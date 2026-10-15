@@ -13599,6 +13599,204 @@ def test_closet_site_rows_v382():
           "(each thing alone and with others, clashes, costumes, junk, every thing at once)", not bad, bad[:1])
 
 
+def test_halloween_week_v3822():
+    """3.8.22, Halloween week (Sam's pick, round three: "Line, bats and
+    cobweb", shipped before the 24th): 24 to 31 Oct, a line under the
+    board's head with this week's days and the five things, the next and
+    when; three bats across it on the day's first board; a cobweb when every
+    Pip on the crew's rows has a Halloween thing on. Nothing outside the
+    week, with Pip off, or once hidden for the year."""
+    from due_crew import closet as cl, closet_flow as cf
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    check("Halloween: nothing before the 24th or after the 31st",
+          cl.halloween("2026-10-23", [], {}) is None and cl.halloween("2026-11-01", [], {}) is None
+          and cl.halloween("nope", [], {}) is None)
+    hw = cl.halloween("2026-10-24", ["2025-10-24", "2026-10-23"], {})
+    check("the first day: last year's days and the day before don't count; the pumpkin, studying today",
+          hw["days"] == 0 and hw["next"] == ("pumpkin", 1) and not hw["today"] and [k for k, _n, _g in hw["things"]] == list(cl.HALLOWEEN), hw)
+    hw = cl.halloween("2026-10-26", ["2026-10-24", "2026-10-26"], {"pumpkin": "2026-10-24"})
+    check("two days so far, today among them: the witch hat's earned (the days reach it), the bat wings next, a day more",
+          hw["days"] == 2 and hw["today"] and [g for _k, _n, g in hw["things"]] == [True, True, False, False, False]
+          and hw["next"] == ("batwings", 1), hw)
+    hw = cl.halloween("2026-10-30", ["2026-10-30"], {})
+    check("the 30th with one day: tomorrow reaches the witch hat, never the mummy",
+          hw["next"] == ("witch", 1), hw)
+    hw = cl.halloween("2026-10-31", [], {k: "2025-10-31" for k in cl.HALLOWEEN})
+    check("all five already mine (a year before): nothing next", hw["next"] is None and all(g for _k, _n, g in hw["things"]), hw)
+    check("the cobweb: every Pip in a Halloween thing (a costume shows; a plain Pip doesn't), two at least",
+          cl.spooky([["pumpkin"], ["ghost", "glasses"], ["batwings", "cap"]]) and not cl.spooky([["pumpkin"], None])
+          and not cl.spooky([["pumpkin"]]) and not cl.spooky([["pumpkin"], ["glasses"]]))
+    base = cl.halloween("2026-10-26", ["2026-10-24", "2026-10-25"], {"pumpkin": "2026-10-24"})
+    line = board.halloween_html(dict(base, spooky=0, bats=None), {})
+    check("the line: its days, the five things as Pips (mine in colour), the next, the closet and a way to hide it",
+          "2 days so far" in line and line.count("sv-slot") == 5 and line.count('class="hwk on"') == 2
+          and "study today for the bat wings" in line and "duecrew:closet&#x27;" not in line
+          and "pycmd('duecrew:closet')" in line and "pycmd('duecrew:closethw')" in line
+          and "hwbat" not in line and "hwweb" not in line and "spooky" not in line, line[:600])
+    flying = board.halloween_html(dict(base, spooky=6, bats=1.5), {})
+    check("the day's first board: three bats, their flight's place kept across a redraw; the whole crew dressed: cobweb and line",
+          flying.count('class="hwbat"') == 3 and "--ago:1.50s" in flying and "hwweb" in flying
+          and "all 6 of you dressed up" in flying, flying[:400])
+    check("Pip off, or not the week: no line", board.halloween_html(dict(base, bats=0), {"sev": False}) == ""
+          and board.halloween_html(None, {}) == "")
+    check("the bats never fly with Reduce motion, and never over the logo (only across the line)",
+          "@media (prefers-reduced-motion: no-preference)" in board.HW_CSS
+          and board.HW_CSS.index("dc-hwbat 4.2s") > board.HW_CSS.index("@media (prefers-reduced-motion: no-preference)")
+          and ".dc-hw .hwbat" in board.HW_CSS and "dc-title" not in board.HW_CSS)
+    data = {"entries": [{"user_id": "me", "name": "Me", "you": True, "paused": False, "last_updated": "", "exam_date": "",
+                         "days": {}, "decks": []}], "pending": [],
+            "labels": [(datetime.date(2026, 10, 26) - datetime.timedelta(days=i)).isoformat() for i in range(7)]}
+    now = __import__("time").time()
+    drawn = board.render(data, {"period": "today"}, now, halloween=dict(base, spooky=0, bats=None))
+    check("the board: the line under its head, its sheet with it; without it, neither",
+          drawn.count('class="dc-hw"') == 1 and drawn.index('class="dc-head"') < drawn.index('class="dc-hw"')
+          and "dc-hwbat" in drawn and "dc-hw" not in board.render(data, {"period": "today"}, now))
+    # the glue: my row's days, the crew's looks, the bats once, hidden till next year
+    from due_crew.wrap import _wrap_data
+    saved = (cf._save, cf.look, cf.have, dict(dc._state))
+    cf._save = lambda: None
+    cf.look = lambda c=None: ["pumpkin"]
+    cf.have = lambda c=None: {"pumpkin": "2026-10-24"}
+    w = _wrap_data()
+    try:
+        w.pop("hw_hidden", None)
+        dc._state.pop("hw_bats", None)
+        entries = [{"user_id": "me", "you": True, "days": {"2026-10-24": {"studied": True, "reviews": 30}, "2026-10-25": {"reviews": 0}}},
+                   {"user_id": "dre", "look": ["ghost"], "days": {}}, {"user_id": "mo", "look": ["witch", "glasses"], "days": {}}]
+        v = cf.halloween_view("2026-10-25", entries, {})
+        check("the glue: my row's days (a day with no reviews isn't one), every row dressed: cobweb for 3; the bats out",
+              v and v["days"] == 1 and v["spooky"] == 3 and v["bats"] is not None and v["bats"] < 1, v)
+        dc._state["hw_bats"]["2026-10-25"] -= cf.BATS_SECONDS + 1
+        v2 = cf.halloween_view("2026-10-25", entries[:2] + [{"user_id": "mo", "look": None}], {})
+        check("a later board the same day: no bats; a plain Pip on a row: no cobweb", v2["bats"] is None and v2["spooky"] == 0, v2)
+        check("Pip off: no line", cf.halloween_view("2026-10-25", entries, {"sev": False}) is None)
+        swaps = []
+        old = (dc._swap, dc._rerender, dc._board_on_screen)
+        dc._swap, dc._rerender, dc._board_on_screen = (lambda c, focus=None: swaps.append(1)), (lambda: swaps.append(2)), (lambda: True)
+        dc._state["labels"] = ["2026-10-25"]
+        try:
+            dc._on_js(False, "duecrew:closethw", DeckBrowser())
+        finally:
+            dc._swap, dc._rerender, dc._board_on_screen = old
+        check("its ×, sent as the board sends it: hidden for 2026 (the board redraws), back next year",
+              w.get("hw_hidden") == "2026" and swaps and cf.halloween_view("2026-10-25", entries, {}) is None
+              and cf.halloween_view("2027-10-25", entries, {}) is not None, (w.get("hw_hidden"), swaps))
+    finally:
+        cf._save, cf.look, cf.have = saved[:3]
+        dc._state.clear()
+        dc._state.update(saved[3])
+        w.pop("hw_hidden", None)
+
+
+def test_year_counts_v3822():
+    """3.8.22 (Sam: "Start the year counts in the next release: Yes"): the
+    closet's tallies keep a year too, for Wrapped: Fifteens and the hours
+    they began, rooms with the crew, cheers sent and got, crew days, each
+    squad card's lines once, and the days each thing Pip has on was worn,
+    once a day. Six years at most, cleaned like the rest; nothing sent."""
+    from due_crew import closet_flow as cf
+    from due_crew.wrap import _wrap_data
+    from due_crew.app import _state
+    w = _wrap_data()
+    saved = (cf._save, cf.look, w.get("closet"), list(_state.get("labels") or []))
+    cf._save = lambda: None
+    cf.look = lambda c=None: ["dino"]
+    w["closet"] = {}
+    _state["labels"] = ["2026-10-25"]
+    try:
+        cf.note_fifteens(3, datetime.datetime(2026, 10, 25, 20, 5).astimezone())
+        cf.note_fifteens(1)
+        cf.note_room(True)
+        cf.note_room(False)
+        cf.note_cheer("dre", "2026-10-25")
+        cf.note_cheer("mo", "2026-10-25")
+        cf.note_cheered()
+        for lines, wk in ((1, "202643:s1"), (2, "202643:s1"), (1, "202643:s1"), (1, "202644:s1")):
+            cf.note_bingo(lines, False, wk)
+        crew = [{"you": True}, {"you": False, "days": {"2026-10-25": {"studied": True, "reviews": 3}}}]
+        cf.note_day("2026-10-25", crew, True, 0)
+        cf.note_day("2026-10-25", crew, True, 0)
+        cf.look = lambda c=None: ["pumpkin", "glasses"]
+        cf.note_day("2026-10-26", crew, True, 0)
+        y = cf.year_counts(2026)
+        check("the year: Fifteens and their hour, rooms with the crew, cheers sent and got, a card's lines once (its most), crew days",
+              y.get("fifteens") == 4 and y.get("hours") == {"20": 3} and y.get("rooms") == 1 and y.get("cheers_sent") == 2
+              and y.get("cheered_by") == 1 and y.get("bingo") == {"202643:s1": 2, "202644:s1": 1} and y.get("crew_days") == 1, y)
+        check("what Pip wore, a day each, once a day (a costume alone while it's on)",
+              y.get("worn") == {"dino": 1, "pumpkin": 1, "glasses": 1} and y.get("worn_last") == "2026-10-26", y)
+        _state["labels"] = ["2027-01-02"]
+        cf.note_cheered()
+        check("a new year starts its own counts", cf.year_counts(2027) == {"cheered_by": 1} and cf.year_counts(2026).get("cheered_by") == 1)
+        t = cf.clean_tallies({"years": {"2019": {"rooms": 1}, "2020": {}, "2021": {}, "2022": {}, "2023": {}, "2024": {}, "2025": {},
+                                        "x": {"rooms": 2}, "2026": {"rooms": -1, "fifteens": True, "hours": {"25": 1, "9": 2, "x": 1},
+                                                                    "worn": {"nope": 3, "dino": 4}, "bingo": {"": 1, "w": "2"},
+                                                                    "worn_last": "2026-10-26", "cheers_sent": 3}}})
+        check("cleaned like the rest: six years at most, junk dropped",
+              sorted(t["years"]) == ["2021", "2022", "2023", "2024", "2025", "2026"]
+              and t["years"]["2026"] == {"cheers_sent": 3, "hours": {"9": 2}, "worn": {"dino": 4}, "worn_last": "2026-10-26"}, t)
+    finally:
+        cf._save, cf.look = saved[:2]
+        w["closet"] = saved[2] or {}
+        _state["labels"] = saved[3]
+
+
+def test_cheers_with_pips_v3822():
+    """3.8.22, cheers with Pips (Sam's pick, round three: "One by one, then
+    and N more"): when cheers land, each sender's Pip rises from the board's
+    bottom edge in turn, tosses the cheer onto my row and ducks back down,
+    in place of the flurry; three at most, the rest "and N more"; with
+    Reduce motion they stand still in the banner. A mutual friend comes in
+    their colour and look, anyone else plain; Pip off, the flurry as before."""
+    from due_crew import social
+    from due_crew.app import _state, _pending_cheers
+    entries = [{"user_id": "me", "you": True}, {"user_id": "dre", "name": "Dre", "accent": "blue", "look": ["dino"]},
+               {"user_id": "mo", "name": "Mo"}, {"user_id": "zz", "name": "Z", "look": ['"><b>x'], "accent": "red;}"}]
+    cheers = [{"from": "dre", "name": "Dre", "emoji": "🎉"}, {"from": "dre", "name": "Dre", "emoji": "🔥"},
+              {"from": "mo", "name": "Mo", "emoji": "💪"}, {"from": "zz", "name": '"><img src=x>', "emoji": "👏"},
+              {"from": "ann", "name": "Ann", "emoji": "🌟"}]
+    pips = board.cheer_pips(cheers, entries, {})
+    check("who sent them, as Pips: each once, in the order they came, three at most",
+          [p["emoji"] for p in pips] == ["🎉", "💪", "👏"] and len(pips) == 3, pips)
+    check("a mutual friend in their colour and look; anyone else plain, in the default colour",
+          pips[0]["a"] == list(board.accent_pair("blue")) and "<path" in pips[0]["svg"]
+          and pips[1]["a"] == list(board.accent_pair(None)) and pips[2]["a"] == list(board.accent_pair(None)))
+    check("a name is only a label, escaped; a hostile look never becomes markup",
+          "<img" not in pips[2]["svg"] and "&lt;img" in pips[2]["svg"] and "<b>" not in pips[2]["svg"], pips[2]["svg"][:300])
+    check("Pip off: no Pips", board.cheer_pips(cheers, entries, {"sev": False}) == [])
+    check("one, two, three names; then and N more",
+          [board.and_more(x) for x in (["A"], ["A", "B"], ["A", "B", "C"], ["A", "B", "C", "D", "E"])]
+          == ["A", "A and B", "A, B and C", "A, B, C and 2 more"])
+    js = board.flurry_js(["🎉"], "Dre sent cheers", pips=pips, season=["🎃"])
+    check("the toss: from the board's bottom edge onto my row, in place of the flurry; still Pips in the banner with Reduce motion",
+          "tr.you td.nm" in js and "dc.getBoundingClientRect()" in js and "if (still) { return; }" in js
+          and "banner.insertBefore(who, title)" in js and "classList.add('rest')" in js and "<\\/" in js.split("var pips = ")[1][:20000]
+          and "</svg" not in js.split("var pips = ")[1].split(";")[0], js[:200])
+    plain = board.flurry_js(["🎉"], "Dre sent cheers", season=["🎃"])
+    check("no Pips: the flurry, as before", "var pips = []" in plain and "dcfall" in plain)
+    import shutil
+    import subprocess
+    if shutil.which("node"):
+        r = subprocess.run(["node", "--check", "-"], input=js, capture_output=True, text=True)
+        check("the toss's script is valid JS", r.returncode == 0, r.stderr[:400])
+    # sent as the board plays them: names in order, the Pips with them
+    saved = (social.mw.state, getattr(social.mw, "web", None), list(_state.get("entries") or []), list(_state.get("labels") or []))
+    said = []
+    social.mw.state = "deckBrowser"
+    social.mw.web = types.SimpleNamespace(eval=said.append)
+    _state["entries"], _state["labels"] = entries, ["2026-10-25"]
+    try:
+        _pending_cheers.extend(cheers)
+        social._play_cheers()
+    finally:
+        social.mw.state, social.mw.web = saved[:2]
+        _state["entries"], _state["labels"] = saved[2], saved[3]
+        _pending_cheers.clear()
+    check("played: the banner names them in order (Dre, Mo, the rest and N more), the senders' Pips come along",
+          said and "Dre, Mo, &quot;" not in said[0] and "Dre, Mo, " in said[0] and "and 1 more sent cheers" in said[0]
+          and said[0].count("Pip") >= 3 and "dino" not in said[0].split("var pips")[0], said[0][:300] if said else said)
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

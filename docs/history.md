@@ -1793,3 +1793,31 @@ every release that changes how something works.
   Invites, text shares, cheers (the emoji someone sent) and the admin
   pages (a report can be about an emoji) keep their emojis. Pip off: the
   emojis everywhere, as before.
+  Then three of the fun round's third round (Sam's picks; the round's page
+  went deep on Wrapped, the Beast and Crew Town and mocked the rest):
+  Halloween week, 24 to 31 Oct, shipped before the 24th: a line under the
+  board's head with this week's days and the closet's five Halloween
+  things in order (mine in colour), the next and when ("study today for
+  the witch hat", "tomorrow: the bat wings"; `closet.halloween`, from my
+  row's eight days, which are the whole week); three bats across that line
+  on the day's first board, never over the logo, still with Reduce motion
+  (`closet_flow.halloween_view`'s `bats`, kept like Pip by the logo's
+  moment); and when every Pip on the crew's rows has a Halloween thing on
+  (`closet.spooky`; a crewmate who isn't a mutual friend is a plain Pip, so
+  never), a cobweb in its corner and "A spooky crew: all N of you dressed
+  up." Its × hides it till next year (wrap.json `hw_hidden`; the closet
+  keeps the things). Pip off, none of it. Cheers with Pips: when cheers
+  land, each sender's Pip rises from the board's bottom edge in turn
+  (three at most, in the order they came), tosses its cheer onto my row
+  (a little burst, the row lit for a moment) and ducks back down, in place
+  of the flurry; the banner names them in order, "Dre, Mo, Ana and 2 more"
+  (`board.cheer_pips`, `and_more`, `flurry_js`'s `pips`). A cheer lands
+  only from someone I added: a mutual friend comes in their colour and
+  look, anyone else plain. With Reduce motion the Pips stand still in the
+  banner. Pip off, the flurry as before. And the year counts (Sam: "Start
+  the year counts in the next release: Yes"), so the first Wrapped has
+  more than Anki's history: the closet's tallies keep a year too (wrap.json
+  `closet.years`, six at most): Fifteens and the hour each began, rooms
+  with the crew, cheers sent (new) and got, crew days, each squad card's
+  lines (its most, once), and the days each thing Pip had on was worn
+  (new, once a day). Nothing of it is sent.

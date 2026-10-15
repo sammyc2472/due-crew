@@ -672,6 +672,9 @@ In Anki (as a follower):
 - [ ] Squads › click someone who isn't in your crew: their card has a plain Pip where the emoji was. Settings › You: your Pip by your name; click it, the closet. Squad bingo: who stamped a square are Pips, bigger than the old emoji circles, none cut off at the square's edge. Tools › Due Crew › Friends: names, no emojis.
 - [ ] duecrew.com: your Pip at the top of Account; Home's Since you were here: "added you back" and a crewmate's exam lead with their Pip.
 - [ ] Settings › Pip off: every one of these is back to emojis (the Friends dialog stays names only).
+- [ ] Halloween week (set the computer's date to 24 to 31 Oct, or wait): a line under the logo, "Halloween week · N days so far", the five things as little Pips (yours in colour), and what's next ("study today for the pumpkin"); the first board of the day, three bats fly across that line (not across the logo), and not again that day; Reduce motion: no bats. Every Pip on your crew's rows in a Halloween thing: a cobweb in the line's corner and "A spooky crew". × hides the line; it stays hidden till next year. 1 Nov: gone.
+- [ ] A crewmate cheers you (have them send one, then Refresh): their Pip rises from the bottom of the board, tosses the emoji onto your row, which lights for a moment, and ducks back down; no flurry. Three or more at once: one after another, three at most, the banner "Dre, Mo, Ana and 1 more sent cheers". From someone who hasn't added you back: a plain Pip. Reduce motion: their Pips standing in the banner. Pip off: the flurry.
+- [ ] Do a Fifteen, cheer someone, sit in a room with your crew: user_files' wrap.json has `closet.years.2026` counting them (and `worn` with what Pip had on today).
 
 ### 3.8.21: Pips on Squads
 

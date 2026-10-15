@@ -552,6 +552,18 @@ sections.append("<h3>3.8.2: a costume over the look (the things under it say Und
     dict(_CV, look=_MINE["sev_look"] + ["dino"]), {"accent": "purple"}))
 sections.append("<h3>3.8.2: To earn: what's close, then the rest by how it's earned</h3>" + board.closet_html(
     dict(_CV, tab="To earn"), {"accent": "green", "theme": "dark"}))
+# 3.8.22: Halloween week (24 to 31 Oct): the line, the five things, the bats (at the day's first board) and,
+# with every Pip on the rows in a Halloween thing, the cobweb
+from due_crew import closet as _cl  # noqa: E402
+_HW = _cl.halloween("2026-10-26", ["2026-10-24", "2026-10-25"], _MINE["sev_closet"])
+_SPOOK = {"dre": ["ghost"], "marisa": ["witch"], "noah": ["mummy"], "priya": ["batwings"], "long": ["pumpkin"]}
+SPOOKY = [dict(e, accent=_ACC.get(e["user_id"], "amber"), look=_SPOOK.get(e["user_id"], ["pumpkin"])) for e in DATA["entries"]]
+sections.append("<h3>3.8.22: Halloween week: the line, the bats' flight once a day, and the cobweb when the whole crew is dressed up</h3>"
+                + board.render(dict(DATA, entries=SPOOKY), dict(_MINE, period="today", sev_look=["pumpkin"]), now_ts - 60,
+                               halloween=dict(_HW, spooky=len(SPOOKY), bats=0)))
+sections.append("<h3>3.8.22: Halloween week, its last day: all five, no bats (they flew this morning), not everyone dressed</h3>"
+                + board.render(dict(DATA, entries=DRESSED), dict(_MINE, period="today"), now_ts - 60,
+                               halloween=dict(_cl.halloween("2026-10-31", ["2026-10-%d" % d for d in range(24, 32)], {}), spooky=0, bats=None)))
 # Each board styles `#due-crew`; on one page the last <style> would win for
 # all of them, so every accent gets its own document via srcdoc.
 def _framed(markup, dark):

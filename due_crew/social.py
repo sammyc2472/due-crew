@@ -36,12 +36,12 @@ def _play_cheers():
         return
     cheers = list(_pending_cheers)
     _pending_cheers.clear()
-    names = sorted({ch["name"] for ch in cheers})
+    names = list(dict.fromkeys(ch["name"] for ch in cheers))  # 3.8.22: in the order they came, as their Pips toss them
     emojis = [ch["emoji"] for ch in cheers]
     if len(names) == 1:
         text = f"{emojis[0]} {names[0]} sent cheers"
     else:
-        text = f"{' '.join(dict.fromkeys(emojis))} {' and '.join(names)} sent cheers"
+        text = f"{' '.join(list(dict.fromkeys(emojis))[:3])} {board.and_more(names)} sent cheers"
     back = (cheers[0]["from"], cheers[0]["emoji"]) if len(cheers) == 1 else None
     notes = [ch["note"] if len(cheers) == 1 else f"{ch['name']}: {ch['note']}"
              for ch in cheers if ch.get("note")]
@@ -50,7 +50,8 @@ def _play_cheers():
         season = board.season_emoji(datetime.date.fromisoformat(today)) if today else None
     except ValueError:
         season = None
-    mw.web.eval(board.flurry_js(emojis, text, back=back, notes=notes, season=season))
+    pips = board.cheer_pips(cheers, _state["entries"], cfg())  # 3.8.22: each sender's Pip tosses theirs
+    mw.web.eval(board.flurry_js(emojis, text, back=back, notes=notes, season=season, pips=pips))
 
 
 def cheer_choices():

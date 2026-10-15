@@ -349,6 +349,46 @@ def from_hours(starts):
     return {"mornings": len(morn), "evenings": len(eve), "yearturn": turn}
 
 
+# ---- Halloween week (3.8.22) ----
+
+HALLOWEEN = ("pumpkin", "witch", "batwings", "ghost", "mummy")  # a day of the week, two, three, four, five
+HALLOWEEN_WEEK = ((10, 24), (10, 31))
+
+
+def _date(v):
+    try:
+        return _dt.date.fromisoformat(str(v))
+    except ValueError:
+        return None
+
+
+def halloween(today, studied, have):
+    """Halloween week's line on the board (Sam's pick, round three), or None
+    outside 24 to 31 Oct. today: the Anki day (ISO); studied: the days I
+    studied (ISO; the board's eight are the whole week); have: the closet.
+    {days: this week's, things: [(key, days it takes, mine)], next: (key,
+    more days) or None, today: studied today}. The next is the first thing
+    not mine that the days left this week can still reach."""
+    t = _date(today)
+    if t is None or not HALLOWEEN_WEEK[0] <= (t.month, t.day) <= HALLOWEEN_WEEK[1]:
+        return None
+    start = _dt.date(t.year, *HALLOWEEN_WEEK[0])
+    week = {d for d in (_date(x) for x in studied or ()) if d and start <= d <= t}
+    days, mine = len(week), clean_closet(have)
+    things = [(k, BY[k]["need"][1], k in mine or BY[k]["need"][1] <= days) for k in HALLOWEEN]
+    left = (_dt.date(t.year, *HALLOWEEN_WEEK[1]) - t).days + (0 if t in week else 1)
+    nxt = next(((k, n - days) for k, n, got in things if not got and n - days <= left), None)
+    return {"days": days, "things": things, "next": nxt, "today": t in week}
+
+
+def spooky(looks):
+    """Every Pip on the crew's rows has something of Halloween's showing,
+    two Pips at least (a crewmate who isn't a mutual friend has no look, so
+    a plain Pip): the board's cobweb."""
+    looks = list(looks or ())
+    return len(looks) >= 2 and all(set(shown(x)) & set(HALLOWEEN) for x in looks)
+
+
 def longest_run(labels):
     """The longest run of consecutive dates among `labels` (ISO dates)."""
     return from_days(labels)["run"]

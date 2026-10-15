@@ -9,6 +9,11 @@ finds out what you've done:
   rooms with your crew, cheers you sent and got, a whole crew's day, days
   with nothing left due, cards you added, bingo lines.
 
+3.8.22: the tallies keep a year too ("years": {"2026": {...}}), for your
+Wrapped (Sam: start counting now): Fifteens and the hours they began,
+rooms, cheers sent and got, crew days, bingo lines, and the days each thing
+Pip has on was worn. Six years at most; nothing of it is sent.
+
 What's earned goes to the account (sev_closet), and what Pip has on
 (sev_look): both follow you to every computer, and the look rides with your
 accent to mutual friends. Nothing new is asked of the server: a new thing
@@ -18,6 +23,7 @@ Main thread: collection and config. No network here.
 """
 
 import datetime
+import time
 import traceback
 
 from aqt import mw
@@ -30,6 +36,36 @@ _TALLIES = ("fifteens", "fifteen_go", "fifteen_am", "rooms", "big_cheer", "cheer
             "clear", "bingo_line", "bingo_card", "crew_day", "crew")
 _LISTS = {"cheered": 40, "cheer_days": 40}
 AM = 9  # a Fifteen begun before nine is a morning one
+YEAR_KEYS = ("fifteens", "rooms", "cheers_sent", "cheered_by", "crew_days")  # 3.8.22: a year's counts
+YEARS_KEPT = 6
+_BIG = 10 ** 7
+
+
+def _n_ok(v):
+    return isinstance(v, int) and not isinstance(v, bool) and 0 <= v < _BIG
+
+
+def clean_year(v):
+    """One year's counts, as this add-on writes them, or less: the counts,
+    {hour: Fifteens begun}, {thing: days worn}, {week:squad: lines}, and
+    the day the look was last counted."""
+    out = {}
+    if not isinstance(v, dict):
+        return out
+    for k in YEAR_KEYS:
+        if _n_ok(v.get(k)):
+            out[k] = v[k]
+    keep = {"hours": lambda h: h.isdigit() and int(h) < 24, "worn": lambda k: k in closet.BY,
+            "bingo": lambda k: 0 < len(k) <= 48}
+    for k, ok in keep.items():
+        d = v.get(k)
+        if isinstance(d, dict):
+            got = {str(a): b for a, b in d.items() if isinstance(a, str) and ok(a) and _n_ok(b)}
+            if got:
+                out[k] = dict(list(got.items())[-80:])
+    if isinstance(v.get("worn_last"), str) and len(v["worn_last"]) == 10:
+        out["worn_last"] = v["worn_last"]
+    return out
 
 
 # ---- the tallies (wrap.json) ----
@@ -50,6 +86,9 @@ def clean_tallies(v):
             out[k] = v[k]
     if isinstance(v.get("clear_run"), int) and not isinstance(v.get("clear_run"), bool):
         out["clear_run"] = max(0, v["clear_run"])
+    if isinstance(v.get("years"), dict):
+        ys = {y: clean_year(d) for y, d in v["years"].items() if isinstance(y, str) and len(y) == 4 and y.isdigit()}
+        out["years"] = {y: ys[y] for y in sorted(ys)[-YEARS_KEPT:]}
     return out
 
 
@@ -79,6 +118,39 @@ def _most(key, n):
         _save()
 
 
+def _year(day=None):
+    """The year a count goes in: the Anki day's (today's, unless given)."""
+    d = str(day or (_state["labels"][0] if _state.get("labels") else "") or "")
+    return d[:4] if len(d) >= 4 and d[:4].isdigit() else str(datetime.date.today().year)
+
+
+def _the_year(day=None):
+    t = _tallies()
+    ys = t.setdefault("years", {})
+    y = _year(day)
+    if y not in ys:
+        ys[y] = {}
+        for old in sorted(ys)[:-YEARS_KEPT]:
+            del ys[old]
+    return ys[y]
+
+
+def _ybump(key, by=1, day=None, within=None):
+    """A year's count up by `by` (within: one of its {name: n}), saved."""
+    y = _the_year(day)
+    if within:
+        d = y.setdefault(within, {})
+        d[key] = d.get(key, 0) + by
+    else:
+        y[key] = y.get(key, 0) + by
+    _save()
+
+
+def year_counts(year):
+    """3.8.22: a year's counts, for Wrapped (clean_year's shape)."""
+    return clean_year(_tallies().get("years", {}).get(str(year)))
+
+
 def _add(key, item):
     t = _tallies()
     seen = t.setdefault(key, [])
@@ -94,9 +166,12 @@ def note_fifteens(n, began=None):
         return
     _bump("fifteens", n)
     _most("fifteen_go", n)
+    _ybump("fifteens", n)
     if began is not None:
         try:
-            if began.astimezone().hour < AM:
+            hour = began.astimezone().hour
+            _ybump(str(hour), n, within="hours")
+            if hour < AM:
                 _bump("fifteen_am", n)
         except Exception:
             pass
@@ -106,12 +181,14 @@ def note_room(with_crew):
     """A study room ended; with crewmates in it, it counts."""
     if with_crew:
         _bump("rooms")
+        _ybump("rooms")
 
 
 def note_cheer(to_uid, day, big=False):
     """I cheered someone: a crewmate more, a day more; a big streak's."""
     _add("cheered", str(to_uid or ""))
     _add("cheer_days", str(day or ""))
+    _ybump("cheers_sent", day=day)
     if big:
         _most("big_cheer", 1)
 
@@ -119,6 +196,7 @@ def note_cheer(to_uid, day, big=False):
 def note_cheered():
     """A crewmate's cheer landed."""
     _bump("cheered_by")
+    _ybump("cheered_by")
 
 
 def note_card_added(*_args):
@@ -129,10 +207,16 @@ def note_card_added(*_args):
         traceback.print_exc()
 
 
-def note_bingo(lines, full):
-    """My squad's card: a line made, the whole card."""
+def note_bingo(lines, full, week=None):
+    """My squad's card: a line made, the whole card. week (3.8.22): the
+    card's week and squad, so the year counts each card's lines once."""
     if lines > 0:
         _most("bingo_line", 1)
+        if week:
+            y = _the_year()
+            if lines > y.get("bingo", {}).get(str(week)[:48], 0):
+                y.setdefault("bingo", {})[str(week)[:48]] = lines
+                _save()
     if full:
         _most("bingo_card", 1)
 
@@ -164,6 +248,14 @@ def note_day(today, entries, studied, due_left):
             and all(any(_showed((e.get("days") or {}).get(lb)) for lb in soon) for e in others)):
         t["crew_day"] = t.get("crew_day", 0) + 1
         t["crew_day_last"] = today
+        y = _the_year(today)
+        y["crew_days"] = y.get("crew_days", 0) + 1
+        changed = True
+    y = _the_year(today)
+    if y.get("worn_last") != today:  # 3.8.22: what Pip wore today, once a day, for Wrapped's "worn most"
+        y["worn_last"] = today
+        for k in closet.shown(look()):
+            y.setdefault("worn", {})[k] = y.get("worn", {}).get(k, 0) + 1
         changed = True
     if changed:
         _save()
@@ -323,6 +415,47 @@ def standing(c=None):
     except Exception:
         traceback.print_exc()
         return [], {}
+
+
+# ---- Halloween week (3.8.22) ----
+
+BATS_SECONDS = 7  # the bats' flight across the line, the day's first board, and a little after
+
+
+def halloween_view(today, entries, c=None):
+    """Halloween week's line for the board (board.halloween_html), or None:
+    outside 24 to 31 Oct, with Pip off, or hidden till next year. My days
+    are my row's (its eight are the whole week); the cobweb's every row's
+    Pip, mine as on my row, a crewmate's as theirs comes (mutual friends'
+    looks, the rest plain). The bats fly the day's first board, once."""
+    c = c or cfg()
+    if not c.get("sev", True):
+        return None
+    try:
+        from .wrap import _wrap_data
+        if str(_wrap_data().get("hw_hidden") or "") == str(today)[:4]:
+            return None
+        me = next((e for e in entries or [] if e.get("you")), None) or {}
+        days = me.get("days") or {}
+        hw = closet.halloween(today, [lb for lb, d in days.items() if _showed(d)], have(c))
+        if hw is None:
+            return None
+        rows = [look(c) if e.get("you") else e.get("look") for e in entries or []]
+        hw["spooky"] = len(rows) if closet.spooky(rows) else 0
+        flown = _state.setdefault("hw_bats", {})
+        ago = time.time() - flown.setdefault(str(today), time.time())
+        hw["bats"] = round(ago, 2) if ago < BATS_SECONDS else None
+        return hw
+    except Exception:
+        traceback.print_exc()
+        return None
+
+
+def hide_halloween(today):
+    """The line's ×: hidden till next year's week (the closet keeps the things)."""
+    from .wrap import _wrap_data
+    _wrap_data()["hw_hidden"] = str(today)[:4]
+    _save()
 
 
 _HOOKED = {"done": False}

@@ -3084,7 +3084,8 @@ def _one_at_a_time(bans):
 def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
            rules_stale=False, squad_view=None, knocks=None, reviews=None,
            sync_error=False, live=False, tricky=None, milestones=None, room=None, plans=None,
-           notice=None, asks=None, due=None, you=None, sticking=None, sev=None, milestone_sev=None, closet=None):
+           notice=None, asks=None, due=None, you=None, sticking=None, sev=None, milestone_sev=None, closet=None,
+           halloween=None):
     """3.8.0: two parts, apart. On top the You bubble (you_html): due,
     Due's view (due_flow.view, None when Due is off), and you, its Plans and
     Insights ({tab, folded, plans, insights}; None draws Due alone). Under it
@@ -3100,7 +3101,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     asks (3.5.0): my own asks about cards (together.my_asks_view), Crew › Decks.
     sev (3.8.1): Pip beside the logo for a moment, {svg, ago} (rooms.board_sev), or None.
     milestone_sev (3.8.1): {uid: Pip's markup} for a streak banner, Pip in its emoji's place.
-    closet (3.8.2): {keys, first}: what just came for Pip, for its line (closet_line)."""
+    closet (3.8.2): {keys, first}: what just came for Pip, for its line (closet_line).
+    halloween (3.8.22): Halloween week's line, its bats and cobweb (halloween_html), or None."""
     period = cfg.get("period", "today")
     hidden = hidden_tabs(cfg)
     if period not in PERIODS or period in hidden:
@@ -3233,11 +3235,11 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     # the name's cell clips what spills out of it: room above the line for a Pip's hat, the whole
     # row's (tr.sv) so the name and the numbers stay on one line
     seat += f"\n    #due-crew tr.sv > td {{ padding-top: {(3 if cfg.get('compact') else 6) + 6}px; }}"
-    sheet = f'<style>{SEV_CSS}{CLOSET_CSS}{seat}{_sev.CSS}</style>' if cfg.get("sev", True) else ""
+    sheet = f'<style>{SEV_CSS}{CLOSET_CSS}{HW_CSS if halloween else ""}{seat}{_sev.CSS}</style>' if cfg.get("sev", True) else ""
     people = {x.get("user_id"): x for x in data.get("entries") or []}  # 3.8.22: a plan's squad line, mine too
     return (f'<div id="due-crew" class="dc-frame dc-split">{_css(cfg)}<style>{DUE_CSS}</style>{sheet}'
             f'{you_html(cfg, due, you, people)}<div class="dc-sheet">'
-            f'{_head(period, show_up, hidden, cfg.get("crew_view") or period, sev)}{body}{foot}</div></div>')
+            f'{_head(period, show_up, hidden, cfg.get("crew_view") or period, sev)}{halloween_html(halloween, cfg)}{body}{foot}</div></div>')
 
 
 def you_html(cfg, due=None, you=None, people=None):
@@ -3859,6 +3861,80 @@ def closet_line(news, look, first=False):
             f'<a class="wx" href="#" title="Later" onclick="{_pycmd("closetnew")}">&times;</a></div>')
 
 
+HW_PIP = 34  # 3.8.22: a Halloween thing on the week's line
+HW_BAT = ('<svg class="hwbat" style="--d:{d}s" viewBox="0 0 40 20" aria-hidden="true"><g class="w">'
+          '<path d="M20 9 C17 4 12 3 6 5 C9 7 9 10 7 12 C11 11 14 12 16 15 C17 13 18 12 20 12 C22 12 23 13 24 15 '
+          'C26 12 29 11 33 12 C31 10 31 7 34 5 C28 3 23 4 20 9 Z"/></g>'
+          '<circle class="e" cx="18.6" cy="9.5" r=".9"/><circle class="e" cx="21.4" cy="9.5" r=".9"/></svg>')
+HW_WEB = ('<svg class="hwweb" viewBox="0 0 60 60" aria-hidden="true"><path d="M60 0 L0 0 M60 0 L60 60 M60 0 L8 30 M60 0 '
+          'L30 52 M60 0 L2 14 M60 0 L46 58 M46 0 Q48 6 60 14 M32 0 Q36 12 60 28 M18 0 Q24 18 60 42"/></svg>')
+HW_CSS = """
+    #due-crew .dc-hw { position: relative; overflow: hidden; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px;
+      text-align: left; margin: 0 0 8px; padding: 3px 30px 3px 10px; border-radius: 10px; background: var(--dc-well); font-size: 12.5px; }
+    #due-crew .dc-hw .hwl { color: var(--dc-hours); font-weight: 700; text-decoration: none; }
+    #due-crew .dc-hw .hwd, #due-crew .dc-hw .hwn { color: var(--dc-muted); }
+    #due-crew .dc-hw .hws { color: var(--dc-hours); font-weight: 600; }
+    #due-crew .dc-hw .hwt { display: inline-flex; align-items: flex-end; gap: 3px; padding-top: 6px; }
+    #due-crew .dc-hw .hwk { display: inline-flex; line-height: 0; }
+    #due-crew .dc-hw .hwk.off { opacity: .32; filter: grayscale(1); }
+    #due-crew .dc-hw .hwk .sv, #due-crew .dc-hw .hwk .sv * { animation: none !important; }
+    #due-crew .dc-hw .wx { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); z-index: 2;
+      color: var(--dc-muted); text-decoration: none; font-size: 16px; line-height: 1; }
+    #due-crew .dc-hw .wx:hover { color: var(--dc-ink); }
+    #due-crew .dc-hw .hwweb { position: absolute; right: -1px; top: -1px; width: 30px; height: 30px; pointer-events: none;
+      fill: none; stroke: var(--dc-muted); stroke-width: 1; opacity: .5; }
+    #due-crew .dc-hw .hwbat { position: absolute; left: -30px; top: 3px; width: 26px; height: 13px; opacity: 0; pointer-events: none; z-index: 3; }
+    #due-crew .dc-hw .hwbat path { fill: var(--dc-ink); opacity: .85; }
+    #due-crew .dc-hw .hwbat .e { fill: var(--dc-hours); }
+    @media (prefers-reduced-motion: no-preference) {
+      /* three bats across the line, once a day: past the logo's line, never over it (Sam) */
+      #due-crew .dc-hw .hwbat { animation: dc-hwbat 4.2s linear calc(var(--d) - var(--ago, 0s)) both; }
+      #due-crew .dc-hw .hwbat .w { transform-box: fill-box; transform-origin: 50% 50%; animation: dc-hwflap .22s ease-in-out infinite alternate; }
+      @keyframes dc-hwbat { 0% { opacity: 1; left: -30px; transform: translateY(2px); } 25% { transform: translateY(-2px); }
+        50% { transform: translateY(3px); } 75% { transform: translateY(-1px); } 100% { opacity: 1; left: calc(100% + 10px); transform: translateY(1px); } }
+      @keyframes dc-hwflap { from { transform: scaleY(1); } to { transform: scaleY(.45); } }
+    }
+"""
+
+
+def halloween_html(hw, cfg):
+    """3.8.22, Halloween week (24 to 31 Oct; Sam's pick, round three): a line
+    under the board's head with this week's days, the five things in
+    order (mine in colour), the next and when; three bats across it once a
+    day (hw["bats"]: how long they've been out, as Pip by the logo; None
+    after); and when every Pip on the crew's rows has a Halloween thing on
+    (hw["spooky"]: how many), a cobweb in its corner and a line about it.
+    Nothing with Pip off. hw: closet.halloween's, from closet_flow."""
+    if not hw or not cfg.get("sev", True):
+        return ""
+    e = _html.escape
+    days = int(hw.get("days") or 0)
+    said = "a thing a day for five days" if not days else f'{days} day{"" if days == 1 else "s"} so far'
+    things = "".join(
+        f'<span class="hwk {"on" if got else "off"}" title="{e(_closet.BY[k]["name"])}: '
+        f'{"a day" if n == 1 else str(n) + " days"} of Halloween week">'
+        f'{_sev.slot(_sev.svg("idle", rest=True, look=[k], label=_closet.BY[k]["name"]), HW_PIP)}</span>'
+        for k, n, got in hw.get("things") or [] if k in _closet.BY)
+    nxt = hw.get("next")
+    if nxt:
+        name = e(_closet.BY[nxt[0]]["name"].lower())
+        more = int(nxt[1])
+        when = ((f"tomorrow: the {name}" if hw.get("today") else f"study today for the {name}") if more == 1
+                else f"the {name} in {more} more days")
+    elif all(got for _k, _n, got in hw.get("things") or []):
+        when = "all five: Pip&rsquo;s ready"
+    else:
+        when = "the rest next year"
+    n = int(hw.get("spooky") or 0)
+    spooky = f'<span class="hws">A spooky crew: all {n} of you dressed up.</span>' if n else ""
+    ago = hw.get("bats")
+    bats = "".join(HW_BAT.format(d=d) for d in (0, .5, 1.1)) if ago is not None else ""
+    return (f'<div class="dc-hw" style="--ago:{float(ago or 0):.2f}s">{bats}{HW_WEB if n else ""}'
+            f'<a class="hwl" href="#" title="Pip&rsquo;s closet" onclick="{_pycmd("closet")}">Halloween week</a>'
+            f'<span class="hwd">{said}</span><span class="hwt">{things}</span><span class="hwn">{when}</span>{spooky}'
+            f'<a class="wx" href="#" title="Hide until next year" onclick="{_pycmd("closethw")}">&times;</a></div>')
+
+
 def row_sev(row, cfg, size=None):
     """3.8.2: someone's Pip on a crew row, in the emoji's place: their colour
     and their look (mine: this computer's), still until the row is pointed
@@ -4103,18 +4179,60 @@ def loading_card(cfg):
     return _card(cfg, "Due Crew", "Catching up with your crew&hellip;")
 
 
-def flurry_js(emojis, banner_text, back=None, notes=None, season=None):
+CHEER_PIP = 92  # 3.8.22: a crewmate's Pip popping in with their cheer
+
+
+def cheer_pips(cheers, entries, cfg, most=3):
+    """3.8.22, cheers with Pips (Sam's pick, round three): who sent the
+    cheers that just landed, as their Pips, each once, in the order they
+    came, three at most: [{svg, a: [light, dark], emoji}]. A cheer lands
+    only from someone I added: a mutual friend comes in their colour and
+    look, anyone else plain. [] with Pip off. Our own markup; a name is
+    only its label, escaped."""
+    if not cfg.get("sev", True):
+        return []
+    by = {e.get("user_id"): e for e in entries or [] if not e.get("you")}
+    out, seen = [], set()
+    for ch in cheers or []:
+        u = ch.get("from")
+        if not u or u in seen:
+            continue
+        seen.add(u)
+        e = by.get(u) or {}
+        label = _html.escape(f'{ch.get("name") or e.get("name") or "?"}’s Pip', quote=True)
+        out.append({"svg": _sev.svg("hello", "popup", look=e.get("look"), label=label),
+                    "a": list(accent_pair(e.get("accent"))), "emoji": str(ch.get("emoji") or "")})
+        if len(out) >= most:
+            break
+    return out
+
+
+def and_more(names, most=3):
+    """"Dre", "Dre and Mo", "Dre, Mo and Ana", "Dre, Mo, Ana and 2 more"."""
+    names = [str(n) for n in names]
+    if len(names) > most:
+        return ", ".join(names[:most]) + f" and {len(names) - most} more"
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1] if names else ""
+
+
+def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None):
     """Injected via web.eval after render — never inline in board HTML.
     Banner takes its colors from the board's tokens (so Settings → Theme
     holds), the page's night classes only when the board is off. When `back` is
     (uid, emoji) — a single sender — the banner is clickable to return the
     cheer, and stays up a little longer. `notes`: sender-written lines shown
-    under the title (textContent: never markup), which also buy time."""
+    under the title (textContent: never markup), which also buy time.
+    pips (3.8.22, cheer_pips): the senders' Pips. Each pops up at the
+    board's edge in turn, tosses its cheer onto my row and ducks back down,
+    in place of the flurry; with Reduce motion they stand still in the
+    banner."""
     # 2.10: about one flake in three is the season's
     emoji_list = _json.dumps(list(emojis) * 2 + list(season or []) if season else list(emojis))
     banner = _json.dumps(banner_text)
     notes_json = _json.dumps([str(n) for n in (notes or [])][:3])
     back_cmd = _json.dumps(f"duecrew:cheerback:{back[0]}:{back[1]}" if back else None)
+    pips_json = _json.dumps([{"svg": p["svg"], "a": p["a"], "emoji": p.get("emoji") or ""} for p in (pips or [])][:3]).replace("</", "<\\/")
+    season_one = _json.dumps((list(season or []) or [""])[0])
     return """
     (function() {
         if (document.getElementById('dc-flurry')) { return; }
@@ -4161,10 +4279,101 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None):
                 banner.remove();
             });
         }
+        var pips = %s, still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        // 3.8.22: the board's own theme decides a Pip's colour, light or dark
+        function dark(c) {
+            var m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(c), n = m ? [m[1], m[2], m[3]].map(function(h) { return parseInt(h, 16); })
+                : (/(\\d+)\\D+(\\d+)\\D+(\\d+)/.exec(c) || [0, 255, 255, 255]).slice(1).map(Number);
+            return n[0] * 0.299 + n[1] * 0.587 + n[2] * 0.114 < 128;
+        }
+        var boardDark = dark(dcBg), muted = tok('muted', '#6f736b', '#9a9e94');
+        function pipEl(p, size) {
+            var w = document.createElement('span');
+            w.style.cssText = 'display:inline-block;line-height:0;width:' + size + 'px;height:' + size + 'px;' +
+                '--sv-a:' + (boardDark ? p.a[1] : p.a[0]) + ';--sv-line:' + dcLine + ';--sv-amb:' + warn + ';--sv-mut:' + muted + ';';
+            w.innerHTML = p.svg;
+            var v = w.querySelector('svg');
+            if (v) { v.setAttribute('width', size); v.setAttribute('height', size); v.style.overflow = 'visible'; }
+            return w;
+        }
+        if (pips.length && still) {
+            // standing still beside who sent it, no flurry
+            var who = document.createElement('div');
+            who.style.cssText = 'display:flex;justify-content:center;gap:4px;margin:-4px 0 0;';
+            pips.forEach(function(p) { var e = pipEl(p, 52); var v = e.querySelector('svg'); if (v) { v.classList.add('rest'); } who.appendChild(e); });
+            banner.insertBefore(who, title);
+        }
         document.body.appendChild(banner);
         setTimeout(function() { banner.style.opacity = '0'; }, linger);
         setTimeout(function() { banner.remove(); }, linger + 600);
-        if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { return; }
+        if (still) { return; }
+        if (pips.length && document.body.animate) {
+            var dc = document.getElementById('due-crew'), vw = window.innerWidth, vh = window.innerHeight;
+            var edge = dc ? dc.getBoundingClientRect().right : vw * 0.8, size = %d, season = %s;
+            pips.forEach(function(p, i) { setTimeout(function() { toss(p, i); }, i * 1150); });
+            function where() {
+                // my row's name, if it's on screen; else under the banner
+                var me = dc && dc.querySelector('tr.you td.nm'), r = me && me.getBoundingClientRect();
+                if (r && r.top > 0 && r.bottom < vh) { return { x: r.left + Math.min(r.width * 0.4, 160), y: r.top + r.height / 2, row: me }; }
+                var b = banner.getBoundingClientRect();
+                return { x: b.left + b.width / 2, y: b.bottom + 24, row: null };
+            }
+            function fly(text, from, to, ms, px, then) {
+                var f = document.createElement('span');
+                f.textContent = text;
+                f.setAttribute('aria-hidden', 'true');
+                f.style.cssText = 'position:fixed;left:0;top:0;z-index:72;pointer-events:none;font-size:' + px + 'px;line-height:1;';
+                document.body.appendChild(f);
+                var mid = { x: (from.x + to.x) / 2, y: Math.min(from.y, to.y) - 80 };
+                var a = f.animate([{ transform: 'translate(' + from.x + 'px,' + from.y + 'px) rotate(0) scale(.7)' },
+                                   { transform: 'translate(' + mid.x + 'px,' + mid.y + 'px) rotate(180deg) scale(1.15)', offset: 0.5 },
+                                   { transform: 'translate(' + to.x + 'px,' + to.y + 'px) rotate(360deg) scale(1)' }],
+                                  { duration: ms, easing: 'ease-in-out', fill: 'forwards' });
+                a.onfinish = function() { f.remove(); if (then) { then(); } };
+            }
+            function burst(text, at) {
+                for (var k = 0; k < 9; k++) {
+                    var s = document.createElement('span');
+                    s.textContent = (k === 4 && season) ? season : text;
+                    s.setAttribute('aria-hidden', 'true');
+                    s.style.cssText = 'position:fixed;left:0;top:0;z-index:72;pointer-events:none;font-size:15px;line-height:1;';
+                    document.body.appendChild(s);
+                    var ang = k / 9 * Math.PI * 2, d = 34 + (k %% 3) * 14;
+                    s.animate([{ transform: 'translate(' + at.x + 'px,' + at.y + 'px) scale(.4)', opacity: 1 },
+                               { transform: 'translate(' + (at.x + Math.cos(ang) * d) + 'px,' + (at.y + Math.sin(ang) * d * 0.6 + 16) + 'px) scale(1)', opacity: 0 }],
+                              { duration: 900, easing: 'ease-out', fill: 'forwards' }).onfinish = (function(x) { return function() { x.remove(); }; })(s);
+                }
+            }
+            function toss(p, i) {
+                // it rises from the board's bottom edge (the window's, if the board runs past it), in a box that hides it below
+                var r = dc ? dc.getBoundingClientRect() : null, base = Math.min(vh, r ? r.bottom : vh);
+                var x = Math.max(8, Math.min(vw - size - 8, edge - size - 16 - i * 64));
+                var box = document.createElement('div'), w = pipEl(p, size);
+                box.setAttribute('aria-hidden', 'true');
+                box.style.cssText = 'position:fixed;z-index:71;pointer-events:none;overflow:hidden;left:' + x + 'px;top:' + (base - size) +
+                    'px;width:' + size + 'px;height:' + size + 'px;';
+                w.style.transform = 'translateY(' + size + 'px)';
+                box.appendChild(w);
+                document.body.appendChild(box);
+                w.animate([{ transform: 'translateY(' + size + 'px)' }, { transform: 'translateY(4px)' }],
+                          { duration: 380, easing: 'cubic-bezier(.3,1.4,.5,1)', fill: 'forwards' });
+                setTimeout(function() {
+                    var to = where();
+                    fly(p.emoji || '🎉', { x: x + size * 0.72, y: base - size * 0.5 }, { x: to.x, y: to.y - 12 }, 760, 26, function() {
+                        burst(p.emoji || '🎉', { x: to.x, y: to.y - 12 });
+                        if (to.row) {
+                            to.row.parentNode.animate([{ backgroundColor: 'transparent' }, { backgroundColor: accent + '33', offset: 0.2 }, { backgroundColor: 'transparent' }],
+                                                     { duration: 1100 });
+                        }
+                    });
+                }, 520);
+                setTimeout(function() {
+                    w.animate([{ transform: 'translateY(4px)' }, { transform: 'translateY(' + size + 'px)' }],
+                              { duration: 340, easing: 'ease-in', fill: 'forwards' }).onfinish = function() { box.remove(); };
+                }, 2200);
+            }
+            return;
+        }
         var emojis = %s;
         var wrap = document.createElement('div');
         wrap.id = 'dc-flurry';
@@ -4184,7 +4393,7 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None):
         document.body.appendChild(wrap);
         setTimeout(function() { wrap.remove(); }, 3800);
     })();
-    """ % (back_cmd, banner, notes_json, emoji_list)
+    """ % (back_cmd, banner, notes_json, pips_json, CHEER_PIP, season_one, emoji_list)
 
 
 def stranger_card_js(info):

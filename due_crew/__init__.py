@@ -509,7 +509,8 @@ def _squad_view_with_bingo(c):
             sv = dict(sv, bingo=bv)
             squares = (bv.get("ev") or {}).get("squares") or []
             _closet(lambda cf: cf.note_bingo(int((bv.get("ev") or {}).get("lines") or 0),
-                                             bool(squares) and all(q.get("done") for q in squares)))
+                                             bool(squares) and all(q.get("done") for q in squares),
+                                             f'{(bv.get("card") or {}).get("wk")}:{bv.get("squad_id")}'))
             if bingo_flow.new_lines(bv):
                 tooltip("BINGO! Your squad just made a line.", period=4000)
     return sv
@@ -536,6 +537,7 @@ def _bingo_cmd(cmd):
 
 def _board_html(c):
     """The board from cache: one call for the first render and every swap."""
+    from . import closet_flow
     if _state.get("settings_tab"):
         return board.settings_html(_settings_view(), c)  # 3.5.0: Settings in its place
     if _state.get("closet_open"):
@@ -568,7 +570,9 @@ def _board_html(c):
                         milestone_sev=None if show_up else rooms.milestone_sevs(_state["milestones"][:2]),
                         room=rooms.board_view(), plans=plans,
                         due=due, you=_you(c, due, plans), sticking=_sticking(c),
-                        sev=rooms.board_sev(c, due), closet=_state.get("closet_new"))
+                        sev=rooms.board_sev(c, due), closet=_state.get("closet_new"),
+                        halloween=closet_flow.halloween_view(_state["labels"][0] if _state["labels"] else "",
+                                                             _state["entries"], c))
 
 
 def _you(c, due, plans):
@@ -1186,6 +1190,8 @@ def _closet_cmd(cmd, parts):
         return
     if cmd == "closetnew":
         _state["closet_new"] = None  # the line, later: the things stay in the closet
+    elif cmd == "closethw":
+        closet_flow.hide_halloween(_state["labels"][0] if _state["labels"] else "")  # 3.8.22: till next year
     elif cmd == "closetclose":
         _state["closet_open"] = None
     elif cmd == "closetwear" and arg in cl.BY:
