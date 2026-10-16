@@ -245,16 +245,15 @@ def pips_by_uid(c=None):
             for e in _state["entries"] or [] if not e.get("you") and e.get("user_id")}
 
 
-def peek_pip(uid, size=PEEK_PIP):
+def peek_pip(uid):
     """3.9.0: a crewmate's Pip waving as it peeks in (sev.py's own markup,
-    their look; a name only in its label, escaped), or None. size: the
-    corner's, or CHIP_PIP for the bar's."""
+    their look; a name only in its label, escaped), or None."""
     import html
     from . import sev
     e = next((e for e in _state["entries"] or [] if e.get("user_id") == uid and not e.get("you")), None)
     if e is None:
         return None
-    return sev.slot(sev.svg("peek", look=e.get("look"), label=html.escape(f'{e.get("name") or "?"}’s Pip', quote=True)), size)
+    return sev.slot(sev.svg("peek", look=e.get("look"), label=html.escape(f'{e.get("name") or "?"}’s Pip', quote=True)), PEEK_PIP)
 
 def tip_list(info, local_tips, names):
     """The tips on one card, each person once: [{from, name, text, helped}].
@@ -368,47 +367,25 @@ _CHIP_JS = """(function () {
   var old = document.getElementById('dc-knows'); if (old) { old.remove(); }
   var D = __DATA__; if (!D) { return; }
   var night = /night/i.test(document.body.className) || document.documentElement.classList.contains('night-mode');
-  var still = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-  // 3.9.0 (Sam, 16 Oct: the pill "is not the new version we agreed on"): with the corner busy, the peek comes
-  // here, smaller: their Pip popping up, the lightbulb glowing, the peek's words; never the old pill for it
-  var pk = D.peek && D.peek.bar && D.pip ? D.peek : null;
   if (Array.isArray(D.accent)) { D.accent = D.accent[night ? 1 : 0]; }
   var edit = document.querySelector('button[onclick*="edit"]');
   var cell = edit ? edit.parentNode : document.body;
   var s = document.createElement('span'); s.id = 'dc-knows';
   s.style.cssText = 'display:inline-flex;align-items:center;gap:6px;margin-left:10px;padding:' + (D.pip ? '3px 10px 3px 6px' : '2px 10px') +
     ';border-radius:99px;border:1px solid ' + D.accent + ';font:11.5px -apple-system,Segoe UI,sans-serif;white-space:nowrap;vertical-align:middle;cursor:pointer;';
-  var fig = null, bulb = null;
-  if (pk) {
-    fig = document.createElement('span'); fig.style.cssText = 'display:inline-flex;line-height:0;';
-    pip(fig, {pip: {svg: pk.bar, a: D.pip.a}, sevcss: D.sevcss}, night, 'margin:8px 0 0 1px;');
-    s.appendChild(fig);
-    var ink = night ? '#e0a458' : '#a35f00';
-    bulb = document.createElement('span'); bulb.style.cssText = 'display:inline-flex;line-height:0;margin:0 0 0 -3px;';
-    bulb.innerHTML = '<svg width="12" height="15" viewBox="0 0 20 26" aria-hidden="true"><path d="M10 1a8 8 0 0 0-4.6 14.5c.9.7 1.4 1.6 1.4 2.6V19h6.4v-.9c0-1 ' +
-      '.5-1.9 1.4-2.6A8 8 0 0 0 10 1z" fill="#ffd34d" stroke="' + ink + '" stroke-width="1.5"/><rect x="6.8" y="19.6" width="6.4" height="2.6" rx="1.1" ' +
-      'fill="#8a8f86"/><rect x="7.8" y="22.8" width="4.4" height="2.2" rx="1.1" fill="#8a8f86"/></svg>';
-    s.appendChild(bulb);
-  } else {
-    pip(s, D, night, 'margin:8px 2px 0 1px;');  // 3.8.22: who it is, as their Pip (Sam, 16 Oct: room for all of it, head to feet)
-  }
-  var words = pk ? pk.head : D.text;
-  var t = document.createElement('span'); t.id = 'dc-knows-t'; t.textContent = words; s.appendChild(t);
-  t.setAttribute('data-full', words); t.setAttribute('data-short', D.short || words);
+  pip(s, D, night, 'margin:8px 2px 0 1px;');  // 3.8.22: who it is, as their Pip (Sam, 16 Oct: room for all of it, head to feet)
+  var t = document.createElement('span'); t.id = 'dc-knows-t'; t.textContent = D.text; s.appendChild(t);
+  t.setAttribute('data-full', D.text); t.setAttribute('data-short', D.short || D.text);
   if (D.kind === 'tip') { t.setAttribute('data-tip', '1'); }
   s.title = D.title || D.text;
   t.style.cssText = 'display:inline-block;max-width:24vw;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;';
   if (D.more) { var m = document.createElement('span'); m.textContent = '+' + D.more + ' more'; m.style.opacity = '0.7'; s.appendChild(m); }
   if (D.act) {
-    var a = document.createElement('b'); a.textContent = pk ? pk.act : D.act; a.style.cssText = 'flex:none;color:' + D.accent; s.appendChild(a);
+    var a = document.createElement('b'); a.textContent = D.act; a.style.cssText = 'flex:none;color:' + D.accent; s.appendChild(a);
     if (D.actcmd) { a.onclick = function (e) { e.stopPropagation(); try { pycmd('duecrew:' + D.actcmd); } catch (x) {} }; }
   }
   if (D.cmd) { s.onclick = function () { try { pycmd('duecrew:' + D.cmd); } catch (e) {} }; } else { s.style.cursor = 'default'; }
   cell.appendChild(s);
-  if (pk && !still && fig.animate) {  // up it pops, the bulb glows twice; nothing with Reduce motion
-    fig.animate([{transform: 'translateY(10px)', opacity: 0}, {transform: 'none', opacity: 1}], {duration: 550, easing: 'cubic-bezier(.2,.9,.3,1.25)'});
-    bulb.animate([{filter: 'none'}, {filter: 'drop-shadow(0 0 4px #ffd34d)'}, {filter: 'none'}], {duration: 1600, delay: 500, iterations: 2});
-  }
   __PIP__
 })();"""
 
@@ -428,8 +405,9 @@ def chip_js(data):
 _FLOAT_JS = """(function () {
   var D = __DATA__;
   var still = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-  var old = document.getElementById('dc-knows-card');
+  var old = document.getElementById('dc-knows-card'), oldPad = document.getElementById('dc-knows-pad');
   if (window.dcKnowsOff) { window.dcKnowsOff(!D); window.dcKnowsOff = null; } else if (old) { old.remove(); }
+  if (oldPad) { oldPad.remove(); }
   if (!D) { return false; }
   var KEY = __KEY__, gone = false;
   function send(cmd) { try { pycmd('duecrew:' + cmd + '|' + KEY); } catch (e) {} }
@@ -502,9 +480,11 @@ _FLOAT_JS = """(function () {
     for (var j = 0; j < m.length; j++) { if (!box.contains(m[j]) && hit(m[j].getBoundingClientRect(), b)) { return false; } }
     return true;
   }
+  var pad = null, ro = null, later = null;
   function off(duck) {
     if (gone) { return; }
     gone = true;
+    if (pad) { pad.remove(); }
     window.removeEventListener('scroll', check, true); window.removeEventListener('resize', check);
     document.removeEventListener('load', check, true);
     if (ro) { ro.disconnect(); }
@@ -518,13 +498,22 @@ _FLOAT_JS = """(function () {
     } else { box.remove(); }
   }
   function check() { if (!gone && !free()) { off(); send('knowsbar'); } }
+  window.dcKnowsOff = off;
+  if (peek) {
+    // 3.9.0 (Sam, 16 Oct: the pill "is not the new version we agreed on"): the peek always shows, as in
+    // the mock, never the bar's chip; room under the card so its last lines scroll clear of it
+    pad = el('div', 'height:' + (box.offsetHeight + 12) + 'px;');
+    pad.id = 'dc-knows-pad';
+    document.body.appendChild(pad);
+    return true;
+  }
   window.addEventListener('scroll', check, true); window.addEventListener('resize', check);
   document.addEventListener('load', check, true);  // a picture that loads late
   // Anki puts the answer in a moment later (pictures preloaded, MathJax
   // typeset): look again when the card's area changes size, and once more
-  var qa = document.getElementById('qa'), ro = null, later = setTimeout(check, 600);
+  var qa = document.getElementById('qa');
+  later = setTimeout(check, 600);
   if (qa && window.ResizeObserver) { ro = new ResizeObserver(check); ro.observe(qa); }
-  window.dcKnowsOff = off;
   if (!free()) { off(); return false; }
   return true;
 })();"""
@@ -620,8 +609,7 @@ def on_answer(card):
             view = remark_view(client().session.get("plans"), guid, card.ord) or view  # 3.8.1
         if view and view.get("peek"):
             peek = dict(view["peek"])
-            uid = peek.pop("uid", None)
-            peek.update(svg=peek_pip(uid), bar=peek_pip(uid, CHIP_PIP))  # the corner's, and the bar's when the corner's busy
+            peek["svg"] = peek_pip(peek.pop("uid", None))
             view["peek"] = peek if peek["svg"] else None
     except Exception:
         view = None

@@ -2200,8 +2200,7 @@ def test_together_v210():
           and chip.get("actcmd", "").startswith("knowshelped:") and "more" not in chip, str(chip))
     js = crew_cards.chip_js(dict(chip, accent="#0a0"))
     check("tips: This helped is its own click, the tip's words go in as text",
-          "stopPropagation" in js and "duecrew:" in js and "textContent" in js and js.count("innerHTML") == 2 and "p.innerHTML = D.pip.svg" in js
-          and "bulb.innerHTML = '<svg" in js)  # 3.9.0: the second, the peek's bulb, our own constant drawing
+          "stopPropagation" in js and "duecrew:" in js and "textContent" in js and js.count("innerHTML") == 1 and "p.innerHTML = D.pip.svg" in js)
     from due_crew import room_model as rm
     check("bottom bar: the chip, a room beside Edit, and removing them keep the answer buttons centred",
           "dcBarBalance" in js and "dcBarBalance" in crew_cards.chip_js(None)
@@ -5395,9 +5394,7 @@ def test_who_knows_v32():
     check("chip: a tip's short form names whose tip it is",
           K.chip_view(cardsin["guid000003"], [], names)["short"] == "\U0001F4A1 Dre's tip")
     js = K.chip_js({"text": "</span><script>x</script>", "cmd": "knowsask", "act": "Ask", "accent": "#0a0"})
-    check("chip: text goes in as text (3.8.22: the markup is a Pip's own drawing; 3.9.0, and the peek's bulb, a constant)",
-          "textContent" in js and js.count("innerHTML") == 2 and "p.innerHTML = D.pip.svg" in js and "bulb.innerHTML = '<svg" in js
-          and "var words = pk ? pk.head : D.text" in js and "t.textContent = words" in js)
+    check("chip: text goes in as text (3.8.22: the one markup is a Pip's own drawing)", "textContent" in js and js.count("innerHTML") == 1 and "p.innerHTML = D.pip.svg" in js)
     acked(sam, sam.fetch_board(labels))  # Dre's tip is read, and the next refresh
     sam.fetch_board(labels)               # says so: a flag on that card may go up again
     sam.session["tricky"] = [{"guid": "guid000003", "deck": "Step 1", "at": _day(0), "text": "A card", "q": "Trick?"}]
@@ -5603,27 +5600,24 @@ def test_knows_peek_v390():
         _state.update(saved[4])
     v = shown[0]
     check("peek: on the review screen, their Pip waving in their look (sev.py's own markup, the name only its label, escaped)",
-          v["kind"] == "knows" and set(v["peek"]) == {"head", "act", "svg", "bar"} and "m-peek" in v["peek"]["svg"]
-          and "m-peek" in v["peek"]["bar"] and f"width:{K.CHIP_PIP}px" in v["peek"]["bar"]
-          and "Dre &lt;b&gt;Ng’s Pip" in v["peek"]["svg"] and "<b>" not in v["peek"]["svg"] + v["peek"]["bar"], v.get("peek"))
+          v["kind"] == "knows" and set(v["peek"]) == {"head", "act", "svg"} and "m-peek" in v["peek"]["svg"]
+          and "Dre &lt;b&gt;Ng’s Pip" in v["peek"]["svg"] and "<b>" not in v["peek"]["svg"], v.get("peek"))
     js = K.float_js(v)
     check("peek: drawn in the corner's place, up from the bottom; the words as text; it ducks back down; still with Reduce motion",
           "var peek = D.peek && D.peek.svg && D.pip" in js and "translateY(105%)" in js and "head = el('div'" in js
           and "peek ? peek.head : D.text" in js and "prefers-reduced-motion: reduce" in js and "if (peek && !still" in js
           and "window.dcKnowsOff(!D)" in js and "off(true)" in js and "knowsbar" in js)
+    check("peek: always shown, as agreed (Sam: the pill \"is not the new version we agreed on\"): no corner check, never "
+          "the bar's chip; room under the card, gone with it",
+          "if (peek) {" in js and js.index("if (peek) {\n    // 3.9.0") < js.index("window.addEventListener('scroll'")
+          and "dc-knows-pad" in js and "if (pad) { pad.remove(); }" in js and "oldPad.remove()" in js)
     bar = K.chip_js(v)
-    check("peek: when the corner's busy, the bar has the peek, smaller (Sam: not the old pill): their Pip popping up, "
-          "the bulb glowing twice, the peek's words and act as text; still with Reduce motion",
-          "var pk = D.peek && D.peek.bar && D.pip" in bar and "pk ? pk.head : D.text" in bar and "pk ? pk.act : D.act" in bar
-          and "t.textContent = words" in bar and "drop-shadow(0 0 4px #ffd34d)" in bar and "if (pk && !still" in bar
-          and "prefers-reduced-motion: reduce" in bar)
-    old = K.chip_js(K.chip_view({"knows": ["dre"], "tips": []}, [], names))
-    check("peek: no Pip (Pip off), the bar's chip as it was", "var pk = D.peek" in old and '"peek"' not in old)
+    check("peek: the bar's chip (Pip off, or no review page) says what it said", "peek" not in bar.split("var D = ")[0]
+          and "t.textContent = D.text" in bar and "D.peek" not in bar)
     node = shutil.which("node")
     if node:
         ok = subprocess.run([node, "--check"], input=js, capture_output=True, text=True, timeout=30)
-        ok2 = subprocess.run([node, "--check"], input=bar, capture_output=True, text=True, timeout=30)
-        check("peek: its scripts parse (the corner's and the bar's)", ok.returncode == 0 and ok2.returncode == 0, (ok.stderr + ok2.stderr)[-400:])
+        check("peek: its script parses", ok.returncode == 0, ok.stderr[-400:])
 
 
 def test_admin_notice_v321():
@@ -10225,7 +10219,7 @@ def test_plan_remarks_and_deck_link_v381():
           and C.remark_view(plans, "guid000005", 0) is None and C.remark_view([], "guid000005", 1) is None, view)
     js = C.chip_js(dict(view, accent="#2e7d32")) + C.float_js(dict(view, accent=["#2e7d32", "#7cc47f"]))
     check("review: drawn as text, never markup; with no click of its own",
-          "var words = pk ? pk.head : D.text" in js and "t.textContent = words" in js and "e.textContent = text" in js and "if (D.cmd)" in js
+          "t.textContent = D.text" in js and "e.textContent = text" in js and "if (D.cmd)" in js
           and json.dumps(view["text"]) in js, js[:200])
     shown, saved = [], (C._bottom, C._review_web, C._show, C.client)
     store = world({"dre": "Dre", "sam": "Sam"})
@@ -13540,7 +13534,7 @@ def test_pips_where_emojis_were_v3822():
           and old["text"] == "🐢 Dre knows this" and "pip" not in old, (knows, asked["text"], old["text"]))
     bar, card = K.chip_js(knows), K.float_js(dict(knows, accent=["#2e7d32", "#7cc47f"]))
     check("chip: the bar and the card both draw it (its own markup, the words still text)",
-          all("p.innerHTML = D.pip.svg" in x and "pip(" in x and "t.textContent = words" in bar for x in (bar, card))
+          all("p.innerHTML = D.pip.svg" in x and "pip(" in x and "t.textContent = D.text" in bar for x in (bar, card))
           and "__PIP__" not in bar + card and "dc-sev-css-k" in bar)
     node = shutil.which("node")
     if node:

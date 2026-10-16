@@ -682,7 +682,7 @@ In Anki (as a follower):
 - [ ] A crewmate (mutual, sharing the same deck) has a card down that you've never missed. Open Anki (the day's first sync), study, press Again on that card for the first time: ten minutes later it's back, and on its answer side their Pip pops up from the bottom right with a lightbulb, "I know this one", Ask Dre, Not now. No sync needed in between.
 - [ ] Before you've missed it: nothing. The next card: their Pip ducks back down. Not now: the same. Ask Dre: the ask window, as before.
 - [ ] Two crewmates know it: "Dre and 1 more know this", Ask. Already asked: Asked. A tip on it, an ask from a crewmate or a plan's note: the card as before, not the Pip.
-- [ ] A card whose text or picture fills that corner: the peek moves beside Edit, smaller: their Pip popping up with the lightbulb glowing, "I know this one · Ask Dre" (two: "Dre and 1 more know this · Ask"). Never the old plain pill for it. Reduce motion (system setting): the Pip and bubble there at once, no pop, no duck. Settings › Pip off: the corner card as before.
+- [ ] A card whose text or picture fills that corner: still the peek, never the chip beside Edit; scroll down and the card's last lines clear it. Reduce motion (system setting): the Pip and bubble there at once, no pop, no duck. Settings › Pip off: the corner card as before.
 
 ### 3.9.0: the Backlog Beast
 
