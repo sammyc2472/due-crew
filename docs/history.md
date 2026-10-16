@@ -1898,3 +1898,8 @@ every release that changes how something works.
   the fake the same); an older Worker that refuses it gets the week
   without it, so deploy the Worker first. `beast.py` pure, `beast_flow.py`
   the glue, `beast_art.py` the drawings.
+- 3.9.0, the closet's line (Sam, 16 Oct): Wear it floated mid-banner,
+  apart from Closet. Each banner action pushes itself right with an auto
+  margin, so two of them split the free space; a second one now sits
+  beside the first (`.wc + .wc`), actions never break over two lines, and
+  the line's words sit left when they wrap at phone width.

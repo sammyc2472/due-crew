@@ -603,7 +603,10 @@ def _css(cfg):
       border: 1px solid var(--dc-accent); border-radius: 10px; padding: 8px 12px;
       font-size: 12px; margin-bottom: 10px; }}
     #due-crew .dc-wrap .wc {{ margin-left: auto; color: var(--dc-accent);
-      text-decoration: none; font-weight: 700; font-size: 10.5px; }}
+      text-decoration: none; font-weight: 700; font-size: 10.5px; white-space: nowrap; }}
+    /* a banner's second action sits beside the first: two auto margins would split the free space between them */
+    #due-crew .dc-wrap .wc + .wc {{ margin-left: 4px; }}
+    #due-crew .dc-wrap.cl-earn {{ text-align: left; }}
     #due-crew .dc-wrap .wx {{ color: var(--dc-muted);
       text-decoration: none; font-weight: 700; }}
     #due-crew .dc-wrap.inv {{ text-align: left; }}

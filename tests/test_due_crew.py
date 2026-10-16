@@ -13959,6 +13959,22 @@ def test_wrapped_flow_v390():
           and "YEAR_SEV = 220" in js and S.YEAR_SEV == 220)
 
 
+def test_banner_actions_sit_together_v390():
+    """A banner with two actions (the closet's Wear it and Closet) keeps
+    them together at its right end: each .wc pushes itself right with an
+    auto margin, so two of them split the free space and the first floated
+    mid-banner (Sam, 16 Oct). They stay on one line, and the closet's words
+    sit left when they wrap (the Decks screen's <center> reaches them)."""
+    from due_crew import closet
+    k = next(t["k"] for t in closet.THINGS if t["slot"] != closet.COSTUME)
+    line = board.closet_line([k], [])
+    css = board._css({})
+    check("the closet's line: two actions, Wear it and Closet", line.count('class="wc"') == 2 and "Wear it" in line)
+    check("a banner's second action sits beside the first, no auto margin splitting the space; actions on one line",
+          ".dc-wrap .wc + .wc { margin-left: 4px; }" in css and re.search(r"\.dc-wrap \.wc \{[^}]*white-space: nowrap", css)
+          and ".dc-wrap.cl-earn { text-align: left; }" in css)
+
+
 def test_beast_rides_the_week_v390():
     """3.9.0: my beast rides my week to my crew (its kind and how far,
     nothing else), and a Worker not yet on 3.9.0 that refuses it gets the
