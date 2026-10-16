@@ -13070,6 +13070,10 @@ def test_closet_board_v382():
     check("▶ Fifteen? in the top bar wears my look (it was plain)", CA.ART["cap"][0][:30] in chip["sev"]["idle"]
           and CA.ART["cap"][0][:30] not in RM.start_data(("#2e7d32", "#7cc47f"), "right", True)["sev"]["idle"])
     check("Settings › Fifteen and Pip: the closet, a click away", "duecrew:closet'" in board._settings_board({}))
+    col_page = board.closet_html({"tab": "Yours", "have": {}, "look": []}, {"accent": "blue"})
+    check("3.9.0 (Sam): the closet has the colour too, every accent, the one on pressed, as Settings' Board tab has it",
+          all(f"duecrew:set:accent:{k}" in col_page for k in board.ACCENTS) and 'aria-label="Blue" aria-pressed="true"' in col_page
+          and "Pip and your board" in col_page and board._accent_swatches({"accent": "blue"}) in board._settings_board({"accent": "blue"}))
     # the clicks, as the board sends them
     if "aqt.reviewer" not in sys.modules:
         sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
@@ -13098,6 +13102,8 @@ def test_closet_board_v382():
         worn = list(mine["sev_look"])
         send("closetwear:dino")
         back = list(mine["sev_look"])
+        send("set:accent:purple")  # 3.9.0 (Sam): the colour, from the closet
+        coloured = (mine.get("accent"), dc._state["closet_open"] is not None)
         send("closettab:99")
         send("closetoff")
         offed = list(mine["sev_look"])
@@ -13107,6 +13113,8 @@ def test_closet_board_v382():
               st["tab"] == "Yours" and st["new"] == ["dino"] and dc._state["closet_new"] is None and tab9 == "To earn")
         check("its clicks: put mine on (a hat replaces the hat; a costume over the look, off again: the look's back), never one I haven't",
               not tried and worn == ["headphones", "dino"] and back == ["headphones"], (worn, back))
+        check("the closet's colour: Pip's and the board's, saved as Settings saves it, and the closet stays open",
+              coloured == ("purple", True), coloured)
         check("take it all off; its view holds what's mine and what's near; back to the board",
               offed == [] and v["have"] == have and v["near"] and v["near"][0][0] == "cap" and v["progress"]["cap"] == (11, 14)
               and dc._state["closet_open"] is None and len(swaps) >= 8)

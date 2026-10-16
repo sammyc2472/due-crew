@@ -3445,16 +3445,22 @@ def _settings_you(view, cfg=None):
     return out
 
 
+def _accent_swatches(cfg):
+    """The accent's swatches (Settings › Board and, 3.9.0, the closet):
+    Pip's colour and the board's, the one your crew sees Pip in."""
+    accent = cfg.get("accent", DEFAULT_ACCENT)
+    return "".join(
+        f'<button class="{"on" if k == accent else ""}" style="background:{v["light"][0]}" title="{k.title()}" '
+        f'aria-label="{k.title()}" aria-pressed="{"true" if k == accent else "false"}" {_st_click(f"set:accent:{k}")}></button>'
+        for k, v in ACCENTS.items())
+
+
 def _settings_board(cfg):
     hidden = hidden_tabs(cfg)
     pills = '<button class="st-pill on" disabled aria-pressed="true">Crew</button>' + "".join(
         f'<button class="st-pill{"" if k in hidden else " on"}" aria-pressed="{"false" if k in hidden else "true"}" '
         f'{_st_click(f"settabs:{k}:{1 if k in hidden else 0}")}>{t}</button>' for k, t in HIDEABLE_TABS)
-    accent = cfg.get("accent", DEFAULT_ACCENT)
-    swatches = "".join(
-        f'<button class="{"on" if k == accent else ""}" style="background:{v["light"][0]}" title="{k.title()}" '
-        f'aria-label="{k.title()}" aria-pressed="{"true" if k == accent else "false"}" {_st_click(f"set:accent:{k}")}></button>'
-        for k, v in ACCENTS.items())
+    swatches = _accent_swatches(cfg)
     label = _html.escape(str(cfg.get("crew_label") or "Crew"))
     label_in = (f'<input class="st-in" data-f="label" maxlength="24" size="12" value="{label}" aria-label="Crew name in shares" '
                 f'onchange="pycmd(\'duecrew:setlabel:\'+encodeURIComponent(this.value));">')
@@ -3670,6 +3676,9 @@ CLOSET_CSS = """
     #due-crew .cl-o i { font-style: normal; color: var(--dc-faded); }
     #due-crew .cl-o.cos { background: var(--dc-you-bg); }
     #due-crew .cl-ons.covered .cl-o:not(.cos) { opacity: .5; }
+    #due-crew .cl-col { display: grid; gap: 5px; font-size: 12px; font-weight: 600; padding-bottom: 6px; border-bottom: 1px solid var(--dc-line); }
+    #due-crew .cl-col small { font-weight: 400; color: var(--dc-muted); margin-left: 4px; }
+    #due-crew .cl-col .st-sw { flex-wrap: wrap; padding: 2px 3px; }
     #due-crew .cl-msg { font-size: 11.5px; color: var(--dc-muted); }
     #due-crew .cl-msg:empty { display: none; }
     #due-crew .cl-msg b { color: var(--dc-ink); }
@@ -3821,7 +3830,9 @@ def closet_html(view, cfg):
     new = [k for k in view.get("new") or [] if k in have]
     progress = {k: v for k, v in (view.get("progress") or {}).items() if k in _closet.BY and k not in have}
     fig = _sev.svg("hello" if new else "idle", rest=bool(view.get("rest")), look=look, label="Your Pip")
-    me = (f'<div class="cl-me"><div class="cl-fig">{fig}</div>{_closet_ons(look)}'
+    colour = (f'<div class="cl-col"><span>Colour <small>Pip and your board</small></span>'
+              f'<span class="st-sw" role="group" aria-label="Colour">{_accent_swatches(cfg)}</span></div>')  # 3.9.0 (Sam)
+    me = (f'<div class="cl-me"><div class="cl-fig">{fig}</div>{colour}{_closet_ons(look)}'
           f'<div class="cl-msg" aria-live="polite">{str(view.get("msg") or "")}</div>'
           + (f'<a class="st-lk" href="#" {_st_click("closetoff")}>Take it all off</a>' if look else "")
           + '</div>')

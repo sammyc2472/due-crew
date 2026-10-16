@@ -665,6 +665,11 @@ In Anki (as a follower):
 - [ ] Plan ▾ › How its cards open: switch to When I'm ready (a deck with open later cards offers Hold back), and back to the plan's dates (dates passed since ask, as Resume does). duecrew.com's plan page shows "At your pace · next: …" and the same choice; changing it there reaches Anki at its next refresh.
 - [ ] Browse: right-click a tag in the sidebar › Due Crew: open its cards…: the sheet counts what opens, what's open already, the leeches (they stay suspended), and the plans that hold them; Open with First in line ticked puts them first in Anki's new cards; one Edit › Undo shuts them. Pick cards in the table › Due Crew: open these…: the same for just those. Signed out: both are there.
 
+### 3.9.0: the closet's colour, the review chip
+
+- [ ] Pip's closet: under Pip, Colour with the six swatches, yours ringed. Click one: Pip, the closet and (‹ Board) the board are in it; Settings › Board › Accent shows the same one. A crewmate sees your Pip in it after your next sync.
+- [ ] Review a card a crewmate knows: the chip beside Edit has their Pip whole (hat and feet inside the pill), light and dark.
+
 ### 3.9.0: the Backlog Beast
 
 - [ ] A profile with a real pile (a week away is easiest: 100 overdue cards or more, and two of your usual days' worth), after the day's AnkiWeb sync: a card in the You bubble, "The Backlog Beast" (or the Snoozasaurus after a week away, the Overdue Owl, the Leech Lord, the Pile), "Turned up today · N overdue cards left", its health bar in its colour, the beast breathing (still with Reduce motion). It shows on every tab of the bubble; folded, the beast sits small on the one line. Click anywhere on the card but Study them: its page. Tab to it and press Enter: the same. Before the AnkiWeb sync: nothing yet.

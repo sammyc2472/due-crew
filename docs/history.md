@@ -1903,6 +1903,16 @@ every release that changes how something works.
   the fake the same); an older Worker that refuses it gets the week
   without it, so deploy the Worker first. `beast.py` pure, `beast_flow.py`
   the glue, `beast_art.py` the drawings.
+- 3.9.0, the closet has the colour (Sam, 16 Oct: "add pip / overall
+  color change to the closet page so people can more easily access
+  overall color change stuff"). Under Pip on the closet page, Colour
+  ("Pip and your board"): the accent's swatches, the same ones as
+  Settings › Board (`board._accent_swatches`, one markup for both) and
+  the same `set:accent` click, which redraws the closet in the new colour.
+- 3.9.0, the review chip's Pip has room (Sam, 16 Oct: "this button is a
+  bit too compact for the pip"). The bar chip was 18px tall with Pip
+  pulled up into its border; with a Pip it pads to 30px and Pip sits in
+  it head to feet (`cards._CHIP_JS`). The card-corner one had room.
 - 3.9.0, a hit is a card moved to tomorrow (Sam, 16 Oct: "the beast gets
   beaten when the cards are moved to at least tomorrow"). Any review used
   to knock it, Again too; now a card is off the beast once Anki has it

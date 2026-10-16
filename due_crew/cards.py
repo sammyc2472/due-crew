@@ -306,9 +306,9 @@ _CHIP_JS = """(function () {
   var edit = document.querySelector('button[onclick*="edit"]');
   var cell = edit ? edit.parentNode : document.body;
   var s = document.createElement('span'); s.id = 'dc-knows';
-  s.style.cssText = 'display:inline-flex;align-items:center;gap:6px;margin-left:10px;padding:2px 10px;border-radius:99px;' +
-    'border:1px solid ' + D.accent + ';font:11.5px -apple-system,Segoe UI,sans-serif;white-space:nowrap;vertical-align:middle;cursor:pointer;';
-  pip(s, D, night, 'margin:-5px 1px -2px -4px;');  // 3.8.22: who it is, as their Pip
+  s.style.cssText = 'display:inline-flex;align-items:center;gap:6px;margin-left:10px;padding:' + (D.pip ? '3px 10px 3px 6px' : '2px 10px') +
+    ';border-radius:99px;border:1px solid ' + D.accent + ';font:11.5px -apple-system,Segoe UI,sans-serif;white-space:nowrap;vertical-align:middle;cursor:pointer;';
+  pip(s, D, night, 'margin:8px 2px 0 1px;');  // 3.8.22: who it is, as their Pip (Sam, 16 Oct: room for all of it, head to feet)
   var t = document.createElement('span'); t.id = 'dc-knows-t'; t.textContent = D.text; s.appendChild(t);
   t.setAttribute('data-full', D.text); t.setAttribute('data-short', D.short || D.text);
   if (D.kind === 'tip') { t.setAttribute('data-tip', '1'); }
