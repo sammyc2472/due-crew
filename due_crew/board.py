@@ -4274,8 +4274,8 @@ def _beast_pets(met):
     return f'<div class="st-h">Beaten</div><div class="bp-pets">{figs}</div>'
 
 
-BEAST_HOW = ("It&rsquo;s the reviews you fell behind on. It never grows.",
-             "Review its cards to shrink it. Again counts too.",
+BEAST_HOW = ("It&rsquo;s the cards that were overdue (due before today) the morning it came. It never grows.",
+             "Review one and Anki moves it to tomorrow or later: that&rsquo;s a hit. Again keeps it here till you get it.",
              "No rush: it waits for you. Beat it and it&rsquo;s your pet.")
 
 
@@ -4284,8 +4284,8 @@ def _beast_how(now=None):
     A beast that's part of a bigger pile says so in the first."""
     first = BEAST_HOW[0]
     if now and now.get("capped") and int(now.get("pile") or 0) > int(now.get("size") or 0):
-        first = (f"It&rsquo;s the oldest {int(now['size']):,} of your {int(now['pile']):,} overdue reviews. "
-                 "It never grows; the rest can come later.")
+        first = (f"It&rsquo;s {int(now['size']):,} of the {int(now['pile']):,} cards that were overdue (due before today) "
+                 "the morning it came, the most overdue first. It never grows; the rest can come later.")
     return ('<div class="bp-how"><div class="st-h">How it works</div><ol>'
             + "".join(f"<li>{x}</li>" for x in (first,) + BEAST_HOW[1:]) + "</ol></div>")
 
@@ -4311,7 +4311,7 @@ def beast_html(view, cfg):
         stage = (f'<svg class="dc-bst big st{_beast.stage(frac)}" style="--bs:{scale}" viewBox="0 0 200 170" role="img" '
                  f'aria-label="{e(name)}, {int(frac * 100)}% beaten">{_bart.art(k, stages=True)}</svg>')
         left = int(v.get("left") or 0)
-        side = (f'<div class="bp-n">{e(name)}</div><div class="bp-why">{e(_beast.subtitle(k, now.get("size") or 0))}</div>'
+        side = (f'<div class="bp-n">{e(name)}</div><div class="bp-why">{e(_beast.subtitle(k, now.get("size") or 0, now.get("usual") or 0))}</div>'
                 f'<div class="bp-hpr">{_beast_hp(frac, f"{int(frac * 100)}% beaten")}<span class="bp-t"><b>{left:,}</b> left</span></div>'
                 f'<div class="bp-row"><button class="bp-go" {_st_click("beaststudy")}>Study them</button>'
                 f'<button class="bp-btn" {_st_click("beastlet")}>Let it go</button></div>'
@@ -4334,7 +4334,8 @@ def beast_html(view, cfg):
                      'Turn them on</button></div>')
         elif not (k and news.get("how") == "beaten"):
             side += ('<div class="bp-n">Backlog beasts</div>'
-                     '<div class="bp-why">When your overdue reviews pile up (100 or more), they turn up here as a beast.</div>')
+                     '<div class="bp-why">When 100 or more cards are overdue (due before today), and that&rsquo;s two of your usual days, '
+                     'they turn up here as a beast.</div>')
         side += _beast_how()
     bc = BEAST_COLOURS.get((now or {}).get("k") or news.get("k"), "#7b5cd6")
     return (f'<div id="due-crew" class="dc-frame dc-set dc-bp">{_css(cfg)}<style>{SETTINGS_CSS}{BEAST_CSS}{_bart.CSS}</style>'

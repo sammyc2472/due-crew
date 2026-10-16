@@ -14049,9 +14049,13 @@ def test_beast_rules_v390():
     check("how it breaks up: a horn at a quarter, the other at half, dizzy at three quarters, gone at the end",
           [B.stage(x) for x in (0, .24, .25, .5, .75, .99, 1)] == [0, 0, 1, 2, 3, 3, 4])
     check("what it is, in one plain line (Sam: say what it means)",
-          B.subtitle("snooze", 17) == "17 overdue cards from your week away."
+          B.subtitle("snooze", 860, 120) == "860 overdue cards that came due while you were away."
           and B.subtitle("owl", 1) == "1 overdue card, most of them two weeks late or more."
-          and B.subtitle("pile", 4442) == "4,442 overdue cards, about five days of reviews."
+          and B.subtitle("leech", 260, 50) == "260 overdue cards, many of them leeches (cards you keep forgetting)."
+          and B.subtitle("pile", 4442, 300) == "4,442 overdue cards: about 15 days of your usual reviews."
+          and B.subtitle("backlog", 380, 120) == "380 overdue cards: about 3 days of your usual reviews."
+          and B.subtitle("backlog", 130, 120) == "130 overdue cards: about 1 day of your usual reviews."
+          and B.subtitle("backlog", 380) == "380 overdue cards."
           and all(set(k) == {"name", "from"} for k in B.KINDS.values()))
     s = {"now": dict(now, size=10)}
     s1 = B.update(s, 4, 1, t)
@@ -14102,8 +14106,8 @@ def test_beast_flow_v390():
     """3.9.0: the beast's glue on a collection: the pile (review cards due
     before today, in decks studied lately), rule B once a day after the
     day's AnkiWeb sync, its cards kept here or worked out from Anki's
-    history on another computer, hits counted from any review (never a
-    request), the end saved once, my week, Study them's deck, and the board's
+    history on another computer, a hit for each card Anki moves to tomorrow
+    or later (never a request), the end saved once, my week, Study them's deck, and the board's
     commands as the board sends them."""
     from due_crew import beast as B, beast_flow as F
     import due_crew as dc
@@ -14155,18 +14159,43 @@ def test_beast_flow_v390():
         F.check()
         check("once a day: a second look the same day changes nothing", len(saves) == 1)
         ids = kept["cids"]
-        for cid in ids[:30]:
-            fakes.add_review(conn, at(today, 15), cid=cid, ease=1)  # Again counts too
-        conn.execute(f"UPDATE cards SET queue = -1 WHERE id IN ({','.join(map(str, ids[30:35]))})")
+        cut = fakes.day_cutoff_for(today)
+        q = lambda xs: ",".join(map(str, xs))
+        # a hit: Anki has it due tomorrow or later (Sam), as its revlog and cards show it (tools/real_anki.py checks Anki does this)
+        for cid in ids[:20]:  # Hard, Good, Easy: a day or more ahead
+            fakes.add_review(conn, at(today, 15), cid=cid, ease=3, ivl=4)
+        conn.execute(f"UPDATE cards SET due = 1004, ivl = 4 WHERE id IN ({q(ids[:20])})")
+        conn.execute(f"UPDATE cards SET due = 1001 WHERE id IN ({q(ids[20:25])})")  # Set due date: tomorrow (its revlog: ease 0)
+        for cid in ids[20:25]:
+            fakes.add_review(conn, at(today, 15), cid=cid, ease=0, rtype=4, ivl=10)
+        for cid in ids[25:29]:  # Again with a relearning step of a day: tomorrow
+            fakes.add_review(conn, at(today, 15), cid=cid, ease=1, rtype=1, ivl=1)
+        conn.execute(f"UPDATE cards SET type = 3, queue = 3, due = 1001 WHERE id IN ({q(ids[25:29])})")
+        conn.execute(f"UPDATE cards SET type = 3, queue = 1, due = {cut + 600} WHERE id = {ids[29]}")  # a step past the rollover
+        # not yet: Again (a step later today), a preview deck's review, Set due date: today
+        for cid in ids[36:46]:
+            fakes.add_review(conn, at(today, 15), cid=cid, ease=1, ivl=-600)
+        conn.execute(f"UPDATE cards SET type = 3, queue = 1, due = {cut - 3600} WHERE id IN ({q(ids[36:46])})")
+        fakes.add_review(conn, at(today, 15), cid=ids[46], ease=3, rtype=3, ivl=0)
+        fakes.add_review(conn, at(today, 15), cid=ids[47], ease=0, rtype=4, ivl=10)
+        conn.execute(f"UPDATE cards SET due = 1000 WHERE id = {ids[47]}")
+        conn.execute(f"UPDATE cards SET queue = -1 WHERE id IN ({q(ids[30:35])})")
         conn.execute(f"UPDATE cards SET type = 0, queue = 0 WHERE id = {ids[35]}")
         s = F.check()
         frac, left = B.progress(s["now"])
-        check("any review knocks it, Again too; suspended and made-new cards leave it without a hit; counted here, never saved",
+        check("a hit when Anki moves a card to tomorrow or later (Sam): Hard/Good/Easy, Set due date, a day's step; "
+              "not Again till it's got, not a preview, not Set due date today; suspended and made-new leave without a hit; never saved",
               s["now"]["hit"] == 30 and s["now"]["gone"] == 6 and left == 115 and len(saves) == 1
               and dc._state["beast_count"] == {"day": "2026-10-15", "hit": 30, "gone": 6}, s["now"])
+        conn.execute(f"UPDATE cards SET due = 990 WHERE id = {ids[0]}")  # days later it's due again, unreviewed
+        conn.execute(f"UPDATE cards SET type = 2, queue = 2, due = 1003 WHERE id = {ids[36]}")  # Again, then got it
+        fakes.add_review(conn, at(today, 16), cid=ids[36], ease=3, rtype=2, ivl=3)
+        s = F.check()
+        check("a card it was moved ahead keeps counting when it comes due again (it never heals); Again then got: a hit",
+              s["now"]["hit"] == 31 and dc._state["beast_count"]["hit"] == 31, s["now"])
         F.note_week("2026-10-15")
         check("my week carries its kind and how far (My beast on to start), in the session for the next sync",
-              cl.session.get("beast") == {"k": "backlog", "p": int(30 / 145 * 100)} and session["saved"] == 1, cl.session)
+              cl.session.get("beast") == {"k": "backlog", "p": int(31 / 145 * 100)} and session["saved"] == 1, cl.session)
         conf["share_beast"] = False
         F.note_week("2026-10-15")
         check("My beast off: off my week at the next sync", "beast" not in cl.session)
@@ -14176,7 +14205,7 @@ def test_beast_flow_v390():
         conf.pop("show_up")
         v = F.view()
         check("the card's view: what's left and how far, shared or not; no bite, no pace (Sam's \"Just the cards\")",
-              v["left"] == 115 and v["share"] and set(v) == {"news", "met", "on", "share", "now", "frac", "left"}, v)
+              v["left"] == 114 and v["share"] and set(v) == {"news", "met", "on", "share", "now", "frac", "left"}, v)
         # another computer: no beast.json; its cards from Anki's history for that morning
         os.remove(os.path.join(files, F.FILE))
         start = F._day_start_ms(col, "2026-10-15")
@@ -14202,8 +14231,9 @@ def test_beast_flow_v390():
             F._write("2026-10-15", kept_ids)
             F.study()
             name, cids, order = built[-1]
-            check("Study them: a Due Crew deck of its cards not yet reviewed (all 115, under OPEN_MAX), the most overdue first (Anki's order by name; Due without Anki)",
-                  name == "Due Crew::The Backlog Beast" and len(cids) == 115 and not set(cids) & set(ids[:36]) and order == F.overdue_order()
+            check("Study them: a Due Crew deck of its cards not yet moved on (all 114, under OPEN_MAX: Again's ones too), the most overdue first (Anki's order by name; Due without Anki)",
+                  name == "Due Crew::The Backlog Beast" and len(cids) == 114 and not set(cids) & set(ids[:37]) and set(ids[37:46]) <= set(cids)
+                  and order == F.overdue_order()
                   and pc.get(F.DECK_DAY), built[-1][::2])
             F._write("2026-10-15", kept_ids)
             old_max, F.OPEN_MAX = F.OPEN_MAX, 50
@@ -14216,9 +14246,9 @@ def test_beast_flow_v390():
         F._write("2026-10-15", ids)
         for cid in ids[30:]:
             if cid not in ids[30:36]:
-                fakes.add_review(conn, at(today, 16), cid=cid)
+                fakes.add_review(conn, at(today, 16), cid=cid, ivl=2)
         s = F.check()
-        check("every card reviewed or gone: beaten, saved once more (the end), a pet; the news for the card",
+        check("every card moved on or gone: beaten, saved once more (the end), a pet; the news for the card",
               "now" not in s and s["met"][-1]["how"] == "beaten" and len(saves) == 2 and saves[-1]["beast"]["met"][-1]["how"] == "beaten"
               and dc._state["beast_news"]["how"] == "beaten" and F.beaten_in(2026)[0]["name"] == "The Backlog Beast", s)
         from due_crew import closet_flow as cf
@@ -14337,16 +14367,17 @@ def test_beast_board_v390():
           and 'class="bst-c"' in alone, alone[:300])
     page = board.beast_html(bv, {})
     check("its page, in the board's place (Sam's \"Just the cards\"): big and half broken (st2), one line, its health, Study them, Let it go",
-          "dc-bst big st2" in page and "412 overdue cards from the last few days." in page and "<b>206</b> left" in page
+          "dc-bst big st2" in page and "412 overdue cards: about 2 days of your usual reviews." in page and "<b>206</b> left" in page
           and "duecrew:beaststudy" in page and "duecrew:beastlet" in page and "duecrew:beastclose" in page, page[-2500:])
     check("how it works, in three short lines",
-          "How it works" in page and page.count("<li>") == 3 and "It never grows." in page and "Again counts too." in page
+          "How it works" in page and page.count("<li>") == 3 and "overdue (due before today)" in page and "It never grows." in page
+          and "Anki moves it to tomorrow or later" in page and "Again keeps it here" in page
           and "it waits for you" in page)
     check("gone (Sam): no speech, no bite, no pace, no Privacy or Not for me line",
           "bp-say" not in page
           and not any(w in re.sub(r"<style>.*?</style>", "", page, flags=re.S) for w in ("bite", "Steady", "Gentle", "Privacy", "Not for me", "beastoff", "beastpace")))
     part = board.beast_html(dict(bv, now=dict(now, capped=True, pile=900)), {})
-    check("part of a bigger pile: its first line says so", "the oldest 412 of your 900 overdue reviews" in part)
+    check("part of a bigger pile: its first line says so", "412 of the 900 cards that were overdue (due before today)" in part)
     pets = board.beast_html({"met": [{"k": "owl", "day": "2026-09-01", "end": "2026-09-09", "size": 300, "how": "beaten"},
                                      {"k": "pile", "day": "2026-09-20", "end": "2026-09-22", "size": 3, "how": "let"}],
                              "news": None, "on": False}, {})

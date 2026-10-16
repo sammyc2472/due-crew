@@ -5,7 +5,9 @@ speech, three lines on how it works). Pure: no aqt.
 
 When your overdue reviews pile up they turn up as a creature. Its kind says
 why the pile built (KINDS). It never grows: its cards are the ones overdue
-the morning it came, and any review of one of them knocks it, Again too.
+(due before today) the morning it came, and each is off it once Anki has it
+due tomorrow or later (Sam): a review that sends it ahead, Again only once
+it's got right.
 Study them opens its cards, the most overdue first, as many as you like.
 Nothing to lose: a day off and it waits; Let it go and it leaves, nobody's
 told. Beat it and it's a pet (and the closet's beast hood, viking helmet
@@ -43,12 +45,13 @@ SHOW_DAYS = 2  # a crewmate's beaten beast: a banner for two days
 ENDS = ("beaten", "let", "wandered")
 
 KINDS = {
-    # from: what its one line says after "17 overdue cards" (subtitle)
-    "snooze": {"name": "The Snoozasaurus", "from": " from your week away"},
+    # from: what its one line says after "17 overdue cards" (subtitle); None
+    # says how many of your usual days it is
+    "snooze": {"name": "The Snoozasaurus", "from": " that came due while you were away"},
     "owl": {"name": "The Overdue Owl", "from": ", most of them two weeks late or more"},
-    "leech": {"name": "The Leech Lord", "from": ", many of them leeches"},
-    "pile": {"name": "The Pile", "from": ", about five days of reviews"},
-    "backlog": {"name": "The Backlog Beast", "from": " from the last few days"},
+    "leech": {"name": "The Leech Lord", "from": ", many of them leeches (cards you keep forgetting)"},
+    "pile": {"name": "The Pile", "from": None},
+    "backlog": {"name": "The Backlog Beast", "from": None},
 }
 ORDER = ("snooze", "owl", "leech", "pile", "backlog")  # which cause wins when more than one is true
 
@@ -133,11 +136,20 @@ def stage(frac):
     return 4 if frac >= 1 else 3 if frac >= 0.75 else 2 if frac >= 0.5 else 1 if frac >= 0.25 else 0
 
 
-def subtitle(kind_key, n):
-    """Its one line: what it is, in plain words. "17 overdue cards from
-    your week away." """
+def subtitle(kind_key, n, usual_day=0):
+    """Its one line: what it is and why it came, in plain words. "860
+    overdue cards that came due while you were away." The Pile and the
+    Backlog Beast say how many of your usual days: "380 overdue cards:
+    about 3 days of your usual reviews." """
     k = KINDS.get(kind_key, KINDS["backlog"])
-    return f"{int(n):,} overdue card{'' if int(n) == 1 else 's'}{k['from']}."
+    n = int(n)
+    cards = f"{n:,} overdue card{'' if n == 1 else 's'}"
+    if k["from"] is not None:
+        return f"{cards}{k['from']}."
+    if int(usual_day or 0) <= 0:
+        return f"{cards}."
+    d = max(1, round(n / int(usual_day)))
+    return f"{cards}: about {d} day{'' if d == 1 else 's'} of your usual reviews."
 
 
 def update(state, hit, gone, today):

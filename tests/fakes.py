@@ -186,12 +186,13 @@ def make_collection(conn):
     return conn
 
 
-def add_review(conn, ts_ms, ease=3, time_ms=6000, rtype=1, cid=0, last_ivl=0):
-    # revlog ids are epoch-ms and must be unique
+def add_review(conn, ts_ms, ease=3, time_ms=6000, rtype=1, cid=0, last_ivl=0, ivl=0):
+    # revlog ids are epoch-ms and must be unique; ivl as Anki logs it (days
+    # ahead, or a learning step's seconds, negative)
     while conn.execute("SELECT 1 FROM revlog WHERE id=?", (ts_ms,)).fetchone():
         ts_ms += 1
-    conn.execute("INSERT INTO revlog (id, ease, time, type, cid, lastIvl) VALUES (?,?,?,?,?,?)",
-                 (ts_ms, ease, time_ms, rtype, cid, last_ivl))
+    conn.execute("INSERT INTO revlog (id, ease, time, type, cid, lastIvl, ivl) VALUES (?,?,?,?,?,?,?)",
+                 (ts_ms, ease, time_ms, rtype, cid, last_ivl, ivl))
     return ts_ms
 
 

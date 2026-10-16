@@ -1,16 +1,17 @@
 """3.9.0: the Backlog Beast, the glue (beast.py says what it is; board draws
-it). At each refresh: the beast now counts what's been reviewed of its
-cards (on any device: Anki's history, after an AnkiWeb sync) and what's
-gone without a review; once an Anki day with none, a look at the pile for
+it). At each refresh: the beast now counts its cards Anki has moved to
+tomorrow or later (on any device: the cards and Anki's history, after an
+AnkiWeb sync) and what's gone without that; once an Anki day with none,
+a look at the pile for
 a new one (rule B). Its cards stay on this computer (user_files/<profile>/
 beast.json); another computer works them out from Anki's own history for
 that morning. The account keeps the beast itself (`beast`), so every
 computer has the same one.
 
-Study them: a Due Crew deck of its cards not yet reviewed (OPEN_MAX at a
+Study them: a Due Crew deck of its cards not yet moved on (OPEN_MAX at a
 time), the most overdue for their interval first (Anki's relative
 overdueness), Anki rescheduling them as it would; one undo step of Anki's
-own. Study as many as you like; any review counts.
+own. Study as many as you like.
 
 Main thread: the collection and the config. No network here: what my crew
 sees rides my week (api.week_doc, session["beast"]).
@@ -177,13 +178,25 @@ def _write(day, cids):
 
 
 def count(col, cids, day):
-    """(reviewed since its morning, gone without a review: deleted,
-    suspended, or new again). Any review counts, Again too."""
+    """(moved to tomorrow or later since its morning, gone without that:
+    deleted, suspended, or new again). A card's off the beast once Anki has
+    it due tomorrow or later (Sam): a review since its morning that sent it
+    a day or more ahead (Hard, Good, Easy; Again only once it's got right:
+    Anki logs a learning step in seconds), or it's due tomorrow or later
+    now (Set due date, a relearning step of a day). The first keeps
+    counting after the card comes due again, so the beast never heals; a
+    preview deck's review (ivl 0) moves nothing."""
     s_ms = _day_start_ms(col, day)
+    today, cut = int(col.sched.today), int(col.sched.day_cutoff)
     hit, here = set(), set()
     for i in range(0, len(cids), CHUNK):
         chunk = ",".join(str(int(c)) for c in cids[i:i + CHUNK])
-        hit |= {int(c) for (c,) in col.db.all(f"SELECT DISTINCT cid FROM revlog WHERE id >= ? AND ease > 0 AND cid IN ({chunk})", s_ms) or []}
+        hit |= {int(c) for (c,) in col.db.all(
+            f"SELECT DISTINCT cid FROM revlog WHERE id >= ? AND ease > 0 AND ivl > 0 AND cid IN ({chunk})", s_ms) or []}
+        # a home due over 1e9 is a learning step's time; under it, a day number
+        hit |= {int(c) for (c,) in col.db.all(
+            f"SELECT id FROM (SELECT id, queue, type, CASE WHEN odid THEN odue ELSE due END AS d FROM cards WHERE id IN ({chunk})) "
+            "WHERE queue != -1 AND type != 0 AND CASE WHEN d > 1000000000 THEN d >= ? ELSE d > ? END", cut, today) or []}
         here |= {int(c) for (c,) in col.db.all(f"SELECT id FROM cards WHERE id IN ({chunk}) AND queue != -1 AND type != 0") or []}
     gone = {int(c) for c in cids} - here - hit
     return len(hit), len(gone), hit
@@ -274,7 +287,7 @@ def note_week(today=None, c=None):
 # ---- the clicks ----
 
 def open_cards(col, now):
-    """The cards Study them opens: its cards not yet reviewed, the most
+    """The cards Study them opens: its cards not yet moved on, the most
     overdue for their interval first, OPEN_MAX at most (Study them again
     opens the next)."""
     ids = cards(col, now)

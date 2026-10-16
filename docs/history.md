@@ -1866,10 +1866,11 @@ every release that changes how something works.
   away or paused; looked for once an Anki day, after the day's AnkiWeb
   sync, as the plans' morning waits. It never grows: its cards are the
   ones overdue that morning, the most overdue for their interval first,
-  at most three weeks of half a usual day (the rest after its rest). Any review of
-  one knocks it, Again too, on any device; a card suspended, deleted or
+  at most three weeks of half a usual day (the rest after its rest). A
+  card's a hit once Anki moves it to tomorrow or later, on any device
+  (below: Sam's rule, 16 Oct); a card suspended, deleted or
   made new leaves it without a hit, and half gone that way it wanders off.
-  Study them is a Due Crew deck of its cards not yet reviewed, up to 200
+  Study them is a Due Crew deck of its cards not yet moved on, up to 200
   (`beast_flow.OPEN_MAX`), most overdue first (Anki's relative-overdue
   order, found by its name: Anki renumbered the orders, and on 26.09 the
   old number is retrievability, which builds nothing on SM-2, as
@@ -1902,6 +1903,20 @@ every release that changes how something works.
   the fake the same); an older Worker that refuses it gets the week
   without it, so deploy the Worker first. `beast.py` pure, `beast_flow.py`
   the glue, `beast_art.py` the drawings.
+- 3.9.0, a hit is a card moved to tomorrow (Sam, 16 Oct: "the beast gets
+  beaten when the cards are moved to at least tomorrow"). Any review used
+  to knock it, Again too; now a card is off the beast once Anki has it
+  due tomorrow or later (`beast_flow.count`): a review since its morning
+  that Anki logged a day or more ahead (Hard, Good, Easy; Again logs a
+  step in seconds, so it counts once the card is got right), or the card
+  due tomorrow or later now (Set due date, a relearning step of a day).
+  The first keeps counting when the card comes due again later, so the
+  beast never heals; a preview deck's review (ivl 0) moves nothing.
+  `tools/real_anki.py` answers its cards with Anki's own scheduler to
+  prove each case. Overdue is said plainly too: "due before today". The
+  kinds' lines say why it came, the Pile's and the Backlog Beast's in
+  your usual days ("380 overdue cards: about 3 days of your usual
+  reviews."; `beast.subtitle`), from the mock "The Beast, plainly".
 - 3.9.0, the beast made plain (Sam, 16 Oct, on the click-test build:
   "way too much explanation", the bite "doesn't make any sense",
   Gentle / Steady / Fast neither, the beast's words strange; his pick,

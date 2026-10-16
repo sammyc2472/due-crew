@@ -714,20 +714,45 @@ def check_beast(tmp):
         rev(c, (cut - 3600) * 1000, 30)
     col.sched.suspend_cards(ids[40:45])
     hit, gone, _h = BF.count(col, ids, now["day"])
-    ok("counted: today's reviews of its cards, and the suspended ones gone", (hit, gone) == (40, 5), (hit, gone))
+    ok("counted: its cards today's reviews sent ahead, and the suspended ones gone", (hit, gone) == (40, 5), (hit, gone))
     BF._state["beast_count"] = None
     BF.study()
     name = P.our_deck(B.KINDS[now["k"]]["name"])
     bid = col.decks.id_for_name(name)
     deck = col.decks.get(bid) if bid else {}
     in_it = set(col.find_cards(f'"deck:{name}"')) if bid else set()
-    ok("Study them: Anki's filtered deck of its cards not yet reviewed, relative overdueness, rescheduling, opened",
+    ok("Study them: Anki's filtered deck of its cards not yet moved on, relative overdueness, rescheduling, opened",
        bid and deck.get("dyn") and len(in_it) == min(455, BF.OPEN_MAX) == 200 and not in_it & set(ids[:45]) and deck["terms"][0][2] == BF.overdue_order() == 10
        and deck.get("resched") and moved[-1:] == ["overview"], f"{len(in_it)} cards, terms {deck.get('terms')}")
     step = col.undo_status().undo
     col.undo()
     ok("Edit › Undo takes its deck away, its cards home", not col.decks.id_for_name(name), f"undo {step!r}")
     BF.study()
+    # a hit is a card Anki moves to tomorrow or later (Sam): answered by Anki's own scheduler in Study them's deck
+    from anki.scheduler.v3 import CardAnswer
+
+    def answer(cid, rating):
+        card = col.get_card(cid)
+        card.start_timer()
+        st = col._backend.get_scheduling_states(card.id)
+        new = {CardAnswer.AGAIN: st.again, CardAnswer.HARD: st.hard, CardAnswer.GOOD: st.good, CardAnswer.EASY: st.easy}[rating]
+        col.sched.answer_card(CardAnswer(card_id=card.id, current_state=st.current, new_state=new, rating=rating,
+                                         answered_at_millis=int(time.time() * 1000), milliseconds_taken=4000))
+    h0, g0, _h = BF.count(col, ids, now["day"])
+    deck_cards = sorted(col.find_cards(f'"deck:{name}"'))
+    outside = [c for c in ids[45:] if c not in set(deck_cards)]
+    a_, g_, h_ = deck_cards[:3]
+    answer(a_, CardAnswer.AGAIN)
+    answer(g_, CardAnswer.GOOD)
+    answer(h_, CardAnswer.HARD)
+    col.sched.set_due_date([outside[0]], "1")
+    col.sched.set_due_date([outside[1]], "0")
+    h1, g1, _h = BF.count(col, ids, now["day"])
+    answer(a_, CardAnswer.GOOD)
+    h2, g2, _h = BF.count(col, ids, now["day"])
+    ok("a hit when Anki moves a card to tomorrow or later: Good, Hard and Set due date 1 are; Again and Set due date 0 aren't; "
+       "Again then Good is", (h1 - h0, h2 - h0, g1 - g0) == (3, 4, 0),
+       f"{h0} → {h1} → {h2}; again {col.get_card(a_).queue}, revlog {col.db.list('SELECT ivl FROM revlog WHERE cid = ? ORDER BY id', a_)}")
     pc[BF.DECK_DAY] = "2000-01-01"
     normal = {int(d.id) for d in col.decks.all_names_and_ids(include_filtered=False)}
     BF.empty_old_deck(col, normal)
