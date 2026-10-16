@@ -10,7 +10,7 @@ import traceback
 from aqt import mw
 from aqt.utils import tooltip
 
-from . import app, board
+from . import app, board, shows
 from .app import (CHEER_QUICK, HEATMAP_DAYS, _bg, _pending_cheers,
                   _profile_files, _state, cfg, client, save_cfg)
 from .backend.shapes import clean_emoji
@@ -50,8 +50,13 @@ def _play_cheers():
         season = board.season_emoji(datetime.date.fromisoformat(today)) if today else None
     except ValueError:
         season = None
-    pips = board.cheer_pips(cheers, _state["entries"], cfg())  # 3.8.22: each sender's Pip tosses theirs
-    mw.web.eval(board.flurry_js(emojis, text, back=back, notes=notes, season=season, pips=pips))
+    c = cfg()
+    pips = board.cheer_pips(cheers, _state["entries"], c)  # 3.8.22: each sender's Pip tosses theirs
+    show = None
+    if pips:  # 3.9.0: a show over the whole Decks screen, a different one each time (Sam)
+        show, bag = shows.next_show(c.get(shows.BAG_KEY))
+        save_cfg(dict(c, **{shows.BAG_KEY: bag}))
+    mw.web.eval(board.flurry_js(emojis, text, back=back, notes=notes, season=season, pips=pips, show=show))
 
 
 def cheer_choices():

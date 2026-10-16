@@ -158,7 +158,7 @@ same commit, each with its test:
 |---|---|---|
 | The board, your people: Crew (Today · Week · Decks picker) and Squads | `board.py`, `__init__.py`, `backend/api.py`, `stats/` | `board.ts`, `social.ts`; `Board` in app.js |
 | The You bubble over it (3.8.0): Today, Upcoming, Later, Plans, Insights | `board.you_html`, `__init__._you`, `due_flow.py` | the rail on /home |
-| Cheers, status, profile card (3.8.22: a landing cheer's sender's Pip tosses it, `board.cheer_pips`) | `social.py`, `wrap.py` | `social.ts` |
+| Cheers, status, profile card (3.9.0: a landing cheer is a show over the whole Decks screen, a different one each time: `shows.py` the bag, `show.js` the twelve, started by `board.flurry_js`) | `social.py`, `wrap.py`, `shows.py`, `show.js` | `social.ts` |
 | Settings (one: the board's, 3.8.0) | `settings_model.py`, `account.py`, `board.settings_html` | `GET/PUT /settings` |
 | Squads, knocks, bingo | `squads.py`, `bingo.py`, `bingo_flow.py` | `squads.ts`, `bingo.ts`, `adminsquads.ts` |
 | Who knows this, asks, tips | `cards.py`, `together.py` | `cards.ts` |

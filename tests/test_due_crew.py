@@ -13805,6 +13805,91 @@ def test_cheers_with_pips_v3822():
           and said[0].count("Pip") >= 3 and "dino" not in said[0].split("var pips")[0], said[0][:300] if said else said)
 
 
+def test_cheer_shows_v390():
+    """3.9.0, how a cheer lands (Sam's picks, "Cheers, everywhere"): a show
+    over the whole Decks screen, a different one each time. The bag plays
+    every one of the twelve before any repeats, never the same twice in a
+    row; it's kept in this computer's config, never sent. flurry_js runs the
+    show (show.js) in place of the toss, the banner at the top; Reduce
+    motion and Pip off are as before. Sam's tweaks: the piñata says no
+    "CRACK!", and the fireworks put no name in the middle."""
+    import random as _r
+    import shutil
+    import subprocess
+    from due_crew import shows, social
+    from due_crew.app import _state, _pending_cheers
+    check("the twelve Sam kept, in the mock's order",
+          shows.SHOWS == ("cannon", "pinata", "fireworks", "gift", "bubbles", "wave", "balloons", "rocket", "stamp", "disco", "hat", "snow"))
+    rng, bag, seen = _r.Random(7), None, []
+    for _ in range(12 * 6):
+        k, bag = shows.next_show(bag, rng)
+        seen.append(k)
+    check("every one plays before any repeats, bag after bag",
+          all(sorted(seen[i:i + 12]) == sorted(shows.SHOWS) for i in range(0, len(seen), 12)), seen[:24])
+    check("never the same twice in a row, even where one bag ends and the next begins",
+          all(a != b for a, b in zip(seen, seen[1:])))
+    k, b2 = shows.next_show(["gone", "fireworks", "snow"], rng)
+    check("an older add-on's show in the bag is dropped; the last one played stays last",
+          k == "fireworks" and b2 == ["fireworks"] and shows.next_show(None, rng)[0] in shows.SHOWS)
+    for seed in range(40):  # a new bag never starts with the one just played
+        k, _b = shows.next_show(["snow"], _r.Random(seed))
+        check("a fresh bag doesn't open with the last show", k != "snow") if k == "snow" else None
+    entries = [{"user_id": "me", "you": True}, {"user_id": "dre", "name": "Dre K.", "accent": "blue", "look": ["dino"]}, {"user_id": "mo", "name": "Mo"}]
+    cheers = [{"from": "dre", "name": "Dre K.", "emoji": "🔥", "note": "go </script> " + "x" * 300}, {"from": "mo", "name": "Mo", "emoji": "💪"}]
+    pips = board.cheer_pips(cheers, entries, {})
+    check("each sender brings the poses a show needs, a first name and their note (cut short)",
+          set(pips[0]["poses"]) == {"hello", "jump", "cheer", "idle"} and all("<svg" in v for v in pips[0]["poses"].values())
+          and pips[0]["name"] == "Dre" and pips[0]["note"].startswith("go </script>") and len(pips[0]["note"]) == 140 and pips[1]["note"] == "", pips[0]["name"])
+    js = board.flurry_js(["🔥", "💪"], "Dre and Mo sent cheers", pips=pips, show="pinata")
+    check("with a show: show.js comes along and plays it in place of the toss, the banner at the top; Reduce motion still stands the Pips in the banner",
+          'var show = "pinata"' in js and "window.DCShow.play(show" in js and "banner.style.top = '12px'" in js and board.SHOW_JS[:200] in js
+          and js.index("if (still) { return; }") < js.index("window.DCShow.play(show") and "banner.insertBefore(who, title)" in js)
+    check("what the show gets is escaped for the page: no </ in the senders it's handed",
+          "</script>" not in js.split("senders: ")[1].split(", dark:")[0], js.split("senders: ")[1][:120])
+    check("Pip off (no Pips) or a show it doesn't know: no show, the flurry or the toss as before",
+          'var show = null' in board.flurry_js(["🎉"], "Dre sent cheers", show="pinata") and board.SHOW_JS[:200] not in board.flurry_js(["🎉"], "x", show="pinata")
+          and 'var show = null' in board.flurry_js(["🎉"], "x", pips=pips, show="spotlight"))
+    sj = board.SHOW_JS
+    check("show.js draws all twelve, and only them",
+          set(re.findall(r"SHOW\.(\w+) = function", sj)) == set(shows.SHOWS) and len(re.findall(r"SHOW\.(\w+) = function", sj)) == len(shows.SHOWS))
+    check("Sam's tweaks: no \"CRACK!\" on the piñata, no name in the fireworks' middle",
+          "CRACK" not in sj and "dcs-lbl" not in sj.split("SHOW.fireworks")[1].split("SHOW.gift")[0] and "THWACK!" in sj)
+    check("a show never takes markup from the page: names, notes and emoji go in as text; Pips are sev.py's",
+          ".innerHTML = s." not in sj and "innerHTML = svg" in sj and sj.count("textContent") >= 8)
+    check("a click anywhere but a present or a bubble, or Esc, ends it; it ends on its own too",
+          'e.key === "Escape"' in sj and 'closest(".dcs-click")' in sj and "function end(ms)" in sj)
+    if shutil.which("node"):
+        for name, code in (("show.js", sj), ("a landing with a show", js)):
+            r = subprocess.run(["node", "--check", "-"], input=code, capture_output=True, text=True)
+            check(f"{name} is valid JS", r.returncode == 0, r.stderr[:400])
+    # as the board plays them: the next show from the bag, the bag kept in the config
+    conf = {}
+    saved = (social.mw.state, getattr(social.mw, "web", None), list(_state.get("entries") or []), list(_state.get("labels") or []), social.cfg, social.save_cfg)
+    said = []
+    social.mw.state, social.mw.web = "deckBrowser", types.SimpleNamespace(eval=said.append)
+    social.cfg, social.save_cfg = (lambda: conf), (lambda c: (conf.clear(), conf.update(c)))
+    _state["entries"], _state["labels"] = entries, ["2026-10-25"]
+    try:
+        played = []
+        for _ in range(3):
+            _pending_cheers.extend(cheers)
+            social._play_cheers()
+            played.append(re.search(r'var show = "(\w+)"', said[-1]).group(1))
+        bag = list(conf.get(shows.BAG_KEY) or [])
+        conf["sev"] = False
+        _pending_cheers.extend(cheers)
+        social._play_cheers()
+        off = said[-1]
+    finally:
+        social.mw.state, social.mw.web = saved[:2]
+        _state["entries"], _state["labels"] = saved[2], saved[3]
+        social.cfg, social.save_cfg = saved[4], saved[5]
+        _pending_cheers.clear()
+    check("each landing plays the bag's next show, three different ones, the bag saved in this computer's config (not an account key)",
+          len(set(played)) == 3 and bag[-1] == played[-1] and len(bag) == 10 and shows.BAG_KEY not in __import__("due_crew.account", fromlist=["x"]).ACCOUNT_KEYS, (played, bag))
+    check("Pip off: the flurry as before, and the bag untouched", "var show = null" in off and conf.get(shows.BAG_KEY) == bag)
+
+
 def _wr_year(seed, keep, until=datetime.date(2026, 11, 30), start=datetime.date(2026, 1, 1)):
     import random as _r
     r, out, d = _r.Random(seed), {}, start

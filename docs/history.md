@@ -1903,6 +1903,26 @@ every release that changes how something works.
   the fake the same); an older Worker that refuses it gets the week
   without it, so deploy the Worker first. `beast.py` pure, `beast_flow.py`
   the glue, `beast_art.py` the drawings.
+- 3.9.0, cheers land everywhere (Sam, 16 Oct: the Pips tossing a cheer
+  were "less exciting", then "a different cheer every time, but ... the
+  whole anki decks screen", "Tons of options! Tons of fun!"; his picks
+  from the mock "Cheers, everywhere"). A landing cheer is a show over the
+  whole Decks page (deck list and board, a fixed layer under Anki's top
+  bar, which is its own page): the confetti cannon, the piñata (no
+  "CRACK!"), fireworks (no name in the middle), a present to open, bubbles
+  to pop, the deck wave, balloons, a rocket, a rubber stamp, the disco
+  ball, the magic hat, the snow globe. `shows.next_show` deals them from a
+  bag kept in this computer's config (`cheer_bag`): every one before any
+  repeats, never the same twice in a row. `show.js` draws them with the
+  senders' real Pips (`cheer_pips` now brings four poses, a first name and
+  their note, which go in as text), three at most, so three cheers is the
+  big version. `flurry_js` starts it in place of the toss, its banner (the
+  names, the notes, send one back) at the top; a click anywhere but a
+  present or a bubble, or Esc, ends it, and each ends on its own (a
+  present nobody opens opens itself). Reduce motion: the Pips still in the
+  banner, as before; Pip off: the flurry. Nothing new is sent.
+  `tools/show_preview.py` plays each on a page like the Decks screen with
+  the real board. The README's cheer picture is the balloons now.
 - 3.9.0, the closet has the colour (Sam, 16 Oct: "add pip / overall
   color change to the closet page so people can more easily access
   overall color change stuff"). Under Pip on the closet page, Colour

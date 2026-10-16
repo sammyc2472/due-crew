@@ -15,10 +15,10 @@ add you back. Your cards never leave your computer.
 
 ## Your crew
 
-**Cheers.** Tap 🎉 next to a friend's name and it rains down their
-screen, with your note.
+**Cheers.** Tap 🎉 next to a friend's name and a little show lands on
+their Decks screen, a different one each time, with your note.
 
-<img alt="A cheer arriving" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/flurry.png" width="600">
+<img alt="A cheer landing" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/flurry.png" width="600">
 
 **Study rooms.** 25-minute rounds with your crew, the timer in Anki's top
 bar, breaks together. Each of you sits in the room as your own Pip, in

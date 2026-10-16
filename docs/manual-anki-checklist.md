@@ -665,6 +665,13 @@ In Anki (as a follower):
 - [ ] Plan ▾ › How its cards open: switch to When I'm ready (a deck with open later cards offers Hold back), and back to the plan's dates (dates passed since ask, as Resume does). duecrew.com's plan page shows "At your pace · next: …" and the same choice; changing it there reaches Anki at its next refresh.
 - [ ] Browse: right-click a tag in the sidebar › Due Crew: open its cards…: the sheet counts what opens, what's open already, the leeches (they stay suspended), and the plans that hold them; Open with First in line ticked puts them first in Anki's new cards; one Edit › Undo shuts them. Pick cards in the table › Due Crew: open these…: the same for just those. Signed out: both are there.
 
+### 3.9.0: cheers land everywhere
+
+- [ ] Have a crewmate cheer you, then open the Decks screen: a show plays over the whole page, the deck list and the board, never over Anki's top bar; the banner at the top names them, with their note and "click to send one back". Cheered again (or a few cheers at once): a different show each time, never the same twice in a row, all twelve before any repeats.
+- [ ] Three crewmates at once: the big version (three Pips, three presents, three stamps…). A present: click it and their Pip springs out with their note on the tag; leave it and it opens itself. Bubbles: click one and it pops.
+- [ ] A click anywhere (but a present or bubble) or Esc ends it at once; otherwise it ends on its own and the page is as it was.
+- [ ] Reduce motion (system setting): no show, the senders' Pips standing in the banner. Settings › Pip off: the emoji flurry, as before.
+
 ### 3.9.0: the closet's colour, the review chip
 
 - [ ] Pip's closet: under Pip, Colour with the six swatches, yours ringed. Click one: Pip, the closet and (‹ Board) the board are in it; Settings › Board › Accent shows the same one. A crewmate sees your Pip in it after your next sync.

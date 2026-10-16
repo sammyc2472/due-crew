@@ -23,7 +23,7 @@ from datetime import date as _date, datetime, timezone
 
 from .logo import board_mark
 from . import room_model
-from . import beast as _beast, beast_art as _bart, closet as _closet, sev as _sev
+from . import beast as _beast, beast_art as _bart, closet as _closet, sev as _sev, shows as _shows
 from .stats.decks import sig_match
 
 LIGHT = {
@@ -1389,6 +1389,9 @@ FIND_JS = r"""
 # 3.8.0: the board's motion, one file shared with duecrew.com (site/public/motion.js, byte for byte)
 with open(_os.path.join(_os.path.dirname(__file__), "motion.js"), encoding="utf-8") as _f:
     MOTION_JS = _f.read()
+# 3.9.0: how a cheer lands, a show over the whole Decks screen (shows.py picks which)
+with open(_os.path.join(_os.path.dirname(__file__), "show.js"), encoding="utf-8") as _f:
+    SHOW_JS = _f.read()
 
 
 def keep_me_in_view_js():
@@ -4706,10 +4709,12 @@ CHEER_PIP = 92  # 3.8.22: a crewmate's Pip popping in with their cheer
 def cheer_pips(cheers, entries, cfg, most=3):
     """3.8.22, cheers with Pips (Sam's pick, round three): who sent the
     cheers that just landed, as their Pips, each once, in the order they
-    came, three at most: [{svg, a: [light, dark], emoji}]. A cheer lands
-    only from someone I added: a mutual friend comes in their colour and
-    look, anyone else plain. [] with Pip off. Our own markup; a name is
-    only its label, escaped."""
+    came, three at most: [{svg, a: [light, dark], emoji, name, note, poses}].
+    A cheer lands only from someone I added: a mutual friend comes in their
+    colour and look, anyone else plain. [] with Pip off. Our own markup; a
+    name is only its label, escaped. 3.9.0: the poses a show needs (popping
+    up, jumping, springing out of a present, still), and the name and
+    note, which the show puts in as text."""
     if not cfg.get("sev", True):
         return []
     by = {e.get("user_id"): e for e in entries or [] if not e.get("you")}
@@ -4720,9 +4725,17 @@ def cheer_pips(cheers, entries, cfg, most=3):
             continue
         seen.add(u)
         e = by.get(u) or {}
-        label = _html.escape(f'{ch.get("name") or e.get("name") or "?"}’s Pip', quote=True)
-        out.append({"svg": _sev.svg("hello", "popup", look=e.get("look"), label=label),
-                    "a": list(accent_pair(e.get("accent"))), "emoji": str(ch.get("emoji") or "")})
+        name = str(ch.get("name") or e.get("name") or "?")
+        label = _html.escape(f'{name}’s Pip', quote=True)
+        look = e.get("look")
+        note = next((str(c.get("note")) for c in cheers if c.get("from") == u and c.get("note")), "")
+        out.append({"svg": _sev.svg("hello", "popup", look=look, label=label),
+                    "a": list(accent_pair(e.get("accent"))), "emoji": str(ch.get("emoji") or ""),
+                    "name": name.split(" ")[0][:40], "note": note[:140],
+                    "poses": {"hello": _sev.svg("hello", "popup", look=look, label=label),
+                              "jump": _sev.svg("hop", "jump", look=look, label=label),
+                              "cheer": _sev.svg("cheer", "giftspin", look=look, label=label),
+                              "idle": _sev.svg("idle", look=look, label=label)}})
         if len(out) >= most:
             break
     return out
@@ -4736,7 +4749,7 @@ def and_more(names, most=3):
     return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1] if names else ""
 
 
-def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None):
+def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None, show=None):
     """Injected via web.eval after render — never inline in board HTML.
     Banner takes its colors from the board's tokens (so Settings → Theme
     holds), the page's night classes only when the board is off. When `back` is
@@ -4746,13 +4759,18 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
     pips (3.8.22, cheer_pips): the senders' Pips. Each pops up at the
     board's edge in turn, tosses its cheer onto my row and ducks back down,
     in place of the flurry; with Reduce motion they stand still in the
-    banner."""
+    banner. show (3.9.0, shows.next_show): with the Pips, a show over the
+    whole Decks screen in place of the toss (show.js), the banner at the
+    top; the toss if the show can't play."""
     # 2.10: about one flake in three is the season's
     emoji_list = _json.dumps(list(emojis) * 2 + list(season or []) if season else list(emojis))
     banner = _json.dumps(banner_text)
     notes_json = _json.dumps([str(n) for n in (notes or [])][:3])
     back_cmd = _json.dumps(f"duecrew:cheerback:{back[0]}:{back[1]}" if back else None)
     pips_json = _json.dumps([{"svg": p["svg"], "a": p["a"], "emoji": p.get("emoji") or ""} for p in (pips or [])][:3]).replace("</", "<\\/")
+    show_json = _json.dumps(show if show in _shows.SHOWS and pips else None)
+    senders_json = _json.dumps([dict(p.get("poses") or {}, name=p.get("name") or "", note=p.get("note") or "", emoji=p.get("emoji") or "\U0001F389", a=p["a"])
+                                for p in (pips or [])][:3]).replace("</", "<\\/") if show else "[]"
     season_one = _json.dumps((list(season or []) or [""])[0])
     return """
     (function() {
@@ -4828,6 +4846,14 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
         setTimeout(function() { banner.style.opacity = '0'; }, linger);
         setTimeout(function() { banner.remove(); }, linger + 600);
         if (still) { return; }
+        var show = %s;
+        if (show && pips.length && document.body.animate) {
+            // 3.9.0: a show over the whole Decks screen, the banner at its top (show.js)
+            %s
+            var played = window.DCShow && window.DCShow.play(show, { senders: %s, dark: boardDark, line: dcLine, amb: warn, mut: muted,
+                accent: accent, accentInk: accentInk, ink: dcInk, sevcss: %s });
+            if (played) { banner.style.top = '12px'; return; }
+        }
         if (pips.length && document.body.animate) {
             var dc = document.getElementById('due-crew'), vw = window.innerWidth, vh = window.innerHeight;
             var edge = dc ? dc.getBoundingClientRect().right : vw * 0.8, size = %d, season = %s;
@@ -4914,7 +4940,8 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
         document.body.appendChild(wrap);
         setTimeout(function() { wrap.remove(); }, 3800);
     })();
-    """ % (back_cmd, banner, notes_json, pips_json, CHEER_PIP, season_one, emoji_list)
+    """ % (back_cmd, banner, notes_json, pips_json, show_json, SHOW_JS if show_json != "null" else "",
+           senders_json, _json.dumps(_sev.CSS).replace("</", "<\\/") if show_json != "null" else "null", CHEER_PIP, season_one, emoji_list)
 
 
 def stranger_card_js(info):
