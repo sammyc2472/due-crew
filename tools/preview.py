@@ -594,9 +594,7 @@ _bf, _bl = _bst.progress(_bnow)
 
 def _bv(now=_bnow, **k):
     f, left = _bst.progress(now)
-    return dict({"now": now, "frac": f, "left": left, "says": _bst.says(now["k"], f), "bite": _bst.bite(now["usual"], now["pace"]),
-                 "days": _bst.days_left(left, now["usual"], now["pace"]), "met": [], "news": None, "share": True, "on": True,
-                 "naps": False}, **k)
+    return dict({"now": now, "frac": f, "left": left, "met": [], "news": None, "share": True, "on": True}, **k)
 
 
 _YOU = {"tab": "today", "folded": False, "plans": PLANS, "insights": None}
@@ -609,7 +607,7 @@ sections.append("<h3>3.9.0: the You bubble folded: the beast small on its line</
 for _k, _hit, _cap in (("backlog", 150, False), ("backlog", 330, False), ("backlog", 2600, True), ("snooze", 2400, True), ("owl", 40, False),
                        ("pile", 500, False), ("leech", 200, False)):
     _n = dict(_bst.turn_up(L[0], _k, list(range(3150 if _cap else 640)), 300), hit=_hit, capped=_cap)
-    sections.append(f"<h3>3.9.0: the fight, in the board's place: {_bst.KINDS[_k]['name']}, {int(_bst.progress(_n)[0] * 100)}% beaten</h3>"
+    sections.append(f"<h3>3.9.0: its page, in the board's place: {_bst.KINDS[_k]['name']}, {int(_bst.progress(_n)[0] * 100)}% beaten</h3>"
                     + board.beast_html(_bv(_n, met=[{"k": "owl", "day": "2026-08-01", "end": "2026-08-09", "size": 300, "how": "beaten"},
                                                     {"k": "snooze", "day": "2026-09-01", "end": "2026-09-12", "size": 1800, "how": "beaten"}]),
                                        dict(_MINE, accent="green")))
@@ -620,6 +618,9 @@ sections.append("<h3>3.9.0: the day it's beaten: the card's line, and the fight 
                                       "seen": []})
                 + board.beast_html({"news": {"k": "pile", "how": "beaten", "day": L[0]}, "on": True,
                                     "met": [{"k": "pile", "day": L[6], "end": L[0], "size": 1150, "how": "beaten"}]}, _MINE))
+sections.append("<h3>3.9.0: its page with no beast: what one is, and the pets so far</h3>"
+                + board.beast_html({"news": None, "on": True, "met": [{"k": "owl", "day": "2026-08-01", "end": "2026-08-09", "size": 300, "how": "beaten"}]}, _MINE))
+sections.append("<h3>3.9.0: its page with beasts off</h3>" + board.beast_html({"news": None, "on": False, "met": []}, _MINE))
 # Each board styles `#due-crew`; on one page the last <style> would win for
 # all of them, so every accent gets its own document via srcdoc.
 def _framed(markup, dark):

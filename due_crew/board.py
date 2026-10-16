@@ -3483,7 +3483,7 @@ def _settings_board(cfg):
                                             cfg.get("sev_break", "breathe"), "On a break"),
                       "Breathe with Pip, four counts a side, or stretch")
             + _st_row("Backlog beasts", _st_switch("beasts", g("beasts", True), "Backlog beasts"),
-                      "When your overdue pile gets big, it turns up as a beast to beat, a bite a day")
+                      "When your overdue reviews pile up, they turn up as a beast to beat")
             + '</div><div class="st-h">Due</div><div class="st-box">'
             + _st_row("Today, Upcoming, Later", _st_switch("due_show", g("due_show", True), "Today, Upcoming, Later"))
             + _st_row("Suggestions", _st_switch("due_suggest", g("due_suggest", True), "Suggestions"),
@@ -4115,11 +4115,12 @@ BEAST_CSS = """
     #due-crew .chip.bst { display: inline-flex; align-items: center; gap: 3px; vertical-align: -1px; }
     #due-crew .chip .dc-bst { width: 17px; height: 15px; display: inline-block; overflow: hidden; }
     #due-crew .bst-c { display: flex; align-items: center; gap: 10px; text-align: left; padding: 6px 10px 6px 6px;
-      margin: 6px 0 2px; border: 1px solid var(--dc-line); border-radius: 10px; }
-    #due-crew .bst-c > a.fig { flex: none; line-height: 0; }
+      margin: 6px 0 2px; border: 1px solid var(--dc-line); border-radius: 10px; cursor: pointer; }
+    #due-crew .bst-c:hover { background: var(--dc-well); }
+    #due-crew .bst-c > .fig { flex: none; line-height: 0; }
     #due-crew .bst-c .dc-bst { width: 48px; height: 41px; }
     #due-crew .bst-c .bx { flex: 1; min-width: 0; display: grid; gap: 3px; }
-    #due-crew .bst-c .bx > a { color: var(--dc-ink); text-decoration: none; }
+    #due-crew .bst-c .bx > b { color: var(--dc-ink); }
     #due-crew .bst-c .bx small { color: var(--dc-muted); font-size: 11.5px; }
     #due-crew .bst-c .x { color: var(--dc-faded); text-decoration: none; font-size: 15px; padding: 0 2px; }
     #due-crew .bst-c .dc-bst.pet { width: 50px; height: 43px; }
@@ -4131,20 +4132,20 @@ BEAST_CSS = """
     #due-crew.dc-bp { text-align: left; }
     #due-crew .bp-wrap { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 22px; align-items: start; }
     @media (max-width: 600px) { #due-crew .bp-wrap { grid-template-columns: minmax(0, 1fr); } }
-    #due-crew .bp-stage { position: relative; border-radius: 16px; padding: 64px 22px 14px; overflow: hidden;
+    #due-crew .bp-stage { position: relative; border-radius: 16px; padding: 22px 22px 14px; overflow: hidden;
       background: linear-gradient(180deg, color-mix(in srgb, var(--bc) 10%, var(--dc-bg)), color-mix(in srgb, var(--bc) 22%, var(--dc-bg)));
       border: 1px solid var(--dc-line); min-height: 230px; display: flex; align-items: flex-end; justify-content: center; }
     #due-crew .bp-stage .dc-bst.big { width: 100%; max-width: 250px; height: auto; aspect-ratio: 200 / 170; }
     #due-crew .bp-stage .dc-bst.big.pet { max-width: 210px; aspect-ratio: 120 / 104; }
-    #due-crew .bp-say { position: absolute; top: 12px; left: 14px; right: 14px; background: var(--dc-bg); color: var(--dc-ink);
-      border-radius: 12px; padding: 7px 11px; font-size: 13px; font-weight: 600; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
-    #due-crew .bp-say::after { content: ""; position: absolute; left: 50%; bottom: -6px; width: 12px; height: 12px;
-      background: var(--dc-bg); transform: translateX(-50%) rotate(45deg); }
     #due-crew .bp-side { display: grid; gap: 9px; align-content: start; }
     #due-crew .bp-n { font-size: 18px; font-weight: 800; line-height: 1.2; }
     #due-crew .bp-why { color: var(--dc-muted); font-size: 12.5px; margin-top: -5px; }
-    #due-crew .bp-side .bst-hp { height: 10px; }
-    #due-crew .bp-t { font-size: 12.5px; font-variant-numeric: tabular-nums; }
+    #due-crew .bp-hpr { display: flex; align-items: center; gap: 10px; }
+    #due-crew .bp-hpr .bst-hp { flex: 1; height: 10px; }
+    #due-crew .bp-t { font-size: 12.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    #due-crew .bp-how .st-h { margin: 8px 0 5px; }
+    #due-crew .bp-how ol { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 12.5px; line-height: 1.4; }
+    #due-crew .bp-how li::marker { color: var(--dc-muted); font-weight: 700; }
     #due-crew .bp-row { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
     #due-crew .bp-row small { color: var(--dc-muted); font-size: 11.5px; }
     #due-crew .bp-go { font: inherit; font-size: 13px; font-weight: 700; padding: 6px 14px; border-radius: 8px; cursor: pointer;
@@ -4157,6 +4158,14 @@ BEAST_CSS = """
     #due-crew .dc-wrap .dc-bst { width: 34px; height: 29px; flex: none; }
     #due-crew .bst-pk { line-height: 0; margin-right: 6px; } #due-crew .bst-pk .dc-bst { width: 26px; height: 22px; }
     #due-crew .bp-stage .dc-bst.big .bb { transform: scale(var(--bs, 1)); }
+    /* the card's beast is alive (Sam): it breathes, and the Snoozasaurus's z's drift up; never with Reduce motion */
+    @media (prefers-reduced-motion: no-preference) {
+      #due-crew .dc-bst.live .bz { animation: dc-bmini 2.8s ease-in-out infinite; }
+      @keyframes dc-bmini { 0%, 100% { transform: none; } 50% { transform: translateY(-5px) scale(1.04, .96); } }
+      #due-crew .dc-bst.live .bzz, #due-crew .dc-bst.big .bzz { animation: dc-bzz 2.8s ease-in-out infinite; }
+      #due-crew .dc-bst .bzz + .bzz { animation-delay: -1.4s; }
+      @keyframes dc-bzz { 0%, 100% { opacity: .3; transform: translateY(4px); } 50% { opacity: 1; transform: translateY(-4px); } }
+    }
 """
 
 
@@ -4186,8 +4195,8 @@ def beast_chip(b):
     p = max(0, min(100, int(b.get("p") or 0)))
     name = _beast_name(b["k"])
     if b.get("end"):
-        return f' <span class="chip bst" title="Beat {_html.escape(name)}">{beast_mini(b["k"])}beaten</span>'
-    return f' <span class="chip bst" title="{_html.escape(name)}, {p}% beaten">{beast_mini(b["k"])}{p}%</span>'
+        return f' <span class="chip bst" title="Beat {_html.escape(name)}, their overdue cards">{beast_mini(b["k"])}beaten</span>'
+    return f' <span class="chip bst" title="{_html.escape(name)}: their overdue cards, {p}% cleared">{beast_mini(b["k"])}{p}%</span>'
 
 
 def beast_banners(entries, seen=()):
@@ -4204,7 +4213,8 @@ def beast_banners(entries, seen=()):
             continue
         uid = str(e.get("user_id") or "")
         out.append(f'<div class="dc-wrap bst-ban">{beast_mini(b["k"])}'
-                   f'<span><b>{_html.escape(str(e.get("name") or "?"))}</b> beat {_html.escape(_beast_name(b["k"]))}.</span>'
+                   f'<span><b>{_html.escape(str(e.get("name") or "?"))}</b> beat {_html.escape(_beast_name(b["k"]))}, '
+                   f'a pile of overdue cards.</span>'
                    f'<a class="wc" href="#" title="Send a cheer" onclick="{_pycmd("beastcheer:" + uid)}">Send &#127942;</a>'
                    f'<a class="wx" href="#" title="Dismiss" onclick="{_pycmd("beastx:" + uid)}">&times;</a></div>')
     return out[:2]
@@ -4212,45 +4222,43 @@ def beast_banners(entries, seen=()):
 
 def beast_card(bv):
     """3.9.0: my beast's card in the You bubble (beast_flow.view): its kind,
-    what's left and today's bite, its health, Study the bite; the day one's
-    beaten or wanders off, a line that says so, with its x. "" for none."""
+    alive, its overdue cards left and its health, Study them; the day one's
+    beaten or wanders off, a line that says so, with its x. A click anywhere
+    on it but Study them (or the x) opens its page (Sam). "" for none."""
     if not bv:
         return ""
     e = _html.escape
     now, news = bv.get("now"), bv.get("news") or {}
+    open_ = _pycmd("beastopen")
+    card = (f'role="button" tabindex="0" title="Open" onclick="{open_}" '
+            f'onkeydown="if(event.key===\'Enter\'){{{open_}}}"')
     if now:
         k = now["k"]
         name = _beast_name(k)
-        left, bite = int(bv.get("left") or 0), int(bv.get("bite") or 0)
-        if bv.get("naps"):
-            sub = f"{left:,} left &middot; napping while you&rsquo;re away"
-        else:
-            sub = (("Turned up today &middot; " if news.get("how") == "came" else "")
-                   + f"{left:,} left &middot; today&rsquo;s bite {bite:,}")
-        go = ("" if bv.get("naps") else
-              f'<a href="#" class="du-go" title="A deck of today&rsquo;s bite, the most overdue first" '
-              f'onclick="{_pycmd("beastbite")}">Study the bite &rsaquo;</a>')
+        left = int(bv.get("left") or 0)
+        cards = f"{left:,} overdue card{'' if left == 1 else 's'}"
+        sub = f"Turned up today · {cards} left" if news.get("how") == "came" else f"{cards} left"
+        go = (f'<a href="#" class="du-go" title="Its cards, the most overdue first" '
+              f'onclick="event.stopPropagation(); {_pycmd("beaststudy")}">Study them &rsaquo;</a>')
         pct = int(float(bv.get("frac") or 0) * 100)
-        return (f'<div class="bst-c" style="--bc:{BEAST_COLOURS.get(k, "#7b5cd6")}">'
-                f'<a class="fig" href="#" title="Open" onclick="{_pycmd("beastopen")}">{beast_mini(k, e(name))}</a>'
-                f'<div class="bx"><a href="#" onclick="{_pycmd("beastopen")}"><b>{e(name)}</b></a>'
+        return (f'<div class="bst-c" style="--bc:{BEAST_COLOURS.get(k, "#7b5cd6")}" {card}>'
+                f'<span class="fig">{_bart.svg(k, "mini live", e(name))}</span>'
+                f'<div class="bx"><b>{e(name)}</b>'
                 f'{_beast_hp(bv.get("frac"), f"{pct}% beaten")}<small>{sub}</small></div>{go}</div>')
     k = news.get("k")
     if k not in _beast.KINDS or news.get("how") not in ("beaten", "wandered"):
         return ""
     name = e(_beast_name(k))
-    x = f'<a class="x" href="#" title="Dismiss" onclick="{_pycmd("beastnews")}">&times;</a>'
+    x = f'<a class="x" href="#" title="Dismiss" onclick="event.stopPropagation(); {_pycmd("beastnews")}">&times;</a>'
     if news["how"] == "beaten":
         m = next((m for m in reversed(bv.get("met") or []) if m.get("how") == "beaten" and m.get("k") == k), None)
-        size = f'{int(m["size"]):,} cards' if m else "Its cards"
+        size = f'{int(m["size"]):,} overdue cards cleared' if m else "Its cards cleared"
         days = max(1, (_date.fromisoformat(m["end"]) - _date.fromisoformat(m["day"])).days) if m else 0
-        return (f'<div class="bst-c done"><a class="fig" href="#" title="Open" onclick="{_pycmd("beastopen")}">'
-                f'{_bart.pet_svg(k, "", name)}</a>'
+        return (f'<div class="bst-c done" {card}><span class="fig">{_bart.pet_svg(k, "", name)}</span>'
                 f'<div class="bx"><b>You beat {name}!</b><small>{size}{f" in {days} day" + ("" if days == 1 else "s") if days else ""}. '
                 f'It&rsquo;s a pet now.</small></div>{x}</div>')
-    return (f'<div class="bst-c gone">{beast_mini(k)}<div class="bx"><b>{name} wandered off.</b>'
-            f'<small>Half its cards went without a review: suspended, deleted or made new.</small></div>{x}</div>')
-
+    return (f'<div class="bst-c gone" {card}><span class="fig">{beast_mini(k)}</span><div class="bx"><b>{name} wandered off.</b>'
+            f'<small>Half its cards were suspended or deleted.</small></div>{x}</div>')
 
 
 def _beast_pets(met):
@@ -4266,71 +4274,68 @@ def _beast_pets(met):
     return f'<div class="st-h">Beaten</div><div class="bp-pets">{figs}</div>'
 
 
+BEAST_HOW = ("It&rsquo;s the reviews you fell behind on. It never grows.",
+             "Review its cards to shrink it. Again counts too.",
+             "No rush: it waits for you. Beat it and it&rsquo;s your pet.")
+
+
+def _beast_how(now=None):
+    """How it works, in three short lines (Sam: say what it means, briefly).
+    A beast that's part of a bigger pile says so in the first."""
+    first = BEAST_HOW[0]
+    if now and now.get("capped") and int(now.get("pile") or 0) > int(now.get("size") or 0):
+        first = (f"It&rsquo;s the oldest {int(now['size']):,} of your {int(now['pile']):,} overdue reviews. "
+                 "It never grows; the rest can come later.")
+    return ('<div class="bp-how"><div class="st-h">How it works</div><ol>'
+            + "".join(f"<li>{x}</li>" for x in (first,) + BEAST_HOW[1:]) + "</ol></div>")
+
+
 def beast_html(view, cfg):
-    """3.9.0, the fight (Sam's pick, round three: "Yours · Rule B · Steady ·
-    In parts of three weeks"), in place of the board as the closet is: the
-    beast, big, breaking up as it's beaten (a horn at a quarter, the other
-    at half, dizzy at three quarters, smaller all the way), what it says,
-    its health, the pace, Study the bite and Let it go; the ones beaten,
-    as pets. view: beast_flow.view, plus on/share; None: no beast now."""
+    """3.9.0, its page (Sam's pick, round three: "Yours · Rule B · Steady ·
+    In parts of three weeks"; then "Just the cards"), in place of the board
+    as the closet is: the beast, big, breaking up as it's beaten (a horn at
+    a quarter, the other at half, dizzy at three quarters, smaller all the
+    way), what it is in one line, its health, Study them and Let it go, and
+    how it works in three; the ones beaten, as pets. view: beast_flow.view
+    (page=True)."""
     e = _html.escape
     v = view or {}
     now, news = v.get("now"), v.get("news") or {}
     side, stage, title = "", "", "Backlog beasts"
     if now:
         k = now["k"]
-        kd = _beast.KINDS[k]
-        title = kd["name"]
+        name = _beast.KINDS[k]["name"]
+        title = name
         frac = float(v.get("frac") or 0)
-        st = _beast.stage(frac)
         scale = round(1 - 0.3 * min(1.0, frac), 3)
-        stage = (f'<div class="bp-say" aria-live="polite">{e(v.get("says") or "")}</div>'
-                 f'<svg class="dc-bst big st{st}" style="--bs:{scale}" viewBox="0 0 200 170" role="img" '
-                 f'aria-label="{e(kd["name"])}, {int(frac * 100)}% beaten">{_bart.art(k, stages=True)}</svg>')
-        size, left = int(now.get("size") or 0), int(v.get("left") or 0)
-        hit = int(now.get("hit") or 0)
-        pace = now.get("pace") or _beast.DEFAULT_PACE
-        seg = "".join(f'<button class="{"on" if p == pace else ""}" aria-pressed="{"true" if p == pace else "false"}" '
-                      f'{_st_click("beastpace:" + p)}>{_beast.PACE_NAMES[p]}</button>' for p in _beast.PACES)
-        days = int(v.get("days") or 0)
-        bite = int(v.get("bite") or 0)
-        when = ("It&rsquo;s napping while you&rsquo;re away: no bite till you&rsquo;re back." if v.get("naps") else
-                f"Today&rsquo;s bite: {bite:,}, on top of what&rsquo;s due"
-                + (f" &middot; about {days} day{'' if days == 1 else 's'} at this pace" if days else ""))
-        share = (f'Your crew sees its kind and how far you&rsquo;ve got, never how many cards. '
-                 f'<a class="st-lk" href="#" {_st_click("settings:privacy")}>Privacy</a>'
-                 if v.get("share") else
-                 f'Only you see it. <a class="st-lk" href="#" {_st_click("settings:privacy")}>Privacy</a>')
-        side = (f'<div class="bp-n">{e(kd["name"])}</div><div class="bp-why">{e(kd["why"])}</div>'
-                + _beast_hp(frac, f"{int(frac * 100)}% beaten")
-                + f'<div class="bp-t"><b>{hit:,}</b> of {size:,} knocked off &middot; {left:,} left</div>'
-                + f'<div class="bp-row"><span class="st-seg" role="group" aria-label="Pace">{seg}</span><small>{when}</small></div>'
-                + '<div class="bp-row">'
-                + ("" if v.get("naps") else f'<button class="bp-go" {_st_click("beastbite")}>Study the bite</button>')
-                + f'<button class="bp-btn" {_st_click("beastlet")}>Let it go</button></div>'
-                + ('<div class="st-note">This is the first part of a bigger pile, the most overdue for their interval first. '
-                   'The rest can come after a week&rsquo;s rest.</div>' if now.get("capped") else "")
-                + '<div class="st-note">Any review of one of its cards knocks it, Again too, on any device. It never grows: '
-                  'cards due later don&rsquo;t feed it. A day off and it waits. Let it go and it waves and leaves; nobody&rsquo;s told.</div>'
-                + f'<div class="st-note">{share}</div>'
-                + f'<div class="st-note"><a class="st-lk" href="#" {_st_click("beastoff")}>Not for me</a>: no more beasts '
-                  '(Settings &rsaquo; Board brings them back).</div>')
+        stage = (f'<svg class="dc-bst big st{_beast.stage(frac)}" style="--bs:{scale}" viewBox="0 0 200 170" role="img" '
+                 f'aria-label="{e(name)}, {int(frac * 100)}% beaten">{_bart.art(k, stages=True)}</svg>')
+        left = int(v.get("left") or 0)
+        side = (f'<div class="bp-n">{e(name)}</div><div class="bp-why">{e(_beast.subtitle(k, now.get("size") or 0))}</div>'
+                f'<div class="bp-hpr">{_beast_hp(frac, f"{int(frac * 100)}% beaten")}<span class="bp-t"><b>{left:,}</b> left</span></div>'
+                f'<div class="bp-row"><button class="bp-go" {_st_click("beaststudy")}>Study them</button>'
+                f'<button class="bp-btn" {_st_click("beastlet")}>Let it go</button></div>'
+                + _beast_how(now))
     else:
         k = news.get("k") if news.get("k") in _beast.KINDS else None
         if k and news.get("how") == "beaten":
-            title = f"You beat {_beast.KINDS[k]['name']}"
-            stage = (f'<div class="bp-say">{e(_beast.KINDS[k]["says"][3])}</div>'
-                     + _bart.pet_svg(k, "big", f'{e(_beast.KINDS[k]["name"])}, a pet now'))
-            side = '<div class="bp-n">It&rsquo;s a pet now.</div><div class="bp-why">It lives here, with the others you&rsquo;ve beaten.</div>'
+            name = _beast.KINDS[k]["name"]
+            title = f"You beat {name}"
+            m = next((m for m in reversed(v.get("met") or []) if m.get("how") == "beaten" and m.get("k") == k), None)
+            stage = _bart.pet_svg(k, "big", f"{e(name)}, a pet now")
+            side = ('<div class="bp-n">It&rsquo;s a pet now.</div>'
+                    + (f'<div class="bp-why">You cleared {int(m["size"]):,} overdue cards.</div>' if m else ""))
         elif k and news.get("how") in ("let", "wandered"):
-            stage = f'<div class="bp-none">{"It waved and left. Nobody&rsquo;s told." if news["how"] == "let" else "It wandered off."}</div>'
+            stage = (f'<div class="bp-none">{"It left. Nobody&rsquo;s told." if news["how"] == "let" else "It wandered off: half its cards were suspended or deleted."}</div>')
         else:
             stage = '<div class="bp-none">No beast right now.</div>'
         if not v.get("on", True):
             side += (f'<div class="bp-n">Beasts are off</div><div class="bp-row"><button class="bp-btn" {_st_click("set:beasts:1")}>'
                      'Turn them on</button></div>')
-        side += ('<div class="st-note">A beast turns up when your overdue reviews reach two of your usual days, and 100 '
-                 'cards or more, a week after the last one left. Its kind says why the pile built; beat it and it&rsquo;s a pet.</div>')
+        elif not (k and news.get("how") == "beaten"):
+            side += ('<div class="bp-n">Backlog beasts</div>'
+                     '<div class="bp-why">When your overdue reviews pile up (100 or more), they turn up here as a beast.</div>')
+        side += _beast_how()
     bc = BEAST_COLOURS.get((now or {}).get("k") or news.get("k"), "#7b5cd6")
     return (f'<div id="due-crew" class="dc-frame dc-set dc-bp">{_css(cfg)}<style>{SETTINGS_CSS}{BEAST_CSS}{_bart.CSS}</style>'
             f'<div class="dc-head"><span class="dc-title">{board_mark()}</span></div>'

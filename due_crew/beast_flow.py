@@ -7,9 +7,10 @@ beast.json); another computer works them out from Anki's own history for
 that morning. The account keeps the beast itself (`beast`), so every
 computer has the same one.
 
-Study the bite: a Due Crew deck of the bite's cards, the most overdue for
-their interval first (Anki's relative overdueness), Anki rescheduling them
-as it would; one undo step of Anki's own.
+Study them: a Due Crew deck of its cards not yet reviewed (OPEN_MAX at a
+time), the most overdue for their interval first (Anki's relative
+overdueness), Anki rescheduling them as it would; one undo step of Anki's
+own. Study as many as you like; any review counts.
 
 Main thread: the collection and the config. No network here: what my crew
 sees rides my week (api.week_doc, session["beast"]).
@@ -29,6 +30,8 @@ KEY = "beast"  # the account's (account.ACCOUNT_KEYS)
 ON_KEY = "beasts"  # the account's: beasts at all (Settings; the beast's Not for me)
 SHARE_KEY = "share_beast"  # the account's: My beast, in Privacy
 FILE = "beast.json"
+OPEN_MAX = 200  # Study them opens this many of its cards at most; again, the next
+DECK_DAY = "beast_deck_day"  # plans.json: the day its deck was built (the next morning empties what's left)
 CHUNK = 500
 
 
@@ -189,7 +192,7 @@ def count(col, cids, day):
 # ---- at a refresh ----
 
 def _away(c, t):
-    """Away (Privacy's dates) or paused: no new beast, and one here naps."""
+    """Away (Privacy's dates) or paused: no new beast."""
     from .backend.shapes import away_range
     rng = away_range(c)
     return bool(rng and rng[0] <= t <= rng[1]) or bool(c.get("paused"))
@@ -270,9 +273,10 @@ def note_week(today=None, c=None):
 
 # ---- the clicks ----
 
-def bite_cards(col, now):
-    """The bite: the beast's cards not yet reviewed, the most overdue for
-    their interval first, a bite's worth."""
+def open_cards(col, now):
+    """The cards Study them opens: its cards not yet reviewed, the most
+    overdue for their interval first, OPEN_MAX at most (Study them again
+    opens the next)."""
     ids = cards(col, now)
     _n, _g, hit = count(col, ids, now["day"])
     left = [c for c in ids if c not in hit]
@@ -283,25 +287,25 @@ def bite_cards(col, now):
         rows += col.db.all(f"SELECT id, CASE WHEN odid THEN odue ELSE due END, ivl FROM cards WHERE id IN ({chunk}) "
                            "AND queue != -1 AND type != 0") or []
     rows.sort(key=lambda r: (-((today - int(r[1])) / max(1, int(r[2] or 1))), int(r[0])))
-    return [int(r[0]) for r in rows[:B.bite(int(now.get("usual") or 0), now.get("pace"))]]
+    return [int(r[0]) for r in rows[:OPEN_MAX]]
 
 
-def study_bite():
-    """Study the bite: a Due Crew deck of it, then Anki's Study screen on it."""
+def study():
+    """Study them: a Due Crew deck of its cards, then Anki's Study screen on it."""
     from aqt.utils import tooltip
     from . import plan_flow as pf, plans as P
     s = state()
     now = s.get("now")
     if not now or mw.col is None:
         return
-    ids = bite_cards(mw.col, now)
+    ids = open_cards(mw.col, now)
     if not ids:
-        tooltip("Nothing left in its bite today.")
+        tooltip("None of its cards are left to review.")
         return
     name = P.our_deck(B.KINDS[now["k"]]["name"])
     if pf._filtered(mw.col, name, ids, order=overdue_order()):
         c = pf._pcfg()
-        c["bite_day"] = pf._today()  # the next morning empties it back if it's left
+        c[DECK_DAY] = pf._today()  # the next morning empties it back if it's left
         pf._psave(c)
         pf._after_change()
         did = mw.col.decks.id_for_name(name)
@@ -310,51 +314,32 @@ def study_bite():
             mw.moveToState("overview")
 
 
-def empty_old_bite(col, normal):
-    """The morning (plan_flow.tidy_decks): a bite left from an earlier day
-    goes back to its decks first (Anki's Empty), as Today's misses does, so
-    its cards are never kept out of their own decks; then the tidy takes
-    the empty deck. normal: the ids of the decks that aren't filtered."""
+def empty_old_deck(col, normal):
+    """The morning (plan_flow.tidy_decks): a beast's deck left from an
+    earlier day goes back to its decks first (Anki's Empty), as Today's
+    misses does, so its cards are never kept out of their own decks; then
+    the tidy takes the empty deck. normal: the ids of the decks that aren't
+    filtered."""
     from . import plan_flow as pf, plans as P
     c = pf._pcfg()
-    if not c.get("bite_day") or c.get("bite_day") == pf._today():
+    if not c.get(DECK_DAY) or c.get(DECK_DAY) == pf._today():
         return
     for k in B.KINDS.values():
         did = col.decks.id_for_name(P.our_deck(k["name"]))
         if did and int(did) not in normal:
             col.sched.empty_filtered_deck(int(did))
-    c.pop("bite_day", None)
+    c.pop(DECK_DAY, None)
     pf._psave(c)
 
 
-def set_pace(pace):
-    s = state()
-    if s.get("now") and pace in B.PACES and s["now"].get("pace") != pace:
-        s["now"] = dict(s["now"], pace=pace)
-        _save(s)
-        return True
-    return False
-
-
 def let_go(today):
-    """Let it go: it waves and leaves; nobody's told; a week's rest."""
+    """Let it go: it leaves; nobody's told; a week's rest."""
     s = state()
     if s.get("now"):
         _save(B.end(s, "let", today))
         _state["beast_news"] = {"k": s["now"]["k"], "how": "let", "day": today}
         return True
     return False
-
-
-def not_for_me():
-    """Not for me: beasts off (Settings › Fifteen and Pip brings them back);
-    one now leaves quietly."""
-    c = dict(cfg())
-    s = state(c)
-    c[ON_KEY] = False
-    if s.get("now"):
-        c[KEY] = B.end(s, "let", _cut(mw.col)[1].isoformat() if mw.col else datetime.date.today().isoformat())
-    save_cfg(c)
 
 
 def beaten_in(year):
@@ -368,9 +353,8 @@ def seen_news():
 
 
 def view(c=None, page=False):
-    """The You bubble's card: {now, frac, left, says, bite, days, naps,
-    met, news} or None. page: the fight page's, which is drawn without a
-    beast too (and says whether beasts are on and mine is shared)."""
+    """The You bubble's card: {now, frac, left, met, news, on, share} or
+    None. page: the fight page's, which is drawn without a beast too."""
     c = c or cfg()
     s = state(c)
     now = s.get("now")
@@ -380,11 +364,8 @@ def view(c=None, page=False):
     if (not now and not news or not on(c)) and not page:
         return None  # nothing to say, or beasts off (Settings)
     out = {"news": news, "met": s.get("met") or [], "on": on(c),
-           "share": bool(week_field(_cut(mw.col)[1].isoformat() if mw.col else "", c)) if now else False,
-           "naps": bool(now) and mw.col is not None and _away(c, _cut(mw.col)[1])}
+           "share": bool(week_field(_cut(mw.col)[1].isoformat() if mw.col else "", c)) if now else False}
     if now:
         frac, left = B.progress(now)
-        out.update(now=now, frac=frac, left=left, says=B.says(now["k"], frac),
-                   bite=B.bite(int(now.get("usual") or 0), now.get("pace")),
-                   days=B.days_left(left, int(now.get("usual") or 0), now.get("pace")))
+        out.update(now=now, frac=frac, left=left)
     return out

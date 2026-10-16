@@ -108,7 +108,7 @@ _T = (
     ("detective", COSTUME, "Card care", "Detective", "50 leeches turned around", ("leeches", 50),
      {"tip": "A card that lapsed 8 times, now going three weeks or more between reviews"}),
     ("beasthood", COSTUME, "Beasts", "Beast hood", "Your first beast beaten", ("beasts", 1),
-     {"tip": "When your overdue pile gets big it turns up as a beast; a bite a day beats it"}),
+     {"tip": "When your overdue reviews pile up they turn up as a beast; review them to beat it"}),
     ("knight", COSTUME, "Beasts", "Knight", "10 beasts beaten", ("beasts", 10)),
     ("ghost", COSTUME, "Seasons", "Ghost", "Four days of Halloween week", ("halloween", 4), {"when": "24 to 31 Oct"}),
     ("mummy", COSTUME, "Seasons", "Mummy", "Five days of Halloween week", ("halloween", 5), {"when": "24 to 31 Oct"}),

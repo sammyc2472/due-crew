@@ -1,21 +1,22 @@
 """3.9.0: the Backlog Beast, yours (Sam's pick, the fun round's third round:
 "Build · Yours · Rule B · My beast on to start · Steady · In parts of three
-weeks"). Pure: no aqt.
+weeks"; reworked before it shipped, "Just the cards": no bite, no pace, no
+speech, three lines on how it works). Pure: no aqt.
 
-When your overdue pile gets real it turns up as a creature. Its kind says
+When your overdue reviews pile up they turn up as a creature. Its kind says
 why the pile built (KINDS). It never grows: its cards are the ones overdue
-the morning it came, and any review of one of them knocks it off, Again
-too. It shrinks by a bite a day at the pace you pick, on top of what's
-due. Nothing to lose: a day off and it waits; Let it go and it waves and
-leaves, nobody's told. Beat it and it's a pet (and the closet's beast hood,
-viking helmet and knight).
+the morning it came, and any review of one of them knocks it, Again too.
+Study them opens its cards, the most overdue first, as many as you like.
+Nothing to lose: a day off and it waits; Let it go and it leaves, nobody's
+told. Beat it and it's a pet (and the closet's beast hood, viking helmet
+and knight).
 
 The pile: review cards due before today (not new, not learning, not
 suspended or buried) in decks studied in the last 30 days. It turns up
 (rule B, the round's simulation) when the pile is two usual days or more
 and 100 cards or more, a week after the last one left, not while away or
-paused. A bigger pile than three weeks of bites comes in parts: the most
-overdue first (relative to their intervals), the rest next time.
+paused. A bigger pile than three weeks of half a usual day comes in parts:
+the most overdue first (relative to their intervals), the rest next time.
 
 The account keeps it (`beast`: the one now and the last ones met), so
 every computer has the same beast; this computer keeps its cards. With
@@ -29,31 +30,25 @@ import statistics
 MIN_PILE = 100
 USUAL_DAYS = 2  # the pile, in usual days, before one turns up
 REST_DAYS = 7  # after one leaves, beaten or let go
-PART_DAYS = 21  # a beast is never more than three weeks of bites
+PART_DAYS = 21  # a beast is never more than three weeks of half a usual day (Sam's "in parts of three weeks")
 WANDER_SHARE = 2  # half its cards gone without a review (suspended, deleted, made new): it wanders off
 DECK_DAYS = 30  # a deck counts when it was studied this recently
 USUAL_WINDOW = 28  # the usual day: the middle of the days studied in the last four weeks
 SNOOZE_GAP, OWL_DAYS, LEECH_SHARE, PILE_DAYS = 7, 14, 0.15, 5
 LEECH_LAPSES = 8
 KEEP = 50  # beasts met, kept for the closet, Wrapped and the town
-PACES = {"gentle": 0.25, "steady": 0.5, "fast": 1.0}
-PACE_NAMES = {"gentle": "Gentle", "steady": "Steady", "fast": "Fast"}
+PACES = {"gentle": 0.25, "steady": 0.5, "fast": 1.0}  # a share of the usual day; only Steady sizes a beast's parts now
 DEFAULT_PACE = "steady"
 SHOW_DAYS = 2  # a crewmate's beaten beast: a banner for two days
 ENDS = ("beaten", "let", "wandered")
 
 KINDS = {
-    "snooze": {"name": "The Snoozasaurus", "why": "Built while you were away a week or more. Easy does it.",
-               "says": ("Yawn. You were away. I grew.", "Five more minutes…", "Fine, I’m up. Mostly.", "Zzz… okay… you win…")},
-    "owl": {"name": "The Overdue Owl", "why": "Half its cards are two weeks or more overdue. The oldest come first.",
-            "says": ("Hoo’s behind? Hoo hoo.", "Hoo! That one was old.", "You’re catching up. Hoo knew.", "Hooo… I need a nap.")},
-    "leech": {"name": "The Leech Lord", "why": "One card in seven keeps slipping. Fixing them helps most.",
-              "says": ("I’ll just hang on to these cards.", "You fixed one. Rude.", "My grip! It’s going.", "Fine. Have your cards.")},
-    "pile": {"name": "The Pile", "why": "Five usual days’ worth, or more.",
-             "says": ("Don’t mind me. Just piling.", "Hey, I was tall.", "Less of a pile. More of a stack.", "Is this… a heap now?")},
-    "backlog": {"name": "The Backlog Beast", "why": "Built over a few short days.",
-                "says": ("Rrrr. I’m your overdue cards.", "My horn! I liked that horn.", "Okay. Okay. You’re good at this.",
-                         "Everything’s… spinning…")},
+    # from: what its one line says after "17 overdue cards" (subtitle)
+    "snooze": {"name": "The Snoozasaurus", "from": " from your week away"},
+    "owl": {"name": "The Overdue Owl", "from": ", most of them two weeks late or more"},
+    "leech": {"name": "The Leech Lord", "from": ", many of them leeches"},
+    "pile": {"name": "The Pile", "from": ", about five days of reviews"},
+    "backlog": {"name": "The Backlog Beast", "from": " from the last few days"},
 }
 ORDER = ("snooze", "owl", "leech", "pile", "backlog")  # which cause wins when more than one is true
 
@@ -77,7 +72,8 @@ def usual(day_counts, today):
 
 
 def bite(usual_day, pace=DEFAULT_PACE):
-    """The extra reviews a day at a pace: a share of your usual day, one at least."""
+    """A share of your usual day (half at Steady), one at least: three weeks
+    of it is the most one beast holds (pick)."""
     return max(1, round(usual_day * PACES.get(pace, PACES[DEFAULT_PACE])))
 
 
@@ -109,7 +105,7 @@ def should_turn_up(pile, usual_day, state, today, away=False, paused=False):
 def pick(cards, usual_day, pace=DEFAULT_PACE):
     """The beast's cards from the pile: [(card id, days overdue, interval)],
     the most overdue for their interval first (Anki's relative
-    overdueness), at most three weeks of bites at this pace. (ids, capped)."""
+    overdueness), at most three weeks of half a usual day. (ids, capped)."""
     order = sorted(cards, key=lambda c: (-(c[1] / max(1, c[2])), -c[1], c[0]))
     most = PART_DAYS * bite(usual_day, pace)
     ids = [c[0] for c in order[:most]]
@@ -117,9 +113,8 @@ def pick(cards, usual_day, pace=DEFAULT_PACE):
 
 
 def turn_up(today, kind_key, cids, usual_day, pace=DEFAULT_PACE, capped=False, pile=0):
-    """The beast that turns up this morning: what the account keeps of it,
-    at Steady (Sam's pick) until I pick another pace. Its cards stay on this
-    computer (the glue's beast.json)."""
+    """The beast that turns up this morning: what the account keeps of it.
+    Its cards stay on this computer (the glue's beast.json)."""
     pace = pace if pace in PACES else DEFAULT_PACE
     return {"k": kind_key, "day": str(today), "size": len(cids), "usual": int(usual_day), "pace": pace,
             "capped": bool(capped), "pile": int(pile or len(cids)), "hit": 0, "gone": 0}
@@ -138,13 +133,11 @@ def stage(frac):
     return 4 if frac >= 1 else 3 if frac >= 0.75 else 2 if frac >= 0.5 else 1 if frac >= 0.25 else 0
 
 
-def says(kind_key, frac):
-    return KINDS.get(kind_key, KINDS["backlog"])["says"][min(3, stage(frac))]
-
-
-def days_left(left, usual_day, pace):
-    """About how many days of bites are left (a day at least while any are)."""
-    return 0 if left <= 0 else -(-int(left) // bite(usual_day, pace))
+def subtitle(kind_key, n):
+    """Its one line: what it is, in plain words. "17 overdue cards from
+    your week away." """
+    k = KINDS.get(kind_key, KINDS["backlog"])
+    return f"{int(n):,} overdue card{'' if int(n) == 1 else 's'}{k['from']}."
 
 
 def update(state, hit, gone, today):

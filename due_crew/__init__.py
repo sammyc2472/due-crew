@@ -1319,16 +1319,16 @@ def open_beast():
 
 
 def _beast_cmd(cmd, parts):
-    """3.9.0: the beast's clicks: its card (open, Study the bite, the line's
-    x), the fight (pace, Let it go, Not for me, back to the board), and a
-    crewmate's beaten beast's banner (a cheer, its x)."""
+    """3.9.0: the beast's clicks: its card (open, Study them, the line's x),
+    its page (Let it go, back to the board), and a crewmate's beaten
+    beast's banner (a cheer, its x)."""
     from . import beast_flow
     arg = parts[0] if parts else ""
     if cmd == "beastopen":
         open_beast()
         return
-    if cmd == "beastbite":
-        beast_flow.study_bite()
+    if cmd == "beaststudy":
+        beast_flow.study()
         return
     if cmd == "beastcheer" and arg:
         e = next((e for e in _state["entries"] or [] if str(e.get("user_id")) == arg and not e.get("you")), None)
@@ -1345,22 +1345,18 @@ def _beast_cmd(cmd, parts):
             _beast_seen(f'{arg}:{e["beast"]["end"]}')
         return
     today = _state["labels"][0] if _state["labels"] else None
-    if cmd == "beastpace" and arg:
-        beast_flow.set_pace(arg)
-    elif cmd == "beastlet":
+    if cmd == "beastlet":
         from .ui import confirm
-        if not confirm(mw, "Let it go?", "It waves and leaves. Nobody's told, and the next one waits a week.", "Let It Go"):
+        if not confirm(mw, "Let it go?", "It leaves, and nobody's told. The next one waits a week.", "Let It Go"):
             return
         beast_flow.let_go(beast_flow._cut(mw.col)[1].isoformat() if mw.col else today)
-    elif cmd == "beastoff":
-        beast_flow.not_for_me()
     elif cmd == "beastnews":
         beast_flow.seen_news()
     elif cmd == "beastclose":
         _state["beast_open"] = False
     else:
         return
-    if cmd in ("beastlet", "beastoff"):
+    if cmd == "beastlet":
         _beast_check(week=True)
         _share_push["n"] += 1
         n = _share_push["n"]

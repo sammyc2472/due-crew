@@ -1086,8 +1086,8 @@ const Board = (() => {
   function beastChip(b) {
     const name = BEAST_NAMES[b.k];
     const fig = typeof Sev !== "undefined" && Sev.beast ? Sev.beast(b.k) : null;
-    return b.end ? h("span", { class: "chip bst", title: `Beat ${name}` }, fig, "beaten")
-      : h("span", { class: "chip bst", title: `${name}, ${b.p}% beaten` }, fig, `${b.p}%`);
+    return b.end ? h("span", { class: "chip bst", title: `Beat ${name}, their overdue cards` }, fig, "beaten")
+      : h("span", { class: "chip bst", title: `${name}: their overdue cards, ${b.p}% cleared` }, fig, `${b.p}%`);
   }
 
   function nameCell(r, period) {

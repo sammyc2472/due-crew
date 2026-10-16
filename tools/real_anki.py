@@ -639,8 +639,8 @@ def check(path):
 def check_beast(tmp):
     """3.9.0, the Backlog Beast on Anki's own engine: the pile's query (a
     card in a filtered deck by its home's due), rule B from the revlog, its
-    cards worked out from history on another computer, the bite's filtered
-    deck in relative-overdue order with its undo, and a bite left from an
+    cards worked out from history on another computer, Study them's filtered
+    deck in relative-overdue order with its undo, and a deck left from an
     earlier day emptied back."""
     import json, time
     REPO = os.path.dirname(HERE)
@@ -716,23 +716,23 @@ def check_beast(tmp):
     hit, gone, _h = BF.count(col, ids, now["day"])
     ok("counted: today's reviews of its cards, and the suspended ones gone", (hit, gone) == (40, 5), (hit, gone))
     BF._state["beast_count"] = None
-    BF.study_bite()
+    BF.study()
     name = P.our_deck(B.KINDS[now["k"]]["name"])
     bid = col.decks.id_for_name(name)
     deck = col.decks.get(bid) if bid else {}
     in_it = set(col.find_cards(f'"deck:{name}"')) if bid else set()
-    ok("Study the bite: Anki's filtered deck of today's bite, relative overdueness, rescheduling, opened",
-       bid and deck.get("dyn") and len(in_it) == 60 and not in_it & set(ids[:45]) and deck["terms"][0][2] == BF.overdue_order() == 10
+    ok("Study them: Anki's filtered deck of its cards not yet reviewed, relative overdueness, rescheduling, opened",
+       bid and deck.get("dyn") and len(in_it) == min(455, BF.OPEN_MAX) == 200 and not in_it & set(ids[:45]) and deck["terms"][0][2] == BF.overdue_order() == 10
        and deck.get("resched") and moved[-1:] == ["overview"], f"{len(in_it)} cards, terms {deck.get('terms')}")
     step = col.undo_status().undo
     col.undo()
-    ok("Edit › Undo takes the bite's deck away, its cards home", not col.decks.id_for_name(name), f"undo {step!r}")
-    BF.study_bite()
-    pc["bite_day"] = "2000-01-01"
+    ok("Edit › Undo takes its deck away, its cards home", not col.decks.id_for_name(name), f"undo {step!r}")
+    BF.study()
+    pc[BF.DECK_DAY] = "2000-01-01"
     normal = {int(d.id) for d in col.decks.all_names_and_ids(include_filtered=False)}
-    BF.empty_old_bite(col, normal)
+    BF.empty_old_deck(col, normal)
     left = col.find_cards(f'"deck:{name}"') if col.decks.id_for_name(name) else []
-    ok("a bite left from an earlier day goes back to its decks", not left and "bite_day" not in pc, len(left))
+    ok("its deck left from an earlier day goes back to its decks", not left and BF.DECK_DAY not in pc, len(left))
     col.close()
     return failed
 

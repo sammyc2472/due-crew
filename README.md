@@ -68,9 +68,9 @@ Above the board is yours.
   want to share it.
 - **The Backlog Beast.** When your overdue pile gets big, it turns up as
   a beast: the Snoozasaurus after a week away, the Overdue Owl when the
-  cards are old. Study a bite a day, at your pace, and it breaks up; beat
-  it and it's a pet. Your crew sees which beast and how far you've got,
-  never how many cards. Let it go any time; nobody's told.
+  cards are old. Review its cards and it breaks up; beat it and it's a
+  pet. Your crew sees which beast and how far you've got, never how many
+  cards. Let it go any time; nobody's told.
 - **Your year.** From 1 December, your year in Anki as a short story,
   made on your computer from your own reviews. Tools → Due Crew → Your
   year… has any year Anki remembers.

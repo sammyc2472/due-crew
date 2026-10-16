@@ -14047,10 +14047,12 @@ def test_beast_rules_v390():
     check("how far: hits over the cards still there (gone ones don't count against it); what's left",
           abs(frac - 50 / 80) < 1e-9 and left == 30, (frac, left))
     check("how it breaks up: a horn at a quarter, the other at half, dizzy at three quarters, gone at the end",
-          [B.stage(x) for x in (0, .24, .25, .5, .75, .99, 1)] == [0, 0, 1, 2, 3, 3, 4]
-          and B.says("owl", .6) == B.KINDS["owl"]["says"][2] and B.says("owl", 1) == B.KINDS["owl"]["says"][3])
-    check("days left at the pace: a day at least while any are left",
-          B.days_left(301, 300, "steady") == 3 and B.days_left(0, 300, "steady") == 0 and B.days_left(1, 300, "fast") == 1)
+          [B.stage(x) for x in (0, .24, .25, .5, .75, .99, 1)] == [0, 0, 1, 2, 3, 3, 4])
+    check("what it is, in one plain line (Sam: say what it means)",
+          B.subtitle("snooze", 17) == "17 overdue cards from your week away."
+          and B.subtitle("owl", 1) == "1 overdue card, most of them two weeks late or more."
+          and B.subtitle("pile", 4442) == "4,442 overdue cards, about five days of reviews."
+          and all(set(k) == {"name", "from"} for k in B.KINDS.values()))
     s = {"now": dict(now, size=10)}
     s1 = B.update(s, 4, 1, t)
     check("counted, not ended: it keeps the hits, a review never comes off", s1["now"]["hit"] == 4 and s1["now"]["gone"] == 1
@@ -14101,7 +14103,7 @@ def test_beast_flow_v390():
     before today, in decks studied lately), rule B once a day after the
     day's AnkiWeb sync, its cards kept here or worked out from Anki's
     history on another computer, hits counted from any review (never a
-    request), the end saved once, my week, the bite's deck, and the board's
+    request), the end saved once, my week, Study them's deck, and the board's
     commands as the board sends them."""
     from due_crew import beast as B, beast_flow as F
     import due_crew as dc
@@ -14173,11 +14175,8 @@ def test_beast_flow_v390():
         check("only my numbers carry it (Just that I studied: nothing)", F.week_field("2026-10-15") is None)
         conf.pop("show_up")
         v = F.view()
-        check("the card's view: what's left, today's bite (half of 60), the days at that pace",
-              v["left"] == 115 and v["bite"] == 30 and v["days"] == 4 and v["share"] and not v["naps"], v)
-        conf["away_from"], conf["away_to"] = "2026-10-14", "2026-10-20"
-        check("away: it naps (no bite asked)", F.view()["naps"])
-        conf.pop("away_from"), conf.pop("away_to")
+        check("the card's view: what's left and how far, shared or not; no bite, no pace (Sam's \"Just the cards\")",
+              v["left"] == 115 and v["share"] and set(v) == {"news", "met", "on", "share", "now", "frac", "left"}, v)
         # another computer: no beast.json; its cards from Anki's history for that morning
         os.remove(os.path.join(files, F.FILE))
         start = F._day_start_ms(col, "2026-10-15")
@@ -14189,7 +14188,7 @@ def test_beast_flow_v390():
         got = F.derive(col, {"day": "2026-10-15", "size": 12})
         check("another computer works its cards out: due before that morning by their last review, the most overdue for their interval first, as many as it has",
               len(got) == 12 and set(got) <= set(range(100, 120)) and 120 not in got and 9999 not in got, got)
-        # the bite's deck
+        # Study them's deck
         from due_crew import plan_flow as pf
         built = []
         old = (pf._filtered, pf._after_change, pf._pcfg, pf._psave)
@@ -14201,11 +14200,16 @@ def test_beast_flow_v390():
         try:
             kept_ids = list(ids)
             F._write("2026-10-15", kept_ids)
-            F.study_bite()
+            F.study()
             name, cids, order = built[-1]
-            check("Study the bite: a Due Crew deck of today's bite (30), its unreviewed cards, the most overdue first (Anki's order by name; Due without Anki)",
-                  name == "Due Crew::The Backlog Beast" and len(cids) == 30 and not set(cids) & set(ids[:30]) and order == F.overdue_order()
-                  and pc.get("bite_day"), built[-1][::2])
+            check("Study them: a Due Crew deck of its cards not yet reviewed (all 115, under OPEN_MAX), the most overdue first (Anki's order by name; Due without Anki)",
+                  name == "Due Crew::The Backlog Beast" and len(cids) == 115 and not set(cids) & set(ids[:36]) and order == F.overdue_order()
+                  and pc.get(F.DECK_DAY), built[-1][::2])
+            F._write("2026-10-15", kept_ids)
+            old_max, F.OPEN_MAX = F.OPEN_MAX, 50
+            F.study()
+            F.OPEN_MAX = old_max
+            check("a big one opens OPEN_MAX at a time; Study them again opens the next", len(built[-1][1]) == 50)
         finally:
             pf._filtered, pf._after_change, pf._pcfg, pf._psave = old
         # beat it
@@ -14232,16 +14236,14 @@ def test_beast_flow_v390():
     calls = []
     import due_crew.ui as U
     import due_crew.social as SO
-    old = (dc.open_beast, dc._swap, dc._board_on_screen, F.study_bite, F.set_pace, F.let_go, F.not_for_me, F.seen_news,
+    old = (dc.open_beast, dc._swap, dc._board_on_screen, F.study, F.let_go, F.seen_news,
            U.confirm, SO._send_cheer, dc.cfg, dc.save_cfg, dc._beast_check, dict(dc._state))
     conf2 = {}
     dc.open_beast = lambda: calls.append("open")
     dc._swap = lambda c, focus=None: calls.append("swap")
     dc._board_on_screen = lambda: True
-    F.study_bite = lambda: calls.append("bite")
-    F.set_pace = lambda p: calls.append("pace:" + p)
+    F.study = lambda: calls.append("study")
     F.let_go = lambda day: calls.append("let")
-    F.not_for_me = lambda: calls.append("off")
     F.seen_news = lambda: calls.append("news")
     U.confirm = lambda *a, **k: True
     SO._send_cheer = lambda uid, name, emoji, **k: calls.append(("cheer", uid, emoji, k.get("big")))
@@ -14254,20 +14256,20 @@ def test_beast_flow_v390():
         dc._state["labels"] = ["2026-10-15"]
         dc._state["beast_open"] = True
         send = lambda m: dc._on_js(False, "duecrew:" + m, DeckBrowser())
-        for m in ("beastopen", "beastbite", "beastpace:fast", "beastlet", "beastoff", "beastnews", "beastclose",
+        for m in ("beastopen", "beaststudy", "beastlet", "beastnews", "beastclose",
                   "beastcheer:dre", "beastcheer:mo", "beastx:dre"):
             send(m)
-        check("the board's clicks reach the beast: open, the bite, the pace, Let it go (asked first), Not for me, the line's x, back",
-              [c for c in calls if isinstance(c, str) and c != "swap"] == ["open", "bite", "pace:fast", "let", "off", "news"]
+        check("the board's clicks reach the beast: open, Study them, Let it go (asked first), the line's x, back",
+              [c for c in calls if isinstance(c, str) and c != "swap"] == ["open", "study", "let", "news"]
               and dc._state["beast_open"] is False, calls)
         check("a crewmate's beaten beast: a cheer (a trophy, the closet's big one) and the banner goes; not for one still fighting",
               ("cheer", "dre", "\U0001F3C6", True) in calls and not any(isinstance(c, tuple) and c[1] == "mo" for c in calls)
               and conf2.get(dc.BEAST_SEEN) == ["dre:2026-10-15"], conf2)
     finally:
-        (dc.open_beast, dc._swap, dc._board_on_screen, F.study_bite, F.set_pace, F.let_go, F.not_for_me, F.seen_news,
-         U.confirm, SO._send_cheer, dc.cfg, dc.save_cfg, dc._beast_check) = old[:13]
+        (dc.open_beast, dc._swap, dc._board_on_screen, F.study, F.let_go, F.seen_news,
+         U.confirm, SO._send_cheer, dc.cfg, dc.save_cfg, dc._beast_check) = old[:11]
         dc._state.clear()
-        dc._state.update(old[13])
+        dc._state.update(old[11])
 
 
 def test_beast_board_v390():
@@ -14289,31 +14291,39 @@ def test_beast_board_v390():
     rows = {r["user_id"]: r for r in fresh + rest}
     chip = board._chip(rows["dre"])
     check("a crew row: their beast, small, and how far it's beaten; never how many cards",
-          'class="chip bst"' in chip and "62%" in chip and "The Snoozasaurus, 62% beaten" in chip and "dc-bst mini" in chip, chip)
+          'class="chip bst"' in chip and "62%" in chip and "The Snoozasaurus: their overdue cards, 62% cleared" in chip
+          and "dc-bst mini" in chip and "live" not in chip, chip)
     check("a beaten one says so; on a break, nothing", "beaten" in board._chip(rows["mo"]) and rows["zed"]["beast"] is None)
     check("the last thing a chip says: an exam or a plan week before it",
           "bst" not in board._chip(dict(rows["dre"], exam="exam in 3 days")) and "bst" not in board._chip(dict(rows["dre"], recap={"n": 2, "name": "x"})))
     check("Just that I studied (no numbers): no one's beast", board.build_rows([dre], labels, "", "today", {"show_up": True})[0][0]["beast"] is None)
     bans = board.beast_banners([me, dre, mo, zed])
     check("a crewmate's beaten beast: one banner, their name escaped, a cheer and its x; one fighting gets none",
-          len(bans) == 1 and "<b>Mo</b> beat The Overdue Owl." in bans[0] and "duecrew:beastcheer:mo" in bans[0]
+          len(bans) == 1 and "<b>Mo</b> beat The Overdue Owl, a pile of overdue cards." in bans[0] and "duecrew:beastcheer:mo" in bans[0]
           and "duecrew:beastx:mo" in bans[0] and board.beast_banners([mo], {"mo:" + labels[0]}) == []
           and "Dre &lt;b&gt;" in "".join(board.beast_banners([dict(dre, beast={"k": "pile", "p": 100, "end": labels[0]})])))
     now = B.turn_up(labels[0], "backlog", list(range(412)), 180)
     now["hit"] = 206
     frac, left = B.progress(now)
-    bv = {"now": now, "frac": frac, "left": left, "says": B.says("backlog", frac), "bite": 90, "days": 3, "met": [],
-          "news": {"k": "backlog", "how": "came", "day": labels[0]}, "share": True, "on": True, "naps": False}
+    bv = {"now": now, "frac": frac, "left": left, "met": [],
+          "news": {"k": "backlog", "how": "came", "day": labels[0]}, "share": True, "on": True}
     card = board.beast_card(bv)
-    check("my card: its kind, what's left and today's bite, its health half gone, Study the bite, open on a click",
-          "The Backlog Beast" in card and "206 left" in card and "bite 90" in card and "Turned up today" in card
-          and "duecrew:beastbite" in card and "duecrew:beastopen" in card and 'width:50.0%' in card, card)
-    check("napping while away: no bite", "napping" in board.beast_card(dict(bv, naps=True))
-          and "beastbite" not in board.beast_card(dict(bv, naps=True)))
+    check("my card: its kind, its overdue cards left, its health half gone, Study them",
+          "The Backlog Beast" in card and "Turned up today · 206 overdue cards left" in card and "Study them" in card
+          and 'width:50.0%' in card and "bite" not in card.lower(), card)
+    check("my card: a click anywhere opens its page, but Study them studies (it stops the click); its beast is alive",
+          card.startswith('<div class="bst-c"') and 'onclick="pycmd(\'duecrew:beastopen\')' in card.split(">", 1)[0]
+          and 'onclick="event.stopPropagation(); pycmd(\'duecrew:beaststudy\')' in card and "dc-bst mini live" in card
+          and "Enter" in card.split(">", 1)[0]
+          and "206 overdue cards left" in board.beast_card(dict(bv, news=None)))
+    check("its beast breathes (and the z's drift), never with Reduce motion",
+          "@media (prefers-reduced-motion: no-preference)" in board.BEAST_CSS
+          and board.BEAST_CSS.index(".dc-bst.live .bz") > board.BEAST_CSS.index("@media (prefers-reduced-motion: no-preference)"))
     won = board.beast_card({"news": {"k": "pile", "how": "beaten", "day": labels[0]},
                             "met": [{"k": "pile", "day": "2026-10-01", "end": labels[0], "size": 1150, "how": "beaten"}]})
     check("the day it's beaten: the line says so, its size and days, a pet, and its x",
-          "You beat The Pile!" in won and "1,150 cards in 14 days" in won and "pet" in won and "duecrew:beastnews" in won, won)
+          "You beat The Pile!" in won and "1,150 overdue cards cleared in 14 days" in won and "pet" in won
+          and "event.stopPropagation(); pycmd('duecrew:beastnews')" in won and "duecrew:beastopen" in won, won)
     check("wandered off: said once; let go: nothing to say",
           "wandered off" in board.beast_card({"news": {"k": "owl", "how": "wandered"}, "met": []})
           and board.beast_card({"news": {"k": "owl", "how": "let"}, "met": []}) == "" and board.beast_card(None) == "")
@@ -14325,19 +14335,27 @@ def test_beast_board_v390():
     check("in the You bubble on its tab; folded, small on the one line; with nothing else, the card alone",
           'class="bst-c"' in out and out.index("du-h") < out.index("bst-c") and "bst-pk" in folded and "bst-c" not in folded
           and 'class="bst-c"' in alone, alone[:300])
-    page = board.beast_html(dict(bv, now=dict(now, capped=True)), {})
-    check("the fight, in the board's place: big and half broken (st2), what it says, its health, the pace (Steady on), the bite, Let it go",
-          "dc-bst big st2" in page and "Okay. Okay. You’re good at this." in page and "206</b> of 412 knocked off" in page
-          and 'aria-pressed="true" data-f="beastpace:steady"' in page and "duecrew:beastbite" in page and "duecrew:beastlet" in page
-          and "duecrew:beastclose" in page and "duecrew:beastoff" in page and "first part of a bigger pile" in page, page[-2500:])
-    check("who sees it: my crew, its kind and how far (with My beast on); else only me",
-          "never how many cards" in page and "Only you see it" in board.beast_html(dict(bv, share=False), {}))
+    page = board.beast_html(bv, {})
+    check("its page, in the board's place (Sam's \"Just the cards\"): big and half broken (st2), one line, its health, Study them, Let it go",
+          "dc-bst big st2" in page and "412 overdue cards from the last few days." in page and "<b>206</b> left" in page
+          and "duecrew:beaststudy" in page and "duecrew:beastlet" in page and "duecrew:beastclose" in page, page[-2500:])
+    check("how it works, in three short lines",
+          "How it works" in page and page.count("<li>") == 3 and "It never grows." in page and "Again counts too." in page
+          and "it waits for you" in page)
+    check("gone (Sam): no speech, no bite, no pace, no Privacy or Not for me line",
+          "bp-say" not in page
+          and not any(w in re.sub(r"<style>.*?</style>", "", page, flags=re.S) for w in ("bite", "Steady", "Gentle", "Privacy", "Not for me", "beastoff", "beastpace")))
+    part = board.beast_html(dict(bv, now=dict(now, capped=True, pile=900)), {})
+    check("part of a bigger pile: its first line says so", "the oldest 412 of your 900 overdue reviews" in part)
     pets = board.beast_html({"met": [{"k": "owl", "day": "2026-09-01", "end": "2026-09-09", "size": 300, "how": "beaten"},
                                      {"k": "pile", "day": "2026-09-20", "end": "2026-09-22", "size": 3, "how": "let"}],
                              "news": None, "on": False}, {})
     check("no beast now: when one turns up, the ones beaten as pets (not the ones let go), and beasts off: Turn them on",
           "No beast right now." in pets and pets.count('class="dc-bst pet"') == 1 and "duecrew:set:beasts:1" in pets
-          and "two of your usual days" in pets, pets[-1500:])
+          and "How it works" in pets, pets[-1500:])
+    none = board.beast_html({"met": [], "news": None, "on": True}, {})
+    check("no beast, beasts on: what one is, in a line, and how it works",
+          "they turn up here as a beast" in none and "How it works" in none)
     st = board.settings_html({"tab": "board"}, {})
     pv = board.settings_html({"tab": "privacy"}, {})
     idx = board.settings_index({"tab": "you"}, {})

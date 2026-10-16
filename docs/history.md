@@ -1866,23 +1866,27 @@ every release that changes how something works.
   away or paused; looked for once an Anki day, after the day's AnkiWeb
   sync, as the plans' morning waits. It never grows: its cards are the
   ones overdue that morning, the most overdue for their interval first,
-  at most three weeks of bites (the rest after its rest). Any review of
+  at most three weeks of half a usual day (the rest after its rest). Any review of
   one knocks it, Again too, on any device; a card suspended, deleted or
   made new leaves it without a hit, and half gone that way it wanders off.
-  The bite is half a usual day at Steady (Gentle a quarter, Fast a whole
-  one), Study the bite a Due Crew deck of it (Anki's relative-overdue
+  Study them is a Due Crew deck of its cards not yet reviewed, up to 200
+  (`beast_flow.OPEN_MAX`), most overdue first (Anki's relative-overdue
   order, found by its name: Anki renumbered the orders, and on 26.09 the
   old number is retrievability, which builds nothing on SM-2, as
-  `tools/real_anki.py` caught; one undo step; a bite left at the next
-  morning is emptied back, as Today's misses is). It breaks up as it's beaten (a horn at a quarter,
+  `tools/real_anki.py` caught; one undo step; a deck left at the next
+  morning is emptied back, as Today's misses is). As many as you like:
+  there's no day's share. It breaks up as it's beaten (a horn at a quarter,
   the other at half with a sweat, dizzy at three quarters, smaller all the
-  way; `beast_art`), and beaten it's a pet: on the fight's page, on
+  way; `beast_art`), and beaten it's a pet: on its page, on
   Wrapped's beasts slide, and the closet's three new things (the beast
   hood, the viking helmet at five, the knight at ten; Beasts is a group).
   Let it go: it waves and leaves, nobody's told. Where it is: a card in
-  the You bubble on every tab (small on the folded line), the fight in
-  the board's place (`board.beast_html`), the switches in Settings (Board
-  › Backlog beasts; Privacy › My beast, with the numbers). What's sent:
+  the You bubble on every tab (small on the folded line; the beast
+  breathing, and a click anywhere on it but Study them opens its page),
+  its page in the board's place (`board.beast_html`: the beast, one line
+  of what it is, its health, Study them, Let it go and How it works'
+  three lines), the switches in Settings (Board › Backlog beasts;
+  Privacy › My beast). What's sent:
   with My beast on, my week's `beast` is its kind and how far
   (`beast.week_field`), never its size or its cards; a crewmate's shows
   after their name as the last thing a chip says (`board.beast_chip` ↔
@@ -1893,11 +1897,25 @@ every release that changes how something works.
   its cards stay here (`user_files/<profile>/beast.json`), and another
   computer works them out from Anki's history for that morning. Its hits
   are counted on each computer from Anki's history and never saved, so a
-  review costs no request: the account is written when it comes, when it
-  ends, and at a pace. The Worker checks the week's `beast` (validate.ts,
+  review costs no request: the account is written when it comes and when
+  it ends. The Worker checks the week's `beast` (validate.ts,
   the fake the same); an older Worker that refuses it gets the week
   without it, so deploy the Worker first. `beast.py` pure, `beast_flow.py`
   the glue, `beast_art.py` the drawings.
+- 3.9.0, the beast made plain (Sam, 16 Oct, on the click-test build:
+  "way too much explanation", the bite "doesn't make any sense",
+  Gentle / Steady / Fast neither, the beast's words strange; his pick,
+  "just the cards"). The bite, the paces, the speech bubble and Not for
+  me are gone (and their commands, `beastpace`, `beastoff`); so is the
+  page's Privacy line (Settings › Privacy › My beast stays). Its page
+  says what it is in one line (`beast.subtitle`: "640 overdue cards from
+  your week away."), then its health with what's left, Study them (its
+  cards not yet reviewed, as many as you like) and Let it go, then How
+  it works in three short lines (`board.BEAST_HOW`; a capped one says
+  it's the oldest part of the pile). With no beast the page says what
+  one is. The You bubble's card: its beast breathes (not with Reduce
+  motion), and the whole card opens its page but Study them (Sam).
+  Sizing a beast's parts still uses half a usual day (`beast.PACES`).
 - 3.9.0, the closet's line (Sam, 16 Oct): Wear it floated mid-banner,
   apart from Closet. Each banner action pushes itself right with an auto
   margin, so two of them split the free space; a second one now sits
