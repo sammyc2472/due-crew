@@ -362,7 +362,7 @@ class ApiClient:
                 "room": _live_room(self.session.get("room") if you else week.get("room")),
                 # 3.2: their last plan week done, for a cheer
                 "recap": clean_recap(self.session.get("recap") if you else week.get("recap"), today),
-                # 3.9.0: their beast, its kind and how far (mine from the session)
+                # 3.9.0: their beast once beaten, for its banner (mine from the session)
                 "beast": _clean_beast(self.session.get("beast") if you else week.get("beast"), today),
             })
         by_uid = {f.get("uid"): f for f in data.get("friends") or []}
@@ -549,7 +549,7 @@ class ApiClient:
         from ..beast import clean_week as clean_beast
         bst = clean_beast(self.session.get("beast"), labels[0] if labels else None)
         if bst:
-            doc["beast"] = bst  # 3.9.0: its kind and how far, never its size or its cards
+            doc["beast"] = bst  # 3.9.0: a beaten one, its kind and day; never one I am on, its size or its cards
         return doc
 
     def push(self, labels, cfg, stats=None, backfill=None, shared_decks=None, heatmap=None,

@@ -1988,3 +1988,35 @@ every release that changes how something works.
   glows twice; it ducks back down on the next card or Not now; none of it
   with Reduce motion. The bar's chip, tips, asks and plan notes are as
   they were; "Dre knows this" stays the words (E, his pick).
+- 3.9.0, the beast, the way back (Sam's picks, "The way back" rounds 2
+  and 3, 16 Oct: "go with your picks, build it for 3.9.0"). Three kinds:
+  the Leech Lord, the Pile and the Backlog Beast (`beast.KINDS`; the
+  Snoozasaurus and the Overdue Owl are gone, "implies laziness", and a
+  test build's account beast of those kinds is the Backlog Beast now,
+  `beast.WAS`). Its line under the name is the count ("1,507 overdue
+  cards", `beast.subtitle`). Study opens your own deck: Anki's Study
+  screen on the top deck holding most of its cards left
+  (`beast_flow.home_deck`), whose usual order puts the most overdue
+  first; no deck of its own any more (`OPEN_MAX`, `open_cards` and
+  `overdue_order` are gone; `empty_old_deck` still empties one a test
+  build left). A hit is a review that sends a card a day or more ahead;
+  a card suspended, deleted, made new or moved ahead with Set due date
+  just leaves it, no hit (`beast_flow.count`; `tools/real_anki.py`
+  answers and sets due dates with Anki's own scheduler to prove it), and
+  half gone that way it goes quietly, with nothing said (no "wandered
+  off" card). Beaten, no pet: the card shows Pip, and the first one
+  beaten puts the Beast hood in Pip's closet (five the Viking helmet, ten
+  the Knight, as before), said on the card with Be one
+  (`beast_flow.thing`; the beast is counted before the closet at a
+  refresh so both land together, and the closet's own line leaves that
+  thing to the card); its page shows Pip in it, and the pets on its page
+  and Wrapped's slide are gone (the slide shows the beasts themselves).
+  Nothing on a crew row (Sam: "the little icon on the crew page doesn't
+  make sense"): `board.beast_chip`, app.js's `beastChip`/`beastOf` and
+  the kit's beast drawings are gone, and my week carries a beast only
+  once it's beaten, for two days, for the banner (`beast.week_field`;
+  validate.ts and the fake take only that, `{k, p: 100, end}`). Let it go
+  asks on its page, not in a window (`beastletyes`, `beastletno`). How it
+  works says less. The pace (How fast? on the card) and a plan's days
+  away as a line on its card, in place of Welcome back's window, are
+  3.9.1 (his pick).

@@ -4,14 +4,16 @@ weeks"; reworked before it shipped, "Just the cards": no bite, no pace, no
 speech, three lines on how it works). Pure: no aqt.
 
 When your overdue reviews pile up they turn up as a creature. Its kind says
-why the pile built (KINDS). It never grows: its cards are the ones overdue
-(due before today) the morning it came, and each is off it once Anki has it
-due tomorrow or later (Sam): a review that sends it ahead, Again only once
-it's got right.
-Study them opens its cards, the most overdue first, as many as you like.
-Nothing to lose: a day off and it waits; Let it go and it leaves, nobody's
-told. Beat it and it's a pet (and the closet's beast hood, viking helmet
-and knight).
+why the pile built (KINDS: three, Sam's round 2). It never grows: its
+cards are the ones overdue (due before today) the morning it came, and a
+review that sends one a day or more ahead is a hit (Again only once it's
+got right). A card suspended, deleted, made new or moved ahead without a
+review (Set due date) just leaves it (Sam's round 3); half gone that way
+and it goes, quietly.
+Study opens your own deck (Sam's round 3, no deck of its own): Anki's
+order puts the most overdue first. Nothing to lose: a day off and it
+waits; Let it go and it leaves, nobody's told. Beat it and Pip's closet
+counts it (the beast hood, viking helmet and knight); no pet.
 
 The pile: review cards due before today (not new, not learning, not
 suspended or buried) in decks studied in the last 30 days. It turns up
@@ -22,8 +24,8 @@ the most overdue first (relative to their intervals), the rest next time.
 
 The account keeps it (`beast`: the one now and the last ones met), so
 every computer has the same beast; this computer keeps its cards. With
-My beast on (Privacy), my week says its kind and how far it's beaten,
-never its size or its cards (week_field).
+My beast on (Privacy), my week says only that I beat one, and its kind, for
+two days (week_field: the crew's banner; nothing on my row, Sam's round 2).
 """
 
 import datetime as _dt
@@ -33,27 +35,24 @@ MIN_PILE = 100
 USUAL_DAYS = 2  # the pile, in usual days, before one turns up
 REST_DAYS = 7  # after one leaves, beaten or let go
 PART_DAYS = 21  # a beast is never more than three weeks of half a usual day (Sam's "in parts of three weeks")
-WANDER_SHARE = 2  # half its cards gone without a review (suspended, deleted, made new): it wanders off
+WANDER_SHARE = 2  # half its cards gone without a review (suspended, deleted, made new, moved ahead): it goes, quietly
 DECK_DAYS = 30  # a deck counts when it was studied this recently
 USUAL_WINDOW = 28  # the usual day: the middle of the days studied in the last four weeks
-SNOOZE_GAP, OWL_DAYS, LEECH_SHARE, PILE_DAYS = 7, 14, 0.15, 5
+LEECH_SHARE, PILE_DAYS = 0.15, 5
 LEECH_LAPSES = 8
 KEEP = 50  # beasts met, kept for the closet, Wrapped and the town
 PACES = {"gentle": 0.25, "steady": 0.5, "fast": 1.0}  # a share of the usual day; only Steady sizes a beast's parts now
 DEFAULT_PACE = "steady"
 SHOW_DAYS = 2  # a crewmate's beaten beast: a banner for two days
-ENDS = ("beaten", "let", "wandered")
+ENDS = ("beaten", "let", "wandered")  # wandered: it went quietly (half its cards left it)
 
 KINDS = {
-    # from: what its one line says after "17 overdue cards" (subtitle); None
-    # says how many of your usual days it is
-    "snooze": {"name": "The Snoozasaurus", "from": " that came due while you were away"},
-    "owl": {"name": "The Overdue Owl", "from": ", most of them two weeks late or more"},
-    "leech": {"name": "The Leech Lord", "from": ", many of them leeches (cards you keep forgetting)"},
-    "pile": {"name": "The Pile", "from": None},
-    "backlog": {"name": "The Backlog Beast", "from": None},
+    "leech": {"name": "The Leech Lord"},
+    "pile": {"name": "The Pile"},
+    "backlog": {"name": "The Backlog Beast"},
 }
-ORDER = ("snooze", "owl", "leech", "pile", "backlog")  # which cause wins when more than one is true
+ORDER = ("leech", "pile", "backlog")  # which cause wins when more than one is true
+WAS = {"snooze": "backlog", "owl": "backlog"}  # two kinds 3.9.0's test builds had: the account's are the Backlog Beast now
 
 
 def _date(v):
@@ -80,14 +79,11 @@ def bite(usual_day, pace=DEFAULT_PACE):
     return max(1, round(usual_day * PACES.get(pace, PACES[DEFAULT_PACE])))
 
 
-def kind(gap_days, pile, usual_day, overdue_days, leeches):
-    """Why the pile built, from the facts the morning it turns up: the days
-    off just before, its size, how overdue its cards are (each card's days
-    past due) and how many are leeches."""
-    od = sorted(overdue_days or [])
-    middle = od[len(od) // 2] if od else 0
-    facts = {"snooze": gap_days >= SNOOZE_GAP, "owl": middle >= OWL_DAYS,
-             "leech": pile and leeches / max(1, pile) >= LEECH_SHARE,
+def kind(pile, usual_day, leeches):
+    """Why the pile built, from the facts the morning it turns up: many of
+    its cards leeches (the Leech Lord), five usual days or more (the Pile),
+    else the Backlog Beast."""
+    facts = {"leech": pile and leeches / max(1, pile) >= LEECH_SHARE,
              "pile": usual_day and pile >= PILE_DAYS * usual_day}
     return next((k for k in ORDER if facts.get(k)), "backlog")
 
@@ -136,26 +132,16 @@ def stage(frac):
     return 4 if frac >= 1 else 3 if frac >= 0.75 else 2 if frac >= 0.5 else 1 if frac >= 0.25 else 0
 
 
-def subtitle(kind_key, n, usual_day=0):
-    """Its one line: what it is and why it came, in plain words. "860
-    overdue cards that came due while you were away." The Pile and the
-    Backlog Beast say how many of your usual days: "380 overdue cards:
-    about 3 days of your usual reviews." """
-    k = KINDS.get(kind_key, KINDS["backlog"])
+def subtitle(n):
+    """Its one line under the name: the count (Sam's round 3), "1,507 overdue cards"."""
     n = int(n)
-    cards = f"{n:,} overdue card{'' if n == 1 else 's'}"
-    if k["from"] is not None:
-        return f"{cards}{k['from']}."
-    if int(usual_day or 0) <= 0:
-        return f"{cards}."
-    d = max(1, round(n / int(usual_day)))
-    return f"{cards}: about {d} day{'' if d == 1 else 's'} of your usual reviews."
+    return f"{n:,} overdue card{'' if n == 1 else 's'}"
 
 
 def update(state, hit, gone, today):
     """The account's beast after counting: its hits and cards gone; beaten
-    when none are left, wandered off when half went without a review. An
-    end moves it to the ones met and starts the week's rest."""
+    when none are left, gone quietly (wandered) when half left it without a
+    review. An end moves it to the ones met and starts the week's rest."""
     s = clean(state)
     now = s.get("now")
     if not now:
@@ -170,8 +156,8 @@ def update(state, hit, gone, today):
 
 
 def end(state, how, today):
-    """It leaves: beaten, let go, or wandered off. Kept among the ones met
-    (beaten ones become pets), and a week's rest before the next."""
+    """It leaves: beaten, let go, or gone quietly. Kept among the ones met
+    (the beaten ones count for Pip's closet), and a week's rest before the next."""
     s = clean(state)
     now = s.get("now")
     if not now:
@@ -193,16 +179,13 @@ def beaten(state, year=None):
 
 
 def week_field(state, today, share=True):
-    """What rides my week to mutual friends, with My beast on (Privacy):
-    the kind and how far it's beaten, never its size or its cards; a
-    beaten one for two days after (its end day, for their banner). None
-    otherwise."""
+    """What rides my week to mutual friends, with My beast on (Privacy): a
+    beaten one, for two days after (its kind and end day, for their
+    banner). Never one I'm still on (Sam's round 2: nothing on my row), its
+    size or its cards. None otherwise."""
     if not share:
         return None
     s = clean(state)
-    now = s.get("now")
-    if now:
-        return {"k": now["k"], "p": int(progress(now)[0] * 100)}
     last = (s.get("met") or [None])[-1]
     if last and last["how"] == "beaten" and 0 <= (_date(today) - _date(last["end"])).days < SHOW_DAYS:
         return {"k": last["k"], "p": 100, "end": last["end"]}
@@ -210,26 +193,25 @@ def week_field(state, today, share=True):
 
 
 def clean_week(v, today=None):
-    """A crewmate's beast off their week: {k, p[, end]}, or None (an end
-    older than two days, too)."""
+    """A beaten beast off a week (a crewmate's, or mine for the sync):
+    {k, p: 100, end}, or None (one not beaten, or an end older than two
+    days)."""
     if not isinstance(v, dict) or v.get("k") not in KINDS:
         return None
-    p = v.get("p")
-    if not isinstance(p, int) or isinstance(p, bool) or not 0 <= p <= 100:
+    p, e = v.get("p"), _date(v.get("end") or "")
+    if p != 100 or isinstance(p, bool) or not e:
         return None
-    out = {"k": v["k"], "p": p}
-    if "end" in v:
-        e = _date(v.get("end"))
-        if not e or p != 100:
-            return None
-        if today and not 0 <= (_date(today) - e).days < SHOW_DAYS:
-            return None
-        out["end"] = e.isoformat()
-    return out
+    if today and not 0 <= (_date(today) - e).days < SHOW_DAYS:
+        return None
+    return {"k": v["k"], "p": 100, "end": e.isoformat()}
 
 
 def _n(v, lo=0, hi=10 ** 7):
     return isinstance(v, int) and not isinstance(v, bool) and lo <= v < hi
+
+
+def _was(m):
+    return dict(m, k=WAS[m["k"]]) if isinstance(m, dict) and m.get("k") in WAS else m
 
 
 def clean(v):
@@ -238,6 +220,7 @@ def clean(v):
     out = {}
     if not isinstance(v, dict):
         return out
+    v = dict(v, now=_was(v.get("now")), met=[_was(m) for m in v.get("met")] if isinstance(v.get("met"), list) else v.get("met"))
     if v.get("off") is True:
         out["off"] = True
     if _date(v.get("rest") or ""):

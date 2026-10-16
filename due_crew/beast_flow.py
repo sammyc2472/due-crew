@@ -1,17 +1,15 @@
 """3.9.0: the Backlog Beast, the glue (beast.py says what it is; board draws
-it). At each refresh: the beast now counts its cards Anki has moved to
-tomorrow or later (on any device: the cards and Anki's history, after an
-AnkiWeb sync) and what's gone without that; once an Anki day with none,
-a look at the pile for
-a new one (rule B). Its cards stay on this computer (user_files/<profile>/
+it). At each refresh: the beast now counts its cards reviewed a day or
+more ahead (on any device: Anki's history, after an AnkiWeb sync) and the
+ones that left it; once an Anki day with none, a look at the pile for a
+new one (rule B). Its cards stay on this computer (user_files/<profile>/
 beast.json); another computer works them out from Anki's own history for
 that morning. The account keeps the beast itself (`beast`), so every
 computer has the same one.
 
-Study them: a Due Crew deck of its cards not yet moved on (OPEN_MAX at a
-time), the most overdue for their interval first (Anki's relative
-overdueness), Anki rescheduling them as it would; one undo step of Anki's
-own. Study as many as you like.
+Study: your own deck, the top one holding most of its cards left (Sam's
+round 3: no deck of its own); Anki's order puts the most overdue first.
+Study as many as you like.
 
 Main thread: the collection and the config. No network here: what my crew
 sees rides my week (api.week_doc, session["beast"]).
@@ -31,25 +29,9 @@ KEY = "beast"  # the account's (account.ACCOUNT_KEYS)
 ON_KEY = "beasts"  # the account's: beasts at all (Settings; the beast's Not for me)
 SHARE_KEY = "share_beast"  # the account's: My beast, in Privacy
 FILE = "beast.json"
-OPEN_MAX = 200  # Study them opens this many of its cards at most; again, the next
-DECK_DAY = "beast_deck_day"  # plans.json: the day its deck was built (the next morning empties what's left)
+DECK_DAY = "beast_deck_day"  # plans.json: set by 3.9.0's test builds, which built a deck of its cards
+OLD_DECKS = ("The Snoozasaurus", "The Overdue Owl", "The Leech Lord", "The Pile", "The Backlog Beast")
 CHUNK = 500
-
-
-def overdue_order():
-    """Anki's filtered-deck order for relative overdueness, found by its
-    name: Anki renumbered them (on 26.09 it's 10, and 8 is retrievability,
-    which builds nothing for a deck on SM-2). Due order where it has
-    neither name."""
-    try:
-        from anki.decks_pb2 import Deck
-        order = Deck.Filtered.SearchTerm.Order
-        for name in ("RELATIVE_OVERDUENESS", "DUE_PRIORITY"):
-            if name in order.keys():
-                return int(order.Value(name))
-    except Exception:
-        pass
-    return 6  # DUE, the same number on every version
 
 
 def state(c=None):
@@ -94,16 +76,6 @@ def day_counts(col, days=B.USUAL_WINDOW + 1):
     rows = col.db.all("SELECT CAST((? - id / 1000) / 86400 AS INTEGER), COUNT(*) FROM revlog "
                       "WHERE ease > 0 AND id >= ? GROUP BY 1", cut - 1, (cut - 86400 * days) * 1000)
     return {(today - datetime.timedelta(days=int(d))).isoformat(): int(n) for d, n in rows or []}
-
-
-def gap(col, counts=None):
-    """Days off just before today (since the last day studied before it)."""
-    _cut_, today = _cut(col)
-    counts = counts if counts is not None else day_counts(col, 60)
-    before = sorted(d for d, n in counts.items() if n and d < today.isoformat())
-    if not before:
-        return 0
-    return (today - datetime.date.fromisoformat(before[-1])).days - 1
 
 
 def studied_decks(col, days=B.DECK_DAYS):
@@ -178,27 +150,26 @@ def _write(day, cids):
 
 
 def count(col, cids, day):
-    """(moved to tomorrow or later since its morning, gone without that:
-    deleted, suspended, or new again). A card's off the beast once Anki has
-    it due tomorrow or later (Sam): a review since its morning that sent it
-    a day or more ahead (Hard, Good, Easy; Again only once it's got right:
-    Anki logs a learning step in seconds), or it's due tomorrow or later
-    now (Set due date, a relearning step of a day). The first keeps
+    """(hits, cards gone, the hits' ids). A hit: a review since its morning
+    that sent the card a day or more ahead (Hard, Good, Easy; Again only
+    once it's got right: Anki logs a learning step in seconds). It keeps
     counting after the card comes due again, so the beast never heals; a
-    preview deck's review (ivl 0) moves nothing."""
+    preview deck's review (ivl 0) is no hit. Gone (Sam's round 3): left it
+    without one, so deleted, suspended, new again, or due tomorrow or
+    later with no review (Set due date). Still to hit: the rest, overdue
+    or due today, or in (re)learning after Again."""
     s_ms = _day_start_ms(col, day)
-    today, cut = int(col.sched.today), int(col.sched.day_cutoff)
-    hit, here = set(), set()
+    today = int(col.sched.today)
+    hit, waiting = set(), set()
     for i in range(0, len(cids), CHUNK):
         chunk = ",".join(str(int(c)) for c in cids[i:i + CHUNK])
         hit |= {int(c) for (c,) in col.db.all(
             f"SELECT DISTINCT cid FROM revlog WHERE id >= ? AND ease > 0 AND ivl > 0 AND cid IN ({chunk})", s_ms) or []}
-        # a home due over 1e9 is a learning step's time; under it, a day number
-        hit |= {int(c) for (c,) in col.db.all(
-            f"SELECT id FROM (SELECT id, queue, type, CASE WHEN odid THEN odue ELSE due END AS d FROM cards WHERE id IN ({chunk})) "
-            "WHERE queue != -1 AND type != 0 AND CASE WHEN d > 1000000000 THEN d >= ? ELSE d > ? END", cut, today) or []}
-        here |= {int(c) for (c,) in col.db.all(f"SELECT id FROM cards WHERE id IN ({chunk}) AND queue != -1 AND type != 0") or []}
-    gone = {int(c) for c in cids} - here - hit
+        # learning queues (1, 3) and relearning (type 3) are still Again's; a review card's day number, due by today
+        waiting |= {int(c) for (c,) in col.db.all(
+            f"SELECT id FROM cards WHERE id IN ({chunk}) AND queue != -1 AND type != 0 AND (queue IN (1, 3) OR type = 3 "
+            "OR (CASE WHEN odid THEN odue ELSE due END) <= ?)", today) or []}
+    gone = {int(c) for c in cids} - hit - waiting
     return len(hit), len(gone), hit
 
 
@@ -213,7 +184,7 @@ def _away(c, t):
 
 def check(today=None, look=True):
     """At a refresh and before a sync, on the main thread: count the beast
-    now (its end, when it's beaten or wandered off), else once a day look
+    now (its end, when it's beaten or gone quietly), else once a day look
     for a new one. look: False while the day's AnkiWeb sync hasn't come
     (a phone's reviews may not be here yet), as the plans' morning waits.
     The account is saved only when something changed. Returns the state."""
@@ -236,7 +207,8 @@ def check(today=None, look=True):
             if not s2.get("now"):
                 _save(s2)  # it ended: that the account keeps
                 last = s2["met"][-1]
-                _state["beast_news"] = {"k": last["k"], "how": last["how"], "day": today}
+                if last["how"] == "beaten":  # one that went quietly says nothing (Sam's round 3)
+                    _state["beast_news"] = {"k": last["k"], "how": last["how"], "day": today}
             return s2
         if not look or _state.get("beast_looked") == today:
             return s
@@ -247,8 +219,7 @@ def check(today=None, look=True):
         if not B.should_turn_up(len(p), usual, s, today, _away(c, t)):
             return s
         ids, capped = B.pick([(cid, od, ivl) for cid, od, ivl, _l in p], usual, B.DEFAULT_PACE)
-        k = B.kind(gap(col, counts), len(p), usual, [od for _c, od, _i, _l in p],
-                   sum(1 for *_x, lapses in p if lapses >= B.LEECH_LAPSES))
+        k = B.kind(len(p), usual, sum(1 for *_x, lapses in p if lapses >= B.LEECH_LAPSES))
         s = dict(s, now=B.turn_up(today, k, ids, usual, B.DEFAULT_PACE, capped, len(p)))
         _write(today, ids)
         _save(s)
@@ -260,8 +231,8 @@ def check(today=None, look=True):
 
 
 def week_field(today, c=None):
-    """What rides my week (api.week_doc reads session["beast"]): the kind
-    and how far, with My beast on and my numbers shared; None otherwise."""
+    """What rides my week (api.week_doc reads session["beast"]): a beaten
+    one for two days, with My beast on and my numbers shared; None otherwise."""
     c = c or cfg()
     share = bool(c.get(SHARE_KEY, True)) and not c.get("show_up") and not c.get("paused") and on(c)
     return B.week_field(state(c), today, share)
@@ -286,50 +257,45 @@ def note_week(today=None, c=None):
 
 # ---- the clicks ----
 
-def open_cards(col, now):
-    """The cards Study them opens: its cards not yet moved on, the most
-    overdue for their interval first, OPEN_MAX at most (Study them again
-    opens the next)."""
+def home_deck(col, now):
+    """Where Study goes: the top deck holding most of its cards not hit yet
+    (by their home deck), or None when none are left."""
     ids = cards(col, now)
     _n, _g, hit = count(col, ids, now["day"])
     left = [c for c in ids if c not in hit]
-    today = int(col.sched.today)
-    rows = []
+    tally = {}
     for i in range(0, len(left), CHUNK):
         chunk = ",".join(str(c) for c in left[i:i + CHUNK])
-        rows += col.db.all(f"SELECT id, CASE WHEN odid THEN odue ELSE due END, ivl FROM cards WHERE id IN ({chunk}) "
-                           "AND queue != -1 AND type != 0") or []
-    rows.sort(key=lambda r: (-((today - int(r[1])) / max(1, int(r[2] or 1))), int(r[0])))
-    return [int(r[0]) for r in rows[:OPEN_MAX]]
+        for did, n in col.db.all(f"SELECT CASE WHEN odid THEN odid ELSE did END, COUNT(*) FROM cards WHERE id IN ({chunk}) "
+                                 "AND queue != -1 AND type != 0 GROUP BY 1") or []:
+            d = col.decks.get(int(did), default=False)
+            if d:
+                top = str(d["name"]).split("::")[0]
+                tally[top] = tally.get(top, 0) + int(n)
+    if not tally:
+        return None
+    return col.decks.id_for_name(max(sorted(tally), key=tally.get))
 
 
 def study():
-    """Study them: a Due Crew deck of its cards, then Anki's Study screen on it."""
+    """Study: Anki's Study screen on your own deck (home_deck). No deck of
+    its own (Sam's round 3): Anki's order puts the most overdue first."""
     from aqt.utils import tooltip
-    from . import plan_flow as pf, plans as P
     s = state()
     now = s.get("now")
     if not now or mw.col is None:
         return
-    ids = open_cards(mw.col, now)
-    if not ids:
+    did = home_deck(mw.col, now)
+    if not did:
         tooltip("None of its cards are left to review.")
         return
-    name = P.our_deck(B.KINDS[now["k"]]["name"])
-    if pf._filtered(mw.col, name, ids, order=overdue_order()):
-        c = pf._pcfg()
-        c[DECK_DAY] = pf._today()  # the next morning empties it back if it's left
-        pf._psave(c)
-        pf._after_change()
-        did = mw.col.decks.id_for_name(name)
-        if did:
-            mw.col.decks.select(did)
-            mw.moveToState("overview")
+    mw.col.decks.select(did)
+    mw.moveToState("overview")
 
 
 def empty_old_deck(col, normal):
-    """The morning (plan_flow.tidy_decks): a beast's deck left from an
-    earlier day goes back to its decks first (Anki's Empty), as Today's
+    """The morning (plan_flow.tidy_decks): a beast's deck one of 3.9.0's
+    test builds left goes back to its decks (Anki's Empty), as Today's
     misses does, so its cards are never kept out of their own decks; then
     the tidy takes the empty deck. normal: the ids of the decks that aren't
     filtered."""
@@ -337,8 +303,8 @@ def empty_old_deck(col, normal):
     c = pf._pcfg()
     if not c.get(DECK_DAY) or c.get(DECK_DAY) == pf._today():
         return
-    for k in B.KINDS.values():
-        did = col.decks.id_for_name(P.our_deck(k["name"]))
+    for name in OLD_DECKS:
+        did = col.decks.id_for_name(P.our_deck(name))
         if did and int(did) not in normal:
             col.sched.empty_filtered_deck(int(did))
     c.pop(DECK_DAY, None)
@@ -361,8 +327,27 @@ def beaten_in(year):
 
 
 def seen_news():
-    """The x on the card's line (beaten, wandered off): it's said."""
+    """The x on the beaten card: it's said, and so is the closet thing it showed."""
+    news = _state.get("beast_news") or {}
     _state["beast_news"] = None
+    if news.get("how") == "beaten":
+        _drop_thing()
+
+
+BEAST_THINGS = ("beasthood", "viking", "knight")  # Pip's closet's beast things (closet.THINGS, group Beasts)
+
+
+def thing():
+    """A beast thing just come in Pip's closet (its line's news), for the beaten card to say."""
+    keys = list((_state.get("closet_new") or {}).get("keys") or [])
+    return next((k for k in reversed(keys) if k in BEAST_THINGS), None)
+
+
+def _drop_thing():
+    cn = _state.get("closet_new")
+    if cn and cn.get("keys"):
+        keys = [k for k in cn["keys"] if k not in BEAST_THINGS]
+        _state["closet_new"] = dict(cn, keys=keys) if keys else None
 
 
 def view(c=None, page=False):
@@ -376,9 +361,10 @@ def view(c=None, page=False):
         news = _state["beast_news"] = None  # yesterday's news: said
     if (not now and not news or not on(c)) and not page:
         return None  # nothing to say, or beasts off (Settings)
-    out = {"news": news, "met": s.get("met") or [], "on": on(c),
-           "share": bool(week_field(_cut(mw.col)[1].isoformat() if mw.col else "", c)) if now else False}
+    out = {"news": news, "met": s.get("met") or [], "on": on(c), "share": bool(c.get(SHARE_KEY, True))}
+    if news and news.get("how") == "beaten":
+        out["thing"] = thing()  # the beaten card says it, so the closet's own line doesn't
     if now:
         frac, left = B.progress(now)
-        out.update(now=now, frac=frac, left=left)
+        out.update(now=now, frac=frac, left=left, letting=bool(page and _state.get("beast_letting")))
     return out

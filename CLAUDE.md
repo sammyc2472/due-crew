@@ -62,8 +62,8 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   what the add-on costs, and must be deliberate. A new feature rides one
   of the two, or is one request on a click.
 - My week is the one shape for day stats (last eight days, away spell,
-  exam, paused, `liveUntil`, flags, room, recap, and since 3.9.0 my
-  Backlog Beast's kind and how far). The client rebuilds it
+  exam, paused, `liveUntil`, flags, room, recap, and since 3.9.0 a
+  Backlog Beast I beat, for two days). The client rebuilds it
   from `session.week_raw` with the current Privacy switches at every sync,
   so turning a switch off takes that number off every day.
 - Consent: friendship is two edges (`friends(owner, friend)`); only mutual
@@ -99,7 +99,7 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
 - Mine alone, never sent: Insights, my progress on each bingo square,
   checkpoint scores, `wrap.json` (3.8.2: and the closet's tallies in it),
   Wrapped, and my Backlog Beast's cards and counts (3.9.0: with My beast
-  on, my week says only its kind and how far; the account keeps the beast
+  on, my week says only that I beat one, and its kind, for two days; the account keeps the beast
   for me, its hits counted on each computer from Anki's history, so a
   review never costs a request).
   Pip's closet is mine (an account key only I read); what my Pip has on
@@ -123,9 +123,7 @@ same commit, each with its test:
 - `board.row_sev` ↔ `who` in app.js's `Board` (a crew row's Pip in the
   emoji's place, its accent and look; mine from `/board`'s `me.look`, 3.8.2);
   `board.squad_pip` ↔ `squadPip` (Squads' Pips: a crewmate's in colour,
-  anyone else plain, 3.8.21); `board.beast_chip` ↔ `beastChip` and
-  `beast.clean_week` ↔ `beastOf` (a crewmate's Backlog Beast after their
-  name, 3.9.0; the kit carries its small drawings, `Sev.beast`).
+  anyone else plain, 3.8.21).
   The drawing isn't restated: `sev.site_kit()` is written into
   `site/public/sev.js` by `tools/gen_sev_js.py` (run it when Pip or the
   closet changes); its `clean`/`shown` restate `closet.clean`/`shown`. The
@@ -175,7 +173,7 @@ same commit, each with its test:
 | Shares: text, and picture cards (made in Anki since 3.8.0) | `share.py`, `shares.py`, `sharecard.py`, `ui/share_card_dialog.py` | `site/public/cards.js` |
 | Admin, notices, feedback, reports (kept for the Inbox, 3.8.1) | | `admin.ts`, `people.ts`, `notices.ts`, `feedback.ts`, `reports.ts` |
 | Your Wrapped (3.9.0): the year's story in the board's place, the board's line 1 Dec to 15 Jan, Tools › Your year… | `wrapped.py` (pure: facts, slides, words, SAD), `wrapped_flow.py` (one query, counts, the card), `board.wrapped_html`/`wrapped_js`/`wrapped_line`, `sharecard.year`'s Pip | never sent; the account's `wrapped_seen`; cards.js draws the year card's Pip the same |
-| The Backlog Beast (3.9.0, yours): an overdue pile turns up as a beast by its cause (rule B, once a day after AnkiWeb's sync); Study them, its cards most overdue first; breaks up as it's beaten, a pet after; its card in the You bubble, its page in the board's place; a crewmate's after their name and a beaten one's banner | `beast.py` (pure: the rule, kind, subtitle, parts, stages, week field, clean/merge), `beast_flow.py` (the pile, its cards in beast.json or from revlog, counting, the bite's deck), `beast_art.py`, `board.beast_card`/`beast_html`/`beast_chip`/`beast_banners` | week `beast {k, p[, end]}` (validate.ts); account keys `beast`, `beasts`, `share_beast`; `beastChip` in app.js |
+| The Backlog Beast (3.9.0, yours): an overdue pile turns up as a beast by its cause (three kinds; rule B, once a day after AnkiWeb's sync); Study opens your own deck; breaks up as it's beaten; beaten, Pip and the closet's beast things (no pet); its card in the You bubble, its page in the board's place; nothing on crew rows, a beaten one's banner | `beast.py` (pure: the rule, kind, count, parts, stages, week field, clean/merge), `beast_flow.py` (the pile, its cards in beast.json or from revlog, counting, the home deck, the closet thing), `beast_art.py`, `board.beast_card`/`beast_html`/`beast_banners` | week `beast {k, p: 100, end}`, beaten only (validate.ts); account keys `beast`, `beasts`, `share_beast` |
 | Why isn't this card showing? (Browse right-click, 3.8.0) | `why.py`, `why_flow.py`, `ui/why_dialog.py` | never sent |
 | Plan tags: DueCrew::<plan>::SLG_12 on followers' notes (Browse right-click, the builder, Tag by objective; 3.8.0) | `plans.sync_tags`, `plan_flow.apply_tags`, `ui/tag_dialog.py` | `plans.ts` tagNotes; This plan's tags in builder.js |
 | Cuts (a video kept to an SLG) and a tag's single cards; taking a tag off (3.8.1) | `plans.match`/`plan_tag_cards`/`topic_items`, `plan_flow._unit_cids` | `planDoc`/`putIds` in `plans.ts`; `setCut`/`syncCuts` and the Text preview in builder.js |

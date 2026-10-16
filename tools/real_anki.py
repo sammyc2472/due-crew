@@ -639,9 +639,9 @@ def check(path):
 def check_beast(tmp):
     """3.9.0, the Backlog Beast on Anki's own engine: the pile's query (a
     card in a filtered deck by its home's due), rule B from the revlog, its
-    cards worked out from history on another computer, Study them's filtered
-    deck in relative-overdue order with its undo, and a deck left from an
-    earlier day emptied back."""
+    cards worked out from history on another computer, a hit by Anki's own
+    answers (Set due date leaves it, Sam's round 3), Study on my own deck
+    (no deck of its own), and a deck a 3.9.0 test build left emptied back."""
     import json, time
     REPO = os.path.dirname(HERE)
     sys.path.insert(0, REPO); sys.path.insert(0, REPO + "/tests")
@@ -649,7 +649,7 @@ def check_beast(tmp):
     import fakes
     fakes.install_fake_requests(fakes.FakeWorker())
     fakes.install_fake_aqt()
-    from due_crew import beast as B, beast_flow as BF, plan_flow as F, plans as P
+    from due_crew import beast_flow as BF, plan_flow as F, plans as P
     from due_crew.app import _state
     failed = []
 
@@ -717,18 +717,11 @@ def check_beast(tmp):
     ok("counted: its cards today's reviews sent ahead, and the suspended ones gone", (hit, gone) == (40, 5), (hit, gone))
     BF._state["beast_count"] = None
     BF.study()
-    name = P.our_deck(B.KINDS[now["k"]]["name"])
-    bid = col.decks.id_for_name(name)
-    deck = col.decks.get(bid) if bid else {}
-    in_it = set(col.find_cards(f'"deck:{name}"')) if bid else set()
-    ok("Study them: Anki's filtered deck of its cards not yet moved on, relative overdueness, rescheduling, opened",
-       bid and deck.get("dyn") and len(in_it) == min(455, BF.OPEN_MAX) == 200 and not in_it & set(ids[:45]) and deck["terms"][0][2] == BF.overdue_order() == 10
-       and deck.get("resched") and moved[-1:] == ["overview"], f"{len(in_it)} cards, terms {deck.get('terms')}")
-    step = col.undo_status().undo
-    col.undo()
-    ok("Edit › Undo takes its deck away, its cards home", not col.decks.id_for_name(name), f"undo {step!r}")
-    BF.study()
-    # a hit is a card Anki moves to tomorrow or later (Sam): answered by Anki's own scheduler in Study them's deck
+    ok("Study: Anki's Study screen on my own top deck holding its cards (no deck of its own, Sam's round 3)",
+       col.decks.current()["name"] == "Step Deck" and moved[-1:] == ["overview"]
+       and not [d for d in col.decks.all_names_and_ids(include_filtered=True) if d.name.startswith(P.PARENT)],
+       f"{col.decks.current()['name']!r}, {moved[-1:]}")
+    # a hit: a review Anki's own scheduler sends a day or more ahead
     from anki.scheduler.v3 import CardAnswer
 
     def answer(cid, rating):
@@ -739,25 +732,26 @@ def check_beast(tmp):
         col.sched.answer_card(CardAnswer(card_id=card.id, current_state=st.current, new_state=new, rating=rating,
                                          answered_at_millis=int(time.time() * 1000), milliseconds_taken=4000))
     h0, g0, _h = BF.count(col, ids, now["day"])
-    deck_cards = sorted(col.find_cards(f'"deck:{name}"'))
-    outside = [c for c in ids[45:] if c not in set(deck_cards)]
-    a_, g_, h_ = deck_cards[:3]
+    a_, g_, h_, d1, d0 = ids[45:50]
     answer(a_, CardAnswer.AGAIN)
     answer(g_, CardAnswer.GOOD)
     answer(h_, CardAnswer.HARD)
-    col.sched.set_due_date([outside[0]], "1")
-    col.sched.set_due_date([outside[1]], "0")
+    col.sched.set_due_date([d1], "1")
+    col.sched.set_due_date([d0], "0")
     h1, g1, _h = BF.count(col, ids, now["day"])
     answer(a_, CardAnswer.GOOD)
     h2, g2, _h = BF.count(col, ids, now["day"])
-    ok("a hit when Anki moves a card to tomorrow or later: Good, Hard and Set due date 1 are; Again and Set due date 0 aren't; "
-       "Again then Good is", (h1 - h0, h2 - h0, g1 - g0) == (3, 4, 0),
-       f"{h0} → {h1} → {h2}; again {col.get_card(a_).queue}, revlog {col.db.list('SELECT ivl FROM revlog WHERE cid = ? ORDER BY id', a_)}")
+    ok("a hit: Good and Hard are; Again isn't till it's got (then it is); Set due date 1 leaves it, no hit; Set due date 0 is still to do",
+       (h1 - h0, h2 - h0, g1 - g0) == (2, 3, 1),
+       f"{h0} → {h1} → {h2}, gone {g0} → {g1}; again {col.get_card(a_).queue}, revlog {col.db.list('SELECT ivl FROM revlog WHERE cid = ? ORDER BY id', a_)}")
+    # a deck one of 3.9.0's test builds made of its cards: the next morning puts them home
+    name = P.our_deck("The Snoozasaurus")
+    F._filtered(col, name, ids[100:110])
     pc[BF.DECK_DAY] = "2000-01-01"
     normal = {int(d.id) for d in col.decks.all_names_and_ids(include_filtered=False)}
     BF.empty_old_deck(col, normal)
     left = col.find_cards(f'"deck:{name}"') if col.decks.id_for_name(name) else []
-    ok("its deck left from an earlier day goes back to its decks", not left and BF.DECK_DAY not in pc, len(left))
+    ok("a test build's deck of its cards goes back to their decks the next morning", not left and BF.DECK_DAY not in pc, len(left))
     col.close()
     return failed
 

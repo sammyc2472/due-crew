@@ -1000,7 +1000,6 @@ const Board = (() => {
         live: !w.paused && !!(w.liveUntil && Date.parse(w.liveUntil) > Date.now()),
         room: !w.paused && w.room && roomLive(w.room) ? (host ? `${(host.name || "?").split(" ")[0]}’s room` : "A study room") : "",
         recap: !w.paused && w.recap && w.recap.day === today ? w.recap : null,
-        beast: w.paused ? null : beastOf(w.beast, today),  // 3.9.0 (build_rows): their Backlog Beast
         days7: last7.filter((l) => showed(dayOf(w, l))).length, daysWk: wk.filter((l) => showed(dayOf(w, l))).length, showup: false };
       if (r.paused) { paused.push(r); continue; }
       const flags = (d) => { r.status = d.status || ""; r.away = d.away ? awayText(d.awayTo, today) : ""; };
@@ -1069,27 +1068,6 @@ const Board = (() => {
     return Sev.row(p.look, accentPair(you ? p.accent || worn : p.accent), you ? "Your Pip" : `${x.name || "?"}’s Pip`);
   }
 
-  /** beast.clean_week (3.9.0): a crewmate's Backlog Beast off their week,
-   *  {k, p[, end]}: its kind and how far it's beaten; a beaten one's end
-   *  day only at 100 and for two days. Anything else: null. */
-  const BEAST_NAMES = { snooze: "The Snoozasaurus", owl: "The Overdue Owl", leech: "The Leech Lord", pile: "The Pile", backlog: "The Backlog Beast" };
-  function beastOf(b, today) {
-    if (!b || typeof b !== "object" || !Object.prototype.hasOwnProperty.call(BEAST_NAMES, b.k) || !Number.isInteger(b.p) || b.p < 0 || b.p > 100) return null;
-    if (!("end" in b)) return { k: b.k, p: b.p };
-    if (b.p !== 100 || typeof b.end !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(b.end)) return null;
-    const ago = Math.round((Date.parse(today) - Date.parse(b.end)) / 86400000);
-    return ago >= 0 && ago < 2 ? { k: b.k, p: 100, end: b.end } : null;
-  }
-
-  /** board.beast_chip: their beast, small (sev.js's kit), and how far it's
-   *  beaten; never how many cards. Without sev.js, the words alone. */
-  function beastChip(b) {
-    const name = BEAST_NAMES[b.k];
-    const fig = typeof Sev !== "undefined" && Sev.beast ? Sev.beast(b.k) : null;
-    return b.end ? h("span", { class: "chip bst", title: `Beat ${name}, their overdue cards` }, fig, "beaten")
-      : h("span", { class: "chip bst", title: `${name}: their overdue cards, ${b.p}% cleared` }, fig, `${b.p}%`);
-  }
-
   function nameCell(r, period) {
     const p = r.p;
     const cell = h("td", { class: "nm" }, who(p));
@@ -1101,7 +1079,6 @@ const Board = (() => {
       else if (r.exam) cell.append(h("span", { class: "chip exam" }, r.exam));
       else if (r.away) cell.append(h("span", { class: "chip" }, r.away === "away" ? "away" : `away · ${r.away}`));
       else if (r.recap) cell.append(h("span", { class: "chip", title: r.recap.name }, `week ${r.recap.n} done`));
-      else if (r.beast) cell.append(beastChip(r.beast));  // 3.9.0: the last thing a chip says
     }
     if (r.paused) cell.append(h("span", { class: "ago faded it" }, " · on a break"));
     else if (r.quiet) { const [t] = ago(r.last); if (t) cell.append(h("span", { class: "ago faded" }, ` (${t})`)); }

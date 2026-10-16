@@ -418,8 +418,9 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
     elif data.get("plans"):
         plan_flow.refresh_progress()
     due_flow.after_refresh()  # Due: a fresh reviews count, and the morning's leeches when asked
+    _beast_check()  # 3.9.0: the Backlog Beast, counted (and once a day, looked for); before the closet,
+    # so one beaten here earns its thing at the same refresh and its card can say so
     _closet(lambda cf: _closet_day(cf, labels[0], data["entries"]))  # 3.8.2: Pip's closet
-    _beast_check()  # 3.9.0: the Backlog Beast, counted (and once a day, looked for)
     toasts += _update_returns(data["entries"], labels, tomorrow, c)
     milestone = _update_wrap(data["entries"], labels)
     if milestone and c.get("sync_notifications", True):
@@ -1305,7 +1306,7 @@ BEAST_SEEN = "beast_seen"  # per computer: a crewmate's beaten beast's banner, d
 
 def open_beast():
     """3.9.0: the Backlog Beast's fight, in place of the board (as the closet is)."""
-    _state["beast_open"] = True
+    _state.update(beast_open=True, beast_letting=False)
     _state["settings_tab"] = None
     _state["closet_open"] = None
     _state["wrapped_open"] = None
@@ -1319,9 +1320,9 @@ def open_beast():
 
 
 def _beast_cmd(cmd, parts):
-    """3.9.0: the beast's clicks: its card (open, Study them, the line's x),
-    its page (Let it go, back to the board), and a crewmate's beaten
-    beast's banner (a cheer, its x)."""
+    """3.9.0: the beast's clicks: its card (open, Study, the beaten line's
+    x), its page (Let it go, asked in place: no window, Sam's round 3; back
+    to the board), and a crewmate's beaten beast's banner (a cheer, its x)."""
     from . import beast_flow
     arg = parts[0] if parts else ""
     if cmd == "beastopen":
@@ -1346,21 +1347,18 @@ def _beast_cmd(cmd, parts):
         return
     today = _state["labels"][0] if _state["labels"] else None
     if cmd == "beastlet":
-        from .ui import confirm
-        if not confirm(mw, "Let it go?", "It leaves, and nobody's told. The next one waits a week.", "Let It Go"):
-            return
+        _state["beast_letting"] = True  # its page asks, in place
+    elif cmd == "beastletno":
+        _state["beast_letting"] = False
+    elif cmd == "beastletyes":
+        _state["beast_letting"] = False
         beast_flow.let_go(beast_flow._cut(mw.col)[1].isoformat() if mw.col else today)
     elif cmd == "beastnews":
         beast_flow.seen_news()
     elif cmd == "beastclose":
-        _state["beast_open"] = False
+        _state.update(beast_open=False, beast_letting=False)
     else:
         return
-    if cmd == "beastlet":
-        _beast_check(week=True)
-        _share_push["n"] += 1
-        n = _share_push["n"]
-        QTimer.singleShot(2500, lambda: n == _share_push["n"] and _on_sync_done())  # my week drops it soon
     if _board_on_screen() or mw.state == "deckBrowser":
         _swap(cfg())
 

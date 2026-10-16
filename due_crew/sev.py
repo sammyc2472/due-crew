@@ -315,21 +315,17 @@ def site_kit():
     then a costume), COSTUME and LOOK_MAX; things: each thing's place, the
     other places it takes, and its drawing (front, back). Filled in as
     closet.art fills them, it's slot(svg("idle", rest=True, look=look),
-    ROW_SIZE), to the byte. beasts (3.9.0): each Backlog Beast's small
-    drawing, as board.beast_mini draws it, for a crew row's chip."""
+    ROW_SIZE), to the byte."""
     from . import closet
     from .closet_art import ART
     held = _held_in(BLANKS[2], POSES["idle"]["arms"])
     row = slot(svg("idle", rest=True, worn=BLANKS), ROW_SIZE)
     if row.count(held) != 1 or any(row.count(b) != 1 for b in BLANKS):
         raise ValueError("site_kit: a blank isn't where the look goes")
-    from . import beast, beast_art
     return {"row": row.replace(held, BLANKS[2]), "held": held, "slots": list(closet.SLOTS), "costume": closet.COSTUME,
             "max": closet.LOOK_MAX,
             "things": {t["k"]: [t["slot"], list(t.get("also") or ()), ART[t["k"]][0], ART[t["k"]][1]]
-                       for t in closet.THINGS},
-            # 3.9.0: a crew row's Backlog Beast, small (board.beast_chip's), by kind
-            "beasts": {k: beast_art.svg(k, "mini") for k in beast.KINDS}}
+                       for t in closet.THINGS}}
 
 
 def stack_reach(n, size):

@@ -78,7 +78,7 @@ cookie) except these, which need no sign-in: `GET /version`,
 - A flagged card (`tricky`) is `{guid, deck, at}`. Any `text` is dropped on the way in; crewmates read the text from their own copy of the note.
 - A flag with a tip still waiting for me is dropped on the way in, so a sync before I've read the tip doesn't put it back up.
 - 3.2: a flag may carry `q`, my one line asking whoever has the card down (an ask). `recap: {name, n, day}` is my last plan week done. Neither goes to anyone else.
-- 3.9.0: `beast: {k, p[, end]}` is my Backlog Beast with My beast on: its kind (`snooze`, `owl`, `leech`, `pile`, `backlog`) and how far it's beaten (0 to 100); `end`, a date, only at 100 (a beaten one, for its banner). Anything else in it (a size, its cards) is dropped on the way in; a bad one is a 400 (`bad_week`), and an older add-on's server takes the week without it (`api._without_32`). Mutual friends read it as they read the week.
+- 3.9.0: `beast: {k, p: 100, end}` is a Backlog Beast I beat, with My beast on: its kind (`leech`, `pile`, `backlog`) and the day (`p` is always 100), for my crew's banner. One I'm still fighting is never sent (nothing shows it). Anything else in it (a size, its cards) is dropped on the way in; a bad one is a 400 (`bad_week`), and an older add-on's server takes the week without it (`api._without_32`). Mutual friends read it as they read the week.
 
 ### People
 

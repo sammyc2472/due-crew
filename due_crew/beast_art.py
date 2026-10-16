@@ -4,13 +4,12 @@ comes from a person or the server.
 
 The Backlog Beast breaks up as it's beaten (CSS on its classes: a horn at
 a quarter, the other at half with a brow and a sweat, dizzy at three
-quarters, a puff of smoke at the end); the others shrink. A beaten one is
-a pet: small, with a bow (pet)."""
+quarters, a puff of smoke at the end); the others shrink. Three kinds,
+no pets (Sam's rounds 2 and 3)."""
 
 _CARD_SPOTS = ((44, 92, 6.9), (58, 60, 13.5), (84, 44, 16.5), (116, 44, 24.8), (142, 60, 13.4), (156, 92, 23.7),
                (160, 122, -26.4), (40, 124, -1.9), (70, 146, 24.8), (130, 146, 8.3), (100, 36, 22.5), (50, 108, -21.7),
                (150, 108, -1.7), (100, 150, -14.2))
-_FONT = 'font-family="-apple-system, Segoe UI, sans-serif"'
 
 
 def _card(x, y, r):
@@ -50,32 +49,6 @@ def backlog(stages=True):
             '</g>' + poof + '</g>')
 
 
-def owl():
-    return ('<g class="bz"><g class="bb"><ellipse cx="100" cy="163" rx="50" ry="5.5" fill="rgba(0,0,0,.12)"/>'
-            '<path d="M58 40 L66 18 L80 36 Z M142 40 L134 18 L120 36 Z" fill="#6f5136"/>'
-            '<ellipse cx="100" cy="100" rx="52" ry="62" fill="#8a6a4a"/>'
-            '<path d="M50 92 C40 110 44 140 60 152 C60 130 60 110 56 94 Z M150 92 C160 110 156 140 140 152 C140 130 140 110 144 94 Z" fill="#6f5136"/>'
-            '<circle cx="100" cy="122" r="27" fill="#f3e6cf"/><circle cx="100" cy="122" r="22" fill="#fff" stroke="#c9b48f" stroke-width="2"/>'
-            '<path d="M100 122 V106 M100 122 L111 128" stroke="#3b2a1a" stroke-width="2.6" stroke-linecap="round"/>'
-            '<circle cx="80" cy="74" r="17" fill="#f3e6cf"/><circle cx="120" cy="74" r="17" fill="#f3e6cf"/>'
-            '<circle cx="80" cy="74" r="10" fill="#f2b33d"/><circle cx="120" cy="74" r="10" fill="#f2b33d"/>'
-            '<circle cx="80" cy="75" r="5.5" fill="#2b1d10"/><circle cx="120" cy="75" r="5.5" fill="#2b1d10"/>'
-            '<path d="M95 88 L100 97 L105 88 Z" fill="#e0a24a"/>'
-            '<path d="M84 160 v6 M92 160 v6 M108 160 v6 M116 160 v6" stroke="#e0a24a" stroke-width="3" stroke-linecap="round"/></g></g>')
-
-
-def snooze():
-    return ('<g class="bz"><g class="bb"><ellipse cx="100" cy="163" rx="64" ry="6" fill="rgba(0,0,0,.12)"/>'
-            '<path d="M40 70 l8 -14 l6 14 M60 52 l9 -15 l7 15 M82 42 l9 -15 l8 15 M106 42 l9 -15 l8 15 M128 52 l9 -14 l7 15" fill="#3f8f5a"/>'
-            '<path d="M28 124 C24 80 56 46 100 46 C150 46 176 86 172 124 C170 152 142 160 100 160 C58 160 30 152 28 124 Z" fill="#5cb878"/>'
-            '<ellipse cx="100" cy="128" rx="46" ry="24" fill="#a9dbb5"/>'
-            '<path d="M70 92 Q80 100 90 92 M110 92 Q120 100 130 92" stroke="#1f3d27" stroke-width="3.2" fill="none" stroke-linecap="round"/>'
-            '<ellipse cx="100" cy="116" rx="7" ry="5" fill="#1f3d27"/>'
-            f'<text class="bzz" x="150" y="40" {_FONT} font-size="20" font-weight="800" fill="#8c9a90">z</text>'
-            f'<text class="bzz" x="166" y="22" {_FONT} font-size="15" font-weight="800" fill="#8c9a90">z</text>'
-            '<rect x="64" y="148" width="24" height="16" rx="7" fill="#3f8f5a"/><rect x="112" y="148" width="24" height="16" rx="7" fill="#3f8f5a"/></g></g>')
-
-
 def pile():
     cards = ""
     for x, y, r in ((100, 146, -4), (96, 128, 5), (104, 110, -6), (98, 92, 3), (102, 74, -3)):
@@ -100,29 +73,14 @@ def leech():
             '<path d="M120 132 Q132 140 146 132" stroke="#4f5a24" stroke-width="3" fill="none" stroke-linecap="round"/></g></g>')
 
 
-ART = {"backlog": backlog, "snooze": snooze, "owl": owl, "pile": pile, "leech": leech}
+ART = {"backlog": backlog, "pile": pile, "leech": leech}
 
 
 def art(kind, stages=False):
     """A beast's drawing, by kind (the Backlog Beast with its stages, when asked)."""
     if kind == "backlog":
         return backlog(stages)
-    return ART.get(kind, owl)()
-
-
-def pet(kind, flip=False):
-    """A beaten beast, small and friendly, with a bow."""
-    return (f'<g transform="translate(100 164) scale({-.5 if flip else .5} .5) translate(-100 -164)">{art(kind)}</g>'
-            '<path d="M86 96 L76 89 L76 103 Z M86 96 L96 89 L96 103 Z" fill="#f08fa8"/><circle cx="86" cy="96" r="3" fill="#e0457b"/>')
-
-
-PET_BOX = "40 66 120 104"  # a pet is half size at the feet: its own box, so it fills what it's given
-
-
-def pet_svg(kind, cls="", label=None, flip=False):
-    """A pet as its own <svg>, cropped to it."""
-    a = f'role="img" aria-label="{label}"' if label else 'aria-hidden="true"'
-    return f'<svg class="{" ".join(["dc-bst pet", cls]).strip()}" viewBox="{PET_BOX}" {a}>{pet(kind, flip)}</svg>'
+    return ART.get(kind, pile)()
 
 
 def svg(kind, cls="", label=None, stages=False, inner=None):
@@ -151,7 +109,5 @@ CSS = """
       @keyframes dc-bspin { to { transform: rotate(360deg); } }
       #due-crew .dc-bst.poof .bpoof circle { transform-box: fill-box; transform-origin: 50% 50%; animation: dc-bpuff .9s ease-out both; }
       @keyframes dc-bpuff { from { transform: scale(.2); } to { transform: scale(1.15); opacity: 0; } }
-      #due-crew .dc-bst.pet { animation: dc-pbob 2.4s ease-in-out infinite; transform-origin: 50% 100%; }
-      @keyframes dc-pbob { 0%, 100% { transform: none; } 50% { transform: translateY(-4px); } }
     }
 """

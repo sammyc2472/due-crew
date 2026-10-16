@@ -773,13 +773,12 @@ class FakeWorker:
                 raise Bad(400, "bad_week")
             out["recap"] = {"name": r["name"][:60], "n": r["n"], "day": r["day"]}
         if "beast" in w:
-            # 3.9.0 (validate.ts: case "beast"): kind and how far, an end day only at 100
+            # 3.9.0 (validate.ts: case "beast"): a beaten one only, its kind and day
             b = w["beast"]
-            if (not isinstance(b, dict) or b.get("k") not in ("snooze", "owl", "leech", "pile", "backlog")
-                    or not _is_int(b.get("p"), 0, 100)
-                    or ("end" in b and (b["p"] != 100 or not DATE_RE.fullmatch(str(b["end"]))))):
+            if (not isinstance(b, dict) or b.get("k") not in ("leech", "pile", "backlog")
+                    or b.get("p") != 100 or isinstance(b.get("p"), bool) or not DATE_RE.fullmatch(str(b.get("end")))):
                 raise Bad(400, "bad_week")
-            out["beast"] = {k: b[k] for k in ("k", "p", "end") if k in b}  # anything else is dropped
+            out["beast"] = {"k": b["k"], "p": 100, "end": b["end"]}  # anything else is dropped
         return out
 
     ROW_KEYS = {"name", "day", "reviews", "studyTimeMs", "accuracy", "streak", "week", "emoji", "newCards", "play"}

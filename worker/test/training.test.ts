@@ -313,15 +313,13 @@ describe("the week's 3.2 extras", () => {
 });
 
 describe("the week's 3.9.0 beast", () => {
-  it("carries its kind and how far, nothing else", async () => {
+  it("carries a beaten one, its kind and day, nothing else; never one still being fought", async () => {
     const { sam, dre } = await crew();
     const seen = async () => (await dre.call("GET", "/board")).body.friends.find((f: any) => f.uid === "sam").week.beast;
-    expect(await sam.status("POST", "/sync", { week: { ...WEEK("2026-10-26"), beast: { k: "snooze", p: 62, size: 4442, cids: [1, 2] } } })).toBe(200);
-    expect(await seen(), "its size and cards never stay").toEqual({ k: "snooze", p: 62 });
-    expect(await sam.status("POST", "/sync", { week: { ...WEEK("2026-10-26"), beast: { k: "owl", p: 100, end: "2026-10-26" } } })).toBe(200);
-    expect(await seen()).toEqual({ k: "owl", p: 100, end: "2026-10-26" });
-    for (const beast of [{ k: "dragon", p: 1 }, { k: "owl", p: 101 }, { k: "owl", p: 1.5 }, { k: "owl", p: 40, end: "2026-10-26" },
-      { k: "owl", p: 100, end: "soon" }, "owl", null]) {
+    expect(await sam.status("POST", "/sync", { week: { ...WEEK("2026-10-26"), beast: { k: "pile", p: 100, end: "2026-10-26", size: 4442, cids: [1, 2] } } })).toBe(200);
+    expect(await seen(), "its size and cards never stay").toEqual({ k: "pile", p: 100, end: "2026-10-26" });
+    for (const beast of [{ k: "dragon", p: 100, end: "2026-10-26" }, { k: "snooze", p: 100, end: "2026-10-26" }, { k: "pile", p: 62 },
+      { k: "pile", p: 40, end: "2026-10-26" }, { k: "pile", p: 100 }, { k: "pile", p: 100, end: "soon" }, "pile", null]) {
       expect(await sam.status("POST", "/sync", { week: { ...WEEK("2026-10-26"), beast } }), JSON.stringify(beast)).toBe(400);
     }
     expect(await sam.status("POST", "/sync", { week: WEEK("2026-10-27") })).toBe(200);
