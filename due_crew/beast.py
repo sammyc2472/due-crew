@@ -31,6 +31,7 @@ two days (week_field: the crew's banner; nothing on my row, Sam's round 2).
 import datetime as _dt
 import statistics
 
+READY = False  # Sam, 16 Oct: "not there yet". Built and tested, off in 3.9.0: nothing shows, earns or is sent
 MIN_PILE = 100
 USUAL_DAYS = 2  # the pile, in usual days, before one turns up
 REST_DAYS = 7  # after one leaves, beaten or let go

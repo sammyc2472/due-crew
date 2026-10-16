@@ -5578,10 +5578,10 @@ def test_knows_peek_v390():
     two = K.chip_view({"knows": ["dre", "mo"], "tips": []}, [], names, pips=pips)
     mine = K.chip_view({"knows": ["dre"], "tips": []}, [], names, mine=True, pips=pips)
     plain = K.chip_view({"knows": ["dre"], "tips": []}, [], names)
-    check("peek: one who knows it speaks for themselves; more, the words say who; asked, it says so; no Pip, no peek",
+    check("peek: one who knows it speaks for themselves; more, the words say who; asked, it says so; no Pip, the same bubble saying who (Sam: always this version)",
           one["peek"] == {"uid": "dre", "head": "I know this one", "act": "Ask Dre"}
           and two["peek"]["head"] == "Dre and 1 more know this" and two["peek"]["act"] == "Ask"
-          and mine["peek"]["act"] == "Asked" and "peek" not in plain
+          and mine["peek"]["act"] == "Asked" and plain["peek"] == {"uid": "dre", "head": "Dre knows this", "act": "Ask"}
           and one["text"] == "Dre knows this" and one["act"] == "Ask", (one.get("peek"), two.get("peek")))
     tip = K.chip_view({"knows": ["dre"], "tips": [{"from": "dre", "text": "think loops"}]}, [], names, pips=pips)
     check("peek: a tip or an ask keeps its card", "peek" not in tip
@@ -5599,12 +5599,26 @@ def test_knows_peek_v390():
         _state.clear()
         _state.update(saved[4])
     v = shown[0]
+    shown2, saved2 = [], (K._bottom, K._review_web, K._show, K.client, K.pips_by_uid, dict(_state))
+    try:
+        K._bottom, K._review_web, K._show, K.client = (lambda: object()), (lambda: None), (lambda v: shown2.append(v)), (lambda: sam)
+        K.pips_by_uid = lambda c=None: {}  # Pip off
+        _state["entries"] = [{"user_id": "dre", "name": "Dre <b>Ng", "you": False, "accent": "blue", "look": ["headphones"]}]
+        K.on_answer(types.SimpleNamespace(note=lambda: types.SimpleNamespace(guid="guid000001"), ord=0, id=1, lapses=3))
+    finally:
+        K._bottom, K._review_web, K._show, K.client, K.pips_by_uid = saved2[:5]
+        _state.clear()
+        _state.update(saved2[5])
+    check("peek, Pip off: the same bubble in the same place, without the Pip (Sam: \"always this version, just without the pip\")",
+          shown2[0]["peek"] == {"head": "Dre <b>Ng knows this".split(" ")[0] + " knows this", "act": "Ask"} and "svg" not in shown2[0]["peek"]
+          and "pip" not in shown2[0], shown2[0].get("peek"))
     check("peek: on the review screen, their Pip waving in their look (sev.py's own markup, the name only its label, escaped)",
           v["kind"] == "knows" and set(v["peek"]) == {"head", "act", "svg"} and "m-peek" in v["peek"]["svg"]
           and "Dre &lt;b&gt;Ng’s Pip" in v["peek"]["svg"] and "<b>" not in v["peek"]["svg"], v.get("peek"))
     js = K.float_js(v)
     check("peek: drawn in the corner's place, up from the bottom; the words as text; it ducks back down; still with Reduce motion",
-          "var peek = D.peek && D.peek.svg && D.pip" in js and "translateY(105%)" in js and "head = el('div'" in js
+          "var peek = D.peek || null, withPip = !!(peek && peek.svg && D.pip)" in js and "if (withPip) {" in js
+          and "translateY(105%)" in js and "head = el('div'" in js
           and "peek ? peek.head : D.text" in js and "prefers-reduced-motion: reduce" in js and "if (peek && !still" in js
           and "window.dcKnowsOff(!D)" in js and "off(true)" in js and "knowsbar" in js)
     check("peek: always shown, as agreed (Sam: the pill \"is not the new version we agreed on\"): no corner check, never "
@@ -13141,10 +13155,11 @@ def test_closet_board_v382():
     view = {"tab": "Yours", "have": have, "look": ["bowtie", "glasses", "headphones"],
             "near": [("cap", 11, 14, "days in a row")], "progress": {"cap": (11, 14), "beanie": (3, 7)}, "new": ["dino"], "msg": ""}
     page = board.closet_html(view, {"theme": "light"})
+    SHOWN = [t for t in C.THINGS if C.offered(t, have)]  # 3.9.0: the beast's things wait for the beast (beast.READY)
     fig = page.split('class="cl-fig"')[1].split("</div>")[0]
     check("the closet: its own page, a way back, how many of how many; Yours and To earn, each with its count",
-          "dc-closet" in page and "duecrew:closetclose" in page and f"5 of {len(C.THINGS)}" in page
-          and "Yours <small>5</small>" in page and f"To earn <small>{len(C.THINGS) - 5}</small>" in page
+          "dc-closet" in page and "duecrew:closetclose" in page and f"5 of {len(SHOWN)}" in page
+          and "Yours <small>5</small>" in page and f"To earn <small>{len(SHOWN) - 5}</small>" in page
           and "duecrew:closettab:1" in page and "never bought" not in page)
     check("Yours: only my things, each a button, by place (head to back, then costumes); nothing greyed, nothing to try",
           page.count('<button class="cl-t') == len(have) and 'class="cl-t lk' not in page and "closettry" not in page
@@ -13168,7 +13183,8 @@ def test_closet_board_v382():
     earn = board.closet_html(dict(view, tab="To earn"), {"theme": "light"})
     secrets = [t for t in C.THINGS if t["group"] == "Secret"]
     check("To earn: every thing I haven't got, shown but never a button, by how it's earned; how far along",
-          earn.count('<div class="cl-t lk') == len(C.THINGS) - len(have) and '<button class="cl-t' not in earn
+          earn.count('<div class="cl-t lk') == len(SHOWN) - len(have) and '<button class="cl-t' not in earn
+          and "Beasts <small>" not in earn and "Viking helmet" not in earn
           and "duecrew:closetwear:cap" not in earn and "Almost there" in earn and "11 of 14 days in a row" in earn
           and "<small>11 of 14</small>" in earn and "<small>3 of 7</small>" not in earn  # beanie is mine
           and "Showing up <small>" in earn)
@@ -14225,6 +14241,59 @@ def test_banner_actions_sit_together_v390():
           and ".dc-wrap.cl-earn { text-align: left; }" in css)
 
 
+def beast_ready(fn):
+    """The beast's own tests run with it on (beast.READY, off in 3.9.0: Sam, 16 Oct)."""
+    def run():
+        from due_crew import beast as B
+        was, B.READY = B.READY, True
+        try:
+            fn()
+        finally:
+            B.READY = was
+    run.__name__ = fn.__name__
+    return run
+
+
+def test_beast_held_back_v390():
+    """3.9.0 ships without the Backlog Beast (Sam, 16 Oct: "remove the beast
+    business from this version because I don't think we're there yet"). It's
+    built and tested (beast.READY turns it on), and off: no turning up, no
+    card or page, no Settings rows, nothing on my week, no crewmate's banner,
+    the closet's beast things neither shown nor earned, nothing for Wrapped."""
+    from due_crew import beast as B, beast_flow as F, closet as CL, closet_flow as CF
+    import due_crew as dc
+    check("held back: beast.READY is off in this version", B.READY is False)
+    conf = {"beast": {"now": {"k": "pile", "day": "2026-10-15", "size": 9},
+                      "met": [{"k": "pile", "day": "2026-10-01", "end": "2026-10-15", "size": 300, "how": "beaten"}]}}
+    saved = (F.cfg, F.save_cfg, dict(dc._state))
+    saves = []
+    F.cfg, F.save_cfg = (lambda: conf), (lambda c: saves.append(c))
+    try:
+        dc._state["beast_news"] = {"k": "pile", "how": "beaten", "day": "2026-10-15"}
+        check("held back: never on, no card or view, nothing counted or saved, nothing on my week or for Wrapped",
+              not F.on() and F.view() is None and F.view(page=True) is None and F.check() in ({}, B.clean(conf["beast"])) and not saves
+              and F.week_field("2026-10-15") is None and F.beaten_in(2026) == [], saves)
+        check("held back: the closet doesn't count beasts, offer their things or earn them; one already had stays",
+              CF.facts(conf)["beasts"] == 0 and not any(CL.offered(t) for t in CL.THINGS if t["group"] == "Beasts")
+              and CL.offered(CL.BY["beasthood"], {"beasthood": "2026-10-15"})
+              and "viking" not in CL.progress({"beasts": 3}, {}) and "beasthood" not in CL.new({"beasts": 0}, {}, "2026-10-15"))
+    finally:
+        F.cfg, F.save_cfg = saved[:2]
+        dc._state.clear()
+        dc._state.update(saved[2])
+    st, pv = board.settings_html({"tab": "board"}, {}), board.settings_html({"tab": "privacy"}, {})
+    check("held back: no Backlog beasts switch, no My beast", "set:beasts:" not in st and "Backlog beasts" not in st
+          and "share_beast" not in pv and "My beast" not in pv)
+    labels = [(datetime.date(2026, 10, 15) - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    me = {"user_id": "me", "name": "Me", "you": True, "paused": False, "last_updated": "", "exam_date": "", "days": {}, "decks": []}
+    mo = dict(me, user_id="mo", name="Mo", you=False, beast={"k": "pile", "p": 100, "end": labels[0]})
+    drawn = board.render({"entries": [me, mo], "pending": [], "labels": labels}, {"period": "today"}, __import__("time").time(),
+                         beast={"view": None, "seen": []})
+    check("held back: a crewmate's beaten beast (a test build's) gets no banner", "beat The Pile" not in drawn and 'class="bst-c' not in drawn
+          and 'class="dc-wrap bst-ban"' not in drawn)
+
+
+@beast_ready
 def test_beast_rides_the_week_v390():
     """3.9.0: my beast rides my week to my crew only once it's beaten (its
     kind and day, for their banner: nothing on my row while I'm on it, Sam's
@@ -14260,6 +14329,7 @@ def test_beast_rides_the_week_v390():
           ok and len(tries) == 2 and "beast" not in tries[1]["week"], [list(b.get("week", {})) for b in tries])
 
 
+@beast_ready
 def test_beast_rules_v390():
     """3.9.0, the Backlog Beast (Sam's pick, round three: "Yours · Rule B ·
     My beast on to start · Steady · In parts of three weeks"; The Way Back,
@@ -14359,6 +14429,7 @@ def test_beast_rules_v390():
           and account.clean({"beast": junk})["beast"] == c)
 
 
+@beast_ready
 def test_beast_flow_v390():
     """3.9.0: the beast's glue on a collection: the pile (review cards due
     before today, in decks studied lately), rule B once a day after the
@@ -14583,6 +14654,7 @@ def test_beast_flow_v390():
         dc._state.update(old[11])
 
 
+@beast_ready
 def test_beast_board_v390():
     """3.9.0: the beast on the board. Nothing on a crew row (Sam's round 2);
     a crewmate's beaten beast's banner with a cheer; my card in the You

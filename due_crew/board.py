@@ -3167,7 +3167,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
                     f'onclick="{_pycmd("milestonecheer:" + str(uid))}">Send {emoji}</a>'
                     f'<a class="wx" href="#" title="Dismiss" '
                     f'onclick="{_pycmd("milestonex:" + str(uid))}">&times;</a></div>')
-    bans += beast_banners(data.get("entries"), set((beast or {}).get("seen") or ()))
+    if _beast.READY:
+        bans += beast_banners(data.get("entries"), set((beast or {}).get("seen") or ()))
     if wrapped and wrapped.get("year"):
         bans.append(wrapped_line(wrapped["year"], wrapped.get("so_far"), wrapped.get("look") or [], cfg.get("sev", True)))
     if closet and closet.get("keys") and cfg.get("sev", True):
@@ -3490,8 +3491,8 @@ def _settings_board(cfg):
             + _st_row("On a break", _st_seg("sev_break", (("breathe", "Breathe"), ("stretch", "Stretch")),
                                             cfg.get("sev_break", "breathe"), "On a break"),
                       "Breathe with Pip, four counts a side, or stretch")
-            + _st_row("Backlog beasts", _st_switch("beasts", g("beasts", True), "Backlog beasts"),
-                      "When your overdue reviews pile up, they turn up as a beast to beat")
+            + (_st_row("Backlog beasts", _st_switch("beasts", g("beasts", True), "Backlog beasts"),
+                       "When your overdue reviews pile up, they turn up as a beast to beat") if _beast.READY else "")
             + '</div><div class="st-h">Due</div><div class="st-box">'
             + _st_row("Today, Upcoming, Later", _st_switch("due_show", g("due_show", True), "Today, Upcoming, Later"))
             + _st_row("Suggestions", _st_switch("due_suggest", g("due_suggest", True), "Suggestions"),
@@ -3521,8 +3522,8 @@ def _settings_privacy(cfg):
             f'<button class="st-pill{" on" if cfg.get(k, True) else ""}" aria-pressed="{"true" if cfg.get(k, True) else "false"}" '
             f'{_st_click(f"set:{k}:{0 if cfg.get(k, True) else 1}")}>{t}</button>'
             for k, t in (("share_reviews", "Reviews"), ("share_time", "Study time"), ("share_retention", "Retention"),
-                         ("share_streak", "Streak"), ("share_heatmap", "Heatmap"),
-                         ("share_beast", "My beast"))) + '</span></div>'
+                         ("share_streak", "Streak"), ("share_heatmap", "Heatmap"))
+                     + ((("share_beast", "My beast"),) if _beast.READY else ())) + '</span></div>'
     exam = str(cfg.get("exam_date") or "")
     a, b = str(cfg.get("away_from") or ""), str(cfg.get("away_to") or "")
     away_on = bool(a and b)
@@ -3838,7 +3839,8 @@ def closet_html(view, cfg):
           f'<div class="cl-msg" aria-live="polite">{str(view.get("msg") or "")}</div>'
           + (f'<a class="st-lk" href="#" {_st_click("closetoff")}>Take it all off</a>' if look else "")
           + '</div>')
-    left = len(_closet.THINGS) - len(have)
+    things = [t for t in _closet.THINGS if _closet.offered(t, have)]
+    left = len(things) - len(have)
     counts = (len(have), left)
     pills = "".join(f'<button class="st-pill{" on" if t == tab else ""}" aria-pressed="{"true" if t == tab else "false"}" '
                     f'{_st_click(f"closettab:{i}")}>{e(t)} <small>{counts[i]}</small></button>' for i, t in enumerate(CLOSET_TABS))
@@ -3849,7 +3851,7 @@ def closet_html(view, cfg):
             if mine:
                 body = '<div class="cl-grid">' + "".join(_wear_tile(t, have, look, shown, new) for t in mine) + "</div>"
             else:  # nothing here yet: the next one, and how far along
-                todo = [t for t in _closet.THINGS if t["slot"] == p and t["group"] != "Secret"]
+                todo = [t for t in things if t["slot"] == p and t["group"] != "Secret"]
                 nxt = max(todo, key=lambda t: (progress.get(t["k"], (0, 1))[0] / progress.get(t["k"], (0, 1))[1], -todo.index(t)))
                 got = progress.get(nxt["k"], (0, 0))[0]
                 body = (f'<div class="cl-next">Next: <b>{e(nxt["name"])}</b>, {e(nxt["rule"][:1].lower() + nxt["rule"][1:])}'
@@ -3867,16 +3869,16 @@ def closet_html(view, cfg):
                 for k, got, need, unit in view.get("near")) + "</div></section>")
         secs = []
         for g in _closet.GROUPS:
-            todo = [t for t in _closet.THINGS if t["group"] == g and t["k"] not in have]
+            todo = [t for t in things if t["group"] == g and t["k"] not in have]
             if todo:
                 secs.append(f'<section class="cl-sec"><h4>{e(g)} <small>{len(todo)} to go</small></h4><div class="cl-grid lk">'
                             + "".join(_earn_tile(t, progress) for t in todo) + "</div></section>")
-        main = near_html + ("".join(secs) or f'<div class="cl-next">All {len(_closet.THINGS)} earned.</div>')
+        main = near_html + ("".join(secs) or f'<div class="cl-next">All {len(things)} earned.</div>')
     off = "" if cfg.get("sev", True) else '<div class="st-note">Pip is off in Settings, so nobody sees it for now.</div>'
     return (f'<div id="due-crew" class="dc-frame dc-set dc-closet">{_css(cfg)}<style>{SETTINGS_CSS}{SEV_CSS}{CLOSET_CSS}{_sev.CSS}</style>'
             f'<div class="dc-head"><span class="dc-title">{board_mark()}</span></div>'
             f'<div class="st-bar"><a class="st-back" href="#" {_st_click("closetclose")}>&lsaquo; Board</a><b>Pip&rsquo;s closet</b>'
-            f'<span class="cl-n">{len(have)} of {len(_closet.THINGS)}</span></div>'
+            f'<span class="cl-n">{len(have)} of {len(things)}</span></div>'
             f'<div class="cl-wrap">{me}<div class="cl-main"><div class="cl-pills" role="group" aria-label="Show">{pills}</div>'
             f'{main}</div></div>{off}</div>')
 

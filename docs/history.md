@@ -2040,4 +2040,20 @@ every release that changes how something works.
   check; a spacer under the card (`dc-knows-pad`, gone with the peek) lets
   its last lines scroll clear. Pip off, the corner card and the bar's chip
   as before.
+- 3.9.0 ships without the Backlog Beast (Sam, 16 Oct: "remove the beast
+  business from this version because I don't think we're there yet").
+  It stays built and tested, off: `beast.READY` is False, so
+  `beast_flow.on` is never true (no looking, no card or page, nothing on
+  my week, nothing for Wrapped), Settings has no Backlog beasts switch
+  and Privacy no My beast, a crewmate's beaten beast (a test build's)
+  gets no banner, and Pip's closet neither shows nor earns the beast's
+  three things (`closet.offered`; one already had stays). Its tests and
+  `tools/real_anki.py` run with it on, and the beast test build turns it
+  on. The README's paragraph and the privacy page's row are out until it
+  ships. The Worker still takes a beaten one on the week; this add-on
+  sends none.
+- 3.9.0, the peek with Pip off (Sam, 16 Oct: "We should always get this
+  version, it would just be without the pip"). Who knows it is the same
+  bubble in the same corner with Pip off, saying who ("Dre knows this",
+  Ask, Not now), always shown like the peek; it fades in and out.
 

@@ -649,7 +649,8 @@ def check_beast(tmp):
     import fakes
     fakes.install_fake_requests(fakes.FakeWorker())
     fakes.install_fake_aqt()
-    from due_crew import beast_flow as BF, plan_flow as F, plans as P
+    from due_crew import beast as B, beast_flow as BF, plan_flow as F, plans as P
+    B.READY = True  # off in 3.9.0 (Sam: "not there yet"); its own check runs with it on
     from due_crew.app import _state
     failed = []
 

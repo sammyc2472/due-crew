@@ -682,9 +682,12 @@ In Anki (as a follower):
 - [ ] A crewmate (mutual, sharing the same deck) has a card down that you've never missed. Open Anki (the day's first sync), study, press Again on that card for the first time: ten minutes later it's back, and on its answer side their Pip pops up from the bottom right with a lightbulb, "I know this one", Ask Dre, Not now. No sync needed in between.
 - [ ] Before you've missed it: nothing. The next card: their Pip ducks back down. Not now: the same. Ask Dre: the ask window, as before.
 - [ ] Two crewmates know it: "Dre and 1 more know this", Ask. Already asked: Asked. A tip on it, an ask from a crewmate or a plan's note: the card as before, not the Pip.
-- [ ] A card whose text or picture fills that corner: still the peek, never the chip beside Edit; scroll down and the card's last lines clear it. Reduce motion (system setting): the Pip and bubble there at once, no pop, no duck. Settings › Pip off: the corner card as before.
+- [ ] A card whose text or picture fills that corner: still the peek, never the chip beside Edit; scroll down and the card's last lines clear it.
+- [ ] Settings › Pip off: the same bubble in the same corner without Pip, "Dre knows this", Ask, Not now; it fades in, and out on the next card. Reduce motion (system setting): the Pip and bubble there at once, no pop, no duck. Settings › Pip off: the corner card as before.
 
 ### 3.9.0: the Backlog Beast
+
+Held back from 3.9.0 (`beast.READY` off). With the release build: no beast card, no Backlog beasts or My beast in Settings, no beast things in Pip's closet, no crewmate's beast banner. The rest of this section is for the beast test build.
 
 - [ ] A profile with a real pile (a week away is easiest: 100 overdue cards or more, and two of your usual days' worth), after the day's AnkiWeb sync: a card in the You bubble, "The Backlog Beast" (or the Leech Lord, or the Pile: no other kinds), "Turned up today · N overdue cards", its health bar in its colour, the beast breathing (still with Reduce motion). It shows on every tab of the bubble; folded, the beast sits small on the one line. Click anywhere on the card but Study: its page. Tab to it and press Enter: the same. Before the AnkiWeb sync: nothing yet.
 - [ ] Study ›: Anki's Study screen on your own deck (the top deck holding most of its cards), no "Due Crew::" deck made. Review some: back on the Decks screen, the card's left count and health drop for each Hard, Good or Easy; an Again doesn't count until you get it right later.

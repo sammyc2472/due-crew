@@ -66,11 +66,6 @@ Above the board is yours.
   know, topic by topic. Click a topic to open its parts. It's worked out
   in your Anki and never sent; copy the map as a picture or as text if you
   want to share it.
-- **The Backlog Beast.** When your overdue pile gets big, it turns up as
-  a beast: the Pile, the Leech Lord or the Backlog Beast. Study opens
-  your own deck; review its cards and it breaks up. Beat your first and
-  Pip gets a beast hood. Your crew sees only that you beat one. Let it go
-  any time.
 - **Your year.** From 1 December, your year in Anki as a short story,
   made on your computer from your own reviews. Tools → Due Crew → Your
   year… has any year Anki remembers.
@@ -152,8 +147,8 @@ what you share in Settings → Privacy, or pause at any time. Anyone else
 sees your name and emoji, nothing more. Card text never leaves your
 computer: a crewmate sees a card's text only if they have the same card,
 and a plan holds card and note IDs, which each follower's Anki looks up
-in its own copy. Insights, your topic map, your year, your beast's
-cards and your progress on each bingo square stay on your computer. Your email is used to sign you in.
+in its own copy. Insights, your topic map, your year and your progress
+on each bingo square stay on your computer. Your email is used to sign you in.
 Your own to-dos are kept with your settings, so every computer has them;
 only you see them. If you write in, Sam, who runs Due Crew, can look up
 your account, your squads and who's on your crew list to fix problems;

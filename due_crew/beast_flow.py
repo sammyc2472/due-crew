@@ -52,8 +52,9 @@ def _save(s):
 
 
 def on(c=None):
+    """Beasts at all: ready (beast.READY, off in 3.9.0), Settings' switch, not turned off."""
     c = c or cfg()
-    return bool(c.get(ON_KEY, True)) and not B.clean(c.get(KEY)).get("off")
+    return B.READY and bool(c.get(ON_KEY, True)) and not B.clean(c.get(KEY)).get("off")
 
 
 # ---- the collection ----
@@ -322,8 +323,8 @@ def let_go(today):
 
 
 def beaten_in(year):
-    """For Wrapped: [{k, name, days}] beaten in a year."""
-    return B.beaten(state(), year)
+    """For Wrapped: [{k, name, days}] beaten in a year (none while it isn't ready)."""
+    return B.beaten(state(), year) if B.READY else []
 
 
 def seen_news():
@@ -354,6 +355,8 @@ def view(c=None, page=False):
     """The You bubble's card: {now, frac, left, met, news, on, share} or
     None. page: the fight page's, which is drawn without a beast too."""
     c = c or cfg()
+    if not B.READY:
+        return None
     s = state(c)
     now = s.get("now")
     news = _state.get("beast_news")

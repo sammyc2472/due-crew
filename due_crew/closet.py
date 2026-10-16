@@ -226,6 +226,13 @@ def earned(facts):
     return [t["k"] for t in THINGS if _n(f.get(t["need"][0])) >= t["need"][1]]
 
 
+def offered(t, have=()):
+    """3.9.0: a thing the closet shows and counts. The Backlog Beast's wait
+    for the beast (beast.READY); one already had stays."""
+    from . import beast
+    return t["group"] != "Beasts" or beast.READY or t["k"] in have
+
+
 def new(facts, have, today):
     """{thing: today} for each thing earned now that wasn't before."""
     have = clean_closet(have)
@@ -241,7 +248,7 @@ def near(facts, have, n=4):
     out, lines = [], set()
     for t in THINGS:
         fact, need = t["need"]
-        if fact in lines or t["k"] in have or fact not in UNITS:
+        if fact in lines or t["k"] in have or fact not in UNITS or not offered(t, have):
             continue
         got = _n(f.get(fact))
         if got >= need:
@@ -261,7 +268,7 @@ def progress(facts, have):
     out = {}
     for t in THINGS:
         fact, need = t["need"]
-        if t["k"] in have or fact not in UNITS or need <= 1 or t["group"] == "Secret":
+        if t["k"] in have or fact not in UNITS or need <= 1 or t["group"] == "Secret" or not offered(t, have):
             continue
         got = _n(f.get(fact))
         if got < need:
