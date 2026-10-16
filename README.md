@@ -70,7 +70,7 @@ Above the board is yours.
   a beast: the Pile, the Leech Lord or the Backlog Beast. Study opens
   your own deck; review its cards and it breaks up. Beat your first and
   Pip gets a beast hood. Your crew sees only that you beat one. Let it go
-  any time; nobody's told.
+  any time.
 - **Your year.** From 1 December, your year in Anki as a short story,
   made on your computer from your own reviews. Tools → Due Crew → Your
   year… has any year Anki remembers.

@@ -2020,3 +2020,14 @@ every release that changes how something works.
   works says less. The pace (How fast? on the card) and a plan's days
   away as a line on its card, in place of Welcome back's window, are
   3.9.1 (his pick).
+- 3.9.0, the beast's page in plain words (Sam, 16 Oct, on the test
+  build: "nobody's told reads really strange", then "all the text on
+  this page actually reads a bit paternalistic and faux nice"). Facts
+  only: How it works is what its cards are, what takes one off, and the
+  Beast hood (`board.BEAST_HOW`; no "No rush", no "till you get it
+  right", no "due before today"); Let it go just asks ("Let it go?",
+  Let it go · Cancel), and after it the page says "No beast right now.";
+  beaten, its name and "Beaten · 1,150 cards in 6 days"; with none, "One
+  turns up when 100 or more cards are overdue and that's at least two
+  days of your usual reviews." The README's line ends "Let it go any
+  time."

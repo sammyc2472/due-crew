@@ -4280,10 +4280,10 @@ def _beaten_line(bv, k):
     return f'{int(m["size"]):,} cards in {days} day{"" if days == 1 else "s"}'
 
 
-BEAST_HOW = ("It&rsquo;s the cards overdue (due before today) the morning it came. It never grows.",
-             "Review one and it&rsquo;s a hit. Again keeps it here till you get it right. Suspend, delete or move one ahead "
-             "and it just leaves.",
-             "No rush: it waits for you. Your first one beaten puts a Beast hood in Pip&rsquo;s closet.")
+BEAST_HOW = ("Its cards are the ones that were overdue when it turned up. It doesn&rsquo;t grow.",
+             "A review that moves a card to tomorrow or later takes it off. Suspended, deleted and rescheduled cards "
+             "come off without counting.",
+             "First one beaten: the Beast hood, in Pip&rsquo;s closet.")  # Sam, 16 Oct: plain facts, nothing "faux nice"
 
 
 def _beast_how(now=None):
@@ -4291,8 +4291,8 @@ def _beast_how(now=None):
     A beast that's part of a bigger pile says so in the first."""
     first = BEAST_HOW[0]
     if now and now.get("capped") and int(now.get("pile") or 0) > int(now.get("size") or 0):
-        first = (f"It&rsquo;s {int(now['size']):,} of the {int(now['pile']):,} cards overdue (due before today) "
-                 "the morning it came, the most overdue first. It never grows; the rest can come later.")
+        first = (f"Its cards are the {int(now['size']):,} most overdue of the {int(now['pile']):,} that were overdue "
+                 "when it turned up. It doesn&rsquo;t grow; the rest come later.")
     return ('<div class="bp-how"><div class="st-h">How it works</div><ol>'
             + "".join(f"<li>{x}</li>" for x in (first,) + BEAST_HOW[1:]) + "</ol></div>")
 
@@ -4320,7 +4320,7 @@ def beast_html(view, cfg):
         left = int(v.get("left") or 0)
         side = (f'<div class="bp-n">{e(name)}</div><div class="bp-why">{e(_beast.subtitle(now.get("size") or 0))}</div>'
                 f'<div class="bp-hpr">{_beast_hp(frac, f"{int(frac * 100)}% beaten")}<span class="bp-t"><b>{left:,}</b> left</span></div>'
-                + (f'<div class="bp-row bp-ask"><span><b>Let it go?</b> It leaves, and nobody&rsquo;s told.</span>'
+                + (f'<div class="bp-row bp-ask"><span><b>Let it go?</b></span>'
                    f'<button class="bp-btn" {_st_click("beastletyes")}>Let it go</button>'
                    f'<button class="bp-btn" {_st_click("beastletno")}>Cancel</button></div>' if v.get("letting") else
                    f'<div class="bp-row"><button class="bp-go" title="Your deck, the most overdue first" {_st_click("beaststudy")}>Study</button>'
@@ -4330,21 +4330,19 @@ def beast_html(view, cfg):
         k = news.get("k") if news.get("k") in _beast.KINDS else None
         if k and news.get("how") == "beaten":
             name = _beast.KINDS[k]["name"]
-            title = f"You beat {name}"
+            title = name
             thing = _beast_thing(v)
             if cfg.get("sev", True):
                 stage = _beaten_pip(cfg, thing)
                 pip_css = f"{SEV_CSS}{_sev.CSS}"
             else:
                 stage = f'<div class="bp-none">{e(name)}: beaten.</div>'
-            side = f'<div class="bp-n">You beat it!</div><div class="bp-why">{_beaten_line(v, k)}.</div>'
+            side = f'<div class="bp-n">{e(name)}</div><div class="bp-why">Beaten · {_beaten_line(v, k)}</div>'
             if thing and cfg.get("sev", True):
                 t = _closet.BY[thing]
                 side += (f'<div class="bp-row"><button class="bp-go" {_st_click("closetwear:" + thing)}>'
                          f'{"Be one" if t["slot"] == _closet.COSTUME else "Wear it"}</button>'
                          f'<small>New for Pip: the {e(t["name"])}</small></div>')
-        elif k and news.get("how") == "let":
-            stage = '<div class="bp-none">It left. Nobody&rsquo;s told.</div>'
         else:
             stage = '<div class="bp-none">No beast right now.</div>'
         if not v.get("on", True):
@@ -4352,8 +4350,8 @@ def beast_html(view, cfg):
                      'Turn them on</button></div>')
         elif not (k and news.get("how") == "beaten"):
             side += ('<div class="bp-n">Backlog beasts</div>'
-                     '<div class="bp-why">When 100 or more cards are overdue (due before today), and that&rsquo;s two of your usual days, '
-                     'they turn up here as a beast.</div>')
+                     '<div class="bp-why">One turns up when 100 or more cards are overdue and that&rsquo;s at least two days '
+                     'of your usual reviews.</div>')
         side += _beast_how()
     bc = BEAST_COLOURS.get((now or {}).get("k") or news.get("k"), "#7b5cd6")
     return (f'<div id="due-crew" class="dc-frame dc-set dc-bp">{_css(cfg)}<style>{SETTINGS_CSS}{BEAST_CSS}{_bart.CSS}{pip_css}</style>'

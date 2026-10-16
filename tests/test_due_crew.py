@@ -14649,27 +14649,30 @@ def test_beast_board_v390():
           and "duecrew:beaststudy" in page and ">Study</button>" in page and "duecrew:beastlet" in page
           and "duecrew:beastclose" in page, page[-2500:])
     ask = board.beast_html(dict(bv, letting=True), {})
-    check("Let it go asks in place, no window: Let it go, Cancel",
-          "Let it go?" in ask and "duecrew:beastletyes" in ask and "duecrew:beastletno" in ask and "duecrew:beaststudy" not in ask)
-    check("how it works, in three short lines",
-          "How it works" in page and page.count("<li>") == 3 and "overdue (due before today)" in page and "It never grows." in page
-          and "it&rsquo;s a hit" in page and "Again keeps it here" in page and "move one ahead" in page
-          and "it waits for you" in page and "Beast hood in Pip&rsquo;s closet" in page)
+    check("Let it go asks in place, no window, and only asks: Let it go, Cancel",
+          "<b>Let it go?</b></span>" in ask and "duecrew:beastletyes" in ask and "duecrew:beastletno" in ask and "duecrew:beaststudy" not in ask)
+    check("how it works, in three short lines of plain fact (Sam: not paternalistic, not faux nice)",
+          "How it works" in page and page.count("<li>") == 3 and "overdue when it turned up" in page and "doesn&rsquo;t grow" in page
+          and "tomorrow or later takes it off" in page and "rescheduled cards come off without counting" in page
+          and "First one beaten: the Beast hood" in page
+          and not any(w in page for w in ("No rush", "waits for you", "get it right", "due before today", "just leaves",
+                                          "nobody", "!</div>")))
     check("gone (Sam): no speech, no bite, no pace, no pets, no Privacy or Not for me line",
           "bp-say" not in page
           and not any(w in re.sub(r"<style>.*?</style>", "", page, flags=re.S)
                       for w in ("bite", "Steady", "Gentle", "Privacy", "Not for me", "beastoff", "beastpace", "pet")))
     part = board.beast_html(dict(bv, now=dict(now, capped=True, pile=900)), {})
-    check("part of a bigger pile: its first line says so", "412 of the 900 cards overdue (due before today)" in part)
+    check("part of a bigger pile: its first line says so", "412 most overdue of the 900 that were overdue when it turned up" in part)
     wonp = board.beast_html(dict(beaten, thing="beasthood", on=True), {})
     check("its page, beaten: Pip big in the Beast hood, its size and days, Be one; no pet",
-          "You beat The Pile" in wonp and "1,150 cards in 14 days." in wonp and 'class="sv' in wonp
+          "<b>The Pile</b>" in wonp and "Beaten · 1,150 cards in 14 days</div>" in wonp and 'class="sv' in wonp
           and "duecrew:closetwear:beasthood" in wonp and "pet" not in re.sub(r"<style>.*?</style>", "", wonp, flags=re.S))
     none = board.beast_html({"met": met, "news": None, "on": False}, {})
     check("no beast now and beasts off: Turn them on; no pets of the ones beaten",
           "No beast right now." in none and "duecrew:set:beasts:1" in none and "How it works" in none and "dc-bst pet" not in none)
     check("no beast, beasts on: what one is, in a line, and how it works",
-          "they turn up here as a beast" in board.beast_html({"met": [], "news": None, "on": True}, {}))
+          "One turns up when 100 or more cards are overdue" in board.beast_html({"met": [], "news": None, "on": True}, {})
+          and "No beast right now." in board.beast_html({"met": [], "news": {"k": "pile", "how": "let"}, "on": True}, {}))
     st = board.settings_html({"tab": "board"}, {})
     pv = board.settings_html({"tab": "privacy"}, {})
     idx = board.settings_index({"tab": "you"}, {})

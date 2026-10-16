@@ -312,7 +312,7 @@ def empty_old_deck(col, normal):
 
 
 def let_go(today):
-    """Let it go: it leaves; nobody's told; a week's rest."""
+    """Let it go: it leaves (its cards stay as they are); a week's rest."""
     s = state()
     if s.get("now"):
         _save(B.end(s, "let", today))

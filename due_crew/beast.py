@@ -12,7 +12,7 @@ review (Set due date) just leaves it (Sam's round 3); half gone that way
 and it goes, quietly.
 Study opens your own deck (Sam's round 3, no deck of its own): Anki's
 order puts the most overdue first. Nothing to lose: a day off and it
-waits; Let it go and it leaves, nobody's told. Beat it and Pip's closet
+waits; Let it go and it leaves, its cards as they were. Beat it and Pip's closet
 counts it (the beast hood, viking helmet and knight); no pet.
 
 The pile: review cards due before today (not new, not learning, not
