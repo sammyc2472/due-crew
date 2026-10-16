@@ -2031,3 +2031,13 @@ every release that changes how something works.
   turns up when 100 or more cards are overdue and that's at least two
   days of your usual reviews." The README's line ends "Let it go any
   time."
+- 3.9.0, the peek in the bar too (Sam, 16 Oct, on the test build: the
+  plain "Adina and 1 more know this · Ask" pill "is also not the new
+  version we agreed on"). The peek showed only when the card left the
+  bottom-right corner free, and a full answer sent it back to the old
+  chip. Now the bar's chip is the peek, smaller, when the corner's busy:
+  their Pip (the peek pose, `peek_pip(uid, CHIP_PIP)`, the view's
+  `peek.bar`) popping up beside a lightbulb that glows twice, the peek's
+  words and act ("I know this one", Ask Dre). Pip off, the chip as before;
+  nothing moves with Reduce motion.
+
