@@ -14,6 +14,13 @@ the last 30 days. I'm stuck on one I've lapsed on twice or more, or pressed
 Again on today. The chip shows only on the answer side of a stuck card, and
 only when someone knows it or left a tip; on every other card, nothing.
 Nothing is drawn inside the card.
+
+3.9.0 (Sam's pick, "Open calls" A): the day's first sync also sends the
+cards due today in the decks I share (DUE_MAX of them, the most overdue
+first), and the same reply says who knows each. That answer is kept for the
+day, beside the stuck cards', so a card I miss for the first time shows the
+chip the next time it comes up, without waiting for a sync; it still shows
+only once I'm stuck on it (stuck_now).
 """
 
 import json
@@ -29,6 +36,7 @@ KNOWN_IVL = 21
 CLEAN_DAYS = 30
 STUCK_LAPSES = 2
 STUCK_MAX = 300
+DUE_MAX = 1000  # 3.9.0: the cards due today the day's first sync asks about
 LOG_FULL = 120
 LOG_RECENT = 8
 LOG_BACK_STEP = 366  # 3.7.1: the history import, a year a sync
@@ -72,6 +80,39 @@ def known_and_stuck(col, dids, day_cutoff, with_known=True):
     return {str(g) for g in known} - set(stuck), stuck
 
 
+
+def due_today(col, dids, skip=()):
+    """3.9.0: the guids of the cards due today in these decks and their
+    subdecks (reviews due today or before, learning cards), the most
+    overdue first, DUE_MAX at most, none of `skip` (the stuck ones, which
+    go anyway). One query. A card in a filtered deck counts by its home
+    deck's due day."""
+    tree = _tree(col, dids)
+    if not tree:
+        return []
+    ids = ",".join(str(d) for d in sorted(tree))
+    today = int(col.sched.today)
+    home = "CASE WHEN c.odid THEN c.odue ELSE c.due END"
+    rows = col.db.all(
+        f"SELECT n.guid, MIN(CASE WHEN c.queue = 1 THEN {today} ELSE {home} END) AS d FROM cards c JOIN notes n ON n.id = c.nid "
+        f"WHERE (c.did IN ({ids}) OR c.odid IN ({ids})) AND (c.queue = 1 OR (c.queue IN (2, 3) AND {home} <= {today})) "
+        "GROUP BY n.guid ORDER BY d, n.guid LIMIT ?", DUE_MAX + len(skip))
+    skip = set(skip)
+    return [str(g) for g, _d in rows if str(g) not in skip][:DUE_MAX]
+
+
+def stuck_now(col, card, day_cutoff):
+    """3.9.0: am I stuck on this card right now (what the stuck list means:
+    lapsed twice or more, or Again on it today)? One indexed look at the
+    review log."""
+    try:
+        if int(card.lapses or 0) >= STUCK_LAPSES:
+            return True
+        return bool(col.db.scalar("SELECT 1 FROM revlog WHERE cid = ? AND id >= ? AND ease = 1 LIMIT 1",
+                                  int(card.id), (int(day_cutoff) - 86400) * 1000))
+    except Exception:
+        return False
+
 def log_today(col):
     from .stats.queries import StatsQueries
     return StatsQueries(col).day_label(0)
@@ -106,7 +147,8 @@ def log_days(col, days, skip=0):
 def for_sync(c, light=False):
     """What a sync carries for 3.2, as push()'s keyword arguments: the cards
     I'm stuck on (every sync), and on a full sync the cards I know and my
-    log (the first time 120 days, then the last 8). Main thread."""
+    log (the first time 120 days, then the last 8). 3.9.0: the day's first
+    sync, light or full, the cards due today as well. Main thread."""
     cl = client()
     if not mw.col or not cl.signed_in:
         return None
@@ -117,6 +159,11 @@ def for_sync(c, light=False):
         out["stuck"] = stuck
         if not light:
             out["known"] = known
+        day = log_today(mw.col)
+        if cl.session.get("due_day") != day:
+            # 3.9.0: once a day, the cards due today too (who knows them comes back with the stuck ones')
+            out["due"] = due_today(mw.col, dids, skip=stuck)
+            out["due_day"] = day
     if not light:
         days = LOG_RECENT if cl.session.get("log_full") == cl.user_id else LOG_FULL
         today = log_today(mw.col)
@@ -178,6 +225,7 @@ def names_by_uid():
 
 
 CHIP_PIP = 24  # 3.8.22: a crewmate's Pip on the review screen's chip, its slot the chip's line
+PEEK_PIP = 76  # 3.9.0: who knows it, peeking up from the bottom of the card
 
 
 def pips_by_uid(c=None):
@@ -196,6 +244,16 @@ def pips_by_uid(c=None):
                            "a": list(accent_pair(e.get("accent")))}
             for e in _state["entries"] or [] if not e.get("you") and e.get("user_id")}
 
+
+def peek_pip(uid):
+    """3.9.0: a crewmate's Pip waving as it peeks in (sev.py's own markup,
+    their look; a name only in its label, escaped), or None."""
+    import html
+    from . import sev
+    e = next((e for e in _state["entries"] or [] if e.get("user_id") == uid and not e.get("you")), None)
+    if e is None:
+        return None
+    return sev.slot(sev.svg("peek", look=e.get("look"), label=html.escape(f'{e.get("name") or "?"}’s Pip', quote=True)), PEEK_PIP)
 
 def tip_list(info, local_tips, names):
     """The tips on one card, each person once: [{from, name, text, helped}].
@@ -228,7 +286,9 @@ def chip_view(info, local_tips, names, asks=(), mine=False, pips=None):
     3.5.0, K1: a tip shows its own words in the bar, with This helped.
     `short` is what the bar says when the words don't fit beside Edit.
     pips (3.8.22, pips_by_uid): who asked, or knows it, leads with their Pip
-    in place of their emoji."""
+    in place of their emoji. 3.9.0 (Sam's pick, "Open calls" C): with a
+    Pip, who knows it also has `peek`, what their Pip says when it peeks in
+    from the corner ("I know this one", Ask Dre); on_answer adds its drawing."""
     pips = pips or {}
 
     def who_of(uid):
@@ -265,9 +325,14 @@ def chip_view(info, local_tips, names, asks=(), mine=False, pips=None):
     if knows:
         who = who_of(knows[0])
         more = len(knows) - 1
-        return with_pip({"kind": "knows", "text": who + (f" and {more} more know this" if more > 0 else " knows this"),
-                         "short": who + (f" +{more}" if more > 0 else ""), "ask": True,
-                         "cmd": "knowsask", "act": "Asked" if mine else "Ask"}, knows[0])
+        view = {"kind": "knows", "text": who + (f" and {more} more know this" if more > 0 else " knows this"),
+                "short": who + (f" +{more}" if more > 0 else ""), "ask": True,
+                "cmd": "knowsask", "act": "Asked" if mine else "Ask"}
+        if knows[0] in pips:
+            # one knower speaks for themselves; more, the words say who (Ask still reaches everyone with the card)
+            view["peek"] = {"uid": knows[0], "head": "I know this one" if more <= 0 else view["text"],
+                            "act": "Asked" if mine else (f"Ask {who}" if more <= 0 else "Ask")}
+        return with_pip(view, knows[0])
     return None
 
 
@@ -338,23 +403,30 @@ def chip_js(data):
 # card's script runs too, so they're keyed (room_model.CARD_PAGE_CMDS) and
 # This helped from here asks first.
 _FLOAT_JS = """(function () {
-  var old = document.getElementById('dc-knows-card'); if (old) { old.remove(); }
-  if (window.dcKnowsOff) { window.dcKnowsOff(); window.dcKnowsOff = null; }
-  var D = __DATA__; if (!D) { return false; }
+  var D = __DATA__;
+  var still = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  var old = document.getElementById('dc-knows-card');
+  if (window.dcKnowsOff) { window.dcKnowsOff(!D); window.dcKnowsOff = null; } else if (old) { old.remove(); }
+  if (!D) { return false; }
   var KEY = __KEY__, gone = false;
   function send(cmd) { try { pycmd('duecrew:' + cmd + '|' + KEY); } catch (e) {} }
   var night = /night/i.test(document.body.className) || document.documentElement.classList.contains('night-mode');
   var acc = night ? D.accent[1] : D.accent[0];
   var c = night ? {bg: '#2c2c2c', ink: '#e8e8e8', mut: '#9c9c9c', line: '#3d403b'} : {bg: '#ffffff', ink: '#222222', mut: '#777777', line: '#e2e2da'};
   function el(tag, css, text) { var e = document.createElement(tag); e.style.cssText = css; if (text != null) { e.textContent = text; } return e; }
-  var box = el('div', 'position:fixed;right:12px;bottom:12px;max-width:260px;box-sizing:border-box;display:grid;gap:6px;padding:9px 12px;' +
-    'border:1px solid ' + c.line + ';border-radius:12px;background:' + c.bg + ';color:' + c.ink + ';box-shadow:0 6px 18px rgba(0,0,0,.22);' +
-    'font:12.5px/1.35 -apple-system,Segoe UI,sans-serif;text-align:left;z-index:60;');
+  // 3.9.0 (Sam's pick, "Open calls" C): who knows it, their Pip peeking up from the bottom with a lightbulb
+  var peek = D.peek && D.peek.svg && D.pip ? D.peek : null;
+  var font = 'font:12.5px/1.35 -apple-system,Segoe UI,sans-serif;text-align:left;';
+  var card = 'border:1px solid ' + c.line + ';background:' + c.bg + ';color:' + c.ink + ';box-shadow:0 6px 18px rgba(0,0,0,.22);';
+  var box = peek ? el('div', 'position:fixed;right:16px;bottom:0;display:flex;align-items:flex-end;gap:8px;z-index:60;' + font)
+    : el('div', 'position:fixed;right:12px;bottom:12px;max-width:260px;box-sizing:border-box;display:grid;gap:6px;padding:9px 12px;' +
+      'border-radius:12px;' + card + font + 'z-index:60;');
   box.id = 'dc-knows-card';
-  var head = el('div', 'font-weight:600;cursor:pointer;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;', D.text);
+  var head = el('div', 'font-weight:600;cursor:pointer;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;',
+    peek ? peek.head : D.text);
   if (D.title) { head.title = D.title; }
   if (D.cmd) { head.onclick = function () { send(D.cmd); }; } else { head.style.cursor = 'default'; }
-  if (D.pip) {  // 3.8.22: who it is, as their Pip, before the words
+  if (D.pip && !peek) {  // 3.8.22: who it is, as their Pip, before the words
     var hr = el('div', 'display:flex;gap:6px;align-items:center;');
     pip(hr, D, night, 'margin:-4px 0 -2px -2px;');
     hr.appendChild(head); head = hr;
@@ -364,12 +436,35 @@ _FLOAT_JS = """(function () {
     var a = el('span', 'cursor:pointer;color:' + color + ';' + (bold ? 'font-weight:700;' : ''), text);
     a.onclick = function (e) { e.stopPropagation(); fn(); }; acts.appendChild(a); return a;
   }
-  if (D.act) { link(D.act, acc, true, function () { send(D.actcmd || D.cmd); }); }
+  if (D.act) { link(peek ? peek.act : D.act, acc, true, function () { send(D.actcmd || D.cmd); }); }
   if (D.more) { link('+' + D.more + ' more', c.mut, false, function () { send('knowstip'); }); }
-  link('Not now', c.mut, false, function () { off(); });
-  box.appendChild(head); box.appendChild(acts);
+  link('Not now', c.mut, false, function () { off(true); });
+  var fig = null, bub = null, bulb = null;
+  if (peek) {
+    bub = el('div', 'margin-bottom:26px;max-width:220px;display:grid;gap:4px;padding:8px 11px;border-radius:12px 12px 4px 12px;' +
+      'transform-origin:100% 100%;' + card);
+    bub.appendChild(head); bub.appendChild(acts);
+    fig = el('span', 'position:relative;display:inline-flex;line-height:0;');
+    fig.setAttribute('data-fig', '1');
+    bulb = el('span', 'position:absolute;left:50%;top:-18px;margin-left:-11px;line-height:0;');
+    bulb.innerHTML = '<svg width="22" height="26" viewBox="-6 -6 32 38" aria-hidden="true"><g stroke="' + (night ? '#e0a458' : '#a35f00') +
+      '" stroke-width="1.6" stroke-linecap="round" fill="none" opacity=".7"><path d="M10 -4.5v3M-3 2.5l2.2 2M23 2.5l-2.2 2M-4.5 11h3M24.5 11h-3"/></g>' +
+      '<path d="M10 1a8 8 0 0 0-4.6 14.5c.9.7 1.4 1.6 1.4 2.6V19h6.4v-.9c0-1 .5-1.9 1.4-2.6A8 8 0 0 0 10 1z" fill="#ffd34d" stroke="' +
+      (night ? '#e0a458' : '#a35f00') + '" stroke-width="1.3"/><rect x="6.8" y="19.6" width="6.4" height="2.6" rx="1.1" fill="#8a8f86"/>' +
+      '<rect x="7.8" y="22.8" width="4.4" height="2.2" rx="1.1" fill="#8a8f86"/></svg>';
+    fig.appendChild(bulb);
+    pip(fig, {pip: {svg: peek.svg, a: D.pip.a}, sevcss: D.sevcss}, night, '');
+    box.appendChild(bub); box.appendChild(fig);
+  } else {
+    box.appendChild(head); box.appendChild(acts);
+  }
   __PIP__
   document.body.appendChild(box);
+  if (peek && !still && fig.animate) {  // up it pops, then the bubble, then the bulb glows twice; nothing with Reduce motion
+    fig.animate([{transform: 'translateY(105%)'}, {transform: 'none'}], {duration: 700, easing: 'cubic-bezier(.2,.9,.3,1.25)'});
+    bub.animate([{opacity: 0, transform: 'scale(.85)'}, {opacity: 1, transform: 'none'}], {duration: 350, delay: 550, easing: 'ease-out', fill: 'backwards'});
+    bulb.animate([{filter: 'none'}, {filter: 'drop-shadow(0 0 5px #ffd34d)'}, {filter: 'none'}], {duration: 1600, delay: 700, iterations: 2});
+  }
   function hit(r, b) { return r.width > 0 && r.height > 0 && r.left < b.right + 8 && r.right > b.left - 8 && r.top < b.bottom + 8 && r.bottom > b.top - 8; }
   function free() {
     var b = box.getBoundingClientRect(), qa = document.getElementById('qa') || document.body;
@@ -384,13 +479,20 @@ _FLOAT_JS = """(function () {
     for (var j = 0; j < m.length; j++) { if (!box.contains(m[j]) && hit(m[j].getBoundingClientRect(), b)) { return false; } }
     return true;
   }
-  function off() {
+  function off(duck) {
     if (gone) { return; }
-    gone = true; box.remove();
+    gone = true;
     window.removeEventListener('scroll', check, true); window.removeEventListener('resize', check);
     document.removeEventListener('load', check, true);
     if (ro) { ro.disconnect(); }
     clearTimeout(later);
+    if (window.dcKnowsOff === off) { window.dcKnowsOff = null; }
+    box.removeAttribute('id');
+    if (duck && fig && !still && fig.animate) {  // it ducks back down: the next card, or Not now
+      box.style.pointerEvents = 'none';
+      bub.animate([{opacity: 1}, {opacity: 0}], {duration: 150, fill: 'forwards'});
+      fig.animate([{transform: 'none'}, {transform: 'translateY(105%)'}], {duration: 260, easing: 'ease-in', fill: 'forwards'}).onfinish = function () { box.remove(); };
+    } else { box.remove(); }
   }
   function check() { if (!gone && !free()) { off(); send('knowsbar'); } }
   window.addEventListener('scroll', check, true); window.addEventListener('resize', check);
@@ -472,7 +574,9 @@ def _accent():
 
 def on_answer(card):
     """reviewer_did_show_answer: the chip, when this card is one I'm stuck on
-    and someone knows it or left a tip."""
+    and someone knows it or left a tip. 3.9.0: the stuck cards' answer from
+    the last sync, or, for a card I'm stuck on since, the morning's answer
+    for the cards due today."""
     web = _bottom()
     if web is None or not client().signed_in:
         return
@@ -483,10 +587,18 @@ def on_answer(card):
                 for i, t in enumerate(e.get("tricky") or []) if t.get("guid") == guid and t.get("q")]
         from .together import _today
         mine = any(f["guid"] == guid for f in clean_tricky(client().session.get("tricky"), _today()))
-        view = chip_view((client().session.get("cards") or {}).get(guid), local_tips(guid), names_by_uid(), asks, mine,
-                         pips_by_uid())
+        sess = client().session
+        info = (sess.get("cards") or {}).get(guid)
+        if info is None and guid in (sess.get("cards_due") or {}) and sess.get("due_day") == log_today(mw.col) \
+                and stuck_now(mw.col, card, mw.col.sched.day_cutoff):
+            info = sess["cards_due"][guid]  # 3.9.0: missed today for the first time, known since the morning
+        view = chip_view(info, local_tips(guid), names_by_uid(), asks, mine, pips_by_uid())
         if view is None or view.get("kind") == "knows":
             view = remark_view(client().session.get("plans"), guid, card.ord) or view  # 3.8.1
+        if view and view.get("peek"):
+            peek = dict(view["peek"])
+            peek["svg"] = peek_pip(peek.pop("uid", None))
+            view["peek"] = peek if peek["svg"] else None
     except Exception:
         view = None
     if view:

@@ -1966,3 +1966,25 @@ every release that changes how something works.
   margin, so two of them split the free space; a second one now sits
   beside the first (`.wc + .wc`), actions never break over two lines, and
   the line's words sit left when they wrap at phone width.
+- 3.9.0, who knows it, the moment you miss it (Sam's picks, "Open calls"
+  A and C, 16 Oct: "go with your recommendations"). The chip only knew
+  about the cards I was stuck on at the last sync, so a card missed for
+  the first time mid-session showed nothing till the next one. Now the
+  day's first sync, light or full, also sends the note guids of the
+  cards due today in the decks I share (`cards.due_today`: reviews due
+  today or before, learning cards, the most overdue first, `DUE_MAX`
+  1,000, not the stuck ones), and its reply (`cards`, the same mutual
+  friends' knows and tips as the stuck ones', nothing kept) is kept for
+  the day (`session["cards_due"]`, `due_day`). On the answer side a card
+  I'm stuck on now (`cards.stuck_now`: lapsed twice, or Again today)
+  uses it, so the second time a missed card comes up its chip is there.
+  Still one request (`due` rides `POST /sync`, validated in both the
+  Worker and the fake); a Worker without `due` gets the sync again
+  without it and isn't asked again that day. And with Pip on, the corner
+  card for who knows it is their Pip (`peek_pip`, waving, in their look)
+  peeking up from the bottom of the review screen with a lightbulb:
+  "I know this one", Ask Dre, Not now (more than one: "Dre and 2 more
+  know this", Ask; asked: Asked). It pops up, the bubble after, the bulb
+  glows twice; it ducks back down on the next card or Not now; none of it
+  with Reduce motion. The bar's chip, tips, asks and plan notes are as
+  they were; "Dre knows this" stays the words (E, his pick).

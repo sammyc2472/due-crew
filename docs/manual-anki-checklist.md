@@ -677,6 +677,13 @@ In Anki (as a follower):
 - [ ] Pip's closet: under Pip, Colour with the six swatches, yours ringed. Click one: Pip, the closet and (‹ Board) the board are in it; Settings › Board › Accent shows the same one. A crewmate sees your Pip in it after your next sync.
 - [ ] Review a card a crewmate knows: the chip beside Edit has their Pip whole (hat and feet inside the pill), light and dark.
 
+### 3.9.0: who knows it, the moment you miss it
+
+- [ ] A crewmate (mutual, sharing the same deck) has a card down that you've never missed. Open Anki (the day's first sync), study, press Again on that card for the first time: ten minutes later it's back, and on its answer side their Pip pops up from the bottom right with a lightbulb, "I know this one", Ask Dre, Not now. No sync needed in between.
+- [ ] Before you've missed it: nothing. The next card: their Pip ducks back down. Not now: the same. Ask Dre: the ask window, as before.
+- [ ] Two crewmates know it: "Dre and 1 more know this", Ask. Already asked: Asked. A tip on it, an ask from a crewmate or a plan's note: the card as before, not the Pip.
+- [ ] A card whose text or picture fills that corner: the chip beside Edit, "Dre knows this · Ask", as before. Reduce motion (system setting): the Pip and bubble there at once, no pop, no duck. Settings › Pip off: the corner card as before.
+
 ### 3.9.0: the Backlog Beast
 
 - [ ] A profile with a real pile (a week away is easiest: 100 overdue cards or more, and two of your usual days' worth), after the day's AnkiWeb sync: a card in the You bubble, "The Backlog Beast" (or the Snoozasaurus after a week away, the Overdue Owl, the Leech Lord, the Pile), "Turned up today · N overdue cards left", its health bar in its colour, the beast breathing (still with Reduce motion). It shows on every tab of the bubble; folded, the beast sits small on the one line. Click anywhere on the card but Study them: its page. Tab to it and press Enter: the same. Before the AnkiWeb sync: nothing yet.

@@ -299,11 +299,12 @@ def clean_notice(value):
 
 def clean_cards(value):
     """3.2: what a sync says about the cards I'm stuck on: {guid: {knows:
-    [uid], tips: [{from, text, at, helped}]}}."""
+    [uid], tips: [{from, text, at, helped}]}}. 3.9.0: and the cards due
+    today (300 stuck and 1,000 due at most)."""
     out = {}
     if not isinstance(value, dict):
         return out
-    for guid, v in list(value.items())[:300]:
+    for guid, v in list(value.items())[:1300]:
         if not isinstance(guid, str) or not guid or len(guid) > GUID_MAX or not isinstance(v, dict):
             continue
         knows = [str(u)[:128] for u in v.get("knows") or [] if isinstance(u, str) and u][:5]

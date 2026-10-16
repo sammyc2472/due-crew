@@ -2221,7 +2221,8 @@ def test_together_v210():
     fj = crew_cards.float_js(dict(chip, accent=["#0a0", "#7c7"]))
     check("ask card: above the bar only while the corner is free, else back to the bar",
           "dc-knows-card" in fj and "knowsbar" in fj and "free()" in fj and "Not now" in fj
-          and rm.CMD_KEY in fj and "textContent" in fj and fj.count("innerHTML") == 1 and "p.innerHTML = D.pip.svg" in fj
+          and rm.CMD_KEY in fj and "textContent" in fj and fj.count("innerHTML") == 2 and "p.innerHTML = D.pip.svg" in fj
+          and "bulb.innerHTML = '<svg" in fj  # 3.9.0: the peek's lightbulb, our own constant drawing
           and "dc-knows-card" in crew_cards.float_js(None) and "return false" in crew_cards.float_js(None))
     import aqt.utils as _au
     calls, asked = [], []
@@ -5461,6 +5462,158 @@ def test_older_server_v32():
     check("older server: the sync still goes, without 3.2's parts", ok and len(sent) == 2
           and not {"knows", "stuck", "log"} & set(sent[1]) and "recap" not in sent[1]["week"])
     check("older server: nothing 3.2 is marked sent", "log_hash" not in sam.session and sam._load_known()[1] is None)
+
+
+def test_knows_due_v390():
+    """3.9.0 (Sam's pick, "Open calls" A): the day's first sync asks who
+    knows the cards due today too, and that answer is kept for the day, so
+    a card I miss for the first time shows the chip the next time it comes
+    up, without a sync; only once I'm stuck on it. An older Worker gets the
+    sync without it, and isn't asked again that day."""
+    from due_crew import cards as K
+    col = _knows_col()
+    conn = col.db.conn
+    conn.execute("UPDATE cards SET due = 999 WHERE id = 3")
+    conn.execute("UPDATE cards SET due = 1000 WHERE id = 4")
+    fakes.add_card(conn, 7, did=10, ctype=2, queue=2, ivl=5, due=1001)        # due tomorrow
+    fakes.add_card(conn, 8, did=10, ctype=1, queue=1, due=1790000000)         # learning, due later today
+    fakes.add_card(conn, 9, did=10, ctype=2, queue=-1, ivl=5)                 # suspended
+    fakes.add_card(conn, 12, did=30, odid=10, ctype=2, queue=2, ivl=5, due=-5)  # in a filtered deck, due at home
+    fakes.add_card(conn, 13, did=30, odid=10, ctype=2, queue=2, ivl=5, due=-4)  # in a filtered deck, not due at home
+    conn.execute("UPDATE cards SET odue = 998 WHERE id = 12")
+    conn.execute("UPDATE cards SET odue = 1005 WHERE id = 13")
+    due = K.due_today(col, [10], skip=["guid000003"])
+    check("due today: reviews due today or before and learning cards, in my shared deck and its subdecks, filtered ones "
+          "by their home deck's day, the most overdue first; not the stuck ones, tomorrow's, suspended or another deck's",
+          due == ["guid000001", "guid000002", "guid000006", "guid000012", "guid000004", "guid000008"], due)
+    real_max = K.DUE_MAX
+    try:
+        K.DUE_MAX = 2
+        check("due today: DUE_MAX at most, the most overdue kept", K.due_today(col, [10]) == ["guid000001", "guid000002"])
+    finally:
+        K.DUE_MAX = real_max
+    check("due today: nothing without a shared deck", K.due_today(col, []) == [])
+
+    labels = [_day(0)]
+    store = world({"sam": "Sam", "dre": "Dre", "zed": "Zed"}, {"sam": ["dre"], "dre": ["sam"], "zed": ["sam"]})
+    sam, dre, zed = new_client(store, "sam", "Sam"), new_client(store, "dre", "Dre"), new_client(store, "zed", "Zed")
+    dre.push(labels, {}, known={"guid000001", "guid000003"})
+    zed.push(labels, {}, known={"guid000002"})
+    mw = sys.modules["aqt"].mw
+    saved = (K.client, mw.col, K._bottom, K._review_web, K._show, dict(K._state))
+    shown = []
+    try:
+        K.client, mw.col = (lambda: sam), col
+        first = K.for_sync({"shared_decks": [10]}, light=True)
+        due = [g for g in due if g != "guid000004"]  # stuck too, so it goes with those
+        check("the day's first sync, light or full, carries the cards due today (not the stuck ones), and the day",
+              first["due"] == due and first["due_day"] == _day(0) and first["stuck"] == ["guid000003", "guid000004"], first)
+        n = len(store.log)
+        ok, _g = sam.push(labels, {}, **first)
+        sent = store.bodies[-1][2]
+        check("one request: who knows them comes back with the stuck cards' answer",
+              ok and len(store.log) == n + 1 and sent["due"] == due and sent["stuck"] == ["guid000003", "guid000004"])
+        check("the answers kept apart: the stuck ones for this sync, the due ones for the day; a one-way friend's never",
+              sam.session["cards"] == {"guid000003": {"knows": ["dre"], "tips": []}}
+              and sam.session["cards_due"] == {"guid000001": {"knows": ["dre"], "tips": []}}
+              and sam.session["due_day"] == _day(0), (sam.session.get("cards"), sam.session.get("cards_due")))
+        later = K.for_sync({"shared_decks": [10]}, light=True)
+        sam.push(labels, {}, **later)
+        check("a later sync that day doesn't ask again, and keeps the morning's answer",
+              "due" not in later and "due" not in store.bodies[-1][2] and sam.session["cards_due"] == {"guid000001": {"knows": ["dre"], "tips": []}})
+
+        K._bottom, K._review_web, K._show = (lambda: object()), (lambda: None), (lambda v: shown.append(v))
+        K._state["entries"] = [{"user_id": "dre", "name": "Dre Ng", "you": False}]
+        card = types.SimpleNamespace(note=lambda: types.SimpleNamespace(guid="guid000001"), ord=0, id=1, lapses=0)
+        n = len(store.log)
+        K.on_answer(card)
+        noon = int(datetime.datetime.combine(TODAY, datetime.time(13)).timestamp() * 1000)
+        fakes.add_review(conn, noon, ease=1, cid=1)
+        K.on_answer(card)
+        K.on_answer(types.SimpleNamespace(note=lambda: types.SimpleNamespace(guid="guid000002"), ord=0, id=2, lapses=3))
+        sam.session["due_day"] = _day(-1)
+        K.on_answer(card)
+        sam.session["due_day"] = _day(0)
+        check("the chip: not before I miss it; the first miss today shows who knows it, with no request; "
+              "a card nobody I can name knows, nothing; yesterday's answer, nothing",
+              shown[0] is None and shown[1] and shown[1]["kind"] == "knows" and shown[1]["text"].endswith("Dre knows this")
+              and shown[2] is None and shown[3] is None and len(store.log) == n, shown)
+        lapsed = types.SimpleNamespace(note=lambda: types.SimpleNamespace(guid="guid000001"), ord=0, id=99, lapses=2)
+        check("stuck now: lapsed twice, or missed today", K.stuck_now(col, lapsed, col.sched.day_cutoff)
+              and K.stuck_now(col, card, col.sched.day_cutoff)
+              and not K.stuck_now(col, types.SimpleNamespace(id=2, lapses=0), col.sched.day_cutoff))
+    finally:
+        K.client, mw.col, K._bottom, K._review_web, K._show = saved[:5]
+        K._state.clear()
+        K._state.update(saved[5])
+
+    old = world({"sam": "Sam"})
+    real = old._sync
+
+    def old_sync(me, body):
+        if "due" in body:
+            raise fakes.Bad(400, "bad_sync")
+        return real(me, body)
+    old._sync = old_sync
+    s2 = new_client(old, "sam", "Sam")
+    ok, _g = s2.push(labels, {}, stuck=["g2"], due=["g1"], due_day=_day(0))
+    sent = [b for m, p, b in old.bodies if p == "/sync"]
+    check("older Worker: the sync goes again without `due`, the stuck cards still asked; not asked again today",
+          ok and len(sent) == 2 and "due" not in sent[1] and sent[1]["stuck"] == ["g2"]
+          and s2.session["due_day"] == _day(0) and s2.session["cards_due"] == {})
+
+
+def test_knows_peek_v390():
+    """3.9.0 (Sam's pick, "Open calls" C): with Pip on, who knows the card
+    peeks up from the bottom of the review screen, waving, a lightbulb over
+    their head: "I know this one", Ask Dre, Not now. The bar's chip and every
+    other kind of card stay as they were; nothing moves with Reduce motion."""
+    import shutil
+    import subprocess
+    from due_crew import cards as K
+    from due_crew.app import _state
+    names = {"dre": ("Dre <b>Ng", ""), "mo": ("Mo", "")}
+    pips = {"dre": {"svg": "<svg></svg>", "a": ["#1e5fb4", "#7fb2f0"]}, "mo": {"svg": "<svg></svg>", "a": ["#2e7d32", "#7cc47f"]}}
+    one = K.chip_view({"knows": ["dre"], "tips": []}, [], names, pips=pips)
+    two = K.chip_view({"knows": ["dre", "mo"], "tips": []}, [], names, pips=pips)
+    mine = K.chip_view({"knows": ["dre"], "tips": []}, [], names, mine=True, pips=pips)
+    plain = K.chip_view({"knows": ["dre"], "tips": []}, [], names)
+    check("peek: one who knows it speaks for themselves; more, the words say who; asked, it says so; no Pip, no peek",
+          one["peek"] == {"uid": "dre", "head": "I know this one", "act": "Ask Dre"}
+          and two["peek"]["head"] == "Dre and 1 more know this" and two["peek"]["act"] == "Ask"
+          and mine["peek"]["act"] == "Asked" and "peek" not in plain
+          and one["text"] == "Dre knows this" and one["act"] == "Ask", (one.get("peek"), two.get("peek")))
+    tip = K.chip_view({"knows": ["dre"], "tips": [{"from": "dre", "text": "think loops"}]}, [], names, pips=pips)
+    check("peek: a tip or an ask keeps its card", "peek" not in tip
+          and "peek" not in K.chip_view(None, [], names, asks=[("dre", 1, "why?")], pips=pips))
+    shown, saved = [], (K._bottom, K._review_web, K._show, K.client, dict(_state))
+    store = world({"sam": "Sam"})
+    sam = new_client(store, "sam", "Sam")
+    sam.session["cards"] = {"guid000001": {"knows": ["dre"], "tips": []}}
+    try:
+        K._bottom, K._review_web, K._show, K.client = (lambda: object()), (lambda: None), (lambda v: shown.append(v)), (lambda: sam)
+        _state["entries"] = [{"user_id": "dre", "name": "Dre <b>Ng", "you": False, "accent": "blue", "look": ["headphones"]}]
+        K.on_answer(types.SimpleNamespace(note=lambda: types.SimpleNamespace(guid="guid000001"), ord=0, id=1, lapses=3))
+    finally:
+        K._bottom, K._review_web, K._show, K.client = saved[:4]
+        _state.clear()
+        _state.update(saved[4])
+    v = shown[0]
+    check("peek: on the review screen, their Pip waving in their look (sev.py's own markup, the name only its label, escaped)",
+          v["kind"] == "knows" and set(v["peek"]) == {"head", "act", "svg"} and "m-peek" in v["peek"]["svg"]
+          and "Dre &lt;b&gt;Ng’s Pip" in v["peek"]["svg"] and "<b>" not in v["peek"]["svg"], v.get("peek"))
+    js = K.float_js(v)
+    check("peek: drawn in the corner's place, up from the bottom; the words as text; it ducks back down; still with Reduce motion",
+          "var peek = D.peek && D.peek.svg && D.pip" in js and "translateY(105%)" in js and "head = el('div'" in js
+          and "peek ? peek.head : D.text" in js and "prefers-reduced-motion: reduce" in js and "if (peek && !still" in js
+          and "window.dcKnowsOff(!D)" in js and "off(true)" in js and "knowsbar" in js)
+    bar = K.chip_js(v)
+    check("peek: the bar's chip, when the corner isn't free, says what it said", "peek" not in bar.split("var D = ")[0]
+          and "t.textContent = D.text" in bar and "D.peek" not in bar)
+    node = shutil.which("node")
+    if node:
+        ok = subprocess.run([node, "--check"], input=js, capture_output=True, text=True, timeout=30)
+        check("peek: its script parses", ok.returncode == 0, ok.stderr[-400:])
 
 
 def test_admin_notice_v321():

@@ -96,6 +96,21 @@ describe("who knows this", () => {
     expect(rows).toBe(5);  // dre 2, mo 1, zed 1, sam 1: the asks left nothing
   });
 
+  it("3.9.0: answers the cards due today the same way, with the stuck ones, and refuses more than 1,000", async () => {
+    const { sam, dre, stranger } = await crew();
+    await dre.call("POST", "/sync", { knows: { reset: true, add: ["d1", "s1"] } });
+    await stranger.call("POST", "/sync", { knows: { add: ["d1", "d2"] } });
+    const r = await sam.call("POST", "/sync", { stuck: ["s1"], due: ["d1", "d2", "s1"] });
+    expect(r.status).toBe(200);
+    expect(r.body.cards).toEqual({ s1: { knows: ["dre"], tips: [] }, d1: { knows: ["dre"], tips: [] } });  // never zed's
+    expect((await sam.call("POST", "/sync", { due: ["d1"] })).body.cards).toEqual({ d1: { knows: ["dre"], tips: [] } });
+    const many = Array.from({ length: 1000 }, (_, i) => `x${i}`);
+    expect(await sam.status("POST", "/sync", { due: many })).toBe(200);
+    expect(await sam.status("POST", "/sync", { due: [...many, "y"] })).toBe(400);
+    const rows = await db().prepare("SELECT COUNT(*) AS n FROM knows").first<number>("n");
+    expect(rows).toBe(4);  // the asks left nothing
+  });
+
   it("del and reset take cards off", async () => {
     const { sam, dre } = await crew();
     await dre.call("POST", "/sync", { knows: { add: ["g1", "g2"] } });

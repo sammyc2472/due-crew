@@ -10,6 +10,7 @@ export const KNOWS_PER_SYNC = 2000;
 export const KNOWS_MAX = 100000;  // a person's cards "down": a big shared deck has ~35,000 notes
 export const TIPS_MAX = 5000;     // tips a person keeps on cards
 export const STUCK_MAX = 300;
+export const DUE_MAX = 1000;  // 3.9.0: the cards due today, asked about once a day
 const CHUNK = 90;           // D1: at most 100 bound parameters a statement
 const LOG_DAYS = 400;      // days one sync carries
 const LOG_KEEP = 15 * 366;  // 3.7.1: days kept, so a year card reaches back (the history import)
@@ -60,6 +61,14 @@ export function knowsWrites(env: Env, uid: string, k: ReturnType<typeof knowsPar
 
 export function stuckPart(v: unknown): string[] {
   return guids(v, STUCK_MAX, "stuck");
+}
+
+/** 3.9.0: a sync's `due`, the cards due today in the decks I share (the
+ *  day's first sync sends them), answered the same way as the stuck ones,
+ *  so a card I miss for the first time shows who knows it without waiting
+ *  for a sync. Kept nowhere. */
+export function duePart(v: unknown): string[] {
+  return guids(v, DUE_MAX, "due");
 }
 
 /** For each card I'm stuck on: which mutual friends have it down, and the

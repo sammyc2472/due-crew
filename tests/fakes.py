@@ -817,7 +817,8 @@ class FakeWorker:
         return out, r.get("name")
 
     def _sync(self, me, body):
-        if not set(body) <= {"profile", "week", "decks", "heatmap", "squads", "settings", "plans", "knows", "stuck", "log", "team"}:
+        if not set(body) <= {"profile", "week", "decks", "heatmap", "squads", "settings", "plans", "knows", "stuck", "log", "team",
+                             "due"}:
             raise Bad(400, "bad_sync")
         prof = body.get("profile")
         if prof is not None:
@@ -837,6 +838,10 @@ class FakeWorker:
         if stuck is not None and (not isinstance(stuck, list) or len(stuck) > 300
                                   or not all(isinstance(g, str) and 0 < len(g) <= 40 for g in stuck)):
             raise Bad(400, "bad_stuck")
+        due = body.get("due")  # 3.9.0: the cards due today, asked about once a day
+        if due is not None and (not isinstance(due, list) or len(due) > 1000
+                                or not all(isinstance(g, str) and 0 < len(g) <= 40 for g in due)):
+            raise Bad(400, "bad_due")
         log = body.get("log")
         if log is not None:
             days = log.get("days") if isinstance(log, dict) else None
@@ -943,8 +948,8 @@ class FakeWorker:
         out = {"ok": True, "gone": gone, "wrote": wrote, "logAll": True}
         if me in self.log_cut:
             out["logCut"] = True
-        if stuck is not None:
-            out["cards"] = self._for_stuck(me, list(dict.fromkeys(stuck)))
+        if stuck is not None or due is not None:
+            out["cards"] = self._for_stuck(me, list(dict.fromkeys((stuck or []) + (due or []))))
         return 200, out
 
     def _guids(self, v, keys):
