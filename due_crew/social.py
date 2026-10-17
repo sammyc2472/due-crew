@@ -10,7 +10,7 @@ import traceback
 from aqt import mw
 from aqt.utils import tooltip
 
-from . import app, board, shows
+from . import app, board, native_emoji, shows
 from .app import (CHEER_QUICK, HEATMAP_DAYS, _bg, _pending_cheers,
                   _profile_files, _state, cfg, client, save_cfg)
 from .backend.shapes import clean_doodle, clean_emoji, clean_note
@@ -89,7 +89,8 @@ def _cheer_menu(to_uid):
     mw.web.eval(board.cheer_overlay_js({
         "uid": to_uid, "name": entry["name"], "emojis": list(quick),
         "pip": board.card_sev(entry, c),  # their Pip, as on their card; None with Pip off
-        "pen": board.accent_pair(c.get("accent"))[0]}))
+        "pen": board.accent_pair(c.get("accent"))[0],
+        "native": native_emoji.available()}))  # "other" opens the computer's own emoji picker
 
 
 def send_from_window(raw):

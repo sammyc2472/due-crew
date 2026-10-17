@@ -2306,6 +2306,17 @@ every release that changes how something works.
   they were published with. Nothing changes for anyone using Due Crew.
   The notice is in the part of the README that is the AnkiWeb listing:
   re-paste it there.
+- 3.9.1, "other" opens the computer's own emoji picker (Sam: "the emoji
+  drawer is missing tons that are natively supported. want the other
+  option to just open the native drawer?"). A page can't; Python can ask
+  (`native_emoji.py`): a Mac's Character Viewer (what ⌃⌘Space opens,
+  `orderFrontCharacterPalette:` through the Objective-C runtime) or
+  Windows' emoji panel (Win + . pressed and let go). The window puts a
+  focused box in other's place first ("pick one") and sends
+  `duecrew:emojipicker`; whatever lands in the box is picked, Esc puts
+  other back. Linux has no one picker to ask for: there, and whenever
+  asking fails, the glue tells the window to open its own drawer
+  (`dcCheerNoNative`), which stays as it was.
 - 3.9.1, room sounds, round three (Sam, 17 Oct: "the waves sound isn't
   great so let's find another", then "A for waves. Fifteen sounds, my
   pick: A · Say it on the chip. Make an option to remove sounds in

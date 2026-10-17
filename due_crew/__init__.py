@@ -885,6 +885,11 @@ def _on_js(handled, message, context):
     elif cmd == "fridgedown" and len(parts) > 2:
         _closet(lambda cf: cf.take_down(parts[2]))  # 3.9.1: off the fridge
         _swap(c)
+    elif cmd == "emojipicker":
+        # 3.9.1: the Cheer window's "other": the computer's own picker; when it has none, the window's drawer
+        from .native_emoji import open_picker
+        if not open_picker():
+            mw.web.eval("window.dcCheerNoNative && window.dcCheerNoNative();")
     elif cmd == "cheersend" and len(parts) > 2:
         from .social import send_from_window
         send_from_window(":".join(parts[2:]))  # 3.9.1: the Cheer window's Send

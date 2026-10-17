@@ -14652,6 +14652,50 @@ def test_doodle_cheers_v391():
         dc._swap, dc._board_on_screen = saved
 
 
+def test_native_emoji_picker_v391():
+    """3.9.1 (Sam: "the emoji drawer is missing tons that are natively
+    supported. want the other option to just open the native drawer?"): on a
+    Mac or Windows the Cheer window's "other" opens the computer's own
+    picker into a focused box; where there's none (Linux), or asking fails,
+    the window's own drawer opens instead."""
+    import ctypes
+    import types as _types
+    from due_crew import native_emoji as NE
+    check("the computer's own picker: a Mac's and Windows', never Linux's; asking where there's none is a no",
+          NE.available("darwin") and NE.available("win32") and not NE.available("linux")
+          and NE.open_picker("linux") is False and NE.open_picker("darwin") in (True, False))
+    presses = []
+    had = getattr(ctypes, "windll", None)
+    ctypes.windll = _types.SimpleNamespace(user32=_types.SimpleNamespace(keybd_event=lambda *a: presses.append(a)))
+    try:
+        ok = NE.open_picker("win32")
+    finally:
+        if had is None:
+            del ctypes.windll
+        else:
+            ctypes.windll = had
+    check("Windows: Win + . pressed and let go, in that order",
+          ok is True and presses == [(0x5B, 0, 0, 0), (0xBE, 0, 0, 0), (0xBE, 0, 2, 0), (0x5B, 0, 2, 0)], presses)
+    js = board.cheer_overlay_js({"uid": "dre", "name": "Dre", "emojis": ["🎉"], "native": True})
+    plain = board.cheer_overlay_js({"uid": "dre", "name": "Dre", "emojis": ["🎉"]})
+    check("the window: with a picker, other gives a focused box and asks for it; without, the drawer; the box's pick is picked; Esc puts other back",
+          '"native": true' in js and '"native": false' in plain and "if (V.native) { native(); }" in js
+          and "pycmd('duecrew:emojipicker')" in js and "window.dcCheerNoNative = function () { unpick(); openDrawer(); };" in js
+          and "if (t) { unpick(); choose(t); }" in js and "if (pickIn.style.display !== 'none') { unpick(); other.focus(); }" in js)
+    import due_crew as dc
+    from aqt import mw
+    from aqt.deckbrowser import DeckBrowser
+    evals = []
+    saved = mw.web.eval
+    mw.web.eval = lambda code: evals.append(code)
+    try:
+        dc._on_js(False, "duecrew:emojipicker", DeckBrowser())
+    finally:
+        mw.web.eval = saved
+    check("emojipicker from the Decks screen: here (no picker to open) the window is told to open its drawer",
+          evals == ["window.dcCheerNoNative && window.dcCheerNoNative();"], evals)
+
+
 def test_cheer_pill_and_window_v391():
     """3.9.1 (Sam: "Cheers, clearer: build 1", "get rid of the current cheers
     click to the right of the stats", "make the cheers and doodles modals in

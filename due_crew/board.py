@@ -4575,6 +4575,9 @@ CHEER_WINDOW_JS = r"""
         '#dc-cheer .em .ot{width:auto;min-width:66px;padding:0 10px;font-size:12px;color:' + muted + ';}' +
         '#dc-cheer .em .ot.on{border:2px solid ' + accent + ';background:' + you + ';font-size:20px;color:' + ink + ';}' +
         '#dc-cheer .em .ot[aria-expanded=true]{border-color:' + accent + ';color:' + accent + ';}' +
+        '#dc-cheer .em input.pk{width:74px;height:36px;border-radius:10px;border:2px solid ' + accent + ';background:' + you + ';color:' + ink + ';font-size:20px;padding:0 8px;text-align:center;}' +
+        '#dc-cheer .em input.pk::placeholder{font-size:12px;color:' + muted + ';}' +
+        '#dc-cheer .em input.pk:focus{outline:none;}' +
         '#dc-cheer .dr{border:1px solid ' + line + ';border-radius:12px;padding:8px;display:grid;gap:6px;background:' + well + ';}' +
         '#dc-cheer .gt{display:flex;flex-wrap:wrap;gap:2px;}' +
         '#dc-cheer .gt button{width:32px;height:28px;border:0;background:none;border-radius:8px;font-size:16px;line-height:1;padding:0;}' +
@@ -4641,8 +4644,29 @@ CHEER_WINDOW_JS = r"""
     other.title = 'Any emoji';
     other.setAttribute('aria-label', 'Any other emoji');
     other.setAttribute('aria-expanded', 'false');
-    other.addEventListener('click', function () { if (drawer.style.display === 'none') { openDrawer(); } else { shut(); } });
+    other.addEventListener('click', function () {
+        if (V.native) { native(); } else if (drawer.style.display === 'none') { openDrawer(); } else { shut(); }
+    });
     em.appendChild(other);
+    // on a Mac or Windows, other opens the computer's own picker (Sam: "want the other option to just open
+    // the native drawer?"): a box takes other's place, focused, and what's picked there is picked;
+    // if the computer can't (Linux, or asking failed), the drawer opens instead (dcCheerNoNative)
+    var pickIn = el('input', 'ot pk');
+    pickIn.style.display = 'none';
+    pickIn.placeholder = 'pick one';
+    pickIn.maxLength = 16;
+    pickIn.setAttribute('aria-label', 'Your emoji');
+    em.appendChild(pickIn);
+    function native() {
+        other.style.display = 'none'; pickIn.style.display = ''; pickIn.value = ''; pickIn.focus();
+        window.dcCheerNoNative = function () { unpick(); openDrawer(); };
+        if (typeof pycmd !== 'undefined') { pycmd('duecrew:emojipicker'); } else { window.dcCheerNoNative(); }
+    }
+    function unpick() { pickIn.style.display = 'none'; other.style.display = ''; }
+    pickIn.addEventListener('input', function () {
+        var t = oneEmoji(pickIn.value.trim());
+        if (t) { unpick(); choose(t); } else if (pickIn.value.trim()) { pickIn.value = ''; }
+    });
     card.appendChild(em);
     var drawer = el('div', 'dr'), find = el('input', 'tx'), gt = el('div', 'gt'), gr = el('div', 'gr'), none = el('div', 'none', 'Nothing by that name. Paste one in here instead.');
     drawer.style.display = 'none';
@@ -4910,7 +4934,8 @@ CHEER_WINDOW_JS = r"""
     function esc(e) {
         if (e.key !== 'Escape') { return; }
         e.stopPropagation();
-        if (drawer.style.display !== 'none') { shut(); other.focus(); } else { close(); }
+        if (pickIn.style.display !== 'none') { unpick(); other.focus(); }
+        else if (drawer.style.display !== 'none') { shut(); other.focus(); } else { close(); }
     }
     document.addEventListener('keydown', esc, true);
     document.body.appendChild(back);
@@ -5110,7 +5135,7 @@ def cheer_overlay_js(view):
             "emojis": [str(x) for x in view.get("emojis") or []][:8] or ["\U0001F389"],
             "pip": view.get("pip") or "", "pen": pen, "inks": inks,
             "mine": next((i for i, x in enumerate(inks) if x[0].lower() == pen.lower()), -1),
-            "drawer": _emoji_drawer.view()}
+            "drawer": _emoji_drawer.view(), "native": bool(view.get("native"))}
     return CHEER_WINDOW_JS.replace("__VIEW__", _json.dumps(data).replace("</", "<\\/"))
 
 
