@@ -10,6 +10,12 @@
 // through review. window.dcSounds = {kinds, labels, play, stop, setVolume,
 // playing, build}; build(ctx, kind, out) draws one sound into any context, an
 // OfflineAudioContext too.
+// Since Sam's "the background noises aren't the best": rain, fire and waves
+// are recordings when the add-on has them (sounds/*.ogg, CC0: see
+// sounds/CREDITS.md), each a seamless loop played sample-exact by an
+// AudioBufferSourceNode; brown noise stays made, as brown noise is. Only the
+// sound that's playing is decoded (a minute of stereo is ~23 MB as samples).
+// A file that won't load or decode plays the made one instead.
 (function () {
   if (window.dcSounds) { return; }  // once a page: a second copy couldn't stop the first's sound
   var FADE = 1.5;
@@ -265,6 +271,31 @@
     return { nodes: nodes, out: g };
   }
 
+  // recordings: {kind: url} from the glue (files()); each already at the
+  // others' loudness when it was cut, so its trim is 1 unless it says otherwise
+  var FILES = {}, FILE_TRIM = { rain: 1, fire: 1, waves: 1 }, held = {};
+  function recorded(kind) {
+    if (held.kind === kind && held.url === FILES[kind]) { return held.p; }
+    var url = FILES[kind];
+    var p = fetch(url).then(function (r) {
+      if (!r.ok) { throw new Error("no " + kind); }
+      return r.arrayBuffer();
+    }).then(function (a) {
+      return new Promise(function (ok, no) { ac.decodeAudioData(a, ok, no); });
+    });
+    held = { kind: kind, url: url, p: p };  // one at a time: the last one's samples go
+    p.catch(function () { if (held.p === p) { held = {}; } });
+    return p;
+  }
+  function loop(ctx, buf, kind, out) {
+    var s = ctx.createBufferSource(), g = ctx.createGain();
+    s.buffer = buf; s.loop = true;
+    g.gain.value = FILE_TRIM[kind] || 1;
+    s.connect(g); g.connect(out);
+    s.start(ctx.currentTime, Math.random() * buf.duration);  // somewhere in the loop: never the same opening
+    return { nodes: [s, g] };
+  }
+
   var ac = null, master = null, limiter = null, now = null, vol = 0.6;
   function context() {
     if (ac) { return ac; }
@@ -308,10 +339,21 @@
       if (now && now.kind === kind) { return; }
       retire(now);
       var fade = ac.createGain(); fade.gain.value = 0; fade.connect(master);
-      var s = build(ac, kind, fade);
-      now = { kind: kind, nodes: s.nodes, fade: fade };
-      fadeTo(fade.gain, 1, FADE);
+      var mine = now = { kind: kind, nodes: [], fade: fade };
+      function go(buf) {
+        if (now !== mine) { return; }  // switched or stopped while it loaded
+        mine.nodes = (buf ? loop(ac, buf, kind, fade) : build(ac, kind, fade)).nodes;
+        fadeTo(fade.gain, 1, FADE);
+      }
+      if (FILES[kind]) { recorded(kind).then(go, function () { go(null); }); } else { go(null); }
     },
+    // where the recordings are: {rain: url, ...}; a kind left out is made
+    files: function (map) {
+      var f = {};
+      Object.keys(map || {}).forEach(function (k) { if (BUILD[k] && k !== "brown" && typeof map[k] === "string") { f[k] = map[k]; } });
+      FILES = f;
+    },
+    recorded: function () { return Object.keys(FILES); },
     stop: function () { retire(now); now = null; },
     setVolume: function (v) {
       vol = Math.max(0, Math.min(1, +v || 0));

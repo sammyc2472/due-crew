@@ -2280,7 +2280,8 @@ def install_fake_aqt():
         col=None, state="deckBrowser",
         addonManager=types.SimpleNamespace(
             getConfig=lambda name: {}, writeConfig=lambda n, c: None,
-            setConfigAction=lambda n, f: None),
+            setConfigAction=lambda n, f: None, setWebExports=lambda n, r: None,
+            addonFromModule=lambda m: m.split(".")[0]),
         taskman=types.SimpleNamespace(
             run_on_main=lambda f: f(), run_in_background=lambda f: f()),
         web=types.SimpleNamespace(eval=lambda js: None),

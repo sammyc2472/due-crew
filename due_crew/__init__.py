@@ -1550,6 +1550,8 @@ def _on_profile_open():
         _menu_done = True
         _tools_menu()
         mw.addonManager.setConfigAction(__name__, open_settings)
+        # 3.9.1: the room sounds' recordings, for the top bar's page (rooms._sound_files)
+        mw.addonManager.setWebExports(__name__, r"sounds/.+\.ogg")
     _reset_runtime()          # profile switch: nothing carries over
     with _lock:
         _fetching = False     # the last profile's refresh can't commit here

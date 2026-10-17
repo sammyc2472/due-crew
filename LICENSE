@@ -14,6 +14,9 @@ This MIT License covers this repository except:
   itself; anything else needs written permission. Copies taken before
   that date stay under the license they were published with.
 
+The room sounds' recordings (`due_crew/sounds/*.ogg`) are CC0 1.0, as their
+makers released them: see `due_crew/sounds/CREDITS.md`.
+
 "Due Crew", the Seven days logo and Pip (its name and how it looks) are
 trademarks of Sammy Caplan and no license here covers them: see "Name,
 logo and Pip" in README.md.

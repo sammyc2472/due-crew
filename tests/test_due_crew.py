@@ -14854,7 +14854,10 @@ def test_room_sounds_v391():
     made from noise in the top bar's page; a speaker on the chip picks one;
     each person their own, kept on this computer, never sent; off till
     picked; it plays while the session runs (breaks too) and stops when it
-    ends. Only the top bar's chip may set it, never a card's page."""
+    ends. Only the top bar's chip may set it, never a card's page. Since
+    Sam's "the background noises aren't the best": rain, fire and waves are
+    CC0 recordings, seamless loops in due_crew/sounds/; brown noise stays
+    made."""
     import shutil
     import subprocess
     import due_crew as dc
@@ -14881,7 +14884,7 @@ def test_room_sounds_v391():
     sf, sr = rm.sound_state(fif, "rain", 50), rm.sound_state(room, "fire", 100)
     ms = lambda d: int(d.timestamp() * 1000)
     check("sounds: they play from the session's start to its end, breaks too (a fifteen's: the end of its question)",
-          sf == {"kind": "rain", "vol": 0.5, "from": ms(t0), "until": ms(rm.live_until(fif))}
+          sf == {"kind": "rain", "vol": 0.5, "from": ms(t0), "until": ms(rm.live_until(fif)), "files": {}}
           and sr["until"] == ms(rm.room_end(room)) and sr["vol"] == 1.0
           and rm.sound_state(None, "rain", 50) is None and rm.sound_state(fif, "cafe", 50)["kind"] == "off")
     stop, on = rm.sound_js(None), rm.sound_js(sf)
@@ -14902,6 +14905,11 @@ def test_room_sounds_v391():
         out = subprocess.run([node], input=prog, capture_output=True, text=True, timeout=60)
         check("sounds.js: the four, made from noise; loaded twice it's still the one (so it can always stop)",
               out.stdout.strip() == "brown,rain,fire,waves|true|function", out.stdout + out.stderr)
+        prog = ("var window = {};" + src + "window.dcSounds.files({rain: '/a.ogg', brown: '/b.ogg', fire: 5, cafe: '/c.ogg'});"
+                "console.log(window.dcSounds.recorded().join(','));")
+        out = subprocess.run([node], input=prog, capture_output=True, text=True, timeout=60)
+        check("sounds.js: told where the recordings are, it takes rain, fire and waves as text, never brown noise or anything else",
+              out.stdout.strip() == "rain", out.stdout + out.stderr)
     else:
         print("SKIP sounds.js in node: no node")
     # the clicks: from the top bar (our page) it's kept; from a card's page, never
@@ -14921,6 +14929,9 @@ def test_room_sounds_v391():
         dc._on_js(False, "duecrew:roomsound:waves:75|" + rm.CMD_KEY, DeckBrowser())
         kept = dict(mine)
         played = evals[-1] if evals else ""
+        check("sounds: the top bar's player is told where this install's recordings are, by Anki's /_addons/ (setWebExports)",
+              json.dumps({k: f"/_addons/due_crew/sounds/{k}.ogg" for k in ("rain", "fire", "waves")}) in played
+              and 'setWebExports(__name__, r"sounds/.+\\.ogg")' in open(os.path.join(REPO, "due_crew", "__init__.py")).read())
         dc._on_js(False, "duecrew:roomsound:fire:20|" + rm.CMD_KEY, object())  # a card's page, keyed
         dc._on_js(False, "duecrew:roomsound:fire:20", object())               # and bare
         dc._on_js(False, "duecrew:roomsound:cafe:20", DeckBrowser())          # not one of ours
@@ -14934,6 +14945,22 @@ def test_room_sounds_v391():
         check("sounds: no room, the player stops; no top bar, nothing", evals == [rm.sound_js(None)])
     finally:
         R.cfg, R.save_cfg, R._webs, R._eval, R.my_room = saved
+    check("sounds: a recording's address is its kind's, in the add-on's own folder (quoted); brown noise and strangers have none",
+          rm.sound_files("my add-on", ["rain", "brown", "waves", "cafe"])
+          == {"rain": "/_addons/my%20add-on/sounds/rain.ogg", "waves": "/_addons/my%20add-on/sounds/waves.ogg"}
+          and rm.sound_files("x", []) == {} and rm.sound_state(fif, "rain", 50)["files"] == {}
+          and rm.sound_state(fif, "rain", 50, {"rain": "/r.ogg"})["files"] == {"rain": "/r.ogg"}
+          and "window.dcSounds.files(s.files)" in rm.sound_js(rm.sound_state(fif, "rain", 50)))
+    snd = os.path.join(REPO, "due_crew", "sounds")
+    credits = open(os.path.join(snd, "CREDITS.md")).read()
+    heads = {k: open(os.path.join(snd, k + ".ogg"), "rb").read(200) for k in rm.RECORDED}
+    sizes = {k: os.path.getsize(os.path.join(snd, k + ".ogg")) for k in rm.RECORDED}
+    check("sounds: rain, fire and waves ship as Ogg Opus loops, each well under 700 KB, credited (CC0, the maker, the page)",
+          rm.RECORDED == ("rain", "fire", "waves") and all(h.startswith(b"OggS") and b"OpusHead" in h for h in heads.values())
+          and all(40_000 < n < 700_000 for n in sizes.values())
+          and all(f"`{k}.ogg`" in credits for k in rm.RECORDED) and "CC0 1.0" in credits
+          and all(u in credits for u in ("freesound.org/s/525046/", "freesound.org/s/132534/", "freesound.org/s/339517/"))
+          and "due_crew/sounds/*.ogg" in open(os.path.join(REPO, "LICENSE")).read(), sizes)
 
 
 def main():

@@ -683,6 +683,8 @@ In Anki (as a follower):
 
 ### 3.9.1: room sounds
 
+- [ ] The recordings: Rain is real rain, Fire a real fireplace (soft pops), Waves a real shore, each a minute or so that loops; listen for two minutes each: no click or jump where it comes round, no voices, birds or hum. Brown noise is the made one, as before. All four sound about as loud at one volume.
+
 - [ ] Start a fifteen: its chip in the top bar ends in a grey speaker (struck through). Click it: the chip becomes Off · Brown noise · Rain · Fire · Waves; Off is filled. Esc, or a click anywhere else, puts the chip back; a click on the chip (not the speaker) still opens its card.
 - [ ] Pick Rain: it fades in over a second or so (headphones for Brown noise and Waves: laptop speakers barely play them); the volume slider appears and changes it as you drag. Pick Fire: Rain fades as Fire comes in. The speaker is in your accent, with waves. Off: it fades out.
 - [ ] Study with a sound on: it plays on through Review (cards changing don't cut it), through a fifteen's break and its question; Stop here: it fades out. Take five, then another: it plays through.

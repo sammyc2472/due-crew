@@ -2306,6 +2306,27 @@ every release that changes how something works.
   they were published with. Nothing changes for anyone using Due Crew.
   The notice is in the part of the README that is the AnkiWeb listing:
   re-paste it there.
+- 3.9.1, room sounds, recorded (Sam, 17 Oct: "the background noises
+  aren't the best. are there any open source sounds we can use with
+  attribution instead?", then "keep the brown noise"). Rain, fire and
+  waves are recordings now, CC0 from Freesound, each checked on its page
+  (`due_crew/sounds/CREDITS.md`: who, where, which seconds): rain by
+  speakwithanimals (the first pick, a "seamless rain", had left
+  Freesound), a fireplace by inchadney, a Baltic shore by pulswelle.
+  Each is a loop of a minute or so from the steadiest stretch of the
+  recording (no block more than about 2 dB over the stretch's middle;
+  the waves' seam sits between two waves), its end crossfaded into its
+  start, levelled to the made brown noise's -23.3 LUFS (measured from an
+  offline render of sounds.js), limited to -1 dBFS, Ogg Opus at 80 kbps
+  (`tools/cut_sound.sh`): 1.6 MB for the three. In Anki's own Chromium
+  they decode to the exact length and the wrap is an ordinary step, not
+  a click. They play by an AudioBufferSourceNode that loops sample-exact,
+  from a random point; only the playing one is decoded. The top bar's
+  page fetches them from Anki's `/_addons/<folder>/sounds/`
+  (`setWebExports`, `rooms._sound_files`, `room_model.sound_files`, the
+  state's `files`); a file that won't load or decode plays the made
+  sound instead, and brown noise is always made. The files are CC0, not
+  MIT (the root LICENSE says so).
 - 3.9.1, room sounds (Sam's picks from the Room Sounds page, 17 Oct: a
   speaker on the chip; in a crew room each person picks their own; off
   till you pick, the last pick remembered on this computer; made from

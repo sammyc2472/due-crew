@@ -1054,16 +1054,28 @@ def sound_cmd(parts):
     return (parts[2], vol) if vol <= 100 else None
 
 
-def sound_state(room, kind, vol):
+def sound_state(room, kind, vol, files=None):
     """What the top bar's player needs (SOUND_RUNTIME): the pick, and the
     session's span in ms, from its start to the end of its last round (a
     fifteen's, of its question): it plays through the breaks. None in no
-    room: it stops."""
+    room: it stops. files: where the recordings are (sound_files)."""
     if room is None:
         return None
     end = live_until(room) if is_fifteen(room) else room_end(room)
     return {"kind": kind if kind in SOUNDS else "off", "vol": max(0, min(100, int(vol))) / 100,
-            "from": int(_parse(room["start"]).timestamp() * 1000), "until": int(end.timestamp() * 1000)}
+            "from": int(_parse(room["start"]).timestamp() * 1000), "until": int(end.timestamp() * 1000),
+            "files": dict(files or {})}
+
+
+RECORDED = ("rain", "fire", "waves")  # brown noise is made, as brown noise is
+
+
+def sound_files(folder, have):
+    """{kind: url} for the recordings the add-on has (have: the kinds whose
+    sounds/<kind>.ogg is there), served to the top bar's page by Anki's
+    /_addons/ (setWebExports). folder: the add-on's folder name."""
+    from urllib.parse import quote
+    return {k: f"/_addons/{quote(str(folder))}/sounds/{k}.ogg" for k in RECORDED if k in set(have or ())}
 
 
 _SOUNDS_SRC = []
@@ -1091,7 +1103,10 @@ SOUND_RUNTIME = r"""
       }
       if ((!s || now >= s.until) && R.t) { clearInterval(R.t); R.t = null; }
     };
-    R.set = function (s) { R.s = s; R.check(); if (s && !R.t) { R.t = setInterval(R.check, 5000); } };
+    R.set = function (s) {
+      if (s && window.dcSounds && window.dcSounds.files) { window.dcSounds.files(s.files); }
+      R.s = s; R.check(); if (s && !R.t) { R.t = setInterval(R.check, 5000); }
+    };
     R.pick = function (kind, vol) { if (R.s) { R.s.kind = kind; R.s.vol = vol; } R.check(); };
     R.volume = function (vol) { if (R.s) { R.s.vol = vol; } if (window.dcSounds) { window.dcSounds.setVolume(vol); } };
   }

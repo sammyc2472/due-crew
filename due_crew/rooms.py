@@ -21,6 +21,7 @@ one per yes, one to stop). Pip, if on, keeps me company through it.
 
 import datetime
 import html
+import os
 import time
 import traceback
 
@@ -265,7 +266,21 @@ def _sound(top, room):
     kind, vol = room_model.sound_pick(cfg())
     if kind != "off":
         _allow_sound(top)
-    _eval(top, room_model.sound_js(room_model.sound_state(room, kind, vol)))
+    _eval(top, room_model.sound_js(room_model.sound_state(room, kind, vol, _sound_files())))
+
+
+_SOUND_DIR = os.path.join(os.path.dirname(__file__), "sounds")
+
+
+def _sound_files():
+    """Where the top bar's page finds the recordings this install has (none:
+    they're all made). The folder is served by /_addons/ (setWebExports in
+    __init__)."""
+    try:
+        have = [k for k in room_model.RECORDED if os.path.isfile(os.path.join(_SOUND_DIR, k + ".ogg"))]
+        return room_model.sound_files(mw.addonManager.addonFromModule(__name__), have) if have else {}
+    except Exception:
+        return {}
 
 
 def set_sound(parts):
