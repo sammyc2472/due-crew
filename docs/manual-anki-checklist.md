@@ -693,7 +693,7 @@ In Anki (as a follower):
 - [ ] A crewmate's ask with a line: their Pip and "Sam asked about this card", Show, Not now; Show: their line, Tip. An ask without a line: "Sam asked about this", Tip, as before. A plan's note: "📌 A note from Block 1", Show; Show: the note.
 - [ ] Where the corner isn't free (a long card): the chip beside Edit says the same folded words with Show; a click shows the words, then This helped / Tip work as before. Opened on the card and then moved to the bar: still open there.
 
-- [ ] Squad bingo: point at a square two or three of you stamped: their Pips blink one after another, never together. A plan card's squad line: the same.
+- [ ] Squad bingo: point at a square two or three of you stamped: their Pips blink each on their own, in no order and never together. A plan card's squad line, a study room's seats and the peek's Pips: the same.
 
 ### 3.9.0: your Wrapped
 

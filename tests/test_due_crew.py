@@ -5733,8 +5733,9 @@ def test_knows_peek_v390():
     ds = [x.get("d") for x in shown3[0]["peek"]["pips"]]
     js3 = K.float_js(shown3[0])
     check("peek, three side by side: each its own place in the blink, as a room's seats (Sam: they blinked as one)",
-          ds == [sev.started(i) for i in range(3)] and len(set(ds)) == 3
-          and "'--sv-d:' + (+peek.pips[i].d || 0) + 's;'" in js3 and "var(--sv-d, 0s)" in sev.CSS, ds)
+          ds == [sev.blink(i)[1] for i in range(3)] and [x.get("b") for x in shown3[0]["peek"]["pips"]] == [sev.blink(i)[0] for i in range(3)]
+          and "'--sv-b:' + (+peek.pips[i].b || 4.6) + 's;--sv-d:' + (+peek.pips[i].d || 0) + 's;'" in js3
+          and "sv-blink var(--sv-b, 4.6s) var(--sv-d, 0s)" in sev.CSS, ds)
     check("peek: on the review screen, their Pip waving in their look (sev.py's own markup, the name only its label, escaped)",
           v["kind"] == "knows" and set(v["peek"]) == {"head", "act", "pips"} and len(v["peek"]["pips"]) == 1
           and "m-peek" in v["peek"]["pips"][0]["svg"] and v["peek"]["pips"][0]["a"] == list(board.accent_pair("blue"))
@@ -12685,8 +12686,14 @@ def test_crew_room_sevs_wear_their_accents_v381():
           and on["sev"] == dict({"idle": sev.svg("idle")}, **{f"idle.{m}": sev.svg("idle", m) for m in sev.SEAT_MOVES[1:]})
           and "sv-blink" in on["sevcss"], on["seats"])
     check("…each started at its own moment: the blinks never line up (a delay in the blink, each different)",
-          [s["d"] for s in on["seats"]] == [0, -1.7, -3.4] and "sv-blink 4.6s var(--sv-d, 0s)" in sev.CSS
-          and sev.BLINK == 4.6 and len({sev.started(i) for i in range(6)}) == 6)
+          [(s["b"], s["d"]) for s in on["seats"]] == [sev.blink(i) for i in range(3)]
+          and "sv-blink var(--sv-b, 4.6s) var(--sv-d, 0s)" in sev.CSS and sev.BLINK == 4.6)
+    clocks = [sev.blink(i) for i in range(8)]
+    check("…each on its own clock (3.9.0, Sam: in turn \"still looks kinda creepy\"): cycles of 3.4 to 6.4 s, no two alike, "
+          "places in them apart; the same every time it's drawn",
+          all(3.4 <= c <= 6.4 and -c <= d <= 0 for c, d in clocks) and len({c for c, _d in clocks}) == 8
+          and all(abs(a[0] - b[0]) >= 0.3 for a, b in zip(clocks, clocks[1:])) and clocks == [sev.blink(i) for i in range(8)]
+          and sev.blink_css(1) == f"--sv-b:{clocks[1][0]}s;--sv-d:{clocks[1][1]}s", clocks)
     js = rm.widget_js("card", on)
     check("…drawn from sev.py's markup (24 px seats, the faces' size), coloured by day or night, the name only a label set as text",
           "who.appendChild(people(c, 24));" in js and "Math.round(size / (D.slot || [0.6])[0]), f = seats(s, most)" in js
@@ -12704,16 +12711,16 @@ def test_crew_room_sevs_wear_their_accents_v381():
     check("lobby, Pip on: each member is their Pip, in their accent by day and by night, blinking at its own moment",
           lobby.count('class="seat"') == 3 and "<i>D</i>" not in lobby and "sv-seats" in lobby
           and [lobby.count(f"sv m-{m}") for m in ("idle", "sread", "snod")] == [1, 1, 1]
-          and f'--sa-l:{blue[0]};--sa-d:{blue[1]};--sv-d:0.00s' in lobby and f'--sa-l:{amber[0]};--sa-d:{amber[1]};--sv-d:-3.40s' in lobby
-          and "--sv-d:-1.70s" in lobby)
+          and all(f"--sv-b:{c:.2f}s;--sv-d:{d:.2f}s" in lobby for c, d in (sev.blink(i) for i in range(3)))
+          and f'--sa-l:{blue[0]};--sa-d:{blue[1]};--sv-b:' in lobby and f'--sa-l:{amber[0]};--sa-d:{amber[1]};--sv-b:' in lobby)
     check("…the name only as its label, escaped",
           'title="Dre &lt;K&gt;"' in lobby and 'aria-label="Dre &lt;K&gt;"' in lobby and "Dre <K>" not in lobby
           and 'aria-label="You"' in lobby)
     plain = board.room_html(rm.board_view(room, ents, now=now))
     check("lobby, Pip off: the initials as before", "<i>D</i><i>A</i><i>S</i>" in plain and "sv-slot" not in plain)
-    bad = board._seat_html({"n": '"><b>x', "a": ["red;}</style>", "#2e7d3"], "d": "soon"})
+    bad = board._seat_html({"n": '"><b>x', "a": ["red;}</style>", "#2e7d3"], "d": "soon", "b": "1;}</style>"})
     check("lobby: a seat's colours are colours, or the default's; nothing else reaches its style",
-          f'--sa-l:{board.accent_pair(None)[0]};--sa-d:{board.accent_pair(None)[1]};--sv-d:0.00s' in bad
+          f'--sa-l:{board.accent_pair(None)[0]};--sa-d:{board.accent_pair(None)[1]};--sv-b:4.60s;--sv-d:0.00s' in bad
           and "</style>" not in bad and "<b>" not in bad)
     cfg_sheet = lambda theme: board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []}, {"theme": theme}, 0)
     dark, light, auto = cfg_sheet("dark"), cfg_sheet("light"), cfg_sheet("auto")
@@ -13611,8 +13618,8 @@ def test_plan_card_squad_pips_v3822():
     check("…in that order (me, the crewmate, the stranger)",
           pips.index(f"--rs-l:{amber[0]}") < pips.index(f"--rs-l:{blue[0]}") < pips.index(f"--rs-l:{plain[0]}"))
     check("…each blinking at its own moment, as a room's seats (3.9.0, Sam: on bingo they blinked as one)",
-          "--sv-d" not in exact[0] and f"--sv-d:{sev.started(1)}s" in exact[1] and f"--sv-d:{sev.started(2)}s" in exact[2]
-          and sev.started(1) != sev.started(2) != 0, [x[:120] for x in exact])
+          all(sev.blink_css(k) in exact[k] for k in range(3)) and len({sev.blink(k) for k in range(3)}) == 3
+          and "--sv-d" not in board.squad_pip("dre", "Dre", False, people, cfg), [x[:160] for x in exact])
     off = board._squad_line("p1", {"summary": summ, "unread": 0}, people, dict(cfg, sev=False))
     old = board._squad_line("p1", {"summary": dict(summ, who=[]), "unread": 0}, people, cfg)
     bare = board._squad_line("p1", {"summary": summ, "unread": 0})
@@ -13726,7 +13733,7 @@ def test_pips_where_emojis_were_v3822():
           and f"--rs-l:{plain[0]}" in sq0 and not any(x in sq0 for x in ("🦊", "🐢", "🐸")) and "stamped" in sq0
           and f"width:{round(board.STAMP_PIP * sev.SLOT[0])}px" in sq0 and board.STAMP_PIP * sev.SLOT[0] > 22, sq0[:400])
     check("bingo: a square's stamps each blink at their own moment when it's pointed at (3.9.0, Sam: \"they all blink at the same time\")",
-          f"--sv-d:{sev.started(1)}s" in sq0 and f"--sv-d:{sev.started(2)}s" in sq0 and sq0.count("--sv-d:") == 2, sq0[:400])
+          all(sev.blink_css(k) in sq0 for k in range(3)) and sq0.count("--sv-b:") == 3, sq0[:400])
     check("bingo: a square is a button, so no stamp is a link (mine doesn't open the closet from here)",
           "<a " not in sq0 and "duecrew:closet" not in sq0)
     plain_card = board.bingo_html(bv, {"sev": False}, people=people)

@@ -4188,19 +4188,20 @@ def halloween_html(hw, cfg):
             f'<a class="wx" href="#" title="Hide until next year" onclick="{_pycmd("closethw")}">&times;</a></div>')
 
 
-def row_sev(row, cfg, size=None, nth=0):
+def row_sev(row, cfg, size=None, nth=None):
     """3.8.2: someone's Pip on a crew row, in the emoji's place: their colour
     and their look (mine: this computer's), still until the row is pointed
     at. My own opens the closet. None with Pip off. nth (3.9.0): its place
     among Pips that move together (a bingo square's stamps, a plan card's
-    squad line), so each blinks at its own moment, as a room's seats do."""
+    squad line), so each blinks on its own clock (sev.blink), as a room's
+    seats do."""
     if not cfg.get("sev", True):
         return None
     light, dark = accent_pair(cfg.get("accent") if row.get("you") else row.get("accent"))
     look = my_look(cfg) if row.get("you") else row.get("look")
     label = "Your Pip" if row.get("you") else _html.escape(f'{row.get("name") or "?"}’s Pip', quote=True)
     fig = _sev.slot(_sev.svg("idle", rest=True, look=look, label=label), size or _sev.ROW_SIZE)  # the site's rows too (sev.site_kit)
-    style = f'--rs-l:{light};--rs-d:{dark}' + (f';--sv-d:{_sev.started(nth)}s' if nth else "")
+    style = f'--rs-l:{light};--rs-d:{dark}' + (f';{_sev.blink_css(nth)}' if nth is not None else "")
     if row.get("you"):
         return (f'<a class="dc-rsev" href="#" title="Pip&rsquo;s closet" style="{style}" '
                 f'onclick="{_pycmd("closet")}">{fig}</a>')
@@ -4211,7 +4212,7 @@ PCREW_PIP = 26  # 3.8.22: a Pip on a plan card's squad line, its slot a line of 
 SETTINGS_PIP = 44  # 3.8.22: mine in Settings › You, beside my name and status
 
 
-def squad_pip(uid, name, you, people, cfg, size=None, nth=0):
+def squad_pip(uid, name, you, people, cfg, size=None, nth=None):
     """3.8.21: someone's Pip on the Squads tab, in the emoji's place (Sam: "the
     squads page still has the old emojis"): mine as on my row; a crewmate's
     in their colour and look (a mutual friend's, which only the crew brings);
@@ -4230,7 +4231,7 @@ BINGO_PIP_CSS = """
 """
 
 
-def stamp_pip(uid, name, people, cfg, nth=0):
+def stamp_pip(uid, name, people, cfg, nth=None):
     """3.8.22: who stamped a bingo square, as their Pip: mine and a
     crewmate's in colour and look, a squadmate's plain (all they share is a
     name and an emoji). The square is a button, so never a link: mine
@@ -4335,10 +4336,14 @@ def _seat_html(s):
         delay = max(-60.0, min(0.0, float(s.get("d") or 0)))
     except (TypeError, ValueError):
         delay = 0.0
+    try:  # 3.9.0: its own blink cycle (sev.blink)
+        cycle = max(2.0, min(10.0, float(s.get("b") or _sev.BLINK)))
+    except (TypeError, ValueError):
+        cycle = _sev.BLINK
     name = _html.escape(str(s.get("n") or ""), quote=True)
     turn = s.get("m") if s.get("m") in _sev.SEAT_MOVES else "idle"  # its own small thing now and then
     look = s.get("l") if isinstance(s.get("l"), list) else None  # 3.8.2: what they have on (closet.clean rules it)
-    return (f'<span class="seat" title="{name}" style="--sa-l:{light};--sa-d:{dark};--sv-d:{delay:.2f}s">'
+    return (f'<span class="seat" title="{name}" style="--sa-l:{light};--sa-d:{dark};--sv-b:{cycle:.2f}s;--sv-d:{delay:.2f}s">'
             f'{_sev.slot(_sev.svg("idle", turn, label=name, look=look), 40)}</span>')
 
 

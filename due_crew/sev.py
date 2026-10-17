@@ -338,15 +338,29 @@ def stack_reach(n, size):
     return max(0, math.ceil(-(y + top * k))), max(0, math.ceil(y + 77.1 * k - w))  # 77.1: the shadow's bottom
 
 
-# 3.8.1: in a study room each member is their Pip (room_model.seats). They
-# started at different moments, so the blinks never line up: each gets its
-# own place in the blink (--sv-d, a negative delay), a step apart.
-BLINK = 4.6  # s: the blink's cycle (sv-blink, below)
+# 3.8.1: in a study room each member is their Pip (room_model.seats); 3.9.0
+# the peek's Pips, a bingo square's stamps, a plan card's squad line. Side by
+# side they never blink together, nor one after another in turn (Sam: "still
+# looks kinda creepy"): each blinks on its own clock, a cycle of its own
+# (--sv-b) and its own place in it (--sv-d, a negative delay), so they drift
+# past each other and no order shows for long.
+BLINK = 4.6  # s: a Pip's blink cycle on its own (sv-blink, below)
 
 
-def started(i):
-    """The i-th Pip of several: its blink's delay in s (0, then back a step each, round the cycle)."""
-    return -round(i * 1.7 % BLINK, 2) or 0
+def blink(i):
+    """The i-th Pip of several: (cycle, delay) in s for its blink. Cycles
+    from 3.4 to 6.4 s and places in them spread apart (golden steps, a
+    little jitter), so no two of a group start or stay together; from i
+    alone, so a redraw draws the same and nothing moves for it."""
+    r = random.Random(f"sev-blink:{i}")
+    cycle = round(3.4 + ((i * 0.382 + r.random() * 0.08) % 1) * 3.0, 2)
+    return cycle, -round(((i * 0.618 + r.random() * 0.08) % 1) * cycle, 2)
+
+
+def blink_css(i):
+    """blink(i) as the style that sets it, on a Pip's wrapper."""
+    cycle, delay = blink(i)
+    return f"--sv-b:{cycle}s;--sv-d:{delay}s"
 
 
 # 3.8.1 (Sam): by the logo Pip is a moment, not a fixture. It comes when
@@ -456,7 +470,7 @@ svg.sv { overflow: visible; display: block; flex: none; }
 .sv .cl-wl { transform-origin: 100% 40%; }
 .sv .cl-wr { transform-origin: 0% 40%; }
 @media (prefers-reduced-motion: no-preference) {
-  .sv .sv-eyes { animation: sv-blink 4.6s var(--sv-d, 0s) infinite; }
+  .sv .sv-eyes { animation: sv-blink var(--sv-b, 4.6s) var(--sv-d, 0s) infinite; }
   @keyframes sv-blink { 0%, 90%, 100% { transform: scaleY(1); } 93% { transform: scaleY(.12); } 96% { transform: scaleY(1); } }
   /* napping: nothing studied yet today */
   .sv.m-nap .sv-body { animation: sv-breathe 3.2s ease-in-out infinite; }

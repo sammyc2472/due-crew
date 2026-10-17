@@ -308,14 +308,14 @@ def seats(ms, entries, my_pair, my_look=()):
     [{n: the name, its label (text, never markup), a: [light, dark], d: s,
     l: their look}]. A crewmate wears their accent (the add-on's colours
     for it; one it doesn't know, the default's), I wear mine, and each
-    started at its own moment (d, sev.started), so the blinks never line
-    up. Each has its own small thing to do now and then (m,
+    blinks on its own clock (b, d: sev.blink), so the blinks never line
+    up, nor go round in turn. Each has its own small thing to do now and then (m,
     sev.SEAT_MOVES), side by side never the same. 3.8.2: and each wears
     what they have on from the closet (l: names, never markup)."""
     from .closet import clean
     by = {e.get("user_id"): e for e in entries or []}
     return [{"n": "You" if you else name, "a": list(my_pair if you else _pair_of((by.get(uid) or {}).get("accent"))),
-             "d": _sev.started(i), "m": _sev.SEAT_MOVES[i % len(_sev.SEAT_MOVES)],
+             "b": _sev.blink(i)[0], "d": _sev.blink(i)[1], "m": _sev.SEAT_MOVES[i % len(_sev.SEAT_MOVES)],
              "l": clean(my_look if you else (by.get(uid) or {}).get("look"))}
             for i, (uid, name, you) in enumerate(ms)]
 
@@ -610,6 +610,7 @@ _RUNTIME = r"""
       var w = sev(s.k && D.sev[s.k] ? s.k : s.m && s.m !== 'idle' && D.sev['idle.' + s.m] ? 'idle.' + s.m : 'idle', size), v = w.firstChild;
       w.style.setProperty('--sv-a', n ? s.a[1] : s.a[0]);
       w.style.setProperty('--sv-d', s.d + 's');
+      if (s.b) { w.style.setProperty('--sv-b', s.b + 's'); }
       w.title = s.n;
       if (v && v.setAttribute) { v.setAttribute('aria-label', s.n); }
       f.appendChild(w);

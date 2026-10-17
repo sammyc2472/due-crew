@@ -2077,6 +2077,15 @@ every release that changes how something works.
   blink (`sev.started`, as a room's seats and the peek's Pips); the
   stamps (`stamp_pip`) and the squad line (`squad_pip`) pass it. The site's
   Pips don't move, so nothing there to match.
+- 3.9.0, Pips blink on their own clocks (Sam, 17 Oct: one after another
+  "still looks kinda creepy", random "anywhere it is"). Side by side, a
+  room's seats, the peek's Pips, a bingo square's stamps and a plan
+  card's squad line used to share one cycle, each a fixed step behind the
+  last, so they went round in turn. Now each has its own cycle (3.4 to
+  6.4 s) and its own place in it (`sev.blink`, `--sv-b` and `--sv-d` on
+  the wrapper; the blink reads both), spread so none start together, and
+  they drift past each other, no order lasting. From the Pip's place in
+  its group, so a redraw draws the same and nothing moves for it.
 - 3.9.0, asks and tips (Sam's picks on the mock "Asks and tips", 17 Oct:
   A with W1, Folded until you open it, nothing new for a helped tip; and
   his note, "find a way to integrate the tipper's pip in the tip").
