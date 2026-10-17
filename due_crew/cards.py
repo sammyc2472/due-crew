@@ -226,6 +226,7 @@ def names_by_uid():
 
 CHIP_PIP = 24  # 3.8.22: a crewmate's Pip on the review screen's chip, its slot the chip's line
 PEEK_PIP = 76  # 3.9.0: who knows it, peeking up from the bottom of the card
+PEEK_MAX = 3  # 3.9.0 (Sam's "2D"): up to three who know it, side by side
 
 
 def pips_by_uid(c=None):
@@ -287,10 +288,12 @@ def chip_view(info, local_tips, names, asks=(), mine=False, pips=None):
     `short` is what the bar says when the words don't fit beside Edit.
     pips (3.8.22, pips_by_uid): who asked, or knows it, leads with their Pip
     in place of their emoji. 3.9.0 (Sam's pick, "Open calls" C): who knows
-    it also has `peek`, what the corner says: their Pip's words with a Pip
-    ("I know this one", Ask Dre; on_answer adds its drawing), and with Pip
-    off the same bubble without it (Sam: "always this version, just without
-    the pip"): "Dre knows this", Ask."""
+    it also has `peek`, what the corner says (Sam's "2D": no lightbulb, up to
+    three Pips side by side): one knower's Pip speaks for them ("I know this
+    one", Ask Dre), more say who ("Dre, Mo and Jo know this", "... and 2
+    more"), Ask; `uids`, whose Pips (on_answer draws them). With Pip off the
+    same bubble without them (Sam: "always this version, just without the
+    pip")."""
     pips = pips or {}
 
     def who_of(uid):
@@ -332,7 +335,12 @@ def chip_view(info, local_tips, names, asks=(), mine=False, pips=None):
                 "cmd": "knowsask", "act": "Asked" if mine else "Ask"}
         # one knower's Pip speaks for them; more, or no Pip, the words say who (Ask still reaches everyone with the card)
         speaks = knows[0] in pips and more <= 0
-        view["peek"] = {"uid": knows[0], "head": "I know this one" if speaks else view["text"],
+        firsts = [names[u][0].split(" ")[0] for u in knows[:PEEK_MAX]]
+        rest = len(knows) - len(firsts)
+        said = (firsts[0] if len(firsts) == 1 and not rest else ", ".join(firsts[:-1]) + " and " + firsts[-1] if not rest
+                else ", ".join(firsts) + f" and {rest} more")
+        view["peek"] = {"uids": [u for u in knows[:PEEK_MAX] if u in pips],
+                        "head": "I know this one" if speaks else f"{said} know{'s' if len(knows) == 1 else ''} this",
                         "act": "Asked" if mine else (f"Ask {who}" if speaks else "Ask")}
         return with_pip(view, knows[0])
     return None
@@ -417,9 +425,9 @@ _FLOAT_JS = """(function () {
   var acc = night ? D.accent[1] : D.accent[0];
   var c = night ? {bg: '#2c2c2c', ink: '#e8e8e8', mut: '#9c9c9c', line: '#3d403b'} : {bg: '#ffffff', ink: '#222222', mut: '#777777', line: '#e2e2da'};
   function el(tag, css, text) { var e = document.createElement(tag); e.style.cssText = css; if (text != null) { e.textContent = text; } return e; }
-  // 3.9.0 (Sam's pick, "Open calls" C): who knows it, their Pip peeking up from the bottom with a lightbulb;
-  // with Pip off the same bubble in the same place, without the Pip (Sam: "always this version")
-  var peek = D.peek || null, withPip = !!(peek && peek.svg && D.pip);
+  // 3.9.0 (Sam's picks, "Open calls" C, then "2D"): who knows it, their Pips peeking up from the bottom,
+  // side by side (three at most), no light bulb drawn; with Pip off the same bubble in the same place, without them
+  var peek = D.peek || null, withPip = !!(peek && peek.pips && peek.pips.length);
   var font = 'font:12.5px/1.35 -apple-system,Segoe UI,sans-serif;text-align:left;';
   var card = 'border:1px solid ' + c.line + ';background:' + c.bg + ';color:' + c.ink + ';box-shadow:0 6px 18px rgba(0,0,0,.22);';
   var box = peek ? el('div', 'position:fixed;right:16px;bottom:' + (withPip ? '0' : '14px') + ';display:flex;align-items:flex-end;gap:8px;z-index:60;' + font)
@@ -443,7 +451,7 @@ _FLOAT_JS = """(function () {
   if (D.act) { link(peek ? peek.act : D.act, acc, true, function () { send(D.actcmd || D.cmd); }); }
   if (D.more) { link('+' + D.more + ' more', c.mut, false, function () { send('knowstip'); }); }
   link('Not now', c.mut, false, function () { off(true); });
-  var fig = null, bub = null, bulb = null;
+  var fig = null, bub = null;
   if (peek) {
     bub = el('div', 'margin-bottom:' + (withPip ? '26px' : '0') + ';max-width:220px;display:grid;gap:4px;padding:8px 11px;' +
       'border-radius:' + (withPip ? '12px 12px 4px 12px' : '12px') + ';transform-origin:100% 100%;' + card);
@@ -451,26 +459,20 @@ _FLOAT_JS = """(function () {
     box.appendChild(bub);
   }
   if (withPip) {
-    fig = el('span', 'position:relative;display:inline-flex;line-height:0;');
+    fig = el('span', 'position:relative;display:inline-flex;align-items:flex-end;gap:2px;line-height:0;');
     fig.setAttribute('data-fig', '1');
-    bulb = el('span', 'position:absolute;left:50%;top:-18px;margin-left:-11px;line-height:0;');
-    bulb.innerHTML = '<svg width="22" height="26" viewBox="-6 -6 32 38" aria-hidden="true"><g stroke="' + (night ? '#e0a458' : '#a35f00') +
-      '" stroke-width="1.6" stroke-linecap="round" fill="none" opacity=".7"><path d="M10 -4.5v3M-3 2.5l2.2 2M23 2.5l-2.2 2M-4.5 11h3M24.5 11h-3"/></g>' +
-      '<path d="M10 1a8 8 0 0 0-4.6 14.5c.9.7 1.4 1.6 1.4 2.6V19h6.4v-.9c0-1 .5-1.9 1.4-2.6A8 8 0 0 0 10 1z" fill="#ffd34d" stroke="' +
-      (night ? '#e0a458' : '#a35f00') + '" stroke-width="1.3"/><rect x="6.8" y="19.6" width="6.4" height="2.6" rx="1.1" fill="#8a8f86"/>' +
-      '<rect x="7.8" y="22.8" width="4.4" height="2.2" rx="1.1" fill="#8a8f86"/></svg>';
-    fig.appendChild(bulb);
-    pip(fig, {pip: {svg: peek.svg, a: D.pip.a}, sevcss: D.sevcss}, night, '');
+    for (var i = peek.pips.length - 1; i >= 0; i--) {  // the first who knows it nearest the corner
+      pip(fig, {pip: peek.pips[i], sevcss: D.sevcss}, night, '');
+    }
     box.appendChild(fig);
   } else if (!peek) {
     box.appendChild(head); box.appendChild(acts);
   }
   __PIP__
   document.body.appendChild(box);
-  if (peek && !still && bub.animate) {  // up it pops, then the bubble, then the bulb glows twice; nothing with Reduce motion
+  if (peek && !still && bub.animate) {  // up they pop, then the bubble; nothing with Reduce motion
     if (fig) { fig.animate([{transform: 'translateY(105%)'}, {transform: 'none'}], {duration: 700, easing: 'cubic-bezier(.2,.9,.3,1.25)'}); }
     bub.animate([{opacity: 0, transform: 'scale(.85)'}, {opacity: 1, transform: 'none'}], {duration: 350, delay: fig ? 550 : 0, easing: 'ease-out', fill: 'backwards'});
-    if (bulb) { bulb.animate([{filter: 'none'}, {filter: 'drop-shadow(0 0 5px #ffd34d)'}, {filter: 'none'}], {duration: 1600, delay: 700, iterations: 2}); }
   }
   function hit(r, b) { return r.width > 0 && r.height > 0 && r.left < b.right + 8 && r.right > b.left - 8 && r.top < b.bottom + 8 && r.bottom > b.top - 8; }
   function free() {
@@ -611,14 +613,15 @@ def on_answer(card):
         if info is None and guid in (sess.get("cards_due") or {}) and sess.get("due_day") == log_today(mw.col) \
                 and stuck_now(mw.col, card, mw.col.sched.day_cutoff):
             info = sess["cards_due"][guid]  # 3.9.0: missed today for the first time, known since the morning
-        view = chip_view(info, local_tips(guid), names_by_uid(), asks, mine, pips_by_uid())
+        pips = pips_by_uid()
+        view = chip_view(info, local_tips(guid), names_by_uid(), asks, mine, pips)
         if view is None or view.get("kind") == "knows":
             view = remark_view(client().session.get("plans"), guid, card.ord) or view  # 3.8.1
         if view and view.get("peek"):
             peek = dict(view["peek"])
-            uid = peek.pop("uid", None)
-            if view.get("pip"):
-                peek["svg"] = peek_pip(uid)  # no Pip (Pip off, or theirs unknown): the bubble alone
+            # each Pip waving, in their look and colour; none (Pip off): the bubble alone
+            drawn = [{"svg": peek_pip(u), "a": pips[u]["a"]} for u in peek.pop("uids", None) or [] if u in pips]
+            peek["pips"] = [p for p in drawn if p["svg"]]
             view["peek"] = peek
     except Exception:
         view = None

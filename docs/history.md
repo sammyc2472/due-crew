@@ -2056,4 +2056,13 @@ every release that changes how something works.
   version, it would just be without the pip"). Who knows it is the same
   bubble in the same corner with Pip off, saying who ("Dre knows this",
   Ask, Not now), always shown like the peek; it fades in and out.
+- 3.9.0, the peek, 2D (Sam, 16 Oct, from the sheet: no lightbulb; up to
+  three Pips). Who knows it peeks up with no lightbulb over their head,
+  and when more than one crewmate knows the card their Pips stand side by
+  side, three at most, the first nearest the corner; the words name them
+  ("Adina and Mo know this", "Adina, Mo and Jo know this", "Adina, Mo, Jo
+  and 1 more know this"; one alone still says "I know this one", Ask
+  Adina). `cards.chip_view`'s peek carries `uids` (`PEEK_MAX` 3);
+  `on_answer` draws each Pip in their look and colour (`peek.pips`). Ask
+  still reaches everyone who has the card.
 

@@ -2221,8 +2221,8 @@ def test_together_v210():
     fj = crew_cards.float_js(dict(chip, accent=["#0a0", "#7c7"]))
     check("ask card: above the bar only while the corner is free, else back to the bar",
           "dc-knows-card" in fj and "knowsbar" in fj and "free()" in fj and "Not now" in fj
-          and rm.CMD_KEY in fj and "textContent" in fj and fj.count("innerHTML") == 2 and "p.innerHTML = D.pip.svg" in fj
-          and "bulb.innerHTML = '<svg" in fj  # 3.9.0: the peek's lightbulb, our own constant drawing
+          and rm.CMD_KEY in fj and "textContent" in fj and fj.count("innerHTML") == 1 and "p.innerHTML = D.pip.svg" in fj
+          and "bulb.innerHTML" not in fj  # 3.9.0, Sam's "2D": no lightbulb
           and "dc-knows-card" in crew_cards.float_js(None) and "return false" in crew_cards.float_js(None))
     import aqt.utils as _au
     calls, asked = [], []
@@ -5578,10 +5578,17 @@ def test_knows_peek_v390():
     two = K.chip_view({"knows": ["dre", "mo"], "tips": []}, [], names, pips=pips)
     mine = K.chip_view({"knows": ["dre"], "tips": []}, [], names, mine=True, pips=pips)
     plain = K.chip_view({"knows": ["dre"], "tips": []}, [], names)
+    names4 = dict(names, jo=("Jo", ""), al=("Al", ""))
+    three = K.chip_view({"knows": ["dre", "mo", "jo"], "tips": []}, [], names4, pips=dict(pips, jo=pips["mo"], al=pips["mo"]))
+    four = K.chip_view({"knows": ["dre", "mo", "jo", "al"], "tips": []}, [], names4, pips=dict(pips, jo=pips["mo"], al=pips["mo"]))
+    check("peek (Sam's 2D): up to three Pips, the words name them; more than three, the rest counted",
+          three["peek"]["uids"] == ["dre", "mo", "jo"] and three["peek"]["head"] == "Dre, Mo and Jo know this"
+          and four["peek"]["uids"] == ["dre", "mo", "jo"] and four["peek"]["head"] == "Dre, Mo, Jo and 1 more know this"
+          and four["peek"]["act"] == "Ask", (three["peek"], four["peek"]))
     check("peek: one who knows it speaks for themselves; more, the words say who; asked, it says so; no Pip, the same bubble saying who (Sam: always this version)",
-          one["peek"] == {"uid": "dre", "head": "I know this one", "act": "Ask Dre"}
-          and two["peek"]["head"] == "Dre and 1 more know this" and two["peek"]["act"] == "Ask"
-          and mine["peek"]["act"] == "Asked" and plain["peek"] == {"uid": "dre", "head": "Dre knows this", "act": "Ask"}
+          one["peek"] == {"uids": ["dre"], "head": "I know this one", "act": "Ask Dre"}
+          and two["peek"] == {"uids": ["dre", "mo"], "head": "Dre and Mo know this", "act": "Ask"}
+          and mine["peek"]["act"] == "Asked" and plain["peek"] == {"uids": [], "head": "Dre knows this", "act": "Ask"}
           and one["text"] == "Dre knows this" and one["act"] == "Ask", (one.get("peek"), two.get("peek")))
     tip = K.chip_view({"knows": ["dre"], "tips": [{"from": "dre", "text": "think loops"}]}, [], names, pips=pips)
     check("peek: a tip or an ask keeps its card", "peek" not in tip
@@ -5610,14 +5617,16 @@ def test_knows_peek_v390():
         _state.clear()
         _state.update(saved2[5])
     check("peek, Pip off: the same bubble in the same place, without the Pip (Sam: \"always this version, just without the pip\")",
-          shown2[0]["peek"] == {"head": "Dre <b>Ng knows this".split(" ")[0] + " knows this", "act": "Ask"} and "svg" not in shown2[0]["peek"]
+          shown2[0]["peek"] == {"head": "Dre knows this", "act": "Ask", "pips": []}
           and "pip" not in shown2[0], shown2[0].get("peek"))
     check("peek: on the review screen, their Pip waving in their look (sev.py's own markup, the name only its label, escaped)",
-          v["kind"] == "knows" and set(v["peek"]) == {"head", "act", "svg"} and "m-peek" in v["peek"]["svg"]
-          and "Dre &lt;b&gt;Ng’s Pip" in v["peek"]["svg"] and "<b>" not in v["peek"]["svg"], v.get("peek"))
+          v["kind"] == "knows" and set(v["peek"]) == {"head", "act", "pips"} and len(v["peek"]["pips"]) == 1
+          and "m-peek" in v["peek"]["pips"][0]["svg"] and v["peek"]["pips"][0]["a"] == list(board.accent_pair("blue"))
+          and "Dre &lt;b&gt;Ng’s Pip" in v["peek"]["pips"][0]["svg"] and "<b>" not in v["peek"]["pips"][0]["svg"], v.get("peek"))
     js = K.float_js(v)
     check("peek: drawn in the corner's place, up from the bottom; the words as text; it ducks back down; still with Reduce motion",
-          "var peek = D.peek || null, withPip = !!(peek && peek.svg && D.pip)" in js and "if (withPip) {" in js
+          "var peek = D.peek || null, withPip = !!(peek && peek.pips && peek.pips.length)" in js and "if (withPip) {" in js
+          and "for (var i = peek.pips.length - 1; i >= 0; i--)" in js and "bulb.innerHTML" not in js
           and "translateY(105%)" in js and "head = el('div'" in js
           and "peek ? peek.head : D.text" in js and "prefers-reduced-motion: reduce" in js and "if (peek && !still" in js
           and "window.dcKnowsOff(!D)" in js and "off(true)" in js and "knowsbar" in js)
