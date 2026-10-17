@@ -287,17 +287,23 @@ def check(path):
     ok("…read in one pass of the recent answers", t_full < 60 and t_light < 20,
        f"{t_full*1000:.0f} ms a full sync, {t_light*1000:.0f} ms a light one")
 
-    # 3.8.2: Pip's closet reads the revlog's days and hours in one grouped query
-    # a day (today's own hours each time), and the cards learned and leeches
+    # 3.8.2: Pip's closet reads the revlog's days and hours by the hour, and the
+    # cards learned and leeches. 3.9.1: the days before the last week are kept
+    # (closet_days.json), so only the first read is whole; a relaunch reads the file
     from due_crew import closet_flow as CF
-    CF._RF["key"] = None
+    closet_files = tempfile.mkdtemp()
+    CF._profile_files = lambda: closet_files
+    CF._RF.update(key=None, hist=None)
     t = tm(); facts = CF.revlog_facts(col); t_day = tm() - t
     t = tm(); again = CF.revlog_facts(col); t_again = tm() - t
+    CF._RF.update(key=None, hist=None)
+    t = tm(); relaunch = CF.revlog_facts(col); t_relaunch = tm() - t
     answers = col.db.scalar("SELECT COUNT(*) FROM revlog WHERE ease > 0 AND id < ?", cut * 1000)
-    ok("Pip's closet: every answer counted, its days and runs, the first read of the day and each one after, quick",
-       facts["reviews"] == answers and again == facts and facts["days"] > 300 and facts["run"] >= 1
-       and facts["learned"] >= 12000 and t_day < 2.5 and t_again < 0.2,
-       f"{answers:,} answers, {facts['days']} days, {t_day*1000:.0f} ms the day's first, {t_again*1000:.0f} ms after")
+    ok("Pip's closet: every answer counted, its days and runs, the first read whole and each one after, a relaunch, quick",
+       facts["reviews"] == answers and again == facts == relaunch and facts["days"] > 300 and facts["run"] >= 1
+       and facts["learned"] >= 12000 and t_day < 2.5 and t_again < 0.05 and t_relaunch < 0.1,
+       f"{answers:,} answers, {facts['days']} days, {t_day*1000:.0f} ms the first, {t_again*1000:.0f} ms after, "
+       f"{t_relaunch*1000:.0f} ms a relaunch")
 
     # 3.7.3: Insights, worked out on the main thread when the tab opens, and
     # the team's days on every sync, over the same 400,000 answers

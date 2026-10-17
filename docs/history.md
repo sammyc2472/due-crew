@@ -2331,6 +2331,47 @@ every release that changes how something works.
   and the config is read from disk once and again only after a save
   (`app.cfg`; Anki read config.json and meta.json at every call, a few
   times a card). A usual card now sends nothing.
+- 3.9.1, the efficiency run, history scans (the same ask). Measured on
+  Anki's own engine (26.9.3) with a big collection (35,000 notes, 1.1
+  million reviews over four years, a 1,459-day streak): four reads of the
+  whole history are gone or cut, each held to the old answer by a test
+  that keeps the old code. Pip's closet read the whole revlog by the hour
+  at every launch's first refresh (350 to 680 ms on the main thread, while
+  Anki's own sync ran) and walked all 35,000 hours in Python at every
+  refresh (62 ms); kept in memory by the day alone, a second profile
+  opened that day got the first one's. Now `closet_days.json` (per
+  profile, never sent; `closet_flow._history`) keeps the days before the
+  last week as the closet counts them (the days, the mornings' and
+  evenings' dates, `closet.hour_sets`, the year turning, the answers), a
+  day going in as it settles. Two counts check it at each refresh (the
+  revlog's rows less those since its edge, half a millisecond); it's read
+  whole again when they move (a sync brought older answers in) or its
+  hours stop lining up with today's (rollover, time zone, DST). The last
+  week is read fresh, so a phone's week counts the moment it syncs (until
+  now, the next day). A launch is 19 ms, a refresh 8, a new day's first 20;
+  the first launch on 3.9.1 reads it all once (`test_closet_history_v391`,
+  against 3.8.2's whole read). The streak: the day after a day studied
+  here, yesterday's run with the day before it still empty is the base,
+  since the scan can't find more; a long streak's four widening scans (233
+  to 373 ms on the day's first push) are gone (0.6 ms;
+  `test_streak_shortcut_v391`, against 2.11.1's base). The history
+  import's new cards (`new_cards_by_day`): over a year every answer looked
+  for an earlier one, about 600 of the year's 700 to 770 ms. A window
+  longer than a month now reads each card's first answer once, off
+  revlog's card index (140 to 160 ms, the year 250 to 275, the first log's
+  120 days 207 to 124); a short one keeps 2.13's form, the quicker there.
+  Counting only learns (`type = 0`) was quicker still, but a card imported
+  with its schedule, set due first or previewed in a filtered deck is new
+  on an answer that isn't a learn; the count is 2.13's in every window
+  (`test_new_cards_first_answer_v391`, and every window of the big
+  collection with 3,000 such cards added). Closing: Anki's own sync as it
+  closes ran the full gather (770 to 1,010 ms, 1.2 s with a plan, a year of
+  the history import among it) before Anki could quit, for an upload on a
+  thread that quitting may cut short. It's light now, today's numbers as
+  the pushes on open send (2 ms; with a plan, its progress, 320), and
+  nothing when the collection's mod, my day and my config are as the last
+  push that went had them (`_on_anki_sync`, `test_close_sync_light_v391`).
+  Leaving a room still goes: rooms.on_close pushes it itself.
 - 3.9.1, "other" opens the computer's own emoji picker (Sam: "the emoji
   drawer is missing tons that are natively supported. want the other
   option to just open the native drawer?"). A page can't; Python can ask
