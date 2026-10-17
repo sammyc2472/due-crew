@@ -2306,6 +2306,13 @@ every release that changes how something works.
   they were published with. Nothing changes for anyone using Due Crew.
   The notice is in the part of the README that is the AnkiWeb listing:
   re-paste it there.
+- 3.9.1, the sound picker folds back by itself (Sam: "the sounds chip
+  should close after a second or two because now just stays open"): 1.5 s
+  after a pick, 2 s after the volume last moved, 1 s after the pointer
+  leaves the chip, 4 s after it opens if nothing's touched; moving in it
+  keeps it out, and never while the volume is held mid-drag
+  (`room_model`'s chip, `later`). Esc and a click elsewhere still close it
+  at once.
 - 3.9.1, room sounds, recorded (Sam, 17 Oct: "the background noises
   aren't the best. are there any open source sounds we can use with
   attribution instead?", then "keep the brown noise"). Rain, fire and

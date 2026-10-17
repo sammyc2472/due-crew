@@ -688,8 +688,8 @@ _RUNTIME = r"""
       });
       var vol = el('input', 'width:64px;margin:0 2px 0 5px;accent-color:' + c.a + ';cursor:pointer;');
       vol.type = 'range'; vol.min = '0'; vol.max = '100'; vol.value = String(snd.vol); vol.setAttribute('aria-label', 'Volume');
-      vol.oninput = function () { snd.vol = +vol.value; if (window.dcRoomSound) { window.dcRoomSound.volume(snd.vol / 100); } };
-      vol.onchange = function () { send('roomsound:' + snd.kind + ':' + snd.vol); };
+      vol.oninput = function () { snd.vol = +vol.value; if (window.dcRoomSound) { window.dcRoomSound.volume(snd.vol / 100); } later(2000); };
+      vol.onchange = function () { send('roomsound:' + snd.kind + ':' + snd.vol); later(2000); };
       pk.appendChild(vol);
       pk.onclick = pk.onmousedown = function (ev) { ev.stopPropagation(); };
       var svgEl = function (tag, at) {
@@ -714,14 +714,31 @@ _RUNTIME = r"""
         vol.style.display = on ? '' : 'none';
       };
       var choose = function (k) {
-        snd.kind = k; paint();
+        snd.kind = k; paint(); picked = true; later(1500);
         if (window.dcRoomSound) { window.dcRoomSound.pick(k, snd.vol / 100); }
         send('roomsound:' + k + ':' + snd.vol);
       };
+      // 3.9.1 (Sam: "should close after a second or two"): the picker folds back into the chip
+      // by itself: 1.5 s after a pick, 2 s after the volume moves, 1 s after the pointer leaves,
+      // 4 s after it opens if nothing's touched; moving in it keeps it out (never mid-drag)
+      var timer = null, picked = false;
+      var later = function (ms) {
+        clearTimeout(timer);
+        timer = setTimeout(function () {
+          if (!open) { return; }
+          if (vol.matches(':active')) { later(800); return; }
+          show(false);
+        }, ms);
+      };
+      root.addEventListener('mousemove', function () { if (open) { later(picked ? 1500 : 4000); } });
+      root.addEventListener('mouseleave', function () { if (open) { later(1000); } });
+      root.addEventListener('keydown', function () { if (open) { later(picked ? 1500 : 4000); } });
       var away = function (ev) { if (!root.isConnected || !root.contains(ev.target)) { show(false); } };
       var esc = function (ev) { if (ev.key === 'Escape') { show(false); } };
       var show = function (on) {
         open = on;
+        clearTimeout(timer);
+        if (on) { picked = false; later(4000); }
         pk.style.display = on ? 'inline-flex' : 'none';
         // the picker has the chip to itself while it's out
         tx.style.display = fc.style.display = on || D.compact ? 'none' : '';

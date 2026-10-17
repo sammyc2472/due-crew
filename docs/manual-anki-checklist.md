@@ -683,6 +683,7 @@ In Anki (as a follower):
 
 ### 3.9.1: room sounds
 
+- [ ] The picker closes by itself: pick Rain and leave the pointer still: the chip is back in a second and a half. Drag the volume and hold it: it stays; let go: back in two seconds. Open it and move away: back in a second. Open it and do nothing: back in four.
 - [ ] The recordings: Rain is real rain, Fire a real fireplace (soft pops), Waves a real shore, each a minute or so that loops; listen for two minutes each: no click or jump where it comes round, no voices, birds or hum. Brown noise is the made one, as before. All four sound about as loud at one volume.
 
 - [ ] Start a fifteen: its chip in the top bar ends in a grey speaker (struck through). Click it: the chip becomes Off · Brown noise · Rain · Fire · Waves; Off is filled. Esc, or a click anywhere else, puts the chip back; a click on the chip (not the speaker) still opens its card.

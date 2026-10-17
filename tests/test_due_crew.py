@@ -14897,6 +14897,10 @@ def test_room_sounds_v391():
           d["sound"] == {"kind": "rain", "vol": 40} and d["soundKinds"] == list(rm.SOUNDS)
           and d["soundLabels"]["brown"] == "Brown noise" and "'Room sound'" in chip and "roomsound:" in chip
           and rm.widget_data(fif, [], ("#2e7d32", "#7cc47f"))["sound"] is None)
+    check("sounds: the picker folds back by itself (Sam: \"should close after a second or two\"): 1.5 s after a pick, "
+          "2 s after the volume, 1 s after the pointer leaves, 4 s if nothing's touched; never mid-drag",
+          "picked = true; later(1500);" in chip and "later(2000)" in chip and "if (open) { later(1000); }" in chip
+          and "if (on) { picked = false; later(4000); }" in chip and "if (vol.matches(':active')) { later(800); return; }" in chip)
     node = shutil.which("node")
     if node:
         src = open(os.path.join(REPO, "due_crew", "sounds.js")).read()
