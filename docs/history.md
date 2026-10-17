@@ -2295,9 +2295,17 @@ every release that changes how something works.
 - 3.9.1, the README's License section says the name, the Seven days logo
   and Pip (its name and look) are trademarks, not part of either licence
   (Sam, 17 Oct, after a look at how another open-source app words it:
-  "just the notice"). The code's licences are unchanged; the logo files
-  and Pip's drawing stay under the add-on's MIT. It's in the part of the
-  README that is the AnkiWeb listing: re-paste it there.
+  "just the notice", then "nah do both"). And from that day the logo's
+  and Pip's artwork leaves the open licences, as `worker/` and `site/`
+  left MIT on 29 Sep: `docs/logo/`, `docs/images/`, `due_crew/logo.py`,
+  `sev.py`, `closet_art.py`, and their copies in `site/` (logo and icon
+  files, the board pictures, `sev.js`, the Pip in `cards.js`, the logo in
+  `og_assets.ts`) are all rights reserved, to be copied and run only as
+  part of Due Crew (the root LICENSE lists them; `site/LICENSE.md` and
+  `worker/LICENSE.md` point there). Copies taken before stay under what
+  they were published with. Nothing changes for anyone using Due Crew.
+  The notice is in the part of the README that is the AnkiWeb listing:
+  re-paste it there.
 - 3.9.1, room sounds (Sam's picks from the Room Sounds page, 17 Oct: a
   speaker on the chip; in a crew room each person picks their own; off
   till you pick, the last pick remembered on this computer; made from

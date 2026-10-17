@@ -18,7 +18,12 @@ add-on.
   backend (Firebase) is gone since 3.8.0.
   `worker/` and `site/` are PolyForm Shield 1.0.0 (their LICENSE.md) since
   29 Sep 2026: readable and runnable, not for a competing service. The
-  add-on, tests and tools stay MIT (root LICENSE).
+  add-on, tests and tools stay MIT (root LICENSE), but for the logo's and
+  Pip's artwork (`docs/logo/`, `docs/images/`, `logo.py`, `sev.py`,
+  `closet_art.py` and their copies in `site/`), all rights reserved since
+  17 Oct 2026; the name, logo and Pip are trademarks (README's "Name, logo
+  and Pip"). A new file that draws Pip or the logo joins that list in the
+  root LICENSE.
 - `site/` — duecrew.com: the landing page, and the app (`public/app.*`,
   plain JS, no framework: sign-in, plans, the builder). Its Worker
   (`site/src/index.ts`) sends `/api/*` to the API by service binding, so

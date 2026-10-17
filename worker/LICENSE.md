@@ -3,7 +3,9 @@ Required Notice: Copyright (c) 2026 Sammy Caplan (https://duecrew.com)
 This folder (`worker/`) is under the PolyForm Shield License 1.0.0 below, from
 29 September 2026 on. Copies taken before then stay under the MIT License
 they were published with. The rest of this repository, the Anki add-on
-included, is MIT (see LICENSE at the root).
+included, is MIT (see LICENSE at the root), but for Due Crew's logo and
+Pip, which are all rights reserved from 17 October 2026 (the root LICENSE
+lists them). No license here covers the name, logo or Pip as trademarks.
 
 ---
 

@@ -1,3 +1,4 @@
+# Due Crew's logo and Pip: Copyright (c) 2026 Sammy Caplan, all rights reserved (see LICENSE).
 """Pip, the square from the logo's seven days (3.8.1, the "Pip Design" page:
 Block, Sam's picks: no belt, big round eyes, stubby arms, cheeks only when
 a cheer lands). Pure: no aqt.

@@ -1,7 +1,22 @@
-This MIT License covers this repository except `worker/` and `site/`
-(the Due Crew server and duecrew.com), which from 29 September 2026 are
-under the PolyForm Shield License 1.0.0: see the LICENSE.md in each.
-Copies of those folders taken before then stay under this MIT License.
+This MIT License covers this repository except:
+
+- `worker/` and `site/` (the Due Crew server and duecrew.com), which from
+  29 September 2026 are under the PolyForm Shield License 1.0.0: see the
+  LICENSE.md in each. Copies of those folders taken before then stay
+  under this MIT License.
+- Due Crew's logo and Pip, from 17 October 2026: `docs/logo/`,
+  `docs/images/`, `due_crew/logo.py`, `due_crew/sev.py` and
+  `due_crew/closet_art.py`, and their copies elsewhere in this repository
+  (in `site/`: `public/logo*.svg`, `public/icon.*`, `public/board*.png`,
+  `public/sev.js`, the Pip in `public/cards.js` and the logo in
+  `src/og_assets.ts`). These are Copyright (c) 2026 Sammy Caplan, all
+  rights reserved: you may copy and run them only as part of Due Crew
+  itself; anything else needs written permission. Copies taken before
+  that date stay under the license they were published with.
+
+"Due Crew", the Seven days logo and Pip (its name and how it looks) are
+trademarks of Sammy Caplan and no license here covers them: see "Name,
+logo and Pip" in README.md.
 
 MIT License
 
