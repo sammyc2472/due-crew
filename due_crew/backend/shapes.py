@@ -299,11 +299,12 @@ def clean_notice(value):
 
 def clean_cards(value):
     """3.2: what a sync says about the cards I'm stuck on: {guid: {knows:
-    [uid], tips: [{from, text, at, helped}]}}."""
+    [uid], tips: [{from, text, at, helped}]}}. 3.9.0: and the cards due
+    today (300 stuck and 1,000 due at most)."""
     out = {}
     if not isinstance(value, dict):
         return out
-    for guid, v in list(value.items())[:300]:
+    for guid, v in list(value.items())[:1300]:
         if not isinstance(guid, str) or not guid or len(guid) > GUID_MAX or not isinstance(v, dict):
             continue
         knows = [str(u)[:128] for u in v.get("knows") or [] if isinstance(u, str) and u][:5]
@@ -852,7 +853,8 @@ def _when(v):
 
 def clean_teams(v):
     """The board's counts for the teams I'm on: {plan id: {shown, of,
-    streak, faces, act, last}}."""
+    streak, faces, act, last}}; 3.8.22: who, the faces' uids, one for one
+    ("" where it isn't one)."""
     out = {}
     for pid, t in (v.items() if isinstance(v, dict) else []):
         if not _PLAN_ID.fullmatch(str(pid)) or not isinstance(t, dict):
@@ -860,6 +862,7 @@ def clean_teams(v):
         last = t.get("last") if isinstance(t.get("last"), dict) else None
         out[pid] = {"shown": _nat(t.get("shown")), "of": _nat(t.get("of")),
                     "faces": [clean_emoji(e) for e in (t.get("faces") or [])[:4] if isinstance(e, str)],
+                    "who": [u if isinstance(u, str) and _UID.fullmatch(u) else "" for u in (t.get("who") or [])[:4]],
                     "act": sorted((_when(a) for a in (t.get("act") or [])[:20]), reverse=True),
                     "last": {"name": clean_note(last.get("name"), 60) or "?",
                              "text": clean_note(last.get("text"), TEAM_TEXT_MAX)} if last else None}

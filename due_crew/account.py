@@ -30,12 +30,13 @@ ACCOUNT_KEYS = ("share_reviews", "share_time", "share_retention", "share_streak"
                 "status", "emoji", "squads", "crew_label", "shared_decks", "muted",
                 "accent",  # 3.5.0: the site wears it too
                 "due_items", "due_ticks", "due_show", "due_suggest",  # Due: my own to-dos, on every computer
-                "sev_look", "sev_closet")  # 3.8.2: Pip's closet: what it has on, what it's earned
+                "sev_look", "sev_closet",  # 3.8.2: Pip's closet: what it has on, what it's earned
+                "wrapped_seen")  # 3.9.0: the year whose Wrapped line was put away, on every computer
 ACCENT_NAMES = ("green", "blue", "purple", "teal", "amber", "rose")
 _BOOLS = ("share_reviews", "share_time", "share_retention", "share_streak",
           "share_heatmap", "show_up", "paused", "due_show", "due_suggest")
 _TEXT = {"exam_date": 10, "away_from": 10, "away_to": 10, "status": 80, "emoji": 16,
-         "crew_label": 40}
+         "crew_label": 40, "wrapped_seen": 4}
 MAX_SQUADS = 20
 SEEN_KEY = "account_seen"  # 3.6: in the config: the account save this config holds
 MAX_DECKS = 200

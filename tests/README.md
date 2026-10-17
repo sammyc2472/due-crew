@@ -24,6 +24,21 @@ Neither layer replaces a click-test in a running Anki: see
 simulates Anki's night classes and, since v1.10, Anki 26's `.fancy table`
 glass fill — it is a stand-in for the webview, not the webview.
 
+## Motion (Chromium)
+
+`tools/motion_audit.js` plays every motion in `tools/motion_preview.html`
+with its frames held and stepped by hand, and counts the pixels that
+differ between each one's last frame and the page once it has cleaned up
+(a pill that ends square, a box that ends its padding too tall). It needs
+Playwright's Chromium; it isn't in CI:
+
+    python3 tools/motion_preview.py
+    NODE_PATH=$(npm root -g) node tools/motion_audit.js [key,key] [--out DIR]
+
+Over 500 pixels is a jump (a Pip's blink, a breathing chip or text drawn
+in its own layer while it moves make a few hundred at most); it exits 1
+and names them. `--out` keeps every frame.
+
 ## Dialogs (Qt)
 
 The suite above runs without Qt, so it cannot see the dialogs. Render every

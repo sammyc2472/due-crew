@@ -23,7 +23,7 @@ from datetime import date as _date, datetime, timezone
 
 from .logo import board_mark
 from . import room_model
-from . import closet as _closet, sev as _sev
+from . import closet as _closet, sev as _sev, shows as _shows
 from .stats.decks import sig_match
 
 LIGHT = {
@@ -601,7 +601,10 @@ def _css(cfg):
       border: 1px solid var(--dc-accent); border-radius: 10px; padding: 8px 12px;
       font-size: 12px; margin-bottom: 10px; }}
     #due-crew .dc-wrap .wc {{ margin-left: auto; color: var(--dc-accent);
-      text-decoration: none; font-weight: 700; font-size: 10.5px; }}
+      text-decoration: none; font-weight: 700; font-size: 10.5px; white-space: nowrap; }}
+    /* a banner's second action sits beside the first: two auto margins would split the free space between them */
+    #due-crew .dc-wrap .wc + .wc {{ margin-left: 4px; }}
+    #due-crew .dc-wrap.cl-earn {{ text-align: left; }}
     #due-crew .dc-wrap .wx {{ color: var(--dc-muted);
       text-decoration: none; font-weight: 700; }}
     #due-crew .dc-wrap.inv {{ text-align: left; }}
@@ -1384,6 +1387,9 @@ FIND_JS = r"""
 # 3.8.0: the board's motion, one file shared with duecrew.com (site/public/motion.js, byte for byte)
 with open(_os.path.join(_os.path.dirname(__file__), "motion.js"), encoding="utf-8") as _f:
     MOTION_JS = _f.read()
+# 3.9.0: how a cheer lands, a show over the whole Decks screen (shows.py picks which)
+with open(_os.path.join(_os.path.dirname(__file__), "show.js"), encoding="utf-8") as _f:
+    SHOW_JS = _f.read()
 
 
 def keep_me_in_view_js():
@@ -1555,20 +1561,20 @@ def _decks_html(data, deltas=None, tricky=None, plans=None, mine=None, sticking=
     return _decks_body(data, deltas, sticking, pick, _tricky_html(tricky, mine))
 
 
-def _plans_html(plans):
+def _plans_html(plans, people=None, cfg=None):
     """3.3: the plans, a card each; 3.5.0: with none, the ways in."""
     cards = (plans or {}).get("cards") or []
-    return "".join(_plan_card_html(card) for card in cards) if cards else _plans_empty_html()
+    return "".join(_plan_card_html(card, people, cfg) for card in cards) if cards else _plans_empty_html()
 
 
-def _you_plans(plans, opened=None):
+def _you_plans(plans, opened=None, people=None, cfg=None):
     """3.8.0, You › Plans: a plan offered to one of my squads, then each plan
     I follow; following none, the ways in. opened: this morning's line, here
     only when Due is off (it's under Today otherwise)."""
     if opened and not opened.get("dates") and (plans or {}).get("opened_dates"):
         opened = dict(opened, dates=plans["opened_dates"])  # 3.8.1: its dates, as Due's Today has them
     return (_opened_line(opened) + _invite_lines((plans or {}).get("invites"))
-            + _offer_banners((plans or {}).get("offers")) + _plans_html(plans))
+            + _offer_banners((plans or {}).get("offers")) + _plans_html(plans, people, cfg))
 
 
 def _invite_lines(invites):
@@ -1635,7 +1641,7 @@ def _plans_empty_html():
             f'</div></div>')
 
 
-def _plan_card_html(card):
+def _plan_card_html(card, people=None, cfg=None):
     """3.5.0, a plan I follow (You › Plans since 3.8.0): the plan, what it
     says about now (_plan_now), this week as the site's calendar draws it
     (a list when narrow), one note at most, and the crew. Today is the tab
@@ -1654,7 +1660,7 @@ def _plan_card_html(card):
     notes = _plan_notes(card, pid)
     if notes:
         out += notes[0]
-    crew = _squad_line(pid, tabs)
+    crew = _squad_line(pid, tabs, people, cfg)
     if not crew:
         # 3.8.0: not in its squad: the crew who follow it, and the way in
         crew = _crew_line(card)
@@ -1757,15 +1763,24 @@ def _own_html(ow, pid):
     return out + "</div>"
 
 
-def _squad_line(pid, tabs):
+def _squad_line(pid, tabs, people=None, cfg=None):
     """3.8.0, the Plan tab's line about the plan's squad: faces, how many
     showed up, and the way there (the newest question from someone else
-    when there is one). "" when I'm not in it."""
+    when there is one). "" when I'm not in it. 3.8.22 (Sam: "under squad we
+    haven't switched to pips"): who showed up are their Pips, as on the
+    Squads tab (squad_pip: mine and a crewmate's in colour and look, anyone
+    else plain), from the uids beside their emojis (who); Pip off, or a
+    server without them, the emojis. people: {uid: crew entry}, mine too."""
     e = _html.escape
     s = tabs.get("summary")
     if not s:
         return ""
-    faces = "".join(e(str(x)) for x in s.get("faces") or [])
+    emojis, who, people = s.get("faces") or [], s.get("who") or [], people or {}
+    pips = [squad_pip(u, (people.get(u) or {}).get("name") or "A squadmate", (people.get(u) or {}).get("you"),
+                      people, cfg, PCREW_PIP, k)
+            for k, u in enumerate(who[:len(emojis)])] if cfg is not None and len(who) >= len(emojis) else []
+    faces = (f'<span class="pips">{"".join(pips)}</span>' if pips and all(pips)
+             else "".join(e(str(x)) for x in emojis))
     n, of = int(s.get("shown") or 0), int(s.get("of") or 0)
     out = f'{faces} Squad: {n} of {of} showed up' if n else f'Squad: {of} in it'
     last, unread = s.get("last"), int(tabs.get("unread") or 0)
@@ -2866,12 +2881,16 @@ def bingo_card_html(bv):
 CELLS_BINGO = (0, 1, 2, 3, 5, 6, 7, 8)
 
 
-def bingo_html(bv, cfg, loading=False, team=False):
+def bingo_html(bv, cfg, loading=False, team=False, people=None):
     """The whole card, in the board's place (like Settings). Every string
     from the server is escaped here. A square's details show in the page
-    when it's clicked: no request."""
+    when it's clicked: no request. people (3.8.22): {uid: crew entry}, mine
+    too, so who stamped a square shows as their Pip (stamp_pip)."""
     e = _html.escape
-    head = (f'<div id="due-crew" class="dc-frame bg-full">{_css(cfg)}<style>{BINGO_CSS}</style>'
+    pips = cfg.get("sev", True)
+    sheet = (f'<style>{_sev.CSS}{BINGO_PIP_CSS}{_by_theme(cfg, "#due-crew .dc-rsev", "--sv-a: var(--rs-l);", "--sv-a: var(--rs-d);")}</style>'
+             if pips else "")
+    head = (f'<div id="due-crew" class="dc-frame bg-full">{_css(cfg)}<style>{BINGO_CSS}</style>{sheet}'
             f'<div class="dc-head"><span class="dc-title">{board_mark()}</span></div>')
     team_card = bool(bv and bv.get("team")) or team  # 3.7.3: a plan team's card: counts, never who
     back = (f'<a class="bg-a" href="#" onclick="{_pycmd("planteambingoback")}">&lsaquo; Squads</a>' if team_card
@@ -2918,11 +2937,13 @@ def bingo_html(bv, cfg, loading=False, team=False):
             team = (f'<span class="tm{" ok" if st["done"] else ""}">&#128101; {_bg_need(sq, st["need"])}'
                     f'{so_far}</span>')
         marks = "".join(
+            f'<span class="st sp" style="right:{8 + k * 27}px;{"" if st["done"] else "opacity:.55"}" title="{e(names.get(u, ("?", ""))[0])}">'
+            f'{stamp_pip(u, names.get(u, ("?", ""))[0], people, cfg, k)}</span>' if pips else
             f'<span class="st" style="right:{3 + k * 15}px;{"" if st["done"] else "opacity:.55"}" title="{e(names.get(u, ("?", ""))[0])}">'
             f'{e(names.get(u, ("?", ""))[1]) or "&#10003;"}</span>' for k, u in enumerate(who[:3]))
         dots, dname = diffs.get(sq.get("diff"), diffs["m"])
         rule = f'<span class="rl">{e(sq["rule"])}</span>' if known else ""
-        squares += (f'<button class="bg-sq {"done" if st["done"] else ""} {cls}" data-i="{i}" onclick="{show}">'
+        squares += (f'<button class="bg-sq {"done" if st["done"] else ""} {cls}{" stamped" if pips and who else ""}" data-i="{i}" onclick="{show}">'
                     f'<span class="fm">{fams.get(sq.get("fam"), "")}</span><span class="df" title="{dname}">{dots}</span>'
                     f'<span class="ic">{e(sq["icon"])}</span><span class="tt">{e(sq["title"]) if known else "Update to play"}</span>'
                     f'{rule}{team}{marks}</button>')
@@ -3069,7 +3090,8 @@ def _one_at_a_time(bans):
 def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
            rules_stale=False, squad_view=None, knocks=None, reviews=None,
            sync_error=False, live=False, tricky=None, milestones=None, room=None, plans=None,
-           notice=None, asks=None, due=None, you=None, sticking=None, sev=None, milestone_sev=None, closet=None):
+           notice=None, asks=None, due=None, you=None, sticking=None, sev=None, milestone_sev=None, closet=None,
+           halloween=None, wrapped=None):
     """3.8.0: two parts, apart. On top the You bubble (you_html): due,
     Due's view (due_flow.view, None when Due is off), and you, its Plans and
     Insights ({tab, folded, plans, insights}; None draws Due alone). Under it
@@ -3085,7 +3107,9 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     asks (3.5.0): my own asks about cards (together.my_asks_view), Crew › Decks.
     sev (3.8.1): Pip beside the logo for a moment, {svg, ago} (rooms.board_sev), or None.
     milestone_sev (3.8.1): {uid: Pip's markup} for a streak banner, Pip in its emoji's place.
-    closet (3.8.2): {keys, first}: what just came for Pip, for its line (closet_line)."""
+    closet (3.8.2): {keys, first}: what just came for Pip, for its line (closet_line).
+    halloween (3.8.22): Halloween week's line, its bats and cobweb (halloween_html), or None.
+    wrapped (3.9.0): {year, so_far, look} for the line that your year is ready (1 Dec to 15 Jan), or None."""
     period = cfg.get("period", "today")
     hidden = hidden_tabs(cfg)
     if period not in PERIODS or period in hidden:
@@ -3141,6 +3165,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
                     f'onclick="{_pycmd("milestonecheer:" + str(uid))}">Send {emoji}</a>'
                     f'<a class="wx" href="#" title="Dismiss" '
                     f'onclick="{_pycmd("milestonex:" + str(uid))}">&times;</a></div>')
+    if wrapped and wrapped.get("year"):
+        bans.append(wrapped_line(wrapped["year"], wrapped.get("so_far"), wrapped.get("look") or [], cfg.get("sev", True)))
     if closet and closet.get("keys") and cfg.get("sev", True):
         line = closet_line(closet["keys"], my_look(cfg), bool(closet.get("first")))
         if line:
@@ -3218,17 +3244,19 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     # the name's cell clips what spills out of it: room above the line for a Pip's hat, the whole
     # row's (tr.sv) so the name and the numbers stay on one line
     seat += f"\n    #due-crew tr.sv > td {{ padding-top: {(3 if cfg.get('compact') else 6) + 6}px; }}"
-    sheet = f'<style>{SEV_CSS}{CLOSET_CSS}{seat}{_sev.CSS}</style>' if cfg.get("sev", True) else ""
+    sheet = f'<style>{SEV_CSS}{CLOSET_CSS}{HW_CSS if halloween else ""}{seat}{_sev.CSS}</style>' if cfg.get("sev", True) else ""
+    people = {x.get("user_id"): x for x in data.get("entries") or []}  # 3.8.22: a plan's squad line, mine too
     return (f'<div id="due-crew" class="dc-frame dc-split">{_css(cfg)}<style>{DUE_CSS}</style>{sheet}'
-            f'{you_html(cfg, due, you)}<div class="dc-sheet">'
-            f'{_head(period, show_up, hidden, cfg.get("crew_view") or period, sev)}{body}{foot}</div></div>')
+            f'{you_html(cfg, due, you, people)}<div class="dc-sheet">'
+            f'{_head(period, show_up, hidden, cfg.get("crew_view") or period, sev)}{halloween_html(halloween, cfg)}{body}{foot}</div></div>')
 
 
-def you_html(cfg, due=None, you=None):
+def you_html(cfg, due=None, you=None, people=None):
     """3.8.0, the You bubble: Today, Upcoming and Later (Due's lists, when
     Due is on), then Plans and Insights unless hidden in Settings. due:
     due.view or None; you: {tab, folded, plans, insights, opened}, from the glue
-    (None: Due's lists alone, as before). "" when there's nothing to show."""
+    (None: Due's lists alone, as before). "" when there's nothing to show.
+    people (3.8.22): {uid: crew entry}, mine too, for a plan's squad line."""
     if you is None:
         return _due_html(due)
     hidden = hidden_tabs(cfg)
@@ -3237,9 +3265,10 @@ def you_html(cfg, due=None, you=None):
     if not keys:
         return ""
     tab = you.get("tab") if you.get("tab") in keys else keys[0]
-    body = (_you_plans(you.get("plans"), None if due else you.get("opened")) if tab == "plans"
+    body = (_you_plans(you.get("plans"), None if due else you.get("opened"), people, cfg) if tab == "plans"
             else _you_insights(you.get("insights")) if tab == "insights" else "")
     return _due_html(due, more, tab if tab in dict(more) else None, body, folded=bool(you.get("folded")))
+
 
 
 # ---- 3.5.0: Settings, in the board ----
@@ -3325,7 +3354,7 @@ SETTINGS_CSS = """
     #due-crew .st-hits b { font-size: 12.5px; color: var(--dc-ink); }
     #due-crew .st-hits small { font-size: 11px; color: var(--dc-muted); }
     #due-crew .st-hits .st-none { padding: 6px 9px; font-size: 12px; color: var(--dc-muted); }
-    @keyframes sthit { from { background-color: color-mix(in srgb, var(--dc-accent) 26%, transparent); } to { background-color: transparent; } }
+    @keyframes sthit { from { background-color: color-mix(in srgb, var(--dc-accent) 26%, transparent); } }  /* to its own ground, whatever that is */
     @media (prefers-reduced-motion: no-preference) { #due-crew .st-hit { animation: sthit 1.8s ease-out; } }
     @media (prefers-reduced-motion: reduce) { #due-crew .st-hit { outline: 2px solid var(--dc-accent); outline-offset: 1px; } }
 """
@@ -3354,14 +3383,19 @@ def _st_seg(key, options, current, label):
     return f'<span class="st-seg" role="group" aria-label="{label}">{btns}</span>'
 
 
-def _settings_you(view):
+def _settings_you(view, cfg=None):
+    """cfg (3.8.22): with Pip on, my Pip where my emoji was, opening the
+    closet (Emoji… stays: it shows with Pip off and in text shares)."""
     e = _html.escape
     if not view.get("signed_in"):
         return (f'<p>Not signed in.</p><div class="st-acts">'
                 f'<a class="st-lk" href="#" {_st_click("setsignin")}>Start with your email</a></div>')
     emoji = e(str(view.get("emoji") or ""))
     status = str(view.get("status") or "")
-    out = (f'<div class="st-who">{f"<span class=em>{emoji}</span>" if emoji else ""}'
+    fig = (f'<a class="st-pip" href="#" title="Pip&rsquo;s closet" onclick="{_pycmd("closet")}">'
+           f'{_sev.slot(_sev.svg("idle", rest=True, look=my_look(cfg), label="Your Pip"), SETTINGS_PIP)}</a>'
+           if cfg is not None and cfg.get("sev", True) else f"<span class=em>{emoji}</span>" if emoji else "")
+    out = (f'<div class="st-who">{fig}'
            f'<span style="display:grid"><b>{e(str(view.get("name") or "?"))}</b>'
            f'<span style="color:var(--dc-muted)">{"&ldquo;" + e(status) + "&rdquo;" if status else "No status"}</span></span></div>'
            f'<div class="st-acts"><a class="st-lk" href="#" {_st_click("setname")}>Name&hellip;</a>'
@@ -3393,16 +3427,22 @@ def _settings_you(view):
     return out
 
 
+def _accent_swatches(cfg):
+    """The accent's swatches (Settings › Board and, 3.9.0, the closet):
+    Pip's colour and the board's, the one your crew sees Pip in."""
+    accent = cfg.get("accent", DEFAULT_ACCENT)
+    return "".join(
+        f'<button class="{"on" if k == accent else ""}" style="background:{v["light"][0]}" title="{k.title()}" '
+        f'aria-label="{k.title()}" aria-pressed="{"true" if k == accent else "false"}" {_st_click(f"set:accent:{k}")}></button>'
+        for k, v in ACCENTS.items())
+
+
 def _settings_board(cfg):
     hidden = hidden_tabs(cfg)
     pills = '<button class="st-pill on" disabled aria-pressed="true">Crew</button>' + "".join(
         f'<button class="st-pill{"" if k in hidden else " on"}" aria-pressed="{"false" if k in hidden else "true"}" '
         f'{_st_click(f"settabs:{k}:{1 if k in hidden else 0}")}>{t}</button>' for k, t in HIDEABLE_TABS)
-    accent = cfg.get("accent", DEFAULT_ACCENT)
-    swatches = "".join(
-        f'<button class="{"on" if k == accent else ""}" style="background:{v["light"][0]}" title="{k.title()}" '
-        f'aria-label="{k.title()}" aria-pressed="{"true" if k == accent else "false"}" {_st_click(f"set:accent:{k}")}></button>'
-        for k, v in ACCENTS.items())
+    swatches = _accent_swatches(cfg)
     label = _html.escape(str(cfg.get("crew_label") or "Crew"))
     label_in = (f'<input class="st-in" data-f="label" maxlength="24" size="12" value="{label}" aria-label="Crew name in shares" '
                 f'onchange="pycmd(\'duecrew:setlabel:\'+encodeURIComponent(this.value));">')
@@ -3565,10 +3605,15 @@ def settings_html(view, cfg):
     tab = view.get("tab") if view.get("tab") in dict(SETTINGS_TABS) else "you"
     pills = "".join(f'<a class="dc-pill{" on" if k == tab else ""}" href="#" {_st_click("settab:" + k)}>{t}</a>'
                     for k, t in SETTINGS_TABS)
-    body = (_settings_you(view) if tab == "you" else _settings_board(cfg) if tab == "board"
+    body = (_settings_you(view, cfg) if tab == "you" else _settings_board(cfg) if tab == "board"
             else _settings_privacy(cfg))
     foot = "Privacy, dates, status and accent follow your account." if view.get("signed_in") else ""
-    return (f'<div id="due-crew" class="dc-frame dc-set">{_css(cfg)}<style>{SETTINGS_CSS}</style>'
+    pip = ""
+    if tab == "you" and cfg.get("sev", True):  # 3.8.22: my Pip in my colour, by day or night as the board
+        light, dark = accent_pair(cfg.get("accent"))
+        pip = (f'<style>{_sev.CSS}{_by_theme(cfg, "#due-crew .st-pip", f"--sv-a: {light};", f"--sv-a: {dark};")}'
+               '\n#due-crew .st-pip { display: inline-flex; line-height: 0; margin: 6px 8px 0 0; text-decoration: none; border: 0; }</style>')
+    return (f'<div id="due-crew" class="dc-frame dc-set">{_css(cfg)}<style>{SETTINGS_CSS}</style>{pip}'
             f'<div class="dc-head"><span class="dc-title">{board_mark()}</span><span>{pills}</span></div>'
             f'<div class="st-bar"><a class="st-back" href="#" {_st_click("setclose")}>&lsaquo; Board</a><b>Settings</b>'
             # 3.8.0, pick 28: a word finds a setting on any tab (FIND_JS)
@@ -3608,6 +3653,9 @@ CLOSET_CSS = """
     #due-crew .cl-o i { font-style: normal; color: var(--dc-faded); }
     #due-crew .cl-o.cos { background: var(--dc-you-bg); }
     #due-crew .cl-ons.covered .cl-o:not(.cos) { opacity: .5; }
+    #due-crew .cl-col { display: grid; gap: 5px; font-size: 12px; font-weight: 600; padding-bottom: 6px; border-bottom: 1px solid var(--dc-line); }
+    #due-crew .cl-col small { font-weight: 400; color: var(--dc-muted); margin-left: 4px; }
+    #due-crew .cl-col .st-sw { flex-wrap: wrap; padding: 2px 3px; }
     #due-crew .cl-msg { font-size: 11.5px; color: var(--dc-muted); }
     #due-crew .cl-msg:empty { display: none; }
     #due-crew .cl-msg b { color: var(--dc-ink); }
@@ -3661,6 +3709,10 @@ CLOSET_CSS = """
     #due-crew .dc-rsev { display: inline-block; vertical-align: middle; margin: -3px 8px -6px 2px; line-height: 0; }
     #due-crew a.dc-rsev, #due-crew a.dc-rsevl { text-decoration: none; border: 0; }
     #due-crew tr:not(:hover) .dc-rsev .sv, #due-crew tr:not(:hover) .dc-rsev .sv * { animation: none !important; }
+    /* 3.8.22: a plan card's squad line: who showed up, side by side, still until it's pointed at */
+    #due-crew .pcrew .pips { display: inline-flex; gap: 4px; vertical-align: middle; margin: 8px 5px 0 0; }  /* a hat clear of the line above */
+    #due-crew .pcrew .pips .dc-rsev { margin: 0; }
+    #due-crew .pcrew:not(:hover) .dc-rsev .sv, #due-crew .pcrew:not(:hover) .dc-rsev .sv * { animation: none !important; }
     @media (max-width: 380px) { #due-crew .dc-rsev { display: none; } }
 """
 
@@ -3755,7 +3807,9 @@ def closet_html(view, cfg):
     new = [k for k in view.get("new") or [] if k in have]
     progress = {k: v for k, v in (view.get("progress") or {}).items() if k in _closet.BY and k not in have}
     fig = _sev.svg("hello" if new else "idle", rest=bool(view.get("rest")), look=look, label="Your Pip")
-    me = (f'<div class="cl-me"><div class="cl-fig">{fig}</div>{_closet_ons(look)}'
+    colour = (f'<div class="cl-col"><span>Colour <small>Pip and your board</small></span>'
+              f'<span class="st-sw" role="group" aria-label="Colour">{_accent_swatches(cfg)}</span></div>')  # 3.9.0 (Sam)
+    me = (f'<div class="cl-me"><div class="cl-fig">{fig}</div>{colour}{_closet_ons(look)}'
           f'<div class="cl-msg" aria-live="polite">{str(view.get("msg") or "")}</div>'
           + (f'<a class="st-lk" href="#" {_st_click("closetoff")}>Take it all off</a>' if look else "")
           + '</div>')
@@ -3802,6 +3856,238 @@ def closet_html(view, cfg):
             f'{main}</div></div>{off}</div>')
 
 
+WRAPPED_CSS = """
+    #due-crew.dc-wr { text-align: left; }
+    #due-crew .wr-wrap { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 22px; align-items: start; }
+    @media (max-width: 600px) { #due-crew .wr-wrap { grid-template-columns: minmax(0, 1fr); justify-items: center; } }
+    #due-crew .wr-phone { position: relative; width: 300px; max-width: 100%; height: 560px; border-radius: 26px; overflow: hidden;
+      background: #000; box-shadow: 0 10px 30px rgba(0,0,0,.18); outline: none; }
+    #due-crew .wr-phone:focus-visible { box-shadow: 0 0 0 3px var(--dc-accent), 0 10px 30px rgba(0,0,0,.18); }
+    #due-crew .wr-bars { position: absolute; top: 10px; left: 12px; right: 12px; display: flex; gap: 4px; z-index: 3; }
+    #due-crew .wr-bars i { flex: 1; height: 3px; border-radius: 2px; background: rgba(255,255,255,.3); overflow: hidden; display: block; }
+    #due-crew .wr-bars b { display: block; height: 100%; width: 0; background: #fff; }
+    #due-crew .wr-phone.lt .wr-bars i { background: rgba(0,0,0,.14); } #due-crew .wr-phone.lt .wr-bars b { background: #222; }
+    #due-crew .wr-s { position: absolute; inset: 0; background: var(--bg); color: #fff; padding: 36px 20px 18px; display: none;
+      flex-direction: column; gap: 8px; }
+    #due-crew .wr-s.on { display: flex; }
+    #due-crew .wr-s.lt { color: #222; }
+    #due-crew .wr-tap { position: absolute; top: 0; bottom: 0; width: 34%; background: transparent; border: 0; box-shadow: none;
+      border-radius: 0; margin: 0; padding: 0; z-index: 2; cursor: pointer; }
+    #due-crew .wr-tap.l { left: 0; } #due-crew .wr-tap.r { right: 0; width: 66%; }
+    #due-crew .wk { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; opacity: .78; }
+    #due-crew .wb { font-size: 40px; font-weight: 800; line-height: 1.04; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+    #due-crew .wb.long { font-size: 32px; }
+    #due-crew .wl { font-size: 15px; line-height: 1.35; opacity: .92; }
+    #due-crew .wsm { font-size: 13px; line-height: 1.35; opacity: .8; }
+    #due-crew .wno { font-size: 13px; opacity: .8; margin-top: auto; }
+    #due-crew .wtag { align-self: flex-start; font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 99px;
+      background: rgba(255,255,255,.16); }
+    #due-crew .wr-s.lt .wtag { background: rgba(0,0,0,.08); }
+    #due-crew .wp { align-self: center; margin-top: auto; line-height: 0; --sv-line: rgba(255,255,255,.18); }
+    #due-crew .wp svg.sv { width: 128px; height: 128px; overflow: visible; }
+    #due-crew .wp.xl svg.sv { width: 176px; height: 176px; }
+    #due-crew .wh { display: grid; grid-template-rows: repeat(7, 1fr); grid-auto-flow: column; grid-auto-columns: 1fr; gap: 1.3px; margin: 6px 0 2px; }
+    #due-crew .wh i { display: block; aspect-ratio: 1; border-radius: 1.2px; background: rgba(255,255,255,.1); }
+    #due-crew .wh i.x { background: transparent; } #due-crew .wh i.f { background: rgba(255,255,255,.05); }
+    #due-crew .wh i.l1 { background: color-mix(in srgb, var(--wa) 45%, transparent); } #due-crew .wh i.l2 { background: color-mix(in srgb, var(--wa) 65%, transparent); }
+    #due-crew .wh i.l3 { background: color-mix(in srgb, var(--wa) 85%, transparent); } #due-crew .wh i.l4 { background: var(--wa); }
+    #due-crew .wh i.r { background: #e0a458; }
+    #due-crew .wg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 10px; margin-top: 8px; font-size: 12.5px; opacity: .95; }
+    #due-crew .wg b { display: block; font-size: 28px; line-height: 1.05; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+    #due-crew .wq { background: #fbf8f1; color: #2b2d29; border-radius: 12px; padding: 18px 14px; font-size: 16px; font-weight: 600;
+      line-height: 1.35; margin: 6px 0 4px; box-shadow: 0 4px 14px rgba(0,0,0,.25); overflow-wrap: anywhere; }
+    #due-crew .wt { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); justify-items: center; gap: 2px; margin-top: 6px; }
+    #due-crew .wt .sv { width: 54px; height: 54px; overflow: visible; }
+    #due-crew .wt .sv, #due-crew .wt .sv * { animation: none !important; }
+    #due-crew .wpic { background: #fff; color: #222; border-radius: 16px; padding: 16px 12px 6px; display: grid; gap: 8px;
+      box-shadow: 0 6px 18px rgba(0,0,0,.08); margin-top: 6px; }
+    #due-crew .wpic .wk { text-align: center; opacity: .7; }
+    #due-crew .wpic .wg { grid-template-columns: repeat(3, minmax(0, 1fr)); text-align: center; color: #6b6f67; margin: 0; }
+    #due-crew .wpic .wg b { color: #222; font-size: 24px; }
+    #due-crew .wpic .wp { margin: 0; --sv-line: #e2e2da; } #due-crew .wpic .wp svg.sv { width: 92px; height: 92px; }
+    #due-crew .wpic .dc-mark { height: 14px; width: auto; justify-self: center; }
+    #due-crew .wgo { position: relative; z-index: 4; align-self: center; margin-top: 10px; font: inherit; font-size: 13px; font-weight: 700;
+      padding: 7px 14px; border-radius: 9px; border: 0; background: #2e7d32; color: #fff; cursor: pointer; }
+    #due-crew .wr-side { display: grid; gap: 10px; align-content: start; font-size: 13px; max-width: 360px; }
+    #due-crew .wr-side h3 { margin: 0; font-family: inherit; font-size: 17px; font-weight: 700; letter-spacing: normal; }
+    #due-crew .wr-side p { margin: 0; color: var(--dc-muted); line-height: 1.45; }
+    #due-crew .wr-years { display: flex; flex-wrap: wrap; gap: 6px; }
+    #due-crew .wr-years a { padding: 3px 10px; border-radius: 99px; border: 1px solid var(--dc-line); color: var(--dc-ink); text-decoration: none; }
+    #due-crew .wr-years a.on { background: var(--dc-accent); color: var(--dc-accent-ink); border-color: transparent; }
+    #due-crew .wr-list { margin: 16px 0 0; padding: 12px 14px 12px 34px; border: 1px solid var(--dc-line); border-radius: 12px;
+      display: grid; gap: 6px; font-size: 13px; line-height: 1.45; max-width: 640px; }
+    #due-crew .wr-list[hidden] { display: none; }
+    #due-crew .wr-btn { font: inherit; font-size: 12.5px; font-weight: 700; padding: 5px 12px; border-radius: 8px; border: 1px solid var(--dc-line);
+      background: var(--dc-bg); color: var(--dc-ink); cursor: pointer; margin: 0; box-shadow: none; justify-self: start; }
+"""
+
+
+def _wr_heat(cells, accent, run=None):
+    lo, hi = (run or ("", ""))
+    out = []
+    for c in cells:
+        if c is None:
+            out.append('<i class="x"></i>')
+        elif c == "":
+            out.append('<i class="f"></i>')
+        else:
+            day, lv = c
+            out.append('<i class="r"></i>' if run and lo <= day <= hi else f'<i class="l{int(lv)}"></i>' if lv else "<i></i>")
+    return f'<div class="wh" style="--wa:{accent}" aria-hidden="true">' + "".join(out) + "</div>"
+
+
+def _wr_slide(i, total, sl, view, cfg):
+    e = _html.escape
+    look = view.get("look") or []
+    kind = sl.get("kind")
+    lt = kind == "picture"
+    accent = accent_pair(cfg.get("accent", DEFAULT_ACCENT))
+    pip_a = accent[0] if lt else accent[1]
+
+    def pip(pose, size_cls="", lk=None):
+        if not cfg.get("sev", True):
+            return ""  # Pip off: the story without it
+        return (f'<span class="wp {size_cls}" style="--sv-a:{pip_a}">'
+                f'{_sev.svg(pose, look=look if lk is None else lk, label="Your Pip")}</span>')
+    parts = []
+    if kind != "picture":
+        parts.append(f'<div class="wk">{e(sl.get("kicker") or "")}</div>')
+    if sl.get("tag"):
+        parts.append(f'<span class="wtag">{e(sl["tag"])}</span>')
+    if sl.get("lead"):
+        parts.append(f'<div class="wl">{e(sl["lead"])}</div>')
+    if sl.get("big"):
+        parts.append(f'<div class="wb{" long" if len(str(sl["big"])) > 12 else ""}">{e(sl["big"])}</div>')
+    if sl.get("line") and kind != "crew":
+        parts.append(f'<div class="wl">{e(sl["line"])}</div>')
+    if kind == "days":
+        parts.append(_wr_heat(view.get("heat") or [], accent[1]))
+    if kind == "run":
+        parts.append(_wr_heat(view.get("heat") or [], accent[1], sl.get("run")))
+    if kind == "turned":
+        parts.insert(2, f'<div class="wq">{e(sl.get("front") or "")}</div>')
+    if kind == "things":
+        parts.append('<div class="wt">' + "".join(
+            _sev.svg("idle", rest=True, look=[k], label=e(_closet.BY[k]["name"])).replace('<svg ', f'<svg style="--sv-a:{pip_a}" ', 1)
+            for k in sl.get("things") or [] if k in _closet.BY) + "</div>")
+    if sl.get("grid") and kind != "picture":
+        parts.append('<div class="wg">' + "".join(f"<div><b>{e(a)}</b>{e(b)}</div>" for a, b in sl["grid"]) + "</div>")
+    if kind == "crew" and sl.get("line"):
+        parts.append(f'<div class="wl">{e(sl["line"])}</div>')
+    if sl.get("small") and kind != "picture":
+        parts.append(f'<div class="wsm">{e(sl["small"])}</div>')
+    if kind == "picture":
+        nums = "".join(f"<div><b>{e(a)}</b>{e(b)}</div>" for a, b in sl.get("grid") or [])
+        parts.append(f'<div class="wpic">{board_mark()}<div class="wk">{e(sl.get("kicker") or "")}</div>'
+                     f'<div class="wg">{nums}</div>{pip("hop")}</div>'
+                     f'<button class="wgo" onclick="{_pycmd("wrappedpic:" + str(int(view.get("year") or 0)))}">Make the picture</button>'
+                     + (f'<div class="wno">{e(sl["small"])}</div>' if sl.get("small") else ""))
+    elif sl.get("pose") and kind not in ("turned", "things", "days"):
+        parts.append(pip(sl["pose"], "xl" if kind == "cover" else ""))
+    if sl.get("note"):
+        parts.append(f'<div class="wno">{e(sl["note"])}</div>')
+    return (f'<section class="wr-s{" on" if i == 0 else ""}{" lt" if lt else ""}" style="--bg:{e(sl.get("bg") or "#12301a")}" '
+            f'aria-roledescription="slide" aria-label="{i + 1} of {total}">{"".join(parts)}</section>')
+
+
+def wrapped_html(view, cfg):
+    """3.9.0, your Wrapped (Sam's pick, round three), in place of the board
+    (as the closet is): the year's story on a phone-shaped card, slide by
+    slide (wrapped.slides), Pip in your look; tap or the arrow keys move it,
+    and it moves on by itself (wrapped_js; not with Reduce motion). Beside
+    it the years Anki's history has, All on one page (every slide as
+    text), and the way back. view: {year, years, slides, heat, look}."""
+    from . import wrapped as _w
+    e = _html.escape
+    sl = [s for s in view.get("slides") or [] if cfg.get("sev", True) or s.get("kind") != "things"]
+    year = int(view.get("year") or 0)
+    if sl:
+        phone = (f'<div class="wr-phone" tabindex="0" aria-label="Your {year}, a story: the arrow keys or the sides move it">'
+                 f'<div class="wr-bars">{"".join("<i><b></b></i>" for _ in sl)}</div>'
+                 + "".join(_wr_slide(i, len(sl), s, view, cfg) for i, s in enumerate(sl))
+                 + '<button class="wr-tap l" aria-label="Back"></button><button class="wr-tap r" aria-label="Next"></button></div>')
+        lines = "".join(f"<li>{e(_w.words(s))}</li>" for s in sl)
+        listing = f'<ol class="wr-list" id="wr-list" hidden>{lines}</ol>'
+    else:
+        phone = f'<div class="st-note">No reviews in {year} yet.</div>'
+        listing = ""
+    years = "".join(f'<a href="#" class="{"on" if y == year else ""}" onclick="{_pycmd("wrappedyear:" + str(int(y)))}">{int(y)}</a>'
+                    for y in view.get("years") or [] if str(y).isdigit())
+    side = (f'<div class="wr-side"><h3>Your {year}</h3>'
+            '<p>Made on this computer from your own reviews. Nothing is sent, and only you see it unless you make the picture.</p>'
+            + (f'<div class="wr-years" aria-label="Another year">{years}</div>' if years else "")
+            + ('<button class="wr-btn" onclick="var l=document.getElementById(\'wr-list\');if(l){l.hidden=!l.hidden;}return false;">'
+               'All on one page</button>' if sl else "")
+            + (f'<a class="st-lk" href="#" {_st_click("wrappedcard")}>'
+               f'{"Leave out the card you turned around" if view.get("card_on") else "Show the card you turned around"}</a>'
+               if view.get("card") else "")
+            + '</div>')
+    sheet = f"{SEV_CSS}{WRAPPED_CSS}{_sev.CSS}" if cfg.get("sev", True) else WRAPPED_CSS
+    return (f'<div id="due-crew" class="dc-frame dc-set dc-wr">{_css(cfg)}<style>{SETTINGS_CSS}{sheet}</style>'
+            f'<div class="dc-head"><span class="dc-title">{board_mark()}</span></div>'
+            f'<div class="st-bar"><a class="st-back" href="#" {_st_click("wrappedclose")}>&lsaquo; Board</a><b>Your {year}</b></div>'
+            f'<div class="wr-wrap">{phone}{side}</div>{listing}</div>')
+
+
+def wrapped_js():
+    """3.9.0: Wrapped's player, said to the page after the board draws it:
+    the sides and the arrow keys move it, it moves on by itself and waits
+    while the pointer is on it, each slide's Pip plays its moment as it
+    comes; with Reduce motion it never moves on by itself. Once a card."""
+    return """
+    (function() {
+        var ph = document.querySelector('#due-crew .wr-phone');
+        if (!ph || ph.getAttribute('data-on')) { return; }
+        ph.setAttribute('data-on', '1');
+        var sl = [].slice.call(ph.querySelectorAll('.wr-s')), bars = [].slice.call(ph.querySelectorAll('.wr-bars b'));
+        var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        var st = { i: 0, t: 0, held: false, last: 0 }, PER = 6500;
+        function show(i) {
+            st.i = Math.max(0, Math.min(sl.length - 1, i)); st.t = 0;
+            sl.forEach(function(s, j) { s.classList.toggle('on', j === st.i); });
+            bars.forEach(function(b, j) { b.style.width = j < st.i ? '100%' : (j === st.i && still ? '100%' : '0'); });
+            ph.classList.toggle('lt', sl[st.i].classList.contains('lt'));
+            if (!still) {
+                sl[st.i].querySelectorAll('.wp svg.sv').forEach(function(v) { var c = v.cloneNode(true); v.parentNode.replaceChild(c, v); });
+            }
+        }
+        function tick(now) {
+            if (!document.body.contains(ph)) { return; }
+            var dt = st.last ? now - st.last : 0; st.last = now;
+            if (!st.held && !document.hidden && st.i < sl.length - 1) {
+                st.t += dt;
+                bars[st.i].style.width = Math.min(100, st.t / PER * 100) + '%';
+                if (st.t >= PER) { show(st.i + 1); }
+            } else if (st.i === sl.length - 1) { bars[st.i].style.width = '100%'; }
+            requestAnimationFrame(tick);
+        }
+        ph.querySelector('.wr-tap.l').addEventListener('click', function(ev) { ev.preventDefault(); show(st.i - 1); });
+        ph.querySelector('.wr-tap.r').addEventListener('click', function(ev) { ev.preventDefault(); show(st.i + 1); });
+        ph.addEventListener('keydown', function(ev) {
+            if (ev.key === 'ArrowRight' || ev.key === ' ') { show(st.i + 1); ev.preventDefault(); }
+            else if (ev.key === 'ArrowLeft') { show(st.i - 1); ev.preventDefault(); }
+        });
+        ph.addEventListener('mouseenter', function() { st.held = true; });
+        ph.addEventListener('mouseleave', function() { st.held = false; });
+        show(0);
+        try { ph.focus({ preventScroll: true }); } catch (e) {}
+        if (!still) { requestAnimationFrame(tick); }
+    })();
+    """
+
+
+def wrapped_line(year, so_far, look, pip=True):
+    """3.9.0: the board's line, 1 December to 15 January: your year is
+    ready. Open plays it in the board's place; the x is for the year, on
+    every computer (the account's wrapped_seen). Pip off: a gift."""
+    fig = (f'<span class="dc-fig">{_sev.slot(_sev.svg("hop", rest=True, look=look, label="Your Pip"), 40)}</span>'
+           if pip else "<span>&#127873;</span>")
+    return (f'<div class="dc-wrap wr-line">{fig}'
+            f'<span><b>Your {int(year)}{" so far" if so_far else ""}</b> is ready: your year in Anki{", as Pip saw it" if pip else ""}.</span>'
+            f'<a class="wc" href="#" onclick="{_pycmd("wrappedopen:" + str(int(year)))}">Open &#9654;</a>'
+            f'<a class="wx" href="#" title="Not this year" onclick="{_pycmd("wrappedx:" + str(int(year)))}">&times;</a></div>')
+
+
 def closet_line(news, look, first=False):
     """3.8.2: the board's line when something new is in the closet: Pip
     in it, its name and what earned it, Wear it (or Be one, a costume) and
@@ -3828,31 +4114,132 @@ def closet_line(news, look, first=False):
             f'<a class="wx" href="#" title="Later" onclick="{_pycmd("closetnew")}">&times;</a></div>')
 
 
-def row_sev(row, cfg, size=None):
+HW_PIP = 34  # 3.8.22: a Halloween thing on the week's line
+HW_BAT = ('<svg class="hwbat" style="--d:{d}s" viewBox="0 0 40 20" aria-hidden="true"><g class="w">'
+          '<path d="M20 9 C17 4 12 3 6 5 C9 7 9 10 7 12 C11 11 14 12 16 15 C17 13 18 12 20 12 C22 12 23 13 24 15 '
+          'C26 12 29 11 33 12 C31 10 31 7 34 5 C28 3 23 4 20 9 Z"/></g>'
+          '<circle class="e" cx="18.6" cy="9.5" r=".9"/><circle class="e" cx="21.4" cy="9.5" r=".9"/></svg>')
+HW_WEB = ('<svg class="hwweb" viewBox="0 0 60 60" aria-hidden="true"><path d="M60 0 L0 0 M60 0 L60 60 M60 0 L8 30 M60 0 '
+          'L30 52 M60 0 L2 14 M60 0 L46 58 M46 0 Q48 6 60 14 M32 0 Q36 12 60 28 M18 0 Q24 18 60 42"/></svg>')
+HW_CSS = """
+    #due-crew .dc-hw { position: relative; overflow: hidden; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px;
+      text-align: left; margin: 0 0 8px; padding: 3px 30px 3px 10px; border-radius: 10px; background: var(--dc-well); font-size: 12.5px; }
+    #due-crew .dc-hw .hwl { color: var(--dc-hours); font-weight: 700; text-decoration: none; }
+    #due-crew .dc-hw .hwd, #due-crew .dc-hw .hwn { color: var(--dc-muted); }
+    #due-crew .dc-hw .hws { color: var(--dc-hours); font-weight: 600; }
+    #due-crew .dc-hw .hwt { display: inline-flex; align-items: flex-end; gap: 3px; padding-top: 6px; }
+    #due-crew .dc-hw .hwk { display: inline-flex; line-height: 0; }
+    #due-crew .dc-hw .hwk.off { opacity: .32; filter: grayscale(1); }
+    #due-crew .dc-hw .hwk .sv, #due-crew .dc-hw .hwk .sv * { animation: none !important; }
+    #due-crew .dc-hw .wx { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); z-index: 2;
+      color: var(--dc-muted); text-decoration: none; font-size: 16px; line-height: 1; }
+    #due-crew .dc-hw .wx:hover { color: var(--dc-ink); }
+    #due-crew .dc-hw .hwweb { position: absolute; right: -1px; top: -1px; width: 30px; height: 30px; pointer-events: none;
+      fill: none; stroke: var(--dc-muted); stroke-width: 1; opacity: .5; }
+    #due-crew .dc-hw .hwbat { position: absolute; left: -30px; top: 3px; width: 26px; height: 13px; opacity: 0; pointer-events: none; z-index: 3; }
+    #due-crew .dc-hw .hwbat path { fill: var(--dc-ink); opacity: .85; }
+    #due-crew .dc-hw .hwbat .e { fill: var(--dc-hours); }
+    @media (prefers-reduced-motion: no-preference) {
+      /* three bats across the line, once a day: past the logo's line, never over it (Sam) */
+      #due-crew .dc-hw .hwbat { animation: dc-hwbat 4.2s linear calc(var(--d) - var(--ago, 0s)) both; }
+      #due-crew .dc-hw .hwbat .w { transform-box: fill-box; transform-origin: 50% 50%; animation: dc-hwflap .22s ease-in-out infinite alternate; }
+      @keyframes dc-hwbat { 0% { opacity: 1; left: -30px; transform: translateY(2px); } 25% { transform: translateY(-2px); }
+        50% { transform: translateY(3px); } 75% { transform: translateY(-1px); } 100% { opacity: 1; left: calc(100% + 10px); transform: translateY(1px); } }
+      @keyframes dc-hwflap { from { transform: scaleY(1); } to { transform: scaleY(.45); } }
+    }
+"""
+
+
+def halloween_html(hw, cfg):
+    """3.8.22, Halloween week (24 to 31 Oct; Sam's pick, round three): a line
+    under the board's head with this week's days, the five things in
+    order (mine in colour), the next and when; three bats across it once a
+    day (hw["bats"]: how long they've been out, as Pip by the logo; None
+    after); and when every Pip on the crew's rows has a Halloween thing on
+    (hw["spooky"]: how many), a cobweb in its corner and a line about it.
+    Nothing with Pip off. hw: closet.halloween's, from closet_flow."""
+    if not hw or not cfg.get("sev", True):
+        return ""
+    e = _html.escape
+    days = int(hw.get("days") or 0)
+    said = "a thing a day for five days" if not days else f'{days} day{"" if days == 1 else "s"} so far'
+    things = "".join(
+        f'<span class="hwk {"on" if got else "off"}" title="{e(_closet.BY[k]["name"])}: '
+        f'{"a day" if n == 1 else str(n) + " days"} of Halloween week">'
+        f'{_sev.slot(_sev.svg("idle", rest=True, look=[k], label=_closet.BY[k]["name"]), HW_PIP)}</span>'
+        for k, n, got in hw.get("things") or [] if k in _closet.BY)
+    nxt = hw.get("next")
+    if nxt:
+        name = e(_closet.BY[nxt[0]]["name"].lower())
+        more = int(nxt[1])
+        when = ((f"tomorrow: the {name}" if hw.get("today") else f"study today for the {name}") if more == 1
+                else f"the {name} in {more} more days")
+    elif all(got for _k, _n, got in hw.get("things") or []):
+        when = "all five: Pip&rsquo;s ready"
+    else:
+        when = "the rest next year"
+    n = int(hw.get("spooky") or 0)
+    spooky = f'<span class="hws">A spooky crew: all {n} of you dressed up.</span>' if n else ""
+    ago = hw.get("bats")
+    bats = "".join(HW_BAT.format(d=d) for d in (0, .5, 1.1)) if ago is not None else ""
+    return (f'<div class="dc-hw" style="--ago:{float(ago or 0):.2f}s">{bats}{HW_WEB if n else ""}'
+            f'<a class="hwl" href="#" title="Pip&rsquo;s closet" onclick="{_pycmd("closet")}">Halloween week</a>'
+            f'<span class="hwd">{said}</span><span class="hwt">{things}</span><span class="hwn">{when}</span>{spooky}'
+            f'<a class="wx" href="#" title="Hide until next year" onclick="{_pycmd("closethw")}">&times;</a></div>')
+
+
+def row_sev(row, cfg, size=None, nth=None):
     """3.8.2: someone's Pip on a crew row, in the emoji's place: their colour
     and their look (mine: this computer's), still until the row is pointed
-    at. My own opens the closet. None with Pip off."""
+    at. My own opens the closet. None with Pip off. nth (3.9.0): its place
+    among Pips that move together (a bingo square's stamps, a plan card's
+    squad line), so each blinks on its own clock (sev.blink), as a room's
+    seats do."""
     if not cfg.get("sev", True):
         return None
     light, dark = accent_pair(cfg.get("accent") if row.get("you") else row.get("accent"))
     look = my_look(cfg) if row.get("you") else row.get("look")
     label = "Your Pip" if row.get("you") else _html.escape(f'{row.get("name") or "?"}’s Pip', quote=True)
     fig = _sev.slot(_sev.svg("idle", rest=True, look=look, label=label), size or _sev.ROW_SIZE)  # the site's rows too (sev.site_kit)
-    style = f'--rs-l:{light};--rs-d:{dark}'
+    style = f'--rs-l:{light};--rs-d:{dark}' + (f';{_sev.blink_css(nth)}' if nth is not None else "")
     if row.get("you"):
         return (f'<a class="dc-rsev" href="#" title="Pip&rsquo;s closet" style="{style}" '
                 f'onclick="{_pycmd("closet")}">{fig}</a>')
     return f'<span class="dc-rsev" style="{style}">{fig}</span>'
 
 
-def squad_pip(uid, name, you, people, cfg, size=None):
+PCREW_PIP = 26  # 3.8.22: a Pip on a plan card's squad line, its slot a line of its small text
+SETTINGS_PIP = 44  # 3.8.22: mine in Settings › You, beside my name and status
+
+
+def squad_pip(uid, name, you, people, cfg, size=None, nth=None):
     """3.8.21: someone's Pip on the Squads tab, in the emoji's place (Sam: "the
     squads page still has the old emojis"): mine as on my row; a crewmate's
     in their colour and look (a mutual friend's, which only the crew brings);
     anyone else plain, in the default colour, since all a squadmate shares is
     a name and an emoji. people: {uid: crew entry}. None with Pip off."""
     p = (people or {}).get(uid) or {}
-    return row_sev({"you": bool(you), "name": name, "accent": p.get("accent"), "look": p.get("look")}, cfg, size)
+    return row_sev({"you": bool(you), "name": name, "accent": p.get("accent"), "look": p.get("look")}, cfg, size, nth)
+
+
+STAMP_PIP = 40  # 3.8.22: who stamped a bingo square, bigger than the emoji was (Sam: "make the bingo stamps bigger")
+BINGO_PIP_CSS = """
+    #due-crew .bg-sq.stamped { padding-bottom: 34px; }
+    #due-crew .bg-sq .st.sp { width: auto; height: auto; background: none; box-shadow: none; border-radius: 0; bottom: 4px; }
+    #due-crew .bg-sq .st.sp .dc-rsev { display: inline-block; line-height: 0; margin: 0; }
+    #due-crew .bg-sq:not(:hover) .dc-rsev .sv, #due-crew .bg-sq:not(:hover) .dc-rsev .sv * { animation: none !important; }
+"""
+
+
+def stamp_pip(uid, name, people, cfg, nth=None):
+    """3.8.22: who stamped a bingo square, as their Pip: mine and a
+    crewmate's in colour and look, a squadmate's plain (all they share is a
+    name and an emoji). The square is a button, so never a link: mine
+    doesn't open the closet from here."""
+    p = (people or {}).get(uid) or {}
+    you = bool(p.get("you"))
+    return row_sev({"name": name, "accent": cfg.get("accent") if you else p.get("accent"),
+                    "look": my_look(cfg) if you else p.get("look")}, cfg, STAMP_PIP, nth) or ""
 
 
 def card_sev(row, cfg, size=44):
@@ -3949,10 +4336,14 @@ def _seat_html(s):
         delay = max(-60.0, min(0.0, float(s.get("d") or 0)))
     except (TypeError, ValueError):
         delay = 0.0
+    try:  # 3.9.0: its own blink cycle (sev.blink)
+        cycle = max(2.0, min(10.0, float(s.get("b") or _sev.BLINK)))
+    except (TypeError, ValueError):
+        cycle = _sev.BLINK
     name = _html.escape(str(s.get("n") or ""), quote=True)
     turn = s.get("m") if s.get("m") in _sev.SEAT_MOVES else "idle"  # its own small thing now and then
     look = s.get("l") if isinstance(s.get("l"), list) else None  # 3.8.2: what they have on (closet.clean rules it)
-    return (f'<span class="seat" title="{name}" style="--sa-l:{light};--sa-d:{dark};--sv-d:{delay:.2f}s">'
+    return (f'<span class="seat" title="{name}" style="--sa-l:{light};--sa-d:{dark};--sv-b:{cycle:.2f}s;--sv-d:{delay:.2f}s">'
             f'{_sev.slot(_sev.svg("idle", turn, label=name, look=look), 40)}</span>')
 
 
@@ -4048,18 +4439,75 @@ def loading_card(cfg):
     return _card(cfg, "Due Crew", "Catching up with your crew&hellip;")
 
 
-def flurry_js(emojis, banner_text, back=None, notes=None, season=None):
+CHEER_PIP = 92  # 3.8.22: a crewmate's Pip popping in with their cheer
+
+
+def cheer_pips(cheers, entries, cfg, most=3):
+    """3.8.22, cheers with Pips (Sam's pick, round three): who sent the
+    cheers that just landed, as their Pips, each once, in the order they
+    came, three at most: [{svg, a: [light, dark], emoji, name, note, poses}].
+    A cheer lands only from someone I added: a mutual friend comes in their
+    colour and look, anyone else plain. [] with Pip off. Our own markup; a
+    name is only its label, escaped. 3.9.0: the poses a show needs (popping
+    up, jumping, springing out of a present, still), and the name and
+    note, which the show puts in as text."""
+    if not cfg.get("sev", True):
+        return []
+    by = {e.get("user_id"): e for e in entries or [] if not e.get("you")}
+    out, seen = [], set()
+    for ch in cheers or []:
+        u = ch.get("from")
+        if not u or u in seen:
+            continue
+        seen.add(u)
+        e = by.get(u) or {}
+        name = str(ch.get("name") or e.get("name") or "?")
+        label = _html.escape(f'{name}’s Pip', quote=True)
+        look = e.get("look")
+        note = next((str(c.get("note")) for c in cheers if c.get("from") == u and c.get("note")), "")
+        out.append({"svg": _sev.svg("hello", "popup", look=look, label=label),
+                    "a": list(accent_pair(e.get("accent"))), "emoji": str(ch.get("emoji") or ""),
+                    "name": name.split(" ")[0][:40], "note": note[:140],
+                    "poses": {"hello": _sev.svg("hello", "popup", look=look, label=label),
+                              "jump": _sev.svg("hop", "jump", look=look, label=label),
+                              "cheer": _sev.svg("cheer", "giftspin", look=look, label=label),
+                              "idle": _sev.svg("idle", look=look, label=label)}})
+        if len(out) >= most:
+            break
+    return out
+
+
+def and_more(names, most=3):
+    """"Dre", "Dre and Mo", "Dre, Mo and Ana", "Dre, Mo, Ana and 2 more"."""
+    names = [str(n) for n in names]
+    if len(names) > most:
+        return ", ".join(names[:most]) + f" and {len(names) - most} more"
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1] if names else ""
+
+
+def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None, show=None):
     """Injected via web.eval after render — never inline in board HTML.
     Banner takes its colors from the board's tokens (so Settings → Theme
     holds), the page's night classes only when the board is off. When `back` is
     (uid, emoji) — a single sender — the banner is clickable to return the
     cheer, and stays up a little longer. `notes`: sender-written lines shown
-    under the title (textContent: never markup), which also buy time."""
+    under the title (textContent: never markup), which also buy time.
+    pips (3.8.22, cheer_pips): the senders' Pips. Each pops up at the
+    board's edge in turn, tosses its cheer onto my row and ducks back down,
+    in place of the flurry; with Reduce motion they stand still in the
+    banner. show (3.9.0, shows.next_show): with the Pips, a show over the
+    whole Decks screen in place of the toss (show.js), the banner at the
+    top; the toss if the show can't play."""
     # 2.10: about one flake in three is the season's
     emoji_list = _json.dumps(list(emojis) * 2 + list(season or []) if season else list(emojis))
     banner = _json.dumps(banner_text)
     notes_json = _json.dumps([str(n) for n in (notes or [])][:3])
     back_cmd = _json.dumps(f"duecrew:cheerback:{back[0]}:{back[1]}" if back else None)
+    pips_json = _json.dumps([{"svg": p["svg"], "a": p["a"], "emoji": p.get("emoji") or ""} for p in (pips or [])][:3]).replace("</", "<\\/")
+    show_json = _json.dumps(show if show in _shows.SHOWS and pips else None)
+    senders_json = _json.dumps([dict(p.get("poses") or {}, name=p.get("name") or "", note=p.get("note") or "", emoji=p.get("emoji") or "\U0001F389", a=p["a"])
+                                for p in (pips or [])][:3]).replace("</", "<\\/") if show else "[]"
+    season_one = _json.dumps((list(season or []) or [""])[0])
     return """
     (function() {
         if (document.getElementById('dc-flurry')) { return; }
@@ -4103,13 +4551,121 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None):
             banner.appendChild(sub);
             banner.addEventListener('click', function() {
                 pycmd(backCmd);
-                banner.remove();
+                // once: it fades as it goes, no second send
+                banner.style.pointerEvents = 'none';
+                banner.style.transition = 'opacity 0.25s';
+                banner.style.opacity = '0';
+                setTimeout(function() { banner.remove(); }, 300);
             });
         }
+        var pips = %s, still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        // 3.8.22: the board's own theme decides a Pip's colour, light or dark
+        function dark(c) {
+            var m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(c), n = m ? [m[1], m[2], m[3]].map(function(h) { return parseInt(h, 16); })
+                : (/(\\d+)\\D+(\\d+)\\D+(\\d+)/.exec(c) || [0, 255, 255, 255]).slice(1).map(Number);
+            return n[0] * 0.299 + n[1] * 0.587 + n[2] * 0.114 < 128;
+        }
+        var boardDark = dark(dcBg), muted = tok('muted', '#6f736b', '#9a9e94');
+        function pipEl(p, size) {
+            var w = document.createElement('span');
+            w.style.cssText = 'display:inline-block;line-height:0;width:' + size + 'px;height:' + size + 'px;' +
+                '--sv-a:' + (boardDark ? p.a[1] : p.a[0]) + ';--sv-line:' + dcLine + ';--sv-amb:' + warn + ';--sv-mut:' + muted + ';';
+            w.innerHTML = p.svg;
+            var v = w.querySelector('svg');
+            if (v) { v.setAttribute('width', size); v.setAttribute('height', size); v.style.overflow = 'visible'; }
+            return w;
+        }
+        if (pips.length && still) {
+            // standing still beside who sent it, no flurry
+            var who = document.createElement('div');
+            who.style.cssText = 'display:flex;justify-content:center;gap:4px;margin:-4px 0 0;';
+            pips.forEach(function(p) { var e = pipEl(p, 52); var v = e.querySelector('svg'); if (v) { v.classList.add('rest'); } who.appendChild(e); });
+            banner.insertBefore(who, title);
+        }
         document.body.appendChild(banner);
+        // it comes in as it goes out, a fade (and a drop, with motion); never there in one frame
+        if (banner.animate) {
+            banner.animate([{ opacity: 0, transform: 'translateX(-50%%) translateY(' + (still ? 0 : -10) + 'px)' },
+                            { opacity: 1, transform: 'translateX(-50%%)' }], { duration: 280, easing: 'ease-out' });
+        }
         setTimeout(function() { banner.style.opacity = '0'; }, linger);
         setTimeout(function() { banner.remove(); }, linger + 600);
-        if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { return; }
+        if (still) { return; }
+        var show = %s;
+        if (show && pips.length && document.body.animate) {
+            // 3.9.0: a show over the whole Decks screen, the banner at its top (show.js)
+            %s
+            var played = window.DCShow && window.DCShow.play(show, { senders: %s, dark: boardDark, line: dcLine, amb: warn, mut: muted,
+                accent: accent, accentInk: accentInk, ink: dcInk, sevcss: %s });
+            if (played) { banner.style.top = '12px'; return; }
+        }
+        if (pips.length && document.body.animate) {
+            var dc = document.getElementById('due-crew'), vw = window.innerWidth, vh = window.innerHeight;
+            var edge = dc ? dc.getBoundingClientRect().right : vw * 0.8, size = %d, season = %s;
+            pips.forEach(function(p, i) { setTimeout(function() { toss(p, i); }, i * 1150); });
+            function where() {
+                // my row's name, if it's on screen; else under the banner
+                var me = dc && dc.querySelector('tr.you td.nm'), r = me && me.getBoundingClientRect();
+                if (r && r.top > 0 && r.bottom < vh) { return { x: r.left + Math.min(r.width * 0.4, 160), y: r.top + r.height / 2, row: me }; }
+                var b = banner.getBoundingClientRect();
+                return { x: b.left + b.width / 2, y: b.bottom + 24, row: null };
+            }
+            function fly(text, from, to, ms, px, then) {
+                var f = document.createElement('span');
+                f.textContent = text;
+                f.setAttribute('aria-hidden', 'true');
+                f.style.cssText = 'position:fixed;left:0;top:0;z-index:72;pointer-events:none;font-size:' + px + 'px;line-height:1;';
+                document.body.appendChild(f);
+                var mid = { x: (from.x + to.x) / 2, y: Math.min(from.y, to.y) - 80 };
+                var a = f.animate([{ transform: 'translate(' + from.x + 'px,' + from.y + 'px) rotate(0) scale(.7)' },
+                                   { transform: 'translate(' + mid.x + 'px,' + mid.y + 'px) rotate(180deg) scale(1.15)', offset: 0.5 },
+                                   { transform: 'translate(' + to.x + 'px,' + to.y + 'px) rotate(360deg) scale(1)' }],
+                                  { duration: ms, easing: 'ease-in-out', fill: 'forwards' });
+                a.onfinish = function() { f.remove(); if (then) { then(); } };
+            }
+            function burst(text, at) {
+                for (var k = 0; k < 9; k++) {
+                    var s = document.createElement('span');
+                    s.textContent = (k === 4 && season) ? season : text;
+                    s.setAttribute('aria-hidden', 'true');
+                    s.style.cssText = 'position:fixed;left:0;top:0;z-index:72;pointer-events:none;font-size:15px;line-height:1;';
+                    document.body.appendChild(s);
+                    var ang = k / 9 * Math.PI * 2, d = 34 + (k %% 3) * 14;
+                    s.animate([{ transform: 'translate(' + at.x + 'px,' + at.y + 'px) scale(.4)', opacity: 1 },
+                               { transform: 'translate(' + (at.x + Math.cos(ang) * d) + 'px,' + (at.y + Math.sin(ang) * d * 0.6 + 16) + 'px) scale(1)', opacity: 0 }],
+                              { duration: 900, easing: 'ease-out', fill: 'forwards' }).onfinish = (function(x) { return function() { x.remove(); }; })(s);
+                }
+            }
+            function toss(p, i) {
+                // it rises from the board's bottom edge (the window's, if the board runs past it), in a box that hides it below
+                var r = dc ? dc.getBoundingClientRect() : null, base = Math.min(vh, r ? r.bottom : vh);
+                var x = Math.max(8, Math.min(vw - size - 8, edge - size - 16 - i * 64));
+                var box = document.createElement('div'), w = pipEl(p, size);
+                box.setAttribute('aria-hidden', 'true');
+                box.style.cssText = 'position:fixed;z-index:71;pointer-events:none;overflow:hidden;left:' + x + 'px;top:' + (base - size) +
+                    'px;width:' + size + 'px;height:' + size + 'px;';
+                w.style.transform = 'translateY(' + size + 'px)';
+                box.appendChild(w);
+                document.body.appendChild(box);
+                w.animate([{ transform: 'translateY(' + size + 'px)' }, { transform: 'translateY(4px)' }],
+                          { duration: 380, easing: 'cubic-bezier(.3,1.4,.5,1)', fill: 'forwards' });
+                setTimeout(function() {
+                    var to = where();
+                    fly(p.emoji || '🎉', { x: x + size * 0.72, y: base - size * 0.5 }, { x: to.x, y: to.y - 12 }, 760, 26, function() {
+                        burst(p.emoji || '🎉', { x: to.x, y: to.y - 12 });
+                        if (to.row) {
+                            to.row.parentNode.animate([{ backgroundColor: 'transparent' }, { backgroundColor: accent + '33', offset: 0.2 }, { backgroundColor: 'transparent' }],
+                                                     { duration: 1100 });
+                        }
+                    });
+                }, 520);
+                setTimeout(function() {
+                    w.animate([{ transform: 'translateY(4px)' }, { transform: 'translateY(' + size + 'px)' }],
+                              { duration: 340, easing: 'ease-in', fill: 'forwards' }).onfinish = function() { box.remove(); };
+                }, 2200);
+            }
+            return;
+        }
         var emojis = %s;
         var wrap = document.createElement('div');
         wrap.id = 'dc-flurry';
@@ -4129,15 +4685,19 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None):
         document.body.appendChild(wrap);
         setTimeout(function() { wrap.remove(); }, 3800);
     })();
-    """ % (back_cmd, banner, notes_json, emoji_list)
+    """ % (back_cmd, banner, notes_json, pips_json, show_json, SHOW_JS if show_json != "null" else "",
+           senders_json, _json.dumps(_sev.CSS).replace("</", "<\\/") if show_json != "null" else "null", CHEER_PIP, season_one, emoji_list)
 
 
 def stranger_card_js(info):
     """Card for a squadmate who isn't crew. Deliberately spare — no heatmap,
     no cheer, no celebration: we don't necessarily know them. info: uid,
     name, reviews, time_ms, retention, streak, rank, squad, today (bool),
-    pending, knocked_me, founder_me."""
-    name = _label(info.get("name", "?"), info.get("emoji"))
+    pending, knocked_me, founder_me; sev (3.8.22): card_sev's markup, a
+    plain Pip in the emoji's place (all a squadmate shares is a name and an
+    emoji, so no colour or look), or None."""
+    sev_fig = info.get("sev")
+    name = _html.escape(str(info.get("name", "?"))) if sev_fig else _label(info.get("name", "?"), info.get("emoji"))
     squad = _html.escape(str(info.get("squad") or "squad"))
     numberless = all(info.get(k) is None for k in ("reviews", "time_ms", "retention", "streak"))
     if info.get("show_up") or numberless:
@@ -4156,12 +4716,13 @@ def stranger_card_js(info):
             bits.append(f'{float(info["retention"]):.1f}% retention')
         bits.append(f'{int(info.get("streak") or 0)}-day streak')
     stat = " &middot; ".join(bits)
-    inner = _json.dumps(
-        f'<div style="display: flex; align-items: baseline; gap: 8px;">'
-        f'<span style="font-size: 15px; font-weight: 700;">{name}</span>'
-        f'<span style="opacity: 0.6; font-size: 10.5px; text-transform: uppercase;'
-        f' letter-spacing: 0.08em;">{where}</span></div>'
-        f'<div style="font-size: 12px; opacity: 0.8; padding: 6px 0 2px;">{stat}</div>')
+    head = (f'<div style="display: flex; align-items: baseline; gap: 8px; flex: 1; min-width: 0;">'
+            f'<span style="font-size: 15px; font-weight: 700;">{name}</span>'
+            f'<span style="opacity: 0.6; font-size: 10.5px; text-transform: uppercase;'
+            f' letter-spacing: 0.08em;">{where}</span></div>')
+    if sev_fig:  # 3.8.22: as on a crewmate's card, Pip beside the line, room above for a hat
+        head = f'<div style="display: flex; align-items: center; gap: 10px; padding-top: 10px;">{sev_fig}{head}</div>'
+    inner = _json.dumps(head + f'<div style="font-size: 12px; opacity: 0.8; padding: 6px 0 2px;">{stat}</div>')
     uid = str(info.get("uid", ""))
     if info.get("knocked_me"):
         act_label = _json.dumps("\U0001F91D Add back")

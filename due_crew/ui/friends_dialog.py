@@ -18,10 +18,6 @@ from ..backend.shapes import friend_code_from, invite_code_from
 from . import accent, attach_alive, confirm, copy_text, run_bg
 
 
-def _with_emoji(name, emoji):
-    return f"{emoji} {name}" if emoji else name
-
-
 def invite_text(friend_code):
     from ..share import friend_invite   # one wording, also used by the board
     return friend_invite(friend_code)
@@ -137,8 +133,8 @@ class FriendsDialog(QDialog):
 
         def job():
             code, people, knocks = self.client.friends_view()  # one request
-            return (code, [(fid, _with_emoji(name, emoji), mutual)
-                           for fid, name, emoji, mutual in people], knocks)
+            # 3.8.22 (Sam): names alone; a person is their Pip everywhere else
+            return (code, [(fid, name, mutual) for fid, name, _emoji, mutual in people], knocks)
 
         def done(result, err):
             if err or result is None:

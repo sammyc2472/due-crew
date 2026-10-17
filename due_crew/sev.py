@@ -338,15 +338,29 @@ def stack_reach(n, size):
     return max(0, math.ceil(-(y + top * k))), max(0, math.ceil(y + 77.1 * k - w))  # 77.1: the shadow's bottom
 
 
-# 3.8.1: in a study room each member is their Pip (room_model.seats). They
-# started at different moments, so the blinks never line up: each gets its
-# own place in the blink (--sv-d, a negative delay), a step apart.
-BLINK = 4.6  # s: the blink's cycle (sv-blink, below)
+# 3.8.1: in a study room each member is their Pip (room_model.seats); 3.9.0
+# the peek's Pips, a bingo square's stamps, a plan card's squad line. Side by
+# side they never blink together, nor one after another in turn (Sam: "still
+# looks kinda creepy"): each blinks on its own clock, a cycle of its own
+# (--sv-b) and its own place in it (--sv-d, a negative delay), so they drift
+# past each other and no order shows for long.
+BLINK = 4.6  # s: a Pip's blink cycle on its own (sv-blink, below)
 
 
-def started(i):
-    """The i-th Pip of several: its blink's delay in s (0, then back a step each, round the cycle)."""
-    return -round(i * 1.7 % BLINK, 2) or 0
+def blink(i):
+    """The i-th Pip of several: (cycle, delay) in s for its blink. Cycles
+    from 3.4 to 6.4 s and places in them spread apart (golden steps, a
+    little jitter), so no two of a group start or stay together; from i
+    alone, so a redraw draws the same and nothing moves for it."""
+    r = random.Random(f"sev-blink:{i}")
+    cycle = round(3.4 + ((i * 0.382 + r.random() * 0.08) % 1) * 3.0, 2)
+    return cycle, -round(((i * 0.618 + r.random() * 0.08) % 1) * cycle, 2)
+
+
+def blink_css(i):
+    """blink(i) as the style that sets it, on a Pip's wrapper."""
+    cycle, delay = blink(i)
+    return f"--sv-b:{cycle}s;--sv-d:{delay}s"
 
 
 # 3.8.1 (Sam): by the logo Pip is a moment, not a fixture. It comes when
@@ -441,7 +455,9 @@ svg.sv { overflow: visible; display: block; flex: none; }
 .sv .cf { transform: translate(var(--dx), var(--dy)) rotate(var(--r)); }
 .sv .lab { opacity: .35; }
 .sv .lab.l1 { opacity: 1; }
-.sv.m-peek .sv-body, .sv.m-knock .sv-body, .sv.m-bounce .sv-body { transform: translateY(22%); }
+/* 3.9.0: moved in the drawing's own units, a plain body's share (45.5 tall: 22% is 10), never a share of
+   the body's box, which what Pip has on makes taller (Sam: a pumpkin and an umbrella sank it) */
+.sv.m-peek .sv-body, .sv.m-knock .sv-body, .sv.m-bounce .sv-body { transform: translateY(10px); }
 .sv.m-peek .sv-shadow, .sv.m-in .sv-shadow, .sv.m-knock .sv-shadow, .sv.m-bounce .sv-shadow,
 .sv.m-popup .sv-shadow { display: none; }
 .sv.m-hop .sv-body, .sv.m-twirl .sv-body, .sv.m-shuffle .sv-body, .sv.m-jump .sv-body { transform: translateY(-12px); }
@@ -456,7 +472,7 @@ svg.sv { overflow: visible; display: block; flex: none; }
 .sv .cl-wl { transform-origin: 100% 40%; }
 .sv .cl-wr { transform-origin: 0% 40%; }
 @media (prefers-reduced-motion: no-preference) {
-  .sv .sv-eyes { animation: sv-blink 4.6s var(--sv-d, 0s) infinite; }
+  .sv .sv-eyes { animation: sv-blink var(--sv-b, 4.6s) var(--sv-d, 0s) infinite; }
   @keyframes sv-blink { 0%, 90%, 100% { transform: scaleY(1); } 93% { transform: scaleY(.12); } 96% { transform: scaleY(1); } }
   /* napping: nothing studied yet today */
   .sv.m-nap .sv-body { animation: sv-breathe 3.2s ease-in-out infinite; }
@@ -470,7 +486,7 @@ svg.sv { overflow: visible; display: block; flex: none; }
   /* peeking in, from behind the nudge: up once, a wave */
   .sv.m-peek .sv-body { animation: sv-peek .7s cubic-bezier(.34, 1.56, .64, 1) 1 both; }
   .sv.m-peek .sv-armR { animation: sv-wave 1.6s ease-in-out .5s 1 both; }
-  @keyframes sv-peek { from { transform: translateY(75%); } to { transform: translateY(22%); } }
+  @keyframes sv-peek { from { transform: translateY(34.1px); } to { transform: translateY(10px); } }
   @keyframes sv-wave { 0%, 100% { transform: rotate(0); } 20%, 60% { transform: rotate(-26deg); } 40%, 80% { transform: rotate(10deg); } }
   /* let's go: a squash, a jump, a fist */
   .sv.m-ready .sv-body { animation: sv-ready .9s ease-out 1 both; }
@@ -602,7 +618,7 @@ svg.sv { overflow: visible; display: block; flex: none; }
   .sv.m-popup .sv-body { animation: sv-popup .9s cubic-bezier(.34, 1.56, .64, 1) 1 both; }
   .sv.m-popup .sv-armR { animation: sv-wave 1.6s ease-in-out .55s 1 both; }
   .sv.m-popup .sv-armL { animation: sv-waveL 1.6s ease-in-out .65s 1 both; }
-  @keyframes sv-popup { 0% { transform: translateY(80%) scale(.92); } 65% { transform: translateY(-8px); } 100% { transform: none; } }
+  @keyframes sv-popup { 0% { transform: translateY(36.4px) scale(.92); } 65% { transform: translateY(-8px); } 100% { transform: none; } }
   @keyframes sv-waveL { 0%, 100% { transform: rotate(0); } 20%, 60% { transform: rotate(26deg); } 40%, 80% { transform: rotate(-10deg); } }
   /* 3.8.1, more moves: exam eve */
   .sv.m-pep .sv-star { animation: sv-spin 2.6s ease-in-out infinite; }
@@ -677,8 +693,8 @@ svg.sv { overflow: visible; display: block; flex: none; }
   @keyframes sv-knock { 0%, 100% { transform: rotate(0); } 15% { transform: rotate(-52deg); } 25% { transform: rotate(-30deg); } 35% { transform: rotate(-52deg); }
     45% { transform: rotate(-30deg); } 55% { transform: rotate(-52deg); } 70% { transform: rotate(-10deg); } }
   .sv.m-bounce .sv-body { animation: sv-bounce 1.6s cubic-bezier(.34, 1.2, .64, 1) 1 both; }
-  @keyframes sv-bounce { 0% { transform: translateY(75%); } 25% { transform: translateY(8%); } 42% { transform: translateY(45%); } 66% { transform: translateY(2%); }
-    82% { transform: translateY(28%); } 100% { transform: translateY(22%); } }
+  @keyframes sv-bounce { 0% { transform: translateY(34.1px); } 25% { transform: translateY(3.6px); } 42% { transform: translateY(20.5px); } 66% { transform: translateY(.9px); }
+    82% { transform: translateY(12.7px); } 100% { transform: translateY(10px); } }
   /* 3.8.1, more moves: a room's seats: each does one small thing now and then, at its own time */
   .sv.m-sread .sv-pupils { animation: sv-read 1.75s ease-in-out infinite alternate; }
   .sv.m-snod .sv-body { animation: sv-nod 6s ease-in-out var(--sv-d, 0s) infinite; }
@@ -717,5 +733,5 @@ svg.sv { overflow: visible; display: block; flex: none; }
 .sv.rest .sv-card, .sv.rest .sv-gift, .sv.rest .stk, .sv.rest .sv-cheek, .sv.rest .spark,
 .sv.rest .sv-footL, .sv.rest .sv-footR { transform: none; }
 .sv.rest .cf, .sv.rest .spark, .sv.rest .sv-ring { opacity: 0; }
-.sv.rest.m-peek .sv-body, .sv.rest.m-knock .sv-body, .sv.rest.m-bounce .sv-body { transform: translateY(22%); }
+.sv.rest.m-peek .sv-body, .sv.rest.m-knock .sv-body, .sv.rest.m-bounce .sv-body { transform: translateY(10px); }
 """

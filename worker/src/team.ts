@@ -320,6 +320,9 @@ export async function forBoard(env: Env, uid: string) {
     const threads = (acts.results as Obj[]).filter((a) => a.plan === plan && !muted.has(a.uid as string));
     const last = threads.find((a) => a.uid !== uid);
     out[plan] = { shown: shown.length, of: rows.length, faces: shown.slice(0, 4).map((m) => m.emoji || ""),
+      // 3.8.22: whose faces they are (a squadmate's uid, as the squad's own view has it), so the
+      // add-on draws a crewmate's Pip in their colour and look; an older add-on reads faces alone
+      who: shown.slice(0, 4).map((m) => m.uid),
       // what moved since I looked: not by me (my own question, my own reply)
       act: threads.filter((a) => (a.act_by ?? a.uid) !== uid).map((a) => a.act), ...(last ? { last: { name: (last.name as string) || "?", text: last.text } } : {}) };
   }

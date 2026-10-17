@@ -97,11 +97,12 @@ def week(days, today, one=False, fresh=None, streak=0, crew=0, sev=False):
             "streak": int(streak or 0), "crew": int(crew or 0), "sev": bool(sev)}
 
 
-def year(days, y, today, cheers=None):
+def year(days, y, today, cheers=None, sev=False):
     """My year in Anki: the calendar year, Monday-first columns, days
     before my first review dashed; how many days, the hours and reviews,
     the longest streak and the biggest day. cheers: received that year,
-    None while unknown."""
+    None while unknown. sev (3.9.0, Wrapped's picture): Pip hops beside
+    the days (Settings › Pip here)."""
     jan1, dec31 = datetime.date(int(y), 1, 1), datetime.date(int(y), 12, 31)
     first = min(days) if days else today
     lv = heat_level(days)
@@ -129,7 +130,7 @@ def year(days, y, today, cheers=None):
             "since": short(first) if first > jan1.isoformat() and first <= dec31.isoformat() else "",
             "cols": len(cells) // 7, "cells": cells, "minutes": sum(days[lb][1] for lb in mine) / 60000,
             "reviews": sum(days[lb][0] for lb in mine), "streak": streak,
-            "best": best if best and best["n"] else None, "cheers": cheers}
+            "best": best if best and best["n"] else None, "cheers": cheers, "sev": bool(sev)}
 
 
 def alltime(days, today, cheers=None):
@@ -276,6 +277,7 @@ SEV_FEET = 72.5 / 80  # where its feet end in its drawing (sev.py)
 HOP = 0.45  # a hop's height, times the root of the days it spans: a day off, a longer one
 DOT, STEP = 0.035, 0.16  # the trail: a dot's radius, and the way between two dots
 ROOM = 100  # on a story, the squares and what's under them move down this much for Pip
+YEAR_SEV = 220  # 3.9.0: Pip's drawing on the year card, beside its big number
 
 
 def landings(d):
@@ -410,6 +412,8 @@ def _year(o, W, H, size, d, on):
     o.eyebrow(f"My year in Anki · {d['year']}", P, 236, 30)
     o.text(_plural(d["studied"], "day"), P, 380, 132, pal["ink"], 700)
     o.text(f"studied, since {d['since']}" if d["since"] else f"studied in {d['year']}", P, 446, 38, pal["mut"])
+    if d.get("sev"):  # 3.9.0: Pip hops at the right, its feet on the line under the days (cards.js the same)
+        o.sev("hop", W - P - YEAR_SEV, 446 - YEAR_SEV * SEV_FEET, YEAR_SEV, pal["g"])
     w, cols, gap = W - 2 * P, d["cols"], 4
     s = (w - (cols - 1) * gap) / cols
     for i, c in enumerate(d["cells"]):

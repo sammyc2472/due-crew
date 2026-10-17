@@ -665,6 +665,64 @@ In Anki (as a follower):
 - [ ] Plan ▾ › How its cards open: switch to When I'm ready (a deck with open later cards offers Hold back), and back to the plan's dates (dates passed since ask, as Resume does). duecrew.com's plan page shows "At your pace · next: …" and the same choice; changing it there reaches Anki at its next refresh.
 - [ ] Browse: right-click a tag in the sidebar › Due Crew: open its cards…: the sheet counts what opens, what's open already, the leeches (they stay suspended), and the plans that hold them; Open with First in line ticked puts them first in Anki's new cards; one Edit › Undo shuts them. Pick cards in the table › Due Crew: open these…: the same for just those. Signed out: both are there.
 
+### 3.9.0: cheers land everywhere
+
+- [ ] Have a crewmate cheer you, then open the Decks screen: a show plays over the whole page, the deck list and the board, never over Anki's top bar; the banner at the top names them, with their note and "click to send one back". Cheered again (or a few cheers at once): a different show each time, never the same twice in a row, all twelve before any repeats.
+- [ ] Three crewmates at once: the big version (three Pips, three presents, three stamps…). A present: click it and their Pip springs out with their note on the tag; leave it and it opens itself. Bubbles: click one and it pops.
+- [ ] A click anywhere (but a present or bubble) or Esc ends it at once; otherwise it ends on its own and the page is as it was.
+- [ ] Reduce motion (system setting): no show, the senders' Pips standing in the banner. Settings › Pip off: the emoji flurry, as before.
+
+### 3.9.0: the closet's colour, the review chip
+
+- [ ] Pip's closet: under Pip, Colour with the six swatches, yours ringed. Click one: Pip, the closet and (‹ Board) the board are in it; Settings › Board › Accent shows the same one. A crewmate sees your Pip in it after your next sync.
+- [ ] Review a card a crewmate knows: the chip beside Edit has their Pip whole (hat and feet inside the pill), light and dark.
+
+### 3.9.0: who knows it, the moment you miss it
+
+- [ ] A crewmate (mutual, sharing the same deck) has a card down that you've never missed. Open Anki (the day's first sync), study, press Again on that card for the first time: ten minutes later it's back, and on its answer side their Pip pops up from the bottom right (no lightbulb), "I know this one", Ask Dre, Not now. No sync needed in between.
+- [ ] Before you've missed it: nothing. The next card: their Pip ducks back down. Not now: the same. Ask Dre: the ask window, as before.
+- [ ] Two crewmates know it: both Pips side by side at the same height whatever they wear (a hat, an umbrella), never blinking together, "Dre and Mo know this", Ask; three: "Dre, Mo and Jo know this"; four or more: three Pips, "Dre, Mo, Jo and 1 more know this". No lightbulb. Already asked: Asked. An ask from a crewmate or a plan's note: the corner card, folded (below), not the peek.
+- [ ] A card whose text or picture fills that corner: still the peek, never the chip beside Edit; scroll down and the card's last lines clear it.
+- [ ] Settings › Pip off: the same bubble in the same corner without Pip, "Dre knows this", Ask, Not now; it fades in, and out on the next card. Reduce motion (system setting): the Pip and bubble there at once, no pop, no duck. Settings › Pip off: the corner card as before.
+
+### 3.9.0: asks and tips
+
+- [ ] Ask on a card someone has down: the window says "Goes to everyone in your crew who has this card. Adina has it down. One line, optional." On a card nobody has down: the first and last sentences only. Asked already: "… You've asked. Change your line, or leave it as it is."
+- [ ] A tip on a card you're stuck on: the tipper's Pip peeks up from the bottom right, its bubble edged in their colour (who knows it: a plain grey line), "Adina left a tip", Show, Not now; no words, and none on a hover. Show: "Adina: …" with This helped (and +1 more with two tips). This helped: it stays open (and asks first, as before). Pip off: the same bubble with 💡.
+- [ ] A one-by-one card (a cloze that shows its parts a step at a time) with a tip: nothing of the tip's words shows until Show, whatever step you're on.
+- [ ] A crewmate's ask with a line: their Pip and "Sam asked about this card", Show, Not now; Show: their line, Tip. An ask without a line: "Sam asked about this", Tip, as before. A plan's note: "📌 A note from Block 1", Show; Show: the note.
+- [ ] Where the corner isn't free (a long card): the chip beside Edit says the same folded words with Show; a click shows the words, then This helped / Tip work as before. Opened on the card and then moved to the bar: still open there.
+
+- [ ] Squad bingo: point at a square two or three of you stamped: their Pips blink each on their own, in no order and never together. A plan card's squad line, a study room's seats and the peek's Pips: the same.
+
+### 3.9.0: smooth motion
+
+- [ ] Crew ↔ Squads, back and forth: the green pill slides across, round at both ends on its way, and lands round on the outside edge; no frame of it square, no second outline, the words changing colour as it passes. Today · Week · Decks: the underline slides, the same.
+- [ ] Fold and open the Due box, change tabs in it, add a to-do, tick one: the box grows and shrinks to its size and stops there, nothing below it jumping a few pixels at the end. A note or a knock leaving, the last topic that starts sticking, Caught up: what's under them settles once, no hop.
+- [ ] Click ↻ and let the board redraw: the arrow finishes its turn, never snapping upright.
+- [ ] A crewmate's cheer: the banner fades in; click it to send one back and it fades out. During a show, click anywhere or press Esc: the show fades away (a quarter second), not gone in one frame.
+- [ ] On a card with a tip, press Show in the corner: the bubble grows to fit the words, which fade in; the chip beside Edit fades its words in too.
+- [ ] Reduce motion (system setting): nothing slides, grows or turns; the banner only fades.
+
+### 3.9.0: your Wrapped
+
+- [ ] Tools › Due Crew › Your year…: the board's place shows Your 2026 on a phone-shaped card; it moves on every few seconds and waits while the pointer is on it; the right side or → goes on, the left or ← goes back. Each slide's Pip plays as it comes, in your look. ‹ Board goes back.
+- [ ] The slides your year can fill, and no others: a year without Fifteens has no Fifteens slide; the comeback slide only if you were away a week or more; Night owl or Early bird only with 30 days or more. None of it says missed, fewer or behind.
+- [ ] The card you turned around shows a real card's front as text; "Leave out the card you turned around" takes it off (and the link says Show it again). Make the picture opens Share's picture on that year, Pip hopping on it; Copy and Save work.
+- [ ] Another year (2025, …) from the list beside it; All on one page lists every slide as text. Reduce motion: it never moves on by itself; the Pips are still.
+- [ ] Set the date to 1 December (or wait): the board's line "Your 2026 so far is ready"; Open plays it; × puts it away, and it stays away on your other computer after a sync. 16 January: no line.
+
+### 3.8.22: Pips on a plan card's squad line
+
+- [ ] You › Plans, a plan whose squad you're in: "Squad: N of M showed up" starts with who showed up as Pips (yours in your look, a crewmate's in their colour and look, anyone else a plain green Pip), no emojis; no hat touches the line above. Click your Pip: the closet. Settings › Pip off: the emojis come back.
+- [ ] Review a card a crewmate knows or asked about: the chip beside Edit (and the card in the bottom right corner, when it's free) starts with their Pip in their colour and look, no emoji, nothing touching the words. Night mode: their night colour.
+- [ ] Squads › click someone who isn't in your crew: their card has a plain Pip where the emoji was. Settings › You: your Pip by your name; click it, the closet. Squad bingo: who stamped a square are Pips, bigger than the old emoji circles, none cut off at the square's edge. Tools › Due Crew › Friends: names, no emojis.
+- [ ] duecrew.com: your Pip at the top of Account; Home's Since you were here: "added you back" and a crewmate's exam lead with their Pip.
+- [ ] Settings › Pip off: every one of these is back to emojis (the Friends dialog stays names only).
+- [ ] Halloween week (set the computer's date to 24 to 31 Oct, or wait): a line under the logo, "Halloween week · N days so far", the five things as little Pips (yours in colour), and what's next ("study today for the pumpkin"); the first board of the day, three bats fly across that line (not across the logo), and not again that day; Reduce motion: no bats. Every Pip on your crew's rows in a Halloween thing: a cobweb in the line's corner and "A spooky crew". × hides the line; it stays hidden till next year. 1 Nov: gone.
+- [ ] A crewmate cheers you (have them send one, then Refresh): their Pip rises from the bottom of the board, tosses the emoji onto your row, which lights for a moment, and ducks back down; no flurry. Three or more at once: one after another, three at most, the banner "Dre, Mo, Ana and 1 more sent cheers". From someone who hasn't added you back: a plain Pip. Reduce motion: their Pips standing in the banner. Pip off: the flurry.
+- [ ] Do a Fifteen, cheer someone, sit in a room with your crew: user_files' wrap.json has `closet.years.2026` counting them (and `worn` with what Pip had on today).
+
 ### 3.8.21: Pips on Squads
 
 - [ ] Squads › a squad: each person's Pip where the emoji was; yours in your look (it opens the closet), a crewmate's in their colour and look, everyone else a plain green Pip. Settings › Pip off: the emojis come back.
@@ -674,7 +732,7 @@ In Anki (as a follower):
 ### 3.8.2: Pip's closet
 
 - [ ] First refresh after updating: the board's line says the closet is open and how many things your days had earned already; See them opens it. Your crew's rows show each person's Pip where their emoji was, in their colour (yours in yours); Settings › Pip off brings the emojis back.
-- [ ] The closet (Settings › Fifteen and Pip › Pip's closet, or Tools › Due Crew › Pip's closet, or click your Pip on your row or your card): your Pip big, in what it has on, and what's on place by place; ‹ Board goes back. The count says N of 61. Yours shows your things by place, each with what earned it; what's on is filled with a ✓ On.
+- [ ] The closet (Settings › Fifteen and Pip › Pip's closet, or Tools › Due Crew › Pip's closet, or click your Pip on your row or your card): your Pip big, in what it has on, and what's on place by place; ‹ Board goes back. The count says N of 64. Yours shows your things by place, each with what earned it; what's on is filled with a ✓ On.
 - [ ] Put on a hat, then another hat: the second replaces the first. Glasses and a hat together: both on. Earmuffs and a scarf (winter) with a scarf on: the scarf comes off.
 - [ ] A costume (the Dinosaur, say) over a look: only the costume shows; a second costume replaces the first; take the costume off (click it again, or its chip): the look you had comes back. Put a hat on while in a costume: the costume comes off.
 - [ ] To earn: everything you haven't got, by how it's earned, greyed, with what it needs (and how far along); clicking does nothing, Pip never wears it. A secret says it's a secret and shows nothing. A place on Yours with nothing yet says what's next.

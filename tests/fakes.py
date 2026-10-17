@@ -173,11 +173,11 @@ def make_collection(conn):
     """The slices of Anki's schema the add-on queries: revlog (with cid, so
     reviews can be credited to a deck), cards, and notes."""
     conn.execute("CREATE TABLE revlog (id INTEGER PRIMARY KEY, ease INTEGER, "
-                 "time INTEGER, type INTEGER, cid INTEGER DEFAULT 0, lastIvl INTEGER DEFAULT 0)")
+                 "time INTEGER, type INTEGER, cid INTEGER DEFAULT 0, lastIvl INTEGER DEFAULT 0, ivl INTEGER DEFAULT 0)")
     conn.execute("CREATE TABLE cards (id INTEGER PRIMARY KEY, nid INTEGER, did INTEGER, "
                  "odid INTEGER DEFAULT 0, type INTEGER DEFAULT 0, "
                  "queue INTEGER DEFAULT 0, ivl INTEGER DEFAULT 0, ord INTEGER DEFAULT 0, "
-                 "due INTEGER DEFAULT 0, lapses INTEGER DEFAULT 0, data TEXT DEFAULT '')")
+                 "due INTEGER DEFAULT 0, lapses INTEGER DEFAULT 0, data TEXT DEFAULT '', odue INTEGER DEFAULT 0)")
     conn.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY, guid TEXT, mid INTEGER DEFAULT 0, flds TEXT DEFAULT '', "
                  "tags TEXT DEFAULT '', mod INTEGER DEFAULT 0)")
     # Anki bumps a note's mod on every edit; the plan index keeps tags by it
@@ -186,12 +186,13 @@ def make_collection(conn):
     return conn
 
 
-def add_review(conn, ts_ms, ease=3, time_ms=6000, rtype=1, cid=0, last_ivl=0):
-    # revlog ids are epoch-ms and must be unique
+def add_review(conn, ts_ms, ease=3, time_ms=6000, rtype=1, cid=0, last_ivl=0, ivl=0):
+    # revlog ids are epoch-ms and must be unique; ivl as Anki logs it (days
+    # ahead, or a learning step's seconds, negative)
     while conn.execute("SELECT 1 FROM revlog WHERE id=?", (ts_ms,)).fetchone():
         ts_ms += 1
-    conn.execute("INSERT INTO revlog (id, ease, time, type, cid, lastIvl) VALUES (?,?,?,?,?,?)",
-                 (ts_ms, ease, time_ms, rtype, cid, last_ivl))
+    conn.execute("INSERT INTO revlog (id, ease, time, type, cid, lastIvl, ivl) VALUES (?,?,?,?,?,?,?)",
+                 (ts_ms, ease, time_ms, rtype, cid, last_ivl, ivl))
     return ts_ms
 
 
@@ -808,7 +809,8 @@ class FakeWorker:
         return out, r.get("name")
 
     def _sync(self, me, body):
-        if not set(body) <= {"profile", "week", "decks", "heatmap", "squads", "settings", "plans", "knows", "stuck", "log", "team"}:
+        if not set(body) <= {"profile", "week", "decks", "heatmap", "squads", "settings", "plans", "knows", "stuck", "log", "team",
+                             "due"}:
             raise Bad(400, "bad_sync")
         prof = body.get("profile")
         if prof is not None:
@@ -828,6 +830,10 @@ class FakeWorker:
         if stuck is not None and (not isinstance(stuck, list) or len(stuck) > 300
                                   or not all(isinstance(g, str) and 0 < len(g) <= 40 for g in stuck)):
             raise Bad(400, "bad_stuck")
+        due = body.get("due")  # 3.9.0: the cards due today, asked about once a day
+        if due is not None and (not isinstance(due, list) or len(due) > 1000
+                                or not all(isinstance(g, str) and 0 < len(g) <= 40 for g in due)):
+            raise Bad(400, "bad_due")
         log = body.get("log")
         if log is not None:
             days = log.get("days") if isinstance(log, dict) else None
@@ -934,8 +940,8 @@ class FakeWorker:
         out = {"ok": True, "gone": gone, "wrote": wrote, "logAll": True}
         if me in self.log_cut:
             out["logCut"] = True
-        if stuck is not None:
-            out["cards"] = self._for_stuck(me, list(dict.fromkeys(stuck)))
+        if stuck is not None or due is not None:
+            out["cards"] = self._for_stuck(me, list(dict.fromkeys((stuck or []) + (due or []))))
         return 200, out
 
     def _guids(self, v, keys):
@@ -2041,7 +2047,7 @@ class FakeWorker:
                              key=lambda a: (-a["act"], -a["id"]))[:20]
             last = next((a for a in threads if a["uid"] != me), None)
             out[pid] = {"shown": len(shown), "of": len(rows),
-                        "faces": [self.users[u]["emoji"] or "" for u in shown][:4],
+                        "faces": [self.users[u]["emoji"] or "" for u in shown][:4], "who": shown[:4],
                         "act": [a["act"] for a in threads if a.get("act_by", a["uid"]) != me]}
             if last:
                 out[pid]["last"] = {"name": self.users[last["uid"]]["name"] or "?", "text": last["text"]}

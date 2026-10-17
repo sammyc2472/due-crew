@@ -252,10 +252,12 @@ def _crew_with_me(span):
                and any(board._showed((e.get("days") or {}).get(lb)) for lb in span))
 
 
-def picture(kind):
+def picture(kind, year=None):
     """The footer's Share › As a picture: the card made here (it opened
     duecrew.com before). My day and week start from my Privacy switches;
-    my year and all time count my crew's cheers with one request."""
+    my year and all time count my crew's cheers with one request. year
+    (3.9.0, Wrapped's Make the picture): the year card on that year, Pip
+    on it (as Settings › Pip says)."""
     if not mw.col:
         return
     from . import sharecard as S
@@ -293,12 +295,14 @@ def picture(kind):
                 total = sum(by.values()) if by is not None else None
                 return {"kind": "alltime", "title": "Share my Anki, all time", "sizes": ("story", "link"),
                         "file": "due-crew-all-time", "data": S.alltime(days, today, total)}
+            from .rooms import sev_on
             return {"kind": "year", "title": "Share my year", "sizes": ("story",), "file": f"due-crew-{k}",
-                    "data": S.year(days, k, today, (by or {}).get(str(k), 0) if by is not None else None)}
+                    "data": S.year(days, k, today, (by or {}).get(str(k), 0) if by is not None else None, sev_on())}
         if not days:
             tooltip("No reviews yet.")
             return
-        dlg = ShareCardDialog(mw, choose, S.year_options(days, today), "all" if kind == "picturealltime" else today[:4],
+        first = str(year) if year and str(year) in [str(o) for o in S.year_options(days, today)] else today[:4]
+        dlg = ShareCardDialog(mw, choose, S.year_options(days, today), "all" if kind == "picturealltime" else first,
                               tooltip=tooltip, cheers_say="counting…" if signed else "sign in to count")
         if signed:
             gen, cl = app.generation, client()

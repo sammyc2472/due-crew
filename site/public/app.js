@@ -164,6 +164,16 @@ function copyInvite(friendCode, btn) {
 
 let me = null;  // {uid, name} or null
 
+/** 3.8.22 (Sam: "all the places where there are emojis"): someone's Pip away from the board, by uid, as
+ *  board.squad_pip draws them: a crewmate's in their colour and look (crew: /board's friends, which bring
+ *  only a mutual friend's), mine in my accent (look: mine, when the page has it), anyone else plain.
+ *  Without sev.js, null: the emoji, as before. */
+function pipFor(uid, name, crew, look) {
+  if (typeof Sev !== "object") return null;
+  const you = !!me && uid === me.uid, p = you ? { look } : (crew || []).find((f) => f.uid === uid) || {};
+  return Sev.row(p.look, accentPair(you ? worn : p.accent), you ? "Your Pip" : `${name || "?"}’s Pip`);
+}
+
 async function whoami() {
   try { me = await api("GET", "/auth/me"); } catch { me = null; }
   rollover = Math.max(0, Math.min(23, Number(me?.rollover) || 0));
@@ -786,7 +796,7 @@ async function account() {
   const where = pl ? [pl.computers ? n(pl.computers, "computer") : null, pl.browsers > 1 ? `this browser and ${n(pl.browsers - 1, "other")}` : "this browser"].filter(Boolean).join(", ") : "";
   const sec = (title, ...kids) => h("section", { class: "panel acc" }, h("h4", {}, title), ...kids);
   page(
-    h("div", { class: "phead" }, h("div", { class: "accwho" }, h("span", { class: "em" }, face(me.emoji, me.name)),
+    h("div", { class: "phead" }, h("div", { class: "accwho" }, h("span", { class: "em" }, pipFor(me.uid, me.name, [], st?.settings?.sev_look) || face(me.emoji, me.name)),
       h("div", {}, h("h1", {}, me.name || "Account"), h("p", { class: "muted" }, me.email, " · name and emoji change in Anki")))),
     sec("Your code", h("div", { class: "row" }, code ? h("span", { class: "mono codepill" }, spaced(code)) : h("span", { class: "muted" }, "none yet"),
       code ? h("button", { onclick: (e) => copyInvite(code, e.target) }, "Copy invite") : null)),
@@ -1694,7 +1704,7 @@ function sinceYouWereHere(b, crew, t) {
   const fresh = prev ? items.filter((x) => x.at > prev) : items;
   const older = items.filter((x) => !fresh.includes(x));
   const when = (iso) => { const d = new Date(iso); return `${DAYS[d.getDay()]} ${d.getHours() % 12 || 12}:${String(d.getMinutes()).padStart(2, "0")} ${d.getHours() < 12 ? "am" : "pm"}`; };
-  const who = (x) => `${x.emoji ? `${x.emoji} ` : ""}${x.name}`;
+  const who = (x) => { const pip = pipFor(x.uid, x.name, crew); return pip ? [pip, x.name] : `${x.emoji ? `${x.emoji} ` : ""}${x.name}`; };
   const row = (icon, main, sub) => h("div", { class: "fi" }, h("span", { class: "ic" }, icon), h("div", {}, h("span", {}, main), sub ? h("small", { class: "muted" }, sub) : null));
   const item = (x) => x.kind === "back" ? row("🤝", [h("b", {}, who(x)), " added you back"], "Now in your crew")
     : x.kind === "note" ? row("✎", [h("b", {}, x.name), ` on ${pretty(x.day)}, `, link(`/plans/${x.plan}`, x.planName), `: ${x.text}`], "A note on a day")
@@ -1708,7 +1718,7 @@ function sinceYouWereHere(b, crew, t) {
       const sentLine = () => h("small", { class: "muted" }, "Good luck sent ✓");
       const send = luckSent(f.uid, d) ? sentLine() : h("button", { class: "linkish", onclick: () => box.replaceChildren(luckForm(f, () => box.replaceChildren(),
         () => { markLuck(f.uid, d); send.replaceWith(sentLine()); })) }, "Send good luck");
-      return h("div", { class: "fi" }, h("span", { class: "ic" }, face(f.emoji, f.name)),
+      return h("div", { class: "fi" }, h("span", { class: "ic" }, pipFor(f.uid, f.name, crew) || face(f.emoji, f.name)),
         h("div", {}, h("span", {}, h("b", {}, f.name), `'s exam is ${d === t ? "today" : pretty(d)}`), send, box));
     });
   const earlier = h("div", { class: "stack", hidden: true }, older.map(item));

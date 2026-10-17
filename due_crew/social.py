@@ -10,7 +10,7 @@ import traceback
 from aqt import mw
 from aqt.utils import tooltip
 
-from . import app, board
+from . import app, board, shows
 from .app import (CHEER_QUICK, HEATMAP_DAYS, _bg, _pending_cheers,
                   _profile_files, _state, cfg, client, save_cfg)
 from .backend.shapes import clean_emoji
@@ -36,12 +36,12 @@ def _play_cheers():
         return
     cheers = list(_pending_cheers)
     _pending_cheers.clear()
-    names = sorted({ch["name"] for ch in cheers})
+    names = list(dict.fromkeys(ch["name"] for ch in cheers))  # 3.8.22: in the order they came, as their Pips toss them
     emojis = [ch["emoji"] for ch in cheers]
     if len(names) == 1:
         text = f"{emojis[0]} {names[0]} sent cheers"
     else:
-        text = f"{' '.join(dict.fromkeys(emojis))} {' and '.join(names)} sent cheers"
+        text = f"{' '.join(list(dict.fromkeys(emojis))[:3])} {board.and_more(names)} sent cheers"
     back = (cheers[0]["from"], cheers[0]["emoji"]) if len(cheers) == 1 else None
     notes = [ch["note"] if len(cheers) == 1 else f"{ch['name']}: {ch['note']}"
              for ch in cheers if ch.get("note")]
@@ -50,7 +50,13 @@ def _play_cheers():
         season = board.season_emoji(datetime.date.fromisoformat(today)) if today else None
     except ValueError:
         season = None
-    mw.web.eval(board.flurry_js(emojis, text, back=back, notes=notes, season=season))
+    c = cfg()
+    pips = board.cheer_pips(cheers, _state["entries"], c)  # 3.8.22: each sender's Pip tosses theirs
+    show = None
+    if pips:  # 3.9.0: a show over the whole Decks screen, a different one each time (Sam)
+        show, bag = shows.next_show(c.get(shows.BAG_KEY))
+        save_cfg(dict(c, **{shows.BAG_KEY: bag}))
+    mw.web.eval(board.flurry_js(emojis, text, back=back, notes=notes, season=season, pips=pips, show=show))
 
 
 def cheer_choices():

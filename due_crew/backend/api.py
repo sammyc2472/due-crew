@@ -547,7 +547,7 @@ class ApiClient:
 
     def push(self, labels, cfg, stats=None, backfill=None, shared_decks=None, heatmap=None,
              squad_row=None, squads=(), version=None, clock=None, plans=None,
-             known=None, stuck=None, log=None, log_back=None, log_window=None, team=None):
+             known=None, stuck=None, log=None, log_back=None, log_window=None, team=None, due=None, due_day=None):
         """One POST /sync with whatever this sync has. Returns (ok, gone):
         gone lists the squads I'm no longer in. heatmap: counts to share,
         "off" to take it down, None to leave it. plans (3.1): {plan id:
@@ -557,7 +557,9 @@ class ApiClient:
         as changes since the last that went); stuck, the guids I'm stuck
         on (the answer lands in session["cards"]); log, my study log's
         days, sent when they changed. 3.7.3: team, {plan id: {day?, play?}}
-        for the plans whose team I'm on, sent when it changed.
+        for the plans whose team I'm on, sent when it changed. 3.9.0: due,
+        the guids of the cards due today (the day's first sync; who knows
+        them lands in session["cards_due"], kept for due_day).
         Raises TransportError."""
         body = {}
         profile = {"name": self.display_name or "Me"}
@@ -592,6 +594,8 @@ class ApiClient:
                 body["knows"] = part
         if stuck is not None and not paused:
             body["stuck"] = list(stuck)[:300]
+        if due is not None and not paused:
+            body["due"] = list(due)[:1000]
         if team and not paused and _digest(team) != self.session.get("team_hash"):
             body["team"] = team
         if log and _digest(log) != self.session.get("log_hash"):
@@ -600,6 +604,10 @@ class ApiClient:
             # 3.7.1: a year of my history, riding this sync (the server merges it)
             body["log"] = {"days": {**log_back[0], **(log or {})}}
         status, data = self._call("POST", "/sync", body)
+        if status == 400 and data.get("error") == "bad_sync" and "due" in body:
+            # 3.9.0 against a Worker that doesn't take `due` yet: the rest goes as before
+            body = {k: v for k, v in body.items() if k != "due"}
+            status, data = self._call("POST", "/sync", body)
         if status == 400 and data.get("error") in ("bad_sync", "bad_week"):
             # 3.2 against a server that doesn't know 3.2's parts yet (a Worker
             # not yet deployed): the day's numbers still go, without them
@@ -621,8 +629,19 @@ class ApiClient:
             self.session["team_hash"] = _digest(body["team"])
         if "knows" in body:
             self._save_known(sent_known)
-        if "stuck" in body:
-            self.session["cards"] = clean_cards(data.get("cards"))
+        if "stuck" in body or "due" in body:
+            got = clean_cards(data.get("cards"))
+            if "stuck" in body:
+                mine = set(body["stuck"])
+                self.session["cards"] = {g: v for g, v in got.items() if g in mine}
+            if "due" in body:
+                mine = set(body["due"])
+                self.session["cards_due"] = {g: v for g, v in got.items() if g in mine}
+        if due is not None and not paused:
+            # asked for today; a Worker that doesn't take `due` yet isn't asked again till tomorrow
+            self.session["due_day"] = str(due_day or "")
+            if "due" not in body:
+                self.session["cards_due"] = {}
         if log_back and "log" in body and data.get("logAll"):
             # only a server that keeps the whole log moves the import on (one
             # still trimming to 400 days would drop the year this carried)
@@ -647,7 +666,7 @@ class ApiClient:
     def _without_32(body):
         """The sync as a 3.1 server takes it: no known or stuck cards, no
         log, and the week without a recap or asks' lines."""
-        out = {k: v for k, v in body.items() if k not in ("knows", "stuck", "log", "team")}
+        out = {k: v for k, v in body.items() if k not in ("knows", "stuck", "log", "team", "due")}
         week = out.get("week")
         if isinstance(week, dict) and ("recap" in week or any("q" in t for t in week.get("tricky") or [])):
             week = {k: v for k, v in week.items() if k != "recap"}
@@ -700,9 +719,10 @@ class ApiClient:
         """3.2: "This helped" on a crewmate's tip. One request, on a click."""
         status, _ = self._call("POST", "/tips/helped", {"guid": str(guid), "from": str(from_uid), "helped": bool(helped)})
         if status == 200:
-            for t in (self.session.get("cards") or {}).get(guid, {}).get("tips") or []:
-                if t.get("from") == from_uid:
-                    t["helped"] = bool(helped)
+            for kept in ("cards", "cards_due"):
+                for t in (self.session.get(kept) or {}).get(guid, {}).get("tips") or []:
+                    if t.get("from") == from_uid:
+                        t["helped"] = bool(helped)
             self._save_session()
         return status == 200
 
@@ -1119,7 +1139,7 @@ class ApiClient:
         status, data = self._call("POST", f"/plans/{plan_id}/team" + (f"?wk={wk}" if wk else ""), retry=False)
         if status != 200:
             return status  # 409: the team is full
-        self.session.setdefault("teams", {})[plan_id] = {"shown": 0, "of": 1, "streak": 0, "faces": [], "act": [], "last": None}
+        self.session.setdefault("teams", {})[plan_id] = {"shown": 0, "of": 1, "streak": 0, "faces": [], "who": [], "act": [], "last": None}
         self._note_follow(plan_id, share=True, teamAsk=False)  # 3.7.6: on the team is sharing
         return clean_team_view(data)
 

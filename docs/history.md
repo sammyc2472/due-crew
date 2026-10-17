@@ -1762,3 +1762,393 @@ every release that changes how something works.
   each Pip's slot the size of the face it replaces; the gap between them
   grows with their size, so a held mug clears the next one. Pip off, the
   initials as before. README's room picture re-rendered from the widget.
+
+- 3.8.22, Pips on a plan card's squad line (Sam: "under squad we haven't
+  switched to pips"). You › Plans, a plan's card: "Squad: N of M showed
+  up" now leads with who showed up as their Pips, as on the Squads tab:
+  mine in my look (it opens the closet), a crewmate's in their colour and
+  look, anyone else plain. The board's summary of each plan squad I'm in
+  carried only the emojis of who showed up, so it now names whose they
+  are too (`who`, their uids, one for one with `faces`; the squad's own
+  view already gives its members each other's uids). Still one request:
+  it rides `GET /board`'s `teams`. The crew is the board's own entries
+  (`you_html`'s `people`, down to `board._squad_line`). Pip off, or an
+  older server without `who`, the emojis as before; an older add-on reads
+  `faces` alone. The Pips sit a little above the line's text, so a hat
+  clears the line before it.
+  Then the rest (Sam: "all the places where there are emojis we should
+  reflect pips, including bottom bars, we can make the bingo stamps bigger.
+  remove emojis from the friends dialog. invites and text shares can stay
+  as is"): the review screen's chip, in the bottom bar and as the card in
+  the corner, leads "Dre knows this" and "Dre asked about this" with Dre's
+  Pip (`cards.pips_by_uid`, `chip_view`'s `pips`; sev.py's own markup, a
+  name only in its escaped label, its motion sheet carried once); a
+  squadmate's card (not crew) has a plain Pip, as the Squads tab does;
+  Settings › You shows my Pip, opening the closet (Emoji… stays: it shows
+  with Pip off and in text shares); squad bingo's stamps are Pips, a size
+  up from the emoji (`stamp_pip`, never a link inside the square's
+  button); the Friends dialog lists names alone. duecrew.com: my Pip tops
+  the account page, and a crewmate's leads "added you back" and their
+  exam's Send good luck (`pipFor` in app.js, as `squadPip` draws them).
+  Invites, text shares, cheers (the emoji someone sent) and the admin
+  pages (a report can be about an emoji) keep their emojis. Pip off: the
+  emojis everywhere, as before.
+  Then three of the fun round's third round (Sam's picks; the round's page
+  went deep on Wrapped, the Beast and Crew Town and mocked the rest):
+  Halloween week, 24 to 31 Oct, shipped before the 24th: a line under the
+  board's head with this week's days and the closet's five Halloween
+  things in order (mine in colour), the next and when ("study today for
+  the witch hat", "tomorrow: the bat wings"; `closet.halloween`, from my
+  row's eight days, which are the whole week); three bats across that line
+  on the day's first board, never over the logo, still with Reduce motion
+  (`closet_flow.halloween_view`'s `bats`, kept like Pip by the logo's
+  moment); and when every Pip on the crew's rows has a Halloween thing on
+  (`closet.spooky`; a crewmate who isn't a mutual friend is a plain Pip, so
+  never), a cobweb in its corner and "A spooky crew: all N of you dressed
+  up." Its × hides it till next year (wrap.json `hw_hidden`; the closet
+  keeps the things). Pip off, none of it. Cheers with Pips: when cheers
+  land, each sender's Pip rises from the board's bottom edge in turn
+  (three at most, in the order they came), tosses its cheer onto my row
+  (a little burst, the row lit for a moment) and ducks back down, in place
+  of the flurry; the banner names them in order, "Dre, Mo, Ana and 2 more"
+  (`board.cheer_pips`, `and_more`, `flurry_js`'s `pips`). A cheer lands
+  only from someone I added: a mutual friend comes in their colour and
+  look, anyone else plain. With Reduce motion the Pips stand still in the
+  banner. Pip off, the flurry as before. And the year counts (Sam: "Start
+  the year counts in the next release: Yes"), so the first Wrapped has
+  more than Anki's history: the closet's tallies keep a year too (wrap.json
+  `closet.years`, six at most): Fifteens and the hour each began, rooms
+  with the crew, cheers sent (new) and got, crew days, each squad card's
+  lines (its most, once), and the days each thing Pip had on was worn
+  (new, once a day). Nothing of it is sent.
+
+- 3.9.0, your Wrapped (Sam's pick, the fun round's third round: "Build ·
+  Start the year counts · Show the card you turned around, here only ·
+  Night owl or early bird · Past years from Anki's history · 1 Dec to 15
+  Jan"). Your own year as a short story, in the board's place (as the
+  closet is): the board's line from 1 December to 15 January ("Your 2026
+  so far is ready"; its x is for the year, on every computer: the
+  account's `wrapped_seen`), and Tools › Due Crew › Your year… any time,
+  any year Anki's history has. Made on this computer from one grouped query
+  over the year's reviews (an hour a row; new cards met are first answers)
+  and the year counts above; nothing is sent. Only the slides a year can
+  fill (`wrapped.SLIDES` says when each is made): the cover (or "You and
+  Anki met on…"), days with the year's squares and the steadiest month,
+  the longest run (gold on the squares; "and still going"), coming back
+  (nine weeks away gets its own big slide, and the days that followed when
+  most were studied), night owl or early bird (30 days or more, half the
+  reviews either side), the cards, the card you turned around (its front,
+  plain text, drawn here and never on the picture; a switch on the page
+  leaves it out), Fifteens and their favourite hour, Pip's things and what
+  was worn most, you and your crew (your own numbers only), the beasts you
+  beat, and the picture: days, longest run, reviews (or new cards), and
+  Make the picture, the year card, made in Anki, with Pip hopping on it
+  now (`sharecard.year`'s `sev`, cards.js the same). Kind, always: no
+  missed days, no "fewer", no comparing; a test reads every slide of
+  three made-up years for the words it never says (`wrapped.SAD`). The
+  slides Due Crew only began counting in October say "Since October". It
+  moves on by itself and waits under the pointer; the sides and the arrow
+  keys move it; Reduce motion never moves it on; All on one page lists
+  every slide as text (`board.wrapped_html`, `wrapped_js`, said to the
+  page after each draw; `wrapped.py` pure, `wrapped_flow.py` the glue).
+- 3.9.0, the Backlog Beast, yours (Sam's pick, round three: "Build ·
+  Yours · Rule B · My beast on to start · Steady · In parts of three
+  weeks"). When the overdue pile gets real it turns up as a creature
+  whose kind says why the pile built (`beast.KINDS`: the Snoozasaurus after
+  a week or more away, the Overdue Owl when half its cards are two weeks
+  late, the Leech Lord when one in seven is a leech, the Pile at five usual
+  days, the Backlog Beast otherwise). The pile is review cards due before
+  today in decks studied in the last 30 days (a card in a filtered deck by
+  its home's due), never new or learning ones. Rule B (the round's
+  simulation: rule A was seven beasts in four months for someone on and
+  off): two usual days (the middle of the days studied in the last four
+  weeks) and 100 cards or more, a week after the last one left, never
+  away or paused; looked for once an Anki day, after the day's AnkiWeb
+  sync, as the plans' morning waits. It never grows: its cards are the
+  ones overdue that morning, the most overdue for their interval first,
+  at most three weeks of half a usual day (the rest after its rest). A
+  card's a hit once Anki moves it to tomorrow or later, on any device
+  (below: Sam's rule, 16 Oct); a card suspended, deleted or
+  made new leaves it without a hit, and half gone that way it wanders off.
+  Study them is a Due Crew deck of its cards not yet moved on, up to 200
+  (`beast_flow.OPEN_MAX`), most overdue first (Anki's relative-overdue
+  order, found by its name: Anki renumbered the orders, and on 26.09 the
+  old number is retrievability, which builds nothing on SM-2, as
+  `tools/real_anki.py` caught; one undo step; a deck left at the next
+  morning is emptied back, as Today's misses is). As many as you like:
+  there's no day's share. It breaks up as it's beaten (a horn at a quarter,
+  the other at half with a sweat, dizzy at three quarters, smaller all the
+  way; `beast_art`), and beaten it's a pet: on its page, on
+  Wrapped's beasts slide, and the closet's three new things (the beast
+  hood, the viking helmet at five, the knight at ten; Beasts is a group).
+  Let it go: it waves and leaves, nobody's told. Where it is: a card in
+  the You bubble on every tab (small on the folded line; the beast
+  breathing, and a click anywhere on it but Study them opens its page),
+  its page in the board's place (`board.beast_html`: the beast, one line
+  of what it is, its health, Study them, Let it go and How it works'
+  three lines), the switches in Settings (Board › Backlog beasts;
+  Privacy › My beast). What's sent:
+  with My beast on, my week's `beast` is its kind and how far
+  (`beast.week_field`), never its size or its cards; a crewmate's shows
+  after their name as the last thing a chip says (`board.beast_chip` ↔
+  `beastChip` in app.js, its drawing from sev.js's kit), and a beaten one
+  is a banner for two days with a cheer (a trophy). The account keeps the
+  beast (`beast`: the one now and the last 50 met; `account.merge3` merges
+  two computers' by `beast.merge`), so every computer has the same one;
+  its cards stay here (`user_files/<profile>/beast.json`), and another
+  computer works them out from Anki's history for that morning. Its hits
+  are counted on each computer from Anki's history and never saved, so a
+  review costs no request: the account is written when it comes and when
+  it ends. The Worker checks the week's `beast` (validate.ts,
+  the fake the same); an older Worker that refuses it gets the week
+  without it, so deploy the Worker first. `beast.py` pure, `beast_flow.py`
+  the glue, `beast_art.py` the drawings.
+- 3.9.0, cheers land everywhere (Sam, 16 Oct: the Pips tossing a cheer
+  were "less exciting", then "a different cheer every time, but ... the
+  whole anki decks screen", "Tons of options! Tons of fun!"; his picks
+  from the mock "Cheers, everywhere"). A landing cheer is a show over the
+  whole Decks page (deck list and board, a fixed layer under Anki's top
+  bar, which is its own page): the confetti cannon, the piñata (no
+  "CRACK!"), fireworks (no name in the middle), a present to open, bubbles
+  to pop, the deck wave, balloons, a rocket, a rubber stamp, the disco
+  ball, the magic hat, the snow globe. `shows.next_show` deals them from a
+  bag kept in this computer's config (`cheer_bag`): every one before any
+  repeats, never the same twice in a row. `show.js` draws them with the
+  senders' real Pips (`cheer_pips` now brings four poses, a first name and
+  their note, which go in as text), three at most, so three cheers is the
+  big version. `flurry_js` starts it in place of the toss, its banner (the
+  names, the notes, send one back) at the top; a click anywhere but a
+  present or a bubble, or Esc, ends it, and each ends on its own (a
+  present nobody opens opens itself). Reduce motion: the Pips still in the
+  banner, as before; Pip off: the flurry. Nothing new is sent.
+  `tools/show_preview.py` plays each on a page like the Decks screen with
+  the real board. The README's cheer picture is the balloons now.
+- 3.9.0, the closet has the colour (Sam, 16 Oct: "add pip / overall
+  color change to the closet page so people can more easily access
+  overall color change stuff"). Under Pip on the closet page, Colour
+  ("Pip and your board"): the accent's swatches, the same ones as
+  Settings › Board (`board._accent_swatches`, one markup for both) and
+  the same `set:accent` click, which redraws the closet in the new colour.
+- 3.9.0, the review chip's Pip has room (Sam, 16 Oct: "this button is a
+  bit too compact for the pip"). The bar chip was 18px tall with Pip
+  pulled up into its border; with a Pip it pads to 30px and Pip sits in
+  it head to feet (`cards._CHIP_JS`). The card-corner one had room.
+- 3.9.0, a hit is a card moved to tomorrow (Sam, 16 Oct: "the beast gets
+  beaten when the cards are moved to at least tomorrow"). Any review used
+  to knock it, Again too; now a card is off the beast once Anki has it
+  due tomorrow or later (`beast_flow.count`): a review since its morning
+  that Anki logged a day or more ahead (Hard, Good, Easy; Again logs a
+  step in seconds, so it counts once the card is got right), or the card
+  due tomorrow or later now (Set due date, a relearning step of a day).
+  The first keeps counting when the card comes due again later, so the
+  beast never heals; a preview deck's review (ivl 0) moves nothing.
+  `tools/real_anki.py` answers its cards with Anki's own scheduler to
+  prove each case. Overdue is said plainly too: "due before today". The
+  kinds' lines say why it came, the Pile's and the Backlog Beast's in
+  your usual days ("380 overdue cards: about 3 days of your usual
+  reviews."; `beast.subtitle`), from the mock "The Beast, plainly".
+- 3.9.0, the beast made plain (Sam, 16 Oct, on the click-test build:
+  "way too much explanation", the bite "doesn't make any sense",
+  Gentle / Steady / Fast neither, the beast's words strange; his pick,
+  "just the cards"). The bite, the paces, the speech bubble and Not for
+  me are gone (and their commands, `beastpace`, `beastoff`); so is the
+  page's Privacy line (Settings › Privacy › My beast stays). Its page
+  says what it is in one line (`beast.subtitle`: "640 overdue cards from
+  your week away."), then its health with what's left, Study them (its
+  cards not yet reviewed, as many as you like) and Let it go, then How
+  it works in three short lines (`board.BEAST_HOW`; a capped one says
+  it's the oldest part of the pile). With no beast the page says what
+  one is. The You bubble's card: its beast breathes (not with Reduce
+  motion), and the whole card opens its page but Study them (Sam).
+  Sizing a beast's parts still uses half a usual day (`beast.PACES`).
+- 3.9.0, the closet's line (Sam, 16 Oct): Wear it floated mid-banner,
+  apart from Closet. Each banner action pushes itself right with an auto
+  margin, so two of them split the free space; a second one now sits
+  beside the first (`.wc + .wc`), actions never break over two lines, and
+  the line's words sit left when they wrap at phone width.
+- 3.9.0, who knows it, the moment you miss it (Sam's picks, "Open calls"
+  A and C, 16 Oct: "go with your recommendations"). The chip only knew
+  about the cards I was stuck on at the last sync, so a card missed for
+  the first time mid-session showed nothing till the next one. Now the
+  day's first sync, light or full, also sends the note guids of the
+  cards due today in the decks I share (`cards.due_today`: reviews due
+  today or before, learning cards, the most overdue first, `DUE_MAX`
+  1,000, not the stuck ones), and its reply (`cards`, the same mutual
+  friends' knows and tips as the stuck ones', nothing kept) is kept for
+  the day (`session["cards_due"]`, `due_day`). On the answer side a card
+  I'm stuck on now (`cards.stuck_now`: lapsed twice, or Again today)
+  uses it, so the second time a missed card comes up its chip is there.
+  Still one request (`due` rides `POST /sync`, validated in both the
+  Worker and the fake); a Worker without `due` gets the sync again
+  without it and isn't asked again that day. And with Pip on, the corner
+  card for who knows it is their Pip (`peek_pip`, waving, in their look)
+  peeking up from the bottom of the review screen with a lightbulb:
+  "I know this one", Ask Dre, Not now (more than one: "Dre and 2 more
+  know this", Ask; asked: Asked). It pops up, the bubble after, the bulb
+  glows twice; it ducks back down on the next card or Not now; none of it
+  with Reduce motion. The bar's chip, tips, asks and plan notes are as
+  they were; "Dre knows this" stays the words (E, his pick).
+- 3.9.0, the beast, the way back (Sam's picks, "The way back" rounds 2
+  and 3, 16 Oct: "go with your picks, build it for 3.9.0"). Three kinds:
+  the Leech Lord, the Pile and the Backlog Beast (`beast.KINDS`; the
+  Snoozasaurus and the Overdue Owl are gone, "implies laziness", and a
+  test build's account beast of those kinds is the Backlog Beast now,
+  `beast.WAS`). Its line under the name is the count ("1,507 overdue
+  cards", `beast.subtitle`). Study opens your own deck: Anki's Study
+  screen on the top deck holding most of its cards left
+  (`beast_flow.home_deck`), whose usual order puts the most overdue
+  first; no deck of its own any more (`OPEN_MAX`, `open_cards` and
+  `overdue_order` are gone; `empty_old_deck` still empties one a test
+  build left). A hit is a review that sends a card a day or more ahead;
+  a card suspended, deleted, made new or moved ahead with Set due date
+  just leaves it, no hit (`beast_flow.count`; `tools/real_anki.py`
+  answers and sets due dates with Anki's own scheduler to prove it), and
+  half gone that way it goes quietly, with nothing said (no "wandered
+  off" card). Beaten, no pet: the card shows Pip, and the first one
+  beaten puts the Beast hood in Pip's closet (five the Viking helmet, ten
+  the Knight, as before), said on the card with Be one
+  (`beast_flow.thing`; the beast is counted before the closet at a
+  refresh so both land together, and the closet's own line leaves that
+  thing to the card); its page shows Pip in it, and the pets on its page
+  and Wrapped's slide are gone (the slide shows the beasts themselves).
+  Nothing on a crew row (Sam: "the little icon on the crew page doesn't
+  make sense"): `board.beast_chip`, app.js's `beastChip`/`beastOf` and
+  the kit's beast drawings are gone, and my week carries a beast only
+  once it's beaten, for two days, for the banner (`beast.week_field`;
+  validate.ts and the fake take only that, `{k, p: 100, end}`). Let it go
+  asks on its page, not in a window (`beastletyes`, `beastletno`). How it
+  works says less. The pace (How fast? on the card) and a plan's days
+  away as a line on its card, in place of Welcome back's window, are
+  3.9.1 (his pick).
+- 3.9.0, the beast's page in plain words (Sam, 16 Oct, on the test
+  build: "nobody's told reads really strange", then "all the text on
+  this page actually reads a bit paternalistic and faux nice"). Facts
+  only: How it works is what its cards are, what takes one off, and the
+  Beast hood (`board.BEAST_HOW`; no "No rush", no "till you get it
+  right", no "due before today"); Let it go just asks ("Let it go?",
+  Let it go · Cancel), and after it the page says "No beast right now.";
+  beaten, its name and "Beaten · 1,150 cards in 6 days"; with none, "One
+  turns up when 100 or more cards are overdue and that's at least two
+  days of your usual reviews." The README's line ends "Let it go any
+  time."
+- 3.9.0, the peek, always (Sam, 16 Oct, on the test build: the plain "Adina
+  and 1 more know this · Ask" pill "is also not the new version we agreed
+  on"; a smaller peek squeezed into the bar wasn't either). The peek
+  showed only when the card left the bottom-right corner free, and a full
+  answer sent it back to the old chip. Now with Pip on, who knows it always
+  peeks up in that corner as mocked ("Open calls" C), with no corner
+  check; a spacer under the card (`dc-knows-pad`, gone with the peek) lets
+  its last lines scroll clear. Pip off, the corner card and the bar's chip
+  as before.
+- 3.9.0 ships without the Backlog Beast (Sam, 16 Oct: "remove the beast
+  business from this version because I don't think we're there yet";
+  17 Oct: "divorce the beast from the codebase for this release"). The
+  beast's bullets above are a build that never shipped. It's out of the
+  code, not switched off: `beast.py`, `beast_flow.py`, `beast_art.py`, its
+  card, page, banner and commands, Settings' Backlog beasts and Privacy's
+  My beast, the account's `beast`, `beasts` and `share_beast`, the week's
+  `beast` (validate.ts and the fake refuse it again), Wrapped's beasts
+  slide, and the closet's three beast things (61 things again, every one
+  offered). Git keeps it: it came in with 9915332 and was last whole at
+  b96f20c. A "Due Crew::The …" deck an earlier test build made is no
+  longer emptied for you; delete it in Anki and its cards go home.
+- 3.9.0, the peek with Pip off (Sam, 16 Oct: "We should always get this
+  version, it would just be without the pip"). Who knows it is the same
+  bubble in the same corner with Pip off, saying who ("Dre knows this",
+  Ask, Not now), always shown like the peek; it fades in and out.
+- 3.9.0, the peek, 2D (Sam, 16 Oct, from the sheet: no lightbulb; up to
+  three Pips). Who knows it peeks up with no lightbulb over their head,
+  and when more than one crewmate knows the card their Pips stand side by
+  side, three at most, the first nearest the corner; the words name them
+  ("Adina and Mo know this", "Adina, Mo and Jo know this", "Adina, Mo, Jo
+  and 1 more know this"; one alone still says "I know this one", Ask
+  Adina). `cards.chip_view`'s peek carries `uids` (`PEEK_MAX` 3);
+  `on_answer` draws each Pip in their look and colour (`peek.pips`). Ask
+  still reaches everyone who has the card.
+- 3.9.0, the peek's Pips blink on their own (Sam, 17 Oct: "they are
+  blinking at the same time"). Side by side, two or three Pips shared
+  one blink. Each now gets its own place in it (`sev.started(i)`, the
+  `--sv-d` a study room's seats use), so no two blink together.
+- 3.9.0, a bingo square's stamps blink on their own (Sam, 17 Oct: "they
+  all blink at the same time on bingo"). A square's Pips move only while
+  it's pointed at, so its two or three stamps started together and blinked
+  as one; a plan card's squad line did the same. `board.row_sev` takes
+  `nth`, its place among Pips that move together, for its own place in the
+  blink (`sev.started`, as a room's seats and the peek's Pips); the
+  stamps (`stamp_pip`) and the squad line (`squad_pip`) pass it. The site's
+  Pips don't move, so nothing there to match.
+- 3.9.0, Pips blink on their own clocks (Sam, 17 Oct: one after another
+  "still looks kinda creepy", random "anywhere it is"). Side by side, a
+  room's seats, the peek's Pips, a bingo square's stamps and a plan
+  card's squad line used to share one cycle, each a fixed step behind the
+  last, so they went round in turn. Now each has its own cycle (3.4 to
+  6.4 s) and its own place in it (`sev.blink`, `--sv-b` and `--sv-d` on
+  the wrapper; the blink reads both), spread so none start together, and
+  they drift past each other, no order lasting. From the Pip's place in
+  its group, so a redraw draws the same and nothing moves for it.
+- 3.9.0, a dressed Pip peeks at the same height (Sam, 17 Oct: "why's the
+  second pip so low?", a Pip in the pumpkin with the umbrella). The peek,
+  the knock, the bounce and the pop-up moved the body by a share of its
+  own box (`translateY(22%)`, the body's fill box), and what Pip has on is
+  drawn in the body, so a hat and a held thing made the box taller and
+  the share bigger: 22% of 86.7 units sank it 19, a plain Pip 10. Each
+  now moves by the drawing's own units, a plain body's share (45.5 tall:
+  22% is 10), so every Pip lands the same whatever it wears.
+- 3.9.0, asks and tips (Sam's picks on the mock "Asks and tips", 17 Oct:
+  A with W1, Folded until you open it, nothing new for a helped tip; and
+  his note, "find a way to integrate the tipper's pip in the tip").
+  An ask still goes to everyone in the crew who has the card (it rides
+  my week, as before); the dialog now says so first: "Goes to everyone
+  in your crew who has this card. Adina has it down. One line,
+  optional." (`cards.ask`). On a one-by-one card the answer side opens
+  with most of it hidden, and a tip's words, an ask's line or a plan's
+  note gave the rest away the moment it opened. Now each says only who
+  (`fold`: "Adina left a tip", "Sam asked about this card", "📌 A note
+  from Block 1"), with Show; Show brings the words and what to do with
+  them (This helped, Tip, +1 more). The bar's chip folds the same way
+  and opens on a click; no words on a hover while folded. Who knows it
+  never folds: it names people. A tip now peeks in like who knows it:
+  the tipper's Pip waving from the bottom corner, the bubble beside it
+  (with Pip off, the same bubble with 💡), always shown, with room under
+  the card; its bubble wears the tipper's colour round its edge (mine
+  with Pip off), so a tip doesn't look like who knows it (Sam: "too
+  similar"), whose bubble keeps the plain line. Opened stays opened: This helped draws it again open
+  (`on_answer(card, opened=True)`), and a move to the bar says so
+  (`knowsbar:open`).
+- 3.9.0, the motion audit (Sam, 17 Oct: Crew to Squads "visibly flicks
+  from rectangular to fit the pill", "everything should be smooth!").
+  `tools/motion_audit.js` plays every motion in `tools/motion_preview.html`
+  with its frames held, steps through them, and counts what jumps between
+  the last frame and the page once it has cleaned up. What it found, and
+  the fixes (`motion.js`, the site's byte for byte):
+  the pick's pill slid as a box and took its round end only once it
+  landed; now each corner is read as drawn (a 99px radius draws as half
+  the height), it rounds both ends on its way and lands in the new pick's
+  shape, and the one it left keeps its picked words and edge until the
+  pill has gone from under them, the new one takes it as the pill
+  arrives, each edge in step with the fill (`slide`, `onIn`).
+  Every height move overshot by the box's padding and border (the Due box
+  12px top and bottom, a banner, a note) and jumped back at the end:
+  offsetHeight is outside height and style.height inside. Now `inner` takes
+  them off, from `tall`, the height to the fraction of a pixel (offsetHeight
+  rounds, and half a pixel moved every line below at the end).
+  A fold to nothing ended a few px short: a box with a border, children or
+  a flex gap keeps its neighbours' margins apart, and a grid keeps its gap
+  beside an empty row whatever the margins. `room` measures what's left
+  and the fold (and unfold, and a room seat's shrink) takes it back as a
+  margin; in a grid the neighbour closes the gap in step (`close`).
+  A glow ended on nothing and then my row's tint came back; it ends on the
+  box's own ground. A dimmed box (a day that's off) ended a fade at full
+  and snapped back; `anim` keeps its own opacity. ↻ snapped from mid-turn
+  to upright when the board redrew; the new one finishes the turn, and the
+  ten-second stop waits for a turn's end.
+  Elsewhere: a cheer's banner faded out but popped in, and a click took it
+  in one frame; both fade now. A show ended by a click or Esc vanished;
+  it fades in a quarter second, taking no clicks (`show.js` `stop`). The
+  peek's Show swapped "Adina left a tip" for the words in one frame; the
+  bubble grows into them and they fade in once there's room, and the bar's
+  chip fades its words in. Settings' found row glowed back to nothing;
+  to its own ground. Pip's moves, the bats, the logo's wave and the
+  cheers' toss were already ending where they rest. The suite reads every
+  keyframe list in the add-on and the site and fails one whose offsets go
+  backwards, which a browser drops without a word.

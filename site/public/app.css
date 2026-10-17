@@ -620,6 +620,8 @@ button[hidden] { display: none; }
 .feed .fi { display: grid; grid-template-columns: 20px 1fr; gap: 8px; font-size: 13.5px; padding-top: 8px; border-top: 1px solid var(--line); }
 .feed .fi > div { display: grid; gap: 2px; justify-items: start; min-width: 0; overflow-wrap: anywhere; }
 .feed .fi .ic { text-align: center; }
+.feed .fi .ic .rsev { margin: -2px 0 0; }  /* 3.8.22: a crewmate's Pip in the icon's place */
+.feed .fi b .rsev { margin: -9px 7px -5px 0; }
 .heatwrap { overflow-x: auto; display: grid; gap: 6px; }
 .heat { display: grid; grid-template-columns: 28px max-content; grid-template-rows: auto auto; gap: 2px 4px; font-size: 10.5px; color: var(--muted); }
 .heat .hm { grid-column: 2; display: grid; grid-template-columns: repeat(53, 10px); gap: 2px; }
@@ -833,6 +835,7 @@ p.sum { text-align: left; margin: 6px 0 0; padding: 0 8px; }
 .stepcard { margin: 14px 0; } .stepcard ol.steps { margin: 6px 0 0; }
 /* S6: Account */
 .accwho { display: flex; gap: 12px; align-items: center; } .accwho .em { font-size: 34px; line-height: 1; }
+.accwho .em .rsev { zoom: 2; margin: 0 2px 0 6px; }  /* 3.8.22: my Pip, the emoji's size */
 .panel.acc { margin-top: 12px; } .panel.acc .row { gap: 8px 14px; }
 /* S4: a library card's ⋯ */
 .lcmore > summary::after { content: none; }

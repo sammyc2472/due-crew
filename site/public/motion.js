@@ -31,10 +31,32 @@
   };
   function anim(el, kf, o) {
     if (!el || !el.animate || !M.ok()) return null;
+    // opacity 1 is "as it is": a day or a row dimmed by its own style (.off) never ends brighter than it stays
+    var op = parseFloat(getComputedStyle(el).opacity);
+    if (op > 0 && op < 1 && !(el.getAnimations && el.getAnimations().length)) {
+      kf = kf.map(function (k) { return k.opacity === 1 ? Object.assign({}, k, { opacity: op }) : k; });
+    }
     try { return el.animate(kf, Object.assign({ duration: BASE, easing: EASE }, o || {})); } catch (e) { return null; }
   }
   function done(a, f) { if (a) a.onfinish = a.oncancel = f; else f(); }
   M.anim = anim;
+  // a box's height outside to the fraction of a pixel: offsetHeight rounds, and the half pixel it
+  // drops moves every line under the box at the end
+  function tall(el) {
+    var cs = getComputedStyle(el), h = parseFloat(cs.height);
+    if (!(h >= 0)) return el.offsetHeight;
+    if (cs.boxSizing === "border-box") return h;
+    var px = function (k) { return parseFloat(cs[k]) || 0; };
+    return h + px("paddingTop") + px("paddingBottom") + px("borderTopWidth") + px("borderBottomWidth");
+  }
+  // and as style.height has it: a box sized content-box draws its padding and border outside its
+  // height, so they come off, or the move ends that much too tall and jumps back once it's done
+  function inner(el, outer) {
+    var cs = getComputedStyle(el);
+    if (cs.boxSizing === "border-box") return outer;
+    var px = function (k) { return parseFloat(cs[k]) || 0; };
+    return Math.max(0, outer - px("paddingTop") - px("paddingBottom") - px("borderTopWidth") - px("borderBottomWidth"));
+  }
 
   // ---- who's who across a redraw ----
   function cmdOf(el) {
@@ -201,7 +223,12 @@
     if (!on) return null;
     var a = g.getBoundingClientRect(), b = on.getBoundingClientRect(), cs = getComputedStyle(on);
     var bg = cs.backgroundColor, pill = bg && bg !== "transparent" && !/rgba\(\d+, \d+, \d+, 0\)/.test(bg);
-    return { x: b.left - a.left, y: b.top - a.top, w: b.width, h: b.height, pill: pill, bg: bg, r: cs.borderRadius };
+    // each corner as drawn: a radius past half the height draws as half of it, so a move between two never lingers square
+    var r = ["borderTopLeftRadius", "borderTopRightRadius", "borderBottomRightRadius", "borderBottomLeftRadius"].map(function (k) {
+      return Math.min(parseFloat(cs[k]) || 0, b.height / 2, b.width / 2) + "px";
+    }).join(" ");
+    return { x: b.left - a.left, y: b.top - a.top, w: b.width, h: b.height, pill: pill, bg: bg, r: r,
+             color: cs.color, edge: cs.borderTopColor, i: Array.prototype.indexOf.call(g.querySelectorAll("a, button"), on) };
   }
 
   // a click's hint is for the redraw it causes, not one minutes later
@@ -215,17 +242,20 @@
     M.hint = null;
     if (!root) return snap;
     snap.mode = mode(root);
-    snap.h = root.offsetHeight;
+    snap.h = tall(root);
+    // Refresh's arrow, mid-turn: where it had got to, so the new one finishes the turn
+    var sp = root.querySelector(".dc-spin"), sa = sp && sp.getAnimations ? sp.getAnimations()[0] : null;
+    if (sa) snap.spin = ((sa.currentTime || 0) % 800) / 800 * 360;
     Array.prototype.forEach.call(root.querySelectorAll(".du-r, .du-ln"), function (r) { snap.rows[words(r)] = 1; });
     each(root, function (rule, el, k) {
       var r = el.getBoundingClientRect();
-      snap.at[k] = { v: rule.val(el), w: el.style.width, t: words(el), h: el.offsetHeight, r: r,
+      snap.at[k] = { v: rule.val(el), w: el.style.width, t: words(el), h: tall(el), r: r,
                      on: rule.kind === "tabs" ? onIn(el) : null, x: rule.extra ? rule.extra(el) : null,
                      go: spot(root, rule, el), kind: rule.kind };
     });
     [".du", ".dc-sheet", ".dc-panel"].forEach(function (s) {
       var p = root.matches(s) ? root : root.querySelector(s);
-      if (p) snap.parts[s] = p.offsetHeight;
+      if (p) snap.parts[s] = tall(p);
     });
     return snap;
   };
@@ -233,6 +263,14 @@
   M.after = function (root, snap) {
     M.swapped = Date.now();
     if (!root || !snap || !M.ok()) return;
+    if (snap.spin != null) {
+      var ic = root.querySelector('.dc-foot a.ic[title="Refresh"], .foot button[title="Refresh"]');
+      if (ic && !ic.classList.contains("dc-spin")) {
+        ic.style.display = "inline-block";
+        done(anim(ic, [{ transform: "rotate(" + snap.spin + "deg)" }, { transform: "rotate(360deg)" }],
+                  { duration: 200 + (360 - snap.spin) / 360 * 900, easing: "cubic-bezier(.3,.6,.4,1)" }), function () { ic.style.display = ""; });
+      }
+    }
     // 18 Settings (or a bingo card) and the board: one slides in as the other goes
     if (snap.mode && snap.mode !== mode(root)) { turn(root, snap); return; }
     var cold = !Object.keys(snap.at).length, entered = [], tabbed = [], here = {};
@@ -292,8 +330,10 @@
                 { duration: ms || 320 });
   }
   function glow(el, ms) {
-    return anim(el, [{ backgroundColor: "color-mix(in srgb, var(--dc-accent, #2e7d32) 22%, transparent)" },
-                     { backgroundColor: "transparent" }], { duration: ms || 1400, easing: "ease-out" });
+    // a wash of the accent over its own ground, back to that ground: my row's tint never blinks off at the end
+    var bg = getComputedStyle(el).backgroundColor || "transparent";
+    return anim(el, [{ backgroundColor: "color-mix(in srgb, var(--dc-accent, #2e7d32) 22%, " + bg + ")" },
+                     { backgroundColor: bg }], { duration: ms || 1400, easing: "ease-out" });
   }
   function rise(el, delay) {
     return anim(el, [{ opacity: 0, transform: "translateY(4px)" }, { opacity: 1, transform: "none" }],
@@ -344,10 +384,10 @@
     text: function (el, was) { rise(el); count(el, was.t, words(el)); },
     due: function (el, was, v) {
       var fold = was.v.split(":")[0] !== v.split(":")[0];
-      if (fold && was.h && el.offsetHeight !== was.h) {
-        var h = el.offsetHeight;
+      if (fold && was.h && Math.abs(tall(el) - was.h) > 0.5) {
+        var h = tall(el);
         el.style.overflow = "hidden";
-        done(anim(el, [{ height: was.h + "px" }, { height: h + "px" }], { duration: BASE }), function () { el.style.overflow = ""; });
+        done(anim(el, [{ height: inner(el, was.h) + "px" }, { height: inner(el, h) + "px" }], { duration: BASE }), function () { el.style.overflow = ""; });
         Array.prototype.forEach.call(el.children, function (c, i) { rise(c, 40 + i * 20); });
       }
       if (/:done$/.test(v) && !/:done$/.test(was.v)) { sweep(el); M.logo(el.closest("#due-crew, .brd") || document, 500); }
@@ -449,19 +489,59 @@
 
   // ---- the bigger moves ----
   // 23, 30: a line opens into its place, the rest moving down for it
+  // what a box still takes up once it's nothing: with any border, or a flex gap, or its children, its
+  // neighbours' margins can't fold together across it as they will once it's gone. A move to nothing
+  // ends that much short (and a move from nothing starts that much open), so it takes it back as a
+  // margin: the page under it never jumps when the box is put in or taken out
+  function room(el, x) {
+    var pv = el.previousElementSibling, nx = el.nextElementSibling, p = el.parentNode;
+    if (!p || !p.getBoundingClientRect) return 0;
+    function gap() {
+      var P = p.getBoundingClientRect(), a = pv ? pv.getBoundingClientRect() : null, b = nx ? nx.getBoundingClientRect() : null;
+      return x ? (b ? b.left : P.right) - (a ? a.right : P.left) : (b ? b.top : P.bottom) - (a ? a.bottom : P.top);
+    }
+    var st = el.style, keep = st.cssText;
+    st.overflow = "hidden"; st.boxSizing = "border-box";
+    if (x) { st.width = st.minWidth = st.paddingLeft = st.paddingRight = st.marginLeft = st.marginRight = st.borderLeftWidth = st.borderRightWidth = "0px"; }
+    else { st.height = st.minHeight = st.paddingTop = st.paddingBottom = st.marginTop = st.marginBottom = st.borderTopWidth = st.borderBottomWidth = "0px"; }
+    var a = gap();
+    st.display = "none";
+    var r = a - gap();
+    st.cssText = keep;
+    return Math.abs(r) < 48 ? r : 0;  // neighbours that aren't where they seem (out of flow): as before
+  }
+  // a grid keeps its gap beside an empty row whatever the row's margins, so there the neighbour
+  // takes the room back instead: the one after closes over it (or the one before, if it's the last),
+  // in step with the box, from `a` of the room to `b` of it
+  function close(el, r, a, b, o) {
+    if (!r || !/grid/.test(getComputedStyle(el.parentNode).display)) return null;
+    var nx = el.nextElementSibling, by = nx || el.previousElementSibling, k = nx ? "marginTop" : "marginBottom";
+    if (!by) return null;
+    var m = parseFloat(getComputedStyle(by)[k]) || 0, f0 = {}, f1 = {};
+    f0[k] = m - a * r + "px"; f1[k] = m - b * r + "px";
+    return anim(by, [f0, f1], Object.assign({ duration: BASE, fill: "forwards" }, o || {}));
+  }
   function unfold(el) {
     if (el.hidden || !el.offsetHeight) return;
-    var h = el.offsetHeight, clip = el.style.overflow;
+    var h = tall(el), clip = el.style.overflow, cs = getComputedStyle(el);
     el.style.overflow = "hidden";
-    done(anim(el, [{ height: "0px", opacity: 0 }, { height: h + "px", opacity: 1 }], { duration: BASE }), function () { el.style.overflow = clip; });
+    // from nothing at all (its padding and margins too) to just what it is
+    var bt = cs.borderTopWidth, bb = cs.borderBottomWidth, mb = cs.marginBottom, r = room(el), pull = close(el, r, 1, 0);
+    done(anim(el, [{ height: "0px", opacity: 0, paddingTop: "0px", paddingBottom: "0px", marginTop: "0px", marginBottom: (pull ? 0 : -r) + "px",
+                     borderTopWidth: "0px", borderBottomWidth: "0px" },
+                   { height: inner(el, h) + "px", opacity: 1, paddingTop: cs.paddingTop, paddingBottom: cs.paddingBottom,
+                     marginTop: cs.marginTop, marginBottom: mb, borderTopWidth: bt, borderBottomWidth: bb }], { duration: BASE }),
+         function () { el.style.overflow = clip; if (pull) pull.cancel(); });
   }
   // and folds away, the rest closing up; then it's gone
   function fold(el, delay, f) {
-    var h = el.offsetHeight;
+    var h = tall(el), r = room(el), pull = close(el, r, 0, 1, { delay: delay || 0 });
     el.style.overflow = "hidden";
     el.style.boxSizing = "border-box";
-    done(anim(el, [{ height: h + "px", opacity: 1 }, { height: "0px", opacity: 0, paddingTop: "0px", paddingBottom: "0px", marginTop: "0px", marginBottom: "0px" }],
-              { duration: BASE, delay: delay || 0, fill: "forwards" }), function () { el.remove(); if (f) f(); });
+    // a border can't be thinner than a pixel until it's none: it goes, unseen, halfway down
+    done(anim(el, [{ height: h + "px", opacity: 1 }, { height: "0px", opacity: 0, paddingTop: "0px", paddingBottom: "0px", marginTop: "0px", marginBottom: (pull ? 0 : -r) + "px",
+                                                      borderTopWidth: "0px", borderBottomWidth: "0px", borderTopStyle: "none", borderBottomStyle: "none" }],
+              { duration: BASE, delay: delay || 0, fill: "forwards" }), function () { el.remove(); if (pull) pull.cancel(); if (f) f(); });
   }
 
   // 20: a 🔥 rises from a streak that just grew
@@ -483,11 +563,11 @@
       if (c.matches("style, script")) return;
       anim(c, [{ opacity: 0, transform: "translateX(" + (40 * dir) + "px)" }, { opacity: 1, transform: "none" }], { duration: BASE });
     });
-    var h = root.offsetHeight;
+    var h = tall(root);
     if (snap.h && Math.abs(h - snap.h) > 2) {
       var clip = root.style.overflow;
       root.style.overflow = "hidden";
-      done(anim(root, [{ height: snap.h + "px" }, { height: h + "px" }], { duration: BASE }), function () { root.style.overflow = clip; });
+      done(anim(root, [{ height: inner(root, snap.h) + "px" }, { height: inner(root, h) + "px" }], { duration: BASE }), function () { root.style.overflow = clip; });
     }
   }
 
@@ -541,9 +621,13 @@
     fold: function (g) { fold(g); },
     // 24 someone leaves the room: their face goes and the rest close up
     shrink: function (g) {
-      var w = g.offsetWidth;
+      var w = g.offsetWidth, r = room(g, true);
       g.style.overflow = "hidden";
-      done(anim(g, [{ width: w + "px", opacity: 1 }, { width: "0px", opacity: 0, marginLeft: "0px", marginRight: "0px" }], { duration: BASE, fill: "forwards" }),
+      g.style.boxSizing = "border-box";
+      done(anim(g, [{ width: w + "px", opacity: 1 }, { width: "0px", minWidth: "0px", opacity: 0, marginLeft: "0px", marginRight: -r + "px",
+                                                      paddingLeft: "0px", paddingRight: "0px", borderLeftWidth: "0px", borderRightWidth: "0px",
+                                                      borderLeftStyle: "none", borderRightStyle: "none" }],
+                { duration: BASE, fill: "forwards" }),
            function () { g.remove(); });
     },
     // 26 its bars shrink away, it says "sticking now ✓", and folds up
@@ -566,15 +650,15 @@
     },
     // 29 Behind folds down to "Caught up ✓", and that goes too
     caught: function (g) {
-      var h = g.offsetHeight;
+      var h = tall(g);
       g.innerHTML = "";
       var say = document.createElement("div");
       say.textContent = "Caught up ✓";
       say.style.cssText = "color:var(--dc-accent,#2e7d32);font-weight:700;font-size:12px;padding:4px 0";
       g.appendChild(say);
-      var h2 = g.offsetHeight;
+      var h2 = tall(g);
       g.style.overflow = "hidden";
-      anim(g, [{ height: h + "px" }, { height: h2 + "px" }], { duration: BASE });
+      anim(g, [{ height: inner(g, h) + "px" }, { height: inner(g, h2) + "px" }], { duration: BASE });
       pop(say, 0, 320);
       setTimeout(function () { if (g.isConnected) fold(g); }, 1600);
     }
@@ -618,9 +702,32 @@
       if (other) anim(on, [{ color: getComputedStyle(other).color }, { color: getComputedStyle(on).color }], { duration: BASE });
     }
     g.insertBefore(ind, g.firstChild);
-    var a = anim(ind, [{ left: from.x + "px", top: y0 + "px", width: from.w + "px", height: (from.pill ? from.h : 2) + "px" },
-                       { left: to.x + "px", top: y1 + "px", width: to.w + "px", height: (to.pill ? to.h : 2) + "px" }],
-                 { duration: BASE, fill: "forwards" });
+    // the pill takes the new pick's shape on its way, round at both ends while it travels
+    // (Sam: Crew to Squads "flicks from rectangular to fit the pill")
+    var k0 = { left: from.x + "px", top: y0 + "px", width: from.w + "px", height: (from.pill ? from.h : 2) + "px", borderRadius: from.pill ? from.r : "1px" };
+    var k1 = { left: to.x + "px", top: y1 + "px", width: to.w + "px", height: (to.pill ? to.h : 2) + "px", borderRadius: to.pill ? to.r : "1px" };
+    var kf = [k0, k1];
+    if (from.pill && to.pill) kf = [k0, { borderRadius: Math.min(from.h, to.h) / 2 + "px", offset: 0.5 }, k1];
+    // what the one it left looks like once it's let go, read before anything moves
+    var was = items[from.i], cw = was && was !== on ? getComputedStyle(was) : null;
+    var off = cw ? { color: cw.color, edge: cw.borderTopColor } : null;
+    var a = anim(ind, kf, { duration: BASE, fill: "forwards" });
+    // the one it left keeps the picked look until the pill has gone from under it, the new one takes it as
+    // the pill gets there: the outer edges turn as the pill leaves or arrives, the inner ones (where the two
+    // meet, under the pill as it crosses) the other way round; never an outline without its fill
+    var fwd = to.x >= from.x, L = "borderLeftColor", R = "borderRightColor";
+    function edges(v, side, sv) { var k = { borderTopColor: v, borderBottomColor: v }; k[L] = v; k[R] = v; if (side) k[side] = sv; return k; }
+    if (off && from.color) {
+      var wi = fwd ? R : L, w1 = edges(off.edge, wi, from.edge), w2 = {};
+      w1.offset = 0.1; w2[wi] = from.edge; w2.offset = 0.9;
+      anim(was, [Object.assign({ color: from.color }, edges(from.edge)), w1, { color: off.color, offset: 0.6 }, w2,
+                 Object.assign({ color: off.color }, edges(off.edge))], { duration: BASE });
+    }
+    if (from.pill && from.edge && off) {
+      var ni = fwd ? L : R, n1 = {}, n2 = edges(off.edge, ni, to.edge);
+      n1[ni] = to.edge; n1.offset = 0.1; n2.offset = 0.9;
+      anim(on, [edges(off.edge), n1, n2, edges(to.edge)], { duration: BASE });
+    }
     done(a, function () {
       ind.remove();
       on.style.boxShadow = keep.bs; on.style.backgroundColor = keep.bg;
@@ -638,11 +745,11 @@
       rise(c, 40 + Math.min(i, 6) * 15);
     });
     var key = part.matches(".du") ? ".du" : part.matches(".dc-sheet") ? ".dc-sheet" : ".dc-panel";
-    var h0 = snap.parts[key], h1 = part.offsetHeight;
+    var h0 = snap.parts[key], h1 = tall(part);
     if (h0 && Math.abs(h1 - h0) > 2 && !part.style.minHeight) {
       var clip = part.style.overflow;
       part.style.overflow = "hidden";
-      done(anim(part, [{ height: h0 + "px" }, { height: h1 + "px" }], { duration: BASE }), function () { part.style.overflow = clip; });
+      done(anim(part, [{ height: inner(part, h0) + "px" }, { height: inner(part, h1) + "px" }], { duration: BASE }), function () { part.style.overflow = clip; });
     }
   }
 
@@ -681,9 +788,10 @@
       if (!row && words(r).indexOf(h.add.slice(0, 30)) >= 0 && !snap.rows[words(r)]) row = r;
     });
     if (row) {
-      var ht = row.offsetHeight;
+      var ht = tall(row), rs = getComputedStyle(row);
       row.style.overflow = "hidden";
-      done(anim(row, [{ height: "0px", opacity: 0 }, { height: ht + "px", opacity: 1 }], { duration: BASE }), function () {
+      done(anim(row, [{ height: "0px", opacity: 0, paddingTop: "0px", paddingBottom: "0px" },
+                      { height: inner(row, ht) + "px", opacity: 1, paddingTop: rs.paddingTop, paddingBottom: rs.paddingBottom }], { duration: BASE }), function () {
         row.style.overflow = ""; glow(row, 1200);
       });
       return;
@@ -907,7 +1015,13 @@
     var nav = t.closest("a[onclick*='duecrew:planweek:']");
     if (nav) { M.say({ week: /:prev'/.test(nav.getAttribute("onclick")) ? -1 : 1 }); return; }
     var spin = t.closest('.dc-foot a.ic[title="Refresh"], .brd .foot button[title="Refresh"]');
-    if (spin && M.ok()) { spin.classList.add("dc-spin"); setTimeout(function () { spin.classList.remove("dc-spin"); }, 10000); return; }
+    if (spin && M.ok()) {
+      spin.classList.add("dc-spin");
+      setTimeout(function () {  // no answer by now: it stops where a turn ends, never mid-turn
+        spin.addEventListener("animationiteration", function f() { spin.removeEventListener("animationiteration", f); spin.classList.remove("dc-spin"); });
+      }, 10000);
+      return;
+    }
     // 8: the day you pick on a plan's week: the outline glides there, its card slides in
     var cell = t.closest(".pwk .pc");
     if (cell && M.ok()) {

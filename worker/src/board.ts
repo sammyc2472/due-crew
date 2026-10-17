@@ -220,7 +220,7 @@ export async function getHeatmap(s: Session, env: Env, [uid]: string[]): Promise
 export async function sync(req: Request, s: Session, env: Env): Promise<Response> {
   const body = await readJson(req);
   for (const k of Object.keys(body)) {
-    if (!["profile", "week", "decks", "heatmap", "squads", "settings", "plans", "knows", "stuck", "log", "team"].includes(k)) throw V.bad("sync");
+    if (!["profile", "week", "decks", "heatmap", "squads", "settings", "plans", "knows", "stuck", "log", "team", "due"].includes(k)) throw V.bad("sync");
   }
   // validate everything before writing anything
   const profile = "profile" in body ? V.profile(body.profile) : null;
@@ -232,6 +232,7 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
   const planProgress = "plans" in body ? P.progressPart(body.plans) : null;  // 3.1
   const knows = "knows" in body ? C.knowsPart(body.knows) : null;           // 3.2
   const stuck = "stuck" in body ? C.stuckPart(body.stuck) : null;
+  const due = "due" in body ? C.duePart(body.due) : null;                   // 3.9.0
   const log = "log" in body ? C.logPart(body.log) : null;
   const team = "team" in body ? T.teamPart(body.team) : null;               // 3.7.3
   let squads: { row: ReturnType<typeof V.memberRow>; ids: string[] } | null = null;
@@ -373,8 +374,8 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
     // a row UPDATE that matched nothing had nothing new to say
     if (squads) wrote.squads = squadAt.some((i) => (results[i].meta.changes ?? 0) > 0);
   } else if (squads) wrote.squads = false;
-  // 3.2: the cards I'm stuck on: who has them down, and their tips
-  const cards = stuck ? await C.forStuck(env, s.uid, stuck) : undefined;
+  // 3.2: the cards I'm stuck on: who has them down, and their tips (3.9.0: and the cards due today)
+  const cards = stuck || due ? await C.forStuck(env, s.uid, [...new Set([...(stuck ?? []), ...(due ?? [])])]) : undefined;
   await touchSeen(env, s.uid);
   // logAll: this server keeps the whole log, so the add-on's history import moves on
   return json({ ok: true, gone, wrote, logAll: true, ...(C.logCut(have.log) ? { logCut: true } : {}), ...(cards ? { cards } : {}) });

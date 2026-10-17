@@ -14,6 +14,13 @@ the last 30 days. I'm stuck on one I've lapsed on twice or more, or pressed
 Again on today. The chip shows only on the answer side of a stuck card, and
 only when someone knows it or left a tip; on every other card, nothing.
 Nothing is drawn inside the card.
+
+3.9.0 (Sam's pick, "Open calls" A): the day's first sync also sends the
+cards due today in the decks I share (DUE_MAX of them, the most overdue
+first), and the same reply says who knows each. That answer is kept for the
+day, beside the stuck cards', so a card I miss for the first time shows the
+chip the next time it comes up, without waiting for a sync; it still shows
+only once I'm stuck on it (stuck_now).
 """
 
 import json
@@ -29,6 +36,7 @@ KNOWN_IVL = 21
 CLEAN_DAYS = 30
 STUCK_LAPSES = 2
 STUCK_MAX = 300
+DUE_MAX = 1000  # 3.9.0: the cards due today the day's first sync asks about
 LOG_FULL = 120
 LOG_RECENT = 8
 LOG_BACK_STEP = 366  # 3.7.1: the history import, a year a sync
@@ -72,6 +80,39 @@ def known_and_stuck(col, dids, day_cutoff, with_known=True):
     return {str(g) for g in known} - set(stuck), stuck
 
 
+
+def due_today(col, dids, skip=()):
+    """3.9.0: the guids of the cards due today in these decks and their
+    subdecks (reviews due today or before, learning cards), the most
+    overdue first, DUE_MAX at most, none of `skip` (the stuck ones, which
+    go anyway). One query. A card in a filtered deck counts by its home
+    deck's due day."""
+    tree = _tree(col, dids)
+    if not tree:
+        return []
+    ids = ",".join(str(d) for d in sorted(tree))
+    today = int(col.sched.today)
+    home = "CASE WHEN c.odid THEN c.odue ELSE c.due END"
+    rows = col.db.all(
+        f"SELECT n.guid, MIN(CASE WHEN c.queue = 1 THEN {today} ELSE {home} END) AS d FROM cards c JOIN notes n ON n.id = c.nid "
+        f"WHERE (c.did IN ({ids}) OR c.odid IN ({ids})) AND (c.queue = 1 OR (c.queue IN (2, 3) AND {home} <= {today})) "
+        "GROUP BY n.guid ORDER BY d, n.guid LIMIT ?", DUE_MAX + len(skip))
+    skip = set(skip)
+    return [str(g) for g, _d in rows if str(g) not in skip][:DUE_MAX]
+
+
+def stuck_now(col, card, day_cutoff):
+    """3.9.0: am I stuck on this card right now (what the stuck list means:
+    lapsed twice or more, or Again on it today)? One indexed look at the
+    review log."""
+    try:
+        if int(card.lapses or 0) >= STUCK_LAPSES:
+            return True
+        return bool(col.db.scalar("SELECT 1 FROM revlog WHERE cid = ? AND id >= ? AND ease = 1 LIMIT 1",
+                                  int(card.id), (int(day_cutoff) - 86400) * 1000))
+    except Exception:
+        return False
+
 def log_today(col):
     from .stats.queries import StatsQueries
     return StatsQueries(col).day_label(0)
@@ -106,7 +147,8 @@ def log_days(col, days, skip=0):
 def for_sync(c, light=False):
     """What a sync carries for 3.2, as push()'s keyword arguments: the cards
     I'm stuck on (every sync), and on a full sync the cards I know and my
-    log (the first time 120 days, then the last 8). Main thread."""
+    log (the first time 120 days, then the last 8). 3.9.0: the day's first
+    sync, light or full, the cards due today as well. Main thread."""
     cl = client()
     if not mw.col or not cl.signed_in:
         return None
@@ -117,6 +159,11 @@ def for_sync(c, light=False):
         out["stuck"] = stuck
         if not light:
             out["known"] = known
+        day = log_today(mw.col)
+        if cl.session.get("due_day") != day:
+            # 3.9.0: once a day, the cards due today too (who knows them comes back with the stuck ones')
+            out["due"] = due_today(mw.col, dids, skip=stuck)
+            out["due_day"] = day
     if not light:
         days = LOG_RECENT if cl.session.get("log_full") == cl.user_id else LOG_FULL
         today = log_today(mw.col)
@@ -177,6 +224,38 @@ def names_by_uid():
             for e in _state["entries"] or [] if not e.get("you")}
 
 
+CHIP_PIP = 24  # 3.8.22: a crewmate's Pip on the review screen's chip, its slot the chip's line
+PEEK_PIP = 76  # 3.9.0: who knows it, peeking up from the bottom of the card
+PEEK_MAX = 3  # 3.9.0 (Sam's "2D"): up to three who know it, side by side
+
+
+def pips_by_uid(c=None):
+    """3.8.22 (Sam: "all the places where there are emojis"): each
+    crewmate's Pip for the review screen's chip, where their emoji was:
+    {uid: {svg, a: [light, dark]}}, in their colour and look (a mutual
+    friend's, which only the crew brings); {} with Pip off. Our own markup:
+    a name is only its label, escaped."""
+    if not (app.cfg() if c is None else c).get("sev", True):
+        return {}
+    import html
+    from . import sev
+    from .board import accent_pair
+    return {e["user_id"]: {"svg": sev.slot(sev.svg("idle", rest=True, look=e.get("look"),
+                                                   label=html.escape(f'{e.get("name") or "?"}’s Pip', quote=True)), CHIP_PIP),
+                           "a": list(accent_pair(e.get("accent")))}
+            for e in _state["entries"] or [] if not e.get("you") and e.get("user_id")}
+
+
+def peek_pip(uid):
+    """3.9.0: a crewmate's Pip waving as it peeks in (sev.py's own markup,
+    their look; a name only in its label, escaped), or None."""
+    import html
+    from . import sev
+    e = next((e for e in _state["entries"] or [] if e.get("user_id") == uid and not e.get("you")), None)
+    if e is None:
+        return None
+    return sev.slot(sev.svg("peek", look=e.get("look"), label=html.escape(f'{e.get("name") or "?"}’s Pip', quote=True)), PEEK_PIP)
+
 def tip_list(info, local_tips, names):
     """The tips on one card, each person once: [{from, name, text, helped}].
     The server's first (on a card I'm stuck on, from crewmates I can name),
@@ -200,23 +279,42 @@ def tip_list(info, local_tips, names):
     return out
 
 
-def chip_view(info, local_tips, names, asks=(), mine=False):
+def chip_view(info, local_tips, names, asks=(), mine=False, pips=None):
     """What the chip says for one card, or None. info: the session's entry
     for the card; local_tips: the tips kept here for it (together.local_tips);
     asks: [(uid, index[, line])] crewmates asking about this card (on their
     week); mine: I've asked about it myself and no tip has come yet.
     3.5.0, K1: a tip shows its own words in the bar, with This helped.
-    `short` is what the bar says when the words don't fit beside Edit."""
+    `short` is what the bar says when the words don't fit beside Edit.
+    pips (3.8.22, pips_by_uid): who asked, or knows it, leads with their Pip
+    in place of their emoji. 3.9.0 (Sam's pick, "Open calls" C): who knows
+    it also has `peek`, what the corner says (Sam's "2D": no lightbulb, up to
+    three Pips side by side): one knower's Pip speaks for them ("I know this
+    one", Ask Dre), more say who ("Dre, Mo and Jo know this", "... and 2
+    more"), Ask; `uids`, whose Pips (on_answer draws them). With Pip off the
+    same bubble without them (Sam: "always this version, just without the
+    pip")."""
+    pips = pips or {}
+
+    def who_of(uid):
+        name, emoji = names[uid]
+        return name.split(" ")[0] if uid in pips else f"{emoji + ' ' if emoji else ''}{name.split(' ')[0]}"
+
+    def with_pip(view, uid):
+        if uid in pips:
+            from .sev import CSS
+            view.update(pip=pips[uid], sevcss=CSS)
+        return view
     asks = [a for a in asks if a[0] in names]
     if asks:
-        name, emoji = names[asks[0][0]]
-        who = f"{emoji + ' ' if emoji else ''}{name.split(' ')[0]}"
+        who = who_of(asks[0][0])
         q = str(asks[0][2]) if len(asks[0]) > 2 and asks[0][2] else ""
         view = {"kind": "asked", "text": f"{who}: \u201c{q}\u201d" if q else f"{who} asked about this",
                 "short": f"{who} asked", "ask": False, "cmd": f"knowsreply:{asks[0][0]}:{int(asks[0][1])}", "act": "Tip"}
         if q:
             view["title"] = q
-        return view
+            view["fold"] = f"{who} asked about this card"  # the line can give the answer away
+        return with_pip(view, asks[0][0])
     knows = [u for u in (info or {}).get("knows") or [] if u in names]
     tips = tip_list(info, local_tips, names)
     if tips:
@@ -229,14 +327,29 @@ def chip_view(info, local_tips, names, asks=(), mine=False):
         if first["from"]:
             view["act"] = "\u2713 Helped" if first["helped"] else "This helped"
             view["actcmd"] = f"knowshelped:{first['from']}"
-        return view
+        # 3.9.0 (Sam's note on "Asks and tips"): the tipper's Pip peeks in with it, as who knows it
+        # does (the same bubble without it, Pip off); its words folded till Show
+        own = first["from"] in pips
+        view["fold"] = f"{who} left a tip" if own else f"\U0001F4A1 {who} left a tip"
+        view["peek"] = {"uids": [first["from"]] if own else [], "head": f"{who}: {first['text']}" if own else view["text"],
+                        "act": view.get("act")}
+        return with_pip(view, first["from"]) if own else view
     if knows:
-        name, emoji = names[knows[0]]
-        who = f"{emoji + ' ' if emoji else ''}{name.split(' ')[0]}"
+        who = who_of(knows[0])
         more = len(knows) - 1
-        return {"kind": "knows", "text": who + (f" and {more} more know this" if more > 0 else " knows this"),
+        view = {"kind": "knows", "text": who + (f" and {more} more know this" if more > 0 else " knows this"),
                 "short": who + (f" +{more}" if more > 0 else ""), "ask": True,
                 "cmd": "knowsask", "act": "Asked" if mine else "Ask"}
+        # one knower's Pip speaks for them; more, or no Pip, the words say who (Ask still reaches everyone with the card)
+        speaks = knows[0] in pips and more <= 0
+        firsts = [names[u][0].split(" ")[0] for u in knows[:PEEK_MAX]]
+        rest = len(knows) - len(firsts)
+        said = (firsts[0] if len(firsts) == 1 and not rest else ", ".join(firsts[:-1]) + " and " + firsts[-1] if not rest
+                else ", ".join(firsts) + f" and {rest} more")
+        view["peek"] = {"uids": [u for u in knows[:PEEK_MAX] if u in pips],
+                        "head": "I know this one" if speaks else f"{said} know{'s' if len(knows) == 1 else ''} this",
+                        "act": "Asked" if mine else (f"Ask {who}" if speaks else "Ask")}
+        return with_pip(view, knows[0])
     return None
 
 
@@ -249,39 +362,73 @@ def remark_view(plans, guid, ord_):
     if not got:
         return None
     name, text = got[0]
-    return {"kind": "remark", "text": f"\U0001F4CC {name}: {text}", "short": f"\U0001F4CC {name}", "title": text}
+    return {"kind": "remark", "text": f"\U0001F4CC {name}: {text}", "short": f"\U0001F4CC {name}", "title": text,
+            "fold": f"\U0001F4CC A note from {name}"}  # 3.9.0: folded till Show, as a tip is
 
+
+# 3.8.22: who asked, or knows it, as their Pip (pips_by_uid): sev.py's own
+# drawing, a name only in its label (escaped there), so it goes in as
+# markup; its motion sheet comes along once
+_PIP_JS = """function pip(into, D, night, css) {
+    if (!D.pip || !D.pip.svg) { return; }
+    if (D.sevcss && !document.getElementById('dc-sev-css-k')) {
+      var st = document.createElement('style'); st.id = 'dc-sev-css-k'; st.textContent = D.sevcss;
+      (document.head || document.body).appendChild(st);
+    }
+    var p = document.createElement('span'); p.innerHTML = D.pip.svg;
+    p.style.cssText = 'display:inline-flex;flex:none;line-height:0;' + css + '--sv-a:' + D.pip.a[night ? 1 : 0] + ';' +
+      (night ? '--sv-line:#3d403b;' : '');
+    into.appendChild(p);
+  }"""
 
 _CHIP_JS = """(function () {
   var old = document.getElementById('dc-knows'); if (old) { old.remove(); }
   var D = __DATA__; if (!D) { return; }
-  if (Array.isArray(D.accent)) {
-    var night = /night/i.test(document.body.className) || document.documentElement.classList.contains('night-mode');
-    D.accent = D.accent[night ? 1 : 0];
-  }
+  var night = /night/i.test(document.body.className) || document.documentElement.classList.contains('night-mode');
+  if (Array.isArray(D.accent)) { D.accent = D.accent[night ? 1 : 0]; }
   var edit = document.querySelector('button[onclick*="edit"]');
   var cell = edit ? edit.parentNode : document.body;
   var s = document.createElement('span'); s.id = 'dc-knows';
-  s.style.cssText = 'display:inline-flex;align-items:center;gap:6px;margin-left:10px;padding:2px 10px;border-radius:99px;' +
-    'border:1px solid ' + D.accent + ';font:11.5px -apple-system,Segoe UI,sans-serif;white-space:nowrap;vertical-align:middle;cursor:pointer;';
-  var t = document.createElement('span'); t.id = 'dc-knows-t'; t.textContent = D.text; s.appendChild(t);
-  t.setAttribute('data-full', D.text); t.setAttribute('data-short', D.short || D.text);
+  s.style.cssText = 'display:inline-flex;align-items:center;gap:6px;margin-left:10px;padding:' + (D.pip ? '3px 10px 3px 6px' : '2px 10px') +
+    ';border-radius:99px;border:1px solid ' + D.accent + ';font:11.5px -apple-system,Segoe UI,sans-serif;white-space:nowrap;vertical-align:middle;cursor:pointer;';
+  pip(s, D, night, 'margin:8px 2px 0 1px;');  // 3.8.22: who it is, as their Pip (Sam, 16 Oct: room for all of it, head to feet)
+  var t = document.createElement('span'); t.id = 'dc-knows-t'; s.appendChild(t);
   if (D.kind === 'tip') { t.setAttribute('data-tip', '1'); }
-  s.title = D.title || D.text;
   t.style.cssText = 'display:inline-block;max-width:24vw;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;';
-  if (D.more) { var m = document.createElement('span'); m.textContent = '+' + D.more + ' more'; m.style.opacity = '0.7'; s.appendChild(m); }
-  if (D.act) {
-    var a = document.createElement('b'); a.textContent = D.act; a.style.cssText = 'flex:none;color:' + D.accent; s.appendChild(a);
-    if (D.actcmd) { a.onclick = function (e) { e.stopPropagation(); try { pycmd('duecrew:' + D.actcmd); } catch (x) {} }; }
+  // 3.9.0 (Sam's pick, "Asks and tips" 2): folded as on the card, its words on a click
+  var folded = !!(D.fold && !D.open);
+  function said() {
+    while (t.nextSibling) { s.removeChild(t.nextSibling); }
+    t.textContent = folded ? D.fold : D.text;
+    t.setAttribute('data-full', t.textContent); t.setAttribute('data-short', folded ? D.fold : (D.short || D.text));
+    if (folded) { s.removeAttribute('title'); } else { s.title = D.title || D.text; }
+    if (D.more && !folded) { var m = document.createElement('span'); m.textContent = '+' + D.more + ' more'; m.style.opacity = '0.7'; s.appendChild(m); }
+    var act = folded ? 'Show' : D.act;
+    if (act) {
+      var a = document.createElement('b'); a.textContent = act; a.style.cssText = 'flex:none;color:' + D.accent; s.appendChild(a);
+      if (D.actcmd && !folded) { a.onclick = function (e) { e.stopPropagation(); try { pycmd('duecrew:' + D.actcmd); } catch (x) {} }; }
+    }
+    s.style.cursor = folded || D.cmd ? 'pointer' : 'default';
   }
-  if (D.cmd) { s.onclick = function () { try { pycmd('duecrew:' + D.cmd); } catch (e) {} }; } else { s.style.cursor = 'default'; }
+  s.onclick = function () {
+    if (folded) {
+      folded = false; said(); if (window.dcBarBalance) { window.dcBarBalance(); }
+      if (t.animate && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+        [].forEach.call(s.children, function (x) { if (x.tagName !== 'svg' && !x.querySelector('svg')) { x.animate([{opacity: 0}, {opacity: getComputedStyle(x).opacity}], {duration: 220, easing: 'ease-out'}); } });
+      }
+      return;
+    }
+    if (D.cmd) { try { pycmd('duecrew:' + D.cmd); } catch (e) {} }
+  };
+  said();
   cell.appendChild(s);
+  __PIP__
 })();"""
 
 
 def chip_js(data):
     from .room_model import BAR_BALANCE
-    return _CHIP_JS.replace("__DATA__", json.dumps(data)) + BAR_BALANCE
+    return _CHIP_JS.replace("__PIP__", _PIP_JS).replace("__DATA__", json.dumps(data)) + BAR_BALANCE
 
 
 # The chip as a small card above the bar, bottom right of the review
@@ -292,32 +439,94 @@ def chip_js(data):
 # card's script runs too, so they're keyed (room_model.CARD_PAGE_CMDS) and
 # This helped from here asks first.
 _FLOAT_JS = """(function () {
-  var old = document.getElementById('dc-knows-card'); if (old) { old.remove(); }
-  if (window.dcKnowsOff) { window.dcKnowsOff(); window.dcKnowsOff = null; }
-  var D = __DATA__; if (!D) { return false; }
+  var D = __DATA__;
+  var still = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  var old = document.getElementById('dc-knows-card'), oldPad = document.getElementById('dc-knows-pad');
+  if (window.dcKnowsOff) { window.dcKnowsOff(!D); window.dcKnowsOff = null; } else if (old) { old.remove(); }
+  if (oldPad) { oldPad.remove(); }
+  if (!D) { return false; }
   var KEY = __KEY__, gone = false;
   function send(cmd) { try { pycmd('duecrew:' + cmd + '|' + KEY); } catch (e) {} }
   var night = /night/i.test(document.body.className) || document.documentElement.classList.contains('night-mode');
   var acc = night ? D.accent[1] : D.accent[0];
   var c = night ? {bg: '#2c2c2c', ink: '#e8e8e8', mut: '#9c9c9c', line: '#3d403b'} : {bg: '#ffffff', ink: '#222222', mut: '#777777', line: '#e2e2da'};
   function el(tag, css, text) { var e = document.createElement(tag); e.style.cssText = css; if (text != null) { e.textContent = text; } return e; }
-  var box = el('div', 'position:fixed;right:12px;bottom:12px;max-width:260px;box-sizing:border-box;display:grid;gap:6px;padding:9px 12px;' +
-    'border:1px solid ' + c.line + ';border-radius:12px;background:' + c.bg + ';color:' + c.ink + ';box-shadow:0 6px 18px rgba(0,0,0,.22);' +
-    'font:12.5px/1.35 -apple-system,Segoe UI,sans-serif;text-align:left;z-index:60;');
+  // 3.9.0 (Sam's picks, "Open calls" C, then "2D"): who knows it, their Pips peeking up from the bottom,
+  // side by side (three at most), no light bulb drawn; with Pip off the same bubble in the same place, without them
+  var peek = D.peek || null, withPip = !!(peek && peek.pips && peek.pips.length);
+  var font = 'font:12.5px/1.35 -apple-system,Segoe UI,sans-serif;text-align:left;';
+  var card = 'border:1px solid ' + c.line + ';background:' + c.bg + ';color:' + c.ink + ';box-shadow:0 6px 18px rgba(0,0,0,.22);';
+  var box = peek ? el('div', 'position:fixed;right:16px;bottom:' + (withPip ? '0' : '14px') + ';display:flex;align-items:flex-end;gap:8px;z-index:60;' + font)
+    : el('div', 'position:fixed;right:12px;bottom:12px;max-width:260px;box-sizing:border-box;display:grid;gap:6px;padding:9px 12px;' +
+      'border-radius:12px;' + card + font + 'z-index:60;');
   box.id = 'dc-knows-card';
-  var head = el('div', 'font-weight:600;cursor:pointer;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;', D.text);
-  if (D.title) { head.title = D.title; }
-  if (D.cmd) { head.onclick = function () { send(D.cmd); }; } else { head.style.cursor = 'default'; }
+  // 3.9.0 (Sam's pick, "Asks and tips" 2): a tip's, an ask's or a plan note's words wait for Show, so
+  // nothing gives away what a one-by-one card still hides; who knows it never folds (it names people)
+  var folded = !!(D.fold && !D.open);
+  var words = el('div', 'font-weight:600;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;', '');
+  var head = words;
+  words.onclick = function () { if (folded) { open(); } else if (D.cmd) { send(D.cmd); } };
+  if (D.pip && !peek) {  // 3.8.22: who it is, as their Pip, before the words
+    var hr = el('div', 'display:flex;gap:6px;align-items:center;');
+    pip(hr, D, night, 'margin:-4px 0 -2px -2px;');
+    hr.appendChild(words); head = hr;
+  }
   var acts = el('div', 'display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;');
   function link(text, color, bold, fn) {
     var a = el('span', 'cursor:pointer;color:' + color + ';' + (bold ? 'font-weight:700;' : ''), text);
     a.onclick = function (e) { e.stopPropagation(); fn(); }; acts.appendChild(a); return a;
   }
-  if (D.act) { link(D.act, acc, true, function () { send(D.actcmd || D.cmd); }); }
-  if (D.more) { link('+' + D.more + ' more', c.mut, false, function () { send('knowstip'); }); }
-  link('Not now', c.mut, false, function () { off(); });
-  box.appendChild(head); box.appendChild(acts);
+  function said() {
+    words.textContent = folded ? D.fold : (peek ? peek.head : D.text);
+    if (D.title && !folded) { words.title = D.title; } else { words.removeAttribute('title'); }  // no words on a hover either
+    words.style.cursor = folded || D.cmd ? 'pointer' : 'default';
+    acts.textContent = '';
+    if (folded) { link('Show', acc, true, open); } else {
+      if (D.act) { link(peek ? peek.act : D.act, acc, true, function () { send(D.actcmd || D.cmd); }); }
+      if (D.more) { link('+' + D.more + ' more', c.mut, false, function () { send('knowstip'); }); }
+    }
+    link('Not now', c.mut, false, function () { off(true); });
+  }
+  function open() {  // Show: the words, and what to do with them; the room under the card grows to match
+    var grow = bub || box, b0 = !still && grow.animate ? grow.getBoundingClientRect() : null;
+    folded = false; said();
+    if (b0) {
+      // it grows into its words, which fade in once there's room for them: never the open words in the folded size
+      var b1 = grow.getBoundingClientRect(), was = [grow.style.boxSizing, grow.style.overflow];
+      grow.style.boxSizing = 'border-box'; grow.style.overflow = 'hidden';
+      var g = grow.animate([{width: b0.width + 'px', height: b0.height + 'px'}, {width: b1.width + 'px', height: b1.height + 'px'}], {duration: 240, easing: 'ease-out'});
+      g.onfinish = g.oncancel = function () { grow.style.boxSizing = was[0]; grow.style.overflow = was[1]; };
+      [head, acts].forEach(function (x) { x.animate([{opacity: 0}, {opacity: 0, offset: 0.4}, {opacity: getComputedStyle(x).opacity}], {duration: 320}); });
+    }
+    if (pad) { pad.style.height = (box.offsetHeight + 12) + 'px'; } else { check(); }
+  }
+  said();
+  var fig = null, bub = null;
+  if (peek) {
+    // 3.9.0 (Sam: a tip "looks too similar" to who knows it): a tip's bubble wears its tipper's colour
+    // round its edge, their Pip's (mine with Pip off); who knows it keeps the plain line
+    var edge = D.kind === 'tip' ? 'border:2px solid ' + (withPip ? peek.pips[0].a[night ? 1 : 0] : acc) + ';' : '';
+    bub = el('div', 'margin-bottom:' + (withPip ? '26px' : '0') + ';max-width:220px;display:grid;gap:4px;padding:8px 11px;' +
+      'border-radius:' + (withPip ? '12px 12px 4px 12px' : '12px') + ';transform-origin:100% 100%;' + card + edge);
+    bub.appendChild(head); bub.appendChild(acts);
+    box.appendChild(bub);
+  }
+  if (withPip) {
+    fig = el('span', 'position:relative;display:inline-flex;align-items:flex-end;gap:2px;line-height:0;');
+    fig.setAttribute('data-fig', '1');
+    for (var i = peek.pips.length - 1; i >= 0; i--) {  // the first who knows it nearest the corner
+      pip(fig, {pip: peek.pips[i], sevcss: D.sevcss}, night, '--sv-b:' + (+peek.pips[i].b || 4.6) + 's;--sv-d:' + (+peek.pips[i].d || 0) + 's;');
+    }
+    box.appendChild(fig);
+  } else if (!peek) {
+    box.appendChild(head); box.appendChild(acts);
+  }
+  __PIP__
   document.body.appendChild(box);
+  if (peek && !still && !D.open && bub.animate) {  // up they pop, then the bubble; nothing with Reduce motion (nor drawn again, opened)
+    if (fig) { fig.animate([{transform: 'translateY(105%)'}, {transform: 'none'}], {duration: 700, easing: 'cubic-bezier(.2,.9,.3,1.25)'}); }
+    bub.animate([{opacity: 0, transform: 'scale(.85)'}, {opacity: 1, transform: 'none'}], {duration: 350, delay: fig ? 550 : 0, easing: 'ease-out', fill: 'backwards'});
+  }
   function hit(r, b) { return r.width > 0 && r.height > 0 && r.left < b.right + 8 && r.right > b.left - 8 && r.top < b.bottom + 8 && r.bottom > b.top - 8; }
   function free() {
     var b = box.getBoundingClientRect(), qa = document.getElementById('qa') || document.body;
@@ -332,22 +541,41 @@ _FLOAT_JS = """(function () {
     for (var j = 0; j < m.length; j++) { if (!box.contains(m[j]) && hit(m[j].getBoundingClientRect(), b)) { return false; } }
     return true;
   }
-  function off() {
+  var pad = null, ro = null, later = null;
+  function off(duck) {
     if (gone) { return; }
-    gone = true; box.remove();
+    gone = true;
+    if (pad) { pad.remove(); }
     window.removeEventListener('scroll', check, true); window.removeEventListener('resize', check);
     document.removeEventListener('load', check, true);
     if (ro) { ro.disconnect(); }
     clearTimeout(later);
+    if (window.dcKnowsOff === off) { window.dcKnowsOff = null; }
+    box.removeAttribute('id');
+    if (duck && bub && !still && bub.animate) {  // it ducks back down (or the bubble fades): the next card, or Not now
+      box.style.pointerEvents = 'none';
+      var fade = bub.animate([{opacity: 1}, {opacity: 0}], {duration: fig ? 150 : 200, fill: 'forwards'});
+      if (fig) { fig.animate([{transform: 'none'}, {transform: 'translateY(105%)'}], {duration: 260, easing: 'ease-in', fill: 'forwards'}).onfinish = function () { box.remove(); }; }
+      else { fade.onfinish = function () { box.remove(); }; }
+    } else { box.remove(); }
   }
-  function check() { if (!gone && !free()) { off(); send('knowsbar'); } }
+  function check() { if (!gone && !free()) { off(); send(D.fold && !folded ? 'knowsbar:open' : 'knowsbar'); } }
+  window.dcKnowsOff = off;
+  if (peek) {
+    // 3.9.0 (Sam, 16 Oct: the pill "is not the new version we agreed on"): the peek always shows, as in
+    // the mock, never the bar's chip; room under the card so its last lines scroll clear of it
+    pad = el('div', 'height:' + (box.offsetHeight + 12) + 'px;');
+    pad.id = 'dc-knows-pad';
+    document.body.appendChild(pad);
+    return true;
+  }
   window.addEventListener('scroll', check, true); window.addEventListener('resize', check);
   document.addEventListener('load', check, true);  // a picture that loads late
   // Anki puts the answer in a moment later (pictures preloaded, MathJax
   // typeset): look again when the card's area changes size, and once more
-  var qa = document.getElementById('qa'), ro = null, later = setTimeout(check, 600);
+  var qa = document.getElementById('qa');
+  later = setTimeout(check, 600);
   if (qa && window.ResizeObserver) { ro = new ResizeObserver(check); ro.observe(qa); }
-  window.dcKnowsOff = off;
   if (!free()) { off(); return false; }
   return true;
 })();"""
@@ -355,7 +583,8 @@ _FLOAT_JS = """(function () {
 
 def float_js(data):
     from .room_model import CMD_KEY
-    return _FLOAT_JS.replace("__KEY__", json.dumps(CMD_KEY)).replace("__DATA__", json.dumps(data))
+    return (_FLOAT_JS.replace("__PIP__", _PIP_JS).replace("__KEY__", json.dumps(CMD_KEY))
+            .replace("__DATA__", json.dumps(data)))
 
 
 _LAST = {"n": 0, "view": None}
@@ -393,12 +622,13 @@ def _show(view):
     to_bar(False)
 
 
-def to_bar():
-    """knowsbar: the corner stopped being free (a picture loaded, a scroll)."""
+def to_bar(opened=False):
+    """knowsbar: the corner stopped being free (a picture loaded, a scroll);
+    opened (3.9.0): its words were shown there, so the bar's are too."""
     bar = _bottom()
     if bar is not None and _LAST["view"]:
         try:
-            bar.eval(chip_js(_LAST["view"]))
+            bar.eval(chip_js(dict(_LAST["view"], open=True) if opened else _LAST["view"]))
         except Exception:
             pass
 
@@ -417,9 +647,12 @@ def _accent():
         return ["#2e7d32", "#7cc47f"]
 
 
-def on_answer(card):
+def on_answer(card, opened=False):
     """reviewer_did_show_answer: the chip, when this card is one I'm stuck on
-    and someone knows it or left a tip."""
+    and someone knows it or left a tip. 3.9.0: the stuck cards' answer from
+    the last sync, or, for a card I'm stuck on since, the morning's answer
+    for the cards due today. opened: drawn again after This helped, whose
+    words were already shown (a folded one opens)."""
     web = _bottom()
     if web is None or not client().signed_in:
         return
@@ -430,13 +663,29 @@ def on_answer(card):
                 for i, t in enumerate(e.get("tricky") or []) if t.get("guid") == guid and t.get("q")]
         from .together import _today
         mine = any(f["guid"] == guid for f in clean_tricky(client().session.get("tricky"), _today()))
-        view = chip_view((client().session.get("cards") or {}).get(guid), local_tips(guid), names_by_uid(), asks, mine)
+        sess = client().session
+        info = (sess.get("cards") or {}).get(guid)
+        if info is None and guid in (sess.get("cards_due") or {}) and sess.get("due_day") == log_today(mw.col) \
+                and stuck_now(mw.col, card, mw.col.sched.day_cutoff):
+            info = sess["cards_due"][guid]  # 3.9.0: missed today for the first time, known since the morning
+        pips = pips_by_uid()
+        view = chip_view(info, local_tips(guid), names_by_uid(), asks, mine, pips)
         if view is None or view.get("kind") == "knows":
             view = remark_view(client().session.get("plans"), guid, card.ord) or view  # 3.8.1
+        if view and view.get("peek"):
+            peek = dict(view["peek"])
+            # each Pip waving, in their look and colour; none (Pip off): the bubble alone
+            from .sev import blink
+            drawn = [{"svg": peek_pip(u), "a": pips[u]["a"]} for u in peek.pop("uids", None) or [] if u in pips]
+            # each blinking on its own clock, as a room's seats (Sam: side by side they blinked as one)
+            peek["pips"] = [dict(p, b=blink(i)[0], d=blink(i)[1]) for i, p in enumerate(p for p in drawn if p["svg"])]
+            view["peek"] = peek
     except Exception:
         view = None
     if view:
         view["accent"] = _accent()
+        if opened:
+            view["open"] = True
     _show(view)
 
 
@@ -471,14 +720,16 @@ def ask(card=None):
     if who:
         listed = (", ".join(who[:-1]) + " and " + who[-1]) if 1 < len(who) <= 3 else \
             (", ".join(who[:3]) + f" and {len(who) - 3} more" if len(who) > 3 else who[0])
-        lead = f"{listed} {'has' if len(who) == 1 else 'have'} it down. "
+        lead = f" {listed} {'has' if len(who) == 1 else 'have'} it down."
     else:
         lead = ""
     from .together import _today
     asked = next((f for f in clean_tricky(client().session.get("tricky"), _today()) if f["guid"] == guid), None)
+    # 3.9.0 (Sam's pick, "Asks and tips" 1): it says who it goes to first, as it goes to
+    # everyone in the crew with the card, not only who has it down
     line, ok = ask_text(mw, "Ask your crew about this card",
-                        lead + ("You've asked. Change your line, or leave it as it is."
-                                if asked else "Your crew sees it on their copy of the card. One line, optional."),
+                        "Goes to everyone in your crew who has this card." + lead
+                        + (" You've asked. Change your line, or leave it as it is." if asked else " One line, optional."),
                         (asked or {}).get("q") or "")
     if not ok:
         return
@@ -545,7 +796,7 @@ def helped(guid, from_uid, on=True):
             tooltip("Thanks. The tips that help most show first.")
         card = _card()
         if card is not None and card.note().guid == guid and getattr(mw.reviewer, "state", "") == "answer":
-            on_answer(card)
+            on_answer(card, opened=True)
     _bg(lambda: cl.tip_helped(guid, from_uid, on), done)
 
 
@@ -573,7 +824,7 @@ def on_message(cmd, parts=(), from_card_page=False):
     elif cmd == "knowstip":
         show_tips()
     elif cmd == "knowsbar":
-        to_bar()
+        to_bar(len(parts) > 2 and parts[2] == "open")
     elif cmd == "knowshelped" and len(parts) > 2:
         if from_card_page:
             # the review screen runs the card's script too: a thanks is sent only on a yes

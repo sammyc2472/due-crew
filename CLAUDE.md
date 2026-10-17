@@ -96,7 +96,8 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   deck ids belong to one collection. `plans.py` is pure, `plan_flow.py`
   the glue.
 - Mine alone, never sent: Insights, my progress on each bingo square,
-  checkpoint scores, `wrap.json` (3.8.2: and the closet's tallies in it).
+  checkpoint scores, `wrap.json` (3.8.2: and the closet's tallies in it)
+  and Wrapped.
   Pip's closet is mine (an account key only I read); what my Pip has on
   rides with my accent to mutual friends, as names. A plan's squad (its team on the server) shares only
   that I showed up, my questions and answers, and bingo stamps; never my
@@ -151,14 +152,14 @@ same commit, each with its test:
 |---|---|---|
 | The board, your people: Crew (Today · Week · Decks picker) and Squads | `board.py`, `__init__.py`, `backend/api.py`, `stats/` | `board.ts`, `social.ts`; `Board` in app.js |
 | The You bubble over it (3.8.0): Today, Upcoming, Later, Plans, Insights | `board.you_html`, `__init__._you`, `due_flow.py` | the rail on /home |
-| Cheers, status, profile card | `social.py`, `wrap.py` | `social.ts` |
+| Cheers, status, profile card (3.9.0: a landing cheer is a show over the whole Decks screen, a different one each time: `shows.py` the bag, `show.js` the twelve, started by `board.flurry_js`) | `social.py`, `wrap.py`, `shows.py`, `show.js` | `social.ts` |
 | Settings (one: the board's, 3.8.0) | `settings_model.py`, `account.py`, `board.settings_html` | `GET/PUT /settings` |
 | Squads, knocks, bingo | `squads.py`, `bingo.py`, `bingo_flow.py` | `squads.ts`, `bingo.ts`, `adminsquads.ts` |
-| Who knows this, asks, tips | `cards.py`, `together.py` | `cards.ts` |
+| Who knows this, asks, tips (3.9.0: the day's first sync asks about the cards due today too, so a first miss shows it; with Pip on, the knower's Pip peeks in from the corner, and a tip's tipper's; a tip's, an ask's or a plan note's words fold till Show, so a one-by-one card isn't given away) | `cards.py`, `together.py` | `cards.ts` |
 | Study rooms | `rooms.py`, `room_model.py` | rides my week |
 | The Fifteen (3.8.1): ▶ Fifteen? in the top bar, the nudge, the question at its end, Take five / Another now / Stop | `room_model.make_fifteen`/`fifteen_next`, `rooms.start_fifteen`/`fifteen_answer` | studying now only (never a room on my week) |
 | Pip (3.8.1, Block; called Sev until 3.8.2, and still `sev` in code: sev.py, the `sev*` keys, `.sv`, sev.js's `Sev`): by the logo for a moment, in a fifteen's chip, question and break, the nudge, the session's line; hopping across the week picture card; a study room's seats, each crewmate's in their accent; waving in Welcome back and on the signed-out card; hopping on a crewmate's big-streak banner (not on crew rows: Sam's no). Each place has its mix of moves (`sev.MOVES`), never the same twice in a row | `sev.py` (one drawing; the widgets get its markup, the week card and Welcome back `sev.still`; `pick`/`nth` the variety), `rooms.board_sev`/`pick`/`milestone_sevs`/`signed_out_sev`, `sharecard.hops`, `room_model.seats`/`vary_seed`, `ui.sev_label` | never sent; cards.js keeps a copy of `sev.still` (the suite checks it) |
-| Pip's closet (3.8.2): 61 things earned by showing up, coming back, together, plans, card care, seasons, secrets; one per place, a costume over the look; in place of the board (Yours by place, To earn by how); each crew row's, profile card's and (3.8.21) squadmate's Pip in the emoji's place | `closet.py` (pure: things, wear/clean/shown, facts from days and hours), `closet_art.py` (the drawings), `closet_flow.py` (facts, tallies in wrap.json, earned, worn), `board.closet_html`/`closet_line`/`row_sev`/`card_sev`/`squad_pip` | account keys `sev_look`, `sev_closet`; a mutual friend's look on /board (`lookOf` in `board.ts`) |
+| Pip's closet (3.8.2): 61 things earned by showing up, coming back, together, plans, card care, seasons, secrets; one per place, a costume over the look; in place of the board (Yours by place, To earn by how); each crew row's, profile card's and (3.8.21) squadmate's Pip in the emoji's place (3.8.22: a plan card's squad line too, by `who` on `/board`'s `teams`; the review chip, a squadmate's card, Settings › You, bingo stamps; the site's account page and home feed, `pipFor`; the Friends dialog is names alone) | `closet.py` (pure: things, wear/clean/shown, facts from days and hours; 3.8.22: `halloween`/`spooky`), `closet_art.py` (the drawings), `closet_flow.py` (facts, tallies in wrap.json, a year of them for Wrapped, earned, worn, `halloween_view`), `board.closet_html`/`closet_line`/`row_sev`/`card_sev`/`squad_pip`/`halloween_html` | account keys `sev_look`, `sev_closet`; a mutual friend's look on /board (`lookOf` in `board.ts`) |
 | Plans (follow, morning, week, load; You › Plans) | `plans.py`, `schedule.py`, `plan_flow.py` | `plans.ts`, `library.ts`; `builder.js`, app.js |
 | A plan's squad (3.8.0, on the Squads tab; its team on the server) | `team.py`, `team_flow.py` | `team.ts`; `PlanSquad` in builder.js |
 | Insights (the deck's, a plan only sharpens it; You › Insights; the topic map, tiles open into parts; its card and text, shared by hand) | `team.py`, `team_flow.py`, `mapcard.py`, `ui/map_card_dialog.py` | never sent |
@@ -167,6 +168,7 @@ same commit, each with its test:
 | Sign-in, sessions, quiet accounts | `ui/auth_dialog.py`, `backend/api.py` | `auth.ts`, `quiet.ts`, `mydata.ts` |
 | Shares: text, and picture cards (made in Anki since 3.8.0) | `share.py`, `shares.py`, `sharecard.py`, `ui/share_card_dialog.py` | `site/public/cards.js` |
 | Admin, notices, feedback, reports (kept for the Inbox, 3.8.1) | | `admin.ts`, `people.ts`, `notices.ts`, `feedback.ts`, `reports.ts` |
+| Your Wrapped (3.9.0): the year's story in the board's place, the board's line 1 Dec to 15 Jan, Tools › Your year… | `wrapped.py` (pure: facts, slides, words, SAD), `wrapped_flow.py` (one query, counts, the card), `board.wrapped_html`/`wrapped_js`/`wrapped_line`, `sharecard.year`'s Pip | never sent; the account's `wrapped_seen`; cards.js draws the year card's Pip the same |
 | Why isn't this card showing? (Browse right-click, 3.8.0) | `why.py`, `why_flow.py`, `ui/why_dialog.py` | never sent |
 | Plan tags: DueCrew::<plan>::SLG_12 on followers' notes (Browse right-click, the builder, Tag by objective; 3.8.0) | `plans.sync_tags`, `plan_flow.apply_tags`, `ui/tag_dialog.py` | `plans.ts` tagNotes; This plan's tags in builder.js |
 | Cuts (a video kept to an SLG) and a tag's single cards; taking a tag off (3.8.1) | `plans.match`/`plan_tag_cards`/`topic_items`, `plan_flow._unit_cids` | `planDoc`/`putIds` in `plans.ts`; `setCut`/`syncCuts` and the Text preview in builder.js |
@@ -234,6 +236,10 @@ clean `main` does the migrations, the API, then the site, then
   with Reduce motion, no row ever slides past another; what leaves is put
   back inert for a moment, and a full draw compares with the page's
   session memory). The logo may move, never change: transforms only.
+  A move ends exactly where the page lands, so nothing jumps when it
+  cleans up (heights by `tall`/`inner`, folds by `room`, never
+  offsetHeight); `tools/motion_audit.js` measures each one's last frame
+  against the settled page (3.9.0).
 - Every `duecrew:` command a page emits needs a handler
   (`test_every_board_command_has_a_handler`), and a new one gets a test
   that sends it through `_on_js` as the board does (3.5.0's Settings went

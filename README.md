@@ -15,10 +15,10 @@ add you back. Your cards never leave your computer.
 
 ## Your crew
 
-**Cheers.** Tap 🎉 next to a friend's name and it rains down their
-screen, with your note.
+**Cheers.** Tap 🎉 next to a friend's name and a little show lands on
+their Decks screen, a different one each time, with your note.
 
-<img alt="A cheer arriving" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/flurry.png" width="600">
+<img alt="A cheer landing" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/flurry.png" width="600">
 
 **Study rooms.** 25-minute rounds with your crew, the timer in Anki's top
 bar, breaks together. Each of you sits in the room as your own Pip, in
@@ -66,6 +66,9 @@ Above the board is yours.
   know, topic by topic. Click a topic to open its parts. It's worked out
   in your Anki and never sent; copy the map as a picture or as text if you
   want to share it.
+- **Your year.** From 1 December, your year in Anki as a short story,
+  made on your computer from your own reviews. Tools → Due Crew → Your
+  year… has any year Anki remembers.
 
 **Pip**, the square from the logo, keeps you company: heads down in a
 fifteen, breathing with you on a break, a hop when the day's done, a wave
@@ -144,8 +147,8 @@ what you share in Settings → Privacy, or pause at any time. Anyone else
 sees your name and emoji, nothing more. Card text never leaves your
 computer: a crewmate sees a card's text only if they have the same card,
 and a plan holds card and note IDs, which each follower's Anki looks up
-in its own copy. Insights, your topic map and your progress on each
-bingo square stay on your computer. Your email is used to sign you in.
+in its own copy. Insights, your topic map, your year and your progress
+on each bingo square stay on your computer. Your email is used to sign you in.
 Your own to-dos are kept with your settings, so every computer has them;
 only you see them. If you write in, Sam, who runs Due Crew, can look up
 your account, your squads and who's on your crew list to fix problems;

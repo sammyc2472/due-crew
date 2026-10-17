@@ -467,6 +467,10 @@ def _on_render(deck_browser, content):
             _state["board_shown"] = True  # 3.8.2: Pip's closet, as Settings
             content.stats += board.closet_html(_closet_view(), c)
             return
+        if _state.get("wrapped_open") and mw.col:
+            _state["board_shown"] = True  # 3.9.0: your Wrapped, as the closet
+            content.stats += board.wrapped_html(_wrapped_view(), c)
+            return
         if not c.get("show_leaderboard", True):
             _state["board_shown"] = False
             return
@@ -509,7 +513,8 @@ def _squad_view_with_bingo(c):
             sv = dict(sv, bingo=bv)
             squares = (bv.get("ev") or {}).get("squares") or []
             _closet(lambda cf: cf.note_bingo(int((bv.get("ev") or {}).get("lines") or 0),
-                                             bool(squares) and all(q.get("done") for q in squares)))
+                                             bool(squares) and all(q.get("done") for q in squares),
+                                             f'{(bv.get("card") or {}).get("wk")}:{bv.get("squad_id")}'))
             if bingo_flow.new_lines(bv):
                 tooltip("BINGO! Your squad just made a line.", period=4000)
     return sv
@@ -536,10 +541,13 @@ def _bingo_cmd(cmd):
 
 def _board_html(c):
     """The board from cache: one call for the first render and every swap."""
+    from . import closet_flow
     if _state.get("settings_tab"):
         return board.settings_html(_settings_view(), c)  # 3.5.0: Settings in its place
     if _state.get("closet_open"):
         return board.closet_html(_closet_view(), c)  # 3.8.2: Pip's closet in its place
+    if _state.get("wrapped_open"):
+        return board.wrapped_html(_wrapped_view(), c)  # 3.9.0: your Wrapped in its place
     if _state.get("team_bingo_open"):
         from . import team_flow  # 3.7.3: a plan team's card in its place
         pid = _state["team_bingo_open"]
@@ -547,7 +555,8 @@ def _board_html(c):
         return board.bingo_html(team_flow.bingo_view(pid), c, loading=tv.get("state") == "fetching", team=True)
     if _state.get("bingo_open"):
         return board.bingo_html(_bingo_view(c), c,  # 3.6: the squad's card in its place
-                                loading=_squad_view(c).get("state") == "loading" and bool(bingo_flow.card()))
+                                loading=_squad_view(c).get("state") == "loading" and bool(bingo_flow.card()),
+                                people={e.get("user_id"): e for e in _state["entries"] or []})  # 3.8.22: stamps as Pips
     show_up = bool(c.get("show_up"))
     notice = _state.get("notice")
     if notice and notice["id"] in (_wrap_data().get("notices_dismissed") or []):
@@ -567,7 +576,10 @@ def _board_html(c):
                         milestone_sev=None if show_up else rooms.milestone_sevs(_state["milestones"][:2]),
                         room=rooms.board_view(), plans=plans,
                         due=due, you=_you(c, due, plans), sticking=_sticking(c),
-                        sev=rooms.board_sev(c, due), closet=_state.get("closet_new"))
+                        sev=rooms.board_sev(c, due), closet=_state.get("closet_new"),
+                        halloween=closet_flow.halloween_view(_state["labels"][0] if _state["labels"] else "",
+                                                             _state["entries"], c),
+                        wrapped=_wrapped_banner(c))
 
 
 def _you(c, due, plans):
@@ -618,7 +630,7 @@ def _arrive_js():
 
 
 def _on_did_render(deck_browser):
-    mw.web.eval(board.keep_me_in_view_js() + _arrive_js())
+    mw.web.eval(board.keep_me_in_view_js() + _arrive_js() + (board.wrapped_js() if _state.get("wrapped_open") else ""))
     _play_cheers()
     if _state.get("plans_midday") and not _closing:
         # 3.7.3: an update that came while reviewing waits for the Decks screen
@@ -916,6 +928,8 @@ def _on_js(handled, message, context):
         open_settings(tab=parts[2] if len(parts) > 2 else None)
     elif cmd.startswith("closet"):
         _closet_cmd(cmd, parts[2:])  # 3.8.2: Pip's closet
+    elif cmd.startswith("wrapped"):
+        _wrapped_cmd(cmd, parts[2:])  # 3.9.0: your Wrapped
     elif cmd == "heatday" and len(parts) > 2:
         _browse_day(parts[2])
     elif cmd in SETTINGS_CMDS:
@@ -971,6 +985,8 @@ def _swap(c, focus=None):
         return
     html_out = _board_html(c)
     js = board.swap_js(html_out) + board.keep_me_in_view_js() + _arrive_js()  # 3.8.0: no jumps under the pointer
+    if _state.get("wrapped_open"):
+        js += board.wrapped_js()  # 3.9.0: Wrapped's player, on the card just drawn
     if focus:
         js += ("(function(){var f=document.querySelector('#due-crew [data-f=\"%s\"]');"
                "if(f){f.focus({preventScroll:true});}})();" % re.sub(r"[^A-Za-z0-9:_-]", "", focus))
@@ -1154,6 +1170,7 @@ def open_closet(tab=None):
     news = list((_state.get("closet_new") or {}).get("keys") or [])
     _state["closet_open"] = {"tab": tab or board.CLOSET_TABS[0], "msg": "", "new": news, "drawn": False}
     _state["closet_new"] = None
+    _state["wrapped_open"] = None
     _state["settings_tab"] = None
     _close_addons_dialog()
     if mw.state != "deckBrowser":
@@ -1162,6 +1179,79 @@ def open_closet(tab=None):
         _swap(cfg())
     else:
         _rerender()
+
+
+def open_wrapped(year=None):
+    """3.9.0: your Wrapped, in place of the board (as the closet is), from
+    the board's December line or Tools › Due Crew › Your year…: the year's
+    story, made here from your own reviews (wrapped_flow)."""
+    if not mw.col:
+        return
+    from . import wrapped_flow
+    try:
+        v = wrapped_flow.view(year)
+    except Exception:
+        traceback.print_exc()
+        tooltip("Couldn't read your year just now.")
+        return
+    _state["wrapped_open"] = {"year": v["year"], "view": v}
+    _state["settings_tab"] = None
+    _state["closet_open"] = None
+    _close_addons_dialog()
+    if mw.state != "deckBrowser":
+        mw.moveToState("deckBrowser")
+    elif _board_on_screen():
+        _swap(cfg())
+    else:
+        _rerender()
+
+
+def _wrapped_view():
+    st = _state.get("wrapped_open") or {}
+    return st.get("view") or {"year": st.get("year"), "slides": []}
+
+
+def _wrapped_banner(c):
+    from . import wrapped_flow
+    try:
+        return wrapped_flow.banner(_state["labels"][0] if _state["labels"] else "", c)
+    except Exception:
+        traceback.print_exc()
+        return None
+
+
+def _wrapped_cmd(cmd, parts):
+    """3.9.0: Wrapped's clicks: open it (the line's Open), another year, the
+    picture, the card I turned around on or off, back to the board, and the
+    line's x (for the year, on every computer)."""
+    arg = parts[0] if parts else ""
+    year = int(arg) if arg.isdigit() and len(arg) == 4 else None
+    if cmd in ("wrappedopen", "wrappedyear"):
+        open_wrapped(year)
+        return
+    if cmd == "wrappedpic" and year:
+        from .shares import picture
+        picture("pictureyear", year=year)  # the year card, made here, with Pip on it
+        return
+    if cmd == "wrappedcard":
+        from .wrapped_flow import CARD_KEY
+        c = dict(cfg())
+        c[CARD_KEY] = not c.get(CARD_KEY, True)
+        save_cfg(c)
+        st = _state.get("wrapped_open")
+        if st:
+            open_wrapped(st.get("year"))
+        return
+    if cmd == "wrappedclose":
+        _state["wrapped_open"] = None
+    elif cmd == "wrappedx" and year:
+        c = dict(cfg())
+        c["wrapped_seen"] = str(year)
+        save_cfg(c)
+    else:
+        return
+    if _board_on_screen() or mw.state == "deckBrowser":
+        _swap(cfg())
 
 
 def _closet_view():
@@ -1185,6 +1275,8 @@ def _closet_cmd(cmd, parts):
         return
     if cmd == "closetnew":
         _state["closet_new"] = None  # the line, later: the things stay in the closet
+    elif cmd == "closethw":
+        closet_flow.hide_halloween(_state["labels"][0] if _state["labels"] else "")  # 3.8.22: till next year
     elif cmd == "closetclose":
         _state["closet_open"] = None
     elif cmd == "closetwear" and arg in cl.BY:
@@ -1377,6 +1469,7 @@ def open_settings(tab=None):
     is how the board comes back."""
     from .settings_model import TABS
     _state["settings_tab"] = tab if tab in TABS else "you"
+    _state["wrapped_open"] = None
     _close_addons_dialog()
     if mw.state != "deckBrowser":
         mw.moveToState("deckBrowser")  # its draw shows Settings
@@ -1490,6 +1583,7 @@ def _tools_menu():
                  ("Export cards for my AI…", plan_flow.open_export), None,
                  ("Settings…", open_settings),
                  ("Pip’s closet…", lambda: open_closet()),
+                 ("Your year…", lambda: open_wrapped()),
                  ("Show on the Decks screen", _toggle_board),
                  ("Send feedback…", open_feedback)):
         if item is None:

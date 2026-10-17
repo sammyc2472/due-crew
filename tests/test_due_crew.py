@@ -2200,7 +2200,7 @@ def test_together_v210():
           and chip.get("actcmd", "").startswith("knowshelped:") and "more" not in chip, str(chip))
     js = crew_cards.chip_js(dict(chip, accent="#0a0"))
     check("tips: This helped is its own click, the tip's words go in as text",
-          "stopPropagation" in js and "duecrew:" in js and "textContent" in js and "innerHTML" not in js)
+          "stopPropagation" in js and "duecrew:" in js and "textContent" in js and js.count("innerHTML") == 1 and "p.innerHTML = D.pip.svg" in js)
     from due_crew import room_model as rm
     check("bottom bar: the chip, a room beside Edit, and removing them keep the answer buttons centred",
           "dcBarBalance" in js and "dcBarBalance" in crew_cards.chip_js(None)
@@ -2221,7 +2221,8 @@ def test_together_v210():
     fj = crew_cards.float_js(dict(chip, accent=["#0a0", "#7c7"]))
     check("ask card: above the bar only while the corner is free, else back to the bar",
           "dc-knows-card" in fj and "knowsbar" in fj and "free()" in fj and "Not now" in fj
-          and rm.CMD_KEY in fj and "textContent" in fj and "innerHTML" not in fj
+          and rm.CMD_KEY in fj and "textContent" in fj and fj.count("innerHTML") == 1 and "p.innerHTML = D.pip.svg" in fj
+          and "bulb.innerHTML" not in fj  # 3.9.0, Sam's "2D": no lightbulb
           and "dc-knows-card" in crew_cards.float_js(None) and "return false" in crew_cards.float_js(None))
     import aqt.utils as _au
     calls, asked = [], []
@@ -4902,6 +4903,104 @@ def test_morning_waits_for_decks_v380():
         _state["plans_morning"] = None
 
 
+def test_asks_and_tips_v390():
+    """3.9.0 (Sam's picks, "Asks and tips"): 1, an ask still goes to everyone
+    in the crew with the card, and the dialog says so first (W1); 2, a tip's,
+    an ask's or a plan note's words are folded until Show, on the card and in
+    the bar, so nothing gives away what a one-by-one card still hides (who
+    knows it isn't folded: it names people); his note: the tip peeks in with
+    its tipper's Pip, as who knows it does. Opened stays opened."""
+    import shutil
+    import subprocess
+    from due_crew import cards as K, ui
+    from due_crew.app import _state
+    names = {"dre": ("Dre Ng", ""), "sam": ("Sam", "")}
+    pips = {"dre": {"svg": "<svg></svg>", "a": ["#1e5fb4", "#7fb2f0"]}}
+    # 1 · the Ask dialog's words
+    got, saved = [], (getattr(ui, "ask_text", None), K._card, K.client, K.flag, dict(_state))
+    store = world({"sam": "Sam"})
+    sam = new_client(store, "sam", "Sam")
+    card = types.SimpleNamespace(note=lambda: types.SimpleNamespace(guid="guid000001"), ord=0, id=1)
+    try:
+        ui.ask_text = lambda parent, title, label, text="": (got.append((title, label)), ("", False))[1]
+        K._card, K.client, K.flag = (lambda: card), (lambda: sam), (lambda c, q: None)
+        _state["entries"] = [{"user_id": "dre", "name": "Dre Ng", "you": False}, {"user_id": "mo", "name": "Mo", "you": False}]
+        sam.session["cards"] = {"guid000001": {"knows": ["dre"], "tips": []}}
+        K.ask()
+        sam.session["cards"] = {"guid000001": {"knows": ["dre", "mo"], "tips": []}}
+        K.ask()
+        sam.session["cards"] = {}
+        K.ask()
+    finally:
+        if saved[0] is not None:
+            ui.ask_text = saved[0]
+        K._card, K.client, K.flag = saved[1:4]
+        _state.clear()
+        _state.update(saved[4])
+    check("ask: it says it goes to everyone with the card, then who has it down (Sam's pick, W1)",
+          [g[1] for g in got] == ["Goes to everyone in your crew who has this card. Dre has it down. One line, optional.",
+                                  "Goes to everyone in your crew who has this card. Dre and Mo have it down. One line, optional.",
+                                  "Goes to everyone in your crew who has this card. One line, optional."]
+          and got[0][0] == "Ask your crew about this card", got)
+    # 2 · folded till Show; the tipper's Pip
+    tip = K.chip_view({"tips": [{"from": "dre", "text": "think loops", "helped": False}]}, [], names, pips=pips)
+    tip_off = K.chip_view({"tips": [{"from": "dre", "text": "think loops", "helped": False}]}, [], names)
+    asked = K.chip_view(None, [], names, asks=[("dre", 1, "why axillary?")], pips=pips)
+    bare = K.chip_view(None, [], names, asks=[("dre", 1)], pips=pips)
+    knows = K.chip_view({"knows": ["dre"], "tips": []}, [], names, pips=pips)
+    note = K.remark_view([{"name": "Block 1", "doc": {"remarks": [{"card": ["guid000001", 0], "text": "the second cloze"}]}}], "guid000001", 0)
+    check("fold: a tip says who left it, with the Pip peeking in; Pip off, the same bubble with the bulb; the words wait",
+          tip["fold"] == "Dre left a tip" and tip["peek"] == {"uids": ["dre"], "head": "Dre: think loops", "act": "This helped"}
+          and tip["pip"] == pips["dre"] and tip["text"] == "\U0001F4A1 Dre: think loops"
+          and tip_off["fold"] == "\U0001F4A1 Dre left a tip" and tip_off["peek"]["uids"] == [] and "pip" not in tip_off, (tip, tip_off))
+    check("fold: an ask's line and a plan's note fold too; an ask with no line, and who knows it, don't (nothing to give away)",
+          asked["fold"] == "Dre asked about this card" and asked["text"] == "Dre: \u201cwhy axillary?\u201d"
+          and "fold" not in bare and "fold" not in knows and note["fold"] == "\U0001F4CC A note from Block 1", (asked, note))
+    fj, bj = K.float_js(dict(tip, accent=["#2e7d32", "#7cc47f"])), K.chip_js(dict(tip, accent="#2e7d32"))
+    check("fold: on the card, Show opens it (the words, This helped, more); no words on a hover while folded; drawn again opened, no pop",
+          "var folded = !!(D.fold && !D.open);" in fj and "link('Show', acc, true, open)" in fj
+          and "words.textContent = folded ? D.fold : (peek ? peek.head : D.text);" in fj
+          and "if (D.title && !folded) { words.title = D.title; } else { words.removeAttribute('title'); }" in fj
+          and "if (peek && !still && !D.open && bub.animate)" in fj and "pad.style.height = (box.offsetHeight + 12) + 'px'" in fj
+          and "send(D.fold && !folded ? 'knowsbar:open' : 'knowsbar')" in fj)
+    check("tip: its bubble wears the tipper's colour round its edge (mine with Pip off); who knows it, the plain line (Sam: too alike)",
+          "var edge = D.kind === 'tip' ? 'border:2px solid ' + (withPip ? peek.pips[0].a[night ? 1 : 0] : acc) + ';' : '';" in fj
+          and "+ card + edge);" in fj and tip["kind"] == "tip" and knows["kind"] == "knows")
+    check("fold: in the bar the same, a click opens it, then its act and its click as before",
+          "var folded = !!(D.fold && !D.open);" in bj and "var act = folded ? 'Show' : D.act;" in bj
+          and "if (D.actcmd && !folded)" in bj and "if (folded) { s.removeAttribute('title'); }" in bj
+          and "if (folded) {\n      folded = false; said(); if (window.dcBarBalance) { window.dcBarBalance(); }" in bj)
+    node = shutil.which("node")
+    if node:
+        ok = subprocess.run([node, "--check"], input=fj + "\n;" + bj, capture_output=True, text=True, timeout=30)
+        check("fold: its scripts parse", ok.returncode == 0, ok.stderr[-400:])
+    # opened stays opened: This helped draws it again open; the move to the bar keeps it open
+    shown, bars, saved = [], [], (K._bottom, K._review_web, K._show, K.client, dict(_state), dict(K._LAST))
+    sam.session["cards"] = {"guid000001": {"knows": [], "tips": [{"from": "dre", "text": "think loops", "at": 1, "helped": False}]}}
+    try:
+        K._bottom, K._review_web, K._show, K.client = (lambda: types.SimpleNamespace(eval=bars.append)), (lambda: None), shown.append, (lambda: sam)
+        _state["entries"] = [{"user_id": "dre", "name": "Dre Ng", "you": False, "accent": "blue", "look": []}]
+        K.on_answer(card)
+        K.on_answer(card, opened=True)
+        K._LAST["view"] = shown[0]
+        K.on_message("knowsbar", ["duecrew", "knowsbar", "open"], from_card_page=True)
+        K.on_message("knowsbar", ["duecrew", "knowsbar"], from_card_page=True)
+    finally:
+        K._bottom, K._review_web, K._show, K.client = saved[:4]
+        _state.clear()
+        _state.update(saved[4])
+        K._LAST.clear()
+        K._LAST.update(saved[5])
+    check("open: a tip on the review screen peeks in with Dre's Pip, folded; drawn again after This helped, open",
+          shown[0]["kind"] == "tip" and "open" not in shown[0] and shown[1]["open"] is True
+          and len(shown[0]["peek"]["pips"]) == 1 and "m-peek" in shown[0]["peek"]["pips"][0]["svg"], shown)
+    check("open: knowsbar:open moves it to the bar open; plain knowsbar, as it was",
+          len(bars) == 2 and '"open": true' in bars[0] and '"open": true' not in bars[1], [b[-200:] for b in bars])
+    import inspect
+    check("open: This helped draws the card again with its words showing",
+          "on_answer(card, opened=True)" in inspect.getsource(K.helped))
+
+
 def test_plain_prompts_v311():
     """3.1.1: prompts that carry a crewmate's name are plain-text labels."""
     from due_crew import together, ui
@@ -5393,7 +5492,7 @@ def test_who_knows_v32():
     check("chip: a tip's short form names whose tip it is",
           K.chip_view(cardsin["guid000003"], [], names)["short"] == "\U0001F4A1 Dre's tip")
     js = K.chip_js({"text": "</span><script>x</script>", "cmd": "knowsask", "act": "Ask", "accent": "#0a0"})
-    check("chip: text goes in as text", "textContent" in js and "innerHTML" not in js)
+    check("chip: text goes in as text (3.8.22: the one markup is a Pip's own drawing)", "textContent" in js and js.count("innerHTML") == 1 and "p.innerHTML = D.pip.svg" in js)
     acked(sam, sam.fetch_board(labels))  # Dre's tip is read, and the next refresh
     sam.fetch_board(labels)               # says so: a flag on that card may go up again
     sam.session["tricky"] = [{"guid": "guid000003", "deck": "Step 1", "at": _day(0), "text": "A card", "q": "Trick?"}]
@@ -5461,6 +5560,204 @@ def test_older_server_v32():
     check("older server: the sync still goes, without 3.2's parts", ok and len(sent) == 2
           and not {"knows", "stuck", "log"} & set(sent[1]) and "recap" not in sent[1]["week"])
     check("older server: nothing 3.2 is marked sent", "log_hash" not in sam.session and sam._load_known()[1] is None)
+
+
+def test_knows_due_v390():
+    """3.9.0 (Sam's pick, "Open calls" A): the day's first sync asks who
+    knows the cards due today too, and that answer is kept for the day, so
+    a card I miss for the first time shows the chip the next time it comes
+    up, without a sync; only once I'm stuck on it. An older Worker gets the
+    sync without it, and isn't asked again that day."""
+    from due_crew import cards as K
+    col = _knows_col()
+    conn = col.db.conn
+    conn.execute("UPDATE cards SET due = 999 WHERE id = 3")
+    conn.execute("UPDATE cards SET due = 1000 WHERE id = 4")
+    fakes.add_card(conn, 7, did=10, ctype=2, queue=2, ivl=5, due=1001)        # due tomorrow
+    fakes.add_card(conn, 8, did=10, ctype=1, queue=1, due=1790000000)         # learning, due later today
+    fakes.add_card(conn, 9, did=10, ctype=2, queue=-1, ivl=5)                 # suspended
+    fakes.add_card(conn, 12, did=30, odid=10, ctype=2, queue=2, ivl=5, due=-5)  # in a filtered deck, due at home
+    fakes.add_card(conn, 13, did=30, odid=10, ctype=2, queue=2, ivl=5, due=-4)  # in a filtered deck, not due at home
+    conn.execute("UPDATE cards SET odue = 998 WHERE id = 12")
+    conn.execute("UPDATE cards SET odue = 1005 WHERE id = 13")
+    due = K.due_today(col, [10], skip=["guid000003"])
+    check("due today: reviews due today or before and learning cards, in my shared deck and its subdecks, filtered ones "
+          "by their home deck's day, the most overdue first; not the stuck ones, tomorrow's, suspended or another deck's",
+          due == ["guid000001", "guid000002", "guid000006", "guid000012", "guid000004", "guid000008"], due)
+    real_max = K.DUE_MAX
+    try:
+        K.DUE_MAX = 2
+        check("due today: DUE_MAX at most, the most overdue kept", K.due_today(col, [10]) == ["guid000001", "guid000002"])
+    finally:
+        K.DUE_MAX = real_max
+    check("due today: nothing without a shared deck", K.due_today(col, []) == [])
+
+    labels = [_day(0)]
+    store = world({"sam": "Sam", "dre": "Dre", "zed": "Zed"}, {"sam": ["dre"], "dre": ["sam"], "zed": ["sam"]})
+    sam, dre, zed = new_client(store, "sam", "Sam"), new_client(store, "dre", "Dre"), new_client(store, "zed", "Zed")
+    dre.push(labels, {}, known={"guid000001", "guid000003"})
+    zed.push(labels, {}, known={"guid000002"})
+    mw = sys.modules["aqt"].mw
+    saved = (K.client, mw.col, K._bottom, K._review_web, K._show, dict(K._state))
+    shown = []
+    try:
+        K.client, mw.col = (lambda: sam), col
+        first = K.for_sync({"shared_decks": [10]}, light=True)
+        due = [g for g in due if g != "guid000004"]  # stuck too, so it goes with those
+        check("the day's first sync, light or full, carries the cards due today (not the stuck ones), and the day",
+              first["due"] == due and first["due_day"] == _day(0) and first["stuck"] == ["guid000003", "guid000004"], first)
+        n = len(store.log)
+        ok, _g = sam.push(labels, {}, **first)
+        sent = store.bodies[-1][2]
+        check("one request: who knows them comes back with the stuck cards' answer",
+              ok and len(store.log) == n + 1 and sent["due"] == due and sent["stuck"] == ["guid000003", "guid000004"])
+        check("the answers kept apart: the stuck ones for this sync, the due ones for the day; a one-way friend's never",
+              sam.session["cards"] == {"guid000003": {"knows": ["dre"], "tips": []}}
+              and sam.session["cards_due"] == {"guid000001": {"knows": ["dre"], "tips": []}}
+              and sam.session["due_day"] == _day(0), (sam.session.get("cards"), sam.session.get("cards_due")))
+        later = K.for_sync({"shared_decks": [10]}, light=True)
+        sam.push(labels, {}, **later)
+        check("a later sync that day doesn't ask again, and keeps the morning's answer",
+              "due" not in later and "due" not in store.bodies[-1][2] and sam.session["cards_due"] == {"guid000001": {"knows": ["dre"], "tips": []}})
+
+        K._bottom, K._review_web, K._show = (lambda: object()), (lambda: None), (lambda v: shown.append(v))
+        K._state["entries"] = [{"user_id": "dre", "name": "Dre Ng", "you": False}]
+        card = types.SimpleNamespace(note=lambda: types.SimpleNamespace(guid="guid000001"), ord=0, id=1, lapses=0)
+        n = len(store.log)
+        K.on_answer(card)
+        noon = int(datetime.datetime.combine(TODAY, datetime.time(13)).timestamp() * 1000)
+        fakes.add_review(conn, noon, ease=1, cid=1)
+        K.on_answer(card)
+        K.on_answer(types.SimpleNamespace(note=lambda: types.SimpleNamespace(guid="guid000002"), ord=0, id=2, lapses=3))
+        sam.session["due_day"] = _day(-1)
+        K.on_answer(card)
+        sam.session["due_day"] = _day(0)
+        check("the chip: not before I miss it; the first miss today shows who knows it, with no request; "
+              "a card nobody I can name knows, nothing; yesterday's answer, nothing",
+              shown[0] is None and shown[1] and shown[1]["kind"] == "knows" and shown[1]["text"].endswith("Dre knows this")
+              and shown[2] is None and shown[3] is None and len(store.log) == n, shown)
+        lapsed = types.SimpleNamespace(note=lambda: types.SimpleNamespace(guid="guid000001"), ord=0, id=99, lapses=2)
+        check("stuck now: lapsed twice, or missed today", K.stuck_now(col, lapsed, col.sched.day_cutoff)
+              and K.stuck_now(col, card, col.sched.day_cutoff)
+              and not K.stuck_now(col, types.SimpleNamespace(id=2, lapses=0), col.sched.day_cutoff))
+    finally:
+        K.client, mw.col, K._bottom, K._review_web, K._show = saved[:5]
+        K._state.clear()
+        K._state.update(saved[5])
+
+    old = world({"sam": "Sam"})
+    real = old._sync
+
+    def old_sync(me, body):
+        if "due" in body:
+            raise fakes.Bad(400, "bad_sync")
+        return real(me, body)
+    old._sync = old_sync
+    s2 = new_client(old, "sam", "Sam")
+    ok, _g = s2.push(labels, {}, stuck=["g2"], due=["g1"], due_day=_day(0))
+    sent = [b for m, p, b in old.bodies if p == "/sync"]
+    check("older Worker: the sync goes again without `due`, the stuck cards still asked; not asked again today",
+          ok and len(sent) == 2 and "due" not in sent[1] and sent[1]["stuck"] == ["g2"]
+          and s2.session["due_day"] == _day(0) and s2.session["cards_due"] == {})
+
+
+def test_knows_peek_v390():
+    """3.9.0 (Sam's pick, "Open calls" C): with Pip on, who knows the card
+    peeks up from the bottom of the review screen, waving, a lightbulb over
+    their head: "I know this one", Ask Dre, Not now. The bar's chip and every
+    other kind of card stay as they were; nothing moves with Reduce motion."""
+    import shutil
+    import subprocess
+    from due_crew import cards as K, sev
+    from due_crew.app import _state
+    names = {"dre": ("Dre <b>Ng", ""), "mo": ("Mo", "")}
+    pips = {"dre": {"svg": "<svg></svg>", "a": ["#1e5fb4", "#7fb2f0"]}, "mo": {"svg": "<svg></svg>", "a": ["#2e7d32", "#7cc47f"]}}
+    one = K.chip_view({"knows": ["dre"], "tips": []}, [], names, pips=pips)
+    two = K.chip_view({"knows": ["dre", "mo"], "tips": []}, [], names, pips=pips)
+    mine = K.chip_view({"knows": ["dre"], "tips": []}, [], names, mine=True, pips=pips)
+    plain = K.chip_view({"knows": ["dre"], "tips": []}, [], names)
+    names4 = dict(names, jo=("Jo", ""), al=("Al", ""))
+    three = K.chip_view({"knows": ["dre", "mo", "jo"], "tips": []}, [], names4, pips=dict(pips, jo=pips["mo"], al=pips["mo"]))
+    four = K.chip_view({"knows": ["dre", "mo", "jo", "al"], "tips": []}, [], names4, pips=dict(pips, jo=pips["mo"], al=pips["mo"]))
+    check("peek (Sam's 2D): up to three Pips, the words name them; more than three, the rest counted",
+          three["peek"]["uids"] == ["dre", "mo", "jo"] and three["peek"]["head"] == "Dre, Mo and Jo know this"
+          and four["peek"]["uids"] == ["dre", "mo", "jo"] and four["peek"]["head"] == "Dre, Mo, Jo and 1 more know this"
+          and four["peek"]["act"] == "Ask", (three["peek"], four["peek"]))
+    check("peek: one who knows it speaks for themselves; more, the words say who; asked, it says so; no Pip, the same bubble saying who (Sam: always this version)",
+          one["peek"] == {"uids": ["dre"], "head": "I know this one", "act": "Ask Dre"}
+          and two["peek"] == {"uids": ["dre", "mo"], "head": "Dre and Mo know this", "act": "Ask"}
+          and mine["peek"]["act"] == "Asked" and plain["peek"] == {"uids": [], "head": "Dre knows this", "act": "Ask"}
+          and one["text"] == "Dre knows this" and one["act"] == "Ask", (one.get("peek"), two.get("peek")))
+    tip = K.chip_view({"knows": ["dre"], "tips": [{"from": "dre", "text": "think loops"}]}, [], names, pips=pips)
+    check("peek: a tip peeks in with its tipper's Pip (Sam's note on \"Asks and tips\"); an ask keeps its card",
+          tip["peek"] == {"uids": ["dre"], "head": "Dre: think loops", "act": "This helped"} and tip["fold"] == "Dre left a tip"
+          and "peek" not in K.chip_view(None, [], names, asks=[("dre", 1, "why?")], pips=pips), tip.get("peek"))
+    shown, saved = [], (K._bottom, K._review_web, K._show, K.client, dict(_state))
+    store = world({"sam": "Sam"})
+    sam = new_client(store, "sam", "Sam")
+    sam.session["cards"] = {"guid000001": {"knows": ["dre"], "tips": []}}
+    try:
+        K._bottom, K._review_web, K._show, K.client = (lambda: object()), (lambda: None), (lambda v: shown.append(v)), (lambda: sam)
+        _state["entries"] = [{"user_id": "dre", "name": "Dre <b>Ng", "you": False, "accent": "blue", "look": ["headphones"]}]
+        K.on_answer(types.SimpleNamespace(note=lambda: types.SimpleNamespace(guid="guid000001"), ord=0, id=1, lapses=3))
+    finally:
+        K._bottom, K._review_web, K._show, K.client = saved[:4]
+        _state.clear()
+        _state.update(saved[4])
+    v = shown[0]
+    shown2, saved2 = [], (K._bottom, K._review_web, K._show, K.client, K.pips_by_uid, dict(_state))
+    try:
+        K._bottom, K._review_web, K._show, K.client = (lambda: object()), (lambda: None), (lambda v: shown2.append(v)), (lambda: sam)
+        K.pips_by_uid = lambda c=None: {}  # Pip off
+        _state["entries"] = [{"user_id": "dre", "name": "Dre <b>Ng", "you": False, "accent": "blue", "look": ["headphones"]}]
+        K.on_answer(types.SimpleNamespace(note=lambda: types.SimpleNamespace(guid="guid000001"), ord=0, id=1, lapses=3))
+    finally:
+        K._bottom, K._review_web, K._show, K.client, K.pips_by_uid = saved2[:5]
+        _state.clear()
+        _state.update(saved2[5])
+    check("peek, Pip off: the same bubble in the same place, without the Pip (Sam: \"always this version, just without the pip\")",
+          shown2[0]["peek"] == {"head": "Dre knows this", "act": "Ask", "pips": []}
+          and "pip" not in shown2[0], shown2[0].get("peek"))
+    shown3, saved3 = [], (K._bottom, K._review_web, K._show, K.client, dict(_state))
+    sam.session["cards"] = {"guid000001": {"knows": ["dre", "mo", "jo"], "tips": []}}
+    try:
+        K._bottom, K._review_web, K._show, K.client = (lambda: object()), (lambda: None), (lambda v: shown3.append(v)), (lambda: sam)
+        _state["entries"] = [{"user_id": u, "name": n, "you": False, "accent": "blue", "look": []}
+                             for u, n in (("dre", "Dre"), ("mo", "Mo"), ("jo", "Jo"))]
+        K.on_answer(types.SimpleNamespace(note=lambda: types.SimpleNamespace(guid="guid000001"), ord=0, id=1, lapses=3))
+    finally:
+        K._bottom, K._review_web, K._show, K.client = saved3[:4]
+        _state.clear()
+        _state.update(saved3[4])
+    sam.session["cards"] = {"guid000001": {"knows": ["dre"], "tips": []}}
+    ds = [x.get("d") for x in shown3[0]["peek"]["pips"]]
+    js3 = K.float_js(shown3[0])
+    check("peek, three side by side: each its own place in the blink, as a room's seats (Sam: they blinked as one)",
+          ds == [sev.blink(i)[1] for i in range(3)] and [x.get("b") for x in shown3[0]["peek"]["pips"]] == [sev.blink(i)[0] for i in range(3)]
+          and "'--sv-b:' + (+peek.pips[i].b || 4.6) + 's;--sv-d:' + (+peek.pips[i].d || 0) + 's;'" in js3
+          and "sv-blink var(--sv-b, 4.6s) var(--sv-d, 0s)" in sev.CSS, ds)
+    check("peek: on the review screen, their Pip waving in their look (sev.py's own markup, the name only its label, escaped)",
+          v["kind"] == "knows" and set(v["peek"]) == {"head", "act", "pips"} and len(v["peek"]["pips"]) == 1
+          and "m-peek" in v["peek"]["pips"][0]["svg"] and v["peek"]["pips"][0]["a"] == list(board.accent_pair("blue"))
+          and "Dre &lt;b&gt;Ng’s Pip" in v["peek"]["pips"][0]["svg"] and "<b>" not in v["peek"]["pips"][0]["svg"], v.get("peek"))
+    js = K.float_js(v)
+    check("peek: drawn in the corner's place, up from the bottom; the words as text; it ducks back down; still with Reduce motion",
+          "var peek = D.peek || null, withPip = !!(peek && peek.pips && peek.pips.length)" in js and "if (withPip) {" in js
+          and "for (var i = peek.pips.length - 1; i >= 0; i--)" in js and "bulb.innerHTML" not in js
+          and "translateY(105%)" in js and "var words = el('div'" in js
+          and "peek ? peek.head : D.text" in js and "prefers-reduced-motion: reduce" in js and "if (peek && !still" in js
+          and "window.dcKnowsOff(!D)" in js and "off(true)" in js and "knowsbar" in js)
+    check("peek: always shown, as agreed (Sam: the pill \"is not the new version we agreed on\"): no corner check, never "
+          "the bar's chip; room under the card, gone with it",
+          "if (peek) {" in js and js.index("if (peek) {\n    // 3.9.0") < js.index("window.addEventListener('scroll'")
+          and "dc-knows-pad" in js and "if (pad) { pad.remove(); }" in js and "oldPad.remove()" in js)
+    bar = K.chip_js(v)
+    check("peek: the bar's chip (Pip off, or no review page) says what it said", "peek" not in bar.split("var D = ")[0]
+          and "t.textContent = folded ? D.fold : D.text" in bar and "D.peek" not in bar)
+    node = shutil.which("node")
+    if node:
+        ok = subprocess.run([node, "--check"], input=js, capture_output=True, text=True, timeout=30)
+        check("peek: its script parses", ok.returncode == 0, ok.stderr[-400:])
 
 
 def test_admin_notice_v321():
@@ -10062,7 +10359,7 @@ def test_plan_remarks_and_deck_link_v381():
           and C.remark_view(plans, "guid000005", 0) is None and C.remark_view([], "guid000005", 1) is None, view)
     js = C.chip_js(dict(view, accent="#2e7d32")) + C.float_js(dict(view, accent=["#2e7d32", "#7cc47f"]))
     check("review: drawn as text, never markup; with no click of its own",
-          "t.textContent = D.text" in js and "e.textContent = text" in js and "if (D.cmd)" in js
+          "t.textContent = folded ? D.fold : D.text" in js and "e.textContent = text" in js and "if (D.cmd)" in js
           and json.dumps(view["text"]) in js, js[:200])
     shown, saved = [], (C._bottom, C._review_web, C._show, C.client)
     store = world({"dre": "Dre", "sam": "Sam"})
@@ -12389,8 +12686,14 @@ def test_crew_room_sevs_wear_their_accents_v381():
           and on["sev"] == dict({"idle": sev.svg("idle")}, **{f"idle.{m}": sev.svg("idle", m) for m in sev.SEAT_MOVES[1:]})
           and "sv-blink" in on["sevcss"], on["seats"])
     check("…each started at its own moment: the blinks never line up (a delay in the blink, each different)",
-          [s["d"] for s in on["seats"]] == [0, -1.7, -3.4] and "sv-blink 4.6s var(--sv-d, 0s)" in sev.CSS
-          and sev.BLINK == 4.6 and len({sev.started(i) for i in range(6)}) == 6)
+          [(s["b"], s["d"]) for s in on["seats"]] == [sev.blink(i) for i in range(3)]
+          and "sv-blink var(--sv-b, 4.6s) var(--sv-d, 0s)" in sev.CSS and sev.BLINK == 4.6)
+    clocks = [sev.blink(i) for i in range(8)]
+    check("…each on its own clock (3.9.0, Sam: in turn \"still looks kinda creepy\"): cycles of 3.4 to 6.4 s, no two alike, "
+          "places in them apart; the same every time it's drawn",
+          all(3.4 <= c <= 6.4 and -c <= d <= 0 for c, d in clocks) and len({c for c, _d in clocks}) == 8
+          and all(abs(a[0] - b[0]) >= 0.3 for a, b in zip(clocks, clocks[1:])) and clocks == [sev.blink(i) for i in range(8)]
+          and sev.blink_css(1) == f"--sv-b:{clocks[1][0]}s;--sv-d:{clocks[1][1]}s", clocks)
     js = rm.widget_js("card", on)
     check("…drawn from sev.py's markup (24 px seats, the faces' size), coloured by day or night, the name only a label set as text",
           "who.appendChild(people(c, 24));" in js and "Math.round(size / (D.slot || [0.6])[0]), f = seats(s, most)" in js
@@ -12408,16 +12711,16 @@ def test_crew_room_sevs_wear_their_accents_v381():
     check("lobby, Pip on: each member is their Pip, in their accent by day and by night, blinking at its own moment",
           lobby.count('class="seat"') == 3 and "<i>D</i>" not in lobby and "sv-seats" in lobby
           and [lobby.count(f"sv m-{m}") for m in ("idle", "sread", "snod")] == [1, 1, 1]
-          and f'--sa-l:{blue[0]};--sa-d:{blue[1]};--sv-d:0.00s' in lobby and f'--sa-l:{amber[0]};--sa-d:{amber[1]};--sv-d:-3.40s' in lobby
-          and "--sv-d:-1.70s" in lobby)
+          and all(f"--sv-b:{c:.2f}s;--sv-d:{d:.2f}s" in lobby for c, d in (sev.blink(i) for i in range(3)))
+          and f'--sa-l:{blue[0]};--sa-d:{blue[1]};--sv-b:' in lobby and f'--sa-l:{amber[0]};--sa-d:{amber[1]};--sv-b:' in lobby)
     check("…the name only as its label, escaped",
           'title="Dre &lt;K&gt;"' in lobby and 'aria-label="Dre &lt;K&gt;"' in lobby and "Dre <K>" not in lobby
           and 'aria-label="You"' in lobby)
     plain = board.room_html(rm.board_view(room, ents, now=now))
     check("lobby, Pip off: the initials as before", "<i>D</i><i>A</i><i>S</i>" in plain and "sv-slot" not in plain)
-    bad = board._seat_html({"n": '"><b>x', "a": ["red;}</style>", "#2e7d3"], "d": "soon"})
+    bad = board._seat_html({"n": '"><b>x', "a": ["red;}</style>", "#2e7d3"], "d": "soon", "b": "1;}</style>"})
     check("lobby: a seat's colours are colours, or the default's; nothing else reaches its style",
-          f'--sa-l:{board.accent_pair(None)[0]};--sa-d:{board.accent_pair(None)[1]};--sv-d:0.00s' in bad
+          f'--sa-l:{board.accent_pair(None)[0]};--sa-d:{board.accent_pair(None)[1]};--sv-b:4.60s;--sv-d:0.00s' in bad
           and "</style>" not in bad and "<b>" not in bad)
     cfg_sheet = lambda theme: board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []}, {"theme": theme}, 0)
     dark, light, auto = cfg_sheet("dark"), cfg_sheet("light"), cfg_sheet("auto")
@@ -12770,15 +13073,18 @@ def test_sev_moves_v381():
            "bounce"} <= sev.ONCE and not ({"pep", "nod", "think", "tap", "shake", "march", "look"} | set(sev.SEAT_MOVES)) & sev.ONCE
           and all(rests(sev.move(k, m, rest=True)) for k in sev.MOVES for m in sev.moves(k) if m in sev.ONCE))
     check("still, each is the frame that says it: peeking low, the day done in the air (and at rest it's landed)",
-          ".sv.m-peek .sv-body, .sv.m-knock .sv-body, .sv.m-bounce .sv-body { transform: translateY(22%); }" in still
+          ".sv.m-peek .sv-body, .sv.m-knock .sv-body, .sv.m-bounce .sv-body { transform: translateY(10px); }" in still
           and ".sv.m-hop .sv-body, .sv.m-twirl .sv-body, .sv.m-shuffle .sv-body, .sv.m-jump .sv-body" in still
-          and ".sv.rest.m-knock .sv-body, .sv.rest.m-bounce .sv-body { transform: translateY(22%); }" in motion
+          and ".sv.rest.m-knock .sv-body, .sv.rest.m-bounce .sv-body { transform: translateY(10px); }" in motion
           and ".sv.rest .sv-footL, .sv.rest .sv-footR" in motion)
     after = sev.CSS.rsplit("\n}\n", 1)[1]
     check("drawn again it rests with Reduce motion on too: landed, what flew gone (a banner isn't left mid-hop)",
           ".sv.rest .cf, .sv.rest .spark, .sv.rest .sv-ring { opacity: 0; }" in after
           and ".sv.rest .sv-footL, .sv.rest .sv-footR { transform: none; }" in after and "animation" not in after
-          and "translateY(22%)" in after)
+          and "translateY(10px)" in after)
+    check("a body moves in the drawing's own units, never a share of its box, which what Pip has on makes taller "
+          "(3.9.0, Sam: a pumpkin and an umbrella sank the peek)",
+          not re.search(r"translateY\(-?[0-9.]+%\)", sev.CSS), re.findall(r"translateY\(-?[0-9.]+%\)", sev.CSS))
 
     rnd = random.Random(7)
     never = all(sev.pick(k, last, rnd) != last for k in sev.MOVES for last in sev.moves(k) for _ in range(20))
@@ -13070,6 +13376,10 @@ def test_closet_board_v382():
     check("▶ Fifteen? in the top bar wears my look (it was plain)", CA.ART["cap"][0][:30] in chip["sev"]["idle"]
           and CA.ART["cap"][0][:30] not in RM.start_data(("#2e7d32", "#7cc47f"), "right", True)["sev"]["idle"])
     check("Settings › Fifteen and Pip: the closet, a click away", "duecrew:closet'" in board._settings_board({}))
+    col_page = board.closet_html({"tab": "Yours", "have": {}, "look": []}, {"accent": "blue"})
+    check("3.9.0 (Sam): the closet has the colour too, every accent, the one on pressed, as Settings' Board tab has it",
+          all(f"duecrew:set:accent:{k}" in col_page for k in board.ACCENTS) and 'aria-label="Blue" aria-pressed="true"' in col_page
+          and "Pip and your board" in col_page and board._accent_swatches({"accent": "blue"}) in board._settings_board({"accent": "blue"}))
     # the clicks, as the board sends them
     if "aqt.reviewer" not in sys.modules:
         sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
@@ -13098,6 +13408,8 @@ def test_closet_board_v382():
         worn = list(mine["sev_look"])
         send("closetwear:dino")
         back = list(mine["sev_look"])
+        send("set:accent:purple")  # 3.9.0 (Sam): the colour, from the closet
+        coloured = (mine.get("accent"), dc._state["closet_open"] is not None)
         send("closettab:99")
         send("closetoff")
         offed = list(mine["sev_look"])
@@ -13107,6 +13419,8 @@ def test_closet_board_v382():
               st["tab"] == "Yours" and st["new"] == ["dino"] and dc._state["closet_new"] is None and tab9 == "To earn")
         check("its clicks: put mine on (a hat replaces the hat; a costume over the look, off again: the look's back), never one I haven't",
               not tried and worn == ["headphones", "dino"] and back == ["headphones"], (worn, back))
+        check("the closet's colour: Pip's and the board's, saved as Settings saves it, and the closet stays open",
+              coloured == ("purple", True), coloured)
         check("take it all off; its view holds what's mine and what's near; back to the board",
               offed == [] and v["have"] == have and v["near"] and v["near"][0][0] == "cap" and v["progress"]["cap"] == (11, 14)
               and dc._state["closet_open"] is None and len(swaps) >= 8)
@@ -13261,6 +13575,182 @@ console.log(JSON.stringify({
               for k in ("chip", "gutter", "break", "card")), got)
     check("a fifteen's chip: its own Pip, no people", got[("chip", 1, True, True)]["pips"] == []
           and got[("chip", 1, True, True)]["initials"] == [], got)
+
+
+def test_plan_card_squad_pips_v3822():
+    """3.8.22 (Sam: "under squad we haven't switched to pips"): the plan
+    card's squad line draws who showed up as their Pips, as the Squads tab
+    does: mine in my look (it opens the closet), a crewmate's in their colour
+    and look, anyone else plain. The board's summary names whose faces they
+    are (who, uids, one for one); Pip off, or a server without who, the
+    emojis as before. Still one request."""
+    from due_crew import sev
+    from due_crew.backend import shapes as S
+    # the fake (the Worker's twin): who beside faces, one for one
+    store = world({"sam": "Sammy", "dre": "Dre", "zed": "Zed"}, {"sam": ["dre"], "dre": ["sam"]})
+    store.today = TODAY.isoformat()
+    for u in ("sam", "dre", "zed"):
+        store.team[("abcdefghij", u)] = {"joined": 1, "days": [store.today] if u != "zed" else [], "play": None}
+    t = store._teams_for_board("zed")["abcdefghij"]
+    check("server: the board's squad summary names whose faces they are, one for one",
+          sorted(t["who"]) == ["dre", "sam"] and len(t["who"]) == len(t["faces"]) == t["shown"] == 2, t)
+    # the client keeps who beside faces: junk is "", never dropped (they stay one for one)
+    c = S.clean_teams({"abcdefghij": {"shown": 3, "of": 5, "faces": ["🐢", "", "🐸"], "who": ["dre", "<b>", 7]}})["abcdefghij"]
+    check("client: who kept one for one with faces, junk as nothing",
+          c["who"] == ["dre", "", ""] and c["faces"] == ["🐢", "", "🐸"], c)
+    check("client: an older server's summary has no who", S.clean_teams({"abcdefghij": {"shown": 1, "faces": ["🐢"]}})["abcdefghij"]["who"] == [])
+
+    people = {"sam": {"user_id": "sam", "name": "Sammy", "you": True},
+              "dre": {"user_id": "dre", "name": "Dre", "accent": "blue", "look": ["dino"]}}
+    cfg = {"accent": "amber", "sev_look": ["cap"], "sev_closet": {"cap": "2026-09-01"}}
+    summ = {"shown": 3, "of": 11, "faces": ["🦊", "🐢", "🐸"], "who": ["sam", "dre", "zed"]}
+    line = board._squad_line("p1", {"summary": summ, "unread": 0}, people, cfg)
+    pips = line[line.index('class="pips"'):line.index("Squad:")]
+    blue, amber, plain = board.accent_pair("blue"), board.accent_pair("amber"), board.accent_pair(None)
+    check("line: who showed up are Pips, in order, and no emoji",
+          pips.count("dc-rsev") == 3 and not any(x in line for x in ("🦊", "🐢", "🐸"))
+          and "Squad: 3 of 11 showed up" in line and "duecrew:squadplan:p1" in line, line[:300])
+    exact = [board.squad_pip(u, n, y, people, cfg, board.PCREW_PIP, k)
+             for k, (u, n, y) in enumerate((("sam", "Sammy", True), ("dre", "Dre", False), ("zed", "A squadmate", False)))]
+    check("…each the Squads tab's own Pip, look and all (mine and the crewmate's dressed, the stranger plain)",
+          all(x and x in pips for x in exact) and len(exact[1]) > len(exact[2]) and "duecrew:closet" in exact[0]
+          and f"--rs-l:{amber[0]}" in exact[0])
+    check("…a crewmate's in their colour and look; anyone else plain, labelled as a squadmate",
+          f"--rs-l:{blue[0]}" in pips and pips.count(f"--rs-l:{plain[0]}") == 1 and "A squadmate’s Pip" in pips
+          and "Dre’s Pip" in pips, pips[:400])
+    check("…in that order (me, the crewmate, the stranger)",
+          pips.index(f"--rs-l:{amber[0]}") < pips.index(f"--rs-l:{blue[0]}") < pips.index(f"--rs-l:{plain[0]}"))
+    check("…each blinking at its own moment, as a room's seats (3.9.0, Sam: on bingo they blinked as one)",
+          all(sev.blink_css(k) in exact[k] for k in range(3)) and len({sev.blink(k) for k in range(3)}) == 3
+          and "--sv-d" not in board.squad_pip("dre", "Dre", False, people, cfg), [x[:160] for x in exact])
+    off = board._squad_line("p1", {"summary": summ, "unread": 0}, people, dict(cfg, sev=False))
+    old = board._squad_line("p1", {"summary": dict(summ, who=[]), "unread": 0}, people, cfg)
+    bare = board._squad_line("p1", {"summary": summ, "unread": 0})
+    check("Pip off, a server without who, or no settings: the emojis, as before",
+          all("🦊🐢🐸 Squad: 3 of 11" in x and "dc-rsev" not in x for x in (off, old, bare)), [off, old, bare])
+
+    # the board end to end: You › Plans has the crew it needs
+    labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    ents = [dict(x, accent="blue", look=["dino"]) if x["user_id"] == "dre" else x
+            for x in new_client(store, "sam", "Sammy").fetch_board(labels)["entries"]]
+    card = {"id": "p1", "title": "Plan", "tabs": {"unread": 0, "summary": summ}}
+    plans = {"cards": [card]}
+    html = board.render({"entries": ents, "labels": labels, "tomorrow": "", "pending": []}, dict(cfg, due_show=False), 0,
+                        plans=plans, you={"tab": "plans", "plans": plans})
+    sq = html[html.index('class="pcrew"'):]
+    sq = sq[:sq.index("</div>")]
+    check("board: the plan card's squad line, Pips from the board's own crew",
+          sq.count("dc-rsev") == 3 and f"--rs-l:{blue[0]}" in sq and "#due-crew .pcrew .pips" in html, sq[:300])
+
+
+def test_pips_where_emojis_were_v3822():
+    """3.8.22 (Sam: "all the places where there are emojis we should reflect
+    pips, including bottom bars, we can make the bingo stamps bigger.
+    remove emojis from the friends dialog. invites and text shares can stay
+    as is"): the review screen's chip, a squadmate's card, Settings › You,
+    the bingo stamps, and on the site the account page, the exam rail and
+    who added me back. Pip off: the emojis, as before. A Pip is our own
+    markup; a name is only ever its label, escaped."""
+    import shutil
+    import subprocess
+    from due_crew import cards as K, sev
+    from due_crew.app import _state
+    blue, plain = board.accent_pair("blue"), board.accent_pair(None)
+    # ---- the review screen: who asked, or knows it, as their Pip ----
+    saved = dict(_state)
+    try:
+        _state["entries"] = [{"user_id": "me", "name": "Sammy", "you": True},
+                             {"user_id": "dre", "name": "Dre <b>Ng", "emoji": "🐢", "accent": "blue", "look": ["dino"]},
+                             {"user_id": "mo", "name": "Mo", "emoji": ""},
+                             {"user_id": "zz", "name": '"><img src=x onerror=alert(1)>', "look": ['"><b>x', "dino\"><i>"],
+                              "accent": "red;}</style>"}]
+        pips = K.pips_by_uid({})
+        off = K.pips_by_uid({"sev": False})
+    finally:
+        _state.clear()
+        _state.update(saved)
+    hostile = pips.pop("zz")
+    check("chip: a hostile name, look or accent never becomes markup in a Pip",
+          not any(x in hostile["svg"] for x in ("<img", "<b>", "<i>", "</style>")) and hostile["a"] == list(plain)
+          and "&lt;img" in hostile["svg"], hostile["svg"][:300])
+    check("chip: each crewmate's Pip, in their colour, a name only its label (escaped); none of mine; Pip off, none",
+          sorted(pips) == ["dre", "mo"] and pips["dre"]["a"] == list(blue) and pips["mo"]["a"] == list(plain)
+          and "Dre &lt;b&gt;Ng’s Pip" in pips["dre"]["svg"] and "<b>" not in pips["dre"]["svg"]
+          and len(pips["dre"]["svg"]) > len(pips["mo"]["svg"]) and off == {}, pips.get("dre", {}).get("svg", "")[:200])
+    names = {"dre": ("Dre <b>Ng", "🐢"), "mo": ("Mo", "")}
+    knows = K.chip_view({"knows": ["dre", "mo"], "tips": []}, [], names, pips=pips)
+    asked = K.chip_view(None, [], names, asks=[("dre", 1, "why?")], pips=pips)
+    old = K.chip_view({"knows": ["dre"], "tips": []}, [], names)
+    check("chip: knows and asked lead with the Pip, no emoji in the words; without pips, the emoji as before",
+          knows["text"] == "Dre and 1 more know this" and knows["pip"] == pips["dre"] and knows["sevcss"] == sev.CSS
+          and asked["text"] == "Dre: “why?”" and asked["pip"] == pips["dre"]
+          and old["text"] == "🐢 Dre knows this" and "pip" not in old, (knows, asked["text"], old["text"]))
+    bar, card = K.chip_js(knows), K.float_js(dict(knows, accent=["#2e7d32", "#7cc47f"]))
+    check("chip: the bar and the card both draw it (its own markup, the words still text)",
+          all("p.innerHTML = D.pip.svg" in x and "pip(" in x and "t.textContent = folded ? D.fold : D.text" in bar for x in (bar, card))
+          and "__PIP__" not in bar + card and "dc-sev-css-k" in bar)
+    node = shutil.which("node")
+    if node:
+        ok = subprocess.run([node, "--check"], input=bar + "\n;" + card, capture_output=True, text=True, timeout=30)
+        check("chip: its scripts parse", ok.returncode == 0, ok.stderr[-400:])
+
+    # ---- a squadmate's card: a plain Pip ----
+    fig = board.card_sev({"name": "igk"}, {})
+    sq = board.stranger_card_js({"uid": "u1", "name": "igk <i>", "emoji": "🐢", "reviews": 1, "time_ms": 1, "retention": None,
+                                 "streak": 1, "rank": 1, "squad": "busm", "today": True, "pending": False,
+                                 "knocked_me": False, "founder_me": False, "sev": fig})
+    check("squadmate card: a plain Pip, in the default colour, no emoji; the name escaped",
+          json.dumps(fig)[1:40] in sq and f"--sv-a: {plain[0]}" in fig and "🐢" not in sq and "\\ud83d\\udc22" not in sq
+          and "igk &lt;i&gt;" in sq, sq[:300])
+    check("squadmate card: Pip off, no figure: the emoji, as before", board.card_sev({"name": "igk"}, {"sev": False}) is None)
+
+    # ---- Settings › You: my Pip, opening the closet ----
+    view = {"tab": "you", "signed_in": True, "name": "Sam", "emoji": "🦊", "status": "", "sync": "", "crew": 1,
+            "squads": [], "decks": []}
+    you = board.settings_html(view, {"accent": "blue", "sev_look": ["cap"], "sev_closet": {"cap": "2026-09-01"}})
+    off = board.settings_html(view, {"sev": False})
+    check("Settings › You: my Pip in my colour and look, opening the closet; Emoji… stays",
+          'class="st-pip"' in you and "duecrew:closet" in you and "🦊" not in you and f"--sv-a: {blue[0]}" in you
+          and 'aria-label="Your Pip"' in you and "setemoji" in you and sev.CSS in you)
+    check("Settings › You: Pip off, my emoji as before", "🦊" in off and "st-pip" not in off)
+
+    # ---- squad bingo: who stamped a square, as a bigger Pip ----
+    from due_crew import bingo as B
+    sqs = [{"id": f"q{i}", "fam": "often", "diff": "m", "icon": "x", "title": "T", "rule": "R", "detail": "D",
+            "type": "days", "params": {"days": 1}} for i in range(8)]
+    bcard = B.clean_card(_bingo_card(squares=sqs))
+    rows = [{"user_id": u, "emoji": "🐢", "day": "2026-09-01", "joined": "2026-01-01",
+             "play": {"wk": 202636, "s": 0b1}} for u in ("me", "dre", "zed")]
+    ev = B.evaluate(bcard, rows)
+    bv = {"card": bcard, "ev": ev, "names": {"me": ("Sammy", "🦊"), "dre": ("Dre", "🐢"), "zed": ("Zed", "🐸")}, "me": "me",
+          "squad": "s", "squad_id": "s", "closest": B.closest(bcard, ev), "progress": [], "new": False, "withheld": [],
+          "today": "2026-09-01"}
+    people = {"me": {"user_id": "me", "you": True}, "dre": {"user_id": "dre", "accent": "blue", "look": ["dino"]}}
+    cfg = {"accent": "amber"}
+    full = board.bingo_html(bv, cfg, people=people)
+    sq0 = full[full.rindex("<button", 0, full.index('data-i="0"')):]
+    sq0 = sq0[:sq0.index("</button>")]
+    amber = board.accent_pair("amber")
+    check("bingo: who stamped are Pips (mine, a crewmate's dressed, a squadmate plain), a size up from the emoji, no emoji",
+          sq0.count('class="st sp"') == 3 and f"--rs-l:{amber[0]}" in sq0 and f"--rs-l:{blue[0]}" in sq0
+          and f"--rs-l:{plain[0]}" in sq0 and not any(x in sq0 for x in ("🦊", "🐢", "🐸")) and "stamped" in sq0
+          and f"width:{round(board.STAMP_PIP * sev.SLOT[0])}px" in sq0 and board.STAMP_PIP * sev.SLOT[0] > 22, sq0[:400])
+    check("bingo: a square's stamps each blink at their own moment when it's pointed at (3.9.0, Sam: \"they all blink at the same time\")",
+          all(sev.blink_css(k) in sq0 for k in range(3)) and sq0.count("--sv-b:") == 3, sq0[:400])
+    check("bingo: a square is a button, so no stamp is a link (mine doesn't open the closet from here)",
+          "<a " not in sq0 and "duecrew:closet" not in sq0)
+    plain_card = board.bingo_html(bv, {"sev": False}, people=people)
+    p0 = plain_card[plain_card.index('data-i="0"'):]
+    check("bingo: Pip off, the emojis as before", "🐢" in p0[:p0.index("</button>")] and "st sp" not in plain_card)
+
+    # ---- the site: the account page, the exam rail, who added me back ----
+    app_js = open(os.path.join(os.path.dirname(__file__), "..", "site", "public", "app.js"), encoding="utf-8").read()
+    check("site: one helper draws someone's Pip by uid, as squad_pip does; the account page, the exam rail and "
+          "who added me back use it, the emoji only without sev.js",
+          "function pipFor(uid, name, crew, look)" in app_js
+          and "pipFor(me.uid, me.name, [], st?.settings?.sev_look) || face(me.emoji, me.name)" in app_js
+          and "pipFor(f.uid, f.name, crew) || face(f.emoji, f.name)" in app_js
+          and "const pip = pipFor(x.uid, x.name, crew); return pip ? [pip, x.name]" in app_js)
 
 
 def test_closet_flow_v382():
@@ -13427,6 +13917,574 @@ def test_closet_site_rows_v382():
            if g != [C.clean(look), C.shown(look), sev.slot(sev.svg("idle", rest=True, look=look), sev.ROW_SIZE)]]
     check(f"sev.js is the closet's twin: clean, shown and the row's Pip to the byte, on {len(looks)} looks "
           "(each thing alone and with others, clashes, costumes, junk, every thing at once)", not bad, bad[:1])
+
+
+def test_halloween_week_v3822():
+    """3.8.22, Halloween week (Sam's pick, round three: "Line, bats and
+    cobweb", shipped before the 24th): 24 to 31 Oct, a line under the
+    board's head with this week's days and the five things, the next and
+    when; three bats across it on the day's first board; a cobweb when every
+    Pip on the crew's rows has a Halloween thing on. Nothing outside the
+    week, with Pip off, or once hidden for the year."""
+    from due_crew import closet as cl, closet_flow as cf
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    check("Halloween: nothing before the 24th or after the 31st",
+          cl.halloween("2026-10-23", [], {}) is None and cl.halloween("2026-11-01", [], {}) is None
+          and cl.halloween("nope", [], {}) is None)
+    hw = cl.halloween("2026-10-24", ["2025-10-24", "2026-10-23"], {})
+    check("the first day: last year's days and the day before don't count; the pumpkin, studying today",
+          hw["days"] == 0 and hw["next"] == ("pumpkin", 1) and not hw["today"] and [k for k, _n, _g in hw["things"]] == list(cl.HALLOWEEN), hw)
+    hw = cl.halloween("2026-10-26", ["2026-10-24", "2026-10-26"], {"pumpkin": "2026-10-24"})
+    check("two days so far, today among them: the witch hat's earned (the days reach it), the bat wings next, a day more",
+          hw["days"] == 2 and hw["today"] and [g for _k, _n, g in hw["things"]] == [True, True, False, False, False]
+          and hw["next"] == ("batwings", 1), hw)
+    hw = cl.halloween("2026-10-30", ["2026-10-30"], {})
+    check("the 30th with one day: tomorrow reaches the witch hat, never the mummy",
+          hw["next"] == ("witch", 1), hw)
+    hw = cl.halloween("2026-10-31", [], {k: "2025-10-31" for k in cl.HALLOWEEN})
+    check("all five already mine (a year before): nothing next", hw["next"] is None and all(g for _k, _n, g in hw["things"]), hw)
+    check("the cobweb: every Pip in a Halloween thing (a costume shows; a plain Pip doesn't), two at least",
+          cl.spooky([["pumpkin"], ["ghost", "glasses"], ["batwings", "cap"]]) and not cl.spooky([["pumpkin"], None])
+          and not cl.spooky([["pumpkin"]]) and not cl.spooky([["pumpkin"], ["glasses"]]))
+    base = cl.halloween("2026-10-26", ["2026-10-24", "2026-10-25"], {"pumpkin": "2026-10-24"})
+    line = board.halloween_html(dict(base, spooky=0, bats=None), {})
+    check("the line: its days, the five things as Pips (mine in colour), the next, the closet and a way to hide it",
+          "2 days so far" in line and line.count("sv-slot") == 5 and line.count('class="hwk on"') == 2
+          and "study today for the bat wings" in line and "duecrew:closet&#x27;" not in line
+          and "pycmd('duecrew:closet')" in line and "pycmd('duecrew:closethw')" in line
+          and "hwbat" not in line and "hwweb" not in line and "spooky" not in line, line[:600])
+    flying = board.halloween_html(dict(base, spooky=6, bats=1.5), {})
+    check("the day's first board: three bats, their flight's place kept across a redraw; the whole crew dressed: cobweb and line",
+          flying.count('class="hwbat"') == 3 and "--ago:1.50s" in flying and "hwweb" in flying
+          and "all 6 of you dressed up" in flying, flying[:400])
+    check("Pip off, or not the week: no line", board.halloween_html(dict(base, bats=0), {"sev": False}) == ""
+          and board.halloween_html(None, {}) == "")
+    check("the bats never fly with Reduce motion, and never over the logo (only across the line)",
+          "@media (prefers-reduced-motion: no-preference)" in board.HW_CSS
+          and board.HW_CSS.index("dc-hwbat 4.2s") > board.HW_CSS.index("@media (prefers-reduced-motion: no-preference)")
+          and ".dc-hw .hwbat" in board.HW_CSS and "dc-title" not in board.HW_CSS)
+    data = {"entries": [{"user_id": "me", "name": "Me", "you": True, "paused": False, "last_updated": "", "exam_date": "",
+                         "days": {}, "decks": []}], "pending": [],
+            "labels": [(datetime.date(2026, 10, 26) - datetime.timedelta(days=i)).isoformat() for i in range(7)]}
+    now = __import__("time").time()
+    drawn = board.render(data, {"period": "today"}, now, halloween=dict(base, spooky=0, bats=None))
+    check("the board: the line under its head, its sheet with it; without it, neither",
+          drawn.count('class="dc-hw"') == 1 and drawn.index('class="dc-head"') < drawn.index('class="dc-hw"')
+          and "dc-hwbat" in drawn and "dc-hw" not in board.render(data, {"period": "today"}, now))
+    # the glue: my row's days, the crew's looks, the bats once, hidden till next year
+    from due_crew.wrap import _wrap_data
+    saved = (cf._save, cf.look, cf.have, dict(dc._state))
+    cf._save = lambda: None
+    cf.look = lambda c=None: ["pumpkin"]
+    cf.have = lambda c=None: {"pumpkin": "2026-10-24"}
+    w = _wrap_data()
+    try:
+        w.pop("hw_hidden", None)
+        dc._state.pop("hw_bats", None)
+        entries = [{"user_id": "me", "you": True, "days": {"2026-10-24": {"studied": True, "reviews": 30}, "2026-10-25": {"reviews": 0}}},
+                   {"user_id": "dre", "look": ["ghost"], "days": {}}, {"user_id": "mo", "look": ["witch", "glasses"], "days": {}}]
+        v = cf.halloween_view("2026-10-25", entries, {})
+        check("the glue: my row's days (a day with no reviews isn't one), every row dressed: cobweb for 3; the bats out",
+              v and v["days"] == 1 and v["spooky"] == 3 and v["bats"] is not None and v["bats"] < 1, v)
+        dc._state["hw_bats"]["2026-10-25"] -= cf.BATS_SECONDS + 1
+        v2 = cf.halloween_view("2026-10-25", entries[:2] + [{"user_id": "mo", "look": None}], {})
+        check("a later board the same day: no bats; a plain Pip on a row: no cobweb", v2["bats"] is None and v2["spooky"] == 0, v2)
+        check("Pip off: no line", cf.halloween_view("2026-10-25", entries, {"sev": False}) is None)
+        swaps = []
+        old = (dc._swap, dc._rerender, dc._board_on_screen)
+        dc._swap, dc._rerender, dc._board_on_screen = (lambda c, focus=None: swaps.append(1)), (lambda: swaps.append(2)), (lambda: True)
+        dc._state["labels"] = ["2026-10-25"]
+        try:
+            dc._on_js(False, "duecrew:closethw", DeckBrowser())
+        finally:
+            dc._swap, dc._rerender, dc._board_on_screen = old
+        check("its ×, sent as the board sends it: hidden for 2026 (the board redraws), back next year",
+              w.get("hw_hidden") == "2026" and swaps and cf.halloween_view("2026-10-25", entries, {}) is None
+              and cf.halloween_view("2027-10-25", entries, {}) is not None, (w.get("hw_hidden"), swaps))
+    finally:
+        cf._save, cf.look, cf.have = saved[:3]
+        dc._state.clear()
+        dc._state.update(saved[3])
+        w.pop("hw_hidden", None)
+
+
+def test_year_counts_v3822():
+    """3.8.22 (Sam: "Start the year counts in the next release: Yes"): the
+    closet's tallies keep a year too, for Wrapped: Fifteens and the hours
+    they began, rooms with the crew, cheers sent and got, crew days, each
+    squad card's lines once, and the days each thing Pip has on was worn,
+    once a day. Six years at most, cleaned like the rest; nothing sent."""
+    from due_crew import closet_flow as cf
+    from due_crew.wrap import _wrap_data
+    from due_crew.app import _state
+    w = _wrap_data()
+    saved = (cf._save, cf.look, w.get("closet"), list(_state.get("labels") or []))
+    cf._save = lambda: None
+    cf.look = lambda c=None: ["dino"]
+    w["closet"] = {}
+    _state["labels"] = ["2026-10-25"]
+    try:
+        cf.note_fifteens(3, datetime.datetime(2026, 10, 25, 20, 5).astimezone())
+        cf.note_fifteens(1)
+        cf.note_room(True)
+        cf.note_room(False)
+        cf.note_cheer("dre", "2026-10-25")
+        cf.note_cheer("mo", "2026-10-25")
+        cf.note_cheered()
+        for lines, wk in ((1, "202643:s1"), (2, "202643:s1"), (1, "202643:s1"), (1, "202644:s1")):
+            cf.note_bingo(lines, False, wk)
+        crew = [{"you": True}, {"you": False, "days": {"2026-10-25": {"studied": True, "reviews": 3}}}]
+        cf.note_day("2026-10-25", crew, True, 0)
+        cf.note_day("2026-10-25", crew, True, 0)
+        cf.look = lambda c=None: ["pumpkin", "glasses"]
+        cf.note_day("2026-10-26", crew, True, 0)
+        y = cf.year_counts(2026)
+        check("the year: Fifteens and their hour, rooms with the crew, cheers sent and got, a card's lines once (its most), crew days",
+              y.get("fifteens") == 4 and y.get("hours") == {"20": 3} and y.get("rooms") == 1 and y.get("cheers_sent") == 2
+              and y.get("cheered_by") == 1 and y.get("bingo") == {"202643:s1": 2, "202644:s1": 1} and y.get("crew_days") == 1, y)
+        check("what Pip wore, a day each, once a day (a costume alone while it's on)",
+              y.get("worn") == {"dino": 1, "pumpkin": 1, "glasses": 1} and y.get("worn_last") == "2026-10-26", y)
+        _state["labels"] = ["2027-01-02"]
+        cf.note_cheered()
+        check("a new year starts its own counts", cf.year_counts(2027) == {"cheered_by": 1} and cf.year_counts(2026).get("cheered_by") == 1)
+        t = cf.clean_tallies({"years": {"2019": {"rooms": 1}, "2020": {}, "2021": {}, "2022": {}, "2023": {}, "2024": {}, "2025": {},
+                                        "x": {"rooms": 2}, "2026": {"rooms": -1, "fifteens": True, "hours": {"25": 1, "9": 2, "x": 1},
+                                                                    "worn": {"nope": 3, "dino": 4}, "bingo": {"": 1, "w": "2"},
+                                                                    "worn_last": "2026-10-26", "cheers_sent": 3}}})
+        check("cleaned like the rest: six years at most, junk dropped",
+              sorted(t["years"]) == ["2021", "2022", "2023", "2024", "2025", "2026"]
+              and t["years"]["2026"] == {"cheers_sent": 3, "hours": {"9": 2}, "worn": {"dino": 4}, "worn_last": "2026-10-26"}, t)
+    finally:
+        cf._save, cf.look = saved[:2]
+        w["closet"] = saved[2] or {}
+        _state["labels"] = saved[3]
+
+
+def test_cheers_with_pips_v3822():
+    """3.8.22, cheers with Pips (Sam's pick, round three: "One by one, then
+    and N more"): when cheers land, each sender's Pip rises from the board's
+    bottom edge in turn, tosses the cheer onto my row and ducks back down,
+    in place of the flurry; three at most, the rest "and N more"; with
+    Reduce motion they stand still in the banner. A mutual friend comes in
+    their colour and look, anyone else plain; Pip off, the flurry as before."""
+    from due_crew import social
+    from due_crew.app import _state, _pending_cheers
+    entries = [{"user_id": "me", "you": True}, {"user_id": "dre", "name": "Dre", "accent": "blue", "look": ["dino"]},
+               {"user_id": "mo", "name": "Mo"}, {"user_id": "zz", "name": "Z", "look": ['"><b>x'], "accent": "red;}"}]
+    cheers = [{"from": "dre", "name": "Dre", "emoji": "🎉"}, {"from": "dre", "name": "Dre", "emoji": "🔥"},
+              {"from": "mo", "name": "Mo", "emoji": "💪"}, {"from": "zz", "name": '"><img src=x>', "emoji": "👏"},
+              {"from": "ann", "name": "Ann", "emoji": "🌟"}]
+    pips = board.cheer_pips(cheers, entries, {})
+    check("who sent them, as Pips: each once, in the order they came, three at most",
+          [p["emoji"] for p in pips] == ["🎉", "💪", "👏"] and len(pips) == 3, pips)
+    check("a mutual friend in their colour and look; anyone else plain, in the default colour",
+          pips[0]["a"] == list(board.accent_pair("blue")) and "<path" in pips[0]["svg"]
+          and pips[1]["a"] == list(board.accent_pair(None)) and pips[2]["a"] == list(board.accent_pair(None)))
+    check("a name is only a label, escaped; a hostile look never becomes markup",
+          "<img" not in pips[2]["svg"] and "&lt;img" in pips[2]["svg"] and "<b>" not in pips[2]["svg"], pips[2]["svg"][:300])
+    check("Pip off: no Pips", board.cheer_pips(cheers, entries, {"sev": False}) == [])
+    check("one, two, three names; then and N more",
+          [board.and_more(x) for x in (["A"], ["A", "B"], ["A", "B", "C"], ["A", "B", "C", "D", "E"])]
+          == ["A", "A and B", "A, B and C", "A, B, C and 2 more"])
+    js = board.flurry_js(["🎉"], "Dre sent cheers", pips=pips, season=["🎃"])
+    check("the toss: from the board's bottom edge onto my row, in place of the flurry; still Pips in the banner with Reduce motion",
+          "tr.you td.nm" in js and "dc.getBoundingClientRect()" in js and "if (still) { return; }" in js
+          and "banner.insertBefore(who, title)" in js and "classList.add('rest')" in js and "<\\/" in js.split("var pips = ")[1][:20000]
+          and "</svg" not in js.split("var pips = ")[1].split(";")[0], js[:200])
+    plain = board.flurry_js(["🎉"], "Dre sent cheers", season=["🎃"])
+    check("no Pips: the flurry, as before", "var pips = []" in plain and "dcfall" in plain)
+    import shutil
+    import subprocess
+    if shutil.which("node"):
+        r = subprocess.run(["node", "--check", "-"], input=js, capture_output=True, text=True)
+        check("the toss's script is valid JS", r.returncode == 0, r.stderr[:400])
+    # sent as the board plays them: names in order, the Pips with them
+    saved = (social.mw.state, getattr(social.mw, "web", None), list(_state.get("entries") or []), list(_state.get("labels") or []))
+    said = []
+    social.mw.state = "deckBrowser"
+    social.mw.web = types.SimpleNamespace(eval=said.append)
+    _state["entries"], _state["labels"] = entries, ["2026-10-25"]
+    try:
+        _pending_cheers.extend(cheers)
+        social._play_cheers()
+    finally:
+        social.mw.state, social.mw.web = saved[:2]
+        _state["entries"], _state["labels"] = saved[2], saved[3]
+        _pending_cheers.clear()
+    check("played: the banner names them in order (Dre, Mo, the rest and N more), the senders' Pips come along",
+          said and "Dre, Mo, &quot;" not in said[0] and "Dre, Mo, " in said[0] and "and 1 more sent cheers" in said[0]
+          and said[0].count("Pip") >= 3 and "dino" not in said[0].split("var pips")[0], said[0][:300] if said else said)
+
+
+def test_cheer_shows_v390():
+    """3.9.0, how a cheer lands (Sam's picks, "Cheers, everywhere"): a show
+    over the whole Decks screen, a different one each time. The bag plays
+    every one of the twelve before any repeats, never the same twice in a
+    row; it's kept in this computer's config, never sent. flurry_js runs the
+    show (show.js) in place of the toss, the banner at the top; Reduce
+    motion and Pip off are as before. Sam's tweaks: the piñata says no
+    "CRACK!", and the fireworks put no name in the middle."""
+    import random as _r
+    import shutil
+    import subprocess
+    from due_crew import shows, social
+    from due_crew.app import _state, _pending_cheers
+    check("the twelve Sam kept, in the mock's order",
+          shows.SHOWS == ("cannon", "pinata", "fireworks", "gift", "bubbles", "wave", "balloons", "rocket", "stamp", "disco", "hat", "snow"))
+    rng, bag, seen = _r.Random(7), None, []
+    for _ in range(12 * 6):
+        k, bag = shows.next_show(bag, rng)
+        seen.append(k)
+    check("every one plays before any repeats, bag after bag",
+          all(sorted(seen[i:i + 12]) == sorted(shows.SHOWS) for i in range(0, len(seen), 12)), seen[:24])
+    check("never the same twice in a row, even where one bag ends and the next begins",
+          all(a != b for a, b in zip(seen, seen[1:])))
+    k, b2 = shows.next_show(["gone", "fireworks", "snow"], rng)
+    check("an older add-on's show in the bag is dropped; the last one played stays last",
+          k == "fireworks" and b2 == ["fireworks"] and shows.next_show(None, rng)[0] in shows.SHOWS)
+    for seed in range(40):  # a new bag never starts with the one just played
+        k, _b = shows.next_show(["snow"], _r.Random(seed))
+        check("a fresh bag doesn't open with the last show", k != "snow") if k == "snow" else None
+    entries = [{"user_id": "me", "you": True}, {"user_id": "dre", "name": "Dre K.", "accent": "blue", "look": ["dino"]}, {"user_id": "mo", "name": "Mo"}]
+    cheers = [{"from": "dre", "name": "Dre K.", "emoji": "🔥", "note": "go </script> " + "x" * 300}, {"from": "mo", "name": "Mo", "emoji": "💪"}]
+    pips = board.cheer_pips(cheers, entries, {})
+    check("each sender brings the poses a show needs, a first name and their note (cut short)",
+          set(pips[0]["poses"]) == {"hello", "jump", "cheer", "idle"} and all("<svg" in v for v in pips[0]["poses"].values())
+          and pips[0]["name"] == "Dre" and pips[0]["note"].startswith("go </script>") and len(pips[0]["note"]) == 140 and pips[1]["note"] == "", pips[0]["name"])
+    js = board.flurry_js(["🔥", "💪"], "Dre and Mo sent cheers", pips=pips, show="pinata")
+    check("with a show: show.js comes along and plays it in place of the toss, the banner at the top; Reduce motion still stands the Pips in the banner",
+          'var show = "pinata"' in js and "window.DCShow.play(show" in js and "banner.style.top = '12px'" in js and board.SHOW_JS[:200] in js
+          and js.index("if (still) { return; }") < js.index("window.DCShow.play(show") and "banner.insertBefore(who, title)" in js)
+    check("what the show gets is escaped for the page: no </ in the senders it's handed",
+          "</script>" not in js.split("senders: ")[1].split(", dark:")[0], js.split("senders: ")[1][:120])
+    check("Pip off (no Pips) or a show it doesn't know: no show, the flurry or the toss as before",
+          'var show = null' in board.flurry_js(["🎉"], "Dre sent cheers", show="pinata") and board.SHOW_JS[:200] not in board.flurry_js(["🎉"], "x", show="pinata")
+          and 'var show = null' in board.flurry_js(["🎉"], "x", pips=pips, show="spotlight"))
+    sj = board.SHOW_JS
+    check("show.js draws all twelve, and only them",
+          set(re.findall(r"SHOW\.(\w+) = function", sj)) == set(shows.SHOWS) and len(re.findall(r"SHOW\.(\w+) = function", sj)) == len(shows.SHOWS))
+    check("Sam's tweaks: no \"CRACK!\" on the piñata, no name in the fireworks' middle",
+          "CRACK" not in sj and "dcs-lbl" not in sj.split("SHOW.fireworks")[1].split("SHOW.gift")[0] and "THWACK!" in sj)
+    check("a show never takes markup from the page: names, notes and emoji go in as text; Pips are sev.py's",
+          ".innerHTML = s." not in sj and "innerHTML = svg" in sj and sj.count("textContent") >= 8)
+    check("a click anywhere but a present or a bubble, or Esc, ends it; it ends on its own too",
+          'e.key === "Escape"' in sj and 'closest(".dcs-click")' in sj and "function end(ms)" in sj)
+    if shutil.which("node"):
+        for name, code in (("show.js", sj), ("a landing with a show", js)):
+            r = subprocess.run(["node", "--check", "-"], input=code, capture_output=True, text=True)
+            check(f"{name} is valid JS", r.returncode == 0, r.stderr[:400])
+    # as the board plays them: the next show from the bag, the bag kept in the config
+    conf = {}
+    saved = (social.mw.state, getattr(social.mw, "web", None), list(_state.get("entries") or []), list(_state.get("labels") or []), social.cfg, social.save_cfg)
+    said = []
+    social.mw.state, social.mw.web = "deckBrowser", types.SimpleNamespace(eval=said.append)
+    social.cfg, social.save_cfg = (lambda: conf), (lambda c: (conf.clear(), conf.update(c)))
+    _state["entries"], _state["labels"] = entries, ["2026-10-25"]
+    try:
+        played = []
+        for _ in range(3):
+            _pending_cheers.extend(cheers)
+            social._play_cheers()
+            played.append(re.search(r'var show = "(\w+)"', said[-1]).group(1))
+        bag = list(conf.get(shows.BAG_KEY) or [])
+        conf["sev"] = False
+        _pending_cheers.extend(cheers)
+        social._play_cheers()
+        off = said[-1]
+    finally:
+        social.mw.state, social.mw.web = saved[:2]
+        _state["entries"], _state["labels"] = saved[2], saved[3]
+        social.cfg, social.save_cfg = saved[4], saved[5]
+        _pending_cheers.clear()
+    check("each landing plays the bag's next show, three different ones, the bag saved in this computer's config (not an account key)",
+          len(set(played)) == 3 and bag[-1] == played[-1] and len(bag) == 10 and shows.BAG_KEY not in __import__("due_crew.account", fromlist=["x"]).ACCOUNT_KEYS, (played, bag))
+    check("Pip off: the flurry as before, and the bag untouched", "var show = null" in off and conf.get(shows.BAG_KEY) == bag)
+
+
+def _wr_year(seed, keep, until=datetime.date(2026, 11, 30), start=datetime.date(2026, 1, 1)):
+    import random as _r
+    r, out, d = _r.Random(seed), {}, start
+    while d <= until:
+        if keep(d, r):
+            out[d.isoformat()] = (r.randint(60, 400), r.randint(0, 25), r.randint(600000, 4000000))
+        d += datetime.timedelta(days=1)
+    return out
+
+
+def test_wrapped_story_v390():
+    """3.9.0, your Wrapped (Sam's pick, round three): a year's story from my
+    own reviews, only the slides that year can fill, every line kind (no
+    missed days, no "fewer", no comparing: wrapped.SAD, read in every slide
+    of every year here), the card I turned around shown here only, and the
+    board's line from 1 December to 15 January."""
+    from due_crew import wrapped as W
+    full = W.facts(2026, "2026-12-01", _wr_year(9, lambda d, r: r.random() < (.97 if d.month == 3 else .85)),
+                   {22: 5000, 23: 3000, 9: 1000}, "2023-02-01")
+    fall = W.facts(2026, "2026-12-01", _wr_year(4, lambda d, r: d >= datetime.date(2026, 9, 2) and r.random() < .82),
+                   {7: 4000, 8: 2000, 20: 500}, "2026-09-02")
+    back = W.facts(2026, "2026-12-01", _wr_year(5, lambda d, r: not (datetime.date(2026, 2, 9) <= d <= datetime.date(2026, 4, 13)) and r.random() < .9),
+                   {14: 100, 15: 100}, "2025-01-01")
+    one = W.facts(2026, "2026-03-03", {"2026-03-02": (12, 12, 60000)}, {}, "2026-03-02")
+    none = W.facts(2026, "2026-03-03", {}, {}, None)
+    names = {k: t["name"] for k, t in __import__("due_crew.closet", fromlist=["BY"]).BY.items()}
+    counts = {"fifteens": 38, "hours": {"20": 20}, "cheers_sent": 12, "cheered_by": 41, "rooms": 6, "worn": {"headphones": 40}}
+    sl_full = W.slides(full, counts, {"sprout": "2026-10-14", "headphones": "2026-10-14"}, ["Headphones"], 4,
+                       {"front": "Which nerve <b>x</b>?", "lapses": 9, "ivl": 41}, 12, 4, names)
+    sl_fall = W.slides(fall, {}, {"sprout": "2026-09-02"}, ["Sprout"], 0, None, 0, 4, names)
+    sl_back = W.slides(back, {}, {}, [], 2, None, 0, 4, names)
+    kinds = lambda sl: [x["kind"] for x in sl]
+    check("a full year: every slide it can fill, in the story's order",
+          kinds(sl_full) == ["cover", "days", "run", "back", "time", "cards", "turned", "fifteens", "things", "crew", "picture"]
+          or kinds(sl_full) == ["cover", "days", "run", "time", "cards", "turned", "fifteens", "things", "crew", "picture"], kinds(sl_full))
+    check("met Anki this year: says so; an early bird; no crew, no Fifteens, no comebacks: those slides aren't made",
+          sl_fall[0]["line"] == "You and Anki met on 2 September." and "time" in kinds(sl_fall)
+          and next(x for x in sl_fall if x["kind"] == "time")["big"] == "Early bird"
+          and not {"crew", "fifteens", "back", "turned"} & set(kinds(sl_fall)), kinds(sl_fall))
+    bk = next(x for x in sl_back if x["kind"] == "back")
+    check("a comeback after weeks away is its own big slide: the day, how long, and the days that followed (more than half)",
+          bk["big"].endswith("April") and bk["line"].startswith("after nine weeks away. Then you showed up on") and "next" in bk["line"], bk)
+    check("one day: a short story (cover, days, cards, picture); no reviews: nothing",
+          kinds(W.slides(one)) == ["cover", "days", "cards", "picture"] and W.slides(none) == [])
+    every = sl_full + sl_fall + sl_back + W.slides(one)
+    said = [W.words(x).lower() for x in every]
+    bad = [(w, t) for t in said for w in W.SAD if re.search(rf"\b{w}", t)]
+    check("kind, always: no slide says missed, only, fewer, down, worst, lost, behind, less ...", not bad, bad[:5])
+    check("the card I turned around: its front on its slide, marked as staying here; never on the picture",
+          next(x for x in sl_full if x["kind"] == "turned")["tag"].startswith("Stays on this computer")
+          and "nerve" not in W.words(sl_full[-1]).lower())
+    check("since October, for what Due Crew only began counting then", next(x for x in sl_full if x["kind"] == "fifteens")["tag"] == "Since October"
+          and next(x for x in sl_full if x["kind"] == "crew")["tag"] == "Since October")
+    things = next(x for x in sl_full if x["kind"] == "things")
+    check("Pip's things: what came this year, worn most (a week or more of it)",
+          things["big"] == "2 things" and "headphones, 40 days" in things["small"], things)
+    check("the picture: days, longest run, and reviews (new cards when the year was mostly new)",
+          sl_full[-1]["grid"][2][1] == "reviews" and sl_fall[-1]["grid"][2][1] in ("reviews", "new cards")
+          and sl_full[-1]["kicker"] == "My 2026 so far in Anki" and sl_full[-1]["small"] == "See you in 2027.")
+    check("the board's line: 1 December to 15 January, for the year just ending; else none; the year it's about",
+          W.banner_year("2026-12-01") == 2026 and W.banner_year("2027-01-15") == 2026 and W.banner_year("2027-01-16") is None
+          and W.banner_year("2026-11-30") is None and W.default_year("2027-01-10") == 2026 and W.default_year("2026-12-02") == 2026)
+    cells = W.heat(full)
+    check("the year's squares: Monday-first weeks, levels against the year's own days, the days still to come empty",
+          len(cells) % 7 == 0 and 53 <= len(cells) // 7 <= 54 and {c[1] for c in cells if c and c != ""} <= {0, 1, 2, 3, 4}
+          and any(c == "" for c in cells) and cells[0] is None)
+    check("every kind of slide is in the table that says when it's made", {x["kind"] for x in every} <= {k for k, _w in W.SLIDES}
+          and set(W.BG) == {k for k, _w in W.SLIDES})
+    # drawn, in the board's place
+    view = {"year": 2026, "years": [2026, 2025], "slides": sl_full, "heat": cells, "look": ["headphones"], "card": True, "card_on": True}
+    h = board.wrapped_html(view, {"accent": "green"})
+    check("drawn: a slide each, Pip in my look, the year's squares, another year, All on one page, the card's switch, the way back",
+          h.count('<section class="wr-s') == len(sl_full) and "duecrew:wrappedyear:2025" in h and "All on one page" in h
+          and "duecrew:wrappedcard" in h and "duecrew:wrappedclose" in h and "duecrew:wrappedpic:2026" in h
+          and 'class="wh"' in h and '<svg class="sv' in h, h[:300])
+    check("the card's front is text, escaped", "Which nerve &lt;b&gt;x&lt;/b&gt;?" in h and "<b>x</b>" not in h)
+    off = board.wrapped_html(view, {"sev": False})
+    check("Pip off: the story without Pip (no Pip's things slide)", "<svg class=\"sv" not in off and off.count('<section class="wr-s') == len(sl_full) - 1)
+    js = board.wrapped_js()
+    check("the player: arrows and the sides move it, it moves on by itself, never with Reduce motion, once a card",
+          "ArrowRight" in js and "prefers-reduced-motion: reduce" in js and "if (!still) { requestAnimationFrame(tick); }" in js
+          and "data-on" in js)
+    import shutil
+    import subprocess
+    if shutil.which("node"):
+        r = subprocess.run(["node", "--check", "-"], input=js, capture_output=True, text=True)
+        check("the player is valid JS", r.returncode == 0, r.stderr[:300])
+    line = board.wrapped_line(2026, True, ["dino"])
+    check("the line: Your 2026 so far, Open, and its x for the year", "Your 2026 so far" in line and "duecrew:wrappedopen:2026" in line
+          and "duecrew:wrappedx:2026" in line and "&#127873;" in board.wrapped_line(2026, False, [], pip=False))
+    from due_crew import account
+    check("the line's x is the account's (wrapped_seen), so it holds on every computer",
+          "wrapped_seen" in account.ACCOUNT_KEYS and account.clean({"wrapped_seen": "2026xx"}) == {"wrapped_seen": "2026"})
+
+
+def test_wrapped_flow_v390():
+    """3.9.0: Wrapped's glue reads the year in one grouped query (an hour a
+    row), new cards met as first answers, the first review ever, the years
+    there are, and the card I turned around as plain text; the commands
+    reach it as the board sends them."""
+    from due_crew import wrapped_flow as F
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    at = lambda d, h: int(datetime.datetime.combine(d, datetime.time(h)).timestamp() * 1000)
+    for d, h in ((datetime.date(2026, 3, 2), 22), (datetime.date(2026, 3, 2), 23), (datetime.date(2026, 3, 3), 1), (datetime.date(2025, 12, 31), 10)):
+        fakes.add_review(conn, at(d, h), rtype=1, time_ms=60000)
+    fakes.add_review(conn, at(datetime.date(2026, 3, 2), 22), rtype=0, last_ivl=0, cid=7)   # a new card, first seen
+    fakes.add_review(conn, at(datetime.date(2026, 3, 2), 22), rtype=0, last_ivl=-600, cid=7)  # its next learning step
+    fakes.add_card(conn, 5, 1, ctype=2, queue=2, ivl=41, lapses=9)
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(datetime.date(2026, 3, 10)))
+    days, hours = F.year_rows(col, 2026)
+    check("the year in one query: 1 am counts for the day before (the rollover); a new card met once; the hours",
+          days.get("2026-03-02", (0,))[0] == 5 and days["2026-03-02"][1] == 1 and "2026-03-03" not in days
+          and "2025-12-31" not in days and hours.get(22) == 3 and hours.get(1) == 1, (days, hours))
+    check("the first review ever, and the years there are", F.first_day(col) == "2025-12-31" and F.years(col) == [2026, 2025])
+    col.get_card = lambda cid: types.SimpleNamespace(question=lambda: '<style>.x{}</style><div>Which <b>nerve</b>?</div>[sound:a.mp3]&amp; why')
+    n, card = F.turned(col)
+    check("the card I turned around: as plain text (no markup, no media)", n == 1 and card == {"front": "Which nerve ? & why", "lapses": 9, "ivl": 41}, card)
+    # the board's commands
+    saved = (dc.open_wrapped, dc._swap, dc.cfg, dc.save_cfg, dc._board_on_screen, dict(dc._state))
+    opened, conf, swaps = [], {"accent": "green"}, []
+    import due_crew.shares as SH
+    pics = []
+    saved_pic = SH.picture
+    dc.open_wrapped = lambda year=None: opened.append(year)
+    dc._swap = lambda c, focus=None: swaps.append(1)
+    dc.cfg = lambda: conf
+    dc.save_cfg = lambda c, **k: conf.update(c)
+    dc._board_on_screen = lambda: True
+    SH.picture = lambda kind, year=None: pics.append((kind, year))
+    try:
+        send = lambda m: dc._on_js(False, "duecrew:" + m, DeckBrowser())
+        send("wrappedopen:2026")
+        send("wrappedyear:2025")
+        send("wrappedpic:2026")
+        send("wrappedx:2026")
+        dc._state["wrapped_open"] = {"year": 2026}
+        send("wrappedcard")
+        send("wrappedclose")
+        check("the board's clicks reach it: open, another year, the picture on that year, the line's x for the year, the card off, back",
+              opened == [2026, 2025, 2026] and pics == [("pictureyear", 2026)] and conf.get("wrapped_seen") == "2026"
+              and conf.get(F.CARD_KEY) is False and dc._state.get("wrapped_open") is None and swaps, (opened, pics, conf))
+    finally:
+        dc.open_wrapped, dc._swap, dc.cfg, dc.save_cfg, dc._board_on_screen = saved[:5]
+        dc._state.clear()
+        dc._state.update(saved[5])
+        SH.picture = saved_pic
+    check("the board's line: in its fortnight-and-a-month, until its x for that year",
+          F.banner("2026-12-03", {"sev": False})["year"] == 2026 and F.banner("2026-12-03", {"wrapped_seen": "2026"}) is None
+          and F.banner("2027-01-10", {"sev": False}) == {"year": 2026, "so_far": False, "look": []} and F.banner("2026-10-03", {}) is None)
+    from due_crew import sharecard as S
+    d = S.year({"2026-03-02": (5, 60000)}, 2026, "2026-03-10", None, True)
+    ops = S.draw("year", "story", d, {"time": True, "reviews": True, "streak": True, "best": True}, "light", lambda s, px, w: len(s) * px * 0.5)[2]
+    js = open(os.path.join(REPO, "site", "public", "cards.js"), encoding="utf-8").read()
+    check("the year card can carry Pip (Wrapped's picture), and cards.js draws it the same",
+          any(o[0] == "sev" for o in ops) and not any(o[0] == "sev" for o in S.draw("year", "story", dict(d, sev=False), {}, "light", lambda s, px, w: 1)[2])
+          and "if (d.sev) { const img = await sevImg(pal.g); if (img) c.drawImage(img, W - P - YEAR_SEV, 446 - YEAR_SEV * SEV_FEET, YEAR_SEV, YEAR_SEV); }" in js
+          and "YEAR_SEV = 220" in js and S.YEAR_SEV == 220)
+
+
+def test_banner_actions_sit_together_v390():
+    """A banner with two actions (the closet's Wear it and Closet) keeps
+    them together at its right end: each .wc pushes itself right with an
+    auto margin, so two of them split the free space and the first floated
+    mid-banner (Sam, 16 Oct). They stay on one line, and the closet's words
+    sit left when they wrap (the Decks screen's <center> reaches them)."""
+    from due_crew import closet
+    k = next(t["k"] for t in closet.THINGS if t["slot"] != closet.COSTUME)
+    line = board.closet_line([k], [])
+    css = board._css({})
+    check("the closet's line: two actions, Wear it and Closet", line.count('class="wc"') == 2 and "Wear it" in line)
+    check("a banner's second action sits beside the first, no auto margin splitting the space; actions on one line",
+          ".dc-wrap .wc + .wc { margin-left: 4px; }" in css and re.search(r"\.dc-wrap \.wc \{[^}]*white-space: nowrap", css)
+          and ".dc-wrap.cl-earn { text-align: left; }" in css)
+
+
+def _keyframe_lists(src):
+    """Each keyframe list a script hands animate() (or motion.js's anim()), as text."""
+    out = []
+    for m in re.finditer(r"\b(?:animate|anim)\(\s*[\w.]+\s*,\s*\[|\.animate\(\s*\[", src):
+        i, depth, q = m.end() - 1, 0, None
+        for j in range(i, min(len(src), i + 4000)):
+            c = src[j]
+            if q:
+                if c == q and src[j - 1] != "\\":
+                    q = None
+            elif c in "'\"`":
+                q = c
+            elif c == "[":
+                depth += 1
+            elif c == "]":
+                depth -= 1
+                if not depth:
+                    out.append(src[i:j + 1])
+                    break
+    return out
+
+
+def test_motion_ends_where_it_lands_v390():
+    """3.9.0, the motion audit (Sam, 17 Oct: Crew to Squads "visibly flicks
+    from rectangular to fit the pill"; "everything should be smooth!").
+    tools/motion_audit.js plays every motion with its frames held and
+    measures the last one against the page once it has cleaned up; these
+    are the fixes it led to, so none comes undone: the pick's pill takes
+    the new pick's shape (each corner as drawn) and its colours as it goes,
+    a height move ends at the box's own height to the fraction of a pixel
+    (its padding and border counted, offsetHeight never), a fold ends where
+    taking the box out leaves the page (its border, a flex or grid gap),
+    a glow ends on the box's own ground, a dimmed box keeps its dim, ↻
+    finishes its turn, a cheer's banner and a show fade, the peek grows
+    into its words. And no keyframe list anywhere goes backwards, which a
+    browser refuses without a word."""
+    js = open(os.path.join(REPO, "due_crew", "motion.js"), encoding="utf-8").read()
+    check("audit: still one motion.js, the board's and the site's",
+          js == open(os.path.join(REPO, "site", "public", "motion.js"), encoding="utf-8").read())
+    slide = js[js.index("  function slide(g, from)"):js.index("  // 7: after a tab")]
+    on_in = js[js.index("  function onIn(g)"):js.index("  function slide(g, from)")] if "  function onIn(g)" in js else js
+    check("audit: the pick's pill: each corner as drawn (a radius past half the height draws as half), round at both ends on its way, the new pick's shape at the end",
+          'Math.min(parseFloat(cs[k]) || 0, b.height / 2, b.width / 2) + "px"' in on_in
+          and "borderRadius: from.pill ? from.r" in slide and "borderRadius: to.pill ? to.r" in slide
+          and "kf = [k0, { borderRadius: Math.min(from.h, to.h) / 2 + \"px\", offset: 0.5 }, k1]" in slide, slide[:300])
+    check("audit: the pick's colours are read before anything moves; the one left eases back, the new one's edge turns as the pill arrives",
+          slide.index("var off = cw ?") < slide.index("var a = anim(ind, kf")
+          and "anim(was, [Object.assign({ color: from.color }, edges(from.edge)), w1, { color: off.color, offset: 0.6 }, w2," in slide
+          and "anim(on, [edges(off.edge), n1, n2, edges(to.edge)], { duration: BASE });" in slide
+          and "w1.offset = 0.1; w2[wi] = from.edge; w2.offset = 0.9;" in slide and "n1[ni] = to.edge; n1.offset = 0.1; n2.offset = 0.9;" in slide)
+    heights = re.findall(r"height: ([^,}\]]+)", js)
+    loose = [h for h in heights if "inner(" not in h and h.strip() not in ('"0px"', 'h + "px"', '(from.pill ? from.h : 2) + "px"',
+                                                                         '(to.pill ? to.h : 2) + "px"', 'r.height + "px"', 'z.h + "px"',
+                                                                         'a.height + "px"', 'b.height + "px"')]  # the day ring: border-box
+    check("audit: every height move goes to style.height's own measure (inner, from tall): no padding or border overshoot, no rounding",
+          "function tall(el)" in js and "function inner(el, outer)" in js and not loose
+          and not re.search(r"inner\([^)]*offsetHeight", js) and "h: tall(el)" in js and "snap.h = tall(root)" in js, loose)
+    fold = js[js.index("  function fold(el"):js.index("  // 20: a")]
+    check("audit: a fold ends where taking it out leaves the page: what's left of it (room), and in a grid the neighbour closes the gap",
+          "function room(el, x)" in js and "function close(el, r, a, b, o)" in js and "room(el)" in fold and "close(el, r, 0, 1" in fold
+          and 'borderTopStyle: "none"' in fold and "if (pull) pull.cancel();" in fold
+          and "room(el), pull = close(el, r, 1, 0)" in js and "room(g, true)" in js)
+    check("audit: a glow ends on the box's own ground (my row's tint never blinks off)",
+          'var bg = getComputedStyle(el).backgroundColor || "transparent";' in js and '{ backgroundColor: bg }' in js)
+    check("audit: opacity 1 is 'as it is': a dimmed day keeps its dim at a move's end",
+          "k.opacity === 1 ? Object.assign({}, k, { opacity: op }) : k" in js)
+    check("audit: ↻ finishes its turn: a redraw carries on from where it had got to, and the ten-second stop waits for a turn's end",
+          "snap.spin = ((sa.currentTime || 0) % 800) / 800 * 360" in js and 'rotate(" + snap.spin + "deg)' in js
+          and '"animationiteration"' in js)
+    sj = board.SHOW_JS
+    stop = sj[sj.index("  function stop()"):sj.index("  function end(ms)")]
+    check("audit: a show ended by a click or Esc fades away, takes no more clicks, then goes",
+          "o.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 260" in stop and "o.inert = true" in stop
+          and "a.onfinish = a.oncancel = function () { o.remove(); };" in stop and '"#dc-show[aria-hidden=true] *{pointer-events:none!important}"' in sj)
+    fl = board.flurry_js(["\U0001F389"], "Dre sent cheers", back=("dre", "\U0001F389"))
+    check("audit: a cheer's banner fades in (and drops in, with motion), and a click fades it, once",
+          "banner.animate([{ opacity: 0, transform: 'translateX(-50%) translateY(' + (still ? 0 : -10) + 'px)' }" in fl
+          and "banner.style.pointerEvents = 'none';" in fl and "setTimeout(function() { banner.remove(); }, 300);" in fl)
+    from due_crew import cards as K
+    fj = K.float_js({"text": "x", "accent": ["#2e7d32", "#7cc47f"]})
+    check("audit: the peek's Show grows the bubble into its words, which fade in once there's room; the bar's chip fades its words in",
+          "grow.animate([{width: b0.width + 'px', height: b0.height + 'px'}" in fj and "{opacity: 0, offset: 0.4}" in fj
+          and "{opacity: getComputedStyle(x).opacity}" in K.chip_js({"text": "x", "accent": "#2e7d32"}))
+    bp = open(os.path.join(REPO, "due_crew", "board.py"), encoding="utf-8").read()
+    sthit = bp[bp.index("@keyframes sthit"):].split("\n")[0]
+    check("audit: Settings' found row glows back to its own ground (from, and no to)", "{ from {" in sthit and "to {" not in sthit, sthit)
+    srcs = {"motion.js": js, "show.js": sj, "board.py": bp,
+            "cards.py": open(os.path.join(REPO, "due_crew", "cards.py"), encoding="utf-8").read(),
+            "room_model.py": open(os.path.join(REPO, "due_crew", "room_model.py"), encoding="utf-8").read()}
+    for f in sorted(os.listdir(os.path.join(REPO, "site", "public"))):
+        if f.endswith(".js"):
+            srcs["site/" + f] = open(os.path.join(REPO, "site", "public", f), encoding="utf-8").read()
+    bad, n = [], 0
+    for name, src in srcs.items():
+        for kf in _keyframe_lists(src):
+            offs = [float(x) for x in re.findall(r"\boffset: ([0-9.]+)\b", kf)]
+            n += 1
+            if offs != sorted(offs) or any(o > 1 for o in offs):
+                bad.append((name, kf[:120]))
+    check("audit: no keyframe list anywhere goes backwards (a browser drops the whole move without a word)", n >= 60 and not bad, (n, bad))
+    import shutil
+    import subprocess
+    if shutil.which("node"):
+        r = subprocess.run(["node", "--check", os.path.join(REPO, "tools", "motion_audit.js")], capture_output=True, text=True)
+        check("audit: tools/motion_audit.js is valid JS", r.returncode == 0, r.stderr[:300])
 
 
 def main():
