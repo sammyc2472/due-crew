@@ -53,7 +53,11 @@ def _play_cheers():
     c = cfg()
     pips = board.cheer_pips(cheers, _state["entries"], c)  # 3.8.22: each sender's Pip tosses theirs
     # 3.9.1: a drawing or a sign came along: its sender's Pip holds it up, in the show's place
-    doodle = board.doodle_landing(next((ch for ch in cheers if ch.get("doodle")), None), _state["entries"], c)
+    drew = next((ch for ch in cheers if ch.get("doodle")), None)
+    if drew is not None:  # its note goes under it, as its caption (ni: its line in the banner, which then goes)
+        with_notes = [ch for ch in cheers if ch.get("note")]
+        drew = dict(drew, ni=with_notes.index(drew) if drew in with_notes else -1)
+    doodle = board.doodle_landing(drew, _state["entries"], c)
     show = None
     if pips and not (doodle and doodle.get("pip")):  # 3.9.0: a show over the whole Decks screen, a different one each time (Sam)
         show, bag = shows.next_show(c.get(shows.BAG_KEY))

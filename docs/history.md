@@ -2227,3 +2227,23 @@ every release that changes how something works.
   are on" with Undo (`instwono`) for as long as the board shows it; with
   two buttons on otherwise, the line doesn't come (there's no Hard to
   press). Nothing is sent but the setting, as Settings sends it.
+- 3.9.1, the fridge moves onto the Decks screen, and a doodle has a
+  caption (Sam, 17 Oct: "could the fridge just be the periphery of the
+  decks window, like dragged around the anki window? / can we add text to
+  the doodle, or put the included text in the message under like a
+  caption with a from the pip person ya know with their name"). The
+  doodles I'm sent are pinned around the board like magnets on a fridge
+  (`board.fridge_html`, placed and made draggable by `fridge_js` after
+  every draw and swap): in the gutters beside the board, newest highest,
+  left then right; a small pile in the bottom right corner when the
+  window has no room beside it. Drag one anywhere and it stays
+  (`fridgemove`, its place kept as thousandths of the window in
+  wrap.json, so it holds when the window changes size; no redraw); ×
+  takes it down (`fridgedown`). Twelve at most (`fridge.KEEP`, what fits
+  around a board on a laptop); Pip's closet's Fridge page is gone. Each
+  carries the note it came with under it, "from" their Pip and name, and
+  the day; held up as it lands, the sign has the same caption and the
+  note leaves the banner (`doodle_landing`'s `note`, `from`, `ni`). With
+  a drawing or a sign, the Cheer window's note says "A caption under it
+  (optional)". A sign's words are in the board's own font, bold, not a
+  handwriting font (Sam: "consistent with our normal fonts").

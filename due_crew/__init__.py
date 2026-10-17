@@ -584,7 +584,7 @@ def _board_html(c):
                         sev=rooms.board_sev(c, due), closet=_state.get("closet_new"),
                         halloween=closet_flow.halloween_view(_state["labels"][0] if _state["labels"] else "",
                                                              _state["entries"], c),
-                        wrapped=_wrapped_banner(c))
+                        wrapped=_wrapped_banner(c), fridge=closet_flow.fridge())
 
 
 def _you(c, due, plans):
@@ -635,7 +635,8 @@ def _arrive_js():
 
 
 def _on_did_render(deck_browser):
-    mw.web.eval(board.keep_me_in_view_js() + _arrive_js() + (board.wrapped_js() if _state.get("wrapped_open") else ""))
+    mw.web.eval(board.keep_me_in_view_js() + _arrive_js() + (board.wrapped_js() if _state.get("wrapped_open") else "")
+                + board.fridge_js())  # 3.9.1: the doodles placed around the board, and draggable
     _play_cheers()
     if _state.get("plans_midday") and not _closing:
         # 3.7.3: an update that came while reviewing waits for the Decks screen
@@ -881,6 +882,11 @@ def _on_js(handled, message, context):
         open_auth()
     elif cmd == "cheerpick" and len(parts) > 2:
         _cheer_menu(parts[2])
+    elif cmd == "fridgemove" and len(parts) > 4 and parts[3].isdigit() and parts[4].isdigit():
+        _closet(lambda cf: cf.move_fridge(parts[2], int(parts[3][:4]), int(parts[4][:4])))  # 3.9.1: where I left it; no redraw
+    elif cmd == "fridgedown" and len(parts) > 2:
+        _closet(lambda cf: cf.take_down(parts[2]))  # 3.9.1: off the fridge
+        _swap(c)
     elif cmd == "cheersend" and len(parts) > 2:
         from .social import send_from_window
         send_from_window(":".join(parts[2:]))  # 3.9.1: the Cheer window's Send
@@ -992,7 +998,7 @@ def _swap(c, focus=None):
         _rerender()
         return
     html_out = _board_html(c)
-    js = board.swap_js(html_out) + board.keep_me_in_view_js() + _arrive_js()  # 3.8.0: no jumps under the pointer
+    js = board.swap_js(html_out) + board.keep_me_in_view_js() + _arrive_js() + board.fridge_js()  # 3.8.0: no jumps under the pointer
     if _state.get("wrapped_open"):
         js += board.wrapped_js()  # 3.9.0: Wrapped's player, on the card just drawn
     if focus:
@@ -1269,8 +1275,7 @@ def _closet_view():
     rest, st["drawn"] = bool(st.get("drawn")), True  # Pip waves when it opens and at a change, then rests
     near, progress = closet_flow.standing(c)
     return {"tab": st.get("tab"), "have": closet_flow.have(c), "look": closet_flow.look(c),
-            "near": near, "progress": progress, "new": st.get("new") or [], "msg": st.get("msg") or "", "rest": rest,
-            "fridge": closet_flow.fridge()}  # 3.9.1
+            "near": near, "progress": progress, "new": st.get("new") or [], "msg": st.get("msg") or "", "rest": rest}
 
 
 def _closet_cmd(cmd, parts):
@@ -1298,9 +1303,6 @@ def _closet_cmd(cmd, parts):
     elif cmd == "closettab" and st is not None and arg.isdigit() and int(arg) < len(board.CLOSET_TABS):
         st.update({"tab": board.CLOSET_TABS[int(arg)], "msg": ""})
         focus = "closettab:" + arg
-    elif cmd == "closetfridge" and st is not None and arg:
-        closet_flow.take_down(arg)  # 3.9.1: off the fridge; the next one along takes its place
-        st.update({"tab": "Fridge", "msg": ""})
     elif cmd == "closetoff":
         c = cfg()
         if c.get(closet_flow.LOOK_KEY):

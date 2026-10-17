@@ -199,7 +199,7 @@ def note_cheered():
     _ybump("cheered_by")
 
 
-# ---- 3.9.1: the fridge (wrap.json's "fridge") ----
+# ---- 3.9.1: the fridge, around the Decks screen (wrap.json's "fridge") ----
 
 def fridge():
     """The doodles on my fridge, oldest first (fridge.clean)."""
@@ -231,6 +231,19 @@ def take_down(k):
     if len(after) == len(before):
         return False
     w["fridge"] = after
+    _save()
+    return True
+
+
+def move_fridge(k, x, y):
+    """Where I dragged a doodle to (fridge.move); True when it was there."""
+    from . import fridge as fr
+    from .wrap import _wrap_data
+    w = _wrap_data()
+    before = fr.clean(w.get("fridge"))
+    if not any(fr.key(x) == k for x in before):
+        return False
+    w["fridge"] = fr.move(before, k, x, y)
     _save()
     return True
 

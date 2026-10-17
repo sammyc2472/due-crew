@@ -14565,22 +14565,42 @@ def test_doodle_cheers_v391():
     check("the landing: the doodle rides in as data (no '</' to end the script), buys time, and its Pip holds it up in the show's place",
           "</script><b>" not in js and "&lt;/script&gt;" in js and "linger += 2500" in js and "if (held)" in js
           and "var dd = null" in board.flurry_js([party], "x"))
-    # the fridge: mine, the last 24, on this computer
-    cheers = [{"from": "dre", "name": "Dre", "at": f"2026-10-{d:02d}T10:00:00Z", "doodle": draw} for d in range(1, 30)]
+    # the landing's caption (Sam: "put the included text ... under like a caption ... with their name")
+    capt = board.doodle_landing({"from": "dre", "name": "Dre Smith", "note": "good luck", "doodle": draw, "ni": 0}, ents, {"sev": True})
+    js = board.flurry_js([party], "🎉 Dre sent cheers", notes=["good luck"], pips=[{"svg": "<svg></svg>", "a": ["#1", "#2"]}], doodle=capt)
+    dd = json.loads(re.search(r"var dd = (\{.*?\}), held", js).group(1).replace("<\\/", "</"))
+    check("held up, the note it came with goes under it with who it's from, and leaves the banner; in the banner (Pip off, Reduce motion) it stays put",
+          dd["note"] == "good luck" and dd["from"] == "Dre" and dd["ni"] == 0 and "paper(170, 96, true)" in js
+          and "noteEls[dd.ni].remove()" in js and "paper(150, 85, false)" in js and "'from ' + dd.from" in js)
+    # the fridge: mine, around the Decks screen, the last KEEP, on this computer
+    cheers = [{"from": "dre", "name": "Dre", "at": f"2026-10-{d:02d}T10:00:00Z", "note": f"day {d}", "doodle": draw} for d in range(1, 30)]
     items = FR.add([], cheers + [{"from": "mo", "name": "Mo", "at": "x", "doodle": None}], {"dre": "purple"})
     again = FR.add(items, cheers[-2:], {})
-    check("the fridge: the ones that carried a doodle, each once, the last 24, colour as it came",
-          len(items) == FR.KEEP and items[-1]["at"].startswith("2026-10-29") and items[0]["at"].startswith("2026-10-06")
-          and items[0]["a"] == "purple" and again == items)
+    check("the fridge: the ones that carried a doodle, each once, with its note, the last 12, colour as it came",
+          FR.KEEP == 12 and len(items) == 12 and items[-1]["at"].startswith("2026-10-29") and items[0]["at"].startswith("2026-10-18")
+          and items[0]["a"] == "purple" and items[-1]["n"] == "day 29" and again == items)
     k = FR.key(items[-1])
-    check("take one down by its key; junk on the fridge is dropped",
+    moved = FR.move(items, k, 1500, 250)
+    check("take one down by its key; where I dragged it is kept (thousandths of the window, clamped); junk is dropped",
           len(FR.take_down(items, k)) == FR.KEEP - 1 and all(FR.key(x) != k for x in FR.take_down(items, k))
-          and FR.clean([{"d": {"k": "pic"}}, 5, {"from": "x", "d": draw}]) == [{"from": "x", "name": "?", "at": "", "a": "", "d": draw}])
-    page = board.closet_html({"tab": "Fridge", "have": {}, "look": [], "fridge": items[-3:]}, {"accent": "green"})
-    empty = board.closet_html({"tab": "Fridge", "have": {}, "look": [], "fridge": []}, {"accent": "green"})
-    check("Pip's closet has a Fridge: newest first, who and when, each with a way to take it down; empty, it says what goes there",
-          "Fridge <small>3</small>" in page and page.count('class="fr-it"') == 3 and f"duecrew:closetfridge:{k}" in page
-          and page.index("29 Oct") < page.index("27 Oct") and "Only you see it" in empty and "Fridge <small>0</small>" in empty)
+          and moved[-1]["p"] == [1000, 250] and "p" not in moved[0]
+          and FR.clean([{"d": {"k": "pic"}}, 5, {"from": "x", "d": draw, "p": [5, 2000]}]) == [{"from": "x", "name": "?", "at": "", "a": "", "n": "", "d": draw}])
+    people = {"dre": {"user_id": "dre", "name": "Dre", "look": ["cap"], "accent": "purple"}}
+    fr = board.fridge_html(moved[-3:], people, {"sev": True})
+    check("pinned around the Decks screen: newest first, the note under it, from whom (their Pip), a magnet in their colour, a × to take it down, my place for the one I moved",
+          fr.count('class="fz"') == 3 and fr.index("29 Oct") < fr.index("27 Oct") and "&ldquo;day 29&rdquo;" in fr
+          and "from <span class=\"sv-slot\"" in fr and f"duecrew:fridgedown:{k}" in fr and 'data-x="1000" data-y="250"' in fr
+          and f"--fa:{board.accent_pair('purple')[0]}" in fr and board.fridge_html([], people, {}) == ""
+          and "from <b>Dre</b>" in board.fridge_html(moved[-1:], people, {"sev": False})
+          and "Fridge" not in board.closet_html({"tab": "Yours", "have": {}, "look": []}, {"accent": "green"}))
+    fjs = board.fridge_js()
+    check("its script places them (my spot, else the gutters beside the board, else a pile in the corner) and drags; a drop says where",
+          "el.dataset.x / 1000" in fjs and "room.l || room.r" in fjs and "duecrew:fridgemove:" in fjs and "setPointerCapture" in fjs
+          and "resize" in fjs)
+    import shutil
+    import subprocess
+    node = subprocess.run(["node", "--check", "-"], input=fjs, capture_output=True, text=True) if shutil.which("node") else None
+    check("the fridge's script parses", node is None or node.returncode == 0, node and node.stderr[:300])
     # the clicks, as the board sends them
     import due_crew as dc
     from due_crew import closet_flow as cf
@@ -14588,23 +14608,25 @@ def test_doodle_cheers_v391():
     if "aqt.reviewer" not in sys.modules:
         sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
     wrap = _patched_due_crew()
+    swaps = []
     saved = (dc._swap, dc._board_on_screen)
-    dc._swap = lambda c, focus=None: None
+    dc._swap = lambda c, focus=None: swaps.append(1)
     dc._board_on_screen = lambda: True
     try:
         cf.keep_doodles(cheers[-3:], ents)
-        dc._state["closet_open"] = {"tab": "Yours"}
         n0 = len(cf.fridge())
-        dc._on_js(False, "duecrew:closettab:2", DeckBrowser())
-        tab = dc._state["closet_open"]["tab"]
-        dc._on_js(False, "duecrew:closetfridge:" + FR.key(cf.fridge()[0]), DeckBrowser())
-        dc._on_js(False, "duecrew:closetfridge:nope", DeckBrowser())
-        check("on the fridge as they land; the Fridge tab; take one down, through the board's own handler (an unknown key: nothing)",
-              n0 == 3 and tab == "Fridge" and len(cf.fridge()) == 2 and dc._state["closet_open"]["tab"] == "Fridge"
-              and len(wrap._wrap_data()["fridge"]) == 2 and dc._closet_view()["fridge"] == cf.fridge())
+        k0 = FR.key(cf.fridge()[0])
+        dc._on_js(False, f"duecrew:fridgemove:{k0}:120:640", DeckBrowser())
+        placed, redrew = cf.fridge()[0].get("p"), len(swaps)
+        dc._on_js(False, "duecrew:fridgemove:nope:1:1", DeckBrowser())
+        dc._on_js(False, f"duecrew:fridgemove:{k0}:x:1", DeckBrowser())
+        dc._on_js(False, "duecrew:fridgedown:" + k0, DeckBrowser())
+        dc._on_js(False, "duecrew:fridgedown:nope", DeckBrowser())
+        check("on the fridge as they land; a drag keeps its place without a redraw; × takes it down and the board redraws; through the board's own handler",
+              n0 == 3 and placed == [120, 640] and redrew == 0 and len(cf.fridge()) == 2 and swaps
+              and len(wrap._wrap_data()["fridge"]) == 2 and all(FR.key(x) != k0 for x in cf.fridge()))
     finally:
         dc._swap, dc._board_on_screen = saved
-        dc._state["closet_open"] = None
 
 
 def test_cheer_pill_and_window_v391():

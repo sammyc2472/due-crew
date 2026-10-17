@@ -3120,7 +3120,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
            rules_stale=False, squad_view=None, knocks=None, reviews=None,
            sync_error=False, live=False, tricky=None, milestones=None, room=None, plans=None,
            notice=None, asks=None, due=None, you=None, sticking=None, sev=None, milestone_sev=None, closet=None,
-           halloween=None, wrapped=None):
+           halloween=None, wrapped=None, fridge=None):
     """3.8.0: two parts, apart. On top the You bubble (you_html): due,
     Due's view (due_flow.view, None when Due is off), and you, its Plans and
     Insights ({tab, folded, plans, insights}; None draws Due alone). Under it
@@ -3138,7 +3138,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     milestone_sev (3.8.1): {uid: Pip's markup} for a streak banner, Pip in its emoji's place.
     closet (3.8.2): {keys, first}: what just came for Pip, for its line (closet_line).
     halloween (3.8.22): Halloween week's line, its bats and cobweb (halloween_html), or None.
-    wrapped (3.9.0): {year, so_far, look} for the line that your year is ready (1 Dec to 15 Jan), or None."""
+    wrapped (3.9.0): {year, so_far, look} for the line that your year is ready (1 Dec to 15 Jan), or None.
+    fridge (3.9.1): the doodles my crew sent (fridge.clean's), pinned around the Decks screen (fridge_html)."""
     period = cfg.get("period", "today")
     hidden = hidden_tabs(cfg)
     if period not in PERIODS or period in hidden:
@@ -3277,7 +3278,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     people = {x.get("user_id"): x for x in data.get("entries") or []}  # 3.8.22: a plan's squad line, mine too
     return (f'<div id="due-crew" class="dc-frame dc-split">{_css(cfg)}<style>{DUE_CSS}</style>{sheet}'
             f'{you_html(cfg, due, you, people)}<div class="dc-sheet">'
-            f'{_head(period, show_up, hidden, cfg.get("crew_view") or period, sev)}{halloween_html(halloween, cfg)}{body}{foot}</div></div>')
+            f'{_head(period, show_up, hidden, cfg.get("crew_view") or period, sev)}{halloween_html(halloween, cfg)}{body}{foot}</div>'
+            f'{fridge_html(fridge, people, cfg)}</div>')  # 3.9.1: the doodles, pinned around the Decks screen
 
 
 def you_html(cfg, due=None, you=None, people=None):
@@ -3665,25 +3667,13 @@ def settings_html(view, cfg):
 
 # ---- 3.8.2: Pip's closet ----
 
-CLOSET_TABS = ("Yours", "To earn", "Fridge")  # 3.9.1: the doodles my crew sends
+CLOSET_TABS = ("Yours", "To earn")
 # the places on Pip, top to bottom, as the closet lists them; a costume over them all
 CLOSET_PLACES = ("head", "face", "body", "hand", "back")
 PLACE_NAMES = {"head": "Head", "face": "Face", "body": "Body", "hand": "Hand", "back": "Back", _closet.COSTUME: "Costume"}
 
 CLOSET_CSS = """
     #due-crew.dc-closet { text-align: left; }
-    /* 3.9.1: the fridge: each doodle on its paper, a little crooked, like a real one */
-    #due-crew .fr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
-    #due-crew .fr-it { margin: 0; display: grid; gap: 4px; min-width: 0; }
-    #due-crew .fr-paper { aspect-ratio: 300 / 170; max-width: 100%; background: #fffdf7; border: 1px solid #e6dfcc; border-radius: 7px;
-      display: grid; place-items: center; overflow: hidden; color: #2b2d29; box-shadow: 0 3px 8px rgba(0,0,0,.08); transform: rotate(-1.2deg); }
-    #due-crew .fr-it:nth-child(even) .fr-paper { transform: rotate(1deg); }
-    #due-crew .fr-paper svg { width: 100%; height: 100%; display: block; }
-    #due-crew .fr-paper .dd-sign { font-size: 21px; line-height: 1.05; text-align: center; padding: 4px 8px; overflow-wrap: anywhere; }
-    #due-crew .fr-it figcaption { display: flex; gap: 4px; align-items: baseline; font-size: 12px; color: var(--dc-muted); }
-    #due-crew .fr-it figcaption b { color: var(--dc-ink); font-weight: 600; }
-    #due-crew .fr-x { margin-left: auto; color: var(--dc-muted); text-decoration: none; font-size: 15px; line-height: 1; padding: 0 4px; border-radius: 4px; }
-    #due-crew .fr-x:hover, #due-crew .fr-x:focus-visible { color: var(--dc-ink); background: var(--dc-well); }
     #due-crew .cl-wrap { display: grid; grid-template-columns: 176px minmax(0, 1fr); gap: 16px; align-items: start; }
     @media (max-width: 560px) { #due-crew .cl-wrap { grid-template-columns: minmax(0, 1fr); } }
     #due-crew .cl-me { display: grid; gap: 8px; position: sticky; top: 6px; }
@@ -3840,25 +3830,6 @@ def _closet_ons(look):
     return (f'<div class="cl-ons{" covered" if cos else ""}" aria-label="What your Pip has on">' + "".join(rows) + "</div>")
 
 
-def _fridge_html(items):
-    """3.9.1: the fridge: the drawings and signs my crew sent, newest first,
-    each on its paper with who and when, and a way to take it down."""
-    if not items:
-        return ('<div class="cl-next">When someone in your crew sends a cheer with a drawing or a sign, '
-                'it stays here. Only you see it.</div>')
-    tiles = []
-    for x in reversed(items):
-        name = _html.escape(x["name"])
-        when = _short_day(x["at"])
-        art = doodle_html(x["d"], x["a"], x["name"] + "’s drawing")
-        tiles.append(f'<figure class="fr-it"><div class="fr-paper">{art}</div>'
-                     f'<figcaption><b>{name}</b>{f" · {when}" if when else ""}'
-                     f'<a class="fr-x" href="#" title="Take it down" aria-label="Take {name}’s down" {_st_click("closetfridge:" + _fridge.key(x))}>&times;</a>'
-                     f'</figcaption></figure>')
-    return (f'<section class="cl-sec"><h4>Your fridge <small>{len(items)} of {_fridge.KEEP}</small></h4>'
-            f'<div class="fr-grid">{"".join(tiles)}</div><div class="st-note">On this computer only. The oldest comes down to make room.</div></section>')
-
-
 def _short_day(iso):
     """"14 Oct" from a cheer's ISO time; "" for anything else."""
     try:
@@ -3892,8 +3863,7 @@ def closet_html(view, cfg):
           + (f'<a class="st-lk" href="#" {_st_click("closetoff")}>Take it all off</a>' if look else "")
           + '</div>')
     left = len(_closet.THINGS) - len(have)
-    fridge = _fridge.clean(view.get("fridge"))
-    counts = (len(have), left, len(fridge))
+    counts = (len(have), left)
     pills = "".join(f'<button class="st-pill{" on" if t == tab else ""}" aria-pressed="{"true" if t == tab else "false"}" '
                     f'{_st_click(f"closettab:{i}")}>{e(t)} <small>{counts[i]}</small></button>' for i, t in enumerate(CLOSET_TABS))
     if tab == CLOSET_TABS[0]:
@@ -3911,8 +3881,6 @@ def closet_html(view, cfg):
             secs.append(f'<section class="cl-sec"><h4>{"Costumes" if p == _closet.COSTUME else PLACE_NAMES[p]}'
                         f'{f" <small>{len(mine)}</small>" if mine else ""}</h4>{body}</section>')
         main = "".join(secs)
-    elif tab == "Fridge":
-        main = _fridge_html(fridge)
     else:
         near_html = ""
         if view.get("near"):
@@ -4522,7 +4490,8 @@ def loading_card(cfg):
 
 # 3.9.1, doodle cheers: drawn on paper, the same in either theme, like the pad
 DOODLE_PAPER, DOODLE_LINE, DOODLE_INK = "#fffdf7", "#e6dfcc", "#2b2d29"
-DOODLE_HAND = "'Patrick Hand','Comic Sans MS','Chalkboard SE','Segoe Print','Bradley Hand',cursive"
+# the board's own font (Sam: "consistent with our normal fonts"): a sign is the board's words, bold
+BOARD_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
 
 
 def doodle_html(d, accent=None, label="A drawing"):
@@ -4535,7 +4504,7 @@ def doodle_html(d, accent=None, label="A drawing"):
     if not d:
         return ""
     if d["k"] == "sign":
-        return f'<div class="dd-sign" style="font-family:{DOODLE_HAND}">{_html.escape(d["t"])}</div>'
+        return f'<div class="dd-sign" style="font-family:{BOARD_FONT};font-weight:700">{_html.escape(d["t"])}</div>'
     colour = accent_pair(accent)[0]
     paths = []
     for st in d["s"]:
@@ -4557,7 +4526,9 @@ def doodle_landing(cheer, entries, cfg):
     e = next((x for x in entries or [] if x.get("user_id") == cheer.get("from") and not x.get("you")), {})
     name = str(cheer.get("name") or e.get("name") or "?")
     out = {"html": doodle_html(d, e.get("accent"), f"{name}’s drawing"), "sign": d["k"] == "sign",
-           "a": list(accent_pair(e.get("accent"))), "pip": None}
+           "a": list(accent_pair(e.get("accent"))), "pip": None,
+           # its caption, as on the fridge: the note under it, and who it's from (text, never markup)
+           "note": str(cheer.get("note") or "")[:80], "from": name.split(" ")[0][:40], "ni": int(cheer.get("ni", -1))}
     if cfg.get("sev", True):
         out["pip"] = _sev.svg("stretch", "idle", look=e.get("look"), label=_html.escape(f"{name}’s Pip", quote=True))
     return out
@@ -4625,7 +4596,7 @@ CHEER_WINDOW_JS = r"""
         '#dc-cheer .lk{border:0;background:none;padding:1px 4px;font-size:12px;color:' + accent + ';font-weight:600;}' +
         '#dc-cheer .sp{flex:1;}' +
         '#dc-cheer .ct{font-size:11px;color:' + muted + ';font-variant-numeric:tabular-nums;}' +
-        '#dc-cheer .words{position:absolute;inset:0;display:grid;place-items:center;padding:10px 16px;text-align:center;font-family:' + V.hand + ';font-size:30px;line-height:1.1;overflow-wrap:anywhere;}' +
+        '#dc-cheer .words{position:absolute;inset:0;display:grid;place-items:center;padding:10px 16px;text-align:center;font-weight:700;font-size:26px;line-height:1.15;overflow-wrap:anywhere;}' +
         '#dc-cheer .words.ph{color:#b7b1a2;}' +
         '#dc-cheer .tx{width:100%;height:32px;border-radius:8px;border:1px solid ' + line + ';background:' + bg + ';color:' + ink + ';font-size:13px;padding:0 10px;}' +
         '#dc-cheer .tx:focus,#dc-cheer .em input:focus{outline:2px solid ' + accent + ';outline-offset:0;}' +
@@ -4726,6 +4697,7 @@ CHEER_WINDOW_JS = r"""
         });
         var n = points();
         count.textContent = n > MAXP - 500 ? n.toLocaleString() + ' / ' + MAXP.toLocaleString() : '';
+        caption();
     }
     function at(e) {
         var r = cv.getBoundingClientRect();
@@ -4791,6 +4763,7 @@ CHEER_WINDOW_JS = r"""
         var s = signIn.value.replace(/\s+/g, ' ').trim();
         words.textContent = s || "you've got this";
         words.className = s ? 'words' : 'words ph';
+        caption();
     });
     sp.appendChild(words);
     sign.appendChild(signIn);
@@ -4804,10 +4777,18 @@ CHEER_WINDOW_JS = r"""
         tabs.draw.setAttribute('aria-pressed', m === 'draw' ? 'true' : 'false');
         tabs.sign.setAttribute('aria-pressed', m === 'sign' ? 'true' : 'false');
         if (m === 'sign') { signIn.focus(); }
+        caption();
+    }
+    // 3.9.1 (Sam): with a drawing or a sign, the note goes under it, "from" me, as a caption
+    var note = null;
+    function caption() {
+        if (!note) { return; }
+        var has = mode === 'sign' ? !!signIn.value.trim() : strokes.length > 0;
+        note.placeholder = has ? 'A caption under it (optional)' : 'Add a note (optional)';
     }
     show('draw');
 
-    var note = el('input', 'tx');
+    note = el('input', 'tx');
     note.maxLength = NOTE;
     note.placeholder = 'Add a note (optional)';
     note.setAttribute('aria-label', 'Note');
@@ -4860,6 +4841,134 @@ CHEER_WINDOW_JS = r"""
 """
 
 
+# 3.9.1: the fridge, around the Decks screen (Sam: "could the fridge just be the
+# periphery of the decks window, like dragged around the anki window?")
+FRIDGE_W = 124  # px: a doodle on the window, on its paper
+FRIDGE_CSS = """
+    #dc-fridge { position: fixed; left: 0; top: 0; right: 0; bottom: 0; pointer-events: none; z-index: 5; }
+    #dc-fridge .fz { position: fixed; left: -9999px; top: 0; width: %dpx; box-sizing: border-box; pointer-events: auto;
+      background: #fffdf7; border: 1px solid #e6dfcc; border-radius: 6px; padding: 6px 6px 5px; color: #2b2d29;
+      box-shadow: 0 4px 12px rgba(0,0,0,.14); text-align: left; font-size: 10.5px; line-height: 1.3; cursor: grab;
+      touch-action: none; user-select: none; -webkit-user-select: none; transform: rotate(var(--fr, -2deg)); }
+    #dc-fridge .fz::before { content: ""; position: absolute; top: -6px; left: 50%%; width: 12px; height: 12px; margin-left: -6px;
+      border-radius: 50%%; background: var(--fa); box-shadow: 0 1px 2px rgba(0,0,0,.3); }
+    #dc-fridge .fz.drag { cursor: grabbing; box-shadow: 0 12px 26px rgba(0,0,0,.25); z-index: 1; }
+    #dc-fridge .fp { aspect-ratio: 300 / 170; display: grid; place-items: center; overflow: hidden; }
+    #dc-fridge .fp svg { width: 100%%; height: 100%%; display: block; }
+    #dc-fridge .fp .dd-sign { font-size: 13px; line-height: 1.15; text-align: center; padding: 2px 4px; overflow-wrap: anywhere; }
+    #dc-fridge .fq { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-top: 4px; }
+    #dc-fridge .fw { display: flex; align-items: center; gap: 3px; margin-top: 3px; color: #6b665a; white-space: nowrap; overflow: hidden; }
+    #dc-fridge .fw b { color: #2b2d29; overflow: hidden; text-overflow: ellipsis; }
+    #dc-fridge .fw .sv-slot { --sv-a: var(--fa); flex: none; }
+    #dc-fridge .fx { position: absolute; top: 1px; right: 4px; display: none; color: #6b665a; text-decoration: none; font-size: 15px; line-height: 1; }
+    #dc-fridge .fz:hover .fx, #dc-fridge .fz:focus-within .fx { display: block; }
+""" % FRIDGE_W
+
+
+def fridge_html(items, people, cfg):
+    """3.9.1: the doodles my crew sent (fridge.clean's), pinned around the
+    Decks screen like magnets on a fridge, newest first: each on its paper
+    with the note it came with under it and "from" its sender (their Pip
+    beside the name, with Pip on), a magnet in their colour, and a × to
+    take it down. Where I dragged one (its p, thousandths of the window)
+    rides as data; fridge_js places the rest in the gutters beside the
+    board, and lets me drag. "" when there's none."""
+    items = _fridge.clean(items)
+    if not items:
+        return ""
+    notes = []
+    for x in reversed(items):
+        k = _fridge.key(x)
+        e = (people or {}).get(x["from"]) or {}
+        name = _html.escape(x["name"])
+        pip = (_sev.slot(_sev.svg("idle", rest=True, look=e.get("look"), label=f"{name}’s Pip"), 16)
+               if cfg.get("sev", True) and e else "")
+        when = _short_day(x["at"])
+        note = f'<div class="fq">&ldquo;{_html.escape(x["n"])}&rdquo;</div>' if x.get("n") else ""
+        at = f' data-x="{x["p"][0]}" data-y="{x["p"][1]}"' if x.get("p") else ""
+        art = doodle_html(x["d"], x["a"], x["name"] + "’s drawing")
+        notes.append(f'<div class="fz" data-k="{k}"{at} style="--fa:{accent_pair(x["a"])[0]}" title="Drag it anywhere">'
+                     f'<div class="fp">{art}</div>{note}<div class="fw">from {pip}<b>{name}</b>{f" · {when}" if when else ""}</div>'
+                     f'<a class="fx" href="#" title="Take it down" aria-label="Take {name}’s down" '
+                     f'onclick="{_pycmd("fridgedown:" + k)}">&times;</a></div>')
+    return f'<style>{FRIDGE_CSS}</style><div id="dc-fridge" role="group" aria-label="Your fridge">{"".join(notes)}</div>'
+
+
+FRIDGE_JS = r"""
+(function () {
+    var f = document.getElementById('dc-fridge');
+    if (!f) { return; }
+    var notes = Array.prototype.slice.call(f.querySelectorAll('.fz'));
+    var tilt = [-2.5, 2, -1.5, 3, -3, 1.5];
+    function place() {
+        var box = f.getBoundingClientRect(), W = box.width, H = box.height;
+        var dc = f.closest('#due-crew') || document.getElementById('due-crew'), r = dc ? dc.getBoundingClientRect() : null;
+        var left = r ? r.left - box.left : 0, right = r ? box.right - r.right : 0, nw = __W__, gap = 18;
+        var room = { l: left >= nw + 2 * gap, r: right >= nw + 2 * gap }, y = { l: 64, r: 64 }, n = 0;
+        notes.forEach(function (el, i) {
+            el.style.setProperty('--fr', tilt[i % tilt.length] + 'deg');
+            var h = el.offsetHeight || 110, x, top;
+            if (el.dataset.x) {  // where I left it
+                x = el.dataset.x / 1000 * W; top = el.dataset.y / 1000 * H;
+            } else if (room.l || room.r) {  // the gutters beside the board, newest highest, left then right
+                var side = room.l && room.r ? (n % 2 ? 'r' : 'l') : (room.l ? 'l' : 'r');
+                x = side === 'l' ? (left - nw) / 2 : r.right - box.left + (right - nw) / 2;
+                top = y[side]; y[side] += h + gap; n++;
+                if (top + h > H - 8) { top = H - h - 8 - (n % 3) * 10; }  // a pile at the bottom once a side is full
+            } else {  // no gutter (a narrow window): a little pile in the bottom right corner
+                x = W - nw - 16 - (i % 4) * 12; top = H - h - 16 - (i % 4) * 10;
+            }
+            el.style.left = Math.max(4, Math.min(W - nw - 4, x)) + 'px';
+            el.style.top = Math.max(4, Math.min(H - h - 4, top)) + 'px';
+        });
+    }
+    notes.forEach(function (el) {
+        el.addEventListener('pointerdown', function (e) {
+            if (e.button !== 0 || e.target.closest('.fx')) { return; }
+            e.preventDefault();
+            el.setPointerCapture(e.pointerId);
+            var box = f.getBoundingClientRect(), sx = e.clientX, sy = e.clientY,
+                ox = parseFloat(el.style.left) || 0, oy = parseFloat(el.style.top) || 0, moved = false;
+            el.classList.add('drag');
+            function move(ev) {
+                var nx = Math.max(4, Math.min(box.width - el.offsetWidth - 4, ox + ev.clientX - sx)),
+                    ny = Math.max(4, Math.min(box.height - el.offsetHeight - 4, oy + ev.clientY - sy));
+                if (Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) > 3) { moved = true; }
+                el.style.left = nx + 'px'; el.style.top = ny + 'px';
+            }
+            function up() {
+                el.removeEventListener('pointermove', move);
+                el.removeEventListener('pointerup', up);
+                el.removeEventListener('pointercancel', up);
+                el.classList.remove('drag');
+                if (!moved) { return; }
+                var x = Math.round(parseFloat(el.style.left) / box.width * 1000), y = Math.round(parseFloat(el.style.top) / box.height * 1000);
+                el.dataset.x = x; el.dataset.y = y;
+                if (typeof pycmd !== 'undefined') { pycmd('duecrew:fridgemove:' + el.dataset.k + ':' + x + ':' + y); }
+            }
+            el.addEventListener('pointermove', move);
+            el.addEventListener('pointerup', up);
+            el.addEventListener('pointercancel', up);
+        });
+    });
+    place();
+    window.dcFridgePlace = place;
+    if (!window.dcFridgeResize) {
+        window.dcFridgeResize = true;
+        window.addEventListener('resize', function () { if (window.dcFridgePlace) { window.dcFridgePlace(); } });
+    }
+})();
+""".replace("__W__", str(FRIDGE_W))
+
+
+def fridge_js():
+    """3.9.1: after the board is drawn (and at every swap): the fridge's
+    doodles placed (where I left each, else beside the board) and made
+    draggable; a drop is duecrew:fridgemove:<key>:<x>:<y>, in thousandths
+    of the window. Nothing when there's no fridge on the page."""
+    return FRIDGE_JS
+
+
 def cheer_overlay_js(view):
     """3.9.1 (Sam: "make the cheers and doodles modals in the design language
     of our add on"): the Cheer window, drawn on the Decks screen in the
@@ -4872,8 +4981,7 @@ def cheer_overlay_js(view):
     uid is a crewmate. The name and emoji go in as text, never markup."""
     data = {"uid": str(view.get("uid") or ""), "name": str(view.get("name") or "?"),
             "emojis": [str(x) for x in view.get("emojis") or []][:8] or ["\U0001F389"],
-            "pip": view.get("pip") or "", "pen": accent_pair(None)[0] if not _re.fullmatch(r"#[0-9a-fA-F]{6}", str(view.get("pen") or "")) else view["pen"],
-            "hand": DOODLE_HAND}
+            "pip": view.get("pip") or "", "pen": accent_pair(None)[0] if not _re.fullmatch(r"#[0-9a-fA-F]{6}", str(view.get("pen") or "")) else view["pen"]}
     return CHEER_WINDOW_JS.replace("__VIEW__", _json.dumps(data).replace("</", "<\\/"))
 
 
@@ -4950,7 +5058,8 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
     senders_json = _json.dumps([dict(p.get("poses") or {}, name=p.get("name") or "", note=p.get("note") or "", emoji=p.get("emoji") or "\U0001F389", a=p["a"])
                                 for p in (pips or [])][:3]).replace("</", "<\\/") if show else "[]"
     season_one = _json.dumps((list(season or []) or [""])[0])
-    doodle_json = _json.dumps({k: doodle[k] for k in ("html", "sign", "a", "pip")} if doodle and doodle.get("html") else None).replace("</", "<\\/")
+    doodle_json = _json.dumps({k: doodle.get(k) for k in ("html", "sign", "a", "pip", "note", "from", "ni")}
+                              if doodle and doodle.get("html") else None).replace("</", "<\\/")
     return """
     (function() {
         if (document.getElementById('dc-flurry')) { return; }
@@ -4973,12 +5082,13 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
         var title = document.createElement('div');
         title.textContent = %s;
         banner.appendChild(title);
-        var notes = %s;
+        var notes = %s, noteEls = [];
         for (var n = 0; n < notes.length; n++) {
             var line = document.createElement('div');
             line.textContent = '\u201c' + notes[n] + '\u201d';
             line.style.cssText = 'font-size:13px;font-weight:400;margin-top:4px;opacity:0.9;max-width:60vw;';
             banner.appendChild(line);
+            noteEls.push(line);
         }
         banner.style.cssText = 'position:fixed;top:18vh;left:50%%;transform:translateX(-50%%);' +
             'z-index:70;border-radius:12px;padding:10px 20px;font-weight:700;font-size:15px;' +
@@ -5004,20 +5114,40 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
         var pips = %s, still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         // 3.9.1: a doodle buys time, on its paper (light in either theme, like the pad it was drawn on)
         var dd = %s, held = !!(dd && dd.pip && pips.length && !still && document.body.animate);
-        function paper(w, h) {
+        function paper(w, h, caption) {
             var p = document.createElement('div');
-            p.style.cssText = 'width:' + w + 'px;height:' + h + 'px;box-sizing:border-box;background:%s;border:1px solid %s;' +
-                'border-radius:8px;display:grid;place-items:center;overflow:hidden;color:%s;font-weight:400;';
-            p.innerHTML = dd.html;
-            var v = p.querySelector('svg');
+            p.style.cssText = 'width:' + w + 'px;box-sizing:border-box;background:%s;border:1px solid %s;' +
+                'border-radius:8px;overflow:hidden;color:%s;font-weight:400;text-align:left;';
+            var art = document.createElement('div');
+            art.style.cssText = 'height:' + h + 'px;display:grid;place-items:center;overflow:hidden;';
+            art.innerHTML = dd.html;
+            p.appendChild(art);
+            var v = art.querySelector('svg');
             if (v) { v.style.cssText = 'width:100%%;height:100%%;display:block;'; }
-            var words = p.querySelector('.dd-sign');
-            if (words) { words.style.cssText += ';font-size:' + Math.round(h * 0.27) + 'px;line-height:1.05;text-align:center;padding:4px 8px;overflow-wrap:anywhere;'; }
+            var words = art.querySelector('.dd-sign');
+            if (words) { words.style.cssText += ';font-size:' + Math.round(h * 0.22) + 'px;line-height:1.15;text-align:center;padding:4px 10px;overflow-wrap:anywhere;'; }
+            if (caption) {
+                // 3.9.1 (Sam): the note it came with under it, and who it's from, as on the fridge
+                var cap = document.createElement('div');
+                cap.style.cssText = 'padding:0 8px 6px;font-size:11px;line-height:1.3;';
+                if (dd.note) {
+                    var q = document.createElement('div');
+                    q.textContent = '\u201c' + dd.note + '\u201d';
+                    q.style.cssText = 'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;';
+                    cap.appendChild(q);
+                }
+                var by = document.createElement('div');
+                by.textContent = 'from ' + dd.from;
+                by.style.cssText = 'font-weight:700;opacity:.75;margin-top:2px;';
+                cap.appendChild(by);
+                p.appendChild(cap);
+            }
             return p;
         }
         if (dd) {
             linger += 2500;
-            if (!held) { var mini = paper(150, 85); mini.style.margin = '8px auto 2px'; banner.insertBefore(mini, sub || null); }
+            if (!held) { var mini = paper(150, 85, false); mini.style.margin = '8px auto 2px'; banner.insertBefore(mini, sub || null); }
+            else if (dd.ni >= 0 && noteEls[dd.ni]) { noteEls[dd.ni].remove(); }  // its note goes under it, not in the banner too
         }
         // 3.8.22: the board's own theme decides a Pip's colour, light or dark
         function dark(c) {
@@ -5054,7 +5184,7 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
         if (held) {
             // 3.9.1: their Pip holds it up at the board's corner, then ducks down as the banner goes
             var hb = document.getElementById('due-crew'), hr = hb ? hb.getBoundingClientRect() : null;
-            var hvh = window.innerHeight, base = Math.min(hvh, hr ? hr.bottom : hvh), HW = 190, HH = 196;
+            var hvh = window.innerHeight, base = Math.min(hvh, hr ? hr.bottom : hvh), HW = 190, HH = 236;  // room for its caption
             var right = Math.min(window.innerWidth - 8, hr ? hr.right : window.innerWidth - 8);
             var hbox = document.createElement('div');
             hbox.setAttribute('aria-hidden', 'true');
@@ -5062,7 +5192,7 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
                 'px;top:' + (base - HH) + 'px;width:' + HW + 'px;height:' + HH + 'px;';
             var lift = document.createElement('div');
             lift.style.cssText = 'display:flex;flex-direction:column;align-items:center;padding-top:6px;transform:translateY(' + HH + 'px);';
-            var sign = paper(170, 96);
+            var sign = paper(170, 96, true);
             sign.style.transform = 'rotate(-3deg)';
             sign.style.boxShadow = '0 6px 16px rgba(0,0,0,.18)';
             var sticks = document.createElement('div');
