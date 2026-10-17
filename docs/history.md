@@ -2331,6 +2331,40 @@ every release that changes how something works.
   and the config is read from disk once and again only after a save
   (`app.cfg`; Anki read config.json and meta.json at every call, a few
   times a card). A usual card now sends nothing.
+- 3.9.1, the efficiency run, plans and the deck tree (Sam: "please do an
+  efficiency run"). Measured on Anki's own engine, a big collection (35,000
+  notes, 1.1 million answers) following a 30-date plan: a refresh's plan
+  work (`refresh_progress`: the deck read, each date's numbers, today's
+  session) ran whole each time it was asked, and a sync asks twice (its
+  payload, then its commit), about 280 ms each; today's session found the
+  notes started before today with a pass over the whole deck for every date
+  (`DeckIndex.buried_today`, 115 to 160 ms a refresh); and Anki's deck tree
+  (8 to 17 ms) was read by Due's reviews again after every refresh, and by
+  each plan's due on its own. Now `buried_today` finds them once per index
+  and first_seen (the session 6 to 7 ms). `refresh_progress` keeps its last
+  answer under one key of everything it reads (`_progress_key`: col.mod,
+  which every answer and op moves, the day and Due's day, the session's
+  plans, plans.json's state as it stands, the generation, and the due now
+  of each plan deck on my schedule) and gives it again in under a
+  millisecond while that holds; it keeps nothing when a part failed,
+  without a col.mod, or when a date's search is about my own reviews
+  (`is:due`, `rated:`…, read at every refresh as before). The deck tree is
+  read once while it can't have changed (`due_flow.deck_tree`: col.mod,
+  the day, and till a learning card comes inside Anki's learn-ahead,
+  `collapseTime`, where the clock alone moves its count); Due's reviews, a
+  plan's due (its node, as Anki's own `deck_due_tree(did)` finds it) and
+  the bingo's week share it, and a refresh no longer throws it away with
+  Due's count. On that collection, main thread: the push on open 532 → 244
+  ms, the morning's sync 986 → 472 ms (the deck read three times to twice:
+  the morning's own, before it opens, stays), a stale redraw's refresh 870
+  → 338 ms, a second sync 1,261 → 883 ms; over a day of them (nine steps,
+  open to a relaunch) our own deck tree reads 13 → 3. Each kept answer was
+  compared with a fresh read while measuring, and is in
+  `test_efficiency_plans_v391`; `tools/real_anki.py` checks it on Anki's
+  engine (an answer, a learning card coming back, an unsuspend: read again)
+  and that today's session takes under 20 ms. A change made by raw SQL
+  doesn't move col.mod and waits for the next one, as Due's suggestions and
+  my own load already did.
 - 3.9.1, "other" opens the computer's own emoji picker (Sam: "the emoji
   drawer is missing tons that are natively supported. want the other
   option to just open the native drawer?"). A page can't; Python can ask

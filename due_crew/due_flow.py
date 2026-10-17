@@ -170,6 +170,32 @@ def _every_line(key, today, any_day=False):
     return None, None
 
 
+_TREE = {"key": None, "at": 0.0, "until": 0.0, "tree": None}
+
+
+def deck_tree(col):
+    """3.9.1: Anki's deck tree with its counts, read again only once it can
+    have changed: the collection did (every answer and op moves col.mod),
+    the day turned, or a learning card came inside Anki's learn-ahead (the
+    clock moves that count, not a change). Due's reviews, a plan's due and
+    the bingo's week share one read (each had its own: 8 to 17 ms on 35,000
+    cards, again after every refresh)."""
+    mod, now = getattr(col, "mod", None), time.time()
+    key = (app.generation, id(col), mod)
+    if mod is not None and _TREE["key"] == key and _TREE["at"] <= now < _TREE["until"]:
+        return _TREE["tree"]
+    tree = col.sched.deck_due_tree()
+    try:
+        # a learning card counts once it's due within the learn-ahead (preview cards too)
+        ahead = int(col.get_config("collapseTime", 1200) or 0)
+        nxt = col.db.scalar("SELECT min(due) FROM cards WHERE queue IN (1, 4) AND due >= ?", int(now) + ahead)
+        until = min(float(col.sched.day_cutoff), float(nxt) - ahead if nxt else float("inf"))
+    except Exception:
+        until = 0.0  # can't say when it changes: read again next time
+    _TREE.update(key=key, at=now, until=until, tree=tree)
+    return tree
+
+
 def _reviews():
     """{due, done, back, at}: reviews and learning due now across my decks,
     whether I've reviewed today, and the learning cards back later today
@@ -179,7 +205,7 @@ def _reviews():
         return hit[1]
     out = None
     try:
-        tree = mw.col.sched.deck_due_tree()
+        tree = deck_tree(mw.col)
         due = sum(int(n.review_count) + int(n.learn_count) for n in tree.children)
         start = (mw.col.sched.day_cutoff - 86400) * 1000
         done = int(mw.col.db.scalar("SELECT count() FROM revlog WHERE id >= ? AND ease > 0", start) or 0)
@@ -739,7 +765,7 @@ def _due_now(col, dids, tree=None):
             out[int(node.deck_id)] = int(node.review_count) + int(node.learn_count) + int(node.new_count)
         for ch in node.children:
             walk(ch, False)
-    for ch in (tree or col.sched.deck_due_tree()).children:
+    for ch in (tree or deck_tree(col)).children:
         walk(ch, True)
     return out
 

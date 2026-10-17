@@ -228,6 +228,17 @@ class FakeDecks:
     def all_names_and_ids(self, skip_empty_default=False, include_filtered=True):
         return [types.SimpleNamespace(id=d, name=n) for d, n in self.names.items()]  # none filtered
 
+    @classmethod
+    def find_deck_in_tree(cls, node, deck_id):
+        """Anki's: the deck's node in a deck tree (what deck_due_tree(did) returns), else None."""
+        if node.deck_id == deck_id:
+            return node
+        for child in node.children:
+            match = cls.find_deck_in_tree(child, deck_id)
+            if match:
+                return match
+        return None
+
 
 # ------------------------------------------------------------ fake worker
 

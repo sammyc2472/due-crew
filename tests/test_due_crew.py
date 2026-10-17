@@ -15046,6 +15046,197 @@ def test_efficiency_review_screen_v391():
         A._CFG["text"] = None
 
 
+def test_efficiency_plans_v391():
+    """3.9.1, the efficiency run, plans and the deck tree: buried_today finds
+    the notes started before today once a session_view, not once a date; a
+    refresh_progress asked again with nothing it reads changed gives the
+    last answer without reading the deck; Anki's deck tree is read once
+    while it can't have changed, and Due, a plan's due and the bingo share it.
+    Every answer the same as a fresh read."""
+    import time as _t
+    from due_crew import plans as P, plan_flow as F, due_flow as DF, app as A
+    from due_crew.app import _state
+
+    def old_buried(self, cids, first_seen):  # 3.9.0's, a pass over the deck each time
+        before = {self.nid_of[c] for c, (_q, t) in self.cards.items() if t != 0 and first_seen.get(c) != 0}
+        started, nid_of = self.started(), self.nid_of
+        return sum(1 for c in cids if self.cards[c][1] == 0 and self.cards[c][0] in (-2, -3)
+                   and nid_of.get(c) in started and nid_of.get(c) not in before)
+
+    class Passes(dict):
+        n = 0
+
+        def items(self):
+            Passes.n += 1
+            return dict.items(self)
+    col = _plan_col()
+    conn = col.db.conn
+    conn.execute("UPDATE cards SET queue = 2, type = 2 WHERE id = 5")
+    conn.execute("UPDATE cards SET queue = -3, type = 0 WHERE id = 6")
+    for o in (2, 3, 4):
+        fakes.add_card(conn, 60 + o, did=10, queue=-3, nid=50, ord_=o)
+    fakes.add_card(conn, 71, did=10, ctype=2, queue=2, nid=70, ord_=0)  # a second cloze, c1 seen
+    fakes.add_card(conn, 72, did=10, queue=-2, nid=70, ord_=1)
+    refs = [["guid000050", o] for o in range(5)] + [["guid000070", 0], ["guid000070", 1]]
+    plan = {"id": "p", "sched": {"days": [1] * 7, "minutes": 60}, "doc": {"deck": "Step 1", "units": [
+        {"id": f"u{i}", "name": f"Date {i}", "opens": _day(i - 4), "cards": refs[i:i + 3]} for i in range(5)]}}
+    same, passes = [], []
+    for seen in ({}, {5: 0}, {5: 1}, {5: 0, 71: 0}, {71: 2}):
+        idx = P.DeckIndex(col, 10)
+        idx.cards = Passes(idx.cards)
+        idx.started()
+        Passes.n = 0
+        v = F.session_view(plan, {"deck_id": 10}, idx, seen, _day(0))
+        passes.append(Passes.n)
+        keep = P.DeckIndex.buried_today
+        P.DeckIndex.buried_today = old_buried
+        try:
+            ref = F.session_view(plan, {"deck_id": 10}, P.DeckIndex(col, 10), seen, _day(0))
+        finally:
+            P.DeckIndex.buried_today = keep
+        same.append(v == ref)
+    check("buried today: a session_view's answer as before, five dates and the notes started before today found once",
+          all(same) and passes == [1] * 5, (same, passes))
+    idx = P.DeckIndex(col, 10)
+    check("buried today: asked with another first_seen, it's found again",
+          idx.buried_today({62, 63}, {5: 0}) == 2 and idx.buried_today({62, 63}, {5: 1}) == 0
+          and idx.buried_today({62, 63}, {}) == 0 and idx.buried_today({72}, {71: 0}) == 1)
+
+    # refresh_progress: what it reads, in one key
+    store, pid, code, maya = _v381_world()
+    col = _plan_col()
+    col.mod = 1  # Anki's col.mod: every answer and op moves it (the fakes don't, so the test does)
+    fakes.add_card(col.db.conn, 30, did=20, ctype=1, queue=1, due=0)  # a learning card, elsewhere: when it's back is set below
+    builds, trees = [], []
+    real_init, real_tree = P.DeckIndex.__init__, col.sched.deck_due_tree
+
+    def counted(self, c, did):
+        builds.append(did)
+        real_init(self, c, did)
+    clock = [float(col.sched.day_cutoff) - 6 * 3600]
+    ahead = 1200  # Anki's learn-ahead (collapseTime) when the collection doesn't say
+    saved = (DF.time, list(_state.get("labels") or []), _state.get("due_reviews"), _state.get("back_timer"))
+    P.DeckIndex.__init__ = counted
+    col.sched.deck_due_tree = lambda: trees.append(1) or real_tree()
+    DF.time = types.SimpleNamespace(time=lambda: clock[0], localtime=_t.localtime)
+    snap = lambda: {k: json.dumps(_state.get(k), sort_keys=True) for k in F._WRITES}  # noqa: E731
+
+    def fresh():
+        """The same refresh read again with nothing kept: what it must equal."""
+        got, key = snap(), F._last["key"]
+        F._last.update(key=None, got=None)
+        DF._TREE.update(key=None)
+        n, t = len(builds), len(trees)
+        F.refresh_progress()
+        del builds[n:], trees[t:]
+        return got == snap() and F._last["key"] == key
+    try:
+        F._last.update(key=None, got=None)
+        DF._TREE.update(key=None)
+        with _PlanGlue({"A": maya}, {"A": col}) as g:
+            got, _ = maya.follow_plan(code)
+            F.on_followed(got, 10, None, "open")
+            col.mod += 1  # what the open did
+            col.db.conn.execute("UPDATE cards SET due = ? WHERE id = 30", (int(clock[0]) + ahead + 60,))
+            col.sched.due = {10: (4, 0)}
+            del builds[:], trees[:]
+            first = F.refresh_progress()
+            sess = dict(_state["plan_session"][pid])
+            F.refresh_progress()
+            n = len(builds)
+            check("memo: asked again with nothing changed, the last answer: the deck read once, the deck tree once",
+                  n == 1 and len(trees) == 1 and F.refresh_progress() == first and sess["due"] == 4 and fresh(),
+                  (builds, len(trees), sess.get("due")))
+            col.sched.unsuspend_cards([4])  # Extras, a date that opens in three days
+            col.mod += 1
+            F.refresh_progress()
+            check("memo: an unsuspend (col.mod moved) reads the deck again, and what it opened counts",
+                  len(builds) == n + 1 and _state["plan_progress"][pid]["ex"][0] == 1 and first[pid]["ex"][0] == 0 and fresh(),
+                  (builds, _state["plan_progress"][pid]))
+            col.sched.due = {10: (6, 0)}  # a learning card come inside the learn-ahead, in Anki's count: no change made
+            F.refresh_progress()
+            check("memo: Anki's due count holds till a learning card can come back", len(builds) == n + 1
+                  and _state["plan_session"][pid]["due"] == 4)
+            clock[0] += 61
+            F.refresh_progress()
+            check("memo: once one can, the deck tree is read again, and a new due is a new answer",
+                  len(builds) == n + 2 and len(trees) == 3 and _state["plan_session"][pid]["due"] == 6 and fresh(),
+                  (builds, len(trees), _state["plan_session"][pid].get("due")))
+            n = len(builds)
+            g.today["d"] = _day(1)
+            F.refresh_progress()
+            g.today["d"] = _day(0)
+            F.refresh_progress()
+            _state["labels"] = [_day(0), _day(-1)]
+            F.refresh_progress()
+            F._pcfg()["plans"][pid]["missed"] = {"mode": "spread", "day": _day(0)}  # the plan state, not yet saved
+            F.refresh_progress()
+            maya.session["plans"][0]["paused"] = True  # the plans as the session has them
+            F.refresh_progress()
+            check("memo: a paused plan has no session, at once", pid not in _state["plan_session"])
+            maya.session["plans"][0]["paused"] = False
+            A.generation += 1  # a profile or sign-in changed
+            F.refresh_progress()
+            check("memo: the day, Due's day, the plan state, the session's plans and a new profile each read again",
+                  len(builds) == n + 6 and fresh(), builds[n:])
+            n = len(builds)
+            maya.session["plans"][0]["doc"]["units"][1]["search"] = ["is:due"]
+            F.refresh_progress()
+            F.refresh_progress()
+            check("memo: a search about my own reviews is read again at every refresh, as before",
+                  len(builds) == n + 2 and F._last["key"] is None, builds[n:])
+            del maya.session["plans"][0]["doc"]["units"][1]["search"]
+            F.refresh_progress()
+            F.mw.col.mod = None  # an Anki that can't say: every refresh reads, as before
+            F.refresh_progress()
+            F.refresh_progress()
+            check("memo: without col.mod nothing is kept", len(builds) == n + 5 and F._last["key"] is None)
+            col.mod = 50
+
+            # the deck tree: Due's reviews, a plan's due and the bingo's week, one read
+            DF._TREE.update(key=None)
+            del trees[:]
+            _state["due_reviews"] = None
+            r1 = DF._reviews()
+            due = F._due_in(col, 10)
+            DF.after_refresh()  # a refresh drops Due's count, not the tree
+            r2 = DF._reviews()
+            check("tree: Due's count twice and a plan's due, one read of Anki's deck tree, the same answers",
+                  len(trees) == 1 and r1 == r2 and r1["due"] == 6 and due == 6, (len(trees), r1, due))
+            DF._TREE.update(key=None)
+            _state["due_reviews"] = None
+            check("tree: the same as read fresh", DF._reviews() == r1 and len(trees) == 2)
+            t0 = DF.deck_tree(col)
+            col.mod += 1  # an answer
+            t1 = DF.deck_tree(col)
+            clock[0] = float(col.sched.day_cutoff) + 1  # the day turned
+            t2 = DF.deck_tree(col)
+            check("tree: read again after an answer and when the day turns", len(trees) == 4 and t0 is not t1 and t1 is not t2)
+            clock[0] = float(col.sched.day_cutoff) - 6 * 3600
+            col.db.conn.execute("UPDATE cards SET due = ? WHERE id = 30", (int(clock[0]) + ahead + 30,))
+            col.mod += 1
+            DF.deck_tree(col)
+            clock[0] += 29
+            DF.deck_tree(col)
+            check("tree: kept till a learning card comes inside Anki's learn-ahead", len(trees) == 5)
+            clock[0] += 2
+            DF.deck_tree(col)
+            clock[0] -= 10  # the clock put back: read again
+            DF.deck_tree(col)
+            check("tree: then read again; a clock put back reads again too", len(trees) == 7)
+            col.conf["collapseTime"] = 0  # no learn-ahead: the card counts only once it's due
+            col.mod += 1
+            DF.deck_tree(col)
+            clock[0] += 100
+            DF.deck_tree(col)
+            check("tree: Anki's own learn-ahead, from the collection", len(trees) == 8, len(trees))
+    finally:
+        P.DeckIndex.__init__ = real_init
+        DF.time, _state["labels"], _state["due_reviews"], _state["back_timer"] = saved
+        F._last.update(key=None, got=None)
+        DF._TREE.update(key=None)
+
+
 def test_room_sounds_v391():
     """3.9.1, room sounds (Sam's picks): brown noise, rain, fire and waves,
     made from noise in the top bar's page; a speaker on the chip picks one;

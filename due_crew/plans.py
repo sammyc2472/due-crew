@@ -204,6 +204,7 @@ class DeckIndex:
                 self.order[cid] = (int(ctype) == 0, int(due or 0), cid)
         self.fell_back = set()  # unit ids matched by their note ids (C5)
         self._started = None  # note ids with a card answered: siblings wait on these
+        self._before = None  # 3.9.1: (first_seen, the notes started before today), for buried_today
         self._fresh = {}  # a search about my own reviews: this refresh only
         self._ptc = {}  # 3.8.1: what each of a plan's own tags holds here, this refresh
 
@@ -453,8 +454,14 @@ class DeckIndex:
         own progress. A note started before today had them counted as seen
         already; a review card of it due today buries them too, and that
         burial isn't today's progress (nor makes them behind). first_seen:
-        {cid: days ago its first answer was} (0 today)."""
-        before = {self.nid_of[c] for c, (_q, t) in self.cards.items() if t != 0 and first_seen.get(c) != 0}
+        {cid: days ago its first answer was} (0 today), read as it is at the
+        first ask. 3.9.1: the notes started before today are found once per
+        index and first_seen, not once per date (session_view asks for each:
+        a pass over the whole deck every time, 171 ms a refresh on 35,000 cards)."""
+        if self._before is None or self._before[0] is not first_seen:
+            self._before = (first_seen, {self.nid_of[c] for c, (_q, t) in self.cards.items()
+                                         if t != 0 and first_seen.get(c) != 0})
+        before = self._before[1]
         started, nid_of = self.started(), self.nid_of
         return sum(1 for c in cids
                    if self.cards[c][1] == 0 and self.cards[c][0] in (-2, -3)

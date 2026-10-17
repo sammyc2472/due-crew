@@ -1815,11 +1815,43 @@ def build_checks(plan_list):
     return built
 
 
+# 3.9.1: what refresh_progress leaves in _state; its last answer, and what it was read from
+_WRITES = ("plan_progress", "plan_load", "plan_picks", "plan_reviews", "plan_session", "plan_parts", "plan_sibs")
+_last = {"key": None, "got": None}
+
+
+def _progress_key(col):
+    """3.9.1: everything refresh_progress reads, as one value: the
+    collection (every answer and op moves col.mod), the day, Due's day, the
+    plans as the session has them, this profile's plan state, and the due
+    now of each plan deck on my schedule (the clock moves a learning card's
+    count, not a change). None when the collection can't say."""
+    mod = getattr(col, "mod", None)
+    if mod is None:
+        return None
+    try:
+        plans = json.dumps(client().session.get("plans"))
+        state = json.dumps(_state_cfg())
+    except (TypeError, ValueError):
+        return None
+    due = tuple(_due_in(col, st["deck_id"]) for _p, st in _on_schedule(col, followed(), _state_cfg()))
+    return (app.generation, id(col), mod, _today(), _state["labels"][0] if _state["labels"] else "", plans, state, due)
+
+
 def refresh_progress():
     """Main thread: my numbers per unit, for the card and the next sync, and
-    (3.2) today's session for the plans on my schedule."""
+    (3.2) today's session for the plans on my schedule. 3.9.1: asked again
+    with nothing it reads changed (a sync and its commit ask one after the
+    other), the last answer stands: the deck read again and the rest were
+    about 280 ms on 35,000 cards."""
     if not mw.col:
         return {}
+    key = _progress_key(mw.col)
+    if key is not None and _last["key"] == key:
+        _state.update({k: dict(v) if isinstance(v, dict) else v for k, v in _last["got"].items()})
+        _note_recap(_state["plan_session"])
+        return _state["plan_progress"]
+    _last.update(key=None, got=None)
     idxs = {}  # each deck read once for both
     try:
         prog = progress(mw.col, followed(), _state_cfg(), idxs)
@@ -1827,33 +1859,44 @@ def refresh_progress():
         traceback.print_exc()
         return {}
     _state["plan_progress"] = prog
+    whole = True  # kept for the next ask only when every part was read
     try:
         _state["plan_load"] = loads(mw.col, followed(), _state_cfg(), idxs)  # 3.7.81
     except Exception:
+        whole = False
         traceback.print_exc()
     try:
         _state["plan_picks"] = pick_names(mw.col, followed(), _state_cfg(), idxs)  # 3.8.1
         if prog:
             _note_reviews(mw.col, _today())  # 3.8.1: my own load, beside what the plan opens
     except Exception:
+        whole = False
         traceback.print_exc()
     try:
         _state["plan_session"] = sessions(mw.col, followed(), _state_cfg(), _today(), idxs)
         _note_recap(_state["plan_session"])
     except Exception:
+        whole = False
         traceback.print_exc()
     try:
         from . import due_flow
         due_flow.parts(mw.col, idxs, _state["labels"][0] if _state["labels"] else _today())  # Due: each date's resources
     except Exception:
+        whole = False
         traceback.print_exc()
+    # a search about my own reviews (is:due, rated:…) is read at every refresh, as before
+    if whole and key is not None and not any(idx._fresh for idx in idxs.values()):
+        _last.update(key=key, got={k: dict(v) if isinstance(v, dict) else v for k, v in _state.items() if k in _WRITES})
     return prog
 
 
 def _due_in(col, did):
-    """Reviews (and learning cards) due now in a deck and its subdecks, when this Anki can say."""
+    """Reviews (and learning cards) due now in a deck and its subdecks, when
+    this Anki can say. 3.9.1: its node in the deck tree Due reads too, as
+    Anki's deck_due_tree(did) finds it, not a whole tree of its own each time."""
     try:
-        node = col.sched.deck_due_tree(int(did))
+        from . import due_flow
+        node = col.decks.find_deck_in_tree(due_flow.deck_tree(col), int(did))
         return int(node.review_count) + int(node.learn_count)
     except Exception:
         return None
@@ -1926,12 +1969,17 @@ def raise_limit(pid):
     app.swap(cfg())
 
 
+def _on_schedule(col, plan_list, state):
+    """[(plan, its state)] for the plans on my schedule here: not paused, not at my own pace."""
+    todo = [(p, state.get(p["id"])) for p in plan_list if not p.get("paused") and not P.own_pace(p)]
+    return [(p, st) for p, st in todo if st and _deck_ok(col, st.get("deck_id"))]
+
+
 def sessions(col, plan_list, state, today, idxs=None):
     """{plan id: session_view} for the plans on my schedule, on this computer."""
     from .stats.queries import StatsQueries
     q = StatsQueries(col)
-    todo = [(p, state.get(p["id"])) for p in plan_list if not p.get("paused") and not P.own_pace(p)]
-    todo = [(p, st) for p, st in todo if st and _deck_ok(col, st.get("deck_id"))]
+    todo = _on_schedule(col, plan_list, state)
     if not todo:
         return {}
     first = q.first_seen(15)
