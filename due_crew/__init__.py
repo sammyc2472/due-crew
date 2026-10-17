@@ -882,8 +882,10 @@ def _on_js(handled, message, context):
         open_auth()
     elif cmd == "cheerpick" and len(parts) > 2:
         _cheer_menu(parts[2])
-    elif cmd == "fridgemove" and len(parts) > 4 and parts[3].isdigit() and parts[4].isdigit():
-        _closet(lambda cf: cf.move_fridge(parts[2], int(parts[3][:4]), int(parts[4][:4])))  # 3.9.1: where I left it; no redraw
+    elif (cmd == "fridgemove" and len(parts) > 5 and parts[3] in ("l", "r")
+          and (parts[4][1:] if parts[4][:1] == "-" else parts[4]).isdecimal() and parts[5].isdecimal()):
+        # 3.9.1: where I left it, beside the board (side, px from its edge, px down); no redraw
+        _closet(lambda cf: cf.move_fridge(parts[2], parts[3], int(parts[4][:6]), int(parts[5][:5])))
     elif cmd == "fridgedown" and len(parts) > 2:
         _closet(lambda cf: cf.take_down(parts[2]))  # 3.9.1: off the fridge
         _swap(c)

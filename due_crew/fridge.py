@@ -2,9 +2,13 @@
 stay pinned around the Decks screen, like magnets on a fridge (Sam: "could
 the fridge just be the periphery of the decks window, like dragged around
 the anki window?"), each with the note it came with under it and who sent
-it, till I take it down. The last KEEP; each where I dragged it (p: its
-place as thousandths of the window, so it keeps its spot when the window
-changes size), a new one in the gutter beside the board. It's mine: kept
+it, till I take it down. The last KEEP; each where I dragged it, a new
+one in the gutter beside the board. A spot (p) is [side, dx, y]: which
+side of the board, its distance in px from that edge of the board, and
+px from the window's top, so it stays put beside the board as the window
+changes size; when the window's too small for it, it waits in the corner
+and comes back when there's room (Sam: "they should remain in their
+place for if window expanded again"). It's mine: kept
 in wrap.json on this computer, never sent. Pure; the glue is
 closet_flow's, the drawing board.fridge_html and fridge_js."""
 
@@ -20,10 +24,18 @@ def key(item):
     return hashlib.sha1(f'{item.get("from")}|{item.get("at")}'.encode()).hexdigest()[:10]
 
 
+REACH = 4000  # px: how far from the board a spot can be (a big screen's worth)
+
+
+def _px(v, lo):
+    return isinstance(v, int) and not isinstance(v, bool) and lo <= v <= REACH
+
+
 def _place(p):
-    if (isinstance(p, (list, tuple)) and len(p) == 2
-            and all(isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 1000 for v in p)):
-        return [p[0], p[1]]
+    """A spot as move() keeps it, or None (an older one, in thousandths of
+    the window, is None too: that doodle goes back beside the board)."""
+    if isinstance(p, (list, tuple)) and len(p) == 3 and p[0] in ("l", "r") and _px(p[1], -REACH) and _px(p[2], 0):
+        return [p[0], p[1], p[2]]
     return None
 
 
@@ -62,10 +74,11 @@ def take_down(items, k):
     return [x for x in clean(items) if key(x) != k]
 
 
-def move(items, k, x, y):
-    """Where I dragged it: x and y in thousandths of the window (clamped)."""
+def move(items, k, side, dx, y):
+    """Where I dragged it: beside the board's left or right edge ("l",
+    "r"), dx px from that edge, y px from the window's top (clamped)."""
     out = clean(items)
     for item in out:
-        if key(item) == k:
-            item["p"] = [max(0, min(1000, int(x))), max(0, min(1000, int(y)))]
+        if key(item) == k and side in ("l", "r"):
+            item["p"] = [side, max(-REACH, min(REACH, int(dx))), max(0, min(REACH, int(y)))]
     return out

@@ -577,7 +577,7 @@ sections.append("<h3>3.9.1: a crew's first two weeks: the Cheer pill on every ro
                 + board.render(dict(DATA, entries=DRESSED), dict(_MINE, period="today", cheer_pill_from=DATA["labels"][0]), now_ts - 60))
 # the fridge around the Decks screen: in a box of its own here (a transform holds the
 # pinned notes to it, as the window holds them in Anki), placed by its own script
-_NOTES = ["good luck tomorrow!!", "", "you've got this, see you at the library", "", "proud of you"]
+_NOTES = ["proud of you", "", "you've got this, see you at the library", "", "good luck tomorrow!!"]
 sections.append("<h3>3.9.1: the fridge, pinned around the Decks screen: drag one anywhere, × takes it down</h3>"
                 '<div style="position:relative;height:620px;transform:translateZ(0);overflow:hidden;border:1px dashed #ccc">'
                 + board.render(dict(DATA, entries=DRESSED), dict(_MINE, period="today"), now_ts - 60,

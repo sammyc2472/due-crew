@@ -2237,9 +2237,7 @@ every release that changes how something works.
   every draw and swap): in the gutters beside the board, newest highest,
   left then right; a small pile in the bottom right corner when the
   window has no room beside it. Drag one anywhere and it stays
-  (`fridgemove`, its place kept as thousandths of the window in
-  wrap.json, so it holds when the window changes size; no redraw); ×
-  takes it down (`fridgedown`). Twelve at most (`fridge.KEEP`, what fits
+  (`fridgemove`; no redraw); × takes it down (`fridgedown`). Twelve at most (`fridge.KEEP`, what fits
   around a board on a laptop); Pip's closet's Fridge page is gone. Each
   carries the note it came with under it, "from" their Pip and name, and
   the day; held up as it lands, the sign has the same caption and the
@@ -2247,6 +2245,28 @@ every release that changes how something works.
   a drawing or a sign, the Cheer window's note says "A caption under it
   (optional)". A sign's words are in the board's own font, bold, not a
   handwriting font (Sam: "consistent with our normal fonts").
+- 3.9.1, the fridge's notes are Polaroids, and keep their place as the
+  window changes (Sam's pick from the mock "Pinned Doodles", 17 Oct: "B ·
+  Polaroid. Tilt: a little, each its own way. Also: Perfect but get rid
+  of 'From' so there's more room for the Pip", then "make sure different
+  window sizes are handled well... they should remain in their place for
+  if window expanded again"). Each doodle sits in a white frame, the note
+  on its wide bottom edge, then their Pip (now a crew row's size,
+  `FRIDGE_PIP`) and name and the day, with no "from"; a strip of tape in
+  their colour holds it up, see-through (`_tape`: rgba, since Anki's
+  older webviews have no color-mix). The landing sign's caption keeps
+  "from Priya": Pip is holding the sign there, not in its caption. A spot
+  I drag one to is kept beside the board, not as a share of the window:
+  which side (`l`, `r`), px from that edge of the board, px down
+  (`fridge.move`, `duecrew:fridgemove:<key>:<side>:<dx>:<y>`), so as the
+  window grows or shrinks it stays the same distance from the board. A
+  spot the window's too small for waits on the corner pile, still
+  draggable, and goes back when the window has room again (`fridge_js`
+  places at every resize; the spot itself never changes till I drag).
+  One that's too low is lifted into the window for now. Ones that come
+  in later go round the ones I placed, not under them. A spot kept the
+  older way (thousandths, in a test build) is dropped, and that doodle
+  goes back beside the board.
 - 3.9.1, room sounds (Sam's picks from the Room Sounds page, 17 Oct: a
   speaker on the chip; in a crew room each person picks their own; off
   till you pick, the last pick remembered on this computer; made from

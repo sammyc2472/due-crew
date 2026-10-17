@@ -4844,35 +4844,54 @@ CHEER_WINDOW_JS = r"""
 # 3.9.1: the fridge, around the Decks screen (Sam: "could the fridge just be the
 # periphery of the decks window, like dragged around the anki window?")
 FRIDGE_W = 124  # px: a doodle on the window, on its paper
+FRIDGE_PIP = 30  # px: the Pip by a sender's name on the fridge (a crew row's size; its body is 18)
+
+
+def _tape(colour):
+    """A tape strip's colour: an accent's light shade (#rrggbb), see-through
+    as tape is (rgba, since Anki's older webviews have no color-mix)."""
+    h = str(colour).lstrip("#")
+    try:
+        r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    except ValueError:
+        return "rgba(0,0,0,.12)"
+    return f"rgba({r},{g},{b},.6)"
+
+
 FRIDGE_CSS = """
     #dc-fridge { position: fixed; left: 0; top: 0; right: 0; bottom: 0; pointer-events: none; z-index: 5; }
     #dc-fridge .fz { position: fixed; left: -9999px; top: 0; width: %dpx; box-sizing: border-box; pointer-events: auto;
-      background: #fffdf7; border: 1px solid #e6dfcc; border-radius: 6px; padding: 6px 6px 5px; color: #2b2d29;
-      box-shadow: 0 4px 12px rgba(0,0,0,.14); text-align: left; font-size: 10.5px; line-height: 1.3; cursor: grab;
+      background: #fff; border-radius: 2px; padding: 7px; color: #2b2d29;
+      box-shadow: 0 3px 10px rgba(0,0,0,.16), 0 0 0 1px rgba(0,0,0,.05); text-align: left; font-size: 10.5px; line-height: 1.3; cursor: grab;
       touch-action: none; user-select: none; -webkit-user-select: none; transform: rotate(var(--fr, -2deg)); }
-    #dc-fridge .fz::before { content: ""; position: absolute; top: -6px; left: 50%%; width: 12px; height: 12px; margin-left: -6px;
-      border-radius: 50%%; background: var(--fa); box-shadow: 0 1px 2px rgba(0,0,0,.3); }
-    #dc-fridge .fz.drag { cursor: grabbing; box-shadow: 0 12px 26px rgba(0,0,0,.25); z-index: 1; }
-    #dc-fridge .fp { aspect-ratio: 300 / 170; display: grid; place-items: center; overflow: hidden; }
+    #dc-fridge .fz::before { content: ""; position: absolute; top: -8px; left: 50%%; width: 54px; height: 16px; margin-left: -27px;
+      background: var(--ft); transform: rotate(-4deg);
+      clip-path: polygon(0 12%%, 5%% 0, 30%% 6%%, 60%% 0, 95%% 5%%, 100%% 0, 98%% 50%%, 100%% 100%%, 70%% 94%%, 40%% 100%%, 4%% 95%%, 0 100%%, 2%% 50%%); }
+    #dc-fridge .fz.drag { cursor: grabbing; box-shadow: 0 14px 28px rgba(0,0,0,.25); z-index: 1; }
+    #dc-fridge .fp { aspect-ratio: 300 / 170; display: grid; place-items: center; overflow: hidden; background: #f4f3ee; }
     #dc-fridge .fp svg { width: 100%%; height: 100%%; display: block; }
     #dc-fridge .fp .dd-sign { font-size: 13px; line-height: 1.15; text-align: center; padding: 2px 4px; overflow-wrap: anywhere; }
-    #dc-fridge .fq { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-top: 4px; }
-    #dc-fridge .fw { display: flex; align-items: center; gap: 3px; margin-top: 3px; color: #6b665a; white-space: nowrap; overflow: hidden; }
+    #dc-fridge .fq { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-top: 7px;
+      text-align: center; font-size: 11px; }
+    #dc-fridge .fw { display: flex; align-items: center; justify-content: center; gap: 3px; margin-top: 3px; color: #6b665a;
+      white-space: nowrap; overflow: hidden; }
     #dc-fridge .fw b { color: #2b2d29; overflow: hidden; text-overflow: ellipsis; }
     #dc-fridge .fw .sv-slot { --sv-a: var(--fa); flex: none; }
-    #dc-fridge .fx { position: absolute; top: 1px; right: 4px; display: none; color: #6b665a; text-decoration: none; font-size: 15px; line-height: 1; }
+    #dc-fridge .fx { position: absolute; top: 0; right: 3px; display: none; color: #6b665a; text-decoration: none; font-size: 15px; line-height: 1; }
     #dc-fridge .fz:hover .fx, #dc-fridge .fz:focus-within .fx { display: block; }
 """ % FRIDGE_W
 
 
 def fridge_html(items, people, cfg):
     """3.9.1: the doodles my crew sent (fridge.clean's), pinned around the
-    Decks screen like magnets on a fridge, newest first: each on its paper
-    with the note it came with under it and "from" its sender (their Pip
-    beside the name, with Pip on), a magnet in their colour, and a × to
-    take it down. Where I dragged one (its p, thousandths of the window)
-    rides as data; fridge_js places the rest in the gutters beside the
-    board, and lets me drag. "" when there's none."""
+    Decks screen, newest first: each a Polaroid (Sam's pick from "Pinned
+    Doodles": the doodle in a white frame, taped up with a strip in their
+    colour), the note it came with on the frame's wide bottom edge, then
+    their Pip and name (no "from": Sam, "so there's more room for the
+    Pip") and the day, and a × to take it down. Where I dragged one (its p:
+    side of the board, px from its edge, px down) rides as data; fridge_js
+    places the rest in the gutters beside the board, and lets me drag. ""
+    when there's none."""
     items = _fridge.clean(items)
     if not items:
         return ""
@@ -4881,14 +4900,15 @@ def fridge_html(items, people, cfg):
         k = _fridge.key(x)
         e = (people or {}).get(x["from"]) or {}
         name = _html.escape(x["name"])
-        pip = (_sev.slot(_sev.svg("idle", rest=True, look=e.get("look"), label=f"{name}’s Pip"), 16)
+        pip = (_sev.slot(_sev.svg("idle", rest=True, look=e.get("look"), label=f"{name}’s Pip"), FRIDGE_PIP)
                if cfg.get("sev", True) and e else "")
         when = _short_day(x["at"])
         note = f'<div class="fq">&ldquo;{_html.escape(x["n"])}&rdquo;</div>' if x.get("n") else ""
-        at = f' data-x="{x["p"][0]}" data-y="{x["p"][1]}"' if x.get("p") else ""
+        at = f' data-s="{x["p"][0]}" data-x="{x["p"][1]}" data-y="{x["p"][2]}"' if x.get("p") else ""
         art = doodle_html(x["d"], x["a"], x["name"] + "’s drawing")
-        notes.append(f'<div class="fz" data-k="{k}"{at} style="--fa:{accent_pair(x["a"])[0]}" title="Drag it anywhere">'
-                     f'<div class="fp">{art}</div>{note}<div class="fw">from {pip}<b>{name}</b>{f" · {when}" if when else ""}</div>'
+        fa, tape = accent_pair(x["a"])
+        notes.append(f'<div class="fz" data-k="{k}"{at} style="--fa:{fa};--ft:{_tape(tape)}" title="Drag it anywhere">'
+                     f'<div class="fp">{art}</div>{note}<div class="fw">{pip}<b>{name}</b>{f" · {when}" if when else ""}</div>'
                      f'<a class="fx" href="#" title="Take it down" aria-label="Take {name}’s down" '
                      f'onclick="{_pycmd("fridgedown:" + k)}">&times;</a></div>')
     return f'<style>{FRIDGE_CSS}</style><div id="dc-fridge" role="group" aria-label="Your fridge">{"".join(notes)}</div>'
@@ -4899,24 +4919,42 @@ FRIDGE_JS = r"""
     var f = document.getElementById('dc-fridge');
     if (!f) { return; }
     var notes = Array.prototype.slice.call(f.querySelectorAll('.fz'));
-    var tilt = [-2.5, 2, -1.5, 3, -3, 1.5];
-    function place() {
-        var box = f.getBoundingClientRect(), W = box.width, H = box.height;
+    var tilt = [-2.5, 2, -1.5, 3, -3, 1.5], nw = __W__, gap = 18;
+    // the board's edges in the window (its middle, with no board)
+    function edges(box) {
         var dc = f.closest('#due-crew') || document.getElementById('due-crew'), r = dc ? dc.getBoundingClientRect() : null;
-        var left = r ? r.left - box.left : 0, right = r ? box.right - r.right : 0, nw = __W__, gap = 18;
-        var room = { l: left >= nw + 2 * gap, r: right >= nw + 2 * gap }, y = { l: 64, r: 64 }, n = 0;
-        notes.forEach(function (el, i) {
+        return r ? { l: r.left - box.left, r: r.right - box.left } : { l: box.width / 2, r: box.width / 2 };
+    }
+    function place() {
+        var box = f.getBoundingClientRect(), W = box.width, H = box.height, b = edges(box);
+        var room = { l: b.l >= nw + 2 * gap, r: W - b.r >= nw + 2 * gap }, y = { l: 64, r: 64 }, n = 0, pile = 0, mine = [], at = [];
+        notes.forEach(function (el, i) {  // where I left each, beside the board's edge; it waits in the corner while the window's too small
             el.style.setProperty('--fr', tilt[i % tilt.length] + 'deg');
-            var h = el.offsetHeight || 110, x, top;
-            if (el.dataset.x) {  // where I left it
-                x = el.dataset.x / 1000 * W; top = el.dataset.y / 1000 * H;
-            } else if (room.l || room.r) {  // the gutters beside the board, newest highest, left then right
+            var h = el.offsetHeight || 140, x = el.dataset.s ? b[el.dataset.s] + Number(el.dataset.x) : null;
+            if (x !== null && x >= 4 && x + nw <= W - 4) {
+                at[i] = [x, Math.min(Number(el.dataset.y), H - h - 4)];
+                mine.push({ x: x, y: at[i][1], h: h });
+            }
+        });
+        notes.forEach(function (el, i) {
+            var h = el.offsetHeight || 140, x = null, top;
+            if (at[i]) {
+                x = at[i][0]; top = at[i][1];
+            } else if (!el.dataset.s && (room.l || room.r)) {  // the gutters beside the board, newest highest, left then right
                 var side = room.l && room.r ? (n % 2 ? 'r' : 'l') : (room.l ? 'l' : 'r');
-                x = side === 'l' ? (left - nw) / 2 : r.right - box.left + (right - nw) / 2;
-                top = y[side]; y[side] += h + gap; n++;
+                x = side === 'l' ? (b.l - nw) / 2 : b.r + (W - b.r - nw) / 2;
+                top = y[side];
+                for (var k = 0, hit = true; hit && k < mine.length + 1; k++) {  // below any I left in the way
+                    hit = false;
+                    mine.forEach(function (m) {
+                        if (m.x < x + nw + 6 && x < m.x + nw + 6 && m.y < top + h + gap && top < m.y + m.h + gap) { top = m.y + m.h + gap; hit = true; }
+                    });
+                }
+                y[side] = top + h + gap; n++;
                 if (top + h > H - 8) { top = H - h - 8 - (n % 3) * 10; }  // a pile at the bottom once a side is full
-            } else {  // no gutter (a narrow window): a little pile in the bottom right corner
-                x = W - nw - 16 - (i % 4) * 12; top = H - h - 16 - (i % 4) * 10;
+            }
+            if (x === null) {  // no room: a little pile in the bottom right corner
+                x = W - nw - 16 - (pile % 4) * 12; top = H - h - 16 - (pile % 4) * 10; pile++;
             }
             el.style.left = Math.max(4, Math.min(W - nw - 4, x)) + 'px';
             el.style.top = Math.max(4, Math.min(H - h - 4, top)) + 'px';
@@ -4942,9 +4980,12 @@ FRIDGE_JS = r"""
                 el.removeEventListener('pointercancel', up);
                 el.classList.remove('drag');
                 if (!moved) { return; }
-                var x = Math.round(parseFloat(el.style.left) / box.width * 1000), y = Math.round(parseFloat(el.style.top) / box.height * 1000);
-                el.dataset.x = x; el.dataset.y = y;
-                if (typeof pycmd !== 'undefined') { pycmd('duecrew:fridgemove:' + el.dataset.k + ':' + x + ':' + y); }
+                // kept by the nearer half of the board: px from that edge, px down
+                var b = edges(box), x = parseFloat(el.style.left), s = x + nw / 2 < (b.l + b.r) / 2 ? 'l' : 'r';
+                el.dataset.s = s; el.dataset.x = Math.round(x - b[s]); el.dataset.y = Math.round(parseFloat(el.style.top));
+                if (typeof pycmd !== 'undefined') {
+                    pycmd('duecrew:fridgemove:' + el.dataset.k + ':' + s + ':' + el.dataset.x + ':' + el.dataset.y);
+                }
             }
             el.addEventListener('pointermove', move);
             el.addEventListener('pointerup', up);
@@ -4964,8 +5005,10 @@ FRIDGE_JS = r"""
 def fridge_js():
     """3.9.1: after the board is drawn (and at every swap): the fridge's
     doodles placed (where I left each, else beside the board) and made
-    draggable; a drop is duecrew:fridgemove:<key>:<x>:<y>, in thousandths
-    of the window. Nothing when there's no fridge on the page."""
+    draggable; a drop is duecrew:fridgemove:<key>:<side>:<dx>:<y>, beside
+    the board's left or right edge (l, r), px from it, px down. A spot the
+    window's too small for waits in the corner and comes back at the next
+    resize. Nothing when there's no fridge on the page."""
     return FRIDGE_JS
 
 

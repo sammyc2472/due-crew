@@ -235,7 +235,7 @@ def take_down(k):
     return True
 
 
-def move_fridge(k, x, y):
+def move_fridge(k, side, dx, y):
     """Where I dragged a doodle to (fridge.move); True when it was there."""
     from . import fridge as fr
     from .wrap import _wrap_data
@@ -243,7 +243,7 @@ def move_fridge(k, x, y):
     before = fr.clean(w.get("fridge"))
     if not any(fr.key(x) == k for x in before):
         return False
-    w["fridge"] = fr.move(before, k, x, y)
+    w["fridge"] = fr.move(before, k, side, dx, y)
     _save()
     return True
 

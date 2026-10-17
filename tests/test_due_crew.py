@@ -14580,23 +14580,34 @@ def test_doodle_cheers_v391():
           FR.KEEP == 12 and len(items) == 12 and items[-1]["at"].startswith("2026-10-29") and items[0]["at"].startswith("2026-10-18")
           and items[0]["a"] == "purple" and items[-1]["n"] == "day 29" and again == items)
     k = FR.key(items[-1])
-    moved = FR.move(items, k, 1500, 250)
-    check("take one down by its key; where I dragged it is kept (thousandths of the window, clamped); junk is dropped",
+    moved = FR.move(items, k, "l", -9000, 250)
+    check("take one down by its key; where I dragged it is kept beside the board (side, px from its edge, px down; clamped); "
+          "junk and an older spot (thousandths of the window) are dropped",
           len(FR.take_down(items, k)) == FR.KEEP - 1 and all(FR.key(x) != k for x in FR.take_down(items, k))
-          and moved[-1]["p"] == [1000, 250] and "p" not in moved[0]
-          and FR.clean([{"d": {"k": "pic"}}, 5, {"from": "x", "d": draw, "p": [5, 2000]}]) == [{"from": "x", "name": "?", "at": "", "a": "", "n": "", "d": draw}])
+          and moved[-1]["p"] == ["l", -FR.REACH, 250] and "p" not in moved[0]
+          and FR.move(items, k, "up", 5, 5)[-1].get("p") is None
+          and FR.clean([dict(moved[-1], p=["r", 40, 120])])[0]["p"] == ["r", 40, 120]
+          and FR.clean([{"d": {"k": "pic"}}, 5, {"from": "x", "d": draw, "p": [5, 200]}]) == [{"from": "x", "name": "?", "at": "", "a": "", "n": "", "d": draw}])
     people = {"dre": {"user_id": "dre", "name": "Dre", "look": ["cap"], "accent": "purple"}}
     fr = board.fridge_html(moved[-3:], people, {"sev": True})
-    check("pinned around the Decks screen: newest first, the note under it, from whom (their Pip), a magnet in their colour, a × to take it down, my place for the one I moved",
+    tape = board.accent_pair("purple")[1].lstrip("#")
+    check("pinned around the Decks screen as Polaroids (Sam's pick): newest first, the note on the frame, their Pip and name "
+          "(no \"from\", for room), taped up in their colour, a × to take it down, my place for the one I moved",
           fr.count('class="fz"') == 3 and fr.index("29 Oct") < fr.index("27 Oct") and "&ldquo;day 29&rdquo;" in fr
-          and "from <span class=\"sv-slot\"" in fr and f"duecrew:fridgedown:{k}" in fr and 'data-x="1000" data-y="250"' in fr
+          and '<div class="fw"><span class="sv-slot"' in fr and ">from " not in fr and f"duecrew:fridgedown:{k}" in fr
+          and f'data-s="l" data-x="{-FR.REACH}" data-y="250"' in fr
           and f"--fa:{board.accent_pair('purple')[0]}" in fr and board.fridge_html([], people, {}) == ""
-          and "from <b>Dre</b>" in board.fridge_html(moved[-1:], people, {"sev": False})
+          and f"--ft:rgba({int(tape[0:2], 16)},{int(tape[2:4], 16)},{int(tape[4:6], 16)},.6)" in fr
+          and "background: var(--ft)" in board.FRIDGE_CSS and "color-mix" not in board.FRIDGE_CSS
+          and '<div class="fw"><b>Dre</b>' in board.fridge_html(moved[-1:], people, {"sev": False})
           and "Fridge" not in board.closet_html({"tab": "Yours", "have": {}, "look": []}, {"accent": "green"}))
     fjs = board.fridge_js()
     check("its script places them (my spot, else the gutters beside the board, else a pile in the corner) and drags; a drop says where",
-          "el.dataset.x / 1000" in fjs and "room.l || room.r" in fjs and "duecrew:fridgemove:" in fjs and "setPointerCapture" in fjs
-          and "resize" in fjs)
+          "b[el.dataset.s] + Number(el.dataset.x)" in fjs and "room.l || room.r" in fjs and "duecrew:fridgemove:" in fjs
+          and "setPointerCapture" in fjs and "resize" in fjs and "/ 1000" not in fjs)
+    check("a spot the window's too small for waits on the pile and keeps its place for when the window grows",
+          "x >= 4 && x + nw <= W - 4" in fjs and "if (x === null) {" in fjs and "!el.dataset.s && (room.l || room.r)" in fjs
+          and "el.dataset.s = s" in fjs and "below any I left in the way" in fjs)
     import shutil
     import subprocess
     node = subprocess.run(["node", "--check", "-"], input=fjs, capture_output=True, text=True) if shutil.which("node") else None
@@ -14616,14 +14627,19 @@ def test_doodle_cheers_v391():
         cf.keep_doodles(cheers[-3:], ents)
         n0 = len(cf.fridge())
         k0 = FR.key(cf.fridge()[0])
-        dc._on_js(False, f"duecrew:fridgemove:{k0}:120:640", DeckBrowser())
+        dc._on_js(False, f"duecrew:fridgemove:{k0}:l:-150:640", DeckBrowser())
         placed, redrew = cf.fridge()[0].get("p"), len(swaps)
-        dc._on_js(False, "duecrew:fridgemove:nope:1:1", DeckBrowser())
-        dc._on_js(False, f"duecrew:fridgemove:{k0}:x:1", DeckBrowser())
+        dc._on_js(False, "duecrew:fridgemove:nope:l:1:1", DeckBrowser())
+        dc._on_js(False, f"duecrew:fridgemove:{k0}:x:1:1", DeckBrowser())
+        dc._on_js(False, f"duecrew:fridgemove:{k0}:r:1", DeckBrowser())
+        dc._on_js(False, f"duecrew:fridgemove:{k0}:r:-:5", DeckBrowser())
+        dc._on_js(False, f"duecrew:fridgemove:{k0}:r:--5:5", DeckBrowser())
+        dc._on_js(False, f"duecrew:fridgemove:{k0}:r:²:5", DeckBrowser())
+        kept = cf.fridge()[0].get("p")
         dc._on_js(False, "duecrew:fridgedown:" + k0, DeckBrowser())
         dc._on_js(False, "duecrew:fridgedown:nope", DeckBrowser())
         check("on the fridge as they land; a drag keeps its place without a redraw; × takes it down and the board redraws; through the board's own handler",
-              n0 == 3 and placed == [120, 640] and redrew == 0 and len(cf.fridge()) == 2 and swaps
+              n0 == 3 and placed == ["l", -150, 640] and kept == placed and redrew == 0 and len(cf.fridge()) == 2 and swaps
               and len(wrap._wrap_data()["fridge"]) == 2 and all(FR.key(x) != k0 for x in cf.fridge()))
     finally:
         dc._swap, dc._board_on_screen = saved
