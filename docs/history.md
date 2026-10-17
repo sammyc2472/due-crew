@@ -2086,6 +2086,14 @@ every release that changes how something works.
   the wrapper; the blink reads both), spread so none start together, and
   they drift past each other, no order lasting. From the Pip's place in
   its group, so a redraw draws the same and nothing moves for it.
+- 3.9.0, a dressed Pip peeks at the same height (Sam, 17 Oct: "why's the
+  second pip so low?", a Pip in the pumpkin with the umbrella). The peek,
+  the knock, the bounce and the pop-up moved the body by a share of its
+  own box (`translateY(22%)`, the body's fill box), and what Pip has on is
+  drawn in the body, so a hat and a held thing made the box taller and
+  the share bigger: 22% of 86.7 units sank it 19, a plain Pip 10. Each
+  now moves by the drawing's own units, a plain body's share (45.5 tall:
+  22% is 10), so every Pip lands the same whatever it wears.
 - 3.9.0, asks and tips (Sam's picks on the mock "Asks and tips", 17 Oct:
   A with W1, Folded until you open it, nothing new for a helped tip; and
   his note, "find a way to integrate the tipper's pip in the tip").

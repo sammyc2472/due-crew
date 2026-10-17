@@ -455,7 +455,9 @@ svg.sv { overflow: visible; display: block; flex: none; }
 .sv .cf { transform: translate(var(--dx), var(--dy)) rotate(var(--r)); }
 .sv .lab { opacity: .35; }
 .sv .lab.l1 { opacity: 1; }
-.sv.m-peek .sv-body, .sv.m-knock .sv-body, .sv.m-bounce .sv-body { transform: translateY(22%); }
+/* 3.9.0: moved in the drawing's own units, a plain body's share (45.5 tall: 22% is 10), never a share of
+   the body's box, which what Pip has on makes taller (Sam: a pumpkin and an umbrella sank it) */
+.sv.m-peek .sv-body, .sv.m-knock .sv-body, .sv.m-bounce .sv-body { transform: translateY(10px); }
 .sv.m-peek .sv-shadow, .sv.m-in .sv-shadow, .sv.m-knock .sv-shadow, .sv.m-bounce .sv-shadow,
 .sv.m-popup .sv-shadow { display: none; }
 .sv.m-hop .sv-body, .sv.m-twirl .sv-body, .sv.m-shuffle .sv-body, .sv.m-jump .sv-body { transform: translateY(-12px); }
@@ -484,7 +486,7 @@ svg.sv { overflow: visible; display: block; flex: none; }
   /* peeking in, from behind the nudge: up once, a wave */
   .sv.m-peek .sv-body { animation: sv-peek .7s cubic-bezier(.34, 1.56, .64, 1) 1 both; }
   .sv.m-peek .sv-armR { animation: sv-wave 1.6s ease-in-out .5s 1 both; }
-  @keyframes sv-peek { from { transform: translateY(75%); } to { transform: translateY(22%); } }
+  @keyframes sv-peek { from { transform: translateY(34.1px); } to { transform: translateY(10px); } }
   @keyframes sv-wave { 0%, 100% { transform: rotate(0); } 20%, 60% { transform: rotate(-26deg); } 40%, 80% { transform: rotate(10deg); } }
   /* let's go: a squash, a jump, a fist */
   .sv.m-ready .sv-body { animation: sv-ready .9s ease-out 1 both; }
@@ -616,7 +618,7 @@ svg.sv { overflow: visible; display: block; flex: none; }
   .sv.m-popup .sv-body { animation: sv-popup .9s cubic-bezier(.34, 1.56, .64, 1) 1 both; }
   .sv.m-popup .sv-armR { animation: sv-wave 1.6s ease-in-out .55s 1 both; }
   .sv.m-popup .sv-armL { animation: sv-waveL 1.6s ease-in-out .65s 1 both; }
-  @keyframes sv-popup { 0% { transform: translateY(80%) scale(.92); } 65% { transform: translateY(-8px); } 100% { transform: none; } }
+  @keyframes sv-popup { 0% { transform: translateY(36.4px) scale(.92); } 65% { transform: translateY(-8px); } 100% { transform: none; } }
   @keyframes sv-waveL { 0%, 100% { transform: rotate(0); } 20%, 60% { transform: rotate(26deg); } 40%, 80% { transform: rotate(-10deg); } }
   /* 3.8.1, more moves: exam eve */
   .sv.m-pep .sv-star { animation: sv-spin 2.6s ease-in-out infinite; }
@@ -691,8 +693,8 @@ svg.sv { overflow: visible; display: block; flex: none; }
   @keyframes sv-knock { 0%, 100% { transform: rotate(0); } 15% { transform: rotate(-52deg); } 25% { transform: rotate(-30deg); } 35% { transform: rotate(-52deg); }
     45% { transform: rotate(-30deg); } 55% { transform: rotate(-52deg); } 70% { transform: rotate(-10deg); } }
   .sv.m-bounce .sv-body { animation: sv-bounce 1.6s cubic-bezier(.34, 1.2, .64, 1) 1 both; }
-  @keyframes sv-bounce { 0% { transform: translateY(75%); } 25% { transform: translateY(8%); } 42% { transform: translateY(45%); } 66% { transform: translateY(2%); }
-    82% { transform: translateY(28%); } 100% { transform: translateY(22%); } }
+  @keyframes sv-bounce { 0% { transform: translateY(34.1px); } 25% { transform: translateY(3.6px); } 42% { transform: translateY(20.5px); } 66% { transform: translateY(.9px); }
+    82% { transform: translateY(12.7px); } 100% { transform: translateY(10px); } }
   /* 3.8.1, more moves: a room's seats: each does one small thing now and then, at its own time */
   .sv.m-sread .sv-pupils { animation: sv-read 1.75s ease-in-out infinite alternate; }
   .sv.m-snod .sv-body { animation: sv-nod 6s ease-in-out var(--sv-d, 0s) infinite; }
@@ -731,5 +733,5 @@ svg.sv { overflow: visible; display: block; flex: none; }
 .sv.rest .sv-card, .sv.rest .sv-gift, .sv.rest .stk, .sv.rest .sv-cheek, .sv.rest .spark,
 .sv.rest .sv-footL, .sv.rest .sv-footR { transform: none; }
 .sv.rest .cf, .sv.rest .spark, .sv.rest .sv-ring { opacity: 0; }
-.sv.rest.m-peek .sv-body, .sv.rest.m-knock .sv-body, .sv.rest.m-bounce .sv-body { transform: translateY(22%); }
+.sv.rest.m-peek .sv-body, .sv.rest.m-knock .sv-body, .sv.rest.m-bounce .sv-body { transform: translateY(10px); }
 """

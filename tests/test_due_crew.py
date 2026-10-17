@@ -13073,15 +13073,18 @@ def test_sev_moves_v381():
            "bounce"} <= sev.ONCE and not ({"pep", "nod", "think", "tap", "shake", "march", "look"} | set(sev.SEAT_MOVES)) & sev.ONCE
           and all(rests(sev.move(k, m, rest=True)) for k in sev.MOVES for m in sev.moves(k) if m in sev.ONCE))
     check("still, each is the frame that says it: peeking low, the day done in the air (and at rest it's landed)",
-          ".sv.m-peek .sv-body, .sv.m-knock .sv-body, .sv.m-bounce .sv-body { transform: translateY(22%); }" in still
+          ".sv.m-peek .sv-body, .sv.m-knock .sv-body, .sv.m-bounce .sv-body { transform: translateY(10px); }" in still
           and ".sv.m-hop .sv-body, .sv.m-twirl .sv-body, .sv.m-shuffle .sv-body, .sv.m-jump .sv-body" in still
-          and ".sv.rest.m-knock .sv-body, .sv.rest.m-bounce .sv-body { transform: translateY(22%); }" in motion
+          and ".sv.rest.m-knock .sv-body, .sv.rest.m-bounce .sv-body { transform: translateY(10px); }" in motion
           and ".sv.rest .sv-footL, .sv.rest .sv-footR" in motion)
     after = sev.CSS.rsplit("\n}\n", 1)[1]
     check("drawn again it rests with Reduce motion on too: landed, what flew gone (a banner isn't left mid-hop)",
           ".sv.rest .cf, .sv.rest .spark, .sv.rest .sv-ring { opacity: 0; }" in after
           and ".sv.rest .sv-footL, .sv.rest .sv-footR { transform: none; }" in after and "animation" not in after
-          and "translateY(22%)" in after)
+          and "translateY(10px)" in after)
+    check("a body moves in the drawing's own units, never a share of its box, which what Pip has on makes taller "
+          "(3.9.0, Sam: a pumpkin and an umbrella sank the peek)",
+          not re.search(r"translateY\(-?[0-9.]+%\)", sev.CSS), re.findall(r"translateY\(-?[0-9.]+%\)", sev.CSS))
 
     rnd = random.Random(7)
     never = all(sev.pick(k, last, rnd) != last for k in sev.MOVES for last in sev.moves(k) for _ in range(20))
