@@ -15316,6 +15316,16 @@ def test_room_sounds_v391():
         out = subprocess.run([node], input=prog, capture_output=True, text=True, timeout=60)
         check("sounds.js: told where the recordings are, it takes rain, fire and waves as text, never brown noise or anything else",
               out.stdout.strip() == "rain", out.stdout + out.stderr)
+        fake = open(os.path.join(REPO, "tests", "fake_audio.js")).read()
+        prog = (fake + src + "var S = window.dcSounds; S.play('brown', 0.5); flush();"
+                "S.setVolume(0); flush(); var a = log.join(','); S.setVolume(0.4); flush(); var b = log.join(',');"
+                "S.stop(); flush(); var c = log.join(','); S.play('brown', 0.5); flush();"
+                "console.log([a, b, c, log.join(',')].join('|'));")
+        out = subprocess.run([node], input=prog, capture_output=True, text=True, timeout=60)
+        check("sounds.js (3.9.1, the efficiency run): at no volume it sleeps, turned up it wakes; stopped, the context closes "
+              "(its samples go with it) and the next play makes a new one",
+              out.stdout.strip() == "new,suspend|new,suspend,resume|new,suspend,resume,close|new,suspend,resume,close,new",
+              out.stdout + out.stderr)
     else:
         print("SKIP sounds.js in node: no node")
     # the clicks: from the top bar (our page) it's kept; from a card's page, never

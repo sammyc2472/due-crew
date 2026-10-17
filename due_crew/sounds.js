@@ -320,9 +320,18 @@
     setTimeout(function () {
       s.nodes.forEach(function (n) { try { if (n.stop) { n.stop(); } n.disconnect(); } catch (e) {} });
       try { s.fade.disconnect(); } catch (e) {}
-      // nothing playing: the context rests, so a quiet top bar costs nothing
-      if (!now && ac && ac.state === "running") { try { ac.suspend(); } catch (e) {} }
+      rest();
     }, FADE * 1000 + 200);
+  }
+  // nothing playing: the context closes, and what it held goes with it (a
+  // minute of a recording is ~23 MB as samples, the noise 4 MB), so a quiet
+  // top bar costs nothing (3.9.1: suspended, it kept them all)
+  function rest() {
+    if (now || !ac) { return; }
+    var c = ac;
+    ac = master = limiter = null;
+    held = {};
+    try { c.close(); } catch (e) {}
   }
 
   window.dcSounds = {
@@ -358,6 +367,11 @@
     setVolume: function (v) {
       vol = Math.max(0, Math.min(1, +v || 0));
       if (master) { fadeTo(master.gain, vol, 0.08); }
+      // 3.9.1: at no volume it sleeps (a running context costs, silent or not); turned up, it wakes
+      if (ac && vol > 0 && ac.state === "suspended" && now) { ac.resume(); }
+      if (ac && vol === 0) {
+        setTimeout(function () { if (vol === 0 && ac && ac.state === "running") { try { ac.suspend(); } catch (e) {} } }, 150);
+      }
     },
     playing: function () { return now ? now.kind : null; },
     build: build,
