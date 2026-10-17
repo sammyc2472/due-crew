@@ -171,3 +171,10 @@ Worker in `worker/`, duecrew.com is `site/`. Tests:
 The add-on is MIT. The server and site (`worker/`, `site/`) are
 [PolyForm Shield 1.0.0](https://polyformproject.org/licenses/shield/1.0.0).
 Copyright (c) 2026 Sammy Caplan.
+
+**Name, logo and Pip.** The licences above cover Due Crew's code, not its
+name or look. "Due Crew", the Seven days logo, and Pip (its name and how it
+looks) are trademarks of Sammy Caplan and aren't part of either licence.
+You're welcome to build on the code, but give your version its own name,
+logo and characters so no one mistakes it for Due Crew. You can always say
+what it's based on ("based on Due Crew").

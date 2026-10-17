@@ -2292,6 +2292,12 @@ every release that changes how something works.
   the emoji, "Add Draw · Sign" with neither picked, the note and Send. A
   press opens one; a second press on it shuts it. Only an open one is
   sent; a drawing shut away stays on the pad for a reopen.
+- 3.9.1, the README's License section says the name, the Seven days logo
+  and Pip (its name and look) are trademarks, not part of either licence
+  (Sam, 17 Oct, after a look at how another open-source app words it:
+  "just the notice"). The code's licences are unchanged; the logo files
+  and Pip's drawing stay under the add-on's MIT. It's in the part of the
+  README that is the AnkiWeb listing: re-paste it there.
 - 3.9.1, room sounds (Sam's picks from the Room Sounds page, 17 Oct: a
   speaker on the chip; in a crew room each person picks their own; off
   till you pick, the last pick remembered on this computer; made from
