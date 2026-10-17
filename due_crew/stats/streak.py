@@ -11,6 +11,10 @@ gap (the day just before the run): once a sync fills it, the run is counted
 again. And a run the tracker has seen is kept: yesterday's streak, today
 included, is the floor for today's base, so a late or partial history can't
 shorten what was already counted.
+
+3.9.1: that floor, with the day before it empty, is the base, so the day
+after a day studied here needs no scan (a 1,459-day streak's took four,
+233 to 373 ms at 1.1 million reviews, on the day's first push).
 """
 
 import json
@@ -37,6 +41,12 @@ class StreakTracker:
         seen = cached.get("seen") if isinstance(cached.get("seen"), dict) else {}
         if seen.get("day") == self.q.day_label(1):
             kept = max(kept, _int(seen.get("run")))  # what I counted yesterday stands
+            if cached.get("date") != today and self.q.reviews_for_day(kept + 1) == 0:
+                # 3.9.1: the day's first count after a day I saw: the day
+                # before that run still empty, the scan can't find more, so
+                # it isn't run (a long streak's widened to the whole revlog)
+                self._save(dict(cached, date=today, base=kept))
+                return kept
         base = max(self._base_through_yesterday(), kept)
         self._save(dict(cached, date=today, base=base))
         return base

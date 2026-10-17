@@ -56,6 +56,7 @@ _fetching = False
 _menu_done = False
 _last_attempt = 0.0   # when a push was last STARTED, success or not
 _closing = False      # profile_will_close: uploads still go, fetches don't
+_pushed = None        # 3.9.1: (col.mod, my day, my config) as the last push gathered them
 
 def _board_data():
     return {"entries": _state["entries"], "labels": _state["labels"],
@@ -667,7 +668,7 @@ def _on_sync_done(full=False, light=False, fetch=None):
     (on open, on a stale board) send today's numbers only — decks, heatmap,
     and backfill move slowly and cost main-thread SQL, so they wait for a
     real sync or a Refresh."""
-    global _last_attempt
+    global _last_attempt, _pushed
     if not mw.col or not client().signed_in:
         return
     if not account.ready():
@@ -751,8 +752,32 @@ def _on_sync_done(full=False, light=False, fetch=None):
             extras = dict(extras or {}, team=team)
     except Exception:
         traceback.print_exc()
+    _pushed = _push_key() if stats is not None else None
     refresh_board(upload_stats=stats, backfill=week, shared_decks=decks,
                   heatmap=heat, squad_row=row, full=full, fetch=fetch, plans=plan_prog, extras=extras)
+
+
+def _push_key():
+    """What a push's numbers come from: the collection (Anki moves its mod
+    with every change, a sync's too), my day and my config."""
+    try:
+        return (mw.col.mod, StatsQueries(mw.col).day_label(0), cfg())
+    except Exception:
+        return None
+
+
+def _on_anki_sync(*_args):
+    """Anki's own sync finished: everything that changed goes up
+    (_on_sync_done). 3.9.1: the one Anki runs as it closes (after
+    profile_will_close) sends today's numbers only, as the pushes on open
+    do, and nothing when the collection, my day and my config are as the
+    last push that went had them: Anki waits on this before it can quit,
+    and the upload's thread may not outlive it. Leaving a room still goes
+    (rooms.on_close pushes it itself)."""
+    if not _closing:
+        _on_sync_done()
+    elif _pushed is None or _pushed != _push_key() or _state.get("sync_error"):
+        _on_sync_done(light=True)
 
 
 def _our_page(context):
@@ -1543,15 +1568,16 @@ SHARE_KEYS = ("show_up", "share_reviews", "share_time", "share_retention", "shar
 
 
 def _on_signed_out():
-    global _fetching
+    global _fetching, _pushed
     _reset_runtime(keep_sync=True)
     with _lock:
         _fetching = False
+    _pushed = None
     _rerender()
 
 
 def _on_profile_open():
-    global _menu_done, _closing, _last_attempt, _fetching
+    global _menu_done, _closing, _last_attempt, _fetching, _pushed
     if not _menu_done:
         _menu_done = True
         _tools_menu()
@@ -1563,6 +1589,7 @@ def _on_profile_open():
         _fetching = False     # the last profile's refresh can't commit here
     _closing = False
     _last_attempt = 0.0
+    _pushed = None
     client()                  # rebind to this profile's session
     _closet(lambda cf: cf.hook())  # 3.8.2: cards I add count for Pip's closet
     if client().signed_in:
@@ -1729,7 +1756,7 @@ gui_hooks.deck_browser_did_render.append(_on_did_render)
 gui_hooks.sync_did_finish.append(_mark_anki_synced)
 
 
-gui_hooks.sync_did_finish.append(_on_sync_done)
+gui_hooks.sync_did_finish.append(_on_anki_sync)
 
 
 gui_hooks.webview_did_receive_js_message.append(_on_js)

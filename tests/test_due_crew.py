@@ -1985,6 +1985,60 @@ def test_streak_phone_v2111():
           held_streak(5, {"2026-09-30": {"streak": 90}}, "2026-09-24") == 5)
 
 
+def test_streak_shortcut_v391():
+    """3.9.1: the day after a day studied here, the streak's base is the run
+    I saw yesterday when the day before it is still empty: no scan, and the
+    answer 2.11.1's base (kept here) gives, scan and all. The phone filling
+    that day late, a history that lost a day, a day off yesterday, later
+    the same day, a run that isn't a number."""
+    from due_crew.stats.streak import StreakTracker, _int
+
+    def base_2111(t):
+        today = t.q.day_label(0)
+        cached = t._load()
+        kept = 0
+        if cached.get("date") == today:
+            kept = _int(cached.get("base"))
+            if t.q.reviews_for_day(kept + 1) == 0:
+                return kept
+        seen = cached.get("seen") if isinstance(cached.get("seen"), dict) else {}
+        if seen.get("day") == t.q.day_label(1):
+            kept = max(kept, _int(seen.get("run")))
+        return max(t._base_through_yesterday(), kept)
+
+    def case(agos, state):
+        col = make_user_col([TODAY - datetime.timedelta(days=i) for i in agos])
+        files = tempfile.mkdtemp()
+        with open(os.path.join(files, "streak.json"), "w") as f:
+            json.dump(state, f)
+        t = StreakTracker(StatsQueries(col), files)
+        want = base_2111(t)
+        scans = []
+        real = StreakTracker._base_through_yesterday
+        StreakTracker._base_through_yesterday = lambda self: scans.append(1) or real(self)
+        try:
+            got = t.base()
+        finally:
+            StreakTracker._base_through_yesterday = real
+        return got, want, len(scans), json.load(open(os.path.join(files, "streak.json")))
+
+    lb = lambda i: (TODAY - datetime.timedelta(days=i)).isoformat()
+    yday = {"date": lb(1), "base": 299, "seen": {"day": lb(1), "run": 300}}
+    got, want, scans, saved = case(range(1, 301), yday)
+    check("streak: the day after a day studied here, yesterday's run with the day before it empty is the base, unscanned",
+          got == want == 300 and scans == 0 and saved["date"] == lb(0) and saved["base"] == 300, (got, want, scans))
+    for name, agos, state, base in (
+            ("the phone filled the day before the run late: scanned, the longer run", range(1, 321), yday, 320),
+            ("a history that lost a day: the run I saw stands", [i for i in range(1, 301) if i != 150], yday, 300),
+            ("a day off yesterday: yesterday's count was two days ago", range(2, 60),
+             {"date": lb(2), "base": 57, "seen": {"day": lb(2), "run": 58}}, 0),
+            ("later the same day", range(1, 301), dict(yday, date=lb(0), base=300), 300),
+            ("a run that isn't a number", range(1, 301), dict(yday, seen={"day": lb(1), "run": "x"}), 300),
+            ("nothing kept yet", range(1, 80), {}, 79)):
+        got, want, scans, _ = case(agos, state)
+        check(f"streak: {name}: the same base as 2.11.1's", got == want == base, (got, want, scans))
+
+
 def test_main_thread_caches_v29():
     """2.9 (H5, H6): the per-sync SQL gets caches, and the Shared Decks
     dialog stops fingerprinting every deck. Each must give exactly what the
@@ -4845,6 +4899,68 @@ def test_morning_not_while_closing_v311():
         dc._closing = False
 
 
+def test_close_sync_light_v391():
+    """3.9.1: Anki's own sync as it closes (after profile_will_close) sends
+    today's numbers only, as the pushes on open do, and nothing when the
+    collection, my day and my config are as the last push that went had
+    them. Any other sync is the full one, and leaving a room on close still
+    goes (rooms.on_close pushes it itself)."""
+    import due_crew as dc
+    from due_crew.app import _state
+    src = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
+    check("close sync: Anki's sync hook lands in _on_anki_sync",
+          "sync_did_finish.append(_on_anki_sync)" in src and "sync_did_finish.append(_on_sync_done)" not in src)
+    col = make_user_col([TODAY - datetime.timedelta(days=i) for i in range(3)])
+    col.mod = 111
+    cl = new_client(world({"sam": "Sam"}), "sam", "Sam")
+    files = tempfile.mkdtemp()
+    pushes, lights = [], []
+    from due_crew import team_flow
+    names = ("client", "cfg", "_profile_files", "_awaiting_phone", "refresh_board", "_pushed", "_closing", "_last_attempt")
+    saved = {k: getattr(dc, k) for k in names}
+    saved_mods = (dc.mw.col, dc.account.ready, dc.plan_flow.for_sync, dc.plan_flow.maybe_morning, dc.crew_cards.for_sync,
+                  dc.bingo_flow.for_row, team_flow.for_sync, _state.get("sync_error"))
+    dc.mw.col, dc.client, dc.cfg, dc._profile_files = col, (lambda: cl), (lambda: {}), (lambda: files)
+    dc._awaiting_phone = lambda: False
+    dc.account.ready = lambda: True
+    dc.refresh_board = lambda **kw: pushes.append(kw)
+    dc.plan_flow.for_sync = lambda: None
+    dc.plan_flow.maybe_morning = lambda *a, **k: None
+    dc.crew_cards.for_sync = lambda c, light=False: lights.append(light) or None
+    dc.bingo_flow.for_row = lambda c: None
+    team_flow.for_sync = lambda c: None
+    _state["sync_error"] = False
+    try:
+        dc._closing, dc._pushed = False, None
+        dc._on_anki_sync()
+        check("close sync: a sync while Anki is open is the full one, as before",
+              len(pushes) == 1 and pushes[0]["backfill"] is not None and pushes[0]["heatmap"] is not None and lights == [False])
+        check("close sync: a push keeps what its numbers came from", dc._pushed == (111, TODAY.isoformat(), {}), dc._pushed)
+        dc._closing = True
+        dc._on_anki_sync()
+        check("close sync: closing with nothing new since the last push that went, nothing is gathered or sent",
+              len(pushes) == 1)
+        dc._on_sync_done(light=True, fetch=False)  # what rooms.on_close does
+        check("close sync: leaving a room on close still goes", len(pushes) == 2 and pushes[1]["fetch"] is False)
+        col.mod = 112  # the close's own sync sent or brought something
+        dc._on_anki_sync()
+        check("close sync: closing after something changed, today's numbers only: no week, decks, heatmap, known cards or log",
+              len(pushes) == 3 and pushes[2]["upload_stats"] is not None and pushes[2]["backfill"] is None
+              and pushes[2]["shared_decks"] is None and pushes[2]["heatmap"] is None and lights[-1] is True)
+        _state["sync_error"] = True
+        dc._on_anki_sync()
+        check("close sync: the last push didn't go, so this one does", len(pushes) == 4)
+        _state["sync_error"] = False
+        dc._pushed = None
+        dc._on_anki_sync()
+        check("close sync: nothing pushed yet this time Anki was open, it goes", len(pushes) == 5)
+    finally:
+        for k, v in saved.items():
+            setattr(dc, k, v)
+        (dc.mw.col, dc.account.ready, dc.plan_flow.for_sync, dc.plan_flow.maybe_morning, dc.crew_cards.for_sync,
+         dc.bingo_flow.for_row, team_flow.for_sync, _state["sync_error"]) = saved_mods
+
+
 def test_morning_waits_for_decks_v380():
     """3.8.0: the morning never unsuspends on the review screen (its undo
     step would sit on top of the last answer). It waits for the Decks
@@ -7115,6 +7231,76 @@ def test_history_import():
     cl2.push(labels, {}, log={labels[0]: [5, 10, 1, 90.0]}, log_back=({"2025-01-02": [9, 20, 2, None]}, 486))
     check("history: after Delete my log (logCut) the import is done: the old years stay home (3.7.1, D2)",
           (cl2.session.get("log_back") or {}).get("done") is True)
+
+
+NEW_CARDS_213 = ("SELECT CAST((? - r.id / 1000) / 86400 AS INTEGER), COUNT(DISTINCT r.cid) "
+                 "FROM revlog r WHERE r.ease > 0 AND r.id >= ? AND r.id < ? AND NOT EXISTS "
+                 "(SELECT 1 FROM revlog p WHERE p.cid = r.cid AND p.ease > 0 AND p.id < r.id) GROUP BY 1")
+
+
+def test_new_cards_first_answer_v391():
+    """3.9.1, the history import's new cards: each card answered in the
+    window has its first answer read once, where every answer used to look
+    for an earlier one (2.13's query, kept here). The same count, window by
+    window, for cards whose first local row isn't a learn (imported with
+    their schedule, set due first, a filtered deck's preview), relearned,
+    forgotten and learned again, or only ever rescheduled; a first local
+    row being a learn (type 0) isn't what makes a card new."""
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    q = StatsQueries(col)
+    cut = col.sched.day_cutoff
+    cards = {  # cid: (days ago, type, ease), oldest first
+        1: [(400, 0, 1), (400, 0, 3), (300, 1, 3), (100, 1, 1), (100, 2, 3)],  # learned, lapsed, relearned
+        2: [(500, 1, 3), (200, 1, 3)],                                         # imported: its first row a review
+        3: [(450, 4, 0), (130, 1, 3), (5, 1, 4)],                              # set due date first (ease 0)
+        4: [(140, 3, 3), (139, 0, 3), (2, 1, 3)],                              # a filtered deck's preview first
+        5: [(800, 0, 3), (700, 1, 3), (125, 4, 0), (125, 0, 3), (3, 0, 3)],    # forgotten, learned again
+        6: [(126, 5, 0), (126, 5, 0)],                                         # rescheduled, never answered
+        7: [(6, 0, 1), (6, 0, 3), (0, 1, 3)],                                  # new this week
+        8: [(1, 0, 3)],
+        9: [(0, 0, 3)],
+    }
+    for cid, rows in cards.items():
+        for ago, typ, ease in rows:
+            fakes.add_review(conn, (cut - ago * 86400 - 5 * 3600) * 1000, ease=ease, rtype=typ, cid=cid)
+
+    def before(days, skip=0, typed=False):
+        s, e = (cut - (days + skip) * 86400) * 1000, (cut - skip * 86400) * 1000
+        sql = NEW_CARDS_213.replace("r.ease > 0 AND", "r.ease > 0 AND r.type = 0 AND") if typed else NEW_CARDS_213
+        return {q.day_label(int(a)): int(n) for a, n in col.db.all(sql, cut - 1, s, e)}
+
+    windows = ([(1, 0), (7, 0), (8, 0), (31, 0), (32, 0), (120, 0), (366, 120), (366, 486), (366, 852)]
+               + [(30, s) for s in range(0, 900, 30)] + [(60, s) for s in range(0, 900, 60)])
+    bad, per = {}, StatsQueries.PER_CARD_DAYS
+    try:
+        for name, n in (("each card once", 0), ("each answer", 10 ** 6), ("as it picks", per)):
+            StatsQueries.PER_CARD_DAYS = n
+            bad[name] = [(d, s) for d, s in windows if q.new_cards_by_day(d, s) != before(d, s)]
+    finally:
+        StatsQueries.PER_CARD_DAYS = per
+    check("new cards: each card's first answer, read once, counts as 2.13's query did, in every window "
+          "(as does each answer looking for an earlier one, and the pick between them by the window's length)",
+          all(v == [] for v in bad.values()), bad)
+    check("new cards: a card imported with its schedule, set due first or previewed is new on its first answer",
+          sum(q.new_cards_by_day(366, 120).values()) == 3 and sum(q.new_cards_by_day(366, 486).values()) == 2
+          and q.new_cards_by_day(8) == {q.day_label(6): 1, q.day_label(1): 1, q.day_label(0): 1}
+          and q.new_cards_by_day(366, 486) != before(366, 486, typed=True), q.new_cards_by_day(366, 486))
+    check("new cards: relearned, forgotten and learned again, or only rescheduled, it isn't new again",
+          q.new_cards_by_day(120) == {q.day_label(6): 1, q.day_label(1): 1, q.day_label(0): 1}
+          and q.day_label(125) not in q.new_cards_by_day(366, 120) and q.day_label(126) not in q.new_cards_by_day(366, 120))
+    ran = []
+    real_all = col.db.all
+    col.db.all = lambda sql, *a: ran.append((sql, a)) or real_all(sql, *a)
+    q.new_cards_by_day(366, 120)
+    q.new_cards_by_day(8)
+    col.db.all = real_all
+    plan = " ".join(str(r[-1]) for r in real_all("EXPLAIN QUERY PLAN " + ran[0][0], *ran[0][1]))
+    check("new cards: a year looks each card's first answer up once (its select isn't flattened into the count's); "
+          "a week, each answer for an earlier one, as in 2.13",
+          len(ran) == 2 and plan.count("CORRELATED SCALAR SUBQUERY") == 1 and "LIMIT -1" in ran[0][0]
+          and ran[1][0] == NEW_CARDS_213, plan)
 
 
 def test_offline_error_names_no_code():
@@ -13769,14 +13955,20 @@ def test_closet_flow_v382():
     for cid in range(12):
         fakes.add_card(conn, cid + 1, 1, ctype=2, queue=2, ivl=30, lapses=9 if cid < 3 else 0)
     col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    files, saved_files = tempfile.mkdtemp(), cf._profile_files
+    cf._profile_files = lambda: files
     cf._RF["key"] = None
-    f = cf.revlog_facts(col)
-    check("the revlog's facts: days, the longest run, mornings and evenings, Halloween, reviews, learned, leeches",
-          f["days"] == 22 and f["run"] == 20 and f["mornings"] == 22 and f["evenings"] == 22 and f["halloween"] == 2
-          and f["reviews"] == 44 and f["learned"] == 12 and f["leeches"] == 3 and f["back7"] == 1, f)
-    fakes.add_review(conn, int(datetime.datetime.combine(TODAY, datetime.time(9)).timestamp() * 1000))
-    check("the days before today are read once a day; today's hours each time",
-          cf.revlog_facts(col)["reviews"] == 45 and cf._RF["key"] == int(col.sched.day_cutoff))
+    try:
+        f = cf.revlog_facts(col)
+        check("the revlog's facts: days, the longest run, mornings and evenings, Halloween, reviews, learned, leeches",
+              f["days"] == 22 and f["run"] == 20 and f["mornings"] == 22 and f["evenings"] == 22 and f["halloween"] == 2
+              and f["reviews"] == 44 and f["learned"] == 12 and f["leeches"] == 3 and f["back7"] == 1, f)
+        fakes.add_review(conn, int(datetime.datetime.combine(TODAY, datetime.time(9)).timestamp() * 1000))
+        check("the days before the last week are kept (3.9.1: closet_days.json); today's hours count each time",
+              cf.revlog_facts(col)["reviews"] == 45 and cf._RF["key"] == os.path.join(files, cf.HISTORY))
+    finally:
+        cf._profile_files = saved_files
+        cf._RF["key"] = None
     t = cf.clean_tallies({"fifteens": 3, "rooms": -1, "cheered": ["a", 5, "b"], "clear_last": "2026-09-01", "crew": True})
     check("the tallies, as this add-on writes them or less", t == {"fifteens": 3, "cheered": ["a", "b"], "clear_last": "2026-09-01"}, t)
     bf = cf.board_facts({"squads": [{"id": "s1", "founder": "me"}, {"id": "s2"}]}, [], "me",
@@ -13836,6 +14028,105 @@ def test_closet_flow_v382():
     store.settings["bob"]["settings"]["sev_look"] = ["<script>"]
     check("a look that isn't names isn't sent",
           next(e for e in cl.fetch_board(labels)["entries"] if e["user_id"] == "bob")["look"] == [])
+
+
+def _closet_whole(col):
+    """3.8.2's read of the closet's revlog facts, the whole revlog by the
+    hour (kept here to hold 3.9.1's kept history to it)."""
+    from due_crew import closet as C
+    cut = int(col.sched.day_cutoff)
+    hours = {int(h): int(n) for h, n in col.db.all(
+        "SELECT CAST((? - id / 1000) / 3600 AS INTEGER), COUNT(*) FROM revlog "
+        "WHERE ease > 0 AND id >= 0 AND id < ? GROUP BY 1", cut - 1, cut * 1000)}
+    end = datetime.date.fromtimestamp(cut)
+    out = C.from_days({(end - datetime.timedelta(days=h // 24 + 1)).isoformat() for h in hours})
+    out.update(C.from_hours([datetime.datetime.fromtimestamp(cut - (h + 1) * 3600) for h in hours]))
+    out["reviews"] = sum(hours.values())
+    return out
+
+
+def test_closet_history_v391():
+    """3.9.1: Pip's closet keeps the days before the last week in
+    closet_days.json, per profile, where every launch read the whole revlog
+    by the hour. The facts are the whole read's: the first time, again, in
+    a new process, the next day (a day goes in), when a sync brings in a
+    phone's last week or older answers, when the clock moves, and from a
+    file that isn't one; a second profile the same day gets its own."""
+    from due_crew import closet_flow as cf
+    at = lambda d, h: int(datetime.datetime.combine(d, datetime.time(h)).timestamp() * 1000)
+
+    def col_with(days, rollover=4):
+        conn = sqlite3.connect(":memory:")
+        fakes.make_collection(conn)
+        for d, hour in days:
+            fakes.add_review(conn, at(d, hour))
+        fakes.add_review(conn, at(TODAY - datetime.timedelta(days=30), 12), ease=0, rtype=4)  # a set due date: no answer
+        return fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY, rollover))
+
+    D = datetime.date
+    days = ([(TODAY - datetime.timedelta(days=i), h) for i in range(40) if i % 9 != 4 for h in (6, 22)]
+            + [(TODAY - datetime.timedelta(days=i), 1) for i in (2, 11, 25)]
+            + [(D(2025, 10, 24), 9), (D(2025, 10, 25), 9), (D(2025, 10, 31), 20), (D(2025, 12, 31), 23), (D(2026, 1, 1), 0),
+               (D(2026, 3, 14), 12), (D(2024, 2, 29), 7), (D(2026, 6, 21), 5), (D(2025, 2, 13), 13)])
+    col = col_with(days)
+    files = tempfile.mkdtemp()
+    reads = []
+    saved = (cf._profile_files, cf._span, cf._zone)
+    real_span = cf._span
+    cf._profile_files = lambda: files
+    cf._span = lambda c, cut, lo, hi: reads.append(lo) or real_span(c, cut, lo, hi)
+    cf._RF.update(key=None, hist=None)
+
+    def same(c, name, whole):
+        f, want = cf.revlog_facts(c), _closet_whole(c)
+        check(f"closet's history: {name}: the facts are the whole revlog's"
+              + (", read whole" if whole else ", without reading it whole"),
+              {k: f[k] for k in want} == want and reads.count(0) == whole, ({k: (f[k], want[k]) for k in want if f[k] != want[k]}, reads))
+        reads.clear()
+
+    try:
+        same(col, "the first time", 1)
+        kept = json.load(open(os.path.join(files, cf.HISTORY)))
+        same(col, "again", 0)
+        cf._RF.update(key=None, hist=None)
+        same(col, "a new process, from the file", 0)
+        col.sched.day_cutoff += 86400
+        fakes.add_review(col.db.conn, at(TODAY + datetime.timedelta(days=1), 10))
+        same(col, "the next day, a day added to the file", 0)
+        check("closet's history: the file moves on by the day that settled, and only the last week is read fresh",
+              json.load(open(os.path.join(files, cf.HISTORY)))["hi"] == kept["hi"] + 86400 * 1000
+              and kept["hi"] == (fakes.day_cutoff_for(TODAY) - cf.SETTLED * 86400) * 1000 and kept["days"] == sorted(kept["days"]))
+        fakes.add_review(col.db.conn, at(TODAY - datetime.timedelta(days=3), 13))
+        same(col, "a phone's reviews from last week", 0)
+        fakes.add_review(col.db.conn, at(TODAY - datetime.timedelta(days=33), 13))
+        same(col, "a sync bringing in answers from a month ago", 1)
+        col.sched.day_cutoff += 86400 + 3600
+        same(col, "the clock moved an hour (DST)", 1)
+        cf._zone = lambda: [1, 2, ["X", "Y"]]
+        same(col, "another time zone", 1)
+        cf._zone = saved[2]
+        with open(os.path.join(files, cf.HISTORY), "w") as f:
+            f.write('{"days": "2026-01-01"}')
+        cf._RF.update(key=None, hist=None)
+        same(col, "a file that isn't one", 1)
+        midnight = col_with([(TODAY - datetime.timedelta(days=7), 22), (TODAY - datetime.timedelta(days=6), 1),
+                             (TODAY - datetime.timedelta(days=20), 6)], rollover=0)
+        cf._profile_files = lambda: os.path.join(files, "midnight")
+        os.makedirs(os.path.join(files, "midnight"), exist_ok=True)
+        same(midnight, "an evening over the kept edge (a day that rolls over at midnight)", 1)
+        check("closet's history: that evening is one", cf.revlog_facts(midnight)["evenings"] == 1)
+        reads.clear()
+        one = col_with([(TODAY - datetime.timedelta(days=i), 12) for i in range(10, 30)])
+        two = col_with([(TODAY - datetime.timedelta(days=i), 12) for i in range(10, 50, 2)])
+        for name, c in (("one", one), ("two", two)):
+            os.makedirs(os.path.join(files, name), exist_ok=True)
+            cf._profile_files = lambda name=name: os.path.join(files, name)
+            same(c, f"profile {name}", 1)
+        check("closet's history: a second profile the same day (as many rows) gets its own, not the first's",
+              cf.revlog_facts(two)["run"] == 1 and _closet_whole(one)["run"] == 20)
+    finally:
+        cf._profile_files, cf._span, cf._zone = saved
+        cf._RF.update(key=None, hist=None)
 
 
 def test_closet_site_rows_v382():

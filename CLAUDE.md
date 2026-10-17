@@ -103,7 +103,8 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
 - Mine alone, never sent: Insights, my progress on each bingo square,
   checkpoint scores, `wrap.json` (3.8.2: and the closet's tallies in it;
   3.9.1: the fridge, the doodles I was sent and where I pinned them),
-  my room sound and Wrapped.
+  `closet_days.json` (3.9.1: the closet's older days, kept so the revlog
+  isn't read whole at every launch), my room sound and Wrapped.
   Pip's closet is mine (an account key only I read); what my Pip has on
   rides with my accent to mutual friends, as names. A plan's squad (its team on the server) shares only
   that I showed up, my questions and answers, and bingo stamps; never my
