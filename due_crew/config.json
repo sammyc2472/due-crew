@@ -28,5 +28,7 @@
   "hidden_tabs": [],
   "fifteen": true,
   "sev": true,
-  "sev_break": "breathe"
+  "sev_break": "breathe",
+  "room_sound": "off",
+  "room_sound_vol": 60
 }

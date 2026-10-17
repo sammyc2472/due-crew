@@ -21,3 +21,4 @@ users.json
 .dev.vars
 tools/motion_preview.html
 tools/show_preview.html
+tools/chip_preview.html

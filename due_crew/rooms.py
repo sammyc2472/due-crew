@@ -236,7 +236,53 @@ def _data(room, side=None, **kw):
     return room_model.widget_data(room, _state["entries"], _accent_pair(),
                                   compact=bool(c.get("room_compact")),
                                   side=c.get("room_chip_side") if side is None else side,
-                                  sev=sev_on(), brk_pose=_brk_pose(), look=my_look(), **kw)
+                                  sev=sev_on(), brk_pose=_brk_pose(), look=my_look(),
+                                  sound=room_model.sound_pick(c), **kw)
+
+
+def _allow_sound(web):
+    """3.9.1: the top bar's page may play sound without a click on it, so a
+    room sound picked earlier comes back by itself after the bar redraws
+    (Anki's webviews, like browsers, wait for a click otherwise)."""
+    try:
+        web.setPlaybackRequiresGesture(False)
+    except Exception:
+        try:
+            from aqt.qt import QWebEngineSettings
+            web.settings().setAttribute(QWebEngineSettings.WebAttribute.PlaybackRequiresUserGesture, False)
+        except Exception:
+            pass
+
+
+def _sound(top, room):
+    """3.9.1: the top bar's player, told my pick and the session (or, in no
+    room, to stop). Nothing is sent: each person picks their own."""
+    if top is None:
+        return
+    if room is None:
+        _eval(top, room_model.sound_js(None))
+        return
+    kind, vol = room_model.sound_pick(cfg())
+    if kind != "off":
+        _allow_sound(top)
+    _eval(top, room_model.sound_js(room_model.sound_state(room, kind, vol)))
+
+
+def set_sound(parts):
+    """roomsound:<kind>:<volume> from the chip's picker: kept for this
+    computer (it already plays in the page). Only the top bar sends it; a
+    card's page can't (room_model.CARD_PAGE_CMDS)."""
+    got = room_model.sound_cmd(parts)
+    if got is None:
+        return
+    c = cfg()
+    if (c.get("room_sound"), c.get("room_sound_vol")) != got:
+        c["room_sound"], c["room_sound_vol"] = got
+        save_cfg(c)
+    top = _webs()[0]
+    if top is not None and got[0] != "off":
+        _allow_sound(top)
+    _sound(top, my_room())
 
 
 def refresh_widgets():
@@ -246,6 +292,7 @@ def refresh_widgets():
     top, main, bottom = _webs()
     signed = client().signed_in
     room = my_room() if signed else None
+    _sound(top, room)  # 3.9.1: the room sound plays (or stops) in the top bar, whichever little one shows
     if room is None:
         for web in (top, main, bottom):
             _eval(web, room_model.widget_js("off"))
@@ -424,6 +471,7 @@ def on_close():
     """profile_will_close: closing Anki leaves the room. Anki's closing sync
     (or this push) takes it off my week doc; uploads still go while closing.
     3.8.1: a fifteen ends, and its line waits for the next open."""
+    _sound(_webs()[0], None)  # 3.9.1: a room sound stops with the profile
     cl = client()
     room = room_model.clean_room(cl.session.get("room"))
     if cl.signed_in and room_model.is_fifteen(room):
@@ -527,6 +575,8 @@ def on_message(cmd, parts):
         fifteen_answer(cmd[6:])
     elif cmd == "room15x":
         dismiss_fifteen_done()
+    elif cmd == "roomsound":
+        set_sound(parts)  # 3.9.1: the chip's speaker
     elif cmd == "roomtick":
         # a phase changed (the chip saw it): the Decks screen's lobby follows
         if mw.state == "deckBrowser":
