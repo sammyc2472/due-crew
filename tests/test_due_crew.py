@@ -14897,6 +14897,15 @@ def test_room_sounds_v391():
           d["sound"] == {"kind": "rain", "vol": 40} and d["soundKinds"] == list(rm.SOUNDS)
           and d["soundLabels"]["brown"] == "Brown noise" and "'Room sound'" in chip and "roomsound:" in chip
           and rm.widget_data(fif, [], ("#2e7d32", "#7cc47f"))["sound"] is None)
+    check("sounds: the speaker says it (Sam's pick, A): Sound while off, the sound's name while one plays; the speaker alone when compact",
+          "on ? D.soundLabels[snd.kind] : 'Sound'" in chip and "if (!D.compact)" in chip and "if (!open) {" in chip)
+    from due_crew import settings_model as sm
+    tab = board._settings_board({"room_sounds": False})
+    check("sounds: Settings › Board › Room sounds takes them away (on by default; Reset board puts it back on); Find a setting finds it",
+          sm.change(["set", "room_sounds", "0"], {}) == {"room_sounds": False} and sm.BOARD_DEFAULTS["room_sounds"] is True
+          and rm.sounds_on({}) and rm.sounds_on({"room_sounds": True}) and not rm.sounds_on({"room_sounds": False})
+          and 'aria-label="Room sounds"' in tab and "duecrew:set:room_sounds:1" in tab
+          and "rain" in board.FIND_WORDS["set:room_sounds:"])
     check("sounds: the picker folds back by itself (Sam: \"should close after a second or two\"): 1.5 s after a pick, "
           "2 s after the volume, 1 s after the pointer leaves, 4 s if nothing's touched; never mid-drag",
           "picked = true; later(1500);" in chip and "later(2000)" in chip and "if (open) { later(1000); }" in chip
@@ -14947,6 +14956,13 @@ def test_room_sounds_v391():
         R._sound(Top(), None)
         R._sound(None, fif)
         check("sounds: no room, the player stops; no top bar, nothing", evals == [rm.sound_js(None)])
+        mine["room_sounds"] = False
+        evals.clear()
+        R._sound(Top(), fif)
+        dc._on_js(False, "duecrew:roomsound:rain:50|" + rm.CMD_KEY, DeckBrowser())
+        check("sounds: with Room sounds off, the chip has no speaker, the player is told off, and a pick from the chip is ignored",
+              R._data(fif)["sound"] is None and len(evals) == 1 and '"kind": "off"' in evals[0]
+              and mine["room_sound"] == "waves")
     finally:
         R.cfg, R.save_cfg, R._webs, R._eval, R.my_room = saved
     check("sounds: a recording's address is its kind's, in the add-on's own folder (quoted); brown noise and strangers have none",
@@ -14963,7 +14979,7 @@ def test_room_sounds_v391():
           rm.RECORDED == ("rain", "fire", "waves") and all(h.startswith(b"OggS") and b"OpusHead" in h for h in heads.values())
           and all(40_000 < n < 700_000 for n in sizes.values())
           and all(f"`{k}.ogg`" in credits for k in rm.RECORDED) and "CC0 1.0" in credits
-          and all(u in credits for u in ("freesound.org/s/525046/", "freesound.org/s/132534/", "freesound.org/s/339517/"))
+          and all(u in credits for u in ("freesound.org/s/525046/", "freesound.org/s/132534/", "freesound.org/s/587164/"))
           and "due_crew/sounds/*.ogg" in open(os.path.join(REPO, "LICENSE")).read(), sizes)
 
 

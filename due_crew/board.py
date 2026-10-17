@@ -3484,6 +3484,8 @@ def _settings_board(cfg, fsrs=None):
             + '</div><div class="st-h">Fifteen and Pip</div><div class="st-box">'
             + _st_row("Fifteen? in the top bar", _st_switch("fifteen", g("fifteen", True), "Fifteen? in the top bar"),
                       "And the nudge, when you haven't started by your usual time")
+            + _st_row("Room sounds", _st_switch("room_sounds", g("room_sounds", True), "Room sounds"),
+                      "Brown noise, rain, fire or waves while you study, from the chip")
             + _st_row("Pip", _st_switch("sev", g("sev", True), "Pip"), "The square from the logo, beside it and in your fifteens")
             + _st_row("Pip&rsquo;s closet", f'<a class="st-lk" href="#" {_st_click("closet")}>Open</a>',
                       "What your Pip has on, and what it&rsquo;s earned")
@@ -3567,6 +3569,7 @@ FIND_WORDS = {
     "setreset": "default", "friends": "crew code invite", "decks": "share deck",
     # 3.8.1: the Fifteen and Pip
     "set:fifteen:": "timer pomodoro focus session nudge minutes", "set:sev:": "mascot character buddy animation",
+    "set:room_sounds:": "sound noise audio ambient music speaker volume brown rain fire waves",
     "set:sev_break:": "breathe stretch rest",
     # 3.9.1
     "set:two_buttons:": "hard easy again good pass fail answer buttons keys review",

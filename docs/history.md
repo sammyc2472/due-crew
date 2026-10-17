@@ -2306,6 +2306,21 @@ every release that changes how something works.
   they were published with. Nothing changes for anyone using Due Crew.
   The notice is in the part of the README that is the AnkiWeb listing:
   re-paste it there.
+- 3.9.1, room sounds, round three (Sam, 17 Oct: "the waves sound isn't
+  great so let's find another", then "A for waves. Fifteen sounds, my
+  pick: A · Say it on the chip. Make an option to remove sounds in
+  settings"). Waves are el_boss's "Evening Ocean Waves along the Pacific
+  Coast" (CC0, freesound 587164), picked by ear from three loops cut the
+  same way (a Cornish beach and a calm Whidbey Island shore were the
+  others); 60.5 s from 6:08.5, the seam between two waves. The chip's
+  speaker says what it is, from the mock "Fifteen Sounds": "Sound" in a
+  quiet outline while it's off, the sound's name in your colour while
+  one plays ("Rain"); the speaker alone when the chip is compact, and
+  while the picker is out (it says it all). And Settings › Board ›
+  Fifteen and Pip › Room sounds (on by default, this computer's, like the
+  pick; Reset board turns it back on): off, the chip has no speaker, the
+  player is told off, and a pick from the chip is ignored
+  (`room_model.sounds_on`; the chip redraws on the switch).
 - 3.9.1, the sound picker folds back by itself (Sam: "the sounds chip
   should close after a second or two because now just stays open"): 1.5 s
   after a pick, 2 s after the volume last moved, 1 s after the pointer

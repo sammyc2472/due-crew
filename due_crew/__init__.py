@@ -1407,7 +1407,8 @@ def _apply_settings(changed, focus=None):
     c = cfg()
     push = any(k in changed and changed[k] != c.get(k) for k in SHARE_KEYS)
     chip = any(k in changed and changed[k] != c.get(k, d) for k, d in
-               (("room_chip_side", "right"), ("fifteen", True), ("sev", True), ("sev_break", "breathe")))  # 3.8.1
+               (("room_chip_side", "right"), ("fifteen", True), ("sev", True), ("sev_break", "breathe"),
+                ("room_sounds", True)))  # 3.8.1; 3.9.1: the speaker comes and goes
     leeches = changed.get("due_leeches") is True and not c.get("due_leeches")
     c.update(changed)
     save_cfg(c)

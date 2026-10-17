@@ -15,6 +15,6 @@ made brown noise's level), limited to -1 dBFS and encoded as Ogg Opus,
 |---|---|---|---|
 | `rain.ogg` | "Rain Slowly Passing TREATED LOOP_Edgewater_06192020.wav", https://freesound.org/s/525046/ | speakwithanimals | 60 s from 0:36, 3 s crossfade |
 | `fire.ogg` | "Fireplace.wav", https://freesound.org/s/132534/ | inchadney | 60 s from 2:49, 1.5 s crossfade |
-| `waves.ogg` | "Waves at Baltic Sea shore.wav", https://freesound.org/s/339517/ | pulswelle | 61.5 s from 5:18.5, 1.5 s crossfade, the seam between two waves |
+| `waves.ogg` | "Evening Ocean Waves along the Pacific Coast", https://freesound.org/s/587164/ | el_boss | 60.5 s from 6:08.5, 1.5 s crossfade, the seam between two waves (Sam's pick of three, by ear) |
 
 Thank you, all three.

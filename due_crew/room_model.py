@@ -676,7 +676,10 @@ _RUNTIME = r"""
     // under it, so the chip itself becomes the picker: Off, the four sounds, the volume
     var snd = D.sound;
     if (snd) {
-      var spk = el('span', 'display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;flex:none;margin:0 -4px 0 0;cursor:pointer;'),
+      // 3.9.1 (Sam's pick, "Fifteen sounds": A, say it on the chip): the speaker with a word,
+      // Sound while it's off and the sound's name while one plays; just the speaker when compact
+      var spk = el('span', 'display:inline-flex;align-items:center;gap:3px;height:20px;border-radius:10px;flex:none;margin:0 -5px 0 1px;cursor:pointer;' +
+        (D.compact ? 'width:20px;justify-content:center;' : 'padding:0 8px 0 5px;font:600 11px -apple-system,Segoe UI,sans-serif;')),
           pk = el('span', 'display:none;align-items:center;gap:3px;'), opts = [], open = false;
       spk.setAttribute('role', 'button'); spk.setAttribute('aria-label', 'Room sound'); spk.tabIndex = 0;
       D.soundKinds.forEach(function (k) {
@@ -703,6 +706,12 @@ _RUNTIME = r"""
         icon.appendChild(svgEl('path', on ? {d: 'M10.8 5.7a3.2 3.2 0 0 1 0 4.6M12.6 3.9a5.8 5.8 0 0 1 0 8.2', fill: 'none', stroke: c.a,
           'stroke-width': '1.4', 'stroke-linecap': 'round'} : {d: 'M11 6.2l3 3.6m0-3.6l-3 3.6', stroke: c.mut, 'stroke-width': '1.3', 'stroke-linecap': 'round'}));
         spk.textContent = ''; spk.appendChild(icon);
+        if (!D.compact) {  // while the picker's out it says it all: the speaker alone, to fold it back
+          if (!open) { spk.appendChild(el('span', '', on ? D.soundLabels[snd.kind] : 'Sound')); }
+          spk.style.border = '1px solid ' + (open ? 'transparent' : on ? c.a : c.line);
+          spk.style.padding = open ? '0 2px' : '0 8px 0 5px';
+          spk.style.color = on ? c.a : c.ink;
+        }
         spk.title = on ? 'Room sound: ' + D.soundLabels[snd.kind] : 'Room sound: off';
         spk.setAttribute('aria-expanded', open ? 'true' : 'false');
         opts.forEach(function (b) {
@@ -1053,6 +1062,12 @@ def chip_side(value):
 SOUNDS = ("off", "brown", "rain", "fire", "waves")
 SOUND_LABELS = {"off": "Off", "brown": "Brown noise", "rain": "Rain", "fire": "Fire", "waves": "Waves"}
 SOUND_VOL = 60
+
+
+def sounds_on(cfg):
+    """3.9.1 (Sam: "make an option to remove sounds in settings"): Settings ›
+    Board › Room sounds. Off, the chip has no speaker and nothing plays."""
+    return cfg.get("room_sounds", True) is not False
 
 
 def sound_pick(cfg):

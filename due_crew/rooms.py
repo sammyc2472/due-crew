@@ -238,7 +238,7 @@ def _data(room, side=None, **kw):
                                   compact=bool(c.get("room_compact")),
                                   side=c.get("room_chip_side") if side is None else side,
                                   sev=sev_on(), brk_pose=_brk_pose(), look=my_look(),
-                                  sound=room_model.sound_pick(c), **kw)
+                                  sound=room_model.sound_pick(c) if room_model.sounds_on(c) else None, **kw)
 
 
 def _allow_sound(web):
@@ -263,7 +263,8 @@ def _sound(top, room):
     if room is None:
         _eval(top, room_model.sound_js(None))
         return
-    kind, vol = room_model.sound_pick(cfg())
+    c = cfg()
+    kind, vol = room_model.sound_pick(c) if room_model.sounds_on(c) else ("off", 0)
     if kind != "off":
         _allow_sound(top)
     _eval(top, room_model.sound_js(room_model.sound_state(room, kind, vol, _sound_files())))
@@ -288,7 +289,7 @@ def set_sound(parts):
     computer (it already plays in the page). Only the top bar sends it; a
     card's page can't (room_model.CARD_PAGE_CMDS)."""
     got = room_model.sound_cmd(parts)
-    if got is None:
+    if got is None or not room_model.sounds_on(cfg()):
         return
     c = cfg()
     if (c.get("room_sound"), c.get("room_sound_vol")) != got:

@@ -683,6 +683,9 @@ In Anki (as a follower):
 
 ### 3.9.1: room sounds
 
+- [ ] The chip says it: during a fifteen, the chip ends in an outlined "Sound" with a struck speaker; pick Rain: it reads "Rain" in your colour. A compact chip (narrow window) shows the speaker alone.
+- [ ] Settings › Board › Fifteen and Pip › Room sounds, off: the sound fades out and the chip loses its speaker at once; start a fifteen: no speaker, no sound. On again: the speaker's back, with your last pick.
+- [ ] Waves is the Pacific one now: listen for two minutes on loop: no click where it comes round.
 - [ ] The picker closes by itself: pick Rain and leave the pointer still: the chip is back in a second and a half. Drag the volume and hold it: it stays; let go: back in two seconds. Open it and move away: back in a second. Open it and do nothing: back in four.
 - [ ] The recordings: Rain is real rain, Fire a real fireplace (soft pops), Waves a real shore, each a minute or so that loops; listen for two minutes each: no click or jump where it comes round, no voices, birds or hum. Brown noise is the made one, as before. All four sound about as loud at one volume.
 
