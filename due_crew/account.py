@@ -31,11 +31,10 @@ ACCOUNT_KEYS = ("share_reviews", "share_time", "share_retention", "share_streak"
                 "accent",  # 3.5.0: the site wears it too
                 "due_items", "due_ticks", "due_show", "due_suggest",  # Due: my own to-dos, on every computer
                 "sev_look", "sev_closet",  # 3.8.2: Pip's closet: what it has on, what it's earned
-                "wrapped_seen",  # 3.9.0: the year whose Wrapped line was put away, on every computer
-                "beast", "beasts", "share_beast")  # 3.9.0: the Backlog Beast (the one now, the ones met), beasts at all, My beast
+                "wrapped_seen")  # 3.9.0: the year whose Wrapped line was put away, on every computer
 ACCENT_NAMES = ("green", "blue", "purple", "teal", "amber", "rose")
 _BOOLS = ("share_reviews", "share_time", "share_retention", "share_streak",
-          "share_heatmap", "show_up", "paused", "due_show", "due_suggest", "beasts", "share_beast")
+          "share_heatmap", "show_up", "paused", "due_show", "due_suggest")
 _TEXT = {"exam_date": 10, "away_from": 10, "away_to": 10, "status": 80, "emoji": 16,
          "crew_label": 40, "wrapped_seen": 4}
 MAX_SQUADS = 20
@@ -113,9 +112,6 @@ def clean(s):
     if isinstance(s.get("sev_closet"), dict):
         from .closet import clean_closet
         out["sev_closet"] = clean_closet(s["sev_closet"])
-    if isinstance(s.get("beast"), dict):
-        from .beast import clean as clean_beast
-        out["beast"] = clean_beast(s["beast"])
     if isinstance(s.get("muted"), list):
         # 3.0.1: the people whose cheers and knocks I don't get, by uid
         out["muted"] = list(dict.fromkeys(
@@ -190,8 +186,7 @@ def merge3(base, mine, theirs):
     """The account's settings from my save and theirs, both made from `base`.
     A key one side changed takes that side's. A key both changed: the muted,
     squads, shared decks and to-dos merge item by item, the to-do ticks day
-    by day, the closet thing by thing (3.8.2: nothing earned is lost), the
-    beast's met ones each once (3.9.0), and
+    by day, the closet thing by thing (3.8.2: nothing earned is lost), and
     anything else (a switch, a status, Pip's look) takes mine. Pure."""
     base, mine, theirs = (x if isinstance(x, dict) else {} for x in (base, mine, theirs))
     out = {}
@@ -209,9 +204,6 @@ def merge3(base, mine, theirs):
         elif k == "sev_closet":
             from .closet import merge_closets
             v = merge_closets(m if isinstance(m, dict) else {}, t if isinstance(t, dict) else {})  # earned is never lost
-        elif k == "beast":
-            from .beast import merge as merge_beast
-            v = merge_beast(t, m)  # 3.9.0: the beasts met, each once; the one now counted furthest
         else:
             v = m
         if v is not _GONE:

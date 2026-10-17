@@ -740,7 +740,7 @@ class FakeWorker:
                 for (to, frm), k in sorted(self.knocks.items())
                 if to == me and frm in self.users and not self._muted_by(me, frm)]
 
-    WEEK_KEYS = {"v", "days", "paused", "examDate", "awayFrom", "awayTo", "liveUntil", "tricky", "room", "recap", "beast"}
+    WEEK_KEYS = {"v", "days", "paused", "examDate", "awayFrom", "awayTo", "liveUntil", "tricky", "room", "recap"}
     DAY_KEYS = {"studied", "reviews", "studyTimeMs", "streak", "newCards", "accuracy", "status"}
 
     def _clean_week(self, w):
@@ -772,13 +772,6 @@ class FakeWorker:
                     or not _is_int(r.get("n"), 1, 200) or not DATE_RE.fullmatch(str(r.get("day")))):
                 raise Bad(400, "bad_week")
             out["recap"] = {"name": r["name"][:60], "n": r["n"], "day": r["day"]}
-        if "beast" in w:
-            # 3.9.0 (validate.ts: case "beast"): a beaten one only, its kind and day
-            b = w["beast"]
-            if (not isinstance(b, dict) or b.get("k") not in ("leech", "pile", "backlog")
-                    or b.get("p") != 100 or isinstance(b.get("p"), bool) or not DATE_RE.fullmatch(str(b.get("end")))):
-                raise Bad(400, "bad_week")
-            out["beast"] = {"k": b["k"], "p": 100, "end": b["end"]}  # anything else is dropped
         return out
 
     ROW_KEYS = {"name", "day", "reviews", "studyTimeMs", "accuracy", "streak", "week", "emoji", "newCards", "play"}

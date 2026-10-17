@@ -1758,8 +1758,6 @@ def tidy_decks(col):
             c = _pcfg()
             c.pop("misses_day", None)
             _psave(c)
-        from . import beast_flow
-        beast_flow.empty_old_deck(col, normal)  # 3.9.0: a beast's deck from an earlier day, the same
         rows = [(int(d.id), d.name, col.db.scalar("SELECT count() FROM cards WHERE did = ?", int(d.id)) or 0)
                 for d in col.decks.all_names_and_ids(include_filtered=True) if int(d.id) not in normal]
         c = _pcfg()

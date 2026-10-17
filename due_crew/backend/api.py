@@ -25,7 +25,6 @@ import requests
 
 from .. import bingo as _bingo
 from ..room_model import clean_room, is_fifteen, is_over
-from ..beast import clean_week as _clean_beast
 from .shapes import (
     AuthError, REPORT_NOTE_MAX, TransportError, TIMEOUT, WEEK_WINDOW, _clean_day, _clean_decks, _clean_member,
     _exam_value, _live_room, _week_days, away_range, clean_accent, clean_days, clean_look, clean_emoji, clean_squad_name, clean_note, clean_offer, clean_authored, clean_plan, clean_sched, clean_recap, clean_cards, clean_notice,
@@ -362,8 +361,6 @@ class ApiClient:
                 "room": _live_room(self.session.get("room") if you else week.get("room")),
                 # 3.2: their last plan week done, for a cheer
                 "recap": clean_recap(self.session.get("recap") if you else week.get("recap"), today),
-                # 3.9.0: their beast once beaten, for its banner (mine from the session)
-                "beast": _clean_beast(self.session.get("beast") if you else week.get("beast"), today),
             })
         by_uid = {f.get("uid"): f for f in data.get("friends") or []}
         cheers = []
@@ -546,10 +543,6 @@ class ApiClient:
         recap = clean_recap(self.session.get("recap"), labels[0] if labels else None)
         if recap:
             doc["recap"] = recap
-        from ..beast import clean_week as clean_beast
-        bst = clean_beast(self.session.get("beast"), labels[0] if labels else None)
-        if bst:
-            doc["beast"] = bst  # 3.9.0: a beaten one, its kind and day; never one I am on, its size or its cards
         return doc
 
     def push(self, labels, cfg, stats=None, backfill=None, shared_decks=None, heatmap=None,
@@ -672,12 +665,11 @@ class ApiClient:
     @staticmethod
     def _without_32(body):
         """The sync as a 3.1 server takes it: no known or stuck cards, no
-        log, and the week without a recap or asks' lines. 3.9.0: or a beast
-        (a Worker not yet deployed takes the day's numbers without it)."""
+        log, and the week without a recap or asks' lines."""
         out = {k: v for k, v in body.items() if k not in ("knows", "stuck", "log", "team", "due")}
         week = out.get("week")
-        if isinstance(week, dict) and ("recap" in week or "beast" in week or any("q" in t for t in week.get("tricky") or [])):
-            week = {k: v for k, v in week.items() if k not in ("recap", "beast")}
+        if isinstance(week, dict) and ("recap" in week or any("q" in t for t in week.get("tricky") or [])):
+            week = {k: v for k, v in week.items() if k != "recap"}
             if week.get("tricky"):
                 week["tricky"] = [{k: v for k, v in t.items() if k != "q"} for t in week["tricky"]]
             out["week"] = week

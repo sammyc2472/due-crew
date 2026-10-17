@@ -351,8 +351,6 @@ def facts(c=None):
     except Exception:
         traceback.print_exc()
     out["crew"] = max(out.get("crew", 0), len([e for e in _state["entries"] or [] if not e.get("you")]))
-    from . import beast
-    out["beasts"] = len(beast.beaten(c.get("beast"))) if beast.READY else 0  # the Backlog Beasts beaten (the account's), once it's ready
     for k in ("cheered", "cheer_days"):
         out[k] = len(out.get(k) or [])
     return out

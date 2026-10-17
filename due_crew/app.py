@@ -200,11 +200,7 @@ def _reset_runtime(keep_sync=False):
                   settings_tab=None, team_view={}, team_draft={},
                   team_bingo_open=None, insights={}, you_decks=None,
                   closet_open=None, closet_new=None,  # 3.8.2: Pip's closet, and what just came for it
-                  wrapped_open=None,  # 3.9.0: your Wrapped, in the board's place
-                  # 3.9.0: the Backlog Beast's fight in the board's place; what just
-                  # happened to it (came, beaten, let go, wandered off); the day it was looked for
-                  beast_open=False, beast_news=None, beast_looked=None, beast_letting=False,
-                  beast_count=None)  # its hits and cards gone, counted here from Anki's history (never sent)
+                  wrapped_open=None)  # 3.9.0: your Wrapped, in the board's place
     _pending_cheers.clear()
 
 

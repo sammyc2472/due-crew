@@ -418,8 +418,6 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
     elif data.get("plans"):
         plan_flow.refresh_progress()
     due_flow.after_refresh()  # Due: a fresh reviews count, and the morning's leeches when asked
-    _beast_check()  # 3.9.0: the Backlog Beast, counted (and once a day, looked for); before the closet,
-    # so one beaten here earns its thing at the same refresh and its card can say so
     _closet(lambda cf: _closet_day(cf, labels[0], data["entries"]))  # 3.8.2: Pip's closet
     toasts += _update_returns(data["entries"], labels, tomorrow, c)
     milestone = _update_wrap(data["entries"], labels)
@@ -472,10 +470,6 @@ def _on_render(deck_browser, content):
         if _state.get("wrapped_open") and mw.col:
             _state["board_shown"] = True  # 3.9.0: your Wrapped, as the closet
             content.stats += board.wrapped_html(_wrapped_view(), c)
-            return
-        if _state.get("beast_open") and mw.col:
-            _state["board_shown"] = True  # 3.9.0: the Backlog Beast's fight, as the closet
-            content.stats += board.beast_html(_beast_view(c), c)
             return
         if not c.get("show_leaderboard", True):
             _state["board_shown"] = False
@@ -554,8 +548,6 @@ def _board_html(c):
         return board.closet_html(_closet_view(), c)  # 3.8.2: Pip's closet in its place
     if _state.get("wrapped_open"):
         return board.wrapped_html(_wrapped_view(), c)  # 3.9.0: your Wrapped in its place
-    if _state.get("beast_open") and mw.col:
-        return board.beast_html(_beast_view(c), c)  # 3.9.0: the Backlog Beast's fight in its place
     if _state.get("team_bingo_open"):
         from . import team_flow  # 3.7.3: a plan team's card in its place
         pid = _state["team_bingo_open"]
@@ -587,7 +579,7 @@ def _board_html(c):
                         sev=rooms.board_sev(c, due), closet=_state.get("closet_new"),
                         halloween=closet_flow.halloween_view(_state["labels"][0] if _state["labels"] else "",
                                                              _state["entries"], c),
-                        wrapped=_wrapped_banner(c), beast=_beast_board(c))
+                        wrapped=_wrapped_banner(c))
 
 
 def _you(c, due, plans):
@@ -684,7 +676,6 @@ def _on_sync_done(full=False, light=False, fetch=None):
     _last_attempt = time.time()
     # 3.1: the morning waits for the day's AnkiWeb sync; this may be it
     _morning(_awaiting_phone())
-    _beast_check(week=True)  # 3.9.0: my beast as it is now, on the week this sync sends
     c = cfg()
     # independent try blocks: one gatherer failing must not silently stop
     # the others from uploading (that failure mode is invisible in the UI)
@@ -939,8 +930,6 @@ def _on_js(handled, message, context):
         _closet_cmd(cmd, parts[2:])  # 3.8.2: Pip's closet
     elif cmd.startswith("wrapped"):
         _wrapped_cmd(cmd, parts[2:])  # 3.9.0: your Wrapped
-    elif cmd.startswith("beast"):
-        _beast_cmd(cmd, parts[2:])  # 3.9.0: the Backlog Beast
     elif cmd == "heatday" and len(parts) > 2:
         _browse_day(parts[2])
     elif cmd in SETTINGS_CMDS:
@@ -1182,7 +1171,6 @@ def open_closet(tab=None):
     _state["closet_open"] = {"tab": tab or board.CLOSET_TABS[0], "msg": "", "new": news, "drawn": False}
     _state["closet_new"] = None
     _state["wrapped_open"] = None
-    _state["beast_open"] = False
     _state["settings_tab"] = None
     _close_addons_dialog()
     if mw.state != "deckBrowser":
@@ -1209,7 +1197,6 @@ def open_wrapped(year=None):
     _state["wrapped_open"] = {"year": v["year"], "view": v}
     _state["settings_tab"] = None
     _state["closet_open"] = None
-    _state["beast_open"] = False
     _close_addons_dialog()
     if mw.state != "deckBrowser":
         mw.moveToState("deckBrowser")
@@ -1265,110 +1252,6 @@ def _wrapped_cmd(cmd, parts):
         return
     if _board_on_screen() or mw.state == "deckBrowser":
         _swap(cfg())
-
-
-def _beast_check(week=False):
-    """3.9.0, on the main thread: the Backlog Beast counted, and once an
-    Anki day (after the day's AnkiWeb sync, as the plans' morning waits)
-    looked for; week: before a sync, what my week carries of it."""
-    if not mw.col or not account.ready():
-        return  # an install pulls the account's beast before it ever saves one
-    try:
-        from . import beast_flow
-        beast_flow.check(look=not _awaiting_phone())
-        if week:
-            beast_flow.note_week()
-    except Exception:
-        traceback.print_exc()
-
-
-def _beast_board(c):
-    """The board's beast: my card's view, and the crewmates' beaten beasts I've dismissed."""
-    try:
-        from . import beast_flow
-        return {"view": beast_flow.view(c), "seen": list(c.get(BEAST_SEEN) or [])}
-    except Exception:
-        traceback.print_exc()
-        return None
-
-
-def _beast_view(c):
-    from . import beast_flow
-    try:
-        return beast_flow.view(c, page=True)
-    except Exception:
-        traceback.print_exc()
-        return None
-
-
-BEAST_SEEN = "beast_seen"  # per computer: a crewmate's beaten beast's banner, dismissed ("uid:end")
-
-
-def open_beast():
-    """3.9.0: the Backlog Beast's fight, in place of the board (as the closet is)."""
-    _state.update(beast_open=True, beast_letting=False)
-    _state["settings_tab"] = None
-    _state["closet_open"] = None
-    _state["wrapped_open"] = None
-    _close_addons_dialog()
-    if mw.state != "deckBrowser":
-        mw.moveToState("deckBrowser")
-    elif _board_on_screen():
-        _swap(cfg())
-    else:
-        _rerender()
-
-
-def _beast_cmd(cmd, parts):
-    """3.9.0: the beast's clicks: its card (open, Study, the beaten line's
-    x), its page (Let it go, asked in place: no window, Sam's round 3; back
-    to the board), and a crewmate's beaten beast's banner (a cheer, its x)."""
-    from . import beast_flow
-    arg = parts[0] if parts else ""
-    if cmd == "beastopen":
-        open_beast()
-        return
-    if cmd == "beaststudy":
-        beast_flow.study()
-        return
-    if cmd == "beastcheer" and arg:
-        e = next((e for e in _state["entries"] or [] if str(e.get("user_id")) == arg and not e.get("you")), None)
-        if e and (e.get("beast") or {}).get("end"):
-            from .social import _send_cheer, cheer_allowed
-            emoji = cheer_allowed("\U0001F3C6")
-            if emoji:
-                _send_cheer(arg, e.get("name") or "", emoji, big=True)
-            _beast_seen(f'{arg}:{e["beast"]["end"]}')
-        return
-    if cmd == "beastx" and arg:
-        e = next((e for e in _state["entries"] or [] if str(e.get("user_id")) == arg), None)
-        if e and (e.get("beast") or {}).get("end"):
-            _beast_seen(f'{arg}:{e["beast"]["end"]}')
-        return
-    today = _state["labels"][0] if _state["labels"] else None
-    if cmd == "beastlet":
-        _state["beast_letting"] = True  # its page asks, in place
-    elif cmd == "beastletno":
-        _state["beast_letting"] = False
-    elif cmd == "beastletyes":
-        _state["beast_letting"] = False
-        beast_flow.let_go(beast_flow._cut(mw.col)[1].isoformat() if mw.col else today)
-    elif cmd == "beastnews":
-        beast_flow.seen_news()
-    elif cmd == "beastclose":
-        _state.update(beast_open=False, beast_letting=False)
-    else:
-        return
-    if _board_on_screen() or mw.state == "deckBrowser":
-        _swap(cfg())
-
-
-def _beast_seen(key):
-    c = dict(cfg())
-    c[BEAST_SEEN] = ([k for k in c.get(BEAST_SEEN) or [] if isinstance(k, str) and k != key] + [key])[-20:]
-    save_cfg(c)
-    if _board_on_screen():
-        _swap(c)
 
 
 def _closet_view():
@@ -1627,7 +1510,7 @@ def _close_addons_dialog():
 
 SHARE_KEYS = ("show_up", "share_reviews", "share_time", "share_retention", "share_streak",
               "share_heatmap", "paused", "exam_date",
-              "away_from", "away_to", "share_beast", "beasts")
+              "away_from", "away_to")
 
 
 def _on_signed_out():

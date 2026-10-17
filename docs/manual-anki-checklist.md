@@ -685,20 +685,6 @@ In Anki (as a follower):
 - [ ] A card whose text or picture fills that corner: still the peek, never the chip beside Edit; scroll down and the card's last lines clear it.
 - [ ] Settings › Pip off: the same bubble in the same corner without Pip, "Dre knows this", Ask, Not now; it fades in, and out on the next card. Reduce motion (system setting): the Pip and bubble there at once, no pop, no duck. Settings › Pip off: the corner card as before.
 
-### 3.9.0: the Backlog Beast
-
-Held back from 3.9.0 (`beast.READY` off). With the release build: no beast card, no Backlog beasts or My beast in Settings, no beast things in Pip's closet, no crewmate's beast banner. The rest of this section is for the beast test build.
-
-- [ ] A profile with a real pile (a week away is easiest: 100 overdue cards or more, and two of your usual days' worth), after the day's AnkiWeb sync: a card in the You bubble, "The Backlog Beast" (or the Leech Lord, or the Pile: no other kinds), "Turned up today · N overdue cards", its health bar in its colour, the beast breathing (still with Reduce motion). It shows on every tab of the bubble; folded, the beast sits small on the one line. Click anywhere on the card but Study: its page. Tab to it and press Enter: the same. Before the AnkiWeb sync: nothing yet.
-- [ ] Study ›: Anki's Study screen on your own deck (the top deck holding most of its cards), no "Due Crew::" deck made. Review some: back on the Decks screen, the card's left count and health drop for each Hard, Good or Easy; an Again doesn't count until you get it right later.
-- [ ] Browse › Set due date 1 on one of its cards: it leaves the beast (the count drops, the health doesn't). Suspend a few: the same. Suspend half: it goes quietly, with no card about it.
-- [ ] Its page, in the board's place: the beast big, its name, its count ("640 overdue cards"), its health with quarter ticks and "L left", Study, Let it go, then How it works (three short lines of plain fact). A quarter beaten: a horn falls. Half: the other, a brow and a sweat. Three quarters: dizzy eyes, a wobble. ‹ Board goes back. Reduce motion: no breathing or wobble.
-- [ ] Let it go: no window; the page asks in place ("Let it go?" Let it go · Cancel). Cancel brings Study back; Let it go: "No beast right now."; a week before another. Settings › Board › Backlog beasts off: no card, no beast; on again brings them back.
-- [ ] Beat your first (review its last card): the card says "You beat The Backlog Beast!", "N cards in D days. New for Pip: the Beast hood." with Pip hopping in it, Be one and its x; no separate closet line for the hood. Be one: Pip wears it. Its page shows Pip big in the hood, its name and "Beaten · N cards in D days". No pet anywhere (its page, Your year's beasts slide shows the beasts themselves). No new beast for a week.
-- [ ] A crewmate's beast: nothing on their row while they fight it (here and on duecrew.com). Their beaten one: a banner "Dre beat The Pile, their overdue cards." with Send 🏆 (a cheer) and ×, for two days. Settings › Privacy › My beast off: after your next sync, no banner of yours on their board. Just that I studied: no banners.
-- [ ] Your other computer after an AnkiWeb sync and a Due Crew refresh: the same beast, the same count left.
-- [ ] If an earlier 3.9.0 test build made a "Due Crew::The …" deck of its cards: the next morning its cards are back in their decks and the deck is gone.
-
 ### 3.9.0: your Wrapped
 
 - [ ] Tools › Due Crew › Your year…: the board's place shows Your 2026 on a phone-shaped card; it moves on every few seconds and waits while the pointer is on it; the right side or → goes on, the left or ← goes back. Each slide's Pip plays as it comes, in your look. ‹ Board goes back.

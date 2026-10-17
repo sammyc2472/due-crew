@@ -62,8 +62,7 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   what the add-on costs, and must be deliberate. A new feature rides one
   of the two, or is one request on a click.
 - My week is the one shape for day stats (last eight days, away spell,
-  exam, paused, `liveUntil`, flags, room, recap, and a Backlog Beast I
-  beat, for two days, once the beast ships). The client rebuilds it
+  exam, paused, `liveUntil`, flags, room, recap). The client rebuilds it
   from `session.week_raw` with the current Privacy switches at every sync,
   so turning a switch off takes that number off every day.
 - Consent: friendship is two edges (`friends(owner, friend)`); only mutual
@@ -97,11 +96,8 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   deck ids belong to one collection. `plans.py` is pure, `plan_flow.py`
   the glue.
 - Mine alone, never sent: Insights, my progress on each bingo square,
-  checkpoint scores, `wrap.json` (3.8.2: and the closet's tallies in it),
-  Wrapped, and my Backlog Beast's cards and counts (3.9.0: with My beast
-  on, my week says only that I beat one, and its kind, for two days; the account keeps the beast
-  for me, its hits counted on each computer from Anki's history, so a
-  review never costs a request).
+  checkpoint scores, `wrap.json` (3.8.2: and the closet's tallies in it)
+  and Wrapped.
   Pip's closet is mine (an account key only I read); what my Pip has on
   rides with my accent to mutual friends, as names. A plan's squad (its team on the server) shares only
   that I showed up, my questions and answers, and bingo stamps; never my
@@ -163,7 +159,7 @@ same commit, each with its test:
 | Study rooms | `rooms.py`, `room_model.py` | rides my week |
 | The Fifteen (3.8.1): ▶ Fifteen? in the top bar, the nudge, the question at its end, Take five / Another now / Stop | `room_model.make_fifteen`/`fifteen_next`, `rooms.start_fifteen`/`fifteen_answer` | studying now only (never a room on my week) |
 | Pip (3.8.1, Block; called Sev until 3.8.2, and still `sev` in code: sev.py, the `sev*` keys, `.sv`, sev.js's `Sev`): by the logo for a moment, in a fifteen's chip, question and break, the nudge, the session's line; hopping across the week picture card; a study room's seats, each crewmate's in their accent; waving in Welcome back and on the signed-out card; hopping on a crewmate's big-streak banner (not on crew rows: Sam's no). Each place has its mix of moves (`sev.MOVES`), never the same twice in a row | `sev.py` (one drawing; the widgets get its markup, the week card and Welcome back `sev.still`; `pick`/`nth` the variety), `rooms.board_sev`/`pick`/`milestone_sevs`/`signed_out_sev`, `sharecard.hops`, `room_model.seats`/`vary_seed`, `ui.sev_label` | never sent; cards.js keeps a copy of `sev.still` (the suite checks it) |
-| Pip's closet (3.8.2): 64 things earned by showing up, coming back, together, plans, card care, beasts (3.9.0), seasons, secrets; one per place, a costume over the look; in place of the board (Yours by place, To earn by how); each crew row's, profile card's and (3.8.21) squadmate's Pip in the emoji's place (3.8.22: a plan card's squad line too, by `who` on `/board`'s `teams`; the review chip, a squadmate's card, Settings › You, bingo stamps; the site's account page and home feed, `pipFor`; the Friends dialog is names alone) | `closet.py` (pure: things, wear/clean/shown, facts from days and hours; 3.8.22: `halloween`/`spooky`), `closet_art.py` (the drawings), `closet_flow.py` (facts, tallies in wrap.json, a year of them for Wrapped, earned, worn, `halloween_view`), `board.closet_html`/`closet_line`/`row_sev`/`card_sev`/`squad_pip`/`halloween_html` | account keys `sev_look`, `sev_closet`; a mutual friend's look on /board (`lookOf` in `board.ts`) |
+| Pip's closet (3.8.2): 61 things earned by showing up, coming back, together, plans, card care, seasons, secrets; one per place, a costume over the look; in place of the board (Yours by place, To earn by how); each crew row's, profile card's and (3.8.21) squadmate's Pip in the emoji's place (3.8.22: a plan card's squad line too, by `who` on `/board`'s `teams`; the review chip, a squadmate's card, Settings › You, bingo stamps; the site's account page and home feed, `pipFor`; the Friends dialog is names alone) | `closet.py` (pure: things, wear/clean/shown, facts from days and hours; 3.8.22: `halloween`/`spooky`), `closet_art.py` (the drawings), `closet_flow.py` (facts, tallies in wrap.json, a year of them for Wrapped, earned, worn, `halloween_view`), `board.closet_html`/`closet_line`/`row_sev`/`card_sev`/`squad_pip`/`halloween_html` | account keys `sev_look`, `sev_closet`; a mutual friend's look on /board (`lookOf` in `board.ts`) |
 | Plans (follow, morning, week, load; You › Plans) | `plans.py`, `schedule.py`, `plan_flow.py` | `plans.ts`, `library.ts`; `builder.js`, app.js |
 | A plan's squad (3.8.0, on the Squads tab; its team on the server) | `team.py`, `team_flow.py` | `team.ts`; `PlanSquad` in builder.js |
 | Insights (the deck's, a plan only sharpens it; You › Insights; the topic map, tiles open into parts; its card and text, shared by hand) | `team.py`, `team_flow.py`, `mapcard.py`, `ui/map_card_dialog.py` | never sent |
@@ -173,7 +169,6 @@ same commit, each with its test:
 | Shares: text, and picture cards (made in Anki since 3.8.0) | `share.py`, `shares.py`, `sharecard.py`, `ui/share_card_dialog.py` | `site/public/cards.js` |
 | Admin, notices, feedback, reports (kept for the Inbox, 3.8.1) | | `admin.ts`, `people.ts`, `notices.ts`, `feedback.ts`, `reports.ts` |
 | Your Wrapped (3.9.0): the year's story in the board's place, the board's line 1 Dec to 15 Jan, Tools › Your year… | `wrapped.py` (pure: facts, slides, words, SAD), `wrapped_flow.py` (one query, counts, the card), `board.wrapped_html`/`wrapped_js`/`wrapped_line`, `sharecard.year`'s Pip | never sent; the account's `wrapped_seen`; cards.js draws the year card's Pip the same |
-| The Backlog Beast (built, held back from 3.9.0: `beast.READY` is off, Sam's "not there yet"; its tests and the beast test build turn it on): an overdue pile turns up as a beast by its cause (three kinds; rule B, once a day after AnkiWeb's sync); Study opens your own deck; breaks up as it's beaten; beaten, Pip and the closet's beast things (no pet); its card in the You bubble, its page in the board's place; nothing on crew rows, a beaten one's banner | `beast.py` (pure: the rule, kind, count, parts, stages, week field, clean/merge), `beast_flow.py` (the pile, its cards in beast.json or from revlog, counting, the home deck, the closet thing), `beast_art.py`, `board.beast_card`/`beast_html`/`beast_banners` | week `beast {k, p: 100, end}`, beaten only (validate.ts); account keys `beast`, `beasts`, `share_beast` |
 | Why isn't this card showing? (Browse right-click, 3.8.0) | `why.py`, `why_flow.py`, `ui/why_dialog.py` | never sent |
 | Plan tags: DueCrew::<plan>::SLG_12 on followers' notes (Browse right-click, the builder, Tag by objective; 3.8.0) | `plans.sync_tags`, `plan_flow.apply_tags`, `ui/tag_dialog.py` | `plans.ts` tagNotes; This plan's tags in builder.js |
 | Cuts (a video kept to an SLG) and a tag's single cards; taking a tag off (3.8.1) | `plans.match`/`plan_tag_cards`/`topic_items`, `plan_flow._unit_cids` | `planDoc`/`putIds` in `plans.ts`; `setCut`/`syncCuts` and the Text preview in builder.js |

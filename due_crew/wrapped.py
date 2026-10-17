@@ -3,7 +3,7 @@ Pure: no aqt.
 
 Your own year as a short story, made on this computer from Anki's own
 review history and what Due Crew counts there (closet_flow's year counts,
-the closet, the Beast). Nothing is sent, and only you see it unless you
+the closet). Nothing is sent, and only you see it unless you
 share the picture at its end. Only the slides your year can fill are made
 (SLIDES says when each is), and every line is kind: no missed days, no
 "fewer than", no comparing, nobody else's numbers. The words are checked
@@ -33,7 +33,7 @@ FRONT_MAX = 140
 # each slide's ground (a story's, light text on it), and Pip's pose there
 BG = {"cover": "#12301a", "days": "#0f2747", "run": "#3a2507", "back": "#0b2e2b", "time": "#14123a",
       "cards": "#3a1222", "turned": "#2a1d08", "fifteens": "#0b2e2b", "things": "#241640",
-      "crew": "#12301a", "beasts": "#2a1240", "picture": "#f4f4ef"}
+      "crew": "#12301a", "picture": "#f4f4ef"}
 POSE = {"cover": "hop", "run": "hop", "back": "hello", "cards": "focus", "fifteens": "focus",
         "crew": "cheer", "picture": "hop"}
 
@@ -49,7 +49,6 @@ SLIDES = (
     ("fifteens", "One Fifteen or more"),
     ("things", "Something in Pip's closet"),
     ("crew", "A crew, and a number above 0"),
-    ("beasts", "A beast beaten"),
     ("picture", "Always"),
 )
 
@@ -160,13 +159,13 @@ def _since(year, key):
     return f"Since {MONTHS[s.month - 1]}" if int(year) == s.year else ""
 
 
-def slides(f, counts=None, have=None, look_names=(), crew=0, card=None, leeches=0, beasts=None, rollover=4,
+def slides(f, counts=None, have=None, look_names=(), crew=0, card=None, leeches=0, rollover=4,
            thing_names=None):
     """The story, slide by slide, for facts(). counts: closet_flow's year
     counts; have: the closet ({thing: day}); look_names: what Pip has on,
     by name; crew: how many crewmates; card: the card I turned around,
     {front, lapses, ivl} or None; leeches: how many are turned around;
-    beasts: [{name, days}] beaten this year; thing_names: {key: name}."""
+    thing_names: {key: name}."""
     y = f["year"]
     counts, have, thing_names = counts or {}, have or {}, thing_names or {}
     out = []
@@ -268,11 +267,6 @@ def slides(f, counts=None, have=None, look_names=(), crew=0, card=None, leeches=
         if grid:
             add("crew", kicker="You and your crew", tag=_since(y, "counts"), grid=grid,
                 line="Your own numbers. Nobody else’s are here.")
-    # beasts
-    if beasts:
-        longest = max(beasts, key=lambda b: int(b.get("days") or 0))
-        add("beasts", kicker="Beasts", lead="You beat", big=plural(len(beasts), "beast"), beasts=[b.get("k") for b in beasts][:8],
-            small=f"{longest.get('name') or 'One'} took {plural(int(longest.get('days') or 0), 'day')}. It’s a pet now.")
     # the picture
     third = (n(f["new"]), "new cards") if f["new"] * 3 >= max(1, f["reviews"]) else (n(f["reviews"]), "reviews")
     add("picture", kicker=f"My {y}{' so far' if f['so_far'] else ''} in Anki",

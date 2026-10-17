@@ -101,15 +101,6 @@ def turned(col):
     return count, ({"front": front[:wrapped.FRONT_MAX], "lapses": int(row[1]), "ivl": int(row[2])} if front else None)
 
 
-def beasts(year):
-    """The beasts beaten in a year, for its slide: [{k, name, days}]."""
-    try:
-        from . import beast_flow
-        return beast_flow.beaten_in(year)
-    except Exception:
-        return []
-
-
 def view(year=None):
     """Wrapped's view for the board (board.wrapped_html): {year, years,
     slides, heat, look}. Main thread."""
@@ -129,7 +120,7 @@ def view(year=None):
     crew = len([e for e in _state.get("entries") or [] if not e.get("you")])
     slides = wrapped.slides(f, closet_flow.year_counts(year), closet_flow.have(c) if c.get("sev", True) else {},
                             [names[k] for k in closet.shown(look)], crew,
-                            card if c.get(CARD_KEY, True) else None, n_turned, beasts(year), rollover, names)
+                            card if c.get(CARD_KEY, True) else None, n_turned, rollover, names)
     return {"year": year, "years": years(col), "slides": slides, "heat": wrapped.heat(f), "look": look,
             "card": bool(card), "card_on": bool(c.get(CARD_KEY, True))}
 

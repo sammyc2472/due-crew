@@ -106,9 +106,6 @@ export function room(v: unknown): Obj {
   return { host: v.host, start: v.start, rounds: v.rounds, round: v.round, brk: v.brk };
 }
 
-/** 3.9.0: the Backlog Beast's kinds (beast.KINDS in the add-on). */
-export const BEAST_KINDS = ["leech", "pile", "backlog"];
-
 /** The week doc (2.9's shared/week): my last eight days in one document,
  *  plus what rides it. 3.0: a flagged card is its note guid, the deck's
  *  name and the day, never the card's text; crewmates read the text from
@@ -162,14 +159,6 @@ export function week(v: unknown): Obj {
         // 3.2: last plan week done, on my row: {name, n, day}
         if (!isObj(x) || !isStr(x.name, NAME_MAX, 1) || !isInt(x.n, 1, 200) || !isDate(x.day)) throw bad("week");
         out[k] = { name: oneLine(x.name, NAME_MAX), n: x.n, day: x.day };
-        break;
-      }
-      case "beast": {
-        // 3.9.0: my Backlog Beast, with My beast on, once it's beaten (its
-        // kind and day, for a crewmate's banner): never one I'm still on
-        // (nothing shows it), its size or its cards
-        if (!isObj(x) || !BEAST_KINDS.includes(x.k as string) || x.p !== 100 || !isDate(x.end)) throw bad("week");
-        out[k] = { k: x.k, p: 100, end: x.end };
         break;
       }
       default:
