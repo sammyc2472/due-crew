@@ -681,6 +681,16 @@ In Anki (as a follower):
 - [ ] A second computer signed in to the same account: it's on there after the account's settings come down. Your phone keeps four buttons.
 - [ ] You › Insights on a deck where you press Hard a lot (15% of 200 answers): the Hard habit line ends "Try two buttons · Not now". Try two buttons: the line says "Two buttons are on … Undo", and Settings shows it on. Undo: off, and the Hard line is back. Reopen Anki with it on: no Hard habit line.
 
+### 3.9.1: room sounds
+
+- [ ] Start a fifteen: its chip in the top bar ends in a grey speaker (struck through). Click it: the chip becomes Off · Brown noise · Rain · Fire · Waves; Off is filled. Esc, or a click anywhere else, puts the chip back; a click on the chip (not the speaker) still opens its card.
+- [ ] Pick Rain: it fades in over a second or so (headphones for Brown noise and Waves: laptop speakers barely play them); the volume slider appears and changes it as you drag. Pick Fire: Rain fades as Fire comes in. The speaker is in your accent, with waves. Off: it fades out.
+- [ ] Study with a sound on: it plays on through Review (cards changing don't cut it), through a fifteen's break and its question; Stop here: it fades out. Take five, then another: it plays through.
+- [ ] Restart Anki, start a fifteen: your last pick comes back by itself (no click), at its volume. Sync (the top bar redraws): it carries on, or comes back within a moment.
+- [ ] A crew room with someone who picked a different sound (or none): each of you hears your own; theirs never changes yours. The room ends: yours stops.
+- [ ] Preferences › hide the top bar while reviewing: the room shows in the bottom bar or the margin with no speaker, and the sound plays on.
+- [ ] No room and no fifteen: no sound, ever (it never starts on its own outside a session).
+
 ### 3.9.1: doodle cheers (deploy the Worker first: migration 0029)
 
 - [ ] 🎉 a crewmate: the Cheer window has Draw and Sign under the emoji. Draw on the pad with the mouse (and a trackpad, and a pen if you have one): the lines follow, in your accent; Black, Thin and Thick change the next line; Undo takes the last line, Clear all of them. Night mode: the pad stays paper-light.

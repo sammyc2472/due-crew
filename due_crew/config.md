@@ -32,6 +32,8 @@ Raw keys, for reference:
 | `fifteen` | true/false | ▶ Fifteen? in the top bar, and the nudge when you haven't started by your usual time, on this computer |
 | `sev` | true/false | Pip, the square from the logo: beside it on the board and in your fifteens, on this computer |
 | `sev_break` | breathe / stretch | A fifteen's break: breathe along with Pip, four counts a side, or stretch |
+| `room_sound` | off / brown / rain / fire / waves | The sound under a fifteen or a study room, picked from the speaker on its chip; made in Anki, never sent, on this computer |
+| `room_sound_vol` | 0 to 100 | Its volume |
 | `ins_deck` | deck id | The deck Insights shows on this computer |
 | `muted` | user ids | Crewmates whose cheers and knocks you don't get; right-click their name on the board |
 

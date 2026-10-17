@@ -14811,6 +14811,93 @@ def test_two_buttons_v391():
           tried_on == (True, True) and undone == (False, False) and len(swaps) == 2, (tried_on, undone))
 
 
+def test_room_sounds_v391():
+    """3.9.1, room sounds (Sam's picks): brown noise, rain, fire and waves,
+    made from noise in the top bar's page; a speaker on the chip picks one;
+    each person their own, kept on this computer, never sent; off till
+    picked; it plays while the session runs (breaks too) and stops when it
+    ends. Only the top bar's chip may set it, never a card's page."""
+    import shutil
+    import subprocess
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    from due_crew import rooms as R, room_model as rm, account
+    t0 = datetime.datetime(2026, 10, 17, 18, 0, tzinfo=datetime.timezone.utc)
+    conf = json.load(open(os.path.join(REPO, "due_crew", "config.json")))
+    check("sounds: off till you pick, on this computer (the add-on's config, never an account key)",
+          conf.get("room_sound") == "off" and conf.get("room_sound_vol") == 60 and rm.sound_pick({}) == ("off", 60)
+          and not {"room_sound", "room_sound_vol"} & set(account.ACCOUNT_KEYS))
+    check("sounds: a pick is one of the four (or off), its volume 0-100; anything else is the default",
+          rm.sound_pick({"room_sound": "rain", "room_sound_vol": 35}) == ("rain", 35)
+          and rm.sound_pick({"room_sound": "cafe", "room_sound_vol": 101}) == ("off", 60)
+          and rm.sound_pick({"room_sound": "fire", "room_sound_vol": True}) == ("fire", 60)
+          and rm.SOUNDS == ("off", "brown", "rain", "fire", "waves"))
+    check("sounds: the chip's command, read strictly",
+          rm.sound_cmd(["duecrew", "roomsound", "waves", "80"]) == ("waves", 80)
+          and rm.sound_cmd(["duecrew", "roomsound", "off", "0"]) == ("off", 0)
+          and all(rm.sound_cmd(p) is None for p in (["duecrew", "roomsound", "cafe", "50"], ["duecrew", "roomsound", "rain", "101"],
+                                                    ["duecrew", "roomsound", "rain", "-1"], ["duecrew", "roomsound", "rain"],
+                                                    ["duecrew", "roomsound", "rain", "5", "x"], ["duecrew", "roomsound", "rain", "5.5"])))
+    fif = rm.make_fifteen("me", t0)
+    room = rm.make_room("me", t0, 4, 25, 5)
+    sf, sr = rm.sound_state(fif, "rain", 50), rm.sound_state(room, "fire", 100)
+    ms = lambda d: int(d.timestamp() * 1000)
+    check("sounds: they play from the session's start to its end, breaks too (a fifteen's: the end of its question)",
+          sf == {"kind": "rain", "vol": 0.5, "from": ms(t0), "until": ms(rm.live_until(fif))}
+          and sr["until"] == ms(rm.room_end(room)) and sr["vol"] == 1.0
+          and rm.sound_state(None, "rain", 50) is None and rm.sound_state(fif, "cafe", 50)["kind"] == "off")
+    stop, on = rm.sound_js(None), rm.sound_js(sf)
+    check("sounds: in no room, the player is only told to stop; in one, the sounds come once a page, then the pick",
+          "dcRoomSound.set(null)" in stop and "dcSounds" not in stop.replace("dcRoomSound", "")
+          and on.count("kinds: KINDS") == 1 and "if (window.dcSounds) { return; }" in on and json.dumps(sf) in on)
+    d = rm.widget_data(fif, [], ("#2e7d32", "#7cc47f"), sound=("rain", 40))
+    chip = rm.widget_js("chip", d)
+    check("sounds: the chip carries the speaker, the pick and the four, labelled; without a pick to carry, no speaker",
+          d["sound"] == {"kind": "rain", "vol": 40} and d["soundKinds"] == list(rm.SOUNDS)
+          and d["soundLabels"]["brown"] == "Brown noise" and "'Room sound'" in chip and "roomsound:" in chip
+          and rm.widget_data(fif, [], ("#2e7d32", "#7cc47f"))["sound"] is None)
+    node = shutil.which("node")
+    if node:
+        src = open(os.path.join(REPO, "due_crew", "sounds.js")).read()
+        prog = ("var window = {};" + src + "var first = window.dcSounds;" + src +
+                "console.log(window.dcSounds.kinds.join(',') + '|' + (window.dcSounds === first) + '|' + typeof window.dcSounds.build);")
+        out = subprocess.run([node], input=prog, capture_output=True, text=True, timeout=60)
+        check("sounds.js: the four, made from noise; loaded twice it's still the one (so it can always stop)",
+              out.stdout.strip() == "brown,rain,fire,waves|true|function", out.stdout + out.stderr)
+    else:
+        print("SKIP sounds.js in node: no node")
+    # the clicks: from the top bar (our page) it's kept; from a card's page, never
+    mine = {"room_sound": "off", "room_sound_vol": 60}
+    evals, allowed = [], []
+
+    class Top:
+        def setPlaybackRequiresGesture(self, v):
+            allowed.append(v)
+    saved = (R.cfg, R.save_cfg, R._webs, R._eval, R.my_room)
+    try:
+        R.cfg = lambda: mine
+        R.save_cfg = lambda c, **k: mine.update(c)
+        R._webs = lambda: (Top(), None, None)
+        R._eval = lambda web, js: evals.append(js)
+        R.my_room = lambda: fif
+        dc._on_js(False, "duecrew:roomsound:waves:75|" + rm.CMD_KEY, DeckBrowser())
+        kept = dict(mine)
+        played = evals[-1] if evals else ""
+        dc._on_js(False, "duecrew:roomsound:fire:20|" + rm.CMD_KEY, object())  # a card's page, keyed
+        dc._on_js(False, "duecrew:roomsound:fire:20", object())               # and bare
+        dc._on_js(False, "duecrew:roomsound:cafe:20", DeckBrowser())          # not one of ours
+        check("sounds: the chip's pick is kept for this computer and plays at once; the top bar may play it after a redraw",
+              kept == {"room_sound": "waves", "room_sound_vol": 75} and '"kind": "waves"' in played and allowed == [False, False])
+        check("sounds: a card's page can't set it, keyed or not; nor can a sound that isn't one of the four",
+              mine == {"room_sound": "waves", "room_sound_vol": 75})
+        evals.clear()
+        R._sound(Top(), None)
+        R._sound(None, fif)
+        check("sounds: no room, the player stops; no top bar, nothing", evals == [rm.sound_js(None)])
+    finally:
+        R.cfg, R.save_cfg, R._webs, R._eval, R.my_room = saved
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

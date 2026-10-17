@@ -2247,3 +2247,29 @@ every release that changes how something works.
   a drawing or a sign, the Cheer window's note says "A caption under it
   (optional)". A sign's words are in the board's own font, bold, not a
   handwriting font (Sam: "consistent with our normal fonts").
+- 3.9.1, room sounds (Sam's picks from the Room Sounds page, 17 Oct: a
+  speaker on the chip; in a crew room each person picks their own; off
+  till you pick, the last pick remembered on this computer; made from
+  noise only, no café or library). Brown noise, rain, fire and waves,
+  made by Web Audio from noise (`sounds.js`, 16 KB, no sound files: the
+  now-and-then things, a drop or a crackle, are drawn once into loops of
+  different lengths; the waves are slow oscillators), each trimmed to the
+  same loudness, with a safety limiter. They play in the top bar's page,
+  which Anki keeps through review (the review page reloads every card),
+  from a fifteen's or a room's start to its end, breaks and a fifteen's
+  question included, fading in and out over 1.5 s; the player stops at the
+  session's end by itself and when the room goes (`room_model.sound_state`,
+  `SOUND_RUNTIME`, `rooms._sound` in `refresh_widgets`, and at profile
+  close). The top bar's page may play without a click
+  (`setPlaybackRequiresGesture(False)`, `rooms._allow_sound`), so a pick
+  comes back by itself after the bar redraws. The control: a speaker at
+  the chip's end (muted grey when off, the accent's waves when on); a click
+  turns the chip into the picker (the bar is too short for anything under
+  it): Off, Brown noise, Rain, Fire, Waves and the volume; Esc or a click
+  elsewhere puts the chip back. A pick plays at once and is kept for this
+  computer (`roomsound:<kind>:<volume>`, `room_sound` and `room_sound_vol`
+  in the add-on's config, never an account key, never sent: nothing new
+  on the wire, no Worker change). Only the top bar's chip may set it: a
+  card's page can't (`room_model.CARD_PAGE_CMDS`). The bars' and the
+  margin's little ones carry no speaker; the sound plays on under them.
+  `tools/chip_preview.py` draws the chip with it, light, dark and narrow.
