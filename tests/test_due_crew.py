@@ -14899,6 +14899,11 @@ def test_room_sounds_v391():
           and rm.widget_data(fif, [], ("#2e7d32", "#7cc47f"))["sound"] is None)
     check("sounds: the speaker says it (Sam's pick, A): Sound while off, the sound's name while one plays; the speaker alone when compact",
           "on ? D.soundLabels[snd.kind] : 'Sound'" in chip and "if (!D.compact)" in chip and "if (!open) {" in chip)
+    check("sounds: spacing (Sam: \"too close to the edge\"): the outlined speaker nested 3 px inside the chip on every side "
+          "(20 px tall, border included, 7 px into the chip's 10 px end); alone, it sits clear of the end; an empty crewmate slot never doubles a gap",
+          "box-sizing:border-box;height:20px;" in chip and "margin:0 -7px 0 0;" in chip and "'width:20px;margin:0;'" in chip
+          and "if (!fc.childElementCount) { fc.style.display = 'none'; }" in chip
+          and "fc.style.display = on || D.compact || !fc.childElementCount ? 'none' : '';" in chip)
     from due_crew import settings_model as sm
     tab = board._settings_board({"room_sounds": False})
     check("sounds: Settings › Board › Room sounds takes them away (on by default; Reset board puts it back on); Find a setting finds it",

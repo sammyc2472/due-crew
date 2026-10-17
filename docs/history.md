@@ -2321,6 +2321,12 @@ every release that changes how something works.
   pick; Reset board turns it back on): off, the chip has no speaker, the
   player is told off, and a pick from the chip is ignored
   (`room_model.sounds_on`; the chip redraws on the switch).
+  Spacing, measured in every state (Sam: "in one the sound symbol is a
+  bit too close to the edge of the oval"): the outlined speaker sits 3 px
+  inside the chip on all four sides (20 px tall with its border, as the
+  chip's inside is 26), like a button nested in it; alone (compact, or
+  the picker out) its icon is 6 px from the end, not 1; a solo fifteen's
+  empty crewmate slot no longer doubles the gap before it (15 px to 7).
 - 3.9.1, the sound picker folds back by itself (Sam: "the sounds chip
   should close after a second or two because now just stays open"): 1.5 s
   after a pick, 2 s after the volume last moved, 1 s after the pointer

@@ -671,6 +671,7 @@ _RUNTIME = r"""
     if (sq.set) { sq.style.marginRight = '5px'; }  // 3.8.2: what Pip set down to hold its card, clear of the clock
     root.appendChild(sq); root.appendChild(rg); root.appendChild(tx); root.appendChild(fc);
     if (D.compact) { tx.style.display = fc.style.display = 'none'; if (!sq.set) { sq.style.display = 'none'; } root.style.padding = '0 3px'; }
+    if (!fc.childElementCount) { fc.style.display = 'none'; }  // no one with me: no empty slot doubling the gap
     root.onclick = function () { send('roomcard'); };
     // 3.9.1, room sounds: a speaker at the chip's end. The top bar is too short for anything
     // under it, so the chip itself becomes the picker: Off, the four sounds, the volume
@@ -678,8 +679,12 @@ _RUNTIME = r"""
     if (snd) {
       // 3.9.1 (Sam's pick, "Fifteen sounds": A, say it on the chip): the speaker with a word,
       // Sound while it's off and the sound's name while one plays; just the speaker when compact
-      var spk = el('span', 'display:inline-flex;align-items:center;gap:3px;height:20px;border-radius:10px;flex:none;margin:0 -5px 0 1px;cursor:pointer;' +
-        (D.compact ? 'width:20px;justify-content:center;' : 'padding:0 8px 0 5px;font:600 11px -apple-system,Segoe UI,sans-serif;')),
+      // spacing (Sam: "the sound symbol is a bit too close to the edge"): the outlined speaker sits
+      // 3 px inside the chip on every side, nested; alone (compact, or the picker out) its icon sits
+      // as far in from the chip's end as the chip's first thing does from the other
+      var spk = el('span', 'display:inline-flex;align-items:center;justify-content:center;gap:3px;box-sizing:border-box;height:20px;' +
+        'border-radius:10px;flex:none;cursor:pointer;' +
+        (D.compact ? 'width:20px;margin:0;' : 'margin:0 -7px 0 0;font:600 11px -apple-system,Segoe UI,sans-serif;')),
           pk = el('span', 'display:none;align-items:center;gap:3px;'), opts = [], open = false;
       spk.setAttribute('role', 'button'); spk.setAttribute('aria-label', 'Room sound'); spk.tabIndex = 0;
       D.soundKinds.forEach(function (k) {
@@ -709,7 +714,7 @@ _RUNTIME = r"""
         if (!D.compact) {  // while the picker's out it says it all: the speaker alone, to fold it back
           if (!open) { spk.appendChild(el('span', '', on ? D.soundLabels[snd.kind] : 'Sound')); }
           spk.style.border = '1px solid ' + (open ? 'transparent' : on ? c.a : c.line);
-          spk.style.padding = open ? '0 2px' : '0 8px 0 5px';
+          spk.style.padding = open ? '0 2px' : '0 8px 0 6px';
           spk.style.color = on ? c.a : c.ink;
         }
         spk.title = on ? 'Room sound: ' + D.soundLabels[snd.kind] : 'Room sound: off';
@@ -750,7 +755,8 @@ _RUNTIME = r"""
         if (on) { picked = false; later(4000); }
         pk.style.display = on ? 'inline-flex' : 'none';
         // the picker has the chip to itself while it's out
-        tx.style.display = fc.style.display = on || D.compact ? 'none' : '';
+        tx.style.display = on || D.compact ? 'none' : '';
+        fc.style.display = on || D.compact || !fc.childElementCount ? 'none' : '';
         rg.style.display = on ? 'none' : '';
         sq.style.display = on || (D.compact && !sq.set) ? 'none' : '';
         paint();
