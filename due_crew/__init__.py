@@ -394,6 +394,7 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
         _pending_cheers.extend(fresh)
         _state["sev_cheer"] = time.time()  # 3.8.1: Pip catches it by the logo, once
         _closet(lambda cf: cf.note_cheered())  # 3.8.2: a crewmate's cheer
+        _closet(lambda cf: cf.keep_doodles(fresh, _state["entries"]))  # 3.9.1: a drawing or a sign goes on the fridge
 
     if knocks is not None:
         _state["knocks"] = [tuple(k) for k in knocks]
@@ -1261,7 +1262,8 @@ def _closet_view():
     rest, st["drawn"] = bool(st.get("drawn")), True  # Pip waves when it opens and at a change, then rests
     near, progress = closet_flow.standing(c)
     return {"tab": st.get("tab"), "have": closet_flow.have(c), "look": closet_flow.look(c),
-            "near": near, "progress": progress, "new": st.get("new") or [], "msg": st.get("msg") or "", "rest": rest}
+            "near": near, "progress": progress, "new": st.get("new") or [], "msg": st.get("msg") or "", "rest": rest,
+            "fridge": closet_flow.fridge()}  # 3.9.1
 
 
 def _closet_cmd(cmd, parts):
@@ -1289,6 +1291,9 @@ def _closet_cmd(cmd, parts):
     elif cmd == "closettab" and st is not None and arg.isdigit() and int(arg) < len(board.CLOSET_TABS):
         st.update({"tab": board.CLOSET_TABS[int(arg)], "msg": ""})
         focus = "closettab:" + arg
+    elif cmd == "closetfridge" and st is not None and arg:
+        closet_flow.take_down(arg)  # 3.9.1: off the fridge; the next one along takes its place
+        st.update({"tab": "Fridge", "msg": ""})
     elif cmd == "closetoff":
         c = cfg()
         if c.get(closet_flow.LOOK_KEY):

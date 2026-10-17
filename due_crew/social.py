@@ -52,11 +52,13 @@ def _play_cheers():
         season = None
     c = cfg()
     pips = board.cheer_pips(cheers, _state["entries"], c)  # 3.8.22: each sender's Pip tosses theirs
+    # 3.9.1: a drawing or a sign came along: its sender's Pip holds it up, in the show's place
+    doodle = board.doodle_landing(next((ch for ch in cheers if ch.get("doodle")), None), _state["entries"], c)
     show = None
-    if pips:  # 3.9.0: a show over the whole Decks screen, a different one each time (Sam)
+    if pips and not (doodle and doodle.get("pip")):  # 3.9.0: a show over the whole Decks screen, a different one each time (Sam)
         show, bag = shows.next_show(c.get(shows.BAG_KEY))
         save_cfg(dict(c, **{shows.BAG_KEY: bag}))
-    mw.web.eval(board.flurry_js(emojis, text, back=back, notes=notes, season=season, pips=pips, show=show))
+    mw.web.eval(board.flurry_js(emojis, text, back=back, notes=notes, season=season, pips=pips, show=show, doodle=doodle))
 
 
 def cheer_choices():
@@ -81,13 +83,14 @@ def _cheer_menu(to_uid):
     if dlg.exec():
         emoji = cheer_allowed(dlg.emoji)
         if emoji:
-            _send_cheer(to_uid, entry["name"], emoji, dlg.note)
+            _send_cheer(to_uid, entry["name"], emoji, dlg.note, doodle=dlg.doodle)
 
 
-def _send_cheer(to_uid, to_name, emoji, note="", luck=False, guid=None, then=None, big=False):
+def _send_cheer(to_uid, to_name, emoji, note="", luck=False, guid=None, then=None, big=False, doodle=None):
     """luck: a line held for their exam morning; guid: a tip on one card
     (2.10). then(ok): on the main thread, after it went (or didn't). big
-    (3.8.2): a cheer for a big streak, which the closet counts."""
+    (3.8.2): a cheer for a big streak, which the closet counts. doodle
+    (3.9.1): a drawing or a sign from the Cheer window."""
     cl = client()
 
     def done(ok):
@@ -107,7 +110,8 @@ def _send_cheer(to_uid, to_name, emoji, note="", luck=False, guid=None, then=Non
         elif ok is True and guid:
             tooltip("Tip sent.")
         elif ok:
-            tooltip(f"Sent {html.escape(emoji)} to {html.escape(to_name)}.")
+            extra = {"draw": " and a drawing", "sign": " and a sign"}.get((doodle or {}).get("k"), "")
+            tooltip(f"Sent {html.escape(emoji)}{extra} to {html.escape(to_name)}.")
             try:  # 3.8.0: a few of it float up from their row (motion.js)
                 mw.web.eval("window.dcMotion&&dcMotion.cheer(%s,%s)" % (json.dumps(str(to_uid)), json.dumps(str(emoji))))
             except Exception:
@@ -115,7 +119,7 @@ def _send_cheer(to_uid, to_name, emoji, note="", luck=False, guid=None, then=Non
         else:
             tooltip("Couldn't send. Check your connection.")
 
-    _bg(lambda: cl.send_cheer(to_uid, emoji, note or None, luck=luck, guid=guid), done)
+    _bg(lambda: cl.send_cheer(to_uid, emoji, note or None, luck=luck, guid=guid, doodle=doodle), done)
 
 
 def _edit_status(parent=None):

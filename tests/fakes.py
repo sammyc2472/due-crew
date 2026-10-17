@@ -303,6 +303,33 @@ def _one_line(v, n):
     return re.sub(r"[\x00-\x1f\x7f-\x9f]", "", t)[:n]
 
 
+def _doodle(v):
+    """validate.ts doodle (3.9.1): a drawing's strokes on the 300 x 170 pad,
+    [pen 0-3, x, y, ...] in whole points, 200 strokes and 2,000 points at
+    most; or a sign of 24 at most. The canonical dict, or Bad."""
+    if not isinstance(v, dict):
+        raise Bad(400, "bad_doodle")
+    if v.get("k") == "sign":
+        if set(v) != {"k", "t"} or not isinstance(v["t"], str) or _js_len(v["t"]) > 96:
+            raise Bad(400, "bad_doodle")
+        text = _one_line(v["t"], 24)
+        if not text:
+            raise Bad(400, "bad_doodle")
+        return {"k": "sign", "t": text}
+    s = v.get("s")
+    if v.get("k") != "draw" or set(v) != {"k", "s"} or not isinstance(s, list) or not 0 < len(s) <= 200:
+        raise Bad(400, "bad_doodle")
+    points = 0
+    for st in s:
+        if (not isinstance(st, list) or len(st) < 3 or len(st) % 2 != 1 or not _is_int(st[0], 0, 3)
+                or not all(_is_int(x, 0, 300) for x in st[1::2]) or not all(_is_int(y, 0, 170) for y in st[2::2])):
+            raise Bad(400, "bad_doodle")
+        points += (len(st) - 1) // 2
+    if points > 2000:
+        raise Bad(400, "bad_doodle")
+    return {"k": "draw", "s": [list(st) for st in s]}
+
+
 def _path(v):
     """plans.ts path: a tag's or subdeck's path, 1-200, no control characters."""
     return isinstance(v, str) and 0 < _js_len(v) <= 200 and not re.search(r"[\x00-\x1f]", v)
@@ -686,7 +713,8 @@ class FakeWorker:
             if self.mutual(me, frm) and not self._muted_by(me, frm):  # 3.8.1: muted, dropped as read
                 cheers.append({"from": frm, "name": self.users[frm]["name"] or "?", "emoji": c["emoji"],
                                "note": c.get("note") or "", "luck": bool(c.get("luck")),
-                               "guid": c.get("guid") or "", "at": c["at"]})
+                               "guid": c.get("guid") or "", "at": c["at"],
+                               **({"doodle": json.loads(json.dumps(c["doodle"]))} if c.get("doodle") else {})})
         mine = [c["n"] for (to, _f), c in self.cheers.items() if to == me]
         if got is None:  # an older add-on: they go as they're read
             for key in [k for k in self.cheers if k[0] == me]:
@@ -1083,7 +1111,7 @@ class FakeWorker:
         raise Bad(405, "method")
 
     def _cheer(self, me, to, body):
-        if not set(body) <= {"emoji", "note", "luck", "guid"} or not _is_emoji(body.get("emoji")):
+        if not set(body) <= {"emoji", "note", "luck", "guid", "doodle"} or not _is_emoji(body.get("emoji")):
             raise Bad(400, "bad_cheer")
         if body.get("note") is not None and (not isinstance(body["note"], str) or len(body["note"]) > 80):
             raise Bad(400, "bad_note")
@@ -1091,6 +1119,9 @@ class FakeWorker:
             raise Bad(400, "bad_luck")
         if body.get("guid") is not None and (not isinstance(body["guid"], str) or len(body["guid"]) > 40):
             raise Bad(400, "bad_guid")
+        doodle = _doodle(body["doodle"]) if body.get("doodle") is not None else None
+        if doodle and (body.get("luck") is True or body.get("guid")):
+            raise Bad(400, "bad_doodle")  # 3.9.1: a tip and a good-luck line are words
         if (to, me) not in self.friends:
             raise Bad(403, "not_friends")
         if self._muted_by(to, me):  # 3.8.1: it goes nowhere, and reads as sent
@@ -1103,7 +1134,7 @@ class FakeWorker:
                 by = self.__dict__.setdefault("cheer_counts", {}).setdefault(to, {})
                 by[day[:4]] = by.get(day[:4], 0) + 1
         self.cheers[(to, me)] = {"emoji": body["emoji"], "note": body.get("note"), "luck": body.get("luck") is True,
-                                 "guid": body.get("guid"), "at": _now(), "n": self._next_cheer()}
+                                 "guid": body.get("guid"), "doodle": doodle, "at": _now(), "n": self._next_cheer()}
         if body.get("guid") and body.get("note"):  # 3.2: a tip with words stays on its card
             self.tips[(body["guid"], me)] = {"text": " ".join(body["note"].split())[:80], "at": len(self.tips) + 1}
             self._count("tips")

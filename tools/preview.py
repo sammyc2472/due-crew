@@ -552,6 +552,24 @@ sections.append("<h3>3.8.2: a costume over the look (the things under it say Und
     dict(_CV, look=_MINE["sev_look"] + ["dino"]), {"accent": "purple"}))
 sections.append("<h3>3.8.2: To earn: what's close, then the rest by how it's earned</h3>" + board.closet_html(
     dict(_CV, tab="To earn"), {"accent": "green", "theme": "dark"}))
+# 3.9.1: the fridge, the doodles my crew sent (a heart, a sun, a star, two signs)
+import math as _m  # noqa: E402
+_HEART = [n for a in [i / 24 * 2 * _m.pi for i in range(25)]
+          for n in (round(150 + 52 * _m.sin(a) ** 3), round(84 - 3.4 * (13 * _m.cos(a) - 5 * _m.cos(2 * a) - 2 * _m.cos(3 * a) - _m.cos(4 * a))))]
+_SUN = [[1] + [n for i in range(21) for n in (round(150 + 32 * _m.cos(i / 20 * 2 * _m.pi)), round(85 + 32 * _m.sin(i / 20 * 2 * _m.pi)))]] + [
+    [1, round(150 + 44 * _m.cos(k * _m.pi / 4)), round(85 + 44 * _m.sin(k * _m.pi / 4)),
+     round(150 + 60 * _m.cos(k * _m.pi / 4)), round(85 + 60 * _m.sin(k * _m.pi / 4))] for k in range(8)]
+_STAR = [[2] + [n for i in range(11) for n in (round(150 + (60 if i % 2 == 0 else 26) * _m.cos(-_m.pi / 2 + i * _m.pi / 5)),
+                                                  round(88 + (60 if i % 2 == 0 else 26) * _m.sin(-_m.pi / 2 + i * _m.pi / 5)))]]
+_FRIDGE = [{"from": "dre", "name": "Dre", "at": "2026-10-03T09:00:00Z", "a": "blue", "d": {"k": "sign", "t": "proud of u"}},
+           {"from": "marisa", "name": "Marisa", "at": "2026-10-09T09:00:00Z", "a": "rose", "d": {"k": "draw", "s": _STAR}},
+           {"from": "noah", "name": "Noah", "at": "2026-10-12T09:00:00Z", "a": "teal", "d": {"k": "draw", "s": _SUN}},
+           {"from": "dre", "name": "Dre", "at": "2026-10-15T09:00:00Z", "a": "blue", "d": {"k": "sign", "t": "one more block!"}},
+           {"from": "priya", "name": "Priya", "at": "2026-10-17T09:00:00Z", "a": "purple", "d": {"k": "draw", "s": [[1] + _HEART]}}]
+sections.append("<h3>3.9.1: the fridge, in Pip's closet: the drawings and signs your crew sent, newest first</h3>"
+                + board.closet_html(dict(_CV, tab="Fridge", fridge=_FRIDGE), {"accent": "green"}))
+sections.append("<h3>3.9.1: the fridge, empty (dark)</h3>"
+                + board.closet_html(dict(_CV, tab="Fridge", fridge=[]), {"accent": "green", "theme": "dark"}))
 # 3.8.22: Halloween week (24 to 31 Oct): the line, the five things, the bats (at the day's first board) and,
 # with every Pip on the rows in a Halloween thing, the cobweb
 from due_crew import closet as _cl  # noqa: E402

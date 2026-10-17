@@ -96,8 +96,8 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   deck ids belong to one collection. `plans.py` is pure, `plan_flow.py`
   the glue.
 - Mine alone, never sent: Insights, my progress on each bingo square,
-  checkpoint scores, `wrap.json` (3.8.2: and the closet's tallies in it)
-  and Wrapped.
+  checkpoint scores, `wrap.json` (3.8.2: and the closet's tallies in it;
+  3.9.1: the fridge, the doodles I was sent) and Wrapped.
   Pip's closet is mine (an account key only I read); what my Pip has on
   rides with my accent to mutual friends, as names. A plan's squad (its team on the server) shares only
   that I showed up, my questions and answers, and bingo stamps; never my
@@ -144,6 +144,8 @@ same commit, each with its test:
 - `room_model.phase` ↔ the room widget's JS (3.8.1: a fifteen's question too; `test_fifteen_js_phase_matches_v381`)
 - `sharecard.py` ↔ `site/public/cards.js` (the picture cards' layouts and words, 3.8.0)
 - `due_crew/motion.js` = `site/public/motion.js`, byte for byte (the board's motion, 3.8.0; the suite checks)
+- `shapes.clean_doodle` ↔ `doodle` in `worker/src/validate.ts` ↔ the fake's
+  `_doodle` (a doodle cheer's strokes or sign, 3.9.1)
 - the Worker ↔ `tests/fakes.FakeWorker` (the suite's server)
 
 ## Where things live
@@ -152,7 +154,7 @@ same commit, each with its test:
 |---|---|---|
 | The board, your people: Crew (Today · Week · Decks picker) and Squads | `board.py`, `__init__.py`, `backend/api.py`, `stats/` | `board.ts`, `social.ts`; `Board` in app.js |
 | The You bubble over it (3.8.0): Today, Upcoming, Later, Plans, Insights | `board.you_html`, `__init__._you`, `due_flow.py` | the rail on /home |
-| Cheers, status, profile card (3.9.0: a landing cheer is a show over the whole Decks screen, a different one each time: `shows.py` the bag, `show.js` the twelve, started by `board.flurry_js`) | `social.py`, `wrap.py`, `shows.py`, `show.js` | `social.ts` |
+| Cheers, status, profile card (3.9.0: a landing cheer is a show over the whole Decks screen, a different one each time: `shows.py` the bag, `show.js` the twelve, started by `board.flurry_js`; 3.9.1: a drawing or a sign from the Cheer window's Draw · Sign, held up by the sender's Pip as it lands, then on my fridge in Pip's closet) | `social.py`, `wrap.py`, `shows.py`, `show.js`, `ui/cheer_dialog.py` (`DoodlePad`), `board.doodle_html`/`doodle_landing`, `fridge.py` | `social.ts`, `validate.doodle` (migration 0029) |
 | Settings (one: the board's, 3.8.0) | `settings_model.py`, `account.py`, `board.settings_html` | `GET/PUT /settings` |
 | Squads, knocks, bingo | `squads.py`, `bingo.py`, `bingo_flow.py` | `squads.ts`, `bingo.ts`, `adminsquads.ts` |
 | Who knows this, asks, tips (3.9.0: the day's first sync asks about the cards due today too, so a first miss shows it; with Pip on, the knower's Pip peeks in from the corner, and a tip's tipper's; a tip's, an ask's or a plan note's words fold till Show, so a one-by-one card isn't given away) | `cards.py`, `together.py` | `cards.ts` |

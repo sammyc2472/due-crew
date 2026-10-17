@@ -23,7 +23,8 @@ from datetime import date as _date, datetime, timezone
 
 from .logo import board_mark
 from . import room_model
-from . import closet as _closet, sev as _sev, shows as _shows
+from . import closet as _closet, fridge as _fridge, sev as _sev, shows as _shows
+from .backend.shapes import clean_doodle
 from .stats.decks import sig_match
 
 LIGHT = {
@@ -3627,13 +3628,25 @@ def settings_html(view, cfg):
 
 # ---- 3.8.2: Pip's closet ----
 
-CLOSET_TABS = ("Yours", "To earn")
+CLOSET_TABS = ("Yours", "To earn", "Fridge")  # 3.9.1: the doodles my crew sends
 # the places on Pip, top to bottom, as the closet lists them; a costume over them all
 CLOSET_PLACES = ("head", "face", "body", "hand", "back")
 PLACE_NAMES = {"head": "Head", "face": "Face", "body": "Body", "hand": "Hand", "back": "Back", _closet.COSTUME: "Costume"}
 
 CLOSET_CSS = """
     #due-crew.dc-closet { text-align: left; }
+    /* 3.9.1: the fridge: each doodle on its paper, a little crooked, like a real one */
+    #due-crew .fr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+    #due-crew .fr-it { margin: 0; display: grid; gap: 4px; min-width: 0; }
+    #due-crew .fr-paper { aspect-ratio: 300 / 170; max-width: 100%; background: #fffdf7; border: 1px solid #e6dfcc; border-radius: 7px;
+      display: grid; place-items: center; overflow: hidden; color: #2b2d29; box-shadow: 0 3px 8px rgba(0,0,0,.08); transform: rotate(-1.2deg); }
+    #due-crew .fr-it:nth-child(even) .fr-paper { transform: rotate(1deg); }
+    #due-crew .fr-paper svg { width: 100%; height: 100%; display: block; }
+    #due-crew .fr-paper .dd-sign { font-size: 21px; line-height: 1.05; text-align: center; padding: 4px 8px; overflow-wrap: anywhere; }
+    #due-crew .fr-it figcaption { display: flex; gap: 4px; align-items: baseline; font-size: 12px; color: var(--dc-muted); }
+    #due-crew .fr-it figcaption b { color: var(--dc-ink); font-weight: 600; }
+    #due-crew .fr-x { margin-left: auto; color: var(--dc-muted); text-decoration: none; font-size: 15px; line-height: 1; padding: 0 4px; border-radius: 4px; }
+    #due-crew .fr-x:hover, #due-crew .fr-x:focus-visible { color: var(--dc-ink); background: var(--dc-well); }
     #due-crew .cl-wrap { display: grid; grid-template-columns: 176px minmax(0, 1fr); gap: 16px; align-items: start; }
     @media (max-width: 560px) { #due-crew .cl-wrap { grid-template-columns: minmax(0, 1fr); } }
     #due-crew .cl-me { display: grid; gap: 8px; position: sticky; top: 6px; }
@@ -3790,6 +3803,34 @@ def _closet_ons(look):
     return (f'<div class="cl-ons{" covered" if cos else ""}" aria-label="What your Pip has on">' + "".join(rows) + "</div>")
 
 
+def _fridge_html(items):
+    """3.9.1: the fridge: the drawings and signs my crew sent, newest first,
+    each on its paper with who and when, and a way to take it down."""
+    if not items:
+        return ('<div class="cl-next">When someone in your crew sends a cheer with a drawing or a sign, '
+                'it stays here. Only you see it.</div>')
+    tiles = []
+    for x in reversed(items):
+        name = _html.escape(x["name"])
+        when = _short_day(x["at"])
+        art = doodle_html(x["d"], x["a"], x["name"] + "’s drawing")
+        tiles.append(f'<figure class="fr-it"><div class="fr-paper">{art}</div>'
+                     f'<figcaption><b>{name}</b>{f" · {when}" if when else ""}'
+                     f'<a class="fr-x" href="#" title="Take it down" aria-label="Take {name}’s down" {_st_click("closetfridge:" + _fridge.key(x))}>&times;</a>'
+                     f'</figcaption></figure>')
+    return (f'<section class="cl-sec"><h4>Your fridge <small>{len(items)} of {_fridge.KEEP}</small></h4>'
+            f'<div class="fr-grid">{"".join(tiles)}</div><div class="st-note">On this computer only. The oldest comes down to make room.</div></section>')
+
+
+def _short_day(iso):
+    """"14 Oct" from a cheer's ISO time; "" for anything else."""
+    try:
+        d = _dt.date.fromisoformat(str(iso)[:10])
+    except ValueError:
+        return ""
+    return f"{d.day} {d.strftime('%b')}"
+
+
 def closet_html(view, cfg):
     """3.8.2: Pip's closet, in place of the board (as Settings is).
     view: {tab, have: {thing: day}, look, near: [(k, got, need, unit)],
@@ -3814,7 +3855,8 @@ def closet_html(view, cfg):
           + (f'<a class="st-lk" href="#" {_st_click("closetoff")}>Take it all off</a>' if look else "")
           + '</div>')
     left = len(_closet.THINGS) - len(have)
-    counts = (len(have), left)
+    fridge = _fridge.clean(view.get("fridge"))
+    counts = (len(have), left, len(fridge))
     pills = "".join(f'<button class="st-pill{" on" if t == tab else ""}" aria-pressed="{"true" if t == tab else "false"}" '
                     f'{_st_click(f"closettab:{i}")}>{e(t)} <small>{counts[i]}</small></button>' for i, t in enumerate(CLOSET_TABS))
     if tab == CLOSET_TABS[0]:
@@ -3832,6 +3874,8 @@ def closet_html(view, cfg):
             secs.append(f'<section class="cl-sec"><h4>{"Costumes" if p == _closet.COSTUME else PLACE_NAMES[p]}'
                         f'{f" <small>{len(mine)}</small>" if mine else ""}</h4>{body}</section>')
         main = "".join(secs)
+    elif tab == "Fridge":
+        main = _fridge_html(fridge)
     else:
         near_html = ""
         if view.get("near"):
@@ -4439,6 +4483,49 @@ def loading_card(cfg):
     return _card(cfg, "Due Crew", "Catching up with your crew&hellip;")
 
 
+# 3.9.1, doodle cheers: drawn on paper, the same in either theme, like the pad
+DOODLE_PAPER, DOODLE_LINE, DOODLE_INK = "#fffdf7", "#e6dfcc", "#2b2d29"
+DOODLE_HAND = "'Patrick Hand','Comic Sans MS','Chalkboard SE','Segoe Print','Bradley Hand',cursive"
+
+
+def doodle_html(d, accent=None, label="A drawing"):
+    """3.9.1: a doodle cheer's drawing, as an SVG of its strokes on the pad's
+    300 x 170, or a sign's words; "" for anything clean_doodle drops. The
+    caller sets the paper behind it. accent: the sender's colour (an accent
+    name; its light shade, on paper in either theme). Numbers and escaped
+    words only: a doodle never carries markup or a colour of its own."""
+    d = clean_doodle(d)
+    if not d:
+        return ""
+    if d["k"] == "sign":
+        return f'<div class="dd-sign" style="font-family:{DOODLE_HAND}">{_html.escape(d["t"])}</div>'
+    colour = accent_pair(accent)[0]
+    paths = []
+    for st in d["s"]:
+        pts = list(zip(st[1::2], st[2::2]))
+        line = "M" + " L".join(f"{x} {y}" for x, y in pts) + (" l0.1 0" if len(pts) == 1 else "")
+        paths.append(f'<path d="{line}" stroke="{DOODLE_INK if st[0] & 2 else colour}" stroke-width="{6 if st[0] & 1 else 3}"/>')
+    return (f'<svg class="dd-draw" viewBox="0 0 300 170" role="img" aria-label="{_html.escape(label, quote=True)}" fill="none"'
+            f' stroke-linecap="round" stroke-linejoin="round">{"".join(paths)}</svg>')
+
+
+def doodle_landing(cheer, entries, cfg):
+    """3.9.1: what a landing cheer's doodle needs (flurry_js): its markup,
+    whether it's a sign, and, with Pip on, the sender's Pip with its arms
+    up to hold it (their colour and look, as cheer_pips draws them). None
+    when the cheer has none."""
+    d = clean_doodle((cheer or {}).get("doodle"))
+    if not d:
+        return None
+    e = next((x for x in entries or [] if x.get("user_id") == cheer.get("from") and not x.get("you")), {})
+    name = str(cheer.get("name") or e.get("name") or "?")
+    out = {"html": doodle_html(d, e.get("accent"), f"{name}’s drawing"), "sign": d["k"] == "sign",
+           "a": list(accent_pair(e.get("accent"))), "pip": None}
+    if cfg.get("sev", True):
+        out["pip"] = _sev.svg("stretch", "idle", look=e.get("look"), label=_html.escape(f"{name}’s Pip", quote=True))
+    return out
+
+
 CHEER_PIP = 92  # 3.8.22: a crewmate's Pip popping in with their cheer
 
 
@@ -4485,7 +4572,7 @@ def and_more(names, most=3):
     return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1] if names else ""
 
 
-def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None, show=None):
+def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None, show=None, doodle=None):
     """Injected via web.eval after render — never inline in board HTML.
     Banner takes its colors from the board's tokens (so Settings → Theme
     holds), the page's night classes only when the board is off. When `back` is
@@ -4497,7 +4584,11 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
     in place of the flurry; with Reduce motion they stand still in the
     banner. show (3.9.0, shows.next_show): with the Pips, a show over the
     whole Decks screen in place of the toss (show.js), the banner at the
-    top; the toss if the show can't play."""
+    top; the toss if the show can't play. doodle (3.9.1, doodle_landing):
+    a drawing or a sign came with it. The sender's Pip pops up at the
+    board's corner holding it up, in place of the show and the toss, and
+    ducks down as the banner goes; with Pip off or Reduce motion it sits in
+    the banner, still, on its paper."""
     # 2.10: about one flake in three is the season's
     emoji_list = _json.dumps(list(emojis) * 2 + list(season or []) if season else list(emojis))
     banner = _json.dumps(banner_text)
@@ -4508,6 +4599,7 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
     senders_json = _json.dumps([dict(p.get("poses") or {}, name=p.get("name") or "", note=p.get("note") or "", emoji=p.get("emoji") or "\U0001F389", a=p["a"])
                                 for p in (pips or [])][:3]).replace("</", "<\\/") if show else "[]"
     season_one = _json.dumps((list(season or []) or [""])[0])
+    doodle_json = _json.dumps({k: doodle[k] for k in ("html", "sign", "a", "pip")} if doodle and doodle.get("html") else None).replace("</", "<\\/")
     return """
     (function() {
         if (document.getElementById('dc-flurry')) { return; }
@@ -4559,6 +4651,23 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
             });
         }
         var pips = %s, still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        // 3.9.1: a doodle buys time, on its paper (light in either theme, like the pad it was drawn on)
+        var dd = %s, held = !!(dd && dd.pip && pips.length && !still && document.body.animate);
+        function paper(w, h) {
+            var p = document.createElement('div');
+            p.style.cssText = 'width:' + w + 'px;height:' + h + 'px;box-sizing:border-box;background:%s;border:1px solid %s;' +
+                'border-radius:8px;display:grid;place-items:center;overflow:hidden;color:%s;font-weight:400;';
+            p.innerHTML = dd.html;
+            var v = p.querySelector('svg');
+            if (v) { v.style.cssText = 'width:100%%;height:100%%;display:block;'; }
+            var words = p.querySelector('.dd-sign');
+            if (words) { words.style.cssText += ';font-size:' + Math.round(h * 0.27) + 'px;line-height:1.05;text-align:center;padding:4px 8px;overflow-wrap:anywhere;'; }
+            return p;
+        }
+        if (dd) {
+            linger += 2500;
+            if (!held) { var mini = paper(150, 85); mini.style.margin = '8px auto 2px'; banner.insertBefore(mini, sub || null); }
+        }
         // 3.8.22: the board's own theme decides a Pip's colour, light or dark
         function dark(c) {
             var m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(c), n = m ? [m[1], m[2], m[3]].map(function(h) { return parseInt(h, 16); })
@@ -4591,6 +4700,36 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
         setTimeout(function() { banner.style.opacity = '0'; }, linger);
         setTimeout(function() { banner.remove(); }, linger + 600);
         if (still) { return; }
+        if (held) {
+            // 3.9.1: their Pip holds it up at the board's corner, then ducks down as the banner goes
+            var hb = document.getElementById('due-crew'), hr = hb ? hb.getBoundingClientRect() : null;
+            var hvh = window.innerHeight, base = Math.min(hvh, hr ? hr.bottom : hvh), HW = 190, HH = 196;
+            var right = Math.min(window.innerWidth - 8, hr ? hr.right : window.innerWidth - 8);
+            var hbox = document.createElement('div');
+            hbox.setAttribute('aria-hidden', 'true');
+            hbox.style.cssText = 'position:fixed;z-index:71;pointer-events:none;overflow:hidden;left:' + Math.max(8, right - HW - 8) +
+                'px;top:' + (base - HH) + 'px;width:' + HW + 'px;height:' + HH + 'px;';
+            var lift = document.createElement('div');
+            lift.style.cssText = 'display:flex;flex-direction:column;align-items:center;padding-top:6px;transform:translateY(' + HH + 'px);';
+            var sign = paper(170, 96);
+            sign.style.transform = 'rotate(-3deg)';
+            sign.style.boxShadow = '0 6px 16px rgba(0,0,0,.18)';
+            var sticks = document.createElement('div');
+            sticks.style.cssText = 'display:flex;justify-content:space-between;width:56px;height:28px;margin-top:-2px;';  // long enough for a hat under it
+            sticks.innerHTML = '<i style="width:3px;background:#b08a5a;border-radius:2px"></i><i style="width:3px;background:#b08a5a;border-radius:2px"></i>';
+            var holder = pipEl({ svg: dd.pip, a: dd.a }, 92);
+            holder.style.marginTop = '-40px';
+            lift.appendChild(sign); lift.appendChild(sticks); lift.appendChild(holder);
+            hbox.appendChild(lift);
+            document.body.appendChild(hbox);
+            lift.animate([{ transform: 'translateY(' + HH + 'px)' }, { transform: 'translateY(0px)' }],
+                         { duration: 600, easing: 'cubic-bezier(.2,.9,.3,1.25)', fill: 'forwards' });
+            setTimeout(function() {
+                lift.animate([{ transform: 'translateY(0px)' }, { transform: 'translateY(' + HH + 'px)' }],
+                             { duration: 380, easing: 'ease-in', fill: 'forwards' }).onfinish = function() { hbox.remove(); };
+            }, linger);
+            return;
+        }
         var show = %s;
         if (show && pips.length && document.body.animate) {
             // 3.9.0: a show over the whole Decks screen, the banner at its top (show.js)
@@ -4685,7 +4824,7 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
         document.body.appendChild(wrap);
         setTimeout(function() { wrap.remove(); }, 3800);
     })();
-    """ % (back_cmd, banner, notes_json, pips_json, show_json, SHOW_JS if show_json != "null" else "",
+    """ % (back_cmd, banner, notes_json, pips_json, doodle_json, DOODLE_PAPER, DOODLE_LINE, DOODLE_INK, show_json, SHOW_JS if show_json != "null" else "",
            senders_json, _json.dumps(_sev.CSS).replace("</", "<\\/") if show_json != "null" else "null", CHEER_PIP, season_one, emoji_list)
 
 

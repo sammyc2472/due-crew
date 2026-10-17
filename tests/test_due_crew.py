@@ -14487,6 +14487,126 @@ def test_motion_ends_where_it_lands_v390():
         check("audit: tools/motion_audit.js is valid JS", r.returncode == 0, r.stderr[:300])
 
 
+def test_doodle_cheers_v391():
+    """3.9.1, doodle cheers (Sam: "create the doodles thing"): a cheer can
+    carry a drawing (strokes on the 300 x 170 pad) or a sign their Pip holds
+    up. Numbers and one line of words, both ways; it lands held up by the
+    sender's Pip (in the banner with Pip off or Reduce motion), and stays on
+    my fridge in Pip's closet, on this computer, till I take it down."""
+    from due_crew.backend.shapes import clean_doodle
+    from due_crew import fridge as FR
+    draw = {"k": "draw", "s": [[0, 10, 20, 30, 40, 50, 60], [3, 299, 169]]}
+    check("doodle shape: strokes of whole points on the pad, pen 0-3, kept as they are",
+          clean_doodle(draw) == draw and clean_doodle(dict(draw)) is not draw)
+    many = [n for i in range(2001) for n in (i % 300, i % 170)]
+    bad = [{"k": "draw", "s": []}, {"k": "draw", "s": [[4, 1, 1]]}, {"k": "draw", "s": [[0, 1]]},
+           {"k": "draw", "s": [[0, 301, 1]]}, {"k": "draw", "s": [[0, 1, 171]]}, {"k": "draw", "s": [[0, 1.5, 1]]},
+           {"k": "draw", "s": [[0, True, 1]]}, {"k": "draw", "s": [[0, -1, 1]]}, {"k": "draw", "s": [[0] + many]},
+           {"k": "draw", "s": [[0, 1, 1]] * 201}, {"k": "draw", "s": [[0, 1, 1]], "c": "#f00"},
+           {"k": "sign", "t": "  "}, {"k": "sign", "t": 5}, {"k": "pic", "src": "https://x"}, "draw", None, []]
+    check("doodle shape: anything the Worker turns away is None (no colour, no picture, no link, past the ceilings)",
+          all(clean_doodle(b) is None for b in bad))
+    check("doodle shape: 2,000 points is the ceiling, not past it",
+          clean_doodle({"k": "draw", "s": [[2] + many[:4000]]}) is not None)
+    party = "\U0001F389"
+    check("a sign: one line, 24 at most as the Worker counts, an emoji never cut in half",
+          clean_doodle({"k": "sign", "t": "  you've\ngot   this "}) == {"k": "sign", "t": "you've got this"}
+          and clean_doodle({"k": "sign", "t": "x" * 40})["t"] == "x" * 24
+          and clean_doodle({"k": "sign", "t": "x" * 23 + party})["t"] == "x" * 23)
+    # both ways, through the fake Worker
+    store = world({"sam": "Sammy", "dre": "Dre", "nia": "Nia"}, {"sam": ["dre", "nia"], "dre": ["sam"]})
+    dre = new_client(store, "dre", "Dre")
+    sent = dre.send_cheer("sam", party, "go", doodle=draw)
+    check("sent: one request, the drawing as one more field of the cheer", sent is True
+          and store.cheers[("sam", "dre")]["doodle"] == draw)
+    dre.send_cheer("sam", "\U0001F340", "luck", luck=True, doodle=draw)
+    lucky = store.cheers[("sam", "dre")]
+    dre.send_cheer("sam", party, doodle={"k": "draw", "s": [[9, 1, 1]]})
+    check("never on a good-luck line or a tip; a broken one isn't sent, the cheer still goes",
+          lucky["doodle"] is None and lucky["luck"] and store.cheers[("sam", "dre")]["doodle"] is None)
+    dre.send_cheer("sam", party, doodle={"k": "sign", "t": "you've got this"})
+    sam = new_client(store, "sam", "Sammy")
+    data, _labels, _t = fetch_as(store, sam, make_user_col([TODAY]))
+    check("received: the sign comes with the cheer, read through the same gate",
+          data["cheers"][0].get("doodle") == {"k": "sign", "t": "you've got this"}, data["cheers"])
+    check("only to someone who added me, as every cheer (Nia hasn't added Dre)",
+          dre.send_cheer("nia", party, doodle=draw) is False and ("nia", "dre") not in store.cheers)
+    newer = store._cheer
+
+    def older(me, to, body):  # a Worker from before 3.9.1: the field is one it doesn't know
+        if "doodle" in body:
+            raise fakes.Bad(400, "bad_cheer")
+        return newer(me, to, body)
+    store._cheer = older
+    try:
+        went = dre.send_cheer("sam", "\U0001F525", "still", doodle=draw)
+    finally:
+        store._cheer = newer
+    check("a server from before doodles turns the field away: the cheer still goes, without it",
+          went is True and store.cheers[("sam", "dre")]["note"] == "still" and store.cheers[("sam", "dre")].get("doodle") is None)
+    # drawn: numbers and escaped words only
+    art = board.doodle_html(draw, "blue")
+    blue = board.accent_pair("blue")[0]
+    check("drawn: a path a stroke, my colour or ink, thin or thick; nothing but numbers in it",
+          art.count("<path") == 2 and f'stroke="{blue}" stroke-width="3"' in art and f'stroke="{board.DOODLE_INK}" stroke-width="6"' in art
+          and "M299 169 l0.1 0" in art and 'viewBox="0 0 300 170"' in art)
+    sign = board.doodle_html({"k": "sign", "t": "<b>hi</b>"})
+    check("a sign's words are escaped; a broken doodle draws nothing",
+          "&lt;b&gt;hi&lt;/b&gt;" in sign and "<b>" not in sign and board.doodle_html({"k": "draw", "s": [[7, 1, 1]]}) == "")
+    ents = [{"user_id": "dre", "name": "Dre", "accent": "purple", "look": ["cap"], "you": False}]
+    land = board.doodle_landing({"from": "dre", "name": "Dre", "doodle": draw}, ents, {"sev": True})
+    still = board.doodle_landing({"from": "dre", "name": "Dre", "doodle": draw}, ents, {"sev": False})
+    check("it lands held up by their Pip, arms up, in their colour and look; Pip off: no Pip; no doodle: nothing",
+          land and "m-idle" in land["pip"] and land["a"] == list(board.accent_pair("purple"))
+          and board.accent_pair("purple")[0] in land["html"] and still["pip"] is None
+          and board.doodle_landing({"from": "dre"}, ents, {"sev": True}) is None)
+    js = board.flurry_js([party], "🎉 Dre sent cheers", back=("dre", party), pips=[{"svg": "<svg></svg>", "a": ["#1", "#2"]}],
+                         doodle=dict(land, html=board.doodle_html({"k": "sign", "t": "</script><b>"})))
+    check("the landing: the doodle rides in as data (no '</' to end the script), buys time, and its Pip holds it up in the show's place",
+          "</script><b>" not in js and "&lt;/script&gt;" in js and "linger += 2500" in js and "if (held)" in js
+          and "var dd = null" in board.flurry_js([party], "x"))
+    # the fridge: mine, the last 24, on this computer
+    cheers = [{"from": "dre", "name": "Dre", "at": f"2026-10-{d:02d}T10:00:00Z", "doodle": draw} for d in range(1, 30)]
+    items = FR.add([], cheers + [{"from": "mo", "name": "Mo", "at": "x", "doodle": None}], {"dre": "purple"})
+    again = FR.add(items, cheers[-2:], {})
+    check("the fridge: the ones that carried a doodle, each once, the last 24, colour as it came",
+          len(items) == FR.KEEP and items[-1]["at"].startswith("2026-10-29") and items[0]["at"].startswith("2026-10-06")
+          and items[0]["a"] == "purple" and again == items)
+    k = FR.key(items[-1])
+    check("take one down by its key; junk on the fridge is dropped",
+          len(FR.take_down(items, k)) == FR.KEEP - 1 and all(FR.key(x) != k for x in FR.take_down(items, k))
+          and FR.clean([{"d": {"k": "pic"}}, 5, {"from": "x", "d": draw}]) == [{"from": "x", "name": "?", "at": "", "a": "", "d": draw}])
+    page = board.closet_html({"tab": "Fridge", "have": {}, "look": [], "fridge": items[-3:]}, {"accent": "green"})
+    empty = board.closet_html({"tab": "Fridge", "have": {}, "look": [], "fridge": []}, {"accent": "green"})
+    check("Pip's closet has a Fridge: newest first, who and when, each with a way to take it down; empty, it says what goes there",
+          "Fridge <small>3</small>" in page and page.count('class="fr-it"') == 3 and f"duecrew:closetfridge:{k}" in page
+          and page.index("29 Oct") < page.index("27 Oct") and "Only you see it" in empty and "Fridge <small>0</small>" in empty)
+    # the clicks, as the board sends them
+    import due_crew as dc
+    from due_crew import closet_flow as cf
+    from aqt.deckbrowser import DeckBrowser
+    if "aqt.reviewer" not in sys.modules:
+        sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
+    wrap = _patched_due_crew()
+    saved = (dc._swap, dc._board_on_screen)
+    dc._swap = lambda c, focus=None: None
+    dc._board_on_screen = lambda: True
+    try:
+        cf.keep_doodles(cheers[-3:], ents)
+        dc._state["closet_open"] = {"tab": "Yours"}
+        n0 = len(cf.fridge())
+        dc._on_js(False, "duecrew:closettab:2", DeckBrowser())
+        tab = dc._state["closet_open"]["tab"]
+        dc._on_js(False, "duecrew:closetfridge:" + FR.key(cf.fridge()[0]), DeckBrowser())
+        dc._on_js(False, "duecrew:closetfridge:nope", DeckBrowser())
+        check("on the fridge as they land; the Fridge tab; take one down, through the board's own handler (an unknown key: nothing)",
+              n0 == 3 and tab == "Fridge" and len(cf.fridge()) == 2 and dc._state["closet_open"]["tab"] == "Fridge"
+              and len(wrap._wrap_data()["fridge"]) == 2 and dc._closet_view()["fridge"] == cf.fridge())
+    finally:
+        dc._swap, dc._board_on_screen = saved
+        dc._state["closet_open"] = None
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

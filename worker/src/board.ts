@@ -116,7 +116,7 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
        LEFT JOIN settings t ON t.uid = f.friend AND b.owner IS NOT NULL
        WHERE f.owner = ?1 ORDER BY f.at, f.friend`).bind(s.uid),
     db.prepare(
-      `SELECT c.from_uid, c.emoji, c.note, c.luck, c.guid, c.at FROM cheers c WHERE c.to_uid = ?`).bind(s.uid),
+      `SELECT c.from_uid, c.emoji, c.note, c.luck, c.guid, c.doodle, c.at FROM cheers c WHERE c.to_uid = ?`).bind(s.uid),
   ]);
   const me = meRes.results[0] as any;
   if (!me) throw new HttpError(401, "auth");
@@ -135,7 +135,8 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
     const from = byUid.get(c.from_uid);
     if (!from?.mutual || muted.has(c.from_uid)) continue;  // added me once, not any more (or never back), or muted: dropped
     cheers.push({ from: c.from_uid, name: from.name, emoji: c.emoji, note: c.note || "",
-                  luck: c.luck === 1, guid: c.guid || "", at: iso(c.at) });
+                  luck: c.luck === 1, guid: c.guid || "", at: iso(c.at),
+                  ...(c.doodle ? { doodle: JSON.parse(c.doodle) } : {}) });  // 3.9.1: written by validate.doodle
   }
   const cheersAt = Math.max(0, ...(cheersRes.results as any[]).map((c) => Number(c.at) || 0));
   if (cheersRes.results.length && !keep && !acks) {

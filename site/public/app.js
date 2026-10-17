@@ -1710,7 +1710,9 @@ function sinceYouWereHere(b, crew, t) {
     : x.kind === "note" ? row("✎", [h("b", {}, x.name), ` on ${pretty(x.day)}, `, link(`/plans/${x.plan}`, x.planName), `: ${x.text}`], "A note on a day")
     : x.kind === "post" ? row("✉", [h("b", {}, x.name), " on ", link(`/plans/${x.plan}`, x.planName), `: ${x.text}`], "Posted to followers")
     : row("↻", [h("b", {}, x.name), " changed ", link(`/plans/${x.plan}`, x.planName), `: ${x.summary}`], "Your Anki has it at its next refresh");
-  const cheers = b.cheers.length ? row(b.cheers[0].emoji, [h("b", {}, b.cheers[0].name), " cheered", b.cheers[0].note ? `: ${b.cheers[0].note}` : ""],
+  // 3.9.1: a drawing or a sign waits with it, for Anki to show (its Pip holds it up)
+  const drew = (c) => ({ draw: " with a drawing", sign: " with a sign" })[c.doodle?.k] || "";
+  const cheers = b.cheers.length ? row(b.cheers[0].emoji, [h("b", {}, b.cheers[0].name), " cheered", drew(b.cheers[0]), b.cheers[0].note ? `: ${b.cheers[0].note}` : ""],
     `${b.cheers.length === 1 ? "It waits" : `${b.cheers.length} cheers wait`} for your Anki screen`) : null;
   const exams = crew.map((f) => [f, f.week?.examDate]).filter(([, d]) => d && d >= t && d <= addDays(t, 14)).sort((a, c) => a[1].localeCompare(c[1]))
     .map(([f, d]) => {

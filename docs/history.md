@@ -2152,3 +2152,32 @@ every release that changes how something works.
   cheers' toss were already ending where they rest. The suite reads every
   keyframe list in the add-on and the site and fails one whose offsets go
   backwards, which a browser drops without a word.
+- 3.9.1, doodle cheers (Sam, 17 Oct: "Like doodle idea! mock it", then
+  "create the doodles thing", with the mock's picks: both, Pip holds it up,
+  the fridge, your colour and black). The Cheer window has Draw and Sign
+  under the emoji: a pad to draw on (paper, light in either theme; two
+  pens, your accent's light shade and ink, thin or thick, Undo, Clear), or
+  a few words (24 at most, shown on the paper as they'll look) for your
+  Pip to hold up. Both are optional; a blank pad sends a plain cheer. It
+  goes as one more field of the cheer, so sending is still one request: a
+  drawing is its strokes, [pen, x, y, ...] in whole points on the 300 x
+  170 pad (pen bit 0 thick, bit 1 ink), 200 strokes and 2,000 points at
+  most, a few KB; never pixels, a colour of its own, markup or a link.
+  `shapes.clean_doodle` is the client's gate both ways, `validate.doodle`
+  the Worker's (the fake's `_doodle` the same); never on a tip or a
+  good-luck line. Migration 0029 adds `cheers.doodle`; `/board` returns
+  it with the cheer, `GET /account/data` with the ones waiting, a report
+  says a sign's words or that it drew. A Worker from before it turns the
+  field away (400, nothing written), so the add-on sends the cheer again
+  without it. It lands as the cheer does, from mutual friends only, and
+  in place of the show: the sender's Pip (their colour and look, arms up)
+  rises at the board's corner holding it on two sticks and ducks down as
+  the banner goes (`board.doodle_landing`, `flurry_js`'s `doodle`); with
+  Pip off or Reduce motion it sits in the banner on its paper, still. The
+  drawing is drawn back on my side (`board.doodle_html`: an SVG of paths,
+  the sender's accent in its light shade). Every one that lands goes on
+  the fridge, a third page of Pip's closet (Yours · To earn · Fridge):
+  newest first, who and when, a × to take it down (`closetfridge`), the
+  last 24, kept in wrap.json on this computer and never sent (`fridge.py`
+  pure, `closet_flow.keep_doodles`/`fridge`/`take_down` the glue). The
+  site's home says "cheered with a drawing" and leaves it for Anki.

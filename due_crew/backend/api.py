@@ -27,7 +27,7 @@ from .. import bingo as _bingo
 from ..room_model import clean_room, is_fifteen, is_over
 from .shapes import (
     AuthError, REPORT_NOTE_MAX, TransportError, TIMEOUT, WEEK_WINDOW, _clean_day, _clean_decks, _clean_member,
-    _exam_value, _live_room, _week_days, away_range, clean_accent, clean_days, clean_look, clean_emoji, clean_squad_name, clean_note, clean_offer, clean_authored, clean_plan, clean_sched, clean_recap, clean_cards, clean_notice,
+    _exam_value, _live_room, _week_days, away_range, clean_accent, clean_days, clean_doodle, clean_look, clean_emoji, clean_squad_name, clean_note, clean_offer, clean_authored, clean_plan, clean_sched, clean_recap, clean_cards, clean_notice,
     clean_tricky, day_doc, friend_code_from, invite_code_from, live_now, normalize_code,
     clean_team_view, clean_teams, clean_plan_invites,
 )
@@ -372,7 +372,8 @@ class ApiClient:
             cheers.append({"from": str(c["from"]), "name": str(sender.get("name") or "?"),
                            "emoji": emoji, "at": str(c.get("at") or ""),
                            "note": clean_note(c.get("note")), "luck": c.get("luck") is True,
-                           "guid": str(c.get("guid") or "")[:40]})
+                           "guid": str(c.get("guid") or "")[:40],
+                           "doodle": clean_doodle(c.get("doodle"))})  # 3.9.1
         friends = [str(f.get("uid")) for f in data.get("friends") or [] if f.get("uid")]
         if friends != self.session.get("friend_ids"):
             self.session["friend_ids"] = friends
@@ -836,8 +837,9 @@ class ApiClient:
 
     # ---- cheers and knocks ----
 
-    def send_cheer(self, to_uid, emoji, note=None, luck=False, guid=None):
-        """One cheer; it replaces my last one to the same person."""
+    def send_cheer(self, to_uid, emoji, note=None, luck=False, guid=None, doodle=None):
+        """One cheer; it replaces my last one to the same person. doodle
+        (3.9.1): a drawing or a sign (clean_doodle), on a plain cheer only."""
         emoji = clean_emoji(emoji)
         if not emoji:
             return False  # nothing that isn't one emoji is ever sent
@@ -849,7 +851,14 @@ class ApiClient:
             body["luck"] = True
         if guid:
             body["guid"] = str(guid)[:40]
+        doodle = None if luck or guid else clean_doodle(doodle)
+        if doodle:
+            body["doodle"] = doodle
         status, _ = self._call("POST", f"/cheers/{to_uid}", body)
+        if status == 400 and doodle:
+            # a Worker from before 3.9.1 turns the field away and writes nothing: the cheer still goes
+            body.pop("doodle")
+            status, _ = self._call("POST", f"/cheers/{to_uid}", body)
         return status == 200
 
     def send_knock(self, to_uid, squad):

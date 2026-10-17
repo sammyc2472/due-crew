@@ -665,6 +665,17 @@ In Anki (as a follower):
 - [ ] Plan ▾ › How its cards open: switch to When I'm ready (a deck with open later cards offers Hold back), and back to the plan's dates (dates passed since ask, as Resume does). duecrew.com's plan page shows "At your pace · next: …" and the same choice; changing it there reaches Anki at its next refresh.
 - [ ] Browse: right-click a tag in the sidebar › Due Crew: open its cards…: the sheet counts what opens, what's open already, the leeches (they stay suspended), and the plans that hold them; Open with First in line ticked puts them first in Anki's new cards; one Edit › Undo shuts them. Pick cards in the table › Due Crew: open these…: the same for just those. Signed out: both are there.
 
+### 3.9.1: doodle cheers (deploy the Worker first: migration 0029)
+
+- [ ] 🎉 a crewmate: the Cheer window has Draw and Sign under the emoji. Draw on the pad with the mouse (and a trackpad, and a pen if you have one): the lines follow, in your accent; Black, Thin and Thick change the next line; Undo takes the last line, Clear all of them. Night mode: the pad stays paper-light.
+- [ ] Send with a drawing: "Sent 🎉 and a drawing to Adina." Send with the pad blank: a plain cheer, as before.
+- [ ] Sign: type a few words; the paper under it shows them as they'll look; 24 letters at most. Send from the Sign tab: "Sent 🎉 and a sign …".
+- [ ] On their Decks screen (or yours, cheered by a second account): the banner at the top, and your Pip (your colour, your look) rises at the board's bottom right holding the drawing (or the sign) up on two sticks, then ducks down as the banner goes. No show that time. A hat on your Pip sits under the sign, not in front of it.
+- [ ] Reduce motion (system setting): no Pip rising; the drawing sits in the banner on its paper, under the note. Settings › Pip off: the same, with the emoji flurry.
+- [ ] Pip's closet: a third pill, Fridge, with how many. The drawing is there, newest first, "Adina · 17 Oct", a little crooked; × takes it down and the next one closes up. Empty: "When someone in your crew sends a cheer with a drawing or a sign, it stays here. Only you see it."
+- [ ] duecrew.com's home, before Anki opens: "Adina cheered with a drawing: …, It waits for your Anki screen".
+- [ ] Report someone who sent a sign: the admin's Inbox shows "(with a sign: "…")" in their last cheer.
+
 ### 3.9.0: cheers land everywhere
 
 - [ ] Have a crewmate cheer you, then open the Decks screen: a show plays over the whole page, the deck list and the board, never over Anki's top bar; the banner at the top names them, with their note and "click to send one back". Cheered again (or a few cheers at once): a different show each time, never the same twice in a row, all twelve before any repeats.

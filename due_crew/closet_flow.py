@@ -199,6 +199,42 @@ def note_cheered():
     _ybump("cheered_by")
 
 
+# ---- 3.9.1: the fridge (wrap.json's "fridge") ----
+
+def fridge():
+    """The doodles on my fridge, oldest first (fridge.clean)."""
+    from . import fridge as fr
+    from .wrap import _wrap_data
+    return fr.clean(_wrap_data().get("fridge"))
+
+
+def keep_doodles(cheers, entries):
+    """Stick the cheers that carried a drawing or a sign on the fridge, as
+    they land. Main thread (wrap.json)."""
+    from . import fridge as fr
+    from .wrap import _wrap_data
+    if not any(ch.get("doodle") for ch in cheers or []):
+        return
+    w = _wrap_data()
+    accents = {e.get("user_id"): e.get("accent") for e in entries or [] if not e.get("you")}
+    w["fridge"] = fr.add(w.get("fridge"), cheers, accents)
+    _save()
+
+
+def take_down(k):
+    """Take one off the fridge; True when it was there."""
+    from . import fridge as fr
+    from .wrap import _wrap_data
+    w = _wrap_data()
+    before = fr.clean(w.get("fridge"))
+    after = fr.take_down(before, k)
+    if len(after) == len(before):
+        return False
+    w["fridge"] = after
+    _save()
+    return True
+
+
 def note_card_added(*_args):
     """A note added in Anki's Add window: a card of my own."""
     try:
