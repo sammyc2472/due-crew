@@ -368,6 +368,10 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
 
     _state["prev_label"] = today
     _state["prev_counts"] = counts
+    # 3.9.1: the day this computer first sees a crewmate starts the Cheer pill's two weeks on every row
+    if not c.get("cheer_pill_from") and any(not e["you"] for e in data["entries"]):
+        c["cheer_pill_from"] = today
+        save_cfg(c)
 
     cl = client()
     # 3.0.1: someone I muted is dropped here, quietly; their tips don't
@@ -877,6 +881,9 @@ def _on_js(handled, message, context):
         open_auth()
     elif cmd == "cheerpick" and len(parts) > 2:
         _cheer_menu(parts[2])
+    elif cmd == "cheersend" and len(parts) > 2:
+        from .social import send_from_window
+        send_from_window(":".join(parts[2:]))  # 3.9.1: the Cheer window's Send
     elif cmd == "rowmenu" and len(parts) > 2:
         row_menu(parts[2])  # 3.0.1: right-click a crewmate: mute, report
     elif cmd == "status":

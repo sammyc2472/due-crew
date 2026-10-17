@@ -1088,6 +1088,9 @@ const Board = (() => {
       const [t] = ago(r.last);
       cell.append(h("span", { class: "ago faded" }, ` · nothing ${period === "week" ? "this week" : "yet"}${t && t !== "just now" ? ` as of ${t}` : ""}`));
     }
+    // board.py 3.9.1: the cheer is a pill after the name, on hover or focus (always on a touch screen,
+    // and on every row for a crew's first two weeks), in place of the 🎉 column at the end
+    if (!r.you) cell.append(h("button", { class: "linkish cpill", title: "Send a cheer", "aria-label": `Cheer ${p.name}`, onclick: (e) => cheerMenu(p.uid, e.currentTarget) }, "🎉 Cheer"));
     else if (r.stale) cell.append(h("span", { class: "ago faded" }, " · yesterday"));
     else if (r.showup && r.daysWk) cell.append(h("span", { class: "ago faded" }, ` · ${r.daysWk} day${r.daysWk === 1 ? "" : "s"} this week`));
     if (r.status) {
@@ -1108,28 +1111,30 @@ const Board = (() => {
     const sort = HEADS.some(([k]) => k === kept) ? kept : "reviews";
     const [fresh, dormant] = rows(people, period, sort, today);
     const head = h("tr", {}, picker ? corner(picker) : [h("th"), h("th")], HEADS.map(([k, l]) => h("th", { class: `k-${k}${k === sort ? " on" : ""}` },
-      h("button", { class: "linkish", onclick: () => { store("dc-sort", k); onSort(); } }, l + (k === sort ? " ▾" : "")))), h("th"));
+      h("button", { class: "linkish", onclick: () => { store("dc-sort", k); onSort(); } }, l + (k === sort ? " ▾" : "")))));
     let n = 0;
     const tr = (r, rank) => {
       // T5: how many were new, on the Week tab
       const rv = r.reviews === null ? "—" : h("span", {}, r.reviews.toLocaleString(), period === "week" && r.new > 0 && r.reviews > 0 ? h("small", {}, r.new >= r.reviews ? "all new" : `${Math.min(r.new, r.reviews).toLocaleString()} new`) : null);
       const dash = r.paused || r.quiet || r.notyet;
-      const cheer = r.you ? h("td") : h("td", { class: "chc" }, h("button", { class: "linkish cheer", title: "Send a cheer", onclick: (e) => cheerMenu(r.p.uid, e.currentTarget) }, "🎉"));
       return h("tr", { class: [r.you ? "you" : "", r.stale || r.quiet || r.paused || r.notyet ? "dim" : ""].join(" ").trim(), "data-uid": r.p.uid },
         h("td", { class: "rk" }, rank), nameCell(r, period),
         h("td", { class: "n" }, dash ? "—" : rv), h("td", { class: "n k-time" }, dash || r.time === null ? "—" : fmtTime(r.time)),
         h("td", { class: "n k-retention" }, dash || r.retention === null ? "—" : `${r.retention.toFixed(1)}%`),
-        h("td", { class: "n" }, dash || r.streak === null ? "—" : String(r.streak)), cheer);
+        h("td", { class: "n" }, dash || r.streak === null ? "—" : String(r.streak)));
     };
     // Q3: friends with no sync in 90+ days fold into one line, as board.py's _quiet_fold
     const longQ = dormant.filter((r) => r.quiet && !r.you && r.last && Date.now() - Date.parse(r.last) > 90 * 86400000);
-    const tbl = h("table", { class: "brdt" });
+    // board.pills_always: the pill on every row for this browser's first two weeks with a crew
+    let pillFrom = store("dc-pill-from");
+    if (!pillFrom && [...fresh, ...dormant].some((r) => !r.you)) pillFrom = store("dc-pill-from", today);
+    const tbl = h("table", { class: pillFrom && today >= pillFrom && today < addDays(pillFrom, 14) ? "brdt cpills" : "brdt" });
     const fold = [];
     if (longQ.length) {
       const names = longQ.map((r) => r.p.name);
       const who = names.length === 1 ? names[0] : names.length <= 3 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : `${names.slice(0, 2).join(", ")} and ${names.length - 2} more`;
       const since = MONTHS[new Date(Math.max(...longQ.map((r) => Date.parse(r.last)))).getMonth()];
-      fold.push(h("tr", { class: "qfold" }, h("td", { class: "rk" }), h("td", { class: "nm", colspan: HEADS.length + 2 },
+      fold.push(h("tr", { class: "qfold" }, h("td", { class: "rk" }), h("td", { class: "nm", colspan: HEADS.length + 1 },
         h("button", { class: "linkish", onclick: () => tbl.classList.toggle("qopen") }, `▸ ${longQ.length} quiet`),
         h("span", { class: "ago faded" }, ` · ${who} ${longQ.length === 1 ? "hasn't" : "haven't"} been here since ${since}`))));
       for (const r of longQ) { const row = tr(r, "—"); row.classList.add("qh"); fold.push(row); }

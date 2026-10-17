@@ -13,7 +13,7 @@ from aqt.utils import tooltip
 from . import app, board, shows
 from .app import (CHEER_QUICK, HEATMAP_DAYS, _bg, _pending_cheers,
                   _profile_files, _state, cfg, client, save_cfg)
-from .backend.shapes import clean_emoji
+from .backend.shapes import clean_doodle, clean_emoji, clean_note
 from .stats import duet_runs, heatmap
 from .stats.queries import StatsQueries
 
@@ -73,17 +73,40 @@ def cheer_allowed(emoji):
 
 
 def _cheer_menu(to_uid):
+    """The Cheer window. 3.9.1 (Sam): on the Decks screen in the board's own
+    look (board.cheer_overlay_js), not a Qt window; its Send comes back as
+    duecrew:cheersend (send_from_window)."""
     entry = next((e for e in (_state["entries"] or [])
-                  if e["user_id"] == to_uid), None)
-    if entry is None:
+                  if e["user_id"] == to_uid and not e.get("you")), None)
+    if entry is None or mw.state != "deckBrowser":
         return
-    from .ui.cheer_dialog import CheerDialog
-    quick, any_emoji = cheer_choices()
-    dlg = CheerDialog(mw, entry["name"], quick, any_emoji=any_emoji)
-    if dlg.exec():
-        emoji = cheer_allowed(dlg.emoji)
-        if emoji:
-            _send_cheer(to_uid, entry["name"], emoji, dlg.note, doodle=dlg.doodle)
+    c = cfg()
+    quick, _any = cheer_choices()
+    mw.web.eval(board.cheer_overlay_js({
+        "uid": to_uid, "name": entry["name"], "emojis": list(quick),
+        "pip": board.card_sev(entry, c),  # their Pip, as on their card; None with Pip off
+        "pen": board.accent_pair(c.get("accent"))[0]}))
+
+
+def send_from_window(raw):
+    """3.9.1: the Cheer window's Send, a URI-encoded JSON {to, emoji, note,
+    doodle}. Every field is checked again here, as from any page: a
+    crewmate on the board, one emoji, one line, a doodle clean_doodle keeps.
+    Anything else sends nothing."""
+    from urllib.parse import unquote
+    try:
+        p = json.loads(unquote(str(raw or "")))
+    except ValueError:
+        return False
+    if not isinstance(p, dict):
+        return False
+    uid = str(p.get("to") or "")
+    entry = next((e for e in (_state["entries"] or []) if e["user_id"] == uid and not e.get("you")), None)
+    emoji = cheer_allowed(p.get("emoji"))
+    if entry is None or not emoji:
+        return False
+    _send_cheer(uid, entry["name"], emoji, clean_note(p.get("note")), doodle=clean_doodle(p.get("doodle")))
+    return True
 
 
 def _send_cheer(to_uid, to_name, emoji, note="", luck=False, guid=None, then=None, big=False, doodle=None):

@@ -14607,6 +14607,95 @@ def test_doodle_cheers_v391():
         dc._state["closet_open"] = None
 
 
+def test_cheer_pill_and_window_v391():
+    """3.9.1 (Sam: "Cheers, clearer: build 1", "get rid of the current cheers
+    click to the right of the stats", "make the cheers and doodles modals in
+    the design language of our add on"): a crewmate's row has a "🎉 Cheer"
+    pill after the name (on hover or focus; on every row for this
+    computer's first two weeks with a crew), the 🎉 column is gone, and the
+    Cheer window is drawn on the Decks screen in the board's look, its Send
+    checked again in Python."""
+    labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    tomorrow = (TODAY + datetime.timedelta(days=1)).isoformat()
+    day = {labels[0]: {"reviews": 40, "studyTimeMs": 600000, "retention": 90.0, "streak": 3}}
+    base = {"days": day, "last_updated": "", "decks": [], "paused": False, "room": None}
+    ents = [dict(base, user_id="me", name="Sammy", you=True), dict(base, user_id="dre", name="Dre <b>", you=False)]
+    data = {"entries": ents, "labels": labels, "tomorrow": tomorrow, "pending": [], "decks": {}, "my_friends": []}
+    page = board.render(data, {"period": "today"}, 0)
+    rows = re.findall(r"<tr class=\"[^\"]*\">.*?</tr>", page, re.S)
+    mine = next(r for r in rows if "Sammy" in r)
+    dres = next(r for r in rows if "Dre" in r)
+    nm = re.search(r'<td class="nm">(.*?)</td>', dres, re.S).group(1)
+    head = re.search(r"<table[^>]*><tr>(.*?)</tr>", page, re.S).group(1)
+    check("the 🎉 column is gone: no cheer cell, no empty head cell for it; a row has as many cells as the head",
+          'class="chc"' not in page and "dc-cheer" not in page
+          and dres.count("<td") == head.count("<th") + head.count('colspan="2"'), (dres.count("<td"), head.count("<th")))
+    check("a crewmate's cheer is a pill after the name (escaped), opening the Cheer window; never on my own row",
+          "duecrew:cheerpick:dre" in nm and "&#127881; Cheer" in nm and 'aria-label="Cheer Dre &lt;b&gt;"' in nm
+          and nm.index("dc-pl") < nm.index("dc-cpill") and "dc-cpill" not in mine)
+    check("the pill shows on hover or focus; a long name gives way so it's never cut off",
+          "tr:hover a.dc-cpill" in page and "tr:focus-within a.dc-cpill" in page and "max-width: 56%" in page)
+    today = labels[0]
+    week_on = board.render(data, {"period": "today", "cheer_pill_from": labels[6]}, 0)
+    check("for this computer's first two weeks with a crew the pill is on every row; then only on hover",
+          board.pills_always({"cheer_pill_from": today}, today) and board.pills_always({"cheer_pill_from": labels[6]}, today)
+          and not board.pills_always({"cheer_pill_from": (TODAY - datetime.timedelta(days=14)).isoformat()}, today)
+          and not board.pills_always({}, today) and not board.pills_always({"cheer_pill_from": "x"}, today)
+          and '<table class="dc-pills">' in week_on and '<table class="dc-pills">' not in page)
+    app_js = open(os.path.join(REPO, "site", "public", "app.js")).read()
+    app_css = open(os.path.join(REPO, "site", "public", "app.css")).read()
+    check("the site's twin: the pill after the name, no 🎉 column, every row's pill for its first two weeks, always on a touch screen",
+          '"linkish cpill"' in app_js and 'class: "chc"' not in app_js and "dc-pill-from" in app_js
+          and "HEADS.length + 1" in app_js and "@media (hover: none) { .brdt .cpill { display: inline-block; } }" in app_css
+          and ".chc" not in app_css)
+    # the Cheer window, in the board's look
+    js = board.cheer_overlay_js({"uid": "dre", "name": "Dre </script><b>", "emojis": ["🎉", "💪"], "pip": None,
+                                 "pen": "red;background:url(x)"})
+    view = json.loads(re.search(r"var V = (\{.*?\});\n", js).group(1).replace("<\\/", "</"))
+    check("the window: its data as JSON (no '</' to end the script), the name as text, a pen that isn't a colour turned away",
+          "</script>" not in js.split("var V = ")[1].split(";\n")[0] and view["name"] == "Dre </script><b>"
+          and view["pen"] == board.accent_pair(None)[0] and view["emojis"] == ["🎉", "💪"] and view["pip"] == ""
+          and "textContent" in js and "innerHTML = V.pip" in js and "duecrew:cheersend:" in js and "encodeURIComponent" in js)
+    check("the window: the board's tokens, its own font, Draw and Sign, the pad's ceilings, Esc and the backdrop close it",
+          "getPropertyValue('--dc-' + name)" in js and "dcStyle.fontFamily" in js and "'Draw'" in js and "'Sign'" in js
+          and "MAXP = 2000" in js and "SIGN = 24" in js and "'Escape'" in js and "downOnBack" in js)
+    import shutil
+    import subprocess
+    node = subprocess.run(["node", "--check", "-"], input=js, capture_output=True, text=True) if shutil.which("node") else None
+    check("the window's script parses", node is None or node.returncode == 0, node and node.stderr[:300])
+    # Send, through the board's own handler, checked again
+    import due_crew as dc
+    from due_crew import social
+    from aqt.deckbrowser import DeckBrowser
+    store = world({"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
+    sam = new_client(store, "sam", "Sammy")
+    saved = (social.client, social._bg, dc._state.get("entries"), social.mw.web.eval)
+    evals = []
+    social.client = lambda: sam
+    social._bg = lambda job, done=None: done(job()) if done else job()
+    social.mw.web.eval = evals.append
+    dc._state["entries"] = [dict(ents[0], user_id="sam"), dict(ents[1], name="Dre", user_id="dre")]
+    from urllib.parse import quote
+    send = lambda p: dc._on_js(False, "duecrew:cheersend:" + quote(json.dumps(p)), DeckBrowser())
+    try:
+        dc._on_js(False, "duecrew:cheerpick:dre", DeckBrowser())
+        opened = evals[-1] if evals else ""
+        send({"to": "dre", "emoji": "🔥", "note": "go  go", "doodle": {"k": "sign", "t": "you've got this"}})
+        got = dict(store.cheers.get(("dre", "sam")) or {})
+        store.cheers.clear()
+        for bad in ({"to": "sam", "emoji": "🔥"}, {"to": "nia", "emoji": "🔥"}, {"to": "dre", "emoji": "lol"}, ["dre"]):
+            send(bad)
+        dc._on_js(False, "duecrew:cheersend:%7Bnot json", DeckBrowser())
+        send({"to": "dre", "emoji": "🎉", "doodle": {"k": "draw", "s": [[9, 1, 1]]}, "extra": "<b>"})
+        check("cheerpick opens the window on the Decks screen, for that crewmate",
+              "dc-cheer" in opened and '"uid": "dre"' in opened)
+        check("Send: one cheer with its note and sign; me, a stranger, a word for an emoji or a broken payload send nothing; a broken doodle goes without it",
+              got.get("emoji") == "🔥" and got.get("note") == "go go" and got.get("doodle") == {"k": "sign", "t": "you've got this"}
+              and list(store.cheers) == [("dre", "sam")] and store.cheers[("dre", "sam")]["doodle"] is None)
+    finally:
+        social.client, social._bg, dc._state["entries"], social.mw.web.eval = saved
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

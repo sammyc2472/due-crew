@@ -568,6 +568,8 @@ _FRIDGE = [{"from": "dre", "name": "Dre", "at": "2026-10-03T09:00:00Z", "a": "bl
            {"from": "priya", "name": "Priya", "at": "2026-10-17T09:00:00Z", "a": "purple", "d": {"k": "draw", "s": [[1] + _HEART]}}]
 sections.append("<h3>3.9.1: the fridge, in Pip's closet: the drawings and signs your crew sent, newest first</h3>"
                 + board.closet_html(dict(_CV, tab="Fridge", fridge=_FRIDGE), {"accent": "green"}))
+sections.append("<h3>3.9.1: a crew's first two weeks: the Cheer pill on every row, no 🎉 column</h3>"
+                + board.render(dict(DATA, entries=DRESSED), dict(_MINE, period="today", cheer_pill_from=DATA["labels"][0]), now_ts - 60))
 sections.append("<h3>3.9.1: the fridge, empty (dark)</h3>"
                 + board.closet_html(dict(_CV, tab="Fridge", fridge=[]), {"accent": "green", "theme": "dark"}))
 # 3.8.22: Halloween week (24 to 31 Oct): the line, the five things, the bats (at the day's first board) and,

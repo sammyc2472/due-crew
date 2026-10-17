@@ -2181,3 +2181,26 @@ every release that changes how something works.
   last 24, kept in wrap.json on this computer and never sent (`fridge.py`
   pure, `closet_flow.keep_doodles`/`fridge`/`take_down` the glue). The
   site's home says "cheered with a drawing" and leaves it for Anki.
+- 3.9.1, cheers, clearer (Sam, 17 Oct: "Cheers, clearer: build these: 1 ·
+  A 🎉 that looks pressable", then "also get rid of the current cheers
+  click to the right of the stats", and "make the cheers and doodles
+  modals in the design language of our add on, not in the native anki
+  style"). The faint 🎉 column at the end of every crew row (12px, 30%,
+  no word, past Streak) is gone; a crewmate's cheer is a "🎉 Cheer" pill
+  right after the name and its chip, on hover or focus, and on every row
+  for this computer's first two weeks with a crew (`cheer_pill_from`, set
+  the first time a refresh brings a crewmate; `board.pills_always`). A
+  long name ends a little sooner while its pill shows, so the pill is
+  never cut off. The site's rows are the twin (`cpill`; the first two
+  weeks per browser in localStorage, and always on a touch screen, which
+  has no hover). The Cheer window is drawn on the Decks screen in the
+  board's own look (`board.cheer_overlay_js`: its tokens, so Theme and
+  Accent hold; their Pip and name at the top; the quick emoji and any
+  other; Draw · Sign on a canvas pad and a paper preview; the note; Send
+  and Cancel; Esc or a press on the backdrop closes it, never a line
+  drawn off the pad's edge), in place of the Qt window (`CheerDialog` and
+  its `DoodlePad` are gone; the crew-emoji window keeps the picker). Send
+  is one `duecrew:cheersend` command, its payload URI-encoded JSON, and
+  `social.send_from_window` checks it all again: a crewmate on the board,
+  one emoji, one line, a doodle `clean_doodle` keeps. The name goes in as
+  text, never markup.

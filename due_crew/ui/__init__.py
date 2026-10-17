@@ -141,16 +141,6 @@ def accent():
         return "#7cc47f" if shade == "dark" else "#2e7d32"
 
 
-def paper_accent():
-    """3.9.1: the accent's light shade, for a doodle: it's drawn on paper,
-    light in either theme, and lands in this shade on a crewmate's board."""
-    try:
-        from ..board import ACCENTS, DEFAULT_ACCENT
-        return ACCENTS.get(_accent_name(), ACCENTS[DEFAULT_ACCENT])["light"][0]
-    except Exception:
-        return "#2e7d32"
-
-
 def _svg_by_renderer(data, w, h):
     """The image plugin's stand-in: QtSvg's renderer, where the build has
     it. None where it doesn't."""

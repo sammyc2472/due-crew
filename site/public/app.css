@@ -140,7 +140,14 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px
 .brdt .chip.live::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-right: 5px; vertical-align: 1px; }
 .brdt .chip.exam { color: var(--warn); font-weight: 700; }
 .brdt .bub { display: inline-block; margin-top: 5px; font-size: 12.5px; padding: 3px 10px; border-radius: 99px; background: var(--well); color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-.brdt .chc { width: 30px; position: relative; } .brdt .cheer { font-size: 15px; opacity: 0.6; } .brdt .cheer:hover { opacity: 1; }
+/* 3.9.1, board.py's dc-cpill: the cheer, a pill after the name */
+.brdt .cpill { display: none; margin-left: 6px; padding: 0 8px; border: 1px solid var(--accent); border-radius: 99px; color: var(--accent);
+  font-size: 11px; font-weight: 700; line-height: 17px; white-space: nowrap; vertical-align: 1px; text-decoration: none; }
+.brdt tr:hover .cpill, .brdt tr:focus-within .cpill, .brdt.cpills .cpill { display: inline-block; }
+.brdt .cpill:hover, .brdt .cpill:focus-visible { background: var(--accent); color: var(--accent-ink); }
+.brdt tr:hover .who, .brdt tr:focus-within .who, .brdt.cpills .who { display: inline-block; max-width: 56%; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+.brdt tr.you .who { max-width: none; }
+@media (hover: none) { .brdt .cpill { display: inline-block; } }
 .sq { width: 14px; height: 14px; border-radius: 3px; background: var(--well); display: inline-block; } .sq.on { background: var(--accent); }
 .cheer-pop { position: absolute; right: 0; z-index: 5; display: flex; gap: 2px; padding: 4px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 6px 18px rgba(0,0,0,0.12); }
 .cheer-pop button { font-size: 18px; padding: 2px 5px; }
@@ -201,7 +208,6 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px
 @media (max-width: 560px) {
   .brdt td.nm { white-space: normal; overflow: visible; min-width: 100px; }
   .brdt td, .brdt th { padding-left: 5px; padding-right: 5px; }
-  .brdt td.chc { padding: 0; }
   .brdt .bub { white-space: normal; }
 }
 .wb > * { min-width: 0; }

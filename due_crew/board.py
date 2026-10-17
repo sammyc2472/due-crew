@@ -169,7 +169,7 @@ def _quiet_fold(rows):
     except Exception:
         since = ""
     verb = "hasn't" if len(rows) == 1 else "haven't"
-    return (f'<tr class="qfold"><td class="rk"></td><td class="nm" colspan="{len(HEADERS) + 2}">'
+    return (f'<tr class="qfold"><td class="rk"></td><td class="nm" colspan="{len(HEADERS) + 1}">'
             f'<a href="#" onclick="this.closest(\'table\').classList.toggle(\'qopen\');return false;">'
             f'&#9656; {len(rows)} quiet</a> <span class="dc-note">&middot; {who} {verb} been here'
             f'{" since " + since if since else " in months"}</span></td></tr>')
@@ -557,9 +557,17 @@ def _css(cfg):
       background: var(--dc-well); vertical-align: middle; }}
     #due-crew .sq.on {{ background: var(--dc-accent); }}
     #due-crew .sq.away {{ background: var(--dc-well); box-shadow: inset 0 0 0 2px var(--dc-accent); opacity: 0.5; }}
-    #due-crew td.chc {{ width: 22px; padding-left: 2px; padding-right: 2px; text-align: center; }}
-    #due-crew a.dc-cheer {{ text-decoration: none; opacity: 0.3; font-size: 12px; }}
-    #due-crew a.dc-cheer:hover {{ opacity: 1; }}
+    /* 3.9.1 (Sam's pick, "Cheers, clearer"): a cheer is a pill after the name, on hover or focus (on
+       every row for a crew's first two weeks, dc-pills), in place of the faint 🎉 column at the end */
+    #due-crew a.dc-cpill {{ display: none; margin-left: 6px; padding: 0 8px; border: 1px solid var(--dc-accent); border-radius: 99px;
+      color: var(--dc-accent); font-size: 10.5px; font-weight: 700; line-height: 16px; text-decoration: none; white-space: nowrap;
+      vertical-align: 1px; }}
+    #due-crew tr:hover a.dc-cpill, #due-crew tr:focus-within a.dc-cpill, #due-crew table.dc-pills a.dc-cpill {{ display: inline-block; }}
+    /* a long name gives way so its pill is never cut off: it ends a little sooner while the pill shows */
+    #due-crew tr:hover a.dc-pl, #due-crew tr:focus-within a.dc-pl, #due-crew table.dc-pills a.dc-pl {{
+      display: inline-block; max-width: 56%; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }}
+    #due-crew tr.you a.dc-pl {{ max-width: none; }}
+    #due-crew a.dc-cpill:hover, #due-crew a.dc-cpill:focus-visible {{ background: var(--dc-accent); color: var(--dc-accent-ink); outline: none; }}
     #due-crew tr.you td {{ {you_bg} }}
     #due-crew tr.you td.nm {{ font-weight: 700; }}
     #due-crew tr.dim td {{ color: var(--dc-faded); }}
@@ -1158,12 +1166,13 @@ def _row_html(row, rank, cfg, period="today"):
                         f'{done:,} &middot; ')
         status = f'<div class="dc-stw"><span class="dc-st" title="{st}">{lead}{st}</span></div>'
     if row["you"]:
-        cheer = '<td class="chc"></td>'
+        cheer = ""
         name = (f'{fig}<a class="dc-pl" href="#" title="See what your crew sees" '
                 f'onclick="{_pycmd("profile:" + str(row["user_id"]))}">{name}</a>')
     else:
-        cheer = (f'<td class="chc"><a class="dc-cheer" href="#" title="Send a cheer" '
-                 f'onclick="{_pycmd("cheerpick:" + str(row["user_id"]))}">&#127881;</a></td>')
+        # 3.9.1: the cheer is a pill after the name (and its chip), where the eye already is
+        cheer = (f'<a class="dc-cpill" href="#" title="Send a cheer" aria-label="Cheer {_html.escape(str(row["name"]), quote=True)}" '
+                 f'onclick="{_pycmd("cheerpick:" + str(row["user_id"]))}">&#127881; Cheer</a>')
         # 3.0.1: right-click for Mute cheers and Report…
         # 3.8.2: their Pip opens the profile too, outside the name's underline
         sev_link = (f'<a class="dc-rsevl" href="#" tabindex="-1" aria-hidden="true" '
@@ -1172,7 +1181,7 @@ def _row_html(row, rank, cfg, period="today"):
                 f'onclick="{_pycmd("profile:" + str(row["user_id"]))}" '
                 f'oncontextmenu="{_pycmd("rowmenu:" + str(row["user_id"]))}">{name}</a>')
     return (f'<tr class="{cls.strip()}"><td class="rk">{rank}</td>'
-            f'<td class="nm">{name}{chip}{la}{extra}{status}</td>{cells}{cheer}</tr>')
+            f'<td class="nm">{name}{chip}{la}{extra}{cheer}{status}</td>{cells}</tr>')
 
 
 def _solo_html(data):
@@ -1215,7 +1224,6 @@ def _table_html(data, cfg, period, pick=""):
         arrow = " &#9662;" if key == sort else ""
         heads += (f'<th><a class="{on}" href="#" '
                   f'onclick="{_pycmd("sort:" + key)}">{label}{arrow}</a></th>')
-    heads += "<th></th>"
     if cfg.get("show_up"):
         fresh, dormant = build_rows(data["entries"], data["labels"],
                                     data.get("tomorrow", ""), "today", cfg)
@@ -1244,10 +1252,24 @@ def _table_html(data, cfg, period, pick=""):
     solo = _solo_html(data)
     # the name column ellipsizes, so the table can never outgrow the card;
     # past the row cap it scrolls inside it
-    return _scroll(f'<table><tr>{heads}</tr>{body}</table>', body.count('<tr class=')) + solo
+    pills = ' class="dc-pills"' if pills_always(cfg, (data.get("labels") or [""])[0]) else ""
+    return _scroll(f'<table{pills}><tr>{heads}</tr>{body}</table>', body.count('<tr class=')) + solo
 
 
 ROW_CAP = 10
+PILL_DAYS = 14  # 3.9.1: a crew's first two weeks on this computer, the Cheer pill on every row
+
+
+def pills_always(cfg, today):
+    """3.9.1: whether the Cheer pill shows on every row, not only on hover:
+    for PILL_DAYS from the day this computer first saw a crewmate
+    (cheer_pill_from, set by the glue), so a new crew finds it."""
+    try:
+        since = _date.fromisoformat(str(cfg.get("cheer_pill_from") or ""))
+        day = _date.fromisoformat(str(today or ""))
+    except ValueError:
+        return False
+    return 0 <= (day - since).days < PILL_DAYS
 
 
 def _scroll(html, rows):
@@ -2715,7 +2737,7 @@ def _squads_html(view, cfg, crew_by=None):
         if id(r) in long_ids:
             if not folded:
                 body += _quiet_fold([{"name": x["name"], "last_updated": x.get("day")} for x in long_q]).replace(
-                    f'colspan="{len(HEADERS) + 2}"', f'colspan="{2 + (1 if show_up else len(SQUAD_HEADERS))}"', 1)
+                    f'colspan="{len(HEADERS) + 1}"', f'colspan="{2 + (1 if show_up else len(SQUAD_HEADERS))}"', 1)
                 folded = True
             cls = "qh"
         if r.get("you"):
@@ -4524,6 +4546,320 @@ def doodle_landing(cheer, entries, cfg):
     if cfg.get("sev", True):
         out["pip"] = _sev.svg("stretch", "idle", look=e.get("look"), label=_html.escape(f"{name}’s Pip", quote=True))
     return out
+
+
+CHEER_WINDOW_JS = r"""
+(function () {
+    var V = __VIEW__;
+    var old = document.getElementById('dc-cheer');
+    if (old) { old.remove(); }
+    var night = /night/i.test(document.body.className) ||
+        (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    var dcBoard = document.getElementById('due-crew');
+    var dcStyle = dcBoard ? getComputedStyle(dcBoard) : null;
+    function tok(name, light, dark) {
+        var v = dcStyle && dcStyle.getPropertyValue('--dc-' + name).trim();
+        return v || (night ? dark : light);
+    }
+    var bg = tok('bg', '#ffffff', '#1c1c1c'), ink = tok('ink', '#333333', '#dfe1dc'), line = tok('line', '#e2e2da', '#3d403b'),
+        well = tok('well', '#f2f2ec', '#2b2d29'), muted = tok('muted', '#6f736b', '#9a9e94'),
+        accent = tok('accent', '#2e7d32', '#7cc47f'), accentInk = tok('accent-ink', '#ffffff', '#122912'),
+        you = tok('you-bg', '#e9f2e9', '#2c372b');
+    var font = (dcStyle && dcStyle.fontFamily) || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    var W = 300, H = 170, MAXP = 2000, MAXS = 200, SIGN = 24, NOTE = 80;
+    var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function el(tag, cls, text) {
+        var e = document.createElement(tag);
+        if (cls) { e.className = cls; }
+        if (text != null) { e.textContent = text; }
+        return e;
+    }
+    var back = el('div');
+    back.id = 'dc-cheer';
+    back.setAttribute('role', 'dialog');
+    back.setAttribute('aria-modal', 'true');
+    back.setAttribute('aria-label', 'Cheer ' + V.name);
+    var css = el('style');
+    css.textContent =
+        '#dc-cheer{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.35);display:flex;align-items:flex-start;justify-content:center;padding:9vh 16px 16px;overflow:auto;}' +
+        '#dc-cheer *{box-sizing:border-box;}' +
+        '#dc-cheer .cw{width:440px;max-width:100%;border-radius:14px;padding:16px 18px 14px;text-align:left;display:grid;gap:12px;font-family:' + font + ';' +
+          'box-shadow:0 16px 60px rgba(0,0,0,.35);background:' + bg + ';color:' + ink + ';border:1px solid ' + line + ';font-size:13px;}' +
+        '#dc-cheer button,#dc-cheer input{margin:0;box-shadow:none;font-family:inherit;color:inherit;}#dc-cheer button{cursor:pointer;}' +
+        '#dc-cheer .hd{display:flex;align-items:center;gap:10px;}' +
+        '#dc-cheer .hd .pp{width:40px;height:40px;flex:none;display:grid;place-items:center;}' +
+        '#dc-cheer .hd .pp svg{width:44px;height:44px;overflow:visible;}' +
+        '#dc-cheer .hd b{display:block;font-size:16px;}' +
+        '#dc-cheer .hd small{display:block;color:' + muted + ';font-size:11.5px;}' +
+        '#dc-cheer .em{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}' +
+        '#dc-cheer .em button{width:40px;height:36px;padding:0;border-radius:10px;border:1px solid ' + line + ';background:' + bg + ';font-size:20px;line-height:1;}' +
+        '#dc-cheer .em button[aria-pressed=true]{border:2px solid ' + accent + ';background:' + you + ';}' +
+        '#dc-cheer .em input{width:66px;height:36px;border-radius:10px;border:1px solid ' + line + ';background:' + bg + ';color:' + ink + ';font-size:12px;padding:0 8px;text-align:center;}' +
+        '#dc-cheer .em input.on{border:2px solid ' + accent + ';background:' + you + ';font-size:20px;}' +
+        '#dc-cheer .sg{display:inline-flex;border:1px solid ' + line + ';border-radius:99px;padding:2px;gap:2px;width:max-content;}' +
+        '#dc-cheer .sg button{border:0;background:none;border-radius:99px;padding:2px 14px;font-weight:700;font-size:12px;color:' + muted + ';}' +
+        '#dc-cheer .sg button[aria-pressed=true]{background:' + accent + ';color:' + accentInk + ';}' +
+        '#dc-cheer .pane{display:grid;gap:8px;}' +
+        '#dc-cheer .paper{width:100%;aspect-ratio:300/170;background:#fffdf7;border:1px solid #e6dfcc;border-radius:10px;overflow:hidden;position:relative;color:#2b2d29;}' +
+        '#dc-cheer canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair;}' +
+        '#dc-cheer .tl{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}' +
+        '#dc-cheer .sw{width:22px;height:22px;border-radius:50%;border:2px solid ' + bg + ';box-shadow:0 0 0 1px ' + line + ';padding:0;}' +
+        '#dc-cheer .sw[aria-pressed=true]{box-shadow:0 0 0 2px ' + accent + ';}' +
+        '#dc-cheer .pl{border:1px solid ' + line + ';background:none;border-radius:99px;padding:1px 10px;font-size:12px;}' +
+        '#dc-cheer .pl[aria-pressed=true]{border-color:' + accent + ';color:' + accent + ';font-weight:700;}' +
+        '#dc-cheer .lk{border:0;background:none;padding:1px 4px;font-size:12px;color:' + accent + ';font-weight:600;}' +
+        '#dc-cheer .sp{flex:1;}' +
+        '#dc-cheer .ct{font-size:11px;color:' + muted + ';font-variant-numeric:tabular-nums;}' +
+        '#dc-cheer .words{position:absolute;inset:0;display:grid;place-items:center;padding:10px 16px;text-align:center;font-family:' + V.hand + ';font-size:30px;line-height:1.1;overflow-wrap:anywhere;}' +
+        '#dc-cheer .words.ph{color:#b7b1a2;}' +
+        '#dc-cheer .tx{width:100%;height:32px;border-radius:8px;border:1px solid ' + line + ';background:' + bg + ';color:' + ink + ';font-size:13px;padding:0 10px;}' +
+        '#dc-cheer .tx:focus,#dc-cheer .em input:focus{outline:2px solid ' + accent + ';outline-offset:0;}' +
+        '#dc-cheer .ft{display:flex;align-items:center;gap:8px;}' +
+        '#dc-cheer .go{background:' + accent + ';color:' + accentInk + ';border:1px solid transparent;border-radius:8px;padding:6px 16px;font-weight:700;font-size:13px;}' +
+        '#dc-cheer .no{background:none;border:1px solid ' + line + ';border-radius:8px;padding:6px 14px;font-size:13px;}' +
+        '#dc-cheer button:focus-visible{outline:2px solid ' + accent + ';outline-offset:2px;}' +
+        '#dc-cheer .hint{font-size:11px;color:' + muted + ';}';
+    back.appendChild(css);
+    var card = el('div', 'cw');
+    back.appendChild(card);
+
+    // who it's for: their Pip (or emoji) and name
+    var hd = el('div', 'hd');
+    if (V.pip) { var pp = el('div', 'pp'); pp.innerHTML = V.pip; hd.appendChild(pp); }
+    var ht = el('div');
+    ht.appendChild(el('b', null, 'Cheer ' + V.name));
+    ht.appendChild(el('small', null, 'Lands after their next sync.'));
+    hd.appendChild(ht);
+    card.appendChild(hd);
+
+    // the emoji: the quick picks, or any other
+    var emoji = V.emojis[0], em = el('div', 'em');
+    em.setAttribute('role', 'group');
+    em.setAttribute('aria-label', 'Emoji');
+    var quick = [];
+    V.emojis.forEach(function (x) {
+        var b = el('button', null, x);
+        b.type = 'button';
+        b.setAttribute('aria-label', 'Send ' + x);
+        b.addEventListener('click', function () { pick(x); other.value = ''; other.className = ''; });
+        quick.push([x, b]);
+        em.appendChild(b);
+    });
+    var other = el('input');
+    other.placeholder = 'other';
+    other.maxLength = 16;
+    other.title = 'Any emoji';
+    other.setAttribute('aria-label', 'Any other emoji');
+    other.addEventListener('input', function () {
+        var s = other.value.trim(), first = '';
+        if (s && window.Intl && Intl.Segmenter) {
+            var it = new Intl.Segmenter().segment(s)[Symbol.iterator]().next();
+            first = it.done ? '' : it.value.segment;
+        } else if (s) { first = Array.from(s)[0]; }
+        if (first && !/[A-Za-z0-9\s]/.test(first) && first.charCodeAt(0) >= 0x2190) {
+            other.value = first;
+            other.className = 'on';
+            pick(first);
+        } else {
+            other.value = '';
+            other.className = '';
+            pick(V.emojis[0]);
+        }
+    });
+    em.appendChild(other);
+    card.appendChild(em);
+    function pick(x) {
+        emoji = x;
+        quick.forEach(function (q) { q[1].setAttribute('aria-pressed', q[0] === x ? 'true' : 'false'); });
+    }
+    pick(emoji);
+
+    // Draw · Sign (3.9.1): a drawing, or words their Pip holds up; both optional
+    var mode = 'draw', sg = el('div', 'sg');
+    sg.setAttribute('role', 'group');
+    sg.setAttribute('aria-label', 'Add');
+    var tabs = {};
+    [['draw', 'Draw'], ['sign', 'Sign']].forEach(function (x) {
+        var b = el('button', null, x[1]);
+        b.type = 'button';
+        b.addEventListener('click', function () { show(x[0]); });
+        tabs[x[0]] = b;
+        sg.appendChild(b);
+    });
+    card.appendChild(sg);
+
+    var draw = el('div', 'pane'), paper = el('div', 'paper'), cv = el('canvas');
+    cv.width = W * 2;
+    cv.height = H * 2;
+    cv.setAttribute('aria-label', 'Draw here');
+    paper.appendChild(cv);
+    draw.appendChild(paper);
+    var strokes = [], live = null, pen = 1;  // pen: bit 0 thick, bit 1 ink (else my colour)
+    var cx = cv.getContext('2d');
+    function points() { return strokes.reduce(function (a, s) { return a + s.p.length; }, 0); }
+    function paint() {
+        cx.setTransform(cv.width / W, 0, 0, cv.height / H, 0, 0);
+        cx.clearRect(0, 0, W, H);
+        cx.lineCap = 'round';
+        cx.lineJoin = 'round';
+        strokes.forEach(function (s) {
+            cx.strokeStyle = s.pen & 2 ? '#2b2d29' : V.pen;
+            cx.lineWidth = s.pen & 1 ? 6 : 3;
+            cx.beginPath();
+            s.p.forEach(function (q, i) { if (i) { cx.lineTo(q[0], q[1]); } else { cx.moveTo(q[0], q[1]); cx.lineTo(q[0] + 0.1, q[1]); } });
+            cx.stroke();
+        });
+        var n = points();
+        count.textContent = n > MAXP - 500 ? n.toLocaleString() + ' / ' + MAXP.toLocaleString() : '';
+    }
+    function at(e) {
+        var r = cv.getBoundingClientRect();
+        return [Math.max(0, Math.min(W, Math.round((e.clientX - r.left) / r.width * W))),
+                Math.max(0, Math.min(H, Math.round((e.clientY - r.top) / r.height * H)))];
+    }
+    cv.addEventListener('pointerdown', function (e) {
+        if (strokes.length >= MAXS || points() >= MAXP) { return; }
+        cv.setPointerCapture(e.pointerId);
+        live = { pen: pen, p: [at(e)] };
+        strokes.push(live);
+        paint();
+    });
+    cv.addEventListener('pointermove', function (e) {
+        if (!live || points() >= MAXP) { return; }
+        var q = at(e), l = live.p[live.p.length - 1];
+        if (Math.abs(q[0] - l[0]) + Math.abs(q[1] - l[1]) >= 2) { live.p.push(q); paint(); }
+    });
+    function lift() { live = null; }
+    cv.addEventListener('pointerup', lift);
+    cv.addEventListener('pointercancel', lift);
+
+    var tl = el('div', 'tl'), swatches = [], widths = [];
+    [[V.pen, 'My colour', 0], ['#2b2d29', 'Black', 2]].forEach(function (x) {
+        var b = el('button', 'sw');
+        b.type = 'button';
+        b.style.background = x[0];
+        b.title = x[1];
+        b.setAttribute('aria-label', x[1]);
+        b.addEventListener('click', function () { pen = (pen & 1) | x[2]; tools(); });
+        swatches.push([x[2], b]);
+        tl.appendChild(b);
+    });
+    [['Thin', 0], ['Thick', 1]].forEach(function (x) {
+        var b = el('button', 'pl', x[0]);
+        b.type = 'button';
+        b.addEventListener('click', function () { pen = (pen & 2) | x[1]; tools(); });
+        widths.push([x[1], b]);
+        tl.appendChild(b);
+    });
+    tl.appendChild(el('span', 'sp'));
+    var count = el('span', 'ct');
+    tl.appendChild(count);
+    var undo = el('button', 'lk', 'Undo'), clear = el('button', 'lk', 'Clear');
+    undo.type = clear.type = 'button';
+    undo.addEventListener('click', function () { strokes.pop(); paint(); });
+    clear.addEventListener('click', function () { strokes = []; paint(); });
+    tl.appendChild(undo);
+    tl.appendChild(clear);
+    draw.appendChild(tl);
+    function tools() {
+        swatches.forEach(function (s) { s[1].setAttribute('aria-pressed', (pen & 2) === s[0] ? 'true' : 'false'); });
+        widths.forEach(function (w) { w[1].setAttribute('aria-pressed', (pen & 1) === w[0] ? 'true' : 'false'); });
+    }
+    tools();
+    card.appendChild(draw);
+
+    var sign = el('div', 'pane'), signIn = el('input', 'tx'), sp = el('div', 'paper'), words = el('div', 'words ph', "you've got this");
+    signIn.maxLength = SIGN;
+    signIn.placeholder = "you've got this";
+    signIn.setAttribute('aria-label', 'What your Pip holds up');
+    signIn.addEventListener('input', function () {
+        var s = signIn.value.replace(/\s+/g, ' ').trim();
+        words.textContent = s || "you've got this";
+        words.className = s ? 'words' : 'words ph';
+    });
+    sp.appendChild(words);
+    sign.appendChild(signIn);
+    sign.appendChild(sp);
+    sign.appendChild(el('div', 'hint', 'A few words for your Pip to hold up when it lands. ' + SIGN + ' letters at most.'));
+    card.appendChild(sign);
+    function show(m) {
+        mode = m;
+        draw.style.display = m === 'draw' ? '' : 'none';
+        sign.style.display = m === 'sign' ? '' : 'none';
+        tabs.draw.setAttribute('aria-pressed', m === 'draw' ? 'true' : 'false');
+        tabs.sign.setAttribute('aria-pressed', m === 'sign' ? 'true' : 'false');
+        if (m === 'sign') { signIn.focus(); }
+    }
+    show('draw');
+
+    var note = el('input', 'tx');
+    note.maxLength = NOTE;
+    note.placeholder = 'Add a note (optional)';
+    note.setAttribute('aria-label', 'Note');
+    note.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); send(); } });
+    card.appendChild(note);
+
+    var ft = el('div', 'ft'), go = el('button', 'go', '🎉 Send'), no = el('button', 'no', 'Cancel');
+    go.type = no.type = 'button';
+    ft.appendChild(go);
+    ft.appendChild(el('span', 'sp'));
+    ft.appendChild(no);
+    card.appendChild(ft);
+    paint();
+
+    function doodle() {
+        if (mode === 'sign') {
+            var t = signIn.value.replace(/\s+/g, ' ').trim();
+            return t ? { k: 'sign', t: t } : null;
+        }
+        if (!strokes.length) { return null; }
+        return { k: 'draw', s: strokes.map(function (s) {
+            var out = [s.pen];
+            s.p.forEach(function (q) { out.push(q[0], q[1]); });
+            return out;
+        }) };
+    }
+    function close() {
+        document.removeEventListener('keydown', esc, true);
+        if (still || !back.animate) { back.remove(); return; }
+        back.style.pointerEvents = 'none';
+        back.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-in' }).onfinish = function () { back.remove(); };
+    }
+    function send() {
+        var p = { to: V.uid, emoji: emoji, note: note.value.replace(/\s+/g, ' ').trim().slice(0, NOTE), doodle: doodle() };
+        close();
+        if (typeof pycmd !== 'undefined') { pycmd('duecrew:cheersend:' + encodeURIComponent(JSON.stringify(p))); }
+    }
+    go.addEventListener('click', send);
+    no.addEventListener('click', close);
+    // a press that starts on the backdrop and ends there closes it (a line drawn off the pad's edge never does)
+    var downOnBack = false;
+    back.addEventListener('pointerdown', function (e) { downOnBack = e.target === back; });
+    back.addEventListener('click', function (e) { if (e.target === back && downOnBack) { close(); } });
+    function esc(e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } }
+    document.addEventListener('keydown', esc, true);
+    document.body.appendChild(back);
+    if (window.dcMotion && !still) { dcMotion.open(back, card); }
+    quick[0][1].focus();
+})();
+"""
+
+
+def cheer_overlay_js(view):
+    """3.9.1 (Sam: "make the cheers and doodles modals in the design language
+    of our add on"): the Cheer window, drawn on the Decks screen in the
+    board's own look (its tokens, so Settings › Theme and Accent hold), in
+    place of the Qt window. view: {uid, name, emojis (the quick picks), pip
+    (card_sev's markup, or None with Pip off), pen (my accent's light shade,
+    the drawing's colour, on paper in either theme)}. Send goes as one
+    duecrew:cheersend command, its payload URI-encoded JSON; the glue checks
+    every field again (cheer_allowed, clean_note, clean_doodle) and that the
+    uid is a crewmate. The name and emoji go in as text, never markup."""
+    data = {"uid": str(view.get("uid") or ""), "name": str(view.get("name") or "?"),
+            "emojis": [str(x) for x in view.get("emojis") or []][:8] or ["\U0001F389"],
+            "pip": view.get("pip") or "", "pen": accent_pair(None)[0] if not _re.fullmatch(r"#[0-9a-fA-F]{6}", str(view.get("pen") or "")) else view["pen"],
+            "hand": DOODLE_HAND}
+    return CHEER_WINDOW_JS.replace("__VIEW__", _json.dumps(data).replace("</", "<\\/"))
 
 
 CHEER_PIP = 92  # 3.8.22: a crewmate's Pip popping in with their cheer

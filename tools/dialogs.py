@@ -191,27 +191,6 @@ def main(out):
         app.processEvents()
         shoot(dlg, os.path.join(out, "squads.png"))
 
-    def cheer():
-        from due_crew.ui.cheer_dialog import CheerDialog
-        from due_crew.app import CHEER_QUICK
-        dlg = CheerDialog(None, "Ameya", CHEER_QUICK)
-        dlg.other.setText("\U0001F973")  # a palette pick landing in the box
-        shoot(dlg, os.path.join(out, "cheer.png"))
-        # 3.9.1: a doodle on the pad (a heart in my colour, a star in ink), then the Sign tab
-        import math
-        heart = [(round(150 + 52 * math.sin(a) ** 3), round(84 - 3.4 * (13 * math.cos(a) - 5 * math.cos(2 * a) - 2 * math.cos(3 * a) - math.cos(4 * a))))
-                 for a in [i / 24 * 2 * math.pi for i in range(25)]]
-        star = [(round(64 + (18 if i % 2 == 0 else 8) * math.cos(-math.pi / 2 + i * math.pi / 5)),
-                 round(48 + (18 if i % 2 == 0 else 8) * math.sin(-math.pi / 2 + i * math.pi / 5))) for i in range(11)]
-        dlg.pad.strokes = [[1, heart], [2, star]]
-        dlg.note_edit.setText("good luck tomorrow")
-        assert dlg.doodle["k"] == "draw" and len(dlg.doodle["s"]) == 2
-        shoot(dlg, os.path.join(out, "cheer-draw.png"))
-        dlg.tabs.setCurrentIndex(1)
-        dlg.sign_edit.setText("you've got this")
-        assert dlg.doodle == {"k": "sign", "t": "you've got this"}
-        shoot(dlg, os.path.join(out, "cheer-sign.png"))
-
     def auth():
         from due_crew.ui.auth_dialog import AuthDialog
         dlg = AuthDialog(None, CLIENT)
@@ -763,7 +742,7 @@ def main(out):
         shoot(dlg, os.path.join(out, "plan-remark-new.png"))
 
     for label, build in (("tools menu", tools_menu), ("friends", friends), ("decks", decks),
-                         ("squads", squads), ("cheer", cheer), ("auth", auth),
+                         ("squads", squads), ("auth", auth),
                          ("welcome", welcome), ("logo", logo), ("room", room), ("emoji", emoji),
                          ("report", report), ("plans", plans), ("schedule", schedule), ("map card", map_card),
                          ("share card", share_card), ("why", why), ("plan tags", plan_tags), ("open cards", open_cards),

@@ -665,6 +665,13 @@ In Anki (as a follower):
 - [ ] Plan ▾ › How its cards open: switch to When I'm ready (a deck with open later cards offers Hold back), and back to the plan's dates (dates passed since ask, as Resume does). duecrew.com's plan page shows "At your pace · next: …" and the same choice; changing it there reaches Anki at its next refresh.
 - [ ] Browse: right-click a tag in the sidebar › Due Crew: open its cards…: the sheet counts what opens, what's open already, the leeches (they stay suspended), and the plans that hold them; Open with First in line ticked puts them first in Anki's new cards; one Edit › Undo shuts them. Pick cards in the table › Due Crew: open these…: the same for just those. Signed out: both are there.
 
+### 3.9.1: cheers, clearer (the pill, the Cheer window)
+
+- [ ] The crew rows: no 🎉 at the end of any row. The first two weeks after this computer first sees a crewmate, every crewmate's row has a green "🎉 Cheer" pill after the name (and after an exam or "studying now" chip); never on your own row. After that, it shows when you point at a row or Tab to it. A very long name ends sooner while the pill shows; the pill is never cut off.
+- [ ] Click the pill (or "🎉 Send a cheer" on their card): the Cheer window opens over the Decks screen in the board's look (your accent, light and dark both right), their Pip and "Cheer Dre" at the top. Pick an emoji, or type/paste any other into "other" (⌃⌘Space on a Mac). Draw on the pad with the mouse, a trackpad or a pen; Black, Thin, Thick, Undo, Clear. Sign: type, and the paper shows it.
+- [ ] Send (or Enter in the note): the window fades, "Sent 🔥 and a drawing to Dre.", and the emoji floats up from their row. Cancel, Esc and a click on the dim backdrop close it without sending; a line drawn off the pad's edge never closes it.
+- [ ] duecrew.com: the same pill after the name on hover; on a phone it's always there; the 🎉 column is gone.
+
 ### 3.9.1: doodle cheers (deploy the Worker first: migration 0029)
 
 - [ ] 🎉 a crewmate: the Cheer window has Draw and Sign under the emoji. Draw on the pad with the mouse (and a trackpad, and a pen if you have one): the lines follow, in your accent; Black, Thin and Thick change the next line; Undo takes the last line, Clear all of them. Night mode: the pad stays paper-light.
