@@ -14496,10 +14496,11 @@ def test_doodle_cheers_v391():
     from due_crew.backend.shapes import clean_doodle
     from due_crew import fridge as FR
     draw = {"k": "draw", "s": [[0, 10, 20, 30, 40, 50, 60], [3, 299, 169]]}
-    check("doodle shape: strokes of whole points on the pad, pen 0-3, kept as they are",
-          clean_doodle(draw) == draw and clean_doodle(dict(draw)) is not draw)
+    check("doodle shape: strokes of whole points on the pad, kept as they are; pens 0 to 15 (thin or thick in mine, black or any accent)",
+          clean_doodle(draw) == draw and clean_doodle(dict(draw)) is not draw
+          and clean_doodle({"k": "draw", "s": [[p, 1, 1] for p in range(16)]}) is not None)
     many = [n for i in range(2001) for n in (i % 300, i % 170)]
-    bad = [{"k": "draw", "s": []}, {"k": "draw", "s": [[4, 1, 1]]}, {"k": "draw", "s": [[0, 1]]},
+    bad = [{"k": "draw", "s": []}, {"k": "draw", "s": [[16, 1, 1]]}, {"k": "draw", "s": [[0, 1]]},
            {"k": "draw", "s": [[0, 301, 1]]}, {"k": "draw", "s": [[0, 1, 171]]}, {"k": "draw", "s": [[0, 1.5, 1]]},
            {"k": "draw", "s": [[0, True, 1]]}, {"k": "draw", "s": [[0, -1, 1]]}, {"k": "draw", "s": [[0] + many]},
            {"k": "draw", "s": [[0, 1, 1]] * 201}, {"k": "draw", "s": [[0, 1, 1]], "c": "#f00"},
@@ -14521,7 +14522,7 @@ def test_doodle_cheers_v391():
           and store.cheers[("sam", "dre")]["doodle"] == draw)
     dre.send_cheer("sam", "\U0001F340", "luck", luck=True, doodle=draw)
     lucky = store.cheers[("sam", "dre")]
-    dre.send_cheer("sam", party, doodle={"k": "draw", "s": [[9, 1, 1]]})
+    dre.send_cheer("sam", party, doodle={"k": "draw", "s": [[16, 1, 1]]})
     check("never on a good-luck line or a tip; a broken one isn't sent, the cheer still goes",
           lucky["doodle"] is None and lucky["luck"] and store.cheers[("sam", "dre")]["doodle"] is None)
     dre.send_cheer("sam", party, doodle={"k": "sign", "t": "you've got this"})
@@ -14552,7 +14553,13 @@ def test_doodle_cheers_v391():
           and "M299 169 l0.1 0" in art and 'viewBox="0 0 300 170"' in art)
     sign = board.doodle_html({"k": "sign", "t": "<b>hi</b>"})
     check("a sign's words are escaped; a broken doodle draws nothing",
-          "&lt;b&gt;hi&lt;/b&gt;" in sign and "<b>" not in sign and board.doodle_html({"k": "draw", "s": [[7, 1, 1]]}) == "")
+          "&lt;b&gt;hi&lt;/b&gt;" in sign and "<b>" not in sign and board.doodle_html({"k": "draw", "s": [[16, 1, 1]]}) == "")
+    from due_crew.backend.shapes import DOODLE_INKS, DOODLE_PEN_MAX
+    inked = board.doodle_html({"k": "draw", "s": [[2 * (2 + i) + 1, 1, 1] for i in range(len(DOODLE_INKS))] + [[0, 1, 1]]}, "rose")
+    check("every accent on the pad (Sam: \"all of our colors\"): pen >> 1 names one of ours by place, in the board's own shades; 0 is still the sender's",
+          DOODLE_PEN_MAX == 15 and set(DOODLE_INKS) == set(board.ACCENTS) and len(DOODLE_INKS) == len(board.ACCENTS)
+          and all(f'stroke="{board.accent_pair(n)[0]}" stroke-width="6"' in inked for n in DOODLE_INKS)
+          and inked.endswith(f'<path d="M1 1 l0.1 0" stroke="{board.accent_pair("rose")[0]}" stroke-width="3"/></svg>'))
     ents = [{"user_id": "dre", "name": "Dre", "accent": "purple", "look": ["cap"], "you": False}]
     land = board.doodle_landing({"from": "dre", "name": "Dre", "doodle": draw}, ents, {"sev": True})
     still = board.doodle_landing({"from": "dre", "name": "Dre", "doodle": draw}, ents, {"sev": False})
@@ -14649,8 +14656,8 @@ def test_cheer_pill_and_window_v391():
     """3.9.1 (Sam: "Cheers, clearer: build 1", "get rid of the current cheers
     click to the right of the stats", "make the cheers and doodles modals in
     the design language of our add on"): a crewmate's row has a "🎉 Cheer"
-    pill after the name (on hover or focus; on every row for this
-    computer's first two weeks with a crew), the 🎉 column is gone, and the
+    pill after the name (only while the pointer or a key is on the name:
+    "not persistent all the time"), the 🎉 column is gone, and the
     Cheer window is drawn on the Decks screen in the board's look, its Send
     checked again in Python."""
     labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
@@ -14671,21 +14678,16 @@ def test_cheer_pill_and_window_v391():
     check("a crewmate's cheer is a pill after the name (escaped), opening the Cheer window; never on my own row",
           "duecrew:cheerpick:dre" in nm and "&#127881; Cheer" in nm and 'aria-label="Cheer Dre &lt;b&gt;"' in nm
           and nm.index("dc-pl") < nm.index("dc-cpill") and "dc-cpill" not in mine)
-    check("the pill shows on hover or focus; a long name gives way so it's never cut off",
-          "tr:hover a.dc-cpill" in page and "tr:focus-within a.dc-cpill" in page and "max-width: 56%" in page)
-    today = labels[0]
-    week_on = board.render(data, {"period": "today", "cheer_pill_from": labels[6]}, 0)
-    check("for this computer's first two weeks with a crew the pill is on every row; then only on hover",
-          board.pills_always({"cheer_pill_from": today}, today) and board.pills_always({"cheer_pill_from": labels[6]}, today)
-          and not board.pills_always({"cheer_pill_from": (TODAY - datetime.timedelta(days=14)).isoformat()}, today)
-          and not board.pills_always({}, today) and not board.pills_always({"cheer_pill_from": "x"}, today)
-          and '<table class="dc-pills">' in week_on and '<table class="dc-pills">' not in page)
+    check("the pill shows only while the pointer (or a key) is on the name, never on every row; a long name gives way so it's never cut off",
+          "td.nm:hover a.dc-cpill" in page and "td.nm:focus-within a.dc-cpill" in page and "max-width: 56%" in page
+          and "tr:hover a.dc-cpill" not in page and "dc-pills" not in page and not hasattr(board, "pills_always")
+          and "dc-pills" not in board.render(data, {"period": "today", "cheer_pill_from": labels[6]}, 0))
     app_js = open(os.path.join(REPO, "site", "public", "app.js")).read()
     app_css = open(os.path.join(REPO, "site", "public", "app.css")).read()
-    check("the site's twin: the pill after the name, no 🎉 column, every row's pill for its first two weeks, always on a touch screen",
-          '"linkish cpill"' in app_js and 'class: "chc"' not in app_js and "dc-pill-from" in app_js
-          and "HEADS.length + 1" in app_js and "@media (hover: none) { .brdt .cpill { display: inline-block; } }" in app_css
-          and ".chc" not in app_css)
+    check("the site's twin: the pill after the name, only while the pointer's on the name; no 🎉 column, never on every row",
+          '"linkish cpill"' in app_js and 'class: "chc"' not in app_js and "dc-pill-from" not in app_js and "cpills" not in app_js
+          and "HEADS.length + 1" in app_js and ".brdt td.nm:hover .cpill, .brdt td.nm:focus-within .cpill" in app_css
+          and "tr:hover .cpill" not in app_css and "hover: none" not in app_css and ".chc" not in app_css)
     # the Cheer window, in the board's look
     js = board.cheer_overlay_js({"uid": "dre", "name": "Dre </script><b>", "emojis": ["🎉", "💪"], "pip": None,
                                  "pen": "red;background:url(x)"})
@@ -14697,6 +14699,23 @@ def test_cheer_pill_and_window_v391():
     check("the window: the board's tokens, its own font, Draw and Sign, the pad's ceilings, Esc and the backdrop close it",
           "getPropertyValue('--dc-' + name)" in js and "dcStyle.fontFamily" in js and "'Draw'" in js and "'Sign'" in js
           and "MAXP = 2000" in js and "SIGN = 24" in js and "'Escape'" in js and "downOnBack" in js)
+    from due_crew import emoji_drawer as ED
+    from due_crew.backend.shapes import DOODLE_INKS, clean_emoji
+    every = [e for _, items in ED.GROUPS for e, _ in items]
+    check("other opens a drawer of emoji, by group, each found by its words; every one can be sent (clean_emoji keeps it whole)",
+          view["drawer"] == ED.view() and len(every) == len(set(every)) > 150
+          and all(clean_emoji(e) == e for e in every) and all(w.strip() for _, items in ED.GROUPS for _, w in items)
+          and "el('button', 'ot', 'other')" in js and "aria-expanded" in js and "function openDrawer()" in js
+          and "Find one: heart, coffee, owl" in js and "oneEmoji(find.value.trim())" in js,
+          [e for e in every if clean_emoji(e) != e])
+    check("Esc shuts the drawer first, then the window",
+          "if (drawer.style.display !== 'none') { shut(); other.focus(); } else { close(); }" in js)
+    mine = board.cheer_overlay_js({"uid": "dre", "name": "Dre", "emojis": ["🎉"], "pen": board.accent_pair("teal")[0]})
+    mv = json.loads(re.search(r"var V = (\{.*?\});\n", mine).group(1).replace("<\\/", "</"))
+    check("the pad has every accent, mine first, then black; a stroke's colour goes as its place in DOODLE_INKS",
+          [x[0] for x in mv["inks"]] == [board.accent_pair(n)[0] for n in DOODLE_INKS] and mv["mine"] == DOODLE_INKS.index("teal")
+          and "'My colour'" in mine and "'Black'" in mine and "pen = (pen & 1) | (x[0] << 1)" in mine
+          and "cx.strokeStyle = inkOf(s.pen)" in mine and f"INK = '{board.DOODLE_INK}'" in mine and "__INK__" not in mine)
     import shutil
     import subprocess
     node = subprocess.run(["node", "--check", "-"], input=js, capture_output=True, text=True) if shutil.which("node") else None
@@ -14724,7 +14743,7 @@ def test_cheer_pill_and_window_v391():
         for bad in ({"to": "sam", "emoji": "🔥"}, {"to": "nia", "emoji": "🔥"}, {"to": "dre", "emoji": "lol"}, ["dre"]):
             send(bad)
         dc._on_js(False, "duecrew:cheersend:%7Bnot json", DeckBrowser())
-        send({"to": "dre", "emoji": "🎉", "doodle": {"k": "draw", "s": [[9, 1, 1]]}, "extra": "<b>"})
+        send({"to": "dre", "emoji": "🎉", "doodle": {"k": "draw", "s": [[16, 1, 1]]}, "extra": "<b>"})
         check("cheerpick opens the window on the Decks screen, for that crewmate",
               "dc-cheer" in opened and '"uid": "dre"' in opened)
         check("Send: one cheer with its note and sign; me, a stranger, a word for an emoji or a broken payload send nothing; a broken doodle goes without it",

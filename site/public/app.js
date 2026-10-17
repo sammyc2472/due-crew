@@ -1088,8 +1088,8 @@ const Board = (() => {
       const [t] = ago(r.last);
       cell.append(h("span", { class: "ago faded" }, ` · nothing ${period === "week" ? "this week" : "yet"}${t && t !== "just now" ? ` as of ${t}` : ""}`));
     }
-    // board.py 3.9.1: the cheer is a pill after the name, on hover or focus (always on a touch screen,
-    // and on every row for a crew's first two weeks), in place of the 🎉 column at the end
+    // board.py 3.9.1: the cheer is a pill after the name, only while the pointer's on the name (or a key's
+    // on it), in place of the 🎉 column at the end; on a phone, tapping the name opens their card, which has it
     if (!r.you) cell.append(h("button", { class: "linkish cpill", title: "Send a cheer", "aria-label": `Cheer ${p.name}`, onclick: (e) => cheerMenu(p.uid, e.currentTarget) }, "🎉 Cheer"));
     else if (r.stale) cell.append(h("span", { class: "ago faded" }, " · yesterday"));
     else if (r.showup && r.daysWk) cell.append(h("span", { class: "ago faded" }, ` · ${r.daysWk} day${r.daysWk === 1 ? "" : "s"} this week`));
@@ -1125,10 +1125,7 @@ const Board = (() => {
     };
     // Q3: friends with no sync in 90+ days fold into one line, as board.py's _quiet_fold
     const longQ = dormant.filter((r) => r.quiet && !r.you && r.last && Date.now() - Date.parse(r.last) > 90 * 86400000);
-    // board.pills_always: the pill on every row for this browser's first two weeks with a crew
-    let pillFrom = store("dc-pill-from");
-    if (!pillFrom && [...fresh, ...dormant].some((r) => !r.you)) pillFrom = store("dc-pill-from", today);
-    const tbl = h("table", { class: pillFrom && today >= pillFrom && today < addDays(pillFrom, 14) ? "brdt cpills" : "brdt" });
+    const tbl = h("table", { class: "brdt" });
     const fold = [];
     if (longQ.length) {
       const names = longQ.map((r) => r.p.name);

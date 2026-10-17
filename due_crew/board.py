@@ -23,8 +23,8 @@ from datetime import date as _date, datetime, timezone
 
 from .logo import board_mark
 from . import room_model
-from . import closet as _closet, fridge as _fridge, sev as _sev, shows as _shows
-from .backend.shapes import clean_doodle
+from . import closet as _closet, emoji_drawer as _emoji_drawer, fridge as _fridge, sev as _sev, shows as _shows
+from .backend.shapes import DOODLE_INKS, clean_doodle
 from .stats.decks import sig_match
 
 LIGHT = {
@@ -557,14 +557,15 @@ def _css(cfg):
       background: var(--dc-well); vertical-align: middle; }}
     #due-crew .sq.on {{ background: var(--dc-accent); }}
     #due-crew .sq.away {{ background: var(--dc-well); box-shadow: inset 0 0 0 2px var(--dc-accent); opacity: 0.5; }}
-    /* 3.9.1 (Sam's pick, "Cheers, clearer"): a cheer is a pill after the name, on hover or focus (on
-       every row for a crew's first two weeks, dc-pills), in place of the faint 🎉 column at the end */
+    /* 3.9.1 (Sam's pick, "Cheers, clearer"): a cheer is a pill after the name, in place of the faint 🎉
+       column at the end; it shows only while the pointer's on the name (or a key's on it), never always
+       (Sam: "only show up when scrolling on a name, not persistent all the time") */
     #due-crew a.dc-cpill {{ display: none; margin-left: 6px; padding: 0 8px; border: 1px solid var(--dc-accent); border-radius: 99px;
       color: var(--dc-accent); font-size: 10.5px; font-weight: 700; line-height: 16px; text-decoration: none; white-space: nowrap;
       vertical-align: 1px; }}
-    #due-crew tr:hover a.dc-cpill, #due-crew tr:focus-within a.dc-cpill, #due-crew table.dc-pills a.dc-cpill {{ display: inline-block; }}
+    #due-crew td.nm:hover a.dc-cpill, #due-crew td.nm:focus-within a.dc-cpill {{ display: inline-block; }}
     /* a long name gives way so its pill is never cut off: it ends a little sooner while the pill shows */
-    #due-crew tr:hover a.dc-pl, #due-crew tr:focus-within a.dc-pl, #due-crew table.dc-pills a.dc-pl {{
+    #due-crew td.nm:hover a.dc-pl, #due-crew td.nm:focus-within a.dc-pl {{
       display: inline-block; max-width: 56%; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }}
     #due-crew tr.you a.dc-pl {{ max-width: none; }}
     #due-crew a.dc-cpill:hover, #due-crew a.dc-cpill:focus-visible {{ background: var(--dc-accent); color: var(--dc-accent-ink); outline: none; }}
@@ -1252,24 +1253,10 @@ def _table_html(data, cfg, period, pick=""):
     solo = _solo_html(data)
     # the name column ellipsizes, so the table can never outgrow the card;
     # past the row cap it scrolls inside it
-    pills = ' class="dc-pills"' if pills_always(cfg, (data.get("labels") or [""])[0]) else ""
-    return _scroll(f'<table{pills}><tr>{heads}</tr>{body}</table>', body.count('<tr class=')) + solo
+    return _scroll(f'<table><tr>{heads}</tr>{body}</table>', body.count('<tr class=')) + solo
 
 
 ROW_CAP = 10
-PILL_DAYS = 14  # 3.9.1: a crew's first two weeks on this computer, the Cheer pill on every row
-
-
-def pills_always(cfg, today):
-    """3.9.1: whether the Cheer pill shows on every row, not only on hover:
-    for PILL_DAYS from the day this computer first saw a crewmate
-    (cheer_pill_from, set by the glue), so a new crew finds it."""
-    try:
-        since = _date.fromisoformat(str(cfg.get("cheer_pill_from") or ""))
-        day = _date.fromisoformat(str(today or ""))
-    except ValueError:
-        return False
-    return 0 <= (day - since).days < PILL_DAYS
 
 
 def _scroll(html, rows):
@@ -4510,7 +4497,9 @@ def doodle_html(d, accent=None, label="A drawing"):
     for st in d["s"]:
         pts = list(zip(st[1::2], st[2::2]))
         line = "M" + " L".join(f"{x} {y}" for x, y in pts) + (" l0.1 0" if len(pts) == 1 else "")
-        paths.append(f'<path d="{line}" stroke="{DOODLE_INK if st[0] & 2 else colour}" stroke-width="{6 if st[0] & 1 else 3}"/>')
+        c = st[0] >> 1  # 0 the sender's colour, 1 black, 2 on one of ours (DOODLE_INKS)
+        ink = DOODLE_INK if c == 1 else accent_pair(DOODLE_INKS[c - 2])[0] if c >= 2 else colour
+        paths.append(f'<path d="{line}" stroke="{ink}" stroke-width="{6 if st[0] & 1 else 3}"/>')
     return (f'<svg class="dd-draw" viewBox="0 0 300 170" role="img" aria-label="{_html.escape(label, quote=True)}" fill="none"'
             f' stroke-linecap="round" stroke-linejoin="round">{"".join(paths)}</svg>')
 
@@ -4552,7 +4541,7 @@ CHEER_WINDOW_JS = r"""
         accent = tok('accent', '#2e7d32', '#7cc47f'), accentInk = tok('accent-ink', '#ffffff', '#122912'),
         you = tok('you-bg', '#e9f2e9', '#2c372b');
     var font = (dcStyle && dcStyle.fontFamily) || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    var W = 300, H = 170, MAXP = 2000, MAXS = 200, SIGN = 24, NOTE = 80;
+    var W = 300, H = 170, MAXP = 2000, MAXS = 200, SIGN = 24, NOTE = 80, INK = '__INK__';
     var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     function el(tag, cls, text) {
         var e = document.createElement(tag);
@@ -4580,8 +4569,18 @@ CHEER_WINDOW_JS = r"""
         '#dc-cheer .em{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}' +
         '#dc-cheer .em button{width:40px;height:36px;padding:0;border-radius:10px;border:1px solid ' + line + ';background:' + bg + ';font-size:20px;line-height:1;}' +
         '#dc-cheer .em button[aria-pressed=true]{border:2px solid ' + accent + ';background:' + you + ';}' +
-        '#dc-cheer .em input{width:66px;height:36px;border-radius:10px;border:1px solid ' + line + ';background:' + bg + ';color:' + ink + ';font-size:12px;padding:0 8px;text-align:center;}' +
-        '#dc-cheer .em input.on{border:2px solid ' + accent + ';background:' + you + ';font-size:20px;}' +
+        '#dc-cheer .em .ot{width:auto;min-width:66px;padding:0 10px;font-size:12px;color:' + muted + ';}' +
+        '#dc-cheer .em .ot.on{border:2px solid ' + accent + ';background:' + you + ';font-size:20px;color:' + ink + ';}' +
+        '#dc-cheer .em .ot[aria-expanded=true]{border-color:' + accent + ';color:' + accent + ';}' +
+        '#dc-cheer .dr{border:1px solid ' + line + ';border-radius:12px;padding:8px;display:grid;gap:6px;background:' + well + ';}' +
+        '#dc-cheer .gt{display:flex;flex-wrap:wrap;gap:2px;}' +
+        '#dc-cheer .gt button{width:32px;height:28px;border:0;background:none;border-radius:8px;font-size:16px;line-height:1;padding:0;}' +
+        '#dc-cheer .gt button:hover{background:' + bg + ';}' +
+        '#dc-cheer .gr{position:relative;max-height:176px;overflow-y:auto;display:flex;flex-wrap:wrap;gap:2px;align-content:flex-start;}' +
+        '#dc-cheer .gr .gl{flex-basis:100%;font-size:11px;font-weight:700;color:' + muted + ';padding:4px 2px 2px;}' +
+        '#dc-cheer .gr button{width:34px;height:32px;border:0;background:none;border-radius:8px;font-size:20px;line-height:1;padding:0;}' +
+        '#dc-cheer .gr button:hover{background:' + bg + ';}' +
+        '#dc-cheer .gr .none{flex-basis:100%;color:' + muted + ';font-size:12px;padding:6px 2px;}' +
         '#dc-cheer .sg{display:inline-flex;border:1px solid ' + line + ';border-radius:99px;padding:2px;gap:2px;width:max-content;}' +
         '#dc-cheer .sg button{border:0;background:none;border-radius:99px;padding:2px 14px;font-weight:700;font-size:12px;color:' + muted + ';}' +
         '#dc-cheer .sg button[aria-pressed=true]{background:' + accent + ';color:' + accentInk + ';}' +
@@ -4599,7 +4598,7 @@ CHEER_WINDOW_JS = r"""
         '#dc-cheer .words{position:absolute;inset:0;display:grid;place-items:center;padding:10px 16px;text-align:center;font-weight:700;font-size:26px;line-height:1.15;overflow-wrap:anywhere;}' +
         '#dc-cheer .words.ph{color:#b7b1a2;}' +
         '#dc-cheer .tx{width:100%;height:32px;border-radius:8px;border:1px solid ' + line + ';background:' + bg + ';color:' + ink + ';font-size:13px;padding:0 10px;}' +
-        '#dc-cheer .tx:focus,#dc-cheer .em input:focus{outline:2px solid ' + accent + ';outline-offset:0;}' +
+        '#dc-cheer .tx:focus{outline:2px solid ' + accent + ';outline-offset:0;}' +
         '#dc-cheer .ft{display:flex;align-items:center;gap:8px;}' +
         '#dc-cheer .go{background:' + accent + ';color:' + accentInk + ';border:1px solid transparent;border-radius:8px;padding:6px 16px;font-weight:700;font-size:13px;}' +
         '#dc-cheer .no{background:none;border:1px solid ' + line + ';border-radius:8px;padding:6px 14px;font-size:13px;}' +
@@ -4627,33 +4626,96 @@ CHEER_WINDOW_JS = r"""
         var b = el('button', null, x);
         b.type = 'button';
         b.setAttribute('aria-label', 'Send ' + x);
-        b.addEventListener('click', function () { pick(x); other.value = ''; other.className = ''; });
+        b.addEventListener('click', function () { choose(x); });
         quick.push([x, b]);
         em.appendChild(b);
     });
-    var other = el('input');
-    other.placeholder = 'other';
-    other.maxLength = 16;
+    // other: a drawer of emoji (emoji_drawer.py) in the window's own look, since a page can't open the
+    // computer's picker (Sam: "doesn't pop up with the emoji drawer"); its search box takes a typed or pasted one too
+    var other = el('button', 'ot', 'other');
+    other.type = 'button';
     other.title = 'Any emoji';
     other.setAttribute('aria-label', 'Any other emoji');
-    other.addEventListener('input', function () {
-        var s = other.value.trim(), first = '';
+    other.setAttribute('aria-expanded', 'false');
+    other.addEventListener('click', function () { if (drawer.style.display === 'none') { openDrawer(); } else { shut(); } });
+    em.appendChild(other);
+    card.appendChild(em);
+    var drawer = el('div', 'dr'), find = el('input', 'tx'), gt = el('div', 'gt'), gr = el('div', 'gr'), none = el('div', 'none', 'Nothing by that name. Paste one in here instead.');
+    drawer.style.display = 'none';
+    find.placeholder = 'Find one: heart, coffee, owl…';
+    find.setAttribute('aria-label', 'Find an emoji');
+    drawer.appendChild(find);
+    drawer.appendChild(gt);
+    drawer.appendChild(gr);
+    var cells = [], labels = [];
+    V.drawer.forEach(function (g) {
+        var lab = el('div', 'gl', g[0]);
+        gr.appendChild(lab);
+        labels.push([lab, []]);
+        var tab = el('button', null, g[1][0][0]);
+        tab.type = 'button';
+        tab.title = g[0];
+        tab.setAttribute('aria-label', g[0]);
+        tab.addEventListener('click', function () { if (find.value) { find.value = ''; filter(); } gr.scrollTop = lab.offsetTop; });
+        gt.appendChild(tab);
+        g[1].forEach(function (x) {
+            var b = el('button', null, x[0]);
+            b.type = 'button';
+            b.title = x[1];
+            b.setAttribute('aria-label', x[0] + ' ' + x[1]);
+            b.addEventListener('click', function () { choose(x[0]); });
+            gr.appendChild(b);
+            cells.push([b, (' ' + x[1]).toLowerCase(), lab]);
+            labels[labels.length - 1][1].push(b);
+        });
+    });
+    gr.appendChild(none);
+    function oneEmoji(s) {
+        var first = '';
         if (s && window.Intl && Intl.Segmenter) {
             var it = new Intl.Segmenter().segment(s)[Symbol.iterator]().next();
             first = it.done ? '' : it.value.segment;
         } else if (s) { first = Array.from(s)[0]; }
-        if (first && !/[A-Za-z0-9\s]/.test(first) && first.charCodeAt(0) >= 0x2190) {
-            other.value = first;
-            other.className = 'on';
-            pick(first);
-        } else {
-            other.value = '';
-            other.className = '';
-            pick(V.emojis[0]);
-        }
+        return first && !/[A-Za-z0-9\s]/.test(first) && first.charCodeAt(0) >= 0x2190 ? first : '';
+    }
+    function filter() {
+        var q = find.value.trim().toLowerCase(), shown = 0;
+        cells.forEach(function (c) {
+            var on = !q || c[1].indexOf(' ' + q) >= 0;
+            c[0].style.display = on ? '' : 'none';
+            if (on) { shown++; }
+        });
+        labels.forEach(function (l) { l[0].style.display = !q && l[1].length ? '' : 'none'; });
+        none.style.display = shown ? 'none' : '';
+    }
+    find.addEventListener('input', function () {
+        var typed = oneEmoji(find.value.trim());
+        if (typed) { choose(typed); return; }
+        filter();
     });
-    em.appendChild(other);
-    card.appendChild(em);
+    filter();
+    card.appendChild(drawer);
+    function openDrawer() {
+        drawer.style.display = '';
+        other.setAttribute('aria-expanded', 'true');
+        find.value = '';
+        filter();
+        gr.scrollTop = 0;
+        find.focus();
+    }
+    function shut() {
+        drawer.style.display = 'none';
+        other.setAttribute('aria-expanded', 'false');
+    }
+    function choose(x) {
+        var q = V.emojis.indexOf(x) >= 0;
+        other.textContent = q ? 'other' : x;
+        other.className = q ? 'ot' : 'ot on';
+        other.setAttribute('aria-label', q ? 'Any other emoji' : 'Send ' + x + ' (choose another)');
+        pick(x);
+        shut();
+        other.focus();
+    }
     function pick(x) {
         emoji = x;
         quick.forEach(function (q) { q[1].setAttribute('aria-pressed', q[0] === x ? 'true' : 'false'); });
@@ -4680,7 +4742,12 @@ CHEER_WINDOW_JS = r"""
     cv.setAttribute('aria-label', 'Draw here');
     paper.appendChild(cv);
     draw.appendChild(paper);
-    var strokes = [], live = null, pen = 1;  // pen: bit 0 thick, bit 1 ink (else my colour)
+    // pen: bit 0 thick; pen >> 1 the colour: 0 the sender's, 1 black, 2 on one of ours (V.inks, DOODLE_INKS's order)
+    var inks = V.inks.map(function (x, i) { return [i + 2, x[0], x[1]]; });
+    if (V.mine >= 0 && inks[V.mine]) { var m = inks.splice(V.mine, 1)[0]; inks.unshift([m[0], m[1], 'My colour']); }
+    inks.push([1, INK, 'Black']);
+    var strokes = [], live = null, pen = (inks[0][0] << 1) | 1;
+    function inkOf(p) { var c = p >> 1; return c === 1 ? INK : c >= 2 && V.inks[c - 2] ? V.inks[c - 2][0] : V.pen; }
     var cx = cv.getContext('2d');
     function points() { return strokes.reduce(function (a, s) { return a + s.p.length; }, 0); }
     function paint() {
@@ -4689,7 +4756,7 @@ CHEER_WINDOW_JS = r"""
         cx.lineCap = 'round';
         cx.lineJoin = 'round';
         strokes.forEach(function (s) {
-            cx.strokeStyle = s.pen & 2 ? '#2b2d29' : V.pen;
+            cx.strokeStyle = inkOf(s.pen);
             cx.lineWidth = s.pen & 1 ? 6 : 3;
             cx.beginPath();
             s.p.forEach(function (q, i) { if (i) { cx.lineTo(q[0], q[1]); } else { cx.moveTo(q[0], q[1]); cx.lineTo(q[0] + 0.1, q[1]); } });
@@ -4721,20 +4788,20 @@ CHEER_WINDOW_JS = r"""
     cv.addEventListener('pointercancel', lift);
 
     var tl = el('div', 'tl'), swatches = [], widths = [];
-    [[V.pen, 'My colour', 0], ['#2b2d29', 'Black', 2]].forEach(function (x) {
+    inks.forEach(function (x) {
         var b = el('button', 'sw');
         b.type = 'button';
-        b.style.background = x[0];
-        b.title = x[1];
-        b.setAttribute('aria-label', x[1]);
-        b.addEventListener('click', function () { pen = (pen & 1) | x[2]; tools(); });
-        swatches.push([x[2], b]);
+        b.style.background = x[1];
+        b.title = x[2];
+        b.setAttribute('aria-label', x[2]);
+        b.addEventListener('click', function () { pen = (pen & 1) | (x[0] << 1); tools(); });
+        swatches.push([x[0], b]);
         tl.appendChild(b);
     });
     [['Thin', 0], ['Thick', 1]].forEach(function (x) {
         var b = el('button', 'pl', x[0]);
         b.type = 'button';
-        b.addEventListener('click', function () { pen = (pen & 2) | x[1]; tools(); });
+        b.addEventListener('click', function () { pen = (pen & ~1) | x[1]; tools(); });
         widths.push([x[1], b]);
         tl.appendChild(b);
     });
@@ -4749,7 +4816,7 @@ CHEER_WINDOW_JS = r"""
     tl.appendChild(clear);
     draw.appendChild(tl);
     function tools() {
-        swatches.forEach(function (s) { s[1].setAttribute('aria-pressed', (pen & 2) === s[0] ? 'true' : 'false'); });
+        swatches.forEach(function (s) { s[1].setAttribute('aria-pressed', (pen >> 1) === s[0] ? 'true' : 'false'); });
         widths.forEach(function (w) { w[1].setAttribute('aria-pressed', (pen & 1) === w[0] ? 'true' : 'false'); });
     }
     tools();
@@ -4832,13 +4899,17 @@ CHEER_WINDOW_JS = r"""
     var downOnBack = false;
     back.addEventListener('pointerdown', function (e) { downOnBack = e.target === back; });
     back.addEventListener('click', function (e) { if (e.target === back && downOnBack) { close(); } });
-    function esc(e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } }
+    function esc(e) {
+        if (e.key !== 'Escape') { return; }
+        e.stopPropagation();
+        if (drawer.style.display !== 'none') { shut(); other.focus(); } else { close(); }
+    }
     document.addEventListener('keydown', esc, true);
     document.body.appendChild(back);
     if (window.dcMotion && !still) { dcMotion.open(back, card); }
     quick[0][1].focus();
 })();
-"""
+""".replace("__INK__", DOODLE_INK)
 
 
 # 3.9.1: the fridge, around the Decks screen (Sam: "could the fridge just be the
@@ -5021,10 +5092,17 @@ def cheer_overlay_js(view):
     the drawing's colour, on paper in either theme)}. Send goes as one
     duecrew:cheersend command, its payload URI-encoded JSON; the glue checks
     every field again (cheer_allowed, clean_note, clean_doodle) and that the
-    uid is a crewmate. The name and emoji go in as text, never markup."""
+    uid is a crewmate. The name and emoji go in as text, never markup.
+    Also: "other"'s drawer (emoji_drawer), and every accent for the pad
+    (Sam: "make all of our colors available in the doodles feature"), in
+    DOODLE_INKS's order, mine first."""
+    pen = view.get("pen") if _re.fullmatch(r"#[0-9a-fA-F]{6}", str(view.get("pen") or "")) else accent_pair(None)[0]
+    inks = [[accent_pair(n)[0], n.capitalize()] for n in DOODLE_INKS]
     data = {"uid": str(view.get("uid") or ""), "name": str(view.get("name") or "?"),
             "emojis": [str(x) for x in view.get("emojis") or []][:8] or ["\U0001F389"],
-            "pip": view.get("pip") or "", "pen": accent_pair(None)[0] if not _re.fullmatch(r"#[0-9a-fA-F]{6}", str(view.get("pen") or "")) else view["pen"]}
+            "pip": view.get("pip") or "", "pen": pen, "inks": inks,
+            "mine": next((i for i, x in enumerate(inks) if x[0].lower() == pen.lower()), -1),
+            "drawer": _emoji_drawer.view()}
     return CHEER_WINDOW_JS.replace("__VIEW__", _json.dumps(data).replace("</", "<\\/"))
 
 

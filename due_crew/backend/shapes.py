@@ -130,11 +130,16 @@ DOODLE_W, DOODLE_H = 300, 170
 DOODLE_POINTS = 2000
 DOODLE_STROKES = 200
 SIGN_MAX = 24  # UTF-16 units, as the Worker counts
+# A stroke's pen: bit 0 thick; pen >> 1 its colour: 0 the sender's accent, 1
+# black, 2 on these accents in this order (Sam: "make all of our colors
+# available"). Stored doodles name them by place: only ever add at the end.
+DOODLE_INKS = ("green", "blue", "purple", "teal", "amber", "rose")
+DOODLE_PEN_MAX = 2 * (len(DOODLE_INKS) + 1) + 1  # 15, validate.ts DOODLE_PEN_MAX
 
 
 def clean_doodle(v):
     """3.9.1: a cheer's doodle, both ways: {"k": "draw", "s": [[pen, x, y,
-    ...], ...]} (pen 0-3: bit 0 thick, bit 1 ink, else the sender's colour;
+    ...], ...]} (pen 0-DOODLE_PEN_MAX: bit 0 thick, the rest its colour;
     whole points on the 300 x 170 pad) or {"k": "sign", "t": "..."}, the
     words their Pip holds up. Anything the Worker's validate.doodle would
     turn away is None: numbers and one line of text, never markup or a
@@ -158,7 +163,7 @@ def clean_doodle(v):
         return isinstance(x, int) and not isinstance(x, bool) and 0 <= x <= hi
 
     for st in s:
-        if (not isinstance(st, list) or len(st) < 3 or len(st) % 2 != 1 or not whole(st[0], 3)
+        if (not isinstance(st, list) or len(st) < 3 or len(st) % 2 != 1 or not whole(st[0], DOODLE_PEN_MAX)
                 or not all(whole(x, DOODLE_W) for x in st[1::2]) or not all(whole(y, DOODLE_H) for y in st[2::2])):
             return None
         points += (len(st) - 1) // 2

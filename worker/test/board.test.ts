@@ -68,7 +68,7 @@ describe("GET /board", () => {
     const send = (doodle: unknown, extra = {}) => dre.call("POST", "/cheers/sam", { emoji: "🎉", doodle, ...extra });
     const many = Array.from({ length: 2001 }, (_, i) => [i % 300, i % 170]).flat();
     for (const bad of [
-      { k: "draw", s: [] }, { k: "draw", s: [[4, 1, 1]] }, { k: "draw", s: [[0, 1]] }, { k: "draw", s: [[0, 301, 1]] },
+      { k: "draw", s: [] }, { k: "draw", s: [[16, 1, 1]] }, { k: "draw", s: [[0, 1]] }, { k: "draw", s: [[0, 301, 1]] },
       { k: "draw", s: [[0, 1, 171]] }, { k: "draw", s: [[0, 1.5, 1]] }, { k: "draw", s: [[0, -1, 1]] }, { k: "draw", s: [["0", 1, 1]] },
       { k: "draw", s: [[0, ...many]] }, { k: "draw", s: Array.from({ length: 201 }, () => [0, 1, 1]) },
       { k: "draw", s: [[0, 1, 1]], c: "#f00" }, { k: "sign", t: "" }, { k: "sign", t: "   " }, { k: "sign", t: 5 },
@@ -79,6 +79,9 @@ describe("GET /board", () => {
     expect((await send({ k: "sign", t: "x".repeat(40) })).status).toBe(200);  // cut to 24
     expect((await sam.call("GET", "/board")).body.cheers[0].doodle.t).toBe("x".repeat(24));
     expect((await send({ k: "draw", s: [[2, ...many.slice(0, 4000)]] })).status).toBe(200);  // 2,000 points, the ceiling
+    // every accent (pen >> 1: 0 mine, 1 black, 2 to 7 the six), thin or thick: pens 0 to 15
+    expect((await send({ k: "draw", s: Array.from({ length: 16 }, (_, p) => [p, 1, 1]) })).status).toBe(200);
+    expect((await sam.call("GET", "/board")).body.cheers[0].doodle.s.map((st: number[]) => st[0])).toEqual([...Array(16).keys()]);
     expect((await send(null)).status).toBe(200);
   });
 

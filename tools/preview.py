@@ -573,8 +573,8 @@ _FRIDGE = [{"from": "dre", "name": "Dre", "at": "2026-10-03T09:00:00Z", "a": "bl
            {"from": "noah", "name": "Noah", "at": "2026-10-12T09:00:00Z", "a": "teal", "d": {"k": "draw", "s": _SUN}},
            {"from": "dre", "name": "Dre", "at": "2026-10-15T09:00:00Z", "a": "blue", "d": {"k": "sign", "t": "one more block!"}},
            {"from": "priya", "name": "Priya", "at": "2026-10-17T09:00:00Z", "a": "purple", "d": {"k": "draw", "s": [[1] + _HEART]}}]
-sections.append("<h3>3.9.1: a crew's first two weeks: the Cheer pill on every row, no 🎉 column</h3>"
-                + board.render(dict(DATA, entries=DRESSED), dict(_MINE, period="today", cheer_pill_from=DATA["labels"][0]), now_ts - 60))
+sections.append("<h3>3.9.1: the Cheer pill after a name, only while the pointer's on it (point at a name); no 🎉 column</h3>"
+                + board.render(dict(DATA, entries=DRESSED), dict(_MINE, period="today"), now_ts - 60))
 # the fridge around the Decks screen: in a box of its own here (a transform holds the
 # pinned notes to it, as the window holds them in Anki), placed by its own script
 _NOTES = ["proud of you", "", "you've got this, see you at the library", "", "good luck tomorrow!!"]

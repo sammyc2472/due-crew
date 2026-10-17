@@ -305,7 +305,8 @@ def _one_line(v, n):
 
 def _doodle(v):
     """validate.ts doodle (3.9.1): a drawing's strokes on the 300 x 170 pad,
-    [pen 0-3, x, y, ...] in whole points, 200 strokes and 2,000 points at
+    [pen 0-15 (bit 0 thick, the rest its colour), x, y, ...] in whole
+    points, 200 strokes and 2,000 points at
     most; or a sign of 24 at most. The canonical dict, or Bad."""
     if not isinstance(v, dict):
         raise Bad(400, "bad_doodle")
@@ -321,7 +322,7 @@ def _doodle(v):
         raise Bad(400, "bad_doodle")
     points = 0
     for st in s:
-        if (not isinstance(st, list) or len(st) < 3 or len(st) % 2 != 1 or not _is_int(st[0], 0, 3)
+        if (not isinstance(st, list) or len(st) < 3 or len(st) % 2 != 1 or not _is_int(st[0], 0, 15)
                 or not all(_is_int(x, 0, 300) for x in st[1::2]) or not all(_is_int(y, 0, 170) for y in st[2::2])):
             raise Bad(400, "bad_doodle")
         points += (len(st) - 1) // 2

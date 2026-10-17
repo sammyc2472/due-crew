@@ -667,10 +667,10 @@ In Anki (as a follower):
 
 ### 3.9.1: cheers, clearer (the pill, the Cheer window)
 
-- [ ] The crew rows: no 🎉 at the end of any row. The first two weeks after this computer first sees a crewmate, every crewmate's row has a green "🎉 Cheer" pill after the name (and after an exam or "studying now" chip); never on your own row. After that, it shows when you point at a row or Tab to it. A very long name ends sooner while the pill shows; the pill is never cut off.
+- [ ] The crew rows: no 🎉 at the end of any row, and no pill anywhere at rest. Point at a crewmate's name: a green "🎉 Cheer" pill shows after it (and after an exam or "studying now" chip); move off the name and it goes. Pointing at their numbers shows nothing. Tab to a name: it shows. Never on your own row. A very long name ends sooner while the pill shows; the pill is never cut off.
 - [ ] Click the pill (or "🎉 Send a cheer" on their card): the Cheer window opens over the Decks screen in the board's look (your accent, light and dark both right), their Pip and "Cheer Dre" at the top. Pick an emoji, or type/paste any other into "other" (⌃⌘Space on a Mac). Draw on the pad with the mouse, a trackpad or a pen; Black, Thin, Thick, Undo, Clear. Sign: type, and the paper shows it.
 - [ ] Send (or Enter in the note): the window fades, "Sent 🔥 and a drawing to Dre.", and the emoji floats up from their row. Cancel, Esc and a click on the dim backdrop close it without sending; a line drawn off the pad's edge never closes it.
-- [ ] duecrew.com: the same pill after the name on hover; on a phone it's always there; the 🎉 column is gone.
+- [ ] duecrew.com: the same pill after the name, only while pointing at the name; on a phone, tap the name for their card and its "🎉 Send a cheer"; the 🎉 column is gone.
 
 ### 3.9.1: two buttons
 
@@ -693,7 +693,9 @@ In Anki (as a follower):
 
 ### 3.9.1: doodle cheers (deploy the Worker first: migration 0029)
 
-- [ ] 🎉 a crewmate: the Cheer window has Draw and Sign under the emoji. Draw on the pad with the mouse (and a trackpad, and a pen if you have one): the lines follow, in your accent; Black, Thin and Thick change the next line; Undo takes the last line, Clear all of them. Night mode: the pad stays paper-light.
+- [ ] 🎉 a crewmate: the Cheer window has Draw and Sign under the emoji. Draw on the pad with the mouse (and a trackpad, and a pen if you have one): the lines follow, in your accent. The colours under the pad: yours first ("My colour"), then the other five accents, then Black; each changes the next line, as Thin and Thick do; a drawing can mix them. Undo takes the last line, Clear all of them. Night mode: the pad stays paper-light.
+- [ ] Send a drawing in three colours: on their screen (held up, and on the fridge) each line is in the colour it was drawn in, whatever their own accent.
+- [ ] "other": a drawer opens under the emoji, in the window's look: Find, a row of groups (Faces, Hands, Hearts, Party, Study, Nature, Food), and the emoji. Type "coffee": ☕ (and only what matches); type nonsense: "Nothing by that name". A group's button scrolls to it. Click one: the drawer shuts and "other" shows it, picked. Paste or type an emoji into Find (⌃⌘Space on a Mac, Win+. on Windows): it's picked. Esc with the drawer open shuts the drawer, not the window; Esc again closes the window. A quick pick after that puts "other" back.
 - [ ] Send with a drawing: "Sent 🎉 and a drawing to Adina." Send with the pad blank: a plain cheer, as before.
 - [ ] Sign: type a few words; the paper under it shows them as they'll look; 24 letters at most. Send from the Sign tab: "Sent 🎉 and a sign …".
 - [ ] On their Decks screen (or yours, cheered by a second account): the banner at the top, and your Pip (your colour, your look) rises at the board's bottom right holding the drawing (or the sign) up on two sticks, then ducks down as the banner goes. No show that time. A hat on your Pip sits under the sign, not in front of it.

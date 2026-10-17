@@ -2187,13 +2187,13 @@ every release that changes how something works.
   modals in the design language of our add on, not in the native anki
   style"). The faint 🎉 column at the end of every crew row (12px, 30%,
   no word, past Streak) is gone; a crewmate's cheer is a "🎉 Cheer" pill
-  right after the name and its chip, on hover or focus, and on every row
-  for this computer's first two weeks with a crew (`cheer_pill_from`, set
-  the first time a refresh brings a crewmate; `board.pills_always`). A
-  long name ends a little sooner while its pill shows, so the pill is
-  never cut off. The site's rows are the twin (`cpill`; the first two
-  weeks per browser in localStorage, and always on a touch screen, which
-  has no hover). The Cheer window is drawn on the Decks screen in the
+  right after the name and its chip, only while the pointer (or a key)
+  is on the name (`td.nm:hover`; Sam, after a first try that showed it on
+  every row for a crew's first two weeks: "cheer should only show up when
+  scrolling on a name, not persistent all the time"). A long name ends a
+  little sooner while its pill shows, so the pill is never cut off. The
+  site's rows are the twin (`cpill`); on a phone, with no pointer,
+  tapping the name opens their card, which has "🎉 Send a cheer". The Cheer window is drawn on the Decks screen in the
   board's own look (`board.cheer_overlay_js`: its tokens, so Theme and
   Accent hold; their Pip and name at the top; the quick emoji and any
   other; Draw · Sign on a canvas pad and a paper preview; the note; Send
@@ -2267,6 +2267,26 @@ every release that changes how something works.
   in later go round the ones I placed, not under them. A spot kept the
   older way (thousandths, in a test build) is dropped, and that doodle
   goes back beside the board.
+- 3.9.1, the Cheer window, round two (Sam, 17 Oct: "the other button in
+  the emoji for cheers selector doesn't pop up with the emoji drawer", and
+  "make all of our colors available in the doodles feature, not just
+  yours / black"). "other" was a box to type into, which needed the
+  computer's own emoji picker (a page can't open it). It's a button now
+  that opens a drawer in the window's look: Find (by words: "coffee",
+  "owl"), a row of groups, and the emoji by group (`emoji_drawer.py`,
+  170 or so, each one clean_emoji keeps whole, the suite checks). Picking
+  one shuts it and "other" shows the pick; one typed or pasted into Find
+  is picked too. Esc shuts the drawer before the window. The pad's
+  colours are every accent, mine first ("My colour"), then black. A
+  stroke's pen says which: bit 0 thick as before, pen >> 1 the colour (0
+  the sender's accent, as every doodle so far; 1 black, as before; 2 to 7
+  `shapes.DOODLE_INKS`, by place, so the list only ever grows at the
+  end). Pens 0 to 15 now, in the three that check a doodle
+  (`clean_doodle`, `validate.ts` `DOODLE_PEN_MAX`, the fake); the Worker
+  has to go out before an add-on that sends them (an older Worker turns
+  a pen past 3 away, and the add-on sends the cheer without its drawing).
+  Each line lands in the colour it was drawn in, whatever the
+  recipient's accent (`doodle_html`, the board's own shades on paper).
 - 3.9.1, room sounds (Sam's picks from the Room Sounds page, 17 Oct: a
   speaker on the chip; in a crew room each person picks their own; off
   till you pick, the last pick remembered on this computer; made from

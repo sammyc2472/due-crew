@@ -283,9 +283,11 @@ export function cheer(v: unknown) {
 }
 
 // 3.9.1, doodle cheers: the pad is DOODLE_W x DOODLE_H; a stroke is its pen
-// (0 my colour thin, 1 my colour thick, 2 ink thin, 3 ink thick: bit 0 thick,
-// bit 1 ink) and then x, y, x, y in whole points. My colour is my accent, which
-// a mutual friend already has, so a doodle carries no colour of its own.
+// and then x, y, x, y in whole points. The pen: bit 0 thick; pen >> 1 its
+// colour, a number, never a colour of its own: 0 my accent (which a mutual
+// friend already has), 1 black, 2 to 7 one of the board's six accents
+// (shapes.DOODLE_INKS, Sam: "make all of our colors available").
+export const DOODLE_PEN_MAX = 15;
 export const DOODLE_W = 300;
 export const DOODLE_H = 170;
 export const DOODLE_POINTS = 2000;
@@ -306,7 +308,7 @@ export function doodle(v: unknown): string {
   if (v.k !== "draw" || Object.keys(v).length !== 2 || !Array.isArray(v.s) || !v.s.length || v.s.length > DOODLE_STROKES) throw bad("doodle");
   let points = 0;
   for (const st of v.s) {
-    if (!Array.isArray(st) || st.length < 3 || st.length % 2 !== 1 || !isInt(st[0], 0, 3)) throw bad("doodle");
+    if (!Array.isArray(st) || st.length < 3 || st.length % 2 !== 1 || !isInt(st[0], 0, DOODLE_PEN_MAX)) throw bad("doodle");
     for (let i = 1; i < st.length; i += 2) {
       if (!isInt(st[i], 0, DOODLE_W) || !isInt(st[i + 1], 0, DOODLE_H)) throw bad("doodle");
     }
