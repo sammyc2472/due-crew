@@ -5570,7 +5570,7 @@ def test_knows_peek_v390():
     other kind of card stay as they were; nothing moves with Reduce motion."""
     import shutil
     import subprocess
-    from due_crew import cards as K
+    from due_crew import cards as K, sev
     from due_crew.app import _state
     names = {"dre": ("Dre <b>Ng", ""), "mo": ("Mo", "")}
     pips = {"dre": {"svg": "<svg></svg>", "a": ["#1e5fb4", "#7fb2f0"]}, "mo": {"svg": "<svg></svg>", "a": ["#2e7d32", "#7cc47f"]}}
@@ -5619,6 +5619,23 @@ def test_knows_peek_v390():
     check("peek, Pip off: the same bubble in the same place, without the Pip (Sam: \"always this version, just without the pip\")",
           shown2[0]["peek"] == {"head": "Dre knows this", "act": "Ask", "pips": []}
           and "pip" not in shown2[0], shown2[0].get("peek"))
+    shown3, saved3 = [], (K._bottom, K._review_web, K._show, K.client, dict(_state))
+    sam.session["cards"] = {"guid000001": {"knows": ["dre", "mo", "jo"], "tips": []}}
+    try:
+        K._bottom, K._review_web, K._show, K.client = (lambda: object()), (lambda: None), (lambda v: shown3.append(v)), (lambda: sam)
+        _state["entries"] = [{"user_id": u, "name": n, "you": False, "accent": "blue", "look": []}
+                             for u, n in (("dre", "Dre"), ("mo", "Mo"), ("jo", "Jo"))]
+        K.on_answer(types.SimpleNamespace(note=lambda: types.SimpleNamespace(guid="guid000001"), ord=0, id=1, lapses=3))
+    finally:
+        K._bottom, K._review_web, K._show, K.client = saved3[:4]
+        _state.clear()
+        _state.update(saved3[4])
+    sam.session["cards"] = {"guid000001": {"knows": ["dre"], "tips": []}}
+    ds = [x.get("d") for x in shown3[0]["peek"]["pips"]]
+    js3 = K.float_js(shown3[0])
+    check("peek, three side by side: each its own place in the blink, as a room's seats (Sam: they blinked as one)",
+          ds == [sev.started(i) for i in range(3)] and len(set(ds)) == 3
+          and "'--sv-d:' + (+peek.pips[i].d || 0) + 's;'" in js3 and "var(--sv-d, 0s)" in sev.CSS, ds)
     check("peek: on the review screen, their Pip waving in their look (sev.py's own markup, the name only its label, escaped)",
           v["kind"] == "knows" and set(v["peek"]) == {"head", "act", "pips"} and len(v["peek"]["pips"]) == 1
           and "m-peek" in v["peek"]["pips"][0]["svg"] and v["peek"]["pips"][0]["a"] == list(board.accent_pair("blue"))

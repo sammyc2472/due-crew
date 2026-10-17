@@ -462,7 +462,7 @@ _FLOAT_JS = """(function () {
     fig = el('span', 'position:relative;display:inline-flex;align-items:flex-end;gap:2px;line-height:0;');
     fig.setAttribute('data-fig', '1');
     for (var i = peek.pips.length - 1; i >= 0; i--) {  // the first who knows it nearest the corner
-      pip(fig, {pip: peek.pips[i], sevcss: D.sevcss}, night, '');
+      pip(fig, {pip: peek.pips[i], sevcss: D.sevcss}, night, '--sv-d:' + (+peek.pips[i].d || 0) + 's;');
     }
     box.appendChild(fig);
   } else if (!peek) {
@@ -620,8 +620,10 @@ def on_answer(card):
         if view and view.get("peek"):
             peek = dict(view["peek"])
             # each Pip waving, in their look and colour; none (Pip off): the bubble alone
+            from .sev import started
             drawn = [{"svg": peek_pip(u), "a": pips[u]["a"]} for u in peek.pop("uids", None) or [] if u in pips]
-            peek["pips"] = [p for p in drawn if p["svg"]]
+            # each its own place in the blink, as a room's seats (Sam: side by side they blinked as one)
+            peek["pips"] = [dict(p, d=started(i)) for i, p in enumerate(p for p in drawn if p["svg"])]
             view["peek"] = peek
     except Exception:
         view = None

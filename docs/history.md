@@ -2065,4 +2065,8 @@ every release that changes how something works.
   Adina). `cards.chip_view`'s peek carries `uids` (`PEEK_MAX` 3);
   `on_answer` draws each Pip in their look and colour (`peek.pips`). Ask
   still reaches everyone who has the card.
+- 3.9.0, the peek's Pips blink on their own (Sam, 17 Oct: "they are
+  blinking at the same time"). Side by side, two or three Pips shared
+  one blink. Each now gets its own place in it (`sev.started(i)`, the
+  `--sv-d` a study room's seats use), so no two blink together.
 
