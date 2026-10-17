@@ -1910,7 +1910,7 @@ def test_study_rooms_v212():
         rooms.on_question(None)
         check("placement: top bar showing, the chip goes there and the margin card doesn't",
               any('"chip"' in e and '"title"' in e for e in evals)
-              and any('"gutter"' in e and "null" in e.split("var D =")[1][:12] for e in evals))
+              and any(e.endswith('})("gutter");') and "var D =" not in e for e in evals))
         syncs.clear()
         rooms.on_close()
         check("close: closing Anki leaves the room, and pushes that", "room" not in fake_cl.session
@@ -2204,8 +2204,8 @@ def test_together_v210():
     from due_crew import room_model as rm
     check("bottom bar: the chip, a room beside Edit, and removing them keep the answer buttons centred",
           "dcBarBalance" in js and "dcBarBalance" in crew_cards.chip_js(None)
-          and all("window.dcBarBalance = function" in rm.widget_js(k, None) for k in ("bottom", "off"))
-          and "window.dcBarBalance = function" not in rm.widget_js("chip", None))
+          and all("window.dcBarBalance()" in rm.widget_js(k, None) for k in ("bottom", "off"))
+          and "window.dcBarBalance = function" in rm.BAR_BALANCE)
     check("bottom bar: our chip steps past a button another add-on draws over the bar",
           "position" in rm.BAR_BALANCE and "'absolute'" in rm.BAR_BALANCE and "marginLeft" in rm.BAR_BALANCE
           and "clear(chip)" in rm.BAR_BALANCE
@@ -2223,7 +2223,8 @@ def test_together_v210():
           "dc-knows-card" in fj and "knowsbar" in fj and "free()" in fj and "Not now" in fj
           and rm.CMD_KEY in fj and "textContent" in fj and fj.count("innerHTML") == 1 and "p.innerHTML = D.pip.svg" in fj
           and "bulb.innerHTML" not in fj  # 3.9.0, Sam's "2D": no lightbulb
-          and "dc-knows-card" in crew_cards.float_js(None) and "return false" in crew_cards.float_js(None))
+          and "dc-knows-card" in crew_cards.float_js(None) and "dcKnowsOff(true)" in crew_cards.float_js(None)
+          and len(crew_cards.float_js(None)) < 400 and len(crew_cards.chip_js(None)) < 300)  # 3.9.1: a remover, not the whole chip
     import aqt.utils as _au
     calls, asked = [], []
     real_toggle, real_ask = crew_cards.helped_toggle, _au.askUser
@@ -3108,12 +3109,12 @@ def test_room_card_pops_out_on_the_chips_side_v381():
           "send('roomcardoff')" in left and "roomcardoff" in rm.CARD_PAGE_CMDS)
     check("card: moves by its top row, kept on screen, remembered for that side",
           "Drag to move" in left and "dcRoomCardAt" in left and "at.side === D.side" in left and "innerWidth - w - 4" in left)
-    evals, saved = [], (R._webs, R._eval, R.my_room, R.cfg, R._where, R._card_web, R.room_model.widget_data)
+    evals, saved = [], (R._webs, R._eval, R.my_room, R.cfg, R._where, R._card_web, R.room_model.widget_data, R._tweak)
     tops = types.SimpleNamespace(name="top")
     main = types.SimpleNamespace(name="main", evalWithCallback=lambda js, cb: cb(False))
     try:
         R._webs = lambda: (tops, None, None)
-        R._eval = lambda web, js: evals.append((getattr(web, "name", None), js))
+        R._eval = R._tweak = lambda web, js: evals.append((getattr(web, "name", None), js))
         R.my_room = lambda: {"host": "sam"}
         R.cfg = lambda: {"room_chip_side": "left"}
         R._where = lambda: "chip"
@@ -3140,7 +3141,7 @@ def test_room_card_pops_out_on_the_chips_side_v381():
         check("card: from the review bar's little one it opens at the right, and that one hides",
               sides == ["right"] and _state["room_card"] == "bottom")
     finally:
-        R._webs, R._eval, R.my_room, R.cfg, R._where, R._card_web, R.room_model.widget_data = saved
+        R._webs, R._eval, R.my_room, R.cfg, R._where, R._card_web, R.room_model.widget_data, R._tweak = saved
         _state["room_card"] = None
 
 def test_only_our_pages_act_bare():
@@ -5708,7 +5709,7 @@ def test_knows_peek_v390():
     shown2, saved2 = [], (K._bottom, K._review_web, K._show, K.client, K.pips_by_uid, dict(_state))
     try:
         K._bottom, K._review_web, K._show, K.client = (lambda: object()), (lambda: None), (lambda v: shown2.append(v)), (lambda: sam)
-        K.pips_by_uid = lambda c=None: {}  # Pip off
+        K.pips_by_uid = lambda c=None, **kw: {}  # Pip off
         _state["entries"] = [{"user_id": "dre", "name": "Dre <b>Ng", "you": False, "accent": "blue", "look": ["headphones"]}]
         K.on_answer(types.SimpleNamespace(note=lambda: types.SimpleNamespace(guid="guid000001"), ord=0, id=1, lapses=3))
     finally:
@@ -14891,6 +14892,158 @@ def test_two_buttons_v391():
         _state["two_tried"] = False
     check("Try two buttons turns it on (saved as Settings saves it) and says so; Undo turns it off, back to the line",
           tried_on == (True, True) and undone == (False, False) and len(swaps) == 2, (tried_on, undone))
+
+
+def test_efficiency_review_screen_v391():
+    """3.9.1, the efficiency run (Sam: "I don't want our add on to impact anki
+    performance"): the review screen's widgets go to a page once, and again
+    only when they change or the page is new; taking one down is a few
+    lines; the knows chip is taken down only when one's up; an answer draws
+    only the Pips its chip could name; Pip's drawing and the config are kept."""
+    from due_crew import rooms as R, room_model as rm, cards as K, sev, app as A
+    from due_crew.app import _state
+    sent = []
+
+    class Web:
+        def __init__(self, n):
+            self.n = n
+
+        def eval(self, js):
+            sent.append((self.n, js))
+
+        def evalWithCallback(self, js, cb):
+            sent.append((self.n, js))
+            cb(True)
+    top, main, bottom = Web("top"), Web("main"), Web("bottom")
+    conf, room = {}, {"v": None}
+    now = datetime.datetime.now(datetime.timezone.utc)
+    saved = (R._webs, R.client, R.cfg, R.my_room, R._where, dict(_state))
+    try:
+        R._webs = lambda: (top, main, bottom)
+        R.client = lambda: types.SimpleNamespace(signed_in=True, session={})
+        R.cfg = lambda: dict(conf)
+        R.my_room = lambda: room["v"]
+        R._where = lambda: "chip"
+        _state["entries"] = [{"user_id": "me", "name": "Sam", "you": True}]
+        R._DRAWN.clear()
+        R.refresh_widgets()
+        first = dict(sent)
+        sent.clear()
+        R.refresh_widgets()
+        R.on_question(None)
+        check("efficiency: each page's widgets go as one piece; the next card, the same widgets send nothing",
+              sorted(first) == ["bottom", "main", "top"] and sent == [], [n for n, _ in sent])
+        check("efficiency: the bottom bar alone gets what keeps Anki's buttons in its middle; taking a widget down is a few lines",
+              rm.BAR_BALANCE in first["bottom"] and rm.BAR_BALANCE not in first["top"] + first["main"]
+              and len(first["main"]) < 1000 and "var D =" not in first["main"] and "var D =" in first["top"])
+        A.on_set_content(None, None)
+        R.refresh_widgets()
+        check("efficiency: a new page anywhere (webview_will_set_content), and they go again",
+              sorted(n for n, _ in sent) == ["bottom", "main", "top"])
+        sent.clear()
+        conf["room_chip_side"] = "left"
+        R.refresh_widgets()
+        check("efficiency: a change goes only to the page it changes", [n for n, _ in sent] == ["top"])
+        sent.clear()
+        R._eval(main, "1;")
+        sent.clear()
+        R.refresh_widgets()
+        check("efficiency: anything else drawn on a page, and that page gets them again", [n for n, _ in sent] == ["main"])
+        sent.clear()
+        R.on_theme()
+        check("efficiency: night mode on or off, all drawn again (they pick their colours as they're drawn)", len(sent) == 3)
+        room["v"] = rm.make_room("me", now - datetime.timedelta(minutes=3))
+        _state["entries"][0]["room"] = room["v"]
+        sent.clear()
+        R.refresh_widgets()
+        quiet = dict(sent)
+        conf.update(room_sound="rain", room_sound_vol=40)
+        sent.clear()
+        R.refresh_widgets()
+        loud = dict(sent)
+        check("efficiency: in a room, the sounds' code goes only once a sound's picked (it stops one either way)",
+              "window.dcSounds = {" not in quiet["top"] and "window.dcRoomSound" in quiet["top"]
+              and "window.dcSounds = {" in loud["top"] and list(loud) == ["top"])
+        sent.clear()
+        R.on_question(None)
+        check("efficiency: and in a room, the next card sends nothing either", sent == [], [n for n, _ in sent])
+    finally:
+        R._webs, R.client, R.cfg, R.my_room, R._where = saved[:5]
+        _state.clear()
+        _state.update(saved[5])
+        R._DRAWN.clear()
+    runtime_ids = re.search(r"var ids = (\[[^\]]*\])", rm._RUNTIME).group(1)
+    check("efficiency: the remover takes down the runtime's own widgets and stops their clocks, as its drop() does",
+          runtime_ids in rm.REMOVE_JS and "clearInterval(window['dcRoomTick_' + k])" in rm.REMOVE_JS
+          and "dcRoomTick_' + k]) { clearInterval(window['dcRoomTick_' + k])" in rm._RUNTIME
+          and rm.widget_js("gutter", None).endswith('})("gutter");'))
+
+    # the knows chip
+    saved = (K._bottom, K._review_web, K.client)
+    view = {"kind": "knows", "text": "Dre knows this", "accent": ["#0a0", "#7c7"], "pip": {"svg": "<svg/>", "a": ["#00f", "#99f"]},
+            "sevcss": sev.CSS, "peek": {"head": "I know this one", "act": "Ask Dre", "pips": [{"svg": "<svg/>", "a": ["#00f", "#99f"]}]}}
+    try:
+        K._bottom, K._review_web = (lambda: bottom), (lambda: main)
+        K._UP.update(bar=False, page=False)
+        K._SHEET.clear()
+        sent.clear()
+        K.on_question(None)
+        K._show(None)
+        check("efficiency: a card with no chip sends nothing to the review screen, question or answer", sent == [])
+        K._show(dict(view))
+        once = list(sent)
+        sent.clear()
+        K.on_question(None)
+        down = list(sent)
+        sent.clear()
+        K._show(dict(view))
+        again = list(sent)
+        sent.clear()
+        A.on_set_content(None, None)
+        K._show(dict(view))
+        fresh = list(sent)
+        sheet = json.dumps(sev.CSS)[1:200]
+        check("efficiency: a chip that's up is taken down with a few lines (it still ducks away)",
+              len(down) == 1 and down[0] == ("main", K.FLOAT_OFF) and "dcKnowsOff(true)" in K.FLOAT_OFF)
+        check("efficiency: Pip's motion sheet goes to a page once, and again on a new page",
+              sheet in once[0][1] and sheet not in again[0][1] and sheet in fresh[0][1], [len(x[0][1]) for x in (once, again, fresh)])
+    finally:
+        K._bottom, K._review_web, K.client = saved
+        K._UP.update(bar=False, page=False)
+    saved = dict(_state)
+    try:
+        _state["entries"] = [{"user_id": u, "name": u.title(), "accent": "blue"} for u in ("dre", "mo", "jo", "al")]
+        names = K.names_by_uid()
+        who = K.chip_people({"knows": ["dre", "mo", "jo", "al"], "tips": [{"from": "eve", "text": "x"}]}, [], names, [("mo", 0, "q")])
+        check("efficiency: an answer draws only who its chip could name: who asked, who tipped, the first three who know it",
+              who == {"dre", "mo", "jo", "eve"} and K.chip_people(None, [], names) == set()
+              and set(K.pips_by_uid({}, only={"dre", "zed"})) == {"dre"} and K.pips_by_uid({}, only=set()) == {}
+              and set(K.pips_by_uid({})) == {"dre", "mo", "jo", "al"})
+    finally:
+        _state.clear()
+        _state.update(saved)
+    looks = [None, [], ["headphones"], ("headphones", "scarf"), {"cap": 1}, "cap", [{"x": 1}]]
+    check("efficiency: Pip's drawing is kept, the same as drawn afresh, a look from anywhere included",
+          all(sev.svg(p, look=lk, label="L") == sev._svg(p, None, None, False, "L", None, None, lk, None)
+              for p in ("idle", "peek", "nap") for lk in looks)
+          and sev.svg("idle", look=["headphones"]) is sev.svg("idle", look=("headphones",)))
+    am = A.mw.addonManager
+    real = (am.getConfig, am.writeConfig)
+    disk, reads = {"c": {"accent": "blue"}}, []
+    try:
+        am.getConfig = lambda n: (reads.append(1), dict(disk["c"]))[1]
+        am.writeConfig = lambda n, c: disk.update(c=dict(c))
+        A._CFG["text"] = None
+        c1 = A.cfg()
+        c1["accent"] = "rose"
+        c2 = A.cfg()
+        A.save_cfg(dict(c2, theme="dark"))
+        c3 = A.cfg()
+        check("efficiency: the config is read once, each caller its own copy, and read again after a save",
+              len(reads) == 2 and c2 == {"accent": "blue"} and c3 == {"accent": "blue", "theme": "dark"})
+    finally:
+        am.getConfig, am.writeConfig = real
+        A._CFG["text"] = None
 
 
 def test_room_sounds_v391():

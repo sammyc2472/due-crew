@@ -2306,6 +2306,31 @@ every release that changes how something works.
   they were published with. Nothing changes for anyone using Due Crew.
   The notice is in the part of the README that is the AnkiWeb listing:
   re-paste it there.
+- 3.9.1, the efficiency run, the review screen (Sam: "We've made the add
+  on chunkier over the past few days ... I don't want our add on to impact
+  anki performance"). Measured on Anki's own pages: every card sent about
+  230 KB of our script (ten evals, about 6 ms of Anki's main thread, several
+  times Anki's own engine work for the card), because every widget was
+  drawn again at every question though nothing in it had changed. Anki
+  keeps the review screen's pages from card to card (it builds them at the
+  first card; the room sounds note's "the review page reloads every card" was
+  wrong), and the
+  top bar's from screen to screen. Now: each page's widgets go as one piece
+  and only when they'd come out different, or the page is new (`app.pages`,
+  bumped by `webview_will_set_content`), or something else was drawn there
+  (`rooms._draw`/`_DRAWN`); night mode draws them again (`theme_did_change`).
+  Taking a widget down is the runtime's own few lines (`REMOVE_JS`), not the
+  whole 35 KB runtime; the bottom bar's balance goes to the bottom bar only
+  (it had been watching the top bar and the card's page for nothing); the
+  sounds' 18 KB only once a sound is picked. The knows chip is taken down
+  only when one's up (`cards._UP`; `CHIP_OFF`, `FLOAT_OFF`, which still
+  duck), an answer draws only the Pips its chip could name
+  (`cards.chip_people`), not the whole crew's, and Pip's motion sheet goes
+  to a page once (`cards._SHEET`). Pip's drawing is kept once drawn
+  (`sev.svg`, an lru_cache; a look that isn't a list is drawn as it comes),
+  and the config is read from disk once and again only after a save
+  (`app.cfg`; Anki read config.json and meta.json at every call, a few
+  times a card). A usual card now sends nothing.
 - 3.9.1, "other" opens the computer's own emoji picker (Sam: "the emoji
   drawer is missing tons that are natively supported. want the other
   option to just open the native drawer?"). A page can't; Python can ask

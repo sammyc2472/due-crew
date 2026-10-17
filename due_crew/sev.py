@@ -24,6 +24,7 @@ Transforms and opacity only. Colours come from the page: --sv-a (the
 accent), --sv-line, --sv-amb, --sv-mut, with a fallback each.
 """
 
+import functools
 import math
 import random
 import re
@@ -257,7 +258,25 @@ def svg(pose, moment=None, size=None, rest=False, label=None, cheeks=None, stack
     cheeks: blushing, which only a cheer does (Sam's pick) unless asked.
     stack: squares on its head, one a fifteen (three at most). look (3.8.2):
     what it has on from the closet (closet.clean rules it); worn: a look
-    already drawn, (back, front, hand), in place of `look` (site_kit)."""
+    already drawn, (back, front, hand), in place of `look` (site_kit).
+    3.9.1 (the efficiency run): the same Pip is drawn once, then kept (a
+    fifteen's widgets draw thirty); a look that can't be a key is drawn as
+    it comes."""
+    if all(v is None or isinstance(v, (list, tuple)) for v in (look, worn)):
+        try:
+            return _svg_kept(pose, moment, size, rest, label, cheeks, stack,
+                             tuple(look) if look else None, tuple(worn) if worn else None)
+        except TypeError:
+            pass
+    return _svg(pose, moment, size, rest, label, cheeks, stack, look, worn)
+
+
+@functools.lru_cache(maxsize=512)
+def _svg_kept(pose, moment, size, rest, label, cheeks, stack, look, worn):
+    return _svg(pose, moment, size, rest, label, cheeks, stack, list(look) if look else None, worn)
+
+
+def _svg(pose, moment, size, rest, label, cheeks, stack, look, worn):
     p = POSES.get(pose) or POSES["idle"]
     m = moment or MOMENT.get(pose, "idle")
     blush = p.get("cheeks") if cheeks is None else cheeks

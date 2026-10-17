@@ -1158,20 +1158,39 @@ def sound_js(state):
     None stops it. The sounds themselves (sounds.js) come once a page."""
     if state is None:
         return "window.dcRoomSound && window.dcRoomSound.set(null);"
-    return _sounds_js() + SOUND_RUNTIME.replace("__SOUND__", json.dumps(state))
+    # 3.9.1 (the efficiency run): the sounds themselves only once one's picked;
+    # off, the player stops one a page already has, and needs nothing else
+    return ((_sounds_js() if state.get("kind") in SOUNDS and state["kind"] != "off" else "")
+            + SOUND_RUNTIME.replace("__SOUND__", json.dumps(state)))
 
 
 def widget_js(kind, data=None):
     """The JS that draws (or, with data None, removes) one widget. kind
-    'off' removes them all from this webview."""
+    'off' removes them all from this webview. 3.9.1 (the efficiency run):
+    removing one is the runtime's own few lines (REMOVE_JS), not all of it;
+    the bottom bar's balance (BAR_BALANCE) is refresh_widgets' to add, to
+    that page alone."""
+    if data is None:
+        return REMOVE_JS.replace("__KIND__", json.dumps(kind))
     # the data goes in last: a name or a tip holding "__KEY__" stays text
     return (_RUNTIME.replace("__KIND__", json.dumps(kind))
             .replace("__SQUARES__", json.dumps(SQUARES))
             .replace("__GUTTER__", str(GUTTER_WIDTH))
             .replace("__SIDE__", chip_side((data or {}).get("side")))
             .replace("__KEY__", json.dumps(CMD_KEY))
-            .replace("__DATA__", json.dumps(data))
-            + (BAR_BALANCE if kind in ("bottom", "off") else ""))
+            .replace("__DATA__", json.dumps(data)))
+
+
+# the runtime's drop(), alone (its ids and its ticks, kept the same; the suite checks)
+REMOVE_JS = r"""(function (KIND) {
+  var ids = KIND === 'off' ? ['chip', 'bottom', 'gutter', 'break', 'card', 'ask', 'start'] : [KIND];
+  ids.forEach(function (k) {
+    var el = document.getElementById('dc-room-' + k);
+    if (el) { el.remove(); if (k === 'bottom' && window.dcBarBalance) { window.dcBarBalance(); } }
+    if (window['dcRoomTick_' + k]) { clearInterval(window['dcRoomTick_' + k]); window['dcRoomTick_' + k] = null; }
+  });
+  if (KIND === 'off') { window.dcRoomFit = null; window.dcBarBalance && window.dcBarBalance(); }
+})(__KIND__);"""
 
 
 # what the widgets send from the reviewer's page (the margin card, the

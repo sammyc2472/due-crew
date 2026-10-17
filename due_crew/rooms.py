@@ -218,11 +218,44 @@ def _bar_hidden(which):
 
 
 def _eval(web, js):
+    """Anything drawn on a page outside refresh_widgets: its next refresh
+    draws everything again."""
+    try:
+        if web is not None:
+            _DRAWN.pop(id(web), None)
+            web.eval(js)
+    except Exception:
+        pass
+
+
+def _tweak(web, js):
+    """A widget's own small change (shown or hidden), which a refresh that
+    draws nothing new leaves as it is."""
     try:
         if web is not None:
             web.eval(js)
     except Exception:
         pass
+
+
+# 3.9.1 (the efficiency run): what refresh_widgets last drew on each page,
+# and on which page (app.pages). Anki keeps the review screen's pages from
+# card to card and the top bar's from screen to screen, so a refresh whose
+# widgets come out the same sends nothing (it sent about 200 KB a card); a
+# new page, or anything else drawn there since, and it all goes again.
+_DRAWN = {}
+
+
+def _draw(web, parts):
+    """True when it went (it changed, or the page is new)."""
+    if web is None:
+        return False
+    key = (app.pages[0], "".join(parts))
+    if _DRAWN.get(id(web)) == key:
+        return False
+    _eval(web, key[1])
+    _DRAWN[id(web)] = key
+    return True
 
 
 def _webs():
@@ -258,16 +291,18 @@ def _allow_sound(web):
 def _sound(top, room):
     """3.9.1: the top bar's player, told my pick and the session (or, in no
     room, to stop). Nothing is sent: each person picks their own."""
-    if top is None:
-        return
+    if top is not None:
+        _eval(top, _sound_js(top, room))
+
+
+def _sound_js(top, room):
     if room is None:
-        _eval(top, room_model.sound_js(None))
-        return
+        return room_model.sound_js(None)
     c = cfg()
     kind, vol = room_model.sound_pick(c) if room_model.sounds_on(c) else ("off", 0)
-    if kind != "off":
+    if kind != "off" and top is not None:
         _allow_sound(top)
-    _eval(top, room_model.sound_js(room_model.sound_state(room, kind, vol, _sound_files())))
+    return room_model.sound_js(room_model.sound_state(room, kind, vol, _sound_files()))
 
 
 _SOUND_DIR = os.path.join(os.path.dirname(__file__), "sounds")
@@ -276,12 +311,18 @@ _SOUND_DIR = os.path.join(os.path.dirname(__file__), "sounds")
 def _sound_files():
     """Where the top bar's page finds the recordings this install has (none:
     they're all made). The folder is served by /_addons/ (setWebExports in
-    __init__)."""
-    try:
-        have = [k for k in room_model.RECORDED if os.path.isfile(os.path.join(_SOUND_DIR, k + ".ogg"))]
-        return room_model.sound_files(mw.addonManager.addonFromModule(__name__), have) if have else {}
-    except Exception:
-        return {}
+    __init__). Looked for once a run."""
+    if "files" not in _SOUND_FILES:
+        try:
+            have = [k for k in room_model.RECORDED if os.path.isfile(os.path.join(_SOUND_DIR, k + ".ogg"))]
+            _SOUND_FILES["files"] = (room_model.sound_files(mw.addonManager.addonFromModule(__name__), have)
+                                     if have else {})
+        except Exception:
+            return {}
+    return dict(_SOUND_FILES["files"])
+
+
+_SOUND_FILES = {}
 
 
 def set_sound(parts):
@@ -308,25 +349,31 @@ def refresh_widgets():
     top, main, bottom = _webs()
     signed = client().signed_in
     room = my_room() if signed else None
-    _sound(top, room)  # 3.9.1: the room sound plays (or stops) in the top bar, whichever little one shows
+    # 3.9.1: the room sound plays (or stops) in the top bar, whichever little
+    # one shows; each page's widgets go as one piece (_draw), the bottom bar's
+    # with what keeps Anki's answer buttons in its middle
+    t, m, b = [_sound_js(top, room)], [], []
     if room is None:
-        for web in (top, main, bottom):
-            _eval(web, room_model.widget_js("off"))
+        off = room_model.widget_js("off")
+        t.append(off), m.append(off), b.append(off)
         if signed and cfg().get("fifteen", True):
             c = cfg()
-            _eval(top, room_model.widget_js("start", room_model.start_data(
+            t.append(room_model.widget_js("start", room_model.start_data(
                 _accent_pair(), c.get("room_chip_side"), sev_on(), nap=not _studied_today(),
                 compact=bool(c.get("room_compact")), look=my_look())))
+        b.append(room_model.BAR_BALANCE)
+        _draw(top, t), _draw(main, m), _draw(bottom, b)
         return
     data = _data(room)
     where = _where()
-    _eval(top, room_model.widget_js("start", None))
-    _eval(top, room_model.widget_js("chip", data if where == "chip" else None))
-    _eval(bottom, room_model.widget_js("bottom", data if where == "bottom" else None))
-    _eval(main, room_model.widget_js("gutter", data if where == "gutter" else None))
+    t += [room_model.widget_js("start", None), room_model.widget_js("chip", data if where == "chip" else None)]
+    b += [room_model.widget_js("bottom", data if where == "bottom" else None), room_model.BAR_BALANCE]
+    m.append(room_model.widget_js("gutter", data if where == "gutter" else None))
+    drawn = {"chip": _draw(top, t), "bottom": _draw(bottom, b), "gutter": _draw(main, m)}
     if _state.get("room_card"):
         if _state["room_card"] == where:
-            _card_still_out(where)
+            if drawn[where]:
+                _card_still_out(where)
         else:
             _state["room_card"] = None  # it moved (a review began or ended): the card went with the page
 
@@ -347,8 +394,8 @@ def _little_shown(where, on):
     is out, and comes back when the card closes."""
     top, main, bottom = _webs()
     web = {"chip": top, "bottom": bottom, "gutter": main}.get(where)
-    _eval(web, "(function(){var e=document.getElementById('dc-room-%s');if(e){e.style.visibility='%s';}})();"
-          % (where, "" if on else "hidden"))
+    _tweak(web, "(function(){var e=document.getElementById('dc-room-%s');if(e){e.style.visibility='%s';}})();"
+           % (where, "" if on else "hidden"))
 
 
 def show_card():
@@ -540,8 +587,7 @@ def on_question(card):
 def on_answer(card):
     if _state["room_break"]:
         _stop_auto_advance()  # Auto Advance's answer timer starts with the answer side
-    _eval(getattr(getattr(mw, "reviewer", None), "web", None),
-          "window.dcRoomFit && window.dcRoomFit();")
+    _tweak(getattr(getattr(mw, "reviewer", None), "web", None), "window.dcRoomFit && window.dcRoomFit();")
 
 
 def on_state(new_state, old_state):
@@ -552,6 +598,14 @@ def on_state(new_state, old_state):
 
 
 def on_toolbar(*_args):
+    if client().signed_in:
+        refresh_widgets()
+
+
+def on_theme(*_args):
+    """3.9.1: night mode on or off: the widgets pick their colours as they're
+    drawn, so they're drawn again."""
+    _DRAWN.clear()
     if client().signed_in:
         refresh_widgets()
 

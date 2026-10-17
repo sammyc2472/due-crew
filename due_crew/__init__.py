@@ -1769,6 +1769,10 @@ gui_hooks.state_did_change.append(due_flow.on_state)  # 3.8.0: Study today's wal
 gui_hooks.state_shortcuts_will_change.append(due_flow.walk_keys)  # and Escape stops it
 if hasattr(gui_hooks, "top_toolbar_did_redraw"):  # Anki 2.1.54+
     gui_hooks.top_toolbar_did_redraw.append(rooms.on_toolbar)
+# 3.9.1 (the efficiency run): a page sent once is sent again only on a new page
+gui_hooks.webview_will_set_content.append(app.on_set_content)
+if hasattr(gui_hooks, "theme_did_change"):
+    gui_hooks.theme_did_change.append(rooms.on_theme)  # the widgets pick their colours as they're drawn
 
 # the modules that need a redraw or a refresh reach it through app
 app.swap = _swap

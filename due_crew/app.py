@@ -146,8 +146,29 @@ def _profile_files():
     return d
 
 
+# 3.9.1 (the efficiency run): Anki's getConfig reads config.json and
+# meta.json from disk each time, and the review screen asks a few times a
+# card. The merged doc is kept as text (each caller still gets its own copy
+# to change) until save_cfg writes; Anki's own config editor isn't ours to
+# worry about (setConfigAction opens Settings in its place).
+_CFG = {"text": None}
+
+
 def cfg():
-    return mw.addonManager.getConfig(__name__) or {}
+    text = _CFG["text"]
+    if text is None:
+        text = _CFG["text"] = json.dumps(mw.addonManager.getConfig(__name__) or {})
+    return json.loads(text)
+
+
+# 3.9.1: one count of new pages in any of Anki's webviews
+# (webview_will_set_content). What a page was sent once (rooms' widgets, a
+# card's Pip sheet) is sent again once this moves.
+pages = [0]
+
+
+def on_set_content(*_args):
+    pages[0] += 1
 
 
 # 2.13: set by __init__ to account.on_change; a config write that changes a
@@ -157,7 +178,8 @@ on_account_change = None
 
 def save_cfg(c, from_account=False):
     """from_account: the account's own settings arriving; no echo back."""
-    before = mw.addonManager.getConfig(__name__) or {}
+    before = cfg()
+    _CFG["text"] = None
     mw.addonManager.writeConfig(__name__, c)
     if not from_account and on_account_change is not None:
         from .account import ACCOUNT_KEYS
