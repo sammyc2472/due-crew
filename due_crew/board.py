@@ -4581,6 +4581,7 @@ CHEER_WINDOW_JS = r"""
         '#dc-cheer .gr button{width:34px;height:32px;border:0;background:none;border-radius:8px;font-size:20px;line-height:1;padding:0;}' +
         '#dc-cheer .gr button:hover{background:' + bg + ';}' +
         '#dc-cheer .gr .none{flex-basis:100%;color:' + muted + ';font-size:12px;padding:6px 2px;}' +
+        '#dc-cheer .sgw{display:flex;align-items:center;gap:8px;}' +
         '#dc-cheer .sg{display:inline-flex;border:1px solid ' + line + ';border-radius:99px;padding:2px;gap:2px;width:max-content;}' +
         '#dc-cheer .sg button{border:0;background:none;border-radius:99px;padding:2px 14px;font-weight:700;font-size:12px;color:' + muted + ';}' +
         '#dc-cheer .sg button[aria-pressed=true]{background:' + accent + ';color:' + accentInk + ';}' +
@@ -4722,19 +4723,23 @@ CHEER_WINDOW_JS = r"""
     }
     pick(emoji);
 
-    // Draw · Sign (3.9.1): a drawing, or words their Pip holds up; both optional
-    var mode = 'draw', sg = el('div', 'sg');
+    // Draw · Sign (3.9.1): a drawing, or words their Pip holds up; both optional, so both start shut and
+    // the window is just the emoji and the note (Sam: "they don't always need to send a doodle / sign");
+    // a press opens one, a second press on it shuts it, and only what's open is sent
+    var mode = '', sgw = el('div', 'sgw'), sg = el('div', 'sg');
+    sgw.appendChild(el('span', 'hint', 'Add'));
     sg.setAttribute('role', 'group');
     sg.setAttribute('aria-label', 'Add');
     var tabs = {};
     [['draw', 'Draw'], ['sign', 'Sign']].forEach(function (x) {
         var b = el('button', null, x[1]);
         b.type = 'button';
-        b.addEventListener('click', function () { show(x[0]); });
+        b.addEventListener('click', function () { show(mode === x[0] ? '' : x[0]); });
         tabs[x[0]] = b;
         sg.appendChild(b);
     });
-    card.appendChild(sg);
+    sgw.appendChild(sg);
+    card.appendChild(sgw);
 
     var draw = el('div', 'pane'), paper = el('div', 'paper'), cv = el('canvas');
     cv.width = W * 2;
@@ -4850,10 +4855,10 @@ CHEER_WINDOW_JS = r"""
     var note = null;
     function caption() {
         if (!note) { return; }
-        var has = mode === 'sign' ? !!signIn.value.trim() : strokes.length > 0;
+        var has = mode === 'sign' ? !!signIn.value.trim() : mode === 'draw' && strokes.length > 0;
         note.placeholder = has ? 'A caption under it (optional)' : 'Add a note (optional)';
     }
-    show('draw');
+    show('');
 
     note = el('input', 'tx');
     note.maxLength = NOTE;
@@ -4875,7 +4880,7 @@ CHEER_WINDOW_JS = r"""
             var t = signIn.value.replace(/\s+/g, ' ').trim();
             return t ? { k: 'sign', t: t } : null;
         }
-        if (!strokes.length) { return null; }
+        if (mode !== 'draw' || !strokes.length) { return null; }  // shut: nothing goes, what's drawn stays for a reopen
         return { k: 'draw', s: strokes.map(function (s) {
             var out = [s.pen];
             s.p.forEach(function (q) { out.push(q[0], q[1]); });

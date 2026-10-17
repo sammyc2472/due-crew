@@ -14708,6 +14708,9 @@ def test_cheer_pill_and_window_v391():
           and "el('button', 'ot', 'other')" in js and "aria-expanded" in js and "function openDrawer()" in js
           and "Find one: heart, coffee, owl" in js and "oneEmoji(find.value.trim())" in js,
           [e for e in every if clean_emoji(e) != e])
+    check("Draw and Sign start shut (a cheer is the emoji and the note); a second press shuts one, and only an open one is sent",
+          "show('');" in js and "show('draw');" not in js and "show(mode === x[0] ? '' : x[0])" in js
+          and "if (mode !== 'draw' || !strokes.length) { return null; }" in js and "mode === 'draw' && strokes.length > 0" in js)
     check("Esc shuts the drawer first, then the window",
           "if (drawer.style.display !== 'none') { shut(); other.focus(); } else { close(); }" in js)
     mine = board.cheer_overlay_js({"uid": "dre", "name": "Dre", "emojis": ["🎉"], "pen": board.accent_pair("teal")[0]})

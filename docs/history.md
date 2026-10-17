@@ -2287,6 +2287,11 @@ every release that changes how something works.
   a pen past 3 away, and the add-on sends the cheer without its drawing).
   Each line lands in the colour it was drawn in, whatever the
   recipient's accent (`doodle_html`, the board's own shades on paper).
+  Draw and Sign start shut (Sam: "they don't always need to send a
+  doodle / sign... should they always be open?"): the window opens as
+  the emoji, "Add Draw · Sign" with neither picked, the note and Send. A
+  press opens one; a second press on it shuts it. Only an open one is
+  sent; a drawing shut away stays on the pad for a reopen.
 - 3.9.1, room sounds (Sam's picks from the Room Sounds page, 17 Oct: a
   speaker on the chip; in a crew room each person picks their own; off
   till you pick, the last pick remembered on this computer; made from
