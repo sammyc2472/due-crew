@@ -4903,6 +4903,104 @@ def test_morning_waits_for_decks_v380():
         _state["plans_morning"] = None
 
 
+def test_asks_and_tips_v390():
+    """3.9.0 (Sam's picks, "Asks and tips"): 1, an ask still goes to everyone
+    in the crew with the card, and the dialog says so first (W1); 2, a tip's,
+    an ask's or a plan note's words are folded until Show, on the card and in
+    the bar, so nothing gives away what a one-by-one card still hides (who
+    knows it isn't folded: it names people); his note: the tip peeks in with
+    its tipper's Pip, as who knows it does. Opened stays opened."""
+    import shutil
+    import subprocess
+    from due_crew import cards as K, ui
+    from due_crew.app import _state
+    names = {"dre": ("Dre Ng", ""), "sam": ("Sam", "")}
+    pips = {"dre": {"svg": "<svg></svg>", "a": ["#1e5fb4", "#7fb2f0"]}}
+    # 1 · the Ask dialog's words
+    got, saved = [], (getattr(ui, "ask_text", None), K._card, K.client, K.flag, dict(_state))
+    store = world({"sam": "Sam"})
+    sam = new_client(store, "sam", "Sam")
+    card = types.SimpleNamespace(note=lambda: types.SimpleNamespace(guid="guid000001"), ord=0, id=1)
+    try:
+        ui.ask_text = lambda parent, title, label, text="": (got.append((title, label)), ("", False))[1]
+        K._card, K.client, K.flag = (lambda: card), (lambda: sam), (lambda c, q: None)
+        _state["entries"] = [{"user_id": "dre", "name": "Dre Ng", "you": False}, {"user_id": "mo", "name": "Mo", "you": False}]
+        sam.session["cards"] = {"guid000001": {"knows": ["dre"], "tips": []}}
+        K.ask()
+        sam.session["cards"] = {"guid000001": {"knows": ["dre", "mo"], "tips": []}}
+        K.ask()
+        sam.session["cards"] = {}
+        K.ask()
+    finally:
+        if saved[0] is not None:
+            ui.ask_text = saved[0]
+        K._card, K.client, K.flag = saved[1:4]
+        _state.clear()
+        _state.update(saved[4])
+    check("ask: it says it goes to everyone with the card, then who has it down (Sam's pick, W1)",
+          [g[1] for g in got] == ["Goes to everyone in your crew who has this card. Dre has it down. One line, optional.",
+                                  "Goes to everyone in your crew who has this card. Dre and Mo have it down. One line, optional.",
+                                  "Goes to everyone in your crew who has this card. One line, optional."]
+          and got[0][0] == "Ask your crew about this card", got)
+    # 2 · folded till Show; the tipper's Pip
+    tip = K.chip_view({"tips": [{"from": "dre", "text": "think loops", "helped": False}]}, [], names, pips=pips)
+    tip_off = K.chip_view({"tips": [{"from": "dre", "text": "think loops", "helped": False}]}, [], names)
+    asked = K.chip_view(None, [], names, asks=[("dre", 1, "why axillary?")], pips=pips)
+    bare = K.chip_view(None, [], names, asks=[("dre", 1)], pips=pips)
+    knows = K.chip_view({"knows": ["dre"], "tips": []}, [], names, pips=pips)
+    note = K.remark_view([{"name": "Block 1", "doc": {"remarks": [{"card": ["guid000001", 0], "text": "the second cloze"}]}}], "guid000001", 0)
+    check("fold: a tip says who left it, with the Pip peeking in; Pip off, the same bubble with the bulb; the words wait",
+          tip["fold"] == "Dre left a tip" and tip["peek"] == {"uids": ["dre"], "head": "Dre: think loops", "act": "This helped"}
+          and tip["pip"] == pips["dre"] and tip["text"] == "\U0001F4A1 Dre: think loops"
+          and tip_off["fold"] == "\U0001F4A1 Dre left a tip" and tip_off["peek"]["uids"] == [] and "pip" not in tip_off, (tip, tip_off))
+    check("fold: an ask's line and a plan's note fold too; an ask with no line, and who knows it, don't (nothing to give away)",
+          asked["fold"] == "Dre asked about this card" and asked["text"] == "Dre: \u201cwhy axillary?\u201d"
+          and "fold" not in bare and "fold" not in knows and note["fold"] == "\U0001F4CC A note from Block 1", (asked, note))
+    fj, bj = K.float_js(dict(tip, accent=["#2e7d32", "#7cc47f"])), K.chip_js(dict(tip, accent="#2e7d32"))
+    check("fold: on the card, Show opens it (the words, This helped, more); no words on a hover while folded; drawn again opened, no pop",
+          "var folded = !!(D.fold && !D.open);" in fj and "link('Show', acc, true, open)" in fj
+          and "words.textContent = folded ? D.fold : (peek ? peek.head : D.text);" in fj
+          and "if (D.title && !folded) { words.title = D.title; } else { words.removeAttribute('title'); }" in fj
+          and "if (peek && !still && !D.open && bub.animate)" in fj and "pad.style.height = (box.offsetHeight + 12) + 'px'" in fj
+          and "send(D.fold && !folded ? 'knowsbar:open' : 'knowsbar')" in fj)
+    check("tip: its bubble wears the tipper's colour round its edge (mine with Pip off); who knows it, the plain line (Sam: too alike)",
+          "var edge = D.kind === 'tip' ? 'border:2px solid ' + (withPip ? peek.pips[0].a[night ? 1 : 0] : acc) + ';' : '';" in fj
+          and "+ card + edge);" in fj and tip["kind"] == "tip" and knows["kind"] == "knows")
+    check("fold: in the bar the same, a click opens it, then its act and its click as before",
+          "var folded = !!(D.fold && !D.open);" in bj and "var act = folded ? 'Show' : D.act;" in bj
+          and "if (D.actcmd && !folded)" in bj and "if (folded) { s.removeAttribute('title'); }" in bj
+          and "if (folded) { folded = false; said(); if (window.dcBarBalance) { window.dcBarBalance(); } return; }" in bj)
+    node = shutil.which("node")
+    if node:
+        ok = subprocess.run([node, "--check"], input=fj + "\n;" + bj, capture_output=True, text=True, timeout=30)
+        check("fold: its scripts parse", ok.returncode == 0, ok.stderr[-400:])
+    # opened stays opened: This helped draws it again open; the move to the bar keeps it open
+    shown, bars, saved = [], [], (K._bottom, K._review_web, K._show, K.client, dict(_state), dict(K._LAST))
+    sam.session["cards"] = {"guid000001": {"knows": [], "tips": [{"from": "dre", "text": "think loops", "at": 1, "helped": False}]}}
+    try:
+        K._bottom, K._review_web, K._show, K.client = (lambda: types.SimpleNamespace(eval=bars.append)), (lambda: None), shown.append, (lambda: sam)
+        _state["entries"] = [{"user_id": "dre", "name": "Dre Ng", "you": False, "accent": "blue", "look": []}]
+        K.on_answer(card)
+        K.on_answer(card, opened=True)
+        K._LAST["view"] = shown[0]
+        K.on_message("knowsbar", ["duecrew", "knowsbar", "open"], from_card_page=True)
+        K.on_message("knowsbar", ["duecrew", "knowsbar"], from_card_page=True)
+    finally:
+        K._bottom, K._review_web, K._show, K.client = saved[:4]
+        _state.clear()
+        _state.update(saved[4])
+        K._LAST.clear()
+        K._LAST.update(saved[5])
+    check("open: a tip on the review screen peeks in with Dre's Pip, folded; drawn again after This helped, open",
+          shown[0]["kind"] == "tip" and "open" not in shown[0] and shown[1]["open"] is True
+          and len(shown[0]["peek"]["pips"]) == 1 and "m-peek" in shown[0]["peek"]["pips"][0]["svg"], shown)
+    check("open: knowsbar:open moves it to the bar open; plain knowsbar, as it was",
+          len(bars) == 2 and '"open": true' in bars[0] and '"open": true' not in bars[1], [b[-200:] for b in bars])
+    import inspect
+    check("open: This helped draws the card again with its words showing",
+          "on_answer(card, opened=True)" in inspect.getsource(K.helped))
+
+
 def test_plain_prompts_v311():
     """3.1.1: prompts that carry a crewmate's name are plain-text labels."""
     from due_crew import together, ui
@@ -5591,8 +5689,9 @@ def test_knows_peek_v390():
           and mine["peek"]["act"] == "Asked" and plain["peek"] == {"uids": [], "head": "Dre knows this", "act": "Ask"}
           and one["text"] == "Dre knows this" and one["act"] == "Ask", (one.get("peek"), two.get("peek")))
     tip = K.chip_view({"knows": ["dre"], "tips": [{"from": "dre", "text": "think loops"}]}, [], names, pips=pips)
-    check("peek: a tip or an ask keeps its card", "peek" not in tip
-          and "peek" not in K.chip_view(None, [], names, asks=[("dre", 1, "why?")], pips=pips))
+    check("peek: a tip peeks in with its tipper's Pip (Sam's note on \"Asks and tips\"); an ask keeps its card",
+          tip["peek"] == {"uids": ["dre"], "head": "Dre: think loops", "act": "This helped"} and tip["fold"] == "Dre left a tip"
+          and "peek" not in K.chip_view(None, [], names, asks=[("dre", 1, "why?")], pips=pips), tip.get("peek"))
     shown, saved = [], (K._bottom, K._review_web, K._show, K.client, dict(_state))
     store = world({"sam": "Sam"})
     sam = new_client(store, "sam", "Sam")
@@ -5644,7 +5743,7 @@ def test_knows_peek_v390():
     check("peek: drawn in the corner's place, up from the bottom; the words as text; it ducks back down; still with Reduce motion",
           "var peek = D.peek || null, withPip = !!(peek && peek.pips && peek.pips.length)" in js and "if (withPip) {" in js
           and "for (var i = peek.pips.length - 1; i >= 0; i--)" in js and "bulb.innerHTML" not in js
-          and "translateY(105%)" in js and "head = el('div'" in js
+          and "translateY(105%)" in js and "var words = el('div'" in js
           and "peek ? peek.head : D.text" in js and "prefers-reduced-motion: reduce" in js and "if (peek && !still" in js
           and "window.dcKnowsOff(!D)" in js and "off(true)" in js and "knowsbar" in js)
     check("peek: always shown, as agreed (Sam: the pill \"is not the new version we agreed on\"): no corner check, never "
@@ -5653,7 +5752,7 @@ def test_knows_peek_v390():
           and "dc-knows-pad" in js and "if (pad) { pad.remove(); }" in js and "oldPad.remove()" in js)
     bar = K.chip_js(v)
     check("peek: the bar's chip (Pip off, or no review page) says what it said", "peek" not in bar.split("var D = ")[0]
-          and "t.textContent = D.text" in bar and "D.peek" not in bar)
+          and "t.textContent = folded ? D.fold : D.text" in bar and "D.peek" not in bar)
     node = shutil.which("node")
     if node:
         ok = subprocess.run([node, "--check"], input=js, capture_output=True, text=True, timeout=30)
@@ -10259,7 +10358,7 @@ def test_plan_remarks_and_deck_link_v381():
           and C.remark_view(plans, "guid000005", 0) is None and C.remark_view([], "guid000005", 1) is None, view)
     js = C.chip_js(dict(view, accent="#2e7d32")) + C.float_js(dict(view, accent=["#2e7d32", "#7cc47f"]))
     check("review: drawn as text, never markup; with no click of its own",
-          "t.textContent = D.text" in js and "e.textContent = text" in js and "if (D.cmd)" in js
+          "t.textContent = folded ? D.fold : D.text" in js and "e.textContent = text" in js and "if (D.cmd)" in js
           and json.dumps(view["text"]) in js, js[:200])
     shown, saved = [], (C._bottom, C._review_web, C._show, C.client)
     store = world({"dre": "Dre", "sam": "Sam"})
@@ -13574,7 +13673,7 @@ def test_pips_where_emojis_were_v3822():
           and old["text"] == "🐢 Dre knows this" and "pip" not in old, (knows, asked["text"], old["text"]))
     bar, card = K.chip_js(knows), K.float_js(dict(knows, accent=["#2e7d32", "#7cc47f"]))
     check("chip: the bar and the card both draw it (its own markup, the words still text)",
-          all("p.innerHTML = D.pip.svg" in x and "pip(" in x and "t.textContent = D.text" in bar for x in (bar, card))
+          all("p.innerHTML = D.pip.svg" in x and "pip(" in x and "t.textContent = folded ? D.fold : D.text" in bar for x in (bar, card))
           and "__PIP__" not in bar + card and "dc-sev-css-k" in bar)
     node = shutil.which("node")
     if node:

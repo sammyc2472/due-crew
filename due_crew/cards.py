@@ -313,6 +313,7 @@ def chip_view(info, local_tips, names, asks=(), mine=False, pips=None):
                 "short": f"{who} asked", "ask": False, "cmd": f"knowsreply:{asks[0][0]}:{int(asks[0][1])}", "act": "Tip"}
         if q:
             view["title"] = q
+            view["fold"] = f"{who} asked about this card"  # the line can give the answer away
         return with_pip(view, asks[0][0])
     knows = [u for u in (info or {}).get("knows") or [] if u in names]
     tips = tip_list(info, local_tips, names)
@@ -326,7 +327,13 @@ def chip_view(info, local_tips, names, asks=(), mine=False, pips=None):
         if first["from"]:
             view["act"] = "\u2713 Helped" if first["helped"] else "This helped"
             view["actcmd"] = f"knowshelped:{first['from']}"
-        return view
+        # 3.9.0 (Sam's note on "Asks and tips"): the tipper's Pip peeks in with it, as who knows it
+        # does (the same bubble without it, Pip off); its words folded till Show
+        own = first["from"] in pips
+        view["fold"] = f"{who} left a tip" if own else f"\U0001F4A1 {who} left a tip"
+        view["peek"] = {"uids": [first["from"]] if own else [], "head": f"{who}: {first['text']}" if own else view["text"],
+                        "act": view.get("act")}
+        return with_pip(view, first["from"]) if own else view
     if knows:
         who = who_of(knows[0])
         more = len(knows) - 1
@@ -355,7 +362,8 @@ def remark_view(plans, guid, ord_):
     if not got:
         return None
     name, text = got[0]
-    return {"kind": "remark", "text": f"\U0001F4CC {name}: {text}", "short": f"\U0001F4CC {name}", "title": text}
+    return {"kind": "remark", "text": f"\U0001F4CC {name}: {text}", "short": f"\U0001F4CC {name}", "title": text,
+            "fold": f"\U0001F4CC A note from {name}"}  # 3.9.0: folded till Show, as a tip is
 
 
 # 3.8.22: who asked, or knows it, as their Pip (pips_by_uid): sev.py's own
@@ -384,17 +392,29 @@ _CHIP_JS = """(function () {
   s.style.cssText = 'display:inline-flex;align-items:center;gap:6px;margin-left:10px;padding:' + (D.pip ? '3px 10px 3px 6px' : '2px 10px') +
     ';border-radius:99px;border:1px solid ' + D.accent + ';font:11.5px -apple-system,Segoe UI,sans-serif;white-space:nowrap;vertical-align:middle;cursor:pointer;';
   pip(s, D, night, 'margin:8px 2px 0 1px;');  // 3.8.22: who it is, as their Pip (Sam, 16 Oct: room for all of it, head to feet)
-  var t = document.createElement('span'); t.id = 'dc-knows-t'; t.textContent = D.text; s.appendChild(t);
-  t.setAttribute('data-full', D.text); t.setAttribute('data-short', D.short || D.text);
+  var t = document.createElement('span'); t.id = 'dc-knows-t'; s.appendChild(t);
   if (D.kind === 'tip') { t.setAttribute('data-tip', '1'); }
-  s.title = D.title || D.text;
   t.style.cssText = 'display:inline-block;max-width:24vw;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;';
-  if (D.more) { var m = document.createElement('span'); m.textContent = '+' + D.more + ' more'; m.style.opacity = '0.7'; s.appendChild(m); }
-  if (D.act) {
-    var a = document.createElement('b'); a.textContent = D.act; a.style.cssText = 'flex:none;color:' + D.accent; s.appendChild(a);
-    if (D.actcmd) { a.onclick = function (e) { e.stopPropagation(); try { pycmd('duecrew:' + D.actcmd); } catch (x) {} }; }
+  // 3.9.0 (Sam's pick, "Asks and tips" 2): folded as on the card, its words on a click
+  var folded = !!(D.fold && !D.open);
+  function said() {
+    while (t.nextSibling) { s.removeChild(t.nextSibling); }
+    t.textContent = folded ? D.fold : D.text;
+    t.setAttribute('data-full', t.textContent); t.setAttribute('data-short', folded ? D.fold : (D.short || D.text));
+    if (folded) { s.removeAttribute('title'); } else { s.title = D.title || D.text; }
+    if (D.more && !folded) { var m = document.createElement('span'); m.textContent = '+' + D.more + ' more'; m.style.opacity = '0.7'; s.appendChild(m); }
+    var act = folded ? 'Show' : D.act;
+    if (act) {
+      var a = document.createElement('b'); a.textContent = act; a.style.cssText = 'flex:none;color:' + D.accent; s.appendChild(a);
+      if (D.actcmd && !folded) { a.onclick = function (e) { e.stopPropagation(); try { pycmd('duecrew:' + D.actcmd); } catch (x) {} }; }
+    }
+    s.style.cursor = folded || D.cmd ? 'pointer' : 'default';
   }
-  if (D.cmd) { s.onclick = function () { try { pycmd('duecrew:' + D.cmd); } catch (e) {} }; } else { s.style.cursor = 'default'; }
+  s.onclick = function () {
+    if (folded) { folded = false; said(); if (window.dcBarBalance) { window.dcBarBalance(); } return; }
+    if (D.cmd) { try { pycmd('duecrew:' + D.cmd); } catch (e) {} }
+  };
+  said();
   cell.appendChild(s);
   __PIP__
 })();"""
@@ -434,27 +454,45 @@ _FLOAT_JS = """(function () {
     : el('div', 'position:fixed;right:12px;bottom:12px;max-width:260px;box-sizing:border-box;display:grid;gap:6px;padding:9px 12px;' +
       'border-radius:12px;' + card + font + 'z-index:60;');
   box.id = 'dc-knows-card';
-  var head = el('div', 'font-weight:600;cursor:pointer;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;',
-    peek ? peek.head : D.text);
-  if (D.title) { head.title = D.title; }
-  if (D.cmd) { head.onclick = function () { send(D.cmd); }; } else { head.style.cursor = 'default'; }
+  // 3.9.0 (Sam's pick, "Asks and tips" 2): a tip's, an ask's or a plan note's words wait for Show, so
+  // nothing gives away what a one-by-one card still hides; who knows it never folds (it names people)
+  var folded = !!(D.fold && !D.open);
+  var words = el('div', 'font-weight:600;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;', '');
+  var head = words;
+  words.onclick = function () { if (folded) { open(); } else if (D.cmd) { send(D.cmd); } };
   if (D.pip && !peek) {  // 3.8.22: who it is, as their Pip, before the words
     var hr = el('div', 'display:flex;gap:6px;align-items:center;');
     pip(hr, D, night, 'margin:-4px 0 -2px -2px;');
-    hr.appendChild(head); head = hr;
+    hr.appendChild(words); head = hr;
   }
   var acts = el('div', 'display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;');
   function link(text, color, bold, fn) {
     var a = el('span', 'cursor:pointer;color:' + color + ';' + (bold ? 'font-weight:700;' : ''), text);
     a.onclick = function (e) { e.stopPropagation(); fn(); }; acts.appendChild(a); return a;
   }
-  if (D.act) { link(peek ? peek.act : D.act, acc, true, function () { send(D.actcmd || D.cmd); }); }
-  if (D.more) { link('+' + D.more + ' more', c.mut, false, function () { send('knowstip'); }); }
-  link('Not now', c.mut, false, function () { off(true); });
+  function said() {
+    words.textContent = folded ? D.fold : (peek ? peek.head : D.text);
+    if (D.title && !folded) { words.title = D.title; } else { words.removeAttribute('title'); }  // no words on a hover either
+    words.style.cursor = folded || D.cmd ? 'pointer' : 'default';
+    acts.textContent = '';
+    if (folded) { link('Show', acc, true, open); } else {
+      if (D.act) { link(peek ? peek.act : D.act, acc, true, function () { send(D.actcmd || D.cmd); }); }
+      if (D.more) { link('+' + D.more + ' more', c.mut, false, function () { send('knowstip'); }); }
+    }
+    link('Not now', c.mut, false, function () { off(true); });
+  }
+  function open() {  // Show: the words, and what to do with them; the room under the card grows to match
+    folded = false; said();
+    if (pad) { pad.style.height = (box.offsetHeight + 12) + 'px'; } else { check(); }
+  }
+  said();
   var fig = null, bub = null;
   if (peek) {
+    // 3.9.0 (Sam: a tip "looks too similar" to who knows it): a tip's bubble wears its tipper's colour
+    // round its edge, their Pip's (mine with Pip off); who knows it keeps the plain line
+    var edge = D.kind === 'tip' ? 'border:2px solid ' + (withPip ? peek.pips[0].a[night ? 1 : 0] : acc) + ';' : '';
     bub = el('div', 'margin-bottom:' + (withPip ? '26px' : '0') + ';max-width:220px;display:grid;gap:4px;padding:8px 11px;' +
-      'border-radius:' + (withPip ? '12px 12px 4px 12px' : '12px') + ';transform-origin:100% 100%;' + card);
+      'border-radius:' + (withPip ? '12px 12px 4px 12px' : '12px') + ';transform-origin:100% 100%;' + card + edge);
     bub.appendChild(head); bub.appendChild(acts);
     box.appendChild(bub);
   }
@@ -470,7 +508,7 @@ _FLOAT_JS = """(function () {
   }
   __PIP__
   document.body.appendChild(box);
-  if (peek && !still && bub.animate) {  // up they pop, then the bubble; nothing with Reduce motion
+  if (peek && !still && !D.open && bub.animate) {  // up they pop, then the bubble; nothing with Reduce motion (nor drawn again, opened)
     if (fig) { fig.animate([{transform: 'translateY(105%)'}, {transform: 'none'}], {duration: 700, easing: 'cubic-bezier(.2,.9,.3,1.25)'}); }
     bub.animate([{opacity: 0, transform: 'scale(.85)'}, {opacity: 1, transform: 'none'}], {duration: 350, delay: fig ? 550 : 0, easing: 'ease-out', fill: 'backwards'});
   }
@@ -506,7 +544,7 @@ _FLOAT_JS = """(function () {
       else { fade.onfinish = function () { box.remove(); }; }
     } else { box.remove(); }
   }
-  function check() { if (!gone && !free()) { off(); send('knowsbar'); } }
+  function check() { if (!gone && !free()) { off(); send(D.fold && !folded ? 'knowsbar:open' : 'knowsbar'); } }
   window.dcKnowsOff = off;
   if (peek) {
     // 3.9.0 (Sam, 16 Oct: the pill "is not the new version we agreed on"): the peek always shows, as in
@@ -569,12 +607,13 @@ def _show(view):
     to_bar(False)
 
 
-def to_bar():
-    """knowsbar: the corner stopped being free (a picture loaded, a scroll)."""
+def to_bar(opened=False):
+    """knowsbar: the corner stopped being free (a picture loaded, a scroll);
+    opened (3.9.0): its words were shown there, so the bar's are too."""
     bar = _bottom()
     if bar is not None and _LAST["view"]:
         try:
-            bar.eval(chip_js(_LAST["view"]))
+            bar.eval(chip_js(dict(_LAST["view"], open=True) if opened else _LAST["view"]))
         except Exception:
             pass
 
@@ -593,11 +632,12 @@ def _accent():
         return ["#2e7d32", "#7cc47f"]
 
 
-def on_answer(card):
+def on_answer(card, opened=False):
     """reviewer_did_show_answer: the chip, when this card is one I'm stuck on
     and someone knows it or left a tip. 3.9.0: the stuck cards' answer from
     the last sync, or, for a card I'm stuck on since, the morning's answer
-    for the cards due today."""
+    for the cards due today. opened: drawn again after This helped, whose
+    words were already shown (a folded one opens)."""
     web = _bottom()
     if web is None or not client().signed_in:
         return
@@ -629,6 +669,8 @@ def on_answer(card):
         view = None
     if view:
         view["accent"] = _accent()
+        if opened:
+            view["open"] = True
     _show(view)
 
 
@@ -663,14 +705,16 @@ def ask(card=None):
     if who:
         listed = (", ".join(who[:-1]) + " and " + who[-1]) if 1 < len(who) <= 3 else \
             (", ".join(who[:3]) + f" and {len(who) - 3} more" if len(who) > 3 else who[0])
-        lead = f"{listed} {'has' if len(who) == 1 else 'have'} it down. "
+        lead = f" {listed} {'has' if len(who) == 1 else 'have'} it down."
     else:
         lead = ""
     from .together import _today
     asked = next((f for f in clean_tricky(client().session.get("tricky"), _today()) if f["guid"] == guid), None)
+    # 3.9.0 (Sam's pick, "Asks and tips" 1): it says who it goes to first, as it goes to
+    # everyone in the crew with the card, not only who has it down
     line, ok = ask_text(mw, "Ask your crew about this card",
-                        lead + ("You've asked. Change your line, or leave it as it is."
-                                if asked else "Your crew sees it on their copy of the card. One line, optional."),
+                        "Goes to everyone in your crew who has this card." + lead
+                        + (" You've asked. Change your line, or leave it as it is." if asked else " One line, optional."),
                         (asked or {}).get("q") or "")
     if not ok:
         return
@@ -737,7 +781,7 @@ def helped(guid, from_uid, on=True):
             tooltip("Thanks. The tips that help most show first.")
         card = _card()
         if card is not None and card.note().guid == guid and getattr(mw.reviewer, "state", "") == "answer":
-            on_answer(card)
+            on_answer(card, opened=True)
     _bg(lambda: cl.tip_helped(guid, from_uid, on), done)
 
 
@@ -765,7 +809,7 @@ def on_message(cmd, parts=(), from_card_page=False):
     elif cmd == "knowstip":
         show_tips()
     elif cmd == "knowsbar":
-        to_bar()
+        to_bar(len(parts) > 2 and parts[2] == "open")
     elif cmd == "knowshelped" and len(parts) > 2:
         if from_card_page:
             # the review screen runs the card's script too: a thanks is sent only on a yes

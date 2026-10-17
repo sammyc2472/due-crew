@@ -681,9 +681,17 @@ In Anki (as a follower):
 
 - [ ] A crewmate (mutual, sharing the same deck) has a card down that you've never missed. Open Anki (the day's first sync), study, press Again on that card for the first time: ten minutes later it's back, and on its answer side their Pip pops up from the bottom right (no lightbulb), "I know this one", Ask Dre, Not now. No sync needed in between.
 - [ ] Before you've missed it: nothing. The next card: their Pip ducks back down. Not now: the same. Ask Dre: the ask window, as before.
-- [ ] Two crewmates know it: both Pips side by side (never blinking together), "Dre and Mo know this", Ask; three: "Dre, Mo and Jo know this"; four or more: three Pips, "Dre, Mo, Jo and 1 more know this". No lightbulb. Already asked: Asked. A tip on it, an ask from a crewmate or a plan's note: the card as before, not the Pip.
+- [ ] Two crewmates know it: both Pips side by side (never blinking together), "Dre and Mo know this", Ask; three: "Dre, Mo and Jo know this"; four or more: three Pips, "Dre, Mo, Jo and 1 more know this". No lightbulb. Already asked: Asked. An ask from a crewmate or a plan's note: the corner card, folded (below), not the peek.
 - [ ] A card whose text or picture fills that corner: still the peek, never the chip beside Edit; scroll down and the card's last lines clear it.
 - [ ] Settings › Pip off: the same bubble in the same corner without Pip, "Dre knows this", Ask, Not now; it fades in, and out on the next card. Reduce motion (system setting): the Pip and bubble there at once, no pop, no duck. Settings › Pip off: the corner card as before.
+
+### 3.9.0: asks and tips
+
+- [ ] Ask on a card someone has down: the window says "Goes to everyone in your crew who has this card. Adina has it down. One line, optional." On a card nobody has down: the first and last sentences only. Asked already: "… You've asked. Change your line, or leave it as it is."
+- [ ] A tip on a card you're stuck on: the tipper's Pip peeks up from the bottom right, its bubble edged in their colour (who knows it: a plain grey line), "Adina left a tip", Show, Not now; no words, and none on a hover. Show: "Adina: …" with This helped (and +1 more with two tips). This helped: it stays open (and asks first, as before). Pip off: the same bubble with 💡.
+- [ ] A one-by-one card (a cloze that shows its parts a step at a time) with a tip: nothing of the tip's words shows until Show, whatever step you're on.
+- [ ] A crewmate's ask with a line: their Pip and "Sam asked about this card", Show, Not now; Show: their line, Tip. An ask without a line: "Sam asked about this", Tip, as before. A plan's note: "📌 A note from Block 1", Show; Show: the note.
+- [ ] Where the corner isn't free (a long card): the chip beside Edit says the same folded words with Show; a click shows the words, then This helped / Tip work as before. Opened on the card and then moved to the bar: still open there.
 
 ### 3.9.0: your Wrapped
 

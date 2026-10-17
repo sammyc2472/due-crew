@@ -2069,4 +2069,24 @@ every release that changes how something works.
   blinking at the same time"). Side by side, two or three Pips shared
   one blink. Each now gets its own place in it (`sev.started(i)`, the
   `--sv-d` a study room's seats use), so no two blink together.
-
+- 3.9.0, asks and tips (Sam's picks on the mock "Asks and tips", 17 Oct:
+  A with W1, Folded until you open it, nothing new for a helped tip; and
+  his note, "find a way to integrate the tipper's pip in the tip").
+  An ask still goes to everyone in the crew who has the card (it rides
+  my week, as before); the dialog now says so first: "Goes to everyone
+  in your crew who has this card. Adina has it down. One line,
+  optional." (`cards.ask`). On a one-by-one card the answer side opens
+  with most of it hidden, and a tip's words, an ask's line or a plan's
+  note gave the rest away the moment it opened. Now each says only who
+  (`fold`: "Adina left a tip", "Sam asked about this card", "📌 A note
+  from Block 1"), with Show; Show brings the words and what to do with
+  them (This helped, Tip, +1 more). The bar's chip folds the same way
+  and opens on a click; no words on a hover while folded. Who knows it
+  never folds: it names people. A tip now peeks in like who knows it:
+  the tipper's Pip waving from the bottom corner, the bubble beside it
+  (with Pip off, the same bubble with 💡), always shown, with room under
+  the card; its bubble wears the tipper's colour round its edge (mine
+  with Pip off), so a tip doesn't look like who knows it (Sam: "too
+  similar"), whose bubble keeps the plain line. Opened stays opened: This helped draws it again open
+  (`on_answer(card, opened=True)`), and a move to the bar says so
+  (`knowsbar:open`).
