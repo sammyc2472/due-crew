@@ -1777,8 +1777,8 @@ def _squad_line(pid, tabs, people=None, cfg=None):
         return ""
     emojis, who, people = s.get("faces") or [], s.get("who") or [], people or {}
     pips = [squad_pip(u, (people.get(u) or {}).get("name") or "A squadmate", (people.get(u) or {}).get("you"),
-                      people, cfg, PCREW_PIP)
-            for u in who[:len(emojis)]] if cfg is not None and len(who) >= len(emojis) else []
+                      people, cfg, PCREW_PIP, k)
+            for k, u in enumerate(who[:len(emojis)])] if cfg is not None and len(who) >= len(emojis) else []
     faces = (f'<span class="pips">{"".join(pips)}</span>' if pips and all(pips)
              else "".join(e(str(x)) for x in emojis))
     n, of = int(s.get("shown") or 0), int(s.get("of") or 0)
@@ -2938,7 +2938,7 @@ def bingo_html(bv, cfg, loading=False, team=False, people=None):
                     f'{so_far}</span>')
         marks = "".join(
             f'<span class="st sp" style="right:{8 + k * 27}px;{"" if st["done"] else "opacity:.55"}" title="{e(names.get(u, ("?", ""))[0])}">'
-            f'{stamp_pip(u, names.get(u, ("?", ""))[0], people, cfg)}</span>' if pips else
+            f'{stamp_pip(u, names.get(u, ("?", ""))[0], people, cfg, k)}</span>' if pips else
             f'<span class="st" style="right:{3 + k * 15}px;{"" if st["done"] else "opacity:.55"}" title="{e(names.get(u, ("?", ""))[0])}">'
             f'{e(names.get(u, ("?", ""))[1]) or "&#10003;"}</span>' for k, u in enumerate(who[:3]))
         dots, dname = diffs.get(sq.get("diff"), diffs["m"])
@@ -4188,17 +4188,19 @@ def halloween_html(hw, cfg):
             f'<a class="wx" href="#" title="Hide until next year" onclick="{_pycmd("closethw")}">&times;</a></div>')
 
 
-def row_sev(row, cfg, size=None):
+def row_sev(row, cfg, size=None, nth=0):
     """3.8.2: someone's Pip on a crew row, in the emoji's place: their colour
     and their look (mine: this computer's), still until the row is pointed
-    at. My own opens the closet. None with Pip off."""
+    at. My own opens the closet. None with Pip off. nth (3.9.0): its place
+    among Pips that move together (a bingo square's stamps, a plan card's
+    squad line), so each blinks at its own moment, as a room's seats do."""
     if not cfg.get("sev", True):
         return None
     light, dark = accent_pair(cfg.get("accent") if row.get("you") else row.get("accent"))
     look = my_look(cfg) if row.get("you") else row.get("look")
     label = "Your Pip" if row.get("you") else _html.escape(f'{row.get("name") or "?"}’s Pip', quote=True)
     fig = _sev.slot(_sev.svg("idle", rest=True, look=look, label=label), size or _sev.ROW_SIZE)  # the site's rows too (sev.site_kit)
-    style = f'--rs-l:{light};--rs-d:{dark}'
+    style = f'--rs-l:{light};--rs-d:{dark}' + (f';--sv-d:{_sev.started(nth)}s' if nth else "")
     if row.get("you"):
         return (f'<a class="dc-rsev" href="#" title="Pip&rsquo;s closet" style="{style}" '
                 f'onclick="{_pycmd("closet")}">{fig}</a>')
@@ -4209,14 +4211,14 @@ PCREW_PIP = 26  # 3.8.22: a Pip on a plan card's squad line, its slot a line of 
 SETTINGS_PIP = 44  # 3.8.22: mine in Settings › You, beside my name and status
 
 
-def squad_pip(uid, name, you, people, cfg, size=None):
+def squad_pip(uid, name, you, people, cfg, size=None, nth=0):
     """3.8.21: someone's Pip on the Squads tab, in the emoji's place (Sam: "the
     squads page still has the old emojis"): mine as on my row; a crewmate's
     in their colour and look (a mutual friend's, which only the crew brings);
     anyone else plain, in the default colour, since all a squadmate shares is
     a name and an emoji. people: {uid: crew entry}. None with Pip off."""
     p = (people or {}).get(uid) or {}
-    return row_sev({"you": bool(you), "name": name, "accent": p.get("accent"), "look": p.get("look")}, cfg, size)
+    return row_sev({"you": bool(you), "name": name, "accent": p.get("accent"), "look": p.get("look")}, cfg, size, nth)
 
 
 STAMP_PIP = 40  # 3.8.22: who stamped a bingo square, bigger than the emoji was (Sam: "make the bingo stamps bigger")
@@ -4228,7 +4230,7 @@ BINGO_PIP_CSS = """
 """
 
 
-def stamp_pip(uid, name, people, cfg):
+def stamp_pip(uid, name, people, cfg, nth=0):
     """3.8.22: who stamped a bingo square, as their Pip: mine and a
     crewmate's in colour and look, a squadmate's plain (all they share is a
     name and an emoji). The square is a button, so never a link: mine
@@ -4236,7 +4238,7 @@ def stamp_pip(uid, name, people, cfg):
     p = (people or {}).get(uid) or {}
     you = bool(p.get("you"))
     return row_sev({"name": name, "accent": cfg.get("accent") if you else p.get("accent"),
-                    "look": my_look(cfg) if you else p.get("look")}, cfg, STAMP_PIP) or ""
+                    "look": my_look(cfg) if you else p.get("look")}, cfg, STAMP_PIP, nth) or ""
 
 
 def card_sev(row, cfg, size=44):

@@ -2069,6 +2069,14 @@ every release that changes how something works.
   blinking at the same time"). Side by side, two or three Pips shared
   one blink. Each now gets its own place in it (`sev.started(i)`, the
   `--sv-d` a study room's seats use), so no two blink together.
+- 3.9.0, a bingo square's stamps blink on their own (Sam, 17 Oct: "they
+  all blink at the same time on bingo"). A square's Pips move only while
+  it's pointed at, so its two or three stamps started together and blinked
+  as one; a plan card's squad line did the same. `board.row_sev` takes
+  `nth`, its place among Pips that move together, for its own place in the
+  blink (`sev.started`, as a room's seats and the peek's Pips); the
+  stamps (`stamp_pip`) and the squad line (`squad_pip`) pass it. The site's
+  Pips don't move, so nothing there to match.
 - 3.9.0, asks and tips (Sam's picks on the mock "Asks and tips", 17 Oct:
   A with W1, Folded until you open it, nothing new for a helped tip; and
   his note, "find a way to integrate the tipper's pip in the tip").

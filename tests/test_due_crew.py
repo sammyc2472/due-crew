@@ -13574,6 +13574,7 @@ def test_plan_card_squad_pips_v3822():
     and look, anyone else plain. The board's summary names whose faces they
     are (who, uids, one for one); Pip off, or a server without who, the
     emojis as before. Still one request."""
+    from due_crew import sev
     from due_crew.backend import shapes as S
     # the fake (the Worker's twin): who beside faces, one for one
     store = world({"sam": "Sammy", "dre": "Dre", "zed": "Zed"}, {"sam": ["dre"], "dre": ["sam"]})
@@ -13599,8 +13600,8 @@ def test_plan_card_squad_pips_v3822():
     check("line: who showed up are Pips, in order, and no emoji",
           pips.count("dc-rsev") == 3 and not any(x in line for x in ("🦊", "🐢", "🐸"))
           and "Squad: 3 of 11 showed up" in line and "duecrew:squadplan:p1" in line, line[:300])
-    exact = [board.squad_pip(u, n, y, people, cfg, board.PCREW_PIP)
-             for u, n, y in (("sam", "Sammy", True), ("dre", "Dre", False), ("zed", "A squadmate", False))]
+    exact = [board.squad_pip(u, n, y, people, cfg, board.PCREW_PIP, k)
+             for k, (u, n, y) in enumerate((("sam", "Sammy", True), ("dre", "Dre", False), ("zed", "A squadmate", False)))]
     check("…each the Squads tab's own Pip, look and all (mine and the crewmate's dressed, the stranger plain)",
           all(x and x in pips for x in exact) and len(exact[1]) > len(exact[2]) and "duecrew:closet" in exact[0]
           and f"--rs-l:{amber[0]}" in exact[0])
@@ -13609,6 +13610,9 @@ def test_plan_card_squad_pips_v3822():
           and "Dre’s Pip" in pips, pips[:400])
     check("…in that order (me, the crewmate, the stranger)",
           pips.index(f"--rs-l:{amber[0]}") < pips.index(f"--rs-l:{blue[0]}") < pips.index(f"--rs-l:{plain[0]}"))
+    check("…each blinking at its own moment, as a room's seats (3.9.0, Sam: on bingo they blinked as one)",
+          "--sv-d" not in exact[0] and f"--sv-d:{sev.started(1)}s" in exact[1] and f"--sv-d:{sev.started(2)}s" in exact[2]
+          and sev.started(1) != sev.started(2) != 0, [x[:120] for x in exact])
     off = board._squad_line("p1", {"summary": summ, "unread": 0}, people, dict(cfg, sev=False))
     old = board._squad_line("p1", {"summary": dict(summ, who=[]), "unread": 0}, people, cfg)
     bare = board._squad_line("p1", {"summary": summ, "unread": 0})
@@ -13721,6 +13725,8 @@ def test_pips_where_emojis_were_v3822():
           sq0.count('class="st sp"') == 3 and f"--rs-l:{amber[0]}" in sq0 and f"--rs-l:{blue[0]}" in sq0
           and f"--rs-l:{plain[0]}" in sq0 and not any(x in sq0 for x in ("🦊", "🐢", "🐸")) and "stamped" in sq0
           and f"width:{round(board.STAMP_PIP * sev.SLOT[0])}px" in sq0 and board.STAMP_PIP * sev.SLOT[0] > 22, sq0[:400])
+    check("bingo: a square's stamps each blink at their own moment when it's pointed at (3.9.0, Sam: \"they all blink at the same time\")",
+          f"--sv-d:{sev.started(1)}s" in sq0 and f"--sv-d:{sev.started(2)}s" in sq0 and sq0.count("--sv-d:") == 2, sq0[:400])
     check("bingo: a square is a button, so no stamp is a link (mine doesn't open the closet from here)",
           "<a " not in sq0 and "duecrew:closet" not in sq0)
     plain_card = board.bingo_html(bv, {"sev": False}, people=people)
