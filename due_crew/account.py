@@ -31,10 +31,11 @@ ACCOUNT_KEYS = ("share_reviews", "share_time", "share_retention", "share_streak"
                 "accent",  # 3.5.0: the site wears it too
                 "due_items", "due_ticks", "due_show", "due_suggest",  # Due: my own to-dos, on every computer
                 "sev_look", "sev_closet",  # 3.8.2: Pip's closet: what it has on, what it's earned
-                "wrapped_seen")  # 3.9.0: the year whose Wrapped line was put away, on every computer
+                "wrapped_seen",  # 3.9.0: the year whose Wrapped line was put away, on every computer
+                "two_buttons")  # 3.9.1: Again and Good alone, a person's way of reviewing
 ACCENT_NAMES = ("green", "blue", "purple", "teal", "amber", "rose")
 _BOOLS = ("share_reviews", "share_time", "share_retention", "share_streak",
-          "share_heatmap", "show_up", "paused", "due_show", "due_suggest")
+          "share_heatmap", "show_up", "paused", "due_show", "due_suggest", "two_buttons")
 _TEXT = {"exam_date": 10, "away_from": 10, "away_to": 10, "status": 80, "emoji": 16,
          "crew_label": 40, "wrapped_seen": 4}
 MAX_SQUADS = 20

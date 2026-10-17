@@ -14607,6 +14607,99 @@ def test_doodle_cheers_v391():
         dc._state["closet_open"] = None
 
 
+def test_two_buttons_v391():
+    """3.9.1, two buttons (Sam's picks from the mock): Again and Good alone,
+    every deck, 2, 3 and 4 count as Good, FSRS off allowed with a note; a
+    switch in Settings › Board › Reviewing, and Try two buttons on Insights'
+    Hard habit line, with its Undo there. Two of Anki's hooks; nothing sent."""
+    from due_crew import two_buttons as TB, account, rooms, settings_model as SM, team_flow as TF
+    from due_crew.app import _state
+    four = ((1, "Again"), (2, "Hard"), (3, "Good"), (4, "Easy"))
+    check("the bar: Again and Good with it on, in Anki's own words; off, or not Anki's four: as it came",
+          TB.buttons(four, True) == ((1, "Again"), (3, "Good")) and TB.buttons(four, False) == four
+          and TB.buttons(((1, "Again"), (2, "Good")), True) == ((1, "Again"), (2, "Good"))
+          and TB.buttons((), True) == ())
+    check("the keys: 2, 3 and 4 are Good; 1 stays Again; off, every ease as it was",
+          [TB.ease((True, e), True) for e in (1, 2, 3, 4)] == [(True, 1), (True, 3), (True, 3), (True, 3)]
+          and [TB.ease((True, e), False) for e in (1, 2, 3, 4)] == [(True, 1), (True, 2), (True, 3), (True, 4)])
+    # the hooks, chained as Anki chains filters (the room's break first, as registered)
+    conf = {"two_buttons": True}
+    import due_crew.app as appmod
+    saved_cfg = appmod.cfg
+    appmod.cfg = lambda: conf
+    try:
+        def answer(e):
+            out = (True, e)
+            for f in (rooms.will_answer, TB.will_answer):
+                out = f(out, None, None)
+            return out
+        _state["room_break"] = False
+        on = [answer(e) for e in (1, 2, 3, 4)]
+        _state["room_break"] = True
+        held = answer(4)
+        _state["room_break"] = False
+        conf["two_buttons"] = False
+        off = [answer(e) for e in (1, 2, 3, 4)]
+        bar_off = TB.will_init_buttons(four, None, None)
+        conf["two_buttons"] = True
+        bar_on = TB.will_init_buttons(four, None, None)
+    finally:
+        appmod.cfg = saved_cfg
+        _state["room_break"] = False
+    check("the hooks, called as Anki calls them: on, 2/3/4 land as Good and 1 as Again; off, nothing changes",
+          on == [(True, 1), (True, 3), (True, 3), (True, 3)] and off == [(True, 1), (True, 2), (True, 3), (True, 4)]
+          and bar_on == ((1, "Again"), (3, "Good")) and bar_off == four, (on, off))
+    check("a room's break still holds the answer, whatever two buttons does with it", held == (False, 3), held)
+    check("it's registered on both hooks", "two_buttons.will_answer" in open(os.path.join(REPO, "due_crew", "__init__.py")).read()
+          and "reviewer_will_init_answer_buttons.append(two_buttons.will_init_buttons)" in open(os.path.join(REPO, "due_crew", "__init__.py")).read())
+    # the setting: a person's, so an account key; a switch on Settings; off by default; Reset board leaves it
+    check("the setting: an account key, a bool, off unless set; Settings' switch sets it; Reset board leaves it",
+          "two_buttons" in account.ACCOUNT_KEYS and account.clean({"two_buttons": True}) == {"two_buttons": True}
+          and "two_buttons" not in account.clean({"two_buttons": "yes"}) and account.pick({"two_buttons": True})["two_buttons"] is True
+          and SM.change(["set", "two_buttons", "1"], {}) == {"two_buttons": True}
+          and SM.change(["set", "two_buttons", "0"], {}) == {"two_buttons": False}
+          and "two_buttons" not in SM.BOARD_DEFAULTS and not TB.on({}))
+    view = {"tab": "board", "signed_in": True}
+    page = board.settings_html(dict(view, fsrs=True), {"two_buttons": True})
+    page_off = board.settings_html(dict(view, fsrs=False), {})
+    check("Settings › Board › Reviewing: Two buttons, on, with what it does and that phones keep four; FSRS off: its note",
+          '<div class="st-h">Reviewing</div>' in page and "Two buttons" in page and "duecrew:set:two_buttons:0" in page
+          and "2, 3 and 4 count as Good. Phones keep four." in page and "Works best with FSRS on." not in page
+          and "duecrew:set:two_buttons:1" in page_off and "Works best with FSRS on." in page_off
+          and "Works best with FSRS on." not in board.settings_html(view, {}))
+    ix = board.settings_index(view, {})
+    found = [x for x in ix if x["f"] == "set:two_buttons:"]
+    check("Find a setting: hard, easy or buttons finds it", found and all(w in found[0]["k"] for w in ("hard", "easy", "buttons")), found)
+    # Insights' Hard habit line
+    hh = board._insights_html(10, {"hard": {"pct": 22, "n": 640}, "two": ""})
+    tried = board._insights_html(10, {"hard": {"pct": 22, "n": 640}, "two": "tried"})
+    check("the Hard habit line offers Try two buttons beside Not now; tried: it's on, with Undo; on: there's no Hard to press",
+          "duecrew:instwo:10" in hh and "Try two buttons" in hh and "duecrew:inshardno:10" in hh
+          and "Two buttons are on" in tried and "duecrew:instwono:10" in tried and "You press Hard" not in tried
+          and "You press Hard" not in board._insights_html(10, {"hard": {"pct": 22, "n": 640}, "two": "on"}))
+    # the clicks, as the board sends them
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    if "aqt.reviewer" not in sys.modules:
+        sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
+    mine = {}
+    saved = (TF.cfg, TF.save_cfg, appmod.swap)
+    swaps = []
+    TF.cfg = lambda: mine
+    TF.save_cfg = lambda c, **k: mine.update(c)
+    appmod.swap = lambda c, **k: swaps.append(1)
+    try:
+        dc._on_js(False, "duecrew:instwo:10", DeckBrowser())
+        tried_on = (mine.get("two_buttons"), _state.get("two_tried"))
+        dc._on_js(False, "duecrew:instwono:10", DeckBrowser())
+        undone = (mine.get("two_buttons"), _state.get("two_tried"))
+    finally:
+        TF.cfg, TF.save_cfg, appmod.swap = saved
+        _state["two_tried"] = False
+    check("Try two buttons turns it on (saved as Settings saves it) and says so; Undo turns it off, back to the line",
+          tried_on == (True, True) and undone == (False, False) and len(swaps) == 2, (tried_on, undone))
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

@@ -665,6 +665,15 @@ In Anki (as a follower):
 - [ ] Plan ▾ › How its cards open: switch to When I'm ready (a deck with open later cards offers Hold back), and back to the plan's dates (dates passed since ask, as Resume does). duecrew.com's plan page shows "At your pace · next: …" and the same choice; changing it there reaches Anki at its next refresh.
 - [ ] Browse: right-click a tag in the sidebar › Due Crew: open its cards…: the sheet counts what opens, what's open already, the leeches (they stay suspended), and the plans that hold them; Open with First in line ticked puts them first in Anki's new cards; one Edit › Undo shuts them. Pick cards in the table › Due Crew: open these…: the same for just those. Signed out: both are there.
 
+### 3.9.1: two buttons
+
+- [ ] Settings › Board › Reviewing: Two buttons, off. Its line: "Again and Good. Hard and Easy hide; 2, 3 and 4 count as Good. Phones keep four." With FSRS off (Deck options › FSRS), the line ends "Works best with FSRS on."; with it on, it doesn't. Find a setting: "hard" finds it.
+- [ ] Turn it on and review: the bar shows Again and Good only, each with its interval, in Anki's own words (try another interface language). Learning cards that already show two buttons look as before.
+- [ ] Keys: 1 is Again; Space, Enter, 2, 3 and 4 all answer Good (check the card's info: Good, not Hard or Easy). Turn it off: four buttons, and 2 and 4 are Hard and Easy again, at once.
+- [ ] In a study room, on its break: no key answers (2 and 4 included), as before.
+- [ ] A second computer signed in to the same account: it's on there after the account's settings come down. Your phone keeps four buttons.
+- [ ] You › Insights on a deck where you press Hard a lot (15% of 200 answers): the Hard habit line ends "Try two buttons · Not now". Try two buttons: the line says "Two buttons are on … Undo", and Settings shows it on. Undo: off, and the Hard line is back. Reopen Anki with it on: no Hard habit line.
+
 ### 3.9.1: doodle cheers (deploy the Worker first: migration 0029)
 
 - [ ] 🎉 a crewmate: the Cheer window has Draw and Sign under the emoji. Draw on the pad with the mouse (and a trackpad, and a pen if you have one): the lines follow, in your accent; Black, Thin and Thick change the next line; Undo takes the last line, Clear all of them. Night mode: the pad stays paper-light.

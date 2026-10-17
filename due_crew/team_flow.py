@@ -534,7 +534,9 @@ def you_view(c):
     at = (_state.get("map_at") or {}).get(d["did"]) or []
     if view.get("map"):
         T.map_level(view["map"], at, view.get("_map_know") or {})  # what's on screen worked out
-    return {"decks": decks, "did": d["did"], "exam": exam, "view": dict(view, map_at=at)}
+    # 3.9.1: two buttons, for the Hard habit line: on, or just turned on from it (its Undo)
+    two = ("tried" if _state.get("two_tried") else "on") if c.get("two_buttons") else ""
+    return {"decks": decks, "did": d["did"], "exam": exam, "view": dict(view, map_at=at, two=two)}
 
 
 def plan_lines(cards):
@@ -1152,6 +1154,17 @@ def for_sync(c):
     return out or None
 
 
+def try_two(on):
+    """3.9.1: Try two buttons, from the Hard habit line: on (an account key,
+    saved and synced as Settings saves it), and the line says so with Undo,
+    which turns it off again and brings the line back."""
+    c = dict(cfg())
+    c["two_buttons"] = bool(on)
+    _state["two_tried"] = bool(on)
+    save_cfg(c)
+    app.swap(cfg())
+
+
 def _put_away(key):
     """An Insights line's Not now: gone for 30 days, on every deck."""
     pf = _plans_flow()
@@ -1197,6 +1210,10 @@ def on_message(cmd, parts):
             share_map(did)
         elif cmd == "inshardno":
             _put_away("ins_hard_hide")
+        elif cmd == "instwo":
+            try_two(True)
+        elif cmd == "instwono":
+            try_two(False)
         elif cmd == "insleeches":
             browse_leeches(did)
         else:

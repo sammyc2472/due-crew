@@ -2102,10 +2102,16 @@ def _insights_html(did, v):
                 f'<a href="#" onclick="{_pycmd(f"insfsrs:{did}")}">Optimize FSRS</a> '
                 f'<a class="q" href="#" onclick="{_pycmd(f"insfsrsno:{did}")}">Not now</a></div>')
     h = v.get("hard")
-    if h:
-        # 3.8.0: the Hard habit, said once a month at most
+    two = v.get("two")
+    if two == "tried":
+        # 3.9.1: just turned on from here: said, with its way back
+        out += (f'<div class="iline">Two buttons are on: Again and Good. 2, 3 and 4 count as Good. '
+                f'<a class="q" href="#" onclick="{_pycmd(f"instwono:{did}")}">Undo</a></div>')
+    elif h and two != "on":
+        # 3.8.0: the Hard habit, said once a month at most; 3.9.1: with two buttons on there's no Hard to press
         out += (f'<div class="iline" title="{int(h["n"]):,} reviews in 4 weeks">You press Hard on {int(h["pct"])}% of reviews. '
                 f'Anki counts Hard as remembered. '
+                f'<a href="#" onclick="{_pycmd(f"instwo:{did}")}">Try two buttons</a> '
                 f'<a class="q" href="#" onclick="{_pycmd(f"inshardno:{did}")}">Not now</a></div>')
     lee = int(v.get("leeches") or 0)
     if lee:
@@ -3438,7 +3444,9 @@ def _accent_swatches(cfg):
         for k, v in ACCENTS.items())
 
 
-def _settings_board(cfg):
+def _settings_board(cfg, fsrs=None):
+    """fsrs (3.9.1): whether FSRS is on in this collection (None: not known),
+    for two buttons' one-line note."""
     hidden = hidden_tabs(cfg)
     pills = '<button class="st-pill on" disabled aria-pressed="true">Crew</button>' + "".join(
         f'<button class="st-pill{"" if k in hidden else " on"}" aria-pressed="{"false" if k in hidden else "true"}" '
@@ -3477,6 +3485,11 @@ def _settings_board(cfg):
                       "Today's misses, new leeches")
             + _st_row("Recover leeches", _st_switch("due_leeches", g("due_leeches", False), "Recover leeches"),
                       "Each morning, as new cards")
+            # 3.9.1, two buttons (Sam's picks): every deck; FSRS off, allowed with a note
+            + '</div><div class="st-h">Reviewing</div><div class="st-box">'
+            + _st_row("Two buttons", _st_switch("two_buttons", g("two_buttons", False), "Two buttons"),
+                      "Again and Good. Hard and Easy hide; 2, 3 and 4 count as Good. Phones keep four."
+                      + (" Works best with FSRS on." if fsrs is False else ""))
             + '</div><div class="st-h">Shortcuts</div><div class="st-box">'
             + _st_row("Study what&rsquo;s next", f'<kbd class="st-kbd">{STUDY_KBD}</kbd>', "From any Anki screen")
             + _st_row("Ask the squad about this card", f'<kbd class="st-kbd">{ASK_KBD}</kbd>', "While reviewing")
@@ -3544,6 +3557,8 @@ FIND_WORDS = {
     # 3.8.1: the Fifteen and Pip
     "set:fifteen:": "timer pomodoro focus session nudge minutes", "set:sev:": "mascot character buddy animation",
     "set:sev_break:": "breathe stretch rest",
+    # 3.9.1
+    "set:two_buttons:": "hard easy again good pass fail answer buttons keys review",
 }
 
 
@@ -3575,7 +3590,7 @@ def settings_index(view, cfg):
         out.append({"t": tab, "f": _find_key(f), "l": label, "w": where, "k": " ".join(_re.findall(r"[a-z0-9]+", words.lower()))})
     for tab in ("you", "board", "privacy"):
         body = (_settings_you(dict(view, name="", status="", emoji="")) if tab == "you"
-                else _settings_board(cfg) if tab == "board" else _settings_privacy(cfg))
+                else _settings_board(cfg, view.get("fsrs")) if tab == "board" else _settings_privacy(cfg))
         sections = _re.split(r'<div class="st-h">', body)
         for i, sec in enumerate(sections):
             head = H.unescape(sec.split("</div>", 1)[0]) if i else ""
@@ -3606,7 +3621,7 @@ def settings_html(view, cfg):
     tab = view.get("tab") if view.get("tab") in dict(SETTINGS_TABS) else "you"
     pills = "".join(f'<a class="dc-pill{" on" if k == tab else ""}" href="#" {_st_click("settab:" + k)}>{t}</a>'
                     for k, t in SETTINGS_TABS)
-    body = (_settings_you(view, cfg) if tab == "you" else _settings_board(cfg) if tab == "board"
+    body = (_settings_you(view, cfg) if tab == "you" else _settings_board(cfg, view.get("fsrs")) if tab == "board"
             else _settings_privacy(cfg))
     foot = "Privacy, dates, status and accent follow your account." if view.get("signed_in") else ""
     pip = ""

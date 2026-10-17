@@ -46,7 +46,7 @@ from .stats import heatmap as cached_heatmap
 from .stats.decks import gather_shared_decks
 from .stats.queries import StatsQueries
 from .ui import copy_text
-from . import account, bingo_flow, due_flow, plan_flow, rooms, together
+from . import account, bingo_flow, due_flow, plan_flow, rooms, together, two_buttons
 from . import cards as crew_cards
 from .wrap import (_arrivals, _deck_deltas, _exam_eve_info, _mute_knocker, _save_wrap, _update_returns,
                    _update_wrap, _wrap_data, _wrap_info)
@@ -1336,7 +1336,18 @@ def _settings_view():
     return {"tab": _state.get("settings_tab"), "signed_in": cl.signed_in, "name": cl.display_name,
             "emoji": c.get("emoji"), "status": c.get("status"), "sync": sync, "crew": crew,
             "squads": [s.get("name") for s in (c.get("squads") or []) if isinstance(s, dict) and s.get("name")],
-            "decks": decks}
+            "decks": decks,
+            "fsrs": _fsrs_on()}  # 3.9.1: two buttons' note, with FSRS off
+
+
+def _fsrs_on():
+    """Whether FSRS is on in this collection; None when there's none open."""
+    if not mw.col:
+        return None
+    try:
+        return bool(mw.col.get_config("fsrs", False))
+    except Exception:
+        return None
 
 
 def _settings_cmd(cmd, parts):
@@ -1735,6 +1746,9 @@ gui_hooks.reviewer_did_show_question.append(rooms.on_question)
 gui_hooks.reviewer_did_show_answer.append(rooms.on_answer)
 if hasattr(gui_hooks, "reviewer_will_answer_card"):
     gui_hooks.reviewer_will_answer_card.append(rooms.will_answer)  # none under a room's break
+    gui_hooks.reviewer_will_answer_card.append(two_buttons.will_answer)  # 3.9.1: 2, 3 and 4 are Good
+if hasattr(gui_hooks, "reviewer_will_init_answer_buttons"):
+    gui_hooks.reviewer_will_init_answer_buttons.append(two_buttons.will_init_buttons)  # 3.9.1: Again and Good
 gui_hooks.state_did_change.append(rooms.on_state)
 gui_hooks.state_did_change.append(due_flow.on_state)  # 3.8.0: Study today's walk
 gui_hooks.state_shortcuts_will_change.append(due_flow.walk_keys)  # and Escape stops it

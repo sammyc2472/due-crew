@@ -399,6 +399,13 @@ sections.append("<h3>3.8.0: Insights, no plan, the exam date in its head; the Ha
     DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
     you=_YOU("insights", insights={"decks": _DECKS, "did": 20, "exam": "2026-10-14", "plan": None,
                                    "view": dict(_DECK_INS, hard={"pct": 22, "n": 640})})))
+# 3.9.1: two buttons: Try it from the Hard habit line, then it's on with its Undo; Settings › Board › Reviewing
+sections.append("<h3>3.9.1: two buttons, just tried from the Hard habit line (Undo)</h3>" + board.render(
+    DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
+    you=_YOU("insights", insights={"decks": _DECKS, "did": 20, "exam": "2026-10-14", "plan": None,
+                                   "view": dict(_DECK_INS, hard={"pct": 22, "n": 640}, two="tried")})))
+sections.append("<h3>3.9.1: Settings › Board › Reviewing: two buttons, FSRS off (its note)</h3>" + board.settings_html(
+    dict(SET_VIEW, tab="board", fsrs=False), dict(SET_CFG, two_buttons=True)))
 sections.append("<h3>Due: folded</h3>" + board.render(DATA, {"period": "week"}, now_ts - 60, due=dict(_DV, folded=True),
                                                        plans=PLANS, you=_YOU("today", folded=True)))
 sections.append("<h3>Due: done for today, a long tomorrow</h3>" + board.render(
