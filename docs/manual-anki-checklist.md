@@ -695,6 +695,15 @@ In Anki (as a follower):
 
 - [ ] Squad bingo: point at a square two or three of you stamped: their Pips blink each on their own, in no order and never together. A plan card's squad line, a study room's seats and the peek's Pips: the same.
 
+### 3.9.0: smooth motion
+
+- [ ] Crew ↔ Squads, back and forth: the green pill slides across, round at both ends on its way, and lands round on the outside edge; no frame of it square, no second outline, the words changing colour as it passes. Today · Week · Decks: the underline slides, the same.
+- [ ] Fold and open the Due box, change tabs in it, add a to-do, tick one: the box grows and shrinks to its size and stops there, nothing below it jumping a few pixels at the end. A note or a knock leaving, the last topic that starts sticking, Caught up: what's under them settles once, no hop.
+- [ ] Click ↻ and let the board redraw: the arrow finishes its turn, never snapping upright.
+- [ ] A crewmate's cheer: the banner fades in; click it to send one back and it fades out. During a show, click anywhere or press Esc: the show fades away (a quarter second), not gone in one frame.
+- [ ] On a card with a tip, press Show in the corner: the bubble grows to fit the words, which fade in; the chip beside Edit fades its words in too.
+- [ ] Reduce motion (system setting): nothing slides, grows or turns; the banner only fades.
+
 ### 3.9.0: your Wrapped
 
 - [ ] Tools › Due Crew › Your year…: the board's place shows Your 2026 on a phone-shaped card; it moves on every few seconds and waits while the pointer is on it; the right side or → goes on, the left or ← goes back. Each slide's Pip plays as it comes, in your look. ‹ Board goes back.

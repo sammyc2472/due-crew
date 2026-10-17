@@ -2115,3 +2115,40 @@ every release that changes how something works.
   similar"), whose bubble keeps the plain line. Opened stays opened: This helped draws it again open
   (`on_answer(card, opened=True)`), and a move to the bar says so
   (`knowsbar:open`).
+- 3.9.0, the motion audit (Sam, 17 Oct: Crew to Squads "visibly flicks
+  from rectangular to fit the pill", "everything should be smooth!").
+  `tools/motion_audit.js` plays every motion in `tools/motion_preview.html`
+  with its frames held, steps through them, and counts what jumps between
+  the last frame and the page once it has cleaned up. What it found, and
+  the fixes (`motion.js`, the site's byte for byte):
+  the pick's pill slid as a box and took its round end only once it
+  landed; now each corner is read as drawn (a 99px radius draws as half
+  the height), it rounds both ends on its way and lands in the new pick's
+  shape, and the one it left keeps its picked words and edge until the
+  pill has gone from under them, the new one takes it as the pill
+  arrives, each edge in step with the fill (`slide`, `onIn`).
+  Every height move overshot by the box's padding and border (the Due box
+  12px top and bottom, a banner, a note) and jumped back at the end:
+  offsetHeight is outside height and style.height inside. Now `inner` takes
+  them off, from `tall`, the height to the fraction of a pixel (offsetHeight
+  rounds, and half a pixel moved every line below at the end).
+  A fold to nothing ended a few px short: a box with a border, children or
+  a flex gap keeps its neighbours' margins apart, and a grid keeps its gap
+  beside an empty row whatever the margins. `room` measures what's left
+  and the fold (and unfold, and a room seat's shrink) takes it back as a
+  margin; in a grid the neighbour closes the gap in step (`close`).
+  A glow ended on nothing and then my row's tint came back; it ends on the
+  box's own ground. A dimmed box (a day that's off) ended a fade at full
+  and snapped back; `anim` keeps its own opacity. ↻ snapped from mid-turn
+  to upright when the board redrew; the new one finishes the turn, and the
+  ten-second stop waits for a turn's end.
+  Elsewhere: a cheer's banner faded out but popped in, and a click took it
+  in one frame; both fade now. A show ended by a click or Esc vanished;
+  it fades in a quarter second, taking no clicks (`show.js` `stop`). The
+  peek's Show swapped "Adina left a tip" for the words in one frame; the
+  bubble grows into them and they fade in once there's room, and the bar's
+  chip fades its words in. Settings' found row glowed back to nothing;
+  to its own ground. Pip's moves, the bats, the logo's wave and the
+  cheers' toss were already ending where they rest. The suite reads every
+  keyframe list in the add-on and the site and fails one whose offsets go
+  backwards, which a browser drops without a word.

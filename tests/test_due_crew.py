@@ -4969,7 +4969,7 @@ def test_asks_and_tips_v390():
     check("fold: in the bar the same, a click opens it, then its act and its click as before",
           "var folded = !!(D.fold && !D.open);" in bj and "var act = folded ? 'Show' : D.act;" in bj
           and "if (D.actcmd && !folded)" in bj and "if (folded) { s.removeAttribute('title'); }" in bj
-          and "if (folded) { folded = false; said(); if (window.dcBarBalance) { window.dcBarBalance(); } return; }" in bj)
+          and "if (folded) {\n      folded = false; said(); if (window.dcBarBalance) { window.dcBarBalance(); }" in bj)
     node = shutil.which("node")
     if node:
         ok = subprocess.run([node, "--check"], input=fj + "\n;" + bj, capture_output=True, text=True, timeout=30)
@@ -14378,6 +14378,113 @@ def test_banner_actions_sit_together_v390():
     check("a banner's second action sits beside the first, no auto margin splitting the space; actions on one line",
           ".dc-wrap .wc + .wc { margin-left: 4px; }" in css and re.search(r"\.dc-wrap \.wc \{[^}]*white-space: nowrap", css)
           and ".dc-wrap.cl-earn { text-align: left; }" in css)
+
+
+def _keyframe_lists(src):
+    """Each keyframe list a script hands animate() (or motion.js's anim()), as text."""
+    out = []
+    for m in re.finditer(r"\b(?:animate|anim)\(\s*[\w.]+\s*,\s*\[|\.animate\(\s*\[", src):
+        i, depth, q = m.end() - 1, 0, None
+        for j in range(i, min(len(src), i + 4000)):
+            c = src[j]
+            if q:
+                if c == q and src[j - 1] != "\\":
+                    q = None
+            elif c in "'\"`":
+                q = c
+            elif c == "[":
+                depth += 1
+            elif c == "]":
+                depth -= 1
+                if not depth:
+                    out.append(src[i:j + 1])
+                    break
+    return out
+
+
+def test_motion_ends_where_it_lands_v390():
+    """3.9.0, the motion audit (Sam, 17 Oct: Crew to Squads "visibly flicks
+    from rectangular to fit the pill"; "everything should be smooth!").
+    tools/motion_audit.js plays every motion with its frames held and
+    measures the last one against the page once it has cleaned up; these
+    are the fixes it led to, so none comes undone: the pick's pill takes
+    the new pick's shape (each corner as drawn) and its colours as it goes,
+    a height move ends at the box's own height to the fraction of a pixel
+    (its padding and border counted, offsetHeight never), a fold ends where
+    taking the box out leaves the page (its border, a flex or grid gap),
+    a glow ends on the box's own ground, a dimmed box keeps its dim, ↻
+    finishes its turn, a cheer's banner and a show fade, the peek grows
+    into its words. And no keyframe list anywhere goes backwards, which a
+    browser refuses without a word."""
+    js = open(os.path.join(REPO, "due_crew", "motion.js"), encoding="utf-8").read()
+    check("audit: still one motion.js, the board's and the site's",
+          js == open(os.path.join(REPO, "site", "public", "motion.js"), encoding="utf-8").read())
+    slide = js[js.index("  function slide(g, from)"):js.index("  // 7: after a tab")]
+    on_in = js[js.index("  function onIn(g)"):js.index("  function slide(g, from)")] if "  function onIn(g)" in js else js
+    check("audit: the pick's pill: each corner as drawn (a radius past half the height draws as half), round at both ends on its way, the new pick's shape at the end",
+          'Math.min(parseFloat(cs[k]) || 0, b.height / 2, b.width / 2) + "px"' in on_in
+          and "borderRadius: from.pill ? from.r" in slide and "borderRadius: to.pill ? to.r" in slide
+          and "kf = [k0, { borderRadius: Math.min(from.h, to.h) / 2 + \"px\", offset: 0.5 }, k1]" in slide, slide[:300])
+    check("audit: the pick's colours are read before anything moves; the one left eases back, the new one's edge turns as the pill arrives",
+          slide.index("var off = cw ?") < slide.index("var a = anim(ind, kf")
+          and "anim(was, [Object.assign({ color: from.color }, edges(from.edge)), w1, { color: off.color, offset: 0.6 }, w2," in slide
+          and "anim(on, [edges(off.edge), n1, n2, edges(to.edge)], { duration: BASE });" in slide
+          and "w1.offset = 0.1; w2[wi] = from.edge; w2.offset = 0.9;" in slide and "n1[ni] = to.edge; n1.offset = 0.1; n2.offset = 0.9;" in slide)
+    heights = re.findall(r"height: ([^,}\]]+)", js)
+    loose = [h for h in heights if "inner(" not in h and h.strip() not in ('"0px"', 'h + "px"', '(from.pill ? from.h : 2) + "px"',
+                                                                         '(to.pill ? to.h : 2) + "px"', 'r.height + "px"', 'z.h + "px"',
+                                                                         'a.height + "px"', 'b.height + "px"')]  # the day ring: border-box
+    check("audit: every height move goes to style.height's own measure (inner, from tall): no padding or border overshoot, no rounding",
+          "function tall(el)" in js and "function inner(el, outer)" in js and not loose
+          and not re.search(r"inner\([^)]*offsetHeight", js) and "h: tall(el)" in js and "snap.h = tall(root)" in js, loose)
+    fold = js[js.index("  function fold(el"):js.index("  // 20: a")]
+    check("audit: a fold ends where taking it out leaves the page: what's left of it (room), and in a grid the neighbour closes the gap",
+          "function room(el, x)" in js and "function close(el, r, a, b, o)" in js and "room(el)" in fold and "close(el, r, 0, 1" in fold
+          and 'borderTopStyle: "none"' in fold and "if (pull) pull.cancel();" in fold
+          and "room(el), pull = close(el, r, 1, 0)" in js and "room(g, true)" in js)
+    check("audit: a glow ends on the box's own ground (my row's tint never blinks off)",
+          'var bg = getComputedStyle(el).backgroundColor || "transparent";' in js and '{ backgroundColor: bg }' in js)
+    check("audit: opacity 1 is 'as it is': a dimmed day keeps its dim at a move's end",
+          "k.opacity === 1 ? Object.assign({}, k, { opacity: op }) : k" in js)
+    check("audit: ↻ finishes its turn: a redraw carries on from where it had got to, and the ten-second stop waits for a turn's end",
+          "snap.spin = ((sa.currentTime || 0) % 800) / 800 * 360" in js and 'rotate(" + snap.spin + "deg)' in js
+          and '"animationiteration"' in js)
+    sj = board.SHOW_JS
+    stop = sj[sj.index("  function stop()"):sj.index("  function end(ms)")]
+    check("audit: a show ended by a click or Esc fades away, takes no more clicks, then goes",
+          "o.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 260" in stop and "o.inert = true" in stop
+          and "a.onfinish = a.oncancel = function () { o.remove(); };" in stop and '"#dc-show[aria-hidden=true] *{pointer-events:none!important}"' in sj)
+    fl = board.flurry_js(["\U0001F389"], "Dre sent cheers", back=("dre", "\U0001F389"))
+    check("audit: a cheer's banner fades in (and drops in, with motion), and a click fades it, once",
+          "banner.animate([{ opacity: 0, transform: 'translateX(-50%) translateY(' + (still ? 0 : -10) + 'px)' }" in fl
+          and "banner.style.pointerEvents = 'none';" in fl and "setTimeout(function() { banner.remove(); }, 300);" in fl)
+    from due_crew import cards as K
+    fj = K.float_js({"text": "x", "accent": ["#2e7d32", "#7cc47f"]})
+    check("audit: the peek's Show grows the bubble into its words, which fade in once there's room; the bar's chip fades its words in",
+          "grow.animate([{width: b0.width + 'px', height: b0.height + 'px'}" in fj and "{opacity: 0, offset: 0.4}" in fj
+          and "{opacity: getComputedStyle(x).opacity}" in K.chip_js({"text": "x", "accent": "#2e7d32"}))
+    bp = open(os.path.join(REPO, "due_crew", "board.py"), encoding="utf-8").read()
+    sthit = bp[bp.index("@keyframes sthit"):].split("\n")[0]
+    check("audit: Settings' found row glows back to its own ground (from, and no to)", "{ from {" in sthit and "to {" not in sthit, sthit)
+    srcs = {"motion.js": js, "show.js": sj, "board.py": bp,
+            "cards.py": open(os.path.join(REPO, "due_crew", "cards.py"), encoding="utf-8").read(),
+            "room_model.py": open(os.path.join(REPO, "due_crew", "room_model.py"), encoding="utf-8").read()}
+    for f in sorted(os.listdir(os.path.join(REPO, "site", "public"))):
+        if f.endswith(".js"):
+            srcs["site/" + f] = open(os.path.join(REPO, "site", "public", f), encoding="utf-8").read()
+    bad, n = [], 0
+    for name, src in srcs.items():
+        for kf in _keyframe_lists(src):
+            offs = [float(x) for x in re.findall(r"\boffset: ([0-9.]+)\b", kf)]
+            n += 1
+            if offs != sorted(offs) or any(o > 1 for o in offs):
+                bad.append((name, kf[:120]))
+    check("audit: no keyframe list anywhere goes backwards (a browser drops the whole move without a word)", n >= 60 and not bad, (n, bad))
+    import shutil
+    import subprocess
+    if shutil.which("node"):
+        r = subprocess.run(["node", "--check", os.path.join(REPO, "tools", "motion_audit.js")], capture_output=True, text=True)
+        check("audit: tools/motion_audit.js is valid JS", r.returncode == 0, r.stderr[:300])
 
 
 def main():

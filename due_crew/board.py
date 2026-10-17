@@ -3354,7 +3354,7 @@ SETTINGS_CSS = """
     #due-crew .st-hits b { font-size: 12.5px; color: var(--dc-ink); }
     #due-crew .st-hits small { font-size: 11px; color: var(--dc-muted); }
     #due-crew .st-hits .st-none { padding: 6px 9px; font-size: 12px; color: var(--dc-muted); }
-    @keyframes sthit { from { background-color: color-mix(in srgb, var(--dc-accent) 26%, transparent); } to { background-color: transparent; } }
+    @keyframes sthit { from { background-color: color-mix(in srgb, var(--dc-accent) 26%, transparent); } }  /* to its own ground, whatever that is */
     @media (prefers-reduced-motion: no-preference) { #due-crew .st-hit { animation: sthit 1.8s ease-out; } }
     @media (prefers-reduced-motion: reduce) { #due-crew .st-hit { outline: 2px solid var(--dc-accent); outline-offset: 1px; } }
 """
@@ -4551,7 +4551,11 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
             banner.appendChild(sub);
             banner.addEventListener('click', function() {
                 pycmd(backCmd);
-                banner.remove();
+                // once: it fades as it goes, no second send
+                banner.style.pointerEvents = 'none';
+                banner.style.transition = 'opacity 0.25s';
+                banner.style.opacity = '0';
+                setTimeout(function() { banner.remove(); }, 300);
             });
         }
         var pips = %s, still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -4579,6 +4583,11 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
             banner.insertBefore(who, title);
         }
         document.body.appendChild(banner);
+        // it comes in as it goes out, a fade (and a drop, with motion); never there in one frame
+        if (banner.animate) {
+            banner.animate([{ opacity: 0, transform: 'translateX(-50%%) translateY(' + (still ? 0 : -10) + 'px)' },
+                            { opacity: 1, transform: 'translateX(-50%%)' }], { duration: 280, easing: 'ease-out' });
+        }
         setTimeout(function() { banner.style.opacity = '0'; }, linger);
         setTimeout(function() { banner.remove(); }, linger + 600);
         if (still) { return; }

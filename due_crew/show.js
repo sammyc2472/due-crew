@@ -12,6 +12,7 @@
   var CSS = [
     "#dc-show{position:fixed;inset:0;z-index:68;pointer-events:none;overflow:hidden}",
     "#dc-show *{box-sizing:border-box}",
+    "#dc-show[aria-hidden=true] *{pointer-events:none!important}",
     ".dcs-pp{position:absolute;display:block;line-height:0}",
     ".dcs-pp svg{width:100%;height:100%;display:block;overflow:visible}",
     ".dcs-pt{position:absolute;left:0;top:0;line-height:1;pointer-events:none;will-change:transform}",
@@ -413,7 +414,14 @@
 
   function stop() {
     T.forEach(clearTimeout); T = []; LOOPS.forEach(function (o) { o.on = false; }); LOOPS = [];
-    if (ov) { ov.remove(); ov = null; }
+    if (ov) {
+      // a click or Esc mid-show: it fades away, never gone in one frame; what's mid-air goes with it
+      var o = ov, a = o.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 260, easing: "ease-out", fill: "forwards" });
+      ov = null;
+      o.setAttribute("aria-hidden", "true"); o.inert = true; o.style.pointerEvents = "none";
+      o.querySelectorAll(".dcs-click").forEach(function (x) { x.classList.remove("dcs-click"); });
+      a.onfinish = a.oncancel = function () { o.remove(); };
+    }
     if (onKey) { document.removeEventListener("keydown", onKey, true); onKey = null; }
     if (onDown) { document.removeEventListener("pointerdown", onDown, true); onDown = null; }
   }

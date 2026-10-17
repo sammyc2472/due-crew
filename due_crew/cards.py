@@ -411,7 +411,13 @@ _CHIP_JS = """(function () {
     s.style.cursor = folded || D.cmd ? 'pointer' : 'default';
   }
   s.onclick = function () {
-    if (folded) { folded = false; said(); if (window.dcBarBalance) { window.dcBarBalance(); } return; }
+    if (folded) {
+      folded = false; said(); if (window.dcBarBalance) { window.dcBarBalance(); }
+      if (t.animate && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+        [].forEach.call(s.children, function (x) { if (x.tagName !== 'svg' && !x.querySelector('svg')) { x.animate([{opacity: 0}, {opacity: getComputedStyle(x).opacity}], {duration: 220, easing: 'ease-out'}); } });
+      }
+      return;
+    }
     if (D.cmd) { try { pycmd('duecrew:' + D.cmd); } catch (e) {} }
   };
   said();
@@ -482,7 +488,16 @@ _FLOAT_JS = """(function () {
     link('Not now', c.mut, false, function () { off(true); });
   }
   function open() {  // Show: the words, and what to do with them; the room under the card grows to match
+    var grow = bub || box, b0 = !still && grow.animate ? grow.getBoundingClientRect() : null;
     folded = false; said();
+    if (b0) {
+      // it grows into its words, which fade in once there's room for them: never the open words in the folded size
+      var b1 = grow.getBoundingClientRect(), was = [grow.style.boxSizing, grow.style.overflow];
+      grow.style.boxSizing = 'border-box'; grow.style.overflow = 'hidden';
+      var g = grow.animate([{width: b0.width + 'px', height: b0.height + 'px'}, {width: b1.width + 'px', height: b1.height + 'px'}], {duration: 240, easing: 'ease-out'});
+      g.onfinish = g.oncancel = function () { grow.style.boxSizing = was[0]; grow.style.overflow = was[1]; };
+      [head, acts].forEach(function (x) { x.animate([{opacity: 0}, {opacity: 0, offset: 0.4}, {opacity: getComputedStyle(x).opacity}], {duration: 320}); });
+    }
     if (pad) { pad.style.height = (box.offsetHeight + 12) + 'px'; } else { check(); }
   }
   said();

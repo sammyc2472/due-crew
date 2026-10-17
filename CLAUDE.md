@@ -236,6 +236,10 @@ clean `main` does the migrations, the API, then the site, then
   with Reduce motion, no row ever slides past another; what leaves is put
   back inert for a moment, and a full draw compares with the page's
   session memory). The logo may move, never change: transforms only.
+  A move ends exactly where the page lands, so nothing jumps when it
+  cleans up (heights by `tall`/`inner`, folds by `room`, never
+  offsetHeight); `tools/motion_audit.js` measures each one's last frame
+  against the settled page (3.9.0).
 - Every `duecrew:` command a page emits needs a handler
   (`test_every_board_command_has_a_handler`), and a new one gets a test
   that sends it through `_on_js` as the board does (3.5.0's Settings went
