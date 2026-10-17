@@ -2313,9 +2313,9 @@ every release that changes how something works.
   times Anki's own engine work for the card), because every widget was
   drawn again at every question though nothing in it had changed. Anki
   keeps the review screen's pages from card to card (it builds them at the
-  first card; the room sounds note's "the review page reloads every card" was
-  wrong), and the
-  top bar's from screen to screen. Now: each page's widgets go as one piece
+  first card; the room sounds note's "the review page reloads every card"
+  was wrong), and the top bar's from screen to screen. Now: each page's
+  widgets go as one piece
   and only when they'd come out different, or the page is new (`app.pages`,
   bumped by `webview_will_set_content`), or something else was drawn there
   (`rooms._draw`/`_DRAWN`); night mode draws them again (`theme_did_change`).
