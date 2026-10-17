@@ -116,6 +116,7 @@ _state = {
     "team_bingo_open": None,  # 3.7.3: the plan whose team bingo card is open in the board's place
     "insights": {},        # 3.8.0: {deck id: {at, view, key}}: Insights, worked out here, never sent
     "you_decks": None,     # 3.8.0: {at, list}: Insights' decks, as its picker shows them
+    "two_tried": False,    # 3.9.1: two buttons, just turned on from the Hard habit line (its Undo shows)
 }
 
 
@@ -200,7 +201,8 @@ def _reset_runtime(keep_sync=False):
                   settings_tab=None, team_view={}, team_draft={},
                   team_bingo_open=None, insights={}, you_decks=None,
                   closet_open=None, closet_new=None,  # 3.8.2: Pip's closet, and what just came for it
-                  wrapped_open=None)  # 3.9.0: your Wrapped, in the board's place
+                  wrapped_open=None,  # 3.9.0: your Wrapped, in the board's place
+                  two_tried=False)  # 3.9.1
     _pending_cheers.clear()
 
 

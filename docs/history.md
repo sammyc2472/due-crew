@@ -2204,3 +2204,26 @@ every release that changes how something works.
   `social.send_from_window` checks it all again: a crewmate on the board,
   one emoji, one line, a doodle `clean_doodle` keeps. The name goes in as
   text, never markup.
+- 3.9.1, two buttons (Sam's picks from the mock "Two Buttons": a switch in
+  Settings plus a link on the Hard habit line; 2, 3 and 4 count as Good;
+  every deck; FSRS off allowed, with a one-line note). Review with Again
+  and Good alone. `two_buttons.py` is the whole of it, on two of Anki's
+  own hooks: `reviewer_will_init_answer_buttons` hands the bar Again (1)
+  and Good (3) out of Anki's four, in its own words (a list that isn't the
+  four, another add-on's, is left as it came), and
+  `reviewer_will_answer_card`, the filter every answer passes through,
+  keys and clicks alike, turns 2 and 4 into 3. A room's break shares that
+  filter and its no still holds (filters chain; a no stays a no). Space
+  and Enter are Good already. Nothing else about scheduling changes; past
+  answers and Undo are untouched. It's a person's way of reviewing, so
+  it's an account key (`two_buttons`, off by default) and follows them to
+  another computer; Reset board leaves it. Settings › Board has a new
+  Reviewing section: "Two buttons", "Again and Good. Hard and Easy hide;
+  2, 3 and 4 count as Good. Phones keep four." (phones don't run desktop
+  add-ons), and with FSRS off in this collection, "Works best with FSRS
+  on." (`_settings_board`'s `fsrs`, from the glue's `_fsrs_on`). Find a
+  setting finds it by hard, easy, buttons. Insights' Hard habit line gains
+  "Try two buttons" (`instwo`): it's on, and the line says "Two buttons
+  are on" with Undo (`instwono`) for as long as the board shows it; with
+  two buttons on otherwise, the line doesn't come (there's no Hard to
+  press). Nothing is sent but the setting, as Settings sends it.
