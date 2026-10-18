@@ -106,7 +106,7 @@ def show_luck_card():
     if store.get("exam") != _today() or mw.state != "deckBrowser":
         return
     name = (client().display_name or "").split(" ")[0]
-    mw.web.eval(board.luck_card_js(name, [(x["name"], x["note"]) for x in store["lines"]]))
+    app.board_eval(board.luck_card_js(name, [(x["name"], x["note"]) for x in store["lines"]]))
     store["shown"] = True
     _save_wrap()
 

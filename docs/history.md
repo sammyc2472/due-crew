@@ -2331,6 +2331,26 @@ every release that changes how something works.
   and the config is read from disk once and again only after a save
   (`app.cfg`; Anki read config.json and meta.json at every call, a few
   times a card). A usual card now sends nothing.
+- 3.9.1, the security review. A reviewer read every input that crosses a
+  trust line (the doodle pipeline, every `duecrew:` command, the Worker's
+  consent and auth, the site, logging, the client's network code) and found
+  them sound but for two. (1) On the way back to Decks, Anki's
+  `DeckBrowser.show()` makes the main view's messages the Decks screen's at
+  once, then builds the Decks page after a background query; leaving review
+  doesn't take the review page down. In that gap a card's own script (or a
+  deck description's, from Overview) could send any board command as the
+  board, past the card-page rules (`room_model.trusted`). Now the Decks
+  page's own commands carry `board.BOARD_KEY`, new each run and written only
+  into that page (`_pycmd`, and `window.dcBK` for what its scripts build);
+  without it a message from the Decks screen gets a card page's rules
+  (`__init__._on_js`). And nothing is drawn on the board till the Decks
+  page is the one going in (`app.board_eval`: `deck_browser_will_render_content`
+  says so, `state_will_change` unsays it), so the key never lands on the
+  page before. (2) The room sounds' web export, `sounds/.+\.ogg`, matched
+  `sounds/../…` (Anki fullmatches it; a card's script can fetch from the
+  media server): any `.ogg` in another add-on's folder was readable. Now
+  `sounds/[^/]+\.ogg`, a file in sounds/ alone. No token or file of ours
+  was reachable (none ends .ogg).
 - 3.9.1, the efficiency run, the Decks screen (the same ask). Measured with
   a crew of thirteen and a full fridge (twelve drawings at 2,000 points):
   every click that redraws the board (a swap) sent 77 KB of script the page

@@ -173,6 +173,32 @@ def on_set_content(*_args):
     pages[0] += 1
 
 
+# 3.9.1 (the security review): whether Anki's main view has the Decks page
+# in it. Anki says "deckBrowser" from the moment it switches, but the page
+# before (a card's, or Overview's with a deck's description, scripts and
+# all) stays up until the Decks page is built; what we draw on the board
+# (its commands carry board.BOARD_KEY) waits for that page.
+_decks = [False]
+
+
+def on_state_will_change(*_args):
+    _decks[0] = False
+
+
+def on_decks_render():
+    _decks[0] = True  # deck_browser_will_render_content: the Decks page goes in now
+
+
+def board_up():
+    return mw.state == "deckBrowser" and _decks[0]
+
+
+def board_eval(js):
+    """mw.web.eval, for what draws on the board: only on the Decks page."""
+    if board_up():
+        mw.web.eval(js)
+
+
 # 2.13: set by __init__ to account.on_change; a config write that changes a
 # setting that follows the account also saves it there
 on_account_change = None

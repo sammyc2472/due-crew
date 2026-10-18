@@ -263,7 +263,12 @@ clean `main` does the migrations, the API, then the site, then
   bar: `_our_page`) only the widgets' keyed commands in
   `room_model.CARD_PAGE_CMDS` are taken
   (`room_model.trusted`); anything that acts for me elsewhere comes from
-  the board, the bars or a dialog.
+  the board, the bars or a dialog. The board's own commands carry
+  `board.BOARD_KEY` (3.9.1: `_pycmd`, or `+ '|' + window.dcBK` in a script
+  that builds one): Anki calls a message the Decks screen's before the page
+  before has gone, and a Decks-screen message without the key gets the card
+  page's rules. Draw on the board with `app.board_eval`, never into a page
+  that isn't the Decks page.
 - A failed request is sent again only when twice can't do a thing twice
   (`api._call`: reads, PUT/PATCH/DELETE, a sync, one that never got out).
   What a person or a request adds on the server has a ceiling.

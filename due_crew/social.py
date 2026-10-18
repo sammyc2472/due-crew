@@ -62,7 +62,7 @@ def _play_cheers():
     if pips and not (doodle and doodle.get("pip")):  # 3.9.0: a show over the whole Decks screen, a different one each time (Sam)
         show, bag = shows.next_show(c.get(shows.BAG_KEY))
         save_cfg(dict(c, **{shows.BAG_KEY: bag}))
-    mw.web.eval(board.flurry_js(emojis, text, back=back, notes=notes, season=season, pips=pips, show=show, doodle=doodle))
+    app.board_eval(board.flurry_js(emojis, text, back=back, notes=notes, season=season, pips=pips, show=show, doodle=doodle))
 
 
 def cheer_choices():
@@ -86,7 +86,7 @@ def _cheer_menu(to_uid):
         return
     c = cfg()
     quick, _any = cheer_choices()
-    mw.web.eval(board.cheer_overlay_js({
+    app.board_eval(board.cheer_overlay_js({
         "uid": to_uid, "name": entry["name"], "emojis": list(quick),
         "pip": board.card_sev(entry, c),  # their Pip, as on their card; None with Pip off
         "pen": board.accent_pair(c.get("accent"))[0],
@@ -262,7 +262,7 @@ def _open_profile(uid):
                         for lb in reversed(labels)]
                     duet = {"run": run, "best": best,
                             "mine_week": mine_week, "theirs_week": theirs_week}
-            mw.web.eval(board.profile_overlay_js({
+            app.board_eval(board.profile_overlay_js({
                 "name": entry["name"], "streak": streak_val,
                 "last_active": entry["last_updated"], "cells": cells,
                 "same_days": same, "decks_line": decks_line, "uid": uid,

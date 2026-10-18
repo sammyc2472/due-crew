@@ -14,6 +14,7 @@ ahead of mine still renders as fresh.
 
 import datetime as _dt
 import html as _html
+import secrets as _secrets
 import json as _json
 import os as _os
 import re as _re
@@ -1017,10 +1018,23 @@ def _css(cfg):
     """
 
 
+# 3.9.1 (the security review): the Decks page's own commands carry this, new
+# each run and written only into that page. Anki calls a message the Decks
+# screen's from the moment it switches to it, while the page before (a
+# card's, or Overview's with a deck's description, scripts and all) is still
+# up; without the key a message gets a card page's rules (__init__._on_js).
+BOARD_KEY = _secrets.token_hex(8)
+
+
+def key_js():
+    """The key, where the page's own scripts add it (window.dcBK)."""
+    return f"<script>window.dcBK={_json.dumps(BOARD_KEY)};</script>"
+
+
 def _pycmd(cmd):
     """Only ids and keys ride in commands; anything else is dropped so a
     server-sourced id could never close the quote it sits in."""
-    return f"pycmd('duecrew:{_re.sub(r'[^A-Za-z0-9:_.-]', '', str(cmd))}'); return false;"
+    return f"pycmd('duecrew:{_re.sub(r'[^A-Za-z0-9:_.-]', '', str(cmd))}|{BOARD_KEY}'); return false;"
 
 
 def crew_views(show_up=False, hidden=frozenset()):
@@ -1195,7 +1209,7 @@ def _solo_html(data):
     # 3.5.0: a friend's, a plan's or a squad's code, or a whole invite
     add = ("var v=(document.getElementById('dc-addcode').value||'').toUpperCase()"
            ".replace(/[^A-Z0-9 \\/]/g,' ').slice(0,200);"
-           "pycmd('duecrew:addcode:'+v);return false;")
+           "pycmd('duecrew:addcode:'+v+'|'+window.dcBK);return false;")
     pending = [str(x) for x in data.get("pending") or []]
     if not pending:
         wait = "Send a friend your invite. Once you’ve added each other, they’re here."
@@ -1371,7 +1385,7 @@ FIND_JS = r"""
         var tab = on ? (on.getAttribute('data-f') || '').split(':')[1] : '';
         if (tab === h.t) { this.land(h.f); return; }
         this.want = {f: h.f, at: Date.now()};
-        pycmd('duecrew:settab:' + h.t);
+        pycmd('duecrew:settab:' + h.t + '|' + window.dcBK);
       },
       land: function (f) {
         var el = document.querySelector('#due-crew [data-f="' + f + '"]') || document.querySelector('#due-crew [data-f^="' + f + '"]');
@@ -1653,7 +1667,7 @@ def _plans_empty_html():
     """3.5.0: the Plans tab with no plan: three ways in."""
     add = ("var v=(document.getElementById('dc-plancode').value||'').toUpperCase()"
            ".replace(/[^A-Z0-9 \\/]/g,' ').slice(0,200);"
-           "pycmd('duecrew:addcode:'+v);return false;")
+           "pycmd('duecrew:addcode:'+v+'|'+window.dcBK);return false;")
     return (f'<div class="dc-pways"><b class="t">Follow a plan</b><div class="ways">'
             f'<div class="way"><b>Got a code?</b><input id="dc-plancode" placeholder="N4AP ULM2" '
             f'onkeydown="if(event.key===\'Enter\'){{{add}}}"><a href="#" onclick="{add}">Follow</a></div>'
@@ -1881,7 +1895,7 @@ def _plan_squad_html(pid, tabs, people=None, cfg=None):
                 f'<a href="#" onclick="{_pycmd(f"planteambingo:{pid}")}">Open</a></div>')
     draft = e(str(tabs.get("draft") or ""), quote=True)
     send = (f"var v=document.getElementById('dc-tqa-{_re.sub(r'[^A-Za-z0-9]', '', pid)}').value;"
-            f"if(v.trim())pycmd('duecrew:planteamask:{pid}:'+encodeURIComponent(v.slice(0,280)));return false;")
+            f"if(v.trim())pycmd('duecrew:planteamask:{pid}:'+encodeURIComponent(v.slice(0,280))+'|'+window.dcBK);return false;")
     iid = f"dc-tqa-{_re.sub(r'[^A-Za-z0-9]', '', pid)}"
     out += (f'<div class="tg">Ask the squad</div><div class="tqa"><input id="{iid}" maxlength="280" '
             f'placeholder="Ask anything&hellip;" value="{draft}" onkeydown="if(event.key===\'Enter\'){{{send}}}">'
@@ -1995,7 +2009,7 @@ def _you_insights(ins):
     ctx = (f'<span class="iexam" title="Your exam date. Your crew sees it for the two weeks before.">'
            f'<a href="#" onclick="var i=this.nextElementSibling;try{{i.showPicker();}}catch(x){{i.classList.remove(\'ixd\');i.focus();}}return false;">{said}</a>'
            f'<input class="ixd" type="date" value="{e(ex)}" aria-label="Exam date" '
-           f'onchange="pycmd(\'duecrew:setexam:\'+(this.value||\'off\'));">{off}</span>')
+           f'onchange="pycmd(\'duecrew:setexam:\'+(this.value||\'off\')+\'|\'+window.dcBK);">{off}</span>')
     head = f'<div class="ihead">{pick}<span class="ictx">{ctx}</span></div>'
     return head + _insights_html(did, ins.get("view") or {})
 
@@ -2189,7 +2203,7 @@ def _ins_map(did, tiles, by, at=(), ways=()):
         opts = "".join(f'<option value="{i}"{" selected" if w.get("on") else ""}>{e(str(w.get("name") or "?"))}</option>'
                        for i, w in enumerate(ways))
         sub = (f'<span>&nbsp;&middot; by <select class="tmby" aria-label="Split by" '
-               f'onchange="pycmd(\'duecrew:insmapby:{int(did)}:\'+this.value);">{opts}</select>'
+               f'onchange="pycmd(\'duecrew:insmapby:{int(did)}:\'+this.value+\'|\'+window.dcBK);">{opts}</select>'
                f'<i class="tmbv" aria-hidden="true">&#9662;</i></span>')
     else:
         sub = "<span>&nbsp;&middot; by topic, now</span>"
@@ -3476,7 +3490,7 @@ def _settings_board(cfg, fsrs=None):
     swatches = _accent_swatches(cfg)
     label = _html.escape(str(cfg.get("crew_label") or "Crew"))
     label_in = (f'<input class="st-in" data-f="label" maxlength="24" size="12" value="{label}" aria-label="Crew name in shares" '
-                f'onchange="pycmd(\'duecrew:setlabel:\'+encodeURIComponent(this.value));">')
+                f'onchange="pycmd(\'duecrew:setlabel:\'+encodeURIComponent(this.value)+\'|\'+window.dcBK);">')
     g = lambda k, d: bool(cfg.get(k, d))  # noqa: E731
     return ('<div class="st-h">What it shows</div><div class="st-box">'
             + _st_row("Due Crew on the Decks screen", _st_switch("show_leaderboard", g("show_leaderboard", True), "Due Crew on the Decks screen"),
@@ -3543,9 +3557,9 @@ def _settings_privacy(cfg):
     away_on = bool(a and b)
     esc = _html.escape
     exam_ctl = (f'<input class="st-in" type="date" data-f="exam" value="{esc(exam)}"{"" if exam else " disabled"} '
-                f'aria-label="Exam date" onchange="if(this.value)pycmd(\'duecrew:setexam:\'+this.value);">'
+                f'aria-label="Exam date" onchange="if(this.value)pycmd(\'duecrew:setexam:\'+this.value+\'|\'+window.dcBK);">'
                 + _st_toggle_cmd("setexam:" + ("off" if exam else "on"), bool(exam), "Exam"))
-    send = "pycmd('duecrew:setaway:'+document.getElementById('st-af').value+':'+document.getElementById('st-at').value);"
+    send = "pycmd('duecrew:setaway:'+document.getElementById('st-af').value+':'+document.getElementById('st-at').value+'|'+window.dcBK);"
     away_ctl = (f'<input class="st-in" type="date" id="st-af" data-f="af" value="{esc(a)}"{"" if away_on else " disabled"} aria-label="Away from" '
                 f'onchange="{send}"><span style="color:var(--dc-muted)">to</span>'
                 f'<input class="st-in" type="date" id="st-at" data-f="at" value="{esc(b)}"{"" if away_on else " disabled"} aria-label="Away until" '
@@ -4683,7 +4697,7 @@ CHEER_WINDOW_JS = r"""
     function native() {
         other.style.display = 'none'; pickIn.style.display = ''; pickIn.value = ''; pickIn.focus();
         window.dcCheerNoNative = function () { unpick(); openDrawer(); };
-        if (typeof pycmd !== 'undefined') { pycmd('duecrew:emojipicker'); } else { window.dcCheerNoNative(); }
+        if (typeof pycmd !== 'undefined') { pycmd('duecrew:emojipicker|' + window.dcBK); } else { window.dcCheerNoNative(); }
     }
     function unpick() { pickIn.style.display = 'none'; other.style.display = ''; }
     pickIn.addEventListener('input', function () {
@@ -4946,7 +4960,7 @@ CHEER_WINDOW_JS = r"""
     function send() {
         var p = { to: V.uid, emoji: emoji, note: note.value.replace(/\s+/g, ' ').trim().slice(0, NOTE), doodle: doodle() };
         close();
-        if (typeof pycmd !== 'undefined') { pycmd('duecrew:cheersend:' + encodeURIComponent(JSON.stringify(p))); }
+        if (typeof pycmd !== 'undefined') { pycmd('duecrew:cheersend:' + encodeURIComponent(JSON.stringify(p)) + '|' + window.dcBK); }
     }
     go.addEventListener('click', send);
     no.addEventListener('click', close);
@@ -5130,7 +5144,7 @@ window.dcFridge = window.dcFridge || function () {
                 var b = edges(box), x = parseFloat(el.style.left), s = x + nw / 2 < (b.l + b.r) / 2 ? 'l' : 'r';
                 el.dataset.s = s; el.dataset.x = Math.round(x - b[s]); el.dataset.y = Math.round(parseFloat(el.style.top));
                 if (typeof pycmd !== 'undefined') {
-                    pycmd('duecrew:fridgemove:' + el.dataset.k + ':' + s + ':' + el.dataset.x + ':' + el.dataset.y);
+                    pycmd('duecrew:fridgemove:' + el.dataset.k + ':' + s + ':' + el.dataset.x + ':' + el.dataset.y + '|' + window.dcBK);
                 }
             }
             el.addEventListener('pointermove', move);
@@ -5301,7 +5315,7 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
             sub.style.cssText = 'font-size:11px;font-weight:400;opacity:0.7;margin-top:2px;';
             banner.appendChild(sub);
             banner.addEventListener('click', function() {
-                pycmd(backCmd);
+                pycmd(backCmd + '|' + window.dcBK);
                 // once: it fades as it goes, no second send
                 banner.style.pointerEvents = 'none';
                 banner.style.transition = 'opacity 0.25s';
@@ -5600,7 +5614,7 @@ def stranger_card_js(info):
         if (actCmd) {
             act.addEventListener('click', function() {
                 back.remove();
-                if (typeof pycmd !== 'undefined') { pycmd(actCmd); }
+                if (typeof pycmd !== 'undefined') { pycmd(actCmd + '|' + window.dcBK); }
             });
         }
         var close = document.createElement('button');
@@ -5634,7 +5648,7 @@ def stranger_card_js(info):
                     'background:none;color:inherit;opacity:0.85;border:1px solid ' + dcLine + ';';
                 extra.addEventListener('click', function() {
                     back.remove();
-                    if (typeof pycmd !== 'undefined') { pycmd(pair[1]); }
+                    if (typeof pycmd !== 'undefined') { pycmd(pair[1] + '|' + window.dcBK); }
                 });
                 tools.appendChild(extra);
             });
@@ -5709,7 +5723,7 @@ def luck_card_js(name, lines):
             'background:' + accent + ';color:' + accentInk + ';border:1px solid transparent;font-weight:600;';
         thanks.addEventListener('click', function() {
             back.remove();
-            if (typeof pycmd !== 'undefined') { pycmd('duecrew:luckthanks'); }
+            if (typeof pycmd !== 'undefined') { pycmd('duecrew:luckthanks|' + window.dcBK); }
         });
         var spacer = document.createElement('div');
         spacer.style.flex = '1';
@@ -5962,7 +5976,7 @@ def profile_overlay_js(profile):
         var act = btn(%s, %s);
         act.addEventListener('click', function() {
             back.remove();
-            if (typeof pycmd !== 'undefined') { pycmd(%s); }
+            if (typeof pycmd !== 'undefined') { pycmd(%s + '|' + window.dcBK); }
         });
         var close = btn('Close', false);
         close.addEventListener('click', function() { back.remove(); });
@@ -6228,7 +6242,7 @@ DUE_JS = r"""
         var r = inp.getBoundingClientRect();
         dcMotion.say({add: inp.value.trim().slice(0, 16), when: w, from: {x: r.left, y: r.top}});
       }
-      pycmd('duecrew:dueadd:' + w + ':' + (this.raw ? 1 : 0) + ':' + encodeURIComponent(inp.value));
+      pycmd('duecrew:dueadd:' + w + ':' + (this.raw ? 1 : 0) + ':' + encodeURIComponent(inp.value) + '|' + window.dcBK);
       this.raw = false;
       inp.value = '';  // sent: a redraw doesn't put it back (swap_js keeps a half-typed one)
     },

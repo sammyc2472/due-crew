@@ -458,6 +458,8 @@ def _rerender():
 
 
 def _on_render(deck_browser, content):
+    app.on_decks_render()
+    content.stats += board.key_js()  # 3.9.1: the page's own scripts add the board's key to what they send
     try:
         c = cfg()
         if _state.get("settings_tab"):
@@ -649,7 +651,8 @@ def _board_js(drawn=False):
 
 def _on_did_render(deck_browser):
     keep, fridge = _board_js(drawn=True)
-    mw.web.eval(keep + _arrive_js() + (board.wrapped_js() if _state.get("wrapped_open") else "")
+    mw.web.eval("window.dcBK=%s;" % board._json.dumps(board.BOARD_KEY)  # 3.9.1: as the page's own script set it
+                + keep + _arrive_js() + (board.wrapped_js() if _state.get("wrapped_open") else "")
                 + fridge)  # 3.9.1: the doodles placed around the board, and draggable
     _play_cheers()
     if _state.get("plans_midday") and not _closing:
@@ -824,12 +827,20 @@ def _on_js(handled, message, context):
     card_page = False
     if message.startswith("duecrew:"):
         # the reviewer's page runs the card's own script too: from there only
-        # the widgets' keyed buttons count, never a bare command
+        # the widgets' keyed buttons count, never a bare command. 3.9.1 (the
+        # security review): the Decks screen's too, unless its page's own key
+        # comes with it: on the way back to Decks, Anki sends the page
+        # before's messages (a card's, a deck description's) as the Decks
+        # screen's until the Decks page is built
         from .room_model import trusted
-        card_page = not _our_page(context)
-        message, ok = trusted(message, card_page)
-        if not ok:
-            return (True, None)
+        body, sep, key = message.rpartition("|")
+        if isinstance(context, DeckBrowser) and sep and key == board.BOARD_KEY:
+            message, card_page = body, False
+        else:
+            card_page = isinstance(context, DeckBrowser) or not _our_page(context)
+            message, ok = trusted(message, card_page)
+            if not ok:
+                return (True, None)
     if message.startswith("duecrew:knows"):
         # 3.2: the chip in the reviewer's bottom bar, or its card above it
         try:
@@ -1050,7 +1061,7 @@ def _swap(c, focus=None):
     if focus:
         js += ("(function(){var f=document.querySelector('#due-crew [data-f=\"%s\"]');"
                "if(f){f.focus({preventScroll:true});}})();" % re.sub(r"[^A-Za-z0-9:_-]", "", focus))
-    mw.web.eval(js)
+    app.board_eval(js)  # 3.9.1: never into the page before the Decks page (it'd carry the board's key)
 
 
 def open_auth():
@@ -1601,7 +1612,7 @@ def _on_profile_open():
         _tools_menu()
         mw.addonManager.setConfigAction(__name__, open_settings)
         # 3.9.1: the room sounds' recordings, for the top bar's page (rooms._sound_files)
-        mw.addonManager.setWebExports(__name__, r"sounds/.+\.ogg")
+        mw.addonManager.setWebExports(__name__, r"sounds/[^/]+\.ogg")
     _reset_runtime()          # profile switch: nothing carries over
     with _lock:
         _fetching = False     # the last profile's refresh can't commit here
@@ -1816,6 +1827,7 @@ if hasattr(gui_hooks, "top_toolbar_did_redraw"):  # Anki 2.1.54+
     gui_hooks.top_toolbar_did_redraw.append(rooms.on_toolbar)
 # 3.9.1 (the efficiency run): a page sent once is sent again only on a new page
 gui_hooks.webview_will_set_content.append(app.on_set_content)
+gui_hooks.state_will_change.append(app.on_state_will_change)  # 3.9.1: the Decks page isn't up till it renders
 if hasattr(gui_hooks, "theme_did_change"):
     gui_hooks.theme_did_change.append(rooms.on_theme)  # the widgets pick their colours as they're drawn
 

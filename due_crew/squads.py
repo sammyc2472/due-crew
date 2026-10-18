@@ -138,7 +138,7 @@ def _open_squad_card(uid):
     live = sorted([r for r in rows if r["day"] == view.get("day")],
                   key=lambda r: r[field] if r[field] is not None else -1, reverse=True)
     rank = next((i + 1 for i, r in enumerate(live) if r["user_id"] == uid), None)
-    mw.web.eval(board.stranger_card_js({
+    app.board_eval(board.stranger_card_js({
         "uid": uid, "name": row["name"], "emoji": row.get("emoji") or "",
         "sev": board.card_sev({"name": row["name"]}, cfg()),  # 3.8.22: a plain Pip, as on the Squads tab
         "show_up": bool(cfg().get("show_up")), "week": row.get("week"),
