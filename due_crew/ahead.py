@@ -206,11 +206,14 @@ def starts(rate, wd0, left, h=H, stop=None, today_done=0, plan=None, pool=None):
     (pace), today less what I've started already, never more than `left`
     in all (the deck's new cards, unlocked or not). stop: (first, last) day
     with none. plan: {day: cards} a plan opens on its dates, started that
-    day; then only the `pool` already unlocked goes at my pace."""
+    day; then only the `pool` already unlocked goes at my pace. A plan's
+    date inside a stop still opens: its cards join the pool, for after."""
     out, budget = [0.0] * h, float(max(0, left))
     drain = float(max(0, pool if plan is not None and pool is not None else left))
     for d in range(h):
         if stop and stop[0] <= d <= stop[1]:
+            if plan is not None:  # its date still opens; the cards wait, unlocked, for after
+                drain += float((plan or {}).get(d) or 0)
             continue
         n = rate[(wd0 + d) % 7] - (today_done if d == 0 else 0)
         n = max(0.0, min(n, drain))

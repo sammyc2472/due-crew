@@ -2737,6 +2737,11 @@ every release that changes how something works.
   week and 20 cards more, one line: "Reviews in Big Step 1 climb to about 420
   a day by Mon 12 Oct · this week 310", See ahead (You › Insights on it), ×
   for a week (`ahead_line_x`). A redraw only when there's a line.
+  On Sam's own deck (18 Oct, a plan, a batch of 1,295 the week before):
+  a plan's date inside a stop still opens and its cards wait in the
+  unlocked pile for after (`ahead.starts`), where the forecast had dropped
+  them; the board's line says its number as the chart does ("about 1,030",
+  not "1,026").
 - 3.9.2, leeches, one button a card (S1-A, S2-A). Insights' line counts the
   leeches Anki stopped showing me and the cards one miss from it (the next
   lapse reaches the deck's leech threshold, or a half of it past, and the
@@ -2752,7 +2757,9 @@ every release that changes how something works.
   (`leech_out`). Bring back unsuspends with the leech tag off, schedule kept;
   Learn it fresh is Anki's Reset, lapses from zero; each one undo step. Who
   has it down and their tips are the stuck list's, back with each sync: no
-  new request.
+  new request. A leech lapsed (`c.lapses > 0`, as Recover leeches has it):
+  Anki tags the note, so on Sam's deck a sibling the shared deck ships
+  suspended, never answered, counted as one.
 - 3.9.2, the exam's scope (C1-A): my exam covers the cards I started since
   my last exam, when it was in the last 10 weeks, else the whole deck; an
   exam is kept once it's passed (`exam_last`, an account key, set when a new
@@ -2768,7 +2775,9 @@ every release that changes how something works.
   it was (`team.batch_name`: the deepest tag a third of it shares that
   isn't on nearly every card I've started, "This week · Cardio · Pharm"),
   shaded by what I know now, opening into its topics; Browse, its cards.
-  Worked out only when picked (one more read of the deck's log).
+  Worked out only when picked (one more read of the deck's log). A long
+  name ends on a whole word with an ellipsis (`team.clip`; Sam's deck had
+  "Reproductive Physiolo").
 - 3.9.2, the words three students tripped on (F1-A): "never passed" and
   "lapsed", as Anki's Stats say them; a map tile's % with its cards ("66% ·
   190") and a key that says what the % is and what the bar is; "86% right ·

@@ -99,11 +99,13 @@ def _limits(col, dids, cache):
 
 def counts(col, deck):
     """(gone, near) for Insights' line: suspended leeches, and cards one
-    miss from Anki suspending them; none I left out."""
+    miss from Anki suspending them; none I left out. A leech lapsed: Anki
+    tags the note, so a sibling a big shared deck ships suspended, never
+    answered, carries the tag without being one (Sam's deck, 3.9.2)."""
     out = _out()
     gone = [c for c in col.db.list(
         f"SELECT c.id FROM cards c JOIN notes n ON n.id = c.nid WHERE c.id IN ({deck}) "
-        f"AND c.queue = -1 AND (' ' || lower(n.tags) || ' ') LIKE '% leech %'") if c not in out]
+        f"AND c.queue = -1 AND c.lapses > 0 AND (' ' || lower(n.tags) || ' ') LIKE '% leech %'") if c not in out]
     near = _near(col, deck, out)
     return len(gone), len(near)
 
@@ -124,7 +126,7 @@ def view(col, did, deck, since=None):
     sday = int(getattr(col.sched, "today", 0) or 0)
     gone_ids = [int(c) for c in col.db.list(
         f"SELECT c.id FROM cards c JOIN notes n ON n.id = c.nid WHERE c.id IN ({deck}) "
-        f"AND c.queue = -1 AND (' ' || lower(n.tags) || ' ') LIKE '% leech %'") if int(c) not in out]
+        f"AND c.queue = -1 AND c.lapses > 0 AND (' ' || lower(n.tags) || ' ') LIKE '% leech %'") if int(c) not in out]
     near_ids = _near(col, deck, out)
     ids = gone_ids + near_ids
     if not ids:

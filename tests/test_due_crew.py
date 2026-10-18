@@ -8063,7 +8063,7 @@ def test_insights_379():
             fakes.add_review(conn, at(d), ease=3, rtype=0 if d == 10 else 1, cid=400 + i, time_ms=18000)
     for i in range(20):  # tomorrow's date: still locked
         fakes.add_card(conn, 500 + i, did=10, queue=-1, tags="Step1::Later")
-    fakes.add_card(conn, 700, did=10, ctype=2, queue=-1, tags="Step1::Renal leech")  # a leech Anki set aside
+    fakes.add_card(conn, 700, did=10, ctype=2, queue=-1, tags="Step1::Renal leech", lapses=8)  # a leech Anki set aside
     for i in range(25):  # another deck, reviewed less: French, its cards in subdecks and untagged
         fakes.add_card(conn, 800 + i, did=21 if i < 13 else 22, ctype=2, queue=2, ivl=5, due=1040)
         fakes.add_review(conn, at(3), ease=1 if i < 13 else 3, cid=800 + i)
@@ -16603,6 +16603,9 @@ def test_reviews_ahead_392():
     check("ahead: the board's line: the next two weeks' busiest three days a quarter over this week, and 20 more",
           A.climb([100] * 7, [0] + [100] * 5 + [140, 150, 145] + [100] * 33) == (7, 145)
           and A.climb([100] * 7, [0] + [120] * 41) is None and A.climb([10] * 7, [0] + [20] * 41) is None and A.climb([], [5] * 42) is None)
+    held = A.starts([10.0] * 7, 0, 1000, h=14, stop=(0, 2), plan={1: 50}, pool=0)
+    check("ahead: a plan's date inside a stop still opens; its cards start after, at my pace (Sam's deck)",
+          held[:3] == [0.0, 0.0, 0.0] and held[3:8] == [10.0] * 5 and sum(held) == 50, held)
     check("ahead: numbers as the chart says them", [A.r(x) for x in (7.4, 42, 187, 1234)] == [7, 40, 185, 1230])
     # ---- the track record: forecast from past days, against what really happened ----
     res = A.backtest(rows, first, now)
@@ -16658,6 +16661,7 @@ def test_reviews_ahead_392():
     rh = board.render({"entries": [], "labels": ["2026-09-01"], "tomorrow": "", "pending": []}, {}, 0, ahead={"did": 10, "name": "<i>Spanish", "day": "2026-09-08", "n": 330, "week": 250})
     check("board: the line when reviews climb, the deck escaped, to Insights, put away for a week",
           "Reviews in <b>&lt;i&gt;Spanish</b> climb to about <b>330</b> a day by Tue 8 Sep &middot; this week 250" in rh
+          and "about <b>1,030</b> a day" in board.ahead_line({"did": 1, "name": "x", "day": "2026-10-19", "n": 1026.4, "week": 780})
           and "duecrew:youins:10" in rh and "duecrew:insaheadx:10" in rh, rh[:3000])
     # ---- the glue, on a collection ----
     conn = sqlite3.connect(":memory:")
@@ -16795,6 +16799,8 @@ def test_leeches_392():
         conn.execute("UPDATE notes SET sfld = ? WHERE id = ?", (sf, cid))
         fakes.add_review(conn, at(40), ease=3, cid=cid, rtype=0, time_ms=44000 if cid == 103 else 8000)
         fakes.add_review(conn, at(ago), ease=1, cid=cid, time_ms=44000 if cid == 103 else 8000)
+    # Sam's deck: Anki tags the note; a sibling the shared deck ships suspended, never answered, isn't a leech
+    fakes.add_card(conn, 107, did=10, ctype=0, queue=-1, tags="Spanish::Ser_vs_estar leech", lapses=0)
     col = fakes.FakeCol(conn, cut)
     col.decks = fakes.FakeDecks({10: "Spanish"})
     col.get_card = lambda cid: types.SimpleNamespace(id=cid, odid=0, did=10, note=lambda: types.SimpleNamespace(
@@ -16943,6 +16949,14 @@ def test_scope_map_and_words_392():
               ("before", "Before 24 Aug · Renal · Physio", 20, 60), ("new", "Not started", 10, None)]
           and tiles[0]["find"] == {"cids": list(range(40))}, [(t["key"], t["name"], t["n"], t["know"]) for t in tiles])
     first2 = {c: 20 + (c % 3) for c in range(60)}
+    longw = {c: ["Big::#Orig::Zanki_Reproductive::Reproductive_Physiology_and_Embryology_Lecture_Notes"] if c < 40
+             else ["Big::#Orig::Zanki_Biochemistry::Molecular"] for c in range(80)}
+    lt = T.started_tiles({c: 30 if c < 40 else 2 for c in range(80)}, longw, {c: 0.9 for c in range(80)}, set(range(80)),
+                         "2026-10-18")[-1]["name"]
+    check("map by start: a long name ends on a whole word, with an ellipsis (Sam's 'Reproductive Physiolo')",
+          lt.endswith("…") and len(lt) <= T.NAME_MAX and not lt[:-1].endswith((" ", ",", "·"))
+          and T.clip("Before 24 Aug · Zanki Biochemistry · Molecular, Cellular, and Biochemical Basis") ==
+          "Before 24 Aug · Zanki Biochemistry · Molecular, Cellular…" and T.clip("short") == "short", lt)
     check("map by start: a week two weeks back by its days", T.started_tiles(first2, {}, {}, set(range(60)), "2026-10-18")[0]["name"]
           == "28 Sep–4 Oct", T.started_tiles(first2, {}, {}, set(range(60)), "2026-10-18")[0]["name"])
     mixed = {c: ["Big::Cardio::Pharm" if c % 2 else "Big::Renal::Physio"] for c in range(40)}

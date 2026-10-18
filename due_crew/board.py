@@ -4492,7 +4492,7 @@ def ahead_line(a):
     did = int(a["did"])
     day = _ins_dname(a.get("day"), long=True)
     return (f'<div class="dc-wrap ah-line"><span>&#128197;</span>'
-            f'<span>Reviews in <b>{_html.escape(str(a.get("name") or ""))}</b> climb to about <b>{int(a["n"]):,}</b> a day by {day}'
+            f'<span>Reviews in <b>{_html.escape(str(a.get("name") or ""))}</b> climb to about <b>{_ins_r(a["n"])}</b> a day by {day}'
             f' &middot; this week {int(a.get("week") or 0):,}</span>'
             f'<a class="wc" href="#" onclick="{_pycmd(f"youins:{did}")}">See ahead</a>'
             f'<a class="wx" href="#" title="Not this week" onclick="{_pycmd(f"insaheadx:{did}")}">&times;</a></div>')

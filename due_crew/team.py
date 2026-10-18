@@ -447,7 +447,18 @@ def batch_name(cids, tags_of, wide):
     segs = [x for x in spell[best[1]] if not x.startswith(("#", "^", "$", "!"))] or spell[best[1]][-1:]
     # two levels read better than one ("Cardio · Pharm", not "Pharm") under a root and a resource
     words = [P._word(x) for x in (segs[-2:] if len(spell[best[1]]) >= 3 and len(segs) >= 2 else segs[-1:])]
-    return " · ".join(w for w in words if w)[:NAME_MAX - 18]
+    return clip(" · ".join(w for w in words if w), NAME_MAX - 18)
+
+
+def clip(s, n=NAME_MAX):
+    """A name n long at most, ending on a whole word, with an ellipsis when
+    cut ("Reproductive Physiolo" was one)."""
+    s = str(s)
+    if len(s) <= n:
+        return s
+    cut = s[:n - 1]
+    sp = cut.rfind(" ")
+    return (cut[:sp] if sp >= n // 2 else cut).rstrip(" ,·-–+&") + "…"
 
 
 def started_tiles(first_of, tags_of, know, active, today):
@@ -479,7 +490,7 @@ def started_tiles(first_of, tags_of, know, active, today):
     def tile(key, when, cids):
         started = [know[c] for c in cids if c in know]
         what = batch_name(cids, tags_of, wide)
-        return {"key": key, "name": (f"{when} · {what}" if what else when)[:NAME_MAX], "n": len(cids),
+        return {"key": key, "name": clip(f"{when} · {what}" if what else when), "n": len(cids),
                 "started": len(started), "know": int(round(100 * sum(started) / len(started))) if started else None,
                 "find": {"cids": sorted(cids)}, "_batch": sorted(cids), "_tags": {c: tags_of.get(c) or [] for c in cids}}
     for w in sorted(groups):
