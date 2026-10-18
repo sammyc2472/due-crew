@@ -429,6 +429,20 @@ _LEECH = {"n_gone": 14, "n_near": 9, "gone": [
               "tip": [{"name": "Dre", "text": "Same meaning; hubiera is the one you'll hear."}], "knows": ["Dre"], "susp": False},
              {"cid": 5, "front": "ojalá que yo […] (tener) más tiempo", "topic": "Subjunctive", "lapses": 7, "secs": 14,
               "due": 3, "tip": [], "knows": [], "susp": False}]}
+from due_crew import team as _TM  # noqa: E402
+_TAGS = {c: ["Big::#Systems::" + ("Cardio::Pharm" if c < 260 else "Cardio::Physiology" if c < 560 else "Renal::Physiology"
+                                  if c < 760 else "Pulm::Pathology")] for c in range(1000)}
+_FIRST = {c: (2 if c < 260 else 9 if c < 560 else 16 if c < 760 else 30 + c % 40) for c in range(1000)}
+_KNOW = {c: (0.93 if c % 7 else 0.55) if c < 560 else (0.71 if c % 3 else 0.4) for c in range(1000)}
+_STARTED = _TM.started_tiles(_FIRST, _TAGS, _KNOW, set(range(1180)), "2026-10-18")
+sections.append("<h3>3.9.2: the map by when you started them, and the exam's scope in its box</h3>" + board.render(
+    DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
+    you=_YOU("insights", insights={"decks": _DECKS, "did": 10, "exam": "2026-10-14", "plan": None,
+                                   "view": dict(_INS, rows=[], ahead=None, behind=0, fsrs=None, map=_STARTED, map_by="fsrs",
+                                                aim={"day": "2026-10-13", "name": "Your exam", "in": 6, "scoped": False, "kind": "exam",
+                                                     "since": "2026-09-05", "since_why": "last", "since_n": 1240, "since_pick": ""},
+                                                map_ways=[{"key": "s", "name": "Systems", "on": False},
+                                                          {"key": "~start", "name": "When you started them", "on": True}])})))
 sections.append("<h3>3.9.2: Insights' leeches line</h3>" + board.render(
     DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
     you=_YOU("insights", insights={"decks": _DECKS, "did": 20, "exam": "2026-10-14", "plan": None,

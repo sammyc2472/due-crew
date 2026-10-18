@@ -683,7 +683,7 @@ def _css(cfg):
       -webkit-box-orient: vertical; overflow-wrap: anywhere; }}
     #due-crew .tmap .tm b {{ font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }}
     #due-crew .tmap .tm b small {{ font-weight: 500; font-size: 10.5px; opacity: .85; }}
-    #due-crew .sw.bar {{ width: 12px; height: 3px; background: var(--dc-muted); opacity: .6; }}
+    #due-crew .sw.bar {{ width: 14px; height: 3px; border-radius: 1px; background: var(--dc-ink); opacity: .55; }}
     #due-crew .tmap .tm {{ position: relative; }}
     #due-crew .tmap .tm .tmb {{ position: absolute; left: 0; bottom: 0; height: 3px; background: currentColor; opacity: .45; }}
     #due-crew .tm.sn, #due-crew .sw.sn {{ background: var(--dc-well); color: var(--dc-muted); }}

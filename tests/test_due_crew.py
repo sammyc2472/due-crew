@@ -9652,7 +9652,8 @@ def test_builder_work_and_suggestions_v381():
         "console.log(JSON.stringify({"
         " rp: Work.spread(doc, doc.units[0], 212, all), mon: w.get('2026-10-12').n, sum: sum(w), sum5: sum(w5),"
         " sat: w5.get('2026-10-17') || null, rx: Work.spread(doc, doc.units[1], 190, all),"
-        " over: Work.over(w, 20), none: Work.over(w, 0),"
+        " over: Work.over(w, 20), none: Work.over(w, 0), rv: Reviews.weeks(w), pk: Reviews.peak(Reviews.weeks(w)),"
+        " ab: [7.4, 42, 187, 1234].map(Reviews.about), curve: Reviews.CURVE,"
         " s1: Suggest.tags('Renal physiology', tree), s2: Suggest.tags('Cardiac physiology', tree),"
         " s3: Suggest.tags('Lecture 14: Herpes viruses', tree), s4: Suggest.tags('Read: Chapter 3', tree),"
         " s5: Suggest.tags('Arrhythmia', tree, (p) => p.includes('Cardio')), s6: Suggest.tags('Diuretics', tree),"
@@ -9672,6 +9673,13 @@ def test_builder_work_and_suggestions_v381():
     check("work: a due date makes the window; every card counted once", [d for d, _n in r["rx"]] == ["2026-10-19", "2026-10-20"]
           and r["sum"] == 212 + 190 + 288 and r["sum5"] == 212 + 190 + 288, str(r["rx"]))
     check("work: a day off asks nothing", r["sat"] is None)
+    from due_crew import ahead as AH
+    check("3.9.2 reviews by week: the builder's curve is the add-on's typical one (the twins)",
+          r["curve"] == list(AH.GENERIC[0]), r["curve"][:5])
+    rv = r["rv"]
+    check("3.9.2 reviews by week: from the first date, four weeks past the last; the busiest named, as the add-on rounds",
+          rv[0]["a"] == "2026-10-12" and rv[-1]["a"] >= "2026-11-23" and r["pk"]["n"] == max(x["n"] for x in rv)
+          and 0 < r["pk"]["n"] < 212 + 190 + 288 and r["ab"] == ["7", "40", "185", "1,230"], str(rv[:3]) + str(r["pk"]))
     check("work: days over the pace come as runs, with their most", r["over"][0]["a"] == "2026-10-12"
           and r["over"][0]["b"] >= "2026-10-18" and r["over"][0]["top"] >= 31 and r["none"] == [], str(r["over"]))
     check("suggest: every word of the name, one in the tag's last part",

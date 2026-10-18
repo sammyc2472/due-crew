@@ -179,6 +179,41 @@ const Work = (() => {
   return { spread, map, over };
 })();
 
+/** 3.9.2 (Sam's pick R3-A): the reviews a plan's dates bring, a day, by
+ *  week: each day's new cards (Work's, the work a day asks) on a typical
+ *  card's next six weeks (the share of cards seen k days after they start:
+ *  simulated learners on FSRS's defaults at 90%, ahead.GENERIC's cards; the
+ *  suite checks the two are the same). The new cards themselves aside.
+ *  Cards, never minutes: the builder has no one's log. */
+const Reviews = (() => {
+  const CURVE = [1.0, 0.336, 0.15, 0.338, 0.446, 0.27, 0.1, 0.062, 0.104, 0.173, 0.133, 0.066, 0.054, 0.058, 0.058, 0.049, 0.046, 0.077, 0.174, 0.22, 0.134, 0.07, 0.065, 0.065, 0.083, 0.08, 0.049, 0.036, 0.04, 0.044, 0.047, 0.045, 0.04, 0.039, 0.038, 0.033, 0.029, 0.029, 0.032, 0.032, 0.034, 0.037];
+  /** [{a: the week's first day, n: reviews a day}], from the first date to four weeks past the last */
+  function weeks(work) {
+    const ds = [...work.keys()].sort();
+    if (!ds.length) return [];
+    const per = new Map();
+    for (const [d, e] of work) {
+      for (let k = 1; k < CURVE.length; k++) { const x = addDays(d, k); per.set(x, (per.get(x) || 0) + e.n * CURVE[k]); }
+    }
+    const out = [], end = addDays(ds[ds.length - 1], 28);
+    for (let a = ds[0]; a <= end; a = addDays(a, 7)) {
+      let n = 0;
+      for (let i = 0; i < 7; i++) n += per.get(addDays(a, i)) || 0;
+      out.push({ a, n: n / 7 });
+    }
+    return out;
+  }
+  /** the busiest week, {wk: from 1, n}, or null */
+  function peak(ws) {
+    let best = null;
+    ws.forEach((w, i) => { if (!best || w.n > best.n) best = { wk: i + 1, n: w.n }; });
+    return best;
+  }
+  /** a number as the add-on's chart says it (ahead.r): never more exact than it is */
+  const about = (x) => (x < 30 ? Math.round(x) : x < 200 ? Math.round(x / 5) * 5 : Math.round(x / 10) * 10).toLocaleString();
+  return { CURVE, weeks, peak, about };
+})();
+
 /** 3.8.1 (plans, rethought): the deck's tags a date's name points at. "Renal
  *  physiology" finds #Videos::Renal::Physiology: every word of the name in
  *  the tag's path, one of them in its last part. Words, not card text: the
@@ -1482,6 +1517,17 @@ async function builder(id) {
       h("span", { class: "row" },
         big ? h("button", { class: "ghost", onclick: () => { picked = u.opens; splitting = { u, key: big }; sideTab = "day"; draw(); } }, `Split ${chipLabel(big)}`) : null,
         till > last ? h("button", { class: "ghost", onclick: () => { u.due = till; mark(); draw(); } }, `Give it till ${pretty(till)}`) : null));
+  }
+
+  /** 3.9.2 (Sam's pick R3-A): what following the plan asks later, in reviews:
+   *  its busiest week, then each week's, a typical card's (Reviews). */
+  function reviewsNote() {
+    const ws = Reviews.weeks(workMap());
+    const p = Reviews.peak(ws);
+    if (!p || p.n < 5) return null;
+    return h("div", { class: "rnote", title: "A typical card's reviews over its first six weeks, new cards aside. A follower's own will differ." },
+      h("span", {}, "About ", h("b", {}, Reviews.about(p.n)), ` reviews a day by week ${p.wk}`),
+      h("span", { class: "muted" }, "Week by week: " + ws.slice(0, 16).map((w) => Reviews.about(w.n)).join(" · ")));
   }
 
   /** 3.8.1 (plans, rethought): a named date's suggestions: the deck's tags its
@@ -2830,8 +2876,27 @@ async function builder(id) {
           calMenu(plan.code),
           h("button", { class: "linkish", onclick: () => { tab = "calendar"; view = "print"; printOpt.poster = true; shareOpen = false; draw(); } }, "A poster for the class, with a QR code")]
           : h("p", { class: "muted small" }, "Only your squad can follow it. They'll find it in Anki."),
+        nextYear(),
         h("span", { class: "lbl" }, "Planning it with"),
         people()));
+  }
+
+  /** 3.9.2 (Sam's pick C3-A): next year's class gets this plan: a copy of
+   *  my own with every date 52 weeks on, so each keeps its weekday. */
+  function nextYear() {
+    const first = [...doc.units.map((u) => u.opens), ...(doc.events || []).map((e) => e.day)].filter(Boolean).sort()[0];
+    if (!first) return null;
+    const start = addDays(first, 364);
+    const st = h("span", { class: "status small", role: "status" });
+    const b = h("button", { class: "linkish", title: `Its first date on ${pretty(start)}, every date 52 weeks on`, onclick: async () => {
+      b.disabled = true; st.className = "status small"; st.textContent = "Copying…";
+      try { const mine = await api("POST", `/plans/${plan.id}/copy`, { start }); go(`/plans/${mine.id}`); }
+      catch (err) {
+        b.disabled = false; st.className = "status small bad";
+        st.textContent = err.body?.error === "too_many_plans" ? "You have 50 plans. Delete one first." : err.status === 429 ? "That's a lot of new plans. Try again in an hour." : "That didn't work. Try again.";
+      }
+    } }, "Copy for next year");
+    return h("div", { class: "row" }, b, st);
   }
 
   /** The people who write the plan. 3.8.1: the owner asks co-authors in Settings, where each one
@@ -2899,7 +2964,8 @@ async function builder(id) {
     })() : null;
     const main = h("div", { class: "main2" },
       firstSteps, paceBox, view === "print" ? null : everyBox(), view === "print" ? null : followTags(),
-      h("div", { class: "calcard" }, nav, fillRow, view === "text" || view === "print" ? null : heavyNote(), inner),
+      h("div", { class: "calcard" }, nav, fillRow, view === "text" || view === "print" ? null : heavyNote(), inner,
+        view === "text" || view === "print" ? null : reviewsNote()),
       view === "print" ? null : cardNotes());
     if (!author) return main;
     if (sideDay) {
