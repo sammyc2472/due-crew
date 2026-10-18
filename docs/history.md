@@ -2740,8 +2740,21 @@ every release that changes how something works.
   On Sam's own deck (18 Oct, a plan, a batch of 1,295 the week before):
   a plan's date inside a stop still opens and its cards wait in the
   unlocked pile for after (`ahead.starts`), where the forecast had dropped
-  them; the board's line says its number as the chart does ("about 1,030",
-  not "1,026").
+  them; `board.ahead_line` rounds its number itself, as the chart does.
+  Round two, the same day, on how his numbers read (Sam: "improve our
+  insights implementation based on your feedback from my data"): the
+  week ahead was 44% new cards at his pace, a guess, in one number, so the
+  line leads with the cards he'd started and adds new ones after ("Next 2
+  weeks: 380 a day from cards you've started, +140 new at your pace"); a
+  stop says what it holds back and when they start again, and a plan's
+  share of them ("732 new cards wait till Sat 24, 434 of them your plan's
+  dates": the cost was unsaid, and for a block exam those cards are the
+  exam); the board's line names the cause when it's new cards
+  (`ahead.cause`: 200 at least in two weeks, twice the two before: "you
+  started 2,480 cards in 2 weeks"). The track record forecasts each past
+  day as the chart would have then, the typical curve where his own wasn't
+  old enough (a deck under 12 weeks, most first-years in the fall, had
+  none), leaving out a day with under 100 cards started before it.
 - 3.9.2, leeches, one button a card (S1-A, S2-A). Insights' line counts the
   leeches Anki stopped showing me and the cards one miss from it (the next
   lapse reaches the deck's leech threshold, or a half of it past, and the
@@ -2778,6 +2791,22 @@ every release that changes how something works.
   Worked out only when picked (one more read of the deck's log). A long
   name ends on a whole word with an ellipsis (`team.clip`; Sam's deck had
   "Reproductive Physiolo").
+- 3.9.2, the map and the right % read on Sam's deck (18 Oct). The map
+  shaded by FSRS's recall today read 93 to 96% on all 12 of his systems
+  and all 9 weeks while he passed 77% of his reviews: recall today says
+  how lately a card was seen as much as what's known, and the scheduler
+  keeps every card near the target. The old "right on their last review"
+  counted a relearning step after a miss as right, and a last review alone
+  saturates too (a missed card is back the next day and passes). The map
+  now shades each card by the share of its reviews these 4 weeks it got
+  right (each day's first; not due in them, its last review; never due,
+  its last answer), FSRS or not (`team_flow._know`, "% right, 4 weeks"),
+  and a week's snapshot is kept under a new key so the old shading is
+  never compared. Week names prefer the map's own tag tree ("Microbiology ·
+  Clinical Bacteriology", not a video series). The header's right % says
+  the cards started these two weeks apart from the rest when they're a
+  quarter of the reviews and 5 points apart (`team.right_split`: his 87%
+  to 77% came with four times the reviews, mostly first ones).
 - 3.9.2, the words three students tripped on (F1-A): "never passed" and
   "lapsed", as Anki's Stats say them; a map tile's % with its cards ("66% ·
   190") and a key that says what the % is and what the bar is; "86% right ·

@@ -119,7 +119,7 @@ def card(deck, day, tiles, by="fsrs", pct=True, prev=None, since=""):
     started = sum(int(t.get("started") or 0) for t in ts if t.get("know") is not None)
     now = (sum(int(t["know"]) * int(t.get("started") or 0) for t in ts if t.get("know") is not None) / started
            if started else None)
-    said = "I’d remember now" if by == "fsrs" else "right on their last review"
+    said = "I’d remember now" if by == "fsrs" else "right in their reviews these 4 weeks"
     foot = ""
     if pct and now is not None:
         foot = f"{round(now)}% {said} · {cards:,} cards"

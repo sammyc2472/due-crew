@@ -8013,7 +8013,7 @@ def test_insights_379():
           and '<option value="1">&lt;Yield&gt;</option>' in wy and "by topic, now" not in wy
           and "Split by" not in board._ins_map(10, nest, "fsrs", (), [{"key": "a", "name": "Systems", "on": True}]), wy)
     check("map: one tile says nothing", board._ins_map(10, nest[:1], "fsrs") == ""
-          and "right on their last review" in board._ins_map(10, nest, "right"))
+          and "right in their reviews these 4 weeks" in board._ins_map(10, nest, "right"))
     check("insights: nothing yet says so", "Insights fill in after a week of reviews." in board._insights_html(10, {"right": {"now": [1, 2]}}))
     ins = {"decks": [{"did": 10, "name": "Step 1", "full": "Step 1"}, {"did": 20, "name": bad, "full": bad}],
            "did": 10, "exam": False, "plan": {"id": "p1", "name": bad}, "view": view}
@@ -8193,7 +8193,7 @@ def test_insights_379():
         vp, vd = TF.insights(10, "pI"), TF.insights(10)
         check("map: the deck's cards in play by its own tags, plan or not, new ones too; all under one root, what's under it",
               [(t["name"], t["n"]) for t in vp.get("map") or []] == [("Started", 50), ("New", 12), ("Other", 10)]
-              and vp.get("map_by") == "fsrs" and [t["name"] for t in vd.get("map") or []] == ["Started", "New", "Other"]
+              and vp.get("map_by") == "right" and [t["name"] for t in vd.get("map") or []] == ["Started", "New", "Other"]
               and 0 <= vp["map"][0]["know"] <= 100 and vp["map"][1]["know"] is None, vp.get("map"))
         shown.clear()
         dc._on_js(False, as_board("duecrew:insmap:10:2"), DeckBrowser())
@@ -8248,18 +8248,18 @@ def test_insights_379():
         try:
             TF.you_view(dict(conf, ins_deck=30))
             dc._on_js(False, as_board("duecrew:insmapshare:30"), DeckBrowser())
-            check("share: the deck's map, its name and today, shown", made and made[0][:4] == ("Unused", _day(0), ["Cardio", "Pulm", "Renal"], "fsrs")
+            check("share: the deck's map, its name and today, shown", made and made[0][:4] == ("Unused", _day(0), ["Cardio", "Pulm", "Renal"], "right")
                   and made[-1] == "shown", made)
             check("share: no map a week old yet, no change", made[0][4] is None and made[0][5] == "")
-            sys30 = ((pc.get("map_snaps") or {}).get("30") or {}).get("med::^sys") or []
+            sys30 = ((pc.get("map_snaps") or {}).get("30") or {}).get("med::^sys|due") or []
             check("share: today's map kept for next week's change, by way, in this profile's plans file",
-                  [x["day"] for x in sys30] == [_day(0)] and "med::$yield" in pc["map_snaps"]["30"], pc.get("map_snaps"))
+                  [x["day"] for x in sys30] == [_day(0)] and "med::$yield|due" in pc["map_snaps"]["30"], pc.get("map_snaps"))
             sys30[0]["day"] = _day(-8)
             _state["insights"].pop(30, None)
             TF.you_view(dict(conf, ins_deck=30))
             dc._on_js(False, as_board("duecrew:insmapshare:30"), DeckBrowser())
             check("share: a week on, the change since then; today's kept too", made[-2][4] and made[-2][5] == _day(-8)
-                  and [x["day"] for x in pc["map_snaps"]["30"]["med::^sys"]] == [_day(-8), _day(0)], (made[-2], pc["map_snaps"]["30"]))
+                  and [x["day"] for x in pc["map_snaps"]["30"]["med::^sys|due"]] == [_day(-8), _day(0)], (made[-2], pc["map_snaps"]["30"]))
             dc._on_js(False, as_board("duecrew:insmap:30:0"), DeckBrowser())
             dc._on_js(False, as_board("duecrew:insmapshare:30"), DeckBrowser())
             check("share: opened, the parts on screen, named by the trail; the change is the deck's level only",
@@ -12473,7 +12473,7 @@ def test_map_card_v380():
                                                              and M.TOP - 1 <= t["y"] and t["y"] + t["h"] <= M.SIZE - M.FOOT + 1
                                                              for t in c["tiles"]), c["tiles"])
     check("card: the foot, over the started cards", c["foot"] == "80% I’d remember now · 1,104 cards", c["foot"])
-    check("card: without FSRS it says so", "right on their last review" in M.card("D", "2026-10-12", tiles, by="right")["foot"])
+    check("card: without FSRS it says so", "right in their reviews these 4 weeks" in M.card("D", "2026-10-12", tiles, by="right")["foot"])
     shape = M.card("Big Step 1", "2026-10-12", tiles, pct=False)
     check("card: Percentages off, no numbers anywhere, the shades in words", shape["foot"] == "" and shape["key"] is True)
     prev = {"cardio": 82, "renal": 79, "gone": 50}
@@ -16612,6 +16612,13 @@ def test_reviews_ahead_392():
     tr = A.trust(res)
     check("ahead: the track record from three past days, six weeks each; on a steady learner within 15% a week",
           len(res) == 3 and tr is not None and tr[0] < 0.15 and len(tr[1]) == 6, tr)
+    yrows, yfirst, ynow = _sim_log(days=80, pace=20, seed=4)
+    yres = A.backtest(yrows, yfirst, ynow)
+    check("ahead: a deck under 12 weeks has a track record, the forecast as it would have run then (Sam's deck had none)",
+          A.curve(yrows, yfirst, -42) is None and len(yres) == 3 and A.trust(yres) is not None and A.trust(yres)[0] < 0.25,
+          A.trust(yres))
+    check("ahead: a past day with under 100 cards started before it is left out",
+          len(A.backtest(*_sim_log(days=75, pace=3, seed=4))) < 3)
     brows, bf2, bnow = _sim_log(days=200, pace=40, batch=True, seed=3)
     btr = A.trust(A.backtest(brows, bf2, bnow))
     check("ahead: and on one who unlocks a batch a week", btr is not None and btr[0] < 0.2, btr)
@@ -16641,9 +16648,24 @@ def test_reviews_ahead_392():
           html.count('class="ahw"') == 3 and html.count(" hidden>") >= 2 and 'data-k="pace">' in html
           and 'role="radiogroup"' in html and "Your pace &middot; 140 new a week" in html
           and "Stop new a week before the exam" in html, html[:1500])
-    check("board: data first: the next two weeks a day, this week, the time at my pace; the exam week against my pace",
-          "Next 2 weeks: about <b>" in html and "this week 100" in html and "a day at your pace" in html
-          and "Exam week: about <b>" in html and ", not " in html, html)
+    check("board: data first: the cards I've started first, what new ones add at my pace, this week, the time; the exam week against my pace",
+          "Next 2 weeks: <b>" in html and "a day from cards you&rsquo;ve started, <b>+" in html and "new at your pace" in html
+          and "this week 100" in html and " a day</div>" in html and "Exam week: about <b>" in html and ", not " in html, html)
+    check("board: a stop says what it holds back and when they start again (Sam's deck: the cost was unsaid)",
+          "220 new cards wait till Sat 12." in html and "plan&rsquo;s dates" not in html, html)
+    hv = A.view(A.existing([(1, 10)] * 20, *A.habits([])), A.GENERIC, [20.0] * 7, 0, 900, 100, [50] * 7, exam_in=10,
+                plan={2: 50, 20: 30}, pool=100)
+    hw = {w["key"]: w for w in hv["ways"]}
+    check("ahead: a stop's held cards, a plan's dates in it among them; the pace holds none",
+          hw["now"]["held"] == 150 and hw["now"]["plan_held"] == 50 and hw["week"]["plan_held"] == 0
+          and "held" not in hw["pace"], {k: (w.get("held"), w.get("plan_held")) for k, w in hw.items()})
+    hh = board._ins_ahead(10, dict(_ahead_sample(exam_in=10), ways=hv["ways"]), "Step")
+    check("board: a plan's share of what waits", "150 new cards wait till Sat 12, 50 of them your plan&rsquo;s dates." in hh, hh)
+    check("ahead: new cards named the climb's cause only when they're it (200 in two weeks, twice the two before)",
+          A.cause(2480, 262) == 2480 and A.cause(150, 0) == 0 and A.cause(500, 300) == 0 and A.cause(None, None) == 0)
+    ln = board.ahead_line({"did": 1, "name": "Step", "day": "2026-10-19", "n": 1030, "week": 780, "cause": 2480})
+    check("board: the line says the cause", "this week 780 &middot; you started 2,480 cards in 2 weeks</span>" in ln
+          and "you started" not in board.ahead_line({"did": 1, "name": "Step", "day": "2026-10-19", "n": 1030, "week": 780}), ln)
     check("board: Do it for each stop, said once; deck options untouched (its tip); the deck's name escaped",
           "duecrew:insaheadoff:10:week" in html and "duecrew:insaheadoff:10:now" in html
           and "no new cards in &lt;b&gt;Spanish till your exam" in html and "<b>Spanish" not in html
@@ -16902,6 +16924,50 @@ def test_scope_map_and_words_392():
     from due_crew import team as T, team_flow as TF, board
     from due_crew.settings_model import change
     from due_crew import account
+    # ---- 3.9.2, from Sam's deck: right % apart for the cards started these two weeks ----
+    ans = [(c, 1, 3 if c % 3 else 1) for c in range(60)] + [(c, 1, 3 if c % 10 else 1) for c in range(100, 160)]
+    rd = T.right_days(ans, set(range(60)))
+    check("right: the cards started these two weeks apart from the rest", rd["young"] == [40, 60] and rd["older"] == [54, 60]
+          and rd["now"] == [94, 120] and T.right_split(rd) == (67, 90, 60), rd)
+    check("right: not split when close, or too few new ones, or no young set",
+          T.right_split(T.right_days([(c, 1, 3 if c % 10 else 1) for c in range(120)], set(range(60)))) is None
+          and T.right_split(T.right_days(ans, set(range(30)))) is None and T.right_split(T.right_days(ans)) is None)
+    hd = board._insights_html(10, {"right": rd, "target": 90})
+    check("right: the header says both, under the right %",
+          "67% on the cards you started these 2 weeks (60 reviews) &middot; 90% on the rest" in hd, hd)
+    # ---- 3.9.2, from Sam's deck: a week's name from the map's own tag tree first ----
+    tg = {c: ["AK::#Series::Lolnotacop::Bugs", "AK::#FirstAid::03_Microbiology::02_Clinical_Bacteriology"] for c in range(30)}
+    tg.update({c: ["AK::#Series::Other", "AK::#FirstAid::01_Biochem"] for c in range(30, 90)})
+    wd = {"": 90}
+    for c in tg:
+        for t in tg[c]:
+            parts = t.split("::")
+            for i in range(1, len(parts) + 1):
+                k = "::".join(parts[:i]).lower()
+                wd[k] = wd.get(k, 0) + 1
+    check("week names: the map's own way when it has one ('Microbiology · Clinical Bacteriology', not 'Lolnotacop · Bugs')",
+          T.batch_name(list(range(30)), tg, wd, "ak::#firstaid") == "Microbiology · Clinical Bacteriology"
+          and T.batch_name(list(range(30)), tg, wd) in ("Lolnotacop · Bugs", "Microbiology · Clinical Bacteriology")
+          and T.batch_name(list(range(30)), tg, wd, "ak::#nothing") == T.batch_name(list(range(30)), tg, wd))
+    # ---- 3.9.2, from Sam's deck: the map's shade is the last time a card came due ----
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    cut = fakes.day_cutoff_for(TODAY)
+    at = lambda d: (cut - d * 86400 - 3600) * 1000  # noqa: E731
+    for cid, ctype, queue in ((1, 2, 2), (2, 2, 2), (3, 1, 1), (4, 2, -1)):
+        fakes.add_card(conn, cid, did=10, ctype=ctype, queue=queue)
+    fakes.add_review(conn, at(5), ease=3, cid=1, rtype=1)
+    fakes.add_review(conn, at(9), ease=1, cid=2, rtype=1)
+    fakes.add_review(conn, at(9) + 60000, ease=3, cid=2, rtype=2)  # its relearning step: not a review
+    fakes.add_review(conn, at(8), ease=3, cid=2, rtype=1)          # back the next day and passed
+    fakes.add_review(conn, at(1), ease=3, cid=3, rtype=0)          # never due yet: its last answer
+    fakes.add_review(conn, at(5), ease=3, cid=4, rtype=1)          # suspended: not in play
+    fakes.add_card(conn, 5, did=10, ctype=2, queue=2)
+    fakes.add_review(conn, at(60), ease=1, cid=5, rtype=1)         # not due these 4 weeks: its last review
+    know, by = TF._know(fakes.FakeCol(conn, cut), "1,2,3,4,5", cut)
+    check("map: each card's share of its reviews right these 4 weeks; a miss counts though it passed the next day; "
+          "a relearning step isn't a review; not due in them, its last review; FSRS or not",
+          know == {1: 1.0, 2: 0.5, 3: 1.0, 5: 0.0} and by == "right", (know, by))
     # ---- the scope, pure ----
     check("scope: since the day after my last exam, in the last 10 weeks; older, or none, the whole deck",
           T.scope("2026-11-02", "2026-09-04", "", "2026-10-18") == ("2026-09-05", "last")

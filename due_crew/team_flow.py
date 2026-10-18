@@ -633,9 +633,12 @@ def _work_out(did, pid=None, exam=""):
     out = {"target": int(round(100 * target)), "did": did, "deck_name": str(col.decks.name(did) or "").split("::")[-1]}
 
     # the header: right on this deck's reviews, first answer of each card each day
+    # 3.9.2: split by the cards I started in these two weeks, when the mix shifted (T.right_split)
+    young = col.db.list(f"SELECT cid FROM revlog WHERE ease > 0 AND cid IN ({deck}) GROUP BY cid HAVING min(id) >= ?",
+                        since(T.DAYS))
     out["right"] = T.right_days(col.db.all(
         f"SELECT cid, CAST((? - id / 1000) / 86400 AS INTEGER), ease FROM revlog "
-        f"WHERE id >= ? AND type = 1 AND ease > 0 AND cid IN ({deck}) ORDER BY id", cutoff - 1, since(2 * T.DAYS)))
+        f"WHERE id >= ? AND type = 1 AND ease > 0 AND cid IN ({deck}) ORDER BY id", cutoff - 1, since(2 * T.DAYS)), young)
 
     # the exam box: started cards Anki won't show me before the aim, under my target by then
     # (FSRS only). The deck's, plan or not: it aims at the next of my own exam date and
@@ -790,31 +793,42 @@ def _deck_rows(col, did, reviewed, stuck, forgot):
     return rows
 
 
+KNOW_DAYS = 28  # the map's window: a card's reviews these 4 weeks
+
+
 def _know(col, deck, cutoff):
-    """({cid: 0..1}, by): how well I know each started card of the deck
-    now. With FSRS, its recall today (stability, days since its last
-    answer: "fsrs"); without, 1 when its last answer was right ("right")."""
-    last = dict(col.db.all(f"SELECT cid, max(id) FROM revlog WHERE ease > 0 AND cid IN ({deck}) GROUP BY cid"))
-    if not last:
+    """({cid: 0..1}, "right"): each started card of the deck, the share of
+    its reviews these KNOW_DAYS days it got right (each day's first); one
+    not due in them, its last review; one never due yet, its last answer.
+    3.9.2 (Sam's deck): FSRS's recall today read 93 to 96% on every tile
+    while he passed 77% of his reviews (it says how lately a card was seen
+    more than what's known), and the last answer read a relearning step
+    after a miss as right. The last review alone saturates too: a missed
+    card comes back the next day and passes; the weeks' share keeps it."""
+    live = set(col.db.list(f"SELECT id FROM cards WHERE id IN ({deck}) AND type != 0 AND queue != -1"))
+    if not live:
         return {}, ""
-    rows = col.db.all(f"SELECT id, ivl, data FROM cards WHERE id IN ({deck}) AND type != 0 AND queue != -1")
-    if _fsrs(col):
-        out = {}
-        for cid, ivl, data in rows:
-            if cid not in last:
-                continue
-            try:
-                mem = json.loads(data or "{}")
-            except ValueError:
-                mem = {}
-            ago = (cutoff - int(last[cid]) // 1000) // 86400
-            out[int(cid)] = T.recall(ago, float(mem.get("s") or max(int(ivl), 1)), mem.get("decay"))
-        return out, "fsrs"
-    ids = ",".join(str(int(last[cid])) for cid, _i, _d in rows if cid in last)
-    if not ids:
-        return {}, ""
-    return {int(c): 1.0 if int(e) > 1 else 0.0
-            for c, e in col.db.all(f"SELECT cid, ease FROM revlog WHERE id IN ({ids})")}, "right"
+    win, seen = {}, set()
+    for cid, day, ease in col.db.all(
+            f"SELECT cid, CAST((? - id / 1000) / 86400 AS INTEGER), ease FROM revlog WHERE id >= ? AND type = 1 "
+            f"AND ease > 0 AND cid IN ({deck}) ORDER BY id", int(cutoff) - 1, (int(cutoff) - KNOW_DAYS * 86400) * 1000):
+        cid = int(cid)
+        if cid not in live or (cid, day) in seen:
+            continue
+        seen.add((cid, day))
+        w = win.setdefault(cid, [0, 0])
+        w[0] += int(ease) > 1
+        w[1] += 1
+    out = {c: p / float(n) for c, (p, n) in win.items()}
+    rest = [c for c in live if c not in out]
+    if rest:
+        pick = [int(rev or last) for cid, last, rev in col.db.all(
+            f"SELECT cid, max(id), max(CASE WHEN type = 1 THEN id END) FROM revlog "
+            f"WHERE ease > 0 AND cid IN ({_in(rest)}) GROUP BY cid")]
+        if pick:
+            out.update({int(c): 1.0 if int(e) > 1 else 0.0
+                        for c, e in col.db.all(f"SELECT cid, ease FROM revlog WHERE id IN ({_in(pick)})")})
+    return out, ("right" if out else "")
 
 
 def _tag_plans(col, did):
@@ -892,7 +906,9 @@ def _map(col, did, deck, cutoff):
     if pick == T.START_WAY:
         first = {int(c): (cutoff - 1 - int(t) // 1000) // 86400 for c, t in col.db.all(
             f"SELECT cid, min(id) FROM revlog WHERE ease > 0 AND cid IN ({deck}) GROUP BY cid")}
-        start = T.started_tiles(first, tags_of, know, active, _plans_flow()._today())
+        own = next((w["key"] for w in ways if w.get("on") and not str(w["key"]).startswith("~")), None) or next(
+            (w["key"] for w in ways if not str(w["key"]).startswith("~")), None)
+        start = T.started_tiles(first, tags_of, know, active, _plans_flow()._today(), own)
         if len(start) >= 2:
             ways = [dict(w, on=False) for w in ways]
             shown = start
@@ -920,6 +936,7 @@ def _map_week(out, did, today):
     way = next((w["key"] for w in out.get("map_ways") or [] if w.get("on")), None)
     if way is None:
         return
+    way = f"{way}|due"  # 3.9.2: shaded by the last review now; a week of the old shading isn't compared
     pf = _plans_flow()
     pc = pf._pcfg()
     snaps = pc.get("map_snaps") if isinstance(pc.get("map_snaps"), dict) else {}

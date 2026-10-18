@@ -2230,13 +2230,26 @@ def _ins_ahead(did, a, deck_name=""):
     def mean(xs):
         return sum(xs) / len(xs) if xs else 0
 
+    def held(w):
+        """3.9.2 (Sam's deck): what a stop holds back, and till when; a plan's dates in it said."""
+        n, s = w.get("held") or 0, w.get("stop")
+        if n < 1 or not s or 7 + int(s[1]) + 1 >= len(days):
+            return ""
+        ph = w.get("plan_held") or 0
+        return (f" {_ins_r(n)} new cards wait till {_ins_dname(days[7 + int(s[1]) + 1])}"
+                + (f", {_ins_r(ph)} of them your plan&rsquo;s dates" if ph >= 1 else "") + ".")
+
     blocks, pills, acts = "", "", ""
     for w in ways:
         k = w["key"]
         if k == "pace":
-            mins = (f" &middot; about {_hm(max(1, int(round(mean(w['answers'][:14]) * secs / 60.0))))} a day at your pace" if secs else "")
-            line = (f"Next 2 weeks: about <b>{_ins_r(mean(w['cards'][:14]))}</b> a day &middot; "
-                    f"this week {_ins_r(week)}{mins}")
+            # 3.9.2 (Sam's deck: 44% of the week ahead was new cards at his pace, a guess, in one number):
+            # the cards I've started first, what new ones add at my pace after it
+            mins = (f" &middot; about {_hm(max(1, int(round(mean(w['answers'][:14]) * secs / 60.0))))} a day" if secs else "")
+            st, nw = mean((w.get("started") or w["cards"])[:14]), mean((w.get("new") or [0])[:14])
+            line = (f"Next 2 weeks: <b>{_ins_r(st)}</b> a day from cards you&rsquo;ve started"
+                    + (f", <b>+{_ins_r(nw)}</b> new at your pace" if nw >= 0.5 else "")
+                    + f" &middot; this week {_ins_r(week)}{mins}")
             label = f"Your pace &middot; {rate:,} new a week"
         else:
             line = (f"{when}: about <b>{_ins_r(mean(w['cards'][lo:hi]))}</b> a day, not {_ins_r(mean(pace['cards'][lo:hi]))}"
@@ -2253,7 +2266,7 @@ def _ins_ahead(did, a, deck_name=""):
         if k == on and k != "pace":
             act = (f'<span>No new cards in {name} '
                    + (f"till your exam, {exd}" if ex is not None and k != "unlocked" else "till you turn them back on")
-                   + f'.</span><a class="bt" href="#" onclick="{_pycmd(f"insaheadon:{did}")}">Turn new cards back on</a>')
+                   + f'.{held(w)}</span><a class="bt" href="#" onclick="{_pycmd(f"insaheadon:{did}")}">Turn new cards back on</a>')
         elif k == "pace" and on != "pace":
             act = f'<span>New cards back, at your pace.</span><a class="bt" href="#" onclick="{_pycmd(f"insaheadon:{did}")}">Turn new cards back on</a>'
         elif k == "pace":
@@ -2263,7 +2276,7 @@ def _ins_ahead(did, a, deck_name=""):
         elif k in ("week", "now") and on == "pace":
             first = "today" if k == "now" else _ins_dname(days[7 + w["stop"][0]], long=True)
             till = "till your exam" if ex is not None else "till you turn them back on"
-            act = (f'<span>From {first}, no new cards in {name} {till}.</span>'
+            act = (f'<span>From {first}, no new cards in {name} {till}.{held(w)}</span>'
                    f'<a class="bt" href="#" title="Anki&rsquo;s today-only limit, each morning. Your deck options stay as they are." '
                    f'onclick="{_pycmd(f"insaheadoff:{did}:{k}")}">Do it</a>')
         else:
@@ -2415,6 +2428,11 @@ def _insights_html(did, v):
                 f'{now[0]:,} of {now[1]:,} right in 2 weeks"><b>{pct}%</b><span>right &middot; Anki aims for {int(v.get("target") or 90)}%'
                 f'{" &middot; " + was if was else ""}</span>'
                 f'{_ins_spark(r.get("days") or [])}</div>')
+        from .team import right_split
+        sp = right_split(r)
+        if sp:  # 3.9.2 (Sam's deck): a week of new cards reads as forgetting; said apart
+            out += (f'<div class="tmt">{sp[0]}% on the cards you started these 2 weeks ({sp[2]:,} reviews) '
+                    f'&middot; {sp[1]}% on the rest</div>')
     aim = v.get("aim") or {}
     hero = v.get("hero") or []
     if hero:
@@ -2505,7 +2523,7 @@ def _ins_map(did, tiles, by, at=(), ways=()):
     from .team import map_level, map_shade
     trail, cur = map_level(tiles, at)
     big = max(int(t["n"]) for t in cur) or 1
-    how = "you’d remember now (FSRS)" if by == "fsrs" else "right on their last review"  # escaped with the tip
+    how = "you’d remember now (FSRS)" if by == "fsrs" else "right in their reviews these 4 weeks"  # escaped with the tip
     out, fresh = "", False
     for i, t in enumerate(cur):
         n, k, st = int(t["n"]), t.get("know"), int(t.get("started") or 0)
@@ -2531,7 +2549,7 @@ def _ins_map(did, tiles, by, at=(), ways=()):
                 f'{"" if lk is None else f", {int(lk)}%"} '
                 f'&middot; <a href="#" onclick="{_pycmd(f"insmapall:{did}")}">Browse all</a></div>')
     # 3.9.2 (the students: what's the %, what's the bar?): said in the key; a tile's cards beside its %
-    pct = "% you&rsquo;d recall now" if by == "fsrs" else "% right last time"
+    pct = "% you&rsquo;d recall now" if by == "fsrs" else "% right, 4 weeks"
     key = (f'{pct}: <i class="sw s0"></i>under 70 <i class="sw s3"></i>90+' + (' <i class="sw sn"></i>new' if fresh else "")
            + ' &middot; <i class="sw bar"></i>started')
     ways = [w for w in ways or () if isinstance(w, dict)]
@@ -4493,7 +4511,8 @@ def ahead_line(a):
     day = _ins_dname(a.get("day"), long=True)
     return (f'<div class="dc-wrap ah-line"><span>&#128197;</span>'
             f'<span>Reviews in <b>{_html.escape(str(a.get("name") or ""))}</b> climb to about <b>{_ins_r(a["n"])}</b> a day by {day}'
-            f' &middot; this week {int(a.get("week") or 0):,}</span>'
+            f' &middot; this week {int(a.get("week") or 0):,}'
+            + (f' &middot; you started {int(a["cause"]):,} cards in 2 weeks' if a.get("cause") else "") + '</span>'
             f'<a class="wc" href="#" onclick="{_pycmd(f"youins:{did}")}">See ahead</a>'
             f'<a class="wx" href="#" title="Not this week" onclick="{_pycmd(f"insaheadx:{did}")}">&times;</a></div>')
 

@@ -105,17 +105,21 @@ def prep_units(units, eid):
     return [u["id"] for u in units if eid and u.get("for") == eid]
 
 
-def right_days(answers):
+def right_days(answers, young=()):
     """The header: {now: [right, n], before: [right, n], days: [% or None,
-    oldest first]} over [(cid, days ago, ease)] review answers, the first
-    answer of each card each day; now is the last DAYS days."""
+    oldest first], young: [right, n], older: [right, n]} over [(cid, days
+    ago, ease)] review answers, the first answer of each card each day; now
+    is the last DAYS days. young: the cards I started in them (3.9.2, Sam's
+    deck: 2,480 new cards in two weeks made 87% read 77%, the mix as much
+    as the memory), now's split by them."""
     first = {}
     for cid, ago, ease in answers:
         ago = int(ago)
         if 0 <= ago < 2 * DAYS:
             first.setdefault((ago, int(cid)), int(ease) > 1)
-    now, before, days = [0, 0], [0, 0], {}
-    for (ago, _c), ok in first.items():
+    young = set(young or ())
+    now, before, days, yng, old = [0, 0], [0, 0], {}, [0, 0], [0, 0]
+    for (ago, c), ok in first.items():
         w = now if ago < DAYS else before
         w[0] += ok
         w[1] += 1
@@ -123,8 +127,26 @@ def right_days(answers):
             dd = days.setdefault(ago, [0, 0])
             dd[0] += ok
             dd[1] += 1
-    return {"now": now, "before": before,
+            s = yng if c in young else old
+            s[0] += ok
+            s[1] += 1
+    return {"now": now, "before": before, "young": yng, "older": old,
             "days": [int(round(100.0 * days[a][0] / days[a][1])) if a in days else None for a in range(DAYS - 1, -1, -1)]}
+
+
+SPLIT_MIN = 50   # reviews on each side before the header splits
+SPLIT_GAP = 5    # points apart
+
+
+def right_split(r):
+    """(young %, older %, young reviews) when the header should say both:
+    each side SPLIT_MIN reviews, the new cards a quarter of them at least,
+    SPLIT_GAP points apart; else None."""
+    y, o = (r or {}).get("young") or [0, 0], (r or {}).get("older") or [0, 0]
+    if y[1] < SPLIT_MIN or o[1] < SPLIT_MIN or y[1] < (y[1] + o[1]) / 4.0:
+        return None
+    yp, op = 100.0 * y[0] / y[1], 100.0 * o[0] / o[1]
+    return (int(round(yp)), int(round(op)), y[1]) if abs(yp - op) >= SPLIT_GAP else None
 
 
 def hero(cards, target):
@@ -416,11 +438,14 @@ def _range(a, b):
     return f"{a.day}–{b.day} {b:%b}" if a.month == b.month else f"{a.day} {a:%b}–{b.day} {b:%b}"
 
 
-def batch_name(cids, tags_of, wide):
+def batch_name(cids, tags_of, wide, prefer=None):
     """What a batch of cards I started together was: the deepest tag most
     of them share (a third at least) that doesn't cover nearly every card
     I've started (wide: {tag prefix: cards with it}, of all of them); ""
-    when nothing says. A tag's last part, readable."""
+    when nothing says. A tag's last part, readable. prefer: the map's own
+    way (a tag prefix), whose tags win when one qualifies (3.9.2, Sam's
+    deck: the deepest shared tag was a video series, "Lolnotacop · Bugs",
+    where his FirstAid systems said what the week was)."""
     count, spell = {}, {}
     for c in cids:
         seen = set()
@@ -435,13 +460,17 @@ def batch_name(cids, tags_of, wide):
         for k in seen:
             count[k] = count.get(k, 0) + 1
     n, total = max(1, len(cids)), max(1, wide.get("", 0))
-    best = None
+    best, pref = None, None
+    under = str(prefer).lower() + P._SEP if prefer else None
     for k, m in count.items():
         if m / n < 0.34 or wide.get(k, 0) / total >= 0.9:
             continue
         rank = (k.count(P._SEP), m)
         if best is None or rank > best[0]:
             best = (rank, k)
+        if under and k.startswith(under) and (pref is None or rank > pref[0]):
+            pref = (rank, k)
+    best = pref or best
     if best is None:
         return ""
     segs = [x for x in spell[best[1]] if not x.startswith(("#", "^", "$", "!"))] or spell[best[1]][-1:]
@@ -461,13 +490,14 @@ def clip(s, n=NAME_MAX):
     return (cut[:sp] if sp >= n // 2 else cut).rstrip(" ,·-–+&") + "…"
 
 
-def started_tiles(first_of, tags_of, know, active, today):
+def started_tiles(first_of, tags_of, know, active, today, prefer=None):
     """3.9.2 (Sam's pick C2-A, "getting there in reverse"): the map by
     when I started the cards in play, a week a tile (the last START_WEEKS
     with cards; before them, one tile), each named by its dates and what
     it was (batch_name), shaded by what I know now; the ones in play not
     started yet, a tile of their own. first_of: {cid: days ago it
-    started}. A tile opens into its topics (expand); Browse, its cards."""
+    started}. A tile opens into its topics (expand); Browse, its cards.
+    prefer: the map's own way, for the names (batch_name)."""
     t0 = S.d(today)
     monday = t0 - datetime.timedelta(days=t0.weekday())
     groups, before = {}, []
@@ -489,7 +519,7 @@ def started_tiles(first_of, tags_of, know, active, today):
 
     def tile(key, when, cids):
         started = [know[c] for c in cids if c in know]
-        what = batch_name(cids, tags_of, wide)
+        what = batch_name(cids, tags_of, wide, prefer)
         return {"key": key, "name": clip(f"{when} · {what}" if what else when), "n": len(cids),
                 "started": len(started), "know": int(round(100 * sum(started) / len(started))) if started else None,
                 "find": {"cids": sorted(cids)}, "_batch": sorted(cids), "_tags": {c: tags_of.get(c) or [] for c in cids}}

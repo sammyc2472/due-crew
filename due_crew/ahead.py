@@ -37,6 +37,9 @@ BUCKETS = (1, 3, 7, 15, 30, 60, 120, 10 ** 6)  # a card's last interval, up to
 CLIMB = 1.25    # the board's line: the next two weeks a quarter over this one...
 CLIMB_MIN = 20  # ...and this many cards a day more
 STOP_BEFORE = 7  # "Stop new a week before the exam"
+BACK_MIN = 100  # cards started before a past day for backtest() to forecast from it
+CAUSE_MIN = 200  # the board's line names new cards as the climb's cause: this many in two weeks...
+CAUSE_X = 2      # ...and this many times the two weeks before
 # a typical new card's next six weeks (simulated learners on FSRS's
 # defaults at 90%, smoothed): the share seen on each day after it starts,
 # and the answers each took (its learning steps on day 0)
@@ -292,16 +295,17 @@ def state_at(log, first, now, T, gone=()):
 def backtest(log, first, now, gone=(), back=BACK, h=H):
     """[(what I did, what it said)] weekly, cards a day, from each past day
     T = -b in back: forecast with only what came before T (its starts what
-    I really started), against what I really did. A day without my own
-    curve is left out. log reaches back to min(T) - LOOK at least."""
+    I really started), against what I really did: the forecast as it would
+    have run then, the typical curve where mine wasn't old enough yet (3.9.2,
+    Sam's deck: a deck under 12 weeks had no track record at all). A day
+    with fewer than BACK_MIN cards started before it is left out. log
+    reaches back to min(T) - LOOK at least."""
     out = []
     for b in back:
         T = -b
-        if T + h > 0:
+        if T + h > 0 or sum(1 for f in first.values() if f < T) < BACK_MIN:
             continue
         past = [r for r in log if r[0] < T]
-        if curve(past, first, T, h) is None:
-            continue
         st = [0] * h
         for f in first.values():
             if T <= f < T + h:
@@ -368,6 +372,14 @@ def climb(past, cards):
     return None
 
 
+def cause(new14, before14):
+    """The cards I started the last two weeks when they're the climb's
+    likely cause (CAUSE_MIN at least, CAUSE_X times the two weeks before),
+    else 0. 3.9.2, Sam's deck: 2,480 against 262."""
+    new14, before14 = int(new14 or 0), int(before14 or 0)
+    return new14 if new14 >= CAUSE_MIN and new14 >= CAUSE_X * before14 else 0
+
+
 def weeks(xs, lo=BY_DAY, h=H):
     """The by-week part: each week's average day, days lo..h-1."""
     return [_mean(xs[i:i + 7]) for i in range(lo, h, 7)]
@@ -398,12 +410,14 @@ def view(started, cv, rate, wd0, left, unlocked, past, exam_in=None, off=None,
     started: existing()'s; cv: the curve (mine or GENERIC); rate: pace();
     left/unlocked: the deck's new cards, all / unlocked; past: the last
     seven days' cards; off: stop_of()'s (the pause in effect), else None.
-    Each way {key, stop, cards, new, answers, starts}; on: the one in
+    Each way {key, stop, cards, new, answers, starts; a stop's held, the new
+    cards it holds back at my pace, and plan_held, a plan's dates' of them}; on: the one in
     effect (a pause's, else "pace"); climb: the board's line, on it."""
-    ways = []
+    ways, paced = [], None
     for key, stop in choices(exam_in, rate, unlocked, left):
         st = starts(rate, wd0, unlocked if key == "unlocked" else left, stop=stop,
                     today_done=new_today, plan=plan, pool=pool)
+        paced = st if key == "pace" else paced
         ways.append(dict(with_new(started, cv, st), key=key, stop=stop, starts=sum(st)))
     on = "pace"
     if off:
@@ -413,5 +427,10 @@ def view(started, cv, rate, wd0, left, unlocked, past, exam_in=None, off=None,
             hit = dict(with_new(started, cv, st), key="off", stop=off, starts=sum(st))
             ways.append(hit)
         on = hit["key"]
+    for w in ways:  # 3.9.2 (Sam's deck): what a stop holds back, said beside its Do it
+        if w.get("stop") and paced:
+            a, b = int(w["stop"][0]), min(int(w["stop"][1]), len(paced) - 1)
+            w["held"] = sum(paced[a:b + 1])
+            w["plan_held"] = sum(float((plan or {}).get(d) or 0) for d in range(a, b + 1))
     cur = next(w for w in ways if w["key"] == on)
     return {"past": list(past), "ways": ways, "on": on, "climb": climb(past, cur["cards"])}

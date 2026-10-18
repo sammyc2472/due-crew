@@ -90,6 +90,7 @@ def _day_part(col, did, deck, today):
                              f"AND cid IN ({deck})", (cutoff - 15 * 86400) * 1000, start) or (0, 0)
     part = {"day": today, "hab": hab, "extra": extra, "cv": cv or A.GENERIC, "own": cv is not None,
             "rate": A.pace(first, _wd(today)), "past": [len(s) for s in past], "n": len(first),
+            "new14": sum(1 for d in first.values() if -14 <= d), "new14_before": sum(1 for d in first.values() if -28 <= d < -14),
             "secs": (float(ms) / 1000.0 / int(n_ans)) if int(n_ans or 0) >= 200 else None}
     _state.setdefault("ahead_day", {})[did] = part
     return part
@@ -152,6 +153,7 @@ def deck_view(col, did, deck, exam="", plan=None):
     v.update(did=did, today=today, days=[_iso(today, k) for k in range(-7, A.H)], exam=exam_in,
              done=int(done or 0), own=part["own"], secs=part["secs"], rate=sum(part["rate"]),
              unlocked=int(unlocked or 0), left=int(left or 0), off=bool(off),
+             cause=A.cause(part.get("new14"), part.get("new14_before")),
              trust=_trust(col, did, deck, today))
     return v
 
@@ -381,7 +383,7 @@ def check():
         return
     day, n = v["climb"]
     _state["ahead_line"]["line"] = {"did": d["did"], "name": d["name"], "day": v["days"][7 + int(day)],
-                                    "n": A.r(n), "week": A.r(sum(v["past"]) / 7.0)}
+                                    "n": A.r(n), "week": A.r(sum(v["past"]) / 7.0), "cause": int(v.get("cause") or 0)}
     app.swap(cfg())
 
 
