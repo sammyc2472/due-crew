@@ -1434,7 +1434,29 @@ def keep_me_in_view_js(scripts=True):
         var want = me.offsetTop - (box.clientHeight - me.offsetHeight) / 2;
         if (want > 0) { box.scrollTop = want; }
     })();
-    """ + (DUE_JS + MOTION_JS + FIND_JS if scripts else FIND_AFTER) + MOTION_DRAWN
+    """ + (DUE_JS + MOTION_JS + FIND_JS + VEIL_WATCH_JS if scripts else FIND_AFTER) + MOTION_DRAWN
+
+
+# 3.9.1 (Sam: "when cheering, the full background doesn't grey out"): a
+# window over the board dims the board's page; the glue dims the top and
+# bottom bars to match (app.veil) while one is up. This tells it when: a
+# window comes, or the last one goes (a closing one gives up its id as it
+# starts to fade, motion.js, so the bars fade with it).
+VEIL_IDS = ("dc-cheer", "dc-profile", "dc-sheet")
+VEIL_WATCH_JS = """
+(function () {
+    if (window.dcVeil || typeof MutationObserver === 'undefined') { return; }
+    var on = false, IDS = %s;
+    window.dcVeil = function () {
+        var now = IDS.some(function (id) { return !!document.getElementById(id); });
+        if (now === on) { return; }
+        on = now;
+        if (typeof pycmd !== 'undefined') { pycmd('duecrew:veil:' + (on ? 1 : 0) + '|' + window.dcBK); }
+    };
+    new MutationObserver(window.dcVeil).observe(document.body, { childList: true });
+    new MutationObserver(window.dcVeil).observe(document.body, { attributes: true, attributeFilter: ['id'], subtree: true });
+})();
+""" % _json.dumps(list(VEIL_IDS))
 
 
 # what FIND_JS does at every draw once it's on the page
@@ -4951,11 +4973,15 @@ CHEER_WINDOW_JS = r"""
             return out;
         }) };
     }
+    var moved = false;
     function close() {
         document.removeEventListener('keydown', esc, true);
-        if (still || !back.animate) { back.remove(); return; }
+        back.removeAttribute('id');  // the bars' shade goes with it (VEIL_WATCH_JS)
+        // moved: motion.js opened it and takes it out its own way (a fade here first had it
+        // snap back for a frame, its fade unfilled, then go again)
+        if (moved || still || !back.animate) { back.remove(); return; }
         back.style.pointerEvents = 'none';
-        back.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-in' }).onfinish = function () { back.remove(); };
+        back.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-in', fill: 'forwards' }).onfinish = function () { back.remove(); };
     }
     function send() {
         var p = { to: V.uid, emoji: emoji, note: note.value.replace(/\s+/g, ' ').trim().slice(0, NOTE), doodle: doodle() };
@@ -4976,7 +5002,7 @@ CHEER_WINDOW_JS = r"""
     }
     document.addEventListener('keydown', esc, true);
     document.body.appendChild(back);
-    if (window.dcMotion && !still) { dcMotion.open(back, card); }
+    if (window.dcMotion && !still) { dcMotion.open(back, card); moved = true; }
     quick[0][1].focus();
 })();
 """.replace("__INK__", DOODLE_INK)
@@ -5195,6 +5221,241 @@ def cheer_overlay_js(view):
             "mine": next((i for i, x in enumerate(inks) if x[0].lower() == pen.lower()), -1),
             "drawer": _emoji_drawer.view(), "native": bool(view.get("native"))}
     return CHEER_WINDOW_JS.replace("__VIEW__", _json.dumps(data).replace("</", "<\\/"))
+
+
+# 3.9.1 (Sam: "the modal for status update is still native, make sure all
+# modals are in our style"): a question before a step, one line, or one of a
+# few, on the Decks screen in the Cheer window's look (sheets.py asks; Qt
+# answers off the board). view: {id, title, text (plain; its line breaks
+# kept), yes, no, danger (a step that can't be taken back: the button in the
+# board's red), field: {kind: "text", value, max, hint} or {kind: "pick",
+# items, at}, check: {label, on}}. Every word goes in as text, never markup.
+# The answer is one duecrew:sheet command: its id (new each time, so a page
+# can't answer a question it wasn't asked) and URI-encoded JSON {ok, text,
+# at, check}; Cancel, Esc and the backdrop send {ok: false}.
+SHEET_JS = r"""
+(function () {
+    var V = __VIEW__;
+    var old = document.getElementById('dc-sheet');
+    if (old) { old.remove(); }
+    var night = /night/i.test(document.body.className) ||
+        (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    var dcBoard = document.getElementById('due-crew');
+    var dcStyle = dcBoard ? getComputedStyle(dcBoard) : null;
+    function tok(name, light, dark) {
+        var v = dcStyle && dcStyle.getPropertyValue('--dc-' + name).trim();
+        return v || (night ? dark : light);
+    }
+    var bg = tok('bg', '#ffffff', '#1c1c1c'), ink = tok('ink', '#333333', '#dfe1dc'), line = tok('line', '#e2e2da', '#3d403b'),
+        well = tok('well', '#f2f2ec', '#2b2d29'), muted = tok('muted', '#6f736b', '#9a9e94'),
+        accent = tok('accent', '#2e7d32', '#7cc47f'), accentInk = tok('accent-ink', '#ffffff', '#122912'),
+        you = tok('you-bg', '#e9f2e9', '#2c372b');
+    // the board's own theme, not the computer's: its background's lightness
+    var m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(bg);
+    var dark = m ? (parseInt(m[1], 16) * 299 + parseInt(m[2], 16) * 587 + parseInt(m[3], 16) * 114) / 1000 < 128 : night;
+    var bad = dark ? '#ef8383' : '#d32f2f', badInk = dark ? '#2a1212' : '#ffffff';
+    var font = (dcStyle && dcStyle.fontFamily) || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function el(tag, cls, text) {
+        var e = document.createElement(tag);
+        if (cls) { e.className = cls; }
+        if (text != null) { e.textContent = text; }
+        return e;
+    }
+    var back = el('div');
+    back.id = 'dc-sheet';
+    back.setAttribute('role', V.field ? 'dialog' : 'alertdialog');
+    back.setAttribute('aria-modal', 'true');
+    back.setAttribute('aria-label', V.title);
+    var css = el('style');
+    css.textContent =
+        '#dc-sheet{position:fixed;inset:0;z-index:82;background:rgba(0,0,0,.35);display:flex;align-items:flex-start;justify-content:center;padding:12vh 16px 16px;overflow:auto;}' +
+        '#dc-sheet *{box-sizing:border-box;}' +
+        '#dc-sheet .cw{width:420px;max-width:100%;border-radius:14px;padding:16px 18px 14px;text-align:left;display:grid;gap:12px;font-family:' + font + ';' +
+          'box-shadow:0 16px 60px rgba(0,0,0,.35);background:' + bg + ';color:' + ink + ';border:1px solid ' + line + ';font-size:13px;}' +
+        '#dc-sheet button,#dc-sheet input{margin:0;box-shadow:none;font-family:inherit;color:inherit;}#dc-sheet button{cursor:pointer;}' +
+        '#dc-sheet .hd{font-size:16px;font-weight:700;}' +
+        '#dc-sheet .bd{white-space:pre-line;line-height:1.45;max-height:46vh;overflow-y:auto;overflow-wrap:anywhere;}' +
+        '#dc-sheet .tx{width:100%;height:32px;border-radius:8px;border:1px solid ' + line + ';background:' + bg + ';color:' + ink + ';font-size:13px;padding:0 10px;}' +
+        '#dc-sheet .tx:focus{outline:2px solid ' + accent + ';outline-offset:0;}' +
+        '#dc-sheet .ct{font-size:11px;color:' + muted + ';font-variant-numeric:tabular-nums;text-align:right;margin-top:3px;}' +
+        '#dc-sheet .ls{border:1px solid ' + line + ';border-radius:10px;background:' + well + ';padding:4px;max-height:230px;overflow-y:auto;display:grid;gap:2px;}' +
+        '#dc-sheet .ls button{display:block;width:100%;text-align:left;border:1px solid transparent;background:none;border-radius:8px;padding:6px 10px;font-size:13px;overflow-wrap:anywhere;}' +
+        '#dc-sheet .ls button:hover{background:' + bg + ';}' +
+        '#dc-sheet .ls button[aria-selected=true]{border-color:' + accent + ';background:' + you + ';font-weight:600;}' +
+        '#dc-sheet .ls .none{color:' + muted + ';padding:6px 10px;font-size:12px;}' +
+        '#dc-sheet .ck{display:flex;align-items:flex-start;gap:8px;cursor:pointer;line-height:1.35;}' +
+        '#dc-sheet .ck input{accent-color:' + accent + ';width:15px;height:15px;margin-top:1px;flex:none;}' +
+        '#dc-sheet .ft{display:flex;align-items:center;gap:8px;}' +
+        '#dc-sheet .sp{flex:1;}' +
+        '#dc-sheet .go{background:' + accent + ';color:' + accentInk + ';border:1px solid transparent;border-radius:8px;padding:6px 16px;font-weight:700;font-size:13px;}' +
+        '#dc-sheet .go.bad{background:' + bad + ';color:' + badInk + ';}' +
+        '#dc-sheet .go:disabled{opacity:.45;cursor:default;}' +
+        '#dc-sheet .no{background:none;border:1px solid ' + line + ';border-radius:8px;padding:6px 14px;font-size:13px;}' +
+        '#dc-sheet button:focus-visible{outline:2px solid ' + accent + ';outline-offset:2px;}';
+    back.appendChild(css);
+    var card = el('div', 'cw');
+    back.appendChild(card);
+    card.appendChild(el('div', 'hd', V.title));
+    if (V.text) { card.appendChild(el('div', 'bd', V.text)); }
+
+    var f = V.field || null, input = null, at = -1, rows = [];
+    if (f && f.kind === 'text') {
+        var wrap = el('div');
+        input = el('input', 'tx');
+        input.type = 'text';
+        input.value = f.value || '';
+        input.maxLength = f.max || 280;
+        input.placeholder = f.hint || '';
+        input.setAttribute('aria-label', V.title);
+        input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); yes(); } });
+        wrap.appendChild(input);
+        // near the ceiling, how much room is left (the status's 80, a reply's 280)
+        var ct = el('div', 'ct');
+        function count() { var n = input.maxLength - input.value.length; ct.textContent = n <= 20 ? String(n) : ''; }
+        input.addEventListener('input', count);
+        count();
+        wrap.appendChild(ct);
+        card.appendChild(wrap);
+    } else if (f && f.kind === 'pick') {
+        // one of a few (a deck): a list in the board's look; a box to narrow it when it's long
+        var find = null, ls = el('div', 'ls');
+        ls.setAttribute('role', 'listbox');
+        ls.setAttribute('aria-label', V.title);
+        at = Math.max(0, Math.min((f.items || []).length - 1, f.at || 0));
+        (f.items || []).forEach(function (name, i) {
+            var b = el('button', null, name);
+            b.type = 'button';
+            b.setAttribute('role', 'option');
+            b.addEventListener('click', function () { pick(i); });
+            b.addEventListener('dblclick', function () { pick(i); yes(); });
+            rows.push(b);
+            ls.appendChild(b);
+        });
+        var none = el('div', 'none', 'Nothing matches.');
+        none.style.display = 'none';
+        ls.appendChild(none);
+        if (rows.length > 10) {
+            find = el('input', 'tx');
+            find.type = 'search';
+            find.placeholder = 'Find';
+            find.setAttribute('aria-label', 'Find');
+            find.addEventListener('input', function () {
+                var q = find.value.trim().toLowerCase(), first = -1;
+                rows.forEach(function (b, i) {
+                    var show = !q || b.textContent.toLowerCase().indexOf(q) >= 0;
+                    b.style.display = show ? '' : 'none';
+                    if (show && first < 0) { first = i; }
+                });
+                none.style.display = first < 0 ? '' : 'none';
+                if (first >= 0 && rows[at].style.display === 'none') { pick(first); }
+                go.disabled = first < 0;
+            });
+            find.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') { e.preventDefault(); if (!go.disabled) { yes(); } }
+                else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); step(e.key === 'ArrowDown' ? 1 : -1); }
+            });
+            card.appendChild(find);
+        }
+        ls.addEventListener('keydown', function (e) {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); step(e.key === 'ArrowDown' ? 1 : -1); rows[at].focus(); }
+        });
+        card.appendChild(ls);
+    }
+    function pick(i) {
+        at = i;
+        rows.forEach(function (b, j) { b.setAttribute('aria-selected', j === i ? 'true' : 'false'); });
+        var r = rows[i], box = r.parentNode;
+        if (r.offsetTop < box.scrollTop) { box.scrollTop = r.offsetTop - 4; }
+        else if (r.offsetTop + r.offsetHeight > box.scrollTop + box.clientHeight) { box.scrollTop = r.offsetTop + r.offsetHeight - box.clientHeight + 4; }
+    }
+    function step(d) {
+        for (var i = at + d; i >= 0 && i < rows.length; i += d) {
+            if (rows[i].style.display !== 'none') { pick(i); return; }
+        }
+    }
+
+    var tick = null;
+    if (V.check) {
+        var ck = el('label', 'ck');
+        tick = el('input');
+        tick.type = 'checkbox';
+        tick.checked = !!V.check.on;
+        ck.appendChild(tick);
+        ck.appendChild(el('span', null, V.check.label));
+        card.appendChild(ck);
+    }
+
+    var ft = el('div', 'ft'), go = el('button', 'go' + (V.danger ? ' bad' : ''), V.yes || 'OK'), no = el('button', 'no', V.no || 'Cancel');
+    go.type = no.type = 'button';
+    ft.appendChild(go);
+    ft.appendChild(el('span', 'sp'));
+    ft.appendChild(no);
+    card.appendChild(ft);
+    if (rows.length) { pick(at); }
+
+    var said = false;
+    function say(p) {
+        if (said) { return; }
+        said = true;
+        close();
+        if (typeof pycmd !== 'undefined') { pycmd('duecrew:sheet:' + V.id + ':' + encodeURIComponent(JSON.stringify(p)) + '|' + window.dcBK); }
+    }
+    function yes() {
+        var p = { ok: true };
+        if (input) { p.text = input.value; }
+        if (rows.length) { p.at = at; }
+        if (tick) { p.check = tick.checked; }
+        say(p);
+    }
+    var moved = false;
+    function close() {
+        document.removeEventListener('keydown', esc, true);
+        back.removeAttribute('id');  // the bars' shade goes with it (VEIL_WATCH_JS)
+        // moved: motion.js opened it and takes it out its own way, back into what was clicked
+        if (moved || still || !back.animate) { back.remove(); return; }
+        back.style.pointerEvents = 'none';
+        back.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-in', fill: 'forwards' }).onfinish = function () { back.remove(); };
+    }
+    go.addEventListener('click', yes);
+    no.addEventListener('click', function () { say({ ok: false }); });
+    var downOnBack = false;
+    back.addEventListener('pointerdown', function (e) { downOnBack = e.target === back; });
+    back.addEventListener('click', function (e) { if (e.target === back && downOnBack) { say({ ok: false }); } });
+    function esc(e) {
+        if (e.key !== 'Escape') { return; }
+        e.stopPropagation();
+        say({ ok: false });
+    }
+    document.addEventListener('keydown', esc, true);
+    document.body.appendChild(back);
+    if (window.dcMotion && !still) { dcMotion.open(back, card); moved = true; }
+    // a line to write starts in its box, its words selected; a step that can't be
+    // taken back starts on Cancel, as the Qt question did
+    if (input) { input.focus(); input.select(); }
+    else if (rows.length) { (find || rows[at]).focus(); }
+    else if (V.danger) { no.focus(); } else { go.focus(); }
+})();
+"""
+
+
+def sheet_js(view):
+    """SHEET_JS with its view (sheets.py builds it): the words as JSON, no
+    '</' to end the script."""
+    f = view.get("field") or None
+    if f and f.get("kind") == "text":
+        f = {"kind": "text", "value": str(f.get("value") or ""), "max": max(1, min(2000, int(f.get("max") or 280))),
+             "hint": str(f.get("hint") or "")}
+    elif f and f.get("kind") == "pick":
+        items = [str(x) for x in f.get("items") or []]
+        f = {"kind": "pick", "items": items, "at": max(0, min(len(items) - 1, int(f.get("at") or 0)))} if items else None
+    else:
+        f = None
+    ck = view.get("check")
+    data = {"id": str(view.get("id") or ""), "title": str(view.get("title") or ""), "text": str(view.get("text") or ""),
+            "yes": str(view.get("yes") or "OK"), "no": str(view.get("no") or "Cancel"), "danger": bool(view.get("danger")),
+            "field": f, "check": {"label": str(ck.get("label") or ""), "on": bool(ck.get("on"))} if ck else None}
+    return SHEET_JS.replace("__VIEW__", _json.dumps(data).replace("</", "<\\/"))
 
 
 CHEER_PIP = 92  # 3.8.22: a crewmate's Pip popping in with their cheer

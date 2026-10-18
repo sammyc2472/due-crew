@@ -2283,6 +2283,60 @@ def install_fake_requests(store):
     sys.modules["requests"] = mod
 
 
+class _Any:
+    """Any Qt enum or flag: an attribute of anything, callable."""
+    def __getattr__(self, name):
+        return _Any()
+
+    def __call__(self, *a, **k):
+        return _Any()
+
+
+class _FakeBox:
+    """QMessageBox and QInputDialog: whatever's asked, the first button
+    (the yes) is clicked and the text is what it was set to."""
+    Icon = ButtonRole = StandardButton = InputMode = _Any()
+
+    def __init__(self, *a, **k):
+        self._buttons, self._text = [], ""
+
+    def addButton(self, *a, **k):
+        self._buttons.append(object())
+        return self._buttons[-1]
+
+    def clickedButton(self):
+        return self._buttons[0] if self._buttons else None
+
+    def exec(self):
+        return 1
+
+    def setTextValue(self, text):
+        self._text = text
+
+    def textValue(self):
+        return self._text
+
+    def findChildren(self, *a):
+        return []
+
+    def __getattr__(self, name):
+        return lambda *a, **k: None
+
+
+class _FakeCheck:
+    def __init__(self, *a, **k):
+        self._on = False
+
+    def setChecked(self, on):
+        self._on = bool(on)
+
+    def isChecked(self):
+        return self._on
+
+    def __getattr__(self, name):
+        return lambda *a, **k: None
+
+
 def install_fake_aqt():
     """Minimal aqt/anki surface so due_crew modules import."""
     aqt = types.ModuleType("aqt")
@@ -2315,8 +2369,15 @@ def install_fake_aqt():
     qt = types.ModuleType("aqt.qt")
     for name in ("QAction", "QApplication", "QCursor", "QMenu"):
         setattr(qt, name, type(name, (), {"__init__": lambda self, *a, **k: None}))
+    for name in ("setOverrideCursor", "restoreOverrideCursor", "activeModalWidget", "activeWindow"):
+        setattr(qt.QApplication, name, staticmethod(lambda *a: None))
     # deferred calls are recorded, never run: tests drive the glue directly
     qt.QTimer = type("QTimer", (), {"singleShot": staticmethod(lambda ms, fn: None)})
+    # ui.confirm / ask_text / ask_item off the board (sheets.py): yes, as askUser's fake, the words as they were
+    qt.Qt = _Any()
+    qt.QMessageBox = qt.QInputDialog = _FakeBox
+    qt.QCheckBox = _FakeCheck
+    qt.QLabel = type("QLabel", (), {"__init__": lambda self, *a, **k: None})
     utils = types.ModuleType("aqt.utils")
     utils.tooltip = lambda *a, **k: None
     utils.askUser = lambda *a, **k: True

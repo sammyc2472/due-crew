@@ -1422,44 +1422,71 @@ def unread_posts(plan):
     return [x for x in plan.get("posts") or [] if int(x.get("id") or 0) > seen and int(x.get("at") or 0) > cut]
 
 
-def offer_hold(pids, ask=None):
+def offer_hold(pids, ask=None, words=None):
     """3.4 review, H1: a plan first seen on this computer (followed on the
     site, or elsewhere) asks what Follow asks: hold back its later dates'
     cards until their day (at my own pace, until I open them)? Only when
     there are some (a computer that held them already has them suspended,
-    which AnkiWeb brought here). A yes is kept (`hold_yes`)."""
+    which AnkiWeb brought here). A yes is kept (`hold_yes`). 3.9.1: the
+    question is a sheet (sheets.confirm), one plan at a time, the next
+    asked once this one's answered. words(name, n, own): (title, text, yes)
+    in place of _hold_words. ask(name, n): a test's answer, at once."""
     if not mw.col:
         return
+    pids = list(pids)
+    while pids:
+        pid = pids.pop(0)
+        got = _holdable(pid)
+        if not got:
+            continue
+        p, cids, own = got
+        name = p.get("name") or "The plan"
+        if ask is not None:
+            if ask(name, len(cids)):
+                _hold(pid)
+            continue
+        from . import sheets
+        title, text, yes = (words or _hold_words)(name, len(cids), own)
+        rest = list(pids)
+        sheets.confirm(title, text, yes, lambda: (_hold(pid), offer_hold(rest, words=words)),
+                       no=lambda: offer_hold(rest, words=words))
+        return
+
+
+def _holdable(pid):
+    """(plan, the cards Hold back would keep, own pace), or None."""
+    st = _state_cfg(_pcfg()).get(pid)
+    p = next((x for x in followed() if x["id"] == pid), None)
+    if not p or not st or not mw.col or not _deck_ok(mw.col, st.get("deck_id")):
+        return None
+    idx = P.DeckIndex(mw.col, st["deck_id"])
+    own = P.own_pace(p)
+    cids = P.holdable(idx, p["doc"], _today(), _swap(st), st.get("applied"), own=own, kept=_opened_cids(idx, st, p["doc"]))
+    return (p, cids, own) if cids else None
+
+
+def _hold(pid):
+    """offer_hold's yes: what's holdable now, held, in one undo step."""
+    got = _holdable(pid)
+    if not got:
+        return
+    p, cids, _own = got
     c = _pcfg()
     state = _state_cfg(c)
-    changed = False
-    for pid in pids:
-        p = next((x for x in followed() if x["id"] == pid), None)
-        st = state.get(pid)
-        if not p or not st or not _deck_ok(mw.col, st.get("deck_id")):
-            continue
-        idx = P.DeckIndex(mw.col, st["deck_id"])
-        own = P.own_pace(p)
-        cids = P.holdable(idx, p["doc"], _today(), _swap(st), st.get("applied"), own=own, kept=_opened_cids(idx, st, p["doc"]))
-        name = p.get("name") or "The plan"
-        if not cids or not (ask(name, len(cids)) if ask else _ask_hold(name, len(cids), own)):
-            continue
-        st["hold_yes"] = True
-        changed = True
-        n = P.hold_cards(mw.col, cids, f"Due Crew: hold back {p.get('name') or 'plan'}")
-        if n:
-            st["held"] = sorted(set(st.get("held") or []) | {int(x) for x in cids})
-    if changed:
-        c["plans"] = state
-        _psave(c)
-        _after_change()
-        refresh_progress()
-        app.swap(cfg())
+    st = state[pid]
+    st["hold_yes"] = True
+    n = P.hold_cards(mw.col, cids, f"Due Crew: hold back {p.get('name') or 'plan'}")
+    if n:
+        st["held"] = sorted(set(st.get("held") or []) | {int(x) for x in cids})
+    c["plans"] = state
+    _psave(c)
+    _after_change()
+    refresh_progress()
+    app.swap(cfg())
 
 
-def _ask_hold(name, n, own=False):
+def _hold_words(name, n, own=False):
     """offer_hold's question (plain text: the plan's name is the author's)."""
-    from .ui import confirm
     cards = f"{n:,} card{'s' if n != 1 else ''}"
     if own:
         text = (f"{name} is new on this computer. Hold back {cards} of its later dates until you open them?"
@@ -1467,7 +1494,7 @@ def _ask_hold(name, n, own=False):
     else:
         text = (f"{name} is new on this computer. Hold back {cards} of its later dates until their day?"
                 "\n\nThey open on their day. One undo step; stopping the plan opens them again.")
-    return confirm(mw, "Hold back later cards", text, "Hold back")
+    return "Hold back later cards", text, "Hold back"
 
 
 def send_ids():
@@ -2717,9 +2744,8 @@ def set_own(pid, own):
         if was and not own:
             _resume(pid)
         elif own and not was:
-            from .ui import confirm
-            offer_hold([pid], ask=lambda name, n: confirm(
-                mw, "Hold back the rest",
+            offer_hold([pid], words=lambda name, n, _own: (
+                "Hold back the rest",
                 f"{name}: {n:,} card{'s' if n != 1 else ''} of dates you haven't opened are open already. "
                 "Hold them back until you open their date?\n\nOne undo step; stopping the plan opens them again.",
                 "Hold back"))
@@ -2864,11 +2890,13 @@ def reset_days(pid):
     lines = reset_lines(raw)
     if not lines:
         return
-    from .ui import confirm
-    if not confirm(mw, "Reset to default", "Reset to default?\n\n" + "\n".join("\u2022 " + x for x in lines)
+    from . import sheets
+    sheets.confirm("Reset to default?", "\n".join("\u2022 " + x for x in lines)
                    + "\n\nCards already open stay open. Dates that come back and have passed count as behind.",
-                   "Reset"):
-        return
+                   "Reset", lambda: _reset_days(pid))
+
+
+def _reset_days(pid):
     cl = client()
 
     def done(got):
@@ -3257,22 +3285,27 @@ def change_deck(pid):
     p = next((p for p in followed() if p["id"] == pid), None)
     if p is None or not mw.col:
         return
-    from .ui import ask_item
+    from . import sheets
     choices = P.deck_choices(mw.col)
     if not choices:
+        return
+    st = _state_cfg(_pcfg()).get(pid)
+    best, _swap_guess = P.best_deck(mw.col, p["doc"], choices)
+    current = st.get("deck_id") if st else best
+    at = next((i for i, (d, _n) in enumerate(choices) if d == current), 0)
+    # plain text: the plan's name is the author's
+    sheets.ask_item("Change deck", f"Run {p.get('name') or 'the plan'} on", [n for _d, n in choices],
+                    lambda i: _run_on(pid, choices[i][0]), at=at)
+
+
+def _run_on(pid, did):
+    """change_deck's pick."""
+    p = next((p for p in followed() if p["id"] == pid), None)
+    if p is None or not mw.col:
         return
     c = _pcfg()
     state = _state_cfg(c)
     st = state.get(pid)
-    best, _swap_guess = P.best_deck(mw.col, p["doc"], choices)
-    current = st.get("deck_id") if st else best
-    names = [n for _d, n in choices]
-    at = next((i for i, (d, _n) in enumerate(choices) if d == current), 0)
-    # plain text: the plan's name is the author's
-    name, ok = ask_item(mw, "Change deck", f"Run {p.get('name') or 'the plan'} on", names, at)
-    if not ok:
-        return
-    did = next(d for d, n in choices if n == name)
     idx = P.DeckIndex(mw.col, did)
     swap = P.detect_swap(idx, p["doc"])
     if swap:
@@ -3333,19 +3366,22 @@ def stop_following(pid):
     p = next((p for p in followed() if p["id"] == pid), None)
     if p is None:
         return
-    from .ui import confirm, confirm_check
-    text = (f"Stop following {p.get('name') or 'this plan'}?\n\n"
-            "Cards already open stay open"
+    from . import sheets
+    text = ("Cards already open stay open"
             + (", and the ones it held back open too" if (_state_cfg().get(pid) or {}).get("held") else "")
             + ". The crew stops seeing your progress on this plan.")
-    untag = False
+    title = f"Stop following {p.get('name') or 'this plan'}?"
     if (_state_cfg().get(pid) or {}).get("tags"):
         # 3.8.0: its tags stay only if I say so (they stop updating)
-        ok, untag = confirm_check(mw, "Stop following", text, "Stop",
-                                  f"Take {p.get('name') or 'its'}'s tags off your notes too")
-        if not ok:
-            return
-    elif not confirm(mw, "Stop following", text, "Stop"):
+        sheets.confirm_check(title, text, "Stop", f"Take {p.get('name') or 'its'}'s tags off your notes too",
+                             lambda untag: _stop(pid, untag))
+    else:
+        sheets.confirm(title, text, "Stop", lambda: _stop(pid, False))
+
+
+def _stop(pid, untag):
+    p = next((p for p in followed() if p["id"] == pid), None)
+    if p is None:
         return
     cl = client()
 

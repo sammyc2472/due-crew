@@ -46,7 +46,7 @@ from .stats import heatmap as cached_heatmap
 from .stats.decks import gather_shared_decks
 from .stats.queries import StatsQueries
 from .ui import copy_text
-from . import account, bingo_flow, due_flow, plan_flow, rooms, together, two_buttons
+from . import account, bingo_flow, due_flow, plan_flow, rooms, sheets, together, two_buttons
 from . import cards as crew_cards
 from .wrap import (_arrivals, _deck_deltas, _exam_eve_info, _mute_knocker, _save_wrap, _update_returns,
                    _update_wrap, _wrap_data, _wrap_info)
@@ -667,6 +667,7 @@ def _on_did_render(deck_browser):
         from aqt.qt import QTimer
         QTimer.singleShot(0, lambda: _morning_now(waiting))
     together.show_luck_card()
+    sheets.redraw()  # 3.9.1: a question that was open goes back up on the page drawn anew
     rooms.refresh_widgets()
 
 
@@ -843,6 +844,10 @@ def _on_js(handled, message, context):
             message, ok = trusted(message, card_page)
             if not ok:
                 return (True, None)
+    if message == "duecrew:veiltap":
+        # 3.9.1: a tap on the top or bottom bar's shade (app.veil) is Esc on the board
+        app.board_eval("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));")
+        return (True, None)
     if message.startswith("duecrew:knows"):
         # 3.2: the chip in the reviewer's bottom bar, or its card above it
         try:
@@ -948,6 +953,10 @@ def _on_js(handled, message, context):
     elif cmd == "cheersend" and len(parts) > 2:
         from .social import send_from_window
         send_from_window(":".join(parts[2:]))  # 3.9.1: the Cheer window's Send
+    elif cmd == "sheet" and len(parts) > 3:
+        sheets.answer(parts[2], ":".join(parts[3:]))  # 3.9.1: a sheet's answer
+    elif cmd == "veil" and len(parts) > 2:
+        app.veil(parts[2] == "1" and app.board_up())  # 3.9.1: a window over the board; the bars dim with it
     elif cmd == "rowmenu" and len(parts) > 2:
         row_menu(parts[2])  # 3.0.1: right-click a crewmate: mute, report
     elif cmd == "status":
@@ -1438,8 +1447,7 @@ def _settings_cmd(cmd, parts):
         if _edit_emoji(mw) is not None:
             _swap(cfg(), focus)
     elif cmd == "setstatus":
-        if _edit_status(mw) is not None:
-            _swap(cfg(), focus)
+        _edit_status(lambda _s: _swap(cfg(), focus))
     elif cmd == "setsquads":
         open_squads()
         _swap(cfg(), focus)
@@ -1447,11 +1455,11 @@ def _settings_cmd(cmd, parts):
         _state["settings_tab"] = None
         open_auth()
     elif cmd == "setsignout":
-        from .ui import confirm
-        if confirm(mw, "Sign out?", "Sign out on this device? Your account and stats stay.", "Sign Out"):
+        def out():
             _state["settings_tab"] = None
             client().sign_out()
             _on_signed_out()
+        sheets.confirm("Sign out?", "Sign out on this device? Your account and stats stay.", "Sign Out", out)
     elif cmd == "setdelete":
         _delete_account()
     elif cmd == "setfeedback":
@@ -1503,38 +1511,38 @@ def _flip(focus):
 
 
 def _rename():
-    from aqt.qt import QInputDialog, QLineEdit
     cl = client()
     current = cl.display_name
-    name, ok = QInputDialog.getText(mw, "Display name", "New name:", QLineEdit.EchoMode.Normal, current)
-    name = name.strip()
-    if not ok or not name or name == current:
-        return
 
-    def done(result):
-        if not result:
-            tooltip("Couldn't save the name. Try again.")
+    def go(name):
+        name = name.strip()
+        if not name or name == current:
             return
-        tooltip("Name changed.")
-        _swap(cfg())
-    _bg(lambda: cl.set_display_name(name), done)
+
+        def done(result):
+            if not result:
+                tooltip("Couldn't save the name. Try again.")
+                return
+            tooltip("Name changed.")
+            _swap(cfg())
+        _bg(lambda: cl.set_display_name(name), done)
+    sheets.ask_text("Display name", "New name.", go, value=current or "", most=60)
 
 
 def _delete_account():
-    from .ui import confirm
-    if not confirm(mw, "Delete account?", "This deletes your stats, your code, and "
-                   "your account for good. No undo.", "Delete Account"):
-        return
-    cl = client()
+    def go():
+        cl = client()
 
-    def done(result):
-        if not result:
-            tooltip("Couldn't delete. Check your connection and try again.")
-            return
-        _state["settings_tab"] = None
-        _on_signed_out()
-        tooltip("Account deleted.")
-    _bg(lambda: cl.delete_account() or True, done)
+        def done(result):
+            if not result:
+                tooltip("Couldn't delete. Check your connection and try again.")
+                return
+            _state["settings_tab"] = None
+            _on_signed_out()
+            tooltip("Account deleted.")
+        _bg(lambda: cl.delete_account() or True, done)
+    sheets.confirm("Delete account?", "This deletes your stats, your code, and your account for good. No undo.",
+                   "Delete Account", go, danger=True)
 
 
 def open_feedback():

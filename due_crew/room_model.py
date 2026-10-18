@@ -1214,7 +1214,10 @@ CARD_PAGE_CMDS = ("roomcard", "roomcardoff", "roomtuck", "roomskip", "roombreake
                   # the Ask card above the bar (cards.py): opening a dialog or a
                   # menu (Tip asks for its line), moving the chip to the bar, and This
                   # helped, which asks first
-                  "knowsask", "knowstip", "knowsbar", "knowshelped", "knowsreply")
+                  "knowsask", "knowstip", "knowsbar", "knowshelped", "knowsreply",
+                  # 3.9.1: a tap on the bars' shade (app.veil) is Esc on the board; the
+                  # Decks screen's bottom bar is Anki's, not ours, so it comes keyed
+                  "veiltap")
 
 
 def trusted(message, from_card_page):

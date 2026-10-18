@@ -884,9 +884,9 @@ def on_message(cmd, parts=(), from_card_page=False):
     elif cmd == "knowshelped" and len(parts) > 2:
         if from_card_page:
             # the review screen runs the card's script too: a thanks is sent only on a yes
-            from aqt.utils import askUser
+            from .ui import confirm  # in the board's colours (3.9.1); the review screen has no board for a sheet
             tip = _tip_from(parts[2])
-            if tip is None or (not tip["helped"] and not askUser(f"Tell {tip['name'].split(' ')[0]} this tip helped?")):
+            if tip is None or (not tip["helped"] and not confirm(mw, "This helped", f"Tell {tip['name'].split(' ')[0]} this tip helped?", "Tell them")):
                 return True
         helped_toggle(parts[2])
     elif cmd == "knowsreply" and len(parts) > 3:

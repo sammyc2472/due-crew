@@ -169,8 +169,53 @@ def cfg():
 pages = [0]
 
 
-def on_set_content(*_args):
+def on_set_content(_content=None, context=None, *_args):
     pages[0] += 1
+    if _veiled[0] and not _a_bar(context):
+        veil(False)  # the main view's new page has no window open over it
+
+
+def _a_bar(context):
+    """The top bar's or a bottom bar's page (Anki's TopToolbar, Toolbar,
+    DeckBrowserBottomBar, OverviewBottomBar, ReviewerBottomBar)."""
+    name = type(context).__name__
+    return name in ("TopToolbar", "Toolbar") or name.endswith("BottomBar")
+
+
+# 3.9.1 (Sam: "when cheering, the full background doesn't grey out"): while
+# a window is open over the board (the Cheer window, a profile card, a
+# sheet), the top bar and the bottom bar, pages of their own, wear the
+# board's backdrop too, and a tap on either is Esc on the board, as a tap on
+# the backdrop closes it. The board's page says when (board.VEIL_WATCH_JS);
+# a new page in the main view or leaving the Decks screen takes it off.
+VEIL_JS = """(function (on) {
+  var v = document.getElementById('dc-veil');
+  if (!v) {
+    if (!on) { return; }
+    var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    v = document.createElement('div');
+    v.id = 'dc-veil';
+    v.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.35);opacity:0;' + (still ? '' : 'transition:opacity .22s;');
+    v.addEventListener('click', function () { if (typeof pycmd !== 'undefined') { pycmd('duecrew:veiltap|%(key)s'); } });
+    document.body.appendChild(v);
+    v.getBoundingClientRect();
+  }
+  v.style.opacity = on ? '1' : '0';
+  v.style.pointerEvents = on ? 'auto' : 'none';
+})(%(on)s);"""
+_veiled = [False]
+
+
+def veil(on):
+    from .room_model import CMD_KEY
+    _veiled[0] = bool(on)
+    js = VEIL_JS % {"key": CMD_KEY, "on": "true" if on else "false"}
+    for web in (getattr(getattr(mw, "toolbar", None), "web", None), getattr(mw, "bottomWeb", None)):
+        try:
+            if web is not None:
+                web.eval(js)
+        except Exception:
+            pass
 
 
 # 3.9.1 (the security review): whether Anki's main view has the Decks page
@@ -183,6 +228,8 @@ _decks = [False]
 
 def on_state_will_change(*_args):
     _decks[0] = False
+    if _veiled[0]:
+        veil(False)
 
 
 def on_decks_render():

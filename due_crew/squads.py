@@ -8,12 +8,12 @@ import time
 from aqt import mw
 from aqt.utils import tooltip
 
-from . import app, board
+from . import app, board, sheets
 from .app import SQUAD_CACHE_SECS, _bg, _state, cfg, client, save_cfg
 from .backend.shapes import TransportError
 from .social import _open_profile, drop_muted, muted_uids
 from .stats.queries import StatsQueries
-from .ui import confirm, copy_text
+from .ui import copy_text
 from .wrap import _mute_knocker, _wrap_data
 
 def _my_squads(c=None):
@@ -274,10 +274,12 @@ def _copy_invite():
     tooltip("Copied.")
 
 
-def _leave_squad():
+def _leave_squad(sure=False):
     cur = _current_squad()
-    if cur is None or not confirm(
-            mw, "Leave squad?", f"Leave {cur.get('name') or 'this squad'}?", "Leave"):
+    if cur is None:
+        return
+    if not sure:
+        sheets.confirm("Leave squad?", f"Leave {cur.get('name') or 'this squad'}?", "Leave", lambda: _leave_squad(True))
         return
     cl = client()
     sid = cur["id"]
@@ -305,7 +307,7 @@ def _toggle_squad_lock():
     _bg(lambda: cl.set_squad_open(cur["id"], new_open), done)
 
 
-def _block_member(uid):
+def _block_member(uid, sure=False):
     """Founder: remove and keep them out, even with the code and an open
     door."""
     cur = _current_squad()
@@ -313,9 +315,11 @@ def _block_member(uid):
     if cur is None or sq["data"] is None or sq["id"] != cur["id"]:
         return
     row = next((r for r in sq["data"]["rows"] if r["user_id"] == uid), None)
-    if row is None or not confirm(
-            mw, "Block?", f"Block {row['name']}? They leave "
-            f"{cur.get('name') or 'the squad'} and can't rejoin.", "Block"):
+    if row is None:
+        return
+    if not sure:
+        sheets.confirm("Block?", f"Block {row['name']}? They leave {cur.get('name') or 'the squad'} and can't rejoin.",
+                       "Block", lambda: _block_member(uid, True), danger=True)
         return
     cl = client()
     banned = list(sq["data"].get("banned") or [])
@@ -332,7 +336,7 @@ def _block_member(uid):
     _bg(lambda: cl.block_member(cur["id"], uid), done)
 
 
-def _make_founder(uid):
+def _make_founder(uid, sure=False):
     """Founder: hand the squad to a member. Lock and remove move with it;
     you stay a member."""
     cur = _current_squad()
@@ -340,9 +344,11 @@ def _make_founder(uid):
     if cur is None or sq["data"] is None or sq["id"] != cur["id"]:
         return
     row = next((r for r in sq["data"]["rows"] if r["user_id"] == uid), None)
-    if row is None or not confirm(
-            mw, "Hand the squad on?", f"Make {row['name']} the founder of "
-            f"{cur.get('name') or 'the squad'}? You can't undo this.", "Make Founder"):
+    if row is None:
+        return
+    if not sure:
+        sheets.confirm("Hand the squad on?", f"Make {row['name']} the founder of {cur.get('name') or 'the squad'}? "
+                       "You can't undo this.", "Make Founder", lambda: _make_founder(uid, True), danger=True)
         return
     cl = client()
 
@@ -381,15 +387,17 @@ def _share_squad():
     tooltip("Copied.")
 
 
-def _kick_member(uid):
+def _kick_member(uid, sure=False):
     cur = _current_squad()
     sq = _state["squad"]
     if cur is None or sq["data"] is None or sq["id"] != cur["id"]:
         return
     row = next((r for r in sq["data"]["rows"] if r["user_id"] == uid), None)
-    if row is None or not confirm(
-            mw, "Remove?", f"Remove {row['name']} from "
-            f"{cur.get('name') or 'the squad'}?", "Remove"):
+    if row is None:
+        return
+    if not sure:
+        sheets.confirm("Remove?", f"Remove {row['name']} from {cur.get('name') or 'the squad'}?", "Remove",
+                       lambda: _kick_member(uid, True), danger=True)
         return
     cl = client()
 

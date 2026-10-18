@@ -657,6 +657,21 @@ stranger_js = board.stranger_card_js({"uid": "u2", "name": "Maya R.",
                                       "pending": False, "knocked_me": False,
                                       "founder_me": True})
 
+# 3.9.1: the board's sheets (sheets.py): a line, a step that can't be taken back, one of a few
+sheet_text = board.sheet_js({"id": "p1", "title": "Status", "yes": "Set",
+                             "text": "One line under your name, for your crew. Start with a number "
+                                     "(\u201c200 cards, then bed\u201d) and it ticks itself off. Empty clears it.",
+                             "field": {"kind": "text", "value": "200 cards, then bed", "max": 80}})
+sheet_danger = board.sheet_js({"id": "p2", "title": "Stop following Step 1 \u00b7 Micro block?", "yes": "Stop",
+                               "text": "Cards already open stay open. The crew stops seeing your progress on this plan.",
+                               "check": {"label": "Take Step 1 \u00b7 Micro block's tags off your notes too", "on": True}})
+sheet_delete = board.sheet_js({"id": "p3", "title": "Delete account?", "yes": "Delete Account", "danger": True,
+                               "text": "This deletes your stats, your code, and your account for good. No undo."})
+sheet_pick = board.sheet_js({"id": "p4", "title": "Change deck", "text": "Run Step 1 \u00b7 Micro block on",
+                             "field": {"kind": "pick", "at": 3, "items": ["Big Step 1"] + [f"Big Step 1::{x}" for x in (
+                                 "Biochem", "Cardio", "Endo", "GI", "Heme", "Immuno", "Micro", "Neuro", "Pharm",
+                                 "Physio", "Psych", "Renal", "Repro", "Resp")] + ["Japanese Core 2k"]}})
+
 page = f"""<!doctype html><html><head><meta charset="utf-8">
 <title>Due Crew board preview</title>
 <style>
@@ -683,6 +698,10 @@ page = f"""<!doctype html><html><head><meta charset="utf-8">
   <button onclick="eval(FLURRY_JS)">flurry</button>
   <button onclick="eval(STRANGER_JS)">stranger</button>
   <button onclick="eval(LUCK_JS)">luck</button>
+  <button onclick="eval(SHEET_TEXT)">status</button>
+  <button onclick="eval(SHEET_DANGER)">stop</button>
+  <button onclick="eval(SHEET_DELETE)">delete</button>
+  <button onclick="eval(SHEET_PICK)">deck</button>
 </div>
 <center>{''.join(sections)}</center>
 <script>
@@ -691,6 +710,10 @@ page = f"""<!doctype html><html><head><meta charset="utf-8">
   var FLURRY_JS = {json.dumps(flurry)};
   var STRANGER_JS = {json.dumps(stranger_js)};
   var LUCK_JS = {json.dumps(luck_js)};
+  var SHEET_TEXT = {json.dumps(sheet_text)};
+  var SHEET_DANGER = {json.dumps(sheet_danger)};
+  var SHEET_DELETE = {json.dumps(sheet_delete)};
+  var SHEET_PICK = {json.dumps(sheet_pick)};
 </script>
 </body></html>"""
 

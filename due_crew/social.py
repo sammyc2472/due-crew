@@ -152,38 +152,39 @@ def _send_cheer(to_uid, to_name, emoji, note="", luck=False, guid=None, then=Non
     _bg(lambda: cl.send_cheer(to_uid, emoji, note or None, luck=luck, guid=guid, doodle=doodle), done)
 
 
-def _edit_status(parent=None):
+def _edit_status(then=None):
     """Own card → "Set a status" / "edit", and (2.9) Settings → You. One
     line, crew-only, pushed right away (it rides today's stats doc). Empty
-    clears it. Returns the new status, or None when nothing changed."""
-    from aqt.qt import QInputDialog
-    c = cfg()
-    current = str(c.get("status") or "")
-    text, ok = QInputDialog.getText(
-        parent or mw, "Status",
-        "One line under your name, for your crew. Start with a number "
-        "(\u201c200 cards, then bed\u201d) and it ticks itself off. Empty clears it.",
-        text=current)
-    if not ok:
-        return None
-    text = " ".join(str(text).split())[:80]
-    if text == current:
-        return None
-    c["status"] = text
-    save_cfg(c)
-    lb = _state["labels"][0] if _state["labels"] else None
-    for e in _state["entries"] or []:  # show it now; the upload confirms it
-        if e["you"] and lb and e["days"].get(lb):
-            doc = dict(e["days"][lb])
-            if text:
-                doc["status"] = text
-            else:
-                doc.pop("status", None)
-            e["days"][lb] = doc
-    app.rerender()
-    app.sync()
-    tooltip("Status set." if text else "Status cleared.")
-    return text
+    clears it. then(status) once it's changed. 3.9.1: a sheet on the board
+    (sheets.ask_text), not a Qt box."""
+    from . import sheets
+    current = str(cfg().get("status") or "")
+
+    def save(text):
+        text = " ".join(str(text).split())[:80]
+        c = cfg()
+        if text == str(c.get("status") or ""):
+            return
+        c["status"] = text
+        save_cfg(c)
+        lb = _state["labels"][0] if _state["labels"] else None
+        for e in _state["entries"] or []:  # show it now; the upload confirms it
+            if e["you"] and lb and e["days"].get(lb):
+                doc = dict(e["days"][lb])
+                if text:
+                    doc["status"] = text
+                else:
+                    doc.pop("status", None)
+                e["days"][lb] = doc
+        app.rerender()
+        app.sync()
+        tooltip("Status set." if text else "Status cleared.")
+        if then is not None:
+            then(text)
+
+    sheets.ask_text("Status", "One line under your name, for your crew. Start with a number "
+                    "(\u201c200 cards, then bed\u201d) and it ticks itself off. Empty clears it.",
+                    save, value=current, most=80, yes="Set")
 
 
 def _edit_emoji(parent=None):

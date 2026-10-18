@@ -2367,6 +2367,32 @@ every release that changes how something works.
   root). And a cheer an older server took without its drawing (the 400
   fallback) no longer says "and a drawing" (`api.send_cheer` returns
   "plain").
+- 3.9.1, the whole window dims, and the board's questions are sheets (Sam:
+  "when cheering, the full background doesn't grey out ... also the modal
+  for status update is still native, make sure all modals are in our
+  style"). The top bar and the bottom bar are pages of their own, so a
+  window over the board dimmed the board alone. Now the board's page
+  watches for its windows (`board.VEIL_WATCH_JS`: the Cheer window, a
+  profile card, a sheet) and says when one comes and when the last goes
+  (a closing one gives up its id as it starts to fade, so the bars fade
+  with it); the glue puts the same backdrop over both bars (`app.veil`),
+  and a tap there is Esc on the board (`veiltap`, keyed: the Decks
+  screen's bottom bar is Anki's page, not ours). A new page in the main
+  view or leaving Decks takes it off. And every question the board asks
+  (status, display name, sign out, delete account, edit a to-do, the plan
+  squad's join, leave, reply, remove and Ask the squad, a good-luck line,
+  a tip, Hold back, Reset to default, Change deck, Stop following, the
+  founder's Leave, Block, Make founder, Remove) is a sheet in the Cheer
+  window's look (`sheets.py`, `board.sheet_js`): one line, one of a few
+  (a list in the board's look, with Find when it's long), a box to tick;
+  a step that can't be taken back in the board's red, Cancel focused.
+  Only a yes reaches the caller, and only an answer naming the open
+  sheet's id (new each time) with the Decks page's key; a Decks page
+  drawn anew puts the open one back. Off the board (the review screen,
+  Browse, a Qt window in front) the Qt question asks, the same words.
+  Found on the way: the Cheer window's close faded it, then motion.js's
+  own close ran on top (the fade unfilled: a frame's snap back); now
+  motion.js closes what it opened.
 - 3.9.1, the efficiency run, the Decks screen (the same ask). Measured with
   a crew of thirteen and a full fridge (twelve drawings at 2,000 points):
   every click that redraws the board (a swap) sent 77 KB of script the page

@@ -573,16 +573,18 @@ def _pick_day(ident, start):
 
 
 def _edit(ident):
-    from aqt.utils import getText
+    from . import sheets
     c = cfg()
     it = next((x for x in _items(c) if x["id"] == ident), None)
     if not it:
         return
-    text, ok = getText("Edit to-do", parent=mw, default=it["t"], title="Due")
-    if ok and " ".join(str(text).split()):
-        c = cfg()
-        _save(c, items=D.change(_items(c), ident, _today(), t=text))
-        _swap(c)
+
+    def save(text):
+        if " ".join(str(text).split()):
+            c = cfg()
+            _save(c, items=D.change(_items(c), ident, _today(), t=text))
+            _swap(c)
+    sheets.ask_text("Edit to-do", "", save, value=it["t"], most=D.MAX_TEXT)
 
 
 def delete(c, ident):

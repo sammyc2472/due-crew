@@ -2297,21 +2297,21 @@ def test_together_v210():
           and "bulb.innerHTML" not in fj  # 3.9.0, Sam's "2D": no lightbulb
           and "dc-knows-card" in crew_cards.float_js(None) and "dcKnowsOff(true)" in crew_cards.float_js(None)
           and len(crew_cards.float_js(None)) < 400 and len(crew_cards.chip_js(None)) < 300)  # 3.9.1: a remover, not the whole chip
-    import aqt.utils as _au
+    from due_crew import ui as _ui
     calls, asked = [], []
-    real_toggle, real_ask = crew_cards.helped_toggle, _au.askUser
+    real_toggle, real_ask = crew_cards.helped_toggle, _ui.confirm
     crew_cards.helped_toggle = calls.append
     real_tip = crew_cards._tip_from
     crew_cards._tip_from = lambda uid: {"name": "Eve Park", "helped": False, "from": uid}
     try:
-        _au.askUser = lambda q, *a, **k: asked.append(q) or False
+        _ui.confirm = lambda parent, title, q, yes: asked.append(q) or False
         crew_cards.on_message("knowshelped", ["duecrew", "knowshelped", "eve"], from_card_page=True)
         no = list(calls)
-        _au.askUser = lambda q, *a, **k: asked.append(q) or True
+        _ui.confirm = lambda parent, title, q, yes: asked.append(q) or True
         crew_cards.on_message("knowshelped", ["duecrew", "knowshelped", "eve"], from_card_page=True)
         crew_cards.on_message("knowshelped", ["duecrew", "knowshelped", "eve"])
     finally:
-        crew_cards.helped_toggle, _au.askUser, crew_cards._tip_from = real_toggle, real_ask, real_tip
+        crew_cards.helped_toggle, _ui.confirm, crew_cards._tip_from = real_toggle, real_ask, real_tip
     check("ask card: This helped from the review screen asks first; from the bar it doesn't",
           no == [] and calls == ["eve", "eve"] and len(asked) == 2 and "Eve" in asked[0], str((calls, asked)))
     old_style = crew_cards.chip_view(None, [("Eve", "S3 = Kentucky")], {})
@@ -3049,7 +3049,7 @@ def test_every_board_command_has_a_handler():
     handled = set()
     for name in ("__init__.py", "plan_flow.py", "rooms.py", "cards.py", "due_flow.py", "team_flow.py"):
         text = src[os.path.join(REPO, "due_crew", name)]
-        handled |= set(re.findall(r'cmd == "([a-z0-9]+)"', text))
+        handled |= set(re.findall(r'cmd == "([a-z0-9]+)"', text)) | set(re.findall(r'message == "duecrew:([a-z0-9]+)"', text))
         for group in re.findall(r'cmd in \(([^)]*)\)', text) + re.findall(r'SETTINGS_CMDS = \(([^)]*)\)', text):
             handled |= set(re.findall(r'"([a-z0-9]+)"', group))
     prefixes = {"plan", "room", "knows"}  # 'duecrew:' + a name built at run time
@@ -4619,7 +4619,7 @@ def test_your_own_days_376():
             F.move_date(pid, "cz", 2)
             maya.set_days(pid, shift=3)
             asked = []
-            F.confirm = lambda *a: asked.append(a[2]) or True
+            F.confirm = lambda *a: asked.append(a[1] + "\n" + a[2]) or True
             from due_crew import ui as UI
             real_confirm, UI.confirm = UI.confirm, F.confirm
             try:
@@ -5139,18 +5139,19 @@ def test_asks_and_tips_v390():
 def test_plain_prompts_v311():
     """3.1.1: prompts that carry a crewmate's name are plain-text labels."""
     from due_crew import together, ui
+    from due_crew.app import _state
     got = []
-    saved = getattr(ui, "ask_text", None)
+    saved = (getattr(ui, "ask_text", None), _state.get("entries"))
     ui.ask_text = lambda parent, title, label, text="": (got.append(label), ("", False))[1]
+    _state["entries"] = [{"user_id": "dre", "name": "<b>Dre</b> K", "you": False}]
     try:
-        try:
-            together._ask_line("Good-luck card", "A line for <b>Dre</b>")
-        except Exception:
-            pass
-        check("prompts: a crewmate's name goes through the plain-text prompt", got == ["A line for <b>Dre</b>"])
+        together.send_luck_line("dre")  # off the board: Qt's plain-text prompt (3.9.1: on it, a sheet's textContent)
+        check("prompts: a crewmate's name goes through the plain-text prompt",
+              len(got) == 1 and got[0].startswith("A line for <b>Dre</b>'s exam morning"), got)
     finally:
-        if saved is not None:
-            ui.ask_text = saved
+        if saved[0] is not None:
+            ui.ask_text = saved[0]
+        _state["entries"] = saved[1]
 
 
 def test_anki_day_labels_v311():
@@ -10271,7 +10272,6 @@ def test_plan_words_v381():
     back's question at my own pace; Browse's items for writing a plan only
     for someone who writes one."""
     from due_crew import plan_flow as F
-    from due_crew import ui as UI
     line = board._opened_line({"n": 3})
     check("words: the morning's line says Not today, and when they open",
           "Not today</a>" in line and 'title="They open tomorrow morning"' in line and "Put off" not in line, line)
@@ -10288,14 +10288,7 @@ def test_plan_words_v381():
           and "seen the last\"" not in src["ui/follow_dialog.py"] + src["plan_flow.py"])
     check("words: Welcome back's choice is Push my dates back",
           'f"Push my dates back {days} day' in src["ui/days_dialog.py"] and "Pick up where" not in src["ui/days_dialog.py"])
-    said = []
-    saved = UI.confirm
-    UI.confirm = lambda parent, title, text, ok: said.append(text) or True
-    try:
-        F._ask_hold("Step 1", 3, own=True)
-        F._ask_hold("Step 1", 1)
-    finally:
-        UI.confirm = saved
+    said = [F._hold_words("Step 1", 3, own=True)[1], F._hold_words("Step 1", 1)[1]]
     check("words: Hold back's question at my own pace: until you open them",
           "3 cards of its later dates until you open them?" in said[0] and "their day" not in said[0]
           and "1 card of its later dates until their day?" in said[1], said)
@@ -15876,6 +15869,272 @@ def test_decks_page_key_v391():
           and all(f"app.board_eval(board.{f}" in open(os.path.join(REPO, "due_crew", mod)).read()
                   for mod, f in (("social.py", "flurry_js"), ("social.py", "cheer_overlay_js"), ("social.py", "profile_overlay_js"),
                                  ("squads.py", "stranger_card_js"), ("together.py", "luck_card_js"))))
+
+
+def test_veil_v391():
+    """3.9.1 (Sam: "when cheering, the full background doesn't grey out"):
+    while a window is open over the board, the top and bottom bars (pages
+    of their own) wear its backdrop too; a tap on them is Esc on the board.
+    The board's page says when; leaving it, or a new page, takes it off."""
+    import shutil
+    import subprocess
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    from due_crew import app as A
+    from due_crew.room_model import CMD_KEY, trusted
+    keep = board.keep_me_in_view_js()
+    check("veil: the board's page watches for its windows once (with its scripts), never at every swap",
+          board.VEIL_WATCH_JS in keep and board.VEIL_WATCH_JS not in board.keep_me_in_view_js(scripts=False)
+          and "if (window.dcVeil || typeof MutationObserver === 'undefined') { return; }" in board.VEIL_WATCH_JS
+          and all(f'"{i}"' in board.VEIL_WATCH_JS for i in ("dc-cheer", "dc-profile", "dc-sheet"))
+          and "'|' + window.dcBK" in board.VEIL_WATCH_JS)
+    top, bottom, main = [], [], []
+    m = A.mw
+    saved = (getattr(m, "toolbar", None), getattr(m, "bottomWeb", None), getattr(m, "state", None), m.web, A._decks[0])
+    TopToolbar = type("TopToolbar", (), {})
+    DeckBrowserBottomBar = type("DeckBrowserBottomBar", (), {})
+    try:
+        m.toolbar = types.SimpleNamespace(web=types.SimpleNamespace(eval=top.append))
+        m.bottomWeb = types.SimpleNamespace(eval=bottom.append)
+        m.web = types.SimpleNamespace(eval=main.append)
+        m.state = "deckBrowser"
+        A.on_decks_render()
+        dc._on_js(False, "duecrew:veil:1|" + board.BOARD_KEY, DeckBrowser())
+        on = (list(top), list(bottom), A._veiled[0])
+        dc._on_js(False, "duecrew:veil:0|" + board.BOARD_KEY, DeckBrowser())
+        off = (top[-1:], bottom[-1:], A._veiled[0])
+        dc._on_js(False, "duecrew:veil:1", DeckBrowser())  # without the page's key: a card's page, nothing
+        bare = A._veiled[0]
+        check("veil: a window on the board dims both bars, its going undims them; only the board's page says so",
+              len(on[0]) == len(on[1]) == 1 and "(true)" in on[0][0] and on[0] == on[1] and on[2] is True
+              and "(false)" in off[0][0] and off[1] == off[0] and off[2] is False and bare is False, (on, off, bare))
+        dc._on_js(False, "duecrew:veil:1|" + board.BOARD_KEY, DeckBrowser())
+        A.on_set_content(None, TopToolbar())
+        A.on_set_content(None, DeckBrowserBottomBar())
+        bars = A._veiled[0]
+        A.on_set_content(None, DeckBrowser())
+        page = A._veiled[0]
+        dc._on_js(False, "duecrew:veil:1|" + board.BOARD_KEY, DeckBrowser())
+        A.on_state_will_change("review", "deckBrowser")
+        m.state = "review"
+        left = (A._veiled[0], "(false)" in top[-1])
+        dc._on_js(False, "duecrew:veil:1|" + board.BOARD_KEY, DeckBrowser())
+        late = A._veiled[0]
+        check("veil: a bar's own new page keeps it; the main view's new page, leaving Decks or a late word from the page takes it off",
+              bars is True and page is False and left == (False, True) and late is False, (bars, page, left, late))
+        m.state = "deckBrowser"
+        A.on_decks_render()
+        del main[:]
+        dc._on_js(False, "duecrew:veiltap|" + CMD_KEY, DeckBrowserBottomBar())
+        dc._on_js(False, "duecrew:veiltap|" + CMD_KEY, TopToolbar())
+        check("veil: a tap on a bar's shade is Esc on the board, from the Decks bottom bar (Anki's page: keyed) or the top bar",
+              len(main) == 2 and all("key: 'Escape'" in x for x in main) and trusted("duecrew:veiltap|" + CMD_KEY, True)[1]
+              and not trusted("duecrew:veil:1|" + CMD_KEY, True)[1] and f"duecrew:veiltap|{CMD_KEY}" in A.VEIL_JS % {"key": CMD_KEY, "on": "true"})
+    finally:
+        m.toolbar, m.bottomWeb, m.state, m.web, A._decks[0] = saved
+        A._veiled[0] = False
+    node = shutil.which("node")
+    if not node:
+        print("SKIP the veil's scripts in node: no node")
+        return
+    dom = r"""
+    function El(tag) { this.tagName = tag; this.style = {}; this.kids = []; this.l = {}; this.attrs = {}; }
+    El.prototype.appendChild = function (k) { this.kids.push(k); k.parent = this; if (typeof fire === 'function') fire('child'); return k; };
+    El.prototype.addEventListener = function (t, f) { this.l[t] = f; };
+    El.prototype.getBoundingClientRect = function () { return {}; };
+    El.prototype.remove = function () { var p = this.parent; p.kids = p.kids.filter((x) => x !== this); fire('child'); };
+    El.prototype.removeAttribute = function (a) { if (a === 'id') { this.id = ''; fire('attr'); } };
+    var body = new El('body'), sent = [], obs = [];
+    function find(n, id) { if (n.id === id) return n; for (var k of n.kids) { var f = find(k, id); if (f) return f; } return null; }
+    var document = { body: body, createElement: (t) => new El(t), getElementById: (id) => find(body, id) };
+    var window = { dcBK: 'KEY', matchMedia: () => ({ matches: false }) };
+    function pycmd(c) { sent.push(c); }
+    function MutationObserver(f) { this.f = f; }
+    MutationObserver.prototype.observe = function (n, o) { obs.push([this.f, o]); };
+    function fire(kind) { obs.forEach(([f, o]) => { if ((kind === 'child') === !!o.childList) f(); }); }
+    """
+    watch = dom + board.VEIL_WATCH_JS + r"""
+    var a = new El('div'); a.id = 'dc-cheer'; body.appendChild(a);
+    var b = new El('div'); b.id = 'dc-profile'; body.appendChild(b);
+    b.remove();
+    a.removeAttribute('id');
+    a.remove();
+    console.log(JSON.stringify(sent));
+    """
+    run = subprocess.run([node, "-e", watch], capture_output=True, text=True, timeout=60)
+    check("veil: the page says once when a window comes and once when the last one starts to go",
+          run.stdout.strip() == '["duecrew:veil:1|KEY","duecrew:veil:0|KEY"]', run.stdout + run.stderr[-1500:])
+    bar = dom + "function fire() {}\n" + (A.VEIL_JS % {"key": "WK", "on": "true"}) + (A.VEIL_JS % {"key": "WK", "on": "true"}) + r"""
+    var v = document.getElementById('dc-veil'), n = body.kids.length, up = [v.style.opacity, v.style.pointerEvents];
+    v.l.click();
+    """ + (A.VEIL_JS % {"key": "WK", "on": "false"}) + r"""
+    console.log(JSON.stringify([n, up, [v.style.opacity, v.style.pointerEvents], sent, v.style.cssText]));
+    """
+    run = subprocess.run([node, "-e", bar], capture_output=True, text=True, timeout=60)
+    try:
+        got = json.loads(run.stdout)
+    except ValueError:
+        got = None
+    check("veil: a bar gets one shade, the board's backdrop over everything; a tap sends the widget's keyed veiltap; off, it lets clicks through",
+          got is not None and got[0] == 1 and got[1] == ["1", "auto"] and got[2] == ["0", "none"]
+          and got[3] == ["duecrew:veiltap|WK"] and "rgba(0,0,0,.35)" in got[4] and "z-index:2147483647" in got[4],
+          run.stdout + run.stderr[-1500:])
+
+
+def test_sheets_v391():
+    """3.9.1 (Sam: "make sure all modals are in our style"): a question, one
+    line or one of a few, as a sheet on the Decks screen in the Cheer
+    window's look; the Qt one off the board. Only a yes reaches then, and
+    only an answer naming the open sheet's id, with the page's key."""
+    import shutil
+    import subprocess
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    from urllib.parse import quote
+    from due_crew import app as A, sheets, ui
+    js = board.sheet_js({"id": "abc", "title": "Status </script><b>", "text": "One line.\n\nTwo.", "yes": "Set",
+                         "field": {"kind": "text", "value": "200 cards", "max": 99999}, "check": {"label": "Tags <i>too</i>", "on": 1}})
+    view = json.loads(re.search(r"var V = (\{.*?\});\n", js).group(1).replace("<\\/", "</"))
+    check("sheet: its words as JSON (no '</' to end the script), as text never markup; a box's ceiling kept sane",
+          "</script>" not in js.split("var V = ")[1].split(";\n")[0] and view["title"] == "Status </script><b>"
+          and view["field"] == {"kind": "text", "value": "200 cards", "max": 2000, "hint": ""} and view["check"] == {"label": "Tags <i>too</i>", "on": True}
+          and "innerHTML" not in board.SHEET_JS and "textContent" in board.SHEET_JS and "white-space:pre-line" in board.SHEET_JS)
+    pick = json.loads(re.search(r"var V = (\{.*?\});\n", board.sheet_js({"id": "x", "title": "t", "field": {"kind": "pick", "items": ["a", "b"], "at": 9}})).group(1))
+    none = json.loads(re.search(r"var V = (\{.*?\});\n", board.sheet_js({"id": "x", "title": "t", "field": {"kind": "pick", "items": []}})).group(1))
+    odd = json.loads(re.search(r"var V = (\{.*?\});\n", board.sheet_js({"id": "x", "title": "t", "field": {"kind": "html"}})).group(1))
+    check("sheet: a pick's place kept in its list; no items or an unknown kind, no field",
+          pick["field"]["at"] == 1 and none["field"] is None and odd["field"] is None)
+    check("sheet: the board's tokens and font, the Cheer window's buttons, its answer one keyed command; Esc and the backdrop say no",
+          "getPropertyValue('--dc-' + name)" in board.SHEET_JS and "dcStyle.fontFamily" in board.SHEET_JS
+          and "#dc-sheet .go{background:' + accent" in board.SHEET_JS and "#dc-sheet .no{background:none" in board.SHEET_JS
+          and "pycmd('duecrew:sheet:' + V.id + ':' + encodeURIComponent(JSON.stringify(p)) + '|' + window.dcBK)" in board.SHEET_JS
+          and "'Escape'" in board.SHEET_JS and "downOnBack" in board.SHEET_JS and "say({ ok: false })" in board.SHEET_JS
+          and "dc-sheet" in board.VEIL_IDS)
+
+    # the glue: on the board, a sheet; its answer, once, with its id
+    m = A.mw
+    saved = (getattr(m, "state", None), m.web, A._decks[0], A.generation, dc._state.get("entries"))
+    sent, got, nos = [], [], []
+    try:
+        m.web = types.SimpleNamespace(eval=sent.append)
+        m.state = "deckBrowser"
+        A.on_decks_render()
+        sheets.confirm("Sign out?", "Sure?", "Sign Out", lambda: got.append("yes"), no=lambda: nos.append("no"))
+        sid = re.search(r'"id": "([0-9a-f]+)"', sent[-1]).group(1)
+        answer = lambda i, p, key=board.BOARD_KEY: dc._on_js(False, f"duecrew:sheet:{i}:{quote(json.dumps(p))}|{key}", DeckBrowser())
+        answer("0" * 16, {"ok": True})
+        answer(sid, {"ok": True}, key="")
+        wrong = list(got)
+        answer(sid, {"ok": True})
+        answer(sid, {"ok": True})
+        check("sheets: on the board a sheet, not Qt; only its own id with the page's key answers it, and once",
+              len(sent) == 1 and "dc-sheet" in sent[0] and '"yes": "Sign Out"' in sent[0] and wrong == [] and got == ["yes"], (wrong, got))
+        sheets.confirm("Leave?", "", "Leave", lambda: got.append("left"), no=lambda: nos.append("no"))
+        sid = re.search(r'"id": "([0-9a-f]+)"', sent[-1]).group(1)
+        answer(sid, {"ok": False})
+        sheets.confirm("Leave?", "", "Leave", lambda: got.append("left"))
+        sid = re.search(r'"id": "([0-9a-f]+)"', sent[-1]).group(1)
+        answer(sid, {"ok": False})
+        check("sheets: Cancel, Esc or the backdrop: nothing, or the question's no() when it leads to another",
+              got == ["yes"] and nos == ["no"], (got, nos))
+        sheets.ask_text("Status", "One line.", got.append, value="x", most=5)
+        first = re.search(r'"id": "([0-9a-f]+)"', sent[-1]).group(1)
+        sheets.ask_item("Change deck", "Run it on", ["A", "B"], got.append, at=1)
+        sid = re.search(r'"id": "([0-9a-f]+)"', sent[-1]).group(1)
+        answer(first, {"ok": True, "text": "stale"})
+        answer(sid, {"ok": True, "at": 7})
+        sheets.ask_item("Change deck", "Run it on", ["A", "B"], got.append, at=1)
+        sid = re.search(r'"id": "([0-9a-f]+)"', sent[-1]).group(1)
+        answer(sid, {"ok": True, "at": 1})
+        sheets.ask_text("Status", "One line.", got.append, value="x", most=5)
+        sid = re.search(r'"id": "([0-9a-f]+)"', sent[-1]).group(1)
+        answer(sid, {"ok": True, "text": "123456789"})
+        check("sheets: one at a time (a new one drops the one before); a pick out of the list does nothing; a line keeps to its ceiling",
+              got == ["yes", 1, "12345"], got)
+        sheets.confirm("Sign out?", "Sure?", "Sign Out", lambda: got.append("late"))
+        sid = re.search(r'"id": "([0-9a-f]+)"', sent[-1]).group(1)
+        n = len(sent)
+        sheets.redraw()
+        again = sent[n:]
+        A.generation += 1
+        answer(sid, {"ok": True})
+        check("sheets: a Decks page drawn anew draws the open one again; an answer from before a profile change does nothing",
+              len(again) == 1 and f'"id": "{sid}"' in again[0] and got == ["yes", 1, "12345"], (len(again), got))
+        # off the board: Qt asks (the suite's Qt says yes, as askUser's fake did)
+        A.on_state_will_change("review", "deckBrowser")
+        n = len(sent)
+        seen = []
+        real = ui.confirm
+        ui.confirm = lambda parent, title, text, yes: seen.append((title, text, yes)) or True
+        try:
+            sheets.confirm("Sign out?", "Sure?", "Sign Out", lambda: got.append("qt"))
+        finally:
+            ui.confirm = real
+        check("sheets: off the board, Qt's question, the same words; a yes reaches then",
+              len(sent) == n and seen == [("Sign out?", "Sure?", "Sign Out")] and got[-1] == "qt", (seen, got))
+    finally:
+        m.state, m.web, A._decks[0], A.generation, dc._state["entries"] = saved
+        sheets._open.clear()
+    src = {f: open(os.path.join(REPO, "due_crew", f)).read() for f in ("__init__.py", "social.py", "due_flow.py", "team_flow.py",
+                                                                      "together.py", "plan_flow.py", "squads.py", "cards.py")}
+    check("sheets: what the board asks goes through them: status, name, sign out, delete, a to-do, the plan squad, "
+          "a good-luck line, a tip, hold back, reset, change deck, stop following, the founder's tools",
+          all(k in src[f] for f, k in (("social.py", 'sheets.ask_text("Status"'), ("__init__.py", 'sheets.ask_text("Display name"'),
+                                       ("__init__.py", 'sheets.confirm("Sign out?"'), ("__init__.py", 'sheets.confirm("Delete account?"'),
+                                       ("due_flow.py", 'sheets.ask_text("Edit to-do"'), ("team_flow.py", 'sheets.confirm("Join this plan'),
+                                       ("team_flow.py", 'sheets.ask_text("Reply"'), ("team_flow.py", 'sheets.ask_text("Ask the squad"'),
+                                       ("together.py", 'sheets.ask_text("Good-luck card"'), ("together.py", 'sheets.ask_text("Send a tip"'),
+                                       ("plan_flow.py", "sheets.confirm(title, text, yes"), ("plan_flow.py", 'sheets.confirm("Reset to default?"'),
+                                       ("plan_flow.py", 'sheets.ask_item("Change deck"'), ("plan_flow.py", "sheets.confirm_check(title, text, \"Stop\""),
+                                       ("squads.py", 'sheets.confirm("Block?"'), ("squads.py", 'sheets.confirm("Remove?"')))
+          and not any(x in t for t in src.values() for x in ("QInputDialog", "askUser", "getText(")))
+    node = shutil.which("node")
+    if not node:
+        print("SKIP the sheet in node: no node")
+        return
+    dom = r"""
+    function El(tag) { this.tagName = tag; this.style = {}; this.kids = []; this.l = {}; this.attrs = {}; this.value = '';
+                       this.offsetTop = 0; this.offsetHeight = 10; this.scrollTop = 0; this.clientHeight = 100; }
+    El.prototype.appendChild = function (k) { this.kids.push(k); k.parentNode = this; return k; };
+    El.prototype.addEventListener = function (t, f) { this.l[t] = f; };
+    El.prototype.setAttribute = function (a, v) { this.attrs[a] = String(v); };
+    El.prototype.removeAttribute = function (a) { if (a === 'id') { this.id = ''; } delete this.attrs[a]; };
+    El.prototype.focus = function () { focused = this; };
+    El.prototype.select = function () {};
+    El.prototype.remove = function () { removed.push(this); };
+    var focused = null, removed = [], sent = [], doc = {};
+    var body = new El('body');
+    function find(n, id) { if (n.id === id) return n; for (var k of n.kids) { var f = find(k, id); if (f) return f; } return null; }
+    function all(n, out) { out = out || []; out.push(n); n.kids.forEach((k) => all(k, out)); return out; }
+    var document = { body: body, createElement: (t) => new El(t), getElementById: (id) => find(body, id),
+                     addEventListener: (t, f) => { doc[t] = f; }, removeEventListener: (t) => { delete doc[t]; } };
+    var window = { dcBK: 'KEY', matchMedia: () => ({ matches: true }) };
+    function getComputedStyle() { return null; }
+    function pycmd(c) { sent.push(decodeURIComponent(c)); }
+    function btn(text) { return all(body).find((e) => e.tagName === 'button' && e.textContent === text); }
+    """
+    def run(view, then):
+        prog = dom + board.sheet_js(view) + "\n" + then + "\nconsole.log(JSON.stringify(sent));"
+        r = subprocess.run([node, "-e", prog], capture_output=True, text=True, timeout=60)
+        try:
+            return json.loads(r.stdout)
+        except ValueError:
+            return r.stdout + r.stderr[-1500:]
+    typed = run({"id": "s1", "title": "Status", "field": {"kind": "text", "value": "old", "max": 80}},
+                "var box = all(body).find((e) => e.tagName === 'input'); var wasFocused = focused === box; box.value = 'new line'; btn('OK').l.click();"
+                "sent.push(String(wasFocused), String(box.maxLength));")
+    cancelled = run({"id": "s2", "title": "Leave?", "yes": "Leave", "danger": True},
+                    "var f = focused && focused.textContent; doc.keydown({ key: 'Escape', stopPropagation() {} }); btn('Leave').l.click(); sent.push(f);")
+    picked = run({"id": "s3", "title": "Change deck", "field": {"kind": "pick", "items": ["A", "B", "C"], "at": 0}},
+                 "btn('C').l.click(); btn('OK').l.click();")
+    ticked = run({"id": "s4", "title": "Stop following?", "yes": "Stop", "check": {"label": "Tags too", "on": True}},
+                 "all(body).find((e) => e.type === 'checkbox').checked = false; btn('Stop').l.click();")
+    check("sheet in node: a line starts in its box, its ceiling set, and goes with its button; Esc says no once (a step that can't be "
+          "taken back starts on Cancel); a pick and a tick go as asked",
+          typed == ['duecrew:sheet:s1:{"ok":true,"text":"new line"}|KEY', "true", "80"]
+          and cancelled == ['duecrew:sheet:s2:{"ok":false}|KEY', "Cancel"]
+          and picked == ['duecrew:sheet:s3:{"ok":true,"at":2}|KEY']
+          and ticked == ['duecrew:sheet:s4:{"ok":true,"check":false}|KEY'], (typed, cancelled, picked, ticked))
 
 
 def test_room_sounds_v391():

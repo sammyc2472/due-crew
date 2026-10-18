@@ -219,9 +219,13 @@ def join(pid, ask=False):
     """ask: from the plan card's "Join its squad", which says what it shares
     first (the one-time ask and the Follow dialog already said it)."""
     if ask:
-        from aqt.utils import askUser
-        if not askUser("Join this plan's squad? " + JOIN_SAYS):
-            return
+        from . import sheets
+        sheets.confirm("Join this plan's squad?", JOIN_SAYS, "Join", lambda: _join(pid, True))
+        return
+    _join(pid, False)
+
+
+def _join(pid, ask):
     gen, cl, wk = app.generation, client(), _wk()
 
     def done(data):
@@ -243,9 +247,10 @@ def join(pid, ask=False):
 
 
 def leave(pid, ask=True):
-    from aqt.utils import askUser
-    if ask and not askUser("Leave this plan's squad? Your progress stops counting for its authors; "
-                           "your questions and answers stay."):
+    if ask:
+        from . import sheets
+        sheets.confirm("Leave this plan's squad?", "Your progress stops counting for its authors; "
+                       "your questions and answers stay.", "Leave", lambda: leave(pid, False))
         return
     gen, cl = app.generation, client()
 
@@ -306,13 +311,14 @@ def ask(pid, raw):
 
 
 def reply(pid, ask_id):
-    from aqt.qt import QInputDialog, QLineEdit
-    text, ok = QInputDialog.getText(mw, "Reply", "Your answer:", QLineEdit.EchoMode.Normal, "")
-    text = " ".join(str(text or "").split())[:280]
-    if not ok or not text:
-        return
-    cl = client()
-    _bg(_send(lambda: cl.team_ask(pid, text, parent=int(ask_id))), _after(pid))
+    from . import sheets
+
+    def go(text):
+        text = " ".join(str(text or "").split())[:280]
+        if text:
+            cl = client()
+            _bg(_send(lambda: cl.team_ask(pid, text, parent=int(ask_id))), _after(pid))
+    sheets.ask_text("Reply", "Your answer.", go, yes="Send")
 
 
 def _ask_by_id(pid, ask_id):
@@ -335,14 +341,14 @@ def helped(pid, ask_id):
 
 
 def remove(pid, ask_id):
-    from aqt.utils import askUser
+    from . import sheets
     a, parent = _ask_by_id(pid, ask_id)
     if not a or not a.get("remove"):
         return
-    if not askUser("Remove this answer?" if parent else "Remove this question, and its answers?"):
-        return
     cl = client()
-    _bg(_send(lambda: cl.team_remove(pid, a["id"])), _after(pid))
+    sheets.confirm("Remove this answer?" if parent else "Remove this question?",
+                   "" if parent else "Its answers go with it.", "Remove",
+                   lambda: _bg(_send(lambda: cl.team_remove(pid, a["id"])), _after(pid)), danger=True)
 
 
 def report(pid, ask_id):
@@ -375,10 +381,14 @@ def ask_card(card):
     pid = plan_for_card(card)
     if not pid:
         return
-    from aqt.qt import QInputDialog, QLineEdit
-    text, ok = QInputDialog.getText(mw, "Ask the squad", "Your question about this card:", QLineEdit.EchoMode.Normal, "")
+    from . import sheets
+    sheets.ask_text("Ask the squad", "Your question about this card.",
+                    lambda text: _ask_card(card, pid, text), yes="Ask")
+
+
+def _ask_card(card, pid, text):
     text = " ".join(str(text or "").split())[:280]
-    if not ok or not text:
+    if not text:
         return
     note = card.note()
     topic = ""
