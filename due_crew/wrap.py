@@ -38,9 +38,13 @@ def _wrap_data():
     key = _profile_key()
     if _wrap["profile"] != key:
         _wrap["profile"] = key
+        path = os.path.join(_profile_files(), "wrap.json")
+        _wrap["disk"] = None
         try:
-            with open(os.path.join(_profile_files(), "wrap.json")) as f:
-                _wrap["data"] = _sane(json.load(f))
+            with open(path) as f:
+                text = f.read()
+            _wrap["data"] = _sane(json.loads(text))
+            _wrap["disk"] = (path, text)
         except Exception:
             _wrap["data"] = {}
     return _wrap["data"]
@@ -72,13 +76,21 @@ def _arrivals(entries, me):
 
 def _save_wrap():
     """Written whole, then swapped in: a crash mid-write used to leave half a
-    file, which loads as nothing and takes the all-time totals with it."""
+    file, which loads as nothing and takes the all-time totals with it.
+    3.9.1 (the efficiency run): and only when it says something the file
+    doesn't. A refresh saved it two or three times whether anything had
+    changed or not (with a full fridge, 200 KB at 22 ms each); the text is
+    made in one go (json.dumps, 4 ms) and compared with what's on disk."""
     path = os.path.join(_profile_files(), "wrap.json")
+    text = json.dumps(_wrap["data"])
+    if _wrap.get("disk") == (path, text):
+        return
     tmp = path + ".tmp"
     try:
         with open(tmp, "w") as f:
-            json.dump(_wrap["data"], f)
+            f.write(text)
         os.replace(tmp, path)
+        _wrap["disk"] = (path, text)
     except OSError:
         try:
             os.remove(tmp)

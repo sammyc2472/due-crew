@@ -123,7 +123,9 @@ _state = {
 _pending_cheers = []
 
 
-_wrap = {"profile": None, "data": {}}
+# disk (3.9.1): (path, text) of wrap.json as last read or written, so a save
+# that would write the same text writes nothing
+_wrap = {"profile": None, "data": {}, "disk": None}
 
 
 def _profile_key():

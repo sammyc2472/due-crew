@@ -1402,10 +1402,15 @@ with open(_os.path.join(_os.path.dirname(__file__), "show.js"), encoding="utf-8"
     SHOW_JS = _f.read()
 
 
-def keep_me_in_view_js():
+def keep_me_in_view_js(scripts=True):
     """Run after the board is drawn or swapped: a capped view starts with
     your own row in view, wherever it ranks. Nothing happens under the
-    cap, or when you are already visible."""
+    cap, or when you are already visible. scripts (3.9.1, the efficiency
+    run): the board's own scripts with it (Due's add line, motion.js,
+    Find), which a page keeps once it has them and which load only once
+    (each checks it isn't there yet); without, only what each does after
+    a draw (Find lands, the motion's memory), for a swap on a page that
+    has them (the glue's _board_js)."""
     return """
     (function() {
         var box = document.querySelector('#due-crew .dc-scroll');
@@ -1415,7 +1420,13 @@ def keep_me_in_view_js():
         var want = me.offsetTop - (box.clientHeight - me.offsetHeight) / 2;
         if (want > 0) { box.scrollTop = want; }
     })();
-    """ + DUE_JS + MOTION_JS + FIND_JS + MOTION_DRAWN
+    """ + (DUE_JS + MOTION_JS + FIND_JS if scripts else FIND_AFTER) + MOTION_DRAWN
+
+
+# what FIND_JS does at every draw once it's on the page
+FIND_AFTER = """
+if (window.dcFind) { window.dcFind.after(); }
+"""
 
 
 # 3.8.0, round two: the board remembers what it said, so a draw anew (back
@@ -4497,7 +4508,12 @@ def doodle_html(d, accent=None, label="A drawing"):
     caller sets the paper behind it. accent: the sender's colour (an accent
     name; its light shade, on paper in either theme). Numbers and escaped
     words only: a doodle never carries markup or a colour of its own."""
-    d = clean_doodle(d)
+    return _doodle_art(clean_doodle(d), accent, label)
+
+
+def _doodle_art(d, accent, label):
+    """doodle_html's drawing of a doodle clean_doodle has already checked
+    (or None)."""
     if not d:
         return ""
     if d["k"] == "sign":
@@ -5005,21 +5021,35 @@ def fridge_html(items, people, cfg):
     Pip") and the day, and a × to take it down. Where I dragged one (its p:
     side of the board, px from its edge, px down) rides as data; fridge_js
     places the rest in the gutters beside the board, and lets me drag. ""
-    when there's none."""
-    items = _fridge.clean(items)
+    when there's none. Kept as last drawn while what it's drawn from (the
+    items, each person's look, Pip on or off) stays the same."""
+    crew = people or {}
+    looks = [[u, 1, e.get("look")] if isinstance(e, dict) else [u, 0, e] for u, e in crew.items() if e]
+    key = _fridge.fingerprint([items, looks, bool(cfg.get("sev", True))])
+    if key is None or key != _FRIDGE_DRAWN["key"]:
+        _FRIDGE_DRAWN.update(key=key, html=_fridge_notes(_fridge.clean(items), crew, cfg))
+    return _FRIDGE_DRAWN["html"]
+
+
+# 3.9.1 (the efficiency run): the fridge as last drawn, kept on what it was
+# drawn from, so a redraw doesn't draw its doodles again
+_FRIDGE_DRAWN = {"key": None, "html": ""}
+
+
+def _fridge_notes(items, people, cfg):
     if not items:
         return ""
     notes = []
     for x in reversed(items):
         k = _fridge.key(x)
-        e = (people or {}).get(x["from"]) or {}
+        e = people.get(x["from"]) or {}
         name = _html.escape(x["name"])
         pip = (_sev.slot(_sev.svg("idle", rest=True, look=e.get("look"), label=f"{name}’s Pip"), FRIDGE_PIP)
                if cfg.get("sev", True) and e else "")
         when = _short_day(x["at"])
         note = f'<div class="fq">&ldquo;{_html.escape(x["n"])}&rdquo;</div>' if x.get("n") else ""
         at = f' data-s="{x["p"][0]}" data-x="{x["p"][1]}" data-y="{x["p"][2]}"' if x.get("p") else ""
-        art = doodle_html(x["d"], x["a"], x["name"] + "’s drawing")
+        art = _doodle_art(x["d"], x["a"], x["name"] + "’s drawing")  # fridge.clean checked it
         fa, tape = accent_pair(x["a"])
         notes.append(f'<div class="fz" data-k="{k}"{at} style="--fa:{fa};--ft:{_tape(tape)}" title="Drag it anywhere">'
                      f'<div class="fp">{art}</div>{note}<div class="fw">{pip}<b>{name}</b>{f" · {when}" if when else ""}</div>'
@@ -5029,7 +5059,7 @@ def fridge_html(items, people, cfg):
 
 
 FRIDGE_JS = r"""
-(function () {
+window.dcFridge = window.dcFridge || function () {
     var f = document.getElementById('dc-fridge');
     if (!f) { return; }
     var notes = Array.prototype.slice.call(f.querySelectorAll('.fz'));
@@ -5042,16 +5072,18 @@ FRIDGE_JS = r"""
     function place() {
         var box = f.getBoundingClientRect(), W = box.width, H = box.height, b = edges(box);
         var room = { l: b.l >= nw + 2 * gap, r: W - b.r >= nw + 2 * gap }, y = { l: 64, r: 64 }, n = 0, pile = 0, mine = [], at = [];
+        // every tilt, then every height in one read (a write between two reads laid the page out again)
+        notes.forEach(function (el, i) { el.style.setProperty('--fr', tilt[i % tilt.length] + 'deg'); });
+        var hs = notes.map(function (el) { return el.offsetHeight || 140; });
         notes.forEach(function (el, i) {  // where I left each, beside the board's edge; it waits in the corner while the window's too small
-            el.style.setProperty('--fr', tilt[i % tilt.length] + 'deg');
-            var h = el.offsetHeight || 140, x = el.dataset.s ? b[el.dataset.s] + Number(el.dataset.x) : null;
+            var h = hs[i], x = el.dataset.s ? b[el.dataset.s] + Number(el.dataset.x) : null;
             if (x !== null && x >= 4 && x + nw <= W - 4) {
                 at[i] = [x, Math.min(Number(el.dataset.y), H - h - 4)];
                 mine.push({ x: x, y: at[i][1], h: h });
             }
         });
         notes.forEach(function (el, i) {
-            var h = el.offsetHeight || 140, x = null, top;
+            var h = hs[i], x = null, top;
             if (at[i]) {
                 x = at[i][0]; top = at[i][1];
             } else if (!el.dataset.s && (room.l || room.r)) {  // the gutters beside the board, newest highest, left then right
@@ -5112,18 +5144,20 @@ FRIDGE_JS = r"""
         window.dcFridgeResize = true;
         window.addEventListener('resize', function () { if (window.dcFridgePlace) { window.dcFridgePlace(); } });
     }
-})();
+};
 """.replace("__W__", str(FRIDGE_W))
 
 
-def fridge_js():
+def fridge_js(scripts=True):
     """3.9.1: after the board is drawn (and at every swap): the fridge's
     doodles placed (where I left each, else beside the board) and made
     draggable; a drop is duecrew:fridgemove:<key>:<side>:<dx>:<y>, beside
     the board's left or right edge (l, r), px from it, px down. A spot the
     window's too small for waits in the corner and comes back at the next
-    resize. Nothing when there's no fridge on the page."""
-    return FRIDGE_JS
+    resize. Nothing when there's no fridge on the page. scripts: the
+    script itself (dcFridge, loaded once a page) as well as its call, as
+    keep_me_in_view_js's."""
+    return (FRIDGE_JS if scripts else "") + "\nif (window.dcFridge) { window.dcFridge(); }\n"
 
 
 def cheer_overlay_js(view):

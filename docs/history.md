@@ -2331,6 +2331,34 @@ every release that changes how something works.
   and the config is read from disk once and again only after a save
   (`app.cfg`; Anki read config.json and meta.json at every call, a few
   times a card). A usual card now sends nothing.
+- 3.9.1, the efficiency run, the Decks screen (the same ask). Measured with
+  a crew of thirteen and a full fridge (twelve drawings at 2,000 points):
+  every click that redraws the board (a swap) sent 77 KB of script the page
+  already had (motion.js, Due's add line, Find, the fridge's), each guarded
+  so it only loads once; the fridge cost 40 ms of Python a draw, each
+  drawing checked three times (`clean_doodle`) and drawn again; and a
+  refresh saved wrap.json (200 KB with a full fridge) two or three times
+  whether anything had changed or not, 22 ms each. Now: the scripts go to a
+  page once (`_board_js`, by `app.pages`; a page drawn anew always gets
+  them, so the memory of what the board said is compared as before), and a
+  swap sends only what they do after a draw, 0.5 KB
+  (`keep_me_in_view_js(scripts=False)`, `fridge_js(scripts=False)`; the
+  fridge's script is `dcFridge`, loaded once a page). The fridge is checked
+  when it changes and drawn again only then (`fridge.clean` and
+  `board.fridge_html` kept on their contents, `fridge.fingerprint`:
+  marshal's version 2, values only), the same markup byte for byte. Its
+  script tilts every doodle, then reads every height at once: two layouts a
+  draw, not thirteen; the same spots. wrap.json is written only when its
+  text differs from what's on disk (`app._wrap["disk"]`), made by
+  `json.dumps` (4 ms; `json.dump` into the file was the slow encoder, 23
+  ms): a refresh that changes nothing writes nothing, and a profile opened
+  again doesn't write it back. With the full fridge a draw went from 40 to
+  3 ms of Python, a click from 44 to 4 ms, Chromium's share of a click from
+  77 to 68 ms (27 to 24 without a fridge); on Anki's own engine, a Decks
+  redraw from 63 to 22 ms and a click from 27 to 8. Not done: a run of
+  strokes in one pen drawn as one path would be fewer elements, but its
+  edges where strokes overlap come out a shade lighter (Chromium, pixel for
+  pixel), so each stroke stays its own path.
 - 3.9.1, the efficiency run, idle. Measured in Anki's own engine
   (QtWebEngine 6.11): a CSS loop that never ends keeps the page drawing 60
   frames a second, about two-thirds of it on Anki's own thread, even a

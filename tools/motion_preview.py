@@ -116,7 +116,8 @@ S.update({f"fifteendone{'' if m == 'stack' else '.' + m}": (base, R(due=DV_BASE,
 S.update({f"streak.{m}": (base, R(due=DV_BASE, you=you("today"), milestones=[("dre", "Dre", 100)],
                                   milestone_sev={"dre": SV.move("hop", m, label="Pip: a big streak")}), None)
           for m in SV.moves("hop")})
-out = {k: {"a": a, "swap": ((B.swap_js(b) + B.keep_me_in_view_js()) if b else "")
+# 3.9.1: the page has the board's scripts from its load (init_js), so a swap sends their calls alone, as the add-on's do
+out = {k: {"a": a, "swap": ((B.swap_js(b) + B.keep_me_in_view_js(scripts=False)) if b else "")
            + (f"dcMotion.arrive({h.split(':', 1)[1]});" if h and h.startswith("arrive:") else ""), "hint": h} for k, (a, b, h) in S.items()}
 NAMES = {"tick": "1 A tick you can see (and 2, the bar)", "done": "3 Done for today", "add": "4 A to-do lands (today)",
          "addlater": "4 A to-do lands (another day)", "learn": "5 Learning back, flagged", "fold": "6 Hide", "unfold": "6 Show",

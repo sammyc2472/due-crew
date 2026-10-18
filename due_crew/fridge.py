@@ -13,6 +13,7 @@ in wrap.json on this computer, never sent. Pure; the glue is
 closet_flow's, the drawing board.fridge_html and fridge_js."""
 
 import hashlib
+import marshal
 
 from .backend.shapes import clean_doodle, clean_note
 
@@ -39,8 +40,40 @@ def _place(p):
     return None
 
 
+def fingerprint(v):
+    """v's contents as bytes, equal exactly when the contents are (marshal's
+    version 2 writes values, never which object is which), for what's kept
+    on a fridge's contents; None for anything it can't write (nothing
+    JSON gives)."""
+    try:
+        return marshal.dumps(v, 2)
+    except ValueError:
+        return None
+
+
+# 3.9.1 (the efficiency run): the last two fridges cleaned (wrap.json's, and
+# the board's check of what that came to) and what they came to, kept on
+# their contents. Every draw of the board checked each drawing on it three
+# times; now each is checked when the fridge changes.
+_LAST = {}
+
+
 def clean(v):
-    """wrap.json's "fridge", as this writes it, or less: oldest first."""
+    """wrap.json's "fridge", as this writes it, or less: oldest first. Each
+    call gets a list and items of its own (move changes them); the drawings
+    in them are shared, and nothing changes those."""
+    key = fingerprint(v)
+    items = _LAST.get(key) if key is not None else None
+    if items is None:
+        items = _clean(v)
+        if key is not None:
+            _LAST[key] = items
+            for old in list(_LAST)[:-2]:
+                del _LAST[old]
+    return [dict(x, p=list(x["p"])) if "p" in x else dict(x) for x in items]
+
+
+def _clean(v):
     out = []
     for x in v if isinstance(v, list) else []:
         d = clean_doodle(x.get("d")) if isinstance(x, dict) else None
