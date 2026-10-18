@@ -5,7 +5,7 @@
 
 Your friends' studying next to yours, on Anki's Decks screen.
 
-<img alt="The Due Crew board on the Decks screen, your day folded above it" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/board.png?v=7" width="600">
+<img alt="The Due Crew board on the Decks screen, your day folded above it" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/board.png?v=8" width="600">
 
 Studying for a big exam is more fun with friends! Due Crew puts your crew on
 Anki's Decks screen: who's studied today, who's studying now, how far
@@ -15,14 +15,16 @@ add you back. Your cards never leave your computer.
 
 ## Your crew
 
-**Cheers.** Tap 🎉 next to a friend's name and a little show lands on
-their Decks screen, a different one each time, with your note.
+**Cheers.** Point at a friend's name, tap 🎉 Cheer, and a little show
+lands on their Decks screen, a different one each time, with your note.
+Or draw them something: your Pip holds it up, and it stays pinned beside
+their board.
 
 <img alt="A cheer landing" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/flurry.png" width="600">
 
 **Study rooms.** 25-minute rounds with your crew, the timer in Anki's top
 bar, breaks together. Each of you sits in the room as your own Pip, in
-your own colour.
+your own colour. Rain, a fire, waves or brown noise if you like.
 
 <img alt="A study room in Anki's top bar" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/room.png?v=2" width="420">
 

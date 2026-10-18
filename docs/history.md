@@ -2409,6 +2409,15 @@ every release that changes how something works.
   Schedule's chart paints in it too. The window's frame stays the
   computer's. Every render in `tools/dialogs.py` was looked at, light and
   dark; Friends is 50px wider for the code and its three buttons.
+- 3.9.1, before release: the README's cheer line said "Tap 🎉 next to a
+  friend's name" and its board picture had the 🎉 column; both follow the
+  pill now, with a line each for drawings and room sounds. board.png is
+  rendered by `tools/readme_images.py` (the board's own HTML, a sample
+  crew in their looks) and `tools/readme_images.js` (Chromium, 2x), so the
+  next change re-renders it in one step. The click-test list starts with a
+  15-minute pass over what only a live Anki shows (the Decks page's key
+  after a review, the bars' shade, sheets, the Qt look, the system emoji
+  picker, Pip at rest).
 - 3.9.1, the efficiency run, the Decks screen (the same ask). Measured with
   a crew of thirteen and a full fridge (twelve drawings at 2,000 points):
   every click that redraws the board (a swap) sent 77 KB of script the page

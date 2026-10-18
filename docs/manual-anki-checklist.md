@@ -665,6 +665,18 @@ In Anki (as a follower):
 - [ ] Plan ▾ › How its cards open: switch to When I'm ready (a deck with open later cards offers Hold back), and back to the plan's dates (dates passed since ask, as Resume does). duecrew.com's plan page shows "At your pace · next: …" and the same choice; changing it there reaches Anki at its next refresh.
 - [ ] Browse: right-click a tag in the sidebar › Due Crew: open its cards…: the sheet counts what opens, what's open already, the leeches (they stay suspended), and the plans that hold them; Open with First in line ticked puts them first in Anki's new cards; one Edit › Undo shuts them. Pick cards in the table › Due Crew: open these…: the same for just those. Signed out: both are there.
 
+### 3.9.1: the short pass before release (about 15 minutes; the rest of 3.9.1 below as time allows)
+
+The riskiest of 3.9.1, the parts only a live Anki can show, in order:
+
+- [ ] Board clicks after a review (the Decks page's key): study a few cards, go back to Decks, then click Week, a crewmate's name (their card), ↻, ⚙ (Settings), a Due tick. Each works. Then Sync, and click them again. Switch profile and back: again. (If any click does nothing, stop: that's a release blocker.)
+- [ ] The whole window dims: open the Cheer window on a crewmate. The top bar and the bottom bar grey with the board; click the grey top bar: the window closes and the bars clear. Open it again and press S (study): the bars clear on the way out, never stuck grey.
+- [ ] A question on the board: own card › Set a status: a sheet in the board's look (not a Qt box); type, Enter: the status shows on your row. Settings › You › Display name: the same. Settings › Sign out: the sheet, Cancel does nothing; Esc and the backdrop the same.
+- [ ] A question off the board: while reviewing, Ctrl+Shift+Q (Ask the squad) on a plan's card: a Qt box in the board's colours, readable, OK and Cancel work.
+- [ ] The Qt windows: open Friends, Squads and (a plan's ⋯) Pause: board colours, the main button in your accent, ticks and radio dots visible, nothing cut off (Friends' code whole). Settings › Theme › Dark, open Friends again: dark, all readable.
+- [ ] Mac or Windows: Cheer window › "other": the system's emoji picker opens and its pick lands.
+- [ ] Leave Anki on the Decks screen a minute: Pips stop moving after about twelve seconds; the fan quiet (no busy CPU).
+
 ### 3.9.1: cheers, clearer (the pill, the Cheer window)
 
 - [ ] The crew rows: no 🎉 at the end of any row, and no pill anywhere at rest. Point at a crewmate's name: a green "🎉 Cheer" pill shows after it (and after an exam or "studying now" chip); move off the name and it goes. Pointing at their numbers shows nothing. Tab to a name: it shows. Never on your own row. A very long name ends sooner while the pill shows; the pill is never cut off.
