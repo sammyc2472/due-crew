@@ -15,7 +15,7 @@ from aqt.qt import (
     QGridLayout, QLineEdit, QPushButton, QRadioButton, QVBoxLayout, QWidget, Qt,
 )
 
-from . import attach_alive, esc, run_bg, warn
+from . import attach_alive, esc, run_bg, styled, tone, warn
 from .. import plans as P
 
 SHOWN_UNITS = 5
@@ -44,6 +44,7 @@ class SwapDialog(QDialog):
 
     def __init__(self, parent, swap, matched):
         super().__init__(parent)
+        styled(self)  # 3.9.1: the board's look
         theirs, mine = swap
         self.setWindowTitle("Your tags start differently")
         self.setMinimumWidth(400)
@@ -73,6 +74,7 @@ class CatchUpDialog(QDialog):
 
     def __init__(self, parent, n_units, n_cards, nxt):
         super().__init__(parent)
+        styled(self)  # 3.9.1: the board's look
         self.choice = None
         self.setWindowTitle("Resume")
         self.setMinimumWidth(400)
@@ -147,7 +149,7 @@ class FollowDialog(QDialog):
         self.deck.currentIndexChanged.connect(self._deck_changed)
         drow.addWidget(self.deck, 1)
         self.best_hint = QLabel("best match of your decks")
-        self.best_hint.setStyleSheet("font-size: 11px; color: palette(mid);")
+        self.best_hint.setStyleSheet(f"font-size: 11px; color: {tone('muted')};")
         drow.addWidget(self.best_hint)
         root.addLayout(drow)
         # 3.8.1: no deck here named like the plan's, and its authors say where to get it

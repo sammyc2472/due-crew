@@ -11,7 +11,7 @@ from aqt.qt import (
     QHBoxLayout, QLabel, QRadioButton, Qt, QVBoxLayout, QWidget,
 )
 
-from . import attach_alive, run_bg
+from . import attach_alive, run_bg, tone
 from .. import plans as P
 
 
@@ -65,7 +65,7 @@ class AddCardsDialog(QDialog):
         # 3.6.5: a follower's Anki opens a date once; what's added after comes the next morning
         self.opened = QLabel("This date has opened. Followers who opened it get these tomorrow morning.")
         self.opened.setWordWrap(True)
-        self.opened.setStyleSheet("color: palette(placeholder-text); font-size: 11.5px;")
+        self.opened.setStyleSheet(f"color: {tone('muted')}; font-size: 11.5px;")
         self.opened.setVisible(False)
         root.addWidget(self.opened)
         self.unit.currentIndexChanged.connect(self._opened)

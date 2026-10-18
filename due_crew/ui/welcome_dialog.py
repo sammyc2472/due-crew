@@ -12,7 +12,7 @@ from aqt.qt import (
 from aqt.utils import tooltip
 
 from ..backend.shapes import friend_code_from, invite_code_from, long_code_from
-from . import accent, attach_alive, copy_text, logo_label, run_bg, shared_words
+from . import accent, attach_alive, copy_text, logo_label, run_bg, shared_words, tone
 
 
 class WelcomeDialog(QDialog):
@@ -48,7 +48,7 @@ class WelcomeDialog(QDialog):
         self.code_label.setStyleSheet(
             "font-family: Menlo, Consolas, monospace; font-size: 15px; font-weight: bold;"
             f"letter-spacing: 2px; padding: 2px 8px; color: {accent()};"
-            "background: palette(base); border: 1px solid palette(mid); border-radius: 6px;")
+            f"background: {tone('bg')}; border: 1px solid {tone('line')}; border-radius: 6px;")
         grid.addWidget(self.code_label, 0, 1)
         self.copy_btn = QPushButton("Copy Invite")
         self.copy_btn.setEnabled(False)

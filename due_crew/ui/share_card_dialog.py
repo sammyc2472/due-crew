@@ -12,7 +12,7 @@ from aqt.qt import (
     QImage, QLabel, QPainter, QPainterPath, QPen, QPixmap, QPointF, QPushButton, QRadioButton, QRectF, QVBoxLayout, Qt,
 )
 
-from . import _night, attach_alive
+from . import attach_alive, _night, tone
 from .map_card_dialog import _font, _logo, _text
 from .. import sharecard as S, sev
 
@@ -155,7 +155,7 @@ class ShareCardDialog(QDialog):
         side.addSpacing(12)
         side.addLayout(buttons)
         note = QLabel("Made here, from your own Anki. Nothing is posted.")
-        note.setStyleSheet("color: gray; font-size: 11px;")
+        note.setStyleSheet(f"color: {tone('muted')}; font-size: 11px;")
         note.setWordWrap(True)
         side.addWidget(note)
         side.addStretch()

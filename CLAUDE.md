@@ -255,7 +255,9 @@ clean `main` does the migrations, the API, then the site, then
   against the settled page (3.9.0).
 - A question the board asks goes through `sheets.py` (then-callbacks, only
   a yes reaches them), never a bare QMessageBox/QInputDialog/askUser; the
-  Qt ones in `ui` are its fallback off the board.
+  Qt ones in `ui` are its fallback off the board. A Qt window wears the
+  board's look (`ui.styled`, via `attach_alive`); its labels' own style
+  sheets take `ui.tone(...)`, never palette(...).
 - Every `duecrew:` command a page emits needs a handler
   (`test_every_board_command_has_a_handler`), and a new one gets a test
   that sends it through `_on_js` as the board does (3.5.0's Settings went

@@ -17,7 +17,7 @@ from aqt.qt import (
     QVBoxLayout, QWidget,
 )
 
-from . import accent, open_emoji_picker
+from . import accent, open_emoji_picker, styled, tone
 from ..backend.shapes import clean_emoji
 
 # the crew-emoji dialog's quick row: faces for a name, not reactions
@@ -81,7 +81,7 @@ class EmojiPicker(QWidget):
     @staticmethod
     def _other_css(chosen):
         # a small "other" at rest; a chosen emoji at the quick picks' size
-        border = f"2px solid {accent()}" if chosen else "1px solid palette(mid)"
+        border = f"2px solid {accent()}" if chosen else f"1px solid {tone('line')}"
         return (f"QLineEdit {{ font-size: {20 if chosen else 12}px; border: {border};"
                 " border-radius: 8px; padding: 3px 6px; min-height: 30px; }")
 
@@ -125,6 +125,7 @@ class EmojiDialog(QDialog):
 
     def __init__(self, parent, current=""):
         super().__init__(parent)
+        styled(self)  # 3.9.1: the board's look
         self.setWindowTitle("Your Emoji")
         self.setMinimumWidth(380)
         self._removed = False

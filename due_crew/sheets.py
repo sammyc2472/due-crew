@@ -32,7 +32,7 @@ def confirm(title, text, yes, then, danger=False, no=None):
     if _board(dict(title=title, text=text, yes=yes, danger=danger), lambda a: then(), no):
         return
     from .ui import confirm as qt_confirm
-    if qt_confirm(mw, title, text, yes):
+    if qt_confirm(mw, title, text, yes, **({"danger": True} if danger else {})):
         then()
     elif no is not None:
         no()
@@ -44,7 +44,7 @@ def confirm_check(title, text, yes, check, then, checked=True, danger=False):
               lambda a: then(bool(a.get("check")))):
         return
     from .ui import confirm_check as qt_check
-    ok, ticked = qt_check(mw, title, text, yes, check, checked)
+    ok, ticked = qt_check(mw, title, text, yes, check, checked, **({"danger": True} if danger else {}))
     if ok:
         then(ticked)
 

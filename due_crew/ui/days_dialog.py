@@ -10,7 +10,7 @@ from aqt.qt import (
     QSpinBox, QVBoxLayout,
 )
 
-from . import esc
+from . import esc, styled
 
 
 def _qdate(iso):
@@ -27,6 +27,7 @@ class PauseDialog(QDialog):
 
     def __init__(self, parent, name, today, until, from_away=False):
         super().__init__(parent)
+        styled(self)  # 3.9.1: the board's look
         self.until = None
         self.setWindowTitle("Pause")
         self.setMinimumWidth(380)
@@ -69,6 +70,7 @@ class BackDialog(QDialog):
 
     def __init__(self, parent, n_units, days, event=None):
         super().__init__(parent)
+        styled(self)  # 3.9.1: the board's look
         self.choice = None
         self.setWindowTitle("Welcome back")
         self.setMinimumWidth(420)
@@ -106,6 +108,7 @@ class ShiftDialog(QDialog):
 
     def __init__(self, parent, name, current):
         super().__init__(parent)
+        styled(self)  # 3.9.1: the board's look
         self.days = None
         self.setWindowTitle("Push my dates back")
         self.setMinimumWidth(380)

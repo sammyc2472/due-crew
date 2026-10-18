@@ -15,7 +15,7 @@ from aqt.qt import (
     QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QLabel, QVBoxLayout,
 )
 
-from . import attach_alive, run_bg
+from . import attach_alive, run_bg, tone
 from .. import plans as P
 
 BIG = 2 * 1024 * 1024  # past this, most AI chats want it in parts
@@ -58,7 +58,7 @@ class ExportDialog(QDialog):
         note = QLabel("Saved as a file on this computer, for you to attach to your AI chat. "
                       "Due Crew doesn't send it anywhere.")
         note.setWordWrap(True)
-        note.setStyleSheet("color: palette(placeholder-text);")
+        note.setStyleSheet(f"color: {tone('muted')};")
         root.addWidget(note)
         self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         self.go = self.buttons.button(QDialogButtonBox.StandardButton.Ok)

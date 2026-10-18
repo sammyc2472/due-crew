@@ -9,7 +9,7 @@ import datetime
 
 from aqt.qt import QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QPushButton, Qt, QVBoxLayout
 
-from . import attach_alive, sev_label
+from . import attach_alive, sev_label, tone
 
 
 def _day(iso):
@@ -67,7 +67,7 @@ class AwayDialog(QDialog):
                       "Not today opens nothing and asks again tomorrow morning.")
         note.setTextFormat(Qt.TextFormat.PlainText)
         note.setWordWrap(True)
-        note.setStyleSheet("color: palette(placeholder-text); font-size: 11.5px;")
+        note.setStyleSheet(f"color: {tone('muted')}; font-size: 11.5px;")
         words.addWidget(note)
         buttons = QDialogButtonBox()
         buttons.addButton("Not today", QDialogButtonBox.ButtonRole.RejectRole).clicked.connect(self.reject)

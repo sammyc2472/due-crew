@@ -2393,6 +2393,22 @@ every release that changes how something works.
   Found on the way: the Cheer window's close faded it, then motion.js's
   own close ran on top (the fade unfilled: a frame's snap back); now
   motion.js closes what it opened.
+- 3.9.1, the Qt windows in the board's look (the same ask: "all modals").
+  The windows that stay Qt (Friends, sign-in, Welcome, a plan's Follow,
+  Schedule, Pause, Welcome back, Hold back, Squads, Report, the picture
+  cards, and the questions asked off the board) wear the board's colours
+  for its theme (Settings › Theme, not Anki's alone) and accent: its
+  8px corners, the main action (the window's own default) in the accent,
+  the rest outlined, boxes and lists on the board's well; a question in
+  bold over its words, no icon, its yes in the accent or the board's red,
+  Cancel focused (`ui.styled`, from `attach_alive` or its own call;
+  `ui.QSS`). Ticks, radio dots and number boxes keep the computer's own
+  drawing: styled, they lost their frames (an unticked box vanished) or
+  their arrows. A styled window ignores its palette, so a label's own
+  style sheet takes the board's colour (`ui.tone`), never palette(...);
+  Schedule's chart paints in it too. The window's frame stays the
+  computer's. Every render in `tools/dialogs.py` was looked at, light and
+  dark; Friends is 50px wider for the code and its three buttons.
 - 3.9.1, the efficiency run, the Decks screen (the same ask). Measured with
   a crew of thirteen and a full fridge (twelve drawings at 2,000 points):
   every click that redraws the board (a swap) sent 77 KB of script the page

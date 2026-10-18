@@ -2301,7 +2301,7 @@ class _FakeBox:
         self._buttons, self._text = [], ""
 
     def addButton(self, *a, **k):
-        self._buttons.append(object())
+        self._buttons.append(_FakeCheck())  # a button: any call does nothing
         return self._buttons[-1]
 
     def clickedButton(self):

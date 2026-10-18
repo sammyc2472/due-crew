@@ -13,7 +13,7 @@ from aqt.qt import (
     QVBoxLayout, Qt,
 )
 
-from . import _night, attach_alive, copy_text
+from . import attach_alive, copy_text, _night, tone
 from .. import mapcard as M
 
 
@@ -205,7 +205,7 @@ class MapCardDialog(QDialog):
             when = f"Since {d:%a} {d.day} {d:%b}"
         self.change_note = QLabel(when or ("For the whole deck's map, not its parts" if part
                                            else "From next week: it needs last week's map"))
-        self.change_note.setStyleSheet("color: gray; font-size: 11px; margin-left: 22px;")
+        self.change_note.setStyleSheet(f"color: {tone('muted')}; font-size: 11px; margin-left: 22px;")
         self.light = QRadioButton("Light")
         self.dark = QRadioButton("Dark")
         (self.dark if _night() else self.light).setChecked(True)
@@ -227,7 +227,7 @@ class MapCardDialog(QDialog):
         for b in (self.copy, self.save, self.as_text):
             buttons.addWidget(b)
         note = QLabel("Made here, from your own Anki. Nothing is sent.")
-        note.setStyleSheet("color: gray; font-size: 11px;")
+        note.setStyleSheet(f"color: {tone('muted')}; font-size: 11px;")
         note.setWordWrap(True)
         for w in (self.pct, self.change, self.change_note):
             side.addWidget(w)

@@ -121,6 +121,131 @@ def _night():
         return False
 
 
+def _dark():
+    """3.9.1: the board's theme (Settings › Theme), so a window wears what
+    the board does; Match Anki follows Anki's night mode."""
+    try:
+        from ..app import cfg
+        theme = cfg().get("theme", "auto")
+    except Exception:
+        theme = "auto"
+    return theme == "dark" if theme in ("light", "dark") else _night()
+
+
+def tokens():
+    """The board's colours for its theme and accent (board.palette), and
+    its red for a step that can't be taken back."""
+    from ..board import palette
+    t = dict(palette("dark" if _dark() else "light", _accent_name()))
+    t.update({"bad": danger(), "bad-ink": "#2a1212" if _dark() else "#ffffff"})
+    return t
+
+
+def tone(key):
+    """One of the board's colours (tokens) for a label's own style sheet:
+    a window in the board's look ignores its palette, so palette(mid) and
+    the like would come out Anki's, not the board's."""
+    try:
+        return tokens()[key]
+    except Exception:
+        return {"muted": "#7a7a72", "faded": "#aaaaa2", "line": "#e2e2da", "well": "#f2f2ec", "bg": "#ffffff"}.get(key, "#7a7a72")
+
+
+# 3.9.1 (Sam: "make sure all modals are in our style"): a Qt window in the
+# board's look, as its sheets and the Cheer window are: its colours, 8px
+# corners, the main action (the window's default button, or a question's
+# yes) in the accent, Cancel and the rest outlined; boxes on the board's
+# well. The window's frame stays the computer's.
+QSS = """
+QDialog, QMessageBox, QInputDialog {{ background: {bg}; color: {ink}; }}
+QLabel {{ color: {ink}; background: transparent; }}
+QCheckBox, QRadioButton {{ color: {ink}; }}
+QPushButton {{ background: {bg}; color: {ink}; border: 1px solid {line}; border-radius: 8px; padding: 5px 14px; min-height: 18px; }}
+QPushButton:hover {{ background: {well}; }}
+QPushButton:pressed {{ background: {you-bg}; }}
+QPushButton:focus {{ border-color: {accent}; }}
+QPushButton:disabled {{ color: {faded}; border-color: {line}; background: {bg}; }}
+QPushButton[dc="go"] {{ background: {accent}; color: {accent-ink}; border-color: {accent}; font-weight: 600; }}
+QPushButton[dc="bad"] {{ background: {bad}; color: {bad-ink}; border-color: {bad}; font-weight: 600; }}
+QPushButton:checked {{ background: {you-bg}; border-color: {accent}; }}
+QPushButton[dc="go"]:disabled, QPushButton[dc="bad"]:disabled {{ background: {well}; color: {faded}; border-color: {line}; }}
+QLineEdit, QPlainTextEdit, QTextEdit, QDateEdit, QComboBox {{ background: {bg}; color: {ink}; border: 1px solid {line}; border-radius: 8px; padding: 4px 8px; selection-background-color: {accent}; selection-color: {accent-ink}; }}
+QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus, QDateEdit:focus, QComboBox:focus {{ border-color: {accent}; }}
+QComboBox QAbstractItemView {{ background: {bg}; color: {ink}; border: 1px solid {line}; selection-background-color: {you-bg}; selection-color: {ink}; }}
+QListWidget, QListView, QTreeWidget, QTreeView, QTableWidget {{ background: {well}; color: {ink}; border: 1px solid {line}; border-radius: 10px; padding: 2px; }}
+QListWidget::item:selected, QListView::item:selected, QTreeView::item:selected, QTableWidget::item:selected {{ background: {you-bg}; color: {ink}; }}
+QGroupBox {{ border: 1px solid {line}; border-radius: 10px; margin-top: 14px; padding: 8px; }}
+QGroupBox::title {{ subcontrol-origin: margin; left: 10px; padding: 0 4px; color: {muted}; }}
+QScrollArea {{ background: transparent; border: none; }}
+QToolTip {{ background: {bg}; color: {ink}; border: 1px solid {line}; }}
+QFrame[frameShape="4"] {{ border: none; border-top: 1px solid {line}; max-height: 1px; }}
+QMessageBox QLabel#qt_msgbox_label {{ font-size: 15px; font-weight: 700; }}
+"""
+
+
+def styled(dialog):
+    """The board's look on a Qt window (QSS, and its palette for what paints
+    itself; a label's own style sheet takes tone(), as palette(...) there
+    would be Anki's);
+    as it shows, its default button is the accent, unless it says already
+    which is which (confirm's yes). Ticks and radio dots and number boxes
+    keep the system's own drawing (a styled one loses its frame or its
+    arrows). Never raises: the suite's Qt has none of it."""
+    try:
+        from aqt.qt import QColor, QPalette
+        t = tokens()
+        pal = dialog.palette()
+        R = QPalette.ColorRole
+        for role, key in (("Window", "bg"), ("WindowText", "ink"), ("Base", "bg"), ("AlternateBase", "well"),
+                          ("Text", "ink"), ("Button", "bg"), ("ButtonText", "ink"), ("PlaceholderText", "muted"),
+                          ("Mid", "muted"), ("Highlight", "accent"), ("HighlightedText", "accent-ink"),
+                          ("ToolTipBase", "bg"), ("ToolTipText", "ink")):
+            pal.setColor(getattr(R, role), QColor(t[key]))
+        dialog.setPalette(pal)  # for what paints itself from it (a chart); labels take tone()
+        dialog.setStyleSheet(QSS.format(**t))
+        dialog.installEventFilter(_marker(dialog))
+    except Exception:
+        pass
+    return dialog
+
+
+def _mark(dialog):
+    """The default button in the accent (dc="go"), when no button is marked:
+    the one the window chose (setDefault, or its button box's OK), never a
+    link-like one (flat, or dressed by its own style sheet)."""
+    try:
+        from aqt.qt import QPushButton
+        buttons = dialog.findChildren(QPushButton)
+        if any(b.property("dc") for b in buttons):
+            return
+        for b in buttons:
+            if b.isDefault() and not b.isFlat() and not b.styleSheet():
+                b.setProperty("dc", "go")
+                b.style().unpolish(b)
+                b.style().polish(b)
+    except Exception:
+        pass
+
+
+_MARKER = []
+
+
+def _marker(dialog):
+    """An event filter, the dialog's child, that marks its buttons as it
+    shows: by then its own default is set (and its button box's), and focus
+    hasn't yet moved one to whichever button it lands on."""
+    if not _MARKER:
+        from aqt.qt import QEvent, QObject
+
+        class Marker(QObject):
+            def eventFilter(self, obj, ev):
+                if ev.type() == QEvent.Type.Show and obj is self.parent():
+                    _mark(obj)
+                return False
+        _MARKER.append(Marker)
+    return _MARKER[0](dialog)
+
+
 def _accent_name():
     from ..board import DEFAULT_ACCENT
     try:
@@ -133,7 +258,7 @@ def accent():
     """The board's accent (Settings → Accent) in the shade made for Anki's
     current theme. Until 2.9 dialogs were always green. Dialogs rebuild on
     every open, so a change is picked up next time."""
-    shade = "dark" if _night() else "light"
+    shade = "dark" if _dark() else "light"
     try:
         from ..board import ACCENTS, DEFAULT_ACCENT
         return ACCENTS.get(_accent_name(), ACCENTS[DEFAULT_ACCENT])[shade][0]
@@ -169,7 +294,7 @@ def logo_label(width=150):
     ratio so it stays sharp; one square's width of clear space around it."""
     from aqt.qt import QLabel
     from ..logo import ASPECT, svg
-    pixmap = _svg_pixmap(svg("dark" if _night() else "light", _accent_name()), width, round(width * ASPECT))
+    pixmap = _svg_pixmap(svg("dark" if _dark() else "light", _accent_name()), width, round(width * ASPECT))
     if pixmap is None:
         return None
     label = QLabel()
@@ -228,12 +353,12 @@ def sev_label(pose="hello", size=64, name="Pip"):
 
 
 def danger():
-    return "#ef8383" if _night() else "#d32f2f"
+    return "#ef8383" if _dark() else "#d32f2f"
 
 
 def warn():
     """The board's warning colour (its "hours" token), for "not in your copy"."""
-    return "#dda45c" if _night() else "#b26a00"
+    return "#dda45c" if _dark() else "#b26a00"
 
 
 def esc(text):
@@ -242,41 +367,46 @@ def esc(text):
     return html.escape(str(text))
 
 
-def confirm(parent, title, text, yes):
+def confirm(parent, title, text, yes, danger=False):
     """The one way to ask before a step that can't be taken back: the button
     says what happens ("Remove", "Leave"), Cancel is the default, and the
     text is plain, because names in it come from the server. Until 2.9 there
-    were three styles of this."""
-    from aqt.qt import QMessageBox, Qt
-    box = QMessageBox(parent or mw)
-    box.setIcon(QMessageBox.Icon.Question)
-    box.setWindowTitle(title)
-    box.setTextFormat(Qt.TextFormat.PlainText)
-    box.setText(text)
-    go = box.addButton(yes, QMessageBox.ButtonRole.AcceptRole)
-    cancel = box.addButton(QMessageBox.StandardButton.Cancel)
-    box.setDefaultButton(cancel)
+    were three styles of this. 3.9.1: in the board's look, as its sheet
+    (sheets.confirm, whose fallback this is): the title in bold over the
+    words, no icon, the yes in the accent (danger: the board's red)."""
+    box, go = _question(parent, title, text, yes, danger)
     box.exec()
     return box.clickedButton() is go
 
 
-def confirm_check(parent, title, text, yes, check, checked=True):
+def confirm_check(parent, title, text, yes, check, checked=True, danger=False):
     """confirm, with one box to tick under the text (3.8.0: "Take its tags
     off my notes too"). Returns (yes, ticked)."""
-    from aqt.qt import QCheckBox, QMessageBox, Qt
-    box = QMessageBox(parent or mw)
-    box.setIcon(QMessageBox.Icon.Question)
-    box.setWindowTitle(title)
-    box.setTextFormat(Qt.TextFormat.PlainText)
-    box.setText(text)
+    from aqt.qt import QCheckBox
+    box, go = _question(parent, title, text, yes, danger)
     tick = QCheckBox(check)
     tick.setChecked(bool(checked))
     box.setCheckBox(tick)
+    box.exec()
+    return box.clickedButton() is go, tick.isChecked()
+
+
+def _question(parent, title, text, yes, danger):
+    from aqt.qt import QMessageBox, Qt
+    box = QMessageBox(parent or mw)
+    box.setIcon(QMessageBox.Icon.NoIcon)
+    box.setWindowTitle(title)
+    box.setTextFormat(Qt.TextFormat.PlainText)
+    box.setText(title)
+    if text:
+        box.setInformativeText(text)  # plain too: the box's format holds for both
     go = box.addButton(yes, QMessageBox.ButtonRole.AcceptRole)
     cancel = box.addButton(QMessageBox.StandardButton.Cancel)
     box.setDefaultButton(cancel)
-    box.exec()
-    return box.clickedButton() is go, tick.isChecked()
+    go.setProperty("dc", "bad" if danger else "go")
+    cancel.setProperty("dc", "no")
+    styled(box)
+    return box, go
 
 
 def _plain_input(parent, title, label):
@@ -288,7 +418,7 @@ def _plain_input(parent, title, label):
     dlg.setLabelText(label)
     for lb in dlg.findChildren(QLabel):
         lb.setTextFormat(Qt.TextFormat.PlainText)
-    return dlg
+    return styled(dlg)
 
 
 def ask_text(parent, title, label, text=""):
@@ -324,6 +454,7 @@ def shared_words(cfg):
 def attach_alive(dialog):
     dialog._alive = True
     dialog.finished.connect(lambda _=0: setattr(dialog, "_alive", False))
+    styled(dialog)  # 3.9.1: every window that comes here wears the board's look
 
 
 def run_bg(owner, job, done):

@@ -8,7 +8,7 @@ from aqt.qt import (
 
 from ..backend.shapes import SQUAD_CODE_LEN, SQUAD_NAME_MAX, squad_code_from
 from ..app import _bg
-from . import attach_alive, copy_text, run_bg, shared_words
+from . import attach_alive, copy_text, run_bg, shared_words, tone
 
 
 def invite_text(name, code):
@@ -88,7 +88,7 @@ class SquadDialog(QDialog):
 
         lay.addSpacing(6)
         hint = QLabel(note or shared_note({}))
-        hint.setStyleSheet("font-size: 11px; color: palette(placeholder-text);")
+        hint.setStyleSheet(f"font-size: 11px; color: {tone('muted')};")
         hint.setWordWrap(True)
         lay.addWidget(hint)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)

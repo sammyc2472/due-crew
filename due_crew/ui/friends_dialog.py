@@ -15,7 +15,7 @@ from aqt.qt import (
 from aqt.utils import tooltip
 
 from ..backend.shapes import friend_code_from, invite_code_from
-from . import accent, attach_alive, confirm, copy_text, run_bg
+from . import accent, attach_alive, confirm, copy_text, run_bg, tone
 
 
 def invite_text(friend_code):
@@ -43,7 +43,7 @@ class FriendsDialog(QDialog):
 
     def _build(self):
         self.setWindowTitle("Friends")
-        self.setMinimumWidth(420)
+        self.setMinimumWidth(470)  # 3.9.1: the code and its three buttons in the board-look padding
         root = QVBoxLayout(self)
 
         root.addWidget(QLabel("<b>Your code</b>"))
@@ -55,8 +55,8 @@ class FriendsDialog(QDialog):
             "letter-spacing: 3px; padding: 6px 12px;"
             # the one styled well in the Qt surfaces: palette roles track
             # night mode on their own, the accent comes from the theme
-            f"color: {accent()}; background: palette(alternate-base);"
-            "border: 1px solid palette(mid); border-radius: 6px;")
+            f"color: {accent()}; background: {tone('well')};"
+            f"border: 1px solid {tone('line')}; border-radius: 6px;")
         code_row.addWidget(self.code_label)
         copy = QPushButton("Copy")
         copy.clicked.connect(self._copy)
@@ -148,7 +148,7 @@ class FriendsDialog(QDialog):
             self.knocks = [(k[0], k[1]) for k in knocks
                            if k[0] not in have and k[0] not in self.muted]
             self.loaded = True
-            self.code_label.setText(self.code or "?")
+            self._show_code(self.code or "?")
             self._set_writable(True)
             self._render_knocks()
             self._render_list()
@@ -238,6 +238,12 @@ class FriendsDialog(QDialog):
 
     # ---- actions ----
 
+    def _show_code(self, code):
+        """3.9.1: its letter spacing isn't in the label's size, so it asks for
+        that much more (the board-look buttons left no slack to hide it)."""
+        self.code_label.setText(code)
+        self.code_label.setMinimumWidth(self.code_label.sizeHint().width() + 3 * len(code))
+
     def _copy(self):
         if self.code:
             copy_text(self.code)
@@ -273,7 +279,7 @@ class FriendsDialog(QDialog):
             code, problem = result
             if code:
                 self.code = self.new_code = code
-                self.code_label.setText(code)
+                self._show_code(code)
             tooltip(problem or "New code. The old one no longer works.")
 
         run_bg(self, lambda: self.client.new_friend_code(old), done)

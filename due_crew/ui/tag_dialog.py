@@ -9,7 +9,7 @@ from aqt.qt import (
     QComboBox, QDialog, QDialogButtonBox, QFormLayout, QLabel, QPushButton, Qt, QVBoxLayout,
 )
 
-from . import attach_alive, run_bg
+from . import attach_alive, run_bg, tone
 from .. import plans as P
 
 PER_TAG = 5000  # plans.ts IDLIST_MAX: a tag's notes
@@ -49,7 +49,7 @@ class TagDialog(QDialog):
         self.where = QLabel("")
         self.where.setTextFormat(Qt.TextFormat.PlainText)  # names come from the server
         self.where.setWordWrap(True)
-        self.where.setStyleSheet("color: palette(placeholder-text); font-size: 11.5px;")
+        self.where.setStyleSheet(f"color: {tone('muted')}; font-size: 11.5px;")
         root.addWidget(self.where)
         self.status = QLabel("Looking for your plans…")
         self.status.setTextFormat(Qt.TextFormat.PlainText)

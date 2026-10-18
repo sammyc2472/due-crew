@@ -6,7 +6,7 @@ request. Plan and date names are the author's: plain text only."""
 
 from aqt.qt import QDialog, QDialogButtonBox, QLabel, QPushButton, Qt, QVBoxLayout
 
-from . import attach_alive
+from . import attach_alive, tone
 
 
 def _plain(text, muted=False, bold=False):
@@ -14,7 +14,7 @@ def _plain(text, muted=False, bold=False):
     w.setTextFormat(Qt.TextFormat.PlainText)
     w.setWordWrap(True)
     if muted:
-        w.setStyleSheet("color: palette(placeholder-text); font-size: 11.5px;")
+        w.setStyleSheet(f"color: {tone('muted')}; font-size: 11.5px;")
     elif bold:
         w.setStyleSheet("font-weight: 600;")
     return w

@@ -11,7 +11,7 @@ from aqt.qt import (
     QPainter, QPushButton, QRadioButton, QSizePolicy, Qt, QVBoxLayout, QWidget,
 )
 
-from . import attach_alive
+from . import _dark, attach_alive, tone
 from .. import schedule as S
 
 DAY_NAMES = ("M", "T", "W", "T", "F", "S", "S")
@@ -39,12 +39,13 @@ class LoadChart(QWidget):
             return
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        pal = self.palette()
-        ink = pal.color(pal.ColorRole.WindowText)
+        # 3.9.1: the board's colours (its theme), as the window around it
+        dark = _dark()
+        ink = QColor(tone("ink"))
         muted = QColor(ink)
         muted.setAlpha(140)
-        accent = QColor("#2e7d32") if pal.color(pal.ColorRole.Window).lightness() > 128 else QColor("#7cc47f")
-        amber = QColor("#b26a00") if pal.color(pal.ColorRole.Window).lightness() > 128 else QColor("#dda45c")
+        accent = QColor("#7cc47f" if dark else "#2e7d32")
+        amber = QColor(tone("hours"))
         w, h = self.width(), self.height()
         left, bottom, top = 4, 18, 18
         weeks = v["weeks"]
@@ -191,7 +192,7 @@ class ScheduleDialog(QDialog):
         for b, n in zip(self.day_buttons, self.days):
             b.setText(b.text()[0] + ("×2" if n == 2 else ""))
             b.setFixedWidth(46 if n == 2 else 34)
-            b.setStyleSheet("" if n else "color: palette(mid);")
+            b.setStyleSheet("padding: 4px 0;" + ("" if n else f" color: {tone('faded')};"))  # 3.9.1: the letter, not the padding
             b.setToolTip(("Rest day", "Study day", "Double share")[n] + ". Click to change.")
         rest = [DAY_NAMES[i] for i, n in enumerate(self.days) if n == 0]
         double = [DAY_NAMES[i] for i, n in enumerate(self.days) if n == 2]

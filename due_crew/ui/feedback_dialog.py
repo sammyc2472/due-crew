@@ -4,7 +4,7 @@ my email from Due Crew. One request, on Send, in the background."""
 
 from aqt.qt import QCheckBox, QDialog, QDialogButtonBox, QLabel, QPlainTextEdit, Qt, QVBoxLayout
 
-from . import attach_alive, run_bg
+from . import attach_alive, run_bg, tone
 from ..app import feedback_versions as versions
 from ..backend.api import FEEDBACK_MAX
 
@@ -27,7 +27,7 @@ class FeedbackDialog(QDialog):
         lay.addWidget(self.ver)
         note = QLabel("Due Crew sees your name and emoji with it, and can write back to your email. Nobody else sees it.")
         note.setWordWrap(True)
-        note.setStyleSheet("color: palette(placeholder-text);")
+        note.setStyleSheet(f"color: {tone('muted')};")
         lay.addWidget(note)
         self.status = QLabel("")
         self.status.setTextFormat(Qt.TextFormat.PlainText)

@@ -16137,6 +16137,41 @@ def test_sheets_v391():
           and ticked == ['duecrew:sheet:s4:{"ok":true,"check":false}|KEY'], (typed, cancelled, picked, ticked))
 
 
+def test_qt_look_v391():
+    """3.9.1 (Sam: "make sure all modals are in our style"): every Qt window
+    wears the board's look (ui.styled, from attach_alive or its own call):
+    its colours for its theme and accent, the main action in the accent; a
+    label's own style sheet takes tone(), never palette(...), which a styled
+    window doesn't pass down. tools/dialogs.py renders them all."""
+    import glob
+    from due_crew import board as B, ui
+    ok = True
+    for theme in ("light", "dark"):
+        for name in B.ACCENTS:
+            t = dict(B.palette(theme, name), **{"bad": "#d32f2f", "bad-ink": "#ffffff"})
+            try:
+                css = ui.QSS.format(**t)
+            except (KeyError, IndexError, ValueError):
+                ok = False
+                continue
+            ok = ok and t["accent"] in css and t["bg"] in css and "{" in css and "{{" not in css
+    check("qt look: the stylesheet takes every theme and accent's tokens", ok)
+    check("qt look: the suite's Qt has none of it, and nothing raises; a tone is the board's colour",
+          ui.styled(object()) is not None and ui.tone("muted") in (B.LIGHT["muted"], B.DARK["muted"]))
+    src = {os.path.basename(p): open(p).read() for p in glob.glob(os.path.join(REPO, "due_crew", "ui", "*_dialog.py"))}
+    init = open(os.path.join(REPO, "due_crew", "ui", "__init__.py")).read()
+    unstyled = [f for f, t in src.items() if "(QDialog)" in t and t.count("(QDialog)") > t.count("attach_alive(self)") + t.count("styled(self)")]
+    check("qt look: every dialog wears it (attach_alive styles it, the rest call styled)",
+          "    styled(dialog)  # 3.9.1" in init and not unstyled, unstyled)
+    check("qt look: no dialog's own style sheet reads palette(...) or a fixed grey",
+          not [f for f, t in src.items() if re.search(r"palette\(|color: gray", t)])
+    check("qt look: a question's yes is the accent (the red when it can't be taken back), Cancel focused; no icon",
+          'go.setProperty("dc", "bad" if danger else "go")' in init and "box.setDefaultButton(cancel)" in init
+          and "QMessageBox.Icon.NoIcon" in init and 'QPushButton[dc="go"]' in ui.QSS and 'QPushButton[dc="bad"]' in ui.QSS)
+    check("qt look: ticks, radio dots and number boxes keep the system's drawing (a styled one loses its frame or arrows)",
+          "QCheckBox, QRadioButton {{ color: {ink}; }}" in ui.QSS and "QSpinBox" not in ui.QSS and "::indicator" not in ui.QSS)
+
+
 def test_room_sounds_v391():
     """3.9.1, room sounds (Sam's picks): brown noise, rain, fire and waves,
     made from noise in the top bar's page; a speaker on the chip picks one;

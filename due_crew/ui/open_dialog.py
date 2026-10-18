@@ -6,7 +6,7 @@ starts a Due Crew deck of the new ones. One undo step. Local: no request."""
 
 from aqt.qt import QCheckBox, QDialog, QDialogButtonBox, QLabel, QPushButton, Qt, QVBoxLayout
 
-from . import attach_alive
+from . import attach_alive, tone
 
 
 class OpenDialog(QDialog):
@@ -33,7 +33,7 @@ class OpenDialog(QDialog):
             w = QLabel(where)
             w.setTextFormat(Qt.TextFormat.PlainText)
             w.setWordWrap(True)
-            w.setStyleSheet("color: palette(placeholder-text); font-size: 11.5px;")
+            w.setStyleSheet(f"color: {tone('muted')}; font-size: 11.5px;")
             root.addWidget(w)
         facts = []
         if already:
