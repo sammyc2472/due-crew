@@ -47,7 +47,6 @@ STUCK_MIN = 20     # a topic shows with this many cards reviewed in the window
 FSRS_GAP = 3       # points under the target, on cards 1-3 days since their last review...
 FSRS_MIN = 300     # ...with this many answers behind it
 AIM_DAYS = 21      # the hero aims at the next event this close, else a week out
-NEW_MIN = 50       # new cards measured over their first week before the week is in time
 HIDE_DAYS = 30     # Optimize FSRS (or the Hard habit), dismissed, stays away this long
 HARD_SHARE = 15    # % of review answers on Hard before Insights says so (3.8.0)...
 HARD_MIN = 200     # ...with this many answers behind it
@@ -478,20 +477,6 @@ def map_level(tiles, at, know=None):
 def map_shade(know):
     """A tile's shade: 3 at 90% and up, 2 from 80, 1 from 70, 0 under."""
     return 3 if know >= 90 else 2 if know >= 80 else 1 if know >= 70 else 0
-
-
-def week(past, ahead, secs_new, secs_answer):
-    """Your week in minutes: past [(day, minutes)] as studied, ahead
-    [(day, new cards, reviews due)] at my own measured pace (a new card's
-    whole first week counted on the day it opens). None without a measured
-    pace or with nothing ahead."""
-    if not secs_new or not secs_answer or not any(n for _d, n, _r in ahead):
-        return None
-    fut = [(d, int(round((n * secs_new + r * secs_answer) / 60.0)), n, r) for d, n, r in ahead]
-    days = [m for _d, m, _n, _r in fut]
-    seen = [m for _d, m in past]
-    return {"past": list(past), "ahead": fut, "avg": int(round(sum(days) / len(days))),
-            "was": int(round(sum(seen) / len(seen))) if seen else 0}
 
 
 def fsrs_gap(right, n, target):

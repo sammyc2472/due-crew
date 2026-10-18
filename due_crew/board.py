@@ -981,6 +981,27 @@ def _css(cfg):
     #due-crew .iwk .ax.b {{ fill: var(--dc-ink); font-weight: 700; }}
     #due-crew .iwk .ax.d {{ font-size: 9px; opacity: .8; }}
     #due-crew .iwk .ev {{ font-weight: 700; letter-spacing: .04em; }}
+    /* 3.9.2, Reviews ahead: done in ink, started solid, new cards striped; never a warning colour */
+    #due-crew .dc-ahead, #due-crew .dc-ahead .ahw {{ min-width: 0; }}
+    #due-crew .dc-ahead .iwk svg {{ min-width: 560px; }}
+    #due-crew .dc-ahead .ahdefs {{ position: absolute; width: 0; height: 0; overflow: hidden; }}
+    #due-crew .ahdefs .h1 {{ fill: color-mix(in srgb, var(--dc-accent) 18%, var(--dc-bg)); }}
+    #due-crew .ahdefs .h2 {{ fill: color-mix(in srgb, var(--dc-accent) 55%, var(--dc-bg)); }}
+    #due-crew .iwk .ps {{ fill: color-mix(in srgb, var(--dc-ink) 16%, var(--dc-bg)); }}
+    #due-crew .sw.ps {{ background: color-mix(in srgb, var(--dc-ink) 16%, var(--dc-bg)); }}
+    #due-crew .iwk .sep {{ stroke: var(--dc-line); stroke-dasharray: 2 3; }}
+    #due-crew .iwk .exl {{ stroke: var(--dc-ink); stroke-width: 1; }}
+    #due-crew .iwk .ax.ev {{ fill: var(--dc-ink); font-weight: 700; }}
+    #due-crew .dc-ahead .xline {{ color: var(--dc-ink); margin: 2px 0 6px; }}
+    #due-crew .dc-ahead .xline b {{ font-variant-numeric: tabular-nums; }}
+    #due-crew .xwhat {{ display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }}
+    #due-crew .xc {{ border: 1px solid var(--dc-line); border-radius: 99px; padding: 2px 10px; color: var(--dc-ink); cursor: pointer;
+      font-size: 11.5px; user-select: none; }}
+    #due-crew .xc.on {{ border-color: var(--dc-accent); box-shadow: inset 0 0 0 1px var(--dc-accent); color: var(--dc-accent); font-weight: 700; }}
+    #due-crew .xc:focus-visible {{ outline: 2px solid var(--dc-accent); outline-offset: 2px; }}
+    #due-crew .xact {{ display: flex; align-items: center; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap;
+      font-size: 11.5px; color: var(--dc-muted); margin-top: 6px; text-align: left; }}
+    #due-crew .dc-ins .xact a.bt {{ margin-top: 0; }}
     #due-crew .iline {{ border-top: 1px solid var(--dc-line); padding-top: 10px; color: var(--dc-ink); }}
     @media (max-width: 560px) {{ #due-crew .irow {{ grid-template-columns: minmax(0, 1fr) auto auto; row-gap: 4px; }}
       #due-crew .irow .ib {{ grid-column: 1 / -1; grid-row: 2; }} }}
@@ -2036,56 +2057,213 @@ def _you_insights(ins):
     return head + _insights_html(did, ins.get("view") or {})
 
 
-def _ins_week(did, w, aim, today):
-    """Your week in time: the last 7 days as studied, today (done, and what's
-    left), and the next days at my own pace: what the plan asks, or (3.8.0,
-    no plan) what Anki has due."""
-    past, ahead = w.get("past") or [], w.get("ahead") or []
-    cols = [("p", m, d, f"{_hm(m)} in this deck") for d, m in past]
-    done = int(w.get("today_done") or 0)
-    for i, (d, m, n, r) in enumerate(ahead):
-        tip = f"about {_hm(m)}: {n:,} new and {r:,} reviews, at your pace"
-        if i == 0:
-            cols.append(("t", max(m, done), d, f"{_hm(done)} so far &middot; " + tip))
+def _ins_r(x):
+    from .ahead import r
+    return f"{r(x):,}"
+
+
+def _ins_dname(iso, long=False):
+    try:
+        d = _dt.date.fromisoformat(str(iso))
+    except ValueError:
+        return ""
+    return f"{d:%a} {d.day} {d:%b}" if long else f"{d:%a} {d.day}"
+
+
+AHEAD_PILL = {"pace": "Your pace", "week": "Stop new a week before the exam", "unlocked": "",
+              "now": "Stop new now", "off": "Paused"}
+
+
+def _ins_ahead_svg(did, a, w, uid):
+    """3.9.2: one chart, cards a day as Anki counts them: the last 7 days
+    as studied, today (done, and what's still due), the next 13 by day
+    (the cards I've started, solid; what new cards bring, striped), then
+    4 weeks by week (a week's average day). The exam marked on its day.
+    Each bar's tip: its numbers, a band from the track record, the time."""
+    days, past, cards, new = a["days"], a["past"], w["cards"], w["new"]
+    trust = a.get("trust")
+    by = (trust[1] if trust else None) or []
+    secs = a.get("secs")
+    wk_c, wk_n = _ahead_weeks(cards), _ahead_weeks(new)
+    done = int(a.get("done") or 0)
+    tall = max([1] + list(past) + [done + cards[0]] + list(cards[1:14]) + wk_c)
+    step = next((s_ for s_ in (5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000) if tall / s_ <= 4), 10000)
+    top = step * (int(tall // step) + 1)
+    Hh, W = 104.0, 640.0
+    slot = W / 26.5
+    bw = slot * 0.72
+    y = lambda v: Hh - Hh * v / top  # noqa: E731
+    lab = lambda x, yy, t, cls="ax": f'<text class="{cls}" x="{x:.1f}" y="{yy:.1f}">{t}</text>'  # noqa: E731
+    pat = f"ah{uid}"  # defined once, outside the ways' blocks (a pattern in a hidden one doesn't draw)
+    out = ""
+    for k in range(1, int(top // step) + 1):
+        v = k * step
+        out += f'<line class="g" x1="0" x2="{W:.0f}" y1="{y(v):.1f}" y2="{y(v):.1f}"/><text class="yl" x="-5" y="{y(v) + 3:.1f}">{v:,}</text>'
+
+    def band(v, wk):
+        e = by[min(wk, len(by) - 1)] if by else None
+        return f" ({_ins_r(v * (1 - e))}&ndash;{_ins_r(v * (1 + e))})" if e and v >= 10 else ""
+
+    def mins(ans):
+        return f" &middot; about {_hm(max(1, int(round(ans * secs / 60.0))))}" if secs and ans else ""
+
+    pk = max(range(1, 14), key=lambda j: cards[j])  # the tallest day ahead has its number
+    ex = a.get("exam")
+    for i, n in enumerate(past):
+        x = i * slot
+        wd, dn = _ins_day(days[i])
+        out += (f'<g><title>{_ins_dname(days[i])}: {int(n):,} cards</title><rect class="hit" x="{x:.1f}" y="-20" width="{slot:.1f}" height="{Hh + 40:.0f}"/>'
+                f'<rect class="ps" x="{x:.1f}" y="{y(n):.1f}" width="{bw:.1f}" height="{Hh - y(n):.1f}" rx="2"/>'
+                f'{lab(x + bw / 2, Hh + 13, _html.escape(wd[:1]))}{lab(x + bw / 2, Hh + 24, dn, "ax d")}</g>')
+    for j in range(14):
+        x = (7 + j) * slot
+        c, nw = cards[j], new[j]
+        base = Hh
+        bars = ""
+        if j == 0 and done:
+            bars += f'<rect class="ps" x="{x:.1f}" y="{y(done):.1f}" width="{bw:.1f}" height="{Hh - y(done):.1f}" rx="2"/>'
+            base = y(done)
+        h1 = Hh * (c - nw) / top
+        h2 = Hh * nw / top
+        bars += f'<rect class="pm" x="{x:.1f}" y="{base - h1:.1f}" width="{bw:.1f}" height="{h1:.1f}" rx="2"/>'
+        if h2 > 0.5:
+            bars += f'<rect fill="url(#{pat})" x="{x:.1f}" y="{base - h1 - h2:.1f}" width="{bw:.1f}" height="{max(0.0, h2 - 1):.1f}" rx="2"/>'
+        tot = c + (done if j == 0 else 0)
+        ty = base - h1 - h2
+        tip = (f"{'Today' if j == 0 else _ins_dname(days[7 + j])}: "
+               + (f"{done:,} done, about {_ins_r(c)} to go" if j == 0 else f"about {_ins_r(c)} cards{band(c, 0 if j < 7 else 1)}")
+               + f" &middot; {_ins_r(c - nw)} you&rsquo;ve started, {_ins_r(nw)} from new cards{mins(w['answers'][j])}")
+        num = ""
+        if j == 0 or j == pk or j == ex:
+            num = lab(x + bw / 2, ty - 5, _ins_r(tot), "ax b")
+        mark = ""
+        if j == ex:
+            mark = (f'<line class="exl" x1="{x + bw / 2:.1f}" x2="{x + bw / 2:.1f}" y1="-14" y2="{ty - 16:.1f}"/>'
+                    f'{lab(x + bw / 2, -17, "Exam", "ax ev")}')
+        wd, dn = _ins_day(days[7 + j])
+        out += (f'<g><title>{tip}</title><rect class="hit" x="{x:.1f}" y="-20" width="{slot:.1f}" height="{Hh + 40:.0f}"/>{bars}{num}{mark}'
+                f'{lab(x + bw / 2, Hh + 13, _html.escape(wd[:1]), "ax b" if j == 0 else "ax")}'
+                f'{lab(x + bw / 2, Hh + 24, dn, "ax b" if j == 0 else "ax d")}</g>')
+    out += lab(7 * slot + bw / 2, Hh + 36, "today", "ax d")
+    x0 = 21.5 * slot
+    out += lab(x0 + 1.5 * slot * 1.25 + bw / 2, -17, "by week", "ax d")
+    for k in range(4):
+        x = x0 + k * slot * 1.25
+        c, nw = wk_c[k], wk_n[k]
+        h1, h2 = Hh * (c - nw) / top, Hh * nw / top
+        first = days[7 + 14 + 7 * k]
+        exam_here = ex is not None and 14 + 7 * k <= ex < 21 + 7 * k
+        tip = (f"Week of {_ins_dname(first)}: about {_ins_r(c)} cards a day{band(c, 2 + k)}"
+               f"{mins(sum(w['answers'][14 + 7 * k:21 + 7 * k]) / 7.0)}{' &middot; your exam' if exam_here else ''}")
+        try:
+            fd = _dt.date.fromisoformat(first)
+            l1, l2 = str(fd.day), f"{fd:%b}"
+        except ValueError:
+            l1 = l2 = ""
+        out += (f'<g><title>{tip}</title><rect class="hit" x="{x:.1f}" y="-20" width="{slot * 1.2:.1f}" height="{Hh + 40:.0f}"/>'
+                f'<rect class="pm" x="{x:.1f}" y="{Hh - h1:.1f}" width="{bw:.1f}" height="{h1:.1f}" rx="2"/>'
+                + (f'<rect fill="url(#{pat})" x="{x:.1f}" y="{Hh - h1 - h2:.1f}" width="{bw:.1f}" height="{max(0.0, h2 - 1):.1f}" rx="2"/>' if h2 > 0.5 else "")
+                + lab(x + bw / 2, Hh - h1 - h2 - 5, _ins_r(c), "ax b")
+                + (lab(x + bw / 2, Hh - h1 - h2 - 17, "Exam", "ax ev") if exam_here else "")
+                + f'{lab(x + bw / 2, Hh + 13, l1)}{lab(x + bw / 2, Hh + 24, l2, "ax d")}</g>')
+    out += f'<line class="base" x1="0" x2="{W:.0f}" y1="{Hh:.0f}" y2="{Hh:.0f}"/>'
+    for sx in (6.86 * slot, 21.1 * slot):
+        out += f'<line class="sep" x1="{sx:.1f}" x2="{sx:.1f}" y1="-6" y2="{Hh + 26:.0f}"/>'
+    return (f'<svg viewBox="-30 -30 676 174" role="img" aria-label="Cards a day: the last 7 days, the next 14 by day, '
+            f'then 4 weeks by week">{out}</svg>')
+
+
+def _ahead_weeks(xs):
+    from .ahead import weeks
+    return weeks(xs)
+
+
+def _ins_ahead(did, a, deck_name=""):
+    """3.9.2 (Sam's picks: Your week becomes Reviews ahead): the chart, the
+    ways the next six weeks could go (each its own chart and line, picked
+    on the page), and for a stop, Do it: no new cards in this deck, set
+    each morning as Anki's today-only limit (deck options untouched), with
+    Turn back on in its place once it runs. a: ahead_flow.deck_view."""
+    e = _html.escape
+    ways = [w for w in a.get("ways") or [] if isinstance(w, dict)]
+    if not ways:
+        return ""
+    on = a.get("on") or "pace"
+    pace = next((w for w in ways if w["key"] == "pace"), ways[0])
+    days, ex = a["days"], a.get("exam")
+    week = sum(a.get("past") or []) / 7.0
+    uid = _re.sub(r"[^A-Za-z0-9]", "", str(did))[:20]
+    name = e(str(deck_name or "this deck"))
+    secs = a.get("secs")
+    if ex is not None and 0 <= ex < 14:
+        lo, hi, when = max(0, ex - 6), ex + 1, "Exam week" if ex >= 6 else "To your exam"
+    elif ex is not None and 14 <= ex < 42:
+        lo, hi, when = max(0, ex - 6), ex + 1, "Exam week"
+    else:
+        lo, hi, when = 7, 14, "In 2 weeks"
+    exd = _ins_dname(days[7 + ex], long=True) if ex is not None and 0 <= ex < 42 else ""
+    rate, unlocked = int(round(a.get("rate") or 0)), int(a.get("unlocked") or 0)
+
+    def mean(xs):
+        return sum(xs) / len(xs) if xs else 0
+
+    blocks, pills, acts = "", "", ""
+    for w in ways:
+        k = w["key"]
+        if k == "pace":
+            mins = (f" &middot; about {_hm(max(1, int(round(mean(w['answers'][:14]) * secs / 60.0))))} a day at your pace" if secs else "")
+            line = (f"Next 2 weeks: about <b>{_ins_r(mean(w['cards'][:14]))}</b> a day &middot; "
+                    f"this week {_ins_r(week)}{mins}")
+            label = f"Your pace &middot; {rate:,} new a week"
         else:
-            cols.append(("f", m, d, tip))
-    top = max([c[1] for c in cols] + [60])
-    W, H, gap = 640, 90, 6
-    bw = (W - gap * (len(cols) - 1)) / max(1, len(cols))
-    hid = "hx" + _re.sub(r"[^A-Za-z0-9]", "", str(did))[:20]
-    grid = "".join(f'<line class="g" x1="0" x2="{W}" y1="{H - H * h * 60 / top:.1f}" y2="{H - H * h * 60 / top:.1f}"/>'
-                   f'<text class="yl" x="-5" y="{H - H * h * 60 / top + 3:.1f}">{h} h</text>'
-                   for h in range(1, int(top // 60) + 1))
-    bars = ""
-    for i, (k, m, d, tip) in enumerate(cols):
-        x, hgt = i * (bw + gap), H * m / top
-        wd, dn = _ins_day(d, today)
-        lab = _html.escape(f"{wd} {dn}")
-        bars += f'<g><title>{lab} &middot; {tip}</title><rect class="hit" x="{x:.1f}" y="0" width="{bw:.1f}" height="120"/>'
-        if k == "p":
-            bars += f'<rect class="pm" x="{x:.1f}" y="{H - max(hgt, 1.5):.1f}" width="{bw:.1f}" height="{max(hgt, 1.5):.1f}" rx="3"/>'
-        elif k == "t":
-            hd = H * done / top
-            bars += f'<rect class="pm" x="{x:.1f}" y="{H - hd:.1f}" width="{bw:.1f}" height="{hd:.1f}" rx="3"/>'
-            if hgt - hd > 2:
-                bars += f'<rect fill="url(#{hid})" x="{x:.1f}" y="{H - hgt:.1f}" width="{bw:.1f}" height="{hgt - hd - 2:.1f}" rx="3"/>'
+            line = (f"{when}: about <b>{_ins_r(mean(w['cards'][lo:hi]))}</b> a day, not {_ins_r(mean(pace['cards'][lo:hi]))}"
+                    + (f" &middot; exam day about {_ins_r(w['cards'][ex])}" if k != "unlocked" and ex is not None and 0 <= ex < 42 else ""))
+            label = (f"Only the {unlocked:,} unlocked" if k == "unlocked"
+                     else "Stop new now" + (", to the exam" if ex is not None and k == "now" else "") if k == "now"
+                     else AHEAD_PILL.get(k) or k)
+        hid = "" if k == on else " hidden"
+        blocks += (f'<div class="ahw" data-k="{k}"{hid}><div class="xline">{line}</div>'
+                   f'<div class="iwk">{_ins_ahead_svg(did, a, w, uid)}</div></div>')
+        pills += (f'<span class="xc{" on" if k == on else ""}" data-k="{k}" role="radio" tabindex="0" '
+                  f'aria-checked="{"true" if k == on else "false"}">{label}</span>')
+        # what pressing it does, said once, beside its button
+        if k == on and k != "pace":
+            act = (f'<span>No new cards in {name} '
+                   + (f"till your exam, {exd}" if ex is not None and k != "unlocked" else "till you turn them back on")
+                   + f'.</span><a class="bt" href="#" onclick="{_pycmd(f"insaheadon:{did}")}">Turn new cards back on</a>')
+        elif k == "pace" and on != "pace":
+            act = f'<span>New cards back, at your pace.</span><a class="bt" href="#" onclick="{_pycmd(f"insaheadon:{did}")}">Turn new cards back on</a>'
+        elif k == "pace":
+            act = ""
+        elif k == "unlocked":
+            act = "<span>If you unlock no more: what that leaves.</span>"
+        elif k in ("week", "now") and on == "pace":
+            first = "today" if k == "now" else _ins_dname(days[7 + w["stop"][0]], long=True)
+            till = "till your exam" if ex is not None else "till you turn them back on"
+            act = (f'<span>From {first}, no new cards in {name} {till}.</span>'
+                   f'<a class="bt" href="#" title="Anki&rsquo;s today-only limit, each morning. Your deck options stay as they are." '
+                   f'onclick="{_pycmd(f"insaheadoff:{did}:{k}")}">Do it</a>')
         else:
-            bars += f'<rect fill="url(#{hid})" x="{x:.1f}" y="{H - hgt:.1f}" width="{bw:.1f}" height="{hgt:.1f}" rx="3"/>'
-        if aim.get("name") and d == aim.get("day"):
-            last = i == len(cols) - 1
-            anchor = ' style="text-anchor:end"' if last else ""
-            bars += (f'<text class="ev" x="{x + (bw if last else bw / 2):.1f}" y="{H - hgt - 6:.1f}"{anchor}>'
-                     f'{_html.escape(str(aim["name"])[:12])}</text>')
-        bars += (f'<text class="ax{" b" if k == "t" else ""}" x="{x + bw / 2:.1f}" y="{H + 14}">{_html.escape(wd)}</text>'
-                 f'<text class="ax d" x="{x + bw / 2:.1f}" y="{H + 25}">{dn}</text></g>')
-    defs = (f'<defs><pattern id="{hid}" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">'
-            f'<rect width="6" height="6" class="h1"/><rect width="3" height="6" class="h2"/></pattern></defs>')
-    to = (f" to {_ins_day(aim['day'])[0]}" if aim.get("name") and int(aim.get("in") or 99) <= 6 else " this week")
-    return (f'<div class="isec"><div class="ik">Your week<span>&nbsp;&middot; about {_hm(w["avg"])} a day{to}'
-            f' &middot; the last 7 days: {_hm(w.get("was") or 0)}</span>'
-            f'<span class="ikey"><i class="sw pm"></i>your days <i class="sw hx"></i>{"what the plan asks" if w.get("src") != "anki" else "what Anki has due"}</span></div>'
-            f'<div class="iwk"><svg viewBox="-24 0 664 120" role="img" aria-label="Minutes a day in this deck">{defs}{grid}'
-            f'<line class="base" x1="0" x2="{W}" y1="{H}" y2="{H}"/>{bars}</svg></div></div>')
+            act = ""
+        if act:
+            acts += f'<div class="xact" data-k="{k}"{hid}>{act}</div>'
+    tr = a.get("trust")
+    said = ("Counted from your last 120 days"
+            + (f" &middot; on your own past, within {max(1, int(round(100 * tr[0])))}% a week" if tr else "")
+            + ("" if a.get("own") else " &middot; new cards by a typical curve till yours has 6 weeks"))
+    pick = ("var r=this.closest('.dc-ahead'),k=(event.target.closest('.xc')||{}).dataset;"
+            "if(!k||!k.k)return;k=k.k;r.querySelectorAll('[data-k]').forEach(function(x){"
+            "var m=x.dataset.k===k;if(x.classList.contains('xc')){x.classList.toggle('on',m);x.setAttribute('aria-checked',m);}else x.hidden=!m;});")
+    keys = ("if(event.key==='Enter'||event.key===' '){event.preventDefault();event.target.click();}")
+    defs = (f'<svg class="ahdefs" width="0" height="0" aria-hidden="true"><defs><pattern id="ah{uid}" width="6" height="6" '
+            f'patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" class="h1"/>'
+            f'<rect width="3" height="6" class="h2"/></pattern></defs></svg>')
+    return (f'<div class="isec dc-ahead">{defs}<div class="ik">Reviews ahead<span>&nbsp;&middot; cards a day</span>'
+            f'<span class="ikey"><i class="sw ps"></i>done <i class="sw pm"></i>started <i class="sw hx"></i>new cards</span></div>'
+            f'{blocks}'
+            + (f'<div class="xwhat" role="radiogroup" aria-label="New cards" onclick="{pick}" onkeydown="{keys}">{pills}</div>'
+               if len(ways) > 1 else "")
+            + f'{acts}<div class="tmt">{said}.</div></div>')
 
 
 def _insights_html(did, v):
@@ -2104,13 +2282,10 @@ def _insights_html(did, v):
         pct = round(100 * now[0] / now[1])
         was = (f'<span class="m">{round(100 * before[0] / before[1])}% the 2 weeks before</span>' if before[1] >= 50 else "")
         out += (f'<div class="ihd" title="This deck, first answer of each card each day: '
-                f'{now[0]:,} of {now[1]:,} right in 2 weeks"><b>{pct}%</b><span>right on reviews{" &middot; " + was if was else ""}</span>'
+                f'{now[0]:,} of {now[1]:,} right in 2 weeks"><b>{pct}%</b><span>right &middot; Anki aims for {int(v.get("target") or 90)}%'
+                f'{" &middot; " + was if was else ""}</span>'
                 f'{_ins_spark(r.get("days") or [])}</div>')
     aim = v.get("aim") or {}
-    today = ""
-    w = v.get("week")
-    if w and w.get("ahead"):
-        today = w["ahead"][0][0]
     hero = v.get("hero") or []
     if hero:
         k = int(aim.get("in") or 7)
@@ -2128,7 +2303,7 @@ def _insights_html(did, v):
                 f'<div class="t" title="Started cards of {whose} that Anki won&rsquo;t show you before then, under your {int(v.get("target") or 90)}% by then (FSRS)">'
                 f'<a class="tp" href="#" title="Browse them" onclick="{_pycmd(f"insbrowse:{did}:h")}">'
                 f'{len(hero):,} card{"s" if len(hero) != 1 else ""}</a> Anki won&rsquo;t show you before {when}</div>'
-                f'<a class="bt" href="#" onclick="{_pycmd(f"insstudy:{did}:h")}">Study {len(hero):,}</a></div>')
+                f'<a class="bt" href="#" onclick="{_pycmd(f"insstudy:{did}:h")}">Study {len(hero):,} early</a></div>')
     if int(v.get("behind") or 0) and v.get("pid"):
         out += (f'<div class="iline">{int(v["behind"]):,} new cards behind &middot; '
                 f'<a href="#" onclick="{_pycmd("plancatch:" + str(v["pid"]))}">Catch up&hellip;</a></div>')
@@ -2148,8 +2323,8 @@ def _insights_html(did, v):
                     f'<a href="#" onclick="{_pycmd(f"insstudy:{did}:{i}")}">Study {st + fg}</a></div>')
         out += "</div>"
     out += _ins_map(did, v.get("map") or [], v.get("map_by"), v.get("map_at"), v.get("map_ways"))
-    if w:
-        out += _ins_week(did, w, aim, today)
+    if v.get("ahead"):
+        out += _ins_ahead(did, v["ahead"], v.get("deck_name"))
     f = v.get("fsrs")
     if f:
         out += (f'<div class="iline" title="Reviews of cards 1&ndash;3 days since their last review, 4 weeks: '
@@ -3154,7 +3329,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
            rules_stale=False, squad_view=None, knocks=None, reviews=None,
            sync_error=False, live=False, tricky=None, milestones=None, room=None, plans=None,
            notice=None, asks=None, due=None, you=None, sticking=None, sev=None, milestone_sev=None, closet=None,
-           halloween=None, wrapped=None, fridge=None, fridge_gone=None):
+           halloween=None, wrapped=None, fridge=None, fridge_gone=None, ahead=None):
     """3.8.0: two parts, apart. On top the You bubble (you_html): due,
     Due's view (due_flow.view, None when Due is off), and you, its Plans and
     Insights ({tab, folded, plans, insights}; None draws Due alone). Under it
@@ -3174,7 +3349,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     halloween (3.8.22): Halloween week's line, its bats and cobweb (halloween_html), or None.
     wrapped (3.9.0): {year, so_far, look} for the line that your year is ready (1 Dec to 15 Jan), or None.
     fridge (3.9.1): the doodles my crew sent (fridge.clean's), pinned around the Decks screen (fridge_html);
-    fridge_gone: the one just taken down, for its Undo (closet_flow.gone)."""
+    fridge_gone: the one just taken down, for its Undo (closet_flow.gone).
+    ahead (3.9.2): {did, name, day, n, week} when reviews in my most reviewed deck climb (ahead_line)."""
     period = cfg.get("period", "today")
     hidden = hidden_tabs(cfg)
     if period not in PERIODS or period in hidden:
@@ -3230,6 +3406,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
                     f'onclick="{_pycmd("milestonecheer:" + str(uid))}">Send {emoji}</a>'
                     f'<a class="wx" href="#" title="Dismiss" '
                     f'onclick="{_pycmd("milestonex:" + str(uid))}">&times;</a></div>')
+    if ahead and ahead.get("did"):
+        bans.append(ahead_line(ahead))
     if wrapped and wrapped.get("year"):
         bans.append(wrapped_line(wrapped["year"], wrapped.get("so_far"), wrapped.get("look") or [], cfg.get("sev", True)))
     if closet and closet.get("keys") and cfg.get("sev", True):
@@ -4168,6 +4346,19 @@ def wrapped_js():
     """
 
 
+def ahead_line(a):
+    """3.9.2: the board's line when the next two weeks climb a quarter over
+    this one (ahead.climb), in my most reviewed deck: the number and the
+    day, what this week was, and Insights' chart. Never a warning colour."""
+    did = int(a["did"])
+    day = _ins_dname(a.get("day"), long=True)
+    return (f'<div class="dc-wrap ah-line"><span>&#128197;</span>'
+            f'<span>Reviews in <b>{_html.escape(str(a.get("name") or ""))}</b> climb to about <b>{int(a["n"]):,}</b> a day by {day}'
+            f' &middot; this week {int(a.get("week") or 0):,}</span>'
+            f'<a class="wc" href="#" onclick="{_pycmd(f"youins:{did}")}">See ahead</a>'
+            f'<a class="wx" href="#" title="Not this week" onclick="{_pycmd(f"insaheadx:{did}")}">&times;</a></div>')
+
+
 def wrapped_line(year, so_far, look, pip=True):
     """3.9.0: the board's line, 1 December to 15 January: your year is
     ready. Open plays it in the board's place; the x is for the year, on
@@ -4717,12 +4908,22 @@ CHEER_WINDOW_JS = r"""
     pickIn.maxLength = 16;
     pickIn.setAttribute('aria-label', 'Your emoji');
     em.appendChild(pickIn);
+    // 3.9.2 (Sam: "the custom picker doesn't accept the custom emoji choices"): the computer's picker can't
+    // type into this page, so Anki lays its own box over this one (native_emoji.catch), and hands the pick here
     function native() {
-        other.style.display = 'none'; pickIn.style.display = ''; pickIn.value = ''; pickIn.focus();
+        other.style.display = 'none'; pickIn.style.display = ''; pickIn.value = ''; pickIn.blur();
         window.dcCheerNoNative = function () { unpick(); openDrawer(); };
-        if (typeof pycmd !== 'undefined') { pycmd('duecrew:emojipicker|' + window.dcBK); } else { window.dcCheerNoNative(); }
+        window.dcCheerUnpick = function () { unpick(); other.focus(); };
+        window.dcCheerPicked = function (t) { var e = oneEmoji(String(t || '').trim()); if (e) { unpick(); choose(e); } };
+        var r = pickIn.getBoundingClientRect();
+        if (typeof pycmd !== 'undefined') {
+            pycmd('duecrew:emojipicker:' + [r.left, r.top, r.width, r.height].map(function (v) { return Math.max(0, Math.round(v)); }).join(':') + '|' + window.dcBK);
+        } else { window.dcCheerNoNative(); }
     }
-    function unpick() { pickIn.style.display = 'none'; other.style.display = ''; }
+    function unpick() {
+        if (pickIn.style.display !== 'none' && typeof pycmd !== 'undefined') { pycmd('duecrew:emojipickeroff|' + window.dcBK); }
+        pickIn.style.display = 'none'; other.style.display = '';
+    }
     pickIn.addEventListener('input', function () {
         var t = oneEmoji(pickIn.value.trim());
         if (t) { unpick(); choose(t); } else if (pickIn.value.trim()) { pickIn.value = ''; }
@@ -4977,6 +5178,7 @@ CHEER_WINDOW_JS = r"""
     var moved = false;
     function close() {
         document.removeEventListener('keydown', esc, true);
+        unpick();  // 3.9.2: other's box, if it's up, goes with the window
         back.removeAttribute('id');  // the bars' shade goes with it (VEIL_WATCH_JS)
         // moved: motion.js opened it and takes it out its own way (a fade here first had it
         // snap back for a frame, its fade unfilled, then go again)
@@ -5043,9 +5245,11 @@ FRIDGE_CSS = """
     #dc-fridge .fq { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-top: 7px;
       text-align: center; font-size: 11px; }
     #dc-fridge .fw { display: flex; align-items: center; justify-content: center; gap: 3px; margin-top: 3px; color: #6b665a;
-      white-space: nowrap; overflow: hidden; }
-    #dc-fridge .fw b { color: #2b2d29; overflow: hidden; text-overflow: ellipsis; }
-    #dc-fridge .fw .sv-slot { --sv-a: var(--fa); flex: none; }
+      white-space: nowrap; min-width: 0; }
+    #dc-fridge .fw b { color: #2b2d29; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    /* 3.9.2 (Sam: "pips get cutoff on the polaroids"): Pip's head, hat and what it holds reach past its slot,
+       so the line never clips (only the name does) and gives the head room under the photo */
+    #dc-fridge .fw .sv-slot { --sv-a: var(--fa); flex: none; margin: 9px 2px 0 4px; }
     #dc-fridge .fx { position: absolute; top: 0; right: 3px; display: none; color: #6b665a; text-decoration: none; font-size: 15px; line-height: 1; }
     #dc-fridge .fz:hover .fx, #dc-fridge .fz:focus-within .fx { display: block; }
     /* 3.9.1 (Sam's pick, "Pip at rest" C): still until pointed at, as crew rows */

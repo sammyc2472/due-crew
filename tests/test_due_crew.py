@@ -7817,6 +7817,19 @@ def test_plan_load_3781():
           and ("event.stopPropagation();pycmd('duecrew:planleft:pid1:a|" + KK + "')") in hp, hp)
 
 
+def _ahead_sample(exam_in=None, off=None, trust=(0.09, [0.05, 0.07, 0.09, 0.1, 0.11, 0.12]), name_days=True):
+    """3.9.2: a Reviews ahead view as ahead_flow.deck_view makes one: 40 due today,
+    20 a day after, 20 new cards a day, a week of 100 a day behind."""
+    from due_crew import ahead as A
+    hab, extra = A.habits([])
+    st = [(0, 1)] * 40 + [(d, 10) for d in range(1, 14) for _ in range(20)]
+    v = A.view(A.existing(st, hab, extra), A.GENERIC, [20.0] * 7, 0, 500, 300, [100] * 7, exam_in=exam_in, off=off)
+    t0 = datetime.date(2026, 9, 1)
+    v.update(did=10, today=t0.isoformat(), days=[(t0 + datetime.timedelta(days=k)).isoformat() for k in range(-7, A.H)],
+             exam=exam_in, done=30, own=True, secs=8.0, rate=140, unlocked=300, left=500, off=bool(off), trust=trust)
+    return v
+
+
 def test_insights_379():
     """3.7.9 (mock "Insights"): mine alone, worked out in my Anki. The hero is
     the started cards Anki won't show me before the plan's next event that
@@ -7854,11 +7867,6 @@ def test_insights_379():
     rows = T.not_sticking(topics, lambda t: of[t], set(range(1, 31)) | set(range(40, 50)), {1, 2, 3, 40, 41}, {3, 4, 5})
     check("not sticking: never right yet, plus forgot (not counted twice); a thin topic stays out",
           [(r["name"], r["of"], r["stuck"], r["forgot"], r["cids"]) for r in rows] == [("Renal", 30, 3, 2, [1, 2, 3, 4, 5])], rows)
-    w = T.week([("d1", 40), ("d2", 60)], [("d3", 10, 60), ("d4", 0, 0)], 54, 9)
-    check("week: minutes at my pace, the average ahead and before",
-          w["ahead"][0] == ("d3", 18, 10, 60) and w["avg"] == 9 and w["was"] == 50, w)
-    check("week: none without a measured pace or anything new ahead",
-          T.week([], [("d", 5, 0)], None, 9) is None and T.week([], [("d", 0, 9)], 54, 9) is None)
     check("fsrs: 3+ points short with 300+ answers, else nothing",
           T.fsrs_gap(255, 300, 0.9) == {"right": 85, "n": 300, "target": 90} and T.fsrs_gap(264, 300, 0.9) is None
           and T.fsrs_gap(200, 250, 0.9) is None)
@@ -7884,8 +7892,7 @@ def test_insights_379():
     view = {"target": 90, "right": {"now": [86, 100], "before": [87, 100], "days": [80, None, 90]},
             "aim": {"day": "2026-09-04", "name": bad, "in": 3, "scoped": True}, "hero": [1, 2, 3], "behind": 12, "pid": "p1",
             "rows": [{"name": bad, "src": bad, "of": 27, "stuck": 9, "forgot": 1, "cids": [1]}],
-            "week": {"past": [("2026-08-31", 40)], "ahead": [("2026-09-01", 120, 100, 50), ("2026-09-04", 200, 200, 30)],
-                     "avg": 160, "was": 40, "today_done": 30, "src": "plan"},
+            "ahead": _ahead_sample(exam_in=3),
             "fsrs": {"right": 85, "n": 486, "target": 90}, "leeches": 2}
     html = board._insights_html(10, view)
     check("insights: the board escapes the plan's words", "<img" not in html and "&lt;img" in html)
@@ -7894,8 +7901,8 @@ def test_insights_379():
           and "duecrew:insstudy:10:h" in html and "12 new cards behind" in html and "duecrew:plancatch:p1" in html, html[:900])
     check("insights: not sticking yet, one Study a row",
           "Not sticking yet" in html and "<b>10</b> of 27" in html and "duecrew:insstudy:10:0" in html and "Re-watch" not in html)
-    check("insights: the week in time, today marked, the event named",
-          "about 2 h 40 a day to Fri" in html and "the last 7 days: 40 min" in html and ">Today<" in html)
+    check("insights: 3.9.2, Reviews ahead in Your week's place, the exam marked on its day",
+          "Reviews ahead" in html and "Your week" not in html and ">Exam<" in html and ">today<" in html, html)
     check("insights: Optimize FSRS and Not now",
           "Newest cards 85% right, Anki aims for 90%" in html and "duecrew:insfsrs:10" in html
           and "duecrew:insfsrsno:10" in html)
@@ -8092,10 +8099,8 @@ def test_insights_379():
         check("glue: Renal not sticking: 8 never right, 3 forgot, of 30", [(r["name"], r["of"], r["stuck"], r["forgot"])
               for r in v.get("rows") or []] == [("Renal", 30, 8, 3)], v.get("rows"))
         check("glue: Optimize FSRS from my newest cards", v.get("fsrs") == {"right": 80, "n": 300, "target": 90}, v.get("fsrs"))
-        wk = v.get("week") or {}
-        check("glue: the week ahead in minutes: tomorrow's 20 new at my pace (54 s a new card), the plan's",
-              [(d, n) for d, _m, n, _r in wk.get("ahead") or []][:2] == [(_day(0), 0), (_day(1), 20)]
-              and wk["ahead"][1][1] == 19 and wk.get("src") == "plan", wk)
+        check("glue: 3.9.2, under 100 cards started, no Reviews ahead (a forecast needs a past)",
+              v.get("ahead") is None and "week" not in v, sorted(v))
         check("glue: not behind; the plan named for its Catch up", v.get("behind") == 0 and v.get("pid") == "pI")
         check("glue: 3.8.0, the deck's suspended leeches", v.get("leeches") == 1, v.get("leeches"))
         dc._on_js(False, as_board("duecrew:insstudy:10:h"), DeckBrowser())
@@ -8142,10 +8147,7 @@ def test_insights_379():
         check("glue, no plan: the deck's tags name the topics, the resource's part as the source",
               [(r["name"], r["src"], r["of"], r["stuck"], r["forgot"]) for r in w0.get("rows") or []]
               == [("Renal", "Videos › Kidney", 30, 8, 3)], w0.get("rows"))
-        wk0 = w0.get("week") or {}
-        check("glue, no plan: the week ahead is what Anki has due, its new cards a day; no behind",
-              [n for _d, _m, n, _r in wk0.get("ahead") or []] == [5, 5, 2, 0, 0, 0, 0] and wk0.get("src") == "anki"
-              and "behind" not in w0 and "pid" not in w0, wk0)
+        check("glue, no plan: no behind", "behind" not in w0 and "pid" not in w0, sorted(w0))
         soon, late = TF.insights(10, "pI", _day(2))["aim"], TF.insights(10, "pI", _day(10))["aim"]
         check("glue: with a plan, my own exam date aims the box when it's sooner, over the whole deck; else the plan's quiz",
               (soon["kind"], soon["day"], soon["scoped"]) == ("exam", _day(2), False)
@@ -14958,6 +14960,19 @@ def test_doodle_cheers_v391():
         dc._swap, dc._board_on_screen = saved
 
 
+def test_fridge_pip_whole_v392():
+    """3.9.2 (Sam: "pips get cutoff on the polaroids"): the line under a
+    Polaroid never clips (only the name shortens with …), and Pip's slot
+    leaves room above it for the head, hat and what it holds."""
+    css = board.FRIDGE_CSS
+    fw = css[css.index("#dc-fridge .fw {"):css.index("}", css.index("#dc-fridge .fw {"))]
+    nm = css[css.index("#dc-fridge .fw b {"):css.index("}", css.index("#dc-fridge .fw b {"))]
+    slot = css[css.index("#dc-fridge .fw .sv-slot {"):css.index("}", css.index("#dc-fridge .fw .sv-slot {"))]
+    check("fridge: the caption line doesn't clip; the name does, with …; Pip's slot has its head's room",
+          "overflow" not in fw and "overflow: hidden" in nm and "text-overflow: ellipsis" in nm and "min-width: 0" in nm
+          and "margin: 9px" in slot, (fw, nm, slot))
+
+
 def test_fridge_account_and_undo_v391():
     """3.9.1, before release: the fridge is this Anki profile's file, and
     more than one account can sign in on a profile, so it keeps whose
@@ -15059,20 +15074,37 @@ def test_native_emoji_picker_v391():
     plain = board.cheer_overlay_js({"uid": "dre", "name": "Dre", "emojis": ["🎉"]})
     check("the window: with a picker, other gives a focused box and asks for it; without, the drawer; the box's pick is picked; Esc puts other back",
           '"native": true' in js and '"native": false' in plain and "if (V.native) { native(); }" in js
-          and "pycmd('duecrew:emojipicker|' + window.dcBK)" in js and "window.dcCheerNoNative = function () { unpick(); openDrawer(); };" in js
+          and "pycmd('duecrew:emojipicker:' + [r.left, r.top, r.width, r.height]" in js
+          and "window.dcCheerNoNative = function () { unpick(); openDrawer(); };" in js
           and "if (t) { unpick(); choose(t); }" in js and "if (pickIn.style.display !== 'none') { unpick(); other.focus(); }" in js)
+    check("3.9.2 (Sam: the custom picker didn't take the pick): our own box takes it over the page's, the page gets it; "
+          "the window's close or Esc puts the box away",
+          "window.dcCheerPicked = function (t) { var e = oneEmoji(String(t || '').trim()); if (e) { unpick(); choose(e); } };" in js
+          and "pycmd('duecrew:emojipickeroff|' + window.dcBK)" in js and "unpick();  // 3.9.2: other's box" in js
+          and "window.dcCheerUnpick = function () { unpick(); other.focus(); };" in js)
+    check("3.9.2: what the box hands on: an emoji (a whole one, a skin tone and a job in it), never a letter or a digit",
+          NE.first_emoji(" 👩🏽‍⚕️ ") == "👩🏽‍⚕️" and NE.first_emoji("x") == ""
+          and NE.first_emoji("5") == "" and NE.first_emoji("") == ""
+          and NE.picked_js("🎉'</script>") == 'window.dcCheerPicked && window.dcCheerPicked("\\ud83c\\udf89\'</script>");')
     import due_crew as dc
-    from aqt import mw
+    from due_crew import app as appmod
     from aqt.deckbrowser import DeckBrowser
-    evals = []
-    saved = mw.web.eval
-    mw.web.eval = lambda code: evals.append(code)
+    evals, asked = [], []
+    saved = (appmod.board_eval, NE.catch, NE.drop)
+    appmod.board_eval = lambda code: evals.append(code)
     try:
         dc._on_js(False, as_board("duecrew:emojipicker"), DeckBrowser())
+        NE.catch = lambda x, y, w, h, then, gone: asked.append((x, y, w, h)) or then("🦋") or True
+        dc._on_js(False, as_board("duecrew:emojipicker:412:230:72:44"), DeckBrowser())
+        dc._on_js(False, as_board("duecrew:emojipicker:1:2:3:9999999"), DeckBrowser())
+        NE.drop = lambda: asked.append("off")
+        dc._on_js(False, as_board("duecrew:emojipickeroff"), DeckBrowser())
     finally:
-        mw.web.eval = saved
+        appmod.board_eval, NE.catch, NE.drop = saved
     check("emojipicker from the Decks screen: here (no picker to open) the window is told to open its drawer",
-          evals == ["window.dcCheerNoNative && window.dcCheerNoNative();"], evals)
+          evals[0] == "window.dcCheerNoNative && window.dcCheerNoNative();", evals)
+    check("3.9.2: with one, the box goes where the page's is, and the pick goes back to the page; a place it can't be is ignored",
+          asked == [(412, 230, 72, 44), (0, 0, 64, 40), "off"] and evals[1] == NE.picked_js("🦋"), (asked, evals))
 
 
 def test_cheer_pill_and_window_v391():
@@ -16456,6 +16488,258 @@ def test_room_sounds_v391():
           and all(f"`{k}.ogg`" in credits for k in rm.RECORDED) and "CC0 1.0" in credits
           and all(u in credits for u in ("freesound.org/s/525046/", "freesound.org/s/132534/", "freesound.org/s/587164/"))
           and "due_crew/sounds/*.ogg" in open(os.path.join(REPO, "LICENSE")).read(), sizes)
+
+
+def _sim_log(days=200, pace=30, seed=7, batch=False):
+    """3.9.2: a simple learner, stdlib only: a pass pushes a card 2 to 3 times
+    as far, a miss (20% under a week, 10% after) brings it back tomorrow.
+    Rows as the add-on reads them: (day from today, cid, ease, ivl, lastIvl, type)."""
+    import random
+    rng = random.Random(seed)
+    cards, log, nxt = {}, [], 0
+    for t in range(days):
+        for cid, (due, ivl) in sorted(cards.items()):
+            if due > t:
+                continue
+            if rng.random() < (0.2 if ivl < 7 else 0.1):
+                log += [(t, cid, 1, -600, ivl, 1), (t, cid, 3, 1, -600, 2)]
+                cards[cid] = (t + 1, 1)
+            else:
+                n = max(ivl + 1, int(round(ivl * rng.uniform(2.0, 3.0))))
+                log.append((t, cid, 3, n, ivl, 1))
+                cards[cid] = (t + n, n)
+        for _ in range((pace * 7 if t % 7 == 0 else 0) if batch else pace):
+            log += [(t, nxt, 3, -600, 0, 0), (t, nxt, 3, 1, -600, 0)]
+            cards[nxt] = (t + 1, 1)
+            nxt += 1
+    rows = [(d - days, c, e, i, li, ty) for d, c, e, i, li, ty in log]
+    first = {}
+    for d, c, e, *_ in rows:
+        if e > 0 and (c not in first or d < first[c]):
+            first[c] = d
+    return rows, first, {c: (due - days, ivl) for c, (due, ivl) in cards.items()}
+
+
+def test_reviews_ahead_392():
+    """3.9.2 (Sam's picks, 18 Oct: Your week becomes Reviews ahead): the next
+    six weeks of a deck in cards a day, counted from my own log (how my
+    reviews go at each interval, my own new-card curve, when I start new
+    cards: in batches, by weekday), its ways (my pace, stop new a week
+    before the exam or now, only what's unlocked), the pause Do it asks
+    for (Anki's today-only limit each morning, deck options untouched),
+    the track record on my own past, and the board's line when reviews
+    climb. Mine alone, never sent."""
+    import due_crew as dc
+    from aqt import mw
+    from aqt.deckbrowser import DeckBrowser
+    from due_crew import ahead as A, ahead_flow as AF, plan_flow as F, team_flow as TF, board
+    from due_crew.app import _state
+    # ---- pure: habits, the curve, the pace ----
+    log = []
+    for i in range(40):  # 40 reviews at a 10-day interval: 10 missed, landing at 2 days after one step
+        if i % 4 == 0:
+            log += [(-50 + i, i, 1, -600, 10, 1), (-50 + i, i, 3, 2, -600, 2)]
+        else:
+            log.append((-50 + i, i, 3, 25, 10, 1))
+    hab, extra = A.habits(log)
+    p, g, land = hab[A._b(10)]
+    check("ahead: habits by interval, counted: a quarter missed, a pass's push in thirds, a miss lands where mine did",
+          abs(p - 0.25) < 1e-9 and g == (2.5, 2.5, 2.5) and land == 2 and extra == 1.0 and hab[A._b(400)][0] == 0.25, (hab, extra))
+    check("ahead: nothing to go on, a plain default", A.habits([])[0][0] == A._DEFAULT)
+    rows, first, now = _sim_log()
+    cv = A.curve(rows, first)
+    check("ahead: my own curve from the cards I started 6 to 17 weeks ago (each seen on its day, more answers that day)",
+          cv is not None and cv[2] == 30 * 79 and cv[0][0] == 1.0 and cv[1][0] == 2.0 and cv[0][1] == 1.0
+          and 0 < cv[0][5] < 1, cv and (cv[2], cv[0][:6], cv[1][:2]))
+    check("ahead: under 60 of them, none (a typical curve stands in)", A.curve(rows, {c: d for c, d in first.items() if c < 50}) is None)
+    batch, bfirst, _bn = _sim_log(days=120, pace=40, batch=True)
+    rate = A.pace(bfirst, wd0=(120 % 7) % 7)
+    check("ahead: my pace by weekday: a batch unlocked on one day a week lands on that day",
+          sorted(round(x) for x in rate) == [0, 0, 0, 0, 0, 0, 280] and abs(sum(rate) - 280) < 1e-9, rate)
+    check("ahead: a deck begun 3 days ago: a week's span at least",
+          A.pace({1: -2, 2: -2, 3: -1}, 0) == [0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 1.0], A.pace({1: -2, 2: -2, 3: -1}, 0))
+    # ---- starts and the ways ----
+    st = A.starts([10.0] * 7, 0, left=25, today_done=4)
+    check("ahead: starts: today less what's started, never more than the deck has left",
+          st[:4] == [6.0, 10.0, 9.0, 0.0] and sum(st) == 25, st[:5])
+    st = A.starts([10.0] * 7, 0, left=1000, stop=(2, 4))
+    check("ahead: a stop has none on its days", st[:6] == [10.0, 10.0, 0.0, 0.0, 0.0, 10.0], st[:6])
+    st = A.starts([10.0] * 7, 0, left=1000, plan={1: 50, 3: 40}, pool=15)
+    check("ahead: a plan: its dates' cards on their day, the unlocked ones at my pace first",
+          st[:5] == [10.0, 55.0, 0.0, 40.0, 0.0], st[:5])
+    keys = lambda *a: [k for k, _s in A.choices(*a)]  # noqa: E731
+    check("ahead: the ways: an exam 10 days out, a week before or now; 5 days out, now; none, now for good",
+          keys(10, [40.0] * 7, 5000, 9000) == ["pace", "week", "now"] and A.choices(10, [40.0] * 7, 5000, 9000)[1][1] == (3, 10)
+          and keys(5, [40.0] * 7, 5000, 9000) == ["pace", "now"] and A.choices(None, [40.0] * 7, 5000, 9000)[1] == ("now", (0, A.H)))
+    check("ahead: only what's unlocked: a batch person (it runs out within two weeks) with more to unlock",
+          keys(None, [40.0] * 7, 300, 9000) == ["pace", "unlocked", "now"] and keys(None, [40.0] * 7, 300, 300) == ["pace", "now"])
+    check("ahead: a pause's days follow my exam date; it ends when the exam passes or goes",
+          A.stop_of({"kind": "now", "at": "2026-09-01", "exam": True}, 9, "2026-09-02") == (0, 9)
+          and A.stop_of({"kind": "week", "at": "2026-09-01", "exam": True}, 12, "2026-09-02") == (5, 12)
+          and A.stop_of({"kind": "now", "at": "2026-09-01", "exam": True}, -1, "2026-09-02") is None
+          and A.stop_of({"kind": "week", "exam": True}, None, "2026-09-02") is None
+          and A.stop_of({"kind": "now", "at": "2026-09-01", "exam": False}, None, "2026-09-02") == (0, A.H)
+          and A.stop_of(None, 3, "2026-09-02") is None)
+    hab, extra = A.habits(rows)
+    started = A.existing(list(now.values()), hab, extra)
+    v = A.view(started, cv, [30.0] * 7, 0, 9000, 400, [300] * 7, exam_in=10)
+    pace_w, stop_w = v["ways"][0], v["ways"][2]
+    check("ahead: each way its own six weeks; stopping now lowers the exam week, not today's reviews",
+          [w["key"] for w in v["ways"]] == ["pace", "week", "now"] and v["on"] == "pace"
+          and stop_w["cards"][10] < pace_w["cards"][10] and abs(stop_w["started"][0] - pace_w["started"][0]) < 1e-9
+          and stop_w["starts"] == 30 * (A.H - 11) and len(pace_w["cards"]) == A.H, [round(w["cards"][10]) for w in v["ways"]])
+    off = A.view(started, cv, [30.0] * 7, 0, 9000, 400, [300] * 7, exam_in=10, off=(0, 10))
+    check("ahead: the pause in effect is its way, on", off["on"] == "now", off["on"])
+    odd = A.view(started, cv, [30.0] * 7, 0, 9000, 400, [300] * 7, exam_in=10, off=(2, 10))
+    check("ahead: a pause no pill matches is a way of its own", odd["on"] == "off" and odd["ways"][-1]["stop"] == (2, 10))
+    check("ahead: the board's line: the next two weeks' busiest three days a quarter over this week, and 20 more",
+          A.climb([100] * 7, [0] + [100] * 5 + [140, 150, 145] + [100] * 33) == (7, 145)
+          and A.climb([100] * 7, [0] + [120] * 41) is None and A.climb([10] * 7, [0] + [20] * 41) is None and A.climb([], [5] * 42) is None)
+    check("ahead: numbers as the chart says them", [A.r(x) for x in (7.4, 42, 187, 1234)] == [7, 40, 185, 1230])
+    # ---- the track record: forecast from past days, against what really happened ----
+    res = A.backtest(rows, first, now)
+    tr = A.trust(res)
+    check("ahead: the track record from three past days, six weeks each; on a steady learner within 15% a week",
+          len(res) == 3 and tr is not None and tr[0] < 0.15 and len(tr[1]) == 6, tr)
+    brows, bf2, bnow = _sim_log(days=200, pace=40, batch=True, seed=3)
+    btr = A.trust(A.backtest(brows, bf2, bnow))
+    check("ahead: and on one who unlocks a batch a week", btr is not None and btr[0] < 0.2, btr)
+    due_only, by_day = [], {}
+    for d, c, e, *_ in rows:
+        if e > 0:
+            by_day.setdefault(d, set()).add(c)
+    for b in A.BACK:
+        T0 = -b
+        st0 = A.state_at(rows, first, now, T0)
+        dd = [0] * A.H
+        for due, _i in st0:
+            if max(due, 0) < A.H:
+                dd[max(due, 0)] += 1
+        did = [len(by_day.get(T0 + k, ())) for k in range(A.H)]
+        due_only.append(sum(abs(sum(dd[i:i + 7]) - sum(did[i:i + 7])) / max(1, sum(did[i:i + 7])) for i in range(0, A.H, 7)) / 6)
+    check("ahead: counted beats counting only what's due (Anki's Future Due) on the same past",
+          tr[0] < min(due_only), (tr[0], due_only))
+    # ---- the board ----
+    s0 = _ahead_sample(exam_in=10)
+    html = board._ins_ahead(10, s0, "<b>Spanish")
+    check("board: Reviews ahead, one chart a way, the one in effect shown; pills switch on the page",
+          html.count('class="ahw"') == 3 and html.count(" hidden>") >= 2 and 'data-k="pace">' in html
+          and 'role="radiogroup"' in html and "Your pace &middot; 140 new a week" in html
+          and "Stop new a week before the exam" in html, html[:1500])
+    check("board: data first: the next two weeks a day, this week, the time at my pace; the exam week against my pace",
+          "Next 2 weeks: about <b>" in html and "this week 100" in html and "a day at your pace" in html
+          and "Exam week: about <b>" in html and ", not " in html, html)
+    check("board: Do it for each stop, said once; deck options untouched (its tip); the deck's name escaped",
+          "duecrew:insaheadoff:10:week" in html and "duecrew:insaheadoff:10:now" in html
+          and "no new cards in &lt;b&gt;Spanish till your exam" in html and "<b>Spanish" not in html
+          and "deck options stay as they are" in html, html)
+    check("board: the track record, and each bar's band from it", "on your own past, within 9% a week" in html and "&ndash;" in html)
+    check("board: the exam on its day; the last 7 days, today, then by week", ">Exam<" in html and ">today<" in html
+          and ">by week<" in html and "Week of " in html, html)
+    paused = board._ins_ahead(10, _ahead_sample(exam_in=10, off=(0, 10)), "Spanish")
+    check("board: paused: its way on, Turn new cards back on in Do it's place",
+          'class="xc on" data-k="now"' in paused and "duecrew:insaheadon:10" in paused
+          and "duecrew:insaheadoff:10:now" not in paused and "No new cards in Spanish till your exam" in paused, paused[-2500:])
+    generic = board._ins_ahead(10, dict(_ahead_sample(), own=False, trust=None), "Spanish")
+    check("board: no exam: stop for good; a typical curve said; no track record yet",
+          "till you turn them back on" in generic and "typical curve" in generic and "within" not in generic, generic[-1500:])
+    rh = board.render({"entries": [], "labels": ["2026-09-01"], "tomorrow": "", "pending": []}, {}, 0, ahead={"did": 10, "name": "<i>Spanish", "day": "2026-09-08", "n": 330, "week": 250})
+    check("board: the line when reviews climb, the deck escaped, to Insights, put away for a week",
+          "Reviews in <b>&lt;i&gt;Spanish</b> climb to about <b>330</b> a day by Tue 8 Sep &middot; this week 250" in rh
+          and "duecrew:youins:10" in rh and "duecrew:insaheadx:10" in rh, rh[:3000])
+    # ---- the glue, on a collection ----
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    cut = fakes.day_cutoff_for(TODAY)
+    sday = 1000
+    ts = lambda day: (cut + (day - 1) * 86400 + 3600) * 1000  # noqa: E731
+    conn.executemany("INSERT INTO revlog (id, ease, time, type, cid, lastIvl, ivl) VALUES (?,?,?,?,?,?,?)",
+                     [(ts(d) + n, e, 6000, ty, c, li, i) for n, (d, c, e, i, li, ty) in enumerate(rows)])  # its 200 days
+    for c, (due, ivl) in now.items():
+        fakes.add_card(conn, c, did=10, ctype=2, queue=2, ivl=ivl, due=sday + due)
+    for k in range(400):
+        fakes.add_card(conn, 90000 + k, did=11, queue=0)  # unlocked, waiting
+    fd = next(c for c, (due, _i) in now.items() if due == 5)
+    conn.execute("UPDATE cards SET odid = 10, did = 99, due = -100000, odue = ? WHERE id = ?", (sday + 5, fd))
+    col = fakes.FakeCol(conn, cut)
+    store = {10: {"id": 10, "name": "Spanish", "dyn": 0}, 11: {"id": 11, "name": "Spanish::Verbs", "dyn": 0}}
+
+    class Decks(fakes.FakeDecks):
+        def get(self, did, default=True):
+            return store.get(did, False)
+
+        def save(self, deck):
+            store[deck["id"]] = deck
+    col.decks = Decks({10: "Spanish", 11: "Spanish::Verbs"})
+    pc, conf = {}, {"exam_date": _day(10)}
+    saved = (F._today, F._pcfg, F._psave, F._after_change, F.apply_catch, mw.col, AF.cfg, AF.app.swap, AF.tooltip, AF._bg,
+             _state.get("ahead_day"), _state.get("ahead_line"), _state.get("ahead_asked"))
+    said, bg = [], []
+    try:
+        F._today = lambda: _day(0)
+        F._pcfg = lambda: pc
+        F._psave = lambda d: None
+        F._after_change = lambda: None
+        F.apply_catch = lambda: None
+        mw.col = col
+        AF.cfg = lambda: conf
+        AF.app.swap = lambda c=None: None
+        AF.tooltip = lambda m, **k: said.append(m)
+        AF._bg = lambda job, done=None: bg.append((job, done))
+        _state["ahead_day"], _state["ahead_line"], _state["ahead_asked"] = {}, None, set()
+        v = AF.deck_view(col, 10, TF._deck_sql(col, 10), _day(10))
+        check("glue: a deck's view: my curve, my pace, the deck's new cards, the exam in 10 days, today's count",
+              v is not None and v["own"] and round(v["rate"]) == 210 and v["unlocked"] == 400 and v["left"] == 400
+              and v["exam"] == 10 and [w["key"] for w in v["ways"]] == ["pace", "week", "now"] and len(v["days"]) == 7 + A.H
+              and v["days"][7] == _day(0), v and (v["rate"], v["unlocked"], v["exam"]))
+        st_now = AF._state_now(col, TF._deck_sql(col, 10), sday)
+        check("glue: a card in a filtered deck is due on its own day (odue), not today (the 3.8 Your week bug)",
+              (5, now[fd][1]) in st_now and len(st_now) == len(now), [x for x in st_now if x[0] < 0][:3])
+        check("glue: the track record is worked out off the main thread, once a session a deck; none to show yet",
+              len(bg) == 1 and v["trust"] is None)
+        job, done = bg[0]
+        done(job())
+        tr = (pc.get("ahead_trust") or {}).get("10") or {}
+        check("glue: and kept in plans.json for a week", tr.get("day") == _day(0) and len(tr.get("by") or []) == 6
+              and tr["err"] < 0.15, tr)
+        _state["ahead_day"] = {}
+        v2 = AF.deck_view(col, 10, TF._deck_sql(col, 10), _day(10))
+        check("glue: then the view has it", v2["trust"] and abs(v2["trust"][0] - tr["err"]) < 1e-9 and len(bg) == 1)
+        # Do it: no new cards now, to the exam
+        dc._on_js(False, as_board("duecrew:insaheadoff:10:now"), DeckBrowser())
+        lim = lambda d: store[d].get("newLimitToday")  # noqa: E731
+        check("glue: Do it: today's new cards 0 on the deck and its subdecks (Anki's today-only limit), said once",
+              pc["new_off"] == {"10": {"kind": "now", "at": _day(0), "exam": True}}
+              and lim(10) == {"limit": 0, "today": sday} and lim(11) == {"limit": 0, "today": sday}
+              and said[-1].startswith("No new cards in Spanish till your exam"), (pc.get("new_off"), store))
+        _state["ahead_day"] = {}
+        v3 = AF.deck_view(col, 10, TF._deck_sql(col, 10), _day(10))
+        check("glue: the view says it's on", v3["on"] == "now" and v3["off"] is True)
+        col.sched.today = sday + 1
+        store[10].pop("newLimitToday")
+        store[11].pop("newLimitToday")
+        check("glue: each morning sets it again while it runs", AF.apply_morning() and lim(10) == {"limit": 0, "today": sday + 1})
+        dc._on_js(False, as_board("duecrew:insaheadon:10"), DeckBrowser())
+        check("glue: Turn back on: the pause gone, today's 0 off", pc["new_off"] == {} and lim(10) is None and lim(11) is None, store)
+        dc._on_js(False, as_board("duecrew:insaheadoff:10:week"), DeckBrowser())
+        check("glue: a week before: nothing today, the days kept", lim(10) is None and pc["new_off"]["10"]["kind"] == "week"
+              and "from " in said[-1], said[-1])
+        conf["exam_date"] = _day(-1)
+        AF.apply_morning()
+        check("glue: once the exam's past, the pause is forgotten", pc["new_off"] == {}, pc.get("new_off"))
+        conf["exam_date"] = _day(10)
+        dc._on_js(False, as_board("duecrew:insaheadoff:10:bogus"), DeckBrowser())
+        dc._on_js(False, as_board("duecrew:insaheadoff:x:now"), DeckBrowser())
+        check("glue: a stop it doesn't know, or no deck, does nothing", pc["new_off"] == {})
+        dc._on_js(False, as_board("duecrew:insaheadx:10"), DeckBrowser())
+        check("glue: the line put away for this deck", pc["ahead_line_x"] == {"10": _day(0)})
+        _state["ahead_line"] = {"day": _day(0), "line": {"did": 10, "name": "Spanish", "day": _day(5), "n": 330, "week": 250}}
+        check("glue: put away, the line stays away a week", AF.board_line(conf) is None)
+        pc["ahead_line_x"] = {"10": _day(-8)}
+        check("glue: after a week it's back", (AF.board_line(conf) or {}).get("n") == 330)
+    finally:
+        (F._today, F._pcfg, F._psave, F._after_change, F.apply_catch, mw.col, AF.cfg, AF.app.swap, AF.tooltip, AF._bg,
+         _state["ahead_day"], _state["ahead_line"], _state["ahead_asked"]) = saved
 
 
 def main():

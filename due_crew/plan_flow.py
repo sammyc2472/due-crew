@@ -1229,6 +1229,12 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True, update=False):
         if hold_new([p for p in plan_list if not p.get("paused") and p["id"] not in new_here], _state_cfg(), today, morning=True):
             _after_change()  # 3.7.3: what an author added to later dates waits, for whoever chose Hold back
         apply_catch()  # G5
+        try:
+            from . import ahead_flow
+            if ahead_flow.apply_morning():  # 3.9.2: Stop new cards, after a catch-up's own limit
+                _after_change()
+        except Exception:
+            traceback.print_exc()
         built = build_checks([p for p in plan_list if not p.get("paused")])  # 3.2
         # 3.8.1, Welcome back: a plan whose dates from 3+ days I studied nothing would open
         # keeps them shut till its question, asked below (Open them, Push my dates back, Not today)

@@ -331,12 +331,55 @@ _INS = {"target": 90, "right": {"now": [1308, 1519], "before": [1590, 1836],
                  {"name": "Sympathomimetics", "src": "Picture Series › Sympathetic", "of": 44, "stuck": 8, "forgot": 2, "cids": [1]},
                  {"name": "Cholinomimetics", "src": "Picture Series › Parasympathetic", "of": 31, "stuck": 6, "forgot": 0, "cids": [1]},
                  {"name": "Muscarinic antagonists", "src": "Picture Series › Parasympathetic", "of": 47, "stuck": 4, "forgot": 0, "cids": [1]}],
-        "week": {"past": [("2026-09-30", 0), ("2026-10-01", 14), ("2026-10-02", 0), ("2026-10-03", 50), ("2026-10-04", 66),
-                          ("2026-10-05", 61), ("2026-10-06", 74)],
-                 "ahead": [("2026-10-07", 130, 145, 0), ("2026-10-08", 204, 204, 133), ("2026-10-09", 237, 242, 122),
-                           ("2026-10-10", 210, 220, 79), ("2026-10-11", 217, 228, 74), ("2026-10-12", 231, 246, 63),
-                           ("2026-10-13", 128, 133, 55)], "avg": 204, "was": 38, "today_done": 46},
         "fsrs": {"right": 85, "n": 486, "target": 90}}
+
+
+def _ahead(pace, batch, exam_in, off=None, seed=5, unlocked=300, left=4000, done=46, trust=True, secs=9.0):
+    """3.9.2: Reviews ahead as ahead_flow.deck_view makes it, from a simple
+    simulated learner's 200 days (today Wed 7 Oct): a batch a week, or the
+    same every day."""
+    import random
+    from due_crew import ahead as AH
+    rng, cards, log, nxt = random.Random(seed), {}, [], 0
+    for t in range(200):
+        if rng.random() < 0.08:
+            continue  # a day off
+        for cid, (due, ivl) in sorted(cards.items()):
+            if due <= t:
+                if rng.random() < (0.2 if ivl < 7 else 0.1):
+                    log += [(t, cid, 1, -600, ivl, 1), (t, cid, 3, 1, -600, 2)]
+                    cards[cid] = (t + 1, 1)
+                else:
+                    n = max(ivl + 1, int(round(ivl * rng.uniform(1.9, 3.1))))
+                    log.append((t, cid, 3, n, ivl, 1))
+                    cards[cid] = (t + n, n)
+        for _ in range((pace * 7 if t % 7 == 5 else 0) if batch else pace):
+            log += [(t, nxt, 3, -600, 0, 0), (t, nxt, 3, 1, -600, 0)]
+            cards[nxt] = (t + 1, 1)
+            nxt += 1
+    rows = [(d - 200, c, e, i, li, ty) for d, c, e, i, li, ty in log]
+    first = {}
+    for d, c, e, *_ in rows:
+        if e > 0 and (c not in first or d < first[c]):
+            first[c] = d
+    now = {c: (due - 200, ivl) for c, (due, ivl) in cards.items()}
+    hab, extra = AH.habits(rows)
+    cv = AH.curve(rows, first)
+    t0 = datetime.date(2026, 10, 7)
+    rate = AH.pace(first, t0.weekday())
+    past = [len({c for d, c, e, *_ in rows if d == k and e > 0}) for k in range(-7, 0)]
+    exam = (exam_in, None)[exam_in is None]
+    v = AH.view(AH.existing(list(now.values()), hab, extra), cv or AH.GENERIC, rate, t0.weekday(), left, unlocked, past,
+                exam_in=exam, off=off)
+    v.update(did=10, today=t0.isoformat(), days=[(t0 + datetime.timedelta(days=k)).isoformat() for k in range(-7, AH.H)],
+             exam=exam, done=done, own=cv is not None, secs=secs, rate=sum(rate), unlocked=unlocked, left=left, off=bool(off),
+             trust=AH.trust(AH.backtest(rows, first, now)) if trust else None)
+    return v
+
+
+_AHEAD_BIG = _ahead(40, True, 6, unlocked=180, left=9000)       # a lecture's batch a week, the block exam Tue 13 Oct
+_AHEAD_SP = _ahead(20, False, 7, seed=9, unlocked=2400, left=2400, done=120, secs=7.0)  # Spanish, 20 a day, exam Wed 14 Oct
+_INS = dict(_INS, ahead=_AHEAD_BIG, deck_name="Big Step 1")
 _DECKS = [{"did": 10, "name": "Big Step 1", "full": "Big Step 1"}, {"did": 20, "name": "Spanish", "full": "Languages::Spanish"}]
 def _tile(name, n, kn, kids=(), st=None):
     t = {"key": name.lower(), "name": name, "n": n, "know": kn, "started": n if st is None else st,
@@ -350,7 +393,7 @@ _MAP = [_tile("Cardio · Physiology", 412, 86, [_tile("Cardiac output", 160, 91)
         _tile("Cardio · Pathology", 318, 77, st=240), _tile("Cardio · Pharm", 260, 84, st=120), _tile("Renal · Physiology", 190, 66),
         _tile("Pulm · Pathology", 150, 88), _tile("Heme", 120, None, st=0), _tile("Endo", 96, 71, st=60), _tile("MSK", 64, 94)]
 _PLAN_INS = {"decks": _DECKS, "did": 10, "exam": True, "plan": {"id": "p1", "name": "MS2 Block 1 · Dre's plan"},
-             "view": dict(_INS, did=10, pid="p1", leeches=3, week=dict(_INS["week"], src="plan"), map=_MAP, map_by="fsrs",
+             "view": dict(_INS, did=10, pid="p1", leeches=3, map=_MAP, map_by="fsrs",
                           map_ways=[{"key": "s", "name": "Systems", "on": True}, {"key": "b", "name": "Videos", "on": False},
                                     {"key": "y", "name": "HighYield", "on": False}, {"key": "~decks", "name": "Subdecks", "on": False}])}
 sections.append("<h3>3.8.0: You › Insights, a deck with my plan on it (Sam's numbers)</h3>" + board.render(
@@ -359,13 +402,24 @@ _DECK_INS = dict(_INS, did=20, behind=0, leeches=0, fsrs=None,
                  aim={"day": "2026-10-14", "name": "Your exam", "in": 7, "scoped": False, "kind": "exam"},
                  rows=[{"name": "Subjunctive", "src": "Grammar", "of": 41, "stuck": 7, "forgot": 3, "cids": [1]},
                        {"name": "Preterite", "src": "Grammar", "of": 63, "stuck": 5, "forgot": 1, "cids": [1]}],
-                 week=dict(_INS["week"], src="anki"))
+                 ahead=_AHEAD_SP, deck_name="Spanish")
 sections.append("<h3>3.8.0: You › Insights, the map opened on Cardio</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV,
     you=_YOU("insights", insights=dict(_PLAN_INS, view=dict(_PLAN_INS["view"], map_at=["cardio · physiology"])))))
 sections.append("<h3>3.8.0: You › Insights, a deck with no plan (my exam date, its tags), Due off</h3>" + board.render(
     DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
     you=_YOU("insights", insights={"decks": _DECKS, "did": 20, "exam": True, "plan": None, "view": _DECK_INS})))
+sections.append("<h3>3.9.2: Reviews ahead, new cards stopped till the exam (Turn back on)</h3>" + board.render(
+    DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
+    you=_YOU("insights", insights={"decks": _DECKS, "did": 20, "exam": "2026-10-14", "plan": None,
+                                   "view": dict(_DECK_INS, ahead=_ahead(20, False, 7, seed=9, unlocked=2400, left=2400, off=(0, 7)))})))
+sections.append("<h3>3.9.2: Reviews ahead, no exam, a batch person (only what's unlocked), a typical curve</h3>" + board.render(
+    DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
+    you=_YOU("insights", insights={"decks": _DECKS, "did": 10, "exam": "", "plan": None,
+                                   "view": dict(_DECK_INS, aim={}, hero=[], ahead=dict(_ahead(40, True, None, unlocked=120, left=9000),
+                                                                                        own=False, trust=None))})))
+sections.append("<h3>3.9.2: the board's line when reviews climb</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, ahead={"did": 10, "name": "Big Step 1", "day": "2026-10-12", "n": 420, "week": 310}))
 sections.append("<h3>3.8.0: You › Insights, no exam date, nothing yet</h3>" + board.render(
     DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
     you=_YOU("insights", insights={"decks": _DECKS[1:], "did": 20, "exam": False, "plan": None, "view": {}})))

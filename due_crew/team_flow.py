@@ -28,7 +28,6 @@ from aqt.utils import tooltip
 
 from . import app
 from . import plans as P
-from . import schedule as S
 from . import team as T
 from .app import _bg, _state, cfg, client, save_cfg
 from .backend.shapes import TransportError
@@ -600,13 +599,6 @@ def _fsrs(col):
         return False
 
 
-def _new_per_day(col, did):
-    try:
-        return max(0, int(col.decks.config_dict_for_deck_id(did)["new"]["perDay"]))
-    except Exception:
-        return 0
-
-
 MY_EXAM = "~exam"  # my own exam date, among a plan's events
 
 
@@ -630,7 +622,7 @@ def _work_out(did, pid=None, exam=""):
     else:
         deck = _deck_sql(col, did)  # a big shared deck's 30,000 ids stay out of the SQL
     since = lambda days: (cutoff - days * 86400) * 1000  # noqa: E731
-    out = {"target": int(round(100 * target)), "did": did}
+    out = {"target": int(round(100 * target)), "did": did, "deck_name": str(col.decks.name(did) or "").split("::")[-1]}
 
     # the header: right on this deck's reviews, first answer of each card each day
     out["right"] = T.right_days(col.db.all(
@@ -704,49 +696,14 @@ def _work_out(did, pid=None, exam=""):
                                            if str(u.get("opens") or "") < today)
         out["pid"] = p["id"]
 
-    # my week in minutes, at my own pace in this deck: ahead, what the plan
-    # asks, or with no plan, what Anki has due (its new cards a day included)
-    t = S.d(today)
-    days = [S.iso(t + datetime.timedelta(days=i)) for i in range(7)]
-    new = {d: 0 for d in days}
-    if p:
-        for u in units:
-            o = str(u.get("opens") or "")
-            if o in new:
-                _sn, op, lk = ld.get(u["id"]) or [0, 0, 0]
-                new[o] += (op + lk) if o == today else lk
-    else:
-        left = int(col.db.scalar(f"SELECT count() FROM cards WHERE id IN ({deck}) AND queue = 0") or 0)
-        per = _new_per_day(col, did)
-        for d in days:
-            new[d] = min(per, left)
-            left -= new[d]
-    due = {i: 0 for i in range(7)}
-    if sday:
-        for (dd,) in col.db.all(f"SELECT due FROM cards WHERE id IN ({deck}) AND queue = 2"):
-            i = max(int(dd) - sday, 0)
-            if i < 7:
-                due[i] += 1
-    n_ans, ms_ans = col.db.first(f"SELECT count(), total(time) FROM revlog WHERE id >= ? AND type IN (1, 2) AND ease > 0 "
-                                 f"AND cid IN ({deck})", since(T.DAYS)) or (0, 0)
-    firsts = dict(col.db.all(f"SELECT cid, min(id) FROM revlog WHERE cid IN ({deck}) GROUP BY cid "
-                             f"HAVING min(id) >= ? AND min(id) < ?", since(28), since(7)))
-    secs_new = None
-    if len(firsts) >= T.NEW_MIN:
-        spent = 0
-        for cid, rid, ms_ in col.db.all(f"SELECT cid, id, time FROM revlog WHERE ease > 0 AND cid IN ({_in(firsts)})"):
-            if 0 <= rid - firsts[cid] < 7 * 86400 * 1000:
-                spent += ms_
-        secs_new = spent / 1000.0 / len(firsts)
-    past = col.db.all(f"SELECT CAST((? - id / 1000) / 86400 AS INTEGER), total(time) FROM revlog "
-                      f"WHERE id >= ? AND ease > 0 AND cid IN ({deck}) GROUP BY 1", cutoff - 1, since(7))
-    mins = {int(a): int(round(m / 60000.0)) for a, m in past}
-    out["week"] = T.week([(S.iso(t - datetime.timedelta(days=a)), mins.get(a, 0)) for a in range(7, 0, -1)],
-                         [(d, new[d], due[i]) for i, d in enumerate(days)],
-                         secs_new, (ms_ans / 1000.0 / n_ans) if n_ans >= 200 else None)
-    if out["week"]:
-        out["week"]["today_done"] = mins.get(0, 0)
-        out["week"]["src"] = "plan" if p else "anki"
+    # 3.9.2, Reviews ahead (Your week until now): the next six weeks in cards a day,
+    # counted from my own log; a plan's dates in it when I follow one (ahead_flow)
+    try:
+        from . import ahead_flow
+        out["ahead"] = ahead_flow.deck_view(col, did, deck, exam,
+                                            plan=ahead_flow.plan_days(units, ld, today) if p else None)
+    except Exception:
+        traceback.print_exc()
 
     # Optimize FSRS: my newest cards against my target (put away for 30 days)
     hide = float((pf._pcfg().get("ins_fsrs_hide") or 0))
@@ -1226,6 +1183,15 @@ def on_message(cmd, parts):
             try_two(False)
         elif cmd == "insleeches":
             browse_leeches(did)
+        elif cmd == "insaheadoff" and x in ("now", "week"):
+            from . import ahead_flow
+            ahead_flow.stop_new(did, x)
+        elif cmd == "insaheadon":
+            from . import ahead_flow
+            ahead_flow.start_new(did)
+        elif cmd == "insaheadx":
+            from . import ahead_flow
+            ahead_flow.hide_line(did)
         else:
             return False
         return True
