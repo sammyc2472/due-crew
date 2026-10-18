@@ -343,8 +343,8 @@
     play: function (kind, volume) {
       if (!BUILD[kind]) { return; }
       context();
-      if (ac.state === "suspended") { ac.resume(); }
       if (volume != null) { this.setVolume(volume); }
+      if (ac.state === "suspended" && vol > 0) { ac.resume(); }  // 3.9.1: at no volume it stays asleep (the session's check plays every 5 s)
       if (now && now.kind === kind) { return; }
       retire(now);
       var fade = ac.createGain(); fade.gain.value = 0; fade.connect(master);

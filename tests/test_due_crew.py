@@ -14856,8 +14856,8 @@ def test_doodle_cheers_v391():
         went = dre.send_cheer("sam", "\U0001F525", "still", doodle=draw)
     finally:
         store._cheer = newer
-    check("a server from before doodles turns the field away: the cheer still goes, without it",
-          went is True and store.cheers[("sam", "dre")]["note"] == "still" and store.cheers[("sam", "dre")].get("doodle") is None)
+    check("a server from before doodles turns the field away: the cheer still goes, without it (and says so: no \"and a drawing\")",
+          went == "plain" and store.cheers[("sam", "dre")]["note"] == "still" and store.cheers[("sam", "dre")].get("doodle") is None)
     # drawn: numbers and escaped words only
     art = board.doodle_html(draw, "blue")
     blue = board.accent_pair("blue")[0]
@@ -15045,6 +15045,25 @@ def test_cheer_pill_and_window_v391():
           '"linkish cpill"' in app_js and 'class: "chc"' not in app_js and "dc-pill-from" not in app_js and "cpills" not in app_js
           and "HEADS.length + 1" in app_js and ".brdt td.nm:hover .cpill, .brdt td.nm:focus-within .cpill" in app_css
           and "tr:hover .cpill" not in app_css and "hover: none" not in app_css and ".chc" not in app_css)
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if node:
+        # the bug hunt: the pill sat inside the line's if/else chain, so a crewmate's " · yesterday" and
+        # " · 3 days this week" never showed (only mine did, and mine has no pill)
+        body = app_js[app_js.index("  function nameCell(r, period) {"):app_js.index("  /** board._corner", app_js.index("  function nameCell(r, period) {"))]
+        prog = ("function h(tag, attrs, ...kids) { const n = { tag, attrs, kids: [] }; n.append = (...k) => n.kids.push(...k);"
+                " n.append(...kids.flat().filter((x) => x != null)); return n; }\n"
+                "const text = (n) => typeof n === 'string' ? n : (n.kids || []).map(text).join('');\n"
+                "const nameCell = new Function('h', 'who', 'ago', 'planTarget', 'cheerMenu', " + json.dumps(body + "\nreturn nameCell;")
+                + ")(h, (p) => p.name, () => ['2h'], () => null, () => {});\n"
+                "const base = { p: { name: 'Priya', uid: 'u1' }, you: false };\n"
+                "console.log(JSON.stringify([nameCell({ ...base, stale: true }, 'today'), nameCell({ ...base, showup: true, daysWk: 3 }, 'today'),"
+                " nameCell({ ...base, you: true, stale: true }, 'today')].map(text)));")
+        run = subprocess.run([node, "-e", prog], capture_output=True, text=True, timeout=60)
+        check("the site's row (the bug hunt): a crewmate's line still shows, then the pill; mine has the line and no pill",
+              run.stdout.strip() == json.dumps(["Priya · yesterday🎉 Cheer", "Priya · 3 days this week🎉 Cheer", "Priya · yesterday"],
+                                               separators=(",", ":"), ensure_ascii=False), run.stdout + run.stderr[-1500:])
     # the Cheer window, in the board's look
     js = board.cheer_overlay_js({"uid": "dre", "name": "Dre </script><b>", "emojis": ["🎉", "💪"], "pip": None,
                                  "pen": "red;background:url(x)"})
@@ -15109,6 +15128,22 @@ def test_cheer_pill_and_window_v391():
         check("Send: one cheer with its note and sign; me, a stranger, a word for an emoji or a broken payload send nothing; a broken doodle goes without it",
               got.get("emoji") == "🔥" and got.get("note") == "go go" and got.get("doodle") == {"k": "sign", "t": "you've got this"}
               and list(store.cheers) == [("dre", "sam")] and store.cheers[("dre", "sam")]["doodle"] is None)
+        said, tip = [], social.tooltip
+        social.tooltip = said.append
+        newer = store._cheer
+
+        def older(me, to, body):  # a server from before 3.9.1
+            if "doodle" in body:
+                raise fakes.Bad(400, "bad_cheer")
+            return newer(me, to, body)
+        try:
+            send({"to": "dre", "emoji": "🎉", "doodle": {"k": "sign", "t": "go"}})
+            store._cheer = older
+            send({"to": "dre", "emoji": "🎉", "doodle": {"k": "sign", "t": "go"}})
+        finally:
+            social.tooltip, store._cheer = tip, newer
+        check("the toast says a sign went only when it did (the bug hunt: an older server sends the cheer without it)",
+              said == ["Sent 🎉 and a sign to Dre.", "Sent 🎉 to Dre."], said)
     finally:
         social.client, social._bg, dc._state["entries"], social.mw.web.eval = saved
 
@@ -15583,6 +15618,9 @@ def test_efficiency_idle_v391():
           and all(f"#due-crew {k}:hover .dc-rsev .sv {{ --sv-on: infinite; }}" in src for k in ("tr", ".pcrew", ".bg-sq"))
           and "#due-crew .face:hover .dc-rsev .sv {{ --sv-on: infinite; }}" in src)
     app_css = open(os.path.join(REPO, "site", "public", "app.css")).read()
+    check("Pip at rest (the bug hunt): the break screen's Pip goes on all break, whichever of its stretch moves it does",
+          "root.style.setProperty('--sv-on', 'infinite');" in rm._RUNTIME
+          and rm._RUNTIME.index("root.style.setProperty('--sv-on', 'infinite');") > rm._RUNTIME.index("var bs = FIF && D.sev"))
     check("the studying-now dot (Sam's pick D): a few pulses, then lit, in Anki and on the site",
           "dcbreathe 2.4s ease-in-out 7 alternate" in open(os.path.join(REPO, "due_crew", "board.py")).read()
           and ".chip.live::before { animation: dcbreathe 2.4s ease-in-out 7 alternate; }" in app_css
@@ -15928,6 +15966,11 @@ def test_room_sounds_v391():
                 "S.stop(); flush(); var c = log.join(','); S.play('brown', 0.5); flush();"
                 "console.log([a, b, c, log.join(',')].join('|'));")
         out = subprocess.run([node], input=prog, capture_output=True, text=True, timeout=60)
+        prog = (fake + src + "var S = window.dcSounds; S.play('brown', 0.5); flush(); S.setVolume(0); flush(); log.length = 0;"
+                "S.play('brown', 0); flush(); S.play('brown', 0); flush(); S.play('brown', 0); flush(); console.log(log.join(','));")
+        quiet = subprocess.run([node], input=prog, capture_output=True, text=True, timeout=60)
+        check("sounds.js (the bug hunt): at no volume, the session's check every 5 s leaves it asleep",
+              quiet.stdout.strip() == "", quiet.stdout + quiet.stderr)
         check("sounds.js (3.9.1, the efficiency run): at no volume it sleeps, turned up it wakes; stopped, the context closes "
               "(its samples go with it) and the next play makes a new one",
               out.stdout.strip() == "new,suspend|new,suspend,resume|new,suspend,resume,close|new,suspend,resume,close,new",

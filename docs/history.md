@@ -2351,6 +2351,22 @@ every release that changes how something works.
   media server): any `.ogg` in another add-on's folder was readable. Now
   `sounds/[^/]+\.ogg`, a file in sounds/ alone. No token or file of ours
   was reachable (none ends .ogg).
+- 3.9.1, the bug hunt (the same housekeeping). Four found and fixed, each
+  with its test. (1) On the site, the Cheer pill had gone in the middle of
+  a row's if/else chain, so a crewmate's " · yesterday" and " · 3 days this
+  week" never showed; the pill now follows the line (app.js `nameCell`,
+  run in node on a stale crewmate). (2) A drawing that came in on the
+  launch's first refresh went on the fridge in the default colour, and one
+  from someone just become mutual in their old colour: the colour was read
+  from the board before this refresh's crew (`_commit` now hands
+  `keep_doodles` the refresh's own entries). (3) With room sounds at no
+  volume, the session's check every 5 s woke the sound engine it had just
+  put to sleep (`sounds.js` `play` resumes only above 0). (4) The break
+  screen's Pip rested after a few rounds with Pip at rest, mid-exercise;
+  the break is the one place it goes on (`--sv-on: infinite` on the break's
+  root). And a cheer an older server took without its drawing (the 400
+  fallback) no longer says "and a drawing" (`api.send_cheer` returns
+  "plain").
 - 3.9.1, the efficiency run, the Decks screen (the same ask). Measured with
   a crew of thirteen and a full fridge (twelve drawings at 2,000 points):
   every click that redraws the board (a swap) sent 77 KB of script the page

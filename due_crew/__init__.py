@@ -395,7 +395,9 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
         _pending_cheers.extend(fresh)
         _state["sev_cheer"] = time.time()  # 3.8.1: Pip catches it by the logo, once
         _closet(lambda cf: cf.note_cheered())  # 3.8.2: a crewmate's cheer
-        _closet(lambda cf: cf.keep_doodles(fresh, _state["entries"]))  # 3.9.1: a drawing or a sign goes on the fridge
+        # 3.9.1: a drawing or a sign goes on the fridge, in its sender's colour from this refresh's crew
+        # (the bug hunt: _state's is None at launch, and stale for someone just become mutual)
+        _closet(lambda cf: cf.keep_doodles(fresh, data["entries"]))
 
     if knocks is not None:
         _state["knocks"] = [tuple(k) for k in knocks]

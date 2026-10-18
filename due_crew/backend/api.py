@@ -839,7 +839,8 @@ class ApiClient:
 
     def send_cheer(self, to_uid, emoji, note=None, luck=False, guid=None, doodle=None):
         """One cheer; it replaces my last one to the same person. doodle
-        (3.9.1): a drawing or a sign (clean_doodle), on a plain cheer only."""
+        (3.9.1): a drawing or a sign (clean_doodle), on a plain cheer only.
+        True when it went; "plain" when it went without its doodle."""
         emoji = clean_emoji(emoji)
         if not emoji:
             return False  # nothing that isn't one emoji is ever sent
@@ -859,6 +860,7 @@ class ApiClient:
             # a Worker from before 3.9.1 turns the field away and writes nothing: the cheer still goes
             body.pop("doodle")
             status, _ = self._call("POST", f"/cheers/{to_uid}", body)
+            return "plain" if status == 200 else False
         return status == 200
 
     def send_knock(self, to_uid, squad):

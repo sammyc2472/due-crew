@@ -122,6 +122,8 @@ def _send_cheer(to_uid, to_name, emoji, note="", luck=False, guid=None, then=Non
     cl = client()
 
     def done(ok):
+        plain = ok == "plain"  # an older server turned the drawing away; the cheer went
+        ok = True if plain else ok
         if ok is True and not luck:
             from .bingo_flow import bump
             bump("tp" if guid else "ch")  # 3.6: the middle counts cheers and tips
@@ -138,7 +140,7 @@ def _send_cheer(to_uid, to_name, emoji, note="", luck=False, guid=None, then=Non
         elif ok is True and guid:
             tooltip("Tip sent.")
         elif ok:
-            extra = {"draw": " and a drawing", "sign": " and a sign"}.get((doodle or {}).get("k"), "")
+            extra = "" if plain else {"draw": " and a drawing", "sign": " and a sign"}.get((doodle or {}).get("k"), "")
             tooltip(f"Sent {html.escape(emoji)}{extra} to {html.escape(to_name)}.")
             try:  # 3.8.0: a few of it float up from their row (motion.js)
                 mw.web.eval("window.dcMotion&&dcMotion.cheer(%s,%s)" % (json.dumps(str(to_uid)), json.dumps(str(emoji))))

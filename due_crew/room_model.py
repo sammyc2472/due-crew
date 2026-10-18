@@ -843,6 +843,9 @@ _RUNTIME = r"""
     // breathing draws its square around Pip: the whole drawing; a stretch needs only Pip's own room
     var bs = FIF && D.sev ? (D.brk_pose === 'stretch' ? sev(vk('stretch', phase(Date.now()).round), 170) : sev('breathe', 180, true)) : null;
     if (bs) { bs.style.marginBottom = '10px'; }  // its shadow (or the square's "out") clear of the ring
+    // 3.9.1 (Pip at rest, and the bug hunt): the break's Pip is the exercise, so its moves go on all break
+    // (shake, march and look too, not only the stretch), where Pip elsewhere rests after a few rounds
+    root.style.setProperty('--sv-on', 'infinite');
     logo.appendChild(bs || squares(c, 110));
     var rg4 = ring(FIF ? 96 : 150, c), h = el('div', 'font:600 28px -apple-system,Segoe UI,sans-serif;'), p1 = el('div', 'color:' + c.mut + ';max-width:40ch;');
     var btns = el('div', 'display:flex;gap:10px;flex-wrap:wrap;justify-content:center;');

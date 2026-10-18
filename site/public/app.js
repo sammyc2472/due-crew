@@ -1088,11 +1088,11 @@ const Board = (() => {
       const [t] = ago(r.last);
       cell.append(h("span", { class: "ago faded" }, ` · nothing ${period === "week" ? "this week" : "yet"}${t && t !== "just now" ? ` as of ${t}` : ""}`));
     }
-    // board.py 3.9.1: the cheer is a pill after the name, only while the pointer's on the name (or a key's
-    // on it), in place of the 🎉 column at the end; on a phone, tapping the name opens their card, which has it
-    if (!r.you) cell.append(h("button", { class: "linkish cpill", title: "Send a cheer", "aria-label": `Cheer ${p.name}`, onclick: (e) => cheerMenu(p.uid, e.currentTarget) }, "🎉 Cheer"));
     else if (r.stale) cell.append(h("span", { class: "ago faded" }, " · yesterday"));
     else if (r.showup && r.daysWk) cell.append(h("span", { class: "ago faded" }, ` · ${r.daysWk} day${r.daysWk === 1 ? "" : "s"} this week`));
+    // board.py 3.9.1: the cheer is a pill after the name (and its line), only while the pointer's on the name
+    // (or a key's on it), in place of the 🎉 column at the end; on a phone, tapping the name opens their card, which has it
+    if (!r.you) cell.append(h("button", { class: "linkish cpill", title: "Send a cheer", "aria-label": `Cheer ${p.name}`, onclick: (e) => cheerMenu(p.uid, e.currentTarget) }, "🎉 Cheer"));
     if (r.status) {
       // 2.10: a status that starts with a number is a plan, ticked by the day's reviews
       const target = planTarget(r.status), done = r.reviews;
