@@ -9,7 +9,8 @@ import datetime
 
 from aqt.qt import QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QPushButton, Qt, QVBoxLayout
 
-from . import attach_alive, sev_label, tone
+from . import attach_alive, sev_label, title
+from . import note as ui_note
 
 
 def _day(iso):
@@ -52,11 +53,8 @@ class AwayDialog(QDialog):
             top.addSpacing(8)
         top.addLayout(words, 1)
         root.addLayout(top)
-        head = QLabel(f"Welcome back to {name}")
-        head.setTextFormat(Qt.TextFormat.PlainText)
-        head.setWordWrap(True)
-        head.setStyleSheet("font-weight: 600;")
-        words.addWidget(head)
+        words.addWidget(title(f"Welcome back to {name}"))
+        self.setWindowTitle("Due Crew")  # the window says what it is (ui.heading)
         self.body = QLabel(f"{days_words(days)} "
                            f"{n_dates:,} date{'s' if n_dates != 1 else ''} would open now: "
                            f"{n_cards:,} new card{'s' if n_cards != 1 else ''}.")
@@ -66,9 +64,7 @@ class AwayDialog(QDialog):
         note = QLabel("Pushing moves only your dates; the plan and its events stay put. "
                       "Not today opens nothing and asks again tomorrow morning.")
         note.setTextFormat(Qt.TextFormat.PlainText)
-        note.setWordWrap(True)
-        note.setStyleSheet(f"color: {tone('muted')}; font-size: 11.5px;")
-        words.addWidget(note)
+        words.addWidget(ui_note(note))
         buttons = QDialogButtonBox()
         buttons.addButton("Not today", QDialogButtonBox.ButtonRole.RejectRole).clicked.connect(self.reject)
         self.push_btn = QPushButton(f"Push my dates back {n} day{'s' if n != 1 else ''}")

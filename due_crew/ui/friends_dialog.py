@@ -15,7 +15,7 @@ from aqt.qt import (
 from aqt.utils import tooltip
 
 from ..backend.shapes import friend_code_from, invite_code_from
-from . import accent, attach_alive, confirm, copy_text, run_bg, tone
+from . import accent, attach_alive, confirm, copy_text, heading, note, role, run_bg, tone
 
 
 def invite_text(friend_code):
@@ -45,8 +45,9 @@ class FriendsDialog(QDialog):
         self.setWindowTitle("Friends")
         self.setMinimumWidth(470)  # 3.9.1: the code and its three buttons in the board-look padding
         root = QVBoxLayout(self)
+        heading(self, root)
 
-        root.addWidget(QLabel("<b>Your code</b>"))
+        root.addWidget(role(QLabel("Your code"), "head"))
         code_row = QHBoxLayout()
         self.code_label = QLabel("······")
         self.code_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -72,12 +73,10 @@ class FriendsDialog(QDialog):
         code_row.addWidget(self.new_btn)
         code_row.addStretch()
         root.addLayout(code_row)
-        hint = QLabel("You're crew once you've both added each other's codes.")
-        hint.setStyleSheet("font-size: 11px;")
-        root.addWidget(hint)
+        root.addWidget(note(QLabel("You're crew once you've both added each other's codes.")))
 
         root.addSpacing(8)
-        root.addWidget(QLabel("<b>Add a friend</b>"))
+        root.addWidget(role(QLabel("Add a friend"), "head"))
         add_row = QHBoxLayout()
         self.code_input = QLineEdit()
         # 2.9: the whole invite pastes in; the code is taken from it
@@ -96,7 +95,7 @@ class FriendsDialog(QDialog):
         self.knocks_host.hide()
 
         root.addSpacing(8)
-        root.addWidget(QLabel("<b>Your crew</b>"))
+        root.addWidget(role(QLabel("Your crew"), "head"))
         self.list = QListWidget()
         root.addWidget(self.list)
 
@@ -172,8 +171,7 @@ class FriendsDialog(QDialog):
         if not self.knocks:
             self.knocks_host.hide()
             return
-        title = QLabel("<b>Added you</b>")
-        self.knocks_lay.addWidget(title)
+        self.knocks_lay.addWidget(role(QLabel("Added you"), "head"))
         for kuid, kname in self.knocks:
             row = QHBoxLayout()
             # server-sourced name: force plain text

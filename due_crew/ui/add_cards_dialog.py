@@ -11,7 +11,7 @@ from aqt.qt import (
     QHBoxLayout, QLabel, QRadioButton, Qt, QVBoxLayout, QWidget,
 )
 
-from . import attach_alive, run_bg, tone
+from . import attach_alive, heading, note, run_bg
 from .. import plans as P
 
 
@@ -26,6 +26,7 @@ class AddCardsDialog(QDialog):
         self.setWindowTitle("Add to a plan")
         self.setMinimumWidth(440)
         root = QVBoxLayout(self)
+        heading(self, root)
 
         form = QFormLayout()
         self.plan = QComboBox()
@@ -64,8 +65,7 @@ class AddCardsDialog(QDialog):
         root.addLayout(form)
         # 3.6.5: a follower's Anki opens a date once; what's added after comes the next morning
         self.opened = QLabel("This date has opened. Followers who opened it get these tomorrow morning.")
-        self.opened.setWordWrap(True)
-        self.opened.setStyleSheet(f"color: {tone('muted')}; font-size: 11.5px;")
+        note(self.opened)
         self.opened.setVisible(False)
         root.addWidget(self.opened)
         self.unit.currentIndexChanged.connect(self._opened)
@@ -82,7 +82,8 @@ class AddCardsDialog(QDialog):
         what.addButton(self.by_cards)
         shown = QLabel(self.search)
         shown.setTextFormat(Qt.TextFormat.PlainText)  # the search as typed, never markup
-        shown.setStyleSheet("font-family: monospace; font-size: 11.5px; margin-left: 22px;")
+        shown.setStyleSheet("font-family: Menlo, Consolas, monospace; font-size: 12px;")
+        shown.setContentsMargins(24, 0, 0, 0)  # under its choice's words
         shown.setWordWrap(True)
         for w in (self.by_search, shown, self.by_cards):
             root.addWidget(w)

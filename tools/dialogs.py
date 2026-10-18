@@ -15,6 +15,16 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "tests"))
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+if os.environ["QT_QPA_PLATFORM"] == "offscreen":
+    # a laptop's screen, not offscreen's 800x600: a window takes at most two
+    # thirds of its screen, and a narrow one would squeeze rows a Mac doesn't
+    import json
+    import tempfile
+    _screen = os.path.join(tempfile.gettempdir(), "dc-dialogs-screen.json")
+    with open(_screen, "w") as _f:
+        json.dump({"screens": [{"name": "laptop", "x": 0, "y": 0, "width": 1440, "height": 900,
+                                "logicalDpi": 96, "logicalBaseDpi": 96, "dpr": 1}]}, _f)
+    os.environ["QT_QPA_PLATFORM"] = "offscreen:configfile=" + _screen
 
 import fakes  # noqa: E402
 
@@ -34,6 +44,15 @@ qt.Qt = QtCore.Qt
 qt.QMimeData = QtCore.QMimeData
 
 app = QtWidgets.QApplication(sys.argv[:1])
+# a Mac's system font, near enough (13 px; Arial's metrics stand in for the
+# system face), so a render here clips or wraps where a Mac would
+_font = QtGui.QFont("Liberation Sans")
+_font.setPixelSize(13)
+app.setFont(_font)
+if os.environ.get("DC_APP_QSS"):  # an app-wide style sheet under ours, as Anki's own widget style sets one
+    app.setStyle(QtWidgets.QStyleFactory.create("Fusion"))
+    with open(os.environ["DC_APP_QSS"], encoding="utf-8") as _f:
+        app.setStyleSheet(_f.read())
 
 PENDING = []
 
@@ -124,6 +143,8 @@ CONFIG = {
     "shared_decks": [1], "squads": [SQUAD, {"id": "b" * 24, "code": "MS2XXXXX", "name": "MS2", "founder": "x"}],
     "squad": SQUAD["id"],
 }
+if os.environ.get("DC_THEME") in ("light", "dark"):  # DC_THEME=dark: every window in the board's dark look
+    CONFIG["theme"] = os.environ["DC_THEME"]
 aqt.mw.addonManager.getConfig = lambda name: CONFIG  # the accent reaches dialogs
 # fingerprints are note guids; these overlap the Step 1 subtree built in
 # _collection(), so the Shared Decks dialog has a real match to show
@@ -140,9 +161,51 @@ def settle(ms=400):
         QtCore.QThread.msleep(10)
 
 
+def heading_of(dlg):
+    """3.9.1: a window's title is its heading (ui.heading), in plain text: a
+    name in it is someone's. None if it has none, or one in rich text."""
+    for label in dlg.findChildren(QtWidgets.QLabel):
+        if label.property("dc") == "title":
+            return label.text() if label.textFormat() == QtCore.Qt.TextFormat.PlainText else None
+    return None
+
+
+def fits(dlg):
+    """3.9.1: what a person would see as broken, measured: a button, tick or
+    choice narrower than its words; a box narrower than its words (up to the
+    240px ui._tidy keeps); two of a row's buttons or boxes on top of each
+    other; a window shorter or narrower than its rows need. [] when none."""
+    W = QtWidgets
+    bad = []
+    lay = dlg.layout()
+    if lay is not None:
+        least = lay.totalMinimumSize()
+        if dlg.width() < least.width() or dlg.height() < least.height():
+            bad.append(f"window {dlg.width()}x{dlg.height()} under its rows' {least.width()}x{least.height()}")
+        elif lay.hasHeightForWidth() and dlg.height() < lay.totalHeightForWidth(dlg.width()):
+            bad.append(f"window {dlg.height()} tall, its words need {lay.totalHeightForWidth(dlg.width())}")
+    shown = [w for w in dlg.findChildren(W.QWidget) if w.isVisibleTo(dlg) and w.window() is dlg]
+    for w in shown:
+        if isinstance(w, (W.QPushButton, W.QCheckBox, W.QRadioButton)) and w.text():
+            if w.width() < w.sizeHint().width() - 1:
+                bad.append(f"{type(w).__name__} {w.text()!r} {w.width()} < {w.sizeHint().width()}")
+        elif isinstance(w, W.QComboBox) and w.count():
+            if w.width() < min(w.sizeHint().width(), 240) - 1:
+                bad.append(f"box {w.currentText()!r} {w.width()} < {w.sizeHint().width()}")
+    controls = [w for w in shown if isinstance(w, (W.QPushButton, W.QComboBox, W.QLineEdit, W.QAbstractSpinBox))]
+    for i, a in enumerate(controls):
+        for b in controls[i + 1:]:
+            if a.parentWidget() is b.parentWidget() and a.geometry().intersects(b.geometry()):
+                bad.append(f"{type(a).__name__} over {type(b).__name__}: {a.geometry()} {b.geometry()}")
+    return bad
+
+
 def shoot(dlg, path):
     dlg.show()
     settle()
+    broken = fits(dlg)
+    if broken:
+        raise RuntimeError(f"{os.path.basename(path)}: " + "; ".join(broken))
     pix = dlg.grab()
     pix.save(path)
     print(f"{os.path.basename(path)}: {pix.width()}x{pix.height()}")
@@ -231,6 +294,139 @@ def main(out):
             CONFIG["accent"] = was
             theme.theme_manager.night_mode = False
 
+    def kitchen():
+        """3.9.1: every kind of box, button, tick and list a window uses, in the
+        board's look (ui.styled), with a box's list open and a calendar: the
+        one picture that shows the whole look, light or dark (DC_THEME)."""
+        from due_crew import ui
+        W = QtWidgets
+        dlg = W.QDialog()
+        ui.attach_alive(dlg)
+        dlg.setWindowTitle("Due Crew")
+        root = W.QVBoxLayout(dlg)
+        root.addWidget(ui.role(W.QLabel("Open a study room"), "title"))
+        root.addWidget(ui.role(W.QLabel("Your crew sees it on their board and can join any time."), "note"))
+        row = W.QHBoxLayout()
+        row.addWidget(W.QLabel("Rounds"))
+        spin = W.QSpinBox()
+        spin.setRange(1, 8)
+        spin.setValue(4)
+        row.addWidget(spin)
+        row.addWidget(W.QLabel("of"))
+        box = W.QComboBox()
+        for m in (15, 25, 30, 45, 50):
+            box.addItem(f"{m} min")
+        box.setCurrentIndex(1)
+        row.addWidget(box)
+        row.addWidget(W.QLabel("with"))
+        brk = W.QComboBox()
+        brk.addItems(["5 min", "10 min"])
+        brk.setEnabled(False)
+        row.addWidget(brk)
+        row.addStretch()
+        root.addLayout(row)
+        when = W.QHBoxLayout()
+        when.addWidget(W.QLabel("Starts"))
+        now, later = W.QRadioButton("Now"), W.QRadioButton("At a time")
+        now.setChecked(True)
+        when.addWidget(now)
+        when.addWidget(later)
+        t = W.QTimeEdit()
+        t.setDisplayFormat("HH:mm")
+        when.addWidget(t)
+        date = W.QDateEdit(QtCore.QDate(2026, 10, 24))
+        date.setCalendarPopup(True)
+        date.setDisplayFormat("ddd d MMM yyyy")
+        when.addWidget(date)
+        when.addStretch()
+        root.addLayout(when)
+        root.addWidget(ui.role(W.QLabel("How its cards open"), "head"))
+        a, b = W.QCheckBox("Hold back 2 cards of later dates until their day"), W.QCheckBox("Join this plan's squad")
+        a.setChecked(True)
+        root.addWidget(a)
+        root.addWidget(b)
+        off = W.QCheckBox("Can't be changed")
+        off.setEnabled(False)
+        root.addWidget(off)
+        edit = W.QLineEdit()
+        edit.setPlaceholderText("Their code, or paste their invite")
+        root.addWidget(edit)
+        typed = W.QLineEdit("DLT29GPW")
+        root.addWidget(typed)
+        lst = W.QListWidget()
+        lst.addItems(["Adina", "Ameya", "Chidemma \u2014 waiting", "igk"])
+        lst.setCurrentRow(1)
+        lst.setFixedHeight(96)
+        root.addWidget(lst)
+        tree = W.QTreeWidget()
+        tree.setHeaderLabels(["Deck", "Cards"])
+        top = W.QTreeWidgetItem(["Big Step 1", "13"])
+        top.setCheckState(0, QtCore.Qt.CheckState.Checked)
+        kid = W.QTreeWidgetItem(["Cardio", "4"])
+        kid.setCheckState(0, QtCore.Qt.CheckState.Unchecked)
+        top.addChild(kid)
+        tree.addTopLevelItem(top)
+        other = W.QTreeWidgetItem(["Pharm::Antibiotics", "5"])
+        other.setCheckState(0, QtCore.Qt.CheckState.Unchecked)
+        tree.addTopLevelItem(other)
+        tree.expandAll()
+        tree.setFixedHeight(110)
+        root.addWidget(tree)
+        cal = W.QCalendarWidget()
+        cal.setSelectedDate(QtCore.QDate(2026, 10, 24))
+        cal.setCurrentPage(2026, 10)
+        root.addWidget(cal)
+        bb = W.QDialogButtonBox(W.QDialogButtonBox.StandardButton.Ok | W.QDialogButtonBox.StandardButton.Cancel)
+        bb.button(W.QDialogButtonBox.StandardButton.Ok).setText("Open Room")
+        extra = bb.addButton("Not today", W.QDialogButtonBox.ButtonRole.ActionRole)
+        extra.setEnabled(False)
+        root.addWidget(bb)
+        dlg.resize(560, 10)
+        shoot(dlg, os.path.join(out, "kitchen.png"))
+        dlg.show()
+        settle(100)
+        box.showPopup()
+        settle(200)
+        pop = box.view().window()
+        pix = QtGui.QPixmap(dlg.width(), dlg.height())
+        dlg.render(pix)
+        p = QtGui.QPainter(pix)
+        at = pop.mapToGlobal(QtCore.QPoint(0, 0)) - dlg.mapToGlobal(QtCore.QPoint(0, 0))
+        p.drawPixmap(at, pop.grab())
+        p.end()
+        pix.save(os.path.join(out, "kitchen-popup.png"))
+        box.hidePopup()
+        dlg.close()
+
+    def questions():
+        """3.9.1: the board's questions off the board (sheets' Qt fallback),
+        and Due's Pick a day: every window in the look."""
+        from due_crew import ui, due_flow
+        holder = QtWidgets.QWidget()  # the main window's stand-in
+        box, _go = ui._question(holder, "Remove igk?", "They come off your crew, and you off theirs.", "Remove", True)
+        shoot(box, os.path.join(out, "q-confirm.png"))
+        box, _go = ui._question(holder, "Unfollow Step 1?", "Its dates stop opening. What opened stays open.", "Unfollow", False)
+        tick = QtWidgets.QCheckBox("Take its tags off my notes too")
+        tick.setChecked(True)
+        box.setCheckBox(tick)
+        shoot(box, os.path.join(out, "q-confirm-check.png"))
+        dlg = ui._plain_input(None, "Your status", "What are you up to? Your crew sees it today.")
+        dlg.setTextValue("coffee, then 400 cards")
+        shoot(dlg, os.path.join(out, "q-text.png"))
+        dlg = ui._plain_input(None, "Move it", "Which day?")
+        dlg.setComboBoxItems(["Today", "Tomorrow", "Mon 26 Oct"])
+        dlg.setComboBoxEditable(False)
+        shoot(dlg, os.path.join(out, "q-item.png"))
+        was = QtWidgets.QDialog.exec
+        QtWidgets.QDialog.exec = lambda self: (shoot(self, os.path.join(out, "pick-a-day.png")), 0)[1]
+        due_flow._state["labels"] = [TODAY]
+        main, due_flow.mw = due_flow.mw, holder  # its parent, Anki's window
+        try:
+            due_flow._pick_day("x", TODAY)
+        finally:
+            QtWidgets.QDialog.exec = was
+            due_flow.mw = main
+
     def room():
         from due_crew.ui.room_dialog import RoomDialog
         dlg = RoomDialog(None)
@@ -248,8 +444,8 @@ def main(out):
         it goes in the title only, as plain text."""
         from due_crew.ui.report_dialog import ReportDialog
         dlg = ReportDialog(None, "Ameya <b>")
-        if dlg.windowTitle() != "Report Ameya <b>":
-            raise RuntimeError(f"report: title {dlg.windowTitle()!r}")
+        if heading_of(dlg) != "Report Ameya <b>" or dlg.windowTitle() != "Due Crew":
+            raise RuntimeError(f"report: title {heading_of(dlg)!r} on {dlg.windowTitle()!r}")
         shoot(dlg, os.path.join(out, "report.png"))
         dlg = ReportDialog(None, "Ameya")
         dlg.choices[2].setChecked(True)
@@ -409,8 +605,8 @@ def main(out):
                 "phases": {"catchup": 4, "taper": 10}, "units": units}}
         totals = {"c": 420, "r": 610, "p": 560}
         dlg = ScheduleDialog(None, plan, "2026-10-01", totals, [120] * 190, (9.0, 35.0))
-        if dlg.windowTitle() != "My schedule · Step 1 <b>":
-            raise RuntimeError(f"schedule: title {dlg.windowTitle()!r}")
+        if heading_of(dlg) != "My schedule · Step 1 <b>":
+            raise RuntimeError(f"schedule: title {heading_of(dlg)!r}")
         shoot(dlg, os.path.join(out, "plan-schedule.png"))
         dlg._tap(6)
         dlg._tap(5)
@@ -741,7 +937,7 @@ def main(out):
             raise RuntimeError("remark: a card with none starts empty, Save off")
         shoot(dlg, os.path.join(out, "plan-remark-new.png"))
 
-    for label, build in (("tools menu", tools_menu), ("friends", friends), ("decks", decks),
+    for label, build in (("kitchen", kitchen), ("questions", questions), ("tools menu", tools_menu), ("friends", friends), ("decks", decks),
                          ("squads", squads), ("auth", auth),
                          ("welcome", welcome), ("logo", logo), ("room", room), ("emoji", emoji),
                          ("report", report), ("plans", plans), ("schedule", schedule), ("map card", map_card),

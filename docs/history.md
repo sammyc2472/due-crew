@@ -2409,6 +2409,45 @@ every release that changes how something works.
   Schedule's chart paints in it too. The window's frame stays the
   computer's. Every render in `tools/dialogs.py` was looked at, light and
   dark; Friends is 50px wider for the code and its three buttons.
+- 3.9.1, the Qt windows, round two (Sam, with Open a Study Room on a Mac:
+  "washed out. bad spacing. not engaging"). The Mac's own style drew a
+  dressed box's arrow in a box of its own and its list as a menu with a
+  tick column that cut "15 min" to "15 m"; the number box kept the
+  system's stepper; small print was 11px grey everywhere. Now every Due
+  Crew window sits on Fusion (`ui.base_style`, a QProxyStyle: 22px at a
+  window's sides, 8 between rows), so a Mac, Windows and Linux, under
+  Anki's widget style or the system's, get the same window, and `ui.QSS`
+  draws every part itself: a box's chevron and its list (a list, not a
+  menu: `combobox-popup: 0`, rows a `QStyledItemDelegate` the sheet
+  dresses), a number box's two buttons, ticks and radio dots in the
+  accent, a tree's arrows and boxes (Shared Decks' 3.5.0 `box_css` goes),
+  a calendar without red weekends or week numbers, thin scrollbars; boxes
+  and buttons 30px high, a box's edge darker than the board's hairline, a
+  ring where the keyboard is. The arrows and tick are SVGs in the window's
+  colours, written once to `user_files/_qt` (a style sheet takes an image
+  from a file). One type scale: 13px, a window's title 16px bold, a
+  part's heading bold (`ui.role(label, "head")`), small print 12px in an
+  ink between the board's muted and ink (`ui.note`, token `ink-2`). Every
+  window says what it is in its title (`ui.heading`; a plan's or a
+  person's name in it is plain text) and its frame says Due Crew, so the
+  words aren't said twice; a question's box does too. Two sizing bugs
+  under it, both in the shipped 3.9.0 windows: Qt sizes a new window from
+  its widest-and-shortest wish and caps it at two thirds of the screen,
+  so Follow a plan came out shorter than its wrapped lines and the plan's
+  dates ran into each other; and a window with a minimum width of its own
+  never widened for a row that grew after it opened (Friends' code, once
+  it arrives: its Copy slid over the code). `ui._fit` grows a window to
+  its rows and its words, never past its screen, never smaller; the tidy
+  (`ui._tidy`) runs as a window is polished, before it takes its size. A
+  style sheet's margin on a label sets its words in a few px too, so the
+  headings' spacing is a layout margin now. `tools/dialogs.py` renders on
+  a laptop's 1440x900 screen with a Mac's 13px type, adds a window of
+  every control (`kitchen`), the questions off the board and Pick a day,
+  and fails on a clipped button, a box narrower than its words, two
+  controls on top of each other or a window shorter than its words
+  (`fits`); `DC_THEME=dark` renders the dark look and `DC_APP_QSS` puts an
+  app-wide style sheet under ours, as Anki's widget style does (checked
+  with Anki 26.9.3's own sheet in loud colours: none shows through).
 - 3.9.1, before release: the README's cheer line said "Tap 🎉 next to a
   friend's name" and its board picture had the 🎉 column; both follow the
   pill now, with a line each for drawings and room sounds. board.png is

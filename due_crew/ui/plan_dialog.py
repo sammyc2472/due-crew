@@ -11,7 +11,7 @@ from aqt.qt import (
     QComboBox, QDialog, QDialogButtonBox, QFormLayout, QLabel, QVBoxLayout,
 )
 
-from . import attach_alive, esc, run_bg
+from . import attach_alive, esc, heading, note, run_bg
 from .. import plans as P
 
 class MakePlanDialog(QDialog):
@@ -26,6 +26,7 @@ class MakePlanDialog(QDialog):
         self.setWindowTitle("Make a plan")
         self.setMinimumWidth(440)
         root = QVBoxLayout(self)
+        heading(self, root)
 
         form = QFormLayout()
         self.deck = QComboBox()
@@ -35,17 +36,12 @@ class MakePlanDialog(QDialog):
         root.addLayout(form)
         # a plan is one deck and everything under it
         two = QLabel("To plan two decks, put them under one parent deck in Anki.")
-        two.setWordWrap(True)
-        two.setStyleSheet("font-size: 12px;")
-        root.addWidget(two)
+        root.addWidget(note(two))
 
-        self.found = QLabel("")
-        self.found.setWordWrap(True)
-        self.found.setStyleSheet("font-size: 12px;")
+        self.found = note(QLabel(""))
         root.addWidget(self.found)
         self.status = QLabel("")
         self.status.setWordWrap(True)
-        self.status.setStyleSheet("font-size: 12px;")
         root.addWidget(self.status)
 
         self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok

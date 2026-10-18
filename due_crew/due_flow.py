@@ -549,10 +549,12 @@ def item_menu(c, ident):
 
 def _pick_day(ident, start):
     from aqt.qt import QDialog, QVBoxLayout, QCalendarWidget, QDate, QDialogButtonBox
+    from .ui import heading, styled
     today = _today()
-    dlg = QDialog(mw)
+    dlg = styled(QDialog(mw))  # 3.9.1: the board's look, as every window
     dlg.setWindowTitle("Pick a day")
     lay = QVBoxLayout(dlg)
+    heading(dlg, lay)
     cal = QCalendarWidget(dlg)
     t, s = D.d(today), D.d(start if start >= today else today)
     cal.setMinimumDate(QDate(t.year, t.month, t.day))

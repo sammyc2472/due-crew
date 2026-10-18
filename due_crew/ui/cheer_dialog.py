@@ -17,7 +17,7 @@ from aqt.qt import (
     QVBoxLayout, QWidget,
 )
 
-from . import accent, open_emoji_picker, styled, tone
+from . import accent, heading, note, open_emoji_picker, styled, tone
 from ..backend.shapes import clean_emoji
 
 # the crew-emoji dialog's quick row: faces for a name, not reactions
@@ -130,9 +130,8 @@ class EmojiDialog(QDialog):
         self.setMinimumWidth(380)
         self._removed = False
         lay = QVBoxLayout(self)
-        note = QLabel("In front of your name, for your crew and squads.")
-        note.setStyleSheet("font-size: 12px;")
-        lay.addWidget(note)
+        heading(self, lay)
+        lay.addWidget(note(QLabel("In front of your name, for your crew and squads.")))
         self.picker = EmojiPicker(CREW_EMOJI, True, initial=current or "")
         lay.addWidget(self.picker)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save

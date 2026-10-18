@@ -257,8 +257,15 @@ clean `main` does the migrations, the API, then the site, then
 - A question the board asks goes through `sheets.py` (then-callbacks, only
   a yes reaches them), never a bare QMessageBox/QInputDialog/askUser; the
   Qt ones in `ui` are its fallback off the board. A Qt window wears the
-  board's look (`ui.styled`, via `attach_alive`); its labels' own style
-  sheets take `ui.tone(...)`, never palette(...).
+  board's look (`ui.styled`, via `attach_alive`): Fusion under it
+  (`ui.base_style`), every box, arrow and tick drawn by `ui.QSS`. It says
+  what it is with `ui.heading` (its frame says Due Crew), a part's heading
+  is `ui.role(label, "head")`, small print `ui.note`; no window sets its
+  own font sizes or margins in a style sheet (a margin there sets a
+  label's words in), and its labels' own style sheets take
+  `ui.tone(...)`, never palette(...). `tools/dialogs.py` fails on a
+  clipped button, a squeezed box, two controls on top of each other or a
+  window shorter than its words: a new window or state gets a render there.
 - Every `duecrew:` command a page emits needs a handler
   (`test_every_board_command_has_a_handler`), and a new one gets a test
   that sends it through `_on_js` as the board does (3.5.0's Settings went

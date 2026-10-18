@@ -16218,17 +16218,26 @@ def test_qt_look_v391():
     window doesn't pass down. tools/dialogs.py renders them all."""
     import glob
     from due_crew import board as B, ui
-    ok = True
-    for theme in ("light", "dark"):
-        for name in B.ACCENTS:
-            t = dict(B.palette(theme, name), **{"bad": "#d32f2f", "bad-ink": "#ffffff"})
-            try:
-                css = ui.QSS.format(**t)
-            except (KeyError, IndexError, ValueError):
-                ok = False
-                continue
-            ok = ok and t["accent"] in css and t["bg"] in css and "{" in css and "{{" not in css
+    ok, drawn = True, set()
+    was = (ui._dark, ui._accent_name)
+    try:
+        for theme in ("light", "dark"):
+            for name in B.ACCENTS:
+                ui._dark, ui._accent_name = (lambda th=theme: th == "dark"), (lambda n=name: n)
+                t = ui.tokens()
+                try:
+                    css = ui.qss(t)
+                except (KeyError, IndexError, ValueError):
+                    ok = False
+                    continue
+                ok = ok and all(t[k] in css for k in ("accent", "bg", "ink", "edge", "ink-2")) and "{{" not in css
+                drawn.update(re.findall(r'url\("([^"]+)"\)', css))
+    finally:
+        ui._dark, ui._accent_name = was
     check("qt look: the stylesheet takes every theme and accent's tokens", ok)
+    check("qt look: its arrows and ticks are drawings in the window's colours, written once beside the add-on",
+          drawn and all(os.path.isfile(f) and open(f).read().startswith("<svg") and "\\" not in f for f in drawn)
+          and len(drawn) == len(set(os.path.basename(f) for f in drawn)), sorted(drawn)[:3])
     check("qt look: the suite's Qt has none of it, and nothing raises; a tone is the board's colour",
           ui.styled(object()) is not None and ui.tone("muted") in (B.LIGHT["muted"], B.DARK["muted"]))
     src = {os.path.basename(p): open(p).read() for p in glob.glob(os.path.join(REPO, "due_crew", "ui", "*_dialog.py"))}
@@ -16241,8 +16250,53 @@ def test_qt_look_v391():
     check("qt look: a question's yes is the accent (the red when it can't be taken back), Cancel focused; no icon",
           'go.setProperty("dc", "bad" if danger else "go")' in init and "box.setDefaultButton(cancel)" in init
           and "QMessageBox.Icon.NoIcon" in init and 'QPushButton[dc="go"]' in ui.QSS and 'QPushButton[dc="bad"]' in ui.QSS)
-    check("qt look: ticks, radio dots and number boxes keep the system's drawing (a styled one loses its frame or arrows)",
-          "QCheckBox, QRadioButton {{ color: {ink}; }}" in ui.QSS and "QSpinBox" not in ui.QSS and "::indicator" not in ui.QSS)
+
+
+def test_qt_look_round_two_v391():
+    """3.9.1, round two (Sam, of the Open a Study Room window on a Mac:
+    "washed out. bad spacing. not engaging"): the Mac's own style drew a
+    dressed box's arrow in a box and its list as a menu with ticks that cut
+    its words off. Every Due Crew window now sits on Fusion (ui.base_style),
+    with the board's look drawing every box, arrow, tick, radio dot and list
+    itself, the same on a Mac, Windows and Linux, under Anki's style or the
+    system's; a window's edges and rows have room; a window says what it is
+    in a title (ui.heading), its frame says Due Crew; small print is one
+    size and readable (role "note"); and a window grows to what its rows and
+    words need (ui._fit: Qt capped one at two thirds of the screen, and
+    Follow a plan's rows ran into each other). tools/dialogs.py renders every
+    window and fails on a clipped button, a squeezed box, two controls on top
+    of each other or a window shorter than its words."""
+    import glob
+    from due_crew import ui
+    init = open(os.path.join(REPO, "due_crew", "ui", "__init__.py")).read()
+    src = {os.path.basename(p): open(p).read() for p in glob.glob(os.path.join(REPO, "due_crew", "ui", "*_dialog.py"))}
+    check("qt look 2: Fusion under every window, a little more room at its edges and between its rows",
+          'QStyleFactory.create("Fusion")' in init and "PM_LayoutLeftMargin: 22" in init
+          and "PM_LayoutVerticalSpacing: 8" in init and "dialog.setStyle(style)" in init)
+    check("qt look 2: the sheet draws a box's arrow, a number box's buttons, ticks and radio dots, and a box's list as a list",
+          all(x in ui.QSS for x in ("QComboBox::down-arrow", "QAbstractSpinBox::up-button", "QAbstractSpinBox::up-arrow",
+                                    "QCheckBox::indicator:checked", "QRadioButton::indicator:checked",
+                                    "QAbstractItemView::indicator", "combobox-popup: 0",
+                                    "QComboBox QAbstractItemView::item", "QTreeView::branch:has-children:closed")))
+    check("qt look 2: one type scale: 13px, 16px titles, 12px small print in a readable ink; no window sets its own",
+          "* {{ font-size: 13px; }}" in ui.QSS and 'QLabel[dc="title"] {{ font-size: 16px' in ui.QSS
+          and 'QLabel[dc="note"] {{ font-size: 12px; color: {ink-2}; }}' in ui.QSS
+          and not [f for f, t in src.items() if re.search(r"font-size: 11(\.5)?px", t)], 
+          [f for f, t in src.items() if re.search(r"font-size: 11(\.5)?px", t)])
+    no_title = [f for f, t in src.items() if t.count("(QDialog)") > len(re.findall(r"\bheading\(self|\btitle\(", t))
+                and f not in ("auth_dialog.py",)]  # the sign-in has the logo on top
+    check("qt look 2: every window says what it is in its title; its frame says Due Crew",
+          not no_title and 'dialog.setWindowTitle("Due Crew")' in init and 'box.setWindowTitle("Due Crew")' in init, no_title)
+    check("qt look 2: a window's title and a heading are plain text (a plan's or a person's name)",
+          "label.setTextFormat(Qt.TextFormat.PlainText)" in init.split("def title(")[1].split("def ")[0]
+          and not [f for f, t in src.items() if re.search(r'QLabel\(f?"<b>', t)])
+    check("qt look 2: a window grows to its rows and its words, never shrinks, never past its screen; tidied before it takes its size",
+          "def _fit(window):" in init and "QEvent.Type.LayoutRequest" in init and "QEvent.Type.Polish" in init
+          and "need_w >= w and need_h >= h" in init and "availableGeometry()" in init)
+    dialogs = open(os.path.join(REPO, "tools", "dialogs.py")).read()
+    check("qt look 2: the renderer fails on what a person would see as broken, and renders on a laptop's screen",
+          "broken = fits(dlg)" in dialogs and '"width": 1440, "height": 900' in dialogs and "def kitchen():" in dialogs
+          and "def questions():" in dialogs)
 
 
 def test_room_sounds_v391():

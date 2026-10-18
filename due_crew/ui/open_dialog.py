@@ -6,7 +6,7 @@ starts a Due Crew deck of the new ones. One undo step. Local: no request."""
 
 from aqt.qt import QCheckBox, QDialog, QDialogButtonBox, QLabel, QPushButton, Qt, QVBoxLayout
 
-from . import attach_alive, tone
+from . import attach_alive, heading, note
 
 
 class OpenDialog(QDialog):
@@ -23,18 +23,12 @@ class OpenDialog(QDialog):
         self.setMinimumWidth(400)
         root = QVBoxLayout(self)
         what = title or "the picked cards"
-        head = QLabel((f"Open {n:,} card{'s' if n != 1 else ''} of {what}" if title else f"Open {n:,} of the picked cards")
-                      if n else f"Nothing in {what} to open")
-        head.setTextFormat(Qt.TextFormat.PlainText)
-        head.setWordWrap(True)
-        head.setStyleSheet("font-weight: 600;")
-        root.addWidget(head)
+        heading(self, root, (f"Open {n:,} card{'s' if n != 1 else ''} of {what}" if title else f"Open {n:,} of the picked cards")
+                if n else f"Nothing in {what} to open")
         if where:
             w = QLabel(where)
             w.setTextFormat(Qt.TextFormat.PlainText)
-            w.setWordWrap(True)
-            w.setStyleSheet(f"color: {tone('muted')}; font-size: 11.5px;")
-            root.addWidget(w)
+            root.addWidget(note(w))
         facts = []
         if already:
             facts.append(f"{already:,} {'is' if already == 1 else 'are'} open already")

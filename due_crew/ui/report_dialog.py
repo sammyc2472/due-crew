@@ -7,7 +7,7 @@ from aqt.qt import (
     QVBoxLayout,
 )
 
-from . import attach_alive
+from . import attach_alive, heading, note
 from ..backend.shapes import REPORT_NOTE_MAX as NOTE_MAX, REPORT_REASONS as REASONS
 
 
@@ -20,6 +20,7 @@ class ReportDialog(QDialog):
         self.setWindowTitle(f"Report {name}")
         self.setMinimumWidth(380)
         lay = QVBoxLayout(self)
+        heading(self, lay)
         self.group = QButtonGroup(self)
         self.choices = []
         for i, (_value, text) in enumerate(REASONS):
@@ -34,9 +35,7 @@ class ReportDialog(QDialog):
         lay.addWidget(self.note_edit)
         hint = QLabel("Sends their name, emoji and last cheer to Due Crew. Reporting also mutes them.")
         hint.setTextFormat(Qt.TextFormat.PlainText)
-        hint.setWordWrap(True)
-        hint.setStyleSheet("font-size: 11px;")
-        lay.addWidget(hint)
+        lay.addWidget(note(hint))
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok
                                    | QDialogButtonBox.StandardButton.Cancel)
         buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Report")

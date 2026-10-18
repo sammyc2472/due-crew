@@ -15,7 +15,7 @@ from aqt.qt import (
     QGridLayout, QLineEdit, QPushButton, QRadioButton, QVBoxLayout, QWidget, Qt,
 )
 
-from . import attach_alive, esc, run_bg, styled, tone, warn
+from . import attach_alive, esc, heading, note, role, run_bg, styled, tone, warn
 from .. import plans as P
 
 SHOWN_UNITS = 5
@@ -49,8 +49,7 @@ class SwapDialog(QDialog):
         self.setWindowTitle("Your tags start differently")
         self.setMinimumWidth(400)
         root = QVBoxLayout(self)
-        head = QLabel("<b>Your tags start differently</b>")
-        root.addWidget(head)
+        heading(self, root)
         text = QLabel(f"The plan uses <code>{esc(theirs)}::</code>. Your copy uses "
                       f"<code>{esc(mine)}::</code>. With that swap, {matched:,} cards match.")
         text.setWordWrap(True)
@@ -79,7 +78,7 @@ class CatchUpDialog(QDialog):
         self.setWindowTitle("Resume")
         self.setMinimumWidth(400)
         root = QVBoxLayout(self)
-        root.addWidget(QLabel(late_label(n_units, n_cards, while_paused=True)))
+        heading(self, root, late_label(n_units, n_cards, while_paused=True))
         self.now = QRadioButton("Open them now")
         self.now.setChecked(True)
         self.next = QRadioButton(f"Start from the next date, {P.fmt_day(nxt['opens'])}" if nxt
@@ -121,6 +120,7 @@ class FollowDialog(QDialog):
         self.setWindowTitle("Follow a plan")
         self.setMinimumWidth(480)
         root = QVBoxLayout(self)
+        heading(self, root)
 
         row = QHBoxLayout()
         row.addWidget(QLabel("Plan code"))
@@ -135,10 +135,12 @@ class FollowDialog(QDialog):
         root.addLayout(row)
         self.status = QLabel("")
         self.status.setWordWrap(True)
+        self.status.setVisible(False)  # 3.9.1: no empty row's gap under the code
         root.addWidget(self.status)
 
-        self.title = QLabel("")
-        self.title.setStyleSheet("font-size: 14px; font-weight: 700;")
+        self.title = role(QLabel(""), "head")
+        self.title.setStyleSheet("font-size: 14px;")
+        self.title.setContentsMargins(0, 6, 0, 0)  # a style sheet's margin sets a label's words in, too
         root.addWidget(self.title)
         drow = QHBoxLayout()
         self.deck_label = QLabel("Run it on")
@@ -148,8 +150,7 @@ class FollowDialog(QDialog):
             self.deck.addItem(name, did)
         self.deck.currentIndexChanged.connect(self._deck_changed)
         drow.addWidget(self.deck, 1)
-        self.best_hint = QLabel("best match of your decks")
-        self.best_hint.setStyleSheet(f"font-size: 11px; color: {tone('muted')};")
+        self.best_hint = role(QLabel("best match of your decks"), "note")
         drow.addWidget(self.best_hint)
         root.addLayout(drow)
         # 3.8.1: no deck here named like the plan's, and its authors say where to get it
@@ -198,13 +199,12 @@ class FollowDialog(QDialog):
         root.addWidget(self.late_begin)
         root.addWidget(self.late_begin_note)
         for n in (self.late_skip_note, self.late_open_note, self.late_begin_note):
-            n.setWordWrap(True)
-            n.setStyleSheet("font-size: 12px; margin-left: 22px;")
+            note(n).setContentsMargins(24, 0, 0, 0)  # under its choice's words
         self.late_weeks.currentIndexChanged.connect(lambda _=0: self._late_notes())
         self._late = None
         # 3.8.0: how its cards open: on its dates, or at my own pace
-        self.how_label = QLabel("How its cards open")
-        self.how_label.setStyleSheet("font-weight: 600; margin-top: 4px;")
+        self.how_label = role(QLabel("How its cards open"), "head")
+        self.how_label.setContentsMargins(0, 6, 0, 0)
         root.addWidget(self.how_label)
         self.how_dates = QRadioButton("On the plan's dates")
         self.how_dates.setChecked(True)
@@ -215,7 +215,7 @@ class FollowDialog(QDialog):
             root.addWidget(b)
         self.how_next = QCheckBox("Open the next one by itself once I've seen most of the last")
         self.how_next.setChecked(True)
-        self.how_next.setStyleSheet("margin-left: 22px;")
+        self.how_next.setStyleSheet("margin-left: 24px;")
         self.how_next.setVisible(False)
         root.addWidget(self.how_next)
         for b in (self.how_dates, self.how_ready, self.how_next):
@@ -232,9 +232,7 @@ class FollowDialog(QDialog):
                               "the plan's authors. Never your numbers. You can leave any time.")
         self.share.setChecked(False)
         root.addWidget(self.share)
-        self.about = QLabel("Each morning, that day's cards open.")
-        self.about.setWordWrap(True)
-        self.about.setStyleSheet("font-size: 12px;")
+        self.about = note(QLabel("Each morning, that day's cards open."))
         root.addWidget(self.about)
 
         self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok
@@ -251,6 +249,10 @@ class FollowDialog(QDialog):
 
     # ---- look up ----
 
+    def _say(self, text):
+        self.status.setText(text)
+        self.status.setVisible(bool(text))
+
     def _plan_parts(self):
         return (self.title, self.deck_label, self.deck, self.best_hint, self.match, self.found,
                 self.late_label, self.late_skip, self.late_skip_note, self.late_open, self.late_weeks,
@@ -258,7 +260,7 @@ class FollowDialog(QDialog):
 
     def _clear(self):
         self.plan = None
-        self.status.setText("")
+        self._say("")
         for w in self._plan_parts():
             w.setVisible(False)
         self.get_deck.setVisible(False)
@@ -268,10 +270,10 @@ class FollowDialog(QDialog):
     def _look_up(self):
         code = P.code_from(self.code_edit.text())
         if len(code) != P.PLAN_CODE_LEN:
-            self.status.setText(f"Plan codes are {P.PLAN_CODE_LEN} letters and numbers.")
+            self._say(f"Plan codes are {P.PLAN_CODE_LEN} letters and numbers.")
             return
         self.look_btn.setEnabled(False)
-        self.status.setText("Looking up…")
+        self._say("Looking up…")
         cl = self.client
         self._code = code
 
@@ -279,7 +281,7 @@ class FollowDialog(QDialog):
             self.look_btn.setEnabled(True)
             plan, status = result if result else (None, 0)
             if plan is None:
-                self.status.setText("No plan with that code." if status == 404
+                self._say("No plan with that code." if status == 404
                                     else "Couldn't look it up. Check your connection.")
                 return
             self._peeked(plan)
@@ -288,7 +290,7 @@ class FollowDialog(QDialog):
 
     def _peeked(self, plan):
         self.plan = plan
-        self.status.setText("You follow this plan. Following again keeps your progress."
+        self._say("You follow this plan. Following again keeps your progress."
                             if plan.get("following") else "")
         self.title.setText(P.plan_title(plan))  # a plain-text label
         self.title.setTextFormat(Qt.TextFormat.PlainText)
@@ -313,7 +315,8 @@ class FollowDialog(QDialog):
         show = missing and url.startswith("https://")
         if show:
             self.get_deck.setText(f"Your Anki has no deck called <b>{esc(deck)}</b>. "
-                                  f'<a href="{html.escape(url, quote=True)}">Where to get it &rsaquo;</a>')
+                                  f'<a href="{html.escape(url, quote=True)}" style="color: {tone("accent")}; '
+                                  'text-decoration: none; font-weight: 600;">Where to get it &rsaquo;</a>')
         self.get_deck.setVisible(show)
 
     def _open_deck_url(self):
@@ -460,14 +463,14 @@ class FollowDialog(QDialog):
         share = self.share.isChecked()
         code = self._code
         self.follow_btn.setEnabled(False)
-        self.status.setText("Following…")
+        self._say("Following…")
         cl = self.client
 
         def done(result, err):
             got, status = result if result else (None, 0)
             if got is None:
                 self.follow_btn.setEnabled(True)
-                self.status.setText("That plan is for a squad you're not in." if status == 404
+                self._say("That plan is for a squad you're not in." if status == 404
                                     else "Couldn't follow. Check your connection.")
                 return
             if share and not got.get("share"):

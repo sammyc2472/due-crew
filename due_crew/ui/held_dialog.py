@@ -6,18 +6,14 @@ request. Plan and date names are the author's: plain text only."""
 
 from aqt.qt import QDialog, QDialogButtonBox, QLabel, QPushButton, Qt, QVBoxLayout
 
-from . import attach_alive, tone
+from . import attach_alive, heading, note
 
 
-def _plain(text, muted=False, bold=False):
+def _plain(text, muted=False):
     w = QLabel(str(text))
     w.setTextFormat(Qt.TextFormat.PlainText)
     w.setWordWrap(True)
-    if muted:
-        w.setStyleSheet(f"color: {tone('muted')}; font-size: 11.5px;")
-    elif bold:
-        w.setStyleSheet("font-weight: 600;")
-    return w
+    return note(w) if muted else w
 
 
 class HeldDialog(QDialog):
@@ -32,7 +28,7 @@ class HeldDialog(QDialog):
         self.setWindowTitle("Held back")
         self.setMinimumWidth(420)
         root = QVBoxLayout(self)
-        root.addWidget(_plain(f"{view.get('name') or 'The plan'} holds back {n:,} card{'s' if n != 1 else ''}", bold=True))
+        heading(self, root, f"{view.get('name') or 'The plan'} holds back {n:,} card{'s' if n != 1 else ''}")
         self.why = _plain(view.get("why") or "")
         root.addWidget(self.why)
         lines = [f"• {x}" for x in view.get("lines") or []]

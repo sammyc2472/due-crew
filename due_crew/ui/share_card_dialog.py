@@ -12,7 +12,8 @@ from aqt.qt import (
     QImage, QLabel, QPainter, QPainterPath, QPen, QPixmap, QPointF, QPushButton, QRadioButton, QRectF, QVBoxLayout, Qt,
 )
 
-from . import attach_alive, _night, tone
+from . import attach_alive, _night, title
+from . import note as ui_note
 from .map_card_dialog import _font, _logo, _text
 from .. import sharecard as S, sev
 
@@ -108,6 +109,9 @@ class ShareCardDialog(QDialog):
         self.preview.setAccessibleName("The card")
         row.addWidget(self.preview)
         side = QVBoxLayout()
+        self.head = title("")  # the card's name; the frame says Due Crew (ui.heading)
+        side.addWidget(self.head)
+        side.addSpacing(4)
         self.pick = None
         if options:
             self.pick = QComboBox()
@@ -154,10 +158,7 @@ class ShareCardDialog(QDialog):
         buttons.addWidget(self.save)
         side.addSpacing(12)
         side.addLayout(buttons)
-        note = QLabel("Made here, from your own Anki. Nothing is posted.")
-        note.setStyleSheet(f"color: {tone('muted')}; font-size: 11px;")
-        note.setWordWrap(True)
-        side.addWidget(note)
+        side.addWidget(ui_note(QLabel("Made here, from your own Anki. Nothing is posted.")))
         side.addStretch()
         row.addLayout(side)
         self.refresh()
@@ -187,7 +188,8 @@ class ShareCardDialog(QDialog):
         """The switches for the card on screen (a person's flips kept), the
         title, the size row; then the picture."""
         c = self.card()
-        self.setWindowTitle(c["title"])
+        self.head.setText(c["title"])
+        self.setWindowTitle("Due Crew")
         while self.boxes.count():
             w = self.boxes.takeAt(0).widget()
             if w is not None:
