@@ -479,10 +479,12 @@ BAR_BALANCE = r"""
     if (window.MutationObserver) {
       var pend = 0;
       new MutationObserver(function (recs) {
-        var chip = document.getElementById('dc-knows');  // the chip's own moves and text swaps aren't news
-        if (chip && recs.every(function (x) {
+        // the chip's own moves and text swaps aren't news; nor (3.9.1) the room's, whose tick balances when its words change
+        var chip = document.getElementById('dc-knows'), room = document.getElementById('dc-room-bottom');
+        if ((chip || room) && recs.every(function (x) {
           var nodes = [].slice.call(x.addedNodes).concat([].slice.call(x.removedNodes));
-          return chip.contains(x.target) || (nodes.length && nodes.every(function (n) { return n === chip; }));
+          return (chip && chip.contains(x.target)) || (room && room.contains(x.target))
+            || (nodes.length && nodes.every(function (n) { return n === chip || n === room; }));
         })) { return; }
         clearTimeout(pend);
         pend = setTimeout(function () { window.dcBarBalance(); }, 30);
@@ -1040,7 +1042,14 @@ _RUNTIME = r"""
   if (KIND !== 'bottom') { document.body.appendChild(root); }
   root.id = 'dc-room-' + KIND;
   if (root.place) { root.place(); }
-  var last = null;
+  var last = null, said = null;
+  // 3.9.1 (the efficiency run): it ticks only as often as it shows: each
+  // second on the break's mm:ss and the question, else at the next minute
+  // its words turn over or its phase ends, ten seconds at most (the ring)
+  function next(p) {
+    if (KIND === 'break' || KIND === 'ask') { return 1000; }
+    return Math.max(50, Math.min(10000, p.left > 0 ? p.left % 60000 + 50 : 10000));
+  }
   function tick() {
     var p = phase(Date.now());
     // 3.8.1: a phase that changes redraws the Decks screen (its lobby asks the question too)
@@ -1048,10 +1057,11 @@ _RUNTIME = r"""
     if (p.state === 'done' && KIND !== 'break' && KIND !== 'ask') { drop(KIND); return; }
     update(p);
     if (KIND === 'gutter' && window.dcRoomFit) { window.dcRoomFit(); }
-    if (KIND === 'bottom' && window.dcBarBalance) { window.dcBarBalance(); }
+    // the bar's buttons move back to its middle only when the room's words changed width
+    if (KIND === 'bottom' && window.dcBarBalance && root.textContent !== said) { said = root.textContent; window.dcBarBalance(); }
+    window['dcRoomTick_' + KIND] = setTimeout(tick, next(p));
   }
   tick();
-  window['dcRoomTick_' + KIND] = setInterval(tick, KIND === 'break' || KIND === 'ask' || FIF ? 1000 : 10000);
 })();
 """
 

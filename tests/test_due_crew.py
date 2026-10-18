@@ -13726,7 +13726,7 @@ const body = new E('body'); body.className = '';
 globalThis.window = globalThis; window.addEventListener = () => {};
 globalThis.document = { body, head: new E('head'), createElement: (t) => new E(t), getElementById: () => null,
   querySelector: () => null, documentElement: { classList: { contains: () => false } } };
-globalThis.setInterval = () => 0; globalThis.pycmd = () => {};
+globalThis.setInterval = () => 0; globalThis.setTimeout = () => 0; globalThis.pycmd = () => {};
 const walk = (e, out) => { out.push(e); e.kids.forEach((k) => walk(k, out)); return out; };
 """
     out = []
@@ -14574,7 +14574,7 @@ def test_wrapped_story_v390():
     check("Pip off: the story without Pip (no Pip's things slide)", "<svg class=\"sv" not in off and off.count('<section class="wr-s') == len(sl_full) - 1)
     js = board.wrapped_js()
     check("the player: arrows and the sides move it, it moves on by itself, never with Reduce motion, once a card",
-          "ArrowRight" in js and "prefers-reduced-motion: reduce" in js and "if (!still) { requestAnimationFrame(tick); }" in js
+          "ArrowRight" in js and "prefers-reduced-motion: reduce" in js and "bars[st.i].animate" in js and "requestAnimationFrame" not in js and "st.run.pause()" in js
           and "data-on" in js)
     import shutil
     import subprocess
@@ -15526,6 +15526,30 @@ def test_efficiency_plans_v391():
         DF.time, _state["labels"], _state["due_reviews"], _state["back_timer"] = saved
         F._last.update(key=None, got=None)
         DF._TREE.update(key=None)
+
+
+def test_efficiency_idle_v391():
+    """3.9.1, the efficiency run, idle: a loop that never ends keeps Anki
+    drawing 60 frames a second (about two-thirds of it on Anki's own
+    thread). The ones nobody sees end: the bats' wings after their flight,
+    Wrapped's frame loop; the room clocks tick only as often as they show."""
+    from due_crew import room_model as rm
+    import re as _re
+    check("idle: the bats' wings flap for the flight and stop (no loop of ours that runs forever on Halloween's line)",
+          "infinite" not in board.HW_CSS and "calc(var(--d) - var(--ago, 0s)) 20 alternate" in board.HW_CSS)
+    js = board.wrapped_js()
+    check("idle: Wrapped's bars fill by one animation a slide, paused when held or hidden, none on the last; no frame loop",
+          "requestAnimationFrame" not in js and "visibilitychange" in js and "st.run.pause()" in js
+          and "st.i < sl.length - 1 && bars[st.i].animate" in js)
+    rt = rm._RUNTIME
+    check("idle: a room's widgets tick as often as they show (the break's mm:ss and the question each second, "
+          "else at the minute's turn or the phase's end, ten seconds at most), and balance the bar only when their words change",
+          "setInterval(tick" not in rt and "Math.min(10000, p.left > 0 ? p.left % 60000 + 50 : 10000)" in rt
+          and "KIND === 'break' || KIND === 'ask') { return 1000; }" in rt and "root.textContent !== said" in rt)
+    check("idle: the bar's watcher leaves the room's own changes to its tick, as the chip's",
+          "room && room.contains(x.target)" in rm.BAR_BALANCE and "n === chip || n === room" in rm.BAR_BALANCE)
+    loops = _re.findall(r"[^{}]*\{[^{}]*\binfinite\b[^{}]*\}", board.HW_CSS + board.FRIDGE_CSS if hasattr(board, "FRIDGE_CSS") else board.HW_CSS)
+    check("idle: nothing new of ours loops forever on Halloween's line", not [x for x in loops if "hw" in x])
 
 
 def test_room_sounds_v391():

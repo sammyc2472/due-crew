@@ -4080,25 +4080,30 @@ def wrapped_js():
         ph.setAttribute('data-on', '1');
         var sl = [].slice.call(ph.querySelectorAll('.wr-s')), bars = [].slice.call(ph.querySelectorAll('.wr-bars b'));
         var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        var st = { i: 0, t: 0, held: false, last: 0 }, PER = 6500;
+        var st = { i: 0, held: false, run: null }, PER = 6500;
+        // 3.9.1 (the efficiency run): each slide's bar fills by one animation
+        // the page runs itself (a frame loop drew all along, the last slide
+        // and a held one too); held or hidden it waits, and the last runs none
+        function go() {
+            if (st.run) { if (st.held || document.hidden) { st.run.pause(); } else { st.run.play(); } }
+        }
         function show(i) {
-            st.i = Math.max(0, Math.min(sl.length - 1, i)); st.t = 0;
+            st.i = Math.max(0, Math.min(sl.length - 1, i));
+            if (st.run) { st.run.cancel(); st.run = null; }
             sl.forEach(function(s, j) { s.classList.toggle('on', j === st.i); });
-            bars.forEach(function(b, j) { b.style.width = j < st.i ? '100%' : (j === st.i && still ? '100%' : '0'); });
+            bars.forEach(function(b, j) { b.style.width = j < st.i || (j === st.i && (still || j === sl.length - 1)) ? '100%' : '0'; });
             ph.classList.toggle('lt', sl[st.i].classList.contains('lt'));
             if (!still) {
                 sl[st.i].querySelectorAll('.wp svg.sv').forEach(function(v) { var c = v.cloneNode(true); v.parentNode.replaceChild(c, v); });
+                if (st.i < sl.length - 1 && bars[st.i].animate) {
+                    var b = bars[st.i];  // drawn full and scaled (the compositor's work, no layout a frame)
+                    b.style.width = '100%'; b.style.transformOrigin = '0 50%';
+                    var run = b.animate([{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], { duration: PER, fill: 'forwards' });
+                    st.run = run;
+                    run.onfinish = function() { if (st.run === run && document.body.contains(ph)) { show(st.i + 1); } };
+                    go();
+                }
             }
-        }
-        function tick(now) {
-            if (!document.body.contains(ph)) { return; }
-            var dt = st.last ? now - st.last : 0; st.last = now;
-            if (!st.held && !document.hidden && st.i < sl.length - 1) {
-                st.t += dt;
-                bars[st.i].style.width = Math.min(100, st.t / PER * 100) + '%';
-                if (st.t >= PER) { show(st.i + 1); }
-            } else if (st.i === sl.length - 1) { bars[st.i].style.width = '100%'; }
-            requestAnimationFrame(tick);
         }
         ph.querySelector('.wr-tap.l').addEventListener('click', function(ev) { ev.preventDefault(); show(st.i - 1); });
         ph.querySelector('.wr-tap.r').addEventListener('click', function(ev) { ev.preventDefault(); show(st.i + 1); });
@@ -4106,11 +4111,11 @@ def wrapped_js():
             if (ev.key === 'ArrowRight' || ev.key === ' ') { show(st.i + 1); ev.preventDefault(); }
             else if (ev.key === 'ArrowLeft') { show(st.i - 1); ev.preventDefault(); }
         });
-        ph.addEventListener('mouseenter', function() { st.held = true; });
-        ph.addEventListener('mouseleave', function() { st.held = false; });
+        ph.addEventListener('mouseenter', function() { st.held = true; go(); });
+        ph.addEventListener('mouseleave', function() { st.held = false; go(); });
+        document.addEventListener('visibilitychange', go);
         show(0);
         try { ph.focus({ preventScroll: true }); } catch (e) {}
-        if (!still) { requestAnimationFrame(tick); }
     })();
     """
 
@@ -4181,7 +4186,9 @@ HW_CSS = """
     @media (prefers-reduced-motion: no-preference) {
       /* three bats across the line, once a day: past the logo's line, never over it (Sam) */
       #due-crew .dc-hw .hwbat { animation: dc-hwbat 4.2s linear calc(var(--d) - var(--ago, 0s)) both; }
-      #due-crew .dc-hw .hwbat .w { transform-box: fill-box; transform-origin: 50% 50%; animation: dc-hwflap .22s ease-in-out infinite alternate; }
+      /* their wings flap for the flight, then stop (3.9.1: they flapped on out of sight, the frames never ending) */
+      #due-crew .dc-hw .hwbat .w { transform-box: fill-box; transform-origin: 50% 50%;
+        animation: dc-hwflap .22s ease-in-out calc(var(--d) - var(--ago, 0s)) 20 alternate; }
       @keyframes dc-hwbat { 0% { opacity: 1; left: -30px; transform: translateY(2px); } 25% { transform: translateY(-2px); }
         50% { transform: translateY(3px); } 75% { transform: translateY(-1px); } 100% { opacity: 1; left: calc(100% + 10px); transform: translateY(1px); } }
       @keyframes dc-hwflap { from { transform: scaleY(1); } to { transform: scaleY(.45); } }

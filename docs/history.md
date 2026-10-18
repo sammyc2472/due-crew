@@ -2331,6 +2331,25 @@ every release that changes how something works.
   and the config is read from disk once and again only after a save
   (`app.cfg`; Anki read config.json and meta.json at every call, a few
   times a card). A usual card now sends nothing.
+- 3.9.1, the efficiency run, idle. Measured in Anki's own engine
+  (QtWebEngine 6.11): a CSS loop that never ends keeps the page drawing 60
+  frames a second, about two-thirds of it on Anki's own thread, even a
+  blink that changes nothing most of the time. The ones nobody sees are
+  gone: the Halloween bats' wings flapped on past the line's end after
+  their 4.2 s flight (20 flaps now, the flight's length; `HW_CSS`);
+  Wrapped's player ran a frame loop all along, held, hidden and on its
+  last slide too (now one animation a slide, scaling its bar, paused when
+  held or hidden, none on the last; `wrapped_js`); a fifteen's widgets
+  ticked every second though they show minutes (now at the minute's turn
+  or the phase's end, ten seconds at most; the break's mm:ss and the
+  question still each second), and the bottom bar's balance ran at every
+  tick and again from its watcher (now only when the room's words change;
+  the watcher leaves the room's own changes to it, as the chip's). Room
+  sounds sleep at volume 0 (a running context costs, silent or not) and,
+  stopped, close the context and let go of what it held (a minute of a
+  recording is about 23 MB as samples). Pips at rest, the studying-now dot
+  and brown noise's wander are Sam's to call (they'd look or sound
+  different): the "Pip at rest" options page.
 - 3.9.1, the efficiency run, plans and the deck tree (Sam: "please do an
   efficiency run"). Measured on Anki's own engine, a big collection (35,000
   notes, 1.1 million answers) following a 30-date plan: a refresh's plan
