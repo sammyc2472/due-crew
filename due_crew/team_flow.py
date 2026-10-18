@@ -545,7 +545,14 @@ def you_view(c):
         T.map_level(view["map"], at, view.get("_map_know") or {})  # what's on screen worked out
     # 3.9.1: two buttons, for the Hard habit line: on, or just turned on from it (its Undo)
     two = ("tried" if _state.get("two_tried") else "on") if c.get("two_buttons") else ""
-    return {"decks": decks, "did": d["did"], "exam": exam, "view": dict(view, map_at=at, two=two)}
+    out = {"decks": decks, "did": d["did"], "exam": exam, "view": dict(view, map_at=at, two=two)}
+    from . import leech_flow
+    if leech_flow.is_open(d["did"]) and mw.col:
+        # 3.9.2: the leeches view; "on your exam" when the exam's scope is narrower than the deck
+        since = (view.get("aim") or {}).get("since") if (view.get("aim") or {}).get("kind") == "exam" else ""
+        ms = _since_ms(since, mw.col.sched.day_cutoff, _plans_flow()._today()) if since else None
+        out["view"]["leech"] = leech_flow.current(mw.col, d["did"], _deck_sql(mw.col, d["did"]), ms)
+    return out
 
 
 def plan_lines(cards):
@@ -568,7 +575,8 @@ def plan_lines(cards):
 def insights(did, pid=None, exam=""):
     """A deck's Insights, worked out at most every INSIGHTS_FRESH seconds
     (again when the plan or the exam date changes). Main thread."""
-    key = f"{pid or ''}|{exam}"
+    c = cfg()
+    key = f"{pid or ''}|{exam}|{c.get('exam_last') or ''}|{c.get('exam_since') or ''}"  # 3.9.2: the scope too
     have = (_state.get("insights") or {}).get(did)
     if have and have.get("key") == key and time.time() - have["at"] < INSIGHTS_FRESH:
         return have["view"]
@@ -647,6 +655,17 @@ def _work_out(did, pid=None, exam=""):
             got |= set(ms.get(uid) or ())
         aimed = _in(got) if got else ""
     out["aim"] = {"day": day, "name": name, "in": k, "scoped": bool(prep), "kind": "exam" if eid == MY_EXAM else ""}
+    if eid == MY_EXAM:
+        # 3.9.2 (Sam's pick C1-A): my exam covers the cards I started since my last exam (in the
+        # last 10 weeks), or since a day I picked; else the whole deck. Said in the box, with Change
+        c = cfg()
+        first_day, why = T.scope(exam, c.get("exam_last"), c.get("exam_since"), today)
+        out["aim"].update(since=first_day or "", since_why=why, since_pick=str(c.get("exam_since") or ""))
+        if first_day:
+            got = col.db.list(f"SELECT cid FROM revlog WHERE cid IN ({deck}) GROUP BY cid HAVING min(id) >= ?",
+                              _since_ms(first_day, cutoff, today))
+            aimed = _in(got)
+            out["aim"]["since_n"] = len(got)
     if _fsrs(col) and aimed and sday:
         last = dict(col.db.all(f"SELECT cid, max(id) FROM revlog WHERE cid IN ({aimed}) GROUP BY cid"))
         mem_of = {}
@@ -724,21 +743,22 @@ def _work_out(did, pid=None, exam=""):
         except Exception:
             traceback.print_exc()
 
-    # the deck's leeches Anki suspended (from the plan card, 3.8.0)
-    out["leeches"] = len(_leeches(col, deck))
+    # the deck's leeches Anki suspended (from the plan card, 3.8.0); 3.9.2: and the ones a miss from it
+    from . import leech_flow
+    out["leeches"], out["near"] = leech_flow.counts(col, deck)
     return out
+
+
+def _since_ms(day, cutoff, today):
+    """A revlog id: the start of that Anki day."""
+    back = (datetime.date.fromisoformat(str(today)) - datetime.date.fromisoformat(str(day))).days
+    return (int(cutoff) - (back + 1) * 86400) * 1000
 
 
 def _deck_sql(col, did):
     """The deck's cards and its subdecks', as SQL to put in IN (...)."""
     dids = _in(col.decks.deck_and_child_ids(did))
     return f"SELECT id FROM cards WHERE did IN ({dids}) OR odid IN ({dids})"
-
-
-def _leeches(col, deck):
-    """The suspended cards tagged leech among `deck` (ids, or _deck_sql, for SQL)."""
-    return col.db.list(f"SELECT c.id FROM cards c JOIN notes n ON n.id = c.nid WHERE c.id IN ({deck}) "
-                       f"AND c.queue = -1 AND (' ' || lower(n.tags) || ' ') LIKE '% leech %'")
 
 
 def _deck_rows(col, did, reviewed, stuck, forgot):
@@ -866,6 +886,17 @@ def _map(col, did, deck, cutoff):
         ways.append({"key": DECKS_WAY, "name": "Subdecks", "score": dways[0]["score"], "on": by_decks})
         ways.sort(key=lambda w: -w["score"])
     shown = dtiles if by_decks else tiles
+    # 3.9.2 (Sam's pick C2-A): by when I started them, a week a tile, named by what each week was;
+    # worked out only when picked (its first answers are one more read of the deck's log)
+    start = []
+    if pick == T.START_WAY:
+        first = {int(c): (cutoff - 1 - int(t) // 1000) // 86400 for c, t in col.db.all(
+            f"SELECT cid, min(id) FROM revlog WHERE ease > 0 AND cid IN ({deck}) GROUP BY cid")}
+        start = T.started_tiles(first, tags_of, know, active, _plans_flow()._today())
+        if len(start) >= 2:
+            ways = [dict(w, on=False) for w in ways]
+            shown = start
+    ways.append({"key": T.START_WAY, "name": "When you started them", "score": 0.0, "on": len(start) >= 2})
     plan_ways = _plan_ways(col, did, active, know) if active else {}
     if plan_ways:  # 3.8.1: a plan's own tags, only when picked, after the deck's own ways
         chosen = plan_ways.get(pick) if pick else None
@@ -937,6 +968,7 @@ def _find_cids(col, did, find):
     children) or its subdecks: what a topic's name opens in Browse."""
     deck = _deck_sql(col, did)
     out = set()
+    out |= {int(c) for c in (find or {}).get("cids") or ()}  # 3.9.2: a week I started them, its own cards
     want = [str(t).lower() for t in (find or {}).get("tags") or [] if str(t)]
     if want:
         # matched here, not in SQL: SQLite's lower() and LIKE fold ASCII only ("Анатомия", "Ökologie")
@@ -1033,14 +1065,6 @@ def browse(did, key):
         r = rows[int(key)] if int(key) < len(rows) else None
         cids = (_find_cids(mw.col, did, r.get("find")) if r and r.get("find") else []) or cids
     _plans_flow()._browse(cids, empty="Nothing to show.")
-
-
-def browse_leeches(did):
-    """The deck's suspended leeches in Anki's browser."""
-    col = mw.col
-    if not col or not col.decks.get(did, default=False):
-        return
-    _plans_flow()._browse(_leeches(col, _deck_sql(col, did)), empty="No suspended leeches here.")
 
 
 def fsrs(did, open_it=True):
@@ -1182,7 +1206,11 @@ def on_message(cmd, parts):
         elif cmd == "instwono":
             try_two(False)
         elif cmd == "insleeches":
-            browse_leeches(did)
+            from . import leech_flow
+            leech_flow.open_view(did)  # 3.9.2: the leeches view in Insights' place (Browse is on it)
+        elif cmd == "insleech":
+            from . import leech_flow
+            return leech_flow.on_message(did, x, parts[4] if len(parts) > 4 else "")
         elif cmd == "insaheadoff" and x in ("now", "week"):
             from . import ahead_flow
             ahead_flow.stop_new(did, x)

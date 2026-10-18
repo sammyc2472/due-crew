@@ -681,7 +681,9 @@ def _css(cfg):
       color: var(--dc-ink); overflow: hidden; }}
     #due-crew .tmap .tm span {{ overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2;
       -webkit-box-orient: vertical; overflow-wrap: anywhere; }}
-    #due-crew .tmap .tm b {{ font-size: 12px; font-variant-numeric: tabular-nums; }}
+    #due-crew .tmap .tm b {{ font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }}
+    #due-crew .tmap .tm b small {{ font-weight: 500; font-size: 10.5px; opacity: .85; }}
+    #due-crew .sw.bar {{ width: 12px; height: 3px; background: var(--dc-muted); opacity: .6; }}
     #due-crew .tmap .tm {{ position: relative; }}
     #due-crew .tmap .tm .tmb {{ position: absolute; left: 0; bottom: 0; height: 3px; background: currentColor; opacity: .45; }}
     #due-crew .tm.sn, #due-crew .sw.sn {{ background: var(--dc-well); color: var(--dc-muted); }}
@@ -944,6 +946,9 @@ def _css(cfg):
     #due-crew .ihero {{ background: var(--dc-you-bg); border-radius: 10px; padding: 11px 13px; display: grid; gap: 4px; justify-items: start; }}
     #due-crew .ihero .k {{ font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--dc-accent); }}
     #due-crew .ihero .t {{ font-size: 14px; font-weight: 650; color: var(--dc-ink); }}
+    #due-crew .ihero .isc, #due-crew .iline .isc {{ font-size: 11.5px; color: var(--dc-muted); }}
+    #due-crew .iline .isc {{ display: inline; }}
+    #due-crew .isc a.q {{ margin-left: 2px; }}
     #due-crew .dc-ins a.bt {{ margin-top: 4px; background: var(--dc-accent); color: var(--dc-accent-ink); border-radius: 7px; padding: 5px 13px; font-size: 12px; }}
     #due-crew .isec {{ display: grid; gap: 2px; border-top: 1px solid var(--dc-line); padding-top: 10px; }}
     #due-crew .ik {{ display: flex; flex-wrap: wrap; gap: 4px 0; align-items: baseline; font-size: 10.5px; font-weight: 700;
@@ -1002,6 +1007,24 @@ def _css(cfg):
     #due-crew .xact {{ display: flex; align-items: center; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap;
       font-size: 11.5px; color: var(--dc-muted); margin-top: 6px; text-align: left; }}
     #due-crew .dc-ins .xact a.bt {{ margin-top: 0; }}
+    /* 3.9.2, Leeches: one button a card, the rest behind its ⋯ */
+    #due-crew .sl-sum {{ display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px;
+      font-size: 12.5px; color: var(--dc-ink); text-align: left; }}
+    #due-crew .sl-sum b {{ font-variant-numeric: tabular-nums; }}
+    #due-crew .sl-hd {{ display: inline-flex; gap: 12px; align-items: center; }}
+    #due-crew .sl-row {{ display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 7px 0;
+      border-bottom: 1px solid var(--dc-line); }}
+    #due-crew .sl-row:last-child {{ border-bottom: 0; }}
+    #due-crew .sl-q {{ display: grid; min-width: 0; gap: 1px; text-align: left; }}
+    #due-crew .sl-q b {{ font-weight: 500; color: var(--dc-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+    #due-crew .sl-q span {{ font-size: 10.5px; color: var(--dc-muted); }}
+    #due-crew .sl-q .ex {{ color: var(--dc-ink); font-weight: 600; }}
+    #due-crew .sl-act {{ display: flex; align-items: center; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }}
+    #due-crew .dc-ins a.sl-bt {{ background: var(--dc-accent); color: var(--dc-accent-ink); border-radius: 7px; padding: 3px 10px; font-size: 11.5px; }}
+    #due-crew .dc-ins a.sl-bt.tip {{ background: transparent; color: var(--dc-accent); box-shadow: inset 0 0 0 1.5px var(--dc-accent); }}
+    #due-crew .sl-more {{ font-size: 11px; display: inline-flex; gap: 8px; align-items: center; }}
+    #due-crew .sl-plus {{ font-size: 11px; color: var(--dc-muted); text-align: left; padding: 6px 0 0; }}
+    @media (max-width: 560px) {{ #due-crew .sl-row {{ grid-template-columns: minmax(0, 1fr); }} #due-crew .sl-act {{ justify-content: flex-start; }} }}
     #due-crew .iline {{ border-top: 1px solid var(--dc-line); padding-top: 10px; color: var(--dc-ink); }}
     @media (max-width: 560px) {{ #due-crew .irow {{ grid-template-columns: minmax(0, 1fr) auto auto; row-gap: 4px; }}
       #due-crew .irow .ib {{ grid-column: 1 / -1; grid-row: 2; }} }}
@@ -2266,6 +2289,111 @@ def _ins_ahead(did, a, deck_name=""):
             + f'{acts}<div class="tmt">{said}.</div></div>')
 
 
+def _ins_leech_row(did, c):
+    """One card: its front (mine, from my copy), what it says (its topic,
+    misses, when, slow, on my exam), one button and the rest behind ⋯."""
+    e = _html.escape
+    cid = int(c["cid"])
+    bits = [e(str(c["topic"]))] if c.get("topic") else []
+    bits.append(f'missed {int(c["lapses"])} times')
+    if c.get("susp"):
+        if c.get("at"):
+            bits.append("since " + e(_short_day(_dt.datetime.fromtimestamp(int(c["at"]) / 1000).date().isoformat())))
+        if c.get("exam"):
+            bits.append('<b class="ex">on your exam</b>')
+    else:
+        d = int(c.get("due") or 0)
+        bits.append("due today" if d <= 0 else "back tomorrow" if d == 1 else f"back in {d} days")
+    if int(c.get("secs") or 0) >= 30:
+        bits.append(f'slow: {int(c["secs"])} s a try')
+
+    def act(a, label, cls="", title=""):
+        tip_ = f' title="{title}"' if title else ""
+        return f'<a class="{cls}" href="#"{tip_} onclick="{_pycmd(f"insleech:{did}:{a}:{cid}")}">{label}</a>'
+    tip, knows = c.get("tip") or [], c.get("knows") or []
+    back = act("back", "Bring back", "sl-bt", "Due again, schedule kept")
+    if tip:
+        main = act("tip", f'{e(tip[0]["name"])}&rsquo;s tip', "sl-bt tip")
+    elif knows:
+        main = act("ask", f"Ask {e(knows[0])}", "sl-bt tip",
+                   f'{e(", ".join(knows))} {"has" if len(knows) == 1 else "have"} it down')
+    elif c.get("susp"):
+        main = back
+    else:
+        main = ""
+    more = [act("fresh", "Learn it fresh", "q", "A new card again (Anki&rsquo;s Reset)"), act("edit", "Edit", "q")]
+    if c.get("susp"):
+        more.append(act("out", "Leave it out", "q", "Stays suspended, out of this list"))
+        if main != back:
+            more.insert(0, act("back", "Bring back", "q", "Due again, schedule kept"))
+    toggle = "var m=this.nextElementSibling;m.hidden=!m.hidden;this.setAttribute('aria-expanded',!m.hidden);return false;"
+    fr = e(str(c.get("front") or ""))
+    return (f'<div class="sl-row"><span class="sl-q"><b title="{fr}">{fr or "&nbsp;"}</b>'
+            f'<span>{" &middot; ".join(bits)}</span></span>'
+            f'<span class="sl-act">{main}<span class="sl-more"><a class="q" href="#" aria-expanded="false" aria-label="More" '
+            f'title="More" onclick="{toggle}">&middot;&middot;&middot;</a><span class="sl-more" hidden>{" ".join(more)}</span></span></span></div>')
+
+
+LEECH_SHOW = 12  # cards a group lists; the rest are in Browse
+
+
+def _ins_leeches(did, L, deck_name=""):
+    """3.9.2 (Sam's picks: leeches, one button per card, sorted by danger):
+    in Insights' place, Insights › Leeches with the way back; the counts,
+    Bring all back and Browse; the cards Anki stopped showing, then the
+    ones a miss from it. L: leech_flow.view."""
+    e = _html.escape
+    gone, near = L.get("gone") or [], L.get("near") or []
+    ng, nn = int(L.get("n_gone") or 0), int(L.get("n_near") or 0)
+    trail = (f'<div class="tmt"><a href="#" onclick="{_pycmd(f"insleech:{did}:shut:0")}">Insights</a> &rsaquo; '
+             f'<b>Leeches</b>{" &middot; " + e(str(deck_name)) if deck_name else ""}</div>')
+    if not gone and not near:
+        return f'<div class="dc-ins">{trail}<div class="tq0">No leeches here, and none a miss away.</div></div>'
+    on_exam = sum(1 for c in gone if c.get("exam"))
+    summ = " &middot; ".join(x for x in (
+        f"<b>{ng:,}</b> Anki stopped showing you" if ng else "",
+        f"<b>{nn:,}</b> one miss away" if nn else "",
+        f"{on_exam:,} on your exam" if on_exam else "") if x)
+    heads = ""
+    if ng:
+        heads += (f'<a class="sl-bt" href="#" title="Due again, schedule kept" '
+                  f'onclick="{_pycmd(f"insleech:{did}:back:all")}">Bring all {ng:,} back</a>')
+    heads += f'<a href="#" onclick="{_pycmd(f"insleech:{did}:browse:0")}">Browse</a>'
+    out = f'{trail}<div class="sl-sum"><span>{summ}</span><span class="sl-hd">{heads}</span></div>'
+    for rows, n, head, sub in ((gone, ng, "Anki stopped showing these", f"{ng:,}"),
+                               (near, nn, "One miss away", f"{nn:,}, still in your reviews")):
+        if rows:
+            out += (f'<div class="isec"><div class="ik">{head}<span>&nbsp;&middot; {sub}</span></div>'
+                    + "".join(_ins_leech_row(did, c) for c in rows[:LEECH_SHOW])
+                    + (f'<div class="sl-plus">{n - LEECH_SHOW:,} more in Browse</div>' if n > LEECH_SHOW else "") + "</div>")
+    out += ('<div class="tmt">Bring back: due again, schedule kept. Learn it fresh: a new card again. '
+            'Edit &rsaquo; Undo takes either back.</div>')
+    return f'<div class="dc-ins">{out}</div>'
+
+
+def _ins_scope(aim):
+    """3.9.2 (Sam's pick C1-A): what my exam covers, said once: since my
+    last exam (the default, when it was in the last 10 weeks), since a day
+    I picked, or the whole deck; Change picks a day (the date picker),
+    and the other way back is a link."""
+    since, why = str(aim.get("since") or ""), aim.get("since_why") or ""
+    if since:
+        said = (f'Since {_ins_dname(since, long=True)}'
+                + (", the day after your last exam" if why == "last" else "")
+                + (f' &middot; {int(aim["since_n"]):,} cards' if aim.get("since_n") is not None else ""))
+        other = (f'<a class="q" href="#" onclick="{_pycmd("setscope:all")}">Whole deck</a>' if why == "last"
+                 else f'<a class="q" href="#" onclick="{_pycmd("setscope:auto")}">As it was</a>')
+    else:
+        said = "Whole deck"
+        other = (f'<a class="q" href="#" onclick="{_pycmd("setscope:auto")}">Since your last exam</a>'
+                 if aim.get("since_pick") == "all" else "")
+    pick = (f'<span class="iexam"><a class="q" href="#" onclick="var i=this.nextElementSibling;try{{i.showPicker();}}'
+            f'catch(x){{i.classList.remove(\'ixd\');i.focus();}}return false;">Change</a>'
+            f'<input class="ixd" type="date" value="{_html.escape(since)}" aria-label="Count the cards started since" '
+            f'onchange="if(this.value)pycmd(\'duecrew:setscope:\'+this.value+\'|\'+window.dcBK);"></span>')
+    return f'<div class="isc">{said} &middot; {pick}{(" " + other) if other else ""}</div>'
+
+
 def _insights_html(did, v):
     """3.7.9 (mock "Insights"): mine alone, worked out in my Anki. The
     header's right, the cards Anki won't show me before the next exam (a
@@ -2275,6 +2403,8 @@ def _insights_html(did, v):
     deck's, plan or not (did, its id, in each command)."""
     e = _html.escape
     v = v if isinstance(v, dict) else {}
+    if isinstance(v.get("leech"), dict):
+        return _ins_leeches(did, v["leech"], v.get("deck_name"))  # 3.9.2: the leeches view, in Insights' place
     out = ""
     r = v.get("right") or {}
     now, before = r.get("now") or [0, 0], r.get("before") or [0, 0]
@@ -2303,17 +2433,22 @@ def _insights_html(did, v):
                 f'<div class="t" title="Started cards of {whose} that Anki won&rsquo;t show you before then, under your {int(v.get("target") or 90)}% by then (FSRS)">'
                 f'<a class="tp" href="#" title="Browse them" onclick="{_pycmd(f"insbrowse:{did}:h")}">'
                 f'{len(hero):,} card{"s" if len(hero) != 1 else ""}</a> Anki won&rsquo;t show you before {when}</div>'
+                f'{_ins_scope(aim) if mine else ""}'
                 f'<a class="bt" href="#" onclick="{_pycmd(f"insstudy:{did}:h")}">Study {len(hero):,} early</a></div>')
+    elif aim.get("kind") == "exam":
+        # 3.9.2: my exam with nothing at risk still says what it covers, and keeps its Change
+        out += f'<div class="iline">Your exam, {_ins_dname(aim.get("day"), long=True)}: nothing at risk {_ins_scope(aim)}</div>'
     if int(v.get("behind") or 0) and v.get("pid"):
         out += (f'<div class="iline">{int(v["behind"]):,} new cards behind &middot; '
                 f'<a href="#" onclick="{_pycmd("plancatch:" + str(v["pid"]))}">Catch up&hellip;</a></div>')
     rows = v.get("rows") or []
     if rows:
+        # 3.9.2 (the students: "not right yet" and "forgot" read alike): Anki's own Stats' words
         out += ('<div class="isec"><div class="ik">Not sticking yet<span>&nbsp;&middot; last 2 weeks</span>'
-                '<span class="ikey"><i class="sw st"></i>not right yet <i class="sw fg"></i>forgot</span></div>')
+                '<span class="ikey"><i class="sw st"></i>never passed <i class="sw fg"></i>lapsed</span></div>')
         for i, x in enumerate(rows):
             of, st, fg = max(1, int(x["of"])), int(x["stuck"]), int(x["forgot"])
-            tip = f'{x["name"]} · {of} cards reviewed in 2 weeks: {st} not right yet, {fg} forgotten after being right'
+            tip = f'{x["name"]} · {of} cards reviewed in 2 weeks: {st} never passed a review yet, {fg} lapsed after passing'
             out += (f'<div class="irow" title="{e(tip)}"><span class="n"><b><a class="tp" href="#" title="Browse them" '
                     f'onclick="{_pycmd(f"insbrowse:{did}:{i}")}">{e(str(x["name"]))}</a></b>'
                     f'<span>{e(str(x.get("src") or ""))}</span></span>'
@@ -2344,11 +2479,12 @@ def _insights_html(did, v):
                 f'Anki counts Hard as remembered. '
                 f'<a href="#" onclick="{_pycmd(f"instwo:{did}")}">Try two buttons</a> '
                 f'<a class="q" href="#" onclick="{_pycmd(f"inshardno:{did}")}">Not now</a></div>')
-    lee = int(v.get("leeches") or 0)
-    if lee:
-        # 3.8.0: from the plan card; a leech is the deck's
-        out += (f'<div class="iline">{lee:,} suspended leech{"es" if lee != 1 else ""} &middot; '
-                f'<a href="#" onclick="{_pycmd(f"insleeches:{did}")}">See them</a></div>')
+    lee, near = int(v.get("leeches") or 0), int(v.get("near") or 0)
+    if lee or near:
+        # 3.8.0: from the plan card, a leech is the deck's; 3.9.2: and the ones a miss away, a view of their own
+        said = " &middot; ".join(x for x in (f"<b>{lee:,}</b> leech{'es' if lee != 1 else ''} Anki stopped showing you" if lee else "",
+                                              f"<b>{near:,}</b> one miss away" if near else "") if x)
+        out += f'<div class="iline">{said} &middot; <a href="#" onclick="{_pycmd(f"insleeches:{did}")}">See them</a></div>'
     if not out:
         return '<div class="tq0">Insights fill in after a week of reviews.</div>'
     return f'<div class="dc-ins">{out}</div>'
@@ -2382,7 +2518,7 @@ def _ins_map(did, tiles, by, at=(), ways=()):
         out += (f'<a class="tm {"sn" if k is None else f"s{map_shade(int(k))}"}" href="#" '
                 f'style="flex:{n} 1 {70 + int(150 * n / big)}px" title="{e(tip)}" '
                 f'onclick="{_pycmd(f"insmap:{did}:{i}")}"><span>{e(str(t["name"]))}{more}</span>'
-                f'<b>{"new" if k is None else f"{int(k)}%"}</b>{bar}</a>')
+                f'<b>{"new" if k is None else f"{int(k)}%"}<small> &middot; {n:,}</small></b>{bar}</a>')
     path = ""
     if trail:
         steps = [f'<a href="#" onclick="{_pycmd(f"insmapup:{did}:0")}">All</a>']
@@ -2394,7 +2530,10 @@ def _ins_map(did, tiles, by, at=(), ways=()):
         path = (f'<div class="tmt">{" &rsaquo; ".join(steps)} &middot; {int(last["n"]):,} cards'
                 f'{"" if lk is None else f", {int(lk)}%"} '
                 f'&middot; <a href="#" onclick="{_pycmd(f"insmapall:{did}")}">Browse all</a></div>')
-    key = '<i class="sw s0"></i>under 70% <i class="sw s3"></i>90%+' + (' <i class="sw sn"></i>new' if fresh else "")
+    # 3.9.2 (the students: what's the %, what's the bar?): said in the key; a tile's cards beside its %
+    pct = "% you&rsquo;d recall now" if by == "fsrs" else "% right last time"
+    key = (f'{pct}: <i class="sw s0"></i>under 70 <i class="sw s3"></i>90+' + (' <i class="sw sn"></i>new' if fresh else "")
+           + ' &middot; <i class="sw bar"></i>started')
     ways = [w for w in ways or () if isinstance(w, dict)]
     if len(ways) > 1:  # 3.8.0: another way to split it, this deck's, on this computer
         opts = "".join(f'<option value="{i}"{" selected" if w.get("on") else ""}>{e(str(w.get("name") or "?"))}</option>'

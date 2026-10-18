@@ -71,6 +71,34 @@ def aim(events, today):
     return S.iso(t + datetime.timedelta(days=7)), "", 7, ""
 
 
+SCOPE_WEEKS = 10  # 3.9.2: an exam's scope starts after the last exam, when it was this recent
+
+
+def scope(exam, last, since, today):
+    """3.9.2 (Sam's pick C1-A): (first day, why) of what my exam covers:
+    the cards I started from that day on. why "set" (a day I picked),
+    "last" (the day after my last exam, in the last SCOPE_WEEKS), or ""
+    with no day: the whole deck (my pick "all", or no exam that recent).
+    last: the exam kept once passed; my exam date counts too once it has."""
+    if since == "all":
+        return None, ""
+    try:
+        if since:
+            return S.iso(S.d(since)), "set"
+    except ValueError:
+        pass
+    passed = [str(d) for d in (last, exam) if d and str(d) < str(today)]
+    if not passed:
+        return None, ""
+    try:
+        d = S.d(max(passed))
+    except ValueError:
+        return None, ""
+    if (S.d(today) - d).days > SCOPE_WEEKS * 7:
+        return None, ""
+    return S.iso(d + datetime.timedelta(days=1)), "last"
+
+
 def prep_units(units, eid):
     """The ids of the dates that prep for the event (a date's `for`); the
     hero counts only their cards when there are any."""
@@ -324,6 +352,11 @@ def expand(t, know):
     """A tile's smaller ones (two of real size or more), worked out once:
     t["kids"], [] when it doesn't split. Done for the level on screen, so
     its › marks are exact; deeper when a tile opens (map_level)."""
+    if "kids" not in t and "_batch" in t:
+        # 3.9.2: a batch I started together opens into its topics, by its tags
+        kids = subjects_by(t["_tags"], know, t["_batch"])[0] if len(t["_batch"]) >= 2 * MAP_SUB_FIT else []
+        t["kids"] = kids if len(kids) >= 2 else []
+        return t["kids"]
     if "kids" in t or "_per" not in t:
         return t.get("kids") or []
     t["kids"] = []
@@ -374,6 +407,93 @@ def subjects(paths_of, know, active=None, decks=False):
 
 
 TAGS_WAY = "~tags"  # the map by tags with no resource mark, among its ways
+START_WAY = "~start"  # 3.9.2: the map by when I started the cards, among its ways
+START_WEEKS = 8       # weeks a tile each; before them, one tile
+
+
+def _range(a, b):
+    """"14–20 Sep", "28 Sep–4 Oct": a week's days, as dates say them."""
+    return f"{a.day}–{b.day} {b:%b}" if a.month == b.month else f"{a.day} {a:%b}–{b.day} {b:%b}"
+
+
+def batch_name(cids, tags_of, wide):
+    """What a batch of cards I started together was: the deepest tag most
+    of them share (a third at least) that doesn't cover nearly every card
+    I've started (wide: {tag prefix: cards with it}, of all of them); ""
+    when nothing says. A tag's last part, readable."""
+    count, spell = {}, {}
+    for c in cids:
+        seen = set()
+        for t in tags_of.get(c) or ():
+            if str(t).lower() in ANKI_TAGS or str(t).lower().startswith("duecrew::"):
+                continue
+            segs = str(t).split(P._SEP)
+            for i in range(1, len(segs) + 1):
+                k = P._SEP.join(segs[:i]).lower()
+                seen.add(k)
+                spell.setdefault(k, segs[:i])
+        for k in seen:
+            count[k] = count.get(k, 0) + 1
+    n, total = max(1, len(cids)), max(1, wide.get("", 0))
+    best = None
+    for k, m in count.items():
+        if m / n < 0.34 or wide.get(k, 0) / total >= 0.9:
+            continue
+        rank = (k.count(P._SEP), m)
+        if best is None or rank > best[0]:
+            best = (rank, k)
+    if best is None:
+        return ""
+    segs = [x for x in spell[best[1]] if not x.startswith(("#", "^", "$", "!"))] or spell[best[1]][-1:]
+    # two levels read better than one ("Cardio · Pharm", not "Pharm") under a root and a resource
+    words = [P._word(x) for x in (segs[-2:] if len(spell[best[1]]) >= 3 and len(segs) >= 2 else segs[-1:])]
+    return " · ".join(w for w in words if w)[:NAME_MAX - 18]
+
+
+def started_tiles(first_of, tags_of, know, active, today):
+    """3.9.2 (Sam's pick C2-A, "getting there in reverse"): the map by
+    when I started the cards in play, a week a tile (the last START_WEEKS
+    with cards; before them, one tile), each named by its dates and what
+    it was (batch_name), shaded by what I know now; the ones in play not
+    started yet, a tile of their own. first_of: {cid: days ago it
+    started}. A tile opens into its topics (expand); Browse, its cards."""
+    t0 = S.d(today)
+    monday = t0 - datetime.timedelta(days=t0.weekday())
+    groups, before = {}, []
+    for c, ago in first_of.items():
+        if c not in active:
+            continue
+        w = 0 if ago <= t0.weekday() else 1 + (ago - t0.weekday() - 1) // 7
+        (groups.setdefault(w, []) if w < START_WEEKS else before).append(c)
+    wide = {"": len(first_of)}
+    for c in first_of:
+        seen = set()
+        for t in tags_of.get(c) or ():
+            segs = str(t).split(P._SEP)
+            for i in range(1, len(segs) + 1):
+                seen.add(P._SEP.join(segs[:i]).lower())
+        for k in seen:
+            wide[k] = wide.get(k, 0) + 1
+    out = []
+
+    def tile(key, when, cids):
+        started = [know[c] for c in cids if c in know]
+        what = batch_name(cids, tags_of, wide)
+        return {"key": key, "name": (f"{when} · {what}" if what else when)[:NAME_MAX], "n": len(cids),
+                "started": len(started), "know": int(round(100 * sum(started) / len(started))) if started else None,
+                "find": {"cids": sorted(cids)}, "_batch": sorted(cids), "_tags": {c: tags_of.get(c) or [] for c in cids}}
+    for w in sorted(groups):
+        a = monday - datetime.timedelta(days=7 * w)
+        when = "This week" if w == 0 else "Last week" if w == 1 else _range(a, a + datetime.timedelta(days=6))
+        out.append(tile(S.iso(a), when, groups[w]))
+    if before:
+        edge = monday - datetime.timedelta(days=7 * (START_WEEKS - 1))
+        out.append(tile("before", f"Before {edge.day} {edge:%b}", before))
+    fresh = [c for c in active if c not in first_of]
+    if fresh:
+        out.append({"key": "new", "name": "Not started", "n": len(fresh), "started": 0, "know": None,
+                    "find": {"cids": sorted(fresh)}})
+    return out
 
 
 def _bank_id(tag):

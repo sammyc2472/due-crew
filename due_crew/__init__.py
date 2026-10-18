@@ -1254,7 +1254,7 @@ def _on_decks_saved(changed):
     refresh_board(shared_decks=decks)
 
 
-SETTINGS_CMDS = ("settab", "setclose", "set", "settabs", "setlabel", "setprivacy", "setexam",
+SETTINGS_CMDS = ("settab", "setclose", "set", "settabs", "setlabel", "setprivacy", "setexam", "setscope",
                  "setaway", "setreset", "setname", "setemoji", "setstatus", "setsquads",
                  "setsignout", "setdelete", "setsignin", "setfeedback")
 _share_push = {"n": 0}

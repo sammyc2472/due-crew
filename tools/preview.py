@@ -418,6 +418,25 @@ sections.append("<h3>3.9.2: Reviews ahead, no exam, a batch person (only what's 
     you=_YOU("insights", insights={"decks": _DECKS, "did": 10, "exam": "", "plan": None,
                                    "view": dict(_DECK_INS, aim={}, hero=[], ahead=dict(_ahead(40, True, None, unlocked=120, left=9000),
                                                                                         own=False, trust=None))})))
+_LEECH = {"n_gone": 14, "n_near": 9, "gone": [
+    {"cid": 1, "front": "La fiesta ____ en mi casa (ser/estar)", "topic": "Ser vs estar", "lapses": 10, "at": 1791000000000, "secs": 9,
+     "tip": [{"name": "Maya", "text": "Events take ser: la fiesta es en mi casa."}], "knows": ["Maya"], "exam": True, "susp": True},
+    {"cid": 2, "front": "estar listo vs ser listo", "topic": "Ser vs estar", "lapses": 8, "at": 1790600000000, "secs": 12,
+     "tip": [], "knows": [], "exam": True, "susp": True},
+    {"cid": 3, "front": "fui / fue / fuimos: ser or ir? (5 sentences)", "topic": "Preterite", "lapses": 8, "at": 1790000000000,
+     "secs": 44, "tip": [], "knows": ["Dre"], "exam": False, "susp": True}],
+    "near": [{"cid": 4, "front": "hubiera vs hubiese", "topic": "Subjunctive", "lapses": 7, "secs": 11, "due": 1,
+              "tip": [{"name": "Dre", "text": "Same meaning; hubiera is the one you'll hear."}], "knows": ["Dre"], "susp": False},
+             {"cid": 5, "front": "ojalá que yo […] (tener) más tiempo", "topic": "Subjunctive", "lapses": 7, "secs": 14,
+              "due": 3, "tip": [], "knows": [], "susp": False}]}
+sections.append("<h3>3.9.2: Insights' leeches line</h3>" + board.render(
+    DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
+    you=_YOU("insights", insights={"decks": _DECKS, "did": 20, "exam": "2026-10-14", "plan": None,
+                                   "view": dict(_DECK_INS, leeches=14, near=9)})))
+sections.append("<h3>3.9.2: Leeches, in Insights' place (one button a card)</h3>" + board.render(
+    DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
+    you=_YOU("insights", insights={"decks": _DECKS, "did": 20, "exam": "2026-10-14", "plan": None,
+                                   "view": dict(_DECK_INS, leech=_LEECH)})))
 sections.append("<h3>3.9.2: the board's line when reviews climb</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, ahead={"did": 10, "name": "Big Step 1", "day": "2026-10-12", "n": 420, "week": 310}))
 sections.append("<h3>3.8.0: You › Insights, no exam date, nothing yet</h3>" + board.render(
