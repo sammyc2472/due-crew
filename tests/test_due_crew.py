@@ -9224,7 +9224,8 @@ def test_board_motion_round_two_glue_v380():
         dc._arrivals, dc.client = saved
     src = open(os.path.join(REPO, "due_crew", "__init__.py"), encoding="utf-8").read()
     check("arrive: both draws carry it (3.9.1: after the board's scripts, or their calls)",
-          "keep, fridge = _board_js(drawn=True)\n    mw.web.eval(keep + _arrive_js()" in src
+          "keep, fridge = _board_js(drawn=True)\n    mw.web.eval(\"window.dcBK=%s;\" % board._json.dumps(board.BOARD_KEY)" in src
+          and "                + keep + _arrive_js()" in src
           and "keep, fridge = _board_js()\n    js = board.swap_js(html_out) + keep + _arrive_js()" in src)
     from due_crew import due_flow as F
     node = lambda did, n, kids=(): types.SimpleNamespace(deck_id=did, review_count=n, learn_count=0, new_count=0, children=list(kids))  # noqa: E731
@@ -15628,8 +15629,9 @@ def test_efficiency_decks_v391():
     scripts = (board.DUE_JS, board.MOTION_JS, board.FIND_JS, board.FRIDGE_JS)
     calls = swap[len(board.swap_js(mine)):]
     check("efficiency: a page drawn anew gets the board's scripts (Due's add line, motion.js, Find, the fridge's), as before",
-          drawn == board.keep_me_in_view_js() + board.fridge_js() and all(s in drawn for s in scripts)
-          and anew == board.swap_js(mine) + drawn and again == drawn)
+          drawn == "window.dcBK=%s;" % json.dumps(KK) + board.keep_me_in_view_js() + board.fridge_js()
+          and all(s in drawn for s in scripts)
+          and anew == board.swap_js(mine) + board.keep_me_in_view_js() + board.fridge_js() and again == drawn)
     check("efficiency: a swap on that page sends only what they do after a draw, in their order, a few hundred bytes (it was 77 KB)",
           swap == swap2 and swap.startswith(board.swap_js(mine)) and not any(s in swap for s in scripts)
           and calls == board.keep_me_in_view_js(scripts=False) + board.fridge_js(scripts=False)
