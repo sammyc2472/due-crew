@@ -397,7 +397,7 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
         _closet(lambda cf: cf.note_cheered())  # 3.8.2: a crewmate's cheer
         # 3.9.1: a drawing or a sign goes on the fridge, in its sender's colour from this refresh's crew
         # (the bug hunt: _state's is None at launch, and stale for someone just become mutual)
-        _closet(lambda cf: cf.keep_doodles(fresh, data["entries"]))
+        _closet(lambda cf: cf.keep_doodles(fresh, data["entries"], client().user_id))
 
     if knocks is not None:
         _state["knocks"] = [tuple(k) for k in knocks]
@@ -585,7 +585,8 @@ def _board_html(c):
                         sev=rooms.board_sev(c, due), closet=_state.get("closet_new"),
                         halloween=closet_flow.halloween_view(_state["labels"][0] if _state["labels"] else "",
                                                              _state["entries"], c),
-                        wrapped=_wrapped_banner(c), fridge=closet_flow.fridge())
+                        wrapped=_wrapped_banner(c), fridge=closet_flow.fridge(client().user_id),
+                        fridge_gone=closet_flow.gone())
 
 
 def _you(c, due, plans):
@@ -943,7 +944,10 @@ def _on_js(handled, message, context):
         # 3.9.1: where I left it, beside the board (side, px from its edge, px down); no redraw
         _closet(lambda cf: cf.move_fridge(parts[2], parts[3], int(parts[4][:6]), int(parts[5][:5])))
     elif cmd == "fridgedown" and len(parts) > 2:
-        _closet(lambda cf: cf.take_down(parts[2]))  # 3.9.1: off the fridge
+        _closet(lambda cf: cf.take_down(parts[2]))  # 3.9.1: off the fridge, with an Undo in its place for a few seconds
+        _swap(c)
+    elif cmd == "fridgeback" and len(parts) > 2:
+        _closet(lambda cf: cf.put_back(parts[2]))  # 3.9.1: its Undo
         _swap(c)
     elif cmd == "emojipicker":
         # 3.9.1: the Cheer window's "other": the computer's own picker; when it has none, the window's drawer
@@ -1608,6 +1612,7 @@ SHARE_KEYS = ("show_up", "share_reviews", "share_time", "share_retention", "shar
 
 def _on_signed_out():
     global _fetching, _pushed
+    _closet(lambda cf: cf.clear_fridge())  # 3.9.1: the drawings were that account's
     _reset_runtime(keep_sync=True)
     with _lock:
         _fetching = False

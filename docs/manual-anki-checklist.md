@@ -676,6 +676,7 @@ The riskiest of 3.9.1, the parts only a live Anki can show, in order:
 - [ ] The Qt windows: open Friends, Squads and (a plan's ⋯) Pause: board colours, the main button in your accent, ticks and radio dots visible, nothing cut off (Friends' code whole). Settings › Theme › Dark, open Friends again: dark, all readable.
 - [ ] Mac or Windows: Cheer window › "other": the system's emoji picker opens and its pick lands.
 - [ ] Leave Anki on the Decks screen a minute: Pips stop moving after about twelve seconds; the fan quiet (no busy CPU).
+- [ ] The fridge: × on a drawing: "Taken down · Undo" in its place; Undo: it's back where it was. Take one down and wait: the Undo fades after about eight seconds. Sign out: the fridge is empty; sign in as someone else on the same Anki profile: none of the first person's drawings.
 
 ### 3.9.1: cheers, clearer (the pill, the Cheer window)
 

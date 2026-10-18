@@ -2418,6 +2418,18 @@ every release that changes how something works.
   15-minute pass over what only a live Anki shows (the Decks page's key
   after a review, the bars' shade, sheets, the Qt look, the system emoji
   picker, Pip at rest).
+- 3.9.1, before release: the fridge is the account's, and × has an Undo.
+  wrap.json is the Anki profile's file, and more than one account can sign
+  in on a profile: a second account saw the first one's drawings and their
+  captions. Now the fridge keeps whose they are (`fridge_uid`), the board
+  draws the signed-in account's alone (`closet_flow.fridge(uid)`), a
+  drawing landing for another account starts a fridge of its own, and
+  signing out empties it (`clear_fridge`). One from before this (no owner)
+  is whoever's signed in. And × left nothing to change your mind with: now
+  "Taken down · Undo" sits where the drawing was, in its sender's colour,
+  for eight seconds, then fades and goes (`closet_flow.gone`/`put_back`,
+  `duecrew:fridgeback`); Undo puts it back where it was, with its spot.
+  Memory only, the last one taken down.
 - 3.9.1, the efficiency run, the Decks screen (the same ask). Measured with
   a crew of thirteen and a full fridge (twelve drawings at 2,000 points):
   every click that redraws the board (a swap) sent 77 KB of script the page

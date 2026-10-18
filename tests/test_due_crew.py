@@ -14958,6 +14958,79 @@ def test_doodle_cheers_v391():
         dc._swap, dc._board_on_screen = saved
 
 
+def test_fridge_account_and_undo_v391():
+    """3.9.1, before release: the fridge is this Anki profile's file, and
+    more than one account can sign in on a profile, so it keeps whose
+    drawings it holds, shows them to that account alone and empties at
+    sign-out. And × leaves "Taken down · Undo" in the drawing's place for a
+    few seconds; Undo puts it back where it was."""
+    import due_crew as dc
+    from due_crew import closet_flow as cf, fridge as FR
+    from aqt.deckbrowser import DeckBrowser
+    wrap = _patched_due_crew()
+    draw = {"k": "draw", "s": [[0, 10, 10, 50, 50]]}
+    cheers = [{"from": "dre", "name": "Dre", "at": f"2026-10-0{d}T10:00:00Z", "note": f"day {d}", "doodle": draw} for d in range(1, 4)]
+    ents = [{"user_id": "dre", "accent": "blue", "you": False}]
+    # an older fridge (before 3.9.1's owner): whoever's signed in
+    wrap._wrap_data()["fridge"] = FR.add([], cheers[:1], {})
+    legacy = (len(cf.fridge("sam")), len(cf.fridge("nia")))
+    cf.keep_doodles(cheers[1:2], ents, "sam")
+    adopted = (wrap._wrap_data().get("fridge_uid"), len(cf.fridge("sam")), cf.fridge("nia"))
+    cf.keep_doodles(cheers[2:], ents, "nia")
+    nias = (wrap._wrap_data().get("fridge_uid"), [x["n"] for x in cf.fridge("nia")], cf.fridge("sam"))
+    check("fridge to account: an older one is whoever's signed in, then theirs; another account sees none of it, "
+          "and its own first drawing starts a fridge of its own",
+          legacy == (1, 1) and adopted == ("sam", 2, []) and nias == ("nia", ["day 3"], []), (legacy, adopted, nias))
+    saved = (dc._reset_runtime, dc._rerender)
+    dc._reset_runtime, dc._rerender = (lambda **k: None), (lambda: None)
+    try:
+        dc._on_signed_out()
+    finally:
+        dc._reset_runtime, dc._rerender = saved
+    check("fridge to account: signing out empties it (the drawings were that account's)",
+          "fridge" not in wrap._wrap_data() and "fridge_uid" not in wrap._wrap_data() and cf.fridge("nia") == [] and cf.gone() is None)
+    src = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
+    check("fridge to account: the board draws the signed-in account's, and keeps a landing one for it",
+          "fridge=closet_flow.fridge(client().user_id)" in src and 'cf.keep_doodles(fresh, data["entries"], client().user_id)' in src)
+
+    # Undo
+    cf.keep_doodles(cheers, ents, "sam")
+    first, mid = cf.fridge("sam")[0], cf.fridge("sam")[1]
+    cf.move_fridge(FR.key(mid), "r", 40, 300)
+    k = FR.key(mid)
+    swaps = []
+    saved = dc._swap
+    dc._swap = lambda c, focus=None: swaps.append(1)
+    try:
+        dc._on_js(False, as_board("duecrew:fridgedown:" + k), DeckBrowser())
+        g = cf.gone()
+        html = board.fridge_html(cf.fridge("sam"), {}, {"sev": False}, g)
+        dc._on_js(False, as_board("duecrew:fridgeback:nope"), DeckBrowser())
+        wrong = [FR.key(x) for x in cf.fridge("sam")]
+        dc._on_js(False, as_board("duecrew:fridgeback:" + k), DeckBrowser())
+        back = cf.fridge("sam")
+        again = cf.put_back(k)
+    finally:
+        dc._swap = saved
+    pill = re.search(r'<div class="fz fgone"[^>]*>.*?</div>', html)
+    order = re.findall(r'data-k="([0-9a-f]+)"', html)
+    check("undo: × takes it down and leaves Taken down · Undo where it was (its spot, its sender's colour), for the seconds it has",
+          g and g["k"] == k and pill and f"duecrew:fridgeback:{k}" in pill.group(0) and 'data-s="r" data-x="40" data-y="300"' in pill.group(0)
+          and f"--fa:{board.accent_pair('blue')[0]}" in pill.group(0) and 'role="status"' in pill.group(0)
+          and re.search(r"--fg:-\d+\.\ds", pill.group(0)) and order == [FR.key(x) for x in reversed(back)]
+          and len(swaps) >= 1, (g, html[-600:]))
+    check("undo: Undo puts it back in its place with its spot, once; a key that isn't the one just taken down does nothing",
+          [x["n"] for x in back] == ["day 1", "day 2", "day 3"] and back[1].get("p") == ["r", 40, 300]
+          and k not in wrong and len(wrong) == 2 and again is False and back[0] == first, ([x["n"] for x in back], back[1].get("p")))
+    cf.take_down(FR.key(first))
+    cf._GONE["t"] -= cf.UNDO_SECS + 1
+    check("undo: after its seconds the board leaves it out (its fade already hid it), and the cached fridge comes back",
+          cf.gone() is None and 'class="fz fgone"' not in board.fridge_html(cf.fridge("sam"), {}, {"sev": False}, cf.gone())
+          and board.FRIDGE_UNDO == cf.UNDO_SECS
+          and "animation: dcfgone %ds linear forwards" % cf.UNDO_SECS in board.FRIDGE_CSS
+          and "el.classList.contains('fgone')" in board.FRIDGE_JS and "el.isConnected" in board.FRIDGE_JS)
+
+
 def test_native_emoji_picker_v391():
     """3.9.1 (Sam: "the emoji drawer is missing tons that are natively
     supported. want the other option to just open the native drawer?"): on a

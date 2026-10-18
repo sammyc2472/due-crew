@@ -3154,7 +3154,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
            rules_stale=False, squad_view=None, knocks=None, reviews=None,
            sync_error=False, live=False, tricky=None, milestones=None, room=None, plans=None,
            notice=None, asks=None, due=None, you=None, sticking=None, sev=None, milestone_sev=None, closet=None,
-           halloween=None, wrapped=None, fridge=None):
+           halloween=None, wrapped=None, fridge=None, fridge_gone=None):
     """3.8.0: two parts, apart. On top the You bubble (you_html): due,
     Due's view (due_flow.view, None when Due is off), and you, its Plans and
     Insights ({tab, folded, plans, insights}; None draws Due alone). Under it
@@ -3173,7 +3173,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     closet (3.8.2): {keys, first}: what just came for Pip, for its line (closet_line).
     halloween (3.8.22): Halloween week's line, its bats and cobweb (halloween_html), or None.
     wrapped (3.9.0): {year, so_far, look} for the line that your year is ready (1 Dec to 15 Jan), or None.
-    fridge (3.9.1): the doodles my crew sent (fridge.clean's), pinned around the Decks screen (fridge_html)."""
+    fridge (3.9.1): the doodles my crew sent (fridge.clean's), pinned around the Decks screen (fridge_html);
+    fridge_gone: the one just taken down, for its Undo (closet_flow.gone)."""
     period = cfg.get("period", "today")
     hidden = hidden_tabs(cfg)
     if period not in PERIODS or period in hidden:
@@ -3313,7 +3314,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     return (f'<div id="due-crew" class="dc-frame dc-split">{_css(cfg)}<style>{DUE_CSS}</style>{sheet}'
             f'{you_html(cfg, due, you, people)}<div class="dc-sheet">'
             f'{_head(period, show_up, hidden, cfg.get("crew_view") or period, sev)}{halloween_html(halloween, cfg)}{body}{foot}</div>'
-            f'{fridge_html(fridge, people, cfg)}</div>')  # 3.9.1: the doodles, pinned around the Decks screen
+            f'{fridge_html(fridge, people, cfg, fridge_gone)}</div>')  # 3.9.1: the doodles, pinned around the Decks screen
 
 
 def you_html(cfg, due=None, you=None, people=None):
@@ -5012,6 +5013,7 @@ CHEER_WINDOW_JS = r"""
 # periphery of the decks window, like dragged around the anki window?")
 FRIDGE_W = 124  # px: a doodle on the window, on its paper
 FRIDGE_PIP = 30  # px: the Pip by a sender's name on the fridge (a crew row's size; its body is 18)
+FRIDGE_UNDO = 8  # s: "Taken down · Undo" in a doodle's place (closet_flow.UNDO_SECS)
 
 
 def _tape(colour):
@@ -5048,11 +5050,17 @@ FRIDGE_CSS = """
     #dc-fridge .fz:hover .fx, #dc-fridge .fz:focus-within .fx { display: block; }
     /* 3.9.1 (Sam's pick, "Pip at rest" C): still until pointed at, as crew rows */
     #dc-fridge .fz:not(:hover) .sv, #dc-fridge .fz:not(:hover) .sv * { animation: none !important; }
+    /* 3.9.1: where one was just taken down, its Undo for a few seconds, then gone (--fg: how long it's been up) */
+    #dc-fridge .fz.fgone { transform: none; cursor: default; text-align: center; font-size: 11.5px; padding: 8px 2px; white-space: nowrap;
+      border-radius: 8px; animation: dcfgone %ds linear forwards; animation-delay: var(--fg, 0s); }
+    #dc-fridge .fz.fgone::before { display: none; }
+    #dc-fridge .fgone a { color: var(--fa); font-weight: 700; text-decoration: none; }
+    @keyframes dcfgone { 0%%, 85%% { opacity: 1; } 100%% { opacity: 0; visibility: hidden; } }
     #dc-fridge .fz:hover .sv { --sv-on: infinite; }
-""" % FRIDGE_W
+""" % (FRIDGE_W, FRIDGE_UNDO)
 
 
-def fridge_html(items, people, cfg):
+def fridge_html(items, people, cfg, gone=None):
     """3.9.1: the doodles my crew sent (fridge.clean's), pinned around the
     Decks screen, newest first: each a Polaroid (Sam's pick from "Pinned
     Doodles": the doodle in a white frame, taped up with a strip in their
@@ -5062,9 +5070,13 @@ def fridge_html(items, people, cfg):
     side of the board, px from its edge, px down) rides as data; fridge_js
     places the rest in the gutters beside the board, and lets me drag. ""
     when there's none. Kept as last drawn while what it's drawn from (the
-    items, each person's look, Pip on or off) stays the same."""
+    items, each person's look, Pip on or off) stays the same. gone
+    (closet_flow.gone): the one just taken down; in its place "Taken down ·
+    Undo" (duecrew:fridgeback:<key>) for the seconds it has left."""
     crew = people or {}
     looks = [[u, 1, e.get("look")] if isinstance(e, dict) else [u, 0, e] for u, e in crew.items() if e]
+    if gone:
+        return _fridge_notes(_fridge.clean(items), crew, cfg, gone)  # a few seconds: drawn each time
     key = _fridge.fingerprint([items, looks, bool(cfg.get("sev", True))])
     if key is None or key != _FRIDGE_DRAWN["key"]:
         _FRIDGE_DRAWN.update(key=key, html=_fridge_notes(_fridge.clean(items), crew, cfg))
@@ -5076,8 +5088,8 @@ def fridge_html(items, people, cfg):
 _FRIDGE_DRAWN = {"key": None, "html": ""}
 
 
-def _fridge_notes(items, people, cfg):
-    if not items:
+def _fridge_notes(items, people, cfg, gone=None):
+    if not items and not gone:
         return ""
     notes = []
     for x in reversed(items):
@@ -5095,6 +5107,14 @@ def _fridge_notes(items, people, cfg):
                      f'<div class="fp">{art}</div>{note}<div class="fw">{pip}<b>{name}</b>{f" · {when}" if when else ""}</div>'
                      f'<a class="fx" href="#" title="Take it down" aria-label="Take {name}’s down" '
                      f'onclick="{_pycmd("fridgedown:" + k)}">&times;</a></div>')
+    if gone and gone.get("item"):
+        g, k = gone["item"], str(gone.get("k") or "")
+        at = f' data-s="{g["p"][0]}" data-x="{g["p"][1]}" data-y="{g["p"][2]}"' if g.get("p") else ""
+        left = max(0.0, min(float(FRIDGE_UNDO), float(gone.get("ago") or 0)))
+        notes.insert(max(0, min(len(notes), len(items) - int(gone.get("i") or 0))),
+                     f'<div class="fz fgone" data-k="{_html.escape(k)}"{at} role="status" '
+                     f'style="--fa:{accent_pair(g.get("a"))[0]};--fg:-{left:.1f}s">Taken down &middot; '
+                     f'<a href="#" onclick="{_pycmd("fridgeback:" + k)}">Undo</a></div>')
     return f'<style>{FRIDGE_CSS}</style><div id="dc-fridge" role="group" aria-label="Your fridge">{"".join(notes)}</div>'
 
 
@@ -5110,6 +5130,7 @@ window.dcFridge = window.dcFridge || function () {
         return r ? { l: r.left - box.left, r: r.right - box.left } : { l: box.width / 2, r: box.width / 2 };
     }
     function place() {
+        notes = notes.filter(function (el) { return el.isConnected; });  // an Undo whose time ran out has gone
         var box = f.getBoundingClientRect(), W = box.width, H = box.height, b = edges(box);
         var room = { l: b.l >= nw + 2 * gap, r: W - b.r >= nw + 2 * gap }, y = { l: 64, r: 64 }, n = 0, pile = 0, mine = [], at = [];
         // every tilt, then every height in one read (a write between two reads laid the page out again)
@@ -5146,9 +5167,12 @@ window.dcFridge = window.dcFridge || function () {
             el.style.top = Math.max(4, Math.min(H - h - 4, top)) + 'px';
         });
     }
+    notes.forEach(function (el) {  // 3.9.1: an Undo goes when its fade ends (the board's next draw leaves it out too)
+        if (el.classList.contains('fgone')) { el.addEventListener('animationend', function () { el.remove(); }); }
+    });
     notes.forEach(function (el) {
         el.addEventListener('pointerdown', function (e) {
-            if (e.button !== 0 || e.target.closest('.fx')) { return; }
+            if (e.button !== 0 || e.target.closest('.fx') || el.classList.contains('fgone')) { return; }
             e.preventDefault();
             el.setPointerCapture(e.pointerId);
             var box = f.getBoundingClientRect(), sx = e.clientX, sy = e.clientY,
