@@ -262,7 +262,7 @@ def state_at(log, first, now, T, gone=()):
             after[cid] = row
     out = []
     for cid, f in first.items():
-        if f >= T or cid in gone:
+        if f >= T or (cid in gone and cid not in after):
             continue
         r = before.get(cid)
         if r is not None:

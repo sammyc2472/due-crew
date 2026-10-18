@@ -16625,6 +16625,10 @@ def test_reviews_ahead_392():
                 dd[max(due, 0)] += 1
         did = [len(by_day.get(T0 + k, ())) for k in range(A.H)]
         due_only.append(sum(abs(sum(dd[i:i + 7]) - sum(did[i:i + 7])) / max(1, sum(did[i:i + 7])) for i in range(0, A.H, 7)) / 6)
+    sus = [(-30, 1, 3, 10, 4, 1), (-20, 1, 1, -600, 10, 1), (-30, 2, 3, 10, 4, 1)]
+    st_s = A.state_at(sus, {1: -60, 2: -60}, {}, -25, gone={1, 2})
+    check("ahead: a card suspended now is in the past it was answered in; one unanswered since, not",
+          st_s == [(5, 10)], st_s)
     check("ahead: counted beats counting only what's due (Anki's Future Due) on the same past",
           tr[0] < min(due_only), (tr[0], due_only))
     # ---- the board ----

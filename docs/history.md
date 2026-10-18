@@ -2709,8 +2709,10 @@ every release that changes how something works.
   the model by its own amount) it came within about 10% six weeks out, where
   counting only what's due missed half by week two. The track record: three
   past days, each forecast with only what came before, against what I did
-  (`backtest`, `trust`), worked out off the main thread once a week a deck
-  and kept in plans.json (`ahead_trust`); it gives each bar's tip its band
+  (`backtest`, `trust`; a card suspended since is in the past it was still
+  answered in, so a leech Anki suspended mid-window doesn't drop out of the
+  start and make the record look worse than it is), worked out off the main
+  thread once a week a deck and kept in plans.json (`ahead_trust`); it gives each bar's tip its band
   and the section's last line ("on your own past, within 9% a week"). The
   log's part (habits, curve, pace) is read once per Anki day a deck
   (`ahead_flow._day_part`, today left out); each draw reads only the cards
