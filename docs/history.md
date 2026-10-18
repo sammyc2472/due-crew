@@ -2347,9 +2347,23 @@ every release that changes how something works.
   the watcher leaves the room's own changes to it, as the chip's). Room
   sounds sleep at volume 0 (a running context costs, silent or not) and,
   stopped, close the context and let go of what it held (a minute of a
-  recording is about 23 MB as samples). Pips at rest, the studying-now dot
-  and brown noise's wander are Sam's to call (they'd look or sound
-  different): the "Pip at rest" options page.
+  recording is about 23 MB as samples). Brown noise's wander (the made
+  noise's slow drift, a third more than a recording costs) stays, for Sam's
+  ear.
+- 3.9.1, Pip at rest (Sam's picks on the "Pip at rest" page, 18 Oct: "agreed
+  with your calls on pip"). Measured in Anki's own engine, Pip on ▶ Fifteen?
+  cost 41 ms of CPU a second blinking and up to 129 napping or with a moving
+  thing on, on every screen; a five-note fridge 353; the studying-now dot
+  222. A: each of Pip's loops plays about twelve seconds once it's drawn
+  (`var(--sv-on, n)` in sev.CSS, n the rounds that make about twelve, even
+  for one that goes back and forth), then Pip rests; pointing at it plays
+  it on (`.sv:hover, .sv-slot:hover .sv` set `--sv-on: infinite`). The
+  break's breathing square and stretch go on for the break: they're the
+  exercise. Crew rows (and faces, a plan card's crew, the bingo stamps)
+  move while hovered, as before. C: the fridge's Pips are still until
+  pointed at, as crew rows. D: the studying-now dot pulses a few times
+  (seven halves, ending lit) and stays lit, in Anki and on the site. Back
+  to Anki's own idle once they rest.
 - 3.9.1, the efficiency run, plans and the deck tree (Sam: "please do an
   efficiency run"). Measured on Anki's own engine, a big collection (35,000
   notes, 1.1 million answers) following a 30-date plan: a refresh's plan

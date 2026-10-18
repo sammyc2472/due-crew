@@ -13359,7 +13359,8 @@ def test_sev_moves_v381():
               "dc-hi" not in board.signed_out_card({}, expired=True, sev=a) and "dc-hi" not in board.signed_out_card({}, gone=True, sev=a))
         R.cfg = lambda: {"sev": False}
         check("…Settings › Pip off: the card as it was", R.signed_out_sev() is None
-              and "sv-" not in board.signed_out_card({}, sev=None) and "Start with your email" in board.signed_out_card({}))
+              and 'class="sv' not in board.signed_out_card({}, sev=None) and "sv-blink" not in board.signed_out_card({}, sev=None)
+              and "Start with your email" in board.signed_out_card({}))
 
         # new: a crewmate's big streak
         R.cfg = lambda: {}
@@ -15548,6 +15549,24 @@ def test_efficiency_idle_v391():
           and "KIND === 'break' || KIND === 'ask') { return 1000; }" in rt and "root.textContent !== said" in rt)
     check("idle: the bar's watcher leaves the room's own changes to its tick, as the chip's",
           "room && room.contains(x.target)" in rm.BAR_BALANCE and "n === chip || n === room" in rm.BAR_BALANCE)
+    from due_crew import sev as _sev
+    forever = [x for x in _re.findall(r"[^{}\n]*\{[^{}]*\binfinite\b[^{}]*\}", _sev.CSS) if "--sv-on: infinite" not in x]
+    check("Pip at rest (Sam's pick A): every loop of Pip's plays about twelve seconds, then rests; only the break's "
+          "breathing and stretch go on (the exercise); pointing at Pip plays it on",
+          forever and all("m-breathe" in x or "m-stretch" in x for x in forever)
+          and ".sv:hover, .sv-slot:hover .sv { --sv-on: infinite; }" in _sev.CSS
+          and _sev.CSS.count("var(--sv-on, ") >= 40, forever)
+    src = open(os.path.join(REPO, "due_crew", "board.py")).read()
+    check("Pip at rest (Sam's pick C): the fridge's Pips are still until pointed at, as crew rows; rows move on while hovered",
+          "#dc-fridge .fz:not(:hover) .sv, #dc-fridge .fz:not(:hover) .sv * { animation: none !important; }" in board.FRIDGE_CSS
+          and "#dc-fridge .fz:hover .sv { --sv-on: infinite; }" in board.FRIDGE_CSS
+          and all(f"#due-crew {k}:hover .dc-rsev .sv {{ --sv-on: infinite; }}" in src for k in ("tr", ".pcrew", ".bg-sq"))
+          and "#due-crew .face:hover .dc-rsev .sv {{ --sv-on: infinite; }}" in src)
+    app_css = open(os.path.join(REPO, "site", "public", "app.css")).read()
+    check("the studying-now dot (Sam's pick D): a few pulses, then lit, in Anki and on the site",
+          "dcbreathe 2.4s ease-in-out 7 alternate" in open(os.path.join(REPO, "due_crew", "board.py")).read()
+          and ".chip.live::before { animation: dcbreathe 2.4s ease-in-out 7 alternate; }" in app_css
+          and "dcbreathe 2.4s ease-in-out infinite" not in app_css)
     loops = _re.findall(r"[^{}]*\{[^{}]*\binfinite\b[^{}]*\}", board.HW_CSS + board.FRIDGE_CSS if hasattr(board, "FRIDGE_CSS") else board.HW_CSS)
     check("idle: nothing new of ours loops forever on Halloween's line", not [x for x in loops if "hw" in x])
 

@@ -733,7 +733,7 @@ def _css(cfg):
     @keyframes dcbreathe {{ from {{ opacity: .4; transform: scale(.85); }} to {{ opacity: 1; transform: scale(1); }} }}
     @keyframes dcspin {{ to {{ transform: rotate(360deg); }} }}
     @media (prefers-reduced-motion: no-preference) {{
-      #due-crew .dc-live {{ animation: dcbreathe 2.4s ease-in-out infinite alternate; }}
+      #due-crew .dc-live {{ animation: dcbreathe 2.4s ease-in-out 7 alternate; }}  /* 3.9.1 (Sam's pick D): a few pulses, then lit */
       #due-crew .dc-foot a.ic.dc-spin {{ display: inline-block; animation: dcspin .8s linear infinite; }}
     }}
     #due-crew .dc-plan {{ display: inline-block; width: 36px; height: 4px; border-radius: 2px;
@@ -901,7 +901,7 @@ def _css(cfg):
     #due-crew .face {{ display: grid; justify-items: center; gap: 1px; font-size: 11px; color: var(--dc-muted); min-width: 44px; }}
     #due-crew .face .e {{ font-size: 20px; line-height: 24px; }}
     #due-crew .face .e .dc-rsev {{ margin: 4px 0 0; }}
-    #due-crew .face:not(:hover) .dc-rsev .sv, #due-crew .face:not(:hover) .dc-rsev .sv * {{ animation: none !important; }}
+    #due-crew .face:not(:hover) .dc-rsev .sv, #due-crew .face:not(:hover) .dc-rsev .sv * {{ animation: none !important; }} #due-crew .face:hover .dc-rsev .sv {{ --sv-on: infinite; }}
     #due-crew .ini {{ display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--dc-you-bg); color: var(--dc-accent); font-size: 12px; font-weight: 700; line-height: 1; vertical-align: middle; }}
     #due-crew .ini.sm {{ width: 17px; height: 17px; font-size: 10px; }}
     #due-crew .face.away {{ opacity: .38; }}
@@ -3738,11 +3738,11 @@ CLOSET_CSS = """
        and above it for a hat, so the row is a touch taller than an emoji's */
     #due-crew .dc-rsev { display: inline-block; vertical-align: middle; margin: -3px 8px -6px 2px; line-height: 0; }
     #due-crew a.dc-rsev, #due-crew a.dc-rsevl { text-decoration: none; border: 0; }
-    #due-crew tr:not(:hover) .dc-rsev .sv, #due-crew tr:not(:hover) .dc-rsev .sv * { animation: none !important; }
+    #due-crew tr:not(:hover) .dc-rsev .sv, #due-crew tr:not(:hover) .dc-rsev .sv * { animation: none !important; } #due-crew tr:hover .dc-rsev .sv { --sv-on: infinite; }
     /* 3.8.22: a plan card's squad line: who showed up, side by side, still until it's pointed at */
     #due-crew .pcrew .pips { display: inline-flex; gap: 4px; vertical-align: middle; margin: 8px 5px 0 0; }  /* a hat clear of the line above */
     #due-crew .pcrew .pips .dc-rsev { margin: 0; }
-    #due-crew .pcrew:not(:hover) .dc-rsev .sv, #due-crew .pcrew:not(:hover) .dc-rsev .sv * { animation: none !important; }
+    #due-crew .pcrew:not(:hover) .dc-rsev .sv, #due-crew .pcrew:not(:hover) .dc-rsev .sv * { animation: none !important; } #due-crew .pcrew:hover .dc-rsev .sv { --sv-on: infinite; }
     @media (max-width: 380px) { #due-crew .dc-rsev { display: none; } }
 """
 
@@ -4273,7 +4273,7 @@ BINGO_PIP_CSS = """
     #due-crew .bg-sq.stamped { padding-bottom: 34px; }
     #due-crew .bg-sq .st.sp { width: auto; height: auto; background: none; box-shadow: none; border-radius: 0; bottom: 4px; }
     #due-crew .bg-sq .st.sp .dc-rsev { display: inline-block; line-height: 0; margin: 0; }
-    #due-crew .bg-sq:not(:hover) .dc-rsev .sv, #due-crew .bg-sq:not(:hover) .dc-rsev .sv * { animation: none !important; }
+    #due-crew .bg-sq:not(:hover) .dc-rsev .sv, #due-crew .bg-sq:not(:hover) .dc-rsev .sv * { animation: none !important; } #due-crew .bg-sq:hover .dc-rsev .sv { --sv-on: infinite; }
 """
 
 
@@ -4990,6 +4990,9 @@ FRIDGE_CSS = """
     #dc-fridge .fw .sv-slot { --sv-a: var(--fa); flex: none; }
     #dc-fridge .fx { position: absolute; top: 0; right: 3px; display: none; color: #6b665a; text-decoration: none; font-size: 15px; line-height: 1; }
     #dc-fridge .fz:hover .fx, #dc-fridge .fz:focus-within .fx { display: block; }
+    /* 3.9.1 (Sam's pick, "Pip at rest" C): still until pointed at, as crew rows */
+    #dc-fridge .fz:not(:hover) .sv, #dc-fridge .fz:not(:hover) .sv * { animation: none !important; }
+    #dc-fridge .fz:hover .sv { --sv-on: infinite; }
 """ % FRIDGE_W
 
 
