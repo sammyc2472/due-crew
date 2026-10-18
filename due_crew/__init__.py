@@ -630,9 +630,26 @@ def _arrive_js():
     return "try{window.dcMotion&&dcMotion.arrive(%s);}catch(e){}" % board._json.dumps(new) if new else ""
 
 
+# 3.9.1 (the efficiency run): the page the board's scripts last went to
+# (app.pages). A page keeps them (motion.js, Due's add line, Find, the
+# fridge's), and each loads once, so a swap on that page sends only what
+# they do after a draw (it sent 77 KB of them at every click); a page drawn
+# anew gets them all.
+_SCRIPTS = {"page": None}
+
+
+def _board_js(drawn=False):
+    """(keep_me_in_view_js, fridge_js) for this draw: with the scripts when
+    the page was just drawn (drawn) or is another since they went."""
+    whole = drawn or _SCRIPTS["page"] != app.pages[0]
+    _SCRIPTS["page"] = app.pages[0]
+    return board.keep_me_in_view_js(scripts=whole), board.fridge_js(scripts=whole)
+
+
 def _on_did_render(deck_browser):
-    mw.web.eval(board.keep_me_in_view_js() + _arrive_js() + (board.wrapped_js() if _state.get("wrapped_open") else "")
-                + board.fridge_js())  # 3.9.1: the doodles placed around the board, and draggable
+    keep, fridge = _board_js(drawn=True)
+    mw.web.eval(keep + _arrive_js() + (board.wrapped_js() if _state.get("wrapped_open") else "")
+                + fridge)  # 3.9.1: the doodles placed around the board, and draggable
     _play_cheers()
     if _state.get("plans_midday") and not _closing:
         # 3.7.3: an update that came while reviewing waits for the Decks screen
@@ -1001,7 +1018,8 @@ def _swap(c, focus=None):
         _rerender()
         return
     html_out = _board_html(c)
-    js = board.swap_js(html_out) + board.keep_me_in_view_js() + _arrive_js() + board.fridge_js()  # 3.8.0: no jumps under the pointer
+    keep, fridge = _board_js()
+    js = board.swap_js(html_out) + keep + _arrive_js() + fridge  # 3.8.0: no jumps under the pointer
     if _state.get("wrapped_open"):
         js += board.wrapped_js()  # 3.9.0: Wrapped's player, on the card just drawn
     if focus:

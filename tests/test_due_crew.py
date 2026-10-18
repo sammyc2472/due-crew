@@ -1311,18 +1311,26 @@ def test_wrap_file_is_durable():
         check("wrap.json: saved whole, no temp file left", saved == {"life": {"reviews": 1234}}
               and os.listdir(wrap._profile_files()) == ["wrap.json"])
 
-        real_dump = wrap.json.dump
+        class DiesHalfway:  # 3.9.1: the text is made first, then written in one go
+            def __init__(self, f):
+                self.f = f
 
-        def dies_halfway(obj, f):
-            f.write('{"life": {"rev')
-            raise OSError("disk full")
+            def __enter__(self):
+                return self
 
-        wrap.json.dump = dies_halfway
+            def __exit__(self, *exc):
+                self.f.close()
+
+            def write(self, text):
+                self.f.write(text[:len(text) // 2])
+                raise OSError("disk full")
+
+        wrap.open = lambda p, mode="r", *a, **k: DiesHalfway(open(p, mode, *a, **k)) if "w" in mode else open(p, mode, *a, **k)
         try:
             wrap._wrap["data"] = {"life": {"reviews": 0}}
             wrap._save_wrap()
         finally:
-            wrap.json.dump = real_dump
+            del wrap.open
         with open(path) as f:
             after = json.load(f)
         check("wrap.json: a write that dies halfway leaves the last good file in place",
@@ -9019,8 +9027,9 @@ def test_board_motion_round_two_glue_v380():
     finally:
         dc._arrivals, dc.client = saved
     src = open(os.path.join(REPO, "due_crew", "__init__.py"), encoding="utf-8").read()
-    check("arrive: both draws carry it", "board.keep_me_in_view_js() + _arrive_js()" in src
-          and "board.swap_js(html_out) + board.keep_me_in_view_js() + _arrive_js()" in src)
+    check("arrive: both draws carry it (3.9.1: after the board's scripts, or their calls)",
+          "keep, fridge = _board_js(drawn=True)\n    mw.web.eval(keep + _arrive_js()" in src
+          and "keep, fridge = _board_js()\n    js = board.swap_js(html_out) + keep + _arrive_js()" in src)
     from due_crew import due_flow as F
     node = lambda did, n, kids=(): types.SimpleNamespace(deck_id=did, review_count=n, learn_count=0, new_count=0, children=list(kids))  # noqa: E731
     tree = types.SimpleNamespace(children=[node(1, 5, [node(11, 3)]), node(2, 40)])
@@ -15044,6 +15053,198 @@ def test_efficiency_review_screen_v391():
     finally:
         am.getConfig, am.writeConfig = real
         A._CFG["text"] = None
+
+
+def test_efficiency_decks_v391():
+    """3.9.1, the efficiency run, the Decks screen: the board's scripts go to
+    a page once, and a swap sends only what they do after a draw; the
+    fridge is checked and drawn once a change, the same as drawn afresh,
+    and its script reads the page's layout once a placing; wrap.json is
+    written only when it says something new, so a refresh that changes
+    nothing writes nothing."""
+    import shutil
+    import subprocess
+    import due_crew as dc
+    from due_crew import app as A, closet_flow as CF, due_flow, fridge as FR, rooms, together
+    from due_crew.app import _state
+    mw = dc_mw()
+    sent = []
+    mine = '<div id="due-crew">board</div>'
+    saved = (getattr(mw, "web", None), dc._board_html, dc._arrive_js, dc._play_cheers, together.show_luck_card,
+             rooms.refresh_widgets, dict(_state))
+    try:
+        mw.web = types.SimpleNamespace(eval=sent.append)
+        dc._board_html = lambda c: mine
+        dc._arrive_js = lambda: ""
+        dc._play_cheers = lambda: None
+        together.show_luck_card = lambda: None
+        rooms.refresh_widgets = lambda: None
+        _state.update(entries=[], wrapped_open=False, plans_midday=False, plans_morning=None)
+        A.on_set_content(None, None)
+        dc._on_did_render(None)
+        dc._swap({})
+        dc._swap({})
+        A.on_set_content(None, None)  # a page anew (stdHtml, here or in any of Anki's webviews)
+        dc._swap({})
+        dc._on_did_render(None)  # the board drawn: the page is new to it, whatever the count says
+        drawn, swap, swap2, anew, again = sent
+    finally:
+        mw.web, dc._board_html, dc._arrive_js, dc._play_cheers, together.show_luck_card, rooms.refresh_widgets = saved[:6]
+        _state.clear()
+        _state.update(saved[6])
+    scripts = (board.DUE_JS, board.MOTION_JS, board.FIND_JS, board.FRIDGE_JS)
+    calls = swap[len(board.swap_js(mine)):]
+    check("efficiency: a page drawn anew gets the board's scripts (Due's add line, motion.js, Find, the fridge's), as before",
+          drawn == board.keep_me_in_view_js() + board.fridge_js() and all(s in drawn for s in scripts)
+          and anew == board.swap_js(mine) + drawn and again == drawn)
+    check("efficiency: a swap on that page sends only what they do after a draw, in their order, a few hundred bytes (it was 77 KB)",
+          swap == swap2 and swap.startswith(board.swap_js(mine)) and not any(s in swap for s in scripts)
+          and calls == board.keep_me_in_view_js(scripts=False) + board.fridge_js(scripts=False)
+          and "'#due-crew .dc-scroll'" in calls and board.FIND_AFTER in calls and calls.endswith(board.MOTION_DRAWN
+          + "\nif (window.dcFridge) { window.dcFridge(); }\n") and len(calls.encode()) < 1024, len(calls))
+    check("efficiency: each script loads once a page (each checks it isn't there yet), so sent again it changes nothing",
+          "if (window.dcDue) { return; }" in board.DUE_JS and "if (window.dcMotion) return;" in board.MOTION_JS
+          and "if (!window.dcFind) {" in board.FIND_JS and "window.dcFridge = window.dcFridge || function () {" in board.FRIDGE_JS)
+    # the scripts, then a swap's calls, in node on a page that has no board: each call reaches the script it calls,
+    # nothing loads twice, and the calls alone on a page without them (another page) do nothing
+    probe = r"""
+    var none = function () { return null; };
+    globalThis.window = globalThis;
+    globalThis.document = {getElementById: none, querySelector: none, querySelectorAll: function () { return []; },
+                           addEventListener: function () {}, body: {className: ''}};
+    globalThis.sessionStorage = {getItem: none, setItem: function () {}};
+    var out = {};
+    try { (0, eval)(CALLS); out.bare = 'ok'; } catch (e) { out.bare = String(e); }
+    (0, eval)(DRAWN);
+    var due = window.dcDue, motion = window.dcMotion, find = window.dcFind, n = {after: 0, drawn: 0, fridge: 0};
+    var a = find.after, d = motion.drawn, f = window.dcFridge;
+    find.after = function () { n.after++; return a.apply(this, arguments); };
+    motion.drawn = function () { n.drawn++; return d.apply(this, arguments); };
+    window.dcFridge = function () { n.fridge++; return f.apply(this, arguments); };
+    (0, eval)(CALLS);
+    out.n = n;
+    out.same = window.dcDue === due && window.dcMotion === motion && window.dcFind === find;
+    console.log(JSON.stringify(out));
+    """.replace("CALLS", json.dumps(calls)).replace("DRAWN", json.dumps(drawn))
+    node = subprocess.run(["node", "-"], input=probe, capture_output=True, text=True) if shutil.which("node") else None
+    got = json.loads(node.stdout) if node and node.returncode == 0 else None
+    check("efficiency: in a page, a swap's calls reach the scripts the draw loaded, once each; on a page without them, nothing",
+          node is None or got == {"bare": "ok", "n": {"after": 1, "drawn": 1, "fridge": 1}, "same": True},
+          (got, node and node.stderr[:300]))
+    place = board.FRIDGE_JS[board.FRIDGE_JS.index("function place()"):board.FRIDGE_JS.index("el.addEventListener('pointerdown'")]
+    check("efficiency: the fridge's script tilts every doodle, then reads every height at once (a read after each write "
+          "laid the page out again, twice a doodle), and places them by what it read",
+          place.count("offsetHeight") == 1 and place.index("setProperty('--fr'") < place.index("offsetHeight")
+          < place.index("style.left") and place.count("var h = hs[i]") == 2)
+
+    # the fridge, checked and drawn once a change
+    wrap = _patched_due_crew()
+    raw = [{"from": u, "name": u.title(), "at": f"2026-10-0{i + 1}T09:00:00Z", "a": "blue", "n": f"day {i}",
+            "d": {"k": "draw", "s": [[i * 3, 10 * i, 20, 30, 40 + i, 50, 60], [i * 3 + 1, 5, 5]] * 40}}
+           for i, u in enumerate(("dre", "mo", "jo"))]
+    raw.append({"from": "dre", "name": "Dre", "at": "2026-10-05T09:00:00Z", "a": "rose", "n": "", "d": {"k": "sign", "t": "go!"},
+                "p": ["l", -150, 320]})
+    people = {"dre": {"user_id": "dre", "look": ["cap"], "accent": "purple"}, "mo": {"user_id": "mo"}, "me": {"you": True}}
+    afresh = lambda items, ppl, c: board._fridge_notes(FR._clean(items), ppl, c)  # noqa: E731  nothing kept
+    checked = []
+    real_check = FR.clean_doodle
+    try:
+        FR.clean_doodle = board.clean_doodle = lambda d: (checked.append(1), real_check(d))[1]
+        FR._LAST.clear()
+        board._FRIDGE_DRAWN.update(key=None, html="")
+        wrap._wrap_data()["fridge"] = json.loads(json.dumps(raw))
+        draws = [board.fridge_html(CF.fridge(), people, {"sev": True}) for _ in range(3)]
+        once = len(checked)
+        mine1 = CF.fridge()
+        mine1[0]["name"] = "changed"
+        mine1[0]["p"] = ["r", 1, 1]
+        kept = CF.fridge()
+        CF.move_fridge(FR.key(raw[0]), "r", 40, 120)
+        checked.clear()
+        moved = board.fridge_html(CF.fridge(), people, {"sev": True})
+        n_moved = len(checked)
+        checked.clear()
+        dressed = board.fridge_html(CF.fridge(), dict(people, mo={"user_id": "mo", "look": ["dino"]}), {"sev": True})
+        plain = board.fridge_html(CF.fridge(), people, {"sev": False})
+        n_looks = len(checked)
+        want = [afresh(raw, people, {"sev": True}), afresh(wrap._wrap_data()["fridge"], people, {"sev": True}),
+                afresh(wrap._wrap_data()["fridge"], dict(people, mo={"user_id": "mo", "look": ["dino"]}), {"sev": True}),
+                afresh(wrap._wrap_data()["fridge"], people, {"sev": False})]
+    finally:
+        FR.clean_doodle = board.clean_doodle = real_check
+    check("efficiency: a fridge is checked once a change, each drawing once, however often the board draws (it was three times a draw)",
+          once == len(raw) and n_moved == len(raw) and n_looks == 0, (once, n_moved, n_looks))
+    check("efficiency: what's drawn from what's kept is what a draw afresh draws: as it was, moved, a look changed, Pip off",
+          draws[0] == draws[1] == draws[2] == want[0] and moved == want[1] and dressed == want[2] and plain == want[3]
+          and moved != want[0] and 'data-s="r" data-x="40" data-y="120"' in moved and dressed != moved and plain != moved
+          and draws[0].count('class="fz"') == len(raw), [len(x) for x in want])
+    check("efficiency: each caller gets a fridge of its own (a change to one is never kept)",
+          kept[0]["name"] == "Dre" and "p" not in kept[0] and kept == FR.clean(raw))
+    check("efficiency: a fridge's fingerprint is its contents: the same for a copy, never for anything that differs",
+          FR.fingerprint(raw) == FR.fingerprint(json.loads(json.dumps(raw))) and FR.fingerprint([1]) != FR.fingerprint([True])
+          and FR.fingerprint([1]) != FR.fingerprint([1.0]) and FR.fingerprint({"a": "1"}) != FR.fingerprint({"a": 1})
+          and FR.fingerprint([object()]) is None)
+    check("efficiency: an odd fridge (a name cut mid-word, a spot that's no longer one) is still drawn as afresh, and kept",
+          board.fridge_html([dict(raw[0], name="x" * 59 + " yz", p=[5, 200])], people, {})
+          == afresh([dict(raw[0], name="x" * 59 + " yz", p=[5, 200])], people, {}))
+
+    # wrap.json, written only when it says something new
+    wrap = _patched_due_crew()
+    path = os.path.join(wrap._profile_files(), "wrap.json")
+    labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    tomorrow = (TODAY + datetime.timedelta(days=1)).isoformat()
+
+    def refresh(more=0):
+        day = lambda n: {"reviews": n, "studyTimeMs": 60000 * n, "accuracy": 90.0, "streak": 4}  # noqa: E731
+        ents = [{"user_id": u, "name": u.title(), "you": u == "me", "paused": False, "decks": [],
+                 "days": {lb: day(10 + k + (more if u == "dre" and not k else 0)) for k, lb in enumerate(labels)}}
+                for u in ("me", "dre", "mo")]
+        dc._commit({"entries": ents, "pending": [], "cheers": [], "my_code": "ABC", "my_friends": ["dre", "mo"]},
+                   {}, labels, tomorrow)
+
+    writes = []
+    cl = types.SimpleNamespace(session={}, signed_in=True, user_id="me", _save_session=lambda: None)
+    saved = (wrap.os, dc.client, together.client, dc._morning, dc._awaiting_phone, due_flow.after_refresh, due_flow._reviews,
+             CF.check, dc.tooltip, dc._rerender, dc._swap, rooms.refresh_widgets, dc.account.saved_elsewhere, dict(_state))
+    try:
+        wrap.os = types.SimpleNamespace(path=os.path, remove=os.remove,
+                                        replace=lambda a, b: (writes.append(b), os.replace(a, b)))
+        dc.client = together.client = lambda: cl
+        dc._morning = lambda *a, **k: None
+        dc._awaiting_phone = lambda: False
+        due_flow.after_refresh = lambda: None
+        due_flow._reviews = lambda: {"done": 12, "due": 0}
+        CF.check = lambda today: []
+        dc.tooltip = lambda *a, **k: None
+        dc._rerender = dc._swap = rooms.refresh_widgets = lambda *a, **k: None
+        dc.account.saved_elsewhere = lambda at: None
+        _state.update(board_shown=False, prev_label="", prev_counts={}, prev_streaks={}, days={}, decks={})
+        wrap._wrap_data()["fridge"] = FR.clean(raw)
+        refresh()
+        first = len(writes)
+        writes.clear()
+        refresh()
+        refresh()
+        same = list(writes)
+        refresh(more=40)
+        changed = list(writes[len(same):])
+        on_disk = json.load(open(path))
+        wrap._wrap["profile"] = None  # the profile opened again: read from disk, and not written back
+        wrap._wrap_data()
+        wrap._save_wrap()
+        reopened = writes[len(same) + len(changed):]
+    finally:
+        (wrap.os, dc.client, together.client, dc._morning, dc._awaiting_phone, due_flow.after_refresh, due_flow._reviews,
+         CF.check, dc.tooltip, dc._rerender, dc._swap, rooms.refresh_widgets, dc.account.saved_elsewhere) = saved[:13]
+        _state.clear()
+        _state.update(saved[13])
+        wrap._wrap["profile"] = None
+        wrap._wrap["data"] = {}
+    check("efficiency: a refresh that changes nothing writes wrap.json not at all (it wrote it two or three times, fridge and all)",
+          first >= 1 and same == [], (first, same))
+    check("efficiency: one that changes something writes it once, whole, as it is; a profile opened again doesn't write it back",
+          changed == [path] and on_disk["ledger"][labels[0]]["p"]["dre"] == 50 and len(on_disk["fridge"]) == len(raw)
+          and reopened == [], (changed, reopened))
 
 
 def test_room_sounds_v391():
