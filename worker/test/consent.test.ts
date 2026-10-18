@@ -361,6 +361,16 @@ describe("a cheer may carry luck or a card's guid (v2.10)", () => {
   });
 });
 
+describe("a cheer may carry a doodle (3.9.1)", () => {
+  it("doodles", async () => {
+    const drawn = { emoji: "🎉", doodle: { k: "draw", s: [[0, 10, 10, 40, 40]] } };
+    expect(await dave.status("POST", "/cheers/alice", drawn), "doodle: from someone the owner added").toBe(200);
+    expect(await carol.status("POST", "/cheers/alice", drawn), "doodle: still only from someone the owner added").toBe(403);
+    expect(await dave.status("POST", "/cheers/alice", { ...drawn, doodle: { k: "pic", src: "https://x" } }), "doodle: lines or a sign, never a picture or a link").toBe(400);
+    expect(await dave.status("POST", "/cheers/alice", { ...drawn, doodle: { k: "draw", s: [[0, 1, 1]], c: "red" } }), "doodle: no colour of its own").toBe(400);
+  });
+});
+
 describe("markers: /version takes their place", () => {
   it("version", async () => {
     expect((await api("GET", "/version")).body, "marker: the client asks /version, once a day").toEqual({ api: 1, minClient: "3.1.0" });

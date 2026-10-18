@@ -21,6 +21,7 @@ one per yes, one to stop). Pip, if on, keeps me company through it.
 
 import datetime
 import html
+import os
 import time
 import traceback
 
@@ -217,11 +218,44 @@ def _bar_hidden(which):
 
 
 def _eval(web, js):
+    """Anything drawn on a page outside refresh_widgets: its next refresh
+    draws everything again."""
+    try:
+        if web is not None:
+            _DRAWN.pop(id(web), None)
+            web.eval(js)
+    except Exception:
+        pass
+
+
+def _tweak(web, js):
+    """A widget's own small change (shown or hidden), which a refresh that
+    draws nothing new leaves as it is."""
     try:
         if web is not None:
             web.eval(js)
     except Exception:
         pass
+
+
+# 3.9.1 (the efficiency run): what refresh_widgets last drew on each page,
+# and on which page (app.pages). Anki keeps the review screen's pages from
+# card to card and the top bar's from screen to screen, so a refresh whose
+# widgets come out the same sends nothing (it sent about 200 KB a card); a
+# new page, or anything else drawn there since, and it all goes again.
+_DRAWN = {}
+
+
+def _draw(web, parts):
+    """True when it went (it changed, or the page is new)."""
+    if web is None:
+        return False
+    key = (app.pages[0], "".join(parts))
+    if _DRAWN.get(id(web)) == key:
+        return False
+    _eval(web, key[1])
+    _DRAWN[id(web)] = key
+    return True
 
 
 def _webs():
@@ -236,7 +270,76 @@ def _data(room, side=None, **kw):
     return room_model.widget_data(room, _state["entries"], _accent_pair(),
                                   compact=bool(c.get("room_compact")),
                                   side=c.get("room_chip_side") if side is None else side,
-                                  sev=sev_on(), brk_pose=_brk_pose(), look=my_look(), **kw)
+                                  sev=sev_on(), brk_pose=_brk_pose(), look=my_look(),
+                                  sound=room_model.sound_pick(c) if room_model.sounds_on(c) else None, **kw)
+
+
+def _allow_sound(web):
+    """3.9.1: the top bar's page may play sound without a click on it, so a
+    room sound picked earlier comes back by itself after the bar redraws
+    (Anki's webviews, like browsers, wait for a click otherwise)."""
+    try:
+        web.setPlaybackRequiresGesture(False)
+    except Exception:
+        try:
+            from aqt.qt import QWebEngineSettings
+            web.settings().setAttribute(QWebEngineSettings.WebAttribute.PlaybackRequiresUserGesture, False)
+        except Exception:
+            pass
+
+
+def _sound(top, room):
+    """3.9.1: the top bar's player, told my pick and the session (or, in no
+    room, to stop). Nothing is sent: each person picks their own."""
+    if top is not None:
+        _eval(top, _sound_js(top, room))
+
+
+def _sound_js(top, room):
+    if room is None:
+        return room_model.sound_js(None)
+    c = cfg()
+    kind, vol = room_model.sound_pick(c) if room_model.sounds_on(c) else ("off", 0)
+    if kind != "off" and top is not None:
+        _allow_sound(top)
+    return room_model.sound_js(room_model.sound_state(room, kind, vol, _sound_files()))
+
+
+_SOUND_DIR = os.path.join(os.path.dirname(__file__), "sounds")
+
+
+def _sound_files():
+    """Where the top bar's page finds the recordings this install has (none:
+    they're all made). The folder is served by /_addons/ (setWebExports in
+    __init__). Looked for once a run."""
+    if "files" not in _SOUND_FILES:
+        try:
+            have = [k for k in room_model.RECORDED if os.path.isfile(os.path.join(_SOUND_DIR, k + ".ogg"))]
+            _SOUND_FILES["files"] = (room_model.sound_files(mw.addonManager.addonFromModule(__name__), have)
+                                     if have else {})
+        except Exception:
+            return {}
+    return dict(_SOUND_FILES["files"])
+
+
+_SOUND_FILES = {}
+
+
+def set_sound(parts):
+    """roomsound:<kind>:<volume> from the chip's picker: kept for this
+    computer (it already plays in the page). Only the top bar sends it; a
+    card's page can't (room_model.CARD_PAGE_CMDS)."""
+    got = room_model.sound_cmd(parts)
+    if got is None or not room_model.sounds_on(cfg()):
+        return
+    c = cfg()
+    if (c.get("room_sound"), c.get("room_sound_vol")) != got:
+        c["room_sound"], c["room_sound_vol"] = got
+        save_cfg(c)
+    top = _webs()[0]
+    if top is not None and got[0] != "off":
+        _allow_sound(top)
+    _sound(top, my_room())
 
 
 def refresh_widgets():
@@ -246,24 +349,31 @@ def refresh_widgets():
     top, main, bottom = _webs()
     signed = client().signed_in
     room = my_room() if signed else None
+    # 3.9.1: the room sound plays (or stops) in the top bar, whichever little
+    # one shows; each page's widgets go as one piece (_draw), the bottom bar's
+    # with what keeps Anki's answer buttons in its middle
+    t, m, b = [_sound_js(top, room)], [], []
     if room is None:
-        for web in (top, main, bottom):
-            _eval(web, room_model.widget_js("off"))
+        off = room_model.widget_js("off")
+        t.append(off), m.append(off), b.append(off)
         if signed and cfg().get("fifteen", True):
             c = cfg()
-            _eval(top, room_model.widget_js("start", room_model.start_data(
+            t.append(room_model.widget_js("start", room_model.start_data(
                 _accent_pair(), c.get("room_chip_side"), sev_on(), nap=not _studied_today(),
                 compact=bool(c.get("room_compact")), look=my_look())))
+        b.append(room_model.BAR_BALANCE)
+        _draw(top, t), _draw(main, m), _draw(bottom, b)
         return
     data = _data(room)
     where = _where()
-    _eval(top, room_model.widget_js("start", None))
-    _eval(top, room_model.widget_js("chip", data if where == "chip" else None))
-    _eval(bottom, room_model.widget_js("bottom", data if where == "bottom" else None))
-    _eval(main, room_model.widget_js("gutter", data if where == "gutter" else None))
+    t += [room_model.widget_js("start", None), room_model.widget_js("chip", data if where == "chip" else None)]
+    b += [room_model.widget_js("bottom", data if where == "bottom" else None), room_model.BAR_BALANCE]
+    m.append(room_model.widget_js("gutter", data if where == "gutter" else None))
+    drawn = {"chip": _draw(top, t), "bottom": _draw(bottom, b), "gutter": _draw(main, m)}
     if _state.get("room_card"):
         if _state["room_card"] == where:
-            _card_still_out(where)
+            if drawn[where]:
+                _card_still_out(where)
         else:
             _state["room_card"] = None  # it moved (a review began or ended): the card went with the page
 
@@ -284,8 +394,8 @@ def _little_shown(where, on):
     is out, and comes back when the card closes."""
     top, main, bottom = _webs()
     web = {"chip": top, "bottom": bottom, "gutter": main}.get(where)
-    _eval(web, "(function(){var e=document.getElementById('dc-room-%s');if(e){e.style.visibility='%s';}})();"
-          % (where, "" if on else "hidden"))
+    _tweak(web, "(function(){var e=document.getElementById('dc-room-%s');if(e){e.style.visibility='%s';}})();"
+           % (where, "" if on else "hidden"))
 
 
 def show_card():
@@ -424,6 +534,7 @@ def on_close():
     """profile_will_close: closing Anki leaves the room. Anki's closing sync
     (or this push) takes it off my week doc; uploads still go while closing.
     3.8.1: a fifteen ends, and its line waits for the next open."""
+    _sound(_webs()[0], None)  # 3.9.1: a room sound stops with the profile
     cl = client()
     room = room_model.clean_room(cl.session.get("room"))
     if cl.signed_in and room_model.is_fifteen(room):
@@ -476,8 +587,7 @@ def on_question(card):
 def on_answer(card):
     if _state["room_break"]:
         _stop_auto_advance()  # Auto Advance's answer timer starts with the answer side
-    _eval(getattr(getattr(mw, "reviewer", None), "web", None),
-          "window.dcRoomFit && window.dcRoomFit();")
+    _tweak(getattr(getattr(mw, "reviewer", None), "web", None), "window.dcRoomFit && window.dcRoomFit();")
 
 
 def on_state(new_state, old_state):
@@ -488,6 +598,14 @@ def on_state(new_state, old_state):
 
 
 def on_toolbar(*_args):
+    if client().signed_in:
+        refresh_widgets()
+
+
+def on_theme(*_args):
+    """3.9.1: night mode on or off: the widgets pick their colours as they're
+    drawn, so they're drawn again."""
+    _DRAWN.clear()
     if client().signed_in:
         refresh_widgets()
 
@@ -527,6 +645,8 @@ def on_message(cmd, parts):
         fifteen_answer(cmd[6:])
     elif cmd == "room15x":
         dismiss_fifteen_done()
+    elif cmd == "roomsound":
+        set_sound(parts)  # 3.9.1: the chip's speaker
     elif cmd == "roomtick":
         # a phase changed (the chip saw it): the Decks screen's lobby follows
         if mw.state == "deckBrowser":

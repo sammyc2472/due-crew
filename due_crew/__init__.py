@@ -46,7 +46,7 @@ from .stats import heatmap as cached_heatmap
 from .stats.decks import gather_shared_decks
 from .stats.queries import StatsQueries
 from .ui import copy_text
-from . import account, bingo_flow, due_flow, plan_flow, rooms, together
+from . import account, bingo_flow, due_flow, plan_flow, rooms, sheets, together, two_buttons
 from . import cards as crew_cards
 from .wrap import (_arrivals, _deck_deltas, _exam_eve_info, _mute_knocker, _save_wrap, _update_returns,
                    _update_wrap, _wrap_data, _wrap_info)
@@ -56,6 +56,7 @@ _fetching = False
 _menu_done = False
 _last_attempt = 0.0   # when a push was last STARTED, success or not
 _closing = False      # profile_will_close: uploads still go, fetches don't
+_pushed = None        # 3.9.1: (col.mod, my day, my config) as the last push gathered them
 
 def _board_data():
     return {"entries": _state["entries"], "labels": _state["labels"],
@@ -394,6 +395,9 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
         _pending_cheers.extend(fresh)
         _state["sev_cheer"] = time.time()  # 3.8.1: Pip catches it by the logo, once
         _closet(lambda cf: cf.note_cheered())  # 3.8.2: a crewmate's cheer
+        # 3.9.1: a drawing or a sign goes on the fridge, in its sender's colour from this refresh's crew
+        # (the bug hunt: _state's is None at launch, and stale for someone just become mutual)
+        _closet(lambda cf: cf.keep_doodles(fresh, data["entries"], client().user_id))
 
     if knocks is not None:
         _state["knocks"] = [tuple(k) for k in knocks]
@@ -456,6 +460,8 @@ def _rerender():
 
 
 def _on_render(deck_browser, content):
+    app.on_decks_render()
+    content.stats += board.key_js()  # 3.9.1: the page's own scripts add the board's key to what they send
     try:
         c = cfg()
         if _state.get("settings_tab"):
@@ -579,7 +585,8 @@ def _board_html(c):
                         sev=rooms.board_sev(c, due), closet=_state.get("closet_new"),
                         halloween=closet_flow.halloween_view(_state["labels"][0] if _state["labels"] else "",
                                                              _state["entries"], c),
-                        wrapped=_wrapped_banner(c))
+                        wrapped=_wrapped_banner(c), fridge=closet_flow.fridge(client().user_id),
+                        fridge_gone=closet_flow.gone())
 
 
 def _you(c, due, plans):
@@ -629,8 +636,27 @@ def _arrive_js():
     return "try{window.dcMotion&&dcMotion.arrive(%s);}catch(e){}" % board._json.dumps(new) if new else ""
 
 
+# 3.9.1 (the efficiency run): the page the board's scripts last went to
+# (app.pages). A page keeps them (motion.js, Due's add line, Find, the
+# fridge's), and each loads once, so a swap on that page sends only what
+# they do after a draw (it sent 77 KB of them at every click); a page drawn
+# anew gets them all.
+_SCRIPTS = {"page": None}
+
+
+def _board_js(drawn=False):
+    """(keep_me_in_view_js, fridge_js) for this draw: with the scripts when
+    the page was just drawn (drawn) or is another since they went."""
+    whole = drawn or _SCRIPTS["page"] != app.pages[0]
+    _SCRIPTS["page"] = app.pages[0]
+    return board.keep_me_in_view_js(scripts=whole), board.fridge_js(scripts=whole)
+
+
 def _on_did_render(deck_browser):
-    mw.web.eval(board.keep_me_in_view_js() + _arrive_js() + (board.wrapped_js() if _state.get("wrapped_open") else ""))
+    keep, fridge = _board_js(drawn=True)
+    mw.web.eval("window.dcBK=%s;" % board._json.dumps(board.BOARD_KEY)  # 3.9.1: as the page's own script set it
+                + keep + _arrive_js() + (board.wrapped_js() if _state.get("wrapped_open") else "")
+                + fridge)  # 3.9.1: the doodles placed around the board, and draggable
     _play_cheers()
     if _state.get("plans_midday") and not _closing:
         # 3.7.3: an update that came while reviewing waits for the Decks screen
@@ -642,6 +668,7 @@ def _on_did_render(deck_browser):
         from aqt.qt import QTimer
         QTimer.singleShot(0, lambda: _morning_now(waiting))
     together.show_luck_card()
+    sheets.redraw()  # 3.9.1: a question that was open goes back up on the page drawn anew
     rooms.refresh_widgets()
 
 
@@ -665,7 +692,7 @@ def _on_sync_done(full=False, light=False, fetch=None):
     (on open, on a stale board) send today's numbers only — decks, heatmap,
     and backfill move slowly and cost main-thread SQL, so they wait for a
     real sync or a Refresh."""
-    global _last_attempt
+    global _last_attempt, _pushed
     if not mw.col or not client().signed_in:
         return
     if not account.ready():
@@ -749,8 +776,32 @@ def _on_sync_done(full=False, light=False, fetch=None):
             extras = dict(extras or {}, team=team)
     except Exception:
         traceback.print_exc()
+    _pushed = _push_key() if stats is not None else None
     refresh_board(upload_stats=stats, backfill=week, shared_decks=decks,
                   heatmap=heat, squad_row=row, full=full, fetch=fetch, plans=plan_prog, extras=extras)
+
+
+def _push_key():
+    """What a push's numbers come from: the collection (Anki moves its mod
+    with every change, a sync's too), my day and my config."""
+    try:
+        return (mw.col.mod, StatsQueries(mw.col).day_label(0), cfg())
+    except Exception:
+        return None
+
+
+def _on_anki_sync(*_args):
+    """Anki's own sync finished: everything that changed goes up
+    (_on_sync_done). 3.9.1: the one Anki runs as it closes (after
+    profile_will_close) sends today's numbers only, as the pushes on open
+    do, and nothing when the collection, my day and my config are as the
+    last push that went had them: Anki waits on this before it can quit,
+    and the upload's thread may not outlive it. Leaving a room still goes
+    (rooms.on_close pushes it itself)."""
+    if not _closing:
+        _on_sync_done()
+    elif _pushed is None or _pushed != _push_key() or _state.get("sync_error"):
+        _on_sync_done(light=True)
 
 
 def _our_page(context):
@@ -780,12 +831,24 @@ def _on_js(handled, message, context):
     card_page = False
     if message.startswith("duecrew:"):
         # the reviewer's page runs the card's own script too: from there only
-        # the widgets' keyed buttons count, never a bare command
+        # the widgets' keyed buttons count, never a bare command. 3.9.1 (the
+        # security review): the Decks screen's too, unless its page's own key
+        # comes with it: on the way back to Decks, Anki sends the page
+        # before's messages (a card's, a deck description's) as the Decks
+        # screen's until the Decks page is built
         from .room_model import trusted
-        card_page = not _our_page(context)
-        message, ok = trusted(message, card_page)
-        if not ok:
-            return (True, None)
+        body, sep, key = message.rpartition("|")
+        if isinstance(context, DeckBrowser) and sep and key == board.BOARD_KEY:
+            message, card_page = body, False
+        else:
+            card_page = isinstance(context, DeckBrowser) or not _our_page(context)
+            message, ok = trusted(message, card_page)
+            if not ok:
+                return (True, None)
+    if message == "duecrew:veiltap":
+        # 3.9.1: a tap on the top or bottom bar's shade (app.veil) is Esc on the board
+        app.board_eval("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));")
+        return (True, None)
     if message.startswith("duecrew:knows"):
         # 3.2: the chip in the reviewer's bottom bar, or its card above it
         try:
@@ -876,6 +939,28 @@ def _on_js(handled, message, context):
         open_auth()
     elif cmd == "cheerpick" and len(parts) > 2:
         _cheer_menu(parts[2])
+    elif (cmd == "fridgemove" and len(parts) > 5 and parts[3] in ("l", "r")
+          and (parts[4][1:] if parts[4][:1] == "-" else parts[4]).isdecimal() and parts[5].isdecimal()):
+        # 3.9.1: where I left it, beside the board (side, px from its edge, px down); no redraw
+        _closet(lambda cf: cf.move_fridge(parts[2], parts[3], int(parts[4][:6]), int(parts[5][:5])))
+    elif cmd == "fridgedown" and len(parts) > 2:
+        _closet(lambda cf: cf.take_down(parts[2]))  # 3.9.1: off the fridge, with an Undo in its place for a few seconds
+        _swap(c)
+    elif cmd == "fridgeback" and len(parts) > 2:
+        _closet(lambda cf: cf.put_back(parts[2]))  # 3.9.1: its Undo
+        _swap(c)
+    elif cmd == "emojipicker":
+        # 3.9.1: the Cheer window's "other": the computer's own picker; when it has none, the window's drawer
+        from .native_emoji import open_picker
+        if not open_picker():
+            mw.web.eval("window.dcCheerNoNative && window.dcCheerNoNative();")
+    elif cmd == "cheersend" and len(parts) > 2:
+        from .social import send_from_window
+        send_from_window(":".join(parts[2:]))  # 3.9.1: the Cheer window's Send
+    elif cmd == "sheet" and len(parts) > 3:
+        sheets.answer(parts[2], ":".join(parts[3:]))  # 3.9.1: a sheet's answer
+    elif cmd == "veil" and len(parts) > 2:
+        app.veil(parts[2] == "1" and app.board_up())  # 3.9.1: a window over the board; the bars dim with it
     elif cmd == "rowmenu" and len(parts) > 2:
         row_menu(parts[2])  # 3.0.1: right-click a crewmate: mute, report
     elif cmd == "status":
@@ -984,13 +1069,14 @@ def _swap(c, focus=None):
         _rerender()
         return
     html_out = _board_html(c)
-    js = board.swap_js(html_out) + board.keep_me_in_view_js() + _arrive_js()  # 3.8.0: no jumps under the pointer
+    keep, fridge = _board_js()
+    js = board.swap_js(html_out) + keep + _arrive_js() + fridge  # 3.8.0: no jumps under the pointer
     if _state.get("wrapped_open"):
         js += board.wrapped_js()  # 3.9.0: Wrapped's player, on the card just drawn
     if focus:
         js += ("(function(){var f=document.querySelector('#due-crew [data-f=\"%s\"]');"
                "if(f){f.focus({preventScroll:true});}})();" % re.sub(r"[^A-Za-z0-9:_-]", "", focus))
-    mw.web.eval(js)
+    app.board_eval(js)  # 3.9.1: never into the page before the Decks page (it'd carry the board's key)
 
 
 def open_auth():
@@ -1331,7 +1417,18 @@ def _settings_view():
     return {"tab": _state.get("settings_tab"), "signed_in": cl.signed_in, "name": cl.display_name,
             "emoji": c.get("emoji"), "status": c.get("status"), "sync": sync, "crew": crew,
             "squads": [s.get("name") for s in (c.get("squads") or []) if isinstance(s, dict) and s.get("name")],
-            "decks": decks}
+            "decks": decks,
+            "fsrs": _fsrs_on()}  # 3.9.1: two buttons' note, with FSRS off
+
+
+def _fsrs_on():
+    """Whether FSRS is on in this collection; None when there's none open."""
+    if not mw.col:
+        return None
+    try:
+        return bool(mw.col.get_config("fsrs", False))
+    except Exception:
+        return None
 
 
 def _settings_cmd(cmd, parts):
@@ -1354,8 +1451,7 @@ def _settings_cmd(cmd, parts):
         if _edit_emoji(mw) is not None:
             _swap(cfg(), focus)
     elif cmd == "setstatus":
-        if _edit_status(mw) is not None:
-            _swap(cfg(), focus)
+        _edit_status(lambda _s: _swap(cfg(), focus))
     elif cmd == "setsquads":
         open_squads()
         _swap(cfg(), focus)
@@ -1363,11 +1459,11 @@ def _settings_cmd(cmd, parts):
         _state["settings_tab"] = None
         open_auth()
     elif cmd == "setsignout":
-        from .ui import confirm
-        if confirm(mw, "Sign out?", "Sign out on this device? Your account and stats stay.", "Sign Out"):
+        def out():
             _state["settings_tab"] = None
             client().sign_out()
             _on_signed_out()
+        sheets.confirm("Sign out?", "Sign out on this device? Your account and stats stay.", "Sign Out", out)
     elif cmd == "setdelete":
         _delete_account()
     elif cmd == "setfeedback":
@@ -1384,7 +1480,8 @@ def _apply_settings(changed, focus=None):
     c = cfg()
     push = any(k in changed and changed[k] != c.get(k) for k in SHARE_KEYS)
     chip = any(k in changed and changed[k] != c.get(k, d) for k, d in
-               (("room_chip_side", "right"), ("fifteen", True), ("sev", True), ("sev_break", "breathe")))  # 3.8.1
+               (("room_chip_side", "right"), ("fifteen", True), ("sev", True), ("sev_break", "breathe"),
+                ("room_sounds", True)))  # 3.8.1; 3.9.1: the speaker comes and goes
     leeches = changed.get("due_leeches") is True and not c.get("due_leeches")
     c.update(changed)
     save_cfg(c)
@@ -1418,38 +1515,38 @@ def _flip(focus):
 
 
 def _rename():
-    from aqt.qt import QInputDialog, QLineEdit
     cl = client()
     current = cl.display_name
-    name, ok = QInputDialog.getText(mw, "Display name", "New name:", QLineEdit.EchoMode.Normal, current)
-    name = name.strip()
-    if not ok or not name or name == current:
-        return
 
-    def done(result):
-        if not result:
-            tooltip("Couldn't save the name. Try again.")
+    def go(name):
+        name = name.strip()
+        if not name or name == current:
             return
-        tooltip("Name changed.")
-        _swap(cfg())
-    _bg(lambda: cl.set_display_name(name), done)
+
+        def done(result):
+            if not result:
+                tooltip("Couldn't save the name. Try again.")
+                return
+            tooltip("Name changed.")
+            _swap(cfg())
+        _bg(lambda: cl.set_display_name(name), done)
+    sheets.ask_text("Display name", "New name.", go, value=current or "", most=60)
 
 
 def _delete_account():
-    from .ui import confirm
-    if not confirm(mw, "Delete account?", "This deletes your stats, your code, and "
-                   "your account for good. No undo.", "Delete Account"):
-        return
-    cl = client()
+    def go():
+        cl = client()
 
-    def done(result):
-        if not result:
-            tooltip("Couldn't delete. Check your connection and try again.")
-            return
-        _state["settings_tab"] = None
-        _on_signed_out()
-        tooltip("Account deleted.")
-    _bg(lambda: cl.delete_account() or True, done)
+        def done(result):
+            if not result:
+                tooltip("Couldn't delete. Check your connection and try again.")
+                return
+            _state["settings_tab"] = None
+            _on_signed_out()
+            tooltip("Account deleted.")
+        _bg(lambda: cl.delete_account() or True, done)
+    sheets.confirm("Delete account?", "This deletes your stats, your code, and your account for good. No undo.",
+                   "Delete Account", go, danger=True)
 
 
 def open_feedback():
@@ -1514,24 +1611,29 @@ SHARE_KEYS = ("show_up", "share_reviews", "share_time", "share_retention", "shar
 
 
 def _on_signed_out():
-    global _fetching
+    global _fetching, _pushed
+    _closet(lambda cf: cf.clear_fridge())  # 3.9.1: the drawings were that account's
     _reset_runtime(keep_sync=True)
     with _lock:
         _fetching = False
+    _pushed = None
     _rerender()
 
 
 def _on_profile_open():
-    global _menu_done, _closing, _last_attempt, _fetching
+    global _menu_done, _closing, _last_attempt, _fetching, _pushed
     if not _menu_done:
         _menu_done = True
         _tools_menu()
         mw.addonManager.setConfigAction(__name__, open_settings)
+        # 3.9.1: the room sounds' recordings, for the top bar's page (rooms._sound_files)
+        mw.addonManager.setWebExports(__name__, r"sounds/[^/]+\.ogg")
     _reset_runtime()          # profile switch: nothing carries over
     with _lock:
         _fetching = False     # the last profile's refresh can't commit here
     _closing = False
     _last_attempt = 0.0
+    _pushed = None
     client()                  # rebind to this profile's session
     _closet(lambda cf: cf.hook())  # 3.8.2: cards I add count for Pip's closet
     if client().signed_in:
@@ -1698,7 +1800,7 @@ gui_hooks.deck_browser_did_render.append(_on_did_render)
 gui_hooks.sync_did_finish.append(_mark_anki_synced)
 
 
-gui_hooks.sync_did_finish.append(_on_sync_done)
+gui_hooks.sync_did_finish.append(_on_anki_sync)
 
 
 gui_hooks.webview_did_receive_js_message.append(_on_js)
@@ -1730,11 +1832,19 @@ gui_hooks.reviewer_did_show_question.append(rooms.on_question)
 gui_hooks.reviewer_did_show_answer.append(rooms.on_answer)
 if hasattr(gui_hooks, "reviewer_will_answer_card"):
     gui_hooks.reviewer_will_answer_card.append(rooms.will_answer)  # none under a room's break
+    gui_hooks.reviewer_will_answer_card.append(two_buttons.will_answer)  # 3.9.1: 2, 3 and 4 are Good
+if hasattr(gui_hooks, "reviewer_will_init_answer_buttons"):
+    gui_hooks.reviewer_will_init_answer_buttons.append(two_buttons.will_init_buttons)  # 3.9.1: Again and Good
 gui_hooks.state_did_change.append(rooms.on_state)
 gui_hooks.state_did_change.append(due_flow.on_state)  # 3.8.0: Study today's walk
 gui_hooks.state_shortcuts_will_change.append(due_flow.walk_keys)  # and Escape stops it
 if hasattr(gui_hooks, "top_toolbar_did_redraw"):  # Anki 2.1.54+
     gui_hooks.top_toolbar_did_redraw.append(rooms.on_toolbar)
+# 3.9.1 (the efficiency run): a page sent once is sent again only on a new page
+gui_hooks.webview_will_set_content.append(app.on_set_content)
+gui_hooks.state_will_change.append(app.on_state_will_change)  # 3.9.1: the Decks page isn't up till it renders
+if hasattr(gui_hooks, "theme_did_change"):
+    gui_hooks.theme_did_change.append(rooms.on_theme)  # the widgets pick their colours as they're drawn
 
 # the modules that need a redraw or a refresh reach it through app
 app.swap = _swap

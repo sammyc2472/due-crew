@@ -14,6 +14,7 @@ ahead of mine still renders as fresh.
 
 import datetime as _dt
 import html as _html
+import secrets as _secrets
 import json as _json
 import os as _os
 import re as _re
@@ -23,7 +24,8 @@ from datetime import date as _date, datetime, timezone
 
 from .logo import board_mark
 from . import room_model
-from . import closet as _closet, sev as _sev, shows as _shows
+from . import closet as _closet, emoji_drawer as _emoji_drawer, fridge as _fridge, sev as _sev, shows as _shows
+from .backend.shapes import DOODLE_INKS, clean_doodle
 from .stats.decks import sig_match
 
 LIGHT = {
@@ -168,7 +170,7 @@ def _quiet_fold(rows):
     except Exception:
         since = ""
     verb = "hasn't" if len(rows) == 1 else "haven't"
-    return (f'<tr class="qfold"><td class="rk"></td><td class="nm" colspan="{len(HEADERS) + 2}">'
+    return (f'<tr class="qfold"><td class="rk"></td><td class="nm" colspan="{len(HEADERS) + 1}">'
             f'<a href="#" onclick="this.closest(\'table\').classList.toggle(\'qopen\');return false;">'
             f'&#9656; {len(rows)} quiet</a> <span class="dc-note">&middot; {who} {verb} been here'
             f'{" since " + since if since else " in months"}</span></td></tr>')
@@ -556,9 +558,18 @@ def _css(cfg):
       background: var(--dc-well); vertical-align: middle; }}
     #due-crew .sq.on {{ background: var(--dc-accent); }}
     #due-crew .sq.away {{ background: var(--dc-well); box-shadow: inset 0 0 0 2px var(--dc-accent); opacity: 0.5; }}
-    #due-crew td.chc {{ width: 22px; padding-left: 2px; padding-right: 2px; text-align: center; }}
-    #due-crew a.dc-cheer {{ text-decoration: none; opacity: 0.3; font-size: 12px; }}
-    #due-crew a.dc-cheer:hover {{ opacity: 1; }}
+    /* 3.9.1 (Sam's pick, "Cheers, clearer"): a cheer is a pill after the name, in place of the faint 🎉
+       column at the end; it shows only while the pointer's on the name (or a key's on it), never always
+       (Sam: "only show up when scrolling on a name, not persistent all the time") */
+    #due-crew a.dc-cpill {{ display: none; margin-left: 6px; padding: 0 8px; border: 1px solid var(--dc-accent); border-radius: 99px;
+      color: var(--dc-accent); font-size: 10.5px; font-weight: 700; line-height: 16px; text-decoration: none; white-space: nowrap;
+      vertical-align: 1px; }}
+    #due-crew td.nm:hover a.dc-cpill, #due-crew td.nm:focus-within a.dc-cpill {{ display: inline-block; }}
+    /* a long name gives way so its pill is never cut off: it ends a little sooner while the pill shows */
+    #due-crew td.nm:hover a.dc-pl, #due-crew td.nm:focus-within a.dc-pl {{
+      display: inline-block; max-width: 56%; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }}
+    #due-crew tr.you a.dc-pl {{ max-width: none; }}
+    #due-crew a.dc-cpill:hover, #due-crew a.dc-cpill:focus-visible {{ background: var(--dc-accent); color: var(--dc-accent-ink); outline: none; }}
     #due-crew tr.you td {{ {you_bg} }}
     #due-crew tr.you td.nm {{ font-weight: 700; }}
     #due-crew tr.dim td {{ color: var(--dc-faded); }}
@@ -723,7 +734,7 @@ def _css(cfg):
     @keyframes dcbreathe {{ from {{ opacity: .4; transform: scale(.85); }} to {{ opacity: 1; transform: scale(1); }} }}
     @keyframes dcspin {{ to {{ transform: rotate(360deg); }} }}
     @media (prefers-reduced-motion: no-preference) {{
-      #due-crew .dc-live {{ animation: dcbreathe 2.4s ease-in-out infinite alternate; }}
+      #due-crew .dc-live {{ animation: dcbreathe 2.4s ease-in-out 7 alternate; }}  /* 3.9.1 (Sam's pick D): a few pulses, then lit */
       #due-crew .dc-foot a.ic.dc-spin {{ display: inline-block; animation: dcspin .8s linear infinite; }}
     }}
     #due-crew .dc-plan {{ display: inline-block; width: 36px; height: 4px; border-radius: 2px;
@@ -891,7 +902,7 @@ def _css(cfg):
     #due-crew .face {{ display: grid; justify-items: center; gap: 1px; font-size: 11px; color: var(--dc-muted); min-width: 44px; }}
     #due-crew .face .e {{ font-size: 20px; line-height: 24px; }}
     #due-crew .face .e .dc-rsev {{ margin: 4px 0 0; }}
-    #due-crew .face:not(:hover) .dc-rsev .sv, #due-crew .face:not(:hover) .dc-rsev .sv * {{ animation: none !important; }}
+    #due-crew .face:not(:hover) .dc-rsev .sv, #due-crew .face:not(:hover) .dc-rsev .sv * {{ animation: none !important; }} #due-crew .face:hover .dc-rsev .sv {{ --sv-on: infinite; }}
     #due-crew .ini {{ display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--dc-you-bg); color: var(--dc-accent); font-size: 12px; font-weight: 700; line-height: 1; vertical-align: middle; }}
     #due-crew .ini.sm {{ width: 17px; height: 17px; font-size: 10px; }}
     #due-crew .face.away {{ opacity: .38; }}
@@ -1007,10 +1018,23 @@ def _css(cfg):
     """
 
 
+# 3.9.1 (the security review): the Decks page's own commands carry this, new
+# each run and written only into that page. Anki calls a message the Decks
+# screen's from the moment it switches to it, while the page before (a
+# card's, or Overview's with a deck's description, scripts and all) is still
+# up; without the key a message gets a card page's rules (__init__._on_js).
+BOARD_KEY = _secrets.token_hex(8)
+
+
+def key_js():
+    """The key, where the page's own scripts add it (window.dcBK)."""
+    return f"<script>window.dcBK={_json.dumps(BOARD_KEY)};</script>"
+
+
 def _pycmd(cmd):
     """Only ids and keys ride in commands; anything else is dropped so a
     server-sourced id could never close the quote it sits in."""
-    return f"pycmd('duecrew:{_re.sub(r'[^A-Za-z0-9:_.-]', '', str(cmd))}'); return false;"
+    return f"pycmd('duecrew:{_re.sub(r'[^A-Za-z0-9:_.-]', '', str(cmd))}|{BOARD_KEY}'); return false;"
 
 
 def crew_views(show_up=False, hidden=frozenset()):
@@ -1157,12 +1181,13 @@ def _row_html(row, rank, cfg, period="today"):
                         f'{done:,} &middot; ')
         status = f'<div class="dc-stw"><span class="dc-st" title="{st}">{lead}{st}</span></div>'
     if row["you"]:
-        cheer = '<td class="chc"></td>'
+        cheer = ""
         name = (f'{fig}<a class="dc-pl" href="#" title="See what your crew sees" '
                 f'onclick="{_pycmd("profile:" + str(row["user_id"]))}">{name}</a>')
     else:
-        cheer = (f'<td class="chc"><a class="dc-cheer" href="#" title="Send a cheer" '
-                 f'onclick="{_pycmd("cheerpick:" + str(row["user_id"]))}">&#127881;</a></td>')
+        # 3.9.1: the cheer is a pill after the name (and its chip), where the eye already is
+        cheer = (f'<a class="dc-cpill" href="#" title="Send a cheer" aria-label="Cheer {_html.escape(str(row["name"]), quote=True)}" '
+                 f'onclick="{_pycmd("cheerpick:" + str(row["user_id"]))}">&#127881; Cheer</a>')
         # 3.0.1: right-click for Mute cheers and Report…
         # 3.8.2: their Pip opens the profile too, outside the name's underline
         sev_link = (f'<a class="dc-rsevl" href="#" tabindex="-1" aria-hidden="true" '
@@ -1171,7 +1196,7 @@ def _row_html(row, rank, cfg, period="today"):
                 f'onclick="{_pycmd("profile:" + str(row["user_id"]))}" '
                 f'oncontextmenu="{_pycmd("rowmenu:" + str(row["user_id"]))}">{name}</a>')
     return (f'<tr class="{cls.strip()}"><td class="rk">{rank}</td>'
-            f'<td class="nm">{name}{chip}{la}{extra}{status}</td>{cells}{cheer}</tr>')
+            f'<td class="nm">{name}{chip}{la}{extra}{cheer}{status}</td>{cells}</tr>')
 
 
 def _solo_html(data):
@@ -1184,7 +1209,7 @@ def _solo_html(data):
     # 3.5.0: a friend's, a plan's or a squad's code, or a whole invite
     add = ("var v=(document.getElementById('dc-addcode').value||'').toUpperCase()"
            ".replace(/[^A-Z0-9 \\/]/g,' ').slice(0,200);"
-           "pycmd('duecrew:addcode:'+v);return false;")
+           "pycmd('duecrew:addcode:'+v+'|'+window.dcBK);return false;")
     pending = [str(x) for x in data.get("pending") or []]
     if not pending:
         wait = "Send a friend your invite. Once you’ve added each other, they’re here."
@@ -1214,7 +1239,6 @@ def _table_html(data, cfg, period, pick=""):
         arrow = " &#9662;" if key == sort else ""
         heads += (f'<th><a class="{on}" href="#" '
                   f'onclick="{_pycmd("sort:" + key)}">{label}{arrow}</a></th>')
-    heads += "<th></th>"
     if cfg.get("show_up"):
         fresh, dormant = build_rows(data["entries"], data["labels"],
                                     data.get("tomorrow", ""), "today", cfg)
@@ -1361,7 +1385,7 @@ FIND_JS = r"""
         var tab = on ? (on.getAttribute('data-f') || '').split(':')[1] : '';
         if (tab === h.t) { this.land(h.f); return; }
         this.want = {f: h.f, at: Date.now()};
-        pycmd('duecrew:settab:' + h.t);
+        pycmd('duecrew:settab:' + h.t + '|' + window.dcBK);
       },
       land: function (f) {
         var el = document.querySelector('#due-crew [data-f="' + f + '"]') || document.querySelector('#due-crew [data-f^="' + f + '"]');
@@ -1392,10 +1416,15 @@ with open(_os.path.join(_os.path.dirname(__file__), "show.js"), encoding="utf-8"
     SHOW_JS = _f.read()
 
 
-def keep_me_in_view_js():
+def keep_me_in_view_js(scripts=True):
     """Run after the board is drawn or swapped: a capped view starts with
     your own row in view, wherever it ranks. Nothing happens under the
-    cap, or when you are already visible."""
+    cap, or when you are already visible. scripts (3.9.1, the efficiency
+    run): the board's own scripts with it (Due's add line, motion.js,
+    Find), which a page keeps once it has them and which load only once
+    (each checks it isn't there yet); without, only what each does after
+    a draw (Find lands, the motion's memory), for a swap on a page that
+    has them (the glue's _board_js)."""
     return """
     (function() {
         var box = document.querySelector('#due-crew .dc-scroll');
@@ -1405,7 +1434,35 @@ def keep_me_in_view_js():
         var want = me.offsetTop - (box.clientHeight - me.offsetHeight) / 2;
         if (want > 0) { box.scrollTop = want; }
     })();
-    """ + DUE_JS + MOTION_JS + FIND_JS + MOTION_DRAWN
+    """ + (DUE_JS + MOTION_JS + FIND_JS + VEIL_WATCH_JS if scripts else FIND_AFTER) + MOTION_DRAWN
+
+
+# 3.9.1 (Sam: "when cheering, the full background doesn't grey out"): a
+# window over the board dims the board's page; the glue dims the top and
+# bottom bars to match (app.veil) while one is up. This tells it when: a
+# window comes, or the last one goes (a closing one gives up its id as it
+# starts to fade, motion.js, so the bars fade with it).
+VEIL_IDS = ("dc-cheer", "dc-profile", "dc-sheet")
+VEIL_WATCH_JS = """
+(function () {
+    if (window.dcVeil || typeof MutationObserver === 'undefined') { return; }
+    var on = false, IDS = %s;
+    window.dcVeil = function () {
+        var now = IDS.some(function (id) { return !!document.getElementById(id); });
+        if (now === on) { return; }
+        on = now;
+        if (typeof pycmd !== 'undefined') { pycmd('duecrew:veil:' + (on ? 1 : 0) + '|' + window.dcBK); }
+    };
+    new MutationObserver(window.dcVeil).observe(document.body, { childList: true });
+    new MutationObserver(window.dcVeil).observe(document.body, { attributes: true, attributeFilter: ['id'], subtree: true });
+})();
+""" % _json.dumps(list(VEIL_IDS))
+
+
+# what FIND_JS does at every draw once it's on the page
+FIND_AFTER = """
+if (window.dcFind) { window.dcFind.after(); }
+"""
 
 
 # 3.8.0, round two: the board remembers what it said, so a draw anew (back
@@ -1632,7 +1689,7 @@ def _plans_empty_html():
     """3.5.0: the Plans tab with no plan: three ways in."""
     add = ("var v=(document.getElementById('dc-plancode').value||'').toUpperCase()"
            ".replace(/[^A-Z0-9 \\/]/g,' ').slice(0,200);"
-           "pycmd('duecrew:addcode:'+v);return false;")
+           "pycmd('duecrew:addcode:'+v+'|'+window.dcBK);return false;")
     return (f'<div class="dc-pways"><b class="t">Follow a plan</b><div class="ways">'
             f'<div class="way"><b>Got a code?</b><input id="dc-plancode" placeholder="N4AP ULM2" '
             f'onkeydown="if(event.key===\'Enter\'){{{add}}}"><a href="#" onclick="{add}">Follow</a></div>'
@@ -1860,7 +1917,7 @@ def _plan_squad_html(pid, tabs, people=None, cfg=None):
                 f'<a href="#" onclick="{_pycmd(f"planteambingo:{pid}")}">Open</a></div>')
     draft = e(str(tabs.get("draft") or ""), quote=True)
     send = (f"var v=document.getElementById('dc-tqa-{_re.sub(r'[^A-Za-z0-9]', '', pid)}').value;"
-            f"if(v.trim())pycmd('duecrew:planteamask:{pid}:'+encodeURIComponent(v.slice(0,280)));return false;")
+            f"if(v.trim())pycmd('duecrew:planteamask:{pid}:'+encodeURIComponent(v.slice(0,280))+'|'+window.dcBK);return false;")
     iid = f"dc-tqa-{_re.sub(r'[^A-Za-z0-9]', '', pid)}"
     out += (f'<div class="tg">Ask the squad</div><div class="tqa"><input id="{iid}" maxlength="280" '
             f'placeholder="Ask anything&hellip;" value="{draft}" onkeydown="if(event.key===\'Enter\'){{{send}}}">'
@@ -1974,7 +2031,7 @@ def _you_insights(ins):
     ctx = (f'<span class="iexam" title="Your exam date. Your crew sees it for the two weeks before.">'
            f'<a href="#" onclick="var i=this.nextElementSibling;try{{i.showPicker();}}catch(x){{i.classList.remove(\'ixd\');i.focus();}}return false;">{said}</a>'
            f'<input class="ixd" type="date" value="{e(ex)}" aria-label="Exam date" '
-           f'onchange="pycmd(\'duecrew:setexam:\'+(this.value||\'off\'));">{off}</span>')
+           f'onchange="pycmd(\'duecrew:setexam:\'+(this.value||\'off\')+\'|\'+window.dcBK);">{off}</span>')
     head = f'<div class="ihead">{pick}<span class="ictx">{ctx}</span></div>'
     return head + _insights_html(did, ins.get("view") or {})
 
@@ -2101,10 +2158,16 @@ def _insights_html(did, v):
                 f'<a href="#" onclick="{_pycmd(f"insfsrs:{did}")}">Optimize FSRS</a> '
                 f'<a class="q" href="#" onclick="{_pycmd(f"insfsrsno:{did}")}">Not now</a></div>')
     h = v.get("hard")
-    if h:
-        # 3.8.0: the Hard habit, said once a month at most
+    two = v.get("two")
+    if two == "tried":
+        # 3.9.1: just turned on from here: said, with its way back
+        out += (f'<div class="iline">Two buttons are on: Again and Good. 2, 3 and 4 count as Good. '
+                f'<a class="q" href="#" onclick="{_pycmd(f"instwono:{did}")}">Undo</a></div>')
+    elif h and two != "on":
+        # 3.8.0: the Hard habit, said once a month at most; 3.9.1: with two buttons on there's no Hard to press
         out += (f'<div class="iline" title="{int(h["n"]):,} reviews in 4 weeks">You press Hard on {int(h["pct"])}% of reviews. '
                 f'Anki counts Hard as remembered. '
+                f'<a href="#" onclick="{_pycmd(f"instwo:{did}")}">Try two buttons</a> '
                 f'<a class="q" href="#" onclick="{_pycmd(f"inshardno:{did}")}">Not now</a></div>')
     lee = int(v.get("leeches") or 0)
     if lee:
@@ -2162,7 +2225,7 @@ def _ins_map(did, tiles, by, at=(), ways=()):
         opts = "".join(f'<option value="{i}"{" selected" if w.get("on") else ""}>{e(str(w.get("name") or "?"))}</option>'
                        for i, w in enumerate(ways))
         sub = (f'<span>&nbsp;&middot; by <select class="tmby" aria-label="Split by" '
-               f'onchange="pycmd(\'duecrew:insmapby:{int(did)}:\'+this.value);">{opts}</select>'
+               f'onchange="pycmd(\'duecrew:insmapby:{int(did)}:\'+this.value+\'|\'+window.dcBK);">{opts}</select>'
                f'<i class="tmbv" aria-hidden="true">&#9662;</i></span>')
     else:
         sub = "<span>&nbsp;&middot; by topic, now</span>"
@@ -2714,7 +2777,7 @@ def _squads_html(view, cfg, crew_by=None):
         if id(r) in long_ids:
             if not folded:
                 body += _quiet_fold([{"name": x["name"], "last_updated": x.get("day")} for x in long_q]).replace(
-                    f'colspan="{len(HEADERS) + 2}"', f'colspan="{2 + (1 if show_up else len(SQUAD_HEADERS))}"', 1)
+                    f'colspan="{len(HEADERS) + 1}"', f'colspan="{2 + (1 if show_up else len(SQUAD_HEADERS))}"', 1)
                 folded = True
             cls = "qh"
         if r.get("you"):
@@ -3091,7 +3154,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
            rules_stale=False, squad_view=None, knocks=None, reviews=None,
            sync_error=False, live=False, tricky=None, milestones=None, room=None, plans=None,
            notice=None, asks=None, due=None, you=None, sticking=None, sev=None, milestone_sev=None, closet=None,
-           halloween=None, wrapped=None):
+           halloween=None, wrapped=None, fridge=None, fridge_gone=None):
     """3.8.0: two parts, apart. On top the You bubble (you_html): due,
     Due's view (due_flow.view, None when Due is off), and you, its Plans and
     Insights ({tab, folded, plans, insights}; None draws Due alone). Under it
@@ -3109,7 +3172,9 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     milestone_sev (3.8.1): {uid: Pip's markup} for a streak banner, Pip in its emoji's place.
     closet (3.8.2): {keys, first}: what just came for Pip, for its line (closet_line).
     halloween (3.8.22): Halloween week's line, its bats and cobweb (halloween_html), or None.
-    wrapped (3.9.0): {year, so_far, look} for the line that your year is ready (1 Dec to 15 Jan), or None."""
+    wrapped (3.9.0): {year, so_far, look} for the line that your year is ready (1 Dec to 15 Jan), or None.
+    fridge (3.9.1): the doodles my crew sent (fridge.clean's), pinned around the Decks screen (fridge_html);
+    fridge_gone: the one just taken down, for its Undo (closet_flow.gone)."""
     period = cfg.get("period", "today")
     hidden = hidden_tabs(cfg)
     if period not in PERIODS or period in hidden:
@@ -3248,7 +3313,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     people = {x.get("user_id"): x for x in data.get("entries") or []}  # 3.8.22: a plan's squad line, mine too
     return (f'<div id="due-crew" class="dc-frame dc-split">{_css(cfg)}<style>{DUE_CSS}</style>{sheet}'
             f'{you_html(cfg, due, you, people)}<div class="dc-sheet">'
-            f'{_head(period, show_up, hidden, cfg.get("crew_view") or period, sev)}{halloween_html(halloween, cfg)}{body}{foot}</div></div>')
+            f'{_head(period, show_up, hidden, cfg.get("crew_view") or period, sev)}{halloween_html(halloween, cfg)}{body}{foot}</div>'
+            f'{fridge_html(fridge, people, cfg, fridge_gone)}</div>')  # 3.9.1: the doodles, pinned around the Decks screen
 
 
 def you_html(cfg, due=None, you=None, people=None):
@@ -3437,7 +3503,9 @@ def _accent_swatches(cfg):
         for k, v in ACCENTS.items())
 
 
-def _settings_board(cfg):
+def _settings_board(cfg, fsrs=None):
+    """fsrs (3.9.1): whether FSRS is on in this collection (None: not known),
+    for two buttons' one-line note."""
     hidden = hidden_tabs(cfg)
     pills = '<button class="st-pill on" disabled aria-pressed="true">Crew</button>' + "".join(
         f'<button class="st-pill{"" if k in hidden else " on"}" aria-pressed="{"false" if k in hidden else "true"}" '
@@ -3445,7 +3513,7 @@ def _settings_board(cfg):
     swatches = _accent_swatches(cfg)
     label = _html.escape(str(cfg.get("crew_label") or "Crew"))
     label_in = (f'<input class="st-in" data-f="label" maxlength="24" size="12" value="{label}" aria-label="Crew name in shares" '
-                f'onchange="pycmd(\'duecrew:setlabel:\'+encodeURIComponent(this.value));">')
+                f'onchange="pycmd(\'duecrew:setlabel:\'+encodeURIComponent(this.value)+\'|\'+window.dcBK);">')
     g = lambda k, d: bool(cfg.get(k, d))  # noqa: E731
     return ('<div class="st-h">What it shows</div><div class="st-box">'
             + _st_row("Due Crew on the Decks screen", _st_switch("show_leaderboard", g("show_leaderboard", True), "Due Crew on the Decks screen"),
@@ -3464,6 +3532,8 @@ def _settings_board(cfg):
             + '</div><div class="st-h">Fifteen and Pip</div><div class="st-box">'
             + _st_row("Fifteen? in the top bar", _st_switch("fifteen", g("fifteen", True), "Fifteen? in the top bar"),
                       "And the nudge, when you haven't started by your usual time")
+            + _st_row("Room sounds", _st_switch("room_sounds", g("room_sounds", True), "Room sounds"),
+                      "Brown noise, rain, fire or waves while you study, from the chip")
             + _st_row("Pip", _st_switch("sev", g("sev", True), "Pip"), "The square from the logo, beside it and in your fifteens")
             + _st_row("Pip&rsquo;s closet", f'<a class="st-lk" href="#" {_st_click("closet")}>Open</a>',
                       "What your Pip has on, and what it&rsquo;s earned")
@@ -3476,6 +3546,11 @@ def _settings_board(cfg):
                       "Today's misses, new leeches")
             + _st_row("Recover leeches", _st_switch("due_leeches", g("due_leeches", False), "Recover leeches"),
                       "Each morning, as new cards")
+            # 3.9.1, two buttons (Sam's picks): every deck; FSRS off, allowed with a note
+            + '</div><div class="st-h">Reviewing</div><div class="st-box">'
+            + _st_row("Two buttons", _st_switch("two_buttons", g("two_buttons", False), "Two buttons"),
+                      "Again and Good. Hard and Easy hide; 2, 3 and 4 count as Good. Phones keep four."
+                      + (" Works best with FSRS on." if fsrs is False else ""))
             + '</div><div class="st-h">Shortcuts</div><div class="st-box">'
             + _st_row("Study what&rsquo;s next", f'<kbd class="st-kbd">{STUDY_KBD}</kbd>', "From any Anki screen")
             + _st_row("Ask the squad about this card", f'<kbd class="st-kbd">{ASK_KBD}</kbd>', "While reviewing")
@@ -3505,9 +3580,9 @@ def _settings_privacy(cfg):
     away_on = bool(a and b)
     esc = _html.escape
     exam_ctl = (f'<input class="st-in" type="date" data-f="exam" value="{esc(exam)}"{"" if exam else " disabled"} '
-                f'aria-label="Exam date" onchange="if(this.value)pycmd(\'duecrew:setexam:\'+this.value);">'
+                f'aria-label="Exam date" onchange="if(this.value)pycmd(\'duecrew:setexam:\'+this.value+\'|\'+window.dcBK);">'
                 + _st_toggle_cmd("setexam:" + ("off" if exam else "on"), bool(exam), "Exam"))
-    send = "pycmd('duecrew:setaway:'+document.getElementById('st-af').value+':'+document.getElementById('st-at').value);"
+    send = "pycmd('duecrew:setaway:'+document.getElementById('st-af').value+':'+document.getElementById('st-at').value+'|'+window.dcBK);"
     away_ctl = (f'<input class="st-in" type="date" id="st-af" data-f="af" value="{esc(a)}"{"" if away_on else " disabled"} aria-label="Away from" '
                 f'onchange="{send}"><span style="color:var(--dc-muted)">to</span>'
                 f'<input class="st-in" type="date" id="st-at" data-f="at" value="{esc(b)}"{"" if away_on else " disabled"} aria-label="Away until" '
@@ -3542,7 +3617,10 @@ FIND_WORDS = {
     "setreset": "default", "friends": "crew code invite", "decks": "share deck",
     # 3.8.1: the Fifteen and Pip
     "set:fifteen:": "timer pomodoro focus session nudge minutes", "set:sev:": "mascot character buddy animation",
+    "set:room_sounds:": "sound noise audio ambient music speaker volume brown rain fire waves",
     "set:sev_break:": "breathe stretch rest",
+    # 3.9.1
+    "set:two_buttons:": "hard easy again good pass fail answer buttons keys review",
 }
 
 
@@ -3574,7 +3652,7 @@ def settings_index(view, cfg):
         out.append({"t": tab, "f": _find_key(f), "l": label, "w": where, "k": " ".join(_re.findall(r"[a-z0-9]+", words.lower()))})
     for tab in ("you", "board", "privacy"):
         body = (_settings_you(dict(view, name="", status="", emoji="")) if tab == "you"
-                else _settings_board(cfg) if tab == "board" else _settings_privacy(cfg))
+                else _settings_board(cfg, view.get("fsrs")) if tab == "board" else _settings_privacy(cfg))
         sections = _re.split(r'<div class="st-h">', body)
         for i, sec in enumerate(sections):
             head = H.unescape(sec.split("</div>", 1)[0]) if i else ""
@@ -3605,7 +3683,7 @@ def settings_html(view, cfg):
     tab = view.get("tab") if view.get("tab") in dict(SETTINGS_TABS) else "you"
     pills = "".join(f'<a class="dc-pill{" on" if k == tab else ""}" href="#" {_st_click("settab:" + k)}>{t}</a>'
                     for k, t in SETTINGS_TABS)
-    body = (_settings_you(view, cfg) if tab == "you" else _settings_board(cfg) if tab == "board"
+    body = (_settings_you(view, cfg) if tab == "you" else _settings_board(cfg, view.get("fsrs")) if tab == "board"
             else _settings_privacy(cfg))
     foot = "Privacy, dates, status and accent follow your account." if view.get("signed_in") else ""
     pip = ""
@@ -3708,11 +3786,11 @@ CLOSET_CSS = """
        and above it for a hat, so the row is a touch taller than an emoji's */
     #due-crew .dc-rsev { display: inline-block; vertical-align: middle; margin: -3px 8px -6px 2px; line-height: 0; }
     #due-crew a.dc-rsev, #due-crew a.dc-rsevl { text-decoration: none; border: 0; }
-    #due-crew tr:not(:hover) .dc-rsev .sv, #due-crew tr:not(:hover) .dc-rsev .sv * { animation: none !important; }
+    #due-crew tr:not(:hover) .dc-rsev .sv, #due-crew tr:not(:hover) .dc-rsev .sv * { animation: none !important; } #due-crew tr:hover .dc-rsev .sv { --sv-on: infinite; }
     /* 3.8.22: a plan card's squad line: who showed up, side by side, still until it's pointed at */
     #due-crew .pcrew .pips { display: inline-flex; gap: 4px; vertical-align: middle; margin: 8px 5px 0 0; }  /* a hat clear of the line above */
     #due-crew .pcrew .pips .dc-rsev { margin: 0; }
-    #due-crew .pcrew:not(:hover) .dc-rsev .sv, #due-crew .pcrew:not(:hover) .dc-rsev .sv * { animation: none !important; }
+    #due-crew .pcrew:not(:hover) .dc-rsev .sv, #due-crew .pcrew:not(:hover) .dc-rsev .sv * { animation: none !important; } #due-crew .pcrew:hover .dc-rsev .sv { --sv-on: infinite; }
     @media (max-width: 380px) { #due-crew .dc-rsev { display: none; } }
 """
 
@@ -3788,6 +3866,15 @@ def _closet_ons(look):
             what = f'<button title="Take it off" {_st_click("closetwear:" + k)}>{e(_closet.BY[k]["name"])}</button>'
         rows.append(f'<div class="cl-o"><span>{PLACE_NAMES[p]}</span>{what}</div>')
     return (f'<div class="cl-ons{" covered" if cos else ""}" aria-label="What your Pip has on">' + "".join(rows) + "</div>")
+
+
+def _short_day(iso):
+    """"14 Oct" from a cheer's ISO time; "" for anything else."""
+    try:
+        d = _dt.date.fromisoformat(str(iso)[:10])
+    except ValueError:
+        return ""
+    return f"{d.day} {d.strftime('%b')}"
 
 
 def closet_html(view, cfg):
@@ -4041,25 +4128,30 @@ def wrapped_js():
         ph.setAttribute('data-on', '1');
         var sl = [].slice.call(ph.querySelectorAll('.wr-s')), bars = [].slice.call(ph.querySelectorAll('.wr-bars b'));
         var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        var st = { i: 0, t: 0, held: false, last: 0 }, PER = 6500;
+        var st = { i: 0, held: false, run: null }, PER = 6500;
+        // 3.9.1 (the efficiency run): each slide's bar fills by one animation
+        // the page runs itself (a frame loop drew all along, the last slide
+        // and a held one too); held or hidden it waits, and the last runs none
+        function go() {
+            if (st.run) { if (st.held || document.hidden) { st.run.pause(); } else { st.run.play(); } }
+        }
         function show(i) {
-            st.i = Math.max(0, Math.min(sl.length - 1, i)); st.t = 0;
+            st.i = Math.max(0, Math.min(sl.length - 1, i));
+            if (st.run) { st.run.cancel(); st.run = null; }
             sl.forEach(function(s, j) { s.classList.toggle('on', j === st.i); });
-            bars.forEach(function(b, j) { b.style.width = j < st.i ? '100%' : (j === st.i && still ? '100%' : '0'); });
+            bars.forEach(function(b, j) { b.style.width = j < st.i || (j === st.i && (still || j === sl.length - 1)) ? '100%' : '0'; });
             ph.classList.toggle('lt', sl[st.i].classList.contains('lt'));
             if (!still) {
                 sl[st.i].querySelectorAll('.wp svg.sv').forEach(function(v) { var c = v.cloneNode(true); v.parentNode.replaceChild(c, v); });
+                if (st.i < sl.length - 1 && bars[st.i].animate) {
+                    var b = bars[st.i];  // drawn full and scaled (the compositor's work, no layout a frame)
+                    b.style.width = '100%'; b.style.transformOrigin = '0 50%';
+                    var run = b.animate([{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], { duration: PER, fill: 'forwards' });
+                    st.run = run;
+                    run.onfinish = function() { if (st.run === run && document.body.contains(ph)) { show(st.i + 1); } };
+                    go();
+                }
             }
-        }
-        function tick(now) {
-            if (!document.body.contains(ph)) { return; }
-            var dt = st.last ? now - st.last : 0; st.last = now;
-            if (!st.held && !document.hidden && st.i < sl.length - 1) {
-                st.t += dt;
-                bars[st.i].style.width = Math.min(100, st.t / PER * 100) + '%';
-                if (st.t >= PER) { show(st.i + 1); }
-            } else if (st.i === sl.length - 1) { bars[st.i].style.width = '100%'; }
-            requestAnimationFrame(tick);
         }
         ph.querySelector('.wr-tap.l').addEventListener('click', function(ev) { ev.preventDefault(); show(st.i - 1); });
         ph.querySelector('.wr-tap.r').addEventListener('click', function(ev) { ev.preventDefault(); show(st.i + 1); });
@@ -4067,11 +4159,11 @@ def wrapped_js():
             if (ev.key === 'ArrowRight' || ev.key === ' ') { show(st.i + 1); ev.preventDefault(); }
             else if (ev.key === 'ArrowLeft') { show(st.i - 1); ev.preventDefault(); }
         });
-        ph.addEventListener('mouseenter', function() { st.held = true; });
-        ph.addEventListener('mouseleave', function() { st.held = false; });
+        ph.addEventListener('mouseenter', function() { st.held = true; go(); });
+        ph.addEventListener('mouseleave', function() { st.held = false; go(); });
+        document.addEventListener('visibilitychange', go);
         show(0);
         try { ph.focus({ preventScroll: true }); } catch (e) {}
-        if (!still) { requestAnimationFrame(tick); }
     })();
     """
 
@@ -4142,7 +4234,9 @@ HW_CSS = """
     @media (prefers-reduced-motion: no-preference) {
       /* three bats across the line, once a day: past the logo's line, never over it (Sam) */
       #due-crew .dc-hw .hwbat { animation: dc-hwbat 4.2s linear calc(var(--d) - var(--ago, 0s)) both; }
-      #due-crew .dc-hw .hwbat .w { transform-box: fill-box; transform-origin: 50% 50%; animation: dc-hwflap .22s ease-in-out infinite alternate; }
+      /* their wings flap for the flight, then stop (3.9.1: they flapped on out of sight, the frames never ending) */
+      #due-crew .dc-hw .hwbat .w { transform-box: fill-box; transform-origin: 50% 50%;
+        animation: dc-hwflap .22s ease-in-out calc(var(--d) - var(--ago, 0s)) 20 alternate; }
       @keyframes dc-hwbat { 0% { opacity: 1; left: -30px; transform: translateY(2px); } 25% { transform: translateY(-2px); }
         50% { transform: translateY(3px); } 75% { transform: translateY(-1px); } 100% { opacity: 1; left: calc(100% + 10px); transform: translateY(1px); } }
       @keyframes dc-hwflap { from { transform: scaleY(1); } to { transform: scaleY(.45); } }
@@ -4227,7 +4321,7 @@ BINGO_PIP_CSS = """
     #due-crew .bg-sq.stamped { padding-bottom: 34px; }
     #due-crew .bg-sq .st.sp { width: auto; height: auto; background: none; box-shadow: none; border-radius: 0; bottom: 4px; }
     #due-crew .bg-sq .st.sp .dc-rsev { display: inline-block; line-height: 0; margin: 0; }
-    #due-crew .bg-sq:not(:hover) .dc-rsev .sv, #due-crew .bg-sq:not(:hover) .dc-rsev .sv * { animation: none !important; }
+    #due-crew .bg-sq:not(:hover) .dc-rsev .sv, #due-crew .bg-sq:not(:hover) .dc-rsev .sv * { animation: none !important; } #due-crew .bg-sq:hover .dc-rsev .sv { --sv-on: infinite; }
 """
 
 
@@ -4439,6 +4533,955 @@ def loading_card(cfg):
     return _card(cfg, "Due Crew", "Catching up with your crew&hellip;")
 
 
+# 3.9.1, doodle cheers: drawn on paper, the same in either theme, like the pad
+DOODLE_PAPER, DOODLE_LINE, DOODLE_INK = "#fffdf7", "#e6dfcc", "#2b2d29"
+# the board's own font (Sam: "consistent with our normal fonts"): a sign is the board's words, bold
+BOARD_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+
+
+def doodle_html(d, accent=None, label="A drawing"):
+    """3.9.1: a doodle cheer's drawing, as an SVG of its strokes on the pad's
+    300 x 170, or a sign's words; "" for anything clean_doodle drops. The
+    caller sets the paper behind it. accent: the sender's colour (an accent
+    name; its light shade, on paper in either theme). Numbers and escaped
+    words only: a doodle never carries markup or a colour of its own."""
+    return _doodle_art(clean_doodle(d), accent, label)
+
+
+def _doodle_art(d, accent, label):
+    """doodle_html's drawing of a doodle clean_doodle has already checked
+    (or None)."""
+    if not d:
+        return ""
+    if d["k"] == "sign":
+        return f'<div class="dd-sign" style="font-family:{BOARD_FONT};font-weight:700">{_html.escape(d["t"])}</div>'
+    colour = accent_pair(accent)[0]
+    paths = []
+    for st in d["s"]:
+        pts = list(zip(st[1::2], st[2::2]))
+        line = "M" + " L".join(f"{x} {y}" for x, y in pts) + (" l0.1 0" if len(pts) == 1 else "")
+        c = st[0] >> 1  # 0 the sender's colour, 1 black, 2 on one of ours (DOODLE_INKS)
+        ink = DOODLE_INK if c == 1 else accent_pair(DOODLE_INKS[c - 2])[0] if c >= 2 else colour
+        paths.append(f'<path d="{line}" stroke="{ink}" stroke-width="{6 if st[0] & 1 else 3}"/>')
+    return (f'<svg class="dd-draw" viewBox="0 0 300 170" role="img" aria-label="{_html.escape(label, quote=True)}" fill="none"'
+            f' stroke-linecap="round" stroke-linejoin="round">{"".join(paths)}</svg>')
+
+
+def doodle_landing(cheer, entries, cfg):
+    """3.9.1: what a landing cheer's doodle needs (flurry_js): its markup,
+    whether it's a sign, and, with Pip on, the sender's Pip with its arms
+    up to hold it (their colour and look, as cheer_pips draws them). None
+    when the cheer has none."""
+    d = clean_doodle((cheer or {}).get("doodle"))
+    if not d:
+        return None
+    e = next((x for x in entries or [] if x.get("user_id") == cheer.get("from") and not x.get("you")), {})
+    name = str(cheer.get("name") or e.get("name") or "?")
+    out = {"html": doodle_html(d, e.get("accent"), f"{name}’s drawing"), "sign": d["k"] == "sign",
+           "a": list(accent_pair(e.get("accent"))), "pip": None,
+           # its caption, as on the fridge: the note under it, and who it's from (text, never markup)
+           "note": str(cheer.get("note") or "")[:80], "from": name.split(" ")[0][:40], "ni": int(cheer.get("ni", -1))}
+    if cfg.get("sev", True):
+        out["pip"] = _sev.svg("stretch", "idle", look=e.get("look"), label=_html.escape(f"{name}’s Pip", quote=True))
+    return out
+
+
+CHEER_WINDOW_JS = r"""
+(function () {
+    var V = __VIEW__;
+    var old = document.getElementById('dc-cheer');
+    if (old) { old.remove(); }
+    var night = /night/i.test(document.body.className) ||
+        (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    var dcBoard = document.getElementById('due-crew');
+    var dcStyle = dcBoard ? getComputedStyle(dcBoard) : null;
+    function tok(name, light, dark) {
+        var v = dcStyle && dcStyle.getPropertyValue('--dc-' + name).trim();
+        return v || (night ? dark : light);
+    }
+    var bg = tok('bg', '#ffffff', '#1c1c1c'), ink = tok('ink', '#333333', '#dfe1dc'), line = tok('line', '#e2e2da', '#3d403b'),
+        well = tok('well', '#f2f2ec', '#2b2d29'), muted = tok('muted', '#6f736b', '#9a9e94'),
+        accent = tok('accent', '#2e7d32', '#7cc47f'), accentInk = tok('accent-ink', '#ffffff', '#122912'),
+        you = tok('you-bg', '#e9f2e9', '#2c372b');
+    var font = (dcStyle && dcStyle.fontFamily) || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    var W = 300, H = 170, MAXP = 2000, MAXS = 200, SIGN = 24, NOTE = 80, INK = '__INK__';
+    var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function el(tag, cls, text) {
+        var e = document.createElement(tag);
+        if (cls) { e.className = cls; }
+        if (text != null) { e.textContent = text; }
+        return e;
+    }
+    var back = el('div');
+    back.id = 'dc-cheer';
+    back.setAttribute('role', 'dialog');
+    back.setAttribute('aria-modal', 'true');
+    back.setAttribute('aria-label', 'Cheer ' + V.name);
+    var css = el('style');
+    css.textContent =
+        '#dc-cheer{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.35);display:flex;align-items:flex-start;justify-content:center;padding:9vh 16px 16px;overflow:auto;}' +
+        '#dc-cheer *{box-sizing:border-box;}' +
+        '#dc-cheer .cw{width:440px;max-width:100%;border-radius:14px;padding:16px 18px 14px;text-align:left;display:grid;gap:12px;font-family:' + font + ';' +
+          'box-shadow:0 16px 60px rgba(0,0,0,.35);background:' + bg + ';color:' + ink + ';border:1px solid ' + line + ';font-size:13px;}' +
+        '#dc-cheer button,#dc-cheer input{margin:0;box-shadow:none;font-family:inherit;color:inherit;}#dc-cheer button{cursor:pointer;}' +
+        '#dc-cheer .hd{display:flex;align-items:center;gap:10px;}' +
+        '#dc-cheer .hd .pp{width:40px;height:40px;flex:none;display:grid;place-items:center;}' +
+        '#dc-cheer .hd .pp svg{width:44px;height:44px;overflow:visible;}' +
+        '#dc-cheer .hd b{display:block;font-size:16px;}' +
+        '#dc-cheer .hd small{display:block;color:' + muted + ';font-size:11.5px;}' +
+        '#dc-cheer .em{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}' +
+        '#dc-cheer .em button{width:40px;height:36px;padding:0;border-radius:10px;border:1px solid ' + line + ';background:' + bg + ';font-size:20px;line-height:1;}' +
+        '#dc-cheer .em button[aria-pressed=true]{border:2px solid ' + accent + ';background:' + you + ';}' +
+        '#dc-cheer .em .ot{width:auto;min-width:66px;padding:0 10px;font-size:12px;color:' + muted + ';}' +
+        '#dc-cheer .em .ot.on{border:2px solid ' + accent + ';background:' + you + ';font-size:20px;color:' + ink + ';}' +
+        '#dc-cheer .em .ot[aria-expanded=true]{border-color:' + accent + ';color:' + accent + ';}' +
+        '#dc-cheer .em input.pk{width:74px;height:36px;border-radius:10px;border:2px solid ' + accent + ';background:' + you + ';color:' + ink + ';font-size:20px;padding:0 8px;text-align:center;}' +
+        '#dc-cheer .em input.pk::placeholder{font-size:12px;color:' + muted + ';}' +
+        '#dc-cheer .em input.pk:focus{outline:none;}' +
+        '#dc-cheer .dr{border:1px solid ' + line + ';border-radius:12px;padding:8px;display:grid;gap:6px;background:' + well + ';}' +
+        '#dc-cheer .gt{display:flex;flex-wrap:wrap;gap:2px;}' +
+        '#dc-cheer .gt button{width:32px;height:28px;border:0;background:none;border-radius:8px;font-size:16px;line-height:1;padding:0;}' +
+        '#dc-cheer .gt button:hover{background:' + bg + ';}' +
+        '#dc-cheer .gr{position:relative;max-height:176px;overflow-y:auto;display:flex;flex-wrap:wrap;gap:2px;align-content:flex-start;}' +
+        '#dc-cheer .gr .gl{flex-basis:100%;font-size:11px;font-weight:700;color:' + muted + ';padding:4px 2px 2px;}' +
+        '#dc-cheer .gr button{width:34px;height:32px;border:0;background:none;border-radius:8px;font-size:20px;line-height:1;padding:0;}' +
+        '#dc-cheer .gr button:hover{background:' + bg + ';}' +
+        '#dc-cheer .gr .none{flex-basis:100%;color:' + muted + ';font-size:12px;padding:6px 2px;}' +
+        '#dc-cheer .sgw{display:flex;align-items:center;gap:8px;}' +
+        '#dc-cheer .sg{display:inline-flex;border:1px solid ' + line + ';border-radius:99px;padding:2px;gap:2px;width:max-content;}' +
+        '#dc-cheer .sg button{border:0;background:none;border-radius:99px;padding:2px 14px;font-weight:700;font-size:12px;color:' + muted + ';}' +
+        '#dc-cheer .sg button[aria-pressed=true]{background:' + accent + ';color:' + accentInk + ';}' +
+        '#dc-cheer .pane{display:grid;gap:8px;}' +
+        '#dc-cheer .paper{width:100%;aspect-ratio:300/170;background:#fffdf7;border:1px solid #e6dfcc;border-radius:10px;overflow:hidden;position:relative;color:#2b2d29;}' +
+        '#dc-cheer canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair;}' +
+        '#dc-cheer .tl{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}' +
+        '#dc-cheer .sw{width:22px;height:22px;border-radius:50%;border:2px solid ' + bg + ';box-shadow:0 0 0 1px ' + line + ';padding:0;}' +
+        '#dc-cheer .sw[aria-pressed=true]{box-shadow:0 0 0 2px ' + accent + ';}' +
+        '#dc-cheer .pl{border:1px solid ' + line + ';background:none;border-radius:99px;padding:1px 10px;font-size:12px;}' +
+        '#dc-cheer .pl[aria-pressed=true]{border-color:' + accent + ';color:' + accent + ';font-weight:700;}' +
+        '#dc-cheer .lk{border:0;background:none;padding:1px 4px;font-size:12px;color:' + accent + ';font-weight:600;}' +
+        '#dc-cheer .sp{flex:1;}' +
+        '#dc-cheer .ct{font-size:11px;color:' + muted + ';font-variant-numeric:tabular-nums;}' +
+        '#dc-cheer .words{position:absolute;inset:0;display:grid;place-items:center;padding:10px 16px;text-align:center;font-weight:700;font-size:26px;line-height:1.15;overflow-wrap:anywhere;}' +
+        '#dc-cheer .words.ph{color:#b7b1a2;}' +
+        '#dc-cheer .tx{width:100%;height:32px;border-radius:8px;border:1px solid ' + line + ';background:' + bg + ';color:' + ink + ';font-size:13px;padding:0 10px;}' +
+        '#dc-cheer .tx:focus{outline:2px solid ' + accent + ';outline-offset:0;}' +
+        '#dc-cheer .ft{display:flex;align-items:center;gap:8px;}' +
+        '#dc-cheer .go{background:' + accent + ';color:' + accentInk + ';border:1px solid transparent;border-radius:8px;padding:6px 16px;font-weight:700;font-size:13px;}' +
+        '#dc-cheer .no{background:none;border:1px solid ' + line + ';border-radius:8px;padding:6px 14px;font-size:13px;}' +
+        '#dc-cheer button:focus-visible{outline:2px solid ' + accent + ';outline-offset:2px;}' +
+        '#dc-cheer .hint{font-size:11px;color:' + muted + ';}';
+    back.appendChild(css);
+    var card = el('div', 'cw');
+    back.appendChild(card);
+
+    // who it's for: their Pip (or emoji) and name
+    var hd = el('div', 'hd');
+    if (V.pip) { var pp = el('div', 'pp'); pp.innerHTML = V.pip; hd.appendChild(pp); }
+    var ht = el('div');
+    ht.appendChild(el('b', null, 'Cheer ' + V.name));
+    ht.appendChild(el('small', null, 'Lands after their next sync.'));
+    hd.appendChild(ht);
+    card.appendChild(hd);
+
+    // the emoji: the quick picks, or any other
+    var emoji = V.emojis[0], em = el('div', 'em');
+    em.setAttribute('role', 'group');
+    em.setAttribute('aria-label', 'Emoji');
+    var quick = [];
+    V.emojis.forEach(function (x) {
+        var b = el('button', null, x);
+        b.type = 'button';
+        b.setAttribute('aria-label', 'Send ' + x);
+        b.addEventListener('click', function () { choose(x); });
+        quick.push([x, b]);
+        em.appendChild(b);
+    });
+    // other: a drawer of emoji (emoji_drawer.py) in the window's own look, since a page can't open the
+    // computer's picker (Sam: "doesn't pop up with the emoji drawer"); its search box takes a typed or pasted one too
+    var other = el('button', 'ot', 'other');
+    other.type = 'button';
+    other.title = 'Any emoji';
+    other.setAttribute('aria-label', 'Any other emoji');
+    other.setAttribute('aria-expanded', 'false');
+    other.addEventListener('click', function () {
+        if (V.native) { native(); } else if (drawer.style.display === 'none') { openDrawer(); } else { shut(); }
+    });
+    em.appendChild(other);
+    // on a Mac or Windows, other opens the computer's own picker (Sam: "want the other option to just open
+    // the native drawer?"): a box takes other's place, focused, and what's picked there is picked;
+    // if the computer can't (Linux, or asking failed), the drawer opens instead (dcCheerNoNative)
+    var pickIn = el('input', 'ot pk');
+    pickIn.style.display = 'none';
+    pickIn.placeholder = 'pick one';
+    pickIn.maxLength = 16;
+    pickIn.setAttribute('aria-label', 'Your emoji');
+    em.appendChild(pickIn);
+    function native() {
+        other.style.display = 'none'; pickIn.style.display = ''; pickIn.value = ''; pickIn.focus();
+        window.dcCheerNoNative = function () { unpick(); openDrawer(); };
+        if (typeof pycmd !== 'undefined') { pycmd('duecrew:emojipicker|' + window.dcBK); } else { window.dcCheerNoNative(); }
+    }
+    function unpick() { pickIn.style.display = 'none'; other.style.display = ''; }
+    pickIn.addEventListener('input', function () {
+        var t = oneEmoji(pickIn.value.trim());
+        if (t) { unpick(); choose(t); } else if (pickIn.value.trim()) { pickIn.value = ''; }
+    });
+    card.appendChild(em);
+    var drawer = el('div', 'dr'), find = el('input', 'tx'), gt = el('div', 'gt'), gr = el('div', 'gr'), none = el('div', 'none', 'Nothing by that name. Paste one in here instead.');
+    drawer.style.display = 'none';
+    find.placeholder = 'Find one: heart, coffee, owl…';
+    find.setAttribute('aria-label', 'Find an emoji');
+    drawer.appendChild(find);
+    drawer.appendChild(gt);
+    drawer.appendChild(gr);
+    var cells = [], labels = [];
+    V.drawer.forEach(function (g) {
+        var lab = el('div', 'gl', g[0]);
+        gr.appendChild(lab);
+        labels.push([lab, []]);
+        var tab = el('button', null, g[1][0][0]);
+        tab.type = 'button';
+        tab.title = g[0];
+        tab.setAttribute('aria-label', g[0]);
+        tab.addEventListener('click', function () { if (find.value) { find.value = ''; filter(); } gr.scrollTop = lab.offsetTop; });
+        gt.appendChild(tab);
+        g[1].forEach(function (x) {
+            var b = el('button', null, x[0]);
+            b.type = 'button';
+            b.title = x[1];
+            b.setAttribute('aria-label', x[0] + ' ' + x[1]);
+            b.addEventListener('click', function () { choose(x[0]); });
+            gr.appendChild(b);
+            cells.push([b, (' ' + x[1]).toLowerCase(), lab]);
+            labels[labels.length - 1][1].push(b);
+        });
+    });
+    gr.appendChild(none);
+    function oneEmoji(s) {
+        var first = '';
+        if (s && window.Intl && Intl.Segmenter) {
+            var it = new Intl.Segmenter().segment(s)[Symbol.iterator]().next();
+            first = it.done ? '' : it.value.segment;
+        } else if (s) { first = Array.from(s)[0]; }
+        return first && !/[A-Za-z0-9\s]/.test(first) && first.charCodeAt(0) >= 0x2190 ? first : '';
+    }
+    function filter() {
+        var q = find.value.trim().toLowerCase(), shown = 0;
+        cells.forEach(function (c) {
+            var on = !q || c[1].indexOf(' ' + q) >= 0;
+            c[0].style.display = on ? '' : 'none';
+            if (on) { shown++; }
+        });
+        labels.forEach(function (l) { l[0].style.display = !q && l[1].length ? '' : 'none'; });
+        none.style.display = shown ? 'none' : '';
+    }
+    find.addEventListener('input', function () {
+        var typed = oneEmoji(find.value.trim());
+        if (typed) { choose(typed); return; }
+        filter();
+    });
+    filter();
+    card.appendChild(drawer);
+    function openDrawer() {
+        drawer.style.display = '';
+        other.setAttribute('aria-expanded', 'true');
+        find.value = '';
+        filter();
+        gr.scrollTop = 0;
+        find.focus();
+    }
+    function shut() {
+        drawer.style.display = 'none';
+        other.setAttribute('aria-expanded', 'false');
+    }
+    function choose(x) {
+        var q = V.emojis.indexOf(x) >= 0;
+        other.textContent = q ? 'other' : x;
+        other.className = q ? 'ot' : 'ot on';
+        other.setAttribute('aria-label', q ? 'Any other emoji' : 'Send ' + x + ' (choose another)');
+        pick(x);
+        shut();
+        other.focus();
+    }
+    function pick(x) {
+        emoji = x;
+        quick.forEach(function (q) { q[1].setAttribute('aria-pressed', q[0] === x ? 'true' : 'false'); });
+    }
+    pick(emoji);
+
+    // Draw · Sign (3.9.1): a drawing, or words their Pip holds up; both optional, so both start shut and
+    // the window is just the emoji and the note (Sam: "they don't always need to send a doodle / sign");
+    // a press opens one, a second press on it shuts it, and only what's open is sent
+    var mode = '', sgw = el('div', 'sgw'), sg = el('div', 'sg');
+    sgw.appendChild(el('span', 'hint', 'Add'));
+    sg.setAttribute('role', 'group');
+    sg.setAttribute('aria-label', 'Add');
+    var tabs = {};
+    [['draw', 'Draw'], ['sign', 'Sign']].forEach(function (x) {
+        var b = el('button', null, x[1]);
+        b.type = 'button';
+        b.addEventListener('click', function () { show(mode === x[0] ? '' : x[0]); });
+        tabs[x[0]] = b;
+        sg.appendChild(b);
+    });
+    sgw.appendChild(sg);
+    card.appendChild(sgw);
+
+    var draw = el('div', 'pane'), paper = el('div', 'paper'), cv = el('canvas');
+    cv.width = W * 2;
+    cv.height = H * 2;
+    cv.setAttribute('aria-label', 'Draw here');
+    paper.appendChild(cv);
+    draw.appendChild(paper);
+    // pen: bit 0 thick; pen >> 1 the colour: 0 the sender's, 1 black, 2 on one of ours (V.inks, DOODLE_INKS's order)
+    var inks = V.inks.map(function (x, i) { return [i + 2, x[0], x[1]]; });
+    if (V.mine >= 0 && inks[V.mine]) { var m = inks.splice(V.mine, 1)[0]; inks.unshift([m[0], m[1], 'My colour']); }
+    inks.push([1, INK, 'Black']);
+    var strokes = [], live = null, pen = (inks[0][0] << 1) | 1;
+    function inkOf(p) { var c = p >> 1; return c === 1 ? INK : c >= 2 && V.inks[c - 2] ? V.inks[c - 2][0] : V.pen; }
+    var cx = cv.getContext('2d');
+    function points() { return strokes.reduce(function (a, s) { return a + s.p.length; }, 0); }
+    function paint() {
+        cx.setTransform(cv.width / W, 0, 0, cv.height / H, 0, 0);
+        cx.clearRect(0, 0, W, H);
+        cx.lineCap = 'round';
+        cx.lineJoin = 'round';
+        strokes.forEach(function (s) {
+            cx.strokeStyle = inkOf(s.pen);
+            cx.lineWidth = s.pen & 1 ? 6 : 3;
+            cx.beginPath();
+            s.p.forEach(function (q, i) { if (i) { cx.lineTo(q[0], q[1]); } else { cx.moveTo(q[0], q[1]); cx.lineTo(q[0] + 0.1, q[1]); } });
+            cx.stroke();
+        });
+        var n = points();
+        count.textContent = n > MAXP - 500 ? n.toLocaleString() + ' / ' + MAXP.toLocaleString() : '';
+        caption();
+    }
+    function at(e) {
+        var r = cv.getBoundingClientRect();
+        return [Math.max(0, Math.min(W, Math.round((e.clientX - r.left) / r.width * W))),
+                Math.max(0, Math.min(H, Math.round((e.clientY - r.top) / r.height * H)))];
+    }
+    cv.addEventListener('pointerdown', function (e) {
+        if (strokes.length >= MAXS || points() >= MAXP) { return; }
+        cv.setPointerCapture(e.pointerId);
+        live = { pen: pen, p: [at(e)] };
+        strokes.push(live);
+        paint();
+    });
+    cv.addEventListener('pointermove', function (e) {
+        if (!live || points() >= MAXP) { return; }
+        var q = at(e), l = live.p[live.p.length - 1];
+        if (Math.abs(q[0] - l[0]) + Math.abs(q[1] - l[1]) >= 2) { live.p.push(q); paint(); }
+    });
+    function lift() { live = null; }
+    cv.addEventListener('pointerup', lift);
+    cv.addEventListener('pointercancel', lift);
+
+    var tl = el('div', 'tl'), swatches = [], widths = [];
+    inks.forEach(function (x) {
+        var b = el('button', 'sw');
+        b.type = 'button';
+        b.style.background = x[1];
+        b.title = x[2];
+        b.setAttribute('aria-label', x[2]);
+        b.addEventListener('click', function () { pen = (pen & 1) | (x[0] << 1); tools(); });
+        swatches.push([x[0], b]);
+        tl.appendChild(b);
+    });
+    [['Thin', 0], ['Thick', 1]].forEach(function (x) {
+        var b = el('button', 'pl', x[0]);
+        b.type = 'button';
+        b.addEventListener('click', function () { pen = (pen & ~1) | x[1]; tools(); });
+        widths.push([x[1], b]);
+        tl.appendChild(b);
+    });
+    tl.appendChild(el('span', 'sp'));
+    var count = el('span', 'ct');
+    tl.appendChild(count);
+    var undo = el('button', 'lk', 'Undo'), clear = el('button', 'lk', 'Clear');
+    undo.type = clear.type = 'button';
+    undo.addEventListener('click', function () { strokes.pop(); paint(); });
+    clear.addEventListener('click', function () { strokes = []; paint(); });
+    tl.appendChild(undo);
+    tl.appendChild(clear);
+    draw.appendChild(tl);
+    function tools() {
+        swatches.forEach(function (s) { s[1].setAttribute('aria-pressed', (pen >> 1) === s[0] ? 'true' : 'false'); });
+        widths.forEach(function (w) { w[1].setAttribute('aria-pressed', (pen & 1) === w[0] ? 'true' : 'false'); });
+    }
+    tools();
+    card.appendChild(draw);
+
+    var sign = el('div', 'pane'), signIn = el('input', 'tx'), sp = el('div', 'paper'), words = el('div', 'words ph', "you've got this");
+    signIn.maxLength = SIGN;
+    signIn.placeholder = "you've got this";
+    signIn.setAttribute('aria-label', 'What your Pip holds up');
+    signIn.addEventListener('input', function () {
+        var s = signIn.value.replace(/\s+/g, ' ').trim();
+        words.textContent = s || "you've got this";
+        words.className = s ? 'words' : 'words ph';
+        caption();
+    });
+    sp.appendChild(words);
+    sign.appendChild(signIn);
+    sign.appendChild(sp);
+    sign.appendChild(el('div', 'hint', 'A few words for your Pip to hold up when it lands. ' + SIGN + ' letters at most.'));
+    card.appendChild(sign);
+    function show(m) {
+        mode = m;
+        draw.style.display = m === 'draw' ? '' : 'none';
+        sign.style.display = m === 'sign' ? '' : 'none';
+        tabs.draw.setAttribute('aria-pressed', m === 'draw' ? 'true' : 'false');
+        tabs.sign.setAttribute('aria-pressed', m === 'sign' ? 'true' : 'false');
+        if (m === 'sign') { signIn.focus(); }
+        caption();
+    }
+    // 3.9.1 (Sam): with a drawing or a sign, the note goes under it, "from" me, as a caption
+    var note = null;
+    function caption() {
+        if (!note) { return; }
+        var has = mode === 'sign' ? !!signIn.value.trim() : mode === 'draw' && strokes.length > 0;
+        note.placeholder = has ? 'A caption under it (optional)' : 'Add a note (optional)';
+    }
+    show('');
+
+    note = el('input', 'tx');
+    note.maxLength = NOTE;
+    note.placeholder = 'Add a note (optional)';
+    note.setAttribute('aria-label', 'Note');
+    note.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); send(); } });
+    card.appendChild(note);
+
+    var ft = el('div', 'ft'), go = el('button', 'go', '🎉 Send'), no = el('button', 'no', 'Cancel');
+    go.type = no.type = 'button';
+    ft.appendChild(go);
+    ft.appendChild(el('span', 'sp'));
+    ft.appendChild(no);
+    card.appendChild(ft);
+    paint();
+
+    function doodle() {
+        if (mode === 'sign') {
+            var t = signIn.value.replace(/\s+/g, ' ').trim();
+            return t ? { k: 'sign', t: t } : null;
+        }
+        if (mode !== 'draw' || !strokes.length) { return null; }  // shut: nothing goes, what's drawn stays for a reopen
+        return { k: 'draw', s: strokes.map(function (s) {
+            var out = [s.pen];
+            s.p.forEach(function (q) { out.push(q[0], q[1]); });
+            return out;
+        }) };
+    }
+    var moved = false;
+    function close() {
+        document.removeEventListener('keydown', esc, true);
+        back.removeAttribute('id');  // the bars' shade goes with it (VEIL_WATCH_JS)
+        // moved: motion.js opened it and takes it out its own way (a fade here first had it
+        // snap back for a frame, its fade unfilled, then go again)
+        if (moved || still || !back.animate) { back.remove(); return; }
+        back.style.pointerEvents = 'none';
+        back.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-in', fill: 'forwards' }).onfinish = function () { back.remove(); };
+    }
+    function send() {
+        var p = { to: V.uid, emoji: emoji, note: note.value.replace(/\s+/g, ' ').trim().slice(0, NOTE), doodle: doodle() };
+        close();
+        if (typeof pycmd !== 'undefined') { pycmd('duecrew:cheersend:' + encodeURIComponent(JSON.stringify(p)) + '|' + window.dcBK); }
+    }
+    go.addEventListener('click', send);
+    no.addEventListener('click', close);
+    // a press that starts on the backdrop and ends there closes it (a line drawn off the pad's edge never does)
+    var downOnBack = false;
+    back.addEventListener('pointerdown', function (e) { downOnBack = e.target === back; });
+    back.addEventListener('click', function (e) { if (e.target === back && downOnBack) { close(); } });
+    function esc(e) {
+        if (e.key !== 'Escape') { return; }
+        e.stopPropagation();
+        if (pickIn.style.display !== 'none') { unpick(); other.focus(); }
+        else if (drawer.style.display !== 'none') { shut(); other.focus(); } else { close(); }
+    }
+    document.addEventListener('keydown', esc, true);
+    document.body.appendChild(back);
+    if (window.dcMotion && !still) { dcMotion.open(back, card); moved = true; }
+    quick[0][1].focus();
+})();
+""".replace("__INK__", DOODLE_INK)
+
+
+# 3.9.1: the fridge, around the Decks screen (Sam: "could the fridge just be the
+# periphery of the decks window, like dragged around the anki window?")
+FRIDGE_W = 124  # px: a doodle on the window, on its paper
+FRIDGE_PIP = 30  # px: the Pip by a sender's name on the fridge (a crew row's size; its body is 18)
+FRIDGE_UNDO = 8  # s: "Taken down · Undo" in a doodle's place (closet_flow.UNDO_SECS)
+
+
+def _tape(colour):
+    """A tape strip's colour: an accent's light shade (#rrggbb), see-through
+    as tape is (rgba, since Anki's older webviews have no color-mix)."""
+    h = str(colour).lstrip("#")
+    try:
+        r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    except ValueError:
+        return "rgba(0,0,0,.12)"
+    return f"rgba({r},{g},{b},.6)"
+
+
+FRIDGE_CSS = """
+    #dc-fridge { position: fixed; left: 0; top: 0; right: 0; bottom: 0; pointer-events: none; z-index: 5; }
+    #dc-fridge .fz { position: fixed; left: -9999px; top: 0; width: %dpx; box-sizing: border-box; pointer-events: auto;
+      background: #fff; border-radius: 2px; padding: 7px; color: #2b2d29;
+      box-shadow: 0 3px 10px rgba(0,0,0,.16), 0 0 0 1px rgba(0,0,0,.05); text-align: left; font-size: 10.5px; line-height: 1.3; cursor: grab;
+      touch-action: none; user-select: none; -webkit-user-select: none; transform: rotate(var(--fr, -2deg)); }
+    #dc-fridge .fz::before { content: ""; position: absolute; top: -8px; left: 50%%; width: 54px; height: 16px; margin-left: -27px;
+      background: var(--ft); transform: rotate(-4deg);
+      clip-path: polygon(0 12%%, 5%% 0, 30%% 6%%, 60%% 0, 95%% 5%%, 100%% 0, 98%% 50%%, 100%% 100%%, 70%% 94%%, 40%% 100%%, 4%% 95%%, 0 100%%, 2%% 50%%); }
+    #dc-fridge .fz.drag { cursor: grabbing; box-shadow: 0 14px 28px rgba(0,0,0,.25); z-index: 1; }
+    #dc-fridge .fp { aspect-ratio: 300 / 170; display: grid; place-items: center; overflow: hidden; background: #f4f3ee; }
+    #dc-fridge .fp svg { width: 100%%; height: 100%%; display: block; }
+    #dc-fridge .fp .dd-sign { font-size: 13px; line-height: 1.15; text-align: center; padding: 2px 4px; overflow-wrap: anywhere; }
+    #dc-fridge .fq { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-top: 7px;
+      text-align: center; font-size: 11px; }
+    #dc-fridge .fw { display: flex; align-items: center; justify-content: center; gap: 3px; margin-top: 3px; color: #6b665a;
+      white-space: nowrap; overflow: hidden; }
+    #dc-fridge .fw b { color: #2b2d29; overflow: hidden; text-overflow: ellipsis; }
+    #dc-fridge .fw .sv-slot { --sv-a: var(--fa); flex: none; }
+    #dc-fridge .fx { position: absolute; top: 0; right: 3px; display: none; color: #6b665a; text-decoration: none; font-size: 15px; line-height: 1; }
+    #dc-fridge .fz:hover .fx, #dc-fridge .fz:focus-within .fx { display: block; }
+    /* 3.9.1 (Sam's pick, "Pip at rest" C): still until pointed at, as crew rows */
+    #dc-fridge .fz:not(:hover) .sv, #dc-fridge .fz:not(:hover) .sv * { animation: none !important; }
+    /* 3.9.1: where one was just taken down, its Undo for a few seconds, then gone (--fg: how long it's been up) */
+    #dc-fridge .fz.fgone { transform: none; cursor: default; text-align: center; font-size: 11.5px; padding: 8px 2px; white-space: nowrap;
+      border-radius: 8px; animation: dcfgone %ds linear forwards; animation-delay: var(--fg, 0s); }
+    #dc-fridge .fz.fgone::before { display: none; }
+    #dc-fridge .fgone a { color: var(--fa); font-weight: 700; text-decoration: none; }
+    @keyframes dcfgone { 0%%, 85%% { opacity: 1; } 100%% { opacity: 0; visibility: hidden; } }
+    #dc-fridge .fz:hover .sv { --sv-on: infinite; }
+""" % (FRIDGE_W, FRIDGE_UNDO)
+
+
+def fridge_html(items, people, cfg, gone=None):
+    """3.9.1: the doodles my crew sent (fridge.clean's), pinned around the
+    Decks screen, newest first: each a Polaroid (Sam's pick from "Pinned
+    Doodles": the doodle in a white frame, taped up with a strip in their
+    colour), the note it came with on the frame's wide bottom edge, then
+    their Pip and name (no "from": Sam, "so there's more room for the
+    Pip") and the day, and a × to take it down. Where I dragged one (its p:
+    side of the board, px from its edge, px down) rides as data; fridge_js
+    places the rest in the gutters beside the board, and lets me drag. ""
+    when there's none. Kept as last drawn while what it's drawn from (the
+    items, each person's look, Pip on or off) stays the same. gone
+    (closet_flow.gone): the one just taken down; in its place "Taken down ·
+    Undo" (duecrew:fridgeback:<key>) for the seconds it has left."""
+    crew = people or {}
+    looks = [[u, 1, e.get("look")] if isinstance(e, dict) else [u, 0, e] for u, e in crew.items() if e]
+    if gone:
+        return _fridge_notes(_fridge.clean(items), crew, cfg, gone)  # a few seconds: drawn each time
+    key = _fridge.fingerprint([items, looks, bool(cfg.get("sev", True))])
+    if key is None or key != _FRIDGE_DRAWN["key"]:
+        _FRIDGE_DRAWN.update(key=key, html=_fridge_notes(_fridge.clean(items), crew, cfg))
+    return _FRIDGE_DRAWN["html"]
+
+
+# 3.9.1 (the efficiency run): the fridge as last drawn, kept on what it was
+# drawn from, so a redraw doesn't draw its doodles again
+_FRIDGE_DRAWN = {"key": None, "html": ""}
+
+
+def _fridge_notes(items, people, cfg, gone=None):
+    if not items and not gone:
+        return ""
+    notes = []
+    for x in reversed(items):
+        k = _fridge.key(x)
+        e = people.get(x["from"]) or {}
+        name = _html.escape(x["name"])
+        pip = (_sev.slot(_sev.svg("idle", rest=True, look=e.get("look"), label=f"{name}’s Pip"), FRIDGE_PIP)
+               if cfg.get("sev", True) and e else "")
+        when = _short_day(x["at"])
+        note = f'<div class="fq">&ldquo;{_html.escape(x["n"])}&rdquo;</div>' if x.get("n") else ""
+        at = f' data-s="{x["p"][0]}" data-x="{x["p"][1]}" data-y="{x["p"][2]}"' if x.get("p") else ""
+        art = _doodle_art(x["d"], x["a"], x["name"] + "’s drawing")  # fridge.clean checked it
+        fa, tape = accent_pair(x["a"])
+        notes.append(f'<div class="fz" data-k="{k}"{at} style="--fa:{fa};--ft:{_tape(tape)}" title="Drag it anywhere">'
+                     f'<div class="fp">{art}</div>{note}<div class="fw">{pip}<b>{name}</b>{f" · {when}" if when else ""}</div>'
+                     f'<a class="fx" href="#" title="Take it down" aria-label="Take {name}’s down" '
+                     f'onclick="{_pycmd("fridgedown:" + k)}">&times;</a></div>')
+    if gone and gone.get("item"):
+        g, k = gone["item"], str(gone.get("k") or "")
+        at = f' data-s="{g["p"][0]}" data-x="{g["p"][1]}" data-y="{g["p"][2]}"' if g.get("p") else ""
+        left = max(0.0, min(float(FRIDGE_UNDO), float(gone.get("ago") or 0)))
+        notes.insert(max(0, min(len(notes), len(items) - int(gone.get("i") or 0))),
+                     f'<div class="fz fgone" data-k="{_html.escape(k)}"{at} role="status" '
+                     f'style="--fa:{accent_pair(g.get("a"))[0]};--fg:-{left:.1f}s">Taken down &middot; '
+                     f'<a href="#" onclick="{_pycmd("fridgeback:" + k)}">Undo</a></div>')
+    return f'<style>{FRIDGE_CSS}</style><div id="dc-fridge" role="group" aria-label="Your fridge">{"".join(notes)}</div>'
+
+
+FRIDGE_JS = r"""
+window.dcFridge = window.dcFridge || function () {
+    var f = document.getElementById('dc-fridge');
+    if (!f) { return; }
+    var notes = Array.prototype.slice.call(f.querySelectorAll('.fz'));
+    var tilt = [-2.5, 2, -1.5, 3, -3, 1.5], nw = __W__, gap = 18;
+    // the board's edges in the window (its middle, with no board)
+    function edges(box) {
+        var dc = f.closest('#due-crew') || document.getElementById('due-crew'), r = dc ? dc.getBoundingClientRect() : null;
+        return r ? { l: r.left - box.left, r: r.right - box.left } : { l: box.width / 2, r: box.width / 2 };
+    }
+    function place() {
+        notes = notes.filter(function (el) { return el.isConnected; });  // an Undo whose time ran out has gone
+        var box = f.getBoundingClientRect(), W = box.width, H = box.height, b = edges(box);
+        var room = { l: b.l >= nw + 2 * gap, r: W - b.r >= nw + 2 * gap }, y = { l: 64, r: 64 }, n = 0, pile = 0, mine = [], at = [];
+        // every tilt, then every height in one read (a write between two reads laid the page out again)
+        notes.forEach(function (el, i) { el.style.setProperty('--fr', tilt[i % tilt.length] + 'deg'); });
+        var hs = notes.map(function (el) { return el.offsetHeight || 140; });
+        notes.forEach(function (el, i) {  // where I left each, beside the board's edge; it waits in the corner while the window's too small
+            var h = hs[i], x = el.dataset.s ? b[el.dataset.s] + Number(el.dataset.x) : null;
+            if (x !== null && x >= 4 && x + nw <= W - 4) {
+                at[i] = [x, Math.min(Number(el.dataset.y), H - h - 4)];
+                mine.push({ x: x, y: at[i][1], h: h });
+            }
+        });
+        notes.forEach(function (el, i) {
+            var h = hs[i], x = null, top;
+            if (at[i]) {
+                x = at[i][0]; top = at[i][1];
+            } else if (!el.dataset.s && (room.l || room.r)) {  // the gutters beside the board, newest highest, left then right
+                var side = room.l && room.r ? (n % 2 ? 'r' : 'l') : (room.l ? 'l' : 'r');
+                x = side === 'l' ? (b.l - nw) / 2 : b.r + (W - b.r - nw) / 2;
+                top = y[side];
+                for (var k = 0, hit = true; hit && k < mine.length + 1; k++) {  // below any I left in the way
+                    hit = false;
+                    mine.forEach(function (m) {
+                        if (m.x < x + nw + 6 && x < m.x + nw + 6 && m.y < top + h + gap && top < m.y + m.h + gap) { top = m.y + m.h + gap; hit = true; }
+                    });
+                }
+                y[side] = top + h + gap; n++;
+                if (top + h > H - 8) { top = H - h - 8 - (n % 3) * 10; }  // a pile at the bottom once a side is full
+            }
+            if (x === null) {  // no room: a little pile in the bottom right corner
+                x = W - nw - 16 - (pile % 4) * 12; top = H - h - 16 - (pile % 4) * 10; pile++;
+            }
+            el.style.left = Math.max(4, Math.min(W - nw - 4, x)) + 'px';
+            el.style.top = Math.max(4, Math.min(H - h - 4, top)) + 'px';
+        });
+    }
+    notes.forEach(function (el) {  // 3.9.1: an Undo goes when its fade ends (the board's next draw leaves it out too)
+        if (el.classList.contains('fgone')) { el.addEventListener('animationend', function () { el.remove(); }); }
+    });
+    notes.forEach(function (el) {
+        el.addEventListener('pointerdown', function (e) {
+            if (e.button !== 0 || e.target.closest('.fx') || el.classList.contains('fgone')) { return; }
+            e.preventDefault();
+            el.setPointerCapture(e.pointerId);
+            var box = f.getBoundingClientRect(), sx = e.clientX, sy = e.clientY,
+                ox = parseFloat(el.style.left) || 0, oy = parseFloat(el.style.top) || 0, moved = false;
+            el.classList.add('drag');
+            function move(ev) {
+                var nx = Math.max(4, Math.min(box.width - el.offsetWidth - 4, ox + ev.clientX - sx)),
+                    ny = Math.max(4, Math.min(box.height - el.offsetHeight - 4, oy + ev.clientY - sy));
+                if (Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) > 3) { moved = true; }
+                el.style.left = nx + 'px'; el.style.top = ny + 'px';
+            }
+            function up() {
+                el.removeEventListener('pointermove', move);
+                el.removeEventListener('pointerup', up);
+                el.removeEventListener('pointercancel', up);
+                el.classList.remove('drag');
+                if (!moved) { return; }
+                // kept by the nearer half of the board: px from that edge, px down
+                var b = edges(box), x = parseFloat(el.style.left), s = x + nw / 2 < (b.l + b.r) / 2 ? 'l' : 'r';
+                el.dataset.s = s; el.dataset.x = Math.round(x - b[s]); el.dataset.y = Math.round(parseFloat(el.style.top));
+                if (typeof pycmd !== 'undefined') {
+                    pycmd('duecrew:fridgemove:' + el.dataset.k + ':' + s + ':' + el.dataset.x + ':' + el.dataset.y + '|' + window.dcBK);
+                }
+            }
+            el.addEventListener('pointermove', move);
+            el.addEventListener('pointerup', up);
+            el.addEventListener('pointercancel', up);
+        });
+    });
+    place();
+    window.dcFridgePlace = place;
+    if (!window.dcFridgeResize) {
+        window.dcFridgeResize = true;
+        window.addEventListener('resize', function () { if (window.dcFridgePlace) { window.dcFridgePlace(); } });
+    }
+};
+""".replace("__W__", str(FRIDGE_W))
+
+
+def fridge_js(scripts=True):
+    """3.9.1: after the board is drawn (and at every swap): the fridge's
+    doodles placed (where I left each, else beside the board) and made
+    draggable; a drop is duecrew:fridgemove:<key>:<side>:<dx>:<y>, beside
+    the board's left or right edge (l, r), px from it, px down. A spot the
+    window's too small for waits in the corner and comes back at the next
+    resize. Nothing when there's no fridge on the page. scripts: the
+    script itself (dcFridge, loaded once a page) as well as its call, as
+    keep_me_in_view_js's."""
+    return (FRIDGE_JS if scripts else "") + "\nif (window.dcFridge) { window.dcFridge(); }\n"
+
+
+def cheer_overlay_js(view):
+    """3.9.1 (Sam: "make the cheers and doodles modals in the design language
+    of our add on"): the Cheer window, drawn on the Decks screen in the
+    board's own look (its tokens, so Settings › Theme and Accent hold), in
+    place of the Qt window. view: {uid, name, emojis (the quick picks), pip
+    (card_sev's markup, or None with Pip off), pen (my accent's light shade,
+    the drawing's colour, on paper in either theme)}. Send goes as one
+    duecrew:cheersend command, its payload URI-encoded JSON; the glue checks
+    every field again (cheer_allowed, clean_note, clean_doodle) and that the
+    uid is a crewmate. The name and emoji go in as text, never markup.
+    Also: "other"'s drawer (emoji_drawer), and every accent for the pad
+    (Sam: "make all of our colors available in the doodles feature"), in
+    DOODLE_INKS's order, mine first."""
+    pen = view.get("pen") if _re.fullmatch(r"#[0-9a-fA-F]{6}", str(view.get("pen") or "")) else accent_pair(None)[0]
+    inks = [[accent_pair(n)[0], n.capitalize()] for n in DOODLE_INKS]
+    data = {"uid": str(view.get("uid") or ""), "name": str(view.get("name") or "?"),
+            "emojis": [str(x) for x in view.get("emojis") or []][:8] or ["\U0001F389"],
+            "pip": view.get("pip") or "", "pen": pen, "inks": inks,
+            "mine": next((i for i, x in enumerate(inks) if x[0].lower() == pen.lower()), -1),
+            "drawer": _emoji_drawer.view(), "native": bool(view.get("native"))}
+    return CHEER_WINDOW_JS.replace("__VIEW__", _json.dumps(data).replace("</", "<\\/"))
+
+
+# 3.9.1 (Sam: "the modal for status update is still native, make sure all
+# modals are in our style"): a question before a step, one line, or one of a
+# few, on the Decks screen in the Cheer window's look (sheets.py asks; Qt
+# answers off the board). view: {id, title, text (plain; its line breaks
+# kept), yes, no, danger (a step that can't be taken back: the button in the
+# board's red), field: {kind: "text", value, max, hint} or {kind: "pick",
+# items, at}, check: {label, on}}. Every word goes in as text, never markup.
+# The answer is one duecrew:sheet command: its id (new each time, so a page
+# can't answer a question it wasn't asked) and URI-encoded JSON {ok, text,
+# at, check}; Cancel, Esc and the backdrop send {ok: false}.
+SHEET_JS = r"""
+(function () {
+    var V = __VIEW__;
+    var old = document.getElementById('dc-sheet');
+    if (old) { old.remove(); }
+    var night = /night/i.test(document.body.className) ||
+        (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    var dcBoard = document.getElementById('due-crew');
+    var dcStyle = dcBoard ? getComputedStyle(dcBoard) : null;
+    function tok(name, light, dark) {
+        var v = dcStyle && dcStyle.getPropertyValue('--dc-' + name).trim();
+        return v || (night ? dark : light);
+    }
+    var bg = tok('bg', '#ffffff', '#1c1c1c'), ink = tok('ink', '#333333', '#dfe1dc'), line = tok('line', '#e2e2da', '#3d403b'),
+        well = tok('well', '#f2f2ec', '#2b2d29'), muted = tok('muted', '#6f736b', '#9a9e94'),
+        accent = tok('accent', '#2e7d32', '#7cc47f'), accentInk = tok('accent-ink', '#ffffff', '#122912'),
+        you = tok('you-bg', '#e9f2e9', '#2c372b');
+    // the board's own theme, not the computer's: its background's lightness
+    var m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(bg);
+    var dark = m ? (parseInt(m[1], 16) * 299 + parseInt(m[2], 16) * 587 + parseInt(m[3], 16) * 114) / 1000 < 128 : night;
+    var bad = dark ? '#ef8383' : '#d32f2f', badInk = dark ? '#2a1212' : '#ffffff';
+    var font = (dcStyle && dcStyle.fontFamily) || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function el(tag, cls, text) {
+        var e = document.createElement(tag);
+        if (cls) { e.className = cls; }
+        if (text != null) { e.textContent = text; }
+        return e;
+    }
+    var back = el('div');
+    back.id = 'dc-sheet';
+    back.setAttribute('role', V.field ? 'dialog' : 'alertdialog');
+    back.setAttribute('aria-modal', 'true');
+    back.setAttribute('aria-label', V.title);
+    var css = el('style');
+    css.textContent =
+        '#dc-sheet{position:fixed;inset:0;z-index:82;background:rgba(0,0,0,.35);display:flex;align-items:flex-start;justify-content:center;padding:12vh 16px 16px;overflow:auto;}' +
+        '#dc-sheet *{box-sizing:border-box;}' +
+        '#dc-sheet .cw{width:420px;max-width:100%;border-radius:14px;padding:16px 18px 14px;text-align:left;display:grid;gap:12px;font-family:' + font + ';' +
+          'box-shadow:0 16px 60px rgba(0,0,0,.35);background:' + bg + ';color:' + ink + ';border:1px solid ' + line + ';font-size:13px;}' +
+        '#dc-sheet button,#dc-sheet input{margin:0;box-shadow:none;font-family:inherit;color:inherit;}#dc-sheet button{cursor:pointer;}' +
+        '#dc-sheet .hd{font-size:16px;font-weight:700;}' +
+        '#dc-sheet .bd{white-space:pre-line;line-height:1.45;max-height:46vh;overflow-y:auto;overflow-wrap:anywhere;}' +
+        '#dc-sheet .tx{width:100%;height:32px;border-radius:8px;border:1px solid ' + line + ';background:' + bg + ';color:' + ink + ';font-size:13px;padding:0 10px;}' +
+        '#dc-sheet .tx:focus{outline:2px solid ' + accent + ';outline-offset:0;}' +
+        '#dc-sheet .ct{font-size:11px;color:' + muted + ';font-variant-numeric:tabular-nums;text-align:right;margin-top:3px;}' +
+        '#dc-sheet .ls{border:1px solid ' + line + ';border-radius:10px;background:' + well + ';padding:4px;max-height:230px;overflow-y:auto;display:grid;gap:2px;}' +
+        '#dc-sheet .ls button{display:block;width:100%;text-align:left;border:1px solid transparent;background:none;border-radius:8px;padding:6px 10px;font-size:13px;overflow-wrap:anywhere;}' +
+        '#dc-sheet .ls button:hover{background:' + bg + ';}' +
+        '#dc-sheet .ls button[aria-selected=true]{border-color:' + accent + ';background:' + you + ';font-weight:600;}' +
+        '#dc-sheet .ls .none{color:' + muted + ';padding:6px 10px;font-size:12px;}' +
+        '#dc-sheet .ck{display:flex;align-items:flex-start;gap:8px;cursor:pointer;line-height:1.35;}' +
+        '#dc-sheet .ck input{accent-color:' + accent + ';width:15px;height:15px;margin-top:1px;flex:none;}' +
+        '#dc-sheet .ft{display:flex;align-items:center;gap:8px;}' +
+        '#dc-sheet .sp{flex:1;}' +
+        '#dc-sheet .go{background:' + accent + ';color:' + accentInk + ';border:1px solid transparent;border-radius:8px;padding:6px 16px;font-weight:700;font-size:13px;}' +
+        '#dc-sheet .go.bad{background:' + bad + ';color:' + badInk + ';}' +
+        '#dc-sheet .go:disabled{opacity:.45;cursor:default;}' +
+        '#dc-sheet .no{background:none;border:1px solid ' + line + ';border-radius:8px;padding:6px 14px;font-size:13px;}' +
+        '#dc-sheet button:focus-visible{outline:2px solid ' + accent + ';outline-offset:2px;}';
+    back.appendChild(css);
+    var card = el('div', 'cw');
+    back.appendChild(card);
+    card.appendChild(el('div', 'hd', V.title));
+    if (V.text) { card.appendChild(el('div', 'bd', V.text)); }
+
+    var f = V.field || null, input = null, at = -1, rows = [];
+    if (f && f.kind === 'text') {
+        var wrap = el('div');
+        input = el('input', 'tx');
+        input.type = 'text';
+        input.value = f.value || '';
+        input.maxLength = f.max || 280;
+        input.placeholder = f.hint || '';
+        input.setAttribute('aria-label', V.title);
+        input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); yes(); } });
+        wrap.appendChild(input);
+        // near the ceiling, how much room is left (the status's 80, a reply's 280)
+        var ct = el('div', 'ct');
+        function count() { var n = input.maxLength - input.value.length; ct.textContent = n <= 20 ? String(n) : ''; }
+        input.addEventListener('input', count);
+        count();
+        wrap.appendChild(ct);
+        card.appendChild(wrap);
+    } else if (f && f.kind === 'pick') {
+        // one of a few (a deck): a list in the board's look; a box to narrow it when it's long
+        var find = null, ls = el('div', 'ls');
+        ls.setAttribute('role', 'listbox');
+        ls.setAttribute('aria-label', V.title);
+        at = Math.max(0, Math.min((f.items || []).length - 1, f.at || 0));
+        (f.items || []).forEach(function (name, i) {
+            var b = el('button', null, name);
+            b.type = 'button';
+            b.setAttribute('role', 'option');
+            b.addEventListener('click', function () { pick(i); });
+            b.addEventListener('dblclick', function () { pick(i); yes(); });
+            rows.push(b);
+            ls.appendChild(b);
+        });
+        var none = el('div', 'none', 'Nothing matches.');
+        none.style.display = 'none';
+        ls.appendChild(none);
+        if (rows.length > 10) {
+            find = el('input', 'tx');
+            find.type = 'search';
+            find.placeholder = 'Find';
+            find.setAttribute('aria-label', 'Find');
+            find.addEventListener('input', function () {
+                var q = find.value.trim().toLowerCase(), first = -1;
+                rows.forEach(function (b, i) {
+                    var show = !q || b.textContent.toLowerCase().indexOf(q) >= 0;
+                    b.style.display = show ? '' : 'none';
+                    if (show && first < 0) { first = i; }
+                });
+                none.style.display = first < 0 ? '' : 'none';
+                if (first >= 0 && rows[at].style.display === 'none') { pick(first); }
+                go.disabled = first < 0;
+            });
+            find.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') { e.preventDefault(); if (!go.disabled) { yes(); } }
+                else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); step(e.key === 'ArrowDown' ? 1 : -1); }
+            });
+            card.appendChild(find);
+        }
+        ls.addEventListener('keydown', function (e) {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); step(e.key === 'ArrowDown' ? 1 : -1); rows[at].focus(); }
+        });
+        card.appendChild(ls);
+    }
+    function pick(i) {
+        at = i;
+        rows.forEach(function (b, j) { b.setAttribute('aria-selected', j === i ? 'true' : 'false'); });
+        var r = rows[i], box = r.parentNode;
+        if (r.offsetTop < box.scrollTop) { box.scrollTop = r.offsetTop - 4; }
+        else if (r.offsetTop + r.offsetHeight > box.scrollTop + box.clientHeight) { box.scrollTop = r.offsetTop + r.offsetHeight - box.clientHeight + 4; }
+    }
+    function step(d) {
+        for (var i = at + d; i >= 0 && i < rows.length; i += d) {
+            if (rows[i].style.display !== 'none') { pick(i); return; }
+        }
+    }
+
+    var tick = null;
+    if (V.check) {
+        var ck = el('label', 'ck');
+        tick = el('input');
+        tick.type = 'checkbox';
+        tick.checked = !!V.check.on;
+        ck.appendChild(tick);
+        ck.appendChild(el('span', null, V.check.label));
+        card.appendChild(ck);
+    }
+
+    var ft = el('div', 'ft'), go = el('button', 'go' + (V.danger ? ' bad' : ''), V.yes || 'OK'), no = el('button', 'no', V.no || 'Cancel');
+    go.type = no.type = 'button';
+    ft.appendChild(go);
+    ft.appendChild(el('span', 'sp'));
+    ft.appendChild(no);
+    card.appendChild(ft);
+    if (rows.length) { pick(at); }
+
+    var said = false;
+    function say(p) {
+        if (said) { return; }
+        said = true;
+        close();
+        if (typeof pycmd !== 'undefined') { pycmd('duecrew:sheet:' + V.id + ':' + encodeURIComponent(JSON.stringify(p)) + '|' + window.dcBK); }
+    }
+    function yes() {
+        var p = { ok: true };
+        if (input) { p.text = input.value; }
+        if (rows.length) { p.at = at; }
+        if (tick) { p.check = tick.checked; }
+        say(p);
+    }
+    var moved = false;
+    function close() {
+        document.removeEventListener('keydown', esc, true);
+        back.removeAttribute('id');  // the bars' shade goes with it (VEIL_WATCH_JS)
+        // moved: motion.js opened it and takes it out its own way, back into what was clicked
+        if (moved || still || !back.animate) { back.remove(); return; }
+        back.style.pointerEvents = 'none';
+        back.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-in', fill: 'forwards' }).onfinish = function () { back.remove(); };
+    }
+    go.addEventListener('click', yes);
+    no.addEventListener('click', function () { say({ ok: false }); });
+    var downOnBack = false;
+    back.addEventListener('pointerdown', function (e) { downOnBack = e.target === back; });
+    back.addEventListener('click', function (e) { if (e.target === back && downOnBack) { say({ ok: false }); } });
+    function esc(e) {
+        if (e.key !== 'Escape') { return; }
+        e.stopPropagation();
+        say({ ok: false });
+    }
+    document.addEventListener('keydown', esc, true);
+    document.body.appendChild(back);
+    if (window.dcMotion && !still) { dcMotion.open(back, card); moved = true; }
+    // a line to write starts in its box, its words selected; a step that can't be
+    // taken back starts on Cancel, as the Qt question did
+    if (input) { input.focus(); input.select(); }
+    else if (rows.length) { (find || rows[at]).focus(); }
+    else if (V.danger) { no.focus(); } else { go.focus(); }
+})();
+"""
+
+
+def sheet_js(view):
+    """SHEET_JS with its view (sheets.py builds it): the words as JSON, no
+    '</' to end the script."""
+    f = view.get("field") or None
+    if f and f.get("kind") == "text":
+        f = {"kind": "text", "value": str(f.get("value") or ""), "max": max(1, min(2000, int(f.get("max") or 280))),
+             "hint": str(f.get("hint") or "")}
+    elif f and f.get("kind") == "pick":
+        items = [str(x) for x in f.get("items") or []]
+        f = {"kind": "pick", "items": items, "at": max(0, min(len(items) - 1, int(f.get("at") or 0)))} if items else None
+    else:
+        f = None
+    ck = view.get("check")
+    data = {"id": str(view.get("id") or ""), "title": str(view.get("title") or ""), "text": str(view.get("text") or ""),
+            "yes": str(view.get("yes") or "OK"), "no": str(view.get("no") or "Cancel"), "danger": bool(view.get("danger")),
+            "field": f, "check": {"label": str(ck.get("label") or ""), "on": bool(ck.get("on"))} if ck else None}
+    return SHEET_JS.replace("__VIEW__", _json.dumps(data).replace("</", "<\\/"))
+
+
 CHEER_PIP = 92  # 3.8.22: a crewmate's Pip popping in with their cheer
 
 
@@ -4485,7 +5528,7 @@ def and_more(names, most=3):
     return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1] if names else ""
 
 
-def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None, show=None):
+def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None, show=None, doodle=None):
     """Injected via web.eval after render — never inline in board HTML.
     Banner takes its colors from the board's tokens (so Settings → Theme
     holds), the page's night classes only when the board is off. When `back` is
@@ -4497,7 +5540,11 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
     in place of the flurry; with Reduce motion they stand still in the
     banner. show (3.9.0, shows.next_show): with the Pips, a show over the
     whole Decks screen in place of the toss (show.js), the banner at the
-    top; the toss if the show can't play."""
+    top; the toss if the show can't play. doodle (3.9.1, doodle_landing):
+    a drawing or a sign came with it. The sender's Pip pops up at the
+    board's corner holding it up, in place of the show and the toss, and
+    ducks down as the banner goes; with Pip off or Reduce motion it sits in
+    the banner, still, on its paper."""
     # 2.10: about one flake in three is the season's
     emoji_list = _json.dumps(list(emojis) * 2 + list(season or []) if season else list(emojis))
     banner = _json.dumps(banner_text)
@@ -4508,6 +5555,8 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
     senders_json = _json.dumps([dict(p.get("poses") or {}, name=p.get("name") or "", note=p.get("note") or "", emoji=p.get("emoji") or "\U0001F389", a=p["a"])
                                 for p in (pips or [])][:3]).replace("</", "<\\/") if show else "[]"
     season_one = _json.dumps((list(season or []) or [""])[0])
+    doodle_json = _json.dumps({k: doodle.get(k) for k in ("html", "sign", "a", "pip", "note", "from", "ni")}
+                              if doodle and doodle.get("html") else None).replace("</", "<\\/")
     return """
     (function() {
         if (document.getElementById('dc-flurry')) { return; }
@@ -4530,12 +5579,13 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
         var title = document.createElement('div');
         title.textContent = %s;
         banner.appendChild(title);
-        var notes = %s;
+        var notes = %s, noteEls = [];
         for (var n = 0; n < notes.length; n++) {
             var line = document.createElement('div');
             line.textContent = '\u201c' + notes[n] + '\u201d';
             line.style.cssText = 'font-size:13px;font-weight:400;margin-top:4px;opacity:0.9;max-width:60vw;';
             banner.appendChild(line);
+            noteEls.push(line);
         }
         banner.style.cssText = 'position:fixed;top:18vh;left:50%%;transform:translateX(-50%%);' +
             'z-index:70;border-radius:12px;padding:10px 20px;font-weight:700;font-size:15px;' +
@@ -4550,7 +5600,7 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
             sub.style.cssText = 'font-size:11px;font-weight:400;opacity:0.7;margin-top:2px;';
             banner.appendChild(sub);
             banner.addEventListener('click', function() {
-                pycmd(backCmd);
+                pycmd(backCmd + '|' + window.dcBK);
                 // once: it fades as it goes, no second send
                 banner.style.pointerEvents = 'none';
                 banner.style.transition = 'opacity 0.25s';
@@ -4559,6 +5609,43 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
             });
         }
         var pips = %s, still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        // 3.9.1: a doodle buys time, on its paper (light in either theme, like the pad it was drawn on)
+        var dd = %s, held = !!(dd && dd.pip && pips.length && !still && document.body.animate);
+        function paper(w, h, caption) {
+            var p = document.createElement('div');
+            p.style.cssText = 'width:' + w + 'px;box-sizing:border-box;background:%s;border:1px solid %s;' +
+                'border-radius:8px;overflow:hidden;color:%s;font-weight:400;text-align:left;';
+            var art = document.createElement('div');
+            art.style.cssText = 'height:' + h + 'px;display:grid;place-items:center;overflow:hidden;';
+            art.innerHTML = dd.html;
+            p.appendChild(art);
+            var v = art.querySelector('svg');
+            if (v) { v.style.cssText = 'width:100%%;height:100%%;display:block;'; }
+            var words = art.querySelector('.dd-sign');
+            if (words) { words.style.cssText += ';font-size:' + Math.round(h * 0.22) + 'px;line-height:1.15;text-align:center;padding:4px 10px;overflow-wrap:anywhere;'; }
+            if (caption) {
+                // 3.9.1 (Sam): the note it came with under it, and who it's from, as on the fridge
+                var cap = document.createElement('div');
+                cap.style.cssText = 'padding:0 8px 6px;font-size:11px;line-height:1.3;';
+                if (dd.note) {
+                    var q = document.createElement('div');
+                    q.textContent = '\u201c' + dd.note + '\u201d';
+                    q.style.cssText = 'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;';
+                    cap.appendChild(q);
+                }
+                var by = document.createElement('div');
+                by.textContent = 'from ' + dd.from;
+                by.style.cssText = 'font-weight:700;opacity:.75;margin-top:2px;';
+                cap.appendChild(by);
+                p.appendChild(cap);
+            }
+            return p;
+        }
+        if (dd) {
+            linger += 2500;
+            if (!held) { var mini = paper(150, 85, false); mini.style.margin = '8px auto 2px'; banner.insertBefore(mini, sub || null); }
+            else if (dd.ni >= 0 && noteEls[dd.ni]) { noteEls[dd.ni].remove(); }  // its note goes under it, not in the banner too
+        }
         // 3.8.22: the board's own theme decides a Pip's colour, light or dark
         function dark(c) {
             var m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(c), n = m ? [m[1], m[2], m[3]].map(function(h) { return parseInt(h, 16); })
@@ -4591,6 +5678,36 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
         setTimeout(function() { banner.style.opacity = '0'; }, linger);
         setTimeout(function() { banner.remove(); }, linger + 600);
         if (still) { return; }
+        if (held) {
+            // 3.9.1: their Pip holds it up at the board's corner, then ducks down as the banner goes
+            var hb = document.getElementById('due-crew'), hr = hb ? hb.getBoundingClientRect() : null;
+            var hvh = window.innerHeight, base = Math.min(hvh, hr ? hr.bottom : hvh), HW = 190, HH = 236;  // room for its caption
+            var right = Math.min(window.innerWidth - 8, hr ? hr.right : window.innerWidth - 8);
+            var hbox = document.createElement('div');
+            hbox.setAttribute('aria-hidden', 'true');
+            hbox.style.cssText = 'position:fixed;z-index:71;pointer-events:none;overflow:hidden;left:' + Math.max(8, right - HW - 8) +
+                'px;top:' + (base - HH) + 'px;width:' + HW + 'px;height:' + HH + 'px;';
+            var lift = document.createElement('div');
+            lift.style.cssText = 'display:flex;flex-direction:column;align-items:center;padding-top:6px;transform:translateY(' + HH + 'px);';
+            var sign = paper(170, 96, true);
+            sign.style.transform = 'rotate(-3deg)';
+            sign.style.boxShadow = '0 6px 16px rgba(0,0,0,.18)';
+            var sticks = document.createElement('div');
+            sticks.style.cssText = 'display:flex;justify-content:space-between;width:56px;height:28px;margin-top:-2px;';  // long enough for a hat under it
+            sticks.innerHTML = '<i style="width:3px;background:#b08a5a;border-radius:2px"></i><i style="width:3px;background:#b08a5a;border-radius:2px"></i>';
+            var holder = pipEl({ svg: dd.pip, a: dd.a }, 92);
+            holder.style.marginTop = '-40px';
+            lift.appendChild(sign); lift.appendChild(sticks); lift.appendChild(holder);
+            hbox.appendChild(lift);
+            document.body.appendChild(hbox);
+            lift.animate([{ transform: 'translateY(' + HH + 'px)' }, { transform: 'translateY(0px)' }],
+                         { duration: 600, easing: 'cubic-bezier(.2,.9,.3,1.25)', fill: 'forwards' });
+            setTimeout(function() {
+                lift.animate([{ transform: 'translateY(0px)' }, { transform: 'translateY(' + HH + 'px)' }],
+                             { duration: 380, easing: 'ease-in', fill: 'forwards' }).onfinish = function() { hbox.remove(); };
+            }, linger);
+            return;
+        }
         var show = %s;
         if (show && pips.length && document.body.animate) {
             // 3.9.0: a show over the whole Decks screen, the banner at its top (show.js)
@@ -4685,7 +5802,7 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
         document.body.appendChild(wrap);
         setTimeout(function() { wrap.remove(); }, 3800);
     })();
-    """ % (back_cmd, banner, notes_json, pips_json, show_json, SHOW_JS if show_json != "null" else "",
+    """ % (back_cmd, banner, notes_json, pips_json, doodle_json, DOODLE_PAPER, DOODLE_LINE, DOODLE_INK, show_json, SHOW_JS if show_json != "null" else "",
            senders_json, _json.dumps(_sev.CSS).replace("</", "<\\/") if show_json != "null" else "null", CHEER_PIP, season_one, emoji_list)
 
 
@@ -4782,7 +5899,7 @@ def stranger_card_js(info):
         if (actCmd) {
             act.addEventListener('click', function() {
                 back.remove();
-                if (typeof pycmd !== 'undefined') { pycmd(actCmd); }
+                if (typeof pycmd !== 'undefined') { pycmd(actCmd + '|' + window.dcBK); }
             });
         }
         var close = document.createElement('button');
@@ -4816,7 +5933,7 @@ def stranger_card_js(info):
                     'background:none;color:inherit;opacity:0.85;border:1px solid ' + dcLine + ';';
                 extra.addEventListener('click', function() {
                     back.remove();
-                    if (typeof pycmd !== 'undefined') { pycmd(pair[1]); }
+                    if (typeof pycmd !== 'undefined') { pycmd(pair[1] + '|' + window.dcBK); }
                 });
                 tools.appendChild(extra);
             });
@@ -4891,7 +6008,7 @@ def luck_card_js(name, lines):
             'background:' + accent + ';color:' + accentInk + ';border:1px solid transparent;font-weight:600;';
         thanks.addEventListener('click', function() {
             back.remove();
-            if (typeof pycmd !== 'undefined') { pycmd('duecrew:luckthanks'); }
+            if (typeof pycmd !== 'undefined') { pycmd('duecrew:luckthanks|' + window.dcBK); }
         });
         var spacer = document.createElement('div');
         spacer.style.flex = '1';
@@ -5144,7 +6261,7 @@ def profile_overlay_js(profile):
         var act = btn(%s, %s);
         act.addEventListener('click', function() {
             back.remove();
-            if (typeof pycmd !== 'undefined') { pycmd(%s); }
+            if (typeof pycmd !== 'undefined') { pycmd(%s + '|' + window.dcBK); }
         });
         var close = btn('Close', false);
         close.addEventListener('click', function() { back.remove(); });
@@ -5410,7 +6527,7 @@ DUE_JS = r"""
         var r = inp.getBoundingClientRect();
         dcMotion.say({add: inp.value.trim().slice(0, 16), when: w, from: {x: r.left, y: r.top}});
       }
-      pycmd('duecrew:dueadd:' + w + ':' + (this.raw ? 1 : 0) + ':' + encodeURIComponent(inp.value));
+      pycmd('duecrew:dueadd:' + w + ':' + (this.raw ? 1 : 0) + ':' + encodeURIComponent(inp.value) + '|' + window.dcBK);
       this.raw = false;
       inp.value = '';  // sent: a redraw doesn't put it back (swap_js keeps a half-typed one)
     },

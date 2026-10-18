@@ -50,6 +50,41 @@ describe("GET /board", () => {
     expect(c[0]).toMatchObject({ emoji: "🔥", note: "", guid: "", luck: false });
   });
 
+  it("3.9.1: a cheer carries a doodle or a sign, and the next one without takes it away", async () => {
+    const draw = { k: "draw", s: [[0, 10, 20, 30, 40], [3, 299, 169]] };
+    expect((await dre.call("POST", "/cheers/sam", { emoji: "🎉", note: "go", doodle: draw })).status).toBe(200);
+    let c = (await sam.call("GET", "/board")).body.cheers;
+    expect(c[0]).toMatchObject({ emoji: "🎉", note: "go", doodle: draw });
+    await dre.call("POST", "/cheers/sam", { emoji: "💪", doodle: { k: "sign", t: "  you've\ngot   this " } });
+    c = (await sam.call("GET", "/board")).body.cheers;
+    expect(c[0].doodle).toEqual({ k: "sign", t: "you've got this" });
+    await dre.call("POST", "/cheers/sam", { emoji: "🎉", doodle: draw });
+    await dre.call("POST", "/cheers/sam", { emoji: "🔥" });  // overwrites, drawing and all
+    c = (await sam.call("GET", "/board")).body.cheers;
+    expect(c[0].doodle).toBeUndefined();
+  });
+
+  it("3.9.1: a doodle is numbers on the pad, within its ceilings, and never on a tip or a good-luck line", async () => {
+    const send = (doodle: unknown, extra = {}) => dre.call("POST", "/cheers/sam", { emoji: "🎉", doodle, ...extra });
+    const many = Array.from({ length: 2001 }, (_, i) => [i % 300, i % 170]).flat();
+    for (const bad of [
+      { k: "draw", s: [] }, { k: "draw", s: [[16, 1, 1]] }, { k: "draw", s: [[0, 1]] }, { k: "draw", s: [[0, 301, 1]] },
+      { k: "draw", s: [[0, 1, 171]] }, { k: "draw", s: [[0, 1.5, 1]] }, { k: "draw", s: [[0, -1, 1]] }, { k: "draw", s: [["0", 1, 1]] },
+      { k: "draw", s: [[0, ...many]] }, { k: "draw", s: Array.from({ length: 201 }, () => [0, 1, 1]) },
+      { k: "draw", s: [[0, 1, 1]], c: "#f00" }, { k: "sign", t: "" }, { k: "sign", t: "   " }, { k: "sign", t: 5 },
+      { k: "sign", t: "x".repeat(97) }, { k: "pic", d: "data:" }, "draw", [],
+    ]) expect((await send(bad)).status).toBe(400);
+    expect((await send({ k: "sign", t: "hi" }, { guid: "g1" })).status).toBe(400);
+    expect((await send({ k: "sign", t: "hi" }, { luck: true })).status).toBe(400);
+    expect((await send({ k: "sign", t: "x".repeat(40) })).status).toBe(200);  // cut to 24
+    expect((await sam.call("GET", "/board")).body.cheers[0].doodle.t).toBe("x".repeat(24));
+    expect((await send({ k: "draw", s: [[2, ...many.slice(0, 4000)]] })).status).toBe(200);  // 2,000 points, the ceiling
+    // every accent (pen >> 1: 0 mine, 1 black, 2 to 7 the six), thin or thick: pens 0 to 15
+    expect((await send({ k: "draw", s: Array.from({ length: 16 }, (_, p) => [p, 1, 1]) })).status).toBe(200);
+    expect((await sam.call("GET", "/board")).body.cheers[0].doodle.s.map((st: number[]) => st[0])).toEqual([...Array(16).keys()]);
+    expect((await send(null)).status).toBe(200);
+  });
+
   it("decks come along when asked, mine and my crew's only", async () => {
     const deck = { name: "Big Deck", sig: ["a", "b"], total: 100, seen: 40, mature: 10 };
     for (const p of [sam, dre, nia]) await p.call("POST", "/sync", { decks: [deck] });

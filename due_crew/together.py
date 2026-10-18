@@ -106,7 +106,7 @@ def show_luck_card():
     if store.get("exam") != _today() or mw.state != "deckBrowser":
         return
     name = (client().display_name or "").split(" ")[0]
-    mw.web.eval(board.luck_card_js(name, [(x["name"], x["note"]) for x in store["lines"]]))
+    app.board_eval(board.luck_card_js(name, [(x["name"], x["note"]) for x in store["lines"]]))
     store["shown"] = True
     _save_wrap()
 
@@ -146,23 +146,21 @@ def mark_helped(guid, from_uid, on):
 
 # ---- sending ----
 
-def _ask_line(title, prompt):
-    from .ui import ask_text
-    text, ok = ask_text(mw, title, prompt)  # plain text: the prompt holds a crewmate's name
-    return clean_note(text) if ok else ""
-
-
 def send_luck_line(uid):
+    from . import sheets
     from .social import _send_cheer
     entry = next((e for e in _state["entries"] or [] if e["user_id"] == uid), None)
     if entry is None:
         return
     first = str(entry["name"]).split(" ")[0]
-    line = _ask_line("Good-luck card",
-                     f"A line for {first}'s exam morning. They see it when they open Anki "
-                     "that day, with everyone else's.")
-    if line:
-        _send_cheer(uid, entry["name"], LUCK_EMOJI, line, luck=True)
+
+    def go(text):
+        line = clean_note(text)
+        if line:
+            _send_cheer(uid, entry["name"], LUCK_EMOJI, line, luck=True)
+    # plain text: the words hold a crewmate's name
+    sheets.ask_text("Good-luck card", f"A line for {first}'s exam morning. They see it when they open Anki "
+                    "that day, with everyone else's.", go, yes="Send")
 
 
 def send_tip(uid, index):
@@ -176,11 +174,16 @@ def send_tip(uid, index):
                  if v["uid"] == uid and v["index"] == int(index)), "")
     first = str(entry['name']).split(' ')[0]
     q = f" {first} asks: “{flag['q']}”" if flag.get("q") else ""
-    tip = _ask_line("Send a tip",
-                    f"On “{text or 'this card'}”.{q}\n\nOne line; {first} sees it when the card comes up.")
-    if tip:
-        _send_cheer(uid, entry["name"], TIP_EMOJI, tip, guid=flag["guid"],
-                    then=lambda ok: ok and hide_tipped(uid, flag["guid"]))
+    from . import sheets
+
+    def go(words):
+        tip = clean_note(words)
+        if tip:
+            _send_cheer(uid, entry["name"], TIP_EMOJI, tip, guid=flag["guid"],
+                        then=lambda ok: ok and hide_tipped(uid, flag["guid"]))
+    # plain text: the card's words are this computer's own, the ask a crewmate's
+    sheets.ask_text("Send a tip", f"On “{text or 'this card'}”.{q}\n\nOne line; {first} sees it when the card comes up.",
+                    go, yes="Send")
 
 
 def hide_tipped(uid, guid):

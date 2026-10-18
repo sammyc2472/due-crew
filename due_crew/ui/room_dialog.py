@@ -8,7 +8,7 @@ from aqt.qt import (
     QRadioButton, QSpinBox, QTime, QTimeEdit, QVBoxLayout,
 )
 
-from . import attach_alive
+from . import attach_alive, heading, note
 from ..room_model import BREAK_CHOICES, MAX_ROUNDS, ROUND_CHOICES, duration_text
 
 
@@ -20,6 +20,7 @@ class RoomDialog(QDialog):
         self.setWindowTitle("Open a Study Room")
         self.setMinimumWidth(420)
         root = QVBoxLayout(self)
+        heading(self, root)
 
         row = QHBoxLayout()
         row.addWidget(QLabel("Rounds"))
@@ -64,9 +65,7 @@ class RoomDialog(QDialog):
         when.addStretch()
         root.addLayout(when)
 
-        self.note = QLabel("")
-        self.note.setWordWrap(True)
-        self.note.setStyleSheet("font-size: 12px;")
+        self.note = note(QLabel(""))
         root.addWidget(self.note)
         for w in (self.rounds.valueChanged, self.length.currentIndexChanged, self.brk.currentIndexChanged):
             w.connect(self._update_note)

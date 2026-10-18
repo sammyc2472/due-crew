@@ -1,3 +1,4 @@
+# Due Crew's logo and Pip: Copyright (c) 2026 Sammy Caplan, all rights reserved (see LICENSE).
 """The logo ("Seven days", docs/logo) in the user's accent (2.10).
 
 logo.svg and logo_line.svg are docs/logo/svg/due-crew-logo.svg and

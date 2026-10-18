@@ -665,6 +665,70 @@ In Anki (as a follower):
 - [ ] Plan ▾ › How its cards open: switch to When I'm ready (a deck with open later cards offers Hold back), and back to the plan's dates (dates passed since ask, as Resume does). duecrew.com's plan page shows "At your pace · next: …" and the same choice; changing it there reaches Anki at its next refresh.
 - [ ] Browse: right-click a tag in the sidebar › Due Crew: open its cards…: the sheet counts what opens, what's open already, the leeches (they stay suspended), and the plans that hold them; Open with First in line ticked puts them first in Anki's new cards; one Edit › Undo shuts them. Pick cards in the table › Due Crew: open these…: the same for just those. Signed out: both are there.
 
+### 3.9.1: the short pass before release (about 15 minutes; the rest of 3.9.1 below as time allows)
+
+The riskiest of 3.9.1, the parts only a live Anki can show, in order:
+
+- [ ] Board clicks after a review (the Decks page's key): study a few cards, go back to Decks, then click Week, a crewmate's name (their card), ↻, ⚙ (Settings), a Due tick. Each works. Then Sync, and click them again. Switch profile and back: again. (If any click does nothing, stop: that's a release blocker.)
+- [ ] The whole window dims: open the Cheer window on a crewmate. The top bar and the bottom bar grey with the board; click the grey top bar: the window closes and the bars clear. Open it again and press S (study): the bars clear on the way out, never stuck grey.
+- [ ] A question on the board: own card › Set a status: a sheet in the board's look (not a Qt box); type, Enter: the status shows on your row. Settings › You › Display name: the same. Settings › Sign out: the sheet, Cancel does nothing; Esc and the backdrop the same.
+- [ ] A question off the board: while reviewing, Ctrl+Shift+Q (Ask the squad) on a plan's card: a Qt box in the board's colours, readable, OK and Cancel work.
+- [ ] The Qt windows: open Friends, Squads and (a plan's ⋯) Pause: board colours, the main button in your accent, ticks and radio dots visible, nothing cut off (Friends' code whole). Settings › Theme › Dark, open Friends again: dark, all readable.
+- [ ] Round two (on the Mac): Open a Study Room: its title in the window ("Open a Study Room"), the frame says Due Crew; the round length box opens a list in the board's look (no tick column, "15 min" whole), the rounds box has its own up/down arrows; nothing looks washed out. Follow a plan with a code: the plan's dates evenly spaced, Follow and Cancel fully in view. Pause's date box opens a calendar with no red weekends.
+- [ ] Mac or Windows: Cheer window › "other": the system's emoji picker opens and its pick lands.
+- [ ] Leave Anki on the Decks screen a minute: Pips stop moving after about twelve seconds; the fan quiet (no busy CPU).
+- [ ] The fridge: × on a drawing: "Taken down · Undo" in its place; Undo: it's back where it was. Take one down and wait: the Undo fades after about eight seconds. Sign out: the fridge is empty; sign in as someone else on the same Anki profile: none of the first person's drawings.
+
+### 3.9.1: cheers, clearer (the pill, the Cheer window)
+
+- [ ] The crew rows: no 🎉 at the end of any row, and no pill anywhere at rest. Point at a crewmate's name: a green "🎉 Cheer" pill shows after it (and after an exam or "studying now" chip); move off the name and it goes. Pointing at their numbers shows nothing. Tab to a name: it shows. Never on your own row. A very long name ends sooner while the pill shows; the pill is never cut off.
+- [ ] Click the pill (or "🎉 Send a cheer" on their card): the Cheer window opens over the Decks screen in the board's look (your accent, light and dark both right), their Pip and "Cheer Dre" at the top. Pick an emoji, or type/paste any other into "other" (⌃⌘Space on a Mac). Draw on the pad with the mouse, a trackpad or a pen; Black, Thin, Thick, Undo, Clear. Sign: type, and the paper shows it.
+- [ ] Send (or Enter in the note): the window fades, "Sent 🔥 and a drawing to Dre.", and the emoji floats up from their row. Cancel, Esc and a click on the dim backdrop close it without sending; a line drawn off the pad's edge never closes it.
+- [ ] duecrew.com: the same pill after the name, only while pointing at the name; on a phone, tap the name for their card and its "🎉 Send a cheer"; the 🎉 column is gone.
+
+### 3.9.1: two buttons
+
+- [ ] Settings › Board › Reviewing: Two buttons, off. Its line: "Again and Good. Hard and Easy hide; 2, 3 and 4 count as Good. Phones keep four." With FSRS off (Deck options › FSRS), the line ends "Works best with FSRS on."; with it on, it doesn't. Find a setting: "hard" finds it.
+- [ ] Turn it on and review: the bar shows Again and Good only, each with its interval, in Anki's own words (try another interface language). Learning cards that already show two buttons look as before.
+- [ ] Keys: 1 is Again; Space, Enter, 2, 3 and 4 all answer Good (check the card's info: Good, not Hard or Easy). Turn it off: four buttons, and 2 and 4 are Hard and Easy again, at once.
+- [ ] In a study room, on its break: no key answers (2 and 4 included), as before.
+- [ ] A second computer signed in to the same account: it's on there after the account's settings come down. Your phone keeps four buttons.
+- [ ] You › Insights on a deck where you press Hard a lot (15% of 200 answers): the Hard habit line ends "Try two buttons · Not now". Try two buttons: the line says "Two buttons are on … Undo", and Settings shows it on. Undo: off, and the Hard line is back. Reopen Anki with it on: no Hard habit line.
+
+### 3.9.1: room sounds
+
+- [ ] The chip says it: during a fifteen, the chip ends in an outlined "Sound" with a struck speaker; pick Rain: it reads "Rain" in your colour. A compact chip (narrow window) shows the speaker alone.
+- [ ] Settings › Board › Fifteen and Pip › Room sounds, off: the sound fades out and the chip loses its speaker at once; start a fifteen: no speaker, no sound. On again: the speaker's back, with your last pick.
+- [ ] Waves is the Pacific one now: listen for two minutes on loop: no click where it comes round.
+- [ ] The picker closes by itself: pick Rain and leave the pointer still: the chip is back in a second and a half. Drag the volume and hold it: it stays; let go: back in two seconds. Open it and move away: back in a second. Open it and do nothing: back in four.
+- [ ] The recordings: Rain is real rain, Fire a real fireplace (soft pops), Waves a real shore, each a minute or so that loops; listen for two minutes each: no click or jump where it comes round, no voices, birds or hum. Brown noise is the made one, as before. All four sound about as loud at one volume.
+
+- [ ] Start a fifteen: its chip in the top bar ends in a grey speaker (struck through). Click it: the chip becomes Off · Brown noise · Rain · Fire · Waves; Off is filled. Esc, or a click anywhere else, puts the chip back; a click on the chip (not the speaker) still opens its card.
+- [ ] Pick Rain: it fades in over a second or so (headphones for Brown noise and Waves: laptop speakers barely play them); the volume slider appears and changes it as you drag. Pick Fire: Rain fades as Fire comes in. The speaker is in your accent, with waves. Off: it fades out.
+- [ ] Study with a sound on: it plays on through Review (cards changing don't cut it), through a fifteen's break and its question; Stop here: it fades out. Take five, then another: it plays through.
+- [ ] Restart Anki, start a fifteen: your last pick comes back by itself (no click), at its volume. Sync (the top bar redraws): it carries on, or comes back within a moment.
+- [ ] A crew room with someone who picked a different sound (or none): each of you hears your own; theirs never changes yours. The room ends: yours stops.
+- [ ] Preferences › hide the top bar while reviewing: the room shows in the bottom bar or the margin with no speaker, and the sound plays on.
+- [ ] No room and no fifteen: no sound, ever (it never starts on its own outside a session).
+
+### 3.9.1: doodle cheers (deploy the Worker first: migration 0029)
+
+- [ ] 🎉 a crewmate: the Cheer window opens small: the emoji, "Add Draw · Sign" with neither picked, the note, Send. Send now: a plain cheer. Press Draw: the pad opens; press Draw again: it shuts, and Send sends no drawing (open it again: what you drew is still there). Sign the same.
+- [ ] Draw on the pad with the mouse (and a trackpad, and a pen if you have one): the lines follow, in your accent. The colours under the pad: yours first ("My colour"), then the other five accents, then Black; each changes the next line, as Thin and Thick do; a drawing can mix them. Undo takes the last line, Clear all of them. Night mode: the pad stays paper-light.
+- [ ] Send a drawing in three colours: on their screen (held up, and on the fridge) each line is in the colour it was drawn in, whatever their own accent.
+- [ ] Mac: "other" turns into a box ("pick one") and the Character Viewer opens; double-click any emoji, a skin tone, a flag: it's picked and "other" shows it. Esc instead: "other" is back. Windows: the same with the emoji panel (Win + .). Linux: the drawer below, as before.
+- [ ] (Linux, or when the system's picker can't open) "other": a drawer opens under the emoji, in the window's look: Find, a row of groups (Faces, Hands, Hearts, Party, Study, Nature, Food), and the emoji. Type "coffee": ☕ (and only what matches); type nonsense: "Nothing by that name". A group's button scrolls to it. Click one: the drawer shuts and "other" shows it, picked. Paste or type an emoji into Find (⌃⌘Space on a Mac, Win+. on Windows): it's picked. Esc with the drawer open shuts the drawer, not the window; Esc again closes the window. A quick pick after that puts "other" back.
+- [ ] Send with a drawing: "Sent 🎉 and a drawing to Adina." Send with the pad blank: a plain cheer, as before.
+- [ ] Sign: type a few words; the paper under it shows them as they'll look; 24 letters at most. Send from the Sign tab: "Sent 🎉 and a sign …".
+- [ ] On their Decks screen (or yours, cheered by a second account): the banner at the top, and your Pip (your colour, your look) rises at the board's bottom right holding the drawing (or the sign) up on two sticks, then ducks down as the banner goes. No show that time. A hat on your Pip sits under the sign, not in front of it.
+- [ ] Reduce motion (system setting): no Pip rising; the drawing sits in the banner on its paper, under the note. Settings › Pip off: the same, with the emoji flurry.
+- [ ] Held up, its note is under it as a caption, "from Adina", and isn't in the banner a second time. In the Cheer window, once you draw (or type a sign) the note's box says "A caption under it (optional)".
+- [ ] Pip at rest (3.9.1): ▶ Fifteen?'s Pip naps (or blinks) for about twelve seconds, then holds still; point at it and it moves again. Same for a fifteen's chip and a room's card. A fifteen's break: the breathing square (or the stretch) goes on all break. Crew rows' Pips move while the row is hovered, still otherwise. The studying-now dot pulses a few times, then stays lit.
+- [ ] The fridge: back on the Decks screen, the doodle is pinned beside the board as a Polaroid (a white frame, a little crooked, taped up with a see-through strip in their colour), the note on the frame under it, then their Pip and name and the day (no "from"). More of them fill the left side and the right, newest highest. Drag one anywhere: it stays there after Anki restarts; nothing redraws while you drag. Their Pips are still until you point at one (as crew rows).
+- [ ] Window sizes: drag one just right of the board, then make the window wider and narrower: it keeps its distance from the board. Narrow the window till there's no room for it: it waits on the pile in the bottom right corner. Widen it again: it's back where you put it. A short window lifts a low one into view; a tall one puts it back. A new doodle that comes in goes round the ones you placed, not under them. Restart Anki: all still where you left them. Point at one: × takes it down. A narrow window with no room beside the board: a small pile in the bottom right corner, still draggable. Twelve at most; the oldest comes down to make room. Pip's closet has no Fridge page any more.
+- [ ] duecrew.com's home, before Anki opens: "Adina cheered with a drawing: …, It waits for your Anki screen".
+- [ ] Report someone who sent a sign: the admin's Inbox shows "(with a sign: "…")" in their last cheer.
+
 ### 3.9.0: cheers land everywhere
 
 - [ ] Have a crewmate cheer you, then open the Decks screen: a show plays over the whole page, the deck list and the board, never over Anki's top bar; the banner at the top names them, with their note and "click to send one back". Cheered again (or a few cheers at once): a different show each time, never the same twice in a row, all twelve before any repeats.

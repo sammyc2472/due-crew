@@ -18,7 +18,12 @@ add-on.
   backend (Firebase) is gone since 3.8.0.
   `worker/` and `site/` are PolyForm Shield 1.0.0 (their LICENSE.md) since
   29 Sep 2026: readable and runnable, not for a competing service. The
-  add-on, tests and tools stay MIT (root LICENSE).
+  add-on, tests and tools stay MIT (root LICENSE), but for the logo's and
+  Pip's artwork (`docs/logo/`, `docs/images/`, `logo.py`, `sev.py`,
+  `closet_art.py` and their copies in `site/`), all rights reserved since
+  17 Oct 2026; the name, logo and Pip are trademarks (README's "Name, logo
+  and Pip"). A new file that draws Pip or the logo joins that list in the
+  root LICENSE.
 - `site/` — duecrew.com: the landing page, and the app (`public/app.*`,
   plain JS, no framework: sign-in, plans, the builder). Its Worker
   (`site/src/index.ts`) sends `/api/*` to the API by service binding, so
@@ -30,7 +35,8 @@ add-on.
   Its images live in `docs/images/` and are linked by full
   raw.githubusercontent.com URLs on `main`, so the same text works on
   AnkiWeb. They're renders of the add-on's own board, overlays and room
-  widget (sample crew), not mockups; re-render them when those change.
+  widget (sample crew), not mockups; re-render them when those change
+  (board.png: `tools/readme_images.py`, then `node tools/readme_images.js`).
 - `docs/logo/` — the logo ("Seven days"), final artwork: never redraw or
   re-typeset it. Green on GitHub; inside the add-on, `due_crew/logo.py`
   colours the studied days with the user's accent: the board's title is
@@ -96,8 +102,10 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   deck ids belong to one collection. `plans.py` is pure, `plan_flow.py`
   the glue.
 - Mine alone, never sent: Insights, my progress on each bingo square,
-  checkpoint scores, `wrap.json` (3.8.2: and the closet's tallies in it)
-  and Wrapped.
+  checkpoint scores, `wrap.json` (3.8.2: and the closet's tallies in it;
+  3.9.1: the fridge, the doodles I was sent and where I pinned them),
+  `closet_days.json` (3.9.1: the closet's older days, kept so the revlog
+  isn't read whole at every launch), my room sound and Wrapped.
   Pip's closet is mine (an account key only I read); what my Pip has on
   rides with my accent to mutual friends, as names. A plan's squad (its team on the server) shares only
   that I showed up, my questions and answers, and bingo stamps; never my
@@ -144,6 +152,10 @@ same commit, each with its test:
 - `room_model.phase` ↔ the room widget's JS (3.8.1: a fifteen's question too; `test_fifteen_js_phase_matches_v381`)
 - `sharecard.py` ↔ `site/public/cards.js` (the picture cards' layouts and words, 3.8.0)
 - `due_crew/motion.js` = `site/public/motion.js`, byte for byte (the board's motion, 3.8.0; the suite checks)
+- `shapes.clean_doodle` ↔ `doodle` in `worker/src/validate.ts` ↔ the fake's
+  `_doodle` (a doodle cheer's strokes or sign, 3.9.1; a pen's colour is a
+  place in `shapes.DOODLE_INKS`: add only at the end, and raise
+  `DOODLE_PEN_MAX` in all three)
 - the Worker ↔ `tests/fakes.FakeWorker` (the suite's server)
 
 ## Where things live
@@ -152,13 +164,14 @@ same commit, each with its test:
 |---|---|---|
 | The board, your people: Crew (Today · Week · Decks picker) and Squads | `board.py`, `__init__.py`, `backend/api.py`, `stats/` | `board.ts`, `social.ts`; `Board` in app.js |
 | The You bubble over it (3.8.0): Today, Upcoming, Later, Plans, Insights | `board.you_html`, `__init__._you`, `due_flow.py` | the rail on /home |
-| Cheers, status, profile card (3.9.0: a landing cheer is a show over the whole Decks screen, a different one each time: `shows.py` the bag, `show.js` the twelve, started by `board.flurry_js`) | `social.py`, `wrap.py`, `shows.py`, `show.js` | `social.ts` |
+| Cheers, status, profile card (3.9.0: a landing cheer is a show over the whole Decks screen, a different one each time: `shows.py` the bag, `show.js` the twelve, started by `board.flurry_js`; 3.9.1: a drawing or a sign from the Cheer window's Draw · Sign, held up by the sender's Pip as it lands, its note under it as a caption with who it's from, then pinned around the Decks screen as Polaroids (the fridge: drag one anywhere and it keeps its place beside the board as the window changes, × takes it down, with an Undo in its place for a few seconds; it's the signed-in account's, emptied at sign-out); a cheer is a "🎉 Cheer" pill after a crewmate's name, the 🎉 column is gone) | `social.py` (`_cheer_menu`, `send_from_window`), `wrap.py`, `shows.py`, `show.js`, `board.cheer_overlay_js` (the Cheer window, on the Decks screen in the board's look since 3.9.1; "other" opens the computer's own emoji picker, `native_emoji.py`, or on Linux the drawer, `emoji_drawer.py`), `board.doodle_html`/`doodle_landing`, `fridge.py` and `board.fridge_html`/`fridge_js` | `social.ts`, `validate.doodle` (migration 0029) |
 | Settings (one: the board's, 3.8.0) | `settings_model.py`, `account.py`, `board.settings_html` | `GET/PUT /settings` |
+| The board's questions (3.9.1): a sheet over the Decks screen in the Cheer window's look (confirm, one line, one of a few), Qt off the board; the top and bottom bars dim with any window over the board | `sheets.py`, `board.sheet_js`, `board.VEIL_WATCH_JS`, `app.veil` | never sent |
 | Squads, knocks, bingo | `squads.py`, `bingo.py`, `bingo_flow.py` | `squads.ts`, `bingo.ts`, `adminsquads.ts` |
 | Who knows this, asks, tips (3.9.0: the day's first sync asks about the cards due today too, so a first miss shows it; with Pip on, the knower's Pip peeks in from the corner, and a tip's tipper's; a tip's, an ask's or a plan note's words fold till Show, so a one-by-one card isn't given away) | `cards.py`, `together.py` | `cards.ts` |
-| Study rooms | `rooms.py`, `room_model.py` | rides my week |
+| Study rooms (3.9.1: room sounds, a speaker on the chip: brown noise (made in the top bar's page), rain, fire, waves (CC0 recordings, seamless loops, `sounds/` and its CREDITS.md, cut by `tools/cut_sound.sh`); each person their own pick, this computer's config, never sent; the speaker says "Sound" or the sound's name; Settings › Room sounds takes it all away) | `rooms.py` (`_sound_files`), `room_model.py` (`sound_pick`/`sound_state`/`sound_files`/`sound_js`, the chip's picker), `sounds.js` | rides my week (the sound never does) |
 | The Fifteen (3.8.1): ▶ Fifteen? in the top bar, the nudge, the question at its end, Take five / Another now / Stop | `room_model.make_fifteen`/`fifteen_next`, `rooms.start_fifteen`/`fifteen_answer` | studying now only (never a room on my week) |
-| Pip (3.8.1, Block; called Sev until 3.8.2, and still `sev` in code: sev.py, the `sev*` keys, `.sv`, sev.js's `Sev`): by the logo for a moment, in a fifteen's chip, question and break, the nudge, the session's line; hopping across the week picture card; a study room's seats, each crewmate's in their accent; waving in Welcome back and on the signed-out card; hopping on a crewmate's big-streak banner (not on crew rows: Sam's no). Each place has its mix of moves (`sev.MOVES`), never the same twice in a row | `sev.py` (one drawing; the widgets get its markup, the week card and Welcome back `sev.still`; `pick`/`nth` the variety), `rooms.board_sev`/`pick`/`milestone_sevs`/`signed_out_sev`, `sharecard.hops`, `room_model.seats`/`vary_seed`, `ui.sev_label` | never sent; cards.js keeps a copy of `sev.still` (the suite checks it) |
+| Pip (3.8.1, Block; called Sev until 3.8.2, and still `sev` in code: sev.py, the `sev*` keys, `.sv`, sev.js's `Sev`): by the logo for a moment, in a fifteen's chip, question and break, the nudge, the session's line; hopping across the week picture card; a study room's seats, each crewmate's in their accent; waving in Welcome back and on the signed-out card; hopping on a crewmate's big-streak banner (not on crew rows: Sam's no). Each place has its mix of moves (`sev.MOVES`), never the same twice in a row. 3.9.1: its loops play about twelve seconds and rest (`--sv-on`), pointing plays them on; the break's breathing goes on; the fridge's are still till pointed at | `sev.py` (one drawing; the widgets get its markup, the week card and Welcome back `sev.still`; `pick`/`nth` the variety), `rooms.board_sev`/`pick`/`milestone_sevs`/`signed_out_sev`, `sharecard.hops`, `room_model.seats`/`vary_seed`, `ui.sev_label` | never sent; cards.js keeps a copy of `sev.still` (the suite checks it) |
 | Pip's closet (3.8.2): 61 things earned by showing up, coming back, together, plans, card care, seasons, secrets; one per place, a costume over the look; in place of the board (Yours by place, To earn by how); each crew row's, profile card's and (3.8.21) squadmate's Pip in the emoji's place (3.8.22: a plan card's squad line too, by `who` on `/board`'s `teams`; the review chip, a squadmate's card, Settings › You, bingo stamps; the site's account page and home feed, `pipFor`; the Friends dialog is names alone) | `closet.py` (pure: things, wear/clean/shown, facts from days and hours; 3.8.22: `halloween`/`spooky`), `closet_art.py` (the drawings), `closet_flow.py` (facts, tallies in wrap.json, a year of them for Wrapped, earned, worn, `halloween_view`), `board.closet_html`/`closet_line`/`row_sev`/`card_sev`/`squad_pip`/`halloween_html` | account keys `sev_look`, `sev_closet`; a mutual friend's look on /board (`lookOf` in `board.ts`) |
 | Plans (follow, morning, week, load; You › Plans) | `plans.py`, `schedule.py`, `plan_flow.py` | `plans.ts`, `library.ts`; `builder.js`, app.js |
 | A plan's squad (3.8.0, on the Squads tab; its team on the server) | `team.py`, `team_flow.py` | `team.ts`; `PlanSquad` in builder.js |
@@ -170,6 +183,7 @@ same commit, each with its test:
 | Admin, notices, feedback, reports (kept for the Inbox, 3.8.1) | | `admin.ts`, `people.ts`, `notices.ts`, `feedback.ts`, `reports.ts` |
 | Your Wrapped (3.9.0): the year's story in the board's place, the board's line 1 Dec to 15 Jan, Tools › Your year… | `wrapped.py` (pure: facts, slides, words, SAD), `wrapped_flow.py` (one query, counts, the card), `board.wrapped_html`/`wrapped_js`/`wrapped_line`, `sharecard.year`'s Pip | never sent; the account's `wrapped_seen`; cards.js draws the year card's Pip the same |
 | Why isn't this card showing? (Browse right-click, 3.8.0) | `why.py`, `why_flow.py`, `ui/why_dialog.py` | never sent |
+| Two buttons (3.9.1): Again and Good alone, 2, 3 and 4 count as Good; Settings › Board › Reviewing, and Try two buttons on Insights' Hard habit line | `two_buttons.py` (on `reviewer_will_init_answer_buttons` and `reviewer_will_answer_card`), `board._settings_board`, `team_flow.try_two` | account key `two_buttons` |
 | Plan tags: DueCrew::<plan>::SLG_12 on followers' notes (Browse right-click, the builder, Tag by objective; 3.8.0) | `plans.sync_tags`, `plan_flow.apply_tags`, `ui/tag_dialog.py` | `plans.ts` tagNotes; This plan's tags in builder.js |
 | Cuts (a video kept to an SLG) and a tag's single cards; taking a tag off (3.8.1) | `plans.match`/`plan_tag_cards`/`topic_items`, `plan_flow._unit_cids` | `planDoc`/`putIds` in `plans.ts`; `setCut`/`syncCuts` and the Text preview in builder.js |
 | Your own pace (Up next, Open, Put back); Browse › open its cards / open these (3.8.0) | `plans.up_next`, `plan_flow.open_next`, `plan_flow.open_cards_now`, `ui/open_dialog.py` | follow `own` (`plans.ts`); `paceBox` in builder.js |
@@ -240,6 +254,18 @@ clean `main` does the migrations, the API, then the site, then
   cleans up (heights by `tall`/`inner`, folds by `room`, never
   offsetHeight); `tools/motion_audit.js` measures each one's last frame
   against the settled page (3.9.0).
+- A question the board asks goes through `sheets.py` (then-callbacks, only
+  a yes reaches them), never a bare QMessageBox/QInputDialog/askUser; the
+  Qt ones in `ui` are its fallback off the board. A Qt window wears the
+  board's look (`ui.styled`, via `attach_alive`): Fusion under it
+  (`ui.base_style`), every box, arrow and tick drawn by `ui.QSS`. It says
+  what it is with `ui.heading` (its frame says Due Crew), a part's heading
+  is `ui.role(label, "head")`, small print `ui.note`; no window sets its
+  own font sizes or margins in a style sheet (a margin there sets a
+  label's words in), and its labels' own style sheets take
+  `ui.tone(...)`, never palette(...). `tools/dialogs.py` fails on a
+  clipped button, a squeezed box, two controls on top of each other or a
+  window shorter than its words: a new window or state gets a render there.
 - Every `duecrew:` command a page emits needs a handler
   (`test_every_board_command_has_a_handler`), and a new one gets a test
   that sends it through `_on_js` as the board does (3.5.0's Settings went
@@ -251,7 +277,12 @@ clean `main` does the migrations, the API, then the site, then
   bar: `_our_page`) only the widgets' keyed commands in
   `room_model.CARD_PAGE_CMDS` are taken
   (`room_model.trusted`); anything that acts for me elsewhere comes from
-  the board, the bars or a dialog.
+  the board, the bars or a dialog. The board's own commands carry
+  `board.BOARD_KEY` (3.9.1: `_pycmd`, or `+ '|' + window.dcBK` in a script
+  that builds one): Anki calls a message the Decks screen's before the page
+  before has gone, and a Decks-screen message without the key gets the card
+  page's rules. Draw on the board with `app.board_eval`, never into a page
+  that isn't the Decks page.
 - A failed request is sent again only when twice can't do a thing twice
   (`api._call`: reads, PUT/PATCH/DELETE, a sync, one that never got out).
   What a person or a request adds on the server has a ceiling.

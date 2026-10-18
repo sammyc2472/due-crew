@@ -1,7 +1,9 @@
-"""Emoji pickers: the cheer dialog (quick picks, an "other" box, a note) and,
-since 2.9, the crew-emoji dialog, which until then was a bare text box.
-Both are built on EmojiPicker. Pure Qt; the caller sends or saves. Nothing
-here touches the collection or the network.
+"""The emoji picker (quick picks, an "other" box) and, since 2.9, the
+crew-emoji dialog, which until then was a bare text box. The cheer
+dialog was built on it too until 3.9.1, when the Cheer window moved onto
+the Decks screen in the board's own look (board.cheer_overlay_js).
+Pure Qt; the caller saves. Nothing here touches the collection or the
+network.
 
 The "other" box is a text field that acts like a button: a click opens
 the system emoji palette (macOS, Windows), whose pick lands in the field
@@ -15,10 +17,9 @@ from aqt.qt import (
     QVBoxLayout, QWidget,
 )
 
-from . import accent, open_emoji_picker
+from . import accent, heading, note, open_emoji_picker, styled, tone
 from ..backend.shapes import clean_emoji
 
-NOTE_MAX = 80
 # the crew-emoji dialog's quick row: faces for a name, not reactions
 CREW_EMOJI = ("\U0001F98A", "\U0001F422", "\U0001F989", "\U0001F41D",   # fox, turtle, owl, bee
               "\U0001F335", "\U0001F30A")                               # cactus, wave
@@ -80,7 +81,7 @@ class EmojiPicker(QWidget):
     @staticmethod
     def _other_css(chosen):
         # a small "other" at rest; a chosen emoji at the quick picks' size
-        border = f"2px solid {accent()}" if chosen else "1px solid palette(mid)"
+        border = f"2px solid {accent()}" if chosen else f"1px solid {tone('line')}"
         return (f"QLineEdit {{ font-size: {20 if chosen else 12}px; border: {border};"
                 " border-radius: 8px; padding: 3px 6px; min-height: 30px; }")
 
@@ -118,53 +119,19 @@ class EmojiPicker(QWidget):
             b.setChecked(False)
 
 
-class CheerDialog(QDialog):
-    def __init__(self, parent, name, emojis, any_emoji=True):
-        super().__init__(parent)
-        self.setWindowTitle(f"Cheer {name}")
-        self.setMinimumWidth(360)
-        self.note = ""
-        lay = QVBoxLayout(self)
-        self.picker = EmojiPicker(emojis, any_emoji)
-        self.other = self.picker.other  # tools/dialogs.py drops a pick in here
-        lay.addWidget(self.picker)
-        self.note_edit = QLineEdit()
-        self.note_edit.setPlaceholderText("Add a note (optional)")
-        self.note_edit.setMaxLength(NOTE_MAX)
-        lay.addWidget(self.note_edit)
-        hint = QLabel("Lands after their next sync.")
-        hint.setStyleSheet("font-size: 11px;")
-        lay.addWidget(hint)
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok
-                                   | QDialogButtonBox.StandardButton.Cancel)
-        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Send")
-        buttons.accepted.connect(self._send)
-        buttons.rejected.connect(self.reject)
-        lay.addWidget(buttons)
-        self.note_edit.setFocus()
-
-    @property
-    def emoji(self):
-        return self.picker.emoji
-
-    def _send(self):
-        self.note = " ".join(self.note_edit.text().split())[:NOTE_MAX]
-        self.accept()
-
-
 class EmojiDialog(QDialog):
     """Your crew emoji (2.9): the cheer picker, with faces for a quick row.
     `emoji` after accept: the one picked, or "" when Remove was pressed."""
 
     def __init__(self, parent, current=""):
         super().__init__(parent)
+        styled(self)  # 3.9.1: the board's look
         self.setWindowTitle("Your Emoji")
         self.setMinimumWidth(380)
         self._removed = False
         lay = QVBoxLayout(self)
-        note = QLabel("In front of your name, for your crew and squads.")
-        note.setStyleSheet("font-size: 12px;")
-        lay.addWidget(note)
+        heading(self, lay)
+        lay.addWidget(note(QLabel("In front of your name, for your crew and squads.")))
         self.picker = EmojiPicker(CREW_EMOJI, True, initial=current or "")
         lay.addWidget(self.picker)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save

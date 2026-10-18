@@ -107,6 +107,16 @@ from due_crew.stats import gather_week                        # noqa: E402
 CHECKS = []
 
 
+KK = board.BOARD_KEY  # 3.9.1: what the Decks page's own commands carry
+
+
+def as_board(message):
+    """A message as the Decks page sends it (3.9.1): with the board's key,
+    unless it carries a widget's own."""
+    from due_crew import board as _b
+    return message if "|" in message else message + "|" + _b.BOARD_KEY
+
+
 def check(name, cond, detail=""):
     CHECKS.append((name, bool(cond), detail))
     print(("PASS " if cond else "FAIL ") + name + (f"  [{detail}]" if detail and not cond else ""))
@@ -732,7 +742,7 @@ def test_squad_view_html():
           and "squadleave" in html)
     by_streak = board._squads_html(view, {"sort": "streak"})
     check("squad view: headers are the crew's sort links; sorting reorders ranks",
-          'onclick="pycmd(\'duecrew:sort:retention\')' in html
+          ('onclick="pycmd(\'duecrew:sort:retention|' + KK + '\')') in html
           and by_streak.index("StepQueen") < by_streak.index("Maya")
           and by_streak.index("Maya") < by_streak.index("Sammy")
           and '<span class="hi">&#128293;</span><span class="hl">Streak</span> &#9662;' in by_streak, by_streak)
@@ -790,7 +800,7 @@ def test_hardening_v24():
     status, and per-sender cheer bookkeeping."""
     from due_crew import social
     check("pycmd: ids and keys pass, quote-breakers are dropped",
-          board._pycmd("profile:abc_1-2") == "pycmd('duecrew:profile:abc_1-2'); return false;"
+          board._pycmd("profile:abc_1-2") == ("pycmd('duecrew:profile:abc_1-2|" + KK + "'); return false;")
           and "'" not in board._pycmd("x:a')alert(1)//").replace("pycmd('duecrew:", "", 1)[:-len("'); return false;")])
     err = shapes.TransportError("query failed: 403", 403)
     check("transport error carries its status", err.status == 403 and str(err) == "query failed: 403")
@@ -1311,18 +1321,26 @@ def test_wrap_file_is_durable():
         check("wrap.json: saved whole, no temp file left", saved == {"life": {"reviews": 1234}}
               and os.listdir(wrap._profile_files()) == ["wrap.json"])
 
-        real_dump = wrap.json.dump
+        class DiesHalfway:  # 3.9.1: the text is made first, then written in one go
+            def __init__(self, f):
+                self.f = f
 
-        def dies_halfway(obj, f):
-            f.write('{"life": {"rev')
-            raise OSError("disk full")
+            def __enter__(self):
+                return self
 
-        wrap.json.dump = dies_halfway
+            def __exit__(self, *exc):
+                self.f.close()
+
+            def write(self, text):
+                self.f.write(text[:len(text) // 2])
+                raise OSError("disk full")
+
+        wrap.open = lambda p, mode="r", *a, **k: DiesHalfway(open(p, mode, *a, **k)) if "w" in mode else open(p, mode, *a, **k)
         try:
             wrap._wrap["data"] = {"life": {"reviews": 0}}
             wrap._save_wrap()
         finally:
-            wrap.json.dump = real_dump
+            del wrap.open
         with open(path) as f:
             after = json.load(f)
         check("wrap.json: a write that dies halfway leaves the last good file in place",
@@ -1809,7 +1827,7 @@ def test_study_rooms_v212():
     rooms_glue._set_room = lambda r, msg: picked.append(r)
     st["entries"] = [dict(e, room=room) if e["user_id"] != "me" else dict(e, room=None) for e in entries]
     try:
-        cmd = inv_html.split("roomjoin:")[1].split("'")[0]
+        cmd = inv_html.split("roomjoin:")[1].split("'")[0].split("|")[0]
         real_over = rm.is_over
         rooms_glue.room_model.is_over = lambda r, now=None: False
         rooms_glue.join(cmd)
@@ -1910,7 +1928,7 @@ def test_study_rooms_v212():
         rooms.on_question(None)
         check("placement: top bar showing, the chip goes there and the margin card doesn't",
               any('"chip"' in e and '"title"' in e for e in evals)
-              and any('"gutter"' in e and "null" in e.split("var D =")[1][:12] for e in evals))
+              and any(e.endswith('})("gutter");') and "var D =" not in e for e in evals))
         syncs.clear()
         rooms.on_close()
         check("close: closing Anki leaves the room, and pushes that", "room" not in fake_cl.session
@@ -1983,6 +2001,60 @@ def test_streak_phone_v2111():
           held_streak(3, {}, "2026-09-24") == 3 and held_streak(3, {"2026-09-22": {"streak": "x"}}, "2026-09-24") == 3)
     check("held: an upload from a later day (clock change) isn't the one held",
           held_streak(5, {"2026-09-30": {"streak": 90}}, "2026-09-24") == 5)
+
+
+def test_streak_shortcut_v391():
+    """3.9.1: the day after a day studied here, the streak's base is the run
+    I saw yesterday when the day before it is still empty: no scan, and the
+    answer 2.11.1's base (kept here) gives, scan and all. The phone filling
+    that day late, a history that lost a day, a day off yesterday, later
+    the same day, a run that isn't a number."""
+    from due_crew.stats.streak import StreakTracker, _int
+
+    def base_2111(t):
+        today = t.q.day_label(0)
+        cached = t._load()
+        kept = 0
+        if cached.get("date") == today:
+            kept = _int(cached.get("base"))
+            if t.q.reviews_for_day(kept + 1) == 0:
+                return kept
+        seen = cached.get("seen") if isinstance(cached.get("seen"), dict) else {}
+        if seen.get("day") == t.q.day_label(1):
+            kept = max(kept, _int(seen.get("run")))
+        return max(t._base_through_yesterday(), kept)
+
+    def case(agos, state):
+        col = make_user_col([TODAY - datetime.timedelta(days=i) for i in agos])
+        files = tempfile.mkdtemp()
+        with open(os.path.join(files, "streak.json"), "w") as f:
+            json.dump(state, f)
+        t = StreakTracker(StatsQueries(col), files)
+        want = base_2111(t)
+        scans = []
+        real = StreakTracker._base_through_yesterday
+        StreakTracker._base_through_yesterday = lambda self: scans.append(1) or real(self)
+        try:
+            got = t.base()
+        finally:
+            StreakTracker._base_through_yesterday = real
+        return got, want, len(scans), json.load(open(os.path.join(files, "streak.json")))
+
+    lb = lambda i: (TODAY - datetime.timedelta(days=i)).isoformat()
+    yday = {"date": lb(1), "base": 299, "seen": {"day": lb(1), "run": 300}}
+    got, want, scans, saved = case(range(1, 301), yday)
+    check("streak: the day after a day studied here, yesterday's run with the day before it empty is the base, unscanned",
+          got == want == 300 and scans == 0 and saved["date"] == lb(0) and saved["base"] == 300, (got, want, scans))
+    for name, agos, state, base in (
+            ("the phone filled the day before the run late: scanned, the longer run", range(1, 321), yday, 320),
+            ("a history that lost a day: the run I saw stands", [i for i in range(1, 301) if i != 150], yday, 300),
+            ("a day off yesterday: yesterday's count was two days ago", range(2, 60),
+             {"date": lb(2), "base": 57, "seen": {"day": lb(2), "run": 58}}, 0),
+            ("later the same day", range(1, 301), dict(yday, date=lb(0), base=300), 300),
+            ("a run that isn't a number", range(1, 301), dict(yday, seen={"day": lb(1), "run": "x"}), 300),
+            ("nothing kept yet", range(1, 80), {}, 79)):
+        got, want, scans, _ = case(agos, state)
+        check(f"streak: {name}: the same base as 2.11.1's", got == want == base, (got, want, scans))
 
 
 def test_main_thread_caches_v29():
@@ -2060,7 +2132,7 @@ def test_ways_in_v29():
     page = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []}, {}, 0)
     foot = page[page.index('<div class="dc-foot">'):]
     check("ways in: Settings sits in the footer, after Refresh",
-          "duecrew:settings')" in foot and foot.index("duecrew:refresh") < foot.index("duecrew:settings"))
+          ("duecrew:settings|" + KK + "')") in foot and foot.index("duecrew:refresh") < foot.index("duecrew:settings"))
     js = board.profile_overlay_js({"name": "Sammy", "you": True, "cells": None})
     check("ways in: your card's Privacy… opens Settings on Privacy",
           "duecrew:settings:privacy" in js)
@@ -2204,8 +2276,8 @@ def test_together_v210():
     from due_crew import room_model as rm
     check("bottom bar: the chip, a room beside Edit, and removing them keep the answer buttons centred",
           "dcBarBalance" in js and "dcBarBalance" in crew_cards.chip_js(None)
-          and all("window.dcBarBalance = function" in rm.widget_js(k, None) for k in ("bottom", "off"))
-          and "window.dcBarBalance = function" not in rm.widget_js("chip", None))
+          and all("window.dcBarBalance()" in rm.widget_js(k, None) for k in ("bottom", "off"))
+          and "window.dcBarBalance = function" in rm.BAR_BALANCE)
     check("bottom bar: our chip steps past a button another add-on draws over the bar",
           "position" in rm.BAR_BALANCE and "'absolute'" in rm.BAR_BALANCE and "marginLeft" in rm.BAR_BALANCE
           and "clear(chip)" in rm.BAR_BALANCE
@@ -2223,22 +2295,23 @@ def test_together_v210():
           "dc-knows-card" in fj and "knowsbar" in fj and "free()" in fj and "Not now" in fj
           and rm.CMD_KEY in fj and "textContent" in fj and fj.count("innerHTML") == 1 and "p.innerHTML = D.pip.svg" in fj
           and "bulb.innerHTML" not in fj  # 3.9.0, Sam's "2D": no lightbulb
-          and "dc-knows-card" in crew_cards.float_js(None) and "return false" in crew_cards.float_js(None))
-    import aqt.utils as _au
+          and "dc-knows-card" in crew_cards.float_js(None) and "dcKnowsOff(true)" in crew_cards.float_js(None)
+          and len(crew_cards.float_js(None)) < 400 and len(crew_cards.chip_js(None)) < 300)  # 3.9.1: a remover, not the whole chip
+    from due_crew import ui as _ui
     calls, asked = [], []
-    real_toggle, real_ask = crew_cards.helped_toggle, _au.askUser
+    real_toggle, real_ask = crew_cards.helped_toggle, _ui.confirm
     crew_cards.helped_toggle = calls.append
     real_tip = crew_cards._tip_from
     crew_cards._tip_from = lambda uid: {"name": "Eve Park", "helped": False, "from": uid}
     try:
-        _au.askUser = lambda q, *a, **k: asked.append(q) or False
+        _ui.confirm = lambda parent, title, q, yes: asked.append(q) or False
         crew_cards.on_message("knowshelped", ["duecrew", "knowshelped", "eve"], from_card_page=True)
         no = list(calls)
-        _au.askUser = lambda q, *a, **k: asked.append(q) or True
+        _ui.confirm = lambda parent, title, q, yes: asked.append(q) or True
         crew_cards.on_message("knowshelped", ["duecrew", "knowshelped", "eve"], from_card_page=True)
         crew_cards.on_message("knowshelped", ["duecrew", "knowshelped", "eve"])
     finally:
-        crew_cards.helped_toggle, _au.askUser, crew_cards._tip_from = real_toggle, real_ask, real_tip
+        crew_cards.helped_toggle, _ui.confirm, crew_cards._tip_from = real_toggle, real_ask, real_tip
     check("ask card: This helped from the review screen asks first; from the bar it doesn't",
           no == [] and calls == ["eve", "eve"] and len(asked) == 2 and "Eve" in asked[0], str((calls, asked)))
     old_style = crew_cards.chip_view(None, [("Eve", "S3 = Kentucky")], {})
@@ -2641,9 +2714,9 @@ def test_mute_and_report_v301():
     html = board._row_html(row, "#1", {})
     mine = board._row_html(dict(row, user_id="sam", you=True), "#2", {})
     check("menu: a right-click on a crewmate's name asks for the menu; never on my own",
-          'oncontextmenu="pycmd(\'duecrew:rowmenu:dre\'); return false;"' in html and "rowmenu" not in mine)
+          ('oncontextmenu="pycmd(\'duecrew:rowmenu:dre|' + KK + '\'); return false;"') in html and "rowmenu" not in mine)
     check("menu: the uid is the only thing that rides the command",
-          "rowmenu:xscriptalert1script'" in board._row_html(dict(row, user_id="x'<script>alert(1)</script>"), "#1", {}))
+          "rowmenu:xscriptalert1script|" + KK + "'" in board._row_html(dict(row, user_id="x'<script>alert(1)</script>"), "#1", {}))
 
     cheers = [{"from": "dre", "emoji": "\U0001F389"}, {"from": "kai", "emoji": "\U0001F525"}]
     knocks = [("dre", "Dre", ""), ("kai", "Kai", "sq")]
@@ -2945,7 +3018,7 @@ def test_settings_messages_reach_the_panel():
     dc.cfg = lambda: conf
     dc.save_cfg = lambda c, **k: None
     try:
-        send = lambda m: dc._on_js(False, "duecrew:" + m, DeckBrowser())
+        send = lambda m: dc._on_js(False, as_board("duecrew:" + m), DeckBrowser())
         send("settab:board")
         tab = dc._state.get("settings_tab")
         send("set:compact:1")
@@ -2976,7 +3049,7 @@ def test_every_board_command_has_a_handler():
     handled = set()
     for name in ("__init__.py", "plan_flow.py", "rooms.py", "cards.py", "due_flow.py", "team_flow.py"):
         text = src[os.path.join(REPO, "due_crew", name)]
-        handled |= set(re.findall(r'cmd == "([a-z0-9]+)"', text))
+        handled |= set(re.findall(r'cmd == "([a-z0-9]+)"', text)) | set(re.findall(r'message == "duecrew:([a-z0-9]+)"', text))
         for group in re.findall(r'cmd in \(([^)]*)\)', text) + re.findall(r'SETTINGS_CMDS = \(([^)]*)\)', text):
             handled |= set(re.findall(r'"([a-z0-9]+)"', group))
     prefixes = {"plan", "room", "knows"}  # 'duecrew:' + a name built at run time
@@ -3108,12 +3181,12 @@ def test_room_card_pops_out_on_the_chips_side_v381():
           "send('roomcardoff')" in left and "roomcardoff" in rm.CARD_PAGE_CMDS)
     check("card: moves by its top row, kept on screen, remembered for that side",
           "Drag to move" in left and "dcRoomCardAt" in left and "at.side === D.side" in left and "innerWidth - w - 4" in left)
-    evals, saved = [], (R._webs, R._eval, R.my_room, R.cfg, R._where, R._card_web, R.room_model.widget_data)
+    evals, saved = [], (R._webs, R._eval, R.my_room, R.cfg, R._where, R._card_web, R.room_model.widget_data, R._tweak)
     tops = types.SimpleNamespace(name="top")
     main = types.SimpleNamespace(name="main", evalWithCallback=lambda js, cb: cb(False))
     try:
         R._webs = lambda: (tops, None, None)
-        R._eval = lambda web, js: evals.append((getattr(web, "name", None), js))
+        R._eval = R._tweak = lambda web, js: evals.append((getattr(web, "name", None), js))
         R.my_room = lambda: {"host": "sam"}
         R.cfg = lambda: {"room_chip_side": "left"}
         R._where = lambda: "chip"
@@ -3125,7 +3198,7 @@ def test_room_card_pops_out_on_the_chips_side_v381():
         check("card: popped out on the chip's side; the chip hides", sides == ["left"] and hid and "'hidden'" in hid[-1]
               and _state["room_card"] == "chip", str(sides))
         evals.clear()
-        dc._on_js(False, "duecrew:roomcardoff", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:roomcardoff"), DeckBrowser())
         back = [js for w, js in evals if w == "top" and "dc-room-chip" in js]
         check("card: closed (through _on_js, as the card sends it), the chip is back",
               back and "visibility=''" in back[-1] and _state["room_card"] is None, str(back))
@@ -3140,7 +3213,7 @@ def test_room_card_pops_out_on_the_chips_side_v381():
         check("card: from the review bar's little one it opens at the right, and that one hides",
               sides == ["right"] and _state["room_card"] == "bottom")
     finally:
-        R._webs, R._eval, R.my_room, R.cfg, R._where, R._card_web, R.room_model.widget_data = saved
+        R._webs, R._eval, R.my_room, R.cfg, R._where, R._card_web, R.room_model.widget_data, R._tweak = saved
         _state["room_card"] = None
 
 def test_only_our_pages_act_bare():
@@ -3161,7 +3234,7 @@ def test_only_our_pages_act_bare():
         dc._on_js(False, "duecrew:roomcheer", Previewer())
         dc._on_js(False, "duecrew:knowshelped:sam", Previewer())
         dc._on_js(False, f"duecrew:roomcheer|{rm.CMD_KEY}", Previewer())  # the widget's own, keyed
-        dc._on_js(False, "duecrew:roomcheer", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:roomcheer"), DeckBrowser())
     finally:
         R.on_message, CC.on_message = saved
     check("a preview's card script can't cheer the room or mark a tip; the widget's keyed button and the board can",
@@ -3656,7 +3729,7 @@ def test_feedback_365():
     opened, saved = [], dc.open_feedback
     dc.open_feedback = lambda: opened.append(1)
     try:
-        dc._on_js(False, "duecrew:setfeedback", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:setfeedback"), DeckBrowser())
     finally:
         dc.open_feedback = saved
     check("feedback: the board's click reaches it", opened == [1])
@@ -3703,15 +3776,15 @@ def test_plans_what_in_a_day_p7():
     asked, saved = [], F.browse_date
     F.browse_date = lambda pid, uid: asked.append((pid, uid))
     try:
-        dc._on_js(False, "duecrew:planbrowse:p1:a", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:planbrowse:p1:a"), DeckBrowser())
     finally:
         F.browse_date = saved
     check("browse: the board's click reaches it", asked == [("p1", "a")], str(asked))
     asked, saved = [], F.browse_topic
     F.browse_topic = lambda pid, uids, i: asked.append((pid, uids, i))
     try:
-        dc._on_js(False, "duecrew:plantopic:p1:a-b:1", DeckBrowser())
-        dc._on_js(False, "duecrew:plantopic:p1:a:x", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:plantopic:p1:a-b:1"), DeckBrowser())
+        dc._on_js(False, as_board("duecrew:plantopic:p1:a:x"), DeckBrowser())
     finally:
         F.browse_topic = saved
     check("topic: the board's click reaches it, its dates and its place; a bad place is no place",
@@ -3747,23 +3820,23 @@ def test_browse_from_the_board_380():
         F.app.swap = lambda c=None: None
         F.save_cfg = lambda c: None
         mw.col = col
-        dc._on_js(False, "duecrew:planleft:pB:a", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:planleft:pB:a"), DeckBrowser())
         check("left: a date's cards I haven't seen, shut ones too (its \"left\" counts them); a seen leech isn't left",
               shown[-1][0] == [1, 2], shown)
-        dc._on_js(False, "duecrew:planleft:pB:a-b", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:planleft:pB:a-b"), DeckBrowser())
         check("left: a day's two dates together; a seen card isn't left", 8 not in shown[-1][0] and 1 in shown[-1][0], shown)
-        dc._on_js(False, "duecrew:planleft:pB", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:planleft:pB"), DeckBrowser())
         check("behind: every date before today, what's opened and not seen", shown[-1][0] == [1], shown)
         applied["a"] = "skip:" + _day(-1)
         n = len(shown)
-        dc._on_js(False, "duecrew:planleft:pB", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:planleft:pB"), DeckBrowser())
         check("behind: a date skipped here isn't behind, as Due counts it (the review)",
               len(shown) == n and said[-1] == "Nothing left to see.", (shown[-1], said[-1:]))
         applied["a"] = _day(-1)
-        dc._on_js(False, "duecrew:plantopic:pB:c:0", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:plantopic:pB:c:0"), DeckBrowser())
         check("topic: a date ahead's topic finds its cards", shown[-1][0] == [3], shown)
         n = len(shown)
-        dc._on_js(False, "duecrew:planleft:pB:zz", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:planleft:pB:zz"), DeckBrowser())
         check("left: a date that isn't there finds nothing, and says so", len(shown) == n and said[-1] == "Nothing left to see.", said)
         browser = types.SimpleNamespace(selected_cards=lambda: [3])
         F.show_on_plan(browser)
@@ -3777,7 +3850,7 @@ def test_browse_from_the_board_380():
         i = next(k for k, d in enumerate(wk) if d["day"] == _day(4))
         check("show on my plan: the board opens that day's details", f'id="dc-pd-pB-{i}"' in html
               and f'id="dc-pd-pB-{i}" hidden' not in html, html[-600:])
-        dc._on_js(False, "duecrew:planweek:pB:0", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:planweek:pB:0"), DeckBrowser())
         check("show on my plan: moving the week lets go of the day", "plan_focus" not in _state)
     finally:
         (F.followed, F._state_cfg, F._today, F._browse, F.tooltip, F.app.swap, F.save_cfg, mw.col) = saved
@@ -3801,7 +3874,7 @@ def test_browse_from_the_board_380():
                              "counted": True, "what": "Renal", "topics": []}], [], {})
     dh = board._due_html(dv)
     check("due: a date's topics open their cards; Behind's cards to see open what's behind",
-          "duecrew:plantopic:pB:a:0" in dh and "pycmd('duecrew:planleft:pB')" in dh and "8 cards to see</a>" in dh, dh)
+          "duecrew:plantopic:pB:a:0" in dh and ("pycmd('duecrew:planleft:pB|" + KK + "')") in dh and "8 cards to see</a>" in dh, dh)
 
 
 def test_topic_items_380():
@@ -4098,7 +4171,7 @@ def test_plans_glue_v31():
             mw.on_sync_button_clicked = lambda: synced.append(1)
             import due_crew as dc
             from aqt.deckbrowser import DeckBrowser
-            dc._on_js(False, "duecrew:plansync", DeckBrowser())
+            dc._on_js(False, as_board("duecrew:plansync"), DeckBrowser())
             check("morning: Sync now is Anki's own Sync", synced == [1], synced)
         finally:
             mw.col = sv_col
@@ -4396,7 +4469,7 @@ def test_plans_changed_unit_v311():
     F._state_cfg, F.followed, F._pcfg = (lambda c=None: state), (lambda: [changed]), (lambda: pc)
     F._psave, F.app.swap = (lambda d: None), (lambda c: None)
     try:
-        dc._on_js(False, f"duecrew:planasideok:{pid}", DeckBrowser())
+        dc._on_js(False, as_board(f"duecrew:planasideok:{pid}"), DeckBrowser())
     finally:
         F._state_cfg, F.followed, F._pcfg, F._psave, F.app.swap = saved
     check("aside: OK, sent as the board sends it, remembers what was said", pc.get("aside_ok", {}).get(pid) == [2, 0], str(pc))
@@ -4533,7 +4606,7 @@ def test_your_own_days_376():
             card = F.card_view(next(x for x in F.followed() if x["id"] == pid), F._state_cfg()[pid], {}, _day(0))
             html = board._plan_card_html(dict(card, id=pid))
             check("move: a date from today on has Move…", f"planmove:{pid}:ar" in html, html[:300])
-            dc._on_js(False, f"duecrew:planskip:{pid}:ex", DeckBrowser())  # a command the board sends, for the handler list
+            dc._on_js(False, as_board(f"duecrew:planskip:{pid}:ex"), DeckBrowser())  # a command the board sends, for the handler list
             F.move_date(pid, "cz", 2)
             check("move: kept on my follow; the plan itself unchanged",
                   store.follows[(pid, "maya")].get("moved") == {"cz": 2} and store.plans[pid]["doc"]["units"][3]["opens"] == _day(7))
@@ -4541,16 +4614,16 @@ def test_your_own_days_376():
                                week_offset=(datetime.date.fromisoformat(P.week_start(_day(9))) - datetime.date.fromisoformat(P.week_start(_day(0)))).days // 7)
             html = board._plan_card_html(dict(card, id=pid))
             check("move: on its new day, marked moved, with Put it back", "&middot; moved" in html and f"planmoveback:{pid}:cz" in html)
-            dc._on_js(False, f"duecrew:planmoveback:{pid}:cz", DeckBrowser())
+            dc._on_js(False, as_board(f"duecrew:planmoveback:{pid}:cz"), DeckBrowser())
             check("move: Put it back (sent as the board does) takes it off", not store.follows[(pid, "maya")].get("moved"))
             F.move_date(pid, "cz", 2)
             maya.set_days(pid, shift=3)
             asked = []
-            F.confirm = lambda *a: asked.append(a[2]) or True
+            F.confirm = lambda *a: asked.append(a[1] + "\n" + a[2]) or True
             from due_crew import ui as UI
             real_confirm, UI.confirm = UI.confirm, F.confirm
             try:
-                dc._on_js(False, f"duecrew:planreset:{pid}", DeckBrowser())
+                dc._on_js(False, as_board(f"duecrew:planreset:{pid}"), DeckBrowser())
             finally:
                 UI.confirm = real_confirm
             f = store.follows[(pid, "maya")]
@@ -4844,6 +4917,68 @@ def test_morning_not_while_closing_v311():
         dc._closing = False
 
 
+def test_close_sync_light_v391():
+    """3.9.1: Anki's own sync as it closes (after profile_will_close) sends
+    today's numbers only, as the pushes on open do, and nothing when the
+    collection, my day and my config are as the last push that went had
+    them. Any other sync is the full one, and leaving a room on close still
+    goes (rooms.on_close pushes it itself)."""
+    import due_crew as dc
+    from due_crew.app import _state
+    src = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
+    check("close sync: Anki's sync hook lands in _on_anki_sync",
+          "sync_did_finish.append(_on_anki_sync)" in src and "sync_did_finish.append(_on_sync_done)" not in src)
+    col = make_user_col([TODAY - datetime.timedelta(days=i) for i in range(3)])
+    col.mod = 111
+    cl = new_client(world({"sam": "Sam"}), "sam", "Sam")
+    files = tempfile.mkdtemp()
+    pushes, lights = [], []
+    from due_crew import team_flow
+    names = ("client", "cfg", "_profile_files", "_awaiting_phone", "refresh_board", "_pushed", "_closing", "_last_attempt")
+    saved = {k: getattr(dc, k) for k in names}
+    saved_mods = (dc.mw.col, dc.account.ready, dc.plan_flow.for_sync, dc.plan_flow.maybe_morning, dc.crew_cards.for_sync,
+                  dc.bingo_flow.for_row, team_flow.for_sync, _state.get("sync_error"))
+    dc.mw.col, dc.client, dc.cfg, dc._profile_files = col, (lambda: cl), (lambda: {}), (lambda: files)
+    dc._awaiting_phone = lambda: False
+    dc.account.ready = lambda: True
+    dc.refresh_board = lambda **kw: pushes.append(kw)
+    dc.plan_flow.for_sync = lambda: None
+    dc.plan_flow.maybe_morning = lambda *a, **k: None
+    dc.crew_cards.for_sync = lambda c, light=False: lights.append(light) or None
+    dc.bingo_flow.for_row = lambda c: None
+    team_flow.for_sync = lambda c: None
+    _state["sync_error"] = False
+    try:
+        dc._closing, dc._pushed = False, None
+        dc._on_anki_sync()
+        check("close sync: a sync while Anki is open is the full one, as before",
+              len(pushes) == 1 and pushes[0]["backfill"] is not None and pushes[0]["heatmap"] is not None and lights == [False])
+        check("close sync: a push keeps what its numbers came from", dc._pushed == (111, TODAY.isoformat(), {}), dc._pushed)
+        dc._closing = True
+        dc._on_anki_sync()
+        check("close sync: closing with nothing new since the last push that went, nothing is gathered or sent",
+              len(pushes) == 1)
+        dc._on_sync_done(light=True, fetch=False)  # what rooms.on_close does
+        check("close sync: leaving a room on close still goes", len(pushes) == 2 and pushes[1]["fetch"] is False)
+        col.mod = 112  # the close's own sync sent or brought something
+        dc._on_anki_sync()
+        check("close sync: closing after something changed, today's numbers only: no week, decks, heatmap, known cards or log",
+              len(pushes) == 3 and pushes[2]["upload_stats"] is not None and pushes[2]["backfill"] is None
+              and pushes[2]["shared_decks"] is None and pushes[2]["heatmap"] is None and lights[-1] is True)
+        _state["sync_error"] = True
+        dc._on_anki_sync()
+        check("close sync: the last push didn't go, so this one does", len(pushes) == 4)
+        _state["sync_error"] = False
+        dc._pushed = None
+        dc._on_anki_sync()
+        check("close sync: nothing pushed yet this time Anki was open, it goes", len(pushes) == 5)
+    finally:
+        for k, v in saved.items():
+            setattr(dc, k, v)
+        (dc.mw.col, dc.account.ready, dc.plan_flow.for_sync, dc.plan_flow.maybe_morning, dc.crew_cards.for_sync,
+         dc.bingo_flow.for_row, team_flow.for_sync, _state["sync_error"]) = saved_mods
+
+
 def test_morning_waits_for_decks_v380():
     """3.8.0: the morning never unsuspends on the review screen (its undo
     step would sit on top of the last answer). It waits for the Decks
@@ -5004,18 +5139,19 @@ def test_asks_and_tips_v390():
 def test_plain_prompts_v311():
     """3.1.1: prompts that carry a crewmate's name are plain-text labels."""
     from due_crew import together, ui
+    from due_crew.app import _state
     got = []
-    saved = getattr(ui, "ask_text", None)
+    saved = (getattr(ui, "ask_text", None), _state.get("entries"))
     ui.ask_text = lambda parent, title, label, text="": (got.append(label), ("", False))[1]
+    _state["entries"] = [{"user_id": "dre", "name": "<b>Dre</b> K", "you": False}]
     try:
-        try:
-            together._ask_line("Good-luck card", "A line for <b>Dre</b>")
-        except Exception:
-            pass
-        check("prompts: a crewmate's name goes through the plain-text prompt", got == ["A line for <b>Dre</b>"])
+        together.send_luck_line("dre")  # off the board: Qt's plain-text prompt (3.9.1: on it, a sheet's textContent)
+        check("prompts: a crewmate's name goes through the plain-text prompt",
+              len(got) == 1 and got[0].startswith("A line for <b>Dre</b>'s exam morning"), got)
     finally:
-        if saved is not None:
-            ui.ask_text = saved
+        if saved[0] is not None:
+            ui.ask_text = saved[0]
+        _state["entries"] = saved[1]
 
 
 def test_anki_day_labels_v311():
@@ -5708,7 +5844,7 @@ def test_knows_peek_v390():
     shown2, saved2 = [], (K._bottom, K._review_web, K._show, K.client, K.pips_by_uid, dict(_state))
     try:
         K._bottom, K._review_web, K._show, K.client = (lambda: object()), (lambda: None), (lambda v: shown2.append(v)), (lambda: sam)
-        K.pips_by_uid = lambda c=None: {}  # Pip off
+        K.pips_by_uid = lambda c=None, **kw: {}  # Pip off
         _state["entries"] = [{"user_id": "dre", "name": "Dre <b>Ng", "you": False, "accent": "blue", "look": ["headphones"]}]
         K.on_answer(types.SimpleNamespace(note=lambda: types.SimpleNamespace(guid="guid000001"), ord=0, id=1, lapses=3))
     finally:
@@ -6306,7 +6442,7 @@ def test_bingo_end_to_end():
     dc._bingo_view = lambda c: {"card": card, "ev": B.evaluate(card, []), "squad": "busm"}
     bingo_flow.seen = lambda: None
     try:
-        send = lambda m: dc._on_js(False, "duecrew:" + m, DeckBrowser())
+        send = lambda m: dc._on_js(False, as_board("duecrew:" + m), DeckBrowser())
         send("bingo")
         opened = dc._state.get("bingo_open")
         send("bingocopy")
@@ -6340,16 +6476,16 @@ def test_crew_picker_v380():
           and 'dc-pill on" href="#" onclick="pycmd(\'duecrew:period:week' in week, pills(today))
     pick = lambda h: _re.search(r'<div class="dc-sw">(.*?)</div>', h).group(1)
     check("crew: the picker, Today picked, then Week picked",
-          '<a class="on" href="#" onclick="pycmd(\'duecrew:period:today\'); return false;">Today</a>' in pick(today)
-          and '<a href="#" onclick="pycmd(\'duecrew:period:week\'); return false;">Week</a>' in pick(today)
-          and '<a href="#" onclick="pycmd(\'duecrew:period:decks\'); return false;">Decks</a>' in pick(today)
-          and '<a class="on" href="#" onclick="pycmd(\'duecrew:period:week\'); return false;">Week</a>' in pick(week))
+          ('<a class="on" href="#" onclick="pycmd(\'duecrew:period:today|' + KK + '\'); return false;">Today</a>') in pick(today)
+          and ('<a href="#" onclick="pycmd(\'duecrew:period:week|' + KK + '\'); return false;">Week</a>') in pick(today)
+          and ('<a href="#" onclick="pycmd(\'duecrew:period:decks|' + KK + '\'); return false;">Decks</a>') in pick(today)
+          and ('<a class="on" href="#" onclick="pycmd(\'duecrew:period:week|' + KK + '\'); return false;">Week</a>') in pick(week))
     sq = board.render(data, {"period": "squads", "crew_view": "decks"}, 0)
     check("crew: from Squads, the Crew pill goes back to the last view picked (Decks too, since 3.8.0)",
           ("decks", "Crew") in pills(sq) and "period:today'); return false;\">Today</a>" not in sq)
     decks = board.render(data, {"period": "decks", "crew_view": "decks"}, 0)
     check("crew: Decks is Crew's third view, picked", ("decks", "Crew") in pills(decks)
-          and '<a class="on" href="#" onclick="pycmd(\'duecrew:period:decks\'); return false;">Decks</a>' in pick(decks))
+          and ('<a class="on" href="#" onclick="pycmd(\'duecrew:period:decks|' + KK + '\'); return false;">Decks</a>') in pick(decks))
     gone = board.render(data, {"period": "squads", "crew_view": "decks", "hidden_tabs": ["decks"]}, 0)
     check("crew: Decks hidden in Settings, the pill goes to Today and the picker has two",
           ("today", "Crew") in pills(gone) and "period:decks" not in gone)
@@ -6363,7 +6499,7 @@ def test_crew_picker_v380():
     mode = board.render(data, {"period": "week", "show_up": True}, 0)
     check("crew: show-up mode, This week (one view for Today and Week) and Decks",
           "period:week'); return false;\">Week</a>" not in mode and ">Today</a>" not in mode and ">Crew</a>" in mode
-          and '<a class="on" href="#" onclick="pycmd(\'duecrew:period:today\'); return false;">This week</a>' in pick(mode)
+          and ('<a class="on" href="#" onclick="pycmd(\'duecrew:period:today|' + KK + '\'); return false;">This week</a>') in pick(mode)
           and "period:decks" in pick(mode))
     import due_crew as dc
     from aqt.deckbrowser import DeckBrowser
@@ -6374,15 +6510,15 @@ def test_crew_picker_v380():
     dc.save_cfg = lambda c, **k: None
     dc._fetch_squad = dc._fetch_decks = lambda *a, **k: None
     try:
-        dc._on_js(False, "duecrew:period:week", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:period:week"), DeckBrowser())
         week_set = (conf.get("period"), conf.get("crew_view"))
-        dc._on_js(False, "duecrew:period:decks", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:period:decks"), DeckBrowser())
         decks_set = (conf.get("period"), conf.get("crew_view"))
-        dc._on_js(False, "duecrew:period:squads", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:period:squads"), DeckBrowser())
         check("crew: the picker's click reaches its handler and is remembered; Squads keeps it",
               week_set == ("week", "week") and decks_set == ("decks", "decks")
               and conf.get("period") == "squads" and conf.get("crew_view") == "decks", (week_set, decks_set, conf))
-        dc._on_js(False, "duecrew:period:plans", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:period:plans"), DeckBrowser())
         check("crew: 3.8.0, an old board's Plans tab is no period", conf.get("period") == "squads")
     finally:
         dc._swap, dc.cfg, dc.save_cfg, dc._fetch_squad, dc._fetch_decks = saved
@@ -6449,11 +6585,11 @@ def test_you_bubble_v380():
           and "Heart" in up and "Quiz &lt;q&gt;" in up and "Quiz <q>" not in up)
     check("simpler: no Later tab while Later is empty; a saved Later falls back to Today",
           "duetab:later" not in th and "duetab:later" not in board._due_html(dict(dv2, tab="later"))
-          and 'class="on" onclick="pycmd(\'duecrew:duetab:today\')' in board._due_html(dict(dv2, tab="later")))
+          and ('class="on" onclick="pycmd(\'duecrew:duetab:today|' + KK + '\')') in board._due_html(dict(dv2, tab="later")))
     dv3 = DUE.view(lb0, dates, [{"id": "item01", "t": "Some day", "d": "", "done": False}], {}, tab="later")
     l3 = board._due_html(dv3)
     check("simpler: Later shows, with its count, once it holds something",
-          ">Later 1</a>" in l3 and "Some day" in l3 and 'class="on" onclick="pycmd(\'duecrew:duetab:later\')' in l3, l3[:1500])
+          ">Later 1</a>" in l3 and "Some day" in l3 and ('class="on" onclick="pycmd(\'duecrew:duetab:later|' + KK + '\')') in l3, l3[:1500])
     check("refined: Behind is Today's alone", "du-sec warn" in th and "du-sec warn" not in up and "Old" not in up)
     bh = board.render(dict(data, pending=["Jules"]), {"period": "today"}, 0, due=dv2, plans=plans, you={"tab": "today", "plans": plans})
     check("refined: the box's tabs are words, Hide a word", 'class="du-tabs du-more"' in bh and "border: 1px solid var(--dc-line);\n"
@@ -6501,18 +6637,18 @@ def test_you_bubble_v380():
     dc.save_cfg = due_flow.save_cfg = lambda c, **k: None
     due_flow._today = lambda: labels[0]
     try:
-        dc._on_js(False, "duecrew:duetab:plans", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:duetab:plans"), DeckBrowser())
         check("duetab: a tab's click picks it, opens the bubble, and shows a hidden one again",
               conf["due_tab"] == "plans" and conf["due_fold"] == {"day": labels[0], "folded": False}
               and conf["hidden_tabs"] == ["decks"], conf)
-        dc._on_js(False, "duecrew:duetab:insights", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:duetab:insights"), DeckBrowser())
         check("duetab: Insights too", conf["due_tab"] == "insights")
-        dc._on_js(False, "duecrew:duetab:squads", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:duetab:squads"), DeckBrowser())
         check("duetab: not a tab of the bubble, nothing", conf["due_tab"] == "insights")
         conf["due_show"] = False
-        dc._on_js(False, "duecrew:duefold", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:duefold"), DeckBrowser())
         check("duefold: Due off, Hide folds the bubble for today", conf["due_fold"] == {"day": labels[0], "folded": True})
-        dc._on_js(False, "duecrew:duefold", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:duefold"), DeckBrowser())
         check("duefold: and Show opens it", conf["due_fold"] == {"day": labels[0], "folded": False})
         # 3.8.0: an older install's saved Plans tab, and a hidden Week
         conf.clear()
@@ -6702,8 +6838,8 @@ def test_crew_menu_pictures():
     dc._share_menu = lambda c: got.append("share")
     au.openLink = lambda url: got.append(url)
     try:
-        dc._on_js(False, "duecrew:sharemenu", DeckBrowser())
-        dc._on_js(False, "duecrew:privacypage", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:sharemenu"), DeckBrowser())
+        dc._on_js(False, as_board("duecrew:privacypage"), DeckBrowser())
     finally:
         dc._share_menu = saved
         au.openLink = saved_link
@@ -6994,7 +7130,7 @@ def test_due_board_and_clicks():
     F._today = lambda: T
     F.plan_dates = lambda today: ([], [], [])
     try:
-        send = lambda m: dc._on_js(False, "duecrew:" + m, DeckBrowser())
+        send = lambda m: dc._on_js(False, as_board("duecrew:" + m), DeckBrowser())
         send("dueadd:today:0:" + "Book%20the%20room%3A%20B12%20fri")
         it = conf["due_items"][-1] if conf["due_items"] else {}
         check("due add: a day said at the end, text kept with its colon", it.get("t") == "Book the room: B12"
@@ -7066,10 +7202,10 @@ def test_due_board_and_clicks():
         F.mw.col, F.tooltip, F._today = col, (lambda m, **k: said.append(m)), (lambda: T)
         F._pf = lambda: types.SimpleNamespace(_pcfg=lambda: store, _psave=lambda d: None, _after_change=lambda: None)
         dc._state["settings_tab"] = "board"
-        dc._on_js(False, "duecrew:set:due_leeches:1", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:set:due_leeches:1"), DeckBrowser())
         check("leeches: switched on, today's come back at once, and it says so",
               conf2.get("due_leeches") is True and said and said[-1].startswith("1 leech back as new cards"), (said, store))
-        dc._on_js(False, "duecrew:set:due_leeches:1", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:set:due_leeches:1"), DeckBrowser())
         check("leeches: on again changes nothing", len(said) == 1)
     finally:
         (dc.cfg, dc.save_cfg, F.cfg, F.mw.col, F.tooltip, F._today, F._pf) = saved2
@@ -7114,6 +7250,76 @@ def test_history_import():
     cl2.push(labels, {}, log={labels[0]: [5, 10, 1, 90.0]}, log_back=({"2025-01-02": [9, 20, 2, None]}, 486))
     check("history: after Delete my log (logCut) the import is done: the old years stay home (3.7.1, D2)",
           (cl2.session.get("log_back") or {}).get("done") is True)
+
+
+NEW_CARDS_213 = ("SELECT CAST((? - r.id / 1000) / 86400 AS INTEGER), COUNT(DISTINCT r.cid) "
+                 "FROM revlog r WHERE r.ease > 0 AND r.id >= ? AND r.id < ? AND NOT EXISTS "
+                 "(SELECT 1 FROM revlog p WHERE p.cid = r.cid AND p.ease > 0 AND p.id < r.id) GROUP BY 1")
+
+
+def test_new_cards_first_answer_v391():
+    """3.9.1, the history import's new cards: each card answered in the
+    window has its first answer read once, where every answer used to look
+    for an earlier one (2.13's query, kept here). The same count, window by
+    window, for cards whose first local row isn't a learn (imported with
+    their schedule, set due first, a filtered deck's preview), relearned,
+    forgotten and learned again, or only ever rescheduled; a first local
+    row being a learn (type 0) isn't what makes a card new."""
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    q = StatsQueries(col)
+    cut = col.sched.day_cutoff
+    cards = {  # cid: (days ago, type, ease), oldest first
+        1: [(400, 0, 1), (400, 0, 3), (300, 1, 3), (100, 1, 1), (100, 2, 3)],  # learned, lapsed, relearned
+        2: [(500, 1, 3), (200, 1, 3)],                                         # imported: its first row a review
+        3: [(450, 4, 0), (130, 1, 3), (5, 1, 4)],                              # set due date first (ease 0)
+        4: [(140, 3, 3), (139, 0, 3), (2, 1, 3)],                              # a filtered deck's preview first
+        5: [(800, 0, 3), (700, 1, 3), (125, 4, 0), (125, 0, 3), (3, 0, 3)],    # forgotten, learned again
+        6: [(126, 5, 0), (126, 5, 0)],                                         # rescheduled, never answered
+        7: [(6, 0, 1), (6, 0, 3), (0, 1, 3)],                                  # new this week
+        8: [(1, 0, 3)],
+        9: [(0, 0, 3)],
+    }
+    for cid, rows in cards.items():
+        for ago, typ, ease in rows:
+            fakes.add_review(conn, (cut - ago * 86400 - 5 * 3600) * 1000, ease=ease, rtype=typ, cid=cid)
+
+    def before(days, skip=0, typed=False):
+        s, e = (cut - (days + skip) * 86400) * 1000, (cut - skip * 86400) * 1000
+        sql = NEW_CARDS_213.replace("r.ease > 0 AND", "r.ease > 0 AND r.type = 0 AND") if typed else NEW_CARDS_213
+        return {q.day_label(int(a)): int(n) for a, n in col.db.all(sql, cut - 1, s, e)}
+
+    windows = ([(1, 0), (7, 0), (8, 0), (31, 0), (32, 0), (120, 0), (366, 120), (366, 486), (366, 852)]
+               + [(30, s) for s in range(0, 900, 30)] + [(60, s) for s in range(0, 900, 60)])
+    bad, per = {}, StatsQueries.PER_CARD_DAYS
+    try:
+        for name, n in (("each card once", 0), ("each answer", 10 ** 6), ("as it picks", per)):
+            StatsQueries.PER_CARD_DAYS = n
+            bad[name] = [(d, s) for d, s in windows if q.new_cards_by_day(d, s) != before(d, s)]
+    finally:
+        StatsQueries.PER_CARD_DAYS = per
+    check("new cards: each card's first answer, read once, counts as 2.13's query did, in every window "
+          "(as does each answer looking for an earlier one, and the pick between them by the window's length)",
+          all(v == [] for v in bad.values()), bad)
+    check("new cards: a card imported with its schedule, set due first or previewed is new on its first answer",
+          sum(q.new_cards_by_day(366, 120).values()) == 3 and sum(q.new_cards_by_day(366, 486).values()) == 2
+          and q.new_cards_by_day(8) == {q.day_label(6): 1, q.day_label(1): 1, q.day_label(0): 1}
+          and q.new_cards_by_day(366, 486) != before(366, 486, typed=True), q.new_cards_by_day(366, 486))
+    check("new cards: relearned, forgotten and learned again, or only rescheduled, it isn't new again",
+          q.new_cards_by_day(120) == {q.day_label(6): 1, q.day_label(1): 1, q.day_label(0): 1}
+          and q.day_label(125) not in q.new_cards_by_day(366, 120) and q.day_label(126) not in q.new_cards_by_day(366, 120))
+    ran = []
+    real_all = col.db.all
+    col.db.all = lambda sql, *a: ran.append((sql, a)) or real_all(sql, *a)
+    q.new_cards_by_day(366, 120)
+    q.new_cards_by_day(8)
+    col.db.all = real_all
+    plan = " ".join(str(r[-1]) for r in real_all("EXPLAIN QUERY PLAN " + ran[0][0], *ran[0][1]))
+    check("new cards: a year looks each card's first answer up once (its select isn't flattened into the count's); "
+          "a week, each answer for an earlier one, as in 2.13",
+          len(ran) == 2 and plan.count("CORRELATED SCALAR SUBQUERY") == 1 and "LIMIT -1" in ran[0][0]
+          and ran[1][0] == NEW_CARDS_213, plan)
 
 
 def test_offline_error_names_no_code():
@@ -7328,16 +7534,16 @@ def test_plan_updates_v38():
                                "seen": 0, "total": 1, "upd": 1}, {}, _day(0))
             h = board._due_plan(row)
             check("updates: Due's row says it, with Open", "+1 added" in h and "duecrew:planupdopen:" + pid in h, h)
-            dc._on_js(False, "duecrew:planupdlater:" + pid, DeckBrowser())
+            dc._on_js(False, as_board("duecrew:planupdlater:" + pid), DeckBrowser())
             check("updates: Not today: nothing opens, tomorrow's morning will (still applied as it was)",
                   4 not in _open(col) and pid not in _state["plan_updates"]
                   and (g.state()["plans"][pid].get("later") or {}).get("ar") == _day(1)
                   and g.state()["plans"][pid]["applied"].get("ar"))
             g.state()["plans"][pid]["later"].pop("ar")
             F.maybe_morning(False, fresh=True, update=True)
-            dc._on_js(False, "duecrew:planupdopen:" + pid, DeckBrowser())
+            dc._on_js(False, as_board("duecrew:planupdopen:" + pid), DeckBrowser())
             check("updates: Open opens what it adds, in one step", 4 in _open(col) and pid not in _state["plan_updates"])
-            dc._on_js(False, "duecrew:planpostok:" + pid, DeckBrowser())
+            dc._on_js(False, as_board("duecrew:planpostok:" + pid), DeckBrowser())
             card = F.card_view(next(p for p in F.followed() if p["id"] == pid), g.state()["plans"][pid], {}, _day(0))
             check("posts: read once, then gone", card["posts"] == [])
     finally:
@@ -7429,12 +7635,12 @@ def test_plan_team_v39():
             check("3.8.0: not in its squad, the plan card asks before it joins (Join its squad)",
                   f"duecrew:planteamjoin:{pid}:ask" in phtml and f"plansub:{pid}:team" not in phtml, phtml[-500:])
             n_log = len(store.log)
-            dc._on_js(False, f"duecrew:plansub:{pid}:team", DeckBrowser())
+            dc._on_js(False, as_board(f"duecrew:plansub:{pid}:team"), DeckBrowser())
             check("3.8.0: an older page's Team link, not in its squad: nothing happens, nothing's asked",
                   len(store.log) == n_log and (_state.get("plan_sub") or {}).get(pid) != "team" and not conf["cfg"].get("squad"))
             check("3.7.6: following alone shares nothing", not store.follows[(pid, "maya")]["share"]
                   and [b for m, pa, b in store.bodies if pa == "/plans/follow"][0].get("team") is False)
-            dc._on_js(False, f"duecrew:planteamjoin:{pid}:ask", DeckBrowser())
+            dc._on_js(False, as_board(f"duecrew:planteamjoin:{pid}:ask"), DeckBrowser())
             check("team: Join puts me on it", (pid, "maya") in store.team and pid in maya.session["teams"])
             ps = TF.plan_squads()
             check("3.8.0: its squad is a pill on the Squads tab at once, named for the plan",
@@ -7443,19 +7649,19 @@ def test_plan_team_v39():
             pline = board._plan_card_html(F.board_view({})["cards"][0])
             check("3.8.0: the plan card's line goes to it", f"duecrew:squadplan:{pid}" in pline and "Join its squad" not in pline)
             n_log = len(store.log)
-            dc._on_js(False, f"duecrew:squadplan:{pid}", DeckBrowser())
+            dc._on_js(False, as_board(f"duecrew:squadplan:{pid}"), DeckBrowser())
             check("3.8.0: Open picks it on the Squads tab; what the join brought back is fresh, nothing's asked",
                   conf["cfg"].get("squad") == "plan:" + pid and conf["cfg"].get("period") == "squads"
                   and _state["team_view"][pid]["data"]["on"] and len(store.log) == n_log, (conf["cfg"], store.log[n_log:]))
             _state["team_view"].pop(pid)
-            dc._on_js(False, f"duecrew:squadplan:{pid}", DeckBrowser())
+            dc._on_js(False, as_board(f"duecrew:squadplan:{pid}"), DeckBrowser())
             check("3.8.0: and fetches it when it isn't (one request)",
                   _state["team_view"][pid]["data"]["on"] and len(store.log) == n_log + 1, store.log[n_log:])
             sv = dc._squad_view_with_bingo(conf["cfg"])
             shtml = board._squads_html(sv, conf["cfg"])
             check("3.8.0: the Squads tab draws it: its pill on, who showed up, Ask the squad",
                   sv["kind"] == "plan" and "Showed up today" in shtml and "Ask the squad" in shtml
-                  and f"<a class=\"on\" href=\"#\" title=\"Step 1\" onclick=\"pycmd('duecrew:squadplan:{pid}')" in shtml, shtml[:600])
+                  and f"<a class=\"on\" href=\"#\" title=\"Step 1\" onclick=\"pycmd('duecrew:squadplan:{pid}|{KK}')" in shtml, shtml[:600])
             check("3.7.6: and shares my progress, here and on the server",
                   store.follows[(pid, "maya")]["share"] and next(p for p in maya.session["plans"] if p["id"] == pid)["share"])
             # someone who shared before the merge is asked once on the plan card
@@ -7467,14 +7673,14 @@ def test_plan_team_v39():
                   kcard["team_ask"] and "Join this plan&rsquo;s squad?" in khtml
                   and f"duecrew:planteamjoin:{pid}" in khtml and f"duecrew:planteamno:{pid}" in khtml, khtml[:400])
             TF.client = lambda: kai
-            dc._on_js(False, f"duecrew:planteamno:{pid}", DeckBrowser())
+            dc._on_js(False, as_board(f"duecrew:planteamno:{pid}"), DeckBrowser())
             TF.client = lambda: maya
             check("3.7.6: No thanks ends the ask without a question, and shares nothing",
                   not store.follows[(pid, "kai")].get("teamAsk") and not store.follows[(pid, "kai")]["share"]
                   and (pid, "kai") not in store.team)
             kai.team_join(pid)
             kai.team_ask(pid, "Does Friday's quiz include complement?")
-            dc._on_js(False, f"duecrew:planteamask:{pid}:" + quote("Same question: does it? <b>"), DeckBrowser())
+            dc._on_js(False, as_board(f"duecrew:planteamask:{pid}:" + quote("Same question: does it? <b>")), DeckBrowser())
             asked = [a["text"] for a in store.team_asks]
             check("team: Ask sends the box's words (a colon in them too)", asked[-1] == "Same question: does it? <b>", asked)
             maya.fetch_board(labels)
@@ -7510,7 +7716,7 @@ def test_plan_team_v39():
                   seeded and seeded["middle"]["name"] == "Ask away" and maya.session["bingo"] is sq_card)
             maya.session.pop("bingo", None)
             conf["cfg"]["squad"] = "plan:" + pid
-            dc._on_js(False, f"duecrew:planteamleave:{pid}", DeckBrowser())
+            dc._on_js(False, as_board(f"duecrew:planteamleave:{pid}"), DeckBrowser())
             check("3.8.0: Leave takes its pill away, and the Squads tab back to my own",
                   (pid, "maya") not in store.team and not TF.plan_squads() and not conf["cfg"].get("squad")
                   and dc._squad_view_with_bingo(conf["cfg"]).get("kind") != "plan")
@@ -7608,7 +7814,7 @@ def test_plan_load_3781():
     hp = board._week_html({"week": past, "week_offset": 0}, "pid1")
     check("load: a past date says behind, in the warm colour; 3.8.0: it opens those cards in Browse, not the day",
           '<span class="late"><a class="tp"' in hp and '2 behind</a></span>' in hp and 'abar late' in hp
-          and "event.stopPropagation();pycmd('duecrew:planleft:pid1:a')" in hp, hp)
+          and ("event.stopPropagation();pycmd('duecrew:planleft:pid1:a|" + KK + "')") in hp, hp)
 
 
 def test_insights_379():
@@ -7786,8 +7992,8 @@ def test_insights_379():
           and "remember now (FSRS)" in mh and 'class="tmt"' not in mh, mh)
     deep = board._ins_map(10, nest, "fsrs", ["cardio", "valves"])
     check("map: opened two down, the trail back (All, Cardio), where I am, Browse all; its tiles",
-          'class="tmt"' in deep and "duecrew:insmapup:10:0'); return false;\">All</a>" in deep
-          and "duecrew:insmapup:10:1'); return false;\">&lt;b&gt;Cardio</a>" in deep and "<b>Valves</b> &middot; 20 cards, 70%" in deep
+          'class="tmt"' in deep and ("duecrew:insmapup:10:0|" + KK + "'); return false;\">All</a>") in deep
+          and ("duecrew:insmapup:10:1|" + KK + "'); return false;\">&lt;b&gt;Cardio</a>") in deep and "<b>Valves</b> &middot; 20 cards, 70%" in deep
           and "duecrew:insmapall:10" in deep and ">Mitral<" in deep and ">Aortic<" in deep and ">Rhythm<" not in deep, deep)
     nw = board._ins_map(10, [dict(leaf("a", "Verbs", 40, 80), started=20), dict(leaf("b", "Nouns", 30, None), started=0)], "fsrs")
     check("map: none started yet reads new, with its swatch; a bar along the foot says how much is started",
@@ -7806,7 +8012,7 @@ def test_insights_379():
            "did": 10, "exam": False, "plan": {"id": "p1", "name": bad}, "view": view}
     yh = board._you_insights(ins)
     check("you › insights: the decks picked as a squad is, mine escaped",
-          'class="dc-sw"' in yh and '<a class="on" href="#" title="Step 1" onclick="pycmd(\'duecrew:insdeck:10\')' in yh
+          'class="dc-sw"' in yh and ('<a class="on" href="#" title="Step 1" onclick="pycmd(\'duecrew:insdeck:10|' + KK + '\')') in yh
           and "duecrew:insdeck:20" in yh and "<img" not in yh, yh[:600])
     check("you › insights: the deck's, plan or not: no way off to the plan, my exam date right here",
           "duecrew:duetab:plans" not in yh and 'aria-label="Exam date"' in yh and "<img" not in yh)
@@ -7892,19 +8098,19 @@ def test_insights_379():
               and wk["ahead"][1][1] == 19 and wk.get("src") == "plan", wk)
         check("glue: not behind; the plan named for its Catch up", v.get("behind") == 0 and v.get("pid") == "pI")
         check("glue: 3.8.0, the deck's suspended leeches", v.get("leeches") == 1, v.get("leeches"))
-        dc._on_js(False, "duecrew:insstudy:10:h", DeckBrowser())
-        dc._on_js(False, "duecrew:insstudy:10:0", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:insstudy:10:h"), DeckBrowser())
+        dc._on_js(False, as_board("duecrew:insstudy:10:0"), DeckBrowser())
         check("glue: no date preps for the quiz: the whole plan, the box by the day", v["aim"]["scoped"] is False)
         check("glue: Study builds the hero's deck and a topic's", built == [("Due Crew::Before Fri 4", list(range(210, 220))),
               ("Due Crew::Renal", [200, 201, 202, 203, 204, 205, 206, 207, 210, 211, 212])], built)
-        dc._on_js(False, "duecrew:insbrowse:10:h", DeckBrowser())
-        dc._on_js(False, "duecrew:insbrowse:10:0", DeckBrowser())
-        dc._on_js(False, "duecrew:insleeches:10", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:insbrowse:10:h"), DeckBrowser())
+        dc._on_js(False, as_board("duecrew:insbrowse:10:0"), DeckBrowser())
+        dc._on_js(False, as_board("duecrew:insleeches:10"), DeckBrowser())
         check("glue: 3.8.0, Browse: the box's cards; a topic's name, all of its cards (Study, the hard ones); See them, the leeches",
               shown == [list(range(210, 220)), list(range(200, 230)), [700]], shown)
         n = len(built) + len(shown)
         for cmd in ("insstudy:x:h", "insstudy:10:zz", "insbrowse:10:", "insdeck:", "youins:abc"):
-            dc._on_js(False, "duecrew:" + cmd, DeckBrowser())
+            dc._on_js(False, as_board("duecrew:" + cmd), DeckBrowser())
         check("glue: a command without a deck's id (or a row) does nothing", len(built) + len(shown) == n)
         lines = [{"id": "pI"}, {"id": "pX"}, {"id": "pI", "paused": True}]
         TF.plan_lines(lines)
@@ -7920,7 +8126,7 @@ def test_insights_379():
         _state["insights"].pop(10, None)
         v3 = TF.insights(10, "pI")
         built.clear()
-        dc._on_js(False, "duecrew:insstudy:10:h", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:insstudy:10:h"), DeckBrowser())
         check("glue: Renal preps for the quiz too: its weak cards, the deck by the event's name",
               v3.get("hero") == list(range(210, 220)) and built == [("Due Crew::Before Quiz", list(range(210, 220)))], built)
         # the same deck with no plan: my exam date, the deck's own tags, what Anki has due
@@ -7958,15 +8164,15 @@ def test_insights_379():
         yv = TF.you_view({})
         check("you view: the first deck, sharpened by the plan on it", yv["did"] == 10 and "plan" not in yv
               and yv["view"].get("pid") == "pI")
-        dc._on_js(False, "duecrew:insdeck:20", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:insdeck:20"), DeckBrowser())
         check("picker: a deck's click picks it (this computer's)", conf.get("ins_deck") == 20)
         yv = TF.you_view(conf)
         check("you view: the deck picked, no plan on it", yv["did"] == 20 and not yv["view"].get("pid"))
-        dc._on_js(False, "duecrew:insdeck:30", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:insdeck:30"), DeckBrowser())
         check("picker: a deck it doesn't list isn't picked", conf.get("ins_deck") == 20)
         conf.update(hidden_tabs=["insights", "decks"], due_tab="today")
         _state["labels"] = [_day(0)]
-        dc._on_js(False, "duecrew:youins:30", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:youins:30"), DeckBrowser())
         check("youins: the bubble opens on Insights, unfolded and shown again, the deck picked and listed",
               conf.get("due_tab") == "insights" and conf.get("due_fold") == {"day": _day(0), "folded": False}
               and conf.get("hidden_tabs") == ["decks"] and conf.get("ins_deck") == 30
@@ -7979,7 +8185,7 @@ def test_insights_379():
         _state["insights"] = {}
         h = TF.insights(10, "pI").get("hard")
         check("glue: the Hard habit, the deck's review answers in 4 weeks", bool(h) and h["pct"] >= 15 and h["n"] >= 200, h)
-        dc._on_js(False, "duecrew:inshardno:10", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:inshardno:10"), DeckBrowser())
         check("glue: Not now puts the Hard habit away for a while", pc.get("ins_hard_hide") and not TF.insights(10, "pI").get("hard"))
         # 3.8.0: the topic map
         vp, vd = TF.insights(10, "pI"), TF.insights(10)
@@ -7988,7 +8194,7 @@ def test_insights_379():
               and vp.get("map_by") == "fsrs" and [t["name"] for t in vd.get("map") or []] == ["Started", "New", "Other"]
               and 0 <= vp["map"][0]["know"] <= 100 and vp["map"][1]["know"] is None, vp.get("map"))
         shown.clear()
-        dc._on_js(False, "duecrew:insmap:10:2", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:insmap:10:2"), DeckBrowser())
         check("map: a tile that doesn't split opens all of its cards in Browse", shown == [list(range(300, 310))], shown)
         # a deck whose subjects split again: Cardio opens into Valves and Rhythm
         for i in range(80):  # a lecture's tag on some: the systems sort them all
@@ -8003,30 +8209,30 @@ def test_insights_379():
               [(t["name"], t["n"], t["started"], bool(t.get("kids"))) for t in m]
               == [("Cardio", 41, 40, True), ("Pulm", 20, 20, False), ("Renal", 20, 20, False)], m)
         _state.pop("map_at", None)
-        dc._on_js(False, "duecrew:insmap:30:0", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:insmap:30:0"), DeckBrowser())
         yv = TF.you_view(dict(conf, ins_deck=30))
         check("map: a tile that splits opens into its parts, the trail back above them",
               (_state.get("map_at") or {}).get(30) == ["cardio"] and yv["view"].get("map_at") == ["cardio"]
               and ">Rhythm<" in board._ins_map(30, m, "fsrs", yv["view"]["map_at"]), _state.get("map_at"))
         shown.clear()
-        dc._on_js(False, "duecrew:insmap:30:0", DeckBrowser())
-        dc._on_js(False, "duecrew:insmapall:30", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:insmap:30:0"), DeckBrowser())
+        dc._on_js(False, as_board("duecrew:insmapall:30"), DeckBrowser())
         check("map: inside, a part opens its cards; Browse all, the open subject's, new ones too",
               shown == [list(range(900, 920)) + [990], list(range(900, 940)) + [990]], shown)
-        dc._on_js(False, "duecrew:insmapup:30:0", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:insmapup:30:0"), DeckBrowser())
         check("map: All goes back to the top", (_state.get("map_at") or {}).get(30) == [])
         ways = TF.insights(30).get("map_ways") or []
         check("map: its ways, the systems first, the yield tiers to pick", [(w["name"], w["on"]) for w in ways]
               == [("Sys", True), ("Yield", False)], ways)
-        dc._on_js(False, "duecrew:insmap:30:0", DeckBrowser())
-        dc._on_js(False, "duecrew:insmapby:30:1", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:insmap:30:0"), DeckBrowser())
+        dc._on_js(False, as_board("duecrew:insmapby:30:1"), DeckBrowser())
         yv = TF.you_view(dict(conf, ins_deck=30))
         check("map: picked by Yield, this deck's, kept on this computer; it starts from the top",
               (conf.get("ins_map_by") or {}).get("30") == ways[1]["key"] and sorted(t["name"] for t in yv["view"].get("map") or [])
               == ["High", "Low"] and not (_state.get("map_at") or {}).get(30), (conf.get("ins_map_by"), yv["view"].get("map")))
-        dc._on_js(False, "duecrew:insmapby:30:9", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:insmapby:30:9"), DeckBrowser())
         check("map: no such way, nothing", (conf.get("ins_map_by") or {}).get("30") == ways[1]["key"])
-        dc._on_js(False, "duecrew:insmapby:30:0", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:insmapby:30:0"), DeckBrowser())
         # 3.8.0: Share › on the map: the card of the level on screen, made here
         made = []
 
@@ -8039,7 +8245,7 @@ def test_insights_379():
         sys.modules["due_crew.ui.map_card_dialog"] = types.SimpleNamespace(MapCardDialog=Card)
         try:
             TF.you_view(dict(conf, ins_deck=30))
-            dc._on_js(False, "duecrew:insmapshare:30", DeckBrowser())
+            dc._on_js(False, as_board("duecrew:insmapshare:30"), DeckBrowser())
             check("share: the deck's map, its name and today, shown", made and made[0][:4] == ("Unused", _day(0), ["Cardio", "Pulm", "Renal"], "fsrs")
                   and made[-1] == "shown", made)
             check("share: no map a week old yet, no change", made[0][4] is None and made[0][5] == "")
@@ -8049,31 +8255,31 @@ def test_insights_379():
             sys30[0]["day"] = _day(-8)
             _state["insights"].pop(30, None)
             TF.you_view(dict(conf, ins_deck=30))
-            dc._on_js(False, "duecrew:insmapshare:30", DeckBrowser())
+            dc._on_js(False, as_board("duecrew:insmapshare:30"), DeckBrowser())
             check("share: a week on, the change since then; today's kept too", made[-2][4] and made[-2][5] == _day(-8)
                   and [x["day"] for x in pc["map_snaps"]["30"]["med::^sys"]] == [_day(-8), _day(0)], (made[-2], pc["map_snaps"]["30"]))
-            dc._on_js(False, "duecrew:insmap:30:0", DeckBrowser())
-            dc._on_js(False, "duecrew:insmapshare:30", DeckBrowser())
+            dc._on_js(False, as_board("duecrew:insmap:30:0"), DeckBrowser())
+            dc._on_js(False, as_board("duecrew:insmapshare:30"), DeckBrowser())
             check("share: opened, the parts on screen, named by the trail; the change is the deck's level only",
                   made[-2][0] == "Unused · Cardio" and made[-2][2] == ["Valves", "Rhythm"] and made[-2][4] is None
                   and made[-2][6] is True and made[0][6] is False, made[-2])
-            dc._on_js(False, "duecrew:insmapup:30:0", DeckBrowser())
+            dc._on_js(False, as_board("duecrew:insmapup:30:0"), DeckBrowser())
         finally:
             sys.modules.pop("due_crew.ui.map_card_dialog", None)
-        dc._on_js(False, "duecrew:insmap:30:9", DeckBrowser())
-        dc._on_js(False, "duecrew:insmapall:30", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:insmap:30:9"), DeckBrowser())
+        dc._on_js(False, as_board("duecrew:insmapall:30"), DeckBrowser())
         check("map: no such tile, or nothing open: nothing", len(shown) == 2 and not (_state.get("map_at") or {}).get(30))
-        dc._on_js(False, "duecrew:insfsrsno:10", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:insfsrsno:10"), DeckBrowser())
         check("glue: Not now puts Optimize FSRS away, on every deck", pc.get("ins_fsrs_hide") and not TF.insights(10, "pI").get("fsrs")
               and not TF.insights(10).get("fsrs"))
         opened = []
         sys.modules["aqt.deckoptions"] = types.SimpleNamespace(display_options_for_deck_id=opened.append)
-        dc._on_js(False, "duecrew:insfsrs:10", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:insfsrs:10"), DeckBrowser())
         check("glue: Optimize FSRS opens the deck's options", opened == [10], opened)
-        dc._on_js(False, "duecrew:setexam:2026-11-30", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:setexam:2026-11-30"), DeckBrowser())
         check("youins: the exam date set in Insights is my exam date, there too",
               conf.get("exam_date") == "2026-11-30" and TF.you_view(conf)["exam"] == "2026-11-30", conf.get("exam_date"))
-        dc._on_js(False, "duecrew:setexam:off", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:setexam:off"), DeckBrowser())
         check("youins: cleared there, it's gone", conf.get("exam_date") == "")
     finally:
         (TF._plan, F._state_cfg, F.followed, F._today, F._pcfg, F._psave, F._filtered, F._browse, mw.col, TF.app.swap,
@@ -8246,7 +8452,7 @@ def test_one_settings_keys_study_v380():
         applied = []
         dc._apply_keys = lambda: applied.append(1)
         _state["settings_tab"] = "board"
-        dc._on_js(False, "duecrew:set:shortcuts:0", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:set:shortcuts:0"), DeckBrowser())
         check("keys: turning them off applies at once", conf.get("shortcuts") is False and applied == [1], (conf, applied))
         said = []
         TF.tooltip = lambda m, **k: said.append(m)
@@ -8275,7 +8481,7 @@ def test_one_settings_keys_study_v380():
         PF._filtered = lambda col, name, cids, order=4: (built.append(name), True)[1]
         calls.clear()
         try:
-            dc._on_js(False, "duecrew:duestudy", DeckBrowser())
+            dc._on_js(False, as_board("duecrew:duestudy"), DeckBrowser())
             check("study: the button starts on the plan's deck, in Anki's review", sel == [3] and calls == ["move:review"]
                   and _state.get("study_walk"), (sel, calls))
             due["n"] = {3: 0, 9: 6}
@@ -8491,8 +8697,8 @@ def test_review_fixes_board_due_v380():
     # a dot rides in a command: a second identical line's key
     keys = D.line_keys("p1", "u1", [{"k": "do", "t": "Practice"}, {"k": "do", "t": "Practice"}])
     check("review: a second identical line's key reaches its handler whole", keys[1].endswith(".2")
-          and f"duecrew:duetodo:{keys[1]}'" in board._pycmd("duetodo:" + keys[1]), (keys, board._pycmd("duetodo:" + keys[1])))
-    check("review: nothing that closes a quote rides", board._pycmd("x'y\"z<>;.") == "pycmd('duecrew:xyz.'); return false;")
+          and f"duecrew:duetodo:{keys[1]}|{KK}'" in board._pycmd("duetodo:" + keys[1]), (keys, board._pycmd("duetodo:" + keys[1])))
+    check("review: nothing that closes a quote rides", board._pycmd("x'y\"z<>;.") == ("pycmd('duecrew:xyz.|" + KK + "'); return false;"))
     # Escape stops the walk
     saved_walk = _state.get("study_walk")
     try:
@@ -8602,12 +8808,12 @@ def test_head_row_b_v380():
     corner = '<th class="lt dc-corner" colspan="2"><div class="dc-sw">'
     today = board.render(data, {"period": "today"}, 0)
     check("head row B: Crew's views in the header's corner, not a line above the table",
-          corner + '<a class="on" href="#" onclick="pycmd(\'duecrew:period:today\'); return false;">Today</a>' in today
+          corner + ('<a class="on" href="#" onclick="pycmd(\'duecrew:period:today|' + KK + '\'); return false;">Today</a>') in today
           and today.index(corner) > today.index("<table>") and "<th></th><th></th>" not in today
           and today.count('<div class="dc-sw">') == 1)
     week = board.render(data, {"period": "week"}, 0)
     check("head row B: Week too, Week picked", corner in week
-          and '<a class="on" href="#" onclick="pycmd(\'duecrew:period:week\'); return false;">Week</a>' in week)
+          and ('<a class="on" href="#" onclick="pycmd(\'duecrew:period:week|' + KK + '\'); return false;">Week</a>') in week)
     mode = board.render(data, {"period": "today", "show_up": True}, 0)
     check("head row B: show-up mode's corner is the picker; who showed up today goes under the table",
           corner in mode and '<div class="dc-line dc-sum">2 showed up today</div>' in mode
@@ -8618,7 +8824,7 @@ def test_head_row_b_v380():
     decks = board.render(data, {"period": "decks"}, 0)
     line = _re.search(r'<div class="dc-pline">(.*?)</span></div>', decks)
     check("head row B: Decks, the picker on a line of its own with the key at its right, the key once",
-          line is not None and "period:decks'); return false;\">Decks</a>" in line.group(1)
+          line is not None and "period:decks|" + KK + "'); return false;\">Decks</a>" in line.group(1)
           and '<span class="dkey">' in line.group(1) and decks.count('class="dkey"') == 1
           and decks.index("dc-pline") < decks.index('class="dg"'))
     pick = board._crew_picker("decks")
@@ -8659,7 +8865,7 @@ def test_head_row_b_v380():
         check(f"head row B: {st}, the names on top",
               board._squads_html({"state": st, "squads": [{"id": "x", "name": "x"}]}, {}).startswith('<div class="dc-sw">'))
     check("footer: Crew and Share without carets (Sam)",
-          "duecrew:crewmenu'); return false;\">Crew</a>" in today and "duecrew:sharemenu'); return false;\">Share</a>" in today
+          ("duecrew:crewmenu|" + KK + "'); return false;\">Crew</a>") in today and ("duecrew:sharemenu|" + KK + "'); return false;\">Share</a>") in today
           and "Crew &#9662;" not in today and "Share &#9662;" not in today)
     js = open(os.path.join(REPO, "site", "public", "app.js"), encoding="utf-8").read()
     css = open(os.path.join(REPO, "site", "public", "app.css"), encoding="utf-8").read()
@@ -8781,7 +8987,7 @@ def test_every_lines_v380():
     F.plan_dates = lambda today: ([], [], [])
     AU.openLink = opened.append
     try:
-        send = lambda m: dc._on_js(False, "duecrew:" + m, DeckBrowser())
+        send = lambda m: dc._on_js(False, as_board("duecrew:" + m), DeckBrowser())
         send("duetodo:" + keys[0])
         check("every tick: for today", F._ticks(conf).get(keys[0]) == T, conf.get("due_ticks"))
         send("duetodo:" + keys[0])
@@ -8877,7 +9083,7 @@ def test_find_a_setting_v380():
           got and json.loads(H.unescape(got.group(1))) == ix and 'oninput="dcFind.type(this)"' in page)
     js = board.FIND_JS
     check("find: what's found is written as text, never markup; another tab is asked for by a command the add-on has",
-          "innerHTML" not in js and "textContent = h.l" in js and "pycmd('duecrew:settab:' + h.t)" in js
+          "innerHTML" not in js and "textContent = h.l" in js and "pycmd('duecrew:settab:' + h.t + '|' + window.dcBK)" in js
           and js in board.keep_me_in_view_js()
           and 'cmd == "settab"' in open(os.path.join(REPO, "due_crew", "__init__.py")).read())
 
@@ -9018,8 +9224,10 @@ def test_board_motion_round_two_glue_v380():
     finally:
         dc._arrivals, dc.client = saved
     src = open(os.path.join(REPO, "due_crew", "__init__.py"), encoding="utf-8").read()
-    check("arrive: both draws carry it", "board.keep_me_in_view_js() + _arrive_js()" in src
-          and "board.swap_js(html_out) + board.keep_me_in_view_js() + _arrive_js()" in src)
+    check("arrive: both draws carry it (3.9.1: after the board's scripts, or their calls)",
+          "keep, fridge = _board_js(drawn=True)\n    mw.web.eval(\"window.dcBK=%s;\" % board._json.dumps(board.BOARD_KEY)" in src
+          and "                + keep + _arrive_js()" in src
+          and "keep, fridge = _board_js()\n    js = board.swap_js(html_out) + keep + _arrive_js()" in src)
     from due_crew import due_flow as F
     node = lambda did, n, kids=(): types.SimpleNamespace(deck_id=did, review_count=n, learn_count=0, new_count=0, children=list(kids))  # noqa: E731
     tree = types.SimpleNamespace(children=[node(1, 5, [node(11, 3)]), node(2, 40)])
@@ -9532,8 +9740,8 @@ def test_study_for_a_quiz_v381():
         col.decks.select = sel.append
         F.mw.moveToState = moved.append
         try:
-            dc._on_js(False, f"duecrew:planquiz:{pid}:q", DeckBrowser())
-            dc._on_js(False, f"duecrew:planquiz:{pid}:nope", DeckBrowser())
+            dc._on_js(False, as_board(f"duecrew:planquiz:{pid}:q"), DeckBrowser())
+            dc._on_js(False, as_board(f"duecrew:planquiz:{pid}:nope"), DeckBrowser())
         finally:
             F._filtered = saved[0]
             if saved[1] is None:
@@ -9871,7 +10079,7 @@ def test_open_now_on_a_closed_date_v381():
         check("closed by Undo: still opened here, and today's date offers Open now",
               opened and not ({1, 2, 3} & _open(col)) and "ar" in F._state_cfg()[pid]["applied"]
               and f"duecrew:plannow:{pid}:ar" in html, html[:300])
-        dc._on_js(False, f"duecrew:plannow:{pid}:ar", DeckBrowser())
+        dc._on_js(False, as_board(f"duecrew:plannow:{pid}:ar"), DeckBrowser())
         check("Open now (sent as the board does): the date opens whole, in one step; then no Open now",
               3 in _open(col) and col.undo_status().undo == "Due Crew: open Arrhythmia"
               and f"duecrew:plannow:{pid}:ar" not in view(), col.undo_status().undo)
@@ -10040,7 +10248,7 @@ def test_week_open_now_at_own_pace_v381():
         last_week = F.card_view(p, F._state_cfg()[pid], F._state["plan_progress"][pid], _day(0), week_offset=-1)
         check("own pace: a date I haven't opened whose day has passed offers Open now",
               f"duecrew:plannow:{pid}:hf" in board._plan_card_html(dict(last_week, id=pid)))
-        dc._on_js(False, f"duecrew:plannow:{pid}:ex", DeckBrowser())
+        dc._on_js(False, as_board(f"duecrew:plannow:{pid}:ex"), DeckBrowser())
         st = F._state_cfg()[pid]
         due4 = col.db.scalar("SELECT due FROM cards WHERE id = 4")
         last = F._pcfg().get("own_last") or {}
@@ -10052,7 +10260,7 @@ def test_week_open_now_at_own_pace_v381():
         store.edit_plan(pid, units)
         maya.fetch_board([_day(0)], with_decks=True)
         F._state["plan_progress"] = F.progress(col, F.followed(), F._state_cfg())
-        dc._on_js(False, f"duecrew:plannow:{pid}:ex", DeckBrowser())
+        dc._on_js(False, as_board(f"duecrew:plannow:{pid}:ex"), DeckBrowser())
         check("own pace: Open now on a date I opened opens what the author added, and it stays opened as it was",
               9 in _open(col) and F._state_cfg()[pid]["own_opened"] == {"ex": _day(0)})
 
@@ -10064,7 +10272,6 @@ def test_plan_words_v381():
     back's question at my own pace; Browse's items for writing a plan only
     for someone who writes one."""
     from due_crew import plan_flow as F
-    from due_crew import ui as UI
     line = board._opened_line({"n": 3})
     check("words: the morning's line says Not today, and when they open",
           "Not today</a>" in line and 'title="They open tomorrow morning"' in line and "Put off" not in line, line)
@@ -10081,14 +10288,7 @@ def test_plan_words_v381():
           and "seen the last\"" not in src["ui/follow_dialog.py"] + src["plan_flow.py"])
     check("words: Welcome back's choice is Push my dates back",
           'f"Push my dates back {days} day' in src["ui/days_dialog.py"] and "Pick up where" not in src["ui/days_dialog.py"])
-    said = []
-    saved = UI.confirm
-    UI.confirm = lambda parent, title, text, ok: said.append(text) or True
-    try:
-        F._ask_hold("Step 1", 3, own=True)
-        F._ask_hold("Step 1", 1)
-    finally:
-        UI.confirm = saved
+    said = [F._hold_words("Step 1", 3, own=True)[1], F._hold_words("Step 1", 1)[1]]
     check("words: Hold back's question at my own pace: until you open them",
           "3 cards of its later dates until you open them?" in said[0] and "their day" not in said[0]
           and "1 card of its later dates until their day?" in said[1], said)
@@ -10465,7 +10665,7 @@ def test_plan_invites_v381():
     with _PlanGlue({"A": sam}, {"A": col}) as g, _SyncBg(g.F):
         check("invites: the board's view has them", F.board_view({})["invites"] == inv)
         n = len(store.log)
-        dc._on_js(False, f"duecrew:planinvite:{pid}:yes", DeckBrowser())
+        dc._on_js(False, as_board(f"duecrew:planinvite:{pid}:yes"), DeckBrowser())
         sent = [b for m, p, b in store.bodies if p == f"/plans/{pid}/invite"]
         check("invites: Yes is one request; I co-write it now (Browse's items, its tags), and the line goes",
               len(store.log) == n + 1 and sent == [{"yes": True, "kind": "coauthor"}] and "sam" in store.plans[pid].get("editors", [])
@@ -10478,17 +10678,17 @@ def test_plan_invites_v381():
         check("hand-over: the owner offers the plan; it comes with the next refresh, its own words",
               st == 200 and inv2 and inv2[0]["kind"] == "owner"
               and "<b>Dre &lt;b&gt;</b> offered you <b>Block &lt;1&gt;</b> to keep." in html, (inv2, html[:300]))
-        dc._on_js(False, f"duecrew:planinvite:{pid}:no", DeckBrowser())
+        dc._on_js(False, as_board(f"duecrew:planinvite:{pid}:no"), DeckBrowser())
         check("hand-over: No keeps it where it was; the line goes",
               store.plans[pid]["owner"] == "dre" and not sam.session["plan_invites"]
               and [b for m, p, b in store.bodies if p == f"/plans/{pid}/invite"][-1] == {"yes": False, "kind": "owner"})
         sam.session["plan_invites"] = inv2  # as if the board still showed it: the owner took it back meanwhile
-        dc._on_js(False, f"duecrew:planinvite:{pid}:yes", DeckBrowser())
+        dc._on_js(False, as_board(f"duecrew:planinvite:{pid}:yes"), DeckBrowser())
         check("invites: one taken back meanwhile says so, and goes", not sam.session["plan_invites"]
               and "taken back" in g.toasts[-1] and store.plans[pid]["owner"] == "dre", g.toasts[-1:])
         n = len(store.log)
-        dc._on_js(False, f"duecrew:planinvite:{pid}:maybe", DeckBrowser())
-        dc._on_js(False, "duecrew:planinvite:nothere:yes", DeckBrowser())
+        dc._on_js(False, as_board(f"duecrew:planinvite:{pid}:maybe"), DeckBrowser())
+        dc._on_js(False, as_board("duecrew:planinvite:nothere:yes"), DeckBrowser())
         check("invites: anything but yes or no, or an invite I don't have, sends nothing", len(store.log) == n)
 
 
@@ -10781,7 +10981,7 @@ def test_morning_opened_by_date_v381():
         saved = F._browse
         F._browse = lambda cids, q=None, empty="": got.append(sorted(cids))
         try:
-            dc._on_js(False, f"duecrew:planopened:{pid}:hf", DeckBrowser())
+            dc._on_js(False, as_board(f"duecrew:planopened:{pid}:hf"), DeckBrowser())
         finally:
             F._browse = saved
         check("morning by date: a name (sent as the board does) opens Browse on that date's new cards", got == [[1, 2]], got)
@@ -10933,7 +11133,7 @@ def test_why_didnt_it_open_v381():
         saved = F._browse
         F._browse = lambda cids, q=None, empty="": got.append(sorted(cids))
         try:
-            dc._on_js(False, f"duecrew:planleech:{pid}:ar", DeckBrowser())
+            dc._on_js(False, as_board(f"duecrew:planleech:{pid}:ar"), DeckBrowser())
         finally:
             F._browse = saved
         check("why: its leeches open in Browse (sent as the board does)", got == [[3]], got)
@@ -10960,7 +11160,7 @@ def test_up_next_any_date_v381():
         h = board._plan_card_html(dict(v, own=dict(v["own"], then_items=[dict(items[0], name="Arr <b>")] + items[1:])))
         check("then: each name a link that opens it, escaped", f"duecrew:planpaceopen:{pid}:ex" in h
               and "Arr &lt;b&gt;</a> 1 &middot; " in h and "<b>Arr" not in h, h[:1500])
-        dc._on_js(False, f"duecrew:planpaceopen:{pid}:ex", DeckBrowser())
+        dc._on_js(False, as_board(f"duecrew:planpaceopen:{pid}:ex"), DeckBrowser())
         st = F._state_cfg()[pid]
         F._state["plan_progress"] = F.progress(col, F.followed(), F._state_cfg())
         p = next(x for x in F.followed() if x["id"] == pid)
@@ -11011,8 +11211,8 @@ def test_study_this_date_v381():
         col.decks.select = sel.append
         F.mw.moveToState = moved.append
         try:
-            dc._on_js(False, f"duecrew:planstudydate:{pid}:hf", DeckBrowser())
-            dc._on_js(False, f"duecrew:planstudydate:{pid}:ex", DeckBrowser())  # nothing of it open yet
+            dc._on_js(False, as_board(f"duecrew:planstudydate:{pid}:hf"), DeckBrowser())
+            dc._on_js(False, as_board(f"duecrew:planstudydate:{pid}:ex"), DeckBrowser())  # nothing of it open yet
         finally:
             F._filtered = saved[0]
             if saved[1] is None:
@@ -11632,7 +11832,7 @@ def test_plan_tags_glue_v380():
         before = F.tags_seen
         F.tags_seen = lambda p, swap=True: opened.append(("seen", p))
         try:
-            dc._on_js(False, f"duecrew:plantagsok:{pid}", DeckBrowser())
+            dc._on_js(False, as_board(f"duecrew:plantagsok:{pid}"), DeckBrowser())
         finally:
             F.tags_seen = before
         check("tags: the card's OK reaches its handler", opened == [("seen", pid)], str(opened))
@@ -11891,7 +12091,7 @@ def test_own_pace_v380():
         F.put_back_own = lambda p2: got.append(("back", p2))
         try:
             for cmd in ("planpaceopen", "planpacestudy", "planpaceundo", "planpaceback"):
-                dc._on_js(False, f"duecrew:{cmd}:{pid}", DeckBrowser())
+                dc._on_js(False, as_board(f"duecrew:{cmd}:{pid}"), DeckBrowser())
         finally:
             for k, val in saved.items():
                 setattr(F, k, val)
@@ -12355,10 +12555,10 @@ def test_heatmap_day_v380():
         dc.mw.col = fakes.FakeCol(conn, cut)
         _state["labels"] = [TODAY.isoformat()]
         y = (TODAY - datetime.timedelta(days=1)).isoformat()
-        dc._on_js(False, "duecrew:heatday:" + y, DeckBrowser())
+        dc._on_js(False, as_board("duecrew:heatday:" + y), DeckBrowser())
         check("heat: that Anki day's answered cards, in Browse", shown == [[901, 902]], shown)
-        dc._on_js(False, "duecrew:heatday:nope", DeckBrowser())
-        dc._on_js(False, "duecrew:heatday:" + (TODAY + datetime.timedelta(days=3)).isoformat(), DeckBrowser())
+        dc._on_js(False, as_board("duecrew:heatday:nope"), DeckBrowser())
+        dc._on_js(False, as_board("duecrew:heatday:" + (TODAY + datetime.timedelta(days=3)).isoformat()), DeckBrowser())
         check("heat: not a day, or a day ahead: nothing", shown == [[901, 902]])
     finally:
         F._browse, dc.mw.col, _state["labels"] = saved
@@ -12508,7 +12708,7 @@ def test_fifteen_flow_v381():
         R.mw.state, R.mw.col = "deckBrowser", col
         _state["entries"] = [{"user_id": "me", "you": True, "room": None, "live_until": ""}]
         _state["labels"] = ["2026-10-13"]
-        dc._on_js(False, "duecrew:room15", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:room15"), DeckBrowser())
         room = cl.session.get("room")
         check("start: a fifteen of mine, my crew sees studying now (one light sync), Study today opens",
               rm.is_fifteen(room) and room["rounds"] == 1 and cl.session.get("live_until") == "2026-10-13T18:20:00Z"
@@ -12516,16 +12716,16 @@ def test_fifteen_flow_v381():
               and _state["entries"][0]["room"] is None and _state["entries"][0]["live_until"] == "2026-10-13T18:20:00Z")
         clock["now"] = t0 + datetime.timedelta(minutes=16)
         R.rm_real = rm.phase
-        dc._on_js(False, "duecrew:room15five", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:room15five"), DeckBrowser())
         check("take five: one more, studying now to the end of its question",
               cl.session["room"]["rounds"] == 2 and cl.session["live_until"] == "2026-10-13T18:40:00Z" and len(syncs) == 2)
         clock["now"] = t0 + datetime.timedelta(minutes=17)
         walked.clear()
-        dc._on_js(False, "duecrew:room15now", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:room15now"), DeckBrowser())
         check("Start now on its break: the second starts this minute; from Decks, Study today opens",
               rm.phase(cl.session["room"], clock["now"])["left"] == 900 and walked == [1])
         clock["now"] = t0 + datetime.timedelta(minutes=22)
-        dc._on_js(False, "duecrew:room15stop", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:room15stop"), DeckBrowser())
         done = cl.session.get("fifteen_done")
         check("stop: the session's line (fifteens begun, minutes, cards), nothing left of it, crew told",
               "room" not in cl.session and "live_until" not in cl.session and done
@@ -12537,11 +12737,11 @@ def test_fifteen_flow_v381():
         check("…on the board, with Pip stacking (once)", view.get("fifteen_done", {}).get("n") == 2
               and "stk" in (view["fifteen_done"].get("sev") or "") and " rest" not in view["fifteen_done"]["sev"].split('"')[1])
         check("…and drawn again it rests", " rest" in R.board_view()["fifteen_done"]["sev"].split('"')[1])
-        dc._on_js(False, "duecrew:room15x", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:room15x"), DeckBrowser())
         check("× takes the line away", "fifteen_done" not in cl.session)
         # walked away: no answer, so it ends quietly, with no sync of its own
         clock["now"] = t0
-        dc._on_js(False, "duecrew:room15", DeckBrowser())
+        dc._on_js(False, as_board("duecrew:room15"), DeckBrowser())
         n = len(syncs)
         clock["now"] = t0 + datetime.timedelta(minutes=21)
         real_phase = rm.phase
@@ -13172,7 +13372,8 @@ def test_sev_moves_v381():
               "dc-hi" not in board.signed_out_card({}, expired=True, sev=a) and "dc-hi" not in board.signed_out_card({}, gone=True, sev=a))
         R.cfg = lambda: {"sev": False}
         check("…Settings › Pip off: the card as it was", R.signed_out_sev() is None
-              and "sv-" not in board.signed_out_card({}, sev=None) and "Start with your email" in board.signed_out_card({}))
+              and 'class="sv' not in board.signed_out_card({}, sev=None) and "sv-blink" not in board.signed_out_card({}, sev=None)
+              and "Start with your email" in board.signed_out_card({}))
 
         # new: a crewmate's big streak
         R.cfg = lambda: {}
@@ -13328,7 +13529,7 @@ def test_closet_board_v382():
     line = board.closet_line(["cap"], ["beanie"])
     check("the board's line: Pip in the new thing, its name and why, Wear it, the closet, later",
           "New for your Pip: Cap." in line and "14 days in a row" in line and "duecrew:closetwear:cap" in line
-          and "duecrew:closet'" in line and "duecrew:closetnew" in line and CA.ART["cap"][0][:40] in line
+          and ("duecrew:closet|" + KK + "'") in line and "duecrew:closetnew" in line and CA.ART["cap"][0][:40] in line
           and "Be one" in board.closet_line(["dino"], []))
     check("the day it opens, one line for everything your days earned",
           "earned it 9 things" in board.closet_line(list(C.BY)[:9], [], first=True))
@@ -13356,7 +13557,7 @@ def test_closet_board_v382():
     check("a row with Pip: room above it for a hat (the whole row, so name and numbers share a line); "
           "their Pip beside the name's underline, opening their profile too",
           'class="sv"' in dre_row and 'tr.sv > td { padding-top: 12px; }' in crew
-          and 'class="dc-rsevl" href="#" tabindex="-1" aria-hidden="true" onclick="pycmd(\'duecrew:profile:dre\')' in dre_row
+          and ('class="dc-rsevl" href="#" tabindex="-1" aria-hidden="true" onclick="pycmd(\'duecrew:profile:dre|' + KK + '\')') in dre_row
           and dre_row.index('class="dc-rsev"') < dre_row.index('class="dc-pl"')
           and 'tr.sv' not in board.render(data, dict(conf, sev=False), 0))
     # profile cards (3.8.2): their Pip where the emoji was, as on their row; mine opens the closet
@@ -13368,14 +13569,14 @@ def test_closet_board_v382():
     check("profile cards: Pip in the emoji's place, in their colour and look; mine links to the closet",
           turtle not in card and "dc-psev" in card and json.dumps(CA.ART["dino"][0])[1:30] in card and "--sv-a: #1e5fb4" in card
           and fox not in mine_card and json.dumps(CA.ART["cap"][0])[1:30] in mine_card
-          and "remove();pycmd('duecrew:closet')" in mine_card
+          and ("remove();pycmd('duecrew:closet|" + KK + "')") in mine_card
           and "Change emoji" in mine_card and board.card_sev(ents[1], dict(conf, sev=False)) is None
           and turtle in board.profile_overlay_js({"name": "Dre", "uid": "dre", "cells": None, "emoji": "🐢"}))
     from due_crew import room_model as RM
     chip = RM.start_data(("#2e7d32", "#7cc47f"), "right", True, look=["cap"])
     check("▶ Fifteen? in the top bar wears my look (it was plain)", CA.ART["cap"][0][:30] in chip["sev"]["idle"]
           and CA.ART["cap"][0][:30] not in RM.start_data(("#2e7d32", "#7cc47f"), "right", True)["sev"]["idle"])
-    check("Settings › Fifteen and Pip: the closet, a click away", "duecrew:closet'" in board._settings_board({}))
+    check("Settings › Fifteen and Pip: the closet, a click away", ("duecrew:closet|" + KK + "'") in board._settings_board({}))
     col_page = board.closet_html({"tab": "Yours", "have": {}, "look": []}, {"accent": "blue"})
     check("3.9.0 (Sam): the closet has the colour too, every accent, the one on pressed, as Settings' Board tab has it",
           all(f"duecrew:set:accent:{k}" in col_page for k in board.ACCENTS) and 'aria-label="Blue" aria-pressed="true"' in col_page
@@ -13393,7 +13594,7 @@ def test_closet_board_v382():
     dc.save_cfg = cf.save_cfg = lambda c, **k: mine.update(c)
     cf.facts = lambda c=None: {"run": 11}
     dc._board_on_screen = lambda: True
-    send = lambda m: dc._on_js(False, "duecrew:" + m, DeckBrowser())
+    send = lambda m: dc._on_js(False, as_board("duecrew:" + m), DeckBrowser())
     try:
         dc._state["closet_new"] = {"keys": ["dino"], "first": False}
         send("closet")
@@ -13460,7 +13661,7 @@ def test_squad_pips_v3821():
     check("squads: a Pip where each emoji was, room above it for a hat",
           not any(x in html for x in ("🦊", "🐢", "🐸")) and all('class="sv"' in r or ' sv"' in r for r in (me, dre, zed)))
     check("…mine in my colour and look, opening the closet; a crewmate's in theirs",
-          CA.ART["cap"][0][:30] in me and "--rs-l:#b03052" in me and "duecrew:closet'" in me
+          CA.ART["cap"][0][:30] in me and "--rs-l:#b03052" in me and ("duecrew:closet|" + KK + "'") in me
           and CA.ART["dino"][0][:30] in dre and "--rs-l:#1e5fb4" in dre)
     check("…anyone else plain, in the default colour (nothing of theirs but a name), the name still text",
           f"--rs-l:{green}" in zed and "cl-" not in zed.split("dc-pl")[0] and "Zed <b>" not in zed
@@ -13539,7 +13740,7 @@ const body = new E('body'); body.className = '';
 globalThis.window = globalThis; window.addEventListener = () => {};
 globalThis.document = { body, head: new E('head'), createElement: (t) => new E(t), getElementById: () => null,
   querySelector: () => null, documentElement: { classList: { contains: () => false } } };
-globalThis.setInterval = () => 0; globalThis.pycmd = () => {};
+globalThis.setInterval = () => 0; globalThis.setTimeout = () => 0; globalThis.pycmd = () => {};
 const walk = (e, out) => { out.push(e); e.kids.forEach((k) => walk(k, out)); return out; };
 """
     out = []
@@ -13768,14 +13969,20 @@ def test_closet_flow_v382():
     for cid in range(12):
         fakes.add_card(conn, cid + 1, 1, ctype=2, queue=2, ivl=30, lapses=9 if cid < 3 else 0)
     col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    files, saved_files = tempfile.mkdtemp(), cf._profile_files
+    cf._profile_files = lambda: files
     cf._RF["key"] = None
-    f = cf.revlog_facts(col)
-    check("the revlog's facts: days, the longest run, mornings and evenings, Halloween, reviews, learned, leeches",
-          f["days"] == 22 and f["run"] == 20 and f["mornings"] == 22 and f["evenings"] == 22 and f["halloween"] == 2
-          and f["reviews"] == 44 and f["learned"] == 12 and f["leeches"] == 3 and f["back7"] == 1, f)
-    fakes.add_review(conn, int(datetime.datetime.combine(TODAY, datetime.time(9)).timestamp() * 1000))
-    check("the days before today are read once a day; today's hours each time",
-          cf.revlog_facts(col)["reviews"] == 45 and cf._RF["key"] == int(col.sched.day_cutoff))
+    try:
+        f = cf.revlog_facts(col)
+        check("the revlog's facts: days, the longest run, mornings and evenings, Halloween, reviews, learned, leeches",
+              f["days"] == 22 and f["run"] == 20 and f["mornings"] == 22 and f["evenings"] == 22 and f["halloween"] == 2
+              and f["reviews"] == 44 and f["learned"] == 12 and f["leeches"] == 3 and f["back7"] == 1, f)
+        fakes.add_review(conn, int(datetime.datetime.combine(TODAY, datetime.time(9)).timestamp() * 1000))
+        check("the days before the last week are kept (3.9.1: closet_days.json); today's hours count each time",
+              cf.revlog_facts(col)["reviews"] == 45 and cf._RF["key"] == os.path.join(files, cf.HISTORY))
+    finally:
+        cf._profile_files = saved_files
+        cf._RF["key"] = None
     t = cf.clean_tallies({"fifteens": 3, "rooms": -1, "cheered": ["a", 5, "b"], "clear_last": "2026-09-01", "crew": True})
     check("the tallies, as this add-on writes them or less", t == {"fifteens": 3, "cheered": ["a", "b"], "clear_last": "2026-09-01"}, t)
     bf = cf.board_facts({"squads": [{"id": "s1", "founder": "me"}, {"id": "s2"}]}, [], "me",
@@ -13835,6 +14042,105 @@ def test_closet_flow_v382():
     store.settings["bob"]["settings"]["sev_look"] = ["<script>"]
     check("a look that isn't names isn't sent",
           next(e for e in cl.fetch_board(labels)["entries"] if e["user_id"] == "bob")["look"] == [])
+
+
+def _closet_whole(col):
+    """3.8.2's read of the closet's revlog facts, the whole revlog by the
+    hour (kept here to hold 3.9.1's kept history to it)."""
+    from due_crew import closet as C
+    cut = int(col.sched.day_cutoff)
+    hours = {int(h): int(n) for h, n in col.db.all(
+        "SELECT CAST((? - id / 1000) / 3600 AS INTEGER), COUNT(*) FROM revlog "
+        "WHERE ease > 0 AND id >= 0 AND id < ? GROUP BY 1", cut - 1, cut * 1000)}
+    end = datetime.date.fromtimestamp(cut)
+    out = C.from_days({(end - datetime.timedelta(days=h // 24 + 1)).isoformat() for h in hours})
+    out.update(C.from_hours([datetime.datetime.fromtimestamp(cut - (h + 1) * 3600) for h in hours]))
+    out["reviews"] = sum(hours.values())
+    return out
+
+
+def test_closet_history_v391():
+    """3.9.1: Pip's closet keeps the days before the last week in
+    closet_days.json, per profile, where every launch read the whole revlog
+    by the hour. The facts are the whole read's: the first time, again, in
+    a new process, the next day (a day goes in), when a sync brings in a
+    phone's last week or older answers, when the clock moves, and from a
+    file that isn't one; a second profile the same day gets its own."""
+    from due_crew import closet_flow as cf
+    at = lambda d, h: int(datetime.datetime.combine(d, datetime.time(h)).timestamp() * 1000)
+
+    def col_with(days, rollover=4):
+        conn = sqlite3.connect(":memory:")
+        fakes.make_collection(conn)
+        for d, hour in days:
+            fakes.add_review(conn, at(d, hour))
+        fakes.add_review(conn, at(TODAY - datetime.timedelta(days=30), 12), ease=0, rtype=4)  # a set due date: no answer
+        return fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY, rollover))
+
+    D = datetime.date
+    days = ([(TODAY - datetime.timedelta(days=i), h) for i in range(40) if i % 9 != 4 for h in (6, 22)]
+            + [(TODAY - datetime.timedelta(days=i), 1) for i in (2, 11, 25)]
+            + [(D(2025, 10, 24), 9), (D(2025, 10, 25), 9), (D(2025, 10, 31), 20), (D(2025, 12, 31), 23), (D(2026, 1, 1), 0),
+               (D(2026, 3, 14), 12), (D(2024, 2, 29), 7), (D(2026, 6, 21), 5), (D(2025, 2, 13), 13)])
+    col = col_with(days)
+    files = tempfile.mkdtemp()
+    reads = []
+    saved = (cf._profile_files, cf._span, cf._zone)
+    real_span = cf._span
+    cf._profile_files = lambda: files
+    cf._span = lambda c, cut, lo, hi: reads.append(lo) or real_span(c, cut, lo, hi)
+    cf._RF.update(key=None, hist=None)
+
+    def same(c, name, whole):
+        f, want = cf.revlog_facts(c), _closet_whole(c)
+        check(f"closet's history: {name}: the facts are the whole revlog's"
+              + (", read whole" if whole else ", without reading it whole"),
+              {k: f[k] for k in want} == want and reads.count(0) == whole, ({k: (f[k], want[k]) for k in want if f[k] != want[k]}, reads))
+        reads.clear()
+
+    try:
+        same(col, "the first time", 1)
+        kept = json.load(open(os.path.join(files, cf.HISTORY)))
+        same(col, "again", 0)
+        cf._RF.update(key=None, hist=None)
+        same(col, "a new process, from the file", 0)
+        col.sched.day_cutoff += 86400
+        fakes.add_review(col.db.conn, at(TODAY + datetime.timedelta(days=1), 10))
+        same(col, "the next day, a day added to the file", 0)
+        check("closet's history: the file moves on by the day that settled, and only the last week is read fresh",
+              json.load(open(os.path.join(files, cf.HISTORY)))["hi"] == kept["hi"] + 86400 * 1000
+              and kept["hi"] == (fakes.day_cutoff_for(TODAY) - cf.SETTLED * 86400) * 1000 and kept["days"] == sorted(kept["days"]))
+        fakes.add_review(col.db.conn, at(TODAY - datetime.timedelta(days=3), 13))
+        same(col, "a phone's reviews from last week", 0)
+        fakes.add_review(col.db.conn, at(TODAY - datetime.timedelta(days=33), 13))
+        same(col, "a sync bringing in answers from a month ago", 1)
+        col.sched.day_cutoff += 86400 + 3600
+        same(col, "the clock moved an hour (DST)", 1)
+        cf._zone = lambda: [1, 2, ["X", "Y"]]
+        same(col, "another time zone", 1)
+        cf._zone = saved[2]
+        with open(os.path.join(files, cf.HISTORY), "w") as f:
+            f.write('{"days": "2026-01-01"}')
+        cf._RF.update(key=None, hist=None)
+        same(col, "a file that isn't one", 1)
+        midnight = col_with([(TODAY - datetime.timedelta(days=7), 22), (TODAY - datetime.timedelta(days=6), 1),
+                             (TODAY - datetime.timedelta(days=20), 6)], rollover=0)
+        cf._profile_files = lambda: os.path.join(files, "midnight")
+        os.makedirs(os.path.join(files, "midnight"), exist_ok=True)
+        same(midnight, "an evening over the kept edge (a day that rolls over at midnight)", 1)
+        check("closet's history: that evening is one", cf.revlog_facts(midnight)["evenings"] == 1)
+        reads.clear()
+        one = col_with([(TODAY - datetime.timedelta(days=i), 12) for i in range(10, 30)])
+        two = col_with([(TODAY - datetime.timedelta(days=i), 12) for i in range(10, 50, 2)])
+        for name, c in (("one", one), ("two", two)):
+            os.makedirs(os.path.join(files, name), exist_ok=True)
+            cf._profile_files = lambda name=name: os.path.join(files, name)
+            same(c, f"profile {name}", 1)
+        check("closet's history: a second profile the same day (as many rows) gets its own, not the first's",
+              cf.revlog_facts(two)["run"] == 1 and _closet_whole(one)["run"] == 20)
+    finally:
+        cf._profile_files, cf._span, cf._zone = saved
+        cf._RF.update(key=None, hist=None)
 
 
 def test_closet_site_rows_v382():
@@ -13952,7 +14258,7 @@ def test_halloween_week_v3822():
     check("the line: its days, the five things as Pips (mine in colour), the next, the closet and a way to hide it",
           "2 days so far" in line and line.count("sv-slot") == 5 and line.count('class="hwk on"') == 2
           and "study today for the bat wings" in line and "duecrew:closet&#x27;" not in line
-          and "pycmd('duecrew:closet')" in line and "pycmd('duecrew:closethw')" in line
+          and ("pycmd('duecrew:closet|" + KK + "')") in line and ("pycmd('duecrew:closethw|" + KK + "')") in line
           and "hwbat" not in line and "hwweb" not in line and "spooky" not in line, line[:600])
     flying = board.halloween_html(dict(base, spooky=6, bats=1.5), {})
     check("the day's first board: three bats, their flight's place kept across a redraw; the whole crew dressed: cobweb and line",
@@ -13996,7 +14302,7 @@ def test_halloween_week_v3822():
         dc._swap, dc._rerender, dc._board_on_screen = (lambda c, focus=None: swaps.append(1)), (lambda: swaps.append(2)), (lambda: True)
         dc._state["labels"] = ["2026-10-25"]
         try:
-            dc._on_js(False, "duecrew:closethw", DeckBrowser())
+            dc._on_js(False, as_board("duecrew:closethw"), DeckBrowser())
         finally:
             dc._swap, dc._rerender, dc._board_on_screen = old
         check("its ×, sent as the board sends it: hidden for 2026 (the board redraws), back next year",
@@ -14282,7 +14588,7 @@ def test_wrapped_story_v390():
     check("Pip off: the story without Pip (no Pip's things slide)", "<svg class=\"sv" not in off and off.count('<section class="wr-s') == len(sl_full) - 1)
     js = board.wrapped_js()
     check("the player: arrows and the sides move it, it moves on by itself, never with Reduce motion, once a card",
-          "ArrowRight" in js and "prefers-reduced-motion: reduce" in js and "if (!still) { requestAnimationFrame(tick); }" in js
+          "ArrowRight" in js and "prefers-reduced-motion: reduce" in js and "bars[st.i].animate" in js and "requestAnimationFrame" not in js and "st.run.pause()" in js
           and "data-on" in js)
     import shutil
     import subprocess
@@ -14335,7 +14641,7 @@ def test_wrapped_flow_v390():
     dc._board_on_screen = lambda: True
     SH.picture = lambda kind, year=None: pics.append((kind, year))
     try:
-        send = lambda m: dc._on_js(False, "duecrew:" + m, DeckBrowser())
+        send = lambda m: dc._on_js(False, as_board("duecrew:" + m), DeckBrowser())
         send("wrappedopen:2026")
         send("wrappedyear:2025")
         send("wrappedpic:2026")
@@ -14485,6 +14791,1671 @@ def test_motion_ends_where_it_lands_v390():
     if shutil.which("node"):
         r = subprocess.run(["node", "--check", os.path.join(REPO, "tools", "motion_audit.js")], capture_output=True, text=True)
         check("audit: tools/motion_audit.js is valid JS", r.returncode == 0, r.stderr[:300])
+
+
+def test_doodle_cheers_v391():
+    """3.9.1, doodle cheers (Sam: "create the doodles thing"): a cheer can
+    carry a drawing (strokes on the 300 x 170 pad) or a sign their Pip holds
+    up. Numbers and one line of words, both ways; it lands held up by the
+    sender's Pip (in the banner with Pip off or Reduce motion), and stays on
+    my fridge in Pip's closet, on this computer, till I take it down."""
+    from due_crew.backend.shapes import clean_doodle
+    from due_crew import fridge as FR
+    draw = {"k": "draw", "s": [[0, 10, 20, 30, 40, 50, 60], [3, 299, 169]]}
+    check("doodle shape: strokes of whole points on the pad, kept as they are; pens 0 to 15 (thin or thick in mine, black or any accent)",
+          clean_doodle(draw) == draw and clean_doodle(dict(draw)) is not draw
+          and clean_doodle({"k": "draw", "s": [[p, 1, 1] for p in range(16)]}) is not None)
+    many = [n for i in range(2001) for n in (i % 300, i % 170)]
+    bad = [{"k": "draw", "s": []}, {"k": "draw", "s": [[16, 1, 1]]}, {"k": "draw", "s": [[0, 1]]},
+           {"k": "draw", "s": [[0, 301, 1]]}, {"k": "draw", "s": [[0, 1, 171]]}, {"k": "draw", "s": [[0, 1.5, 1]]},
+           {"k": "draw", "s": [[0, True, 1]]}, {"k": "draw", "s": [[0, -1, 1]]}, {"k": "draw", "s": [[0] + many]},
+           {"k": "draw", "s": [[0, 1, 1]] * 201}, {"k": "draw", "s": [[0, 1, 1]], "c": "#f00"},
+           {"k": "sign", "t": "  "}, {"k": "sign", "t": 5}, {"k": "pic", "src": "https://x"}, "draw", None, []]
+    check("doodle shape: anything the Worker turns away is None (no colour, no picture, no link, past the ceilings)",
+          all(clean_doodle(b) is None for b in bad))
+    check("doodle shape: 2,000 points is the ceiling, not past it",
+          clean_doodle({"k": "draw", "s": [[2] + many[:4000]]}) is not None)
+    party = "\U0001F389"
+    check("a sign: one line, 24 at most as the Worker counts, an emoji never cut in half",
+          clean_doodle({"k": "sign", "t": "  you've\ngot   this "}) == {"k": "sign", "t": "you've got this"}
+          and clean_doodle({"k": "sign", "t": "x" * 40})["t"] == "x" * 24
+          and clean_doodle({"k": "sign", "t": "x" * 23 + party})["t"] == "x" * 23)
+    # both ways, through the fake Worker
+    store = world({"sam": "Sammy", "dre": "Dre", "nia": "Nia"}, {"sam": ["dre", "nia"], "dre": ["sam"]})
+    dre = new_client(store, "dre", "Dre")
+    sent = dre.send_cheer("sam", party, "go", doodle=draw)
+    check("sent: one request, the drawing as one more field of the cheer", sent is True
+          and store.cheers[("sam", "dre")]["doodle"] == draw)
+    dre.send_cheer("sam", "\U0001F340", "luck", luck=True, doodle=draw)
+    lucky = store.cheers[("sam", "dre")]
+    dre.send_cheer("sam", party, doodle={"k": "draw", "s": [[16, 1, 1]]})
+    check("never on a good-luck line or a tip; a broken one isn't sent, the cheer still goes",
+          lucky["doodle"] is None and lucky["luck"] and store.cheers[("sam", "dre")]["doodle"] is None)
+    dre.send_cheer("sam", party, doodle={"k": "sign", "t": "you've got this"})
+    sam = new_client(store, "sam", "Sammy")
+    data, _labels, _t = fetch_as(store, sam, make_user_col([TODAY]))
+    check("received: the sign comes with the cheer, read through the same gate",
+          data["cheers"][0].get("doodle") == {"k": "sign", "t": "you've got this"}, data["cheers"])
+    check("only to someone who added me, as every cheer (Nia hasn't added Dre)",
+          dre.send_cheer("nia", party, doodle=draw) is False and ("nia", "dre") not in store.cheers)
+    newer = store._cheer
+
+    def older(me, to, body):  # a Worker from before 3.9.1: the field is one it doesn't know
+        if "doodle" in body:
+            raise fakes.Bad(400, "bad_cheer")
+        return newer(me, to, body)
+    store._cheer = older
+    try:
+        went = dre.send_cheer("sam", "\U0001F525", "still", doodle=draw)
+    finally:
+        store._cheer = newer
+    check("a server from before doodles turns the field away: the cheer still goes, without it (and says so: no \"and a drawing\")",
+          went == "plain" and store.cheers[("sam", "dre")]["note"] == "still" and store.cheers[("sam", "dre")].get("doodle") is None)
+    # drawn: numbers and escaped words only
+    art = board.doodle_html(draw, "blue")
+    blue = board.accent_pair("blue")[0]
+    check("drawn: a path a stroke, my colour or ink, thin or thick; nothing but numbers in it",
+          art.count("<path") == 2 and f'stroke="{blue}" stroke-width="3"' in art and f'stroke="{board.DOODLE_INK}" stroke-width="6"' in art
+          and "M299 169 l0.1 0" in art and 'viewBox="0 0 300 170"' in art)
+    sign = board.doodle_html({"k": "sign", "t": "<b>hi</b>"})
+    check("a sign's words are escaped; a broken doodle draws nothing",
+          "&lt;b&gt;hi&lt;/b&gt;" in sign and "<b>" not in sign and board.doodle_html({"k": "draw", "s": [[16, 1, 1]]}) == "")
+    from due_crew.backend.shapes import DOODLE_INKS, DOODLE_PEN_MAX
+    inked = board.doodle_html({"k": "draw", "s": [[2 * (2 + i) + 1, 1, 1] for i in range(len(DOODLE_INKS))] + [[0, 1, 1]]}, "rose")
+    check("every accent on the pad (Sam: \"all of our colors\"): pen >> 1 names one of ours by place, in the board's own shades; 0 is still the sender's",
+          DOODLE_PEN_MAX == 15 and set(DOODLE_INKS) == set(board.ACCENTS) and len(DOODLE_INKS) == len(board.ACCENTS)
+          and all(f'stroke="{board.accent_pair(n)[0]}" stroke-width="6"' in inked for n in DOODLE_INKS)
+          and inked.endswith(f'<path d="M1 1 l0.1 0" stroke="{board.accent_pair("rose")[0]}" stroke-width="3"/></svg>'))
+    ents = [{"user_id": "dre", "name": "Dre", "accent": "purple", "look": ["cap"], "you": False}]
+    land = board.doodle_landing({"from": "dre", "name": "Dre", "doodle": draw}, ents, {"sev": True})
+    still = board.doodle_landing({"from": "dre", "name": "Dre", "doodle": draw}, ents, {"sev": False})
+    check("it lands held up by their Pip, arms up, in their colour and look; Pip off: no Pip; no doodle: nothing",
+          land and "m-idle" in land["pip"] and land["a"] == list(board.accent_pair("purple"))
+          and board.accent_pair("purple")[0] in land["html"] and still["pip"] is None
+          and board.doodle_landing({"from": "dre"}, ents, {"sev": True}) is None)
+    js = board.flurry_js([party], "🎉 Dre sent cheers", back=("dre", party), pips=[{"svg": "<svg></svg>", "a": ["#1", "#2"]}],
+                         doodle=dict(land, html=board.doodle_html({"k": "sign", "t": "</script><b>"})))
+    check("the landing: the doodle rides in as data (no '</' to end the script), buys time, and its Pip holds it up in the show's place",
+          "</script><b>" not in js and "&lt;/script&gt;" in js and "linger += 2500" in js and "if (held)" in js
+          and "var dd = null" in board.flurry_js([party], "x"))
+    # the landing's caption (Sam: "put the included text ... under like a caption ... with their name")
+    capt = board.doodle_landing({"from": "dre", "name": "Dre Smith", "note": "good luck", "doodle": draw, "ni": 0}, ents, {"sev": True})
+    js = board.flurry_js([party], "🎉 Dre sent cheers", notes=["good luck"], pips=[{"svg": "<svg></svg>", "a": ["#1", "#2"]}], doodle=capt)
+    dd = json.loads(re.search(r"var dd = (\{.*?\}), held", js).group(1).replace("<\\/", "</"))
+    check("held up, the note it came with goes under it with who it's from, and leaves the banner; in the banner (Pip off, Reduce motion) it stays put",
+          dd["note"] == "good luck" and dd["from"] == "Dre" and dd["ni"] == 0 and "paper(170, 96, true)" in js
+          and "noteEls[dd.ni].remove()" in js and "paper(150, 85, false)" in js and "'from ' + dd.from" in js)
+    # the fridge: mine, around the Decks screen, the last KEEP, on this computer
+    cheers = [{"from": "dre", "name": "Dre", "at": f"2026-10-{d:02d}T10:00:00Z", "note": f"day {d}", "doodle": draw} for d in range(1, 30)]
+    items = FR.add([], cheers + [{"from": "mo", "name": "Mo", "at": "x", "doodle": None}], {"dre": "purple"})
+    again = FR.add(items, cheers[-2:], {})
+    check("the fridge: the ones that carried a doodle, each once, with its note, the last 12, colour as it came",
+          FR.KEEP == 12 and len(items) == 12 and items[-1]["at"].startswith("2026-10-29") and items[0]["at"].startswith("2026-10-18")
+          and items[0]["a"] == "purple" and items[-1]["n"] == "day 29" and again == items)
+    k = FR.key(items[-1])
+    moved = FR.move(items, k, "l", -9000, 250)
+    check("take one down by its key; where I dragged it is kept beside the board (side, px from its edge, px down; clamped); "
+          "junk and an older spot (thousandths of the window) are dropped",
+          len(FR.take_down(items, k)) == FR.KEEP - 1 and all(FR.key(x) != k for x in FR.take_down(items, k))
+          and moved[-1]["p"] == ["l", -FR.REACH, 250] and "p" not in moved[0]
+          and FR.move(items, k, "up", 5, 5)[-1].get("p") is None
+          and FR.clean([dict(moved[-1], p=["r", 40, 120])])[0]["p"] == ["r", 40, 120]
+          and FR.clean([{"d": {"k": "pic"}}, 5, {"from": "x", "d": draw, "p": [5, 200]}]) == [{"from": "x", "name": "?", "at": "", "a": "", "n": "", "d": draw}])
+    people = {"dre": {"user_id": "dre", "name": "Dre", "look": ["cap"], "accent": "purple"}}
+    fr = board.fridge_html(moved[-3:], people, {"sev": True})
+    tape = board.accent_pair("purple")[1].lstrip("#")
+    check("pinned around the Decks screen as Polaroids (Sam's pick): newest first, the note on the frame, their Pip and name "
+          "(no \"from\", for room), taped up in their colour, a × to take it down, my place for the one I moved",
+          fr.count('class="fz"') == 3 and fr.index("29 Oct") < fr.index("27 Oct") and "&ldquo;day 29&rdquo;" in fr
+          and '<div class="fw"><span class="sv-slot"' in fr and ">from " not in fr and f"duecrew:fridgedown:{k}" in fr
+          and f'data-s="l" data-x="{-FR.REACH}" data-y="250"' in fr
+          and f"--fa:{board.accent_pair('purple')[0]}" in fr and board.fridge_html([], people, {}) == ""
+          and f"--ft:rgba({int(tape[0:2], 16)},{int(tape[2:4], 16)},{int(tape[4:6], 16)},.6)" in fr
+          and "background: var(--ft)" in board.FRIDGE_CSS and "color-mix" not in board.FRIDGE_CSS
+          and '<div class="fw"><b>Dre</b>' in board.fridge_html(moved[-1:], people, {"sev": False})
+          and "Fridge" not in board.closet_html({"tab": "Yours", "have": {}, "look": []}, {"accent": "green"}))
+    fjs = board.fridge_js()
+    check("its script places them (my spot, else the gutters beside the board, else a pile in the corner) and drags; a drop says where",
+          "b[el.dataset.s] + Number(el.dataset.x)" in fjs and "room.l || room.r" in fjs and "duecrew:fridgemove:" in fjs
+          and "setPointerCapture" in fjs and "resize" in fjs and "/ 1000" not in fjs)
+    check("a spot the window's too small for waits on the pile and keeps its place for when the window grows",
+          "x >= 4 && x + nw <= W - 4" in fjs and "if (x === null) {" in fjs and "!el.dataset.s && (room.l || room.r)" in fjs
+          and "el.dataset.s = s" in fjs and "below any I left in the way" in fjs)
+    import shutil
+    import subprocess
+    node = subprocess.run(["node", "--check", "-"], input=fjs, capture_output=True, text=True) if shutil.which("node") else None
+    check("the fridge's script parses", node is None or node.returncode == 0, node and node.stderr[:300])
+    # the clicks, as the board sends them
+    import due_crew as dc
+    from due_crew import closet_flow as cf
+    from aqt.deckbrowser import DeckBrowser
+    if "aqt.reviewer" not in sys.modules:
+        sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
+    wrap = _patched_due_crew()
+    swaps = []
+    saved = (dc._swap, dc._board_on_screen)
+    dc._swap = lambda c, focus=None: swaps.append(1)
+    dc._board_on_screen = lambda: True
+    try:
+        cf.keep_doodles(cheers[-3:], ents)
+        n0 = len(cf.fridge())
+        k0 = FR.key(cf.fridge()[0])
+        dc._on_js(False, as_board(f"duecrew:fridgemove:{k0}:l:-150:640"), DeckBrowser())
+        placed, redrew = cf.fridge()[0].get("p"), len(swaps)
+        dc._on_js(False, as_board("duecrew:fridgemove:nope:l:1:1"), DeckBrowser())
+        dc._on_js(False, as_board(f"duecrew:fridgemove:{k0}:x:1:1"), DeckBrowser())
+        dc._on_js(False, as_board(f"duecrew:fridgemove:{k0}:r:1"), DeckBrowser())
+        dc._on_js(False, as_board(f"duecrew:fridgemove:{k0}:r:-:5"), DeckBrowser())
+        dc._on_js(False, as_board(f"duecrew:fridgemove:{k0}:r:--5:5"), DeckBrowser())
+        dc._on_js(False, as_board(f"duecrew:fridgemove:{k0}:r:²:5"), DeckBrowser())
+        kept = cf.fridge()[0].get("p")
+        dc._on_js(False, as_board("duecrew:fridgedown:" + k0), DeckBrowser())
+        dc._on_js(False, as_board("duecrew:fridgedown:nope"), DeckBrowser())
+        check("on the fridge as they land; a drag keeps its place without a redraw; × takes it down and the board redraws; through the board's own handler",
+              n0 == 3 and placed == ["l", -150, 640] and kept == placed and redrew == 0 and len(cf.fridge()) == 2 and swaps
+              and len(wrap._wrap_data()["fridge"]) == 2 and all(FR.key(x) != k0 for x in cf.fridge()))
+    finally:
+        dc._swap, dc._board_on_screen = saved
+
+
+def test_fridge_account_and_undo_v391():
+    """3.9.1, before release: the fridge is this Anki profile's file, and
+    more than one account can sign in on a profile, so it keeps whose
+    drawings it holds, shows them to that account alone and empties at
+    sign-out. And × leaves "Taken down · Undo" in the drawing's place for a
+    few seconds; Undo puts it back where it was."""
+    import due_crew as dc
+    from due_crew import closet_flow as cf, fridge as FR
+    from aqt.deckbrowser import DeckBrowser
+    wrap = _patched_due_crew()
+    draw = {"k": "draw", "s": [[0, 10, 10, 50, 50]]}
+    cheers = [{"from": "dre", "name": "Dre", "at": f"2026-10-0{d}T10:00:00Z", "note": f"day {d}", "doodle": draw} for d in range(1, 4)]
+    ents = [{"user_id": "dre", "accent": "blue", "you": False}]
+    # an older fridge (before 3.9.1's owner): whoever's signed in
+    wrap._wrap_data()["fridge"] = FR.add([], cheers[:1], {})
+    legacy = (len(cf.fridge("sam")), len(cf.fridge("nia")))
+    cf.keep_doodles(cheers[1:2], ents, "sam")
+    adopted = (wrap._wrap_data().get("fridge_uid"), len(cf.fridge("sam")), cf.fridge("nia"))
+    cf.keep_doodles(cheers[2:], ents, "nia")
+    nias = (wrap._wrap_data().get("fridge_uid"), [x["n"] for x in cf.fridge("nia")], cf.fridge("sam"))
+    check("fridge to account: an older one is whoever's signed in, then theirs; another account sees none of it, "
+          "and its own first drawing starts a fridge of its own",
+          legacy == (1, 1) and adopted == ("sam", 2, []) and nias == ("nia", ["day 3"], []), (legacy, adopted, nias))
+    saved = (dc._reset_runtime, dc._rerender)
+    dc._reset_runtime, dc._rerender = (lambda **k: None), (lambda: None)
+    try:
+        dc._on_signed_out()
+    finally:
+        dc._reset_runtime, dc._rerender = saved
+    check("fridge to account: signing out empties it (the drawings were that account's)",
+          "fridge" not in wrap._wrap_data() and "fridge_uid" not in wrap._wrap_data() and cf.fridge("nia") == [] and cf.gone() is None)
+    src = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
+    check("fridge to account: the board draws the signed-in account's, and keeps a landing one for it",
+          "fridge=closet_flow.fridge(client().user_id)" in src and 'cf.keep_doodles(fresh, data["entries"], client().user_id)' in src)
+
+    # Undo
+    cf.keep_doodles(cheers, ents, "sam")
+    first, mid = cf.fridge("sam")[0], cf.fridge("sam")[1]
+    cf.move_fridge(FR.key(mid), "r", 40, 300)
+    k = FR.key(mid)
+    swaps = []
+    saved = dc._swap
+    dc._swap = lambda c, focus=None: swaps.append(1)
+    try:
+        dc._on_js(False, as_board("duecrew:fridgedown:" + k), DeckBrowser())
+        g = cf.gone()
+        html = board.fridge_html(cf.fridge("sam"), {}, {"sev": False}, g)
+        dc._on_js(False, as_board("duecrew:fridgeback:nope"), DeckBrowser())
+        wrong = [FR.key(x) for x in cf.fridge("sam")]
+        dc._on_js(False, as_board("duecrew:fridgeback:" + k), DeckBrowser())
+        back = cf.fridge("sam")
+        again = cf.put_back(k)
+    finally:
+        dc._swap = saved
+    pill = re.search(r'<div class="fz fgone"[^>]*>.*?</div>', html)
+    order = re.findall(r'data-k="([0-9a-f]+)"', html)
+    check("undo: × takes it down and leaves Taken down · Undo where it was (its spot, its sender's colour), for the seconds it has",
+          g and g["k"] == k and pill and f"duecrew:fridgeback:{k}" in pill.group(0) and 'data-s="r" data-x="40" data-y="300"' in pill.group(0)
+          and f"--fa:{board.accent_pair('blue')[0]}" in pill.group(0) and 'role="status"' in pill.group(0)
+          and re.search(r"--fg:-\d+\.\ds", pill.group(0)) and order == [FR.key(x) for x in reversed(back)]
+          and len(swaps) >= 1, (g, html[-600:]))
+    check("undo: Undo puts it back in its place with its spot, once; a key that isn't the one just taken down does nothing",
+          [x["n"] for x in back] == ["day 1", "day 2", "day 3"] and back[1].get("p") == ["r", 40, 300]
+          and k not in wrong and len(wrong) == 2 and again is False and back[0] == first, ([x["n"] for x in back], back[1].get("p")))
+    cf.take_down(FR.key(first))
+    cf._GONE["t"] -= cf.UNDO_SECS + 1
+    check("undo: after its seconds the board leaves it out (its fade already hid it), and the cached fridge comes back",
+          cf.gone() is None and 'class="fz fgone"' not in board.fridge_html(cf.fridge("sam"), {}, {"sev": False}, cf.gone())
+          and board.FRIDGE_UNDO == cf.UNDO_SECS
+          and "animation: dcfgone %ds linear forwards" % cf.UNDO_SECS in board.FRIDGE_CSS
+          and "el.classList.contains('fgone')" in board.FRIDGE_JS and "el.isConnected" in board.FRIDGE_JS)
+
+
+def test_native_emoji_picker_v391():
+    """3.9.1 (Sam: "the emoji drawer is missing tons that are natively
+    supported. want the other option to just open the native drawer?"): on a
+    Mac or Windows the Cheer window's "other" opens the computer's own
+    picker into a focused box; where there's none (Linux), or asking fails,
+    the window's own drawer opens instead."""
+    import ctypes
+    import types as _types
+    from due_crew import native_emoji as NE
+    check("the computer's own picker: a Mac's and Windows', never Linux's; asking where there's none is a no",
+          NE.available("darwin") and NE.available("win32") and not NE.available("linux")
+          and NE.open_picker("linux") is False and NE.open_picker("darwin") in (True, False))
+    presses = []
+    had = getattr(ctypes, "windll", None)
+    ctypes.windll = _types.SimpleNamespace(user32=_types.SimpleNamespace(keybd_event=lambda *a: presses.append(a)))
+    try:
+        ok = NE.open_picker("win32")
+    finally:
+        if had is None:
+            del ctypes.windll
+        else:
+            ctypes.windll = had
+    check("Windows: Win + . pressed and let go, in that order",
+          ok is True and presses == [(0x5B, 0, 0, 0), (0xBE, 0, 0, 0), (0xBE, 0, 2, 0), (0x5B, 0, 2, 0)], presses)
+    js = board.cheer_overlay_js({"uid": "dre", "name": "Dre", "emojis": ["🎉"], "native": True})
+    plain = board.cheer_overlay_js({"uid": "dre", "name": "Dre", "emojis": ["🎉"]})
+    check("the window: with a picker, other gives a focused box and asks for it; without, the drawer; the box's pick is picked; Esc puts other back",
+          '"native": true' in js and '"native": false' in plain and "if (V.native) { native(); }" in js
+          and "pycmd('duecrew:emojipicker|' + window.dcBK)" in js and "window.dcCheerNoNative = function () { unpick(); openDrawer(); };" in js
+          and "if (t) { unpick(); choose(t); }" in js and "if (pickIn.style.display !== 'none') { unpick(); other.focus(); }" in js)
+    import due_crew as dc
+    from aqt import mw
+    from aqt.deckbrowser import DeckBrowser
+    evals = []
+    saved = mw.web.eval
+    mw.web.eval = lambda code: evals.append(code)
+    try:
+        dc._on_js(False, as_board("duecrew:emojipicker"), DeckBrowser())
+    finally:
+        mw.web.eval = saved
+    check("emojipicker from the Decks screen: here (no picker to open) the window is told to open its drawer",
+          evals == ["window.dcCheerNoNative && window.dcCheerNoNative();"], evals)
+
+
+def test_cheer_pill_and_window_v391():
+    """3.9.1 (Sam: "Cheers, clearer: build 1", "get rid of the current cheers
+    click to the right of the stats", "make the cheers and doodles modals in
+    the design language of our add on"): a crewmate's row has a "🎉 Cheer"
+    pill after the name (only while the pointer or a key is on the name:
+    "not persistent all the time"), the 🎉 column is gone, and the
+    Cheer window is drawn on the Decks screen in the board's look, its Send
+    checked again in Python."""
+    labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    tomorrow = (TODAY + datetime.timedelta(days=1)).isoformat()
+    day = {labels[0]: {"reviews": 40, "studyTimeMs": 600000, "retention": 90.0, "streak": 3}}
+    base = {"days": day, "last_updated": "", "decks": [], "paused": False, "room": None}
+    ents = [dict(base, user_id="me", name="Sammy", you=True), dict(base, user_id="dre", name="Dre <b>", you=False)]
+    data = {"entries": ents, "labels": labels, "tomorrow": tomorrow, "pending": [], "decks": {}, "my_friends": []}
+    page = board.render(data, {"period": "today"}, 0)
+    rows = re.findall(r"<tr class=\"[^\"]*\">.*?</tr>", page, re.S)
+    mine = next(r for r in rows if "Sammy" in r)
+    dres = next(r for r in rows if "Dre" in r)
+    nm = re.search(r'<td class="nm">(.*?)</td>', dres, re.S).group(1)
+    head = re.search(r"<table[^>]*><tr>(.*?)</tr>", page, re.S).group(1)
+    check("the 🎉 column is gone: no cheer cell, no empty head cell for it; a row has as many cells as the head",
+          'class="chc"' not in page and "dc-cheer" not in page
+          and dres.count("<td") == head.count("<th") + head.count('colspan="2"'), (dres.count("<td"), head.count("<th")))
+    check("a crewmate's cheer is a pill after the name (escaped), opening the Cheer window; never on my own row",
+          "duecrew:cheerpick:dre" in nm and "&#127881; Cheer" in nm and 'aria-label="Cheer Dre &lt;b&gt;"' in nm
+          and nm.index("dc-pl") < nm.index("dc-cpill") and "dc-cpill" not in mine)
+    check("the pill shows only while the pointer (or a key) is on the name, never on every row; a long name gives way so it's never cut off",
+          "td.nm:hover a.dc-cpill" in page and "td.nm:focus-within a.dc-cpill" in page and "max-width: 56%" in page
+          and "tr:hover a.dc-cpill" not in page and "dc-pills" not in page and not hasattr(board, "pills_always")
+          and "dc-pills" not in board.render(data, {"period": "today", "cheer_pill_from": labels[6]}, 0))
+    app_js = open(os.path.join(REPO, "site", "public", "app.js")).read()
+    app_css = open(os.path.join(REPO, "site", "public", "app.css")).read()
+    check("the site's twin: the pill after the name, only while the pointer's on the name; no 🎉 column, never on every row",
+          '"linkish cpill"' in app_js and 'class: "chc"' not in app_js and "dc-pill-from" not in app_js and "cpills" not in app_js
+          and "HEADS.length + 1" in app_js and ".brdt td.nm:hover .cpill, .brdt td.nm:focus-within .cpill" in app_css
+          and "tr:hover .cpill" not in app_css and "hover: none" not in app_css and ".chc" not in app_css)
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if node:
+        # the bug hunt: the pill sat inside the line's if/else chain, so a crewmate's " · yesterday" and
+        # " · 3 days this week" never showed (only mine did, and mine has no pill)
+        body = app_js[app_js.index("  function nameCell(r, period) {"):app_js.index("  /** board._corner", app_js.index("  function nameCell(r, period) {"))]
+        prog = ("function h(tag, attrs, ...kids) { const n = { tag, attrs, kids: [] }; n.append = (...k) => n.kids.push(...k);"
+                " n.append(...kids.flat().filter((x) => x != null)); return n; }\n"
+                "const text = (n) => typeof n === 'string' ? n : (n.kids || []).map(text).join('');\n"
+                "const nameCell = new Function('h', 'who', 'ago', 'planTarget', 'cheerMenu', " + json.dumps(body + "\nreturn nameCell;")
+                + ")(h, (p) => p.name, () => ['2h'], () => null, () => {});\n"
+                "const base = { p: { name: 'Priya', uid: 'u1' }, you: false };\n"
+                "console.log(JSON.stringify([nameCell({ ...base, stale: true }, 'today'), nameCell({ ...base, showup: true, daysWk: 3 }, 'today'),"
+                " nameCell({ ...base, you: true, stale: true }, 'today')].map(text)));")
+        run = subprocess.run([node, "-e", prog], capture_output=True, text=True, timeout=60)
+        check("the site's row (the bug hunt): a crewmate's line still shows, then the pill; mine has the line and no pill",
+              run.stdout.strip() == json.dumps(["Priya · yesterday🎉 Cheer", "Priya · 3 days this week🎉 Cheer", "Priya · yesterday"],
+                                               separators=(",", ":"), ensure_ascii=False), run.stdout + run.stderr[-1500:])
+    # the Cheer window, in the board's look
+    js = board.cheer_overlay_js({"uid": "dre", "name": "Dre </script><b>", "emojis": ["🎉", "💪"], "pip": None,
+                                 "pen": "red;background:url(x)"})
+    view = json.loads(re.search(r"var V = (\{.*?\});\n", js).group(1).replace("<\\/", "</"))
+    check("the window: its data as JSON (no '</' to end the script), the name as text, a pen that isn't a colour turned away",
+          "</script>" not in js.split("var V = ")[1].split(";\n")[0] and view["name"] == "Dre </script><b>"
+          and view["pen"] == board.accent_pair(None)[0] and view["emojis"] == ["🎉", "💪"] and view["pip"] == ""
+          and "textContent" in js and "innerHTML = V.pip" in js and "duecrew:cheersend:" in js and "encodeURIComponent" in js)
+    check("the window: the board's tokens, its own font, Draw and Sign, the pad's ceilings, Esc and the backdrop close it",
+          "getPropertyValue('--dc-' + name)" in js and "dcStyle.fontFamily" in js and "'Draw'" in js and "'Sign'" in js
+          and "MAXP = 2000" in js and "SIGN = 24" in js and "'Escape'" in js and "downOnBack" in js)
+    from due_crew import emoji_drawer as ED
+    from due_crew.backend.shapes import DOODLE_INKS, clean_emoji
+    every = [e for _, items in ED.GROUPS for e, _ in items]
+    check("other opens a drawer of emoji, by group, each found by its words; every one can be sent (clean_emoji keeps it whole)",
+          view["drawer"] == ED.view() and len(every) == len(set(every)) > 150
+          and all(clean_emoji(e) == e for e in every) and all(w.strip() for _, items in ED.GROUPS for _, w in items)
+          and "el('button', 'ot', 'other')" in js and "aria-expanded" in js and "function openDrawer()" in js
+          and "Find one: heart, coffee, owl" in js and "oneEmoji(find.value.trim())" in js,
+          [e for e in every if clean_emoji(e) != e])
+    check("Draw and Sign start shut (a cheer is the emoji and the note); a second press shuts one, and only an open one is sent",
+          "show('');" in js and "show('draw');" not in js and "show(mode === x[0] ? '' : x[0])" in js
+          and "if (mode !== 'draw' || !strokes.length) { return null; }" in js and "mode === 'draw' && strokes.length > 0" in js)
+    check("Esc shuts the drawer first, then the window",
+          "if (drawer.style.display !== 'none') { shut(); other.focus(); } else { close(); }" in js)
+    mine = board.cheer_overlay_js({"uid": "dre", "name": "Dre", "emojis": ["🎉"], "pen": board.accent_pair("teal")[0]})
+    mv = json.loads(re.search(r"var V = (\{.*?\});\n", mine).group(1).replace("<\\/", "</"))
+    check("the pad has every accent, mine first, then black; a stroke's colour goes as its place in DOODLE_INKS",
+          [x[0] for x in mv["inks"]] == [board.accent_pair(n)[0] for n in DOODLE_INKS] and mv["mine"] == DOODLE_INKS.index("teal")
+          and "'My colour'" in mine and "'Black'" in mine and "pen = (pen & 1) | (x[0] << 1)" in mine
+          and "cx.strokeStyle = inkOf(s.pen)" in mine and f"INK = '{board.DOODLE_INK}'" in mine and "__INK__" not in mine)
+    import shutil
+    import subprocess
+    node = subprocess.run(["node", "--check", "-"], input=js, capture_output=True, text=True) if shutil.which("node") else None
+    check("the window's script parses", node is None or node.returncode == 0, node and node.stderr[:300])
+    # Send, through the board's own handler, checked again
+    import due_crew as dc
+    from due_crew import social
+    from aqt.deckbrowser import DeckBrowser
+    store = world({"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
+    sam = new_client(store, "sam", "Sammy")
+    saved = (social.client, social._bg, dc._state.get("entries"), social.mw.web.eval)
+    evals = []
+    social.client = lambda: sam
+    social._bg = lambda job, done=None: done(job()) if done else job()
+    social.mw.web.eval = evals.append
+    dc._state["entries"] = [dict(ents[0], user_id="sam"), dict(ents[1], name="Dre", user_id="dre")]
+    from urllib.parse import quote
+    send = lambda p: dc._on_js(False, as_board("duecrew:cheersend:" + quote(json.dumps(p))), DeckBrowser())
+    try:
+        dc._on_js(False, as_board("duecrew:cheerpick:dre"), DeckBrowser())
+        opened = evals[-1] if evals else ""
+        send({"to": "dre", "emoji": "🔥", "note": "go  go", "doodle": {"k": "sign", "t": "you've got this"}})
+        got = dict(store.cheers.get(("dre", "sam")) or {})
+        store.cheers.clear()
+        for bad in ({"to": "sam", "emoji": "🔥"}, {"to": "nia", "emoji": "🔥"}, {"to": "dre", "emoji": "lol"}, ["dre"]):
+            send(bad)
+        dc._on_js(False, as_board("duecrew:cheersend:%7Bnot json"), DeckBrowser())
+        send({"to": "dre", "emoji": "🎉", "doodle": {"k": "draw", "s": [[16, 1, 1]]}, "extra": "<b>"})
+        check("cheerpick opens the window on the Decks screen, for that crewmate",
+              "dc-cheer" in opened and '"uid": "dre"' in opened)
+        check("Send: one cheer with its note and sign; me, a stranger, a word for an emoji or a broken payload send nothing; a broken doodle goes without it",
+              got.get("emoji") == "🔥" and got.get("note") == "go go" and got.get("doodle") == {"k": "sign", "t": "you've got this"}
+              and list(store.cheers) == [("dre", "sam")] and store.cheers[("dre", "sam")]["doodle"] is None)
+        said, tip = [], social.tooltip
+        social.tooltip = said.append
+        newer = store._cheer
+
+        def older(me, to, body):  # a server from before 3.9.1
+            if "doodle" in body:
+                raise fakes.Bad(400, "bad_cheer")
+            return newer(me, to, body)
+        try:
+            send({"to": "dre", "emoji": "🎉", "doodle": {"k": "sign", "t": "go"}})
+            store._cheer = older
+            send({"to": "dre", "emoji": "🎉", "doodle": {"k": "sign", "t": "go"}})
+        finally:
+            social.tooltip, store._cheer = tip, newer
+        check("the toast says a sign went only when it did (the bug hunt: an older server sends the cheer without it)",
+              said == ["Sent 🎉 and a sign to Dre.", "Sent 🎉 to Dre."], said)
+    finally:
+        social.client, social._bg, dc._state["entries"], social.mw.web.eval = saved
+
+
+def test_two_buttons_v391():
+    """3.9.1, two buttons (Sam's picks from the mock): Again and Good alone,
+    every deck, 2, 3 and 4 count as Good, FSRS off allowed with a note; a
+    switch in Settings › Board › Reviewing, and Try two buttons on Insights'
+    Hard habit line, with its Undo there. Two of Anki's hooks; nothing sent."""
+    from due_crew import two_buttons as TB, account, rooms, settings_model as SM, team_flow as TF
+    from due_crew.app import _state
+    four = ((1, "Again"), (2, "Hard"), (3, "Good"), (4, "Easy"))
+    check("the bar: Again and Good with it on, in Anki's own words; off, or not Anki's four: as it came",
+          TB.buttons(four, True) == ((1, "Again"), (3, "Good")) and TB.buttons(four, False) == four
+          and TB.buttons(((1, "Again"), (2, "Good")), True) == ((1, "Again"), (2, "Good"))
+          and TB.buttons((), True) == ())
+    check("the keys: 2, 3 and 4 are Good; 1 stays Again; off, every ease as it was",
+          [TB.ease((True, e), True) for e in (1, 2, 3, 4)] == [(True, 1), (True, 3), (True, 3), (True, 3)]
+          and [TB.ease((True, e), False) for e in (1, 2, 3, 4)] == [(True, 1), (True, 2), (True, 3), (True, 4)])
+    # the hooks, chained as Anki chains filters (the room's break first, as registered)
+    conf = {"two_buttons": True}
+    import due_crew.app as appmod
+    saved_cfg = appmod.cfg
+    appmod.cfg = lambda: conf
+    try:
+        def answer(e):
+            out = (True, e)
+            for f in (rooms.will_answer, TB.will_answer):
+                out = f(out, None, None)
+            return out
+        _state["room_break"] = False
+        on = [answer(e) for e in (1, 2, 3, 4)]
+        _state["room_break"] = True
+        held = answer(4)
+        _state["room_break"] = False
+        conf["two_buttons"] = False
+        off = [answer(e) for e in (1, 2, 3, 4)]
+        bar_off = TB.will_init_buttons(four, None, None)
+        conf["two_buttons"] = True
+        bar_on = TB.will_init_buttons(four, None, None)
+    finally:
+        appmod.cfg = saved_cfg
+        _state["room_break"] = False
+    check("the hooks, called as Anki calls them: on, 2/3/4 land as Good and 1 as Again; off, nothing changes",
+          on == [(True, 1), (True, 3), (True, 3), (True, 3)] and off == [(True, 1), (True, 2), (True, 3), (True, 4)]
+          and bar_on == ((1, "Again"), (3, "Good")) and bar_off == four, (on, off))
+    check("a room's break still holds the answer, whatever two buttons does with it", held == (False, 3), held)
+    check("it's registered on both hooks", "two_buttons.will_answer" in open(os.path.join(REPO, "due_crew", "__init__.py")).read()
+          and "reviewer_will_init_answer_buttons.append(two_buttons.will_init_buttons)" in open(os.path.join(REPO, "due_crew", "__init__.py")).read())
+    # the setting: a person's, so an account key; a switch on Settings; off by default; Reset board leaves it
+    check("the setting: an account key, a bool, off unless set; Settings' switch sets it; Reset board leaves it",
+          "two_buttons" in account.ACCOUNT_KEYS and account.clean({"two_buttons": True}) == {"two_buttons": True}
+          and "two_buttons" not in account.clean({"two_buttons": "yes"}) and account.pick({"two_buttons": True})["two_buttons"] is True
+          and SM.change(["set", "two_buttons", "1"], {}) == {"two_buttons": True}
+          and SM.change(["set", "two_buttons", "0"], {}) == {"two_buttons": False}
+          and "two_buttons" not in SM.BOARD_DEFAULTS and not TB.on({}))
+    view = {"tab": "board", "signed_in": True}
+    page = board.settings_html(dict(view, fsrs=True), {"two_buttons": True})
+    page_off = board.settings_html(dict(view, fsrs=False), {})
+    check("Settings › Board › Reviewing: Two buttons, on, with what it does and that phones keep four; FSRS off: its note",
+          '<div class="st-h">Reviewing</div>' in page and "Two buttons" in page and "duecrew:set:two_buttons:0" in page
+          and "2, 3 and 4 count as Good. Phones keep four." in page and "Works best with FSRS on." not in page
+          and "duecrew:set:two_buttons:1" in page_off and "Works best with FSRS on." in page_off
+          and "Works best with FSRS on." not in board.settings_html(view, {}))
+    ix = board.settings_index(view, {})
+    found = [x for x in ix if x["f"] == "set:two_buttons:"]
+    check("Find a setting: hard, easy or buttons finds it", found and all(w in found[0]["k"] for w in ("hard", "easy", "buttons")), found)
+    # Insights' Hard habit line
+    hh = board._insights_html(10, {"hard": {"pct": 22, "n": 640}, "two": ""})
+    tried = board._insights_html(10, {"hard": {"pct": 22, "n": 640}, "two": "tried"})
+    check("the Hard habit line offers Try two buttons beside Not now; tried: it's on, with Undo; on: there's no Hard to press",
+          "duecrew:instwo:10" in hh and "Try two buttons" in hh and "duecrew:inshardno:10" in hh
+          and "Two buttons are on" in tried and "duecrew:instwono:10" in tried and "You press Hard" not in tried
+          and "You press Hard" not in board._insights_html(10, {"hard": {"pct": 22, "n": 640}, "two": "on"}))
+    # the clicks, as the board sends them
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    if "aqt.reviewer" not in sys.modules:
+        sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
+    mine = {}
+    saved = (TF.cfg, TF.save_cfg, appmod.swap)
+    swaps = []
+    TF.cfg = lambda: mine
+    TF.save_cfg = lambda c, **k: mine.update(c)
+    appmod.swap = lambda c, **k: swaps.append(1)
+    try:
+        dc._on_js(False, as_board("duecrew:instwo:10"), DeckBrowser())
+        tried_on = (mine.get("two_buttons"), _state.get("two_tried"))
+        dc._on_js(False, as_board("duecrew:instwono:10"), DeckBrowser())
+        undone = (mine.get("two_buttons"), _state.get("two_tried"))
+    finally:
+        TF.cfg, TF.save_cfg, appmod.swap = saved
+        _state["two_tried"] = False
+    check("Try two buttons turns it on (saved as Settings saves it) and says so; Undo turns it off, back to the line",
+          tried_on == (True, True) and undone == (False, False) and len(swaps) == 2, (tried_on, undone))
+
+
+def test_efficiency_review_screen_v391():
+    """3.9.1, the efficiency run (Sam: "I don't want our add on to impact anki
+    performance"): the review screen's widgets go to a page once, and again
+    only when they change or the page is new; taking one down is a few
+    lines; the knows chip is taken down only when one's up; an answer draws
+    only the Pips its chip could name; Pip's drawing and the config are kept."""
+    from due_crew import rooms as R, room_model as rm, cards as K, sev, app as A
+    from due_crew.app import _state
+    sent = []
+
+    class Web:
+        def __init__(self, n):
+            self.n = n
+
+        def eval(self, js):
+            sent.append((self.n, js))
+
+        def evalWithCallback(self, js, cb):
+            sent.append((self.n, js))
+            cb(True)
+    top, main, bottom = Web("top"), Web("main"), Web("bottom")
+    conf, room = {}, {"v": None}
+    now = datetime.datetime.now(datetime.timezone.utc)
+    saved = (R._webs, R.client, R.cfg, R.my_room, R._where, dict(_state))
+    try:
+        R._webs = lambda: (top, main, bottom)
+        R.client = lambda: types.SimpleNamespace(signed_in=True, session={})
+        R.cfg = lambda: dict(conf)
+        R.my_room = lambda: room["v"]
+        R._where = lambda: "chip"
+        _state["entries"] = [{"user_id": "me", "name": "Sam", "you": True}]
+        R._DRAWN.clear()
+        R.refresh_widgets()
+        first = dict(sent)
+        sent.clear()
+        R.refresh_widgets()
+        R.on_question(None)
+        check("efficiency: each page's widgets go as one piece; the next card, the same widgets send nothing",
+              sorted(first) == ["bottom", "main", "top"] and sent == [], [n for n, _ in sent])
+        check("efficiency: the bottom bar alone gets what keeps Anki's buttons in its middle; taking a widget down is a few lines",
+              rm.BAR_BALANCE in first["bottom"] and rm.BAR_BALANCE not in first["top"] + first["main"]
+              and len(first["main"]) < 1000 and "var D =" not in first["main"] and "var D =" in first["top"])
+        A.on_set_content(None, None)
+        R.refresh_widgets()
+        check("efficiency: a new page anywhere (webview_will_set_content), and they go again",
+              sorted(n for n, _ in sent) == ["bottom", "main", "top"])
+        sent.clear()
+        conf["room_chip_side"] = "left"
+        R.refresh_widgets()
+        check("efficiency: a change goes only to the page it changes", [n for n, _ in sent] == ["top"])
+        sent.clear()
+        R._eval(main, "1;")
+        sent.clear()
+        R.refresh_widgets()
+        check("efficiency: anything else drawn on a page, and that page gets them again", [n for n, _ in sent] == ["main"])
+        sent.clear()
+        R.on_theme()
+        check("efficiency: night mode on or off, all drawn again (they pick their colours as they're drawn)", len(sent) == 3)
+        room["v"] = rm.make_room("me", now - datetime.timedelta(minutes=3))
+        _state["entries"][0]["room"] = room["v"]
+        sent.clear()
+        R.refresh_widgets()
+        quiet = dict(sent)
+        conf.update(room_sound="rain", room_sound_vol=40)
+        sent.clear()
+        R.refresh_widgets()
+        loud = dict(sent)
+        check("efficiency: in a room, the sounds' code goes only once a sound's picked (it stops one either way)",
+              "window.dcSounds = {" not in quiet["top"] and "window.dcRoomSound" in quiet["top"]
+              and "window.dcSounds = {" in loud["top"] and list(loud) == ["top"])
+        sent.clear()
+        R.on_question(None)
+        check("efficiency: and in a room, the next card sends nothing either", sent == [], [n for n, _ in sent])
+    finally:
+        R._webs, R.client, R.cfg, R.my_room, R._where = saved[:5]
+        _state.clear()
+        _state.update(saved[5])
+        R._DRAWN.clear()
+    runtime_ids = re.search(r"var ids = (\[[^\]]*\])", rm._RUNTIME).group(1)
+    check("efficiency: the remover takes down the runtime's own widgets and stops their clocks, as its drop() does",
+          runtime_ids in rm.REMOVE_JS and "clearInterval(window['dcRoomTick_' + k])" in rm.REMOVE_JS
+          and "dcRoomTick_' + k]) { clearInterval(window['dcRoomTick_' + k])" in rm._RUNTIME
+          and rm.widget_js("gutter", None).endswith('})("gutter");'))
+
+    # the knows chip
+    saved = (K._bottom, K._review_web, K.client)
+    view = {"kind": "knows", "text": "Dre knows this", "accent": ["#0a0", "#7c7"], "pip": {"svg": "<svg/>", "a": ["#00f", "#99f"]},
+            "sevcss": sev.CSS, "peek": {"head": "I know this one", "act": "Ask Dre", "pips": [{"svg": "<svg/>", "a": ["#00f", "#99f"]}]}}
+    try:
+        K._bottom, K._review_web = (lambda: bottom), (lambda: main)
+        K._UP.update(bar=False, page=False)
+        K._SHEET.clear()
+        sent.clear()
+        K.on_question(None)
+        K._show(None)
+        check("efficiency: a card with no chip sends nothing to the review screen, question or answer", sent == [])
+        K._show(dict(view))
+        once = list(sent)
+        sent.clear()
+        K.on_question(None)
+        down = list(sent)
+        sent.clear()
+        K._show(dict(view))
+        again = list(sent)
+        sent.clear()
+        A.on_set_content(None, None)
+        K._show(dict(view))
+        fresh = list(sent)
+        sheet = json.dumps(sev.CSS)[1:200]
+        check("efficiency: a chip that's up is taken down with a few lines (it still ducks away)",
+              len(down) == 1 and down[0] == ("main", K.FLOAT_OFF) and "dcKnowsOff(true)" in K.FLOAT_OFF)
+        check("efficiency: Pip's motion sheet goes to a page once, and again on a new page",
+              sheet in once[0][1] and sheet not in again[0][1] and sheet in fresh[0][1], [len(x[0][1]) for x in (once, again, fresh)])
+    finally:
+        K._bottom, K._review_web, K.client = saved
+        K._UP.update(bar=False, page=False)
+    saved = dict(_state)
+    try:
+        _state["entries"] = [{"user_id": u, "name": u.title(), "accent": "blue"} for u in ("dre", "mo", "jo", "al")]
+        names = K.names_by_uid()
+        who = K.chip_people({"knows": ["dre", "mo", "jo", "al"], "tips": [{"from": "eve", "text": "x"}]}, [], names, [("mo", 0, "q")])
+        check("efficiency: an answer draws only who its chip could name: who asked, who tipped, the first three who know it",
+              who == {"dre", "mo", "jo", "eve"} and K.chip_people(None, [], names) == set()
+              and set(K.pips_by_uid({}, only={"dre", "zed"})) == {"dre"} and K.pips_by_uid({}, only=set()) == {}
+              and set(K.pips_by_uid({})) == {"dre", "mo", "jo", "al"})
+    finally:
+        _state.clear()
+        _state.update(saved)
+    looks = [None, [], ["headphones"], ("headphones", "scarf"), {"cap": 1}, "cap", [{"x": 1}]]
+    check("efficiency: Pip's drawing is kept, the same as drawn afresh, a look from anywhere included",
+          all(sev.svg(p, look=lk, label="L") == sev._svg(p, None, None, False, "L", None, None, lk, None)
+              for p in ("idle", "peek", "nap") for lk in looks)
+          and sev.svg("idle", look=["headphones"]) is sev.svg("idle", look=("headphones",)))
+    am = A.mw.addonManager
+    real = (am.getConfig, am.writeConfig)
+    disk, reads = {"c": {"accent": "blue"}}, []
+    try:
+        am.getConfig = lambda n: (reads.append(1), dict(disk["c"]))[1]
+        am.writeConfig = lambda n, c: disk.update(c=dict(c))
+        A._CFG["text"] = None
+        c1 = A.cfg()
+        c1["accent"] = "rose"
+        c2 = A.cfg()
+        A.save_cfg(dict(c2, theme="dark"))
+        c3 = A.cfg()
+        check("efficiency: the config is read once, each caller its own copy, and read again after a save",
+              len(reads) == 2 and c2 == {"accent": "blue"} and c3 == {"accent": "blue", "theme": "dark"})
+    finally:
+        am.getConfig, am.writeConfig = real
+        A._CFG["text"] = None
+
+
+def test_efficiency_plans_v391():
+    """3.9.1, the efficiency run, plans and the deck tree: buried_today finds
+    the notes started before today once a session_view, not once a date; a
+    refresh_progress asked again with nothing it reads changed gives the
+    last answer without reading the deck; Anki's deck tree is read once
+    while it can't have changed, and Due, a plan's due and the bingo share it.
+    Every answer the same as a fresh read."""
+    import time as _t
+    from due_crew import plans as P, plan_flow as F, due_flow as DF, app as A
+    from due_crew.app import _state
+
+    def old_buried(self, cids, first_seen):  # 3.9.0's, a pass over the deck each time
+        before = {self.nid_of[c] for c, (_q, t) in self.cards.items() if t != 0 and first_seen.get(c) != 0}
+        started, nid_of = self.started(), self.nid_of
+        return sum(1 for c in cids if self.cards[c][1] == 0 and self.cards[c][0] in (-2, -3)
+                   and nid_of.get(c) in started and nid_of.get(c) not in before)
+
+    class Passes(dict):
+        n = 0
+
+        def items(self):
+            Passes.n += 1
+            return dict.items(self)
+    col = _plan_col()
+    conn = col.db.conn
+    conn.execute("UPDATE cards SET queue = 2, type = 2 WHERE id = 5")
+    conn.execute("UPDATE cards SET queue = -3, type = 0 WHERE id = 6")
+    for o in (2, 3, 4):
+        fakes.add_card(conn, 60 + o, did=10, queue=-3, nid=50, ord_=o)
+    fakes.add_card(conn, 71, did=10, ctype=2, queue=2, nid=70, ord_=0)  # a second cloze, c1 seen
+    fakes.add_card(conn, 72, did=10, queue=-2, nid=70, ord_=1)
+    refs = [["guid000050", o] for o in range(5)] + [["guid000070", 0], ["guid000070", 1]]
+    plan = {"id": "p", "sched": {"days": [1] * 7, "minutes": 60}, "doc": {"deck": "Step 1", "units": [
+        {"id": f"u{i}", "name": f"Date {i}", "opens": _day(i - 4), "cards": refs[i:i + 3]} for i in range(5)]}}
+    same, passes = [], []
+    for seen in ({}, {5: 0}, {5: 1}, {5: 0, 71: 0}, {71: 2}):
+        idx = P.DeckIndex(col, 10)
+        idx.cards = Passes(idx.cards)
+        idx.started()
+        Passes.n = 0
+        v = F.session_view(plan, {"deck_id": 10}, idx, seen, _day(0))
+        passes.append(Passes.n)
+        keep = P.DeckIndex.buried_today
+        P.DeckIndex.buried_today = old_buried
+        try:
+            ref = F.session_view(plan, {"deck_id": 10}, P.DeckIndex(col, 10), seen, _day(0))
+        finally:
+            P.DeckIndex.buried_today = keep
+        same.append(v == ref)
+    check("buried today: a session_view's answer as before, five dates and the notes started before today found once",
+          all(same) and passes == [1] * 5, (same, passes))
+    idx = P.DeckIndex(col, 10)
+    check("buried today: asked with another first_seen, it's found again",
+          idx.buried_today({62, 63}, {5: 0}) == 2 and idx.buried_today({62, 63}, {5: 1}) == 0
+          and idx.buried_today({62, 63}, {}) == 0 and idx.buried_today({72}, {71: 0}) == 1)
+
+    # refresh_progress: what it reads, in one key
+    store, pid, code, maya = _v381_world()
+    col = _plan_col()
+    col.mod = 1  # Anki's col.mod: every answer and op moves it (the fakes don't, so the test does)
+    fakes.add_card(col.db.conn, 30, did=20, ctype=1, queue=1, due=0)  # a learning card, elsewhere: when it's back is set below
+    builds, trees = [], []
+    real_init, real_tree = P.DeckIndex.__init__, col.sched.deck_due_tree
+
+    def counted(self, c, did):
+        builds.append(did)
+        real_init(self, c, did)
+    clock = [float(col.sched.day_cutoff) - 6 * 3600]
+    ahead = 1200  # Anki's learn-ahead (collapseTime) when the collection doesn't say
+    saved = (DF.time, list(_state.get("labels") or []), _state.get("due_reviews"), _state.get("back_timer"))
+    P.DeckIndex.__init__ = counted
+    col.sched.deck_due_tree = lambda: trees.append(1) or real_tree()
+    DF.time = types.SimpleNamespace(time=lambda: clock[0], localtime=_t.localtime)
+    snap = lambda: {k: json.dumps(_state.get(k), sort_keys=True) for k in F._WRITES}  # noqa: E731
+
+    def fresh():
+        """The same refresh read again with nothing kept: what it must equal."""
+        got, key = snap(), F._last["key"]
+        F._last.update(key=None, got=None)
+        DF._TREE.update(key=None)
+        n, t = len(builds), len(trees)
+        F.refresh_progress()
+        del builds[n:], trees[t:]
+        return got == snap() and F._last["key"] == key
+    try:
+        F._last.update(key=None, got=None)
+        DF._TREE.update(key=None)
+        with _PlanGlue({"A": maya}, {"A": col}) as g:
+            got, _ = maya.follow_plan(code)
+            F.on_followed(got, 10, None, "open")
+            col.mod += 1  # what the open did
+            col.db.conn.execute("UPDATE cards SET due = ? WHERE id = 30", (int(clock[0]) + ahead + 60,))
+            col.sched.due = {10: (4, 0)}
+            del builds[:], trees[:]
+            first = F.refresh_progress()
+            sess = dict(_state["plan_session"][pid])
+            F.refresh_progress()
+            n = len(builds)
+            check("memo: asked again with nothing changed, the last answer: the deck read once, the deck tree once",
+                  n == 1 and len(trees) == 1 and F.refresh_progress() == first and sess["due"] == 4 and fresh(),
+                  (builds, len(trees), sess.get("due")))
+            col.sched.unsuspend_cards([4])  # Extras, a date that opens in three days
+            col.mod += 1
+            F.refresh_progress()
+            check("memo: an unsuspend (col.mod moved) reads the deck again, and what it opened counts",
+                  len(builds) == n + 1 and _state["plan_progress"][pid]["ex"][0] == 1 and first[pid]["ex"][0] == 0 and fresh(),
+                  (builds, _state["plan_progress"][pid]))
+            col.sched.due = {10: (6, 0)}  # a learning card come inside the learn-ahead, in Anki's count: no change made
+            F.refresh_progress()
+            check("memo: Anki's due count holds till a learning card can come back", len(builds) == n + 1
+                  and _state["plan_session"][pid]["due"] == 4)
+            clock[0] += 61
+            F.refresh_progress()
+            check("memo: once one can, the deck tree is read again, and a new due is a new answer",
+                  len(builds) == n + 2 and len(trees) == 3 and _state["plan_session"][pid]["due"] == 6 and fresh(),
+                  (builds, len(trees), _state["plan_session"][pid].get("due")))
+            n = len(builds)
+            g.today["d"] = _day(1)
+            F.refresh_progress()
+            g.today["d"] = _day(0)
+            F.refresh_progress()
+            _state["labels"] = [_day(0), _day(-1)]
+            F.refresh_progress()
+            F._pcfg()["plans"][pid]["missed"] = {"mode": "spread", "day": _day(0)}  # the plan state, not yet saved
+            F.refresh_progress()
+            maya.session["plans"][0]["paused"] = True  # the plans as the session has them
+            F.refresh_progress()
+            check("memo: a paused plan has no session, at once", pid not in _state["plan_session"])
+            maya.session["plans"][0]["paused"] = False
+            A.generation += 1  # a profile or sign-in changed
+            F.refresh_progress()
+            check("memo: the day, Due's day, the plan state, the session's plans and a new profile each read again",
+                  len(builds) == n + 6 and fresh(), builds[n:])
+            n = len(builds)
+            maya.session["plans"][0]["doc"]["units"][1]["search"] = ["is:due"]
+            F.refresh_progress()
+            F.refresh_progress()
+            check("memo: a search about my own reviews is read again at every refresh, as before",
+                  len(builds) == n + 2 and F._last["key"] is None, builds[n:])
+            del maya.session["plans"][0]["doc"]["units"][1]["search"]
+            F.refresh_progress()
+            F.mw.col.mod = None  # an Anki that can't say: every refresh reads, as before
+            F.refresh_progress()
+            F.refresh_progress()
+            check("memo: without col.mod nothing is kept", len(builds) == n + 5 and F._last["key"] is None)
+            col.mod = 50
+
+            # the deck tree: Due's reviews, a plan's due and the bingo's week, one read
+            DF._TREE.update(key=None)
+            del trees[:]
+            _state["due_reviews"] = None
+            r1 = DF._reviews()
+            due = F._due_in(col, 10)
+            DF.after_refresh()  # a refresh drops Due's count, not the tree
+            r2 = DF._reviews()
+            check("tree: Due's count twice and a plan's due, one read of Anki's deck tree, the same answers",
+                  len(trees) == 1 and r1 == r2 and r1["due"] == 6 and due == 6, (len(trees), r1, due))
+            DF._TREE.update(key=None)
+            _state["due_reviews"] = None
+            check("tree: the same as read fresh", DF._reviews() == r1 and len(trees) == 2)
+            t0 = DF.deck_tree(col)
+            col.mod += 1  # an answer
+            t1 = DF.deck_tree(col)
+            clock[0] = float(col.sched.day_cutoff) + 1  # the day turned
+            t2 = DF.deck_tree(col)
+            check("tree: read again after an answer and when the day turns", len(trees) == 4 and t0 is not t1 and t1 is not t2)
+            clock[0] = float(col.sched.day_cutoff) - 6 * 3600
+            col.db.conn.execute("UPDATE cards SET due = ? WHERE id = 30", (int(clock[0]) + ahead + 30,))
+            col.mod += 1
+            DF.deck_tree(col)
+            clock[0] += 29
+            DF.deck_tree(col)
+            check("tree: kept till a learning card comes inside Anki's learn-ahead", len(trees) == 5)
+            clock[0] += 2
+            DF.deck_tree(col)
+            clock[0] -= 10  # the clock put back: read again
+            DF.deck_tree(col)
+            check("tree: then read again; a clock put back reads again too", len(trees) == 7)
+            col.conf["collapseTime"] = 0  # no learn-ahead: the card counts only once it's due
+            col.mod += 1
+            DF.deck_tree(col)
+            clock[0] += 100
+            DF.deck_tree(col)
+            check("tree: Anki's own learn-ahead, from the collection", len(trees) == 8, len(trees))
+    finally:
+        P.DeckIndex.__init__ = real_init
+        DF.time, _state["labels"], _state["due_reviews"], _state["back_timer"] = saved
+        F._last.update(key=None, got=None)
+        DF._TREE.update(key=None)
+
+
+def test_efficiency_idle_v391():
+    """3.9.1, the efficiency run, idle: a loop that never ends keeps Anki
+    drawing 60 frames a second (about two-thirds of it on Anki's own
+    thread). The ones nobody sees end: the bats' wings after their flight,
+    Wrapped's frame loop; the room clocks tick only as often as they show."""
+    from due_crew import room_model as rm
+    import re as _re
+    check("idle: the bats' wings flap for the flight and stop (no loop of ours that runs forever on Halloween's line)",
+          "infinite" not in board.HW_CSS and "calc(var(--d) - var(--ago, 0s)) 20 alternate" in board.HW_CSS)
+    js = board.wrapped_js()
+    check("idle: Wrapped's bars fill by one animation a slide, paused when held or hidden, none on the last; no frame loop",
+          "requestAnimationFrame" not in js and "visibilitychange" in js and "st.run.pause()" in js
+          and "st.i < sl.length - 1 && bars[st.i].animate" in js)
+    rt = rm._RUNTIME
+    check("idle: a room's widgets tick as often as they show (the break's mm:ss and the question each second, "
+          "else at the minute's turn or the phase's end, ten seconds at most), and balance the bar only when their words change",
+          "setInterval(tick" not in rt and "Math.min(10000, p.left > 0 ? p.left % 60000 + 50 : 10000)" in rt
+          and "KIND === 'break' || KIND === 'ask') { return 1000; }" in rt and "root.textContent !== said" in rt)
+    check("idle: the bar's watcher leaves the room's own changes to its tick, as the chip's",
+          "room && room.contains(x.target)" in rm.BAR_BALANCE and "n === chip || n === room" in rm.BAR_BALANCE)
+    from due_crew import sev as _sev
+    forever = [x for x in _re.findall(r"[^{}\n]*\{[^{}]*\binfinite\b[^{}]*\}", _sev.CSS) if "--sv-on: infinite" not in x]
+    check("Pip at rest (Sam's pick A): every loop of Pip's plays about twelve seconds, then rests; only the break's "
+          "breathing and stretch go on (the exercise); pointing at Pip plays it on",
+          forever and all("m-breathe" in x or "m-stretch" in x for x in forever)
+          and ".sv:hover, .sv-slot:hover .sv { --sv-on: infinite; }" in _sev.CSS
+          and _sev.CSS.count("var(--sv-on, ") >= 40, forever)
+    src = open(os.path.join(REPO, "due_crew", "board.py")).read()
+    check("Pip at rest (Sam's pick C): the fridge's Pips are still until pointed at, as crew rows; rows move on while hovered",
+          "#dc-fridge .fz:not(:hover) .sv, #dc-fridge .fz:not(:hover) .sv * { animation: none !important; }" in board.FRIDGE_CSS
+          and "#dc-fridge .fz:hover .sv { --sv-on: infinite; }" in board.FRIDGE_CSS
+          and all(f"#due-crew {k}:hover .dc-rsev .sv {{ --sv-on: infinite; }}" in src for k in ("tr", ".pcrew", ".bg-sq"))
+          and "#due-crew .face:hover .dc-rsev .sv {{ --sv-on: infinite; }}" in src)
+    app_css = open(os.path.join(REPO, "site", "public", "app.css")).read()
+    check("Pip at rest (the bug hunt): the break screen's Pip goes on all break, whichever of its stretch moves it does",
+          "root.style.setProperty('--sv-on', 'infinite');" in rm._RUNTIME
+          and rm._RUNTIME.index("root.style.setProperty('--sv-on', 'infinite');") > rm._RUNTIME.index("var bs = FIF && D.sev"))
+    check("the studying-now dot (Sam's pick D): a few pulses, then lit, in Anki and on the site",
+          "dcbreathe 2.4s ease-in-out 7 alternate" in open(os.path.join(REPO, "due_crew", "board.py")).read()
+          and ".chip.live::before { animation: dcbreathe 2.4s ease-in-out 7 alternate; }" in app_css
+          and "dcbreathe 2.4s ease-in-out infinite" not in app_css)
+    loops = _re.findall(r"[^{}]*\{[^{}]*\binfinite\b[^{}]*\}", board.HW_CSS + board.FRIDGE_CSS if hasattr(board, "FRIDGE_CSS") else board.HW_CSS)
+    check("idle: nothing new of ours loops forever on Halloween's line", not [x for x in loops if "hw" in x])
+def test_efficiency_decks_v391():
+    """3.9.1, the efficiency run, the Decks screen: the board's scripts go to
+    a page once, and a swap sends only what they do after a draw; the
+    fridge is checked and drawn once a change, the same as drawn afresh,
+    and its script reads the page's layout once a placing; wrap.json is
+    written only when it says something new, so a refresh that changes
+    nothing writes nothing."""
+    import shutil
+    import subprocess
+    import due_crew as dc
+    from due_crew import app as A, closet_flow as CF, due_flow, fridge as FR, rooms, together
+    from due_crew.app import _state
+    mw = dc_mw()
+    sent = []
+    mine = '<div id="due-crew">board</div>'
+    saved = (getattr(mw, "web", None), dc._board_html, dc._arrive_js, dc._play_cheers, together.show_luck_card,
+             rooms.refresh_widgets, dict(_state))
+    try:
+        mw.web = types.SimpleNamespace(eval=sent.append)
+        dc._board_html = lambda c: mine
+        dc._arrive_js = lambda: ""
+        dc._play_cheers = lambda: None
+        together.show_luck_card = lambda: None
+        rooms.refresh_widgets = lambda: None
+        _state.update(entries=[], wrapped_open=False, plans_midday=False, plans_morning=None)
+        A.on_set_content(None, None)
+        dc._on_did_render(None)
+        dc._swap({})
+        dc._swap({})
+        A.on_set_content(None, None)  # a page anew (stdHtml, here or in any of Anki's webviews)
+        dc._swap({})
+        dc._on_did_render(None)  # the board drawn: the page is new to it, whatever the count says
+        drawn, swap, swap2, anew, again = sent
+    finally:
+        mw.web, dc._board_html, dc._arrive_js, dc._play_cheers, together.show_luck_card, rooms.refresh_widgets = saved[:6]
+        _state.clear()
+        _state.update(saved[6])
+    scripts = (board.DUE_JS, board.MOTION_JS, board.FIND_JS, board.FRIDGE_JS)
+    calls = swap[len(board.swap_js(mine)):]
+    check("efficiency: a page drawn anew gets the board's scripts (Due's add line, motion.js, Find, the fridge's), as before",
+          drawn == "window.dcBK=%s;" % json.dumps(KK) + board.keep_me_in_view_js() + board.fridge_js()
+          and all(s in drawn for s in scripts)
+          and anew == board.swap_js(mine) + board.keep_me_in_view_js() + board.fridge_js() and again == drawn)
+    check("efficiency: a swap on that page sends only what they do after a draw, in their order, a few hundred bytes (it was 77 KB)",
+          swap == swap2 and swap.startswith(board.swap_js(mine)) and not any(s in swap for s in scripts)
+          and calls == board.keep_me_in_view_js(scripts=False) + board.fridge_js(scripts=False)
+          and "'#due-crew .dc-scroll'" in calls and board.FIND_AFTER in calls and calls.endswith(board.MOTION_DRAWN
+          + "\nif (window.dcFridge) { window.dcFridge(); }\n") and len(calls.encode()) < 1024, len(calls))
+    check("efficiency: each script loads once a page (each checks it isn't there yet), so sent again it changes nothing",
+          "if (window.dcDue) { return; }" in board.DUE_JS and "if (window.dcMotion) return;" in board.MOTION_JS
+          and "if (!window.dcFind) {" in board.FIND_JS and "window.dcFridge = window.dcFridge || function () {" in board.FRIDGE_JS)
+    # the scripts, then a swap's calls, in node on a page that has no board: each call reaches the script it calls,
+    # nothing loads twice, and the calls alone on a page without them (another page) do nothing
+    probe = r"""
+    var none = function () { return null; };
+    globalThis.window = globalThis;
+    globalThis.document = {getElementById: none, querySelector: none, querySelectorAll: function () { return []; },
+                           addEventListener: function () {}, body: {className: ''}};
+    globalThis.sessionStorage = {getItem: none, setItem: function () {}};
+    var out = {};
+    try { (0, eval)(CALLS); out.bare = 'ok'; } catch (e) { out.bare = String(e); }
+    (0, eval)(DRAWN);
+    var due = window.dcDue, motion = window.dcMotion, find = window.dcFind, n = {after: 0, drawn: 0, fridge: 0};
+    var a = find.after, d = motion.drawn, f = window.dcFridge;
+    find.after = function () { n.after++; return a.apply(this, arguments); };
+    motion.drawn = function () { n.drawn++; return d.apply(this, arguments); };
+    window.dcFridge = function () { n.fridge++; return f.apply(this, arguments); };
+    (0, eval)(CALLS);
+    out.n = n;
+    out.same = window.dcDue === due && window.dcMotion === motion && window.dcFind === find;
+    console.log(JSON.stringify(out));
+    """.replace("CALLS", json.dumps(calls)).replace("DRAWN", json.dumps(drawn))
+    node = subprocess.run(["node", "-"], input=probe, capture_output=True, text=True) if shutil.which("node") else None
+    got = json.loads(node.stdout) if node and node.returncode == 0 else None
+    check("efficiency: in a page, a swap's calls reach the scripts the draw loaded, once each; on a page without them, nothing",
+          node is None or got == {"bare": "ok", "n": {"after": 1, "drawn": 1, "fridge": 1}, "same": True},
+          (got, node and node.stderr[:300]))
+    place = board.FRIDGE_JS[board.FRIDGE_JS.index("function place()"):board.FRIDGE_JS.index("el.addEventListener('pointerdown'")]
+    check("efficiency: the fridge's script tilts every doodle, then reads every height at once (a read after each write "
+          "laid the page out again, twice a doodle), and places them by what it read",
+          place.count("offsetHeight") == 1 and place.index("setProperty('--fr'") < place.index("offsetHeight")
+          < place.index("style.left") and place.count("var h = hs[i]") == 2)
+
+    # the fridge, checked and drawn once a change
+    wrap = _patched_due_crew()
+    raw = [{"from": u, "name": u.title(), "at": f"2026-10-0{i + 1}T09:00:00Z", "a": "blue", "n": f"day {i}",
+            "d": {"k": "draw", "s": [[i * 3, 10 * i, 20, 30, 40 + i, 50, 60], [i * 3 + 1, 5, 5]] * 40}}
+           for i, u in enumerate(("dre", "mo", "jo"))]
+    raw.append({"from": "dre", "name": "Dre", "at": "2026-10-05T09:00:00Z", "a": "rose", "n": "", "d": {"k": "sign", "t": "go!"},
+                "p": ["l", -150, 320]})
+    people = {"dre": {"user_id": "dre", "look": ["cap"], "accent": "purple"}, "mo": {"user_id": "mo"}, "me": {"you": True}}
+    afresh = lambda items, ppl, c: board._fridge_notes(FR._clean(items), ppl, c)  # noqa: E731  nothing kept
+    checked = []
+    real_check = FR.clean_doodle
+    try:
+        FR.clean_doodle = board.clean_doodle = lambda d: (checked.append(1), real_check(d))[1]
+        FR._LAST.clear()
+        board._FRIDGE_DRAWN.update(key=None, html="")
+        wrap._wrap_data()["fridge"] = json.loads(json.dumps(raw))
+        draws = [board.fridge_html(CF.fridge(), people, {"sev": True}) for _ in range(3)]
+        once = len(checked)
+        mine1 = CF.fridge()
+        mine1[0]["name"] = "changed"
+        mine1[0]["p"] = ["r", 1, 1]
+        kept = CF.fridge()
+        CF.move_fridge(FR.key(raw[0]), "r", 40, 120)
+        checked.clear()
+        moved = board.fridge_html(CF.fridge(), people, {"sev": True})
+        n_moved = len(checked)
+        checked.clear()
+        dressed = board.fridge_html(CF.fridge(), dict(people, mo={"user_id": "mo", "look": ["dino"]}), {"sev": True})
+        plain = board.fridge_html(CF.fridge(), people, {"sev": False})
+        n_looks = len(checked)
+        want = [afresh(raw, people, {"sev": True}), afresh(wrap._wrap_data()["fridge"], people, {"sev": True}),
+                afresh(wrap._wrap_data()["fridge"], dict(people, mo={"user_id": "mo", "look": ["dino"]}), {"sev": True}),
+                afresh(wrap._wrap_data()["fridge"], people, {"sev": False})]
+    finally:
+        FR.clean_doodle = board.clean_doodle = real_check
+    check("efficiency: a fridge is checked once a change, each drawing once, however often the board draws (it was three times a draw)",
+          once == len(raw) and n_moved == len(raw) and n_looks == 0, (once, n_moved, n_looks))
+    check("efficiency: what's drawn from what's kept is what a draw afresh draws: as it was, moved, a look changed, Pip off",
+          draws[0] == draws[1] == draws[2] == want[0] and moved == want[1] and dressed == want[2] and plain == want[3]
+          and moved != want[0] and 'data-s="r" data-x="40" data-y="120"' in moved and dressed != moved and plain != moved
+          and draws[0].count('class="fz"') == len(raw), [len(x) for x in want])
+    check("efficiency: each caller gets a fridge of its own (a change to one is never kept)",
+          kept[0]["name"] == "Dre" and "p" not in kept[0] and kept == FR.clean(raw))
+    check("efficiency: a fridge's fingerprint is its contents: the same for a copy, never for anything that differs",
+          FR.fingerprint(raw) == FR.fingerprint(json.loads(json.dumps(raw))) and FR.fingerprint([1]) != FR.fingerprint([True])
+          and FR.fingerprint([1]) != FR.fingerprint([1.0]) and FR.fingerprint({"a": "1"}) != FR.fingerprint({"a": 1})
+          and FR.fingerprint([object()]) is None)
+    check("efficiency: an odd fridge (a name cut mid-word, a spot that's no longer one) is still drawn as afresh, and kept",
+          board.fridge_html([dict(raw[0], name="x" * 59 + " yz", p=[5, 200])], people, {})
+          == afresh([dict(raw[0], name="x" * 59 + " yz", p=[5, 200])], people, {}))
+
+    # wrap.json, written only when it says something new
+    wrap = _patched_due_crew()
+    path = os.path.join(wrap._profile_files(), "wrap.json")
+    labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    tomorrow = (TODAY + datetime.timedelta(days=1)).isoformat()
+
+    def refresh(more=0):
+        day = lambda n: {"reviews": n, "studyTimeMs": 60000 * n, "accuracy": 90.0, "streak": 4}  # noqa: E731
+        ents = [{"user_id": u, "name": u.title(), "you": u == "me", "paused": False, "decks": [],
+                 "days": {lb: day(10 + k + (more if u == "dre" and not k else 0)) for k, lb in enumerate(labels)}}
+                for u in ("me", "dre", "mo")]
+        dc._commit({"entries": ents, "pending": [], "cheers": [], "my_code": "ABC", "my_friends": ["dre", "mo"]},
+                   {}, labels, tomorrow)
+
+    writes = []
+    cl = types.SimpleNamespace(session={}, signed_in=True, user_id="me", _save_session=lambda: None)
+    saved = (wrap.os, dc.client, together.client, dc._morning, dc._awaiting_phone, due_flow.after_refresh, due_flow._reviews,
+             CF.check, dc.tooltip, dc._rerender, dc._swap, rooms.refresh_widgets, dc.account.saved_elsewhere, dict(_state))
+    try:
+        wrap.os = types.SimpleNamespace(path=os.path, remove=os.remove,
+                                        replace=lambda a, b: (writes.append(b), os.replace(a, b)))
+        dc.client = together.client = lambda: cl
+        dc._morning = lambda *a, **k: None
+        dc._awaiting_phone = lambda: False
+        due_flow.after_refresh = lambda: None
+        due_flow._reviews = lambda: {"done": 12, "due": 0}
+        CF.check = lambda today: []
+        dc.tooltip = lambda *a, **k: None
+        dc._rerender = dc._swap = rooms.refresh_widgets = lambda *a, **k: None
+        dc.account.saved_elsewhere = lambda at: None
+        _state.update(board_shown=False, prev_label="", prev_counts={}, prev_streaks={}, days={}, decks={})
+        wrap._wrap_data()["fridge"] = FR.clean(raw)
+        refresh()
+        first = len(writes)
+        writes.clear()
+        refresh()
+        refresh()
+        same = list(writes)
+        refresh(more=40)
+        changed = list(writes[len(same):])
+        on_disk = json.load(open(path))
+        wrap._wrap["profile"] = None  # the profile opened again: read from disk, and not written back
+        wrap._wrap_data()
+        wrap._save_wrap()
+        reopened = writes[len(same) + len(changed):]
+    finally:
+        (wrap.os, dc.client, together.client, dc._morning, dc._awaiting_phone, due_flow.after_refresh, due_flow._reviews,
+         CF.check, dc.tooltip, dc._rerender, dc._swap, rooms.refresh_widgets, dc.account.saved_elsewhere) = saved[:13]
+        _state.clear()
+        _state.update(saved[13])
+        wrap._wrap["profile"] = None
+        wrap._wrap["data"] = {}
+    check("efficiency: a refresh that changes nothing writes wrap.json not at all (it wrote it two or three times, fridge and all)",
+          first >= 1 and same == [], (first, same))
+    check("efficiency: one that changes something writes it once, whole, as it is; a profile opened again doesn't write it back",
+          changed == [path] and on_disk["ledger"][labels[0]]["p"]["dre"] == 50 and len(on_disk["fridge"]) == len(raw)
+          and reopened == [], (changed, reopened))
+
+
+def test_decks_page_key_v391():
+    """3.9.1 (the security review): Anki calls a message the Decks screen's
+    from the moment it switches to it, while the page before (a card's, or
+    Overview's with a deck's description, scripts and all) is still up. So
+    the Decks page's own commands carry its key, new each run and written
+    only into that page; without it, a message from "the Decks screen" gets
+    a card page's rules. Nothing is drawn on the board until the Decks page
+    is the one going in."""
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    from due_crew import app as A
+    from due_crew.room_model import CMD_KEY
+    sent = []
+    hits = []
+    real = dc._on_sync_done
+    try:
+        dc._on_sync_done = lambda *a, **k: hits.append("refresh")
+        dc._on_js(False, "duecrew:refresh", DeckBrowser())
+        dc._on_js(False, "duecrew:refresh|" + CMD_KEY, DeckBrowser())
+        dc._on_js(False, "duecrew:refresh|0000", DeckBrowser())
+        bare = list(hits)
+        dc._on_js(False, "duecrew:refresh|" + board.BOARD_KEY, DeckBrowser())
+        check("Decks key: a command from the Decks screen acts only with its page's key; bare, a widget's key or a wrong one, nothing",
+              bare == [] and hits == ["refresh"], (bare, hits))
+    finally:
+        dc._on_sync_done = real
+    check("Decks key: the board's commands carry it, as do the ones its scripts build; the page gets it once a draw",
+          board._pycmd("refresh").endswith("|" + board.BOARD_KEY + "'); return false;")
+          and board.key_js() == '<script>window.dcBK="' + board.BOARD_KEY + '";</script>'
+          and len(board.BOARD_KEY) == 16 and board.BOARD_KEY != CMD_KEY
+          and "'|' + window.dcBK" in board.cheer_overlay_js({"uid": "dre", "name": "Dre", "emojis": ["x"]})
+          and "'|' + window.dcBK" in board.FRIDGE_JS)
+    m = A.mw
+    saved = (getattr(m, "state", None), m.web)
+    try:
+        m.web = types.SimpleNamespace(eval=sent.append)
+        m.state = "deckBrowser"
+        A.on_state_will_change("deckBrowser", "review")
+        A.board_eval("x()")
+        A.on_decks_render()
+        A.board_eval("y()")
+        A.on_state_will_change("review", "deckBrowser")
+        m.state = "review"
+        A.board_eval("z()")
+        check("Decks key: nothing's drawn on the board on the way back to Decks till its page goes in, nor after it's left",
+              sent == ["y()"], sent)
+    finally:
+        m.state, m.web = saved
+        A._decks[0] = False
+    src = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
+    check("Decks key: the Decks page's render sets it down and says so; leaving it says so",
+          "app.on_decks_render()\n    content.stats += board.key_js()" in src
+          and "gui_hooks.state_will_change.append(app.on_state_will_change)" in src
+          and all(f"app.board_eval(board.{f}" in open(os.path.join(REPO, "due_crew", mod)).read()
+                  for mod, f in (("social.py", "flurry_js"), ("social.py", "cheer_overlay_js"), ("social.py", "profile_overlay_js"),
+                                 ("squads.py", "stranger_card_js"), ("together.py", "luck_card_js"))))
+
+
+def test_veil_v391():
+    """3.9.1 (Sam: "when cheering, the full background doesn't grey out"):
+    while a window is open over the board, the top and bottom bars (pages
+    of their own) wear its backdrop too; a tap on them is Esc on the board.
+    The board's page says when; leaving it, or a new page, takes it off."""
+    import shutil
+    import subprocess
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    from due_crew import app as A
+    from due_crew.room_model import CMD_KEY, trusted
+    keep = board.keep_me_in_view_js()
+    check("veil: the board's page watches for its windows once (with its scripts), never at every swap",
+          board.VEIL_WATCH_JS in keep and board.VEIL_WATCH_JS not in board.keep_me_in_view_js(scripts=False)
+          and "if (window.dcVeil || typeof MutationObserver === 'undefined') { return; }" in board.VEIL_WATCH_JS
+          and all(f'"{i}"' in board.VEIL_WATCH_JS for i in ("dc-cheer", "dc-profile", "dc-sheet"))
+          and "'|' + window.dcBK" in board.VEIL_WATCH_JS)
+    top, bottom, main = [], [], []
+    m = A.mw
+    saved = (getattr(m, "toolbar", None), getattr(m, "bottomWeb", None), getattr(m, "state", None), m.web, A._decks[0])
+    TopToolbar = type("TopToolbar", (), {})
+    DeckBrowserBottomBar = type("DeckBrowserBottomBar", (), {})
+    try:
+        m.toolbar = types.SimpleNamespace(web=types.SimpleNamespace(eval=top.append))
+        m.bottomWeb = types.SimpleNamespace(eval=bottom.append)
+        m.web = types.SimpleNamespace(eval=main.append)
+        m.state = "deckBrowser"
+        A.on_decks_render()
+        dc._on_js(False, "duecrew:veil:1|" + board.BOARD_KEY, DeckBrowser())
+        on = (list(top), list(bottom), A._veiled[0])
+        dc._on_js(False, "duecrew:veil:0|" + board.BOARD_KEY, DeckBrowser())
+        off = (top[-1:], bottom[-1:], A._veiled[0])
+        dc._on_js(False, "duecrew:veil:1", DeckBrowser())  # without the page's key: a card's page, nothing
+        bare = A._veiled[0]
+        check("veil: a window on the board dims both bars, its going undims them; only the board's page says so",
+              len(on[0]) == len(on[1]) == 1 and "(true)" in on[0][0] and on[0] == on[1] and on[2] is True
+              and "(false)" in off[0][0] and off[1] == off[0] and off[2] is False and bare is False, (on, off, bare))
+        dc._on_js(False, "duecrew:veil:1|" + board.BOARD_KEY, DeckBrowser())
+        A.on_set_content(None, TopToolbar())
+        A.on_set_content(None, DeckBrowserBottomBar())
+        bars = A._veiled[0]
+        A.on_set_content(None, DeckBrowser())
+        page = A._veiled[0]
+        dc._on_js(False, "duecrew:veil:1|" + board.BOARD_KEY, DeckBrowser())
+        A.on_state_will_change("review", "deckBrowser")
+        m.state = "review"
+        left = (A._veiled[0], "(false)" in top[-1])
+        dc._on_js(False, "duecrew:veil:1|" + board.BOARD_KEY, DeckBrowser())
+        late = A._veiled[0]
+        check("veil: a bar's own new page keeps it; the main view's new page, leaving Decks or a late word from the page takes it off",
+              bars is True and page is False and left == (False, True) and late is False, (bars, page, left, late))
+        m.state = "deckBrowser"
+        A.on_decks_render()
+        del main[:]
+        dc._on_js(False, "duecrew:veiltap|" + CMD_KEY, DeckBrowserBottomBar())
+        dc._on_js(False, "duecrew:veiltap|" + CMD_KEY, TopToolbar())
+        check("veil: a tap on a bar's shade is Esc on the board, from the Decks bottom bar (Anki's page: keyed) or the top bar",
+              len(main) == 2 and all("key: 'Escape'" in x for x in main) and trusted("duecrew:veiltap|" + CMD_KEY, True)[1]
+              and not trusted("duecrew:veil:1|" + CMD_KEY, True)[1] and f"duecrew:veiltap|{CMD_KEY}" in A.VEIL_JS % {"key": CMD_KEY, "on": "true"})
+    finally:
+        m.toolbar, m.bottomWeb, m.state, m.web, A._decks[0] = saved
+        A._veiled[0] = False
+    node = shutil.which("node")
+    if not node:
+        print("SKIP the veil's scripts in node: no node")
+        return
+    dom = r"""
+    function El(tag) { this.tagName = tag; this.style = {}; this.kids = []; this.l = {}; this.attrs = {}; }
+    El.prototype.appendChild = function (k) { this.kids.push(k); k.parent = this; if (typeof fire === 'function') fire('child'); return k; };
+    El.prototype.addEventListener = function (t, f) { this.l[t] = f; };
+    El.prototype.getBoundingClientRect = function () { return {}; };
+    El.prototype.remove = function () { var p = this.parent; p.kids = p.kids.filter((x) => x !== this); fire('child'); };
+    El.prototype.removeAttribute = function (a) { if (a === 'id') { this.id = ''; fire('attr'); } };
+    var body = new El('body'), sent = [], obs = [];
+    function find(n, id) { if (n.id === id) return n; for (var k of n.kids) { var f = find(k, id); if (f) return f; } return null; }
+    var document = { body: body, createElement: (t) => new El(t), getElementById: (id) => find(body, id) };
+    var window = { dcBK: 'KEY', matchMedia: () => ({ matches: false }) };
+    function pycmd(c) { sent.push(c); }
+    function MutationObserver(f) { this.f = f; }
+    MutationObserver.prototype.observe = function (n, o) { obs.push([this.f, o]); };
+    function fire(kind) { obs.forEach(([f, o]) => { if ((kind === 'child') === !!o.childList) f(); }); }
+    """
+    watch = dom + board.VEIL_WATCH_JS + r"""
+    var a = new El('div'); a.id = 'dc-cheer'; body.appendChild(a);
+    var b = new El('div'); b.id = 'dc-profile'; body.appendChild(b);
+    b.remove();
+    a.removeAttribute('id');
+    a.remove();
+    console.log(JSON.stringify(sent));
+    """
+    run = subprocess.run([node, "-e", watch], capture_output=True, text=True, timeout=60)
+    check("veil: the page says once when a window comes and once when the last one starts to go",
+          run.stdout.strip() == '["duecrew:veil:1|KEY","duecrew:veil:0|KEY"]', run.stdout + run.stderr[-1500:])
+    bar = dom + "function fire() {}\n" + (A.VEIL_JS % {"key": "WK", "on": "true"}) + (A.VEIL_JS % {"key": "WK", "on": "true"}) + r"""
+    var v = document.getElementById('dc-veil'), n = body.kids.length, up = [v.style.opacity, v.style.pointerEvents];
+    v.l.click();
+    """ + (A.VEIL_JS % {"key": "WK", "on": "false"}) + r"""
+    console.log(JSON.stringify([n, up, [v.style.opacity, v.style.pointerEvents], sent, v.style.cssText]));
+    """
+    run = subprocess.run([node, "-e", bar], capture_output=True, text=True, timeout=60)
+    try:
+        got = json.loads(run.stdout)
+    except ValueError:
+        got = None
+    check("veil: a bar gets one shade, the board's backdrop over everything; a tap sends the widget's keyed veiltap; off, it lets clicks through",
+          got is not None and got[0] == 1 and got[1] == ["1", "auto"] and got[2] == ["0", "none"]
+          and got[3] == ["duecrew:veiltap|WK"] and "rgba(0,0,0,.35)" in got[4] and "z-index:2147483647" in got[4],
+          run.stdout + run.stderr[-1500:])
+
+
+def test_sheets_v391():
+    """3.9.1 (Sam: "make sure all modals are in our style"): a question, one
+    line or one of a few, as a sheet on the Decks screen in the Cheer
+    window's look; the Qt one off the board. Only a yes reaches then, and
+    only an answer naming the open sheet's id, with the page's key."""
+    import shutil
+    import subprocess
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    from urllib.parse import quote
+    from due_crew import app as A, sheets, ui
+    js = board.sheet_js({"id": "abc", "title": "Status </script><b>", "text": "One line.\n\nTwo.", "yes": "Set",
+                         "field": {"kind": "text", "value": "200 cards", "max": 99999}, "check": {"label": "Tags <i>too</i>", "on": 1}})
+    view = json.loads(re.search(r"var V = (\{.*?\});\n", js).group(1).replace("<\\/", "</"))
+    check("sheet: its words as JSON (no '</' to end the script), as text never markup; a box's ceiling kept sane",
+          "</script>" not in js.split("var V = ")[1].split(";\n")[0] and view["title"] == "Status </script><b>"
+          and view["field"] == {"kind": "text", "value": "200 cards", "max": 2000, "hint": ""} and view["check"] == {"label": "Tags <i>too</i>", "on": True}
+          and "innerHTML" not in board.SHEET_JS and "textContent" in board.SHEET_JS and "white-space:pre-line" in board.SHEET_JS)
+    pick = json.loads(re.search(r"var V = (\{.*?\});\n", board.sheet_js({"id": "x", "title": "t", "field": {"kind": "pick", "items": ["a", "b"], "at": 9}})).group(1))
+    none = json.loads(re.search(r"var V = (\{.*?\});\n", board.sheet_js({"id": "x", "title": "t", "field": {"kind": "pick", "items": []}})).group(1))
+    odd = json.loads(re.search(r"var V = (\{.*?\});\n", board.sheet_js({"id": "x", "title": "t", "field": {"kind": "html"}})).group(1))
+    check("sheet: a pick's place kept in its list; no items or an unknown kind, no field",
+          pick["field"]["at"] == 1 and none["field"] is None and odd["field"] is None)
+    check("sheet: the board's tokens and font, the Cheer window's buttons, its answer one keyed command; Esc and the backdrop say no",
+          "getPropertyValue('--dc-' + name)" in board.SHEET_JS and "dcStyle.fontFamily" in board.SHEET_JS
+          and "#dc-sheet .go{background:' + accent" in board.SHEET_JS and "#dc-sheet .no{background:none" in board.SHEET_JS
+          and "pycmd('duecrew:sheet:' + V.id + ':' + encodeURIComponent(JSON.stringify(p)) + '|' + window.dcBK)" in board.SHEET_JS
+          and "'Escape'" in board.SHEET_JS and "downOnBack" in board.SHEET_JS and "say({ ok: false })" in board.SHEET_JS
+          and "dc-sheet" in board.VEIL_IDS)
+
+    # the glue: on the board, a sheet; its answer, once, with its id
+    m = A.mw
+    saved = (getattr(m, "state", None), m.web, A._decks[0], A.generation, dc._state.get("entries"))
+    sent, got, nos = [], [], []
+    try:
+        m.web = types.SimpleNamespace(eval=sent.append)
+        m.state = "deckBrowser"
+        A.on_decks_render()
+        sheets.confirm("Sign out?", "Sure?", "Sign Out", lambda: got.append("yes"), no=lambda: nos.append("no"))
+        sid = re.search(r'"id": "([0-9a-f]+)"', sent[-1]).group(1)
+        answer = lambda i, p, key=board.BOARD_KEY: dc._on_js(False, f"duecrew:sheet:{i}:{quote(json.dumps(p))}|{key}", DeckBrowser())
+        answer("0" * 16, {"ok": True})
+        answer(sid, {"ok": True}, key="")
+        wrong = list(got)
+        answer(sid, {"ok": True})
+        answer(sid, {"ok": True})
+        check("sheets: on the board a sheet, not Qt; only its own id with the page's key answers it, and once",
+              len(sent) == 1 and "dc-sheet" in sent[0] and '"yes": "Sign Out"' in sent[0] and wrong == [] and got == ["yes"], (wrong, got))
+        sheets.confirm("Leave?", "", "Leave", lambda: got.append("left"), no=lambda: nos.append("no"))
+        sid = re.search(r'"id": "([0-9a-f]+)"', sent[-1]).group(1)
+        answer(sid, {"ok": False})
+        sheets.confirm("Leave?", "", "Leave", lambda: got.append("left"))
+        sid = re.search(r'"id": "([0-9a-f]+)"', sent[-1]).group(1)
+        answer(sid, {"ok": False})
+        check("sheets: Cancel, Esc or the backdrop: nothing, or the question's no() when it leads to another",
+              got == ["yes"] and nos == ["no"], (got, nos))
+        sheets.ask_text("Status", "One line.", got.append, value="x", most=5)
+        first = re.search(r'"id": "([0-9a-f]+)"', sent[-1]).group(1)
+        sheets.ask_item("Change deck", "Run it on", ["A", "B"], got.append, at=1)
+        sid = re.search(r'"id": "([0-9a-f]+)"', sent[-1]).group(1)
+        answer(first, {"ok": True, "text": "stale"})
+        answer(sid, {"ok": True, "at": 7})
+        sheets.ask_item("Change deck", "Run it on", ["A", "B"], got.append, at=1)
+        sid = re.search(r'"id": "([0-9a-f]+)"', sent[-1]).group(1)
+        answer(sid, {"ok": True, "at": 1})
+        sheets.ask_text("Status", "One line.", got.append, value="x", most=5)
+        sid = re.search(r'"id": "([0-9a-f]+)"', sent[-1]).group(1)
+        answer(sid, {"ok": True, "text": "123456789"})
+        check("sheets: one at a time (a new one drops the one before); a pick out of the list does nothing; a line keeps to its ceiling",
+              got == ["yes", 1, "12345"], got)
+        sheets.confirm("Sign out?", "Sure?", "Sign Out", lambda: got.append("late"))
+        sid = re.search(r'"id": "([0-9a-f]+)"', sent[-1]).group(1)
+        n = len(sent)
+        sheets.redraw()
+        again = sent[n:]
+        A.generation += 1
+        answer(sid, {"ok": True})
+        check("sheets: a Decks page drawn anew draws the open one again; an answer from before a profile change does nothing",
+              len(again) == 1 and f'"id": "{sid}"' in again[0] and got == ["yes", 1, "12345"], (len(again), got))
+        # off the board: Qt asks (the suite's Qt says yes, as askUser's fake did)
+        A.on_state_will_change("review", "deckBrowser")
+        n = len(sent)
+        seen = []
+        real = ui.confirm
+        ui.confirm = lambda parent, title, text, yes: seen.append((title, text, yes)) or True
+        try:
+            sheets.confirm("Sign out?", "Sure?", "Sign Out", lambda: got.append("qt"))
+        finally:
+            ui.confirm = real
+        check("sheets: off the board, Qt's question, the same words; a yes reaches then",
+              len(sent) == n and seen == [("Sign out?", "Sure?", "Sign Out")] and got[-1] == "qt", (seen, got))
+    finally:
+        m.state, m.web, A._decks[0], A.generation, dc._state["entries"] = saved
+        sheets._open.clear()
+    src = {f: open(os.path.join(REPO, "due_crew", f)).read() for f in ("__init__.py", "social.py", "due_flow.py", "team_flow.py",
+                                                                      "together.py", "plan_flow.py", "squads.py", "cards.py")}
+    check("sheets: what the board asks goes through them: status, name, sign out, delete, a to-do, the plan squad, "
+          "a good-luck line, a tip, hold back, reset, change deck, stop following, the founder's tools",
+          all(k in src[f] for f, k in (("social.py", 'sheets.ask_text("Status"'), ("__init__.py", 'sheets.ask_text("Display name"'),
+                                       ("__init__.py", 'sheets.confirm("Sign out?"'), ("__init__.py", 'sheets.confirm("Delete account?"'),
+                                       ("due_flow.py", 'sheets.ask_text("Edit to-do"'), ("team_flow.py", 'sheets.confirm("Join this plan'),
+                                       ("team_flow.py", 'sheets.ask_text("Reply"'), ("team_flow.py", 'sheets.ask_text("Ask the squad"'),
+                                       ("together.py", 'sheets.ask_text("Good-luck card"'), ("together.py", 'sheets.ask_text("Send a tip"'),
+                                       ("plan_flow.py", "sheets.confirm(title, text, yes"), ("plan_flow.py", 'sheets.confirm("Reset to default?"'),
+                                       ("plan_flow.py", 'sheets.ask_item("Change deck"'), ("plan_flow.py", "sheets.confirm_check(title, text, \"Stop\""),
+                                       ("squads.py", 'sheets.confirm("Block?"'), ("squads.py", 'sheets.confirm("Remove?"')))
+          and not any(x in t for t in src.values() for x in ("QInputDialog", "askUser", "getText(")))
+    node = shutil.which("node")
+    if not node:
+        print("SKIP the sheet in node: no node")
+        return
+    dom = r"""
+    function El(tag) { this.tagName = tag; this.style = {}; this.kids = []; this.l = {}; this.attrs = {}; this.value = '';
+                       this.offsetTop = 0; this.offsetHeight = 10; this.scrollTop = 0; this.clientHeight = 100; }
+    El.prototype.appendChild = function (k) { this.kids.push(k); k.parentNode = this; return k; };
+    El.prototype.addEventListener = function (t, f) { this.l[t] = f; };
+    El.prototype.setAttribute = function (a, v) { this.attrs[a] = String(v); };
+    El.prototype.removeAttribute = function (a) { if (a === 'id') { this.id = ''; } delete this.attrs[a]; };
+    El.prototype.focus = function () { focused = this; };
+    El.prototype.select = function () {};
+    El.prototype.remove = function () { removed.push(this); };
+    var focused = null, removed = [], sent = [], doc = {};
+    var body = new El('body');
+    function find(n, id) { if (n.id === id) return n; for (var k of n.kids) { var f = find(k, id); if (f) return f; } return null; }
+    function all(n, out) { out = out || []; out.push(n); n.kids.forEach((k) => all(k, out)); return out; }
+    var document = { body: body, createElement: (t) => new El(t), getElementById: (id) => find(body, id),
+                     addEventListener: (t, f) => { doc[t] = f; }, removeEventListener: (t) => { delete doc[t]; } };
+    var window = { dcBK: 'KEY', matchMedia: () => ({ matches: true }) };
+    function getComputedStyle() { return null; }
+    function pycmd(c) { sent.push(decodeURIComponent(c)); }
+    function btn(text) { return all(body).find((e) => e.tagName === 'button' && e.textContent === text); }
+    """
+    def run(view, then):
+        prog = dom + board.sheet_js(view) + "\n" + then + "\nconsole.log(JSON.stringify(sent));"
+        r = subprocess.run([node, "-e", prog], capture_output=True, text=True, timeout=60)
+        try:
+            return json.loads(r.stdout)
+        except ValueError:
+            return r.stdout + r.stderr[-1500:]
+    typed = run({"id": "s1", "title": "Status", "field": {"kind": "text", "value": "old", "max": 80}},
+                "var box = all(body).find((e) => e.tagName === 'input'); var wasFocused = focused === box; box.value = 'new line'; btn('OK').l.click();"
+                "sent.push(String(wasFocused), String(box.maxLength));")
+    cancelled = run({"id": "s2", "title": "Leave?", "yes": "Leave", "danger": True},
+                    "var f = focused && focused.textContent; doc.keydown({ key: 'Escape', stopPropagation() {} }); btn('Leave').l.click(); sent.push(f);")
+    picked = run({"id": "s3", "title": "Change deck", "field": {"kind": "pick", "items": ["A", "B", "C"], "at": 0}},
+                 "btn('C').l.click(); btn('OK').l.click();")
+    ticked = run({"id": "s4", "title": "Stop following?", "yes": "Stop", "check": {"label": "Tags too", "on": True}},
+                 "all(body).find((e) => e.type === 'checkbox').checked = false; btn('Stop').l.click();")
+    check("sheet in node: a line starts in its box, its ceiling set, and goes with its button; Esc says no once (a step that can't be "
+          "taken back starts on Cancel); a pick and a tick go as asked",
+          typed == ['duecrew:sheet:s1:{"ok":true,"text":"new line"}|KEY', "true", "80"]
+          and cancelled == ['duecrew:sheet:s2:{"ok":false}|KEY', "Cancel"]
+          and picked == ['duecrew:sheet:s3:{"ok":true,"at":2}|KEY']
+          and ticked == ['duecrew:sheet:s4:{"ok":true,"check":false}|KEY'], (typed, cancelled, picked, ticked))
+
+
+def test_qt_look_v391():
+    """3.9.1 (Sam: "make sure all modals are in our style"): every Qt window
+    wears the board's look (ui.styled, from attach_alive or its own call):
+    its colours for its theme and accent, the main action in the accent; a
+    label's own style sheet takes tone(), never palette(...), which a styled
+    window doesn't pass down. tools/dialogs.py renders them all."""
+    import glob
+    from due_crew import board as B, ui
+    ok, drawn = True, set()
+    was = (ui._dark, ui._accent_name)
+    try:
+        for theme in ("light", "dark"):
+            for name in B.ACCENTS:
+                ui._dark, ui._accent_name = (lambda th=theme: th == "dark"), (lambda n=name: n)
+                t = ui.tokens()
+                try:
+                    css = ui.qss(t)
+                except (KeyError, IndexError, ValueError):
+                    ok = False
+                    continue
+                ok = ok and all(t[k] in css for k in ("accent", "bg", "ink", "edge", "ink-2")) and "{{" not in css
+                drawn.update(re.findall(r'url\("([^"]+)"\)', css))
+    finally:
+        ui._dark, ui._accent_name = was
+    check("qt look: the stylesheet takes every theme and accent's tokens", ok)
+    check("qt look: its arrows and ticks are drawings in the window's colours, written once beside the add-on",
+          drawn and all(os.path.isfile(f) and open(f).read().startswith("<svg") and "\\" not in f for f in drawn)
+          and len(drawn) == len(set(os.path.basename(f) for f in drawn)), sorted(drawn)[:3])
+    check("qt look: the suite's Qt has none of it, and nothing raises; a tone is the board's colour",
+          ui.styled(object()) is not None and ui.tone("muted") in (B.LIGHT["muted"], B.DARK["muted"]))
+    src = {os.path.basename(p): open(p).read() for p in glob.glob(os.path.join(REPO, "due_crew", "ui", "*_dialog.py"))}
+    init = open(os.path.join(REPO, "due_crew", "ui", "__init__.py")).read()
+    unstyled = [f for f, t in src.items() if "(QDialog)" in t and t.count("(QDialog)") > t.count("attach_alive(self)") + t.count("styled(self)")]
+    check("qt look: every dialog wears it (attach_alive styles it, the rest call styled)",
+          "    styled(dialog)  # 3.9.1" in init and not unstyled, unstyled)
+    check("qt look: no dialog's own style sheet reads palette(...) or a fixed grey",
+          not [f for f, t in src.items() if re.search(r"palette\(|color: gray", t)])
+    check("qt look: a question's yes is the accent (the red when it can't be taken back), Cancel focused; no icon",
+          'go.setProperty("dc", "bad" if danger else "go")' in init and "box.setDefaultButton(cancel)" in init
+          and "QMessageBox.Icon.NoIcon" in init and 'QPushButton[dc="go"]' in ui.QSS and 'QPushButton[dc="bad"]' in ui.QSS)
+
+
+def test_qt_look_round_two_v391():
+    """3.9.1, round two (Sam, of the Open a Study Room window on a Mac:
+    "washed out. bad spacing. not engaging"): the Mac's own style drew a
+    dressed box's arrow in a box and its list as a menu with ticks that cut
+    its words off. Every Due Crew window now sits on Fusion (ui.base_style),
+    with the board's look drawing every box, arrow, tick, radio dot and list
+    itself, the same on a Mac, Windows and Linux, under Anki's style or the
+    system's; a window's edges and rows have room; a window says what it is
+    in a title (ui.heading), its frame says Due Crew; small print is one
+    size and readable (role "note"); and a window grows to what its rows and
+    words need (ui._fit: Qt capped one at two thirds of the screen, and
+    Follow a plan's rows ran into each other). tools/dialogs.py renders every
+    window and fails on a clipped button, a squeezed box, two controls on top
+    of each other or a window shorter than its words."""
+    import glob
+    from due_crew import ui
+    init = open(os.path.join(REPO, "due_crew", "ui", "__init__.py")).read()
+    src = {os.path.basename(p): open(p).read() for p in glob.glob(os.path.join(REPO, "due_crew", "ui", "*_dialog.py"))}
+    check("qt look 2: Fusion under every window, a little more room at its edges and between its rows",
+          'QStyleFactory.create("Fusion")' in init and "PM_LayoutLeftMargin: 22" in init
+          and "PM_LayoutVerticalSpacing: 8" in init and "dialog.setStyle(style)" in init)
+    check("qt look 2: the sheet draws a box's arrow, a number box's buttons, ticks and radio dots, and a box's list as a list",
+          all(x in ui.QSS for x in ("QComboBox::down-arrow", "QAbstractSpinBox::up-button", "QAbstractSpinBox::up-arrow",
+                                    "QCheckBox::indicator:checked", "QRadioButton::indicator:checked",
+                                    "QAbstractItemView::indicator", "combobox-popup: 0",
+                                    "QComboBox QAbstractItemView::item", "QTreeView::branch:has-children:closed")))
+    check("qt look 2: one type scale: 13px, 16px titles, 12px small print in a readable ink; no window sets its own",
+          "* {{ font-size: 13px; }}" in ui.QSS and 'QLabel[dc="title"] {{ font-size: 16px' in ui.QSS
+          and 'QLabel[dc="note"] {{ font-size: 12px; color: {ink-2}; }}' in ui.QSS
+          and not [f for f, t in src.items() if re.search(r"font-size: 11(\.5)?px", t)], 
+          [f for f, t in src.items() if re.search(r"font-size: 11(\.5)?px", t)])
+    no_title = [f for f, t in src.items() if t.count("(QDialog)") > len(re.findall(r"\bheading\(self|\btitle\(", t))
+                and f not in ("auth_dialog.py",)]  # the sign-in has the logo on top
+    check("qt look 2: every window says what it is in its title; its frame says Due Crew",
+          not no_title and 'dialog.setWindowTitle("Due Crew")' in init and 'box.setWindowTitle("Due Crew")' in init, no_title)
+    check("qt look 2: a window's title and a heading are plain text (a plan's or a person's name)",
+          "label.setTextFormat(Qt.TextFormat.PlainText)" in init.split("def title(")[1].split("def ")[0]
+          and not [f for f, t in src.items() if re.search(r'QLabel\(f?"<b>', t)])
+    check("qt look 2: a window grows to its rows and its words, never shrinks, never past its screen; tidied before it takes its size",
+          "def _fit(window):" in init and "QEvent.Type.LayoutRequest" in init and "QEvent.Type.Polish" in init
+          and "need_w >= w and need_h >= h" in init and "availableGeometry()" in init)
+    dialogs = open(os.path.join(REPO, "tools", "dialogs.py")).read()
+    check("qt look 2: the renderer fails on what a person would see as broken, and renders on a laptop's screen",
+          "broken = fits(dlg)" in dialogs and '"width": 1440, "height": 900' in dialogs and "def kitchen():" in dialogs
+          and "def questions():" in dialogs)
+
+
+def test_room_sounds_v391():
+    """3.9.1, room sounds (Sam's picks): brown noise, rain, fire and waves,
+    made from noise in the top bar's page; a speaker on the chip picks one;
+    each person their own, kept on this computer, never sent; off till
+    picked; it plays while the session runs (breaks too) and stops when it
+    ends. Only the top bar's chip may set it, never a card's page. Since
+    Sam's "the background noises aren't the best": rain, fire and waves are
+    CC0 recordings, seamless loops in due_crew/sounds/; brown noise stays
+    made."""
+    import shutil
+    import subprocess
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    if "aqt.toolbar" not in sys.modules:  # the top bar's page, as Anki's Toolbar.draw names it
+        sys.modules["aqt.toolbar"] = types.SimpleNamespace(TopToolbar=type("TopToolbar", (), {}), Toolbar=type("Toolbar", (), {}))
+    TopBar = sys.modules["aqt.toolbar"].TopToolbar
+    from due_crew import rooms as R, room_model as rm, account
+    t0 = datetime.datetime(2026, 10, 17, 18, 0, tzinfo=datetime.timezone.utc)
+    conf = json.load(open(os.path.join(REPO, "due_crew", "config.json")))
+    check("sounds: off till you pick, on this computer (the add-on's config, never an account key)",
+          conf.get("room_sound") == "off" and conf.get("room_sound_vol") == 60 and rm.sound_pick({}) == ("off", 60)
+          and not {"room_sound", "room_sound_vol"} & set(account.ACCOUNT_KEYS))
+    check("sounds: a pick is one of the four (or off), its volume 0-100; anything else is the default",
+          rm.sound_pick({"room_sound": "rain", "room_sound_vol": 35}) == ("rain", 35)
+          and rm.sound_pick({"room_sound": "cafe", "room_sound_vol": 101}) == ("off", 60)
+          and rm.sound_pick({"room_sound": "fire", "room_sound_vol": True}) == ("fire", 60)
+          and rm.SOUNDS == ("off", "brown", "rain", "fire", "waves"))
+    check("sounds: the chip's command, read strictly",
+          rm.sound_cmd(["duecrew", "roomsound", "waves", "80"]) == ("waves", 80)
+          and rm.sound_cmd(["duecrew", "roomsound", "off", "0"]) == ("off", 0)
+          and all(rm.sound_cmd(p) is None for p in (["duecrew", "roomsound", "cafe", "50"], ["duecrew", "roomsound", "rain", "101"],
+                                                    ["duecrew", "roomsound", "rain", "-1"], ["duecrew", "roomsound", "rain"],
+                                                    ["duecrew", "roomsound", "rain", "5", "x"], ["duecrew", "roomsound", "rain", "5.5"])))
+    fif = rm.make_fifteen("me", t0)
+    room = rm.make_room("me", t0, 4, 25, 5)
+    sf, sr = rm.sound_state(fif, "rain", 50), rm.sound_state(room, "fire", 100)
+    ms = lambda d: int(d.timestamp() * 1000)
+    check("sounds: they play from the session's start to its end, breaks too (a fifteen's: the end of its question)",
+          sf == {"kind": "rain", "vol": 0.5, "from": ms(t0), "until": ms(rm.live_until(fif)), "files": {}}
+          and sr["until"] == ms(rm.room_end(room)) and sr["vol"] == 1.0
+          and rm.sound_state(None, "rain", 50) is None and rm.sound_state(fif, "cafe", 50)["kind"] == "off")
+    stop, on = rm.sound_js(None), rm.sound_js(sf)
+    check("sounds: in no room, the player is only told to stop; in one, the sounds come once a page, then the pick",
+          "dcRoomSound.set(null)" in stop and "dcSounds" not in stop.replace("dcRoomSound", "")
+          and on.count("kinds: KINDS") == 1 and "if (window.dcSounds) { return; }" in on and json.dumps(sf) in on)
+    d = rm.widget_data(fif, [], ("#2e7d32", "#7cc47f"), sound=("rain", 40))
+    chip = rm.widget_js("chip", d)
+    check("sounds: the chip carries the speaker, the pick and the four, labelled; without a pick to carry, no speaker",
+          d["sound"] == {"kind": "rain", "vol": 40} and d["soundKinds"] == list(rm.SOUNDS)
+          and d["soundLabels"]["brown"] == "Brown noise" and "'Room sound'" in chip and "roomsound:" in chip
+          and rm.widget_data(fif, [], ("#2e7d32", "#7cc47f"))["sound"] is None)
+    check("sounds: the speaker says it (Sam's pick, A): Sound while off, the sound's name while one plays; the speaker alone when compact",
+          "on ? D.soundLabels[snd.kind] : 'Sound'" in chip and "if (!D.compact)" in chip and "if (!open) {" in chip)
+    check("sounds: spacing (Sam: \"too close to the edge\"): the outlined speaker nested 3 px inside the chip on every side "
+          "(20 px tall, border included, 7 px into the chip's 10 px end); alone, it sits clear of the end; an empty crewmate slot never doubles a gap",
+          "box-sizing:border-box;height:20px;" in chip and "margin:0 -7px 0 0;" in chip and "'width:20px;margin:0;'" in chip
+          and "if (!fc.childElementCount) { fc.style.display = 'none'; }" in chip
+          and "fc.style.display = on || D.compact || !fc.childElementCount ? 'none' : '';" in chip)
+    from due_crew import settings_model as sm
+    tab = board._settings_board({"room_sounds": False})
+    check("sounds: Settings › Board › Room sounds takes them away (on by default; Reset board puts it back on); Find a setting finds it",
+          sm.change(["set", "room_sounds", "0"], {}) == {"room_sounds": False} and sm.BOARD_DEFAULTS["room_sounds"] is True
+          and rm.sounds_on({}) and rm.sounds_on({"room_sounds": True}) and not rm.sounds_on({"room_sounds": False})
+          and 'aria-label="Room sounds"' in tab and "duecrew:set:room_sounds:1" in tab
+          and "rain" in board.FIND_WORDS["set:room_sounds:"])
+    check("sounds: the picker folds back by itself (Sam: \"should close after a second or two\"): 1.5 s after a pick, "
+          "2 s after the volume, 1 s after the pointer leaves, 4 s if nothing's touched; never mid-drag",
+          "picked = true; later(1500);" in chip and "later(2000)" in chip and "if (open) { later(1000); }" in chip
+          and "if (on) { picked = false; later(4000); }" in chip and "if (vol.matches(':active')) { later(800); return; }" in chip)
+    node = shutil.which("node")
+    if node:
+        src = open(os.path.join(REPO, "due_crew", "sounds.js")).read()
+        prog = ("var window = {};" + src + "var first = window.dcSounds;" + src +
+                "console.log(window.dcSounds.kinds.join(',') + '|' + (window.dcSounds === first) + '|' + typeof window.dcSounds.build);")
+        out = subprocess.run([node], input=prog, capture_output=True, text=True, timeout=60)
+        check("sounds.js: the four, made from noise; loaded twice it's still the one (so it can always stop)",
+              out.stdout.strip() == "brown,rain,fire,waves|true|function", out.stdout + out.stderr)
+        prog = ("var window = {};" + src + "window.dcSounds.files({rain: '/a.ogg', brown: '/b.ogg', fire: 5, cafe: '/c.ogg'});"
+                "console.log(window.dcSounds.recorded().join(','));")
+        out = subprocess.run([node], input=prog, capture_output=True, text=True, timeout=60)
+        check("sounds.js: told where the recordings are, it takes rain, fire and waves as text, never brown noise or anything else",
+              out.stdout.strip() == "rain", out.stdout + out.stderr)
+        fake = open(os.path.join(REPO, "tests", "fake_audio.js")).read()
+        prog = (fake + src + "var S = window.dcSounds; S.play('brown', 0.5); flush();"
+                "S.setVolume(0); flush(); var a = log.join(','); S.setVolume(0.4); flush(); var b = log.join(',');"
+                "S.stop(); flush(); var c = log.join(','); S.play('brown', 0.5); flush();"
+                "console.log([a, b, c, log.join(',')].join('|'));")
+        out = subprocess.run([node], input=prog, capture_output=True, text=True, timeout=60)
+        prog = (fake + src + "var S = window.dcSounds; S.play('brown', 0.5); flush(); S.setVolume(0); flush(); log.length = 0;"
+                "S.play('brown', 0); flush(); S.play('brown', 0); flush(); S.play('brown', 0); flush(); console.log(log.join(','));")
+        quiet = subprocess.run([node], input=prog, capture_output=True, text=True, timeout=60)
+        check("sounds.js (the bug hunt): at no volume, the session's check every 5 s leaves it asleep",
+              quiet.stdout.strip() == "", quiet.stdout + quiet.stderr)
+        check("sounds.js (3.9.1, the efficiency run): at no volume it sleeps, turned up it wakes; stopped, the context closes "
+              "(its samples go with it) and the next play makes a new one",
+              out.stdout.strip() == "new,suspend|new,suspend,resume|new,suspend,resume,close|new,suspend,resume,close,new",
+              out.stdout + out.stderr)
+    else:
+        print("SKIP sounds.js in node: no node")
+    # the clicks: from the top bar (our page) it's kept; from a card's page, never
+    mine = {"room_sound": "off", "room_sound_vol": 60}
+    evals, allowed = [], []
+
+    class Top:
+        def setPlaybackRequiresGesture(self, v):
+            allowed.append(v)
+    saved = (R.cfg, R.save_cfg, R._webs, R._eval, R.my_room)
+    try:
+        R.cfg = lambda: mine
+        R.save_cfg = lambda c, **k: mine.update(c)
+        R._webs = lambda: (Top(), None, None)
+        R._eval = lambda web, js: evals.append(js)
+        R.my_room = lambda: fif
+        dc._on_js(False, "duecrew:roomsound:waves:75|" + rm.CMD_KEY, TopBar())  # the chip's picker, in the top bar
+        kept = dict(mine)
+        played = evals[-1] if evals else ""
+        check("sounds: the top bar's player is told where this install's recordings are, by Anki's /_addons/ (setWebExports)",
+              json.dumps({k: f"/_addons/due_crew/sounds/{k}.ogg" for k in ("rain", "fire", "waves")}) in played
+              and 'setWebExports(__name__, r"sounds/[^/]+\\.ogg")' in open(os.path.join(REPO, "due_crew", "__init__.py")).read()
+              # 3.9.1 (the security review): a file in sounds/ only, never sounds/../ anything
+              and re.fullmatch(r"sounds/[^/]+\.ogg", "sounds/rain.ogg") and not re.fullmatch(r"sounds/[^/]+\.ogg", "sounds/../x/y.ogg"))
+        dc._on_js(False, "duecrew:roomsound:fire:20|" + rm.CMD_KEY, object())  # a card's page, keyed
+        dc._on_js(False, "duecrew:roomsound:fire:20", object())               # and bare
+        dc._on_js(False, "duecrew:roomsound:cafe:20|" + rm.CMD_KEY, TopBar())          # not one of ours
+        check("sounds: the chip's pick is kept for this computer and plays at once; the top bar may play it after a redraw",
+              kept == {"room_sound": "waves", "room_sound_vol": 75} and '"kind": "waves"' in played and allowed == [False, False])
+        check("sounds: a card's page can't set it, keyed or not; nor can a sound that isn't one of the four",
+              mine == {"room_sound": "waves", "room_sound_vol": 75})
+        evals.clear()
+        R._sound(Top(), None)
+        R._sound(None, fif)
+        check("sounds: no room, the player stops; no top bar, nothing", evals == [rm.sound_js(None)])
+        mine["room_sounds"] = False
+        evals.clear()
+        R._sound(Top(), fif)
+        dc._on_js(False, as_board("duecrew:roomsound:rain:50|" + rm.CMD_KEY), DeckBrowser())
+        check("sounds: with Room sounds off, the chip has no speaker, the player is told off, and a pick from the chip is ignored",
+              R._data(fif)["sound"] is None and len(evals) == 1 and '"kind": "off"' in evals[0]
+              and mine["room_sound"] == "waves")
+    finally:
+        R.cfg, R.save_cfg, R._webs, R._eval, R.my_room = saved
+    check("sounds: a recording's address is its kind's, in the add-on's own folder (quoted); brown noise and strangers have none",
+          rm.sound_files("my add-on", ["rain", "brown", "waves", "cafe"])
+          == {"rain": "/_addons/my%20add-on/sounds/rain.ogg", "waves": "/_addons/my%20add-on/sounds/waves.ogg"}
+          and rm.sound_files("x", []) == {} and rm.sound_state(fif, "rain", 50)["files"] == {}
+          and rm.sound_state(fif, "rain", 50, {"rain": "/r.ogg"})["files"] == {"rain": "/r.ogg"}
+          and "window.dcSounds.files(s.files)" in rm.sound_js(rm.sound_state(fif, "rain", 50)))
+    snd = os.path.join(REPO, "due_crew", "sounds")
+    credits = open(os.path.join(snd, "CREDITS.md")).read()
+    heads = {k: open(os.path.join(snd, k + ".ogg"), "rb").read(200) for k in rm.RECORDED}
+    sizes = {k: os.path.getsize(os.path.join(snd, k + ".ogg")) for k in rm.RECORDED}
+    check("sounds: rain, fire and waves ship as Ogg Opus loops, each well under 700 KB, credited (CC0, the maker, the page)",
+          rm.RECORDED == ("rain", "fire", "waves") and all(h.startswith(b"OggS") and b"OpusHead" in h for h in heads.values())
+          and all(40_000 < n < 700_000 for n in sizes.values())
+          and all(f"`{k}.ogg`" in credits for k in rm.RECORDED) and "CC0 1.0" in credits
+          and all(u in credits for u in ("freesound.org/s/525046/", "freesound.org/s/132534/", "freesound.org/s/587164/"))
+          and "due_crew/sounds/*.ogg" in open(os.path.join(REPO, "LICENSE")).read(), sizes)
 
 
 def main():

@@ -8,7 +8,8 @@ from aqt.qt import (
 
 from ..backend.shapes import SQUAD_CODE_LEN, SQUAD_NAME_MAX, squad_code_from
 from ..app import _bg
-from . import attach_alive, copy_text, run_bg, shared_words
+from . import attach_alive, copy_text, heading, role, run_bg, shared_words
+from . import note as ui_note
 
 
 def invite_text(name, code):
@@ -38,6 +39,7 @@ class SquadDialog(QDialog):
         self.setMinimumWidth(400)
         lay = QVBoxLayout(self)
         lay.setSpacing(8)
+        heading(self, lay)
         # one grid, so both fields and both buttons line up (3.5.0)
         grid = QGridLayout()
         grid.setHorizontalSpacing(8)
@@ -87,10 +89,7 @@ class SquadDialog(QDialog):
         lay.addLayout(grid)
 
         lay.addSpacing(6)
-        hint = QLabel(note or shared_note({}))
-        hint.setStyleSheet("font-size: 11px; color: palette(placeholder-text);")
-        hint.setWordWrap(True)
-        lay.addWidget(hint)
+        lay.addWidget(ui_note(QLabel(note or shared_note({}))))
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(self.reject)
         lay.addWidget(buttons)
@@ -201,8 +200,8 @@ class SquadDialog(QDialog):
 
 
 def _head(text):
-    label = QLabel(f"<b>{text}</b>")
-    label.setStyleSheet("margin-top: 4px;")
+    label = role(QLabel(text), "head")
+    label.setContentsMargins(0, 4, 0, 0)  # a style sheet's margin sets a label's words in, too
     return label
 
 

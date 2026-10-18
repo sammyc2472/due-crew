@@ -1,16 +1,17 @@
 """A follower's own days (G4, G7): pause a plan until a day, the question
 on coming back, and how many days my dates run after the plan's. Only
 this follower's copy changes; the plan never does. Plan and date names are
-the author's: escaped wherever it's rich text."""
+the author's: plain text, never markup (3.9.1: they were escaped into
+rich text, and a lone "&" then showed as "&amp;")."""
 
 import datetime
 
 from aqt.qt import (
     QButtonGroup, QDate, QDateEdit, QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QRadioButton,
-    QSpinBox, QVBoxLayout,
+    QSpinBox, QVBoxLayout, Qt,
 )
 
-from . import esc
+from . import heading, note, styled
 
 
 def _qdate(iso):
@@ -22,16 +23,24 @@ def _iso(qd):
     return datetime.date(qd.year(), qd.month(), qd.day()).isoformat()
 
 
+def _note(text):
+    """The small print under a choice, as plain text: an event's name is its author's."""
+    label = QLabel(str(text))
+    label.setTextFormat(Qt.TextFormat.PlainText)
+    return note(label)
+
+
 class PauseDialog(QDialog):
     """Pause until a day. `until` comes from my Away dates when they're set."""
 
     def __init__(self, parent, name, today, until, from_away=False):
         super().__init__(parent)
+        styled(self)  # 3.9.1: the board's look
         self.until = None
         self.setWindowTitle("Pause")
         self.setMinimumWidth(380)
         root = QVBoxLayout(self)
-        root.addWidget(QLabel(f"<b>Pause {esc(name)}</b>"))
+        heading(self, root, f"Pause {name}")
         row = QHBoxLayout()
         row.addWidget(QLabel("Until"))
         self.date = QDateEdit()
@@ -42,10 +51,8 @@ class PauseDialog(QDialog):
         row.addWidget(self.date)
         row.addStretch()
         root.addLayout(row)
-        note = QLabel(("From your Away dates. " if from_away else "")
-                      + "Nothing opens while it's paused. On the day after, it asks what to do with what you missed.")
-        note.setWordWrap(True)
-        root.addWidget(note)
+        root.addWidget(_note(("From your Away dates. " if from_away else "")
+                             + "Nothing opens while it's paused. On the day after, it asks what to do with what you missed."))
         buttons = QDialogButtonBox()
         buttons.addButton("Cancel", QDialogButtonBox.ButtonRole.RejectRole).clicked.connect(self.reject)
         ok = buttons.addButton("Pause", QDialogButtonBox.ButtonRole.AcceptRole)
@@ -69,12 +76,12 @@ class BackDialog(QDialog):
 
     def __init__(self, parent, n_units, days, event=None):
         super().__init__(parent)
+        styled(self)  # 3.9.1: the board's look
         self.choice = None
         self.setWindowTitle("Welcome back")
         self.setMinimumWidth(420)
         root = QVBoxLayout(self)
-        root.addWidget(QLabel(f"<b>Welcome back. {n_units} date{'s' if n_units != 1 else ''} "
-                              f"opened while you were away.</b>"))
+        heading(self, root, f"Welcome back. {n_units} date{'s' if n_units != 1 else ''} opened while you were away.")
         self.push = QRadioButton(f"Push my dates back {days} day{'s' if days != 1 else ''}")
         self.push.setChecked(True)
         self.open = QRadioButton(f"Open the {n_units} date{'s' if n_units != 1 else ''} now")
@@ -83,10 +90,8 @@ class BackDialog(QDialog):
         group.addButton(self.open)
         root.addWidget(self.push)
         root.addWidget(self.open)
-        note = QLabel("Only your copy changes. The plan stays the same for everyone else"
-                      + (f", and {esc(event[0])} is still {esc(event[1])}." if event else "."))
-        note.setWordWrap(True)
-        root.addWidget(note)
+        root.addWidget(_note("Only your copy changes. The plan stays the same for everyone else"
+                             + (f", and {event[0]} is still {event[1]}." if event else ".")))
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
         buttons.accepted.connect(self._ok)
         root.addWidget(buttons)
@@ -106,11 +111,12 @@ class ShiftDialog(QDialog):
 
     def __init__(self, parent, name, current):
         super().__init__(parent)
+        styled(self)  # 3.9.1: the board's look
         self.days = None
         self.setWindowTitle("Push my dates back")
         self.setMinimumWidth(380)
         root = QVBoxLayout(self)
-        root.addWidget(QLabel(f"<b>{esc(name)}</b>"))
+        heading(self, root, str(name))
         row = QHBoxLayout()
         row.addWidget(QLabel("My dates run"))
         self.spin = QSpinBox()
@@ -120,10 +126,8 @@ class ShiftDialog(QDialog):
         row.addWidget(QLabel("days after the plan's"))
         row.addStretch()
         root.addLayout(row)
-        note = QLabel("Only your copy moves; events stay on their days. 0 puts you back on the plan's dates. "
-                      "Dates already open stay open.")
-        note.setWordWrap(True)
-        root.addWidget(note)
+        root.addWidget(_note("Only your copy moves; events stay on their days. 0 puts you back on the plan's dates. "
+                             "Dates already open stay open."))
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self._ok)
         buttons.rejected.connect(self.reject)

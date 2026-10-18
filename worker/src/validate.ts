@@ -262,20 +262,60 @@ export function squadName(v: unknown): string {
   return n;
 }
 
-/** A cheer: one emoji, a note of at most 80, `luck`, a card's guid. */
+/** A cheer: one emoji, a note of at most 80, `luck`, a card's guid, and
+ *  (3.9.1) a doodle, which only a plain cheer carries. */
 export function cheer(v: unknown) {
   if (!isObj(v)) throw bad("cheer");
-  for (const k of Object.keys(v)) if (!["emoji", "note", "luck", "guid"].includes(k)) throw bad("cheer");
+  for (const k of Object.keys(v)) if (!["emoji", "note", "luck", "guid", "doodle"].includes(k)) throw bad("cheer");
   if (!isEmoji(v.emoji)) throw bad("emoji");
   if ("note" in v && v.note !== null && !isStr(v.note, NOTE_MAX)) throw bad("note");
   if ("luck" in v && typeof v.luck !== "boolean") throw bad("luck");
   if ("guid" in v && v.guid !== null && !isStr(v.guid, GUID_MAX)) throw bad("guid");
+  const d = "doodle" in v && v.doodle !== null ? doodle(v.doodle) : null;
+  if (d && (v.luck === true || v.guid)) throw bad("doodle");  // a tip and a good-luck line are words
   return {
     emoji: v.emoji,
     note: v.note ? oneLine(v.note as string, NOTE_MAX) || null : null,
     luck: v.luck === true ? 1 : null,
     guid: (v.guid as string | undefined) || null,
+    doodle: d,
   };
+}
+
+// 3.9.1, doodle cheers: the pad is DOODLE_W x DOODLE_H; a stroke is its pen
+// and then x, y, x, y in whole points. The pen: bit 0 thick; pen >> 1 its
+// colour, a number, never a colour of its own: 0 my accent (which a mutual
+// friend already has), 1 black, 2 to 7 one of the board's six accents
+// (shapes.DOODLE_INKS, Sam: "make all of our colors available").
+export const DOODLE_PEN_MAX = 15;
+export const DOODLE_W = 300;
+export const DOODLE_H = 170;
+export const DOODLE_POINTS = 2000;
+export const DOODLE_STROKES = 200;
+export const SIGN_MAX = 24;
+
+/** A doodle, as canonical JSON: {k: "draw", s: [[pen, x, y, ...], ...]} or
+ *  {k: "sign", t: "you've got this"}. shapes.clean_doodle is the client's
+ *  twin; anything it would drop, this turns away. */
+export function doodle(v: unknown): string {
+  if (!isObj(v)) throw bad("doodle");
+  if (v.k === "sign") {
+    if (Object.keys(v).length !== 2 || !isStr(v.t, SIGN_MAX * 4)) throw bad("doodle");
+    const t = oneLine(v.t, SIGN_MAX);
+    if (!t) throw bad("doodle");
+    return JSON.stringify({ k: "sign", t });
+  }
+  if (v.k !== "draw" || Object.keys(v).length !== 2 || !Array.isArray(v.s) || !v.s.length || v.s.length > DOODLE_STROKES) throw bad("doodle");
+  let points = 0;
+  for (const st of v.s) {
+    if (!Array.isArray(st) || st.length < 3 || st.length % 2 !== 1 || !isInt(st[0], 0, DOODLE_PEN_MAX)) throw bad("doodle");
+    for (let i = 1; i < st.length; i += 2) {
+      if (!isInt(st[i], 0, DOODLE_W) || !isInt(st[i + 1], 0, DOODLE_H)) throw bad("doodle");
+    }
+    points += (st.length - 1) / 2;
+  }
+  if (points > DOODLE_POINTS) throw bad("doodle");
+  return JSON.stringify({ k: "draw", s: v.s });
 }
 
 export function settingsDoc(v: unknown) {

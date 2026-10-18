@@ -48,7 +48,14 @@ a non-zero exit if one fails to build:
     QT_QPA_PLATFORM=offscreen <python with PyQt6> tools/dialogs.py OUT_DIR
 
 Both crashes shipped on 2026-09-10 (a PyQt6 enum mix and a shadowed tab
-widget) fail here in under a second. Run it before any release that
+widget) fail here in under a second. Since 3.9.1 it also fails on what a
+person would see as broken (`fits`): a button, tick or choice narrower
+than its words, a box narrower than its words, two controls on top of each
+other, a window shorter or narrower than its rows. It renders on a
+laptop-sized screen (1440x900) in 13px type, as a Mac draws; `kitchen.png`
+is every kind of control in one window. `DC_THEME=dark` renders the dark
+look; `DC_APP_QSS=file.qss` puts an app-wide style sheet under the
+windows', as Anki's own widget style does. Run it before any release that
 touches `due_crew/ui/`. Without OUT_DIR it writes `dialog-shots/` in the
 working directory (gitignored; CI uploads it as an artifact).
 

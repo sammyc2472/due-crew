@@ -14,7 +14,9 @@ SWITCHES = ("show_leaderboard", "show_stale", "sync_notifications", "compact",
             "share_streak", "share_heatmap",
             "due_show", "due_suggest", "due_leeches",  # Due
             "shortcuts",  # 3.8.0: Ctrl+Shift+S and Ctrl+Shift+Q
-            "fifteen", "sev")  # 3.8.1: ▶ Fifteen? and the nudge; Pip
+            "fifteen", "sev",  # 3.8.1: ▶ Fifteen? and the nudge; Pip
+            "two_buttons",  # 3.9.1: Again and Good alone (not the board's look: Reset board leaves it)
+            "room_sounds")  # 3.9.1: the speaker on a fifteen's chip, and its sounds
 CHOICES = {"theme": ("auto", "light", "dark"),
            "accent": ("green", "blue", "purple", "teal", "amber", "rose"),
            "room_chip_side": ("left", "right"),
@@ -26,7 +28,7 @@ LABEL_MAX = 24
 BOARD_DEFAULTS = {"show_leaderboard": True, "show_stale": True, "sync_notifications": True,
                   "theme": "auto", "accent": "green", "compact": False, "highlight_me": True,
                   "crew_label": "Crew", "room_chip_side": "right", "hidden_tabs": [], "shortcuts": True,
-                  "fifteen": True, "sev": True, "sev_break": "breathe"}
+                  "fifteen": True, "sev": True, "sev_break": "breathe", "room_sounds": True}
 
 
 def _day(text):

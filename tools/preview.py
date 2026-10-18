@@ -399,6 +399,13 @@ sections.append("<h3>3.8.0: Insights, no plan, the exam date in its head; the Ha
     DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
     you=_YOU("insights", insights={"decks": _DECKS, "did": 20, "exam": "2026-10-14", "plan": None,
                                    "view": dict(_DECK_INS, hard={"pct": 22, "n": 640})})))
+# 3.9.1: two buttons: Try it from the Hard habit line, then it's on with its Undo; Settings › Board › Reviewing
+sections.append("<h3>3.9.1: two buttons, just tried from the Hard habit line (Undo)</h3>" + board.render(
+    DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
+    you=_YOU("insights", insights={"decks": _DECKS, "did": 20, "exam": "2026-10-14", "plan": None,
+                                   "view": dict(_DECK_INS, hard={"pct": 22, "n": 640}, two="tried")})))
+sections.append("<h3>3.9.1: Settings › Board › Reviewing: two buttons, FSRS off (its note)</h3>" + board.settings_html(
+    dict(SET_VIEW, tab="board", fsrs=False), dict(SET_CFG, two_buttons=True)))
 sections.append("<h3>Due: folded</h3>" + board.render(DATA, {"period": "week"}, now_ts - 60, due=dict(_DV, folded=True),
                                                        plans=PLANS, you=_YOU("today", folded=True)))
 sections.append("<h3>Due: done for today, a long tomorrow</h3>" + board.render(
@@ -552,6 +559,30 @@ sections.append("<h3>3.8.2: a costume over the look (the things under it say Und
     dict(_CV, look=_MINE["sev_look"] + ["dino"]), {"accent": "purple"}))
 sections.append("<h3>3.8.2: To earn: what's close, then the rest by how it's earned</h3>" + board.closet_html(
     dict(_CV, tab="To earn"), {"accent": "green", "theme": "dark"}))
+# 3.9.1: the fridge, the doodles my crew sent (a heart, a sun, a star, two signs)
+import math as _m  # noqa: E402
+_HEART = [n for a in [i / 24 * 2 * _m.pi for i in range(25)]
+          for n in (round(150 + 52 * _m.sin(a) ** 3), round(84 - 3.4 * (13 * _m.cos(a) - 5 * _m.cos(2 * a) - 2 * _m.cos(3 * a) - _m.cos(4 * a))))]
+_SUN = [[1] + [n for i in range(21) for n in (round(150 + 32 * _m.cos(i / 20 * 2 * _m.pi)), round(85 + 32 * _m.sin(i / 20 * 2 * _m.pi)))]] + [
+    [1, round(150 + 44 * _m.cos(k * _m.pi / 4)), round(85 + 44 * _m.sin(k * _m.pi / 4)),
+     round(150 + 60 * _m.cos(k * _m.pi / 4)), round(85 + 60 * _m.sin(k * _m.pi / 4))] for k in range(8)]
+_STAR = [[2] + [n for i in range(11) for n in (round(150 + (60 if i % 2 == 0 else 26) * _m.cos(-_m.pi / 2 + i * _m.pi / 5)),
+                                                  round(88 + (60 if i % 2 == 0 else 26) * _m.sin(-_m.pi / 2 + i * _m.pi / 5)))]]
+_FRIDGE = [{"from": "dre", "name": "Dre", "at": "2026-10-03T09:00:00Z", "a": "blue", "d": {"k": "sign", "t": "proud of u"}},
+           {"from": "marisa", "name": "Marisa", "at": "2026-10-09T09:00:00Z", "a": "rose", "d": {"k": "draw", "s": _STAR}},
+           {"from": "noah", "name": "Noah", "at": "2026-10-12T09:00:00Z", "a": "teal", "d": {"k": "draw", "s": _SUN}},
+           {"from": "dre", "name": "Dre", "at": "2026-10-15T09:00:00Z", "a": "blue", "d": {"k": "sign", "t": "one more block!"}},
+           {"from": "priya", "name": "Priya", "at": "2026-10-17T09:00:00Z", "a": "purple", "d": {"k": "draw", "s": [[1] + _HEART]}}]
+sections.append("<h3>3.9.1: the Cheer pill after a name, only while the pointer's on it (point at a name); no 🎉 column</h3>"
+                + board.render(dict(DATA, entries=DRESSED), dict(_MINE, period="today"), now_ts - 60))
+# the fridge around the Decks screen: in a box of its own here (a transform holds the
+# pinned notes to it, as the window holds them in Anki), placed by its own script
+_NOTES = ["proud of you", "", "you've got this, see you at the library", "", "good luck tomorrow!!"]
+sections.append("<h3>3.9.1: the fridge, pinned around the Decks screen: drag one anywhere, × takes it down</h3>"
+                '<div style="position:relative;height:620px;transform:translateZ(0);overflow:hidden;border:1px dashed #ccc">'
+                + board.render(dict(DATA, entries=DRESSED), dict(_MINE, period="today"), now_ts - 60,
+                               fridge=[dict(x, n=_NOTES[i]) for i, x in enumerate(_FRIDGE)])
+                + "<script>" + board.fridge_js() + "</script></div>")
 # 3.8.22: Halloween week (24 to 31 Oct): the line, the five things, the bats (at the day's first board) and,
 # with every Pip on the rows in a Halloween thing, the cobweb
 from due_crew import closet as _cl  # noqa: E402
@@ -626,6 +657,21 @@ stranger_js = board.stranger_card_js({"uid": "u2", "name": "Maya R.",
                                       "pending": False, "knocked_me": False,
                                       "founder_me": True})
 
+# 3.9.1: the board's sheets (sheets.py): a line, a step that can't be taken back, one of a few
+sheet_text = board.sheet_js({"id": "p1", "title": "Status", "yes": "Set",
+                             "text": "One line under your name, for your crew. Start with a number "
+                                     "(\u201c200 cards, then bed\u201d) and it ticks itself off. Empty clears it.",
+                             "field": {"kind": "text", "value": "200 cards, then bed", "max": 80}})
+sheet_danger = board.sheet_js({"id": "p2", "title": "Stop following Step 1 \u00b7 Micro block?", "yes": "Stop",
+                               "text": "Cards already open stay open. The crew stops seeing your progress on this plan.",
+                               "check": {"label": "Take Step 1 \u00b7 Micro block's tags off your notes too", "on": True}})
+sheet_delete = board.sheet_js({"id": "p3", "title": "Delete account?", "yes": "Delete Account", "danger": True,
+                               "text": "This deletes your stats, your code, and your account for good. No undo."})
+sheet_pick = board.sheet_js({"id": "p4", "title": "Change deck", "text": "Run Step 1 \u00b7 Micro block on",
+                             "field": {"kind": "pick", "at": 3, "items": ["Big Step 1"] + [f"Big Step 1::{x}" for x in (
+                                 "Biochem", "Cardio", "Endo", "GI", "Heme", "Immuno", "Micro", "Neuro", "Pharm",
+                                 "Physio", "Psych", "Renal", "Repro", "Resp")] + ["Japanese Core 2k"]}})
+
 page = f"""<!doctype html><html><head><meta charset="utf-8">
 <title>Due Crew board preview</title>
 <style>
@@ -652,6 +698,10 @@ page = f"""<!doctype html><html><head><meta charset="utf-8">
   <button onclick="eval(FLURRY_JS)">flurry</button>
   <button onclick="eval(STRANGER_JS)">stranger</button>
   <button onclick="eval(LUCK_JS)">luck</button>
+  <button onclick="eval(SHEET_TEXT)">status</button>
+  <button onclick="eval(SHEET_DANGER)">stop</button>
+  <button onclick="eval(SHEET_DELETE)">delete</button>
+  <button onclick="eval(SHEET_PICK)">deck</button>
 </div>
 <center>{''.join(sections)}</center>
 <script>
@@ -660,6 +710,10 @@ page = f"""<!doctype html><html><head><meta charset="utf-8">
   var FLURRY_JS = {json.dumps(flurry)};
   var STRANGER_JS = {json.dumps(stranger_js)};
   var LUCK_JS = {json.dumps(luck_js)};
+  var SHEET_TEXT = {json.dumps(sheet_text)};
+  var SHEET_DANGER = {json.dumps(sheet_danger)};
+  var SHEET_DELETE = {json.dumps(sheet_delete)};
+  var SHEET_PICK = {json.dumps(sheet_pick)};
 </script>
 </body></html>"""
 

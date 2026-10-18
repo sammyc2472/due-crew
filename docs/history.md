@@ -2152,3 +2152,542 @@ every release that changes how something works.
   cheers' toss were already ending where they rest. The suite reads every
   keyframe list in the add-on and the site and fails one whose offsets go
   backwards, which a browser drops without a word.
+- 3.9.1, doodle cheers (Sam, 17 Oct: "Like doodle idea! mock it", then
+  "create the doodles thing", with the mock's picks: both, Pip holds it up,
+  the fridge, your colour and black). The Cheer window has Draw and Sign
+  under the emoji: a pad to draw on (paper, light in either theme; two
+  pens, your accent's light shade and ink, thin or thick, Undo, Clear), or
+  a few words (24 at most, shown on the paper as they'll look) for your
+  Pip to hold up. Both are optional; a blank pad sends a plain cheer. It
+  goes as one more field of the cheer, so sending is still one request: a
+  drawing is its strokes, [pen, x, y, ...] in whole points on the 300 x
+  170 pad (pen bit 0 thick, bit 1 ink), 200 strokes and 2,000 points at
+  most, a few KB; never pixels, a colour of its own, markup or a link.
+  `shapes.clean_doodle` is the client's gate both ways, `validate.doodle`
+  the Worker's (the fake's `_doodle` the same); never on a tip or a
+  good-luck line. Migration 0029 adds `cheers.doodle`; `/board` returns
+  it with the cheer, `GET /account/data` with the ones waiting, a report
+  says a sign's words or that it drew. A Worker from before it turns the
+  field away (400, nothing written), so the add-on sends the cheer again
+  without it. It lands as the cheer does, from mutual friends only, and
+  in place of the show: the sender's Pip (their colour and look, arms up)
+  rises at the board's corner holding it on two sticks and ducks down as
+  the banner goes (`board.doodle_landing`, `flurry_js`'s `doodle`); with
+  Pip off or Reduce motion it sits in the banner on its paper, still. The
+  drawing is drawn back on my side (`board.doodle_html`: an SVG of paths,
+  the sender's accent in its light shade). Every one that lands goes on
+  the fridge, a third page of Pip's closet (Yours · To earn · Fridge):
+  newest first, who and when, a × to take it down (`closetfridge`), the
+  last 24, kept in wrap.json on this computer and never sent (`fridge.py`
+  pure, `closet_flow.keep_doodles`/`fridge`/`take_down` the glue). The
+  site's home says "cheered with a drawing" and leaves it for Anki.
+- 3.9.1, cheers, clearer (Sam, 17 Oct: "Cheers, clearer: build these: 1 ·
+  A 🎉 that looks pressable", then "also get rid of the current cheers
+  click to the right of the stats", and "make the cheers and doodles
+  modals in the design language of our add on, not in the native anki
+  style"). The faint 🎉 column at the end of every crew row (12px, 30%,
+  no word, past Streak) is gone; a crewmate's cheer is a "🎉 Cheer" pill
+  right after the name and its chip, only while the pointer (or a key)
+  is on the name (`td.nm:hover`; Sam, after a first try that showed it on
+  every row for a crew's first two weeks: "cheer should only show up when
+  scrolling on a name, not persistent all the time"). A long name ends a
+  little sooner while its pill shows, so the pill is never cut off. The
+  site's rows are the twin (`cpill`); on a phone, with no pointer,
+  tapping the name opens their card, which has "🎉 Send a cheer". The Cheer window is drawn on the Decks screen in the
+  board's own look (`board.cheer_overlay_js`: its tokens, so Theme and
+  Accent hold; their Pip and name at the top; the quick emoji and any
+  other; Draw · Sign on a canvas pad and a paper preview; the note; Send
+  and Cancel; Esc or a press on the backdrop closes it, never a line
+  drawn off the pad's edge), in place of the Qt window (`CheerDialog` and
+  its `DoodlePad` are gone; the crew-emoji window keeps the picker). Send
+  is one `duecrew:cheersend` command, its payload URI-encoded JSON, and
+  `social.send_from_window` checks it all again: a crewmate on the board,
+  one emoji, one line, a doodle `clean_doodle` keeps. The name goes in as
+  text, never markup.
+- 3.9.1, two buttons (Sam's picks from the mock "Two Buttons": a switch in
+  Settings plus a link on the Hard habit line; 2, 3 and 4 count as Good;
+  every deck; FSRS off allowed, with a one-line note). Review with Again
+  and Good alone. `two_buttons.py` is the whole of it, on two of Anki's
+  own hooks: `reviewer_will_init_answer_buttons` hands the bar Again (1)
+  and Good (3) out of Anki's four, in its own words (a list that isn't the
+  four, another add-on's, is left as it came), and
+  `reviewer_will_answer_card`, the filter every answer passes through,
+  keys and clicks alike, turns 2 and 4 into 3. A room's break shares that
+  filter and its no still holds (filters chain; a no stays a no). Space
+  and Enter are Good already. Nothing else about scheduling changes; past
+  answers and Undo are untouched. It's a person's way of reviewing, so
+  it's an account key (`two_buttons`, off by default) and follows them to
+  another computer; Reset board leaves it. Settings › Board has a new
+  Reviewing section: "Two buttons", "Again and Good. Hard and Easy hide;
+  2, 3 and 4 count as Good. Phones keep four." (phones don't run desktop
+  add-ons), and with FSRS off in this collection, "Works best with FSRS
+  on." (`_settings_board`'s `fsrs`, from the glue's `_fsrs_on`). Find a
+  setting finds it by hard, easy, buttons. Insights' Hard habit line gains
+  "Try two buttons" (`instwo`): it's on, and the line says "Two buttons
+  are on" with Undo (`instwono`) for as long as the board shows it; with
+  two buttons on otherwise, the line doesn't come (there's no Hard to
+  press). Nothing is sent but the setting, as Settings sends it.
+- 3.9.1, the fridge moves onto the Decks screen, and a doodle has a
+  caption (Sam, 17 Oct: "could the fridge just be the periphery of the
+  decks window, like dragged around the anki window? / can we add text to
+  the doodle, or put the included text in the message under like a
+  caption with a from the pip person ya know with their name"). The
+  doodles I'm sent are pinned around the board like magnets on a fridge
+  (`board.fridge_html`, placed and made draggable by `fridge_js` after
+  every draw and swap): in the gutters beside the board, newest highest,
+  left then right; a small pile in the bottom right corner when the
+  window has no room beside it. Drag one anywhere and it stays
+  (`fridgemove`; no redraw); × takes it down (`fridgedown`). Twelve at most (`fridge.KEEP`, what fits
+  around a board on a laptop); Pip's closet's Fridge page is gone. Each
+  carries the note it came with under it, "from" their Pip and name, and
+  the day; held up as it lands, the sign has the same caption and the
+  note leaves the banner (`doodle_landing`'s `note`, `from`, `ni`). With
+  a drawing or a sign, the Cheer window's note says "A caption under it
+  (optional)". A sign's words are in the board's own font, bold, not a
+  handwriting font (Sam: "consistent with our normal fonts").
+- 3.9.1, the fridge's notes are Polaroids, and keep their place as the
+  window changes (Sam's pick from the mock "Pinned Doodles", 17 Oct: "B ·
+  Polaroid. Tilt: a little, each its own way. Also: Perfect but get rid
+  of 'From' so there's more room for the Pip", then "make sure different
+  window sizes are handled well... they should remain in their place for
+  if window expanded again"). Each doodle sits in a white frame, the note
+  on its wide bottom edge, then their Pip (now a crew row's size,
+  `FRIDGE_PIP`) and name and the day, with no "from"; a strip of tape in
+  their colour holds it up, see-through (`_tape`: rgba, since Anki's
+  older webviews have no color-mix). The landing sign's caption keeps
+  "from Priya": Pip is holding the sign there, not in its caption. A spot
+  I drag one to is kept beside the board, not as a share of the window:
+  which side (`l`, `r`), px from that edge of the board, px down
+  (`fridge.move`, `duecrew:fridgemove:<key>:<side>:<dx>:<y>`), so as the
+  window grows or shrinks it stays the same distance from the board. A
+  spot the window's too small for waits on the corner pile, still
+  draggable, and goes back when the window has room again (`fridge_js`
+  places at every resize; the spot itself never changes till I drag).
+  One that's too low is lifted into the window for now. Ones that come
+  in later go round the ones I placed, not under them. A spot kept the
+  older way (thousandths, in a test build) is dropped, and that doodle
+  goes back beside the board.
+- 3.9.1, the Cheer window, round two (Sam, 17 Oct: "the other button in
+  the emoji for cheers selector doesn't pop up with the emoji drawer", and
+  "make all of our colors available in the doodles feature, not just
+  yours / black"). "other" was a box to type into, which needed the
+  computer's own emoji picker (a page can't open it). It's a button now
+  that opens a drawer in the window's look: Find (by words: "coffee",
+  "owl"), a row of groups, and the emoji by group (`emoji_drawer.py`,
+  170 or so, each one clean_emoji keeps whole, the suite checks). Picking
+  one shuts it and "other" shows the pick; one typed or pasted into Find
+  is picked too. Esc shuts the drawer before the window. The pad's
+  colours are every accent, mine first ("My colour"), then black. A
+  stroke's pen says which: bit 0 thick as before, pen >> 1 the colour (0
+  the sender's accent, as every doodle so far; 1 black, as before; 2 to 7
+  `shapes.DOODLE_INKS`, by place, so the list only ever grows at the
+  end). Pens 0 to 15 now, in the three that check a doodle
+  (`clean_doodle`, `validate.ts` `DOODLE_PEN_MAX`, the fake); the Worker
+  has to go out before an add-on that sends them (an older Worker turns
+  a pen past 3 away, and the add-on sends the cheer without its drawing).
+  Each line lands in the colour it was drawn in, whatever the
+  recipient's accent (`doodle_html`, the board's own shades on paper).
+  Draw and Sign start shut (Sam: "they don't always need to send a
+  doodle / sign... should they always be open?"): the window opens as
+  the emoji, "Add Draw · Sign" with neither picked, the note and Send. A
+  press opens one; a second press on it shuts it. Only an open one is
+  sent; a drawing shut away stays on the pad for a reopen.
+- 3.9.1, the README's License section says the name, the Seven days logo
+  and Pip (its name and look) are trademarks, not part of either licence
+  (Sam, 17 Oct, after a look at how another open-source app words it:
+  "just the notice", then "nah do both"). And from that day the logo's
+  and Pip's artwork leaves the open licences, as `worker/` and `site/`
+  left MIT on 29 Sep: `docs/logo/`, `docs/images/`, `due_crew/logo.py`,
+  `sev.py`, `closet_art.py`, and their copies in `site/` (logo and icon
+  files, the board pictures, `sev.js`, the Pip in `cards.js`, the logo in
+  `og_assets.ts`) are all rights reserved, to be copied and run only as
+  part of Due Crew (the root LICENSE lists them; `site/LICENSE.md` and
+  `worker/LICENSE.md` point there). Copies taken before stay under what
+  they were published with. Nothing changes for anyone using Due Crew.
+  The notice is in the part of the README that is the AnkiWeb listing:
+  re-paste it there.
+- 3.9.1, the efficiency run, the review screen (Sam: "We've made the add
+  on chunkier over the past few days ... I don't want our add on to impact
+  anki performance"). Measured on Anki's own pages: every card sent about
+  230 KB of our script (ten evals, about 6 ms of Anki's main thread, several
+  times Anki's own engine work for the card), because every widget was
+  drawn again at every question though nothing in it had changed. Anki
+  keeps the review screen's pages from card to card (it builds them at the
+  first card; the room sounds note's "the review page reloads every card"
+  was wrong), and the top bar's from screen to screen. Now: each page's
+  widgets go as one piece
+  and only when they'd come out different, or the page is new (`app.pages`,
+  bumped by `webview_will_set_content`), or something else was drawn there
+  (`rooms._draw`/`_DRAWN`); night mode draws them again (`theme_did_change`).
+  Taking a widget down is the runtime's own few lines (`REMOVE_JS`), not the
+  whole 35 KB runtime; the bottom bar's balance goes to the bottom bar only
+  (it had been watching the top bar and the card's page for nothing); the
+  sounds' 18 KB only once a sound is picked. The knows chip is taken down
+  only when one's up (`cards._UP`; `CHIP_OFF`, `FLOAT_OFF`, which still
+  duck), an answer draws only the Pips its chip could name
+  (`cards.chip_people`), not the whole crew's, and Pip's motion sheet goes
+  to a page once (`cards._SHEET`). Pip's drawing is kept once drawn
+  (`sev.svg`, an lru_cache; a look that isn't a list is drawn as it comes),
+  and the config is read from disk once and again only after a save
+  (`app.cfg`; Anki read config.json and meta.json at every call, a few
+  times a card). A usual card now sends nothing.
+- 3.9.1, the security review. A reviewer read every input that crosses a
+  trust line (the doodle pipeline, every `duecrew:` command, the Worker's
+  consent and auth, the site, logging, the client's network code) and found
+  them sound but for two. (1) On the way back to Decks, Anki's
+  `DeckBrowser.show()` makes the main view's messages the Decks screen's at
+  once, then builds the Decks page after a background query; leaving review
+  doesn't take the review page down. In that gap a card's own script (or a
+  deck description's, from Overview) could send any board command as the
+  board, past the card-page rules (`room_model.trusted`). Now the Decks
+  page's own commands carry `board.BOARD_KEY`, new each run and written only
+  into that page (`_pycmd`, and `window.dcBK` for what its scripts build);
+  without it a message from the Decks screen gets a card page's rules
+  (`__init__._on_js`). And nothing is drawn on the board till the Decks
+  page is the one going in (`app.board_eval`: `deck_browser_will_render_content`
+  says so, `state_will_change` unsays it), so the key never lands on the
+  page before. (2) The room sounds' web export, `sounds/.+\.ogg`, matched
+  `sounds/../…` (Anki fullmatches it; a card's script can fetch from the
+  media server): any `.ogg` in another add-on's folder was readable. Now
+  `sounds/[^/]+\.ogg`, a file in sounds/ alone. No token or file of ours
+  was reachable (none ends .ogg).
+- 3.9.1, the bug hunt (the same housekeeping). Four found and fixed, each
+  with its test. (1) On the site, the Cheer pill had gone in the middle of
+  a row's if/else chain, so a crewmate's " · yesterday" and " · 3 days this
+  week" never showed; the pill now follows the line (app.js `nameCell`,
+  run in node on a stale crewmate). (2) A drawing that came in on the
+  launch's first refresh went on the fridge in the default colour, and one
+  from someone just become mutual in their old colour: the colour was read
+  from the board before this refresh's crew (`_commit` now hands
+  `keep_doodles` the refresh's own entries). (3) With room sounds at no
+  volume, the session's check every 5 s woke the sound engine it had just
+  put to sleep (`sounds.js` `play` resumes only above 0). (4) The break
+  screen's Pip rested after a few rounds with Pip at rest, mid-exercise;
+  the break is the one place it goes on (`--sv-on: infinite` on the break's
+  root). And a cheer an older server took without its drawing (the 400
+  fallback) no longer says "and a drawing" (`api.send_cheer` returns
+  "plain").
+- 3.9.1, the whole window dims, and the board's questions are sheets (Sam:
+  "when cheering, the full background doesn't grey out ... also the modal
+  for status update is still native, make sure all modals are in our
+  style"). The top bar and the bottom bar are pages of their own, so a
+  window over the board dimmed the board alone. Now the board's page
+  watches for its windows (`board.VEIL_WATCH_JS`: the Cheer window, a
+  profile card, a sheet) and says when one comes and when the last goes
+  (a closing one gives up its id as it starts to fade, so the bars fade
+  with it); the glue puts the same backdrop over both bars (`app.veil`),
+  and a tap there is Esc on the board (`veiltap`, keyed: the Decks
+  screen's bottom bar is Anki's page, not ours). A new page in the main
+  view or leaving Decks takes it off. And every question the board asks
+  (status, display name, sign out, delete account, edit a to-do, the plan
+  squad's join, leave, reply, remove and Ask the squad, a good-luck line,
+  a tip, Hold back, Reset to default, Change deck, Stop following, the
+  founder's Leave, Block, Make founder, Remove) is a sheet in the Cheer
+  window's look (`sheets.py`, `board.sheet_js`): one line, one of a few
+  (a list in the board's look, with Find when it's long), a box to tick;
+  a step that can't be taken back in the board's red, Cancel focused.
+  Only a yes reaches the caller, and only an answer naming the open
+  sheet's id (new each time) with the Decks page's key; a Decks page
+  drawn anew puts the open one back. Off the board (the review screen,
+  Browse, a Qt window in front) the Qt question asks, the same words.
+  Found on the way: the Cheer window's close faded it, then motion.js's
+  own close ran on top (the fade unfilled: a frame's snap back); now
+  motion.js closes what it opened.
+- 3.9.1, the Qt windows in the board's look (the same ask: "all modals").
+  The windows that stay Qt (Friends, sign-in, Welcome, a plan's Follow,
+  Schedule, Pause, Welcome back, Hold back, Squads, Report, the picture
+  cards, and the questions asked off the board) wear the board's colours
+  for its theme (Settings › Theme, not Anki's alone) and accent: its
+  8px corners, the main action (the window's own default) in the accent,
+  the rest outlined, boxes and lists on the board's well; a question in
+  bold over its words, no icon, its yes in the accent or the board's red,
+  Cancel focused (`ui.styled`, from `attach_alive` or its own call;
+  `ui.QSS`). Ticks, radio dots and number boxes keep the computer's own
+  drawing: styled, they lost their frames (an unticked box vanished) or
+  their arrows. A styled window ignores its palette, so a label's own
+  style sheet takes the board's colour (`ui.tone`), never palette(...);
+  Schedule's chart paints in it too. The window's frame stays the
+  computer's. Every render in `tools/dialogs.py` was looked at, light and
+  dark; Friends is 50px wider for the code and its three buttons.
+- 3.9.1, the Qt windows, round two (Sam, with Open a Study Room on a Mac:
+  "washed out. bad spacing. not engaging"). The Mac's own style drew a
+  dressed box's arrow in a box of its own and its list as a menu with a
+  tick column that cut "15 min" to "15 m"; the number box kept the
+  system's stepper; small print was 11px grey everywhere. Now every Due
+  Crew window sits on Fusion (`ui.base_style`, a QProxyStyle: 22px at a
+  window's sides, 8 between rows), so a Mac, Windows and Linux, under
+  Anki's widget style or the system's, get the same window, and `ui.QSS`
+  draws every part itself: a box's chevron and its list (a list, not a
+  menu: `combobox-popup: 0`, rows a `QStyledItemDelegate` the sheet
+  dresses), a number box's two buttons, ticks and radio dots in the
+  accent, a tree's arrows and boxes (Shared Decks' 3.5.0 `box_css` goes),
+  a calendar without red weekends or week numbers, thin scrollbars; boxes
+  and buttons 30px high, a box's edge darker than the board's hairline, a
+  ring where the keyboard is. The arrows and tick are SVGs in the window's
+  colours, written once to `user_files/_qt` (a style sheet takes an image
+  from a file). One type scale: 13px, a window's title 16px bold, a
+  part's heading bold (`ui.role(label, "head")`), small print 12px in an
+  ink between the board's muted and ink (`ui.note`, token `ink-2`). Every
+  window says what it is in its title (`ui.heading`; a plan's or a
+  person's name in it is plain text) and its frame says Due Crew, so the
+  words aren't said twice; a question's box does too. Two sizing bugs
+  under it, both in the shipped 3.9.0 windows: Qt sizes a new window from
+  its widest-and-shortest wish and caps it at two thirds of the screen,
+  so Follow a plan came out shorter than its wrapped lines and the plan's
+  dates ran into each other; and a window with a minimum width of its own
+  never widened for a row that grew after it opened (Friends' code, once
+  it arrives: its Copy slid over the code). `ui._fit` grows a window to
+  its rows and its words, never past its screen, never smaller; the tidy
+  (`ui._tidy`) runs as a window is polished, before it takes its size. A
+  style sheet's margin on a label sets its words in a few px too, so the
+  headings' spacing is a layout margin now. `tools/dialogs.py` renders on
+  a laptop's 1440x900 screen with a Mac's 13px type, adds a window of
+  every control (`kitchen`), the questions off the board and Pick a day,
+  and fails on a clipped button, a box narrower than its words, two
+  controls on top of each other or a window shorter than its words
+  (`fits`); `DC_THEME=dark` renders the dark look and `DC_APP_QSS` puts an
+  app-wide style sheet under ours, as Anki's widget style does (checked
+  with Anki 26.9.3's own sheet in loud colours: none shows through).
+- 3.9.1, before release: the README's cheer line said "Tap 🎉 next to a
+  friend's name" and its board picture had the 🎉 column; both follow the
+  pill now, with a line each for drawings and room sounds. board.png is
+  rendered by `tools/readme_images.py` (the board's own HTML, a sample
+  crew in their looks) and `tools/readme_images.js` (Chromium, 2x), so the
+  next change re-renders it in one step. The click-test list starts with a
+  15-minute pass over what only a live Anki shows (the Decks page's key
+  after a review, the bars' shade, sheets, the Qt look, the system emoji
+  picker, Pip at rest).
+- 3.9.1, before release: the fridge is the account's, and × has an Undo.
+  wrap.json is the Anki profile's file, and more than one account can sign
+  in on a profile: a second account saw the first one's drawings and their
+  captions. Now the fridge keeps whose they are (`fridge_uid`), the board
+  draws the signed-in account's alone (`closet_flow.fridge(uid)`), a
+  drawing landing for another account starts a fridge of its own, and
+  signing out empties it (`clear_fridge`). One from before this (no owner)
+  is whoever's signed in. And × left nothing to change your mind with: now
+  "Taken down · Undo" sits where the drawing was, in its sender's colour,
+  for eight seconds, then fades and goes (`closet_flow.gone`/`put_back`,
+  `duecrew:fridgeback`); Undo puts it back where it was, with its spot.
+  Memory only, the last one taken down.
+- 3.9.1, the efficiency run, the Decks screen (the same ask). Measured with
+  a crew of thirteen and a full fridge (twelve drawings at 2,000 points):
+  every click that redraws the board (a swap) sent 77 KB of script the page
+  already had (motion.js, Due's add line, Find, the fridge's), each guarded
+  so it only loads once; the fridge cost 40 ms of Python a draw, each
+  drawing checked three times (`clean_doodle`) and drawn again; and a
+  refresh saved wrap.json (200 KB with a full fridge) two or three times
+  whether anything had changed or not, 22 ms each. Now: the scripts go to a
+  page once (`_board_js`, by `app.pages`; a page drawn anew always gets
+  them, so the memory of what the board said is compared as before), and a
+  swap sends only what they do after a draw, 0.5 KB
+  (`keep_me_in_view_js(scripts=False)`, `fridge_js(scripts=False)`; the
+  fridge's script is `dcFridge`, loaded once a page). The fridge is checked
+  when it changes and drawn again only then (`fridge.clean` and
+  `board.fridge_html` kept on their contents, `fridge.fingerprint`:
+  marshal's version 2, values only), the same markup byte for byte. Its
+  script tilts every doodle, then reads every height at once: two layouts a
+  draw, not thirteen; the same spots. wrap.json is written only when its
+  text differs from what's on disk (`app._wrap["disk"]`), made by
+  `json.dumps` (4 ms; `json.dump` into the file was the slow encoder, 23
+  ms): a refresh that changes nothing writes nothing, and a profile opened
+  again doesn't write it back. With the full fridge a draw went from 40 to
+  3 ms of Python, a click from 44 to 4 ms, Chromium's share of a click from
+  77 to 68 ms (27 to 24 without a fridge); on Anki's own engine, a Decks
+  redraw from 63 to 22 ms and a click from 27 to 8. Not done: a run of
+  strokes in one pen drawn as one path would be fewer elements, but its
+  edges where strokes overlap come out a shade lighter (Chromium, pixel for
+  pixel), so each stroke stays its own path.
+- 3.9.1, the efficiency run, idle. Measured in Anki's own engine
+  (QtWebEngine 6.11): a CSS loop that never ends keeps the page drawing 60
+  frames a second, about two-thirds of it on Anki's own thread, even a
+  blink that changes nothing most of the time. The ones nobody sees are
+  gone: the Halloween bats' wings flapped on past the line's end after
+  their 4.2 s flight (20 flaps now, the flight's length; `HW_CSS`);
+  Wrapped's player ran a frame loop all along, held, hidden and on its
+  last slide too (now one animation a slide, scaling its bar, paused when
+  held or hidden, none on the last; `wrapped_js`); a fifteen's widgets
+  ticked every second though they show minutes (now at the minute's turn
+  or the phase's end, ten seconds at most; the break's mm:ss and the
+  question still each second), and the bottom bar's balance ran at every
+  tick and again from its watcher (now only when the room's words change;
+  the watcher leaves the room's own changes to it, as the chip's). Room
+  sounds sleep at volume 0 (a running context costs, silent or not) and,
+  stopped, close the context and let go of what it held (a minute of a
+  recording is about 23 MB as samples). Brown noise's wander (the made
+  noise's slow drift, a third more than a recording costs) stays, for Sam's
+  ear.
+- 3.9.1, Pip at rest (Sam's picks on the "Pip at rest" page, 18 Oct: "agreed
+  with your calls on pip"). Measured in Anki's own engine, Pip on ▶ Fifteen?
+  cost 41 ms of CPU a second blinking and up to 129 napping or with a moving
+  thing on, on every screen; a five-note fridge 353; the studying-now dot
+  222. A: each of Pip's loops plays about twelve seconds once it's drawn
+  (`var(--sv-on, n)` in sev.CSS, n the rounds that make about twelve, even
+  for one that goes back and forth), then Pip rests; pointing at it plays
+  it on (`.sv:hover, .sv-slot:hover .sv` set `--sv-on: infinite`). The
+  break's breathing square and stretch go on for the break: they're the
+  exercise. Crew rows (and faces, a plan card's crew, the bingo stamps)
+  move while hovered, as before. C: the fridge's Pips are still until
+  pointed at, as crew rows. D: the studying-now dot pulses a few times
+  (seven halves, ending lit) and stays lit, in Anki and on the site. Back
+  to Anki's own idle once they rest.
+- 3.9.1, the efficiency run, plans and the deck tree (Sam: "please do an
+  efficiency run"). Measured on Anki's own engine, a big collection (35,000
+  notes, 1.1 million answers) following a 30-date plan: a refresh's plan
+  work (`refresh_progress`: the deck read, each date's numbers, today's
+  session) ran whole each time it was asked, and a sync asks twice (its
+  payload, then its commit), about 280 ms each; today's session found the
+  notes started before today with a pass over the whole deck for every date
+  (`DeckIndex.buried_today`, 115 to 160 ms a refresh); and Anki's deck tree
+  (8 to 17 ms) was read by Due's reviews again after every refresh, and by
+  each plan's due on its own. Now `buried_today` finds them once per index
+  and first_seen (the session 6 to 7 ms). `refresh_progress` keeps its last
+  answer under one key of everything it reads (`_progress_key`: col.mod,
+  which every answer and op moves, the day and Due's day, the session's
+  plans, plans.json's state as it stands, the generation, and the due now
+  of each plan deck on my schedule) and gives it again in under a
+  millisecond while that holds; it keeps nothing when a part failed,
+  without a col.mod, or when a date's search is about my own reviews
+  (`is:due`, `rated:`…, read at every refresh as before). The deck tree is
+  read once while it can't have changed (`due_flow.deck_tree`: col.mod,
+  the day, and till a learning card comes inside Anki's learn-ahead,
+  `collapseTime`, where the clock alone moves its count); Due's reviews, a
+  plan's due (its node, as Anki's own `deck_due_tree(did)` finds it) and
+  the bingo's week share it, and a refresh no longer throws it away with
+  Due's count. On that collection, main thread: the push on open 532 → 244
+  ms, the morning's sync 986 → 472 ms (the deck read three times to twice:
+  the morning's own, before it opens, stays), a stale redraw's refresh 870
+  → 338 ms, a second sync 1,261 → 883 ms; over a day of them (nine steps,
+  open to a relaunch) our own deck tree reads 13 → 3. Each kept answer was
+  compared with a fresh read while measuring, and is in
+  `test_efficiency_plans_v391`; `tools/real_anki.py` checks it on Anki's
+  engine (an answer, a learning card coming back, an unsuspend: read again)
+  and that today's session takes under 20 ms. A change made by raw SQL
+  doesn't move col.mod and waits for the next one, as Due's suggestions and
+  my own load already did.
+- 3.9.1, the efficiency run, history scans (the same ask). Measured on
+  Anki's own engine (26.9.3) with a big collection (35,000 notes, 1.1
+  million reviews over four years, a 1,459-day streak): four reads of the
+  whole history are gone or cut, each held to the old answer by a test
+  that keeps the old code. Pip's closet read the whole revlog by the hour
+  at every launch's first refresh (350 to 680 ms on the main thread, while
+  Anki's own sync ran) and walked all 35,000 hours in Python at every
+  refresh (62 ms); kept in memory by the day alone, a second profile
+  opened that day got the first one's. Now `closet_days.json` (per
+  profile, never sent; `closet_flow._history`) keeps the days before the
+  last week as the closet counts them (the days, the mornings' and
+  evenings' dates, `closet.hour_sets`, the year turning, the answers), a
+  day going in as it settles. Two counts check it at each refresh (the
+  revlog's rows less those since its edge, half a millisecond); it's read
+  whole again when they move (a sync brought older answers in) or its
+  hours stop lining up with today's (rollover, time zone, DST). The last
+  week is read fresh, so a phone's week counts the moment it syncs (until
+  now, the next day). A launch is 19 ms, a refresh 8, a new day's first 20;
+  the first launch on 3.9.1 reads it all once (`test_closet_history_v391`,
+  against 3.8.2's whole read). The streak: the day after a day studied
+  here, yesterday's run with the day before it still empty is the base,
+  since the scan can't find more; a long streak's four widening scans (233
+  to 373 ms on the day's first push) are gone (0.6 ms;
+  `test_streak_shortcut_v391`, against 2.11.1's base). The history
+  import's new cards (`new_cards_by_day`): over a year every answer looked
+  for an earlier one, about 600 of the year's 700 to 770 ms. A window
+  longer than a month now reads each card's first answer once, off
+  revlog's card index (140 to 160 ms, the year 250 to 275, the first log's
+  120 days 207 to 124); a short one keeps 2.13's form, the quicker there.
+  Counting only learns (`type = 0`) was quicker still, but a card imported
+  with its schedule, set due first or previewed in a filtered deck is new
+  on an answer that isn't a learn; the count is 2.13's in every window
+  (`test_new_cards_first_answer_v391`, and every window of the big
+  collection with 3,000 such cards added). Closing: Anki's own sync as it
+  closes ran the full gather (770 to 1,010 ms, 1.2 s with a plan, a year of
+  the history import among it) before Anki could quit, for an upload on a
+  thread that quitting may cut short. It's light now, today's numbers as
+  the pushes on open send (2 ms; with a plan, its progress, 320), and
+  nothing when the collection's mod, my day and my config are as the last
+  push that went had them (`_on_anki_sync`, `test_close_sync_light_v391`).
+  Leaving a room still goes: rooms.on_close pushes it itself.
+- 3.9.1, "other" opens the computer's own emoji picker (Sam: "the emoji
+  drawer is missing tons that are natively supported. want the other
+  option to just open the native drawer?"). A page can't; Python can ask
+  (`native_emoji.py`): a Mac's Character Viewer (what ⌃⌘Space opens,
+  `orderFrontCharacterPalette:` through the Objective-C runtime) or
+  Windows' emoji panel (Win + . pressed and let go). The window puts a
+  focused box in other's place first ("pick one") and sends
+  `duecrew:emojipicker`; whatever lands in the box is picked, Esc puts
+  other back. Linux has no one picker to ask for: there, and whenever
+  asking fails, the glue tells the window to open its own drawer
+  (`dcCheerNoNative`), which stays as it was.
+- 3.9.1, room sounds, round three (Sam, 17 Oct: "the waves sound isn't
+  great so let's find another", then "A for waves. Fifteen sounds, my
+  pick: A · Say it on the chip. Make an option to remove sounds in
+  settings"). Waves are el_boss's "Evening Ocean Waves along the Pacific
+  Coast" (CC0, freesound 587164), picked by ear from three loops cut the
+  same way (a Cornish beach and a calm Whidbey Island shore were the
+  others); 60.5 s from 6:08.5, the seam between two waves. The chip's
+  speaker says what it is, from the mock "Fifteen Sounds": "Sound" in a
+  quiet outline while it's off, the sound's name in your colour while
+  one plays ("Rain"); the speaker alone when the chip is compact, and
+  while the picker is out (it says it all). And Settings › Board ›
+  Fifteen and Pip › Room sounds (on by default, this computer's, like the
+  pick; Reset board turns it back on): off, the chip has no speaker, the
+  player is told off, and a pick from the chip is ignored
+  (`room_model.sounds_on`; the chip redraws on the switch).
+  Spacing, measured in every state (Sam: "in one the sound symbol is a
+  bit too close to the edge of the oval"): the outlined speaker sits 3 px
+  inside the chip on all four sides (20 px tall with its border, as the
+  chip's inside is 26), like a button nested in it; alone (compact, or
+  the picker out) its icon is 6 px from the end, not 1; a solo fifteen's
+  empty crewmate slot no longer doubles the gap before it (15 px to 7).
+- 3.9.1, the sound picker folds back by itself (Sam: "the sounds chip
+  should close after a second or two because now just stays open"): 1.5 s
+  after a pick, 2 s after the volume last moved, 1 s after the pointer
+  leaves the chip, 4 s after it opens if nothing's touched; moving in it
+  keeps it out, and never while the volume is held mid-drag
+  (`room_model`'s chip, `later`). Esc and a click elsewhere still close it
+  at once.
+- 3.9.1, room sounds, recorded (Sam, 17 Oct: "the background noises
+  aren't the best. are there any open source sounds we can use with
+  attribution instead?", then "keep the brown noise"). Rain, fire and
+  waves are recordings now, CC0 from Freesound, each checked on its page
+  (`due_crew/sounds/CREDITS.md`: who, where, which seconds): rain by
+  speakwithanimals (the first pick, a "seamless rain", had left
+  Freesound), a fireplace by inchadney, a Baltic shore by pulswelle.
+  Each is a loop of a minute or so from the steadiest stretch of the
+  recording (no block more than about 2 dB over the stretch's middle;
+  the waves' seam sits between two waves), its end crossfaded into its
+  start, levelled to the made brown noise's -23.3 LUFS (measured from an
+  offline render of sounds.js), limited to -1 dBFS, Ogg Opus at 80 kbps
+  (`tools/cut_sound.sh`): 1.6 MB for the three. In Anki's own Chromium
+  they decode to the exact length and the wrap is an ordinary step, not
+  a click. They play by an AudioBufferSourceNode that loops sample-exact,
+  from a random point; only the playing one is decoded. The top bar's
+  page fetches them from Anki's `/_addons/<folder>/sounds/`
+  (`setWebExports`, `rooms._sound_files`, `room_model.sound_files`, the
+  state's `files`); a file that won't load or decode plays the made
+  sound instead, and brown noise is always made. The files are CC0, not
+  MIT (the root LICENSE says so).
+- 3.9.1, room sounds (Sam's picks from the Room Sounds page, 17 Oct: a
+  speaker on the chip; in a crew room each person picks their own; off
+  till you pick, the last pick remembered on this computer; made from
+  noise only, no café or library). Brown noise, rain, fire and waves,
+  made by Web Audio from noise (`sounds.js`, 16 KB, no sound files: the
+  now-and-then things, a drop or a crackle, are drawn once into loops of
+  different lengths; the waves are slow oscillators), each trimmed to the
+  same loudness, with a safety limiter. They play in the top bar's page,
+  which Anki keeps through review (the review page reloads every card),
+  from a fifteen's or a room's start to its end, breaks and a fifteen's
+  question included, fading in and out over 1.5 s; the player stops at the
+  session's end by itself and when the room goes (`room_model.sound_state`,
+  `SOUND_RUNTIME`, `rooms._sound` in `refresh_widgets`, and at profile
+  close). The top bar's page may play without a click
+  (`setPlaybackRequiresGesture(False)`, `rooms._allow_sound`), so a pick
+  comes back by itself after the bar redraws. The control: a speaker at
+  the chip's end (muted grey when off, the accent's waves when on); a click
+  turns the chip into the picker (the bar is too short for anything under
+  it): Off, Brown noise, Rain, Fire, Waves and the volume; Esc or a click
+  elsewhere puts the chip back. A pick plays at once and is kept for this
+  computer (`roomsound:<kind>:<volume>`, `room_sound` and `room_sound_vol`
+  in the add-on's config, never an account key, never sent: nothing new
+  on the wire, no Worker change). Only the top bar's chip may set it: a
+  card's page can't (`room_model.CARD_PAGE_CMDS`). The bars' and the
+  margin's little ones carry no speaker; the sound plays on under them.
+  `tools/chip_preview.py` draws the chip with it, light, dark and narrow.

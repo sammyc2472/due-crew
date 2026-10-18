@@ -1,3 +1,4 @@
+# Due Crew's logo and Pip: Copyright (c) 2026 Sammy Caplan, all rights reserved (see LICENSE).
 """Pip, the square from the logo's seven days (3.8.1, the "Pip Design" page:
 Block, Sam's picks: no belt, big round eyes, stubby arms, cheeks only when
 a cheer lands). Pure: no aqt.
@@ -23,6 +24,7 @@ Transforms and opacity only. Colours come from the page: --sv-a (the
 accent), --sv-line, --sv-amb, --sv-mut, with a fallback each.
 """
 
+import functools
 import math
 import random
 import re
@@ -256,7 +258,25 @@ def svg(pose, moment=None, size=None, rest=False, label=None, cheeks=None, stack
     cheeks: blushing, which only a cheer does (Sam's pick) unless asked.
     stack: squares on its head, one a fifteen (three at most). look (3.8.2):
     what it has on from the closet (closet.clean rules it); worn: a look
-    already drawn, (back, front, hand), in place of `look` (site_kit)."""
+    already drawn, (back, front, hand), in place of `look` (site_kit).
+    3.9.1 (the efficiency run): the same Pip is drawn once, then kept (a
+    fifteen's widgets draw thirty); a look that can't be a key is drawn as
+    it comes."""
+    if all(v is None or isinstance(v, (list, tuple)) for v in (look, worn)):
+        try:
+            return _svg_kept(pose, moment, size, rest, label, cheeks, stack,
+                             tuple(look) if look else None, tuple(worn) if worn else None)
+        except TypeError:
+            pass
+    return _svg(pose, moment, size, rest, label, cheeks, stack, look, worn)
+
+
+@functools.lru_cache(maxsize=512)
+def _svg_kept(pose, moment, size, rest, label, cheeks, stack, look, worn):
+    return _svg(pose, moment, size, rest, label, cheeks, stack, list(look) if look else None, worn)
+
+
+def _svg(pose, moment, size, rest, label, cheeks, stack, look, worn):
     p = POSES.get(pose) or POSES["idle"]
     m = moment or MOMENT.get(pose, "idle")
     blush = p.get("cheeks") if cheeks is None else cheeks
@@ -471,13 +491,19 @@ svg.sv { overflow: visible; display: block; flex: none; }
 .sv .cl-flag { transform-origin: 0% 50%; }
 .sv .cl-wl { transform-origin: 100% 40%; }
 .sv .cl-wr { transform-origin: 0% 40%; }
+/* 3.9.1 (the efficiency run; Sam's pick, "Pip at rest" A): each loop plays
+   about twelve seconds once Pip's drawn, then Pip rests (a loop that never
+   ended kept Anki drawing 60 frames a second, on every screen); pointing at
+   Pip plays it on. The break's breathing and stretch go on for the break:
+   they're the exercise */
+.sv:hover, .sv-slot:hover .sv { --sv-on: infinite; }
 @media (prefers-reduced-motion: no-preference) {
-  .sv .sv-eyes { animation: sv-blink var(--sv-b, 4.6s) var(--sv-d, 0s) infinite; }
+  .sv .sv-eyes { animation: sv-blink var(--sv-b, 4.6s) var(--sv-d, 0s) var(--sv-on, 3); }
   @keyframes sv-blink { 0%, 90%, 100% { transform: scaleY(1); } 93% { transform: scaleY(.12); } 96% { transform: scaleY(1); } }
   /* napping: nothing studied yet today */
-  .sv.m-nap .sv-body { animation: sv-breathe 3.2s ease-in-out infinite; }
+  .sv.m-nap .sv-body { animation: sv-breathe 3.2s ease-in-out var(--sv-on, 4); }
   .sv.m-nap .sv-eyes { animation: none; }
-  .sv.m-nap .sv-z { animation: sv-zf 3.6s ease-out infinite; }
+  .sv.m-nap .sv-z { animation: sv-zf 3.6s ease-out var(--sv-on, 4); }
   .sv.m-nap .sv-z.z2 { animation-delay: 1.2s; }
   .sv.m-nap .sv-z.z3 { animation-delay: 2.4s; }
   @keyframes sv-breathe { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.025, 1.05); } }
@@ -498,8 +524,8 @@ svg.sv { overflow: visible; display: block; flex: none; }
   @keyframes sv-shad { 0%, 20% { transform: scaleX(1); opacity: 1; } 50% { transform: scaleX(.62); opacity: .55; } 100% { transform: scaleX(1); opacity: 1; } }
   /* heads down: a blink every seven seconds, eyes along the card, the card turns now and then */
   .sv.m-focus .sv-eyes { animation-duration: 7s; }
-  .sv.m-focus .sv-pupils { animation: sv-read 1.75s ease-in-out infinite alternate; }
-  .sv.m-focus .sv-card { animation: sv-flip 7s ease-in-out infinite; }
+  .sv.m-focus .sv-pupils { animation: sv-read 1.75s ease-in-out var(--sv-on, 8) alternate; }
+  .sv.m-focus .sv-card { animation: sv-flip 7s ease-in-out var(--sv-on, 2); }
   @keyframes sv-read { from { transform: translateX(-1.4px); } to { transform: translateX(1.4px); } }
   @keyframes sv-flip { 0%, 46%, 54%, 100% { transform: scaleX(1); } 50% { transform: scaleX(.06); } }
   /* the fifteen's up: the clock rings */
@@ -561,17 +587,17 @@ svg.sv { overflow: visible; display: block; flex: none; }
   @keyframes sv-catch { 0%, 55% { transform: none; } 68% { transform: scale(1.08, .9); } 85%, 100% { transform: none; } }
   @keyframes sv-blush { 0%, 60% { opacity: 0; } 100% { opacity: .6; } }
   /* exam eve: a star that twinkles, fingers crossed */
-  .sv.m-exam .sv-star { animation: sv-twinkle 2.6s ease-in-out infinite; }
-  .sv.m-exam .sv-body { animation: sv-bob 2.6s ease-in-out infinite; }
-  .sv.m-exam .spark { animation: sv-sparkle 2.6s ease-in-out infinite; }
+  .sv.m-exam .sv-star { animation: sv-twinkle 2.6s ease-in-out var(--sv-on, 5); }
+  .sv.m-exam .sv-body { animation: sv-bob 2.6s ease-in-out var(--sv-on, 5); }
+  .sv.m-exam .spark { animation: sv-sparkle 2.6s ease-in-out var(--sv-on, 5); }
   .sv.m-exam .spark.s2 { animation-delay: 1.3s; }
   @keyframes sv-twinkle { 0%, 100% { transform: rotate(0) scale(1); } 50% { transform: rotate(18deg) scale(1.24); } }
   @keyframes sv-sparkle { 0%, 100% { opacity: .2; transform: scale(.6); } 50% { opacity: 1; transform: scale(1.1); } }
   /* away: off on a trip */
-  .sv.m-away .sv-body { animation: sv-bob 1.2s ease-in-out infinite; }
-  .sv.m-away .sv-footL { animation: sv-step 1.2s ease-in-out infinite; }
-  .sv.m-away .sv-footR { animation: sv-step 1.2s ease-in-out -.6s infinite; }
-  .sv.m-away .sv-case { animation: sv-sway 1.2s ease-in-out infinite; }
+  .sv.m-away .sv-body { animation: sv-bob 1.2s ease-in-out var(--sv-on, 10); }
+  .sv.m-away .sv-footL { animation: sv-step 1.2s ease-in-out var(--sv-on, 10); }
+  .sv.m-away .sv-footR { animation: sv-step 1.2s ease-in-out -.6s var(--sv-on, 10); }
+  .sv.m-away .sv-case { animation: sv-sway 1.2s ease-in-out var(--sv-on, 10); }
   @keyframes sv-bob { 0%, 50%, 100% { transform: none; } 25%, 75% { transform: translateY(-2.5px); } }
   @keyframes sv-step { 0%, 50%, 100% { transform: none; } 25% { transform: translateY(-3px); } }
   @keyframes sv-sway { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
@@ -621,43 +647,43 @@ svg.sv { overflow: visible; display: block; flex: none; }
   @keyframes sv-popup { 0% { transform: translateY(36.4px) scale(.92); } 65% { transform: translateY(-8px); } 100% { transform: none; } }
   @keyframes sv-waveL { 0%, 100% { transform: rotate(0); } 20%, 60% { transform: rotate(26deg); } 40%, 80% { transform: rotate(-10deg); } }
   /* 3.8.1, more moves: exam eve */
-  .sv.m-pep .sv-star { animation: sv-spin 2.6s ease-in-out infinite; }
-  .sv.m-pep .sv-armR { animation: sv-pep 2.6s ease-out infinite; }
-  .sv.m-pep .sv-body { animation: sv-pepb 2.6s ease-out infinite; }
-  .sv.m-pep .spark { animation: sv-sparkle 2.6s ease-in-out infinite; }
+  .sv.m-pep .sv-star { animation: sv-spin 2.6s ease-in-out var(--sv-on, 5); }
+  .sv.m-pep .sv-armR { animation: sv-pep 2.6s ease-out var(--sv-on, 5); }
+  .sv.m-pep .sv-body { animation: sv-pepb 2.6s ease-out var(--sv-on, 5); }
+  .sv.m-pep .spark { animation: sv-sparkle 2.6s ease-in-out var(--sv-on, 5); }
   @keyframes sv-spin { 0% { transform: rotate(0) scale(1); } 50% { transform: rotate(180deg) scale(1.25); } 100% { transform: rotate(360deg) scale(1); } }
   @keyframes sv-pep { 0%, 40%, 100% { transform: rotate(0); } 52% { transform: rotate(-30deg); } 64% { transform: rotate(6deg); } 76% { transform: rotate(-30deg); } 88% { transform: rotate(0); } }
   @keyframes sv-pepb { 0%, 40%, 100% { transform: none; } 52%, 76% { transform: translateY(-3px) scale(.97, 1.04); } 64%, 88% { transform: scale(1.04, .96); } }
   /* 3.8.1, more moves: in a fifteen: the same reading, plus one small thing now and then */
   .sv.m-nod .sv-eyes, .sv.m-think .sv-eyes, .sv.m-tap .sv-eyes { animation-duration: 7s; }
-  .sv.m-nod .sv-pupils, .sv.m-tap .sv-pupils { animation: sv-read 1.75s ease-in-out infinite alternate; }
-  .sv.m-nod .sv-card, .sv.m-tap .sv-card { animation: sv-flip 9s ease-in-out infinite; }
-  .sv.m-nod .sv-body { animation: sv-nod 6s ease-in-out infinite; }
+  .sv.m-nod .sv-pupils, .sv.m-tap .sv-pupils { animation: sv-read 1.75s ease-in-out var(--sv-on, 8) alternate; }
+  .sv.m-nod .sv-card, .sv.m-tap .sv-card { animation: sv-flip 9s ease-in-out var(--sv-on, 2); }
+  .sv.m-nod .sv-body { animation: sv-nod 6s ease-in-out var(--sv-on, 2); }
   @keyframes sv-nod { 0%, 70%, 100% { transform: none; } 75% { transform: rotate(5deg) translateY(1px); } 80% { transform: none; }
     85% { transform: rotate(5deg) translateY(1px); } 90% { transform: none; } }
-  .sv.m-think .sv-armR { animation: sv-scratch 7s ease-in-out infinite; }
-  .sv.m-think .sv-pupils { animation: sv-lookup 7s ease-in-out infinite; }
+  .sv.m-think .sv-armR { animation: sv-scratch 7s ease-in-out var(--sv-on, 2); }
+  .sv.m-think .sv-pupils { animation: sv-lookup 7s ease-in-out var(--sv-on, 2); }
   @keyframes sv-scratch { 0%, 55%, 100% { transform: rotate(0); } 63% { transform: rotate(-205deg); } 67% { transform: rotate(-192deg); } 71% { transform: rotate(-205deg); }
     75% { transform: rotate(-192deg); } 79% { transform: rotate(-205deg); } 88% { transform: rotate(0); } }
   @keyframes sv-lookup { 0%, 55%, 90%, 100% { transform: none; } 62%, 84% { transform: translate(1.3px, -1.5px); } }
-  .sv.m-tap .sv-footR { animation: sv-tap .9s ease-in-out infinite; }
+  .sv.m-tap .sv-footR { animation: sv-tap .9s ease-in-out var(--sv-on, 14); }
   @keyframes sv-tap { 0%, 50%, 100% { transform: none; } 25% { transform: rotate(-16deg); } }
   /* 3.8.1, more moves: on a break */
-  .sv.m-shake .sv-body { animation: sv-shake2 3.2s ease-in-out infinite; }
-  .sv.m-shake .sv-armL { animation: sv-flap 3.2s ease-in-out infinite; }
-  .sv.m-shake .sv-armR { animation: sv-flap 3.2s ease-in-out -.1s infinite reverse; }
+  .sv.m-shake .sv-body { animation: sv-shake2 3.2s ease-in-out var(--sv-on, 4); }
+  .sv.m-shake .sv-armL { animation: sv-flap 3.2s ease-in-out var(--sv-on, 4); }
+  .sv.m-shake .sv-armR { animation: sv-flap 3.2s ease-in-out -.1s var(--sv-on, 4) reverse; }
   @keyframes sv-shake2 { 0%, 50%, 100% { transform: none; } 56% { transform: rotate(-9deg); } 62% { transform: rotate(9deg); } 68% { transform: rotate(-7deg); }
     74% { transform: rotate(7deg); } 80% { transform: rotate(-3deg); } 86% { transform: none; } }
   @keyframes sv-flap { 0%, 50%, 100% { transform: rotate(0); } 56% { transform: rotate(32deg); } 62% { transform: rotate(-22deg); } 68% { transform: rotate(28deg); }
     74% { transform: rotate(-16deg); } 82% { transform: rotate(0); } }
-  .sv.m-march .sv-body { animation: sv-bob .9s ease-in-out infinite; }
-  .sv.m-march .sv-footL { animation: sv-stepup .9s ease-in-out infinite; }
-  .sv.m-march .sv-footR { animation: sv-stepup .9s ease-in-out -.45s infinite; }
-  .sv.m-march .sv-armL { animation: sv-armwig .9s ease-in-out infinite; }
-  .sv.m-march .sv-armR { animation: sv-armwig .9s ease-in-out -.45s infinite; }
+  .sv.m-march .sv-body { animation: sv-bob .9s ease-in-out var(--sv-on, 14); }
+  .sv.m-march .sv-footL { animation: sv-stepup .9s ease-in-out var(--sv-on, 14); }
+  .sv.m-march .sv-footR { animation: sv-stepup .9s ease-in-out -.45s var(--sv-on, 14); }
+  .sv.m-march .sv-armL { animation: sv-armwig .9s ease-in-out var(--sv-on, 14); }
+  .sv.m-march .sv-armR { animation: sv-armwig .9s ease-in-out -.45s var(--sv-on, 14); }
   @keyframes sv-stepup { 0%, 50%, 100% { transform: none; } 25% { transform: translateY(-5px); } }
-  .sv.m-look .sv-pupils { animation: sv-look 7s ease-in-out infinite; }
-  .sv.m-look .sv-body { animation: sv-lean 7s ease-in-out infinite; }
+  .sv.m-look .sv-pupils { animation: sv-look 7s ease-in-out var(--sv-on, 2); }
+  .sv.m-look .sv-body { animation: sv-lean 7s ease-in-out var(--sv-on, 2); }
   @keyframes sv-look { 0%, 100% { transform: none; } 15%, 30% { transform: translate(-1.7px, -1px); } 45%, 60% { transform: translate(1.7px, -1px); }
     72%, 86% { transform: translate(0, -1.8px); } }
   @keyframes sv-lean { 0%, 100% { transform: none; } 22% { transform: rotate(-3deg); } 52% { transform: rotate(3deg); } 78% { transform: translateY(-2px); } }
@@ -696,23 +722,23 @@ svg.sv { overflow: visible; display: block; flex: none; }
   @keyframes sv-bounce { 0% { transform: translateY(34.1px); } 25% { transform: translateY(3.6px); } 42% { transform: translateY(20.5px); } 66% { transform: translateY(.9px); }
     82% { transform: translateY(12.7px); } 100% { transform: translateY(10px); } }
   /* 3.8.1, more moves: a room's seats: each does one small thing now and then, at its own time */
-  .sv.m-sread .sv-pupils { animation: sv-read 1.75s ease-in-out infinite alternate; }
-  .sv.m-snod .sv-body { animation: sv-nod 6s ease-in-out var(--sv-d, 0s) infinite; }
-  .sv.m-sreach .sv-armL, .sv.m-sreach .sv-armR { animation: sv-reach 8s ease-in-out var(--sv-d, 0s) infinite; }
+  .sv.m-sread .sv-pupils { animation: sv-read 1.75s ease-in-out var(--sv-on, 8) alternate; }
+  .sv.m-snod .sv-body { animation: sv-nod 6s ease-in-out var(--sv-d, 0s) var(--sv-on, 2); }
+  .sv.m-sreach .sv-armL, .sv.m-sreach .sv-armR { animation: sv-reach 8s ease-in-out var(--sv-d, 0s) var(--sv-on, 2); }
   .sv.m-sreach .sv-armR { animation-direction: reverse; }
   @keyframes sv-reach { 0%, 70%, 100% { transform: rotate(0); } 78%, 86% { transform: rotate(40deg); } }
-  .sv.m-slook .sv-pupils { animation: sv-look 7s ease-in-out var(--sv-d, 0s) infinite; }
+  .sv.m-slook .sv-pupils { animation: sv-look 7s ease-in-out var(--sv-d, 0s) var(--sv-on, 2); }
   /* 3.8.2: the closet's things: a propeller turns, steam rises, wings flap, a balloon sways */
-  .sv .cl-prop { animation: cl-prop .5s linear infinite; }
-  .sv .cl-steam { animation: cl-steam 2.4s ease-in-out infinite; }
-  .sv .cl-flame { animation: cl-flame .35s ease-in-out infinite alternate; }
-  .sv .cl-flick { animation: cl-flick 1.1s ease-in-out infinite alternate; }
-  .sv .cl-bal { animation: cl-bal 3.2s ease-in-out infinite; }
-  .sv .cl-flag { animation: cl-flag 1.6s ease-in-out infinite; }
-  .sv .cl-blink { animation: cl-blink 1.8s steps(1) infinite; }
-  .sv .cl-glow { animation: cl-glow 2.4s ease-in-out infinite; }
-  .sv .cl-wl { animation: cl-wl 1.4s ease-in-out infinite; }
-  .sv .cl-wr { animation: cl-wr 1.4s ease-in-out infinite; }
+  .sv .cl-prop { animation: cl-prop .5s linear var(--sv-on, 24); }
+  .sv .cl-steam { animation: cl-steam 2.4s ease-in-out var(--sv-on, 5); }
+  .sv .cl-flame { animation: cl-flame .35s ease-in-out var(--sv-on, 36) alternate; }
+  .sv .cl-flick { animation: cl-flick 1.1s ease-in-out var(--sv-on, 12) alternate; }
+  .sv .cl-bal { animation: cl-bal 3.2s ease-in-out var(--sv-on, 4); }
+  .sv .cl-flag { animation: cl-flag 1.6s ease-in-out var(--sv-on, 8); }
+  .sv .cl-blink { animation: cl-blink 1.8s steps(1) var(--sv-on, 7); }
+  .sv .cl-glow { animation: cl-glow 2.4s ease-in-out var(--sv-on, 5); }
+  .sv .cl-wl { animation: cl-wl 1.4s ease-in-out var(--sv-on, 9); }
+  .sv .cl-wr { animation: cl-wr 1.4s ease-in-out var(--sv-on, 9); }
   @keyframes cl-prop { 0%, 100% { transform: scaleX(1); } 50% { transform: scaleX(-1); } }
   @keyframes cl-steam { 0% { opacity: 0; transform: translateY(2px); } 40% { opacity: 1; } 100% { opacity: 0; transform: translateY(-4px); } }
   @keyframes cl-flame { from { transform: scaleY(.8); } to { transform: scaleY(1.15); } }

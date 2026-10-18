@@ -43,8 +43,8 @@ export async function getData(s: Session, env: Env): Promise<Response> {
     // "this helped", squads I'm blocked from, an email change, the admin's note
     q("SELECT deck, doc, at FROM plan_trees WHERE uid = ?1"),
     q("SELECT expires_at, used_at FROM invites WHERE uid = ?1 ORDER BY expires_at"),
-    q(`SELECT u.name AS from_name, c.emoji, c.note, c.at FROM cheers c LEFT JOIN users u ON u.uid = c.from_uid WHERE c.to_uid = ?1`),
-    q(`SELECT u.name AS to_name, c.emoji, c.note, c.at FROM cheers c LEFT JOIN users u ON u.uid = c.to_uid WHERE c.from_uid = ?1`),
+    q(`SELECT u.name AS from_name, c.emoji, c.note, c.doodle, c.at FROM cheers c LEFT JOIN users u ON u.uid = c.from_uid WHERE c.to_uid = ?1`),
+    q(`SELECT u.name AS to_name, c.emoji, c.note, c.doodle, c.at FROM cheers c LEFT JOIN users u ON u.uid = c.to_uid WHERE c.from_uid = ?1`),
     q(`SELECT u.name AS from_name, k.at FROM knocks k LEFT JOIN users u ON u.uid = k.from_uid WHERE k.to_uid = ?1`),
     q(`SELECT u.name AS to_name, k.at FROM knocks k LEFT JOIN users u ON u.uid = k.to_uid WHERE k.from_uid = ?1`),
     // 3.8.1: an invite I haven't answered is kept too (pending), and a plan offered to me
@@ -87,8 +87,8 @@ export async function getData(s: Session, env: Env): Promise<Response> {
     signedIn: rows(15).map((x) => ({ device: x.device, since: when(x.created_at), lastUsed: when(x.last_used) })),
     deckTrees: rows(16).map((t) => ({ deck: t.deck, tree: parse(t.doc), at: when(t.at) })),
     invites: rows(17).map((i) => ({ expires: when(i.expires_at), used: when(i.used_at) })),
-    cheersWaiting: rows(18).map((c) => ({ ...c, at: when(c.at) })),
-    cheersSentNotYetRead: rows(19).map((c) => ({ ...c, at: when(c.at) })),
+    cheersWaiting: rows(18).map((c) => ({ ...c, doodle: c.doodle ? JSON.parse(String(c.doodle)) : null, at: when(c.at) })),
+    cheersSentNotYetRead: rows(19).map((c) => ({ ...c, doodle: c.doodle ? JSON.parse(String(c.doodle)) : null, at: when(c.at) })),
     knocksToYou: rows(20).map((k) => ({ ...k, at: when(k.at) })),
     knocksYouSent: rows(21).map((k) => ({ ...k, at: when(k.at) })),
     plansCoAuthored: rows(22).map((e) => ({ plan: e.plan, at: when(e.at), ...(e.pending === 1 ? { pending: true } : {}),

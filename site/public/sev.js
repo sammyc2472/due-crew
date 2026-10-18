@@ -1,3 +1,4 @@
+// Due Crew's logo and Pip: Copyright (c) 2026 Sammy Caplan, all rights reserved (see LICENSE).
 // duecrew.com, 3.8.2: each person's Pip on the board's crew rows, in the
 // emoji's place, as the add-on's rows have it (board.row_sev: a twin):
 // still, in their accent, wearing their look from the closet.

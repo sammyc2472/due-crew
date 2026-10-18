@@ -10,10 +10,10 @@ import traceback
 from aqt import mw
 from aqt.utils import tooltip
 
-from . import app, board, shows
+from . import app, board, native_emoji, shows
 from .app import (CHEER_QUICK, HEATMAP_DAYS, _bg, _pending_cheers,
                   _profile_files, _state, cfg, client, save_cfg)
-from .backend.shapes import clean_emoji
+from .backend.shapes import clean_doodle, clean_emoji, clean_note
 from .stats import duet_runs, heatmap
 from .stats.queries import StatsQueries
 
@@ -52,11 +52,17 @@ def _play_cheers():
         season = None
     c = cfg()
     pips = board.cheer_pips(cheers, _state["entries"], c)  # 3.8.22: each sender's Pip tosses theirs
+    # 3.9.1: a drawing or a sign came along: its sender's Pip holds it up, in the show's place
+    drew = next((ch for ch in cheers if ch.get("doodle")), None)
+    if drew is not None:  # its note goes under it, as its caption (ni: its line in the banner, which then goes)
+        with_notes = [ch for ch in cheers if ch.get("note")]
+        drew = dict(drew, ni=with_notes.index(drew) if drew in with_notes else -1)
+    doodle = board.doodle_landing(drew, _state["entries"], c)
     show = None
-    if pips:  # 3.9.0: a show over the whole Decks screen, a different one each time (Sam)
+    if pips and not (doodle and doodle.get("pip")):  # 3.9.0: a show over the whole Decks screen, a different one each time (Sam)
         show, bag = shows.next_show(c.get(shows.BAG_KEY))
         save_cfg(dict(c, **{shows.BAG_KEY: bag}))
-    mw.web.eval(board.flurry_js(emojis, text, back=back, notes=notes, season=season, pips=pips, show=show))
+    app.board_eval(board.flurry_js(emojis, text, back=back, notes=notes, season=season, pips=pips, show=show, doodle=doodle))
 
 
 def cheer_choices():
@@ -71,26 +77,53 @@ def cheer_allowed(emoji):
 
 
 def _cheer_menu(to_uid):
+    """The Cheer window. 3.9.1 (Sam): on the Decks screen in the board's own
+    look (board.cheer_overlay_js), not a Qt window; its Send comes back as
+    duecrew:cheersend (send_from_window)."""
     entry = next((e for e in (_state["entries"] or [])
-                  if e["user_id"] == to_uid), None)
-    if entry is None:
+                  if e["user_id"] == to_uid and not e.get("you")), None)
+    if entry is None or mw.state != "deckBrowser":
         return
-    from .ui.cheer_dialog import CheerDialog
-    quick, any_emoji = cheer_choices()
-    dlg = CheerDialog(mw, entry["name"], quick, any_emoji=any_emoji)
-    if dlg.exec():
-        emoji = cheer_allowed(dlg.emoji)
-        if emoji:
-            _send_cheer(to_uid, entry["name"], emoji, dlg.note)
+    c = cfg()
+    quick, _any = cheer_choices()
+    app.board_eval(board.cheer_overlay_js({
+        "uid": to_uid, "name": entry["name"], "emojis": list(quick),
+        "pip": board.card_sev(entry, c),  # their Pip, as on their card; None with Pip off
+        "pen": board.accent_pair(c.get("accent"))[0],
+        "native": native_emoji.available()}))  # "other" opens the computer's own emoji picker
 
 
-def _send_cheer(to_uid, to_name, emoji, note="", luck=False, guid=None, then=None, big=False):
+def send_from_window(raw):
+    """3.9.1: the Cheer window's Send, a URI-encoded JSON {to, emoji, note,
+    doodle}. Every field is checked again here, as from any page: a
+    crewmate on the board, one emoji, one line, a doodle clean_doodle keeps.
+    Anything else sends nothing."""
+    from urllib.parse import unquote
+    try:
+        p = json.loads(unquote(str(raw or "")))
+    except ValueError:
+        return False
+    if not isinstance(p, dict):
+        return False
+    uid = str(p.get("to") or "")
+    entry = next((e for e in (_state["entries"] or []) if e["user_id"] == uid and not e.get("you")), None)
+    emoji = cheer_allowed(p.get("emoji"))
+    if entry is None or not emoji:
+        return False
+    _send_cheer(uid, entry["name"], emoji, clean_note(p.get("note")), doodle=clean_doodle(p.get("doodle")))
+    return True
+
+
+def _send_cheer(to_uid, to_name, emoji, note="", luck=False, guid=None, then=None, big=False, doodle=None):
     """luck: a line held for their exam morning; guid: a tip on one card
     (2.10). then(ok): on the main thread, after it went (or didn't). big
-    (3.8.2): a cheer for a big streak, which the closet counts."""
+    (3.8.2): a cheer for a big streak, which the closet counts. doodle
+    (3.9.1): a drawing or a sign from the Cheer window."""
     cl = client()
 
     def done(ok):
+        plain = ok == "plain"  # an older server turned the drawing away; the cheer went
+        ok = True if plain else ok
         if ok is True and not luck:
             from .bingo_flow import bump
             bump("tp" if guid else "ch")  # 3.6: the middle counts cheers and tips
@@ -107,7 +140,8 @@ def _send_cheer(to_uid, to_name, emoji, note="", luck=False, guid=None, then=Non
         elif ok is True and guid:
             tooltip("Tip sent.")
         elif ok:
-            tooltip(f"Sent {html.escape(emoji)} to {html.escape(to_name)}.")
+            extra = "" if plain else {"draw": " and a drawing", "sign": " and a sign"}.get((doodle or {}).get("k"), "")
+            tooltip(f"Sent {html.escape(emoji)}{extra} to {html.escape(to_name)}.")
             try:  # 3.8.0: a few of it float up from their row (motion.js)
                 mw.web.eval("window.dcMotion&&dcMotion.cheer(%s,%s)" % (json.dumps(str(to_uid)), json.dumps(str(emoji))))
             except Exception:
@@ -115,41 +149,42 @@ def _send_cheer(to_uid, to_name, emoji, note="", luck=False, guid=None, then=Non
         else:
             tooltip("Couldn't send. Check your connection.")
 
-    _bg(lambda: cl.send_cheer(to_uid, emoji, note or None, luck=luck, guid=guid), done)
+    _bg(lambda: cl.send_cheer(to_uid, emoji, note or None, luck=luck, guid=guid, doodle=doodle), done)
 
 
-def _edit_status(parent=None):
+def _edit_status(then=None):
     """Own card → "Set a status" / "edit", and (2.9) Settings → You. One
     line, crew-only, pushed right away (it rides today's stats doc). Empty
-    clears it. Returns the new status, or None when nothing changed."""
-    from aqt.qt import QInputDialog
-    c = cfg()
-    current = str(c.get("status") or "")
-    text, ok = QInputDialog.getText(
-        parent or mw, "Status",
-        "One line under your name, for your crew. Start with a number "
-        "(\u201c200 cards, then bed\u201d) and it ticks itself off. Empty clears it.",
-        text=current)
-    if not ok:
-        return None
-    text = " ".join(str(text).split())[:80]
-    if text == current:
-        return None
-    c["status"] = text
-    save_cfg(c)
-    lb = _state["labels"][0] if _state["labels"] else None
-    for e in _state["entries"] or []:  # show it now; the upload confirms it
-        if e["you"] and lb and e["days"].get(lb):
-            doc = dict(e["days"][lb])
-            if text:
-                doc["status"] = text
-            else:
-                doc.pop("status", None)
-            e["days"][lb] = doc
-    app.rerender()
-    app.sync()
-    tooltip("Status set." if text else "Status cleared.")
-    return text
+    clears it. then(status) once it's changed. 3.9.1: a sheet on the board
+    (sheets.ask_text), not a Qt box."""
+    from . import sheets
+    current = str(cfg().get("status") or "")
+
+    def save(text):
+        text = " ".join(str(text).split())[:80]
+        c = cfg()
+        if text == str(c.get("status") or ""):
+            return
+        c["status"] = text
+        save_cfg(c)
+        lb = _state["labels"][0] if _state["labels"] else None
+        for e in _state["entries"] or []:  # show it now; the upload confirms it
+            if e["you"] and lb and e["days"].get(lb):
+                doc = dict(e["days"][lb])
+                if text:
+                    doc["status"] = text
+                else:
+                    doc.pop("status", None)
+                e["days"][lb] = doc
+        app.rerender()
+        app.sync()
+        tooltip("Status set." if text else "Status cleared.")
+        if then is not None:
+            then(text)
+
+    sheets.ask_text("Status", "One line under your name, for your crew. Start with a number "
+                    "(\u201c200 cards, then bed\u201d) and it ticks itself off. Empty clears it.",
+                    save, value=current, most=80, yes="Set")
 
 
 def _edit_emoji(parent=None):
@@ -230,7 +265,7 @@ def _open_profile(uid):
                         for lb in reversed(labels)]
                     duet = {"run": run, "best": best,
                             "mine_week": mine_week, "theirs_week": theirs_week}
-            mw.web.eval(board.profile_overlay_js({
+            app.board_eval(board.profile_overlay_js({
                 "name": entry["name"], "streak": streak_val,
                 "last_active": entry["last_updated"], "cells": cells,
                 "same_days": same, "decks_line": decks_line, "uid": uid,

@@ -11,7 +11,7 @@ from aqt.qt import (
     QWidget, Qt,
 )
 
-from . import accent, attach_alive, danger, logo_label, run_bg
+from . import accent, attach_alive, danger, logo_label, note, run_bg
 
 ERRORS = {
     "bad_email": "That doesn't look like an email address.",
@@ -29,6 +29,15 @@ def _device():
         return f"Anki on {platform.system() or 'a computer'}"
     except Exception:
         return "Anki"
+
+
+def _page():
+    """One step's page, its edges the window's (3.9.1: a page's own margin
+    set its words in from the logo's)."""
+    w = QWidget()
+    lay = QVBoxLayout(w)
+    lay.setContentsMargins(0, 4, 0, 0)
+    return w, lay
 
 
 class AuthDialog(QDialog):
@@ -83,24 +92,20 @@ class AuthDialog(QDialog):
         b = QPushButton(text)
         b.setFlat(True)
         b.setCursor(Qt.CursorShape.PointingHandCursor)
-        b.setStyleSheet(f"color: {accent()}; text-align: left; border: none;")
+        b.setStyleSheet(f"color: {accent()}; text-align: left; border: none; padding: 4px 0;")  # in line with the box
         b.clicked.connect(slot)
         return b
 
     def _email_page(self):
-        w = QWidget()
-        lay = QVBoxLayout(w)
+        w, lay = _page()
         self.email = self._field(lay, "Email", "you@example.com")
         self.email.setText(self.client.email)
-        note = QLabel("We'll email you a code. No password.")
-        note.setStyleSheet("font-size: 12px; opacity: 0.7;")
-        lay.addWidget(note)
+        lay.addWidget(note(QLabel("We'll email you a code. No password.")))
         lay.addStretch()
         return w
 
     def _code_page(self):
-        w = QWidget()
-        lay = QVBoxLayout(w)
+        w, lay = _page()
         self.sent_to = QLabel("")
         self.sent_to.setWordWrap(True)
         self.sent_to.setTextFormat(Qt.TextFormat.PlainText)
@@ -116,8 +121,7 @@ class AuthDialog(QDialog):
         return w
 
     def _name_page(self):
-        w = QWidget()
-        lay = QVBoxLayout(w)
+        w, lay = _page()
         self.name = self._field(lay, "Display name", "How your crew sees you")
         self.name.setMaxLength(60)
         lay.addStretch()

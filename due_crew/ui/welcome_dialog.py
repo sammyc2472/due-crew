@@ -3,8 +3,6 @@ board, and what the crew will see, said at the moment sharing starts (the
 first upload waits for this screen to close). Shown once. Later closes it;
 everything on it stays reachable from the board and Settings."""
 
-import html
-
 from aqt.qt import (
     QCheckBox, QDialog, QDialogButtonBox, QFrame, QGridLayout, QLabel, QLineEdit,
     QPushButton, QVBoxLayout, Qt,
@@ -12,7 +10,7 @@ from aqt.qt import (
 from aqt.utils import tooltip
 
 from ..backend.shapes import friend_code_from, invite_code_from, long_code_from
-from . import accent, attach_alive, copy_text, logo_label, run_bg, shared_words
+from . import accent, attach_alive, copy_text, logo_label, note, run_bg, shared_words, title, tone
 
 
 class WelcomeDialog(QDialog):
@@ -35,9 +33,7 @@ class WelcomeDialog(QDialog):
         if logo is not None:
             root.addWidget(logo)
 
-        hello = QLabel(f"You're in, {html.escape(client.display_name or 'friend')}.")
-        hello.setStyleSheet("font-size: 16px; font-weight: bold;")
-        root.addWidget(hello)
+        root.addWidget(title(f"You're in, {client.display_name or 'friend'}."))  # plain text: a name
         root.addSpacing(4)
 
         grid = QGridLayout()
@@ -47,8 +43,8 @@ class WelcomeDialog(QDialog):
         self.code_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.code_label.setStyleSheet(
             "font-family: Menlo, Consolas, monospace; font-size: 15px; font-weight: bold;"
-            f"letter-spacing: 2px; padding: 2px 8px; color: {accent()};"
-            "background: palette(base); border: 1px solid palette(mid); border-radius: 6px;")
+            f"letter-spacing: 2px; padding: 5px 10px; color: {accent()};"
+            f"background: {tone('bg')}; border: 1px solid {tone('line')}; border-radius: 6px;")
         grid.addWidget(self.code_label, 0, 1)
         self.copy_btn = QPushButton("Copy Invite")
         self.copy_btn.setEnabled(False)
@@ -73,9 +69,7 @@ class WelcomeDialog(QDialog):
         root.addLayout(grid)
         self.status = QLabel("")
         self.status.setTextFormat(Qt.TextFormat.PlainText)  # friend names land here
-        self.status.setStyleSheet("font-size: 12px;")
-        self.status.setWordWrap(True)
-        root.addWidget(self.status)
+        root.addWidget(note(self.status))
 
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
@@ -84,10 +78,7 @@ class WelcomeDialog(QDialog):
         words = shared_words(cfg)
         seen = (f"Your crew and squads will see your {words}." if words
                 else "Your crew and squads will see which days you studied.")
-        note = QLabel(seen)
-        note.setWordWrap(True)
-        note.setStyleSheet("font-size: 12px;")
-        root.addWidget(note)
+        root.addWidget(note(QLabel(seen)))
         self.show_up_box = QCheckBox("Just show up instead: only which days you studied")
         self.show_up_box.setChecked(bool(cfg.get("show_up")))
         self.offered = bool(words)

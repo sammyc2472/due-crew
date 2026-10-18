@@ -321,12 +321,14 @@ def seats(ms, entries, my_pair, my_look=()):
 
 
 def widget_data(room, entries, accent_pair, compact=False, side="right", sev=True, brk_pose="breathe",
-                cards=None, total=None, look=()):
+                cards=None, total=None, look=(), sound=None):
     """What every widget needs, all plain values. side: the chip's end of
     the top bar, "right" or "left". 3.8.1, a fifteen: sev (the switch in
     Settings), brk_pose ("breathe" or "stretch"), and for its question the
     cards answered in the fifteen and in the session. A crew room with Pip
-    on: its card shows each member as their Pip (seats)."""
+    on: its card shows each member as their Pip (seats). sound (3.9.1):
+    (kind, volume 0-100), sound_pick's, for the chip's speaker; None, no
+    speaker."""
     ms = members(entries, room)
     start = _parse(room["start"])
     fifteen = is_fifteen(room)
@@ -349,7 +351,9 @@ def widget_data(room, entries, accent_pair, compact=False, side="right", sev=Tru
             "kind": "fifteen" if fifteen else "room", "ask": ASK * 60000, "max": MAX_ROUNDS,
             "sev": sevs, "sevcss": css, "slot": list(_sev.SLOT), "brk_pose": "stretch" if brk_pose == "stretch" else "breathe",
             "vary": turns, "vseed": vary_seed(room) if turns else 0,
-            "cards": cards, "total": total}
+            "cards": cards, "total": total,
+            "sound": {"kind": sound[0], "vol": sound[1]} if sound else None,
+            "soundKinds": list(SOUNDS), "soundLabels": dict(SOUND_LABELS)}
 
 
 def start_data(accent_pair, side="right", sev=True, nap=False, compact=False, look=()):
@@ -475,10 +479,12 @@ BAR_BALANCE = r"""
     if (window.MutationObserver) {
       var pend = 0;
       new MutationObserver(function (recs) {
-        var chip = document.getElementById('dc-knows');  // the chip's own moves and text swaps aren't news
-        if (chip && recs.every(function (x) {
+        // the chip's own moves and text swaps aren't news; nor (3.9.1) the room's, whose tick balances when its words change
+        var chip = document.getElementById('dc-knows'), room = document.getElementById('dc-room-bottom');
+        if ((chip || room) && recs.every(function (x) {
           var nodes = [].slice.call(x.addedNodes).concat([].slice.call(x.removedNodes));
-          return chip.contains(x.target) || (nodes.length && nodes.every(function (n) { return n === chip; }));
+          return (chip && chip.contains(x.target)) || (room && room.contains(x.target))
+            || (nodes.length && nodes.every(function (n) { return n === chip || n === room; }));
         })) { return; }
         clearTimeout(pend);
         pend = setTimeout(function () { window.dcBarBalance(); }, 30);
@@ -667,7 +673,103 @@ _RUNTIME = r"""
     if (sq.set) { sq.style.marginRight = '5px'; }  // 3.8.2: what Pip set down to hold its card, clear of the clock
     root.appendChild(sq); root.appendChild(rg); root.appendChild(tx); root.appendChild(fc);
     if (D.compact) { tx.style.display = fc.style.display = 'none'; if (!sq.set) { sq.style.display = 'none'; } root.style.padding = '0 3px'; }
+    if (!fc.childElementCount) { fc.style.display = 'none'; }  // no one with me: no empty slot doubling the gap
     root.onclick = function () { send('roomcard'); };
+    // 3.9.1, room sounds: a speaker at the chip's end. The top bar is too short for anything
+    // under it, so the chip itself becomes the picker: Off, the four sounds, the volume
+    var snd = D.sound;
+    if (snd) {
+      // 3.9.1 (Sam's pick, "Fifteen sounds": A, say it on the chip): the speaker with a word,
+      // Sound while it's off and the sound's name while one plays; just the speaker when compact
+      // spacing (Sam: "the sound symbol is a bit too close to the edge"): the outlined speaker sits
+      // 3 px inside the chip on every side, nested; alone (compact, or the picker out) its icon sits
+      // as far in from the chip's end as the chip's first thing does from the other
+      var spk = el('span', 'display:inline-flex;align-items:center;justify-content:center;gap:3px;box-sizing:border-box;height:20px;' +
+        'border-radius:10px;flex:none;cursor:pointer;' +
+        (D.compact ? 'width:20px;margin:0;' : 'margin:0 -7px 0 0;font:600 11px -apple-system,Segoe UI,sans-serif;')),
+          pk = el('span', 'display:none;align-items:center;gap:3px;'), opts = [], open = false;
+      spk.setAttribute('role', 'button'); spk.setAttribute('aria-label', 'Room sound'); spk.tabIndex = 0;
+      D.soundKinds.forEach(function (k) {
+        var b = el('button', '-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;min-height:0;height:20px;line-height:16px;' +
+          'font:600 11px -apple-system,Segoe UI,sans-serif;border-radius:10px;padding:1px 8px;cursor:pointer;', D.soundLabels[k]);
+        b.type = 'button'; b.k = k;
+        b.onclick = function (ev) { ev.stopPropagation(); choose(k); };
+        opts.push(b); pk.appendChild(b);
+      });
+      var vol = el('input', 'width:64px;margin:0 2px 0 5px;accent-color:' + c.a + ';cursor:pointer;');
+      vol.type = 'range'; vol.min = '0'; vol.max = '100'; vol.value = String(snd.vol); vol.setAttribute('aria-label', 'Volume');
+      vol.oninput = function () { snd.vol = +vol.value; if (window.dcRoomSound) { window.dcRoomSound.volume(snd.vol / 100); } later(2000); };
+      vol.onchange = function () { send('roomsound:' + snd.kind + ':' + snd.vol); later(2000); };
+      pk.appendChild(vol);
+      pk.onclick = pk.onmousedown = function (ev) { ev.stopPropagation(); };
+      var svgEl = function (tag, at) {
+        var e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+        for (var k in at) { e.setAttribute(k, at[k]); }
+        return e;
+      };
+      var paint = function () {
+        var on = snd.kind !== 'off', icon = svgEl('svg', {viewBox: '0 0 16 16', width: '14', height: '14', 'aria-hidden': 'true'});
+        icon.appendChild(svgEl('path', {d: 'M2.5 6h2.6L8.6 3v10L5.1 10H2.5z', fill: on ? c.a : c.mut}));
+        icon.appendChild(svgEl('path', on ? {d: 'M10.8 5.7a3.2 3.2 0 0 1 0 4.6M12.6 3.9a5.8 5.8 0 0 1 0 8.2', fill: 'none', stroke: c.a,
+          'stroke-width': '1.4', 'stroke-linecap': 'round'} : {d: 'M11 6.2l3 3.6m0-3.6l-3 3.6', stroke: c.mut, 'stroke-width': '1.3', 'stroke-linecap': 'round'}));
+        spk.textContent = ''; spk.appendChild(icon);
+        if (!D.compact) {  // while the picker's out it says it all: the speaker alone, to fold it back
+          if (!open) { spk.appendChild(el('span', '', on ? D.soundLabels[snd.kind] : 'Sound')); }
+          spk.style.border = '1px solid ' + (open ? 'transparent' : on ? c.a : c.line);
+          spk.style.padding = open ? '0 2px' : '0 8px 0 6px';
+          spk.style.color = on ? c.a : c.ink;
+        }
+        spk.title = on ? 'Room sound: ' + D.soundLabels[snd.kind] : 'Room sound: off';
+        spk.setAttribute('aria-expanded', open ? 'true' : 'false');
+        opts.forEach(function (b) {
+          var me = b.k === snd.kind;
+          b.setAttribute('aria-pressed', me ? 'true' : 'false');
+          b.style.background = me ? c.a : 'transparent'; b.style.color = me ? c.bg : c.ink;
+          b.style.border = '1px solid ' + (me ? c.a : c.line);
+        });
+        vol.style.display = on ? '' : 'none';
+      };
+      var choose = function (k) {
+        snd.kind = k; paint(); picked = true; later(1500);
+        if (window.dcRoomSound) { window.dcRoomSound.pick(k, snd.vol / 100); }
+        send('roomsound:' + k + ':' + snd.vol);
+      };
+      // 3.9.1 (Sam: "should close after a second or two"): the picker folds back into the chip
+      // by itself: 1.5 s after a pick, 2 s after the volume moves, 1 s after the pointer leaves,
+      // 4 s after it opens if nothing's touched; moving in it keeps it out (never mid-drag)
+      var timer = null, picked = false;
+      var later = function (ms) {
+        clearTimeout(timer);
+        timer = setTimeout(function () {
+          if (!open) { return; }
+          if (vol.matches(':active')) { later(800); return; }
+          show(false);
+        }, ms);
+      };
+      root.addEventListener('mousemove', function () { if (open) { later(picked ? 1500 : 4000); } });
+      root.addEventListener('mouseleave', function () { if (open) { later(1000); } });
+      root.addEventListener('keydown', function () { if (open) { later(picked ? 1500 : 4000); } });
+      var away = function (ev) { if (!root.isConnected || !root.contains(ev.target)) { show(false); } };
+      var esc = function (ev) { if (ev.key === 'Escape') { show(false); } };
+      var show = function (on) {
+        open = on;
+        clearTimeout(timer);
+        if (on) { picked = false; later(4000); }
+        pk.style.display = on ? 'inline-flex' : 'none';
+        // the picker has the chip to itself while it's out
+        tx.style.display = on || D.compact ? 'none' : '';
+        fc.style.display = on || D.compact || !fc.childElementCount ? 'none' : '';
+        rg.style.display = on ? 'none' : '';
+        sq.style.display = on || (D.compact && !sq.set) ? 'none' : '';
+        paint();
+        document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc);
+        if (on) { setTimeout(function () { document.addEventListener('mousedown', away); document.addEventListener('keydown', esc); }, 0); }
+      };
+      spk.onclick = function (ev) { ev.stopPropagation(); show(!open); };
+      spk.onkeydown = function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); ev.stopPropagation(); show(!open); } };
+      root.appendChild(pk); root.appendChild(spk);
+      paint();
+    }
     update = function (p) {
       rg.set(p.state === 'before' ? 0 : p.state === 'ask' ? 1 : 1 - p.left / p.total,
              p.state === 'before' ? '·' : p.state === 'ask' ? '✓' : String(mins(p.left)), p.state === 'break');
@@ -741,6 +843,9 @@ _RUNTIME = r"""
     // breathing draws its square around Pip: the whole drawing; a stretch needs only Pip's own room
     var bs = FIF && D.sev ? (D.brk_pose === 'stretch' ? sev(vk('stretch', phase(Date.now()).round), 170) : sev('breathe', 180, true)) : null;
     if (bs) { bs.style.marginBottom = '10px'; }  // its shadow (or the square's "out") clear of the ring
+    // 3.9.1 (Pip at rest, and the bug hunt): the break's Pip is the exercise, so its moves go on all break
+    // (shake, march and look too, not only the stretch), where Pip elsewhere rests after a few rounds
+    root.style.setProperty('--sv-on', 'infinite');
     logo.appendChild(bs || squares(c, 110));
     var rg4 = ring(FIF ? 96 : 150, c), h = el('div', 'font:600 28px -apple-system,Segoe UI,sans-serif;'), p1 = el('div', 'color:' + c.mut + ';max-width:40ch;');
     var btns = el('div', 'display:flex;gap:10px;flex-wrap:wrap;justify-content:center;');
@@ -940,7 +1045,14 @@ _RUNTIME = r"""
   if (KIND !== 'bottom') { document.body.appendChild(root); }
   root.id = 'dc-room-' + KIND;
   if (root.place) { root.place(); }
-  var last = null;
+  var last = null, said = null;
+  // 3.9.1 (the efficiency run): it ticks only as often as it shows: each
+  // second on the break's mm:ss and the question, else at the next minute
+  // its words turn over or its phase ends, ten seconds at most (the ring)
+  function next(p) {
+    if (KIND === 'break' || KIND === 'ask') { return 1000; }
+    return Math.max(50, Math.min(10000, p.left > 0 ? p.left % 60000 + 50 : 10000));
+  }
   function tick() {
     var p = phase(Date.now());
     // 3.8.1: a phase that changes redraws the Decks screen (its lobby asks the question too)
@@ -948,10 +1060,11 @@ _RUNTIME = r"""
     if (p.state === 'done' && KIND !== 'break' && KIND !== 'ask') { drop(KIND); return; }
     update(p);
     if (KIND === 'gutter' && window.dcRoomFit) { window.dcRoomFit(); }
-    if (KIND === 'bottom' && window.dcBarBalance) { window.dcBarBalance(); }
+    // the bar's buttons move back to its middle only when the room's words changed width
+    if (KIND === 'bottom' && window.dcBarBalance && root.textContent !== said) { said = root.textContent; window.dcBarBalance(); }
+    window['dcRoomTick_' + KIND] = setTimeout(tick, next(p));
   }
   tick();
-  window['dcRoomTick_' + KIND] = setInterval(tick, KIND === 'break' || KIND === 'ask' || FIF ? 1000 : 10000);
 })();
 """
 
@@ -962,17 +1075,135 @@ def chip_side(value):
     return "left" if value == "left" else "right"
 
 
+# 3.9.1, room sounds (Sam's picks): made from noise only (sounds.js), picked
+# from a speaker on the chip, each person their own: the pick and its volume
+# are this computer's config, never sent, off till picked
+SOUNDS = ("off", "brown", "rain", "fire", "waves")
+SOUND_LABELS = {"off": "Off", "brown": "Brown noise", "rain": "Rain", "fire": "Fire", "waves": "Waves"}
+SOUND_VOL = 60
+
+
+def sounds_on(cfg):
+    """3.9.1 (Sam: "make an option to remove sounds in settings"): Settings ›
+    Board › Room sounds. Off, the chip has no speaker and nothing plays."""
+    return cfg.get("room_sounds", True) is not False
+
+
+def sound_pick(cfg):
+    """(kind, volume 0-100) from this computer's config: off, unless picked."""
+    kind, vol = cfg.get("room_sound"), cfg.get("room_sound_vol")
+    return (kind if kind in SOUNDS else "off",
+            vol if isinstance(vol, int) and not isinstance(vol, bool) and 0 <= vol <= 100 else SOUND_VOL)
+
+
+def sound_cmd(parts):
+    """roomsound:<kind>:<volume> as the chip sends it (parts: the command
+    split on ":", "duecrew" first): (kind, volume), or None."""
+    if len(parts) != 4 or parts[2] not in SOUNDS or not parts[3].isdigit():
+        return None
+    vol = int(parts[3])
+    return (parts[2], vol) if vol <= 100 else None
+
+
+def sound_state(room, kind, vol, files=None):
+    """What the top bar's player needs (SOUND_RUNTIME): the pick, and the
+    session's span in ms, from its start to the end of its last round (a
+    fifteen's, of its question): it plays through the breaks. None in no
+    room: it stops. files: where the recordings are (sound_files)."""
+    if room is None:
+        return None
+    end = live_until(room) if is_fifteen(room) else room_end(room)
+    return {"kind": kind if kind in SOUNDS else "off", "vol": max(0, min(100, int(vol))) / 100,
+            "from": int(_parse(room["start"]).timestamp() * 1000), "until": int(end.timestamp() * 1000),
+            "files": dict(files or {})}
+
+
+RECORDED = ("rain", "fire", "waves")  # brown noise is made, as brown noise is
+
+
+def sound_files(folder, have):
+    """{kind: url} for the recordings the add-on has (have: the kinds whose
+    sounds/<kind>.ogg is there), served to the top bar's page by Anki's
+    /_addons/ (setWebExports). folder: the add-on's folder name."""
+    from urllib.parse import quote
+    return {k: f"/_addons/{quote(str(folder))}/sounds/{k}.ogg" for k in RECORDED if k in set(have or ())}
+
+
+_SOUNDS_SRC = []
+
+
+def _sounds_js():
+    if not _SOUNDS_SRC:
+        import os
+        with open(os.path.join(os.path.dirname(__file__), "sounds.js"), encoding="utf-8") as f:
+            _SOUNDS_SRC.append(f.read())
+    return _SOUNDS_SRC[0]
+
+
+# the top bar's player: the pick plays while the session runs, from any
+# screen (Anki keeps the top bar's page through review), and stops at its end
+SOUND_RUNTIME = r"""
+(function (S) {
+  var R = window.dcRoomSound;
+  if (!R) {
+    R = window.dcRoomSound = {s: null, t: null};
+    R.check = function () {
+      var s = R.s, now = Date.now(), on = !!(s && s.kind !== 'off' && now >= s.from && now < s.until);
+      if (window.dcSounds) {
+        if (on) { window.dcSounds.play(s.kind, s.vol); } else if (window.dcSounds.playing()) { window.dcSounds.stop(); }
+      }
+      if ((!s || now >= s.until) && R.t) { clearInterval(R.t); R.t = null; }
+    };
+    R.set = function (s) {
+      if (s && window.dcSounds && window.dcSounds.files) { window.dcSounds.files(s.files); }
+      R.s = s; R.check(); if (s && !R.t) { R.t = setInterval(R.check, 5000); }
+    };
+    R.pick = function (kind, vol) { if (R.s) { R.s.kind = kind; R.s.vol = vol; } R.check(); };
+    R.volume = function (vol) { if (R.s) { R.s.vol = vol; } if (window.dcSounds) { window.dcSounds.setVolume(vol); } };
+  }
+  R.set(S);
+})(__SOUND__);
+"""
+
+
+def sound_js(state):
+    """The top bar's player, told the pick and the session (sound_state);
+    None stops it. The sounds themselves (sounds.js) come once a page."""
+    if state is None:
+        return "window.dcRoomSound && window.dcRoomSound.set(null);"
+    # 3.9.1 (the efficiency run): the sounds themselves only once one's picked;
+    # off, the player stops one a page already has, and needs nothing else
+    return ((_sounds_js() if state.get("kind") in SOUNDS and state["kind"] != "off" else "")
+            + SOUND_RUNTIME.replace("__SOUND__", json.dumps(state)))
+
+
 def widget_js(kind, data=None):
     """The JS that draws (or, with data None, removes) one widget. kind
-    'off' removes them all from this webview."""
+    'off' removes them all from this webview. 3.9.1 (the efficiency run):
+    removing one is the runtime's own few lines (REMOVE_JS), not all of it;
+    the bottom bar's balance (BAR_BALANCE) is refresh_widgets' to add, to
+    that page alone."""
+    if data is None:
+        return REMOVE_JS.replace("__KIND__", json.dumps(kind))
     # the data goes in last: a name or a tip holding "__KEY__" stays text
     return (_RUNTIME.replace("__KIND__", json.dumps(kind))
             .replace("__SQUARES__", json.dumps(SQUARES))
             .replace("__GUTTER__", str(GUTTER_WIDTH))
             .replace("__SIDE__", chip_side((data or {}).get("side")))
             .replace("__KEY__", json.dumps(CMD_KEY))
-            .replace("__DATA__", json.dumps(data))
-            + (BAR_BALANCE if kind in ("bottom", "off") else ""))
+            .replace("__DATA__", json.dumps(data)))
+
+
+# the runtime's drop(), alone (its ids and its ticks, kept the same; the suite checks)
+REMOVE_JS = r"""(function (KIND) {
+  var ids = KIND === 'off' ? ['chip', 'bottom', 'gutter', 'break', 'card', 'ask', 'start'] : [KIND];
+  ids.forEach(function (k) {
+    var el = document.getElementById('dc-room-' + k);
+    if (el) { el.remove(); if (k === 'bottom' && window.dcBarBalance) { window.dcBarBalance(); } }
+    if (window['dcRoomTick_' + k]) { clearInterval(window['dcRoomTick_' + k]); window['dcRoomTick_' + k] = null; }
+  });
+  if (KIND === 'off') { window.dcRoomFit = null; window.dcBarBalance && window.dcBarBalance(); }
+})(__KIND__);"""
 
 
 # what the widgets send from the reviewer's page (the margin card, the
@@ -983,7 +1214,10 @@ CARD_PAGE_CMDS = ("roomcard", "roomcardoff", "roomtuck", "roomskip", "roombreake
                   # the Ask card above the bar (cards.py): opening a dialog or a
                   # menu (Tip asks for its line), moving the chip to the bar, and This
                   # helped, which asks first
-                  "knowsask", "knowstip", "knowsbar", "knowshelped", "knowsreply")
+                  "knowsask", "knowstip", "knowsbar", "knowshelped", "knowsreply",
+                  # 3.9.1: a tap on the bars' shade (app.veil) is Esc on the board; the
+                  # Decks screen's bottom bar is Anki's, not ours, so it comes keyed
+                  "veiltap")
 
 
 def trusted(message, from_card_page):

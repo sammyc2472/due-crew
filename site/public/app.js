@@ -1090,6 +1090,9 @@ const Board = (() => {
     }
     else if (r.stale) cell.append(h("span", { class: "ago faded" }, " · yesterday"));
     else if (r.showup && r.daysWk) cell.append(h("span", { class: "ago faded" }, ` · ${r.daysWk} day${r.daysWk === 1 ? "" : "s"} this week`));
+    // board.py 3.9.1: the cheer is a pill after the name (and its line), only while the pointer's on the name
+    // (or a key's on it), in place of the 🎉 column at the end; on a phone, tapping the name opens their card, which has it
+    if (!r.you) cell.append(h("button", { class: "linkish cpill", title: "Send a cheer", "aria-label": `Cheer ${p.name}`, onclick: (e) => cheerMenu(p.uid, e.currentTarget) }, "🎉 Cheer"));
     if (r.status) {
       // 2.10: a status that starts with a number is a plan, ticked by the day's reviews
       const target = planTarget(r.status), done = r.reviews;
@@ -1108,18 +1111,17 @@ const Board = (() => {
     const sort = HEADS.some(([k]) => k === kept) ? kept : "reviews";
     const [fresh, dormant] = rows(people, period, sort, today);
     const head = h("tr", {}, picker ? corner(picker) : [h("th"), h("th")], HEADS.map(([k, l]) => h("th", { class: `k-${k}${k === sort ? " on" : ""}` },
-      h("button", { class: "linkish", onclick: () => { store("dc-sort", k); onSort(); } }, l + (k === sort ? " ▾" : "")))), h("th"));
+      h("button", { class: "linkish", onclick: () => { store("dc-sort", k); onSort(); } }, l + (k === sort ? " ▾" : "")))));
     let n = 0;
     const tr = (r, rank) => {
       // T5: how many were new, on the Week tab
       const rv = r.reviews === null ? "—" : h("span", {}, r.reviews.toLocaleString(), period === "week" && r.new > 0 && r.reviews > 0 ? h("small", {}, r.new >= r.reviews ? "all new" : `${Math.min(r.new, r.reviews).toLocaleString()} new`) : null);
       const dash = r.paused || r.quiet || r.notyet;
-      const cheer = r.you ? h("td") : h("td", { class: "chc" }, h("button", { class: "linkish cheer", title: "Send a cheer", onclick: (e) => cheerMenu(r.p.uid, e.currentTarget) }, "🎉"));
       return h("tr", { class: [r.you ? "you" : "", r.stale || r.quiet || r.paused || r.notyet ? "dim" : ""].join(" ").trim(), "data-uid": r.p.uid },
         h("td", { class: "rk" }, rank), nameCell(r, period),
         h("td", { class: "n" }, dash ? "—" : rv), h("td", { class: "n k-time" }, dash || r.time === null ? "—" : fmtTime(r.time)),
         h("td", { class: "n k-retention" }, dash || r.retention === null ? "—" : `${r.retention.toFixed(1)}%`),
-        h("td", { class: "n" }, dash || r.streak === null ? "—" : String(r.streak)), cheer);
+        h("td", { class: "n" }, dash || r.streak === null ? "—" : String(r.streak)));
     };
     // Q3: friends with no sync in 90+ days fold into one line, as board.py's _quiet_fold
     const longQ = dormant.filter((r) => r.quiet && !r.you && r.last && Date.now() - Date.parse(r.last) > 90 * 86400000);
@@ -1129,7 +1131,7 @@ const Board = (() => {
       const names = longQ.map((r) => r.p.name);
       const who = names.length === 1 ? names[0] : names.length <= 3 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : `${names.slice(0, 2).join(", ")} and ${names.length - 2} more`;
       const since = MONTHS[new Date(Math.max(...longQ.map((r) => Date.parse(r.last)))).getMonth()];
-      fold.push(h("tr", { class: "qfold" }, h("td", { class: "rk" }), h("td", { class: "nm", colspan: HEADS.length + 2 },
+      fold.push(h("tr", { class: "qfold" }, h("td", { class: "rk" }), h("td", { class: "nm", colspan: HEADS.length + 1 },
         h("button", { class: "linkish", onclick: () => tbl.classList.toggle("qopen") }, `▸ ${longQ.length} quiet`),
         h("span", { class: "ago faded" }, ` · ${who} ${longQ.length === 1 ? "hasn't" : "haven't"} been here since ${since}`))));
       for (const r of longQ) { const row = tr(r, "—"); row.classList.add("qh"); fold.push(row); }
@@ -1710,7 +1712,9 @@ function sinceYouWereHere(b, crew, t) {
     : x.kind === "note" ? row("✎", [h("b", {}, x.name), ` on ${pretty(x.day)}, `, link(`/plans/${x.plan}`, x.planName), `: ${x.text}`], "A note on a day")
     : x.kind === "post" ? row("✉", [h("b", {}, x.name), " on ", link(`/plans/${x.plan}`, x.planName), `: ${x.text}`], "Posted to followers")
     : row("↻", [h("b", {}, x.name), " changed ", link(`/plans/${x.plan}`, x.planName), `: ${x.summary}`], "Your Anki has it at its next refresh");
-  const cheers = b.cheers.length ? row(b.cheers[0].emoji, [h("b", {}, b.cheers[0].name), " cheered", b.cheers[0].note ? `: ${b.cheers[0].note}` : ""],
+  // 3.9.1: a drawing or a sign waits with it, for Anki to show (its Pip holds it up)
+  const drew = (c) => ({ draw: " with a drawing", sign: " with a sign" })[c.doodle?.k] || "";
+  const cheers = b.cheers.length ? row(b.cheers[0].emoji, [h("b", {}, b.cheers[0].name), " cheered", drew(b.cheers[0]), b.cheers[0].note ? `: ${b.cheers[0].note}` : ""],
     `${b.cheers.length === 1 ? "It waits" : `${b.cheers.length} cheers wait`} for your Anki screen`) : null;
   const exams = crew.map((f) => [f, f.week?.examDate]).filter(([, d]) => d && d >= t && d <= addDays(t, 14)).sort((a, c) => a[1].localeCompare(c[1]))
     .map(([f, d]) => {

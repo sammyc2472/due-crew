@@ -1,3 +1,4 @@
+# Due Crew's logo and Pip: Copyright (c) 2026 Sammy Caplan, all rights reserved (see LICENSE).
 """3.8.2: the closet's drawings, in Pip's own 80 x 80 drawing (sev.py). Pure data.
 
 ART[k] = (front, back): front goes over the body (under any arms in front),

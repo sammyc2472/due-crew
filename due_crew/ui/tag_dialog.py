@@ -9,7 +9,7 @@ from aqt.qt import (
     QComboBox, QDialog, QDialogButtonBox, QFormLayout, QLabel, QPushButton, Qt, QVBoxLayout,
 )
 
-from . import attach_alive, run_bg
+from . import attach_alive, heading, note, run_bg
 from .. import plans as P
 
 PER_TAG = 5000  # plans.ts IDLIST_MAX: a tag's notes
@@ -31,9 +31,7 @@ class TagDialog(QDialog):
         self.setWindowTitle("Tag for a plan")
         self.setMinimumWidth(440)
         root = QVBoxLayout(self)
-        head = QLabel(f"Tag {n:,} note{'s' if n != 1 else ''} for a plan")
-        head.setStyleSheet("font-weight: 600;")
-        root.addWidget(head)
+        heading(self, root, f"Tag {n:,} note{'s' if n != 1 else ''} for a plan")
         form = QFormLayout()
         self.plan = QComboBox()
         self.plan.currentIndexChanged.connect(self._plan_changed)
@@ -48,9 +46,7 @@ class TagDialog(QDialog):
         root.addLayout(form)
         self.where = QLabel("")
         self.where.setTextFormat(Qt.TextFormat.PlainText)  # names come from the server
-        self.where.setWordWrap(True)
-        self.where.setStyleSheet("color: palette(placeholder-text); font-size: 11.5px;")
-        root.addWidget(self.where)
+        root.addWidget(note(self.where))
         self.status = QLabel("Looking for your plans…")
         self.status.setTextFormat(Qt.TextFormat.PlainText)
         self.status.setWordWrap(True)

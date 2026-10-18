@@ -11,7 +11,7 @@ from aqt.qt import (
     QPainter, QPushButton, QRadioButton, QSizePolicy, Qt, QVBoxLayout, QWidget,
 )
 
-from . import attach_alive
+from . import _dark, attach_alive, heading, note, role, tone
 from .. import schedule as S
 
 DAY_NAMES = ("M", "T", "W", "T", "F", "S", "S")
@@ -39,12 +39,13 @@ class LoadChart(QWidget):
             return
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        pal = self.palette()
-        ink = pal.color(pal.ColorRole.WindowText)
+        # 3.9.1: the board's colours (its theme), as the window around it
+        dark = _dark()
+        ink = QColor(tone("ink"))
         muted = QColor(ink)
         muted.setAlpha(140)
-        accent = QColor("#2e7d32") if pal.color(pal.ColorRole.Window).lightness() > 128 else QColor("#7cc47f")
-        amber = QColor("#b26a00") if pal.color(pal.ColorRole.Window).lightness() > 128 else QColor("#dda45c")
+        accent = QColor("#7cc47f" if dark else "#2e7d32")
+        amber = QColor(tone("hours"))
         w, h = self.width(), self.height()
         left, bottom, top = 4, 18, 18
         weeks = v["weeks"]
@@ -53,7 +54,10 @@ class LoadChart(QWidget):
         slot = (w - left - 4) / len(weeks)
         bw = max(3.0, slot - 4)
         f = p.font()
-        f.setPointSizeF(max(7.0, f.pointSizeF() - 2))
+        if f.pixelSize() > 0:  # the window's look sets its type in px (3.9.1)
+            f.setPixelSize(max(9, f.pixelSize() - 3))
+        else:
+            f.setPointSizeF(max(7.0, f.pointSizeF() - 2))
         p.setFont(f)
         for i, (label, val, over) in enumerate(weeks):
             x = left + i * slot + (slot - bw) / 2
@@ -84,6 +88,7 @@ class ScheduleDialog(QDialog):
         self.setWindowTitle(f"My schedule · {plan.get('name') or 'Plan'}")
         self.setMinimumWidth(460)
         lay = QVBoxLayout(self)
+        heading(self, lay)
 
         first = S.plan_start(plan["doc"]) or self.today
         lay.addWidget(self._label("Start"))
@@ -118,8 +123,7 @@ class ScheduleDialog(QDialog):
         lay.addLayout(days_row)
         self.days_hint = QLabel()
         self.days_hint.setTextFormat(Qt.TextFormat.PlainText)
-        self.days_hint.setStyleSheet("font-size: 11px;")
-        lay.addWidget(self.days_hint)
+        lay.addWidget(note(self.days_hint))
 
         lay.addWidget(self._label("Time a day"))
         self.minutes = QComboBox()
@@ -135,12 +139,10 @@ class ScheduleDialog(QDialog):
         self.summary.setTextFormat(Qt.TextFormat.PlainText)
         self.summary.setWordWrap(True)
         lay.addWidget(self.summary)
-        note = QLabel("The plan's dates are the window; your days decide how each one fills. "
-                      "Rest days open no new cards. Anki's reviews still come due.")
-        note.setTextFormat(Qt.TextFormat.PlainText)
-        note.setWordWrap(True)
-        note.setStyleSheet("font-size: 11px;")
-        lay.addWidget(note)
+        small = QLabel("The plan's dates are the window; your days decide how each one fills. "
+                       "Rest days open no new cards. Anki's reviews still come due.")
+        small.setTextFormat(Qt.TextFormat.PlainText)
+        lay.addWidget(note(small))
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Save")
@@ -160,8 +162,8 @@ class ScheduleDialog(QDialog):
 
     @staticmethod
     def _label(text):
-        lab = QLabel(text)
-        lab.setStyleSheet("font-weight: 600; margin-top: 6px;")
+        lab = role(QLabel(text), "head")
+        lab.setContentsMargins(0, 6, 0, 0)  # a style sheet's margin sets a label's words in, too
         return lab
 
     def _tap(self, i):
@@ -191,7 +193,10 @@ class ScheduleDialog(QDialog):
         for b, n in zip(self.day_buttons, self.days):
             b.setText(b.text()[0] + ("×2" if n == 2 else ""))
             b.setFixedWidth(46 if n == 2 else 34)
-            b.setStyleSheet("" if n else "color: palette(mid);")
+            # 3.9.1: the letter, not the padding; a study day in the accent's tint, so the week reads at a glance
+            b.setStyleSheet("padding: 4px 0;" + (f" background: {tone('you-bg')}; border: 1px solid {tone('accent')};"
+                                                 f" color: {tone('mark')}; font-weight: 700;" if n
+                                                 else f" color: {tone('faded')};"))
             b.setToolTip(("Rest day", "Study day", "Double share")[n] + ". Click to change.")
         rest = [DAY_NAMES[i] for i, n in enumerate(self.days) if n == 0]
         double = [DAY_NAMES[i] for i, n in enumerate(self.days) if n == 2]

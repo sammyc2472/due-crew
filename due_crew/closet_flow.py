@@ -1,8 +1,9 @@
 """3.8.2: Pip's closet, the glue. closet.py says what a thing needs; this
 finds out what you've done:
 
-- your reviews: the days and hours studied, read from the revlog in one
-  grouped query a day (today's own hours read fresh, a small query), and
+- your reviews: the days and hours studied, from the revlog by the hour
+  (3.9.1: the days before the last week kept in closet_days.json and
+  checked with two counts, the last week read fresh, a small query), and
   the cards learned and leeches turned around (cards, one query each);
 - the board: your crew, your squads and the plans you follow;
 - a few tallies this computer keeps (wrap.json's "closet"): Fifteens,
@@ -23,13 +24,15 @@ Main thread: collection and config. No network here.
 """
 
 import datetime
+import json
+import os
 import time
 import traceback
 
 from aqt import mw
 
 from . import closet
-from .app import _state, cfg, save_cfg
+from .app import _profile_files, _state, cfg, save_cfg
 
 LOOK_KEY, CLOSET_KEY = "sev_look", "sev_closet"
 _TALLIES = ("fifteens", "fifteen_go", "fifteen_am", "rooms", "big_cheer", "cheered_by", "own_cards",
@@ -199,6 +202,114 @@ def note_cheered():
     _ybump("cheered_by")
 
 
+# ---- 3.9.1: the fridge, around the Decks screen (wrap.json's "fridge") ----
+# wrap.json is this Anki profile's, and more than one account can sign in
+# on a profile: the fridge keeps whose drawings it holds ("fridge_uid"), shows
+# them to that account alone, and empties at sign-out (clear_fridge). One
+# that came before this (no owner) is whoever's signed in.
+
+def _ours(w, uid):
+    owner = w.get("fridge_uid")
+    return not owner or owner == (uid or "")
+
+
+def fridge(uid=None):
+    """The doodles on my fridge, oldest first (fridge.clean); none when
+    they came to another account."""
+    from . import fridge as fr
+    from .wrap import _wrap_data
+    w = _wrap_data()
+    return fr.clean(w.get("fridge")) if _ours(w, uid) else []
+
+
+def keep_doodles(cheers, entries, uid=None):
+    """Stick the cheers that carried a drawing or a sign on the fridge, as
+    they land. Another account's fridge here makes way for this one's.
+    Main thread (wrap.json)."""
+    from . import fridge as fr
+    from .wrap import _wrap_data
+    if not any(ch.get("doodle") for ch in cheers or []):
+        return
+    w = _wrap_data()
+    if not _ours(w, uid):
+        w["fridge"] = []
+    if uid:
+        w["fridge_uid"] = uid
+    accents = {e.get("user_id"): e.get("accent") for e in entries or [] if not e.get("you")}
+    w["fridge"] = fr.add(w.get("fridge"), cheers, accents)
+    _save()
+
+
+def clear_fridge():
+    """Signed out: the drawings were that account's, and go with it."""
+    from .wrap import _wrap_data
+    w = _wrap_data()
+    _GONE.clear()
+    if "fridge" in w or "fridge_uid" in w:
+        w.pop("fridge", None)
+        w.pop("fridge_uid", None)
+        _save()
+
+
+# the one just taken down, for its Undo: this session only, the last one
+_GONE = {}
+UNDO_SECS = 8  # how long "Taken down · Undo" stays where it was
+
+
+def take_down(k):
+    """Take one off the fridge; True when it was there. It's kept for its
+    Undo (put_back) till the next one comes down."""
+    from . import fridge as fr
+    from .wrap import _wrap_data
+    w = _wrap_data()
+    before = fr.clean(w.get("fridge"))
+    at = next((i for i, x in enumerate(before) if fr.key(x) == k), None)
+    if at is None:
+        return False
+    _GONE.clear()
+    _GONE.update(k=k, item=before[at], i=at, t=time.time())
+    w["fridge"] = fr.take_down(before, k)
+    _save()
+    return True
+
+
+def gone():
+    """{k, item, i, ago}: the one just taken down, while its Undo shows;
+    else None."""
+    ago = time.time() - _GONE["t"] if _GONE else UNDO_SECS
+    return dict(_GONE, ago=ago) if ago < UNDO_SECS else None
+
+
+def put_back(k):
+    """Undo: the one just taken down goes back where it was, with its spot;
+    True when it did."""
+    from . import fridge as fr
+    from .wrap import _wrap_data
+    if _GONE.get("k") != k:
+        return False
+    w = _wrap_data()
+    items = fr.clean(w.get("fridge"))
+    if not any(fr.key(x) == k for x in items):
+        items.insert(min(_GONE["i"], len(items)), _GONE["item"])
+    w["fridge"] = fr.clean(items)
+    _GONE.clear()
+    _save()
+    return True
+
+
+def move_fridge(k, side, dx, y):
+    """Where I dragged a doodle to (fridge.move); True when it was there."""
+    from . import fridge as fr
+    from .wrap import _wrap_data
+    w = _wrap_data()
+    before = fr.clean(w.get("fridge"))
+    if not any(fr.key(x) == k for x in before):
+        return False
+    w["fridge"] = fr.move(before, k, side, dx, y)
+    _save()
+    return True
+
+
 def note_card_added(*_args):
     """A note added in Anki's Add window: a card of my own."""
     try:
@@ -271,7 +382,9 @@ def _showed(day):
 
 # ---- the revlog: days and hours ----
 
-_RF = {"key": None, "hours": {}, "facts": {}}
+HISTORY = "closet_days.json"  # 3.9.1: user_files/<profile>/, never sent
+SETTLED = 7  # the days before the last week are kept there; the last week is read each time
+_RF = {"key": None, "hist": None}  # that file as last read or written (key: its path)
 
 
 def _buckets(col, lo_ms, hi_ms):
@@ -282,24 +395,90 @@ def _buckets(col, lo_ms, hi_ms):
     return {int(h): int(n) for h, n in rows or []}
 
 
+def _span(col, cut, lo_ms, hi_ms):
+    """What the answers in [lo, hi) give the closet, hour by hour: the days
+    (Anki's, as labels), the mornings, the evenings, the year turning, and
+    how many."""
+    hours = _buckets(col, lo_ms, hi_ms)
+    end = datetime.date.fromtimestamp(cut)
+    morn, eve, turn = closet.hour_sets(datetime.datetime.fromtimestamp(cut - (h + 1) * 3600) for h in hours)
+    return {"days": {(end - datetime.timedelta(days=h // 24 + 1)).isoformat() for h in hours},
+            "morn": morn, "eve": eve, "turn": turn, "reviews": sum(hours.values())}
+
+
+def _before(col, ms):
+    """The revlog's rows (any ease) before ms: all of them less the newer,
+    a count off an index and a short range, never the history itself."""
+    return (int(col.db.scalar("SELECT COUNT(*) FROM revlog") or 0)
+            - int(col.db.scalar("SELECT COUNT(*) FROM revlog WHERE id >= ?", ms) or 0))
+
+
+def _zone():
+    return [time.timezone, time.altzone, list(time.tzname)]
+
+
+def _history(col, cut):
+    """3.9.1: the days before the last week as the closet counts them, kept
+    in closet_days.json (per profile: the history used to be kept in memory
+    by the day alone, so a second profile opened that day got the first
+    one's). A day's hours go in as it settles. It's read whole again when
+    the rows before its edge aren't the ones it counted (a sync brought
+    older answers in) or its hours no longer line up with today's (another
+    rollover hour or time zone, or DST). Whole, it's the whole revlog by
+    the hour, which every launch's first refresh used to read, while
+    Anki's own sync ran. Main thread."""
+    hi = (cut - SETTLED * 86400) * 1000
+    path = os.path.join(_profile_files(), HISTORY)
+    if _RF["key"] != path:
+        _RF.update(key=path, hist=_load_history(path))
+    h = _RF["hist"]
+    if not (h and h["zone"] == _zone() and (cut - h["cut"]) % 86400 == 0 and h["hi"] <= hi
+            and _before(col, h["hi"]) == h["n"]):
+        h = dict(_span(col, cut, 0, hi), cut=cut, zone=_zone(), hi=hi, n=_before(col, hi))
+    elif h["hi"] < hi:
+        more = _span(col, cut, h["hi"], hi)
+        h = dict(h, cut=cut, hi=hi, n=_before(col, hi), reviews=h["reviews"] + more["reviews"],
+                 turn=h["turn"] or more["turn"], **{k: h[k] | more[k] for k in ("days", "morn", "eve")})
+    else:
+        return h
+    _RF["hist"] = h
+    tmp = path + ".tmp"
+    try:
+        with open(tmp, "w") as f:
+            json.dump(dict(h, **{k: sorted(h[k]) for k in ("days", "morn", "eve")}), f)
+        os.replace(tmp, path)
+    except OSError:
+        pass
+    return h
+
+
+def _load_history(path):
+    try:
+        with open(path) as f:
+            d = json.load(f)
+        h = {k: int(d[k]) for k in ("cut", "hi", "n", "reviews", "turn")}
+        h["zone"] = d["zone"]
+        for k in ("days", "morn", "eve"):
+            if not isinstance(d[k], list):
+                return None
+            h[k] = {str(x) for x in d[k]}
+        return h
+    except Exception:
+        return None
+
+
 def revlog_facts(col):
     """The facts the revlog gives: days, runs, comebacks, seasons, secrets,
     mornings and evenings, reviews, cards learned, leeches turned around.
-    The days before today are read once a day; today's hours each time."""
+    The days before the last week come from closet_days.json (_history);
+    the last week's hours, today's among them, are read each time, a small
+    query, so a phone's reviews count as soon as they sync."""
     cut = int(col.sched.day_cutoff)
-    today_ms = (cut - 86400) * 1000
-    if _RF["key"] != cut:
-        _RF["hours"] = _buckets(col, 0, today_ms)
-        _RF["key"] = cut
-    hours = dict(_RF["hours"])
-    for h, n in _buckets(col, today_ms, cut * 1000).items():
-        hours[h] = hours.get(h, 0) + n
-    end = datetime.date.fromtimestamp(cut)
-    labels = {(end - datetime.timedelta(days=h // 24 + 1)).isoformat() for h in hours}
-    starts = [datetime.datetime.fromtimestamp(cut - (h + 1) * 3600) for h in hours]
-    out = closet.from_days(labels)
-    out.update(closet.from_hours(starts))
-    out["reviews"] = sum(hours.values())
+    h = _history(col, cut)
+    week = _span(col, cut, h["hi"], cut * 1000)
+    out = closet.from_days(h["days"] | week["days"])
+    out.update(closet.hour_facts(h["morn"] | week["morn"], h["eve"] | week["eve"], h["turn"] or week["turn"]))
+    out["reviews"] = h["reviews"] + week["reviews"]
     out["learned"] = int(col.db.scalar("SELECT COUNT() FROM cards WHERE type IN (2, 3)") or 0)
     out["leeches"] = int(col.db.scalar("SELECT COUNT() FROM cards WHERE lapses >= 8 AND type = 2 "
                                        "AND ivl >= 21 AND queue >= 0") or 0)
@@ -372,7 +551,8 @@ def look(c=None):
 def check(today):
     """At a refresh: anything newly earned goes in the closet (one settings
     save, only when there's something), the newest for the board to say.
-    Once a day is enough for the revlog; the tallies count as they happen."""
+    The revlog's older days are kept (_history); the tallies count as they
+    happen."""
     c = cfg()
     try:
         f = facts(c)

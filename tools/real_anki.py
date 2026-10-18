@@ -203,6 +203,15 @@ def check(path):
     t = tm(); i4 = P.DeckIndex(col, did); P.progress(i4, doc); t1 = tm() - t
     t = tm(); i5 = P.DeckIndex(col, did); P.progress(i5, doc); t2 = tm() - t
     ok("a later refresh keeps the tags and reads only card states", t2 < 150, f"first {t1*1000:.0f} ms, then {t2*1000:.0f} ms")
+    # 3.9.1: today's session, at every refresh: the notes started before today found once, not once a
+    # date (on the plan's own days, the deck's part alone; my own days add schedule.py's windows)
+    from due_crew.stats.queries import StatsQueries
+    seen = StatsQueries(col).first_seen(15)
+    t = tm(); sv = F.session_view({"id": "pS", "doc": doc}, {"deck_id": did}, i5, seen, today); t_sv = tm() - t
+    t = tm(); F.session_view({"id": "pS", "doc": doc, "sched": {"days": [1] * 7, "minutes": 60}}, {"deck_id": did}, i5, seen, today)
+    t_mine = tm() - t
+    ok("today's session over 31 dates, in under 20 ms", sv is not None and t_sv < 0.02,
+       f"{t_sv*1000:.1f} ms; on my own days {t_mine*1000:.1f} ms")
     n0 = col.get_note(col.get_card(next(iter(i5.cards))).nid)
     n0.tags.append("NewTag::Here"); col.update_note(n0)
     i6 = P.DeckIndex(col, did)
@@ -287,17 +296,23 @@ def check(path):
     ok("…read in one pass of the recent answers", t_full < 60 and t_light < 20,
        f"{t_full*1000:.0f} ms a full sync, {t_light*1000:.0f} ms a light one")
 
-    # 3.8.2: Pip's closet reads the revlog's days and hours in one grouped query
-    # a day (today's own hours each time), and the cards learned and leeches
+    # 3.8.2: Pip's closet reads the revlog's days and hours by the hour, and the
+    # cards learned and leeches. 3.9.1: the days before the last week are kept
+    # (closet_days.json), so only the first read is whole; a relaunch reads the file
     from due_crew import closet_flow as CF
-    CF._RF["key"] = None
+    closet_files = tempfile.mkdtemp()
+    CF._profile_files = lambda: closet_files
+    CF._RF.update(key=None, hist=None)
     t = tm(); facts = CF.revlog_facts(col); t_day = tm() - t
     t = tm(); again = CF.revlog_facts(col); t_again = tm() - t
+    CF._RF.update(key=None, hist=None)
+    t = tm(); relaunch = CF.revlog_facts(col); t_relaunch = tm() - t
     answers = col.db.scalar("SELECT COUNT(*) FROM revlog WHERE ease > 0 AND id < ?", cut * 1000)
-    ok("Pip's closet: every answer counted, its days and runs, the first read of the day and each one after, quick",
-       facts["reviews"] == answers and again == facts and facts["days"] > 300 and facts["run"] >= 1
-       and facts["learned"] >= 12000 and t_day < 2.5 and t_again < 0.2,
-       f"{answers:,} answers, {facts['days']} days, {t_day*1000:.0f} ms the day's first, {t_again*1000:.0f} ms after")
+    ok("Pip's closet: every answer counted, its days and runs, the first read whole and each one after, a relaunch, quick",
+       facts["reviews"] == answers and again == facts == relaunch and facts["days"] > 300 and facts["run"] >= 1
+       and facts["learned"] >= 12000 and t_day < 2.5 and t_again < 0.05 and t_relaunch < 0.1,
+       f"{answers:,} answers, {facts['days']} days, {t_day*1000:.0f} ms the first, {t_again*1000:.0f} ms after, "
+       f"{t_relaunch*1000:.0f} ms a relaunch")
 
     # 3.7.3: Insights, worked out on the main thread when the tab opens, and
     # the team's days on every sync, over the same 400,000 answers
@@ -368,6 +383,40 @@ def check(path):
        f"{dn.get(did)} due, {len(dn)} decks, {t_due*1000:.0f} ms")
     col.decks.select(did)
     ok("study: the current deck's counts, as the review hands over", len(col.sched.counts()) == 3, str(col.sched.counts()))
+    # 3.9.1: Anki's deck tree, read once while it can't have changed: an answer moves col.mod;
+    # a learning card coming inside the learn-ahead moves its count with the clock alone
+    from anki.cards import Card
+    from anki.scheduler.v3 import CardAnswer
+    real_tree, reads = col.sched.deck_due_tree, []
+    col.sched.deck_due_tree = lambda *a: reads.append(1) or real_tree(*a)
+    DF._TREE.update(key=None)
+    try:
+        t = tm(); t0 = DF.deck_tree(col); t_first = tm() - t
+        t = tm(); again = DF.deck_tree(col); t_kept = tm() - t
+        kept = again is t0 and t0 == real_tree()
+        queued = col.sched.get_queued_cards().cards
+        if queued:  # the review's own way: the card, its states, Good
+            card = Card(col, backend_card=queued[0].card)
+            card.start_timer()
+            col.sched.answer_card(col.sched.build_answer(card=card, states=queued[0].states, rating=CardAnswer.GOOD))
+        t1 = DF.deck_tree(col)
+        ok("deck tree: read once while nothing changes, again after an answer, as Anki reads it",
+           queued and kept and len(reads) == 2 and t1 is not t0 and t1 == real_tree() and t_kept < t_first / 4,
+           f"{t_first*1000:.1f} ms, then {t_kept*1000:.2f} ms")
+        lc2 = col.get_card(col.find_cards('deck:"Step Deck" is:new -is:suspended')[0])
+        ahead = int(col.get_config("collapseTime", 1200) or 0)
+        lc2.type, lc2.queue, lc2.due = 1, 1, int(_t.time()) + ahead + 2
+        col.update_card(lc2)
+        t2 = DF.deck_tree(col)
+        learn = lambda tr: col.decks.find_deck_in_tree(tr, did).learn_count  # noqa: E731
+        held = DF.deck_tree(col) is t2
+        _t.sleep(3)
+        t3 = DF.deck_tree(col)
+        ok("deck tree: kept till a learning card comes inside the learn-ahead, then read again and counted",
+           held and t3 is not t2 and t3 == real_tree() and learn(t3) == learn(t2) + 1, f"learning {learn(t2)} then {learn(t3)}")
+    finally:
+        del col.sched.deck_due_tree
+        DF._TREE.update(key=None)
     # 3.8.0: Recover leeches on Anki's engine: the tag off, unsuspended, new again, one undo step
     lc = col.get_card(col.find_cards('tag:leech deck:"Step Deck"')[0])
     lc.type, lc.queue, lc.lapses, lc.ivl = 2, -1, 9, 5
@@ -628,6 +677,25 @@ def check(path):
         ok("study this date: one undo step of Anki's own; Edit › Undo takes the deck away, the cards go home",
            not col.decks.id_for_name(sname) and all(col.get_card(c).odid == 0 and col.get_card(c).did == did for c in want),
            f"undo {sstep!r}")
+        # 3.9.1: refresh_progress asked again with nothing changed (a sync, then its commit): the last
+        # answer, the deck not read again; an unsuspend moves col.mod and it's read again
+        shut = sorted(c for c in P.DeckIndex(col, did).match(rdates[3], None, "Step Deck") if col.get_card(c).queue == -1)[:1]
+        builds, real_init = [], P.DeckIndex.__init__
+        P.DeckIndex.__init__ = lambda self, c, d: builds.append(d) or real_init(self, c, d)
+        F._last.update(key=None, got=None)
+        try:
+            t = tm(); a = F_real["refresh_progress"](); t_read = tm() - t
+            t = tm(); b = F_real["refresh_progress"](); t_memo = tm() - t
+            once = len(builds) == 1 and a == b and bool(a)
+            col.sched.unsuspend_cards(shut)
+            c2 = F_real["refresh_progress"]()
+            col.undo()
+        finally:
+            P.DeckIndex.__init__ = real_init
+            F._last.update(key=None, got=None)
+        ok("refresh: asked again with nothing changed, the last answer; an unsuspend reads the deck again",
+           shut and once and len(builds) == 2 and c2 != a and t_memo < t_read / 10,
+           f"{t_read*1000:.0f} ms, then {t_memo*1000:.1f} ms")
     finally:
         for k, v in F_real.items():
             setattr(F, k, v)

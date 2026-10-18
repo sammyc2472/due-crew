@@ -11,7 +11,7 @@ from aqt.qt import (
     QComboBox, QDialog, QDialogButtonBox, QFormLayout, QLabel, QLineEdit, QPushButton, Qt, QVBoxLayout,
 )
 
-from . import attach_alive, run_bg
+from . import attach_alive, heading, note, run_bg
 from .. import plans as P
 
 TEXT_MAX = 280  # the server's: one line, 1 to 280
@@ -29,6 +29,7 @@ class RemarkDialog(QDialog):
         self.setWindowTitle("Note for the plan's followers")
         self.setMinimumWidth(440)
         root = QVBoxLayout(self)
+        heading(self, root)
         form = QFormLayout()
         self.plan = QComboBox()
         self.plan.currentIndexChanged.connect(self._plan_changed)
@@ -41,9 +42,7 @@ class RemarkDialog(QDialog):
         root.addLayout(form)
         self.where = QLabel("")
         self.where.setTextFormat(Qt.TextFormat.PlainText)  # plan names come from the server
-        self.where.setWordWrap(True)
-        self.where.setStyleSheet("color: palette(placeholder-text); font-size: 11.5px;")
-        root.addWidget(self.where)
+        root.addWidget(note(self.where))
         self.status = QLabel("Looking for your plans…")
         self.status.setTextFormat(Qt.TextFormat.PlainText)
         self.status.setWordWrap(True)

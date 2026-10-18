@@ -6,7 +6,7 @@ read them as rich text, so it's told not to."""
 
 from aqt.qt import QDialog, QFrame, QHBoxLayout, QLabel, QPushButton, Qt, QVBoxLayout, QWidget
 
-from . import attach_alive
+from . import attach_alive, heading, note
 
 
 class WhyDialog(QDialog):
@@ -20,14 +20,13 @@ class WhyDialog(QDialog):
         self.setMinimumWidth(460)
         self._fix = on_fix
         lay = QVBoxLayout(self)
+        heading(self, lay)
         self.list = QVBoxLayout()
         self.list.setSpacing(8)
         lay.addLayout(self.list)
         self.note = QLabel()
         self.note.setTextFormat(Qt.TextFormat.PlainText)
-        self.note.setStyleSheet("color: gray; font-size: 11px;")
-        self.note.setWordWrap(True)
-        lay.addWidget(self.note)
+        lay.addWidget(note(self.note))
         foot = QHBoxLayout()
         foot.addStretch()
         close = QPushButton("Close")
@@ -47,7 +46,6 @@ class WhyDialog(QDialog):
             if i:
                 line = QFrame()
                 line.setFrameShape(QFrame.Shape.HLine)
-                line.setStyleSheet("color: rgba(128,128,128,0.3);")
                 self.list.addWidget(line)
             row = QWidget()
             h = QHBoxLayout(row)

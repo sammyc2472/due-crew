@@ -225,16 +225,26 @@ export async function sendCheer(req: Request, s: Session, env: Env, [to]: string
     }
   }
   await env.DB.prepare(
-    `INSERT INTO cheers (to_uid, from_uid, emoji, note, luck, guid, at) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO cheers (to_uid, from_uid, emoji, note, luck, guid, doodle, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(to_uid, from_uid) DO UPDATE SET emoji = excluded.emoji, note = excluded.note,
-       luck = excluded.luck, guid = excluded.guid, at = excluded.at`,
-  ).bind(to, s.uid, c.emoji, c.note, c.luck, c.guid, now).run();
+       luck = excluded.luck, guid = excluded.guid, doodle = excluded.doodle, at = excluded.at`,
+  ).bind(to, s.uid, c.emoji, c.note, c.luck, c.guid, c.doodle, now).run();
   // 3.2: a tip with words stays on its card, for the crew who has it
   if (c.guid && c.note) await tipWrite(env, s.uid, c.guid, c.note).run();
   // 3.0.1: the first tip on a flagged card takes the flag down for the whole
   // crew. Only a tip from someone the flag was shown to (mutual) counts.
   if (c.guid && (await added(env, s.uid, to))) await unflag(env, to, c.guid);
   return json({ ok: true });
+}
+
+/** 3.9.1: a doodle, in a report's words: a sign's text, or that it drew. */
+function doodleSaid(raw: string | null): string {
+  try {
+    const d = raw ? JSON.parse(raw) : null;
+    if (d?.k === "sign") return ` (with a sign: "${d.t}")`;
+    if (d?.k === "draw") return ` (with a drawing, ${d.s.length} strokes)`;
+  } catch { /* none */ }
+  return "";
 }
 
 /** Take `guid` off `uid`'s flagged cards. Written only when it was there,
@@ -334,11 +344,11 @@ export async function report(req: Request, s: Session, env: Env): Promise<Respon
   await limitOrThrow(env, `report:${s.uid}`, 10, 3600);
   const note = typeof body.note === "string" ? V.oneLine(body.note, REPORT_NOTE_MAX) : "";
   const c = await env.DB.prepare(
-    "SELECT emoji, note, luck, guid, at FROM cheers WHERE to_uid = ? AND from_uid = ?",
-  ).bind(s.uid, uid).first<{ emoji: string; note: string | null; luck: number | null; guid: string | null; at: number }>();
+    "SELECT emoji, note, luck, guid, doodle, at FROM cheers WHERE to_uid = ? AND from_uid = ?",
+  ).bind(s.uid, uid).first<{ emoji: string; note: string | null; luck: number | null; guid: string | null; doodle: string | null; at: number }>();
   const cheer = c
     ? `${c.emoji}${c.note ? ` "${c.note}"` : ""}${c.luck ? " (good-luck line)" : ""}${c.guid ? " (tip on a card)" : ""}`
-      + `, ${new Date(c.at * 1000).toISOString()}`
+      + doodleSaid(c.doodle) + `, ${new Date(c.at * 1000).toISOString()}`
     : "none waiting (cheers go once they're read)";
   const text = [
     `Reason: ${REPORT_REASONS[reason]}`,

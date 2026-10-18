@@ -338,15 +338,26 @@ def from_hours(starts):
     with a review in it): mornings before 8, evenings after 9 (counted by
     the evening's date), and the year turning (the last hour of 31 Dec or
     the first of 1 Jan)."""
+    return hour_facts(*hour_sets(starts))
+
+
+def hour_sets(starts):
+    """3.9.1, from_hours' sets: the mornings' and the evenings' dates (ISO)
+    and the year turning (1 or 0). Two spans' sets, joined, count as the
+    two spans would together (closet_flow keeps the old ones)."""
     morn, eve, turn = set(), set(), 0
     for h in starts or ():
         if h.hour in MORNING:
-            morn.add(h.date())
+            morn.add(h.date().isoformat())
         if h.hour in EVENING:
-            eve.add((h - _dt.timedelta(hours=3)).date())
+            eve.add((h - _dt.timedelta(hours=3)).date().isoformat())
         if (h.month, h.day, h.hour) in ((12, 31, 23), (1, 1, 0)):
             turn = 1
-    return {"mornings": len(morn), "evenings": len(eve), "yearturn": turn}
+    return morn, eve, turn
+
+
+def hour_facts(morn, eve, turn):
+    return {"mornings": len(morn), "evenings": len(eve), "yearturn": 1 if turn else 0}
 
 
 # ---- Halloween week (3.8.22) ----

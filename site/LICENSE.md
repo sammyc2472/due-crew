@@ -5,6 +5,10 @@ This folder (`site/`) is under the PolyForm Shield License 1.0.0 below, from
 they were published with. The rest of this repository, the Anki add-on
 included, is MIT (see LICENSE at the root).
 
+Due Crew's logo and Pip, where this folder copies them, aren't under
+this license from 17 October 2026: they're all rights reserved, as the
+root LICENSE lists. Nor are the name, logo or Pip as trademarks.
+
 ---
 
 # PolyForm Shield License 1.0.0

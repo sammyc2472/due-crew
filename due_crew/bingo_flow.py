@@ -119,7 +119,8 @@ def _observe(q, d, today):
         counts[node.deck_id] = (node.review_count + node.learn_count, node.new_count)
         for child in node.children:
             walk(child)
-    walk(mw.col.sched.deck_due_tree())
+    from . import due_flow
+    walk(due_flow.deck_tree(mw.col))  # 3.9.1: the one Due and the plans read
     studied = [(int(did), bool(new)) for did, new in rows if int(did) in counts]
     if not studied:
         return

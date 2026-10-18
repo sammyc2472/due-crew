@@ -228,6 +228,17 @@ class FakeDecks:
     def all_names_and_ids(self, skip_empty_default=False, include_filtered=True):
         return [types.SimpleNamespace(id=d, name=n) for d, n in self.names.items()]  # none filtered
 
+    @classmethod
+    def find_deck_in_tree(cls, node, deck_id):
+        """Anki's: the deck's node in a deck tree (what deck_due_tree(did) returns), else None."""
+        if node.deck_id == deck_id:
+            return node
+        for child in node.children:
+            match = cls.find_deck_in_tree(child, deck_id)
+            if match:
+                return match
+        return None
+
 
 # ------------------------------------------------------------ fake worker
 
@@ -301,6 +312,34 @@ def _one_line(v, n):
     """validate.ts oneLine: one printable line, at most n."""
     t = " ".join(re.split(r"[" + re.escape(_JS_SPACE) + r"]+", v)).strip(_JS_SPACE)
     return re.sub(r"[\x00-\x1f\x7f-\x9f]", "", t)[:n]
+
+
+def _doodle(v):
+    """validate.ts doodle (3.9.1): a drawing's strokes on the 300 x 170 pad,
+    [pen 0-15 (bit 0 thick, the rest its colour), x, y, ...] in whole
+    points, 200 strokes and 2,000 points at
+    most; or a sign of 24 at most. The canonical dict, or Bad."""
+    if not isinstance(v, dict):
+        raise Bad(400, "bad_doodle")
+    if v.get("k") == "sign":
+        if set(v) != {"k", "t"} or not isinstance(v["t"], str) or _js_len(v["t"]) > 96:
+            raise Bad(400, "bad_doodle")
+        text = _one_line(v["t"], 24)
+        if not text:
+            raise Bad(400, "bad_doodle")
+        return {"k": "sign", "t": text}
+    s = v.get("s")
+    if v.get("k") != "draw" or set(v) != {"k", "s"} or not isinstance(s, list) or not 0 < len(s) <= 200:
+        raise Bad(400, "bad_doodle")
+    points = 0
+    for st in s:
+        if (not isinstance(st, list) or len(st) < 3 or len(st) % 2 != 1 or not _is_int(st[0], 0, 15)
+                or not all(_is_int(x, 0, 300) for x in st[1::2]) or not all(_is_int(y, 0, 170) for y in st[2::2])):
+            raise Bad(400, "bad_doodle")
+        points += (len(st) - 1) // 2
+    if points > 2000:
+        raise Bad(400, "bad_doodle")
+    return {"k": "draw", "s": [list(st) for st in s]}
 
 
 def _path(v):
@@ -686,7 +725,8 @@ class FakeWorker:
             if self.mutual(me, frm) and not self._muted_by(me, frm):  # 3.8.1: muted, dropped as read
                 cheers.append({"from": frm, "name": self.users[frm]["name"] or "?", "emoji": c["emoji"],
                                "note": c.get("note") or "", "luck": bool(c.get("luck")),
-                               "guid": c.get("guid") or "", "at": c["at"]})
+                               "guid": c.get("guid") or "", "at": c["at"],
+                               **({"doodle": json.loads(json.dumps(c["doodle"]))} if c.get("doodle") else {})})
         mine = [c["n"] for (to, _f), c in self.cheers.items() if to == me]
         if got is None:  # an older add-on: they go as they're read
             for key in [k for k in self.cheers if k[0] == me]:
@@ -1083,7 +1123,7 @@ class FakeWorker:
         raise Bad(405, "method")
 
     def _cheer(self, me, to, body):
-        if not set(body) <= {"emoji", "note", "luck", "guid"} or not _is_emoji(body.get("emoji")):
+        if not set(body) <= {"emoji", "note", "luck", "guid", "doodle"} or not _is_emoji(body.get("emoji")):
             raise Bad(400, "bad_cheer")
         if body.get("note") is not None and (not isinstance(body["note"], str) or len(body["note"]) > 80):
             raise Bad(400, "bad_note")
@@ -1091,6 +1131,9 @@ class FakeWorker:
             raise Bad(400, "bad_luck")
         if body.get("guid") is not None and (not isinstance(body["guid"], str) or len(body["guid"]) > 40):
             raise Bad(400, "bad_guid")
+        doodle = _doodle(body["doodle"]) if body.get("doodle") is not None else None
+        if doodle and (body.get("luck") is True or body.get("guid")):
+            raise Bad(400, "bad_doodle")  # 3.9.1: a tip and a good-luck line are words
         if (to, me) not in self.friends:
             raise Bad(403, "not_friends")
         if self._muted_by(to, me):  # 3.8.1: it goes nowhere, and reads as sent
@@ -1103,7 +1146,7 @@ class FakeWorker:
                 by = self.__dict__.setdefault("cheer_counts", {}).setdefault(to, {})
                 by[day[:4]] = by.get(day[:4], 0) + 1
         self.cheers[(to, me)] = {"emoji": body["emoji"], "note": body.get("note"), "luck": body.get("luck") is True,
-                                 "guid": body.get("guid"), "at": _now(), "n": self._next_cheer()}
+                                 "guid": body.get("guid"), "doodle": doodle, "at": _now(), "n": self._next_cheer()}
         if body.get("guid") and body.get("note"):  # 3.2: a tip with words stays on its card
             self.tips[(body["guid"], me)] = {"text": " ".join(body["note"].split())[:80], "at": len(self.tips) + 1}
             self._count("tips")
@@ -2240,6 +2283,60 @@ def install_fake_requests(store):
     sys.modules["requests"] = mod
 
 
+class _Any:
+    """Any Qt enum or flag: an attribute of anything, callable."""
+    def __getattr__(self, name):
+        return _Any()
+
+    def __call__(self, *a, **k):
+        return _Any()
+
+
+class _FakeBox:
+    """QMessageBox and QInputDialog: whatever's asked, the first button
+    (the yes) is clicked and the text is what it was set to."""
+    Icon = ButtonRole = StandardButton = InputMode = _Any()
+
+    def __init__(self, *a, **k):
+        self._buttons, self._text = [], ""
+
+    def addButton(self, *a, **k):
+        self._buttons.append(_FakeCheck())  # a button: any call does nothing
+        return self._buttons[-1]
+
+    def clickedButton(self):
+        return self._buttons[0] if self._buttons else None
+
+    def exec(self):
+        return 1
+
+    def setTextValue(self, text):
+        self._text = text
+
+    def textValue(self):
+        return self._text
+
+    def findChildren(self, *a):
+        return []
+
+    def __getattr__(self, name):
+        return lambda *a, **k: None
+
+
+class _FakeCheck:
+    def __init__(self, *a, **k):
+        self._on = False
+
+    def setChecked(self, on):
+        self._on = bool(on)
+
+    def isChecked(self):
+        return self._on
+
+    def __getattr__(self, name):
+        return lambda *a, **k: None
+
+
 def install_fake_aqt():
     """Minimal aqt/anki surface so due_crew modules import."""
     aqt = types.ModuleType("aqt")
@@ -2248,7 +2345,8 @@ def install_fake_aqt():
         col=None, state="deckBrowser",
         addonManager=types.SimpleNamespace(
             getConfig=lambda name: {}, writeConfig=lambda n, c: None,
-            setConfigAction=lambda n, f: None),
+            setConfigAction=lambda n, f: None, setWebExports=lambda n, r: None,
+            addonFromModule=lambda m: m.split(".")[0]),
         taskman=types.SimpleNamespace(
             run_on_main=lambda f: f(), run_in_background=lambda f: f()),
         web=types.SimpleNamespace(eval=lambda js: None),
@@ -2262,7 +2360,8 @@ def install_fake_aqt():
                  "reviewer_will_show_context_menu", "reviewer_did_show_question",
                  "reviewer_did_show_answer", "state_did_change", "top_toolbar_did_redraw",
                  "browser_will_show_context_menu", "state_shortcuts_will_change",
-                 "add_cards_did_add_note"):
+                 "add_cards_did_add_note", "webview_will_set_content", "theme_did_change",
+                 "state_will_change"):
         setattr(hooks, name, types.SimpleNamespace(append=lambda f: None))
     aqt.gui_hooks = hooks
     deckbrowser = types.ModuleType("aqt.deckbrowser")
@@ -2270,8 +2369,15 @@ def install_fake_aqt():
     qt = types.ModuleType("aqt.qt")
     for name in ("QAction", "QApplication", "QCursor", "QMenu"):
         setattr(qt, name, type(name, (), {"__init__": lambda self, *a, **k: None}))
+    for name in ("setOverrideCursor", "restoreOverrideCursor", "activeModalWidget", "activeWindow"):
+        setattr(qt.QApplication, name, staticmethod(lambda *a: None))
     # deferred calls are recorded, never run: tests drive the glue directly
     qt.QTimer = type("QTimer", (), {"singleShot": staticmethod(lambda ms, fn: None)})
+    # ui.confirm / ask_text / ask_item off the board (sheets.py): yes, as askUser's fake, the words as they were
+    qt.Qt = _Any()
+    qt.QMessageBox = qt.QInputDialog = _FakeBox
+    qt.QCheckBox = _FakeCheck
+    qt.QLabel = type("QLabel", (), {"__init__": lambda self, *a, **k: None})
     utils = types.ModuleType("aqt.utils")
     utils.tooltip = lambda *a, **k: None
     utils.askUser = lambda *a, **k: True

@@ -229,12 +229,15 @@ PEEK_PIP = 76  # 3.9.0: who knows it, peeking up from the bottom of the card
 PEEK_MAX = 3  # 3.9.0 (Sam's "2D"): up to three who know it, side by side
 
 
-def pips_by_uid(c=None):
+def pips_by_uid(c=None, only=None):
     """3.8.22 (Sam: "all the places where there are emojis"): each
     crewmate's Pip for the review screen's chip, where their emoji was:
     {uid: {svg, a: [light, dark]}}, in their colour and look (a mutual
     friend's, which only the crew brings); {} with Pip off. Our own markup:
-    a name is only its label, escaped."""
+    a name is only its label, escaped. only (3.9.1): just these uids (the
+    ones a card's chip could name, chip_people), not the whole crew."""
+    if only is not None and not only:
+        return {}
     if not (app.cfg() if c is None else c).get("sev", True):
         return {}
     import html
@@ -243,7 +246,21 @@ def pips_by_uid(c=None):
     return {e["user_id"]: {"svg": sev.slot(sev.svg("idle", rest=True, look=e.get("look"),
                                                    label=html.escape(f'{e.get("name") or "?"}’s Pip', quote=True)), CHIP_PIP),
                            "a": list(accent_pair(e.get("accent")))}
-            for e in _state["entries"] or [] if not e.get("you") and e.get("user_id")}
+            for e in _state["entries"] or []
+            if not e.get("you") and e.get("user_id") and (only is None or e["user_id"] in only)}
+
+
+def chip_people(info, local_tips, names, asks=()):
+    """3.9.1 (the efficiency run): everyone chip_view could draw as a Pip for
+    one card: who asked, who tipped, the first who know it (PEEK_MAX). The
+    rest of the crew isn't drawn at every answer."""
+    out = {a[0] for a in asks}
+    out.update(t.get("from") for t in (info or {}).get("tips") or [] if isinstance(t, dict))
+    out.update(t.get("from") for t in local_tips or [] if isinstance(t, dict))
+    out.update([u for u in (info or {}).get("knows") or [] if u in names][:PEEK_MAX])
+    out.discard(None)
+    out.discard("")
+    return out
 
 
 def peek_pip(uid):
@@ -428,7 +445,19 @@ _CHIP_JS = """(function () {
 
 def chip_js(data):
     from .room_model import BAR_BALANCE
+    if data is None:
+        return CHIP_OFF
     return _CHIP_JS.replace("__PIP__", _PIP_JS).replace("__DATA__", json.dumps(data)) + BAR_BALANCE
+
+
+# 3.9.1 (the efficiency run): taking the chip down is what its own script
+# does with no data, alone (the bar's balance is already on that page:
+# rooms.refresh_widgets puts it there), and the card's the same
+CHIP_OFF = ("(function () { var o = document.getElementById('dc-knows');"
+            " if (o) { o.remove(); if (window.dcBarBalance) { window.dcBarBalance(); } } })();")
+FLOAT_OFF = ("(function () { var o = document.getElementById('dc-knows-card'), p = document.getElementById('dc-knows-pad');"
+             " if (window.dcKnowsOff) { window.dcKnowsOff(true); window.dcKnowsOff = null; } else if (o) { o.remove(); }"
+             " if (p) { p.remove(); } })();")
 
 
 # The chip as a small card above the bar, bottom right of the review
@@ -583,11 +612,38 @@ _FLOAT_JS = """(function () {
 
 def float_js(data):
     from .room_model import CMD_KEY
+    if data is None:
+        return FLOAT_OFF
     return (_FLOAT_JS.replace("__PIP__", _PIP_JS).replace("__KEY__", json.dumps(CMD_KEY))
             .replace("__DATA__", json.dumps(data)))
 
 
 _LAST = {"n": 0, "view": None}
+# 3.9.1: whether a chip may be up on the bar or the card's page (only then is
+# one taken down), and on which page each last got Pip's motion sheet
+# (app.pages: it stays on a page, so it goes once a page)
+_UP = {"bar": False, "page": False}
+_SHEET = {}
+
+
+def _put(web, where, view, cb=None):
+    """Draw (or, view None, take down) the chip on the bar or the card above
+    it; nothing when there's none to take down."""
+    if web is None or (view is None and not _UP[where]):
+        if cb is not None:
+            cb(False)
+        return
+    if view and "sevcss" in view:
+        if _SHEET.get(where) == app.pages[0]:
+            view = {k: v for k, v in view.items() if k != "sevcss"}
+        else:
+            _SHEET[where] = app.pages[0]
+    js = (chip_js if where == "bar" else float_js)(view)
+    _UP[where] = view is not None
+    if cb is None:
+        web.eval(js)
+    else:
+        web.evalWithCallback(js, cb)
 
 
 def _review_web():
@@ -605,18 +661,18 @@ def _show(view):
         if n != _LAST["n"] or bar is None:
             return  # a newer card is up
         try:
-            bar.eval(chip_js(None if shown else view))
+            _put(bar, "bar", None if shown else view)
         except Exception:
             pass
     if view and page is not None:
         try:
-            page.evalWithCallback(float_js(view), to_bar)
+            _put(page, "page", view, to_bar)
             return
         except Exception:
             pass
     if not view and page is not None:
         try:
-            page.eval(float_js(None))  # nothing to show now: the card above the bar goes too
+            _put(page, "page", None)  # nothing to show now: the card above the bar goes too
         except Exception:
             pass
     to_bar(False)
@@ -628,7 +684,7 @@ def to_bar(opened=False):
     bar = _bottom()
     if bar is not None and _LAST["view"]:
         try:
-            bar.eval(chip_js(dict(_LAST["view"], open=True) if opened else _LAST["view"]))
+            _put(bar, "bar", dict(_LAST["view"], open=True) if opened else _LAST["view"])
         except Exception:
             pass
 
@@ -668,8 +724,9 @@ def on_answer(card, opened=False):
         if info is None and guid in (sess.get("cards_due") or {}) and sess.get("due_day") == log_today(mw.col) \
                 and stuck_now(mw.col, card, mw.col.sched.day_cutoff):
             info = sess["cards_due"][guid]  # 3.9.0: missed today for the first time, known since the morning
-        pips = pips_by_uid()
-        view = chip_view(info, local_tips(guid), names_by_uid(), asks, mine, pips)
+        names, tips = names_by_uid(), local_tips(guid)
+        pips = pips_by_uid(only=chip_people(info, tips, names, asks))
+        view = chip_view(info, tips, names, asks, mine, pips)
         if view is None or view.get("kind") == "knows":
             view = remark_view(client().session.get("plans"), guid, card.ord) or view  # 3.8.1
         if view and view.get("peek"):
@@ -692,12 +749,11 @@ def on_answer(card, opened=False):
 def on_question(card):
     _LAST["n"] += 1
     _LAST["view"] = None
-    for web, js in ((_bottom(), chip_js(None)), (_review_web(), float_js(None))):
-        if web is not None:
-            try:
-                web.eval(js)
-            except Exception:
-                pass
+    for web, where in ((_bottom(), "bar"), (_review_web(), "page")):
+        try:
+            _put(web, where, None)
+        except Exception:
+            pass
 
 
 def _card():
@@ -828,9 +884,9 @@ def on_message(cmd, parts=(), from_card_page=False):
     elif cmd == "knowshelped" and len(parts) > 2:
         if from_card_page:
             # the review screen runs the card's script too: a thanks is sent only on a yes
-            from aqt.utils import askUser
+            from .ui import confirm  # in the board's colours (3.9.1); the review screen has no board for a sheet
             tip = _tip_from(parts[2])
-            if tip is None or (not tip["helped"] and not askUser(f"Tell {tip['name'].split(' ')[0]} this tip helped?")):
+            if tip is None or (not tip["helped"] and not confirm(mw, "This helped", f"Tell {tip['name'].split(' ')[0]} this tip helped?", "Tell them")):
                 return True
         helped_toggle(parts[2])
     elif cmd == "knowsreply" and len(parts) > 3:
