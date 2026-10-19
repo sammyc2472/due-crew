@@ -2691,3 +2691,246 @@ every release that changes how something works.
   card's page can't (`room_model.CARD_PAGE_CMDS`). The bars' and the
   margin's little ones carry no speaker; the sound plays on under them.
   `tools/chip_preview.py` draws the chip with it, light, dark and narrow.
+- 3.9.2, Reviews ahead (Sam's picks on the "Three Unknowns" page, round
+  two, 18 Oct: "Most med students don't work by the 25 new a day, mostly
+  unsuspend cards in batches tied to content ... put data at the forefront,
+  don't make actions ambiguous, don't over explain"). Insights' Your week
+  becomes one chart of a deck in cards a day, as Anki counts them: the last
+  7 days as studied, today (done, and what's still due), 13 days by day, then
+  4 weeks by week (a week's average day), my exam marked on its day. Counted,
+  never modelled (`ahead.py`, pure): the cards I've started go on by how my
+  own reviews have gone at their interval (missed, a pass's push in thirds,
+  where a miss lands; my last 120 days); the cards I'll start by my own
+  curve (of the cards I started 6 to 17 weeks ago, the share seen each day
+  after; a typical one, `GENERIC`, until I have 60); and when I start them by
+  my pace, by weekday (the last four weeks: a batch unlocked on Mondays lands
+  on Mondays), never more than the deck has left, a plan's dates when I
+  follow one. On simulated learners (FSRS's defaults, each card's memory off
+  the model by its own amount) it came within about 10% six weeks out, where
+  counting only what's due missed half by week two. The track record: three
+  past days, each forecast with only what came before, against what I did
+  (`backtest`, `trust`; a card suspended since is in the past it was still
+  answered in, so a leech Anki suspended mid-window doesn't drop out of the
+  start and make the record look worse than it is), worked out off the main
+  thread once a week a deck and kept in plans.json (`ahead_trust`); it gives each bar's tip its band
+  and the section's last line ("on your own past, within 9% a week"). The
+  log's part (habits, curve, pace) is read once per Anki day a deck
+  (`ahead_flow._day_part`, today left out); each draw reads only the cards
+  as they are. A card in a filtered deck counts on its own due day (`odue`):
+  Your week counted it today (the 3.8 bug).
+- 3.9.2, Stop new cards (the same page, R2-A, "with a Do it button"). The
+  chart's ways, pills switched on the page: my pace; with an exam 8+ days
+  out, stop new a week before it; stop new now (to the exam, or with none,
+  till I turn them back on); with no exam and the unlocked cards gone within
+  two weeks at my pace, only what's unlocked (no button: what that leaves).
+  Each way its own chart and a line of numbers ("Exam week: about 240 a day,
+  not 320 · exam day about 210"). Do it says once what it does: each morning
+  (after a catch-up's own limit) Anki's today-only new limit goes to 0 on the
+  deck and its subdecks while it runs, the deck's options untouched; Turn new
+  cards back on takes today's off and puts a catch-up's back. The pause is
+  this profile's plans.json (`new_off`, {deck: {kind, at, exam}}): its exam
+  is whichever date I have now, so it moves with it, and ends when it passes.
+  Never a warning colour: a busy day is just a tall bar.
+- 3.9.2, the board's line when reviews climb (R1-A): once a day, after the
+  board draws, my most reviewed deck's forecast (Insights' own when a plan's
+  on it); when the next two weeks' busiest three days run a quarter over this
+  week and 20 cards more, one line: "Reviews in Big Step 1 climb to about 420
+  a day by Mon 12 Oct · this week 310", See ahead (You › Insights on it), ×
+  for a week (`ahead_line_x`). A redraw only when there's a line.
+  On Sam's own deck (18 Oct, a plan, a batch of 1,295 the week before):
+  a plan's date inside a stop still opens and its cards wait in the
+  unlocked pile for after (`ahead.starts`), where the forecast had dropped
+  them; `board.ahead_line` rounds its number itself, as the chart does.
+  Round two, the same day, on how his numbers read (Sam: "improve our
+  insights implementation based on your feedback from my data"): the
+  week ahead was 44% new cards at his pace, a guess, in one number, so the
+  line leads with the cards he'd started and adds new ones after ("Next 2
+  weeks: 380 a day from cards you've started, +140 new at your pace"); a
+  stop says what it holds back and when they start again, and a plan's
+  share of them ("732 new cards wait till Sat 24, 434 of them your plan's
+  dates": the cost was unsaid, and for a block exam those cards are the
+  exam); the board's line names the cause when it's new cards
+  (`ahead.cause`: 200 at least in two weeks, twice the two before: "you
+  started 2,480 cards in 2 weeks"). The track record forecasts each past
+  day as the chart would have then, the typical curve where his own wasn't
+  old enough (a deck under 12 weeks, most first-years in the fall, had
+  none), leaving out a day with under 100 cards started before it.
+- 3.9.2, leeches, one button a card (S1-A, S2-A). Insights' line counts the
+  leeches Anki stopped showing me and the cards one miss from it (the next
+  lapse reaches the deck's leech threshold, or a half of it past, and the
+  deck suspends leeches); See them opens a view in Insights' place
+  (`leech_flow.py`): Insights › Leeches with the way back, the counts, Bring
+  all back and Browse on top, then each card (its front from my own copy,
+  a cloze's answer hidden; its topic, misses, since when, slow when 30 s a
+  try or more, on my exam when the exam's scope is narrower than the deck),
+  sorted by danger (on my exam, most missed, latest; a miss away: due
+  soonest). One button: a crewmate's tip (in a sheet, Bring it back from
+  there), else Ask who has it down (the card ask, a sheet), else Bring back;
+  behind its dots, Learn it fresh, Edit (Browse on it) and Leave it out
+  (`leech_out`). Bring back unsuspends with the leech tag off, schedule kept;
+  Learn it fresh is Anki's Reset, lapses from zero; each one undo step. Who
+  has it down and their tips are the stuck list's, back with each sync: no
+  new request. A leech lapsed (`c.lapses > 0`, as Recover leeches has it):
+  Anki tags the note, so on Sam's deck a sibling the shared deck ships
+  suspended, never answered, counted as one.
+- 3.9.2, the exam's scope (C1-A): my exam covers the cards I started since
+  my last exam, when it was in the last 10 weeks, else the whole deck; an
+  exam is kept once it's passed (`exam_last`, an account key, set when a new
+  date takes its place), and a day I pick wins (`exam_since`: a date, or
+  "all"; a new exam starts from the default). Said in the exam box ("Since
+  Sat 5 Sep, the day after your last exam · 1,240 cards · Change"), Change
+  the date picker, Whole deck and back. With nothing at risk the box is a
+  line that still says it, with its Change.
+- 3.9.2, the map by when I started them (C2-A, "getting there in reverse":
+  a plan's dates, read back from my own log): a "by" on every deck's map, a
+  week a tile for the last 8 weeks with cards (before them, one tile; the
+  cards in play not started yet, one more), each named by its dates and what
+  it was (`team.batch_name`: the deepest tag a third of it shares that
+  isn't on nearly every card I've started, "This week · Cardio · Pharm"),
+  shaded by what I know now, opening into its topics; Browse, its cards.
+  Worked out only when picked (one more read of the deck's log). A long
+  name ends on a whole word with an ellipsis (`team.clip`; Sam's deck had
+  "Reproductive Physiolo").
+- 3.9.2, the map and the right % read on Sam's deck (18 Oct). The map
+  shaded by FSRS's recall today read 93 to 96% on all 12 of his systems
+  and all 9 weeks while he passed 77% of his reviews: recall today says
+  how lately a card was seen as much as what's known, and the scheduler
+  keeps every card near the target. The old "right on their last review"
+  counted a relearning step after a miss as right, and a last review alone
+  saturates too (a missed card is back the next day and passes). The map
+  now shades each card by the share of its reviews these 4 weeks it got
+  right (each day's first; not due in them, its last review; never due,
+  its last answer), FSRS or not (`team_flow._know`, "% right, 4 weeks"),
+  and a week's snapshot is kept under a new key so the old shading is
+  never compared. Week names prefer the map's own tag tree ("Microbiology ·
+  Clinical Bacteriology", not a video series). The header's right % says
+  the cards started these two weeks apart from the rest when they're a
+  quarter of the reviews and 5 points apart (`team.right_split`: his 87%
+  to 77% came with four times the reviews, mostly first ones).
+- 3.9.2, the words three students tripped on (F1-A): "never passed" and
+  "lapsed", as Anki's Stats say them; a map tile's % with its cards ("66% ·
+  190") and a key that says what the % is and what the bar is; "86% right ·
+  Anki aims for 90%"; "Study 53 early" (they aren't due yet).
+- 3.9.2, the builder (R3-A, C3-A): under the calendar, the reviews a plan's
+  dates bring, by week, a typical card's (`Reviews` in builder.js, its curve
+  `ahead.GENERIC`'s cards, the suite checks the twins): "About 380 reviews a
+  day by week 4 · Week by week: ...", cards never minutes. Share › Copy for
+  next year: a copy of my own with every date 52 weeks on, weekdays kept
+  (the existing copy, its first date set for me).
+- 3.9.2, the Cheer window's "pick one" (Sam: "the custom picker doesn't
+  accept the custom emoji choices"): the Mac's Character Viewer can't type
+  into Anki's web page, so a Qt box of ours sits exactly over the page's
+  (`native_emoji.catch`, the page's place and zoom), focused, takes the
+  pick and hands it to the page (`window.dcCheerPicked`); Esc, the window's
+  close or two minutes put it away. And Pip on a fridge Polaroid's caption
+  is no longer clipped (Sam: "pips get cutoff on the polaroids"): the line
+  never clips, only the name shortens, and Pip's slot has its head's room.
+- 3.9.2, the Polaroids (Sam: "some of the dates on polaroids are wrong",
+  "also need dark mode for polaroids"). A cheer's `at` comes from the server
+  in UTC and the Polaroid showed its first ten characters, the UTC date, so
+  a doodle sent on an American evening was dated the next day:
+  `board._short_day` reads a moment on this computer's clock now (a plain
+  day stays that day), and the quiet fold's month too. At night a
+  Polaroid's frame and photo go dark, as Settings › Theme says (Match Anki:
+  its night mode and the computer's): its colours are tokens on each one
+  (`FRIDGE_LIGHT`, `FRIDGE_DARK`), a doodle's black ink reads light and each
+  colour takes its night shade (`FRIDGE_INKS`, the board's own), and Pip and
+  Undo the sender's night accent (`--fd` beside `--fa`). A theme change
+  draws the fridge again (it's kept as last drawn).
+- 3.9.2, the map by when I started them, by topic (Sam, on its week names:
+  "the organization from when you started something tag name by original
+  deck isn't helpful ... should be organized by topic"). A week is named by
+  the map's own way only (`team.way_of`: a tag's family up to its first
+  resource mark, or plain tags), the deepest of its topics a third of the
+  week shares, else its two biggest ("21–27 Sep · Renal, GI"), else just its
+  dates; never by the deck a card first came from, nor the way's own root.
+  It opens into those topics, and each Browses that week's cards alone (the
+  audit: a topic in it opened every card of the deck with its tag). The
+  tiles are the last 8 weeks I started cards in, however long ago (a deck
+  finished months back had none in 8 calendar weeks, one tile, and the pick
+  did nothing). A card started but never reviewed is "too soon" on the map,
+  not 100% (its last answer was the pass that graduated it, so the newest
+  week read best known), on the picture card and its text too.
+- 3.9.2, the release audit (Sam: "everything we ship must actually work, and
+  shouldn't be something we've not got right yet"): four reviews of the
+  release, Stop new and the leech buttons run on Anki's own engine
+  (`tools/real_anki.py`'s `check_392`), and what they found fixed:
+  Stop new says what the pause I made does (`pause` on the view: its kind,
+  its exam; "to the exam" only for an exam ahead, named at any distance; the
+  week before it, from its first day), one undo step for a deck and its
+  subdecks (and none when nothing changes), set before I study too
+  (`ahead_flow.on_state`: not signed in, or the morning waiting for
+  AnkiWeb), a stop that holds nothing back isn't offered, today's bar
+  counts a card still in its steps once, the track record caps a week I took
+  off (never "within 411%"), and a plan's Raise, Catch up and Why stand aside
+  for it (`ahead_flow.paused`: the plan card says new cards are stopped, with
+  Turn them back on). Leeches: a miss away at Anki's own steps (half the
+  threshold rounded up: at 5, 8, 11), a relearning card isn't one, a note
+  keeps its leech tag while another of its cards is still out, the view is
+  worked out again when the collection changed (`col.mod`), a card deleted
+  since is no error, each card's front is its own question as Anki draws it
+  (a reversed card's, a cloze's asked part hidden), and Leave it out has its
+  way back at the foot of the list. The exam: "nothing at risk" only when
+  FSRS looked (it's FSRS's), "Anki aims for 90%" only with FSRS on, the next
+  exam set on the last one's day keeps it as the last, an upcoming exam
+  moved keeps its scope, and a start is a real answer. A profile switch
+  empties the views kept by deck id (the Default deck is 1 everywhere). The
+  Cheer window's box over "pick one" goes with a quick pick, a scroll, a
+  resize or a new page. The builder: Copy for next year copies the plan as
+  saved (a save first; its first date from the saved plan, 364 days on), says
+  a full account, and the reviews line's busiest week is one its list shows.
+  No third-party deck or video names in code or tests (CLAUDE.md). Stop new
+  is offered only on Anki's v3 scheduler (`ahead_flow._v3`: the old v2 has
+  no today-only limit), and `docs/manual-anki-checklist.md` has the release's
+  short click-test pass.
+- 3.9.2, four small ones Sam okayed (19 Oct, "anything easy that requires me
+  to approve first"). Tag Only leeches: since Anki 23.10 a preset's leech
+  action is Tag Only, so Anki tags a leech and keeps showing it, and
+  Insights' leeches line showed nothing for most new decks. They're counted
+  now ("N leeches still in your reviews · See them") and listed last in the
+  same view: a tagged card at its deck's leech count or past it, in a deck
+  that tags (`leech_flow._kept`; a tag a shared deck shipped isn't one, nor a
+  card I unsuspended by hand in a deck that suspends), with Learn it fresh,
+  Edit and Leave it out behind its ⋯ and no Bring back (it never left); a
+  note keeps its tag while another of its cards is one. Checked on Anki's
+  engine: the eighth miss tags it and keeps it in relearning. The map by
+  when I started them, when everything started in one week: one tile says
+  nothing, so the map stays by topic and says why ("Everything you've
+  started is from one week"). Copy for next year names the copy "… (next
+  year)", not "(copy)": the builder renames it right after, the name alone
+  (`library.test.ts` holds the call); its plan tags keep the root the copy
+  took. The Cheer window's Other takes the emoji that are older than emoji
+  (©, ®, ‼, ⁉, ™, ℹ, as the computer's picker sends them:
+  `shapes.EMOJI_LOW`, `native_emoji.first_emoji`, the window's `oneEmoji`);
+  a keycap (1️⃣) still isn't one, as the Worker counts.
+- 3.9.2, the last QoL pass (Sam: "last check for little things"; three
+  reviewers and a look at every new screen). The release blocker it found:
+  the Cheer window did nothing (a `var moved` overwrote the scroll/resize
+  handler the audit added, so every close threw); the handler is `away`
+  and the suite now runs the window in node (`tests/fake_dom.js`, real
+  EventTargets) through a quick pick and Send, Cancel, Esc, the backdrop
+  and the computer's picker. Stop new: a pause that ends or moves (the exam
+  moved or went, here or from another computer) takes today's 0 off at once
+  and puts a catch-up's limit back (`ahead_flow.exam_moved`, the morning's
+  idle pauses); Turn back on says so, is one undo step with the catch-up's
+  limit in it, and the plan card's line follows; a stop that hasn't begun
+  says "Keep them on", is named from its own day even past the chart, and
+  never shows as "Paused" or compares a number with itself; an exam today
+  isn't one ahead. Why names the deck the stop is on. Leeches: Insights'
+  line counts as the collection is now (`leech_flow.line_counts`), keeps a
+  way back when every one is left out, says "one miss from a leech" alone,
+  and a sync's new tips work the open view out again; See ahead opens
+  Insights, not a leeches view left open; the daily climb check waits when
+  no board is drawn. Words: one card / one time, days with their month, an
+  old leech's year, the scope's links apart and its picker stopping at
+  today, the minutes with the weeks they're for ("1h 13m"), the map's key
+  wrapping between its parts at phone width and naming the bar only when
+  one shows, a leech's last day by my rollover. The Cheer window: England's,
+  Scotland's and Wales's flags whole, a letter of any script (あ, 中) never
+  an emoji (Python and the page agree, the suite runs both), Tab stays in
+  the window and the board's sheets, focus goes back to what opened them,
+  a quick pick keeps the key, Enter in Sign sends, the computer's picker
+  hands the keys back to the page; a Polaroid's × is reachable by Tab. The
+  builder: next year's copy never "(next year) (next year)" or "(copy)
+  (next year)", cut at a word; offline and "no dates" said as themselves;
+  a break between a plan's parts reads "0 for 24 weeks".

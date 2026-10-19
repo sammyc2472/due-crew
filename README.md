@@ -63,11 +63,14 @@ Above the board is yours.
 - **Fifteen?** One click in Anki's top bar starts fifteen minutes of
   Study today. At the end: take five, go again, or stop there. Your crew
   sees you're studying. Not started by your usual time? Today nudges you.
-- **Insights**, for any deck: the cards Anki won't show you before your
-  exam, what isn't sticking yet, your week in time, and a map of what you
-  know, topic by topic. Click a topic to open its parts. It's worked out
-  in your Anki and never sent; copy the map as a picture or as text if you
-  want to share it.
+- **Insights**, for any deck: your reviews for the next six weeks,
+  counted from your own reviews, and what stopping new cards before your
+  exam would do (one click to stop, one to start again); the cards Anki
+  won't show you before your exam; the leeches Anki stopped showing you,
+  one button each to bring them back; what isn't sticking yet; and a map
+  of what you know, by topic or by the week you started it. It's worked
+  out in your Anki and never sent; copy the map as a picture or as text
+  if you want to share it.
 - **Your year.** From 1 December, your year in Anki as a short story,
   made on your computer from your own reviews. Tools → Due Crew → Your
   year… has any year Anki remembers.

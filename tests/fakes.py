@@ -179,7 +179,7 @@ def make_collection(conn):
                  "queue INTEGER DEFAULT 0, ivl INTEGER DEFAULT 0, ord INTEGER DEFAULT 0, "
                  "due INTEGER DEFAULT 0, lapses INTEGER DEFAULT 0, data TEXT DEFAULT '', odue INTEGER DEFAULT 0)")
     conn.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY, guid TEXT, mid INTEGER DEFAULT 0, flds TEXT DEFAULT '', "
-                 "tags TEXT DEFAULT '', mod INTEGER DEFAULT 0)")
+                 "tags TEXT DEFAULT '', mod INTEGER DEFAULT 0, sfld TEXT DEFAULT '')")  # sfld: 3.9.2's leeches show it
     # Anki bumps a note's mod on every edit; the plan index keeps tags by it
     conn.execute("CREATE TRIGGER notes_mod AFTER UPDATE OF tags, guid, flds ON notes "
                  "BEGIN UPDATE notes SET mod = mod + 1 WHERE id = NEW.id; END")

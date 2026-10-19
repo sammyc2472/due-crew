@@ -80,16 +80,25 @@ def clean_emoji(text):
     return out if out and emoji_fits(out) else ""
 
 
+# 3.9.2 (Sam's pick): the emoji below U+2190 a picker gives: © ® ‼ ⁉ ™ ℹ (keycaps start with a digit,
+# which the Worker refuses); board.py's oneEmoji and native_emoji.first_emoji take the same
+EMOJI_LOW = (0xA9, 0xAE, 0x203C, 0x2049, 0x2122, 0x2139)
+
+
 def _first_grapheme(text):
     """The first emoji cluster of `text` (joiners, variation selectors, skin
     tones, flag pairs), or '' when it doesn't start with one."""
     text = str(text or "").strip()
-    if not text or ord(text[0]) < 0x2190 or not text[0].isprintable():
+    if not text or (ord(text[0]) < 0x2190 and ord(text[0]) not in EMOJI_LOW) or not text[0].isprintable():
         return ""
+    if text[0].isalnum() and ord(text[0]) not in EMOJI_LOW:
+        return ""  # 3.9.2's QoL pass: a letter or digit of any script (あ, 中, ①) isn't an emoji
     out = ""
     for i, ch in enumerate(text[:32]):
         code = ord(ch)
-        joiner = code in (0x200D, 0xFE0F) or 0x1F3FB <= code <= 0x1F3FF or 0x1F1E6 <= code <= 0x1F1FF
+        # tag characters (U+E0020-E007F) finish England's, Scotland's and Wales's flags (3.9.2's QoL pass)
+        joiner = (code in (0x200D, 0xFE0F) or 0x1F3FB <= code <= 0x1F3FF or 0x1F1E6 <= code <= 0x1F1FF
+                  or 0xE0020 <= code <= 0xE007F)
         if i > 0 and not joiner and ord(text[i - 1]) != 0x200D:
             break
         out += ch

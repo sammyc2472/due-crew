@@ -28,7 +28,6 @@ from aqt.utils import tooltip
 
 from . import app
 from . import plans as P
-from . import schedule as S
 from . import team as T
 from .app import _bg, _state, cfg, client, save_cfg
 from .backend.shapes import TransportError
@@ -546,7 +545,21 @@ def you_view(c):
         T.map_level(view["map"], at, view.get("_map_know") or {})  # what's on screen worked out
     # 3.9.1: two buttons, for the Hard habit line: on, or just turned on from it (its Undo)
     two = ("tried" if _state.get("two_tried") else "on") if c.get("two_buttons") else ""
-    return {"decks": decks, "did": d["did"], "exam": exam, "view": dict(view, map_at=at, two=two)}
+    out = {"decks": decks, "did": d["did"], "exam": exam, "view": dict(view, map_at=at, two=two)}
+    from . import leech_flow
+    if mw.col and "leeches" in view:
+        # 3.9.2's QoL pass: the line's counts as the collection is now (the view it opens is), not as
+        # Insights' ten minutes kept them; and the ones I left out, so their way back stays reachable
+        try:
+            out["view"].update(leech_flow.line_counts(mw.col, d["did"], _deck_sql(mw.col, d["did"])))
+        except Exception:
+            traceback.print_exc()
+    if leech_flow.is_open(d["did"]) and mw.col:
+        # 3.9.2: the leeches view; "on your exam" when the exam's scope is narrower than the deck
+        since = (view.get("aim") or {}).get("since") if (view.get("aim") or {}).get("kind") == "exam" else ""
+        ms = _since_ms(since, mw.col.sched.day_cutoff, _plans_flow()._today()) if since else None
+        out["view"]["leech"] = leech_flow.current(mw.col, d["did"], _deck_sql(mw.col, d["did"]), ms)
+    return out
 
 
 def plan_lines(cards):
@@ -569,7 +582,8 @@ def plan_lines(cards):
 def insights(did, pid=None, exam=""):
     """A deck's Insights, worked out at most every INSIGHTS_FRESH seconds
     (again when the plan or the exam date changes). Main thread."""
-    key = f"{pid or ''}|{exam}"
+    c = cfg()
+    key = f"{pid or ''}|{exam}|{c.get('exam_last') or ''}|{c.get('exam_since') or ''}"  # 3.9.2: the scope too
     have = (_state.get("insights") or {}).get(did)
     if have and have.get("key") == key and time.time() - have["at"] < INSIGHTS_FRESH:
         return have["view"]
@@ -600,13 +614,6 @@ def _fsrs(col):
         return False
 
 
-def _new_per_day(col, did):
-    try:
-        return max(0, int(col.decks.config_dict_for_deck_id(did)["new"]["perDay"]))
-    except Exception:
-        return 0
-
-
 MY_EXAM = "~exam"  # my own exam date, among a plan's events
 
 
@@ -630,12 +637,16 @@ def _work_out(did, pid=None, exam=""):
     else:
         deck = _deck_sql(col, did)  # a big shared deck's 30,000 ids stay out of the SQL
     since = lambda days: (cutoff - days * 86400) * 1000  # noqa: E731
-    out = {"target": int(round(100 * target)), "did": did}
+    out = {"target": int(round(100 * target)), "did": did, "deck_name": str(col.decks.name(did) or "").split("::")[-1],
+           "fsrs_on": bool(_fsrs(col))}  # 3.9.2's audit: Anki aims for a retention only with FSRS on
 
     # the header: right on this deck's reviews, first answer of each card each day
+    # 3.9.2: split by the cards I started in these two weeks, when the mix shifted (T.right_split)
+    young = col.db.list(f"SELECT cid FROM revlog WHERE ease > 0 AND cid IN ({deck}) GROUP BY cid HAVING min(id) >= ?",
+                        since(T.DAYS))
     out["right"] = T.right_days(col.db.all(
         f"SELECT cid, CAST((? - id / 1000) / 86400 AS INTEGER), ease FROM revlog "
-        f"WHERE id >= ? AND type = 1 AND ease > 0 AND cid IN ({deck}) ORDER BY id", cutoff - 1, since(2 * T.DAYS)))
+        f"WHERE id >= ? AND type = 1 AND ease > 0 AND cid IN ({deck}) ORDER BY id", cutoff - 1, since(2 * T.DAYS)), young)
 
     # the exam box: started cards Anki won't show me before the aim, under my target by then
     # (FSRS only). The deck's, plan or not: it aims at the next of my own exam date and
@@ -655,7 +666,19 @@ def _work_out(did, pid=None, exam=""):
             got |= set(ms.get(uid) or ())
         aimed = _in(got) if got else ""
     out["aim"] = {"day": day, "name": name, "in": k, "scoped": bool(prep), "kind": "exam" if eid == MY_EXAM else ""}
+    if eid == MY_EXAM:
+        # 3.9.2 (Sam's pick C1-A): my exam covers the cards I started since my last exam (in the
+        # last 10 weeks), or since a day I picked; else the whole deck. Said in the box, with Change
+        c = cfg()
+        first_day, why = T.scope(exam, c.get("exam_last"), c.get("exam_since"), today)
+        out["aim"].update(since=first_day or "", since_why=why, since_pick=str(c.get("exam_since") or ""), today=str(today))
+        if first_day:
+            got = col.db.list(f"SELECT cid FROM revlog WHERE ease > 0 AND cid IN ({deck}) GROUP BY cid HAVING min(id) >= ?",
+                              _since_ms(first_day, cutoff, today))
+            aimed = _in(got)
+            out["aim"]["since_n"] = len(got)
     if _fsrs(col) and aimed and sday:
+        out["aim"]["checked"] = True
         last = dict(col.db.all(f"SELECT cid, max(id) FROM revlog WHERE cid IN ({aimed}) GROUP BY cid"))
         mem_of = {}
         for cid, ctype, queue, due, ivl, data in col.db.all(
@@ -704,49 +727,14 @@ def _work_out(did, pid=None, exam=""):
                                            if str(u.get("opens") or "") < today)
         out["pid"] = p["id"]
 
-    # my week in minutes, at my own pace in this deck: ahead, what the plan
-    # asks, or with no plan, what Anki has due (its new cards a day included)
-    t = S.d(today)
-    days = [S.iso(t + datetime.timedelta(days=i)) for i in range(7)]
-    new = {d: 0 for d in days}
-    if p:
-        for u in units:
-            o = str(u.get("opens") or "")
-            if o in new:
-                _sn, op, lk = ld.get(u["id"]) or [0, 0, 0]
-                new[o] += (op + lk) if o == today else lk
-    else:
-        left = int(col.db.scalar(f"SELECT count() FROM cards WHERE id IN ({deck}) AND queue = 0") or 0)
-        per = _new_per_day(col, did)
-        for d in days:
-            new[d] = min(per, left)
-            left -= new[d]
-    due = {i: 0 for i in range(7)}
-    if sday:
-        for (dd,) in col.db.all(f"SELECT due FROM cards WHERE id IN ({deck}) AND queue = 2"):
-            i = max(int(dd) - sday, 0)
-            if i < 7:
-                due[i] += 1
-    n_ans, ms_ans = col.db.first(f"SELECT count(), total(time) FROM revlog WHERE id >= ? AND type IN (1, 2) AND ease > 0 "
-                                 f"AND cid IN ({deck})", since(T.DAYS)) or (0, 0)
-    firsts = dict(col.db.all(f"SELECT cid, min(id) FROM revlog WHERE cid IN ({deck}) GROUP BY cid "
-                             f"HAVING min(id) >= ? AND min(id) < ?", since(28), since(7)))
-    secs_new = None
-    if len(firsts) >= T.NEW_MIN:
-        spent = 0
-        for cid, rid, ms_ in col.db.all(f"SELECT cid, id, time FROM revlog WHERE ease > 0 AND cid IN ({_in(firsts)})"):
-            if 0 <= rid - firsts[cid] < 7 * 86400 * 1000:
-                spent += ms_
-        secs_new = spent / 1000.0 / len(firsts)
-    past = col.db.all(f"SELECT CAST((? - id / 1000) / 86400 AS INTEGER), total(time) FROM revlog "
-                      f"WHERE id >= ? AND ease > 0 AND cid IN ({deck}) GROUP BY 1", cutoff - 1, since(7))
-    mins = {int(a): int(round(m / 60000.0)) for a, m in past}
-    out["week"] = T.week([(S.iso(t - datetime.timedelta(days=a)), mins.get(a, 0)) for a in range(7, 0, -1)],
-                         [(d, new[d], due[i]) for i, d in enumerate(days)],
-                         secs_new, (ms_ans / 1000.0 / n_ans) if n_ans >= 200 else None)
-    if out["week"]:
-        out["week"]["today_done"] = mins.get(0, 0)
-        out["week"]["src"] = "plan" if p else "anki"
+    # 3.9.2, Reviews ahead (Your week until now): the next six weeks in cards a day,
+    # counted from my own log; a plan's dates in it when I follow one (ahead_flow)
+    try:
+        from . import ahead_flow
+        out["ahead"] = ahead_flow.deck_view(col, did, deck, exam,
+                                            plan=ahead_flow.plan_days(units, ld, today) if p else None)
+    except Exception:
+        traceback.print_exc()
 
     # Optimize FSRS: my newest cards against my target (put away for 30 days)
     hide = float((pf._pcfg().get("ins_fsrs_hide") or 0))
@@ -767,21 +755,23 @@ def _work_out(did, pid=None, exam=""):
         except Exception:
             traceback.print_exc()
 
-    # the deck's leeches Anki suspended (from the plan card, 3.8.0)
-    out["leeches"] = len(_leeches(col, deck))
+    # the deck's leeches Anki suspended (from the plan card, 3.8.0); 3.9.2: the ones a miss from it, and
+    # the ones Anki tagged and kept showing (Tag Only)
+    from . import leech_flow
+    out["leeches"], out["near"], out["kept"] = leech_flow.counts(col, deck)
     return out
+
+
+def _since_ms(day, cutoff, today):
+    """A revlog id: the start of that Anki day."""
+    back = (datetime.date.fromisoformat(str(today)) - datetime.date.fromisoformat(str(day))).days
+    return (int(cutoff) - (back + 1) * 86400) * 1000
 
 
 def _deck_sql(col, did):
     """The deck's cards and its subdecks', as SQL to put in IN (...)."""
     dids = _in(col.decks.deck_and_child_ids(did))
     return f"SELECT id FROM cards WHERE did IN ({dids}) OR odid IN ({dids})"
-
-
-def _leeches(col, deck):
-    """The suspended cards tagged leech among `deck` (ids, or _deck_sql, for SQL)."""
-    return col.db.list(f"SELECT c.id FROM cards c JOIN notes n ON n.id = c.nid WHERE c.id IN ({deck}) "
-                       f"AND c.queue = -1 AND (' ' || lower(n.tags) || ' ') LIKE '% leech %'")
 
 
 def _deck_rows(col, did, reviewed, stuck, forgot):
@@ -813,31 +803,44 @@ def _deck_rows(col, did, reviewed, stuck, forgot):
     return rows
 
 
+KNOW_DAYS = 28  # the map's window: a card's reviews these 4 weeks
+
+
 def _know(col, deck, cutoff):
-    """({cid: 0..1}, by): how well I know each started card of the deck
-    now. With FSRS, its recall today (stability, days since its last
-    answer: "fsrs"); without, 1 when its last answer was right ("right")."""
-    last = dict(col.db.all(f"SELECT cid, max(id) FROM revlog WHERE ease > 0 AND cid IN ({deck}) GROUP BY cid"))
-    if not last:
+    """({cid: 0..1 or None}, "right"): each started card of the deck, the share of
+    its reviews these KNOW_DAYS days it got right (each day's first); one
+    not due in them, its last review; one never due yet, None (3.9.2's
+    audit: its last answer is the pass that graduated it, so the newest
+    cards read best known; the map says "too soon").
+    3.9.2 (Sam's deck): FSRS's recall today read 93 to 96% on every tile
+    while he passed 77% of his reviews (it says how lately a card was seen
+    more than what's known), and the last answer read a relearning step
+    after a miss as right. The last review alone saturates too: a missed
+    card comes back the next day and passes; the weeks' share keeps it."""
+    live = set(col.db.list(f"SELECT id FROM cards WHERE id IN ({deck}) AND type != 0 AND queue != -1"))
+    if not live:
         return {}, ""
-    rows = col.db.all(f"SELECT id, ivl, data FROM cards WHERE id IN ({deck}) AND type != 0 AND queue != -1")
-    if _fsrs(col):
-        out = {}
-        for cid, ivl, data in rows:
-            if cid not in last:
-                continue
-            try:
-                mem = json.loads(data or "{}")
-            except ValueError:
-                mem = {}
-            ago = (cutoff - int(last[cid]) // 1000) // 86400
-            out[int(cid)] = T.recall(ago, float(mem.get("s") or max(int(ivl), 1)), mem.get("decay"))
-        return out, "fsrs"
-    ids = ",".join(str(int(last[cid])) for cid, _i, _d in rows if cid in last)
-    if not ids:
-        return {}, ""
-    return {int(c): 1.0 if int(e) > 1 else 0.0
-            for c, e in col.db.all(f"SELECT cid, ease FROM revlog WHERE id IN ({ids})")}, "right"
+    win, seen = {}, set()
+    for cid, day, ease in col.db.all(
+            f"SELECT cid, CAST((? - id / 1000) / 86400 AS INTEGER), ease FROM revlog WHERE id >= ? AND type = 1 "
+            f"AND ease > 0 AND cid IN ({deck}) ORDER BY id", int(cutoff) - 1, (int(cutoff) - KNOW_DAYS * 86400) * 1000):
+        cid = int(cid)
+        if cid not in live or (cid, day) in seen:
+            continue
+        seen.add((cid, day))
+        w = win.setdefault(cid, [0, 0])
+        w[0] += int(ease) > 1
+        w[1] += 1
+    out = {c: p / float(n) for c, (p, n) in win.items()}
+    rest = [c for c in live if c not in out]
+    if rest:
+        out.update({c: None for c in rest})
+        pick = [int(rev) for _cid, rev in col.db.all(
+            f"SELECT cid, max(id) FROM revlog WHERE type = 1 AND ease > 0 AND cid IN ({_in(rest)}) GROUP BY cid")]
+        if pick:
+            out.update({int(c): 1.0 if int(e) > 1 else 0.0
+                        for c, e in col.db.all(f"SELECT cid, ease FROM revlog WHERE id IN ({_in(pick)})")})
+    return out, ("right" if out else "")
 
 
 def _tag_plans(col, did):
@@ -909,6 +912,23 @@ def _map(col, did, deck, cutoff):
         ways.append({"key": DECKS_WAY, "name": "Subdecks", "score": dways[0]["score"], "on": by_decks})
         ways.sort(key=lambda w: -w["score"])
     shown = dtiles if by_decks else tiles
+    # 3.9.2 (Sam's pick C2-A): by when I started them, a week a tile, named by what each week was;
+    # worked out only when picked (its first answers are one more read of the deck's log)
+    start = []
+    if pick == T.START_WAY:
+        first = {int(c): (cutoff - 1 - int(t) // 1000) // 86400 for c, t in col.db.all(
+            f"SELECT cid, min(id) FROM revlog WHERE ease > 0 AND cid IN ({deck}) GROUP BY cid")}
+        # named and opened by the map's own topics: its tag way that's on, else its best (3.9.2's audit:
+        # plain tags are a way too; subdecks, a plan's tags and this one aren't tags of the deck's own)
+        tag_ways = [w for w in ways if w["key"] == T.TAGS_WAY or not str(w["key"]).startswith("~")]
+        own = next((w["key"] for w in tag_ways if w.get("on")), None) or (tag_ways[0]["key"] if tag_ways else None)
+        start = T.started_tiles(first, tags_of, know, active, _plans_flow()._today(), own)
+        if len(start) >= 2:
+            ways = [dict(w, on=False) for w in ways]
+            shown = start
+    # 3.9.2 (Sam's pick): picked, but all I've started is from one week: said, not snapped back to topics
+    ways.append({"key": T.START_WAY, "name": "When you started them", "score": 0.0, "on": len(start) >= 2,
+                 "one": pick == T.START_WAY and len(start) == 1})
     plan_ways = _plan_ways(col, did, active, know) if active else {}
     if plan_ways:  # 3.8.1: a plan's own tags, only when picked, after the deck's own ways
         chosen = plan_ways.get(pick) if pick else None
@@ -932,6 +952,7 @@ def _map_week(out, did, today):
     way = next((w["key"] for w in out.get("map_ways") or [] if w.get("on")), None)
     if way is None:
         return
+    way = f"{way}|due"  # 3.9.2: shaded by the last review now; a week of the old shading isn't compared
     pf = _plans_flow()
     pc = pf._pcfg()
     snaps = pc.get("map_snaps") if isinstance(pc.get("map_snaps"), dict) else {}
@@ -980,6 +1001,7 @@ def _find_cids(col, did, find):
     children) or its subdecks: what a topic's name opens in Browse."""
     deck = _deck_sql(col, did)
     out = set()
+    out |= {int(c) for c in (find or {}).get("cids") or ()}  # 3.9.2: a week I started them, its own cards
     want = [str(t).lower() for t in (find or {}).get("tags") or [] if str(t)]
     if want:
         # matched here, not in SQL: SQLite's lower() and LIKE fold ASCII only ("Анатомия", "Ökologie")
@@ -1078,14 +1100,6 @@ def browse(did, key):
     _plans_flow()._browse(cids, empty="Nothing to show.")
 
 
-def browse_leeches(did):
-    """The deck's suspended leeches in Anki's browser."""
-    col = mw.col
-    if not col or not col.decks.get(did, default=False):
-        return
-    _plans_flow()._browse(_leeches(col, _deck_sql(col, did)), empty="No suspended leeches here.")
-
-
 def fsrs(did, open_it=True):
     """Optimize FSRS: the deck's options (Anki's own button is there), or the
     line put away for 30 days."""
@@ -1116,6 +1130,7 @@ def go_insights(did):
     c = cfg()
     c["due_tab"] = "insights"
     c["due_fold"] = {"day": _today(), "folded": False}
+    (_state.get("leech_open") or {}).pop(int(did), None)  # 3.9.2's QoL pass: Insights itself, not a leeches view left open
     if "insights" in (c.get("hidden_tabs") or []):
         c["hidden_tabs"] = [k for k in c["hidden_tabs"] if k != "insights"]
     if mw.col and mw.col.decks.get(did, default=False):
@@ -1225,7 +1240,20 @@ def on_message(cmd, parts):
         elif cmd == "instwono":
             try_two(False)
         elif cmd == "insleeches":
-            browse_leeches(did)
+            from . import leech_flow
+            leech_flow.open_view(did)  # 3.9.2: the leeches view in Insights' place (Browse is on it)
+        elif cmd == "insleech":
+            from . import leech_flow
+            return leech_flow.on_message(did, x, parts[4] if len(parts) > 4 else "")
+        elif cmd == "insaheadoff" and x in ("now", "week"):
+            from . import ahead_flow
+            ahead_flow.stop_new(did, x)
+        elif cmd == "insaheadon":
+            from . import ahead_flow
+            ahead_flow.start_new(did)
+        elif cmd == "insaheadx":
+            from . import ahead_flow
+            ahead_flow.hide_line(did)
         else:
             return False
         return True

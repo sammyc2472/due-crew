@@ -54,6 +54,10 @@ def context(col):
                 conf = col.decks.config_dict_for_deck_id(did)
                 out = {"new": int(node.new_count) if node else 0, "rev": int(node.review_count) if node else 0,
                        "new_limit": int(conf["new"]["perDay"]), "rev_limit": int(conf["rev"]["perDay"])}
+                from . import ahead_flow
+                held = ahead_flow.paused(col, did)
+                if held:  # 3.9.2's audit: Stop new cards, said as itself; QoL pass: named by the deck it's on
+                    out["paused"] = str(col.decks.name(held[0]) or "").split("::")[-1] or True
             except Exception:
                 traceback.print_exc()
             left[did] = out

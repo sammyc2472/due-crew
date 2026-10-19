@@ -1229,6 +1229,12 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True, update=False):
         if hold_new([p for p in plan_list if not p.get("paused") and p["id"] not in new_here], _state_cfg(), today, morning=True):
             _after_change()  # 3.7.3: what an author added to later dates waits, for whoever chose Hold back
         apply_catch()  # G5
+        try:
+            from . import ahead_flow
+            if ahead_flow.apply_morning():  # 3.9.2: Stop new cards, after a catch-up's own limit
+                _after_change()
+        except Exception:
+            traceback.print_exc()
         built = build_checks([p for p in plan_list if not p.get("paused")])  # 3.2
         # 3.8.1, Welcome back: a plan whose dates from 3+ days I studied nothing would open
         # keeps them shut till its question, asked below (Open them, Push my dates back, Not today)
@@ -1969,6 +1975,9 @@ def raise_limit(pid):
     if not st or not mw.col or not want:
         return
     col, did = mw.col, int(st["deck_id"])
+    if _paused(col, did):
+        tooltip("New cards are stopped in this deck. Turn them back on in Insights first.")
+        return
     was = new_limit(col, did)
     pos = None
     try:
@@ -2019,6 +2028,7 @@ def sessions(col, plan_list, state, today, idxs=None):
                          _answered(col, st.get("checks") or {}))
         if v is not None:
             v["limit"] = new_limit(col, st["deck_id"])  # 3.3, C1
+            v["paused_new"] = _paused(col, st["deck_id"])  # 3.9.2's audit: Stop new, not a low limit
             v["fell_back"] = len(idx.fell_back)          # 3.3, C5
         out[p["id"]] = v
     return out
@@ -2987,6 +2997,19 @@ def set_shift(pid):
     _bg(lambda: cl.set_days(pid, shift=n), done)
 
 
+def _paused(col, did):
+    """3.9.2's audit: the deck whose Stop new cards (Insights) runs today over
+    this one, or None. Raise and Catch up stand aside for it: they'd undo it
+    till the next morning set it again."""
+    try:
+        from . import ahead_flow
+        got = ahead_flow.paused(col, did)
+    except Exception:
+        traceback.print_exc()
+        return None
+    return got[0] if got else None
+
+
 def _base_limit(col, did):
     """This deck's own new cards a day, not counting a today-only one."""
     try:
@@ -3009,12 +3032,17 @@ def apply_catch():
         c = st.get("catch") or {}
         if not c or str(c.get("until") or "") < today or not _deck_ok(col, st.get("deck_id")):
             continue
+        if _paused(col, st["deck_id"]):
+            continue  # Stop new runs on it today
         base = _base_limit(col, st["deck_id"])
         if base is None:
             continue
         try:
             deck = col.decks.get(int(st["deck_id"]))
-            deck["newLimitToday"] = {"limit": base + int(c.get("extra") or 0), "today": int(col.sched.today)}
+            want = {"limit": base + int(c.get("extra") or 0), "today": int(col.sched.today)}
+            if deck.get("newLimitToday") == want:
+                continue  # already so: no save, no undo step of its own (3.9.2's QoL pass)
+            deck["newLimitToday"] = want
             col.decks.save(deck)
         except Exception:
             traceback.print_exc()
@@ -3048,6 +3076,9 @@ def start_catch(pid, days, extra):
     st = state.get(pid)
     if not st:
         return
+    if mw.col and _paused(mw.col, st.get("deck_id")):
+        tooltip("New cards are stopped in this deck. Turn them back on in Insights first.")
+        return
     st["catch"] = {"until": S.iso(S.d(_today()) + datetime.timedelta(days=days - 1)), "extra": int(extra)}
     c["plans"] = state
     _psave(c)
@@ -3066,7 +3097,7 @@ def stop_catch(pid):
     st.pop("catch", None)
     c["plans"] = state
     _psave(c)
-    if mw.col and _deck_ok(mw.col, st.get("deck_id")):
+    if mw.col and _deck_ok(mw.col, st.get("deck_id")) and not _paused(mw.col, st.get("deck_id")):
         try:
             deck = mw.col.decks.get(int(st["deck_id"]))
             deck.pop("newLimitToday", None)

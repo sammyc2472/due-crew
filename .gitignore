@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 .DS_Store
 due_crew/user_files/
+poc/course_mac/user_files/
 *.ankiaddon
 
 # local preview harness output (dialog-shots/ is tools/dialogs.py's default)

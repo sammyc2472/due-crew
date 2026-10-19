@@ -141,7 +141,7 @@ def _tile(p, t, look, pct):
     pad = min(26.0, t["w"] * 0.12, t["h"] * 0.16)
     small = t["h"] < 150 or t["w"] < 190
     maxw = t["w"] - 2 * pad
-    num = "new" if t["k"] is None else f"{t['k']}%"
+    num = ("too soon" if t.get("soon") else "new") if t["k"] is None else f"{t['k']}%"
     if not pct:
         lines, z = _wrap(t["name"], maxw, 34 if small else 44, 18, 650)
         for i, line in enumerate(lines):

@@ -348,7 +348,9 @@ def check(path):
         t = tm()
         decks = TF._you_decks(col)
         t_decks = tm() - t
-        lee = TF._leeches(col, TF._deck_sql(col, did))
+        from due_crew import leech_flow as LF
+        lee = LF.counts(col, TF._deck_sql(col, did))
+        lee_anki = len(col.find_cards('deck:"Step Deck" tag:leech is:suspended prop:lapses>0'))
     finally:
         TF._plan, F._state_cfg, F._today, F._pcfg, F.followed, TF.cfg, _mw.col = keep
     ok("insights: the whole tab (hero, not sticking, week, FSRS line) in one pass", isinstance(view, dict) and "rows" in view
@@ -360,7 +362,8 @@ def check(path):
        f"week {'yes' if bare.get('week') else 'no'}, {t_bare*1000:.0f} ms")
     ok("insights: the decks to pick, by deck, the plan's marked, Anki's own deck names and ids",
        any(d["did"] == did and d["pid"] == "pI" for d in decks) and t_decks < 0.5, f"{decks}, {t_decks*1000:.0f} ms")
-    ok("insights: the deck's suspended leeches", len(lee) >= 1, f"{len(lee)}")
+    ok("insights: the deck's suspended leeches, as Anki's own search counts them (3.9.2: lapsed, not a shipped-suspended sibling)",
+       lee[0] == lee_anki, f"{lee} vs Anki's {lee_anki}")
     # 3.8.0: the topic map on a big deck's size, and Study today's counts from Anki's tree
     from due_crew import due_flow as DF
     t = tm()
@@ -704,10 +707,337 @@ def check(path):
     return failed
 
 
+def check_392(tmp):
+    """3.9.2 on Anki's engine, on a deck of its own with a log written as Anki
+    writes one (150 days of a simple learner): Stop new cards (Anki's
+    today-only limit on a deck and its subdecks, one undo step, each
+    morning, a week before an exam, a deck deleted), Reviews ahead on the
+    log, the leech buttons (Bring back, Learn it fresh, each one undo step;
+    a card deleted since), the leech view's fronts (a reversed card's own,
+    a cloze's asked part hidden), the view worked out again when an answer
+    moves col.mod, and the map by % right and by when I started them."""
+    import random, time, datetime as dt
+    from anki.collection import Collection
+    from due_crew import plan_flow as F, ahead_flow as AF, leech_flow as LF, team_flow as TF, app
+    keep = {(m, k): getattr(m, k) for m, ks in ((F, ("_pcfg", "_psave", "_today", "tooltip", "apply_catch", "_after_change", "client")),
+                                                 (AF, ("tooltip", "cfg")), (LF, ("tooltip", "cfg")), (TF, ("cfg",)),
+                                                 (app, ("swap", "client"))) for k in ks}
+    keep_col = F.mw.col
+    try:
+        failed = []
+        def ok(name, cond, extra=""):
+            print(("PASS " if cond else "FAIL ") + "3.9.2: " + name, extra)
+            if not cond:
+                failed.append(name)
+
+        path = os.path.join(tmp, "c.anki2")
+        col = Collection(path)
+        col.crt = col.crt - 400 * 86400  # a collection made long ago, as a real one is
+        col.close()
+        col = Collection(path)
+        did = col.decks.id("Step Deck")
+        sub = col.decks.id("Step Deck::Sub")
+        model = col.models.by_name("Basic")
+        for d, n in ((did, 300), (sub, 300)):
+            for i in range(n):
+                note = col.new_note(model)
+                note["Front"], note["Back"] = f"Q {d} {i} <b>bold</b>", f"A {i}"
+                col.add_note(note, d)
+        conf = col.decks.config_dict_for_deck_id(did)
+        ok("setup: the preset's 20 new a day", conf["new"]["perDay"] == 20, f"leech action {conf['lapse'].get('leechAction')}, fails {conf['lapse'].get('leechFails')}")
+        if conf["lapse"].get("leechAction") != 0:
+            conf["lapse"]["leechAction"] = 0  # Suspend Card, as a big shared deck's preset has it
+            col.decks.update_config(conf)
+
+        # a log: 150 days, about 25 new a day, reviews by a simple learner, written as Anki writes them
+        cutoff = int(col.sched.day_cutoff)
+        sday = int(col.sched.today)
+        rng = random.Random(3)
+        cids = sorted(col.find_cards('deck:"Step Deck"'))
+        rng.shuffle(cids)
+        rows, state, nxt = [], {}, 0
+        DAYS = 150
+        for t in range(DAYS):
+            day0 = cutoff - (DAYS - t) * 86400
+            k = 0
+            for cid, (due, ivl, lapses, reps) in sorted(state.items()):
+                if due > t:
+                    continue
+                k += 1
+                ts = (day0 + 3600 + k * 7) * 1000 + rng.randrange(1000)
+                if rng.random() < (0.2 if ivl < 7 else 0.1):
+                    rows += [(ts, cid, 1, -600, ivl, 2500, 9000, 1), (ts + 600000, cid, 3, 1, -600, 2300, 7000, 2)]
+                    state[cid] = (t + 1, 1, lapses + 1, reps + 2)
+                else:
+                    n = max(ivl + 1, int(round(ivl * rng.uniform(2.0, 3.0))))
+                    rows.append((ts, cid, 3, n, ivl, 2500, 8000, 1))
+                    state[cid] = (t + n, n, lapses, reps + 1)
+            for _ in range(4 if nxt < 400 else 0):
+                cid = cids[nxt]; nxt += 1
+                ts = (day0 + 7200 + nxt) * 1000
+                rows += [(ts, cid, 3, -600, 0, 2500, 10000, 0), (ts + 600000, cid, 3, 1, -600, 2500, 6000, 0)]
+                state[cid] = (t + 1, 1, 0, 2)
+        col.db.executemany("INSERT INTO revlog (id, cid, usn, ease, ivl, lastIvl, factor, time, type) VALUES (?,?,-1,?,?,?,?,?,?)", rows)
+        for cid, (due, ivl, lapses, reps) in state.items():
+            c = col.get_card(cid)
+            c.type, c.queue, c.ivl, c.due, c.lapses, c.reps = 2, 2, ivl, sday + (due - DAYS), lapses, reps
+            col.update_card(c)
+        # two leeches: one suspended by Anki (tagged), one a miss away
+        leech, near = sorted(state)[:2]
+        for cid, lap, q in ((leech, 8, -1), (near, 7, 2)):
+            c = col.get_card(cid)
+            c.lapses, c.queue = lap, q
+            col.update_card(c)
+        n = col.get_card(leech).note()
+        n.tags.append("leech")
+        col.update_note(n)
+        ok("setup: a log", len(rows) > 2000, f"{len(rows):,} answers, {len(state)} cards started")
+
+        # glue stubs, as tools/real_anki.py has them
+        pstore = {}
+        today = dt.date.today().isoformat()
+        F._pcfg, F._psave = (lambda: pstore), (lambda d: None)
+        F._today = lambda: today
+        F.tooltip = AF.tooltip = LF.tooltip = lambda *a, **k: None
+        catches = []
+        F.apply_catch = lambda *a, **k: catches.append(1)
+        F._after_change = lambda: None
+        app.swap = lambda *a, **k: None
+        exam = {"exam_date": ""}
+        AF.cfg = LF.cfg = lambda: exam
+        F.mw.col = col
+        AF.mw.col = col
+        LF.mw.col = col
+
+
+        def new_counts():
+            tree = col.sched.deck_due_tree()
+            out = {}
+            def walk(n):
+                out[n.deck_id] = n.new_count
+                for ch in n.children:
+                    walk(ch)
+            walk(tree)
+            return out[did], out[sub]
+
+        def selected_new(d):
+            col.decks.select(d)
+            col.sched.reset() if hasattr(col.sched, "reset") else None
+            return col.sched.counts()[0]
+
+        base = new_counts()
+        ok("before: 20 new today on the deck and on its subdeck", base[1] == 20 and base[0] >= 20, str(base))
+
+        # Stop new now (no exam): today's 0 on both, the preset untouched
+        AF.stop_new(did, "now")
+        step_stop = col.undo_status().undo
+        after = new_counts()
+        col.undo()
+        undone = new_counts()
+        AF.apply_morning()
+        pre = col.decks.config_dict_for_deck_id(did)["new"]["perDay"]
+        ok("stop now: no new cards today on the deck, its subdeck, or studying either", after == (0, 0)
+           and selected_new(did) == 0 and selected_new(sub) == 0, f"{after}")
+        ok("stop now: the preset and the deck's own limit as they were", pre == 20 and col.decks.get(did).get("newLimit") is None
+           and col.decks.get(sub).get("newLimit") is None)
+        ok("stop now: one undo step for the deck and its subdeck", step_stop == "Due Crew: new cards stopped", repr(step_stop))
+        ok("stop now: one Edit › Undo brings the deck's and the subdeck's new cards back", undone == base, str(undone))
+        ok("and the morning sets it again", new_counts() == (0, 0))
+        ok("stop now: kept in plans.json", (pstore.get("new_off") or {}).get(str(did), {}).get("kind") == "now", str(pstore.get("new_off")))
+        ok("the morning again: no change, still 0", AF.apply_morning() is False and new_counts() == (0, 0))
+        # yesterday's 0 doesn't hold today: the morning sets it again
+        for d in (did, sub):
+            deck = col.decks.get(d); deck["newLimitToday"] = {"limit": 0, "today": sday - 1}; col.decks.save(deck)
+        ok("a 0 from yesterday lapses on its own", new_counts() == base, str(new_counts()))
+        ok("and the morning sets today's", AF.apply_morning() is True and new_counts() == (0, 0))
+
+        # Reviews ahead with the pause on
+        v = AF.deck_view(col, did, TF._deck_sql(col, did))
+        ok("reviews ahead: worked out on a real log, the pause on", isinstance(v, dict) and v.get("off") is True and len(v.get("days") or []) > 20,
+           f"keys {sorted(v)[:12] if isinstance(v, dict) else v}")
+
+        # Turn back on: today's 0 off, the catch-up's put back
+        AF.start_new(did)
+        ok("turn new cards back on: the deck's 20 back, the pause gone, a catch-up's limit put back",
+           new_counts() == base and not (pstore.get("new_off") or {}) and catches, f"{new_counts()} {catches}")
+
+        # a catch-up's own limit today (35), then a stop: 0; back on pops it and asks the catch-up again
+        deck = col.decks.get(did); deck["newLimitToday"] = {"limit": 35, "today": sday}; col.decks.save(deck)
+        c35 = new_counts()
+        AF.stop_new(did, "now")
+        ok("stop over a catch-up's limit: 0", new_counts() == (0, 0), f"was {c35}")
+        AF.start_new(did)
+
+        # the week before an exam: nothing today with the exam 12 days out; 0 once the week comes; over after it
+        exam["exam_date"] = (dt.date.today() + dt.timedelta(days=12)).isoformat()
+        AF.stop_new(did, "week")
+        ok("the week before my exam, 12 days out: new cards today as ever", new_counts() == base and str(did) in pstore["new_off"])
+        F._today = lambda: (dt.date.today() + dt.timedelta(days=6)).isoformat()
+        ok("six days on, the exam a week off: the morning sets 0", AF.apply_morning() is True and new_counts() == (0, 0))
+        F._today = lambda: (dt.date.today() + dt.timedelta(days=13)).isoformat()
+        AF.apply_morning()
+        ok("the day after the exam: the pause is forgotten", str(did) not in (pstore.get("new_off") or {}), str(pstore.get("new_off")))
+        F._today = lambda: today
+        for d in (did, sub):
+            deck = col.decks.get(d); deck.pop("newLimitToday", None); col.decks.save(deck)
+        exam["exam_date"] = ""
+
+        # a deck deleted while paused: the morning drops it, no error
+        gone_did = col.decks.id("Gone Deck")
+        pstore["new_off"] = {str(gone_did): {"kind": "now", "at": today, "exam": False}}
+        col.decks.remove([gone_did])
+        ok("a paused deck since deleted: the morning just forgets it", AF.apply_morning() is False and not pstore["new_off"])
+
+        # leeches: the line's counts and the view's reads
+        deck_sql = TF._deck_sql(col, did)
+        F.client = lambda: type("C", (), {"signed_in": True, "session": {}})()
+        app.client = F.client
+        cnt = LF.counts(col, deck_sql)
+        ok("leeches: one Anki stopped showing me; the ones a miss from it (Anki's own steps)", cnt[0] == 1 and cnt[1] >= 1, str(cnt))
+        t = time.perf_counter(); lv = LF.view(col, did, deck_sql); t_v = time.perf_counter() - t
+        ok("leeches view: each card's front from my copy, plain, its misses",
+           [c["cid"] for c in lv["gone"]] == [leech] and near in [c["cid"] for c in lv["near"]]
+           and "<b>" not in lv["gone"][0]["front"] and lv["gone"][0]["lapses"] == 8, f"{lv['gone'][0]['front']!r}, {t_v*1000:.0f} ms")
+
+        # Bring back: unsuspended, tag off, schedule kept, one undo step; Undo puts both back
+        due0, ivl0 = col.get_card(leech).due, col.get_card(leech).ivl
+        LF.bring_back(did, [leech])
+        c = col.get_card(leech)
+        step = col.undo_status().undo
+        ok("bring back: due again with its schedule, the leech tag off, one undo step",
+           c.queue == 2 and c.due == due0 and c.ivl == ivl0 and "leech" not in [x.lower() for x in c.note().tags]
+           and step == "Due Crew: bring back", f"queue {c.queue}, undo {step!r}")
+        col.undo()
+        c = col.get_card(leech)
+        ok("bring back: Edit › Undo suspends it and tags it again", c.queue == -1 and "leech" in c.note().tags)
+
+        # Learn it fresh: a new card again, counts from zero, unsuspended, tag off, one undo step
+        LF.fresh(did, leech)
+        c = col.get_card(leech)
+        step = col.undo_status().undo
+        ok("learn it fresh: new again, lapses and reps from zero, the tag off, one undo step",
+           c.type == 0 and c.queue == 0 and c.lapses == 0 and c.reps == 0 and "leech" not in c.note().tags
+           and step == "Due Crew: learn it fresh", f"type {c.type} queue {c.queue} lapses {c.lapses}, undo {step!r}")
+        col.undo()
+        c = col.get_card(leech)
+        ok("learn it fresh: Edit › Undo puts it back as it was", c.type == 2 and c.queue == -1 and c.lapses == 8 and "leech" in c.note().tags,
+           f"type {c.type} queue {c.queue} lapses {c.lapses}")
+
+        # the view's front is the card's own question: a reversed card's front is the note's back
+        rev_model = col.models.by_name("Basic (and reversed card)")
+        rn = col.new_note(rev_model)
+        rn["Front"], rn["Back"] = "the question side", "the answer side"
+        col.add_note(rn, did)
+        c2 = [c for c in rn.cards() if c.ord == 1][0]
+        c2.type, c2.queue, c2.lapses, c2.ivl, c2.due = 2, -1, 8, 3, sday
+        col.update_card(c2)
+        rn.tags.append("leech")
+        col.update_note(rn)
+        col.db.execute("INSERT INTO revlog (id, cid, usn, ease, ivl, lastIvl, factor, time, type) VALUES (?,?,-1,1,1,3,2500,9000,1)",
+                       cutoff * 1000 - 5000, c2.id)
+        LF._mine("leech_view").clear()
+        lv2 = LF.current(col, did, TF._deck_sql(col, did))
+        fr = {c["cid"]: c["front"] for c in lv2["gone"]}
+        ok("leeches view: a reversed card shows its own front (the note's back), never its answer",
+           fr.get(c2.id) == "the answer side", repr(fr.get(c2.id)))
+        cz = col.models.by_name("Cloze")
+        zn = col.new_note(cz)
+        zn["Text"] = "{{c1::Warfarin}} inhibits {{c2::VKOR}}"
+        col.add_note(zn, did)
+        z2 = [c for c in zn.cards() if c.ord == 1][0]
+        z2.type, z2.queue, z2.lapses, z2.ivl, z2.due = 2, -1, 9, 3, sday
+        col.update_card(z2)
+        zn.tags.append("leech")
+        col.update_note(zn)
+        col.db.execute("INSERT INTO revlog (id, cid, usn, ease, ivl, lastIvl, factor, time, type) VALUES (?,?,-1,1,1,3,2500,9000,1)",
+                       cutoff * 1000 - 4000, z2.id)
+        LF._mine("leech_view").clear()
+        fr = {c["cid"]: c["front"] for c in LF.current(col, did, TF._deck_sql(col, did))["gone"]}
+        ok("leeches view: a cloze card shows its own question, its answer hidden, the other cloze as Anki shows it",
+           "VKOR" not in (fr.get(z2.id) or "x") and "Warfarin" in (fr.get(z2.id) or ""), repr(fr.get(z2.id)))
+        # the view's cache moves with the collection: a real answer changes col.mod
+        from anki.scheduler.v3 import CardAnswer
+        col.decks.select(did)
+        m0 = col.mod
+        qc = col.sched.get_queued_cards()
+        if qc.cards:
+            card = col.get_card(qc.cards[0].card.id)
+            card.start_timer()
+            col.sched.answer_card(col.sched.build_answer(card=card, states=qc.cards[0].states, rating=CardAnswer.GOOD))
+        ok("a real answer moves col.mod (the leech view is worked out again)", bool(qc.cards) and col.mod != m0, f"{m0} -> {col.mod}")
+        # a card deleted after the view was drawn
+        col.remove_notes([col.get_card(near).nid])
+        try:
+            LF.fresh(did, near)
+            LF.bring_back(did, [near])
+            ok("a card deleted since the view was drawn: nothing happens, no error", True)
+        except Exception as e:
+            ok("a card deleted since the view was drawn: nothing happens, no error", False, repr(e))
+
+        # a Tag Only preset (Anki's default since 23.10): the eighth miss tags it and keeps it in my reviews
+        tdid = col.decks.id("Tag Deck")
+        tconf = col.decks.get_config(col.decks.add_config_returning_id("Tag Only"))
+        tconf["lapse"]["leechAction"], tconf["lapse"]["leechFails"] = 1, 8
+        col.decks.update_config(tconf)
+        td = col.decks.get(tdid)
+        td["conf"] = tconf["id"]
+        col.decks.save(td)
+        tn = col.new_note(model)
+        tn["Front"], tn["Back"] = "Tag only front", "back"
+        col.add_note(tn, tdid)
+        tc = tn.card_ids()[0]
+        col.db.execute("UPDATE cards SET type = 2, queue = 2, ivl = 10, due = ?, lapses = 7, reps = 20, factor = 2500 WHERE id = ?", sday, tc)
+        col.decks.select(tdid)
+        qc = col.sched.get_queued_cards()
+        if qc.cards and qc.cards[0].card.id == tc:
+            card = col.get_card(tc)
+            card.start_timer()
+            col.sched.answer_card(col.sched.build_answer(card=card, states=qc.cards[0].states, rating=CardAnswer.AGAIN))
+        c = col.get_card(tc)
+        tsql = TF._deck_sql(col, tdid)
+        tcnt = LF.counts(col, tsql)
+        ok("tag only: Anki's eighth miss tags it and keeps it in my reviews; the line counts it as one",
+           c.lapses == 8 and c.queue != -1 and "leech" in [x.lower() for x in c.note().tags] and tcnt == (0, 0, 1)
+           and len(col.find_cards('deck:"Tag Deck" tag:leech -is:suspended')) == 1, f"{c.lapses} lapses, queue {c.queue}, {tcnt}")
+        LF._mine("leech_view").clear()
+        tv = LF.view(col, tdid, tsql)
+        ok("tag only: the view lists it as still in my reviews, due today",
+           [x["cid"] for x in tv["kept"]] == [tc] and not tv["gone"] and not tv["near"] and tv["kept"][0]["due"] == 0, str(tv["kept"]))
+        LF.fresh(tdid, tc)
+        c = col.get_card(tc)
+        ok("tag only: Learn it fresh: a new card, the tag off, one undo step",
+           c.type == 0 and c.lapses == 0 and "leech" not in [x.lower() for x in c.note().tags] and LF.counts(col, tsql) == (0, 0, 0)
+           and col.undo_status().undo == "Due Crew: learn it fresh", f"type {c.type}, {c.note().tags}, {col.undo_status().undo}")
+
+        # the map by when I started them, and the shading by % right, on the real log
+        try:
+            t = time.perf_counter(); m = TF._map(col, did, deck_sql, cutoff); t_m = time.perf_counter() - t
+            ok("map: worked out on the real log", m is not None, f"{t_m*1000:.0f} ms, {type(m).__name__}")
+            t = time.perf_counter(); k, kby = TF._know(col, deck_sql, cutoff); t_k = time.perf_counter() - t
+            vals = list(k.values())
+            ok("know: each started card's share right, 0 to 1", vals and all(x is None or 0 <= x <= 1 for x in vals) and any(x is not None for x in vals),
+               f"{len(vals)} cards, {t_k*1000:.0f} ms, e.g. {vals[:3]}")
+            TF.cfg = lambda: {"ins_map_by": {str(did): __import__("due_crew.team", fromlist=["x"]).START_WAY}}
+            shown, by, know, ways = TF._map(col, did, deck_sql, cutoff)
+            ok("map by when I started them: a week a tile, picked", len(shown) >= 2 and any(w.get("on") and w["name"] == "When you started them" for w in ways),
+               f"{len(shown)} tiles: {[t.get('name') for t in shown][:4]}")
+        except Exception as e:
+            import traceback; traceback.print_exc()
+            ok("map / know on the real log", False, repr(e))
+
+        col.close()
+    finally:
+        for (m, k), v in keep.items():
+            setattr(m, k, v)
+        F.mw.col = keep_col
+    return failed
+
+
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory() as tmp:
         p = os.path.join(tmp, "big.anki2")
         make(p)
         failed = check(p)
+        failed += check_392(tmp)
     print(f"\n{len(failed)} failed" + (": " + "; ".join(failed) if failed else ""))
     sys.exit(1 if failed else 0)

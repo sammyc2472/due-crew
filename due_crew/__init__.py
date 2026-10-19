@@ -46,7 +46,7 @@ from .stats import heatmap as cached_heatmap
 from .stats.decks import gather_shared_decks
 from .stats.queries import StatsQueries
 from .ui import copy_text
-from . import account, bingo_flow, due_flow, plan_flow, rooms, sheets, together, two_buttons
+from . import account, ahead_flow, bingo_flow, due_flow, plan_flow, rooms, sheets, together, two_buttons
 from . import cards as crew_cards
 from .wrap import (_arrivals, _deck_deltas, _exam_eve_info, _mute_knocker, _save_wrap, _update_returns,
                    _update_wrap, _wrap_data, _wrap_info)
@@ -585,7 +585,8 @@ def _board_html(c):
                         sev=rooms.board_sev(c, due), closet=_state.get("closet_new"),
                         halloween=closet_flow.halloween_view(_state["labels"][0] if _state["labels"] else "",
                                                              _state["entries"], c),
-                        wrapped=_wrapped_banner(c), fridge=closet_flow.fridge(client().user_id),
+                        wrapped=_wrapped_banner(c), ahead=ahead_flow.board_line(c),
+                        fridge=closet_flow.fridge(client().user_id),
                         fridge_gone=closet_flow.gone())
 
 
@@ -668,6 +669,9 @@ def _on_did_render(deck_browser):
         from aqt.qt import QTimer
         QTimer.singleShot(0, lambda: _morning_now(waiting))
     together.show_luck_card()
+    if not _closing:
+        from aqt.qt import QTimer
+        QTimer.singleShot(1500, ahead_flow.check)  # 3.9.2: once a day, the board's line when reviews climb
     sheets.redraw()  # 3.9.1: a question that was open goes back up on the page drawn anew
     rooms.refresh_widgets()
 
@@ -950,10 +954,17 @@ def _on_js(handled, message, context):
         _closet(lambda cf: cf.put_back(parts[2]))  # 3.9.1: its Undo
         _swap(c)
     elif cmd == "emojipicker":
-        # 3.9.1: the Cheer window's "other": the computer's own picker; when it has none, the window's drawer
-        from .native_emoji import open_picker
-        if not open_picker():
-            mw.web.eval("window.dcCheerNoNative && window.dcCheerNoNative();")
+        # 3.9.1: the Cheer window's "other": the computer's own picker; when it has none, the window's drawer.
+        # 3.9.2: into our own box over its "pick one" (x:y:w:h), since the page can't take the pick
+        from . import native_emoji
+        at = [int(v) for v in parts[2:6] if v.isdecimal() and len(v) < 6]
+        x, y, w, h = at if len(at) == 4 else (0, 0, 64, 40)
+        if not native_emoji.catch(x, y, w, h, lambda e: app.board_eval(native_emoji.picked_js(e)),
+                                  lambda: app.board_eval("window.dcCheerUnpick && window.dcCheerUnpick();")):
+            app.board_eval("window.dcCheerNoNative && window.dcCheerNoNative();")
+    elif cmd == "emojipickeroff":
+        from .native_emoji import drop
+        drop()  # 3.9.2: the Cheer window closed, or other's box put away there
     elif cmd == "cheersend" and len(parts) > 2:
         from .social import send_from_window
         send_from_window(":".join(parts[2:]))  # 3.9.1: the Cheer window's Send
@@ -1243,7 +1254,7 @@ def _on_decks_saved(changed):
     refresh_board(shared_decks=decks)
 
 
-SETTINGS_CMDS = ("settab", "setclose", "set", "settabs", "setlabel", "setprivacy", "setexam",
+SETTINGS_CMDS = ("settab", "setclose", "set", "settabs", "setlabel", "setprivacy", "setexam", "setscope",
                  "setaway", "setreset", "setname", "setemoji", "setstatus", "setsquads",
                  "setsignout", "setdelete", "setsignin", "setfeedback")
 _share_push = {"n": 0}
@@ -1483,8 +1494,11 @@ def _apply_settings(changed, focus=None):
                (("room_chip_side", "right"), ("fifteen", True), ("sev", True), ("sev_break", "breathe"),
                 ("room_sounds", True)))  # 3.8.1; 3.9.1: the speaker comes and goes
     leeches = changed.get("due_leeches") is True and not c.get("due_leeches")
+    exam = "exam_date" in changed and str(changed["exam_date"] or "") != str(c.get("exam_date") or "")
     c.update(changed)
     save_cfg(c)
+    if exam:
+        ahead_flow.exam_moved()  # 3.9.2's QoL pass: a pause to it follows now, not tomorrow
     if changed.get("show_leaderboard") is False:
         _state["settings_tab"] = None
         _rerender()
@@ -1843,6 +1857,7 @@ if hasattr(gui_hooks, "top_toolbar_did_redraw"):  # Anki 2.1.54+
 # 3.9.1 (the efficiency run): a page sent once is sent again only on a new page
 gui_hooks.webview_will_set_content.append(app.on_set_content)
 gui_hooks.state_will_change.append(app.on_state_will_change)  # 3.9.1: the Decks page isn't up till it renders
+gui_hooks.state_will_change.append(ahead_flow.on_state)  # 3.9.2's audit: Stop new is set before I study
 if hasattr(gui_hooks, "theme_did_change"):
     gui_hooks.theme_did_change.append(rooms.on_theme)  # the widgets pick their colours as they're drawn
 

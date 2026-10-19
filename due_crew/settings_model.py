@@ -65,12 +65,29 @@ def change(parts, cfg, today=None):
         # "My numbers" comes back
         return {"show_up": arg == "showup", "paused": arg == "paused"}
     if cmd == "setexam":
+        # 3.9.2 (Sam's pick C1-A): an exam that's passed is kept (exam_last) when another takes its
+        # place, so the next one's scope can start after it; a new exam's scope starts from the default
+        # (3.9.2's audit: set on the exam's own day, it's kept too; an upcoming exam moved keeps its scope)
+        old = _day(cfg.get("exam_date"))
+        passed = bool(old) and old <= today.isoformat()
+        keep = {}
+        if passed and old > (_day(cfg.get("exam_last")) or ""):
+            keep["exam_last"] = old
+        if cfg.get("exam_since") and (passed or not old or arg == "off"):
+            keep["exam_since"] = ""
         if arg == "off":
-            return {"exam_date": ""}
+            return {"exam_date": "", **keep}
         day = _day(arg) or (_day(cfg.get("exam_date")) if arg == "on" else None)
         if arg == "on" and not day:
             day = (today + _dt.timedelta(days=7)).isoformat()
-        return {"exam_date": day} if day else None
+        return {"exam_date": day, **(keep if day != old else {})} if day else None
+    if cmd == "setscope":
+        # 3.9.2: what my exam covers: the cards I started since a day, the whole deck ("all"), or the
+        # default ("auto": since my last exam, when it was in the last 10 weeks)
+        if arg in ("all", "auto"):
+            return {"exam_since": "all" if arg == "all" else ""}
+        day = _day(arg)
+        return {"exam_since": day} if day and day <= today.isoformat() else None
     if cmd == "setaway":
         if arg == "off":
             return {"away_from": "", "away_to": ""}

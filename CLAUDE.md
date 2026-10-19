@@ -42,6 +42,12 @@ add-on.
   colours the studied days with the user's accent: the board's title is
   the one-line logo (inline SVG on the `--dc-*` tokens), and the stacked
   one tops the sign-in and welcome screens.
+- `poc/course_mac/` — Course on a Mac, a separate add-on proof of concept
+  (Sam's, on his Mac; not part of Due Crew and never talks to its server): a
+  block's calendar read, each lecture's cards found by Apple's on-device model
+  (a Swift helper built on the Mac, or the `fm` command) or plain rules, ticked
+  and opened; Copy as plan text is its one bridge to the builder. Its own
+  tests, `poc/tests/`, and `poc/README.md`; CI doesn't run them.
 - `tests/` — `python3 tests/test_due_crew.py` (client behavior against
   `fakes.FakeWorker`, a Python restatement of the Worker; standard library
   only). `worker/test/` is the Worker itself in real workerd with D1
@@ -106,6 +112,9 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   3.9.1: the fridge, the doodles I was sent and where I pinned them),
   `closet_days.json` (3.9.1: the closet's older days, kept so the revlog
   isn't read whole at every launch), my room sound and Wrapped.
+  3.9.2: Reviews ahead, its track record and the pause it asks for, and
+  the leeches view (plans.json: `new_off`, `ahead_trust`, `ahead_line_x`,
+  `leech_out`); my exam's scope rides my settings (`exam_last`, `exam_since`).
   Pip's closet is mine (an account key only I read); what my Pip has on
   rides with my accent to mutual friends, as names. A plan's squad (its team on the server) shares only
   that I showed up, my questions and answers, and bingo stamps; never my
@@ -156,6 +165,8 @@ same commit, each with its test:
   `_doodle` (a doodle cheer's strokes or sign, 3.9.1; a pen's colour is a
   place in `shapes.DOODLE_INKS`: add only at the end, and raise
   `DOODLE_PEN_MAX` in all three)
+- `ahead.GENERIC`'s cards ↔ `Reviews.CURVE` in builder.js (a typical card's
+  next six weeks, 3.9.2; the suite checks)
 - the Worker ↔ `tests/fakes.FakeWorker` (the suite's server)
 
 ## Where things live
@@ -175,7 +186,9 @@ same commit, each with its test:
 | Pip's closet (3.8.2): 61 things earned by showing up, coming back, together, plans, card care, seasons, secrets; one per place, a costume over the look; in place of the board (Yours by place, To earn by how); each crew row's, profile card's and (3.8.21) squadmate's Pip in the emoji's place (3.8.22: a plan card's squad line too, by `who` on `/board`'s `teams`; the review chip, a squadmate's card, Settings › You, bingo stamps; the site's account page and home feed, `pipFor`; the Friends dialog is names alone) | `closet.py` (pure: things, wear/clean/shown, facts from days and hours; 3.8.22: `halloween`/`spooky`), `closet_art.py` (the drawings), `closet_flow.py` (facts, tallies in wrap.json, a year of them for Wrapped, earned, worn, `halloween_view`), `board.closet_html`/`closet_line`/`row_sev`/`card_sev`/`squad_pip`/`halloween_html` | account keys `sev_look`, `sev_closet`; a mutual friend's look on /board (`lookOf` in `board.ts`) |
 | Plans (follow, morning, week, load; You › Plans) | `plans.py`, `schedule.py`, `plan_flow.py` | `plans.ts`, `library.ts`; `builder.js`, app.js |
 | A plan's squad (3.8.0, on the Squads tab; its team on the server) | `team.py`, `team_flow.py` | `team.ts`; `PlanSquad` in builder.js |
-| Insights (the deck's, a plan only sharpens it; You › Insights; the topic map, tiles open into parts; its card and text, shared by hand) | `team.py`, `team_flow.py`, `mapcard.py`, `ui/map_card_dialog.py` | never sent |
+| Insights (the deck's, a plan only sharpens it; You › Insights; the topic map, tiles open into parts, or by the week I started them (3.9.2); its card and text, shared by hand; my exam's scope, since my last exam (3.9.2)) | `team.py`, `team_flow.py`, `mapcard.py`, `ui/map_card_dialog.py` | never sent |
+| Reviews ahead (3.9.2: six weeks of a deck counted from my log; its ways and Stop new cards, Anki's today-only limit each morning; the track record; the board's line when reviews climb) | `ahead.py` (pure), `ahead_flow.py`, `board._ins_ahead`/`ahead_line` | never sent; the builder's `Reviews` (a typical curve) |
+| Leeches (3.9.2: in Insights' place; one button a card, Bring back, Learn it fresh, Leave it out) | `leech_flow.py`, `board._ins_leeches` | never sent (tips ride the stuck list) |
 | Due (the bubble's Today, Upcoming, Later; Study today, 3.8.0) | `due.py`, `due_flow.py`, `board._due_html` | settings doc |
 | Invites, codes | `__init__.py`, `ui/friends_dialog.py`, `ui/welcome_dialog.py` | `invites.ts`, `social.ts` |
 | Sign-in, sessions, quiet accounts | `ui/auth_dialog.py`, `backend/api.py` | `auth.ts`, `quiet.ts`, `mydata.ts` |

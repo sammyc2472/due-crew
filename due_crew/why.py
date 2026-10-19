@@ -57,6 +57,10 @@ def reason(c, ctx):
         left = ctx["left"](did)
         lim, room = int(left.get("new_limit") or 0), int(left.get("new") or 0)
         rank = int(ctx["rank"](c) or 1)
+        if left.get("paused"):
+            on = left["paused"] if isinstance(left["paused"], str) else deck  # the deck the stop is on, maybe a parent
+            return _r("new_paused", f"new:{did}", f"New: you stopped new cards in {on} (Insights › Reviews ahead).",
+                      None, did)
         if lim <= 0:
             return _r("new_off", f"new:{did}", f"New, and {deck} takes no new cards a day.",
                       ("more_new", did, rank), did)
@@ -151,6 +155,9 @@ def _many(rs, ctx):
         return f"{n:,} in {deck}, a filtered deck: they show when you study it."
     if rs[0]["group"].startswith("new:"):
         left = ctx["left"](did)
+        if "new_paused" in kinds:
+            on = left["paused"] if isinstance(left.get("paused"), str) else deck
+            return f"{n:,} new: you stopped new cards in {on} (Insights › Reviews ahead)."
         if "new_off" in kinds:
             return f"{n:,} new, and {deck} takes no new cards a day."
         if int(left.get("new") or 0) <= 0:
