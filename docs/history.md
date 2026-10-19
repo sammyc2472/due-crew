@@ -2934,3 +2934,12 @@ every release that changes how something works.
   builder: next year's copy never "(next year) (next year)" or "(copy)
   (next year)", cut at a word; offline and "no dates" said as themselves;
   a break between a plan's parts reads "0 for 24 weeks".
+- 3.9.2, no error window offline (Sam's report, 19 Oct: Anki's error window
+  with "GET /settings failed"). `app._bg` printed every exception's
+  traceback, and Anki shows anything on stderr in its error window, so a
+  settings pull (or any background request) that got no answer looked like
+  a crash. A TransportError is now one line on stdout, as the refresh's
+  already was; a real bug still prints its traceback.
+  `test_offline_stays_off_stderr_v392` runs `_bg` both ways and checks no
+  handler that prints a traceback around a request lets a TransportError
+  reach it.

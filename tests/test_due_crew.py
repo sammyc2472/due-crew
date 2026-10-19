@@ -17705,6 +17705,69 @@ def test_scope_map_and_words_392():
         F._today, F._pcfg, F._psave, mw.col, TF.cfg, _state["insights"] = saved
 
 
+def test_offline_stays_off_stderr_v392():
+    """3.9.2 (Sam's report): a settings pull that got no answer printed its
+    traceback, and Anki shows anything on stderr in its error window. A
+    background job's TransportError is one line on stdout; a real bug still
+    prints its traceback. And no handler that prints a traceback around a
+    request lets a TransportError reach it."""
+    import ast, contextlib, io, pathlib, threading
+    from due_crew import app as appmod
+    from due_crew.backend.shapes import TransportError
+
+    def run(job):
+        got, done, err, out = [], threading.Event(), io.StringIO(), io.StringIO()
+        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(out):
+            appmod._bg(job, lambda r: (got.append(r), done.set()))
+            done.wait(5)
+        return got, err.getvalue(), out.getvalue()
+
+    def offline():
+        raise TransportError("GET /settings failed")
+
+    def bug():
+        raise ValueError("a real bug")
+
+    got, err, out = run(offline)
+    check("offline: nothing on stderr (no error window), one line on stdout, None delivered",
+          got == [None] and err == "" and "GET /settings failed" in out and "Traceback" not in out, (got, err, out))
+    got, err, out = run(bug)
+    check("a real bug still prints its traceback, and delivers None",
+          got == [None] and "Traceback" in err and "a real bug" in err, (got, err))
+    got, err, _ = run(lambda: 7)
+    check("a job that works delivers its result", got == [7] and err == "", (got, err))
+
+    root = pathlib.Path(__file__).resolve().parent.parent / "due_crew"
+    cls = next(n for n in ast.parse((root / "backend" / "api.py").read_text()).body
+               if isinstance(n, ast.ClassDef) and n.name == "ApiClient")
+    uses = {f.name: {c.func.attr for c in ast.walk(f) if isinstance(c, ast.Call)
+                     and isinstance(c.func, ast.Attribute) and isinstance(c.func.value, ast.Name)
+                     and c.func.value.id == "self"} for f in cls.body if isinstance(f, ast.FunctionDef)}
+    net, grew = {"_call"}, True
+    while grew:
+        more = {m for m, cs in uses.items() if cs & net} - net
+        net |= more
+        grew = bool(more)
+    loud = []
+    for f in sorted(root.rglob("*.py")):
+        if "backend" in f.parts:
+            continue
+        for t in ast.walk(ast.parse(f.read_text())):
+            if not isinstance(t, ast.Try):
+                continue
+            asks = any(isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute) and c.func.attr in net - {"_call"}
+                       for b in t.body for c in ast.walk(b))
+            seen_te = False
+            for h in t.handlers:
+                names = {getattr(e, "id", "") for e in (h.type.elts if isinstance(h.type, ast.Tuple) else [h.type])} if h.type else {"Exception"}
+                seen_te = seen_te or "TransportError" in names
+                prints = any(isinstance(c, ast.Call) and getattr(c.func, "attr", "") == "print_exc" for c in ast.walk(h))
+                if asks and prints and "Exception" in names and not seen_te:
+                    loud.append(f"{f.name}:{h.lineno}")
+    check("every handler that prints a traceback around a request catches TransportError first",
+          not loud and len(net) > 20, loud)
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

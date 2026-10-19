@@ -12,6 +12,7 @@ import traceback
 from aqt import mw
 
 from .backend.api import ApiClient
+from .backend.shapes import TransportError
 
 
 def _read_version():
@@ -66,11 +67,17 @@ _client_profile = None
 
 def _bg(job, done=None):
     """Run job() off the main thread; deliver its result to done(result) on
-    the main thread. An exception prints its traceback and delivers None,
-    so a caller treating None as failure gets both the failure and a log."""
+    the main thread. An exception delivers None, so a caller treating None
+    as failure gets the failure. A TransportError (no network, the server
+    busy, signed out) is one line on stdout: Anki shows anything on stderr
+    in its error window, and being offline isn't an error (3.9.2: a settings
+    pull that got no answer did). Anything else prints its traceback."""
     def worker():
         try:
             result = job()
+        except TransportError as e:
+            print(f"due crew: {e}")
+            result = None
         except Exception:
             traceback.print_exc()
             result = None
