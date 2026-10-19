@@ -139,9 +139,7 @@ def test_for_everyone():
     labs): one request on the click, my plans; labs on or off."""
     store = world({"sam": "Sammy", "dre": "Dre"})
     store.admins.add("sam")
-    sam, dre = new_client(store, "sam"), new_client(store, "dre")
-    check("everyone: the server still says who the admin is (other pages ask it)",
-          R.is_admin(sam) is True and R.is_admin(dre) is False)
+    dre = new_client(store, "dre")  # not the admin: the window is everyone's
     from due_crew.planner import flow
     shown, tips = [], []
     saved = (flow.enabled, flow.client, flow._bg, flow.show_plans, flow.tooltip, flow.mw.col, flow.plan_flow._signed_in)
@@ -1037,7 +1035,7 @@ def test_rules_of_the_road():
     routes = set(re.findall(r'_call\((?:client, )?"(GET|PUT|POST|PATCH|DELETE)", f?"([^"]+)"', src["remote.py"]))
     builder = open(os.path.join(REPO, "site", "public", "builder.js")).read()
     check("road: nothing new on the server: routes the builder and the site use already",
-          routes == {("GET", "/auth/me"), ("GET", "/plans/{pid}"), ("PUT", "/plans/{pid}"), ("POST", "/plans/{pid}/undo"),
+          routes == {("GET", "/plans/{pid}"), ("PUT", "/plans/{pid}"), ("POST", "/plans/{pid}/undo"),
                      ("POST", "/plans"), ("GET", "/plans/{pid}/log"), ("GET", "/plans/{pid}/posts"), ("POST", "/plans/{pid}/posts"),
                      ("DELETE", "/plans/{pid}/posts/{int(post_id)}"), ("GET", "/plans/{pid}/progress"), ("PUT", "/plans/{pid}/listed"),
                      ("POST", "/plans/{pid}/copy"), ("DELETE", "/plans/{pid}"), ("GET", "/friends"), ("POST", "/plans/{pid}/editors"),

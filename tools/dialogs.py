@@ -1257,9 +1257,6 @@ def main(out):
         pid, _code = STORE.add_plan("sam", "MS2 Block 2", "Big Step 1", units)
         STORE.plans[pid]["doc"]["events"] = [{"id": "e1", "day": day(4), "name": "Heme quiz"}]
         next(u for u in STORE.plans[pid]["doc"]["units"] if u["id"] == "u1")["for"] = "e1"  # add_plan drops a `for` with no event yet
-        STORE.admins.add("sam")
-        if not PR.is_admin(CLIENT):
-            raise RuntimeError("planner: the admin's account isn't one")
 
         class Ops(PF.Ops):
             """The window's asks, on this render's collection and client, at once."""

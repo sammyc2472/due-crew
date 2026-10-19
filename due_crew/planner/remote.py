@@ -2,10 +2,10 @@
 off the main thread (they raise TransportError like every request). All of
 them are routes the site's builder uses already: nothing new on the server.
 
-Who may open the window is asked of the server (GET /auth/me says admin for
-the admin's account, worker/src/notices.isAdmin); the window opens only for
-that account. A save is the builder's: PUT /plans/{id} with the version it
-started from; the server keeps what only the author's Anki sends.
+Anyone signed in opens the window (3.9.3); what each may change is the
+server's to say, as it says it to the site. A save is the builder's: PUT
+/plans/{id} with the version it started from; the server keeps what only
+the author's Anki sends.
 """
 
 import json
@@ -22,18 +22,9 @@ SAVE_WORDS = {
     "no_plan": "This plan was deleted.",
     "too_big": "The plan is too big to save.",
     "slow_down": "That's a lot of saves today. Try again tomorrow.",
-    "too_many_plans": "You have as many plans as one account can. Delete one on duecrew.com first.",
+    "too_many_plans": "You have 50 plans, as many as one account keeps. Delete one first (its Settings › Delete this plan…).",
     "nothing_to_undo": "There's nothing to undo.",
 }
-
-
-def is_admin(client):
-    """True for the admin's account (GET /auth/me's admin), False when the
-    server says it isn't, None when it couldn't say (asked again next time)."""
-    status, data = client._call("GET", "/auth/me")
-    if status != 200:
-        return None
-    return data.get("admin") is True
 
 
 def _refused(data):
@@ -182,8 +173,7 @@ SETTINGS_WORDS = dict(SAVE_WORDS, **{
     "too_many_editors": "A plan has up to 10 co-authors.",
     "not_crew": "Co-authors come from your crew: you add each other.",
     "not_coauthor": "Only a co-author who said yes can be handed it.",
-    "too_many_plans": "You have 50 plans. Delete one first.",
-    "slow_down": "That's a lot of changes. Try again in an hour.",
+    "slow_down": "That's a lot of changes for now. Try again later.",
 })
 
 
