@@ -3039,7 +3039,10 @@ def apply_catch():
             continue
         try:
             deck = col.decks.get(int(st["deck_id"]))
-            deck["newLimitToday"] = {"limit": base + int(c.get("extra") or 0), "today": int(col.sched.today)}
+            want = {"limit": base + int(c.get("extra") or 0), "today": int(col.sched.today)}
+            if deck.get("newLimitToday") == want:
+                continue  # already so: no save, no undo step of its own (3.9.2's QoL pass)
+            deck["newLimitToday"] = want
             col.decks.save(deck)
         except Exception:
             traceback.print_exc()

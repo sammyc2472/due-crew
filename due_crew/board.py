@@ -2292,12 +2292,16 @@ def _ins_ahead(did, a, deck_name=""):
         if k == on and k != "pace":
             to_exam = bool(pz and (pz.get("exam") or pz.get("kind") == "week") and exd)
             start = int((pz or {}).get("from") or 0)
+            # 3.9.2's QoL pass: a start past the chart still named; before it starts, they aren't off yet
             act = (f'<span>No new cards in {name} '
-                   + (f"from {_ins_dname(days[7 + start], long=True)} " if 0 < start < len(days) - 7 else "")
+                   + (f"from {_ins_dname(_day_after(days[7], start), long=True)} " if start > 0 else "")
                    + (f"till your exam, {exd}" if to_exam else "till you turn them back on")
-                   + f'.{held(w)}</span><a class="bt" href="#" onclick="{_pycmd(f"insaheadon:{did}")}">Turn new cards back on</a>')
+                   + f'.{held(w)}</span><a class="bt" href="#" onclick="{_pycmd(f"insaheadon:{did}")}">'
+                   + ("Keep them on" if start > 0 else "Turn new cards back on") + '</a>')
         elif k == "pace" and on != "pace":
-            act = f'<span>From today, new cards at your pace.</span><a class="bt" href="#" onclick="{_pycmd(f"insaheadon:{did}")}">Turn new cards back on</a>'
+            later = int((pz or {}).get("from") or 0) > 0  # the stop hasn't begun: they're on today
+            act = (f'<span>{"New cards stay on, at your pace." if later else "From today, new cards at your pace."}</span>'
+                   f'<a class="bt" href="#" onclick="{_pycmd(f"insaheadon:{did}")}">{"Keep them on" if later else "Turn new cards back on"}</a>')
         elif k == "pace":
             act = ""
         elif k == "unlocked":
@@ -2544,7 +2548,12 @@ def _insights_html(did, v):
                 f'<a href="#" onclick="{_pycmd(f"instwo:{did}")}">Try two buttons</a> '
                 f'<a class="q" href="#" onclick="{_pycmd(f"inshardno:{did}")}">Not now</a></div>')
     lee, near, kept = int(v.get("leeches") or 0), int(v.get("near") or 0), int(v.get("kept") or 0)
-    if lee or near or kept:
+    lout = int(v.get("leech_out") or 0)
+    if not (lee or near or kept) and lout:
+        # 3.9.2's QoL pass: every one left out, the way back to them still here
+        out += (f'<div class="iline"><b>{lout:,}</b> leech{"es" if lout != 1 else ""} you left out &middot; '
+                f'<a href="#" onclick="{_pycmd(f"insleeches:{did}")}">See them</a></div>')
+    elif lee or near or kept:
         # 3.8.0: from the plan card, a leech is the deck's; 3.9.2: and the ones a miss away, a view of their own,
         # and the ones Anki tagged and kept showing (Tag Only, its default since 23.10)
         les = lambda n: f"leech{'es' if n != 1 else ''} "  # noqa: E731
@@ -5030,6 +5039,17 @@ CHEER_WINDOW_JS = r"""
     var font = (dcStyle && dcStyle.fontFamily) || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
     var W = 300, H = 170, MAXP = 2000, MAXS = 200, SIGN = 24, NOTE = 80, INK = '__INK__';
     var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // 3.9.2's QoL pass: Tab wraps inside box (the window over the board), never onto the board under it
+    function trap(e, box) {
+        var f = Array.prototype.filter.call(box.querySelectorAll('button, input, a[href], [tabindex="0"]'),
+            function (x) { return !x.disabled && x.offsetParent !== null; });
+        if (!f.length) { return; }
+        var at = f.indexOf(document.activeElement);
+        if (at < 0 || (e.shiftKey && at === 0) || (!e.shiftKey && at === f.length - 1)) {
+            e.preventDefault();
+            (e.shiftKey ? f[f.length - 1] : f[0]).focus();
+        }
+    }
     function el(tag, cls, text) {
         var e = document.createElement(tag);
         if (cls) { e.className = cls; }
@@ -5117,7 +5137,7 @@ CHEER_WINDOW_JS = r"""
         var b = el('button', null, x);
         b.type = 'button';
         b.setAttribute('aria-label', 'Send ' + x);
-        b.addEventListener('click', function () { unpick(); choose(x); });  // 3.9.2's audit: Anki's box goes too
+        b.addEventListener('click', function () { unpick(); choose(x, true); });  // 3.9.2's audit: Anki's box goes too
         quick.push([x, b]);
         em.appendChild(b);
     });
@@ -5207,7 +5227,9 @@ CHEER_WINDOW_JS = r"""
             first = it.done ? '' : it.value.segment;
         } else if (s) { first = Array.from(s)[0]; }
         var low = [0xA9, 0xAE, 0x203C, 0x2049, 0x2122, 0x2139];  // shapes.EMOJI_LOW (the suite checks): © ® ‼ ⁉ ™ ℹ
-        return first && !/[A-Za-z0-9\s]/.test(first) && (first.charCodeAt(0) >= 0x2190 || low.indexOf(first.charCodeAt(0)) >= 0) ? first : '';
+        // a letter or digit of any script (あ, 中, ①) isn't one either (3.9.2's QoL pass; shapes._first_grapheme the same)
+        return first && !/[A-Za-z0-9\s]/.test(first) && !/^[\p{L}\p{N}]/u.test(first)
+            && (first.charCodeAt(0) >= 0x2190 || low.indexOf(first.charCodeAt(0)) >= 0) ? first : '';
     }
     function filter() {
         var q = find.value.trim().toLowerCase(), shown = 0;
@@ -5238,14 +5260,14 @@ CHEER_WINDOW_JS = r"""
         drawer.style.display = 'none';
         other.setAttribute('aria-expanded', 'false');
     }
-    function choose(x) {
+    function choose(x, stay) {
         var q = V.emojis.indexOf(x) >= 0;
         other.textContent = q ? 'other' : x;
         other.className = q ? 'ot' : 'ot on';
         other.setAttribute('aria-label', q ? 'Any other emoji' : 'Send ' + x + ' (choose another)');
         pick(x);
         shut();
-        other.focus();
+        if (!stay) { other.focus(); }  // a quick pick keeps the key on the emoji pressed (3.9.2's QoL pass)
     }
     function pick(x) {
         emoji = x;
@@ -5361,6 +5383,7 @@ CHEER_WINDOW_JS = r"""
     signIn.maxLength = SIGN;
     signIn.placeholder = "you've got this";
     signIn.setAttribute('aria-label', 'What your Pip holds up');
+    signIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); send(); } });  // as the note's
     signIn.addEventListener('input', function () {
         var s = signIn.value.replace(/\s+/g, ' ').trim();
         words.textContent = s || "you've got this";
@@ -5417,10 +5440,11 @@ CHEER_WINDOW_JS = r"""
             return out;
         }) };
     }
-    var moved = false;
+    var moved = false, was = document.activeElement;  // what opened it gets the key back (3.9.2's QoL pass)
     function close() {
         document.removeEventListener('keydown', esc, true);
         unpick();  // 3.9.2: other's box, if it's up, goes with the window
+        if (was && was.isConnected && was.focus) { try { was.focus(); } catch (x) { /* gone with a redraw */ } }
         back.removeAttribute('id');  // the bars' shade goes with it (VEIL_WATCH_JS)
         // moved: motion.js opened it and takes it out its own way (a fade here first had it
         // snap back for a frame, its fade unfilled, then go again)
@@ -5440,6 +5464,7 @@ CHEER_WINDOW_JS = r"""
     back.addEventListener('pointerdown', function (e) { downOnBack = e.target === back; });
     back.addEventListener('click', function (e) { if (e.target === back && downOnBack) { close(); } });
     function esc(e) {
+        if (e.key === 'Tab') { trap(e, card); return; }  // 3.9.2's QoL pass: Tab stays in the window, never on the board under it
         if (e.key !== 'Escape') { return; }
         e.stopPropagation();
         if (pickIn.style.display !== 'none') { unpick(); other.focus(); }
@@ -5492,8 +5517,9 @@ FRIDGE_CSS = """
     /* 3.9.2 (Sam: "pips get cutoff on the polaroids"): Pip's head, hat and what it holds reach past its slot,
        so the line never clips (only the name does) and gives the head room under the photo */
     #dc-fridge .fw .sv-slot { --sv-a: var(--fz-acc); flex: none; margin: 9px 2px 0 4px; }
-    #dc-fridge .fx { position: absolute; top: 0; right: 3px; display: none; color: var(--fz-muted); text-decoration: none; font-size: 15px; line-height: 1; }
-    #dc-fridge .fz:hover .fx, #dc-fridge .fz:focus-within .fx { display: block; }
+    #dc-fridge .fx { position: absolute; top: 0; right: 3px; display: block; opacity: 0; color: var(--fz-muted); text-decoration: none; font-size: 15px; line-height: 1; }
+    /* 3.9.2's QoL pass: hidden by opacity, not display, so Tab reaches it (and shows it) */
+    #dc-fridge .fz:hover .fx, #dc-fridge .fz:focus-within .fx, #dc-fridge .fx:focus { opacity: 1; }
     /* 3.9.1 (Sam's pick, "Pip at rest" C): still until pointed at, as crew rows */
     #dc-fridge .fz:not(:hover) .sv, #dc-fridge .fz:not(:hover) .sv * { animation: none !important; }
     /* 3.9.1: where one was just taken down, its Undo for a few seconds, then gone (--fg: how long it's been up) */
@@ -5898,10 +5924,11 @@ SHEET_JS = r"""
         if (tick) { p.check = tick.checked; }
         say(p);
     }
-    var moved = false;
+    var moved = false, was = document.activeElement;  // what asked gets the key back (3.9.2's QoL pass)
     function close() {
         document.removeEventListener('keydown', esc, true);
         back.removeAttribute('id');  // the bars' shade goes with it (VEIL_WATCH_JS)
+        if (was && was.isConnected && was.focus) { try { was.focus(); } catch (x) { /* gone with a redraw */ } }
         // moved: motion.js opened it and takes it out its own way, back into what was clicked
         if (moved || still || !back.animate) { back.remove(); return; }
         back.style.pointerEvents = 'none';
@@ -5913,9 +5940,20 @@ SHEET_JS = r"""
     back.addEventListener('pointerdown', function (e) { downOnBack = e.target === back; });
     back.addEventListener('click', function (e) { if (e.target === back && downOnBack) { say({ ok: false }); } });
     function esc(e) {
+        if (e.key === 'Tab') { trap(e); return; }  // 3.9.2's QoL pass: Tab stays in the sheet, never on the board under it
         if (e.key !== 'Escape') { return; }
         e.stopPropagation();
         say({ ok: false });
+    }
+    function trap(e) {
+        var f = Array.prototype.filter.call(card.querySelectorAll('button, input, a[href], [tabindex="0"]'),
+            function (x) { return !x.disabled && x.offsetParent !== null; });
+        if (!f.length) { return; }
+        var at = f.indexOf(document.activeElement);
+        if (at < 0 || (e.shiftKey && at === 0) || (!e.shiftKey && at === f.length - 1)) {
+            e.preventDefault();
+            (e.shiftKey ? f[f.length - 1] : f[0]).focus();
+        }
     }
     document.addEventListener('keydown', esc, true);
     document.body.appendChild(back);

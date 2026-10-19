@@ -314,7 +314,7 @@ def _reset_runtime(keep_sync=False):
                   wrapped_open=None,  # 3.9.0: your Wrapped, in the board's place
                   two_tried=False,  # 3.9.1
                   # 3.9.2's audit: keyed by deck id, and the Default deck is 1 in every collection
-                  leech_view={}, leech_open={}, ahead_day={}, ahead_line=None, ahead_asked=set())
+                  leech_view={}, leech_open={}, leech_line={}, map_at={}, ahead_day={}, ahead_line=None, ahead_asked=set())
     _pending_cheers.clear()
 
 

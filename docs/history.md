@@ -2903,3 +2903,34 @@ every release that changes how something works.
   (©, ®, ‼, ⁉, ™, ℹ, as the computer's picker sends them:
   `shapes.EMOJI_LOW`, `native_emoji.first_emoji`, the window's `oneEmoji`);
   a keycap (1️⃣) still isn't one, as the Worker counts.
+- 3.9.2, the last QoL pass (Sam: "last check for little things"; three
+  reviewers and a look at every new screen). The release blocker it found:
+  the Cheer window did nothing (a `var moved` overwrote the scroll/resize
+  handler the audit added, so every close threw); the handler is `away`
+  and the suite now runs the window in node (`tests/fake_dom.js`, real
+  EventTargets) through a quick pick and Send, Cancel, Esc, the backdrop
+  and the computer's picker. Stop new: a pause that ends or moves (the exam
+  moved or went, here or from another computer) takes today's 0 off at once
+  and puts a catch-up's limit back (`ahead_flow.exam_moved`, the morning's
+  idle pauses); Turn back on says so, is one undo step with the catch-up's
+  limit in it, and the plan card's line follows; a stop that hasn't begun
+  says "Keep them on", is named from its own day even past the chart, and
+  never shows as "Paused" or compares a number with itself; an exam today
+  isn't one ahead. Why names the deck the stop is on. Leeches: Insights'
+  line counts as the collection is now (`leech_flow.line_counts`), keeps a
+  way back when every one is left out, says "one miss from a leech" alone,
+  and a sync's new tips work the open view out again; See ahead opens
+  Insights, not a leeches view left open; the daily climb check waits when
+  no board is drawn. Words: one card / one time, days with their month, an
+  old leech's year, the scope's links apart and its picker stopping at
+  today, the minutes with the weeks they're for ("1h 13m"), the map's key
+  wrapping between its parts at phone width and naming the bar only when
+  one shows, a leech's last day by my rollover. The Cheer window: England's,
+  Scotland's and Wales's flags whole, a letter of any script (あ, 中) never
+  an emoji (Python and the page agree, the suite runs both), Tab stays in
+  the window and the board's sheets, focus goes back to what opened them,
+  a quick pick keeps the key, Enter in Sign sends, the computer's picker
+  hands the keys back to the page; a Polaroid's × is reachable by Tab. The
+  builder: next year's copy never "(next year) (next year)" or "(copy)
+  (next year)", cut at a word; offline and "no dates" said as themselves;
+  a break between a plan's parts reads "0 for 24 weeks".

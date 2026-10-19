@@ -1494,8 +1494,11 @@ def _apply_settings(changed, focus=None):
                (("room_chip_side", "right"), ("fifteen", True), ("sev", True), ("sev_break", "breathe"),
                 ("room_sounds", True)))  # 3.8.1; 3.9.1: the speaker comes and goes
     leeches = changed.get("due_leeches") is True and not c.get("due_leeches")
+    exam = "exam_date" in changed and str(changed["exam_date"] or "") != str(c.get("exam_date") or "")
     c.update(changed)
     save_cfg(c)
+    if exam:
+        ahead_flow.exam_moved()  # 3.9.2's QoL pass: a pause to it follows now, not tomorrow
     if changed.get("show_leaderboard") is False:
         _state["settings_tab"] = None
         _rerender()

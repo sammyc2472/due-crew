@@ -132,6 +132,11 @@ def drop():
     box, _box["w"] = _box["w"], None
     if box is not None:
         try:
+            if box.hasFocus():
+                # 3.9.2's QoL pass: the keys back to the page (the Cheer window), not to whatever Qt picks next
+                from aqt import mw
+                if getattr(mw, "web", None) is not None:
+                    mw.web.setFocus()
             box.hide()
             box.deleteLater()
         except RuntimeError:

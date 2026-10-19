@@ -131,6 +131,21 @@ def counts(col, deck):
     return len(gone), len(_near(col, deck, out)), len(_kept(col, deck, out))
 
 
+def line_counts(col, did, deck):
+    """Insights' line: {leeches, near, kept, leech_out}, worked out again when
+    the collection or what I left out changed (3.9.2's QoL pass: the line
+    kept Insights' ten-minute numbers while the view it opens was current)."""
+    out = _out()
+    key = (int(did), getattr(col, "mod", None), hash(frozenset(out)))
+    have = _mine("leech_line").get(int(did))
+    if have and have[0] == key:
+        return have[1]
+    gone, near, kept = counts(col, deck)
+    got = {"leeches": gone, "near": near, "kept": kept, "leech_out": n_out(col, deck)}
+    _mine("leech_line")[int(did)] = (key, got)
+    return got
+
+
 def _near(col, deck, out=()):
     rows = col.db.all(f"SELECT id, lapses, CASE WHEN odid THEN odid ELSE did END FROM cards WHERE id IN ({deck}) "
                       f"AND queue = 2 AND type = 2 AND lapses >= 1")
@@ -403,14 +418,16 @@ def current(col, did, deck, since=None):
         mod = int(col.mod)
     except Exception:
         mod = None
-    if have is None or have.get("mod") != mod or have.get("since") != since:
+    # 3.9.2's QoL pass: and when a sync brought the crew's tips and who has it down (a new session["cards"])
+    tips = id(app.client().session.get("cards"))
+    if have is None or have.get("mod") != mod or have.get("since") != since or have.get("tips") != tips:
         try:
             have = view(col, did, deck, since)
             have["out"] = n_out(col, deck)
         except Exception:
             traceback.print_exc()
             have = _empty()
-        have.update(mod=mod, since=since)
+        have.update(mod=mod, since=since, tips=tips)
         _mine("leech_view")[int(did)] = have
     return have
 

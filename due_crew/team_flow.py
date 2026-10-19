@@ -547,6 +547,13 @@ def you_view(c):
     two = ("tried" if _state.get("two_tried") else "on") if c.get("two_buttons") else ""
     out = {"decks": decks, "did": d["did"], "exam": exam, "view": dict(view, map_at=at, two=two)}
     from . import leech_flow
+    if mw.col and "leeches" in view:
+        # 3.9.2's QoL pass: the line's counts as the collection is now (the view it opens is), not as
+        # Insights' ten minutes kept them; and the ones I left out, so their way back stays reachable
+        try:
+            out["view"].update(leech_flow.line_counts(mw.col, d["did"], _deck_sql(mw.col, d["did"])))
+        except Exception:
+            traceback.print_exc()
     if leech_flow.is_open(d["did"]) and mw.col:
         # 3.9.2: the leeches view; "on your exam" when the exam's scope is narrower than the deck
         since = (view.get("aim") or {}).get("since") if (view.get("aim") or {}).get("kind") == "exam" else ""
@@ -1123,6 +1130,7 @@ def go_insights(did):
     c = cfg()
     c["due_tab"] = "insights"
     c["due_fold"] = {"day": _today(), "folded": False}
+    (_state.get("leech_open") or {}).pop(int(did), None)  # 3.9.2's QoL pass: Insights itself, not a leeches view left open
     if "insights" in (c.get("hidden_tabs") or []):
         c["hidden_tabs"] = [k for k in c["hidden_tabs"] if k != "insights"]
     if mw.col and mw.col.decks.get(did, default=False):

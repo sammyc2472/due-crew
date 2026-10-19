@@ -194,12 +194,15 @@ def _decks(col, did):
     return [d for d in ids if _pf()._deck_ok(col, d)]
 
 
-def _set_zero(col, did, on):
+def _set_zero(col, did, on, keep=(), then=None):
     """Today's new cards to 0 on the deck and its subdecks (on), or today's
     0 taken off again: Anki's today-only limit, the deck's options as they
-    were. True when a deck changed."""
+    were; never on a deck in keep (another pause running today has it);
+    then(), run inside the same undo step. True when a deck changed."""
     today, todo = int(col.sched.today), []
     for d in _decks(col, did):
+        if d in keep:
+            continue
         deck = col.decks.get(d)
         t = deck.get("newLimitToday") if isinstance(deck.get("newLimitToday"), dict) else {}
         mine = t.get("today") == today and t.get("limit") == 0
@@ -219,6 +222,8 @@ def _set_zero(col, did, on):
         pos = None
     for deck in todo:
         col.decks.save(deck)
+    if then:
+        then()  # 3.9.2's QoL pass: a catch-up's limit back in the same step, not a bare "Update Deck"
     if pos is not None:
         try:
             col.merge_undo_entries(pos)
@@ -238,23 +243,34 @@ def apply_morning():
     if not today:
         return False
     pc = _pf()._pcfg()
-    offs, keep, changed = _off(), {}, False
+    offs, keep, changed, idle, on = _off(), {}, False, [], set()
     for key, off in offs.items():
         if not col.decks.get(int(key), default=False):
             continue
         stop = A.stop_of(off, _days_to(exam, today) if exam else None, today)
-        if stop is None:
-            continue  # over: forgotten
-        keep[key] = off
-        if stop[0] <= 0 <= stop[1]:
+        if stop is not None:
+            keep[key] = off  # else over: forgotten
+        if stop is not None and stop[0] <= 0 <= stop[1]:
+            on |= set(_decks(col, int(key)))
             try:
                 changed = _set_zero(col, int(key), True) or changed
             except Exception:
                 traceback.print_exc()
+        else:
+            idle.append(int(key))
+    # 3.9.2's QoL pass: one over or not today (its exam moved or went) takes today's 0 off, the catch-up's back
+    lifted = False
+    for key in idle:
+        try:
+            lifted = _set_zero(col, key, False, keep=on) or lifted
+        except Exception:
+            traceback.print_exc()
+    if lifted:
+        _pf().apply_catch()
     if keep != offs:
         pc["new_off"] = keep
         _pf()._psave(pc)
-    return changed
+    return changed or lifted
 
 
 def on_state(new_state, *_args):
@@ -336,17 +352,34 @@ def start_new(did):
     _pf()._psave(pc)
     if col and col.decks.get(int(did), default=False):
         try:
-            if _set_zero(col, int(did), False):
-                _pf().apply_catch()
+            if _set_zero(col, int(did), False, then=_pf().apply_catch):
                 _pf()._after_change()
         except Exception:
             traceback.print_exc()
+        tooltip(f"New cards back on in {str(col.decks.name(int(did)) or '').split('::')[-1]}.")
     _forget(did)
+
+
+def exam_moved():
+    """3.9.2's QoL pass: my exam moved or went (here or from another
+    computer): a pause to it follows today, its 0 on or off now."""
+    if mw.col and _off():
+        try:
+            if apply_morning():
+                _pf()._after_change()
+        except Exception:
+            traceback.print_exc()
+        _state["insights"] = {}
+        _state["ahead_line"] = None
 
 
 def _forget(did):
     (_state.get("insights") or {}).pop(int(did), None)
     _state["ahead_line"] = None  # the line again, with the pause in it
+    try:
+        _pf().refresh_progress()  # 3.9.2's QoL pass: the plan card's line follows (stopped, or Raise)
+    except Exception:
+        traceback.print_exc()
     app.swap(cfg())
 
 
@@ -429,8 +462,8 @@ def check():
     """Once per Anki day, after the board draws: my most reviewed deck's
     forecast, for the board's line (a plan on it: Insights' own, its
     dates in it); a redraw only when there's a line."""
-    if not mw.col:
-        return
+    if not mw.col or not _state.get("board_shown") or _state.get("entries") is None:
+        return  # 3.9.2's QoL pass: no board drawn (signed out, or it's off), nothing to put a line on
     today = _today()
     if not today or (_state.get("ahead_line") or {}).get("day") == today:
         return

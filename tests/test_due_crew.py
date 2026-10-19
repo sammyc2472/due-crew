@@ -15177,7 +15177,7 @@ def test_native_emoji_picker_v391():
     check("emojipicker from the Decks screen: here (no picker to open) the window is told to open its drawer",
           evals[0] == "window.dcCheerNoNative && window.dcCheerNoNative();", evals)
     check("3.9.2's audit: a quick pick, a scroll or a resize puts Anki's box away (it sat where 'pick one' was)",
-          "b.addEventListener('click', function () { unpick(); choose(x); });" in js
+          "b.addEventListener('click', function () { unpick(); choose(x, true); });" in js
           and "window.addEventListener('resize', away);" in js and "back.addEventListener('scroll', away, true);" in js
           and "window.removeEventListener('resize', away);" in js and "back.removeEventListener('scroll', away, true);" in js)
     downs = []
@@ -15209,6 +15209,23 @@ def test_more_emoji_v392():
     js = board.cheer_overlay_js({"uid": "dre", "name": "Dre", "emojis": ["🎉"]})
     lst = re.search(r"var low = \[([^\]]*)\];", js).group(1)
     check("the page's oneEmoji takes the same list", sorted(int(x, 16) for x in lst.split(", ")) == sorted(S.EMOJI_LOW), lst)
+    # 3.9.2's QoL pass: England's flag (tag characters) whole; a letter or digit of any script never
+    eng, sco = "\U0001F3F4\U000E0067\U000E0062\U000E0065\U000E006E\U000E0067\U000E007F", "\U0001F3F4\U000E0067\U000E0062\U000E0073\U000E0063\U000E0074\U000E007F"
+    other = ["あ", "中", "ａ", "①", "ありがとう"]
+    check("England's and Scotland's flags whole; あ 中 ａ ① never pass (Python)",
+          S.clean_emoji(eng) == eng and S.clean_emoji(sco) == sco and S.clean_emoji(eng + "x") == eng
+          and all(S.clean_emoji(t) == "" for t in other), [(t, S.clean_emoji(t)) for t in other + [eng]])
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if node:
+        fn = js[js.index("function oneEmoji(s)"):js.index("function filter()")]
+        cases = other + [eng, "🎉", "©️", "1️⃣", "👩‍⚕️"]
+        out = subprocess.run([node, "-e", "var window = globalThis; " + fn + "; console.log(JSON.stringify("
+                              + json.dumps(cases) + ".map(oneEmoji)))"], capture_output=True, text=True, timeout=30)
+        got = json.loads(out.stdout or "null") or []
+        check("the page's oneEmoji agrees with clean_emoji on each (the twins)",
+              got == [S.clean_emoji(c) for c in cases], (got, [S.clean_emoji(c) for c in cases], out.stderr[-200:]))
 
 
 def test_cheer_pill_and_window_v391():
@@ -16876,8 +16893,37 @@ def test_reviews_ahead_392():
         AF.on_state("review", "overview")
         check("glue: and before I study, when the morning hasn't (not signed in, waiting for AnkiWeb)",
               lim(10) == {"limit": 0, "today": sday + 1} and lim(11) == {"limit": 0, "today": sday + 1})
-        dc._on_js(False, as_board("duecrew:insaheadon:10"), DeckBrowser())
-        check("glue: Turn back on: the pause gone, today's 0 off", pc["new_off"] == {} and lim(10) is None and lim(11) is None, store)
+        refreshed, caught, sv_rp = [], [], F.refresh_progress
+        F.refresh_progress = lambda: refreshed.append(1)
+        F.apply_catch = lambda: caught.append(1)
+        try:
+            dc._on_js(False, as_board("duecrew:insaheadon:10"), DeckBrowser())
+            check("glue: Turn back on: the pause gone, today's 0 off", pc["new_off"] == {} and lim(10) is None and lim(11) is None, store)
+            check("QoL pass: Turn back on says so, the catch-up's limit back in its one undo step, the plan card worked out again",
+                  said[-1] == "New cards back on in Spanish." and caught and col.undo_steps[-1][0] == "Due Crew: new cards back on"
+                  and refreshed, (said[-1:], caught, col.undo_steps[-1:], refreshed))
+            # the exam cleared (or moved) while a stop to it ran: today's 0 comes off now, not at tomorrow's rollover
+            dc._on_js(False, as_board("duecrew:insaheadoff:10:now"), DeckBrowser())
+            caught.clear()
+            keep_exam, conf["exam_date"] = conf["exam_date"], ""
+            AF.exam_moved()
+            check("QoL pass: the exam cleared under a stop to it: the stop's over and today's 0 off at once, the catch-up's back",
+                  pc["new_off"] == {} and lim(10) is None and lim(11) is None and caught, (pc.get("new_off"), store))
+            conf["exam_date"] = keep_exam
+            moved, sv_em, sv = [], AF.exam_moved, (dc.save_cfg, dc._swap, dc.cfg)
+            fake = {"exam_date": ""}
+            AF.exam_moved = lambda: moved.append(1)
+            dc.save_cfg, dc._swap, dc.cfg = (lambda c: None), (lambda c=None, **k: None), (lambda: fake)
+            try:
+                dc._apply_settings({"exam_date": "2030-01-02"})
+                dc._apply_settings({"exam_date": "2030-01-02"})
+                dc._apply_settings({"exam_date": ""})
+            finally:
+                AF.exam_moved = sv_em
+                dc.save_cfg, dc._swap, dc.cfg = sv
+            check("QoL pass: Settings tells the pause when my exam changes (not when it's set to what it was)", len(moved) == 2, moved)
+        finally:
+            F.refresh_progress, F.apply_catch = sv_rp, (lambda: None)
         dc._on_js(False, as_board("duecrew:insaheadoff:10:week"), DeckBrowser())
         check("glue: a week before: nothing today, the days kept", lim(10) is None and pc["new_off"]["10"]["kind"] == "week"
               and "from " in said[-1], said[-1])
@@ -16949,14 +16995,25 @@ def test_builder_audit_v392():
           "if (dirty) {" in ny and "Save your changes first" in ny and 'await api("GET", `/plans/${plan.id}`)' in ny
           and "addDays(saved, 364)" in ny and '"plans_full"' in ny, ny[:600])
     import subprocess
-    named = ny[ny.index("const named = "):ny.index(";", ny.index("const named = "))]
-    out = subprocess.run(["node", "-e", named + "; console.log(JSON.stringify([named('Pharm block'), named('x'.repeat(70)), named('Cardio  ' + 'y'.repeat(40))]))"],
+    named = ny[ny.index("function named(n) {"):ny.index("\n    }", ny.index("function named(n) {")) + 6]
+    long_ = "Pharm for second years with Dr. Lopez and the whole M2s team"
+    out = subprocess.run(["node", "-e", named + "; console.log(JSON.stringify([named('Pharm block'), named('x'.repeat(70)), "
+                          "named('Pharm block (next year)'), named('Cardio (copy)'), named(" + json.dumps(long_) + ")]))"],
                          capture_output=True, text=True, timeout=30)
     got = json.loads(out.stdout or "null") or []
-    check("Copy for next year: named \"… (next year)\", within a plan name's 60 (Sam's pick)",
-          got[:1] == ["Pharm block (next year)"] and all(len(x) <= 60 for x in got) and got[1].endswith("x (next year)")
-          and "PUT\", `/plans/${mine.id}`" in ny and "name: named(got.name || plan.name)" in ny and "go(`/plans/${mine.id}`)" in ny,
+    check("Copy for next year: named \"… (next year)\" within a name's 60; never twice, never \"(copy) (next year)\", cut at a word",
+          got[:4] == ["Pharm block (next year)", "x" * 48 + " (next year)", "Pharm block (next year)", "Cardio (next year)"]
+          and all(len(x) <= 60 for x in got) and got[4] == "Pharm for second years with Dr. Lopez and the (next year)"
+          and "PUT\", `/plans/${mine.id}`" in ny and "name: named(got.name || plan.name)" in ny and "go(`/plans/${mine.id}`)" in ny
+          and "The saved plan has no dates to copy." in ny and "That didn't copy: check your connection" in ny,
           (got, out.stderr[-300:]))
+    rev = js[js.index("const Reviews = (() => {"):js.index("})();", js.index("const Reviews = (() => {")) + 5]
+    wk = js[js.index("function weekly(ws) {"):js.index("\n  }", js.index("function weekly(ws) {")) + 4]
+    out = subprocess.run(["node", "-e", "const addDays = (d) => d; " + rev + "\n" + wk + "\nconsole.log(JSON.stringify(weekly("
+                          + json.dumps([{"n": x} for x in (26, 60, 3, 0.2, 0, 0, 0, 30, 0.4, 0)]) + ")))"],
+                         capture_output=True, text=True, timeout=30)
+    check("the reviews line: a break between a plan's parts says so, its tail's zeros go (3.9.2's QoL pass)",
+          json.loads(out.stdout or "null") == ["26", "60", "3", "0 for 4 weeks", "30"], (out.stdout, out.stderr[-300:]))
     i = js.index("function reviewsNote()")
     rn = js[i:js.index("function sugRows", i)]
     check("the reviews line: its busiest week among the 16 it lists, a longer plan's list marked as cut",
@@ -17271,6 +17328,29 @@ def test_leeches_tag_only_v392():
               and "Put it back" in board._ins_leeches(10, v), v)
         dc._on_js(False, as_board("duecrew:insleech:10:fresh:302"), DeckBrowser())
         check("Learn it fresh on the last of a note: the tag comes off", q(302) == (0, 0) and "leech" not in tags(302), tags(302))
+        # 3.9.2's QoL pass: Insights' line counts as the collection is now, and the ones left out
+        col.mod = 4
+        lc = LF.line_counts(col, 10, deck)
+        check("QoL pass: the line's counts now, the one left out among them",
+              lc == {"leeches": 1, "near": 0, "kept": 1, "leech_out": 1}, lc)
+        v1 = LF.current(col, 10, deck)
+        check("QoL pass: the view kept while nothing changed", LF.current(col, 10, deck) is v1)
+        LF.app.client().session["cards"] = dict(LF.app.client().session.get("cards") or {})
+        check("QoL pass: a sync's new tips work the open view out again (same collection)", LF.current(col, 10, deck) is not v1)
+        from due_crew import team_flow as TF2, ahead_flow as AF2
+        _state["leech_open"] = {10: True}
+        sv2 = (TF2.cfg, TF2.save_cfg, TF2.app.swap, TF2.you_decks)
+        TF2.cfg, TF2.save_cfg, TF2.app.swap, TF2.you_decks = (lambda: {}), (lambda c: None), (lambda c=None: None), (lambda: [{"did": 10}])
+        try:
+            TF2.go_insights(10)
+        finally:
+            TF2.cfg, TF2.save_cfg, TF2.app.swap, TF2.you_decks = sv2
+        check("QoL pass: See ahead (or a plan's line) opens Insights itself, not a leeches view left open", not LF.is_open(10))
+        keep_line, keep_shown = _state.get("ahead_line"), _state.get("board_shown")
+        _state["ahead_line"], _state["board_shown"] = None, False
+        AF2.check()
+        check("QoL pass: no board drawn, the day's climb check waits (no forecast, no redraw)", _state["ahead_line"] is None)
+        _state["ahead_line"], _state["board_shown"] = keep_line, keep_shown
     finally:
         F._pcfg, F._psave, F._after_change, mw.col, LF.tooltip, LF.app.swap, _state["leech_view"], _state["leech_open"] = saved
 
@@ -17320,6 +17400,21 @@ def test_qol_pass_v392():
           and 'title="Since your last exam, or the whole deck"' in sc and 'max="2026-10-19"' in sc, sc)
     ex = board._insights_html(10, {"aim": {"day": "2026-10-23", "kind": "exam", "checked": True, "since": "", "today": "2026-10-19"}})
     check("the exam line: nothing at risk, then its scope, apart", "nothing at risk &middot; <div class=\"isc\">" in ex, ex)
+    # every leech left out: the way back to them still on Insights
+    lo = board._insights_html(10, {"leeches": 0, "near": 0, "kept": 0, "leech_out": 2})
+    check("Insights' line: every leech left out, still a way to them", "<b>2</b> leeches you left out" in lo and "duecrew:insleeches:10" in lo, lo)
+    # a stop to the week before an exam 60 days out: named from its own day; before it starts they're not off yet
+    far = board._ins_ahead(10, _ahead_sample(exam_in=60, off=(53, 60), pause={"kind": "week", "exam": True, "from": 53}), "Spanish")
+    check("a stop far ahead: from its own day (past the chart), and Keep them on, not Turn back on",
+          "No new cards in Spanish from Sat 24 Oct till your exam, Sat 31 Oct" in far and "Keep them on" in far
+          and "Turn new cards back on" not in far, far[-900:])
+    # Why: the stop on a parent deck is named as that deck
+    from due_crew import why as W
+    ctx = {"today": 500, "now": 1_000_000, "ahead": 1200, "deck": lambda d: {1: "Cardio"}.get(d, "?"),
+           "left": lambda d: {"new": 0, "new_limit": 20, "paused": "Big"}, "rank": lambda c: 1, "size": lambda d: 1,
+           "day": lambda n: f"day {n}", "clock": lambda t: "", "fsrs": True}
+    said = W.reason({"id": 1, "did": 1, "odid": 0, "queue": 0, "due": 0, "lapses": 0, "leech": False}, ctx)["say"]
+    check("why: a stop on the parent deck names that deck", said == "New: you stopped new cards in Big (Insights › Reviews ahead).", said)
 
 
 def test_cheer_window_runs_v392():

@@ -1528,7 +1528,21 @@ async function builder(id) {
     if (!p || p.n < 5) return null;
     return h("div", { class: "rnote", title: "A typical card's reviews over its first six weeks, new cards aside. A follower's own will differ." },
       h("span", {}, "About ", h("b", {}, Reviews.about(p.n)), ` reviews a day by week ${p.wk}`),
-      h("span", { class: "muted" }, "Week by week: " + ws.map((w) => Reviews.about(w.n)).join(" · ") + (all.length > ws.length ? " · …" : "")));
+      h("span", { class: "muted" }, "Week by week: " + weekly(ws).join(" · ") + (all.length > ws.length ? " · …" : "")));
+  }
+
+  /** 3.9.2's QoL pass: a break between a plan's parts says so ("0 for 24 weeks"), not a row of zeros; its tail's zeros go */
+  function weekly(ws) {
+    const parts = [];
+    let z = 0;
+    for (const w of ws) {
+      const s = Reviews.about(w.n);
+      if (s === "0") { z++; continue; }
+      if (z) parts.push(z > 1 ? `0 for ${z} weeks` : "0");
+      z = 0;
+      parts.push(s);
+    }
+    return parts;
   }
 
   /** 3.8.1 (plans, rethought): a named date's suggestions: the deck's tags its
@@ -2887,7 +2901,12 @@ async function builder(id) {
    *  "… (next year)" (Sam's pick), not "(copy)". */
   function nextYear() {
     const firstOf = (d) => [...(d.units || []).map((u) => u.opens), ...(d.events || []).map((e) => e.day)].filter(Boolean).sort()[0];
-    const named = (n) => `${String(n || "").slice(0, 48).trimEnd()} (next year)`;  // a plan's name is 60 at most
+    // "… (next year)" within a plan name's 60: an earlier "(next year)" or "(copy)" off, cut at a word (3.9.2's QoL pass)
+    function named(n) {
+      let b = String(n || "").replace(/\s*\((?:next year|copy)\)\s*$/i, "").trim();
+      if (b.length > 48) { b = b.slice(0, 48); const sp = b.lastIndexOf(" "); if (sp > 24) b = b.slice(0, sp); }
+      return `${b.trimEnd()} (next year)`;
+    }
     const first = firstOf(doc);
     if (!first) return null;
     const st = h("span", { class: "status small", role: "status" });
@@ -2908,9 +2927,11 @@ async function builder(id) {
       } catch (err) {
         b.disabled = false; st.className = "status small bad";
         const code = err.body?.error;
-        st.textContent = code === "too_many_plans" ? "You have 50 plans. Delete one first."
+        st.textContent = err.message === "no dates" ? "The saved plan has no dates to copy."
+          : code === "too_many_plans" ? "You have 50 plans. Delete one first."
           : code === "plans_full" ? "Your plans hold as much as one account can. Delete one first."
-          : err.status === 429 ? "That's a lot of new plans. Try again in an hour." : "That didn't work. Try again.";
+          : err.status === 429 ? "That's a lot of new plans. Try again in an hour."
+          : !err.status ? "That didn't copy: check your connection, then try again." : "That didn't work. Try again.";
       }
     } }, "Copy for next year");
     return h("div", { class: "row" }, b, st);
