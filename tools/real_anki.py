@@ -430,6 +430,30 @@ def check(path):
        lc.id in got and back.type == 0 and back.queue == 0 and back.lapses == 0
        and "leech" not in [t.lower() for t in back.note().tags] and col.undo_status().undo == "Due Crew: recover leeches",
        f"{len(got)} recovered, undo {col.undo_status().undo!r}")
+    # 3.9.3 (Sam's pick A): by the deck's own leech count, read from its options on Anki's engine: Tag Only at 5,
+    # a card Anki kept in my reviews at 6 lapses is a leech now (8 was Recover's line); taken once asked, one undo step
+    sdid = col.decks.id_for_name("Step Deck")
+    conf = col.decks.config_dict_for_deck_id(sdid)
+    was = (conf["lapse"]["leechFails"], conf["lapse"]["leechAction"])
+    conf["lapse"]["leechFails"], conf["lapse"]["leechAction"] = 5, 1
+    col.decks.update_config(conf)
+    kc = col.get_card(next(c for c in col.find_cards('deck:"Step Deck" -tag:leech -is:suspended')
+                           if len(col.get_note(col.get_card(c).nid).card_ids()) == 1))
+    kc.type, kc.queue, kc.lapses, kc.ivl, kc.due = 2, 2, 6, 5, col.sched.today + 3
+    col.update_card(kc)
+    kn = kc.note()
+    kn.add_tag("leech")
+    col.update_note(kn)
+    deck, eight, extra, counts = DF.leech_plan(col)
+    ok("leeches 3.9.3: the deck's own count, read from its options on Anki's engine",
+       kc.id in deck and kc.id not in eight and kc.id in extra and counts == [5], f"extra {len(extra)}, counts {counts}")
+    got = DF.recover_leeches(col, cids=extra)
+    back = col.get_card(kc.id)
+    ok("leeches 3.9.3: the one kept in my reviews back as new, its tag off, one undo step",
+       kc.id in got and back.type == 0 and back.lapses == 0 and "leech" not in [t.lower() for t in back.note().tags]
+       and col.undo_status().undo == "Due Crew: recover leeches", f"{len(got)} recovered, undo {col.undo_status().undo!r}")
+    conf["lapse"]["leechFails"], conf["lapse"]["leechAction"] = was
+    col.decks.update_config(conf)
     t = tm()
     days = col.db.list(
         f"SELECT DISTINCT CAST((? - id / 1000) / 86400 AS INTEGER) FROM revlog WHERE id >= ? AND id < ? AND ease > 0 "
