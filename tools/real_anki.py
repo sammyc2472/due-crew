@@ -1033,11 +1033,91 @@ def check_392(tmp):
     return failed
 
 
+def check_planner(path):
+    """Labs (due_crew/planner, docs/planner.md) on the real engine, on the big
+    collection: question IDs found among 12,000 question tags, Bring back as
+    one undo step that Anki's undo takes back whole, and the picker's tree
+    and search, timed."""
+    import time
+    from anki.collection import Collection
+    from due_crew import plans as P
+    from due_crew.planner import actions as A, edits as E, model as M, qids as Q
+    failed = []
+
+    def ok(name, cond, extra=""):
+        print(("PASS " if cond else "FAIL ") + "planner: " + name, extra)
+        if not cond:
+            failed.append("planner: " + name)
+    col = Collection(path)
+    try:
+        did = col.decks.id_for_name("Step Deck")
+        R = "#Big_Step1_v12"
+        idx = P.DeckIndex(col, did)
+        t = time.perf_counter(); banks = Q.banks(idx); t_b = time.perf_counter() - t
+        qb = banks.get("QBank") or {}
+        have = {k.rsplit("::", 1)[-1] for k in idx.tag_keys if k.rsplit("::", 1)[-1].isdigit()}  # the ones sampled onto notes
+        ok("question tags read by bank", set(qb) == have and len(qb) > 11000 and list(banks) == ["QBank"],
+           f"{len(qb):,} numbers, {t_b*1000:.0f} ms")
+        picked = sorted(qb)[:15]
+        cids = set().union(*(qb[n] for n in picked))
+        cl = sorted(cids)
+        # some seen before (review cards a month out), some of those shut, one a leech
+        col.sched.set_due_date(cl[:8], "30")
+        col.sched.suspend_cards(cl[4:12])
+        leech = col.get_card(cl[0]).note()
+        leech.tags = list(leech.tags) + ["leech"]
+        col.update_note(leech)
+        idx = P.DeckIndex(col, did)
+        text = "Block 3 · 12 Oct 2026\nMissed: " + ", ".join(picked) + " · 65%"
+        t = time.perf_counter(); f = Q.find(idx, text); t_f = time.perf_counter() - t
+        ok("a paste: its 15 questions found, the date and the score aren't questions",
+           f["found"] == picked and f["missing"] == ["2026"] and f["cids"] == cids, f"{len(cids)} cards, {t_f*1000:.0f} ms, missing {f['missing']}")
+        before = {c: (col.get_card(c).queue, col.get_card(c).due) for c in cl}
+        shut = P.openable_ids(col, cids)
+        reviews = A.reviews(col, cids, shut)
+        got = A.bring_back(col, cids, "Due Crew: bring back 15 questions")
+        today = col.sched.today
+        cards = {c: col.get_card(c) for c in cl}
+        leech_ids = {c for c in cl if cards[c].nid == leech.id}
+        ok("Bring back: the shut ones open, never the leech's cards",
+           all(cards[c].queue != -1 for c in shut) and all(cards[c].queue == -1 for c in leech_ids if before[c][0] == -1),
+           f"opened {got['opened']}, shut {len(shut)}")
+        ok("Bring back: the ones seen before due today to the day after tomorrow, their intervals kept",
+           got["due"] == len(reviews) > 0 and all(0 <= cards[c].due - today <= 2 for c in reviews) and all(cards[c].ivl > 0 for c in reviews),
+           f"{got['due']} due: {sorted(cards[c].due - today for c in reviews)}")
+        ok("Bring back: one undo step, named", col.undo_status().undo == "Due Crew: bring back 15 questions", repr(col.undo_status().undo))
+        col.undo()
+        back = {c: (col.get_card(c).queue, col.get_card(c).due) for c in cl}
+        ok("Bring back: Anki's undo takes it all back, opens and due dates", back == before,
+           str([c for c in cl if back[c] != before[c]][:5]))
+        t = time.perf_counter(); kids = M.children(idx, R); t_c = time.perf_counter() - t
+        ok("picker: the root's parts, #s first, then ^", [p.rsplit("::", 1)[-1] for p, _n, _m in kids][-1] == "^Systems" and len(kids) == 8,
+           f"{[p.rsplit('::', 1)[-1] for p, _n, _m in kids]}, {t_c*1000:.0f} ms")
+        t = time.perf_counter(); hits = M.find(idx, "cardio topic"); t_s = time.perf_counter() - t
+        t = time.perf_counter(); hits2 = M.find(idx, "renal"); t_s2 = time.perf_counter() - t
+        ok("picker: a search over every path, quick once read", hits and all("cardio" in h.lower() for h in hits) and t_s2 < 0.5,
+           f"{len(hits)} hits, first {t_s*1000:.0f} ms (reads the paths), then {t_s2*1000:.0f} ms ({len(hits2)} hits)")
+        t = time.perf_counter(); n = M.tag_count(idx, f"{R}::#V&B"); t_n = time.perf_counter() - t
+        ok("picker: a big part's count", n[0] > 1000, f"{n}, {t_n*1000:.0f} ms")
+        unit = {"id": "u1", "name": "Cardio", "opens": "2026-11-09", "tags": [h for h in hits[:30]] + [f"{R}::#QBank::Step::{picked[0]}"]}
+        doc = {"deck": "Step Deck", "units": [unit]}
+        t = time.perf_counter(); rows = M.sources(idx, unit, doc); t_r = time.perf_counter() - t
+        ok("a date's sources by resource", rows and rows[-1]["kind"] == "question" and all(r["cids"] for r in rows[:-1]),
+           f"{len(rows)} rows, {t_r*1000:.0f} ms")
+        t = time.perf_counter(); rc = E.recount(doc, idx, {"u1"}); t_rc = time.perf_counter() - t
+        ok("a changed date counted as the builder counts it", rc["units"][0]["n"] == sum(len(idx.tag_cards(x)) for x in unit["tags"]),
+           f"n {rc['units'][0]['n']:,}, {t_rc*1000:.0f} ms")
+    finally:
+        col.close()
+    return failed
+
+
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory() as tmp:
         p = os.path.join(tmp, "big.anki2")
         make(p)
         failed = check(p)
         failed += check_392(tmp)
+        failed += check_planner(p)
     print(f"\n{len(failed)} failed" + (": " + "; ".join(failed) if failed else ""))
     sys.exit(1 if failed else 0)

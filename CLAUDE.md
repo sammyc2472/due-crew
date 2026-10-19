@@ -42,6 +42,12 @@ add-on.
   colours the studied days with the user's accent: the board's title is
   the one-line logo (inline SVG on the `--dc-*` tokens), and the stacked
   one tops the sign-in and welcome screens.
+- `due_crew/planner/` — labs (`docs/planner.md`): the plan window and
+  Question IDs, Python-native, kept apart from the rest while it's tried.
+  Nothing of it runs unless this computer's config says `"labs": true` (no
+  window sets it), and the plan window opens only for the admin's account
+  (`GET /auth/me`'s admin). Routes the builder uses already; nothing new on
+  the server. Its tests: `tests/test_planner.py`.
 - `poc/course_mac/` — Course on a Mac, a separate add-on proof of concept
   (Sam's, on his Mac; not part of Due Crew and never talks to its server): a
   block's calendar read, each lecture's cards found by Apple's on-device model
@@ -115,6 +121,7 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   3.9.2: Reviews ahead, its track record and the pause it asks for, and
   the leeches view (plans.json: `new_off`, `ahead_trust`, `ahead_line_x`,
   `leech_out`); my exam's scope rides my settings (`exam_last`, `exam_since`).
+  Labs: the misses Question IDs keeps (`qids.json`, numbers only).
   Pip's closet is mine (an account key only I read); what my Pip has on
   rides with my accent to mutual friends, as names. A plan's squad (its team on the server) shares only
   that I showed up, my questions and answers, and bingo stamps; never my

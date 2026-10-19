@@ -12,6 +12,9 @@ Two layers, deliberately separate:
 prove one side, it proves they agree. Its docstring has the three commands;
 CI runs it in the worker job.
 
+`tests/test_planner.py` is the labs plan window's (`due_crew/planner`,
+`docs/planner.md`), on the same fakes: `python3 tests/test_planner.py`.
+
 Requirements: Python 3.9+ and the standard library for the first layer
 (`sqlite3` backs the fake collection); Node 22 for the Worker. CI runs
 both on every push.

@@ -1717,6 +1717,8 @@ def _tools_menu():
     ask = QShortcut(QKeySequence(ASK_KEY), mw)
     ask.activated.connect(_ask_this_card)
     mw._due_crew_ask = ask
+    from . import planner
+    planner.install(menu)  # labs: nothing unless this computer's config says "labs": true (docs/planner.md)
     mw.form.menuTools.addMenu(menu)
     mw._due_crew_menu = menu  # kept alive with the window
     _apply_keys()

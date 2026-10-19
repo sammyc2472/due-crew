@@ -31,6 +31,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: python3 tests/test_due_crew.py
+      - run: python3 tests/test_planner.py  # labs: the plan window (docs/planner.md)
 
   dialogs:
     name: dialogs build (offscreen PyQt6)

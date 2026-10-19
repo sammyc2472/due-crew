@@ -82,6 +82,19 @@ class FakeSched:
         if self.col is not None:
             self.col.undo_steps.append(("Reposition", ids))
 
+    def set_due_date(self, card_ids, days, config_key=None):
+        """Anki's Set due date: "0-2" (a range, in days from today) or "3";
+        each card due on a day of it, in turn, its interval kept (no "!").
+        A card that isn't suspended goes to the review queue. An undoable op."""
+        lo, _, hi = str(days).partition("-")
+        lo, hi = int(lo), int(hi or lo)
+        ids = [int(i) for i in card_ids]
+        for k, cid in enumerate(ids):
+            self.db.conn.execute("UPDATE cards SET due = ?, type = 2, queue = CASE WHEN queue = -1 THEN -1 ELSE 2 END "
+                                 "WHERE id = ?", (self.today + lo + k % (hi - lo + 1), cid))
+        if self.col is not None:
+            self.col.undo_steps.append(("Set Due Date", ids))
+
     def suspend_cards(self, ids):
         """Anki's: queue -1, whatever it was. An undoable op."""
         ids = [int(i) for i in ids]
@@ -424,6 +437,8 @@ class FakeWorker:
         self.new_codes = {}  # uid -> POST /codes today (20 a day)
         self.reports = []    # what POST /reports kept (3.8.1: the Worker keeps them for the admin too)
         self.feedback = []   # 3.6.5, P6: [{uid, text, ver}] for the admin's page
+        self.admins = set()  # notices.ts isAdmin: wrangler.toml's ADMINS (and the ADMIN_UIDS secret)
+        self.plan_log = []   # plans.ts logSave: (plan, version, uid, summary), a save's history line
         self.otp = {}        # email -> code
         # 3.1: plans (worker/src/plans.ts)
         self.plans = {}      # id -> {code, owner, name, line, audience, squad, doc, version,
@@ -630,7 +645,8 @@ class FakeWorker:
         me = self._me(auth)
         if what == "me" and method == "GET":
             u = self.users[me]
-            return 200, {"uid": me, "email": u["email"], "name": u["name"], "emoji": u["emoji"]}
+            out = {"uid": me, "email": u["email"], "name": u["name"], "emoji": u["emoji"]}
+            return 200, dict(out, admin=True) if me in self.admins else out  # 3.2.1: the site shows Admin
         if what == "link" and method == "POST" and len(rest) == 1:
             token = f"link-{me}-{len(self.links)}".ljust(43, "x")[:43]
             self.links[token] = me
@@ -1357,8 +1373,15 @@ class FakeWorker:
     def edit_plan(self, pid, units):
         """The author saves new dates on the site: version + 1 (plans.ts put, keepIdr)."""
         p = self.plans[pid]
-        old = {u["id"]: u for u in p["doc"]["units"]}
-        doc = self._plan_doc(dict(p["doc"], units=units))
+        p["doc"] = self._keep_idr(self._plan_doc(dict(p["doc"], units=units)), p["doc"])
+        p["version"] += 1
+
+    @staticmethod
+    def _keep_idr(doc, was):
+        """plans.ts keepIdr: what only the author's Anki sends (a date's idr,
+        pn, ids, pl) is the stored doc's, never a save's, while what it was
+        worked out from is unchanged."""
+        old = {u["id"]: u for u in (was or {}).get("units") or []}
         for u in doc["units"]:  # 3.6.5: idr only from the author's Anki, kept while the ids are
             o = old.get(u["id"]) or {}
             u.pop("idr", None)
@@ -1376,8 +1399,7 @@ class FakeWorker:
             u.pop("pl", None)  # 3.8.1: what its picks are, while they're the same picks
             if o.get("pl") and _picks(o) == _picks(u):
                 u["pl"] = o["pl"]
-        p["doc"] = doc
-        p["version"] += 1
+        return doc
 
     # 3.8.1's review: who sees which plan, as plans.ts SEES, authorOnly and forBoard's offers
     def _sees(self, p, me):
@@ -2041,6 +2063,34 @@ class FakeWorker:
         if len(rest) == 1 and method == "GET":
             if not self._may_read(p, pid, me, self._norm(query.get("code"))):
                 raise Bad(404, "no_plan")
+            return 200, self._plan_view(pid, me)
+        if len(rest) == 1 and method == "PUT":  # plans.ts put: an author's save, from the version it started at
+            if not self._writes(p, me):
+                raise Bad(403, "not_author")
+            if not set(body) <= {"version", "name", "line", "audience", "squad", "doc", "summary", "post"}:
+                raise Bad(400, "bad_plan")
+            if p["owner"] != me and (("audience" in body and body["audience"] != p["audience"])
+                                     or ("squad" in body and body["squad"] != p["squad"])):
+                raise Bad(403, "not_owner")
+            if not _is_int(body.get("version"), 1):
+                raise Bad(400, "bad_version")
+            name = " ".join(str(body["name"]).split())[:60] if "name" in body else p["name"]
+            if not name:
+                raise Bad(400, "bad_name")
+            line = " ".join(str(body["line"] or "").split())[:120] if "line" in body else p["line"]
+            try:
+                doc = self._keep_idr(self._plan_doc(body["doc"]), p["doc"]) if "doc" in body else p["doc"]
+            except Bad as e:  # the Worker's V.bad("plan") is "bad_plan"
+                raise Bad(e.status, e.code if e.code.startswith("bad_") else "bad_" + e.code) from None
+            if name == p["name"] and line == p["line"] and doc == p["doc"]:
+                return 200, self._plan_view(pid, me)  # nothing changed: nothing written
+            if body["version"] != p["version"]:
+                raise Bad(409, "stale", {"version": p["version"]})
+            p.update(name=name, line=line, doc=doc)
+            p["version"] += 1
+            self.plan_log.append((pid, p["version"], me, " ".join(str(body.get("summary") or "").split())[:120]
+                                  or "changed the plan"))
+            self._count("plans")
             return 200, self._plan_view(pid, me)
         raise Bad(405, "method")
 
