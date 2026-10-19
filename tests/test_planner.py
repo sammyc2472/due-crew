@@ -1856,6 +1856,19 @@ def test_lay_out_review_fixes_v393():
     check("fill: its words, one day or from one to another, a card or cards",
           B.put_words(1, "Mon 9 Nov", "Mon 9 Nov") == "Put 1 card on Mon 9 Nov."
           and B.put_words(1500, "Mon 9 Nov", "Fri 13 Nov") == "Put 1,500 cards from Mon 9 Nov to Fri 13 Nov.")
+    import json
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    line = re.search(r"^\s*const putWords = .*;$", open(os.path.join(REPO, "site", "public", "builder.js")).read(), re.M)
+    cases = [[1, "Mon 9 Nov", "Mon 9 Nov"], [2, "Mon 9 Nov", "Mon 9 Nov"], [1500, "Mon 9 Nov", "Fri 13 Nov"], [0, "a", "b"]]
+    if not node or not line:
+        check("fill: builder.js has putWords", bool(line))
+        return
+    got = subprocess.run([node, "-e", line.group(0) + f"\nconsole.log(JSON.stringify({json.dumps(cases)}.map((c) => putWords(...c))))"],
+                         capture_output=True, text=True, timeout=30)
+    check("fill: builder.js's putWords says the same (put_words)",
+          got.returncode == 0 and json.loads(got.stdout) == [B.put_words(*c) for c in cases], got.stdout + got.stderr)
 
 
 def main():
