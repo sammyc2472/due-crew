@@ -178,9 +178,11 @@ same commit, each with its test:
 - `ahead.GENERIC`'s cards ↔ `Reviews.CURVE` in builder.js (a typical card's
   next six weeks, 3.9.2; the suite checks)
 - `planner/build.py` ↔ builder.js (3.9.3): Todo, Every, Remarks, Picks,
-  Suggest, Work, Reviews, `Tags.ankiSearch`, searchName (checked in node);
-  pieces, fill, layOut, What to cover's toggle and inView, heavyNote
-  (checked by hand-worked plans); `planner/edits.py` ↔ the builder's edits
+  Suggest, Work, Reviews, `Tags.ankiSearch`, `Tags.word`/`name`/`natural`,
+  searchName (checked in node); pieces, fill, layOut and its putWords,
+  autoName (with renameAll, `edits.name_dates` on every save), What to
+  cover's toggle and inView, heavyNote (checked by hand-worked plans);
+  `planner/edits.py` ↔ the builder's edits
   (a date's sources, cuts, splits, events, review days, retag and dropSay);
   `planner/text.py` ↔ toText, fromText and the Text tab's use, takeOff
   (its date line is `plans._date_line`); `text.pick_note` ↔ `pickNote`

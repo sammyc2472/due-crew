@@ -313,7 +313,7 @@ class TextTab(QWidget):
                      f" · was {old.get('name')}" if whole and old and str(old.get("name")).strip() != str(u["name"]).strip() else "")
             names = [B.label(tree, k, placed) if (tree is not None and tree.has(k)) or k.lower().startswith(ours) else f"{B.path_of(k)} (not found)"
                      for k in B.srcs(u)]
-            names += [f"{P._word(c['tag'].split('::')[-1])} · {self._ptag_name(r, c['in'])}" for c in u.get("cut") or []]
+            names += [f"{B.tag_word(c['tag'].split('::')[-1])} · {self._ptag_name(r, c['in'])}" for c in u.get("cut") or []]
             uncounted = bool(u.get("cut")) or any(k.lower().startswith(ours) for k in B.srcs(u))
             n = B.unit_total(tree, u, placed) if tree is not None else 0
             cards = "counted in your Anki after you save" if not n and uncounted else f"{n:,}{'+' if uncounted else ''} cards"
@@ -405,4 +405,4 @@ class TextTab(QWidget):
             made["ids"] = {u["id"] for u in got["units"]}
             return T.apply(doc, got, whole, self._name(), new_id=lambda: E.new_id(doc))
         pid = self.win.plan["id"]
-        self.win._apply(change, lambda: made.get("ids", ()), then=lambda saved: self._went(whole, pid, saved))
+        self.win._apply(change, lambda: made.get("ids", ()), then=lambda saved: self._went(whole, pid, saved), rename=False)

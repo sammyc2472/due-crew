@@ -1029,6 +1029,8 @@ async function builder(id) {
     return { placedN, lastD, left: items.slice(i), clipped };
   }
   /** what a fill left off, by name: "Renal, Pulm · the rest and 2 more" */
+  /** 3.9.3: what a Fill put where, "Put 150 cards from Mon 9 Nov to Fri 13 Nov." (build.put_words) */
+  const putWords = (n, a, b) => `Put ${n.toLocaleString()} card${n === 1 ? "" : "s"} ${a === b ? `on ${a}` : `from ${a} to ${b}`}.`;
   const leftNames = (xs) => `${xs.slice(0, 3).map((x) => `${Tags.word(pathOf(x.key).split("::").pop())}${x.rest ? " · the rest" : ""}`).join(", ")}${xs.length > 3 ? ` and ${xs.length - 3} more` : ""}`;
   function layOut(weekAhead) {
     // Fill to <date> stops there; just next week stops at its Sunday (or the end, if sooner)
@@ -1072,9 +1074,11 @@ async function builder(id) {
     if (ev) for (const u of doc.units) if (!before.has(u.id) && u.opens < ev.day && !u.for) u.for = ev.id;
     renameAll(); byOpens(); mark();
     const leftN = r.left.reduce((a, x) => a + x.n, 0);
-    note = [r.placedN ? `Put ${r.placedN.toLocaleString()} cards on ${pretty(firstStudy(from))} to ${pretty(r.lastD)}.`
+    // 3.9.3: what to do about what didn't fit, said (planner/build.py says the same)
+    const tip = end && !full ? " Move the finish date." : full && pace.mode === "daily" ? " Raise the cards a day for fewer, bigger dates." : "";
+    note = [r.placedN ? putWords(r.placedN, pretty(firstStudy(from)), pretty(r.lastD))
       : weekAhead ? "No study days left in that week." : "Nothing fit.",
-    leftN && (full || !weekAhead) ? `${full ? `${full} ` : ""}${leftN.toLocaleString()} didn't fit${end && !full ? ` by ${pretty(end)}` : ""}: ${leftNames(r.left)}.` : ""]
+    leftN && (full || !weekAhead) ? `${full ? `${full} ` : ""}${leftN.toLocaleString()} didn't fit${end && !full ? ` by ${pretty(end)}` : ""}: ${leftNames(r.left)}.${tip}` : ""]
       .filter(Boolean).join(" ");
     if (!weekAhead && r.lastD) anchor = firstStudy(from);
     if (r.lastD) requestAnimationFrame(() => document.querySelector(".cal2")?.scrollIntoView({ block: "nearest", behavior: "smooth" }));

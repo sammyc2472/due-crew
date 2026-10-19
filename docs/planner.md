@@ -55,6 +55,17 @@ A save, its undo or a setting changes the plan, never the deck: the
 window keeps the deck's index and the tree Lay it out reads (a big deck's
 is seconds of work); picking a plan or Reload reads them again.
 
+Every save names again the dates still named for what's on them, as the
+builder's renameAll does (`edits.name_dates`, from the doc before the
+change, `build.auto_name`): a tag with another date below it reads
+"Cardio · the rest", a date named for a cut follows its plan tag's
+rename ("Heart Failure · Unit 12"). A name an author typed stays, and so
+does one this change typed; Text's import names its own. Tags read and
+sort as the site's do (`build.tag_word`, "05_Renal" as "5 · Renal",
+"Step1" as "Step 1"; `build.natural`, localeCompare's order: punctuation,
+then numbers by value, then letters, case and accents aside), so a name
+made in Anki is the one the site would make.
+
 ### Dates
 
 Left, the plan's weeks ("Week 3 · 9–13 Nov", this week bold and open),
@@ -137,25 +148,35 @@ The builder's side panel and pace row (`layout_tab.py`, its rules
   the calendar is muted. "120 cards ticked · 80 not on a day yet."
   **Put it on …** puts the picked one on the next study day after the
   last date (the builder's +).
-- **The pace**: Starts (moving it, once there are dates, moves every
-  date, quiz, review day and the end with it, asked first); study days;
-  Finish by a date, or a quiz or exam (the day before it, and the new
-  dates prep for it); Cards a day ("done ≈ Fri 13 Nov"); or I'll place
-  each day.
+- **The pace**: Starts (moving it moves every date, quiz, review day and
+  the end with it, asked first; with nothing on the calendar it's this
+  tab's till the first date. A typed date counts once it's typed, a click
+  or arrow once it rests, and a wheel over it, or over any pace box,
+  scrolls the page); study days; Finish by a date, or a quiz or exam (the
+  day before it, and the new dates prep for it); Cards a day ("done ≈ Fri
+  13 Nov"); or I'll place each day. A plan with an end date and no pace
+  yet opens as Finish by, as the site's does.
 - **Fill** lays what's ticked and not on a date yet on the study days
   after the last date: chapters whole while they fit the pace, a bigger
   one by its own tags (the part only on it last), one with nothing below
   it spread evenly over its days. To an end date, a little more a day
   (about a tenth, up to seven times) until it all fits; past that it stops
-  there and says what's left. **Just next week** stops at that week's
-  Sunday. Fill and **Save the pace** save the ticks and the pace with the
-  dates, one save; till then they wait here (another change's save keeps
-  them).
+  there and says what's left, and what to do (Move the finish date; Raise
+  the cards a day, when a plan's 200 dates are what stopped it). "Put 150
+  cards from Mon 9 Nov to Fri 13 Nov.", or "on Mon 9 Nov" for one day
+  (`build.put_words`, the site's putWords). **Just next week** stops at
+  that week's Sunday. Fill and **Save the pace** save the ticks and the
+  pace with the dates, one save, as the builder saves them: cards a day
+  for Cards a day and Finish by only (5,000 at most), the ticks that
+  aren't under another, in the deck's order, 500 at most. Till a save
+  goes they wait here ("Ticks aren't saved until you Fill or Save the
+  pace."); one that doesn't go, or another change's save, keeps them.
 - **What the plan asks**: the first run of days a quarter over the pace
-  ("Mon 9 Nov asks 70 new a day (pace 30): Videos, 110 by Wed 11 Nov"),
-  with **Split …** (its biggest tag, on the Dates tab) and **Give it till
-  …** (the study days the pace needs); the reviews the dates bring, a
-  typical card's, by week.
+  that isn't past ("Mon 9 Nov asks 70 new a day (pace 30): Videos, 110
+  by Wed 11 Nov"; the site's takes the run its calendar shows), worked
+  out again once the pace rests, with **Split …** (its biggest tag, on
+  the Dates tab) and **Give it till …** (the study days the pace needs);
+  the reviews the dates bring, a typical card's, by week.
 - **This plan's tags**: each with its cards here; Rename… (the dates, a
   cut kept to it, a search using it, its note, and a date named for it
   follow), Delete… (says first what goes: a date with nothing else, its

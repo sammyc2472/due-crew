@@ -3061,3 +3061,40 @@ every release that changes how something works.
   library; the fake Worker gained plans.ts's notes (`test_day_notes_v393`).
   Still the site's: the AI prompts. No new route, nothing on a refresh or a
   sync.
+- 3.9.3, Your plans checked over (Sam: "check your work and find places to
+  add pip / make things friendlier, clearer, and more efficient"). Three
+  reviews of the new windows, then: **Pip and words**: with no plans, a
+  welcome with Pip waving (as Settings › Pip says) and the three ways to
+  start; Progress's "Nobody follows it yet" and, with no date behind,
+  "The class is keeping up with every date so far." with Pip cheering; a
+  tab's words go when another opens; one Undo on History. **Data**: Split
+  by its tags kept the date it split (it made new ones, and the name, due
+  date, prep, to-dos, review day and followers' progress went with the old
+  id); an answer that comes back for a plan no longer picked is dropped,
+  and Progress, History and Updates read again when the plan changed under
+  them; the window closes at sign-out. Text says a day that isn't one on
+  its own line and cuts names as the Worker counts them (an emoji whole);
+  Settings keeps what's typed across a reload, and a wheel scrolls its
+  page, not its boxes; Enter twice posts an update once. **Lay it out**:
+  the dates are named as the site names them (`build.tag_word`, Tags.word:
+  "5 · Renal", "Step 1"; one `build.auto_name` with cut names; renameAll
+  on every save, `edits.name_dates`, so "· the rest" and a renamed plan
+  tag reach the names, and a typed name stays), and the tree sorts as the
+  site's (`build.natural`, localeCompare's order, checked in node on
+  every pair). The pace saves as the builder saves it (5,000 a day at most,
+  the top ticks in the deck's order, 500 at most: a Fill to a near end
+  date was refused before); ticks that didn't save wait still; the day over
+  the pace is one that isn't past; a plan with an end and no pace opens as
+  Finish by; the start waits for a typed date, and a wheel over it
+  scrolls; "²" in a cards: line is a bad token, not a crash; a cut's
+  search goes on a date once. Fill says "Put 1 card on Mon 9 Nov." and
+  "from … to …", and what to do about what didn't fit, on the site too
+  (putWords). **Speed** on a big shared deck (12,244 tags, 60 dates):
+  placed keys 1.8 s to 0.03, a Finish by date at every pace step 1.8 s to
+  0.008, a Fill to an end date 7 s to 0.4 (the extras map worked out once
+  a tree, `build.Placed` looking up above and below instead of scanning);
+  the deck's index and tree kept through a save; searches wait for a
+  pause in the typing; Change ▾ is built when it opens. No new route.
+  `test_lay_out_review_fixes_v393`, `test_text_review_fixes_v393`,
+  `test_split_keeps_the_date_v393`; `tools/dialogs.py` checks the welcome,
+  the kept ticks and Finish by.

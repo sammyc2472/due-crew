@@ -1103,6 +1103,11 @@ def test_builder_twins_v393():
     totals = {"a": 97, "b": 0, "c": 401}
     days = [[1, 1, 1, 1, 1, 0, 0], [1, 0, 1, 0, 1, 0, 0]]
     paths = [["tag", f"{ROOT}::#Videos::Cardio::Heart_Failure"], ["tag", "a_b*c\\d"], ["deck", 'Big "Step"::1_x']]
+    segs = ["05_Renal", "#AK_Step1_v12", "^Systems", "!FLAG", "Heart_Failure", "003. Intro", "12) Strep", "a1b2", "Step10_v3",
+            "  __  ", "007", "Lecture 3a", "Ébola_2", "x_V12"]
+    sortme = ["#Videos", "^Systems", "01_Cardio", "1_Cardio", "02_Renal", "10_GI", "2_Heme", "Ébola", "Ebola", "Árboles", "Animales",
+              "Heart_Failure", "Heart Failure", "x 2", "x2", "x_2", "Step1", "Step10", "Step2", "Zeta", "zeta", "!FLAG", "$Junk",
+              "straße", "strasse", "Œuvre", "Ølsen", "Pharm (Cardiac)", "Pharm-Cardiac", "Pharm::Cardiac", "Lecture 03", "Lecture 3 a", "日本"]
     prog = _builder_js() + f"""
 const out = {{}};
 out.todo = Todo.clean({json.dumps(todo)});
@@ -1115,6 +1120,9 @@ out.rline = [Remarks.line({{card: ["g", 2], text: "t"}}), Remarks.line({{tag: "A
 out.picks = {json.dumps(picks)}.map(Picks.take);
 out.suggest = {json.dumps(names)}.map((n) => Suggest.tags(n, {json.dumps(rows)}));
 out.search = {json.dumps(paths)}.map(([k, p]) => Tags.ankiSearch(k, p));
+out.word = {json.dumps(segs)}.map(Tags.word);
+out.name = Tags.name({json.dumps("::".join(segs[:4]))});
+out.sorted = {json.dumps(sortme)}.slice().sort(Tags.natural);
 const docs = {json.dumps(docs)}, totals = {json.dumps(totals)}, days = {json.dumps(days)};
 out.spread = []; out.over = []; out.weeks = []; out.peak = []; out.about = [];
 for (const doc of docs) for (const d of days) {{
@@ -1148,6 +1156,11 @@ console.log(JSON.stringify(out));
           js["suggest"] == mine and mine[0] and mine[0][0][0].endswith("Antiarrhythmics") and mine[2] == [["DueCrew::MS2::SLG_12", 4]],
           (js["suggest"], mine))
     check("builder twins: Tags.ankiSearch", js["search"] == [B.anki_search(k, p) for k, p in paths], (js["search"], paths))
+    check("builder twins: Tags.word and Tags.name (5 · Renal, Step 1)", js["word"] == [B.tag_word(x) for x in segs]
+          and js["name"] == B.tag_name("::".join(segs[:4])) and B.tag_word("05_Renal") == "5 · Renal",
+          (js["word"], [B.tag_word(x) for x in segs]))
+    check("builder twins: Tags.natural (punctuation, then numbers by value, then letters; accents and case aside)",
+          js["sorted"] == sorted(sortme, key=B.natural), (js["sorted"], sorted(sortme, key=B.natural)))
     spread, over, weeks, peak = [], [], [], []
     for doc in docs:
         for d in days:
@@ -1270,7 +1283,7 @@ def test_date_edits_v393():
     check("dates: Split evenly: its own date over the study days, due on the last; the date it left goes when empty",
           "u2" not in us and us[nid]["even"] is True and us[nid]["due"] == "2026-11-12" and us[nid]["tags"] == [DRUGS], sp["units"])
     placed, touched = E.place(d, [("2026-11-09", "tags", BOOK), ("2026-11-16", "tags", OTHER)], rng)
-    named = E.name_dates(placed, touched, d)
+    named = E.name_dates(placed, d)
     check("dates: Fill's places join a day's date or make one, named for what's on it (a hand name kept)",
           [u["tags"] for u in named["units"]] == [[VID, BOOK], [DRUGS], [OTHER]]
           and named["units"][0]["name"] == "Heart failure" and named["units"][2]["name"] == "Antibiotics", named["units"])
@@ -1323,7 +1336,7 @@ def test_lay_out_v393():
     check("lay out: Fill at 30 a day: a chapter bigger than the pace spread evenly, weekends off",
           us == [("2026-11-09", "2026-11-10", ["#Big::#Book"]), ("2026-11-11", "2026-11-12", ["#Big::#Videos::Cardio"]),
                  ("2026-11-13", "2026-11-16", ["#Big::#Videos::Pulm"])]
-          and r["note"] == "Put 150 cards on Mon 9 Nov to Mon 16 Nov." and len(r["touched"]) == 3 and r["daily"] is None, (us, r))
+          and r["note"] == "Put 150 cards from Mon 9 Nov to Mon 16 Nov." and len(r["touched"]) == 3 and r["daily"] is None, (us, r))
     doc = {"deck": "Big Step 1", "units": [], "end": "2026-11-13",
            "events": [{"id": "e1", "day": "2026-11-14", "name": "Cardio quiz"}]}
     r = B.lay_out(doc, t, {"mode": "end", "days": week, "daily": 20}, cover, start, "2026-11-04", lambda: next(ids), aim="e1")
@@ -1332,7 +1345,7 @@ def test_lay_out_v393():
           r["daily"] == 41 and us == [("2026-11-09", "2026-11-10", ["#Big::#Book"], "e1"),
                                       ("2026-11-11", "2026-11-12", ["#Big::#Videos::Cardio"], "e1"),
                                       ("2026-11-13", None, ["#Big::#Videos::Pulm"], "e1")]
-          and r["note"] == "Put 150 cards on Mon 9 Nov to Fri 13 Nov.", (us, r))
+          and r["note"] == "Put 150 cards from Mon 9 Nov to Fri 13 Nov.", (us, r))
     late = {"deck": "Big Step 1", "units": [], "end": "2026-11-08"}
     r = B.lay_out(late, t, {"mode": "end", "days": week, "daily": 20}, cover, start, "2026-11-04", lambda: next(ids))
     check("lay out: an end before the start: nothing, and why",
@@ -1341,11 +1354,11 @@ def test_lay_out_v393():
     r = B.lay_out(doc, t, pace, cover | {"tag:Misc"}, start, "2026-11-04", lambda: next(ids), week_ahead=True)
     check("lay out: just next week: from its Monday, nothing starting after its Sunday, what's left unsaid",
           [u["opens"] for u in doc["units"]] == ["2026-11-09", "2026-11-11", "2026-11-13"]
-          and r["note"] == "Put 150 cards on Mon 9 Nov to Mon 16 Nov.", (doc["units"], r))
+          and r["note"] == "Put 150 cards from Mon 9 Nov to Mon 16 Nov.", (doc["units"], r))
     r2 = B.lay_out(doc, t, pace, cover | {"tag:Misc"}, start, "2026-11-04", lambda: next(ids))
     check("lay out: Fill again goes on after the last date, with only what's left",
           [(u["opens"], u["tags"]) for u in doc["units"]][-1] == ("2026-11-17", ["Misc"])
-          and r2["note"] == "Put 10 cards on Tue 17 Nov to Tue 17 Nov.", (doc["units"], r2))
+          and r2["note"] == "Put 10 cards on Tue 17 Nov.", (doc["units"], r2))
     hd = {"deck": "Big Step 1", "units": [{"id": "u1", "name": "Videos", "opens": start, "tags": ["#Big::#Videos", "Misc"],
                                            "decks": [], "cards": []}]}
     placed = B.placed_keys(hd, t)
@@ -1365,7 +1378,8 @@ def test_plan_edits_v393():
     from due_crew.planner import build as B
     p = E.set_pace({"units": []}, "end", [1, 1, 1, 1, 1, 0, 0], 25, ["tag:B", "tag:A", "tag:A"])
     check("plan: the pace, its study days, cards a day, what it covers",
-          p["pace"] == {"mode": "end", "days": [1, 1, 1, 1, 1, 0, 0], "daily": 25, "cover": ["tag:A", "tag:B"]}, p)
+          p["pace"] == {"mode": "end", "days": [1, 1, 1, 1, 1, 0, 0], "daily": 25, "cover": ["tag:B", "tag:A"]}
+          and len(E.set_pace({}, "daily", [1] * 7, 20, [f"tag:T{i}" for i in range(600)])["pace"]["cover"]) == 500, p)
     words = []
     for args in (("x", [1] * 7), ("daily", [0] * 7), ("daily", [1] * 6)):
         try:
@@ -1673,8 +1687,8 @@ def test_split_keeps_the_date_v393():
     n = iter(f"n{i}" for i in range(9))
     before = doc
     out = E.take_off(doc, "h", "tags", "A", keep=True)
-    got = B.fill(out, items, "2026-11-06", None, 30, [1, 1, 1, 1, 1, 0, 0], lambda: next(n))
-    out = E.name_dates(E.cleanup(out), got["touched"], before)
+    B.fill(out, items, "2026-11-06", None, 30, [1, 1, 1, 1, 1, 0, 0], lambda: next(n))
+    out = E.name_dates(E.cleanup(out), before)
     h = next((u for u in out["units"] if u["id"] == "h"), None)
     check("split: the date stays, its first part on it, the rest on a new date",
           h is not None and h["tags"] == ["A::One"] and h["name"] == "Heart week" and h["due"] == "2026-11-10"
@@ -1771,6 +1785,79 @@ def test_day_notes_v393():
     check("notes: in the library, a stranger's note isn't shown to anyone else",
           [x["text"] for x in R.notes(lee, pid)] == ["Lab day, keep it light", "Quiz moved"])
     check("notes: they go with the plan", R.delete(sam, pid) and not store.plan_notes)
+
+
+def test_lay_out_review_fixes_v393():
+    """3.9.3's review of Lay it out: one autoName and renameAll (a cut's
+    name follows its plan tag, a tag with a date below it reads "· the
+    rest", a name typed stays); placed keys looked up, not scanned; the
+    pace the server keeps (5,000 a day, 500 ticks); a day over the pace
+    that isn't past; "²" is no card number; a cut's search once; Fill's
+    words."""
+    import itertools
+    from due_crew.planner import build as B
+    root = {"tagroot": "MS2", "tags": [{"id": "t1", "name": "SLG 12"}]}
+    ptag = P.tag_path(root, root["tags"][0])
+    q = B.cut_q(VID, ptag)
+    t = B.Tree([(VID, 9), (VID + "::Extra", 2), (BOOK, 5), ("A", 10), ("A::One", 4)], [])
+    doc = dict(root, deck="Big Step 1", units=[
+        {"id": "u1", "name": "Heart Failure · SLG 12", "opens": "2026-11-09", "tags": [], "decks": [], "cards": [],
+         "cut": [{"tag": VID, "in": "t1", "q": q}], "search": [q]},
+        {"id": "u2", "name": "A", "opens": "2026-11-10", "tags": ["A"], "decks": [], "cards": []},
+        {"id": "u3", "name": "My own name", "opens": "2026-11-11", "tags": [BOOK], "decks": [], "cards": []}])
+    placed = B.placed_keys(doc, t)
+    check("names: autoName with a cut is the cut's (Heart Failure · SLG 12), a date's first tag read as the site reads it",
+          B.auto_name(doc, t, doc["units"][0], placed) == "Heart Failure · SLG 12"
+          and B.auto_name(doc, t, doc["units"][1], placed) == "A" and B.tag_word("Heart_Failure") == "Heart Failure")
+    r = E.rename_plan_tag(doc, "t1", "Unit 12")
+    check("names: a plan tag renamed, the date named for its cut follows it; one named by hand doesn't",
+          r["units"][0]["name"] == "Heart Failure · Unit 12" and r["units"][2]["name"] == "My own name", r["units"])
+    more = E.name_dates(dict(doc, units=doc["units"] + [{"id": "u4", "name": "One", "opens": "2026-11-12", "tags": ["A::One"],
+                                                         "decks": [], "cards": []}]), doc, t)
+    check("names: a tag with a date below it reads \"· the rest\" (renameAll, every date named for what's on it)",
+          [u["name"] for u in more["units"]] == ["Heart Failure · SLG 12", "A · the rest", "My own name", "One"], more["units"])
+    typed = E.name_dates(E.rename(doc, "u2", "Week one"), doc, t)
+    check("names: a name this change typed stays (nameIt), and one left blank is named again",
+          typed["units"][1]["name"] == "Week one"
+          and E.name_dates(dict(doc, units=[dict(doc["units"][1], name="")]), doc, t)["units"][0]["name"] == "A", typed["units"])
+    rng = random.Random(7)
+    paths = ["A", "A::B", "A::B::C", "a::b::d", "X", "X::Y", "A:", "A:::B", "Q::R::S::T"]
+    keys = [f"{k}:{p}" for k in ("tag", "deck") for p in paths]
+    same = True
+    for _ in range(300):
+        pl = set(rng.sample(keys, rng.randint(0, 6)))
+        fast = B.Placed(pl)
+        for key in keys:
+            slow_is = key in pl or any(B.under(p, key) for p in pl)
+            below = [p for p in pl if B.under(key, p)]
+            slow_below = sorted(p for p in below if not any(x != p and B.under(x, p) for x in below))
+            same = same and B.is_placed(key, fast) == slow_is == B.is_placed(key, pl) \
+                and sorted(B.placed_below(key, fast)) == slow_below == sorted(B.placed_below(key, pl))
+    check("placed: looked up by what's above and below, the same as scanning every placed key", same)
+    check("placed: a tag kept without its extras is on the calendar (the tree's map, worked out once)",
+          "tag:" + VID in B.placed_keys({"units": [{"id": "x", "opens": "2026-11-09", "search": [B.without_q(VID, [VID + "::Extra"])]}]}, t)
+          and t.extras() is t.extras())
+    big = B.Tree([("Big", 30000)], [])
+    lay = {"units": [], "end": "2026-11-13"}
+    ids = itertools.count()
+    r = B.lay_out(lay, big, {"mode": "end", "days": [1] * 7}, {"tag:Big"}, "2026-11-09", "2026-11-01", lambda: f"n{next(ids)}")
+    check("pace: 30,000 cards in 5 days fills at more than the server keeps; the pace saved is 5,000 at most",
+          r["daily"] > 5000 and E.set_pace({}, "end", [1] * 7, r["daily"])["pace"]["daily"] == 5000, r)
+    hv_doc = {"units": [{"id": "a", "name": "A", "opens": "2026-09-07"}, {"id": "m", "name": "M", "opens": "2026-09-08"},
+                        {"id": "b", "name": "B", "opens": "2026-11-09"}]}
+    tot = {"a": 400, "m": 0, "b": 300}
+    past = B.heavy(hv_doc, big, {"mode": "daily", "days": [1] * 7, "daily": 20}, set(), "2026-09-07", lambda u: tot[u["id"]])
+    now = B.heavy(hv_doc, big, {"mode": "daily", "days": [1] * 7, "daily": 20}, set(), "2026-09-07", lambda u: tot[u["id"]], "2026-10-19")
+    check("heavy: the first day over the pace that isn't past (a plan that's been running doesn't say September)",
+          past["a"] == "2026-09-07" and now["a"] == "2026-11-09" and now["unit"]["id"] == "b", (past, now))
+    check("picks: \"²\" is a digit but no card number: a bad token, not a crash",
+          B.picks_take("cards:g1:² g2:3")["cards"] == [["g2", 2]] and B.picks_take("cards:g1:²")["bad"] == ["g1:²"])
+    once = E.set_cut(dict(doc, units=[dict(doc["units"][1], tags=[VID], search=[q])]), "u2", VID, "t1")
+    check("cut: a date that has the cut's search already keeps it once (addSearch)",
+          once["units"][0]["search"] == [q] and once["units"][0]["cut"][0]["q"] == q, once["units"])
+    check("fill: its words, one day or from one to another, a card or cards",
+          B.put_words(1, "Mon 9 Nov", "Mon 9 Nov") == "Put 1 card on Mon 9 Nov."
+          and B.put_words(1500, "Mon 9 Nov", "Fri 13 Nov") == "Put 1,500 cards from Mon 9 Nov to Fri 13 Nov.")
 
 
 def main():

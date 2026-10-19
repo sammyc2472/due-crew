@@ -21,6 +21,7 @@ from .. import plans as P
 from . import build as B
 from . import date_dialogs as DD
 from . import edits as E
+from .settings_tab import _WheelToPage
 
 ROLE = Qt.ItemDataRole.UserRole
 VIEWS = (("resource", "Resource"), ("system", "System"), ("other", "Other"))  # the builder's, those the tags have; then Deck
@@ -56,7 +57,7 @@ class LayoutTab(QWidget):
         row = QHBoxLayout()
         self.view = QComboBox()
         self.view.setToolTip("<span>How the deck's tags are sorted: by resource (#), by system (^), the rest, or its subdecks</span>")
-        self.view.currentIndexChanged.connect(lambda _i: self._fill_tree())
+        self.view.currentIndexChanged.connect(lambda _i: None if self._loading else self._fill_tree())
         row.addWidget(self.view)
         self.find = QLineEdit()
         self.find.setPlaceholderText("Search tags and subdecks")
@@ -83,7 +84,7 @@ class LayoutTab(QWidget):
         ll.addWidget(self.ticked)
         prow = QHBoxLayout()
         self.put_btn = QPushButton("Put it on the next free day")
-        self.put_btn.setToolTip("<span>The builder's +: the picked tag or subdeck on the next study day after the last date. "
+        self.put_btn.setToolTip("<span>The picked tag or subdeck on the next study day after the last date. "
                                 "To put it on a date of your choosing: the Dates tab's Change › Add from the deck…</span>")
         self.put_btn.clicked.connect(lambda: self._put(self._row_key()))
         prow.addWidget(self.put_btn)
@@ -100,7 +101,12 @@ class LayoutTab(QWidget):
         self.start_in = QDateEdit()
         self.start_in.setCalendarPopup(True)
         self.start_in.setDisplayFormat("ddd d MMM yyyy")
-        self.start_in.dateChanged.connect(self._start_changed)
+        self.start_in.setKeyboardTracking(False)  # a typed date counts once it's typed, not at each digit
+        self._starting = QTimer(self)  # and a click or arrow on it once it rests: the start can move every date
+        self._starting.setSingleShot(True)
+        self._starting.setInterval(600)
+        self._starting.timeout.connect(self._start_changed)
+        self.start_in.dateChanged.connect(lambda _d: None if self._loading else self._starting.start())
         line.addWidget(self.start_in)
         line.addSpacing(12)
         line.addWidget(_plain("Study days"))
@@ -230,6 +236,14 @@ class LayoutTab(QWidget):
         scroll.setWidget(right)
         scroll.viewport().setAutoFillBackground(False)  # the window's own ground behind it
         right.setAutoFillBackground(False)
+        guard = _WheelToPage(scroll)  # a wheel scrolling the page doesn't move the start or the pace
+        for w in (self.start_in, self.mode, self.end_in, self.aim_in, self.daily):
+            w.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+            w.installEventFilter(guard)
+        self._asking = QTimer(self)  # what the plan asks (a day over the pace), once the pace rests
+        self._asking.setSingleShot(True)
+        self._asking.setInterval(300)
+        self._asking.timeout.connect(self._asks)
         split.addWidget(scroll)
         split.setStretchFactor(0, 4)
         split.setStretchFactor(1, 5)
@@ -251,6 +265,8 @@ class LayoutTab(QWidget):
             self.said.setText("")
         if not self.dirty:  # what's ticked here and not saved yet stays through another change's save
             self.pace = dict({"mode": "placed" if P.units(doc) else "daily", "days": [1] * 7, "daily": 20}, **(doc.get("pace") or {}))
+            if not doc.get("pace") and doc.get("end"):
+                self.pace["mode"] = "end"  # fromDoc: a plan with an end and no pace yet finishes by it
             self.cover = set(self.pace.get("cover") or [])
         pace = self.pace
         self.start = B.plan_start(doc, self.start or B.next_monday(win.ops.today()))
@@ -307,7 +323,7 @@ class LayoutTab(QWidget):
     def _item(self, key, full=False):
         t = self._tree()
         path = B.path_of(key)
-        it = QTreeWidgetItem([P._word(path.split("::")[-1]) if not full else " › ".join(P._word(x) for x in path.split("::")),
+        it = QTreeWidgetItem([B.tag_name(path) if full else B.tag_word(path.split("::")[-1]),
                               f"{t.n(key):,}"])
         it.setData(0, ROLE, key)
         it.setToolTip(0, f"<span>{esc(path)}</span>")
@@ -328,7 +344,7 @@ class LayoutTab(QWidget):
         term = self.find.text().strip().lower()
         if term:
             if self._hay[0] is not t:
-                self._hay = (t, [(key, (B.path_of(key) + "\n" + " › ".join(P._word(x) for x in B.path_of(key).split("::"))).lower())
+                self._hay = (t, [(key, (B.path_of(key) + "\n" + B.tag_name(B.path_of(key))).lower())
                                  for key in t.order])
             n = 0
             for key, hay in self._hay[1]:
@@ -346,12 +362,12 @@ class LayoutTab(QWidget):
             item = self.tree.topLevelItem(0) if self.tree.topLevelItemCount() == 1 else None
             while item is not None:
                 item.setExpanded(True)
-                self._expanded(item)
+                self._expanded(item, marks=False)
                 item = item.child(0) if item.childCount() == 1 else None
         self.tree.blockSignals(False)
         self._marks()
 
-    def _expanded(self, item):
+    def _expanded(self, item, marks=True):
         if item.childCount() == 1 and item.child(0).data(0, ROLE) is None:
             self.tree.blockSignals(True)
             item.takeChild(0)
@@ -360,7 +376,8 @@ class LayoutTab(QWidget):
                 if self._shown(key) and t.n(key):
                     item.addChild(self._item(key))
             self.tree.blockSignals(False)
-            self._marks()
+            if marks:
+                self._marks()
 
     def _items(self):
         out, stack = [], [self.tree.topLevelItem(i) for i in range(self.tree.topLevelItemCount())]
@@ -397,7 +414,7 @@ class LayoutTab(QWidget):
             tot = sum(t.n(k) for k in B.cover_items(t, self.cover))
             left = B.cover_left(t, self.cover, placed)
             self.ticked.setText((f"{tot:,} cards ticked · {left:,} not on a day yet." if tot else "Tick what the plan covers.")
-                                + (" Fill or Save the pace keeps the ticks." if self.dirty else ""))
+                                + (" Ticks aren't saved until you Fill or Save the pace." if self.dirty else ""))
 
     def _ticked(self, item, col):
         if col != 0 or not item.data(0, ROLE):
@@ -405,7 +422,7 @@ class LayoutTab(QWidget):
         self.cover = B.toggle(self.cover, self._tree(), item.data(0, ROLE), self.view.currentData(), self.kinds)
         self.dirty = True
         self._marks()
-        self._show()
+        self._paced()
 
     # ---- the builder's +: one onto a day ----
 
@@ -449,63 +466,74 @@ class LayoutTab(QWidget):
             self.days[i].setChecked(True)
             self._loading = False
             return
-        self.pace["days"], self.dirty = days, True
-        self._show()
+        self.pace["days"] = days
+        self._paced()
 
     def _mode(self):
         if self._loading:
             return
-        self.pace["mode"], self.dirty = self.mode.currentData(), True
-        self._show()
+        self.pace["mode"] = self.mode.currentData()
+        self._paced()
 
     def _daily(self):
         if not self._loading:
-            self.pace["daily"], self.dirty = int(self.daily.value()), True
-            self._show()
+            self.pace["daily"] = int(self.daily.value())
+            self._paced()
 
     def _end(self):
         if not self._loading:
-            self.aim, self.dirty = None, True
-            self._show()
+            self.aim = None
+            self._paced()
 
     def _aim(self):
         if self._loading:
             return
         eid = self.aim_in.currentData()
         ev = next((e for e in self.win.raw["doc"].get("events") or [] if e.get("id") == eid), None) if eid else None
-        self.aim, self.dirty = (eid if ev else None), True
+        self.aim = eid if ev else None
         if ev:
             self._loading = True
             self.end_in.setDate(QDate.fromString(E._later(ev["day"], -1), "yyyy-MM-dd"))
             self._loading = False
-        self._show()
+        self._paced()
 
-    def _start_changed(self, d):
-        if self._loading:
+    def _start_changed(self):
+        if self._loading or not self.win.author():
             return
-        day = d.toString("yyyy-MM-dd")
+        day = self.start_in.date().toString("yyyy-MM-dd")
         doc = self.win.raw["doc"]
-        if not P.units(doc):
-            self.start = day  # no dates yet: the start set here stays, as the builder's does
-            self._show()
-            return
         delta = (E._day(day) - E._day(self.start)).days
         if not delta:
             return
-        if confirm(self, f"Move every date {abs(delta)} day{'s' if abs(delta) != 1 else ''} {'later' if delta > 0 else 'earlier'}?",
-                   "Every date, quiz and exam, review day and the end date move with the start, for everyone following it.",
-                   "Move them"):
-            self.win._apply(lambda dd: E.shift_all(dd, delta))
+        moves = P.units(doc) or doc.get("events") or doc.get("reviews") or doc.get("end")
+        if not moves:
+            self.start = day  # nothing on the calendar yet: the start set here stays, as the builder's does
+            self._paced()
+            return
+        what = ("Every date, quiz and exam, review day and the end date move" if P.units(doc)
+                else "The quizzes and exams, review days and the end date move")
+        if not self.win.busy and confirm(
+                self, f"Move {'every date' if P.units(doc) else 'the calendar'} {abs(delta)} day{'s' if abs(delta) != 1 else ''} "
+                f"{'later' if delta > 0 else 'earlier'}?", f"{what} with the start, for everyone following it.", "Move them"):
+            was = self.start
+            self.start = day  # with no dates the start is this tab's: it moves with them
+            self.win._apply(lambda dd: E.shift_all(dd, delta), then=lambda saved: None if saved else self._start_back(was))
         else:
-            self._loading = True
-            self.start_in.setDate(QDate.fromString(self.start, "yyyy-MM-dd"))
-            self._loading = False
+            self._start_back(self.start)
+
+    def _start_back(self, day):
+        self.start = day
+        self._loading = True
+        self.start_in.setDate(QDate.fromString(day, "yyyy-MM-dd"))
+        self._loading = False
+        self._show()
 
     def _doc_now(self):
-        """The doc with this tab's end date (Finish by) in it."""
+        """The doc with this tab's end date (Finish by) in it, to count with
+        (a shallow copy: it's never saved)."""
         doc = self.win.raw["doc"]
         if self.pace.get("mode") == "end":
-            doc = E.set_end(doc, self.end_in.date().toString("yyyy-MM-dd"))
+            doc = dict(doc, end=self.end_in.date().toString("yyyy-MM-dd"))
         return doc
 
     def _show(self):
@@ -529,20 +557,35 @@ class LayoutTab(QWidget):
             words = f"done ≈ {P.fmt_day(fin)}" if fin else ""
             self.fill_btn.setText(f"Fill at {int(self.pace.get('daily') or 20):,} a day")
         else:
-            words = "each day from the Dates tab, or Put it on a day here"
+            words = "each day by hand: on the Dates tab, or with Put it on… under the list"
         self.how.setText(words)
-        changed = self._pace_doc() != (self.win.raw["doc"].get("pace") or {}) \
+        now = self._now()
+        changed = self._pace_doc(doc, now) != (self.win.raw["doc"].get("pace") or {}) \
             or (mode == "end" and doc.get("end") != self.win.raw["doc"].get("end"))
         self.save_btn.setEnabled(changed and not self.win.busy)
         self.fill_btn.setEnabled(not self.win.busy and t is not None)
         self.week_btn.setEnabled(not self.win.busy and t is not None)
 
-    def _pace_doc(self):
-        out = {"mode": self.pace.get("mode") or "placed", "days": [1 if x else 0 for x in self.pace.get("days") or [1] * 7]}
-        if self.pace.get("daily"):
-            out["daily"] = int(self.pace["daily"])
-        if self.cover:
-            out["cover"] = sorted(self.cover)
+    def _paced(self):
+        """The pace or the ticks changed here: words now, what the plan asks once it rests."""
+        self.dirty = True
+        self._show()
+        self._asking.start()
+
+    def _pace_doc(self, doc, now):
+        """The pace as the builder saves it: cards a day only when it's
+        asked for (Finish by keeps the pace it fills at, 5,000 at most), the
+        ticks that aren't under another, in the deck's order, 500 at most."""
+        pace, t = now["pace"], self._tree()
+        out = {"mode": pace.get("mode") or "placed", "days": [1 if x else 0 for x in pace.get("days") or [1] * 7]}
+        if out["mode"] == "daily":
+            out["daily"] = max(1, min(5000, int(pace.get("daily") or 20)))
+        elif out["mode"] == "end":
+            d1 = (B.end_daily(doc, t, pace, now["cover"], now["start"]) if t is not None else 0) or int(pace.get("daily") or 0)
+            if d1:
+                out["daily"] = max(1, min(5000, d1))
+        if now["cover"]:
+            out["cover"] = (B.cover_items(t, now["cover"]) if t is not None else sorted(now["cover"]))[:500]
         return out
 
     def _now(self):
@@ -551,15 +594,21 @@ class LayoutTab(QWidget):
         return {"pace": dict(self.pace), "cover": set(self.cover), "start": self.start, "aim": self.aim,
                 "end": self.end_in.date().toString("yyyy-MM-dd") if self.pace.get("mode") == "end" else None}
 
-    @staticmethod
-    def _with_pace(doc, now):
-        pace = now["pace"]
-        doc = E.set_pace(doc, pace.get("mode") or "placed", pace.get("days") or [1] * 7, pace.get("daily"), sorted(now["cover"]))
-        return E.set_end(doc, now["end"]) if now["end"] else doc
+    def _with_pace(self, doc, now):
+        doc = E.set_end(doc, now["end"]) if now["end"] else doc
+        p = self._pace_doc(doc, now)
+        return E.set_pace(doc, p["mode"], p["days"], p.get("daily"), p.get("cover"))
 
     def _save_pace(self):
-        now, self.dirty = self._now(), False
-        self.win._apply(lambda d: self._with_pace(d, now))
+        now = self._now()
+        self.win._apply(lambda d: self._with_pace(d, now), then=self._kept)
+
+    def _kept(self, saved):
+        """The ticks and the pace saved: nothing here waits any more (a save
+        that didn't go keeps them waiting, as they were)."""
+        if saved:
+            self.dirty = False
+            self._marks()
 
     def _fill(self, week_ahead):
         t = self._tree()
@@ -571,26 +620,24 @@ class LayoutTab(QWidget):
         got, now, today = {}, self._now(), self.win.ops.today()
 
         def change(doc):
-            doc = self._with_pace(doc, now)
-            before = E.copy.deepcopy(doc)
+            doc = self._with_pace(doc, now)  # a copy
             r = B.lay_out(doc, t, dict(now["pace"]), now["cover"], now["start"], today,
                           lambda: E.new_id(doc), week_ahead=week_ahead, aim=now["aim"])
             got.update(r)
             if not r["touched"]:
                 raise E.Refused(r["note"] or "Nothing fit.")
             if r.get("daily"):
-                doc["pace"]["daily"] = int(r["daily"])
-            return E.name_dates(doc, r["touched"], before)
+                doc["pace"]["daily"] = max(1, min(5000, int(r["daily"])))  # the server keeps 1 to 5,000
+            return doc
         self.said.setText("")
-        self.dirty = False
-        self.win._apply(change, lambda: got.get("touched", ()))
+        self.win._apply(change, lambda: got.get("touched", ()), then=self._kept)
         if got.get("note"):
             self.said.setText(got["note"])
 
     # ---- what the plan asks ----
 
     def _side(self):
-        doc, t = self.win.raw["doc"], self._tree()
+        doc = self.win.raw["doc"]
         # the plan's own tags
         self.ptags.clear()
         for x in P.plan_tags(doc):
@@ -615,18 +662,24 @@ class LayoutTab(QWidget):
                 self.cnotes.addTopLevelItem(it)
         self.cnotes.setVisible(self.cnotes.topLevelItemCount() > 0)
         self.cnote_off.setVisible(self.cnotes.topLevelItemCount() > 0)
-        # a day over the pace, and the reviews the dates bring
+        self._asks()
+
+    def _asks(self):
+        """A day over the pace (the first that isn't past), and the reviews the dates bring."""
+        if not self.win.author():
+            return
+        doc, t = self._doc_now(), self._tree()  # this tab's end date, as Finish by counts it
         self.heavy_now, self.reviews_tip = None, ""
         self.reviews.setText("")
         if t is not None:
             placed = B.placed_keys(doc, t)
             total = lambda u: B.unit_total(t, u, placed)  # noqa: E731
-            hv = B.heavy(doc, t, self.pace or (doc.get("pace") or {}), self.cover, self.start, total)
+            hv = B.heavy(doc, t, self.pace or (doc.get("pace") or {}), self.cover, self.start, total, self.win.ops.today())
             if hv:
                 hv = dict(hv, big=B.biggest(t, hv["unit"], placed),
                           till=B.give_till(doc, (self.pace or {}).get("days") or [1] * 7, hv["unit"], hv["total"], hv["cap"]))
                 when = P.fmt_day(hv["a"]) if hv["a"] == hv["b"] else f"{P.fmt_day(hv['a'])} – {P.fmt_day(hv['b'])}"
-                name = hv["unit"].get("name") or B.auto_name(t, hv["unit"], placed) or "?"
+                name = hv["unit"].get("name") or B.auto_name(doc, t, hv["unit"], placed)
                 self.heavy.setText(f"{when} {'asks' if hv['a'] == hv['b'] else 'ask'} {hv['top']:,} new a day (pace {hv['cap']:,}): "
                                    f"{name}, {hv['total']:,} by {P.fmt_day(hv['last'])}.")
                 if hv["big"]:
@@ -690,7 +743,7 @@ class LayoutTab(QWidget):
         t = self._picked_tag()
         if t is None:
             return
-        name, ok = ask_text(self, "Rename the tag", "Its name (40 characters); the dates, searches and notes using it follow:",
+        name, ok = ask_text(self, "Rename the tag", "Its name (40 characters); the dates, searches and notes using it change with it:",
                             str(t.get("name") or ""))
         if ok and name.strip() and name.strip() != t.get("name"):
             self.win._apply(lambda d: E.rename_plan_tag(d, t["id"], name))

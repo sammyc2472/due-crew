@@ -46,9 +46,7 @@ _SRC_SPLIT = re.compile(r"\s*[,;]\s*(?=(?:tag|deck):)", re.I)
 _SAFE = 2 ** 53 - 1
 
 
-def _name(path):
-    """Tags.name: a path as it reads, "Cardio › Heart Failure"."""
-    return " › ".join(P._word(x) for x in str(path).split("::"))
+_name = B.tag_name  # Tags.name
 
 
 def _leaf(p):
@@ -140,35 +138,7 @@ class _Keys:
         return len(self.tree.order) if self.tree is not None else 0
 
 
-def _extras(tree):
-    """extrasOf, worked out once a tree: each without-its-extras search, its tag."""
-    got = getattr(tree, "_extras_map", None)
-    if got is None:
-        got = {}
-        for key in tree.order:
-            if B.kind_of(key) == "tag" and tree.extra_kids(key):
-                got[B.without_q(B.path_of(key), [B.path_of(k) for k in tree.extra_kids(key)])] = B.path_of(key)
-        tree._extras_map = got
-    return got
-
-
-def auto_name(doc, tree, u, placed):
-    """autoName: a date named for what's on it (its first tag, + N more)."""
-    ks = B.srcs(u)
-    if not ks and u.get("cut"):
-        c = u["cut"][0]
-        t = next((x for x in P.plan_tags(doc) if x.get("id") == c.get("in")), None)
-        nm = f"{P._word(str(c.get('tag')).split('::')[-1])}{' · ' + t['name'] if t else ''}"
-        return E._cut(f"{nm}{' + ' + str(len(u['cut']) - 1) + ' more' if len(u['cut']) > 1 else ''}", 60)
-    wo = next((p for p in (_extras(tree).get(q) for q in u.get("search") or []) if p), None) if tree is not None else None
-    if not ks and wo:
-        return E._cut(B.label(tree, f"tag:{wo}", placed), 60)
-    if not ks:
-        n_ids = len(u.get("nids") or []) + len(u.get("cids") or []) + len(u.get("notes") or [])
-        n = len(u.get("cards") or [])
-        return ("Search" if u.get("search") else f"{n_ids:,} added by ID" if n_ids
-                else f"{n} single card{'s' if n != 1 else ''}" if n else "?")
-    return E._cut(f"{B.label(tree, ks[0], placed)}{f' + {len(ks) - 1} more' if len(ks) > 1 else ''}", 60)
+auto_name = B.auto_name  # autoName
 
 
 def from_text(doc, tree, text, whole=False, start="", plan_name="", new_id=None):
@@ -502,7 +472,7 @@ def from_text(doc, tree, text, whole=False, start="", plan_name="", new_id=None)
             u["cut"] = list(u.get("cut") or []) + [{"tag": c["tag"], "in": t["id"], "q": ""}]
         if u["id"] in auto and not B.srcs(u) and u["cut"][0]["tag"] == c["tag"]:
             more = f" + {len(u['cut']) - 1} more" if len(u["cut"]) > 1 else ""
-            u["name"] = E._cut(f"{P._word(c['tag'].split('::')[-1])} · {t['name']}{more}", 60)
+            u["name"] = E._cut(f"{B.tag_word(c['tag'].split('::')[-1])} · {t['name']}{more}", 60)
         elif u["id"] in auto and not B.srcs(u):
             u["name"] = E._cut(re.sub(r"( \+ \d+ more)?$", f" + {len(u['cut']) - 1} more", u["name"], count=1), 60)
 
@@ -619,7 +589,7 @@ def take_all(doc, r, tree, plan_name=""):
             u["name"] = auto_name(doc, tree, u, placed)
         what = ("nothing left on it, so it goes" if _bare(u) else "; ".join(p for p in (
             ", ".join(f"{t['name']} off it" for t in ts if not any(c.get("in") == t.get("id") for c in cuts)),
-            ", ".join(f"back to all of {P._word(c['tag'].split('::')[-1])}" for c in cuts)) if p))
+            ", ".join(f"back to all of {B.tag_word(c['tag'].split('::')[-1])}" for c in cuts)) if p))
         said.append(f"{P.fmt_day(u['opens'])} · {was}: {what}")
     r["units"] = [u for u in r["units"] if not _bare(u)]
     return said

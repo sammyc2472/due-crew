@@ -1458,11 +1458,34 @@ def main(out):
         made = [u for u in doc["units"] if u.get("tags") == [f"{root}::#Book"]]
         if (doc.get("pace") != {"mode": "daily", "days": [1] * 7, "daily": 20, "cover": [f"tag:{root}::#Book"]}
                 or len(made) != 1 or made[0]["opens"] != day(4) or made[0]["name"] != "Book"
-                or lay.said.text() != f"Put 6 cards on {P.fmt_day(day(4))} to {P.fmt_day(day(4))}." or lay.dirty):
+                or lay.said.text() != f"Put 6 cards on {P.fmt_day(day(4))}." or lay.dirty):
             raise RuntimeError(f"planner: Fill: {doc.get('pace')}, {made}, {lay.said.text()!r}")
         lay._fill(False)
         if lay.said.text() != "Everything ticked is on the calendar already.":
             raise RuntimeError(f"planner: Fill again: {lay.said.text()!r}")
+        # a save that doesn't go keeps the ticks waiting; one that does saves them as the builder does
+        lay.cover = set(lay.cover) | {f"tag:{root}::#Sketches"}
+        lay.dirty = True
+        lay._marks()  # what a tick does
+        lay._paced()
+        real_save = dlg.ops.save
+        dlg.ops.save = lambda _w, _pid, _v, _doc, _sum, done: done(None)
+        lay._save_pace()
+        dlg.ops.save = real_save
+        if not lay.dirty or f"tag:{root}::#Sketches" not in lay.cover or "aren't saved" not in lay.ticked.text():
+            raise RuntimeError(f"planner: a pace that didn't save lost its ticks: {lay.dirty}, {lay.cover}, {lay.ticked.text()!r}")
+        lay._save_pace()
+        if lay.dirty or STORE.plans[pid]["doc"]["pace"].get("cover") != [f"tag:{root}::#Book", f"tag:{root}::#Sketches"]:
+            raise RuntimeError(f"planner: the pace saved: {STORE.plans[pid]['doc'].get('pace')}")
+        # a plan with an end and no pace yet opens as Finish by (fromDoc); a wheel over the start scrolls the page
+        was = dlg.raw
+        dlg.raw = dict(was, doc={k: v for k, v in dict(was["doc"], end=day(30)).items() if k != "pace"})
+        lay.plan_loaded(dlg)
+        if lay.mode.currentData() != "end" or lay.end_in.isHidden() \
+                or lay.start_in.focusPolicy() != QtCore.Qt.FocusPolicy.StrongFocus:
+            raise RuntimeError(f"planner: Finish by isn't how a plan with an end opens: {lay.mode.currentData()}")
+        dlg.raw = was
+        lay.plan_loaded(dlg)
         lay._put(f"tag:{root}::#Sketches")
         doc = STORE.plans[pid]["doc"]
         if not any(u.get("tags") == [f"{root}::#Sketches"] and u["opens"] == day(5) for u in doc["units"]):

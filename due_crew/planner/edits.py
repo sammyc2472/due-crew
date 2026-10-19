@@ -103,12 +103,12 @@ def new_id(doc, rng=random):
 
 
 def auto_name(tags=(), decks=()):
-    """A new date's name from what's on it, as the builder names one: the
-    first source's last part read, "+ 2 more"."""
+    """A new date's first name from what's on it (the first source's last
+    part read, "+ 2 more"), till name_dates names it as the builder would."""
     srcs = list(tags) + list(decks)
     if not srcs:
         return "?"
-    first = P._word(str(srcs[0]).split("::")[-1])
+    first = B.tag_word(str(srcs[0]).split("::")[-1])
     return _cut(f"{first}{f' + {len(srcs) - 1} more' if len(srcs) > 1 else ''}", NAME_MAX)
 
 
@@ -584,9 +584,10 @@ def set_cut(doc, uid, tag_path, ptag_id):
         u["tags"].append(tag_path)
         return doc
     q = B.cut_q(tag_path, P.tag_path(doc, t))
-    if len(_searches(u)) >= B.SEARCH_MAX:
-        raise Refused(f"A date holds up to {B.SEARCH_MAX} searches and cuts.")
-    u["search"] = _searches(u) + [q]
+    if q not in _searches(u):  # addSearch: an Overlap search from before 3.8.1 may be it already
+        if len(_searches(u)) >= B.SEARCH_MAX:
+            raise Refused(f"A date holds up to {B.SEARCH_MAX} searches and cuts.")
+        u["search"] = _searches(u) + [q]
     u["cut"] = list(u.get("cut") or []) + [{"tag": tag_path, "in": t["id"], "q": q}]
     return doc
 
@@ -734,30 +735,38 @@ def cleanup(doc):
     return doc
 
 
-def name_dates(doc, ids, before=None):
-    """renameAll, for these dates: one with no name, or still named for what
-    was on it (before: the doc before the change), is named for what's on
-    it now. A date an author named keeps its name."""
-    was = {u.get("id"): u for u in (before or {}).get("units") or [] if isinstance(u, dict)}
+def name_dates(doc, before, tree=None):
+    """renameAll after a change: a date still named for what was on it
+    (before: the doc before the change), or with no name, is named for
+    what's on it now (B.auto_name). One an author named keeps it, and so
+    does one this change named (nameIt), unless it left it blank."""
+    was = {u.get("id"): u for u in P.units(before or {})}
+    placed_was, placed = B.placed_keys(before or {}, tree), B.placed_keys(doc, tree)
     for u in doc.get("units") or []:
-        if u.get("id") not in ids:
+        if not isinstance(u, dict):
             continue
-        old = was.get(u["id"])
-        auto = (not str(u.get("name") or "").strip() or old is None
-                or old.get("name") == auto_name(old.get("tags") or [], old.get("decks") or []))
-        if auto and (u.get("tags") or u.get("decks")):
-            u["name"] = _name(auto_name(u.get("tags") or [], u.get("decks") or []))
-        elif not str(u.get("name") or "").strip():
-            u["name"] = "Date"
+        old, name = was.get(u.get("id")), str(u.get("name") or "").strip()
+        if not name:
+            auto = True
+        elif old is None:
+            auto = name == auto_name(u.get("tags") or [], u.get("decks") or [])  # an edit's first name, not one typed
+        else:
+            auto = old.get("name") == u.get("name") and old.get("name") == B.auto_name(before, tree, old, placed_was)
+        if auto:
+            u["name"] = _name(B.auto_name(doc, tree, u, placed))
     return doc
 
 
 # ---- 3.9.3: Lay it out: the pace, the start, the end, the plan's own tags ----
 
+COVER_MAX = 500                                # plans.ts COVER_MAX
+
+
 def set_pace(doc, mode, days, daily=None, cover=None):
     """The builder's pace (plans.ts pace): how it's laid out (an end date,
     cards a day, or each day placed), its study days, cards a day, and
-    what it covers ("tag:PATH", "deck:PATH")."""
+    what it covers ("tag:PATH", "deck:PATH"; in the order given, as the
+    builder saves them in the deck's, 500 at most as the server keeps)."""
     if mode not in ("end", "daily", "placed"):
         raise Refused("That isn't a pace.")
     days = [1 if x else 0 for x in days]
@@ -768,7 +777,7 @@ def set_pace(doc, mode, days, daily=None, cover=None):
     if daily is not None:
         pace["daily"] = max(1, min(5000, int(daily)))
     if cover:
-        pace["cover"] = sorted(set(cover))[:2000]
+        pace["cover"] = list(dict.fromkeys(cover))[:COVER_MAX]
     doc["pace"] = pace
     return doc
 
@@ -931,7 +940,7 @@ def rename_plan_tag(doc, tid, name):
     old, before = P.tag_path(doc, t), copy.deepcopy(doc)
     t["name"] = v
     _retag(doc, old, P.tag_path(doc, t))
-    return name_dates(doc, {u.get("id") for u in doc.get("units") or []}, before)  # renameAll
+    return name_dates(doc, before)  # renameAll: "Heart Failure · SLG 12" follows the tag
 
 
 def drop_say(doc, tid):
@@ -980,7 +989,7 @@ def delete_plan_tag(doc, tid):
     else:
         doc.pop("tags", None)
     _retag(doc, path, None)
-    return name_dates(doc, {u.get("id") for u in doc.get("units") or []}, before)  # renameAll
+    return name_dates(doc, before)  # renameAll
 
 
 # ---- 3.9.3: Settings and Progress ----

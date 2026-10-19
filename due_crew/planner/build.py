@@ -10,6 +10,7 @@ where it's from; change one, change both (CLAUDE.md's twins).
   typical card's (Reviews).
 """
 
+import bisect
 import datetime
 import math
 import re
@@ -98,7 +99,7 @@ def remark_line(r):
 def remark_take(rest):
     """Remarks.take: the part after "note |": {card: [guid, ord], text} or
     {tag, text}, {bad: True}, or None."""
-    m = re.match(r"card:(\S+?):(\d+)(?:\s+\|\s*|\s{2,})(.*)$", rest, re.I | re.S)
+    m = re.match(r"card:(\S+?):([0-9]+)(?:\s+\|\s*|\s{2,})(.*)$", rest, re.I | re.S)
     if m:
         n = int(m.group(2))
         return ({"card": [m.group(1), n - 1], "text": m.group(3)} if len(m.group(1)) <= 40 and 1 <= n <= 1001
@@ -136,7 +137,7 @@ def picks_take(line):
                 continue
             at = tok.rfind(":")
             g, n = tok[:at], tok[at + 1:]
-            if at > 0 and _guid_ok(g) and n.isdigit() and 1 <= int(n) <= 1001:
+            if at > 0 and _guid_ok(g) and n.isascii() and n.isdigit() and 1 <= int(n) <= 1001:  # "²" is a digit, not a number
                 out["cards"].append([g, int(n) - 1])
             else:
                 out["bad"].append(tok)
@@ -168,7 +169,7 @@ def anki_search(kind, path):
     if kind == "deck":
         return f'"deck:{esc(path)}"'
     segs = str(path).split("::")
-    first = re.sub(r"\\_v\d+$", lambda m: "\\_v*", esc(segs[0]), flags=re.I)
+    first = re.sub(r"\\_v[0-9]+$", lambda m: "\\_v*", esc(segs[0]), flags=re.I)
     return '"tag:' + "::".join([first] + [esc(x) for x in segs[1:]]) + '"'
 
 
@@ -198,9 +199,21 @@ SEARCH_LEN = 500
 IDS_MAX = 5000                                 # a date's note ids, card ids or notes, each
 
 
-def _tag_word(seg):
-    from .. import plans as P
-    return P._word(seg)
+def tag_word(seg):
+    """Tags.word: a tag part as it reads, "05_Renal" as "5 · Renal",
+    "#AK_Step1_v12" as "Step 1" (plans._word, a follower's, leaves the
+    number off)."""
+    s = re.sub(r"(?i)_v[0-9]+$", "", re.sub(r"(?i)^AK_", "", re.sub(r"^[#^$!]+", "", str(seg))))
+    s = re.sub(r"\s+", " ", s.replace("_", " ")).strip()
+    m = re.match(r"0*([0-9]+)\s*[.)-]?\s+(\S.*)$", s)
+    if m:
+        s = f"{m.group(1)} · {m.group(2)}"
+    return re.sub(r"([a-z])([0-9])", r"\1 \2", s) or str(seg)
+
+
+def tag_name(path):
+    """Tags.name: a path as it reads, "Cardio › Heart Failure"."""
+    return " › ".join(tag_word(x) for x in str(path).split("::"))
 
 
 _OR = re.compile(r"\sOR\s")
@@ -213,7 +226,7 @@ def search_name(q):
     ws = []
     for m in re.finditer(r'(-?)"?tag:"?((?:\\.|[^\s"])+)', str(q), re.I):
         parts = [x for x in re.sub(r"\\(.)", r"\1", m.group(2)).split("::") if x.replace("*", "")]
-        w = _tag_word(parts[-1]).replace("*", "") if parts else ""
+        w = tag_word(parts[-1]).replace("*", "") if parts else ""
         if w:
             ws.append((m.group(1), w))
     if len(ws) == 2 and not ws[0][0]:
@@ -239,12 +252,12 @@ def words(s):
 
 
 def _nums(s):
-    return [int(x) for x in re.findall(r"\d+", str(s or ""))]
+    return [int(x) for x in re.findall(r"[0-9]+", str(s or ""))]
 
 
 def _part_nums(seg):
     """A tag part's own numbers: a leading "03_" is the deck's order, not one."""
-    return _nums(re.sub(r"^[#^]?\d+[_ .-]+", "", str(seg)))
+    return _nums(re.sub(r"^[#^]?[0-9]+[_ .-]+", "", str(seg)))
 
 
 def same_word(a, b):
@@ -424,9 +437,27 @@ def weekly(ws):
 
 # ---- the deck's tree, as the builder reads it (counts, children, order) ----
 
+# Tags.natural is localeCompare (numeric, base): punctuation first in its
+# own order, then numbers by value, then letters, case and accents aside
+_ICU_PUNCT = " _-,;:!?.'\"()[]{}@*/\\&#%`^+<=>|~$"
+_COLL = {ord(c): chr(0x100 + i) for i, c in enumerate(_ICU_PUNCT)}
+_COLL.update({ord(c): chr(0x400 + ord(c)) for c in "abcdefghijklmnopqrstuvwxyz"})
+_FOLD = str.maketrans({"æ": "ae", "œ": "oe", "ø": "o", "ł": "l", "đ": "d"})
+_DIGITS = re.compile(r"[0-9]+")
+
+
+def _num(m):
+    n = m.group().lstrip("0") or "0"
+    return f"\u0300{chr(0x301 + len(n))}{n}"
+
+
 def natural(s):
-    """Tags.natural's order: numbers by value, letters without case."""
-    return [(0, int(x), "") if x.isdigit() else (1, 0, x.lower()) for x in re.findall(r"\d+|\D+", str(s))]
+    """Tags.natural's order, as a key."""
+    s = str(s).casefold()
+    if not s.isascii():
+        s = "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c)).translate(_FOLD)
+        s = "".join(c if c.isascii() else ("\u1000" if c.isalnum() else "\u0200") + c for c in s)
+    return _DIGITS.sub(_num, s.translate(_COLL))
 
 
 class Tree:
@@ -439,6 +470,7 @@ class Tree:
     def __init__(self, tags=(), decks=(), count=None):
         self._n = {}
         self._count = count
+        self._extras = None
         self.kids_of = {"root:tag": [], "root:deck": []}
         for kind, rows in (("tag", tags), ("deck", decks)):
             have = {}
@@ -487,6 +519,16 @@ class Tree:
     def extra_kids(self, key):
         return [k for k in self.kids(key) if kind_of(key) == "tag" and is_extra(path_of(k).split("::")[-1])]
 
+    def extras(self):
+        """extrasOf's map, worked out once: each without-its-extras search, its tag."""
+        if self._extras is None:
+            self._extras = {}
+            for key in self.order:
+                ks = self.extra_kids(key)
+                if ks:
+                    self._extras[without_q(path_of(key), [path_of(k) for k in ks])] = path_of(key)
+        return self._extras
+
 
 def kind_of(key):
     return key[:key.index(":")]
@@ -507,11 +549,29 @@ def srcs(u):
 
 def extras_of(tree, q):
     """The tag a without-its-extras search is, or None."""
-    for key in tree.order:
-        if kind_of(key) == "tag" and tree.extra_kids(key):
-            if without_q(path_of(key), [path_of(k) for k in tree.extra_kids(key)]) == q:
-                return path_of(key)
-    return None
+    return tree.extras().get(q) if tree is not None else None
+
+
+class Placed(frozenset):
+    """placedKeys' answer, with what's above and below each key worked out
+    once (a big deck's Fill asks at every tag)."""
+
+    def index(self):
+        if not hasattr(self, "_ix"):
+            self._ix = _index(self)
+        return self._ix
+
+
+def _index(placed):
+    """({(kind, path lowercased)}, {kind: [(path lowercased, key)] sorted})."""
+    low, by = set(), {}
+    for p in placed:
+        k, lp = kind_of(p), path_of(p).lower()
+        low.add((k, lp))
+        by.setdefault(k, []).append((lp, p))
+    for v in by.values():
+        v.sort()
+    return low, by
 
 
 def placed_keys(doc, tree=None):
@@ -520,21 +580,36 @@ def placed_keys(doc, tree=None):
     out = set()
     for u in S.units(doc):
         out.update(srcs(u))
-        if tree is not None:
-            for q in u.get("search") or []:
-                if "-" in q:
-                    p = extras_of(tree, q)
-                    if p:
-                        out.add(f"tag:{p}")
-    return out
+        for q in u.get("search") or []:
+            p = extras_of(tree, q) if "-" in q else None
+            if p:
+                out.add(f"tag:{p}")
+    return Placed(out)
 
 
 def is_placed(key, placed):
-    return key in placed or any(under(p, key) for p in placed)
+    """On a date, or under one that is (under(p, key) for some p placed)."""
+    if key in placed:
+        return True
+    low = (placed.index() if isinstance(placed, Placed) else _index(placed))[0]
+    k, lp = kind_of(key), path_of(key).lower()
+    i = lp.find("::")
+    while i >= 0:
+        if (k, lp[:i]) in low:
+            return True
+        i = lp.find("::", i + 1)
+    return False
 
 
 def placed_below(key, placed):
-    below = [p for p in placed if under(key, p)]
+    """The placed keys under `key`, the topmost of them."""
+    by = (placed.index() if isinstance(placed, Placed) else _index(placed))[1].get(kind_of(key)) or []
+    pre = path_of(key).lower() + "::"
+    below = []
+    for lp, p in by[bisect.bisect_left(by, (pre,)):]:
+        if not lp.startswith(pre):
+            break
+        below.append(p)
     return [p for p in below if not any(q != p and under(q, p) for q in below)]
 
 
@@ -552,24 +627,32 @@ def unit_total(tree, u, placed):
 
 
 def label(tree, key, placed):
-    w = _tag_word(path_of(key).split("::")[-1])
+    w = tag_word(path_of(key).split("::")[-1])
     return f"{w} · the rest" if placed_below(key, placed) else w
 
 
-def auto_name(tree, u, placed):
-    """autoName: a date named for what's on it."""
+def cut_name(doc, c):
+    """cutName: "Cephalosporins · SLG 12", a tag kept to one of the plan's own."""
+    t = next((x for x in doc.get("tags") or [] if isinstance(x, dict) and x.get("id") == c.get("in")), None)
+    return f"{tag_word(str(c.get('tag')).split('::')[-1])}{' · ' + str(t.get('name')) if t else ''}"
+
+
+def auto_name(doc, tree, u, placed):
+    """autoName: a date named for what's on it (its first tag, + N more)."""
+    from .edits import _cut
     ks = srcs(u)
+    more = lambda xs: f" + {len(xs) - 1} more" if len(xs) > 1 else ""  # noqa: E731
     if not ks and u.get("cut"):
-        return None  # a cut's name is its plan tag's: the caller keeps the one it has
+        return _cut(f"{cut_name(doc, u['cut'][0])}{more(u['cut'])}", 60)
+    wo = next((p for p in (extras_of(tree, q) for q in u.get("search") or []) if p), None)
+    if not ks and wo:
+        return _cut(label(tree, f"tag:{wo}", placed), 60)
     if not ks:
-        wo = next((extras_of(tree, q) for q in u.get("search") or [] if "-" in q and extras_of(tree, q)), None)
-        if wo:
-            return label(tree, f"tag:{wo}", placed)[:60]
-        if u.get("search"):
-            return "Search"
+        n_ids = len(u.get("nids") or []) + len(u.get("cids") or []) + len(u.get("notes") or [])
         n = len(u.get("cards") or [])
-        return f"{n} single card{'s' if n != 1 else ''}" if n else None
-    return f"{label(tree, ks[0], placed)}{f' + {len(ks) - 1} more' if len(ks) > 1 else ''}"[:60]
+        return ("Search" if u.get("search") else f"{n_ids:,} added by ID" if n_ids
+                else f"{n} single card{'s' if n != 1 else ''}" if n else "?")
+    return _cut(f"{label(tree, ks[0], placed)}{more(ks)}", 60)
 
 
 def pieces(tree, key, cap, placed):
@@ -736,7 +819,7 @@ def fill(doc, items, frm, until, cap, days, new_id, end=None):
 
 def left_names(xs):
     """leftNames: what a fill left off, by name: "Renal, Pulm · the rest and 2 more"."""
-    names = [f"{_tag_word(path_of(x['key']).split('::')[-1])}{' · the rest' if x.get('rest') else ''}" for x in xs[:3]]
+    names = [f"{tag_word(path_of(x['key']).split('::')[-1])}{' · the rest' if x.get('rest') else ''}" for x in xs[:3]]
     return ", ".join(names) + (f" and {len(xs) - 3} more" if len(xs) > 3 else "")
 
 
@@ -933,25 +1016,33 @@ def lay_out(doc, tree, pace, cover, start, today, new_id, week_ahead=False, aim=
             if u["id"] not in before and str(u["opens"]) < str(ev.get("day")) and not u.get("for"):
                 u["for"] = ev["id"]
     left_n = sum(x["n"] for x in r["left"])
-    words = [f"Put {r['placed']:,} cards on {P.fmt_day(dd.first(frm))} to {P.fmt_day(r['last'])}." if r["placed"]
+    words = [put_words(r["placed"], P.fmt_day(dd.first(frm)), P.fmt_day(r["last"])) if r["placed"]
              else "No study days left in that week." if week_ahead else "Nothing fit."]
     if left_n and (r["note"] or not week_ahead):
+        tip = (" Move the finish date." if end and not r["note"]
+               else " Raise the cards a day for fewer, bigger dates." if r["note"] and pace.get("mode") == "daily" else "")
         words.append(f"{r['note'] + ' ' if r['note'] else ''}{left_n:,} didn't fit"
-                     f"{' by ' + P.fmt_day(end) if end and not r['note'] else ''}: {left_names(r['left'])}.")
+                     f"{' by ' + P.fmt_day(end) if end and not r['note'] else ''}: {left_names(r['left'])}.{tip}")
     out["note"] = " ".join(words)
     out["touched"] = r["touched"]
     return out
 
 
-def heavy(doc, tree, pace, cover, start, total_of):
+def put_words(n, a, b):
+    """putWords: what a Fill put where, "Put 150 cards from Mon 9 Nov to Fri 13 Nov."."""
+    return f"Put {n:,} card{'s' if n != 1 else ''} {f'on {a}' if a == b else f'from {a} to {b}'}."
+
+
+def heavy(doc, tree, pace, cover, start, total_of, today=None):
     """heavyNote: the first run of days whose work is over the pace (a
-    quarter over it): {a, b, top, unit, total, last, cap} or None."""
+    quarter over it), of those not past by today (the builder's, of those
+    its calendar shows): {a, b, top, unit, total, last, cap} or None."""
     cap = (end_daily(doc, tree, pace, cover, start) or int(pace.get("daily") or 0)) if pace.get("mode") == "end" \
         else int(pace.get("daily") or 0) if pace.get("mode") == "daily" else 0
     if not cap:
         return None
     work = work_map(doc, total_of, pace.get("days") or [1] * 7)
-    runs = over(work, cap)
+    runs = [r for r in over(work, cap) if not today or r["b"] >= str(today)]
     if not runs:
         return None
     run = runs[0]

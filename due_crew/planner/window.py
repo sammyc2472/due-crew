@@ -901,18 +901,27 @@ class PlanWindow(QDialog):
             if callable(getattr(page, "busy_changed", None)):
                 page.busy_changed(self)
 
-    def _apply(self, change, touched=(), keep=None, then=None):
+    def _apply(self, change, touched=(), keep=None, then=None, rename=True):
         """One change to the plan, saved: change(doc) -> doc, on the doc as the
         server keeps it; the dates it touched (and any it made) counted again
         in this copy (or a function, asked after the change: the dates it
         worked out). keep: what to have picked once it's saved (a callable,
         asked after the change), else what's picked now. then(saved): this
-        change's own outcome, once (True only when it saved)."""
+        change's own outcome, once (True only when it saved). rename: the
+        dates named for what's on them named again (renameAll; Text names
+        its own)."""
         if not self.author() or self.busy:
             if then:
                 then(False)
             return
+        if rename:
+            change = self._renamed(change)
         self._save(change, touched if callable(touched) else set(touched), keep, again=True, then=then)
+
+    def _renamed(self, change):
+        def run(doc):
+            return E.name_dates(change(doc), doc, self.deck_tree())
+        return run
 
     def _save(self, change, touched, keep, again, then=None):
         then = then or (lambda _ok: None)
@@ -1128,7 +1137,8 @@ class PlanWindow(QDialog):
         return self._tree
 
     def _named_by_hand(self, u):
-        return bool(str(u.get("name") or "").strip()) and u.get("name") != E.auto_name(u.get("tags") or [], u.get("decks") or [])
+        return bool(str(u.get("name") or "").strip()) and u.get("name") != B.auto_name(
+            self.doc, self.deck_tree(), u, B.placed_keys(self.doc, self.deck_tree()))
 
     def _suggestions(self, u):
         """The deck's tags a date's name points at that no date has yet (Suggest.tags),
@@ -1242,12 +1252,12 @@ class PlanWindow(QDialog):
         total = B.eff(t, tk, others) or len(self.idx.match(u, self.swap, self.doc))
         cap, days = self._pace()
         rest = t.only(tk) if kids else 0
-        parts = " · ".join(f"{B._tag_word(B.path_of(k).split('::')[-1])} {B.eff(t, k, others):,}" for k in kids[:6])
+        parts = " · ".join(f"{B.tag_word(B.path_of(k).split('::')[-1])} {B.eff(t, k, others):,}" for k in kids[:6])
         if len(kids) > 6:
             parts += f" · {len(kids) - 6} more"
         if kids and rest > 0:
             parts += f" · the rest {rest:,}"
-        dlg = DD.SplitDialog(self, B._tag_word(path.split("::")[-1]), total, parts, cap,
+        dlg = DD.SplitDialog(self, B.tag_word(path.split("::")[-1]), total, parts, cap,
                              -(-total // cap) if cap else 3)
         if not dlg.exec():
             return
@@ -1271,12 +1281,11 @@ class PlanWindow(QDialog):
             items.append({"key": tk, "n": rest, "rest": True, "even": bool(cap) and rest > cap})
 
         def change(doc):
-            before = doc
             doc = E.take_off(doc, u["id"], field, path, keep=True)  # takeOut: the date stays, its parts fill onto it first
             got = B.fill(doc, items, u["opens"], None, cap, days, lambda: E.new_id(doc))
             if got["left"]:
                 raise E.Refused(got["note"] or f"{sum(x['n'] for x in got['left']):,} didn't fit: {B.left_names(got['left'])}.")
-            return E.name_dates(E.cleanup(doc), got["touched"], before)
+            return E.cleanup(doc)  # renamed as every change is, in _save
         self._apply(change, {u["id"]}, keep=lambda: ("date", u["id"]) if self._unit(u["id"]) else None)
 
     def _todo(self):
