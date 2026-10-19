@@ -974,6 +974,41 @@ def check_392(tmp):
         except Exception as e:
             ok("a card deleted since the view was drawn: nothing happens, no error", False, repr(e))
 
+        # a Tag Only preset (Anki's default since 23.10): the eighth miss tags it and keeps it in my reviews
+        tdid = col.decks.id("Tag Deck")
+        tconf = col.decks.get_config(col.decks.add_config_returning_id("Tag Only"))
+        tconf["lapse"]["leechAction"], tconf["lapse"]["leechFails"] = 1, 8
+        col.decks.update_config(tconf)
+        td = col.decks.get(tdid)
+        td["conf"] = tconf["id"]
+        col.decks.save(td)
+        tn = col.new_note(model)
+        tn["Front"], tn["Back"] = "Tag only front", "back"
+        col.add_note(tn, tdid)
+        tc = tn.card_ids()[0]
+        col.db.execute("UPDATE cards SET type = 2, queue = 2, ivl = 10, due = ?, lapses = 7, reps = 20, factor = 2500 WHERE id = ?", sday, tc)
+        col.decks.select(tdid)
+        qc = col.sched.get_queued_cards()
+        if qc.cards and qc.cards[0].card.id == tc:
+            card = col.get_card(tc)
+            card.start_timer()
+            col.sched.answer_card(col.sched.build_answer(card=card, states=qc.cards[0].states, rating=CardAnswer.AGAIN))
+        c = col.get_card(tc)
+        tsql = TF._deck_sql(col, tdid)
+        tcnt = LF.counts(col, tsql)
+        ok("tag only: Anki's eighth miss tags it and keeps it in my reviews; the line counts it as one",
+           c.lapses == 8 and c.queue != -1 and "leech" in [x.lower() for x in c.note().tags] and tcnt == (0, 0, 1)
+           and len(col.find_cards('deck:"Tag Deck" tag:leech -is:suspended')) == 1, f"{c.lapses} lapses, queue {c.queue}, {tcnt}")
+        LF._mine("leech_view").clear()
+        tv = LF.view(col, tdid, tsql)
+        ok("tag only: the view lists it as still in my reviews, due today",
+           [x["cid"] for x in tv["kept"]] == [tc] and not tv["gone"] and not tv["near"] and tv["kept"][0]["due"] == 0, str(tv["kept"]))
+        LF.fresh(tdid, tc)
+        c = col.get_card(tc)
+        ok("tag only: Learn it fresh: a new card, the tag off, one undo step",
+           c.type == 0 and c.lapses == 0 and "leech" not in [x.lower() for x in c.note().tags] and LF.counts(col, tsql) == (0, 0, 0)
+           and col.undo_status().undo == "Due Crew: learn it fresh", f"type {c.type}, {c.note().tags}, {col.undo_status().undo}")
+
         # the map by when I started them, and the shading by % right, on the real log
         try:
             t = time.perf_counter(); m = TF._map(col, did, deck_sql, cutoff); t_m = time.perf_counter() - t

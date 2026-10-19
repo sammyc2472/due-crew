@@ -431,7 +431,11 @@ _LEECH = {"n_gone": 14, "n_near": 9, "out": 2, "gone": [
     "near": [{"cid": 4, "front": "hubiera vs hubiese", "topic": "Subjunctive", "lapses": 7, "secs": 11, "due": 1,
               "tip": [{"name": "Dre", "text": "Same meaning; hubiera is the one you'll hear."}], "knows": ["Dre"], "susp": False},
              {"cid": 5, "front": "ojalá que yo […] (tener) más tiempo", "topic": "Subjunctive", "lapses": 7, "secs": 14,
-              "due": 3, "tip": [], "knows": [], "susp": False}]}
+              "due": 3, "tip": [], "knows": [], "susp": False}],
+    "n_kept": 2, "kept": [{"cid": 6, "front": "se me olvidó vs olvidé", "topic": "Se", "lapses": 9, "secs": 8, "due": 0,
+                           "tip": [], "knows": ["Maya"], "susp": False, "kept": True},
+                          {"cid": 7, "front": "por vs para: el regalo es ___ ti", "topic": "Por vs para", "lapses": 8, "secs": 6,
+                           "due": 2, "tip": [], "knows": [], "susp": False, "kept": True}]}
 from due_crew import team as _TM  # noqa: E402
 # each card carries the shared deck it first came from too; a week's name is the map's topics, never that
 # (Sam: "isn't helpful ... should be organized by topic"); this week's, started, none reviewed yet: too soon
@@ -455,7 +459,11 @@ sections.append("<h3>3.9.2: the map by when you started them, and the exam's sco
 sections.append("<h3>3.9.2: Insights' leeches line</h3>" + board.render(
     DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
     you=_YOU("insights", insights={"decks": _DECKS, "did": 20, "exam": "2026-10-14", "plan": None,
-                                   "view": dict(_DECK_INS, leeches=14, near=9)})))
+                                   "view": dict(_DECK_INS, leeches=14, near=9, kept=6)})))
+sections.append("<h3>3.9.2: Insights' leeches line, Tag Only (Anki's default since 23.10)</h3>" + board.render(
+    DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
+    you=_YOU("insights", insights={"decks": _DECKS, "did": 20, "exam": "2026-10-14", "plan": None,
+                                   "view": dict(_DECK_INS, leeches=0, near=0, kept=11)})))
 sections.append("<h3>3.9.2: Leeches, in Insights' place (one button a card)</h3>" + board.render(
     DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
     you=_YOU("insights", insights={"decks": _DECKS, "did": 20, "exam": "2026-10-14", "plan": None,

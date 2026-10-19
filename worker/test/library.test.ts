@@ -170,6 +170,12 @@ describe("the library (3.5, B)", () => {
     const own = await dre.call("POST", `/plans/${p.id}/copy`, { start: "2026-10-05" });
     expect(own.body).toMatchObject({ name: "Cardio block (copy)" });
     expect(own.body.basedOn).toBeUndefined();
+    // 3.9.2: the builder's Copy for next year names it so, right after: the name alone, its dates as copied
+    const ny = await dre.call("PUT", `/plans/${own.body.id}`, { version: own.body.version, name: "Cardio block (next year)", summary: "named for next year" });
+    expect(ny.status).toBe(200);
+    expect(ny.body).toMatchObject({ name: "Cardio block (next year)", version: own.body.version + 1 });
+    expect(ny.body.doc.units[0].opens).toBe("2026-10-05");
+    expect((await dre.call("GET", `/plans/${own.body.id}/log`)).body.log[0].summary).toBe("named for next year");
   });
 
   it("the admin takes a plan out; its author reads why and can't list it again until it's put back", async () => {

@@ -15192,6 +15192,23 @@ def test_native_emoji_picker_v391():
           asked == [(412, 230, 72, 44), (0, 0, 64, 40), "off"] and evals[1] == NE.picked_js("🦋"), (asked, evals))
 
 
+def test_more_emoji_v392():
+    """3.9.2 (Sam's pick): the Cheer window's Other (and a status) takes the
+    emoji a picker gives below U+2190 (© ® ‼ ⁉ ™ ℹ); keycaps start with a
+    digit, which the Worker refuses, so they stay out; letters never pass.
+    The page's oneEmoji keeps the same list (shapes.EMOJI_LOW)."""
+    from due_crew.backend import shapes as S
+    from due_crew import native_emoji as NE
+    ok = ["©️", "®️", "‼️", "⁉️", "™️", "ℹ️"]
+    check("© ® ‼ ⁉ ™ ℹ pass, as the cheer and the native box take them; keycaps, letters and digits never",
+          all(S.clean_emoji(t) == t and NE.first_emoji(t) == t for t in ok)
+          and all(S.clean_emoji(t) == "" and NE.first_emoji(t) == "" for t in ("1️⃣", "#️⃣", "a", "5", "i")),
+          [(t, S.clean_emoji(t), NE.first_emoji(t)) for t in ok])
+    js = board.cheer_overlay_js({"uid": "dre", "name": "Dre", "emojis": ["🎉"]})
+    lst = re.search(r"var low = \[([^\]]*)\];", js).group(1)
+    check("the page's oneEmoji takes the same list", sorted(int(x, 16) for x in lst.split(", ")) == sorted(S.EMOJI_LOW), lst)
+
+
 def test_cheer_pill_and_window_v391():
     """3.9.1 (Sam: "Cheers, clearer: build 1", "get rid of the current cheers
     click to the right of the stats", "make the cheers and doodles modals in
@@ -16927,6 +16944,15 @@ def test_builder_audit_v392():
     check("Copy for next year: a save first; the saved plan's first date, 364 days on; plans_full said",
           "if (dirty) {" in ny and "Save your changes first" in ny and 'await api("GET", `/plans/${plan.id}`)' in ny
           and "addDays(saved, 364)" in ny and '"plans_full"' in ny, ny[:600])
+    import subprocess
+    named = ny[ny.index("const named = "):ny.index(";", ny.index("const named = "))]
+    out = subprocess.run(["node", "-e", named + "; console.log(JSON.stringify([named('Pharm block'), named('x'.repeat(70)), named('Cardio  ' + 'y'.repeat(40))]))"],
+                         capture_output=True, text=True, timeout=30)
+    got = json.loads(out.stdout or "null") or []
+    check("Copy for next year: named \"… (next year)\", within a plan name's 60 (Sam's pick)",
+          got[:1] == ["Pharm block (next year)"] and all(len(x) <= 60 for x in got) and got[1].endswith("x (next year)")
+          and "PUT\", `/plans/${mine.id}`" in ny and "name: named(got.name || plan.name)" in ny and "go(`/plans/${mine.id}`)" in ny,
+          (got, out.stderr[-300:]))
     i = js.index("function reviewsNote()")
     rn = js[i:js.index("function sugRows", i)]
     check("the reviews line: its busiest week among the 16 it lists, a longer plan's list marked as cut",
@@ -17002,7 +17028,7 @@ def test_leeches_392():
         _state["leech_view"], _state["leech_open"] = {}, {}
         deck = TF._deck_sql(col, 10)
         check("glue: counts for Insights' line: 3 suspended leeches, 2 a miss away (7 and 11 lapses, not 9)",
-              LF.counts(col, deck) == (3, 2), LF.counts(col, deck))
+              LF.counts(col, deck) == (3, 2, 0), LF.counts(col, deck))
         dc._on_js(False, as_board("duecrew:insleeches:10"), DeckBrowser())
         v = LF.current(col, 10, deck)
         check("glue: See them opens the view in Insights' place", LF.is_open(10) and v["n_gone"] == 3 and v["n_near"] == 2)
@@ -17042,7 +17068,7 @@ def test_leeches_392():
         dc._on_js(False, as_board("duecrew:insleech:10:out:101"), DeckBrowser())
         v2 = LF.current(col, 10, deck)
         check("glue: Leave it out: still suspended, out of the list and the count", q(101)[0] == -1 and pc["leech_out"] == [101]
-              and [c["cid"] for c in v2["gone"]] == [103] and LF.counts(col, deck) == (1, 1), v2)
+              and [c["cid"] for c in v2["gone"]] == [103] and LF.counts(col, deck) == (1, 1, 0), v2)
         dc._on_js(False, as_board("duecrew:insleech:10:back:all"), DeckBrowser())
         check("glue: Bring all back: every one listed, one step", q(103)[0] == 2 and q(101)[0] == -1
               and col.undo_steps[-1] == ("Due Crew: bring back", [103]))
@@ -17157,6 +17183,88 @@ def test_leeches_audit_v392():
         sheets.ask_text = sv_ask
 
 
+def test_leeches_tag_only_v392():
+    """3.9.2 (Sam's pick): since Anki 23.10 a preset's leech action is Tag
+    Only: Anki tags a leech and keeps showing it, none suspended. Insights'
+    line counts them ("N leeches still in your reviews · See them") and the
+    view lists them after the rest: a tagged card at its deck's leech count
+    or past it, in a deck that tags (a tag a shared deck shipped isn't one;
+    one I unsuspended by hand in a deck that suspends isn't either)."""
+    import due_crew as dc
+    from aqt import mw
+    from aqt.deckbrowser import DeckBrowser
+    from due_crew import leech_flow as LF, plan_flow as F, team_flow as TF, board
+    from due_crew.app import _state
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    cut = fakes.day_cutoff_for(TODAY)
+    for cid, did, ctype, queue, lapses, due, tags, nid, ord_ in (
+            (301, 10, 2, 2, 8, 1003, "Bio::Cells leech", None, 0),      # Tag Only: kept, back in 3 days
+            (302, 10, 3, 1, 9, 0, "Bio::Krebs leech", None, 0),         # relearning: due today
+            (303, 10, 2, 2, 3, 1002, "Bio::Krebs leech", None, 0),      # the tag a shared deck shipped
+            (304, 10, 2, -1, 8, 1003, "Bio::Cells leech", None, 0),     # suspended by hand: Anki stopped showing it
+            (305, 10, 2, 2, 7, 1001, "Bio::Cells", None, 0),            # Tag Only never suspends: not a miss away
+            (306, 11, 2, 2, 8, 1001, "Bio::Sub leech", None, 0),        # a deck that suspends, put back by hand
+            (307, 10, 2, -2, 8, 1000, "Bio::Cells leech", None, 0),     # buried: back tomorrow
+            (308, 10, 2, 2, 8, 1003, "", 301, 1)):                      # 301's reversed card, a leech too
+        kw = {"nid": nid, "ord_": ord_} if nid else {"tags": tags}
+        fakes.add_card(conn, cid, did=did, ctype=ctype, queue=queue, ivl=3, due=due, lapses=lapses, **kw)
+        fakes.add_review(conn, (cut - 3 * 86400) * 1000 + cid, ease=1, cid=cid)
+    col = fakes.FakeCol(conn, cut)
+    col.decks = fakes.FakeDecks({10: "Bio", 11: "Bio::Sub"})
+    col.decks.config_dict_for_deck_id = lambda d: {"lapse": {"leechFails": 8, "leechAction": 0 if int(d) == 11 else 1}}
+    col.mod = 1
+    col.get_card = lambda cid: types.SimpleNamespace(id=cid, odid=0, did=10, note=lambda: types.SimpleNamespace(
+        guid=f"guid{cid:06d}", fields=["x"]))
+    pc, said = {}, []
+    saved = (F._pcfg, F._psave, F._after_change, mw.col, LF.tooltip, LF.app.swap, _state.get("leech_view"), _state.get("leech_open"))
+    try:
+        F._pcfg, F._psave, F._after_change = (lambda: pc), (lambda d: None), (lambda: None)
+        mw.col = col
+        LF.tooltip = lambda m, **k: said.append(m)
+        LF.app.swap = lambda c=None: None
+        _state["leech_view"], _state["leech_open"] = {}, {}
+        deck = TF._deck_sql(col, 10)
+        tags = lambda nid: conn.execute("SELECT tags FROM notes WHERE id = ?", (nid,)).fetchone()[0]  # noqa: E731
+        q = lambda cid: conn.execute("SELECT queue, lapses FROM cards WHERE id = ?", (cid,)).fetchone()  # noqa: E731
+        check("tag only: counts: the one suspended by hand, none a miss away, four kept in my reviews",
+              LF.counts(col, deck) == (1, 0, 4), LF.counts(col, deck))
+        v = LF.current(col, 10, deck)
+        kept = [c["cid"] for c in v["kept"]]
+        check("tag only: the view lists them, due soonest first; never the shipped tag, a deck that suspends, a near card",
+              v["n_kept"] == 4 and kept[:2] == [302, 307] and set(kept) == {301, 302, 307, 308}
+              and [c["cid"] for c in v["gone"]] == [304] and v["near"] == [], v)
+        html = board._ins_leeches(10, v)
+        check("board: the summary, its own group, due today and back tomorrow, Leave it out but no Bring back",
+              "<b>4</b> still in your reviews" in html and "Leeches still in your reviews" in html
+              and "due today" in html and "back tomorrow" in html
+              and "duecrew:insleech:10:out:301" in html and "Stays in your reviews, out of this list" in html
+              and "duecrew:insleech:10:fresh:301" in html and "duecrew:insleech:10:back:301" not in html
+              and "Bring all 1 back" in html, html)
+        line = board._insights_html(10, {"leeches": 0, "near": 0, "kept": 4})
+        check("board: Insights' line: N leeches still in your reviews · See them (Sam's words)",
+              "<b>4</b> leeches still in your reviews &middot; <a" in line and "duecrew:insleeches:10" in line, line)
+        line = board._insights_html(10, {"leeches": 1, "near": 2, "kept": 1})
+        check("board: with the others, said once",
+              "<b>1</b> leech Anki stopped showing you &middot; <b>1</b> still in your reviews &middot; <b>2</b> one miss away" in line, line)
+        dc._on_js(False, as_board("duecrew:insleech:10:fresh:301"), DeckBrowser())
+        col.mod = 2
+        v = LF.current(col, 10, deck)
+        check("Learn it fresh on one: a new card; its note keeps the tag while the reversed card's still a leech",
+              q(301) == (0, 0) and "leech" in tags(301) and 308 in [c["cid"] for c in v["kept"]] and 301 not in [c["cid"] for c in v["kept"]],
+              (q(301), tags(301), v["kept"]))
+        dc._on_js(False, as_board("duecrew:insleech:10:out:308"), DeckBrowser())
+        col.mod = 3
+        v = LF.current(col, 10, deck)
+        check("Leave it out: still in my reviews, out of the list and the count, its way back at the foot",
+              q(308) == (2, 8) and pc["leech_out"] == [308] and LF.counts(col, deck) == (1, 0, 2) and v["out"] == 1
+              and "Put it back" in board._ins_leeches(10, v), v)
+        dc._on_js(False, as_board("duecrew:insleech:10:fresh:302"), DeckBrowser())
+        check("Learn it fresh on the last of a note: the tag comes off", q(302) == (0, 0) and "leech" not in tags(302), tags(302))
+    finally:
+        F._pcfg, F._psave, F._after_change, mw.col, LF.tooltip, LF.app.swap, _state["leech_view"], _state["leech_open"] = saved
+
+
 def test_exam_dates_audit_v392():
     """3.9.2's audit: the next exam set on the last one's own day keeps it as
     the last (the scope starts after it); an upcoming exam moved keeps the
@@ -17247,6 +17355,15 @@ def test_scope_map_and_words_392():
     sm = board._ins_map(10, soon + [{"key": "x", "name": "Older", "n": 5, "started": 5, "know": 80}], "right")
     check("map: a week of cards started, none reviewed yet: started, and too soon to say (not 100%, not new)",
           soon[0]["started"] == 30 and soon[0]["know"] is None and "too soon<small>" in sm and "none reviewed yet" in sm, sm)
+    check("map: the key names too soon when a tile shows it, new when one does", "<i class=\"sw sn\"></i>too soon" in sm
+          and "<i class=\"sw sn\"></i>new, too soon" in board._ins_map(10, soon + [{"key": "n", "name": "Not started", "n": 9,
+                                                                                     "started": 0, "know": None}], "right"), sm)
+    one = board._ins_map(10, [{"key": "a", "name": "Cardio", "n": 30, "started": 30, "know": 90},
+                              {"key": "b", "name": "Renal", "n": 20, "started": 20, "know": 80}], "right",
+                         ways=[{"key": "s", "name": "Systems", "on": True},
+                               {"key": "~start", "name": "When you started them", "on": False, "one": True}])
+    check("map by start, picked, but all I've started is from one week: it says so (Sam's pick), by topic",
+          "Everything you&rsquo;ve started is from one week, so this is by topic." in one, one)
     # ---- the scope, pure ----
     check("scope: since the day after my last exam, in the last 10 weeks; older, or none, the whole deck",
           T.scope("2026-11-02", "2026-09-04", "", "2026-10-18") == ("2026-09-05", "last")
@@ -17384,6 +17501,12 @@ def test_scope_map_and_words_392():
               [(t["n"], t["know"] is not None) for t in v.get("map") or []] == [(20, True), (20, True)]
               and next(w for w in v["map_ways"] if w["key"] == T.START_WAY)["on"]
               and TF._find_cids(col, 10, v["map"][0]["find"]) == list(range(920, 940)), v.get("map"))
+        conn.execute("UPDATE revlog SET id = id + 20 * 86400000 + 997 WHERE cid < 920 AND type = 0")  # all started one week
+        _state["insights"] = {}
+        v = TF.insights(10, None, _day(5))
+        sw = next(w for w in v["map_ways"] if w["key"] == T.START_WAY)
+        check("glue: picked, but everything started in one week: not on, and it says so (Sam's pick)",
+              sw.get("one") is True and not sw["on"], sw)
     finally:
         F._today, F._pcfg, F._psave, mw.col, TF.cfg, _state["insights"] = saved
 

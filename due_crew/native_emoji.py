@@ -71,8 +71,9 @@ def _windows():
 def first_emoji(text):
     """What's picked, when it reads as an emoji (not a letter, a digit or a
     space); the page cuts it to its first one. "" otherwise."""
+    from .backend.shapes import EMOJI_LOW
     t = str(text or "").strip()
-    if not t or t[0].isalnum() or ord(t[0]) < 0x2190:
+    if not t or (ord(t[0]) not in EMOJI_LOW and (t[0].isalnum() or ord(t[0]) < 0x2190)):
         return ""
     return t[:16]
 

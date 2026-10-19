@@ -665,7 +665,7 @@ In Anki (as a follower):
 - [ ] Plan ▾ › How its cards open: switch to When I'm ready (a deck with open later cards offers Hold back), and back to the plan's dates (dates passed since ask, as Resume does). duecrew.com's plan page shows "At your pace · next: …" and the same choice; changing it there reaches Anki at its next refresh.
 - [ ] Browse: right-click a tag in the sidebar › Due Crew: open its cards…: the sheet counts what opens, what's open already, the leeches (they stay suspended), and the plans that hold them; Open with First in line ticked puts them first in Anki's new cards; one Edit › Undo shuts them. Pick cards in the table › Due Crew: open these…: the same for just those. Signed out: both are there.
 
-### 3.9.2: the short pass before release (about 20 minutes)
+### 3.9.2: the short pass before release (about 25 minutes)
 
 The parts of 3.9.2 only a live Anki can show, riskiest first. Use a deck with
 some history (a few weeks of reviews) and a few leeches.
@@ -678,7 +678,10 @@ some history (a few weeks of reviews) and a few leeches.
 - [ ] The map › by When you started them: weeks named by the map's own topics (never a shared deck's source names); a week you just started reads "too soon"; open a week: its topics, and Browse all on one opens only that week's cards.
 - [ ] Polaroids: a doodle sent in your evening shows your day, not tomorrow's. Settings › Theme › Dark (and Match Anki with Anki's night mode): the Polaroids go dark, black ink reads light, colours readable, Pip in its night colour.
 - [ ] Mac or Windows: Cheer window › other: the picker's pick lands; with the box up, click a quick emoji (the box goes), scroll or resize the window (it goes), or press Esc. Never left floating after the window closes.
-- [ ] duecrew.com builder, a plan you wrote: with an unsaved change, Share › Copy for next year says to save first; saved, it makes a copy whose dates fall on the same weekdays a year on.
+- [ ] Tag Only leeches: a deck whose preset's Leech action is Tag Only (Anki's default since 23.10). Fail a card past its leech count (or use one tagged leech with lapses at the threshold): Insights says "N leeches still in your reviews · See them"; the view lists it under "Leeches still in your reviews", due today or back in N days, ⋯ with Learn it fresh, Edit, Leave it out (no Bring back). Learn it fresh: a new card, tag off, one Edit › Undo.
+- [ ] The map › by When you started them, on a deck you only started this week: it stays by topic and says "Everything you've started is from one week".
+- [ ] Cheer window › other: © or ™ from the computer's picker lands as the cheer.
+- [ ] duecrew.com builder, a plan you wrote: with an unsaved change, Share › Copy for next year says to save first; saved, it makes a copy named "<plan> (next year)" whose dates fall on the same weekdays a year on.
 
 ### 3.9.1: the short pass before release (about 15 minutes; the rest of 3.9.1 below as time allows)
 

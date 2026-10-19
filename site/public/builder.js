@@ -2883,9 +2883,11 @@ async function builder(id) {
   }
 
   /** 3.9.2 (Sam's pick C3-A): next year's class gets this plan: a copy of
-   *  my own with every date 52 weeks on, so each keeps its weekday. */
+   *  my own with every date 52 weeks on, so each keeps its weekday, named
+   *  "… (next year)" (Sam's pick), not "(copy)". */
   function nextYear() {
     const firstOf = (d) => [...(d.units || []).map((u) => u.opens), ...(d.events || []).map((e) => e.day)].filter(Boolean).sort()[0];
+    const named = (n) => `${String(n || "").slice(0, 48).trimEnd()} (next year)`;  // a plan's name is 60 at most
     const first = firstOf(doc);
     if (!first) return null;
     const st = h("span", { class: "status small", role: "status" });
@@ -2895,9 +2897,13 @@ async function builder(id) {
       if (dirty) { st.className = "status small bad"; st.textContent = "Save your changes first, so they're in the copy."; return; }
       b.disabled = true; st.className = "status small"; st.textContent = "Copying…";
       try {
-        const saved = firstOf((await api("GET", `/plans/${plan.id}`)).doc || {});
+        const got = await api("GET", `/plans/${plan.id}`);
+        const saved = firstOf(got.doc || {});
         if (!saved) throw new Error("no dates");
-        const mine = await api("POST", `/plans/${plan.id}/copy`, { start: addDays(saved, 364) });
+        let mine = await api("POST", `/plans/${plan.id}/copy`, { start: addDays(saved, 364) });
+        try {
+          mine = await api("PUT", `/plans/${mine.id}`, { version: mine.version, name: named(got.name || plan.name), summary: "named for next year" });
+        } catch (_) { /* the copy stands, named "(copy)"; Settings renames it */ }
         go(`/plans/${mine.id}`);
       } catch (err) {
         b.disabled = false; st.className = "status small bad";

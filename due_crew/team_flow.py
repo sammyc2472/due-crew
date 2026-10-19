@@ -748,9 +748,10 @@ def _work_out(did, pid=None, exam=""):
         except Exception:
             traceback.print_exc()
 
-    # the deck's leeches Anki suspended (from the plan card, 3.8.0); 3.9.2: and the ones a miss from it
+    # the deck's leeches Anki suspended (from the plan card, 3.8.0); 3.9.2: the ones a miss from it, and
+    # the ones Anki tagged and kept showing (Tag Only)
     from . import leech_flow
-    out["leeches"], out["near"] = leech_flow.counts(col, deck)
+    out["leeches"], out["near"], out["kept"] = leech_flow.counts(col, deck)
     return out
 
 
@@ -918,7 +919,9 @@ def _map(col, did, deck, cutoff):
         if len(start) >= 2:
             ways = [dict(w, on=False) for w in ways]
             shown = start
-    ways.append({"key": T.START_WAY, "name": "When you started them", "score": 0.0, "on": len(start) >= 2})
+    # 3.9.2 (Sam's pick): picked, but all I've started is from one week: said, not snapped back to topics
+    ways.append({"key": T.START_WAY, "name": "When you started them", "score": 0.0, "on": len(start) >= 2,
+                 "one": pick == T.START_WAY and len(start) == 1})
     plan_ways = _plan_ways(col, did, active, know) if active else {}
     if plan_ways:  # 3.8.1: a plan's own tags, only when picked, after the deck's own ways
         chosen = plan_ways.get(pick) if pick else None

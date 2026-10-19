@@ -2883,3 +2883,23 @@ every release that changes how something works.
   is offered only on Anki's v3 scheduler (`ahead_flow._v3`: the old v2 has
   no today-only limit), and `docs/manual-anki-checklist.md` has the release's
   short click-test pass.
+- 3.9.2, four small ones Sam okayed (19 Oct, "anything easy that requires me
+  to approve first"). Tag Only leeches: since Anki 23.10 a preset's leech
+  action is Tag Only, so Anki tags a leech and keeps showing it, and
+  Insights' leeches line showed nothing for most new decks. They're counted
+  now ("N leeches still in your reviews · See them") and listed last in the
+  same view: a tagged card at its deck's leech count or past it, in a deck
+  that tags (`leech_flow._kept`; a tag a shared deck shipped isn't one, nor a
+  card I unsuspended by hand in a deck that suspends), with Learn it fresh,
+  Edit and Leave it out behind its ⋯ and no Bring back (it never left); a
+  note keeps its tag while another of its cards is one. Checked on Anki's
+  engine: the eighth miss tags it and keeps it in relearning. The map by
+  when I started them, when everything started in one week: one tile says
+  nothing, so the map stays by topic and says why ("Everything you've
+  started is from one week"). Copy for next year names the copy "… (next
+  year)", not "(copy)": the builder renames it right after, the name alone
+  (`library.test.ts` holds the call); its plan tags keep the root the copy
+  took. The Cheer window's Other takes the emoji that are older than emoji
+  (©, ®, ‼, ⁉, ™, ℹ, as the computer's picker sends them:
+  `shapes.EMOJI_LOW`, `native_emoji.first_emoji`, the window's `oneEmoji`);
+  a keycap (1️⃣) still isn't one, as the Worker counts.

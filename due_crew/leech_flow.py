@@ -8,7 +8,9 @@ Bring back is Anki's unsuspend with the leech tag off: the card keeps its
 schedule and is due again (before an exam, that's what saves it). Learn it
 fresh is Anki's Reset: a new card again, in its place among them. Either
 is one undo step (Edit › Undo). Leave it out keeps it suspended and out of
-the count, in this profile's plans.json (`leech_out`).
+the count, in this profile's plans.json (`leech_out`). And the leeches
+Anki tagged and kept showing me (Tag Only, its default since 23.10: none of
+them suspended), still in my reviews.
 
 Mine alone: worked out here, never sent. A card's front shows here only,
 from my own copy (escaped by the board). Who has it down and their tips
@@ -107,16 +109,16 @@ def _limits(col, dids, cache):
 
 
 def counts(col, deck):
-    """(gone, near) for Insights' line: suspended leeches, and cards one
-    miss from Anki suspending them; none I left out. A leech lapsed: Anki
-    tags the note, so a sibling a big shared deck ships suspended, never
-    answered, carries the tag without being one (Sam's deck, 3.9.2)."""
+    """(gone, near, kept) for Insights' line: suspended leeches, cards one
+    miss from Anki suspending them, and leeches Anki tagged and kept in my
+    reviews; none I left out. A leech lapsed: Anki tags the note, so a
+    sibling a big shared deck ships suspended, never answered, carries the
+    tag without being one (Sam's deck, 3.9.2)."""
     out = _out()
     gone = [c for c in col.db.list(
         f"SELECT c.id FROM cards c JOIN notes n ON n.id = c.nid WHERE c.id IN ({deck}) "
         f"AND c.queue = -1 AND c.lapses > 0 AND (' ' || lower(n.tags) || ' ') LIKE '% leech %'") if c not in out]
-    near = _near(col, deck, out)
-    return len(gone), len(near)
+    return len(gone), len(_near(col, deck, out)), len(_kept(col, deck, out))
 
 
 def _near(col, deck, out=()):
@@ -126,20 +128,32 @@ def _near(col, deck, out=()):
     return [int(c) for c, lap, d in rows if int(c) not in out and lim[int(d)][1] == 0 and next_is_leech(lap, lim[int(d)][0])]
 
 
+def _kept(col, deck, out=()):
+    """3.9.2 (Sam's pick): the leeches Anki tagged and kept showing me, in a
+    deck whose leech action is Tag Only (Anki's default since 23.10), at
+    its leech count or past it (so a tag a shared deck shipped isn't one)."""
+    rows = col.db.all(f"SELECT c.id, c.lapses, CASE WHEN c.odid THEN c.odid ELSE c.did END FROM cards c "
+                      f"JOIN notes n ON n.id = c.nid WHERE c.id IN ({deck}) AND c.queue != -1 AND c.lapses > 0 "
+                      f"AND (' ' || lower(n.tags) || ' ') LIKE '% leech %'")
+    lim = _limits(col, {int(d) for _c, _l, d in rows}, {})
+    return [int(c) for c, lap, d in rows if int(c) not in out and lim[int(d)][1] == 1 and int(lap) >= lim[int(d)][0]]
+
+
 def view(col, did, deck, since=None):
-    """{gone, near, n_gone, n_near}: each card {cid, front, topic, lapses,
-    at (its last answer, ms), due (days from today, near), secs, exam,
-    tip [{name, text}], knows [names], susp}. since: an exam's scope (a
-    started-since day, ms), for "on your exam"."""
+    """{gone, near, kept, n_gone, n_near, n_kept}: each card {cid, front,
+    topic, lapses, at (its last answer, ms), due (days from today, near and
+    kept), secs, exam, tip [{name, text}], knows [names], susp, kept}.
+    since: an exam's scope (a started-since day, ms), for "on your exam"."""
     out = _out()
     sday = int(getattr(col.sched, "today", 0) or 0)
     gone_ids = [int(c) for c in col.db.list(
         f"SELECT c.id FROM cards c JOIN notes n ON n.id = c.nid WHERE c.id IN ({deck}) "
         f"AND c.queue = -1 AND c.lapses > 0 AND (' ' || lower(n.tags) || ' ') LIKE '% leech %'") if int(c) not in out]
     near_ids = _near(col, deck, out)
-    ids = gone_ids + near_ids
+    kept_ids = set(_kept(col, deck, out))
+    ids = gone_ids + near_ids + sorted(kept_ids)
     if not ids:
-        return {"gone": [], "near": [], "n_gone": 0, "n_near": 0}
+        return _empty()
     q = ",".join(str(c) for c in ids)
     stats = {int(c): (int(t or 0), int(m or 0), int(n or 0), int(f or 0)) for c, t, m, n, f in col.db.all(
         f"SELECT cid, max(id), total(time), count(), min(id) FROM revlog WHERE ease > 0 AND cid IN ({q}) GROUP BY cid")}
@@ -147,7 +161,7 @@ def view(col, did, deck, since=None):
     from .together import local_tips
     names = names_by_uid()
     session = app.client().session.get("cards") or {}
-    gone, near = [], []
+    gone, near, kept = [], [], []
     for cid, lapses, queue, due, odid, sfld, tags, guid in col.db.all(
             f"SELECT c.id, c.lapses, c.queue, CASE WHEN c.odid THEN c.odue ELSE c.due END, c.odid, n.sfld, n.tags, n.guid "
             f"FROM cards c JOIN notes n ON n.id = c.nid WHERE c.id IN ({q})"):
@@ -158,16 +172,22 @@ def view(col, did, deck, since=None):
         knows = [names[u][0].split(" ")[0] for u in info.get("knows") or [] if u in names]
         c = {"cid": int(cid), "front": front(sfld), "topic": topic(tags), "lapses": int(lapses), "at": last,
              "secs": int(round(ms / 1000.0 / n)) if n else 0, "tip": tips[:3], "knows": knows[:3],
-             "exam": bool(since and first >= since), "susp": int(queue) == -1}
+             "exam": bool(since and first >= since), "susp": int(queue) == -1, "kept": int(cid) in kept_ids}
         if c["susp"]:
             gone.append(c)
-        else:
-            c["due"] = max(0, int(due) - sday) if int(queue) in (2, 3) else 0
-            near.append(c)
+            continue
+        # a buried card's back tomorrow; a relearning one (its due a time) is due today
+        c["due"] = 1 if int(queue) in (-2, -3) else max(0, int(due) - sday) if int(queue) in (2, 3) else 0
+        (kept if c["kept"] else near).append(c)
     gone, near = order(gone, near)
-    for c in gone[:FRONTS] + near[:FRONTS]:
+    kept = order([], kept)[1]
+    for c in gone[:FRONTS] + near[:FRONTS] + kept[:FRONTS]:
         c["front"] = question(col, c["cid"], c["front"])
-    return {"gone": gone, "near": near, "n_gone": len(gone), "n_near": len(near)}
+    return {"gone": gone, "near": near, "kept": kept, "n_gone": len(gone), "n_near": len(near), "n_kept": len(kept)}
+
+
+def _empty():
+    return {"gone": [], "near": [], "kept": [], "n_gone": 0, "n_near": 0, "n_kept": 0}
 
 
 def question(col, cid, fallback=""):
@@ -201,14 +221,18 @@ def _merge(col, pos):
 
 def _untag(col, cids):
     """The notes whose leech tag comes off with these cards: not one with
-    another card still a leech, out of reviews (3.9.2's audit: a reversed
-    note's other card stayed suspended and fell out of every count)."""
+    another card still a leech, suspended or kept in my reviews (3.9.2's
+    audit: a reversed note's other card stayed suspended and fell out of
+    every count)."""
     q = ",".join(str(int(c)) for c in cids)
     nids = {int(n) for n in col.db.list(f"SELECT nid FROM cards WHERE id IN ({q})")}
     if not nids:
         return []
-    keep = {int(n) for n in col.db.list(f"SELECT nid FROM cards WHERE nid IN ({','.join(map(str, nids))}) "
-                                        f"AND id NOT IN ({q}) AND queue = -1 AND lapses > 0")}
+    rows = col.db.all(f"SELECT nid, queue, lapses, CASE WHEN odid THEN odid ELSE did END FROM cards "
+                      f"WHERE nid IN ({','.join(map(str, nids))}) AND id NOT IN ({q}) AND lapses > 0")
+    lim = _limits(col, {int(d) for _n, _q, _l, d in rows}, {})
+    # a leech Anki kept showing (Tag Only) keeps the tag too
+    keep = {int(n) for n, qu, lap, d in rows if int(qu) == -1 or (lim[int(d)][1] == 1 and int(lap) >= lim[int(d)][0])}
     return sorted(nids - keep)
 
 
@@ -300,7 +324,11 @@ def _done(did, said):
 
 def _card_of(did, cid):
     v = (_state.get("leech_view") or {}).get(int(did)) or {}
-    return next((c for c in (v.get("gone") or []) + (v.get("near") or []) if c["cid"] == int(cid)), None)
+    return next((c for c in _listed(v) if c["cid"] == int(cid)), None)
+
+
+def _listed(v):
+    return (v.get("gone") or []) + (v.get("near") or []) + (v.get("kept") or [])
 
 
 def show_tip(did, cid):
@@ -341,8 +369,7 @@ def ask(did, cid):
 
 def browse(did):
     v = (_state.get("leech_view") or {}).get(int(did)) or {}
-    cids = [c["cid"] for c in (v.get("gone") or []) + (v.get("near") or [])]
-    _pf()._browse(cids, empty="No leeches here.")
+    _pf()._browse([c["cid"] for c in _listed(v)], empty="No leeches here.")
 
 
 def open_view(did, on=True):
@@ -370,7 +397,7 @@ def current(col, did, deck, since=None):
             have["out"] = n_out(col, deck)
         except Exception:
             traceback.print_exc()
-            have = {"gone": [], "near": [], "n_gone": 0, "n_near": 0}
+            have = _empty()
         have.update(mod=mod, since=since)
         _mine("leech_view")[int(did)] = have
     return have

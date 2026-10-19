@@ -2364,6 +2364,8 @@ def _ins_leech_row(did, c):
         more.append(act("out", "Leave it out", "q", "Stays suspended, out of this list"))
         if main != back:
             more.insert(0, act("back", "Bring back", "q", "Due again, schedule kept"))
+    elif c.get("kept"):
+        more.append(act("out", "Leave it out", "q", "Stays in your reviews, out of this list"))
     toggle = "var m=this.nextElementSibling;m.hidden=!m.hidden;this.setAttribute('aria-expanded',!m.hidden);return false;"
     fr = e(str(c.get("front") or ""))
     return (f'<div class="sl-row"><span class="sl-q"><b title="{fr}">{fr or "&nbsp;"}</b>'
@@ -2379,21 +2381,23 @@ def _ins_leeches(did, L, deck_name=""):
     """3.9.2 (Sam's picks: leeches, one button per card, sorted by danger):
     in Insights' place, Insights › Leeches with the way back; the counts,
     Bring all back and Browse; the cards Anki stopped showing, then the
-    ones a miss from it. L: leech_flow.view."""
+    ones a miss from it, then the ones Anki tagged and kept showing (Tag
+    Only). L: leech_flow.view."""
     e = _html.escape
-    gone, near = L.get("gone") or [], L.get("near") or []
-    ng, nn = int(L.get("n_gone") or 0), int(L.get("n_near") or 0)
+    gone, near, kept = L.get("gone") or [], L.get("near") or [], L.get("kept") or []
+    ng, nn, nk = int(L.get("n_gone") or 0), int(L.get("n_near") or 0), int(L.get("n_kept") or 0)
     trail = (f'<div class="tmt"><a href="#" onclick="{_pycmd(f"insleech:{did}:shut:0")}">Insights</a> &rsaquo; '
              f'<b>Leeches</b>{" &middot; " + e(str(deck_name)) if deck_name else ""}</div>')
     n_out = int(L.get("out") or 0)
     # 3.9.2's audit: Leave it out's way back, on the same screen
     put = (f'<div class="tmt">{n_out:,} left out of this list &middot; <a href="#" '
            f'onclick="{_pycmd(f"insleech:{did}:unout:0")}">Put {"it" if n_out == 1 else "them"} back</a></div>') if n_out else ""
-    if not gone and not near:
+    if not gone and not near and not kept:
         return f'<div class="dc-ins">{trail}<div class="tq0">No leeches here, and none a miss away.</div>{put}</div>'
     on_exam = sum(1 for c in gone if c.get("exam"))
     summ = " &middot; ".join(x for x in (
         f"<b>{ng:,}</b> Anki stopped showing you" if ng else "",
+        f"<b>{nk:,}</b> still in your reviews" if nk else "",
         f"<b>{nn:,}</b> one miss away" if nn else "",
         f"{on_exam:,} on your exam" if on_exam else "") if x)
     heads = ""
@@ -2403,7 +2407,8 @@ def _ins_leeches(did, L, deck_name=""):
     heads += f'<a href="#" onclick="{_pycmd(f"insleech:{did}:browse:0")}">Browse</a>'
     out = f'{trail}<div class="sl-sum"><span>{summ}</span><span class="sl-hd">{heads}</span></div>'
     for rows, n, head, sub in ((gone, ng, "Anki stopped showing these", f"{ng:,}"),
-                               (near, nn, "One miss away", f"{nn:,}, still in your reviews")):
+                               (near, nn, "One miss away", f"{nn:,}, still in your reviews"),
+                               (kept, nk, "Leeches still in your reviews", f"{nk:,}")):
         if rows:
             out += (f'<div class="isec"><div class="ik">{head}<span>&nbsp;&middot; {sub}</span></div>'
                     + "".join(_ins_leech_row(did, c) for c in rows[:LEECH_SHOW])
@@ -2528,10 +2533,13 @@ def _insights_html(did, v):
                 f'Anki counts Hard as remembered. '
                 f'<a href="#" onclick="{_pycmd(f"instwo:{did}")}">Try two buttons</a> '
                 f'<a class="q" href="#" onclick="{_pycmd(f"inshardno:{did}")}">Not now</a></div>')
-    lee, near = int(v.get("leeches") or 0), int(v.get("near") or 0)
-    if lee or near:
-        # 3.8.0: from the plan card, a leech is the deck's; 3.9.2: and the ones a miss away, a view of their own
-        said = " &middot; ".join(x for x in (f"<b>{lee:,}</b> leech{'es' if lee != 1 else ''} Anki stopped showing you" if lee else "",
+    lee, near, kept = int(v.get("leeches") or 0), int(v.get("near") or 0), int(v.get("kept") or 0)
+    if lee or near or kept:
+        # 3.8.0: from the plan card, a leech is the deck's; 3.9.2: and the ones a miss away, a view of their own,
+        # and the ones Anki tagged and kept showing (Tag Only, its default since 23.10)
+        les = lambda n: f"leech{'es' if n != 1 else ''} "  # noqa: E731
+        said = " &middot; ".join(x for x in (f"<b>{lee:,}</b> {les(lee)}Anki stopped showing you" if lee else "",
+                                              f"<b>{kept:,}</b> {'' if lee else les(kept)}still in your reviews" if kept else "",
                                               f"<b>{near:,}</b> one miss away" if near else "") if x)
         out += f'<div class="iline">{said} &middot; <a href="#" onclick="{_pycmd(f"insleeches:{did}")}">See them</a></div>'
     if not out:
@@ -2555,11 +2563,12 @@ def _ins_map(did, tiles, by, at=(), ways=()):
     trail, cur = map_level(tiles, at)
     big = max(int(t["n"]) for t in cur) or 1
     how = "you’d remember now (FSRS)" if by == "fsrs" else "right in their reviews these 4 weeks"  # escaped with the tip
-    out, fresh = "", False
+    out, fresh, soon_any = "", False, False
     for i, t in enumerate(cur):
         n, k, st = int(t["n"]), t.get("know"), int(t.get("started") or 0)
         soon = k is None and st > 0  # 3.9.2's audit: started, none reviewed yet: too soon to say
         fresh = fresh or (k is None and not soon)
+        soon_any = soon_any or soon
         cards = f'{n:,} card{"" if n == 1 else "s"}'
         said = (f"{cards}, started, none reviewed yet: too soon to say" if soon
                 else f"{cards}, none started yet" if k is None
@@ -2584,7 +2593,8 @@ def _ins_map(did, tiles, by, at=(), ways=()):
                 f'&middot; <a href="#" onclick="{_pycmd(f"insmapall:{did}")}">Browse all</a></div>')
     # 3.9.2 (the students: what's the %, what's the bar?): said in the key; a tile's cards beside its %
     pct = "% you&rsquo;d recall now" if by == "fsrs" else "% right, 4 weeks"
-    key = (f'{pct}: <i class="sw s0"></i>under 70 <i class="sw s3"></i>90+' + (' <i class="sw sn"></i>new' if fresh else "")
+    grey = ", ".join(w for w, on in (("new", fresh), ("too soon", soon_any)) if on)
+    key = (f'{pct}: <i class="sw s0"></i>under 70 <i class="sw s3"></i>90+' + (f' <i class="sw sn"></i>{grey}' if grey else "")
            + ' &middot; <i class="sw bar"></i>started')
     ways = [w for w in ways or () if isinstance(w, dict)]
     if len(ways) > 1:  # 3.8.0: another way to split it, this deck's, on this computer
@@ -2599,6 +2609,8 @@ def _ins_map(did, tiles, by, at=(), ways=()):
     # 3.8.1: by a plan's own tags, the ones no card in this deck carries (a gap in the plan's coverage)
     none = next((w.get("none") or [] for w in ways if w.get("on")), [])
     gap = ""
+    if any(w.get("one") for w in ways) and not trail:
+        gap = '<div class="tmt">Everything you&rsquo;ve started is from one week, so this is by topic.</div>'
     if none and not trail:
         names = ", ".join(e(str(x)) for x in none[:6]) + (f" and {len(none) - 6} more" if len(none) > 6 else "")
         gap = f'<div class="tmt">No card in this deck carries {names}.</div>'
@@ -5178,7 +5190,8 @@ CHEER_WINDOW_JS = r"""
             var it = new Intl.Segmenter().segment(s)[Symbol.iterator]().next();
             first = it.done ? '' : it.value.segment;
         } else if (s) { first = Array.from(s)[0]; }
-        return first && !/[A-Za-z0-9\s]/.test(first) && first.charCodeAt(0) >= 0x2190 ? first : '';
+        var low = [0xA9, 0xAE, 0x203C, 0x2049, 0x2122, 0x2139];  // shapes.EMOJI_LOW (the suite checks): © ® ‼ ⁉ ™ ℹ
+        return first && !/[A-Za-z0-9\s]/.test(first) && (first.charCodeAt(0) >= 0x2190 || low.indexOf(first.charCodeAt(0)) >= 0) ? first : '';
     }
     function filter() {
         var q = find.value.trim().toLowerCase(), shown = 0;
