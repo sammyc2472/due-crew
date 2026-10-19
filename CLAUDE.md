@@ -42,6 +42,12 @@ add-on.
   colours the studied days with the user's accent: the board's title is
   the one-line logo (inline SVG on the `--dc-*` tokens), and the stacked
   one tops the sign-in and welcome screens.
+- `poc/course_mac/` — Course on a Mac, a separate add-on proof of concept
+  (Sam's, on his Mac; not part of Due Crew and never talks to its server): a
+  block's calendar read, each lecture's cards found by Apple's on-device model
+  (a Swift helper built on the Mac, or the `fm` command) or plain rules, ticked
+  and opened; Copy as plan text is its one bridge to the builder. Its own
+  tests, `poc/tests/`, and `poc/README.md`; CI doesn't run them.
 - `tests/` — `python3 tests/test_due_crew.py` (client behavior against
   `fakes.FakeWorker`, a Python restatement of the Worker; standard library
   only). `worker/test/` is the Worker itself in real workerd with D1

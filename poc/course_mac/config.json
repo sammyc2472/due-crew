@@ -1,0 +1,15 @@
+{
+  "runner": "auto",
+  "timeout": 90,
+  "prompt_chars": 5200,
+  "read_batch": 10,
+  "groups_max": 10,
+  "tag_max_notes": 400,
+  "part_max": 60,
+  "found_max": 30,
+  "calendar_chars": 1800,
+  "first_in_line": true,
+  "day_first": false,
+  "verbose_log": false,
+  "fm_schema_flag": false
+}
