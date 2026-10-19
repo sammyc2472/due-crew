@@ -16820,6 +16820,13 @@ def test_reviews_ahead_392():
         _state["ahead_day"] = {}
         v2 = AF.deck_view(col, 10, TF._deck_sql(col, 10), _day(10))
         check("glue: then the view has it", v2["trust"] and abs(v2["trust"][0] - tr["err"]) < 1e-9 and len(bg) == 1)
+        col.v3_scheduler = lambda: False
+        _state["ahead_day"] = {}
+        old = AF.deck_view(col, 10, TF._deck_sql(col, 10), _day(10))
+        AF.stop_new(10, "now")
+        del col.v3_scheduler
+        check("glue: on Anki's old v2 scheduler (no today-only limit) no stop is offered, and Do it does nothing",
+              [w["key"] for w in old["ways"]] == ["pace"] and not pc.get("new_off"), [w["key"] for w in old["ways"]])
         # Do it: no new cards now, to the exam
         dc._on_js(False, as_board("duecrew:insaheadoff:10:now"), DeckBrowser())
         lim = lambda d: store[d].get("newLimitToday")  # noqa: E731

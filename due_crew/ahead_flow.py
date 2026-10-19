@@ -157,6 +157,9 @@ def deck_view(col, did, deck, exam="", plan=None):
                exam_in=exam_in, off=off, new_today=int(new_today or 0),
                plan=plan, pool=int(unlocked or 0) if plan is not None else None,
                off_kind=pause.get("kind") if off and isinstance(pause, dict) else None)
+    if not _v3(col):
+        # 3.9.2: Anki's old v2 scheduler (2.1.55 to 23.x, by choice) has no today-only limit, so no stop is offered
+        v["ways"] = [w for w in v["ways"] if not w.get("stop") or w["key"] == v["on"]]
     v.update(did=did, today=today, days=[_iso(today, k) for k in range(-7, A.H)], exam=exam_in,
              done=int(done or 0), own=part["own"], secs=part["secs"], rate=sum(part["rate"]),
              unlocked=int(unlocked or 0), left=int(left or 0), off=bool(off),
@@ -172,6 +175,15 @@ def deck_view(col, did, deck, exam="", plan=None):
 def _off():
     pc = _pf()._pcfg()
     return pc.get("new_off") if isinstance(pc.get("new_off"), dict) else {}
+
+
+def _v3(col):
+    """Whether this collection studies on Anki's v3 scheduler (the only one
+    since 23.10), whose today-only new limit Stop new sets."""
+    try:
+        return bool(col.v3_scheduler())
+    except Exception:
+        return True
 
 
 def _decks(col, did):
@@ -281,7 +293,7 @@ def stop_new(did, kind):
     """Do it: no new cards in this deck "now" (to my exam, or till I turn
     them back on) or the "week" before my exam. Main thread."""
     col = mw.col
-    if not col or kind not in ("now", "week") or not col.decks.get(int(did), default=False):
+    if not col or kind not in ("now", "week") or not col.decks.get(int(did), default=False) or not _v3(col):
         return
     today, exam = _today(), str(cfg().get("exam_date") or "")
     exam_in = _days_to(exam, today) if exam else None

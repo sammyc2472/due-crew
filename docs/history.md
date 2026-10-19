@@ -2879,4 +2879,7 @@ every release that changes how something works.
   resize or a new page. The builder: Copy for next year copies the plan as
   saved (a save first; its first date from the saved plan, 364 days on), says
   a full account, and the reviews line's busiest week is one its list shows.
-  No third-party deck or video names in code or tests (CLAUDE.md).
+  No third-party deck or video names in code or tests (CLAUDE.md). Stop new
+  is offered only on Anki's v3 scheduler (`ahead_flow._v3`: the old v2 has
+  no today-only limit), and `docs/manual-anki-checklist.md` has the release's
+  short click-test pass.

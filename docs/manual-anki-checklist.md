@@ -665,6 +665,21 @@ In Anki (as a follower):
 - [ ] Plan ▾ › How its cards open: switch to When I'm ready (a deck with open later cards offers Hold back), and back to the plan's dates (dates passed since ask, as Resume does). duecrew.com's plan page shows "At your pace · next: …" and the same choice; changing it there reaches Anki at its next refresh.
 - [ ] Browse: right-click a tag in the sidebar › Due Crew: open its cards…: the sheet counts what opens, what's open already, the leeches (they stay suspended), and the plans that hold them; Open with First in line ticked puts them first in Anki's new cards; one Edit › Undo shuts them. Pick cards in the table › Due Crew: open these…: the same for just those. Signed out: both are there.
 
+### 3.9.2: the short pass before release (about 20 minutes)
+
+The parts of 3.9.2 only a live Anki can show, riskiest first. Use a deck with
+some history (a few weeks of reviews) and a few leeches.
+
+- [ ] Stop new: You › Insights on a deck with new cards, Reviews ahead › Stop new now › Do it. The Decks screen shows 0 new on the deck and its subdecks; Deck Options' preset is unchanged. Edit › Undo (one step, "Due Crew: new cards stopped") brings them back; Do it again, then Turn new cards back on: they're back. With an exam date set 10+ days out, Stop new a week before the exam says "From <day>, … till your exam, <date>" and today keeps its new cards.
+- [ ] Stop new before studying: Do it, then quit and reopen Anki the next day (or change the computer's date) and go straight to Study without visiting the Decks screen: no new cards.
+- [ ] A plan on a stopped deck: its card says "New cards are stopped in this deck (Insights)" with Turn them back on (no "Raise to N"); Catch up… says to turn them back on first. Browse › a new card › Why isn't this card showing?: "you stopped new cards in <deck>".
+- [ ] Leeches: Insights › See them. Each card shows its own question (a reversed card its back field; a cloze with its answer as […]). Bring back: the card is due again, one Edit › Undo re-suspends it. A Basic (and reversed) note with both cards leeches: Bring back one, the other stays listed. ⋯ › Leave it out: gone, and the list's foot says "1 left out · Put it back"; Put it back works. Study a card the list shows, come back: the list is current.
+- [ ] Insights with FSRS off (Deck Options): the exam box never says "nothing at risk", the right % has no "Anki aims for".
+- [ ] The map › by When you started them: weeks named by the map's own topics (never a shared deck's source names); a week you just started reads "too soon"; open a week: its topics, and Browse all on one opens only that week's cards.
+- [ ] Polaroids: a doodle sent in your evening shows your day, not tomorrow's. Settings › Theme › Dark (and Match Anki with Anki's night mode): the Polaroids go dark, black ink reads light, colours readable, Pip in its night colour.
+- [ ] Mac or Windows: Cheer window › other: the picker's pick lands; with the box up, click a quick emoji (the box goes), scroll or resize the window (it goes), or press Esc. Never left floating after the window closes.
+- [ ] duecrew.com builder, a plan you wrote: with an unsaved change, Share › Copy for next year says to save first; saved, it makes a copy whose dates fall on the same weekdays a year on.
+
 ### 3.9.1: the short pass before release (about 15 minutes; the rest of 3.9.1 below as time allows)
 
 The riskiest of 3.9.1, the parts only a live Anki can show, in order:
