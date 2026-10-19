@@ -2671,7 +2671,7 @@ async function builder(id) {
         h("pre", { class: "mono small muted", style: "margin:0;white-space:pre-wrap" }, "2026-10-05 | Heart failure | tag:Step1::Cardio::Heart_failure | due 2026-10-09 | even\nweek 2 | Arrhythmia | tag:Step1::Cardio::Arrhythmia\n2026-10-19 | Lecture 12 | notes:Ab3$kL9qZ1 p&x8Hk!eQ2\n2026-10-20 | Chapter 4 | deck:Chemistry::Unit 3::Chapter 4 | read: Chapter 4, sections 1 to 3\nnote | tag:Step1::Cardio::Arrhythmia | Lecture 9's slides cover this better than the book."),
         h("a", { class: "small", href: "/plan-text", target: "_blank", rel: "noopener" }, "The whole format ›")),
       h("div", { class: "row" }, modes, h("span", { class: "muted small" }, adding
-        ? `Adds to the plan's ${doc.units.length} date${doc.units.length === 1 ? "" : "s"}. Changes nothing already there.`
+        ? `Adds to the plan's ${doc.units.length} date${doc.units.length === 1 ? "" : "s"}. A line with a date's own day and name adds to that date.`
         : "Read it shows what would change. Nothing does until you Replace the plan's dates, and Save.")),
       ta, h("div", { class: "row" }, readBtn), out, preview);
   }

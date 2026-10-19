@@ -323,6 +323,11 @@ def _reset_runtime(keep_sync=False):
                   # 3.9.2's audit: keyed by deck id, and the Default deck is 1 in every collection
                   leech_view={}, leech_open={}, leech_line={}, map_at={}, ahead_day={}, ahead_line=None, ahead_asked=set())
     _pending_cheers.clear()
+    try:  # 3.9.3: the plan windows were the last account's (its plans, its requests in flight)
+        from .planner import flow as planner_flow
+        planner_flow.close_all()
+    except Exception:
+        traceback.print_exc()
 
 
 # ---- late-bound hooks, set by __init__ (which owns rendering + refresh) ----

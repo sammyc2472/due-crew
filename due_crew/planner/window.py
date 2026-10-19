@@ -187,6 +187,8 @@ class PlanWindow(QDialog):
         self.study_btn.clicked.connect(self._study)
         self.change_btn = QPushButton("Change")
         self.menu = QMenu(self.change_btn)
+        self.menu.aboutToShow.connect(self._change_menu)  # made when it opens: Suggested reads the whole deck
+        self._sugg = {}           # (date id, version) -> Suggested from its name, worked out once
         self.change_btn.setMenu(self.menu)
         for w in (self.browse_btn, self.open_btn, self.study_btn):
             row.addWidget(w)
@@ -319,7 +321,10 @@ class PlanWindow(QDialog):
         return bool(self.plan) and self.plan.get("role") in ("owner", "editor") and self.raw is not None
 
     def _empty(self, words):
+        self.picked = None  # what was picked was the last plan's (or a date that's gone)
+        self.tree.blockSignals(True)
         self.tree.clear()
+        self.tree.blockSignals(False)
         self.table.clear()
         self.title.setText("")
         self.meta.setText(words)
@@ -344,16 +349,21 @@ class PlanWindow(QDialog):
         self._busy(False, "")
         if not got:
             self.plan = self.raw = self.doc = self.idx = None
-            self.picked = None
+            self._tree = None
             self._empty("The plan didn't load: check your connection, then Reload.")
+            self._role_tabs()  # no plan: Dates alone, its words saying why
             return
         raw, plan = got
         # a save of this plan (or its undo, or a setting) changed the plan, not the deck: its index and
         # tree (a big deck's is seconds of work) stay; a plan picked or read again reads them again
         same = (saved and self.idx is not None and (self.plan or {}).get("id") == pid
                 and str((self.doc or {}).get("deck") or "") == str((plan.get("doc") or {}).get("deck") or ""))
-        self.plan = plan
         library = (raw or {}).get("library") is True
+        if plan.get("role") in ("owner", "editor") and isinstance(raw, dict):
+            mig = E.migrate_checks(raw.get("doc") or {})  # as the builder loads it: an old checkpoint, a review day
+            if mig is not raw.get("doc"):
+                raw, plan = dict(raw, doc=mig), dict(plan, doc=mig)
+        self.plan = plan
         self.raw = raw if plan.get("role") in ("owner", "editor") else None
         # an author's view is the plan's own dates; a follower's, mine (as my follow moves them)
         self.doc = plan["doc"] if self.raw is not None else self.ops.my_doc(plan)
@@ -497,13 +507,18 @@ class PlanWindow(QDialog):
         week's by day. A note is on the plan's own day: a follower's dates
         may have moved, so a date's is its day in the plan."""
         key = self.picked[1] if self.picked else None
+        if self.plan is None:
+            kind = ""
         if kind == "date":
             u = next((x for x in P.units(self.plan["doc"]) if x["id"] == key), None) or self._unit(key)
             day = (u or {}).get("opens")
         elif kind == "event":
             day = (self._event(key) or {}).get("day")
         elif kind == "review":
-            day = key
+            # a follower's review days move with their dates: its notes are on the plan's own review day
+            r = self._review(key) or {}
+            day = next((x.get("day") for x in (self.plan["doc"].get("reviews") or []) if isinstance(x, dict)
+                        and (x.get("from"), x.get("to")) == (r.get("from"), r.get("to"))), key)
         elif kind == "week":
             mine = {u["id"] for u in (self._week_units(key) or {}).get("dates") or []}
             days = {E._later(key, i) for i in range(7)} | {u["opens"] for u in P.units(self.plan["doc"]) if u["id"] in mine}
@@ -706,9 +721,14 @@ class PlanWindow(QDialog):
         self.change_btn.setEnabled(author and idle and kind in ("date", "event", "review"))
         self.new_btn.setEnabled(idle)
         self._new_menu(author and idle)
+
+    def _change_menu(self):
+        """Change ▾, as it opens: the picked date's, quiz's or review day's."""
         self.menu.clear()
-        if not author:
+        kind = self.picked[0] if self.picked else ""
+        if not self.author() or self.busy:
             return
+        on_row = self._on_row()
         if kind == "date":
             self._date_menu(on_row)
         elif kind == "event":
@@ -741,6 +761,8 @@ class PlanWindow(QDialog):
     def _date_menu(self, on_row):
         """Change ▾ on a date: the builder's day panel, as a menu."""
         u = self._date()
+        if u is None:
+            return  # the picked date is gone (taken off, or another plan's)
         item = self.table.currentItem()
         key = tuple(item.data(0, ROLE)) if on_row and item is not None and item.data(0, ROLE) else None
         here = self.idx is not None
@@ -798,7 +820,7 @@ class PlanWindow(QDialog):
 
     def _takeable(self, item):
         k = item.data(0, ROLE) if item is not None else None
-        return bool(k) and k[0] in ("tag", "deck", "cut", "questions")
+        return bool(k) and k[0] in ("tag", "deck", "cut", "questions", "search", "picks")  # all edits.take_source takes
 
     def _browse_item(self, item):
         k = item.data(0, ROLE) if item is not None else None
@@ -879,27 +901,34 @@ class PlanWindow(QDialog):
             if callable(getattr(page, "busy_changed", None)):
                 page.busy_changed(self)
 
-    def _apply(self, change, touched=(), keep=None):
+    def _apply(self, change, touched=(), keep=None, then=None):
         """One change to the plan, saved: change(doc) -> doc, on the doc as the
         server keeps it; the dates it touched (and any it made) counted again
         in this copy (or a function, asked after the change: the dates it
         worked out). keep: what to have picked once it's saved (a callable,
-        asked after the change), else what's picked now."""
+        asked after the change), else what's picked now. then(saved): this
+        change's own outcome, once (True only when it saved)."""
         if not self.author() or self.busy:
+            if then:
+                then(False)
             return
-        self._save(change, touched if callable(touched) else set(touched), keep, again=True)
+        self._save(change, touched if callable(touched) else set(touched), keep, again=True, then=then)
 
-    def _save(self, change, touched, keep, again):
+    def _save(self, change, touched, keep, again, then=None):
+        then = then or (lambda _ok: None)
         if not self.author():
+            then(False)
             return
         before = self.raw["doc"]
         try:
             doc = change(before)
         except E.Refused as e:
             self.status.setText(str(e))
+            then(False)
             return
         if json.dumps(E.lean(doc), sort_keys=True) == json.dumps(E.lean(before), sort_keys=True):
             self.status.setText("Nothing to change: the plan has that already.")
+            then(False)
             return
         made = {u["id"] for u in doc.get("units") or [] if u.get("id") not in {x.get("id") for x in before.get("units") or []}}
         want, touched = touched, set(touched() if callable(touched) else touched) | made
@@ -911,18 +940,22 @@ class PlanWindow(QDialog):
         self._busy(True, "Saving…")
         self._can_undo(None)
         self.ops.save(self, pid, version, doc, summary,
-                      lambda got: self._saved(pid, got, keep_now, (change, want, keep) if again else None))
+                      lambda got: self._saved(pid, got, keep_now, (change, want, keep) if again else None, then))
 
-    def _saved(self, pid, got, keep, retry=None):
+    def _saved(self, pid, got, keep, retry=None, then=None):
+        then = then or (lambda _ok: None)
         self._busy(False, "")
         if pid != self.pick.currentData():
+            then(False)
             return
         if not got:
             self.status.setText("That didn't save: check your connection, then try again.")
+            then(False)
             return
         outcome, what = got
         if outcome == "refused":
             self.status.setText(str(what))
+            then(False)
             return
         plan = clean_plan(what) or self.plan
         self._loaded(pid, (what, plan), keep=keep, saved=True)
@@ -930,21 +963,22 @@ class PlanWindow(QDialog):
             # someone (or my Anki's note ids) saved since it loaded: the same change, once, on theirs
             change, touched, keep_fn = retry
             self.status.setText("Someone saved this plan since it loaded: putting your change on theirs…")
-            self._save(change, touched, keep_fn, again=False)
+            self._save(change, touched, keep_fn, again=False, then=then)
             return
+        then(outcome == "saved")
         if outcome == "saved":
             self._can_undo((pid, plan.get("version")))
             self.status.setText("Saved for everyone following it. They get it at their next refresh.")
-            for page in self.pages.values():
-                if callable(getattr(page, "saved", None)):
-                    page.saved(self)
         else:
             self.status.setText("Someone saved this plan again since: it's up to date now. Make the change again.")
 
     def took(self, raw):
         """A settings change the server answered with the plan as it is now:
-        the window on that (its name in the list too)."""
+        the window on that (its name in the list too), while it's still the
+        plan picked."""
         pid = self.pick.currentData()
+        if not isinstance(raw, dict) or str(raw.get("id") or pid) != str(pid) or (self.plan or {}).get("id") != pid:
+            return
         plan = clean_plan(raw) or self.plan
         self._loaded(pid, (raw, plan), saved=True)
         self.pick.setItemText(self.pick.currentIndex(), f"{plan.get('name') or 'Plan'} · {_whose(plan)}")
@@ -1097,9 +1131,16 @@ class PlanWindow(QDialog):
         return bool(str(u.get("name") or "").strip()) and u.get("name") != E.auto_name(u.get("tags") or [], u.get("decks") or [])
 
     def _suggestions(self, u):
-        """The deck's tags a date's name points at that no date has yet (Suggest.tags)."""
+        """The deck's tags a date's name points at that no date has yet (Suggest.tags),
+        once a date and version."""
         if u is None or self.idx is None or self.swap or not self._named_by_hand(u):
             return []
+        key = (u.get("id"), u.get("name"), (self.raw or {}).get("version"))
+        if key not in self._sugg:
+            self._sugg = {key: self._suggest_now(u)}  # the picked date's alone: no other is asked for
+        return self._sugg[key]
+
+    def _suggest_now(self, u):
         t = self.deck_tree()
         on, above = set(), set()
         for k in B.placed_keys(self.doc):
@@ -1156,8 +1197,16 @@ class PlanWindow(QDialog):
         if u is None:
             return
         idx = self.idx
-        dlg = DD.AddCardsDialog(self, f"Add cards to {P.fmt_day(u['opens'])}",
-                                lambda q: len(idx.search_cards(q)) if idx is not None else None)
+
+        def peek(q):
+            """A search's cards here while it's typed: run, not kept (half a search isn't one to remember)."""
+            if idx is None:
+                return None
+            try:
+                return sum(1 for c in idx.col.find_cards(str(q)) if int(c) in idx.cards)
+            except Exception:
+                return 0  # one this Anki can't read finds nothing
+        dlg = DD.AddCardsDialog(self, f"Add cards to {P.fmt_day(u['opens'])}", peek)
         if not dlg.exec():
             return
         what = dlg.what()
@@ -1222,12 +1271,12 @@ class PlanWindow(QDialog):
             items.append({"key": tk, "n": rest, "rest": True, "even": bool(cap) and rest > cap})
 
         def change(doc):
-            doc = E.take_off(doc, u["id"], field, path)
-            before = E.copy.deepcopy(doc)
+            before = doc
+            doc = E.take_off(doc, u["id"], field, path, keep=True)  # takeOut: the date stays, its parts fill onto it first
             got = B.fill(doc, items, u["opens"], None, cap, days, lambda: E.new_id(doc))
             if got["left"]:
                 raise E.Refused(got["note"] or f"{sum(x['n'] for x in got['left']):,} didn't fit: {B.left_names(got['left'])}.")
-            return E.name_dates(doc, got["touched"], before)
+            return E.name_dates(E.cleanup(doc), got["touched"], before)
         self._apply(change, {u["id"]}, keep=lambda: ("date", u["id"]) if self._unit(u["id"]) else None)
 
     def _todo(self):

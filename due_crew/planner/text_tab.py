@@ -53,8 +53,8 @@ class TextTab(QWidget):
         super().__init__()
         self.win = win
         self.whole = False
-        self.pending = None    # Add or Replace sent: its whole, till the save lands
         self.put = ""          # the plan's text as this tab last put it in the box (Edit the whole plan)
+        self.put_for = None    # the plan it's the text of
         self.read_now = None   # (text, whole, r, using, gone) once Read it has read it
         self.kept = []         # Keep the tags: their names, said once
         self.taken = None      # Take them off those dates too: what it did, date by date
@@ -153,23 +153,26 @@ class TextTab(QWidget):
         if not win.author():
             return
         self._hint()
-        if self.whole and self.box.toPlainText() == self.put:
-            self._fill_whole()  # untouched: the plan as it is now
-        elif self.whole:
-            self._clear()
-            self.status.setText("The plan changed since this text was made: Read it shows what it would change now.")
-            return
+        if self.whole:
+            if self.put_for != win.plan["id"] or self.box.toPlainText() == self.put:
+                self._fill_whole()  # untouched, or another plan's: this plan as it is now
+            elif T.to_text(self._doc()) == self.put:
+                return  # a setting or a name changed, not its dates: the edits and their reading stay
+            else:
+                self._clear()
+                self.status.setText("The plan changed since this text was made: Read it shows what it would change now.")
+                return
         self._clear()
 
     def busy_changed(self, win):
         if win.author():
             self._buttons()
 
-    def saved(self, win):
-        """A save landed: one of this tab's, the box emptied (Add) or the plan's text again (Replace)."""
-        if self.pending is None:
+    def _went(self, whole, pid, saved):
+        """Add or Replace's own save: when it saved, the box emptied (Add) or
+        the plan's text again (Replace); otherwise the window says why."""
+        if not saved or (self.win.plan or {}).get("id") != pid or not self.win.author():
             return
-        whole, self.pending = self.pending, None
         n = len(P.units(self._doc()))
         if whole:
             self._fill_whole()
@@ -193,12 +196,12 @@ class TextTab(QWidget):
 
     def _hint(self):
         n = len(P.units(self._doc()))
-        self.hint.setText(f"Adds to the plan's {n:,} date{'s' if n != 1 else ''}. Changes nothing already there."
+        self.hint.setText(f"Adds to the plan's {n:,} date{'s' if n != 1 else ''}. A line with a date's own day and name adds to that date."
                           if not self.whole else "Read it shows what would change. Nothing does until you Replace the plan's dates.")
 
     def _fill_whole(self):
         self._loading = True
-        self.put = T.to_text(self._doc())
+        self.put, self.put_for = T.to_text(self._doc()), self.win.plan["id"]
         self.box.setPlainText(self.put)
         self._loading = False
 
@@ -215,8 +218,12 @@ class TextTab(QWidget):
         self._clear()
 
     def _changed(self):
-        if not self._loading and self.read_now is not None:
-            self._clear(keep_status=False)
+        if self._loading:
+            return
+        if self.read_now is not None:
+            self._clear(keep_status=False)  # its reading was of other words
+        else:
+            self._buttons()  # Read it, once there's something to read
 
     def _copy(self):
         QApplication.clipboard().setText(T.to_text(self._doc()))
@@ -397,7 +404,5 @@ class TextTab(QWidget):
                 T.take_all(doc, got, self.win.deck_tree(), self._name())
             made["ids"] = {u["id"] for u in got["units"]}
             return T.apply(doc, got, whole, self._name(), new_id=lambda: E.new_id(doc))
-        self.pending = whole
-        self.win._apply(change, lambda: made.get("ids", ()))
-        if not self.win.busy and self.pending is not None:
-            self.pending = None  # refused before it went, or nothing to change: the window says which
+        pid = self.win.plan["id"]
+        self.win._apply(change, lambda: made.get("ids", ()), then=lambda saved: self._went(whole, pid, saved))

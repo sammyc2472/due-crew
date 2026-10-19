@@ -6,7 +6,7 @@ deck's, plain text everywhere."""
 
 from aqt.qt import (
     QButtonGroup, QComboBox, QDialog, QDialogButtonBox, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit,
-    QPushButton, QRadioButton, QSpinBox, Qt, QToolButton, QVBoxLayout, QWidget,
+    QPushButton, QRadioButton, QSpinBox, Qt, QTimer, QToolButton, QVBoxLayout, QWidget,
 )
 
 from ..ui import attach_alive, heading, note
@@ -94,8 +94,16 @@ class AddCardsDialog(QDialog):
         root.addWidget(self.said)
         box, self.go = _buttons(self, "Add")
         root.addWidget(box)
-        self.box.textChanged.connect(self._said)
+        self._typing = QTimer(self)  # a search runs in the collection: once the typing pauses
+        self._typing.setSingleShot(True)
+        self._typing.setInterval(300)
+        self._typing.timeout.connect(self._said)
+        self.box.textChanged.connect(self._typed)
         self._said()
+
+    def _typed(self):
+        self.go.setEnabled(False)
+        self._typing.start()
 
     def what(self):
         """("search", q) | ("nids"|"cids", [n]) | ("picks", {notes, cards}) | None."""

@@ -19,6 +19,7 @@ from ..backend.shapes import TransportError
 from . import actions, enabled, qids, remote
 
 _open = {}       # "plans", "start", "qids" -> the window, while it's open
+_asking = []     # my plans on their way for Your plans (one ask at a time)
 
 
 def close_all():
@@ -57,16 +58,21 @@ def open_plans(select=None, tab=None):
             w.activateWindow()
             return
         w.close()  # a plan it doesn't list (one just made): my plans asked again
-    if not plan_flow._signed_in():
-        return
+    if not plan_flow._signed_in() or _asking:
+        return  # (a second click while my plans are on their way: the one window)
     cl, gen = client(), app.generation
+    _asking.append(True)
 
     def done(plans):
+        _asking.clear()
         if gen != app.generation or not mw.col:
             return
         if plans is None:
             tooltip("Due Crew couldn't be reached. Try again in a minute.")
             return
+        w = _open.get("plans")
+        if w is not None and getattr(w, "_alive", False):
+            w.close()  # one opened meanwhile (a plan made): this one, with every plan, in its place
         show_plans(plans, select, tab)
     _bg(lambda: remote.my_plans(cl), done)
 

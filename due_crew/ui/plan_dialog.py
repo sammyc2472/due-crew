@@ -132,7 +132,11 @@ class MakePlanDialog(QDialog):
         if not deck:
             return
         title = " ".join(self.name.text().split()) or deck
-        self.go.setEnabled(False)
+        # while it's being made, nothing else: a second plan, or one made with nobody told
+        held = [self.go, self.site_btn, self.buttons.button(QDialogButtonBox.StandardButton.Cancel)]
+        for b in held:
+            if b is not None:
+                b.setEnabled(False)
         self.status.setText("Making the plan…")
         cl, make = self.client, self.make
 
@@ -143,7 +147,9 @@ class MakePlanDialog(QDialog):
 
         def done(got, err):
             if not got or got[0] != "saved":
-                self.go.setEnabled(True)
+                for b in held:
+                    if b is not None:
+                        b.setEnabled(True)
                 self.status.setText(str(got[1]) if got else "Couldn't reach Due Crew. Check your connection.")
                 return
             if self.on_sent:

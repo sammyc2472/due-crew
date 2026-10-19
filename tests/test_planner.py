@@ -1658,6 +1658,61 @@ def test_settings_remote_v393():
     check("settings: only its owner takes it down; then it's gone", not R.delete(dre, pid) and R.delete(sam, pid) and pid not in store.plans)
 
 
+def test_split_keeps_the_date_v393():
+    """3.9.3 review: Split by its tags (takeOut, fill, cleanup) keeps the
+    date when the split tag was all on it: its id (followers' progress is
+    by it), name, due date, prep, to-dos and review day; its first part
+    fills onto it and the rest goes on new dates."""
+    from due_crew.planner import build as B
+    from due_crew.planner import edits as E
+    doc = {"deck": "Big Step 1", "events": [{"id": "e1", "day": "2026-11-13", "name": "Heart quiz"}],
+           "reviews": [{"day": "2026-11-12", "from": "h", "to": "h"}],
+           "units": [{"id": "h", "name": "Heart week", "opens": "2026-11-06", "due": "2026-11-10", "for": "e1",
+                      "todo": [{"k": "read", "t": "Ch 4"}], "tags": ["A"], "decks": []}]}
+    items = [{"key": "tag:A::One", "n": 20}, {"key": "tag:A::Two", "n": 25}]
+    n = iter(f"n{i}" for i in range(9))
+    before = doc
+    out = E.take_off(doc, "h", "tags", "A", keep=True)
+    got = B.fill(out, items, "2026-11-06", None, 30, [1, 1, 1, 1, 1, 0, 0], lambda: next(n))
+    out = E.name_dates(E.cleanup(out), got["touched"], before)
+    h = next((u for u in out["units"] if u["id"] == "h"), None)
+    check("split: the date stays, its first part on it, the rest on a new date",
+          h is not None and h["tags"] == ["A::One"] and h["name"] == "Heart week" and h["due"] == "2026-11-10"
+          and h["for"] == "e1" and h["todo"] == [{"k": "read", "t": "Ch 4"}] and out.get("reviews") == doc["reviews"]
+          and [u["tags"] for u in out["units"] if u["id"] != "h"] == [["A::Two"]], out["units"])
+    gone = E.cleanup(E.take_off(doc, "h", "tags", "A", keep=True))
+    check("split: a date nothing filled goes after all, with its review day", gone["units"] == [] and "reviews" not in gone)
+
+
+def test_text_review_fixes_v393():
+    """3.9.3 review: Text reads a day that isn't one as a line's error (not a
+    crash later), cuts names as the Worker counts them (UTF-16: an emoji is
+    two), and an old checkpoint is a review day as the builder loads it."""
+    from due_crew.planner import edits as E
+    from due_crew.planner import text as T
+    import itertools
+    ids = itertools.count()
+    doc = {"deck": "Big Step 1", "units": []}
+    got = T.from_text(doc, None, "2026-02-31 | Heart | tag:A\n2026-11-02 | Lungs | tag:B | due 2026-11-31\n"
+                                 "2026-02-30 | event | Quiz", whole=False, start="2026-11-02", new_id=lambda: f"n{next(ids)}")
+    check("text: a day that isn't one is a line's error",
+          [e for e in got["errors"] if "isn't a day on the calendar" in e] == [
+              "Line 1: 2026-02-31 isn't a day on the calendar.", "Line 2: 2026-11-31 isn't a day on the calendar.",
+              "Line 3: 2026-02-30 isn't a day on the calendar."] and not got["units"] and not got["events"], got["errors"])
+    emoji = "\U0001F600" * 35
+    got = T.from_text(doc, None, f"2026-11-02 | event | {emoji}\n2026-11-03 | {emoji} | tag:A", whole=False,
+                      start="2026-11-02", new_id=lambda: f"n{next(ids)}")
+    ev, un = (got["events"] or [{}])[0], (got["units"] or [{}])[0]
+    check("text: names cut to 60 as the Worker counts, an emoji whole",
+          len(ev.get("name", "")) == 30 and T._u16(ev["name"]) == 60 and T._u16(un.get("name") or un.get("key") or "") <= 60
+          and any("cut to 60" in w for w in got["warns"]), (len(ev.get("name", "")), got["warns"]))
+    old = {"units": [{"id": "a", "opens": "2026-11-02", "check": "2026-11-06", "tags": ["A"]}], "reviews": [{"day": "2026-11-09", "from": "a", "to": "a"}]}
+    mig = E.migrate_checks(old)
+    check("text: an old checkpoint is a review day (builder.js on load), the doc left as it was",
+          "check" not in mig["units"][0] and mig["reviews"][-1] == {"day": "2026-11-06", "from": "a", "to": "a"}
+          and old["units"][0]["check"] == "2026-11-06" and E.migrate_checks(mig) is mig)
+
+
 def test_pick_note_twin_v393():
     """3.9.3: Read it's "To pick in Anki:" line says "Pick in Anki" once, its
     date kept: text.pick_note and builder.js's pickNote, the same."""

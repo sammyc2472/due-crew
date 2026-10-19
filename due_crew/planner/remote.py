@@ -11,6 +11,7 @@ started from; the server keeps what only the author's Anki sends.
 import json
 
 from ..backend.shapes import TransportError, clean_plan
+from .edits import _cut
 
 # a refused save, in words (builder.js SAVE_ERRORS, as the window says them)
 SAVE_WORDS = {
@@ -256,7 +257,7 @@ def offer(client, pid, uid):
 def create(client, name, deck):
     """A new plan, no dates yet, mine (POST /plans, the builder's New plan):
     ("saved", raw) | ("refused", words)."""
-    status, data = _call(client, "POST", "/plans", {"name": str(name)[:60], "deck": str(deck)})
+    status, data = _call(client, "POST", "/plans", {"name": _cut(" ".join(str(name).split()), 60), "deck": str(deck)})
     if status == 200 and isinstance(data.get("doc"), dict) and data.get("id"):
         return "saved", data
     return _refused(data)

@@ -75,6 +75,8 @@ class DayNotes(QWidget):
         if self.of == pid:
             self._draw()
             return
+        if self.of is not None:
+            self.box.clear()  # what I was typing was a note for the last plan
         self.notes, self.of = [], None
         self.said.setText("")
         self._draw()
@@ -155,6 +157,7 @@ class DayNotes(QWidget):
         def done(got):
             self.sending = False
             if pid != self.of:
+                self._buttons()
                 return
             if not got:
                 self._say("That note didn't post. Try again.")
@@ -177,6 +180,7 @@ class DayNotes(QWidget):
         def done(ok):
             self.sending = False
             if pid != self.of:
+                self._buttons()
                 return
             if ok:
                 self.notes = [y for y in self.notes if y is not x]

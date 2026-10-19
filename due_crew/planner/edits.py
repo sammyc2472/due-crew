@@ -701,15 +701,36 @@ def _drop_reviews(doc, uid):
             del doc["reviews"]
 
 
-def take_off(doc, uid, field, path):
+def take_off(doc, uid, field, path, keep=False):
     """A tag or subdeck off a date, the date going with it when it was all
-    that was on it (Split by its tags moves it to its parts)."""
+    that was on it. keep (Split by its tags, takeOut): the date stays, empty,
+    so its parts fill onto it first and it keeps its name, due date, prep,
+    to-dos and review days; cleanup after the fill takes it if nothing did."""
     doc = copy.deepcopy(doc)
     u = _unit(doc, uid)
     u[field] = [x for x in u.get(field) or [] if x != path]
-    if not has_sources(u):
+    if not keep and not has_sources(u):
         doc["units"] = [x for x in doc["units"] if x is not u]
         _drop_reviews(doc, uid)
+    return doc
+
+
+def migrate_checks(doc):
+    """builder.js on load: a date's checkpoint from before review days
+    (`check`) is a review day of that date. The doc itself when there's none."""
+    if not any(isinstance(u, dict) and u.get("check") for u in doc.get("units") or []):
+        return doc
+    doc = copy.deepcopy(doc)
+    for u in doc["units"]:
+        if isinstance(u, dict) and u.get("check"):
+            doc.setdefault("reviews", []).append({"day": u["check"], "from": u["id"], "to": u["id"]})
+            del u["check"]
+    return doc
+
+
+def cleanup(doc):
+    """builder.js cleanup, after a fill: a date with nothing on it goes, and the review days that name it."""
+    _cleanup(doc)
     return doc
 
 

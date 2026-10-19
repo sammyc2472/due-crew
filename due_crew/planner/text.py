@@ -12,6 +12,7 @@ and what it leaves out goes. Names, tags, ids and the authors' words:
 never a card's text."""
 
 import copy
+import datetime
 import json
 import re
 
@@ -26,6 +27,20 @@ IDS_MAX = 5000
 PERSONAL = re.compile(r"(?:^|[\s(\"-])(?:deck:current|is:(?:due|new|learn|review|suspended|buried|susp)|rated:|prop:|"
                       r"introduced:|added:|edited:|resched:|flag:|nid:|cid:)", re.I)
 _DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def _real_day(d):
+    """2026-02-31 looks like a day and isn't one."""
+    try:
+        datetime.date.fromisoformat(str(d))
+        return True
+    except ValueError:
+        return False
+
+
+def _u16(s):
+    """A length as builder.js and the Worker count it (UTF-16: an emoji is two)."""
+    return len(str(s).encode("utf-16-le")) // 2
 _SPLIT = re.compile(r"\s*\|\s*|\s{2,}")
 _SRC_SPLIT = re.compile(r"\s*[,;]\s*(?=(?:tag|deck):)", re.I)
 _SAFE = 2 ** 53 - 1
@@ -144,16 +159,16 @@ def auto_name(doc, tree, u, placed):
         c = u["cut"][0]
         t = next((x for x in P.plan_tags(doc) if x.get("id") == c.get("in")), None)
         nm = f"{P._word(str(c.get('tag')).split('::')[-1])}{' · ' + t['name'] if t else ''}"
-        return f"{nm}{' + ' + str(len(u['cut']) - 1) + ' more' if len(u['cut']) > 1 else ''}"[:60]
+        return E._cut(f"{nm}{' + ' + str(len(u['cut']) - 1) + ' more' if len(u['cut']) > 1 else ''}", 60)
     wo = next((p for p in (_extras(tree).get(q) for q in u.get("search") or []) if p), None) if tree is not None else None
     if not ks and wo:
-        return B.label(tree, f"tag:{wo}", placed)[:60]
+        return E._cut(B.label(tree, f"tag:{wo}", placed), 60)
     if not ks:
         n_ids = len(u.get("nids") or []) + len(u.get("cids") or []) + len(u.get("notes") or [])
         n = len(u.get("cards") or [])
         return ("Search" if u.get("search") else f"{n_ids:,} added by ID" if n_ids
                 else f"{n} single card{'s' if n != 1 else ''}" if n else "?")
-    return f"{B.label(tree, ks[0], placed)}{f' + {len(ks) - 1} more' if len(ks) > 1 else ''}"[:60]
+    return E._cut(f"{B.label(tree, ks[0], placed)}{f' + {len(ks) - 1} more' if len(ks) > 1 else ''}", 60)
 
 
 def from_text(doc, tree, text, whole=False, start="", plan_name="", new_id=None):
@@ -190,7 +205,7 @@ def from_text(doc, tree, text, whole=False, start="", plan_name="", new_id=None)
     for raw in str(text).split("\n"):
         m = re.match(r"^\s*(?:[-*•]\s+)?`?tag\s*\|\s*([^|]+?)\s*(?:\||$)", raw, re.I)
         if m:
-            named.add(P.tag_part(m.group(1)[:40]).lower())
+            named.add(P.tag_part(E._cut(m.group(1), 40)).lower())
 
     def plan_tag_key(raw_):
         if "::" in raw_:
@@ -227,10 +242,10 @@ def from_text(doc, tree, text, whole=False, start="", plan_name="", new_id=None)
             if not words:
                 errors.append(f"Line {i + 1}: the note has no words.")
                 continue
-            if len(words) > B.REMARK_TEXT:
+            if _u16(words) > B.REMARK_TEXT:
                 warns.append(f"Line {i + 1}: a note is cut to {B.REMARK_TEXT} characters.")
             x = {"card": r["card"]} if r.get("card") else {"tag": B.path_of(plan_tag_key(r["tag"]) or keys.find("tag", r["tag"]))}
-            if "tag" in x and (not x["tag"] or len(x["tag"]) > 200):
+            if "tag" in x and (not x["tag"] or _u16(x["tag"]) > 200):
                 errors.append(f"Line {i + 1}: a note's tag is up to 200 characters.")
                 continue
             x["text"] = words[:B.REMARK_TEXT]
@@ -250,8 +265,8 @@ def from_text(doc, tree, text, whole=False, start="", plan_name="", new_id=None)
         parts = [p for p in _SPLIT.split(line) if p]
         if len(parts) >= 2 and re.fullmatch(r"tag", parts[0], re.I):
             full = parts[1].strip()
-            tname = full[:40].strip()
-            if len(full) > 40:
+            tname = E._cut(full, 40).strip()
+            if _u16(full) > 40:
                 warns.append(f"Line {i + 1}: a tag's name is cut to 40 characters.")
             tg, dk, sq, bad = [], [], [], False
             for part in parts[2:]:
@@ -294,8 +309,11 @@ def from_text(doc, tree, text, whole=False, start="", plan_name="", new_id=None)
             continue
         if len(parts) >= 3 and _DAY.fullmatch(parts[0]) and re.fullmatch(r"event", parts[1], re.I):
             full = " ".join(parts[2:])
-            name = full[:60]
-            if len(full) > 60:
+            if not _real_day(parts[0]):
+                errors.append(f"Line {i + 1}: {parts[0]} isn't a day on the calendar.")
+                continue
+            name = E._cut(full, 60)
+            if _u16(full) > 60:
                 warns.append(f"Line {i + 1}: the event's name is cut to 60 characters.")
             old = next((x for x in _events(doc) if str(x.get("name")).lower() == name.lower()), None)
             evs.append({"id": old["id"] if old else uid8(), "day": parts[0], "name": name})
@@ -348,6 +366,10 @@ def from_text(doc, tree, text, whole=False, start="", plan_name="", new_id=None)
         if len(e["nids"]) > IDS_MAX or len(e["cids"]) > IDS_MAX or len(pk["notes"]) > IDS_MAX:
             errors.append(f"Line {i + 1}: a date takes up to 5,000 IDs.")
             continue
+        bad_day = next((d for d in (e["opens"], e["due"]) if d and not _real_day(d)), None)
+        if bad_day:
+            errors.append(f"Line {i + 1}: {bad_day} isn't a day on the calendar.")
+            continue
         if e["due"] and e["due"] < e["opens"]:
             errors.append(f"Line {i + 1}: due is before it opens.")
             continue
@@ -360,10 +382,10 @@ def from_text(doc, tree, text, whole=False, start="", plan_name="", new_id=None)
         if len(set(e["tags"])) > SOURCES_MAX or len(set(e["decks"])) > SOURCES_MAX:
             errors.append(f"Line {i + 1}: a date holds up to {SOURCES_MAX} tags and {SOURCES_MAX} subdecks.")
             continue
-        if len(e["name"]) > 60:
+        if _u16(e["name"]) > 60:
             warns.append(f"Line {i + 1}: the name is cut to 60 characters.")
         first = (e["tags"] or e["decks"] or [None])[0] or (e["cuts"][0]["tag"] if e["cuts"] else None)
-        e["key"] = (e["name"] or _leaf(first) or "")[:60].strip()
+        e["key"] = E._cut(e["name"] or _leaf(first) or "", 60).strip()
         lines.append(e)
 
     renamed = []
@@ -434,7 +456,7 @@ def from_text(doc, tree, text, whole=False, start="", plan_name="", new_id=None)
         if not (e["tags"] or e["cuts"] or e["decks"] or e["searches"] or e["nids"] or e["cids"] or pk["notes"] or cards):
             errors.append(f"Line {e['i'] + 1}: needs a tag:, a deck:, a search: or notes:.")
             continue
-        u = {"id": old.get("id") or uid8(), "name": e["name"][:60], "opens": e["opens"],
+        u = {"id": old.get("id") or uid8(), "name": E._cut(e["name"], 60), "opens": e["opens"],
              "tags": list(dict.fromkeys(e["tags"])), "decks": list(dict.fromkeys(e["decks"])), "cards": cards}
         if e["due"]:
             u["due"] = e["due"]
@@ -480,9 +502,9 @@ def from_text(doc, tree, text, whole=False, start="", plan_name="", new_id=None)
             u["cut"] = list(u.get("cut") or []) + [{"tag": c["tag"], "in": t["id"], "q": ""}]
         if u["id"] in auto and not B.srcs(u) and u["cut"][0]["tag"] == c["tag"]:
             more = f" + {len(u['cut']) - 1} more" if len(u["cut"]) > 1 else ""
-            u["name"] = f"{P._word(c['tag'].split('::')[-1])} · {t['name']}{more}"[:60]
+            u["name"] = E._cut(f"{P._word(c['tag'].split('::')[-1])} · {t['name']}{more}", 60)
         elif u["id"] in auto and not B.srcs(u):
-            u["name"] = re.sub(r"( \+ \d+ more)?$", f" + {len(u['cut']) - 1} more", u["name"], count=1)[:60]
+            u["name"] = E._cut(re.sub(r"( \+ \d+ more)?$", f" + {len(u['cut']) - 1} more", u["name"], count=1), 60)
 
     ours = f"tag:DueCrew::{root}::".lower()
     want_keys = [k for u in units for k in [f"tag:{t}" for t in u["tags"]] + [f"tag:{c['tag']}" for c in u.get("cut") or []]

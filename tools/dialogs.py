@@ -1367,6 +1367,9 @@ def main(out):
         dlg._go_to(("date", "u1"))
         rows = [dlg.table.topLevelItem(i) for i in range(dlg.table.topLevelItemCount())]
         dlg.table.setCurrentItem(next(r for r in rows if r.text(0).strip() == "Cardio › Heart Failure"))
+        if dlg.menu.actions():
+            raise RuntimeError("planner: Change ▾ is made when it opens, not at every click")
+        dlg._change_menu()  # what opening it does
         items = [a.text() for a in dlg.menu.actions()]
         for want in ("Add from the deck…", "Add cards: a search or IDs…", "Take the picked one off", "Split the picked one…",
                      "A note for followers on it…", "Prep for", "Spread evenly to its due date", "To do…",
@@ -1380,6 +1383,7 @@ def main(out):
         review = dlg._find(("review", day(5)))
         if review is None or "Review · Heart failure – Shock" not in review.text(0) or dlg.picked != ("review", day(5)):
             raise RuntimeError(f"planner: a review day saved: {dlg.picked}, {review.text(0) if review else None}")
+        dlg._change_menu()
         if [a.text() for a in dlg.menu.actions() if a.text()] != ["Change its dates…", "No review day"]:
             raise RuntimeError(f"planner: Change ▾ on a review day: {[a.text() for a in dlg.menu.actions()]}")
         shoot(dlg, os.path.join(out, "planner-review.png"))
@@ -1397,14 +1401,19 @@ def main(out):
         col.find_cards = lambda q: sorted(idx.tag_cards(q.split("tag:", 1)[1].split()[0])) if "tag:" in q else []
         add = DD.AddCardsDialog(None, "Add cards to Thu 22", lambda q: len(idx.search_cards(q)))
         add.box.setPlainText("tag:#Big_Step1_v3::#Videos::Cardio::Shock")
+        if add.go.isEnabled() or not add._typing.isActive():
+            raise RuntimeError("planner: Add cards counts once the typing pauses")
+        add._said()  # what the pause does
         if not add.go.isEnabled() or "finds 7 cards here" not in add.said.text():
             raise RuntimeError(f"planner: Add cards, a search: {add.said.text()!r}")
         shoot(add, os.path.join(out, "planner-addcards.png"))
         add.box.setPlainText("1688392011234, 1688392011235\n1688392011236")
+        add._said()
         if not add.kinds.isVisibleTo(add) or add.what() != ("nids", [1688392011234, 1688392011235, 1688392011236]):
             raise RuntimeError(f"planner: Add cards, note IDs: {add.what()}")
         shoot(add, os.path.join(out, "planner-addids.png"))
         add.box.setPlainText("is:due tag:x")
+        add._said()
         if add.go.isEnabled() or "each person" not in add.said.text():
             raise RuntimeError("planner: Add cards takes no search about one person's Anki")
         lines = DD.LinesDialog(None, "To do on Mon 19", [{"k": "watch", "t": "Heart failure 1–2"}, {"k": "read", "t": "pp. 290–295"}])
@@ -1619,6 +1628,22 @@ def main(out):
         dn._remove()
         if [x["text"] for x in STORE.plan_notes if x["plan"] == pid] != ["Lecture's in room 4B today"]:
             raise RuntimeError("planner: a note taken off")
+        # 3.9.3 review: a date picked, then its plan with no dates, then a load that fails: no crash, no stale pick
+        crash = PlanWindow_()
+        crash._go_to(("date", "u1"))
+        raw0, plan0 = PR.load(CLIENT, pid)
+        bare = dict(raw0, doc=dict(raw0["doc"], units=[], reviews=[], events=[]))
+        crash._loaded(pid, (bare, dict(plan0, doc=dict(plan0["doc"], units=[], events=[]))))
+        crash._change_menu()
+        if crash.picked is not None or "No dates on this plan yet" not in crash.meta.text():
+            raise RuntimeError(f"planner: a picked date outlived its plan's dates: {crash.picked}")
+        crash._loaded(pid, None)
+        shown = [crash.tabs.tabText(i) for i in range(crash.tabs.count()) if crash.tabs.isTabVisible(i)]
+        if shown != ["Dates"] or crash.picked is not None or "didn't load" not in crash.meta.text():
+            raise RuntimeError(f"planner: a load that failed: {shown}, {crash.meta.text()!r}")
+        crash._load()
+        if crash.busy or crash.plan is None:
+            raise RuntimeError("planner: Reload after a load that failed")
         empty = PlanWindow_([])
         if not empty.tabs.isHidden() or empty.welcome.isHidden() or not empty.pick.isHidden() \
                 or not [w for w in empty.welcome.findChildren(QtWidgets.QLabel) if w.pixmap() is not None and not w.pixmap().isNull()]:

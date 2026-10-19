@@ -47,13 +47,14 @@ class _Lazy(QWidget):
         return win.author()
 
     def plan_loaded(self, win):
-        self.got = None
-        if self.isVisible():
-            self._read()
+        if self.got != self._now():  # another plan, or a save: read again; a setting that kept the version, not
+            self.got = None
+            if self.isVisible() and not self.loading:
+                self._read()
 
     def showEvent(self, e):
         super().showEvent(e)
-        if self.win.author() and self.got != self._now():
+        if self.win.author() and self.got != self._now() and not self.loading:
             self._read()
 
     def _now(self):
@@ -95,9 +96,11 @@ class HistoryTab(_Lazy):
         self.win.ops.ask(self.win, lambda cl: remote.log(cl, pid), lambda got: self._got(now, got))
 
     def _got(self, now, rows):
-        if now != self._now():
-            return
         self.loading = False
+        if now != self._now():  # an answer for the last plan (or version): this one's, if it's on show
+            if self.isVisible() and self.win.author():
+                self._read()
+            return
         if rows is None:
             self._show([], "Couldn't load the history.", again=True)
             return
@@ -170,6 +173,7 @@ class UpdatesTab(_Lazy):
         row.addWidget(self.remove_btn)
         root.addLayout(row)
         self.rows = []
+        self.posting = False
         self._show([], "")
 
     def plan_loaded(self, win):
@@ -183,11 +187,11 @@ class UpdatesTab(_Lazy):
         super().plan_loaded(win)
 
     def _count(self, text):
-        self.count.setText(f"{len(text)} / 200")
+        self.count.setText(f"{len(text.encode('utf-16-le')) // 2} / 200")  # as the box and the server count (an emoji is two)
         self._buttons()
 
     def _buttons(self):
-        busy = self.win.busy or self.loading
+        busy = self.win.busy or self.loading or getattr(self, "posting", False)
         self.post_btn.setEnabled(bool(self.box.text().strip()) and not busy)
         x = self._picked()
         self.remove_btn.setVisible(bool(x and x.get("remove")))
@@ -211,9 +215,11 @@ class UpdatesTab(_Lazy):
         self.win.ops.ask(self.win, lambda cl: remote.posts(cl, pid), lambda got: self._got(now, got))
 
     def _got(self, now, rows):
-        if now != self._now():
-            return
         self.loading = False
+        if now != self._now():  # an answer for the last plan (or version): this one's, if it's on show
+            if self.isVisible() and self.win.author():
+                self._read()
+            return
         if rows is None:
             self._show([], "Couldn't load the updates.", again=True)
             return
@@ -243,12 +249,14 @@ class UpdatesTab(_Lazy):
     def _post(self):
         text = " ".join(self.box.text().split())
         now = self._now()
-        if not text or now is None or self.win.busy:
-            return
+        if not text or now is None or self.win.busy or self.posting:
+            return  # (Enter again while it's on its way: one post)
+        self.posting = True
         self.post_btn.setEnabled(False)
         self.status.setText("Posting…")
 
         def done(got):
+            self.posting = False
             if now != self._now():
                 return
             if not got:
