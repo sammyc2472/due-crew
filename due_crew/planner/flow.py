@@ -182,6 +182,11 @@ class Ops:
     def new_from_deck(self):
         plan_flow.open_make()
 
+    def open_page(self, path):
+        """A page of duecrew.com (the Text tab's format), in the browser."""
+        from aqt.utils import openLink
+        openLink(f"{plan_flow.site_base()}{path}")
+
 
 def study_cards(idx, cids, name):
     """A Due Crew deck of these cards' open ones, random (a date's Study), and

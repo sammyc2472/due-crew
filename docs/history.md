@@ -3036,5 +3036,12 @@ every release that changes how something works.
   Remarks, Picks, Suggest, Work, Reviews and Tags in node against them);
   Fill, layOut and the tag edits are checked by hand-worked plans
   (`test_build_fill_v393`, `test_lay_out_v393`, `test_plan_edits_v393`).
-  Still the site's: Text, Updates, Progress, History, Settings, day notes.
-  No new route, nothing on a refresh or a sync.
+  **Text**, for authors (`text_tab.py`, `text.py`, builder.js's toText and
+  fromText restated): Add dates and Edit the whole plan, Read it's
+  preview (moved, renamed, what goes, a tag a date still uses with Take
+  them off those dates too or Keep the tags, a day over the pace), one
+  save read again on the plan as it is (`test_plan_text_v393`). The
+  window's height stays the window's: Lay it out's right side scrolls, and
+  Text sits in a splitter with smaller size hints. Still the site's:
+  Updates, Progress, History, Settings, day notes, the AI prompts. No new
+  route, nothing on a refresh or a sync.

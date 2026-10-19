@@ -1011,18 +1011,18 @@ def test_rules_of_the_road():
           and all(t.count("(QDialog)") == t.count("attach_alive(self)") == len(re.findall(r"\bheading\(self", t))
                   for t in windows.values()), sorted(windows))
     tabs = {f: t for f, t in src.items() if "(QWidget)" in t}  # 3.9.3: Your plans' tabs past Dates
-    check("road: the tabs are Lay it out's", sorted(tabs) == ["layout_tab.py"], sorted(tabs))
+    check("road: the tabs are Lay it out's and Text's", sorted(tabs) == ["layout_tab.py", "text_tab.py"], sorted(tabs))
     windows_tabs = dict(windows, **tabs)
     check("road: no window sets its own type or margins in a style sheet, nor reads Anki's palette",
           not [f for f, t in windows_tabs.items() if "setStyleSheet" in t or "palette(" in t or "font-size" in t])
     check("road: every label is plain text (names are the authors' and the deck's); tooltips escaped",
           all("setTextFormat(Qt.TextFormat.PlainText)" in t for t in windows_tabs.values())
           and not [f for f, t in windows_tabs.items() if re.search(r'setToolTip\(0, (?!f"<span>\{esc\()', t)])
-    pure = ("model.py", "qids.py", "edits.py", "actions.py", "remote.py", "reading.py", "claude.py", "build.py")
+    pure = ("model.py", "qids.py", "edits.py", "actions.py", "remote.py", "reading.py", "claude.py", "build.py", "text.py")
     check("road: the pure parts and the requests import no aqt",
           not [f for f in pure if re.search(r"^\s*(from aqt|import aqt)", src[f], re.M)])
     calls = set()
-    for f in ("flow.py", "window.py", "layout_tab.py", "qid_window.py", "picker.py", "start_window.py"):
+    for f in ("flow.py", "window.py", "layout_tab.py", "text_tab.py", "qid_window.py", "picker.py", "start_window.py"):
         for node in ast.walk(ast.parse(src[f])):
             if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "remote":
                 calls.add(node.attr)
@@ -1412,6 +1412,101 @@ def test_plan_edits_v393():
     check("plan: a tag deleted: a date with nothing else goes (its review day too), a cut is all its tag again, searches and its note go",
           set(us) == {"u2", "u3"} and us["u2"]["tags"] == [VID] and "cut" not in us["u2"] and "search" not in us["u2"]
           and "search" not in us["u3"] and "reviews" not in d and "remarks" not in d and d["tags"] == [root["tags"][1]], d)
+
+
+def test_plan_text_v393():
+    """3.9.3: the builder's Text in Your plans: the plan as text, read back
+    the same; Add dates (a new date, a line adding to its own date, an
+    event, a cut on one of the plan's tags); Edit the whole plan (a date
+    moved or renamed keeps its id, one left out goes, a tag renamed keeps
+    its id and its dates follow); what it can't read, a line each."""
+    from due_crew.planner import build as B
+    from due_crew.planner import text as T
+    t = B.Tree([("#Big", 250), ("#Big::#Book", 50), ("#Big::#Videos", 100), ("#Big::#Videos::Cardio", 60),
+                ("#Big::#Videos::Pulm", 40), ("Misc", 10)], [("Big Step 1", 260)])
+    ids = iter(f"x{i}" for i in range(999))
+    doc = {"deck": "Big Step 1", "tagroot": "MS2", "tags": [{"id": "t1", "name": "SLG 12", "notes": ["g1", "g2"]}],
+           "events": [{"id": "e1", "day": "2026-11-13", "name": "Cardio quiz"}],
+           "units": [{"id": "u1", "name": "Cardio", "opens": "2026-11-09", "due": "2026-11-11", "even": True,
+                      "tags": ["#Big::#Videos::Cardio"], "decks": [], "cards": [], "for": "e1",
+                      "todo": [{"k": "watch", "t": "Lecture 14"}]},
+                     {"id": "u2", "name": "Book", "opens": "2026-11-12", "tags": ["#Big::#Book"], "decks": [], "cards": [["g9", 1]],
+                      "search": ["tag:Misc -tag:Misc::x"]}],
+           "remarks": [{"id": "r1", "tag": "#Big::#Book", "text": "Read the summary first"}]}
+    txt = T.to_text(doc)
+    check("text: the plan as text, the builder's: tags, then dates and events by day, then notes",
+          txt.split("\n") == ["tag | SLG 12 | notes:g1 g2",
+                              "2026-11-09 | Cardio | tag:#Big::#Videos::Cardio | due 2026-11-11 | even | for Cardio quiz | watch: Lecture 14",
+                              "2026-11-12 | Book | tag:#Big::#Book | search:tag:Misc -tag:Misc::x | cards:g9:2",
+                              "2026-11-13 | event | Cardio quiz",
+                              "note | tag:#Big::#Book | Read the summary first"], txt)
+    r = T.from_text(doc, t, txt, whole=True, start="2026-11-09", new_id=lambda: next(ids))
+    back = T.apply(doc, r, True)
+    check("text: read back whole, nothing changes",
+          not r["errors"] and E.lean(back) == E.lean(doc) and [u["id"] for u in r["units"]] == ["u1", "u2"], (r["errors"], back))
+    add = ("2026-11-16 | Pulm | tag:#big::#videos::pulm | for Cardio quiz\n"
+           "2026-11-09 | Cardio | tag:Misc | read: chapter 4\n"
+           "week 2 | Cuts | tag:#Big::#Videos::Cardio in SLG 12\n"
+           "2026-11-20 | event | Pulm quiz\n"
+           "# Pick in Anki: the iron cards\n"
+           "# I chose the video over the book")
+    r = T.from_text(doc, t, add, start="2026-11-09", new_id=lambda: next(ids))
+    us = {u["name"]: u for u in r["units"]}
+    check("text: Add dates: a new date (a tag in any case), one adding to its own day and name, an event; picks and notes said",
+          not r["errors"] and us["Pulm"]["tags"] == ["#Big::#Videos::Pulm"] and us["Pulm"]["for"] == "e1"
+          and us["Cardio"]["id"] == "u1" and us["Cardio"]["tags"] == ["Misc"] and len(r["events"]) == 1
+          and r["notes"] == ["Pick in Anki: the iron cards"] and r["why"] == ["I chose the video over the book"], r)
+    cut = next(u for u in r["units"] if u.get("cut"))
+    check("text: week 2 is the plan's second Monday; a date named by its cut alone reads as it and its plan tag",
+          cut["opens"] == "2026-11-16" and cut["name"] == "Cuts" and cut["cut"][0]["in"] == "t1"
+          and T.from_text(doc, t, "week 2 | tag:#Big::#Videos::Cardio in SLG 12", start="2026-11-09")["units"][0]["name"]
+          == "Cardio · SLG 12", cut)
+    added = T.apply(doc, r, False)
+    au = {u["id"]: u for u in added["units"]}
+    check("text: Add to the plan: a date it names gets its tag and to-do, new ones go on, the cut's search is made",
+          au["u1"]["tags"] == ["#Big::#Videos::Cardio", "Misc"] and au["u1"]["todo"][-1] == {"k": "read", "t": "chapter 4"}
+          and len(added["units"]) == 4 and [e["name"] for e in added["events"]] == ["Cardio quiz", "Pulm quiz"]
+          and B.cut_q("#Big::#Videos::Cardio", "DueCrew::MS2::SLG_12") in au[cut["id"]]["search"], added["units"])
+    whole = ("tag | SLG 12b | notes:g1 g2\n"
+             "2026-11-10 | Cardio | tag:#Big::#Videos::Cardio | due 2026-11-11 | even | for Cardio quiz\n"
+             "2026-11-13 | event | Cardio quiz\n"
+             "2026-11-16 | Pulm | tag:#Big::#Videos::Pulm | tag:SLG 12b")
+    r = T.from_text(doc, t, whole, whole=True, start="2026-11-09", new_id=lambda: next(ids))
+    gu, gt, gr = T.gone(doc, r, True)
+    check("text: the whole plan: a date moved keeps its id, one left out goes, a tag with a new name and the same notes is it renamed",
+          not r["errors"] and r["units"][0]["id"] == "u1" and [u["id"] for u in gu] == ["u2"] and not gt
+          and r["renamed"] == [{"id": "t1", "from": "DueCrew::MS2::SLG_12", "was": "SLG 12"}] and [x["id"] for x in gr] == ["r1"]
+          and r["units"][1]["tags"] == ["#Big::#Videos::Pulm", "DueCrew::MS2::SLG_12b"], r)
+    rep = T.apply(doc, r, True)
+    check("text: Replace the plan's dates: the plan as the text says, the tag renamed",
+          [u["id"] for u in rep["units"]] == ["u1", r["units"][1]["id"]] and rep["tags"][0] == {"id": "t1", "name": "SLG 12b", "notes": ["g1", "g2"]}
+          and "remarks" not in rep and rep["units"][0]["opens"] == "2026-11-10", rep)
+    ren = T.from_text(doc, t, "2026-11-12 | Chapter 5 | tag:#Big::#Book | search:tag:Misc -tag:Misc::x | cards:g9:2", whole=True,
+                      start="2026-11-09", new_id=lambda: next(ids))
+    check("text: the whole plan: a date with its cards under another name is it renamed",
+          ren["units"][0]["id"] == "u2" and ren["units"][0]["name"] == "Chapter 5", ren["units"])
+    drop = T.from_text(doc, t, "2026-11-09 | Cardio | tag:#Big::#Videos::Cardio\n2026-11-16 | Own | tag:SLG 12", whole=True,
+                       start="2026-11-09", new_id=lambda: next(ids))
+    uses = T.using(doc, drop, True)
+    check("text: a tag the whole plan leaves out, while a date in it still uses it, says so first",
+          [u["name"] for u, _w in uses] == ["Own"] and "nothing else on it" in uses[0][1], uses)
+    said = T.take_all(doc, drop, t)
+    back, kept = T.keep_tags(doc, "2026-11-16 | Own | tag:SLG 12", T.from_text(doc, t, "2026-11-16 | Own | tag:SLG 12", whole=True,
+                                                                               start="2026-11-09"))
+    check("text: Take them off those dates too (a date with nothing left goes), or Keep the tags (their lines back in the text)",
+          [u["name"] for u in drop["units"]] == ["Cardio"] and said == ["Mon 16 Nov · Own: nothing left on it, so it goes"]
+          and back.startswith("tag | SLG 12 | notes:g1 g2\n") and kept == ["SLG 12"], (said, back))
+    bad = T.from_text(doc, t, "\n".join(["Cardio | tag:Misc", "2026-11-09 | x | search:is:due tag:Misc",
+                                         "2026-11-12 | y | tag:Misc | due 2026-11-10", "2026-11-12 | z | tag:Misc | even",
+                                         "2026-11-12 | w | tag:Misc | for Nothing", "2026-11-12 | v | notes:" + "x" * 41,
+                                         "2026-11-12 | nothing on it", "note | bad", "tag | SLG 13"]), start="2026-11-09")
+    check("text: what it can't read, a line each, in the builder's words",
+          [e.split(":")[0] for e in bad["errors"]] == ["Line 1", "Line 2", "Line 3", "Line 4", "Line 6", "Line 7", "Line 8",
+                                                      "Line 9", '"for Nothing"']
+          and "each person's Anki" in bad["errors"][1] and "before it opens" in bad["errors"][2], bad["errors"])
+    miss = T.from_text(doc, t, "2026-11-12 | q | tag:Nope::Here | tag:DueCrew::MS2::New", start="2026-11-09")
+    check("text: a tag the deck doesn't have is said (the plan's own aren't till they're made)",
+          miss["missing"] == ["tag:Nope::Here"], miss["missing"])
 
 
 def main():

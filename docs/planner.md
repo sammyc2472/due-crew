@@ -40,7 +40,8 @@ builder's on duecrew.com (Not here yet, below).
 ## Your plans
 
 My plans (the ones I write first, then the ones I follow), one at a time,
-in tabs: **Dates** for everyone, **Lay it out** for a plan's authors.
+in tabs: **Dates** for everyone, **Lay it out** and **Text** for a plan's
+authors.
 **Reload** reads the plan again (an edit on the site meanwhile); **New ▾**
 makes a date, a quiz or exam, a review day, or a new plan.
 
@@ -148,12 +149,44 @@ New plan ▾) now makes the plan here: the deck, a name, **Make the
 plan** (its tree to the site, as before, then `POST /plans`), and Your
 plans opens on it at Lay it out. **Open the builder instead** is the site.
 
+### Text (authors)
+
+The builder's Text (`text_tab.py`, its rules `text.py`'s, restated from
+builder.js's toText and fromText): the plan as lines, a date a line
+("2026-10-05 | Heart failure | tag:…, deck:… | due 2026-10-09 | even |
+for Heme quiz | watch: Lecture 14"), an event ("… | event | Heme quiz"),
+one of the plan's own tags ("tag | SLG 12 | notes:…"), a note for
+followers ("note | tag:… | words"); "week 3" for the plan's third Monday;
+a tag by its path in any case or its readable name. **The whole
+format** opens duecrew.com/plan-text.
+
+- **Add dates**: lines pasted in go on; a line with a date's own day and
+  name adds to it (its tags, searches, IDs, picks, to-dos). Changes
+  nothing already there.
+- **Edit the whole plan**: the plan as text, edited. A date keeps its id
+  (followers' skips, moves and progress) by its day and name, or, with
+  neither, by its name on another day (moved) or by its cards under
+  another name (renamed); a tag line with a new name and the same cards is
+  that tag renamed (its dates follow). What the text leaves out goes, said
+  first; a tag it leaves out that a date still uses asks: **Take them off
+  those dates too** (a cut is its whole tag again; a date left with
+  nothing goes) or **Keep the tags** (their lines back in the text).
+- **Read it** shows what would change (each date with its cards here,
+  moved from or was, a tag new or added to, notes; a tag the deck doesn't
+  have; a day over the pace; "# Pick in Anki" lines; an AI's own notes,
+  never kept), and nothing changes until **Add to the plan** or **Replace
+  the plan's dates** (asked first when something goes): one save, read
+  again on the plan as it is when it saves. **Copy the plan as text**.
+- What it can't read is said a line at a time, in the builder's words
+  (a date first, a search about one person's Anki, due before it opens,
+  even with no due date, a "for" with no such event, an ID that isn't one).
+
 ### Not here yet
 
-The builder's Text (the plan as text, Add dates, Edit the whole plan),
-its Updates (posts, reached N of M), Progress, History, and Settings
-(name, line, link, squad, co-authors, listing, copy for next year,
-delete), and day notes: those stay on duecrew.com for now.
+The builder's Updates (posts, reached N of M), Progress, History, and
+Settings (name, line, link, squad, co-authors, listing, copy for next
+year, delete), day notes, and the prompts for your own AI: those stay on
+duecrew.com for now.
 
 ## The picker
 
@@ -280,19 +313,21 @@ request carries. Nothing is sent: `claude.py` has no requests.
 | `planner/qids.py` | pure: numbers, banks, a paste found, threads, the kept misses |
 | `planner/edits.py` | pure: an author's changes to the doc (the builder's edits), the count, the history line |
 | `planner/build.py` | pure: the builder's rules restated (Todo, Every, Remarks, Picks, Suggest, Work, Reviews, Tags, Fill, Split, layOut, What to cover) |
+| `planner/text.py` | pure: the builder's Text (toText, fromText, Add and Replace, what it would change) |
 | `planner/actions.py` | Bring back, the one collection step it adds |
 | `planner/remote.py` | its requests (who I am, my plans, one plan, a save) |
 | `planner/reading.py` | pure: a calendar read, a session's tags, an exam's line, by plain rules |
 | `planner/claude.py` | pure: Claude's stand-in, and what Claude would get (`request`) |
 | `planner/flow.py` | the glue: the windows' asks (`Ops`, `StartOps`, `QidOps`), `make_here`, `qids.json` |
-| `planner/window.py`, `layout_tab.py`, `date_dialogs.py`, `picker.py`, `qid_window.py`, `start_window.py` | the Qt windows and Lay it out, in the board's look |
+| `planner/window.py`, `layout_tab.py`, `text_tab.py`, `date_dialogs.py`, `picker.py`, `qid_window.py`, `start_window.py` | the Qt windows and their tabs, in the board's look |
 
 Checks: `tests/test_planner.py` (the pure parts, `build.py` against
 builder.js run in node, Fill and Lay it out, the save against the fake
 Worker's `PUT /plans/{id}`, the labs switch, the rules of the road), the
 planner renders in `tools/dialogs.py` (an author's window, a change saved
 end to end, Change ▾ and New ▾, a review day, a search and a to-do saved,
-Lay it out ticked, filled and its tags renamed, Make the plan here, the
+Lay it out ticked, filled and its tags renamed, Text's Add dates and the
+whole plan replaced, Make the plan here, the
 picker, Missed questions with its threads, Do it and All my misses, a
 calendar read and made into a plan, What Claude would get, the Plans
 menu), and `check_planner` in `tools/real_anki.py` (12,000

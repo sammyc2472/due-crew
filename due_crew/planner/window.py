@@ -5,7 +5,8 @@ the picked one on the right, each source with what it holds in this copy
 (cards, new, shut), grouped as the deck files them: by resource, by
 system, other, the plan's own tags, subdecks, searches, picked cards.
 Lay it out (layout_tab.py), for its authors: what it covers, the pace,
-Fill, the plan's own tags, its lines every week.
+Fill, the plan's own tags, its lines every week. Text (text_tab.py): the
+plan as text, Add dates and Edit the whole plan.
 
 Show in Browse, Open its cards and Study it are plan_flow's (through ops).
 An author changes the plan here (Change ▾, New ▾): each change is one save
@@ -30,6 +31,7 @@ from . import date_dialogs as DD
 from . import edits as E
 from . import model as M
 from .layout_tab import LayoutTab
+from .text_tab import TextTab
 
 ROLE = Qt.ItemDataRole.UserRole
 
@@ -190,6 +192,7 @@ class PlanWindow(QDialog):
         split.setSizes([300, 640])
         self._add_tab("dates", "Dates", split)
         self._add_tab("layout", "Lay it out", LayoutTab(self))
+        self._add_tab("text", "Text", TextTab(self))
         self.want_tab = tab
 
         bottom = QHBoxLayout()
@@ -850,6 +853,9 @@ class PlanWindow(QDialog):
         if outcome == "saved":
             self._can_undo((pid, plan.get("version")))
             self.status.setText("Saved for everyone following it. They get it at their next refresh.")
+            for page in self.pages.values():
+                if callable(getattr(page, "saved", None)):
+                    page.saved(self)
         else:
             self.status.setText("Someone saved this plan again since: it's up to date now. Make the change again.")
 

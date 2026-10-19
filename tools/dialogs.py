@@ -1281,6 +1281,9 @@ def main(out):
             def undo(self, owner, pid, version, done):
                 done(PR.undo(CLIENT, pid, version))
 
+            def open_page(self, path):
+                pass
+
         mine = PR.my_plans(CLIENT)
 
         def PlanWindow_(plans=mine):
@@ -1436,6 +1439,45 @@ def main(out):
             raise RuntimeError(f"planner: Lay it out's tags and lines: {STORE.plans[pid]['doc'].get('tags')}, {dlg.status.text()!r}")
         lay.ptags.setCurrentItem(lay.ptags.topLevelItem(0))
         shoot(dlg, os.path.join(out, "planner-layout-saved.png"))
+        # 3.9.3: Text: Add dates read and saved; the whole plan with a date left out
+        from due_crew.planner import text_tab as PT
+        txt = dlg.pages["text"]
+        dlg._show_tab("text")
+        if dlg.tabs.currentWidget() is not txt:
+            raise RuntimeError("planner: Text isn't an author's tab")
+        txt.box.setPlainText(f"{day(6)} | Shock again | tag:{root}::#Videos::Cardio::Shock | read: chapter 9\n"
+                             f"{day(4)} | event | Shock quiz\n# Pick in Anki: the two shock cases")
+        txt._read()
+        rows = [txt.preview.topLevelItem(i).text(0) for i in range(txt.preview.topLevelItemCount())]
+        if rows != [P.fmt_day(day(6))] or txt.go_btn.isHidden() or txt.go_btn.text() != "Add to the plan" \
+                or "1 date, 1 event." not in txt.status.text() or "To pick in Anki" not in txt.said.text():
+            raise RuntimeError(f"planner: Text, Add dates read: {rows}, {txt.status.text()!r}, {txt.said.text()!r}")
+        dlg.resize(1100, 720)
+        shoot(dlg, os.path.join(out, "planner-text-add.png"))
+        txt._go()
+        doc = STORE.plans[pid]["doc"]
+        if not any(u.get("name") == "Shock again" and u["opens"] == day(6) for u in doc["units"]) \
+                or not any(e.get("name") == "Shock quiz" for e in doc.get("events") or []) or txt.box.toPlainText() \
+                or not txt.status.text().startswith("Added. Now "):
+            raise RuntimeError(f"planner: Text, Add to the plan: {txt.status.text()!r}")
+        txt.modes.button(1).click()
+        whole = txt.box.toPlainText().split("\n")
+        if not any("| Shock again |" in x for x in whole) or not any(x.startswith("tag | SLG 12b") for x in whole):
+            raise RuntimeError(f"planner: Text, the whole plan: {whole}")
+        txt.box.setPlainText("\n".join(x for x in whole if "| Shock again |" not in x))
+        txt._read()
+        if "Takes off 1 date" not in txt.said.text() or txt.go_btn.text() != "Replace the plan's dates":
+            raise RuntimeError(f"planner: Text, the whole plan read: {txt.said.text()!r}, {txt.go_btn.text()!r}")
+        dlg.resize(1100, 720)
+        shoot(dlg, os.path.join(out, "planner-text-whole.png"))
+        was_confirm, PT.confirm = PT.confirm, lambda *a, **k: True
+        try:
+            txt._go()
+        finally:
+            PT.confirm = was_confirm
+        doc = STORE.plans[pid]["doc"]
+        if any(u.get("name") == "Shock again" for u in doc["units"]) or txt.box.toPlainText() != PT.T.to_text(doc):
+            raise RuntimeError(f"planner: Text, Replace: {txt.status.text()!r}")
         empty = PlanWindow_([])
         shoot(empty, os.path.join(out, "planner-empty.png"))
         idx = P.DeckIndex(col, 1)
