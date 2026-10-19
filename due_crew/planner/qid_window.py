@@ -9,11 +9,11 @@ thread). What you act on is kept on this computer, numbers only, so All my
 misses shows the threads across every block. Nothing is sent."""
 
 from aqt.qt import (
-    QButtonGroup, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLabel, QListWidget,
+    QButtonGroup, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLabel, QListWidget,
     QListWidgetItem, QPlainTextEdit, QPushButton, QRadioButton, Qt, QTimer, QVBoxLayout,
 )
 
-from ..ui import attach_alive, heading, note, role
+from ..ui import attach_alive, confirm, heading, note, role
 from . import actions as A
 from . import qids as Q
 
@@ -37,6 +37,7 @@ class QidWindow(QDialog):
         self.gone = None  # what Forget took out, while its Undo shows
         self.pasted = ""  # the paste, while All my misses shows the kept ones in its place
         self.threads = []
+        self.picked = None  # the bank I picked, while it's this paste's and this deck's
         attach_alive(self)
         self.setWindowTitle("Question IDs")
         self.setModal(False)
@@ -86,14 +87,9 @@ class QidWindow(QDialog):
         self.thread_list.itemSelectionChanged.connect(self._show)
         self.thread_list.itemDoubleClicked.connect(lambda _i: self.ops.browse(self.cids()))
         root.addWidget(self.thread_list)
-        self.both = QRadioButton("")
-        self.just = QRadioButton("")
-        self.both.setChecked(True)
-        how = QButtonGroup(self)
-        how.addButton(self.both)
-        how.addButton(self.just)
-        root.addWidget(self.both)
-        root.addWidget(self.just)
+        self.back = QCheckBox("")  # and bring back the ones I've seen, over 3 days
+        self.back.setChecked(True)
+        root.addWidget(self.back)
         self.said = _plain(muted=True)
         root.addWidget(self.said)
         buttons = QDialogButtonBox()
@@ -114,10 +110,10 @@ class QidWindow(QDialog):
         self._timer.setSingleShot(True)
         self._timer.setInterval(250)
         self._timer.timeout.connect(self._count)
-        self.text.textChanged.connect(self._timer.start)
+        self.text.textChanged.connect(self._pasted)
         self.deck.currentIndexChanged.connect(self._deck)
-        self.bank.currentIndexChanged.connect(lambda _i: self._count())
-        self.both.toggled.connect(lambda _on: self._show())
+        self.bank.activated.connect(self._pick_bank)  # a pick of mine, never one the count made
+        self.back.toggled.connect(lambda _on: self._show())
         self.all.toggled.connect(lambda _on: self._scope())
         start = self.ops.default_deck(self.choices)
         at = next((i for i, (d, _n) in enumerate(self.choices) if d == start), 0)
@@ -137,17 +133,39 @@ class QidWindow(QDialog):
         t = self.thread()
         return set(t["cids"]) if t else set((self.found or {}).get("cids") or ())
 
+    def _kept_bank(self):
+        """All my misses reads one bank's: the one I picked, else the one
+        most of them are from."""
+        did = self.deck.currentData()
+        if self.picked:
+            return self.picked
+        names = list(Q.banks(self.idx)) if self.idx is not None else []
+        return max(names, key=lambda b: (len(self.ops.kept(did, b)[0]), b == names[0]), default=None)
+
     def _numbers(self):
-        """The text the count reads: the paste, or every kept miss."""
+        """The text the count reads: the paste, or the kept misses of one bank."""
         if self.all.isChecked():
-            nums, _pastes, _since = self.ops.kept(self.deck.currentData())
+            nums, _pastes, _since = self.ops.kept(self.deck.currentData(), self._kept_bank())
             return " ".join(nums)
         return self.text.toPlainText()
+
+    def _pasted(self):
+        if not self.text.isReadOnly():
+            self.picked = None  # a new paste: the bank its numbers say
+        self._timer.start()
+
+    def _pick_bank(self, _i):
+        self.picked = self.bank.currentText() or None
+        if self.all.isChecked():
+            self._scope()
+        else:
+            self._count()
 
     # ---- reading ----
 
     def _deck(self, *_):
         did = self.deck.currentData()
+        self.picked = None
         self.idx = self.ops.index(did) if did is not None else None
         self._scope_words()
         self._count()
@@ -170,7 +188,7 @@ class QidWindow(QDialog):
         if every and not self.text.isReadOnly():
             self.pasted = self.text.toPlainText()
         if every:
-            self.text.setPlainText("  ".join(self.ops.kept(self.deck.currentData())[0]))
+            self.text.setPlainText("  ".join(self.ops.kept(self.deck.currentData(), self._kept_bank())[0]))
         elif self.text.isReadOnly():
             self.text.setPlainText(self.pasted)
         self.text.setReadOnly(every)
@@ -185,7 +203,7 @@ class QidWindow(QDialog):
             self._fill_threads()
             self._show()
             return
-        asked = self.bank.currentText() if self.bank.count() > 1 else None
+        asked = self.picked or (self._kept_bank() if self.all.isChecked() else None)
         self.found = Q.find(self.idx, self._numbers(), asked)
         self.t = Q.tally(self.idx, self.found["cids"])
         banks = self.found["banks"]
@@ -232,23 +250,22 @@ class QidWindow(QDialog):
             self.thread_list.setFixedHeight(min(rows, 6 * max(1, self.thread_list.sizeHintForRow(0))) + 2 * self.thread_list.frameWidth() + 10)
 
     def _show(self):
-        t = Q.tally(self.idx, self.cids()) if self.idx is not None and self.cids() else (self.t or {})
-        shut, review = int(t.get("shut") or 0), int(t.get("review") or 0)
-        days = A.BACK_DAYS
-        self.both.setText(f"Open the {shut:,} shut, and bring the {review:,} you’ve seen back over {days} days"
-                          if shut else f"Bring the {review:,} you’ve seen back over {days} days")
-        self.just.setText(f"Just open the {shut:,} shut" if shut else "Nothing to open")
-        has = bool(self.cids())
-        self.both.setEnabled(has and bool(shut or review))
-        self.just.setEnabled(has and bool(shut))
-        if not self.just.isEnabled() and self.just.isChecked():
-            self.both.setChecked(True)
-        self.go.setEnabled(has and bool(shut or (review and self.both.isChecked())))
+        cids = self.cids()
+        t = Q.tally(self.idx, cids) if self.idx is not None and cids else (self.t or {})
+        shut = int(t.get("shut") or 0)
+        later = self.ops.movable(cids) if cids else 0  # the seen ones Bring back would move (actions.reviews)
+        self.back.setText(f"Bring back the {later:,} you’ve seen, over the next {A.BACK_DAYS} days")
+        self.back.setVisible(bool(later))
+        back = bool(later) and self.back.isChecked()
+        go = ([f"Open {shut:,}"] if shut else []) + ([f"bring back {later:,}"] if back else [])
+        self.go.setText(", ".join(go).capitalize() if go else "Nothing to do")
+        self.go.setEnabled(bool(go))
+        has = bool(cids)
         one = self.thread() is not None
         self.browse_btn.setText("Show this thread in Browse" if one else "Show in Browse")
         self.study_btn.setText("Study this thread" if one else "Study them now")
         self.browse_btn.setEnabled(has)
-        self.study_btn.setEnabled(has and int(t.get("open") or 0) + shut > 0)
+        self.study_btn.setEnabled(has and int(t.get("open") or 0) > 0)  # Study takes the open ones
         if not self.said.text():
             self.said.setText("Counted here; nothing is sent. What you act on is kept on this computer, numbers only.")
 
@@ -260,11 +277,20 @@ class QidWindow(QDialog):
             self.ops.keep(self.deck.currentData(), self.found["bank"], self.found["found"])
             self._scope_words()
 
+    MANY = 200  # bringing back more than this asks first: it's days of reviews
+
     def _do(self):
         cids = self.cids()
         if not cids:
             return
-        got = self.ops.bring_back(cids, back=self.both.isChecked())
+        back = self.back.isChecked() and not self.back.isHidden()
+        later = self.ops.movable(cids) if back else 0
+        if later > self.MANY and not confirm(
+                self, f"Bring back {later:,} cards?",
+                f"About {-(-later // A.BACK_DAYS):,} a day on top of your reviews for the next {A.BACK_DAYS} days. "
+                "Edit › Undo takes it back.", "Bring them back"):
+            return
+        got = self.ops.bring_back(cids, back=back)
         if not got:
             return
         self._keep()

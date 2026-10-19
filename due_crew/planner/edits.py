@@ -44,9 +44,21 @@ def _unit(doc, uid):
     return u
 
 
+def _cut(text, most):
+    """Cut to `most` as the Worker counts (UTF-16 units: an emoji is two),
+    never splitting one."""
+    out, n = [], 0
+    for ch in str(text):
+        n += 2 if ord(ch) > 0xFFFF else 1
+        if n > most:
+            break
+        out.append(ch)
+    return "".join(out)
+
+
 def _name(text):
-    """A name as the server keeps one: one line, 60 characters."""
-    name = " ".join(str(text or "").split())[:NAME_MAX]
+    """A name as the server keeps one: one line, 60 characters as it counts them."""
+    name = _cut(" ".join(str(text or "").split()), NAME_MAX).strip()
     if not name:
         raise Refused("A date needs a name.")
     return name
@@ -88,7 +100,7 @@ def auto_name(tags=(), decks=()):
     if not srcs:
         return "?"
     first = P._word(str(srcs[0]).split("::")[-1])
-    return f"{first}{f' + {len(srcs) - 1} more' if len(srcs) > 1 else ''}"[:NAME_MAX]
+    return _cut(f"{first}{f' + {len(srcs) - 1} more' if len(srcs) > 1 else ''}", NAME_MAX)
 
 
 def add_sources(doc, uid, tags=(), decks=()):

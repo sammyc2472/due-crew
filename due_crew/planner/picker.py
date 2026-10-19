@@ -73,7 +73,7 @@ class Picker(QDialog):
         cards, new = M.tag_count(self.idx, path) if kind == "tag" else self._deck_count(path)
         item = QTreeWidgetItem([name, f"{cards:,}", f"{new:,}"])
         item.setData(0, ROLE, (kind, path, cards))
-        item.setToolTip(0, esc(path))
+        item.setToolTip(0, f"<span>{esc(path)}</span>")  # rich text: Qt shows the escape as written otherwise
         for i in (1, 2):
             item.setTextAlignment(i, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
@@ -82,8 +82,13 @@ class Picker(QDialog):
             item.setChildIndicatorPolicy(QTreeWidgetItem.ChildIndicatorPolicy.ShowIndicator)
         return item
 
+    def _deck(self):
+        """The plan's deck name, as its subdecks are written in it (this copy's
+        may be named differently: the plan's name is what followers read)."""
+        return self.plan_deck or self.idx.name
+
     def _deck_count(self, path):
-        c = M.counts(self.idx, self.idx.deck_cards(path, self.idx.name))
+        c = M.counts(self.idx, self.idx.deck_cards(path, self._deck()))
         return c["cards"], c["new"]
 
     def _fill(self):
@@ -106,7 +111,7 @@ class Picker(QDialog):
                 head.setFlags(Qt.ItemFlag.ItemIsEnabled)
                 self.tree.addTopLevelItem(head)
                 for rel in decks:
-                    head.addChild(self._row("deck", f"{self.idx.name}::{rel}", rel.replace("::", " › ")))
+                    head.addChild(self._row("deck", f"{self._deck()}::{rel}", rel.replace("::", " › ")))
         self.hint.setVisible(bool(self.hint.text()))
         self.tree.blockSignals(False)
         self._said()
@@ -141,21 +146,29 @@ class Picker(QDialog):
         self._said()
 
     def _said(self):
-        """"2 ticked · 140 cards", or that nothing is."""
-        n = len(self.ticked)
+        """"2 ticked · 140 cards" (each card once), or that nothing is."""
+        tags, decks = self.value()
+        n = len(tags) + len(decks)
         self.go.setEnabled(bool(n))
         if not n:
             self.said.setText("Nothing ticked yet.")
             return
-        cards = sum(self.ticked.values())
-        self.said.setText(f"{n:,} ticked · {cards:,} card{'s' if cards != 1 else ''}"
-                          + (" (a card under two of them counts twice here)" if n > 1 else ""))
+        cids = set()
+        for t in tags:
+            cids |= self.idx.tag_cards(t)
+        for d in decks:
+            cids |= self.idx.deck_cards(d, self._deck())
+        self.said.setText(f"{n:,} ticked · {len(cids):,} card{'s' if len(cids) != 1 else ''}")
 
     def value(self):
-        """(tags, decks) ticked, in the order ticked."""
+        """(tags, decks) ticked, in the order ticked; one under another ticked
+        one left out (it comes with it)."""
+        def inside(p, others):
+            low = p.lower()
+            return any(low.startswith(o.lower() + M.SEP) for o in others if o != p)
         tags = [p for (k, p) in self.ticked if k == "tag"]
         decks = [p for (k, p) in self.ticked if k == "deck"]
-        return tags, decks
+        return [t for t in tags if not inside(t, tags)], [d for d in decks if not inside(d, decks)]
 
 
 def pick_sources(parent, idx, title, plan_deck=""):

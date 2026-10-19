@@ -439,6 +439,7 @@ class FakeWorker:
         self.feedback = []   # 3.6.5, P6: [{uid, text, ver}] for the admin's page
         self.admins = set()  # notices.ts isAdmin: wrangler.toml's ADMINS (and the ADMIN_UIDS secret)
         self.plan_log = []   # plans.ts logSave: (plan, version, uid, summary), a save's history line
+        self.plan_prev = {}  # plans.ts plan_log.prev: a plan's doc before its latest save, for undo
         self.otp = {}        # email -> code
         # 3.1: plans (worker/src/plans.ts)
         self.plans = {}      # id -> {code, owner, name, line, audience, squad, doc, version,
@@ -1790,6 +1791,17 @@ class FakeWorker:
             if body.get("team") is True:  # 3.7.6: following onto its team; share alone does nothing now
                 self._join_team(pid, me)
             return 200, self._plan_view(pid, me)
+        if not rest and method == "POST":
+            # plans.ts create: a new plan, no units yet; I'm its author (PLANS_MAX of my own)
+            name = " ".join(str(body.get("name") or "").split())[:60]
+            if not name:
+                raise Bad(400, "bad_name")
+            if sum(1 for q in self.plans.values() if q["owner"] == me) >= 50:
+                raise Bad(409, "too_many_plans")
+            pid, _code = self.add_plan(me, name, str(body.get("deck") or ""), [])
+            self.plans[pid]["line"] = " ".join(str(body.get("line") or "").split())[:120]
+            self._count("plans")
+            return 200, self._plan_view(pid, me)
         pid = rest[0] if rest else ""
         if rest[1:] == ["follow"] and method == "DELETE":
             self.follows.pop((pid, me), None)  # stopping: my progress goes with it
@@ -2086,10 +2098,26 @@ class FakeWorker:
                 return 200, self._plan_view(pid, me)  # nothing changed: nothing written
             if body["version"] != p["version"]:
                 raise Bad(409, "stale", {"version": p["version"]})
+            self.plan_prev[pid] = p["doc"]
             p.update(name=name, line=line, doc=doc)
             p["version"] += 1
             self.plan_log.append((pid, p["version"], me, " ".join(str(body.get("summary") or "").split())[:120]
                                   or "changed the plan"))
+            self._count("plans")
+            return 200, self._plan_view(pid, me)
+        if rest[1:] == ["undo"] and method == "POST":  # plans.ts undo: what the latest save replaced, back
+            if not self._writes(p, me):
+                raise Bad(403, "not_author")
+            if body.get("version") != p["version"]:
+                raise Bad(409, "stale", {"version": p["version"]})
+            prev = self.plan_prev.get(pid)
+            if prev is None:
+                raise Bad(404, "nothing_to_undo")
+            self.plan_prev[pid] = p["doc"]  # its own undo puts it back again
+            p["doc"] = prev
+            p["version"] += 1
+            last = next((x[3] for x in reversed(self.plan_log) if x[0] == pid), "")
+            self.plan_log.append((pid, p["version"], me, f"undid: {last}"[:120]))
             self._count("plans")
             return 200, self._plan_view(pid, me)
         raise Bad(405, "method")

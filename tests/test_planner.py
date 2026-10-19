@@ -89,6 +89,8 @@ def collection():
     add(conn, 15, 4, odid=1, ctype=2, queue=2, ivl=4, tags=DRUGS)
     col = fakes.FakeCol(conn, fakes.day_cutoff_for(datetime.date(2026, 11, 9)))
     col.decks = fakes.FakeDecks({1: "Big Step 1", 2: "Big Step 1::Cardio", 3: "Mine", 4: "Due Crew::Cram"})
+    # the review cards come due a month out (Anki's day 1000 is today), so Bring back has something to move
+    conn.execute("UPDATE cards SET due = 1030 WHERE type = 2")
     return col
 
 
@@ -373,6 +375,15 @@ def test_bring_back():
           and after[15] == before[15] and after[7][1] == 0, (got, after))
     check("bring back: a new one opened goes first in Anki's line", after[7][2] == 0 and before[7][2] == 0
           and any(n == "Reposition" or 7 in ids for n, ids in col.undo_steps), col.undo_steps)
+    col3 = collection()
+    col3.db.conn.execute("UPDATE cards SET due = 990 WHERE id = 3")   # overdue
+    col3.db.conn.execute("UPDATE cards SET due = 1001 WHERE id = 9")  # due tomorrow, inside the 3 days
+    moves = A.reviews(col3, {3, 9, 8}, {8})  # what the window's count says first
+    got3 = A.bring_back(col3, {3, 9, 8}, "Due Crew: bring back 3 cards")
+    after3 = state(col3)
+    check("bring back: never puts a card later: one overdue or due inside the 3 days stays as it is",
+          moves == [8] and got3 == {"opened": 1, "due": 1} and after3[3][2] == 990 and after3[9][2] == 1001
+          and after3[8][2] in (1000, 1001, 1002), (moves, got3, after3))
     col2 = collection()
     got2 = A.bring_back(col2, {7, 8, 9}, "Due Crew: open 3", back=False)
     after2 = state(col2)
@@ -579,7 +590,7 @@ def test_rules_of_the_road():
           not [f for f, t in windows.items() if "setStyleSheet" in t or "palette(" in t or "font-size" in t])
     check("road: every label is plain text (names are the authors' and the deck's); tooltips escaped",
           all("setTextFormat(Qt.TextFormat.PlainText)" in t for t in windows.values())
-          and not [f for f, t in windows.items() if re.search(r"setToolTip\(0, (?!esc\()", t)])
+          and not [f for f, t in windows.items() if re.search(r'setToolTip\(0, (?!f"<span>\{esc\()', t)])
     pure = ("model.py", "qids.py", "edits.py", "actions.py", "remote.py")
     check("road: the pure parts and the requests import no aqt",
           not [f for f in pure if re.search(r"^\s*(from aqt|import aqt)", src[f], re.M)])
@@ -589,10 +600,11 @@ def test_rules_of_the_road():
             if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "remote":
                 calls.add(node.attr)
     check("road: requests only on a click, through remote (who I am, my plans, one plan, a save)",
-          calls <= {"is_admin", "my_plans", "load", "save"} and "_call" not in src["flow.py"], calls)
-    routes = set(re.findall(r'_call\("(GET|PUT|POST|PATCH|DELETE)", f?"([^"]+)"', src["remote.py"]))
+          calls <= {"is_admin", "my_plans", "load", "save", "undo", "create"} and "_call" not in src["flow.py"], calls)
+    routes = set(re.findall(r'_call\((?:client, )?"(GET|PUT|POST|PATCH|DELETE)", f?"([^"]+)"', src["remote.py"]))
     check("road: nothing new on the server: routes the builder and the site use already",
-          routes == {("GET", "/auth/me"), ("GET", "/plans/{pid}"), ("PUT", "/plans/{pid}")}, routes)
+          routes == {("GET", "/auth/me"), ("GET", "/plans/{pid}"), ("PUT", "/plans/{pid}"), ("POST", "/plans/{pid}/undo"),
+                     ("POST", "/plans")}, routes)
     words = " ".join(src.values()).lower()
     banned = [w for w in ("anking", "uworld", "amboss", "boards and beyond", "sketchy", "pathoma", "first aid", "bootcamp")
               if w in words]

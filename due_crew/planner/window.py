@@ -9,6 +9,8 @@ save of the builder's (PUT /plans/{id}, the version it started from), and
 says so. Names are the authors' and the deck's: plain text everywhere,
 escaped in a tooltip."""
 
+import json
+
 from aqt.qt import (
     QAbstractItemView, QBrush, QColor, QComboBox, QDate, QDateEdit, QDialog, QDialogButtonBox,
     QFont, QHBoxLayout, QHeaderView, QLabel, QMenu, QPushButton, QSplitter, Qt, QTreeWidget,
@@ -97,6 +99,7 @@ class PlanWindow(QDialog):
         self.how = ""
         self.picked = None        # ("date", uid) | ("week", start) | ("event", id)
         self.busy = False
+        self.undoable = None      # (plan id, version) a save of this window's made, while its Undo shows
         self._rows = {}           # uid -> model.sources, for this plan's index
         attach_alive(self)
         self.setWindowTitle("Plans")
@@ -110,6 +113,11 @@ class PlanWindow(QDialog):
         for p in self.plans:
             self.pick.addItem(f"{p.get('name') or 'Plan'} · {_whose(p)}", p["id"])
         top.addWidget(self.pick, 1)
+        self.reload_btn = QPushButton("Reload")
+        self.reload_btn.setFlat(True)
+        self.reload_btn.setToolTip("The plan as it is on duecrew.com now")
+        self.reload_btn.clicked.connect(self._load)
+        top.addWidget(self.reload_btn)
         self.new_btn = QPushButton("New date…")
         self.new_btn.clicked.connect(self._new_date)
         top.addWidget(self.new_btn)
@@ -169,13 +177,23 @@ class PlanWindow(QDialog):
         split.setSizes([300, 640])
         root.addWidget(split, 1)
 
+        bottom = QHBoxLayout()
         self.status = _plain(muted=True)
-        root.addWidget(self.status)
+        bottom.addWidget(self.status, 1)
+        self.undo_btn = QPushButton("Undo")
+        self.undo_btn.setFlat(True)
+        self.undo_btn.setToolTip("Puts back what the last save changed, for everyone (as the builder's Undo)")
+        self.undo_btn.clicked.connect(self._undo)
+        self.undo_btn.setVisible(False)
+        bottom.addWidget(self.undo_btn)
+        root.addLayout(bottom)
         buttons = QDialogButtonBox()
         buttons.addButton("Close", QDialogButtonBox.ButtonRole.RejectRole).clicked.connect(self.reject)
         root.addWidget(buttons)
 
         self.pick.currentIndexChanged.connect(self._load)
+        # the same plan picked again after a load that failed: try it again
+        self.pick.activated.connect(lambda _i: self._load() if self.plan is None and not self.busy else None)
         if self.plans:
             self._load()
         else:
@@ -200,6 +218,7 @@ class PlanWindow(QDialog):
         pid = self.pick.currentData()
         if not pid:
             return
+        self._can_undo(None)
         self._busy(True, "Loading the plan…")
         self.ops.load(self, pid, lambda got: self._loaded(pid, got))
 
@@ -210,14 +229,13 @@ class PlanWindow(QDialog):
         if not got:
             self.plan = self.raw = self.doc = self.idx = None
             self.picked = None
-            self._empty("The plan didn't load: check your connection, then pick it again.")
+            self._empty("The plan didn't load: check your connection, then Reload.")
             return
         raw, plan = got
         self.plan = plan
         self.raw = raw if plan.get("role") in ("owner", "editor") else None
         # an author's view is the plan's own dates; a follower's, mine (as my follow moves them)
         self.doc = plan["doc"] if self.raw is not None else self.ops.my_doc(plan)
-        self.head.setText(str(plan.get("name") or "Plan"))
         self.idx, self.swap, self.how = self.ops.context(plan, self.doc)
         self._rows = {}
         self._line()
@@ -235,8 +253,6 @@ class PlanWindow(QDialog):
             bits.append(f"counted in your {self.idx.name}" + (" (its tags read as your copy names them)" if self.swap else ""))
         else:
             bits.append(f"its deck ({self.doc.get('deck') or '?'}) isn't in this Anki")
-        if self.author():
-            bits.append("changes save to the plan for everyone")
         self.line.setText(" · ".join(bits))
 
     def rows(self, u):
@@ -376,14 +392,14 @@ class PlanWindow(QDialog):
                                         _n(c["new"]) if c["cards"] else "", _n(c["shut"]) if c["cards"] else ""])
                 item.setData(0, ROLE, r["key"])
                 if r["raw"]:
-                    item.setToolTip(0, esc(r["raw"]))
+                    item.setToolTip(0, f"<span>{esc(r['raw'])}</span>")  # rich text, so the escape reads as written
                 for i in (1, 2, 3):
                     item.setTextAlignment(i, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 self.table.addTopLevelItem(item)
         if self.idx is None:
             for t in list(u.get("tags") or []) + list(u.get("decks") or []):
                 item = QTreeWidgetItem([M.label(t), "", "", ""])
-                item.setToolTip(0, esc(t))
+                item.setToolTip(0, f"<span>{esc(t)}</span>")
                 self.table.addTopLevelItem(item)
 
     def _week_units(self, start):
@@ -478,9 +494,12 @@ class PlanWindow(QDialog):
         self.open_btn.setEnabled(have and idle and kind == "date")
         self.study_btn.setEnabled(have and idle and kind in ("date", "event"))
         self.study_btn.setText("Study for it" if kind == "event" else "Study it")
-        item = self.table.currentItem()
-        on_row = kind == "date" and item is not None and item.data(0, ROLE) is not None
+        on_row = self._on_row()
         self.browse_btn.setText("Show these in Browse" if on_row else "Show in Browse")
+        self.open_btn.setText("Open these" if on_row else "Open its cards")
+        if kind != "event":
+            self.study_btn.setText("Study these" if on_row else "Study it")
+        self.reload_btn.setEnabled(idle and self.pick.count() > 0)
         author = self.author()
         self.change_btn.setVisible(author)
         self.new_btn.setVisible(author)
@@ -489,7 +508,7 @@ class PlanWindow(QDialog):
         self.menu.clear()
         if author and kind == "date":
             for label, fn, ok in (("Add from the deck…", self._add, self.idx is not None),
-                                  ("Take the picked one off", self._take, on_row and self._takeable(item)),
+                                  ("Take the picked one off", self._take, on_row and self._takeable(self.table.currentItem())),
                                   (None, None, None),
                                   ("Rename…", self._rename, True), ("Move to another day…", self._move, True),
                                   ("Due date…", self._due, True), (None, None, None),
@@ -500,6 +519,12 @@ class PlanWindow(QDialog):
                 a = self.menu.addAction(label)
                 a.setEnabled(bool(ok))
                 a.triggered.connect(lambda _=False, fn=fn: fn())
+
+    def _on_row(self):
+        """A source row of the picked date is picked: the buttons act on it."""
+        item = self.table.currentItem()
+        return (bool(self.picked) and self.picked[0] == "date" and item is not None
+                and isinstance(item.data(0, ROLE), tuple) and item.data(0, ROLE)[:1] != ("date",))
 
     def _takeable(self, item):
         k = item.data(0, ROLE) if item is not None else None
@@ -533,25 +558,35 @@ class PlanWindow(QDialog):
         cids, _name = self._cards()
         self.ops.browse(cids)
 
+    def _own_steps(self):
+        """The plan's own open and study (its state kept: at my own pace, Up
+        next's): when I follow it here, the board's copy is this version,
+        and the whole date (not one of its rows) is what's picked."""
+        return (not self._on_row()
+                and self.ops.followed_here(self.plan["id"], self.plan.get("version")))
+
     def _open(self):
         if not self.picked or self.picked[0] != "date":
             return
         uid, pid = self.picked[1], self.plan["id"]
-        if self.ops.followed_here(pid):
-            self.ops.open_date(pid, uid)  # the plan's own open (at my pace, Up next's), its state kept
+        if self._own_steps():
+            self.ops.open_date(pid, uid)
         else:
             cids, name = self._cards()
-            self.ops.open_cards(cids, name)
+            n = self.ops.open_cards(cids, name)
+            if not n:
+                self.status.setText("Nothing to open: its cards here are open already (leeches stay shut).")
         self._recount()
 
     def _study(self):
         kind, key = self.picked or ("", "")
         pid = self.plan["id"]
-        if self.ops.followed_here(pid) and kind in ("date", "event"):
+        if kind in ("date", "event") and self._own_steps():
             (self.ops.study_date if kind == "date" else self.ops.study_quiz)(pid, key)
             return
         cids, name = self._cards()
-        self.ops.study_cards(self.idx, cids, name)
+        if self.ops.study_cards(self.idx, cids, name):
+            self.close()  # Anki's Study screen is on it; the window would sit over it
 
     def _recount(self):
         """After an open: the cards' states read again (the index re-reads
@@ -578,11 +613,19 @@ class PlanWindow(QDialog):
         asked after the change), else what's picked now."""
         if not self.author() or self.busy:
             return
+        self._save(change, set(touched), keep, again=True)
+
+    def _save(self, change, touched, keep, again):
+        if not self.author():
+            return
         before = self.raw["doc"]
         try:
             doc = change(before)
         except E.Refused as e:
             self.status.setText(str(e))
+            return
+        if json.dumps(E.lean(doc), sort_keys=True) == json.dumps(E.lean(before), sort_keys=True):
+            self.status.setText("Nothing to change: the plan has that already.")
             return
         touched = set(touched) | {u["id"] for u in doc.get("units") or []
                                   if u.get("id") not in {x.get("id") for x in before.get("units") or []}}
@@ -590,11 +633,13 @@ class PlanWindow(QDialog):
             doc = E.recount(doc, self.idx, touched, self.swap)
         summary = E.what_changed(before, doc)
         pid, version = self.plan["id"], self.raw.get("version")
-        keep = keep() if callable(keep) else (keep if keep is not None else self.picked)
+        keep_now = keep() if callable(keep) else (keep if keep is not None else self.picked)
         self._busy(True, "Saving…")
-        self.ops.save(self, pid, version, doc, summary, lambda got: self._saved(pid, got, keep))
+        self._can_undo(None)
+        self.ops.save(self, pid, version, doc, summary,
+                      lambda got: self._saved(pid, got, keep_now, (change, touched, keep) if again else None))
 
-    def _saved(self, pid, got, keep):
+    def _saved(self, pid, got, keep, retry=None):
         self._busy(False, "")
         if pid != self.pick.currentData():
             return
@@ -607,8 +652,48 @@ class PlanWindow(QDialog):
             return
         plan = clean_plan(what) or self.plan
         self._loaded(pid, (what, plan), keep=keep)
-        self.status.setText("Saved. Followers get it at their next refresh." if outcome == "saved"
-                            else "Someone saved this plan since it loaded. It's up to date now: make the change again.")
+        if outcome == "stale" and retry:
+            # someone (or my Anki's note ids) saved since it loaded: the same change, once, on theirs
+            change, touched, keep_fn = retry
+            self.status.setText("Someone saved this plan since it loaded: putting your change on theirs…")
+            self._save(change, touched, keep_fn, again=False)
+            return
+        if outcome == "saved":
+            self._can_undo((pid, plan.get("version")))
+            self.status.setText("Saved for everyone following it. They get it at their next refresh.")
+        else:
+            self.status.setText("Someone saved this plan again since: it's up to date now. Make the change again.")
+
+    def _can_undo(self, what):
+        self.undoable = what
+        self.undo_btn.setVisible(bool(what))
+
+    def _undo(self):
+        if not self.undoable or self.busy:
+            return
+        pid, version = self.undoable
+        if pid != self.pick.currentData():
+            self._can_undo(None)
+            return
+        self._busy(True, "Undoing…")
+        self._can_undo(None)
+        keep = self.picked
+
+        def done(got):
+            self._busy(False, "")
+            if pid != self.pick.currentData():
+                return
+            if not got:
+                self.status.setText("That didn't undo: check your connection, then try again.")
+                return
+            outcome, what = got
+            if outcome == "refused":
+                self.status.setText(str(what))
+                return
+            self._loaded(pid, (what, clean_plan(what) or self.plan), keep=keep)
+            self.status.setText("Undone." if outcome == "saved"
+                                else "Someone saved this plan since, so there's nothing of yours to undo now.")
+        self.ops.undo(self, pid, version, done)
 
     def _date(self):
         return self._unit(self.picked[1]) if self.picked and self.picked[0] == "date" else None
@@ -620,8 +705,25 @@ class PlanWindow(QDialog):
         from .picker import pick_sources
         got = pick_sources(self, self.idx, f"Add to {P.fmt_day(u['opens'])}", self.doc.get("deck") or "")
         if got:
-            tags, decks = got
+            tags, decks = self._as_plan(got)
             self._apply(lambda d: E.add_sources(d, u["id"], tags, decks)[0], {u["id"]})
+
+    def _as_plan(self, got):
+        """(tags, decks) picked in this copy, as the plan names them: a copy
+        whose top tag is named differently (self.swap: the plan's, mine)
+        has its tags read back to the plan's."""
+        tags, decks = got
+        if self.swap:
+            tags = [P.swapped(t, (self.swap[1], self.swap[0])) for t in tags]
+        return tags, decks
+
+    def _day_taken(self, day, uid=None):
+        """True to go on: no other date that day, or I said so."""
+        other = next((x for x in P.units(self.doc) if x.get("opens") == day and x.get("id") != uid), None)
+        if other is None:
+            return True
+        return confirm(self, f"{P.fmt_day(day)} has {other.get('name') or 'a date'} already",
+                       "Put this one on that day too? Followers see both.", "Put it on")
 
     def _take(self):
         u = self._date()
@@ -646,7 +748,7 @@ class PlanWindow(QDialog):
         day = ask_day(self, f"Move {P.fmt_day(u['opens'])}",
                       "Its due date and checkpoint move with it." if u.get("due") or u.get("check")
                       else "The day it opens for followers.", u["opens"], "Move it")
-        if day and day != u["opens"]:
+        if day and day != u["opens"] and self._day_taken(day, u["id"]):
             self._apply(lambda d: E.move(d, u["id"], day))
 
     def _due(self):
@@ -674,11 +776,11 @@ class PlanWindow(QDialog):
         got = pick_sources(self, self.idx, "What the new date opens", self.doc.get("deck") or "")
         if not got:
             return
-        tags, decks = got
+        tags, decks = self._as_plan(got)
         u = self._date()
-        day = ask_day(self, "The new date's day", "The day it opens for followers.",
-                      (u or {}).get("opens") or self.ops.today(), "Put it on")
-        if day:
+        start = E._later(u["opens"], 1) if u and u.get("opens") else self.ops.today()  # the day after the picked one
+        day = ask_day(self, "The new date's day", "The day it opens for followers.", start, "Put it on")
+        if day and self._day_taken(day):
             made = {}
 
             def change(d):

@@ -21,13 +21,16 @@ def _rows(col, sql, cids):
     return out
 
 
-def reviews(col, cids, opening=()):
+def reviews(col, cids, opening=(), days=BACK_DAYS):
     """The review cards among these that Set due date would move: Anki's
     review cards in their own deck (a filtered deck's are being studied
-    there), open, or shut and among `opening` (what this step opens)."""
+    there), open, or shut and among `opening` (what this step opens), due
+    after the next `days` days. One due already (overdue, today) or inside
+    them comes back as it is: bringing back never puts a card later."""
     opening = {int(c) for c in opening}
-    rows = _rows(col, "SELECT id, queue FROM cards WHERE type = 2 AND queue IN (2, -1) AND odid = 0 AND id IN ({})", cids)
-    return sorted(int(c) for c, q in rows if int(q) == 2 or int(c) in opening)
+    last = int(col.sched.today) + max(1, int(days)) - 1
+    rows = _rows(col, "SELECT id, queue, due FROM cards WHERE type = 2 AND queue IN (2, -1) AND odid = 0 AND id IN ({})", cids)
+    return sorted(int(c) for c, q, d in rows if (int(q) == 2 or int(c) in opening) and int(d or 0) > last)
 
 
 def bring_back(col, cids, label, days=BACK_DAYS, back=True):
@@ -38,7 +41,7 @@ def bring_back(col, cids, label, days=BACK_DAYS, back=True):
     if not back:
         return {"opened": P.open_cards(col, cids, label, first=True), "due": 0}
     shut = P.openable_ids(col, cids)
-    due = reviews(col, cids, shut)
+    due = reviews(col, cids, shut, days)
     if not shut and not due:
         return {"opened": 0, "due": 0}
     pos = None

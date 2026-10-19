@@ -179,12 +179,19 @@ KEEP_PASTES = 200      # the pastes kept, newest
 KEEP_NUMBERS = 20000   # numbers kept in all
 
 
+def _nums(e):
+    """A kept paste's numbers, as text; [] for one that isn't a list (a
+    hand-edited or damaged qids.json never stops the window)."""
+    n = e.get("n")
+    return [str(x) for x in n if str(x).isdigit()] if isinstance(n, list) else []
+
+
 def keep(log, day, did, bank, numbers):
     """The log with a paste's questions in it: one entry a day, deck and
     bank, its numbers once each; the newest KEEP_PASTES, KEEP_NUMBERS in all.
     log: [{day, deck, bank, n: [number]}], oldest first."""
     nums = [str(x) for x in numbers if str(x).isdigit()]
-    out = [dict(e, n=list(e.get("n") or [])) for e in log or [] if isinstance(e, dict)]
+    out = [dict(e, n=_nums(e)) for e in log or [] if isinstance(e, dict)]
     if not nums:
         return out
     same = next((e for e in out if e.get("day") == day and e.get("deck") == did and e.get("bank") == bank), None)
@@ -207,7 +214,7 @@ def kept(log, did, bank=None):
     mine = [e for e in log or [] if isinstance(e, dict) and e.get("deck") == did and (bank is None or e.get("bank") == bank)]
     seen, nums = set(), []
     for e in reversed(mine):
-        for x in e.get("n") or []:
+        for x in _nums(e):
             if x not in seen:
                 seen.add(x)
                 nums.append(x)

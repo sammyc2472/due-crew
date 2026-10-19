@@ -998,7 +998,7 @@ def main(out):
             def context(self, plan, doc):
                 return P.DeckIndex(col, 1), None, "named"
 
-            def followed_here(self, pid):
+            def followed_here(self, pid, version=None):
                 return False
 
             def load(self, owner, pid, done):
@@ -1006,6 +1006,9 @@ def main(out):
 
             def save(self, owner, pid, version, doc, summary, done):
                 done(PR.save(CLIENT, pid, version, doc, summary))
+
+            def undo(self, owner, pid, version, done):
+                done(PR.undo(CLIENT, pid, version))
 
         mine = PR.my_plans(CLIENT)
 
@@ -1015,8 +1018,8 @@ def main(out):
                 w.pick.setCurrentIndex(w.pick.findData(pid))  # earlier renders left plans of Sam's in the store
             return w
         dlg = PlanWindow_()
-        if dlg.head.text() != "MS2 Block 2" or not dlg.author():
-            raise RuntimeError(f"planner: {dlg.head.text()!r}, author {dlg.author()}")
+        if not dlg.pick.currentText().startswith("MS2 Block 2") or not dlg.author():
+            raise RuntimeError(f"planner: {dlg.pick.currentText()!r}, author {dlg.author()}")
         dlg.resize(980, 640)
         dlg._go_to(("date", "u1"))
         groups = [dlg.table.topLevelItem(i).text(0) for i in range(dlg.table.topLevelItemCount())]
@@ -1034,9 +1037,22 @@ def main(out):
         dlg._apply(lambda d: PE.add_sources(d, "u2", [f"{root}::#Sketches::Pharm::HF_Drugs"])[0], {"u2"})
         u2 = next(u for u in STORE.plans[pid]["doc"]["units"] if u["id"] == "u2")
         if (STORE.plans[pid]["version"] != 2 or u2["tags"][-1] != f"{root}::#Sketches::Pharm::HF_Drugs" or u2.get("n") != 13
-                or not dlg.status.text().startswith("Saved") or dlg.picked != ("date", "u2")):
+                or not dlg.status.text().startswith("Saved") or dlg.picked != ("date", "u2") or dlg.undo_btn.isHidden()):
             raise RuntimeError(f"planner: a change saved: v{STORE.plans[pid]['version']}, {u2}, {dlg.status.text()!r}")
         shoot(dlg, os.path.join(out, "planner-saved.png"))
+        dlg._apply(lambda d: PE.add_sources(d, "u2", [f"{root}::#Sketches::Pharm::HF_Drugs"])[0], {"u2"})
+        if STORE.plans[pid]["version"] != 2 or "Nothing to change" not in dlg.status.text():
+            raise RuntimeError(f"planner: the same change again saves nothing: {dlg.status.text()!r}")
+        dlg._can_undo((pid, 2))
+        dlg._undo()
+        u2 = next(u for u in STORE.plans[pid]["doc"]["units"] if u["id"] == "u2")
+        if STORE.plans[pid]["version"] != 3 or f"{root}::#Sketches::Pharm::HF_Drugs" in u2["tags"] or dlg.status.text() != "Undone.":
+            raise RuntimeError(f"planner: Undo: v{STORE.plans[pid]['version']}, {u2['tags']}, {dlg.status.text()!r}")
+        STORE.plans[pid]["version"] += 1  # someone saves on the site meanwhile: the window's next change goes on theirs
+        dlg._apply(lambda d: PE.rename(d, "u2", "HF drugs"), {"u2"})
+        u2 = next(u for u in STORE.plans[pid]["doc"]["units"] if u["id"] == "u2")
+        if u2["name"] != "HF drugs" or not dlg.status.text().startswith("Saved"):
+            raise RuntimeError(f"planner: a stale save, put on theirs: {u2['name']!r}, {dlg.status.text()!r}")
         dlg = PlanWindow_()
         dlg.resize(980, 640)
         dlg._go_to(("week", day(0)))
@@ -1078,6 +1094,9 @@ def main(out):
 
             def bring_back(self, cids, back):
                 return PA.bring_back(col, cids, "Due Crew: bring back", back=back)
+
+            def movable(self, cids):
+                return len(PA.reviews(col, cids, P.openable_ids(col, cids))) if cids else 0
 
             log = []  # this render's kept misses (qids.json in Anki)
 

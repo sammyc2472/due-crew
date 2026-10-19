@@ -19,6 +19,9 @@ def enabled(c=None):
     return c.get("labs") is True
 
 
+_hooked = []  # the profile's close, hooked once: the windows close with it
+
+
 def install(menu):
     """Tools › Due Crew's labs entries, once, when labs is on (at profile
     open; turning it on takes a restart)."""
@@ -26,6 +29,13 @@ def install(menu):
         return False
     from aqt.qt import QAction
     from . import flow
+    if not _hooked:
+        try:
+            from aqt import gui_hooks
+            gui_hooks.profile_will_close.append(flow.close_all)
+            _hooked.append(True)
+        except (ImportError, AttributeError):
+            pass
     menu._dc_labs = True
     menu.addSeparator()
     for label, fn in (("Plan window (labs)…", flow.open_plans), ("Question IDs (labs)…", flow.open_qids)):

@@ -51,13 +51,16 @@ the picked one:
   (the notes behind it found the cards).
 - **A week**: its dates, with their numbers. **An event**: the dates that
   prep for it.
-- **Show in Browse** (the picked row's cards, else the date's), **Open its
-  cards**, **Study it** / **Study for it**. These are plan_flow's own steps:
-  for a plan I follow here, a date's Open is the plan's (at my own pace, Up
-  next's) and Study is a date's or a quiz's Study; otherwise Browse's open
-  (one undo step, never a leech, new ones first in line) and a Due Crew
-  deck of the open cards. What the window opens, the morning and Not today
-  count as they count Browse's.
+- **Show in Browse**, **Open its cards**, **Study it** / **Study for it**;
+  with a source row picked, **Open these** and **Study these** act on that
+  row alone. For a whole date of a plan I follow here, while the board's
+  copy is the version the window shows, Open is the plan's own (at my own
+  pace, Up next's) and Study a date's or a quiz's Study; otherwise Browse's
+  open (one undo step, never a leech, new ones first in line, and it says
+  so when there's nothing to open) and a Due Crew deck of the open cards,
+  and the window closes for Anki's Study screen. What the window opens, the
+  morning and Not today count as they count Browse's. **Reload** reads the
+  plan again (an edit on the site meanwhile).
 
 An author (owner or co-author) sees the plan's own dates, and **Change**
 and **New date…**:
@@ -75,9 +78,17 @@ and **New date…**:
   212"), and `remote.save` sends it with the version it started from, a
   history line ("Mon 9 Nov: added 1 tag (in Anki)"). What only the
   author's Anki sends (a date's note ids, refs, counts, pick names) isn't
-  sent: the server keeps its own (`keepIdr`). A save from an older version
-  comes back stale: the window reloads and says to make the change again
-  (no merge yet). A refused one says why in words.
+  sent: the server keeps its own (`keepIdr`). A change that changes nothing
+  isn't saved. A save from an older version (someone on the site, or my
+  Anki's note ids at the day's first refresh) comes back stale: the window
+  reloads and puts the same change on theirs, once. A refused one says why
+  in the builder's words; a ceiling (429) says so too.
+- **Undo**, after a save, is the builder's (`POST /plans/{id}/undo`): what
+  the last save changed, back, for everyone.
+- Tags picked in a copy whose top tag is named differently go in as the
+  plan names them; a subdeck as the plan's deck writes it. A tag under
+  another ticked one is left out (it comes with it). A day that has a date
+  already asks before a second one lands on it.
 - Not here yet: events, searches, picked cards, cuts made, to-dos, the
   pace, co-authors; those stay the builder's on duecrew.com.
 
@@ -104,16 +115,21 @@ one with the most of them, or the one picked.
   by system and by resource ("Systems › Cardio · 9 of 15 questions"), a
   question counted once a thread, each line of tags named once at its
   deepest. Picking one makes Show in Browse, Study and Do it about it.
-- **Do it**: the shut ones open (never a leech, new ones first in Anki's
-  line) and, asked, the ones seen before come due over the next 3 days
-  (Anki's Set due date, intervals kept; not a card in a filtered deck),
-  one undo step, `actions.bring_back`. **Study them now** (or this thread):
-  a Due Crew deck of their open cards.
+- **Open 6, bring back 8** (the button says what it does): the shut ones
+  open (never a leech, new ones first in Anki's line) and, ticked, the ones
+  seen before come due over the next 3 days (Anki's Set due date,
+  intervals kept; not a card in a filtered deck; one due already or inside
+  the 3 days is left as it is, so nothing is put later), one undo step,
+  `actions.bring_back`. More than 200 to bring back asks first. **Study
+  them now** (or this thread): a Due Crew deck of their open cards. The
+  deck list is top decks (question tags are deck-wide); a bank I pick holds
+  for this paste and deck only.
 - **All my misses**: a paste I act on (Do it, Study) is kept on this
   computer, in this profile's `qids.json`: the numbers, by day, deck and
   bank, never card text, never sent (200 pastes, 20,000 numbers). All my
-  misses reads every one kept for the deck: its threads across blocks,
-  and a deck of all of them. Forget my misses, with its Undo.
+  misses reads every one kept for the deck and bank: its threads across
+  blocks, and a deck of all of them. Forget my misses, with its Undo.
+- The labs windows close with the profile.
 
 ## Files
 

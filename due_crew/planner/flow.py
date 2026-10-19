@@ -21,6 +21,18 @@ _admin = {}      # uid -> the server's answer, asked once an Anki session
 _open = {}       # "plans", "qids" -> the window, while it's open
 
 
+def close_all():
+    """profile_will_close: the labs windows go with the profile (their cards
+    and decks are its collection's)."""
+    for key, w in list(_open.items()):
+        _open.pop(key, None)
+        if w is not None and getattr(w, "_alive", False):
+            try:
+                w.close()
+            except RuntimeError:
+                pass  # Qt has it gone already
+
+
 def _raise(key):
     w = _open.get(key)
     if w is not None and getattr(w, "_alive", False):
@@ -52,7 +64,7 @@ def open_plans():
     def done(got):
         if gen != app.generation or not mw.col:
             return
-        if got is None:
+        if got is None or got[0] is None:  # no answer, or one that wasn't the server's yes or no
             tooltip("Due Crew couldn't be reached. Try again in a minute.")
             return
         ok, plans = got
@@ -67,9 +79,16 @@ def open_plans():
 def show_plans(plans):
     from .window import PlanWindow
     w = PlanWindow(mw, mw.col, plans, Ops())
+    _gone_on_close(w)
     _open["plans"] = w
     w.show()
     return w
+
+
+def _gone_on_close(w):
+    """A labs window lets go of its deck read when it closes."""
+    from aqt.qt import Qt
+    w.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
 
 
 class Ops:
@@ -97,10 +116,17 @@ class Ops:
         """A plan I follow as I run it: my dates (plan_flow.mine)."""
         return plan_flow.mine(plan)["doc"]
 
-    def followed_here(self, pid):
-        """True when I follow it and it runs on a deck here (open and study go
-        through the plan's own state)."""
-        return plan_flow._plan_idx(pid) is not None
+    def followed_here(self, pid, version=None):
+        """True when I follow it, it runs on a deck here (open and study go
+        through the plan's own state), and (with `version`) the board's copy
+        of it is that version: one the window saved since the last refresh
+        isn't the board's yet, so the window opens its own cards."""
+        if plan_flow._plan_idx(pid) is None:
+            return False
+        if version is None:
+            return True
+        p = next((p for p in client().session.get("plans") or [] if isinstance(p, dict) and p.get("id") == pid), None)
+        return p is not None and int(p.get("version") or 0) == int(version)
 
     def generation(self):
         return app.generation
@@ -118,10 +144,17 @@ class Ops:
         _bg(lambda: remote.save(cl, pid, version, doc, summary),
             lambda got: getattr(owner, "_alive", False) and gen == app.generation and done(got))
 
+    def undo(self, owner, pid, version, done):
+        """done((outcome, what) or None): remote.undo's (the builder's Undo)."""
+        cl, gen = client(), app.generation
+        _bg(lambda: remote.undo(cl, pid, version),
+            lambda got: getattr(owner, "_alive", False) and gen == app.generation and done(got))
+
     def browse(self, cids):
         plan_flow._browse(cids)
 
     def open_cards(self, cids, name):
+        """How many opened (Browse's open: one undo step, never a leech)."""
         return plan_flow.open_cards_now(cids, name, first=True)
 
     def open_date(self, pid, uid):
@@ -163,7 +196,10 @@ def open_qids():
     if not enabled() or not mw.col or _raise("qids"):
         return
     from .qid_window import QidWindow
-    w = QidWindow(mw, mw.col, P.deck_choices(mw.col), QidOps())
+    every = P.deck_choices(mw.col)
+    tops = [(d, n) for d, n in every if "::" not in str(n)]  # question tags are deck-wide: a top deck is enough
+    w = QidWindow(mw, mw.col, tops or every, QidOps())
+    _gone_on_close(w)
     _open["qids"] = w
     w.show()
     return w
@@ -248,6 +284,13 @@ class QidOps:
             if dates:
                 out.append((str(p.get("name") or "Plan"), [P.fmt_day(u.get("opens")) for u in dates]))
         return out
+
+    def movable(self, cids):
+        """How many of these Bring back would move: the seen ones due after
+        its days (actions.reviews), with the shut ones it opens."""
+        if not mw.col or not cids:
+            return 0
+        return len(actions.reviews(mw.col, cids, P.openable_ids(mw.col, cids)))
 
     def bring_back(self, cids, back):
         """The window's Do it: actions.bring_back, then what plan_flow does
