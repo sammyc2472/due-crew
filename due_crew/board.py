@@ -2015,7 +2015,7 @@ def _plan_squad_html(pid, tabs, people=None, cfg=None):
 
 def _hm(m):
     m = int(m)
-    return f"{m // 60} h {m % 60:02d}" if m >= 60 else f"{m} min"
+    return f"{m // 60}h {m % 60:02d}m" if m >= 60 else f"{m} min"  # the crew rows' "1h 13m"
 
 
 def _ins_day(iso, today=""):
@@ -2190,7 +2190,7 @@ def _ins_ahead_svg(did, a, w, uid):
         h1, h2 = Hh * (c - nw) / top, Hh * nw / top
         first = days[7 + 14 + 7 * k]
         exam_here = ex is not None and 14 + 7 * k <= ex < 21 + 7 * k
-        tip = (f"Week of {_ins_dname(first)}: about {_ins_r(c)} cards a day{band(c, 2 + k)}"
+        tip = (f"Week of {_ins_dname(first, long=True)}: about {_ins_r(c)} cards a day{band(c, 2 + k)}"
                f"{mins(sum(w['answers'][14 + 7 * k:21 + 7 * k]) / 7.0)}{' &middot; your exam' if exam_here else ''}")
         try:
             fd = _dt.date.fromisoformat(first)
@@ -2232,7 +2232,7 @@ def _ins_ahead(did, a, deck_name=""):
     uid = _re.sub(r"[^A-Za-z0-9]", "", str(did))[:20]
     name = e(str(deck_name or "this deck"))
     secs = a.get("secs")
-    if ex is not None and 0 <= ex < 14:
+    if ex is not None and 1 <= ex < 14:
         lo, hi, when = max(0, ex - 6), ex + 1, "Exam week" if ex >= 6 else "To your exam"
     elif ex is not None and 14 <= ex < 42:
         lo, hi, when = max(0, ex - 6), ex + 1, "Exam week"
@@ -2258,7 +2258,7 @@ def _ins_ahead(did, a, deck_name=""):
         ph = w.get("plan_held") or 0
         one = _ahead_r(n) == 1
         return (f" {_ins_r(n)} new card{'' if one else 's'} wait{'s' if one else ''} "
-                f"till {_ins_dname(days[7 + int(s[1]) + 1])}"
+                f"till {_ins_dname(days[7 + int(s[1]) + 1], long=True)}"
                 + (f", {_ins_r(ph)} of them your plan&rsquo;s dates" if ph >= 1 else "") + ".")
 
     blocks, pills, acts = "", "", ""
@@ -2267,19 +2267,22 @@ def _ins_ahead(did, a, deck_name=""):
         if k == "pace":
             # 3.9.2 (Sam's deck: 44% of the week ahead was new cards at his pace, a guess, in one number):
             # the cards I've started first, what new ones add at my pace after it
-            mins = (f" &middot; about {_hm(max(1, int(round(mean(w['answers'][:14]) * secs / 60.0))))} a day" if secs else "")
+            mins = (f", about {_hm(max(1, int(round(mean(w['answers'][:14]) * secs / 60.0))))} a day" if secs else "")
             st, nw = mean((w.get("started") or w["cards"])[:14]), mean((w.get("new") or [0])[:14])
             line = (f"Next 2 weeks: <b>{_ins_r(st)}</b> a day from cards you&rsquo;ve started"
                     + (f", <b>+{_ins_r(nw)}</b> new at your pace" if nw >= 0.5 else "")
-                    + f" &middot; this week {_ins_r(week)}{mins}")
+                    + f"{mins} &middot; this week {_ins_r(week)}")
             label = f"Your pace &middot; {rate:,} new a week"
         else:
-            line = (f"{when}: about <b>{_ins_r(mean(w['cards'][lo:hi]))}</b> a day, not {_ins_r(mean(pace['cards'][lo:hi]))}"
-                    + (f" &middot; exam day about {_ins_r(w['cards'][ex])}" if k != "unlocked" and ex is not None and 0 <= ex < 42 else ""))
-            label = (f"Only the {unlocked:,} unlocked" if k == "unlocked"
+            a_, b_ = _ins_r(mean(w['cards'][lo:hi])), _ins_r(mean(pace['cards'][lo:hi]))
+            line = (f"{when}: about <b>{a_}</b> a day" + (f", not {b_}" if a_ != b_ else "")
+                    + (f" &middot; exam day about {_ins_r(w['cards'][ex])}" if k != "unlocked" and ex is not None and 1 <= ex < 42 else ""))
+            # 3.9.2's QoL pass: a pause no longer among the choices (its exam moved) keeps its own kind's name
+            kk = str((pz or {}).get("kind") or "now") if k == "off" else k
+            label = (f"Only the {unlocked:,} unlocked" if kk == "unlocked"
                      else "Stop new now" + (", to the exam" if (bool(pz.get("exam")) if pz and k == on else ahead_ex) else "")
-                     if k == "now"
-                     else AHEAD_PILL.get(k) or k)
+                     if kk == "now"
+                     else AHEAD_PILL.get(kk) or kk)
         hid = "" if k == on else " hidden"
         blocks += (f'<div class="ahw" data-k="{k}"{hid}><div class="xline">{line}</div>'
                    f'<div class="iwk">{_ins_ahead_svg(did, a, w, uid)}</div></div>')
@@ -2294,7 +2297,7 @@ def _ins_ahead(did, a, deck_name=""):
                    + (f"till your exam, {exd}" if to_exam else "till you turn them back on")
                    + f'.{held(w)}</span><a class="bt" href="#" onclick="{_pycmd(f"insaheadon:{did}")}">Turn new cards back on</a>')
         elif k == "pace" and on != "pace":
-            act = f'<span>New cards back, at your pace.</span><a class="bt" href="#" onclick="{_pycmd(f"insaheadon:{did}")}">Turn new cards back on</a>'
+            act = f'<span>From today, new cards at your pace.</span><a class="bt" href="#" onclick="{_pycmd(f"insaheadon:{did}")}">Turn new cards back on</a>'
         elif k == "pace":
             act = ""
         elif k == "unlocked":
@@ -2334,10 +2337,15 @@ def _ins_leech_row(did, c):
     e = _html.escape
     cid = int(c["cid"])
     bits = [e(str(c["topic"]))] if c.get("topic") else []
-    bits.append(f'missed {int(c["lapses"])} times')
+    bits.append(f'missed {int(c["lapses"])} time{"" if int(c["lapses"]) == 1 else "s"}')
     if c.get("susp"):
-        if c.get("day") or c.get("at"):  # my Anki day (its rollover), as every day on the board
-            bits.append("since " + e(_short_day(c.get("day") or _dt.datetime.fromtimestamp(int(c["at"]) / 1000).date().isoformat())))
+        if c.get("day") or c.get("at"):  # my Anki day (its rollover), as every day on the board; a year ago or more, its year
+            day = c.get("day") or _dt.datetime.fromtimestamp(int(c["at"]) / 1000).date().isoformat()
+            try:
+                old = (_dt.date.today() - _dt.date.fromisoformat(day)).days > 300
+            except ValueError:
+                old = False
+            bits.append("since " + e(_short_day(day)) + (f" {day[:4]}" if old else ""))
         if c.get("exam"):
             bits.append('<b class="ex">on your exam</b>')
     else:
@@ -2404,7 +2412,7 @@ def _ins_leeches(did, L, deck_name=""):
     heads = ""
     if ng:
         heads += (f'<a class="sl-bt" href="#" title="Due again, schedule kept" '
-                  f'onclick="{_pycmd(f"insleech:{did}:back:all")}">Bring all {ng:,} back</a>')
+                  f'onclick="{_pycmd(f"insleech:{did}:back:all")}">{"Bring it back" if ng == 1 else f"Bring all {ng:,} back"}</a>')
     heads += f'<a href="#" onclick="{_pycmd(f"insleech:{did}:browse:0")}">Browse</a>'
     out = f'{trail}<div class="sl-sum"><span>{summ}</span><span class="sl-hd">{heads}</span></div>'
     for rows, n, head, sub in ((gone, ng, "Anki stopped showing these", f"{ng:,}"),
@@ -2414,8 +2422,8 @@ def _ins_leeches(did, L, deck_name=""):
             out += (f'<div class="isec"><div class="ik">{head}<span>&nbsp;&middot; {sub}</span></div>'
                     + "".join(_ins_leech_row(did, c) for c in rows[:LEECH_SHOW])
                     + (f'<div class="sl-plus">{n - LEECH_SHOW:,} more in Browse</div>' if n > LEECH_SHOW else "") + "</div>")
-    out += ('<div class="tmt">Bring back: due again, schedule kept. Learn it fresh: a new card again. '
-            'Edit &rsaquo; Undo takes either back.</div>') + put
+    out += ('<div class="tmt">' + ("Bring back: due again, schedule kept. " if ng else "")
+            + "Learn it fresh: a new card again. Edit &rsaquo; Undo takes " + ("either" if ng else "it") + " back.</div>") + put
     return f'<div class="dc-ins">{out}</div>'
 
 
@@ -2428,18 +2436,19 @@ def _ins_scope(aim):
     if since:
         said = (f'Since {_ins_dname(since, long=True)}'
                 + (", the day after your last exam" if why == "last" else "")
-                + (f' &middot; {int(aim["since_n"]):,} cards' if aim.get("since_n") is not None else ""))
+                + (f' &middot; {int(aim["since_n"]):,} card{"" if int(aim["since_n"]) == 1 else "s"}' if aim.get("since_n") is not None else ""))
         other = (f'<a class="q" href="#" onclick="{_pycmd("setscope:all")}">Whole deck</a>' if why == "last"
-                 else f'<a class="q" href="#" onclick="{_pycmd("setscope:auto")}">As it was</a>')
+                 else f'<a class="q" href="#" title="Since your last exam, or the whole deck" onclick="{_pycmd("setscope:auto")}">As it was</a>')
     else:
         said = "Whole deck"
         other = (f'<a class="q" href="#" onclick="{_pycmd("setscope:auto")}">Since your last exam</a>'
                  if aim.get("since_pick") == "all" else "")
+    max_ = f' max="{_html.escape(str(aim["today"]))}"' if aim.get("today") else ""  # a later day is no scope
     pick = (f'<span class="iexam"><a class="q" href="#" onclick="var i=this.nextElementSibling;try{{i.showPicker();}}'
             f'catch(x){{i.classList.remove(\'ixd\');i.focus();}}return false;">Change</a>'
-            f'<input class="ixd" type="date" value="{_html.escape(since)}" aria-label="Count the cards started since" '
+            f'<input class="ixd" type="date" value="{_html.escape(since)}"{max_} aria-label="Count the cards started since" '
             f'onchange="if(this.value)pycmd(\'duecrew:setscope:\'+this.value+\'|\'+window.dcBK);"></span>')
-    return f'<div class="isc">{said} &middot; {pick}{(" " + other) if other else ""}</div>'
+    return f'<div class="isc">{said} &middot; {pick}{(" &middot; " + other) if other else ""}</div>'
 
 
 def _insights_html(did, v):
@@ -2492,7 +2501,7 @@ def _insights_html(did, v):
         # 3.9.2: my exam with nothing at risk still says what it covers, and keeps its Change; without
         # FSRS nothing was looked at (what's at risk is FSRS's), so it says only the day (the audit)
         risk = ": nothing at risk" if aim.get("checked") else ""
-        out += f'<div class="iline">Your exam, {_ins_dname(aim.get("day"), long=True)}{risk} {_ins_scope(aim)}</div>'
+        out += f'<div class="iline">Your exam, {_ins_dname(aim.get("day"), long=True)}{risk} &middot; {_ins_scope(aim)}</div>'
     if int(v.get("behind") or 0) and v.get("pid"):
         out += (f'<div class="iline">{int(v["behind"]):,} new cards behind &middot; '
                 f'<a href="#" onclick="{_pycmd("plancatch:" + str(v["pid"]))}">Catch up&hellip;</a></div>')
@@ -2541,7 +2550,9 @@ def _insights_html(did, v):
         les = lambda n: f"leech{'es' if n != 1 else ''} "  # noqa: E731
         said = " &middot; ".join(x for x in (f"<b>{lee:,}</b> {les(lee)}Anki stopped showing you" if lee else "",
                                               f"<b>{kept:,}</b> {'' if lee else les(kept)}still in your reviews" if kept else "",
-                                              f"<b>{near:,}</b> one miss away" if near else "") if x)
+                                              (f"<b>{near:,}</b> one miss away" if lee or kept  # alone, it says of what
+                                               else f"<b>{near:,}</b> card{'' if near == 1 else 's'} one miss from a leech")
+                                              if near else "") if x)
         out += f'<div class="iline">{said} &middot; <a href="#" onclick="{_pycmd(f"insleeches:{did}")}">See them</a></div>'
     if not out:
         return '<div class="tq0">Insights fill in after a week of reviews.</div>'
@@ -2895,7 +2906,8 @@ def _plan_notes(card, pid):
     if s.get("paused_new") and want and s.get("kind") == "study":
         # 3.9.2's audit: Stop new cards runs here; Raise would undo it till tomorrow morning
         on_cmd = _pycmd("insaheadon:" + str(int(s["paused_new"])))
-        out.append(f'<div class="pn"><span>New cards are stopped in this deck (Insights); today&rsquo;s {want:,} wait.</span>'
+        out.append(f'<div class="pn"><span>New cards are stopped in this deck (You &rsaquo; Insights): today&rsquo;s {want:,} '
+                   f'new {"card waits" if want == 1 else "cards wait"}.</span>'
                    f'<span class="acts"><a href="#" onclick="{on_cmd}">Turn them back on</a></span></div>')
     elif lim is not None and want > int(lim) and s.get("kind") == "study":
         out.append(f'<div class="pn warn"><span>Anki shows {int(lim):,} new a day in this deck; today has {want:,}.</span>'
@@ -5139,8 +5151,8 @@ CHEER_WINDOW_JS = r"""
         var r = pickIn.getBoundingClientRect();
         // 3.9.2's audit: Anki's box sits where "pick one" was; a scroll or a resize moves the page under it,
         // so either puts it away (other again, to pick once more)
-        window.addEventListener('resize', moved);
-        back.addEventListener('scroll', moved, true);
+        window.addEventListener('resize', away);
+        back.addEventListener('scroll', away, true);
         if (typeof pycmd !== 'undefined') {
             pycmd('duecrew:emojipicker:' + [r.left, r.top, r.width, r.height].map(function (v) { return Math.max(0, Math.round(v)); }).join(':') + '|' + window.dcBK);
         } else { window.dcCheerNoNative(); }
@@ -5148,10 +5160,11 @@ CHEER_WINDOW_JS = r"""
     function unpick() {
         if (pickIn.style.display !== 'none' && typeof pycmd !== 'undefined') { pycmd('duecrew:emojipickeroff|' + window.dcBK); }
         pickIn.style.display = 'none'; other.style.display = '';
-        window.removeEventListener('resize', moved);
-        back.removeEventListener('scroll', moved, true);
+        window.removeEventListener('resize', away);
+        back.removeEventListener('scroll', away, true);
     }
-    function moved() { if (pickIn.style.display !== 'none') { unpick(); } }
+    // not `moved`: that's the open's motion flag below, and a var of that name overwrote this (3.9.2's QoL pass)
+    function away() { if (pickIn.style.display !== 'none') { unpick(); } }
     pickIn.addEventListener('input', function () {
         var t = oneEmoji(pickIn.value.trim());
         if (t) { unpick(); choose(t); } else if (pickIn.value.trim()) { pickIn.value = ''; }

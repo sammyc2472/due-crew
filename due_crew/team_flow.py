@@ -664,7 +664,7 @@ def _work_out(did, pid=None, exam=""):
         # last 10 weeks), or since a day I picked; else the whole deck. Said in the box, with Change
         c = cfg()
         first_day, why = T.scope(exam, c.get("exam_last"), c.get("exam_since"), today)
-        out["aim"].update(since=first_day or "", since_why=why, since_pick=str(c.get("exam_since") or ""))
+        out["aim"].update(since=first_day or "", since_why=why, since_pick=str(c.get("exam_since") or ""), today=str(today))
         if first_day:
             got = col.db.list(f"SELECT cid FROM revlog WHERE ease > 0 AND cid IN ({deck}) GROUP BY cid HAVING min(id) >= ?",
                               _since_ms(first_day, cutoff, today))

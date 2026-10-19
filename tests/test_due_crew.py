@@ -8145,8 +8145,10 @@ def test_insights_379():
         w0 = TF.insights(10, None, _day(3))
         hero = set(w0.get("hero") or [])
         check("glue, no plan: my exam date aims the box over the whole deck",
-              w0["aim"] == {"day": _day(3), "name": "Your exam", "in": 3, "scoped": False, "kind": "exam",
-                            "since": "", "since_why": "", "since_pick": "", "checked": True}
+              {k: x for k, x in w0["aim"].items() if k != "today"} == {"day": _day(3), "name": "Your exam", "in": 3, "scoped": False,
+                                                                       "kind": "exam", "since": "", "since_why": "", "since_pick": "",
+                                                                       "checked": True}
+              and len(str(w0["aim"].get("today"))) == 10  # the scope's picker stops at today
               and set(range(210, 220)) <= hero and not hero & (set(range(200, 210)) | set(range(220, 230)) | set(range(500, 520))),
               (w0["aim"], sorted(hero)))
         check("glue, no plan: the deck's tags name the topics, the resource's part as the source",
@@ -15176,8 +15178,8 @@ def test_native_emoji_picker_v391():
           evals[0] == "window.dcCheerNoNative && window.dcCheerNoNative();", evals)
     check("3.9.2's audit: a quick pick, a scroll or a resize puts Anki's box away (it sat where 'pick one' was)",
           "b.addEventListener('click', function () { unpick(); choose(x); });" in js
-          and "window.addEventListener('resize', moved);" in js and "back.addEventListener('scroll', moved, true);" in js
-          and "window.removeEventListener('resize', moved);" in js and "back.removeEventListener('scroll', moved, true);" in js)
+          and "window.addEventListener('resize', away);" in js and "back.addEventListener('scroll', away, true);" in js
+          and "window.removeEventListener('resize', away);" in js and "back.removeEventListener('scroll', away, true);" in js)
     downs = []
     NE.drop, keep_drop, keep_up = (lambda: downs.append(1)), NE.drop, appmod._decks[0]
     try:
@@ -16744,9 +16746,10 @@ def test_reviews_ahead_392():
           and "Stop new a week before the exam" in html, html[:1500])
     check("board: data first: the cards I've started first, what new ones add at my pace, this week, the time; the exam week against my pace",
           "Next 2 weeks: <b>" in html and "a day from cards you&rsquo;ve started, <b>+" in html and "new at your pace" in html
-          and "this week 100" in html and " a day</div>" in html and "Exam week: about <b>" in html and ", not " in html, html)
+          and " a day &middot; this week 100</div>" in html and "new at your pace, about " in html
+          and "Exam week: about <b>" in html and ", not " in html, html)
     check("board: a stop says what it holds back and when they start again (Sam's deck: the cost was unsaid)",
-          "220 new cards wait till Sat 12." in html and "plan&rsquo;s dates" not in html, html)
+          "220 new cards wait till Sat 12 " in html and "plan&rsquo;s dates" not in html, html)
     hv = A.view(A.existing([(1, 10)] * 20, *A.habits([])), A.GENERIC, [20.0] * 7, 0, 900, 100, [50] * 7, exam_in=10,
                 plan={2: 50, 20: 30}, pool=100)
     hw = {w["key"]: w for w in hv["ways"]}
@@ -16754,7 +16757,8 @@ def test_reviews_ahead_392():
           hw["now"]["held"] == 150 and hw["now"]["plan_held"] == 50 and hw["week"]["plan_held"] == 0
           and "held" not in hw["pace"], {k: (w.get("held"), w.get("plan_held")) for k, w in hw.items()})
     hh = board._ins_ahead(10, dict(_ahead_sample(exam_in=10), ways=hv["ways"]), "Step")
-    check("board: a plan's share of what waits", "150 new cards wait till Sat 12, 50 of them your plan&rsquo;s dates." in hh, hh)
+    check("board: a plan's share of what waits (the day with its month)",
+          "150 new cards wait till Sat 12 " in hh and ", 50 of them your plan&rsquo;s dates." in hh, hh)
     check("ahead: new cards named the climb's cause only when they're it (200 in two weeks, twice the two before)",
           A.cause(2480, 262) == 2480 and A.cause(150, 0) == 0 and A.cause(500, 300) == 0 and A.cause(None, None) == 0)
     ln = board.ahead_line({"did": 1, "name": "Step", "day": "2026-10-19", "n": 1030, "week": 780, "cause": 2480})
@@ -17246,7 +17250,7 @@ def test_leeches_tag_only_v392():
               and "due today" in html and "back tomorrow" in html
               and "duecrew:insleech:10:out:301" in html and "Stays in your reviews, out of this list" in html
               and "duecrew:insleech:10:fresh:301" in html and "duecrew:insleech:10:back:301" not in html
-              and "Bring all 1 back" in html, html)
+              and "Bring it back" in html, html)
         line = board._insights_html(10, {"leeches": 0, "near": 0, "kept": 4})
         check("board: Insights' line: N leeches still in your reviews · See them (Sam's words)",
               "<b>4</b> leeches still in your reviews &middot; <a" in line and "duecrew:insleeches:10" in line, line)
@@ -17269,6 +17273,91 @@ def test_leeches_tag_only_v392():
         check("Learn it fresh on the last of a note: the tag comes off", q(302) == (0, 0) and "leech" not in tags(302), tags(302))
     finally:
         F._pcfg, F._psave, F._after_change, mw.col, LF.tooltip, LF.app.swap, _state["leech_view"], _state["leech_open"] = saved
+
+
+def test_qol_pass_v392():
+    """3.9.2's last QoL pass (Sam: "last check for little things"): one card
+    or one time said so; a day named with its month where the line's other
+    days are; the scope's links apart from each other; a stop no longer among
+    the choices keeps its own name and never compares a number with itself;
+    an exam today isn't one ahead (and a stop to it ends tonight); the
+    leeches' foot says only what's on the screen; a near leech alone says of
+    what; an old leech's year; the plan card says where the stop is."""
+    from due_crew import ahead as A, board
+    check("time: the crew rows' 1h 13m; under an hour, minutes", board._hm(73) == "1h 13m" and board._hm(35) == "35 min")
+    # a "week before" stop whose exam moved 45 days out: no longer a choice, its own name, no "95, not 95"
+    pz = {"kind": "week", "exam": True, "from": 38}
+    a = _ahead_sample(exam_in=45, off=(38, 45), pause=pz)
+    h = board._ins_ahead(10, a, "Spanish")
+    import re as _re
+    nots = _re.findall(r"about <b>(\d+)</b> a day, not (\d+)", h)
+    check("a stop no longer among the choices: its own kind's name, never Paused; never a number against itself",
+          "Paused" not in h and "Stop new a week before the exam" in h and all(x != y for x, y in nots), (nots, h[-1500:]))
+    # an exam today: no "To your exam" over today alone; a stop to it ends tonight, not in six weeks
+    v = A.view(A.existing([(0, 1)] * 40, *A.habits([])), A.GENERIC, [20.0] * 7, 0, 500, 300, [100] * 7, exam_in=0,
+               off=A.stop_of({"kind": "now", "exam": True, "at": "2026-09-01"}, 0, "2026-09-01"), off_kind="now")
+    on = next(w for w in v["ways"] if w["key"] == v["on"])
+    check("an exam today: a stop to it is today's alone (not the six-week stop of the same kind)", tuple(on["stop"]) == (0, 0), on["stop"])
+    h0 = board._ins_ahead(10, _ahead_sample(exam_in=0), "Spanish")
+    check("an exam today: no 'To your exam' or 'exam day' over today alone", "To your exam" not in h0 and "exam day about" not in h0, h0[-1200:])
+    # leeches
+    one = {"cid": 1, "front": "x", "topic": "", "lapses": 1, "susp": False, "due": 2, "tip": [], "knows": []}
+    lv = board._ins_leeches(10, {"near": [one], "n_near": 1, "gone": [], "kept": []})
+    check("leeches: missed 1 time; no Bring back explained where there's none",
+          "missed 1 time " in lv + " " and "missed 1 times" not in lv and "Bring back:" not in lv and "Undo takes it back" in lv, lv)
+    g = dict(one, susp=True, lapses=8, day="2024-08-03")
+    lg = board._ins_leeches(10, {"gone": [g], "n_gone": 1, "near": [], "kept": []})
+    check("leeches: one to bring back says it; a leech from a year ago or more says its year",
+          "Bring it back" in lg and "Bring all 1" not in lg and "since 3 Aug 2024" in lg and "Bring back: due again" in lg, lg)
+    line = board._insights_html(10, {"leeches": 0, "near": 1, "kept": 0})
+    check("Insights' line: a near leech alone says of what", "<b>1</b> card one miss from a leech" in line, line)
+    line = board._insights_html(10, {"leeches": 2, "near": 3})
+    check("…and beside the others, as before", "<b>3</b> one miss away" in line, line)
+    # the scope
+    sc = board._ins_scope({"since": "2026-10-05", "since_why": "pick", "since_n": 1, "today": "2026-10-19"})
+    check("scope: 1 card; Change and As it was apart; As it was says where it goes; no day after today",
+          "&middot; 1 card " in sc + " " and "1 cards" not in sc and "</span> &middot; <a" in sc
+          and 'title="Since your last exam, or the whole deck"' in sc and 'max="2026-10-19"' in sc, sc)
+    ex = board._insights_html(10, {"aim": {"day": "2026-10-23", "kind": "exam", "checked": True, "since": "", "today": "2026-10-19"}})
+    check("the exam line: nothing at risk, then its scope, apart", "nothing at risk &middot; <div class=\"isc\">" in ex, ex)
+
+
+def test_cheer_window_runs_v392():
+    """3.9.2's QoL pass: the Cheer window run in node (tests/fake_dom.js, a
+    small DOM whose elements are real EventTargets), not only read: a `var
+    moved` overwrote the scroll/resize handler, so every close threw and
+    nothing picked, sent or closed, while every string check passed. A quick
+    pick and Send send one cheer and close; Cancel, Esc and the backdrop
+    close; "other" asks for the computer's picker and a quick pick or a
+    scroll puts it away. Needs node; skipped without it."""
+    import shutil
+    import subprocess
+    from due_crew import board
+    node = shutil.which("node")
+    if not node:
+        print("SKIP cheer window run: no node")
+        return
+    here = os.path.dirname(os.path.abspath(__file__))
+    with tempfile.TemporaryDirectory() as tmp:
+        js = os.path.join(tmp, "cheer.js")
+        with open(js, "w", encoding="utf-8") as f:
+            f.write(board.cheer_overlay_js({"uid": "dre", "name": "Dre", "emojis": ["🎉", "🔥", "💪"], "native": True}))
+
+        def run(steps):
+            out = subprocess.run([node, os.path.join(here, "fake_dom.js"), js, steps], capture_output=True, text=True, timeout=30)
+            return json.loads(out.stdout.strip().splitlines()[-1]) if out.stdout.strip() else {"errors": [out.stderr[-300:]]}
+        r = run("quick:🔥,button:🎉 Send")
+        check("cheer window: a quick pick and Send send one cheer, with it, and close; no errors",
+              not r.get("errors") and not r.get("open") and len(r.get("sent") or []) == 1
+              and r["sent"][0].startswith("duecrew:cheersend:") and "%F0%9F%94%A5" in r["sent"][0], r)
+        for steps in ("button:Cancel", "esc", "backdrop"):
+            r = run(steps)
+            check(f"cheer window: {steps.split(':')[-1]} closes it, nothing sent, no errors",
+                  not r.get("errors") and not r.get("open") and not r.get("sent"), r)
+        for steps in ("button:other,quick:💪", "button:other,scroll"):
+            r = run(steps)
+            check(f"cheer window: other asks for the computer's picker; {steps.split(',')[1].split(':')[0]} puts it away",
+                  not r.get("errors") and r.get("open") and [x.split(":")[1] for x in r.get("sent") or []] == ["emojipicker", "emojipickeroff"], r)
 
 
 def test_exam_dates_audit_v392():

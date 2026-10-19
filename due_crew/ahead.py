@@ -426,7 +426,9 @@ def view(started, cv, rate, wd0, left, unlocked, past, exam_in=None, off=None,
         ways.append(dict(with_new(started, cv, st), key=key, stop=stop, starts=sum(st)))
     on = "pace"
     if off:
-        hit = next((w for w in ways if w["stop"] and (w["key"] == off_kind or tuple(w["stop"]) == tuple(off))), None)
+        # its own kind's way, unless it ends sooner than that way would (a stop to an exam that's today)
+        hit = next((w for w in ways if w["stop"] and ((w["key"] == off_kind and off[1] >= w["stop"][1])
+                                                     or tuple(w["stop"]) == tuple(off))), None)
         if hit is None:
             st = starts(rate, wd0, left, stop=off, today_done=new_today, plan=plan, pool=pool)
             hit = dict(with_new(started, cv, st), key="off", stop=off, starts=sum(st))
