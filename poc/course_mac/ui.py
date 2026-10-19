@@ -1,5 +1,5 @@
-"""The PoC's windows: the course (lectures, a lecture's rows to tick, what
-opening would do), the calendar, settings (build and check the model),
+"""The PoC's windows: All the details of a course (lectures, a lecture's rows
+to tick, what opening would do; simple.py is the window everyone sees first), the calendar, settings (build and check the model),
 measuring against an answer key's tags, and a tag's cards by lecture
 (Browse). Plain Qt in Anki's own style. Names from a deck or a calendar
 go into item texts (plain) or are escaped before a rich-text label."""
@@ -681,8 +681,8 @@ class CourseWindow(QDialog):
                    "note ids and searches, never a card's text.").exec()
 
     def closeEvent(self, ev):
+        # 0.2.0: closing it doesn't stop a reading (the simple window's, or its own): Stop does
         self.pull()
-        self.app.cancel_flag = True
         self.app.window = None
         super().closeEvent(ev)
 

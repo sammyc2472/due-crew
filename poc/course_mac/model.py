@@ -526,6 +526,18 @@ def json_schema(s):
     return {"type": t or "string"}
 
 
+def plain_why(why):
+    """Why Apple's model isn't ready, in words a person knows, or ""."""
+    t = str(why or "")
+    if "appleIntelligenceNotEnabled" in t:
+        return "Apple Intelligence is off (System Settings \u203a Apple Intelligence & Siri)"
+    if "deviceNotEligible" in t:
+        return "this Mac can't run Apple's model"
+    if "modelNotReady" in t:
+        return "Apple's model is still downloading"
+    return ""
+
+
 def setup_line(helper, fm):
     """Settings' first words: the model Auto will use, and whether anything
     needs building. With macOS 27's fm, nothing does."""

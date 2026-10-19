@@ -213,6 +213,56 @@ def _note(col, model, deck_id, fields, tags, suspend=True, study=False):
     return n
 
 
+class SimpleWindowWords(unittest.TestCase):
+    """0.2.0, the window everyone sees first: its course name, deck, lines
+    and order come from here."""
+
+    def test_course_name_and_deck(self):
+        self.assertEqual(C.course_name(CALENDAR, "Big Step 1"), "Block 2")
+        self.assertEqual(C.course_name("Mon 10/26 LEC Heart failure", "Big Step 1"), "Big Step 1 course")
+        self.assertEqual(C.course_name("", ""), "My course")
+        self.assertEqual(C.course_name("MS2 Cardio-Renal | Fall 2026\nMon 10/26 LEC Heart failure"), "MS2 Cardio-Renal")  # mixed case kept as written
+        self.assertEqual(C.biggest_deck([(1, "Spanish", 300), (2, "Big Step 1", 28000), (3, "Default", 0)]), 2)
+        self.assertEqual(C.biggest_deck([(3, "Default", 0)]), 0)
+        self.assertEqual(C.biggest_deck([]), 0)
+        self.assertEqual(C.day_label("2026-10-26"), "Mon 26 Oct")
+
+    def test_lines_and_order(self):
+        c = C.new_course("Block 2", 1, "Big Step 1")
+        past = C.new_lecture("2026-10-01", "Lipids")
+        hf = C.new_lecture("2026-10-26", "Heart failure")
+        quiz = C.new_lecture("2026-10-30", "Cardio quiz 1", "quiz")
+        c["lectures"] = [quiz, hf, past]
+        self.assertEqual(C.lecture_status(c, quiz, None), ("quiz", False))
+        self.assertEqual(C.lecture_status(c, hf, None), ("waiting to be read", False))
+        hf["state"] = "running"
+        self.assertEqual(C.lecture_status(c, hf, None), ("reading…", False))
+        hf["state"] = "error"
+        self.assertFalse(C.lecture_status(c, hf, None)[1])
+        hf["state"] = "new"
+        self.assertEqual([l["title"] for l in C.reading_order(c, "2026-10-20")], ["Heart failure", "Lipids"])
+        self.assertIs(C.next_up(c, None, "2026-10-20"), hf)
+        self.assertIsNone(C.next_up(c, None, "2026-10-27"))  # a quiz is never "next up"
+        C.wait_for_open(c, "2026-10-20")
+        self.assertEqual(past.get("auto_done"), "before")
+        self.assertNotIn("auto_done", hf)
+
+    def test_read_by(self):
+        c = C.new_course()
+        self.assertEqual(C.read_by(c), "")
+        a, b = C.new_lecture("2026-10-26", "A"), C.new_lecture("2026-10-27", "B")
+        c["lectures"] = [a, b]
+        a.update(state="done", how={"terms": "rules (unavailable)", "pick": "rules (unavailable)", "read": "model"})
+        self.assertEqual(C.read_by(c), "model")
+        a["how"] = {"terms": "yours", "pick": "rules (timeout)", "read": "rules"}
+        self.assertEqual(C.read_by(c), "rules")
+
+    def test_plain_why(self):
+        self.assertIn("System Settings", M.plain_why("unavailable(.appleIntelligenceNotEnabled)"))
+        self.assertIn("downloading", M.plain_why("unavailable(.modelNotReady)"))
+        self.assertEqual(M.plain_why("something else"), "")
+
+
 XCODE_LICENSE = ("You have not agreed to the Xcode license agreements. Please run 'sudo xcodebuild -license' from "
                  "within a Terminal window to review and agree to the Xcode and Apple SDKs license.")
 

@@ -28,38 +28,55 @@ only, never Private Cloud Compute.
    file), then restart Anki.
 2. You'll find it under **Tools › Course on a Mac (PoC)**.
 
-## Turn on the Mac's model (once)
+## Use it
 
-Apple Intelligence has to be on (System Settings › Apple Intelligence & Siri),
-on an Apple silicon Mac.
+1. Tools › Course on a Mac (PoC) › **Open…**
+2. Paste your block's calendar (or **Load a file…**): each session's date and
+   title, and its objectives under it if you have them.
+3. Check **Your deck** (it starts on your biggest deck), and press **Make my
+   course**.
 
-- **macOS 27: nothing to install.** The Mac's own `fm` command is the model.
-  Tools › Course on a Mac (PoC) › **Settings…** says "the fm command, nothing
-  to build"; press **Check the model** to try it. Leave Model on **Auto**.
-- **macOS 26:** the add-on builds a small Swift helper on your Mac on Apple's
-  FoundationModels framework. Building needs Apple's Command Line Tools: if
-  `swiftc` isn't there, run `xcode-select --install` in Terminal first. If a
-  full Xcode is installed but was never opened, Apple's tools first want its
-  license accepted: Build says so, and `sudo xcodebuild -license accept` in
-  Terminal does it once. Then **Settings…** › **Build the helper**. It takes a
-  minute or two and says which build it kept. It tries four builds: with or
-  without the permissive guardrails, and with or without the model's context
-  size, so an older SDK still builds. On macOS 27 the helper is optional; it
-  gives the model's answers in their exact shape, and reads PDFs.
+That's it. It reads the calendar, then every lecture, today's and the next
+ones first, and lists them: each lecture with how many cards it would open,
+and an **Open** button. The top line says what's next; **Open them now** opens
+it early. With **Open each lecture's cards on its day** ticked (it starts
+ticked), Anki opens each lecture's cards on its date, from today on, when it
+starts. Lectures already past wait for their Open button. Every Open is one
+Edit › Undo. You can close the window while it reads.
 
-**Check the model** says whether Apple Intelligence is ready, the window size
-it reports, and how long one real call took. **Auto** takes the built helper,
-else the `fm` command, else plain rules. If `fm` doesn't answer, **fm's
-help** shows the flags this Mac's `fm` takes (they weren't settled in Apple's
-docs when this was written).
+**The Mac's model.** It's used when Apple Intelligence is on (System Settings
+› Apple Intelligence & Siri, on an Apple silicon Mac). On macOS 27 there's
+nothing to install: the Mac's own `fm` command is the model. When the model
+isn't on, or doesn't answer, the course is read by plain matching instead
+(the title and objective words matched to your deck's tags), and the line
+under the course's name says so.
 
-No Mac model, or the build fails? **No model** runs the same flow on plain
-rules: the title and objective words matched to tag names. It's useful as a
-comparison too.
+**More** has the rest: All the details (also a double-click on a lecture),
+Add more of the calendar, Copy as plan text, New course, Rename, Delete,
+Settings and the log.
 
-## Make a course
+## All the details
 
-1. **Open…** › **New course…**: name it (MS2 Block 2) and pick your deck.
+The detailed window shows each lecture's rows and lets you change them. It's
+for checking the model's work, not for everyday use.
+
+**The helper (macOS 26).** Without `fm`, the add-on can build a small Swift
+helper on your Mac on Apple's FoundationModels framework: More › Settings… ›
+**Build the helper**. Building needs Apple's Command Line Tools: if `swiftc`
+isn't there, run `xcode-select --install` in Terminal first. If a full Xcode
+is installed but was never opened, Apple's tools first want its license
+accepted: Build says so, and `sudo xcodebuild -license accept` in Terminal
+does it once. It tries four builds (with or without the permissive
+guardrails, with or without the model's context size), so an older SDK still
+builds. On macOS 27 the helper is optional; it gives the model's answers in
+their exact shape, and reads PDFs. **Check the model** says whether Apple
+Intelligence is ready, the window size it reports, and how long one real
+call took. If `fm` doesn't answer, **fm's help** shows the flags this Mac's
+`fm` takes (they weren't settled in Apple's docs when this was written).
+
+**By hand, in the detailed window:**
+
+1. More › **All the details…** › **New course…**: name it (MS2 Block 2) and pick your deck.
 2. **Calendar…**: paste the block's calendar, or Load a file (text; a PDF
    works once the helper is built). **Read with the Mac model** or **Read as
    lines** (for a calendar already one line a session, its objectives indented
@@ -139,7 +156,8 @@ for `tag:Course::*`, select all, then Notes › Remove Tags.
 `poc/course_mac/`: `model.py` (the helper, `fm`, no model), `helper.swift`,
 `jobs.py` (the four jobs: prompts, shapes, checks, rules), `find.py` (tags by
 resource, matching), `course.py` (rows, checks, plan text), `engine.py` (the
-collection side), `cal.py`, `store.py`, `glue.py` and `ui.py` (Anki).
+collection side), `cal.py`, `store.py`, `glue.py`, `simple.py` (the window everyone
+sees first) and `ui.py` (All the details, settings, measuring; Anki).
 Tests: `python -m unittest poc/tests/test_course_mac.py` (needs `pip install
 anki`); the windows offscreen: `QT_QPA_PLATFORM=offscreen python
 poc/tests/render_course_mac.py OUT_DIR` (also needs PyQt6).

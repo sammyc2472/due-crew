@@ -64,7 +64,8 @@ class App:
         self.runner = None
         self.busy = False
         self.cancel_flag = False
-        self.window = None
+        self.window = None  # All the details (ui.CourseWindow)
+        self.simple = None  # the window everyone sees first (simple.SimpleWindow)
 
     # ---- config, log, model ----
 
@@ -237,13 +238,15 @@ app = App()
 
 
 def open_window():
-    from . import ui
+    from . import simple
     app.load()
-    if app.window is None:
-        app.window = ui.CourseWindow(app)
-    app.window.show()
-    app.window.raise_()
-    app.window.activateWindow()
+    if app.simple is None:
+        app.simple = simple.SimpleWindow(app)
+    else:
+        app.simple.show_page()
+    app.simple.show()
+    app.simple.raise_()
+    app.simple.activateWindow()
 
 
 def open_measure():
@@ -291,10 +294,12 @@ def _profile_open():
 
 
 def _profile_close():
+    app.cancel_flag = True
     app.reset_runner()
-    if app.window:
-        app.window.close()
-        app.window = None
+    for w in (app.window, app.simple):
+        if w:
+            w.close()
+    app.window = app.simple = None
     app.profile = None
 
 
