@@ -378,7 +378,9 @@ def review_weeks(work):
             per[x] = per.get(x, 0) + e["n"] * cv[k]
     out, end, a = [], _d(ds[-1]) + datetime.timedelta(days=28), _d(ds[0])
     while a <= end:
-        n = sum(per.get(_iso(a + datetime.timedelta(days=i)), 0) for i in range(7))
+        n = 0
+        for i in range(7):  # one by one, as builder.js adds them (since 3.12, sum() rounds floats its own way)
+            n += per.get(_iso(a + datetime.timedelta(days=i)), 0)
         out.append({"a": _iso(a), "n": n / 7})
         a += datetime.timedelta(days=7)
     return out
