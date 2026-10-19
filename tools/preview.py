@@ -369,11 +369,12 @@ def _ahead(pace, batch, exam_in, off=None, seed=5, unlocked=300, left=4000, done
     rate = AH.pace(first, t0.weekday())
     past = [len({c for d, c, e, *_ in rows if d == k and e > 0}) for k in range(-7, 0)]
     exam = (exam_in, None)[exam_in is None]
+    pause = {"kind": "now", "exam": exam is not None and exam >= 1, "from": off[0]} if off else None  # as Do it made it
     v = AH.view(AH.existing(list(now.values()), hab, extra), cv or AH.GENERIC, rate, t0.weekday(), left, unlocked, past,
-                exam_in=exam, off=off)
+                exam_in=exam, off=off, off_kind=(pause or {}).get("kind"))
     v.update(did=10, today=t0.isoformat(), days=[(t0 + datetime.timedelta(days=k)).isoformat() for k in range(-7, AH.H)],
              exam=exam, done=done, own=cv is not None, secs=secs, rate=sum(rate), unlocked=unlocked, left=left, off=bool(off),
-             trust=AH.trust(AH.backtest(rows, first, now)) if trust else None)
+             trust=AH.trust(AH.backtest(rows, first, now)) if trust else None, pause=pause)
     return v
 
 
@@ -420,7 +421,7 @@ sections.append("<h3>3.9.2: Reviews ahead, no exam, a batch person (only what's 
     you=_YOU("insights", insights={"decks": _DECKS, "did": 10, "exam": "", "plan": None,
                                    "view": dict(_DECK_INS, aim={}, hero=[], ahead=dict(_ahead(40, True, None, unlocked=120, left=9000),
                                                                                         own=False, trust=None))})))
-_LEECH = {"n_gone": 14, "n_near": 9, "gone": [
+_LEECH = {"n_gone": 14, "n_near": 9, "out": 2, "gone": [
     {"cid": 1, "front": "La fiesta ____ en mi casa (ser/estar)", "topic": "Ser vs estar", "lapses": 10, "at": 1791000000000, "secs": 9,
      "tip": [{"name": "Maya", "text": "Events take ser: la fiesta es en mi casa."}], "knows": ["Maya"], "exam": True, "susp": True},
     {"cid": 2, "front": "estar listo vs ser listo", "topic": "Ser vs estar", "lapses": 8, "at": 1790600000000, "secs": 12,
@@ -432,11 +433,17 @@ _LEECH = {"n_gone": 14, "n_near": 9, "gone": [
              {"cid": 5, "front": "ojalá que yo […] (tener) más tiempo", "topic": "Subjunctive", "lapses": 7, "secs": 14,
               "due": 3, "tip": [], "knows": [], "susp": False}]}
 from due_crew import team as _TM  # noqa: E402
+# each card carries the shared deck it first came from too; a week's name is the map's topics, never that
+# (Sam: "isn't helpful ... should be organized by topic"); this week's, started, none reviewed yet: too soon
 _TAGS = {c: ["Big::#Systems::" + ("Cardio::Pharm" if c < 260 else "Cardio::Physiology" if c < 560 else "Renal::Physiology"
-                                  if c < 760 else "Pulm::Pathology")] for c in range(1000)}
-_FIRST = {c: (2 if c < 260 else 9 if c < 560 else 16 if c < 760 else 30 + c % 40) for c in range(1000)}
+                                  if c < 760 else "Pulm::Pathology"), "Big::#Source_Decks::Deck_" + "ABCD"[c % 4]]
+         for c in range(1080)}
+_TAGS.update({c: ["Big::#Systems::GI::Liver", "Big::#Source_Decks::Deck_E"] for c in range(1000, 1080)})
+_FIRST = {c: (9 if c < 260 else 16 if c < 560 else 23 if c < 760 else 37 + c % 40) for c in range(1000)}
+_FIRST.update({c: 0 for c in range(1000, 1080)})
 _KNOW = {c: (0.93 if c % 7 else 0.55) if c < 560 else (0.71 if c % 3 else 0.4) for c in range(1000)}
-_STARTED = _TM.started_tiles(_FIRST, _TAGS, _KNOW, set(range(1180)), "2026-10-18")
+_KNOW.update({c: None for c in range(1000, 1080)})
+_STARTED = _TM.started_tiles(_FIRST, _TAGS, _KNOW, set(range(1180)), "2026-10-18", "big::#systems")
 sections.append("<h3>3.9.2: the map by when you started them, and the exam's scope in its box</h3>" + board.render(
     DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
     you=_YOU("insights", insights={"decks": _DECKS, "did": 10, "exam": "2026-10-14", "plan": None,

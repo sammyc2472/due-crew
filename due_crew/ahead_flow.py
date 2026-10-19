@@ -92,22 +92,26 @@ def _day_part(col, did, deck, today):
             "rate": A.pace(first, _wd(today)), "past": [len(s) for s in past], "n": len(first),
             "new14": sum(1 for d in first.values() if -14 <= d), "new14_before": sum(1 for d in first.values() if -28 <= d < -14),
             "secs": (float(ms) / 1000.0 / int(n_ans)) if int(n_ans or 0) >= 200 else None}
-    _state.setdefault("ahead_day", {})[did] = part
+    if not isinstance(_state.get("ahead_day"), dict):
+        _state["ahead_day"] = {}
+    _state["ahead_day"][did] = part
     return part
 
 
 # ---- the cards now ----
 
-def _state_now(col, deck, sday):
+def _state_now(col, deck, sday, done=()):
     """[(due day, interval)] of the deck's started cards, unsuspended, from
     today: a card in a filtered deck by its own due (odue), one in its
-    learning steps today, a buried one tomorrow at the soonest."""
+    learning steps today, a buried one tomorrow at the soonest. done: the
+    cards answered today, today's bar's already (3.9.2's audit: one still
+    in its steps was counted twice), so theirs is tomorrow."""
     out = []
-    for ctype, queue, due, ivl in col.db.all(
-            f"SELECT type, queue, CASE WHEN odid THEN odue ELSE due END, ivl FROM cards "
+    for cid, ctype, queue, due, ivl in col.db.all(
+            f"SELECT id, type, queue, CASE WHEN odid THEN odue ELSE due END, ivl FROM cards "
             f"WHERE id IN ({deck}) AND type != 0 AND queue != -1"):
         if queue in (1, 4):
-            out.append((0, max(1, int(ivl or 0))))
+            out.append((1 if cid in done else 0, max(1, int(ivl or 0))))
         elif queue in (-2, -3):
             out.append((max(1, int(due) - sday) if ctype == 2 else 1, max(1, int(ivl or 0))))
         else:
@@ -145,14 +149,19 @@ def deck_view(col, did, deck, exam="", plan=None):
         f"SELECT count(DISTINCT cid), count(DISTINCT CASE WHEN type = 0 AND lastIvl = 0 THEN cid END) FROM revlog "
         f"WHERE id >= ? AND ease > 0 AND cid IN ({deck})", start) or (0, 0)
     exam_in = _days_to(exam, today) if exam else None
-    off = A.stop_of(_off().get(str(did)), exam_in, today)
-    started = A.existing(_state_now(col, deck, sday), part["hab"], part["extra"])
+    pause = _off().get(str(did))
+    off = A.stop_of(pause, exam_in, today)
+    answered = set(col.db.list(f"SELECT DISTINCT cid FROM revlog WHERE id >= ? AND ease > 0 AND cid IN ({deck})", start))
+    started = A.existing(_state_now(col, deck, sday, answered), part["hab"], part["extra"])
     v = A.view(started, part["cv"], part["rate"], _wd(today), int(left or 0), int(unlocked or 0), part["past"],
                exam_in=exam_in, off=off, new_today=int(new_today or 0),
-               plan=plan, pool=int(unlocked or 0) if plan is not None else None)
+               plan=plan, pool=int(unlocked or 0) if plan is not None else None,
+               off_kind=pause.get("kind") if off and isinstance(pause, dict) else None)
     v.update(did=did, today=today, days=[_iso(today, k) for k in range(-7, A.H)], exam=exam_in,
              done=int(done or 0), own=part["own"], secs=part["secs"], rate=sum(part["rate"]),
              unlocked=int(unlocked or 0), left=int(left or 0), off=bool(off),
+             # 3.9.2's audit: what the pause I made says comes from it, not from whether there's an exam now
+             pause={"kind": pause.get("kind"), "exam": bool(pause.get("exam")), "from": int(off[0])} if off else None,
              cause=A.cause(part.get("new14"), part.get("new14_before")),
              trust=_trust(col, did, deck, today))
     return v
@@ -177,7 +186,7 @@ def _set_zero(col, did, on):
     """Today's new cards to 0 on the deck and its subdecks (on), or today's
     0 taken off again: Anki's today-only limit, the deck's options as they
     were. True when a deck changed."""
-    today, changed = int(col.sched.today), False
+    today, todo = int(col.sched.today), []
     for d in _decks(col, did):
         deck = col.decks.get(d)
         t = deck.get("newLimitToday") if isinstance(deck.get("newLimitToday"), dict) else {}
@@ -188,9 +197,22 @@ def _set_zero(col, did, on):
             deck.pop("newLimitToday", None)
         else:
             continue
+        todo.append(deck)
+    if not todo:
+        return False
+    # 3.9.2's audit: every deck's save was its own undo step; one Edit › Undo now takes the day's 0 off them all
+    try:
+        pos = col.add_custom_undo_entry("Due Crew: new cards " + ("stopped" if on else "back on"))
+    except Exception:
+        pos = None
+    for deck in todo:
         col.decks.save(deck)
-        changed = True
-    return changed
+    if pos is not None:
+        try:
+            col.merge_undo_entries(pos)
+        except Exception:
+            pass
+    return True
 
 
 def apply_morning():
@@ -201,6 +223,8 @@ def apply_morning():
     if not col:
         return False
     today, exam = _today(), str(cfg().get("exam_date") or "")
+    if not today:
+        return False
     pc = _pf()._pcfg()
     offs, keep, changed = _off(), {}, False
     for key, off in offs.items():
@@ -219,6 +243,38 @@ def apply_morning():
         pc["new_off"] = keep
         _pf()._psave(pc)
     return changed
+
+
+def on_state(new_state, *_args):
+    """3.9.2's audit: the pause is set before I study, not only in the plans'
+    morning (that waits for a sign-in, the Decks screen and AnkiWeb's sync)."""
+    if new_state in ("overview", "review") and mw.col and _off():
+        try:
+            if apply_morning():
+                _pf()._after_change()
+        except Exception:
+            traceback.print_exc()
+
+
+def paused(col, did):
+    """The pause in effect today on this deck or one it's under (its
+    deck's id, {kind, at, exam}), else None: a plan's Raise and Catch up
+    and Why stand aside for it."""
+    offs = _off()
+    if not offs or not col:
+        return None
+    from .stats.queries import StatsQueries
+    today, exam = StatsQueries(col).day_label(0), str(cfg().get("exam_date") or "")
+    for key, off in offs.items():
+        stop = A.stop_of(off, _days_to(exam, today) if exam else None, today)
+        if stop is None or not stop[0] <= 0 <= stop[1]:
+            continue
+        try:
+            if int(did) in {int(x) for x in col.decks.deck_and_child_ids(int(key))}:
+                return int(key), off
+        except Exception:
+            continue
+    return None
 
 
 def stop_new(did, kind):
@@ -292,7 +348,9 @@ def _trust(col, did, deck, today):
     book = pc.get("ahead_trust") if isinstance(pc.get("ahead_trust"), dict) else {}
     have = book.get(str(did)) if isinstance(book.get(str(did)), dict) else {}
     age = _days_to(have.get("day"), today) if have else None
-    asked = _state.setdefault("ahead_asked", set())
+    if not isinstance(_state.get("ahead_asked"), set):
+        _state["ahead_asked"] = set()
+    asked = _state["ahead_asked"]
     if (age is None or age <= -TRUST_DAYS) and did not in asked:
         asked.add(did)
         try:

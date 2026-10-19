@@ -113,6 +113,7 @@ def card(deck, day, tiles, by="fsrs", pct=True, prev=None, since=""):
         if prev is not None and k is not None and prev.get(t.get("key")) is not None:
             d = int(k) - int(prev[t["key"]])
         out.append({"name": str(t.get("name") or "?"), "k": None if k is None else int(k),
+                    "soon": k is None and int(t.get("started") or 0) > 0,  # started, none reviewed yet
                     "shade": None if k is None else map_shade(int(k)), "d": d,
                     "x": x + GAP / 2, "y": y + GAP / 2, "w": max(0.0, w - GAP), "h": max(0.0, h - GAP)})
     cards = sum(int(t["n"]) for t in ts)
@@ -152,7 +153,7 @@ def text(deck, day, tiles, by="fsrs", pct=True, prev=None, since=""):
     for t in c["tiles"]:
         bit = f"{square(t['k'])} {t['name']}"
         if pct:
-            bit += " new" if t["k"] is None else f" {t['k']}%"
+            bit += (" too soon" if t.get("soon") else " new") if t["k"] is None else f" {t['k']}%"
             if t["d"]:
                 bit += f" {'↑' if t['d'] > 0 else '↓'}{abs(t['d'])}"
         lines.append(bit)

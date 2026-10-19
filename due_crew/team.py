@@ -342,6 +342,15 @@ def _best(fams, n, fit, top, min_n=None):
     return best
 
 
+def _shade(cids, know):
+    """(started, % or None) over cids: know's cards are the started ones; a
+    card with no review yet (None, 3.9.2's audit) counts as started but not
+    in the % (its first pass says nothing yet)."""
+    got = [know[c] for c in cids if c in know]
+    vals = [v for v in got if v is not None]
+    return len(got), (int(round(100 * sum(vals) / len(vals))) if vals else None)
+
+
 def _tiles(per, cut, know, decks, level):
     """A cut's tiles, biggest first. Each keeps what it needs to open
     later (expand): its level's cards and paths, privately (_-keys)."""
@@ -350,9 +359,8 @@ def _tiles(per, cut, know, decks, level):
         name = P._word(spell.split(P._SEP)[-1])[:NAME_MAX]
         if not name:
             continue
-        started = [know[c] for c in cids if c in know]
-        out.append({"key": P._SEP.join(key), "name": name, "n": len(cids), "started": len(started),
-                    "know": int(round(100 * sum(started) / len(started))) if started else None,
+        n_st, pct = _shade(cids, know)
+        out.append({"key": P._SEP.join(key), "name": name, "n": len(cids), "started": n_st, "know": pct,
                     "find": {"decks" if decks else "tags": [spell]},
                     "_spell": spell, "_per": per, "_cids": cids, "_key": key, "_level": level})
     names = [t["name"].lower() for t in out]
@@ -375,9 +383,11 @@ def expand(t, know):
     t["kids"], [] when it doesn't split. Done for the level on screen, so
     its › marks are exact; deeper when a tile opens (map_level)."""
     if "kids" not in t and "_batch" in t:
-        # 3.9.2: a batch I started together opens into its topics, by its tags
+        # 3.9.2: a batch I started together opens into its topics, by its tags (the map's way's); each
+        # topic in it is this batch's cards alone, in Browse too (the audit: a tag's find was the deck's)
         kids = subjects_by(t["_tags"], know, t["_batch"])[0] if len(t["_batch"]) >= 2 * MAP_SUB_FIT else []
         t["kids"] = kids if len(kids) >= 2 else []
+        _within(t["kids"])
         return t["kids"]
     if "kids" in t or "_per" not in t:
         return t.get("kids") or []
@@ -393,7 +403,19 @@ def expand(t, know):
         sc, _f, kids = _best({(): sub}, len(t["_cids"]), MAP_SUB_FIT, False)
         if sc and len(kids) >= 2:
             t["kids"] = _tiles(sub, kids, know, "decks" in t["find"], t["_level"] + 1)
+            if t.get("_within"):
+                _within(t["kids"])
     return t["kids"]
+
+
+def _within(tiles):
+    """Tiles inside a batch: each finds its own cards, not every card of
+    the deck with its tag; and so do theirs."""
+    for k in tiles:
+        k["find"] = {"cids": sorted(k.get("_cids") or ())}
+        k["_within"] = True
+        if k.get("kids"):
+            _within(k["kids"])  # opened already (subjects_by opens the level on screen)
 
 
 def _ours(tag):
@@ -415,9 +437,8 @@ def plan_tiles(held, know, active):
         play = [c for c in cids if c in active]
         if not play:
             continue
-        started = [know[c] for c in play if c in know]
-        tiles.append({"key": path, "name": str(name)[:NAME_MAX], "n": len(play), "started": len(started),
-                      "know": int(round(100 * sum(started) / len(started))) if started else None,
+        n_st, pct = _shade(play, know)
+        tiles.append({"key": path, "name": str(name)[:NAME_MAX], "n": len(play), "started": n_st, "know": pct,
                       "find": {"tags": [path]}})
     tiles.sort(key=lambda t: (-t["n"], t["name"].lower()))
     return tiles, none
@@ -438,45 +459,67 @@ def _range(a, b):
     return f"{a.day}–{b.day} {b:%b}" if a.month == b.month else f"{a.day} {a:%b}–{b.day} {b:%b}"
 
 
+def way_of(tag):
+    """The map's way a tag belongs to: its family as subjects_by reads it
+    (what comes up to its first resource mark, lowercased), or TAGS_WAY for
+    a tag with no mark."""
+    segs = [x for x in str(tag).split(P._SEP) if x]
+    for i in range(1, len(segs)):
+        if segs[i][:1] in "#^$!":
+            return P._SEP.join(x.lower() for x in segs[:i + 1])
+    return TAGS_WAY
+
+
+def _in_way(tag, way):
+    return way is None or way_of(tag) == way
+
+
 def batch_name(cids, tags_of, wide, prefer=None):
-    """What a batch of cards I started together was: the deepest tag most
-    of them share (a third at least) that doesn't cover nearly every card
-    I've started (wide: {tag prefix: cards with it}, of all of them); ""
-    when nothing says. A tag's last part, readable. prefer: the map's own
-    way (a tag prefix), whose tags win when one qualifies (3.9.2, Sam's
-    deck: the deepest shared tag was a video series, "Lolnotacop · Bugs",
-    where his FirstAid systems said what the week was)."""
-    count, spell = {}, {}
+    """What a batch of cards I started together was, in the map's own
+    topics: the deepest tag most of them share (a third at least) that
+    doesn't cover nearly every card I've started (wide: {tag prefix: cards
+    with it}, of all of them), else its two biggest topics ("Renal, GI");
+    "" when nothing says. A tag's last part, readable. prefer: the map's
+    way (way_of's), the only tags it reads (3.9.2, Sam: a week named by the
+    shared deck a card first came from "isn't helpful", "should be
+    organized by topic"); None reads them all."""
+    count, spell, top, top_spell = {}, {}, {}, {}
     for c in cids:
-        seen = set()
+        seen, tops = set(), set()
         for t in tags_of.get(c) or ():
-            if str(t).lower() in ANKI_TAGS or str(t).lower().startswith("duecrew::"):
+            if str(t).lower() in ANKI_TAGS or str(t).lower().startswith("duecrew::") or not _in_way(t, prefer):
                 continue
             segs = str(t).split(P._SEP)
-            for i in range(1, len(segs) + 1):
+            lead = 0 if prefer in (None, TAGS_WAY) else len(prefer.split(P._SEP))
+            for i in range(lead + 1, len(segs) + 1):  # a topic in the way, never the way's own root
                 k = P._SEP.join(segs[:i]).lower()
                 seen.add(k)
                 spell.setdefault(k, segs[:i])
+            if prefer is not None:
+                if len(segs) > lead:
+                    k = P._SEP.join(segs[:lead + 1]).lower()
+                    tops.add(k)
+                    top_spell.setdefault(k, segs[lead])
         for k in seen:
             count[k] = count.get(k, 0) + 1
+        for k in tops:
+            top[k] = top.get(k, 0) + 1
     n, total = max(1, len(cids)), max(1, wide.get("", 0))
-    best, pref = None, None
-    under = str(prefer).lower() + P._SEP if prefer else None
+    best = None
     for k, m in count.items():
         if m / n < 0.34 or wide.get(k, 0) / total >= 0.9:
             continue
         rank = (k.count(P._SEP), m)
         if best is None or rank > best[0]:
             best = (rank, k)
-        if under and k.startswith(under) and (pref is None or rank > pref[0]):
-            pref = (rank, k)
-    best = pref or best
-    if best is None:
-        return ""
-    segs = [x for x in spell[best[1]] if not x.startswith(("#", "^", "$", "!"))] or spell[best[1]][-1:]
-    # two levels read better than one ("Cardio · Pharm", not "Pharm") under a root and a resource
-    words = [P._word(x) for x in (segs[-2:] if len(spell[best[1]]) >= 3 and len(segs) >= 2 else segs[-1:])]
-    return clip(" · ".join(w for w in words if w), NAME_MAX - 18)
+    if best is not None:
+        segs = [x for x in spell[best[1]] if not x.startswith(("#", "^", "$", "!"))] or spell[best[1]][-1:]
+        # two levels read better than one ("Cardio · Pharm", not "Pharm") under a root and a resource
+        words = [P._word(x) for x in (segs[-2:] if len(spell[best[1]]) >= 3 and len(segs) >= 2 else segs[-1:])]
+        return clip(" · ".join(w for w in words if w), NAME_MAX - 18)
+    # no one topic holds a third: its two biggest, a fifth of it at least each
+    big = [k for k, m in sorted(top.items(), key=lambda kv: (-kv[1], kv[0])) if m / n >= 0.2][:2]
+    return clip(", ".join(w for w in (P._word(top_spell[k]) for k in big) if w), NAME_MAX - 18)
 
 
 def clip(s, n=NAME_MAX):
@@ -500,12 +543,17 @@ def started_tiles(first_of, tags_of, know, active, today, prefer=None):
     prefer: the map's own way, for the names (batch_name)."""
     t0 = S.d(today)
     monday = t0 - datetime.timedelta(days=t0.weekday())
-    groups, before = {}, []
+    weeks = {}
     for c, ago in first_of.items():
         if c not in active:
             continue
         w = 0 if ago <= t0.weekday() else 1 + (ago - t0.weekday() - 1) // 7
-        (groups.setdefault(w, []) if w < START_WEEKS else before).append(c)
+        weeks.setdefault(w, []).append(c)
+    # the last START_WEEKS weeks I started cards in, however long ago (3.9.2's audit: a deck finished
+    # months back had none in the last 8 calendar weeks, one tile, and the pick did nothing)
+    kept = sorted(weeks)[:START_WEEKS]
+    groups = {w: weeks[w] for w in kept}
+    before = [c for w in sorted(weeks)[START_WEEKS:] for c in weeks[w]]
     wide = {"": len(first_of)}
     for c in first_of:
         seen = set()
@@ -518,17 +566,18 @@ def started_tiles(first_of, tags_of, know, active, today, prefer=None):
     out = []
 
     def tile(key, when, cids):
-        started = [know[c] for c in cids if c in know]
+        n_st, pct = _shade(cids, know)
         what = batch_name(cids, tags_of, wide, prefer)
+        # it opens into the map's own topics (prefer's tags), each Browsing this week's cards alone
         return {"key": key, "name": clip(f"{when} · {what}" if what else when), "n": len(cids),
-                "started": len(started), "know": int(round(100 * sum(started) / len(started))) if started else None,
-                "find": {"cids": sorted(cids)}, "_batch": sorted(cids), "_tags": {c: tags_of.get(c) or [] for c in cids}}
+                "started": n_st, "know": pct, "find": {"cids": sorted(cids)}, "_batch": sorted(cids),
+                "_tags": {c: [t for t in tags_of.get(c) or [] if _in_way(t, prefer)] for c in cids}}
     for w in sorted(groups):
         a = monday - datetime.timedelta(days=7 * w)
         when = "This week" if w == 0 else "Last week" if w == 1 else _range(a, a + datetime.timedelta(days=6))
         out.append(tile(S.iso(a), when, groups[w]))
     if before:
-        edge = monday - datetime.timedelta(days=7 * (START_WEEKS - 1))
+        edge = monday - datetime.timedelta(days=7 * max(kept))
         out.append(tile("before", f"Before {edge.day} {edge:%b}", before))
     fresh = [c for c in active if c not in first_of]
     if fresh:

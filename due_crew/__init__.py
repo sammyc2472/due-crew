@@ -1854,6 +1854,7 @@ if hasattr(gui_hooks, "top_toolbar_did_redraw"):  # Anki 2.1.54+
 # 3.9.1 (the efficiency run): a page sent once is sent again only on a new page
 gui_hooks.webview_will_set_content.append(app.on_set_content)
 gui_hooks.state_will_change.append(app.on_state_will_change)  # 3.9.1: the Decks page isn't up till it renders
+gui_hooks.state_will_change.append(ahead_flow.on_state)  # 3.9.2's audit: Stop new is set before I study
 if hasattr(gui_hooks, "theme_did_change"):
     gui_hooks.theme_did_change.append(rooms.on_theme)  # the widgets pick their colours as they're drawn
 

@@ -28,6 +28,14 @@ from .app import _state, cfg
 OUT_MAX = 5000   # cards left out, at most
 SLOW_SECS = 30   # a card's answers this slow on average say so
 FRONT_MAX = 90
+FRONTS = 12      # the cards a group lists (board.LEECH_SHOW), drawn from their own question
+
+
+def _mine(key):
+    """This profile's {deck id: ...} for key (app._reset_runtime empties it)."""
+    if not isinstance(_state.get(key), dict):
+        _state[key] = {}
+    return _state[key]
 
 
 def _pf():
@@ -39,9 +47,10 @@ def _pf():
 
 def next_is_leech(lapses, fails, every=None):
     """Whether one more miss makes this card a leech (again): Anki marks one
-    at `fails` lapses, then every half of it after."""
+    at `fails` lapses, then every half of it after, rounded up (at 5: 5, 8,
+    11; 3.9.2's audit, on Anki's engine)."""
     fails = max(1, int(fails))
-    every = max(1, fails // 2) if every is None else max(1, int(every))
+    every = max(1, -(-fails // 2)) if every is None else max(1, int(every))
     n = int(lapses) + 1
     return n >= fails and (n - fails) % every == 0
 
@@ -53,7 +62,7 @@ def front(sfld):
     """A card's sort field as one plain line: tags and sounds out, a cloze's
     answer hidden ([…], or its hint), at most FRONT_MAX."""
     t = _CLOZE.sub(lambda m: f"[{m.group(2)}]" if m.group(2) else "[…]", str(sfld or ""))
-    t = re.sub(r"\[sound:[^\]]*\]", " ", t)
+    t = re.sub(r"\[sound:[^\]]*\]|\[\[type:[^\]]*\]\]", " ", t)
     t = re.sub(r"<[^>]*>", " ", t)
     t = " ".join(html.unescape(t).split())
     return t if len(t) <= FRONT_MAX else t[:FRONT_MAX - 1].rstrip() + "…"
@@ -112,7 +121,7 @@ def counts(col, deck):
 
 def _near(col, deck, out=()):
     rows = col.db.all(f"SELECT id, lapses, CASE WHEN odid THEN odid ELSE did END FROM cards WHERE id IN ({deck}) "
-                      f"AND queue >= 0 AND type IN (2, 3) AND lapses >= 1")
+                      f"AND queue = 2 AND type = 2 AND lapses >= 1")
     lim = _limits(col, {int(d) for _c, _l, d in rows}, {})
     return [int(c) for c, lap, d in rows if int(c) not in out and lim[int(d)][1] == 0 and next_is_leech(lap, lim[int(d)][0])]
 
@@ -156,7 +165,21 @@ def view(col, did, deck, since=None):
             c["due"] = max(0, int(due) - sday) if int(queue) in (2, 3) else 0
             near.append(c)
     gone, near = order(gone, near)
+    for c in gone[:FRONTS] + near[:FRONTS]:
+        c["front"] = question(col, c["cid"], c["front"])
     return {"gone": gone, "near": near, "n_gone": len(gone), "n_near": len(near)}
+
+
+def question(col, cid, fallback=""):
+    """3.9.2's audit: a card's question as Anki shows it, as one plain line
+    (front()'s rules): a reversed card's own front, a cloze's asked part
+    hidden. fallback (the sort field's) when the card can't be drawn."""
+    try:
+        q = col.get_card(int(cid)).render_output(reload=True, browser=True).question_text
+    except Exception:
+        return fallback
+    q = re.sub(r"<(script|style)\b.*?</\1\s*>", " ", str(q or ""), flags=re.S | re.I)
+    return front(q) or fallback
 
 
 # ---- the commands ----
@@ -176,16 +199,34 @@ def _merge(col, pos):
             pass
 
 
+def _untag(col, cids):
+    """The notes whose leech tag comes off with these cards: not one with
+    another card still a leech, out of reviews (3.9.2's audit: a reversed
+    note's other card stayed suspended and fell out of every count)."""
+    q = ",".join(str(int(c)) for c in cids)
+    nids = {int(n) for n in col.db.list(f"SELECT nid FROM cards WHERE id IN ({q})")}
+    if not nids:
+        return []
+    keep = {int(n) for n in col.db.list(f"SELECT nid FROM cards WHERE nid IN ({','.join(map(str, nids))}) "
+                                        f"AND id NOT IN ({q}) AND queue = -1 AND lapses > 0")}
+    return sorted(nids - keep)
+
+
 def bring_back(did, cids):
     """Unsuspended, the leech tag off, schedule kept: due again. One undo."""
     col = mw.col
     if not col or not cids:
         return
     cids = [int(c) for c in cids]
-    nids = sorted({int(n) for n in col.db.list(f"SELECT nid FROM cards WHERE id IN ({','.join(map(str, cids))})")})
+    cids = [int(c) for c in col.db.list(f"SELECT id FROM cards WHERE id IN ({','.join(map(str, cids))})")]
+    if not cids:
+        _done(did, None)  # gone since the view was drawn
+        return
+    nids = _untag(col, cids)
     pos = _undo_step(col, "Due Crew: bring back")
     try:
-        col.tags.bulk_remove(nids, "leech")
+        if nids:
+            col.tags.bulk_remove(nids, "leech")
         col.sched.unsuspend_cards(cids)
     except Exception:
         traceback.print_exc()
@@ -203,10 +244,13 @@ def fresh(did, cid):
         return
     nid = col.db.scalar("SELECT nid FROM cards WHERE id = ?", int(cid))
     if nid is None:
+        _done(did, None)
         return
+    nids = _untag(col, [int(cid)])
     pos = _undo_step(col, "Due Crew: learn it fresh")
     try:
-        col.tags.bulk_remove([int(nid)], "leech")
+        if nids:
+            col.tags.bulk_remove(nids, "leech")
         col.sched.unsuspend_cards([int(cid)])
         col.sched.schedule_cards_as_new([int(cid)], restore_position=True, reset_counts=True)
     except Exception:
@@ -224,13 +268,31 @@ def leave_out(did, cid):
         have = (have + [int(cid)])[-OUT_MAX:]
     pc["leech_out"] = have
     _pf()._psave(pc)
+    _done(did, "Left out. Put it back from the foot of this list.")
+
+
+def put_back_out(did, deck):
+    """Leave it out's way back: this deck's cards left out, back in the list."""
+    col = mw.col
+    pc = _pf()._pcfg()
+    have = [int(x) for x in pc.get("leech_out") or [] if str(x).isdigit()]
+    here = set(int(c) for c in col.db.list(f"SELECT id FROM cards WHERE id IN ({deck})")) if col else set()
+    pc["leech_out"] = [c for c in have if c not in here]
+    _pf()._psave(pc)
     _done(did, None)
+
+
+def n_out(col, deck):
+    have = _out()
+    if not have:
+        return 0
+    return len(set(int(c) for c in col.db.list(f"SELECT id FROM cards WHERE id IN ({deck})")) & have)
 
 
 def _done(did, said):
     _pf()._after_change()
     (_state.get("insights") or {}).pop(int(did), None)
-    _state.setdefault("leech_view", {})[int(did)] = None  # worked out again
+    _mine("leech_view")[int(did)] = None  # worked out again
     if said:
         tooltip(said)
     app.swap(cfg())
@@ -267,7 +329,11 @@ def ask(did, cid):
     from .cards import clean_note, flag
     who = c["knows"]
     lead = (", ".join(who[:-1]) + " and " + who[-1]) if len(who) > 1 else (who[0] if who else "")
-    card = col.get_card(int(cid))
+    try:
+        card = col.get_card(int(cid))
+    except Exception:
+        _done(did, None)
+        return
     sheets.ask_text("Ask your crew about this card",
                     f"Goes to everyone in your crew who has it.{' ' + lead + (' has' if len(who) == 1 else ' have') + ' it down.' if who else ''}",
                     lambda line: flag(card, clean_note(line) or ""), yes="Ask")
@@ -280,8 +346,8 @@ def browse(did):
 
 
 def open_view(did, on=True):
-    _state.setdefault("leech_open", {})[int(did)] = bool(on)
-    _state.setdefault("leech_view", {})[int(did)] = None
+    _mine("leech_open")[int(did)] = bool(on)
+    _mine("leech_view")[int(did)] = None
     app.swap(cfg())
 
 
@@ -290,16 +356,23 @@ def is_open(did):
 
 
 def current(col, did, deck, since=None):
-    """The open view, worked out once until a change (a command, or the deck
-    picked again)."""
+    """The open view, worked out again when the collection changed since
+    (a review, Browse, an undo, a card deleted: 3.9.2's audit) or my exam's
+    scope did; a command's own change too."""
     have = (_state.get("leech_view") or {}).get(int(did))
-    if have is None:
+    try:
+        mod = int(col.mod)
+    except Exception:
+        mod = None
+    if have is None or have.get("mod") != mod or have.get("since") != since:
         try:
             have = view(col, did, deck, since)
+            have["out"] = n_out(col, deck)
         except Exception:
             traceback.print_exc()
             have = {"gone": [], "near": [], "n_gone": 0, "n_near": 0}
-        _state.setdefault("leech_view", {})[int(did)] = have
+        have.update(mod=mod, since=since)
+        _mine("leech_view")[int(did)] = have
     return have
 
 
@@ -309,13 +382,17 @@ def on_message(did, act, arg):
     v = {}
     if mw.col and act not in ("open", "shut") and mw.col.decks.get(int(did), default=False):
         from .team_flow import _deck_sql
-        v = current(mw.col, did, _deck_sql(mw.col, int(did)))
+        have = (_state.get("leech_view") or {}).get(int(did)) or {}
+        v = current(mw.col, did, _deck_sql(mw.col, int(did)), have.get("since"))
     if act == "open":
         open_view(did)
     elif act == "shut":
         open_view(did, False)
     elif act == "browse":
         browse(did)
+    elif act == "unout" and mw.col:
+        from .team_flow import _deck_sql
+        put_back_out(did, _deck_sql(mw.col, int(did)))
     elif act == "back" and arg == "all":
         bring_back(did, [c["cid"] for c in v.get("gone") or []])
     elif act in ("back", "fresh", "edit", "out", "tip", "ask") and arg.isdigit() and _card_of(did, arg):

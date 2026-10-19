@@ -7817,16 +7817,21 @@ def test_plan_load_3781():
           and ("event.stopPropagation();pycmd('duecrew:planleft:pid1:a|" + KK + "')") in hp, hp)
 
 
-def _ahead_sample(exam_in=None, off=None, trust=(0.09, [0.05, 0.07, 0.09, 0.1, 0.11, 0.12]), name_days=True):
+def _ahead_sample(exam_in=None, off=None, trust=(0.09, [0.05, 0.07, 0.09, 0.1, 0.11, 0.12]), name_days=True, pause=None):
     """3.9.2: a Reviews ahead view as ahead_flow.deck_view makes one: 40 due today,
-    20 a day after, 20 new cards a day, a week of 100 a day behind."""
+    20 a day after, 20 new cards a day, a week of 100 a day behind. pause: the
+    pause I made, when off (default: "now", to the exam when there is one)."""
     from due_crew import ahead as A
     hab, extra = A.habits([])
     st = [(0, 1)] * 40 + [(d, 10) for d in range(1, 14) for _ in range(20)]
-    v = A.view(A.existing(st, hab, extra), A.GENERIC, [20.0] * 7, 0, 500, 300, [100] * 7, exam_in=exam_in, off=off)
+    if off and pause is None:
+        pause = {"kind": "now", "exam": exam_in is not None and exam_in >= 1, "from": off[0]}
+    v = A.view(A.existing(st, hab, extra), A.GENERIC, [20.0] * 7, 0, 500, 300, [100] * 7, exam_in=exam_in, off=off,
+               off_kind=(pause or {}).get("kind"))
     t0 = datetime.date(2026, 9, 1)
     v.update(did=10, today=t0.isoformat(), days=[(t0 + datetime.timedelta(days=k)).isoformat() for k in range(-7, A.H)],
-             exam=exam_in, done=30, own=True, secs=8.0, rate=140, unlocked=300, left=500, off=bool(off), trust=trust)
+             exam=exam_in, done=30, own=True, secs=8.0, rate=140, unlocked=300, left=500, off=bool(off), trust=trust,
+             pause=pause if off else None)
     return v
 
 
@@ -8141,7 +8146,7 @@ def test_insights_379():
         hero = set(w0.get("hero") or [])
         check("glue, no plan: my exam date aims the box over the whole deck",
               w0["aim"] == {"day": _day(3), "name": "Your exam", "in": 3, "scoped": False, "kind": "exam",
-                            "since": "", "since_why": "", "since_pick": ""}
+                            "since": "", "since_why": "", "since_pick": "", "checked": True}
               and set(range(210, 220)) <= hero and not hero & (set(range(200, 210)) | set(range(220, 230)) | set(range(500, 520))),
               (w0["aim"], sorted(hero)))
         check("glue, no plan: the deck's tags name the topics, the resource's part as the source",
@@ -14981,6 +14986,64 @@ def test_fridge_pip_whole_v392():
           and "margin: 9px" in slot, (fw, nm, slot))
 
 
+def test_fridge_dates_local_v392():
+    """3.9.2 (Sam: "some of the dates on polaroids are wrong"): a cheer's at
+    comes from the server in UTC, and the Polaroid showed its first ten
+    characters, the UTC date, so a doodle sent on an American evening was
+    dated the next day. It's this computer's day now."""
+    import time as _time
+    check("a day stays that day; anything else is no date",
+          board._short_day("2026-10-14") == "14 Oct" and board._short_day("") == "" and board._short_day("x") == ""
+          and board._short_day(None) == "" and board._short_day("2026-13-40T99:00:00Z") == "")
+    if not hasattr(_time, "tzset"):
+        return
+    old_tz = os.environ.get("TZ")
+    try:
+        os.environ["TZ"] = "America/New_York"
+        _time.tzset()
+        item = {"from": "dre", "name": "Dre", "at": "2026-10-15T01:30:00Z", "a": "", "n": "", "d": {"k": "sign", "t": "go"}}
+        fr = board.fridge_html([item], {}, {"sev": False})
+        check("9.30 pm in New York on the 14th is the 14th on its Polaroid, not the server's 15th",
+              board._short_day("2026-10-15T01:30:00Z") == "14 Oct" and "14 Oct" in fr and "15 Oct" not in fr, fr)
+        os.environ["TZ"] = "Asia/Tokyo"
+        _time.tzset()
+        check("and 10.30 am in Tokyo on the 15th is the 15th; a day with no clock is never moved",
+              board._short_day("2026-10-15T01:30:00Z") == "15 Oct" and board._short_day("2026-10-14T23:30:00+00:00") == "15 Oct"
+              and board._short_day("2026-10-14") == "14 Oct")
+    finally:
+        if old_tz is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = old_tz
+        _time.tzset()
+
+
+def test_fridge_dark_v392():
+    """3.9.2 (Sam: "also need dark mode for polaroids"): at night a Polaroid's
+    frame and photo go dark, a doodle's black ink reads light and each colour
+    takes its night shade, Pip and Undo the sender's night accent; as
+    Settings › Theme says (Match Anki: its night mode and the computer's)."""
+    draw = {"k": "draw", "s": [[2, 10, 10, 50, 50], [0, 60, 60, 90, 90], [2 * (2 + board.DOODLE_INKS.index("rose")), 5, 5, 9, 9]]}
+    item = {"from": "dre", "name": "Dre", "at": "2026-10-14T15:00:00Z", "a": "purple", "n": "", "d": draw}
+    people = {"dre": {"user_id": "dre", "name": "Dre", "look": [], "accent": "purple"}}
+    auto = board.fridge_html([item], people, {"sev": True})
+    dark = board.fridge_html([item], people, {"sev": True, "theme": "dark"})
+    light = board.fridge_html([item], people, {"sev": True, "theme": "light"})
+    pl, pd = board.accent_pair("purple")
+    rl, rd = board.accent_pair("rose")
+    check("dark: the frame, photo and words on tokens; the night set by Settings › Theme, Match Anki by its night mode",
+          "background: var(--fz-bg)" in board.FRIDGE_CSS and "background: var(--fz-photo)" in board.FRIDGE_CSS
+          and "#fff" not in board.FRIDGE_CSS and "#2b2d29" not in board.FRIDGE_CSS
+          and "--fz-bg: #33352f" in dark and "--fz-bg: #33352f" not in light and "--fz-bg: #fff" in light
+          and "prefers-color-scheme: dark" in auto and "body.nightMode #dc-fridge .fz" in auto)
+    check("dark: black ink reads light, each colour its night shade, Pip and Undo the sender's night accent",
+          f'stroke="{board.DOODLE_INK}"' in dark and f'path[stroke="{board.DOODLE_INK}"] {{ stroke: var(--fz-2b2d29, {board.DOODLE_INK}); }}' in dark
+          and "--fz-2b2d29: #e6e8e3;" in dark and f'stroke="{pl}"' in dark and f"--fz-{pl[1:]}: {pd};" in dark
+          and f'stroke="{rl}"' in dark and f"--fz-{rl[1:]}: {rd};" in dark
+          and f"--fa:{pl};--fd:{pd};" in dark and "--fz-acc: var(--fd)" in dark and "--sv-a: var(--fz-acc)" in board.FRIDGE_CSS)
+    check("a theme change draws it again (it's kept as last drawn)", dark != light != auto)
+
+
 def test_fridge_account_and_undo_v391():
     """3.9.1, before release: the fridge is this Anki profile's file, and
     more than one account can sign in on a profile, so it keeps whose
@@ -15111,6 +15174,20 @@ def test_native_emoji_picker_v391():
         appmod.board_eval, NE.catch, NE.drop = saved
     check("emojipicker from the Decks screen: here (no picker to open) the window is told to open its drawer",
           evals[0] == "window.dcCheerNoNative && window.dcCheerNoNative();", evals)
+    check("3.9.2's audit: a quick pick, a scroll or a resize puts Anki's box away (it sat where 'pick one' was)",
+          "b.addEventListener('click', function () { unpick(); choose(x); });" in js
+          and "window.addEventListener('resize', moved);" in js and "back.addEventListener('scroll', moved, true);" in js
+          and "window.removeEventListener('resize', moved);" in js and "back.removeEventListener('scroll', moved, true);" in js)
+    downs = []
+    NE.drop, keep_drop, keep_up = (lambda: downs.append(1)), NE.drop, appmod._decks[0]
+    try:
+        appmod.on_state_will_change("review", "deckBrowser")
+        appmod.on_set_content(None, DeckBrowser())
+        appmod.on_set_content(None, type("ReviewerBottomBar", (), {})())
+    finally:
+        NE.drop, appmod._decks[0] = keep_drop, keep_up
+    check("3.9.2's audit: and it goes with the page it sat on (another screen, a redraw), not with a bar's page",
+          len(downs) == 2, downs)
     check("3.9.2: with one, the box goes where the page's is, and the pick goes back to the page; a place it can't be is ignored",
           asked == [(412, 230, 72, 44), (0, 0, 64, 40), "off"] and evals[1] == NE.picked_js("🦋"), (asked, evals))
 
@@ -16750,13 +16827,27 @@ def test_reviews_ahead_392():
               pc["new_off"] == {"10": {"kind": "now", "at": _day(0), "exam": True}}
               and lim(10) == {"limit": 0, "today": sday} and lim(11) == {"limit": 0, "today": sday}
               and said[-1].startswith("No new cards in Spanish till your exam"), (pc.get("new_off"), store))
+        check("glue: the deck and its subdeck in one undo step (3.9.2's audit: a step a deck)",
+              col.undo_steps[-1][0] == "Due Crew: new cards stopped", col.undo_steps[-3:])
+        n_steps = len(col.undo_steps)
+        AF.apply_morning()
+        AF.on_state("overview", "deckBrowser")
+        check("glue: set again with nothing to change: no step, and no empty one", len(col.undo_steps) == n_steps)
+        check("glue: paused here and in the subdeck (a plan's Raise and Catch up, and Why, stand aside)",
+              AF.paused(col, 11) == (10, pc["new_off"]["10"]) and AF.paused(col, 10)[0] == 10 and F._paused(col, 11) == 10)
         _state["ahead_day"] = {}
         v3 = AF.deck_view(col, 10, TF._deck_sql(col, 10), _day(10))
-        check("glue: the view says it's on", v3["on"] == "now" and v3["off"] is True)
+        check("glue: the view says it's on, and what the pause is (its own words)",
+              v3["on"] == "now" and v3["off"] is True and v3["pause"] == {"kind": "now", "exam": True, "from": 0})
         col.sched.today = sday + 1
         store[10].pop("newLimitToday")
         store[11].pop("newLimitToday")
         check("glue: each morning sets it again while it runs", AF.apply_morning() and lim(10) == {"limit": 0, "today": sday + 1})
+        store[10].pop("newLimitToday")
+        store[11].pop("newLimitToday")
+        AF.on_state("review", "overview")
+        check("glue: and before I study, when the morning hasn't (not signed in, waiting for AnkiWeb)",
+              lim(10) == {"limit": 0, "today": sday + 1} and lim(11) == {"limit": 0, "today": sday + 1})
         dc._on_js(False, as_board("duecrew:insaheadon:10"), DeckBrowser())
         check("glue: Turn back on: the pause gone, today's 0 off", pc["new_off"] == {} and lim(10) is None and lim(11) is None, store)
         dc._on_js(False, as_board("duecrew:insaheadoff:10:week"), DeckBrowser())
@@ -16778,6 +16869,61 @@ def test_reviews_ahead_392():
     finally:
         (F._today, F._pcfg, F._psave, F._after_change, F.apply_catch, mw.col, AF.cfg, AF.app.swap, AF.tooltip, AF._bg,
          _state["ahead_day"], _state["ahead_line"], _state["ahead_asked"]) = saved
+
+
+def test_ahead_audit_v392():
+    """3.9.2's audit, before release: Stop new's words come from the pause I
+    made (its kind, its exam), not from whether there's an exam date now;
+    an exam today or passed is no exam ahead; one far off is named; a stop
+    that holds nothing back isn't offered; the track record caps a week I
+    took off; today's bar counts a card still in its steps once."""
+    from due_crew import ahead as A, board
+    keys = lambda e: [k for k, _s in A.choices(e, [20.0] * 7, 300, 500)]  # noqa: E731
+    check("choices: an exam today or passed is none ahead: stop now till I turn them back on",
+          keys(0) == ["pace", "now"] and dict(A.choices(0, [20.0] * 7, 300, 500))["now"] == (0, A.H)
+          and keys(-3) == ["pace", "now"] and keys(10) == ["pace", "week", "now"] and keys(5) == ["pace", "now"])
+    res = [([2.0] * 6, [300.0] * 6), ([100.0] * 6, [110.0] * 6)]
+    tr = A.trust(res)
+    check("track record: a week off is a whole miss, never 400% of one", tr and all(e <= 1.0 for e in tr[1]) and tr[0] <= 1.0, tr)
+    sample = _ahead_sample
+    exam_today = board._ins_ahead(10, sample(exam_in=0), "Spanish")
+    passed = board._ins_ahead(10, sample(exam_in=-4), "Spanish")
+    far = board._ins_ahead(10, sample(exam_in=60, off=(0, 60), pause={"kind": "now", "exam": True, "from": 0}), "Spanish")
+    later = board._ins_ahead(10, sample(exam_in=10, off=(0, 10), pause={"kind": "now", "exam": False, "from": 0}), "Spanish")
+    week = board._ins_ahead(10, sample(exam_in=10, off=(3, 10), pause={"kind": "week", "exam": True, "from": 3}), "Spanish")
+    check("board: an exam today: Stop new now, till I turn them back on (never 'to the exam')",
+          "to the exam" not in exam_today and "till you turn them back on" in exam_today, exam_today[-1800:])
+    check("board: an exam passed: the same", "to the exam" not in passed and "till your exam" not in passed, passed[-1800:])
+    check("board: paused to an exam six weeks off: its date named, one pill for it",
+          "till your exam, Sat 31 Oct" in far and far.count('data-k="now" role="radio"') == 1 and 'data-k="off"' not in far, far[-1800:])
+    check("board: a pause made with no exam, an exam added since: still till I turn them back on",
+          "No new cards in Spanish till you turn them back on" in later, later[-1500:])
+    check("board: the week before the exam, before it starts: from its first day",
+          "No new cards in Spanish from Fri 4 Sep till your exam, Fri 11 Sep" in week, week[-1500:])
+    fin = A.view(A.existing([(d, 10) for d in range(1, 14) for _ in range(20)], *A.habits([])), A.GENERIC, [0.0] * 7, 0, 0, 0,
+                 [100] * 7, exam_in=20)
+    check("a finished deck (no new cards left): no stop offered, it changes nothing", [w["key"] for w in fin["ways"]] == ["pace"],
+          [w["key"] for w in fin["ways"]])
+    check("words: one card, one new card", "1 new card waits" in board._ins_ahead(10, dict(sample(exam_in=10), ways=[
+        dict(w, held=1) if w["key"] == "now" else w for w in sample(exam_in=10)["ways"]]), "Spanish"))
+
+
+def test_builder_audit_v392():
+    """3.9.2's audit of the builder: Copy for next year copies the plan as
+    saved, so it waits for a save and takes its first date from the saved
+    plan as it is now (an unsaved earlier date made the shift 361 days and
+    the weekdays slipped); a full account says so; the reviews line's
+    busiest week is one its list shows, and a cut list says so."""
+    js = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "site", "public", "builder.js"), encoding="utf-8").read()
+    i = js.index("function nextYear()")
+    ny = js[i:js.index("Copy for next year\");", i)]
+    check("Copy for next year: a save first; the saved plan's first date, 364 days on; plans_full said",
+          "if (dirty) {" in ny and "Save your changes first" in ny and 'await api("GET", `/plans/${plan.id}`)' in ny
+          and "addDays(saved, 364)" in ny and '"plans_full"' in ny, ny[:600])
+    i = js.index("function reviewsNote()")
+    rn = js[i:js.index("function sugRows", i)]
+    check("the reviews line: its busiest week among the 16 it lists, a longer plan's list marked as cut",
+          "const ws = all.slice(0, 16);" in rn and "Reviews.peak(ws)" in rn and '" · …"' in rn, rn)
 
 
 def test_leeches_392():
@@ -16913,6 +17059,114 @@ def test_leeches_392():
         sheets.confirm, sheets.ask_text = sv_sheet
 
 
+def test_leeches_audit_v392():
+    """3.9.2's audit, before release: Anki's half of the threshold is
+    rounded up (at 5: 5, 8, 11); a note's other card still a leech keeps
+    the note's tag when one comes back; the view is worked out again when
+    the collection changed (a review, Browse, an undo); a card deleted since
+    is no error; Leave it out has its way back on the same screen; a
+    relearning card isn't a miss away (another miss adds no lapse)."""
+    import due_crew as dc
+    from aqt import mw
+    from aqt.deckbrowser import DeckBrowser
+    from due_crew import leech_flow as LF, plan_flow as F, team_flow as TF, board
+    from due_crew.app import _state
+    near_at = lambda fails: [n for n in range(0, 16) if LF.next_is_leech(n, fails)]  # noqa: E731
+    check("leech: a miss away at Anki's own steps: 5 → 4, 7, 10, 13; 7 → 6, 10, 14; 3 → 2, 4, 6; 8 → 7, 11, 15; 1 → every one",
+          near_at(5) == [4, 7, 10, 13] and near_at(7) == [6, 10, 14] and near_at(3)[:3] == [2, 4, 6]
+          and near_at(8) == [7, 11, 15] and near_at(1) == list(range(16)), (near_at(5), near_at(7), near_at(3)))
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    cut = fakes.day_cutoff_for(TODAY)
+    fakes.add_card(conn, 201, did=10, ctype=2, queue=-1, ivl=3, tags="Bio::Cells leech", lapses=8)
+    fakes.add_card(conn, 202, did=10, ctype=2, queue=-1, ivl=3, nid=201, ord_=1, lapses=9)  # its reversed card, a leech too
+    fakes.add_card(conn, 203, did=10, ctype=2, queue=-1, ivl=3, tags="Bio::Krebs leech", lapses=8)
+    fakes.add_card(conn, 204, did=10, ctype=3, queue=1, ivl=1, tags="Bio::Krebs", lapses=7)  # relearning: not a miss away
+    for cid in (201, 202, 203, 204):
+        fakes.add_review(conn, (cut - 3 * 86400) * 1000 + cid, ease=1, cid=cid)
+    col = fakes.FakeCol(conn, cut)
+    col.decks = fakes.FakeDecks({10: "Bio"})
+    col.mod = 1
+    deleted = set()
+
+    def get_card(cid):
+        if cid in deleted:
+            raise KeyError(cid)
+        return types.SimpleNamespace(id=cid, odid=0, did=10, note=lambda: types.SimpleNamespace(guid=f"guid{cid:06d}", fields=["x"]))
+    col.get_card = get_card
+    pc, said, asked = {}, [], []
+    saved = (F._pcfg, F._psave, F._after_change, mw.col, LF.tooltip, LF.app.swap, _state.get("leech_view"), _state.get("leech_open"))
+    from due_crew import sheets
+    sv_ask = sheets.ask_text
+    try:
+        F._pcfg, F._psave, F._after_change = (lambda: pc), (lambda d: None), (lambda: None)
+        mw.col = col
+        LF.tooltip = lambda m, **k: said.append(m)
+        LF.app.swap = lambda c=None: None
+        sheets.ask_text = lambda *a, **k: asked.append(a)
+        _state["leech_view"], _state["leech_open"] = {}, {}
+        deck = TF._deck_sql(col, 10)
+        tags = lambda nid: conn.execute("SELECT tags FROM notes WHERE id = ?", (nid,)).fetchone()[0]  # noqa: E731
+        q = lambda cid: conn.execute("SELECT queue FROM cards WHERE id = ?", (cid,)).fetchone()[0]  # noqa: E731
+        v = LF.current(col, 10, deck)
+        check("leech: the reversed card is a leech of its own; a relearning card isn't a miss away",
+              sorted(c["cid"] for c in v["gone"]) == [201, 202, 203] and v["near"] == [], v)
+        dc._on_js(False, as_board("duecrew:insleech:10:back:201"), DeckBrowser())
+        check("bring back one card of a note whose other card is still a leech: the note keeps its tag, the other stays listed",
+              q(201) == 2 and q(202) == -1 and "leech" in tags(201)
+              and [c["cid"] for c in LF.current(col, 10, deck)["gone"]] == [202, 203] or [c["cid"] for c in LF.current(col, 10, deck)["gone"]] == [203, 202],
+              (tags(201), LF.current(col, 10, deck)))
+        dc._on_js(False, as_board("duecrew:insleech:10:back:202"), DeckBrowser())
+        check("…and when the last of them comes back, the tag comes off", q(202) == 2 and "leech" not in tags(201))
+        # the collection changed under the view (a review suspended 204 as a leech): worked out again
+        LF.current(col, 10, deck)
+        conn.execute("UPDATE cards SET queue = -1, lapses = 8, type = 2 WHERE id = 204")
+        conn.execute("UPDATE notes SET tags = ' Bio::Krebs leech ' WHERE id = 204")
+        stale = [c["cid"] for c in LF.current(col, 10, deck)["gone"]]
+        col.mod = 2
+        fresh = [c["cid"] for c in LF.current(col, 10, deck)["gone"]]
+        check("the view is worked out again when the collection changed (col.mod), not before",
+              204 not in stale and 204 in fresh, (stale, fresh))
+        # a card deleted since the view was drawn (Edit opened Browse): Ask, Bring back do nothing, no error
+        deleted.add(203)
+        conn.execute("DELETE FROM cards WHERE id = 203")
+        n = len(col.undo_steps)
+        dc._on_js(False, as_board("duecrew:insleech:10:ask:203"), DeckBrowser())
+        LF.bring_back(10, [203])
+        check("a card deleted since: Ask and Bring back do nothing, no error, no empty undo step",
+              not asked and len(col.undo_steps) == n, col.undo_steps[n:])
+        col.mod = 3
+        dc._on_js(False, as_board("duecrew:insleech:10:out:204"), DeckBrowser())
+        v = LF.current(col, 10, deck)
+        html = board._ins_leeches(10, v)
+        check("Leave it out: out of the list, and its way back at the foot of it",
+              pc["leech_out"] == [204] and v["gone"] == [] and v["out"] == 1 and "1 left out of this list" in html
+              and "duecrew:insleech:10:unout:0" in html and "Put it back" in html and "foot of this list" in said[-1], html)
+        dc._on_js(False, as_board("duecrew:insleech:10:unout:0"), DeckBrowser())
+        v = LF.current(col, 10, deck)
+        check("Put it back: in the list again", pc["leech_out"] == [] and [c["cid"] for c in v["gone"]] == [204] and not v["out"])
+    finally:
+        F._pcfg, F._psave, F._after_change, mw.col, LF.tooltip, LF.app.swap, _state["leech_view"], _state["leech_open"] = saved
+        sheets.ask_text = sv_ask
+
+
+def test_exam_dates_audit_v392():
+    """3.9.2's audit: the next exam set on the last one's own day keeps it as
+    the last (the scope starts after it); an upcoming exam moved keeps the
+    scope I picked; a new exam starts from the default."""
+    from due_crew import settings_model as SM
+    today = datetime.date(2026, 10, 19)
+    got = SM.change(["setexam", "2026-12-01"], {"exam_date": "2026-10-19", "exam_since": "all"}, today)
+    check("set on the exam's own day: kept as the last, the scope back to the default",
+          got == {"exam_date": "2026-12-01", "exam_last": "2026-10-19", "exam_since": ""}, got)
+    got = SM.change(["setexam", "2026-11-03"], {"exam_date": "2026-11-02", "exam_since": "all"}, today)
+    check("an upcoming exam moved a day: the scope I picked stays", got == {"exam_date": "2026-11-03"}, got)
+    got = SM.change(["setexam", "2026-11-03"], {"exam_date": "", "exam_since": "2026-09-01"}, today)
+    check("a new exam where there was none: the default", got == {"exam_date": "2026-11-03", "exam_since": ""}, got)
+    got = SM.change(["setexam", "off"], {"exam_date": "2026-11-02", "exam_since": "all"}, today)
+    check("no exam: the scope goes with it", got == {"exam_date": "", "exam_since": ""}, got)
+
+
 def test_scope_map_and_words_392():
     """3.9.2 (Sam's picks C1-A, C2-A, F1-A): my exam covers the cards I
     started since my last exam (in the last 10 weeks; an exam is kept once
@@ -16935,20 +17189,32 @@ def test_scope_map_and_words_392():
     hd = board._insights_html(10, {"right": rd, "target": 90})
     check("right: the header says both, under the right %",
           "67% on the cards you started these 2 weeks (60 reviews) &middot; 90% on the rest" in hd, hd)
-    # ---- 3.9.2, from Sam's deck: a week's name from the map's own tag tree first ----
-    tg = {c: ["AK::#Series::Lolnotacop::Bugs", "AK::#FirstAid::03_Microbiology::02_Clinical_Bacteriology"] for c in range(30)}
-    tg.update({c: ["AK::#Series::Other", "AK::#FirstAid::01_Biochem"] for c in range(30, 90)})
-    wd = {"": 90}
+    # ---- 3.9.2, from Sam's deck: a week's name in the map's own topics, never the deck a card came from ----
+    tg = {c: ["Big::#Source_Decks::Deck_A::Bugs", "Big::#Systems::03_Microbiology::02_Clinical_Bacteriology"] for c in range(30)}
+    tg.update({c: ["Big::#Source_Decks::Deck_B", "Big::#Systems::01_Biochem"] for c in range(30, 90)})
+    tg.update({c: ["Big::#Source_Decks::Deck_C::Mixed", "Big::#Systems::" + ("04_Cardio", "05_Renal", "06_GI", "07_Neuro")[c % 4]
+                   + "::Topic_" + str(c)] for c in range(90, 130)})
+    tg.update({c: ["Big::#Source_Decks::Deck_D::Only_here"] for c in range(130, 150)})
+    tg.update({c: ["Cardio::Drugs::Beta_blockers"] for c in range(150, 160)})
+    wd = {"": 160}
     for c in tg:
         for t in tg[c]:
             parts = t.split("::")
             for i in range(1, len(parts) + 1):
                 k = "::".join(parts[:i]).lower()
                 wd[k] = wd.get(k, 0) + 1
-    check("week names: the map's own way when it has one ('Microbiology · Clinical Bacteriology', not 'Lolnotacop · Bugs')",
-          T.batch_name(list(range(30)), tg, wd, "ak::#firstaid") == "Microbiology · Clinical Bacteriology"
-          and T.batch_name(list(range(30)), tg, wd) in ("Lolnotacop · Bugs", "Microbiology · Clinical Bacteriology")
-          and T.batch_name(list(range(30)), tg, wd, "ak::#nothing") == T.batch_name(list(range(30)), tg, wd))
+    check("week names: a tag's way is its family up to its first resource mark; no mark, plain tags",
+          T.way_of("Big::#Systems::03_Microbiology") == "big::#systems" and T.way_of("Cardio::Drugs") == T.TAGS_WAY
+          and T.way_of("Big::^Systems::Cardio") == "big::^systems")
+    check("week names: in the map's own topics ('Microbiology · Clinical Bacteriology'), never the deck a card came from "
+          "(Sam: 'isn't helpful ... should be organized by topic')",
+          T.batch_name(list(range(30)), tg, wd, "big::#systems") == "Microbiology · Clinical Bacteriology"
+          and "Bugs" not in T.batch_name(list(range(30)), tg, wd, "big::#systems"))
+    check("week names: no one topic holds a third: its two biggest, by name; a week the map's topics don't reach: no name",
+          T.batch_name(list(range(90, 130)), tg, wd, "big::#systems") == "Cardio, Renal"
+          and T.batch_name(list(range(130, 150)), tg, wd, "big::#systems") == "")
+    check("week names: plain tags are the map's way too", T.batch_name(list(range(150, 160)), tg, wd, T.TAGS_WAY) == "Drugs · Beta blockers",
+          T.batch_name(list(range(150, 160)), tg, wd, T.TAGS_WAY))
     # ---- 3.9.2, from Sam's deck: the map's shade is the last time a card came due ----
     conn = sqlite3.connect(":memory:")
     fakes.make_collection(conn)
@@ -16960,14 +17226,20 @@ def test_scope_map_and_words_392():
     fakes.add_review(conn, at(9), ease=1, cid=2, rtype=1)
     fakes.add_review(conn, at(9) + 60000, ease=3, cid=2, rtype=2)  # its relearning step: not a review
     fakes.add_review(conn, at(8), ease=3, cid=2, rtype=1)          # back the next day and passed
-    fakes.add_review(conn, at(1), ease=3, cid=3, rtype=0)          # never due yet: its last answer
+    fakes.add_review(conn, at(1), ease=3, cid=3, rtype=0)          # never due yet: too soon to say
     fakes.add_review(conn, at(5), ease=3, cid=4, rtype=1)          # suspended: not in play
     fakes.add_card(conn, 5, did=10, ctype=2, queue=2)
     fakes.add_review(conn, at(60), ease=1, cid=5, rtype=1)         # not due these 4 weeks: its last review
     know, by = TF._know(fakes.FakeCol(conn, cut), "1,2,3,4,5", cut)
     check("map: each card's share of its reviews right these 4 weeks; a miss counts though it passed the next day; "
-          "a relearning step isn't a review; not due in them, its last review; FSRS or not",
-          know == {1: 1.0, 2: 0.5, 3: 1.0, 5: 0.0} and by == "right", (know, by))
+          "a relearning step isn't a review; not due in them, its last review; never due yet, too soon to say "
+          "(3.9.2's audit: its last answer was the pass that graduated it); FSRS or not",
+          know == {1: 1.0, 2: 0.5, 3: None, 5: 0.0} and by == "right", (know, by))
+    soon = T.started_tiles({c: 1 for c in range(30)}, {c: ["Big::#Systems::Cardio"] for c in range(30)},
+                           {c: None for c in range(30)}, set(range(30)), "2026-10-18")
+    sm = board._ins_map(10, soon + [{"key": "x", "name": "Older", "n": 5, "started": 5, "know": 80}], "right")
+    check("map: a week of cards started, none reviewed yet: started, and too soon to say (not 100%, not new)",
+          soon[0]["started"] == 30 and soon[0]["know"] is None and "too soon<small>" in sm and "none reviewed yet" in sm, sm)
     # ---- the scope, pure ----
     check("scope: since the day after my last exam, in the last 10 weeks; older, or none, the whole deck",
           T.scope("2026-11-02", "2026-09-04", "", "2026-10-18") == ("2026-09-05", "last")
@@ -17001,28 +17273,45 @@ def test_scope_map_and_words_392():
           "duecrew:setscope:auto" in board._ins_scope(dict(aim, since_why="set"))
           and "Whole deck" in board._ins_scope(dict(aim, since="", since_why="", since_pick="all"))
           and "Since your last exam" in board._ins_scope(dict(aim, since="", since_why="", since_pick="all")))
-    none = board._insights_html(10, {"aim": dict(aim, day="2026-11-02"), "hero": []})
-    check("board: my exam with nothing at risk still says what it covers, with its Change",
-          "Your exam, Mon 2 Nov: nothing at risk" in none and "duecrew:setscope:" in none, none)
+    none = board._insights_html(10, {"aim": dict(aim, day="2026-11-02", checked=True), "hero": []})
+    unseen = board._insights_html(10, {"aim": dict(aim, day="2026-11-02"), "hero": []})
+    check("board: my exam with nothing at risk still says what it covers, with its Change; "
+          "without FSRS (nothing looked at) it never says nothing's at risk (3.9.2's audit)",
+          "Your exam, Mon 2 Nov: nothing at risk" in none and "duecrew:setscope:" in none
+          and "nothing at risk" not in unseen and "Your exam, Mon 2 Nov " in unseen and "duecrew:setscope:" in unseen, none)
     # ---- the map by when I started them, pure ----
     tags = {c: ["Big::#Systems::" + ("Cardio::Pharm" if c < 40 else "Renal::Physio")] for c in range(100)}
     first = {c: (1 if c < 40 else 9 if c < 80 else 120) for c in range(100)}
     know = {c: (0.95 if c < 40 else 0.6) for c in range(100)}
     tiles = T.started_tiles(first, tags, know, set(range(110)), "2026-10-18")
-    check("map by start: a week a tile, named by its dates and what it was; before them one; not started one",
+    check("map by start: a week a tile, named by its dates and what it was; the last 8 weeks I started cards in, "
+          "however long ago (3.9.2's audit); not started one",
           [(t["key"], t["name"], t["n"], t["know"]) for t in tiles]
           == [("2026-10-12", "This week · Cardio · Pharm", 40, 95), ("2026-10-05", "Last week · Renal · Physio", 40, 60),
-              ("before", "Before 24 Aug · Renal · Physio", 20, 60), ("new", "Not started", 10, None)]
+              ("2026-06-15", "15–21 Jun · Renal · Physio", 20, 60), ("new", "Not started", 10, None)]
           and tiles[0]["find"] == {"cids": list(range(40))}, [(t["key"], t["name"], t["n"], t["know"]) for t in tiles])
+    many = T.started_tiles({c: 7 * (c // 10) for c in range(100)}, tags, know, set(range(100)), "2026-10-18")
+    check("map by start: more than 8 weeks with cards: 8 tiles, the rest before the oldest of them",
+          len(many) == 9 and many[-1]["key"] == "before" and many[-1]["name"].startswith("Before 24 Aug") and many[-1]["n"] == 20,
+          [(t["key"], t["name"], t["n"]) for t in many])
+    mixed = {c: ["Big::#Systems::" + ("Cardio::Pharm" if c % 2 else "Renal::Physio"), "Big::#Source_Decks::Deck_A::X" + str(c % 2)]
+             for c in range(200)}
+    wk = T.started_tiles({c: (1 if c < 100 else 30) for c in range(200)}, mixed, {c: 0.9 for c in range(200)},
+                         set(range(200)), "2026-10-18", "big::#systems")[0]
+    kids = T.expand(wk, {c: 0.9 for c in range(200)})
+    check("map by start: a week opens into the map's own topics, and each finds that week's cards alone "
+          "(3.9.2's audit: a topic in it opened every card of the deck with its tag)",
+          sorted(k["name"] for k in kids) == ["Cardio", "Renal"] and all(set(k["find"]["cids"]) <= set(range(100)) for k in kids)
+          and sum(len(k["find"]["cids"]) for k in kids) == 100, [(k["name"], k["find"]) for k in kids])
     first2 = {c: 20 + (c % 3) for c in range(60)}
-    longw = {c: ["Big::#Orig::Zanki_Reproductive::Reproductive_Physiology_and_Embryology_Lecture_Notes"] if c < 40
-             else ["Big::#Orig::Zanki_Biochemistry::Molecular"] for c in range(80)}
+    longw = {c: ["Big::#Notes::Reproductive_Notes::Reproductive_Physiology_and_Embryology_Lecture_Notes"] if c < 40
+             else ["Big::#Notes::Biochemistry_Notes::Molecular"] for c in range(80)}
     lt = T.started_tiles({c: 30 if c < 40 else 2 for c in range(80)}, longw, {c: 0.9 for c in range(80)}, set(range(80)),
                          "2026-10-18")[-1]["name"]
     check("map by start: a long name ends on a whole word, with an ellipsis (Sam's 'Reproductive Physiolo')",
           lt.endswith("…") and len(lt) <= T.NAME_MAX and not lt[:-1].endswith((" ", ",", "·"))
-          and T.clip("Before 24 Aug · Zanki Biochemistry · Molecular, Cellular, and Biochemical Basis") ==
-          "Before 24 Aug · Zanki Biochemistry · Molecular, Cellular…" and T.clip("short") == "short", lt)
+          and T.clip("Before 24 Aug · Biochemistry Notes · Molecular, Cellular, and Biochemical Basis") ==
+          "Before 24 Aug · Biochemistry Notes · Molecular, Cellular…" and T.clip("short") == "short", lt)
     check("map by start: a week two weeks back by its days", T.started_tiles(first2, {}, {}, set(range(60)), "2026-10-18")[0]["name"]
           == "28 Sep–4 Oct", T.started_tiles(first2, {}, {}, set(range(60)), "2026-10-18")[0]["name"])
     mixed = {c: ["Big::Cardio::Pharm" if c % 2 else "Big::Renal::Physio"] for c in range(40)}

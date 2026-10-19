@@ -67,11 +67,13 @@ def change(parts, cfg, today=None):
     if cmd == "setexam":
         # 3.9.2 (Sam's pick C1-A): an exam that's passed is kept (exam_last) when another takes its
         # place, so the next one's scope can start after it; a new exam's scope starts from the default
+        # (3.9.2's audit: set on the exam's own day, it's kept too; an upcoming exam moved keeps its scope)
         old = _day(cfg.get("exam_date"))
+        passed = bool(old) and old <= today.isoformat()
         keep = {}
-        if old and old < today.isoformat() and old > (_day(cfg.get("exam_last")) or ""):
+        if passed and old > (_day(cfg.get("exam_last")) or ""):
             keep["exam_last"] = old
-        if cfg.get("exam_since"):
+        if cfg.get("exam_since") and (passed or not old or arg == "off"):
             keep["exam_since"] = ""
         if arg == "off":
             return {"exam_date": "", **keep}

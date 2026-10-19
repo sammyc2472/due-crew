@@ -238,7 +238,8 @@ def choices(exam_in, rate, unlocked, left, h=H):
     run out within two weeks at my pace."""
     out = [("pace", None)]
     weekly = sum(rate)
-    if exam_in is not None and 0 <= exam_in < h:
+    # 3.9.2's audit: an exam today is no exam ahead (a stop "to the exam" would end tonight)
+    if exam_in is not None and 1 <= exam_in < h:
         if exam_in > STOP_BEFORE:
             out.append(("week", (exam_in - STOP_BEFORE, exam_in)))
         out.append(("now", (0, exam_in)))
@@ -326,7 +327,8 @@ def trust(results):
     if len(results) < 2:
         return None
     weeks = len(results[0][0])
-    by = [sum(abs(f[w] - a[w]) / max(1.0, a[w]) for a, f in results) / len(results) for w in range(weeks)]
+    # 3.9.2's audit: a week I took off (after a block exam) is a whole miss, not 400% of one
+    by = [sum(min(1.0, abs(f[w] - a[w]) / max(1.0, a[w])) for a, f in results) / len(results) for w in range(weeks)]
     return sum(by) / weeks, by
 
 
@@ -405,14 +407,17 @@ def stop_of(off, exam_in, today_iso, h=H):
 
 
 def view(started, cv, rate, wd0, left, unlocked, past, exam_in=None, off=None,
-         new_today=0, plan=None, pool=None):
+         new_today=0, plan=None, pool=None, off_kind=None):
     """What Reviews ahead draws, worked out: {past, ways, on, climb}.
     started: existing()'s; cv: the curve (mine or GENERIC); rate: pace();
     left/unlocked: the deck's new cards, all / unlocked; past: the last
     seven days' cards; off: stop_of()'s (the pause in effect), else None.
     Each way {key, stop, cards, new, answers, starts; a stop's held, the new
     cards it holds back at my pace, and plan_held, a plan's dates' of them}; on: the one in
-    effect (a pause's, else "pace"); climb: the board's line, on it."""
+    effect (a pause's, else "pace"); climb: the board's line, on it. off_kind:
+    the pause's own kind, so it's that way's pill (3.9.2's audit: a pause
+    to an exam six weeks out made a second one). A stop that holds nothing
+    back isn't offered (a finished deck)."""
     ways, paced = [], None
     for key, stop in choices(exam_in, rate, unlocked, left):
         st = starts(rate, wd0, unlocked if key == "unlocked" else left, stop=stop,
@@ -421,7 +426,7 @@ def view(started, cv, rate, wd0, left, unlocked, past, exam_in=None, off=None,
         ways.append(dict(with_new(started, cv, st), key=key, stop=stop, starts=sum(st)))
     on = "pace"
     if off:
-        hit = next((w for w in ways if w["stop"] and tuple(w["stop"]) == tuple(off)), None)
+        hit = next((w for w in ways if w["stop"] and (w["key"] == off_kind or tuple(w["stop"]) == tuple(off))), None)
         if hit is None:
             st = starts(rate, wd0, left, stop=off, today_done=new_today, plan=plan, pool=pool)
             hit = dict(with_new(started, cv, st), key="off", stop=off, starts=sum(st))
@@ -432,5 +437,6 @@ def view(started, cv, rate, wd0, left, unlocked, past, exam_in=None, off=None,
             a, b = int(w["stop"][0]), min(int(w["stop"][1]), len(paced) - 1)
             w["held"] = sum(paced[a:b + 1])
             w["plan_held"] = sum(float((plan or {}).get(d) or 0) for d in range(a, b + 1))
+    ways = [w for w in ways if w["key"] in ("pace", on) or not w.get("stop") or w.get("held", 0) >= 1]
     cur = next(w for w in ways if w["key"] == on)
     return {"past": list(past), "ways": ways, "on": on, "climb": climb(past, cur["cards"])}

@@ -1522,12 +1522,13 @@ async function builder(id) {
   /** 3.9.2 (Sam's pick R3-A): what following the plan asks later, in reviews:
    *  its busiest week, then each week's, a typical card's (Reviews). */
   function reviewsNote() {
-    const ws = Reviews.weeks(workMap());
+    const all = Reviews.weeks(workMap());
+    const ws = all.slice(0, 16);  // 3.9.2's audit: the headline's week is one the list shows
     const p = Reviews.peak(ws);
     if (!p || p.n < 5) return null;
     return h("div", { class: "rnote", title: "A typical card's reviews over its first six weeks, new cards aside. A follower's own will differ." },
       h("span", {}, "About ", h("b", {}, Reviews.about(p.n)), ` reviews a day by week ${p.wk}`),
-      h("span", { class: "muted" }, "Week by week: " + ws.slice(0, 16).map((w) => Reviews.about(w.n)).join(" · ")));
+      h("span", { class: "muted" }, "Week by week: " + ws.map((w) => Reviews.about(w.n)).join(" · ") + (all.length > ws.length ? " · …" : "")));
   }
 
   /** 3.8.1 (plans, rethought): a named date's suggestions: the deck's tags its
@@ -2884,16 +2885,26 @@ async function builder(id) {
   /** 3.9.2 (Sam's pick C3-A): next year's class gets this plan: a copy of
    *  my own with every date 52 weeks on, so each keeps its weekday. */
   function nextYear() {
-    const first = [...doc.units.map((u) => u.opens), ...(doc.events || []).map((e) => e.day)].filter(Boolean).sort()[0];
+    const firstOf = (d) => [...(d.units || []).map((u) => u.opens), ...(d.events || []).map((e) => e.day)].filter(Boolean).sort()[0];
+    const first = firstOf(doc);
     if (!first) return null;
-    const start = addDays(first, 364);
     const st = h("span", { class: "status small", role: "status" });
-    const b = h("button", { class: "linkish", title: `Its first date on ${pretty(start)}, every date 52 weeks on`, onclick: async () => {
+    const b = h("button", { class: "linkish", title: `Its first date on ${pretty(addDays(first, 364))}, every date 52 weeks on`, onclick: async () => {
+      // 3.9.2's audit: the copy is made of the plan as saved, so it waits for a save, and its first
+      // date comes from the saved plan as it is now (a co-author's save since), 364 days on: weekdays kept
+      if (dirty) { st.className = "status small bad"; st.textContent = "Save your changes first, so they're in the copy."; return; }
       b.disabled = true; st.className = "status small"; st.textContent = "Copying…";
-      try { const mine = await api("POST", `/plans/${plan.id}/copy`, { start }); go(`/plans/${mine.id}`); }
-      catch (err) {
+      try {
+        const saved = firstOf((await api("GET", `/plans/${plan.id}`)).doc || {});
+        if (!saved) throw new Error("no dates");
+        const mine = await api("POST", `/plans/${plan.id}/copy`, { start: addDays(saved, 364) });
+        go(`/plans/${mine.id}`);
+      } catch (err) {
         b.disabled = false; st.className = "status small bad";
-        st.textContent = err.body?.error === "too_many_plans" ? "You have 50 plans. Delete one first." : err.status === 429 ? "That's a lot of new plans. Try again in an hour." : "That didn't work. Try again.";
+        const code = err.body?.error;
+        st.textContent = code === "too_many_plans" ? "You have 50 plans. Delete one first."
+          : code === "plans_full" ? "Your plans hold as much as one account can. Delete one first."
+          : err.status === 429 ? "That's a lot of new plans. Try again in an hour." : "That didn't work. Try again.";
       }
     } }, "Copy for next year");
     return h("div", { class: "row" }, b, st);

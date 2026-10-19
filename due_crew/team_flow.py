@@ -630,7 +630,8 @@ def _work_out(did, pid=None, exam=""):
     else:
         deck = _deck_sql(col, did)  # a big shared deck's 30,000 ids stay out of the SQL
     since = lambda days: (cutoff - days * 86400) * 1000  # noqa: E731
-    out = {"target": int(round(100 * target)), "did": did, "deck_name": str(col.decks.name(did) or "").split("::")[-1]}
+    out = {"target": int(round(100 * target)), "did": did, "deck_name": str(col.decks.name(did) or "").split("::")[-1],
+           "fsrs_on": bool(_fsrs(col))}  # 3.9.2's audit: Anki aims for a retention only with FSRS on
 
     # the header: right on this deck's reviews, first answer of each card each day
     # 3.9.2: split by the cards I started in these two weeks, when the mix shifted (T.right_split)
@@ -665,11 +666,12 @@ def _work_out(did, pid=None, exam=""):
         first_day, why = T.scope(exam, c.get("exam_last"), c.get("exam_since"), today)
         out["aim"].update(since=first_day or "", since_why=why, since_pick=str(c.get("exam_since") or ""))
         if first_day:
-            got = col.db.list(f"SELECT cid FROM revlog WHERE cid IN ({deck}) GROUP BY cid HAVING min(id) >= ?",
+            got = col.db.list(f"SELECT cid FROM revlog WHERE ease > 0 AND cid IN ({deck}) GROUP BY cid HAVING min(id) >= ?",
                               _since_ms(first_day, cutoff, today))
             aimed = _in(got)
             out["aim"]["since_n"] = len(got)
     if _fsrs(col) and aimed and sday:
+        out["aim"]["checked"] = True
         last = dict(col.db.all(f"SELECT cid, max(id) FROM revlog WHERE cid IN ({aimed}) GROUP BY cid"))
         mem_of = {}
         for cid, ctype, queue, due, ivl, data in col.db.all(
@@ -797,9 +799,11 @@ KNOW_DAYS = 28  # the map's window: a card's reviews these 4 weeks
 
 
 def _know(col, deck, cutoff):
-    """({cid: 0..1}, "right"): each started card of the deck, the share of
+    """({cid: 0..1 or None}, "right"): each started card of the deck, the share of
     its reviews these KNOW_DAYS days it got right (each day's first); one
-    not due in them, its last review; one never due yet, its last answer.
+    not due in them, its last review; one never due yet, None (3.9.2's
+    audit: its last answer is the pass that graduated it, so the newest
+    cards read best known; the map says "too soon").
     3.9.2 (Sam's deck): FSRS's recall today read 93 to 96% on every tile
     while he passed 77% of his reviews (it says how lately a card was seen
     more than what's known), and the last answer read a relearning step
@@ -822,9 +826,9 @@ def _know(col, deck, cutoff):
     out = {c: p / float(n) for c, (p, n) in win.items()}
     rest = [c for c in live if c not in out]
     if rest:
-        pick = [int(rev or last) for cid, last, rev in col.db.all(
-            f"SELECT cid, max(id), max(CASE WHEN type = 1 THEN id END) FROM revlog "
-            f"WHERE ease > 0 AND cid IN ({_in(rest)}) GROUP BY cid")]
+        out.update({c: None for c in rest})
+        pick = [int(rev) for _cid, rev in col.db.all(
+            f"SELECT cid, max(id) FROM revlog WHERE type = 1 AND ease > 0 AND cid IN ({_in(rest)}) GROUP BY cid")]
         if pick:
             out.update({int(c): 1.0 if int(e) > 1 else 0.0
                         for c, e in col.db.all(f"SELECT cid, ease FROM revlog WHERE id IN ({_in(pick)})")})
@@ -906,8 +910,10 @@ def _map(col, did, deck, cutoff):
     if pick == T.START_WAY:
         first = {int(c): (cutoff - 1 - int(t) // 1000) // 86400 for c, t in col.db.all(
             f"SELECT cid, min(id) FROM revlog WHERE ease > 0 AND cid IN ({deck}) GROUP BY cid")}
-        own = next((w["key"] for w in ways if w.get("on") and not str(w["key"]).startswith("~")), None) or next(
-            (w["key"] for w in ways if not str(w["key"]).startswith("~")), None)
+        # named and opened by the map's own topics: its tag way that's on, else its best (3.9.2's audit:
+        # plain tags are a way too; subdecks, a plan's tags and this one aren't tags of the deck's own)
+        tag_ways = [w for w in ways if w["key"] == T.TAGS_WAY or not str(w["key"]).startswith("~")]
+        own = next((w["key"] for w in tag_ways if w.get("on")), None) or (tag_ways[0]["key"] if tag_ways else None)
         start = T.started_tiles(first, tags_of, know, active, _plans_flow()._today(), own)
         if len(start) >= 2:
             ways = [dict(w, on=False) for w in ways]

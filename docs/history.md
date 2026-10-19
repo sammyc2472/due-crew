@@ -2825,3 +2825,58 @@ every release that changes how something works.
   close or two minutes put it away. And Pip on a fridge Polaroid's caption
   is no longer clipped (Sam: "pips get cutoff on the polaroids"): the line
   never clips, only the name shortens, and Pip's slot has its head's room.
+- 3.9.2, the Polaroids (Sam: "some of the dates on polaroids are wrong",
+  "also need dark mode for polaroids"). A cheer's `at` comes from the server
+  in UTC and the Polaroid showed its first ten characters, the UTC date, so
+  a doodle sent on an American evening was dated the next day:
+  `board._short_day` reads a moment on this computer's clock now (a plain
+  day stays that day), and the quiet fold's month too. At night a
+  Polaroid's frame and photo go dark, as Settings › Theme says (Match Anki:
+  its night mode and the computer's): its colours are tokens on each one
+  (`FRIDGE_LIGHT`, `FRIDGE_DARK`), a doodle's black ink reads light and each
+  colour takes its night shade (`FRIDGE_INKS`, the board's own), and Pip and
+  Undo the sender's night accent (`--fd` beside `--fa`). A theme change
+  draws the fridge again (it's kept as last drawn).
+- 3.9.2, the map by when I started them, by topic (Sam, on its week names:
+  "the organization from when you started something tag name by original
+  deck isn't helpful ... should be organized by topic"). A week is named by
+  the map's own way only (`team.way_of`: a tag's family up to its first
+  resource mark, or plain tags), the deepest of its topics a third of the
+  week shares, else its two biggest ("21–27 Sep · Renal, GI"), else just its
+  dates; never by the deck a card first came from, nor the way's own root.
+  It opens into those topics, and each Browses that week's cards alone (the
+  audit: a topic in it opened every card of the deck with its tag). The
+  tiles are the last 8 weeks I started cards in, however long ago (a deck
+  finished months back had none in 8 calendar weeks, one tile, and the pick
+  did nothing). A card started but never reviewed is "too soon" on the map,
+  not 100% (its last answer was the pass that graduated it, so the newest
+  week read best known), on the picture card and its text too.
+- 3.9.2, the release audit (Sam: "everything we ship must actually work, and
+  shouldn't be something we've not got right yet"): four reviews of the
+  release, Stop new and the leech buttons run on Anki's own engine
+  (`tools/real_anki.py`'s `check_392`), and what they found fixed:
+  Stop new says what the pause I made does (`pause` on the view: its kind,
+  its exam; "to the exam" only for an exam ahead, named at any distance; the
+  week before it, from its first day), one undo step for a deck and its
+  subdecks (and none when nothing changes), set before I study too
+  (`ahead_flow.on_state`: not signed in, or the morning waiting for
+  AnkiWeb), a stop that holds nothing back isn't offered, today's bar
+  counts a card still in its steps once, the track record caps a week I took
+  off (never "within 411%"), and a plan's Raise, Catch up and Why stand aside
+  for it (`ahead_flow.paused`: the plan card says new cards are stopped, with
+  Turn them back on). Leeches: a miss away at Anki's own steps (half the
+  threshold rounded up: at 5, 8, 11), a relearning card isn't one, a note
+  keeps its leech tag while another of its cards is still out, the view is
+  worked out again when the collection changed (`col.mod`), a card deleted
+  since is no error, each card's front is its own question as Anki draws it
+  (a reversed card's, a cloze's asked part hidden), and Leave it out has its
+  way back at the foot of the list. The exam: "nothing at risk" only when
+  FSRS looked (it's FSRS's), "Anki aims for 90%" only with FSRS on, the next
+  exam set on the last one's day keeps it as the last, an upcoming exam
+  moved keeps its scope, and a start is a real answer. A profile switch
+  empties the views kept by deck id (the Default deck is 1 everywhere). The
+  Cheer window's box over "pick one" goes with a quick pick, a scroll, a
+  resize or a new page. The builder: Copy for next year copies the plan as
+  saved (a save first; its first date from the saved plan, 364 days on), says
+  a full account, and the reviews line's busiest week is one its list shows.
+  No third-party deck or video names in code or tests (CLAUDE.md).

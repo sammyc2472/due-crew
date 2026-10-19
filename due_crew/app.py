@@ -171,6 +171,8 @@ pages = [0]
 
 def on_set_content(_content=None, context=None, *_args):
     pages[0] += 1
+    if not _a_bar(context):
+        _drop_emoji_box()
     if _veiled[0] and not _a_bar(context):
         veil(False)  # the main view's new page has no window open over it
 
@@ -226,7 +228,18 @@ def veil(on):
 _decks = [False]
 
 
+def _drop_emoji_box():
+    """3.9.2's audit: the Cheer window's box over "pick one" (native_emoji) goes
+    with the page it sat on (a redraw, another screen, a profile switch)."""
+    try:
+        from .native_emoji import drop
+        drop()
+    except Exception:
+        pass
+
+
 def on_state_will_change(*_args):
+    _drop_emoji_box()
     _decks[0] = False
     if _veiled[0]:
         veil(False)
@@ -299,7 +312,9 @@ def _reset_runtime(keep_sync=False):
                   team_bingo_open=None, insights={}, you_decks=None,
                   closet_open=None, closet_new=None,  # 3.8.2: Pip's closet, and what just came for it
                   wrapped_open=None,  # 3.9.0: your Wrapped, in the board's place
-                  two_tried=False)  # 3.9.1
+                  two_tried=False,  # 3.9.1
+                  # 3.9.2's audit: keyed by deck id, and the Default deck is 1 in every collection
+                  leech_view={}, leech_open={}, ahead_day={}, ahead_line=None, ahead_asked=set())
     _pending_cheers.clear()
 
 

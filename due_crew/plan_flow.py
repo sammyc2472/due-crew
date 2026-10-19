@@ -1975,6 +1975,9 @@ def raise_limit(pid):
     if not st or not mw.col or not want:
         return
     col, did = mw.col, int(st["deck_id"])
+    if _paused(col, did):
+        tooltip("New cards are stopped in this deck. Turn them back on in Insights first.")
+        return
     was = new_limit(col, did)
     pos = None
     try:
@@ -2025,6 +2028,7 @@ def sessions(col, plan_list, state, today, idxs=None):
                          _answered(col, st.get("checks") or {}))
         if v is not None:
             v["limit"] = new_limit(col, st["deck_id"])  # 3.3, C1
+            v["paused_new"] = _paused(col, st["deck_id"])  # 3.9.2's audit: Stop new, not a low limit
             v["fell_back"] = len(idx.fell_back)          # 3.3, C5
         out[p["id"]] = v
     return out
@@ -2993,6 +2997,19 @@ def set_shift(pid):
     _bg(lambda: cl.set_days(pid, shift=n), done)
 
 
+def _paused(col, did):
+    """3.9.2's audit: the deck whose Stop new cards (Insights) runs today over
+    this one, or None. Raise and Catch up stand aside for it: they'd undo it
+    till the next morning set it again."""
+    try:
+        from . import ahead_flow
+        got = ahead_flow.paused(col, did)
+    except Exception:
+        traceback.print_exc()
+        return None
+    return got[0] if got else None
+
+
 def _base_limit(col, did):
     """This deck's own new cards a day, not counting a today-only one."""
     try:
@@ -3015,6 +3032,8 @@ def apply_catch():
         c = st.get("catch") or {}
         if not c or str(c.get("until") or "") < today or not _deck_ok(col, st.get("deck_id")):
             continue
+        if _paused(col, st["deck_id"]):
+            continue  # Stop new runs on it today
         base = _base_limit(col, st["deck_id"])
         if base is None:
             continue
@@ -3054,6 +3073,9 @@ def start_catch(pid, days, extra):
     st = state.get(pid)
     if not st:
         return
+    if mw.col and _paused(mw.col, st.get("deck_id")):
+        tooltip("New cards are stopped in this deck. Turn them back on in Insights first.")
+        return
     st["catch"] = {"until": S.iso(S.d(_today()) + datetime.timedelta(days=days - 1)), "extra": int(extra)}
     c["plans"] = state
     _psave(c)
@@ -3072,7 +3094,7 @@ def stop_catch(pid):
     st.pop("catch", None)
     c["plans"] = state
     _psave(c)
-    if mw.col and _deck_ok(mw.col, st.get("deck_id")):
+    if mw.col and _deck_ok(mw.col, st.get("deck_id")) and not _paused(mw.col, st.get("deck_id")):
         try:
             deck = mw.col.decks.get(int(st["deck_id"]))
             deck.pop("newLimitToday", None)

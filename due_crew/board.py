@@ -166,7 +166,7 @@ def _quiet_fold(rows):
     who = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1] if len(names) <= 3 else f"{', '.join(names[:2])} and {len(names) - 2} more"
     newest = max((str(r.get("last_updated") or "") for r in rows), default="")
     try:
-        since = datetime.fromisoformat(newest.replace("Z", "+00:00")).strftime("%b")
+        since = datetime.fromisoformat(newest.replace("Z", "+00:00")).astimezone().strftime("%b")  # this computer's month
     except Exception:
         since = ""
     verb = "hasn't" if len(rows) == 1 else "haven't"
@@ -2085,6 +2085,19 @@ def _ins_r(x):
     return f"{r(x):,}"
 
 
+def _ahead_r(x):
+    from .ahead import r
+    return r(x)
+
+
+def _day_after(iso, k):
+    """The day k days after iso (a day), "" for anything else."""
+    try:
+        return (_dt.date.fromisoformat(str(iso)) + _dt.timedelta(days=int(k))).isoformat()
+    except (TypeError, ValueError):
+        return ""
+
+
 def _ins_dname(iso, long=False):
     try:
         d = _dt.date.fromisoformat(str(iso))
@@ -2125,7 +2138,7 @@ def _ins_ahead_svg(did, a, w, uid):
 
     def band(v, wk):
         e = by[min(wk, len(by) - 1)] if by else None
-        return f" ({_ins_r(v * (1 - e))}&ndash;{_ins_r(v * (1 + e))})" if e and v >= 10 else ""
+        return f" ({_ins_r(max(0.0, v * (1 - e)))}&ndash;{_ins_r(v * (1 + e))})" if e and v >= 10 else ""
 
     def mins(ans):
         return f" &middot; about {_hm(max(1, int(round(ans * secs / 60.0))))}" if secs and ans else ""
@@ -2135,7 +2148,7 @@ def _ins_ahead_svg(did, a, w, uid):
     for i, n in enumerate(past):
         x = i * slot
         wd, dn = _ins_day(days[i])
-        out += (f'<g><title>{_ins_dname(days[i])}: {int(n):,} cards</title><rect class="hit" x="{x:.1f}" y="-20" width="{slot:.1f}" height="{Hh + 40:.0f}"/>'
+        out += (f'<g><title>{_ins_dname(days[i])}: {int(n):,} card{"" if int(n) == 1 else "s"}</title><rect class="hit" x="{x:.1f}" y="-20" width="{slot:.1f}" height="{Hh + 40:.0f}"/>'
                 f'<rect class="ps" x="{x:.1f}" y="{y(n):.1f}" width="{bw:.1f}" height="{Hh - y(n):.1f}" rx="2"/>'
                 f'{lab(x + bw / 2, Hh + 13, _html.escape(wd[:1]))}{lab(x + bw / 2, Hh + 24, dn, "ax d")}</g>')
     for j in range(14):
@@ -2154,7 +2167,7 @@ def _ins_ahead_svg(did, a, w, uid):
         tot = c + (done if j == 0 else 0)
         ty = base - h1 - h2
         tip = (f"{'Today' if j == 0 else _ins_dname(days[7 + j])}: "
-               + (f"{done:,} done, about {_ins_r(c)} to go" if j == 0 else f"about {_ins_r(c)} cards{band(c, 0 if j < 7 else 1)}")
+               + (f"{done:,} done, about {_ins_r(c)} to go" if j == 0 else f"about {_ins_r(c)} card{'' if _ahead_r(c) == 1 else 's'}{band(c, 0 if j < 7 else 1)}")
                + f" &middot; {_ins_r(c - nw)} you&rsquo;ve started, {_ins_r(nw)} from new cards{mins(w['answers'][j])}")
         num = ""
         if j == 0 or j == pk or j == ex:
@@ -2224,7 +2237,13 @@ def _ins_ahead(did, a, deck_name=""):
         lo, hi, when = max(0, ex - 6), ex + 1, "Exam week"
     else:
         lo, hi, when = 7, 14, "In 2 weeks"
-    exd = _ins_dname(days[7 + ex], long=True) if ex is not None and 0 <= ex < 42 else ""
+    # 3.9.2's audit: "to the exam" only for an exam ahead (today's, or one passed, isn't), named at any distance;
+    # a pause I made says what it does from its own kind and exam, not from whether there's an exam now
+    ahead_ex = ex is not None and ex >= 1
+    exd = _ins_dname(_day_after(days[7], ex), long=True) if ex is not None and ex >= 0 else ""
+    if exd and ex == 0:
+        exd = "today"
+    pz = a.get("pause") if isinstance(a.get("pause"), dict) else None
     rate, unlocked = int(round(a.get("rate") or 0)), int(a.get("unlocked") or 0)
 
     def mean(xs):
@@ -2236,7 +2255,9 @@ def _ins_ahead(did, a, deck_name=""):
         if n < 1 or not s or 7 + int(s[1]) + 1 >= len(days):
             return ""
         ph = w.get("plan_held") or 0
-        return (f" {_ins_r(n)} new cards wait till {_ins_dname(days[7 + int(s[1]) + 1])}"
+        one = _ahead_r(n) == 1
+        return (f" {_ins_r(n)} new card{'' if one else 's'} wait{'s' if one else ''} "
+                f"till {_ins_dname(days[7 + int(s[1]) + 1])}"
                 + (f", {_ins_r(ph)} of them your plan&rsquo;s dates" if ph >= 1 else "") + ".")
 
     blocks, pills, acts = "", "", ""
@@ -2255,7 +2276,8 @@ def _ins_ahead(did, a, deck_name=""):
             line = (f"{when}: about <b>{_ins_r(mean(w['cards'][lo:hi]))}</b> a day, not {_ins_r(mean(pace['cards'][lo:hi]))}"
                     + (f" &middot; exam day about {_ins_r(w['cards'][ex])}" if k != "unlocked" and ex is not None and 0 <= ex < 42 else ""))
             label = (f"Only the {unlocked:,} unlocked" if k == "unlocked"
-                     else "Stop new now" + (", to the exam" if ex is not None and k == "now" else "") if k == "now"
+                     else "Stop new now" + (", to the exam" if (bool(pz.get("exam")) if pz and k == on else ahead_ex) else "")
+                     if k == "now"
                      else AHEAD_PILL.get(k) or k)
         hid = "" if k == on else " hidden"
         blocks += (f'<div class="ahw" data-k="{k}"{hid}><div class="xline">{line}</div>'
@@ -2264,8 +2286,11 @@ def _ins_ahead(did, a, deck_name=""):
                   f'aria-checked="{"true" if k == on else "false"}">{label}</span>')
         # what pressing it does, said once, beside its button
         if k == on and k != "pace":
+            to_exam = bool(pz and (pz.get("exam") or pz.get("kind") == "week") and exd)
+            start = int((pz or {}).get("from") or 0)
             act = (f'<span>No new cards in {name} '
-                   + (f"till your exam, {exd}" if ex is not None and k != "unlocked" else "till you turn them back on")
+                   + (f"from {_ins_dname(days[7 + start], long=True)} " if 0 < start < len(days) - 7 else "")
+                   + (f"till your exam, {exd}" if to_exam else "till you turn them back on")
                    + f'.{held(w)}</span><a class="bt" href="#" onclick="{_pycmd(f"insaheadon:{did}")}">Turn new cards back on</a>')
         elif k == "pace" and on != "pace":
             act = f'<span>New cards back, at your pace.</span><a class="bt" href="#" onclick="{_pycmd(f"insaheadon:{did}")}">Turn new cards back on</a>'
@@ -2275,7 +2300,7 @@ def _ins_ahead(did, a, deck_name=""):
             act = "<span>If you unlock no more: what that leaves.</span>"
         elif k in ("week", "now") and on == "pace":
             first = "today" if k == "now" else _ins_dname(days[7 + w["stop"][0]], long=True)
-            till = "till your exam" if ex is not None else "till you turn them back on"
+            till = f"till your exam, {exd}" if ahead_ex else "till you turn them back on"
             act = (f'<span>From {first}, no new cards in {name} {till}.{held(w)}</span>'
                    f'<a class="bt" href="#" title="Anki&rsquo;s today-only limit, each morning. Your deck options stay as they are." '
                    f'onclick="{_pycmd(f"insaheadoff:{did}:{k}")}">Do it</a>')
@@ -2360,8 +2385,12 @@ def _ins_leeches(did, L, deck_name=""):
     ng, nn = int(L.get("n_gone") or 0), int(L.get("n_near") or 0)
     trail = (f'<div class="tmt"><a href="#" onclick="{_pycmd(f"insleech:{did}:shut:0")}">Insights</a> &rsaquo; '
              f'<b>Leeches</b>{" &middot; " + e(str(deck_name)) if deck_name else ""}</div>')
+    n_out = int(L.get("out") or 0)
+    # 3.9.2's audit: Leave it out's way back, on the same screen
+    put = (f'<div class="tmt">{n_out:,} left out of this list &middot; <a href="#" '
+           f'onclick="{_pycmd(f"insleech:{did}:unout:0")}">Put {"it" if n_out == 1 else "them"} back</a></div>') if n_out else ""
     if not gone and not near:
-        return f'<div class="dc-ins">{trail}<div class="tq0">No leeches here, and none a miss away.</div></div>'
+        return f'<div class="dc-ins">{trail}<div class="tq0">No leeches here, and none a miss away.</div>{put}</div>'
     on_exam = sum(1 for c in gone if c.get("exam"))
     summ = " &middot; ".join(x for x in (
         f"<b>{ng:,}</b> Anki stopped showing you" if ng else "",
@@ -2380,7 +2409,7 @@ def _ins_leeches(did, L, deck_name=""):
                     + "".join(_ins_leech_row(did, c) for c in rows[:LEECH_SHOW])
                     + (f'<div class="sl-plus">{n - LEECH_SHOW:,} more in Browse</div>' if n > LEECH_SHOW else "") + "</div>")
     out += ('<div class="tmt">Bring back: due again, schedule kept. Learn it fresh: a new card again. '
-            'Edit &rsaquo; Undo takes either back.</div>')
+            'Edit &rsaquo; Undo takes either back.</div>') + put
     return f'<div class="dc-ins">{out}</div>'
 
 
@@ -2425,7 +2454,7 @@ def _insights_html(did, v):
         pct = round(100 * now[0] / now[1])
         was = (f'<span class="m">{round(100 * before[0] / before[1])}% the 2 weeks before</span>' if before[1] >= 50 else "")
         out += (f'<div class="ihd" title="This deck, first answer of each card each day: '
-                f'{now[0]:,} of {now[1]:,} right in 2 weeks"><b>{pct}%</b><span>right &middot; Anki aims for {int(v.get("target") or 90)}%'
+                f'{now[0]:,} of {now[1]:,} right in 2 weeks"><b>{pct}%</b><span>right{" &middot; Anki aims for " + str(int(v.get("target") or 90)) + "%" if v.get("fsrs_on", True) else ""}'
                 f'{" &middot; " + was if was else ""}</span>'
                 f'{_ins_spark(r.get("days") or [])}</div>')
         from .team import right_split
@@ -2454,8 +2483,10 @@ def _insights_html(did, v):
                 f'{_ins_scope(aim) if mine else ""}'
                 f'<a class="bt" href="#" onclick="{_pycmd(f"insstudy:{did}:h")}">Study {len(hero):,} early</a></div>')
     elif aim.get("kind") == "exam":
-        # 3.9.2: my exam with nothing at risk still says what it covers, and keeps its Change
-        out += f'<div class="iline">Your exam, {_ins_dname(aim.get("day"), long=True)}: nothing at risk {_ins_scope(aim)}</div>'
+        # 3.9.2: my exam with nothing at risk still says what it covers, and keeps its Change; without
+        # FSRS nothing was looked at (what's at risk is FSRS's), so it says only the day (the audit)
+        risk = ": nothing at risk" if aim.get("checked") else ""
+        out += f'<div class="iline">Your exam, {_ins_dname(aim.get("day"), long=True)}{risk} {_ins_scope(aim)}</div>'
     if int(v.get("behind") or 0) and v.get("pid"):
         out += (f'<div class="iline">{int(v["behind"]):,} new cards behind &middot; '
                 f'<a href="#" onclick="{_pycmd("plancatch:" + str(v["pid"]))}">Catch up&hellip;</a></div>')
@@ -2527,16 +2558,19 @@ def _ins_map(did, tiles, by, at=(), ways=()):
     out, fresh = "", False
     for i, t in enumerate(cur):
         n, k, st = int(t["n"]), t.get("know"), int(t.get("started") or 0)
-        fresh = fresh or k is None
-        said = (f"{n:,} cards, none started yet" if k is None
-                else f"{n:,} cards, {st:,} started, {int(k)}% {how}")
+        soon = k is None and st > 0  # 3.9.2's audit: started, none reviewed yet: too soon to say
+        fresh = fresh or (k is None and not soon)
+        cards = f'{n:,} card{"" if n == 1 else "s"}'
+        said = (f"{cards}, started, none reviewed yet: too soon to say" if soon
+                else f"{cards}, none started yet" if k is None
+                else f"{cards}, {st:,} started, {int(k)}% {how}")
         tip = f'{t["name"]}: {said}. ' + ("Open it." if t.get("kids") else "Browse them.")
         more = '<i aria-hidden="true">&rsaquo;</i>' if t.get("kids") else ""
         bar = (f'<i class="tmb" style="width:{100 * st / n:.0f}%"></i>' if k is not None and 0 < st < n else "")
         out += (f'<a class="tm {"sn" if k is None else f"s{map_shade(int(k))}"}" href="#" '
                 f'style="flex:{n} 1 {70 + int(150 * n / big)}px" title="{e(tip)}" '
                 f'onclick="{_pycmd(f"insmap:{did}:{i}")}"><span>{e(str(t["name"]))}{more}</span>'
-                f'<b>{"new" if k is None else f"{int(k)}%"}<small> &middot; {n:,}</small></b>{bar}</a>')
+                f'<b>{"too soon" if soon else "new" if k is None else f"{int(k)}%"}<small> &middot; {n:,}</small></b>{bar}</a>')
     path = ""
     if trail:
         steps = [f'<a href="#" onclick="{_pycmd(f"insmapup:{did}:0")}">All</a>']
@@ -2545,7 +2579,7 @@ def _ins_map(did, tiles, by, at=(), ways=()):
         last = trail[-1]
         steps.append(f'<b>{e(str(last["name"]))}</b>')
         lk = last.get("know")
-        path = (f'<div class="tmt">{" &rsaquo; ".join(steps)} &middot; {int(last["n"]):,} cards'
+        path = (f'<div class="tmt">{" &rsaquo; ".join(steps)} &middot; {int(last["n"]):,} card{"" if int(last["n"]) == 1 else "s"}'
                 f'{"" if lk is None else f", {int(lk)}%"} '
                 f'&middot; <a href="#" onclick="{_pycmd(f"insmapall:{did}")}">Browse all</a></div>')
     # 3.9.2 (the students: what's the %, what's the bar?): said in the key; a tile's cards beside its %
@@ -2843,7 +2877,12 @@ def _plan_notes(card, pid):
                    f'<span class="acts"><a href="#" onclick="{_pycmd("plantags:" + pid)}">Browse them</a>'
                    f'<a href="#" onclick="{_pycmd("plantagsok:" + pid)}">OK</a></span></div>')
     lim, want = s.get("limit"), int(s.get("target") or 0)
-    if lim is not None and want > int(lim) and s.get("kind") == "study":
+    if s.get("paused_new") and want and s.get("kind") == "study":
+        # 3.9.2's audit: Stop new cards runs here; Raise would undo it till tomorrow morning
+        on_cmd = _pycmd("insaheadon:" + str(int(s["paused_new"])))
+        out.append(f'<div class="pn"><span>New cards are stopped in this deck (Insights); today&rsquo;s {want:,} wait.</span>'
+                   f'<span class="acts"><a href="#" onclick="{on_cmd}">Turn them back on</a></span></div>')
+    elif lim is not None and want > int(lim) and s.get("kind") == "study":
         out.append(f'<div class="pn warn"><span>Anki shows {int(lim):,} new a day in this deck; today has {want:,}.</span>'
                    f'<span class="acts"><a href="#" onclick="{_pycmd("planlimit:" + pid)}">Raise to {want:,}</a></span></div>')
     fb = int(s.get("fell_back") or 0)
@@ -4204,9 +4243,18 @@ def _closet_ons(look):
 
 
 def _short_day(iso):
-    """"14 Oct" from a cheer's ISO time; "" for anything else."""
+    """"14 Oct" from a day ("2026-10-14"), or from a moment (a cheer's
+    "2026-10-15T01:30:00Z", which the server keeps in UTC) on this
+    computer's clock; "" for anything else. 3.9.2: a moment was cut at its
+    first ten characters, its UTC date, so a doodle sent on an American
+    evening was dated the next day."""
+    s = str(iso or "").strip()
     try:
-        d = _dt.date.fromisoformat(str(iso)[:10])
+        if "T" in s:
+            t = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            d = (t.astimezone() if t.tzinfo else t).date()
+        else:
+            d = _dt.date.fromisoformat(s[:10])
     except ValueError:
         return ""
     return f"{d.day} {d.strftime('%b')}"
@@ -5042,7 +5090,7 @@ CHEER_WINDOW_JS = r"""
         var b = el('button', null, x);
         b.type = 'button';
         b.setAttribute('aria-label', 'Send ' + x);
-        b.addEventListener('click', function () { choose(x); });
+        b.addEventListener('click', function () { unpick(); choose(x); });  // 3.9.2's audit: Anki's box goes too
         quick.push([x, b]);
         em.appendChild(b);
     });
@@ -5074,6 +5122,10 @@ CHEER_WINDOW_JS = r"""
         window.dcCheerUnpick = function () { unpick(); other.focus(); };
         window.dcCheerPicked = function (t) { var e = oneEmoji(String(t || '').trim()); if (e) { unpick(); choose(e); } };
         var r = pickIn.getBoundingClientRect();
+        // 3.9.2's audit: Anki's box sits where "pick one" was; a scroll or a resize moves the page under it,
+        // so either puts it away (other again, to pick once more)
+        window.addEventListener('resize', moved);
+        back.addEventListener('scroll', moved, true);
         if (typeof pycmd !== 'undefined') {
             pycmd('duecrew:emojipicker:' + [r.left, r.top, r.width, r.height].map(function (v) { return Math.max(0, Math.round(v)); }).join(':') + '|' + window.dcBK);
         } else { window.dcCheerNoNative(); }
@@ -5081,7 +5133,10 @@ CHEER_WINDOW_JS = r"""
     function unpick() {
         if (pickIn.style.display !== 'none' && typeof pycmd !== 'undefined') { pycmd('duecrew:emojipickeroff|' + window.dcBK); }
         pickIn.style.display = 'none'; other.style.display = '';
+        window.removeEventListener('resize', moved);
+        back.removeEventListener('scroll', moved, true);
     }
+    function moved() { if (pickIn.style.display !== 'none') { unpick(); } }
     pickIn.addEventListener('input', function () {
         var t = oneEmoji(pickIn.value.trim());
         if (t) { unpick(); choose(t); } else if (pickIn.value.trim()) { pickIn.value = ''; }
@@ -5390,25 +5445,25 @@ def _tape(colour):
 FRIDGE_CSS = """
     #dc-fridge { position: fixed; left: 0; top: 0; right: 0; bottom: 0; pointer-events: none; z-index: 5; }
     #dc-fridge .fz { position: fixed; left: -9999px; top: 0; width: %dpx; box-sizing: border-box; pointer-events: auto;
-      background: #fff; border-radius: 2px; padding: 7px; color: #2b2d29;
-      box-shadow: 0 3px 10px rgba(0,0,0,.16), 0 0 0 1px rgba(0,0,0,.05); text-align: left; font-size: 10.5px; line-height: 1.3; cursor: grab;
+      background: var(--fz-bg); border-radius: 2px; padding: 7px; color: var(--fz-ink);
+      box-shadow: var(--fz-sh); text-align: left; font-size: 10.5px; line-height: 1.3; cursor: grab;
       touch-action: none; user-select: none; -webkit-user-select: none; transform: rotate(var(--fr, -2deg)); }
     #dc-fridge .fz::before { content: ""; position: absolute; top: -8px; left: 50%%; width: 54px; height: 16px; margin-left: -27px;
       background: var(--ft); transform: rotate(-4deg);
       clip-path: polygon(0 12%%, 5%% 0, 30%% 6%%, 60%% 0, 95%% 5%%, 100%% 0, 98%% 50%%, 100%% 100%%, 70%% 94%%, 40%% 100%%, 4%% 95%%, 0 100%%, 2%% 50%%); }
     #dc-fridge .fz.drag { cursor: grabbing; box-shadow: 0 14px 28px rgba(0,0,0,.25); z-index: 1; }
-    #dc-fridge .fp { aspect-ratio: 300 / 170; display: grid; place-items: center; overflow: hidden; background: #f4f3ee; }
+    #dc-fridge .fp { aspect-ratio: 300 / 170; display: grid; place-items: center; overflow: hidden; background: var(--fz-photo); }
     #dc-fridge .fp svg { width: 100%%; height: 100%%; display: block; }
     #dc-fridge .fp .dd-sign { font-size: 13px; line-height: 1.15; text-align: center; padding: 2px 4px; overflow-wrap: anywhere; }
     #dc-fridge .fq { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-top: 7px;
       text-align: center; font-size: 11px; }
-    #dc-fridge .fw { display: flex; align-items: center; justify-content: center; gap: 3px; margin-top: 3px; color: #6b665a;
+    #dc-fridge .fw { display: flex; align-items: center; justify-content: center; gap: 3px; margin-top: 3px; color: var(--fz-muted);
       white-space: nowrap; min-width: 0; }
-    #dc-fridge .fw b { color: #2b2d29; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    #dc-fridge .fw b { color: var(--fz-ink); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
     /* 3.9.2 (Sam: "pips get cutoff on the polaroids"): Pip's head, hat and what it holds reach past its slot,
        so the line never clips (only the name does) and gives the head room under the photo */
-    #dc-fridge .fw .sv-slot { --sv-a: var(--fa); flex: none; margin: 9px 2px 0 4px; }
-    #dc-fridge .fx { position: absolute; top: 0; right: 3px; display: none; color: #6b665a; text-decoration: none; font-size: 15px; line-height: 1; }
+    #dc-fridge .fw .sv-slot { --sv-a: var(--fz-acc); flex: none; margin: 9px 2px 0 4px; }
+    #dc-fridge .fx { position: absolute; top: 0; right: 3px; display: none; color: var(--fz-muted); text-decoration: none; font-size: 15px; line-height: 1; }
     #dc-fridge .fz:hover .fx, #dc-fridge .fz:focus-within .fx { display: block; }
     /* 3.9.1 (Sam's pick, "Pip at rest" C): still until pointed at, as crew rows */
     #dc-fridge .fz:not(:hover) .sv, #dc-fridge .fz:not(:hover) .sv * { animation: none !important; }
@@ -5416,10 +5471,29 @@ FRIDGE_CSS = """
     #dc-fridge .fz.fgone { transform: none; cursor: default; text-align: center; font-size: 11.5px; padding: 8px 2px; white-space: nowrap;
       border-radius: 8px; animation: dcfgone %ds linear forwards; animation-delay: var(--fg, 0s); }
     #dc-fridge .fz.fgone::before { display: none; }
-    #dc-fridge .fgone a { color: var(--fa); font-weight: 700; text-decoration: none; }
+    #dc-fridge .fgone a { color: var(--fz-acc); font-weight: 700; text-decoration: none; }
     @keyframes dcfgone { 0%%, 85%% { opacity: 1; } 100%% { opacity: 0; visibility: hidden; } }
     #dc-fridge .fz:hover .sv { --sv-on: infinite; }
 """ % (FRIDGE_W, FRIDGE_UNDO)
+
+
+# 3.9.2 (Sam: "also need dark mode for polaroids"): a Polaroid's colours as
+# tokens on each one, light or dark as Settings › Theme says. At night the
+# frame and the photo go dark, and a doodle's ink with them: black reads
+# light, each colour its own night shade (the board's), and Pip and Undo
+# take the sender's night accent (--fd beside --fa on each)
+FRIDGE_LIGHT = ("--fz-bg: #fff; --fz-photo: #f4f3ee; --fz-ink: #2b2d29; --fz-muted: #6b665a; --fz-acc: var(--fa); "
+                "--fz-sh: 0 3px 10px rgba(0,0,0,.16), 0 0 0 1px rgba(0,0,0,.05);")
+FRIDGE_INKS = ((DOODLE_INK, "#e6e8e3"),) + tuple(
+    (v["light"][0], v["dark"][0]) for _k, v in sorted(ACCENTS.items()))
+FRIDGE_DARK = ("--fz-bg: #33352f; --fz-photo: #23241f; --fz-ink: #e6e8e3; --fz-muted: #a3a79c; --fz-acc: var(--fd); "
+               "--fz-sh: 0 4px 14px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.07); "
+               + " ".join(f"--fz-{a[1:]}: {b};" for a, b in FRIDGE_INKS))
+FRIDGE_INK_CSS = "".join(f'#dc-fridge .fp path[stroke="{a}"] {{ stroke: var(--fz-{a[1:]}, {a}); }}' for a, _b in FRIDGE_INKS)
+
+
+def _fridge_theme(cfg):
+    return FRIDGE_INK_CSS + _by_theme(cfg, "#dc-fridge .fz", FRIDGE_LIGHT, FRIDGE_DARK)
 
 
 def fridge_html(items, people, cfg, gone=None):
@@ -5439,7 +5513,7 @@ def fridge_html(items, people, cfg, gone=None):
     looks = [[u, 1, e.get("look")] if isinstance(e, dict) else [u, 0, e] for u, e in crew.items() if e]
     if gone:
         return _fridge_notes(_fridge.clean(items), crew, cfg, gone)  # a few seconds: drawn each time
-    key = _fridge.fingerprint([items, looks, bool(cfg.get("sev", True))])
+    key = _fridge.fingerprint([items, looks, bool(cfg.get("sev", True)), str(cfg.get("theme", "auto"))])
     if key is None or key != _FRIDGE_DRAWN["key"]:
         _FRIDGE_DRAWN.update(key=key, html=_fridge_notes(_fridge.clean(items), crew, cfg))
     return _FRIDGE_DRAWN["html"]
@@ -5465,7 +5539,7 @@ def _fridge_notes(items, people, cfg, gone=None):
         at = f' data-s="{x["p"][0]}" data-x="{x["p"][1]}" data-y="{x["p"][2]}"' if x.get("p") else ""
         art = _doodle_art(x["d"], x["a"], x["name"] + "’s drawing")  # fridge.clean checked it
         fa, tape = accent_pair(x["a"])
-        notes.append(f'<div class="fz" data-k="{k}"{at} style="--fa:{fa};--ft:{_tape(tape)}" title="Drag it anywhere">'
+        notes.append(f'<div class="fz" data-k="{k}"{at} style="--fa:{fa};--fd:{tape};--ft:{_tape(tape)}" title="Drag it anywhere">'
                      f'<div class="fp">{art}</div>{note}<div class="fw">{pip}<b>{name}</b>{f" · {when}" if when else ""}</div>'
                      f'<a class="fx" href="#" title="Take it down" aria-label="Take {name}’s down" '
                      f'onclick="{_pycmd("fridgedown:" + k)}">&times;</a></div>')
@@ -5475,9 +5549,10 @@ def _fridge_notes(items, people, cfg, gone=None):
         left = max(0.0, min(float(FRIDGE_UNDO), float(gone.get("ago") or 0)))
         notes.insert(max(0, min(len(notes), len(items) - int(gone.get("i") or 0))),
                      f'<div class="fz fgone" data-k="{_html.escape(k)}"{at} role="status" '
-                     f'style="--fa:{accent_pair(g.get("a"))[0]};--fg:-{left:.1f}s">Taken down &middot; '
+                     f'style="--fa:{accent_pair(g.get("a"))[0]};--fd:{accent_pair(g.get("a"))[1]};--fg:-{left:.1f}s">Taken down &middot; '
                      f'<a href="#" onclick="{_pycmd("fridgeback:" + k)}">Undo</a></div>')
-    return f'<style>{FRIDGE_CSS}</style><div id="dc-fridge" role="group" aria-label="Your fridge">{"".join(notes)}</div>'
+    return (f'<style>{FRIDGE_CSS}{_fridge_theme(cfg)}</style>'
+            f'<div id="dc-fridge" role="group" aria-label="Your fridge">{"".join(notes)}</div>')
 
 
 FRIDGE_JS = r"""
