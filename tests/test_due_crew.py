@@ -3947,6 +3947,13 @@ def test_plans_matching_v31():
     check("follow: found of the author's count when the plan has one, else cards found",
           rows[0] == ("Heart failure", "2 of 3", False) and rows[1] == ("Arrhythmia", "1 card", False)
           and rows[2] == ("Cloze two", "1 of 1", False), str(rows))
+    # 3.9.3 (Sam's pick): a card under two of a date's tags counts once, and what's missing is counted alike
+    two = dict(u["hf"], tags=list(u["hf"]["tags"]) * 2, n=6)  # the author's builder added the same 2 (3 there) twice
+    rows2 = FD.match_rows(idx, {"deck": "Step 1", "units": [two]})
+    same = dict(u["hf"], tags=list(u["hf"]["tags"]) * 2, n=4)
+    rows3 = FD.match_rows(idx, {"deck": "Step 1", "units": [same]})
+    check("follow 3.9.3: two tags on the same cards count each card once, what's missing too",
+          rows2[0][1] == "2 of 3" and rows3[0][1] == "2 of 2", (rows2, rows3))
     missing = FD.match_rows(idx, {"deck": "Step 1", "units": [dict(u["rn"], tags=["Nope"], n=40)]})
     check("follow: a date with none of its cards here says so", missing == [("Renal", "not in your copy", True)])
     check("code: typed, spaced, or a pasted link",
@@ -7212,6 +7219,97 @@ def test_due_board_and_clicks():
         dc._state["settings_tab"] = None
 
 
+def test_recover_by_deck_count_v393():
+    """3.9.3, Sam's pick A: Recover leeches takes a leech by its deck's own
+    leech count (as Insights' Leeches counts them), never one I left out,
+    and asks once before the ones its old line (8 lapses) left in my
+    reviews."""
+    from due_crew import due_flow as F
+    T = TODAY.isoformat()
+    rows = [(1, 1, 8, -1, 10), (5, 5, 6, 2, 10), (6, 6, 6, 2, 20), (7, 7, 9, 2, 10), (8, 8, 3, -1, 10), (9, 9, 0, -1, 10)]
+    limits = {10: (5, 1), 20: (8, 0)}
+    deck, eight, extra = F.leech_sets(rows, limits, out={8})
+    check("recover 3.9.3: by the deck's count, a suspended one always, none I left out, none never lapsed",
+          deck == [1, 5, 7] and eight == [1, 7] and extra == [5], (deck, eight, extra))
+    check("recover 3.9.3: a deck with no options read counts at 8", F.leech_sets([(3, 3, 6, 2, 99)], {})[0] == [])
+
+    def col_with():
+        conn = sqlite3.connect(":memory:")
+        fakes.make_collection(conn)
+        for cid, did, q, lp in ((1, 10, -1, 8), (5, 10, 2, 6), (6, 20, 2, 6), (7, 10, 2, 9), (8, 10, -1, 3)):
+            fakes.add_card(conn, cid, did=did, ctype=2, queue=q, tags="leech Cardio", lapses=lp)
+        col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+        col.decks = fakes.FakeDecks({10: "Big Step 1", 20: "Mine"})
+        col.decks.config_dict_for_deck_id = lambda d: {"lapse": {"leechFails": 5 if int(d) == 10 else 8,
+                                                                 "leechAction": 1 if int(d) == 10 else 0}}
+        return conn, col
+    conn, col = col_with()
+    check("recover 3.9.3: the plan over a collection, with the counts the question names",
+          F.leech_plan(col, {8}) == ([1, 5, 7], [1, 7], [5], [5]), F.leech_plan(col, {8}))
+    pc, asked, said, changed = {}, [], [], []
+    store = {"pc": pc}
+    import aqt.qt as Q
+    saved = (F._pf, F.mw.col, F._today, getattr(F.mw, "state", None), F.ask_reach, F._left_out, F.tooltip,
+             Q.QTimer.singleShot)
+    try:
+        Q.QTimer.singleShot = staticmethod(lambda ms, fn: fn())  # the question, once the board has drawn
+        F._pf = lambda: types.SimpleNamespace(_pcfg=lambda: store["pc"], _psave=lambda d: store.update(pc=d),
+                                              _after_change=lambda: changed.append(1))
+        F.mw.col, F._today, F.mw.state = col, (lambda: T), "deckBrowser"
+        F.ask_reach = lambda n, counts: asked.append((n, counts))
+        F._left_out = lambda: {8}
+        F.tooltip = lambda m, **k: said.append(m)
+        F.morning({"due_leeches": True})
+        st = store["pc"]["due"]
+        check("recover 3.9.3: the first morning takes what Recover always took, and asks about the rest",
+              sorted(st["recovered"]) == [1, 7] and asked == [(1, [5])] and "leech_reach" not in store["pc"]
+              and changed, (st, asked, store["pc"]))
+        F.morning({"due_leeches": True})
+        check("recover 3.9.3: asked once a morning", len(asked) == 1)
+        F.set_reach(True)
+        rows_now = {cid: q for cid, q in conn.execute("SELECT id, queue FROM cards")}
+        check("recover 3.9.3: Learn them fresh: the deck's count from now on, today's extra ones now, said",
+              store["pc"]["leech_reach"] == "deck" and rows_now[5] == 0 and sorted(store["pc"]["due"]["recovered"]) == [1, 5, 7]
+              and said[-1] == "1 leech back as a new card. Edit › Undo puts it back.", (store["pc"], rows_now, said))
+        check("recover 3.9.3: the one I left out stays shut", rows_now[8] == -1)
+        conn2, col2 = col_with()
+        F.mw.col = col2
+        store["pc"] = {"leech_reach": "eight"}
+        F.morning({"due_leeches": True})
+        check("recover 3.9.3: after Not these, Recover keeps to 8 lapses, and doesn't ask",
+              sorted(store["pc"]["due"]["recovered"]) == [1, 7] and len(asked) == 1)
+        store["pc"] = {}
+        F.set_reach(False)
+        check("recover 3.9.3: Not these is kept", store["pc"]["leech_reach"] == "eight")
+        conn3, col3 = col_with()
+        conn3.execute("UPDATE cards SET lapses = 9 WHERE id = 5")
+        F.mw.col, store["pc"] = col3, {}
+        F.morning({"due_leeches": True})
+        check("recover 3.9.3: nothing the old line left, no question: the deck's count",
+              store["pc"]["leech_reach"] == "deck" and len(asked) == 1 and sorted(store["pc"]["due"]["recovered"]) == [1, 5, 7])
+        conn4, col4 = col_with()
+        F.mw.col, store["pc"] = col4, {"leech_reach": "eight"}
+        saved_cfg = F.cfg
+        F.cfg = lambda: {"due_leeches": True}
+        try:
+            F.recover_now()
+        finally:
+            F.cfg = saved_cfg
+        check("recover 3.9.3: switched on again, its question comes again", len(asked) == 2 and "leech_reach" not in store["pc"])
+    finally:
+        F._pf, F.mw.col, F._today, F.mw.state, F.ask_reach, F._left_out, F.tooltip, single = saved
+        Q.QTimer.singleShot = staticmethod(single)
+    st_html = board.settings_html({"tab": "board"}, {"due_leeches": True})
+    st_eight = board.settings_html({"tab": "board", "leech_reach": "eight"}, {"due_leeches": True})
+    check("recover 3.9.3: Settings says which line it uses",
+          "at each deck&#x27;s leech count" in st_html or "at each deck's leech count" in st_html, st_html[-400:])
+    check("recover 3.9.3: and after Not these, 8 lapses", "at 8 lapses" in st_eight)
+    import inspect
+    src = inspect.getsource(F.ask_reach)
+    check("recover 3.9.3: the question is the board's sheet, Not these its other answer",
+          "sheets.confirm(" in src and 'no_label="Not these"' in src and "gen == app.generation" in src)
+
+
 def test_history_import():
     """3.7.1: once the first 120 days have gone, each full sync carries one
     more year of my log until my first review; an empty year is passed
@@ -8754,12 +8852,14 @@ def test_review_fixes_board_due_v380():
         PF._pcfg, PF._psave = saved
     # leeches: on the Decks screen only
     got = []
-    saved = (F._day_state, F.recover_leeches, F._put_day, F._today, getattr(dc_mw(), "state", None), dc_mw().col)
+    saved = (F._day_state, F.recover_leeches, F._put_day, F._today, getattr(dc_mw(), "state", None), dc_mw().col,
+             F.leech_plan)
     try:
         st = {}
         F._day_state = lambda: ({}, st)
         F._put_day = lambda pc, s: None
-        F.recover_leeches = lambda col: got.append("ran") or []
+        F.recover_leeches = lambda col, **k: got.append("ran") or []
+        F.leech_plan = lambda col, out=(): ([1], [1], [], [])
         F._today = lambda: T0
         dc_mw().col = object()
         dc_mw().state = "review"
@@ -8769,7 +8869,7 @@ def test_review_fixes_board_due_v380():
         F.morning({"due_leeches": True})
         check("review: on the Decks screen, they're recovered", got == ["ran"] and st.get("leeches_done"))
     finally:
-        F._day_state, F.recover_leeches, F._put_day, F._today, dc_mw().state, dc_mw().col = saved
+        F._day_state, F.recover_leeches, F._put_day, F._today, dc_mw().state, dc_mw().col, F.leech_plan = saved
     js = board.swap_js("<div id='due-crew'></div>")
     check("review: a half-typed to-do survives a redraw while it has focus; a sent one is cleared",
           "document.activeElement === din && din.value" in js and "n1.value = keep.v" in js

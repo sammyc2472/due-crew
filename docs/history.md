@@ -2979,3 +2979,26 @@ every release that changes how something works.
   `new_row` / `through`, `board._due_reviews` / `_due_new` / `_wbar2`;
   motion.js gives a bar's light part its own key (both copies). A count
   from before 3.9.3 still draws as a number. `test_todays_bars_v393`.
+- 3.9.3, one meaning of a leech (Sam's pick A: Recover leeches took a
+  leech at a fixed 8 lapses, Insights' Leeches at the deck's own count,
+  so a deck at 5 showed 61 "still in your reviews" Recover never took).
+  Recover leeches now takes a suspended leech, or one Anki kept in my
+  reviews at its deck's leech count (`due_flow.leech_sets`, the deck's
+  options read as `leech_flow._limits` reads them), never one I left out
+  (Leeches' Leave it out). The first morning it would take ones the old
+  line left, it takes what it always took and asks once on the board
+  (`ask_reach`: "Learn 61 more leeches fresh?", Learn them fresh · Not
+  these), the answer kept in this profile's plans.json (`leech_reach`:
+  "deck", or "eight" to keep to 8 lapses); with nothing the old line
+  left there's no question. Switching Recover off and on asks again.
+  Settings › Due says which line it uses. `sheets.confirm` takes a
+  `no_label` for the board's Cancel. `test_recover_by_deck_count_v393`.
+- 3.9.3, a card counted once (Sam's pick: a date with a video's tag and a
+  system's on the same notes read "14 of 28" in the Follow window with
+  nothing missing). A date's count (`n`) is still the builder's, each tag's
+  and subdeck's cards added up: the site has a count per tag, not which
+  cards a tag holds, so it can't see two tags share them. The follower's
+  Anki now counts its own copy the same way to find what's missing, then
+  says it as cards (`plans._missing`): "14 of 14", or "12 of 14" with two
+  notes gone. The site's numbers for such a date (the builder's load, the
+  plan page, the calendar feed) still count a shared card twice.

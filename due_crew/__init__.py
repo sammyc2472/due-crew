@@ -1429,7 +1429,16 @@ def _settings_view():
             "emoji": c.get("emoji"), "status": c.get("status"), "sync": sync, "crew": crew,
             "squads": [s.get("name") for s in (c.get("squads") or []) if isinstance(s, dict) and s.get("name")],
             "decks": decks,
-            "fsrs": _fsrs_on()}  # 3.9.1: two buttons' note, with FSRS off
+            "fsrs": _fsrs_on(),  # 3.9.1: two buttons' note, with FSRS off
+            "leech_reach": _leech_reach()}  # 3.9.3: Recover leeches' line, by this profile's answer
+
+
+def _leech_reach():
+    """This profile's answer to Recover's one question ("deck", "eight"), or None."""
+    try:
+        return plan_flow._pcfg().get("leech_reach") if mw.col else None
+    except Exception:
+        return None
 
 
 def _fsrs_on():

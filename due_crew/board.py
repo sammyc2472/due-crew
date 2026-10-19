@@ -3914,7 +3914,7 @@ def _accent_swatches(cfg):
         for k, v in ACCENTS.items())
 
 
-def _settings_board(cfg, fsrs=None):
+def _settings_board(cfg, fsrs=None, reach=None):
     """fsrs (3.9.1): whether FSRS is on in this collection (None: not known),
     for two buttons' one-line note."""
     hidden = hidden_tabs(cfg)
@@ -3956,7 +3956,9 @@ def _settings_board(cfg, fsrs=None):
             + _st_row("Suggestions", _st_switch("due_suggest", g("due_suggest", True), "Suggestions"),
                       "Today's misses, new leeches")
             + _st_row("Recover leeches", _st_switch("due_leeches", g("due_leeches", False), "Recover leeches"),
-                      "Each morning, as new cards")
+                      # 3.9.3 (Sam's pick A): by each deck's leech count; 8 lapses after its question's Not these
+                      "Each morning, as new cards, at 8 lapses" if reach == "eight"
+                      else "Each morning, as new cards, at each deck's leech count")
             # 3.9.1, two buttons (Sam's picks): every deck; FSRS off, allowed with a note
             + '</div><div class="st-h">Reviewing</div><div class="st-box">'
             + _st_row("Two buttons", _st_switch("two_buttons", g("two_buttons", False), "Two buttons"),
@@ -4063,7 +4065,7 @@ def settings_index(view, cfg):
         out.append({"t": tab, "f": _find_key(f), "l": label, "w": where, "k": " ".join(_re.findall(r"[a-z0-9]+", words.lower()))})
     for tab in ("you", "board", "privacy"):
         body = (_settings_you(dict(view, name="", status="", emoji="")) if tab == "you"
-                else _settings_board(cfg, view.get("fsrs")) if tab == "board" else _settings_privacy(cfg))
+                else _settings_board(cfg, view.get("fsrs"), view.get("leech_reach")) if tab == "board" else _settings_privacy(cfg))
         sections = _re.split(r'<div class="st-h">', body)
         for i, sec in enumerate(sections):
             head = H.unescape(sec.split("</div>", 1)[0]) if i else ""
@@ -4094,7 +4096,7 @@ def settings_html(view, cfg):
     tab = view.get("tab") if view.get("tab") in dict(SETTINGS_TABS) else "you"
     pills = "".join(f'<a class="dc-pill{" on" if k == tab else ""}" href="#" {_st_click("settab:" + k)}>{t}</a>'
                     for k, t in SETTINGS_TABS)
-    body = (_settings_you(view, cfg) if tab == "you" else _settings_board(cfg, view.get("fsrs")) if tab == "board"
+    body = (_settings_you(view, cfg) if tab == "you" else _settings_board(cfg, view.get("fsrs"), view.get("leech_reach")) if tab == "board"
             else _settings_privacy(cfg))
     foot = "Privacy, dates, status and accent follow your account." if view.get("signed_in") else ""
     pip = ""

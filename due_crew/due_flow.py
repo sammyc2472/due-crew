@@ -488,20 +488,64 @@ def parts(col, idxs, today):
     _state["plan_today"] = sorted(on_today)
 
 
-def recover_leeches(col, label="Due Crew: recover leeches", cap=RECOVER_MAX):
+def leech_sets(rows, limits, out=()):
+    """(deck, eight, extra): the leeches Recover takes, of rows [(card id,
+    note id, lapses, queue, its home deck)] of notes tagged leech whose
+    card lapsed. A suspended one always; one Anki kept in my reviews (Tag
+    Only) at its deck's leech count (limits: {deck id: (leech count,
+    action)}, leech_flow._limits; 3.9.3, Sam's pick A: one meaning of a
+    leech, as Insights' Leeches counts them), or at 8 lapses (Recover's
+    line until 3.9.3); extra: the ones only the deck's count takes. None I
+    left out (Leeches' Leave it out). Pure."""
+    deck, eight = [], []
+    for cid, _nid, lapses, queue, did in rows:
+        cid, lapses = int(cid), int(lapses or 0)
+        if cid in out or lapses <= 0:
+            continue
+        if int(queue) == -1:
+            deck.append(cid)
+            eight.append(cid)
+            continue
+        if lapses >= int((limits.get(int(did)) or (8, 0))[0]):
+            deck.append(cid)
+        if lapses >= 8:
+            eight.append(cid)
+    has = set(eight)
+    return deck, eight, [c for c in deck if c not in has]
+
+
+def _leech_rows(col):
+    return col.db.all(
+        "SELECT c.id, c.nid, c.lapses, c.queue, CASE WHEN c.odid THEN c.odid ELSE c.did END FROM cards c "
+        "JOIN notes n ON n.id = c.nid WHERE (' ' || lower(n.tags) || ' ') LIKE '% leech %' AND c.lapses > 0 "
+        "ORDER BY c.id LIMIT 20000")
+
+
+def leech_plan(col, out=()):
+    """(deck, eight, extra, counts): leech_sets over this collection, and the
+    leech counts of the decks the extra ones are in (for the question)."""
+    from . import leech_flow
+    rows = _leech_rows(col)
+    limits = leech_flow._limits(col, {int(r[4]) for r in rows}, {})
+    deck, eight, extra = leech_sets(rows, limits, out)
+    of = {int(r[0]): int(r[4]) for r in rows}
+    counts = sorted({int(limits[of[c]][0]) for c in extra if of.get(c) in limits})
+    return deck, eight, extra, counts
+
+
+def recover_leeches(col, label="Due Crew: recover leeches", cap=RECOVER_MAX, cids=None, reach="deck", out=()):
     """Leeches back as new cards: the leech tag off, unsuspended, and reset
     (Anki's own Forget, back to their place among the new cards), as one
-    undo step. A leech is a card of a note tagged leech that's suspended or
-    has lapsed 8 times or more (a note's other cards are left alone).
-    Returns the card ids."""
-    rows = col.db.all(
-        "SELECT c.id, c.nid FROM cards c JOIN notes n ON n.id = c.nid "
-        "WHERE (' ' || lower(n.tags) || ' ') LIKE '% leech %' AND c.lapses > 0 AND (c.queue = -1 OR c.lapses >= 8) "
-        f"ORDER BY c.id LIMIT {int(cap)}")
-    if not rows:
+    undo step. A leech: leech_sets' (by its deck's leech count; reach
+    "eight", Recover's 8 lapses, for one who said Not these), or these
+    cids. A note's other cards are left alone. Returns the card ids."""
+    if cids is None:
+        deck, eight, _extra, _n = leech_plan(col, out)
+        cids = eight if reach == "eight" else deck
+    cids = [int(c) for c in cids][:int(cap)]
+    if not cids:
         return []
-    cids = [int(r[0]) for r in rows]
-    nids = sorted({int(r[1]) for r in rows})
+    nids = sorted({int(n) for n in col.db.list(f"SELECT nid FROM cards WHERE id IN ({','.join(map(str, cids))})")})
     pos = None
     if hasattr(col, "add_custom_undo_entry"):
         try:
@@ -519,34 +563,98 @@ def recover_leeches(col, label="Due Crew: recover leeches", cap=RECOVER_MAX):
     return cids
 
 
+def _left_out():
+    try:
+        from . import leech_flow
+        return leech_flow._out()
+    except Exception:
+        return set()
+
+
 def morning(c):
     """Once per Anki day, at the refresh: recover leeches when asked. Only on
     the Decks screen: mid-review its undo step would sit on my last answer
-    (as the plans' morning waits for Decks)."""
+    (as the plans' morning waits for Decks). 3.9.3 (Sam's pick A): by each
+    deck's own leech count. The first morning that would take leeches
+    Recover's old line (8 lapses) left in my reviews, it takes what it
+    always took and asks once about the rest (this profile's plans.json,
+    `leech_reach`: "deck", or "eight" after Not these; switching Recover
+    off and on asks again)."""
     if not c.get("due_leeches") or not mw.col or not _today() or getattr(mw, "state", "") != "deckBrowser":
         return
     pc, st = _day_state()
     if st.get("leeches_done"):
         return
     st["leeches_done"] = True
+    ask = None
     try:
-        st["recovered"] = recover_leeches(mw.col)
+        reach = pc.get("leech_reach")
+        deck, eight, extra, counts = leech_plan(mw.col, _left_out())
+        if reach is None and not extra:
+            reach = pc["leech_reach"] = "deck"  # nothing the old line left: the deck's count, no question
+        if reach is None:
+            ask = (len(extra), counts)
+        st["recovered"] = recover_leeches(mw.col, cids=eight if reach != "deck" else deck)
     except Exception:
         traceback.print_exc()
         st["recovered"] = []
     _put_day(pc, st)
     if st["recovered"]:
         _pf()._after_change()
+    if ask:
+        from aqt.qt import QTimer
+        QTimer.singleShot(0, lambda: ask_reach(*ask))
+
+
+def ask_reach(n, counts):
+    """The one question: the leeches only the deck's count takes, learned
+    fresh too (one undo step), or Not these (Recover keeps to 8 lapses)."""
+    from . import sheets
+    gen = app.generation
+    count = (f"your deck's leech count ({counts[0]} lapses)" if len(counts) == 1 else "your decks' leech counts")
+    them = "them" if n != 1 else "it"
+    sheets.confirm(f"Learn {n:,} more leech{'es' if n != 1 else ''} fresh?",
+                   f"Anki tagged {them} at {count} and kept {them} in your reviews. Recover took only suspended "
+                   f"leeches and ones at 8 lapses. Edit › Undo puts {them} back.",
+                   "Learn them fresh" if n != 1 else "Learn it fresh",
+                   lambda: gen == app.generation and set_reach(True),
+                   no=lambda: gen == app.generation and set_reach(False), no_label="Not these")
+
+
+def set_reach(wide):
+    """The question's answer, for good (on this profile): the deck's count,
+    and today's extra ones now; or Recover's 8 lapses."""
+    pc = _pf()._pcfg()
+    pc["leech_reach"] = "deck" if wide else "eight"
+    _pf()._psave(pc)
+    if not wide or not mw.col:
+        return
+    _deck, _eight, extra, _n = leech_plan(mw.col, _left_out())
+    try:
+        got = recover_leeches(mw.col, cids=extra)
+    except Exception:
+        traceback.print_exc()
+        return
+    pc, st = _day_state()
+    st["recovered"] = list(st.get("recovered") or []) + got
+    st["dismissed"] = [d for d in st.get("dismissed") or [] if d != "recovered"]
+    _put_day(pc, st)
+    if got:
+        _pf()._after_change()
+        tooltip(f"{len(got):,} leeches back as new cards. Edit › Undo puts them back." if len(got) != 1
+                else "1 leech back as a new card. Edit › Undo puts it back.")
 
 
 def recover_now():
     """3.8.0: Recover leeches switched on: today's go now, and it says what
-    happened (it waited for the next refresh and said nothing)."""
+    happened (it waited for the next refresh and said nothing). 3.9.3:
+    switched on, its one question can come again."""
     c = cfg()
     if not c.get("due_leeches") or not mw.col or not _today():
         return
     pc, st = _day_state()
     st["leeches_done"] = False
+    pc.pop("leech_reach", None)
     _put_day(pc, st)
     morning(c)
     _pc, st = _day_state()

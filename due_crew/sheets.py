@@ -25,11 +25,13 @@ from . import app, board
 _open = {}  # id -> {"view": ..., "then": ..., "gen": app.generation}
 
 
-def confirm(title, text, yes, then, danger=False, no=None):
+def confirm(title, text, yes, then, danger=False, no=None, no_label=None):
     """then() after a yes. danger: a step that can't be taken back (the
     button in the board's red; Cancel has the focus). no(): after Cancel,
-    Esc or the backdrop, for a question that leads to another."""
-    if _board(dict(title=title, text=text, yes=yes, danger=danger), lambda a: then(), no):
+    Esc or the backdrop, for a question that leads to another. no_label:
+    the board's Cancel says this ("Not these"; Qt's stays Cancel)."""
+    view = dict(title=title, text=text, yes=yes, danger=danger, **({"no": no_label} if no_label else {}))
+    if _board(view, lambda a: then(), no):
         return
     from .ui import confirm as qt_confirm
     if qt_confirm(mw, title, text, yes, **({"danger": True} if danger else {})):

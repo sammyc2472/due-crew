@@ -656,6 +656,20 @@ def _cards(n):
     return f"{n:,} card{'s' if n != 1 else ''}"
 
 
+def _missing(idx, u, of, n, swap=None, doc=None):
+    """The cards of a date the author has and this copy doesn't, each
+    counted once. The author's count adds up each tag's and subdeck's cards
+    (the builder's, from the tag tree: a card under two of a date's tags,
+    a video's and a system's, counts twice); this copy counted the same way
+    says how many are missing, then each card once as the date's tags here
+    hold them (3.9.3, Sam's pick: "14 of 28" when nothing was missing)."""
+    deck = str((doc or {}).get("deck") or "")
+    mine = (sum(len(idx.tag_cards(swapped(t, swap))) for t in u.get("tags") or [])
+            + sum(len(idx.deck_cards(d, deck)) for d in u.get("decks") or []))
+    gap = max(0, int(of) - mine)
+    return round(gap * n / mine) if mine > n else gap
+
+
 def match_rows(idx, doc, swap=None, shown=5):
     """[(label, text, missing)] for the match list: a unit's tags and
     subdecks as one row (found of the author's count when the plan has
@@ -670,7 +684,8 @@ def match_rows(idx, doc, swap=None, shown=5):
         if u.get("tags") or u.get("decks"):
             n = len(idx.match(dict(u, cards=[], nids=[], cids=[], notes=[], idr=[]), swap, doc))
             of = u.get("n")  # the author's count, when the builder saved one
-            text = (f"{n:,} of {of:,}" if isinstance(of, int) and of else _cards(n)) if n else "not in your copy"
+            text = (f"{n:,} of {n + _missing(idx, u, of, n, swap, doc):,}" if isinstance(of, int) and of else _cards(n)) \
+                if n else "not in your copy"
             rows.append((name, text, not n))
         if u.get("nids") or u.get("cids") or u.get("notes"):
             found = len(idx.id_cards(u))
