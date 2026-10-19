@@ -736,3 +736,245 @@ def left_names(xs):
     """leftNames: what a fill left off, by name: "Renal, Pulm · the rest and 2 more"."""
     names = [f"{_tag_word(path_of(x['key']).split('::')[-1])}{' · the rest' if x.get('rest') else ''}" for x in xs[:3]]
     return ", ".join(names) + (f" and {len(xs) - 3} more" if len(xs) > 3 else "")
+
+
+# ---- what to cover, and laying it out (layOut) ----
+
+def tag_kind(path):
+    """Tags.kind: a ^ part makes a tag a system's, a # part a resource's, else other."""
+    segs = str(path).split("::")
+    return "system" if any(s.startswith("^") for s in segs) else "resource" if any(s.startswith("#") for s in segs) else "other"
+
+
+def kinds_below(tree, key, memo=None):
+    """kindsBelow: the views a tag holds, itself and everything under it."""
+    memo = {} if memo is None else memo
+    if key in memo:
+        return memo[key]
+    out = {tag_kind(path_of(key))} if key.startswith("tag:") else set()
+    for k in tree.kids(key):
+        out |= kinds_below(tree, k, memo)
+    memo[key] = out
+    return out
+
+
+def in_view(tree, key, view, memo=None):
+    """inView: what ticking a key covers in a view: a tag holding more than
+    one view (a big shared deck's top tag holds resources and systems, the
+    same cards twice) covers only what this view shows of it."""
+    if view == "deck" or kind_of(key) == "deck":
+        return [key]
+    if len(kinds_below(tree, key, memo)) > 1:
+        out = []
+        for c in tree.kids(key):
+            if view in kinds_below(tree, c, memo):
+                out.extend(in_view(tree, c, view, memo))
+        return out
+    return [key]
+
+
+def covered(cover, key):
+    return key in cover or any(under(c, key) for c in cover)
+
+
+def partly(cover, key):
+    return any(under(key, c) for c in cover)
+
+
+def ticked(cover, tree, key, view, memo=None):
+    """A row's tick: covered, or all it covers in this view is."""
+    keys = in_view(tree, key, view, memo) if tree is not None else [key]
+    return covered(cover, key) or (len(keys) > 1 and all(covered(cover, x) for x in keys))
+
+
+def toggle(cover, tree, key, view, memo=None):
+    """The builder's tick on What to cover: a ticked one off; else what it
+    covers in this view on, anything under it it now holds off."""
+    cover = set(cover)
+    if key in cover:
+        cover.discard(key)
+        return cover
+    keys = in_view(tree, key, view, memo)
+    if len(keys) > 1 and all(covered(cover, x) for x in keys):
+        return cover - set(keys)
+    if covered(cover, key):
+        return cover
+    for x in keys:
+        for c in list(cover):
+            if under(x, c):
+                cover.discard(c)
+        cover.add(x)
+    return cover
+
+
+def cover_items(tree, cover):
+    """coverItems: what's ticked, none under another ticked one, in the tree's order."""
+    have = [k for k in cover if tree.has(k) and not any(c != k and under(c, k) for c in cover)]
+    return sorted(have, key=lambda k: tree.order.get(k, 0))
+
+
+def cover_left(tree, cover, placed):
+    """coverLeft: cards ticked but on no date yet."""
+    return sum(0 if is_placed(k, placed) else eff(tree, k, placed) for k in cover_items(tree, cover))
+
+
+def last_day(doc):
+    """lastDay: the plan's last day, an even date's due date."""
+    days = [str(u.get("due") if u.get("even") and u.get("due") else u.get("opens") or "") for u in S.units(doc)]
+    return max(days) if days else ""
+
+
+def plan_start(doc, fallback):
+    us = S.units(doc)
+    return min(str(u["opens"]) for u in us) if us else fallback
+
+
+def next_monday(today):
+    d = _d(today)
+    while d.weekday() != 0:
+        d += datetime.timedelta(days=1)
+    return _iso(d)
+
+
+def _after(doc, start):
+    ld = last_day(doc)
+    a = _iso(_d(ld) + datetime.timedelta(days=1)) if ld else start
+    return a if a > start else start
+
+
+def pace_daily(pace):
+    """paceDaily: 0 when each day is placed by hand."""
+    return 0 if pace.get("mode") == "placed" else max(1, int(pace.get("daily") or 0))
+
+
+def end_daily(doc, tree, pace, cover, start):
+    """endDaily: the cards a day that finish what's left by the end date."""
+    if not doc.get("end"):
+        return int(pace.get("daily") or 0)
+    dd = _Days(doc, pace.get("days") or [1] * 7)
+    frm = _after(doc, start)
+    days = dd.count(frm, doc["end"]) if frm <= doc["end"] else 0
+    rest = cover_left(tree, cover, placed_keys(doc, tree))
+    return max(1, -(-rest // days)) if days and rest else 0
+
+
+def finish_by(doc, tree, pace, cover, start, daily):
+    """finishBy: the day what's left is done at `daily` a study day."""
+    rest = cover_left(tree, cover, placed_keys(doc, tree))
+    if not daily or not rest:
+        return None
+    dd = _Days(doc, pace.get("days") or [1] * 7)
+    d = dd.first(_after(doc, start))
+    for _i in range(2000):
+        rest -= daily
+        if rest <= 0:
+            break
+        d = dd.next(d)
+    return d
+
+
+def lay_out(doc, tree, pace, cover, start, today, new_id, week_ahead=False, aim=None):
+    """layOut: what's ticked and not on a date yet, laid on the plan's study
+    days after its last date (or from its start), at the pace: Fill to the
+    end date (a little more a day, up to about twice the pace, until it all
+    fits; past that it stops there and says what's left), Fill at N a day,
+    or just next week. aim: an event's id; the new dates before it prep for
+    it. Works on `doc` itself. {note, daily, touched}: daily, the pace it
+    was filled at (Finish by)."""
+    from .. import plans as P
+    days = pace.get("days") or [1] * 7
+    dd = _Days(doc, days)
+    end = doc.get("end") if pace.get("mode") == "end" and doc.get("end") else None
+    frm = _after(doc, start)
+    until = end
+    if week_ahead:
+        nm = next_monday(today)
+        if frm < nm:
+            frm = nm
+        mon = _iso(S.monday(_d(frm)))
+        frm = mon if frm < mon else frm
+        sun = _iso(_d(mon) + datetime.timedelta(days=6))
+        until = end if end and end < sun else sun
+    out = {"note": "", "daily": None, "touched": set()}
+    if until and dd.first(frm) > until:
+        out["note"] = (f"Nothing fits by {P.fmt_day(end)}: "
+                       + (f"the dates already run to {P.fmt_day(last_day(doc))}" if last_day(doc) else f"the plan starts {P.fmt_day(start)}")
+                       + ". Move the finish date." if end and until == end else "No study days left in that week.")
+        return out
+    if pace.get("mode") == "end":
+        d1 = end_daily(doc, tree, pace, cover, start)
+        if d1:
+            pace = dict(pace, daily=d1)
+    cap = pace_daily(pace)
+    placed = placed_keys(doc, tree)
+    items = [p for k in cover_items(tree, cover) for p in pieces(tree, k, cap, placed)]
+    if not items:
+        out["note"] = "Everything ticked is on the calendar already." if cover else "Tick what to cover first."
+        return out
+    before = {u["id"] for u in S.units(doc)}
+    was = [dict(u) for u in doc.get("units") or []]
+    tries = 0
+    while True:
+        doc["units"] = [dict(u) for u in was]
+        r = fill(doc, [p for k in cover_items(tree, cover) for p in pieces(tree, k, cap, placed)], frm, until, cap, days,
+                 new_id, end)
+        if not end or week_ahead or not (r["left"] or r["clipped"]) or r["note"] or tries >= 7:
+            break
+        tries += 1
+        cap = min(5000, math.ceil(cap * 1.1))
+    if pace.get("mode") == "end":
+        out["daily"] = cap
+    ev = next((e for e in doc.get("events") or [] if isinstance(e, dict) and e.get("id") == aim), None) \
+        if aim and pace.get("mode") == "end" else None
+    if ev:
+        for u in doc["units"]:
+            if u["id"] not in before and str(u["opens"]) < str(ev.get("day")) and not u.get("for"):
+                u["for"] = ev["id"]
+    left_n = sum(x["n"] for x in r["left"])
+    words = [f"Put {r['placed']:,} cards on {P.fmt_day(dd.first(frm))} to {P.fmt_day(r['last'])}." if r["placed"]
+             else "No study days left in that week." if week_ahead else "Nothing fit."]
+    if left_n and (r["note"] or not week_ahead):
+        words.append(f"{r['note'] + ' ' if r['note'] else ''}{left_n:,} didn't fit"
+                     f"{' by ' + P.fmt_day(end) if end and not r['note'] else ''}: {left_names(r['left'])}.")
+    out["note"] = " ".join(words)
+    out["touched"] = r["touched"]
+    return out
+
+
+def heavy(doc, tree, pace, cover, start, total_of):
+    """heavyNote: the first run of days whose work is over the pace (a
+    quarter over it): {a, b, top, unit, total, last, cap} or None."""
+    cap = (end_daily(doc, tree, pace, cover, start) or int(pace.get("daily") or 0)) if pace.get("mode") == "end" \
+        else int(pace.get("daily") or 0) if pace.get("mode") == "daily" else 0
+    if not cap:
+        return None
+    work = work_map(doc, total_of, pace.get("days") or [1] * 7)
+    runs = over(work, cap)
+    if not runs:
+        return None
+    run = runs[0]
+    u, _k = sorted(work[run["a"]]["by"], key=lambda x: -x[1])[0]
+    last = _iso(S.window(doc, u, 0)[1])
+    return dict(run, unit=u, total=total_of(u), last=last, cap=cap)
+
+
+def biggest(tree, u, placed):
+    """heavyNote's Split: a date's biggest tag or subdeck this Anki counts
+    (none on an even date: it's spread already)."""
+    if u.get("even"):
+        return None
+    ks = [k for k in srcs(u) if eff(tree, k, placed) > 0]
+    return max(ks, key=lambda k: eff(tree, k, placed)) if ks else None
+
+
+def give_till(doc, days, u, total, cap):
+    """heavyNote's Give it till: the day by which the pace's study days, from
+    the date's own, hold all it opens (a year at most)."""
+    dd = _Days(doc, days)
+    need = -(-int(total) // max(1, int(cap)))
+    till, k = str(u["opens"]), 1 if dd.study(u["opens"]) else 0
+    lim = _iso(_d(u["opens"]) + datetime.timedelta(days=366))
+    while k < need and till < lim:
+        till = _iso(_d(till) + datetime.timedelta(days=1))
+        k += dd.study(till)
+    return till

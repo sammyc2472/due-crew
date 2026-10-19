@@ -3002,3 +3002,39 @@ every release that changes how something works.
   says it as cards (`plans._missing`): "14 of 14", or "12 of 14" with two
   notes gone. The site's numbers for such a date (the builder's load, the
   plan page, the calendar feed) still count a shared card twice.
+- 3.9.3, Your plans for everyone, and the builder in Anki (Sam: "the plans
+  one which doesn't actually need claude we can try to find a way to
+  integrate into the public release"; then "go with your picks... your goal
+  is to duplicate the website plans functionality in the add on"). The
+  labs windows open for anyone signed in, named as the proposals page
+  picked: Your plans (the plan window), New plan from a calendar, Missed
+  questions (Question IDs). Ways in: Tools › Due Crew › Plans (a submenu
+  with Follow a plan, New plan from a deck and Export cards for my AI), You
+  › Plans' head row (Open plans, New plan ▾) and each card's Open, an
+  Insights line for a deck with a bank's question tags (Missed questions),
+  and Find a setting (`board.FIND_WINDOWS`; `planyours`, `plannew`,
+  `planstart`, `planmissed`). Labs keeps Claude's stand-in and What Claude
+  would get. Your plans has tabs. **Dates**: the builder's day panel as
+  Change ▾ and New ▾ (a search or IDs, notes: and cards:, Suggested from
+  its name, Split by its tags or evenly, a cut, without its extras, a note
+  on a tag, prep for, spread evenly, to-dos, review days, quizzes and
+  exams). **Lay it out**, for authors (`layout_tab.py`): What to cover by
+  resource, system, the rest or subdecks (a tag holding two views covers
+  this view's part of it), the pace (Starts moves every date, study days,
+  Finish by a date or an event, Cards a day, placed by hand), Fill and Just
+  next week (to an end, a tenth more a day until it fits, seven tries), Put
+  it on a day (the builder's +), the day over the pace with Split and Give
+  it till, the reviews line, the plan's own tags (rename and delete: the
+  dates, cuts, searches, notes and names using them follow), Every week,
+  Notes on cards. Ticks and the pace wait in the tab until Fill or Save the
+  pace, one save, and a save tried again on someone else's uses what was
+  set at the click. New plan from a deck makes the plan in Anki (a name,
+  Make the plan, then Your plans on it at Lay it out; Open the builder
+  instead is the site). The builder's rules are restated in
+  `planner/build.py` and its edits in `planner/edits.py`, twins of
+  builder.js (`test_builder_twins_v393` runs builder.js's Todo, Every,
+  Remarks, Picks, Suggest, Work, Reviews and Tags in node against them);
+  Fill, layOut and the tag edits are checked by hand-worked plans
+  (`test_build_fill_v393`, `test_lay_out_v393`, `test_plan_edits_v393`).
+  Still the site's: Text, Updates, Progress, History, Settings, day notes.
+  No new route, nothing on a refresh or a sync.

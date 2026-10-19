@@ -17,6 +17,7 @@ the builder's: PUT /plans/{id} with the version it started from
 import copy
 import datetime
 import random
+import re
 
 from .. import plans as P
 from . import build as B
@@ -727,3 +728,234 @@ def name_dates(doc, ids, before=None):
         elif not str(u.get("name") or "").strip():
             u["name"] = "Date"
     return doc
+
+
+# ---- 3.9.3: Lay it out: the pace, the start, the end, the plan's own tags ----
+
+def set_pace(doc, mode, days, daily=None, cover=None):
+    """The builder's pace (plans.ts pace): how it's laid out (an end date,
+    cards a day, or each day placed), its study days, cards a day, and
+    what it covers ("tag:PATH", "deck:PATH")."""
+    if mode not in ("end", "daily", "placed"):
+        raise Refused("That isn't a pace.")
+    days = [1 if x else 0 for x in days]
+    if len(days) != 7 or not any(days):
+        raise Refused("Pick a study day.")
+    doc = copy.deepcopy(doc)
+    pace = {"mode": mode, "days": days}
+    if daily is not None:
+        pace["daily"] = max(1, min(5000, int(daily)))
+    if cover:
+        pace["cover"] = sorted(set(cover))[:2000]
+    doc["pace"] = pace
+    return doc
+
+
+def shift_all(doc, days):
+    """The start moved: every date, review day, event and the end date with it."""
+    doc = copy.deepcopy(doc)
+    for u in doc.get("units") or []:
+        for k in ("opens", "due", "check"):
+            if u.get(k):
+                u[k] = _later(u[k], days)
+    for r in doc.get("reviews") or []:
+        r["day"] = _later(r["day"], days)
+    for e in doc.get("events") or []:
+        e["day"] = _later(e["day"], days)
+    if doc.get("end"):
+        doc["end"] = _later(doc["end"], days)
+    return _sorted(doc)
+
+
+def set_end(doc, end):
+    """The plan's end (the exam, the course's last day), or none: its
+    review-only days at the end go with it."""
+    doc = copy.deepcopy(doc)
+    if end:
+        doc["end"] = _day(end).isoformat()
+    else:
+        doc.pop("end", None)
+        if doc.get("phases"):
+            doc["phases"]["taper"] = 0
+            if not doc["phases"].get("catchup"):
+                del doc["phases"]
+    return doc
+
+
+def set_phases(doc, catchup=None, taper=None):
+    """Catch-up weeks (every 3rd or 4th: nothing new) and review-only days
+    before the end date (plans.ts phases)."""
+    doc = copy.deepcopy(doc)
+    ph = dict(doc.get("phases") or {"catchup": 0, "taper": 0})
+    if catchup is not None:
+        if catchup not in (0, 2, 3, 4, 5, 6, 7, 8):
+            raise Refused("Catch-up weeks come every 2nd to 8th week.")
+        ph["catchup"] = catchup
+    if taper is not None:
+        if not 0 <= int(taper) <= 60:
+            raise Refused("Review-only days are 0 to 60.")
+        if taper and not doc.get("end"):
+            raise Refused("Review-only days run up to the end date: set one first.")
+        ph["taper"] = int(taper)
+    ph = {"catchup": int(ph.get("catchup") or 0), "taper": int(ph.get("taper") or 0)}
+    if ph["catchup"] or ph["taper"]:
+        doc["phases"] = ph
+    else:
+        doc.pop("phases", None)
+    return doc
+
+
+def _tag_re(path, flags=re.I):
+    """tagRe: a tag where it sits in a search, whole (SLG_1 isn't in SLG_12),
+    as Tags.ankiSearch writes it or plain."""
+    quoted = B.anki_search("tag", path)[1:-1]
+    return re.compile(f"({re.escape(quoted)}|{re.escape('tag:' + str(path))})(?=::|$|[\\s\")])", flags)
+
+
+def _drop_search(u, q):
+    u["search"] = [x for x in u.get("search") or [] if x != q]
+    if isinstance(u.get("sn"), dict):
+        u["sn"] = {k: v for k, v in u["sn"].items() if k != q}
+    for k in ("search", "sn"):
+        if k in u and not u[k]:
+            del u[k]
+
+
+def _sync_cuts(doc):
+    """syncCuts: each date's cuts as the plan's tags are now: one whose tag
+    went is its whole tag again; a renamed tag's cut searches by its new name."""
+    tags = {t.get("id"): t for t in P.plan_tags(doc)}
+    for u in doc.get("units") or []:
+        if not u.get("cut"):
+            u.pop("cut", None)
+            continue
+        keep = []
+        for c in u["cut"]:
+            t = tags.get(c.get("in"))
+            if t is None:
+                _drop_search(u, c.get("q"))
+                u["tags"] = list(dict.fromkeys(list(u.get("tags") or []) + [c["tag"]]))
+                continue
+            q = B.cut_q(c["tag"], P.tag_path(doc, t))
+            if q != c.get("q"):
+                was = (u.get("sn") or {}).get(c.get("q"))
+                _drop_search(u, c.get("q"))
+                if was is not None:
+                    u["sn"] = dict(u.get("sn") or {}, **{q: was})
+                c["q"] = q
+            if q not in (u.get("search") or []):
+                u["search"] = list(u.get("search") or []) + [q]
+            keep.append(c)
+        if keep:
+            u["cut"] = keep
+        else:
+            u.pop("cut", None)
+
+
+def _cleanup(doc):
+    """cleanup: a date with nothing on it goes, and the review days that name it."""
+    doc["units"] = [u for u in doc.get("units") or [] if has_sources(u)]
+    ids = {u["id"] for u in doc["units"]}
+    if doc.get("reviews"):
+        doc["reviews"] = [r for r in doc["reviews"] if r.get("from") in ids and r.get("to") in ids]
+        if not doc["reviews"]:
+            del doc["reviews"]
+
+
+def _retag(doc, old, new):
+    """retag: a plan tag renamed (or gone, new None): the dates using it
+    follow, as a tag and in their searches, and so does a note on it."""
+    low = str(old).lower()
+    nq = B.anki_search("tag", new)[1:-1] if new else None
+    for u in doc.get("units") or []:
+        if any(str(t).lower() == low for t in u.get("tags") or []):
+            u["tags"] = ([new if str(t).lower() == low else t for t in u["tags"]] if new
+                         else [t for t in u["tags"] if str(t).lower() != low])
+        for q in list(u.get("search") or []):
+            if not _tag_re(old).search(q):
+                continue
+            if not nq:
+                _drop_search(u, q)
+                continue
+            q2 = _tag_re(old).sub(lambda m: nq, q)
+            u["search"] = [q2 if x == q else x for x in u["search"]]
+            if (u.get("sn") or {}).get(q) is not None:
+                u["sn"][q2] = u["sn"].pop(q)
+    rs = [r for r in doc.get("remarks") or [] if isinstance(r, dict)]
+    if any(r.get("tag") and str(r["tag"]).lower() == low for r in rs):
+        rs = ([dict(r, tag=new) if r.get("tag") and str(r["tag"]).lower() == low else r for r in rs] if new
+              else [r for r in rs if not (r.get("tag") and str(r["tag"]).lower() == low)])
+        if rs:
+            doc["remarks"] = rs
+        else:
+            doc.pop("remarks", None)
+    _sync_cuts(doc)
+    _cleanup(doc)
+
+
+def rename_plan_tag(doc, tid, name):
+    """One of the plan's own tags renamed (40 characters, a name no other has):
+    every date, search and note using it follows."""
+    doc = copy.deepcopy(doc)
+    t = next((x for x in P.plan_tags(doc) if x.get("id") == tid), None)
+    if t is None:
+        raise Refused("That tag isn't the plan's any more.")
+    v = _cut(" ".join(str(name or "").split()), 40).strip()
+    if not v:
+        raise Refused("A tag needs a name.")
+    clash = next((x for x in P.plan_tags(doc) if x is not t and P.tag_part(x.get("name")).lower() == P.tag_part(v).lower()), None)
+    if clash is not None:
+        raise Refused(f"There's a tag called {clash.get('name')} already.")
+    old, before = P.tag_path(doc, t), copy.deepcopy(doc)
+    t["name"] = v
+    _retag(doc, old, P.tag_path(doc, t))
+    return name_dates(doc, {u.get("id") for u in doc.get("units") or []}, before)  # renameAll
+
+
+def drop_say(doc, tid):
+    """dropSay: what deleting a plan tag does to the dates, said first."""
+    t = next((x for x in P.plan_tags(doc) if x.get("id") == tid), None)
+    if t is None:
+        return ""
+    path = P.tag_path(doc, t)
+
+    def uses(u):
+        return (any(str(x).lower() == path.lower() for x in u.get("tags") or [])
+                or any(c.get("in") == tid for c in u.get("cut") or [])
+                or any(_tag_re(path).search(q) for q in u.get("search") or []))
+
+    def bare(u):
+        return not (any(str(x).lower() != path.lower() for x in u.get("tags") or []) or u.get("decks") or u.get("cards")
+                    or u.get("nids") or u.get("cids") or u.get("notes") or u.get("cut")
+                    or any(not _tag_re(path).search(q) for q in u.get("search") or []))
+    us = sorted((u for u in P.units(doc) if uses(u)), key=lambda u: str(u["opens"]))
+    if not us:
+        return f"{t.get('name')} is on no dates."
+
+    def listed(xs):
+        return ", ".join(P.fmt_day(u["opens"]) for u in xs[:4]) + (f" and {len(xs) - 4} more" if len(xs) > 4 else "")
+    gone = [u for u in us if bare(u)]
+    out = f"{t.get('name')} is on {len(us)} date{'s' if len(us) != 1 else ''}: {listed(us)}."
+    if gone:
+        who = ("It has" if len(us) == 1 else "They have") if len(gone) == len(us) else f"{listed(gone)} ha{'s' if len(gone) == 1 else 've'}"
+        out += f" {who} nothing else, so {'it goes' if len(gone) == 1 else 'they go'}, to-dos too."
+    if any(c.get("in") == tid for u in us for c in u.get("cut") or []):
+        out += " A tag kept to it there is all of that tag again."
+    return out
+
+
+def delete_plan_tag(doc, tid):
+    """One of the plan's own tags deleted: off every date (a cut kept to it
+    is its whole tag again), a date with nothing else going with it."""
+    doc = copy.deepcopy(doc)
+    t = next((x for x in P.plan_tags(doc) if x.get("id") == tid), None)
+    if t is None:
+        raise Refused("That tag isn't the plan's any more.")
+    path, before = P.tag_path(doc, t), copy.deepcopy(doc)
+    rest = [x for x in doc.get("tags") or [] if x.get("id") != tid]
+    if rest:
+        doc["tags"] = rest
+    else:
+        doc.pop("tags", None)
+    _retag(doc, path, None)
+    return name_dates(doc, {u.get("id") for u in doc.get("units") or []}, before)  # renameAll

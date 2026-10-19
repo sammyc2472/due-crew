@@ -42,14 +42,14 @@ add-on.
   colours the studied days with the user's accent: the board's title is
   the one-line logo (inline SVG on the `--dc-*` tokens), and the stacked
   one tops the sign-in and welcome screens.
-- `due_crew/planner/` — labs (`docs/planner.md`): the plan window, a plan
-  from a block's calendar (plain rules first; Claude's jobs a stand-in,
-  `claude.py`, that sends nothing) and Question IDs, Python-native, kept
-  apart from the rest while it's tried.
-  Nothing of it runs unless this computer's config says `"labs": true` (no
-  window sets it), and the plan window opens only for the admin's account
-  (`GET /auth/me`'s admin). Routes the builder uses already; nothing new on
-  the server. Its tests: `tests/test_planner.py`.
+- `due_crew/planner/` — `docs/planner.md`: Your plans (the duecrew.com
+  builder in Anki: Dates, and Lay it out for authors), New plan from a
+  calendar (plain rules first) and Missed questions, Python-native, for
+  everyone signed in since 3.9.3 (Tools › Due Crew › Plans, You › Plans,
+  Insights, Find a setting). Labs (this computer's `"labs": true`, no
+  window sets it) keeps only Claude's stand-in (`claude.py`, sends nothing)
+  and What Claude would get. Routes the builder uses already; nothing new
+  on the server. Its tests: `tests/test_planner.py`.
 - `poc/course_mac/` — Course on a Mac, a separate add-on proof of concept
   (Sam's, on his Mac; not part of Due Crew and never talks to its server): a
   block's calendar read, each lecture's cards found by Apple's on-device model
@@ -176,6 +176,11 @@ same commit, each with its test:
   `DOODLE_PEN_MAX` in all three)
 - `ahead.GENERIC`'s cards ↔ `Reviews.CURVE` in builder.js (a typical card's
   next six weeks, 3.9.2; the suite checks)
+- `planner/build.py` ↔ builder.js (3.9.3): Todo, Every, Remarks, Picks,
+  Suggest, Work, Reviews, `Tags.ankiSearch`, searchName (checked in node);
+  pieces, fill, layOut, What to cover's toggle and inView, heavyNote
+  (checked by hand-worked plans); `planner/edits.py` ↔ the builder's edits
+  (a date's sources, cuts, splits, events, review days, retag and dropSay)
 - the Worker ↔ `tests/fakes.FakeWorker` (the suite's server)
 
 ## Where things live
@@ -194,6 +199,7 @@ same commit, each with its test:
 | Pip (3.8.1, Block; called Sev until 3.8.2, and still `sev` in code: sev.py, the `sev*` keys, `.sv`, sev.js's `Sev`): by the logo for a moment, in a fifteen's chip, question and break, the nudge, the session's line; hopping across the week picture card; a study room's seats, each crewmate's in their accent; waving in Welcome back and on the signed-out card; hopping on a crewmate's big-streak banner (not on crew rows: Sam's no). Each place has its mix of moves (`sev.MOVES`), never the same twice in a row. 3.9.1: its loops play about twelve seconds and rest (`--sv-on`), pointing plays them on; the break's breathing goes on; the fridge's are still till pointed at | `sev.py` (one drawing; the widgets get its markup, the week card and Welcome back `sev.still`; `pick`/`nth` the variety), `rooms.board_sev`/`pick`/`milestone_sevs`/`signed_out_sev`, `sharecard.hops`, `room_model.seats`/`vary_seed`, `ui.sev_label` | never sent; cards.js keeps a copy of `sev.still` (the suite checks it) |
 | Pip's closet (3.8.2): 61 things earned by showing up, coming back, together, plans, card care, seasons, secrets; one per place, a costume over the look; in place of the board (Yours by place, To earn by how); each crew row's, profile card's and (3.8.21) squadmate's Pip in the emoji's place (3.8.22: a plan card's squad line too, by `who` on `/board`'s `teams`; the review chip, a squadmate's card, Settings › You, bingo stamps; the site's account page and home feed, `pipFor`; the Friends dialog is names alone) | `closet.py` (pure: things, wear/clean/shown, facts from days and hours; 3.8.22: `halloween`/`spooky`), `closet_art.py` (the drawings), `closet_flow.py` (facts, tallies in wrap.json, a year of them for Wrapped, earned, worn, `halloween_view`), `board.closet_html`/`closet_line`/`row_sev`/`card_sev`/`squad_pip`/`halloween_html` | account keys `sev_look`, `sev_closet`; a mutual friend's look on /board (`lookOf` in `board.ts`) |
 | Plans (follow, morning, week, load; You › Plans) | `plans.py`, `schedule.py`, `plan_flow.py` | `plans.ts`, `library.ts`; `builder.js`, app.js |
+| Your plans (3.9.3: the builder in Anki; Dates, Lay it out), New plan from a calendar, Missed questions | `planner/` (`window.py`, `layout_tab.py`, `build.py`, `edits.py`, `flow.py`), `ui/plan_dialog.py` (Make the plan) | routes the builder uses; `builder.js` the twin |
 | A plan's squad (3.8.0, on the Squads tab; its team on the server) | `team.py`, `team_flow.py` | `team.ts`; `PlanSquad` in builder.js |
 | Insights (the deck's, a plan only sharpens it; You › Insights; the topic map, tiles open into parts, or by the week I started them (3.9.2); its card and text, shared by hand; my exam's scope, since my last exam (3.9.2)) | `team.py`, `team_flow.py`, `mapcard.py`, `ui/map_card_dialog.py` | never sent |
 | Reviews ahead (3.9.2: six weeks of a deck counted from my log; its ways and Stop new cards, Anki's today-only limit each morning; the track record; the board's line when reviews climb) | `ahead.py` (pure), `ahead_flow.py`, `board._ins_ahead`/`ahead_line` | never sent; the builder's `Reviews` (a typical curve) |

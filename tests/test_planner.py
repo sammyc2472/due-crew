@@ -1010,16 +1010,19 @@ def test_rules_of_the_road():
           sorted(windows) == ["date_dialogs.py", "picker.py", "qid_window.py", "start_window.py", "window.py"]
           and all(t.count("(QDialog)") == t.count("attach_alive(self)") == len(re.findall(r"\bheading\(self", t))
                   for t in windows.values()), sorted(windows))
+    tabs = {f: t for f, t in src.items() if "(QWidget)" in t}  # 3.9.3: Your plans' tabs past Dates
+    check("road: the tabs are Lay it out's", sorted(tabs) == ["layout_tab.py"], sorted(tabs))
+    windows_tabs = dict(windows, **tabs)
     check("road: no window sets its own type or margins in a style sheet, nor reads Anki's palette",
-          not [f for f, t in windows.items() if "setStyleSheet" in t or "palette(" in t or "font-size" in t])
+          not [f for f, t in windows_tabs.items() if "setStyleSheet" in t or "palette(" in t or "font-size" in t])
     check("road: every label is plain text (names are the authors' and the deck's); tooltips escaped",
-          all("setTextFormat(Qt.TextFormat.PlainText)" in t for t in windows.values())
-          and not [f for f, t in windows.items() if re.search(r'setToolTip\(0, (?!f"<span>\{esc\()', t)])
+          all("setTextFormat(Qt.TextFormat.PlainText)" in t for t in windows_tabs.values())
+          and not [f for f, t in windows_tabs.items() if re.search(r'setToolTip\(0, (?!f"<span>\{esc\()', t)])
     pure = ("model.py", "qids.py", "edits.py", "actions.py", "remote.py", "reading.py", "claude.py", "build.py")
     check("road: the pure parts and the requests import no aqt",
           not [f for f in pure if re.search(r"^\s*(from aqt|import aqt)", src[f], re.M)])
     calls = set()
-    for f in ("flow.py", "window.py", "qid_window.py", "picker.py", "start_window.py"):
+    for f in ("flow.py", "window.py", "layout_tab.py", "qid_window.py", "picker.py", "start_window.py"):
         for node in ast.walk(ast.parse(src[f])):
             if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "remote":
                 calls.add(node.attr)
@@ -1256,6 +1259,159 @@ def test_date_edits_v393():
           and named["units"][0]["name"] == "Heart failure" and named["units"][2]["name"] == "Antibiotics", named["units"])
     line = E.what_changed(d, E.set_for(E.set_todo(d, "u1", [{"k": "do", "t": "x"}]), "u1", None))
     check("dates: a save's history line says what changed", "to-dos" in line and "for nothing" in line and line.endswith("(in Anki)"), line)
+
+
+def test_lay_out_v393():
+    """3.9.3: Lay it out, the builder's: what to cover in a view (a tag that
+    holds resources and systems covers what the view shows of it), the
+    pace (cards a day, or a finish date it reaches a little more a day),
+    just next week, a date aimed at a quiz, and a day over the pace."""
+    from due_crew.planner import build as B
+    t = B.Tree([("#Big", 250), ("#Big::#Book", 50), ("#Big::#Videos", 100), ("#Big::#Videos::Cardio", 60),
+                ("#Big::#Videos::Pulm", 40), ("#Big::^Systems", 100), ("#Big::^Systems::Heart", 100), ("Misc", 10)],
+               [("Big Step 1", 260)])
+    check("lay out: a tag's views, itself and below",
+          B.kinds_below(t, "tag:#Big") == {"resource", "system"} and B.kinds_below(t, "root:tag") == {"resource", "system", "other"}
+          and B.tag_kind("#Big::^Systems::Heart") == "system" and B.tag_kind("Misc") == "other")
+    check("lay out: a tag holding more than one view covers what this view shows of it",
+          B.in_view(t, "tag:#Big", "resource") == ["tag:#Big::#Book", "tag:#Big::#Videos"]
+          and B.in_view(t, "tag:#Big", "system") == ["tag:#Big::^Systems"] and B.in_view(t, "tag:#Big", "deck") == ["tag:#Big"],
+          B.in_view(t, "tag:#Big", "resource"))
+    c = B.toggle(set(), t, "tag:#Big", "resource")
+    check("lay out: ticking it ticks those, and shows it ticked; again, they're off",
+          c == {"tag:#Big::#Book", "tag:#Big::#Videos"} and B.ticked(c, t, "tag:#Big", "resource")
+          and B.toggle(c, t, "tag:#Big", "resource") == set(), c)
+    c2 = B.toggle({"tag:#Big::#Videos::Cardio"}, t, "tag:#Big::#Videos", "resource")
+    check("lay out: a tag ticked takes the ones below it off; one below a ticked one stays as it is; a tick off",
+          c2 == {"tag:#Big::#Videos"} and B.toggle(c2, t, "tag:#Big::#Videos::Pulm", "resource") == c2
+          and B.toggle(c2, t, "tag:#Big::#Videos", "resource") == set()
+          and B.partly(c2, "tag:#Big") and B.covered(c2, "tag:#Big::#Videos::Pulm"), c2)
+    cover = {"tag:#Big::#Book", "tag:#Big::#Videos", "tag:#Big::#Videos::Cardio"}
+    check("lay out: what's ticked, none under another, in the tree's order; what's ticked and on no date",
+          B.cover_items(t, cover) == ["tag:#Big::#Book", "tag:#Big::#Videos"] and B.cover_left(t, cover, set()) == 150
+          and B.cover_left(t, cover, {"tag:#Big::#Videos::Cardio"}) == 90)
+    week = [1, 1, 1, 1, 1, 0, 0]
+    start = "2026-11-09"  # a Monday
+    ids = iter(f"n{i}" for i in range(999))
+    doc = {"deck": "Big Step 1", "units": []}
+    pace = {"mode": "daily", "days": week, "daily": 30}
+    check("lay out: done by, at 30 a day; the cards a day that finish by an end",
+          B.finish_by(doc, t, pace, cover, start, 30) == "2026-11-13"
+          and B.end_daily(dict(doc, end="2026-11-13"), t, dict(pace, mode="end"), cover, start) == 30
+          and B.next_monday("2026-11-04") == start and B.plan_start(doc, start) == start)
+    r = B.lay_out(doc, t, pace, cover, start, "2026-11-04", lambda: next(ids))
+    us = [(u["opens"], u.get("due"), u["tags"]) for u in doc["units"]]
+    check("lay out: Fill at 30 a day: a chapter bigger than the pace spread evenly, weekends off",
+          us == [("2026-11-09", "2026-11-10", ["#Big::#Book"]), ("2026-11-11", "2026-11-12", ["#Big::#Videos::Cardio"]),
+                 ("2026-11-13", "2026-11-16", ["#Big::#Videos::Pulm"])]
+          and r["note"] == "Put 150 cards on Mon 9 Nov to Mon 16 Nov." and len(r["touched"]) == 3 and r["daily"] is None, (us, r))
+    doc = {"deck": "Big Step 1", "units": [], "end": "2026-11-13",
+           "events": [{"id": "e1", "day": "2026-11-14", "name": "Cardio quiz"}]}
+    r = B.lay_out(doc, t, {"mode": "end", "days": week, "daily": 20}, cover, start, "2026-11-04", lambda: next(ids), aim="e1")
+    us = [(u["opens"], u.get("due"), u["tags"], u.get("for")) for u in doc["units"]]
+    check("lay out: Fill to an end: a little more a day until it all fits by then (30, 33, 37, 41); aimed at a quiz, the dates prep for it",
+          r["daily"] == 41 and us == [("2026-11-09", "2026-11-10", ["#Big::#Book"], "e1"),
+                                      ("2026-11-11", "2026-11-12", ["#Big::#Videos::Cardio"], "e1"),
+                                      ("2026-11-13", None, ["#Big::#Videos::Pulm"], "e1")]
+          and r["note"] == "Put 150 cards on Mon 9 Nov to Fri 13 Nov.", (us, r))
+    late = {"deck": "Big Step 1", "units": [], "end": "2026-11-08"}
+    r = B.lay_out(late, t, {"mode": "end", "days": week, "daily": 20}, cover, start, "2026-11-04", lambda: next(ids))
+    check("lay out: an end before the start: nothing, and why",
+          not late["units"] and r["note"] == "Nothing fits by Sun 8 Nov: the plan starts Mon 9 Nov. Move the finish date.", r)
+    doc = {"deck": "Big Step 1", "units": []}
+    r = B.lay_out(doc, t, pace, cover | {"tag:Misc"}, start, "2026-11-04", lambda: next(ids), week_ahead=True)
+    check("lay out: just next week: from its Monday, nothing starting after its Sunday, what's left unsaid",
+          [u["opens"] for u in doc["units"]] == ["2026-11-09", "2026-11-11", "2026-11-13"]
+          and r["note"] == "Put 150 cards on Mon 9 Nov to Mon 16 Nov.", (doc["units"], r))
+    r2 = B.lay_out(doc, t, pace, cover | {"tag:Misc"}, start, "2026-11-04", lambda: next(ids))
+    check("lay out: Fill again goes on after the last date, with only what's left",
+          [(u["opens"], u["tags"]) for u in doc["units"]][-1] == ("2026-11-17", ["Misc"])
+          and r2["note"] == "Put 10 cards on Tue 17 Nov to Tue 17 Nov.", (doc["units"], r2))
+    hd = {"deck": "Big Step 1", "units": [{"id": "u1", "name": "Videos", "opens": start, "tags": ["#Big::#Videos", "Misc"],
+                                           "decks": [], "cards": []}]}
+    placed = B.placed_keys(hd, t)
+    hv = B.heavy(hd, t, pace, set(), start, lambda u: B.unit_total(t, u, placed))
+    check("lay out: a day over the pace says so: the date, what it asks, the pace",
+          hv and hv["unit"]["id"] == "u1" and hv["cap"] == 30 and hv["top"] > 37.5 and hv["a"] == start, hv)
+    check("lay out: what fixes it: Split its biggest tag, or Give it till the study days the pace needs",
+          B.biggest(t, hd["units"][0], placed) == "tag:#Big::#Videos"
+          and B.give_till(hd, week, hd["units"][0], 110, 30) == "2026-11-12"
+          and B.biggest(t, dict(hd["units"][0], even=True), placed) is None)
+    check("lay out: no pace, no day over it", B.heavy(hd, t, {"mode": "placed", "days": week}, set(), start, lambda u: 110) is None)
+
+
+def test_plan_edits_v393():
+    """3.9.3: the pace saved, the start moved, the end and its phases, and
+    the plan's own tags renamed or deleted (the dates using them follow)."""
+    from due_crew.planner import build as B
+    p = E.set_pace({"units": []}, "end", [1, 1, 1, 1, 1, 0, 0], 25, ["tag:B", "tag:A", "tag:A"])
+    check("plan: the pace, its study days, cards a day, what it covers",
+          p["pace"] == {"mode": "end", "days": [1, 1, 1, 1, 1, 0, 0], "daily": 25, "cover": ["tag:A", "tag:B"]}, p)
+    words = []
+    for args in (("x", [1] * 7), ("daily", [0] * 7), ("daily", [1] * 6)):
+        try:
+            E.set_pace({}, *args)
+        except E.Refused as e:
+            words.append(str(e))
+    check("plan: no pace that isn't one, none without a study day", len(words) == 3, words)
+    doc = {"units": [{"id": "u1", "opens": "2026-11-09", "due": "2026-11-11", "check": "2026-11-12"}],
+           "reviews": [{"day": "2026-11-14", "from": "u1", "to": "u1"}], "events": [{"id": "e1", "day": "2026-11-15"}],
+           "end": "2026-12-01", "phases": {"catchup": 0, "taper": 5}}
+    s = E.shift_all(doc, 7)
+    check("plan: the start moved a week: every date, review day, event and the end with it",
+          s["units"][0] == {"id": "u1", "opens": "2026-11-16", "due": "2026-11-18", "check": "2026-11-19"}
+          and s["reviews"][0]["day"] == "2026-11-21" and s["events"][0]["day"] == "2026-11-22" and s["end"] == "2026-12-08", s)
+    check("plan: no end: its review-only days go with it; catch-up weeks stay",
+          "end" not in E.set_end(doc, None) and "phases" not in E.set_end(doc, None)
+          and E.set_end(dict(doc, phases={"catchup": 3, "taper": 5}), None)["phases"] == {"catchup": 3, "taper": 0})
+    words = []
+    for kw in ({"catchup": 1}, {"taper": 61}):
+        try:
+            E.set_phases(doc, **kw)
+        except E.Refused as e:
+            words.append(str(e))
+    try:
+        E.set_phases({"units": []}, taper=5)
+    except E.Refused as e:
+        words.append(str(e))
+    check("plan: catch-up every 2nd to 8th week, 0 to 60 review-only days, and those only with an end",
+          len(words) == 3 and E.set_phases(doc, catchup=3)["phases"] == {"catchup": 3, "taper": 5}
+          and "phases" not in E.set_phases(doc, taper=0), words)
+    root = {"tagroot": "MS2", "tags": [{"id": "t1", "name": "SLG 12"}, {"id": "t2", "name": "SLG 13"}]}
+    old = P.tag_path(root, root["tags"][0])
+    q = B.cut_q(VID, old)
+    own = B.anki_search("tag", old)
+    doc = dict(root, deck="Big Step 1",
+               units=[{"id": "u1", "name": E.auto_name([old]), "opens": "2026-11-09", "tags": [old], "decks": [], "cards": []},
+                      {"id": "u2", "name": "Heart failure", "opens": "2026-11-10", "tags": [], "decks": [], "cards": [],
+                       "cut": [{"tag": VID, "in": "t1", "q": q}], "search": [q], "sn": {q: 4}},
+                      {"id": "u3", "name": "Antibiotics", "opens": "2026-11-11", "tags": [OTHER], "decks": [], "cards": [],
+                       "search": [f"{own} -is:suspended"]}],
+               reviews=[{"day": "2026-11-12", "from": "u1", "to": "u2"}],
+               remarks=[{"id": "r1", "tag": old, "text": "Skip the last two minutes"}])
+    r = E.rename_plan_tag(doc, "t1", "SLG 12b")
+    new = P.tag_path(r, r["tags"][0])
+    us = {u["id"]: u for u in r["units"]}
+    check("plan: a tag renamed: the dates on it, a cut kept to it, a search using it and its note follow; a date named for it too",
+          new == "DueCrew::MS2::SLG_12b" and us["u1"]["tags"] == [new] and us["u1"]["name"] == "SLG 12b"
+          and us["u2"]["cut"][0]["q"] == B.cut_q(VID, new) and us["u2"]["search"] == [B.cut_q(VID, new)]
+          and us["u2"]["sn"] == {B.cut_q(VID, new): 4} and us["u2"]["name"] == "Heart failure"
+          and us["u3"]["search"] == [f"{B.anki_search('tag', new)} -is:suspended"] and r["remarks"][0]["tag"] == new, r)
+    try:
+        E.rename_plan_tag(doc, "t1", " slg  13 ")
+        clash = None
+    except E.Refused as e:
+        clash = str(e)
+    check("plan: no two of the plan's tags named alike", clash == "There's a tag called SLG 13 already.", clash)
+    say = E.drop_say(doc, "t1")
+    check("plan: what deleting a tag does, said first",
+          say == "SLG 12 is on 3 dates: Mon 9 Nov, Tue 10 Nov, Wed 11 Nov. Mon 9 Nov has nothing else, so it goes, to-dos too."
+          " A tag kept to it there is all of that tag again.", say)
+    d = E.delete_plan_tag(doc, "t1")
+    us = {u["id"]: u for u in d["units"]}
+    check("plan: a tag deleted: a date with nothing else goes (its review day too), a cut is all its tag again, searches and its note go",
+          set(us) == {"u2", "u3"} and us["u2"]["tags"] == [VID] and "cut" not in us["u2"] and "search" not in us["u2"]
+          and "search" not in us["u3"] and "reviews" not in d and "remarks" not in d and d["tags"] == [root["tags"][1]], d)
 
 
 def main():

@@ -480,6 +480,24 @@ def main(out):
             raise RuntimeError(f"make: opened {opened!r} {dlg.status.text()!r} {STORE.log[-3:]}")
         if ("sam", "Big Step 1") not in STORE.plan_trees:
             raise RuntimeError("make: the tree didn't go")
+        # 3.9.3: made in Anki: named, POST /plans, and Your plans opens on it
+        from due_crew.planner import remote as PR
+        made = []
+        dlg = MakePlanDialog(None, CLIENT, aqt.mw.col, "https://duecrew.com", open_link=opened.append,
+                             make=lambda name, deck: PR.create(CLIENT, name, deck), on_made=made.append)
+        if dlg.go.text() != "Make the plan" or dlg.site_btn is None or dlg.name.placeholderText() != "Big Step 1":
+            raise RuntimeError(f"make here: {dlg.go.text()!r}, {dlg.name.placeholderText()!r}")
+        dlg.name.setText("MS2 <b>Block</b> 3")
+        shoot(dlg, os.path.join(out, "plan-make-here.png"))
+        dlg = MakePlanDialog(None, CLIENT, aqt.mw.col, "https://duecrew.com", open_link=opened.append,
+                             make=lambda name, deck: PR.create(CLIENT, name, deck), on_made=made.append)
+        dlg.show()
+        dlg.name.setText("  MS2   Block 3 ")
+        dlg._make()
+        settle()
+        if len(made) != 1 or STORE.plans.get(made[0].get("id"), {}).get("name") != "MS2 Block 3":
+            raise RuntimeError(f"make here: {made!r} {dlg.status.text()!r}")
+        STORE.plans.pop(made[0]["id"])  # the renders after this one count Sam's plans
 
         today = datetime.date.today()
         day = lambda n: (today + datetime.timedelta(days=n)).isoformat()
@@ -1376,6 +1394,48 @@ def main(out):
         shoot(rv, os.path.join(out, "planner-reviewday.png"))
         sp = DD.SplitDialog(None, "Heart Failure", 18, "Acute 6 · Chronic 9 · the rest 3", 20, 2)
         shoot(sp, os.path.join(out, "planner-split.png"))
+        # 3.9.3: Lay it out, the builder's side panel and pace row: tick, pace, Fill, the plan's tags
+        dlg = PlanWindow_()
+        dlg.resize(1100, 720)
+        lay = dlg.pages["layout"]
+        dlg._show_tab("layout")
+        if dlg.tabs.currentWidget() is not lay:
+            raise RuntimeError("planner: Lay it out isn't an author's tab")
+        views = [lay.view.itemText(i) for i in range(lay.view.count())]
+        if views != ["Resource", "System", "Other", "Deck"]:
+            raise RuntimeError(f"planner: Lay it out's views {views}")
+        lay.find.setText("#book")
+        book = lay.tree.topLevelItem(0)
+        if book is None or book.data(0, QtCore.Qt.ItemDataRole.UserRole) != f"tag:{root}::#Book":
+            raise RuntimeError(f"planner: Lay it out's search {book.text(0) if book else None}")
+        book.setCheckState(0, QtCore.Qt.CheckState.Checked)
+        lay.mode.setCurrentIndex(lay.mode.findData("daily"))
+        if lay.cover != {f"tag:{root}::#Book"} or lay.fill_btn.isHidden() or lay.fill_btn.text() != "Fill at 20 a day" \
+                or not lay.how.text().startswith("done ≈"):
+            raise RuntimeError(f"planner: ticked {lay.cover}, {lay.fill_btn.text()!r}, {lay.how.text()!r}")
+        shoot(dlg, os.path.join(out, "planner-layout.png"))
+        lay._fill(False)
+        doc = STORE.plans[pid]["doc"]
+        made = [u for u in doc["units"] if u.get("tags") == [f"{root}::#Book"]]
+        if (doc.get("pace") != {"mode": "daily", "days": [1] * 7, "daily": 20, "cover": [f"tag:{root}::#Book"]}
+                or len(made) != 1 or made[0]["opens"] != day(4) or made[0]["name"] != "Book"
+                or lay.said.text() != f"Put 6 cards on {P.fmt_day(day(4))} to {P.fmt_day(day(4))}." or lay.dirty):
+            raise RuntimeError(f"planner: Fill: {doc.get('pace')}, {made}, {lay.said.text()!r}")
+        lay._fill(False)
+        if lay.said.text() != "Everything ticked is on the calendar already.":
+            raise RuntimeError(f"planner: Fill again: {lay.said.text()!r}")
+        lay._put(f"tag:{root}::#Sketches")
+        doc = STORE.plans[pid]["doc"]
+        if not any(u.get("tags") == [f"{root}::#Sketches"] and u["opens"] == day(5) for u in doc["units"]):
+            raise RuntimeError(f"planner: Put it on a day: {[(u['opens'], u.get('tags')) for u in doc['units']]}")
+        dlg._apply(lambda d: dict(d, tagroot="MS2", tags=[{"id": "t1", "name": "SLG 12", "notes": ["g1"]}]))
+        dlg._apply(lambda d: PE.set_every(d, [{"k": "do", "t": "Practice questions", "r": "4"}]))
+        dlg._apply(lambda d: PE.rename_plan_tag(d, "t1", "SLG 12b"))
+        if [lay.ptags.topLevelItem(i).text(0) for i in range(lay.ptags.topLevelItemCount())] != ["SLG 12b"] \
+                or "Practice questions" not in lay.every.text() or lay.rename_btn.isHidden():
+            raise RuntimeError(f"planner: Lay it out's tags and lines: {STORE.plans[pid]['doc'].get('tags')}, {dlg.status.text()!r}")
+        lay.ptags.setCurrentItem(lay.ptags.topLevelItem(0))
+        shoot(dlg, os.path.join(out, "planner-layout-saved.png"))
         empty = PlanWindow_([])
         shoot(empty, os.path.join(out, "planner-empty.png"))
         idx = P.DeckIndex(col, 1)

@@ -1,46 +1,54 @@
-# The plan window (labs)
+# Your plans, and the plan windows
 
-Python-native plan work inside Anki, built before the Claude API is
-connected and kept apart from the rest of the add-on while it's tried:
-its own package, `due_crew/planner/`, and nothing of it runs for anyone
-who hasn't turned it on. The mocks are round three's ("Resource tags and
-a Python-native plan window", the design-spec artifact).
+Python-native plan work inside Anki: Your plans (the duecrew.com builder,
+in Anki), New plan from a calendar and Missed questions, in their own
+package, `due_crew/planner/`. Built in labs (round three's mocks,
+"Resource tags and a Python-native plan window", the design-spec
+artifact) and, since 3.9.3, for everyone signed in (Sam's picks on the
+proposals page: the ways in below, the names "Your plans" and "Missed
+questions", authors edit in Anki). What it can't do yet stays the
+builder's on duecrew.com (Not here yet, below).
 
-## Who sees it
+## Ways in
 
-- **Labs switch.** This computer's add-on config has `"labs": true`. No
-  window sets it and `config.json` doesn't have it. Anki's Config button
-  opens the board's Settings, so set it in Anki's Debug Console
-  (Ctrl+Shift+; on Windows and Linux, ⌘⇧; on a Mac), then restart Anki:
+- **Tools › Due Crew › Plans**: Your plans…, New plan from a calendar…,
+  New plan from a deck…, Follow a plan…; Missed questions…, Export cards
+  for my AI….
+- **You › Plans**: its head row, *Open plans* (Your plans) and *New plan
+  ▾*; each plan card's *Open* (Your plans, on that plan).
+- **Insights**: *Missed questions* for a deck with a bank's question tags.
+- **Settings' Find a setting** finds the three windows by their words.
+- **Labs** is what stays behind this computer's switch, `"labs": true` in
+  the add-on's config (no window sets it): Claude's stand-in in New plan
+  from a calendar, and What Claude would get. Set it in Anki's Debug
+  Console (Ctrl+Shift+; on Windows and Linux, ⌘⇧; on a Mac), then
+  restart Anki:
 
   ```python
   c = mw.addonManager.getConfig("2035408484"); c["labs"] = True; mw.addonManager.writeConfig("2035408484", c)
   ```
 
   (`"2035408484"` is the AnkiWeb folder; a copy installed by hand under
-  another folder name uses that name.) `False`, or taking the key out,
-  turns it off after the next restart.
-- **Tools › Due Crew** then has *Plan window (labs)…*, *New plan from a
-  calendar (labs)…* and *Question IDs (labs)…*, after its own entries.
-- **The plan window, and a plan from a calendar, are the admin's account
-  only.** Its click asks the
-  server who this account is (`GET /auth/me`, whose `admin` is
-  `worker/src/notices.isAdmin`: Sam's "sammy" account), once an Anki
-  session, and opens only for that account; anyone else is told it's the
-  admin's while it's in labs. Question IDs touch nothing but this
-  collection, so the labs switch alone opens them.
-- **Nothing new on the server.** The window's requests are routes the
-  site's builder uses already: `GET /auth/me`, `GET /plans/mine`,
-  `GET /plans/{id}`, an author's save, `PUT /plans/{id}`, its Undo, and
-  New plan, `POST /plans`. Each one on a click, in the background. A
-  refresh and a sync are unchanged (`test_request_budget`).
+  another folder name uses that name.)
+- **Nothing new on the server.** The windows' requests are routes the
+  site's builder uses already: `GET /plans/mine`, `GET /plans/{id}`, an
+  author's save, `PUT /plans/{id}`, its Undo, and New plan, `POST
+  /plans` (with Make a plan's `PUT /plans/trees`). Each one on a click, in
+  the background. A refresh and a sync are unchanged
+  (`test_request_budget`).
 
-## The plan window
+## Your plans
 
-My plans (the ones I write first, then the ones I follow), one at a
-time. Left, the plan's weeks ("Week 3 · 9–13 Nov", this week bold and
-open), each date with its cards here, and its events (in italics). Right,
-the picked one:
+My plans (the ones I write first, then the ones I follow), one at a time,
+in tabs: **Dates** for everyone, **Lay it out** for a plan's authors.
+**Reload** reads the plan again (an edit on the site meanwhile); **New ▾**
+makes a date, a quiz or exam, a review day, or a new plan.
+
+### Dates
+
+Left, the plan's weeks ("Week 3 · 9–13 Nov", this week bold and open),
+each date with its cards here, its events (in italics) and review days.
+Right, the picked one:
 
 - **A date**: when it opens, its due date and checkpoint, what it preps
   for; its cards here, new, still shut, the leeches that stay shut, and at
@@ -51,7 +59,7 @@ the picked one:
   Each row: cards, new, shut. A tag this copy names differently says so
   (the notes behind it found the cards).
 - **A week**: its dates, with their numbers. **An event**: the dates that
-  prep for it.
+  prep for it. **A review day**: the dates it reviews.
 - **Show in Browse**, **Open its cards**, **Study it** / **Study for it**;
   with a source row picked, **Open these** and **Study these** act on that
   row alone. For a whole date of a plan I follow here, while the board's
@@ -60,19 +68,23 @@ the picked one:
   open (one undo step, never a leech, new ones first in line, and it says
   so when there's nothing to open) and a Due Crew deck of the open cards,
   and the window closes for Anki's Study screen. What the window opens, the
-  morning and Not today count as they count Browse's. **Reload** reads the
-  plan again (an edit on the site meanwhile).
+  morning and Not today count as they count Browse's.
 
-An author (owner or co-author) sees the plan's own dates, and **Change**
-and **New date…**:
+An author (owner or co-author) sees the plan's own dates, and **Change ▾**
+on the picked one, the builder's day panel as a menu:
 
-- Add from the deck… (the picker, below), Take the picked one off (a tag,
-  a subdeck, a tag kept to a plan tag, with its search, or a bank's
-  questions; not the last thing on a date), Rename…, Move to another day…
-  (its due date and checkpoint the same days later, as the builder's
-  move), Due date… (or none; an even split goes with it), Delete this
-  date… (its review days with it), New date… (pick what it opens, then its
-  day).
+- On a date: Add from the deck… (the picker, below), Add cards: a search
+  or IDs… (a search counted here, note or card IDs, or a paste's notes:
+  and cards:), Suggested from its name (the deck's tags its name points
+  at, `build.suggest`), Take the picked one off, Split the picked one… (by
+  its tags, chapters whole at the pace, or evenly over its study days),
+  Only what one of this plan's tags holds (a cut), Without its extras, A
+  note for followers on it…, Prep for (an event), Spread evenly to its
+  due date, To do…, Make it a review day…, Rename…, Move to another day…
+  (its due date and checkpoint the same days later), Due date…, Delete
+  this date… (its review days with it).
+- On an event: rename, move, delete (the dates that prepped for it let
+  go). On a review day: its dates, or no review day.
 - Each change is one save: `edits.py` changes the doc as the server keeps
   it (every field, so nothing it doesn't touch is lost), counts the dates
   it touched in this copy as the builder counts them (a follower's "204 of
@@ -90,8 +102,58 @@ and **New date…**:
   plan names them; a subdeck as the plan's deck writes it. A tag under
   another ticked one is left out (it comes with it). A day that has a date
   already asks before a second one lands on it.
-- Not here yet: events, searches, picked cards, cuts made, to-dos, the
-  pace, co-authors; those stay the builder's on duecrew.com.
+
+### Lay it out (authors)
+
+The builder's side panel and pace row (`layout_tab.py`, its rules
+`build.py`'s, restated from builder.js):
+
+- **What to cover**: the deck's tags by resource (#), by system (^), the
+  rest, or its subdecks (the views the deck has), or a search over every
+  path. Ticking a tag covers it and all below it; a tag that holds more
+  than one view (a big shared deck's top tag holds resources and systems,
+  the same cards twice) covers what this view shows of it. One already on
+  the calendar is muted. "120 cards ticked · 80 not on a day yet."
+  **Put it on …** puts the picked one on the next study day after the
+  last date (the builder's +).
+- **The pace**: Starts (moving it, once there are dates, moves every
+  date, quiz, review day and the end with it, asked first); study days;
+  Finish by a date, or a quiz or exam (the day before it, and the new
+  dates prep for it); Cards a day ("done ≈ Fri 13 Nov"); or I'll place
+  each day.
+- **Fill** lays what's ticked and not on a date yet on the study days
+  after the last date: chapters whole while they fit the pace, a bigger
+  one by its own tags (the part only on it last), one with nothing below
+  it spread evenly over its days. To an end date, a little more a day
+  (about a tenth, up to seven times) until it all fits; past that it stops
+  there and says what's left. **Just next week** stops at that week's
+  Sunday. Fill and **Save the pace** save the ticks and the pace with the
+  dates, one save; till then they wait here (another change's save keeps
+  them).
+- **What the plan asks**: the first run of days a quarter over the pace
+  ("Mon 9 Nov asks 70 new a day (pace 30): Videos, 110 by Wed 11 Nov"),
+  with **Split …** (its biggest tag, on the Dates tab) and **Give it till
+  …** (the study days the pace needs); the reviews the dates bring, a
+  typical card's, by week.
+- **This plan's tags**: each with its cards here; Rename… (the dates, a
+  cut kept to it, a search using it, its note, and a date named for it
+  follow), Delete… (says first what goes: a date with nothing else, its
+  review days; a cut is its whole tag again), Put it on a day. Tagging
+  stays Browse's (right-click › Due Crew: tag for a plan…).
+- **Every week**: the plan's weekly lines, Edit…. **Notes on cards**:
+  the ones written in Browse, Take it off.
+
+**New plan from a deck** (Tools › Due Crew › Plans, New ▾, You › Plans'
+New plan ▾) now makes the plan here: the deck, a name, **Make the
+plan** (its tree to the site, as before, then `POST /plans`), and Your
+plans opens on it at Lay it out. **Open the builder instead** is the site.
+
+### Not here yet
+
+The builder's Text (the plan as text, Add dates, Edit the whole plan),
+its Updates (posts, reached N of M), Progress, History, and Settings
+(name, line, link, squad, co-authors, listing, copy for next year,
+delete), and day notes: those stay on duecrew.com for now.
 
 ## The picker
 
@@ -101,9 +163,10 @@ cards and new ones here, then its subdecks; or a search over every tag's
 path ("heart failure"). Tick what goes on the date; everything under a
 ticked tag comes with it. Read from the deck index on the main thread.
 
-## Question IDs
+## Missed questions
 
-After a practice block: paste the IDs of the questions I missed, any way
+(Question IDs in labs.) After a practice block: paste the IDs of the
+questions I missed, any way
 the bank copies them. Every run of 3 to 9 digits is a number; only the
 ones the deck has as a question count (a tag whose last part is that
 number, under a bank's #part), so a date or a score pasted with them is
@@ -130,12 +193,12 @@ one with the most of them, or the one picked.
   bank, never card text, never sent (200 pastes, 20,000 numbers). All my
   misses reads every one kept for the deck and bank: its threads across
   blocks, and a deck of all of them. Forget my misses, with its Undo.
-- The labs windows close with the profile.
+- The plan windows close with the profile.
 
 ## A plan from a block's calendar
 
-Tools › Due Crew › New plan from a calendar (labs), the admin's account
-only, as the plan window (it makes a plan on the server). Paste the
+Tools › Due Crew › Plans › New plan from a calendar, or You › Plans'
+New plan ▾ (signed in: it makes a plan on the server). Paste the
 block's calendar, or drop its file on the box (dashed, and in the accent
 while a file is over it; or **Choose a file…**), pick the deck, **Read
 it** (a dropped file reads at once):
@@ -186,7 +249,7 @@ it** (a dropped file reads at once):
   save says so, and Make tries its dates again on that plan, never a
   second one.
 
-**Claude's jobs, a stand-in for now** (`claude.py`): plain rules go first
+**Claude's jobs, a stand-in for now, labs only** (`claude.py`): plain rules go first
 in every job, and Claude is asked only for what they leave. Until it's
 connected, a stand-in answers in its place by looser rules of its own, so
 each step can be click-tested, and each row it filled says "Claude's
@@ -212,22 +275,26 @@ request carries. Nothing is sent: `claude.py` has no requests.
 
 | File | What |
 |---|---|
-| `planner/__init__.py` | the switch (`enabled`) and the menu entries (`install`, from `__init__._tools_menu`) |
+| `planner/__init__.py` | the labs switch (`enabled`) and Tools › Due Crew › Plans (`plans_menu`, from `__init__._tools_menu`) |
 | `planner/model.py` | pure: a tag's kind and name, a date's sources, weeks, pace words, the picker's tree and search |
 | `planner/qids.py` | pure: numbers, banks, a paste found, threads, the kept misses |
-| `planner/edits.py` | pure: an author's changes to the doc, the count, the history line |
+| `planner/edits.py` | pure: an author's changes to the doc (the builder's edits), the count, the history line |
+| `planner/build.py` | pure: the builder's rules restated (Todo, Every, Remarks, Picks, Suggest, Work, Reviews, Tags, Fill, Split, layOut, What to cover) |
 | `planner/actions.py` | Bring back, the one collection step it adds |
 | `planner/remote.py` | its requests (who I am, my plans, one plan, a save) |
 | `planner/reading.py` | pure: a calendar read, a session's tags, an exam's line, by plain rules |
 | `planner/claude.py` | pure: Claude's stand-in, and what Claude would get (`request`) |
-| `planner/flow.py` | the glue: the gate, the windows' asks (`Ops`, `StartOps`, `QidOps`), `qids.json` |
-| `planner/window.py`, `picker.py`, `qid_window.py`, `start_window.py` | the Qt windows, in the board's look |
+| `planner/flow.py` | the glue: the windows' asks (`Ops`, `StartOps`, `QidOps`), `make_here`, `qids.json` |
+| `planner/window.py`, `layout_tab.py`, `date_dialogs.py`, `picker.py`, `qid_window.py`, `start_window.py` | the Qt windows and Lay it out, in the board's look |
 
-Checks: `tests/test_planner.py` (the pure parts, the save against the fake
-Worker's `PUT /plans/{id}`, the gate, the rules of the road), the planner
-renders in `tools/dialogs.py` (an author's window, a change saved end to
-end, the picker, Question IDs with its threads, Do it and All my misses,
-a calendar read and made into a plan, What Claude would get, the labs
+Checks: `tests/test_planner.py` (the pure parts, `build.py` against
+builder.js run in node, Fill and Lay it out, the save against the fake
+Worker's `PUT /plans/{id}`, the labs switch, the rules of the road), the
+planner renders in `tools/dialogs.py` (an author's window, a change saved
+end to end, Change ▾ and New ▾, a review day, a search and a to-do saved,
+Lay it out ticked, filled and its tags renamed, Make the plan here, the
+picker, Missed questions with its threads, Do it and All my misses, a
+calendar read and made into a plan, What Claude would get, the Plans
 menu), and `check_planner` in `tools/real_anki.py` (12,000
 question tags, Bring back and Anki's undo of it, the picker's timings).
 

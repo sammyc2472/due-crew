@@ -4,6 +4,8 @@ weeks and dates on the left (with its quizzes and exams and review days),
 the picked one on the right, each source with what it holds in this copy
 (cards, new, shut), grouped as the deck files them: by resource, by
 system, other, the plan's own tags, subdecks, searches, picked cards.
+Lay it out (layout_tab.py), for its authors: what it covers, the pace,
+Fill, the plan's own tags, its lines every week.
 
 Show in Browse, Open its cards and Study it are plan_flow's (through ops).
 An author changes the plan here (Change ▾, New ▾): each change is one save
@@ -27,6 +29,7 @@ from . import build as B
 from . import date_dialogs as DD
 from . import edits as E
 from . import model as M
+from .layout_tab import LayoutTab
 
 ROLE = Qt.ItemDataRole.UserRole
 
@@ -186,6 +189,7 @@ class PlanWindow(QDialog):
         split.setStretchFactor(1, 5)
         split.setSizes([300, 640])
         self._add_tab("dates", "Dates", split)
+        self._add_tab("layout", "Lay it out", LayoutTab(self))
         self.want_tab = tab
 
         bottom = QHBoxLayout()
@@ -210,7 +214,7 @@ class PlanWindow(QDialog):
         if self.plans:
             self._load()
         else:
-            self._empty("No plans yet. Make one from a deck: Tools › Due Crew › Make a plan from a deck…")
+            self._empty("No plans yet. Make one: New › New plan from a deck…, or from a calendar.")
 
     def go_to_plan(self, pid, tab=None):
         """The window, on this plan: True, or False when it doesn't list it."""
@@ -786,15 +790,19 @@ class PlanWindow(QDialog):
             self.status.setText(words)
         self.pick.setEnabled(not on)
         self._buttons()
+        for page in self.pages.values():
+            if callable(getattr(page, "busy_changed", None)):
+                page.busy_changed(self)
 
     def _apply(self, change, touched=(), keep=None):
         """One change to the plan, saved: change(doc) -> doc, on the doc as the
         server keeps it; the dates it touched (and any it made) counted again
-        in this copy. keep: what to have picked once it's saved (a callable,
+        in this copy (or a function, asked after the change: the dates it
+        worked out). keep: what to have picked once it's saved (a callable,
         asked after the change), else what's picked now."""
         if not self.author() or self.busy:
             return
-        self._save(change, set(touched), keep, again=True)
+        self._save(change, touched if callable(touched) else set(touched), keep, again=True)
 
     def _save(self, change, touched, keep, again):
         if not self.author():
@@ -808,8 +816,8 @@ class PlanWindow(QDialog):
         if json.dumps(E.lean(doc), sort_keys=True) == json.dumps(E.lean(before), sort_keys=True):
             self.status.setText("Nothing to change: the plan has that already.")
             return
-        touched = set(touched) | {u["id"] for u in doc.get("units") or []
-                                  if u.get("id") not in {x.get("id") for x in before.get("units") or []}}
+        made = {u["id"] for u in doc.get("units") or [] if u.get("id") not in {x.get("id") for x in before.get("units") or []}}
+        want, touched = touched, set(touched() if callable(touched) else touched) | made
         if self.idx is not None and touched:
             doc = E.recount(doc, self.idx, touched, self.swap)
         summary = E.what_changed(before, doc)
@@ -818,7 +826,7 @@ class PlanWindow(QDialog):
         self._busy(True, "Saving…")
         self._can_undo(None)
         self.ops.save(self, pid, version, doc, summary,
-                      lambda got: self._saved(pid, got, keep_now, (change, touched, keep) if again else None))
+                      lambda got: self._saved(pid, got, keep_now, (change, want, keep) if again else None))
 
     def _saved(self, pid, got, keep, retry=None):
         self._busy(False, "")

@@ -71,6 +71,18 @@ def open_plans(select=None, tab=None):
     _bg(lambda: remote.my_plans(cl), done)
 
 
+def make_here(cl):
+    """3.9.3, Make a plan from a deck made in Anki: (make, made) for its
+    dialog. make, in the background: the plan (POST /plans); made, on the
+    main thread: Your plans opens on it, at Lay it out."""
+    gen = app.generation
+
+    def made(raw):
+        if gen == app.generation and mw.col and raw.get("id"):
+            open_plans(select=raw["id"], tab="layout")
+    return (lambda name, deck: remote.create(cl, name, deck)), made
+
+
 def show_plans(plans, select=None, tab=None):
     from .window import PlanWindow
     w = PlanWindow(mw, mw.col, plans, Ops(), select=select, tab=tab)

@@ -3884,7 +3884,9 @@ def open_make():
     if not mw.col:
         return
     from .ui.plan_dialog import MakePlanDialog
-    MakePlanDialog(mw, client(), mw.col, site_base(), on_sent=note_tree).exec()
+    from .planner import flow as planner_flow
+    make, made = planner_flow.make_here(client())
+    MakePlanDialog(mw, client(), mw.col, site_base(), on_sent=note_tree, make=make, on_made=made).exec()
 
 
 def open_site(path):
