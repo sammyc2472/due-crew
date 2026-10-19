@@ -1217,7 +1217,7 @@ def main(out):
         author's: plain text."""
         import sqlite3
         from due_crew import plans as P
-        from due_crew.planner import actions as PA, edits as PE, flow as PF, remote as PR
+        from due_crew.planner import actions as PA, edits as PE, flow as PF, model as PM, remote as PR
         from due_crew.planner.picker import Picker
         from due_crew.planner.qid_window import QidWindow
         from due_crew.planner.window import PlanWindow
@@ -1569,6 +1569,34 @@ def main(out):
         if new is None or reopened[-1:] != [new] or not STORE.plans[new]["name"].endswith("(next year)"):
             raise RuntimeError(f"planner: Settings, Copy for next year: {st.said.text()!r}, {reopened}")
         STORE.plans.pop(new)
+        # 3.9.3: notes on a day (Dates): a follower's, read with the plan, and one added on the picked date
+        heart = next(u for u in STORE.plans[pid]["doc"]["units"] if u["id"] == "u1")
+        STORE.follows[(pid, "ameya")] = {"share": False, "paused": False, "sched": None, "progress": None}
+        STORE._note_n = 1
+        STORE.plan_notes.append({"id": 1, "plan": pid, "uid": "ameya", "day": heart["opens"], "text": "Lecture's in room 4B today",
+                                 "at": 0})
+        dlg._show_tab("dates")
+        dlg._load()
+        dlg._go_to(("date", "u1"))
+        dn = dlg.day_notes
+        dn.box.setText("Lab day, keep it light")
+        dn._add()
+        rows = [(dn.list.topLevelItem(i).text(0), dn.list.topLevelItem(i).text(1)) for i in range(dn.list.topLevelItemCount())]
+        if rows != [("Ameya", "Lecture's in room 4B today"), ("You", "Lab day, keep it light")] or dn.box.text() \
+                or [x["text"] for x in STORE.plan_notes if x["plan"] == pid][-1:] != ["Lab day, keep it light"]:
+            raise RuntimeError(f"planner: notes on a day: {rows}, {dn.said.text()!r}")
+        dn.list.setCurrentItem(dn.list.topLevelItem(1))
+        dlg.resize(1100, 720)
+        shoot(dlg, os.path.join(out, "planner-notes.png"))
+        dlg._go_to(("week", next(w["start"] for w in PM.weeks(STORE.plans[pid]["doc"], TODAY)
+                                 if any(u["id"] == "u1" for u in w["dates"]))))
+        if dn.list.topLevelItemCount() != 2 or not dn.box.isHidden() or "·" not in dn.list.topLevelItem(0).text(0):
+            raise RuntimeError("planner: a week's notes, by day, none added there")
+        dlg._go_to(("date", "u1"))
+        dn.list.setCurrentItem(dn.list.topLevelItem(1))
+        dn._remove()
+        if [x["text"] for x in STORE.plan_notes if x["plan"] == pid] != ["Lecture's in room 4B today"]:
+            raise RuntimeError("planner: a note taken off")
         empty = PlanWindow_([])
         shoot(empty, os.path.join(out, "planner-empty.png"))
         idx = P.DeckIndex(col, 1)

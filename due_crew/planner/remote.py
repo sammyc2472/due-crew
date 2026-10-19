@@ -141,6 +141,35 @@ def unpost(client, pid, post_id):
     return status == 200
 
 
+NOTE_WORDS = {"too_many_notes": "That's as many notes as this plan holds from you. Remove one first.",
+              "authors_only": "On a plan in the library, only its authors write notes.",
+              "slow_down": "That's a lot of notes. Try again in an hour.",
+              "bad_note": "A note is one line, 280 characters at most."}
+
+
+def notes(client, pid):
+    """Notes on days (GET /plans/{id}/notes), from anyone in the plan, oldest
+    first: [{id, uid, name, day, text, at, mine, remove}]. Raises when it can't."""
+    status, data = _call(client, "GET", f"/plans/{pid}/notes")
+    if status != 200 or not isinstance(data.get("notes"), list):
+        raise TransportError(f"notes: {status}", status)
+    return [x for x in data["notes"] if isinstance(x, dict) and x.get("id") and isinstance(x.get("day"), str)]
+
+
+def add_note(client, pid, day, text):
+    """A note on a day (POST /plans/{id}/notes): ("saved", {id, day, text}) | ("refused", words)."""
+    status, data = _call(client, "POST", f"/plans/{pid}/notes", {"day": str(day), "text": str(text)})
+    if status == 200 and data.get("id"):
+        return "saved", data
+    return "refused", NOTE_WORDS.get(str((data or {}).get("error") or ""), "That note didn't post. Try again.")
+
+
+def remove_note(client, pid, note_id):
+    """A note taken off (DELETE /plans/{id}/notes/{note}): its writer's, or an author's. True when it went."""
+    status, _data = _call(client, "DELETE", f"/plans/{pid}/notes/{int(note_id)}")
+    return status == 200
+
+
 # the builder's Settings, said as it says them
 SETTINGS_WORDS = dict(SAVE_WORDS, **{
     "not_owner": "Only its owner changes that.",

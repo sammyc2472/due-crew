@@ -62,6 +62,15 @@ Right, the picked one:
   (the notes behind it found the cards).
 - **A week**: its dates, with their numbers. **An event**: the dates that
   prep for it. **A review day**: the dates it reviews.
+- **Notes on the day** (`day_notes.py`, the builder's day notes): under a
+  date, a quiz or a review day, what anyone in the plan wrote on that day
+  ("Lab day, keep it light"), and a box to add one (one line, 280); under
+  a week, its days' notes, each with its day. Read once when a plan is
+  picked or reloaded (`GET /plans/{id}/notes`, one request on that click; a
+  save doesn't read them again). A note's writer takes it off, or an
+  author. On a plan in the library only its authors write, and a
+  stranger's note isn't shown. A note is on the plan's own day: a
+  follower's date that moved shows the notes of its day in the plan.
 - **Show in Browse**, **Open its cards**, **Study it** / **Study for it**;
   with a source row picked, **Open these** and **Study these** act on that
   row alone. For a whole date of a plan I follow here, while the board's
@@ -232,8 +241,8 @@ the window keeps its height. Each change is one request at once:
 
 ### Not here yet
 
-Day notes, and the prompts for your own AI: those stay on duecrew.com for
-now.
+The prompts for your own AI (the builder's "copy a prompt" boxes) stay on
+duecrew.com.
 
 ## The picker
 
@@ -362,11 +371,11 @@ request carries. Nothing is sent: `claude.py` has no requests.
 | `planner/build.py` | pure: the builder's rules restated (Todo, Every, Remarks, Picks, Suggest, Work, Reviews, Tags, Fill, Split, layOut, What to cover) |
 | `planner/text.py` | pure: the builder's Text (toText, fromText, Add and Replace, what it would change) |
 | `planner/actions.py` | Bring back, the one collection step it adds |
-| `planner/remote.py` | its requests (who I am, my plans, one plan, a save, its history and posts, its settings, progress, a copy) |
+| `planner/remote.py` | its requests (who I am, my plans, one plan, a save, its history and posts, its settings, progress, a copy, day notes) |
 | `planner/reading.py` | pure: a calendar read, a session's tags, an exam's line, by plain rules |
 | `planner/claude.py` | pure: Claude's stand-in, and what Claude would get (`request`) |
 | `planner/flow.py` | the glue: the windows' asks (`Ops`, `StartOps`, `QidOps`), `make_here`, `qids.json` |
-| `planner/window.py`, `layout_tab.py`, `text_tab.py`, `history_tab.py`, `settings_tab.py`, `date_dialogs.py`, `picker.py`, `qid_window.py`, `start_window.py` | the Qt windows and their tabs, in the board's look |
+| `planner/window.py`, `layout_tab.py`, `text_tab.py`, `history_tab.py`, `settings_tab.py`, `day_notes.py`, `date_dialogs.py`, `picker.py`, `qid_window.py`, `start_window.py` | the Qt windows and their tabs, in the board's look |
 
 Checks: `tests/test_planner.py` (the pure parts, `build.py` against
 builder.js run in node, Fill and Lay it out, the save against the fake
@@ -376,7 +385,8 @@ end to end, Change ▾ and New ▾, a review day, a search and a to-do saved,
 Lay it out ticked, filled and its tags renamed, Text's Add dates and the
 whole plan replaced, Updates' post, History's Undo, Progress with
 Give the class a day, Settings' name and link saved and Copy for next
-year, Make the plan here, the
+year, a day's notes (added, by day in a week, taken off), Make the plan
+here, the
 picker, Missed questions with its threads, Do it and All my misses, a
 calendar read and made into a plan, What Claude would get, the Plans
 menu), and `check_planner` in `tools/real_anki.py` (12,000

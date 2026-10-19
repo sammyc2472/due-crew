@@ -30,6 +30,7 @@ from . import build as B
 from . import date_dialogs as DD
 from . import edits as E
 from . import model as M
+from .day_notes import DayNotes
 from .layout_tab import LayoutTab
 from .text_tab import TextTab
 from .history_tab import HistoryTab, UpdatesTab
@@ -173,6 +174,8 @@ class PlanWindow(QDialog):
         self.table.itemDoubleClicked.connect(lambda item, _c: self._browse_item(item))
         self.table.itemSelectionChanged.connect(self._buttons)
         rl.addWidget(self.table, 1)
+        self.day_notes = DayNotes(self)  # notes on the picked day, from anyone in the plan
+        rl.addWidget(self.day_notes)
         row = QHBoxLayout()
         self.browse_btn = QPushButton("Show in Browse")
         self.browse_btn.clicked.connect(self._browse)
@@ -281,12 +284,14 @@ class PlanWindow(QDialog):
         self.todo.setText("")
         self.todo.setVisible(False)
         self.line.setText("")
+        self.day_notes.show_for(())
         self._buttons()
 
     def _load(self, *_):
         pid = self.pick.currentData()
         if not pid:
             return
+        self.day_notes.forget()
         self._can_undo(None)
         self._busy(True, "Loading the plan…")
         self.ops.load(self, pid, lambda got: self._loaded(pid, got))
@@ -302,6 +307,7 @@ class PlanWindow(QDialog):
             return
         raw, plan = got
         self.plan = plan
+        library = (raw or {}).get("library") is True
         self.raw = raw if plan.get("role") in ("owner", "editor") else None
         # an author's view is the plan's own dates; a follower's, mine (as my follow moves them)
         self.doc = plan["doc"] if self.raw is not None else self.ops.my_doc(plan)
@@ -309,6 +315,7 @@ class PlanWindow(QDialog):
         self._rows = {}
         self._tree = None
         self._line()
+        self.day_notes.plan_loaded(plan["id"], library)
         self._fill(keep or self.picked)
         self._role_tabs()
 
@@ -435,7 +442,29 @@ class PlanWindow(QDialog):
             self.meta.setText("")
             self.todo.setText("")
             self.todo.setVisible(False)
+        self._notes_for(kind)
         self._buttons()
+
+    def _notes_for(self, kind):
+        """The picked day's notes: a date's, a quiz's or a review day's, or a
+        week's by day. A note is on the plan's own day: a follower's dates
+        may have moved, so a date's is its day in the plan."""
+        key = self.picked[1] if self.picked else None
+        if kind == "date":
+            u = next((x for x in P.units(self.plan["doc"]) if x["id"] == key), None) or self._unit(key)
+            day = (u or {}).get("opens")
+        elif kind == "event":
+            day = (self._event(key) or {}).get("day")
+        elif kind == "review":
+            day = key
+        elif kind == "week":
+            mine = {u["id"] for u in (self._week_units(key) or {}).get("dates") or []}
+            days = {E._later(key, i) for i in range(7)} | {u["opens"] for u in P.units(self.plan["doc"]) if u["id"] in mine}
+            self.day_notes.show_for(days, None, dated=True)
+            return
+        else:
+            day = None
+        self.day_notes.show_for({day} if day else (), day)
 
     def _show_date(self, u):
         if u is None:

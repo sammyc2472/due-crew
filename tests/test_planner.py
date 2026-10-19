@@ -1012,8 +1012,8 @@ def test_rules_of_the_road():
           and all(t.count("(QDialog)") == t.count("attach_alive(self)") == len(re.findall(r"\bheading\(self", t))
                   for t in windows.values()), sorted(windows))
     tabs = {f: t for f, t in src.items() if "(QWidget)" in t}  # 3.9.3: Your plans' tabs past Dates
-    check("road: the tabs past Dates: Lay it out, Text, Progress, Updates, History and Settings",
-          sorted(tabs) == ["history_tab.py", "layout_tab.py", "settings_tab.py", "text_tab.py"], sorted(tabs))
+    check("road: the tabs past Dates (Lay it out, Text, Progress, Updates, History and Settings) and the Dates tab's day notes",
+          sorted(tabs) == ["day_notes.py", "history_tab.py", "layout_tab.py", "settings_tab.py", "text_tab.py"], sorted(tabs))
     windows_tabs = dict(windows, **tabs)
     check("road: no window sets its own type or margins in a style sheet, nor reads Anki's palette",
           not [f for f, t in windows_tabs.items() if "setStyleSheet" in t or "palette(" in t or "font-size" in t])
@@ -1024,13 +1024,15 @@ def test_rules_of_the_road():
     check("road: the pure parts and the requests import no aqt",
           not [f for f in pure if re.search(r"^\s*(from aqt|import aqt)", src[f], re.M)])
     calls = set()
-    for f in ("flow.py", "window.py", "layout_tab.py", "text_tab.py", "history_tab.py", "settings_tab.py", "qid_window.py", "picker.py", "start_window.py"):
+    for f in ("flow.py", "window.py", "layout_tab.py", "text_tab.py", "history_tab.py", "settings_tab.py", "day_notes.py", "qid_window.py",
+              "picker.py", "start_window.py"):
         for node in ast.walk(ast.parse(src[f])):
             if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "remote":
                 calls.add(node.attr)
     check("road: requests only on a click, through remote (who I am, my plans, one plan, a save, its history and posts)",
           calls <= {"is_admin", "my_plans", "load", "save", "undo", "create", "log", "posts", "post", "unpost", "save_meta",
-                    "progress", "set_listed", "copy", "delete", "crew", "add_editor", "remove_editor", "offer"}
+                    "progress", "set_listed", "copy", "delete", "crew", "add_editor", "remove_editor", "offer", "notes", "add_note",
+                    "remove_note"}
           and "_call" not in src["flow.py"], calls)
     routes = set(re.findall(r'_call\((?:client, )?"(GET|PUT|POST|PATCH|DELETE)", f?"([^"]+)"', src["remote.py"]))
     builder = open(os.path.join(REPO, "site", "public", "builder.js")).read()
@@ -1039,11 +1041,13 @@ def test_rules_of_the_road():
                      ("POST", "/plans"), ("GET", "/plans/{pid}/log"), ("GET", "/plans/{pid}/posts"), ("POST", "/plans/{pid}/posts"),
                      ("DELETE", "/plans/{pid}/posts/{int(post_id)}"), ("GET", "/plans/{pid}/progress"), ("PUT", "/plans/{pid}/listed"),
                      ("POST", "/plans/{pid}/copy"), ("DELETE", "/plans/{pid}"), ("GET", "/friends"), ("POST", "/plans/{pid}/editors"),
-                     ("DELETE", "/plans/{pid}/editors/{uid}"), ("POST", "/plans/{pid}/owner")}
+                     ("DELETE", "/plans/{pid}/editors/{uid}"), ("POST", "/plans/{pid}/owner"), ("GET", "/plans/{pid}/notes"),
+                     ("POST", "/plans/{pid}/notes"), ("DELETE", "/plans/{pid}/notes/{int(note_id)}")}
           and all(f'api("{m}", `/plans/${{{v}}}{x}' in builder
                   for m, v, x in (("GET", "id", "/log"), ("GET", "id", "/posts"), ("POST", "id", "/posts"), ("DELETE", "id", "/posts/"),
                                   ("GET", "id", "/progress"), ("PUT", "id", "/listed"), ("POST", "plan.id", "/copy"), ("DELETE", "id", "`"),
-                                  ("POST", "id", "/editors"), ("DELETE", "id", "/editors/"), ("POST", "id", "/owner")))
+                                  ("POST", "id", "/editors"), ("DELETE", "id", "/editors/"), ("POST", "id", "/owner"),
+                                  ("GET", "id", "/notes"), ("POST", "id", "/notes"), ("DELETE", "id", "/notes/")))
           and 'api("GET", "/friends")' in builder, routes)
     check("road: Claude isn't connected: the stand-in sends nothing, and nothing reads a card's text for it",
           not re.search(r"^\s*(?:from|import)\s+(?:requests|urllib|http|socket|anthropic)\b", src["claude.py"] + src["reading.py"], re.M)
@@ -1652,6 +1656,46 @@ def test_settings_remote_v393():
           prog["followers"] == 2 and prog["sharing"] == 1 and prog["units"]["u1"] == {"opened": 1, "done": 1}
           and prog["units"]["u2"] == {"opened": 1, "done": 0}, prog)
     check("settings: only its owner takes it down; then it's gone", not R.delete(dre, pid) and R.delete(sam, pid) and pid not in store.plans)
+
+
+def test_day_notes_v393():
+    """3.9.3: notes on a day in Your plans against the fake Worker (plans.ts
+    notes): anyone in the plan writes one, a stranger gets nothing, its
+    writer or an author takes it off, and on a plan in the library only its
+    authors write (and a stranger's older note isn't shown)."""
+    store = world({"sam": "Sammy", "dre": "Dre", "kai": "Kai", "lee": "Lee"})
+    sam, kai, lee = new_client(store, "sam"), new_client(store, "kai"), new_client(store, "lee")
+    pid, _code = store.add_plan("sam", "MS2 Block 2", "Big Step 1", _doc()["units"])
+    store.follows[(pid, "kai")] = {"share": False, "paused": False, "sched": None, "progress": None}
+    mine = R.add_note(sam, pid, "2026-10-20", "  Lab day,  keep it light ")
+    theirs = R.add_note(kai, pid, "2026-10-20", "Room 4B?")
+    check("notes: an author's and a follower's, one line each",
+          mine[0] == "saved" and mine[1]["text"] == "Lab day, keep it light" and theirs[0] == "saved"
+          and [(x["name"], x["text"], x["mine"], x["remove"]) for x in R.notes(kai, pid)]
+          == [("Sammy", "Lab day, keep it light", False, False), ("Kai", "Room 4B?", True, True)])
+    check("notes: an author takes any off", [x["remove"] for x in R.notes(sam, pid)] == [True, True])
+    try:
+        R.notes(lee, pid)
+        stranger = False
+    except Exception:  # noqa: BLE001 (a 404, as no plan)
+        stranger = True
+    check("notes: a stranger reads none and writes none",
+          stranger and R.add_note(lee, pid, "2026-10-20", "hi")[0] == "refused")
+    check("notes: a follower can't take an author's off", R.remove_note(kai, pid, mine[1]["id"])
+          and len(R.notes(sam, pid)) == 2)
+    check("notes: its writer takes it off", R.remove_note(kai, pid, theirs[1]["id"]) and len(R.notes(sam, pid)) == 1)
+    check("notes: one line, 280 at most", R.add_note(sam, pid, "2026-10-21", "   ") == ("refused", "A note is one line, 280 characters at most.")
+          and R.add_note(sam, pid, "Tuesday", "x")[0] == "refused")
+    R.add_note(kai, pid, "2026-10-21", "Before it was listed")
+    store.plans[pid]["listed"] = 1
+    check("notes: in the library, only its authors write, and a follower's own still shows to them",
+          R.add_note(kai, pid, "2026-10-22", "x") == ("refused", "On a plan in the library, only its authors write notes.")
+          and R.add_note(sam, pid, "2026-10-22", "Quiz moved")[0] == "saved"
+          and [x["text"] for x in R.notes(kai, pid)] == ["Lab day, keep it light", "Before it was listed", "Quiz moved"])
+    store.follows[(pid, "lee")] = {"share": False, "paused": False, "sched": None, "progress": None}
+    check("notes: in the library, a stranger's note isn't shown to anyone else",
+          [x["text"] for x in R.notes(lee, pid)] == ["Lab day, keep it light", "Quiz moved"])
+    check("notes: they go with the plan", R.delete(sam, pid) and not store.plan_notes)
 
 
 def main():

@@ -14,7 +14,7 @@ already); flow.py the glue; window.py, picker.py, qid_window.py and
 start_window.py the Qt windows; build.py the builder's rules, layout_tab.py
 Lay it out, text.py and text_tab.py its Text, history_tab.py its Updates
 and History, settings_tab.py its Progress and Settings, date_dialogs.py
-the Dates tab's dialogs.
+and day_notes.py the Dates tab's dialogs and notes on a day.
 """
 
 

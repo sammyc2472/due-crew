@@ -3054,6 +3054,10 @@ every release that changes how something works.
   library, Copy for next year, Delete), `settings_tab.py`; the fake Worker
   gained progress, listed, copy, delete and audience/squad in a save, and
   reads a follow's progress as the JSON text the Worker keeps
-  (`test_settings_edits_v393`, `test_settings_remote_v393`). Still the
-  site's: day notes, the AI prompts. No new route, nothing on a refresh or
-  a sync.
+  (`test_settings_edits_v393`, `test_settings_remote_v393`). **Notes on a
+  day** (`day_notes.py`), under a date, a quiz or a review day on Dates and
+  by day under a week: read once when a plan is picked, added (one line),
+  taken off by their writer or an author, authors only on a plan in the
+  library; the fake Worker gained plans.ts's notes (`test_day_notes_v393`).
+  Still the site's: the AI prompts. No new route, nothing on a refresh or a
+  sync.

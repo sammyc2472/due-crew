@@ -445,6 +445,7 @@ class FakeWorker:
         self.plans = {}      # id -> {code, owner, name, line, audience, squad, doc, version,
         #                      editors: {uid} (said yes), invited: {uid: n} (3.8.1, waiting), handover: uid or None}
         self.plan_posts = {} # 3.7.3: plan id -> [{id, name, text, withSave, at}]
+        self.plan_notes = [] # plans.ts plan_notes: [{id, plan, uid, day, text, at}], a note on a day
         self.team = {}       # 3.7.3: (plan, uid) -> {joined, days: [label], play}
         self.team_asks = []  # 3.7.3: [{id, plan, uid, parent, text, guid, ord, topic, helped, at, act}]
         self.plan_trees = {}  # (uid, deck) -> {tags, decks}
@@ -2150,7 +2151,37 @@ class FakeWorker:
                 del self.follows[key]
             self.plan_posts.pop(pid, None)
             self.plan_prev.pop(pid, None)
+            self.plan_notes = [x for x in self.plan_notes if x["plan"] != pid]
             return 200, {"ok": True}
+        if rest[1:] == ["notes"] or (len(rest) == 3 and rest[1] == "notes"):  # plans.ts notes: anyone in the plan
+            if not (self._writes(p, me) or (pid, me) in self.follows):
+                raise Bad(404, "no_plan")
+            author = self._writes(p, me)
+            authors = {p["owner"], *(p.get("editors") or ())}
+            if len(rest) == 2 and method == "GET":  # every note, oldest first; in the library, its authors' and my own
+                return 200, {"notes": [{"id": x["id"], "uid": x["uid"], "name": (self.users.get(x["uid"]) or {}).get("name") or "?",
+                                        "emoji": "", "day": x["day"], "text": x["text"], "at": x["at"], "mine": x["uid"] == me,
+                                        "remove": x["uid"] == me or author}
+                                       for x in sorted(self.plan_notes, key=lambda x: x["id"])
+                                       if x["plan"] == pid and (p.get("listed") != 1 or x["uid"] in authors or x["uid"] == me)][:500]}
+            if len(rest) == 2 and method == "POST":  # addNote: one line, 280; in the library only its authors
+                if p.get("listed") == 1 and me not in authors:
+                    raise Bad(403, "authors_only")
+                day, raw = body.get("day"), body.get("text")
+                if not (isinstance(day, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", day)) or not isinstance(raw, str) \
+                        or not 1 <= len(raw) <= 280 * 4 or not _one_line(raw, 280):
+                    raise Bad(400, "bad_note")
+                mine = [x for x in self.plan_notes if x["plan"] == pid]
+                if len(mine) >= 500 or (sum(1 for x in mine if x["uid"] == me) >= 50 and me not in authors):
+                    raise Bad(409, "too_many_notes")
+                self._note_n = getattr(self, "_note_n", 0) + 1
+                self.plan_notes.append({"id": self._note_n, "plan": pid, "uid": me, "day": day, "text": _one_line(raw, 280),
+                                        "at": int(time.time())})
+                return 200, {"id": self._note_n, "day": day, "text": _one_line(raw, 280)}
+            if len(rest) == 3 and method == "DELETE" and rest[2].isdigit():  # removeNote: its writer, or an author
+                self.plan_notes = [x for x in self.plan_notes
+                                   if not (x["plan"] == pid and x["id"] == int(rest[2]) and (author or x["uid"] == me))]
+                return 200, {"ok": True}
         if rest[1:] == ["log"] and method == "GET":  # plans.ts log: every save, newest first (LOG_KEEP); the latest undoes
             if not self._writes(p, me):
                 raise Bad(403, "not_author")
