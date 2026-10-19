@@ -17,7 +17,7 @@ Plain rules go first in every job; Claude is asked only for what they leave:
 
 What Claude would get is built here (request()), so the window can show it
 before anything is ever sent: the pasted text, a session's title,
-objectives and listed resources, and the names of the deck's tags that
+objectives, listed resources and its slides' titles, and the names of the deck's tags that
 could fit or are ticked (paths, with how many cards each holds); never a
 card's text, an id, or anything about anyone else. Pure.
 """
@@ -192,7 +192,8 @@ def request(job, **kw):
                 "instructions": "Which of these tags fit this session: the whole tag, part of it, or not at all.",
                 "input": {"session": {"title": s.get("title") or "",
                                       "objectives": [o.get("text") or "" for o in s.get("objectives") or []][:20],
-                                      "listed": [x.get("text") or "" for x in s.get("listed") or []][:10]},
+                                      "listed": [x.get("text") or "" for x in s.get("listed") or []][:10],
+                                      "slides": [str(t) for t in s.get("slides") or []][:40]},
                           "tags": [{"n": i + 1, "tag": c["tag"], "cards": c["cards"]} for i, c in enumerate(cands[:12])]},
                 "answer": PICK_SHAPE}
     if job == "scope":

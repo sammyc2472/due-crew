@@ -267,24 +267,37 @@ def number_weeks(sessions):
 
 # ---- a calendar's file, dropped on the box ----
 
-FILE_MAX = 5 * 1024 * 1024  # a calendar is never this big; a file this big isn't one
-TEXT_MAX = 200_000
-KINDS_READ = "a calendar export (.ics), a PDF, a Word file (.docx), a CSV or a text file"
+FILE_MAX = 5 * 1024 * 1024    # a text calendar is never this big
+BIG_MAX = 300 * 1024 * 1024   # a PDF, Word file or deck (their pictures weigh; only their words are read)
+TEXT_MAX = 1_000_000          # a block's whole SLG document, as text
+PAGES_MAX = 400               # a PDF's pages read, or a deck's slides
+KINDS_READ = "a calendar export (.ics), a PDF, a Word file (.docx), slides (.pptx), a CSV or a text file"
+BIG = ("pdf", "docx", "pptx")
+
+
+def kind_of_file(name):
+    return str(name or "").lower().rsplit(".", 1)[-1] if "." in str(name or "") else ""
 
 
 def from_file(name, data):
-    """A dropped file's calendar as text the box reads: (text, "") or ("",
-    why not). A calendar export's events as dated lines, a Word file's
-    paragraphs and table rows (cells by tabs), a CSV's rows, text as it is.
-    A PDF is the window's (Qt reads it). Pure; nothing leaves the computer."""
-    ext = str(name or "").lower().rsplit(".", 1)[-1] if "." in str(name or "") else ""
-    if len(data or b"") > FILE_MAX:
+    """A dropped file as text the box reads: (text, "") or ("", why not). A
+    calendar export's events as dated lines, a Word file's paragraphs and
+    table rows (cells by tabs), a deck's slides (pptx_text), a CSV's rows,
+    text as it is. data: the bytes, or for a .docx or .pptx an open file
+    (a deck's pictures are never read). A PDF is the window's (Qt reads
+    it). Pure; nothing leaves the computer."""
+    ext = kind_of_file(name)
+    if isinstance(data, (bytes, bytearray)) and len(data) > (BIG_MAX if ext in BIG else FILE_MAX):
         return "", "That file is too big to be a calendar."
     try:
         if ext == "ics":
             text = _ics(_decode(data))
         elif ext == "docx":
             text = _docx(data)
+        elif ext == "pptx":
+            text = pptx_text(data)
+        elif ext in ("ppt", "key", "odp"):
+            return "", "Save the slides as PowerPoint (.pptx) or a PDF and drop that."
         elif ext in ("csv", "tsv"):
             text = _csv(_decode(data), "\t" if ext == "tsv" else None)
         elif ext in ("txt", "text", "md", ""):
@@ -366,14 +379,23 @@ def _docx_text(p):
     return "".join(out)
 
 
+def _zip(data):
+    return zipfile.ZipFile(io.BytesIO(data) if isinstance(data, (bytes, bytearray)) else data)
+
+
+def _part(z, name):
+    """One XML part of a Word file or deck, refused when it's too big to be words."""
+    info = z.getinfo(name)
+    if info.file_size > 40 * 1024 * 1024:
+        raise ValueError("too big")
+    return ElementTree.fromstring(z.read(info))
+
+
 def _docx(data):
     """A Word file's paragraphs as lines (a list item as "- …", so it reads as
     an objective) and its tables' rows with their cells by tabs."""
-    z = zipfile.ZipFile(io.BytesIO(data))
-    info = z.getinfo("word/document.xml")
-    if info.file_size > 40 * 1024 * 1024:
-        raise ValueError("too big")
-    body = ElementTree.fromstring(z.read(info)).find(_W + "body")
+    z = _zip(data)
+    body = _part(z, "word/document.xml").find(_W + "body")
     out = []
 
     def walk(el):
@@ -394,6 +416,118 @@ def _docx(data):
                     walk(content)
     walk(body if body is not None else [])
     return "\n".join(out)
+
+
+_P = "{http://schemas.openxmlformats.org/presentationml/2006/main}"
+_A = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
+_R = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+_REL = "{http://schemas.openxmlformats.org/package/2006/relationships}"
+
+
+def _slide_lines(root):
+    """A slide's (title, [lines]): its title placeholder's words, then each
+    other paragraph (indented by its level) and each table row (cells by
+    tabs), in the order the slide holds them."""
+    title, lines = "", []
+    for el in root.iter():
+        if el.tag == _P + "sp":
+            ph = el.find(f"{_P}nvSpPr/{_P}nvPr/{_P}ph")
+            paras = ["".join(t.text or "" for t in p.iter(_A + "t")) for p in el.iter(_A + "p")]
+            paras = [" ".join(x.split()) for x in paras if x.strip()]
+            if ph is not None and ph.get("type") in ("title", "ctrTitle") and not title:
+                title = " · ".join(paras)
+                continue
+            for p, text in zip([p for p in el.iter(_A + "p") if "".join(t.text or "" for t in p.iter(_A + "t")).strip()], paras):
+                pr = p.find(_A + "pPr")
+                lvl = int(pr.get("lvl") or 0) if pr is not None and str(pr.get("lvl") or "0").isdigit() else 0
+                lines.append("    " * (lvl + 1) + text)
+        elif el.tag == _A + "tr":
+            cells = [" ".join("".join(t.text or "" for t in tc.iter(_A + "t")).split()) for tc in el.findall(_A + "tc")]
+            if any(cells):
+                lines.append("\t".join(cells))
+    if not title:
+        body = [x for x in lines if x.startswith("    ")]
+        if body:
+            title = body[0].strip()
+            lines.remove(body[0])
+    return title, lines
+
+
+def pptx_slides(data, most=PAGES_MAX):
+    """[(title, [lines])], a deck's slides in its own order (the deck's list
+    of slides, not their file names); never its pictures or notes."""
+    z = _zip(data)
+    pres = _part(z, "ppt/presentation.xml")
+    rels = _part(z, "ppt/_rels/presentation.xml.rels")
+    target = {r.get("Id"): r.get("Target") for r in rels.iter(_REL + "Relationship")}
+    out = []
+    for sid in pres.iter(_P + "sldId"):
+        t = target.get(sid.get(_R + "id"))
+        if not t:
+            continue
+        name = "ppt/" + t.lstrip("/").replace("../", "") if not t.startswith("/ppt/") else t.lstrip("/")
+        try:
+            out.append(_slide_lines(_part(z, name)))
+        except KeyError:
+            continue
+        if len(out) >= most:
+            break
+    return out
+
+
+def pptx_text(data):
+    """A deck as the box reads it: each slide's title on a line, its words
+    under it (indented: a dated title's objectives), its tables' rows as
+    rows (a schedule on a slide reads as a table)."""
+    out = []
+    for title, lines in pptx_slides(data):
+        if title:
+            out.append(title)
+        out += lines
+    return "\n".join(out)
+
+
+_OBJ_HEAD = re.compile(r"(?i)\b(objectives?|learning (?:goals?|outcomes?)|slgs?|goals|outcomes|by the end)\b")
+_NOT_A_TOPIC = re.compile(r"(?i)^(questions?|references?|outline|agenda|overview|summary|thank you|thanks|review|"
+                          r"disclosures?|acknowledg\w*|cases?|quiz|break|contents|introduction|intro|any questions\??)$")
+
+
+def from_slides(pages):
+    """What a lecture's slides add to its session: {title, objectives
+    [{label, text}], slides [title]}. pages: [(title, [lines])] (a deck's,
+    or a PDF's pages, each page's first line its title). An objectives
+    slide's lines, and any line labelled like one ("SLG 3 …"), are
+    objectives; the other slides' titles name what it covers. Pure."""
+    objectives, slides, seen = [], [], set()
+    deck_title = ""
+    for n, (title, lines) in enumerate(pages):
+        title = " ".join(str(title or "").split())[:TITLE_MAX]
+        if n == 0:
+            deck_title = title
+        head = bool(_OBJ_HEAD.search(title))
+        for raw in lines:
+            line = str(raw).strip()
+            label, text = split_objective(line)
+            if (head and len(text) >= 8) or (label and len(text) >= 8):
+                key = text.lower()
+                if key not in seen:
+                    seen.add(key)
+                    objectives.append({"label": label[:20], "text": text[:300]})
+        if n and title and not head and not _NOT_A_TOPIC.match(title.strip(" ?!.:")) and re.search(r"[A-Za-z]{3}", title):
+            if title.lower() not in {x.lower() for x in slides}:
+                slides.append(title)
+    return {"title": deck_title, "objectives": objectives[:60], "slides": slides[:80]}
+
+
+def pdf_pages(texts):
+    """A PDF's pages (Qt's text, a page each) as pages for from_slides:
+    each page's first line its title (a deck saved as a PDF)."""
+    out = []
+    for page in texts or ():
+        lines = [x.strip() for x in str(page or "").splitlines() if x.strip()]
+        if lines:
+            out.append((lines[0], lines[1:]))
+    return out
 
 
 def _csv(text, delimiter=None):
@@ -482,6 +616,19 @@ def terms_of(s, extra=()):
             put(f"{a} {b}")
     for x in s.get("listed") or []:
         put(re.sub(r"\b(?:pp?\.?|pages?)\s*[\d\s,–-]+", " ", x.get("text") or ""))
+    slid = 0
+    for t in s.get("slides") or []:  # a lecture's slides' titles (from_slides): what it covers
+        ws = words(re.sub(r"[:(].*$", "", t))
+        if not 1 <= len(ws) <= 4:
+            continue
+        before = len(out)
+        put(" ".join(ws))
+        if len(ws) >= 3:  # "acid base effects" names Acid_Base by its pair
+            for a, b in zip(ws, ws[1:]):
+                put(f"{a} {b}")
+        slid += len(out) - before
+        if slid >= 12:  # room left for the objectives' own words
+            break
     text = " ".join(o.get("text") or "" for o in s.get("objectives") or [])
     for ab in re.findall(r"\b[A-Z][A-Za-z0-9]{1,5}\b", text):
         if len(ab) >= 3 and sum(c.isupper() for c in ab) >= 2:  # BNP, RAAS, HFrEF; not a capitalised word
@@ -489,9 +636,10 @@ def terms_of(s, extra=()):
     own = set(words(s.get("title")))
     for w in sorted({w for w in words(text) if len(w) >= 7 and w not in own}):
         put(w)
+    del out[24:]
     for t in extra:
         put(t)
-    return out[:24]
+    return out[:32]
 
 
 # ---- the deck's tags ----

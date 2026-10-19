@@ -30,7 +30,8 @@ EXAMPLE = ("Paste the block's calendar here, or drop its file on this box: " + R
            "BLOCK 2 · Cardiovascular\nWEEK 1\nMon 10/26  LEC  Heart failure\n"
            "    SLG 1  Define systolic and diastolic heart failure\n    Watch: heart failure 1-2\n"
            "Tue 10/27  LEC  Heart failure drugs\nFri 10/30  QUIZ  Cardio quiz 1")
-FILES = "Calendars (*.ics *.pdf *.docx *.csv *.tsv *.txt *.md);;Any file (*)"
+FILES = "Calendars (*.ics *.pdf *.docx *.pptx *.csv *.tsv *.txt *.md);;Any file (*)"
+SLIDES = "Slides (*.pptx *.pdf);;Any file (*)"
 
 
 class DropBox(QPlainTextEdit):
@@ -82,9 +83,10 @@ class DropBox(QPlainTextEdit):
             super().dropEvent(e)
 
 
-def pdf_text(path):
-    """A PDF's text, page by page (Qt's own reader), or None when this Anki's
-    Qt has none or the file won't open."""
+def pdf_text(path, pages=False):
+    """A PDF's text (Qt's own reader), up to R.PAGES_MAX pages: one string,
+    or with pages a list, a page each; None when this Anki's Qt has no
+    reader or the file won't open."""
     try:
         from PyQt6.QtPdf import QPdfDocument
     except ImportError:
@@ -93,9 +95,55 @@ def pdf_text(path):
     try:
         if doc.load(path) != QPdfDocument.Error.None_:
             return None
-        return "\n".join(doc.getAllText(n).text() for n in range(min(doc.pageCount(), 60)))
+        got = [doc.getAllText(n).text().replace("\r\n", "\n").replace("\r", "\n")
+               for n in range(min(doc.pageCount(), R.PAGES_MAX))]
+        return got if pages else "\n".join(got)
     finally:
         doc.close()
+
+
+class DropTree(QTreeWidget):
+    """The sessions: a lecture's slides (or its PDF) dropped on a session's
+    row add to it (on_file(path, row)); the row a file is over is the one
+    picked."""
+
+    def __init__(self, on_file):
+        super().__init__()
+        self.on_file = on_file
+        self.setAcceptDrops(True)
+
+    def _row(self, e):
+        item = self.itemAt(e.position().toPoint())
+        while item is not None and item.parent() is not None:
+            item = item.parent()
+        data = item.data(0, ROLE) if item is not None else None
+        return item if data and data[0] == "session" else None
+
+    def dragEnterEvent(self, e):
+        if DropBox.path_of(e.mimeData()):
+            e.acceptProposedAction()
+        else:
+            super().dragEnterEvent(e)
+
+    def dragMoveEvent(self, e):
+        path = DropBox.path_of(e.mimeData())
+        if not path:
+            super().dragMoveEvent(e)
+            return
+        row = self._row(e)
+        if row is not None and R.kind_of_file(path) in ("pptx", "pdf"):
+            self.setCurrentItem(row)
+            e.acceptProposedAction()
+        else:
+            e.ignore()
+
+    def dropEvent(self, e):
+        path, row = DropBox.path_of(e.mimeData()), self._row(e)
+        if path and row is not None:
+            e.acceptProposedAction()
+            self.on_file(path, row)
+        else:
+            super().dropEvent(e)
 
 
 def _plain(text="", muted=False):
@@ -156,7 +204,7 @@ class StartWindow(QDialog):
         self.read_btn.clicked.connect(self._read)
         row.addWidget(self.read_btn)
         root.addLayout(row)
-        self.tree = QTreeWidget()
+        self.tree = DropTree(lambda path, row: self._add_slides(path, row.data(0, ROLE)[1]))
         self.tree.setHeaderLabels(["Session", "Cards", "Read by"])
         h = self.tree.header()
         h.setStretchLastSection(False)
@@ -174,6 +222,9 @@ class StartWindow(QDialog):
         self.add_btn = QPushButton("Add tags…")
         self.add_btn.clicked.connect(self._add)
         buttons.addButton(self.add_btn, QDialogButtonBox.ButtonRole.ActionRole)
+        self.slides_btn = QPushButton("Add its slides…")
+        self.slides_btn.clicked.connect(self._choose_slides)
+        buttons.addButton(self.slides_btn, QDialogButtonBox.ButtonRole.ActionRole)
         self.scope_btn = QPushButton("What's on it…")
         self.scope_btn.clicked.connect(self._scope)
         buttons.addButton(self.scope_btn, QDialogButtonBox.ButtonRole.ActionRole)
@@ -200,10 +251,11 @@ class StartWindow(QDialog):
     def _load_file(self, path):
         """A calendar's file into the box, then read: on this computer only."""
         name = os.path.basename(str(path))
+        kind = R.kind_of_file(name)
         try:
-            if os.path.getsize(path) > R.FILE_MAX:
+            if os.path.getsize(path) > (R.BIG_MAX if kind in R.BIG else R.FILE_MAX):
                 text, why = "", "That file is too big to be a calendar."
-            elif name.lower().endswith(".pdf"):
+            elif kind == "pdf":
                 text = pdf_text(path)
                 if not text or not text.strip():
                     text, why = "", "That PDF's text couldn't be read here. Copy its text in instead."
@@ -213,7 +265,7 @@ class StartWindow(QDialog):
                     text, why = text.replace("\r\n", "\n").replace("\r", "\n")[:R.TEXT_MAX], ""
             else:
                 with open(path, "rb") as f:
-                    text, why = R.from_file(name, f.read())
+                    text, why = R.from_file(name, f if kind in ("docx", "pptx") else f.read())
         except OSError:
             text, why = "", "That file couldn't be opened."
         if why:
@@ -222,6 +274,75 @@ class StartWindow(QDialog):
         self.file = name
         self.text.setPlainText(text)
         self._read()
+
+    # ---- a lecture's slides, onto its session ----
+
+    def _choose_slides(self):
+        p = self._picked()
+        if not p or p[0] != "session":
+            return
+        path, _f = QFileDialog.getOpenFileName(self, "The lecture's slides", "", SLIDES)
+        if path:
+            self._add_slides(path, p[1])
+
+    def _slide_pages(self, path):
+        """([(title, [lines])], why not): a deck's slides, or a PDF's pages."""
+        name = os.path.basename(str(path))
+        kind = R.kind_of_file(name)
+        try:
+            if os.path.getsize(path) > R.BIG_MAX:
+                return [], "That file is too big."
+            if kind == "pptx":
+                with open(path, "rb") as f:
+                    return R.pptx_slides(f), ""
+            if kind == "pdf":
+                pages = pdf_text(path, pages=True)
+                if not pages:
+                    return [], "That PDF's text couldn't be read here."
+                if R.scrambled("\n".join(pages)):
+                    return [], "That PDF's text came out in pieces."
+                return R.pdf_pages(pages), ""
+        except OSError:
+            return [], "That file couldn't be opened."
+        except Exception:  # a broken deck: zipfile's and the XML's own errors
+            return [], "Those slides couldn't be read."
+        return [], "Slides are a PowerPoint (.pptx) or a PDF."
+
+    def _add_slides(self, path, i):
+        """A lecture's slides onto session i: its objectives slide's lines and
+        its slides' titles, then its tags found again with them (by plain
+        rules, then the stand-in). Read on this computer; never sent."""
+        if self.idx is None or not (0 <= i < len(self.sessions)) or self.sessions[i]["kind"] in R.EVENT_KINDS:
+            return
+        pages, why = self._slide_pages(path)
+        got = R.from_slides(pages) if pages else None
+        if not got or not (got["objectives"] or got["slides"]):
+            self.said.setText(why or "Nothing on those slides to go by.")
+            return
+        s = self.sessions[i]
+        have = {o["text"].lower() for o in s.get("objectives") or []}
+        s["objectives"] = list(s.get("objectives") or []) + [o for o in got["objectives"] if o["text"].lower() not in have]
+        s["slides"] = list(dict.fromkeys(list(s.get("slides") or []) + got["slides"]))[:80]
+        keep = {k: v for k, v in self.picks().items() if k != i}
+        cands = R.candidates(self.idx, s)
+        pick = R.pick(cands)
+        who = ("plain rules", "with its slides")
+        if not pick and self.stand_in.isChecked():
+            near = R.nearby(self.idx, [t for v in keep.values() for t in v])
+            self.asked.append(("pick", {"session": s, "cands": R.could_fit(self.idx, s, near)}))
+            cands, pick, why2 = self.reader.pick(self.idx, s, cands)
+            who = (self.reader.name, f"{why2}, with its slides") if pick else ("nothing fits", "")
+        elif not pick:
+            who = ("nothing fits", "")
+        self.cands[i], self.who[i] = cands, who
+        picks = {k: {n for n, c in enumerate(self.cands.get(k) or []) if c["tag"] in v} for k, v in keep.items()}
+        picks[i] = set(pick)
+        self._fill(picks)
+        self._show_session(i)
+        n_obj, n_sl = len(got["objectives"]), len(got["slides"])
+        self.said.setText(f"{s['title']}: {n_sl:,} slide title{'s' if n_sl != 1 else ''}"
+                          + (f" and {n_obj:,} objective{'s' if n_obj != 1 else ''}" if n_obj else "")
+                          + f" from {os.path.basename(str(path))}.")
 
     # ---- reading ----
 
@@ -296,6 +417,16 @@ class StartWindow(QDialog):
         self.tree.blockSignals(False)
         self._count()
 
+    def _show_session(self, i):
+        """After a redraw, session i stays picked, open and in view."""
+        for n in range(self.tree.topLevelItemCount()):
+            top = self.tree.topLevelItem(n)
+            if top.data(0, ROLE) == ("session", i):
+                top.setExpanded(True)
+                self.tree.setCurrentItem(top)
+                self.tree.scrollToItem(top)
+                return
+
     def _scope_rows(self, item, i):
         while item.childCount():
             item.removeChild(item.child(0))
@@ -364,6 +495,7 @@ class StartWindow(QDialog):
     def _buttons(self):
         p = self._picked()
         self.add_btn.setEnabled(bool(p) and p[0] == "session" and self.idx is not None)
+        self.slides_btn.setEnabled(bool(p) and p[0] == "session" and self.idx is not None)
         self.scope_btn.setEnabled(bool(p) and p[0] == "event")
         self.would_btn.setEnabled(bool(self.sessions))
         self.make_btn.setEnabled(any(self.picks().values()) and bool(self.name.text().strip()))
@@ -389,6 +521,7 @@ class StartWindow(QDialog):
                  for i, v in self.picks().items()}
         self.who[p[1]] = ("you", "")
         self._fill(picks)
+        self._show_session(p[1])
 
     def _scope(self):
         p = self._picked()

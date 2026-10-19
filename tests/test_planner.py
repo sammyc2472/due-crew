@@ -725,6 +725,94 @@ def test_calendar_files():
           == ["Heart failure", "Heart failure", "Exam 1", "Lab safety", "Cardio quiz 1"])
 
 
+def _pptx_bytes(slides, order=None):
+    """A deck as PowerPoint writes one, the parts the reader reads: slides
+    [(title, [(level, text)], [[cell]])], listed in `order` (indexes; a
+    deck's order isn't its files' names)."""
+    import io
+    import zipfile
+    from xml.sax.saxutils import escape
+    P_ = 'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" ' \
+         'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ' \
+         'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        rels, ids = [], []
+        for n, (title, body, table) in enumerate(slides, 1):
+            sp = (f'<p:sp><p:nvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:txBody><a:p><a:r><a:t>{escape(title)}'
+                  '</a:t></a:r></a:p></p:txBody></p:sp>') if title else ""
+            if body:
+                sp += "<p:sp><p:nvSpPr><p:nvPr/></p:nvSpPr><p:txBody>" + "".join(
+                    f'<a:p><a:pPr lvl="{lvl}"/><a:r><a:t>{escape(t)}</a:t></a:r></a:p>' for lvl, t in body) + "</p:txBody></p:sp>"
+            if table:
+                sp += "<p:graphicFrame><a:graphic><a:graphicData><a:tbl>" + "".join(
+                    "<a:tr>" + "".join(f"<a:tc><a:txBody><a:p><a:r><a:t>{escape(c)}</a:t></a:r></a:p></a:txBody></a:tc>" for c in row)
+                    + "</a:tr>" for row in table) + "</a:tbl></a:graphicData></a:graphic></p:graphicFrame>"
+            z.writestr(f"ppt/slides/slide{n}.xml", f'<?xml version="1.0"?><p:sld {P_}><p:cSld><p:spTree>{sp}</p:spTree></p:cSld></p:sld>')
+            z.writestr(f"ppt/media/image{n}.png", b"\x89PNG" + b"0" * 50)  # a picture: never read
+            rels.append(f'<Relationship Id="rId{n + 1}" Type="slide" Target="slides/slide{n}.xml"/>')
+        for k in (order or range(len(slides))):
+            ids.append(f'<p:sldId id="{256 + k}" r:id="rId{k + 2}"/>')
+        z.writestr("ppt/presentation.xml", f'<?xml version="1.0"?><p:presentation {P_}><p:sldIdLst>{"".join(ids)}'
+                                           '</p:sldIdLst></p:presentation>')
+        z.writestr("ppt/_rels/presentation.xml.rels", '<?xml version="1.0"?><Relationships '
+                   'xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + "".join(rels) + "</Relationships>")
+    return buf.getvalue()
+
+
+def test_slides():
+    import io
+    from due_crew.planner import reading as RD
+    deck = _pptx_bytes([("Diuretics", [], []),
+                        ("Learning objectives", [(0, "Describe the loop diuretics' site of action"),
+                                                 (0, "Compare thiazides with loop diuretics")], []),
+                        ("Loop diuretics", [(0, "Furosemide"), (1, "Ototoxicity")], []),
+                        ("Acid-base effects", [], []),
+                        ("Questions?", [], []),
+                        ("", [(0, "Block schedule")], [["Mon 11/2", "Diuretics", "Room B2"], ["Tue 11/3", "Acid-base", "B2"]])],
+                       order=[0, 1, 3, 2, 4, 5])
+    slides = RD.pptx_slides(io.BytesIO(deck))
+    check("slides: a deck's slides in its own order, titles, levels, a table's rows; pictures never read",
+          [t for t, _l in slides] == ["Diuretics", "Learning objectives", "Acid-base effects", "Loop diuretics", "Questions?",
+                                      "Block schedule"]
+          and slides[3][1] == ["    Furosemide", "        Ototoxicity"] and slides[5][1] == ["Mon 11/2\tDiuretics\tRoom B2",
+                                                                                         "Tue 11/3\tAcid-base\tB2"], slides)
+    text, why = RD.from_file("Renal 4.pptx", io.BytesIO(deck))
+    check("slides: a deck dropped on the box reads as text, a schedule on a slide as a table",
+          not why and [(x["date"], x["title"]) for x in RD.read_calendar(text, CAL_TODAY)]
+          == [("2026-11-02", "Diuretics"), ("2026-11-03", "Acid-base")], (text, why))
+    got = RD.from_slides(slides)
+    check("slides: what a lecture's slides add: its objectives slide's lines, the topics its slides name",
+          got["title"] == "Diuretics" and [o["text"] for o in got["objectives"]]
+          == ["Describe the loop diuretics' site of action", "Compare thiazides with loop diuretics"]
+          and got["slides"] == ["Acid-base effects", "Loop diuretics", "Block schedule"], got)
+    labelled = RD.from_slides([("Cardio", []), ("Heart failure", ["SLG 3  Define systolic and diastolic dysfunction"])])
+    check("slides: a line labelled like an objective is one, wherever it is",
+          labelled["objectives"] == [{"label": "SLG 3", "text": "Define systolic and diastolic dysfunction"}])
+    pages = RD.pdf_pages(["Diuretics\nDr. Lee", "Objectives\nDescribe the loop diuretics' site of action", "Loop diuretics\nFurosemide", ""])
+    check("slides: a deck saved as a PDF, each page's first line its title",
+          RD.from_slides(pages)["slides"] == ["Loop diuretics"] and len(RD.from_slides(pages)["objectives"]) == 1)
+    check("slides: an old .ppt or a Keynote file says what to do",
+          ".pptx" in RD.from_file("a.ppt", b"x")[1] and ".pptx" in RD.from_file("a.key", b"x")[1]
+          and "couldn't be read" in RD.from_file("a.pptx", b"not a zip")[1])
+    big = b"Mon 10/26 Heart failure\n" + b" " * (RD.FILE_MAX + 10)
+    check("slides: a PDF, Word file or deck may be big (their pictures weigh), a text file not",
+          "too big" in RD.from_file("a.txt", big)[1] and RD.from_file("a.docx", big)[1] != "That file is too big to be a calendar.")
+    col = cal_collection()
+    idx = P.DeckIndex(col, 1)
+    s = RD.session(CAL_TODAY, "Renal pharm")
+    before = [c["tag"] for c in RD.candidates(idx, s)]
+    s["slides"] = got["slides"]
+    s["objectives"] = got["objectives"]
+    after = RD.candidates(idx, s)
+    check("slides: a session its title can't place finds its tags by its slides' titles and objectives",
+          DIURETICS not in before and {DIURETICS, ACID} <= {c["tag"] for c in after}, (before, [c["tag"] for c in after]))
+    from due_crew.planner import claude as C
+    req = C.request("pick", session=s, cands=RD.could_fit(idx, s))
+    check("Claude would get: a session's slides' titles too, never a slide's words beyond its objectives",
+          req["input"]["session"]["slides"] == got["slides"] and "Furosemide" not in str(req))
+
+
 def test_matching():
     from due_crew.planner import reading as RD
     col = cal_collection()

@@ -142,11 +142,22 @@ it** (a dropped file reads at once):
 
 - **Its file** (`reading.from_file`, read on this computer, never sent): a
   calendar export (.ics: each event's day and title, its description's
-  lines under it, the calendar's name first), a PDF (Qt's own reader; one
-  whose text comes out in pieces says so), a Word file (.docx: its
-  paragraphs, a list item as an objective, its tables' rows cell by cell),
-  a CSV or a text file. A sheet says to save it as CSV; anything else, to
-  copy its text in. Up to 5 MB.
+  lines under it, the calendar's name first), a PDF (Qt's own reader, up
+  to 400 pages; one whose text comes out in pieces says so), a Word file
+  (.docx: its paragraphs, a list item as an objective, its tables' rows
+  cell by cell), slides (.pptx: each slide's title, its lines by level,
+  its tables' rows, in the deck's own order; never its pictures or
+  notes), a CSV or a text file. A sheet says to save it as CSV, an old
+  .ppt or Keynote file as .pptx or PDF, anything else to copy its text
+  in. A PDF, Word file or deck up to 300 MB (their pictures weigh; only
+  their words are read), a text file up to 5 MB.
+- **A lecture's slides** (Add its slides…, or a .pptx or PDF dropped on a
+  session's row): its objectives slide's lines, and any line labelled
+  like one ("SLG 3 …"), join the session's objectives; the other slides'
+  titles name what it covers (`reading.from_slides`; a deck title,
+  Questions, References and the like left out). Its tags are found again
+  with them, and What Claude would get carries the slides' titles, never
+  their words.
 
 - **The calendar** (`reading.read_calendar`, plain rules): a line that
   starts with a date ("Mon 10/26", "Oct 26", "26 October 2026",

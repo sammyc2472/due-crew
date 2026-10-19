@@ -946,6 +946,7 @@ def main(out):
         import sqlite3
         from due_crew.planner import reading as R
         from due_crew.planner import start_window as SW
+        ROLE_ = SW.ROLE
         conn = sqlite3.connect(":memory:")
         fakes.make_collection(conn)
         root = "#Big_Step1_v3"
@@ -1108,6 +1109,54 @@ def main(out):
             pass  # this Qt reads it whole: nothing to say
         elif w.sessions or "pieces" not in w.said.text():
             raise RuntimeError(f"start: a PDF read in pieces: {w.said.text()!r}")
+        # a lecture's slides dropped on its session's row: its objectives and its slides' titles find its tags
+        import zipfile
+        from xml.sax.saxutils import escape
+        deck = os.path.join(tempfile.mkdtemp(), "Renal 4 - Diuretics.pptx")
+        ns = ('xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" '
+              'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
+              'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"')
+        slides = [("Diuretics", []), ("Learning objectives", ["Describe the site of action of loop diuretics",
+                                                              "Explain the acid-base effects of thiazides"]),
+                  ("Loop diuretics", ["Furosemide"]), ("Acid-base effects", []), ("Questions?", [])]
+        with zipfile.ZipFile(deck, "w") as z:
+            for n, (title, body) in enumerate(slides, 1):
+                sp = (f'<p:sp><p:nvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:txBody><a:p><a:r><a:t>{escape(title)}'
+                      '</a:t></a:r></a:p></p:txBody></p:sp>')
+                sp += "<p:sp><p:nvSpPr><p:nvPr/></p:nvSpPr><p:txBody>" + "".join(
+                    f"<a:p><a:r><a:t>{escape(t)}</a:t></a:r></a:p>" for t in body) + "</p:txBody></p:sp>"
+                z.writestr(f"ppt/slides/slide{n}.xml", f'<p:sld {ns}><p:cSld><p:spTree>{sp}</p:spTree></p:cSld></p:sld>')
+            z.writestr("ppt/presentation.xml", f'<p:presentation {ns}><p:sldIdLst>' + "".join(
+                f'<p:sldId id="{256 + n}" r:id="rId{n}"/>' for n in range(1, len(slides) + 1)) + "</p:sldIdLst></p:presentation>")
+            z.writestr("ppt/_rels/presentation.xml.rels", '<Relationships xmlns="http://schemas.openxmlformats.org/package/'
+                       '2006/relationships">' + "".join(f'<Relationship Id="rId{n}" Target="slides/slide{n}.xml"/>'
+                                                       for n in range(1, len(slides) + 1)) + "</Relationships>")
+        w = read(cal)
+        row = next(w.tree.topLevelItem(i) for i in range(w.tree.topLevelItemCount())
+                   if w.tree.topLevelItem(i).text(0).endswith("Diuretics"))
+        di = row.data(0, ROLE_)[1]
+        w.show()
+        settle()
+        w.tree.scrollToItem(row)
+        at = QtCore.QPointF(w.tree.visualItemRect(row).center())
+        dmime = QtCore.QMimeData()
+        dmime.setUrls([QtCore.QUrl.fromLocalFile(deck)])
+        move = QtGui.QDragMoveEvent(at.toPoint(), QtCore.Qt.DropAction.CopyAction, dmime,
+                                    QtCore.Qt.MouseButton.LeftButton, QtCore.Qt.KeyboardModifier.NoModifier)
+        w.tree.dragMoveEvent(move)
+        if not move.isAccepted() or w.tree.currentItem() is not row:
+            raise RuntimeError("start: a deck over a session's row")
+        w.tree.dropEvent(QtGui.QDropEvent(at, QtCore.Qt.DropAction.CopyAction, dmime,
+                                          QtCore.Qt.MouseButton.LeftButton, QtCore.Qt.KeyboardModifier.NoModifier))
+        s_ = w.sessions[di]
+        tags_ = [c["tag"] for c in w.cands[di]]
+        if (s_.get("slides") != ["Loop diuretics", "Acid-base effects"] or len(s_["objectives"]) != 2
+                or f"{root}::#Videos::Renal::Acid_Base" not in tags_ or "with its slides" not in w.who[di][1]
+                or "2 slide titles and 2 objectives" not in w.said.text()
+                or w.tree.currentItem() is None or w.tree.currentItem().data(0, ROLE_) != ("session", di)
+                or not w.slides_btn.isEnabled()):
+            raise RuntimeError(f"start: slides onto a session {s_} {tags_} {w.who[di]} {w.said.text()!r}")
+        shoot(w, os.path.join(out, "planner-start-slides.png"))
         w = SW.StartWindow(None, decks, SOps())
         sheet = os.path.join(tempfile.mkdtemp(), "block.xlsx")
         with open(sheet, "wb") as f:
