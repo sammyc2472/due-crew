@@ -13,7 +13,7 @@ from aqt.qt import (
     QPushButton, QRadioButton, QScrollArea, QSpinBox, Qt, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
-from ..ui import ask_item, confirm, esc, note, role
+from ..ui import ask_item, confirm, esc, note, role, sev_label
 from .. import plans as P
 from .. import schedule as S
 from . import edits as E
@@ -522,16 +522,21 @@ class ProgressTab(_Lazy):
             return
         self.got = now
         sharing, followers = int(pr.get("sharing") or 0), int(pr.get("followers") or 0)
+        if not followers:
+            self._show(None, "Nobody follows it yet. Once 3 or more who follow it are in its squad, "
+                             "each date's counts show here.")
+            return
         if sharing < 3:
-            self._show(None, f"{sharing} of {followers} {'is' if sharing == 1 else 'are'} in its squad. "
+            self._show(None, f"{followers:,} follow{'s' if followers == 1 else ''} it, {sharing} in its squad. "
                              "Each date's counts show once 3 or more are in it.")
             return
-        self._show(pr, f"{sharing} of {followers} are in its squad; these counts are theirs.")
+        self._show(pr, f"{sharing:,} of the {followers:,} following it are in its squad: these counts are theirs.")
 
     def _clear_hints(self):
         old, self.hints = self.hints, QWidget()
         QVBoxLayout(self.hints).setContentsMargins(0, 0, 0, 0)
         self.root.replaceWidget(old, self.hints)
+        old.hide()  # off the page now, not when Qt gets round to deleting it
         old.deleteLater()
 
     def _show(self, pr, said, again=False):
@@ -551,7 +556,15 @@ class ProgressTab(_Lazy):
             self.list.addTopLevelItem(it)
         today = self.win.ops.today()
         later = [u for u in P.units(doc) if str(u.get("opens")) > today]
-        for u, done, late in E.behind(doc, pr, today):
+        behind = E.behind(doc, pr, today)
+        if not behind and any(E._later(u.get("due") or u["opens"], 2) <= today for u in P.units(doc)):
+            row = QHBoxLayout()  # no date behind (at least half of them done with each): a word, and Pip, as Settings › Pip says
+            pip = sev_label("ready", 40, "Pip, cheering") if self.win.ops.pip() else None
+            if pip is not None:
+                row.addWidget(pip)
+            row.addWidget(_plain("The class is keeping up with every date so far."), 1)
+            self.hints.layout().addLayout(row)
+        for u, done, late in behind:
             row = QHBoxLayout()
             row.addWidget(role(_plain(f"{u.get('name') or '?'}: {done} of {sharing} finished, {late} days after its date."), "head"), 1)
             row.addWidget(_link("Look at that day", lambda _=False, uid=u["id"]: self._look(uid)))

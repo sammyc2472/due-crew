@@ -12,8 +12,8 @@ authors': plain text everywhere."""
 
 from aqt.qt import (
     QAbstractItemView, QBrush, QColor, QComboBox, QDate, QDateEdit, QFont, QHBoxLayout, QHeaderView, QLabel,
-    QLineEdit, QPushButton, QScrollArea, QSpinBox, QSplitter, Qt, QToolButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout,
-    QWidget,
+    QLineEdit, QPushButton, QScrollArea, QSpinBox, QSplitter, Qt, QTimer, QToolButton, QTreeWidget, QTreeWidgetItem,
+    QVBoxLayout, QWidget,
 )
 
 from ..ui import ask_text, confirm, esc, note, role, tone
@@ -60,7 +60,12 @@ class LayoutTab(QWidget):
         row.addWidget(self.view)
         self.find = QLineEdit()
         self.find.setPlaceholderText("Search tags and subdecks")
-        self.find.textChanged.connect(lambda _t: self._fill_tree())
+        self._typing = QTimer(self)  # a search waits for a pause in the typing: a big deck has 12,000 tags
+        self._typing.setSingleShot(True)
+        self._typing.setInterval(200)
+        self._typing.timeout.connect(self._fill_tree)
+        self.find.textChanged.connect(lambda _t: self._typing.start())
+        self._hay = (None, [])  # (the tree, [(key, its path and readable name, lowercased)]): worded once a tree
         row.addWidget(self.find, 1)
         ll.addLayout(row)
         self.tree = QTreeWidget()
@@ -322,10 +327,12 @@ class LayoutTab(QWidget):
             return
         term = self.find.text().strip().lower()
         if term:
+            if self._hay[0] is not t:
+                self._hay = (t, [(key, (B.path_of(key) + "\n" + " › ".join(P._word(x) for x in B.path_of(key).split("::"))).lower())
+                                 for key in t.order])
             n = 0
-            for key in t.order:
-                path = B.path_of(key)
-                if t.n(key) and (term in path.lower() or term in " › ".join(P._word(x) for x in path.split("::")).lower()):
+            for key, hay in self._hay[1]:
+                if term in hay and t.n(key):
                     self.tree.addTopLevelItem(self._item(key, full=True))
                     n += 1
                     if n >= 200:

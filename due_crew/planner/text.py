@@ -90,6 +90,13 @@ def tag_line(t):
     return " | ".join(p for p in parts if p)
 
 
+def pick_note(n):
+    """A "# Pick in Anki for 2026-10-06: the iron cards" line as Read it
+    shows it after "To pick in Anki:": its date and what, the words once
+    (builder.js's pickNote)."""
+    return re.sub(r"^:\s*", "", re.sub(r"^\s*pick in anki\b\s*(?:for\s+)?", "", str(n), flags=re.I)) or str(n)
+
+
 def to_text(doc):
     """toText: the plan's tags, then its dates and events by day, then its notes for followers."""
     evs = [f"{e.get('day')} | event | {e.get('name')}" for e in _events(doc)]

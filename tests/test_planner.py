@@ -1658,6 +1658,26 @@ def test_settings_remote_v393():
     check("settings: only its owner takes it down; then it's gone", not R.delete(dre, pid) and R.delete(sam, pid) and pid not in store.plans)
 
 
+def test_pick_note_twin_v393():
+    """3.9.3: Read it's "To pick in Anki:" line says "Pick in Anki" once, its
+    date kept: text.pick_note and builder.js's pickNote, the same."""
+    import shutil
+    import subprocess
+    from due_crew.planner.text import pick_note
+    cases = ["Pick in Anki: the two shock cases", "pick in anki for 2026-10-06: the iron cards", "the iron cards",
+             "Pick in Ankifoo", "Pick in Anki", "  PICK IN ANKI  for 2026-01-02 : x"]
+    want = ["the two shock cases", "2026-10-06: the iron cards", "the iron cards", "Pick in Ankifoo", "Pick in Anki", "2026-01-02 : x"]
+    check("pick note: the words once, its date kept", [pick_note(c) for c in cases] == want, [pick_note(c) for c in cases])
+    node = shutil.which("node")
+    line = re.search(r"^\s*const pickNote = .*;$", open(os.path.join(REPO, "site", "public", "builder.js")).read(), re.M)
+    if not node or not line:
+        check("pick note: builder.js has pickNote", bool(line))
+        return
+    got = subprocess.run([node, "-e", line.group(0) + f"\nconsole.log(JSON.stringify({json.dumps(cases)}.map(pickNote)))"],
+                         capture_output=True, text=True, timeout=30)
+    check("pick note: builder.js's pickNote says the same", got.returncode == 0 and json.loads(got.stdout) == want, got.stdout + got.stderr)
+
+
 def test_day_notes_v393():
     """3.9.3: notes on a day in Your plans against the fake Worker (plans.ts
     notes): anyone in the plan writes one, a stranger gets nothing, its

@@ -1297,6 +1297,12 @@ def main(out):
             def my_squads(self):
                 return [{"id": "sq1", "name": "Study buddies"}]
 
+            def pip(self):
+                return True
+
+            def follow_plan(self):
+                reopened.append("follow")
+
             def reopen(self, pid):
                 reopened.append(pid)
 
@@ -1425,6 +1431,10 @@ def main(out):
         if views != ["Resource", "System", "Other", "Deck"]:
             raise RuntimeError(f"planner: Lay it out's views {views}")
         lay.find.setText("#book")
+        if not lay._typing.isActive():
+            raise RuntimeError("planner: Lay it out's search waits for a pause in the typing")
+        lay._typing.stop()
+        lay._fill_tree()  # what the pause does
         book = lay.tree.topLevelItem(0)
         if book is None or book.data(0, QtCore.Qt.ItemDataRole.UserRole) != f"tag:{root}::#Book":
             raise RuntimeError(f"planner: Lay it out's search {book.text(0) if book else None}")
@@ -1488,10 +1498,13 @@ def main(out):
         dlg.resize(1100, 720)
         shoot(dlg, os.path.join(out, "planner-text-whole.png"))
         was_confirm, PT.confirm = PT.confirm, lambda *a, **k: True
+        idx0, tree0 = dlg.idx, dlg.deck_tree()
         try:
             txt._go()
         finally:
             PT.confirm = was_confirm
+        if dlg.idx is not idx0 or dlg.deck_tree() is not tree0:
+            raise RuntimeError("planner: a save read the deck again (its index and tree stay)")
         doc = STORE.plans[pid]["doc"]
         if any(u.get("name") == "Shock again" for u in doc["units"]) or txt.box.toPlainText() != PT.T.to_text(doc):
             raise RuntimeError(f"planner: Text, Replace: {txt.status.text()!r}")
@@ -1531,11 +1544,20 @@ def main(out):
         dlg._show_tab("progress")
         prg._read()
         hints = [w.text() for w in prg.hints.findChildren(QtWidgets.QLabel)]
-        if prg.list.topLevelItemCount() != len(STORE.plans[pid]["doc"]["units"]) or not prg.said.text().startswith("3 of 4") \
+        if prg.list.topLevelItemCount() != len(STORE.plans[pid]["doc"]["units"]) or not prg.said.text().startswith("3 of the 4 following") \
                 or not any(t.startswith("Antibiotics: 1 of 3 finished") for t in hints):
             raise RuntimeError(f"planner: Progress: {prg.said.text()!r}, {hints}")
         dlg.resize(1100, 720)
         shoot(dlg, os.path.join(out, "planner-progress.png"))
+        STORE.follows[(pid, "dre")]["progress"] = json.dumps({"u4": [1, 3, 3]})
+        prg._read()
+        words = [w.text() for w in prg.hints.findChildren(QtWidgets.QLabel)]
+        if "The class is keeping up with every date so far." not in words \
+                or not [w for w in prg.hints.findChildren(QtWidgets.QLabel) if w.pixmap() is not None and not w.pixmap().isNull()]:
+            raise RuntimeError(f"planner: Progress, keeping up: {words}")
+        shoot(dlg, os.path.join(out, "planner-progress-keeping-up.png"))
+        STORE.follows[(pid, "dre")]["progress"] = json.dumps({"u4": [1, 0, 3]})
+        prg._read()
         later = {u["id"]: u["opens"] for u in STORE.plans[pid]["doc"]["units"] if u["opens"] > TODAY}
         was_confirm, ST.confirm = ST.confirm, lambda *a, **k: True
         try:
@@ -1598,6 +1620,12 @@ def main(out):
         if [x["text"] for x in STORE.plan_notes if x["plan"] == pid] != ["Lecture's in room 4B today"]:
             raise RuntimeError("planner: a note taken off")
         empty = PlanWindow_([])
+        if not empty.tabs.isHidden() or empty.welcome.isHidden() or not empty.pick.isHidden() \
+                or not [w for w in empty.welcome.findChildren(QtWidgets.QLabel) if w.pixmap() is not None and not w.pixmap().isNull()]:
+            raise RuntimeError("planner: no plans yet: the welcome, Pip waving, no tabs")
+        [b for b in empty.welcome.findChildren(QtWidgets.QPushButton) if b.text() == "Follow a plan…"][0].click()
+        if reopened[-1:] != ["follow"]:
+            raise RuntimeError("planner: no plans yet: Follow a plan…")
         shoot(empty, os.path.join(out, "planner-empty.png"))
         idx = P.DeckIndex(col, 1)
         pick = Picker(None, idx, "Add to Tue " + day(1)[-2:], "Big Step 1")

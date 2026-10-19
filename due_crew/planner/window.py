@@ -22,7 +22,7 @@ from aqt.qt import (
     QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
-from ..ui import ask_text, attach_alive, confirm, esc, heading, note, role, tone
+from ..ui import ask_text, attach_alive, confirm, esc, heading, note, role, sev_label, tone
 from .. import plans as P
 from .. import schedule as S
 from ..backend.shapes import clean_plan
@@ -141,6 +141,8 @@ class PlanWindow(QDialog):
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
         root.addWidget(self.tabs, 1)
+        self.welcome = self._welcome()  # no plans yet: in the tabs' place
+        root.addWidget(self.welcome, 1)
         self.pages = {}
 
         split = QSplitter(Qt.Orientation.Horizontal)
@@ -217,6 +219,7 @@ class PlanWindow(QDialog):
         buttons = QDialogButtonBox()
         buttons.addButton("Close", QDialogButtonBox.ButtonRole.RejectRole).clicked.connect(self.reject)
         root.addWidget(buttons)
+        self.tabs.currentChanged.connect(self._tab_changed)
 
         if select and self.pick.findData(select) >= 0:
             self.pick.setCurrentIndex(self.pick.findData(select))  # before the signal: one load, of this one
@@ -226,7 +229,46 @@ class PlanWindow(QDialog):
         if self.plans:
             self._load()
         else:
-            self._empty("No plans yet. Make one: New › New plan from a deck…, or from a calendar.")
+            self._no_plans()
+
+    def _welcome(self):
+        """No plans yet: Pip waving (as Settings › Pip says), what a plan
+        is, and the three ways to one."""
+        page = QWidget()
+        row = QHBoxLayout(page)
+        row.setContentsMargins(0, 16, 0, 0)
+        pip = sev_label("hello", 72, "Pip, waving") if self.ops.pip() else None
+        if pip is not None:
+            row.addWidget(pip, 0, Qt.AlignmentFlag.AlignTop)
+            row.addSpacing(12)
+        words = QVBoxLayout()
+        words.addWidget(role(_plain("No plans yet"), "head"))
+        words.addWidget(_plain("A plan puts a block's lectures on dates, and opens each date's cards in Anki "
+                               "as its day comes. Make one for your class, or follow one with its code."))
+        ways = QHBoxLayout()
+        for label, fn, main in (("New plan from a deck…", self.ops.new_from_deck, True),
+                                ("New plan from a calendar…", self.ops.new_from_calendar, False),
+                                ("Follow a plan…", self.ops.follow_plan, False)):
+            b = QPushButton(label)
+            if main:
+                b.setProperty("dc", "go")
+            b.clicked.connect(lambda _=False, fn=fn: fn())
+            ways.addWidget(b)
+        ways.addStretch(1)
+        words.addSpacing(8)
+        words.addLayout(ways)
+        words.addStretch(1)
+        row.addLayout(words, 1)
+        page.hide()
+        return page
+
+    def _no_plans(self):
+        """No plans yet: the welcome in place of the plan row and the tabs."""
+        for w in (self.pick, self.reload_btn, self.new_btn, self.line, self.tabs):
+            w.hide()
+        self.welcome.show()
+        self.setMinimumSize(640, 280)
+        self.resize(720, 300)
 
     def go_to_plan(self, pid, tab=None):
         """The window, on this plan: True, or False when it doesn't list it."""
@@ -296,7 +338,7 @@ class PlanWindow(QDialog):
         self._busy(True, "Loading the plan…")
         self.ops.load(self, pid, lambda got: self._loaded(pid, got))
 
-    def _loaded(self, pid, got, keep=None):
+    def _loaded(self, pid, got, keep=None, saved=False):
         if pid != self.pick.currentData():
             return  # another plan was picked since
         self._busy(False, "")
@@ -306,14 +348,19 @@ class PlanWindow(QDialog):
             self._empty("The plan didn't load: check your connection, then Reload.")
             return
         raw, plan = got
+        # a save of this plan (or its undo, or a setting) changed the plan, not the deck: its index and
+        # tree (a big deck's is seconds of work) stay; a plan picked or read again reads them again
+        same = (saved and self.idx is not None and (self.plan or {}).get("id") == pid
+                and str((self.doc or {}).get("deck") or "") == str((plan.get("doc") or {}).get("deck") or ""))
         self.plan = plan
         library = (raw or {}).get("library") is True
         self.raw = raw if plan.get("role") in ("owner", "editor") else None
         # an author's view is the plan's own dates; a follower's, mine (as my follow moves them)
         self.doc = plan["doc"] if self.raw is not None else self.ops.my_doc(plan)
-        self.idx, self.swap, self.how = self.ops.context(plan, self.doc)
+        if not same:
+            self.idx, self.swap, self.how = self.ops.context(plan, self.doc)
+            self._tree = None
         self._rows = {}
-        self._tree = None
         self._line()
         self.day_notes.plan_loaded(plan["id"], library)
         self._fill(keep or self.picked)
@@ -878,7 +925,7 @@ class PlanWindow(QDialog):
             self.status.setText(str(what))
             return
         plan = clean_plan(what) or self.plan
-        self._loaded(pid, (what, plan), keep=keep)
+        self._loaded(pid, (what, plan), keep=keep, saved=True)
         if outcome == "stale" and retry:
             # someone (or my Anki's note ids) saved since it loaded: the same change, once, on theirs
             change, touched, keep_fn = retry
@@ -899,12 +946,19 @@ class PlanWindow(QDialog):
         the window on that (its name in the list too)."""
         pid = self.pick.currentData()
         plan = clean_plan(raw) or self.plan
-        self._loaded(pid, (raw, plan))
+        self._loaded(pid, (raw, plan), saved=True)
         self.pick.setItemText(self.pick.currentIndex(), f"{plan.get('name') or 'Plan'} · {_whose(plan)}")
+
+    def _tab_changed(self, _i):
+        """Another tab: the last tab's words go (they were about it); Undo
+        stays, but on History, which has its own."""
+        if not self.busy:
+            self.status.setText("")
+        self._can_undo(self.undoable)
 
     def _can_undo(self, what):
         self.undoable = what
-        self.undo_btn.setVisible(bool(what))
+        self.undo_btn.setVisible(bool(what) and self.tabs.currentWidget() is not self.pages.get("history"))
 
     def _undo(self):
         if not self.undoable or self.busy:
@@ -928,7 +982,7 @@ class PlanWindow(QDialog):
             if outcome == "refused":
                 self.status.setText(str(what))
                 return
-            self._loaded(pid, (what, clean_plan(what) or self.plan), keep=keep)
+            self._loaded(pid, (what, clean_plan(what) or self.plan), keep=keep, saved=True)
             self.status.setText("Undone." if outcome == "saved"
                                 else "Someone saved this plan since, so there's nothing of yours to undo now.")
         self.ops.undo(self, pid, version, done)

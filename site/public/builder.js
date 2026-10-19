@@ -2045,6 +2045,8 @@ async function builder(id) {
   const byLower = new Map([...count.keys()].map((k) => [k.toLowerCase(), k]));
   const byName = new Map([...count.keys()].map((k) => [`${kindOf(k)}:${Tags.name(pathOf(k)).toLowerCase()}`, k]));
   const findKey = (kind, p) => byLower.get(`${kind}:${p.toLowerCase()}`) || byName.get(`${kind}:${p.toLowerCase()}`) || `${kind}:${p}`;
+  // 3.9.3: a "# Pick in Anki for 2026-10-06: the iron cards" line after "To pick in Anki:", the words once (text.pick_note)
+  const pickNote = (n) => n.replace(/^\s*pick in anki\b\s*(?:for\s+)?/i, "").replace(/^:\s*/, "") || n;
 
   function fromText(text, whole = false) {
     const errors = [];
@@ -2624,7 +2626,7 @@ async function builder(id) {
         heavy.length ? h("p", { class: "warn small" }, h("b", {}, "Over your pace: "), heavy.slice(0, 6).map((x) => `${x.a === x.b ? pretty(x.a) : `${pretty(x.a)} – ${pretty(x.b)}`}, ${x.top.toLocaleString()} new a day`).join(" · "),
           ` (pace ${cap.toLocaleString()} a day)`) : null,
         r.warns.length ? h("p", { class: "warn small" }, r.warns.slice(0, 4).join(" ")) : null,
-        r.notes.length ? h("div", { class: "hnote" }, h("span", {}, h("b", {}, "To pick in Anki: "), r.notes.join(" · "))) : null,
+        r.notes.length ? h("div", { class: "hnote" }, h("span", {}, h("b", {}, "To pick in Anki: "), r.notes.map(pickNote).join(" · "))) : null,
         r.why.length ? h("details", { class: "small", open: !r.units.length }, h("summary", {}, `The AI's notes (${r.why.length})`),
           h("ul", { class: "muted", style: "margin:4px 0 0;padding-left:20px;text-align:left" }, r.why.map((x) => h("li", {}, x.slice(0, 300))))) : null,
         h("div", { class: "row" },

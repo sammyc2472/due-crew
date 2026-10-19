@@ -41,10 +41,19 @@ builder's on duecrew.com (Not here yet, below).
 ## Your plans
 
 My plans (the ones I write first, then the ones I follow), one at a time,
-in tabs: **Dates** for everyone; **Lay it out**, **Text**, **Updates** and
-**History** for a plan's authors.
+in tabs: **Dates** for everyone; **Lay it out**, **Text**, **Progress**,
+**Updates**, **History** and **Settings** for a plan's authors.
 **Reload** reads the plan again (an edit on the site meanwhile); **New ▾**
-makes a date, a quiz or exam, a review day, or a new plan.
+makes a date, a quiz or exam, a review day, or a new plan. With no plans
+yet, the window is a welcome instead: Pip waving (as Settings › Pip says,
+`sev_label`, still), what a plan is, and **New plan from a deck…**, **New
+plan from a calendar…** and **Follow a plan…** (Your plans again after
+it). A tab's words at the bottom go when another tab opens; the window's
+**Undo** stays, but on History, which has its own.
+
+A save, its undo or a setting changes the plan, never the deck: the
+window keeps the deck's index and the tree Lay it out reads (a big deck's
+is seconds of work); picking a plan or Reload reads them again.
 
 ### Dates
 
@@ -121,7 +130,8 @@ The builder's side panel and pace row (`layout_tab.py`, its rules
 
 - **What to cover**: the deck's tags by resource (#), by system (^), the
   rest, or its subdecks (the views the deck has), or a search over every
-  path. Ticking a tag covers it and all below it; a tag that holds more
+  path (it waits for a pause in the typing, and words the paths once a
+  deck). Ticking a tag covers it and all below it; a tag that holds more
   than one view (a big shared deck's top tag holds resources and systems,
   the same cards twice) covers what this view shows of it. One already on
   the calendar is muted. "120 cards ticked · 80 not on a day yet."
@@ -214,7 +224,10 @@ more (counts, never names). Above the list, the builder's class hints
 it, the latest two, each with **Look at that day** (Dates, on it) and,
 while dates are still to come, **Give the class a day** (`edits.breather`:
 every date still to come one study day later, review days too; quizzes
-and exams stay on their days), one save.
+and exams stay on their days), one save. None behind, once a date is two
+days past: "The class is keeping up with every date so far.", with Pip
+cheering beside it (as Settings › Pip says). Nobody following yet, or
+fewer than three in its squad, it says so in those words.
 
 ### Settings (authors)
 

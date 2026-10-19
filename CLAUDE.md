@@ -183,7 +183,8 @@ same commit, each with its test:
   (checked by hand-worked plans); `planner/edits.py` ↔ the builder's edits
   (a date's sources, cuts, splits, events, review days, retag and dropSay);
   `planner/text.py` ↔ toText, fromText and the Text tab's use, takeOff
-  (its date line is `plans._date_line`)
+  (its date line is `plans._date_line`); `text.pick_note` ↔ `pickNote`
+  (Read it's "To pick in Anki:" line)
 - the Worker ↔ `tests/fakes.FakeWorker` (the suite's server)
 
 ## Where things live

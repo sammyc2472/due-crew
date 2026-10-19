@@ -346,7 +346,7 @@ class TextTab(QWidget):
                 for x in runs[:6]) + f" (pace {cap:,} a day).")
         said += r["warns"][:4]
         if r["notes"]:
-            said.append("To pick in Anki: " + " · ".join(r["notes"]))
+            said.append("To pick in Anki: " + " · ".join(T.pick_note(n) for n in r["notes"]))
         if r["why"]:
             said.append(f"Its notes ({len(r['why'])}), not kept: " + " · ".join(w[:300] for w in r["why"][:6]))
         self.said.setText("\n".join(said))

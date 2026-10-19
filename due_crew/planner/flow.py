@@ -169,6 +169,16 @@ class Ops:
             w.close()
         open_plans(select=pid)
 
+    def pip(self):
+        """Pip in the window's corner, as Settings › Pip says."""
+        from ..rooms import sev_on
+        return sev_on()
+
+    def follow_plan(self):
+        """Follow a plan (its code), then Your plans again, with it in."""
+        plan_flow.open_follow()
+        self.reopen(None)
+
     def me(self):
         """My account's id (a row of mine says You)."""
         return client().user_id
