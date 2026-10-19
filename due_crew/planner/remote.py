@@ -141,6 +141,89 @@ def unpost(client, pid, post_id):
     return status == 200
 
 
+# the builder's Settings, said as it says them
+SETTINGS_WORDS = dict(SAVE_WORDS, **{
+    "not_owner": "Only its owner changes that.",
+    "bad_squad": "That squad isn't one of yours.",
+    "too_many_listed": "You have 20 plans in the library. Take one out first.",
+    "squad_plan": "Only a plan anyone with the code can follow goes in the library.",
+    "no_dates": "Put some dates on it first.",
+    "taken_out": "It was taken out of the library. Send feedback if that's a mistake.",
+    "too_many_editors": "A plan has up to 10 co-authors.",
+    "not_crew": "Co-authors come from your crew: you add each other.",
+    "not_coauthor": "Only a co-author who said yes can be handed it.",
+    "too_many_plans": "You have 50 plans. Delete one first.",
+    "slow_down": "That's a lot of changes. Try again in an hour.",
+})
+
+
+def _view(status, data):
+    if status == 200 and isinstance(data.get("doc"), dict) and data.get("id"):
+        return "saved", data
+    return "refused", SETTINGS_WORDS.get(str((data or {}).get("error") or ""), "That didn't work. Try again.")
+
+
+def save_meta(client, pid, version, fields, summary):
+    """The builder's Settings saved: its name, line, who can follow and its
+    squad (PUT /plans/{id} without the doc). ("saved", raw) | ("stale", raw
+    now) | ("refused", words)."""
+    body = dict({k: v for k, v in fields.items() if k in ("name", "line", "audience", "squad")},
+                version=int(version), summary=str(summary)[:120])
+    status, data = _call(client, "PUT", f"/plans/{pid}", body)
+    if status == 409 and data.get("error") == "stale":
+        return "stale", load(client, pid)[0]
+    return _view(status, data)
+
+
+def progress(client, pid):
+    """The builder's Progress: {followers, sharing, units: {id: {opened, done}}} (its squad's counts)."""
+    status, data = _call(client, "GET", f"/plans/{pid}/progress")
+    if status != 200 or not isinstance(data.get("units"), dict):
+        raise TransportError(f"progress: {status}", status)
+    return data
+
+
+def set_listed(client, pid, on):
+    """In the library, or out (PUT /plans/{id}/listed, the owner's)."""
+    return _view(*_call(client, "PUT", f"/plans/{pid}/listed", {"listed": bool(on)}))
+
+
+def copy(client, pid, start):
+    """A plan of my own from this one, its first date on `start` (POST /plans/{id}/copy)."""
+    return _view(*_call(client, "POST", f"/plans/{pid}/copy", {"start": str(start)}))
+
+
+def delete(client, pid):
+    """The owner takes the plan down (DELETE /plans/{id}); followers keep what's open. True when it went."""
+    status, _data = _call(client, "DELETE", f"/plans/{pid}")
+    return status == 200
+
+
+def crew(client):
+    """My crew, the people a co-author comes from: [(uid, name)], mutual friends (GET /friends)."""
+    status, data = _call(client, "GET", "/friends")
+    if status != 200:
+        raise TransportError(f"friends: {status}", status)
+    return [(str(f["uid"]), str(f.get("name") or "?")) for f in data.get("friends") or []
+            if isinstance(f, dict) and f.get("uid") and f.get("mutual")]
+
+
+def add_editor(client, pid, uid):
+    """Ask one of my crew to co-write it (POST /plans/{id}/editors): they say yes first."""
+    return _view(*_call(client, "POST", f"/plans/{pid}/editors", {"uid": str(uid)}))
+
+
+def remove_editor(client, pid, uid):
+    """A co-author off it, an invite taken back, or me leaving (DELETE /plans/{id}/editors/{uid}). True when done."""
+    status, _data = _call(client, "DELETE", f"/plans/{pid}/editors/{uid}")
+    return status == 200
+
+
+def offer(client, pid, uid):
+    """Hand it to a co-author who said yes, or take the offer back (uid None): POST /plans/{id}/owner."""
+    return _view(*_call(client, "POST", f"/plans/{pid}/owner", {"uid": uid}))
+
+
 def create(client, name, deck):
     """A new plan, no dates yet, mine (POST /plans, the builder's New plan):
     ("saved", raw) | ("refused", words)."""

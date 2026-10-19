@@ -1294,6 +1294,13 @@ def main(out):
                     got = None
                 done(got)
 
+            def my_squads(self):
+                return [{"id": "sq1", "name": "Study buddies"}]
+
+            def reopen(self, pid):
+                reopened.append(pid)
+
+        reopened = []
         mine = PR.my_plans(CLIENT)
 
         def PlanWindow_(plans=mine):
@@ -1514,6 +1521,54 @@ def main(out):
         hist._undo()
         if STORE.plans[pid]["version"] != v + 1 or not STORE.plan_log[-1][3].startswith("undid:"):
             raise RuntimeError(f"planner: History's Undo: v{STORE.plans[pid]['version']}, {dlg.status.text()!r}")
+        # 3.9.3: Progress (its squad's counts, and a date most of the class hasn't finished) and Settings
+        import json
+        from due_crew.planner import settings_tab as ST
+        for who, prog in (("kai", {"u4": [1, 1, 1], "u1": [1, 1, 2]}), ("dre", {"u4": [1, 0, 3]}), ("lee", {"u4": [1, 0, 3], "u1": [1, 0, 2]})):
+            STORE.follows[(pid, who)] = {"share": True, "paused": False, "sched": None, "progress": json.dumps(prog)}
+        STORE.follows[(pid, "mo")] = {"share": False, "paused": False, "sched": None, "progress": None}
+        prg = dlg.pages["progress"]
+        dlg._show_tab("progress")
+        prg._read()
+        hints = [w.text() for w in prg.hints.findChildren(QtWidgets.QLabel)]
+        if prg.list.topLevelItemCount() != len(STORE.plans[pid]["doc"]["units"]) or not prg.said.text().startswith("3 of 4") \
+                or not any(t.startswith("Antibiotics: 1 of 3 finished") for t in hints):
+            raise RuntimeError(f"planner: Progress: {prg.said.text()!r}, {hints}")
+        dlg.resize(1100, 720)
+        shoot(dlg, os.path.join(out, "planner-progress.png"))
+        later = {u["id"]: u["opens"] for u in STORE.plans[pid]["doc"]["units"] if u["opens"] > TODAY}
+        was_confirm, ST.confirm = ST.confirm, lambda *a, **k: True
+        try:
+            prg._breather()
+        finally:
+            ST.confirm = was_confirm
+        moved = {u["id"]: u["opens"] for u in STORE.plans[pid]["doc"]["units"] if u["id"] in later}
+        if not later or any(moved[k] <= v for k, v in later.items()):
+            raise RuntimeError(f"planner: Progress, Give the class a day: {later} -> {moved}")
+        st = dlg.pages["settings"]
+        dlg._show_tab("settings")
+        if st.name.text() != STORE.plans[pid]["name"] or st.squad.count() != 2 or st.delete_btn.isHidden() or not st.leave_btn.isHidden():
+            raise RuntimeError(f"planner: Settings: {st.name.text()!r}, {st.squad.count()} squads")
+        st.line.setText("Organ systems, one a week.")
+        st._save_meta()
+        if STORE.plans[pid].get("line") != "Organ systems, one a week." or not st.said.text().startswith("Saved") \
+                or st.meta_btn.isEnabled():
+            raise RuntimeError(f"planner: Settings, the name and line: {st.said.text()!r}")
+        st.url.setText("https://example.com/big-step-1")
+        st._save_url()
+        if STORE.plans[pid]["doc"].get("deckUrl") != "https://example.com/big-step-1":
+            raise RuntimeError(f"planner: Settings, the deck's link: {dlg.status.text()!r}")
+        dlg.resize(1100, 720)
+        shoot(dlg, os.path.join(out, "planner-settings.png"))
+        bar = st.findChild(QtWidgets.QScrollArea).verticalScrollBar()
+        bar.setValue(bar.maximum())
+        shoot(dlg, os.path.join(out, "planner-settings-end.png"))
+        before = set(STORE.plans)
+        st._next_year()
+        new = next(iter(set(STORE.plans) - before), None)
+        if new is None or reopened[-1:] != [new] or not STORE.plans[new]["name"].endswith("(next year)"):
+            raise RuntimeError(f"planner: Settings, Copy for next year: {st.said.text()!r}, {reopened}")
+        STORE.plans.pop(new)
         empty = PlanWindow_([])
         shoot(empty, os.path.join(out, "planner-empty.png"))
         idx = P.DeckIndex(col, 1)

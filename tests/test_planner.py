@@ -7,6 +7,7 @@ Run: python3 tests/test_planner.py
 import ast
 import datetime
 import glob
+import json
 import os
 import random
 import re
@@ -1011,8 +1012,8 @@ def test_rules_of_the_road():
           and all(t.count("(QDialog)") == t.count("attach_alive(self)") == len(re.findall(r"\bheading\(self", t))
                   for t in windows.values()), sorted(windows))
     tabs = {f: t for f, t in src.items() if "(QWidget)" in t}  # 3.9.3: Your plans' tabs past Dates
-    check("road: the tabs past Dates: Lay it out, Text, Updates and History",
-          sorted(tabs) == ["history_tab.py", "layout_tab.py", "text_tab.py"], sorted(tabs))
+    check("road: the tabs past Dates: Lay it out, Text, Progress, Updates, History and Settings",
+          sorted(tabs) == ["history_tab.py", "layout_tab.py", "settings_tab.py", "text_tab.py"], sorted(tabs))
     windows_tabs = dict(windows, **tabs)
     check("road: no window sets its own type or margins in a style sheet, nor reads Anki's palette",
           not [f for f, t in windows_tabs.items() if "setStyleSheet" in t or "palette(" in t or "font-size" in t])
@@ -1023,21 +1024,27 @@ def test_rules_of_the_road():
     check("road: the pure parts and the requests import no aqt",
           not [f for f in pure if re.search(r"^\s*(from aqt|import aqt)", src[f], re.M)])
     calls = set()
-    for f in ("flow.py", "window.py", "layout_tab.py", "text_tab.py", "history_tab.py", "qid_window.py", "picker.py", "start_window.py"):
+    for f in ("flow.py", "window.py", "layout_tab.py", "text_tab.py", "history_tab.py", "settings_tab.py", "qid_window.py", "picker.py", "start_window.py"):
         for node in ast.walk(ast.parse(src[f])):
             if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "remote":
                 calls.add(node.attr)
     check("road: requests only on a click, through remote (who I am, my plans, one plan, a save, its history and posts)",
-          calls <= {"is_admin", "my_plans", "load", "save", "undo", "create", "log", "posts", "post", "unpost"}
+          calls <= {"is_admin", "my_plans", "load", "save", "undo", "create", "log", "posts", "post", "unpost", "save_meta",
+                    "progress", "set_listed", "copy", "delete", "crew", "add_editor", "remove_editor", "offer"}
           and "_call" not in src["flow.py"], calls)
     routes = set(re.findall(r'_call\((?:client, )?"(GET|PUT|POST|PATCH|DELETE)", f?"([^"]+)"', src["remote.py"]))
     builder = open(os.path.join(REPO, "site", "public", "builder.js")).read()
     check("road: nothing new on the server: routes the builder and the site use already",
           routes == {("GET", "/auth/me"), ("GET", "/plans/{pid}"), ("PUT", "/plans/{pid}"), ("POST", "/plans/{pid}/undo"),
                      ("POST", "/plans"), ("GET", "/plans/{pid}/log"), ("GET", "/plans/{pid}/posts"), ("POST", "/plans/{pid}/posts"),
-                     ("DELETE", "/plans/{pid}/posts/{int(post_id)}")}
-          and all(f'api("{m}", `/plans/${{id}}/{x}' in builder for m, x in (("GET", "log"), ("GET", "posts"), ("POST", "posts"),
-                                                                           ("DELETE", "posts/"))), routes)
+                     ("DELETE", "/plans/{pid}/posts/{int(post_id)}"), ("GET", "/plans/{pid}/progress"), ("PUT", "/plans/{pid}/listed"),
+                     ("POST", "/plans/{pid}/copy"), ("DELETE", "/plans/{pid}"), ("GET", "/friends"), ("POST", "/plans/{pid}/editors"),
+                     ("DELETE", "/plans/{pid}/editors/{uid}"), ("POST", "/plans/{pid}/owner")}
+          and all(f'api("{m}", `/plans/${{{v}}}{x}' in builder
+                  for m, v, x in (("GET", "id", "/log"), ("GET", "id", "/posts"), ("POST", "id", "/posts"), ("DELETE", "id", "/posts/"),
+                                  ("GET", "id", "/progress"), ("PUT", "id", "/listed"), ("POST", "plan.id", "/copy"), ("DELETE", "id", "`"),
+                                  ("POST", "id", "/editors"), ("DELETE", "id", "/editors/"), ("POST", "id", "/owner")))
+          and 'api("GET", "/friends")' in builder, routes)
     check("road: Claude isn't connected: the stand-in sends nothing, and nothing reads a card's text for it",
           not re.search(r"^\s*(?:from|import)\s+(?:requests|urllib|http|socket|anthropic)\b", src["claude.py"] + src["reading.py"], re.M)
           and not re.search(r"\bflds\b|\.note\(|\bnote\[", src["claude.py"] + src["reading.py"] + src["start_window.py"]))
@@ -1552,6 +1559,99 @@ def test_history_and_posts_v393():
     check("updates: the time a line says, as the builder's",
           M.ago(1000, now=1010) == "just now" and M.ago(1000, now=1000 + 300) == "5 min ago"
           and M.ago(1000, now=1000 + 3 * 3600) == "3 h ago")
+
+
+def test_settings_edits_v393():
+    """3.9.3: the builder's Settings and Progress in Your plans: where to get
+    the deck, next year's name and first day, a class's dates behind, and
+    Give the class a day."""
+    check("settings: a deck link is https, printable, no space or quote, 300 at most",
+          E.deck_link("https://example.org/deck?x=1") and not E.deck_link("http://x.org") and not E.deck_link("https://a b")
+          and not E.deck_link('https://a"b') and not E.deck_link("https://" + "x" * 293))
+    d = E.set_deck_url({"units": []}, " https://example.org/deck ")
+    try:
+        E.set_deck_url(d, "example.org")
+        bad = None
+    except E.Refused as e:
+        bad = str(e)
+    check("settings: the deck link set, refused when it isn't one, taken off empty",
+          d["deckUrl"] == "https://example.org/deck" and "https://" in bad and "deckUrl" not in E.set_deck_url(d, ""), bad)
+    check("settings: next year's name, as the builder's",
+          E.next_year_name("MS2 Block 2") == "MS2 Block 2 (next year)" and E.next_year_name("MS2 Block 2 (copy)") == "MS2 Block 2 (next year)"
+          and E.next_year_name("MS2 Block 2 (next year)") == "MS2 Block 2 (next year)"
+          and E.next_year_name("A very long plan name that goes on and on past the limit") == "A very long plan name that goes on and on past (next year)"
+          and E.first_day({"units": [{"opens": "2026-11-10"}], "events": [{"day": "2026-11-09"}]}) == "2026-11-09")
+    doc = {"units": [{"id": "a", "name": "A", "opens": "2026-11-09", "due": "2026-11-10"},
+                     {"id": "b", "name": "B", "opens": "2026-11-12", "due": "2026-11-13", "check": "2026-11-14"},
+                     {"id": "c", "name": "C", "opens": "2026-11-13"}],
+           "reviews": [{"day": "2026-11-14", "from": "a", "to": "b"}], "events": [{"id": "e", "day": "2026-11-15", "name": "Quiz"}]}
+    week = [1, 1, 1, 1, 1, 0, 0]
+    moved, n = E.breather(doc, "2026-11-11", week)
+    us = {u["id"]: u for u in moved["units"]}
+    check("progress: Give the class a day: every date still to come one study day later, events where they were",
+          n == 2 and us["a"]["opens"] == "2026-11-09" and (us["b"]["opens"], us["b"]["due"], us["b"]["check"]) == ("2026-11-13", "2026-11-14", "2026-11-15")
+          and us["c"]["opens"] == "2026-11-16" and moved["reviews"][0]["day"] == "2026-11-16" and moved["events"][0]["day"] == "2026-11-15", moved)
+    prog = {"sharing": 4, "units": {"a": {"opened": 4, "done": 1}, "b": {"opened": 4, "done": 3}, "c": {"opened": 0, "done": 0}}}
+    late = E.behind(doc, prog, "2026-11-16")
+    check("progress: a date most of the class hasn't finished two days after it; fewer than 3 sharing, none",
+          [(u["id"], done, days) for u, done, days in late] == [("c", 0, 3), ("a", 1, 6)] and E.behind(doc, dict(prog, sharing=2), "2026-11-16") == [], late)
+
+
+def test_settings_remote_v393():
+    """3.9.3: Your plans' Settings and Progress against the fake Worker: the
+    name and line, who can follow, co-authors (asked, handed it, taken
+    off), the library, a copy for next year, the plan taken down, and its
+    squad's counts."""
+    store = world({"sam": "Sammy", "dre": "Dre", "kai": "Kai"})
+    sam, dre = new_client(store, "sam"), new_client(store, "dre")
+    pid, _code = store.add_plan("sam", "MS2 Block 2", "Big Step 1", _doc()["units"])
+    raw, _p = R.load(sam, pid)
+    got = R.save_meta(sam, pid, raw["version"], {"name": " MS2  Block 2b ", "line": "One a week", "doc": "ignored"}, "renamed it")
+    check("settings: the name and line saved, nothing but them",
+          got[0] == "saved" and store.plans[pid]["name"] == "MS2 Block 2b" and store.plans[pid]["line"] == "One a week"
+          and set([b for m, p, b in store.bodies if m == "PUT" and p == f"/plans/{pid}"][-1]) == {"name", "line", "version", "summary"}, got)
+    store.squads["s1"] = {"name": "Study crew", "founder": "sam", "open": False}
+    store.members[("s1", "sam")] = {"name": "Sammy", "joined": 1}
+    got = R.save_meta(sam, pid, got[1]["version"], {"audience": "squad", "squad": "s1"}, "for one squad")
+    check("settings: for one of my squads", got[0] == "saved" and (store.plans[pid]["audience"], store.plans[pid]["squad"]) == ("squad", "s1"), got)
+    check("settings: not a squad of mine", R.save_meta(sam, pid, got[1]["version"], {"squad": "nope"}, "x") == ("refused", "That squad isn't one of yours."))
+    check("settings: a plan for one squad stays out of the library",
+          R.set_listed(sam, pid, True) == ("refused", "Only a plan anyone with the code can follow goes in the library."))
+    got = R.save_meta(sam, pid, got[1]["version"], {"audience": "code", "squad": None}, "anyone")
+    listed = R.set_listed(sam, pid, True)
+    check("settings: in the library, and out", listed[0] == "saved" and listed[1]["listed"] == 1
+          and R.set_listed(sam, pid, False)[1]["listed"] == 0)
+    store.befriend("sam", "dre")
+    store.befriend("dre", "sam")
+    store.befriend("sam", "kai")
+    check("settings: co-authors come from my crew (mutual)", R.crew(sam) == [("dre", "Dre")], R.crew(sam))
+    asked = R.add_editor(sam, pid, "dre")
+    check("settings: a co-author asked waits for a yes", asked[0] == "saved" and asked[1]["editors"][0]["pending"] is True, asked)
+    check("settings: not one of my crew", R.add_editor(sam, pid, "kai") == ("refused", "Co-authors come from your crew: you add each other."))
+    check("settings: only a co-author who said yes can be handed it",
+          R.offer(sam, pid, "dre") == ("refused", "Only a co-author who said yes can be handed it."))
+    store.plans[pid]["invited"].pop("dre")
+    store.plans[pid]["editors"] = {"dre"}
+    handed = R.offer(sam, pid, "dre")
+    check("settings: handed to a co-author, and taken back", handed[0] == "saved" and handed[1].get("handover") == "dre"
+          and "handover" not in R.offer(sam, pid, None)[1])
+    check("settings: a co-author leaves", R.remove_editor(dre, pid, "dre") and "dre" not in store.plans[pid]["editors"])
+    raw, _p = R.load(sam, pid)
+    first = E.first_day(raw["doc"])
+    copied = R.copy(sam, pid, E._later(first, 364))
+    new = copied[1]
+    named = R.save_meta(sam, new["id"], new["version"], {"name": E.next_year_name(raw["name"])}, "named for next year")
+    check("settings: Copy for next year: every date 52 weeks on, named for next year",
+          copied[0] == "saved" and E.first_day(new["doc"]) == E._later(first, 364) and named[1]["name"] == "MS2 Block 2b (next year)"
+          and [u["opens"] for u in new["doc"]["units"]] == [E._later(u["opens"], 364) for u in raw["doc"]["units"]], new["doc"]["units"])
+    store.follows[(pid, "kai")] = {"share": True, "paused": False, "sched": None,
+                                   "progress": json.dumps({"u1": [3, 3, 3], "u2": [1, 0, 2]})}
+    store.follows[(pid, "dre")] = {"share": False, "paused": False, "sched": None, "progress": json.dumps({"u1": [1, 1, 1]})}
+    prog = R.progress(sam, pid)
+    check("progress: its squad's counts a date, the rest left out",
+          prog["followers"] == 2 and prog["sharing"] == 1 and prog["units"]["u1"] == {"opened": 1, "done": 1}
+          and prog["units"]["u2"] == {"opened": 1, "done": 0}, prog)
+    check("settings: only its owner takes it down; then it's gone", not R.delete(dre, pid) and R.delete(sam, pid) and pid not in store.plans)
 
 
 def main():

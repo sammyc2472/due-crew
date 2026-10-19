@@ -33,6 +33,7 @@ from . import model as M
 from .layout_tab import LayoutTab
 from .text_tab import TextTab
 from .history_tab import HistoryTab, UpdatesTab
+from .settings_tab import ProgressTab, SettingsTab
 
 ROLE = Qt.ItemDataRole.UserRole
 
@@ -194,8 +195,10 @@ class PlanWindow(QDialog):
         self._add_tab("dates", "Dates", split)
         self._add_tab("layout", "Lay it out", LayoutTab(self))
         self._add_tab("text", "Text", TextTab(self))
+        self._add_tab("progress", "Progress", ProgressTab(self))
         self._add_tab("updates", "Updates", UpdatesTab(self))
         self._add_tab("history", "History", HistoryTab(self))
+        self._add_tab("settings", "Settings", SettingsTab(self))
         self.want_tab = tab
 
         bottom = QHBoxLayout()
@@ -861,6 +864,14 @@ class PlanWindow(QDialog):
                     page.saved(self)
         else:
             self.status.setText("Someone saved this plan again since: it's up to date now. Make the change again.")
+
+    def took(self, raw):
+        """A settings change the server answered with the plan as it is now:
+        the window on that (its name in the list too)."""
+        pid = self.pick.currentData()
+        plan = clean_plan(raw) or self.plan
+        self._loaded(pid, (raw, plan))
+        self.pick.setItemText(self.pick.currentIndex(), f"{plan.get('name') or 'Plan'} · {_whose(plan)}")
 
     def _can_undo(self, what):
         self.undoable = what

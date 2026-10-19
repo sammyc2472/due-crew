@@ -157,6 +157,18 @@ class Ops:
         _bg(lambda: remote.undo(cl, pid, version),
             lambda got: getattr(owner, "_alive", False) and gen == app.generation and done(got))
 
+    def my_squads(self):
+        """The squads I'm in, [{id, name}] (the board's), for a plan offered to one."""
+        from .. import squads
+        return [{"id": q["id"], "name": q.get("name") or "?"} for q in squads._my_squads(cfg())]
+
+    def reopen(self, pid):
+        """Your plans again, on `pid` (a copy just made), or on none (one taken down or left)."""
+        w = _open.pop("plans", None)
+        if w is not None and getattr(w, "_alive", False):
+            w.close()
+        open_plans(select=pid)
+
     def me(self):
         """My account's id (a row of mine says You)."""
         return client().user_id

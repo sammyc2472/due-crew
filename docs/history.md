@@ -3046,5 +3046,14 @@ every release that changes how something works.
   followers, five a day, taken back) and **History** (every save, Undo the
   latest), `history_tab.py`; the fake Worker gained plans.ts's log and
   posts (`test_history_and_posts_v393`). A history line says "1 search",
-  not "1 searche". Still the site's: Progress, Settings, day notes, the AI
-  prompts. No new route, nothing on a refresh or a sync.
+  not "1 searche". **Progress** (its squad's counts a date, three in it or
+  more; the dates most of the class hasn't finished, with Look at that day
+  and Give the class a day) and **Settings** (name and line, the deck's
+  link, a squad and who can follow, co-authors asked from my crew, handed
+  it, taken off or leaving, the end, catch-up weeks, review-only days, the
+  library, Copy for next year, Delete), `settings_tab.py`; the fake Worker
+  gained progress, listed, copy, delete and audience/squad in a save, and
+  reads a follow's progress as the JSON text the Worker keeps
+  (`test_settings_edits_v393`, `test_settings_remote_v393`). Still the
+  site's: day notes, the AI prompts. No new route, nothing on a refresh or
+  a sync.

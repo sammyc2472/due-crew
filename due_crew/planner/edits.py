@@ -960,3 +960,80 @@ def delete_plan_tag(doc, tid):
         doc.pop("tags", None)
     _retag(doc, path, None)
     return name_dates(doc, {u.get("id") for u in doc.get("units") or []}, before)  # renameAll
+
+
+# ---- 3.9.3: Settings and Progress ----
+
+_DECK_URL = re.compile(r"https://[\x21\x23-\x26\x28-\x2e\x30-\x3b\x3d\x3f-\x7e][\x21\x23-\x26\x28-\x3b\x3d\x3f-\x7e]*")
+
+
+def deck_link(url):
+    """deckLink (app.js), plans.ts DECK_URL: https, printable, no space or quote, 300 at most."""
+    return isinstance(url, str) and len(url) <= 300 and bool(_DECK_URL.fullmatch(url))
+
+
+def set_deck_url(doc, url):
+    """Where to get the deck (its link page, poster, and Anki for anyone with
+    no deck by its name), or none."""
+    url = str(url or "").strip()
+    if url and not deck_link(url):
+        raise Refused("A link starts with https://, has no spaces or quotes, and is 300 characters at most.")
+    doc = copy.deepcopy(doc)
+    if url:
+        doc["deckUrl"] = url
+    else:
+        doc.pop("deckUrl", None)
+    return doc
+
+
+def breather(doc, today, days):
+    """classHints' Give the class a day: every date still to come one study
+    day later, and the review days after today; events stay on their days.
+    (doc, how many dates moved)."""
+    dd = B._Days(doc, days)
+    doc = copy.deepcopy(doc)
+    later = [u for u in doc.get("units") or [] if str(u.get("opens") or "") > today]
+    for u in sorted(later, key=lambda u: str(u["opens"]), reverse=True):
+        k = (_day(dd.next(u["opens"])) - _day(u["opens"])).days
+        for f in ("opens", "due", "check"):
+            if u.get(f):
+                u[f] = _later(u[f], k)
+    for r in doc.get("reviews") or []:
+        if str(r.get("day") or "") > today:
+            r["day"] = dd.next(r["day"])
+    return _sorted(doc), len(later)
+
+
+def next_year_name(name):
+    """nextYear's named: "… (next year)" within a plan name's 60, an earlier
+    "(next year)" or "(copy)" off, cut at a word."""
+    b = re.sub(r"\s*\((?:next year|copy)\)\s*$", "", str(name or ""), flags=re.I).strip()
+    if len(b) > 48:
+        b = b[:48]
+        sp = b.rfind(" ")
+        if sp > 24:
+            b = b[:sp]
+    return f"{b.rstrip()} (next year)"
+
+
+def first_day(doc):
+    """nextYear's firstOf: the plan's first date or event."""
+    days = sorted([str(u.get("opens")) for u in doc.get("units") or [] if u.get("opens")]
+                  + [str(e.get("day")) for e in doc.get("events") or [] if isinstance(e, dict) and e.get("day")])
+    return days[0] if days else None
+
+
+def behind(doc, progress, today, total_of=None):
+    """classHints: a date most of the class hasn't finished two days after it
+    (3 or more sharing, under half done), the latest two. [(unit, done, days late)]."""
+    sharing = int(progress.get("sharing") or 0)
+    if sharing < 3:
+        return []
+    units = progress.get("units") or {}
+    out = []
+    for u in P.units(doc):
+        end = u.get("due") or u.get("opens")
+        done = int((units.get(u["id"]) or {}).get("done") or 0)
+        if _later(end, 2) <= today and done < sharing / 2:
+            out.append((u, done, (_day(today) - _day(end)).days))
+    return sorted(out, key=lambda x: str(x[0].get("due") or x[0]["opens"]), reverse=True)[:2]

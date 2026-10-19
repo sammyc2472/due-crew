@@ -195,11 +195,45 @@ a save.
 - **History**: every save, who and what, newest first (the server keeps
   30); **Undo the latest** is the builder's Undo.
 
+### Progress (authors)
+
+`settings_tab.py`'s `ProgressTab`, read when the tab opens (one request,
+`GET /plans/{id}/progress`). Its squad's counts a date, opened and done,
+as a share of those in it; under three in it, how many are and nothing
+more (counts, never names). Above the list, the builder's class hints
+(`edits.behind`): a date most of the class hasn't finished two days after
+it, the latest two, each with **Look at that day** (Dates, on it) and,
+while dates are still to come, **Give the class a day** (`edits.breather`:
+every date still to come one study day later, review days too; quizzes
+and exams stay on their days), one save.
+
+### Settings (authors)
+
+`settings_tab.py`'s `SettingsTab`, the builder's Settings, in a scroll so
+the window keeps its height. Each change is one request at once:
+
+- **Name** and **One line**: Save the name and line (`PUT /plans/{id}`
+  with only those and the version; someone else's save since is read and
+  the change sent again).
+- **Where to get the deck**: Save the link, a save of the doc (`deckUrl`).
+- **Offer it to one of my squads** and **Who can follow** (anyone with
+  the code, or only that squad): the owner's.
+- **Co-authors**: Ask one of my crew… (mutual friends, `GET /friends`),
+  each says yes first; Hand it to them (one who said yes), Take the offer
+  back, Take them off or Take back the invite; a co-author's Leave this
+  plan.
+- **End**, **Catch-up weeks** and **Review-only days at the end**: saves
+  of the doc's `end` and `phases`.
+- **Library**: the owner's switch (only a plan anyone with the code can
+  follow, with dates); taken out by the admin says so.
+- **Copy for next year**: every date 52 weeks on, named "… (next year)",
+  then Your plans on the copy. **Delete this plan…**, the owner's, asks
+  first; followers keep every card they have open.
+
 ### Not here yet
 
-The builder's Progress and Settings (name, line, link, squad, co-authors,
-listing, copy for next year, delete), day notes, and the prompts for your
-own AI: those stay on duecrew.com for now.
+Day notes, and the prompts for your own AI: those stay on duecrew.com for
+now.
 
 ## The picker
 
@@ -328,11 +362,11 @@ request carries. Nothing is sent: `claude.py` has no requests.
 | `planner/build.py` | pure: the builder's rules restated (Todo, Every, Remarks, Picks, Suggest, Work, Reviews, Tags, Fill, Split, layOut, What to cover) |
 | `planner/text.py` | pure: the builder's Text (toText, fromText, Add and Replace, what it would change) |
 | `planner/actions.py` | Bring back, the one collection step it adds |
-| `planner/remote.py` | its requests (who I am, my plans, one plan, a save) |
+| `planner/remote.py` | its requests (who I am, my plans, one plan, a save, its history and posts, its settings, progress, a copy) |
 | `planner/reading.py` | pure: a calendar read, a session's tags, an exam's line, by plain rules |
 | `planner/claude.py` | pure: Claude's stand-in, and what Claude would get (`request`) |
 | `planner/flow.py` | the glue: the windows' asks (`Ops`, `StartOps`, `QidOps`), `make_here`, `qids.json` |
-| `planner/window.py`, `layout_tab.py`, `text_tab.py`, `history_tab.py`, `date_dialogs.py`, `picker.py`, `qid_window.py`, `start_window.py` | the Qt windows and their tabs, in the board's look |
+| `planner/window.py`, `layout_tab.py`, `text_tab.py`, `history_tab.py`, `settings_tab.py`, `date_dialogs.py`, `picker.py`, `qid_window.py`, `start_window.py` | the Qt windows and their tabs, in the board's look |
 
 Checks: `tests/test_planner.py` (the pure parts, `build.py` against
 builder.js run in node, Fill and Lay it out, the save against the fake
@@ -340,7 +374,9 @@ Worker's `PUT /plans/{id}`, the labs switch, the rules of the road), the
 planner renders in `tools/dialogs.py` (an author's window, a change saved
 end to end, Change ▾ and New ▾, a review day, a search and a to-do saved,
 Lay it out ticked, filled and its tags renamed, Text's Add dates and the
-whole plan replaced, Make the plan here, the
+whole plan replaced, Updates' post, History's Undo, Progress with
+Give the class a day, Settings' name and link saved and Copy for next
+year, Make the plan here, the
 picker, Missed questions with its threads, Do it and All my misses, a
 calendar read and made into a plan, What Claude would get, the Plans
 menu), and `check_planner` in `tools/real_anki.py` (12,000
