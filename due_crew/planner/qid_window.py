@@ -1,5 +1,6 @@
-"""Labs, Question IDs (docs/planner.md): after a practice block, paste the
-IDs of the questions you missed, any way the bank copies them. Due Crew
+"""Missed questions (docs/planner.md; Question IDs in labs, for everyone
+since 3.9.3): after a practice block, paste the IDs of the questions you
+missed, any way the bank copies them. Due Crew
 picks out the numbers, finds their cards by the deck's question tags, and
 says what it found (and what isn't a question here), and what they have in
 common: the threads, by the deck's own system and resource tags. Do it
@@ -28,9 +29,10 @@ def _plain(text="", muted=False):
 
 
 class QidWindow(QDialog):
-    """choices: [(deck id, name)]; ops: flow.QidOps, or a render's own."""
+    """choices: [(deck id, name)]; ops: flow.QidOps, or a render's own; did:
+    the deck to start on (Insights' line), else the one my plans run on."""
 
-    def __init__(self, parent, col, choices, ops):
+    def __init__(self, parent, col, choices, ops, did=None):
         super().__init__(parent)
         self.col, self.ops, self.choices = col, ops, list(choices)
         self.idx = self.found = self.t = None
@@ -39,11 +41,11 @@ class QidWindow(QDialog):
         self.threads = []
         self.picked = None  # the bank I picked, while it's this paste's and this deck's
         attach_alive(self)
-        self.setWindowTitle("Question IDs")
+        self.setWindowTitle("Missed questions")
         self.setModal(False)
         self.setMinimumWidth(560)
         root = QVBoxLayout(self)
-        heading(self, root, "Paste the question IDs you missed")
+        heading(self, root, "Paste the questions you missed")
         root.addWidget(_plain("From your question bank’s results, any way they copy: Due Crew picks out "
                               "the numbers and finds their cards by your deck’s question tags.", muted=True))
         form = QFormLayout()
@@ -115,11 +117,17 @@ class QidWindow(QDialog):
         self.bank.activated.connect(self._pick_bank)  # a pick of mine, never one the count made
         self.back.toggled.connect(lambda _on: self._show())
         self.all.toggled.connect(lambda _on: self._scope())
-        start = self.ops.default_deck(self.choices)
+        start = did if any(d == did for d, _n in self.choices) else self.ops.default_deck(self.choices)
         at = next((i for i, (d, _n) in enumerate(self.choices) if d == start), 0)
         if self.choices:
             self.deck.setCurrentIndex(at)
         self._deck()
+
+    def pick_deck(self, did):
+        """The window, on this deck (Insights' line, the window open already)."""
+        i = self.deck.findData(did)
+        if i >= 0 and i != self.deck.currentIndex():
+            self.deck.setCurrentIndex(i)
 
     # ---- what it acts on ----
 

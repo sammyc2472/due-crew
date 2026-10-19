@@ -830,6 +830,13 @@ def _css(cfg):
     #due-crew .dc-pc .pq a.nx3 {{ font-weight: 600; }}  /* 3.8.1: Then's dates, each opens now */
     /* 3.5.0: a plan's week (Anki centres the Decks screen's text; the plan reads left to right) */
     #due-crew .dc-pc, #due-crew .dc-pways {{ text-align: left; }}
+    /* 3.9.3: You › Plans' head row, Your plans and New plan */
+    #due-crew .dc-ph {{ display: flex; align-items: center; gap: 8px; text-align: left; margin: 0 0 10px; }}
+    #due-crew .dc-ph b {{ font-size: 13px; }}
+    #due-crew .dc-ph .sp {{ flex: 1; }}
+    #due-crew .dc-ph a {{ font-size: 12px; font-weight: 700; text-decoration: none; border-radius: 7px; padding: 4px 10px; }}
+    #due-crew .dc-ph a.b1 {{ background: var(--dc-accent); color: var(--dc-accent-ink); }}
+    #due-crew .dc-ph a.b2 {{ color: var(--dc-accent); border: 1px solid var(--dc-line); }}
     #due-crew .wbar {{ display: block; height: 5px; background: var(--dc-well); border-radius: 3px; overflow: hidden; }}
     #due-crew .wbar i {{ display: block; height: 100%; background: var(--dc-accent); }}
     #due-crew .pwh {{ display: flex; align-items: center; gap: 10px; font-size: 12px; margin: 8px 0 6px; }}
@@ -1426,6 +1433,7 @@ FIND_JS = r"""
         if (e.key === 'Enter') { e.preventDefault(); var b = box.querySelector('button'); if (b) { b.click(); } }
       },
       go: function (h) {
+        if (h.p) { pycmd('duecrew:' + h.p + '|' + window.dcBK); return; }  // 3.9.3: a plan window, not a setting
         var on = document.querySelector('#due-crew .dc-head .dc-pill.on');
         var tab = on ? (on.getAttribute('data-f') || '').split(':')[1] : '';
         if (tab === h.t) { this.land(h.f); return; }
@@ -1675,8 +1683,18 @@ def _you_plans(plans, opened=None, people=None, cfg=None):
     only when Due is off (it's under Today otherwise)."""
     if opened and not opened.get("dates") and (plans or {}).get("opened_dates"):
         opened = dict(opened, dates=plans["opened_dates"])  # 3.8.1: its dates, as Due's Today has them
-    return (_opened_line(opened) + _invite_lines((plans or {}).get("invites"))
+    return (_plans_head() + _opened_line(opened) + _invite_lines((plans or {}).get("invites"))
             + _offer_banners((plans or {}).get("offers")) + _plans_html(plans, people, cfg))
+
+
+def _plans_head():
+    """3.9.3, You › Plans' head row: Your plans (the plan window, every plan
+    I write or follow) and New plan ▾ (from a calendar or a file, from a
+    deck, or on duecrew.com)."""
+    return (f'<div class="dc-ph"><b>Your plans</b><span class="sp"></span>'
+            f'<a class="b2" href="#" title="Every plan you write or follow, its weeks and dates" '
+            f'onclick="{_pycmd("planyours")}">Open plans</a>'
+            f'<a class="b1" href="#" onclick="{_pycmd("plannew")}">New plan &#9662;</a></div>')
 
 
 def _invite_lines(invites):
@@ -1739,7 +1757,8 @@ def _plans_empty_html():
             f'<div class="way"><b>Got a code?</b><input id="dc-plancode" placeholder="N4AP ULM2" '
             f'onkeydown="if(event.key===\'Enter\'){{{add}}}"><a href="#" onclick="{add}">Follow</a></div>'
             f'<div class="way"><b>Find one</b><a href="#" onclick="{_pycmd("planlibrary")}">The library &#8599;</a></div>'
-            f'<div class="way"><b>Make one</b><a href="#" onclick="{_pycmd("planmake")}">Pick a deck&hellip;</a></div>'
+            f'<div class="way"><b>Make one</b><a href="#" onclick="{_pycmd("planstart")}">From a calendar&hellip;</a>'
+            f'<a href="#" onclick="{_pycmd("planmake")}">From a deck&hellip;</a></div>'
             f'</div></div>')
 
 
@@ -1753,7 +1772,9 @@ def _plan_card_html(card, people=None, cfg=None):
     pid = str(card.get("id", ""))
     out = (f'<div class="dc-pc"><div class="pk"><b>{e(str(card.get("title") or "Plan"))}</b>'
            f'<span>{e(str(card.get("sub") or ""))}</span>'
-           f'<span class="acts"><a href="#" onclick="{_pycmd("planmenu:" + pid)}">Plan &#9662;</a></span></div>')
+           f'<span class="acts"><a href="#" title="Its weeks and dates, in Your plans" '
+           f'onclick="{_pycmd("planyours:" + pid)}">Open</a>'
+           f'<a href="#" onclick="{_pycmd("planmenu:" + pid)}">Plan &#9662;</a></span></div>')
     tabs = card.get("tabs") or {}
     if card.get("no_deck"):
         out += (f'<div class="dc-line">No deck here has this plan&rsquo;s cards yet. '
@@ -2467,6 +2488,10 @@ def _insights_html(did, v):
     if isinstance(v.get("leech"), dict):
         return _ins_leeches(did, v["leech"], v.get("deck_name"))  # 3.9.2: the leeches view, in Insights' place
     out = ""
+    if v.get("bank"):
+        # 3.9.3: a deck with a bank's question tags: Missed questions, on this deck
+        out += (f'<div class="iline">After a practice block: paste the questions you missed, and see what they have '
+                f'in common. <a href="#" onclick="{_pycmd(f"planmissed:{int(did)}")}">Missed questions&hellip;</a></div>')
     r = v.get("right") or {}
     now, before = r.get("now") or [0, 0], r.get("before") or [0, 0]
     if now[1] >= 50:
@@ -4037,6 +4062,15 @@ FIND_WORDS = {
 }
 
 
+# 3.9.3: the plan windows aren't settings, but someone typing "calendar" or
+# "plan" into Find a setting is looking for them: (command, label, words)
+FIND_WINDOWS = (
+    ("planyours", "Your plans", "plan plans dates weeks schedule write edit author builder follow"),
+    ("planstart", "New plan from a calendar", "new plan calendar syllabus block schedule file pdf word powerpoint slides import make"),
+    ("planmissed", "Missed questions", "missed questions question ids bank practice block qbank wrong incorrect"),
+)
+
+
 def _find_key(f):
     """A control's data-f, without the state at its end ("set:share_time:0"
     finds the switch whichever way it's set)."""
@@ -4086,6 +4120,9 @@ def settings_index(view, cfg):
             for f, t in _re.findall(r'<a class="st-lk[^"]*" href="#" data-f="([^"]+)"[^>]*>(.*?)</a>', sec):
                 if t.strip() not in ("Open", "Send&hellip;"):
                     add(tab, f, t, where)
+    for cmd, label, words in FIND_WINDOWS:  # 3.9.3: found last, after every setting a word names
+        out.append({"t": "", "p": cmd, "f": "", "l": label, "w": "Opens the window",
+                    "k": " ".join(_re.findall(r"[a-z0-9]+", f"{label} {words}".lower()))})
     return out
 
 

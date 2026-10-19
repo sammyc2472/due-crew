@@ -1695,17 +1695,17 @@ STUDY_KEY, ASK_KEY = "Ctrl+Shift+S", ("Meta+Shift+Q" if sys.platform == "darwin"
 def _tools_menu():
     """Tools › Due Crew (3.1: a submenu, for plans). 3.8.0: Study what's
     next on top (Ctrl+Shift+S), Settings… opens the board's, and Show on
-    the Decks screen is the way back when the board is off."""
+    the Decks screen is the way back when the board is off. 3.9.3: one
+    Plans ▸ holds everything about plans (planner.plans_menu)."""
     from aqt.qt import QMenu, QShortcut, QKeySequence
     if getattr(mw, "_due_crew_menu", None) is not None:
         return  # a second profile open: the submenu is already there
+    from . import planner
     menu = QMenu("Due Crew", mw)
     for item in (("Study what’s next", due_flow.study_today), None,
                  ("Friends…", open_friends),
-                 ("Squads…", open_squads), None,
-                 ("Make a plan from a deck…", plan_flow.open_make),
-                 ("Follow a plan…", plan_flow.open_follow),
-                 ("Export cards for my AI…", plan_flow.open_export), None,
+                 ("Squads…", open_squads),
+                 "plans", None,  # 3.9.3: Plans ▸, the plan windows among its entries
                  ("Settings…", open_settings),
                  ("Pip’s closet…", lambda: open_closet()),
                  ("Your year…", lambda: open_wrapped()),
@@ -1713,6 +1713,9 @@ def _tools_menu():
                  ("Send feedback…", open_feedback)):
         if item is None:
             menu.addSeparator()
+            continue
+        if item == "plans":
+            menu.addMenu(planner.plans_menu(menu))
             continue
         label, fn = item
         action = QAction(label, mw)
@@ -1726,8 +1729,6 @@ def _tools_menu():
     ask = QShortcut(QKeySequence(ASK_KEY), mw)
     ask.activated.connect(_ask_this_card)
     mw._due_crew_ask = ask
-    from . import planner
-    planner.install(menu)  # labs: nothing unless this computer's config says "labs": true (docs/planner.md)
     mw.form.menuTools.addMenu(menu)
     mw._due_crew_menu = menu  # kept alive with the window
     _apply_keys()

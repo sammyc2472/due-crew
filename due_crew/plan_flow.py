@@ -2233,6 +2233,14 @@ def on_message(cmd, parts):
         open_site("/library")
     elif cmd == "planmake":
         open_make()
+    elif cmd == "planyours":  # 3.9.3: Your plans, on a plan when the click names one
+        open_yours(arg if re.fullmatch(r"[A-Za-z0-9_-]{1,128}", arg or "") else None)
+    elif cmd == "plannew":  # 3.9.3: You › Plans' New plan ▾
+        new_plan_menu()
+    elif cmd == "planstart":  # 3.9.3: New plan from a calendar
+        _planner_flow().open_start()
+    elif cmd == "planmissed":  # 3.9.3: Insights' Missed questions, on its deck
+        _planner_flow().open_qids(int(arg) if arg.isdigit() else None)
     elif cmd == "planresume" and arg:
         p = next((x for x in followed() if x["id"] == arg), None)
         if p:
@@ -3136,12 +3144,35 @@ def set_early(pid, days):
     _bg(lambda: cl.set_early(pid, days), done)
 
 
+def _planner_flow():
+    from .planner import flow
+    return flow
+
+
+def open_yours(pid=None):
+    """3.9.3: Your plans (the plan window), on this plan when one's named."""
+    _planner_flow().open_plans(select=pid)
+
+
+def new_plan_menu():
+    """3.9.3: You › Plans' New plan ▾: from a calendar or a file (the
+    calendar window), from a deck, or on duecrew.com."""
+    from aqt.qt import QCursor, QMenu
+    menu = QMenu(mw)
+    menu.addAction("From a calendar or a file…").triggered.connect(lambda: _planner_flow().open_start())
+    menu.addAction("From a deck…").triggered.connect(open_make)
+    menu.addAction("On duecrew.com ↗").triggered.connect(lambda: open_site("/plans"))
+    menu.exec(QCursor.pos())
+
+
 def plan_menu(pid):
     p = next((p for p in followed() if p["id"] == pid), None)
     if p is None:
         return
     from aqt.qt import QCursor, QMenu
     menu = QMenu(mw)
+    menu.addAction("Open in Your plans").triggered.connect(lambda: open_yours(pid))  # 3.9.3
+    menu.addSeparator()
     if p.get("sched"):  # 3.3: new follows do the plan's days; a 3.2 schedule can still change or go
         menu.addAction("My schedule…").triggered.connect(lambda: open_schedule(pid))
     how = menu.addMenu("How its cards open")  # 3.8.0: at my own pace

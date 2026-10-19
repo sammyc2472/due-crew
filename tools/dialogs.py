@@ -644,11 +644,16 @@ def main(out):
         if len(subs) != 1:
             raise RuntimeError(f"tools menu: {len(subs)} Due Crew submenus")
         items = [a.text() or "—" for a in subs[0].actions()]
-        want = ["Study what’s next", "—", "Friends…", "Squads…", "—", "Make a plan from a deck…",
-                "Follow a plan…", "Export cards for my AI…", "—", "Settings…", "Pip’s closet…", "Your year…", "Show on the Decks screen",
-                "Send feedback…"]
+        want = ["Study what’s next", "—", "Friends…", "Squads…", "Plans", "—", "Settings…", "Pip’s closet…", "Your year…",
+                "Show on the Decks screen", "Send feedback…"]
         if items != want:
             raise RuntimeError(f"tools menu: {items}")
+        # 3.9.3: Plans ▸, everything about plans, the plan windows among it
+        plans = [a.menu() for a in subs[0].actions() if a.menu()]
+        got = [a.text() or "—" for a in plans[0].actions()] if len(plans) == 1 else []
+        if got != ["Your plans…", "New plan from a calendar…", "New plan from a deck…", "Follow a plan…", "—",
+                   "Missed questions…", "Export cards for my AI…"]:
+            raise RuntimeError(f"tools menu: Plans {got}")
         # 3.8.0: Study what's next carries Ctrl+Shift+S; Show on the Decks screen is a check
         acts = {a.text(): a for a in subs[0].actions()}
         if acts["Study what’s next"].shortcut().toString() != "Ctrl+Shift+S":
@@ -937,8 +942,17 @@ def main(out):
             raise RuntimeError("remark: a card with none starts empty, Save off")
         shoot(dlg, os.path.join(out, "plan-remark-new.png"))
 
+    def _col_texts(tree, col):
+        """Every row's text in one column of a tree, its children too."""
+        out = []
+        for i in range(tree.topLevelItemCount()):
+            top = tree.topLevelItem(i)
+            out.append(top.text(col))
+            out.extend(top.child(j).text(col) for j in range(top.childCount()))
+        return out
+
     def start_window(STORE, PF, PR, P):
-        """Labs: a plan from a block's calendar (start_window.py): empty; a
+        """New plan from a calendar (start_window.py): empty; for everyone (labs off); a
         calendar read (plain rules' ticks, the stand-in's where they found
         nothing, a quiz and an exam); an exam's line read; What Claude would
         get; Make the plan end to end (POST /plans, then its save); prose,
@@ -989,6 +1003,17 @@ def main(out):
         if w.make_btn.isEnabled() or w.would_btn.isEnabled():
             raise RuntimeError("start: nothing read, nothing to make")
         shoot(w, os.path.join(out, "planner-start-empty.png"))
+        # 3.9.3: for everyone, labs off: plain rules alone, no stand-in, no What Claude would get
+        w = SW.StartWindow(None, decks, SOps(), labs=False)
+        w.resize(820, 720)
+        w.text.setPlainText(cal)
+        w._read()
+        if (w.stand_in.isVisible() or w.stand_in.isChecked() or w.would_btn.isVisible()
+                or any(r in ("Claude’s stand-in",) for r in _col_texts(w.tree, 2))):
+            raise RuntimeError("start: labs off shows Claude's stand-in")
+        if not w.make_btn.isEnabled():
+            raise RuntimeError("start: labs off, plain rules' reading can't be made")
+        shoot(w, os.path.join(out, "planner-start-release.png"))
 
         def read(text, stand_in=True):
             w = SW.StartWindow(None, decks, SOps())
@@ -1374,26 +1399,6 @@ def main(out):
         q.all.setChecked(True)
         shoot(q, os.path.join(out, "planner-qids-all.png"))
         start_window(STORE, PF, PR, P)
-        # the labs entries, when this computer's config turns them on
-        import due_crew
-        tools = QtWidgets.QMenu("Tools")
-        win = QtWidgets.QMainWindow()
-        win.form = types.SimpleNamespace(menuTools=tools)
-        win._due_crew_menu = None
-        saved = due_crew.mw
-        due_crew.mw = win
-        from due_crew import app as dc_app
-        CONFIG["labs"] = True
-        dc_app._CFG["text"] = None  # the config as Anki reads it at startup
-        try:
-            due_crew._tools_menu()
-        finally:
-            due_crew.mw = saved
-            CONFIG.pop("labs", None)
-            dc_app._CFG["text"] = None
-        items = [a.text() or "—" for a in [a.menu() for a in tools.actions() if a.menu()][0].actions()]
-        if items[-4:] != ["—", "Plan window (labs)…", "New plan from a calendar (labs)…", "Question IDs (labs)…"]:
-            raise RuntimeError(f"labs menu: {items}")
 
     for label, build in (("kitchen", kitchen), ("questions", questions), ("tools menu", tools_menu), ("friends", friends), ("decks", decks),
                          ("squads", squads), ("auth", auth),

@@ -104,60 +104,70 @@ def test_gate():
     check("gate: labs is on only for a config whose labs is true",
           planner.enabled({"labs": True}) and not planner.enabled({}) and not planner.enabled({"labs": "true"})
           and not planner.enabled({"labs": 1}))
-    from due_crew import app
-    saved = app.cfg
-    menu = types.SimpleNamespace(addSeparator=lambda: None, addAction=lambda a: added.append(a))
-    added = []
+    # 3.9.3: the windows are everyone's, in Tools › Due Crew › Plans
+    from aqt import qt
+
+    class Menu:
+        def __init__(self, title="", parent=None):
+            self.title, self.items = title, []
+
+        def addAction(self, label):
+            self.items.append(label)
+            return types.SimpleNamespace(triggered=types.SimpleNamespace(connect=lambda f: None))
+
+        def addSeparator(self):
+            self.items.append("—")
+    saved = qt.QMenu
+    qt.QMenu = Menu
     try:
-        app.cfg = lambda: {}
-        check("gate: labs off, Tools › Due Crew gets nothing", planner.install(menu) is False and not added)
+        m = planner.plans_menu(None)
     finally:
-        app.cfg = saved
+        qt.QMenu = saved
+    check("gate: Tools › Due Crew › Plans holds everything about plans, the three windows among it, for everyone",
+          m.title == "Plans" and m.items == ["Your plans…", "New plan from a calendar…", "New plan from a deck…",
+                                             "Follow a plan…", "—", "Missed questions…", "Export cards for my AI…"], m.items)
     init = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
-    check("gate: the menu asks the labs package itself, after its own entries; nothing else imports it",
-          "planner.install(menu)" in init and "from . import planner" in init
-          and not [f for f in glob.glob(os.path.join(REPO, "due_crew", "*.py"))
-                   if "planner" in open(f).read() and not f.endswith("__init__.py")])
+    check("gate: Tools › Due Crew puts the Plans submenu in, and the old plan entries at its root are gone",
+          "planner.plans_menu(menu)" in init and "Make a plan from a deck…" not in init and "(labs)" not in init)
     cfgj = open(os.path.join(REPO, "due_crew", "config.json")).read()
-    check("gate: no default config turns it on (a key nothing writes)", '"labs"' not in cfgj)
+    check("gate: no default config turns labs on (a key nothing writes)", '"labs"' not in cfgj)
 
 
-def test_admin_only():
+def test_for_everyone():
+    """3.9.3: Your plans opens for anyone signed in (the admin's alone in
+    labs): one request on the click, my plans; labs on or off."""
     store = world({"sam": "Sammy", "dre": "Dre"})
     store.admins.add("sam")
     sam, dre = new_client(store, "sam"), new_client(store, "dre")
-    check("admin: the server says the admin's account is one, and no one else's",
+    check("everyone: the server still says who the admin is (other pages ask it)",
           R.is_admin(sam) is True and R.is_admin(dre) is False)
     from due_crew.planner import flow
     shown, tips = [], []
     saved = (flow.enabled, flow.client, flow._bg, flow.show_plans, flow.tooltip, flow.mw.col, flow.plan_flow._signed_in)
     try:
-        flow.enabled = lambda: True
+        flow.enabled = lambda: False
         flow._bg = lambda job, done: done(job())
-        flow.show_plans = lambda plans, select=None: shown.append(plans)
+        flow.show_plans = lambda plans, select=None, tab=None: shown.append((plans, select, tab))
         flow.tooltip = lambda text, **k: tips.append(text)
         flow.plan_flow._signed_in = lambda: True
         flow.mw.col = object()
-        flow._admin.clear()
-        flow.client = lambda: dre
-        flow.open_plans()
-        n = len(store.log)
-        flow.open_plans()
-        check("admin: anyone else is told it's the admin's, and asked once a session",
-              not shown and len(tips) == 2 and "admin" in tips[0] and len(store.log) == n
-              and not any(p.startswith("/plans") for _m, p, _s in store.log), (tips, store.log))
-        pid, _code = store.add_plan("sam", "MS2 Block 2", "Big Step 1",
+        flow._open.clear()
+        pid, _code = store.add_plan("dre", "MS2 Block 2", "Big Step 1",
                                     [{"id": "u1", "name": "Heart failure", "opens": "2026-11-09", "tags": [VID]}])
-        flow.client = lambda: sam
+        flow.client = lambda: dre
+        n = len(store.log)
+        flow.open_plans(select=pid, tab="layout")
+        check("everyone: anyone's account gets the window, on the plan and tab asked for, labs off",
+              len(shown) == 1 and [p["id"] for p in shown[0][0]] == [pid] and shown[0][1:] == (pid, "layout") and not tips,
+              (shown, tips))
+        check("everyone: one request on the click, my plans (no asking who I am)",
+              [p for _m, p, _s in store.log[n:]] == ["/plans/mine"], store.log[n:])
+        flow.plan_flow._signed_in = lambda: False
         flow.open_plans()
-        check("admin: the admin's account gets the window, with its plans (two requests, on the click)",
-              len(shown) == 1 and [p["id"] for p in shown[0]] == [pid]
-              and [p for _m, p, _s in store.log][-2:] == ["/auth/me", "/plans/mine"], store.log[-3:])
-        flow.enabled = lambda: False
-        flow.open_plans()
-        check("admin: labs off, nothing at all", len(shown) == 1)
+        check("everyone: signed out, nothing (the sign-in asks)", len(shown) == 1)
     finally:
         flow.enabled, flow.client, flow._bg, flow.show_plans, flow.tooltip, flow.mw.col, flow.plan_flow._signed_in = saved
+        flow._open.clear()
 
 
 # ---- a deck tag ----
@@ -948,16 +958,12 @@ def test_start_flow():
         flow.show_start = lambda: shown.append(True)
         flow.tooltip = lambda text, **k: tips.append(text)
         flow.plan_flow._signed_in = lambda: True
-        flow._admin.clear()
         flow.client = lambda: dre
-        flow.open_start()
-        check("calendar glue: the admin's account only, as the plan window", not shown and tips and "admin" in tips[0])
-        flow.client = lambda: sam
-        flow.open_start()
         n = len(store.log)
-        flow._open.clear()
         flow.open_start()
-        check("calendar glue: the admin gets it, asked once a session", shown == [True, True] and len(store.log) == n)
+        check("calendar glue: anyone signed in gets it (3.9.3), nothing asked of the server to open it",
+              shown == [True] and not tips and len(store.log) == n, (shown, tips))
+        flow.client = lambda: sam
         ops = flow.StartOps()
         owner = types.SimpleNamespace(_alive=True)
         doc, _u, _e = E.from_sessions({"deck": "Big Step 1", "units": []},

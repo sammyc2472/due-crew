@@ -90,7 +90,7 @@ class PlanWindow(QDialog):
     """plans: remote.my_plans' (cleaned, each with its role). ops: flow.Ops,
     or a render's or test's own."""
 
-    def __init__(self, parent, col, plans, ops, select=None):
+    def __init__(self, parent, col, plans, ops, select=None, tab=None):
         super().__init__(parent)
         self.col, self.ops = col, ops
         self.plans = [p for p in plans or [] if isinstance(p, dict) and p.get("id")]
@@ -102,7 +102,7 @@ class PlanWindow(QDialog):
         self.undoable = None      # (plan id, version) a save of this window's made, while its Undo shows
         self._rows = {}           # uid -> model.sources, for this plan's index
         attach_alive(self)
-        self.setWindowTitle("Plans")
+        self.setWindowTitle("Your plans")
         self.setModal(False)
         self.setMinimumSize(900, 600)
         root = QVBoxLayout(self)
@@ -200,6 +200,15 @@ class PlanWindow(QDialog):
             self._load()
         else:
             self._empty("No plans yet. Make one from a deck: Tools › Due Crew › Make a plan from a deck…")
+
+    def go_to_plan(self, pid, tab=None):
+        """The window, on this plan: True, or False when it doesn't list it."""
+        i = self.pick.findData(pid)
+        if i < 0:
+            return False
+        if i != self.pick.currentIndex():
+            self.pick.setCurrentIndex(i)
+        return True
 
     # ---- a plan ----
 

@@ -1,4 +1,4 @@
-"""Labs, the glue (docs/planner.md). Main-thread rules as in __init__: every
+"""The plan windows' glue (docs/planner.md). Main-thread rules as in __init__: every
 collection read and step here, on the main thread; each request in the
 background, on a click, its answer dropped when the profile or the account
 changed since (app.generation). What opens, studies and shows in Browse is
@@ -18,12 +18,11 @@ from ..app import _bg, cfg, client
 from ..backend.shapes import TransportError
 from . import actions, enabled, qids, remote
 
-_admin = {}      # uid -> the server's answer, asked once an Anki session
-_open = {}       # "plans", "qids" -> the window, while it's open
+_open = {}       # "plans", "start", "qids" -> the window, while it's open
 
 
 def close_all():
-    """profile_will_close: the labs windows go with the profile (their cards
+    """profile_will_close: the plan windows go with the profile (their cards
     and decks are its collection's)."""
     for key, w in list(_open.items()):
         _open.pop(key, None)
@@ -45,41 +44,36 @@ def _raise(key):
 
 # ---- the plan window ----
 
-def open_plans(select=None):
-    """Tools › Due Crew › Plan window (labs): the admin's account only (the
-    server says), signed in, a collection open. Two requests on the click:
-    who I am (once a session) and my plans. select: a plan's id to start on."""
-    if not enabled() or not mw.col or _raise("plans"):
+def open_plans(select=None, tab=None):
+    """Your plans (3.9.3, for everyone; labs before): signed in, a
+    collection open. One request on the click: my plans. select: a plan's
+    id to start on; tab: the tab to start on ("dates", "layout"...)."""
+    if not mw.col:
         return
+    w = _open.get("plans")
+    if w is not None and getattr(w, "_alive", False):
+        if not select or w.go_to_plan(select, tab):
+            w.raise_()
+            w.activateWindow()
+            return
+        w.close()  # a plan it doesn't list (one just made): my plans asked again
     if not plan_flow._signed_in():
         return
     cl, gen = client(), app.generation
-    uid = cl.user_id
 
-    def job():
-        ok = _admin.get(uid)
-        if ok is None:
-            ok = remote.is_admin(cl)
-        return ok, (remote.my_plans(cl) if ok else [])
-
-    def done(got):
+    def done(plans):
         if gen != app.generation or not mw.col:
             return
-        if got is None or got[0] is None:  # no answer, or one that wasn't the server's yes or no
+        if plans is None:
             tooltip("Due Crew couldn't be reached. Try again in a minute.")
             return
-        ok, plans = got
-        _admin[uid] = ok
-        if not ok:
-            tooltip("The plan window is for the admin’s account while it’s in labs.")
-            return
-        show_plans(plans, select)
-    _bg(job, done)
+        show_plans(plans, select, tab)
+    _bg(lambda: remote.my_plans(cl), done)
 
 
-def show_plans(plans, select=None):
+def show_plans(plans, select=None, tab=None):
     from .window import PlanWindow
-    w = PlanWindow(mw, mw.col, plans, Ops(), select=select)
+    w = PlanWindow(mw, mw.col, plans, Ops(), select=select, tab=tab)
     _gone_on_close(w)
     _open["plans"] = w
     w.show()
@@ -87,7 +81,7 @@ def show_plans(plans, select=None):
 
 
 def _gone_on_close(w):
-    """A labs window lets go of its deck read when it closes."""
+    """A plan window lets go of its deck read when it closes."""
     from aqt.qt import Qt
     w.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
 
@@ -192,31 +186,14 @@ def study_cards(idx, cids, name):
 # ---- a plan from a block's calendar (claude.py's jobs, a stand-in for now) ----
 
 def open_start():
-    """Tools › Due Crew › New plan from a calendar (labs): the admin's
-    account only, as the plan window (it makes a plan on the server)."""
-    if not enabled() or not mw.col or _raise("start"):
+    """New plan from a calendar (3.9.3, for everyone): signed in (it makes
+    a plan on the server), a collection open. Claude's stand-in and What
+    Claude would get stay behind the labs switch."""
+    if not mw.col or _raise("start"):
         return
     if not plan_flow._signed_in():
         return
-    cl, gen = client(), app.generation
-    uid = cl.user_id
-
-    def done(ok):
-        if gen != app.generation or not mw.col:
-            return
-        if ok is None:
-            tooltip("Due Crew couldn't be reached. Try again in a minute.")
-            return
-        _admin[uid] = ok
-        if not ok:
-            tooltip("A plan from a calendar is for the admin’s account while it’s in labs.")
-            return
-        show_start()
-    known = _admin.get(uid)
-    if known is not None:
-        done(known)
-        return
-    _bg(lambda: remote.is_admin(cl), done)
+    show_start()
 
 
 def top_decks(col):
@@ -234,7 +211,7 @@ def top_decks(col):
 
 def show_start():
     from .start_window import StartWindow
-    w = StartWindow(mw, top_decks(mw.col), StartOps())
+    w = StartWindow(mw, top_decks(mw.col), StartOps(), labs=enabled())
     _gone_on_close(w)
     _open["start"] = w
     w.show()
@@ -286,19 +263,36 @@ class StartOps:
 
 # ---- question IDs ----
 
-def open_qids():
-    """Tools › Due Crew › Question IDs (labs): this collection only, nothing
-    sent, so labs alone opens it."""
-    if not enabled() or not mw.col or _raise("qids"):
+def open_qids(did=None):
+    """Missed questions (3.9.3, for everyone; Question IDs in labs): this
+    collection only, nothing sent. did: the deck to start on (Insights')."""
+    if not mw.col:
+        return
+    did = _top_deck(mw.col, did) if did else None
+    w = _open.get("qids")
+    if w is not None and getattr(w, "_alive", False):
+        if did:
+            w.pick_deck(did)
+        w.raise_()
+        w.activateWindow()
         return
     from .qid_window import QidWindow
     every = P.deck_choices(mw.col)
     tops = [(d, n) for d, n in every if "::" not in str(n)]  # question tags are deck-wide: a top deck is enough
-    w = QidWindow(mw, mw.col, tops or every, QidOps())
+    w = QidWindow(mw, mw.col, tops or every, QidOps(), did=did)
     _gone_on_close(w)
     _open["qids"] = w
     w.show()
     return w
+
+
+def _top_deck(col, did):
+    """A deck's top-level deck (question tags are deck-wide), or None."""
+    try:
+        top = str(col.decks.name(int(did)) or "").split("::")[0]
+        return col.decks.id_for_name(top) if top else None
+    except Exception:
+        return None
 
 
 MISSES = "qids.json"  # this profile's kept misses: question numbers by day, deck and bank; never sent

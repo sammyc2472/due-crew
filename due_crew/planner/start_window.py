@@ -1,11 +1,11 @@
-"""Labs, a plan from a block's calendar (docs/planner.md): paste the
-calendar, Read it, and every session comes back with the deck tags its
-words name, ticked where plain rules are sure; what plain rules leave,
-Claude's stand-in fills when its box is ticked (claude.py), and each row
-says who did it. Quizzes and exams become the plan's events; What's on
+"""New plan from a calendar (docs/planner.md; for everyone since 3.9.3):
+paste the calendar, Read it, and every session comes back with the deck
+tags its words name, ticked where plain rules are sure; in labs, what
+plain rules leave Claude's stand-in fills when its box is ticked
+(claude.py), and each row says who did it. Quizzes and exams become the plan's events; What's on
 it… reads an exam's line ("Exam 1 covers weeks 1-3"). Make the plan puts
 it on duecrew.com as mine (POST /plans, then the builder's save) and opens
-it in the plan window. What Claude would get shows what the jobs the
+it in Your plans. What Claude would get (labs) shows what the jobs the
 stand-in did would send, before anything ever is: nothing is sent now.
 Names are the calendar's and the deck's: plain text everywhere."""
 
@@ -155,11 +155,13 @@ def _plain(text="", muted=False):
 
 class StartWindow(QDialog):
     """decks: [(deck id, name, cards)], biggest first; ops: flow.StartOps,
-    or a render's or test's own."""
+    or a render's or test's own. labs: this computer's labs switch, which
+    alone shows Claude's stand-in and What Claude would get (3.9.3);
+    without it, plain rules alone read the calendar."""
 
-    def __init__(self, parent, decks, ops, reader=None):
+    def __init__(self, parent, decks, ops, reader=None, labs=True):
         super().__init__(parent)
-        self.ops, self.reader = ops, reader or C.StandIn()
+        self.ops, self.reader, self.labs = ops, reader or C.StandIn(), bool(labs)
         self.decks = list(decks)
         self.idx = None
         self.sessions = []   # reading's sessions, numbered by week
@@ -176,7 +178,9 @@ class StartWindow(QDialog):
         self.setMinimumSize(760, 640)
         root = QVBoxLayout(self)
         heading(self, root, "A plan from a block's calendar")
-        root.addWidget(_plain(self.reader.status(), muted=True))
+        root.addWidget(_plain(self.reader.status() if self.labs else
+                              "Paste the block's calendar, or drop its file here. It's read on this computer; "
+                              "nothing is sent until you make the plan.", muted=True))
         form = QFormLayout()
         self.name = QLineEdit()
         self.name.setMaxLength(60)
@@ -194,7 +198,8 @@ class StartWindow(QDialog):
         root.addWidget(self.text)
         row = QHBoxLayout()
         self.stand_in = QCheckBox("Let Claude’s stand-in fill what plain rules leave")
-        self.stand_in.setChecked(True)
+        self.stand_in.setChecked(self.labs)
+        self.stand_in.setVisible(self.labs)
         row.addWidget(self.stand_in)
         row.addStretch(1)
         self.file_btn = QPushButton("Choose a file…")
@@ -230,7 +235,10 @@ class StartWindow(QDialog):
         buttons.addButton(self.scope_btn, QDialogButtonBox.ButtonRole.ActionRole)
         self.would_btn = QPushButton("What Claude would get")
         self.would_btn.clicked.connect(self._would)
-        buttons.addButton(self.would_btn, QDialogButtonBox.ButtonRole.ActionRole)
+        if self.labs:
+            buttons.addButton(self.would_btn, QDialogButtonBox.ButtonRole.ActionRole)
+        else:
+            self.would_btn.hide()
         buttons.addButton("Close", QDialogButtonBox.ButtonRole.RejectRole).clicked.connect(self.reject)
         self.make_btn = QPushButton("Make the plan")
         self.make_btn.setDefault(True)
@@ -385,7 +393,8 @@ class StartWindow(QDialog):
         self.head.setText(f"Calendar read by {by}" if self.sessions else "")
         if not self.sessions:
             self.said.setText("No sessions found: each needs a date (Mon 10/26, Oct 26, 2026-10-26)."
-                              + ("" if self.stand_in.isChecked() else " Claude’s stand-in could look for dates anywhere in a line."))
+                              + ("" if self.stand_in.isChecked() or not self.labs
+                                 else " Claude’s stand-in could look for dates anywhere in a line."))
         self._buttons()
 
     def _fill(self, picks):

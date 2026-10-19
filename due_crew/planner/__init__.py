@@ -1,16 +1,17 @@
-"""Labs: the plan window, Python-native (docs/planner.md). Kept apart from
-the rest of the add-on while it's built: nothing here runs unless this
-computer's config says "labs": true (a key no window sets; docs/planner.md
-says how), and the plan window opens only for the admin's account (the
-server says which, remote.is_admin). Question IDs touch nothing but this
-collection, so labs alone opens them.
+"""The plan windows (docs/planner.md): Your plans (a plan's weeks and dates,
+written here by its authors), New plan from a calendar and Missed
+questions, Python-native, for everyone since 3.9.3. Tools › Due Crew ›
+Plans opens them, and the board: You › Plans' head row and each plan
+card's Open, Insights' Missed questions line, Find a setting.
 
-model.py, qids.py and edits.py are pure; actions.py is the one collection
-step it adds; remote.py its requests (routes the builder uses already);
-flow.py the glue; window.py, picker.py, qid_window.py and start_window.py
-the Qt windows. reading.py (pure) starts a plan from a block's calendar by
-plain rules; claude.py is what Claude would do with what they leave, a
-stand-in for now (nothing is sent).
+Labs is what stays behind this computer's "labs" switch (a key no window
+sets; docs/planner.md says how): Claude's stand-in in New plan from a
+calendar, and What Claude would get (claude.py: nothing is sent).
+
+model.py, qids.py, edits.py and reading.py are pure; actions.py is the one
+collection step it adds; remote.py its requests (routes the builder uses
+already); flow.py the glue; window.py, picker.py, qid_window.py and
+start_window.py the Qt windows.
 """
 
 
@@ -25,12 +26,11 @@ def enabled(c=None):
 _hooked = []  # the profile's close, hooked once: the windows close with it
 
 
-def install(menu):
-    """Tools › Due Crew's labs entries, once, when labs is on (at profile
-    open; turning it on takes a restart)."""
-    if not enabled() or getattr(menu, "_dc_labs", False):
-        return False
-    from aqt.qt import QAction
+def plans_menu(parent):
+    """Tools › Due Crew › Plans (3.9.3): everything about plans in one place,
+    the three windows among them."""
+    from aqt.qt import QMenu
+    from .. import plan_flow
     from . import flow
     if not _hooked:
         try:
@@ -39,11 +39,13 @@ def install(menu):
             _hooked.append(True)
         except (ImportError, AttributeError):
             pass
-    menu._dc_labs = True
-    menu.addSeparator()
-    for label, fn in (("Plan window (labs)…", flow.open_plans), ("New plan from a calendar (labs)…", flow.open_start),
-                      ("Question IDs (labs)…", flow.open_qids)):
-        action = QAction(label, menu)
-        action.triggered.connect(lambda _=False, fn=fn: fn())
-        menu.addAction(action)
-    return True
+    menu = QMenu("Plans", parent)
+    for item in (("Your plans…", flow.open_plans), ("New plan from a calendar…", flow.open_start),
+                 ("New plan from a deck…", plan_flow.open_make), ("Follow a plan…", plan_flow.open_follow), None,
+                 ("Missed questions…", flow.open_qids), ("Export cards for my AI…", plan_flow.open_export)):
+        if item is None:
+            menu.addSeparator()
+            continue
+        label, fn = item
+        menu.addAction(label).triggered.connect(lambda _=False, fn=fn: fn())
+    return menu

@@ -7219,6 +7219,62 @@ def test_due_board_and_clicks():
         dc._state["settings_tab"] = None
 
 
+def test_plan_windows_ways_in_v393():
+    """3.9.3 (Sam's picks): the plan windows, for everyone, and their ways in:
+    You › Plans' head row (Open plans, New plan ▾), each card's Open, the
+    empty state's two ways to make one, Insights' Missed questions line on a
+    deck with a bank, Find a setting. Each click sent as the board sends it."""
+    import due_crew as dc
+    from due_crew import plan_flow, team_flow
+    from due_crew.planner import flow as pflow
+    from aqt.deckbrowser import DeckBrowser
+    card = {"id": "p1", "title": "MS2 <Block> 1", "sub": "week 3 of 9", "tabs": {}}
+    html = board._you_plans({"cards": [card]})
+    check("ways in: You › Plans' head row: Your plans, Open plans, New plan ▾",
+          html.startswith('<div class="dc-ph"><b>Your plans</b>') and "duecrew:planyours|" in html
+          and "duecrew:plannew|" in html and "New plan &#9662;" in html, html[:400])
+    check("ways in: a plan card opens in Your plans, ahead of its Plan ▾; its name escaped",
+          html.index("duecrew:planyours:p1|") < html.index("duecrew:planmenu:p1|") and "MS2 &lt;Block&gt; 1" in html)
+    none = board._you_plans({"cards": []})
+    check("ways in: no plan yet, the head row still, and Make one offers a calendar and a deck",
+          "dc-ph" in none and "duecrew:planstart|" in none and "duecrew:planmake|" in none
+          and "From a calendar&hellip;" in none and "From a deck&hellip;" in none)
+    calls = []
+    saved = (pflow.open_plans, pflow.open_start, pflow.open_qids, plan_flow.new_plan_menu)
+    pflow.open_plans = lambda select=None, tab=None: calls.append(("plans", select))
+    pflow.open_start = lambda: calls.append(("start",))
+    pflow.open_qids = lambda did=None: calls.append(("qids", did))
+    plan_flow.new_plan_menu = lambda: calls.append(("new",))
+    try:
+        send = lambda m: dc._on_js(False, as_board("duecrew:" + m), DeckBrowser())
+        for m in ("planyours", "planyours:p1", "planyours:bad id!", "plannew", "planstart", "planmissed:20", "planmissed:x"):
+            send(m)
+    finally:
+        pflow.open_plans, pflow.open_start, pflow.open_qids, plan_flow.new_plan_menu = saved
+    check("ways in: each click reaches its window (a plan's id, nothing else, picks the plan; a deck's id the deck)",
+          calls == [("plans", None), ("plans", "p1"), ("plans", None), ("new",), ("start",), ("qids", 20), ("qids", None)], calls)
+    v = {"right": {}, "target": 90}
+    check("ways in: Insights' Missed questions line only on a deck with a bank's question tags",
+          "duecrew:planmissed:20|" in board._insights_html(20, dict(v, bank=True))
+          and "planmissed" not in board._insights_html(20, v))
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    fakes.add_card(conn, 1, did=10, tags="Step1::#Bank::10234")
+    fakes.add_card(conn, 2, did=20, tags="Spanish::Verbs::Ser Spanish::Unit_12")
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    check("ways in: a bank is a tag whose last part is 3 to 9 digits; Unit_12 isn't one",
+          team_flow._has_bank(col, "SELECT id FROM cards WHERE did = 10") is True
+          and team_flow._has_bank(col, "SELECT id FROM cards WHERE did = 20") is False)
+    ix = board.settings_index({"tab": "board", "signed_in": True}, {"accent": "green"})
+    wins = {x["l"]: x for x in ix if x.get("p")}
+    check("ways in: Find a setting finds the three windows by the words people use, after every setting",
+          set(wins) == {"Your plans", "New plan from a calendar", "Missed questions"}
+          and "calendar" in wins["New plan from a calendar"]["k"] and "missed" in wins["Missed questions"]["k"]
+          and wins["Your plans"]["p"] == "planyours" and all(x.get("p") for x in ix[-3:]), list(wins))
+    check("ways in: a window picked in Find a setting is opened, not looked for on a tab",
+          "if (h.p) { pycmd('duecrew:' + h.p + '|' + window.dcBK); return; }" in board.FIND_JS)
+
+
 def test_recover_by_deck_count_v393():
     """3.9.3, Sam's pick A: Recover leeches takes a leech by its deck's own
     leech count (as Insights' Leeches counts them), never one I left out,
