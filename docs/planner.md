@@ -171,6 +171,8 @@ The builder's side panel and pace row (`layout_tab.py`, its rules
   aren't under another, in the deck's order, 500 at most. Till a save
   goes they wait here ("Ticks aren't saved until you Fill or Save the
   pace."); one that doesn't go, or another change's save, keeps them.
+  Fill's words show once it saved (one that didn't says why at the
+  window's foot), with Pip hopping when everything ticked is on a date.
 - **What the plan asks**: the first run of days a quarter over the pace
   that isn't past ("Mon 9 Nov asks 70 new a day (pace 30): Videos, 110
   by Wed 11 Nov"; the site's takes the run its calendar shows), worked
@@ -231,9 +233,15 @@ a save.
   co-author marked, "with a save", when), and a post of one line, 200
   characters, five a day a plan (`POST /plans/{id}/posts`); its writer or
   the owner takes one back. "This version is in N of M followers' Anki"
-  when the server says so.
+  when the server says so. "Posted." comes with Pip waving.
 - **History**: every save, who and what, newest first (the server keeps
-  30); **Undo the latest** is the builder's Undo.
+  30); **Undo the latest** is the builder's Undo. A new plan's has none
+  yet: "No saves yet…", with Pip peeking in.
+
+Pip in these lines (and Lay it out's after a Fill that puts everything
+ticked on a date, hopping) is `pip_note.PipNote`: a line of words with a
+still Pip (`ui.sev_label`) beside it while the moment lasts, as Settings
+› Pip says; the next words on that line take Pip away.
 
 ### Progress (authors)
 

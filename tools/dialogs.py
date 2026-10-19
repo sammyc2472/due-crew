@@ -1455,8 +1455,9 @@ def main(out):
         made = [u for u in doc["units"] if u.get("tags") == [f"{root}::#Book"]]
         if (doc.get("pace") != {"mode": "daily", "days": [1] * 7, "daily": 20, "cover": [f"tag:{root}::#Book"]}
                 or len(made) != 1 or made[0]["opens"] != day(4) or made[0]["name"] != "Book"
-                or lay.said.text() != f"Put 6 cards on {P.fmt_day(day(4))}." or lay.dirty):
-            raise RuntimeError(f"planner: Fill: {doc.get('pace')}, {made}, {lay.said.text()!r}")
+                or lay.said.text() != f"Put 6 cards on {P.fmt_day(day(4))}." or lay.dirty or lay.said.pose != "hop"):
+            raise RuntimeError(f"planner: Fill: {doc.get('pace')}, {made}, {lay.said.text()!r}, Pip {lay.said.pose}")
+        shoot(dlg, os.path.join(out, "planner-layout-filled.png"))  # everything ticked on a date: Pip hopping
         lay._fill(False)
         if lay.said.text() != "Everything ticked is on the calendar already.":
             raise RuntimeError(f"planner: Fill again: {lay.said.text()!r}")
@@ -1543,8 +1544,8 @@ def main(out):
         upd.box.setText("Week 3 moved: Shock is Thursday now.")
         upd._post()
         if [upd.list.topLevelItem(i).text(1) for i in range(upd.list.topLevelItemCount())][:1] != ["Week 3 moved: Shock is Thursday now."] \
-                or upd.list.topLevelItem(0).text(0) != "You" or not upd.status.text().startswith("Posted"):
-            raise RuntimeError(f"planner: Updates, a post: {upd.status.text()!r}")
+                or upd.list.topLevelItem(0).text(0) != "You" or not upd.status.text().startswith("Posted") or upd.status.pose != "hello":
+            raise RuntimeError(f"planner: Updates, a post: {upd.status.text()!r}, Pip {upd.status.pose}")
         upd.list.setCurrentItem(upd.list.topLevelItem(0))
         dlg.resize(1100, 720)
         shoot(dlg, os.path.join(out, "planner-updates.png"))
@@ -1553,6 +1554,15 @@ def main(out):
             raise RuntimeError("planner: Updates, a post taken back")
         hist = dlg.pages["history"]
         dlg._show_tab("history")
+        hist._got(hist._now(), [])  # a new plan's: no saves yet, Pip peeking in
+        if hist.said.pose != "peek" or not hist.said.text().startswith("No saves yet") or not hist.list.isHidden():
+            raise RuntimeError(f"planner: History, none yet: {hist.said.text()!r}, Pip {hist.said.pose}")
+        shoot(dlg, os.path.join(out, "planner-history-empty.png"))
+        dlg.ops.pip = lambda: False  # Settings › Pip off: the words alone
+        hist._got(hist._now(), [])
+        del dlg.ops.pip
+        if hist.said.pose is not None or hist.said.pip is not None:
+            raise RuntimeError("planner: History drew Pip with Settings › Pip off")
         hist._read()  # the window's closed between shots: what opening the tab does
         rows = [hist.list.topLevelItem(i).text(1) for i in range(hist.list.topLevelItemCount())]
         if len(rows) < 5 or hist.undo_btn.isHidden() or hist.list.topLevelItem(0).text(0) != "You":

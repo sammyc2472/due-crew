@@ -10,6 +10,7 @@ from aqt.qt import QHBoxLayout, QHeaderView, QLabel, QLineEdit, QPushButton, Qt,
 from ..ui import esc, note
 from . import remote
 from .model import ago
+from .pip_note import PipNote
 
 ROLE = Qt.ItemDataRole.UserRole
 
@@ -68,10 +69,11 @@ class HistoryTab(_Lazy):
         super().__init__(win)
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 8, 0, 0)
-        self.said = _plain(muted=True)
+        self.said = PipNote(lambda: self.win.ops.pip(), muted=True, size=48)
         root.addWidget(self.said)
         self.list = _list()
         root.addWidget(self.list, 1)
+        root.addStretch(0)  # with no list, the words stay at the top
         row = QHBoxLayout()
         row.addStretch(1)
         self.again_btn = QPushButton("Try again")
@@ -105,9 +107,11 @@ class HistoryTab(_Lazy):
             self._show([], "Couldn't load the history.", again=True)
             return
         self.got = now
-        self._show(rows, "" if rows else "Nothing yet. Each save shows here.")
+        # a new plan's: Pip peeking in, as Settings › Pip says
+        self._show(rows, "" if rows else "No saves yet. Each one shows here, who made it and what it changed, "
+                   "and the latest can be undone.", pose=None if rows else "peek")
 
-    def _show(self, rows, said, again=False):
+    def _show(self, rows, said, again=False, pose=None):
         self.rows = rows
         self.list.clear()
         me = self.win.ops.me()
@@ -117,7 +121,7 @@ class HistoryTab(_Lazy):
             it.setToolTip(1, f"<span>{esc(x.get('summary') or '')}</span>")
             self.list.addTopLevelItem(it)
         self.list.setVisible(bool(rows))
-        self.said.setText(said)
+        self.said.say(said, pose, "Pip, peeking in")
         self.said.setVisible(bool(said))
         self.again_btn.setVisible(again)
         self.undo_btn.setVisible(bool(rows) and bool(rows[0].get("undo")))
@@ -154,7 +158,7 @@ class UpdatesTab(_Lazy):
         root.addLayout(row)
         self.reached = _plain(muted=True)
         root.addWidget(self.reached)
-        self.status = _plain()
+        self.status = PipNote(lambda: self.win.ops.pip())
         root.addWidget(self.status)
         self.said = _plain(muted=True)
         root.addWidget(self.said)
@@ -177,6 +181,9 @@ class UpdatesTab(_Lazy):
         self._show([], "")
 
     def plan_loaded(self, win):
+        if (win.plan or {}).get("id") != getattr(self, "pid", None):
+            self.pid = (win.plan or {}).get("id")
+            self.status.setText("")  # the last plan's "Posted." isn't this one's
         if win.author():
             n = int((win.plan or {}).get("followers") or 0)
             self.box.setPlaceholderText(f"Post to the {n:,} following" if n else "Post to its followers (nobody follows it yet)")
@@ -269,7 +276,7 @@ class UpdatesTab(_Lazy):
                 self._buttons()
                 return
             self.box.clear()
-            self.status.setText("Posted. Followers see it in Anki and on their home page.")
+            self.status.say("Posted. Followers see it in Anki and on their home page.", "hello", "Pip, waving")
             self._read()
         self.win.ops.ask(self.win, lambda cl: remote.post(cl, now[0], text), done)
 

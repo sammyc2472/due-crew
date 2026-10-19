@@ -3098,3 +3098,13 @@ every release that changes how something works.
   `test_lay_out_review_fixes_v393`, `test_text_review_fixes_v393`,
   `test_split_keeps_the_date_v393`; `tools/dialogs.py` checks the welcome,
   the kept ticks and Finish by.
+- 3.9.3, Pip in three more places of Your plans (Sam: "add the pip spots you
+  suggested"): hopping beside Lay it out's words after a Fill that puts
+  everything ticked on a date; waving beside "Posted." on Updates; peeking
+  into a new plan's History ("No saves yet. Each one shows here, who made
+  it and what it changed, and the latest can be undone."). Still, as
+  Settings › Pip says, by `planner/pip_note.PipNote` (a line of words; the
+  next words take Pip away). A Fill's words now show once it saved: one
+  that didn't save no longer says it put cards (the window's foot says
+  why), and Updates' "Posted." goes when another plan is picked.
+  `tools/dialogs.py` renders each, and History with Settings › Pip off.

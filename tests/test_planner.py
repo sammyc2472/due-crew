@@ -1010,8 +1010,9 @@ def test_rules_of_the_road():
           and all(t.count("(QDialog)") == t.count("attach_alive(self)") == len(re.findall(r"\bheading\(self", t))
                   for t in windows.values()), sorted(windows))
     tabs = {f: t for f, t in src.items() if "(QWidget)" in t}  # 3.9.3: Your plans' tabs past Dates
-    check("road: the tabs past Dates (Lay it out, Text, Progress, Updates, History and Settings) and the Dates tab's day notes",
-          sorted(tabs) == ["day_notes.py", "history_tab.py", "layout_tab.py", "settings_tab.py", "text_tab.py"], sorted(tabs))
+    check("road: the tabs past Dates (Lay it out, Text, Progress, Updates, History and Settings), the Dates tab's day notes, "
+          "and Pip's line in them",
+          sorted(tabs) == ["day_notes.py", "history_tab.py", "layout_tab.py", "pip_note.py", "settings_tab.py", "text_tab.py"], sorted(tabs))
     windows_tabs = dict(windows, **tabs)
     check("road: no window sets its own type or margins in a style sheet, nor reads Anki's palette",
           not [f for f, t in windows_tabs.items() if "setStyleSheet" in t or "palette(" in t or "font-size" in t])

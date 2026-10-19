@@ -21,6 +21,7 @@ from .. import plans as P
 from . import build as B
 from . import date_dialogs as DD
 from . import edits as E
+from .pip_note import PipNote
 from .settings_tab import _WheelToPage
 
 ROLE = Qt.ItemDataRole.UserRole
@@ -157,7 +158,7 @@ class LayoutTab(QWidget):
         self.save_btn.clicked.connect(self._save_pace)
         line.addWidget(self.save_btn)
         rl.addLayout(line)
-        self.said = _plain(muted=True)
+        self.said = PipNote(lambda: self.win.ops.pip(), muted=True)
         rl.addWidget(self.said)
         self.heavy = _plain()
         rl.addWidget(self.heavy)
@@ -630,9 +631,18 @@ class LayoutTab(QWidget):
                 doc["pace"]["daily"] = max(1, min(5000, int(r["daily"])))  # the server keeps 1 to 5,000
             return doc
         self.said.setText("")
-        self.win._apply(change, lambda: got.get("touched", ()), then=self._kept)
-        if got.get("note"):
-            self.said.setText(got["note"])
+        self.win._apply(change, lambda: got.get("touched", ()), then=lambda saved: self._filled(saved, got))
+
+    def _filled(self, saved, got):
+        """A Fill's words once it saved (one that didn't says why at the
+        window's foot), and Pip hopping when everything ticked is on a
+        date now, as Settings › Pip says."""
+        self._kept(saved)
+        if not saved:
+            return
+        t = self._tree()
+        done = t is not None and bool(self.cover) and not B.cover_left(t, self.cover, B.placed_keys(self.win.raw["doc"], t))
+        self.said.say(got.get("note") or "", "hop" if done else None, "Pip, hopping")
 
     # ---- what the plan asks ----
 
