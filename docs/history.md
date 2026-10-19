@@ -3042,6 +3042,9 @@ every release that changes how something works.
   them off those dates too or Keep the tags, a day over the pace), one
   save read again on the plan as it is (`test_plan_text_v393`). The
   window's height stays the window's: Lay it out's right side scrolls, and
-  Text sits in a splitter with smaller size hints. Still the site's:
-  Updates, Progress, History, Settings, day notes, the AI prompts. No new
-  route, nothing on a refresh or a sync.
+  Text sits in a splitter with smaller size hints. **Updates** (posts to
+  followers, five a day, taken back) and **History** (every save, Undo the
+  latest), `history_tab.py`; the fake Worker gained plans.ts's log and
+  posts (`test_history_and_posts_v393`). A history line says "1 search",
+  not "1 searche". Still the site's: Progress, Settings, day notes, the AI
+  prompts. No new route, nothing on a refresh or a sync.

@@ -32,6 +32,7 @@ from . import edits as E
 from . import model as M
 from .layout_tab import LayoutTab
 from .text_tab import TextTab
+from .history_tab import HistoryTab, UpdatesTab
 
 ROLE = Qt.ItemDataRole.UserRole
 
@@ -193,6 +194,8 @@ class PlanWindow(QDialog):
         self._add_tab("dates", "Dates", split)
         self._add_tab("layout", "Lay it out", LayoutTab(self))
         self._add_tab("text", "Text", TextTab(self))
+        self._add_tab("updates", "Updates", UpdatesTab(self))
+        self._add_tab("history", "History", HistoryTab(self))
         self.want_tab = tab
 
         bottom = QHBoxLayout()

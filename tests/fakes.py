@@ -438,7 +438,7 @@ class FakeWorker:
         self.reports = []    # what POST /reports kept (3.8.1: the Worker keeps them for the admin too)
         self.feedback = []   # 3.6.5, P6: [{uid, text, ver}] for the admin's page
         self.admins = set()  # notices.ts isAdmin: wrangler.toml's ADMINS (and the ADMIN_UIDS secret)
-        self.plan_log = []   # plans.ts logSave: (plan, version, uid, summary), a save's history line
+        self.plan_log = []   # plans.ts logSave: (plan, version, uid, summary, at), a save's history line
         self.plan_prev = {}  # plans.ts plan_log.prev: a plan's doc before its latest save, for undo
         self.otp = {}        # email -> code
         # 3.1: plans (worker/src/plans.ts)
@@ -697,7 +697,7 @@ class FakeWorker:
         """3.7.3, setup helper: an author's post to followers."""
         self._post_n = getattr(self, "_post_n", 0) + 1
         self.plan_posts.setdefault(pid, []).append({"id": self._post_n, "name": (self.users.get(uid) or {}).get("name") or "?",
-                                                    "text": text, "withSave": False, "at": int(time.time())})
+                                                    "text": text, "withSave": False, "at": int(time.time()), "_uid": uid})
 
     def _look_of(self, uid):
         """3.8.2: what someone's Pip has on, from their settings, as board.ts
@@ -2072,6 +2072,40 @@ class FakeWorker:
                 p["version"] += 1
                 self._count("plans")
             return 200, self._plan_view(pid, me)
+        if rest[1:] == ["log"] and method == "GET":  # plans.ts log: every save, newest first (LOG_KEEP); the latest undoes
+            if not self._writes(p, me):
+                raise Bad(403, "not_author")
+            rows = sorted((x for x in self.plan_log if x[0] == pid), key=lambda x: -x[1])[:30]
+            return 200, {"log": [{"version": x[1], "uid": x[2], "name": (self.users.get(x[2]) or {}).get("name") or "?",
+                                  "at": x[4] if len(x) > 4 else 0, "summary": x[3], "undo": i == 0 and pid in self.plan_prev}
+                                 for i, x in enumerate(rows)]}
+        if rest[1:] == ["posts"] and method == "GET":  # plans.ts posts: anyone in the plan, newest first
+            if not (self._writes(p, me) or (pid, me) in self.follows):
+                raise Bad(404, "no_plan")
+            eds = set(p.get("editors") or ())
+            return 200, {"posts": [{"id": x["id"], "uid": x.get("_uid"), "name": x["name"], "emoji": "", "text": x["text"],
+                                    "withSave": x["withSave"], "at": x["at"], "coauthor": x.get("_uid") in eds,
+                                    "remove": x.get("_uid") == me or p["owner"] == me}
+                                   for x in sorted(self.plan_posts.get(pid, []), key=lambda x: -x["id"])[:50]]}
+        if rest[1:] == ["posts"] and method == "POST":  # plans.ts addPost: one line, 5 a day a plan, the newest 50 kept
+            if not self._writes(p, me):
+                raise Bad(403, "not_author")
+            raw = body.get("text")
+            text = _one_line(raw, 200) if isinstance(raw, str) and 1 <= len(raw) <= 800 else ""
+            if not text:
+                raise Bad(400, "bad_post")
+            now = int(time.time())
+            if sum(1 for x in self.plan_posts.get(pid, []) if x["at"] > now - 86400) >= 5:
+                raise Bad(429, "too_many_posts")
+            self.add_post(pid, me, text)
+            self.plan_posts[pid] = sorted(self.plan_posts[pid], key=lambda x: -x["id"])[:50]
+            return 200, {"id": self._post_n, "text": text}
+        if len(rest) == 3 and rest[1] == "posts" and method == "DELETE":  # plans.ts removePost: its writer, or the owner
+            if not self._writes(p, me):
+                raise Bad(403, "not_author")
+            self.plan_posts[pid] = [x for x in self.plan_posts.get(pid, [])
+                                    if not (str(x["id"]) == rest[2] and (p["owner"] == me or x.get("_uid") == me))]
+            return 200, {"ok": True}
         if len(rest) == 1 and method == "GET":
             if not self._may_read(p, pid, me, self._norm(query.get("code"))):
                 raise Bad(404, "no_plan")
@@ -2102,7 +2136,7 @@ class FakeWorker:
             p.update(name=name, line=line, doc=doc)
             p["version"] += 1
             self.plan_log.append((pid, p["version"], me, " ".join(str(body.get("summary") or "").split())[:120]
-                                  or "changed the plan"))
+                                  or "changed the plan", int(time.time())))
             self._count("plans")
             return 200, self._plan_view(pid, me)
         if rest[1:] == ["undo"] and method == "POST":  # plans.ts undo: what the latest save replaced, back
@@ -2117,7 +2151,7 @@ class FakeWorker:
             p["doc"] = prev
             p["version"] += 1
             last = next((x[3] for x in reversed(self.plan_log) if x[0] == pid), "")
-            self.plan_log.append((pid, p["version"], me, f"undid: {last}"[:120]))
+            self.plan_log.append((pid, p["version"], me, f"undid: {last}"[:120], int(time.time())))
             self._count("plans")
             return 200, self._plan_view(pid, me)
         raise Bad(405, "method")
@@ -2291,7 +2325,8 @@ class FakeWorker:
                           "shift": f.get("shift", 0), "until": f.get("until"), "since": f.get("since"), "skipped": f.get("skipped", []),
                           "moved": f.get("moved", {}), **({"own": f["own"]} if f.get("own") else {}),
                           "followers": followers, "crewDone": done,
-                          "posts": [dict(x) for x in sorted(self.plan_posts.get(pid, []), key=lambda x: -x["id"])[:3]]})
+                          "posts": [{k: v for k, v in x.items() if not k.startswith("_")}
+                                    for x in sorted(self.plan_posts.get(pid, []), key=lambda x: -x["id"])[:3]]})
         offers = [{"id": pid, "name": p["name"], "code": p["code"], "squad": p["squad"],
                    "ownerName": (self.users.get(p["owner"]) or {}).get("name") or "?"}
                   for pid, p in sorted(self.plans.items()) if self._offered(pid, p, me)]

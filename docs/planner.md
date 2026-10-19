@@ -32,16 +32,17 @@ builder's on duecrew.com (Not here yet, below).
   another folder name uses that name.)
 - **Nothing new on the server.** The windows' requests are routes the
   site's builder uses already: `GET /plans/mine`, `GET /plans/{id}`, an
-  author's save, `PUT /plans/{id}`, its Undo, and New plan, `POST
-  /plans` (with Make a plan's `PUT /plans/trees`). Each one on a click, in
+  author's save, `PUT /plans/{id}`, its Undo, New plan, `POST /plans`
+  (with Make a plan's `PUT /plans/trees`), its history (`GET
+  /plans/{id}/log`) and posts (`GET`, `POST`, `DELETE /plans/{id}/posts`). Each one on a click, in
   the background. A refresh and a sync are unchanged
   (`test_request_budget`).
 
 ## Your plans
 
 My plans (the ones I write first, then the ones I follow), one at a time,
-in tabs: **Dates** for everyone, **Lay it out** and **Text** for a plan's
-authors.
+in tabs: **Dates** for everyone; **Lay it out**, **Text**, **Updates** and
+**History** for a plan's authors.
 **Reload** reads the plan again (an edit on the site meanwhile); **New ▾**
 makes a date, a quiz or exam, a review day, or a new plan.
 
@@ -181,12 +182,24 @@ format** opens duecrew.com/plan-text.
   (a date first, a search about one person's Anki, due before it opens,
   even with no due date, a "for" with no such event, an ID that isn't one).
 
+### Updates and History (authors)
+
+`history_tab.py`, each read when its tab opens (one request), again after
+a save.
+
+- **Updates**: what the authors said to followers, newest first (who, a
+  co-author marked, "with a save", when), and a post of one line, 200
+  characters, five a day a plan (`POST /plans/{id}/posts`); its writer or
+  the owner takes one back. "This version is in N of M followers' Anki"
+  when the server says so.
+- **History**: every save, who and what, newest first (the server keeps
+  30); **Undo the latest** is the builder's Undo.
+
 ### Not here yet
 
-The builder's Updates (posts, reached N of M), Progress, History, and
-Settings (name, line, link, squad, co-authors, listing, copy for next
-year, delete), day notes, and the prompts for your own AI: those stay on
-duecrew.com for now.
+The builder's Progress and Settings (name, line, link, squad, co-authors,
+listing, copy for next year, delete), day notes, and the prompts for your
+own AI: those stay on duecrew.com for now.
 
 ## The picker
 
@@ -319,7 +332,7 @@ request carries. Nothing is sent: `claude.py` has no requests.
 | `planner/reading.py` | pure: a calendar read, a session's tags, an exam's line, by plain rules |
 | `planner/claude.py` | pure: Claude's stand-in, and what Claude would get (`request`) |
 | `planner/flow.py` | the glue: the windows' asks (`Ops`, `StartOps`, `QidOps`), `make_here`, `qids.json` |
-| `planner/window.py`, `layout_tab.py`, `text_tab.py`, `date_dialogs.py`, `picker.py`, `qid_window.py`, `start_window.py` | the Qt windows and their tabs, in the board's look |
+| `planner/window.py`, `layout_tab.py`, `text_tab.py`, `history_tab.py`, `date_dialogs.py`, `picker.py`, `qid_window.py`, `start_window.py` | the Qt windows and their tabs, in the board's look |
 
 Checks: `tests/test_planner.py` (the pure parts, `build.py` against
 builder.js run in node, Fill and Lay it out, the save against the fake

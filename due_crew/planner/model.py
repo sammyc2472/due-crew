@@ -12,6 +12,7 @@ and counts only: the window escapes nothing because Qt shows them as text.
 import bisect
 import datetime
 import math
+import time
 
 from .. import plans as P
 from .. import schedule as S
@@ -345,3 +346,16 @@ def tag_count(idx, path):
     cids = idx.tag_cards(path)
     c = counts(idx, cids) if cids else {"cards": 0, "new": 0}
     return c["cards"], c["new"]
+
+
+def ago(at, now=None):
+    """The builder's ago2, a history line's or a post's time: "just now",
+    "5 min ago", "3 h ago", else the day."""
+    m = round(((now if now is not None else time.time()) - int(at or 0)) / 60)
+    if m < 1:
+        return "just now"
+    if m < 60:
+        return f"{m} min ago"
+    if m < 1440:
+        return f"{round(m / 60)} h ago"
+    return P.fmt_day(datetime.date.fromtimestamp(int(at)).isoformat())

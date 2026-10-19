@@ -157,6 +157,17 @@ class Ops:
         _bg(lambda: remote.undo(cl, pid, version),
             lambda got: getattr(owner, "_alive", False) and gen == app.generation and done(got))
 
+    def me(self):
+        """My account's id (a row of mine says You)."""
+        return client().user_id
+
+    def ask(self, owner, fn, done):
+        """One of the plan's other requests (its history, posts, settings):
+        fn(client) in the background, done(answer or None) on the main thread
+        while `owner` is open and nothing changed under it."""
+        cl, gen = client(), app.generation
+        _bg(lambda: fn(cl), lambda got: getattr(owner, "_alive", False) and gen == app.generation and done(got))
+
     def browse(self, cids):
         plan_flow._browse(cids)
 

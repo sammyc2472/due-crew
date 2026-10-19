@@ -339,13 +339,14 @@ def what_changed(before, after):
             out.append(f"{day}: due {P.fmt_day(y['due'])}" if y.get("due") else f"{day}: no due date")
         if bool(x.get("even")) != bool(y.get("even")):
             out.append(f"{day}: {'spread evenly' if y.get('even') else 'not spread'}")
-        for field, word in (("tags", "tags"), ("decks", "subdecks"), ("cut", "cuts"), ("search", "searches"),
-                            ("cards", "single cards"), ("notes", "notes"), ("nids", "note IDs"), ("cids", "card IDs")):
+        for field, one, many in (("tags", "tag", "tags"), ("decks", "subdeck", "subdecks"), ("cut", "cut", "cuts"),
+                                 ("search", "search", "searches"), ("cards", "single card", "single cards"),
+                                 ("notes", "note", "notes"), ("nids", "note ID", "note IDs"), ("cids", "card ID", "card IDs")):
             got = len(y.get(field) or []) - len(x.get(field) or [])
             if got > 0:
-                out.append(f"{day}: added {got:,} {word if got != 1 else word[:-1]}")
+                out.append(f"{day}: added {got:,} {one if got == 1 else many}")
             elif got < 0:
-                out.append(f"{day}: took off {-got:,} {word if got != -1 else word[:-1]}")
+                out.append(f"{day}: took off {-got:,} {one if got == -1 else many}")
         if x.get("for") != y.get("for"):
             ev = next((e for e in after.get("events") or [] if isinstance(e, dict) and e.get("id") == y.get("for")), None)
             out.append(f"{day}: for {ev.get('name') or '?'}" if ev else f"{day}: for nothing")

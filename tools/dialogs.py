@@ -1284,6 +1284,16 @@ def main(out):
             def open_page(self, path):
                 pass
 
+            def me(self):
+                return CLIENT.user_id
+
+            def ask(self, owner, fn, done):
+                try:
+                    got = fn(CLIENT)
+                except Exception:  # noqa: BLE001 (the real one's _bg says None)
+                    got = None
+                done(got)
+
         mine = PR.my_plans(CLIENT)
 
         def PlanWindow_(plans=mine):
@@ -1478,6 +1488,32 @@ def main(out):
         doc = STORE.plans[pid]["doc"]
         if any(u.get("name") == "Shock again" for u in doc["units"]) or txt.box.toPlainText() != PT.T.to_text(doc):
             raise RuntimeError(f"planner: Text, Replace: {txt.status.text()!r}")
+        # 3.9.3: Updates (a post, and taking it back) and History (every save; Undo on the latest)
+        upd = dlg.pages["updates"]
+        dlg._show_tab("updates")
+        upd.box.setText("Week 3 moved: Shock is Thursday now.")
+        upd._post()
+        if [upd.list.topLevelItem(i).text(1) for i in range(upd.list.topLevelItemCount())][:1] != ["Week 3 moved: Shock is Thursday now."] \
+                or upd.list.topLevelItem(0).text(0) != "You" or not upd.status.text().startswith("Posted"):
+            raise RuntimeError(f"planner: Updates, a post: {upd.status.text()!r}")
+        upd.list.setCurrentItem(upd.list.topLevelItem(0))
+        dlg.resize(1100, 720)
+        shoot(dlg, os.path.join(out, "planner-updates.png"))
+        upd._remove()
+        if STORE.plan_posts.get(pid):
+            raise RuntimeError("planner: Updates, a post taken back")
+        hist = dlg.pages["history"]
+        dlg._show_tab("history")
+        hist._read()  # the window's closed between shots: what opening the tab does
+        rows = [hist.list.topLevelItem(i).text(1) for i in range(hist.list.topLevelItemCount())]
+        if len(rows) < 5 or hist.undo_btn.isHidden() or hist.list.topLevelItem(0).text(0) != "You":
+            raise RuntimeError(f"planner: History: {rows}")
+        dlg.resize(1100, 720)
+        shoot(dlg, os.path.join(out, "planner-history.png"))
+        v = STORE.plans[pid]["version"]
+        hist._undo()
+        if STORE.plans[pid]["version"] != v + 1 or not STORE.plan_log[-1][3].startswith("undid:"):
+            raise RuntimeError(f"planner: History's Undo: v{STORE.plans[pid]['version']}, {dlg.status.text()!r}")
         empty = PlanWindow_([])
         shoot(empty, os.path.join(out, "planner-empty.png"))
         idx = P.DeckIndex(col, 1)

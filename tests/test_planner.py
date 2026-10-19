@@ -1011,7 +1011,8 @@ def test_rules_of_the_road():
           and all(t.count("(QDialog)") == t.count("attach_alive(self)") == len(re.findall(r"\bheading\(self", t))
                   for t in windows.values()), sorted(windows))
     tabs = {f: t for f, t in src.items() if "(QWidget)" in t}  # 3.9.3: Your plans' tabs past Dates
-    check("road: the tabs are Lay it out's and Text's", sorted(tabs) == ["layout_tab.py", "text_tab.py"], sorted(tabs))
+    check("road: the tabs past Dates: Lay it out, Text, Updates and History",
+          sorted(tabs) == ["history_tab.py", "layout_tab.py", "text_tab.py"], sorted(tabs))
     windows_tabs = dict(windows, **tabs)
     check("road: no window sets its own type or margins in a style sheet, nor reads Anki's palette",
           not [f for f, t in windows_tabs.items() if "setStyleSheet" in t or "palette(" in t or "font-size" in t])
@@ -1022,16 +1023,21 @@ def test_rules_of_the_road():
     check("road: the pure parts and the requests import no aqt",
           not [f for f in pure if re.search(r"^\s*(from aqt|import aqt)", src[f], re.M)])
     calls = set()
-    for f in ("flow.py", "window.py", "layout_tab.py", "text_tab.py", "qid_window.py", "picker.py", "start_window.py"):
+    for f in ("flow.py", "window.py", "layout_tab.py", "text_tab.py", "history_tab.py", "qid_window.py", "picker.py", "start_window.py"):
         for node in ast.walk(ast.parse(src[f])):
             if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "remote":
                 calls.add(node.attr)
-    check("road: requests only on a click, through remote (who I am, my plans, one plan, a save)",
-          calls <= {"is_admin", "my_plans", "load", "save", "undo", "create"} and "_call" not in src["flow.py"], calls)
+    check("road: requests only on a click, through remote (who I am, my plans, one plan, a save, its history and posts)",
+          calls <= {"is_admin", "my_plans", "load", "save", "undo", "create", "log", "posts", "post", "unpost"}
+          and "_call" not in src["flow.py"], calls)
     routes = set(re.findall(r'_call\((?:client, )?"(GET|PUT|POST|PATCH|DELETE)", f?"([^"]+)"', src["remote.py"]))
+    builder = open(os.path.join(REPO, "site", "public", "builder.js")).read()
     check("road: nothing new on the server: routes the builder and the site use already",
           routes == {("GET", "/auth/me"), ("GET", "/plans/{pid}"), ("PUT", "/plans/{pid}"), ("POST", "/plans/{pid}/undo"),
-                     ("POST", "/plans")}, routes)
+                     ("POST", "/plans"), ("GET", "/plans/{pid}/log"), ("GET", "/plans/{pid}/posts"), ("POST", "/plans/{pid}/posts"),
+                     ("DELETE", "/plans/{pid}/posts/{int(post_id)}")}
+          and all(f'api("{m}", `/plans/${{id}}/{x}' in builder for m, x in (("GET", "log"), ("GET", "posts"), ("POST", "posts"),
+                                                                           ("DELETE", "posts/"))), routes)
     check("road: Claude isn't connected: the stand-in sends nothing, and nothing reads a card's text for it",
           not re.search(r"^\s*(?:from|import)\s+(?:requests|urllib|http|socket|anthropic)\b", src["claude.py"] + src["reading.py"], re.M)
           and not re.search(r"\bflds\b|\.note\(|\bnote\[", src["claude.py"] + src["reading.py"] + src["start_window.py"]))
@@ -1257,6 +1263,8 @@ def test_date_edits_v393():
     check("dates: Fill's places join a day's date or make one, named for what's on it (a hand name kept)",
           [u["tags"] for u in named["units"]] == [[VID, BOOK], [DRUGS], [OTHER]]
           and named["units"][0]["name"] == "Heart failure" and named["units"][2]["name"] == "Antibiotics", named["units"])
+    one = E.what_changed(d, E.add_search(d, "u1", "tag:Misc", 3))
+    check("dates: one search added reads as one", one == "Mon 9 Nov: added 1 search (in Anki)", one)
     line = E.what_changed(d, E.set_for(E.set_todo(d, "u1", [{"k": "do", "t": "x"}]), "u1", None))
     check("dates: a save's history line says what changed", "to-dos" in line and "for nothing" in line and line.endswith("(in Anki)"), line)
 
@@ -1507,6 +1515,43 @@ def test_plan_text_v393():
     miss = T.from_text(doc, t, "2026-11-12 | q | tag:Nope::Here | tag:DueCrew::MS2::New", start="2026-11-09")
     check("text: a tag the deck doesn't have is said (the plan's own aren't till they're made)",
           miss["missing"] == ["tag:Nope::Here"], miss["missing"])
+
+
+def test_history_and_posts_v393():
+    """3.9.3: Your plans' History (every save, the latest one undoable) and
+    Updates (a post to followers, five a day; its writer or the owner takes
+    it back), against the fake Worker's plans.ts log and posts."""
+    store = world({"sam": "Sammy", "dre": "Dre", "kai": "Kai"})
+    sam, dre, kai = new_client(store, "sam"), new_client(store, "dre"), new_client(store, "kai")
+    pid, _code = store.add_plan("sam", "MS2 Block 2", "Big Step 1", _doc()["units"])
+    raw, _plan = R.load(sam, pid)
+    R.save(sam, pid, raw["version"], E.rename(raw["doc"], "u1", "HF"), "renamed Mon 9 Nov")
+    log = R.log(sam, pid)
+    check("history: every save, newest first, the latest one undoable; only an author reads it",
+          [x["summary"] for x in log] == ["renamed Mon 9 Nov"] and log[0]["undo"] is True and log[0]["name"] == "Sammy"
+          and log[0]["version"] == 2, log)
+    try:
+        R.log(dre, pid)
+        stranger = None
+    except Exception as e:  # noqa: BLE001
+        stranger = getattr(e, "status", None)
+    check("history: not a stranger's", stranger == 403, stranger)
+    got = R.post(sam, pid, "  Week 3\nmoved:  Shock is Thursday  ")
+    posts = R.posts(sam, pid)
+    check("updates: a post, one line, newest first, the owner's to take back",
+          got[0] == "saved" and [x["text"] for x in posts] == ["Week 3 moved: Shock is Thursday"] and posts[0]["remove"] is True
+          and posts[0]["uid"] == "sam", (got, posts))
+    store.follows[(pid, "kai")] = {"share": False, "paused": False, "progress": None, "sched": None}
+    check("updates: a follower reads them, can't post or take one back",
+          R.posts(kai, pid)[0]["remove"] is False and R.post(kai, pid, "hi")[0] == "refused")
+    for i in range(4):
+        R.post(sam, pid, f"note {i}")
+    over = R.post(sam, pid, "one too many")
+    check("updates: five posts a day a plan", over == ("refused", "Five posts a day per plan. Try tomorrow."), over)
+    check("updates: taken back", R.unpost(sam, pid, posts[0]["id"]) and len(R.posts(sam, pid)) == 4)
+    check("updates: the time a line says, as the builder's",
+          M.ago(1000, now=1010) == "just now" and M.ago(1000, now=1000 + 300) == "5 min ago"
+          and M.ago(1000, now=1000 + 3 * 3600) == "3 h ago")
 
 
 def main():

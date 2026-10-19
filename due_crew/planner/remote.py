@@ -1,4 +1,4 @@
-"""Labs (docs/planner.md): the plan window's requests, each one on a click,
+"""Your plans (docs/planner.md): the plan window's requests, each one on a click,
 off the main thread (they raise TransportError like every request). All of
 them are routes the site's builder uses already: nothing new on the server.
 
@@ -104,6 +104,41 @@ def undo(client, pid, version):
     if status == 409 and data.get("error") == "stale":
         return "stale", load(client, pid)[0]
     return _refused(data)
+
+
+def log(client, pid):
+    """The builder's History: every save, newest first (GET /plans/{id}/log):
+    [{version, uid, name, at, summary, undo}], the latest one undoable."""
+    status, data = _call(client, "GET", f"/plans/{pid}/log")
+    if status != 200 or not isinstance(data.get("log"), list):
+        raise TransportError(f"log: {status}", status)
+    return [x for x in data["log"] if isinstance(x, dict)]
+
+
+def posts(client, pid):
+    """The builder's Updates: what the authors said to followers, newest first (GET /plans/{id}/posts)."""
+    status, data = _call(client, "GET", f"/plans/{pid}/posts")
+    if status != 200 or not isinstance(data.get("posts"), list):
+        raise TransportError(f"posts: {status}", status)
+    return [x for x in data["posts"] if isinstance(x, dict)]
+
+
+POST_WORDS = {"too_many_posts": "Five posts a day per plan. Try tomorrow.", "slow_down": "Five posts a day per plan. Try tomorrow.",
+              "bad_post": "A post is one line, 200 characters at most.", "not_author": SAVE_WORDS["not_author"]}
+
+
+def post(client, pid, text):
+    """A post to the plan's followers (POST /plans/{id}/posts): ("saved", {id, text}) | ("refused", words)."""
+    status, data = _call(client, "POST", f"/plans/{pid}/posts", {"text": str(text)})
+    if status == 200 and data.get("id"):
+        return "saved", data
+    return "refused", POST_WORDS.get(str((data or {}).get("error") or ""), "That didn't post. Try again.")
+
+
+def unpost(client, pid, post_id):
+    """A post taken back (DELETE /plans/{id}/posts/{post}): its writer's, or the owner's. True when it went."""
+    status, _data = _call(client, "DELETE", f"/plans/{pid}/posts/{int(post_id)}")
+    return status == 200
 
 
 def create(client, name, deck):

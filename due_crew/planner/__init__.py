@@ -12,8 +12,8 @@ model.py, qids.py, edits.py and reading.py are pure; actions.py is the one
 collection step it adds; remote.py its requests (routes the builder uses
 already); flow.py the glue; window.py, picker.py, qid_window.py and
 start_window.py the Qt windows; build.py the builder's rules, layout_tab.py
-Lay it out, text.py and text_tab.py its Text, date_dialogs.py the Dates
-tab's dialogs.
+Lay it out, text.py and text_tab.py its Text, history_tab.py its Updates
+and History, date_dialogs.py the Dates tab's dialogs.
 """
 
 
