@@ -944,6 +944,7 @@ def main(out):
         get; Make the plan end to end (POST /plans, then its save); prose,
         which only the stand-in reads, and with it off."""
         import sqlite3
+        from due_crew.planner import reading as R
         from due_crew.planner import start_window as SW
         conn = sqlite3.connect(":memory:")
         fakes.make_collection(conn)
@@ -1055,6 +1056,65 @@ def main(out):
         if w.sessions or w.name.text() or "stand-in could" not in w.said.text():
             raise RuntimeError(f"start: prose, stand-in off: {w.said.text()!r}")
         shoot(w, os.path.join(out, "planner-start-none.png"))
+        # a calendar's file dragged over the box, then dropped: a PDF, made here as a school's would be
+        pdf = os.path.join(tempfile.mkdtemp(), "MS2_Block_2 calendar.pdf")
+        writer = QtGui.QPdfWriter(pdf)
+        writer.setResolution(96)
+        painter = QtGui.QPainter(writer)
+        painter.setFont(QtGui.QFont("DejaVu Sans", 11))
+        rows = [("Week 1", "", ""), (d(0), "Heart failure", "Room B2"), (d(1), "HFrEF", "Room B2"),
+                (d(3), "Antiarrhythmic drugs", "Room B4"), (d(4), "Cardio quiz 1", "Hall A"), ("Week 2", "", ""),
+                (d(7), "Diuretics", "Room B2"), (d(11), "Exam 1", "Hall A")]
+        for n, (a, b, c) in enumerate(rows):
+            for x, t in ((40, a), (180, b), (460, c)):
+                painter.drawText(x, 60 + 24 * n, t)
+        painter.end()
+        w = SW.StartWindow(None, decks, SOps())
+        w.resize(820, 720)
+        mime = QtCore.QMimeData()
+        mime.setUrls([QtCore.QUrl.fromLocalFile(pdf)])
+        if SW.DropBox.path_of(mime) != pdf:
+            raise RuntimeError("start: a dragged file's path")
+        two = QtCore.QMimeData()
+        two.setUrls([QtCore.QUrl.fromLocalFile(pdf), QtCore.QUrl.fromLocalFile(pdf + "2")])
+        if SW.DropBox.path_of(two) is not None:
+            raise RuntimeError("start: two files at once are dropped as nothing")
+        enter = QtGui.QDragEnterEvent(QtCore.QPoint(20, 20), QtCore.Qt.DropAction.CopyAction, mime,
+                                      QtCore.Qt.MouseButton.LeftButton, QtCore.Qt.KeyboardModifier.NoModifier)
+        w.text.dragEnterEvent(enter)
+        if not enter.isAccepted() or w.text.property("over") is not True:
+            raise RuntimeError("start: a file over the box")
+        w.show()
+        settle()
+        w.grab().save(os.path.join(out, "planner-start-drag.png"))
+        drop = QtGui.QDropEvent(QtCore.QPointF(20, 20), QtCore.Qt.DropAction.CopyAction, mime,
+                                QtCore.Qt.MouseButton.LeftButton, QtCore.Qt.KeyboardModifier.NoModifier)
+        w.text.dropEvent(drop)
+        titles = [x["title"] for x in w.sessions]
+        if (w.text.property("over") is not False or w.file != os.path.basename(pdf) or w.name.text() != "MS2 Block 2 calendar"
+                or titles != ["Heart failure", "HFrEF", "Antiarrhythmic drugs", "Cardio quiz 1", "Diuretics", "Exam 1"]
+                or [x["week"] for x in w.sessions] != [1, 1, 1, 1, 2, 2]):
+            raise RuntimeError(f"start: the PDF dropped {w.name.text()!r} {titles} {w.text.toPlainText()!r}")
+        shoot(w, os.path.join(out, "planner-start-dropped.png"))
+        bits = os.path.join(tempfile.mkdtemp(), "bits.pdf")
+        writer = QtGui.QPdfWriter(bits)
+        writer.setResolution(96)
+        painter = QtGui.QPainter(writer)
+        painter.drawText(40, 60, "Mon 10/26 Heart failure")  # no font: Qt reads it back a letter a line
+        painter.end()
+        w = SW.StartWindow(None, decks, SOps())
+        w._load_file(bits)
+        if SW.pdf_text(bits) and not R.scrambled(SW.pdf_text(bits)):
+            pass  # this Qt reads it whole: nothing to say
+        elif w.sessions or "pieces" not in w.said.text():
+            raise RuntimeError(f"start: a PDF read in pieces: {w.said.text()!r}")
+        w = SW.StartWindow(None, decks, SOps())
+        sheet = os.path.join(tempfile.mkdtemp(), "block.xlsx")
+        with open(sheet, "wb") as f:
+            f.write(b"PK")
+        w._load_file(sheet)
+        if "CSV" not in w.said.text() or w.text.toPlainText():
+            raise RuntimeError(f"start: a sheet: {w.said.text()!r}")
 
     def planner():
         """Labs (due_crew/planner, docs/planner.md): the plan window an author

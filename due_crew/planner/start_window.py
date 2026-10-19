@@ -11,9 +11,11 @@ Names are the calendar's and the deck's: plain text everywhere."""
 
 import json
 
+import os
+
 from aqt.qt import (
-    QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
-    QPlainTextEdit, QPushButton, Qt, QTreeWidget, QTreeWidgetItem, QVBoxLayout,
+    QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout, QHeaderView, QLabel,
+    QLineEdit, QPlainTextEdit, QPushButton, Qt, QTreeWidget, QTreeWidgetItem, QVBoxLayout,
 )
 
 from ..ui import ask_text, attach_alive, confirm, esc, heading, note, role
@@ -24,9 +26,76 @@ from . import model as M
 from . import reading as R
 
 ROLE = Qt.ItemDataRole.UserRole
-EXAMPLE = ("BLOCK 2 · Cardiovascular\nWEEK 1\nMon 10/26  LEC  Heart failure\n"
+EXAMPLE = ("Paste the block's calendar here, or drop its file on this box: " + R.KINDS_READ + ".\n\n"
+           "BLOCK 2 · Cardiovascular\nWEEK 1\nMon 10/26  LEC  Heart failure\n"
            "    SLG 1  Define systolic and diastolic heart failure\n    Watch: heart failure 1-2\n"
            "Tue 10/27  LEC  Heart failure drugs\nFri 10/30  QUIZ  Cardio quiz 1")
+FILES = "Calendars (*.ics *.pdf *.docx *.csv *.tsv *.txt *.md);;Any file (*)"
+
+
+class DropBox(QPlainTextEdit):
+    """The calendar's box: paste it in, or drop its file on it (one file, on
+    this computer; on_file(path) reads it). While a file is over it, it
+    says so in the accent."""
+
+    def __init__(self, on_file):
+        super().__init__()
+        self.on_file = on_file
+        self.setProperty("dc", "drop")
+        self.setAcceptDrops(True)
+
+    @staticmethod
+    def path_of(mime):
+        """The one local file a drag carries, else None (text drops as text)."""
+        urls = [u for u in mime.urls() if u.isLocalFile()] if mime is not None and mime.hasUrls() else []
+        return urls[0].toLocalFile() if len(urls) == 1 else None
+
+    def _over(self, on):
+        self.setProperty("over", bool(on))
+        self.style().unpolish(self)
+        self.style().polish(self)
+
+    def dragEnterEvent(self, e):
+        if self.path_of(e.mimeData()):
+            e.acceptProposedAction()
+            self._over(True)
+        else:
+            super().dragEnterEvent(e)
+
+    def dragMoveEvent(self, e):
+        if self.path_of(e.mimeData()):
+            e.acceptProposedAction()
+        else:
+            super().dragMoveEvent(e)
+
+    def dragLeaveEvent(self, e):
+        self._over(False)
+        super().dragLeaveEvent(e)
+
+    def dropEvent(self, e):
+        path = self.path_of(e.mimeData())
+        self._over(False)
+        if path:
+            e.acceptProposedAction()
+            self.on_file(path)
+        else:
+            super().dropEvent(e)
+
+
+def pdf_text(path):
+    """A PDF's text, page by page (Qt's own reader), or None when this Anki's
+    Qt has none or the file won't open."""
+    try:
+        from PyQt6.QtPdf import QPdfDocument
+    except ImportError:
+        return None
+    doc = QPdfDocument(None)
+    try:
+        if doc.load(path) != QPdfDocument.Error.None_:
+            return None
+        return "\n".join(doc.getAllText(n).text() for n in range(min(doc.pageCount(), 60)))
+    finally:
+        doc.close()
 
 
 def _plain(text="", muted=False):
@@ -51,6 +120,7 @@ class StartWindow(QDialog):
         self.scopes = {}     # event's session index -> ([covered index], [(said, who)])
         self.asked = []      # what the stand-in did: [(job, request kwargs)], for What Claude would get
         self.made = None     # a plan made whose dates didn't save: Make tries them again, on it
+        self.file = ""       # the file the box's text came from, by name
         self._named = ""     # the name a reading gave (a name typed in stays)
         attach_alive(self)
         self.setWindowTitle("New plan from a calendar")
@@ -69,16 +139,19 @@ class StartWindow(QDialog):
             self.deck.addItem(f"{name} · {n:,} cards", did)
         form.addRow("Deck", self.deck)
         root.addLayout(form)
-        self.text = QPlainTextEdit()
+        self.text = DropBox(self._load_file)
         self.text.setPlaceholderText(EXAMPLE)
         self.text.setTabChangesFocus(True)
-        self.text.setMinimumHeight(110)
+        self.text.setMinimumHeight(130)
         root.addWidget(self.text)
         row = QHBoxLayout()
         self.stand_in = QCheckBox("Let Claude’s stand-in fill what plain rules leave")
         self.stand_in.setChecked(True)
         row.addWidget(self.stand_in)
         row.addStretch(1)
+        self.file_btn = QPushButton("Choose a file…")
+        self.file_btn.clicked.connect(self._choose)
+        row.addWidget(self.file_btn)
         self.read_btn = QPushButton("Read it")
         self.read_btn.clicked.connect(self._read)
         row.addWidget(self.read_btn)
@@ -117,6 +190,39 @@ class StartWindow(QDialog):
         self.name.textChanged.connect(lambda _t: self._buttons())
         self._buttons()
 
+    # ---- a file ----
+
+    def _choose(self):
+        path, _f = QFileDialog.getOpenFileName(self, "A block's calendar", "", FILES)
+        if path:
+            self._load_file(path)
+
+    def _load_file(self, path):
+        """A calendar's file into the box, then read: on this computer only."""
+        name = os.path.basename(str(path))
+        try:
+            if os.path.getsize(path) > R.FILE_MAX:
+                text, why = "", "That file is too big to be a calendar."
+            elif name.lower().endswith(".pdf"):
+                text = pdf_text(path)
+                if not text or not text.strip():
+                    text, why = "", "That PDF's text couldn't be read here. Copy its text in instead."
+                elif R.scrambled(text):
+                    text, why = "", "That PDF's text came out in pieces. Copy its text in instead."
+                else:
+                    text, why = text.replace("\r\n", "\n").replace("\r", "\n")[:R.TEXT_MAX], ""
+            else:
+                with open(path, "rb") as f:
+                    text, why = R.from_file(name, f.read())
+        except OSError:
+            text, why = "", "That file couldn't be opened."
+        if why:
+            self.said.setText(why)
+            return
+        self.file = name
+        self.text.setPlainText(text)
+        self._read()
+
     # ---- reading ----
 
     def _read(self):
@@ -134,7 +240,7 @@ class StartWindow(QDialog):
             self.asked.append(("calendar", {"text": text, "today": today}))
         self.sessions = R.number_weeks(sessions)
         if self.sessions and (not self.name.text().strip() or self.name.text() == self._named):
-            self._named = R.name_from(text)
+            self._named = R.name_from(text) or R.file_name(self.file)
             self.name.setText(self._named)
         plain = {}
         for i, s in enumerate(self.sessions):

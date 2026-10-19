@@ -136,7 +136,17 @@ one with the most of them, or the one picked.
 
 Tools › Due Crew › New plan from a calendar (labs), the admin's account
 only, as the plan window (it makes a plan on the server). Paste the
-block's calendar, pick the deck, **Read it**:
+block's calendar, or drop its file on the box (dashed, and in the accent
+while a file is over it; or **Choose a file…**), pick the deck, **Read
+it** (a dropped file reads at once):
+
+- **Its file** (`reading.from_file`, read on this computer, never sent): a
+  calendar export (.ics: each event's day and title, its description's
+  lines under it, the calendar's name first), a PDF (Qt's own reader; one
+  whose text comes out in pieces says so), a Word file (.docx: its
+  paragraphs, a list item as an objective, its tables' rows cell by cell),
+  a CSV or a text file. A sheet says to save it as CSV; anything else, to
+  copy its text in. Up to 5 MB.
 
 - **The calendar** (`reading.read_calendar`, plain rules): a line that
   starts with a date ("Mon 10/26", "Oct 26", "26 October 2026",
@@ -145,8 +155,10 @@ block's calendar, pick the deck, **Read it**:
   …"); "Week 2" numbers the ones after it (else weeks count from the first
   session's Monday); breaks and holidays are left out. A quiz or an exam
   becomes one of the plan's events, every other session a date on its
-  day, named as the calendar names it. The plan's name is the first line
-  that names something and holds no date.
+  day, named as the calendar names it (a room or hall at a title's end
+  left off; a kind column, "LEC" or "Lecture:", too, but "Exam 1" stays
+  whole). The plan's name is the calendar's head, the first line before
+  its sessions that holds no date, else the file's name.
 - **Its tags** (`reading.candidates`/`pick`): the deck's own tags its
   words name (tag names only: card text is never read), the title counting
   most; ticked where plain rules are sure (the title names it, or three of

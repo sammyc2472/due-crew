@@ -246,6 +246,9 @@ QLineEdit:hover, QPlainTextEdit:hover, QTextEdit:hover, QAbstractSpinBox:hover, 
 QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus {{ border: 2px solid {accent}; padding: 5px 9px; }}
 QLineEdit:disabled, QPlainTextEdit:disabled, QTextEdit:disabled, QAbstractSpinBox:disabled, QComboBox:disabled {{ color: {faded}; border-color: {line}; background: {bg}; }}
 QPlainTextEdit, QTextEdit {{ padding: 6px 8px; }}
+QPlainTextEdit[dc="drop"] {{ border: 2px dashed {edge-2}; padding: 5px 7px; }}
+QPlainTextEdit[dc="drop"]:focus {{ border: 2px solid {accent}; }}
+QPlainTextEdit[dc="drop"][over="true"] {{ border: 2px dashed {accent}; background: {you-bg}; }}
 
 QComboBox {{ padding: 6px 30px 6px 10px; combobox-popup: 0; }}
 QComboBox:focus, QComboBox:on {{ border: 2px solid {accent}; padding: 5px 29px 5px 9px; }}

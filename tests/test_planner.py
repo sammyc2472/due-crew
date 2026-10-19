@@ -657,6 +657,74 @@ def test_reading():
           sc("Exam 1 covers week 1 and week 2's renal lectures"))
 
 
+def _docx_bytes(paragraphs, rows, listed=()):
+    """A Word file as Word writes one, the parts the reader reads: paragraphs
+    (a list item numbered), then a table."""
+    import io
+    import zipfile
+    from xml.sax.saxutils import escape
+    w = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+    para = lambda t, li=False: ("<w:p>" + ("<w:pPr><w:numPr><w:ilvl w:val=\"0\"/></w:numPr></w:pPr>" if li else "")
+                                + f"<w:r><w:t>{escape(t)}</w:t></w:r></w:p>")
+    body = "".join(para(t, t in listed) for t in paragraphs)
+    body += "<w:tbl>" + "".join("<w:tr>" + "".join(f"<w:tc>{para(c)}</w:tc>" for c in row) + "</w:tr>" for row in rows) + "</w:tbl>"
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("[Content_Types].xml", "<Types/>")
+        z.writestr("word/document.xml", f'<?xml version="1.0"?><w:document {w}><w:body>{body}</w:body></w:document>')
+    return buf.getvalue()
+
+
+def test_calendar_files():
+    from due_crew.planner import reading as RD
+    ics = ("BEGIN:VCALENDAR\r\nX-WR-CALNAME:MS2 Block 2\r\nBEGIN:VEVENT\r\nDTSTART;TZID=America/New_York:20261027T090000\r\n"
+           "SUMMARY:LEC: HFrEF\r\nEND:VEVENT\r\nBEGIN:VEVENT\r\nDTSTART;VALUE=DATE:20261026\r\nSUMMARY:Heart failure\\, "
+           "part 1\r\nDESCRIPTION:SLG 1 Define systolic and diastolic heart failure\\nWatch: heart fa\r\n ilure 1-2\r\n"
+           "END:VEVENT\r\nBEGIN:VEVENT\r\nDTSTART:20261030T130000Z\r\nSUMMARY:Cardio quiz 1\r\nEND:VEVENT\r\n"
+           "BEGIN:VEVENT\r\nDTSTART;VALUE=DATE:20261028\r\nSUMMARY:Fall break\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
+    text, why = RD.from_file("block2.ics", ics.encode())
+    ss = RD.read_calendar(text, CAL_TODAY)
+    check("files: a calendar export's events, by date, its name first, a description's lines under its event",
+          not why and RD.name_from(text) == "MS2 Block 2"
+          and [(x["date"], x["kind"], x["title"]) for x in ss] == [("2026-10-26", "lecture", "Heart failure, part 1"),
+                                                                    ("2026-10-27", "lecture", "HFrEF"),
+                                                                    ("2026-10-30", "quiz", "Cardio quiz 1")]
+          and ss[0]["objectives"][0]["label"] == "SLG 1" and ss[0]["listed"] == [{"how": "watch", "text": "heart failure 1-2"}],
+          (text, ss))
+    doc = _docx_bytes(["MS2 Block 2 · Cardiovascular", "Mon 10/26 LEC Heart failure",
+                       "Define systolic and diastolic heart failure"],
+                      [["Date", "Session", "Room"], ["Tue 10/27", "HFrEF", "Room B2"], ["Fri 10/30", "Cardio quiz 1", "B2"]],
+                      listed=("Define systolic and diastolic heart failure",))
+    text, why = RD.from_file("Block 2.docx", doc)
+    ss = RD.read_calendar(text, CAL_TODAY)
+    check("files: a Word file's paragraphs and its table's rows (a list item an objective, not a room)",
+          not why and [(x["date"], x["title"]) for x in ss] == [("2026-10-26", "Heart failure"), ("2026-10-27", "HFrEF"),
+                                                                 ("2026-10-30", "Cardio quiz 1")]
+          and ss[0]["objectives"] == [{"label": "", "text": "Define systolic and diastolic heart failure"}], (text, ss))
+    text, why = RD.from_file("block.csv", b'Date,Session,Where\n"Monday, October 26, 2026",Heart failure,Room B2\n'
+                                          b'10/27/2026,HFrEF,B2\n')
+    check("files: a sheet saved as CSV, its rows a table",
+          not why and [(x["date"], x["title"]) for x in RD.read_calendar(text, CAL_TODAY)]
+          == [("2026-10-26", "Heart failure"), ("2026-10-27", "HFrEF")], text)
+    text, why = RD.from_file("notes.txt", "Mon 10/26  Heart failure\r\nTue 10/27  HFrEF".encode("cp1252"))
+    check("files: text as it is, any line ending", not why and text == "Mon 10/26  Heart failure\nTue 10/27  HFrEF")
+    said = {n: RD.from_file(n, b"x")[1] for n in ("block.xlsx", "block.pages", "photo.png")}
+    check("files: what it can't read says what to do instead",
+          "CSV" in said["block.xlsx"] and ".docx" in said["block.pages"] and ".ics" in said["photo.png"], said)
+    check("files: a broken Word file, an empty one, one too big, each said",
+          "couldn't be read" in RD.from_file("x.docx", b"not a zip")[1] and "no text" in RD.from_file("x.txt", b"  \n")[1]
+          and "too big" in RD.from_file("x.txt", b"a" * (RD.FILE_MAX + 1))[1])
+    check("files: the file's name names a plan whose calendar names none",
+          RD.file_name("/Users/sam/Downloads/MS2_Block_2 calendar.pdf") == "MS2 Block 2 calendar"
+          and RD.file_name("C:\\x\\Block 3.ics") == "Block 3")
+    check("files: a PDF's table, its cells run together, keeps the room out of the title",
+          [x["title"] for x in RD.read_calendar("Mon 11/2 Diuretics Room B2\nFri 11/6 Exam 1 Hall A", CAL_TODAY)]
+          == ["Diuretics", "Exam 1"])
+    check("reading: a kind column comes off a title, a title that starts with its kind keeps it",
+          [RD.clean_title(t) for t in ("LEC  Heart failure", "Lecture: Heart failure", "Exam 1", "Lab safety", "QUIZ Cardio quiz 1")]
+          == ["Heart failure", "Heart failure", "Exam 1", "Lab safety", "Cardio quiz 1"])
+
+
 def test_matching():
     from due_crew.planner import reading as RD
     col = cal_collection()

@@ -14,9 +14,13 @@ the word matching from its find.py, the way the builder's Suggest matches
 a date's name: every word of a term in the tag's path, one in its last part.
 """
 
+import csv
 import datetime as dt
+import io
 import re
 import unicodedata
+import zipfile
+from xml.etree import ElementTree
 
 from . import model as M
 
@@ -112,8 +116,10 @@ def clean_title(rest):
     t = _TIME.sub("", str(rest or ""))
     t = re.sub(r"^\s*[-–:|]\s*", "", t)
     word = _TAGGY.match(t)
-    t = t[word.end():] if word else t
+    if word and (word.group(1).isupper() or re.match(r"\s*[:.–-]", t[word.end(1):])):
+        t = t[word.end():]  # a kind column ("LEC", "Lecture:"); "Exam 1" and "Lab safety" are titles
     t = re.sub(r"\s*\((?:dr|prof)\.?[^)]*\)\s*$", "", t, flags=re.I)  # "(Dr. Lee)"
+    t = re.sub(r"\s+(?:room|rm\.?|hall|bldg\.?|building)\s+\S+$", "", t, flags=re.I)  # "Room B2": a PDF's cells run together
     return re.sub(r"\s+", " ", t).strip(" -|:–")[:TITLE_MAX]
 
 
@@ -173,14 +179,15 @@ def read_calendar(text, today, day_first=False):
         line = raw.rstrip()
         if not line.strip():
             continue
-        d, rest = parse_date(line, today, day_first)
-        said = None
-        if d:
-            title, said = clean_title(rest), _said_kind(rest)
+        d, said, row = None, None, None
+        if _CELLS.search(line.strip()):
+            row = _row(line, today, day_first)  # cells (a tab, a bar, wide spaces): a table's row, the date a cell
+        if row:
+            d, title, said = row
         else:
-            row = _row(line, today, day_first)
-            if row:
-                d, title, said = row
+            d, rest = parse_date(line, today, day_first)
+            if d:
+                title, said = clean_title(rest), _said_kind(rest)
         if d:
             if not title or _SKIP.search(title):
                 out.append(None)  # a date with nothing on it ends the last session's lines
@@ -256,6 +263,162 @@ def number_weeks(sessions):
         if not s.get("week"):
             s["week"] = (dt.date.fromisoformat(s["date"]) - monday).days // 7 + 1
     return sessions
+
+
+# ---- a calendar's file, dropped on the box ----
+
+FILE_MAX = 5 * 1024 * 1024  # a calendar is never this big; a file this big isn't one
+TEXT_MAX = 200_000
+KINDS_READ = "a calendar export (.ics), a PDF, a Word file (.docx), a CSV or a text file"
+
+
+def from_file(name, data):
+    """A dropped file's calendar as text the box reads: (text, "") or ("",
+    why not). A calendar export's events as dated lines, a Word file's
+    paragraphs and table rows (cells by tabs), a CSV's rows, text as it is.
+    A PDF is the window's (Qt reads it). Pure; nothing leaves the computer."""
+    ext = str(name or "").lower().rsplit(".", 1)[-1] if "." in str(name or "") else ""
+    if len(data or b"") > FILE_MAX:
+        return "", "That file is too big to be a calendar."
+    try:
+        if ext == "ics":
+            text = _ics(_decode(data))
+        elif ext == "docx":
+            text = _docx(data)
+        elif ext in ("csv", "tsv"):
+            text = _csv(_decode(data), "\t" if ext == "tsv" else None)
+        elif ext in ("txt", "text", "md", ""):
+            text = _decode(data)
+        elif ext in ("xlsx", "xls", "numbers", "ods"):
+            return "", "Save the sheet as CSV (File › Save as or Download) and drop that, or copy its cells in."
+        elif ext in ("doc", "pages", "rtf", "odt"):
+            return "", "Save it as a Word file (.docx) or a PDF and drop that, or copy its text in."
+        else:
+            return "", f"Due Crew reads {KINDS_READ}. Copy this one's text in instead."
+    except (zipfile.BadZipFile, KeyError, ElementTree.ParseError, csv.Error, UnicodeError, ValueError):
+        return "", "That file couldn't be read. Copy its text in instead."
+    text = text.replace("\r\n", "\n").replace("\r", "\n")[:TEXT_MAX]
+    return (text, "") if text.strip() else ("", "There's no text in that file.")
+
+
+def _decode(data):
+    for enc in ("utf-8-sig", "cp1252"):
+        try:
+            return bytes(data or b"").decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return bytes(data or b"").decode("latin-1")
+
+
+def _ics_unescape(v):
+    return re.sub(r"\\([\\;,nN])", lambda m: "\n" if m.group(1) in "nN" else m.group(1), v)
+
+
+def _ics(text):
+    """A calendar export's events as "2026-10-26  Heart failure" lines, by
+    date, each description's lines under it; its name first."""
+    lines = []
+    for raw in text.replace("\r\n", "\n").split("\n"):
+        if raw[:1] in (" ", "\t") and lines:
+            lines[-1] += raw[1:]  # a folded line goes on the one before
+        else:
+            lines.append(raw)
+    name, events, ev = "", [], None
+    for line in lines:
+        key, _, value = line.partition(":")
+        prop = key.split(";", 1)[0].upper()
+        if prop == "BEGIN" and value.strip().upper() == "VEVENT":
+            ev = {}
+        elif prop == "END" and value.strip().upper() == "VEVENT":
+            if ev and ev.get("day") and ev.get("title"):
+                events.append(ev)
+            ev = None
+        elif prop == "X-WR-CALNAME" and ev is None:
+            name = _ics_unescape(value).strip()
+        elif ev is not None and prop == "DTSTART":
+            m = re.match(r"(\d{4})(\d{2})(\d{2})", value.strip())
+            if m:
+                ev["day"] = f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+        elif ev is not None and prop == "SUMMARY":
+            ev["title"] = " ".join(_ics_unescape(value).split())
+        elif ev is not None and prop == "DESCRIPTION":
+            ev["notes"] = [x.strip() for x in _ics_unescape(value).split("\n") if x.strip()][:20]
+    out = [name] if name else []
+    for ev in sorted(events, key=lambda e: e["day"]):
+        out.append(f"{ev['day']}  {ev['title']}")
+        out += [f"    {x}" for x in ev.get("notes") or []]
+    return "\n".join(out)
+
+
+_W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+
+def _docx_text(p):
+    """A paragraph's words: its runs, a tab as a tab, a break as a space."""
+    out = []
+    for el in p.iter():
+        if el.tag == _W + "t":
+            out.append(el.text or "")
+        elif el.tag == _W + "tab":
+            out.append("\t")
+        elif el.tag in (_W + "br", _W + "cr"):
+            out.append(" ")
+    return "".join(out)
+
+
+def _docx(data):
+    """A Word file's paragraphs as lines (a list item as "- …", so it reads as
+    an objective) and its tables' rows with their cells by tabs."""
+    z = zipfile.ZipFile(io.BytesIO(data))
+    info = z.getinfo("word/document.xml")
+    if info.file_size > 40 * 1024 * 1024:
+        raise ValueError("too big")
+    body = ElementTree.fromstring(z.read(info)).find(_W + "body")
+    out = []
+
+    def walk(el):
+        for child in el:
+            if child.tag == _W + "p":
+                t = _docx_text(child)
+                listed = child.find(f"{_W}pPr/{_W}numPr") is not None
+                out.append(("    - " + t.strip()) if listed and t.strip() else t)
+            elif child.tag == _W + "tbl":
+                for tr in child.iter(_W + "tr"):
+                    cells = [" ".join(_docx_text(p).strip() for p in tc.iter(_W + "p")).strip()
+                             for tc in tr.findall(_W + "tc")]
+                    if any(cells):
+                        out.append("\t".join(cells))
+            elif child.tag == _W + "sdt":
+                content = child.find(_W + "sdtContent")
+                if content is not None:
+                    walk(content)
+    walk(body if body is not None else [])
+    return "\n".join(out)
+
+
+def _csv(text, delimiter=None):
+    """A sheet's rows, cells by tabs (a table the reader reads)."""
+    if delimiter is None:
+        try:
+            delimiter = csv.Sniffer().sniff(text[:4096], delimiters=",;\t").delimiter
+        except csv.Error:
+            delimiter = ","
+    rows = csv.reader(io.StringIO(text), delimiter=delimiter)
+    return "\n".join("\t".join(c.strip() for c in row) for row in rows if any(c.strip() for c in row))
+
+
+def scrambled(text):
+    """True when a PDF's text came out in pieces (most lines a letter or
+    two), as some PDFs' do: better said than read."""
+    lines = [x.strip() for x in str(text or "").splitlines() if x.strip()]
+    return bool(lines) and sum(1 for x in lines if len(x) <= 3) > len(lines) / 2
+
+
+def file_name(name):
+    """A dropped file's name as a plan's ("MS2 Block 2 calendar.pdf" → "MS2
+    Block 2 calendar"), for a calendar whose head names nothing."""
+    stem = re.sub(r"\.[A-Za-z0-9]{1,5}$", "", str(name or "").replace("\\", "/").rsplit("/", 1)[-1])
+    return " ".join(re.sub(r"[_]+", " ", stem).split())[:60]
 
 
 # ---- words ----
