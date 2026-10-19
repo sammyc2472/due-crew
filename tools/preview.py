@@ -450,7 +450,7 @@ _KNOW.update({c: None for c in range(1000, 1080)})
 _STARTED = _TM.started_tiles(_FIRST, _TAGS, _KNOW, set(range(1180)), "2026-10-18", "big::#systems")
 sections.append("<h3>3.9.2: the map by when you started them, and the exam's scope in its box</h3>" + board.render(
     DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
-    you=_YOU("insights", insights={"decks": _DECKS, "did": 10, "exam": "2026-10-14", "plan": None,
+    you=_YOU("insights", insights={"decks": _DECKS, "did": 10, "exam": "2026-10-13", "plan": None,
                                    "view": dict(_INS, rows=[], ahead=None, behind=0, fsrs=None, map=_STARTED, map_by="right",
                                                 aim={"day": "2026-10-13", "name": "Your exam", "in": 6, "scoped": False, "kind": "exam",
                                                      "since": "2026-09-05", "since_why": "last", "since_n": 1240, "since_pick": ""},

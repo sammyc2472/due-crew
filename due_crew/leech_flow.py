@@ -17,6 +17,7 @@ from my own copy (escaped by the board). Who has it down and their tips
 come back with each sync already (cards.py's stuck list), no new request.
 Main thread."""
 
+import datetime
 import html
 import re
 import traceback
@@ -55,6 +56,15 @@ def next_is_leech(lapses, fails, every=None):
     every = max(1, -(-fails // 2)) if every is None else max(1, int(every))
     n = int(lapses) + 1
     return n >= fails and (n - fails) % every == 0
+
+
+def anki_day(ms, cutoff):
+    """The Anki day (the person's rollover, not midnight) of a revlog time,
+    as an ISO date; "" without one. Counted in dates, as stats' day_label."""
+    if not ms or not cutoff:
+        return ""
+    back = max(0, (int(cutoff) * 1000 - int(ms) - 1) // 86400000)
+    return (datetime.date.fromtimestamp(int(cutoff)) - datetime.timedelta(days=back + 1)).isoformat()
 
 
 _CLOZE = re.compile(r"\{\{c\d+::(.*?)(?:::(.*?))?\}\}", re.S)
@@ -146,6 +156,7 @@ def view(col, did, deck, since=None):
     since: an exam's scope (a started-since day, ms), for "on your exam"."""
     out = _out()
     sday = int(getattr(col.sched, "today", 0) or 0)
+    cut = int(getattr(col.sched, "day_cutoff", 0) or 0)
     gone_ids = [int(c) for c in col.db.list(
         f"SELECT c.id FROM cards c JOIN notes n ON n.id = c.nid WHERE c.id IN ({deck}) "
         f"AND c.queue = -1 AND c.lapses > 0 AND (' ' || lower(n.tags) || ' ') LIKE '% leech %'") if int(c) not in out]
@@ -172,7 +183,8 @@ def view(col, did, deck, since=None):
         knows = [names[u][0].split(" ")[0] for u in info.get("knows") or [] if u in names]
         c = {"cid": int(cid), "front": front(sfld), "topic": topic(tags), "lapses": int(lapses), "at": last,
              "secs": int(round(ms / 1000.0 / n)) if n else 0, "tip": tips[:3], "knows": knows[:3],
-             "exam": bool(since and first >= since), "susp": int(queue) == -1, "kept": int(cid) in kept_ids}
+             "exam": bool(since and first >= since), "susp": int(queue) == -1, "kept": int(cid) in kept_ids,
+             "day": anki_day(last, cut)}
         if c["susp"]:
             gone.append(c)
             continue

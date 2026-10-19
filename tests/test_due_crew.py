@@ -17108,6 +17108,12 @@ def test_leeches_audit_v392():
     check("leech: a miss away at Anki's own steps: 5 → 4, 7, 10, 13; 7 → 6, 10, 14; 3 → 2, 4, 6; 8 → 7, 11, 15; 1 → every one",
           near_at(5) == [4, 7, 10, 13] and near_at(7) == [6, 10, 14] and near_at(3)[:3] == [2, 4, 6]
           and near_at(8) == [7, 11, 15] and near_at(1) == list(range(16)), (near_at(5), near_at(7), near_at(3)))
+    cut = int(datetime.datetime(2026, 10, 19, 4, 0).timestamp())  # rollover at 4: today's Anki day is 18 Oct
+    ms = lambda d, h, m=0: int(datetime.datetime(2026, 10, d, h, m).timestamp() * 1000)  # noqa: E731
+    check("leech: its last day is my Anki day: 1:30 after midnight is still the day before; 3:59 too; 4:00 a new one",
+          (LF.anki_day(ms(19, 1, 30), cut), LF.anki_day(ms(18, 5), cut), LF.anki_day(ms(18, 3, 59), cut), LF.anki_day(ms(18, 4), cut))
+          == ("2026-10-18", "2026-10-18", "2026-10-17", "2026-10-18") and LF.anki_day(0, cut) == "",
+          (LF.anki_day(ms(19, 1, 30), cut), LF.anki_day(ms(18, 3, 59), cut)))
     conn = sqlite3.connect(":memory:")
     fakes.make_collection(conn)
     cut = fakes.day_cutoff_for(TODAY)
@@ -17456,6 +17462,10 @@ def test_scope_map_and_words_392():
     check("words: a tile's % and its cards; the key says what the % is and what the bar is",
           "<b>66%<small> &middot; 190</small></b>" in mh and "<b>new<small> &middot; 80</small></b>" in mh
           and "% you&rsquo;d recall now: " in mh and '<i class="sw bar"></i>started' in mh, mh)
+    whole = board._ins_map(10, [{"key": "a", "name": "Week one", "n": 50, "know": 80, "started": 50, "find": {"tags": ["A"]}},
+                                {"key": "b", "name": "Week two", "n": 30, "know": 70, "started": 30, "find": {"tags": ["B"]}}], "right")
+    check("words: the key names the bar only when a tile shows one (by when I started them, none does)",
+          'class="tmb"' not in whole and "sw bar" not in whole and "started" not in whole.split('class="ikey"')[1].split("</span></div>")[0], whole)
     head = board._insights_html(10, {"target": 90, "right": {"now": [86, 100], "before": [0, 0], "days": []},
                                      "aim": {"day": "2026-10-20", "in": 2}, "hero": [1, 2, 3]})
     check("words: right beside what Anki aims for; Study 3 early (they aren't due yet)",

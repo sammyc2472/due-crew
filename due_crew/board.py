@@ -954,7 +954,8 @@ def _css(cfg):
     #due-crew .ik {{ display: flex; flex-wrap: wrap; gap: 4px 0; align-items: baseline; font-size: 10.5px; font-weight: 700;
       letter-spacing: .06em; text-transform: uppercase; color: var(--dc-muted); margin-bottom: 4px; }}
     #due-crew .ik > span {{ text-transform: none; letter-spacing: 0; color: var(--dc-ink); font-weight: 600; }}
-    #due-crew .ik .ikey {{ margin-left: auto; padding-left: 12px; color: var(--dc-muted); font-weight: 500; display: inline-flex; gap: 5px; align-items: center; }}
+    #due-crew .ik .ikey {{ margin-left: auto; padding-left: 12px; color: var(--dc-muted); font-weight: 500; display: inline-flex; gap: 2px 5px; align-items: center;
+      flex-wrap: wrap; white-space: nowrap; }}  /* 3.9.2: narrow, it wraps between its parts, never inside one */
     #due-crew .sw {{ display: inline-block; width: 12px; height: 7px; border-radius: 2px; margin-left: 6px; }}
     #due-crew .sw.st {{ background: var(--dc-hours); }}
     #due-crew .sw.fg {{ background: color-mix(in srgb, var(--dc-hours) 40%, var(--dc-bg)); }}
@@ -2335,8 +2336,8 @@ def _ins_leech_row(did, c):
     bits = [e(str(c["topic"]))] if c.get("topic") else []
     bits.append(f'missed {int(c["lapses"])} times')
     if c.get("susp"):
-        if c.get("at"):
-            bits.append("since " + e(_short_day(_dt.datetime.fromtimestamp(int(c["at"]) / 1000).date().isoformat())))
+        if c.get("day") or c.get("at"):  # my Anki day (its rollover), as every day on the board
+            bits.append("since " + e(_short_day(c.get("day") or _dt.datetime.fromtimestamp(int(c["at"]) / 1000).date().isoformat())))
         if c.get("exam"):
             bits.append('<b class="ex">on your exam</b>')
     else:
@@ -2563,7 +2564,7 @@ def _ins_map(did, tiles, by, at=(), ways=()):
     trail, cur = map_level(tiles, at)
     big = max(int(t["n"]) for t in cur) or 1
     how = "you’d remember now (FSRS)" if by == "fsrs" else "right in their reviews these 4 weeks"  # escaped with the tip
-    out, fresh, soon_any = "", False, False
+    out, fresh, soon_any, bars = "", False, False, False
     for i, t in enumerate(cur):
         n, k, st = int(t["n"]), t.get("know"), int(t.get("started") or 0)
         soon = k is None and st > 0  # 3.9.2's audit: started, none reviewed yet: too soon to say
@@ -2576,6 +2577,7 @@ def _ins_map(did, tiles, by, at=(), ways=()):
         tip = f'{t["name"]}: {said}. ' + ("Open it." if t.get("kids") else "Browse them.")
         more = '<i aria-hidden="true">&rsaquo;</i>' if t.get("kids") else ""
         bar = (f'<i class="tmb" style="width:{100 * st / n:.0f}%"></i>' if k is not None and 0 < st < n else "")
+        bars = bars or bool(bar)
         out += (f'<a class="tm {"sn" if k is None else f"s{map_shade(int(k))}"}" href="#" '
                 f'style="flex:{n} 1 {70 + int(150 * n / big)}px" title="{e(tip)}" '
                 f'onclick="{_pycmd(f"insmap:{did}:{i}")}"><span>{e(str(t["name"]))}{more}</span>'
@@ -2594,8 +2596,9 @@ def _ins_map(did, tiles, by, at=(), ways=()):
     # 3.9.2 (the students: what's the %, what's the bar?): said in the key; a tile's cards beside its %
     pct = "% you&rsquo;d recall now" if by == "fsrs" else "% right, 4 weeks"
     grey = ", ".join(w for w, on in (("new", fresh), ("too soon", soon_any)) if on)
+    # the key names what the map shows: the grey only with a grey tile, the bar only with a tile part started
     key = (f'{pct}: <i class="sw s0"></i>under 70 <i class="sw s3"></i>90+' + (f' <i class="sw sn"></i>{grey}' if grey else "")
-           + ' &middot; <i class="sw bar"></i>started')
+           + (' &middot; <i class="sw bar"></i>started' if bars else ""))
     ways = [w for w in ways or () if isinstance(w, dict)]
     if len(ways) > 1:  # 3.8.0: another way to split it, this deck's, on this computer
         opts = "".join(f'<option value="{i}"{" selected" if w.get("on") else ""}>{e(str(w.get("name") or "?"))}</option>'
