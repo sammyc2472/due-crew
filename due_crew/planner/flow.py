@@ -15,6 +15,7 @@ from aqt.utils import tooltip
 from .. import app, plan_flow
 from .. import plans as P
 from ..app import _bg, cfg, client
+from ..backend.shapes import TransportError
 from . import actions, enabled, qids, remote
 
 _admin = {}      # uid -> the server's answer, asked once an Anki session
@@ -44,10 +45,10 @@ def _raise(key):
 
 # ---- the plan window ----
 
-def open_plans():
+def open_plans(select=None):
     """Tools › Due Crew › Plan window (labs): the admin's account only (the
     server says), signed in, a collection open. Two requests on the click:
-    who I am (once a session) and my plans."""
+    who I am (once a session) and my plans. select: a plan's id to start on."""
     if not enabled() or not mw.col or _raise("plans"):
         return
     if not plan_flow._signed_in():
@@ -72,13 +73,13 @@ def open_plans():
         if not ok:
             tooltip("The plan window is for the admin’s account while it’s in labs.")
             return
-        show_plans(plans)
+        show_plans(plans, select)
     _bg(job, done)
 
 
-def show_plans(plans):
+def show_plans(plans, select=None):
     from .window import PlanWindow
-    w = PlanWindow(mw, mw.col, plans, Ops())
+    w = PlanWindow(mw, mw.col, plans, Ops(), select=select)
     _gone_on_close(w)
     _open["plans"] = w
     w.show()
@@ -186,6 +187,101 @@ def study_cards(idx, cids, name):
         mw.col.decks.select(did)
         mw.moveToState("overview")
     return True
+
+
+# ---- a plan from a block's calendar (claude.py's jobs, a stand-in for now) ----
+
+def open_start():
+    """Tools › Due Crew › New plan from a calendar (labs): the admin's
+    account only, as the plan window (it makes a plan on the server)."""
+    if not enabled() or not mw.col or _raise("start"):
+        return
+    if not plan_flow._signed_in():
+        return
+    cl, gen = client(), app.generation
+    uid = cl.user_id
+
+    def done(ok):
+        if gen != app.generation or not mw.col:
+            return
+        if ok is None:
+            tooltip("Due Crew couldn't be reached. Try again in a minute.")
+            return
+        _admin[uid] = ok
+        if not ok:
+            tooltip("A plan from a calendar is for the admin’s account while it’s in labs.")
+            return
+        show_start()
+    known = _admin.get(uid)
+    if known is not None:
+        done(known)
+        return
+    _bg(lambda: remote.is_admin(cl), done)
+
+
+def top_decks(col):
+    """[(deck id, name, cards)]: the top-level normal decks, biggest first
+    (a new plan starts on the biggest)."""
+    out = []
+    for did, name in P.deck_choices(col):
+        if "::" in name:
+            continue
+        ids = ",".join(str(int(d)) for d in col.decks.deck_and_child_ids(did)) or "0"
+        n = int(col.db.scalar(f"SELECT count() FROM cards WHERE did IN ({ids}) OR odid IN ({ids})") or 0)
+        out.append((did, name, n))
+    return sorted(out, key=lambda x: (-x[2], x[1].lower()))
+
+
+def show_start():
+    from .start_window import StartWindow
+    w = StartWindow(mw, top_decks(mw.col), StartOps())
+    _gone_on_close(w)
+    _open["start"] = w
+    w.show()
+    return w
+
+
+class StartOps:
+    """What the calendar window asks of the add-on."""
+
+    def today(self):
+        import datetime
+        return datetime.date.fromisoformat(plan_flow._today())
+
+    def index(self, did):
+        return P.DeckIndex(mw.col, did)
+
+    def make(self, owner, name, doc, done, pid=None):
+        """The plan made (POST /plans) and its dates saved (the builder's
+        PUT), one click. done(("saved", raw) | ("made", pid, why): made,
+        its dates not saved | ("refused", words) | None). pid: one made
+        already, whose dates are tried again (never a second plan)."""
+        cl, gen = client(), app.generation
+
+        def job():
+            got = pid
+            if got is None:
+                outcome, raw = remote.create(cl, name, doc.get("deck") or "")
+                if outcome != "saved":
+                    return outcome, raw
+                got, version = raw["id"], raw.get("version") or 1
+            else:
+                version = remote.load(cl, got)[0].get("version") or 1
+            try:
+                outcome, raw = remote.save(cl, got, version, doc, f"made in Anki from a calendar: {name}")
+            except TransportError:
+                return "made", got, "Check your connection."
+            if outcome == "saved":
+                return "saved", dict(raw, id=raw.get("id") or got)
+            return "made", got, (str(raw) if outcome == "refused" else "It changed since.")
+        _bg(job, lambda got: getattr(owner, "_alive", False) and gen == app.generation and done(got))
+
+    def open_plan(self, pid):
+        """The plan window, on the plan just made."""
+        w = _open.get("plans")
+        if w is not None and getattr(w, "_alive", False):
+            w.close()
+        open_plans(select=pid)
 
 
 # ---- question IDs ----

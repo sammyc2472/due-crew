@@ -90,7 +90,7 @@ class PlanWindow(QDialog):
     """plans: remote.my_plans' (cleaned, each with its role). ops: flow.Ops,
     or a render's or test's own."""
 
-    def __init__(self, parent, col, plans, ops):
+    def __init__(self, parent, col, plans, ops, select=None):
         super().__init__(parent)
         self.col, self.ops = col, ops
         self.plans = [p for p in plans or [] if isinstance(p, dict) and p.get("id")]
@@ -191,6 +191,8 @@ class PlanWindow(QDialog):
         buttons.addButton("Close", QDialogButtonBox.ButtonRole.RejectRole).clicked.connect(self.reject)
         root.addWidget(buttons)
 
+        if select and self.pick.findData(select) >= 0:
+            self.pick.setCurrentIndex(self.pick.findData(select))  # before the signal: one load, of this one
         self.pick.currentIndexChanged.connect(self._load)
         # the same plan picked again after a load that failed: try it again
         self.pick.activated.connect(lambda _i: self._load() if self.plan is None and not self.busy else None)

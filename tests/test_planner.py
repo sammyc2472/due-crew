@@ -134,7 +134,7 @@ def test_admin_only():
     try:
         flow.enabled = lambda: True
         flow._bg = lambda job, done: done(job())
-        flow.show_plans = lambda plans: shown.append(plans)
+        flow.show_plans = lambda plans, select=None: shown.append(plans)
         flow.tooltip = lambda text, **k: tips.append(text)
         flow.plan_flow._signed_in = lambda: True
         flow.mw.col = object()
@@ -579,11 +579,276 @@ def test_flow():
          flow.cfg) = saved
 
 
+# ---- a plan from a block's calendar (reading.py, claude.py's stand-in) ----
+
+CAL = """BLOCK 2 · Cardiovascular
+WEEK 1
+Mon 10/26  LEC  Heart failure
+    SLG 1  Define systolic and diastolic heart failure
+    Watch: heart failure 1-2
+Tue 10/27  LEC  HFrEF
+Wed 10/28  Thanksgiving break
+Thu 10/29  LEC  Antiarrhythmic drugs
+Fri 10/30  QUIZ  Cardio quiz 1
+WEEK 2
+Mon 11/2  LEC  Diuretics
+Tue 11/3  LEC  Acid-base
+Fri 11/6  EXAM  Exam 1
+"""
+CAL_TODAY = datetime.date(2026, 10, 19)
+HF_V, HF_S, HF_B = (f"{ROOT}::#Videos::Cardio::Heart_Failure", f"{ROOT}::^Systems::Cardio::Heart_Failure",
+                    f"{ROOT}::#Book::Cardio::Heart_Failure")
+SYSTOLIC, ANTI = f"{ROOT}::#Videos::Cardio::Systolic_Dysfunction", f"{ROOT}::#Videos::Pharm::Antiarrhythmics"
+DIURETICS, ACID = f"{ROOT}::#Book::Renal::Diuretics", f"{ROOT}::#Videos::Renal::Acid_Base"
+
+
+def cal_collection():
+    """A block's deck: heart failure in a video and a system (the same notes)
+    and the book; systolic dysfunction, antiarrhythmics, diuretics, acid-base,
+    a question number."""
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    for cid, tags in ((1, f"{HF_V} {HF_S}"), (2, f"{HF_V} {HF_S}"), (3, HF_B), (4, SYSTOLIC), (5, ANTI), (6, DIURETICS),
+                      (7, f"{ROOT}::#Bank::10234"), (8, ACID)):
+        fakes.add_card(conn, cid, 1, tags=tags)
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(CAL_TODAY))
+    col.decks = fakes.FakeDecks({1: "Big Step 1"})
+    return col
+
+
+def test_reading():
+    from due_crew.planner import reading as RD
+    ss = RD.number_weeks(RD.read_calendar(CAL, CAL_TODAY))
+    check("reading: each dated line a session, by date, in its week; a break left out",
+          [(x["date"], x["kind"], x["title"], x["week"]) for x in ss]
+          == [("2026-10-26", "lecture", "Heart failure", 1), ("2026-10-27", "lecture", "HFrEF", 1),
+              ("2026-10-29", "lecture", "Antiarrhythmic drugs", 1), ("2026-10-30", "quiz", "Cardio quiz 1", 1),
+              ("2026-11-02", "lecture", "Diuretics", 2), ("2026-11-03", "lecture", "Acid-base", 2),
+              ("2026-11-06", "exam", "Exam 1", 2)], ss)
+    check("reading: the lines under a session, its objectives and what it lists",
+          ss[0]["objectives"] == [{"label": "SLG 1", "text": "Define systolic and diastolic heart failure"}]
+          and ss[0]["listed"] == [{"how": "watch", "text": "heart failure 1-2"}] and not ss[1]["objectives"])
+    check("reading: the plan's name is the calendar's first line that names something, never one with a date",
+          RD.name_from(CAL) == "BLOCK 2 · Cardiovascular" and RD.name_from("Mon 10/26 Heart failure") == ""
+          and RD.name_from("We meet on Oct 26 for heart failure.\nCardio block") == "Cardio block"
+          and RD.name_from("Mon 10/26  Heart failure\n    SLG 1  Define systolic and diastolic heart failure") == "")
+    table = "Heart failure | Mon 10/26 | Room B2 | Dr. Lee\nAcid-base\t11/3\tB2\n"
+    check("reading: a table's rows, the cell that names something (not the room, not who)",
+          [(x["date"], x["title"]) for x in RD.read_calendar(table, CAL_TODAY)]
+          == [("2026-10-26", "Heart failure"), ("2026-11-03", "Acid-base")])
+    got = [RD.parse_date(t, CAL_TODAY)[0] for t in ("Mon 10/26", "Oct 26", "26 October 2026", "2026-10-26",
+                                                    "Monday, October 26th", "10/26/26")]
+    check("reading: the ways a calendar writes a date, the year that's coming when none is written",
+          got == [datetime.date(2026, 10, 26)] * 6 and RD.parse_date("3/1", datetime.date(2026, 11, 20))[0]
+          == datetime.date(2027, 3, 1) and RD.parse_date("26/10", CAL_TODAY, day_first=True)[0]
+          == datetime.date(2026, 10, 26), got)
+    weeks = RD.number_weeks(RD.read_calendar("Mon 10/26 Heart failure\nMon 11/2 Diuretics", CAL_TODAY))
+    check("reading: a calendar with no weeks written gets them from the first session's Monday",
+          [x["week"] for x in weeks] == [1, 2])
+    check("reading: prose with no line starting with a date is plain rules' none (the stand-in's job)",
+          RD.read_calendar("We meet on Oct 26 for heart failure.\nThe cardio quiz is on Oct 30.", CAL_TODAY) == [])
+    sc = lambda t: RD.scope(t, ss, CAL_TODAY)
+    check("reading: an exam's line by plain rules: weeks, numbered lectures, dates, up to a date",
+          sc("Exam 1 covers weeks 1-2") == ([0, 1, 2, 4, 5], []) and sc("lectures 1-3") == ([0, 1, 2], [])
+          and sc("Oct 26 - Oct 29") == ([0, 1, 2], []) and sc("everything through 10/29") == ([0, 1, 2], [])
+          and sc("weeks 1-2 lectures") == ([0, 1, 2, 4, 5], []), [sc("weeks 1-2 lectures"), sc("everything through 10/29")])
+    check("reading: what plain rules can't place is left, word for word (some of a week)",
+          sc("Exam 1 covers week 1 and week 2's renal lectures") == ([0, 1, 2], ["week 2's renal lectures"]),
+          sc("Exam 1 covers week 1 and week 2's renal lectures"))
+
+
+def test_matching():
+    from due_crew.planner import reading as RD
+    col = cal_collection()
+    idx = P.DeckIndex(col, 1)
+    ss = RD.number_weeks(RD.read_calendar(CAL, CAL_TODAY))
+    cands = RD.candidates(idx, ss[0])
+    tags = [c["tag"] for c in cands]
+    check("matching: a session's title names its tags, the same cards once (a system with its video's notes)",
+          tags[:2] == [HF_B, HF_V] and HF_S not in tags and all(c["title"] for c in cands[:2]), tags)
+    check("matching: plain rules tick what the title names, one a resource",
+          RD.pick(cands) == [0, 1] and cands[0]["cards"] == 1 and cands[1]["cards"] == 2)
+    check("matching: question numbers are never a session's", not [t for t in tags if "#Bank" in t])
+    check("matching: words it can't read match nothing (HFrEF, antiarrhythmic drugs)",
+          RD.pick(RD.candidates(idx, ss[1])) == [] and RD.pick(RD.candidates(idx, ss[2])) == [])
+    check("matching: one word is one", RD.pick(RD.candidates(idx, ss[4])) == [0]
+          and RD.candidates(idx, ss[4])[0]["tag"] == DIURETICS)
+
+
+def test_stand_in():
+    from due_crew.planner import claude as C
+    from due_crew.planner import reading as RD
+    col = cal_collection()
+    idx = P.DeckIndex(col, 1)
+    ss = RD.number_weeks(RD.read_calendar(CAL, CAL_TODAY))
+    si = C.StandIn()
+    check("stand-in: it says it's a stand-in and that nothing is sent", si.fake and "stand-in" in si.status()
+          and "Nothing is sent" in si.status())
+    cands, got, why = si.pick(idx, ss[1])
+    check("stand-in: reads an abbreviation as a reader would (HFrEF, systolic)",
+          [cands[i]["tag"] for i in got] == [SYSTOLIC] and why == "read HFrEF as systolic or reduced", (got, why))
+    cands, got, why = si.pick(idx, ss[2])
+    check("stand-in: takes a title's words one at a time before reading them",
+          [cands[i]["tag"] for i in got] == [ANTI] and why == "matched its words one at a time", [c["tag"] for c in cands])
+    cands, got, why = si.pick(idx, RD.session(CAL_TODAY, "Ethics"))
+    check("stand-in: says so when nothing fits", got == [] and why == "found nothing that fits")
+    prose = "We meet on Oct 26 for heart failure.\nThe cardio quiz is on Oct 30.\nNo class Oct 28 (holiday)."
+    check("stand-in: finds a date anywhere in a line (prose), breaks still left out",
+          [(x["date"], x["kind"], x["title"]) for x in si.calendar(prose, CAL_TODAY)]
+          == [("2026-10-26", "lecture", "Heart failure"), ("2026-10-30", "quiz", "Cardio quiz")],
+          si.calendar(prose, CAL_TODAY))
+    ticked = {4: [DIURETICS], 5: [ACID]}
+    check("stand-in: some of a week, by the titles and the tags ticked for them (diuretics are renal)",
+          si.scope(["week 2's renal lectures"], ss, ticked) == ([4, 5], [])
+          and si.scope(["week 2's renal lectures"], ss) == ([], ["week 2's renal lectures"])
+          and si.scope(["week 1's drugs lectures"], ss) == ([2], []), si.scope(["week 1's drugs lectures"], ss))
+
+
+def test_from_sessions():
+    from due_crew.planner import reading as RD
+    ss = RD.number_weeks(RD.read_calendar(CAL, CAL_TODAY))
+    rng = random.Random(4)
+    doc, units, events = E.from_sessions({"deck": "Big Step 1", "units": []}, ss,
+                                         {0: [HF_B, HF_V], 1: [SYSTOLIC], 2: [], 4: [DIURETICS], 5: [ACID]}, rng=rng)
+    by = {u["id"]: u for u in doc["units"]}
+    ev = {e["id"]: e for e in doc["events"]}
+    check("calendar plan: a quiz and an exam are events, a session with tags a date named as it is, on its day",
+          sorted(units) == [0, 1, 4, 5] and sorted(events) == [3, 6]
+          and [(e["day"], e["name"]) for e in doc["events"]] == [("2026-10-30", "Cardio quiz 1"), ("2026-11-06", "Exam 1")]
+          and [(u["opens"], u["name"], u["tags"]) for u in doc["units"]][:2]
+          == [("2026-10-26", "Heart failure", [HF_B, HF_V]), ("2026-10-27", "HFrEF", [SYSTOLIC])], doc)
+    check("calendar plan: nothing ticked, not on the plan", 2 not in units)
+    check("calendar plan: each date preps for the next quiz or exam",
+          [ev[by[units[i]]["for"]]["name"] for i in (0, 1, 4, 5)] == ["Cardio quiz 1"] * 2 + ["Exam 1"] * 2)
+    doc2, units2, events2 = E.from_sessions({"deck": "Big Step 1", "units": []}, ss,
+                                            {0: [HF_V], 4: [DIURETICS]}, {6: [0, 4]}, rng=random.Random(4))
+    by2 = {u["id"]: u for u in doc2["units"]}
+    check("calendar plan: what an exam's line covers preps for it, though a quiz comes first",
+          by2[units2[0]]["for"] == events2[6] and by2[units2[4]]["for"] == events2[6])
+    store = world({"sam": "Sammy"})
+    pid, _code = store.add_plan("sam", "MS2 Block 2", "Big Step 1", [])
+    sam = new_client(store, "sam")
+    outcome, raw = R.save(sam, pid, store.plans[pid]["version"], doc, "made in Anki from a calendar")
+    check("calendar plan: the server takes it, events and all", outcome == "saved"
+          and len(raw["doc"]["events"]) == 2 and all(u.get("for") for u in raw["doc"]["units"]), raw)
+    try:
+        E.from_sessions({"deck": "x", "units": [], "events": [{"id": f"e{n:07d}", "day": "2026-11-01", "name": "x"}
+                                                              for n in range(E.EVENTS_MAX)]}, ss, {})
+        refused = False
+    except E.Refused as e:
+        refused = "200" in str(e)
+    check("calendar plan: the ceiling on quizzes and exams is the server's, said first", refused)
+
+
+def test_what_claude_would_get():
+    import json as J
+    from due_crew.planner import claude as C
+    from due_crew.planner import reading as RD
+    col = cal_collection()
+    idx = P.DeckIndex(col, 1)
+    ss = RD.number_weeks(RD.read_calendar(CAL, CAL_TODAY))
+    near = RD.nearby(idx, [HF_B, HF_V, DIURETICS, ACID])
+    check("Claude would get: beside what the block has ticked, the deck's other tags there",
+          near == [SYSTOLIC], near)
+    fits = {i: [c["tag"] for c in RD.could_fit(idx, ss[i], near)] for i in (0, 1, 2)}
+    check("Claude would get: a session nothing matched still has tags to choose among (its words' stems, what's beside)",
+          fits[1] == [SYSTOLIC] and fits[2][0] == ANTI and fits[0][:2] == [HF_B, HF_V], fits)
+    cands = RD.could_fit(idx, ss[0], near)
+    asked = [C.request("calendar", text=CAL, today=CAL_TODAY), C.request("pick", session=ss[0], cands=cands),
+             C.request("scope", phrases=["week 2's renal lectures"], sessions=ss, tags={4: [DIURETICS]})]
+    text = J.dumps(asked)
+    check("Claude would get: each job its words and what to answer in (by number, never a name it makes up)",
+          [a["job"] for a in asked] == ["Read a block's calendar", "Match a session to the deck's tags", "What an exam covers"]
+          and all(set(a) == {"job", "instructions", "input", "answer"} and a["answer"]["type"] == "object" for a in asked)
+          and asked[1]["answer"]["properties"]["picks"]["items"]["properties"]["n"]["type"] == "integer")
+    check("Claude would get: the calendar's words and tag names with their counts; no card, note or id",
+          "_cids" not in text and "guid" not in text
+          and [set(t) for t in asked[1]["input"]["tags"]] == [{"n", "tag", "cards"}] * len(cands)
+          and asked[2]["input"]["sessions"][3]["tags"] == [DIURETICS]
+          and not [x for x in asked[2]["input"]["sessions"] if x["title"] in ("Cardio quiz 1", "Exam 1")], text[:300])
+    try:
+        C.request("anything")
+        unknown = False
+    except ValueError:
+        unknown = True
+    check("Claude would get: only the three jobs", unknown)
+
+
+def test_start_flow():
+    from due_crew.planner import flow
+    store = world({"sam": "Sammy", "dre": "Dre"})
+    store.admins.add("sam")
+    sam, dre = new_client(store, "sam"), new_client(store, "dre")
+    col = collection()
+    shown, tips = [], []
+    saved = (flow.enabled, flow.client, flow._bg, flow.show_start, flow.tooltip, flow.mw.col, flow.plan_flow._signed_in,
+             flow.remote.save, flow.open_plans)
+    try:
+        flow.mw.col = col
+        check("calendar glue: the top-level decks, biggest first (its subdecks' and filtered cards counted)",
+              flow.top_decks(col) == [(1, "Big Step 1", 15), (3, "Mine", 0)], flow.top_decks(col))
+        flow.enabled = lambda: True
+        flow._bg = lambda job, done: done(job())
+        flow.show_start = lambda: shown.append(True)
+        flow.tooltip = lambda text, **k: tips.append(text)
+        flow.plan_flow._signed_in = lambda: True
+        flow._admin.clear()
+        flow.client = lambda: dre
+        flow.open_start()
+        check("calendar glue: the admin's account only, as the plan window", not shown and tips and "admin" in tips[0])
+        flow.client = lambda: sam
+        flow.open_start()
+        n = len(store.log)
+        flow._open.clear()
+        flow.open_start()
+        check("calendar glue: the admin gets it, asked once a session", shown == [True, True] and len(store.log) == n)
+        ops = flow.StartOps()
+        owner = types.SimpleNamespace(_alive=True)
+        doc, _u, _e = E.from_sessions({"deck": "Big Step 1", "units": []},
+                                      [{"date": "2026-11-09", "kind": "lecture", "title": "Heart failure"},
+                                       {"date": "2026-11-13", "kind": "quiz", "title": "Cardio quiz"}], {0: [VID]})
+        got = []
+        ops.make(owner, "MS2 Block 2", doc, got.append)
+        mine = [q for q in store.plans.values() if q["owner"] == "sam"]
+        check("calendar glue: Make is the builder's New plan, then its save (mine, its dates and quiz on it)",
+              len(mine) == 1 and got[0][0] == "saved" and got[0][1]["id"] in store.plans
+              and [u["name"] for u in mine[0]["doc"]["units"]] == ["Heart failure"]
+              and [e["name"] for e in mine[0]["doc"]["events"]] == ["Cardio quiz"], (got, mine))
+
+        def lost(*a, **k):
+            raise api.TransportError("network")
+        flow.remote.save = lost
+        got = []
+        ops.make(owner, "MS2 Block 3", doc, got.append)
+        made = got[0]
+        check("calendar glue: made but its dates lost on the way says so, with the plan it made",
+              made[0] == "made" and made[1] in store.plans and "connection" in made[2], got)
+        flow.remote.save = saved[7]
+        got = []
+        ops.make(owner, "MS2 Block 3", doc, got.append, pid=made[1])
+        check("calendar glue: Make again puts the dates on that plan, never a second one",
+              got[0][0] == "saved" and got[0][1]["id"] == made[1]
+              and sum(1 for q in store.plans.values() if q["name"] == "MS2 Block 3") == 1
+              and store.plans[made[1]]["doc"]["units"], got)
+        opened = []
+        flow.open_plans = lambda select=None: opened.append(select)
+        ops.open_plan(made[1])
+        check("calendar glue: then the plan window, on it", opened == [made[1]])
+        owner._alive = False
+        got = []
+        ops.make(owner, "MS2 Block 4", doc, got.append)
+        check("calendar glue: a window closed meanwhile is told nothing", got == [])
+    finally:
+        (flow.enabled, flow.client, flow._bg, flow.show_start, flow.tooltip, flow.mw.col, flow.plan_flow._signed_in,
+         flow.remote.save, flow.open_plans) = saved
+        flow._open.clear()
+
+
 def test_rules_of_the_road():
     src = {os.path.basename(p): open(p).read() for p in glob.glob(os.path.join(REPO, "due_crew", "planner", "*.py"))}
     windows = {f: t for f, t in src.items() if "(QDialog)" in t}
-    check("road: three windows, each wearing the board's look and saying what it is",
-          sorted(windows) == ["picker.py", "qid_window.py", "window.py"]
+    check("road: four windows, each wearing the board's look and saying what it is",
+          sorted(windows) == ["picker.py", "qid_window.py", "start_window.py", "window.py"]
           and all(t.count("(QDialog)") == t.count("attach_alive(self)") == len(re.findall(r"\bheading\(self", t))
                   for t in windows.values()), sorted(windows))
     check("road: no window sets its own type or margins in a style sheet, nor reads Anki's palette",
@@ -591,11 +856,11 @@ def test_rules_of_the_road():
     check("road: every label is plain text (names are the authors' and the deck's); tooltips escaped",
           all("setTextFormat(Qt.TextFormat.PlainText)" in t for t in windows.values())
           and not [f for f, t in windows.items() if re.search(r'setToolTip\(0, (?!f"<span>\{esc\()', t)])
-    pure = ("model.py", "qids.py", "edits.py", "actions.py", "remote.py")
+    pure = ("model.py", "qids.py", "edits.py", "actions.py", "remote.py", "reading.py", "claude.py")
     check("road: the pure parts and the requests import no aqt",
           not [f for f in pure if re.search(r"^\s*(from aqt|import aqt)", src[f], re.M)])
     calls = set()
-    for f in ("flow.py", "window.py", "qid_window.py", "picker.py"):
+    for f in ("flow.py", "window.py", "qid_window.py", "picker.py", "start_window.py"):
         for node in ast.walk(ast.parse(src[f])):
             if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "remote":
                 calls.add(node.attr)
@@ -605,6 +870,9 @@ def test_rules_of_the_road():
     check("road: nothing new on the server: routes the builder and the site use already",
           routes == {("GET", "/auth/me"), ("GET", "/plans/{pid}"), ("PUT", "/plans/{pid}"), ("POST", "/plans/{pid}/undo"),
                      ("POST", "/plans")}, routes)
+    check("road: Claude isn't connected: the stand-in sends nothing, and nothing reads a card's text for it",
+          not re.search(r"^\s*(?:from|import)\s+(?:requests|urllib|http|socket|anthropic)\b", src["claude.py"] + src["reading.py"], re.M)
+          and not re.search(r"\bflds\b|\.note\(|\bnote\[", src["claude.py"] + src["reading.py"] + src["start_window.py"]))
     words = " ".join(src.values()).lower()
     banned = [w for w in ("anking", "uworld", "amboss", "boards and beyond", "sketchy", "pathoma", "first aid", "bootcamp")
               if w in words]

@@ -937,6 +937,125 @@ def main(out):
             raise RuntimeError("remark: a card with none starts empty, Save off")
         shoot(dlg, os.path.join(out, "plan-remark-new.png"))
 
+    def start_window(STORE, PF, PR, P):
+        """Labs: a plan from a block's calendar (start_window.py): empty; a
+        calendar read (plain rules' ticks, the stand-in's where they found
+        nothing, a quiz and an exam); an exam's line read; What Claude would
+        get; Make the plan end to end (POST /plans, then its save); prose,
+        which only the stand-in reads, and with it off."""
+        import sqlite3
+        from due_crew.planner import start_window as SW
+        conn = sqlite3.connect(":memory:")
+        fakes.make_collection(conn)
+        root = "#Big_Step1_v3"
+        cid = 0
+        for tag, n in ((f"{root}::#Videos::Cardio::Heart_Failure {root}::^Systems::Cardio::Heart_Failure", 14),
+                       (f"{root}::#Book::Cardio::Heart_Failure", 6), (f"{root}::#Videos::Cardio::Systolic_Dysfunction", 5),
+                       (f"{root}::#Videos::Pharm::Antiarrhythmics", 8), (f"{root}::#Book::Renal::Diuretics", 6),
+                       (f"{root}::#Videos::Renal::Acid_Base", 7), (f"{root}::#Bank::10234", 3)):
+            for i in range(n):
+                cid += 1
+                fakes.add_card(conn, cid, 1, tags=tag)
+        col = fakes.FakeCol(conn, fakes.day_cutoff_for(datetime.date.today()))
+        col.decks = fakes.FakeDecks({1: "Big Step 1", 2: "Mine"})
+        monday = datetime.date.today() + datetime.timedelta(days=7 - datetime.date.today().weekday())
+        d = lambda n: (lambda x: f"{x:%a} {x.month}/{x.day}")(monday + datetime.timedelta(days=n))
+        cal = (f"BLOCK 2 · Cardiovascular\nWEEK 1\n{d(0)}  LEC  Heart failure\n"
+               "    SLG 1  Define systolic and diastolic heart failure\n    Watch: heart failure 1-2\n"
+               f"{d(1)}  LEC  HFrEF\n{d(2)}  Holiday, no class\n{d(3)}  LEC  Antiarrhythmic drugs\n"
+               f"{d(4)}  QUIZ  Cardio quiz 1\nWEEK 2\n{d(7)}  LEC  Diuretics\n{d(8)}  LEC  Acid-base\n"
+               f"{d(11)}  EXAM  Exam 1\n")
+        opened = []
+
+        class SOps(PF.StartOps):
+            def today(self):
+                return datetime.date.today()
+
+            def index(self, did):
+                return P.DeckIndex(col, did)
+
+            def make(self, owner, name, doc, done, pid=None):
+                outcome, raw = PR.create(CLIENT, name, doc.get("deck") or "")
+                done(PR.save(CLIENT, raw["id"], raw["version"], doc, "made in Anki from a calendar")
+                     if outcome == "saved" else (outcome, raw))
+
+            def open_plan(self, pid):
+                opened.append(pid)
+
+        decks = [(1, "Big Step 1", cid), (2, "Mine", 0)]
+        w = SW.StartWindow(None, decks, SOps())
+        if w.make_btn.isEnabled() or w.would_btn.isEnabled():
+            raise RuntimeError("start: nothing read, nothing to make")
+        shoot(w, os.path.join(out, "planner-start-empty.png"))
+
+        def read(text, stand_in=True):
+            w = SW.StartWindow(None, decks, SOps())
+            w.resize(820, 720)
+            w.text.setPlainText(text)
+            w.stand_in.setChecked(stand_in)
+            w._read()
+            return w
+        w = read(cal)
+        rows = {w.tree.topLevelItem(i).text(0).split(" · ", 1)[1]: w.tree.topLevelItem(i)
+                for i in range(w.tree.topLevelItemCount())}
+        picks = {w.sessions[i]["title"]: v for i, v in w.picks().items()}
+        if (w.name.text() != "BLOCK 2 · Cardiovascular" or len(w.sessions) != 7
+                or picks["Heart failure"] != [f"{root}::#Book::Cardio::Heart_Failure", f"{root}::#Videos::Cardio::Heart_Failure"]
+                or picks["HFrEF"] != [f"{root}::#Videos::Cardio::Systolic_Dysfunction"]
+                or picks["Antiarrhythmic drugs"] != [f"{root}::#Videos::Pharm::Antiarrhythmics"]
+                or rows["HFrEF"].text(2) != "Claude’s stand-in" or rows["Heart failure"].text(2) != "plain rules"
+                or "Cardio quiz 1 (quiz)" not in rows or "Exam 1 (exam)" not in rows or not w.make_btn.isEnabled()):
+            raise RuntimeError(f"start: read {w.name.text()!r} {picks} {sorted(rows)}")
+        shoot(w, os.path.join(out, "planner-start-read.png"))
+        w = read(cal)
+        exam = next(w.tree.topLevelItem(i) for i in range(w.tree.topLevelItemCount())
+                    if w.tree.topLevelItem(i).text(0).endswith("(exam)"))
+        w.tree.setCurrentItem(exam)
+        saved = SW.ask_text
+        SW.ask_text = lambda *a, **k: ("Exam 1 covers week 1 and week 2's renal lectures", True)
+        try:
+            w._scope()
+        finally:
+            SW.ask_text = saved
+        covered = sorted(w.sessions[i]["title"] for i in next(iter(w.scopes.values()))[0])
+        said = [exam.child(i).text(2) for i in range(exam.childCount())]
+        if covered != ["Acid-base", "Antiarrhythmic drugs", "Diuretics", "HFrEF", "Heart failure"] or said[:2] != [
+                "plain rules", "Claude’s stand-in"]:
+            raise RuntimeError(f"start: the exam's line {covered} {said}")
+        shoot(w, os.path.join(out, "planner-start-scope.png"))
+        jobs = [r["job"] for r in w.would_get()]
+        tags = [[t["tag"] for t in r["input"]["tags"]] for r in w.would_get()[:2]]
+        if (jobs != ["Match a session to the deck's tags"] * 2 + ["What an exam covers"]
+                or f"{root}::#Videos::Cardio::Systolic_Dysfunction" not in tags[0]
+                or f"{root}::#Videos::Pharm::Antiarrhythmics" not in tags[1]):
+            raise RuntimeError(f"start: what Claude would get {jobs} {tags}")
+        dlg = w.would_window()
+        dlg.resize(680, 560)
+        shoot(dlg, os.path.join(out, "planner-start-would.png"))
+        saved = SW.confirm
+        SW.confirm = lambda *a, **k: True
+        try:
+            w.show()
+            w._make()
+        finally:
+            SW.confirm = saved
+        plan = STORE.plans.get(opened[-1]) if opened else None
+        if (not plan or plan["name"] != "BLOCK 2 · Cardiovascular" or len(plan["doc"]["units"]) != 5
+                or [e["name"] for e in plan["doc"]["events"]] != ["Cardio quiz 1", "Exam 1"]
+                or {u["name"]: u.get("for") for u in plan["doc"]["units"]}["Diuretics"] != plan["doc"]["events"][1]["id"]):
+            raise RuntimeError(f"start: Make the plan {plan and plan['doc']}")
+        w.close()
+        prose = (f"We meet on {(monday):%b} {monday.day} for heart failure.\n"
+                 f"The cardio quiz is on {(monday + datetime.timedelta(days=4)):%b} {(monday + datetime.timedelta(days=4)).day}.")
+        w = read(prose)
+        if w.name.text() or [x["title"] for x in w.sessions] != ["Heart failure", "Cardio quiz"] or w.head.text() != "Calendar read by Claude’s stand-in":
+            raise RuntimeError(f"start: prose {w.sessions} {w.head.text()!r}")
+        shoot(w, os.path.join(out, "planner-start-prose.png"))
+        w = read(prose, stand_in=False)
+        if w.sessions or w.name.text() or "stand-in could" not in w.said.text():
+            raise RuntimeError(f"start: prose, stand-in off: {w.said.text()!r}")
+        shoot(w, os.path.join(out, "planner-start-none.png"))
+
     def planner():
         """Labs (due_crew/planner, docs/planner.md): the plan window an author
         sees (a date's sources by resource, system and other, with what each
@@ -1145,6 +1264,7 @@ def main(out):
             raise RuntimeError("qids: This paste gives the box back")
         q.all.setChecked(True)
         shoot(q, os.path.join(out, "planner-qids-all.png"))
+        start_window(STORE, PF, PR, P)
         # the labs entries, when this computer's config turns them on
         import due_crew
         tools = QtWidgets.QMenu("Tools")
@@ -1163,7 +1283,7 @@ def main(out):
             CONFIG.pop("labs", None)
             dc_app._CFG["text"] = None
         items = [a.text() or "—" for a in [a.menu() for a in tools.actions() if a.menu()][0].actions()]
-        if items[-3:] != ["—", "Plan window (labs)…", "Question IDs (labs)…"]:
+        if items[-4:] != ["—", "Plan window (labs)…", "New plan from a calendar (labs)…", "Question IDs (labs)…"]:
             raise RuntimeError(f"labs menu: {items}")
 
     for label, build in (("kitchen", kitchen), ("questions", questions), ("tools menu", tools_menu), ("friends", friends), ("decks", decks),

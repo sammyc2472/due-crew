@@ -42,8 +42,10 @@ add-on.
   colours the studied days with the user's accent: the board's title is
   the one-line logo (inline SVG on the `--dc-*` tokens), and the stacked
   one tops the sign-in and welcome screens.
-- `due_crew/planner/` — labs (`docs/planner.md`): the plan window and
-  Question IDs, Python-native, kept apart from the rest while it's tried.
+- `due_crew/planner/` — labs (`docs/planner.md`): the plan window, a plan
+  from a block's calendar (plain rules first; Claude's jobs a stand-in,
+  `claude.py`, that sends nothing) and Question IDs, Python-native, kept
+  apart from the rest while it's tried.
   Nothing of it runs unless this computer's config says `"labs": true` (no
   window sets it), and the plan window opens only for the admin's account
   (`GET /auth/me`'s admin). Routes the builder uses already; nothing new on

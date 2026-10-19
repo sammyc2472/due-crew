@@ -19,6 +19,7 @@ SOURCES_MAX = 50   # plans.ts SOURCES_MAX: tags, and subdecks, a date
 UNITS_MAX = 200    # plans.ts UNITS_MAX
 NAME_MAX = 60      # validate.ts NAME_MAX
 PATH_MAX = 200     # plans.ts PATH_MAX
+EVENTS_MAX = 200   # plans.ts EVENTS_MAX
 _ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789"  # app.js uid8
 
 
@@ -203,6 +204,62 @@ def add_date(doc, opens, tags=(), decks=(), name=None, rng=random):
                                         "opens": _day(opens).isoformat(), "tags": [], "decks": [], "cards": []})
     doc, _n = add_sources(doc, uid, tags, decks)
     return _sorted(doc), uid
+
+
+def add_event(doc, day, name, rng=random):
+    """A named day (a quiz, the exam) the dates prep for. (doc, its id)."""
+    doc = copy.deepcopy(doc)
+    if len(doc.get("events") or []) >= EVENTS_MAX:
+        raise Refused(f"A plan holds up to {EVENTS_MAX} quizzes and exams.")
+    eid = new_id(doc, rng)
+    doc.setdefault("events", []).append({"id": eid, "day": _day(day).isoformat(), "name": _name(name)})
+    doc["events"].sort(key=lambda e: str(e.get("day") or ""))
+    return doc, eid
+
+
+def prep_for(doc, chosen=None):
+    """Each date preps for an event (its `for`): one `chosen` names for it
+    ({unit id: [event id]}, what an exam's line covers), the earliest of
+    those on or after its day; else the next event on or after it."""
+    doc = copy.deepcopy(doc)
+    events = sorted((e for e in doc.get("events") or [] if isinstance(e, dict)), key=lambda e: str(e.get("day") or ""))
+    days = {e["id"]: str(e.get("day") or "") for e in events}
+    for u in doc.get("units") or []:
+        opens = str(u.get("opens") or "")
+        named = [eid for eid in (chosen or {}).get(u.get("id"), ()) if days.get(eid, "") >= opens]
+        pick = min(named, key=lambda eid: days[eid]) if named else next(
+            (e["id"] for e in events if str(e.get("day") or "") >= opens), None)
+        if pick:
+            u["for"] = pick
+        else:
+            u.pop("for", None)
+    return doc
+
+
+def from_sessions(doc, sessions, picks, scopes=None, rng=random):
+    """A block's sessions onto a plan: a quiz or exam an event, every other
+    session with tags picked a date on its day named as it is, each date
+    prepping for the next event (or the one whose scope names it). picks:
+    {session index: [tag]}; scopes: {session index of an event: [session
+    index it covers]}. (doc, {session index: unit id}, {session index:
+    event id}); a session nothing was picked for isn't put on."""
+    from .reading import EVENT_KINDS
+    units, events = {}, {}
+    for i, s in enumerate(sessions):
+        if s.get("kind") in EVENT_KINDS:
+            doc, events[i] = add_event(doc, s["date"], s.get("title") or s["kind"].capitalize(), rng)
+    for i, s in enumerate(sessions):
+        tags = [t for t in (picks or {}).get(i) or [] if t]
+        if s.get("kind") in EVENT_KINDS or not tags:
+            continue
+        doc, units[i] = add_date(doc, s["date"], tags[:SOURCES_MAX], name=s.get("title"), rng=rng)
+    chosen = {}
+    for ei, covered in (scopes or {}).items():
+        if ei in events:
+            for i in covered:
+                if i in units:
+                    chosen.setdefault(units[i], []).append(events[ei])
+    return prep_for(doc, chosen), units, events
 
 
 def delete_date(doc, uid):

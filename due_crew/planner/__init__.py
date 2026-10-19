@@ -7,7 +7,10 @@ collection, so labs alone opens them.
 
 model.py, qids.py and edits.py are pure; actions.py is the one collection
 step it adds; remote.py its requests (routes the builder uses already);
-flow.py the glue; window.py, picker.py and qid_window.py the Qt windows.
+flow.py the glue; window.py, picker.py, qid_window.py and start_window.py
+the Qt windows. reading.py (pure) starts a plan from a block's calendar by
+plain rules; claude.py is what Claude would do with what they leave, a
+stand-in for now (nothing is sent).
 """
 
 
@@ -38,7 +41,8 @@ def install(menu):
             pass
     menu._dc_labs = True
     menu.addSeparator()
-    for label, fn in (("Plan window (labs)…", flow.open_plans), ("Question IDs (labs)…", flow.open_qids)):
+    for label, fn in (("Plan window (labs)…", flow.open_plans), ("New plan from a calendar (labs)…", flow.open_start),
+                      ("Question IDs (labs)…", flow.open_qids)):
         action = QAction(label, menu)
         action.triggered.connect(lambda _=False, fn=fn: fn())
         menu.addAction(action)

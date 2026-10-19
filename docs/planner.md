@@ -20,9 +20,10 @@ a Python-native plan window", the design-spec artifact).
   (`"2035408484"` is the AnkiWeb folder; a copy installed by hand under
   another folder name uses that name.) `False`, or taking the key out,
   turns it off after the next restart.
-- **Tools › Due Crew** then has *Plan window (labs)…* and *Question IDs
-  (labs)…*, after its own entries.
-- **The plan window is the admin's account only.** Its click asks the
+- **Tools › Due Crew** then has *Plan window (labs)…*, *New plan from a
+  calendar (labs)…* and *Question IDs (labs)…*, after its own entries.
+- **The plan window, and a plan from a calendar, are the admin's account
+  only.** Its click asks the
   server who this account is (`GET /auth/me`, whose `admin` is
   `worker/src/notices.isAdmin`: Sam's "sammy" account), once an Anki
   session, and opens only for that account; anyone else is told it's the
@@ -30,9 +31,9 @@ a Python-native plan window", the design-spec artifact).
   collection, so the labs switch alone opens them.
 - **Nothing new on the server.** The window's requests are routes the
   site's builder uses already: `GET /auth/me`, `GET /plans/mine`,
-  `GET /plans/{id}`, and an author's save, `PUT /plans/{id}`. Each one on a
-  click, in the background. A refresh and a sync are unchanged
-  (`test_request_budget`).
+  `GET /plans/{id}`, an author's save, `PUT /plans/{id}`, its Undo, and
+  New plan, `POST /plans`. Each one on a click, in the background. A
+  refresh and a sync are unchanged (`test_request_budget`).
 
 ## The plan window
 
@@ -131,6 +132,59 @@ one with the most of them, or the one picked.
   blocks, and a deck of all of them. Forget my misses, with its Undo.
 - The labs windows close with the profile.
 
+## A plan from a block's calendar
+
+Tools › Due Crew › New plan from a calendar (labs), the admin's account
+only, as the plan window (it makes a plan on the server). Paste the
+block's calendar, pick the deck, **Read it**:
+
+- **The calendar** (`reading.read_calendar`, plain rules): a line that
+  starts with a date ("Mon 10/26", "Oct 26", "26 October 2026",
+  "2026-10-26") or a table's row with a date in a cell is a session; the
+  lines under it its objectives ("SLG 1 …") and what it lists ("Watch:
+  …"); "Week 2" numbers the ones after it (else weeks count from the first
+  session's Monday); breaks and holidays are left out. A quiz or an exam
+  becomes one of the plan's events, every other session a date on its
+  day, named as the calendar names it. The plan's name is the first line
+  that names something and holds no date.
+- **Its tags** (`reading.candidates`/`pick`): the deck's own tags its
+  words name (tag names only: card text is never read), the title counting
+  most; ticked where plain rules are sure (the title names it, or three of
+  its words do), one a resource. A tag holding the same cards as one in
+  already, or too broad to be one session's (600 cards), gives way.
+  **Add tags…** opens the picker on a session.
+- **What's on it…** on a quiz or exam: its line, as the syllabus says it.
+  Weeks ("weeks 1-3"), numbered lectures ("lectures 1-12"), dates ("Oct 26
+  to Nov 13", "through Nov 13") by plain rules; the dates it covers prep
+  for it (a date's `for`), else each preps for the next event after it.
+- **Make the plan**: asks once, then the builder's New plan (POST
+  /plans) and its save (PUT, the dates and events), mine, nobody
+  following; then the plan window, on it. A plan made whose dates didn't
+  save says so, and Make tries its dates again on that plan, never a
+  second one.
+
+**Claude's jobs, a stand-in for now** (`claude.py`): plain rules go first
+in every job, and Claude is asked only for what they leave. Until it's
+connected, a stand-in answers in its place by looser rules of its own, so
+each step can be click-tested, and each row it filled says "Claude's
+stand-in" (with why, pointed at). Untick its box for plain rules alone.
+
+| Job | What plain rules leave | What the stand-in does |
+|---|---|---|
+| calendar | no line starts with a date (prose, a file's text) | a date anywhere in a line ("we meet on Oct 26 for…") |
+| pick | a session nothing matched | the title's words one at a time ("antiarrhythmic"), then a few abbreviations read as a reader would ("HFrEF" as systolic) |
+| scope | some of a week ("week 4's two pharm lectures") | that week's sessions whose titles, or the tags ticked for them, have the words (diuretics are renal) |
+
+**What Claude would get** shows, as JSON, each request the stand-in's
+jobs would have sent: the calendar's words; a session's title, objectives
+and what it lists, with the deck's tags it could have (its candidates, the
+tags whose last part starts as its words do, and the ones beside what the
+block has ticked, `reading.could_fit`), by name and card count; for an
+exam's line, the sessions by title and the tags ticked for them. Never a
+card's text, an id, or anything about anyone. Claude answers by number in
+lists made here, never with a name it could invent, in the shape each
+request carries. Nothing is sent: `claude.py` has no requests.
+
 ## Files
 
 | File | What |
@@ -141,19 +195,23 @@ one with the most of them, or the one picked.
 | `planner/edits.py` | pure: an author's changes to the doc, the count, the history line |
 | `planner/actions.py` | Bring back, the one collection step it adds |
 | `planner/remote.py` | its requests (who I am, my plans, one plan, a save) |
-| `planner/flow.py` | the glue: the gate, the windows' asks (`Ops`, `QidOps`), `qids.json` |
-| `planner/window.py`, `picker.py`, `qid_window.py` | the Qt windows, in the board's look |
+| `planner/reading.py` | pure: a calendar read, a session's tags, an exam's line, by plain rules |
+| `planner/claude.py` | pure: Claude's stand-in, and what Claude would get (`request`) |
+| `planner/flow.py` | the glue: the gate, the windows' asks (`Ops`, `StartOps`, `QidOps`), `qids.json` |
+| `planner/window.py`, `picker.py`, `qid_window.py`, `start_window.py` | the Qt windows, in the board's look |
 
 Checks: `tests/test_planner.py` (the pure parts, the save against the fake
 Worker's `PUT /plans/{id}`, the gate, the rules of the road), the planner
 renders in `tools/dialogs.py` (an author's window, a change saved end to
 end, the picker, Question IDs with its threads, Do it and All my misses,
-the labs menu), and `check_planner` in `tools/real_anki.py` (12,000
+a calendar read and made into a plan, What Claude would get, the labs
+menu), and `check_planner` in `tools/real_anki.py` (12,000
 question tags, Bring back and Anki's undo of it, the picker's timings).
 
 ## Next (with Sam, or once the API is connected)
 
 From round three: a follower's own resources (videos, book, a bank) and
-Watched it at my own pace; Waiting and Tell followers; starting a plan
-from a block's calendar and matching objectives (Claude's jobs); the
-Browse sidebar and column; a merge on a stale save.
+Watched it at my own pace; Waiting and Tell followers; the Browse sidebar
+and column; a merge on a stale save. Claude connected in the stand-in's
+place (the same requests, a key Sam holds, each answer checked against
+its shape and the lists it numbers); matching objectives to cards.
