@@ -30,17 +30,28 @@ only, never Private Cloud Compute.
 
 ## Turn on the Mac's model (once)
 
-The add-on builds a small Swift helper on your Mac that calls Apple's
-FoundationModels framework. Building it needs Apple's Command Line Tools: if
-`swiftc` isn't there, run `xcode-select --install` in Terminal first.
+Apple Intelligence has to be on (System Settings › Apple Intelligence & Siri),
+on an Apple silicon Mac.
 
-1. Tools › Course on a Mac (PoC) › **Settings…** › **Build the helper**. It
-   takes a minute or two and says which build it kept. It tries four builds:
-   with or without the permissive guardrails, and with or without the
-   model's context size, so an older SDK still builds.
-2. **Check the model**. It says whether Apple Intelligence is ready, the
-   window size it reports, and how long one real call took.
-3. Leave Model on **Auto** (the helper, else the `fm` command, else none).
+- **macOS 27: nothing to install.** The Mac's own `fm` command is the model.
+  Tools › Course on a Mac (PoC) › **Settings…** says "the fm command, nothing
+  to build"; press **Check the model** to try it. Leave Model on **Auto**.
+- **macOS 26:** the add-on builds a small Swift helper on your Mac on Apple's
+  FoundationModels framework. Building needs Apple's Command Line Tools: if
+  `swiftc` isn't there, run `xcode-select --install` in Terminal first. If a
+  full Xcode is installed but was never opened, Apple's tools first want its
+  license accepted: Build says so, and `sudo xcodebuild -license accept` in
+  Terminal does it once. Then **Settings…** › **Build the helper**. It takes a
+  minute or two and says which build it kept. It tries four builds: with or
+  without the permissive guardrails, and with or without the model's context
+  size, so an older SDK still builds. On macOS 27 the helper is optional; it
+  gives the model's answers in their exact shape, and reads PDFs.
+
+**Check the model** says whether Apple Intelligence is ready, the window size
+it reports, and how long one real call took. **Auto** takes the built helper,
+else the `fm` command, else plain rules. If `fm` doesn't answer, **fm's
+help** shows the flags this Mac's `fm` takes (they weren't settled in Apple's
+docs when this was written).
 
 No Mac model, or the build fails? **No model** runs the same flow on plain
 rules: the title and objective words matched to tag names. It's useful as a

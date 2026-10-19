@@ -213,6 +213,71 @@ def _note(col, model, deck_id, fields, tags, suspend=True, study=False):
     return n
 
 
+XCODE_LICENSE = ("You have not agreed to the Xcode license agreements. Please run 'sudo xcodebuild -license' from "
+                 "within a Terminal window to review and agree to the Xcode and Apple SDKs license.")
+
+
+class SetupTests(unittest.TestCase):
+    """Sam's first try (19 Oct): Build stopped on Apple's Xcode license, four
+    times over. It says so once, in a few words, and on macOS 27 nothing
+    needs building at all."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.saved = (M.subprocess.run, M.shutil.which, M.FmRunner)
+        self.calls = []
+
+    def tearDown(self):
+        M.subprocess.run, M.shutil.which, M.FmRunner = self.saved
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def fake(self, xcrun, swiftc, fm=None):
+        class R:
+            def __init__(self, code, out="", err=""):
+                self.returncode, self.stdout, self.stderr = code, out, err
+
+        def run(cmd, **kw):
+            self.calls.append(cmd[0])
+            return R(*xcrun) if cmd[0] == "xcrun" else R(*swiftc)
+        M.subprocess.run = run
+        M.shutil.which = lambda name: "/usr/bin/swiftc" if name == "swiftc" else None
+        M.FmRunner = lambda *a, **k: type("Fm", (), {"path": fm})()
+
+    def test_the_license_is_said_once_in_plain_words(self):
+        self.assertTrue(M.license_blocked(XCODE_LICENSE))
+        self.assertFalse(M.license_blocked("error: cannot find 'SystemLanguageModel' in scope"))
+        # xcrun refuses, and swiftc's shim would too: nothing is compiled
+        self.fake((69, "", XCODE_LICENSE), (69, "", XCODE_LICENSE))
+        ok, said = M.HelperRunner(self.dir).build()
+        self.assertFalse(ok)
+        self.assertIn("sudo xcodebuild -license accept", said)
+        self.assertNotIn("Variant", said)
+        self.assertNotIn("swiftc", self.calls[1:])
+        self.assertNotIn("fm command", said)  # no fm on this Mac: no way round offered
+
+    def test_a_compile_that_hits_the_license_stops_at_once(self):
+        self.fake((1, "", "xcrun: error: unable to find utility"), (1, "", XCODE_LICENSE), fm="/usr/bin/fm")
+        ok, said = M.HelperRunner(self.dir).build()
+        self.assertFalse(ok)
+        self.assertEqual(self.calls.count("/usr/bin/swiftc"), 1)  # not four builds saying the same
+        self.assertIn("sudo xcodebuild -license accept", said)
+        self.assertIn("this Mac has the fm command", said)
+
+    def test_settings_says_fm_needs_nothing_built(self):
+        helper = M.HelperRunner(self.dir)
+        fm = type("Fm", (), {"path": "/usr/bin/fm"})()
+        none = type("Fm", (), {"path": None})()
+        self.assertIn("the fm command, nothing to build", M.setup_line(helper, fm))
+        self.assertIn("optional", M.setup_line(helper, fm))
+        self.assertIn("Build the helper", M.setup_line(helper, none))
+        os.makedirs(helper.folder, exist_ok=True)
+        with open(helper.bin, "w") as f:
+            f.write("")
+        with open(helper.stamp, "w") as f:
+            f.write(f"{helper.source_hash()} permissive\n")
+        self.assertIn("the built helper (permissive guardrails)", M.setup_line(helper, fm))
+
+
 @unittest.skipIf(Collection is None, "needs `pip install anki`")
 class EngineTests(unittest.TestCase):
     def setUp(self):

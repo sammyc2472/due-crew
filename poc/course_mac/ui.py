@@ -760,7 +760,7 @@ class CalendarDialog(QDialog):
             exe = shutil.which("pdftotext")
             if exe:
                 return subprocess.run([exe, "-layout", path, "-"], capture_output=True, text=True, timeout=60).stdout
-            raise M.ModelError("Build the helper (Settings) to read PDFs, or copy the PDF's text and paste it here.")
+            raise M.ModelError("Copy the PDF's text and paste it here (or build the helper in Settings to read PDFs).")
         bg(work, lambda t: (self.text.setPlainText(t), self.state.setText("")), lambda e: self.state.setText(str(e)))
 
     def read(self, with_model):
@@ -800,7 +800,7 @@ class CalendarDialog(QDialog):
 
 # ---- settings ----
 
-RUNNERS = [("auto", "Auto: the helper if built, else fm, else none"), ("helper", "The built helper (guided answers)"),
+RUNNERS = [("auto", "Auto: the built helper, else the fm command, else plain rules"), ("helper", "The built helper (guided answers)"),
            ("fm", "The fm command (macOS 27)"), ("none", "No model: plain rules")]
 NUMS = [("timeout", "Seconds a call may take", 10, 600), ("prompt_chars", "Characters a prompt may hold", 1500, 20000),
         ("read_batch", "Cards a reading call", 1, 30), ("groups_max", "Tag groups a lecture", 3, 30),
@@ -848,10 +848,8 @@ class SettingsDialog(QDialog):
         lay.addLayout(r)
         self.out = QPlainTextEdit()
         self.out.setReadOnly(True)
-        helper = M.HelperRunner(FOLDER)
-        self.out.setPlainText(
-            f"Helper: {'built (' + (helper.guardrails() or '?') + ' guardrails)' if helper.built() else 'not built'}. "
-            f"fm: {M.FmRunner().path or 'not found'}.\nOn-device only: nothing here uses Private Cloud Compute.")
+        self.out.setPlainText(M.setup_line(M.HelperRunner(FOLDER), M.FmRunner())
+                              + "\nOn-device only: nothing here uses Private Cloud Compute.")
         lay.addWidget(self.out, 1)
         bb = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
         bb.accepted.connect(self.save)
