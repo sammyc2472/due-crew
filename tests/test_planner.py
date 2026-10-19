@@ -198,7 +198,7 @@ def test_sources():
           kinds == [("resource", "Videos", "Cardio › Heart Failure"), ("resource", "Book", "Cardio › Heart Failure · SLG 5"),
                     ("system", "Systems", "Cardio › Heart Failure"), ("other", "Other tags", "Pharm › Antibiotics"),
                     ("question", "Bank", "2 questions"), ("plan", "This plan’s tags", "SLG 5"),
-                    ("deck", "Subdecks", "Cardio"), ("search", "Searches", "deck:current"),
+                    ("deck", "Subdecks", "Cardio"), ("search", "Searches", "Search"),
                     ("picks", "Picked cards", "1 single card")], kinds)
     by = {(r["kind"], r["name"]): r for r in rows}
     by.update({r["name"]: r for r in rows if r["kind"] not in ("resource", "system")})
@@ -442,12 +442,9 @@ def test_edits():
     except E.Refused as e:
         last = str(e)
     check("edits: not the last thing on a date", last and "delete the date" in last, last)
-    try:
-        E.take_source(d, "u2", ("search", "q2"))
-        site = None
-    except E.Refused as e:
-        site = str(e)
-    check("edits: a search is changed on duecrew.com", site == "That one is changed on duecrew.com.", site)
+    u = next(x for x in E.take_source(d, "u2", ("search", "q2"))["units"] if x["id"] == "u2")
+    check("edits: a search comes off here too (3.9.3), its count with it", "q2" not in (u.get("search") or [])
+          and "q2" not in (u.get("sn") or {}), u)
     m = E.move(d, "u1", "2026-11-16")
     u1 = next(x for x in m["units"] if x["id"] == "u1")
     check("edits: a move takes its due date and checkpoint the same days, and the dates stay in order",
@@ -1009,8 +1006,8 @@ def test_start_flow():
 def test_rules_of_the_road():
     src = {os.path.basename(p): open(p).read() for p in glob.glob(os.path.join(REPO, "due_crew", "planner", "*.py"))}
     windows = {f: t for f, t in src.items() if "(QDialog)" in t}
-    check("road: four windows, each wearing the board's look and saying what it is",
-          sorted(windows) == ["picker.py", "qid_window.py", "start_window.py", "window.py"]
+    check("road: the windows, each wearing the board's look and saying what it is",
+          sorted(windows) == ["date_dialogs.py", "picker.py", "qid_window.py", "start_window.py", "window.py"]
           and all(t.count("(QDialog)") == t.count("attach_alive(self)") == len(re.findall(r"\bheading\(self", t))
                   for t in windows.values()), sorted(windows))
     check("road: no window sets its own type or margins in a style sheet, nor reads Anki's palette",
@@ -1018,7 +1015,7 @@ def test_rules_of_the_road():
     check("road: every label is plain text (names are the authors' and the deck's); tooltips escaped",
           all("setTextFormat(Qt.TextFormat.PlainText)" in t for t in windows.values())
           and not [f for f, t in windows.items() if re.search(r'setToolTip\(0, (?!f"<span>\{esc\()', t)])
-    pure = ("model.py", "qids.py", "edits.py", "actions.py", "remote.py", "reading.py", "claude.py")
+    pure = ("model.py", "qids.py", "edits.py", "actions.py", "remote.py", "reading.py", "claude.py", "build.py")
     check("road: the pure parts and the requests import no aqt",
           not [f for f in pure if re.search(r"^\s*(from aqt|import aqt)", src[f], re.M)])
     calls = set()
@@ -1041,6 +1038,224 @@ def test_rules_of_the_road():
     check("road: no third-party deck, bank or video series named", not banned, banned)
     check("road: never suspends: the one step it adds unsuspends and moves due dates",
           "suspend_cards" not in src["actions.py"].replace("unsuspend_cards", ""))
+
+
+# ---- 3.9.3: the builder's rules, restated (build.py) ----
+
+def _builder_js():
+    """The top of builder.js (its rules, before the plan's page) with what it
+    needs of app.js (the dates, Sched), for node."""
+    app = open(os.path.join(REPO, "site", "public", "app.js")).read()
+    bj = open(os.path.join(REPO, "site", "public", "builder.js")).read()
+    head = app[app.index("const MONTHS"):app.index("const today =")]
+    sched = app[app.index("const Sched = (() => {"):app.index("// ---- 3.2: home")]
+    rules = bj[bj.index("const Tags = (() => {"):bj.index("/** 3.8.0: a plan's squad")]
+    return head + "\n" + sched + "\n" + rules
+
+
+def test_builder_twins_v393():
+    """3.9.3: build.py restates builder.js's rules (Todo, Every, Remarks,
+    Picks, Suggest, Work, Reviews, Tags.ankiSearch): the same answers on
+    the same cases, the site's run in node. Skipped without node."""
+    import json
+    import shutil
+    import subprocess
+    from due_crew.planner import build as B
+    node = shutil.which("node")
+    if not node:
+        print("SKIP builder twins: no node")
+        return
+    todo = [{"k": "watch", "t": "  Lecture 14  ", "url": "https://x.org/l14"}, {"k": "read", "t": ""},
+            {"k": "do", "t": "Block 3", "url": "http://not-https"}, {"k": "bad", "t": "x"}] + [{"k": "do", "t": f"n{i}"} for i in range(9)]
+    every = [{"k": "do", "t": "Practice", "r": "44"}, {"k": "watch", "t": "x", "r": "7"}, {"k": "read", "t": "Ch", "r": "0123456"}]
+    remarks = ["card:abc:3 | on the quiz", "tag:#V::Cardio | skip the end", "card:x:0 | n", "tag:A  two spaces", "nothing"]
+    picks = ["2026-10-05 | HF | notes:g1 g2 g1 | cards:g3:2 g3:2 g4:x | tag:A", "cards:a|b:1 c:1002", "notes:  "]
+    rows = [[f"{ROOT}::#Videos::Pharm::Antiarrhythmics", 8], [f"{ROOT}::#Videos::Cardio::Heart_Failure", 14],
+            [f"{ROOT}::#Videos::Cardio::Arrhythmias", 6], ["DueCrew::MS2::SLG_12", 4], ["DueCrew::MS2::SLG_3", 5],
+            [f"{ROOT}::#Book::03_Renal::Physiology", 9], [f"{ROOT}::#Videos::Renal::Physiology", 7], ["Pharm::Cardiac", 2]]
+    names = ["Antiarrhythmic", "Heart failure", "SLG 12", "Renal physiology", "cardio arrhythmia week", "Lecture 3", "Cárdiac"]
+    docs = [{"deck": "x", "pace": {"mode": "daily", "days": [1, 1, 1, 1, 1, 0, 0], "daily": 20},
+             "units": [{"id": "a", "name": "A", "opens": "2026-10-05", "due": "2026-10-09"},
+                       {"id": "b", "name": "B", "opens": "2026-10-10"},
+                       {"id": "c", "name": "C", "opens": "2026-10-12", "due": "2026-10-30", "even": True}]},
+            {"deck": "x", "phases": {"catchup": 3}, "units": [{"id": "a", "name": "A", "opens": "2026-10-03"},
+                                                            {"id": "b", "name": "B", "opens": "2026-10-04", "due": "2026-10-20"}]}]
+    totals = {"a": 97, "b": 0, "c": 401}
+    days = [[1, 1, 1, 1, 1, 0, 0], [1, 0, 1, 0, 1, 0, 0]]
+    paths = [["tag", f"{ROOT}::#Videos::Cardio::Heart_Failure"], ["tag", "a_b*c\\d"], ["deck", 'Big "Step"::1_x']]
+    prog = _builder_js() + f"""
+const out = {{}};
+out.todo = Todo.clean({json.dumps(todo)});
+out.parse = [Todo.parse("Watch", "lecture 14 https://x.org/a b"), Todo.parse("read", "chapter 6   https://x.org/c")];
+out.every = Every.clean({json.dumps(every)});
+out.labels = ["0123456", "01234", "14"].map(Every.label);
+out.remarks = {json.dumps(remarks)}.map(Remarks.take);
+out.rclean = Remarks.clean("one\\n two\\t  three\\u0001");
+out.rline = [Remarks.line({{card: ["g", 2], text: "t"}}), Remarks.line({{tag: "A::B", text: "u"}})];
+out.picks = {json.dumps(picks)}.map(Picks.take);
+out.suggest = {json.dumps(names)}.map((n) => Suggest.tags(n, {json.dumps(rows)}));
+out.search = {json.dumps(paths)}.map(([k, p]) => Tags.ankiSearch(k, p));
+const docs = {json.dumps(docs)}, totals = {json.dumps(totals)}, days = {json.dumps(days)};
+out.spread = []; out.over = []; out.weeks = []; out.peak = []; out.about = [];
+for (const doc of docs) for (const d of days) {{
+  for (const u of doc.units) out.spread.push(Work.spread(doc, u, totals[u.id], d));
+  const w = Work.map(doc, (u) => totals[u.id], d);
+  out.over.push(Work.over(w, 15));
+  const ws = Reviews.weeks(w);
+  out.weeks.push(ws.map((x) => [x.a, Math.round(x.n * 1e6) / 1e6]));
+  out.peak.push(Reviews.peak(ws));
+}}
+out.about = [0, 2.5, 29.4, 31, 147.5, 199, 204, 1234.5].map(Reviews.about);
+console.log(JSON.stringify(out));
+"""
+    got = subprocess.run([node, "-e", prog], capture_output=True, text=True, timeout=60)
+    if got.returncode:
+        check("builder twins: builder.js runs in node", False, got.stderr[-800:])
+        return
+    js = json.loads(got.stdout)
+    check("builder twins: Todo.clean and Todo.parse", js["todo"] == B.todo_clean(todo)
+          and js["parse"] == [B.todo_parse("Watch", "lecture 14 https://x.org/a b"), B.todo_parse("read", "chapter 6   https://x.org/c")],
+          (js["todo"], B.todo_clean(todo)))
+    check("builder twins: Every.clean and Every.label", js["every"] == B.every_clean(every)
+          and js["labels"] == [B.every_label(r) for r in ("0123456", "01234", "14")], (js["every"], B.every_clean(every)))
+    check("builder twins: Remarks.take, clean, line", js["remarks"] == [B.remark_take(r) for r in remarks]
+          and js["rclean"] == B.remark_clean("one\n two\t  three\u0001")
+          and js["rline"] == [B.remark_line({"card": ["g", 2], "text": "t"}), B.remark_line({"tag": "A::B", "text": "u"})],
+          (js["remarks"], [B.remark_take(r) for r in remarks]))
+    check("builder twins: Picks.take", js["picks"] == [B.picks_take(x) for x in picks], (js["picks"], [B.picks_take(x) for x in picks]))
+    mine = [[list(x) for x in B.suggest(n, rows)] for n in names]
+    check("builder twins: Suggest.tags (Antiarrhythmic finds Antiarrhythmics; SLG 12 is never SLG 3)",
+          js["suggest"] == mine and mine[0] and mine[0][0][0].endswith("Antiarrhythmics") and mine[2] == [["DueCrew::MS2::SLG_12", 4]],
+          (js["suggest"], mine))
+    check("builder twins: Tags.ankiSearch", js["search"] == [B.anki_search(k, p) for k, p in paths], (js["search"], paths))
+    spread, over, weeks, peak = [], [], [], []
+    for doc in docs:
+        for d in days:
+            for u in doc["units"]:
+                spread.append([list(x) for x in B.spread(doc, u, totals[u["id"]], d)])
+            w = B.work_map(doc, lambda u: totals[u["id"]], d)
+            over.append(B.over(w, 15))
+            ws = B.review_weeks(w)
+            weeks.append([[x["a"], round(x["n"] * 1e6) / 1e6] for x in ws])
+            peak.append(B.review_peak(ws))
+    check("builder twins: Work.spread, map and over", js["spread"] == spread and js["over"] == over, (js["spread"], spread))
+    check("builder twins: Reviews.weeks, peak and about", js["weeks"] == weeks and js["peak"] == peak
+          and js["about"] == [B.about(x) for x in (0, 2.5, 29.4, 31, 147.5, 199, 204, 1234.5)], (js["about"], js["peak"], peak))
+
+
+def test_build_fill_v393():
+    """3.9.3: the builder's Fill and Split, restated: pieces of what to cover
+    (a chapter whole while it fits the pace, a bigger one by its own tags,
+    the rest of it last, one with nothing below it spread evenly), on study
+    days from a day, a pace a day."""
+    from due_crew.planner import build as B
+    t = B.Tree([("A", 60), ("A::One", 20), ("A::Two", 25), ("B", 50), ("C", 9)], [("Big Step 1", 119)])
+    placed = set()
+    check("fill: a chapter that fits is one piece; a bigger one goes by its tags, its rest last",
+          B.pieces(t, "tag:C", 30, placed) == [{"key": "tag:C", "n": 9}]
+          and B.pieces(t, "tag:A", 30, placed) == [{"key": "tag:A::One", "n": 20}, {"key": "tag:A::Two", "n": 25},
+                                                  {"key": "tag:A", "n": 15, "rest": True, "even": False}]
+          and B.pieces(t, "tag:B", 30, placed) == [{"key": "tag:B", "n": 50, "even": True}], B.pieces(t, "tag:A", 30, placed))
+    doc = {"deck": "Big Step 1", "units": [], "pace": {"mode": "daily", "days": [1, 1, 1, 1, 1, 0, 0], "daily": 30}}
+    items = B.pieces(t, "tag:A", 30, placed) + B.pieces(t, "tag:B", 30, placed)
+    n = iter(f"u{i}" for i in range(99))
+    got = B.fill(doc, items, "2026-11-06", None, 30, [1, 1, 1, 1, 1, 0, 0], lambda: next(n))
+    us = [(u["opens"], u.get("due"), u["tags"], bool(u.get("even"))) for u in doc["units"]]
+    check("fill: each piece on the next study day with room, weekends off; a big one evenly over its days",
+          us == [("2026-11-06", None, ["A::One"], False), ("2026-11-09", None, ["A::Two"], False),
+                 ("2026-11-10", None, ["A"], False), ("2026-11-11", "2026-11-12", ["B"], True)]
+          and got["placed"] == 110 and got["last"] == "2026-11-12" and not got["left"], (us, got))
+    doc2 = {"deck": "x", "units": [{"id": "x", "name": "X", "opens": "2026-11-06", "tags": ["Z"], "decks": [], "cards": []}]}
+    got2 = B.fill(doc2, [{"key": "tag:C", "n": 9}, {"key": "tag:B", "n": 10}], "2026-11-06", "2026-11-06", 30,
+                  [1] * 7, lambda: next(n))
+    check("fill: onto a day with a date, it joins it; nothing starts past `until`",
+          [u["tags"] for u in doc2["units"]] == [["Z", "C", "B"]] and got2["touched"] == {"x"} and not got2["left"], doc2)
+    got3 = B.fill({"deck": "x", "units": []}, [{"key": "tag:C", "n": 9}] * 3, "2026-11-06", "2026-11-06", 0, [1] * 7, lambda: next(n))
+    check("fill: with no pace, a piece a day, and what didn't fit by `until` is said",
+          len(got3["left"]) == 2 and B.left_names(got3["left"]) == "C, C", got3)
+    check("fill: a search's name, as the builder's",
+          B.search_name(B.cut_q("#V::Pharm::Ceph", "DueCrew::MS2::SLG_12")) == "SLG 12 and Ceph"
+          and B.search_name('"tag:A::Cardio" -"tag:A::Cardio::Extra" -"tag:A::Cardio::Bonus"') == "Cardio but not Extra, Bonus"
+          and B.search_name("deck:current") == "Search" and B.search_name('("tag:A" OR "tag:B")') == "A or B")
+
+
+def test_date_edits_v393():
+    """3.9.3: the builder's day panel in Your plans: events, what a date
+    preps for, its lines to tick, a review day, a search and IDs, a tag
+    kept to a plan tag or without its extras, a note on a tag, Split."""
+    doc = {"deck": "Big Step 1", "tagroot": "MS2", "tags": [{"id": "t1", "name": "SLG 12", "notes": ["g1"]}],
+           "units": [{"id": "u1", "name": "Heart failure", "opens": "2026-11-09", "tags": [VID], "decks": [], "cards": []},
+                     {"id": "u2", "name": "HF drugs", "opens": "2026-11-10", "tags": [DRUGS], "decks": [], "cards": []}]}
+    rng = random.Random(4)
+    d, eid = E.add_event(doc, "2026-11-13", "Cardio quiz", rng)
+    d = E.set_for(d, "u1", eid)
+    d = E.rename_event(d, eid, "Cardio quiz 1")
+    d = E.move_event(d, eid, "2026-11-12")
+    check("dates: an event made, renamed, moved, and a date preps for it",
+          d["events"] == [{"id": eid, "day": "2026-11-12", "name": "Cardio quiz 1"}] and d["units"][0]["for"] == eid)
+    gone = E.take_event(d, eid)
+    check("dates: an event taken off takes every date's for with it", "events" not in gone and "for" not in gone["units"][0])
+    t = E.set_todo(d, "u1", [{"k": "watch", "t": "Lecture 14", "url": "https://x.org"}, {"k": "read", "t": "  "}])
+    check("dates: lines to tick, the empty ones dropped", t["units"][0]["todo"] == [{"k": "watch", "t": "Lecture 14", "url": "https://x.org"}])
+    try:
+        E.set_todo(d, "u1", [{"k": "do", "t": f"x{i}"} for i in range(9)])
+        many = None
+    except E.Refused as e:
+        many = str(e)
+    check("dates: a date keeps 8 lines to tick", many and "8" in many, many)
+    ev = E.set_every(d, [{"k": "do", "t": "Practice questions", "r": "4"}])
+    check("dates: a line every Friday", ev["every"] == [{"k": "do", "t": "Practice questions", "r": "4"}])
+    r = E.set_review(d, "2026-11-14", "u2", "u1")
+    check("dates: a review day of two dates, from the earlier", r["reviews"] == [{"day": "2026-11-14", "from": "u1", "to": "u2"}])
+    try:
+        E.set_review(d, "2026-11-09", "u1", "u2")
+        early = None
+    except E.Refused as e:
+        early = str(e)
+    check("dates: a review day comes after the dates it reviews", early and "after" in early, early)
+    check("dates: no review day", "reviews" not in E.take_review(r, "2026-11-14"))
+    s = E.add_search(d, "u1", 'tag:#Videos::Cardio  -tag:*Extra*', 12)
+    check("dates: a search on a date with what it finds here, one line", s["units"][0]["search"] == ["tag:#Videos::Cardio -tag:*Extra*"]
+          and s["units"][0]["sn"] == {"tag:#Videos::Cardio -tag:*Extra*": 12})
+    words = []
+    for q in ("is:due tag:x", "x" * 501, ""):
+        try:
+            E.add_search(d, "u1", q)
+        except E.Refused as e:
+            words.append(str(e))
+    check("dates: no search about one person's Anki, none past 500, none empty", len(words) == 3 and "each person" in words[0], words)
+    i = E.add_ids(d, "u1", "nids", [5, 5, 6])
+    p = E.add_picks(d, "u1", ["g1", "g1"], [["g2", 0], ["g2", 0]])
+    check("dates: note IDs and picked notes and cards, each once",
+          i["units"][0]["nids"] == [5, 6] and p["units"][0]["notes"] == ["g1"] and p["units"][0]["cards"] == [["g2", 0]])
+    off = E.take_source(p, "u1", ("picks",))
+    check("dates: picked cards off together", off["units"][0]["cards"] == [] and "notes" not in off["units"][0])
+    c = E.set_cut(d, "u1", VID, "t1")
+    q = c["units"][0]["cut"][0]["q"]
+    check("dates: a tag kept to what one of the plan's tags holds (a cut, its search beside it)",
+          c["units"][0]["tags"] == [] and c["units"][0]["cut"] == [{"tag": VID, "in": "t1", "q": q}] and c["units"][0]["search"] == [q]
+          and q == '"tag:DueCrew::MS2::SLG\\_12" "tag:#Big\\_Step1\\_v*::#Videos::Cardio::Heart\\_Failure"', q)
+    back = E.set_cut(c, "u1", VID, None)
+    check("dates: all of it again", back["units"][0]["tags"] == [VID] and "cut" not in back["units"][0] and "search" not in back["units"][0])
+    x = E.set_extras(d, "u1", VID, True, [VID + "::Extra"], 9)
+    check("dates: a tag without its extras is its search, counted",
+          x["units"][0]["tags"] == [] and x["units"][0]["sn"] == {x["units"][0]["search"][0]: 9}
+          and E.set_extras(x, "u1", VID, False, [VID + "::Extra"])["units"][0]["tags"] == [VID])
+    n = E.set_tag_remark(d, VID, "Skip the\nlast two minutes", rng)
+    check("dates: a note for followers on a tag, one line; empty takes it off",
+          n["remarks"][0]["text"] == "Skip the last two minutes" and n["remarks"][0]["tag"] == VID
+          and "remarks" not in E.set_tag_remark(n, VID.lower(), " ", rng))
+    sp, nid = E.split_even(d, "u2", ("tags", DRUGS), ["2026-11-10", "2026-11-11", "2026-11-12"], rng)
+    us = {u["id"]: u for u in sp["units"]}
+    check("dates: Split evenly: its own date over the study days, due on the last; the date it left goes when empty",
+          "u2" not in us and us[nid]["even"] is True and us[nid]["due"] == "2026-11-12" and us[nid]["tags"] == [DRUGS], sp["units"])
+    placed, touched = E.place(d, [("2026-11-09", "tags", BOOK), ("2026-11-16", "tags", OTHER)], rng)
+    named = E.name_dates(placed, touched, d)
+    check("dates: Fill's places join a day's date or make one, named for what's on it (a hand name kept)",
+          [u["tags"] for u in named["units"]] == [[VID, BOOK], [DRUGS], [OTHER]]
+          and named["units"][0]["name"] == "Heart failure" and named["units"][2]["name"] == "Antibiotics", named["units"])
+    line = E.what_changed(d, E.set_for(E.set_todo(d, "u1", [{"k": "do", "t": "x"}]), "u1", None))
+    check("dates: a save's history line says what changed", "to-dos" in line and "for nothing" in line and line.endswith("(in Anki)"), line)
 
 
 def main():

@@ -164,6 +164,12 @@ class Ops:
     def study_cards(self, idx, cids, name):
         return study_cards(idx, cids, name)
 
+    def new_from_calendar(self):
+        open_start()
+
+    def new_from_deck(self):
+        plan_flow.open_make()
+
 
 def study_cards(idx, cids, name):
     """A Due Crew deck of these cards' open ones, random (a date's Study), and

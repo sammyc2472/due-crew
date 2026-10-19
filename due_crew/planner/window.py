@@ -1,25 +1,30 @@
-"""Labs, the plan window (docs/planner.md): a plan's weeks and dates on the
-left, the picked one on the right, each source with what it holds in this
-copy (cards, new, shut), grouped as the deck files them: by resource, by
+"""Your plans (docs/planner.md; the plan window in labs, for everyone
+since 3.9.3): the builder of duecrew.com, in Anki. Its Dates tab: a plan's
+weeks and dates on the left (with its quizzes and exams and review days),
+the picked one on the right, each source with what it holds in this copy
+(cards, new, shut), grouped as the deck files them: by resource, by
 system, other, the plan's own tags, subdecks, searches, picked cards.
 
 Show in Browse, Open its cards and Study it are plan_flow's (through ops).
-An author changes the plan here (Change ▾, New date…): each change is one
-save of the builder's (PUT /plans/{id}, the version it started from), and
-says so. Names are the authors' and the deck's: plain text everywhere,
-escaped in a tooltip."""
+An author changes the plan here (Change ▾, New ▾): each change is one save
+of the builder's (PUT /plans/{id}, the version it started from), and says
+so; the builder's rules are build.py's and edits.py's. Names are the
+authors' and the deck's: plain text everywhere, escaped in a tooltip."""
 
 import json
 
 from aqt.qt import (
     QAbstractItemView, QBrush, QColor, QComboBox, QDate, QDateEdit, QDialog, QDialogButtonBox,
-    QFont, QHBoxLayout, QHeaderView, QLabel, QMenu, QPushButton, QSplitter, Qt, QTreeWidget,
+    QFont, QHBoxLayout, QHeaderView, QLabel, QMenu, QPushButton, QSplitter, Qt, QTabWidget, QTreeWidget,
     QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
 from ..ui import ask_text, attach_alive, confirm, esc, heading, note, role, tone
 from .. import plans as P
+from .. import schedule as S
 from ..backend.shapes import clean_plan
+from . import build as B
+from . import date_dialogs as DD
 from . import edits as E
 from . import model as M
 
@@ -118,12 +123,17 @@ class PlanWindow(QDialog):
         self.reload_btn.setToolTip("The plan as it is on duecrew.com now")
         self.reload_btn.clicked.connect(self._load)
         top.addWidget(self.reload_btn)
-        self.new_btn = QPushButton("New date…")
-        self.new_btn.clicked.connect(self._new_date)
+        self.new_btn = QPushButton("New")
+        self.new_menu = QMenu(self.new_btn)
+        self.new_btn.setMenu(self.new_menu)
         top.addWidget(self.new_btn)
         root.addLayout(top)
         self.line = _plain(muted=True)
         root.addWidget(self.line)
+        self.tabs = QTabWidget()
+        self.tabs.setDocumentMode(True)
+        root.addWidget(self.tabs, 1)
+        self.pages = {}
 
         split = QSplitter(Qt.Orientation.Horizontal)
         self.tree = QTreeWidget()
@@ -175,7 +185,8 @@ class PlanWindow(QDialog):
         split.setStretchFactor(0, 2)
         split.setStretchFactor(1, 5)
         split.setSizes([300, 640])
-        root.addWidget(split, 1)
+        self._add_tab("dates", "Dates", split)
+        self.want_tab = tab
 
         bottom = QHBoxLayout()
         self.status = _plain(muted=True)
@@ -206,9 +217,43 @@ class PlanWindow(QDialog):
         i = self.pick.findData(pid)
         if i < 0:
             return False
+        self.want_tab = tab
         if i != self.pick.currentIndex():
             self.pick.setCurrentIndex(i)
+        else:
+            self._show_tab(tab)
         return True
+
+    # ---- the tabs ----
+
+    def _add_tab(self, key, label, widget):
+        self.pages[key] = widget
+        self.tabs.addTab(widget, label)
+
+    def _tab_shown(self, key, on):
+        i = self.tabs.indexOf(self.pages[key]) if key in self.pages else -1
+        if i >= 0:
+            self.tabs.setTabVisible(i, bool(on))
+
+    def _show_tab(self, key):
+        page = self.pages.get(key or "")
+        i = self.tabs.indexOf(page) if page is not None else -1
+        if i >= 0 and self.tabs.isTabVisible(i):
+            self.tabs.setCurrentIndex(i)
+
+    def _role_tabs(self):
+        """Which tabs this plan shows: Dates always; the builder's for its
+        authors (the owner's Settings), what everyone in it sees for them."""
+        for key, page in self.pages.items():
+            shown = getattr(page, "shown", None)
+            self._tab_shown(key, shown(self) if callable(shown) else True)
+        for page in self.pages.values():
+            fill = getattr(page, "plan_loaded", None)
+            if callable(fill):
+                fill(self)
+        if self.want_tab:
+            self._show_tab(self.want_tab)
+            self.want_tab = None
 
     # ---- a plan ----
 
@@ -249,8 +294,10 @@ class PlanWindow(QDialog):
         self.doc = plan["doc"] if self.raw is not None else self.ops.my_doc(plan)
         self.idx, self.swap, self.how = self.ops.context(plan, self.doc)
         self._rows = {}
+        self._tree = None
         self._line()
         self._fill(keep or self.picked)
+        self._role_tabs()
 
     def _line(self):
         p = self.plan
@@ -288,14 +335,17 @@ class PlanWindow(QDialog):
                 f.setBold(True)
                 top.setFont(0, f)
             self.tree.addTopLevelItem(top)
-            items = [(u.get("opens"), 0, u) for u in w["dates"]] + [(e.get("day"), 1, e) for e in w["events"]]
+            items = ([(u.get("opens"), 0, u) for u in w["dates"]] + [(e.get("day"), 1, e) for e in w["events"]]
+                     + [(r.get("day"), 2, r) for r in self._week_reviews(w["start"])])
             for _day, is_event, x in sorted(items, key=lambda t: (str(t[0]), t[1])):
                 if is_event:
-                    item = QTreeWidgetItem([M.event_label(x), ""])
-                    item.setData(0, ROLE, ("event", x.get("id")))
+                    review = is_event == 2
+                    item = QTreeWidgetItem([self._review_label(x) if review else M.event_label(x), ""])
+                    item.setData(0, ROLE, ("review", x.get("day")) if review else ("event", x.get("id")))
+                    item.setToolTip(0, f"<span>{esc(item.text(0))}</span>")
                     item.setForeground(0, muted)
                     f = QFont(item.font(0))
-                    f.setItalic(True)  # a named day (a quiz, the exam), not a date that opens cards
+                    f.setItalic(True)  # a named day (a quiz, the exam, a review day), not a date that opens cards
                     item.setFont(0, f)
                 else:
                     n = len(self.idx.match(x, self.swap, self.doc)) if self.idx is not None else None
@@ -334,6 +384,21 @@ class PlanWindow(QDialog):
     def _unit(self, uid):
         return next((u for u in P.units(self.doc) if u["id"] == uid), None)
 
+    def _week_reviews(self, start):
+        """The plan's review days in the week from `start` (a Monday)."""
+        end = E._later(start, 6)
+        return [r for r in self.doc.get("reviews") or [] if isinstance(r, dict) and start <= str(r.get("day") or "") <= end]
+
+    def _review(self, day):
+        return next((r for r in self.doc.get("reviews") or [] if isinstance(r, dict) and r.get("day") == day), None)
+
+    def _review_label(self, r):
+        a, b = self._unit(r.get("from")), self._unit(r.get("to"))
+        names = (a or {}).get("name") or "?"
+        if b is not None and b is not a:
+            names += f" – {b.get('name') or '?'}"
+        return f"{M.day_words(r.get('day'))} · Review · {names}"
+
     def _event(self, eid):
         return next((e for e in self.doc.get("events") or [] if isinstance(e, dict) and e.get("id") == eid), None)
 
@@ -350,6 +415,8 @@ class PlanWindow(QDialog):
             self._show_week(self.picked[1])
         elif kind == "event":
             self._show_event(self._event(self.picked[1]))
+        elif kind == "review":
+            self._show_review(self._review(self.picked[1]))
         else:
             self.title.setText("")
             self.meta.setText("")
@@ -399,7 +466,8 @@ class PlanWindow(QDialog):
             self.table.addTopLevelItem(head)
             for r in rows:
                 c = M.counts(self.idx, r["cids"])
-                item = QTreeWidgetItem(["    " + r["name"], _n(c["cards"]) if c["cards"] else "not in your copy",
+                none = "finds nothing here" if r["kind"] == "search" else "not in your copy"
+                item = QTreeWidgetItem(["    " + r["name"], _n(c["cards"]) if c["cards"] else none,
                                         _n(c["new"]) if c["cards"] else "", _n(c["shut"]) if c["cards"] else ""])
                 item.setData(0, ROLE, r["key"])
                 if r["raw"]:
@@ -463,6 +531,32 @@ class PlanWindow(QDialog):
                 item.setTextAlignment(i, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             self.table.addTopLevelItem(item)
 
+    def _review_units(self, r):
+        """The dates a review day reviews: from its first to its last, in order."""
+        a, b = self._unit(r.get("from")), self._unit(r.get("to"))
+        if a is None or b is None:
+            return []
+        lo, hi = sorted((str(a["opens"]), str(b["opens"])))
+        return [u for u in sorted(P.units(self.doc), key=lambda x: str(x.get("opens") or "")) if lo <= str(u["opens"]) <= hi]
+
+    def _show_review(self, r):
+        if r is None:
+            return
+        self.title.setText(self._review_label(r))
+        us = self._review_units(r)
+        self.meta.setText(f"That morning, followers get a Due Crew deck of what they've seen from these "
+                          f"{len(us):,} date{'s' if len(us) != 1 else ''}, most missed first.")
+        self.todo.setText("")
+        self.todo.setVisible(False)
+        for u in us:
+            c = M.counts(self.idx, self.idx.match(u, self.swap, self.doc)) if self.idx is not None else None
+            item = QTreeWidgetItem([M.date_label(u), _n(c["cards"]) if c else "", _n(c["new"]) if c else "",
+                                    _n(c["shut"]) if c else ""])
+            item.setData(0, ROLE, ("date", u["id"]))
+            for i in (1, 2, 3):
+                item.setTextAlignment(i, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            self.table.addTopLevelItem(item)
+
     # ---- what the buttons do ----
 
     def _cards(self):
@@ -487,6 +581,11 @@ class PlanWindow(QDialog):
             for u in (w or {}).get("dates") or []:
                 cids |= self.idx.match(u, self.swap, self.doc)
             return cids, (w or {}).get("label", "the week")
+        if kind == "review":
+            cids = set()
+            for u in self._review_units(self._review(key) or {}):
+                cids |= self.idx.match(u, self.swap, self.doc)
+            return cids, "review"
         ev = self._event(key)
         cids = set()
         for u in self._prep(ev) if ev else ():
@@ -500,10 +599,12 @@ class PlanWindow(QDialog):
             have = bool(self._prep(self._event(self.picked[1]) or {}))  # no date preps for it: nothing to show
         elif have and kind == "week":
             have = bool((self._week_units(self.picked[1]) or {}).get("dates"))
+        elif have and kind == "review":
+            have = bool(self._review_units(self._review(self.picked[1]) or {}))
         idle = not self.busy
         self.browse_btn.setEnabled(have)
         self.open_btn.setEnabled(have and idle and kind == "date")
-        self.study_btn.setEnabled(have and idle and kind in ("date", "event"))
+        self.study_btn.setEnabled(have and idle and kind in ("date", "event", "review"))
         self.study_btn.setText("Study for it" if kind == "event" else "Study it")
         on_row = self._on_row()
         self.browse_btn.setText("Show these in Browse" if on_row else "Show in Browse")
@@ -513,23 +614,92 @@ class PlanWindow(QDialog):
         self.reload_btn.setEnabled(idle and self.pick.count() > 0)
         author = self.author()
         self.change_btn.setVisible(author)
-        self.new_btn.setVisible(author)
-        self.new_btn.setEnabled(author and idle and self.idx is not None)
-        self.change_btn.setEnabled(author and idle and kind == "date")
+        self.change_btn.setEnabled(author and idle and kind in ("date", "event", "review"))
+        self.new_btn.setEnabled(idle)
+        self._new_menu(author and idle)
         self.menu.clear()
-        if author and kind == "date":
-            for label, fn, ok in (("Add from the deck…", self._add, self.idx is not None),
-                                  ("Take the picked one off", self._take, on_row and self._takeable(self.table.currentItem())),
+        if not author:
+            return
+        if kind == "date":
+            self._date_menu(on_row)
+        elif kind == "event":
+            self._entries(self.menu, (("Rename…", self._rename_event, True), ("Move to another day…", self._move_event, True),
+                                      (None, None, None), ("Take it off…", self._take_event, True)))
+        elif kind == "review":
+            self._entries(self.menu, (("Change its dates…", self._review_day, True), (None, None, None),
+                                      ("No review day", self._no_review, True)))
+
+    def _entries(self, menu, items):
+        for label, fn, ok in items:
+            if label is None:
+                menu.addSeparator()
+                continue
+            a = menu.addAction(label)
+            a.setEnabled(bool(ok))
+            a.triggered.connect(lambda _=False, fn=fn: fn())
+
+    def _new_menu(self, author):
+        """New ▾: a date or a quiz or exam for an author; a plan, for anyone."""
+        self.new_menu.clear()
+        if self.plan is not None and self.author():
+            self._entries(self.new_menu, (("New date…", self._new_date, author and self.idx is not None),
+                                          ("New quiz or exam…", self._new_event, author),
+                                          ("New review day…", self._new_review, author and bool(P.units(self.doc))),
+                                          (None, None, None)))
+        self._entries(self.new_menu, (("New plan from a calendar…", self.ops.new_from_calendar, True),
+                                      ("New plan from a deck…", self.ops.new_from_deck, True)))
+
+    def _date_menu(self, on_row):
+        """Change ▾ on a date: the builder's day panel, as a menu."""
+        u = self._date()
+        item = self.table.currentItem()
+        key = tuple(item.data(0, ROLE)) if on_row and item is not None and item.data(0, ROLE) else None
+        here = self.idx is not None
+        self._entries(self.menu, (("Add from the deck…", self._add, here), ("Add cards: a search or IDs…", self._add_cards, True)))
+        sug = self._suggestions(u)
+        if sug:
+            sm = self.menu.addMenu("Suggested from its name")
+            for path, n in sug:
+                a = sm.addAction(f"{M.label(path)} · {n:,}")
+                a.triggered.connect(lambda _=False, path=path: self._apply(lambda d: E.add_sources(d, u["id"], [path])[0], {u["id"]}))
+        self._entries(self.menu, (("Take the picked one off", self._take, on_row and self._takeable(item)),
+                                  ("Split the picked one…", self._split, bool(key) and key[0] in ("tag", "deck") and here)))
+        if key and key[0] in ("tag", "cut") and P.plan_tags(self.doc) and not self._own_tag(key[1]):
+            cm = self.menu.addMenu("Only what one of this plan's tags holds")
+            now = key[2] if key[0] == "cut" else None
+            for label, pid in [("All of it", None)] + [(f"Only {t.get('name') or '?'}", t.get("id")) for t in P.plan_tags(self.doc)]:
+                a = cm.addAction(label)
+                a.setCheckable(True)
+                a.setChecked(pid == now)
+                a.triggered.connect(lambda _=False, pid=pid, tag=key[1]: self._apply(lambda d: E.set_cut(d, u["id"], tag, pid), {u["id"]}))
+        ex = self._extras(u, key)
+        if ex:
+            path, without, kids, main_n = ex
+            a = self.menu.addAction("Without its extras" if not without else "With its extras")
+            a.triggered.connect(lambda _=False: self._apply(
+                lambda d: E.set_extras(d, u["id"], path, not without, kids, main_n), {u["id"]}))
+        if key and key[0] in ("tag", "cut"):
+            self._entries(self.menu, (("A note for followers on it…", lambda: self._remark(key[1]), True),))
+        self.menu.addSeparator()
+        prep = self.menu.addMenu("Prep for")
+        evs = sorted((e for e in self.doc.get("events") or [] if isinstance(e, dict)), key=lambda e: str(e.get("day") or ""))
+        for label, eid in [("Nothing", None)] + [(f"{e.get('name') or '?'} · {P.fmt_day(e.get('day'))}", e.get("id")) for e in evs]:
+            a = prep.addAction(label + (" (after it)" if eid and str(next(e for e in evs if e["id"] == eid).get("day")) < str(u["opens"]) else ""))
+            a.setCheckable(True)
+            a.setChecked(u.get("for") == eid)
+            a.triggered.connect(lambda _=False, eid=eid: self._apply(lambda d: E.set_for(d, u["id"], eid), {u["id"]}))
+        prep.addSeparator()
+        prep.addAction("New quiz or exam…").triggered.connect(lambda: self._new_event(for_uid=u["id"]))
+        even = self.menu.addAction("Spread evenly to its due date")
+        even.setCheckable(True)
+        even.setChecked(bool(u.get("even")))
+        even.setEnabled(bool(u.get("due") and u["due"] > u["opens"]))
+        even.triggered.connect(lambda on: self._apply(lambda d: E.set_even(d, u["id"], on), {u["id"]}))
+        self._entries(self.menu, (("To do…", self._todo, True), ("Make it a review day…", self._review_day, True),
                                   (None, None, None),
                                   ("Rename…", self._rename, True), ("Move to another day…", self._move, True),
                                   ("Due date…", self._due, True), (None, None, None),
-                                  ("Delete this date…", self._delete, True)):
-                if label is None:
-                    self.menu.addSeparator()
-                    continue
-                a = self.menu.addAction(label)
-                a.setEnabled(bool(ok))
-                a.triggered.connect(lambda _=False, fn=fn: fn())
+                                  ("Delete this date…", self._delete, True)))
 
     def _on_row(self):
         """A source row of the picked date is picked: the buttons act on it."""
@@ -799,3 +969,243 @@ class PlanWindow(QDialog):
                 made["uid"] = uid
                 return doc
             self._apply(change, keep=lambda: ("date", made["uid"]))
+
+    # ---- 3.9.3: the builder's day panel, through Change ▾ and New ▾ ----
+
+    def deck_tree(self):
+        """The deck's tags and subdecks here as the builder reads them (build.Tree),
+        read once a plan's load (a big deck's tree is a few seconds' work once)."""
+        if self.idx is None:
+            return None
+        if getattr(self, "_tree", None) is None:
+            tags, decks = self.idx.tree()
+            self._tree = B.Tree(tags, decks)
+        return self._tree
+
+    def _named_by_hand(self, u):
+        return bool(str(u.get("name") or "").strip()) and u.get("name") != E.auto_name(u.get("tags") or [], u.get("decks") or [])
+
+    def _suggestions(self, u):
+        """The deck's tags a date's name points at that no date has yet (Suggest.tags)."""
+        if u is None or self.idx is None or self.swap or not self._named_by_hand(u):
+            return []
+        t = self.deck_tree()
+        on, above = set(), set()
+        for k in B.placed_keys(self.doc):
+            if B.kind_of(k) != "tag":
+                continue
+            low = B.path_of(k).lower()
+            on.add(low)
+            segs = low.split("::")
+            above.update("::".join(segs[:i]) for i in range(1, len(segs)))
+        for x in P.units(self.doc):
+            for c in x.get("cut") or []:
+                on.add(str(c.get("tag") or "").lower())
+
+        def skip(path):
+            low = path.lower()
+            segs = low.split("::")
+            return low in on or low in above or any("::".join(segs[:i]) in on for i in range(1, len(segs)))
+        rows = [(B.path_of(k), t.n(k)) for k in t.order if B.kind_of(k) == "tag"]
+        return B.suggest(u.get("name"), rows, skip)
+
+    def _own_tag(self, path):
+        return str(path).lower().startswith(P.tag_base(self.doc).lower() + "::")
+
+    def _extras(self, u, key):
+        """(tag, without now, its extras' tags, its cards without them) for a
+        picked tag that has extras (Extra, Bonus), or its search without them."""
+        if not key or self.idx is None or self.swap:
+            return None
+        t = self.deck_tree()
+        if key[0] == "tag":
+            path, without = key[1], False
+        elif key[0] == "search":
+            path, without = B.extras_of(t, key[1]), True
+            if not path:
+                return None
+        else:
+            return None
+        kids = [B.path_of(k) for k in t.extra_kids(f"tag:{path}")]
+        if not kids:
+            return None
+        main = max(0, t.n(f"tag:{path}") - sum(t.n(f"tag:{k}") for k in kids))
+        return path, without, kids, main
+
+    def _remark(self, path):
+        had = next((r for r in self.doc.get("remarks") or [] if isinstance(r, dict) and r.get("tag")
+                    and str(r["tag"]).lower() == str(path).lower()), None)
+        text, ok = ask_text(self, "A note for followers", f"On {M.label(path)}, shown in their Anki when it comes up "
+                            "(one line; empty takes it off):", str((had or {}).get("text") or ""))
+        if ok:
+            self._apply(lambda d: E.set_tag_remark(d, path, text))
+
+    def _add_cards(self):
+        u = self._date()
+        if u is None:
+            return
+        idx = self.idx
+        dlg = DD.AddCardsDialog(self, f"Add cards to {P.fmt_day(u['opens'])}",
+                                lambda q: len(idx.search_cards(q)) if idx is not None else None)
+        if not dlg.exec():
+            return
+        what = dlg.what()
+        if not what:
+            return
+        kind, x = what
+        if kind == "search":
+            n = len(idx.search_cards(x)) if idx is not None else None
+            self._apply(lambda d: E.add_search(d, u["id"], x, n), {u["id"]})
+        elif kind in ("nids", "cids"):
+            self._apply(lambda d: E.add_ids(d, u["id"], kind, x), {u["id"]})
+        else:
+            self._apply(lambda d: E.add_picks(d, u["id"], x["notes"], x["cards"]), {u["id"]})
+
+    def _pace(self):
+        """(cards a day, or 0 when each day is placed by hand; the plan's study days)."""
+        pace = self.doc.get("pace") or {}
+        cap = 0 if pace.get("mode") == "placed" else max(1, int(pace.get("daily") or 20))
+        return cap, S.plan_days(self.doc)
+
+    def _split(self):
+        u = self._date()
+        item = self.table.currentItem()
+        key = tuple(item.data(0, ROLE)) if item is not None and item.data(0, ROLE) else None
+        if u is None or not key or key[0] not in ("tag", "deck") or self.idx is None:
+            return
+        field, path = ("tags" if key[0] == "tag" else "decks"), key[1]
+        t = self.deck_tree()
+        tk = f"{key[0]}:{path}"
+        placed = B.placed_keys(self.doc, t)
+        others = placed - {tk}
+        kids = [k for k in t.kids(tk) if not B.is_placed(k, others) and B.eff(t, k, others) > 0] if not self.swap else []
+        total = B.eff(t, tk, others) or len(self.idx.match(u, self.swap, self.doc))
+        cap, days = self._pace()
+        rest = t.only(tk) if kids else 0
+        parts = " · ".join(f"{B._tag_word(B.path_of(k).split('::')[-1])} {B.eff(t, k, others):,}" for k in kids[:6])
+        if len(kids) > 6:
+            parts += f" · {len(kids) - 6} more"
+        if kids and rest > 0:
+            parts += f" · the rest {rest:,}"
+        dlg = DD.SplitDialog(self, B._tag_word(path.split("::")[-1]), total, parts, cap,
+                             -(-total // cap) if cap else 3)
+        if not dlg.exec():
+            return
+        how = dlg.value()
+        made = {}
+        if how[0] == "even":
+            dd = B._Days(self.doc, days)
+            ds, d = [], dd.first(u["opens"])
+            while len(ds) < how[1]:
+                ds.append(d)
+                d = dd.next(d)
+
+            def change(doc):
+                out, nid = E.split_even(doc, u["id"], (field, path), ds)
+                made["uid"] = nid
+                return out
+            self._apply(change, {u["id"]}, keep=lambda: ("date", made.get("uid", u["id"])))
+            return
+        items = [{"key": k, "n": B.eff(t, k, others)} for k in kids]
+        if rest > 0:
+            items.append({"key": tk, "n": rest, "rest": True, "even": bool(cap) and rest > cap})
+
+        def change(doc):
+            doc = E.take_off(doc, u["id"], field, path)
+            before = E.copy.deepcopy(doc)
+            got = B.fill(doc, items, u["opens"], None, cap, days, lambda: E.new_id(doc))
+            if got["left"]:
+                raise E.Refused(got["note"] or f"{sum(x['n'] for x in got['left']):,} didn't fit: {B.left_names(got['left'])}.")
+            return E.name_dates(doc, got["touched"], before)
+        self._apply(change, {u["id"]}, keep=lambda: ("date", u["id"]) if self._unit(u["id"]) else None)
+
+    def _todo(self):
+        u = self._date()
+        if u is None:
+            return
+        dlg = DD.LinesDialog(self, f"To do on {P.fmt_day(u['opens'])}", u.get("todo") or [])
+        if dlg.exec():
+            lines = dlg.lines()
+            self._apply(lambda d: E.set_todo(d, u["id"], lines), {u["id"]})
+
+    def _review_day(self, day=None):
+        """A review day on the picked date's day (or a review's, or `day`)."""
+        kind, key = self.picked or ("", "")
+        if day is None:
+            day = key if kind == "review" else (self._date() or {}).get("opens")
+        if not day:
+            return
+        before = [u for u in sorted(P.units(self.doc), key=lambda x: str(x.get("opens") or "")) if str(u["opens"]) <= day]
+        if not before:
+            self.status.setText("A review day comes after the dates it reviews: none open by then.")
+            return
+        r = self._review(day)
+        dlg = DD.ReviewDialog(self, f"Review day · {P.fmt_day(day)}", [(u["id"], M.date_label(u)) for u in before],
+                              (r.get("from"), r.get("to")) if r else None)
+        if not dlg.exec():
+            return
+        v = dlg.value()
+        if v[0] == "off":
+            self._apply(lambda d: E.take_review(d, day), keep=("gone",))
+        else:
+            self._apply(lambda d: E.set_review(d, day, v[1], v[2]), keep=("review", day))
+
+    def _no_review(self):
+        kind, key = self.picked or ("", "")
+        if kind == "review":
+            self._apply(lambda d: E.take_review(d, key), keep=("gone",))
+
+    def _new_review(self):
+        day = ask_day(self, "A review day", "The morning followers get a deck of what they've seen so far.",
+                      self.ops.today(), "Next")
+        if day:
+            self._review_day(day)
+
+    def _new_event(self, for_uid=None):
+        if not self.author():
+            return
+        name, ok = ask_text(self, "A quiz or an exam", "Its name, as followers see it (Micro quiz, Block 2 exam):", "")
+        if not ok or not name.strip():
+            return
+        u = self._unit(for_uid) if for_uid else self._date()
+        start = E._later(u["opens"], 3) if u and u.get("opens") else self.ops.today()
+        day = ask_day(self, f"{name.strip()}: its day", "Dates before it can prep for it.", start, "Put it on")
+        if not day:
+            return
+        made = {}
+
+        def change(d):
+            doc, eid = E.add_event(d, day, name)
+            made["eid"] = eid
+            return E.set_for(doc, for_uid, eid) if for_uid else doc
+        self._apply(change, {for_uid} if for_uid else (), keep=lambda: ("date", for_uid) if for_uid else ("event", made["eid"]))
+
+    def _picked_event(self):
+        return self._event(self.picked[1]) if self.picked and self.picked[0] == "event" else None
+
+    def _rename_event(self):
+        e = self._picked_event()
+        if e is None:
+            return
+        name, ok = ask_text(self, "Rename", "Its name, as followers see it:", str(e.get("name") or ""))
+        if ok and name.strip() and name.strip() != e.get("name"):
+            self._apply(lambda d: E.rename_event(d, e["id"], name))
+
+    def _move_event(self):
+        e = self._picked_event()
+        if e is None:
+            return
+        day = ask_day(self, f"Move {e.get('name') or 'it'}", "The dates that prep for it keep prepping for it.",
+                      e.get("day"), "Move it")
+        if day and day != e.get("day"):
+            self._apply(lambda d: E.move_event(d, e["id"], day))
+
+    def _take_event(self):
+        e = self._picked_event()
+        if e is None:
+            return
+        n = len(self._prep(e))
+        if confirm(self, f"Take {e.get('name') or 'it'} off?",
+                   f"{n:,} date{'s' if n != 1 else ''} prep for it; they stay, prepping for nothing." if n
+                   else "It comes off the plan for everyone following it.", "Take it off", danger=True):
+            self._apply(lambda d: E.take_event(d, e["id"]), keep=("gone",))

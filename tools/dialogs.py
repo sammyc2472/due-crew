@@ -1316,6 +1316,66 @@ def main(out):
         if dlg.study_btn.text() != "Study for it":
             raise RuntimeError("planner: an event's Study")
         shoot(dlg, os.path.join(out, "planner-event.png"))
+        # 3.9.3: the builder's day panel in Your plans, through Change ▾ and New ▾
+        from due_crew.planner import date_dialogs as DD
+        dlg = PlanWindow_()
+        dlg.resize(980, 640)
+        dlg._go_to(("date", "u1"))
+        rows = [dlg.table.topLevelItem(i) for i in range(dlg.table.topLevelItemCount())]
+        dlg.table.setCurrentItem(next(r for r in rows if r.text(0).strip() == "Cardio › Heart Failure"))
+        items = [a.text() for a in dlg.menu.actions()]
+        for want in ("Add from the deck…", "Add cards: a search or IDs…", "Take the picked one off", "Split the picked one…",
+                     "A note for followers on it…", "Prep for", "Spread evenly to its due date", "To do…",
+                     "Make it a review day…", "Rename…", "Move to another day…", "Due date…", "Delete this date…"):
+            if want not in items:
+                raise RuntimeError(f"planner: Change ▾ on a date: {items}")
+        news = [a.text() for a in dlg.new_menu.actions()]
+        if news[:3] != ["New date…", "New quiz or exam…", "New review day…"] or "New plan from a calendar…" not in news:
+            raise RuntimeError(f"planner: New ▾ {news}")
+        dlg._apply(lambda d: PE.set_review(d, day(5), "u1", "u3"), keep=("review", day(5)))
+        review = dlg._find(("review", day(5)))
+        if review is None or "Review · Heart failure – Shock" not in review.text(0) or dlg.picked != ("review", day(5)):
+            raise RuntimeError(f"planner: a review day saved: {dlg.picked}, {review.text(0) if review else None}")
+        if [a.text() for a in dlg.menu.actions() if a.text()] != ["Change its dates…", "No review day"]:
+            raise RuntimeError(f"planner: Change ▾ on a review day: {[a.text() for a in dlg.menu.actions()]}")
+        shoot(dlg, os.path.join(out, "planner-review.png"))
+        dlg._apply(lambda d: PE.add_search(d, "u3", 'tag:#Big_Step1_v3::#Videos::Cardio::Shock -tag:*Extra*', 7), {"u3"},
+                   keep=("date", "u3"))
+        u3 = next(u for u in STORE.plans[pid]["doc"]["units"] if u["id"] == "u3")
+        if u3.get("search") != ['tag:#Big_Step1_v3::#Videos::Cardio::Shock -tag:*Extra*'] or u3.get("sn", {}).get(u3["search"][0]) != 7:
+            raise RuntimeError(f"planner: a search saved: {u3}")
+        dlg._apply(lambda d: PE.set_todo(d, "u3", [{"k": "watch", "t": "Shock, part 2", "url": "https://example.org/shock"}]),
+                   {"u3"}, keep=("date", "u3"))
+        if "Watch: Shock, part 2" not in dlg.todo.text():
+            raise RuntimeError(f"planner: a to-do saved: {dlg.todo.text()!r}")
+        shoot(dlg, os.path.join(out, "planner-search.png"))
+        idx = P.DeckIndex(col, 1)
+        col.find_cards = lambda q: sorted(idx.tag_cards(q.split("tag:", 1)[1].split()[0])) if "tag:" in q else []
+        add = DD.AddCardsDialog(None, "Add cards to Thu 22", lambda q: len(idx.search_cards(q)))
+        add.box.setPlainText("tag:#Big_Step1_v3::#Videos::Cardio::Shock")
+        if not add.go.isEnabled() or "finds 7 cards here" not in add.said.text():
+            raise RuntimeError(f"planner: Add cards, a search: {add.said.text()!r}")
+        shoot(add, os.path.join(out, "planner-addcards.png"))
+        add.box.setPlainText("1688392011234, 1688392011235\n1688392011236")
+        if not add.kinds.isVisibleTo(add) or add.what() != ("nids", [1688392011234, 1688392011235, 1688392011236]):
+            raise RuntimeError(f"planner: Add cards, note IDs: {add.what()}")
+        shoot(add, os.path.join(out, "planner-addids.png"))
+        add.box.setPlainText("is:due tag:x")
+        if add.go.isEnabled() or "each person" not in add.said.text():
+            raise RuntimeError("planner: Add cards takes no search about one person's Anki")
+        lines = DD.LinesDialog(None, "To do on Mon 19", [{"k": "watch", "t": "Heart failure 1–2"}, {"k": "read", "t": "pp. 290–295"}])
+        shoot(lines, os.path.join(out, "planner-todo.png"))
+        every = DD.LinesDialog(None, "Every week", [{"k": "do", "t": "Practice questions", "r": "4"}], every=True)
+        if every.lines() != [{"k": "do", "t": "Practice questions", "r": "4"}]:
+            raise RuntimeError(f"planner: Every week's lines {every.lines()}")
+        shoot(every, os.path.join(out, "planner-every.png"))
+        rv = DD.ReviewDialog(None, "Review day · Sat 24", [("u1", "Mon 19 · Heart failure"), ("u2", "Tue 20 · HF drugs"),
+                                                          ("u3", "Thu 22 · Shock")])
+        if rv.value() != ("set", "u1", "u3"):
+            raise RuntimeError(f"planner: a review day's dates {rv.value()}")
+        shoot(rv, os.path.join(out, "planner-reviewday.png"))
+        sp = DD.SplitDialog(None, "Heart Failure", 18, "Acute 6 · Chronic 9 · the rest 3", 20, 2)
+        shoot(sp, os.path.join(out, "planner-split.png"))
         empty = PlanWindow_([])
         shoot(empty, os.path.join(out, "planner-empty.png"))
         idx = P.DeckIndex(col, 1)

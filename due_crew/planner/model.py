@@ -129,8 +129,9 @@ def sources(idx, unit, doc, swap=None):
     for q in unit.get("search") or []:
         if q in cut_q:
             continue
+        from .build import search_name  # 3.9.3: named as the builder names it ("SLG 12 but not Pharm")
         rows.append({"key": ("search", q), "kind": "search", "group": GROUP["search"],
-                     "name": str(q)[:60] + ("…" if len(str(q)) > 60 else ""), "raw": str(q),
+                     "name": search_name(q), "raw": str(q),
                      "cids": idx.match({"search": [q]}, swap, doc)})
     picked = P.picks(unit)
     if picked:
