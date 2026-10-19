@@ -294,8 +294,10 @@ def suggestions(c, today):
 def notes():
     _pc, st = _day_state()
     n = len(st.get("recovered") or [])
-    return [{"key": "recovered", "text": f"Recovered {n:,} leech{'es' if n != 1 else ''} as new cards",
-             "go": "See them"}] if n and "recovered" not in (st.get("dismissed") or []) else []
+    # 3.9.3 (Sam): one card is "it": "Recovered 1 leech as a new card · See it"
+    text = f"Recovered {n:,} leeches as new cards" if n != 1 else "Recovered 1 leech as a new card"
+    return [{"key": "recovered", "text": text, "go": "See them" if n != 1 else "See it"}] \
+        if n and "recovered" not in (st.get("dismissed") or []) else []
 
 
 YOU_TABS = D.TABS + ("plans", "insights")  # 3.8.0: the You bubble's tabs, Due's lists first
@@ -455,7 +457,8 @@ def recover_now():
     morning(c)
     _pc, st = _day_state()
     n = len(st.get("recovered") or [])
-    tooltip(f"{n:,} leech{'es' if n != 1 else ''} back as new cards. Edit › Undo puts {'them' if n != 1 else 'it'} back."
+    tooltip((f"{n:,} leeches back as new cards. Edit › Undo puts them back." if n != 1
+             else "1 leech back as a new card. Edit › Undo puts it back.")
             if n else "No leeches to recover now. Each morning looks again.")
 
 

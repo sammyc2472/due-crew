@@ -7204,7 +7204,7 @@ def test_due_board_and_clicks():
         dc._state["settings_tab"] = "board"
         dc._on_js(False, as_board("duecrew:set:due_leeches:1"), DeckBrowser())
         check("leeches: switched on, today's come back at once, and it says so",
-              conf2.get("due_leeches") is True and said and said[-1].startswith("1 leech back as new cards"), (said, store))
+              conf2.get("due_leeches") is True and said and said[-1] == "1 leech back as a new card. Edit › Undo puts it back.", (said, store))
         dc._on_js(False, as_board("duecrew:set:due_leeches:1"), DeckBrowser())
         check("leeches: on again changes nothing", len(said) == 1)
     finally:
@@ -17766,6 +17766,30 @@ def test_offline_stays_off_stderr_v392():
                     loud.append(f"{f.name}:{h.lineno}")
     check("every handler that prints a traceback around a request catches TransportError first",
           not loud and len(net) > 20, loud)
+
+
+def test_one_leech_is_it_v393():
+    """3.9.3 (Sam, of Due's line "Recovered 1 leech as new cards · See them":
+    "for a singular recovered card, should be 'see it'"): one card is "it",
+    wherever the board names one leech: Due's morning note, the toast when
+    Recover leeches is switched on, and Insights' leech line."""
+    from due_crew import due_flow as F
+    saved = F._day_state
+    try:
+        F._day_state = lambda: ({}, {"recovered": [5], "dismissed": []})
+        one = F.notes()
+        F._day_state = lambda: ({}, {"recovered": [5, 6], "dismissed": []})
+        two = F.notes()
+    finally:
+        F._day_state = saved
+    check("one leech: Due's note says a new card, See it; two say new cards, See them",
+          one == [{"key": "recovered", "text": "Recovered 1 leech as a new card", "go": "See it"}]
+          and two == [{"key": "recovered", "text": "Recovered 2 leeches as new cards", "go": "See them"}], (one, two))
+    lines = [board._insights_html(10, v) for v in ({"leeches": 1}, {"kept": 1}, {"near": 1}, {"leeches": 1, "near": 1},
+                                                    {"leech_out": 1}, {"leech_out": 2})]
+    check("one leech: Insights' line says See it for one card, See them for more",
+          [">See it</a>" in x for x in lines] == [True, True, True, False, True, False]
+          and [">See them</a>" in x for x in lines] == [False, False, False, True, False, True], lines)
 
 
 def main():

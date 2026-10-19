@@ -2552,7 +2552,7 @@ def _insights_html(did, v):
     if not (lee or near or kept) and lout:
         # 3.9.2's QoL pass: every one left out, the way back to them still here
         out += (f'<div class="iline"><b>{lout:,}</b> leech{"es" if lout != 1 else ""} you left out &middot; '
-                f'<a href="#" onclick="{_pycmd(f"insleeches:{did}")}">See them</a></div>')
+                f'<a href="#" onclick="{_pycmd(f"insleeches:{did}")}">{"See it" if lout == 1 else "See them"}</a></div>')
     elif lee or near or kept:
         # 3.8.0: from the plan card, a leech is the deck's; 3.9.2: and the ones a miss away, a view of their own,
         # and the ones Anki tagged and kept showing (Tag Only, its default since 23.10)
@@ -2562,7 +2562,8 @@ def _insights_html(did, v):
                                               (f"<b>{near:,}</b> one miss away" if lee or kept  # alone, it says of what
                                                else f"<b>{near:,}</b> card{'' if near == 1 else 's'} one miss from a leech")
                                               if near else "") if x)
-        out += f'<div class="iline">{said} &middot; <a href="#" onclick="{_pycmd(f"insleeches:{did}")}">See them</a></div>'
+        one = lee + near + kept == 1  # 3.9.3 (Sam): one card is "it"
+        out += f'<div class="iline">{said} &middot; <a href="#" onclick="{_pycmd(f"insleeches:{did}")}">{"See it" if one else "See them"}</a></div>'
     if not out:
         return '<div class="tq0">Insights fill in after a week of reviews.</div>'
     return f'<div class="dc-ins">{out}</div>'

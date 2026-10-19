@@ -2943,3 +2943,9 @@ every release that changes how something works.
   `test_offline_stays_off_stderr_v392` runs `_bg` both ways and checks no
   handler that prints a traceback around a request lets a TransportError
   reach it.
+- 3.9.3, one leech is "it" (Sam, of Due's "Recovered 1 leech as new cards ·
+  See them": "for a singular recovered card, should be 'see it'"). Due's
+  morning note says "Recovered 1 leech as a new card · See it", the toast
+  when Recover leeches is switched on "1 leech back as a new card. Edit ›
+  Undo puts it back.", and Insights' leech line "See it" when it names one
+  card. `test_one_leech_is_it_v393`.
