@@ -681,6 +681,7 @@ some history (a few weeks of reviews) and a few leeches.
 - [ ] Tag Only leeches: a deck whose preset's Leech action is Tag Only (Anki's default since 23.10). Fail a card past its leech count (or use one tagged leech with lapses at the threshold): Insights says "N leeches still in your reviews · See them"; the view lists it under "Leeches still in your reviews", due today or back in N days, ⋯ with Learn it fresh, Edit, Leave it out (no Bring back). Learn it fresh: a new card, tag off, one Edit › Undo.
 - [ ] The map › by When you started them, on a deck you only started this week: it stays by topic and says "Everything you've started is from one week".
 - [ ] Cheer window › other: © or ™ from the computer's picker lands as the cheer.
+- [ ] Offline: turn Wi-Fi off, quit and reopen Anki, wait a minute on the Decks screen, then click the board's ↻: no error window from Due Crew (the board's foot says it couldn't sync; Anki's own sync may say it's offline). Wi-Fi back on, ↻: the board fills in.
 - [ ] duecrew.com builder, a plan you wrote: with an unsaved change, Share › Copy for next year says to save first; saved, it makes a copy named "<plan> (next year)" whose dates fall on the same weekdays a year on.
 
 ### 3.9.1: the short pass before release (about 15 minutes; the rest of 3.9.1 below as time allows)
