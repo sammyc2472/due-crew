@@ -105,7 +105,7 @@
     { sel: ".du-bx", kind: "tick", key: function (el) { return "bx:" + (cmdOf(el) || words(rowOf(el))); },
       val: function (el) { return el.classList.contains("on") ? "1" : el.classList.contains("part") ? "p" : "0"; } },
     // 2 the day's bar, and a plan date's
-    { sel: ".wbar > i", kind: "bar", key: function (el) { return "bar:" + words(rowOf(el)).replace(/\d[\d,]*/g, "#"); },
+    { sel: ".wbar > i", kind: "bar", key: function (el) { return "bar:" + (el.classList.contains("lt") ? "lt:" : "") + words(rowOf(el)).replace(/\d[\d,]*/g, "#"); },
       val: function (el) { return el.style.width; } },
     { sel: ".du-n", kind: "text", key: function () { return "dun"; }, val: function (el) { return words(el); } },
     // 3 done for today, 6 Hide and Show

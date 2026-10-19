@@ -2949,3 +2949,33 @@ every release that changes how something works.
   when Recover leeches is switched on "1 leech back as a new card. Edit ›
   Undo puts it back.", and Insights' leech line "See it" when it names one
   card. `test_one_leech_is_it_v393`.
+- 3.9.3, Today's bars (Sam: "a similar progress bar for reviews as appears
+  with the new cards... perhaps all of them should fill as cards are pushed
+  to at least tomorrow"; the Today's Bars mock, his yes to its picks). One
+  rule for every bar in the Today box: a card fills its bar once it's
+  through for today, answered and next due tomorrow or later; answered and
+  back later today (learning, relearning) is the bar's lighter part, so the
+  bar moves with every answer and fills only when the day's done. Each bar
+  is its row's, under its words and numbers, the row's whole width, so the
+  bars line up. **Reviews** has a bar: the cards due from before today
+  (reviews, relearning, learning carried in from an earlier day), "84 /
+  140", and once started a line with the ones back later today and the ones
+  due now ("6 back at 14:30 · 50 still due"). **A plan's date** counts the
+  same way and ticks itself when its bar is full ("all done"; it said "all
+  seen"); a date behind still counts what's been seen, so a card in its
+  steps today doesn't put it behind. **New cards** (no plan's date today):
+  the ones started today (a new card's first answer: type 0, lastIvl 0 in
+  the revlog, checked on Anki's own engine) and what Anki's limits still
+  give, a line a top deck when there's more than one. On a plan's day, the
+  plan's dates are the new cards; **Other new cards** shows only once I've
+  started some none of today's dates holds, so their steps keep the day
+  open as the Reviews row did for every learning card (3.8.0). The plan's
+  progress, the crew's "N of M done" and the server stay on "seen": they're
+  about what's covered. Where: `due_flow.bars` (one pass over today's
+  answers and today's learning cards; `_reviews` keeps Study today's
+  count), `plans.DeckIndex.again` (a date's cards in their steps today,
+  from the read it already makes) and `P.parts`' fourth number,
+  `due_flow.parts` (`plan_later`, `plan_today`), `due.reviews_row` /
+  `new_row` / `through`, `board._due_reviews` / `_due_new` / `_wbar2`;
+  motion.js gives a bar's light part its own key (both copies). A count
+  from before 3.9.3 still draws as a number. `test_todays_bars_v393`.

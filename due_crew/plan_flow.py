@@ -1849,7 +1849,8 @@ def build_checks(plan_list):
 
 
 # 3.9.1: what refresh_progress leaves in _state; its last answer, and what it was read from
-_WRITES = ("plan_progress", "plan_load", "plan_picks", "plan_reviews", "plan_session", "plan_parts", "plan_sibs")
+_WRITES = ("plan_progress", "plan_load", "plan_picks", "plan_reviews", "plan_session", "plan_parts", "plan_sibs",
+           "plan_later", "plan_today")
 _last = {"key": None, "got": None}
 
 

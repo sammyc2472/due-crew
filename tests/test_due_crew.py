@@ -3354,7 +3354,7 @@ def test_plans_buried_siblings():
     check("siblings: Due says when they come back",
           due._date_row(dict(x, sibs=[12, 12]), set(), "2026-03-01")["n"] == "done \u00b7 12 siblings tomorrow"
           and due._date_row(dict(x, sibs=[1, 0]), set(), "2026-03-01")["n"] == "done \u00b7 1 sibling later"
-          and due._date_row(x, set(), "2026-03-01")["n"] == "all seen"
+          and due._date_row(x, set(), "2026-03-01")["n"] == "all done"
           and due._date_row(dict(x, sibs=[1, 0]), set(), "2026-03-01")["done"])
     # 3.7.3: a review card of an older note, due today, buries its new sibling;
     # that sibling was seen before today, so it isn't today's progress, nor behind
@@ -9818,7 +9818,7 @@ def test_plan_tags_round_two_v381():
     check("r2: a cut's topic finds its cards, as the date does", idx.match(items[0][2], None, doc) == {2, 11})
     got = P.parts(idx, dict(u1, tags=["#Book::Ch07"]), None, doc)
     check("r2: a cut counts in its video's row of Due's progress",
-          sorted(g for g, _s, _t in got) == ["Other", "Videos"] and dict((g, t) for g, _s, t in got)["Videos"] == 2, str(got))
+          sorted(g for g, _s, _t, _b in got) == ["Other", "Videos"] and dict((g, t) for g, _s, t, _b in got)["Videos"] == 2, str(got))
     applied, res = P.sync_tags(col, idx, doc, {}, "Due Crew: tags")
     check("r2: the tag goes on the notes of its single cards (Anki tags notes); missing ones are counted",
           "DueCrew::MS2_Block_1::SLG_12" in _tags_of(col, 1) and "DueCrew::MS2_Block_1::SLG_12" in _tags_of(col, 2)
@@ -17790,6 +17790,137 @@ def test_one_leech_is_it_v393():
     check("one leech: Insights' line says See it for one card, See them for more",
           [">See it</a>" in x for x in lines] == [True, True, True, False, True, False]
           and [">See them</a>" in x for x in lines] == [False, False, False, True, False, True], lines)
+
+
+def test_todays_bars_v393():
+    """3.9.3 (Sam: "a similar progress bar for reviews as appears with the new
+    cards... perhaps all of them should fill as cards are pushed to at least
+    tomorrow"; the Today's Bars mock, his yes to its picks): one rule for
+    every bar on Today, through for today (answered, next due tomorrow or
+    later), with what's answered and back later today in a lighter part;
+    Reviews gets its bar; a plan's date ticks when its bar is full; a New
+    cards row without a plan's date, Other new cards beside one."""
+    import time
+    from due_crew import due as D, due_flow as F, plans as P
+    T = TODAY.isoformat()
+    cut = fakes.day_cutoff_for(TODAY)
+    conn = fakes.make_collection(sqlite3.connect(":memory:"))
+    col = fakes.FakeCol(conn, cut)
+    day = col.sched.today
+    start = (cut - 86400) * 1000
+    # (cid, did, type, queue, due, first answer today: (type, lastIvl) or None)
+    cards = [(1, 1, 2, 2, day + 3, (1, 10)),        # a review, through
+             (2, 1, 3, 1, cut - 3600, (1, 20)),     # a review missed, relearning back later today
+             (3, 1, 2, 2, day, None),               # a review still due (Anki's tree counts it)
+             (4, 1, 3, 3, day, None),               # relearning from yesterday, due today, not answered
+             (5, 1, 1, 1, cut - 100, (0, 0)),       # a new card started today, in its steps
+             (6, 2, 2, 2, day + 1, (0, 0)),         # a new card started today, graduated
+             (7, 1, 2, 2, day + 1, (0, -600))]      # learning carried in from yesterday, through
+    for cid, did, ctype, queue, due, first in cards:
+        conn.execute("INSERT INTO notes (id, guid, tags) VALUES (?, ?, '')", (cid, f"g{cid}"))
+        conn.execute("INSERT INTO cards (id, nid, did, type, queue, due) VALUES (?, ?, ?, ?, ?, ?)",
+                     (cid, cid, did, ctype, queue, due))
+        if first:
+            conn.execute("INSERT INTO revlog (id, ease, time, type, cid, lastIvl) VALUES (?, 3, 5000, ?, ?, ?)",
+                         (start + cid * 1000, first[0], cid, first[1]))
+            conn.execute("INSERT INTO revlog (id, ease, time, type, cid, lastIvl) VALUES (?, 3, 5000, 1, ?, 5)",
+                         (start + 900000 + cid, cid))  # a later answer: only the first one says what it was
+    conn.execute("INSERT INTO revlog (id, ease, time, type, cid) VALUES (?, 3, 5000, 1, 99)", (start + 5,))  # a deleted card
+    conn.execute("INSERT INTO revlog (id, ease, time, type, cid) VALUES (?, 3, 5000, 1, 1)", (start - 86400000,))  # yesterday
+    node = lambda i, name, rv, new: types.SimpleNamespace(deck_id=i, name=name, review_count=rv, learn_count=0,  # noqa: E731
+                                                          new_count=new, children=[])
+    tree = types.SimpleNamespace(children=[node(1, "Big Step 1", 1, 5), node(2, "<Pharm>", 0, 3)])
+    now = cut - 7200
+    got = F.bars(col, tree, now, 1200, {5})
+    check("bars: Reviews are the cards due from before today, carried learning too: 2 through, 1 back later, 2 still due",
+          (got["whole"], got["through"], got["later"], got["left"], got["back"]) == (5, 2, 1, 2, 1)
+          and got["at"] == f"{time.localtime(cut - 3600).tm_hour}:{time.localtime(cut - 3600).tm_min:02d}", got)
+    check("bars: New cards are the ones started today and what Anki still gives, a line a top deck",
+          got["new"] == {"through": 1, "later": 1, "whole": 10,
+                         "decks": [["Big Step 1", 0, 6, 1], ["<Pharm>", 1, 4, 0]]}, got["new"])
+    check("bars: Other new cards leave out today's plan dates' cards, and hold no limit's",
+          got["other"] == {"through": 1, "later": 0, "whole": 1, "decks": [["<Pharm>", 1, 1, 0]]}, got["other"])
+    check("bars: the box's one timer, at the first learning card back later today",
+          got["first"] is True and got["_first"] == cut - 3600)
+    # the deck index: what of a date is back later today
+    conn.execute("UPDATE cards SET did = 10")
+    conn.execute("INSERT INTO cards (id, nid, did, type, queue, due) VALUES (8, 8, 10, 1, 3, ?)", (day + 1,))
+    conn.execute("INSERT INTO cards (id, nid, did, type, queue, due) VALUES (9, 9, 10, 1, 1, ?)", (cut + 60,))
+    conn.execute("INSERT INTO notes (id, guid, tags) VALUES (8, 'g8', ''), (9, 'g9', '')")
+    col.decks = fakes.FakeDecks({10: "Step 1"})
+    idx = P.DeckIndex(col, 10)
+    check("bars: the index knows the cards in their steps and due again today (not tomorrow's)",
+          idx.again == {2, 4, 5}, sorted(idx.again))
+
+    # the pure rows
+    rv = dict(got, due=6, done=12)
+    v = D.view(T, [], [], {}, reviews=rv)
+    kinds = [(r["kind"], r.get("other")) for r in v["rows"]]
+    check("bars: no plan's date today: Reviews, then New cards", kinds == [("reviews", None), ("new", False)], kinds)
+    h = board._due_html(v)
+    rh = h[h.index("<b>Reviews</b>"):h.index("<b>New cards</b>")]
+    check("bars: Reviews says 2 / 5, its line the ones back and the ones due now, its bar two-tone",
+          "2 / 5" in rh and "1 back at " in rh and "2 still due" in rh and 'class="wbar two"' in rh
+          and 'style="width:40%"' in rh and 'class="lt" style="width:20%"' in rh, rh)
+    check("bars: the bar is the row's own, after its end, the row's whole width",
+          re.search(r'<span class="end">.*?</span></span><span class="wbar two"', rh) is not None
+          and "#due-crew .du-r > .wbar { grid-column: 2 / -1; }" in board.DUE_CSS, rh)
+    nh = h[h.index("<b>New cards</b>"):]
+    check("bars: New cards, 1 / 10, a line a deck (names escaped)",
+          "1 / 10" in nh and "<b>Big Step 1</b>" in nh and "0 / 6" in nh and "<b>&lt;Pharm&gt;</b>" in nh
+          and "1 / 4" in nh and "<Pharm>" not in nh, nh[:900])
+    check("bars: the day counts both rows, and Study today has the new cards to walk",
+          v["total_n"] == 2 and v["done_n"] == 0 and v["study"])
+    morning = D.view(T, [], [], {}, reviews={"due": 140, "done": 0, "whole": 140, "through": 0, "later": 0, "left": 140,
+                                            "back": 0, "at": "", "new": {"whole": 20, "through": 0, "later": 0,
+                                                                          "decks": [["Big Step 1", 0, 20, 0]]}})
+    mh = board._due_html(morning)
+    check("bars: the morning says 140 due and 20 new, bars empty, no line yet; one deck named under its row",
+          "140 due" in mh and "20 new" in mh and "still due" not in mh and mh.count('class="wbar two"') == 2
+          and "<small>Big Step 1</small>" in mh and "du-sub" not in mh[mh.index("New cards"):], mh)
+    done = D.view(T, [], [], {}, reviews={"due": 0, "done": 160, "whole": 140, "through": 140, "later": 0, "left": 0,
+                                         "back": 0, "at": "", "new": {"whole": 20, "through": 20, "later": 0, "decks": []}})
+    dh = board._due_html(done)
+    check("bars: through for today, both ticked, all done, the bars put away, the day done",
+          dh.count("all done") == 2 and "wbar two" not in dh and done["done_n"] == done["total_n"] == 2
+          and D.done_for_today(done), dh)
+    last = D.view(T, [], [], {}, reviews={"due": 0, "done": 140, "whole": 140, "through": 134, "later": 6, "left": 0,
+                                         "back": 6, "at": "14:30"})
+    check("bars: everything answered but six back later: not done, 134 / 140, 6 back at 14:30",
+          not last["rows"][0]["done"] and "134 / 140" in board._due_html(last) and "6 back at 14:30" in board._due_html(last)
+          and not D.done_for_today(last))
+    old = D.view(T, [], [], {}, reviews={"due": 12, "done": 3})
+    check("bars: a count from before 3.9.3 is a number, no bar, as before",
+          "12 due" in board._due_html(old) and "wbar two" not in board._due_html(old))
+    none = D.view(T, [], [], {}, reviews={"due": 0, "done": 0, "whole": 0, "through": 0, "later": 0, "left": 0,
+                                         "back": 0, "at": "", "new": {"whole": 0}})
+    check("bars: no reviews and no new cards today: neither row is drawn, nothing counted",
+          [r["kind"] for r in none["rows"]] == ["reviews"] and none["total_n"] == 0
+          and "Reviews" not in board._due_html(none) and "New cards" not in board._due_html(none))
+
+    # a plan's date: the same rule, and the tick with it
+    x = {"pid": "p", "uid": "u", "plan": "MS2", "name": "Heart failure", "opens": T, "seen": 18, "later": 6, "total": 40,
+         "parts": [["Videos", 14, 28, 5], ["Book", 4, 12, 1]]}
+    pv = D.view(T, [x], [], {}, reviews=rv)
+    row = next(r for r in pv["rows"] if r["kind"] == "plan")
+    ph = board._due_html(pv)
+    check("bars: a plan's date says 12 / 40, its parts 9 / 28 and 3 / 12, its bar 12 solid and 6 light",
+          row["n"] == "12 / 40" and "9 / 28" in ph and "3 / 12" in ph
+          and 'style="width:30%"></i><i class="lt" style="width:15%"' in ph, ph[:3000])
+    check("bars: on a plan's day, Other new cards (the ones none of its dates holds), not on a plan",
+          [r["kind"] for r in pv["rows"]] == ["reviews", "new", "plan"] and pv["rows"][1]["other"]
+          and "<b>Other new cards</b>" in ph and "not on a plan" in ph and "<b>New cards</b>" not in ph)
+    seen_all = dict(x, seen=40, later=2, parts=[])
+    r2 = D._date_row(seen_all, set(), T)
+    check("bars: every card seen but two back later today: 38 / 40, not ticked yet",
+          r2["n"] == "38 / 40" and not r2["done"] and r2["part"])
+    r3 = D._date_row(dict(seen_all, later=0), set(), T)
+    check("bars: through for today: all done, ticked", r3["n"] == "all done" and r3["done"])
+    behind, _mine = D.behind([dict(seen_all, opens="2026-01-01")], [], {}, T)
+    check("bars: a date from before today, all seen, some in their steps today, isn't behind (seen still counts there)",
+          behind == [], behind)
+    js = open(os.path.join(REPO, "due_crew", "motion.js"), encoding="utf-8").read()
+    check("bars: a bar's light part moves on its own key", '(el.classList.contains("lt") ? "lt:" : "")' in js)
 
 
 def main():

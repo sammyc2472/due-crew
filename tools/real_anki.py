@@ -1112,6 +1112,57 @@ def check_planner(path):
     return failed
 
 
+def check_bars(tmp):
+    """3.9.3's Today bars (due_flow.bars) on the real engine, on a small
+    collection of its own: reviews answered (one missed, so relearning),
+    new cards started, and Anki's own revlog, tree and queues read back."""
+    import time
+    from anki.collection import Collection
+    from due_crew import due_flow as F
+    failed = []
+
+    def ok(name, cond, extra=""):
+        print(("PASS " if cond else "FAIL ") + "bars: " + name, extra)
+        if not cond:
+            failed.append("bars: " + name)
+    col = Collection(os.path.join(tmp, "bars.anki2"))
+    try:
+        m = col.models.by_name("Basic")
+        big, pharm = col.decks.id("Big Step 1"), col.decks.id("Pharm")
+        for i in range(12):
+            n = col.new_note(m)
+            n["Front"], n["Back"] = f"q{i}", "a"
+            col.add_note(n, big if i < 8 else pharm)
+        cids = sorted(col.find_cards(""))
+        col.sched.set_due_date(cids[:4], "0")  # four reviews due today
+        col.decks.select(big)
+
+        def answer(rating):
+            q = col.sched.get_queued_cards()
+            c = col.get_card(q.cards[0].card.id)
+            c.start_timer()
+            col.sched.answer_card(col.sched.build_answer(card=c, states=col._backend.get_scheduling_states(c.id),
+                                                         rating=rating))
+            return c
+        first = answer(0)  # a review, Again: relearning
+        for _ in range(5):
+            answer(2)  # Good
+        tree = col.sched.deck_due_tree()
+        got = F.bars(col, tree, int(time.time()), int(col.get_config("collapseTime", 1200) or 0), set())
+        fresh = col.db.list("SELECT cid FROM revlog WHERE type = 0 AND lastIvl = 0 AND ease > 0")
+        ok("a new card's first answer is type 0, lastIvl 0 in Anki's revlog", len(fresh) == 3, str(fresh))
+        ok("Reviews: four due, two through, the missed one back later today, two due now",
+           (got["whole"], got["through"], got["later"]) == (4, 2, 1) and got["left"] == 2, str(got))
+        ok("New cards: three started, in their steps; what Anki still gives, a line a deck",
+           got["new"]["later"] == 3 and got["new"]["through"] == 0
+           and [d[0] for d in got["new"]["decks"]] == ["Big Step 1", "Pharm"]
+           and got["new"]["decks"][0][2] == 3 + int(tree.children[0].new_count), str(got["new"]))
+        ok("the missed review is relearning, Anki's own", col.get_card(first.id).type == 3)
+    finally:
+        col.close()
+    return failed
+
+
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory() as tmp:
         p = os.path.join(tmp, "big.anki2")
@@ -1119,5 +1170,6 @@ if __name__ == "__main__":
         failed = check(p)
         failed += check_392(tmp)
         failed += check_planner(p)
+        failed += check_bars(tmp)
     print(f"\n{len(failed)} failed" + (": " + "; ".join(failed) if failed else ""))
     sys.exit(1 if failed else 0)

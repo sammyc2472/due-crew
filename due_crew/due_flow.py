@@ -71,6 +71,7 @@ def plan_dates(today):
     prog = _state.get("plan_progress") or {}
     parts = _state.get("plan_parts") or {}
     sibs = _state.get("plan_sibs") or {}
+    later = _state.get("plan_later") or {}
     state = pf._state_cfg()
     end = D.iso(D.d(today) + datetime.timedelta(days=D.AHEAD))
     dates, events, reviews = [], [], []
@@ -110,6 +111,7 @@ def plan_dates(today):
             ev = evs.get(u.get("for"))
             dates.append({"pid": p["id"], "uid": u["id"], "plan": title, "name": str(u.get("name") or "?"),
                           "opens": opens, "seen": int(s),
+                          "later": int((later.get(p["id"]) or {}).get(u["id"]) or 0),  # 3.9.3: back later today
                           "total": int(o) if running else int(t) or (P.unit_total(u) if opens > today else 0),
                           # counted here and nothing of it in my deck: done once it's open (3.7.2)
                           "counted": pr is not None and opens <= today,
@@ -197,9 +199,11 @@ def deck_tree(col):
 
 
 def _reviews():
-    """{due, done, back, at}: reviews and learning due now across my decks,
-    whether I've reviewed today, and the learning cards back later today
-    (how many, the first one's time). Cached a little: the board redraws often."""
+    """{due, done, next}: what Anki shows now across my decks (Study today's
+    walk), answers today, the deck Study today opens first; and 3.9.3's bars
+    (bars()): the reviews' whole, through, later, left, back and at, and the
+    new cards' (`new`, and `other`: started today outside today's plan
+    dates). Cached a little: the board redraws often."""
     hit = _state.get("due_reviews")
     if hit and time.time() - hit[0] < REVIEWS_FRESH:
         return hit[1]
@@ -209,19 +213,100 @@ def _reviews():
         due = sum(int(n.review_count) + int(n.learn_count) for n in tree.children)
         start = (mw.col.sched.day_cutoff - 86400) * 1000
         done = int(mw.col.db.scalar("SELECT count() FROM revlog WHERE id >= ? AND ease > 0", start) or 0)
-        # 3.8.0: learning cards that come back later today (past Anki's learn-ahead)
         now = int(time.time())
         ahead = int(mw.col.get_config("collapseTime", 1200) or 0)
-        back, first = mw.col.db.first("SELECT count(), min(due) FROM cards WHERE queue = 1 AND due > ? AND due < ?",
-                                      now + ahead, int(mw.col.sched.day_cutoff)) or (0, None)
-        t = time.localtime(int(first)) if back and first else None
-        out = {"due": due, "done": done, "back": int(back or 0), "at": f"{t.tm_hour}:{t.tm_min:02d}" if t else "",
-               "next": _next_deck(tree)}
-        if back and first:
-            _flip_at(int(first) - ahead)
+        out = {"due": due, "done": done, "next": _next_deck(tree)}
+        try:
+            got = bars(mw.col, tree, now, ahead, set(_state.get("plan_today") or ()))
+        except Exception:
+            traceback.print_exc()  # the count alone, as before 3.9.3
+            got = {}
+        when = got.pop("_first", 0)
+        if got.pop("first", False):
+            _flip_at(int(when) - ahead)
+        out.update(got)
     except Exception:
         traceback.print_exc()
     _state["due_reviews"] = (time.time(), out)
+    return out
+
+
+def bars(col, tree, now, ahead, plan_cids=()):
+    """3.9.3: the Today box's bars, from today's answers and today's learning
+    cards. A card is through for today once it's answered and next due
+    tomorrow or later; later: answered, back later today.
+
+    Reviews are the cards due from before today: reviews, relearning, and
+    learning carried over from an earlier day (whole: those I've answered
+    today and the ones still due). New cards are the ones I started today
+    (a first answer of a new card), and what Anki's limits still give;
+    `other`, the ones I started today that none of today's plan dates holds
+    (plan_cids). back/at: reviews back later today, past Anki's learn-ahead,
+    and the first one's time. first/_first: any learning card back later
+    today, for the box's one timer."""
+    cut, day = int(col.sched.day_cutoff), int(col.sched.today)
+    start = (cut - 86400) * 1000
+    first = {}  # cid -> (its first answer today's type, last interval)
+    for cid, kind, last in col.db.all("SELECT cid, type, lastIvl FROM revlog WHERE id >= ? AND ease > 0 ORDER BY id", start):
+        first.setdefault(int(cid), (int(kind), int(last or 0)))
+    fresh = {c for c, (kind, last) in first.items() if kind == 0 and last == 0}  # a new card's first answer
+    tops = {}  # deck id -> its top deck's (id, name), from Anki's tree
+
+    def walk(node, top):
+        tops[int(node.deck_id)] = top
+        for ch in node.children:
+            walk(ch, top)
+    for ch in tree.children:
+        walk(ch, (int(ch.deck_id), str(getattr(ch, "name", "") or "")))
+    rv = {"through": 0, "later": 0}
+    nw, ot = {}, {}  # top deck id -> [through, later]
+    if first:
+        ids = ",".join(str(c) for c in first)
+        for cid, queue, due, did in col.db.all(f"SELECT id, queue, due, did FROM cards WHERE id IN ({ids})"):
+            queue, due = int(queue), int(due or 0)
+            k = "later" if (queue == 1 and due < cut) or (queue in (2, 3) and due <= day) else "through"
+            if int(cid) not in fresh:
+                rv[k] += 1
+                continue
+            top = tops.get(int(did), (0, ""))
+            for got, on in ((nw, True), (ot, int(cid) not in plan_cids)):
+                if on:
+                    got.setdefault(top, [0, 0])[k == "later"] += 1
+    # what's still due today and not yet answered: reviews by Anki's limits,
+    # and (re)learning cards, which no limit holds back
+    todo_r = sum(int(n.review_count) for n in tree.children)
+    left = todo_r
+    back, at, any_at = 0, None, None
+    for cid, queue, due in col.db.all("SELECT id, queue, due FROM cards WHERE (queue = 1 AND due < ?) OR (queue = 3 AND due <= ?)",
+                                      cut, day):
+        cid, queue, due = int(cid), int(queue), int(due or 0)
+        if queue == 1 and due > now + ahead:
+            any_at = due if any_at is None else min(any_at, due)
+        if cid in fresh:
+            continue
+        if cid not in first:
+            todo_r += 1
+        if queue == 3 or due <= now + ahead:
+            left += 1
+        else:
+            back += 1
+            at = due if at is None else min(at, due)
+    answered = rv["through"] + rv["later"]
+    t = time.localtime(at) if at else None
+    out = {"whole": answered + todo_r, "through": rv["through"], "later": rv["later"], "left": left, "back": back,
+           "at": f"{t.tm_hour}:{t.tm_min:02d}" if t else "", "first": any_at is not None, "_first": any_at or 0}
+    decks = []
+    for ch in tree.children:
+        top = (int(ch.deck_id), str(getattr(ch, "name", "") or ""))
+        th, lt = nw.get(top, [0, 0])
+        more = int(getattr(ch, "new_count", 0) or 0)
+        if th + lt + more:
+            decks.append([top[1], th, th + lt + more, lt])
+    out["new"] = {"through": sum(d[1] for d in decks), "later": sum(d[3] for d in decks),
+                  "whole": sum(d[2] for d in decks), "decks": decks}
+    od = [[name, th, th + lt, lt] for (_d, name), (th, lt) in ot.items() if name]
+    out["other"] = {"through": sum(d[1] for d in od), "later": sum(d[3] for d in od),
+                    "whole": sum(d[2] for d in od), "decks": sorted(od, key=lambda d: -d[2])}
     return out
 
 
@@ -367,7 +452,8 @@ def parts(col, idxs, today):
         return
     pf = _pf()
     state = pf._state_cfg()
-    out, sibs = {}, {}  # sibs: {pid: {uid: [counted, buried today]}}
+    out, sibs, later = {}, {}, {}  # sibs: {pid: {uid: [counted, buried today]}}; later: {pid: {uid: n}}
+    on_today = set()  # 3.9.3: the cards of today's dates, so the box's Other new cards are the rest
     for p in pf.followed():
         st = state.get(p["id"])
         if p.get("paused") or not st or not pf._deck_ok(col, st.get("deck_id")):
@@ -387,11 +473,19 @@ def parts(col, idxs, today):
                 got = P.parts(idx, u, pf._swap(st), doc)
                 if got:
                     out.setdefault(p["id"], {})[u["id"]] = got
-                sib = idx.siblings(idx.match(u, pf._swap(st), doc))
+                cids = idx.match(u, pf._swap(st), doc)
+                sib = idx.siblings(cids)
                 if sib[0]:
                     sibs.setdefault(p["id"], {})[u["id"]] = list(sib)
+                back = len(cids & idx.again)  # 3.9.3: seen, back later today: not through for today
+                if back:
+                    later.setdefault(p["id"], {})[u["id"]] = back
+                if opens == today:
+                    on_today |= cids
     _state["plan_parts"] = out
     _state["plan_sibs"] = sibs
+    _state["plan_later"] = later
+    _state["plan_today"] = sorted(on_today)
 
 
 def recover_leeches(col, label="Due Crew: recover leeches", cap=RECOVER_MAX):

@@ -165,7 +165,7 @@ _d = lambda n: (TODAY + datetime.timedelta(days=n)).isoformat()
 _DATES = [
     {"pid": "p1", "uid": "u0", "plan": "Big Step 1 · F3", "name": "F2-4 SLGs 6–8", "opens": _d(-2), "seen": 40, "total": 96},
     {"pid": "p1", "uid": "u1", "plan": "Big Step 1 · F3", "name": "F3-1 SLGs 1-3 · Absorption, distribution, elimination",
-     "opens": _T, "seen": 31, "total": 109, "parts": [["Video Series", 6, 85], ["Path Book", 24, 24]],
+     "opens": _T, "seen": 31, "later": 6, "total": 109, "parts": [["Video Series", 6, 85, 4], ["Path Book", 24, 24, 2]],
      "todo": [{"k": "watch", "t": "lecture 14, renal clearance", "url": "https://example.com/l14"}],
      "what": "Video Series: Pharmacokinetics · Path Book: Drug elimination", "crew": [3, 8], "prep": "KSA F3-2",
      "topics": [["Video Series", [["Pharmacokinetics", 0]]], ["Path Book", [["Drug elimination", 1]]]],  # 3.8.0: links
@@ -186,7 +186,10 @@ _ITEMS = [
     {"id": "i0006", "t": "Practice block", "d": _T, "done": "", "at": _T, "r": "13"},
 ]
 _DV = _D.view(_T, _DATES, _ITEMS, {}, events=[{"day": _d(4), "name": "KSA F3-2", "plan": "Big Step 1"}],
-              review_days=[{"day": _d(3), "plan": "Big Step 1"}], reviews={"due": 214, "done": 120},
+              review_days=[{"day": _d(3), "plan": "Big Step 1"}],
+              # 3.9.3: the day's reviews through for today, some back later; new cards outside the plan's dates
+              reviews={"due": 214, "done": 120, "whole": 214, "through": 96, "later": 8, "left": 110, "back": 5,
+                       "at": "15:40", "other": {"whole": 6, "through": 2, "later": 4, "decks": [["Pharm", 2, 6, 4]]}},
               suggestions=[{"key": "again", "text": "Go over today's 23 misses", "go": "Study"}],
               # 3.8.0: a plan's lines every week
               every=[{"pid": "p1", "plan": "Big Step 1", "first": _d(-30), "last": _d(40),
@@ -496,10 +499,18 @@ for _tab in ("today", "upcoming", "later"):
                                                             due=dict(_DV, tab=_tab, opened={"n": 42} if _tab == "today" else None),
                                                             you=_YOU(_tab)).replace('id="du-', f'id="du{_tab}-'))
 # 3.8.0: reviews done but learning cards back later; the morning's line with Sync now
-_DV2 = _D.view(_T, _DATES[:2], _ITEMS, {}, reviews={"due": 0, "done": 120, "back": 4, "at": "9:42"})
+_DV2 = _D.view(_T, _DATES[:2], _ITEMS, {}, reviews={"due": 0, "done": 120, "whole": 120, "through": 116, "later": 4,
+                                                   "left": 0, "back": 4, "at": "9:42"})
 sections.append("<h3>3.8.0: learning back at 9:42, a repeat, the morning's Sync now</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=dict(_DV2, opened={"n": 42, "sync": True}),
     you=_YOU("today")).replace('id="du-', 'id="dub-'))
+# 3.9.3: no plan's date today: Reviews and New cards, each with its bar, a line a deck
+_DV3 = _D.view(_T, [], [], {}, reviews={"due": 70, "done": 64, "whole": 120, "through": 52, "later": 3, "left": 65,
+                                        "back": 3, "at": "14:30",
+                                        "new": {"whole": 30, "through": 8, "later": 4,
+                                                "decks": [["Big Step 1", 8, 20, 4], ["Pharm", 0, 10, 0]]}})
+sections.append("<h3>3.9.3: Today's bars, no plan: Reviews and New cards</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV3, you=_YOU("today")).replace('id="du-', 'id="duc-'))
 sections.append("<h3>3.8.0: Insights, no plan, the exam date in its head; the Hard habit</h3>" + board.render(
     DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
     you=_YOU("insights", insights={"decks": _DECKS, "did": 20, "exam": "2026-10-14", "plan": None,

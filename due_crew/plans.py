@@ -196,12 +196,20 @@ class DeckIndex:
             _STATIC[key] = (sig, {k: getattr(self, k) for k in _STATIC_KEYS}, ref)
         self.cards = {}      # cid -> (queue, type)
         self.order = {}      # cid -> the deck's own order: cards seen before first, then new by position
+        self.again = set()   # 3.9.3: in (re)learning and due again today: answered, not through for today
+        try:
+            day, cut = int(col.sched.today), int(col.sched.day_cutoff)
+        except Exception:
+            day = cut = None
         home = self.home
         for cid, queue, ctype, due in col.db.all(f"SELECT c.id, c.queue, c.type, c.due FROM cards c {where}"):
             cid = int(cid)
             if cid in home:
-                self.cards[cid] = (int(queue), int(ctype))
-                self.order[cid] = (int(ctype) == 0, int(due or 0), cid)
+                queue, due = int(queue), int(due or 0)
+                self.cards[cid] = (queue, int(ctype))
+                self.order[cid] = (int(ctype) == 0, due, cid)
+                if day is not None and ((queue == 1 and due < cut) or (queue == 3 and due <= day)):
+                    self.again.add(cid)
         self.fell_back = set()  # unit ids matched by their note ids (C5)
         self._started = None  # note ids with a card answered: siblings wait on these
         self._before = None  # 3.9.1: (first_seen, the notes started before today), for buried_today
@@ -1148,7 +1156,7 @@ def topics(unit):
 
 
 def parts(idx, unit, swap=None, plan=""):
-    """Due: [[group, seen, total]] for a date's resources here, grouped as
+    """Due: [[group, seen, total, back later today]] for a date's resources here, grouped as
     `topics` groups its tags (a video series, a book); what else it opens
     (subdecks, searches, picks) is "Other". [] when there's one group or
     none: then the date's own numbers say it all."""
@@ -1175,7 +1183,7 @@ def parts(idx, unit, swap=None, plan=""):
     out = []
     for g, cids in named:
         _o, seen, total = idx.counts(cids)
-        out.append([g or "Other", seen, total])
+        out.append([g or "Other", seen, total, len(cids & idx.again)])  # 3.9.3: and back later today
     return out
 
 

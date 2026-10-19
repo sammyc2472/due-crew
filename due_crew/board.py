@@ -6838,6 +6838,13 @@ DUE_CSS = """
     #due-crew .du-sub .n { font-variant-numeric: tabular-nums; white-space: nowrap; }
     #due-crew .du-rm { display: block; color: var(--dc-muted); font-size: 11.5px; font-style: italic; text-align: left; }
     #due-crew .du .wbar { margin-top: 3px; }
+    /* 3.9.3: a Today row's bar, under its words and numbers, the row's whole
+       width (so the bars line up), in two tones: through for today solid,
+       answered and back later today light */
+    #due-crew .du-r > .wbar { grid-column: 2 / -1; }
+    #due-crew .wbar.two { display: flex; }
+    #due-crew .wbar.two i { flex: none; }
+    #due-crew .wbar.two i.lt { opacity: .35; }
     #due-crew .du-sec { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
       color: var(--dc-muted); padding-top: 4px; }
     #due-crew .du-sec.warn { color: #c77700; }
@@ -7141,7 +7148,7 @@ def _due_plan(r):
         what = ""
     else:
         what = f'<small>{e(r["what"])}</small>' if r.get("what") else ""
-    bar = _wbar(r["seen"], r["total"]) if r["total"] and not r["done"] else ""
+    bar = _wbar2(r.get("through", r["seen"]), r.get("later", 0), r["total"]) if r["total"] and not r["done"] else ""
     go = ""  # 3.8.0: one Study, the box's Study today (its first step is this plan's deck)
     if r.get("study"):  # 3.8.1: but a plan's date with cards open has its own: a cram of just it
         cmd = _pycmd(f"planstudydate:{r['pid']}:{r['uid']}")
@@ -7149,7 +7156,71 @@ def _due_plan(r):
               f'onclick="{cmd}">Study</a>')
     n = f'<span class="n">{e(r["n"])}</span>' if r["n"] else ""
     return (f'<div class="du-r{" done" if r["done"] else ""}">{box}<span class="t"><b>{e(r["name"])}</b>'
-            f'<small>{meta}</small>{what}{subs}{bar}</span><span class="end">{n}{go}</span></div>')
+            f'<small>{meta}</small>{what}{subs}</span><span class="end">{n}{go}</span>{bar}</div>')
+
+
+def _wbar2(through, later, total):
+    """3.9.3: a Today row's bar, in two tones: solid, the cards through for
+    today (answered, next due tomorrow or later); light, answered and back
+    later today; the well, still to do. The row's whole width, under its words."""
+    total = int(total)
+    a = 0 if not total else max(0, min(100, round(100 * int(through) / total)))
+    b = 0 if not total else max(0, min(100 - a, round(100 * (int(through) + int(later)) / total) - a))
+    return (f'<span class="wbar two" title="{int(through):,} through for today, {int(later):,} back later today, '
+            f'of {total:,}"><i style="width:{a}%"></i><i class="lt" style="width:{b}%"></i></span>')
+
+
+def _due_count(r, noun):
+    """What a bar's row says at its end: "140 due" (or "40 new") before
+    anything's answered, then "84 / 140", then "all done"."""
+    if r["done"]:
+        return "all done"
+    if not r["through"] and not r["later"]:
+        return f'{int(r["whole"]):,} {noun}'
+    return f'{int(r["through"]):,} / {int(r["whole"]):,}'
+
+
+def _due_reviews(r):
+    """3.9.3: Reviews with its bar, and a line once I've started: the ones
+    back later today (at the first one's time) and the ones due now."""
+    e = _html.escape
+    if not r["whole"]:
+        return ""
+    said = []
+    if r["back"] and not r["done"]:
+        said.append(f'{int(r["back"]):,} back{" at " + e(r["at"]) if r.get("at") else " later"}')
+    if r["left"] and (r["through"] or r["later"]) and not r["done"]:
+        said.append(f'{int(r["left"]):,} still due')
+    small = f'<small>{" &middot; ".join(said)}</small>' if said else ""
+    box = _due_box("on" if r["done"] else "part" if r["through"] or r["later"] else "")
+    bar = "" if r["done"] else _wbar2(r["through"], r["later"], r["whole"])
+    return (f'<div class="du-r{" done" if r["done"] else ""}">{box}<span class="t"><b>Reviews</b>{small}</span>'
+            f'<span class="end"><span class="n">{_due_count(r, "due")}</span></span>{bar}</div>')
+
+
+def _due_new(r):
+    """3.9.3: New cards (what Anki gives today: the ones I've started and what
+    its limits still give, a line a deck when there's more than one), or Other
+    new cards on a plan's day (the ones I started that none of its dates holds)."""
+    e = _html.escape
+    decks = r.get("decks") or []
+    name = "Other new cards" if r.get("other") else "New cards"
+    subs = small = ""
+    if len(decks) > 5:  # a line a deck up to five; past that, how many
+        small = f"{len(decks):,} decks"
+    elif len(decks) > 1:
+        subs = "".join(f'<span class="du-sub"><span class="du-bx auto{" on" if th >= tot else ""}"></span>'
+                       f'<span><b>{e(d)}</b></span><span class="n">{th:,} / {tot:,}</span></span>'
+                       for d, th, tot, _lt in decks)
+    elif decks:
+        small = e(decks[0][0])
+    if r.get("other"):
+        small = (small + " &middot; " if small else "") + "not on a plan"
+    small = f"<small>{small}</small>" if small else ""
+    box = _due_box("on" if r["done"] else "part" if r["part"] else "", auto=True)
+    bar = "" if r["done"] else _wbar2(r["through"], r["later"], r["whole"])
+    return (f'<div class="du-r{" done" if r["done"] else ""}">{box}<span class="t"><b>{name}</b>{small}{subs}</span>'
+            f'<span class="end"><span class="n">{_due_count(r, "new")}</span></span>{bar}</div>')
 
 
 def _due_short(r):
@@ -7292,6 +7363,9 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
         body += _due_behind(v)
         for r in v["rows"]:
             if r["kind"] == "reviews":
+                if r.get("whole") is not None:
+                    body += _due_reviews(r)
+                    continue
                 back = int(r.get("back") or 0)
                 if not r["due"] and not r["done"] and not back:
                     continue
@@ -7299,6 +7373,8 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
                      else f'{back:,} back{" at " + e(r["at"]) if r.get("at") else " later"}')
                 body += (f'<div class="du-r{" done" if r["done"] else ""}">{_due_box("on" if r["done"] else "")}'
                          f'<span class="t"><b>Reviews</b></span><span class="end"><span class="n">{n}</span></span></div>')
+            elif r["kind"] == "new":
+                body += _due_new(r)
             elif r["kind"] == "plan":
                 body += _due_plan(r)
             elif r["kind"] == "every":
