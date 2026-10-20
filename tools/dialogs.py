@@ -1401,7 +1401,7 @@ def main(out):
         dlg = PlanWindow_()
         tab = dlg.pages["plan"]
         shown = [dlg.tabs.tabText(i) for i in range(dlg.tabs.count()) if dlg.tabs.isTabVisible(i)]
-        if not dlg.pick.currentText().startswith("MS2 Block 2") or not dlg.author() or shown != ["Plan", "Settings"]:
+        if not dlg.pick.currentText().startswith("MS2 Block 2") or not dlg.author() or shown != ["Plan", "Insights", "Settings"]:
             raise RuntimeError(f"planner: an author's tabs {shown}, {dlg.pick.currentText()!r}")
         dlg.resize(1180, 760)
         tab.pick(("date", "u1"))
@@ -1416,6 +1416,30 @@ def main(out):
         if [w for w in dlg.findChildren(QtWidgets.QLabel) if w.pixmap() is not None and not w.pixmap().isNull()]:
             raise RuntimeError("planner: Pip in the plan window (round five: none)")
         shoot(dlg, os.path.join(out, "planner-date.png"))
+        # Insights, between Plan and Settings: what each week asks, how much of the deck, what's in it
+        dlg._show_tab("insights")
+        it = dlg.pages["insights"]
+        said = [w.text() for w in it.findChildren(QtWidgets.QLabel) if w.isVisibleTo(it)]
+        if "Workload" not in said or "How much of the deck" not in said or "What's in it" not in said \
+                or not any(" cards (" in t for t in said) or not any(t.startswith("Week 1") for t in said) \
+                or any(t.startswith("You've seen") for t in said):
+            raise RuntimeError(f"planner: Insights {said}")
+        shoot(dlg, os.path.join(out, "planner-insights.png"))
+        it.body.grab().save(os.path.join(out, "planner-insights-all.png"))  # the whole of it, to look at
+        kept_doc = dlg.doc  # a pace of 5 a day, weekdays: the pace's line down the column, a week over it
+        dlg.doc = dict(kept_doc, pace={"mode": "daily", "days": [1, 1, 1, 1, 1, 0, 0], "daily": 5})
+        it.draw()
+        said = [w.text() for w in it.findChildren(QtWidgets.QLabel) if w.isVisibleTo(it)]
+        if not any(t.startswith("Over the pace") for t in said) or not any("your pace: 5" in t for t in said) \
+                or not any("busiest day" in t for t in said):
+            raise RuntimeError(f"planner: Insights with a pace {said}")
+        it.body.grab().save(os.path.join(out, "planner-insights-pace.png"))
+        dlg.doc = kept_doc
+        it.draw()
+        picks = [r for r in it.findChildren(PW.Row) if r.key[0] == "date"]
+        picks[0].on_pick(picks[0].key)
+        if dlg.tabs.currentWidget() is not tab or tab.picked != picks[0].key:
+            raise RuntimeError(f"planner: a date picked in Insights, on the Plan tab: {tab.picked}")
         tab.pick(("date", "u2"))
         if dp.name.text() != "HF drugs <b>" or tab.rows[("date", "u2")].findChildren(QtWidgets.QLabel)[1].textFormat() \
                 != QtCore.Qt.TextFormat.PlainText:
@@ -1701,10 +1725,17 @@ def main(out):
         fw.resize(1180, 760)
         shown = [fw.tabs.tabText(i) for i in range(fw.tabs.count()) if fw.tabs.isTabVisible(i)]
         ft = fw.pages["plan"]
-        if shown != ["Plan", "Settings"] or fw.author() or ft.today_box.isHidden() or ft.behind_box.isHidden() \
+        if shown != ["Plan", "Insights", "Settings"] or fw.author() or ft.today_box.isHidden() or ft.behind_box.isHidden() \
                 or not ft.paste_row.isHidden() or not ft.shape_box.isHidden() or not fw.undo_btn.isHidden():
             raise RuntimeError(f"planner: a follower's tabs {shown}")
         shoot(fw, os.path.join(out, "planner-follower.png"))
+        fw._show_tab("insights")
+        fi = fw.pages["insights"]
+        said = [w.text() for w in fi.findChildren(QtWidgets.QLabel) if w.isVisibleTo(fi)]
+        if not any(t.startswith("You've seen") for t in said) or "Workload" not in said:
+            raise RuntimeError(f"planner: a follower's Insights {said}")
+        shoot(fw, os.path.join(out, "planner-insights-follower.png"))
+        fi.body.grab().save(os.path.join(out, "planner-insights-follower-all.png"))
         fw._show_tab("mine")
         mt = fw.pages["mine"]
         if mt.later.text() != "2 days later" or mt.held.isHidden():

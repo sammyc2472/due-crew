@@ -7,9 +7,10 @@ and a Python-native plan window", the design-spec artifact), for everyone
 signed in since 3.9.3, and rebuilt in round five (Sam's picks on the
 "Simpler Plan Builder" page: one screen to build a plan, a date changed
 where it's shown, the plan's shape on one line, one way to start,
-changes waiting to be sent, a paste box, a follower's Plan · Settings, Plan
-· Settings, no Pip in the plan windows), then made plain and quick (no
-AI look; one way to each thing; keys, Find, Month's drag, Latest first). Nothing
+changes waiting to be sent, a paste box, Plan · Insights · Settings for
+authors and followers, no Pip in the plan windows), then made plain and
+quick (no AI look; one way to each thing; keys, Find, Month's drag,
+Latest first). Nothing
 suggests what goes on a date (Sam's call, after the picks: plain rules
 aren't trusted to choose cards, and it isn't AI): the author puts every
 card on, from the deck beside the date or a search.
@@ -51,8 +52,8 @@ card on, from the deck beside the date or a search.
 Round five (Sam's picks on the "Simpler Plan Builder" page, all A): one
 window, my plans picked on top (the ones I write first, then the ones I
 follow), **Undo** (a button with its menu) and **New plan…** beside it.
-Two tabs whoever I am: **Plan · Settings** (an author's Settings is the
-plan's own; a follower's, my follow). No Pip in the plan windows (Sam's
+Three tabs whoever I am: **Plan · Insights · Settings** (an author's
+Settings is the plan's own; a follower's, my follow). No Pip in the plan windows (Sam's
 pick 10). With no plans yet, the window is a welcome instead: what a plan
 is, **New plan…** and **Follow a plan…**.
 
@@ -184,6 +185,39 @@ no longer fits (its date taken off) is dropped and said. A send from an
 older version comes back stale: the window puts the same changes on
 theirs, to look over and send again. A change that changes nothing isn't
 kept. Followers keep every card that opened; a change never shuts one.
+
+### Insights (authors and followers)
+
+`insights_tab.py`, its numbers `insights.py`'s (pure), between Plan and
+Settings (Sam, before the click-test: "an insights tab on workload /
+content / amount of the deck relative to the whole"). Worked out when
+it's looked at (PlanWindow._tab_changed), not at every change; never
+sent; a follower's on my dates.
+
+- **Workload**: "1,284 new cards over 5 weeks. Busiest: week 4, 2–8 Nov:
+  24 new a study day, ~115 reviews a day.", the weeks over the pace in
+  amber, then a row a week from week 1 (the Plan tab's numbering) to the
+  week it ends in: its days, its quiz or exam, **new cards a study day**
+  against the pace (the line down the column; over it, amber, and its
+  busiest day) and **reviews a day** (a typical card's, as the week heads
+  count them). Two measures on their own scales, never added: a study day
+  and a day aren't the same day (a first stacked bar summed them; Sam
+  asked for the pictures to be thought through). The busiest week is the
+  one with the most cards in it, new and reviews.
+- **How much of the deck**: "1,284 of Big Step 1's 12,480 cards (10%)"
+  and the deck as one bar, the plan's part filled (a follower's: what
+  I've seen, then what's to go, a key beside it). Then each part of the
+  deck as it files them (`insights.parts`, kept with the index's
+  searches): a big shared deck's resources (its #parts) and systems (the
+  parts under its ^part), else its subdecks, else its top tags (leech and
+  marked aren't parts); each a bar of its own size on one scale, so a big
+  part looks big, the plan's part filled, "1,420 of 5,912 · 24%", biggest
+  first; the ones it holds none of named ("Not in it: Renal, Repro and 6
+  more").
+- **What's in it**: each quiz or exam and what its dates hold (the last
+  with no date for it, everything), the five biggest dates (a click: that
+  one, picked on the Plan tab), how many cards are on two dates or more,
+  and the leeches on its dates that stay shut.
 
 ### Settings (authors)
 
@@ -501,9 +535,10 @@ and sends in Anki (Your plans › the plan › Review and send).
 | `planner/ops.py` | pure, round five: every change an op (its checks, the builder's edit it runs, its words, who it touches, the line to followers) |
 | `planner/draft.py` | pure, round five: changes waiting to be sent (ops replayed on the plan as the server has it; one send) |
 | `planner/view.py` | pure, round five: what the Plan tab shows (the shape line, each week's asks, needs a look, today) |
+| `planner/insights.py` | pure, round five: what the Insights tab shows (the workload by week, how much of the deck and of each part, what each quiz tests, the biggest dates) |
 | `planner/prompts.py` | pure: the prompts for your own AI, builder.js's `Prompts` restated |
 | `planner/flow.py` | the glue: the windows' asks (`Ops`, `StartOps`, `NewOps`, `QidOps`), `make_here`, `plan_drafts.json`, `qids.json` |
-| `planner/window.py`, `plan_tab.py`, `date_panel.py`, `deck_panel.py`, `shape.py`, `send.py`, `followers_tab.py`, `settings_tab.py`, `mine_tab.py`, `new_plan.py`, `text_tab.py`, `history_tab.py`, `day_notes.py`, `date_dialogs.py`, `widgets.py`, `picker.py`, `qid_window.py`, `start_window.py` | the Qt windows and their parts, in the board's look |
+| `planner/window.py`, `plan_tab.py`, `date_panel.py`, `deck_panel.py`, `shape.py`, `send.py`, `insights_tab.py`, `settings_tab.py`, `mine_tab.py`, `new_plan.py`, `text_tab.py`, `history_tab.py`, `day_notes.py`, `date_dialogs.py`, `widgets.py`, `picker.py`, `qid_window.py`, `start_window.py` | the Qt windows and their parts, in the board's look |
 
 Checks: `tests/test_planner.py` (the pure parts, `build.py` against
 builder.js run in node, Fill, the save against the fake Worker's `PUT
@@ -511,7 +546,7 @@ builder.js run in node, Fill, the save against the fake Worker's `PUT
 MCP server), `tests/test_plan_ops.py` (round five: the ops, their words
 and who they touch, changes waiting and replayed on a co-author's save,
 the Plan tab's arithmetic, no suggestion left, New plan's empty dates, a send's line kept by the fake Worker), the planner
-renders in `tools/dialogs.py` (an author's tabs, Plan · Settings, a date's sources, a change
+renders in `tools/dialogs.py` (an author's tabs, Plan · Insights · Settings, a date's sources, Insights with and without a pace and a follower's, a change
 saved and undone, a stale save put on theirs, a new date with nothing
 suggested,
 Settings' dates and pace and Put it back, the deck in the date's place and Done, Lay out from the deck, the

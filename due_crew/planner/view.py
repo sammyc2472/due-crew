@@ -58,6 +58,11 @@ def last_event(doc):
     return evs[-1] if evs else None
 
 
+def prep(doc, e):
+    """The dates that prep for a quiz or exam (their `for`), reinforcement after it aside."""
+    return [u for u in P.units(doc) if u.get("for") == e.get("id") and not P.reinforces(doc, u)]
+
+
 def ends_with(doc):
     """(the quiz or exam the plan ends with, or None; its end day, or ""):
     its end date, and the event on that day when it has one."""
@@ -92,10 +97,11 @@ def reviews_by_day(per_new):
 
 
 def week_asks(doc, tree, pace):
-    """{a week's Monday: {new, reviews, top, over, cap}}: new cards a study
-    day that week (its days' new over its study days), reviews a day (its
-    seven days' over seven), its busiest day, and whether a day of it is over
-    the pace by a quarter (Work.over)."""
+    """{a week's Monday: {new, reviews, new_week, reviews_week, top, over,
+    cap}}: new cards a study day that week (its days' new over its study
+    days), reviews a day (its seven days' over seven), the two for the whole
+    week, its busiest day, and whether a day of it is over the pace by a
+    quarter (Work.over)."""
     per = work(doc, tree, pace)
     if not per:
         return {}
@@ -109,7 +115,8 @@ def week_asks(doc, tree, pace):
         study = sum(1 for i in range(7) if days[i]) or 7
         new = sum(per.get(x, 0) for x in ds)
         top = max(per.get(x, 0) for x in ds)
-        out[mon] = {"new": -(-new // study) if new else 0, "reviews": sum(rv.get(x, 0) for x in ds) / 7,
+        rw = sum(rv.get(x, 0) for x in ds)
+        out[mon] = {"new": -(-new // study) if new else 0, "reviews": rw / 7, "new_week": new, "reviews_week": rw,
                     "top": top, "over": bool(cap) and top > cap * 1.25, "cap": cap}
     return out
 

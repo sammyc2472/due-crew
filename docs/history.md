@@ -3193,3 +3193,21 @@ every release that changes how something works.
   Latest first. One button: every action the boxes' corners and height
   (`widgets.tool`), side-by-side choices one control rounded at its ends
   (`widgets.segs`), tabs underlined; a link is only a way to a date.
+  **Then Insights** (Sam, before the click-test: "the tab we should have
+  between plan and settings is an insights tab on workload / content /
+  amount of the deck relative to the whole"), `planner/insights.py` (pure)
+  and `insights_tab.py`, for authors and followers alike, worked out when
+  it's looked at, never sent: **Workload**, a row a week from the first to
+  the end, new cards a study day against the pace (a line down the
+  column; a week over it amber, with its busiest day) and reviews a day,
+  each on its own scale and never added (a study day and a day aren't the
+  same day; Sam asked for the pictures to be thought through, and a first
+  stacked bar summed the two), the week's quiz or exam beside it, the
+  busiest week by its whole; **How much of the deck**, the plan's cards of
+  the deck's as one bar (a follower's: seen, then to go), and of each part
+  (a big shared deck's resources and its systems, else subdecks, else top
+  tags) drawn on one scale, so a big part looks big, and the parts it
+  holds none of named; **What's in it**, each quiz or exam and what its
+  dates hold, the biggest dates (a click: that one on the Plan tab), cards
+  on two dates, leeches that stay shut. `test_insights_tab`; renders with
+  and without a pace, and a follower's.

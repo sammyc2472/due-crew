@@ -992,6 +992,23 @@ class PlanTab(QWidget):
         if self.side.currentWidget() is self.deck and self.picked and self.picked[0] == "date":
             self.deck.set_target(self.picked[1])
 
+    def show_key(self, key):
+        """A date or a quiz picked from elsewhere (Insights): its week open, picked, in view."""
+        if key and key[0] == "event":
+            e = self._event(key[1])
+            if e is not None:
+                self.open_weeks.add(V.monday(e.get("day")))
+                self.closed_weeks.discard(V.monday(e.get("day")))
+                if tuple(key) not in self.rows and self.mode == "list":
+                    self._draw()
+        self.pick(key)
+
+        def into_view():
+            row = self.rows.get(self.picked) if self.picked else None
+            if row is not None and self.mode == "list":
+                self.list_scroll.ensureWidgetVisible(row, 0, 80)
+        QTimer.singleShot(0, into_view)
+
     def _mark_picked(self):
         for key, row in self.rows.items():
             row.set_on(key == self.picked)
@@ -1125,7 +1142,7 @@ class PlanTab(QWidget):
             self.review_day(day)
 
     def prep(self, e):
-        return [u for u in P.units(self.win.doc) if u.get("for") == e.get("id") and not P.reinforces(self.win.doc, u)]
+        return V.prep(self.win.doc, e)
 
     # ---- a tag's note, its extras, the plan's own ----
 

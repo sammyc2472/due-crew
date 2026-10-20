@@ -1011,9 +1011,9 @@ def test_rules_of_the_road():
           and all(t.count("(QDialog)") == t.count("attach_alive(self)") == len(re.findall(r"\bheading\(self", t))
                   for t in windows.values()), sorted(windows))
     tabs = {f: t for f, t in src.items() if "(QWidget)" in t}  # round five: Your plans' tabs and panels
-    check("road: the tabs and panels (Plan with its date and deck panels, Sharing, Mine, the text, History and Posts, "
+    check("road: the tabs and panels (Plan with its date and deck panels, Insights, Settings, Mine, the text, History and Posts, "
           "a date's notes), and no Pip in them",
-          sorted(tabs) == ["date_panel.py", "day_notes.py", "deck_panel.py", "history_tab.py", "mine_tab.py",
+          sorted(tabs) == ["date_panel.py", "day_notes.py", "deck_panel.py", "history_tab.py", "insights_tab.py", "mine_tab.py",
                            "plan_tab.py", "settings_tab.py", "text_tab.py"]
           and not [f for f, t in dict(windows, **tabs).items() if re.search(r"\bsev\b|pip_note", t)], sorted(tabs))
     windows_tabs = dict(windows, **tabs, **{"widgets.py": src["widgets.py"]})
@@ -1024,7 +1024,7 @@ def test_rules_of_the_road():
           all("setTextFormat(Qt.TextFormat.PlainText)" in t or (not labels[f] and "plain(" in t) for f, t in windows_tabs.items())
           and not [f for f, t in windows_tabs.items() if re.search(r'setToolTip\(0, (?!f"<span>\{esc\()', t)])
     pure = ("model.py", "qids.py", "edits.py", "actions.py", "remote.py", "reading.py", "claude.py", "build.py", "text.py",
-            "ops.py", "draft.py", "view.py", "prompts.py", "ai.py", "mcp.py", "mcp_shim.py")
+            "ops.py", "draft.py", "view.py", "prompts.py", "ai.py", "mcp.py", "mcp_shim.py", "insights.py")
     check("road: the pure parts and the requests import no aqt",
           not [f for f in pure if re.search(r"^\s*(from aqt|import aqt)", src[f], re.M)])
     calls = set()
@@ -1072,6 +1072,10 @@ def test_rules_of_the_road():
           not re.search(r'"Study (them|these|for it)"', src["date_panel.py"]) and "QTabWidget" not in src["plan_tab.py"]
           and "followers_tab.py" not in src and '"−1 day"' not in src["date_panel.py"] and "ShapeDialog" not in src["shape.py"]
           and "Shape(win, form)" in src["settings_tab.py"] and '"Settings"' in src["window.py"] and '"Sharing"' not in src["window.py"])
+    order = re.findall(r'self\._add_tab\("(\w+)", "([^"]+)"', src["window.py"])
+    check("road: Plan · Insights · Settings, whoever I am (Sam, before the click-test); Insights asks the server nothing",
+          [x[1] for x in order] == ["Plan", "Insights", "Settings", "Settings"]
+          and not re.search(r"\bremote\b|_call\(", src["insights_tab.py"] + src["insights.py"]), order)
     keys_ = set(re.findall(r'on\("([^"]+)"', src["plan_tab.py"]))
     check("road: the Plan tab's keys (each in its button's tip)",
           {"Ctrl+N", "Ctrl+E", "Ctrl+F", "Ctrl+T", "Ctrl+1", "Ctrl+2", "Ctrl+D", "Ctrl+Z", "Ctrl+Return", "Up", "Down",
@@ -2357,6 +2361,97 @@ def srv_port_free():
     port = s.getsockname()[1]
     s.close()
     return port
+
+
+# ---- round five: the Insights tab (insights.py) ----
+
+def test_insights_tab():
+    """Round five (Sam, before the click-test): Insights between Plan and
+    Settings: what each week asks, how much of the deck the plan holds and
+    of each of its parts, what each quiz or exam tests, its biggest dates,
+    cards on two dates, leeches."""
+    from due_crew.planner import build as B
+    from due_crew.planner import insights as I
+    from due_crew.planner import view as V
+    check("insights: a share in words", (I.pct(0, 10), I.pct(10, 10), I.pct(1, 1000), I.pct(1, 3), I.pct(995, 1000), I.pct(3, 0))
+          == ("none", "all", "<1%", "33%", "99%", "none"))
+    col = collection()
+    idx = P.DeckIndex(col, 1)
+    doc = {"deck": "Big Step 1", "end": "2026-11-27", "units": [
+        {"id": "u1", "name": "Heart failure", "opens": "2026-11-09", "tags": [VID]},
+        {"id": "u2", "name": "HF drugs", "opens": "2026-11-10", "tags": [DRUGS, VID]},
+        {"id": "u3", "name": "The book", "opens": "2026-11-17", "tags": [BOOK], "for": "e1"}],
+        "events": [{"id": "e2", "day": "2026-11-27", "name": "Block exam"}, {"id": "e1", "day": "2026-11-20", "name": "Cardio quiz"}]}
+    per, cards = I.held(idx, doc)
+    check("insights: the plan's cards here, date by date and all of them (a card on two dates once)",
+          per == {"u1": {1, 2, 3, 4, 12}, "u2": {1, 2, 3, 4, 12, 15}, "u3": {5, 6}} and cards == {1, 2, 3, 4, 5, 6, 12, 15}
+          and I.on_two(per) == 5, per)
+    check("insights: how much of the deck, in words (a filtered deck's card counts in its home deck)",
+          I.deck_words("Big Step 1", len(cards), len(idx.home)) == "8 of Big Step 1's 15 cards (53%)"
+          and I.deck_words("", 0, 4) == "0 of the deck's 4 cards (none)", len(idx.home))
+    groups = I.parts(idx)
+    check("insights: a big shared deck's parts: its resources (the ^part's one system isn't a way of its own)",
+          [(how, sorted((n, sorted(c)) for n, c in rows)) for how, rows in groups]
+          == [("resource", [("Bank", [7, 8, 9]), ("Book", [5, 6]), ("Other Bank", [10]), ("Videos", [1, 2, 3, 4, 12, 15])])]
+          and I.parts(idx) is groups, groups)
+    sh = I.shares(groups, cards)
+    check("insights: each part's share, the biggest first (one scale: a big part looks big); the parts with none after",
+          sh == [("resource", [{"name": "Videos", "held": 6, "total": 6}, {"name": "Book", "held": 2, "total": 2}],
+                  [{"name": "Bank", "held": 0, "total": 3}, {"name": "Other Bank", "held": 0, "total": 1}])]
+          and I.none_words(sh[0][2]) == "Not in it: Bank, Other Bank"
+          and I.none_words([{"name": c, "total": 1} for c in "ABCDEF"]) == "Not in it: A, B, C, D and 2 more", sh)
+    xs = I.exams(doc, per, cards)
+    check("insights: each quiz or exam by its day, what its dates hold; the last with no date for it tests everything",
+          [(x["name"], I.exam_words(x)) for x in xs] == [("Cardio quiz", "2 cards from 1 date"), ("Block exam", "everything: 8 cards")]
+          and I.exam_words({"all": False, "dates": 0, "cards": 0}) == "no date for it yet", xs)
+    check("insights: the biggest dates, most first", [(u["id"], n) for u, n in I.biggest(doc, per)] == [("u2", 6), ("u1", 5), ("u3", 2)])
+    check("insights: the leech on its dates is counted (a plan never opens one)", M.counts(idx, cards)["leech"] == 1)
+    tags, decks = idx.tree()
+    t = B.Tree(tags, decks)
+    pace = V.pace_of(doc)
+    asks = V.week_asks(doc, t, pace)
+    rows = I.workload(doc, asks, "2026-11-11")
+    check("insights: the workload week by week, the first to the one it ends in, a week with nothing new too",
+          [(w["n"], w["start"], w["span"], w["now"]) for w in rows]
+          == [(1, "2026-11-09", "9–15 Nov", True), (2, "2026-11-16", "16–22 Nov", False), (3, "2026-11-23", "23–29 Nov", False)]
+          and rows[0]["new"] > 0 and rows[2]["new"] == 0 and rows[2]["reviews"] > 0, rows)
+    words, over = I.workload_words(doc, rows, V.work(doc, t, pace))
+    b = I.busiest(rows)
+    check("insights: the workload in a line: the new cards, the weeks, the busiest",
+          words.startswith(f"{sum(V.work(doc, t, pace).values()):,} new cards over 3 weeks. Busiest: week {b['n']}, ") and over == "",
+          words)
+    check("insights: each week's quizzes and exams; its whole (new and reviews) finds the busiest",
+          [w["events"] for w in rows] == [[], ["Cardio quiz"], ["Block exam"]]
+          and b["cards"] == max(w["cards"] for w in rows) and all(w["cards"] >= w["new"] for w in rows), rows)
+    w = {"n": 3, "span": "26 Oct–1 Nov", "events": [], "new": 20, "reviews": 34.2, "cards": 300, "over": False, "top": 22, "cap": 20}
+    check("insights: a week's two measures, never added; one over the pace says its busiest day",
+          (I.new_words(w), I.reviews_words(w), I.reviews_words(dict(w, reviews=0.2))) == ("20", "~35", "0")
+          and I.new_words(dict(w, new=18, over=True, top=41)) == "18 · busiest day 41"
+          and I.week_words(w) == "Week 3, 26 Oct–1 Nov: 20 new a study day, ~35 reviews a day"
+          and I.week_words(dict(w, over=True, top=41, events=["Cardio quiz"]))
+          == "Week 3, 26 Oct–1 Nov: 20 new a study day (41 on its busiest day, over the pace of 20), ~35 reviews a day; Cardio quiz"
+          and I.workload_words(doc, [dict(w, over=True), dict(w, n=5, over=True)], {})[1]
+          == "Over the pace: weeks 3 and 5" and I.workload(doc, {}, "2026-11-11") == []
+          and I.busiest([dict(w, cards=0)]) is None and I.busiest([w, dict(w, n=4, cards=300)])["n"] == 3)
+    # a deck of my own: by subdeck, else by its top tags (Anki's own leech aside)
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    for cid, did, tg in ((1, 2, "Lecture::One"), (2, 2, ""), (3, 3, ""), (4, 1, "")):
+        fakes.add_card(conn, cid, did, tags=tg)
+    mine = fakes.FakeCol(conn, fakes.day_cutoff_for(datetime.date(2026, 11, 9)))
+    mine.decks = fakes.FakeDecks({1: "Mine", 2: "Mine::Week_1", 3: "Mine::Week 2"})
+    by_deck = I.parts(P.DeckIndex(mine, 1))
+    conn2 = sqlite3.connect(":memory:")
+    fakes.make_collection(conn2)
+    for cid, tg in ((1, "Cardio::HF"), (2, "Cardio::Valves leech"), (3, "Renal::AKI"), (4, "marked")):
+        fakes.add_card(conn2, cid, 1, tags=tg)
+    solo = fakes.FakeCol(conn2, fakes.day_cutoff_for(datetime.date(2026, 11, 9)))
+    solo.decks = fakes.FakeDecks({1: "Solo"})
+    by_tag = I.parts(P.DeckIndex(solo, 1))
+    check("insights: a deck of my own: by its subdecks; with none, by its top tags (leech and marked aren't parts)",
+          [(h, sorted((n, sorted(c)) for n, c in r)) for h, r in by_deck] == [("deck", [("Week 1", [1, 2]), ("Week 2", [3])])]
+          and [(h, sorted((n, sorted(c)) for n, c in r)) for h, r in by_tag] == [("tag", [("Cardio", [1, 2]), ("Renal", [3])])],
+          (by_deck, by_tag))
 
 
 def main():

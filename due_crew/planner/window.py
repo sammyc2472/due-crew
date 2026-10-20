@@ -1,11 +1,14 @@
 """Your plans (docs/planner.md; round five): the builder of duecrew.com,
-in Anki, as one window, two tabs. An author's: Plan (the plan's shape on
-top, its weeks and dates, the picked one beside them or the deck while
-cards go on, a paste box, and the changes waiting to be sent) and
-Settings (its name, dates and pace, every-week lines; its code, who can
-follow, how many do and the posts to them, co-authors, the library; Your
-AI app). A plan I follow: Plan (today, what's behind, its dates) and
-Settings (my dates, skips, how its cards open). Undo on top.
+in Anki, as one window, three tabs. An author's: Plan (the plan's shape
+on top, its weeks and dates, the picked one beside them or the deck
+while cards go on, a paste box, and the changes waiting to be sent),
+Insights (what each week asks, how much of the deck it holds and of each
+part, what each quiz tests, its biggest dates) and Settings (its name,
+dates and pace, every-week lines; its code, who can follow, how many do
+and the posts to them, co-authors, the library; Your AI app). A plan I
+follow: Plan (today, what's behind, its dates), Insights (the same, on
+my dates, with what I've seen) and Settings (my dates, skips, how its
+cards open). Undo on top.
 
 Every change is an op (ops.py). With anyone following, it waits under
 the plan (draft.py, kept on this computer) until Review and send, one
@@ -33,7 +36,7 @@ from . import ops as O
 from .widgets import fit, menu_button, plain, tip_keys
 
 TABS = {"dates": "plan", "layout": "plan", "text": "plan", "plan": "plan", "history": "plan",
-        "progress": "sharing", "updates": "sharing", "followers": "sharing",
+        "insights": "insights", "workload": "insights", "progress": "sharing", "updates": "sharing", "followers": "sharing",
         "settings": "sharing", "sharing": "sharing", "mine": "mine"}
 
 
@@ -141,9 +144,11 @@ class PlanWindow(QDialog):
         root.addWidget(self.welcome, 1)
         self.pages = {}
         from .plan_tab import PlanTab
+        from .insights_tab import InsightsTab
         from .settings_tab import SettingsTab
         from .mine_tab import MineTab
         self._add_tab("plan", "Plan", PlanTab(self))
+        self._add_tab("insights", "Insights", InsightsTab(self))  # what it asks a week, how much of the deck, what's in it
         self._add_tab("sharing", "Settings", SettingsTab(self))  # an author's: the plan's dates and pace, sharing it
         self._add_tab("mine", "Settings", MineTab(self))  # a follower's: my dates, skips, how its cards open
         self.want_tab = TABS.get(tab or "", tab)
@@ -223,7 +228,7 @@ class PlanWindow(QDialog):
             self.tabs.setCurrentIndex(i)
 
     def _role_tabs(self):
-        """Plan always; Settings: an author's (SettingsTab) or a follower's (MineTab)."""
+        """Plan and Insights always; Settings: an author's (SettingsTab) or a follower's (MineTab)."""
         for key, page in self.pages.items():
             shown = getattr(page, "shown", None)
             i = self.tabs.indexOf(page)
@@ -238,6 +243,9 @@ class PlanWindow(QDialog):
         self._undo_button()
 
     def _tab_changed(self, _i):
+        page = self.tabs.currentWidget()
+        if getattr(page, "dirty", False):
+            page.draw()  # Insights: worked out when it's looked at
         if not self.busy:
             self.status.setText("")
 
