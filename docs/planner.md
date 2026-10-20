@@ -7,9 +7,11 @@ and a Python-native plan window", the design-spec artifact), for everyone
 signed in since 3.9.3, and rebuilt in round five (Sam's picks on the
 "Simpler Plan Builder" page: one screen to build a plan, a date changed
 where it's shown, the plan's shape on one line, one way to start,
-suggestions taken or turned down on the dates, changes waiting to be
-sent, a paste box, a follower's Plan · Mine, Plan · Followers · Sharing
-for authors, no Pip in the plan windows).
+changes waiting to be sent, a paste box, a follower's Plan · Mine, Plan
+· Followers · Sharing for authors, no Pip in the plan windows). Nothing
+suggests what goes on a date (Sam's call, after the picks: plain rules
+aren't trusted to choose cards, and it isn't AI): the author puts every
+card on, from the deck beside the date or a search.
 
 ## Ways in
 
@@ -38,8 +40,7 @@ for authors, no Pip in the plan windows).
   author's save, `PUT /plans/{id}`, its Undo, New plan, `POST /plans`
   (with Make a plan's `PUT /plans/trees`), its history (`GET
   /plans/{id}/log`) and posts (`GET`, `POST`, `DELETE /plans/{id}/posts`),
-  its progress (`GET /plans/{id}/progress`, read with an author's plan
-  once a pick when anyone follows it). A send's line rides its save (`PUT
+  A send's line rides its save (`PUT
   /plans/{id}`'s `post`, as the builder's Updates already send it). Each
   one on a click, in the background. A refresh and a sync are unchanged
   (`test_request_budget`).
@@ -81,23 +82,17 @@ Tags read and sort as the site's do (`build.tag_word`, `build.natural`).
   goes in ("Saving moves 18 dates and 2 quizzes"), then Add to the changes
   (or Save, nobody following): `shift_all`, `set_end`, `set_pace`,
   `set_phases`, one go.
-- **The sure ones**: dates with nothing on them whose name points at one
-  of the deck's tags alone; **Add the N sure ones**.
-- **Today · Needs a look · All weeks open**, and **List | Month**. Needs a
-  look (`view.needs_look`) keeps the weeks with a date that has no cards
-  here, a maybe to look at, or a day over the pace.
+- **Today · Needs a look · N · Open all weeks**, and **List | Month**.
+  Needs a look (`view.needs_look`, shown only when something does) keeps
+  the weeks with a date that has no cards here or a day over the pace.
 - **The weeks**, each saying what it asks (`view.week_asks`: new cards a
-  study day, a typical card's reviews a day; amber, "41 new a day, over
-  your 20 · 52 reviews", when a day of it is a quarter over the pace).
-  Past weeks fold; a line at today with "Study today's N". Each date: its
-  day, its name, its cards here, its sources as chips (`model.sources`,
-  as the deck files them), the deck's tags its name points at that no
-  date has (`view.SuggestIndex`, build.suggest read through an index: the
-  same answer, without reading a big deck's 12,000 tags for each date),
-  **+ Add** for a sure one, **Maybe: … ✓ ✕** for the rest (✕ is
-  remembered on this computer, `plan_drafts.json`'s `nosug`), "changed,
-  not sent" on a date a waiting change touched, and "opened by N of M in
-  its squad" once three share. Quizzes in italics with what they test, review
+  study day, a typical card's reviews a day: "9 new, 34 reviews a day";
+  amber, "41 new a day (over your 20), 52 reviews", when a day of it is
+  a quarter over the pace). Past weeks fold; a line at today. Each date:
+  its day, its name, its cards here, its sources as chips
+  (`model.sources`, as the deck files them), "No cards yet + From the
+  deck" on an empty one, "changed, not sent" on a date a waiting change
+  touched. Quizzes in italics with what they test, review
   days, the days with no new cards. The first heavy run gets a box with
   its fixes: Split its biggest tag…, Let it finish by … (`build.heavy`,
   `give_till`). **+ A date** (a name and a day: an empty date, its cards
@@ -134,10 +129,9 @@ Tags read and sort as the site's do (`build.tag_word`, `build.natural`).
 - **Paste plan lines or a new course calendar**, then **Show the
   changes**: plan lines go to the text's Add (read and shown first); a
   calendar (`reading.py`, on this computer) becomes dates on its days,
-  with the deck's tags their titles name where plain rules are sure and
-  suggestions for the rest, and its quizzes and exams as quizzes; asked
-  first, one change. **Edit the whole plan as text** (the Text window
-  below). **Copy a prompt for your AI ▾**: Plan the dates, Tag by
+  named and with no cards, and its quizzes and exams as quizzes; asked
+  first, one change. **The plan as text** (the Text window below). **A
+  prompt for your AI ▾**: Plan the dates, Tag by
   objective (`prompts.py`, builder.js's Prompts, the deck's tag names and
   counts, never a card), and Let an AI app on this computer help… (AI
   hooks, below).
@@ -167,13 +161,12 @@ kept. Followers keep every card that opened; a change never shuts one.
 ### Followers (authors)
 
 `followers_tab.py`: how many follow it, whose Anki has the last save
-("in N of M followers' Anki"), each date's done count from its squad (three
-sharing or more, never a name; read with the plan, `GET
-/plans/{id}/progress`, one request on picking it), the dates most of the
-class hasn't finished two days on (`edits.behind`) with **Push the dates
-still to come a day later…** (`breather`, a change like any other: it
-waits with the rest), and **Posts** (`history_tab.UpdatesTab`: what the
-authors said, a post of one line, five a day a plan).
+("in N of M followers' Anki"), and **Posts** (`history_tab.UpdatesTab`:
+what the authors said, a post of one line, five a day a plan). How far
+followers are isn't shown in Anki (Sam's call, round five: the counts
+added nothing); what followers do together is the plan's squad on the
+board's Squads tab. The `breather` op (every date still to come a study
+day later) stays for the text and an AI app.
 
 ### Sharing (authors)
 
@@ -286,9 +279,8 @@ its file dropped on the box (or Choose a file…), read on this computer as
 it's typed ("Found 18 sessions and 2 quizzes or exams"; its name and its
 exam fill the boxes above, unless typed in). **Make the plan**
 (`edits.new_plan_doc`, then `POST /plans` and the builder's save): each
-session a date on its day named as it is, with the deck's tags its title
-names where plain rules are sure (`reading.candidates`, `pick`), none yet
-where not (suggestions in the plan take it from there); its quizzes and
+session a date on its day named as it is, with no cards (the author
+puts them on in Your plans: nothing is picked for them); its quizzes and
 the exam its events; each date tested on the next one; the pace fitting
 what's ticked to the end. Your plans opens on it. Without a calendar it's
 an empty plan with its exam and end: the deck beside it, to tick what the
@@ -462,14 +454,14 @@ and sends in Anki (Your plans › the plan › Review and send).
 | `planner/build.py` | pure: the builder's rules restated (Todo, Every, Remarks, Picks, Suggest, Work, Reviews, Tags, Fill, Split, layOut, What to cover) |
 | `planner/text.py` | pure: the builder's Text (toText, fromText, Add and Replace, what it would change) |
 | `planner/actions.py` | Bring back, the one collection step it adds |
-| `planner/remote.py` | its requests (who I am, my plans, one plan, a save, its history and posts, its settings, progress, a copy, day notes) |
+| `planner/remote.py` | its requests (who I am, my plans, one plan, a save, its history and posts, its settings, a copy, day notes) |
 | `planner/reading.py` | pure: a calendar read, a session's tags, an exam's line, by plain rules |
 | `planner/claude.py` | pure: Claude's stand-in, and what Claude would get (`request`) |
 | `planner/ai.py` | pure: the AI hooks (jobs, what a request carries, answers checked into ops, runners, the ops' vocabulary) |
 | `planner/mcp.py`, `mcp_host.py`, `mcp_dialog.py`, `mcp_shim.py` | Your AI app: the local MCP server (standard library), its glue in Anki, its window, the stdio shim (`tools/due_crew_mcp.py`'s twin) |
 | `planner/ops.py` | pure, round five: every change an op (its checks, the builder's edit it runs, its words, who it touches, the line to followers) |
 | `planner/draft.py` | pure, round five: changes waiting to be sent (ops replayed on the plan as the server has it; one send) |
-| `planner/view.py` | pure, round five: what the Plan tab shows (the shape line, each week's asks, suggestions through an index, needs a look, today) |
+| `planner/view.py` | pure, round five: what the Plan tab shows (the shape line, each week's asks, needs a look, today) |
 | `planner/prompts.py` | pure: the prompts for your own AI, builder.js's `Prompts` restated |
 | `planner/flow.py` | the glue: the windows' asks (`Ops`, `StartOps`, `NewOps`, `QidOps`), `make_here`, `plan_drafts.json`, `qids.json` |
 | `planner/window.py`, `plan_tab.py`, `date_panel.py`, `deck_panel.py`, `shape.py`, `send.py`, `followers_tab.py`, `settings_tab.py`, `mine_tab.py`, `new_plan.py`, `text_tab.py`, `history_tab.py`, `day_notes.py`, `date_dialogs.py`, `widgets.py`, `picker.py`, `qid_window.py`, `start_window.py` | the Qt windows and their parts, in the board's look |
@@ -479,14 +471,14 @@ builder.js run in node, Fill, the save against the fake Worker's `PUT
 /plans/{id}`, the labs switch, the rules of the road, the AI hooks and the
 MCP server), `tests/test_plan_ops.py` (round five: the ops, their words
 and who they touch, changes waiting and replayed on a co-author's save,
-the Plan tab's arithmetic, Suggest through the index the same as Suggest,
-New plan's doc, a send's line kept by the fake Worker), the planner
+the Plan tab's arithmetic, no suggestion left, New plan's empty dates, a send's line kept by the fake Worker), the planner
 renders in `tools/dialogs.py` (an author's tabs, a date's chips, a change
-saved and undone, a stale save put on theirs, a sure suggestion added,
+saved and undone, a stale save put on theirs, a new date with nothing
+suggested,
 Change…, the deck ticking for a date and laying out what's ticked, the
 text added and the whole plan, a calendar pasted, changes waiting with
 people following, Review and send, Undo ▾ after a send, a co-author's
-save under waiting changes, Followers with Push…, Sharing, History, a
+save under waiting changes, Followers without counts, Sharing, History, a
 day's notes, Month, a follower's Plan and Mine, a plan that lost its
 dates and a load that failed, no plans yet, New plan from a calendar,
 no Pip anywhere in them, Missed questions, the calendar window in labs),

@@ -114,7 +114,7 @@ class DatePanel(QWidget):
         self.more = QPushButton("⋯")
         self.more.setProperty("dc", "more")
         self.more.setAutoDefault(False)
-        self.more.setToolTip("<span>More for this date: keep only some of its cards, leave out extras, spread, copy its search, delete</span>")
+        self.more.setToolTip("<span>More for this date: split, a review day, keep only some of its cards, spread, copy its search, delete</span>")
         self.more_menu = QMenu(self.more)
         self.more_menu.aboutToShow.connect(self._more)
         self.more.setMenu(self.more_menu)
@@ -124,6 +124,7 @@ class DatePanel(QWidget):
         grid.setHorizontalSpacing(8)
         grid.setVerticalSpacing(6)
         grid.addWidget(plain("Cards open", muted=True), 0, 0)
+        grid.addWidget(plain("Finish by", muted=True), 1, 0)
         self.opens = QDateEdit()
         self.opens.setCalendarPopup(True)
         self.opens.setDisplayFormat("ddd d MMM")
@@ -139,18 +140,18 @@ class DatePanel(QWidget):
         self._resting.timeout.connect(self._days_changed)
         self.opens.dateChanged.connect(lambda _d: None if self._loading else self._resting.start())
         self.due.dateChanged.connect(lambda _d: None if self._loading else self._resting.start())
-        days = QHBoxLayout()
-        days.addWidget(self.opens)
-        days.addWidget(plain("finish by", muted=True))
-        days.addWidget(self.due)
-        days.addStretch(1)
-        grid.addLayout(days, 0, 1)
-        grid.addWidget(plain("Tested on", muted=True), 1, 0)
+        for r, w in ((0, self.opens), (1, self.due)):
+            box = QHBoxLayout()
+            box.addWidget(w)
+            box.addStretch(1)
+            grid.addLayout(box, r, 1)
+        grid.addWidget(plain("Tested on", muted=True), 2, 0)
         self.event = QComboBox()
         self.event.activated.connect(self._tested_on)
-        grid.addWidget(self.event, 1, 1)
-        grid.addWidget(plain("Move", muted=True), 2, 0)
+        grid.addWidget(self.event, 2, 1)
+        grid.addWidget(plain("Move", muted=True), 3, 0)
         moves = QHBoxLayout()
+        moves.setSpacing(6)
         self.earlier = QPushButton("−1 day")
         self.earlier.setAutoDefault(False)
         self.earlier.clicked.connect(lambda: self._nudge(-1))
@@ -159,9 +160,9 @@ class DatePanel(QWidget):
         self.later.clicked.connect(lambda: self._nudge(1))
         moves.addWidget(self.earlier)
         moves.addWidget(self.later)
-        moves.addWidget(link("This and every date after…", self._move_from))
+        moves.addWidget(link("This and later dates…", self._move_from, tip="Move this date and every one after it"))
         moves.addStretch(1)
-        grid.addLayout(moves, 2, 1)
+        grid.addLayout(moves, 3, 1)
         grid.setColumnStretch(1, 1)
         fl.addLayout(grid)
         root.addWidget(self.fields)
@@ -171,14 +172,14 @@ class DatePanel(QWidget):
         root.addWidget(self.meta)
 
         # ---- its cards ----
-        row = QHBoxLayout()
+        heads = QVBoxLayout()
+        heads.setSpacing(1)
         self.cards_head = role(plain(), "head")
-        row.addWidget(self.cards_head)
-        row.addStretch(1)
+        self.cards_head.setWordWrap(False)
+        heads.addWidget(self.cards_head)
         self.cards_said = plain(muted=True)
-        self.cards_said.setWordWrap(False)
-        row.addWidget(self.cards_said)
-        root.addLayout(row)
+        heads.addWidget(self.cards_said)
+        root.addLayout(heads)
         self.chips, self.chips_lay = flow_box()
         root.addWidget(self.chips)
         self.adds = QWidget()
@@ -188,13 +189,8 @@ class DatePanel(QWidget):
         al.addWidget(link("+ From the deck", lambda: self.tab.tick_for(self.u["id"]) if self.u else None,
                           tip="Tick the deck's tags for this date, beside the plan"))
         al.addWidget(link("+ A search or IDs", self._add_cards))
-        self.split_btn = link("Split…", self._split_biggest, tip="Its biggest tag over more days, or into its own tags")
-        al.addWidget(self.split_btn)
-        al.addWidget(link("Make it a review day", self._review_day, tip="That morning followers get a deck of what they've seen so far"))
         al.addStretch(1)
         root.addWidget(self.adds)
-        self.sugg, self.sugg_lay = flow_box()
-        root.addWidget(self.sugg)
         row = QHBoxLayout()
         self.browse_btn = QPushButton("Show in Browse")
         self.browse_btn.setAutoDefault(False)
@@ -208,13 +204,8 @@ class DatePanel(QWidget):
         root.addLayout(row)
 
         # ---- to do ----
-        row = QHBoxLayout()
-        row.addWidget(role(plain("To do"), "head"))
-        row.addStretch(1)
-        self.todo_said = plain("followers tick these in Due", muted=True)
-        self.todo_said.setWordWrap(False)
-        row.addWidget(self.todo_said)
-        root.addLayout(row)
+        self.todo_head = role(plain("To do"), "head")
+        root.addWidget(self.todo_head)
         self.todo_box = QWidget()
         self.todo_lay = QVBoxLayout(self.todo_box)
         self.todo_lay.setContentsMargins(0, 0, 0, 0)
@@ -223,19 +214,14 @@ class DatePanel(QWidget):
         self.todo_links = QWidget()
         tl = QHBoxLayout(self.todo_links)
         tl.setContentsMargins(0, 0, 0, 0)
+        tl.setSpacing(2)
         tl.addWidget(link("+ A line", self._todo, tip="Watch, read or do: a line followers tick in Due on this date"))
+        tl.addWidget(link("+ Every week…", self._every, tip="Lines on the same weekday every week of the plan"))
         tl.addStretch(1)
-        tl.addWidget(link("Every week…", self._every, tip="Lines on the same weekday every week of the plan"))
         root.addWidget(self.todo_links)
 
         # ---- notes on its day ----
-        row = QHBoxLayout()
-        row.addWidget(role(plain("Notes on its day"), "head"))
-        row.addStretch(1)
-        self.notes_said = plain("everyone in the plan sees them", muted=True)
-        self.notes_said.setWordWrap(False)
-        row.addWidget(self.notes_said)
-        root.addLayout(row)
+        root.addWidget(role(plain("Notes on its day"), "head"))
         self.day_notes = DayNotes(win)
         root.addWidget(self.day_notes)
         root.addStretch(1)
@@ -275,10 +261,8 @@ class DatePanel(QWidget):
                 when.append(ev)
             self.meta.setText(" · ".join(when))
         self._cards()
-        self._suggestions()
         self._todos()
-        pday = next((x.get("opens") for x in P.units((win.plan or {}).get("doc") or {}) if x["id"] == u["id"]), u["opens"])
-        self.day_notes.show_for({pday} if pday else (), pday)
+        self.day_notes.show_for({u["opens"]}, u["opens"])  # the day it's on here, sent or not
         self.busy_changed()
 
     def _cids(self):
@@ -319,31 +303,10 @@ class DatePanel(QWidget):
             pace = M.pace_words(win.doc, u, c["new"]) if author else ""
             if pace:
                 bits.append(pace)
-        pr = win.progress or {}
-        got = (pr.get("units") or {}).get(u["id"]) if int(pr.get("sharing") or 0) >= 3 else None
-        if author and got:
-            bits.append(f"opened by {int(got.get('opened') or 0):,} of {int(pr['sharing']):,} in its squad")
         if win.idx is None:
             bits.append(f"its deck ({win.doc.get('deck') or '?'}) isn't in this Anki")
         self.cards_said.setText(" · ".join(bits))
         self.browse_btn.setText(f"Show the {n:,} in Browse" if n else "Show in Browse")
-        self.split_btn.setVisible(author and self._biggest() is not None)
-
-    def _suggestions(self):
-        self.sugg_lay.clear()
-        win, u = self.win, self.u
-        if not win.author():
-            self.sugg.setVisible(False)
-            return
-        for path, n, sure in self.tab.sugg.get(u["id"], ()):
-            c = Chip(M.label(path) if sure else f"Maybe: {M.label(path)}", n, kind="sug" if sure else "maybe", tip=path)
-            if sure:
-                c.add(link("+ Add", lambda p=path: self.tab.take_sugg(u["id"], p)))
-            else:
-                c.add(small("✓", lambda p=path: self.tab.take_sugg(u["id"], p), "Add it to this date"))
-            c.add(small("✕", lambda p=path: self.tab.turn_down(u["id"], p), "Not this one (never suggested here again)"))
-            self.sugg_lay.addWidget(c)
-        self.sugg.setVisible(self.sugg_lay.count() > 0)
 
     def _todos(self):
         while self.todo_lay.count():
@@ -366,17 +329,17 @@ class DatePanel(QWidget):
         every = [x for x in B.every_clean(self.win.doc.get("every") or []) if _every_on(self.win.doc, x, u.get("opens"))]
         for x in every:
             self.todo_lay.addWidget(plain(f"{B.TODO_LABEL.get(x.get('k'), 'Do')}: {x.get('t') or ''} · every week", muted=True))
-        if not lines and not every:
-            self.todo_lay.addWidget(plain("Nothing to tick on this date." if not author else
-                                          "None yet: a video to watch, pages to read, questions to do.", muted=True))
+        self.todo_box.setVisible(bool(lines or every))
+        self.todo_head.setVisible(author or bool(lines or every))
 
     def busy_changed(self):
         idle = not self.win.busy
         for w in (self.fields, self.adds, self.todo_links):
             w.setEnabled(idle)
         has = bool(self._cids())
-        self.browse_btn.setEnabled(has)
-        self.study_btn.setEnabled(has and idle)
+        self.browse_btn.setVisible(has)
+        self.study_btn.setVisible(has)
+        self.study_btn.setEnabled(idle)
 
     # ---- an author's changes ----
 
@@ -583,6 +546,12 @@ class DatePanel(QWidget):
         menu.clear()
         if u is None or not win.author():
             return
+        if self._biggest() is not None:
+            menu.addAction("Split its biggest tag…").triggered.connect(self._split_biggest)
+        a = menu.addAction("Make it a review day")
+        a.setToolTip("That morning followers get a deck of what they've seen so far")
+        a.triggered.connect(self._review_day)
+        menu.addSeparator()
         tags = [t for t in P.plan_tags(win.doc)]
         if tags and any(r["key"][0] == "tag" for r in win.rows(u)):
             keep = menu.addMenu("Keep only cards also tagged…")

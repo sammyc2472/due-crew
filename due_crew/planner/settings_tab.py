@@ -18,7 +18,7 @@ from ..ui import ask_item, confirm, esc, note, role
 from .. import plans as P
 from . import edits as E
 from . import remote
-from .widgets import frame
+from .widgets import frame, link
 
 
 class _Said(QLabel):
@@ -58,11 +58,8 @@ def _nth(n):
     return f"{n}{'th' if 10 <= n % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')}"
 
 
-def _link(text, fn):
-    b = QPushButton(text)
-    b.setFlat(True)
-    b.clicked.connect(fn)
-    return b
+def _link(text, fn, bad=False):
+    return link(text, fn, bad=bad)  # the plan windows' one link (widgets.link): green, flat, in line with the words
 
 
 class SettingsTab(QWidget):
@@ -85,6 +82,8 @@ class SettingsTab(QWidget):
         body.setAutoFillBackground(False)  # after setWidget, which turns it on
         form = QFormLayout(body)
         form.setContentsMargins(0, 0, 12, 0)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        form.setVerticalSpacing(10)
         self.form = form
 
         self.code_box, cl = frame("card", horizontal=True, margins=(12, 10, 12, 10))
@@ -107,11 +106,15 @@ class SettingsTab(QWidget):
         self.line.setPlaceholderText("Organ systems, one a week, done by January.")
         for w in (self.name, self.line):
             w.textChanged.connect(self._meta_changed)
-        self.meta_btn = QPushButton("Save the name and line")
+        self.meta_btn = QPushButton("Save")
+        self.meta_btn.setProperty("dc", "go")
+        self.meta_btn.setAutoDefault(False)
         self.meta_btn.clicked.connect(self._save_meta)
         form.addRow("Name", self.name)
-        form.addRow("One line", self.line)
-        form.addRow("", self.meta_btn)
+        line_row = QHBoxLayout()
+        line_row.addWidget(self.line, 1)
+        line_row.addWidget(self.meta_btn)  # shows once the name or the line changes
+        form.addRow("One line", line_row)
 
         row = QHBoxLayout()
         self.url = QLineEdit()
@@ -119,7 +122,9 @@ class SettingsTab(QWidget):
         self.url.setPlaceholderText("https://…")
         self.url.textChanged.connect(lambda _t: self._buttons())
         row.addWidget(self.url, 1)
-        self.url_btn = QPushButton("Save the link")
+        self.url_btn = QPushButton("Save")
+        self.url_btn.setProperty("dc", "go")
+        self.url_btn.setAutoDefault(False)
         self.url_btn.clicked.connect(self._save_url)
         row.addWidget(self.url_btn)
         form.addRow("Where to get the deck", row)
@@ -152,7 +157,6 @@ class SettingsTab(QWidget):
         h.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self.coas.itemSelectionChanged.connect(self._buttons)
         coa = QVBoxLayout()
-        coa.addWidget(_plain("They edit it with you, and its tags go on their notes in Anki. Each one says yes first.", muted=True))
         coa.addWidget(self.coas)
         row = QHBoxLayout()
         self.add_btn = _link("Ask one of my crew…", self._ask_coauthor)
@@ -164,6 +168,7 @@ class SettingsTab(QWidget):
             row.addWidget(b)
         row.addStretch(1)
         coa.addLayout(row)
+        coa.addWidget(_plain("They edit it with you, and its tags go on their notes in Anki. Each one says yes first.", muted=True))
         self.coa_said = _plain(muted=True, said=True)
         coa.addWidget(self.coa_said)
         form.addRow("Co-authors", coa)
@@ -182,15 +187,14 @@ class SettingsTab(QWidget):
         form.addRow("Library", lib)
 
         row = QHBoxLayout()
+        row.setSpacing(2)
         self.copy_btn = _link("Copy it for next year", self._next_year)
         row.addWidget(self.copy_btn)
         row.addWidget(_link("Copy as a table", self._table))
         row.addStretch(1)
-        self.delete_btn = QPushButton("Delete this plan…")
-        self.delete_btn.setProperty("dc", "bad")
-        self.delete_btn.clicked.connect(self._delete)
+        self.delete_btn = _link("Delete this plan…", self._delete, bad=True)
         row.addWidget(self.delete_btn)
-        form.addRow("", row)
+        form.addRow("This plan", row)
         self.said = _plain(said=True)
         form.addRow(self.said)
 
@@ -245,8 +249,11 @@ class SettingsTab(QWidget):
             return  # plan_loaded calls it once it's all filled
         raw, doc, owner, busy = self._raw(), self._raw().get("doc") or {}, self._owner(), self.win.busy
         changed = (" ".join(self.name.text().split()) != raw.get("name") or " ".join(self.line.text().split()) != (raw.get("line") or ""))
-        self.meta_btn.setEnabled(changed and bool(self.name.text().strip()) and not busy)
-        self.url_btn.setEnabled(self.url.text().strip() != (doc.get("deckUrl") or "") and not busy)
+        self.meta_btn.setVisible(changed)
+        self.meta_btn.setEnabled(bool(self.name.text().strip()) and not busy)
+        url_changed = self.url.text().strip() != (doc.get("deckUrl") or "")
+        self.url_btn.setVisible(url_changed)
+        self.url_btn.setEnabled(not busy)
         for w in (self.squad, self.by_code, self.by_squad):
             w.setEnabled(owner and not busy)
             w.setVisible(owner)  # a co-author can't see its owner's squads: a line says who can follow

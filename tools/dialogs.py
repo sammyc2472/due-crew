@@ -177,12 +177,17 @@ def fits(dlg):
     other; a window shorter or narrower than its rows need. [] when none."""
     W = QtWidgets
     bad = []
+    sheet = bool(dlg.property("every_control"))  # the kitchen: every control at once, not a window anyone opens
+    if not sheet and (dlg.width() > 1280 or dlg.height() > 800):  # round five: a window, as it is now, fits a laptop's screen
+        bad.append(f"window {dlg.width()}x{dlg.height()}: bigger than a 1280x800 screen")
     lay = dlg.layout()
     if lay is not None:
         least = lay.totalMinimumSize()
+        if not sheet and (least.width() > 1240 or least.height() > 740):
+            bad.append(f"its rows need {least.width()}x{least.height()}: more than a 1280x800 screen has")
         if dlg.width() < least.width() or dlg.height() < least.height():
             bad.append(f"window {dlg.width()}x{dlg.height()} under its rows' {least.width()}x{least.height()}")
-        elif lay.hasHeightForWidth() and dlg.height() < lay.totalHeightForWidth(dlg.width()):
+        elif lay.hasHeightForWidth() and not dlg.property("dcOwnSize") and dlg.height() < lay.totalHeightForWidth(dlg.width()):
             bad.append(f"window {dlg.height()} tall, its words need {lay.totalHeightForWidth(dlg.width())}")
     shown = [w for w in dlg.findChildren(W.QWidget) if w.isVisibleTo(dlg) and w.window() is dlg]
     for w in shown:
@@ -382,6 +387,7 @@ def main(out):
         extra.setEnabled(False)
         root.addWidget(bb)
         dlg.resize(560, 10)
+        dlg.setProperty("every_control", True)
         shoot(dlg, os.path.join(out, "kitchen.png"))
         dlg.show()
         settle(100)
@@ -1344,7 +1350,6 @@ def main(out):
                 return [{"id": "sq1", "name": "Study buddies"}]
 
             drafts = {}   # this render's plan_drafts.json
-            nosug = {}
 
             def draft(self, pid):
                 from due_crew.planner.draft import Draft
@@ -1355,12 +1360,6 @@ def main(out):
                     self.drafts.pop(str(pid), None)
                 else:
                     self.drafts[str(pid)] = json.loads(json.dumps(d.to_json()))
-
-            def turned_down(self, pid):
-                return list(self.nosug.get(str(pid), []))
-
-            def turn_down(self, pid, uid, path):
-                self.nosug.setdefault(str(pid), []).append((uid, path))
 
             def send(self, owner, pid, version, doc, summary, post, done):
                 done(PR.save(CLIENT, pid, version, doc, summary, post))
@@ -1439,16 +1438,17 @@ def main(out):
         dlg.change({"op": "rename", "date": "u2", "name": "HF drugs"})
         if unit("u2")["name"] != "HF drugs" or not dlg.status.text().startswith("Saved"):
             raise RuntimeError(f"planner: a stale save, put on theirs: {dlg.status.text()!r}")
-        # a date's name points at a deck tag no date has: + Add (sure), and ✕ remembered
+        # a new date named for a deck tag: nothing suggested (Sam's call); no cards till the author puts them on
         dlg.change({"op": "add_date", "day": day(5), "name": "Heart failure book"}, keep="made")
         made = next(u for u in STORE.plans[pid]["doc"]["units"] if u.get("name") == "Heart failure book")
-        if tab.picked != ("date", made["id"]) or tab.sugg.get(made["id"], [None])[0][:1] != (f"{root}::#Book::Cardio::Heart_Failure",) \
-                or tab.sure_box.isHidden():
-            raise RuntimeError(f"planner: suggestions {tab.sugg}, picked {tab.picked}")
-        shoot(dlg, os.path.join(out, "planner-suggest.png"))
-        tab._add_sure()
-        if unit(made["id"]).get("tags") != [f"{root}::#Book::Cardio::Heart_Failure"] or not tab.sure_box.isHidden():
-            raise RuntimeError(f"planner: Add the sure ones: {unit(made['id'])}")
+        said = [w.text() for w in tab.findChildren(QtWidgets.QLabel) if w.isVisibleTo(tab)]
+        if tab.picked != ("date", made["id"]) or any(t.startswith("Maybe") for t in said) or hasattr(tab, "sure_box") \
+                or "No cards yet" not in said:
+            raise RuntimeError(f"planner: a new date, nothing suggested: picked {tab.picked}, {said}")
+        shoot(dlg, os.path.join(out, "planner-date-new.png"))
+        dlg.change({"op": "add_cards", "date": made["id"], "tags": [f"{root}::#Book::Cardio::Heart_Failure"]}, keep=("date", made["id"]))
+        if unit(made["id"]).get("tags") != [f"{root}::#Book::Cardio::Heart_Failure"]:
+            raise RuntimeError(f"planner: cards put on a new date: {unit(made['id'])}")
         # the shape: Change…
         sh = PSH.ShapeDialog(dlg)
         sh.mode.button(0).click()  # Up to N a day
@@ -1488,7 +1488,7 @@ def main(out):
         # the text: plan lines pasted in, read, then added; the whole plan as text
         td = PT.TextDialog(dlg, False, f"{day(6)} | Shock again | tag:{root}::#Videos::Cardio::Shock | read: chapter 9\n"
                                       f"{day(4)} | event | Shock quiz")
-        if td.tab.go_btn.isHidden() or td.tab.go_btn.text() != "Add to the plan" or "1 date, 1 event." not in td.tab.status.text():
+        if td.tab.go_btn.isHidden() or td.tab.go_btn.text() != "Add to the plan" or "1 date, 1 quiz or exam." not in td.tab.status.text():
             raise RuntimeError(f"planner: plan lines read: {td.tab.status.text()!r}")
         shoot(td, os.path.join(out, "planner-text-add.png"))
         td.tab._go()
@@ -1555,27 +1555,20 @@ def main(out):
         shoot(sd, os.path.join(out, "planner-send-ai.png"))
         sd.reject()
         dlg.take_change(0)
-        # Followers: how far they are, a date behind (Push… waits with the changes), the posts
+        # Followers: how many, and the posts; no counts of how far they are (Sam's call: the plan's squad is where followers meet)
         fol = dlg.pages["followers"]
         dlg._show_tab("followers")
         labels = [w.text() for w in fol.findChildren(QtWidgets.QLabel)]
-        if fol.head.text() != "4 following" or not any("haven't finished it" in t for t in labels):
+        if fol.head.text() != "4 following" or any("finished" in t or " done" in t or "in its squad" in t for t in labels) \
+                or fol.findChildren(QtWidgets.QProgressBar):
             raise RuntimeError(f"planner: Followers {fol.head.text()!r}, {labels}")
         fol.posts.box.setText("Week 3 moved: Shock is Thursday now.")
         fol.posts._post()
         if not fol.posts.status.text().startswith("Posted"):
             raise RuntimeError(f"planner: a post {fol.posts.status.text()!r}")
         shoot(dlg, os.path.join(out, "planner-followers.png"))
-        from due_crew.planner import followers_tab as PFT
-        was = PFT.confirm
-        PFT.confirm = yes
-        try:
-            fol._breather()
-        finally:
-            PFT.confirm = was
-        if not dlg.draft or dlg.draft.ops[-1]["op"] != "breather":
-            raise RuntimeError("planner: Push the dates still to come waits with the changes")
-        dlg.draft.clear()
+        if dlg.draft:
+            dlg.draft.clear()
         dlg.ops.keep_draft(pid, None)
         dlg._load()
         # Sharing: its code and link first; the name and line; the deck's link (a change)
@@ -1688,10 +1681,11 @@ def main(out):
         nw.text.setPlainText(f"BLOCK 2 · Cardiovascular\nWEEK 1\n{P.fmt_day(day(7))}  LEC  Heart failure\n"
                              f"{P.fmt_day(day(8))}  LEC  Something new\n{P.fmt_day(day(11))}  EXAM  Block 2 exam")
         nw._read()
-        doc_, n_, cards_ = nw.doc()
-        if nw.name.text() != "BLOCK 2 · Cardiovascular" or nw.end_name.text() != "Block 2 exam" or (n_, cards_) != (2, 1) \
+        doc_, n_ = nw.doc()
+        if nw.name.text() != "BLOCK 2 · Cardiovascular" or nw.end_name.text() != "Block 2 exam" or n_ != 2 \
+                or any(u.get("tags") or u.get("decks") for u in doc_["units"]) or doc_.get("deck") != "Big Step 1" \
                 or doc_.get("end") != day(11) or len(doc_.get("events") or []) != 1:
-            raise RuntimeError(f"new plan: {nw.name.text()!r}, {nw.end_name.text()!r}, {n_}, {cards_}, {doc_.get('end')}")
+            raise RuntimeError(f"new plan: {nw.name.text()!r}, {nw.end_name.text()!r}, {n_}, {doc_}")
         shoot(nw, os.path.join(out, "planner-new.png"))
         was = __import__("due_crew.planner.new_plan", fromlist=["confirm"]).confirm
         import due_crew.planner.new_plan as PNP

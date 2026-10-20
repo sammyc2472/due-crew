@@ -186,7 +186,7 @@ def test_view():
     wk = asks.get("2026-10-19")
     check("view: a week's new cards a study day and reviews a day", wk and wk["new"] > 0 and wk["reviews"] >= 0, asks)
     words, warn = V.week_words(wk)
-    check("view: a week's words", "new · " in words and "reviews a day" in words and not warn, words)
+    check("view: a week's words", "new, " in words and "reviews a day" in words and not warn, words)
     heavy = dict(d, pace=dict(pace, daily=5))
     hw, hwarn = V.week_words(V.week_asks(heavy, t, V.pace_of(heavy)).get("2026-10-19"))
     check("view: a week over the pace says by how much, in amber", hwarn and "over your 5" in hw, hw)
@@ -203,39 +203,29 @@ def test_view():
     check("view: today's date (its window has today in it)", u["id"] == "u2" and now)
 
 
-def test_suggest_index():
-    t = tree()
-    idx = V.SuggestIndex(t)
-    rows = [(B.path_of(k), t.n(k)) for k in t.order if B.kind_of(k) == "tag"]
-    for name in ("Heart failure book", "Shock", "HF drugs", "Arrhythmias", "Cardio", "Nothing like it"):
-        check(f"view: Suggest through the index is Suggest ({name!r})",
-              idx.suggest(name, lambda p: False) == B.suggest(name, rows, lambda p: False))
+def test_no_suggestions():
+    """Sam's call (round five): nothing suggests what goes on a date; the
+    author puts every card there. Needs a look is no cards, or a week over."""
     d = doc()
     d["units"].append({"id": "u4", "name": "Heart failure book", "opens": "2026-10-24"})
-    sugg = V.suggestions(d, t, idx)
-    check("view: a date by hand with nothing on it, its name pointing at one tag: a sure suggestion",
-          sugg.get("u4") == [(BOOK, 6, True)], sugg)
-    check("view: a tag on a date already isn't suggested again", all(p != VID for xs in sugg.values() for p, _n, _s in xs))
-    check("view: one turned down (✕) isn't suggested again", not V.suggestions(d, t, idx, [("u4", BOOK)]).get("u4"))
-    check("view: Add the sure ones", V.sure_ones(sugg) == [("u4", BOOK)])
-    look = V.needs_look(d, t, {"u1": 18, "u2": 9, "u3": 7, "u4": 0}, sugg, {})
-    check("view: a date with no cards here needs a look, and one a maybe points at",
-          look == {"u4": "no cards here yet", "u1": "a maybe to look at"}, look)
+    check("view: no suggestion helpers left", not any(hasattr(V, n) for n in ("SuggestIndex", "suggestions", "sure_ones")))
+    look = V.needs_look(d, {"u1": 18, "u2": 9, "u3": 7, "u4": 0}, {})
+    check("view: a date with no cards here needs a look; nothing else does here", look == {"u4": "no cards here yet"}, look)
 
 
 def test_new_plan_doc():
     sessions = [{"date": "2026-10-26", "kind": "lecture", "title": "Heart failure"},
                 {"date": "2026-10-27", "kind": "lecture", "title": "Something new"},
                 {"date": "2026-10-30", "kind": "quiz", "title": "Cardio quiz 1"}]
-    d, uids = E.new_plan_doc("Big Step 1", sessions, {0: [VID]}, "Block 2 exam", "2026-11-13")
+    d, uids = E.new_plan_doc("Big Step 1", sessions, "Block 2 exam", "2026-11-13")
     names = {u["name"]: u for u in d["units"]}
-    check("new plan: every session a date on its day, its tags where picked, none yet where not",
-          len(uids) == 2 and names["Heart failure"]["tags"] == [VID] and not B.srcs(names["Something new"]))
+    check("new plan: every session a date on its day, named as it is, with no cards (nothing picked for the author)",
+          len(uids) == 2 and set(names) == {"Heart failure", "Something new"} and not any(B.srcs(u) for u in d["units"]))
     check("new plan: its quizzes and the exam it ends with are events; the end is the exam's day",
           sorted(e["name"] for e in d["events"]) == ["Block 2 exam", "Cardio quiz 1"] and d["end"] == "2026-11-13")
     check("new plan: each date tested on the next quiz after it", all(u.get("for") for u in d["units"]))
     check("new plan: it fits what's ticked to the end", d["pace"]["mode"] == "end" and d["pace"]["days"] == [1, 1, 1, 1, 1, 0, 0])
-    d2, _u = E.new_plan_doc("Big Step 1", [], {}, "", None)
+    d2, _u = E.new_plan_doc("Big Step 1", [], "", None)
     check("new plan: no calendar and no exam: an empty plan at 20 a day", not d2["units"] and d2["pace"]["mode"] == "daily")
 
 

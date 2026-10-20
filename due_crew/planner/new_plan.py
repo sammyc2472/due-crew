@@ -5,10 +5,10 @@ so the plan knows its end from the first minute), and the course's
 calendar if there is one: pasted in or its file dropped on the box, read
 on this computer as it's typed. Make the plan puts it on duecrew.com as
 mine (POST /plans, then the builder's save) and opens it in Your plans:
-with a calendar, its sessions are its dates (with the deck's tags their
-titles name, where plain rules are sure; the rest get suggestions there)
-and its quizzes its quizzes; without one, the deck beside an empty plan,
-to tick what the exam covers. A friend's plan instead: its code, Follow.
+with a calendar, its sessions are its dates, named and with no cards (the
+author puts every card on: nothing is picked for them), and its quizzes
+its quizzes; without one, the deck beside an empty plan, to tick what the
+exam covers. A friend's plan instead: its code, Follow.
 Names are the calendar's and the deck's: plain text everywhere."""
 
 import os
@@ -160,7 +160,7 @@ class NewPlanWindow(QDialog):
         n_ev = sum(1 for s in self.sessions if s["kind"] in R.EVENT_KINDS)
         n = len(self.sessions) - n_ev
         self.said.setText(f"Found {n:,} session{'s' if n != 1 else ''} and {n_ev:,} quiz{'zes' if n_ev != 1 else ''} or exam"
-                          f"{'s' if n_ev != 1 else ''}. Read on this computer.")
+                          f"{'s' if n_ev != 1 else ''}.")
         if not self.name.text().strip() or self.name.text() == self._named:
             self._named = R.name_from(text) or R.file_name(self.file)
             self.name.setText(self._named)
@@ -174,35 +174,27 @@ class NewPlanWindow(QDialog):
     # ---- making it ----
 
     def doc(self):
-        """(doc, dates, with cards) as Make the plan would make it."""
-        did = self.deck.currentData()
-        idx = self.ops.index(did)
-        picks = {}
-        for i, s in enumerate(self.sessions):
-            if s["kind"] not in R.EVENT_KINDS:
-                cands = R.candidates(idx, s)
-                picks[i] = [cands[k]["tag"] for k in R.pick(cands)]
+        """(doc, dates) as Make the plan would make it."""
+        deck = next((name for did, name, _n in self.decks if did == self.deck.currentData()), "")
         end_name = self.end_name.text().strip()
         end_day = self.end_day.date().toString("yyyy-MM-dd") if end_name or not self.sessions else None
-        doc, uids = E.new_plan_doc(idx.name, self.sessions, picks, end_name, end_day)
-        if uids:
-            doc = E.recount(doc, idx, set(uids))
-        return doc, len(uids), sum(1 for v in picks.values() if v)
+        doc, uids = E.new_plan_doc(deck, self.sessions, end_name, end_day)
+        return doc, len(uids)
 
     def _make(self):
         name = self.name.text().strip()
         if not name:
             return
         try:
-            doc, n, with_cards = self.doc()
+            doc, n = self.doc()
         except E.Refused as e:
             self.said.setText(str(e))
             return
         n_ev = len(doc.get("events") or [])
         if self.made is None and not confirm(
                 self, f"Make {name}?",
-                (f"{n:,} date{'s' if n != 1 else ''} ({with_cards:,} with the deck's tags their titles name) and "
-                 f"{n_ev:,} quiz{'zes' if n_ev != 1 else ''} or exams. " if n else
+                (f"{n:,} date{'s' if n != 1 else ''} and {n_ev:,} quiz{'zes' if n_ev != 1 else ''} or exams, "
+                 "the dates with no cards yet. " if n else
                  "An empty plan that ends with " + (f"{doc['end'] and P.fmt_day(doc['end'])}. " if doc.get("end") else "nothing yet. "))
                 + "It's yours: nobody follows it till you share its code.", "Make it"):
             return

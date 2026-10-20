@@ -1,9 +1,8 @@
 """Round five's Plan tab, what it shows worked out (docs/planner.md): the
 plan's shape in one line, what each week asks (new cards a day, the
-reviews it brings), the dates that need a look, and the deck's tags a
-date's name points at (Suggest.tags, build.suggest, read through an index
-so a plan of a hundred dates doesn't read a big deck's 12,000 tags a
-hundred times). Pure: no Anki, no Qt."""
+reviews it brings), the dates that need a look, a follower's today. No
+suggestions of what goes on a date: the author puts every card there
+(Sam's call, round five). Pure: no Anki, no Qt."""
 
 import datetime
 
@@ -116,15 +115,15 @@ def week_asks(doc, tree, pace):
 
 
 def week_words(ask):
-    """"9 new · 34 reviews a day", or the amber "41 new a day, over your 20 · 52 reviews"."""
+    """"9 new, 34 reviews a day", or the amber "41 new a day (over your 20), 52 reviews"."""
     if not ask:
         return "", False
     r = B.about(ask["reviews"])
     if ask["over"]:
-        return f"{ask['top']:,} new a day, over your {ask['cap']:,} · {r} reviews", True
+        return f"{ask['top']:,} new a day (over your {ask['cap']:,}), {r} reviews", True
     if not ask["new"] and r == "0":
         return "", False
-    return f"{ask['new']:,} new · {r} reviews a day", False
+    return f"{ask['new']:,} new, {r} reviews a day", False
 
 
 def peak(asks):
@@ -151,9 +150,7 @@ def shape_line(doc, tree, pace, asks):
         parts.append((f"{a} → {b}", False))
     parts.append((days_words(pace.get("days")), False))
     cap = cap_of(doc, tree, pace)
-    if pace.get("mode") == "placed":
-        parts.append(("each date's cards set by hand", False))
-    elif cap:
+    if pace.get("mode") != "placed" and cap:  # placed: each date's own cards, nothing to say
         parts.append((f"{cap:,} new cards a day" + (" to fit the end" if pace.get("mode") == "end" else ""), True))
     pk = peak(asks)
     if pk:
@@ -167,105 +164,16 @@ def shape_line(doc, tree, pace, asks):
     return parts
 
 
-# ---- suggestions (Suggest.tags), read through an index ----
-
-class SuggestIndex:
-    """The deck's tags by the first three letters of their last part's
-    words: build.suggest needs one of a name's words in a tag's last part,
-    and its same_word needs their first three letters alike, so the tags it
-    reads for a name are these and no others (the answer is the same)."""
-
-    def __init__(self, tree):
-        self.tree = tree
-        self.by = {}
-        self.rows = []
-        if tree is None:
-            return
-        for k in tree.order:
-            if B.kind_of(k) != "tag":
-                continue
-            i = len(self.rows)
-            path = B.path_of(k)
-            self.rows.append((path, tree.n(k)))
-            for w in B.words(path.split("::")[-1]):
-                self.by.setdefault(w[:3], []).append(i)
-
-    def rows_for(self, name):
-        hit = set()
-        for w in B.words(name):
-            hit.update(self.by.get(w[:3], ()))
-        return [self.rows[i] for i in sorted(hit)]
-
-    def suggest(self, name, skip):
-        return B.suggest(name, self.rows_for(name), skip)
-
-
-def placed_skip(doc):
-    """Suggest's skip: a tag on a date already, above one, or under one (a cut's too)."""
-    on, above = set(), set()
-    for k in B.placed_keys(doc):
-        if B.kind_of(k) != "tag":
-            continue
-        low = B.path_of(k).lower()
-        on.add(low)
-        segs = low.split("::")
-        above.update("::".join(segs[:i]) for i in range(1, len(segs)))
-    for u in P.units(doc):
-        for c in u.get("cut") or []:
-            on.add(str(c.get("tag") or "").lower())
-
-    def skip(path):
-        low = str(path).lower()
-        segs = low.split("::")
-        return low in on or low in above or any("::".join(segs[:i]) in on for i in range(1, len(segs)))
-    return skip
-
-
-def by_hand(doc, tree, u, placed=None):
-    """A date named by its author, not for what's on it (autoName)."""
-    placed = B.placed_keys(doc, tree) if placed is None else placed
-    return bool(str(u.get("name") or "").strip()) and u.get("name") != B.auto_name(doc, tree, u, placed)
-
-
-def suggestions(doc, tree, index, turned_down=()):
-    """{date id: [(path, n, sure)]}: for each date named by hand, the deck's
-    tags its name points at that no date has; sure: the date has nothing on
-    it yet and its name points at one tag alone (Add the sure ones adds
-    those). A suggestion turned down here (✕) isn't made again."""
-    if tree is None or index is None:
-        return {}
-    skip_placed = placed_skip(doc)
-    no = {(str(a), str(b).lower()) for a, b in turned_down}
-    placed = B.placed_keys(doc, tree)
-    out = {}
-    for u in P.units(doc):
-        if not by_hand(doc, tree, u, placed):
-            continue
-        got = index.suggest(u.get("name"), lambda p, uid=u["id"]: skip_placed(p) or (uid, str(p).lower()) in no)
-        if got:
-            empty = not B.srcs(u) and not B.unit_total(tree, u, placed)
-            out[u["id"]] = [(p, n, empty and len(got) == 1) for p, n in got]
-    return out
-
-
-def needs_look(doc, tree, counts, sugg, asks):
-    """{date id: why}: a date with no cards here, one a maybe points at, one
-    in a week over the pace."""
+def needs_look(doc, counts, asks):
+    """{date id: why}: a date with no cards here, one in a week over the pace."""
     out = {}
     for u in P.units(doc):
         uid = u["id"]
         if counts.get(uid) == 0:
             out[uid] = "no cards here yet"
-        elif any(not sure for _p, _n, sure in sugg.get(uid, ())):
-            out[uid] = "a maybe to look at"
         elif (asks.get(monday(u.get("opens"))) or {}).get("over"):
             out[uid] = "its week asks too much"
     return out
-
-
-def sure_ones(sugg):
-    """[(date id, tag path)] for Add the sure ones."""
-    return [(uid, x[0]) for uid, xs in sugg.items() for x in xs if x[2]]
 
 
 # ---- a follower's today ----

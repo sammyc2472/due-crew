@@ -1036,7 +1036,7 @@ def test_rules_of_the_road():
                 calls.add(node.attr)
     check("road: requests only on a click, through remote (who I am, my plans, one plan, a save, its history and posts)",
           calls <= {"is_admin", "my_plans", "load", "save", "undo", "create", "log", "posts", "post", "unpost", "save_meta",
-                    "progress", "set_listed", "copy", "delete", "crew", "add_editor", "remove_editor", "offer", "notes", "add_note",
+                    "set_listed", "copy", "delete", "crew", "add_editor", "remove_editor", "offer", "notes", "add_note",
                     "remove_note"}
           and "_call" not in src["flow.py"], calls)
     routes = set(re.findall(r'_call\((?:client, )?"(GET|PUT|POST|PATCH|DELETE)", f?"([^"]+)"', src["remote.py"]))
@@ -1044,13 +1044,13 @@ def test_rules_of_the_road():
     check("road: nothing new on the server: routes the builder and the site use already",
           routes == {("GET", "/plans/{pid}"), ("PUT", "/plans/{pid}"), ("POST", "/plans/{pid}/undo"),
                      ("POST", "/plans"), ("GET", "/plans/{pid}/log"), ("GET", "/plans/{pid}/posts"), ("POST", "/plans/{pid}/posts"),
-                     ("DELETE", "/plans/{pid}/posts/{int(post_id)}"), ("GET", "/plans/{pid}/progress"), ("PUT", "/plans/{pid}/listed"),
+                     ("DELETE", "/plans/{pid}/posts/{int(post_id)}"), ("PUT", "/plans/{pid}/listed"),
                      ("POST", "/plans/{pid}/copy"), ("DELETE", "/plans/{pid}"), ("GET", "/friends"), ("POST", "/plans/{pid}/editors"),
                      ("DELETE", "/plans/{pid}/editors/{uid}"), ("POST", "/plans/{pid}/owner"), ("GET", "/plans/{pid}/notes"),
                      ("POST", "/plans/{pid}/notes"), ("DELETE", "/plans/{pid}/notes/{int(note_id)}")}
           and all(f'api("{m}", `/plans/${{{v}}}{x}' in builder
                   for m, v, x in (("GET", "id", "/log"), ("GET", "id", "/posts"), ("POST", "id", "/posts"), ("DELETE", "id", "/posts/"),
-                                  ("GET", "id", "/progress"), ("PUT", "id", "/listed"), ("POST", "plan.id", "/copy"), ("DELETE", "id", "`"),
+                                  ("PUT", "id", "/listed"), ("POST", "plan.id", "/copy"), ("DELETE", "id", "`"),
                                   ("POST", "id", "/editors"), ("DELETE", "id", "/editors/"), ("POST", "id", "/owner"),
                                   ("GET", "id", "/notes"), ("POST", "id", "/notes"), ("DELETE", "id", "/notes/")))
           and 'api("GET", "/friends")' in builder, routes)
@@ -1667,13 +1667,8 @@ def test_settings_remote_v393():
     check("settings: Copy for next year: every date 52 weeks on, named for next year",
           copied[0] == "saved" and E.first_day(new["doc"]) == E._later(first, 364) and named[1]["name"] == "MS2 Block 2b (next year)"
           and [u["opens"] for u in new["doc"]["units"]] == [E._later(u["opens"], 364) for u in raw["doc"]["units"]], new["doc"]["units"])
-    store.follows[(pid, "kai")] = {"share": True, "paused": False, "sched": None,
-                                   "progress": json.dumps({"u1": [3, 3, 3], "u2": [1, 0, 2]})}
-    store.follows[(pid, "dre")] = {"share": False, "paused": False, "sched": None, "progress": json.dumps({"u1": [1, 1, 1]})}
-    prog = R.progress(sam, pid)
-    check("progress: its squad's counts a date, the rest left out",
-          prog["followers"] == 2 and prog["sharing"] == 1 and prog["units"]["u1"] == {"opened": 1, "done": 1}
-          and prog["units"]["u2"] == {"opened": 1, "done": 0}, prog)
+    check("followers' progress isn't read in Anki (round five, Sam's call: their squad is where followers meet)",
+          not hasattr(R, "progress"))
     check("settings: only its owner takes it down; then it's gone", not R.delete(dre, pid) and R.delete(sam, pid) and pid not in store.plans)
 
 

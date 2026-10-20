@@ -2,9 +2,9 @@
 to follow one. For its authors: the plan's shape in one line (Change…),
 Today · Needs a look · All weeks open, the weeks with what each asks (new
 cards and reviews a day; amber, with its fixes, when a day is over the
-pace), a line at today, each date with its cards as chips and the deck's
-tags its name points at (+ Add, Maybe ✓ ✕), the picked date or the deck
-beside them, a box to paste plan lines or a course calendar into, the
+pace), a line at today, each date with its cards as chips (no
+suggestions of what goes on one: the author puts every card there, Sam's
+call), the picked date or the deck beside them, a box to paste plan lines or a course calendar into, the
 plan as text, a prompt for your own AI, and the changes waiting to be
 sent. For a follower: today's date with Study now, what's behind, and the
 same weeks to read. List or Month.
@@ -13,7 +13,7 @@ Every change is an op through the window (PlanWindow.change). Names are
 the deck's and the authors': plain text everywhere, escaped in rich text."""
 
 from aqt.qt import (
-    QApplication, QDate, QFrame, QGridLayout, QHBoxLayout, QMenu, QPlainTextEdit, QPushButton, QScrollArea,
+    QApplication, QDate, QFrame, QGridLayout, QHBoxLayout, QMenu, QPlainTextEdit, QPushButton, QScrollArea, QSizePolicy,
     QSplitter, QStackedWidget, Qt, QTabWidget, QTimer, QVBoxLayout, QWidget,
 )
 
@@ -26,7 +26,7 @@ from . import model as M
 from . import view as V
 from .date_panel import DatePanel, EventPanel, ReviewPanel, chip_name
 from .deck_panel import DeckPanel
-from .widgets import Chip, Row, flow_box, frame, link, mark, pill, plain, small
+from .widgets import Chip, Elided, Row, flow_box, frame, link, mark, pill, plain
 
 
 def _scroll(widget):
@@ -71,8 +71,7 @@ class PlanTab(QWidget):
         self.only_look = False
         self.mode = "list"
         self.month = None           # the month Month shows (its first day)
-        self.sugg, self.look, self.asks, self.counts = {}, {}, {}, {}
-        self._index = (None, None)  # (tree, view.SuggestIndex)
+        self.look, self.asks, self.counts = {}, {}, {}
         self.rows = {}              # key -> Row, as drawn
         self.pid = None
         root = QVBoxLayout(self)
@@ -100,7 +99,7 @@ class PlanTab(QWidget):
         bl.addWidget(self.behind_go)
         root.addWidget(self.behind_box)
 
-        # an author's shape, and the sure suggestions
+        # an author's shape
         self.shape_box, sl = frame("strip", horizontal=True)
         self.shape_words = plain()
         self.shape_words.setTextFormat(Qt.TextFormat.RichText)
@@ -108,22 +107,13 @@ class PlanTab(QWidget):
         self.shape_btn = link("Change…", self._shape)
         sl.addWidget(self.shape_btn, 0, Qt.AlignmentFlag.AlignTop)
         root.addWidget(self.shape_box)
-        self.sure_box, ul = frame("bar", horizontal=True)
-        self.sure_words = plain()
-        self.sure_words.setTextFormat(Qt.TextFormat.RichText)
-        ul.addWidget(self.sure_words, 1)
-        self.sure_go = QPushButton("Add the sure ones")
-        self.sure_go.setAutoDefault(False)
-        self.sure_go.clicked.connect(self._add_sure)
-        ul.addWidget(self.sure_go)
-        root.addWidget(self.sure_box)
 
         # the toolbar
         bar = QHBoxLayout()
         self.today_btn = pill("Today", self._go_today, tip="The date open today, or the next one")
         self.look_btn = pill("Needs a look", self._toggle_look, checkable=True,
-                             tip="Only the weeks with a date that has no cards here, a maybe, or a day over the pace")
-        self.all_btn = pill("All weeks open", self._toggle_all, checkable=True)
+                             tip="Only the weeks with a date that has no cards here, or a day over the pace")
+        self.all_btn = pill("Open all weeks", self._toggle_all)
         for w in (self.today_btn, self.look_btn, self.all_btn):
             bar.addWidget(w)
         bar.addStretch(1)
@@ -145,7 +135,8 @@ class PlanTab(QWidget):
         self.list_body = QWidget()
         self.list_scroll = _scroll(self.list_body)
         self.views.addWidget(self.list_scroll)
-        self.month_page = QWidget()
+        self.month_body = QWidget()
+        self.month_page = _scroll(self.month_body)  # a month never makes the window taller than its screen
         self.views.addWidget(self.month_page)
         ll.addWidget(self.views)
         split.addWidget(left)
@@ -185,15 +176,14 @@ class PlanTab(QWidget):
         self.paste_go.setAutoDefault(False)
         self.paste_go.clicked.connect(self._show_changes)
         pr.addWidget(self.paste_go, 0, Qt.AlignmentFlag.AlignTop)
-        side = QVBoxLayout()
-        side.setSpacing(0)
-        side.addWidget(link("Edit the whole plan as text", lambda: self.text(True)))
-        self.ai_btn = link("Copy a prompt for your AI ▾")
+        pr.addSpacing(6)
+        pr.addWidget(link("The plan as text", lambda: self.text(True), tip="Every date, quiz and tag as plan lines, to read or edit"),
+                     0, Qt.AlignmentFlag.AlignVCenter)
+        self.ai_btn = link("A prompt for your AI ▾", tip="Copied for you to paste in your own AI; it gets tag names and counts, never a card")
         self.ai_menu = QMenu(self.ai_btn)
         self.ai_menu.aboutToShow.connect(self._ai_entries)
         self.ai_btn.setMenu(self.ai_menu)
-        side.addWidget(self.ai_btn)
-        pr.addLayout(side)
+        pr.addWidget(self.ai_btn, 0, Qt.AlignmentFlag.AlignVCenter)
         root.addWidget(self.paste_row)
 
         # the changes waiting to be sent
@@ -217,7 +207,7 @@ class PlanTab(QWidget):
     def plan_loaded(self, win):
         doc = win.doc
         if doc is None:
-            for w in (self.today_box, self.behind_box, self.shape_box, self.sure_box, self.paste_row, self.send_box):
+            for w in (self.today_box, self.behind_box, self.shape_box, self.paste_row, self.send_box):
                 w.hide()
             self.picked = None
             self._draw_list([])
@@ -252,15 +242,11 @@ class PlanTab(QWidget):
     def forget(self):
         self.date_panel.day_notes.forget()
 
-    def progress_in(self, win):
-        self._draw()
-        if self.picked and self.picked[0] == "date":
-            self._show_side()
-
     def busy_changed(self, win):
         idle = not win.busy
-        for w in (self.shape_btn, self.sure_go, self.paste_go, self.send_go):
+        for w in (self.shape_btn, self.send_go):
             w.setEnabled(idle)
+        self._paste_changed()
         self.date_panel.busy_changed()
         self.event_panel.busy_changed()
         self.review_panel.busy_changed()
@@ -274,13 +260,7 @@ class PlanTab(QWidget):
         pace = V.pace_of(doc)
         self.asks = V.week_asks(doc, t, pace) if t is not None else {}
         self.counts = {u["id"]: len(win.idx.match(u, win.swap, doc)) for u in P.units(doc)} if win.idx is not None else {}
-        if win.author() and t is not None and not win.swap:
-            if self._index[0] is not t:
-                self._index = (t, V.SuggestIndex(t))
-            self.sugg = V.suggestions(doc, t, self._index[1], win.ops.turned_down(win.plan["id"]))
-        else:
-            self.sugg = {}
-        self.look = V.needs_look(doc, t, self.counts, self.sugg, self.asks) if win.author() else {}
+        self.look = V.needs_look(doc, self.counts, self.asks) if win.author() else {}
         self.heavy = None
         if win.author() and t is not None:
             placed = B.placed_keys(doc, t)
@@ -316,12 +296,6 @@ class PlanTab(QWidget):
         if author:
             parts = V.shape_line(doc, win.deck_tree(), V.pace_of(doc), self.asks)
             self.shape_words.setText(" · ".join(f"<b>{esc(w)}</b>" if bold else esc(w) for w, bold in parts))
-        sure = V.sure_ones(self.sugg)
-        self.sure_box.setVisible(author and bool(sure))
-        if sure:
-            self.sure_words.setText(f"<b>{len(sure):,} date{'s' if len(sure) != 1 else ''}</b> with nothing on them "
-                                    f"name one of the deck's tags each.")
-            self.sure_go.setText(f"Add the {len(sure):,} sure one{'s' if len(sure) != 1 else ''}")
         self.paste_row.setVisible(author)
         n = len(win.draft) if win.draft else 0
         self.send_box.setVisible(author and n > 0)
@@ -383,6 +357,10 @@ class PlanTab(QWidget):
 
     def _go_today(self):
         u, _now = V.today_date(self.win.doc or {}, self.win.ops.today())
+        if self.mode == "month":
+            t = QDate.fromString(str(self.win.ops.today()), "yyyy-MM-dd")
+            self.month = QDate(t.year(), t.month(), 1)
+            self._draw()
         if u is not None:
             self.open_weeks.add(V.monday(u["opens"]))
             self.pick(("date", u["id"]))
@@ -395,7 +373,7 @@ class PlanTab(QWidget):
         self._draw()
 
     def _toggle_all(self):
-        self.all_open = self.all_btn.isChecked()
+        self.all_open = not self.all_open
         self.open_weeks, self.closed_weeks = set(), set()
         self._draw()
 
@@ -407,12 +385,11 @@ class PlanTab(QWidget):
         self.list_btn.setChecked(self.mode == "list")
         self.month_btn.setChecked(self.mode == "month")
         n = len(self.look)
-        self.look_btn.setVisible(self.win.author())
-        self.look_btn.setText(f"Needs a look · {n:,}" if n else "Needs a look")
-        self.look_btn.setEnabled(bool(n) or self.only_look)
-        mark(self.look_btn, "tone", "warm" if n else "")
+        self.look_btn.setVisible(self.win.author() and (bool(n) or self.only_look))
+        self.look_btn.setText(f"Needs a look · {n:,}")
+        mark(self.look_btn, "tone", "warm" if n and not self.only_look else "")
         self.look_btn.setChecked(self.only_look)
-        self.all_btn.setChecked(self.all_open)
+        self.all_btn.setText("Fold past weeks" if self.all_open else "Open all weeks")
         if self.mode == "month":
             self._draw_month()
             self.views.setCurrentWidget(self.month_page)
@@ -527,10 +504,6 @@ class PlanTab(QWidget):
         today = self.win.ops.today()
         lay.addWidget(plain(f"Today · {M.day_words(today)}", dc="ok"))
         lay.addStretch(1)
-        u, now = V.today_date(self.win.doc or {}, today)
-        n = self.counts.get(u["id"]) if u is not None and now else None
-        if n:
-            lay.addWidget(link(f"Study today's {n:,}", self._study_today))
         return f
 
     def _date_row(self, u, fresh):
@@ -569,24 +542,18 @@ class PlanTab(QWidget):
         if win.idx is None:
             for t in (list(u.get("tags") or []) + list(u.get("decks") or []))[:6]:
                 flow.addWidget(Chip(M.label(t), tip=t))
-        for path, k, sure in self.sugg.get(u["id"], ()) if author else ():
-            c = Chip(M.label(path) if sure else f"Maybe: {M.label(path)}", k, kind="sug" if sure else "maybe", tip=path)
-            if sure:
-                c.add(link("+ Add", lambda uid=u["id"], p=path: self.take_sugg(uid, p)))
-            else:
-                c.add(small("✓", lambda uid=u["id"], p=path: self.take_sugg(uid, p), "Add it to this date"))
-            c.add(small("✕", lambda uid=u["id"], p=path: self.turn_down(uid, p), "Not this one (never suggested here again)"))
-            flow.addWidget(c)
         if author and u["id"] in fresh:
             flow.addWidget(Chip("changed, not sent", kind="fresh"))
-        pr = win.progress or {}
-        got = (pr.get("units") or {}).get(u["id"]) if author and int(pr.get("sharing") or 0) >= 3 else None
-        if got and str(u["opens"]) <= today:
-            note = plain(f"opened by {int(got.get('opened') or 0):,} of {int(pr['sharing']):,} in its squad", muted=True)
-            note.setWordWrap(False)
-            flow.addWidget(note)
-        if author and u["id"] in self.look and not rows and not self.sugg.get(u["id"]):
-            flow.addWidget(plain("no cards here yet: + From the deck", dc="warn"))
+        if author and u["id"] in self.look and not rows:
+            empty = QWidget()
+            el = QHBoxLayout(empty)
+            el.setContentsMargins(0, 0, 0, 0)
+            el.setSpacing(4)
+            words = plain("No cards yet", dc="warn")
+            words.setWordWrap(False)
+            el.addWidget(words)
+            el.addWidget(link("+ From the deck", lambda uid=u["id"]: self.tick_for(uid)))
+            flow.addWidget(empty)
         if flow.count():
             ind = QHBoxLayout()
             ind.setContentsMargins(64, 0, 0, 0)
@@ -690,7 +657,10 @@ class PlanTab(QWidget):
     # ---- the month ----
 
     def _draw_month(self):
-        old = self.month_page.layout()
+        """Month: seven even columns, a day's dates and quizzes one line each
+        (cut with … to fit, the whole name on hover), two a day and "+N
+        more" (the list, at that date); today shaded, the picked one marked."""
+        old = self.month_body.layout()
         if old is not None:
             QWidget().setLayout(old)  # the old layout and its widgets go with a throwaway parent
         doc, today = self.win.doc or {}, self.win.ops.today()
@@ -699,42 +669,91 @@ class PlanTab(QWidget):
             u = self.win.unit(key) if key else None
             d = QDate.fromString(str((u or {}).get("opens") or today), "yyyy-MM-dd")
             self.month = QDate(d.year(), d.month(), 1)
-        lay = QVBoxLayout(self.month_page)
-        lay.setContentsMargins(6, 6, 6, 6)
+        self.rows = {}
+        lay = QVBoxLayout(self.month_body)
+        lay.setContentsMargins(8, 6, 8, 8)
+        lay.setSpacing(8)
         nav = QHBoxLayout()
-        nav.addWidget(link("‹", lambda: self._month_step(-1)))
-        nav.addWidget(role(plain(self.month.toString("MMMM yyyy")), "head"))
-        nav.addWidget(link("›", lambda: self._month_step(1)))
+        nav.setSpacing(2)
+        nav.addWidget(link("‹", lambda: self._month_step(-1), tip="The month before"))
+        title = role(plain(self.month.toString("MMMM yyyy")), "head")
+        title.setWordWrap(False)
+        nav.addWidget(title)
+        nav.addWidget(link("›", lambda: self._month_step(1), tip="The month after"))
         nav.addStretch(1)
         lay.addLayout(nav)
-        grid = QGridLayout()
-        grid.setSpacing(4)
-        for i, d in enumerate(V.DAYS):
-            grid.addWidget(plain(d, muted=True), 0, i)
-        first = self.month.addDays(-(self.month.dayOfWeek() - 1))
         by_day = {}
-        for u in P.units(doc):
+        for u in sorted(P.units(doc), key=lambda u: str(u.get("name") or "")):
             by_day.setdefault(str(u.get("opens")), []).append(("date", u["id"], u.get("name") or "?"))
         for e in doc.get("events") or []:
             if isinstance(e, dict):
-                by_day.setdefault(str(e.get("day")), []).append(("event", e.get("id"), f"◆ {e.get('name') or '?'}"))
+                by_day.setdefault(str(e.get("day")), []).insert(0, ("event", e.get("id"), f"◆ {e.get('name') or '?'}"))
+        box = QFrame()
+        box.setProperty("dc", "calgrid")
+        grid = QGridLayout(box)
+        grid.setContentsMargins(1, 1, 1, 1)
+        grid.setSpacing(1)
+        for i, d in enumerate(V.DAYS):
+            head = QFrame()
+            head.setProperty("dc", "calday")
+            hl = QHBoxLayout(head)
+            hl.setContentsMargins(6, 3, 6, 3)
+            hl.addWidget(Elided(d, dc="calhead"))
+            head.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+            grid.addWidget(head, 0, i)
+        first = self.month.addDays(-(self.month.dayOfWeek() - 1))
+        rows = 0
         for k in range(42):
             d = first.addDays(k)
             if k >= 35 and d.month() != self.month.month():
                 break
+            rows = 1 + k // 7
             iso = d.toString("yyyy-MM-dd")
-            cell, cl = frame("today" if iso == today else "row", margins=(4, 2, 4, 2), spacing=0)
-            cl.addWidget(plain(str(d.day()), muted=d.month() != self.month.month()))
-            for kind, key, name in by_day.get(iso, ())[:3]:
-                b = link(name[:22], lambda kind=kind, key=key: self.pick((kind, key)))
-                cl.addWidget(b)
-            if len(by_day.get(iso, ())) > 3:
-                cl.addWidget(plain(f"{len(by_day[iso]) - 3} more", muted=True))
+            cell = QFrame()
+            cell.setProperty("dc", "calday")
+            if d.month() != self.month.month():
+                cell.setProperty("out", "true")
+            if iso == today:
+                cell.setProperty("today", "true")
+            cl = QVBoxLayout(cell)
+            cl.setContentsMargins(4, 3, 4, 3)
+            cl.setSpacing(1)
+            num = Elided(str(d.day()), dc="calnum")
+            if iso == today:
+                num.setProperty("today", "true")
+            cl.addWidget(num)
+            here = by_day.get(iso, ())
+            for kind, key, name in here[:2]:
+                entry = Row((kind, key), self.pick, margins=(4, 1, 4, 1))
+                entry.setProperty("dc", "calrow")  # picked: a solid pill in the day, not the list's left bar
+                entry.lay.addWidget(Elided(name, dc="calev" if kind == "event" else "cal"))
+                entry.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+                entry.set_on((kind, key) == self.picked)
+                self.rows[(kind, key)] = entry
+                cl.addWidget(entry)
+            if len(here) > 2:
+                more = link(f"+{len(here) - 2} more", lambda here=here: self._month_more(here[2]),
+                            tip=", ".join(n for _k, _i, n in here[2:]))
+                more.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+                cl.addWidget(more, 0, Qt.AlignmentFlag.AlignLeft)
             cl.addStretch(1)
+            cell.setMinimumHeight(66)
+            cell.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
             grid.addWidget(cell, 1 + k // 7, k % 7)
         for i in range(7):
             grid.setColumnStretch(i, 1)
-        lay.addLayout(grid, 1)
+        for r in range(1, rows + 1):
+            grid.setRowStretch(r, 1)
+        lay.addWidget(box, 1)
+
+    def _month_more(self, first):
+        """+N more: the list, at the first one Month had no room for."""
+        kind, key, _name = first
+        self._mode("list")
+        self.pick((kind, key))
+        row = self.rows.get((kind, key))
+        if row is not None:
+            self.list_scroll.ensureWidgetVisible(row, 0, 80)
 
     def _month_step(self, k):
         self.month = self.month.addMonths(k)
@@ -794,27 +813,11 @@ class PlanTab(QWidget):
             self.deck.target = None
 
     def tick_for(self, uid):
-        """+ From the deck: the deck beside the date, ticks adding to it."""
+        """+ From the deck: the date picked, the deck beside it, ticks adding to it."""
+        if self.picked != ("date", uid):
+            self.pick(("date", uid))
         self.side.setCurrentIndex(1)
         self.deck.set_target(uid)
-
-    # ---- suggestions ----
-
-    def take_sugg(self, uid, path):
-        self.win.change({"op": "add_cards", "date": uid, "tags": [path]}, keep=("date", uid))
-
-    def turn_down(self, uid, path):
-        self.win.ops.turn_down(self.win.plan["id"], uid, path)
-        self._work_out()
-        self._strips()
-        self._draw()
-        if self.picked == ("date", uid):
-            self._show_side()
-
-    def _add_sure(self):
-        sure = V.sure_ones(self.sugg)
-        if sure:
-            self.win.changes([{"op": "add_cards", "date": uid, "tags": [path]} for uid, path in sure])
 
     # ---- the plan's shape ----
 
@@ -974,27 +977,28 @@ class PlanTab(QWidget):
             win.status.setText(" ".join(r["errors"][:2]) if r["errors"] else
                                "Nothing in that reads as plan lines or a calendar: each session needs a date (Mon 10/26, Oct 26).")
             return
-        ops, n_dates, n_events, n_cards = self.calendar_ops(sessions)
+        ops, n_dates, n_events = self.calendar_ops(sessions)
         if not ops:
             win.status.setText("Every session in that is on the plan already.")
             return
         if not confirm(self, f"{n_dates:,} date{'s' if n_dates != 1 else ''} and {n_events:,} quiz{'zes' if n_events != 1 else ''} or exams "
-                       "from the calendar", f"{n_cards:,} of the dates come with the deck's tags their titles name; the rest "
-                       "get suggestions to take or turn down. Read on this computer."
+                       "from the calendar", "The dates come with their names and no cards: pick one, then + From the deck. "
+                       "Read on this computer."
                        + (" They wait with your other changes till you send them." if win.waiting() else ""), "Put them on"):
             return
         if win.changes(ops):
             self.paste.setPlainText("")
 
     def calendar_ops(self, sessions):
-        """A calendar's sessions as ops: (ops, dates, quizzes, dates with cards).
-        A session the plan has (its day and name) is left out."""
+        """A calendar's sessions as ops: (ops, dates, quizzes), each date with
+        its name and no cards (the author puts them on). A session the plan
+        has (its day and name) is left out."""
         from . import reading as R
-        doc, idx = self.win.doc, self.win.idx
+        doc = self.win.doc
         have = {(str(u.get("opens")), " ".join(str(u.get("name") or "").lower().split())) for u in P.units(doc)}
         have |= {(str(e.get("day")), " ".join(str(e.get("name") or "").lower().split()))
                  for e in doc.get("events") or [] if isinstance(e, dict)}
-        ops, n_dates, n_events, n_cards = [], 0, 0, 0
+        ops, n_dates, n_events = [], 0, 0
         for s in sessions:
             title = " ".join(str(s["title"]).split())[:60]
             if (s["date"], title.lower()) in have:
@@ -1003,14 +1007,9 @@ class PlanTab(QWidget):
                 ops.append({"op": "add_event", "day": s["date"], "name": title})
                 n_events += 1
                 continue
-            tags = []
-            if idx is not None and not self.win.swap:
-                cands = R.candidates(idx, s)
-                tags = [cands[k]["tag"] for k in R.pick(cands)]
-            ops.append({"op": "add_date", "day": s["date"], "name": title, "tags": tags})
+            ops.append({"op": "add_date", "day": s["date"], "name": title, "tags": []})
             n_dates += 1
-            n_cards += bool(tags)
-        return ops, n_dates, n_events, n_cards
+        return ops, n_dates, n_events
 
     def text(self, whole, pasted=""):
         """The plan as text (whole), or pasted plan lines to add: read, then

@@ -39,13 +39,15 @@ class MineTab(QWidget):
         form.addRow("My dates", dates)
 
         skip = QHBoxLayout()
+        skip.setSpacing(6)
         self.skips, self.skips_lay = flow_box()
-        skip.addWidget(self.skips, 1)
+        skip.addWidget(self.skips, 0)
         self.skip_btn = link("+ Skip a date")
         self.skip_menu = QMenu(self.skip_btn)
         self.skip_menu.aboutToShow.connect(self._skip_entries)
         self.skip_btn.setMenu(self.skip_menu)
-        skip.addWidget(self.skip_btn, 0, Qt.AlignmentFlag.AlignTop)
+        skip.addWidget(self.skip_btn, 0, Qt.AlignmentFlag.AlignTop)  # right after the dates skipped, not across the window
+        skip.addStretch(1)
         form.addRow("Skipping", skip)
 
         opens = QHBoxLayout()
@@ -132,7 +134,7 @@ class MineTab(QWidget):
         self.held.setText(f"{n:,} card{'s' if n != 1 else ''} kept shut till their day…" if n else "")
         self.held.setVisible(bool(n))
         self.held_none.setVisible(not n)
-        self.squad.setText("In the plan's squad: it sees that you showed up, never your numbers. Squads tab on the board."
+        self.squad.setText("In its squad: they see you showed up, never your numbers."
                            if win.ops.in_team(win.plan["id"]) else "Not in its squad. Join from the board's Squads tab.")
         self.pause_btn.setText("Resume" if p.get("paused") else "Pause until…")
         self.copy_btn.setVisible(bool(win.plan.get("listed")))

@@ -3132,11 +3132,19 @@ every release that changes how something works.
   typical card's reviews a day, amber with its fixes when over the pace,
   `view.py`). **A date** is changed where it's shown (`date_panel.py`:
   fields, −1/+1 day, This and every date after, its cards as chips with ✕,
-  the rest under ⋯ in plain words). **Suggestions** on the dates (+ Add
-  for a sure one, Maybe ✓ ✕, ✕ remembered; `view.SuggestIndex` reads
-  build.suggest through an index of the tags' first three letters, the
-  same answer without reading a big deck's 12,000 tags per date), Add the
-  sure ones. **One New plan** (`new_plan.py`: name, deck, the exam it ends
+  the rest under ⋯ in plain words). **No suggestions** of what goes on a date
+  (Sam's call after the picks: plain rules aren't trusted to choose cards
+  and it isn't AI), so a calendar's sessions, pasted or in New plan,
+  become named dates with no cards, and the author puts every card on. **Followers** shows how many follow,
+  whose Anki has the last send, and the posts; how far each date's class
+  is came out (Sam's call: it added nothing; followers meet in the plan's
+  squad). **The windows keep their size**: `ui._fit` grew a window to its
+  wrapped words' height at every layout change, so each redraw of Your
+  plans grew it toward the screen's height; a window that scrolls its
+  own (`dcOwnSize`) grows only to its rows' minimum, opens sized to the
+  screen (`widgets.fit`), and the renders fail any window past a
+  1280x800 screen. Month is seven even columns, each name one line cut
+  with … (`widgets.Elided`), two a day and +N more. **One New plan** (`new_plan.py`: name, deck, the exam it ends
   with, the calendar if there is one, read as it's typed; a friend's code
   instead) in place of New plan from a calendar and from a deck (the
   calendar window stays in labs). **A paste box** for plan lines or a new

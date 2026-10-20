@@ -318,27 +318,24 @@ def from_sessions(doc, sessions, picks, scopes=None, rng=random):
     return prep_for(doc, chosen), units, events
 
 
-def new_plan_doc(deck, sessions, picks, end_name, end_day):
-    """A new plan's doc: each session a date on its day named as it is (its
-    tags where picked, none yet where not), each quiz or exam an event,
-    the end (the exam named, an event, on its day), the dates tested on
-    the next quiz after them, the pace fitting what's ticked to the end.
-    Round five's New plan (new_plan.py), the add-on's own: the builder
-    starts a plan from its deck on the site. (doc, [date ids])."""
+def new_plan_doc(deck, sessions, end_name, end_day):
+    """A new plan's doc: each session a date on its day named as it is,
+    with no cards (the author puts them on: nothing is picked for them),
+    each quiz or exam an event, the end (the exam named, an event, on its
+    day), the dates tested on the next quiz after them, the pace fitting
+    what's ticked to the end. Round five's New plan (new_plan.py), the
+    add-on's own: the builder starts a plan from its deck on the site.
+    (doc, [date ids])."""
     from .reading import EVENT_KINDS
     doc, uids = {"deck": deck, "units": []}, []
     have = set()
-    for i, s in enumerate(sessions):
+    for s in sessions:
         title = " ".join(str(s.get("title") or "").split())[:60] or s.get("kind", "Session").capitalize()
         if s.get("kind") in EVENT_KINDS:
             doc, _eid = add_event(doc, s["date"], title)
             have.add((s["date"], title.lower()))
             continue
-        tags = [t for t in picks.get(i) or [] if t]
-        if tags:
-            doc, uid = add_date(doc, s["date"], tags[:SOURCES_MAX], name=title)
-        else:
-            doc, uid = add_empty_date(doc, s["date"], title)
+        doc, uid = add_empty_date(doc, s["date"], title)
         uids.append(uid)
     end_name = " ".join(str(end_name or "").split())[:60]
     if end_name and end_day and (end_day, end_name.lower()) not in have:

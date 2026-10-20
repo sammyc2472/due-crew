@@ -354,20 +354,36 @@ QFrame[dc="chip"] QLabel {{ font-size: 12px; color: {ink-2}; }}
 QLabel[dc="n"] {{ color: {muted}; }}
 QLabel[dc="warn"] {{ color: {hours}; font-weight: 700; }}
 QLabel[dc="ok"] {{ color: {accent}; font-weight: 700; }}
+QLabel[dc="cal"] {{ color: {accent}; }}
+QLabel[dc="calev"] {{ color: {ink}; font-style: italic; }}
+QLabel[dc="calhead"] {{ color: {muted}; }}
+QLabel[dc="calnum"] {{ color: {muted}; }}
+QLabel[dc="calnum"][today="true"] {{ color: {accent}; font-weight: 700; }}
+QFrame[dc="calgrid"] {{ background: {line}; border: none; border-radius: 0; }}
+QFrame[dc="calday"] {{ background: {bg}; border: none; border-radius: 0; }}
+QFrame[dc="calday"][out="true"] {{ background: {well}; }}
+QFrame[dc="calday"][today="true"] {{ background: {you-bg}; }}
+QFrame[dc="calrow"] {{ background: transparent; border: none; border-radius: 4px; }}
+QFrame[dc="calrow"]:hover {{ background: {well}; }}
+QFrame[dc="calrow"][on="true"] {{ background: {accent}; }}
+QFrame[dc="calrow"][on="true"] QLabel {{ color: {accent-ink}; }}
 QLabel[dc="bad"] {{ color: {bad}; }}
 QLabel[dc="event"] {{ font-style: italic; font-weight: 700; color: {mark}; }}
 QPushButton[dc="link"] {{ background: transparent; color: {accent}; border: 1px solid transparent; border-radius: 6px; padding: 2px 4px; min-height: 0; }}
 QPushButton[dc="link"]:hover {{ background: {well}; }}
 QPushButton[dc="link"]:disabled {{ color: {faded}; }}
 QPushButton[dc="link"][tone="bad"] {{ color: {bad}; }}
-QPushButton[dc="link"]::menu-indicator, QPushButton[dc="more"]::menu-indicator {{ image: none; width: 0; }}
+QPushButton[dc="link"]::menu-indicator, QPushButton[dc="more"]::menu-indicator, QPushButton[dc="seg"]::menu-indicator,
+QPushButton[dc="pill"]::menu-indicator {{ image: none; width: 0; }}
 QPushButton[dc="x"] {{ background: transparent; color: {muted}; border: none; border-radius: 6px; padding: 0 3px; min-height: 0; font-size: 12px; }}
 QPushButton[dc="x"]:hover {{ background: {press}; color: {ink}; }}
 QPushButton[dc="pill"] {{ border-radius: 12px; padding: 3px 12px; min-height: 0; font-size: 12px; }}
-QPushButton[dc="pill"]:checked {{ background: {you-bg}; border: 1px solid {accent}; color: {accent}; font-weight: 700; }}
+QPushButton[dc="pill"]:checked {{ background: {you-bg}; border: 1px solid {accent}; color: {accent}; }}
 QPushButton[dc="pill"][tone="warm"] {{ background: {warm}; border: 1px solid {warm-line}; color: {hours}; font-weight: 700; }}
 QPushButton[dc="seg"] {{ border-radius: 0; padding: 4px 12px; min-height: 0; }}
-QPushButton[dc="seg"]:checked {{ background: {you-bg}; border: 1px solid {accent}; color: {accent}; font-weight: 700; }}
+QPushButton[dc="seg"]:checked {{ background: {you-bg}; border: 1px solid {accent}; color: {accent}; }}
+QProgressBar {{ border: 0; border-radius: 3px; background: {line}; max-height: 6px; min-height: 6px; }}
+QProgressBar::chunk {{ border-radius: 3px; background: {accent}; }}
 QTabWidget::pane {{ border: none; }}
 QTabBar::tab {{ background: {well}; color: {ink-2}; border: 1px solid {line}; padding: 5px 14px; margin: 0; }}
 QTabBar::tab:selected {{ background: {bg}; color: {mark}; font-weight: 700; border-bottom-color: {bg}; }}
@@ -552,7 +568,10 @@ def _fit(window):
     other; and a window with a minimum width of its own never widens for a
     row that grows after it opened (Friends' code, once it arrives), so the
     row's buttons slid over each other. It grows to what they need, up to
-    the screen it's on. It never shrinks a window."""
+    the screen it's on. It never shrinks a window. A window that scrolls
+    what it holds (dcOwnSize: Your plans) grows only to its rows' minimum:
+    grown to its words, every click that redraws it grew it, to the
+    screen's height (round five)."""
     try:
         window.setProperty("dcFit", False)
         lay = window.layout()
@@ -567,7 +586,7 @@ def _fit(window):
         if room is not None:
             need_w = min(need_w, room.width() - frame_w)
         need_h = max(h, least.height())
-        if lay.hasHeightForWidth():
+        if lay.hasHeightForWidth() and not window.property("dcOwnSize"):  # dcOwnSize: it scrolls its own (Your plans)
             need_h = max(need_h, lay.totalHeightForWidth(need_w))
         if room is not None:
             need_h = min(need_h, room.height() - frame_h)

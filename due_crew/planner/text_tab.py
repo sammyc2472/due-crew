@@ -267,7 +267,7 @@ class TextTab(QWidget):
         self.go_btn.setProperty("dc", "bad" if self.whole and self.read_now and self.read_now[4] else "go")
         self.go_btn.style().unpolish(self.go_btn)
         self.go_btn.style().polish(self.go_btn)
-        self.cancel_btn.setVisible(bool(r))
+        self.cancel_btn.setVisible(bool(r) or bool(getattr(self.window(), "_cancel_always", False)))
 
     def _read(self):
         text, whole, doc = self.box.toPlainText(), self.whole, self._doc()
@@ -292,9 +292,9 @@ class TextTab(QWidget):
             self._buttons()
             return
         bits = [f"{len(r['units'])} date{'s' if len(r['units']) != 1 else ''}"]
-        for key, word in (("events", "event"), ("tags", "tag"), ("remarks", "note")):
+        for key, one, many in (("events", "quiz or exam", "quizzes or exams"), ("tags", "tag", "tags"), ("remarks", "note", "notes")):
             if r[key]:
-                bits.append(f"{len(r[key])} {word}{'s' if len(r[key]) != 1 else ''}")
+                bits.append(f"{len(r[key])} {one if len(r[key]) == 1 else many}")
         miss = r["missing"]
         self.status.setText(", ".join(bits) + "." + (f" Not in your deck (they'd find nothing): "
                                                      f"{', '.join(B.path_of(k) for k in miss[:5])}{'…' if len(miss) > 5 else ''}" if miss else ""))
@@ -411,6 +411,7 @@ class TextDialog(QDialog):
 
     def __init__(self, win, whole, pasted=""):
         super().__init__(win)
+        self._cancel_always = True  # its Cancel is its way out, shown from the start
         attach_alive(self)
         self.setWindowTitle("The plan as text" if whole else "Plan lines to add")
         self.setMinimumSize(760, 560)
@@ -428,10 +429,8 @@ class TextDialog(QDialog):
             self.tab.box.setPlainText(pasted)
             self.tab._loading = False
             self.tab._read()
-        row = QHBoxLayout()
-        row.addStretch(1)
-        close = QPushButton("Close")
-        close.setAutoDefault(False)
-        close.clicked.connect(self.reject)
-        row.addWidget(close)
-        root.addLayout(row)
+        # one way out: its Cancel closes it (no Close beside it); Copy the plan as text when it's the whole plan
+        self.tab.cancel_btn.clicked.disconnect()
+        self.tab.cancel_btn.clicked.connect(self.reject)
+        self.tab.copy_btn.setVisible(bool(whole))
+        self.tab.cancel_btn.setVisible(True)

@@ -75,6 +75,7 @@ class HistoryTab(_Lazy):
         root.addWidget(self.list, 1)
         root.addStretch(0)  # with no list, the words stay at the top
         row = QHBoxLayout()
+        self.button_row = row  # History's window puts its Close in this row
         row.addStretch(1)
         self.again_btn = QPushButton("Try again")
         self.again_btn.setFlat(True)
@@ -166,6 +167,7 @@ class UpdatesTab(_Lazy):
         self.list.itemSelectionChanged.connect(self._buttons)
         root.addWidget(self.list, 1)
         row = QHBoxLayout()
+        self.button_row = row  # History's window puts its Close in this row
         row.addStretch(1)
         self.again_btn = QPushButton("Try again")
         self.again_btn.setFlat(True)
@@ -242,7 +244,7 @@ class UpdatesTab(_Lazy):
             who = "You" if me and x.get("uid") == me else str(x.get("name") or "?")
             if x.get("coauthor"):
                 who += " (co-author)"
-            it = QTreeWidgetItem([who, str(x.get("text") or "") + (" · with a save" if x.get("withSave") else ""), ago(x.get("at"))])
+            it = QTreeWidgetItem([who, str(x.get("text") or "") + (" · sent with changes" if x.get("withSave") else ""), ago(x.get("at"))])
             it.setData(0, ROLE, i)
             it.setToolTip(1, f"<span>{esc(x.get('text') or '')}</span>")
             self.list.addTopLevelItem(it)

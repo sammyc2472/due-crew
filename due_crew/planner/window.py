@@ -29,7 +29,7 @@ from . import build as B
 from . import edits as E
 from . import model as M
 from . import ops as O
-from .widgets import link, plain
+from .widgets import fit, link, plain
 
 TABS = {"dates": "plan", "layout": "plan", "text": "plan", "plan": "plan", "history": "plan",
         "progress": "followers", "updates": "followers", "followers": "followers",
@@ -37,9 +37,10 @@ TABS = {"dates": "plan", "layout": "plan", "text": "plan", "plan": "plan", "hist
 
 
 def _whose(p):
+    who = p.get("ownerName") if p.get("ownerName") not in (None, "", "?") else None  # the server's "?": a name it hasn't got
     if p.get("role") in ("owner", "editor"):
-        return "yours" if p.get("role") == "owner" else f"with {p.get('ownerName') or '?'}"
-    return f"{p.get('ownerName') or '?'}’s · following"
+        return "yours" if p.get("role") == "owner" else (f"with {who}" if who else "a co-author")
+    return f"{who}’s · following" if who else "following"
 
 
 def _pick_label(p):
@@ -104,7 +105,6 @@ class PlanWindow(QDialog):
         self.plans.sort(key=lambda p: (p.get("role") not in ("owner", "editor"), str(p.get("name") or "").lower()))
         self.plan = self.raw = self.doc = self.idx = self.swap = self.draft = None
         self.how = ""
-        self.progress = None      # the plan's squad's counts a date (remote.progress), read once a load for authors
         self.keep = None          # what the Plan tab picks once a plan (re)loads
         self.busy = False
         self.undoable = None      # (plan id, version) a save of this window's made, while its Undo shows
@@ -114,7 +114,9 @@ class PlanWindow(QDialog):
         attach_alive(self)
         self.setWindowTitle("Your plans")
         self.setModal(False)
-        self.setMinimumSize(980, 640)
+        self.setMinimumSize(900, 560)
+        self.setProperty("dcOwnSize", True)  # it scrolls its own: ui._fit never grows it to its words
+        fit(self, 1180, 780)  # its first size; less on a small screen
         root = QVBoxLayout(self)
         self.head = heading(self, root, "Your plans")
 
@@ -176,7 +178,7 @@ class PlanWindow(QDialog):
         words.setContentsMargins(0, 16, 0, 0)
         words.addWidget(role(plain("No plans yet"), "head"))
         words.addWidget(plain("A plan puts a block's lectures on dates, and opens each date's cards in Anki "
-                              "as its day comes. Make one for your class, or follow one with its code."))
+                              "as its day comes."))
         ways = QHBoxLayout()
         b = QPushButton("New plan…")
         b.setProperty("dc", "go")
@@ -295,7 +297,6 @@ class PlanWindow(QDialog):
             self.idx, self.swap, self.how = self.ops.context(plan, self.doc)
             self._tree = None
         if fresh:
-            self.progress = None
             self.sent = None
         self.keep = keep
         self._take_draft(pid)
@@ -303,8 +304,6 @@ class PlanWindow(QDialog):
         if i >= 0:
             self.pick.setItemText(i, _pick_label(plan))
         self._role_tabs()
-        if self.author() and self.followers() and (fresh or saved):
-            self._read_progress(pid)
 
     def _take_draft(self, pid):
         """The changes waiting on this plan here, replayed on it as the
@@ -345,19 +344,6 @@ class PlanWindow(QDialog):
             if callable(fill):
                 fill(self)
         self._undo_button()
-
-    def _read_progress(self, pid):
-        from . import remote
-
-        def done(pr):
-            if (self.plan or {}).get("id") != pid:
-                return
-            self.progress = pr
-            for page in self.pages.values():
-                got = getattr(page, "progress_in", None)
-                if callable(got):
-                    got(self)
-        self.ops.ask(self, lambda cl: remote.progress(cl, pid), done)
 
     def rows(self, u):
         if self.idx is None:
@@ -429,8 +415,7 @@ class PlanWindow(QDialog):
             self.ops.keep_draft(self.plan["id"], self.draft)
             self.doc = self.draft.doc(ctx)
             self._refresh(self._kept(keep, made))
-            n = len(self.draft)
-            self.status.setText(f"{n:,} change{'s' if n != 1 else ''} waiting: Review and send when you're ready.")
+            self.status.setText("")  # the bar under the plan says what's waiting
             then(True)
             return True
         return self._save(ops, keep, then, again=True)

@@ -6,7 +6,7 @@ with it, filled in from the changes for the author to say better. Send is
 one save (PUT /plans/{id} with its post). History: every save of the
 plan, and Undo the latest. Names and words: plain text."""
 
-from aqt.qt import QDialog, QDialogButtonBox, QHBoxLayout, QPlainTextEdit, QPushButton, Qt, QVBoxLayout, QWidget
+from aqt.qt import QDialog, QDialogButtonBox, QFrame, QHBoxLayout, QPlainTextEdit, QPushButton, QScrollArea, Qt, QVBoxLayout, QWidget
 
 from ..ui import attach_alive, heading, role
 from . import ops as O
@@ -28,7 +28,15 @@ class SendDialog(QDialog):
         root = QVBoxLayout(self)
         self.head = heading(self, root)
         self.list_box, self.list_lay = frame("card", margins=(10, 6, 10, 6), spacing=0)
-        root.addWidget(self.list_box)
+        scroll = QScrollArea()  # forty changes scroll here; the window stays its size
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setWidget(self.list_box)
+        scroll.viewport().setAutoFillBackground(False)
+        scroll.setMaximumHeight(320)
+        self.list_scroll = scroll
+        root.addWidget(scroll)
         root.addWidget(plain("Tell them why (they see it with the change)", muted=True))
         self.why_box = QPlainTextEdit()
         self.why_box.setTabChangesFocus(True)
@@ -37,11 +45,11 @@ class SendDialog(QDialog):
         root.addWidget(self.why_box)
         self.count = plain(muted=True)
         root.addWidget(self.count, 0, Qt.AlignmentFlag.AlignRight)
-        root.addWidget(plain("They get it at their next refresh; new cards open on their dates as usual. "
-                             "Undo ▾ takes back the whole send.", muted=True))
+        root.addWidget(plain("Undo ▾ takes back the whole send.", muted=True))
         buttons = QDialogButtonBox()
         buttons.addButton("Back", QDialogButtonBox.ButtonRole.RejectRole).clicked.connect(self.reject)
         self.go = QPushButton(f"Send to {n:,}" if n else "Save")
+        self.go.setProperty("dc", "go")
         self.go.setDefault(True)
         self.go.clicked.connect(self.accept)
         buttons.addButton(self.go, QDialogButtonBox.ButtonRole.AcceptRole)
@@ -121,6 +129,7 @@ class HistoryDialog(QDialog):
         self.tab = HistoryTab(win)
         self.tab.on_undo = self.accept
         root.addWidget(self.tab, 1)
-        buttons = QDialogButtonBox()
-        buttons.addButton("Close", QDialogButtonBox.ButtonRole.RejectRole).clicked.connect(self.reject)
-        root.addWidget(buttons)
+        close = QPushButton("Close")  # beside Undo the latest: one row of buttons
+        close.setAutoDefault(False)
+        close.clicked.connect(self.reject)
+        self.tab.button_row.addWidget(close)

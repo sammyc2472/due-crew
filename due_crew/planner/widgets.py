@@ -230,3 +230,35 @@ class Row(QFrame):
 
     def set_on(self, on):
         mark(self, "on", "true" if on else "false")
+
+
+class Elided(QLabel):
+    """One line that ends in … when its column is narrower than it, the
+    whole of it in its tooltip: never widens what it's in (Month's days)."""
+
+    def __init__(self, text, dc=None):
+        super().__init__()
+        self.full = str(text)
+        self.setTextFormat(Qt.TextFormat.PlainText)
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.setMinimumWidth(1)
+        if dc:
+            self.setProperty("dc", dc)
+        self.setToolTip(f"<span>{esc(self.full)}</span>")
+        self.setText(self.full)
+
+    def resizeEvent(self, e):  # noqa: N802 (Qt's)
+        super().resizeEvent(e)
+        self.setText(self.fontMetrics().elidedText(self.full, Qt.TextElideMode.ElideRight, max(0, self.width())))
+
+
+def fit(win, w, h):
+    """A window's first size: w x h, or less on a small screen (never past
+    what the screen has room for, so nothing opens bigger than the screen)."""
+    from aqt.qt import QGuiApplication
+    scr = win.screen() if hasattr(win, "screen") and win.screen() is not None else QGuiApplication.primaryScreen()
+    if scr is None:
+        win.resize(w, h)
+        return
+    room = scr.availableGeometry()
+    win.resize(min(w, int(room.width() * 0.94)), min(h, int(room.height() * 0.9)))

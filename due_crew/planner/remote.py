@@ -200,14 +200,6 @@ def save_meta(client, pid, version, fields, summary):
     return _view(status, data)
 
 
-def progress(client, pid):
-    """The builder's Progress: {followers, sharing, units: {id: {opened, done}}} (its squad's counts)."""
-    status, data = _call(client, "GET", f"/plans/{pid}/progress")
-    if status != 200 or not isinstance(data.get("units"), dict):
-        raise TransportError(f"progress: {status}", status)
-    return data
-
-
 def set_listed(client, pid, on):
     """In the library, or out (PUT /plans/{id}/listed, the owner's)."""
     return _view(*_call(client, "PUT", f"/plans/{pid}/listed", {"listed": bool(on)}))

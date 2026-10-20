@@ -179,18 +179,6 @@ class Ops:
             ds[str(pid)] = draft.to_json()
         _save_drafts(data)
 
-    def turned_down(self, pid):
-        """[(date id, tag path)]: suggestions I said no to on this plan (✕), on this computer."""
-        return [tuple(x) for x in (_drafts().get("nosug") or {}).get(str(pid)) or [] if isinstance(x, list) and len(x) == 2]
-
-    def turn_down(self, pid, uid, path):
-        data = _drafts()
-        lst = data.setdefault("nosug", {}).setdefault(str(pid), [])
-        if [uid, path] not in lst:
-            lst.append([uid, path])
-            del lst[:-500]
-        _save_drafts(data)
-
     def undo(self, owner, pid, version, done):
         """done((outcome, what) or None): remote.undo's (the builder's Undo)."""
         cl, gen = client(), app.generation
@@ -348,9 +336,8 @@ def _drafts_path():
 
 
 def _drafts():
-    """This profile's waiting changes and turned-down suggestions
-    (plan_drafts.json): {drafts: {plan id: draft}, nosug: {plan id: [[date, tag]]}}.
-    Never sent; read once a profile. Main thread."""
+    """This profile's waiting changes (plan_drafts.json): {drafts: {plan
+    id: draft}}. Never sent; read once a profile. Main thread."""
     key = app._profile_key()
     if _drafts_store["profile"] == key and _drafts_store["data"] is not None:
         return _drafts_store["data"]

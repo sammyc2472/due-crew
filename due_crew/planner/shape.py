@@ -229,7 +229,7 @@ class ShapeDialog(QDialog):
             if opened:
                 said.append(esc(f"{opened:,} of them opened already: followers who have their cards keep them."))
         else:
-            said.append(esc("No date moves: the pace says how what's ticked is laid out."))
+            said.append(esc("No date moves."))
         ph = after.get("phases") or {}
         if int(ph.get("taper") or 0) and after.get("end"):
             n = int(ph["taper"])
