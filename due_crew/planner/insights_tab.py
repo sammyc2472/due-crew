@@ -2,7 +2,9 @@
 what the plan asks and holds, read here (insights.py works it out).
 Workload: its weeks as bars, the new cards a study day and the reviews a
 day they bring on one scale. How much of the deck: the plan's cards of
-the deck's, and of each of its parts. What's in it: each quiz or exam and
+the deck's, and of each of its parts as the board's topic map splits it
+(its By ▾ is the map's, one pick a deck), the part it's mostly in split
+again. What's in it: each quiz or exam and
 what it tests, the biggest dates (a click: that one on the Plan tab),
 cards on two dates, leeches. A plan I follow: the same on my dates, with
 what I've seen. Never sent. Drawn when it's looked at, not at every
@@ -14,7 +16,7 @@ from ..ui import _mix, esc, role, tone
 from . import insights as I
 from . import model as M
 from . import view as V
-from .widgets import Elided, Row, plain
+from .widgets import Elided, Row, menu_button, plain
 
 
 class Bar(QWidget):
@@ -82,6 +84,7 @@ class InsightsTab(QWidget):
         super().__init__()
         self.win = win
         self.dirty = True
+        self._by = {}  # a way picked here when the window's ops keep none (a render's)
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 8, 0, 0)
         self.scroll = QScrollArea()
@@ -217,36 +220,69 @@ class InsightsTab(QWidget):
                 key.addSpacing(6)
             key.addStretch(1)
             lay.addLayout(key)
-        groups = I.shares(I.parts(idx), cards)
-        if not groups:
+        tiles, ways = I.deck_split(idx, self._way(idx.did))
+        rows, none, inside = I.topics(tiles, cards)
+        if not rows:
             return
         lay.addSpacing(4)
-        cols = QHBoxLayout()
-        cols.setSpacing(24)
-        for how, have, none in groups:
-            col = QVBoxLayout()
-            col.setSpacing(4)
-            col.addWidget(_nowrap(plain(I.HOW[how], muted=True)))
-            grid = QGridLayout()
-            grid.setHorizontalSpacing(10)
-            grid.setVerticalSpacing(4)
-            shown = have[:12]
-            scale = max((r["total"] for r in shown), default=1)
-            for i, r in enumerate(shown):
-                grid.addWidget(Elided(r["name"]), i, 0)
-                words = f"{r['held']:,} of {r['total']:,} · {I.pct(r['held'], r['total'])}"
-                grid.addWidget(Bar([(r["held"], "fill")], scale, track=r["total"], tip=f"{r['name']}: {words}"), i, 1)
-                grid.addWidget(_nowrap(plain(words, dc="n")), i, 2)
-            grid.setColumnMinimumWidth(0, 130)  # an Elided name takes no room of its own
-            grid.setColumnStretch(1, 1)
-            col.addLayout(grid)
-            if len(have) > len(shown):
-                col.addWidget(plain(f"and {len(have) - len(shown):,} smaller ones with some of their cards in it", muted=True))
-            if none:
-                col.addWidget(plain(I.none_words(none), muted=True))
-            col.addStretch(1)
-            cols.addLayout(col, 1)
-        lay.addLayout(cols)
+        on = next((w for w in ways if w["on"]), None)
+        if len(ways) > 1:
+            btn, menu = menu_button(f"By {on['name']}" if on else "By", small=True,
+                                    tip="How the deck is split: the same as its topic map on the board")
+            for w in ways:
+                act = menu.addAction(w["name"])
+                act.setCheckable(True)
+                act.setChecked(bool(w["on"]))
+                act.triggered.connect(lambda _=False, k=w["key"]: self._pick(idx.did, k))
+            line = QHBoxLayout()
+            line.addWidget(btn)
+            line.addStretch(1)
+            lay.addLayout(line)
+        elif on:
+            lay.addWidget(_nowrap(plain(f"By {on['name']}", muted=True)))
+        self._parts(lay, rows, none)
+        if inside:
+            name, krows, knone = inside
+            lay.addSpacing(4)
+            lay.addWidget(_nowrap(plain(f"Inside {name}", muted=True)))
+            self._parts(lay, krows, knone)
+
+    def _parts(self, lay, rows, none):
+        """A part a row, the plan's share of it filled, every bar on one scale."""
+        box = QWidget()
+        box.setMaximumWidth(760)
+        grid = QGridLayout(box)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(4)
+        shown = rows[:12]
+        scale = max((r["total"] for r in shown), default=1)
+        for i, r in enumerate(shown):
+            grid.addWidget(Elided(r["name"]), i, 0)
+            words = f"{r['held']:,} of {r['total']:,} · {I.pct(r['held'], r['total'])}"
+            grid.addWidget(Bar([(r["held"], "fill")], scale, track=r["total"], tip=f"{r['name']}: {words}"), i, 1)
+            grid.addWidget(_nowrap(plain(words, dc="n")), i, 2)
+        grid.setColumnMinimumWidth(0, 150)  # an Elided name takes no room of its own
+        grid.setColumnStretch(1, 1)
+        lay.addWidget(box)
+        if len(rows) > len(shown):
+            lay.addWidget(plain(f"and {len(rows) - len(shown):,} smaller ones with some of their cards in it", muted=True))
+        if none:
+            lay.addWidget(plain(I.none_words(none), muted=True))
+
+    def _way(self, did):
+        """The deck's way: the topic map's pick for it on this computer (ops.map_by), else the best."""
+        get = getattr(self.win.ops, "map_by", None)
+        return get(did) if callable(get) else self._by.get(did)
+
+    def _pick(self, did, key):
+        """Another way, for the map too (one pick a deck)."""
+        put = getattr(self.win.ops, "set_map_by", None)
+        if callable(put):
+            put(did, key)
+        else:
+            self._by[did] = key
+        self.draw()
 
     def _contents(self, lay, doc, per, cards):
         win = self.win

@@ -1422,7 +1422,8 @@ def main(out):
         said = [w.text() for w in it.findChildren(QtWidgets.QLabel) if w.isVisibleTo(it)]
         if "Workload" not in said or "How much of the deck" not in said or "What's in it" not in said \
                 or not any(" cards (" in t for t in said) or not any(t.startswith("Week 1") for t in said) \
-                or any(t.startswith("You've seen") for t in said):
+                or any(t.startswith("You've seen") for t in said) or not any(t.startswith("By ") for t in said) \
+                or "Inside Cardio" not in said:
             raise RuntimeError(f"planner: Insights {said}")
         shoot(dlg, os.path.join(out, "planner-insights.png"))
         it.body.grab().save(os.path.join(out, "planner-insights-all.png"))  # the whole of it, to look at

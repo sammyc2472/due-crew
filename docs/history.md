@@ -3210,4 +3210,13 @@ every release that changes how something works.
   holds none of named; **What's in it**, each quiz or exam and what its
   dates hold, the biggest dates (a click: that one on the Plan tab), cards
   on two dates, leeches that stay shut. `test_insights_tab`; renders with
-  and without a pace, and a follower's.
+  and without a pace, and a follower's. Then the deck's parts as the
+  topic map's (Sam: "we need better insights … same organization problem
+  we had for the bento where we're choosing to highlight strange
+  resources"): the first cut took a tag's # part as a resource and the
+  part under its ^ as a system, so a big shared deck showed its banks and
+  sketch series side by side as if they split it. Now `team.subjects_by`
+  over the whole deck chooses (the map's rules: topics over ratings, a
+  bank's ids never), By ▾ is the map's own pick for the deck, the parts
+  the plan holds come most held first, and the part it's mostly in
+  opens into its own parts ("Inside Cardio", the ones left out named).

@@ -14,7 +14,7 @@ from aqt.utils import tooltip
 
 from .. import app, plan_flow
 from .. import plans as P
-from ..app import _bg, cfg, client
+from ..app import _bg, _state, cfg, client, save_cfg
 from ..backend.shapes import TransportError
 from . import actions, enabled, qids, remote
 
@@ -128,6 +128,19 @@ class Ops:
     def my_doc(self, plan):
         """A plan I follow as I run it: my dates (plan_flow.mine)."""
         return plan_flow.mine(plan)["doc"]
+
+    def map_by(self, did):
+        """How Insights splits a deck: the topic map's pick for it on this
+        computer (cfg ins_map_by), or None for the best."""
+        return str((cfg().get("ins_map_by") or {}).get(str(did)) or "") or None
+
+    def set_map_by(self, did, key):
+        """Another way, the map's too: the board's map starts again from the top."""
+        c = cfg()
+        c["ins_map_by"] = dict(c.get("ins_map_by") or {}, **{str(did): str(key)})
+        save_cfg(c)
+        for k in ("map_at", "insights"):
+            (_state.get(k) or {}).pop(did, None)
 
     def followed_here(self, pid, version=None):
         """True when I follow it, it runs on a deck here (open and study go

@@ -2389,17 +2389,11 @@ def test_insights_tab():
     check("insights: how much of the deck, in words (a filtered deck's card counts in its home deck)",
           I.deck_words("Big Step 1", len(cards), len(idx.home)) == "8 of Big Step 1's 15 cards (53%)"
           and I.deck_words("", 0, 4) == "0 of the deck's 4 cards (none)", len(idx.home))
-    groups = I.parts(idx)
-    check("insights: a big shared deck's parts: its resources (the ^part's one system isn't a way of its own)",
-          [(how, sorted((n, sorted(c)) for n, c in rows)) for how, rows in groups]
-          == [("resource", [("Bank", [7, 8, 9]), ("Book", [5, 6]), ("Other Bank", [10]), ("Videos", [1, 2, 3, 4, 12, 15])])]
-          and I.parts(idx) is groups, groups)
-    sh = I.shares(groups, cards)
-    check("insights: each part's share, the biggest first (one scale: a big part looks big); the parts with none after",
-          sh == [("resource", [{"name": "Videos", "held": 6, "total": 6}, {"name": "Book", "held": 2, "total": 2}],
-                  [{"name": "Bank", "held": 0, "total": 3}, {"name": "Other Bank", "held": 0, "total": 1}])]
-          and I.none_words(sh[0][2]) == "Not in it: Bank, Other Bank"
-          and I.none_words([{"name": c, "total": 1} for c in "ABCDEF"]) == "Not in it: A, B, C, D and 2 more", sh)
+    check("insights: what's not in it, named", I.none_words([{"name": c, "total": 1} for c in "ABCDEF"])
+          == "Not in it: A, B, C, D and 2 more" and I.none_words([]) == "")
+    tiles, ways = I.deck_split(idx)
+    check("insights: the fake deck's own split, kept with its searches (a big deck's is a second or two once)",
+          I.deck_split(idx) is I.deck_split(idx) and isinstance(ways, list), ways)
     xs = I.exams(doc, per, cards)
     check("insights: each quiz or exam by its day, what its dates hold; the last with no date for it tests everything",
           [(x["name"], I.exam_words(x)) for x in xs] == [("Cardio quiz", "2 cards from 1 date"), ("Block exam", "everything: 8 cards")]
@@ -2433,26 +2427,50 @@ def test_insights_tab():
           and I.workload_words(doc, [dict(w, over=True), dict(w, n=5, over=True)], {})[1]
           == "Over the pace: weeks 3 and 5" and I.workload(doc, {}, "2026-11-11") == []
           and I.busiest([dict(w, cards=0)]) is None and I.busiest([w, dict(w, n=4, cards=300)])["n"] == 3)
-    # a deck of my own: by subdeck, else by its top tags (Anki's own leech aside)
-    conn = sqlite3.connect(":memory:")
-    fakes.make_collection(conn)
-    for cid, did, tg in ((1, 2, "Lecture::One"), (2, 2, ""), (3, 3, ""), (4, 1, "")):
-        fakes.add_card(conn, cid, did, tags=tg)
-    mine = fakes.FakeCol(conn, fakes.day_cutoff_for(datetime.date(2026, 11, 9)))
-    mine.decks = fakes.FakeDecks({1: "Mine", 2: "Mine::Week_1", 3: "Mine::Week 2"})
-    by_deck = I.parts(P.DeckIndex(mine, 1))
-    conn2 = sqlite3.connect(":memory:")
-    fakes.make_collection(conn2)
-    for cid, tg in ((1, "Cardio::HF"), (2, "Cardio::Valves leech"), (3, "Renal::AKI"), (4, "marked")):
-        fakes.add_card(conn2, cid, 1, tags=tg)
-    solo = fakes.FakeCol(conn2, fakes.day_cutoff_for(datetime.date(2026, 11, 9)))
-    solo.decks = fakes.FakeDecks({1: "Solo"})
-    by_tag = I.parts(P.DeckIndex(solo, 1))
-    check("insights: a deck of my own: by its subdecks; with none, by its top tags (leech and marked aren't parts)",
-          [(h, sorted((n, sorted(c)) for n, c in r)) for h, r in by_deck] == [("deck", [("Week 1", [1, 2]), ("Week 2", [3])])]
-          and [(h, sorted((n, sorted(c)) for n, c in r)) for h, r in by_tag] == [("tag", [("Cardio", [1, 2]), ("Renal", [3])])],
-          (by_deck, by_tag))
-
+    # Sam: "the same organization problem we had for the bento": the deck split as the topic map splits it
+    # (team.subjects_by), not by its #/^ parts. A big shared deck: systems under ^, the same topics under
+    # each # resource, a yield rating on every card, a bank's question ids, Anki's own tags.
+    tags_of, cid = {}, 0
+    for system, parts in (("Cardio", (("Physiology", 60), ("Pathology", 60), ("Pharm", 30))),
+                          ("Renal", (("Physiology", 60), ("Pathology", 60))), ("Pulm", (("Physiology", 45), ("Pathology", 45)))):
+        for part, n in parts:
+            for _ in range(n):
+                cid += 1
+                tags_of[cid] = [f"#Big::^Systems::{system}::{part}", f"#Big::#Videos::{system}::{part}",
+                                f"#Big::#Yield::{1 + cid % 3}-Tier", f"#Big::#Bank::Step::{100000 + cid}"] + (["leech"] if cid % 7 == 0 else [])
+    home = set(tags_of)
+    plan = set(range(1, 61)) | set(range(61, 91)) | set(range(151, 161))  # Cardio's physiology, half its pathology, a little Renal
+    tiles, ways = I.split(tags_of, home)
+    rows, none, inside = I.topics(tiles, plan)
+    check("insights: the deck by its systems, not its ratings or a bank's ids; the plan's parts most held first",
+          [(r["name"], r["held"], r["total"]) for r in rows] == [("Cardio", 90, 150), ("Renal", 10, 120)]
+          and [(r["name"], r["total"]) for r in none] == [("Pulm", 90)]
+          and not any("Tier" in w["name"] or "Bank" in w["name"] for w in ways if w["on"]), (rows, none, ways))
+    check("insights: the part the plan is mostly in, split again: which of its parts it leaves out",
+          inside is not None and inside[0] == "Cardio"
+          and [(r["name"], r["held"], r["total"]) for r in inside[1]] == [("Physiology", 60, 60), ("Pathology", 30, 60)]
+          and [(r["name"], r["total"]) for r in inside[2]] == [("Pharm", 30)], inside)
+    spread = set(range(1, 31)) | set(range(151, 181)) | set(range(271, 301))
+    check("insights: a plan spread over the deck isn't split again", I.topics(tiles, spread)[2] is None)
+    rating = next((w["key"] for w in ways if "yield" in w["key"]), None)
+    rtiles, rways = I.split(tags_of, home, by=rating)
+    check("insights: another way, picked (the map's By ▾): the deck by it; a pick not among them, the best",
+          rating is not None and sorted(t["name"] for t in rtiles) == ["1-Tier", "2-Tier", "3-Tier"]
+          and next(w for w in rways if w["on"])["key"] == rating
+          and [t["name"] for t in I.split(tags_of, home, by="#gone::^way")[0]] == [t["name"] for t in tiles], rways)
+    # a deck of my own: its subdecks when its tags don't split it (team_flow._map's rule); the way named Subdecks
+    mine = {c: [] for c in range(1, 301)}
+    paths = {c: [f"Week {1 + (c - 1) // 100}"] for c in range(1, 301)}
+    dtiles, dways = I.split(mine, set(mine), paths=paths)
+    check("insights: a deck of my own: by its subdecks, the way Subdecks",
+          sorted((t["name"], t["n"]) for t in dtiles) == [("Week 1", 100), ("Week 2", 100), ("Week 3", 100)]
+          and [w["name"] for w in dways if w["on"]] == ["Subdecks"]
+          and f'DECKS_WAY = "{I.DECKS_WAY}"' in open(os.path.join(REPO, "due_crew", "team_flow.py")).read(), dways)
+    col2 = collection()
+    idx2 = P.DeckIndex(col2, 1)
+    sp = I.tags_spelled(idx2)
+    check("insights: each card's tags as written; each subdeck card's path below the deck",
+          VID in sp[1] and SYS in sp[1] and I.deck_paths(idx2) == {13: ["Cardio"], 14: ["Cardio"]}, (sp.get(1), I.deck_paths(idx2)))
 
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]

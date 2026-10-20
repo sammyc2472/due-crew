@@ -206,14 +206,21 @@ sent; a follower's on my dates.
   one with the most cards in it, new and reviews.
 - **How much of the deck**: "1,284 of Big Step 1's 12,480 cards (10%)"
   and the deck as one bar, the plan's part filled (a follower's: what
-  I've seen, then what's to go, a key beside it). Then each part of the
-  deck as it files them (`insights.parts`, kept with the index's
-  searches): a big shared deck's resources (its #parts) and systems (the
-  parts under its ^part), else its subdecks, else its top tags (leech and
-  marked aren't parts); each a bar of its own size on one scale, so a big
-  part looks big, the plan's part filled, "1,420 of 5,912 · 24%", biggest
-  first; the ones it holds none of named ("Not in it: Renal, Repro and 6
-  more").
+  I've seen, then what's to go, a key beside it). Then the deck split as
+  the board's topic map splits it (Sam: "the same organization problem
+  we had for the bento"; a first cut by the tags' # and ^ parts showed
+  odd resources): `team.subjects_by` over every card in the deck,
+  suspended too (the plan is of the whole deck), the cut that tells them
+  apart best, a topic over a rating, a bank's ids and Anki's own tags
+  never, its subdecks a way too (`insights.split`, team_flow._map's
+  rule; kept with the index's searches). **By ▾** is the map's own pick
+  for the deck (`ins_map_by`, this computer's): a pick here is the map's
+  too. A part a row, most held first, each a bar of its own size on one
+  scale with the plan's part filled, "430 of 688 · 63%"; the ones it
+  holds none of named ("Not in it: Renal, Pulm and 13 more"). When one
+  part holds half the plan or more, **Inside** it, its parts the same way
+  (`team.expand`): a block on Cardio says which of Cardio's parts it
+  leaves out.
 - **What's in it**: each quiz or exam and what its dates hold (the last
   with no date for it, everything), the five biggest dates (a click: that
   one, picked on the Plan tab), how many cards are on two dates or more,
@@ -535,7 +542,7 @@ and sends in Anki (Your plans › the plan › Review and send).
 | `planner/ops.py` | pure, round five: every change an op (its checks, the builder's edit it runs, its words, who it touches, the line to followers) |
 | `planner/draft.py` | pure, round five: changes waiting to be sent (ops replayed on the plan as the server has it; one send) |
 | `planner/view.py` | pure, round five: what the Plan tab shows (the shape line, each week's asks, needs a look, today) |
-| `planner/insights.py` | pure, round five: what the Insights tab shows (the workload by week, how much of the deck and of each part, what each quiz tests, the biggest dates) |
+| `planner/insights.py` | pure, round five: what the Insights tab shows (the workload by week, how much of the deck and of each part as the topic map splits it, what each quiz tests, the biggest dates) |
 | `planner/prompts.py` | pure: the prompts for your own AI, builder.js's `Prompts` restated |
 | `planner/flow.py` | the glue: the windows' asks (`Ops`, `StartOps`, `NewOps`, `QidOps`), `make_here`, `plan_drafts.json`, `qids.json` |
 | `planner/window.py`, `plan_tab.py`, `date_panel.py`, `deck_panel.py`, `shape.py`, `send.py`, `insights_tab.py`, `settings_tab.py`, `mine_tab.py`, `new_plan.py`, `text_tab.py`, `history_tab.py`, `day_notes.py`, `date_dialogs.py`, `widgets.py`, `picker.py`, `qid_window.py`, `start_window.py` | the Qt windows and their parts, in the board's look |

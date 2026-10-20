@@ -3,21 +3,22 @@ amount of the deck relative to the whole"): what a plan asks and holds,
 worked out. Workload: each week's new cards a study day and the reviews
 they bring a day (a typical card's, view.week_asks), from the plan's
 first week to its end. The deck: how many of its cards the plan holds,
-and of each part of it (a big shared deck's resources and systems, else
-its subdecks or top tags). What's in it: what each quiz or exam tests,
+and of each part of it, the deck split as the board's topic map splits
+it (Sam: "the same organization problem we had for the bento", a first
+cut by # and ^ parts showed odd resources), the part the plan is mostly
+in split again. What's in it: what each quiz or exam tests,
 the biggest dates, cards on two dates, leeches. Pure: the plan doc and a
 DeckIndex's cards, no Anki, no Qt; names and counts only."""
 
 import datetime
 
 from .. import plans as P
+from .. import team as T
 from . import build as B
 from . import model as M
 from . import view as V
 
 SEP = "::"
-_PARTS = ("#planner parts",)  # a key no search is: kept with the index's searches (they go when its notes change)
-_ANKI_TAGS = {"leech", "marked", P.TAG_PARENT.lower()}  # Anki's own and the plans', never a part of the deck
 
 
 def _d(iso):
@@ -135,101 +136,84 @@ def workload_words(doc, rows, per_new):
 
 # ---- the deck, and how much of it the plan holds ----
 
-def _tag_parts(idx):
-    """{"resource": {name: {tag path}}, "system": {...}}: a big shared deck's
-    #parts (Videos, Book, Bank) and the systems under its ^part (Cardio,
-    Renal), each by the name it reads as, the same name under two roots one."""
-    out = {"resource": {}, "system": {}}
-    names = {}
-    for low in idx.tag_keys:
-        segs = low.split(SEP)
-        ri = P._resource_at(segs)
-        if ri < 0:
-            continue
-        spelled = idx.tag_names[low].split(SEP)
-        if segs[ri].startswith("#"):
-            how, j = "resource", ri
-        else:
-            how, j = "system", ri + 1 if len(segs) > ri + 1 else ri
-        if segs[j].strip().isdigit():
-            continue
-        name = P._word(spelled[j])
-        k = (how, name.lower())
-        names.setdefault(k, name)
-        out[how].setdefault(names[k], set()).add(SEP.join(segs[:j + 1]))
-    return out
+DECKS_WAY = "~decks"  # team_flow.DECKS_WAY: the map by the deck's subdecks, among its ways
+_SPELLED = ("#planner tags as written",)  # keys no search is: kept with the index's searches (they go when its notes change)
+_SPLIT = "#planner the deck split"
 
 
-def _deck_parts(idx):
-    """{name: {did}}: the deck's subdecks one level down."""
-    out = {}
-    for rel, did in idx.rel.items():
-        if not rel:
-            continue
-        top = rel.split(SEP)[0]
-        name = P._word(idx.spelled.get(top, top).split(SEP)[0] or top)
-        out.setdefault(name, set()).add(did)
-    return out
+def tags_spelled(idx):
+    """{cid: [its tags as written]}, read once a deck."""
+    kept = idx._searches.get(_SPELLED)
+    if kept is None:
+        kept = {}
+        for low, cids in idx.by_tag.items():
+            t = idx.tag_names.get(low, low)
+            for c in cids:
+                kept.setdefault(c, []).append(t)
+        idx._searches[_SPELLED] = kept
+    return kept
 
 
-def _top_tags(idx):
-    """{name: {tag path}}: the deck's tags by their first part, Anki's and the plans' own aside."""
-    out = {}
-    for low in idx.tag_keys:
-        top = low.split(SEP)[0]
-        if top.strip() in _ANKI_TAGS or top.strip().isdigit():
-            continue
-        out.setdefault(P._word(idx.tag_names[low].split(SEP)[0]), set()).add(top)
-    return out
+def deck_paths(idx):
+    """{cid: [its subdeck's path below the deck]}, the cards in a subdeck."""
+    rel = {d: idx.spelled.get(r, r) for r, d in idx.rel.items() if r}
+    return {c: [rel[d]] for d, cids in idx.by_deck.items() if d in rel for c in cids}
 
 
-def parts(idx):
-    """[(how, [(name, {cid})])]: the deck's parts as it files them:
-    ("resource", …) and ("system", …) for a big shared deck's, else
-    ("deck", …) its subdecks, else ("tag", …) its top tags; a way with one
-    part only isn't one. Read once a deck, kept with its searches."""
-    kept = idx._searches.get(_PARTS)
-    if kept is not None:
-        return kept
-    out = []
-    tp = _tag_parts(idx)
-    for how in ("resource", "system"):
-        if len(tp[how]) >= 2:
-            out.append((how, [(name, set().union(*(idx.tag_cards(k) for k in keys))) for name, keys in tp[how].items()]))
-    if not out:
-        dp = _deck_parts(idx)
-        if len(dp) >= 2:
-            out.append(("deck", [(name, set().union(*(idx.by_deck.get(d, ()) for d in dids)) & idx.home)
-                                 for name, dids in dp.items()]))
-    if not out:
-        tt = _top_tags(idx)
-        if len(tt) >= 2:
-            out.append(("tag", [(name, set().union(*(idx.tag_cards(k) for k in keys))) for name, keys in tt.items()]))
-    idx._searches[_PARTS] = out
-    return out
+def split(tags_of, home, by=None, paths=None):
+    """(tiles, ways): the deck split as the board's topic map splits it
+    (team.subjects_by: the cut that tells its cards apart best, a topic
+    over a rating, a bank's ids and Anki's own tags never; one root opened
+    into what's under it), over every card in it, suspended too: the plan
+    is of the whole deck. Its subdecks are a way too, and the way when the
+    tags don't split it or it's picked (team_flow._map's rule). by: a way's
+    key (the map's pick for this deck, ins_map_by); one not among them
+    falls back to the best."""
+    tiles, ways = T.subjects_by(tags_of, {}, home, by=None if by == DECKS_WAY else by)
+    dtiles, dways = T.subjects_by(paths, {}, home, decks=True) if paths else ([], [])
+    best = ways[0]["score"] if ways else 0.0
+    by_decks = bool(dtiles) and (by == DECKS_WAY or (by not in {w["key"] for w in ways} and dways[0]["score"] > best)
+                                 or len(tiles) < 2)
+    if dtiles:
+        ways = [dict(w, on=not by_decks and w["on"]) for w in ways]
+        ways.append({"key": DECKS_WAY, "name": "Subdecks", "score": dways[0]["score"], "on": by_decks})
+        ways.sort(key=lambda w: -w["score"])
+    return (dtiles if by_decks else tiles), ways
 
 
-HOW = {"resource": "By resource", "system": "By system", "deck": "By subdeck", "tag": "By tag"}
+def deck_split(idx, by=None):
+    """split() for a deck here, kept with its searches (a big deck's is a second or two once)."""
+    key = (_SPLIT, by)
+    if key not in idx._searches:
+        idx._searches[key] = split(tags_spelled(idx), idx.home, by, deck_paths(idx))
+    return idx._searches[key]
 
 
-def shares(groups, cards):
-    """[(how, [{name, held, total}], [{name, held, total}])]: each part's
-    cards and how many of them the plan holds, the parts it holds some of
-    biggest first (drawn on one scale, so a big part looks big: the deck's
-    whole, not each part's own), then the ones it holds none of, biggest
-    first."""
-    out = []
-    for how, rows in groups:
-        have, none = [], []
-        for name, cids in rows:
-            if not cids:
-                continue
-            n = len(cids & cards)
-            (have if n else none).append({"name": name, "held": n, "total": len(cids)})
-        have.sort(key=lambda r: (-r["total"], r["name"].lower()))
-        none.sort(key=lambda r: (-r["total"], r["name"].lower()))
-        out.append((how, have, none))
-    return out
+def _held(tiles, cards):
+    """(rows, none): the tiles the plan holds some of, {name, held, total},
+    most held first; the ones it holds none of, biggest first."""
+    rows, none = [], []
+    for t in tiles:
+        n = len(cards.intersection(t.get("_cids") or ()))
+        (rows if n else none).append({"name": t["name"], "held": n, "total": t["n"], "_t": t})
+    rows.sort(key=lambda r: (-r["held"], -r["total"], r["name"].lower()))
+    none.sort(key=lambda r: (-r["total"], r["name"].lower()))
+    return rows, none
+
+
+def topics(tiles, cards):
+    """What the plan holds of each part of the deck: (rows, none, inside).
+    rows and none as _held has them; inside, the part holding half the
+    plan's cards or more split again ("Inside Cardio": its parts, the ones
+    it holds none of named), as (name, rows, none), else None: a block on
+    one system says which of its parts it leaves out."""
+    rows, none = _held(tiles, cards)
+    inside = None
+    if rows and cards and rows[0]["held"] * 2 >= len(cards):
+        kids = T.expand(rows[0]["_t"], {})
+        if len(kids) >= 2:
+            inside = (rows[0]["name"],) + _held(kids, cards)
+    return rows, none, inside
 
 
 def none_words(none, most=4):
