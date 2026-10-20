@@ -71,12 +71,17 @@ def _canon(doc):
     return json.dumps(d, sort_keys=True)
 
 
-def save(client, pid, version, doc, summary):
+def save(client, pid, version, doc, summary, post=None):
     """("saved", raw) | ("stale", raw now) | ("refused", words). A save whose
     answer was lost on the way and sent again comes back stale, because the
-    first one landed: one whose doc is the plan's now is "saved"."""
+    first one landed: one whose doc is the plan's now is "saved". post
+    (round five's send): one line to followers that goes with the save
+    (plans.ts POST_MAX, five a day a plan; past them the save still goes)."""
     from .edits import lean
     body = {"version": int(version), "doc": lean(doc), "summary": str(summary)[:120]}
+    line = " ".join(str(post or "").split())[:200]
+    if line:
+        body["post"] = line
     status, data = _call(client, "PUT", f"/plans/{pid}", body)
     if status == 200 and isinstance(data.get("doc"), dict):
         return "saved", data

@@ -1,16 +1,16 @@
-"""Your plans' History and Updates tabs (3.9.3), the builder's, for a
-plan's authors. History: every save, who and what, newest first; the
-latest one undoes (the builder's Undo). Updates: what the authors said to
-followers, newest first, and a post of one line to them (five a day a
-plan), with how many followers' Anki has this version. Each is read when
-its tab opens, one request; names and words are the authors': plain text."""
+"""Your plans' History (Undo ▾'s, round five) and posts (the Followers
+tab's), the builder's, for a plan's authors. History: every save, who and
+what, newest first; the latest one undoes (the builder's Undo). Posts:
+what the authors said to followers, newest first, and a post of one line
+to them (five a day a plan), with how many followers' Anki has this
+version. Each is read when it's shown, one request; names and words are
+the authors': plain text."""
 
 from aqt.qt import QHBoxLayout, QHeaderView, QLabel, QLineEdit, QPushButton, Qt, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget
 
 from ..ui import esc, note
 from . import remote
 from .model import ago
-from .pip_note import PipNote
 
 ROLE = Qt.ItemDataRole.UserRole
 
@@ -69,7 +69,7 @@ class HistoryTab(_Lazy):
         super().__init__(win)
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 8, 0, 0)
-        self.said = PipNote(lambda: self.win.ops.pip(), muted=True, size=48)
+        self.said = _plain(muted=True)
         root.addWidget(self.said)
         self.list = _list()
         root.addWidget(self.list, 1)
@@ -107,11 +107,10 @@ class HistoryTab(_Lazy):
             self._show([], "Couldn't load the history.", again=True)
             return
         self.got = now
-        # a new plan's: Pip peeking in, as Settings › Pip says
         self._show(rows, "" if rows else "No saves yet. Each one shows here, who made it and what it changed, "
-                   "and the latest can be undone.", pose=None if rows else "peek")
+                   "and the latest can be undone.")
 
-    def _show(self, rows, said, again=False, pose=None):
+    def _show(self, rows, said, again=False):
         self.rows = rows
         self.list.clear()
         me = self.win.ops.me()
@@ -121,7 +120,7 @@ class HistoryTab(_Lazy):
             it.setToolTip(1, f"<span>{esc(x.get('summary') or '')}</span>")
             self.list.addTopLevelItem(it)
         self.list.setVisible(bool(rows))
-        self.said.say(said, pose, "Pip, peeking in")
+        self.said.setText(said)
         self.said.setVisible(bool(said))
         self.again_btn.setVisible(again)
         self.undo_btn.setVisible(bool(rows) and bool(rows[0].get("undo")))
@@ -133,8 +132,9 @@ class HistoryTab(_Lazy):
     def _undo(self):
         if not self.rows or not self.rows[0].get("undo"):
             return
-        self.win._can_undo((self.win.plan["id"], self.rows[0]["version"]))
-        self.win._undo()
+        self.win.undo_latest(self.rows[0]["version"])
+        if callable(getattr(self, "on_undo", None)):
+            self.on_undo()
 
 
 class UpdatesTab(_Lazy):
@@ -158,7 +158,7 @@ class UpdatesTab(_Lazy):
         root.addLayout(row)
         self.reached = _plain(muted=True)
         root.addWidget(self.reached)
-        self.status = PipNote(lambda: self.win.ops.pip())
+        self.status = _plain()
         root.addWidget(self.status)
         self.said = _plain(muted=True)
         root.addWidget(self.said)
@@ -276,7 +276,7 @@ class UpdatesTab(_Lazy):
                 self._buttons()
                 return
             self.box.clear()
-            self.status.say("Posted. Followers see it in Anki and on their home page.", "hello", "Pip, waving")
+            self.status.setText("Posted. Followers see it in Anki and on their home page.")
             self._read()
         self.win.ops.ask(self.win, lambda cl: remote.post(cl, now[0], text), done)
 

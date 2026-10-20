@@ -1749,7 +1749,7 @@ def _segs(segments):
 
 
 def _plans_empty_html():
-    """3.5.0: the Plans tab with no plan: three ways in."""
+    """3.5.0: the Plans tab with no plan: three ways in (round five: Make one is the one New plan)."""
     add = ("var v=(document.getElementById('dc-plancode').value||'').toUpperCase()"
            ".replace(/[^A-Z0-9 \\/]/g,' ').slice(0,200);"
            "pycmd('duecrew:addcode:'+v+'|'+window.dcBK);return false;")
@@ -1757,8 +1757,7 @@ def _plans_empty_html():
             f'<div class="way"><b>Got a code?</b><input id="dc-plancode" placeholder="N4AP ULM2" '
             f'onkeydown="if(event.key===\'Enter\'){{{add}}}"><a href="#" onclick="{add}">Follow</a></div>'
             f'<div class="way"><b>Find one</b><a href="#" onclick="{_pycmd("planlibrary")}">The library &#8599;</a></div>'
-            f'<div class="way"><b>Make one</b><a href="#" onclick="{_pycmd("planstart")}">From a calendar&hellip;</a>'
-            f'<a href="#" onclick="{_pycmd("planmake")}">From a deck&hellip;</a></div>'
+            f'<div class="way"><b>Make one</b><a href="#" onclick="{_pycmd("planstart")}">New plan&hellip;</a></div>'
             f'</div></div>')
 
 
@@ -4066,7 +4065,7 @@ FIND_WORDS = {
 # "plan" into Find a setting is looking for them: (command, label, words)
 FIND_WINDOWS = (
     ("planyours", "Your plans", "plan plans dates weeks schedule write edit author builder follow"),
-    ("planstart", "New plan from a calendar", "new plan calendar syllabus block schedule file pdf word powerpoint slides import make"),
+    ("planstart", "New plan", "new plan calendar syllabus block schedule file pdf word powerpoint slides import make deck"),
     ("planmissed", "Missed questions", "missed questions question ids bank practice block qbank wrong incorrect"),
 )
 

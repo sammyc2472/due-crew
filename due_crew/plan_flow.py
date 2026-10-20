@@ -2232,13 +2232,13 @@ def on_message(cmd, parts):
     elif cmd == "planlibrary":
         open_site("/library")
     elif cmd == "planmake":
-        open_make()
+        _planner_flow().open_new()  # round five: one New plan
     elif cmd == "planyours":  # 3.9.3: Your plans, on a plan when the click names one
         open_yours(arg if re.fullmatch(r"[A-Za-z0-9_-]{1,128}", arg or "") else None)
     elif cmd == "plannew":  # 3.9.3: You › Plans' New plan ▾
         new_plan_menu()
-    elif cmd == "planstart":  # 3.9.3: New plan from a calendar
-        _planner_flow().open_start()
+    elif cmd == "planstart":  # 3.9.3: New plan from a calendar (round five: the one New plan)
+        _planner_flow().open_new()
     elif cmd == "planmissed":  # 3.9.3: Insights' Missed questions, on its deck
         _planner_flow().open_qids(int(arg) if arg.isdigit() else None)
     elif cmd == "planresume" and arg:
@@ -3155,12 +3155,11 @@ def open_yours(pid=None):
 
 
 def new_plan_menu():
-    """3.9.3: You › Plans' New plan ▾: from a calendar or a file (the
-    calendar window), from a deck, or on duecrew.com."""
+    """3.9.3: You › Plans' New plan ▾ (round five: New plan, in Anki, the
+    one way to start one; or on duecrew.com)."""
     from aqt.qt import QCursor, QMenu
     menu = QMenu(mw)
-    menu.addAction("From a calendar or a file…").triggered.connect(lambda: _planner_flow().open_start())
-    menu.addAction("From a deck…").triggered.connect(open_make)
+    menu.addAction("New plan…").triggered.connect(lambda: _planner_flow().open_new())
     menu.addAction("On duecrew.com ↗").triggered.connect(lambda: open_site("/plans"))
     menu.exec(QCursor.pos())
 

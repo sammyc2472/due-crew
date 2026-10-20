@@ -1,17 +1,18 @@
-"""Your plans' Text tab (3.9.3), the builder's Text in Anki, for a plan's
-authors: Add dates (lines pasted in go on; a line with a date's own day
-and name adds to it) and Edit the whole plan (the plan as text: what the
-text leaves out goes). Read it shows what would change, nothing does
-until Add to the plan or Replace the plan's dates, one save. The rules
-are text.py's (builder.js's toText and fromText). Names, tags and the
-authors' words: plain text everywhere."""
+"""Your plans' text (3.9.3; round five: a window from the Plan tab), the
+builder's Text in Anki, for a plan's authors: Add dates (lines pasted in
+go on; a line with a date's own day and name adds to it) and Edit the
+whole plan (the plan as text: what the text leaves out goes). Read it
+shows what would change, nothing does until Add or Replace, one change
+(the ops' "text"): waiting with the others when anyone follows the plan.
+The rules are text.py's (builder.js's toText and fromText). Names, tags
+and the authors' words: plain text everywhere."""
 
 from aqt.qt import (
-    QApplication, QButtonGroup, QHBoxLayout, QHeaderView, QLabel, QPlainTextEdit, QPushButton, QSize, QSplitter, Qt,
-    QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
+    QApplication, QButtonGroup, QDialog, QHBoxLayout, QHeaderView, QLabel, QPlainTextEdit, QPushButton, QSize, QSplitter,
+    Qt, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
-from ..ui import confirm, esc, note
+from ..ui import attach_alive, confirm, esc, heading, note
 from .. import plans as P
 from . import build as B
 from . import edits as E
@@ -169,9 +170,13 @@ class TextTab(QWidget):
             self._buttons()
 
     def _went(self, whole, pid, saved):
-        """Add or Replace's own save: when it saved, the box emptied (Add) or
-        the plan's text again (Replace); otherwise the window says why."""
+        """Add or Replace's own change: when it went in, the box emptied (Add)
+        or the plan's text again (Replace), and its window closes; otherwise
+        the window says why."""
         if not saved or (self.win.plan or {}).get("id") != pid or not self.win.author():
+            return
+        if callable(getattr(self, "on_went", None)):
+            self.on_went()
             return
         n = len(P.units(self._doc()))
         if whole:
@@ -186,7 +191,7 @@ class TextTab(QWidget):
     # ---- the text ----
 
     def _doc(self):
-        return self.win.raw["doc"]
+        return self.win.doc  # the plan as the window shows it: with the changes waiting
 
     def _name(self):
         return (self.win.plan or {}).get("name") or ""
@@ -256,7 +261,9 @@ class TextTab(QWidget):
         anything = bool(r and (r["units"] or r["events"] or r["tags"] or r["remarks"]))
         self.go_btn.setVisible(bool(r) and (self.whole or anything))
         self.go_btn.setEnabled(not busy)
-        self.go_btn.setText("Replace anyway" if self.whole and using else "Replace the plan's dates" if self.whole else "Add to the plan")
+        waits = self.win.waiting()
+        self.go_btn.setText("Replace anyway" if self.whole and using else "Replace the plan's dates" if self.whole
+                            else "Add to the changes" if waits else "Add to the plan")
         self.go_btn.setProperty("dc", "bad" if self.whole and self.read_now and self.read_now[4] else "go")
         self.go_btn.style().unpolish(self.go_btn)
         self.go_btn.style().polish(self.go_btn)
@@ -393,16 +400,38 @@ class TextTab(QWidget):
                 self, "Replace the plan's dates?", "What the text leaves out comes off the plan, for everyone following it. "
                 "What their dates already opened stays open.", "Replace them", danger=True):
             return
-        take = self.taken is not None
-        made = {}
-
-        def change(doc):
-            got = self._read_text(doc, text, whole)
-            if got["errors"]:
-                raise E.Refused(" ".join(got["errors"][:3]))
-            if take:
-                T.take_all(doc, got, self.win.deck_tree(), self._name())
-            made["ids"] = {u["id"] for u in got["units"]}
-            return T.apply(doc, got, whole, self._name(), new_id=lambda: E.new_id(doc))
         pid = self.win.plan["id"]
-        self.win._apply(change, lambda: made.get("ids", ()), then=lambda saved: self._went(whole, pid, saved), rename=False)
+        self.win.change({"op": "text", "mode": "replace" if whole else "add", "text": text, "take_tags": self.taken is not None},
+                        then=lambda ok: self._went(whole, pid, ok))
+
+
+class TextDialog(QDialog):
+    """The text, in a window of its own over Your plans: the whole plan to
+    edit (whole), or plan lines pasted in to add (pasted: read at once)."""
+
+    def __init__(self, win, whole, pasted=""):
+        super().__init__(win)
+        attach_alive(self)
+        self.setWindowTitle("The plan as text" if whole else "Plan lines to add")
+        self.setMinimumSize(760, 560)
+        root = QVBoxLayout(self)
+        heading(self, root)
+        self.tab = TextTab(win)
+        self.tab.on_went = self.accept
+        root.addWidget(self.tab, 1)
+        self.tab.plan_loaded(win)
+        if whole:
+            self.tab.modes.button(1).setChecked(True)
+            self.tab._mode(1)
+        elif pasted:
+            self.tab._loading = True
+            self.tab.box.setPlainText(pasted)
+            self.tab._loading = False
+            self.tab._read()
+        row = QHBoxLayout()
+        row.addStretch(1)
+        close = QPushButton("Close")
+        close.setAutoDefault(False)
+        close.clicked.connect(self.reject)
+        row.addWidget(close)
+        root.addLayout(row)

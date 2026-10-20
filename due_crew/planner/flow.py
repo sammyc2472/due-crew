@@ -157,6 +157,40 @@ class Ops:
         _bg(lambda: remote.save(cl, pid, version, doc, summary),
             lambda got: getattr(owner, "_alive", False) and gen == app.generation and done(got))
 
+    def send(self, owner, pid, version, doc, summary, post, done):
+        """Round five's Send: the waiting changes as one save, with its line
+        to followers. done((outcome, what) or None): remote.save's answer."""
+        cl, gen = client(), app.generation
+        _bg(lambda: remote.save(cl, pid, version, doc, summary, post),
+            lambda got: getattr(owner, "_alive", False) and gen == app.generation and done(got))
+
+    def draft(self, pid):
+        """The changes waiting on this plan here (draft.Draft), or None."""
+        from .draft import Draft
+        return Draft.from_json(pid, (_drafts().get("drafts") or {}).get(str(pid)))
+
+    def keep_draft(self, pid, draft):
+        """The waiting changes kept on this computer (None, or none waiting: gone)."""
+        data = _drafts()
+        ds = data.setdefault("drafts", {})
+        if draft is None or not len(draft):
+            ds.pop(str(pid), None)
+        else:
+            ds[str(pid)] = draft.to_json()
+        _save_drafts(data)
+
+    def turned_down(self, pid):
+        """[(date id, tag path)]: suggestions I said no to on this plan (✕), on this computer."""
+        return [tuple(x) for x in (_drafts().get("nosug") or {}).get(str(pid)) or [] if isinstance(x, list) and len(x) == 2]
+
+    def turn_down(self, pid, uid, path):
+        data = _drafts()
+        lst = data.setdefault("nosug", {}).setdefault(str(pid), [])
+        if [uid, path] not in lst:
+            lst.append([uid, path])
+            del lst[:-500]
+        _save_drafts(data)
+
     def undo(self, owner, pid, version, done):
         """done((outcome, what) or None): remote.undo's (the builder's Undo)."""
         cl, gen = client(), app.generation
@@ -216,15 +250,129 @@ class Ops:
         return study_cards(idx, cids, name)
 
     def new_from_calendar(self):
-        open_start()
+        open_new()
 
     def new_from_deck(self):
-        plan_flow.open_make()
+        open_new()
+
+    def new_plan(self):
+        """Round five: the one New plan window."""
+        open_new()
+
+    def now_words(self):
+        """"Tue 2:14 pm", for Undo ▾'s line about a send."""
+        import datetime
+        t = datetime.datetime.now()
+        return f"{t:%a} {t.hour % 12 or 12}:{t:%M} {'am' if t.hour < 12 else 'pm'}"
+
+    def site_url(self, path):
+        return f"{plan_flow.site_base()}{path}"
+
+    # ---- round five's Mine: my follow, plan_flow's own steps ----
+
+    def follow_state(self, pid):
+        return next((p for p in plan_flow.followed() if p.get("id") == pid), None)
+
+    def held_count(self, pid):
+        try:
+            return int(plan_flow.held_count(pid) or 0)
+        except Exception:
+            return 0
+
+    def in_team(self, pid):
+        from .. import team_flow
+        return pid in (team_flow.teams() or {})
+
+    def set_shift(self, pid):
+        plan_flow.set_shift(pid)
+
+    def set_skip(self, pid, uid, on):
+        plan_flow.set_skip(pid, uid, on)
+
+    def set_own(self, pid, own):
+        plan_flow.set_own(pid, own)
+
+    def set_early(self, pid, n):
+        plan_flow.set_early(pid, n)
+
+    def pause_until(self, pid):
+        plan_flow.pause_until(pid)
+
+    def resume(self, pid):
+        p = self.follow_state(pid) or {}
+        if p.get("since"):
+            plan_flow.back(pid)
+        else:
+            plan_flow.set_paused(pid, False)
+
+    def show_held(self, pid):
+        plan_flow.show_held(pid)
+
+    def change_deck(self, pid):
+        plan_flow.change_deck(pid)
+
+    def open_everything(self, pid):
+        plan_flow.open_everything(pid)
+
+    def stop_following(self, pid):
+        plan_flow.stop_following(pid)
+
+    def copy_plan(self, owner, pid, said):
+        """Make my own copy (a library plan): the same dates, mine to change; then Your plans on it."""
+        p = self.follow_state(pid) or {}
+        start = min((str(u.get("opens")) for u in P.units(p.get("doc") or {})), default=self.today())
+        cl, gen = client(), app.generation
+
+        def done(got):
+            if not getattr(owner, "_alive", False) or gen != app.generation:
+                return
+            if not got or got[0] != "saved":
+                said("That didn't copy: " + (str(got[1]) if got else "check your connection, then try again."))
+                return
+            self.reopen(got[1].get("id"))
+        _bg(lambda: remote.copy(cl, pid, start), done)
 
     def open_page(self, path):
         """A page of duecrew.com (the Text tab's format), in the browser."""
         from aqt.utils import openLink
         openLink(f"{plan_flow.site_base()}{path}")
+
+
+# ---- round five: changes waiting to be sent, kept per profile ----
+
+_drafts_store = {"profile": None, "data": None}
+
+
+def _drafts_path():
+    return os.path.join(plan_flow._files(), "plan_drafts.json")
+
+
+def _drafts():
+    """This profile's waiting changes and turned-down suggestions
+    (plan_drafts.json): {drafts: {plan id: draft}, nosug: {plan id: [[date, tag]]}}.
+    Never sent; read once a profile. Main thread."""
+    key = app._profile_key()
+    if _drafts_store["profile"] == key and _drafts_store["data"] is not None:
+        return _drafts_store["data"]
+    try:
+        with open(_drafts_path()) as f:
+            data = json.load(f)
+        data = data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        data = {}
+    _drafts_store.update(profile=key, data=data)
+    return data
+
+
+def _save_drafts(data):
+    path = _drafts_path()
+    tmp = path + ".tmp"
+    try:
+        with open(tmp, "w") as f:
+            json.dump(data, f)
+        os.replace(tmp, path)
+    except OSError:
+        pass  # a full disk: the changes stay in the window till it closes
 
 
 def study_cards(idx, cids, name):
@@ -243,6 +391,22 @@ def study_cards(idx, cids, name):
         mw.col.decks.select(did)
         mw.moveToState("overview")
     return True
+
+
+# ---- round five: New plan, the one way to start ----
+
+def open_new():
+    """New plan: signed in (it makes a plan on the server), a collection open."""
+    if not mw.col or _raise("new"):
+        return
+    if not plan_flow._signed_in():
+        return
+    from .new_plan import NewPlanWindow
+    w = NewPlanWindow(mw, top_decks(mw.col), NewOps(), labs=enabled())
+    _gone_on_close(w)
+    _open["new"] = w
+    w.show()
+    return w
 
 
 # ---- a plan from a block's calendar (claude.py's jobs, a stand-in for now) ----
@@ -321,6 +485,16 @@ class StartOps:
         if w is not None and getattr(w, "_alive", False):
             w.close()
         open_plans(select=pid)
+
+
+class NewOps(StartOps):
+    """What New plan asks of the add-on: StartOps', a friend's code, the labs window."""
+
+    def follow(self, code):
+        plan_flow.open_follow(code)
+
+    def labs_window(self):
+        open_start()
 
 
 # ---- question IDs ----

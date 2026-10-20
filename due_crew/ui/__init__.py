@@ -155,6 +155,9 @@ def tokens():
               "press": _mix(t["well"], t["line"], .7), "go-hover": _mix(t["accent"], toward, .12),
               "bad-hover": _mix(t["bad"], toward, .12), "go-ring": _mix(t["accent"], t["mark"], .3),
               "ink-2": _mix(t["muted"], t["ink"], .4)})
+    # round five's plan window: a week that asks too much, a maybe, a change not sent, a fill past the exam
+    t.update({"warm": _mix(t["bg"], t["hours"], .12), "warm-line": _mix(t["line"], t["hours"], .55),
+              "bad-bg": _mix(t["bg"], t["bad"], .1)})
     return t
 
 
@@ -167,7 +170,7 @@ def tone(key):
     except Exception:
         return {"muted": "#7a7a72", "faded": "#aaaaa2", "line": "#e2e2da", "well": "#f2f2ec", "bg": "#ffffff",
                 "ink": "#333333", "ink-2": "#5e5e58", "mark": "#242424", "accent": "#2e7d32",
-                "you-bg": "#e9f2e9", "hours": "#b26a00"}.get(key, "#7a7a72")
+                "you-bg": "#e9f2e9", "hours": "#b26a00", "warm": "#f8efe2"}.get(key, "#7a7a72")
 
 
 def title(text):
@@ -327,6 +330,48 @@ QMenu::item {{ background: transparent; padding: 5px 16px; margin: 0; border-rad
 QMenu::item:selected {{ background: {you-bg}; color: {ink}; }}
 QMenu::separator {{ height: 1px; background: {line}; margin: 4px 8px; }}
 QToolTip {{ background: {bg}; color: {ink}; border: 1px solid {edge}; padding: 4px 6px; }}
+
+QFrame[dc="card"] {{ background: {bg}; border: 1px solid {edge}; border-radius: 10px; }}
+QFrame[dc="strip"] {{ background: {well}; border: none; border-radius: 8px; }}
+QFrame[dc="warm"] {{ background: {warm}; border: none; border-radius: 8px; }}
+QFrame[dc="bad"] {{ background: {bad-bg}; border: none; border-radius: 8px; }}
+QFrame[dc="bar"] {{ background: {you-bg}; border: 1px solid {accent}; border-radius: 10px; }}
+QFrame[dc="go-bar"] {{ background: {accent}; border: none; border-radius: 8px; }}
+QFrame[dc="go-bar"] QLabel {{ color: {accent-ink}; font-weight: 700; }}
+QFrame[dc="go-bar"] QPushButton[dc="link"] {{ color: {accent-ink}; text-decoration: underline; }}
+QFrame[dc="go-bar"] QPushButton[dc="link"]:hover {{ background: {go-hover}; }}
+QFrame[dc="today"] {{ background: {you-bg}; border: none; border-left: 3px solid {accent}; border-radius: 8px; }}
+QFrame[dc="row"] {{ background: transparent; border: none; border-radius: 8px; }}
+QFrame[dc="row"]:hover {{ background: {well}; }}
+QFrame[dc="row"][on="true"] {{ background: {you-bg}; border-left: 3px solid {accent}; }}
+QFrame[dc="row"][past="true"] QLabel {{ color: {muted}; }}
+QFrame[dc="rule"] {{ border: none; border-top: 2px solid {accent}; background: transparent; }}
+QFrame[dc="chip"] {{ background: {well}; border: 1px solid {line}; border-radius: 11px; }}
+QFrame[dc="chip"][kind="sug"] {{ background: {bg}; border: 1px dashed {edge-2}; }}
+QFrame[dc="chip"][kind="maybe"] {{ background: {warm}; border: 1px dashed {hours}; }}
+QFrame[dc="chip"][kind="fresh"] {{ background: {you-bg}; border: 1px solid {accent}; }}
+QFrame[dc="chip"] QLabel {{ font-size: 12px; color: {ink-2}; }}
+QLabel[dc="n"] {{ color: {muted}; }}
+QLabel[dc="warn"] {{ color: {hours}; font-weight: 700; }}
+QLabel[dc="ok"] {{ color: {accent}; font-weight: 700; }}
+QLabel[dc="bad"] {{ color: {bad}; }}
+QLabel[dc="event"] {{ font-style: italic; font-weight: 700; color: {mark}; }}
+QPushButton[dc="link"] {{ background: transparent; color: {accent}; border: 1px solid transparent; border-radius: 6px; padding: 2px 4px; min-height: 0; }}
+QPushButton[dc="link"]:hover {{ background: {well}; }}
+QPushButton[dc="link"]:disabled {{ color: {faded}; }}
+QPushButton[dc="link"][tone="bad"] {{ color: {bad}; }}
+QPushButton[dc="link"]::menu-indicator, QPushButton[dc="more"]::menu-indicator {{ image: none; width: 0; }}
+QPushButton[dc="x"] {{ background: transparent; color: {muted}; border: none; border-radius: 6px; padding: 0 3px; min-height: 0; font-size: 12px; }}
+QPushButton[dc="x"]:hover {{ background: {press}; color: {ink}; }}
+QPushButton[dc="pill"] {{ border-radius: 12px; padding: 3px 12px; min-height: 0; font-size: 12px; }}
+QPushButton[dc="pill"]:checked {{ background: {you-bg}; border: 1px solid {accent}; color: {accent}; font-weight: 700; }}
+QPushButton[dc="pill"][tone="warm"] {{ background: {warm}; border: 1px solid {warm-line}; color: {hours}; font-weight: 700; }}
+QPushButton[dc="seg"] {{ border-radius: 0; padding: 4px 12px; min-height: 0; }}
+QPushButton[dc="seg"]:checked {{ background: {you-bg}; border: 1px solid {accent}; color: {accent}; font-weight: 700; }}
+QTabWidget::pane {{ border: none; }}
+QTabBar::tab {{ background: {well}; color: {ink-2}; border: 1px solid {line}; padding: 5px 14px; margin: 0; }}
+QTabBar::tab:selected {{ background: {bg}; color: {mark}; font-weight: 700; border-bottom-color: {bg}; }}
+QTabBar::tab:hover {{ color: {ink}; }}
 """
 
 # a chevron or a tick, drawn on a 16px square; each a file the style sheet names

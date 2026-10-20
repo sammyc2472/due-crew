@@ -220,6 +220,48 @@ def add_date(doc, opens, tags=(), decks=(), name=None, rng=random):
     return _sorted(doc), uid
 
 
+def add_empty_date(doc, opens, name, rng=random):
+    """Round five: a date named from the course's calendar with nothing on
+    it yet (its cards are suggestions till the author adds them). The
+    server keeps a date with no cards; it opens nothing. (doc, its id)."""
+    doc = copy.deepcopy(doc)
+    if len(doc.get("units") or []) >= UNITS_MAX:
+        raise Refused(f"A plan holds up to {UNITS_MAX} dates.")
+    uid = new_id(doc, rng)
+    doc.setdefault("units", []).append({"id": uid, "name": _name(name), "opens": _day(opens).isoformat(),
+                                        "tags": [], "decks": [], "cards": []})
+    return _sorted(doc), uid
+
+
+def shift_from(doc, uid, days):
+    """Round five's "this and every date after": the date and every date on
+    or after its day `days` days later (or earlier), their finish-by days
+    and checkpoints with them, and the review days from its day on;
+    quizzes and exams stay on their days (the school's)."""
+    doc = copy.deepcopy(doc)
+    day = _unit(doc, uid)["opens"]
+    for u in doc.get("units") or []:
+        if str(u.get("opens") or "") >= day:
+            for k in ("opens", "due", "check"):
+                if u.get(k):
+                    u[k] = _later(u[k], days)
+    for r in doc.get("reviews") or []:
+        if str(r.get("day") or "") >= day:
+            r["day"] = _later(r["day"], days)
+    return _sorted(doc)
+
+
+def drop_if_empty(doc, uid):
+    """After Split by its tags: the split date goes only when nothing came
+    back onto it (a date with no cards on purpose, a lecture waiting for
+    its cards, stays where cleanup would take it)."""
+    u = next((x for x in doc.get("units") or [] if x.get("id") == uid), None)
+    if u is not None and not has_sources(u):
+        doc["units"] = [x for x in doc["units"] if x is not u]
+        _drop_reviews(doc, uid)
+    return doc
+
+
 def add_event(doc, day, name, rng=random):
     """A named day (a quiz, the exam) the dates prep for. (doc, its id)."""
     doc = copy.deepcopy(doc)
@@ -274,6 +316,39 @@ def from_sessions(doc, sessions, picks, scopes=None, rng=random):
                 if i in units:
                     chosen.setdefault(units[i], []).append(events[ei])
     return prep_for(doc, chosen), units, events
+
+
+def new_plan_doc(deck, sessions, picks, end_name, end_day):
+    """A new plan's doc: each session a date on its day named as it is (its
+    tags where picked, none yet where not), each quiz or exam an event,
+    the end (the exam named, an event, on its day), the dates tested on
+    the next quiz after them, the pace fitting what's ticked to the end.
+    Round five's New plan (new_plan.py), the add-on's own: the builder
+    starts a plan from its deck on the site. (doc, [date ids])."""
+    from .reading import EVENT_KINDS
+    doc, uids = {"deck": deck, "units": []}, []
+    have = set()
+    for i, s in enumerate(sessions):
+        title = " ".join(str(s.get("title") or "").split())[:60] or s.get("kind", "Session").capitalize()
+        if s.get("kind") in EVENT_KINDS:
+            doc, _eid = add_event(doc, s["date"], title)
+            have.add((s["date"], title.lower()))
+            continue
+        tags = [t for t in picks.get(i) or [] if t]
+        if tags:
+            doc, uid = add_date(doc, s["date"], tags[:SOURCES_MAX], name=title)
+        else:
+            doc, uid = add_empty_date(doc, s["date"], title)
+        uids.append(uid)
+    end_name = " ".join(str(end_name or "").split())[:60]
+    if end_name and end_day and (end_day, end_name.lower()) not in have:
+        doc, _eid = add_event(doc, end_day, end_name)
+    if end_day:
+        doc = set_end(doc, end_day)
+    doc = set_pace(doc, "end" if end_day else "daily", [1, 1, 1, 1, 1, 0, 0], 20)
+    if uids and doc.get("events"):
+        doc = prep_for(doc, {})
+    return doc, uids
 
 
 def delete_date(doc, uid):

@@ -125,7 +125,7 @@ def test_gate():
     finally:
         qt.QMenu = saved
     check("gate: Tools › Due Crew › Plans holds everything about plans, the three windows among it, for everyone",
-          m.title == "Plans" and m.items == ["Your plans…", "New plan from a calendar…", "New plan from a deck…",
+          m.title == "Plans" and m.items == ["Your plans…", "New plan…",
                                              "Follow a plan…", "—", "Missed questions…", "Export cards for my AI…"], m.items)
     init = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
     check("gate: Tools › Due Crew puts the Plans submenu in, and the old plan entries at its root are gone",
@@ -1006,25 +1006,31 @@ def test_rules_of_the_road():
     src = {os.path.basename(p): open(p).read() for p in glob.glob(os.path.join(REPO, "due_crew", "planner", "*.py"))}
     windows = {f: t for f, t in src.items() if "(QDialog)" in t}
     check("road: the windows, each wearing the board's look and saying what it is",
-          sorted(windows) == ["date_dialogs.py", "picker.py", "qid_window.py", "start_window.py", "window.py"]
+          sorted(windows) == ["date_dialogs.py", "date_panel.py", "mcp_dialog.py", "new_plan.py", "picker.py", "qid_window.py",
+                              "send.py", "shape.py", "start_window.py", "text_tab.py", "window.py"]
           and all(t.count("(QDialog)") == t.count("attach_alive(self)") == len(re.findall(r"\bheading\(self", t))
                   for t in windows.values()), sorted(windows))
-    tabs = {f: t for f, t in src.items() if "(QWidget)" in t}  # 3.9.3: Your plans' tabs past Dates
-    check("road: the tabs past Dates (Lay it out, Text, Progress, Updates, History and Settings), the Dates tab's day notes, "
-          "and Pip's line in them",
-          sorted(tabs) == ["day_notes.py", "history_tab.py", "layout_tab.py", "pip_note.py", "settings_tab.py", "text_tab.py"], sorted(tabs))
-    windows_tabs = dict(windows, **tabs)
+    tabs = {f: t for f, t in src.items() if "(QWidget)" in t}  # round five: Your plans' tabs and panels
+    check("road: the tabs and panels (Plan with its date and deck panels, Followers, Sharing, Mine, the text, History, "
+          "a date's notes), and no Pip in them",
+          sorted(tabs) == ["date_panel.py", "day_notes.py", "deck_panel.py", "followers_tab.py", "history_tab.py", "mine_tab.py",
+                           "plan_tab.py", "settings_tab.py", "text_tab.py"]
+          and not [f for f, t in dict(windows, **tabs).items() if re.search(r"\bsev\b|pip_note", t)], sorted(tabs))
+    windows_tabs = dict(windows, **tabs, **{"widgets.py": src["widgets.py"]})
     check("road: no window sets its own type or margins in a style sheet, nor reads Anki's palette",
           not [f for f, t in windows_tabs.items() if "setStyleSheet" in t or "palette(" in t or "font-size" in t])
-    check("road: every label is plain text (names are the authors' and the deck's); tooltips escaped",
-          all("setTextFormat(Qt.TextFormat.PlainText)" in t for t in windows_tabs.values())
+    labels = {f: t.count("QLabel(") for f, t in windows_tabs.items()}
+    check("road: every label is plain text (names are the authors' and the deck's), its own or widgets.plain's; tooltips escaped",
+          all("setTextFormat(Qt.TextFormat.PlainText)" in t or (not labels[f] and "plain(" in t) for f, t in windows_tabs.items())
           and not [f for f, t in windows_tabs.items() if re.search(r'setToolTip\(0, (?!f"<span>\{esc\()', t)])
-    pure = ("model.py", "qids.py", "edits.py", "actions.py", "remote.py", "reading.py", "claude.py", "build.py", "text.py")
+    pure = ("model.py", "qids.py", "edits.py", "actions.py", "remote.py", "reading.py", "claude.py", "build.py", "text.py",
+            "ops.py", "draft.py", "view.py", "prompts.py", "ai.py", "mcp.py", "mcp_shim.py")
     check("road: the pure parts and the requests import no aqt",
           not [f for f in pure if re.search(r"^\s*(from aqt|import aqt)", src[f], re.M)])
     calls = set()
-    for f in ("flow.py", "window.py", "layout_tab.py", "text_tab.py", "history_tab.py", "settings_tab.py", "day_notes.py", "qid_window.py",
-              "picker.py", "start_window.py"):
+    for f in ("flow.py", "window.py", "plan_tab.py", "date_panel.py", "deck_panel.py", "shape.py", "send.py", "followers_tab.py",
+              "mine_tab.py", "new_plan.py", "text_tab.py", "history_tab.py", "settings_tab.py", "day_notes.py", "qid_window.py",
+              "picker.py", "start_window.py", "mcp_host.py", "mcp_dialog.py"):
         for node in ast.walk(ast.parse(src[f])):
             if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "remote":
                 calls.add(node.attr)
@@ -1870,6 +1876,473 @@ def test_lay_out_review_fixes_v393():
                          capture_output=True, text=True, timeout=30)
     check("fill: builder.js's putWords says the same (put_words)",
           got.returncode == 0 and json.loads(got.stdout) == [B.put_words(*c) for c in cases], got.stdout + got.stderr)
+
+
+# ---- round five: the AI hooks (ai.py) and Your AI app (mcp.py, the shim) ----
+
+def _ai_plan():
+    """A plan, its deck's tree and its ctx: three dates (one with picked notes), a quiz, nothing sent."""
+    from due_crew.planner import build as B
+    from due_crew.planner import ops as O
+    doc = {"deck": "Big Step 1", "units": [
+        {"id": "u1", "name": "Shock", "opens": "2026-10-21", "tags": ["Cardio::Shock"], "decks": [], "cards": []},
+        {"id": "u2", "name": "Valve disease", "opens": "2026-10-22", "tags": [], "decks": [], "cards": [],
+         "notes": ["Gq7#mN2pLx", "Zr4!tW8bYc"]},
+        {"id": "u3", "name": "Heart failure", "opens": "2026-10-26", "tags": ["Cardio::HF"], "decks": [], "cards": [],
+         "for": "e1"}],
+        "events": [{"id": "e1", "day": "2026-10-28", "name": "Cardio quiz"}]}
+    tree = B.Tree([("Cardio", 30), ("Cardio::Shock", 10), ("Cardio::Valves", 8), ("Cardio::Valves::Valve_disease", 8),
+                   ("Cardio::HF", 12), ("Renal", 5)], [("Big Step 1", 35)])
+    return doc, tree, O.Ctx(tree, "2026-10-20", "MS2 Block 2")
+
+
+def _keys(v, out=None):
+    """Every key anywhere in a request."""
+    out = set() if out is None else out
+    if isinstance(v, dict):
+        for k, x in v.items():
+            out.add(k)
+            _keys(x, out)
+    elif isinstance(v, list):
+        for x in v:
+            _keys(x, out)
+    return out
+
+
+def test_ai_jobs():
+    from due_crew.planner import ai, claude
+    from due_crew.planner import ops as O
+    from due_crew.planner import prompts as PR
+    doc, tree, _ctx = _ai_plan()
+    vocab = ai.vocabulary()
+    check("ai: every op the registry has is in the vocabulary, and nothing else, each with what it does, its fields and an example",
+          sorted(v["op"] for v in vocab) == sorted(O.REG) == sorted(ai.VOCAB)
+          and all(v["does"] and v["example"]["op"] == v["op"] for v in vocab)
+          and all(set(v["example"]) - {"op"} <= set(v["fields"]) for v in vocab),
+          sorted(set(O.REG) ^ set(ai.VOCAB)))
+    from due_crew.planner import build as B
+    ex_doc = {"deck": "Big Step 1", "tagroot": "MS2", "end": "2026-12-18", "units": [
+        {"id": "u1", "name": "Shock", "opens": "2026-10-22", "tags": ["Cardio::Shock", "Cardio::Valves"], "decks": [], "cards": [],
+         "due": "2026-10-24"},
+        {"id": "u2", "name": "Heart failure", "opens": "2026-10-26", "tags": ["Cardio::HF"], "decks": [], "cards": []}],
+        "events": [{"id": "e1", "day": "2026-10-30", "name": "Cardio quiz"}], "tags": [{"id": "t1", "name": "SLG 12", "notes": ["g1"]}],
+        "remarks": [{"id": "r7Kd2pQa", "tag": "Cardio::Shock", "text": "Watch the second half"}]}
+    ex_tree = B.Tree([("Cardio", 40), ("Cardio::Shock", 10), ("Cardio::Shock::Extra", 2), ("Cardio::HF", 12), ("Cardio::Valves", 8),
+                      ("Pharm::Pressors", 4)],
+                     [("Big Step 1", 44)])
+    wrong = []
+    for v in vocab:
+        try:
+            O.apply(ex_doc, O.check(ex_doc, v["example"]), O.Ctx(ex_tree, "2026-10-20", "MS2", [1, 1, 1, 1, 1, 0, 0]))
+        except Exception as e:
+            wrong.append((v["op"], str(e)))
+    check("ai: every op's example goes on a plan it reads as (an AI copies them)", not wrong, wrong)
+    check("ai: what Your plans works out from the deck (Split by its tags) isn't offered to an AI",
+          "split_tags" not in [v["op"] for v in ai.vocabulary(for_ai=True)] and len(ai.vocabulary(for_ai=True)) == len(vocab) - 1)
+    reqs = {}
+    for job in ai.JOBS:
+        reqs[job] = ai.request_for(job, doc, tree, "MS2 Block 2", "2026-10-20", said="push everything after the quiz a day",
+                                   ref={"pick": "u2", "scope": "Cardio quiz"}.get(job), text="Oct 26 heart failure")
+    check("ai: a request is its job, its shape's version and its input; each job's own inputs, only keys it knows",
+          all(set(r) == {"job", "v", "input"} and r["v"] == ai.V and set(r["input"]) <= set(ai.JOBS[j].inputs)
+              and _keys(r["input"]) <= ai.KEYS and not {k.lower() for k in _keys(r["input"])} & ai.NEVER
+              for j, r in reqs.items()), {j: sorted(_keys(r["input"]) - ai.KEYS) for j, r in reqs.items()})
+    blob = json.dumps(reqs)
+    check("ai: a date's picked notes go as a count, never their IDs; no person, no email",
+          "Gq7#mN2pLx" not in blob and "2 picked notes" in blob and "@" not in blob)
+    refused = []
+    for key in ("fields", "question", "answer", "Front", "notes", "cids", "email"):
+        try:
+            ai.request("pick", date={"id": "u1", "name": "Shock", key: "the card's text"}, tags=[])
+        except ai.NotSent as e:
+            refused.append(str(e))
+    try:
+        ai.request("words", said="x", cards=[[1, 2]])
+    except ai.NotSent as e:
+        refused.append(str(e))
+    try:
+        ai.request("check", plan={"name": "x", "dates": [{"id": "u1", "html": "<b>x</b>"}]})
+    except ai.NotSent as e:
+        refused.append(str(e))
+    check("ai: a request refuses anything shaped like card text, an id or a person, anywhere in it, and an input its job isn't sent",
+          len(refused) == 9 and all(r for r in refused) and "card text" in refused[0], refused)
+    said = ai.request("calendar", today="2026-10-20", text="Questions to dr.lee@school.edu\nOct 26 shock")["input"]["text"]
+    check("ai: an email in the author's words goes as [email]", "school.edu" not in said and "[email]" in said, said)
+    check("ai: plain rules first: Suggest puts the tag a date's name names, the exam's weeks and the calendar's lines are read",
+          ai.plain_pick(doc, tree, "u2") == [{"op": "add_cards", "date": "u2", "tags": ["Cardio::Valves::Valve_disease"]}]
+          and ai.plain_scope(doc, "Cardio quiz", "weeks 1", "2026-10-20")[0] == [
+              {"op": "set_for", "date": "u1", "event": "e1"}, {"op": "set_for", "date": "u2", "event": "e1"}]
+          and [s["title"] for s in ai.plain_calendar("Mon 10/26 Heart failure\nTue 10/27 Valves", "2026-10-20")] == ["Heart failure", "Valves"])
+    check("ai: pick is sent the date and the deck's paths it could take, with their counts (names and counts only)",
+          reqs["pick"]["input"]["date"]["id"] == "u2" and {"path": "tag:Cardio::Valves::Valve_disease", "n": 8} in reqs["pick"]["input"]["tags"]
+          and all(set(t) == {"path", "n"} for t in reqs["pick"]["input"]["tags"]), reqs["pick"]["input"])
+    check("ai: runners: the stand-in only with labs on, Claude not connected yet, your own AI always, Off otherwise",
+          isinstance(ai.runner_for(False, "standin"), ai.Off) and isinstance(ai.runner_for(True, "standin"), ai.StandIn)
+          and ai.Claude().available() == (False, "Claude isn't connected yet.") and ai.OwnAI().available()[0]
+          and isinstance(ai.runner_for(True, None), ai.Off) and ai.StandIn().available() == (True, claude.StandIn().status()))
+    told = []
+    ai.Claude().run(reqs["words"], lambda a, w: told.append((a, w)))
+    ai.StandIn().run(reqs["words"], lambda a, w: told.append((a, w)))
+    check("ai: Claude answers nothing yet; the stand-in says which jobs it does", told[0] == (None, "Claude isn't connected yet.")
+          and told[1][0] is None and "your own AI" in told[1][1], told)
+    own = ai.OwnAI()
+    words = own.prompt("words", doc, tree, "MS2 Block 2", "2026-10-20", "push everything after the quiz a day")
+    check("ai: your own AI's prompt for my words lists every op an AI writes, the plan by date id, my words, and asks for JSON",
+          all(f"- {v['op']}:" in words for v in ai.vocabulary(for_ai=True)) and "- split_tags:" not in words
+          and "u3 | 2026-10-26 | Heart failure | tag:Cardio::HF | 12 cards | for Cardio quiz" in words
+          and "push everything after the quiz a day" in words and '{"ops": [' in words and "Gq7#mN2pLx" not in words, words[:400])
+    planned = own.prompt("plan", doc, tree, "MS2 Block 2", "2026-10-20", "My syllabus: week 1 is shock.")
+    check("ai: Plan the dates' prompt is prompts.py's, my words in its edit space",
+          planned == PR.for_plan(doc, tree, "MS2 Block 2", "2026-10-21").replace(
+              "(edit this part):\n\n", "(edit this part):\nMy syllabus: week 1 is shock.\n", 1) and "My syllabus" in planned)
+    src = {f: open(os.path.join(REPO, "due_crew", "planner", f)).read() for f in ("ai.py", "mcp.py", "mcp_shim.py")}
+    check("ai: the AI hooks and the AI app's server import no aqt, and the hooks send nothing",
+          not [f for f, t in src.items() if re.search(r"^\s*(from aqt|import aqt)", t, re.M)]
+          and not re.search(r"^\s*(?:from|import)\s+(?:requests|urllib|http|socket|anthropic)\b", src["ai.py"], re.M))
+
+
+def test_ai_answers():
+    from due_crew.planner import ai
+    from due_crew.planner import ops as O
+    doc, tree, ctx = _ai_plan()
+    before = json.dumps(doc, sort_keys=True)
+    answer = {"ops": [{"op": "move", "date": "u1", "to": "2026-10-23", "bogus": 1, "seed": 7},
+                      {"op": "fly", "date": "u1"},
+                      {"op": "move", "date": "Nope", "to": "2026-10-23"},
+                      {"op": "move_from", "date": "2026-10-26 Heart failure", "days": 1},
+                      {"op": "set_for", "date": "u3", "event": "Cardio quiz"}],
+              "say": "Shock a day later"}
+    ops, refused = ai.answer_ops("words", answer, doc, ctx)
+    check("ai: an answer's good ops kept in order, checked (refs made ids), unknown fields stripped",
+          [(o["op"], o["date"]) for o in ops] == [("move", "u1"), ("move_from", "u3")]
+          and "bogus" not in ops[0] and ops[0]["seed"] != 7, ops)
+    check("ai: an op nobody knows, one naming a date that isn't there and one that changes nothing are each said, never applied",
+          [w for _o, w in refused] == ["There's no change called fly.", "No date on the plan is Nope.",
+                                      "Nothing to change: the plan has that already."]
+          and json.dumps(doc, sort_keys=True) == before, refused)
+    many = [{"op": "rename", "date": "u1", "name": f"Shock {i}"} for i in range(O.OPS_MAX + 5)]
+    ops, refused = ai.answer_ops("words", {"ops": many}, doc, ctx)
+    check("ai: OPS_MAX changes at most; the rest said, not tried",
+          len(ops) == O.OPS_MAX and len(refused) == 5 and all("wasn't tried" in w for _o, w in refused), (len(ops), refused[:1]))
+    pasted = ("Here's the change:\n```json\n{\"ops\": [{\"op\": \"move\", \"date\": \"u1\", \"to\": \"2026-10-23\"}], "
+              "\"say\": \"Shock a day later\"}\n```\nAnything else?")
+    read = ai.OwnAI.read(pasted)
+    check("ai: a pasted answer's JSON is read out of its code fence and the words around it; a bare list is its ops; none is None",
+          read == {"ops": [{"op": "move", "date": "u1", "to": "2026-10-23"}], "say": "Shock a day later"}
+          and ai.OwnAI.read('[{"op": "move", "date": "u1", "to": "2026-10-23"}]') == {"ops": [{"op": "move", "date": "u1", "to": "2026-10-23"}]}
+          and ai.OwnAI.read("Sorry, I can't help with that.") is None and ai.say_of(read) == "Shock a day later")
+    ops, refused = ai.answer_ops("words", pasted, doc, ctx)
+    check("ai: a pasted answer goes through the same checks", [o["op"] for o in ops] == ["move"] and not refused)
+    req = ai.request_for("pick", doc, tree, ref="u2")
+    ops, refused = ai.answer_ops("pick", {"tags": ["tag:Cardio::Valves::Valve_disease", "tag:Renal::Made_up"]}, doc, ctx, req)
+    check("ai: a pick keeps to the paths it was given: an invented one is said, the rest go on the date it was asked about",
+          [(o["op"], o["date"], o["tags"]) for o in ops] == [("add_cards", "u2", ["Cardio::Valves::Valve_disease"])]
+          and refused and "Renal::Made_up" in refused[0][1], (ops, refused))
+    ops, refused = ai.answer_ops("pick", {"ops": [{"op": "add_cards", "date": "u1", "tags": ["Cardio::Valves"]}]}, doc, ctx, req)
+    check("ai: a pick for another date is refused", not ops and refused[0][1] == "That's not the date it was asked about.")
+    sreq = ai.request_for("scope", doc, tree, ref="Cardio quiz", said="the shock lecture")
+    got = []
+    ai.StandIn().run(sreq, lambda a, w: got.append(a))
+    ops, refused = ai.answer_ops("scope", got[0], doc, ctx, sreq)
+    check("ai: the stand-in's scope (its rules, said as its) becomes set_for on the quiz it was asked about",
+          [(o["op"], o["date"], o["event"]) for o in ops] == [("set_for", "u1", "e1")] and "stand-in" in got[0]["say"], (got, ops))
+    ops, refused = ai.answer_ops("scope", {"dates": ["u1", "zz"]}, doc, ctx, sreq)
+    check("ai: a scope's date it wasn't given is refused", len(ops) == 1 and "zz" in refused[0][1], refused)
+    ops, refused = ai.answer_ops("plan", "```\n2026-10-30 | Renal | tag:Renal\n# Renal's whole tag fits.\n```", doc, ctx)
+    check("ai: Plan the dates' answer is plan lines: one text op, added (the whole plan only when asked)",
+          [(o["op"], o["mode"]) for o in ops] == [("text", "add")] and not refused, (ops, refused))
+    whole = ai.request_for("plan", doc, tree, whole=True)
+    ops, refused = ai.answer_ops("plan", {"text": "2026-10-30 | Renal | tag:Renal"}, doc, ctx, whole)
+    check("ai: ...and in the whole plan's place when the request said so", [o["mode"] for o in ops] == ["replace"], (ops, refused))
+    ops, refused = ai.answer_ops("calendar", {"sessions": [
+        {"date": "2026-10-29", "kind": "lecture", "title": "Arrhythmias"}, {"date": "2026-11-02", "kind": "exam", "title": "Cardio exam"},
+        {"date": "not a day", "title": "x"}, {"date": "2026-10-30", "title": "Fall break"}]}, doc, ctx)
+    check("ai: a calendar's sessions on a plan: a date for a lecture, an event for an exam; a bad day and a break left out",
+          [(o["op"], o["day"], o["name"]) for o in ops] == [("add_date", "2026-10-29", "Arrhythmias"),
+                                                           ("add_event", "2026-11-02", "Cardio exam")], ops)
+    check("ai: check makes no changes; its lines are the # lines, or the notes",
+          ai.answer_ops("check", {"notes": ["x"]}, doc, ctx) == ([], [])
+          and ai.check_notes("# Problem: Shock opens after the quiz\n# Tradeoff: two videos on one day\nfine") ==
+          ["Problem: Shock opens after the quiz", "Tradeoff: two videos on one day"]
+          and ai.check_notes({"notes": ["  one  ", ""]}) == ["one"])
+    check("ai: an answer with nothing in it is said", ai.answer_ops("words", {"say": "done"}, doc, ctx)[1][0][1]
+          == "That answer has no changes in it.")
+
+
+class _FakeMcpHost:
+    """mcp.Server's host, as mcp_host.Host is in Anki: my plans, a plan,
+    the deck's tree, today, the drafts kept as their JSON (a fresh Draft each
+    read, as plan_drafts.json gives one), and who heard of a change."""
+
+    def __init__(self, plans, raws, tree, today):
+        self._plans, self.raws, self._tree, self._today = plans, raws, tree, today
+        self.drafts, self.heard, self.calls, self.refuse_keeps, self.gone = {}, [], [], 0, False
+
+    def live(self):
+        if self.gone:
+            from due_crew.planner import mcp
+            raise mcp.Unavailable("Anki changed profile or account. Try again.")
+
+    def plans(self):
+        self.calls.append("plans")
+        return json.loads(json.dumps(self._plans))
+
+    def plan(self, pid):
+        self.calls.append(("plan", pid))
+        return json.loads(json.dumps(self.raws[pid]))
+
+    def tree(self, pid):
+        return self._tree
+
+    def today(self):
+        return self._today
+
+    def draft(self, pid):
+        from due_crew.planner.draft import Draft
+        data = self.drafts.get(pid)
+        return Draft.from_json(pid, json.loads(data)) if data else None
+
+    def keep_draft(self, pid, d):
+        if self.refuse_keeps:
+            self.refuse_keeps -= 1
+            return False  # Your plans changed it meanwhile
+        self.drafts[pid] = json.dumps(d.to_json()) if d is not None and len(d) else None
+        return True
+
+    def changed(self, pid):
+        self.heard.append(pid)
+
+
+def _mcp_post(port, body, token="t0k3n-for-tests", host=None, origin=None, raw=None, path="/mcp", method="POST"):
+    import http.client
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=20)
+    headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
+    if token is not None:
+        headers["Authorization"] = f"Bearer {token}"
+    if host is not None:
+        headers["Host"] = host
+    if origin is not None:
+        headers["Origin"] = origin
+    data = raw if raw is not None else (json.dumps(body).encode() if body is not None else None)
+    conn.request(method, path, body=data, headers=headers)
+    r = conn.getresponse()
+    text = r.read()
+    conn.close()
+    return r.status, (json.loads(text) if text else None)
+
+
+def _mcp_big(port, n):
+    """A POST that says it's n bytes: the status, its body never sent."""
+    import http.client
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=20)
+    conn.putrequest("POST", "/mcp")
+    for k, v in (("Content-Type", "application/json"), ("Authorization", "Bearer t0k3n-for-tests"), ("Content-Length", str(n))):
+        conn.putheader(k, v)
+    conn.endheaders()
+    status = conn.getresponse().status
+    conn.close()
+    return status
+
+
+def _mcp_world():
+    from due_crew.planner import mcp
+    doc, tree, _ctx = _ai_plan()
+    plans = [{"id": "p1", "name": "MS2 Block 2", "role": "owner", "followers": 14, "ownerName": "Sammy"},
+             {"id": "p2", "name": "Dre's renal", "role": "follower", "followers": 3, "ownerName": "Dre"}]
+    raws = {"p1": {"id": "p1", "name": "MS2 Block 2", "role": "owner", "version": 4, "doc": doc},
+            "p2": {"id": "p2", "name": "Dre's renal", "role": "follower", "version": 9, "doc": dict(doc)}}
+    host = _FakeMcpHost(plans, raws, tree, "2026-10-20")
+    return host, mcp.Server(host, "t0k3n-for-tests", 0, cache_secs=0).start()
+
+
+def _tool(port, name, args, mid=1):
+    status, got = _mcp_post(port, {"jsonrpc": "2.0", "id": mid, "method": "tools/call", "params": {"name": name, "arguments": args}})
+    res = (got or {}).get("result") or {}
+    return status, res, res.get("structuredContent")
+
+
+def test_mcp_server():
+    import contextlib
+    import io
+    from due_crew.planner import mcp
+    host, srv = _mcp_world()
+    port = srv.port
+    said = io.StringIO()
+
+    class Tee:  # what the server prints, kept; the checks' own lines still shown
+        def __init__(self, real):
+            self.real = real
+
+        def write(self, x):
+            said.write(x)
+            return self.real.write(x)
+
+        def flush(self):
+            self.real.flush()
+    try:
+        with contextlib.redirect_stdout(Tee(sys.stdout)), contextlib.redirect_stderr(Tee(sys.stderr)):
+            status, got = _mcp_post(port, {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+                "protocolVersion": "2025-03-26", "capabilities": {}, "clientInfo": {"name": "test", "version": "1"}}})
+            res = got["result"]
+            check("mcp: initialize echoes a version it speaks, names itself with the add-on's version, offers tools",
+                  status == 200 and res["protocolVersion"] == "2025-03-26" and res["serverInfo"] == {"name": "due-crew", "version": mcp.version()}
+                  and res["capabilities"] == {"tools": {}} and "Nothing is sent from here" in res["instructions"] and mcp.version(), got)
+            got = _mcp_post(port, {"jsonrpc": "2.0", "id": 2, "method": "initialize", "params": {"protocolVersion": "1999-01-01"}})[1]
+            check("mcp: ...and its newest for one it doesn't", got["result"]["protocolVersion"] == mcp.PROTOCOLS[0])
+            status, got = _mcp_post(port, {"jsonrpc": "2.0", "method": "notifications/initialized"})
+            check("mcp: a notification gets 202 and no body", status == 202 and got is None, (status, got))
+            status, got = _mcp_post(port, {"jsonrpc": "2.0", "id": 3, "method": "tools/list"})
+            tools = {t["name"]: t for t in got["result"]["tools"]}
+            check("mcp: tools/list: the six tools, each with its input's JSON Schema and words",
+                  sorted(tools) == ["add_to_changes", "deck_tags", "list_plans", "ops_vocabulary", "preview_changes", "read_plan"]
+                  and all(t["inputSchema"]["type"] == "object" and t["description"] for t in tools.values()), sorted(tools))
+            _s, res, data = _tool(port, "list_plans", {})
+            check("mcp: list_plans: mine with my role and how many follow, the ones I follow by id and name; no one's name",
+                  data == {"authored": [{"id": "p1", "name": "MS2 Block 2", "role": "owner", "followers": 14}],
+                           "following": [{"id": "p2", "name": "Dre's renal"}]} and "Sammy" not in json.dumps(res), data)
+            _s, res, data = _tool(port, "read_plan", {"plan": "ms2 block 2"})
+            check("mcp: read_plan (by name too): its text, its dates by id with cards, sources and the quiz each preps for",
+                  data["id"] == "p1" and "2026-10-26 | Heart failure | tag:Cardio::HF | for Cardio quiz" in data["text"]
+                  and data["dates"][2] == {"id": "u3", "day": "2026-10-26", "name": "Heart failure", "cards": 12,
+                                           "sources": ["tag:Cardio::HF"], "tested_on": {"id": "e1", "day": "2026-10-28", "name": "Cardio quiz"}}
+                  and data["dates"][1]["sources"] == ["2 picked notes"] and data["events"][0]["id"] == "e1"
+                  and data["waiting"] == [] and json.loads(res["content"][0]["text"]) == data, data)
+            _s, res, data = _tool(port, "deck_tags", {"plan": "p1", "under": "Cardio::Valves"})
+            check("mcp: deck_tags: paths under a tag with their card counts",
+                  data["tags"] == [{"path": "tag:Cardio::Valves::Valve_disease", "cards": 8, "name": "Cardio › Valves › Valve disease"}]
+                  and data["more"] == 0, data)
+            data = _tool(port, "deck_tags", {"plan": "p1", "find": "shock", "limit": 1})[2]
+            check("mcp: deck_tags: words to find, a limit", [t["path"] for t in data["tags"]] == ["tag:Cardio::Shock"], data)
+            data = _tool(port, "ops_vocabulary", {})[2]
+            check("mcp: ops_vocabulary is ai.vocabulary's, for an AI", data["ops"] == __import__("due_crew.planner.ai", fromlist=["x"]).vocabulary(for_ai=True))
+            ops = [{"op": "move", "date": "u1", "to": "2026-10-23"}, {"op": "move", "date": "Nope", "to": "2026-10-23"}]
+            _s, res, data = _tool(port, "preview_changes", {"plan": "p1", "ops": ops})
+            check("mcp: preview_changes: each change in words with who it touches, one that won't go on with why; nothing kept",
+                  [e["verb"] for c in data["changes"] for e in c["entries"]] == ["Moved"]
+                  and data["changes"][0]["entries"][0]["who"] == "Not open for anyone yet"
+                  and data["refused"] == [{"op": ops[1], "why": "No date on the plan is Nope."}]
+                  and not any(host.drafts.values()) and not host.heard and not res["isError"], data)
+            _s, res, data = _tool(port, "add_to_changes", {"plan": "p1", "ops": ops, "why": "Shock a day later"})
+            kept = json.loads(host.drafts["p1"])
+            check("mcp: add_to_changes: under the plan as changes waiting (its version, who asked, the line), an open Your plans told",
+                  len(data["added"]) == 1 and len(data["refused"]) == 1 and data["waiting"] == 1
+                  and kept["version"] == 4 and [(o["op"], o["by"], o["why"]) for o in kept["ops"]] == [("move", "ai", "Shock a day later")]
+                  and host.heard == ["p1"] and mcp.SEND in data["note"], (data, kept))
+            data = _tool(port, "read_plan", {"plan": "p1"})[2]
+            check("mcp: read_plan shows the plan with its changes waiting, and says them",
+                  data["waiting"][0]["verb"] == "Moved" and next(d["day"] for d in data["dates"] if d["id"] == "u1") == "2026-10-23"
+                  and data["note"].startswith("The plan with the 1 change waiting under it, not sent."), data)
+            data = _tool(port, "preview_changes", {"plan": "p1", "ops": [{"op": "move", "date": "u1", "to": "2026-10-23"}]})[2]
+            check("mcp: a preview is tried on the plan as the changes waiting leave it",
+                  data["refused"][0]["why"] == "Nothing to change: the plan has that already.", data)
+            host.refuse_keeps = 1
+            data = _tool(port, "add_to_changes", {"plan": "p1", "ops": [{"op": "move", "date": "u2", "to": "2026-10-24"}]})[2]
+            check("mcp: a draft that changed in Anki meanwhile is read again and the change kept over it",
+                  data["waiting"] == 2 and len(json.loads(host.drafts["p1"])["ops"]) == 2 and host.heard == ["p1", "p1"], data)
+            host.raws["p1"]["version"] = 5  # a co-author's save
+            data = _tool(port, "add_to_changes", {"plan": "p1", "ops": [{"op": "rename", "date": "u3", "name": "HF"}]})[2]
+            check("mcp: a co-author's save since: the changes waiting are put on the plan as it is now",
+                  json.loads(host.drafts["p1"])["version"] == 5 and data["waiting"] == 3, data)
+            before = dict(host.drafts)
+            _s, res, data = _tool(port, "add_to_changes", {"plan": "p2", "ops": ops})
+            check("mcp: a plan I follow takes no changes: an error result in words, nothing kept",
+                  res["isError"] and "only its authors" in res["content"][0]["text"] and host.drafts == before, res)
+            _s, res, _d = _tool(port, "read_plan", {"plan": "nope"})
+            check("mcp: a plan I don't have is an error result, never a crash", res["isError"] and "list_plans" in res["content"][0]["text"])
+            _s, res, _d = _tool(port, "add_to_changes", {"plan": "p1", "ops": "not a list"})
+            check("mcp: ops that aren't a list are an error result", res["isError"], res)
+            status, got = _mcp_post(port, {"jsonrpc": "2.0", "id": 9, "method": "tools/call", "params": {"name": "send_plan"}})
+            check("mcp: an unknown tool is invalid params; an unknown method isn't found",
+                  got["error"]["code"] == -32602 and _mcp_post(port, {"jsonrpc": "2.0", "id": 10, "method": "resources/list"})[1]["error"]["code"] == -32601)
+            status, got = _mcp_post(port, [{"jsonrpc": "2.0", "id": 11, "method": "ping"},
+                                           {"jsonrpc": "2.0", "method": "notifications/initialized"},
+                                           {"jsonrpc": "2.0", "id": 12, "method": "tools/list"}])
+            check("mcp: a batch: an answer for each request, none for its notification",
+                  status == 200 and [a["id"] for a in got] == [11, 12] and got[0]["result"] == {}, got)
+            status, got = _mcp_post(port, [{"jsonrpc": "2.0", "method": "notifications/initialized"}])
+            check("mcp: a batch of notifications alone gets 202", status == 202 and got is None)
+            check("mcp: no token, or the wrong one, is 401",
+                  _mcp_post(port, {"jsonrpc": "2.0", "id": 1, "method": "ping"}, token=None)[0] == 401
+                  and _mcp_post(port, {"jsonrpc": "2.0", "id": 1, "method": "ping"}, token="t0k3n-for-test")[0] == 401)
+            check("mcp: a Host that isn't this computer's address is 403 (DNS rebinding); localhost is fine",
+                  _mcp_post(port, {"jsonrpc": "2.0", "id": 1, "method": "ping"}, host=f"evil.example:{port}")[0] == 403
+                  and _mcp_post(port, {"jsonrpc": "2.0", "id": 1, "method": "ping"}, host="127.0.0.1:1")[0] == 403
+                  and _mcp_post(port, {"jsonrpc": "2.0", "id": 1, "method": "ping"}, host=f"localhost:{port}")[0] == 200)
+            check("mcp: an Origin that isn't this computer's is 403; none, null or a local page's is fine",
+                  _mcp_post(port, {"jsonrpc": "2.0", "id": 1, "method": "ping"}, origin="https://evil.example")[0] == 403
+                  and _mcp_post(port, {"jsonrpc": "2.0", "id": 1, "method": "ping"}, origin="http://localhost.evil.example")[0] == 403
+                  and _mcp_post(port, {"jsonrpc": "2.0", "id": 1, "method": "ping"}, origin="null")[0] == 200
+                  and _mcp_post(port, {"jsonrpc": "2.0", "id": 1, "method": "ping"}, origin="http://localhost:6274")[0] == 200)
+            check("mcp: GET is 405 (no stream), another path 404",
+                  _mcp_post(port, None, method="GET")[0] == 405 and _mcp_post(port, {"jsonrpc": "2.0", "id": 1, "method": "ping"}, path="/x")[0] == 404)
+            status, got = _mcp_post(port, None, raw=b"{not json")
+            check("mcp: a body that isn't JSON is a parse error", status == 400 and got["error"]["code"] == -32700, got)
+            check("mcp: more than 1 MB is turned away before it's read", _mcp_big(port, mcp.BODY_MAX + 1) == 413)
+            check("mcp: setup to copy: the shim with the port, the token in its environment (never its command line); or the address and header",
+                  json.loads(mcp.setup(4242, "tok", "/x/mcp_shim.py", python="python3")) == {"mcpServers": {"due-crew": {
+                      "command": "python3", "args": ["-I", "/x/mcp_shim.py", "--port", "4242"], "env": {"DUE_CREW_MCP_TOKEN": "tok"}}}}
+                  and json.loads(mcp.setup(4242, "tok", "", http=True))["mcpServers"]["due-crew"] == {
+                      "type": "http", "url": "http://127.0.0.1:4242/mcp", "headers": {"Authorization": "Bearer tok"}})
+            host.gone = True  # signed out, or another profile: nothing kept is shown past it
+            _s, res, _d = _tool(port, "list_plans", {})
+            check("mcp: once its profile or account is gone, a tool says so", res["isError"]
+                  and res["content"][0]["text"] == "Anki changed profile or account. Try again.", res)
+    finally:
+        srv.stop()
+    printed = "\n".join(x for x in said.getvalue().splitlines() if not x.startswith(("PASS ", "FAIL ", "     ")))
+    check("mcp: nothing it was sent is logged, the token least of all", "t0k3n" not in printed and "Shock" not in printed, printed[:300])
+    import socket
+    try:
+        socket.create_connection(("127.0.0.1", port), timeout=2).close()
+        gone = False
+    except OSError:
+        gone = True
+    check("mcp: stopped, it's gone (and only ever on 127.0.0.1)", gone and srv.port is None and srv.url == "")
+
+
+def test_mcp_shim():
+    import subprocess
+    shim = os.path.join(REPO, "tools", "due_crew_mcp.py")
+    check("mcp shim: the add-on's copy is tools/due_crew_mcp.py, byte for byte",
+          open(shim, "rb").read() == open(os.path.join(REPO, "due_crew", "planner", "mcp_shim.py"), "rb").read())
+    host, srv = _mcp_world()
+    try:
+        env = dict(os.environ, DUE_CREW_MCP_TOKEN="t0k3n-for-tests")
+        lines = (json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}}) + "\n"
+                 + json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}) + "\n"
+                 + json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "list_plans", "arguments": {}}}) + "\n")
+        got = subprocess.run([sys.executable, "-I", shim, "--port", str(srv.port)], input=lines, capture_output=True, text=True,
+                             timeout=60, env=env)
+        out = [json.loads(x) for x in got.stdout.splitlines() if x.strip()]
+        check("mcp shim: each line on stdin to the server, each answer a line on stdout, none for the notification",
+              got.returncode == 0 and [a["id"] for a in out] == [1, 2] and out[0]["result"]["serverInfo"]["name"] == "due-crew"
+              and out[1]["result"]["structuredContent"]["authored"][0]["id"] == "p1", got.stdout + got.stderr)
+        bad = subprocess.run([sys.executable, "-I", shim, "--port", str(srv.port), "--token", "wrong"], input=lines,
+                             capture_output=True, text=True, timeout=60)
+        check("mcp shim: a wrong token is said on stderr, and an error answers each request",
+              [a["id"] for a in map(json.loads, bad.stdout.splitlines())] == [1, 2] and "token doesn't match" in bad.stderr
+              and "wrong" not in bad.stderr, bad.stdout + bad.stderr)
+    finally:
+        srv.stop()
+    dead = subprocess.run([sys.executable, "-I", shim, "--port", str(srv_port_free())], input=lines, capture_output=True,
+                          text=True, timeout=60, env=env)
+    answers = [json.loads(x) for x in dead.stdout.splitlines() if x.strip()]
+    check("mcp shim: Anki not running is said on stderr (never the token), each request answered with an error",
+          dead.returncode == 0 and "Anki isn't running" in dead.stderr and "t0k3n" not in dead.stderr
+          and [a["id"] for a in answers] == [1, 2] and all("error" in a for a in answers), dead.stdout + dead.stderr)
+    none = subprocess.run([sys.executable, "-I", shim], input="", capture_output=True, text=True, timeout=60,
+                          env={k: v for k, v in os.environ.items() if not k.startswith("DUE_CREW_MCP")})
+    check("mcp shim: no port or token: says what it needs", none.returncode == 2 and "--port" in none.stderr, none.stderr)
+
+
+def srv_port_free():
+    """A port nothing listens on (bound, then let go)."""
+    import socket
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
 
 
 def main():

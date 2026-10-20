@@ -1814,6 +1814,10 @@ def _on_profile_close():
         rooms.on_close()  # 2.12: closing Anki leaves the room
     except Exception:
         traceback.print_exc()
+    try:
+        app.ai_app(on=False)  # Your AI app's local server goes with the profile
+    except Exception:
+        traceback.print_exc()
 
 
 gui_hooks.deck_browser_will_render_content.append(_on_render)

@@ -694,6 +694,21 @@ class FakeWorker:
         return ([{"id": pid, "name": q["name"], "kind": "owner", "by": by(q)} for pid, q in offers]
                 + [{"id": pid, "name": q["name"], "kind": "coauthor", "by": by(q)} for _at, pid, q in asked])[:10]
 
+    def _post_with_save(self, pid, me, body, version):
+        """plans.ts postWithSave: a save's line to followers (round five's
+        send), {posted: {id, text}}; past five a day {posted: {error}}, the
+        save kept all the same. {} with none."""
+        if "post" not in body:
+            return {}
+        text = _one_line(body["post"], 200)
+        now = int(time.time())
+        if sum(1 for x in self.plan_posts.get(pid, []) if x["at"] > now - 86400) >= 5:
+            return {"posted": {"error": "too_many_posts"}}
+        self.add_post(pid, me, text)
+        self.plan_posts[pid][-1]["withSave"] = True
+        self.plan_posts[pid] = sorted(self.plan_posts[pid], key=lambda x: -x["id"])[:50]
+        return {"posted": {"id": self._post_n, "text": text}}
+
     def add_post(self, pid, uid, text):
         """3.7.3, setup helper: an author's post to followers."""
         self._post_n = getattr(self, "_post_n", 0) + 1
@@ -2249,8 +2264,13 @@ class FakeWorker:
                 doc = self._keep_idr(self._plan_doc(body["doc"]), p["doc"]) if "doc" in body else p["doc"]
             except Bad as e:  # the Worker's V.bad("plan") is "bad_plan"
                 raise Bad(e.status, e.code if e.code.startswith("bad_") else "bad_" + e.code) from None
+            if "post" in body:  # plans.ts put: a post that comes with a save is checked before it
+                raw = body["post"]
+                if not isinstance(raw, str) or not 1 <= len(raw) <= 800 or not _one_line(raw, 200):
+                    raise Bad(400, "bad_post")
             if name == p["name"] and line == p["line"] and doc == p["doc"] and audience == p["audience"] and squad == p["squad"]:
-                return 200, self._plan_view(pid, me)  # nothing changed: nothing written
+                out = self._plan_view(pid, me)  # nothing changed: nothing written (but its line, as postWithSave)
+                return 200, dict(out, **self._post_with_save(pid, me, body, None))
             if body["version"] != p["version"]:
                 raise Bad(409, "stale", {"version": p["version"]})
             self.plan_prev[pid] = p["doc"]
@@ -2261,7 +2281,7 @@ class FakeWorker:
             self.plan_log.append((pid, p["version"], me, " ".join(str(body.get("summary") or "").split())[:120]
                                   or "changed the plan", int(time.time())))
             self._count("plans")
-            return 200, self._plan_view(pid, me)
+            return 200, dict(self._plan_view(pid, me), **self._post_with_save(pid, me, body, p["version"]))
         if rest[1:] == ["undo"] and method == "POST":  # plans.ts undo: what the latest save replaced, back
             if not self._writes(p, me):
                 raise Bad(403, "not_author")

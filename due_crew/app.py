@@ -328,6 +328,27 @@ def _reset_runtime(keep_sync=False):
         planner_flow.close_all()
     except Exception:
         traceback.print_exc()
+    try:  # Your AI app's local server: started again for this profile and account, or off
+        ai_app()
+    except Exception:
+        traceback.print_exc()
+
+
+def ai_app(on=True):
+    """Your AI app's local server (planner/mcp_host.py): on as this
+    computer's switch says, with a profile open and signed in (follow), or
+    off (on=False: the profile closing). Loaded only once the switch is on."""
+    import sys
+    loaded = sys.modules.get(f"{__package__}.planner.mcp_host")
+    if loaded is None:
+        m = cfg().get("mcp")
+        if not on or not (isinstance(m, dict) and m.get("on") is True):
+            return
+        from .planner import mcp_host as loaded
+    if on:
+        loaded.follow()
+    else:
+        loaded.stop()
 
 
 # ---- late-bound hooks, set by __init__ (which owns rendering + refresh) ----

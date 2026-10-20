@@ -5506,7 +5506,7 @@ def test_plans_tab_v33():
     check("plans: the card isn't on Crew › Decks, nor under Insights", "Step 1 · Dre’s plan" not in decks)
     none = board.render(data, {"period": "today"}, 0, plans=empty, you={"tab": "plans", "plans": empty})
     check("You › Plans: following nothing, three ways in",
-          "Follow a plan" in none and "planlibrary" in none and "planmake" in none and "dc-plancode" in none)
+          "Follow a plan" in none and "planlibrary" in none and "planstart" in none and "dc-plancode" in none)
     hidden = board.render(data, {"period": "plans", "hidden_tabs": ["plans", "decks"]}, 0, plans=plans,
                           you={"tab": "plans", "plans": plans})
     check("tabs: hidden in Settings, gone, and a saved Plans period falls back to Crew's Today",
@@ -7236,13 +7236,13 @@ def test_plan_windows_ways_in_v393():
     check("ways in: a plan card opens in Your plans, ahead of its Plan ▾; its name escaped",
           html.index("duecrew:planyours:p1|") < html.index("duecrew:planmenu:p1|") and "MS2 &lt;Block&gt; 1" in html)
     none = board._you_plans({"cards": []})
-    check("ways in: no plan yet, the head row still, and Make one offers a calendar and a deck",
-          "dc-ph" in none and "duecrew:planstart|" in none and "duecrew:planmake|" in none
-          and "From a calendar&hellip;" in none and "From a deck&hellip;" in none)
+    check("ways in: no plan yet, the head row still, and Make one is the one New plan (round five)",
+          "dc-ph" in none and "duecrew:planstart|" in none and "duecrew:planmake|" not in none
+          and "New plan&hellip;" in none and "From a deck&hellip;" not in none)
     calls = []
-    saved = (pflow.open_plans, pflow.open_start, pflow.open_qids, plan_flow.new_plan_menu)
+    saved = (pflow.open_plans, pflow.open_new, pflow.open_qids, plan_flow.new_plan_menu)
     pflow.open_plans = lambda select=None, tab=None: calls.append(("plans", select))
-    pflow.open_start = lambda: calls.append(("start",))
+    pflow.open_new = lambda: calls.append(("start",))
     pflow.open_qids = lambda did=None: calls.append(("qids", did))
     plan_flow.new_plan_menu = lambda: calls.append(("new",))
     try:
@@ -7250,7 +7250,7 @@ def test_plan_windows_ways_in_v393():
         for m in ("planyours", "planyours:p1", "planyours:bad id!", "plannew", "planstart", "planmissed:20", "planmissed:x"):
             send(m)
     finally:
-        pflow.open_plans, pflow.open_start, pflow.open_qids, plan_flow.new_plan_menu = saved
+        pflow.open_plans, pflow.open_new, pflow.open_qids, plan_flow.new_plan_menu = saved
     check("ways in: each click reaches its window (a plan's id, nothing else, picks the plan; a deck's id the deck)",
           calls == [("plans", None), ("plans", "p1"), ("plans", None), ("new",), ("start",), ("qids", 20), ("qids", None)], calls)
     v = {"right": {}, "target": 90}
@@ -7268,8 +7268,8 @@ def test_plan_windows_ways_in_v393():
     ix = board.settings_index({"tab": "board", "signed_in": True}, {"accent": "green"})
     wins = {x["l"]: x for x in ix if x.get("p")}
     check("ways in: Find a setting finds the three windows by the words people use, after every setting",
-          set(wins) == {"Your plans", "New plan from a calendar", "Missed questions"}
-          and "calendar" in wins["New plan from a calendar"]["k"] and "missed" in wins["Missed questions"]["k"]
+          set(wins) == {"Your plans", "New plan", "Missed questions"}
+          and "calendar" in wins["New plan"]["k"] and "missed" in wins["Missed questions"]["k"]
           and wins["Your plans"]["p"] == "planyours" and all(x.get("p") for x in ix[-3:]), list(wins))
     check("ways in: a window picked in Find a setting is opened, not looked for on a tab",
           "if (h.p) { pycmd('duecrew:' + h.p + '|' + window.dcBK); return; }" in board.FIND_JS)
@@ -11542,7 +11542,7 @@ def test_plan_tags_builder_v381():
           '"Take them off those dates too"' in builder and '"Keep the tags"' in builder and '"Replace anyway"' in builder
           and "What these dates already opened stays open." in builder)
     check("r2 site: the tagging prompt gives the root, the tags as they stand and the #cards rule",
-          "In Anki each one becomes the tag DueCrew::${tagRootNow()}::NAME" in builder
+          "In Anki each one becomes the tag DueCrew::${a.root}::NAME" in builder and "root: tagRootNow()" in builder
           and "This plan's tags now, as they stand" in builder and "#cards column" in builder
           and "if (ids + m <= 2000)" in builder)
     check("r2 site: a plan tag's tag inside a search is matched whole (renaming SLG 1 leaves SLG 12), as plans.ts reroot bounds it",

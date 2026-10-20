@@ -669,7 +669,7 @@ def main(out):
         # 3.9.3: Plans ▸, everything about plans, the plan windows among it
         plans = [a.menu() for a in subs[0].actions() if a.menu()]
         got = [a.text() or "—" for a in plans[0].actions()] if len(plans) == 1 else []
-        if got != ["Your plans…", "New plan from a calendar…", "New plan from a deck…", "Follow a plan…", "—",
+        if got != ["Your plans…", "New plan…", "Follow a plan…", "—",
                    "Missed questions…", "Export cards for my AI…"]:
             raise RuntimeError(f"tools menu: Plans {got}")
         # 3.8.0: Study what's next carries Ctrl+Shift+S; Show on the Decks screen is a check
@@ -960,6 +960,55 @@ def main(out):
             raise RuntimeError("remark: a card with none starts empty, Save off")
         shoot(dlg, os.path.join(out, "plan-remark-new.png"))
 
+    def ai_app():
+        """Your AI app (planner/mcp_dialog.py): the local MCP server's switch, off;
+        then on, its address, the token hidden, and the setup to copy (the shim's,
+        the token in its environment; the address with the bearer header)."""
+        import json as _json
+        from due_crew.planner import mcp as MCP
+        from due_crew.planner.mcp_dialog import AiAppDialog, SWITCH
+
+        class AiOps:
+            s = {"on": False, "running": False, "port": 0, "url": "", "token": "", "said": ""}
+
+            def state(self):
+                return dict(self.s)
+
+            def set_on(self, on):
+                self.s = (dict(self.s, on=True, running=True, port=48123, url="http://127.0.0.1:48123/mcp",
+                               token=self.s["token"] or "tok-" + "x" * 28) if on
+                          else dict(self.s, on=False, running=False, url=""))
+                return self.state()
+
+            def new_token(self):
+                self.s = dict(self.s, token="tok-" + "y" * 28)
+                return self.state()
+
+            def setup(self, http=False):
+                return MCP.setup(self.s["port"], self.s["token"], "/Users/sam/Library/Application Support/Anki2/addons21/2035408484/planner/mcp_shim.py", http=http)
+
+        ops = AiOps()
+        dlg = AiAppDialog(None, ops)
+        if heading_of(dlg) != "Your AI app" or dlg.switch.text() != SWITCH or dlg.switch.isChecked() or not dlg.on_box.isHidden():
+            raise RuntimeError(f"ai app: off {heading_of(dlg)!r}, {dlg.switch.isChecked()}")
+        shoot(dlg, os.path.join(out, "planner-ai-app-off.png"))
+        dlg = AiAppDialog(None, ops)
+        dlg.show()
+        dlg.switch.setChecked(True)  # as a click: set_on, then its address and token
+        settle(100)
+        if (dlg.on_box.isHidden() or dlg.address.text() != "http://127.0.0.1:48123/mcp"
+                or dlg.token.echoMode() != QtWidgets.QLineEdit.EchoMode.Password or not dlg.setup_btn.isEnabled()):
+            raise RuntimeError(f"ai app: on {dlg.address.text()!r}, {dlg.setup_btn.isEnabled()}")
+        stdio = _json.loads(ops.setup())["mcpServers"]["due-crew"]
+        http = _json.loads(ops.setup(http=True))["mcpServers"]["due-crew"]
+        if ("--port" not in stdio["args"] or "48123" not in stdio["args"] or any(ops.s["token"] in a for a in stdio["args"])
+                or stdio["env"]["DUE_CREW_MCP_TOKEN"] != ops.s["token"] or http["headers"]["Authorization"] != "Bearer " + ops.s["token"]):
+            raise RuntimeError(f"ai app: the setup {stdio} {http}")
+        dlg.setup_btn.click()
+        if dlg.said.text() != "Setup copied." or dlg.said.textFormat() != QtCore.Qt.TextFormat.PlainText:
+            raise RuntimeError(f"ai app: Copy setup said {dlg.said.text()!r}")
+        shoot(dlg, os.path.join(out, "planner-ai-app-on.png"))
+
     def _col_texts(tree, col):
         """Every row's text in one column of a tree, its children too."""
         out = []
@@ -1217,7 +1266,7 @@ def main(out):
         author's: plain text."""
         import sqlite3
         from due_crew import plans as P
-        from due_crew.planner import actions as PA, edits as PE, flow as PF, model as PM, remote as PR
+        from due_crew.planner import actions as PA, flow as PF, remote as PR
         from due_crew.planner.picker import Picker
         from due_crew.planner.qid_window import QidWindow
         from due_crew.planner.window import PlanWindow
@@ -1294,15 +1343,49 @@ def main(out):
             def my_squads(self):
                 return [{"id": "sq1", "name": "Study buddies"}]
 
-            def pip(self):
-                return True
+            drafts = {}   # this render's plan_drafts.json
+            nosug = {}
+
+            def draft(self, pid):
+                from due_crew.planner.draft import Draft
+                return Draft.from_json(pid, self.drafts.get(str(pid)))
+
+            def keep_draft(self, pid, d):
+                if d is None or not len(d):
+                    self.drafts.pop(str(pid), None)
+                else:
+                    self.drafts[str(pid)] = json.loads(json.dumps(d.to_json()))
+
+            def turned_down(self, pid):
+                return list(self.nosug.get(str(pid), []))
+
+            def turn_down(self, pid, uid, path):
+                self.nosug.setdefault(str(pid), []).append((uid, path))
+
+            def send(self, owner, pid, version, doc, summary, post, done):
+                done(PR.save(CLIENT, pid, version, doc, summary, post))
+
+            def now_words(self):
+                return "Tue 2:14 pm"
+
+            def site_url(self, path):
+                return "https://duecrew.com" + path
+
+            def my_doc(self, plan):
+                return plan["doc"]
 
             def follow_plan(self):
                 reopened.append("follow")
 
+            def new_plan(self):
+                reopened.append("new")
+
             def reopen(self, pid):
                 reopened.append(pid)
 
+        import json
+        from due_crew.planner import plan_tab as PTB, send as PS, shape as PSH, text_tab as PT
+        from due_crew.planner import ops as PO
         reopened = []
         mine = PR.my_plans(CLIENT)
 
@@ -1311,377 +1394,318 @@ def main(out):
             if plans:
                 w.pick.setCurrentIndex(w.pick.findData(pid))  # earlier renders left plans of Sam's in the store
             return w
+
+        def unit(uid):
+            return next(u for u in STORE.plans[pid]["doc"]["units"] if u["id"] == uid)
+
+        yes = lambda *a, **k: True  # noqa: E731 (a confirm said yes to)
         dlg = PlanWindow_()
-        if not dlg.pick.currentText().startswith("MS2 Block 2") or not dlg.author():
-            raise RuntimeError(f"planner: {dlg.pick.currentText()!r}, author {dlg.author()}")
-        dlg.resize(980, 640)
-        dlg._go_to(("date", "u1"))
-        groups = [dlg.table.topLevelItem(i).text(0) for i in range(dlg.table.topLevelItemCount())]
-        if groups[:2] != ["Videos", "    Cardio › Heart Failure"] or "Systems" not in groups or "Bank" not in groups:
-            raise RuntimeError(f"planner: the date's sources {groups}")
+        tab = dlg.pages["plan"]
+        shown = [dlg.tabs.tabText(i) for i in range(dlg.tabs.count()) if dlg.tabs.isTabVisible(i)]
+        if not dlg.pick.currentText().startswith("MS2 Block 2") or not dlg.author() or shown != ["Plan", "Followers", "Sharing"]:
+            raise RuntimeError(f"planner: an author's tabs {shown}, {dlg.pick.currentText()!r}")
+        dlg.resize(1180, 760)
+        tab.pick(("date", "u1"))
+        dp = tab.date_panel
+        chips = [c.words.text() for c in dp.chips.findChildren(PTB.Chip)]
+        if "Videos › Cardio › Heart Failure" not in chips or not any(c.startswith("Systems") for c in chips) \
+                or not any(c.startswith("Bank") for c in chips) or dp.name.text() != "Heart failure":
+            raise RuntimeError(f"planner: the date's chips {chips}, {dp.name.text()!r}")
+        if tab.shape_box.isHidden() or "→" not in tab.shape_words.text() or not tab.send_box.isHidden():
+            raise RuntimeError(f"planner: the shape line {tab.shape_words.text()!r}")
+        if [w for w in dlg.findChildren(QtWidgets.QLabel) if w.pixmap() is not None and not w.pixmap().isNull()]:
+            raise RuntimeError("planner: Pip in the plan window (round five: none)")
         shoot(dlg, os.path.join(out, "planner-date.png"))
-        dlg = PlanWindow_()
-        dlg.resize(980, 640)
-        dlg._go_to(("date", "u2"))
-        if dlg.title.textFormat() != QtCore.Qt.TextFormat.PlainText or "<b>" not in dlg.title.text():
+        tab.pick(("date", "u2"))
+        if dp.name.text() != "HF drugs <b>" or "<b>" not in dlg.pages["plan"].side.tabText(0):
             raise RuntimeError("planner: a date's name went in as markup")
-        dlg.table.setCurrentItem(dlg.table.topLevelItem(1))
-        if dlg.browse_btn.text() != "Show these in Browse" or dlg.change_btn.isHidden():
-            raise RuntimeError("planner: a picked source, or an author's Change")
-        dlg._apply(lambda d: PE.add_sources(d, "u2", [f"{root}::#Sketches::Pharm::HF_Drugs"])[0], {"u2"})
-        u2 = next(u for u in STORE.plans[pid]["doc"]["units"] if u["id"] == "u2")
+        # nobody follows it: a change saves at once, and Undo ▾ takes it back
+        dlg.change({"op": "add_cards", "date": "u2", "tags": [f"{root}::#Sketches::Pharm::HF_Drugs"]})
+        u2 = unit("u2")
         if (STORE.plans[pid]["version"] != 2 or u2["tags"][-1] != f"{root}::#Sketches::Pharm::HF_Drugs" or u2.get("n") != 13
-                or not dlg.status.text().startswith("Saved") or dlg.picked != ("date", "u2") or dlg.undo_btn.isHidden()):
+                or not dlg.status.text().startswith("Saved") or tab.picked != ("date", "u2") or dlg.draft is not None):
             raise RuntimeError(f"planner: a change saved: v{STORE.plans[pid]['version']}, {u2}, {dlg.status.text()!r}")
         shoot(dlg, os.path.join(out, "planner-saved.png"))
-        dlg._apply(lambda d: PE.add_sources(d, "u2", [f"{root}::#Sketches::Pharm::HF_Drugs"])[0], {"u2"})
-        if STORE.plans[pid]["version"] != 2 or "Nothing to change" not in dlg.status.text():
+        dlg.change({"op": "add_cards", "date": "u2", "tags": [f"{root}::#Sketches::Pharm::HF_Drugs"]})
+        if STORE.plans[pid]["version"] != 2 or "has those already" not in dlg.status.text():
             raise RuntimeError(f"planner: the same change again saves nothing: {dlg.status.text()!r}")
-        dlg._can_undo((pid, 2))
+        dlg._undo_entries()
+        if not [a for a in dlg.undo_menu.actions() if a.text() == "Undo your last save"]:
+            raise RuntimeError(f"planner: Undo ▾ {[a.text() for a in dlg.undo_menu.actions()]}")
         dlg._undo()
-        u2 = next(u for u in STORE.plans[pid]["doc"]["units"] if u["id"] == "u2")
-        if STORE.plans[pid]["version"] != 3 or f"{root}::#Sketches::Pharm::HF_Drugs" in u2["tags"] or dlg.status.text() != "Undone.":
-            raise RuntimeError(f"planner: Undo: v{STORE.plans[pid]['version']}, {u2['tags']}, {dlg.status.text()!r}")
+        if STORE.plans[pid]["version"] != 3 or f"{root}::#Sketches::Pharm::HF_Drugs" in unit("u2")["tags"] or dlg.status.text() != "Undone.":
+            raise RuntimeError(f"planner: Undo: v{STORE.plans[pid]['version']}, {dlg.status.text()!r}")
         STORE.plans[pid]["version"] += 1  # someone saves on the site meanwhile: the window's next change goes on theirs
-        dlg._apply(lambda d: PE.rename(d, "u2", "HF drugs"), {"u2"})
-        u2 = next(u for u in STORE.plans[pid]["doc"]["units"] if u["id"] == "u2")
-        if u2["name"] != "HF drugs" or not dlg.status.text().startswith("Saved"):
-            raise RuntimeError(f"planner: a stale save, put on theirs: {u2['name']!r}, {dlg.status.text()!r}")
-        dlg = PlanWindow_()
-        dlg.resize(980, 640)
-        dlg._go_to(("week", day(0)))
-        shoot(dlg, os.path.join(out, "planner-week.png"))
-        dlg = PlanWindow_()
-        dlg.resize(980, 640)
-        dlg._go_to(("event", "e1"))
-        if dlg.study_btn.text() != "Study for it":
-            raise RuntimeError("planner: an event's Study")
-        shoot(dlg, os.path.join(out, "planner-event.png"))
-        # 3.9.3: the builder's day panel in Your plans, through Change ▾ and New ▾
-        from due_crew.planner import date_dialogs as DD
-        dlg = PlanWindow_()
-        dlg.resize(980, 640)
-        dlg._go_to(("date", "u1"))
-        rows = [dlg.table.topLevelItem(i) for i in range(dlg.table.topLevelItemCount())]
-        dlg.table.setCurrentItem(next(r for r in rows if r.text(0).strip() == "Cardio › Heart Failure"))
-        if dlg.menu.actions():
-            raise RuntimeError("planner: Change ▾ is made when it opens, not at every click")
-        dlg._change_menu()  # what opening it does
-        items = [a.text() for a in dlg.menu.actions()]
-        for want in ("Add from the deck…", "Add cards: a search or IDs…", "Take the picked one off", "Split the picked one…",
-                     "A note for followers on it…", "Prep for", "Spread evenly to its due date", "To do…",
-                     "Make it a review day…", "Rename…", "Move to another day…", "Due date…", "Delete this date…"):
-            if want not in items:
-                raise RuntimeError(f"planner: Change ▾ on a date: {items}")
-        news = [a.text() for a in dlg.new_menu.actions()]
-        if news[:3] != ["New date…", "New quiz or exam…", "New review day…"] or "New plan from a calendar…" not in news:
-            raise RuntimeError(f"planner: New ▾ {news}")
-        dlg._apply(lambda d: PE.set_review(d, day(5), "u1", "u3"), keep=("review", day(5)))
-        review = dlg._find(("review", day(5)))
-        if review is None or "Review · Heart failure – Shock" not in review.text(0) or dlg.picked != ("review", day(5)):
-            raise RuntimeError(f"planner: a review day saved: {dlg.picked}, {review.text(0) if review else None}")
-        dlg._change_menu()
-        if [a.text() for a in dlg.menu.actions() if a.text()] != ["Change its dates…", "No review day"]:
-            raise RuntimeError(f"planner: Change ▾ on a review day: {[a.text() for a in dlg.menu.actions()]}")
-        shoot(dlg, os.path.join(out, "planner-review.png"))
-        dlg._apply(lambda d: PE.add_search(d, "u3", 'tag:#Big_Step1_v3::#Videos::Cardio::Shock -tag:*Extra*', 7), {"u3"},
-                   keep=("date", "u3"))
-        u3 = next(u for u in STORE.plans[pid]["doc"]["units"] if u["id"] == "u3")
-        if u3.get("search") != ['tag:#Big_Step1_v3::#Videos::Cardio::Shock -tag:*Extra*'] or u3.get("sn", {}).get(u3["search"][0]) != 7:
-            raise RuntimeError(f"planner: a search saved: {u3}")
-        dlg._apply(lambda d: PE.set_todo(d, "u3", [{"k": "watch", "t": "Shock, part 2", "url": "https://example.org/shock"}]),
-                   {"u3"}, keep=("date", "u3"))
-        if "Watch: Shock, part 2" not in dlg.todo.text():
-            raise RuntimeError(f"planner: a to-do saved: {dlg.todo.text()!r}")
-        shoot(dlg, os.path.join(out, "planner-search.png"))
-        idx = P.DeckIndex(col, 1)
-        col.find_cards = lambda q: sorted(idx.tag_cards(q.split("tag:", 1)[1].split()[0])) if "tag:" in q else []
-        add = DD.AddCardsDialog(None, "Add cards to Thu 22", lambda q: len(idx.search_cards(q)))
-        add.box.setPlainText("tag:#Big_Step1_v3::#Videos::Cardio::Shock")
-        if add.go.isEnabled() or not add._typing.isActive():
-            raise RuntimeError("planner: Add cards counts once the typing pauses")
-        add._said()  # what the pause does
-        if not add.go.isEnabled() or "finds 7 cards here" not in add.said.text():
-            raise RuntimeError(f"planner: Add cards, a search: {add.said.text()!r}")
-        shoot(add, os.path.join(out, "planner-addcards.png"))
-        add.box.setPlainText("1688392011234, 1688392011235\n1688392011236")
-        add._said()
-        if not add.kinds.isVisibleTo(add) or add.what() != ("nids", [1688392011234, 1688392011235, 1688392011236]):
-            raise RuntimeError(f"planner: Add cards, note IDs: {add.what()}")
-        shoot(add, os.path.join(out, "planner-addids.png"))
-        add.box.setPlainText("is:due tag:x")
-        add._said()
-        if add.go.isEnabled() or "each person" not in add.said.text():
-            raise RuntimeError("planner: Add cards takes no search about one person's Anki")
-        lines = DD.LinesDialog(None, "To do on Mon 19", [{"k": "watch", "t": "Heart failure 1–2"}, {"k": "read", "t": "pp. 290–295"}])
-        shoot(lines, os.path.join(out, "planner-todo.png"))
-        every = DD.LinesDialog(None, "Every week", [{"k": "do", "t": "Practice questions", "r": "4"}], every=True)
-        if every.lines() != [{"k": "do", "t": "Practice questions", "r": "4"}]:
-            raise RuntimeError(f"planner: Every week's lines {every.lines()}")
-        shoot(every, os.path.join(out, "planner-every.png"))
-        rv = DD.ReviewDialog(None, "Review day · Sat 24", [("u1", "Mon 19 · Heart failure"), ("u2", "Tue 20 · HF drugs"),
-                                                          ("u3", "Thu 22 · Shock")])
-        if rv.value() != ("set", "u1", "u3"):
-            raise RuntimeError(f"planner: a review day's dates {rv.value()}")
-        shoot(rv, os.path.join(out, "planner-reviewday.png"))
-        sp = DD.SplitDialog(None, "Heart Failure", 18, "Acute 6 · Chronic 9 · the rest 3", 20, 2)
-        shoot(sp, os.path.join(out, "planner-split.png"))
-        # 3.9.3: Lay it out, the builder's side panel and pace row: tick, pace, Fill, the plan's tags
-        dlg = PlanWindow_()
-        dlg.resize(1100, 720)
-        lay = dlg.pages["layout"]
-        dlg._show_tab("layout")
-        if dlg.tabs.currentWidget() is not lay:
-            raise RuntimeError("planner: Lay it out isn't an author's tab")
-        views = [lay.view.itemText(i) for i in range(lay.view.count())]
-        if views != ["Resource", "System", "Other", "Deck"]:
-            raise RuntimeError(f"planner: Lay it out's views {views}")
-        lay.find.setText("#book")
-        if not lay._typing.isActive():
-            raise RuntimeError("planner: Lay it out's search waits for a pause in the typing")
-        lay._typing.stop()
-        lay._fill_tree()  # what the pause does
-        book = lay.tree.topLevelItem(0)
-        if book is None or book.data(0, QtCore.Qt.ItemDataRole.UserRole) != f"tag:{root}::#Book":
-            raise RuntimeError(f"planner: Lay it out's search {book.text(0) if book else None}")
-        book.setCheckState(0, QtCore.Qt.CheckState.Checked)
-        lay.mode.setCurrentIndex(lay.mode.findData("daily"))
-        if lay.cover != {f"tag:{root}::#Book"} or lay.fill_btn.isHidden() or lay.fill_btn.text() != "Fill at 20 a day" \
-                or not lay.how.text().startswith("done ≈"):
-            raise RuntimeError(f"planner: ticked {lay.cover}, {lay.fill_btn.text()!r}, {lay.how.text()!r}")
-        shoot(dlg, os.path.join(out, "planner-layout.png"))
-        lay._fill(False)
-        doc = STORE.plans[pid]["doc"]
-        made = [u for u in doc["units"] if u.get("tags") == [f"{root}::#Book"]]
-        if (doc.get("pace") != {"mode": "daily", "days": [1] * 7, "daily": 20, "cover": [f"tag:{root}::#Book"]}
-                or len(made) != 1 or made[0]["opens"] != day(4) or made[0]["name"] != "Book"
-                or lay.said.text() != f"Put 6 cards on {P.fmt_day(day(4))}." or lay.dirty or lay.said.pose != "hop"):
-            raise RuntimeError(f"planner: Fill: {doc.get('pace')}, {made}, {lay.said.text()!r}, Pip {lay.said.pose}")
-        shoot(dlg, os.path.join(out, "planner-layout-filled.png"))  # everything ticked on a date: Pip hopping
-        lay._fill(False)
-        if lay.said.text() != "Everything ticked is on the calendar already.":
-            raise RuntimeError(f"planner: Fill again: {lay.said.text()!r}")
-        # a save that doesn't go keeps the ticks waiting; one that does saves them as the builder does
-        lay.cover = set(lay.cover) | {f"tag:{root}::#Sketches"}
-        lay.dirty = True
-        lay._marks()  # what a tick does
-        lay._paced()
-        real_save = dlg.ops.save
-        dlg.ops.save = lambda _w, _pid, _v, _doc, _sum, done: done(None)
-        lay._save_pace()
-        dlg.ops.save = real_save
-        if not lay.dirty or f"tag:{root}::#Sketches" not in lay.cover or "aren't saved" not in lay.ticked.text():
-            raise RuntimeError(f"planner: a pace that didn't save lost its ticks: {lay.dirty}, {lay.cover}, {lay.ticked.text()!r}")
-        lay._save_pace()
-        if lay.dirty or STORE.plans[pid]["doc"]["pace"].get("cover") != [f"tag:{root}::#Book", f"tag:{root}::#Sketches"]:
-            raise RuntimeError(f"planner: the pace saved: {STORE.plans[pid]['doc'].get('pace')}")
-        # a plan with an end and no pace yet opens as Finish by (fromDoc); a wheel over the start scrolls the page
-        was = dlg.raw
-        dlg.raw = dict(was, doc={k: v for k, v in dict(was["doc"], end=day(30)).items() if k != "pace"})
-        lay.plan_loaded(dlg)
-        if lay.mode.currentData() != "end" or lay.end_in.isHidden() \
-                or lay.start_in.focusPolicy() != QtCore.Qt.FocusPolicy.StrongFocus:
-            raise RuntimeError(f"planner: Finish by isn't how a plan with an end opens: {lay.mode.currentData()}")
-        dlg.raw = was
-        lay.plan_loaded(dlg)
-        lay._put(f"tag:{root}::#Sketches")
-        doc = STORE.plans[pid]["doc"]
-        if not any(u.get("tags") == [f"{root}::#Sketches"] and u["opens"] == day(5) for u in doc["units"]):
-            raise RuntimeError(f"planner: Put it on a day: {[(u['opens'], u.get('tags')) for u in doc['units']]}")
-        dlg._apply(lambda d: dict(d, tagroot="MS2", tags=[{"id": "t1", "name": "SLG 12", "notes": ["g1"]}]))
-        dlg._apply(lambda d: PE.set_every(d, [{"k": "do", "t": "Practice questions", "r": "4"}]))
-        dlg._apply(lambda d: PE.rename_plan_tag(d, "t1", "SLG 12b"))
-        if [lay.ptags.topLevelItem(i).text(0) for i in range(lay.ptags.topLevelItemCount())] != ["SLG 12b"] \
-                or "Practice questions" not in lay.every.text() or lay.rename_btn.isHidden():
-            raise RuntimeError(f"planner: Lay it out's tags and lines: {STORE.plans[pid]['doc'].get('tags')}, {dlg.status.text()!r}")
-        lay.ptags.setCurrentItem(lay.ptags.topLevelItem(0))
-        shoot(dlg, os.path.join(out, "planner-layout-saved.png"))
-        # 3.9.3: Text: Add dates read and saved; the whole plan with a date left out
-        from due_crew.planner import text_tab as PT
-        txt = dlg.pages["text"]
-        dlg._show_tab("text")
-        if dlg.tabs.currentWidget() is not txt:
-            raise RuntimeError("planner: Text isn't an author's tab")
-        txt.box.setPlainText(f"{day(6)} | Shock again | tag:{root}::#Videos::Cardio::Shock | read: chapter 9\n"
-                             f"{day(4)} | event | Shock quiz\n# Pick in Anki: the two shock cases")
-        txt._read()
-        rows = [txt.preview.topLevelItem(i).text(0) for i in range(txt.preview.topLevelItemCount())]
-        if rows != [P.fmt_day(day(6))] or txt.go_btn.isHidden() or txt.go_btn.text() != "Add to the plan" \
-                or "1 date, 1 event." not in txt.status.text() or "To pick in Anki" not in txt.said.text():
-            raise RuntimeError(f"planner: Text, Add dates read: {rows}, {txt.status.text()!r}, {txt.said.text()!r}")
-        dlg.resize(1100, 720)
-        shoot(dlg, os.path.join(out, "planner-text-add.png"))
-        txt._go()
-        doc = STORE.plans[pid]["doc"]
-        if not any(u.get("name") == "Shock again" and u["opens"] == day(6) for u in doc["units"]) \
-                or not any(e.get("name") == "Shock quiz" for e in doc.get("events") or []) or txt.box.toPlainText() \
-                or not txt.status.text().startswith("Added. Now "):
-            raise RuntimeError(f"planner: Text, Add to the plan: {txt.status.text()!r}")
-        txt.modes.button(1).click()
-        whole = txt.box.toPlainText().split("\n")
-        if not any("| Shock again |" in x for x in whole) or not any(x.startswith("tag | SLG 12b") for x in whole):
-            raise RuntimeError(f"planner: Text, the whole plan: {whole}")
-        txt.box.setPlainText("\n".join(x for x in whole if "| Shock again |" not in x))
-        txt._read()
-        if "Takes off 1 date" not in txt.said.text() or txt.go_btn.text() != "Replace the plan's dates":
-            raise RuntimeError(f"planner: Text, the whole plan read: {txt.said.text()!r}, {txt.go_btn.text()!r}")
-        dlg.resize(1100, 720)
-        shoot(dlg, os.path.join(out, "planner-text-whole.png"))
-        was_confirm, PT.confirm = PT.confirm, lambda *a, **k: True
-        idx0, tree0 = dlg.idx, dlg.deck_tree()
+        dlg.change({"op": "rename", "date": "u2", "name": "HF drugs"})
+        if unit("u2")["name"] != "HF drugs" or not dlg.status.text().startswith("Saved"):
+            raise RuntimeError(f"planner: a stale save, put on theirs: {dlg.status.text()!r}")
+        # a date's name points at a deck tag no date has: + Add (sure), and ✕ remembered
+        dlg.change({"op": "add_date", "day": day(5), "name": "Heart failure book"}, keep="made")
+        made = next(u for u in STORE.plans[pid]["doc"]["units"] if u.get("name") == "Heart failure book")
+        if tab.picked != ("date", made["id"]) or tab.sugg.get(made["id"], [None])[0][:1] != (f"{root}::#Book::Cardio::Heart_Failure",) \
+                or tab.sure_box.isHidden():
+            raise RuntimeError(f"planner: suggestions {tab.sugg}, picked {tab.picked}")
+        shoot(dlg, os.path.join(out, "planner-suggest.png"))
+        tab._add_sure()
+        if unit(made["id"]).get("tags") != [f"{root}::#Book::Cardio::Heart_Failure"] or not tab.sure_box.isHidden():
+            raise RuntimeError(f"planner: Add the sure ones: {unit(made['id'])}")
+        # the shape: Change…
+        sh = PSH.ShapeDialog(dlg)
+        sh.mode.button(0).click()  # Up to N a day
+        sh.daily.setValue(25)
+        sh.ends.setCurrentIndex(sh.ends.findText("A day…"))
+        sh.end_day.setDate(QtCore.QDate.fromString(day(30), "yyyy-MM-dd"))
+        sh.taper.setValue(2)
+        ops_ = sh.ops()
+        if [o["op"] for o in ops_] != ["set_end", "set_pace", "set_phases"] or sh.go.text() != "Save" \
+                or "no new cards" not in sh.preview_words.text():
+            raise RuntimeError(f"planner: Change… {ops_}, {sh.go.text()!r}")
+        shoot(sh, os.path.join(out, "planner-shape.png"))
+        sh.start.setDate(sh.start.date().addDays(7))
+        if not sh.ops() or sh.ops()[0] != {"op": "shift_all", "days": 7} or "Saving moves" not in sh.preview_words.text():
+            raise RuntimeError(f"planner: Change…, the start: {sh.ops()}, {sh.preview_words.text()!r}")
+        shoot(sh, os.path.join(out, "planner-shape-moves.png"))
+        # the deck beside it: ticks add to the picked date; with none picked, what the plan covers, laid out
+        tab.tick_for("u3")
+        if tab.deck.bar.isHidden() or "Ticking adds to" not in tab.deck.bar_words.text() or tab.side.currentIndex() != 1:
+            raise RuntimeError("planner: + From the deck")
+        shoot(dlg, os.path.join(out, "planner-deck-date.png"))
+        tab.deck._back()
+        tab.side.setCurrentIndex(1)
+        tab.deck.set_target(None)
+        tab.deck.find.setText("#sketches")
+        tab.deck._typing.stop()
+        tab.deck.fill_tree()
+        it = tab.deck.tree.topLevelItem(0)
+        it.setCheckState(0, QtCore.Qt.CheckState.Checked)
+        if tab.deck.cover != {f"tag:{root}::#Sketches"} or tab.deck.go.isHidden() or "ticked, not on a date" not in tab.deck.fill_words.text():
+            raise RuntimeError(f"planner: the deck's ticks {tab.deck.cover}, {tab.deck.fill_words.text()!r}")
+        shoot(dlg, os.path.join(out, "planner-deck-fill.png"))
+        tab.deck._lay(tab.deck._go_how)
+        if not any(u.get("tags") == [f"{root}::#Sketches"] for u in STORE.plans[pid]["doc"]["units"]):
+            raise RuntimeError(f"planner: Lay them out: {dlg.status.text()!r}")
+        tab.side.setCurrentIndex(0)
+        # the text: plan lines pasted in, read, then added; the whole plan as text
+        td = PT.TextDialog(dlg, False, f"{day(6)} | Shock again | tag:{root}::#Videos::Cardio::Shock | read: chapter 9\n"
+                                      f"{day(4)} | event | Shock quiz")
+        if td.tab.go_btn.isHidden() or td.tab.go_btn.text() != "Add to the plan" or "1 date, 1 event." not in td.tab.status.text():
+            raise RuntimeError(f"planner: plan lines read: {td.tab.status.text()!r}")
+        shoot(td, os.path.join(out, "planner-text-add.png"))
+        td.tab._go()
+        if not any(u.get("name") == "Shock again" for u in STORE.plans[pid]["doc"]["units"]) or td.result() != 1:
+            raise RuntimeError(f"planner: plan lines added: {td.tab.status.text()!r}")
+        td = PT.TextDialog(dlg, True)
+        if not any("| Shock again |" in x for x in td.tab.box.toPlainText().split("\n")):
+            raise RuntimeError("planner: the whole plan as text")
+        shoot(td, os.path.join(out, "planner-text-whole.png"))
+        # a course calendar pasted in: its sessions as dates, its quiz as a quiz
+        tab.paste.setPlainText(f"WEEK 3\n{P.fmt_day(day(8))}  LEC  Arrhythmias\n{P.fmt_day(day(9))}  QUIZ  Cardio quiz 2")
+        was = PTB.confirm
+        PTB.confirm = yes
         try:
-            txt._go()
+            tab._show_changes()
         finally:
-            PT.confirm = was_confirm
-        if dlg.idx is not idx0 or dlg.deck_tree() is not tree0:
-            raise RuntimeError("planner: a save read the deck again (its index and tree stay)")
+            PTB.confirm = was
         doc = STORE.plans[pid]["doc"]
-        if any(u.get("name") == "Shock again" for u in doc["units"]) or txt.box.toPlainText() != PT.T.to_text(doc):
-            raise RuntimeError(f"planner: Text, Replace: {txt.status.text()!r}")
-        # 3.9.3: Updates (a post, and taking it back) and History (every save; Undo on the latest)
-        upd = dlg.pages["updates"]
-        dlg._show_tab("updates")
-        upd.box.setText("Week 3 moved: Shock is Thursday now.")
-        upd._post()
-        if [upd.list.topLevelItem(i).text(1) for i in range(upd.list.topLevelItemCount())][:1] != ["Week 3 moved: Shock is Thursday now."] \
-                or upd.list.topLevelItem(0).text(0) != "You" or not upd.status.text().startswith("Posted") or upd.status.pose != "hello":
-            raise RuntimeError(f"planner: Updates, a post: {upd.status.text()!r}, Pip {upd.status.pose}")
-        upd.list.setCurrentItem(upd.list.topLevelItem(0))
-        dlg.resize(1100, 720)
-        shoot(dlg, os.path.join(out, "planner-updates.png"))
-        upd._remove()
-        if STORE.plan_posts.get(pid):
-            raise RuntimeError("planner: Updates, a post taken back")
-        hist = dlg.pages["history"]
-        dlg._show_tab("history")
-        hist._got(hist._now(), [])  # a new plan's: no saves yet, Pip peeking in
-        if hist.said.pose != "peek" or not hist.said.text().startswith("No saves yet") or not hist.list.isHidden():
-            raise RuntimeError(f"planner: History, none yet: {hist.said.text()!r}, Pip {hist.said.pose}")
-        shoot(dlg, os.path.join(out, "planner-history-empty.png"))
-        dlg.ops.pip = lambda: False  # Settings › Pip off: the words alone
-        hist._got(hist._now(), [])
-        del dlg.ops.pip
-        if hist.said.pose is not None or hist.said.pip is not None:
-            raise RuntimeError("planner: History drew Pip with Settings › Pip off")
-        hist._read()  # the window's closed between shots: what opening the tab does
-        rows = [hist.list.topLevelItem(i).text(1) for i in range(hist.list.topLevelItemCount())]
-        if len(rows) < 5 or hist.undo_btn.isHidden() or hist.list.topLevelItem(0).text(0) != "You":
-            raise RuntimeError(f"planner: History: {rows}")
-        dlg.resize(1100, 720)
-        shoot(dlg, os.path.join(out, "planner-history.png"))
-        v = STORE.plans[pid]["version"]
-        hist._undo()
-        if STORE.plans[pid]["version"] != v + 1 or not STORE.plan_log[-1][3].startswith("undid:"):
-            raise RuntimeError(f"planner: History's Undo: v{STORE.plans[pid]['version']}, {dlg.status.text()!r}")
-        # 3.9.3: Progress (its squad's counts, and a date most of the class hasn't finished) and Settings
-        import json
-        from due_crew.planner import settings_tab as ST
+        if not any(u.get("name") == "Arrhythmias" for u in doc["units"]) or not any(e.get("name") == "Cardio quiz 2" for e in doc["events"]) \
+                or tab.paste.toPlainText():
+            raise RuntimeError(f"planner: a calendar pasted: {dlg.status.text()!r}")
+        # with people following: changes wait under the plan, Review and send is one save with its line
         for who, prog in (("kai", {"u4": [1, 1, 1], "u1": [1, 1, 2]}), ("dre", {"u4": [1, 0, 3]}), ("lee", {"u4": [1, 0, 3], "u1": [1, 0, 2]})):
             STORE.follows[(pid, who)] = {"share": True, "paused": False, "sched": None, "progress": json.dumps(prog)}
         STORE.follows[(pid, "mo")] = {"share": False, "paused": False, "sched": None, "progress": None}
-        prg = dlg.pages["progress"]
-        dlg._show_tab("progress")
-        prg._read()
-        hints = [w.text() for w in prg.hints.findChildren(QtWidgets.QLabel)]
-        if prg.list.topLevelItemCount() != len(STORE.plans[pid]["doc"]["units"]) or not prg.said.text().startswith("3 of the 4 following") \
-                or not any(t.startswith("Antibiotics: 1 of 3 finished") for t in hints):
-            raise RuntimeError(f"planner: Progress: {prg.said.text()!r}, {hints}")
-        dlg.resize(1100, 720)
-        shoot(dlg, os.path.join(out, "planner-progress.png"))
-        STORE.follows[(pid, "dre")]["progress"] = json.dumps({"u4": [1, 3, 3]})
-        prg._read()
-        words = [w.text() for w in prg.hints.findChildren(QtWidgets.QLabel)]
-        if "The class is keeping up with every date so far." not in words \
-                or not [w for w in prg.hints.findChildren(QtWidgets.QLabel) if w.pixmap() is not None and not w.pixmap().isNull()]:
-            raise RuntimeError(f"planner: Progress, keeping up: {words}")
-        shoot(dlg, os.path.join(out, "planner-progress-keeping-up.png"))
-        STORE.follows[(pid, "dre")]["progress"] = json.dumps({"u4": [1, 0, 3]})
-        prg._read()
-        later = {u["id"]: u["opens"] for u in STORE.plans[pid]["doc"]["units"] if u["opens"] > TODAY}
-        was_confirm, ST.confirm = ST.confirm, lambda *a, **k: True
+        dlg._load()
+        v = STORE.plans[pid]["version"]
+        tab.pick(("date", "u3"))
+        dp._nudge(1)
+        dlg.change({"op": "set_todo", "date": "u3", "lines": [{"k": "watch", "t": "Shock, part 2"}]})
+        if STORE.plans[pid]["version"] != v or not dlg.draft or len(dlg.draft) != 2 or tab.send_box.isHidden() \
+                or "2 changes, not sent" not in tab.send_words.text() or unit("u3")["opens"] != day(3):
+            raise RuntimeError(f"planner: changes wait: {tab.send_words.text()!r}, v{STORE.plans[pid]['version']}")
+        shoot(dlg, os.path.join(out, "planner-waiting.png"))
+        sd = PS.SendDialog(dlg)
+        if not sd.why().startswith("Shock moved") or sd.go.text() != "Send to 4" or "Not open for anyone yet" not in \
+                " ".join(w.text() for w in sd.findChildren(QtWidgets.QLabel)):
+            raise RuntimeError(f"planner: Review and send: {sd.why()!r}, {sd.go.text()!r}")
+        shoot(sd, os.path.join(out, "planner-send.png"))
+        dlg.send(sd.why() + " The school moved the lecture.")
+        if STORE.plans[pid]["version"] != v + 1 or unit("u3")["opens"] != day(4) or dlg.draft is not None \
+                or not dlg.status.text().startswith("Sent to 4") or not STORE.plan_posts.get(pid):
+            raise RuntimeError(f"planner: Send: v{STORE.plans[pid]['version']} (was {v}), u3 {unit('u3')['opens']} vs {day(4)}, "
+                               f"draft {dlg.draft}, posts {STORE.plan_posts.get(pid)}, {dlg.status.text()!r}")
+        dlg._undo_entries()
+        if not [a for a in dlg.undo_menu.actions() if a.text().startswith("Undo your send of Tue 2:14 pm (2 changes)")]:
+            raise RuntimeError(f"planner: Undo ▾ after a send {[a.text() for a in dlg.undo_menu.actions()]}")
+        shoot(dlg, os.path.join(out, "planner-sent.png"))
+        # a co-author saves while changes wait: they go on theirs when it loads
+        dlg.change({"op": "rename", "date": "u3", "name": "Shock and sepsis"})
+        STORE.plans[pid]["version"] += 1
+        dlg._load()
+        if not dlg.draft or dlg.draft.version != STORE.plans[pid]["version"] or dlg.unit("u3")["name"] != "Shock and sepsis":
+            raise RuntimeError("planner: waiting changes, replayed on a co-author's save")
+        dlg.take_change(0)
+        if dlg.draft is not None or not tab.send_box.isHidden():
+            raise RuntimeError("planner: a waiting change taken out")
+        # an AI app's change (what the local MCP server adds): marked in Review and send, its reason the line
+        dlg.change({"op": "rename", "date": "u3", "name": "Shock and sepsis", "by": "ai", "why": "Named as the course names it."})
+        sd = PS.SendDialog(dlg)
+        if sd.why() != "Named as the course names it." or "From your AI app" not in \
+                [w.text() for w in sd.findChildren(QtWidgets.QLabel)]:
+            raise RuntimeError(f"planner: an AI app's change in Review and send: {sd.why()!r}")
+        shoot(sd, os.path.join(out, "planner-send-ai.png"))
+        sd.reject()
+        dlg.take_change(0)
+        # Followers: how far they are, a date behind (Push… waits with the changes), the posts
+        fol = dlg.pages["followers"]
+        dlg._show_tab("followers")
+        labels = [w.text() for w in fol.findChildren(QtWidgets.QLabel)]
+        if fol.head.text() != "4 following" or not any("haven't finished it" in t for t in labels):
+            raise RuntimeError(f"planner: Followers {fol.head.text()!r}, {labels}")
+        fol.posts.box.setText("Week 3 moved: Shock is Thursday now.")
+        fol.posts._post()
+        if not fol.posts.status.text().startswith("Posted"):
+            raise RuntimeError(f"planner: a post {fol.posts.status.text()!r}")
+        shoot(dlg, os.path.join(out, "planner-followers.png"))
+        from due_crew.planner import followers_tab as PFT
+        was = PFT.confirm
+        PFT.confirm = yes
         try:
-            prg._breather()
+            fol._breather()
         finally:
-            ST.confirm = was_confirm
-        moved = {u["id"]: u["opens"] for u in STORE.plans[pid]["doc"]["units"] if u["id"] in later}
-        if not later or any(moved[k] <= v for k, v in later.items()):
-            raise RuntimeError(f"planner: Progress, Give the class a day: {later} -> {moved}")
-        st = dlg.pages["settings"]
-        dlg._show_tab("settings")
-        if st.name.text() != STORE.plans[pid]["name"] or st.squad.count() != 2 or st.delete_btn.isHidden() or not st.leave_btn.isHidden():
-            raise RuntimeError(f"planner: Settings: {st.name.text()!r}, {st.squad.count()} squads")
+            PFT.confirm = was
+        if not dlg.draft or dlg.draft.ops[-1]["op"] != "breather":
+            raise RuntimeError("planner: Push the dates still to come waits with the changes")
+        dlg.draft.clear()
+        dlg.ops.keep_draft(pid, None)
+        dlg._load()
+        # Sharing: its code and link first; the name and line; the deck's link (a change)
+        st = dlg.pages["sharing"]
+        dlg._show_tab("sharing")
+        if st.code.text() != STORE.plans[pid]["code"] or st.squad.count() != 2 or st.delete_btn.isHidden():
+            raise RuntimeError(f"planner: Sharing: {st.code.text()!r}")
         st.line.setText("Organ systems, one a week.")
         st._save_meta()
-        if STORE.plans[pid].get("line") != "Organ systems, one a week." or not st.said.text().startswith("Saved") \
-                or st.meta_btn.isEnabled():
-            raise RuntimeError(f"planner: Settings, the name and line: {st.said.text()!r}")
-        st.url.setText("https://example.com/big-step-1")
-        st._save_url()
-        if STORE.plans[pid]["doc"].get("deckUrl") != "https://example.com/big-step-1":
-            raise RuntimeError(f"planner: Settings, the deck's link: {dlg.status.text()!r}")
-        dlg.resize(1100, 720)
-        shoot(dlg, os.path.join(out, "planner-settings.png"))
-        bar = st.findChild(QtWidgets.QScrollArea).verticalScrollBar()
-        bar.setValue(bar.maximum())
-        shoot(dlg, os.path.join(out, "planner-settings-end.png"))
-        before = set(STORE.plans)
-        st._next_year()
-        new = next(iter(set(STORE.plans) - before), None)
-        if new is None or reopened[-1:] != [new] or not STORE.plans[new]["name"].endswith("(next year)"):
-            raise RuntimeError(f"planner: Settings, Copy for next year: {st.said.text()!r}, {reopened}")
-        STORE.plans.pop(new)
-        # 3.9.3: notes on a day (Dates): a follower's, read with the plan, and one added on the picked date
-        heart = next(u for u in STORE.plans[pid]["doc"]["units"] if u["id"] == "u1")
+        if STORE.plans[pid].get("line") != "Organ systems, one a week." or not st.said.text().startswith("Saved"):
+            raise RuntimeError(f"planner: Sharing, the line: {st.said.text()!r}")
+        shoot(dlg, os.path.join(out, "planner-sharing.png"))
+        # History: every save, the latest undone
+        hd = PS.HistoryDialog(dlg)
+        hd.tab._read()
+        if hd.tab.list.topLevelItemCount() < 5 or hd.tab.undo_btn.isHidden():
+            raise RuntimeError("planner: History")
+        shoot(hd, os.path.join(out, "planner-history.png"))
+        # notes on a day, on the picked date
+        heart = unit("u1")
         STORE.follows[(pid, "ameya")] = {"share": False, "paused": False, "sched": None, "progress": None}
         STORE._note_n = 1
-        STORE.plan_notes.append({"id": 1, "plan": pid, "uid": "ameya", "day": heart["opens"], "text": "Lecture's in room 4B today",
-                                 "at": 0})
-        dlg._show_tab("dates")
+        STORE.plan_notes.append({"id": 1, "plan": pid, "uid": "ameya", "day": heart["opens"], "text": "Lecture's in room 4B today", "at": 0})
+        dlg._show_tab("plan")
         dlg._load()
-        dlg._go_to(("date", "u1"))
-        dn = dlg.day_notes
+        tab.pick(("date", "u1"))
+        dn = dp.day_notes
         dn.box.setText("Lab day, keep it light")
         dn._add()
         rows = [(dn.list.topLevelItem(i).text(0), dn.list.topLevelItem(i).text(1)) for i in range(dn.list.topLevelItemCount())]
-        if rows != [("Ameya", "Lecture's in room 4B today"), ("You", "Lab day, keep it light")] or dn.box.text() \
-                or [x["text"] for x in STORE.plan_notes if x["plan"] == pid][-1:] != ["Lab day, keep it light"]:
-            raise RuntimeError(f"planner: notes on a day: {rows}, {dn.said.text()!r}")
-        dn.list.setCurrentItem(dn.list.topLevelItem(1))
-        dlg.resize(1100, 720)
-        shoot(dlg, os.path.join(out, "planner-notes.png"))
-        dlg._go_to(("week", next(w["start"] for w in PM.weeks(STORE.plans[pid]["doc"], TODAY)
-                                 if any(u["id"] == "u1" for u in w["dates"]))))
-        if dn.list.topLevelItemCount() != 2 or not dn.box.isHidden() or "·" not in dn.list.topLevelItem(0).text(0):
-            raise RuntimeError("planner: a week's notes, by day, none added there")
-        dlg._go_to(("date", "u1"))
-        dn.list.setCurrentItem(dn.list.topLevelItem(1))
-        dn._remove()
-        if [x["text"] for x in STORE.plan_notes if x["plan"] == pid] != ["Lecture's in room 4B today"]:
-            raise RuntimeError("planner: a note taken off")
-        # 3.9.3 review: a date picked, then its plan with no dates, then a load that fails: no crash, no stale pick
+        if rows != [("Ameya", "Lecture's in room 4B today"), ("You", "Lab day, keep it light")]:
+            raise RuntimeError(f"planner: notes on a day: {rows}")
+        tab._mode("month")
+        shoot(dlg, os.path.join(out, "planner-month.png"))
+        tab._mode("list")
+        # a plan I follow: Plan (today, behind, its dates to read) and Mine
+        pid2, _code2 = STORE.add_plan("kai", "Kai's Renal", "Big Step 1", [
+            {"id": "k1", "name": "Heart failure", "opens": day(-6), "tags": [f"{root}::#Videos::Cardio::Heart_Failure"]},
+            {"id": "k2", "name": "Shock", "opens": TODAY, "tags": [f"{root}::#Videos::Cardio::Shock"]}])
+        STORE.follows[(pid2, "sam")] = {"share": True, "paused": False, "sched": None, "progress": None}
+
+        class FOps(Ops):
+            def follow_state(self, pid_):
+                return {"id": pid_, "name": "Kai's Renal", "shift": 2, "skipped": ["k1"], "own": ""}
+
+            def held_count(self, pid_):
+                return 3
+
+            def in_team(self, pid_):
+                return True
+
+        fw = PlanWindow(None, col, PR.my_plans(CLIENT), FOps(), select=pid2)
+        fw.resize(1180, 760)
+        shown = [fw.tabs.tabText(i) for i in range(fw.tabs.count()) if fw.tabs.isTabVisible(i)]
+        ft = fw.pages["plan"]
+        if shown != ["Plan", "Mine"] or fw.author() or ft.today_box.isHidden() or ft.behind_box.isHidden() \
+                or not ft.paste_row.isHidden() or not ft.shape_box.isHidden() or not fw.undo_btn.isHidden():
+            raise RuntimeError(f"planner: a follower's tabs {shown}")
+        shoot(fw, os.path.join(out, "planner-follower.png"))
+        fw._show_tab("mine")
+        mt = fw.pages["mine"]
+        if mt.later.text() != "2 days later" or mt.held.isHidden():
+            raise RuntimeError(f"planner: Mine {mt.later.text()!r}")
+        shoot(fw, os.path.join(out, "planner-mine.png"))
+        # a picked date whose plan lost its dates, then a load that fails: no crash, no stale pick
         crash = PlanWindow_()
-        crash._go_to(("date", "u1"))
+        crash.pages["plan"].pick(("date", "u1"))
         raw0, plan0 = PR.load(CLIENT, pid)
         bare = dict(raw0, doc=dict(raw0["doc"], units=[], reviews=[], events=[]))
         crash._loaded(pid, (bare, dict(plan0, doc=dict(plan0["doc"], units=[], events=[]))))
-        crash._change_menu()
-        if crash.picked is not None or "No dates on this plan yet" not in crash.meta.text():
-            raise RuntimeError(f"planner: a picked date outlived its plan's dates: {crash.picked}")
+        if crash.pages["plan"].picked is not None:
+            raise RuntimeError("planner: a picked date outlived its plan's dates")
         crash._loaded(pid, None)
-        shown = [crash.tabs.tabText(i) for i in range(crash.tabs.count()) if crash.tabs.isTabVisible(i)]
-        if shown != ["Dates"] or crash.picked is not None or "didn't load" not in crash.meta.text():
-            raise RuntimeError(f"planner: a load that failed: {shown}, {crash.meta.text()!r}")
+        if crash.pages["plan"].picked is not None or "didn't load" not in crash.status.text():
+            raise RuntimeError(f"planner: a load that failed: {crash.status.text()!r}")
         crash._load()
         if crash.busy or crash.plan is None:
-            raise RuntimeError("planner: Reload after a load that failed")
+            raise RuntimeError("planner: picked again after a load that failed")
         empty = PlanWindow_([])
-        if not empty.tabs.isHidden() or empty.welcome.isHidden() or not empty.pick.isHidden() \
-                or not [w for w in empty.welcome.findChildren(QtWidgets.QLabel) if w.pixmap() is not None and not w.pixmap().isNull()]:
-            raise RuntimeError("planner: no plans yet: the welcome, Pip waving, no tabs")
+        if not empty.tabs.isHidden() or empty.welcome.isHidden() or not empty.pick.isHidden():
+            raise RuntimeError("planner: no plans yet: the welcome, no tabs")
         [b for b in empty.welcome.findChildren(QtWidgets.QPushButton) if b.text() == "Follow a plan…"][0].click()
         if reopened[-1:] != ["follow"]:
             raise RuntimeError("planner: no plans yet: Follow a plan…")
         shoot(empty, os.path.join(out, "planner-empty.png"))
+        # New plan: the one way to start, a calendar pasted
+        from due_crew.planner.new_plan import NewPlanWindow
+
+        class NOps:
+            def today(self):
+                return datetime.date.fromisoformat(TODAY)
+
+            def index(self, did):
+                return P.DeckIndex(col, did)
+
+            def make(self, owner, name, doc, done, pid=None):
+                outcome, raw = PR.create(CLIENT, name, doc.get("deck") or "")
+                done(PR.save(CLIENT, raw["id"], raw.get("version") or 1, doc, "made"))
+
+            def open_plan(self, pid_):
+                reopened.append(("new", pid_))
+
+            def follow(self, code):
+                reopened.append(("follow", code))
+
+            def labs_window(self):
+                pass
+
+        nw = NewPlanWindow(None, [(1, "Big Step 1", 60)], NOps())
+        nw.text.setPlainText(f"BLOCK 2 · Cardiovascular\nWEEK 1\n{P.fmt_day(day(7))}  LEC  Heart failure\n"
+                             f"{P.fmt_day(day(8))}  LEC  Something new\n{P.fmt_day(day(11))}  EXAM  Block 2 exam")
+        nw._read()
+        doc_, n_, cards_ = nw.doc()
+        if nw.name.text() != "BLOCK 2 · Cardiovascular" or nw.end_name.text() != "Block 2 exam" or (n_, cards_) != (2, 1) \
+                or doc_.get("end") != day(11) or len(doc_.get("events") or []) != 1:
+            raise RuntimeError(f"new plan: {nw.name.text()!r}, {nw.end_name.text()!r}, {n_}, {cards_}, {doc_.get('end')}")
+        shoot(nw, os.path.join(out, "planner-new.png"))
+        was = __import__("due_crew.planner.new_plan", fromlist=["confirm"]).confirm
+        import due_crew.planner.new_plan as PNP
+        PNP.confirm = yes
+        try:
+            nw._make()
+        finally:
+            PNP.confirm = was
+        if not reopened or reopened[-1][0] != "new":
+            raise RuntimeError(f"new plan: made {nw.said.text()!r}")
+        STORE.plans.pop(reopened[-1][1], None)
+        STORE.plans.pop(pid2, None)
+        if PO.why_line([]) != "":
+            raise RuntimeError("planner: an empty why")
         idx = P.DeckIndex(col, 1)
         pick = Picker(None, idx, "Add to Tue " + day(1)[-2:], "Big Step 1")
         top = pick.tree.topLevelItem(0)
@@ -1769,7 +1793,10 @@ def main(out):
                          ("welcome", welcome), ("logo", logo), ("room", room), ("emoji", emoji),
                          ("report", report), ("plans", plans), ("schedule", schedule), ("map card", map_card),
                          ("share card", share_card), ("why", why), ("plan tags", plan_tags), ("open cards", open_cards),
-                         ("remark", remark), ("held back", held), ("welcome back", away), ("planner", planner)):
+                         ("remark", remark), ("held back", held), ("welcome back", away), ("planner", planner),
+                         ("ai app", ai_app)):
+        if os.environ.get("DC_ONLY") and label not in os.environ["DC_ONLY"].split(","):
+            continue  # DC_ONLY=planner,plans: just those (while working on them)
         attempt(label, build)
     if failures:
         print("FAILED:", *failures, sep="\n  ")

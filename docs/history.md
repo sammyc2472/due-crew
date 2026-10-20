@@ -3108,3 +3108,48 @@ every release that changes how something works.
   that didn't save no longer says it put cards (the window's foot says
   why), and Updates' "Posted." goes when another plan is picked.
   `tools/dialogs.py` renders each, and History with Settings › Pip off.
+- 3.9.3, round five: Your plans rebuilt as one screen (Sam's ten picks on
+  the "Simpler Plan Builder" page, all A, after four reviewers' pass; the
+  mocks are its v2). **Every change is an op** (`planner/ops.py`: a small
+  JSON object naming a date by its id, day or name, checked, run by the
+  builder's own edits, said in words, with who it touches): the window's,
+  a pasted calendar's and an AI's alike. **Changes wait to be sent** when
+  anyone follows the plan (`draft.py`, kept per profile in
+  `plan_drafts.json`, replayed on the plan as the server has it so a
+  co-author's save or a restart loses nothing; one that no longer fits is
+  dropped and said): "3 changes, not sent", Review and send (each change in
+  words, who it touches, a ✕ each, Tell them why filled in), one save with
+  its line to followers (`PUT /plans/{id}`'s `post`; the fake Worker
+  gained postWithSave), Undo ▾ takes the whole send back. With nobody
+  following, a change saves at once. **Tabs**: Plan · Followers · Sharing
+  for authors, Plan · Mine for a follower; Dates, Lay it out and Text
+  became the Plan tab (the deck beside the plan, `deck_panel.py`, ticking
+  for the picked date or for what the plan covers, with Fit them before
+  the exam when they'd run past it; the text a window of its own; History
+  under Undo ▾). **The plan's shape** on one line with Change… (`shape.py`:
+  start, end, study days, new cards, the last days, catch-up weeks; it says
+  what moves first). **Each week** says what it asks (new cards and a
+  typical card's reviews a day, amber with its fixes when over the pace,
+  `view.py`). **A date** is changed where it's shown (`date_panel.py`:
+  fields, −1/+1 day, This and every date after, its cards as chips with ✕,
+  the rest under ⋯ in plain words). **Suggestions** on the dates (+ Add
+  for a sure one, Maybe ✓ ✕, ✕ remembered; `view.SuggestIndex` reads
+  build.suggest through an index of the tags' first three letters, the
+  same answer without reading a big deck's 12,000 tags per date), Add the
+  sure ones. **One New plan** (`new_plan.py`: name, deck, the exam it ends
+  with, the calendar if there is one, read as it's typed; a friend's code
+  instead) in place of New plan from a calendar and from a deck (the
+  calendar window stays in labs). **A paste box** for plan lines or a new
+  calendar, Edit the whole plan as text, and Copy a prompt for your AI
+  (Plan the dates, Tag by objective: `prompts.py`, builder.js's Prompts
+  restated, a twin). **No Pip in the plan windows** (pick 10;
+  `pip_note.py` went). Behind the scenes, **the AI hooks** (`ai.py`: jobs
+  whose requests carry tag names and counts, never a card; answers checked
+  into ops; runners off, the stand-in in labs, your own AI by a copied
+  prompt, Claude once connected) and **Your AI app** (`mcp.py`, off by
+  default: a local MCP server on 127.0.0.1 with a bearer token that reads
+  my plans and puts changes under one for me to send, never sending; a
+  stdio shim). New ops beyond the builder's edits: `lay_out` (Fill as one
+  change), `move_from`, `add_date` with no cards (`edits.add_empty_date`;
+  the server keeps a date with none). Nothing new on the server.
+  `tests/test_plan_ops.py`; `tools/dialogs.py` renders every state.

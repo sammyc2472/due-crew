@@ -1,27 +1,24 @@
-"""Your plans' Settings and Progress tabs (3.9.3), the builder's, for a
-plan's authors. Settings: its name and one line, where to get the deck,
-whether it's offered to one of my squads and who can follow (the
-owner's), its co-authors (asked, handed it, taken off; a co-author
-leaves), when it ends, catch-up weeks and review-only days at the end,
-the library (the owner's), a copy for next year, and taking it down.
-Progress: its squad's counts a date (three sharing or more), and the dates
-most of the class hasn't finished, with Give the class a day. Each change
-is one request, at once; names are the server's and the authors': plain."""
+"""Your plans' Sharing tab (3.9.3's Settings; round five), the builder's,
+for a plan's authors: its code and link first, its name and one line,
+where to get the deck, whether it's offered to one of my squads and who
+can follow (the owner's), its co-authors (asked, handed it, taken off; a
+co-author leaves), the library (the owner's), a copy for next year, the
+dates as a table, and taking it down. The plan's end, catch-up weeks and
+the days before the end are its shape (the Plan tab's Change…). Each
+change is one request, at once; names are the server's and the authors':
+plain."""
 
 from aqt.qt import (
-    QApplication, QButtonGroup, QCheckBox, QComboBox, QDate, QDateEdit, QEvent, QFormLayout, QHBoxLayout, QHeaderView,
-    QLabel, QLineEdit, QObject, QPushButton, QRadioButton, QScrollArea, QSpinBox, Qt, QTreeWidget, QTreeWidgetItem,
+    QApplication, QButtonGroup, QCheckBox, QComboBox, QEvent, QFormLayout, QHBoxLayout, QHeaderView,
+    QLabel, QLineEdit, QObject, QPushButton, QRadioButton, QScrollArea, Qt, QTreeWidget, QTreeWidgetItem,
     QVBoxLayout, QWidget,
 )
 
-from ..ui import ask_item, confirm, esc, note, role, sev_label
+from ..ui import ask_item, confirm, esc, note, role
 from .. import plans as P
-from .. import schedule as S
 from . import edits as E
 from . import remote
-from .history_tab import _Lazy
-
-CATCHUP = ((0, "None"), (3, "Every 3rd week"), (4, "Every 4th week"))
+from .widgets import frame
 
 
 class _Said(QLabel):
@@ -89,6 +86,19 @@ class SettingsTab(QWidget):
         form = QFormLayout(body)
         form.setContentsMargins(0, 0, 12, 0)
         self.form = form
+
+        self.code_box, cl = frame("card", horizontal=True, margins=(12, 10, 12, 10))
+        cl.addWidget(_plain("Its code", muted=True))
+        self.code = role(_plain(), "title")
+        self.code.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        cl.addWidget(self.code)
+        cl.addStretch(1)
+        self.link_btn = QPushButton("Copy link")
+        self.link_btn.setAutoDefault(False)
+        self.link_btn.clicked.connect(self._copy_link)
+        cl.addWidget(self.link_btn)
+        cl.addWidget(_link("Its page ↗", self._page))
+        form.addRow(self.code_box)
 
         self.name = QLineEdit()
         self.name.setMaxLength(60)
@@ -158,35 +168,10 @@ class SettingsTab(QWidget):
         coa.addWidget(self.coa_said)
         form.addRow("Co-authors", coa)
 
-        row = QHBoxLayout()
-        self.has_end = QCheckBox("Ends")
-        self.has_end.toggled.connect(lambda _on: self._end())
-        self.end = QDateEdit()
-        self.end.setCalendarPopup(True)
-        self.end.setDisplayFormat("ddd d MMM yyyy")
-        self.end.dateChanged.connect(lambda _d: self._end())
-        row.addWidget(self.has_end)
-        row.addWidget(self.end)
-        row.addWidget(_plain("the exam, or the course's last day", muted=True), 1)
-        form.addRow("End", row)
-        self.catchup = QComboBox()
-        for v, label in CATCHUP:
-            self.catchup.addItem(label, v)
-        self.catchup.currentIndexChanged.connect(lambda _i: self._phases())
-        form.addRow("Catch-up weeks (nothing new)", self.catchup)
-        row = QHBoxLayout()
-        self.taper = QSpinBox()
-        self.taper.setRange(0, 60)
-        self.taper.setSuffix(" days")
-        self.taper.editingFinished.connect(self._phases)
-        self.end.setKeyboardTracking(False)  # a date typed is saved once it's typed, not at each digit
         guard = _WheelToPage(scroll)
-        for w in (self.squad, self.catchup, self.end, self.taper):
+        for w in (self.squad,):
             w.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
             w.installEventFilter(guard)
-        row.addWidget(self.taper)
-        row.addWidget(_plain("before the end date: no new cards", muted=True), 1)
-        form.addRow("Review-only days at the end", row)
 
         lib = QVBoxLayout()
         self.listed = QCheckBox("List it in the library")
@@ -197,8 +182,9 @@ class SettingsTab(QWidget):
         form.addRow("Library", lib)
 
         row = QHBoxLayout()
-        self.copy_btn = _link("Copy for next year", self._next_year)
+        self.copy_btn = _link("Copy it for next year", self._next_year)
         row.addWidget(self.copy_btn)
+        row.addWidget(_link("Copy as a table", self._table))
         row.addStretch(1)
         self.delete_btn = QPushButton("Delete this plan…")
         self.delete_btn.setProperty("dc", "bad")
@@ -232,6 +218,9 @@ class SettingsTab(QWidget):
                     w.setText(val)  # what the plan says, unless I'd typed something here (a reload keeps that)
                 self._put[key] = val
             self._put["pid"] = win.plan.get("id")
+            code = str(raw.get("code") or "")
+            self.code.setText(code or "none yet")
+            self.link_btn.setEnabled(bool(code))
             self.url_said.setText(f"On its link page and poster, and in Anki for anyone with no deck called {doc.get('deck') or '?'}.")
             self.squad.clear()
             self.squad.addItem("No squad", None)
@@ -241,17 +230,6 @@ class SettingsTab(QWidget):
                 self.squad.addItem("A squad of mine", raw["squad"])
             self.squad.setCurrentIndex(max(0, self.squad.findData(raw.get("squad"))))
             (self.by_squad if raw.get("audience") == "squad" else self.by_code).setChecked(True)
-            end = QDate.fromString(str(doc.get("end") or ""), "yyyy-MM-dd")
-            self.has_end.setChecked(end.isValid())
-            days = [str(u.get("due") or u.get("opens")) for u in P.units(doc)] + \
-                [str(e["day"]) for e in doc.get("events") or [] if isinstance(e, dict) and e.get("day")]
-            self.end.setDate(end if end.isValid() else QDate.fromString(max(days + [win.ops.today()]), "yyyy-MM-dd"))
-            ph = doc.get("phases") or {}
-            self.catchup.setCurrentIndex(max(0, self.catchup.findData(int(ph.get("catchup") or 0))))
-            if int(ph.get("catchup") or 0) and self.catchup.findData(int(ph["catchup"])) < 0:
-                self.catchup.addItem(f"Every {_nth(int(ph['catchup']))} week", int(ph["catchup"]))
-                self.catchup.setCurrentIndex(self.catchup.count() - 1)
-            self.taper.setValue(int(ph.get("taper") or 0))
             self.listed.setChecked(raw.get("listed") == 1)
         finally:
             self._loading = False
@@ -276,10 +254,6 @@ class SettingsTab(QWidget):
         self.owner_only.setText("Only people in a squad of its owner's can follow it. Its owner sets that."
                                 if raw.get("audience") == "squad" else "Anyone with the code can follow it. Its owner sets that.")
         self.owner_only.setVisible(not owner)
-        self.has_end.setEnabled(not busy)
-        self.end.setEnabled(self.has_end.isChecked() and not busy)
-        self.catchup.setEnabled(not busy)
-        self.taper.setEnabled(bool(doc.get("end")) and not busy)
         listed = raw.get("listed")
         why = ("Only a plan anyone with the code can follow goes in the library." if raw.get("audience") != "code"
                else "Put some dates on it first." if not P.units(doc) else "")
@@ -353,7 +327,32 @@ class SettingsTab(QWidget):
     def _save_url(self):
         url = self.url.text().strip()
         self.said.setText("")
-        self.win._apply(lambda d: E.set_deck_url(d, url))
+        self.win.change({"op": "set_deck_url", "url": url})
+
+    def _copy_link(self):
+        code = str(self._raw().get("code") or "")
+        if code:
+            QApplication.clipboard().setText(self.win.ops.site_url(f"/p/{code}"))
+            self.said.setText("Copied: its link. Anyone who opens it can follow with the code, as Who can follow says.")
+
+    def _page(self):
+        code = str(self._raw().get("code") or "")
+        if code:
+            self.win.ops.open_page(f"/p/{code}")
+
+    def _table(self):
+        """The dates as a table (tab-separated: paste into a spreadsheet)."""
+        doc = self.win.doc or {}
+        lines = ["Day\tDate\tFinish by\tTested on\tCards"]
+        for u in sorted(P.units(doc), key=lambda u: str(u.get("opens") or "")):
+            n = len(self.win.idx.match(u, self.win.swap, doc)) if self.win.idx is not None else ""
+            ev = next((e.get("name") for e in doc.get("events") or [] if isinstance(e, dict) and e.get("id") == u.get("for")), "")
+            lines.append("\t".join(str(x) for x in (u.get("opens"), u.get("name") or "", u.get("due") or "", ev or "", n)))
+        for e in doc.get("events") or []:
+            if isinstance(e, dict):
+                lines.append("\t".join((str(e.get("day")), str(e.get("name") or ""), "", "(quiz or exam)", "")))
+        QApplication.clipboard().setText("\n".join(lines) + "\n")
+        self.said.setText(f"Copied: {len(P.units(doc)):,} dates as a table. Paste it into a spreadsheet.")
 
     def _who(self):
         if self._loading or not self._owner():
@@ -453,27 +452,6 @@ class SettingsTab(QWidget):
                 self.said.setText("That didn't work. Try again.")
         self.win.ops.ask(self.win, lambda cl: remote.remove_editor(cl, pid, me), done)
 
-    # ---- the end, catch-up weeks, review-only days ----
-
-    def _end(self):
-        if self._loading:
-            return
-        end = self.end.date().toString("yyyy-MM-dd") if self.has_end.isChecked() else None
-        if end == (self._raw().get("doc") or {}).get("end"):
-            self._buttons()
-            return
-        self.win._apply(lambda d: E.set_end(d, end))
-
-    def _phases(self):
-        if self._loading:
-            return
-        doc = self._raw().get("doc") or {}
-        ph = doc.get("phases") or {}
-        c, t = int(self.catchup.currentData() or 0), int(self.taper.value()) if doc.get("end") else 0
-        if (c, t) == (int(ph.get("catchup") or 0), int(ph.get("taper") or 0)):
-            return
-        self.win._apply(lambda d: E.set_phases(d, catchup=c, taper=t if d.get("end") else None))
-
     # ---- the library, next year, taking it down ----
 
     def _listed(self, on):
@@ -529,116 +507,3 @@ class SettingsTab(QWidget):
             else:
                 self.said.setText("That didn't work. Try again.")
         self.win.ops.ask(self.win, lambda cl: remote.delete(cl, pid), done)
-
-
-class ProgressTab(_Lazy):
-    """Its squad's counts a date, and the dates most of the class hasn't finished."""
-
-    def __init__(self, win):
-        super().__init__(win)
-        root = QVBoxLayout(self)
-        root.setContentsMargins(0, 8, 0, 0)
-        self.hints = QWidget()  # the dates behind, made again at each read
-        QVBoxLayout(self.hints).setContentsMargins(0, 0, 0, 0)
-        root.addWidget(self.hints)
-        self.root = root
-        self.said = _plain(muted=True)
-        root.addWidget(self.said)
-        self.list = QTreeWidget()
-        self.list.setHeaderLabels(["Date", "Opened", "Done"])
-        self.list.setRootIsDecorated(False)
-        h = self.list.header()
-        h.setStretchLastSection(False)
-        h.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        for i in (1, 2):
-            h.setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
-        root.addWidget(self.list, 1)
-        row = QHBoxLayout()
-        row.addStretch(1)
-        self.again_btn = _link("Try again", self._read)
-        row.addWidget(self.again_btn)
-        root.addLayout(row)
-        self._show(None, "")
-
-    def _read(self):
-        now = self._now()
-        if now is None:
-            return
-        self.loading = True
-        self._show(None, "Loading…")
-        pid = now[0]
-        self.win.ops.ask(self.win, lambda cl: remote.progress(cl, pid), lambda got: self._got(now, got))
-
-    def _got(self, now, pr):
-        self.loading = False
-        if now != self._now():  # an answer for the last plan (or version): this one's, if it's on show
-            if self.isVisible() and self.win.author():
-                self._read()
-            return
-        if pr is None:
-            self._show(None, "Couldn't load it.", again=True)
-            return
-        self.got = now
-        sharing, followers = int(pr.get("sharing") or 0), int(pr.get("followers") or 0)
-        if not followers:
-            self._show(None, "Nobody follows it yet. Once 3 or more who follow it are in its squad, "
-                             "each date's counts show here.")
-            return
-        if sharing < 3:
-            self._show(None, f"{followers:,} follow{'s' if followers == 1 else ''} it, {sharing} in its squad. "
-                             "Each date's counts show once 3 or more are in it.")
-            return
-        self._show(pr, f"{sharing:,} of the {followers:,} following it are in its squad: these counts are theirs.")
-
-    def _clear_hints(self):
-        old, self.hints = self.hints, QWidget()
-        QVBoxLayout(self.hints).setContentsMargins(0, 0, 0, 0)
-        self.root.replaceWidget(old, self.hints)
-        old.hide()  # off the page now, not when Qt gets round to deleting it
-        old.deleteLater()
-
-    def _show(self, pr, said, again=False):
-        self._clear_hints()
-        self.list.clear()
-        self.said.setText(said)
-        self.said.setVisible(bool(said))
-        self.again_btn.setVisible(again)
-        self.list.setVisible(bool(pr))
-        if not pr:
-            return
-        doc, sharing = self.win.doc or {}, int(pr["sharing"])
-        for u in sorted(P.units(doc), key=lambda u: str(u.get("opens"))):
-            c = (pr.get("units") or {}).get(u["id"]) or {}
-            pct = lambda k: f"{int(100 * int(c.get(k) or 0) / sharing + 0.5)}% · {int(c.get(k) or 0)}"  # noqa: E731 (Math.round, as the builder)
-            it = QTreeWidgetItem([f"{P.fmt_day(u['opens'])} · {u.get('name') or '?'}", pct("opened"), pct("done")])
-            self.list.addTopLevelItem(it)
-        today = self.win.ops.today()
-        later = [u for u in P.units(doc) if str(u.get("opens")) > today]
-        behind = E.behind(doc, pr, today)
-        if not behind and any(E._later(u.get("due") or u["opens"], 2) <= today for u in P.units(doc)):
-            row = QHBoxLayout()  # no date behind (at least half of them done with each): a word, and Pip, as Settings › Pip says
-            pip = sev_label("ready", 40, "Pip, cheering") if self.win.ops.pip() else None
-            if pip is not None:
-                row.addWidget(pip)
-            row.addWidget(_plain("The class is keeping up with every date so far."), 1)
-            self.hints.layout().addLayout(row)
-        for u, done, late in behind:
-            row = QHBoxLayout()
-            row.addWidget(role(_plain(f"{u.get('name') or '?'}: {done} of {sharing} finished, {late} days after its date."), "head"), 1)
-            row.addWidget(_link("Look at that day", lambda _=False, uid=u["id"]: self._look(uid)))
-            if later:
-                row.addWidget(_link("Give the class a day", self._breather))
-            self.hints.layout().addLayout(row)
-
-    def _look(self, uid):
-        self.win._show_tab("dates")
-        self.win._go_to(("date", uid))
-
-    def _breather(self):
-        days = S.plan_days(self.win.raw["doc"])
-        today = self.win.ops.today()
-        if not confirm(self, "Give the class a day?",
-                       "Every date still to come moves one study day later, for everyone following it; quizzes and exams stay "
-                       "on their days.", "Move them"):
-            return
-        self.win._apply(lambda d: E.breather(d, today, days)[0])
