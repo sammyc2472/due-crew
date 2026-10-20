@@ -1057,6 +1057,19 @@ def test_rules_of_the_road():
     check("road: Claude isn't connected: the stand-in sends nothing, and nothing reads a card's text for it",
           not re.search(r"^\s*(?:from|import)\s+(?:requests|urllib|http|socket|anthropic)\b", src["claude.py"] + src["reading.py"], re.M)
           and not re.search(r"\bflds\b|\.note\(|\bnote\[", src["claude.py"] + src["reading.py"] + src["start_window.py"]))
+    ui_files = {f: t for f, t in windows_tabs.items() if f not in ("widgets.py",)}
+    hallmarks = [(f, m) for f, t in ui_files.items()
+                 for m in re.findall(r'(?:link|tool|plain|QPushButton|menu_button|addAction)\(\s*f?"(\+ [^"]*|[^"]*[◆▾↗][^"]*)"', t)]
+    hallmarks = [(f, m) for f, m in hallmarks if not m.startswith("{'▾' if")]  # a week's fold, as a tree's
+    check("road: no AI look in the plan windows (Sam, after the site mock): no '+ A …' links, no ◆, no ▾ or ↗ in words, "
+          "no tinted banners or accent stripes, no capitals for a change's kind",
+          not hallmarks and not re.search(r'frame\("(?:strip|warm|today|bar|go-bar)"', src["plan_tab.py"] + src["deck_panel.py"]
+                                           + src["settings_tab.py"] + src["shape.py"])
+          and ".upper()" not in src["send.py"], hallmarks)
+    keys_ = set(re.findall(r'on\("([^"]+)"', src["plan_tab.py"]))
+    check("road: the Plan tab's keys (each in its button's tip)",
+          {"Ctrl+N", "Ctrl+E", "Ctrl+F", "Ctrl+T", "Ctrl+1", "Ctrl+2", "Ctrl+D", "Ctrl+Z", "Ctrl+Return", "Up", "Down",
+           "Alt+Left", "Alt+Right", "Return", "F2", "Delete"} <= keys_, sorted(keys_))
     words = " ".join(src.values()).lower()
     banned = [w for w in ("anking", "uworld", "amboss", "boards and beyond", "sketchy", "pathoma", "first aid", "bootcamp")
               if w in words]

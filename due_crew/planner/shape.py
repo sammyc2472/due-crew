@@ -134,7 +134,7 @@ class ShapeDialog(QDialog):
         form.addRow("Catch-up weeks (nothing new)", self.catchup)
         root.addLayout(form)
 
-        self.preview, pl = frame("warm")
+        self.preview, pl = frame("foot", margins=(0, 8, 0, 0))
         self.preview_words = plain()
         self.preview_words.setTextFormat(Qt.TextFormat.RichText)
         pl.addWidget(self.preview_words)
@@ -201,7 +201,7 @@ class ShapeDialog(QDialog):
         self.taper.setEnabled(bool(self._end()))
         ops = self.ops()
         self.go.setEnabled(bool(ops))
-        mark(self.preview, "dc", "warm" if ops else "strip")
+        mark(self.preview_words, "dc", None if ops else "n")  # what saving does; muted while nothing's changed
         if not ops:
             self.preview_words.setText(esc("Nothing changed yet."))
             return

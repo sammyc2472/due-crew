@@ -1,8 +1,8 @@
 """Round five's deck beside the plan (docs/planner.md; Lay it out's tree
 before): the deck's tags and subdecks, by resource, by system, or more
 (the rest, its subdecks, the plan's own tags), each with its cards and
-the date it's on. With a date picked to add to (+ From the deck), the
-green bar says so and a tick puts that tag on it (or takes it off); with
+the date it's on. With a date picked to add to (Add from the deck), its
+line says so and a tick puts that tag on it (or takes it off); with
 none, ticks are what the plan covers, and the bar under them lays them
 out on its study days at its pace (or fits them before the exam, saying
 first by how much they'd run past it). Every change is an op through the
@@ -19,7 +19,7 @@ from . import build as B
 from . import edits as E
 from . import model as M
 from . import view as V
-from .widgets import frame, link, mark, plain
+from .widgets import frame, link, mark, plain, tool
 
 ROLE = Qt.ItemDataRole.UserRole
 VIEWS = (("resource", "By resource"), ("system", "By system"), ("other", "Other"), ("deck", "Subdecks"), ("plan", "The plan's own tags"))
@@ -42,10 +42,13 @@ class DeckPanel(QWidget):
         root.setContentsMargins(12, 10, 12, 10)
         root.setSpacing(8)
 
-        self.bar, bl = frame("go-bar", horizontal=True)
-        self.bar_words = plain()
+        self.bar, bl = frame("line", horizontal=True, margins=(0, 0, 0, 0), spacing=8)
+        said = plain("Ticks add to", muted=True)
+        said.setWordWrap(False)
+        bl.addWidget(said)
+        self.bar_words = role(plain(), "head")
         bl.addWidget(self.bar_words, 1)
-        bl.addWidget(link("Back to the date", self._back))
+        bl.addWidget(tool("Done", self._back, tip="Back to the date"))
         root.addWidget(self.bar)
         row = QHBoxLayout()
         self.head = role(plain("Tick what the plan covers"), "head")
@@ -66,8 +69,9 @@ class DeckPanel(QWidget):
             b.clicked.connect(lambda _=False, key=key: self._view(key))
             views.addWidget(b)
             self.view_btns[key] = b
-        self.more_btn = QPushButton("More ▾")
+        self.more_btn = QPushButton("More")
         self.more_btn.setProperty("dc", "seg")
+        self.more_btn.setProperty("menu", "true")
         self.more_btn.setCheckable(True)
         self.more_btn.setAutoDefault(False)
         self.more_menu = QMenu(self.more_btn)
@@ -99,7 +103,7 @@ class DeckPanel(QWidget):
         self.tree.customContextMenuRequested.connect(self._row_menu)
         root.addWidget(self.tree, 1)
 
-        self.fill, fl = frame("strip")
+        self.fill, fl = frame("foot", margins=(0, 8, 0, 0))
         self.fill_words = plain()
         self.fill_words.setTextFormat(Qt.TextFormat.RichText)
         fl.addWidget(self.fill_words)
@@ -146,7 +150,7 @@ class DeckPanel(QWidget):
         self._said()
 
     def set_target(self, uid):
-        """+ From the deck: ticks add to this date (None: back to what the plan covers)."""
+        """Add from the deck: ticks add to this date (None: back to what the plan covers)."""
         self.target = uid
         self.fill_tree()
         self._said()
@@ -222,6 +226,7 @@ class DeckPanel(QWidget):
         for key, b in self.view_btns.items():
             b.setChecked(self.view == key)
         self.more_btn.setChecked(self.view not in self.view_btns)
+        self.more_btn.setText(dict(VIEWS).get(self.view, "More") if self.view not in self.view_btns else "More")
         if self.view == "plan":
             self._plan_rows()
             self.tree.blockSignals(False)
@@ -343,7 +348,7 @@ class DeckPanel(QWidget):
         self.bar.setVisible(u is not None)
         self.head_row.setVisible(u is None)
         if u is not None:
-            self.bar_words.setText(f"Ticking adds to {M.date_label(u)}")
+            self.bar_words.setText(M.date_label(u))
         self.fill.setVisible(u is None and win.author())
         self.notes_btn.setVisible(u is None and win.author() and any(
             isinstance(r, dict) and r.get("card") for r in doc.get("remarks") or []))
@@ -360,7 +365,7 @@ class DeckPanel(QWidget):
         self.alt.setVisible(False)
         self.week.setVisible(False)
         self.keep_btn.setVisible(self.dirty)
-        mark(self.fill, "dc", "strip")
+        mark(self.fill, "dc", "foot")
         if not self.cover:
             self.fill_words.setText(esc("Tick what the plan covers; then lay it out on its study days."))
             self.go.setVisible(False)

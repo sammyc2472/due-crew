@@ -1,5 +1,6 @@
 """Round five's small parts of the plan windows (docs/planner.md): words,
-links, chips that wrap, rows that pick, bars. Each wears the board's look
+links, small buttons and menu buttons, a date's sources, rows that pick
+(and Month's that drag to another day), bars. Each wears the board's look
 through the window's style sheet (ui.QSS: QFrame[dc=chip], [dc=row],
 QPushButton[dc=link] and the like); none sets a colour, a size or a
 margin in a style sheet of its own. Names are the deck's and the
@@ -52,16 +53,46 @@ def link(text, fn=None, bad=False, tip=None):
     return b
 
 
-def pill(text, fn=None, checkable=False, tip=None):
+def keys(seq):
+    """A key sequence as this computer writes it ("Ctrl+N", "⌘N")."""
+    from aqt.qt import QKeySequence
+    return QKeySequence(seq).toString(QKeySequence.SequenceFormat.NativeText)
+
+
+def tip_keys(tip, seq=None):
+    """A tooltip, its key after it."""
+    return f"<span>{esc(tip)}" + (f" <b>{esc(keys(seq))}</b>" if seq else "") + "</span>"
+
+
+def tool(text, fn=None, checkable=False, tip=None, seq=None):
+    """A small button of a toolbar's (or a panel's row of actions)."""
     b = QPushButton(str(text))
-    b.setProperty("dc", "pill")
+    b.setProperty("dc", "tool")
     b.setCheckable(checkable)
     b.setAutoDefault(False)
-    if tip:
-        b.setToolTip(f"<span>{esc(tip)}</span>")
+    if tip or seq:
+        b.setToolTip(tip_keys(tip or text, seq))
     if fn is not None:
         b.clicked.connect(lambda _=False: fn())
     return b
+
+
+def menu_button(text, on_show=None, small=False, tip=None):
+    """A button that opens its menu (a chevron at its end, as a box's):
+    (button, menu); on_show fills the menu as it opens."""
+    from aqt.qt import QMenu
+    b = QPushButton(str(text))
+    b.setProperty("dc", "menu")
+    if small:
+        b.setProperty("small", "true")
+    b.setAutoDefault(False)
+    if tip:
+        b.setToolTip(f"<span>{esc(tip)}</span>")
+    m = QMenu(b)
+    if on_show is not None:
+        m.aboutToShow.connect(on_show)
+    b.setMenu(m)
+    return b, m
 
 
 def small(text, fn, tip):
@@ -155,16 +186,50 @@ class FlowLayout(QLayout):
         return y + line - rect.y() + m.bottom()
 
 
-def flow_box():
-    """(a widget whose chips wrap, its FlowLayout)."""
+def flow_box(hspace=6, vspace=6):
+    """(a widget whose parts wrap, its FlowLayout)."""
     from aqt.qt import QWidget
     w = QWidget()
-    lay = FlowLayout(w)
+    lay = FlowLayout(w, hspace, vspace)
     sp = w.sizePolicy()
     sp.setHeightForWidth(True)
     sp.setHorizontalPolicy(QSizePolicy.Policy.Preferred)
     w.setSizePolicy(sp)
     return w, lay
+
+
+class Source(QFrame):
+    """One of a date's sources, a line of the panel's list: its name (the
+    whole of it on hover), its count, and an ✕ for an author. A click
+    anywhere on it: its menu (on_click(pos))."""
+
+    def __init__(self, text, n=None, tip=None, on_click=None, on_take=None):
+        super().__init__()
+        self.setProperty("dc", "src")
+        self.on_click = on_click
+        row = QHBoxLayout(self)
+        row.setContentsMargins(6, 3, 2, 3)
+        row.setSpacing(8)
+        self.words = Elided(str(text))
+        if tip:
+            self.words.setToolTip(f"<span>{esc(tip)}</span>")
+        row.addWidget(self.words, 1)
+        if n is not None:
+            k = QLabel(f"{n:,}" if isinstance(n, int) else str(n))
+            k.setTextFormat(Qt.TextFormat.PlainText)
+            k.setProperty("dc", "n")
+            row.addWidget(k)
+        if on_take is not None:
+            row.addWidget(small("✕", on_take, "Take it off this date"))
+        if on_click is not None:
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+
+    def mousePressEvent(self, e):  # noqa: N802 (Qt's)
+        if self.on_click is not None and e.button() == Qt.MouseButton.LeftButton:
+            self.on_click(self.mapToGlobal(QPoint(0, self.height())))
+            return
+        super().mousePressEvent(e)
 
 
 class Chip(QFrame):
@@ -208,14 +273,20 @@ class Chip(QFrame):
         super().mousePressEvent(e)
 
 
+DRAG = "application/x-duecrew-plan-item"  # Month: a date or a quiz dragged to another day
+
+
 class Row(QFrame):
     """A row of the plan's list (a date, a quiz, a review day, a week's
-    head): picked on a click, as the window's own (on: the picked one)."""
+    head): picked on a click, as the window's own (on: the picked one).
+    on_double: a double-click (its name, to change). drag: Month's entries
+    carry their key to another day."""
 
-    def __init__(self, key, on_pick, margins=(8, 6, 8, 6)):
+    def __init__(self, key, on_pick, margins=(8, 6, 8, 6), on_double=None, drag=False):
         super().__init__()
         self.setProperty("dc", "row")
-        self.key, self.on_pick = key, on_pick
+        self.key, self.on_pick, self.on_double, self.drag = key, on_pick, on_double, drag
+        self._press = None
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         from aqt.qt import QVBoxLayout
         self.lay = QVBoxLayout(self)
@@ -224,12 +295,71 @@ class Row(QFrame):
 
     def mousePressEvent(self, e):  # noqa: N802 (Qt's)
         if e.button() == Qt.MouseButton.LeftButton and self.on_pick is not None:
+            self._press = e.position().toPoint() if hasattr(e, "position") else e.pos()
             self.on_pick(self.key)
             return
         super().mousePressEvent(e)
 
+    def mouseDoubleClickEvent(self, e):  # noqa: N802 (Qt's)
+        if e.button() == Qt.MouseButton.LeftButton and self.on_double is not None:
+            self.on_double(self.key)
+            return
+        super().mouseDoubleClickEvent(e)
+
+    def mouseMoveEvent(self, e):  # noqa: N802 (Qt's)
+        from aqt.qt import QApplication, QDrag, QMimeData
+        if not self.drag or self._press is None or not (e.buttons() & Qt.MouseButton.LeftButton):
+            return super().mouseMoveEvent(e)
+        at = e.position().toPoint() if hasattr(e, "position") else e.pos()
+        if (at - self._press).manhattanLength() < QApplication.startDragDistance():
+            return
+        self._press = None
+        data = QMimeData()
+        data.setData(DRAG, f"{self.key[0]}|{self.key[1]}".encode("utf-8"))
+        d = QDrag(self)
+        d.setMimeData(data)
+        d.setPixmap(self.grab())
+        d.exec(Qt.DropAction.MoveAction)
+
+    def mouseReleaseEvent(self, e):  # noqa: N802 (Qt's)
+        self._press = None
+        super().mouseReleaseEvent(e)
+
     def set_on(self, on):
         mark(self, "on", "true" if on else "false")
+
+
+class DayCell(QFrame):
+    """A day of Month's: a date or a quiz dragged onto it moves there
+    (on_drop(kind, key, day)); lit while one is over it."""
+
+    def __init__(self, day, on_drop):
+        super().__init__()
+        self.setProperty("dc", "calday")
+        self.day, self.on_drop = day, on_drop
+        self.setAcceptDrops(on_drop is not None)
+
+    def _key(self, e):
+        md = e.mimeData()
+        if not md.hasFormat(DRAG):
+            return None
+        kind, _, key = bytes(md.data(DRAG)).decode("utf-8", "replace").partition("|")
+        return (kind, key) if kind in ("date", "event") and key else None
+
+    def dragEnterEvent(self, e):  # noqa: N802 (Qt's)
+        if self._key(e):
+            mark(self, "over", "true")
+            e.acceptProposedAction()
+
+    def dragLeaveEvent(self, e):  # noqa: N802 (Qt's)
+        mark(self, "over", "false")
+
+    def dropEvent(self, e):  # noqa: N802 (Qt's)
+        mark(self, "over", "false")
+        key = self._key(e)
+        if key:
+            e.acceptProposedAction()
+            self.on_drop(key[0], key[1], self.day)
 
 
 class Elided(QLabel):

@@ -343,9 +343,12 @@ QFrame[dc="go-bar"] QPushButton[dc="link"]:hover {{ background: {go-hover}; }}
 QFrame[dc="today"] {{ background: {you-bg}; border: none; border-left: 3px solid {accent}; border-radius: 8px; }}
 QFrame[dc="row"] {{ background: transparent; border: none; border-radius: 8px; }}
 QFrame[dc="row"]:hover {{ background: {well}; }}
-QFrame[dc="row"][on="true"] {{ background: {you-bg}; border-left: 3px solid {accent}; }}
+QFrame[dc="row"][on="true"] {{ background: {you-bg}; }}
 QFrame[dc="row"][past="true"] QLabel {{ color: {muted}; }}
-QFrame[dc="rule"] {{ border: none; border-top: 2px solid {accent}; background: transparent; }}
+QFrame[dc="rule"] {{ border: none; border-top: 1px solid {accent}; background: transparent; }}
+QFrame[dc="foot"] {{ border: none; border-top: 1px solid {edge}; border-radius: 0; background: transparent; }}
+QFrame[dc="src"] {{ background: transparent; border: none; border-radius: 6px; }}
+QFrame[dc="src"]:hover {{ background: {well}; }}
 QFrame[dc="chip"] {{ background: {well}; border: 1px solid {line}; border-radius: 11px; }}
 QFrame[dc="chip"][kind="sug"] {{ background: {bg}; border: 1px dashed {edge-2}; }}
 QFrame[dc="chip"][kind="maybe"] {{ background: {warm}; border: 1px dashed {hours}; }}
@@ -355,7 +358,7 @@ QLabel[dc="n"] {{ color: {muted}; }}
 QLabel[dc="warn"] {{ color: {hours}; font-weight: 700; }}
 QLabel[dc="ok"] {{ color: {accent}; font-weight: 700; }}
 QLabel[dc="cal"] {{ color: {accent}; }}
-QLabel[dc="calev"] {{ color: {ink}; font-style: italic; }}
+QLabel[dc="calev"] {{ color: {mark}; font-weight: 700; }}
 QLabel[dc="calhead"] {{ color: {muted}; }}
 QLabel[dc="calnum"] {{ color: {muted}; }}
 QLabel[dc="calnum"][today="true"] {{ color: {accent}; font-weight: 700; }}
@@ -363,25 +366,36 @@ QFrame[dc="calgrid"] {{ background: {line}; border: none; border-radius: 0; }}
 QFrame[dc="calday"] {{ background: {bg}; border: none; border-radius: 0; }}
 QFrame[dc="calday"][out="true"] {{ background: {well}; }}
 QFrame[dc="calday"][today="true"] {{ background: {you-bg}; }}
+QFrame[dc="calday"][over="true"] {{ background: {you-bg}; border: 1px solid {accent}; }}
 QFrame[dc="calrow"] {{ background: transparent; border: none; border-radius: 4px; }}
 QFrame[dc="calrow"]:hover {{ background: {well}; }}
 QFrame[dc="calrow"][on="true"] {{ background: {accent}; }}
 QFrame[dc="calrow"][on="true"] QLabel {{ color: {accent-ink}; }}
 QLabel[dc="bad"] {{ color: {bad}; }}
-QLabel[dc="event"] {{ font-style: italic; font-weight: 700; color: {mark}; }}
+QLabel[dc="event"] {{ font-weight: 700; color: {mark}; }}
+QLabel[dc="fresh"] {{ color: {accent}; }}
 QPushButton[dc="link"] {{ background: transparent; color: {accent}; border: 1px solid transparent; border-radius: 6px; padding: 2px 4px; min-height: 0; }}
 QPushButton[dc="link"]:hover {{ background: {well}; }}
 QPushButton[dc="link"]:disabled {{ color: {faded}; }}
 QPushButton[dc="link"][tone="bad"] {{ color: {bad}; }}
 QPushButton[dc="link"]::menu-indicator, QPushButton[dc="more"]::menu-indicator, QPushButton[dc="seg"]::menu-indicator,
-QPushButton[dc="pill"]::menu-indicator {{ image: none; width: 0; }}
+QPushButton[dc="tool"]::menu-indicator {{ image: none; width: 0; }}
 QPushButton[dc="x"] {{ background: transparent; color: {muted}; border: none; border-radius: 6px; padding: 0 3px; min-height: 0; font-size: 12px; }}
 QPushButton[dc="x"]:hover {{ background: {press}; color: {ink}; }}
-QPushButton[dc="pill"] {{ border-radius: 12px; padding: 3px 12px; min-height: 0; font-size: 12px; }}
-QPushButton[dc="pill"]:checked {{ background: {you-bg}; border: 1px solid {accent}; color: {accent}; }}
-QPushButton[dc="pill"][tone="warm"] {{ background: {warm}; border: 1px solid {warm-line}; color: {hours}; font-weight: 700; }}
+QPushButton[dc="tool"] {{ border-radius: 6px; padding: 3px 10px; min-height: 0; }}
+QPushButton[dc="tool"]:focus {{ padding: 2px 9px; }}
+QPushButton[dc="tool"]:checked {{ background: {you-bg}; border: 1px solid {accent}; color: {accent}; }}
+QPushButton[dc="tool"][tone="warm"] {{ color: {hours}; font-weight: 700; }}
+QPushButton[dc="menu"] {{ padding: 6px 30px 6px 14px; }}
+QPushButton[dc="menu"]:focus {{ padding: 5px 29px 5px 13px; }}
+QPushButton[dc="menu"]::menu-indicator {{ image: url("{i-down}"); width: 12px; height: 12px; subcontrol-origin: padding; subcontrol-position: center right; right: 10px; }}
+QPushButton[dc="menu"][small="true"] {{ border-radius: 6px; padding: 3px 26px 3px 10px; min-height: 0; }}
+QPushButton[dc="menu"][small="true"]:focus {{ padding: 2px 25px 2px 9px; }}
+QPushButton[dc="menu"][small="true"]::menu-indicator {{ right: 8px; }}
 QPushButton[dc="seg"] {{ border-radius: 0; padding: 4px 12px; min-height: 0; }}
 QPushButton[dc="seg"]:checked {{ background: {you-bg}; border: 1px solid {accent}; color: {accent}; }}
+QPushButton[dc="seg"][menu="true"] {{ padding: 4px 26px 4px 12px; }}
+QPushButton[dc="seg"][menu="true"]::menu-indicator {{ image: url("{i-down}"); width: 12px; height: 12px; subcontrol-origin: padding; subcontrol-position: center right; right: 8px; }}
 QProgressBar {{ border: 0; border-radius: 3px; background: {line}; max-height: 6px; min-height: 6px; }}
 QProgressBar::chunk {{ border-radius: 3px; background: {accent}; }}
 QTabWidget::pane {{ border: none; }}

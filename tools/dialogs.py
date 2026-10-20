@@ -1383,7 +1383,7 @@ def main(out):
                 reopened.append(pid)
 
         import json
-        from due_crew.planner import plan_tab as PTB, send as PS, shape as PSH, text_tab as PT
+        from due_crew.planner import plan_tab as PTB, send as PS, shape as PSH, text_tab as PT, widgets as PW
         from due_crew.planner import ops as PO
         reopened = []
         mine = PR.my_plans(CLIENT)
@@ -1406,12 +1406,13 @@ def main(out):
         dlg.resize(1180, 760)
         tab.pick(("date", "u1"))
         dp = tab.date_panel
-        chips = [c.words.text() for c in dp.chips.findChildren(PTB.Chip)]
+        chips = [c.words.full for c in dp.chips.findChildren(PW.Source)]
         if "Videos › Cardio › Heart Failure" not in chips or not any(c.startswith("Systems") for c in chips) \
                 or not any(c.startswith("Bank") for c in chips) or dp.name.text() != "Heart failure":
             raise RuntimeError(f"planner: the date's chips {chips}, {dp.name.text()!r}")
-        if tab.shape_box.isHidden() or "→" not in tab.shape_words.text() or not tab.send_box.isHidden():
-            raise RuntimeError(f"planner: the shape line {tab.shape_words.text()!r}")
+        shape = [w.text() for w in tab.shape_fields.findChildren(QtWidgets.QLabel)]
+        if tab.shape_box.isHidden() or "Dates" not in shape or "Study days" not in shape or not tab.send_box.isHidden():
+            raise RuntimeError(f"planner: the shape line {shape}")
         if [w for w in dlg.findChildren(QtWidgets.QLabel) if w.pixmap() is not None and not w.pixmap().isNull()]:
             raise RuntimeError("planner: Pip in the plan window (round five: none)")
         shoot(dlg, os.path.join(out, "planner-date.png"))
@@ -1467,8 +1468,8 @@ def main(out):
         shoot(sh, os.path.join(out, "planner-shape-moves.png"))
         # the deck beside it: ticks add to the picked date; with none picked, what the plan covers, laid out
         tab.tick_for("u3")
-        if tab.deck.bar.isHidden() or "Ticking adds to" not in tab.deck.bar_words.text() or tab.side.currentIndex() != 1:
-            raise RuntimeError("planner: + From the deck")
+        if tab.deck.bar.isHidden() or "Shock" not in tab.deck.bar_words.text() or tab.side.currentIndex() != 1:
+            raise RuntimeError("planner: Add from the deck")
         shoot(dlg, os.path.join(out, "planner-deck-date.png"))
         tab.deck._back()
         tab.side.setCurrentIndex(1)
@@ -1520,7 +1521,8 @@ def main(out):
         dp._nudge(1)
         dlg.change({"op": "set_todo", "date": "u3", "lines": [{"k": "watch", "t": "Shock, part 2"}]})
         if STORE.plans[pid]["version"] != v or not dlg.draft or len(dlg.draft) != 2 or tab.send_box.isHidden() \
-                or "2 changes, not sent" not in tab.send_words.text() or unit("u3")["opens"] != day(3):
+                or "2 changes not sent" not in tab.send_words.text() or 'href="u3"' not in tab.send_words.text() \
+                or unit("u3")["opens"] != day(3):
             raise RuntimeError(f"planner: changes wait: {tab.send_words.text()!r}, v{STORE.plans[pid]['version']}")
         shoot(dlg, os.path.join(out, "planner-waiting.png"))
         sd = PS.SendDialog(dlg)
@@ -1603,7 +1605,47 @@ def main(out):
             raise RuntimeError(f"planner: notes on a day: {rows}")
         tab._mode("month")
         shoot(dlg, os.path.join(out, "planner-month.png"))
+        # Month: a date dragged onto another day moves there (with people following, it waits); Ctrl+Z takes it back
+        cells = {c.day: c for c in tab.month_body.findChildren(PW.DayCell)}
+        to = QtCore.QDate.fromString(unit("u1")["opens"], "yyyy-MM-dd").addDays(2).toString("yyyy-MM-dd")
+        drags = [r for r in tab.month_body.findChildren(PW.Row) if r.drag]
+        if to not in cells or not cells[to].acceptDrops() or not drags:
+            raise RuntimeError(f"planner: Month takes a dragged date ({to} in {sorted(cells)[:3]}…)")
+        was = PTB.confirm
+        PTB.confirm = yes
+        try:
+            cells[to].on_drop("date", "u1", to)
+        finally:
+            PTB.confirm = was
+        if not dlg.draft or dlg.draft.ops[-1].get("op") != "move" or dlg.unit("u1")["opens"] != to:
+            raise RuntimeError(f"planner: a date dropped on another day: {dlg.draft and dlg.draft.ops}")
+        dlg.undo_key()
+        if dlg.draft is not None:
+            raise RuntimeError("planner: Ctrl+Z takes back the last change not sent")
         tab._mode("list")
+        # the Plan tab's keys, and Find
+        seqs = {x.key().toString() for x in tab.findChildren(QtGui.QShortcut)}
+        want = {"Ctrl+N", "Ctrl+E", "Ctrl+F", "Ctrl+T", "Ctrl+1", "Ctrl+2", "Ctrl+D", "Ctrl+Z", "Ctrl+Return",
+                "Up", "Down", "Alt+Left", "Alt+Right", "Return", "F2", "Del"}
+        if not want <= seqs:
+            raise RuntimeError(f"planner: the Plan tab's keys, missing {sorted(want - seqs)}")
+        tab.pick(("date", "u1"))
+        tab.step(1)
+        order = [k for k in tab.rows if k[0] in ("date", "event", "review")]
+        if tab.picked != order[order.index(("date", "u1")) + 1]:
+            raise RuntimeError(f"planner: ↓ picks the next one: {tab.picked}")
+        tab.find.setText("heart")
+        found = [k for k in tab.rows if k[0] == "date"]
+        if not found or any("heart" not in (dlg.unit(k[1]).get("name") or "").lower()
+                            and not any("heart" in str(t).lower() for t in dlg.unit(k[1]).get("tags") or []) for k in found):
+            raise RuntimeError(f"planner: Find keeps the dates with its words: {found}")
+        tab._find_first()
+        if tab.picked != found[0]:
+            raise RuntimeError("planner: Find's Enter picks the first")
+        tab.find.clear()
+        tab._go_change("u3")
+        if tab.picked != ("date", "u3"):
+            raise RuntimeError("planner: a change in the foot, clicked, picks its date")
         # a plan I follow: Plan (today, behind, its dates to read) and Mine
         pid2, _code2 = STORE.add_plan("kai", "Kai's Renal", "Big Step 1", [
             {"id": "k1", "name": "Heart failure", "opens": day(-6), "tags": [f"{root}::#Videos::Cardio::Heart_Failure"]},

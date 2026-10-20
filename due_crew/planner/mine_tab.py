@@ -7,11 +7,11 @@ under More, Change deck, Open everything now, Open early. Each is
 plan_flow's own step (through flow.Ops), one request on a click; the
 window reads my follow again once it's taken."""
 
-from aqt.qt import QFormLayout, QHBoxLayout, QMenu, QPushButton, Qt, QTimer, QVBoxLayout, QWidget
+from aqt.qt import QFormLayout, QHBoxLayout, QPushButton, Qt, QTimer, QVBoxLayout, QWidget
 
 from ..ui import role
 from .. import plans as P
-from .widgets import Chip, flow_box, link, plain, small
+from .widgets import Source, link, menu_button, plain
 
 
 class MineTab(QWidget):
@@ -38,22 +38,23 @@ class MineTab(QWidget):
         dates.addStretch(1)
         form.addRow("My dates", dates)
 
-        skip = QHBoxLayout()
-        skip.setSpacing(6)
-        self.skips, self.skips_lay = flow_box()
-        skip.addWidget(self.skips, 0)
-        self.skip_btn = link("+ Skip a date")
-        self.skip_menu = QMenu(self.skip_btn)
-        self.skip_menu.aboutToShow.connect(self._skip_entries)
-        self.skip_btn.setMenu(self.skip_menu)
-        skip.addWidget(self.skip_btn, 0, Qt.AlignmentFlag.AlignTop)  # right after the dates skipped, not across the window
-        skip.addStretch(1)
+        skip = QVBoxLayout()
+        skip.setSpacing(4)
+        self.skips = QWidget()  # a date skipped a line: its day and name, ✕ to stop skipping it
+        self.skips_lay = QVBoxLayout(self.skips)
+        self.skips_lay.setContentsMargins(0, 0, 0, 0)
+        self.skips_lay.setSpacing(0)
+        self.skips.setMaximumWidth(420)  # its ✕ by the name, not across the window
+        skip.addWidget(self.skips)
+        self.skip_btn, self.skip_menu = menu_button("Skip a date", self._skip_entries, small=True)
+        skip.addWidget(self.skip_btn, 0, Qt.AlignmentFlag.AlignLeft)
         form.addRow("Skipping", skip)
 
         opens = QHBoxLayout()
         opens.setSpacing(0)
         self.on_dates = self._seg("Each morning, on their dates", lambda: self._own(""))
-        self.ready = self._seg("When I'm ready (Up next)", lambda: self._own("ready"))
+        self.ready = self._seg("When I'm ready", lambda: self._own("ready"))
+        self.ready.setToolTip("<span>Up next on the board opens the next date's cards when you say</span>")
         opens.addWidget(self.on_dates)
         opens.addWidget(self.ready)
         opens.addStretch(1)
@@ -80,10 +81,7 @@ class MineTab(QWidget):
         self.copy_btn.setAutoDefault(False)
         self.copy_btn.clicked.connect(self._copy)
         row.addWidget(self.copy_btn)
-        self.more_btn = link("More ▾")
-        self.more_menu = QMenu(self.more_btn)
-        self.more_menu.aboutToShow.connect(self._more)
-        self.more_btn.setMenu(self.more_menu)
+        self.more_btn, self.more_menu = menu_button("More", self._more)
         row.addWidget(self.more_btn)
         row.addStretch(1)
         row.addWidget(link("Stop following…", lambda: self._do("stop_following"), bad=True))
@@ -113,20 +111,22 @@ class MineTab(QWidget):
         if not p:
             self.head.setText("You don't follow it on this account any more.")
             return
-        self.head.setText(f"Following {p.get('name') or 'the plan'}" + (" · paused" if p.get("paused") else ""))
+        self.head.setText(f"Following {p.get('name') or 'the plan'}" + (", paused" if p.get("paused") else ""))
         shift = int(p.get("shift") or 0)
         self.as_plan.setChecked(not shift)
         self.later.setChecked(bool(shift))
         self.later.setText(f"{shift:,} day{'s' if shift != 1 else ''} later" if shift else "Some days later…")
-        self.skips_lay.clear()
+        while self.skips_lay.count():
+            w = self.skips_lay.takeAt(0).widget()
+            if w is not None:
+                w.hide()
+                w.deleteLater()
         names = {u["id"]: u for u in P.units(win.plan.get("doc") or {})}
         for uid in p.get("skipped") or []:
             u = names.get(uid)
-            c = Chip(f"{P.fmt_day(u['opens'])} · {u.get('name') or '?'}" if u else "a date taken off")
-            c.add(small("✕", lambda uid=uid: self._do("set_skip", uid, False), "Stop skipping it (it opens if its day has come)"))
-            self.skips_lay.addWidget(c)
-        if not self.skips_lay.count():
-            self.skips_lay.addWidget(plain("None", muted=True))
+            self.skips_lay.addWidget(Source(f"{P.fmt_day(u['opens'])} · {u.get('name') or '?'}" if u else "a date taken off",
+                                            on_take=lambda uid=uid: self._do("set_skip", uid, False)))
+        self.skips.setVisible(self.skips_lay.count() > 0)
         own = p.get("own") or ""
         self.on_dates.setChecked(not own)
         self.ready.setChecked(bool(own))
@@ -134,8 +134,9 @@ class MineTab(QWidget):
         self.held.setText(f"{n:,} card{'s' if n != 1 else ''} kept shut till their day…" if n else "")
         self.held.setVisible(bool(n))
         self.held_none.setVisible(not n)
-        self.squad.setText("In its squad: they see you showed up, never your numbers."
-                           if win.ops.in_team(win.plan["id"]) else "Not in its squad. Join from the board's Squads tab.")
+        inside = win.ops.in_team(win.plan["id"])
+        self.squad.setText("You're in it" if inside else "Not in it: join from the board's Squads tab")
+        self.squad.setToolTip("<span>Its squad sees that you showed up, never your numbers</span>" if inside else "")
         self.pause_btn.setText("Resume" if p.get("paused") else "Pause until…")
         self.copy_btn.setVisible(bool(win.plan.get("listed")))
 

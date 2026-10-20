@@ -190,13 +190,13 @@ def test_view():
     heavy = dict(d, pace=dict(pace, daily=5))
     hw, hwarn = V.week_words(V.week_asks(heavy, t, V.pace_of(heavy)).get("2026-10-19"))
     check("view: a week over the pace says by how much, in amber", hwarn and "over your 5" in hw, hw)
-    line = " · ".join(w for w, _b in V.shape_line(d, t, pace, asks))
-    check("view: the shape line, no end set said so", line.startswith("Mon 19 Oct → Thu 22 Oct, no end set") and "Mon–Fri" in line
-          and "20 new cards a day" in line, line)
-    ended = dict(d, end="2026-10-23", phases={"taper": 3, "catchup": 0})
-    line = " · ".join(w for w, _b in V.shape_line(ended, t, V.pace_of(ended), asks))
-    check("view: the shape line ends with the exam on its end day", "→ Cardio quiz 1 Fri 23 Oct" in line
-          and "no new cards the last 3 days" in line, line)
+    line = dict(V.shape_line(d, t, pace, asks))
+    check("view: the shape, label by label; no end set said so", line.get("Dates") == "Mon 19 Oct – Thu 22 Oct, no end set"
+          and line.get("Study days") == "Mon–Fri" and line.get("New a day") == "20", line)
+    ended = dict(d, end="2026-10-23", phases={"taper": 3, "catchup": 4})
+    line = dict(V.shape_line(ended, t, V.pace_of(ended), asks))
+    check("view: the shape ends with the exam on its end day", line.get("Dates") == "Mon 19 Oct – Cardio quiz 1, Fri 23 Oct"
+          and line.get("Last days") == "3 with no new cards" and line.get("Catch-up") == "every 4th week", line)
     check("view: study days in words", V.days_words([1, 1, 1, 1, 1, 0, 0]) == "Mon–Fri" and V.days_words([1] * 7) == "every day"
           and V.days_words([1, 0, 1, 0, 1, 0, 0]) == "Mon, Wed, Fri")
     u, now = V.today_date(d, TODAY)

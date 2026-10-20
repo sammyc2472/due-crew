@@ -136,31 +136,33 @@ def peak(asks):
 
 
 def shape_line(doc, tree, pace, asks):
-    """The plan's shape, one line: "Mon 12 Oct → Block 2 exam Fri 13 Nov · Mon–Fri
-    · 20 new cards a day · reviews peak ~115 a day (week 5) · no new cards the
-    last 3 days". [(words, bold)] parts."""
+    """The plan's shape, label by label: [("Dates", "Mon 12 Oct – Block 2
+    exam, Fri 13 Nov"), ("Study days", "Mon–Fri"), ("New a day", "20"),
+    ("Reviews peak", "~115 a day, week 5"), ("Last days", "3 with no new
+    cards"), ("Catch-up", "every 4th week")]."""
     parts = []
     start = B.plan_start(doc, "")
     ev, end = ends_with(doc)
     if start or end:
         a = P.fmt_day(start) if start else "Not started"
         last = B.last_day(doc)
-        b = (f"{ev.get('name') or 'the exam'} {P.fmt_day(end)}" if ev else P.fmt_day(end) if end
+        b = (f"{ev.get('name') or 'the exam'}, {P.fmt_day(end)}" if ev else P.fmt_day(end) if end
              else f"{P.fmt_day(last)}, no end set" if last else "no end set")
-        parts.append((f"{a} → {b}", False))
-    parts.append((days_words(pace.get("days")), False))
+        parts.append(("Dates", f"{a} – {b}"))
+    parts.append(("Study days", days_words(pace.get("days"))))
     cap = cap_of(doc, tree, pace)
     if pace.get("mode") != "placed" and cap:  # placed: each date's own cards, nothing to say
-        parts.append((f"{cap:,} new cards a day" + (" to fit the end" if pace.get("mode") == "end" else ""), True))
+        parts.append(("New a day", f"{cap:,}" + (", to fit the end" if pace.get("mode") == "end" else "")))
     pk = peak(asks)
     if pk:
-        parts.append((f"reviews peak ~{B.about(pk[1])} a day (week {pk[0]})", False))
+        parts.append(("Reviews peak", f"~{B.about(pk[1])} a day, week {pk[0]}"))
     ph = doc.get("phases") or {}
     if ph.get("taper"):
         n = int(ph["taper"])
-        parts.append((f"no new cards the last {n} day{'s' if n != 1 else ''}", False))
+        parts.append(("Last days", f"{n} with no new cards"))
     if ph.get("catchup"):
-        parts.append((f"a catch-up week every {int(ph['catchup'])}", False))
+        n = int(ph["catchup"])
+        parts.append(("Catch-up", f"every {n}{'st' if n == 1 else 'nd' if n == 2 else 'rd' if n == 3 else 'th'} week"))
     return parts
 
 

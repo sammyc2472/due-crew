@@ -4,7 +4,7 @@ plan's shape on top, its weeks and dates with the deck beside them, a
 paste box, and the changes waiting to be sent), Followers (how far they
 are, what was said to them) and Sharing (its code, name, who can follow,
 co-authors). A plan I follow has two: Plan (today, what's behind, its
-dates) and Mine (my dates, skips, how its cards open). Undo ▾ on top.
+dates) and Mine (my dates, skips, how its cards open). Undo on top.
 
 Every change is an op (ops.py). With anyone following, it waits under
 the plan (draft.py, kept on this computer) until Review and send, one
@@ -17,7 +17,7 @@ tooltip."""
 import json
 
 from aqt.qt import (
-    QComboBox, QDate, QDateEdit, QDialog, QDialogButtonBox, QHBoxLayout, QMenu, QPushButton, QTabWidget,
+    QComboBox, QDate, QDateEdit, QDialog, QDialogButtonBox, QHBoxLayout, QPushButton, QTabWidget,
     QTimer, QVBoxLayout, QWidget,
 )
 
@@ -29,7 +29,7 @@ from . import build as B
 from . import edits as E
 from . import model as M
 from . import ops as O
-from .widgets import fit, link, plain
+from .widgets import fit, menu_button, plain, tip_keys
 
 TABS = {"dates": "plan", "layout": "plan", "text": "plan", "plan": "plan", "history": "plan",
         "progress": "followers", "updates": "followers", "followers": "followers",
@@ -108,7 +108,7 @@ class PlanWindow(QDialog):
         self.keep = None          # what the Plan tab picks once a plan (re)loads
         self.busy = False
         self.undoable = None      # (plan id, version) a save of this window's made, while its Undo shows
-        self.sent = None          # (when, how many changes) the last send, for Undo ▾'s first line
+        self.sent = None          # (when, how many changes) the last send, for Undo's first line
         self._rows = {}           # uid -> model.sources, for this plan's index and doc
         self._tree = None
         attach_alive(self)
@@ -125,10 +125,8 @@ class PlanWindow(QDialog):
         for p in self.plans:
             self.pick.addItem(_pick_label(p), p["id"])
         top.addWidget(self.pick, 1)
-        self.undo_btn = link("Undo ▾")
-        self.undo_menu = QMenu(self.undo_btn)
-        self.undo_menu.aboutToShow.connect(self._undo_entries)
-        self.undo_btn.setMenu(self.undo_menu)
+        self.undo_btn, self.undo_menu = menu_button("Undo", self._undo_entries)
+        self.undo_btn.setToolTip(tip_keys("The last change not sent, your last save or send; History", "Ctrl+Z"))
         top.addWidget(self.undo_btn)
         self.new_btn = QPushButton("New plan…")
         self.new_btn.setAutoDefault(False)
@@ -489,7 +487,7 @@ class PlanWindow(QDialog):
         if outcome == "saved":
             self.undoable = (pid, plan.get("version"))
             self._undo_button()
-            self.status.setText("Saved. Undo ▾ takes it back.")
+            self.status.setText("Saved.")
         else:
             self.status.setText("Someone saved this plan again since: it's up to date now. Make the change again.")
 
@@ -511,7 +509,7 @@ class PlanWindow(QDialog):
         self.status.setText("Discarded.")
 
     def take_change(self, i):
-        """One waiting change out (Review's ✕, or Undo ▾'s first line)."""
+        """One waiting change out (Review's ✕, or Undo's first line)."""
         if not self.draft or not (0 <= i < len(self.draft)):
             return
         self.draft.take(i)
@@ -566,17 +564,16 @@ class PlanWindow(QDialog):
             self.undoable = (pid, plan.get("version"))
             self.sent = (self.ops.now_words(), n)
             self._undo_button()
-            self.status.setText(f"Sent to {self.followers():,} following. They get it at their next refresh. "
-                                "Undo ▾ takes the whole send back.")
+            self.status.setText(f"Sent to {self.followers():,} following. They get it at their next refresh.")
         self.ops.send(self, pid, version, doc, summary, post, done)
 
-    # ---- Undo ▾ ----
+    # ---- Undo ----
 
     def _undo_button(self):
         self.undo_btn.setVisible(self.author())
 
     def _undo_entries(self):
-        """Undo ▾ as it opens: the last change not sent, the last save or send of this window's, then History."""
+        """Undo as it opens: the last change not sent, the last save or send of this window's, then History."""
         self.undo_menu.clear()
         if not self.author():
             return
@@ -596,6 +593,19 @@ class PlanWindow(QDialog):
             a.setEnabled(False)
         self.undo_menu.addSeparator()
         self.undo_menu.addAction("History: every save…").triggered.connect(self._history)
+
+    def undo_key(self):
+        """Ctrl+Z (the Plan tab's, outside a box): the last change not sent
+        taken back; a save made at once, undone; a send asks, by the menu."""
+        if not self.author() or self.busy:
+            return
+        if self.draft and len(self.draft):
+            self.take_change(len(self.draft) - 1)
+            self.status.setText("Taken back.")
+        elif self.undoable and self.undoable[0] == (self.plan or {}).get("id") and not self.sent:
+            self._undo()
+        elif self.undo_btn.isVisible():
+            self.undo_btn.showMenu()
 
     def _history(self):
         from .send import HistoryDialog

@@ -13,11 +13,11 @@ Every change is an op through the window (PlanWindow.change). Names are
 the deck's and the authors': plain text everywhere, escaped in rich text."""
 
 from aqt.qt import (
-    QApplication, QDate, QFrame, QGridLayout, QHBoxLayout, QMenu, QPlainTextEdit, QPushButton, QScrollArea, QSizePolicy,
-    QSplitter, QStackedWidget, Qt, QTabWidget, QTimer, QVBoxLayout, QWidget,
+    QApplication, QDate, QFrame, QGridLayout, QHBoxLayout, QKeySequence, QLineEdit, QPlainTextEdit, QPushButton,
+    QScrollArea, QShortcut, QSizePolicy, QSplitter, QStackedWidget, Qt, QTabWidget, QTimer, QVBoxLayout, QWidget,
 )
 
-from ..ui import ask_text, confirm, esc, role
+from ..ui import ask_text, confirm, esc, role, tone
 from .. import plans as P
 from . import build as B
 from . import date_dialogs as DD
@@ -26,7 +26,7 @@ from . import model as M
 from . import view as V
 from .date_panel import DatePanel, EventPanel, ReviewPanel, chip_name
 from .deck_panel import DeckPanel
-from .widgets import Chip, Elided, Row, flow_box, frame, link, mark, pill, plain
+from .widgets import DayCell, Elided, Row, flow_box, frame, keys, link, mark, menu_button, plain, tip_keys, tool
 
 
 def _scroll(widget):
@@ -78,10 +78,12 @@ class PlanTab(QWidget):
         root.setContentsMargins(0, 8, 0, 0)
         root.setSpacing(8)
 
-        # a follower's today, and what's behind
-        self.today_box, tl = frame("today", horizontal=True)
+        # a follower's today, and what's behind: a line each, its button at the end
+        self.today_box, tl = frame("line", horizontal=True, margins=(2, 0, 0, 0))
+        self.today_head = plain("Today", dc="ok")
+        self.today_head.setWordWrap(False)
+        tl.addWidget(self.today_head)
         self.today_words = plain()
-        self.today_words.setTextFormat(Qt.TextFormat.RichText)
         tl.addWidget(self.today_words, 1)
         self.today_go = QPushButton("Study now")
         self.today_go.setProperty("dc", "go")
@@ -89,9 +91,11 @@ class PlanTab(QWidget):
         self.today_go.clicked.connect(self._study_today)
         tl.addWidget(self.today_go)
         root.addWidget(self.today_box)
-        self.behind_box, bl = frame("warm", horizontal=True)
+        self.behind_box, bl = frame("line", horizontal=True, margins=(2, 0, 0, 0))
+        self.behind_head = plain("Behind", dc="warn")
+        self.behind_head.setWordWrap(False)
+        bl.addWidget(self.behind_head)
         self.behind_words = plain()
-        self.behind_words.setTextFormat(Qt.TextFormat.RichText)
         bl.addWidget(self.behind_words, 1)
         self.behind_go = QPushButton("Study what's left")
         self.behind_go.setAutoDefault(False)
@@ -99,30 +103,48 @@ class PlanTab(QWidget):
         bl.addWidget(self.behind_go)
         root.addWidget(self.behind_box)
 
-        # an author's shape
-        self.shape_box, sl = frame("strip", horizontal=True)
-        self.shape_words = plain()
-        self.shape_words.setTextFormat(Qt.TextFormat.RichText)
-        sl.addWidget(self.shape_words, 1)
-        self.shape_btn = link("Change…", self._shape)
-        sl.addWidget(self.shape_btn, 0, Qt.AlignmentFlag.AlignTop)
+        # an author's shape: what it covers, by when, how fast, each its own label and value
+        self.shape_box, sl = frame("line", horizontal=True, margins=(2, 0, 0, 0), spacing=12)
+        self.shape_fields, self.shape_lay = flow_box(18, 2)
+        sl.addWidget(self.shape_fields, 1, Qt.AlignmentFlag.AlignVCenter)
+        self.shape_btn = tool("Change…", self._shape, tip="Its start, end, study days and pace")
+        sl.addWidget(self.shape_btn, 0, Qt.AlignmentFlag.AlignVCenter)
         root.addWidget(self.shape_box)
 
-        # the toolbar
+        # the toolbar: find, today, what needs a look, the weeks; add; List or Month
         bar = QHBoxLayout()
-        self.today_btn = pill("Today", self._go_today, tip="The date open today, or the next one")
-        self.look_btn = pill("Needs a look", self._toggle_look, checkable=True,
+        bar.setSpacing(6)
+        self.find = QLineEdit()
+        self.find.setPlaceholderText("Find a date or tag")
+        self.find.setClearButtonEnabled(True)
+        self.find.setToolTip(tip_keys("Only the dates whose name or cards have these words; Enter picks the first", "Ctrl+F"))
+        self.find.setMaximumWidth(220)
+        self.find.textChanged.connect(self._found)
+        self.find.returnPressed.connect(self._find_first)
+        QShortcut(QKeySequence("Escape"), self.find, context=Qt.ShortcutContext.WidgetShortcut,
+                  activated=lambda: self.find.clear() if self.find.text() else self.views.currentWidget().setFocus())
+        bar.addWidget(self.find)
+        self.today_btn = tool("Today", self._go_today, tip="The date open today, or the next one", seq="Ctrl+T")
+        self.look_btn = tool("Needs a look", self._toggle_look, checkable=True,
                              tip="Only the weeks with a date that has no cards here, or a day over the pace")
-        self.all_btn = pill("Open all weeks", self._toggle_all)
+        self.all_btn = tool("Open all weeks", self._toggle_all)
         for w in (self.today_btn, self.look_btn, self.all_btn):
             bar.addWidget(w)
         bar.addStretch(1)
+        self.add_btn, self.add_menu = menu_button("Add", small=True)
+        for label, fn, seq in (("A date…", self.new_date, "Ctrl+N"), ("A quiz or exam…", lambda: self.new_event(), "Ctrl+E"),
+                               ("A review day…", self.new_review, None)):
+            a = self.add_menu.addAction(label + (f"\t{keys(seq)}" if seq else ""))
+            a.triggered.connect(lambda _=False, fn=fn: fn())
+        bar.addWidget(self.add_btn)
+        bar.addSpacing(6)
         self.list_btn = QPushButton("List")
         self.month_btn = QPushButton("Month")
-        for b, m in ((self.list_btn, "list"), (self.month_btn, "month")):
+        for b, m, seq in ((self.list_btn, "list", "Ctrl+1"), (self.month_btn, "month", "Ctrl+2")):
             b.setProperty("dc", "seg")
             b.setCheckable(True)
             b.setAutoDefault(False)
+            b.setToolTip(tip_keys(m.capitalize(), seq))
             b.clicked.connect(lambda _=False, m=m: self._mode(m))
             bar.addWidget(b)
         root.addLayout(bar)
@@ -131,6 +153,7 @@ class PlanTab(QWidget):
         split = QSplitter(Qt.Orientation.Horizontal)
         split.setChildrenCollapsible(False)
         left, ll = frame("card", margins=(4, 4, 4, 4))
+        self.left = left
         self.views = QStackedWidget()
         self.list_body = QWidget()
         self.list_scroll = _scroll(self.list_body)
@@ -138,6 +161,8 @@ class PlanTab(QWidget):
         self.month_body = QWidget()
         self.month_page = _scroll(self.month_body)  # a month never makes the window taller than its screen
         self.views.addWidget(self.month_page)
+        for v in (self.list_scroll, self.month_page):
+            v.setFocusPolicy(Qt.FocusPolicy.StrongFocus)  # its keys: ↑ ↓, a day earlier or later, its name, delete
         ll.addWidget(self.views)
         split.addWidget(left)
         right, rl = frame("card", margins=(0, 0, 0, 0))
@@ -158,6 +183,7 @@ class PlanTab(QWidget):
         self.side.addTab(_scroll(self.panels), "")
         self.deck = DeckPanel(win, self)
         self.side.addTab(self.deck, "The deck")
+        self.side.setTabToolTip(1, tip_keys("Tick the deck's tags for the picked date", "Ctrl+D"))
         self.side.currentChanged.connect(self._side_changed)
         rl.addWidget(self.side)
         split.addWidget(right)
@@ -176,28 +202,63 @@ class PlanTab(QWidget):
         self.paste_go.setAutoDefault(False)
         self.paste_go.clicked.connect(self._show_changes)
         pr.addWidget(self.paste_go, 0, Qt.AlignmentFlag.AlignTop)
-        pr.addSpacing(6)
-        pr.addWidget(link("The plan as text", lambda: self.text(True), tip="Every date, quiz and tag as plan lines, to read or edit"),
-                     0, Qt.AlignmentFlag.AlignVCenter)
-        self.ai_btn = link("A prompt for your AI ▾", tip="Copied for you to paste in your own AI; it gets tag names and counts, never a card")
-        self.ai_menu = QMenu(self.ai_btn)
-        self.ai_menu.aboutToShow.connect(self._ai_entries)
-        self.ai_btn.setMenu(self.ai_menu)
-        pr.addWidget(self.ai_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.text_btn = QPushButton("The plan as text")
+        self.text_btn.setAutoDefault(False)
+        self.text_btn.setToolTip("<span>Every date, quiz and tag as plan lines, to read or edit</span>")
+        self.text_btn.clicked.connect(lambda: self.text(True))
+        pr.addWidget(self.text_btn, 0, Qt.AlignmentFlag.AlignTop)
+        self.ai_btn, self.ai_menu = menu_button("AI prompt", self._ai_entries,
+                                                tip="Copied for you to paste in your own AI; it gets tag names and counts, never a card")
+        pr.addWidget(self.ai_btn, 0, Qt.AlignmentFlag.AlignTop)
         root.addWidget(self.paste_row)
 
-        # the changes waiting to be sent
-        self.send_box, xl = frame("bar", horizontal=True)
+        # the changes waiting to be sent: the window's foot, each change a link to its date
+        self.send_box, xl = frame("foot", horizontal=True, margins=(2, 8, 0, 0))
         self.send_words = plain()
-        self.send_words.setTextFormat(Qt.TextFormat.RichText)
+        self.send_words.setTextFormat(Qt.TextFormat.RichText)  # names escaped; each change a link to its date
+        self.send_words.setTextInteractionFlags(Qt.TextInteractionFlag.LinksAccessibleByMouse)
+        self.send_words.linkActivated.connect(self._go_change)
         xl.addWidget(self.send_words, 1)
         xl.addWidget(link("Discard", lambda: self.win.discard()))
         self.send_go = QPushButton("Review and send")
         self.send_go.setProperty("dc", "go")
         self.send_go.setAutoDefault(False)
+        self.send_go.setToolTip(tip_keys("Every change waiting, and a line for followers", "Ctrl+Return"))
         self.send_go.clicked.connect(lambda: self.win.review_send())
         xl.addWidget(self.send_go)
         root.addWidget(self.send_box)
+        self._keys()
+
+    def _keys(self):
+        """The Plan tab's keys: anywhere in it (Ctrl+…), and on the plan
+        itself (the list or Month in focus: ↑ ↓, Alt+← →, Enter, Delete)."""
+        here = Qt.ShortcutContext.WidgetWithChildrenShortcut
+
+        def on(seq, fn, where=None):
+            QShortcut(QKeySequence(seq), where or self, context=here, activated=fn)
+        on("Ctrl+N", lambda: self._author() and self.new_date())
+        on("Ctrl+E", lambda: self._author() and self.new_event())
+        on("Ctrl+F", self._focus_find)
+        on("Ctrl+T", self._go_today)
+        on("Ctrl+1", lambda: self._mode("list"))
+        on("Ctrl+2", lambda: self._mode("month"))
+        on("Ctrl+D", self._deck_key)
+        on("Ctrl+Return", lambda: self.win.review_send() if self.send_box.isVisible() and self.send_go.isEnabled() else None)
+        on("Ctrl+Enter", lambda: self.win.review_send() if self.send_box.isVisible() and self.send_go.isEnabled() else None)
+        on("Ctrl+Z", lambda: self.win.undo_key())
+        for v in (self.list_scroll, self.month_page):
+            on("Up", lambda: self.step(-1), v)
+            on("Down", lambda: self.step(1), v)
+            on("Alt+Left", lambda: self.nudge(-1), v)
+            on("Alt+Right", lambda: self.nudge(1), v)
+            on("Return", lambda: self.name_it(self.picked), v)
+            on("Enter", lambda: self.name_it(self.picked), v)
+            on("F2", lambda: self.name_it(self.picked), v)
+            on("Delete", self.delete_picked, v)
+            on("Backspace", self.delete_picked, v)
+
+    def _author(self):
+        return self.win.doc is not None and self.win.author() and not self.win.busy
 
     # ---- the window asks ----
 
@@ -228,6 +289,11 @@ class PlanTab(QWidget):
             self.picked = tuple(keep)
         if self.picked and not self._exists(self.picked):
             self.picked = None
+        if (win.plan or {}).get("id") != getattr(self, "_found_for", None):
+            self._found_for = (win.plan or {}).get("id")
+            self.find.blockSignals(True)
+            self.find.clear()
+            self.find.blockSignals(False)
         if self.picked is None:
             u, _now = V.today_date(doc, win.ops.today())
             us = P.units(doc)
@@ -294,31 +360,48 @@ class PlanTab(QWidget):
         author = win.author()
         self.shape_box.setVisible(author)
         if author:
-            parts = V.shape_line(doc, win.deck_tree(), V.pace_of(doc), self.asks)
-            self.shape_words.setText(" · ".join(f"<b>{esc(w)}</b>" if bold else esc(w) for w, bold in parts))
+            self.shape_lay.clear()
+            for label, value in V.shape_line(doc, win.deck_tree(), V.pace_of(doc), self.asks):
+                pair = QWidget()
+                pl = QHBoxLayout(pair)
+                pl.setContentsMargins(0, 0, 0, 0)
+                pl.setSpacing(6)
+                for w in (plain(label, muted=True), plain(value)):
+                    w.setWordWrap(False)
+                    pl.addWidget(w)
+                self.shape_lay.addWidget(pair)
         self.paste_row.setVisible(author)
+        self.add_btn.setVisible(author)
         n = len(win.draft) if win.draft else 0
         self.send_box.setVisible(author and n > 0)
         if n:
-            ents = win.draft.entries(win.ctx())
-            said = " · ".join(esc(f"{x['what'].partition(' · ')[2] or x['what']} {x['verb'].lower()}") for x in ents[:3])
-            self.send_words.setText(f"<b>{n:,} change{'s' if n != 1 else ''}, not sent</b>" + (f" · {said}" if said else "")
-                                    + (" · …" if len(ents) > 3 else ""))
+            said = []
+            for c in win.draft.replay(win.ctx())[1][:3]:
+                x = (c["entries"] or [{}])[0]
+                what = x.get("what") or ""
+                words = esc(f"{what.partition(' · ')[2] or what} {str(x.get('verb') or 'changed').lower()}")
+                go = next((k for k in c["touched"] if win.unit(k) is not None or self._event(k) is not None), None)
+                said.append(f'<a href="{esc(go)}" style="color: {tone("accent")}; text-decoration: none">{words}</a>' if go else words)
+            more = n - len(said)
+            self.send_words.setText(f"<b>{n:,} change{'s' if n != 1 else ''} not sent:</b> " + ", ".join(said)
+                                    + (f", and {more:,} more" if more > 0 else ""))
         # today, for anyone who studies it here; what's behind, for a follower
         u, now = V.today_date(doc, today)
         studies = not author or win.own_steps()
         self.today_box.setVisible(studies and u is not None)
         self._today = u if now else None
         if u is not None and studies:
+            name = str(u.get("name") or "?")
             if now and win.idx is not None:
-                cids = win.idx.match(u, win.swap, doc)
-                c = M.counts(win.idx, cids)
-                self.today_words.setText(f"<b>Today, {esc(P.fmt_day(today))}</b> · {esc(u.get('name') or '?')} · "
-                                         f"{c['new']:,} new of {c['cards']:,}")
+                c = M.counts(win.idx, win.idx.match(u, win.swap, doc))
+                self.today_head.setText("Today")
+                self.today_words.setText(f"{name}, {c['new']:,} new of {c['cards']:,}")
             elif now:
-                self.today_words.setText(f"<b>Today, {esc(P.fmt_day(today))}</b> · {esc(u.get('name') or '?')}")
+                self.today_head.setText("Today")
+                self.today_words.setText(name)
             else:
-                self.today_words.setText(f"<b>Nothing opens today.</b> Next: {esc(P.fmt_day(u['opens']))} · {esc(u.get('name') or '?')}")
+                self.today_head.setText("Next")
+                self.today_words.setText(f"{P.fmt_day(u['opens'])}, {name}")
             self.today_go.setVisible(bool(now))
         behind = []
         if not author and win.idx is not None:
@@ -331,11 +414,20 @@ class PlanTab(QWidget):
         self.behind_box.setVisible(bool(behind))
         if behind:
             left = sum(n for _x, n in behind)
-            names = " and ".join(M.day_words(x["opens"]) for x, _n in behind[-2:])
-            more = f" and {len(behind) - 2:,} more" if len(behind) > 2 else ""
-            self.behind_words.setText(f"<b>{len(behind):,} date{'s' if len(behind) != 1 else ''} behind</b> · "
-                                      f"{esc(names)}{esc(more)} · {left:,} card{'s' if left != 1 else ''} not seen yet")
-            self.behind_go.setText(f"Study the {left:,} left")
+            names = ", ".join(f"{M.day_words(x['opens'])} {x.get('name') or '?'}" for x, _n in behind[:2])
+            more = f", and {len(behind) - 2:,} more" if len(behind) > 2 else ""
+            self.behind_words.setText(f"{names}{more}: {left:,} card{'s' if left != 1 else ''} not seen yet")
+            self.behind_go.setText(f"Study the {left:,}")
+
+    def _go_change(self, key):
+        """A change in the foot clicked: its date (or quiz), picked."""
+        if self.win.unit(key) is not None:
+            self.pick(("date", key))
+        elif self._event(key) is not None:
+            self.pick(("event", key))
+        row = self.rows.get(self.picked) if self.picked else None
+        if row is not None and self.mode == "list":
+            self.list_scroll.ensureWidgetVisible(row, 0, 80)
 
     def _study_today(self):
         u = self._today
@@ -386,7 +478,7 @@ class PlanTab(QWidget):
         self.month_btn.setChecked(self.mode == "month")
         n = len(self.look)
         self.look_btn.setVisible(self.win.author() and (bool(n) or self.only_look))
-        self.look_btn.setText(f"Needs a look · {n:,}")
+        self.look_btn.setText(f"Needs a look ({n:,})")
         mark(self.look_btn, "tone", "warm" if n and not self.only_look else "")
         self.look_btn.setChecked(self.only_look)
         self.all_btn.setText("Fold past weeks" if self.all_open else "Open all weeks")
@@ -433,6 +525,7 @@ class PlanTab(QWidget):
         author = win.author()
         fresh = win.draft.touched(win.ctx()) if win.draft else set()
         taper = self._taper()
+        found = self._matches()
         for w in weeks:
             items = ([(u.get("opens"), 0, u) for u in w["dates"]] + [(e.get("day"), 1, e) for e in w["events"]]
                      + [(r.get("day"), 2, r) for r in self.week_reviews(w["start"])])
@@ -440,8 +533,12 @@ class PlanTab(QWidget):
                 items.append((max(taper[0], w["start"]), 3, None))
             if self.only_look and not any(k == 0 and x["id"] in self.look for _d, k, x in items):
                 continue
+            if found is not None:
+                items = [t for t in items if t[1] in (0, 1) and t[2]["id"] in found]
+                if not items:
+                    continue
             lay.addWidget(self._week_head(w))
-            if not self._is_open(w):
+            if not self._is_open(w) and found is None:
                 continue
             if self.heavy and V.monday(self.heavy["a"]) == w["start"] and author:
                 lay.addWidget(self._heavy_box())
@@ -462,15 +559,9 @@ class PlanTab(QWidget):
                 lay.addWidget(self._today_rule())
         if not weeks:
             lay.addWidget(plain("No dates yet. Paste the course's calendar below, tick what the plan covers in The deck, "
-                                "or add a date." if author else "No dates on this plan yet.", muted=True))
-        if author:
-            links = QHBoxLayout()
-            links.addWidget(link("+ A date", self.new_date))
-            links.addWidget(link("+ A quiz or exam", lambda: self.new_event()))
-            links.addWidget(link("+ A review day", self.new_review))
-            links.addStretch(1)
-            lay.addSpacing(6)
-            lay.addLayout(links)
+                                "or Add › A date." if author else "No dates on this plan yet.", muted=True))
+        elif found is not None and not found:
+            lay.addWidget(plain(f"No date or quiz has “{self.find.text().strip()}” in its name or its cards.", muted=True))
         lay.addStretch(1)
         self.list_body = body
         self.list_scroll.setWidget(body)
@@ -484,12 +575,12 @@ class PlanTab(QWidget):
         top.setSpacing(6)
         opened = self._is_open(w)
         past = E._later(w["start"], 6) < self.win.ops.today()
-        title = role(plain(f"{'▾' if opened else '▸'} {w['label']}" + (" · this week" if w["now"] else "")), "head")
+        title = role(plain(f"{'▾' if opened else '▸'} {w['label']}" + (", this week" if w["now"] else "")), "head")
         top.addWidget(title, 1)
         words, warn = V.week_words(self.asks.get(w["start"]))
         if past and not opened:
             evs = ", ".join(e.get("name") or "?" for e in w["events"])
-            words = f"past · {len(w['dates']):,} date{'s' if len(w['dates']) != 1 else ''}" + (f" · {evs}" if evs else "")
+            words = f"{len(w['dates']):,} date{'s' if len(w['dates']) != 1 else ''}" + (f", {evs}" if evs else "")
             warn = False
         said = plain(words, dc="warn" if warn else None, muted=not warn)
         said.setWordWrap(False)
@@ -502,13 +593,13 @@ class PlanTab(QWidget):
     def _today_rule(self):
         f, lay = frame("rule", horizontal=True, margins=(6, 4, 6, 2))
         today = self.win.ops.today()
-        lay.addWidget(plain(f"Today · {M.day_words(today)}", dc="ok"))
+        lay.addWidget(plain(f"Today, {M.day_words(today)}", dc="ok"))
         lay.addStretch(1)
         return f
 
     def _date_row(self, u, fresh):
         win, author, today = self.win, self.win.author(), self.win.ops.today()
-        row = Row(("date", u["id"]), self.pick)
+        row = Row(("date", u["id"]), self._clicked, on_double=self.name_it)
         top = QHBoxLayout()
         top.setSpacing(8)
         day = plain(M.day_words(u["opens"]), muted=True)
@@ -517,47 +608,51 @@ class PlanTab(QWidget):
         top.addWidget(day, 0, Qt.AlignmentFlag.AlignTop)
         name = role(plain(u.get("name") or "?"), "head")
         top.addWidget(name, 1)
+        if author and u["id"] in fresh:
+            ns = plain("not sent", dc="fresh")
+            ns.setWordWrap(False)
+            ns.setToolTip("<span>Changed: it waits with your other changes till you send them</span>")
+            top.addWidget(ns, 0, Qt.AlignmentFlag.AlignTop)
         n = self.counts.get(u["id"])
         if author:
             right = plain(f"{n:,}" if n is not None else "", dc="n")
+            right.setToolTip("<span>Its cards in your Anki</span>")
         else:
             due = str(u.get("due") or u.get("opens"))
             if str(u["opens"]) > today:
                 right = plain(f"opens {M.day_words(u['opens'])}", dc="n")
             elif win.idx is not None:
                 c = M.counts(win.idx, win.idx.match(u, win.swap, win.doc))
-                right = plain("all seen" if not c["new"] else f"{'open' if due >= today else 'behind'} · {c['new']:,} left",
+                right = plain("all seen" if not c["new"] else f"{c['new']:,} left" + ("" if due >= today else ", behind"),
                               dc="n" if due >= today or not c["new"] else "warn")
             else:
                 right = plain("", dc="n")
         right.setWordWrap(False)
         top.addWidget(right, 0, Qt.AlignmentFlag.AlignTop)
         row.lay.addLayout(top)
-        box, flow = flow_box()
         rows = win.rows(u)
-        for r in rows[:6]:
-            flow.addWidget(Chip(chip_name(r), len(r["cids"]) if win.idx is not None else None, tip=r.get("raw") or None))
+        bits = [chip_name(r) + (f" ({len(r['cids']):,})" if win.idx is not None else "") for r in rows[:6]]
         if len(rows) > 6:
-            flow.addWidget(Chip(f"{len(rows) - 6:,} more"))
+            bits.append(f"and {len(rows) - 6:,} more")
         if win.idx is None:
-            for t in (list(u.get("tags") or []) + list(u.get("decks") or []))[:6]:
-                flow.addWidget(Chip(M.label(t), tip=t))
-        if author and u["id"] in fresh:
-            flow.addWidget(Chip("changed, not sent", kind="fresh"))
-        if author and u["id"] in self.look and not rows:
-            empty = QWidget()
-            el = QHBoxLayout(empty)
+            bits += [M.label(t) for t in (list(u.get("tags") or []) + list(u.get("decks") or []))[:6]]
+        under = None
+        if bits:
+            under = plain(", ".join(bits), muted=True)
+        elif author and u["id"] in self.look:
+            under = QWidget()
+            el = QHBoxLayout(under)
             el.setContentsMargins(0, 0, 0, 0)
             el.setSpacing(4)
             words = plain("No cards yet", dc="warn")
             words.setWordWrap(False)
             el.addWidget(words)
-            el.addWidget(link("+ From the deck", lambda uid=u["id"]: self.tick_for(uid)))
-            flow.addWidget(empty)
-        if flow.count():
+            el.addWidget(link("Add from the deck", lambda uid=u["id"]: self.tick_for(uid)))
+            el.addStretch(1)
+        if under is not None:
             ind = QHBoxLayout()
             ind.setContentsMargins(64, 0, 0, 0)
-            ind.addWidget(box, 1)
+            ind.addWidget(under, 1)
             row.lay.addLayout(ind)
         if str(u.get("due") or u["opens"]) < today:
             mark(row, "past", "true")
@@ -565,35 +660,38 @@ class PlanTab(QWidget):
         return row
 
     def _event_row(self, e):
-        row = Row(("event", e["id"]), self.pick)
+        """A quiz or an exam: one line, its name in the plan's mark and what it tests at the end."""
+        row = Row(("event", e["id"]), self._clicked, on_double=self.name_it)
         top = QHBoxLayout()
         top.setSpacing(8)
         day = plain(M.day_words(e.get("day")), muted=True)
         day.setFixedWidth(56)
         top.addWidget(day, 0, Qt.AlignmentFlag.AlignTop)
-        top.addWidget(plain(f"◆ {e.get('name') or '?'}", dc="event"), 1)
-        row.lay.addLayout(top)
+        top.addWidget(plain(e.get("name") or "?", dc="event"), 1)
         prep = self.prep(e)
         if prep:
             a, b = min(str(u["opens"]) for u in prep), max(str(u.get("due") or u["opens"]) for u in prep)
             words = f"tests {M.day_words(a)} – {M.day_words(b)}" if a != b else f"tests {M.day_words(a)}"
-            if not self.win.author() and self.win.idx is not None:
-                cids = set()
-                for u in prep:
-                    cids |= self.win.idx.match(u, self.win.swap, self.win.doc)
-                c = M.counts(self.win.idx, cids)
-                words += f" · {c['cards']:,} cards, {c['cards'] - c['new']:,} seen"
         else:
-            words = "tests everything" if e is V.last_event(self.win.doc) else "no date tested on it yet"
-        ind = QHBoxLayout()
-        ind.setContentsMargins(64, 0, 0, 0)
-        ind.addWidget(plain(words, muted=True), 1)
-        row.lay.addLayout(ind)
+            words = "tests everything" if e is V.last_event(self.win.doc) else "tests no date yet"
+        said = plain(words, dc="n")
+        said.setWordWrap(False)
+        top.addWidget(said, 0, Qt.AlignmentFlag.AlignTop)
+        row.lay.addLayout(top)
+        if prep and not self.win.author() and self.win.idx is not None:
+            cids = set()
+            for u in prep:
+                cids |= self.win.idx.match(u, self.win.swap, self.win.doc)
+            c = M.counts(self.win.idx, cids)
+            ind = QHBoxLayout()
+            ind.setContentsMargins(64, 0, 0, 0)
+            ind.addWidget(plain(f"{c['cards']:,} cards, {c['cards'] - c['new']:,} seen", muted=True), 1)
+            row.lay.addLayout(ind)
         self.rows[("event", e["id"])] = row
         return row
 
     def _review_row(self, r):
-        row = Row(("review", r.get("day")), self.pick)
+        row = Row(("review", r.get("day")), self._clicked)
         top = QHBoxLayout()
         top.setSpacing(8)
         day = plain(M.day_words(r.get("day")), muted=True)
@@ -626,25 +724,28 @@ class PlanTab(QWidget):
 
     def _heavy_box(self):
         hv, t = self.heavy, self.win.deck_tree()
-        f, lay = frame("warm", margins=(10, 8, 10, 8))
+        f, lay = frame("line", margins=(8, 6, 8, 8))
         name = hv["unit"].get("name") or "a date"
         when = M.day_words(hv["a"]) if hv["a"] == hv["b"] else f"{M.day_words(hv['a'])} – {M.day_words(hv['b'])}"
-        lay.addWidget(plain(f"{when} {'asks' if hv['a'] == hv['b'] else 'ask'} {hv['top']:,} new a day, over your {hv['cap']:,}: "
-                            f"{name} is {hv['total']:,} cards by {M.day_words(hv['last'])}."))
+        top = QHBoxLayout()
+        top.setSpacing(8)
+        head = plain("Over the pace", dc="warn")
+        head.setWordWrap(False)
+        top.addWidget(head, 0, Qt.AlignmentFlag.AlignTop)
+        top.addWidget(plain(f"{when}: {hv['top']:,} new a day, your pace is {hv['cap']:,}. "
+                            f"{name} is {hv['total']:,} cards by {M.day_words(hv['last'])}."), 1)
+        lay.addLayout(top)
         row = QHBoxLayout()
+        row.setSpacing(6)
         if hv.get("big"):
             placed = B.placed_keys(self.win.doc, t)
-            b = QPushButton(f"Split {B.label(t, hv['big'], placed)}…")
-            b.setAutoDefault(False)
-            b.clicked.connect(lambda: self._split_heavy())
-            row.addWidget(b)
+            row.addWidget(tool(f"Split {B.label(t, hv['big'], placed)}…", self._split_heavy))
         if hv["till"] > hv["last"]:
-            b = QPushButton(f"Let it finish by {P.fmt_day(hv['till'])}")
-            b.setAutoDefault(False)
             uid, till = hv["unit"]["id"], hv["till"]
-            b.clicked.connect(lambda: self.win.change({"op": "set_due", "date": uid, "due": till}))
-            row.addWidget(b)
+            row.addWidget(tool(f"Let it finish by {P.fmt_day(hv['till'])}",
+                               lambda: self.win.change({"op": "set_due", "date": uid, "due": till})))
         row.addStretch(1)
+        row.insertSpacing(0, 64)
         lay.addLayout(row)
         return f
 
@@ -659,7 +760,8 @@ class PlanTab(QWidget):
     def _draw_month(self):
         """Month: seven even columns, a day's dates and quizzes one line each
         (cut with … to fit, the whole name on hover), two a day and "+N
-        more" (the list, at that date); today shaded, the picked one marked."""
+        more" (the list, at that date); today shaded, the picked one marked.
+        An author drags a date or a quiz to another day to move it."""
         old = self.month_body.layout()
         if old is not None:
             QWidget().setLayout(old)  # the old layout and its widgets go with a throwaway parent
@@ -687,7 +789,7 @@ class PlanTab(QWidget):
             by_day.setdefault(str(u.get("opens")), []).append(("date", u["id"], u.get("name") or "?"))
         for e in doc.get("events") or []:
             if isinstance(e, dict):
-                by_day.setdefault(str(e.get("day")), []).insert(0, ("event", e.get("id"), f"◆ {e.get('name') or '?'}"))
+                by_day.setdefault(str(e.get("day")), []).insert(0, ("event", e.get("id"), str(e.get("name") or "?")))
         box = QFrame()
         box.setProperty("dc", "calgrid")
         grid = QGridLayout(box)
@@ -709,8 +811,7 @@ class PlanTab(QWidget):
                 break
             rows = 1 + k // 7
             iso = d.toString("yyyy-MM-dd")
-            cell = QFrame()
-            cell.setProperty("dc", "calday")
+            cell = DayCell(iso, self._dropped if self.win.author() else None)
             if d.month() != self.month.month():
                 cell.setProperty("out", "true")
             if iso == today:
@@ -724,7 +825,7 @@ class PlanTab(QWidget):
             cl.addWidget(num)
             here = by_day.get(iso, ())
             for kind, key, name in here[:2]:
-                entry = Row((kind, key), self.pick, margins=(4, 1, 4, 1))
+                entry = Row((kind, key), self._clicked, margins=(4, 1, 4, 1), on_double=self.name_it, drag=self.win.author())
                 entry.setProperty("dc", "calrow")  # picked: a solid pill in the day, not the list's left bar
                 entry.lay.addWidget(Elided(name, dc="calev" if kind == "event" else "cal"))
                 entry.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
@@ -759,7 +860,106 @@ class PlanTab(QWidget):
         self.month = self.month.addMonths(k)
         self._draw_month()
 
-    # ---- picking ----
+    def _dropped(self, kind, key, day):
+        """Month: a date or a quiz dropped on another day moves there."""
+        if self.win.busy or not self.win.author():
+            return
+        if kind == "date":
+            u = self.win.unit(key)
+            if u is not None and u["opens"] != day and self.day_taken(day, key):
+                self.win.change({"op": "move", "date": key, "to": day}, keep=("date", key))
+        elif kind == "event":
+            e = self._event(key)
+            if e is not None and e.get("day") != day:
+                self.win.change({"op": "move_event", "event": key, "to": day}, keep=("event", key))
+
+    # ---- picking, and the plan's keys ----
+
+    def _clicked(self, key):
+        """A row clicked: picked, and the plan in focus for its keys."""
+        self.pick(key)
+        self.views.currentWidget().setFocus(Qt.FocusReason.MouseFocusReason)
+
+    def step(self, k):
+        """↑ ↓: the date (or quiz, or review day) before or after the picked one, as drawn."""
+        keys_ = [x for x in self.rows if x[0] in ("date", "event", "review")]
+        if not keys_:
+            return
+        i = keys_.index(self.picked) if self.picked in keys_ else (-1 if k > 0 else len(keys_))
+        i = max(0, min(len(keys_) - 1, i + k))
+        self.pick(keys_[i])
+        row = self.rows.get(keys_[i])
+        if row is not None and self.mode == "list":
+            self.list_scroll.ensureWidgetVisible(row, 0, 40)
+
+    def nudge(self, k):
+        """Alt+← →: the picked date or quiz a day earlier or later."""
+        if not self._author() or not self.picked:
+            return
+        if self.picked[0] == "date":
+            self.date_panel._nudge(k)
+        elif self.picked[0] == "event":
+            e = self._event(self.picked[1])
+            if e is not None:
+                self.win.change({"op": "move_event", "event": e["id"], "to": E._later(e["day"], k)}, keep=("event", e["id"]))
+
+    def name_it(self, key):
+        """Enter, F2 or a double-click: the picked one's name, to change."""
+        if not key or not self._author():
+            return
+        if tuple(key) != self.picked:
+            self.pick(key)
+        self.side.setCurrentIndex(0)
+        box = {"date": self.date_panel.name, "event": self.event_panel.name}.get(key[0])
+        if box is not None and box.isVisible():
+            box.setFocus(Qt.FocusReason.ShortcutFocusReason)
+            box.selectAll()
+
+    def delete_picked(self):
+        """Delete: the picked date, quiz or review day off the plan (it asks first)."""
+        if not self._author() or not self.picked:
+            return
+        {"date": self.date_panel._delete, "event": self.event_panel._take, "review": self.review_panel._off}[self.picked[0]]()
+
+    def _deck_key(self):
+        if self.side.isTabVisible(1):
+            if self.picked and self.picked[0] == "date":
+                self.tick_for(self.picked[1])
+            else:
+                self.side.setCurrentIndex(1)
+            self.deck.find.setFocus(Qt.FocusReason.ShortcutFocusReason)
+
+    def _focus_find(self):
+        self.find.setFocus(Qt.FocusReason.ShortcutFocusReason)
+        self.find.selectAll()
+
+    def _matches(self):
+        """The ids of the dates and quizzes Find has (None: nothing typed)."""
+        words = self.find.text().lower().split()
+        if not words or self.win.doc is None:
+            return None
+        out = set()
+        for u in P.units(self.win.doc):
+            hay = " ".join([str(u.get("name") or "")] + [chip_name(r) for r in self.win.rows(u)]
+                           + [str(t) for t in (u.get("tags") or []) + (u.get("decks") or [])]).lower()
+            if all(w in hay for w in words):
+                out.add(u["id"])
+        for e in self.win.doc.get("events") or []:
+            if isinstance(e, dict) and all(w in str(e.get("name") or "").lower() for w in words):
+                out.add(e.get("id"))
+        return out
+
+    def _found(self, _text=""):
+        if self.mode != "list" and self.find.text().strip():
+            self.mode = "list"
+        self._draw()
+
+    def _find_first(self):
+        first = next((k for k in self.rows if k[0] in ("date", "event")), None)
+        if first is not None:
+            self.pick(first)
+            self.list_scroll.ensureWidgetVisible(self.rows[first], 0, 40)
+            self.list_scroll.setFocus(Qt.FocusReason.ShortcutFocusReason)
 
     def pick(self, key):
         self.picked = tuple(key) if key else None
@@ -982,8 +1182,7 @@ class PlanTab(QWidget):
             win.status.setText("Every session in that is on the plan already.")
             return
         if not confirm(self, f"{n_dates:,} date{'s' if n_dates != 1 else ''} and {n_events:,} quiz{'zes' if n_events != 1 else ''} or exams "
-                       "from the calendar", "The dates come with their names and no cards: pick one, then + From the deck. "
-                       "Read on this computer."
+                       "from the calendar", "The dates come with their names and no cards: pick one, then Add from the deck."
                        + (" They wait with your other changes till you send them." if win.waiting() else ""), "Put them on"):
             return
         if win.changes(ops):

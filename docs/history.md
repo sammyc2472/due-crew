@@ -3161,3 +3161,19 @@ every release that changes how something works.
   change), `move_from`, `add_date` with no cards (`edits.add_empty_date`;
   the server keeps a date with none). Nothing new on the server.
   `tests/test_plan_ops.py`; `tools/dialogs.py` renders every state.
+  **Then plain and quick** (Sam, after the site mock: "a few of our UI
+  elements are AI hallmarks; we are going for extreme functionality"):
+  the accent stripe on the picked row and today, the tinted banners (the
+  shape, today and behind, the deck's target, the send bar, the code),
+  chips, ◆, "+ A …" links, capitals for a change's kind, ▾ and ↗ in words,
+  and lines that explained a control all went. The shape is label by
+  label; a date's sources are a muted line in the list and a list (name,
+  count, ✕) in the panel; a quiz is one line; adds are buttons that say
+  what they do (the list's adds one Add menu in the toolbar); a button
+  with a menu has the boxes' chevron (`ui.QSS` `dc="menu"`); explanations
+  are tips. And quicker: **keys** (Ctrl+N a date, Ctrl+E a quiz, Ctrl+F
+  Find, Ctrl+T Today, Ctrl+1/2 List/Month, Ctrl+D the deck, Ctrl+Z the
+  last change not sent, Ctrl+Return Review and send; on the plan, ↑ ↓,
+  Alt+← → a day, Enter/F2 its name, Delete), **Find** a date or tag,
+  **Month's drag** to move a date or a quiz, the foot's **changes as
+  links** to their dates, a double-click for a name.

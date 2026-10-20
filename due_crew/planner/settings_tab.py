@@ -18,7 +18,7 @@ from ..ui import ask_item, confirm, esc, note, role
 from .. import plans as P
 from . import edits as E
 from . import remote
-from .widgets import frame, link
+from .widgets import link
 
 
 class _Said(QLabel):
@@ -86,18 +86,21 @@ class SettingsTab(QWidget):
         form.setVerticalSpacing(10)
         self.form = form
 
-        self.code_box, cl = frame("card", horizontal=True, margins=(12, 10, 12, 10))
-        cl.addWidget(_plain("Its code", muted=True))
-        self.code = role(_plain(), "title")
+        cl = QHBoxLayout()
+        cl.setSpacing(8)
+        self.code = role(_plain(), "head")
         self.code.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         cl.addWidget(self.code)
-        cl.addStretch(1)
         self.link_btn = QPushButton("Copy link")
         self.link_btn.setAutoDefault(False)
         self.link_btn.clicked.connect(self._copy_link)
         cl.addWidget(self.link_btn)
-        cl.addWidget(_link("Its page ↗", self._page))
-        form.addRow(self.code_box)
+        page_btn = QPushButton("Open its page")
+        page_btn.setAutoDefault(False)
+        page_btn.clicked.connect(self._page)
+        cl.addWidget(page_btn)
+        cl.addStretch(1)
+        form.addRow("Code", cl)
 
         self.name = QLineEdit()
         self.name.setMaxLength(60)
@@ -128,8 +131,6 @@ class SettingsTab(QWidget):
         self.url_btn.clicked.connect(self._save_url)
         row.addWidget(self.url_btn)
         form.addRow("Where to get the deck", row)
-        self.url_said = _plain(muted=True)
-        form.addRow("", self.url_said)
 
         self.squad = QComboBox()
         self.squad.currentIndexChanged.connect(lambda _i: self._who())
@@ -168,7 +169,8 @@ class SettingsTab(QWidget):
             row.addWidget(b)
         row.addStretch(1)
         coa.addLayout(row)
-        coa.addWidget(_plain("They edit it with you, and its tags go on their notes in Anki. Each one says yes first.", muted=True))
+        for w in (self.coas, self.add_btn):
+            w.setToolTip("<span>They edit it with you, and its tags go on their notes in Anki. Each one says yes first.</span>")
         self.coa_said = _plain(muted=True, said=True)
         coa.addWidget(self.coa_said)
         form.addRow("Co-authors", coa)
@@ -180,9 +182,11 @@ class SettingsTab(QWidget):
 
         lib = QVBoxLayout()
         self.listed = QCheckBox("List it in the library")
+        self.listed.setToolTip("<span>Anyone signed in can find it, look at its calendar, follow it, or copy it into a plan "
+                               "of their own. Your name shows as its author, and its code shows there.</span>")
         self.listed.toggled.connect(self._listed)
         lib.addWidget(self.listed)
-        self.lib_said = _plain(muted=True)
+        self.lib_said = _plain(muted=True, said=True)
         lib.addWidget(self.lib_said)
         form.addRow("Library", lib)
 
@@ -225,7 +229,8 @@ class SettingsTab(QWidget):
             code = str(raw.get("code") or "")
             self.code.setText(code or "none yet")
             self.link_btn.setEnabled(bool(code))
-            self.url_said.setText(f"On its link page and poster, and in Anki for anyone with no deck called {doc.get('deck') or '?'}.")
+            self.url.setToolTip(f"<span>On its link page and poster, and in Anki for anyone with no deck called "
+                                f"{esc(doc.get('deck') or '?')}.</span>")
             self.squad.clear()
             self.squad.addItem("No squad", None)
             for sq in win.ops.my_squads():
@@ -270,8 +275,7 @@ class SettingsTab(QWidget):
             f"Taken out of the library. {raw.get('listedNote') or ''} It stays yours, and its followers keep following. "
             "Send feedback if it's a mistake." if listed == -1
             else "Its owner lists it in the library." if not owner
-            else why or "Anyone signed in can find it, look at its calendar, follow it, or copy it into a plan of their own. "
-                        "Your name shows as its author, and its code shows there.")
+            else why)
         self.copy_btn.setEnabled(bool(E.first_day(doc)) and not busy)
         self.delete_btn.setVisible(owner)
         self.delete_btn.setEnabled(not busy)

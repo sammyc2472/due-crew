@@ -1,10 +1,9 @@
 """Round five's picked date, changed where it's shown (docs/planner.md):
 its name, when its cards open and by when they're done, the quiz it's
 tested on, a day earlier or later (or it and every date after), its cards
-as chips (✕ takes one off; a chip's own menu splits it, keeps it to one
-of the plan's tags, leaves out its extras, puts a note on it), the deck's
-tags its name points at (+ Add, ✕ not this), its to-dos and a note on its
-day. The rest of what the builder's day panel did is under ⋯, each entry
+a source a line (✕ takes one off; a click opens its menu: split it, keep
+it to one of the plan's tags, leave out its extras, a note on it), its
+to-dos and the notes on its day. The rest of what the builder's day panel did is under ⋯, each entry
 saying what it does to the cards. A follower sees the same date to read:
 what's open and left, Study, Show in Browse, the to-dos and the notes.
 
@@ -24,7 +23,7 @@ from . import date_dialogs as DD
 from . import edits as E
 from . import model as M
 from .day_notes import DayNotes
-from .widgets import Chip, flow_box, link, plain, small
+from .widgets import Source, link, plain, small, tip_keys, tool
 
 
 def _every_on(doc, x, day):
@@ -158,6 +157,8 @@ class DatePanel(QWidget):
         self.later = QPushButton("+1 day")
         self.later.setAutoDefault(False)
         self.later.clicked.connect(lambda: self._nudge(1))
+        self.earlier.setToolTip(tip_keys("A day earlier", "Alt+Left"))
+        self.later.setToolTip(tip_keys("A day later", "Alt+Right"))
         moves.addWidget(self.earlier)
         moves.addWidget(self.later)
         moves.addWidget(link("This and later dates…", self._move_from, tip="Move this date and every one after it"))
@@ -180,24 +181,24 @@ class DatePanel(QWidget):
         self.cards_said = plain(muted=True)
         heads.addWidget(self.cards_said)
         root.addLayout(heads)
-        self.chips, self.chips_lay = flow_box()
+        self.chips = QWidget()  # its sources, a line each: name, count, ✕
+        self.chips_lay = QVBoxLayout(self.chips)
+        self.chips_lay.setContentsMargins(0, 0, 0, 0)
+        self.chips_lay.setSpacing(0)
         root.addWidget(self.chips)
         self.adds = QWidget()
         al = QHBoxLayout(self.adds)
         al.setContentsMargins(0, 0, 0, 0)
-        al.setSpacing(2)
-        al.addWidget(link("+ From the deck", lambda: self.tab.tick_for(self.u["id"]) if self.u else None,
-                          tip="Tick the deck's tags for this date, beside the plan"))
-        al.addWidget(link("+ A search or IDs", self._add_cards))
+        al.setSpacing(6)
+        al.addWidget(tool("Add from the deck", lambda: self.tab.tick_for(self.u["id"]) if self.u else None,
+                          tip="Tick the deck's tags for this date, beside the plan", seq="Ctrl+D"))
+        al.addWidget(tool("Add a search or IDs…", self._add_cards))
         al.addStretch(1)
         root.addWidget(self.adds)
         row = QHBoxLayout()
-        self.browse_btn = QPushButton("Show in Browse")
-        self.browse_btn.setAutoDefault(False)
-        self.browse_btn.clicked.connect(lambda: self.win.ops.browse(self._cids()))
-        self.study_btn = QPushButton("Study them")
-        self.study_btn.setAutoDefault(False)
-        self.study_btn.clicked.connect(self._study)
+        row.setSpacing(6)
+        self.browse_btn = tool("Show in Browse", lambda: self.win.ops.browse(self._cids()))
+        self.study_btn = tool("Study them", self._study)
         row.addWidget(self.browse_btn)
         row.addWidget(self.study_btn)
         row.addStretch(1)
@@ -214,9 +215,10 @@ class DatePanel(QWidget):
         self.todo_links = QWidget()
         tl = QHBoxLayout(self.todo_links)
         tl.setContentsMargins(0, 0, 0, 0)
-        tl.setSpacing(2)
-        tl.addWidget(link("+ A line", self._todo, tip="Watch, read or do: a line followers tick in Due on this date"))
-        tl.addWidget(link("+ Every week…", self._every, tip="Lines on the same weekday every week of the plan"))
+        tl.setSpacing(6)
+        self.todo_btn = tool("Add a to-do…", self._todo, tip="Watch, read or do: lines followers tick in Due on this date")
+        tl.addWidget(self.todo_btn)
+        tl.addWidget(tool("Every week…", self._every, tip="Lines on the same weekday every week of the plan"))
         tl.addStretch(1)
         root.addWidget(self.todo_links)
 
@@ -272,25 +274,26 @@ class DatePanel(QWidget):
 
     def _cards(self):
         win, u, author = self.win, self.u, self.win.author()
-        self.chips_lay.clear()
+        while self.chips_lay.count():
+            w = self.chips_lay.takeAt(0).widget()
+            if w is not None:
+                w.hide()
+                w.deleteLater()
         rows = win.rows(u)
         fresh = win.draft.touched(win.ctx()) if win.draft else set()
         for r in rows:
-            c = Chip(chip_name(r), len(r["cids"]) if win.idx is not None else None,
-                     kind="fresh" if u["id"] in fresh else None, tip=r.get("raw") or None,
-                     on_click=(lambda pos, r=r: self._chip_menu(r, pos)))
-            if author:
-                c.add(small("✕", lambda r=r: self.win.change({"op": "take_cards", "date": u["id"], "key": list(r["key"])}),
-                            "Take it off this date"))
-            self.chips_lay.addWidget(c)
+            take = (lambda r=r: self.win.change({"op": "take_cards", "date": u["id"], "key": list(r["key"])})) if author else None
+            self.chips_lay.addWidget(Source(chip_name(r), len(r["cids"]) if win.idx is not None else None,
+                                            tip=r.get("raw") or chip_name(r),
+                                            on_click=(lambda pos, r=r: self._chip_menu(r, pos)), on_take=take))
         if win.idx is None:
             for t in list(u.get("tags") or []) + list(u.get("decks") or []):
-                self.chips_lay.addWidget(Chip(M.label(t), tip=t))
+                self.chips_lay.addWidget(Source(M.label(t), tip=t))
         self.chips.setVisible(self.chips_lay.count() > 0)
         cids = self._cids()
         n = len(cids)
-        self.cards_head.setText(f"Its cards · {n:,}" if win.idx is not None else "Its cards")
-        bits = []
+        self.cards_head.setText(f"Its cards ({n:,})" if win.idx is not None else "Its cards")
+        bits = ["changed, not sent"] if author and u["id"] in fresh else []
         if win.idx is not None and cids:
             c = M.counts(win.idx, cids)
             if author:
@@ -299,13 +302,14 @@ class DatePanel(QWidget):
                     bits.append(f"{c['leech']:,} leech{'es' if c['leech'] != 1 else ''} stay shut")
             else:
                 left = c["shut"] - c["leech"]
-                bits.append(f"{c['open']:,} open · {left:,} still shut" if left else f"all {c['open']:,} open")
+                bits.append(f"{c['open']:,} open, {left:,} still shut" if left else f"all {c['open']:,} open")
             pace = M.pace_words(win.doc, u, c["new"]) if author else ""
             if pace:
                 bits.append(pace)
         if win.idx is None:
             bits.append(f"its deck ({win.doc.get('deck') or '?'}) isn't in this Anki")
-        self.cards_said.setText(" · ".join(bits))
+        self.cards_said.setText(", ".join(bits))
+        self.cards_said.setVisible(bool(bits))
         self.browse_btn.setText(f"Show the {n:,} in Browse" if n else "Show in Browse")
 
     def _todos(self):
@@ -328,8 +332,9 @@ class DatePanel(QWidget):
             self.todo_lay.addWidget(row)
         every = [x for x in B.every_clean(self.win.doc.get("every") or []) if _every_on(self.win.doc, x, u.get("opens"))]
         for x in every:
-            self.todo_lay.addWidget(plain(f"{B.TODO_LABEL.get(x.get('k'), 'Do')}: {x.get('t') or ''} · every week", muted=True))
+            self.todo_lay.addWidget(plain(f"{B.TODO_LABEL.get(x.get('k'), 'Do')}: {x.get('t') or ''} (every week)", muted=True))
         self.todo_box.setVisible(bool(lines or every))
+        self.todo_btn.setText("Change its to-dos…" if lines else "Add a to-do…")
         self.todo_head.setVisible(author or bool(lines or every))
 
     def busy_changed(self):
