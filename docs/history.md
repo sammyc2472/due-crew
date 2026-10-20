@@ -3265,3 +3265,30 @@ every release that changes how something works.
   plan followed, the ways in end with Your plans… for the plans I write.
   `test_date_details_round5`; the plan card's checks in
   `test_plans_tab_v341`; renders in `tools/preview.py`.
+  Then the tab again (Sam: "i don't know that I prefer this new plans
+  tab, give some alternative options", five mocked on the spec page, and
+  "let's go with option A and when a day is clicked, the full
+  assignments for that day open in that plans tab (animate in and
+  out)"): A, seven small days. Under its day's line, This week ‹ Today ›
+  and the days (`board._week_html`), each its bar (amber when it's
+  behind) and what's left ("16 left", "24 to go", "38 new", ✓, rest; a
+  rest day keeps the bar's place, so every day's words sit on one
+  line), a quiz's name under its day; narrow, the words go and a quiz
+  day is underlined. A day's click opens its assignments under the week,
+  whole: each date (`_day_unit`: its name, moved or for its quiz, seen of
+  its cards and its bar, its topics by resource opening Browse with the
+  authors' notes, the authors' lines by `_todo_lines`, a link opening by
+  Due's `duelink` key, so `plans.week_view` carries `todo`; Browse, the
+  ones left, Open now, Study, Move…, Skip it, Put it back, Undo skip,
+  why it left cards shut) and a quiz by name (`_day_event`: Study for it
+  stays the quiz row under the week, one way to it). The same click
+  shuts them; another day's switches. motion.js 8 (the site's copy too)
+  unfolds them, folds them on the second click (`shutDay`), and on a
+  switch slides the ring and the words over while the box grows or
+  shrinks from the last day's height; nothing with Reduce motion. The
+  week shows with Due's lists on or off (last round's Done went), and
+  Show on my plan's day opens in it. A day's Push my dates back… went:
+  Settings › My dates has it. Today's and Upcoming's details on a date's
+  name stay. `test_plans_tab_v341`, `test_plan_load_3781`;
+  `tools/motion_preview.py`'s dayshut and dayswitch (the audit measures
+  both); renders in `tools/preview.py`.

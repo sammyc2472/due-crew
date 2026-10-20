@@ -6108,18 +6108,39 @@ def test_plans_tab_v341():
           'class="ptoday' not in h and "planstudy:p1" not in h and "~48" not in h and "</b> min" not in h
           and "<b>MS2 &lt;b&gt;Block&lt;/b&gt;</b>" in h)
     tidx = next(i for i, d in enumerate(week) if d["today"])
-    check("week: the site's calendar look; names escaped; today's date filled; 3.8.0, every day's details shut "
-          "until its click (today's are the box's Today)",
+    cells = h.split('<div class="pwk">')[1].split('<div class="pday"')[0]
+    check("week: round five, Sam's pick A, seven small days: names in the details, not the days; every day's details shut "
+          "until its click; names escaped",
           'class="pwk"' in h and "V&amp;B &lt;i&gt;" in h and "<i>" not in h.replace("<i class", "").replace("<i style", "")
-          and 'class="pc now"' in h and " sel\"" not in h and '<b class="td">' in h
+          and 'class="pc now"' in h and " sel\"" not in h and "Path Book" not in cells and 'class="chip' not in h
           and f'id="dc-pd-p1-{tidx}" hidden>' in h and h.count('class="pday"') == h.count('" hidden>')
-          and "onclick=\"var w=this.parentNode" in h and "Cardio quiz" in h and "plansite" not in h and "Month &#8599;" not in h
+          and "onclick=\"var w=this.parentNode" in h and '<span class="ev">Cardio quiz</span>' in cells
+          and "plansite" not in h and "Month &#8599;" not in h
           and "planweek:p1:next" in h and "planweek:p1:prev" in h and 'class="tb here"' in h)
+    check("week: a day says what's left: done, behind (amber), to go today, new ahead; a quiz under its day",
+          "&#10003;" in cells and '<span class="late">2<span class="w"> left</span></span>' in cells
+          and '24<span class="w"> to go</span>' in cells and '38<span class="w"> new</span>' in cells
+          and 'class="pc ev1"' in cells and cells.count("rest") == 2, cells)
     seen_day = board._plan_card_html(dict(base, focus=week[tidx + 1]["day"]))
-    check("week: Show on my plan's day opens, the box on it", f'id="dc-pd-p1-{tidx + 1}">' in seen_day
-          and seen_day.count(" sel\"") == 1)
-    check("week: a later day offers Open now, Skip it and Push my dates back",
-          "plannow:p1:d" in h and "planskip:p1:d" in h and "planshift:p1" in h and "Push my dates back" in h and "Undo skip" in h)
+    check("week: Show on my plan's day opens, the box on it (no Done: the week's always there)",
+          f'id="dc-pd-p1-{tidx + 1}">' in seen_day and seen_day.count(" sel\"") == 1 and ">Done</a>" not in seen_day)
+    check("week: a later day offers Open now, Skip it, Move…; a skipped date Undo skip (my dates later is Settings')",
+          "plannow:p1:d" in h and "planskip:p1:d" in h and "planmove:p1:d" in h and "Undo skip" in h and "planshift" not in h)
+    tue = h.split('id="dc-pd-p1-1"')[1].split('<div class="pday"')[0]
+    check("week: a day's details have its dates whole: name, seen of its cards, its bar, Browse, the ones left, Study",
+          "<b>V&amp;B &lt;i&gt;</b>" in tue and "6 / 8" in tue and 'class="wbar"' in tue and "planbrowse:p1:b" in tue
+          and "planleft:p1:b" in tue and "planstudydate:p1:b" in tue and "planmove" not in tue)
+    w2 = P.week_view(dict(doc, units=[dict(u, todo=[{"k": "watch", "t": "Lecture <14>", "url": "https://example.com/l14"}, {"k": "read", "t": "Ch 3"}])
+                                      if u["id"] == "c" else u for u in doc["units"]]),
+                     {"a": [40, 40, 40], "b": [8, 6, 8], "c": [42, 18, 42]}, "2026-10-07", mon)
+    full = board._plan_card_html(dict(base, week=w2, quiz={"id": "q", "name": "Cardio quiz", "day": "2026-10-09", "open": 12}))
+    wed = full.split(f'id="dc-pd-p1-{tidx}"')[1].split('<div class="pday"')[0]
+    fri = full.split(f'id="dc-pd-p1-{tidx + 2}"')[1].split('<div class="pday"')[0].split('<div class="pn">')[0]
+    check("week: and its authors' lines, a link opening in the browser by the line's key; its quiz by name (Study for it once, the row under the week)",
+          "<b>&#9654; Watch</b>" in wed.replace("\u25b6", "&#9654;") and "Lecture &lt;14&gt;" in wed and "duecrew:duelink:p1:c:" in wed
+          and "<b>Read</b> &middot; Ch 3" in wed and "for Cardio quiz" in wed
+          and '<div class="pev"><span><b>Cardio quiz</b></span></div>' in fri and "planquiz" not in fri
+          and full.count("planquiz:p1:q") == 1, wed + fri)
     check("crew: in words", "Crew: 5 done with Path Book 1" in h)
     moved = board._plan_card_html(dict(base, week_offset=1))
     check("week: moved, it says which, Today between the arrows, the details shut",
@@ -6142,14 +6163,10 @@ def test_plans_tab_v341():
     check("behind: a catch-up running says so in its note, and the line isn't called behind",
           "<b>24</b> to go today</span>" in catching and "behind" not in catching.split('class="pst"')[1].split("</div>")[0]
           and "plancatch:p1" not in catching and "plancatchstop:p1" in catching)
-    due_on = board._plan_card_html(base, due_on=True)
-    check("due on: round five, the dates are Today's and Upcoming's, so the card has no week",
-          'class="pwk"' not in due_on and 'class="pday"' not in due_on and "planweek" not in due_on
-          and "Crew: 5 done with Path Book 1" in due_on)
-    asked = board._plan_card_html(dict(base, focus=week[tidx + 1]["day"]), due_on=True)
-    check("due on: Browse › Show on my plan's day still opens the week on it, with Done (no ‹ Today ›: a step lets it go)",
-          'class="pwk"' in asked and f'id="dc-pd-p1-{tidx + 1}">' in asked and "planweek:p1:0" in asked
-          and ">Done</a>" in asked and "planweek:p1:next" not in asked and "planweek:p1:prev" not in asked)
+    from due_crew import due as D
+    lists = board.you_html({}, due=D.view("2026-10-07", [], [], {}), you={"tab": "plans", "plans": {"cards": [base]}})
+    check("due on: the week is on the card whether Due's lists are on or off (Sam's pick A)",
+          'class="pwk"' in lists and 'class="pwk"' in board.you_html({}, due=None, you={"tab": "plans", "plans": {"cards": [base]}}))
     paused = board._plan_card_html(dict(base, paused=True, sub="paused until Mon 12 Oct", session=None))
     check("now: paused, with Resume now", "paused until Mon 12 Oct" in paused and "No new cards while it&rsquo;s paused." in paused
           and "planresume:p1" in paused)
@@ -6167,7 +6184,9 @@ def test_plans_tab_v341():
     plans = {"cards": [base], "offers": []}
     css = board.render({"entries": [], "labels": ["2026-10-07"], "tomorrow": "", "pending": []}, {"period": "today"}, 0,
                        plans=plans, you={"tab": "plans", "plans": plans})
-    check("narrow: the week becomes a list", "#due-crew .pwk {{ grid-template-columns: 1fr; }}".replace("{{", "{").replace("}}", "}") in css)
+    check("narrow: the seven days stay seven, their words and quiz names in the day's details",
+          "#due-crew .pwk { grid-template-columns: 1fr; }" not in css
+          and "#due-crew .pwk .pc .dow, #due-crew .pwk .pc .w, #due-crew .pwk .pc .ev { display: none; }" in css)
 
 
 def _bingo_card(wk="2026-W36", needs=(1, 1, 1, 1, 1, 1, 1, 1), middle=None, squares=None):
@@ -8051,16 +8070,16 @@ def test_plan_load_3781():
     check("load: the week carries a day's size and ask", (wed["size"], wed["ask"], fri["size"], fri["ask"]) == (4, 2, 3, 2), (wed, fri))
     check("load: a day without the load stays as it was", wk[0]["size"] is None)
     html = board._week_html({"week": wk, "week_offset": 0}, "pid1")
-    check("load: today says what's to go, ahead what's new", "2 to go" in html and "2 new" in html, html[:500])
-    check("load: one bar a day on top, to the week's scale, and a key", html.count('class="abar') == 2 and 'width:100%' in html
-          and 'width:75%' in html and "new to you" in html and "busiest" not in html)
+    check("load: today says what's to go, ahead what's new to me", '2<span class="w"> to go</span>' in html
+          and '2<span class="w"> new</span>' in html, html[:500])
+    check("load: round five, a day's bar is what of it I've done (no bar of its size, no key)",
+          'title="2 of 4"' in html and 'style="width:50%"' in html and 'class="abar' not in html and "new to you" not in html)
     check("load: a date ahead's details say what's new and what's seen before",
           "2 of 3 new &middot; 1 already seen or in your Anki" in html and "2 of 4 seen" in html)
     past = P.week_view({"units": [{"id": "a", "name": "A", "opens": "2026-10-07"}]}, {}, "2026-10-08", "2026-10-05", ld=ld)
     hp = board._week_html({"week": past, "week_offset": 0}, "pid1")
-    check("load: a past date says behind, in the warm colour; 3.8.0: it opens those cards in Browse, not the day",
-          '<span class="late"><a class="tp"' in hp and '2 behind</a></span>' in hp and 'abar late' in hp
-          and ("event.stopPropagation();pycmd('duecrew:planleft:pid1:a|" + KK + "')") in hp, hp)
+    check("load: a past day says what's left, in the warm colour, its bar too (round five: the day opens, its details Browse)",
+          '<span class="late">2<span class="w"> left</span></span>' in hp and 'class="wbar late"' in hp, hp)
 
 
 def _ahead_sample(exam_in=None, off=None, trust=(0.09, [0.05, 0.07, 0.09, 0.1, 0.11, 0.12]), name_days=True, pause=None):
@@ -11424,7 +11443,7 @@ def test_up_next_any_date_v381():
         check("then: each date after Up next, with its id", [x["uid"] for x in items] == ["ar", "ex", "cz"], str(items))
         h = board._plan_card_html(dict(v, own=dict(v["own"], then_items=[dict(items[0], name="Arr <b>")] + items[1:])))
         check("then: each name a link that opens it, escaped", f"duecrew:planpaceopen:{pid}:ex" in h
-              and "Arr &lt;b&gt;</a> 1 &middot; " in h and "<b>Arr" not in h, h[:1500])
+              and "Arr &lt;b&gt;</a> 1 &middot; " in h and "Arr <b>" not in h, h[:1500])
         dc._on_js(False, as_board(f"duecrew:planpaceopen:{pid}:ex"), DeckBrowser())
         st = F._state_cfg()[pid]
         F._state["plan_progress"] = F.progress(col, F.followed(), F._state_cfg())

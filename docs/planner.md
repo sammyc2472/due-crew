@@ -25,11 +25,12 @@ card on, from the deck beside the date or a search.
   Settings tab); following none, the ways in end with *New plan…* and
   *Your plans…*. The card is the plan's own: its day in a line ("24 to
   go today, and 54 behind since Monday", Catch up…), a quiz coming, one
-  note, its squad. Its dates are Due's Today and Upcoming, each opening
-  its details on a click on its name (Browse, the ones left, Open now,
-  Move…, Skip it, Put it back, why it left cards shut); the week only
-  with Due's lists off, or for the day Browse › Show on my plan asked
-  for (with Done).
+  note, its squad; under its day's line, the week as seven small days
+  (Sam's pick A), each its bar and what's left, and a day's click opens
+  its assignments under the week, whole (topics, the authors' notes and
+  lines, Browse, the ones left, Open now, Study, Move…, Skip it, Put it
+  back, why it left cards shut), unfolding; the same click folds them.
+  Due's Today and Upcoming open a date's details on its name too.
 - **Insights**: *Missed questions* for a deck with a bank's question tags.
 - **Settings' Find a setting** finds the three windows by their words.
 - **Labs** is what stays behind this computer's switch, `"labs": true` in

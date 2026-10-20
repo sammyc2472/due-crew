@@ -217,9 +217,15 @@ PLAN_CARD = {"id": "p1", "title": "MS2 Block 1 · Dre's plan", "sub": "week 3 of
              "ins": {"n": 53, "did": 10, "name": "KSA F3-3", "day": "2026-10-13"}}  # 3.8.0: the next exam's cards, from Insights
 PLANS = {"cards": [PLAN_CARD], "offers": []}
 _YOU = lambda tab, **kw: dict({"tab": tab, "plans": PLANS}, **kw)  # noqa: E731
-sections.append("<h3>3.8.0: You › Plans, a plan I follow (Due on, so its lists first; round five: the plan's card, "
-                "its dates are Today's and Upcoming's)</h3>" + board.render(
+sections.append("<h3>3.8.0: You › Plans, a plan I follow (round five, Sam's pick A: its day's line, then seven small "
+                "days, each its bar and what's left)</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans")))
+# pick A: a day's click opens its assignments under the week, whole (today's here; the quiz day's next)
+for _i, _what in ((2, "today, its date's topics and what's left"), (4, "the quiz day, the date for it and the quiz by name")):
+    _PF = {"cards": [dict(PLAN_CARD, focus=PLAN_CARD["week"][_i]["day"])], "offers": []}
+    sections.append(f"<h3>round five, pick A: a day opened ({_what})</h3>" + board.render(
+        DATA, {"period": "today"}, now_ts - 60, plans=_PF, due=_DV, you=_YOU("plans", plans=_PF))
+        .replace("dc-pd-p1-", f"dc-pd{_i}-p1-").replace('id="du-', f'id="du{_i}-'))  # its own ids on this page
 # round five: a plan's date opens its details on Today and Upcoming, a click on its name (open here)
 _DVD = dict(_DV, rows=[dict(r, moved=True, why={"lee": 2, "miss": 0}) if r.get("uid") == "u1" else r for r in _DV["rows"]])
 sections.append("<h3>round five: Today, a plan's date opened (a click on its name)</h3>" + board.render(
@@ -230,9 +236,21 @@ sections.append("<h3>round five: Upcoming, a date ahead opened</h3>" + board.ren
     .replace('id="dc-dd-p1-u3" hidden>', 'id="dc-dd-p1-u3">').replace('id="du-', 'id="duu-'))
 # 3.8.0: the plan's squad: a line on the plan card, and a pill on the Squads tab
 _SQ = {"cards": [dict(PLAN_CARD, tabs={"unread": 2, "summary": {
-    "shown": 5, "of": 12, "faces": ["\U0001F419", "\U0001F98A", "\U0001F331"], "last": {"name": "Maya"}}})], "offers": []}
+    "shown": 5, "of": 12, "faces": ["\U0001F419", "\U0001F98A", "\U0001F331"], "who": ["dre", "marisa", "sam"],  # 3.8.22: their Pips
+    "last": {"name": "Maya"}}})], "offers": []}
 sections.append("<h3>3.8.0: a plan I follow, in its squad (the line goes there); Due off</h3>" + board.render(
     DATA, {"period": "week", "due_show": False}, now_ts - 60, plans=_SQ, you=_YOU("plans", plans=_SQ)))
+# two plans followed: a card each, each with its own week
+_MD = {"pace": {"days": [1, 1, 1, 1, 1, 0, 0]}, "events": [],
+       "units": [{"id": "m1", "name": "Micro · Gram positives", "opens": "2026-10-05", "n": 120},
+                 {"id": "m2", "name": "Micro · Gram negatives", "opens": "2026-10-07", "n": 140},
+                 {"id": "m3", "name": "Micro · Viruses 1", "opens": "2026-10-09", "n": 90}]}
+_TWO = {"cards": [_SQ["cards"][0], dict(PLAN_CARD, id="p2", title="Micro · Priya's plan", sub="week 1 of 6 · 3 following",
+                                         week=PL.week_view(_MD, {"m1": [120, 120, 120], "m2": [140, 30, 140]}, _PT, PL.week_start(_PT)),
+                                         status={"togo": 110, "behind": 0, "since": ""}, ins=None, waiting=0, rows=[])], "offers": []}
+sections.append("<h3>round five, pick A: two plans followed (a card each, each its week)</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=_TWO, due=_DV, you=_YOU("plans", plans=_TWO))
+    .replace("dc-pd-p", "dc-pd2-p").replace('id="du-', 'id="du2-'))
 # 3.8.0: at my own pace: Up next with Open, what follows, the last step's Undo, quiet lines (no Behind)
 _OWN = {"mode": "ready", "next": {"uid": "u2", "name": "SLG 13 · Heart failure", "n": 180},
         "then": ["SLG 14 · Arrhythmias · 96", "SLG 15 · Valves · 122", "SLG 16 · 140"], "more": 29,

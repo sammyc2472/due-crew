@@ -836,6 +836,9 @@ def week_view(doc, prog, today, start, skipped=(), ld=None, shut=()):
             rm = topic_remarks(doc, [u])
             if rm:
                 rows[-1]["rm"] = rm  # 3.8.1: the authors' notes under the topics they name
+            todo = [x for x in u.get("todo") or [] if isinstance(x, dict)]
+            if todo and not skip:
+                rows[-1]["todo"] = todo  # round five: its authors' lines, in its day's details
             if u.get("for") and not skip and for_words(doc, u):
                 rows[-1]["ev"] = for_words(doc, u)  # 3.8.1: "for Heme quiz", or "after Heme quiz"
             if not skip and state != "later" and u["id"] in shut:

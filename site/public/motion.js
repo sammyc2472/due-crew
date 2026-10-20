@@ -544,6 +544,26 @@
               { duration: BASE, delay: delay || 0, fill: "forwards" }), function () { el.remove(); if (pull) pull.cancel(); if (f) f(); });
   }
 
+  // 8: a day's details, shut by a second click on its day, put back for a fold to nothing and hidden
+  // at its end (unless the day was picked again meanwhile); what the page has after is just as it was
+  function shutDay(el, cell) {
+    if (!el.hidden) return;
+    var keep = el.style.cssText;
+    el.hidden = false;
+    var h = tall(el), r = room(el);
+    el.style.overflow = "hidden";
+    el.style.boxSizing = "border-box";
+    var a = anim(el, [{ height: h + "px", opacity: 1 }, { height: "0px", opacity: 0, paddingTop: "0px", paddingBottom: "0px", marginTop: "0px",
+                                                       marginBottom: -r + "px", borderTopWidth: "0px", borderBottomWidth: "0px",
+                                                       borderTopStyle: "none", borderBottomStyle: "none" }],
+                 { duration: BASE, fill: "forwards", easing: "cubic-bezier(.4,0,1,1)" });
+    done(a, function () {
+      if (!cell.classList.contains("sel")) el.hidden = true;
+      if (a) a.cancel();
+      el.style.cssText = keep;
+    });
+  }
+
   // 20: a 🔥 rises from a streak that just grew
   function flame(td) {
     if (!M.ok()) return;
@@ -1022,13 +1042,17 @@
       }, 10000);
       return;
     }
-    // 8: the day you pick on a plan's week: the outline glides there, its card slides in
-    var cell = t.closest(".pwk .pc");
+    // 8: the day you pick on a plan's week: the outline glides there, its card slides in; round five
+    // (Sam: "animate in and out"): the first day picked unfolds its details, the same day again folds them away
+    var cell = t.closest(".pwk .pc[onclick]");
     if (cell && M.ok()) {
       var wk = cell.parentNode, old = wk.querySelector(".pc.sel");
       var a = old && old !== cell ? old.getBoundingClientRect() : null, list = Array.prototype.slice.call(wk.children);
       var dir = old ? (list.indexOf(cell) > list.indexOf(old) ? 1 : -1) : 1;
+      var open = wk.parentNode.querySelector(".pday:not([hidden])");
+      var going = old === cell ? open : null, was = open && old && old !== cell ? tall(open) : 0;
       requestAnimationFrame(function () {
+        if (going) { shutDay(going, cell); return; }
         if (!cell.classList.contains("sel")) return;
         var b = cell.getBoundingClientRect(), w = wk.getBoundingClientRect();
         if (a) {
@@ -1046,7 +1070,18 @@
           });
         }
         var box = wk.parentNode.querySelector(".pday:not([hidden])");
-        if (box) anim(box, [{ opacity: 0, transform: "translateX(" + (12 * dir) + "px)" }, { opacity: 1, transform: "none" }], { duration: 180 });
+        if (box && old) {
+          // another day's: its words slide in, and the box grows or shrinks from the last one's height
+          var now = tall(box);
+          if (was && Math.abs(was - now) > 0.5) {
+            var keep = box.style.overflow;
+            box.style.overflow = "hidden";
+            done(anim(box, [{ height: inner(box, was) + "px" }, { height: inner(box, now) + "px" }], { duration: BASE }),
+                 function () { box.style.overflow = keep; });
+          }
+          anim(box, [{ opacity: 0, transform: "translateX(" + (12 * dir) + "px)" }, { opacity: 1, transform: "none" }], { duration: 180 });
+        }
+        else if (box) unfold(box);
       });
     }
   }, true);
