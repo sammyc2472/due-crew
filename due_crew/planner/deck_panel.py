@@ -19,9 +19,10 @@ from . import build as B
 from . import edits as E
 from . import model as M
 from . import view as V
-from .widgets import frame, mark, plain, segs, tool
+from .widgets import fit_parts, frame, mark, plain, segs, tool
 
 ROLE = Qt.ItemDataRole.UserRole
+PARTS = Qt.ItemDataRole.UserRole + 1  # a search's row of a few parts: its words, fitted to the width
 VIEWS = (("resource", "By resource"), ("system", "By system"), ("other", "Other"), ("deck", "Subdecks"), ("plan", "The plan's own tags"))
 
 
@@ -37,7 +38,7 @@ class DeckPanel(QWidget):
         self.pid = None
         self.kinds = {}
         self.view = "resource"
-        self._hay = (None, [])
+        self._hay = (None, [], {}, {})
         root = QVBoxLayout(self)
         root.setContentsMargins(12, 10, 12, 10)
         root.setSpacing(8)
@@ -78,6 +79,8 @@ class DeckPanel(QWidget):
         self.more_menu = QMenu(self.more_btn)
         self.more_btn.setMenu(self.more_menu)
         self.more_menu.aboutToShow.connect(self._more)
+        # a click opens the menu and would tick the button too: ticked only while its view shows
+        self.more_btn.toggled.connect(lambda _on: self.more_btn.setChecked(self.view not in self.view_btns))
         views.addWidget(self.more_btn)
         views.addStretch(1)
         segs(list(self.view_btns.values()) + [self.more_btn])
@@ -94,13 +97,16 @@ class DeckPanel(QWidget):
         self.tree.setHeaderHidden(True)
         self.tree.setColumnCount(3)
         self.tree.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.tree.setTextElideMode(Qt.TextElideMode.ElideMiddle)  # what fit_parts can't fit keeps its end
         h = self.tree.header()
         h.setStretchLastSection(False)
         h.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         h.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         h.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        h.sectionResized.connect(lambda i, _old, new: i == 0 and self._fit(new))
         self.tree.itemChanged.connect(self._ticked)
         self.tree.itemExpanded.connect(self._expanded)
+        self.tree.itemClicked.connect(self._clicked)
         self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self._row_menu)
         root.addWidget(self.tree, 1)
@@ -189,11 +195,11 @@ class DeckPanel(QWidget):
             a.setChecked(self.view == key)
             a.triggered.connect(lambda _=False, key=key: self._view(key))
 
-    def _shown(self, key):
-        t = self.win.deck_tree()
-        if self.view == "deck":
+    def _shown(self, key, view=None):
+        t, view = self.win.deck_tree(), view or self.view
+        if view == "deck":
             return B.kind_of(key) == "deck"
-        return B.kind_of(key) == "tag" and self.view in B.kinds_below(t, key, self.kinds)
+        return B.kind_of(key) == "tag" and view in B.kinds_below(t, key, self.kinds)
 
     def _where(self, key):
         """("on this date" | "on Thu 22" | "", the date's id) for a row."""
@@ -204,17 +210,17 @@ class DeckPanel(QWidget):
                 return ("on this date" if u["id"] == self.target else f"on {M.day_words(u['opens'])}"), u["id"]
         return "", None
 
-    def _item(self, key, full=False):
+    def _item(self, key, name=None, kids=True):
         t = self.win.deck_tree()
         path = B.path_of(key)
         where, _uid = self._where(key)
-        it = QTreeWidgetItem([B.tag_name(path) if full else B.tag_word(path.split("::")[-1]), where, f"{t.n(key):,}"])
+        it = QTreeWidgetItem([name or B.tag_word(path.split("::")[-1]), where, f"{t.n(key):,}"])
         it.setData(0, ROLE, key)
         it.setToolTip(0, f"<span>{esc(path)}</span>")
         it.setTextAlignment(2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         it.setForeground(1, QBrush(QColor(tone("muted"))))
         it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-        if not full and [k for k in t.kids(key) if self._shown(k) and t.n(k)]:
+        if kids and [k for k in t.kids(key) if self._shown(k) and t.n(k)]:
             it.addChild(QTreeWidgetItem(["…", "", ""]))  # a stand-in: its children are read when it opens
         return it
 
@@ -236,15 +242,7 @@ class DeckPanel(QWidget):
             return
         term = self.find.text().strip().lower()
         if term:
-            if self._hay[0] is not t:
-                self._hay = (t, [(key, (B.path_of(key) + "\n" + B.tag_name(B.path_of(key))).lower()) for key in t.order])
-            n = 0
-            for key, hay in self._hay[1]:
-                if term in hay and t.n(key):
-                    self.tree.addTopLevelItem(self._item(key, full=True))
-                    n += 1
-                    if n >= 200:
-                        break
+            self._found(t, term)
         else:
             root = "root:deck" if self.view == "deck" else "root:tag"
             for key in t.kids(root):
@@ -257,6 +255,115 @@ class DeckPanel(QWidget):
                 item = item.child(0) if item.childCount() == 1 else None
         self.tree.blockSignals(False)
         self._marks()
+
+    # ---- a search ----
+
+    FOUND_MAX = 200
+
+    def _hay_of(self, t):
+        """(tree, [(key, its own name's words, its path's)], {key: the one above}, {key: its path's words}), once a tree."""
+        if self._hay[0] is not t:
+            up = {k: p for p, ks in t.kids_of.items() for k in ks}
+            rows, whole = [], {}
+            for key in t.order:
+                path = B.path_of(key)
+                seg = path.split("::")[-1]
+                whole[key] = (path + "\n" + B.tag_name(path)).lower()
+                rows.append((key, (seg + "\n" + B.tag_word(seg)).lower(), whole[key]))
+            self._hay = (t, rows, up, whole)
+        return self._hay
+
+    def _finds(self, t, term, view=None, most=None):
+        """The rows with the term in their own name, as written or as it
+        reads (or across parts of their path, from where it starts), in the
+        deck's order: a tag below one that has it is found only for its own name."""
+        _t, rows, up, whole = self._hay_of(t)
+        out = []
+        for key, own, path in rows:
+            if (term in own or (term in path and term not in whole.get(up.get(key), ""))) \
+                    and self._shown(key, view) and t.n(key):
+                out.append(key)
+                if most and len(out) >= most:
+                    break
+        return out
+
+    def _found(self, t, term):
+        """A search, the deck's structure kept (Sam: tags nested in each
+        other stay nested): each find under the tags above it, a line of
+        them with one way down read as one row (its path, the end kept as
+        it narrows); a find with finds below it shows those, one without
+        opens onto its own parts. Nothing in this view: the views that have it."""
+        found = self._finds(t, term, most=self.FOUND_MAX + 1)
+        more = len(found) > self.FOUND_MAX
+        found = found[:self.FOUND_MAX]
+        if not found:
+            self._none_here(t, term)
+            return
+        _t, _rows, up, _whole = self._hay_of(t)
+        hit, show = set(found), set(found)
+        for k in found:
+            p = up.get(k)
+            while p and p in t.order and p not in show:
+                show.add(p)
+                p = up.get(p)
+        below = {}
+        for k in sorted(show, key=t.order.get):
+            below.setdefault(up.get(k), []).append(k)
+
+        def place(k, above):
+            while k not in hit and len(below.get(k) or []) == 1:
+                k = below[k][0]
+            path = B.path_of(k)
+            parts = [B.tag_word(x) for x in (path[len(B.path_of(above)) + 2:] if above else path).split("::")]
+            it = self._item(k, name=" \u203a ".join(parts), kids=k in hit and not below.get(k))
+            if len(parts) > 2:
+                it.setData(0, PARTS, parts)
+            for c in below.get(k) or []:
+                it.addChild(place(c, k))
+            return it
+        for k in below.get("root:deck" if self.view == "deck" else "root:tag") or []:
+            self.tree.addTopLevelItem(place(k, None))
+        for it in self._items():
+            if it.childCount() and it.child(0).data(0, ROLE):
+                it.setExpanded(True)
+        if more:
+            self._note(f"The first {self.FOUND_MAX:,}: type more of a name to narrow them.")
+        self._fit()
+
+    def _fit(self, w=None):
+        """Each long row's path to its width (column 0's, w as it changes): B&B › … › 5 · Parasites and helminths."""
+        fm, w, ind = self.tree.fontMetrics(), w or self.tree.columnWidth(0), self.tree.indentation()
+        was = self.tree.blockSignals(True)  # a row's words changing isn't a tick
+        for it in self._items():
+            parts = it.data(0, PARTS)
+            if parts:
+                depth, p = 1, it.parent()
+                while p is not None:
+                    depth, p = depth + 1, p.parent()
+                it.setText(0, fit_parts(list(parts), w - ind * depth - 32, fm))
+        self.tree.blockSignals(was)
+
+    def _note(self, words, view=None):
+        it = QTreeWidgetItem([words, "", ""])
+        it.setFlags(Qt.ItemFlag.ItemIsEnabled)
+        it.setForeground(0, QBrush(QColor(tone("accent" if view else "muted"))))
+        if view:
+            it.setData(1, ROLE, view)  # a click shows that view's
+        self.tree.addTopLevelItem(it)
+
+    def _none_here(self, t, term):
+        """Nothing in this view: what the others have ("By system has 4", a click away)."""
+        have = [(v, label, len(self._finds(t, term, v, most=self.FOUND_MAX))) for v, label in VIEWS[:4] if v != self.view]
+        have = [x for x in have if x[2]]
+        self._note(f"Nothing here has \u201c{self.find.text().strip()}\u201d." if have
+                   else f"Nothing in this deck has \u201c{self.find.text().strip()}\u201d.")
+        for v, label, n in have:
+            self._note(f"{label} has {n:,}{'+' if n >= self.FOUND_MAX else ''}", v)
+
+    def _clicked(self, item, _col):
+        v = item.data(1, ROLE) if item.data(0, ROLE) is None else None
+        if v in dict(VIEWS):
+            self._view(v)
 
     def _plan_rows(self):
         doc = self.win.doc or {}

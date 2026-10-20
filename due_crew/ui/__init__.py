@@ -390,12 +390,14 @@ QPushButton[dc="menu"]:focus {{ padding: 5px 29px 5px 13px; }}
 QPushButton[dc="menu"]::menu-indicator {{ image: url("{i-down}"); width: 12px; height: 12px; subcontrol-origin: padding; subcontrol-position: center right; right: 10px; }}
 QPushButton[dc="seg"] {{ border-radius: 0; padding: 6px 14px; }}
 QPushButton[dc="seg"]:focus {{ padding: 5px 13px; }}
-QPushButton[dc="seg"][pos="mid"], QPushButton[dc="seg"][pos="last"] {{ border-left: none; }}
-QPushButton[dc="seg"][pos="first"] {{ border-top-left-radius: 8px; border-bottom-left-radius: 8px; }}
-QPushButton[dc="seg"][pos="last"] {{ border-top-right-radius: 8px; border-bottom-right-radius: 8px; }}
-QPushButton[dc="seg"][pos="only"] {{ border-radius: 8px; }}
+QPushButton[dc="seg"][seg="mid"], QPushButton[dc="seg"][seg="last"] {{ border-left-color: transparent; }}
+QPushButton[dc="seg"][seg="first"] {{ border-top-left-radius: 8px; border-bottom-left-radius: 8px; }}
+QPushButton[dc="seg"][seg="last"] {{ border-top-right-radius: 8px; border-bottom-right-radius: 8px; }}
+QPushButton[dc="seg"][seg="only"] {{ border-radius: 8px; }}
 QPushButton[dc="seg"]:checked {{ background: {you-bg}; border: 1px solid {accent}; color: {accent}; }}
+QPushButton[dc="seg"][next="on"] {{ border-right-color: transparent; }}
 QPushButton[dc="seg"][menu="true"] {{ padding: 6px 28px 6px 14px; }}
+QPushButton[dc="seg"][menu="true"]:focus {{ padding: 5px 27px 5px 13px; }}
 QPushButton[dc="seg"][menu="true"]::menu-indicator {{ image: url("{i-down}"); width: 12px; height: 12px; subcontrol-origin: padding; subcontrol-position: center right; right: 8px; }}
 QProgressBar {{ border: 0; border-radius: 3px; background: {line}; max-height: 6px; min-height: 6px; }}
 QProgressBar::chunk {{ border-radius: 3px; background: {accent}; }}

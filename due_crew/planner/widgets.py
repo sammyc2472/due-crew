@@ -82,11 +82,40 @@ def tool(text, fn=None, checkable=False, tip=None, seq=None, bad=False):
 
 def segs(buttons):
     """Buttons side by side as one control: the ends rounded as the boxes,
-    the joins square (QSS [pos]); only the ones shown count."""
+    the joins square (QSS [seg]: not "pos", every widget's own place, which
+    no style rule ever matched); only the ones shown count. The one before
+    a ticked one leaves its right edge to it ([next]), so a ticked one in
+    the middle has one line round it, not two on its left."""
     shown = [b for b in buttons if not b.isHidden()] or list(buttons)
     for i, b in enumerate(shown):
-        mark(b, "pos", "only" if len(shown) == 1 else "first" if i == 0 else "last" if i == len(shown) - 1 else "mid")
+        mark(b, "seg", "only" if len(shown) == 1 else "first" if i == 0 else "last" if i == len(shown) - 1 else "mid")
+        if getattr(b, "_dc_segs", None) is None:
+            b.toggled.connect(lambda _on, b=b: _seg_next(b._dc_segs))
+        b._dc_segs = shown
+    _seg_next(shown)
     return buttons
+
+
+def _seg_next(shown):
+    for a, b in zip(shown, shown[1:]):
+        mark(a, "next", "on" if b.isChecked() else "")
+    if shown:
+        mark(shown[-1], "next", "")
+
+
+def fit_parts(parts, width, fm):
+    """A path's parts (["B&B", "14 · Infectious Disease", "5 · Parasites"])
+    in a width, whole parts only: all of them, else the first, "…" and as
+    many of the last as fit, else "…" and the last (Qt cuts what's left)."""
+    sep = " \u203a "
+    whole = sep.join(parts)
+    if len(parts) < 3 or fm.horizontalAdvance(whole) <= width:
+        return whole
+    for k in range(len(parts) - 2, 0, -1):
+        s = sep.join([parts[0], "\u2026"] + parts[-k:])
+        if fm.horizontalAdvance(s) <= width:
+            return s
+    return sep.join(["\u2026", parts[-1]])
 
 
 def menu_button(text, on_show=None, small=False, tip=None):

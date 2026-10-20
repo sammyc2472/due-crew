@@ -3220,3 +3220,24 @@ every release that changes how something works.
   bank's ids never), By ▾ is the map's own pick for the deck, the parts
   the plan holds come most held first, and the part it's mostly in
   opens into its own parts ("Inside Cardio", the ones left out named).
+  Then the deck beside the plan (Sam, a screenshot of "helminth" found
+  seven times as the same "Step 1 › B&B › 14 · Infectious Disease › 5 ·
+  Parasites an…": "if in the search some tags are nested to each other,
+  let's keep that structure"): a search matched every tag whose path had
+  the word, so all of a found tag's children came too, flat and cut off
+  at the right. Now a tag is found by its own name (or across parts of
+  its path, from where the words start), each find sits under the tags
+  above it, a line of tags with one way down reads as one row
+  (`widgets.fit_parts`: "B&B › … › 5 · Parasites and Helminths", whole
+  parts dropped from the middle as the panel narrows), a find with finds
+  below it shows them, one without opens onto its own parts. By resource
+  and By system narrow the search to their tags (before, they changed
+  nothing while it was on), and a view without the word says which has
+  it ("By system has 4", a click). And the buttons themselves ("check on
+  these buttons"): `segs` marked each button's place with a property
+  named `pos`, which is every widget's own position, so no rule for the
+  rounded ends or the shared edge ever matched, and every side-by-side
+  choice in Your plans drew as boxes stuck together; it's `seg` now, the
+  edge between two keeps its width as the tick moves (no 1px shuffle),
+  and More, which a click ticked while its menu was open, is ticked only
+  while one of its own views shows.

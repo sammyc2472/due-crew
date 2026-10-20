@@ -1513,6 +1513,33 @@ def main(out):
         tab.lay_out_view()  # Add › Lay out from the deck…
         if tab.side.currentWidget() is not tab.deck or tab.deck.target is not None:
             raise RuntimeError("planner: Lay out from the deck")
+        # a search keeps the tags' structure: what's found under the tags above it, a line of one-way tags one row
+        deck = tab.deck
+        deck.find.setText("heart failure")
+        deck._typing.stop()
+        deck.fill_tree()
+        top = deck.tree.topLevelItem(0)
+        kids = [top.child(i).text(0) for i in range(top.childCount())] if top else []
+        if deck.tree.topLevelItemCount() != 1 or top.text(0) != "Big Step 1" or not top.isExpanded() \
+                or kids != ["Book › Cardio › Heart Failure", "Videos › Cardio › Heart Failure"] or deck.cover:
+            raise RuntimeError(f"planner: the deck's search, kept as a tree: {top and top.text(0)!r} {kids}, {deck.cover}")
+        shoot(dlg, os.path.join(out, "planner-deck-search.png"))
+        deck.view_btns["system"].click()  # a view button narrows the search to its tags
+        top = deck.tree.topLevelItem(0)
+        if deck.tree.topLevelItemCount() != 1 or top.text(0) != "Big Step 1 › Systems › Cardio › Heart Failure":
+            raise RuntimeError(f"planner: the search by system: {top and top.text(0)!r}")
+        deck.find.setText("sketches")
+        deck._typing.stop()
+        deck.fill_tree()
+        rows = [deck.tree.topLevelItem(i).text(0) for i in range(deck.tree.topLevelItemCount())]
+        if rows != ["Nothing here has \u201csketches\u201d.", "By resource has 1"]:
+            raise RuntimeError(f"planner: nothing by system: {rows}")
+        deck.more_btn.setChecked(True)  # a click opens More's menu and ticks it: only its own views tick it
+        if deck.more_btn.isChecked() or not deck.view_btns["system"].isChecked():
+            raise RuntimeError("planner: More ticked while By system shows")
+        deck._clicked(deck.tree.topLevelItem(1), 0)
+        if deck.view != "resource" or deck.tree.topLevelItem(0).text(0) != "Big Step 1 › Sketches":
+            raise RuntimeError(f"planner: By resource has 1: {deck.view}")
         tab.deck.find.setText("#sketches")
         tab.deck._typing.stop()
         tab.deck.fill_tree()
