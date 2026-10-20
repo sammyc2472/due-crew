@@ -213,11 +213,21 @@ PLAN_CARD = {"id": "p1", "title": "MS2 Block 1 · Dre's plan", "sub": "week 3 of
              "week_offset": 0, "session": {"kind": "study", "target": 42, "done": 18, "due": 311, "minutes": 48, "behind": 0},
              "lines": [], "change": None, "no_deck": False, "paused": False,
              "waiting": 16, "aside": [0, 0, 0], "aside_ok": [0, 0],
+             "status": {"togo": 24, "behind": 0, "since": ""},  # round five: the card's line about its day
              "ins": {"n": 53, "did": 10, "name": "KSA F3-3", "day": "2026-10-13"}}  # 3.8.0: the next exam's cards, from Insights
 PLANS = {"cards": [PLAN_CARD], "offers": []}
 _YOU = lambda tab, **kw: dict({"tab": tab, "plans": PLANS}, **kw)  # noqa: E731
-sections.append("<h3>3.8.0: You › Plans, a plan I follow (Due on, so its lists first)</h3>" + board.render(
+sections.append("<h3>3.8.0: You › Plans, a plan I follow (Due on, so its lists first; round five: the plan's card, "
+                "its dates are Today's and Upcoming's)</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans")))
+# round five: a plan's date opens its details on Today and Upcoming, a click on its name (open here)
+_DVD = dict(_DV, rows=[dict(r, moved=True, why={"lee": 2, "miss": 0}) if r.get("uid") == "u1" else r for r in _DV["rows"]])
+sections.append("<h3>round five: Today, a plan's date opened (a click on its name)</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DVD, you=_YOU("today"))
+    .replace('id="dc-dd-p1-u1" hidden>', 'id="dc-dd-p1-u1">').replace('id="du-', 'id="dud-'))
+sections.append("<h3>round five: Upcoming, a date ahead opened</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=dict(_DV, tab="upcoming"), you=_YOU("upcoming"))
+    .replace('id="dc-dd-p1-u3" hidden>', 'id="dc-dd-p1-u3">').replace('id="du-', 'id="duu-'))
 # 3.8.0: the plan's squad: a line on the plan card, and a pill on the Squads tab
 _SQ = {"cards": [dict(PLAN_CARD, tabs={"unread": 2, "summary": {
     "shown": 5, "of": 12, "faces": ["\U0001F419", "\U0001F98A", "\U0001F331"], "last": {"name": "Maya"}}})], "offers": []}
@@ -241,7 +251,7 @@ sections.append("<h3>3.8.0: at my own pace, later (Put back), every date open</h
                       at="The plan's dates ended Fri 4 Dec."))], "offers": []})))
 sections.append("<h3>3.8.0: a plan I follow, not in its squad, behind</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [dict(
-        PLAN_CARD, tabs={"summary": None}, ins=None,
+        PLAN_CARD, tabs={"summary": None}, ins=None, status={"togo": 24, "behind": 54, "since": "Monday"},
         lines=[("behind", [("Path Book 1 · Cell injury", True), (" was due Mon. 54 cards not seen yet.", False)])])], "offers": []})))
 # 3.8.1, plans round three: an invite to co-write and a hand-over above the plans; today's date
 # with an author's note under the topic it names, and its picked cards named by their resource here

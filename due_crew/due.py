@@ -435,7 +435,9 @@ def _date_row(x, ticks, today, short=False):
             "done": done, "part": part,
             "future": x["opens"] > today, "n": n, "seen": seen, "total": total, "lines": lines,
             "through": min(th, total), "later": min(int(x.get("later") or 0), total),  # 3.9.3: its bar
-            "crew": x.get("crew"), "prep": x.get("prep"), "upd": int(x.get("upd") or 0)}
+            "crew": x.get("crew"), "prep": x.get("prep"), "upd": int(x.get("upd") or 0),
+            # round five: its details on a click (board._date_more), the Plans tab's week's
+            "own": bool(x.get("own")), "moved": bool(x.get("moved")), "shut": bool(x.get("shut")), "why": x.get("why")}
 
 
 # ---- 3.8.0: a plan's lines every week ----

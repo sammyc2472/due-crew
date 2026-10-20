@@ -884,6 +884,15 @@ def card_view(plan, st, prog, today, session=None, week_offset=0):
     if st and st.get("snapshot") is not None and st.get("seen_version") != plan.get("version"):
         change = P.change_note(plan.get("ownerName"), st["snapshot"], _plan_doc(plan))
     own = P.own_pace(plan) and not plan.get("paused") and not no_deck
+    # round five: the card's line about the plan's day (Due's Today and Upcoming have each date):
+    # what today's dates have left, and what's behind (past its day, not seen) and since when
+    status = None
+    if not (no_deck or plan.get("paused") or own):
+        left = lambda u: max(0, int(_t3(prog, u)[2]) - int(_t3(prog, u)[1]))
+        late = sorted(str(u["due"]) for u in us if u.get("due") and str(u["due"]) < today and left(u))
+        status = {"togo": sum(left(u) for u in us if str(u.get("opens") or "") == today),
+                  "behind": sum(left(u) for u in us if u.get("due") and str(u["due"]) < today),
+                  "since": P.weekday_or_day(late[0], today) if late else ""}
     if own:  # 3.8.0: no Behind at my own pace; what's next, and where the plan is
         sub = f"at your pace · {followers:,} following"
         waiting, catch, session = 0, None, None
@@ -905,8 +914,13 @@ def card_view(plan, st, prog, today, session=None, week_offset=0):
             "put_off": put_off, "waiting": waiting,
             # 3.8.1: put off by Welcome back's Not today: tomorrow morning asks again
             "put_off_ask": bool(put_off) and str(((st or {}).get("away") or {}).get("day") or "") == today,
-            "week": week, "week_offset": int(week_offset),
+            "week": week, "week_offset": int(week_offset), "status": status,
             "catch": {"extra": int(catch.get("extra") or 0), "until": _short_day(catch["until"], today)} if catch else None}
+
+
+def _t3(prog, u):
+    """A date's [opened, seen, total] here."""
+    return (list((prog or {}).get(u["id"]) or []) + [0, 0, 0])[:3]
 
 
 def _shut_dates(plan, st, prog):

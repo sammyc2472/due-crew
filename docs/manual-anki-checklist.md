@@ -221,10 +221,10 @@ for the builder's link), as for 3.0. Two accounts: Dre (author) and Maya
 - [ ] The Decks tab: "<name> · Dre's plan", "week X of Y · N following", a row per opened date (You: seen, Crew: done, "N of M"), the next date's "opens …", "✓ Opened … this morning: N cards" with Undo. Review a card: Undo goes (Anki has a newer step).
 - [ ] The next morning (change the computer's date, or wait): after Anki's sync on open, the day's date opens with the toast, once. A profile that doesn't sync: at the first refresh. Offline with sync on: three minutes after opening.
 - [ ] Dre moves a date later and one earlier, adds a date: Maya's card says "Dre moved … and added …" with OK. Nothing that was open closes. The date moved earlier opens the next morning, not before.
-- [ ] Plan ▾ → Open everything now: every date opens, one undo step. Change deck…: pick another deck; its cards for the opened dates open. Pause: no mornings; the card says paused. Resume: asks "N units opened while paused" with Open them now / Start from the next unit.
-- [ ] Plan ▾ → Stop following: "Stop following <name>? Nothing gets suspended…", Stop. The card goes; every open card stays open; Dre's progress page stops counting Maya.
+- [ ] Your plans… › Settings › More › Open everything now: every date opens, one undo step. Change deck…: pick another deck; its cards for the opened dates open. Pause: no mornings; the card says paused. Resume: asks "N units opened while paused" with Open them now / Start from the next unit.
+- [ ] Your plans… › Settings › Stop following…: "Stop following <name>? Nothing gets suspended…", Stop. The card goes; every open card stays open; Dre's progress page stops counting Maya.
 - [ ] Follow with "Join this plan's squad" unchecked: Dre's progress page doesn't count Maya, the crew's done counts leave her out, and her own progress still shows on the site's Home. Join its squad from the plan card's line (it asks first, saying what it shares): she counts; Leave in the squad (its question says progress stops counting): she doesn't.
-- [ ] 3.7.6: a date's details from today on have Move…: pick a day; the date shows there dashed with "· moved" and Put it back; the site's plan page says "1 date moved". Plan ▾ › Reset to default… lists what goes back; Reset puts it all back.
+- [ ] 3.7.6: a date's details from today on have Move…: pick a day; the date shows there dashed with "· moved" and Put it back; the site's plan page says "1 date moved". Your plans… › Settings › More › Reset to default… lists what goes back; Reset puts it all back.
 - [ ] 3.7.6: follow a plan whose first dates have passed: Start where everyone is (no behind, the earlier dates skipped with Undo skip), Catch up over 2 weeks (a catch-up note, no "behind"), Start from the beginning (today is its first date).
 - [ ] 3.7.6: on a card with another add-on's button beside Edit (AnkiHub), the answer buttons sit in the middle and the ask chip sits beside More.
 - [ ] 3.7.6: a follower who shared before the update sees "Join this plan's squad?" once on the plan card; Join puts them in it; No thanks makes it go without a question.
@@ -240,7 +240,7 @@ for the builder's link), as for 3.0. Two accounts: Dre (author) and Maya
 - [ ] Dre adds a tag to a date Maya already opened; Maya suspends one of its cards by hand, and one card of it is a leech. Next morning: only the added tag's cards open; the hand-suspended card and the leech stay suspended.
 - [ ] The board's Undo: the cards go back to suspended, then the card's "Opened … this morning" line goes and the counts drop. Edit → Undo is not offered for that step again.
 - [ ] Browse in Notes mode → Due Crew: add to a plan…: a tooltip asks to switch to Cards; nothing opens. In Cards mode it works as before.
-- [ ] Plan ▾ → Change deck… on a plan named with <b>markup</b>: the question shows the name as text.
+- [ ] Your plans… › Settings › More › Change deck… on a plan named with <b>markup</b>: the question shows the name as text.
 - [ ] Signed out, AnkiWeb sync done at open, then sign in: the plans' morning runs with the sign-in's refresh, not three minutes later.
 - [ ] Close Anki with a sync on close on a new day before the morning ran: no plan cards open during the close.
 
@@ -253,7 +253,7 @@ deck both share (Settings › Shared decks).
 - [ ] Maya: Follow a plan… → Follow: My schedule opens right after. Days: click S twice (×2, then rest), minutes, a later start. The chart shows reviews a day by week, amber over my time, "your 60 min ≈ N"; the sentence says what to do. Save: today's share opens (a toast), not the whole date. Cancel instead: dates open whole, as in 3.1.
 - [ ] The plan card: three tiles (new today N / M, reviews due, ~minutes left), "On track." and Study now (opens the deck's review). A rest day says "rest day: no new"; a catch-up week and the taper say so.
 - [ ] Skip two study days (change the date): the card says "You missed Tue and Wed: N new cards waiting" with Spread them (+N a day), Push my dates back 2 days, Leave them open. Push: one request, a tooltip; the plan's dates on the site don't move for Dre. Spread: the target grows by a quarter a day. Either way the question doesn't come back for those days.
-- [ ] Plan ▾ → My schedule…: the same dialog with No schedule; No schedule takes it off.
+- [ ] Your plans… › Settings › More › My schedule…: the same dialog with No schedule; No schedule takes it off.
 - [ ] A checkpoint's morning: "Due Crew built Checkpoint · <date>", a filtered deck of that date's cards with most lapses first, under the Due Crew deck in the deck list. Study it: the card says "N done", then "Checkpoint … done: X of N right first time".
 - [ ] The Monday of plan week 2: "Week 1 done: X of Y sessions, N new cards, on track." Dre's board shows "· week 1 done" beside Maya's name that day.
 - [ ] Who knows this one: Maya presses Again on a card Dre has mature in the shared deck, then syncs. On its answer side, beside Edit: "🐙 Dre knows this · Ask". Ask → a line → the flag goes up. Dre's Decks tab: "Maya asks about a card you know: "…"" first, with Tip; the same card in Dre's reviewer shows "Maya asked about this · Tip". Dre tips: Maya's flag comes down; next time the card's answer shows "💡 Dre's tip"; click: the tip and This helped. Nothing is ever drawn inside the card.
@@ -296,7 +296,7 @@ deck both share (Settings › Shared decks).
 ### 3.3: a class through Step (C1–C5)
 
 - [ ] C1: set the deck's New cards/day to 20 and follow a plan with 60 today: the card says "Anki shows 20 new a day in this deck; today has 60" with Raise to 60. Click: Deck Options shows 60 (a shared preset: this deck now has its own "(Due Crew)" copy; the others still 20). Edit › Undo puts it back.
-- [ ] C2: Plan ▾ › Open early › 2 days: the next two days' cards open now; the card says "(2 days early)".
+- [ ] C2: Your plans… › Settings › More › Open early › 2 days: the next two days' cards open now; the card says "(2 days early)".
 - [ ] C3: in the browser, search `tag:*Cardio* -tag:*Pharm*`, Due Crew: add to a plan › This search: the date shows the search with its count on the site; a follower's morning opens those cards. Paste a search on a day on the site: the same.
 - [ ] C4: Study on a date's row opens "Due Crew · <date>". A review day on the site: that morning, "Review · A – B" (200 most-missed).
 - [ ] C5: rename a tag in a follower's copy (like a new version of a shared deck): the date still opens its cards, and the card says the tags differ, with OK.
@@ -320,8 +320,8 @@ In Anki (as a follower):
 - [ ] The plan card: "For Micro quiz on Thu · 2 more days of prep" while you prep.
 - [ ] G1: Open now on the next date: that date opens (one Edit › Undo step); its morning opens nothing twice.
 - [ ] G2: Not today, right after the morning: the cards close again, the card says they open tomorrow morning (Open it now works too); the next day they open.
-- [ ] G3: Plan ▾ › Skip a date: its row is crossed out with Undo skip; it never opens. Undo skip: it opens if its day has come.
-- [ ] G4: Plan ▾ › Pause until… (your Away dates fill it in if set). The day after, "Welcome back": move my dates later, or open what I missed. Plan ▾ › Push my dates back… sets the days by hand; the card says "your dates +N days".
+- [ ] G3: Your plans… › Settings › Skip a date (or a date's Skip it in Upcoming): its row is crossed out with Undo skip; it never opens. Undo skip: it opens if its day has come.
+- [ ] G4: Your plans… › Settings › Pause until… (your Away dates fill it in if set). The day after, "Welcome back": move my dates later, or open what I missed. Settings › My dates › Some days later… sets the days by hand; the card says "your dates +N days".
 - [ ] G5: fall behind a day: "N new cards from earlier dates waiting · Catch up…": over 3 days, Anki's new count for the deck goes up today only; Stop puts it back.
 - [ ] G6: on the site, the follower's plan page shows "you: 20 of 34", "you: skipped".
 
@@ -594,7 +594,8 @@ In Anki (as a follower):
 - [ ] The box above the board: Today · Upcoming · Later, a thin rule, then Plans · Insights, as words (the one on screen underlined). The count ("1 of 4 done") shows on Today and Upcoming only. Hide ▴ folds the whole box to one line; Show opens it.
 - [ ] Today: a plan date's topics sit on its resources' rows (Video Series · Pharmacokinetics 6 / 85), each topic opening its cards in Browse; the list ends with the add line (no Tomorrow line; Upcoming has it). Behind shows on Today, not on Upcoming. Later's tab shows only while Later holds something; add one there ("Call home later") and the toast's Show opens it.
 - [ ] The board under it: Crew · Squads pills, nothing else; the Decks view is in Crew's picker. Light, dark and a narrow window: nothing spills past the board's edge; on a narrow window Hide sits on the right.
-- [ ] Plans: a day's details open on its click (none open by default; Browse › Show on my plan opens its day); "Month ↗" opens the month on duecrew.com.
+- [ ] Plans: a day's details open on its click (none open by default; Browse › Show on my plan opens its day). Round five: with Due's lists on, You › Plans has no week (the card, Your plans…, its day in a line with Catch up…, a quiz, one note, its squad); Show on my plan still opens the week on its day, with Done, which lets it go. No Month ↗.
+- [ ] Round five: Today and Upcoming: click a plan date's name: its details open under it (Browse N cards, N left, Open now ahead of its day, Move…, Skip it, Put it back after a move, "N leeches stay shut"); click again, they shut. Each one does what the old week's did, and the board redraws with it.
 - [ ] Plans: each plan's card with no Today box: its line (week, followers, "opens 2 days early" when set), the next exam's cards at risk ("53 cards Anki won't show you before KSA … · Study 53 · Insights ›") with FSRS on, the week, one note, the crew line. Paused: "No new cards while it's paused" with Resume now. A rest day says so.
 - [ ] Behind on a plan: its behind line has Catch up…, and the menu ends with Push my dates back…. The day details' link reads Push my dates back… too.
 - [ ] The morning opens cards: Today says "This morning opened N new cards" with Put off to tomorrow, which closes them until tomorrow's morning; review a card and the line goes. With Due off in Settings, the line is on Plans instead.
@@ -662,7 +663,7 @@ In Anki (as a follower):
 - [ ] Open: the date's cards open (no leech) and Anki's next new cards are theirs (check the Browse Due column: they're first); the card says "Opened … first in line. Undo"; Undo shuts them again and it's Up next again. Open and study goes straight into a Due Crew deck of those new cards.
 - [ ] With "the next once I've seen the last": study most of the opened date, and the next morning opens the following one by itself, only one.
 - [ ] Put back on the plan card: only the unseen cards of the last date shut again; Edit › Undo puts them back. Stop following opens them.
-- [ ] Plan ▾ › How its cards open: switch to When I'm ready (a deck with open later cards offers Hold back), and back to the plan's dates (dates passed since ask, as Resume does). duecrew.com's plan page shows "At your pace · next: …" and the same choice; changing it there reaches Anki at its next refresh.
+- [ ] Your plans… › Settings › Cards open (and More's "the next once I've seen most of the last"): switch to When I'm ready (a deck with open later cards offers Hold back), and back to the plan's dates (dates passed since ask, as Resume does). duecrew.com's plan page shows "At your pace · next: …" and the same choice; changing it there reaches Anki at its next refresh.
 - [ ] Browse: right-click a tag in the sidebar › Due Crew: open its cards…: the sheet counts what opens, what's open already, the leeches (they stay suspended), and the plans that hold them; Open with First in line ticked puts them first in Anki's new cards; one Edit › Undo shuts them. Pick cards in the table › Due Crew: open these…: the same for just those. Signed out: both are there.
 
 ### 3.9.2: the short pass before release (about 25 minutes)

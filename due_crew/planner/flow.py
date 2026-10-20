@@ -318,6 +318,19 @@ class Ops:
     def stop_following(self, pid):
         plan_flow.stop_following(pid)
 
+    def open_schedule(self, pid):
+        plan_flow.open_schedule(pid)
+
+    def can_reset(self, pid):
+        """Reset to default has something to put back (my shift, skips, moves, pause)."""
+        try:
+            return bool(plan_flow.reset_lines(plan_flow._raw(pid) or {}))
+        except Exception:
+            return False
+
+    def reset_days(self, pid):
+        plan_flow.reset_days(pid)
+
     def copy_plan(self, owner, pid, said):
         """Make my own copy (a library plan): the same dates, mine to change; then Your plans on it."""
         p = self.follow_state(pid) or {}

@@ -19,9 +19,17 @@ card on, from the deck beside the date or a search.
 
 - **Tools › Due Crew › Plans**: Your plans…, New plan…, Follow a plan…;
   Missed questions…, Export cards for my AI….
-- **You › Plans**: its head row, *Open plans* (Your plans) and *New plan
-  ▾* (New plan…, or on duecrew.com); each plan card's *Open* (Your
-  plans, on that plan).
+- **You › Plans**: each plan card's one button, *Your plans…* (on that
+  plan; round five, where the card's Open and Plan ▾ and the head row's
+  Open plans and New plan ▾ went: a follow's every setting is its
+  Settings tab); following none, the ways in end with *New plan…* and
+  *Your plans…*. The card is the plan's own: its day in a line ("24 to
+  go today, and 54 behind since Monday", Catch up…), a quiz coming, one
+  note, its squad. Its dates are Due's Today and Upcoming, each opening
+  its details on a click on its name (Browse, the ones left, Open now,
+  Move…, Skip it, Put it back, why it left cards shut); the week only
+  with Due's lists off, or for the day Browse › Show on my plan asked
+  for (with Done).
 - **Insights**: *Missed questions* for a deck with a bank's question tags.
 - **Settings' Find a setting** finds the three windows by their words.
 - **Labs** is what stays behind this computer's switch, `"labs": true` in
@@ -351,7 +359,7 @@ one with the most of them, or the one picked.
 ## New plan
 
 Round five's one way to start (`new_plan.py`; Tools › Due Crew › Plans ›
-New plan…, You › Plans' New plan ▾, Your plans' New plan…; signed in:
+New plan…, You › Plans' New plan… with no plan followed, Your plans' New plan…; signed in:
 it makes a plan on the server). **Name**, **Deck**, **Ends with** (the
 exam's name and day, so the plan knows its end from the first minute;
 empty for none), and **the course calendar if there is one**: pasted in or

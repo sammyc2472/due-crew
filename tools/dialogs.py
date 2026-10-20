@@ -1749,6 +1749,9 @@ def main(out):
             def in_team(self, pid_):
                 return True
 
+            def can_reset(self, pid_):
+                return True
+
         fw = PlanWindow(None, col, PR.my_plans(CLIENT), FOps(), select=pid2)
         fw.resize(1180, 760)
         shown = [fw.tabs.tabText(i) for i in range(fw.tabs.count()) if fw.tabs.isTabVisible(i)]
@@ -1768,6 +1771,12 @@ def main(out):
         mt = fw.pages["mine"]
         if mt.later.text() != "2 days later" or mt.held.isHidden():
             raise RuntimeError(f"planner: Mine {mt.later.text()!r}")
+        mt._more()  # round five: what the board's Plan ▾ held besides is under More
+        more = [a.text() for a in mt.more_menu.actions()]
+        nxt = next((a for a in mt.more_menu.actions() if a.text().startswith("When I'm ready, the next")), None)
+        if not {"Change deck…", "Open everything now", "Open early", "Reset to default…"} <= set(more) \
+                or nxt is None or nxt.isEnabled() or "My schedule…" in more:
+            raise RuntimeError(f"planner: Settings' More (a follower's) {more}")
         shoot(fw, os.path.join(out, "planner-mine.png"))
         # a picked date whose plan lost its dates, then a load that fails: no crash, no stale pick
         crash = PlanWindow_()

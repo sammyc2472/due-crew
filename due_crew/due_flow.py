@@ -87,6 +87,9 @@ def plan_dates(today):
         upd = (_state.get("plan_updates") or {}).get(p["id"]) or {}
         own = P.own_pace(p)  # 3.8.0: the dates I opened are today's, till seen; nothing is behind or upcoming
         own_days = st.get("own_opened") or {}
+        # round five: what a date's details say and offer, as the Plans tab's week had it
+        moved, shut = p.get("moved") or {}, pf._shut_dates(p, st, prog.get(p["id"]))
+        lee, miss = st.get("leeches") or {}, st.get("missing") or {}
         for u in P.units(doc):
             opens = str(u.get("opens") or "")
             a = applied.get(u["id"])
@@ -109,6 +112,7 @@ def plan_dates(today):
             if not int(t) and opens < today and not u.get("todo"):
                 continue  # nothing of it in my deck: nothing to be behind on
             ev = evs.get(u.get("for"))
+            m = miss.get(u["id"]) if isinstance(miss.get(u["id"]), (list, tuple)) else None
             dates.append({"pid": p["id"], "uid": u["id"], "plan": title, "name": str(u.get("name") or "?"),
                           "opens": opens, "seen": int(s),
                           "later": int((later.get(p["id"]) or {}).get(u["id"]) or 0),  # 3.9.3: back later today
@@ -129,7 +133,10 @@ def plan_dates(today):
                           # 3.7.3: an author's update adds to it, waiting for Open (its count when it's
                           # the only date the update touches; -1: one of several)
                           "upd": (0 if u["id"] not in (upd.get("units") or []) else
-                                  int(upd.get("n") or 0) if len(upd["units"]) == 1 else -1)})
+                                  int(upd.get("n") or 0) if len(upd["units"]) == 1 else -1),
+                          "own": own, "moved": bool(moved.get(u["id"])), "shut": opens <= today and u["id"] in shut,
+                          # what it left shut when it opened: its leeches (Browse) and picks this copy hasn't
+                          "why": {"lee": int(lee.get(u["id"]) or 0), "miss": int(m[0]) if m else 0} if a else None})
         for e in evs.values():
             if today <= str(e.get("day") or "") <= end:
                 events.append({"day": e["day"], "name": str(e.get("name") or "?"), "plan": title})

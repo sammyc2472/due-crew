@@ -3241,3 +3241,27 @@ every release that changes how something works.
   edge between two keeps its width as the tick moves (no 1px shuffle),
   and More, which a click ticked while its menu was open, is ticked only
   while one of its own views shows.
+  Then the board's You › Plans (Sam: "let's also consider the optimal UI
+  for this surface", then "what happens when you click on a date?
+  worried about overlap with the today page"): a day's click on the
+  Plans tab's week opened what Due's Today and Upcoming already listed,
+  so the dates now live there alone, and each opens its details under
+  it, a click on its name (`board._date_more`: Browse its cards, the
+  ones left, Open now ahead of its day or shut again, Move…, Skip it,
+  Put it back, why it left cards shut; Upcoming's with its topics too).
+  `due_flow.plan_dates` carries what they need (`moved`, `shut`, `why`,
+  `own`) and `due._date_row` hands them on. The Plans tab is the plan's
+  own card: its name, Your plans… (the head row's Open plans and New plan
+  ▾ went, and the card's Open and Plan ▾: a follow's every setting is
+  Your plans' Settings, whose More now has the next-once-seen pace, My
+  schedule… and Reset to default…), its day in a line
+  (`card_view`'s `status`, `board._plan_status`: "24 to go today, and 54
+  behind since Monday", Catch up…; a catch-up running isn't called
+  behind, and the older "new from earlier days waiting" note goes when
+  the line has Catch up…), a quiz coming, the next exam's cards at risk
+  (no Insights ›, the tab beside it), one note, its squad. The week stays
+  for Due's lists off, and for the day Browse › Show on my plan asks for
+  (with Done, no ‹ Today ›: a step lets the day go); no Month ↗. With no
+  plan followed, the ways in end with Your plans… for the plans I write.
+  `test_date_details_round5`; the plan card's checks in
+  `test_plans_tab_v341`; renders in `tools/preview.py`.

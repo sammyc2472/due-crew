@@ -201,3 +201,13 @@ class MineTab(QWidget):
             a.setChecked(now == n)
             a.triggered.connect(lambda _=False, n=n: self._do("set_early", n))
         early.setEnabled(not (self.p or {}).get("own"))
+        # what the board's Plan ▾ held besides (round five: it went; a follow's settings are here)
+        nxt = m.addAction("When I'm ready, the next opens once I've seen most of the last")
+        nxt.setCheckable(True)
+        nxt.setChecked((self.p or {}).get("own") == "next")
+        nxt.setEnabled(bool((self.p or {}).get("own")))
+        nxt.triggered.connect(lambda on: self._do("set_own", "next" if on else "ready"))
+        if (self.p or {}).get("sched"):  # 3.2: a follow with a schedule of its own
+            m.addAction("My schedule…").triggered.connect(lambda: self._do("open_schedule"))
+        if self.win.ops.can_reset(self.win.plan["id"]):  # 3.7.6: only once something's changed
+            m.addAction("Reset to default…").triggered.connect(lambda: self._do("reset_days"))
