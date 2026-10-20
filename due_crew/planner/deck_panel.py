@@ -19,7 +19,7 @@ from . import build as B
 from . import edits as E
 from . import model as M
 from . import view as V
-from .widgets import frame, link, mark, plain, tool
+from .widgets import frame, mark, plain, segs, tool
 
 ROLE = Qt.ItemDataRole.UserRole
 VIEWS = (("resource", "By resource"), ("system", "By system"), ("other", "Other"), ("deck", "Subdecks"), ("plan", "The plan's own tags"))
@@ -54,6 +54,7 @@ class DeckPanel(QWidget):
         self.head = role(plain("Tick what the plan covers"), "head")
         row.addWidget(self.head)
         row.addStretch(1)
+        row.addWidget(tool("Done", self._back, tip="Back to the plan's dates"))
         self.head_row = QWidget()
         self.head_row.setLayout(row)
         root.addWidget(self.head_row)
@@ -79,6 +80,7 @@ class DeckPanel(QWidget):
         self.more_menu.aboutToShow.connect(self._more)
         views.addWidget(self.more_btn)
         views.addStretch(1)
+        segs(list(self.view_btns.values()) + [self.more_btn])
         root.addLayout(views)
         self.find = QLineEdit()
         self.find.setPlaceholderText("Find a tag or subdeck")
@@ -116,15 +118,15 @@ class DeckPanel(QWidget):
         row.addStretch(1)
         fl.addLayout(row)
         links = QHBoxLayout()
-        self.alt = link("Lay them out anyway", lambda: self._lay(self._alt_how))
-        self.week = link("Next week only", lambda: self._lay(("daily", True, None)), tip="Lay out only what fits next week")
-        self.keep_btn = link("Save the ticks only", self._keep, tip="Saves the ticks as what the plan covers, without laying them out")
+        self.alt = tool("Lay them out anyway", lambda: self._lay(self._alt_how))
+        self.week = tool("Next week only", lambda: self._lay(("daily", True, None)), tip="Lay out only what fits next week")
+        self.keep_btn = tool("Save the ticks only", self._keep, tip="Saves the ticks as what the plan covers, without laying them out")
         for w in (self.alt, self.week, self.keep_btn):
             links.addWidget(w)
         links.addStretch(1)
         fl.addLayout(links)
         root.addWidget(self.fill)
-        self.notes_btn = link("Notes on cards…", self._notes, tip="Notes followers see on a card, written in Browse")
+        self.notes_btn = tool("Notes on cards…", self._notes, tip="Notes followers see on a card, written in Browse")
         root.addWidget(self.notes_btn, 0, Qt.AlignmentFlag.AlignLeft)
         self._go_how = self._alt_how = None
 
@@ -142,6 +144,7 @@ class DeckPanel(QWidget):
         have = set(B.kinds_below(t, "root:tag", self.kinds)) if t is not None else set()
         for key, b in self.view_btns.items():
             b.setVisible(key in have)
+        segs(list(self.view_btns.values()) + [self.more_btn])  # the ends rounded, whichever show
         if self.view in ("resource", "system") and self.view not in have:
             self.view = next((k for k, _l in VIEWS[:2] if k in have), "other" if "other" in have else "deck")
         if self.target and win.unit(self.target) is None:
@@ -157,7 +160,7 @@ class DeckPanel(QWidget):
 
     def _back(self):
         uid = self.target
-        self.set_target(None)
+        self.tab.back_from_deck()
         if uid:
             self.tab.pick(("date", uid))
 

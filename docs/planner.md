@@ -7,9 +7,9 @@ and a Python-native plan window", the design-spec artifact), for everyone
 signed in since 3.9.3, and rebuilt in round five (Sam's picks on the
 "Simpler Plan Builder" page: one screen to build a plan, a date changed
 where it's shown, the plan's shape on one line, one way to start,
-changes waiting to be sent, a paste box, a follower's Plan · Mine, Plan
-· Followers · Sharing for authors, no Pip in the plan windows), then
-made plain and quick (no AI look; keys, Find, Month's drag). Nothing
+changes waiting to be sent, a paste box, a follower's Plan · Settings, Plan
+· Settings, no Pip in the plan windows), then made plain and quick (no
+AI look; one way to each thing; keys, Find, Month's drag, Latest first). Nothing
 suggests what goes on a date (Sam's call, after the picks: plain rules
 aren't trusted to choose cards, and it isn't AI): the author puts every
 card on, from the deck beside the date or a search.
@@ -50,11 +50,11 @@ card on, from the deck beside the date or a search.
 
 Round five (Sam's picks on the "Simpler Plan Builder" page, all A): one
 window, my plans picked on top (the ones I write first, then the ones I
-follow), **Undo** (a button with its menu) and **New plan…** beside it. An author's plan has
-three tabs, **Plan · Followers · Sharing**; a plan I follow has two,
-**Plan · Mine**. No Pip in the plan windows (Sam's pick 10). With no
-plans yet, the window is a welcome instead: what a plan is, **New plan…**
-and **Follow a plan…**.
+follow), **Undo** (a button with its menu) and **New plan…** beside it.
+Two tabs whoever I am: **Plan · Settings** (an author's Settings is the
+plan's own; a follower's, my follow). No Pip in the plan windows (Sam's
+pick 10). With no plans yet, the window is a welcome instead: what a plan
+is, **New plan…** and **Follow a plan…**.
 
 Every change is an op (`ops.py`, below). With anyone following, or with
 changes already waiting, it **waits under the plan** (`draft.py`), kept on
@@ -73,73 +73,71 @@ Tags read and sort as the site's do (`build.tag_word`, `build.natural`).
 
 `plan_tab.py`, top to bottom:
 
-- **The shape**, label by label on one line (`view.shape_line`): Dates
-  "Mon 12 Oct – Block 2 exam, Fri 13 Nov", Study days "Mon–Fri", New a day
-  "20", Reviews peak "~115 a day, week 5", Last days "3 with no new
-  cards", Catch-up "every 4th week"; with no end, "…, no end set".
-  **Change…** (`shape.py`): Starts (every date and quiz moves with it),
-  Ends with (one of its quizzes or exams, a day, or nothing yet), Study
-  days, New cards (Up to N a day, Fit to the end, I set each date), No new
-  cards before the end, Catch-up weeks. It says what moves before anything
-  goes in ("Saving moves 18 dates and 2 quizzes"), then Add to the changes
-  (or Save, nobody following): `shift_all`, `set_end`, `set_pace`,
-  `set_phases`, one go.
-- **The toolbar**: Find (a date or tag: only the dates whose name or
+- **The shape**, to read, label by label on one line (`view.shape_line`):
+  Dates "Mon 12 Oct – Block 2 exam, Fri 13 Nov", Study days "Mon–Fri", New
+  a day "20", Reviews peak "~115 a day, week 5", Last days "3 with no new
+  cards", Catch-up "every 4th week"; with no end, "…, no end set". It's
+  changed in Settings.
+- **The toolbar**, over the list it acts on: **List | Month**, Earliest
+  first / Latest first (the list's order; the line at today stays between
+  past and to come), Find (a date or tag: only the dates whose name or
   cards have its words; Enter picks the first, Esc clears), Today, Needs
-  a look (N), Open all weeks; **Add** (A date…, A quiz or exam…, A review
-  day…) and **List | Month**. Needs a look (`view.needs_look`, shown only
-  when something does) keeps the weeks with a date that has no cards here
-  or a day over the pace.
+  a look (N), Expand all / Collapse all, **Add** (A date…, A quiz or
+  exam…, A review day…, Lay out from the deck…). Needs a look
+  (`view.needs_look`, shown only when something does) keeps the weeks
+  with a date that has no cards here or a day over the pace.
 - **The weeks**, each saying what it asks (`view.week_asks`: new cards a
   study day, a typical card's reviews a day: "9 new, 34 reviews a day";
   amber, "41 new a day (over your 20), 52 reviews", when a day of it is
-  a quarter over the pace). Past weeks fold; a line at today. Each date:
-  its day, its name, its cards here, its sources on one muted line under
-  it with their counts (`model.sources`, as the deck files them), "No
-  cards yet · Add from the deck" on an empty one, "not sent" on a date a
-  waiting change touched. A quiz is one line, its name in bold and what
-  it tests at the end; review days; the days with no new cards. The first
-  heavy run gets "Over the pace" with its fixes: Split its biggest tag…,
-  Let it finish by … (`build.heavy`, `give_till`). Month is the same plan
-  on a month's grid; an author drags a date or a quiz onto another day to
-  move it (the same op as its Cards open, `widgets.DayCell`).
-- **The picked date** (`date_panel.py`), changed where it's shown: its
-  name; Cards open and finish by (a day, or none); Tested on (a quiz, or
-  a new one); −1 day, +1 day, This and every date after… (`move_from`:
-  review days move with them, quizzes stay). **Its cards (N)**, a source a
-  line (`widgets.Source`: its name, its count, ✕ takes it off; a click
-  opens its menu: show, study or open its cards, Split it…, Keep only
-  cards also tagged (one of the plan's own tags), Leave out its extras (N
-  cards), A note for followers on it…). **Add from the deck** puts the deck
-  beside it, ticking for this date; Add a search or IDs…; Show the N in
-  Browse; Study them. **To do** (followers tick these in Due): Add a
-  to-do… (Change its to-dos… once it has some), Every week…. **Notes
-  on its day** (`day_notes.py`): what anyone in the plan wrote on that
-  day, and a box to add one. Under **⋯**, each saying what it does to the
-  cards: Keep only cards also tagged…, Leave out its extras (N cards),
-  Spread its cards evenly to its finish-by day, Copy its search for
-  Anki, Open its cards in my Anki now, Delete this date…. A quiz or exam
-  and a review day get panels of their own.
-- **The deck** (`deck_panel.py`, Lay it out's tree before): by resource,
-  by system, or More (the rest, subdecks, the plan's own tags: Rename…,
-  Delete…, a note on it), and a search over every path. With a date
-  picked to add to, a line says so ("Ticks add to Mon 19 · Heart
-  failure", Done) and a tick puts the tag on it or takes it off. With none, ticks are what the plan covers, and the bar under them
-  lays them out (`lay_out`, the builder's Fill): "212 ticked, not on a
-  date. At 20 a day they'd end Wed 2 Dec, 19 days after the exam." in
-  red, with **Fit them before the exam: 31 a day**, Lay them out at 20
-  anyway, Only next week; or, fitting, Lay them out at 20 a day. Keep
-  what's ticked saves the ticks without laying them out. Notes on cards
-  (written in Browse) are taken off from here.
+  a quarter over the pace). Past weeks start collapsed; a line at today.
+  Each date: its day, its name, its cards here, its sources on one muted
+  line under it with their counts (`model.sources`, as the deck files
+  them), "No cards yet" on an empty one, "not sent" on a date a waiting
+  change touched. A quiz is one line, its name in bold and what it tests
+  at the end; review days; the days with no new cards. The first heavy
+  run gets "Over the pace" with its fixes: Split its biggest tag…, Let it
+  finish by … (`build.heavy`, `give_till`). Month is the same plan on a
+  month's grid; an author drags a date or a quiz onto another day to move
+  it (the same op as its Cards open, `widgets.DayCell`).
+- **Beside it, the picked date** (`date_panel.py`), changed where it's
+  shown: its name; Cards open (a new day moves it; so do Alt+← → and
+  Month's drag), Finish by (a day, or none); Tested on (a quiz, or a new
+  one). **Its cards (N)**, a source a line (`widgets.Source`: its name,
+  its count, ✕ takes it off; a click opens its menu: Show these in
+  Browse, Split it…, Keep only cards also tagged (one of the plan's own
+  tags), Leave out its extras (N cards), A note for followers on it…).
+  **Add from the deck** puts the deck in the date's place, ticking for
+  it, Done brings the date back; Add a search or IDs…; Show the N in
+  Browse. **To do** (followers tick these in Due): Add a to-do…
+  (Change its to-dos… once it has some); the plan's every-week lines that
+  land on it, to read. **Notes on its day** (`day_notes.py`): what anyone
+  in the plan wrote on that day, and a box to add one. Under **⋯**: Move
+  this and the N dates after it… (`move_from`: review days move with
+  them, quizzes stay), Keep only cards also tagged…, Spread its cards
+  evenly to its finish-by day, Copy its search for Anki, Open its cards in
+  my Anki now, Delete this date…. A quiz or exam and a review day get
+  panels of their own.
+- **The deck** (`deck_panel.py`, Lay it out's tree before), in the date's
+  place while cards go on (no tab of its own: Add from the deck is the way
+  in, Add › Lay out from the deck… with no date): by resource, by system,
+  or More (the rest, subdecks, the plan's own tags: Rename…, Delete…, a
+  note on it), and a search over every path. For a date, a line says so
+  ("Ticks add to Mon 19 · Heart failure", Done) and a tick puts the tag on
+  it or takes it off. With none, ticks are what the plan covers, and the
+  part under them lays them out (`lay_out`, the builder's Fill): "212
+  ticked, not on a date. At 20 a day they'd end Wed 2 Dec, 19 days after
+  the exam." in red, with **Fit them before the exam: 31 a day**, Lay
+  them out at 20 anyway, Next week only; or, fitting, Lay them out at 20
+  a day. Save the ticks only keeps what's ticked without laying it out.
+  Notes on cards (written in Browse) are taken off from here.
 - **Paste plan lines or a new course calendar**, then **Show the
   changes**: plan lines go to the text's Add (read and shown first); a
   calendar (`reading.py`, on this computer) becomes dates on its days,
   named and with no cards, and its quizzes and exams as quizzes; asked
   first, one change. **The plan as text** (the Text window below). **AI
-  prompt** (a button with its menu): Plan the dates, Tag by
-  objective (`prompts.py`, builder.js's Prompts, the deck's tag names and
-  counts, never a card), and Let an AI app on this computer help… (AI
-  hooks, below).
+  prompt** (a button with its menu): Plan the dates, Tag by objective
+  (`prompts.py`, builder.js's Prompts, the deck's tag names and counts,
+  never a card).
 - **The changes waiting**, the window's foot under a rule: "3 changes not
   sent: Shock moved, Shock changed, and 1 more", each a link that picks
   its date; **Discard** (asked first: nobody saw them), **Review and send**
@@ -159,15 +157,19 @@ row): ↑ ↓ the date before or after, Alt+← → a day earlier or later, Ente
 or F2 its name (a double-click too), Delete takes it off (asked first).
 A box keeps its own keys (Ctrl+Z in a box undoes the typing).
 
-**No AI look** (Sam, after the site mock: "a few of our UI elements are AI
-hallmarks; we are going for extreme functionality"): no accent stripe on
-the picked row or today, no tinted banners (the shape, today, behind, the
-deck's target, the send bar and the code are plain lines), no chips (a
-date's sources are a line in the list and a list in the panel), no ◆, no
-"+ A …" links (buttons that say what they do, the adds in one Add menu),
-no capitals for the changes' kinds, no ▾ or ↗ in words (a button that
-opens a menu has the boxes' chevron), and what explained a control is
-its tip.
+**No AI look, and one way to each thing** (Sam, after the site mock: "a
+few of our UI elements are AI hallmarks; we are going for extreme
+functionality"): no accent stripe on the picked row or today, no tinted
+banners (the shape, today, behind, the deck's target, the send bar and
+the code are plain lines), no chips (a date's sources are a line in the
+list and a list in the panel), no ◆, no "+ A …" links, no capitals for
+the changes' kinds, no ▾ or ↗ in words (a button that opens a menu has
+the boxes' chevron), and what explained a control is its tip. An action
+is a button, one kind with the boxes' corners and height (`widgets.tool`;
+side-by-side choices are one control, rounded at its ends,
+`widgets.segs`); a link is only a way to a date. Nothing is in two
+places: no Study in the window (the board studies), no deck tab, no
+−1/+1 day, no Followers tab, no Change… window.
 
 **Undo**: take back the last change not sent; undo the last save or
 send of this window's (the builder's Undo, `POST /plans/{id}/undo`: the
@@ -183,37 +185,49 @@ older version comes back stale: the window puts the same changes on
 theirs, to look over and send again. A change that changes nothing isn't
 kept. Followers keep every card that opened; a change never shuts one.
 
-### Followers (authors)
+### Settings (authors)
 
-`followers_tab.py`: how many follow it, whose Anki has the last save
-("in N of M followers' Anki"), and **Posts** (`history_tab.UpdatesTab`:
-what the authors said, a post of one line, five a day a plan). How far
-followers are isn't shown in Anki (Sam's call, round five: the counts
-added nothing); what followers do together is the plan's squad on the
-board's Squads tab. The `breather` op (every date still to come a study
-day later) stays for the text and an AI app.
+`settings_tab.py`'s `SettingsTab`, the builder's Settings, everything
+about the plan as a whole in one place (Sam, round five: "rename sharing
+to settings and move as much of the overall settings stuff there as we
+can"):
 
-### Sharing (authors)
+- **The plan**: Name and One line; its dates and pace (`shape.py`'s
+  `Shape`, rows of the form where the Change… window was): Starts (every
+  date and quiz moves with it), Ends with (one of its quizzes or exams, a
+  day, or nothing yet), Study days, New cards (Up to N a day, Fit to the
+  end, I set each date), No new cards before the end, Catch-up weeks. A
+  change says what it does under them before anything goes in ("Saving
+  moves 18 dates and 2 quizzes"), with Put it back and Add to the changes
+  (or Save, nobody following): `shift_all`, `set_end`, `set_pace`,
+  `set_phases`, one go. Every week: the lines followers tick on the same
+  weekday each week (Change…, `set_every`).
+- **Sharing**: its code, Copy link (duecrew.com/p/CODE), Open its page;
+  Where to get the deck (a change, `set_deck_url`); Offer it to one of my
+  squads and Who can follow (the owner's); **Followers**: how many follow,
+  and **Posts…** (`send.PostsDialog`, `history_tab.UpdatesTab`: what the
+  authors said, each send's line among it, and a post of one line, five a
+  day a plan). How far followers are, or whose Anki has the last send,
+  isn't shown (Sam's call, round five: it added nothing; what followers
+  do together is the plan's squad on the board's Squads tab). Co-authors
+  (Ask one of my crew…, each says yes first; Hand it to them; Take them
+  off; a co-author's Leave this plan); Library (the owner's).
+- **This computer**: Your AI app, on or off, Set up… (AI hooks, below).
+- **Copy it for next year**; **Copy as a table** (the dates tab-separated,
+  for a spreadsheet); Delete this plan…, the owner's, asked first.
 
-`settings_tab.py`'s `SettingsTab`, the builder's Settings with the
-plan's end and phases moved to Change…: **its code** first, **Copy link**
-(duecrew.com/p/CODE) and Open its page; Name and One line; Where to get the
-deck (a change, `set_deck_url`); Offer it to one of my squads and Who can
-follow (the owner's); Co-authors (Ask one of my crew…, each says yes
-first; Hand it to them; Take them off; a co-author's Leave this plan);
-Library (the owner's); **Copy it for next year**; **Copy as a table**
-(the dates tab-separated, for a spreadsheet); Delete this plan…, the
-owner's, asked first.
+The `breather` op (every date still to come a study day later) stays for
+the text and an AI app.
 
-### Plan and Mine (a plan I follow)
+### Plan and Settings (a plan I follow)
 
 Plan: **Today** with **Study now** (the date whose window has today in
 it; else the next one), **N dates behind** with Study the N left, then
 the same weeks and dates to read: what's open and left on each, what
 each quiz tests and how much of it I've seen, a date's cards, its to-dos
-and its notes. Mine (`mine_tab.py`): My dates (as the plan, or some days
-later), Skipping (✕ to stop, + Skip a date), Cards open (each morning on
-their dates, or when I'm ready, Up next), Held back, its squad, Pause
+and its notes. Settings (`mine_tab.py`): My dates (as the plan, or some
+days later), Skipping (✕ to stop, Skip a date), Cards open (each morning
+on their dates, or when I'm ready, Up next), Held back, its squad, Pause
 until… / Resume, Make my own copy (a library plan), More (Change deck…,
 Open everything now, Open early), Stop following…. Each is plan_flow's own
 step, one request on a click; the window reads my follow again once it's
@@ -497,14 +511,14 @@ builder.js run in node, Fill, the save against the fake Worker's `PUT
 MCP server), `tests/test_plan_ops.py` (round five: the ops, their words
 and who they touch, changes waiting and replayed on a co-author's save,
 the Plan tab's arithmetic, no suggestion left, New plan's empty dates, a send's line kept by the fake Worker), the planner
-renders in `tools/dialogs.py` (an author's tabs, a date's sources, a change
+renders in `tools/dialogs.py` (an author's tabs, Plan · Settings, a date's sources, a change
 saved and undone, a stale save put on theirs, a new date with nothing
 suggested,
-Change…, the deck ticking for a date and laying out what's ticked, the
+Settings' dates and pace and Put it back, the deck in the date's place and Done, Lay out from the deck, the
 text added and the whole plan, a calendar pasted, changes waiting with
 people following (the foot's links), Review and send, Undo after a send, a co-author's
-save under waiting changes, Followers without counts, Sharing, History, a
-day's notes, Month and a date dragged to another day, Ctrl+Z, the Plan tab's keys, ↓ and Find, a follower's Plan and Mine, a plan that lost its
+save under waiting changes, no Followers tab and Settings' Posts…, Settings, History, a
+day's notes, Month and a date dragged to another day, Ctrl+Z, the Plan tab's keys, Expand all and Collapse all, Latest first, ↓ and Find, a follower's Plan and Settings, a plan that lost its
 dates and a load that failed, no plans yet, New plan from a calendar,
 no Pip anywhere in them, Missed questions, the calendar window in labs),
 and `check_planner` in `tools/real_anki.py` (12,000 question tags, Bring

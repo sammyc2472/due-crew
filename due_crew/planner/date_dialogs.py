@@ -170,7 +170,7 @@ class LinesDialog(QDialog):
         root.addLayout(self.grid)
         self.rows = []
         self.more = QPushButton("Add a line")
-        self.more.setFlat(True)
+        self.more.setAutoDefault(False)
         self.more.clicked.connect(lambda: self._row({"k": "do" if every else "watch", "t": "", "r": "4"}))
         for x in lines or []:
             self._row(x)

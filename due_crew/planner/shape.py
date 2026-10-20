@@ -1,24 +1,22 @@
-"""Round five's Change… (docs/planner.md): the plan's shape in one window,
-where Lay it out and Settings had it in two. When it starts, what it
-ends with (a quiz or exam of its own, a day, or nothing yet), its study
-days, how many new cards a day (up to N, fit to the end, or each date
-set by hand), no new cards in the last days before the end, catch-up
-weeks. Before anything goes in, it says what moves: every date and quiz
-moves with the start. Each part is an op (ops.py); Add to the changes
-(or Save, nobody following) puts them in as one. Names: plain text."""
+"""Round five's plan shape (docs/planner.md), rows of the Settings tab
+(the Change… window before; Lay it out and Settings had it in two): when
+it starts, what it ends with (a quiz or exam of its own, a day, or
+nothing yet), its study days, how many new cards a day (up to N, fit to
+the end, or each date set by hand), no new cards in the last days before
+the end, catch-up weeks. Before anything goes in, it says what moves:
+every date and quiz moves with the start. Each part is an op (ops.py);
+Add to the changes (or Save, nobody following) puts them in as one, Put
+it back takes the rows back to the plan's. Names: plain text."""
 
-from aqt.qt import (
-    QButtonGroup, QComboBox, QDate, QDateEdit, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QPushButton,
-    QSpinBox, Qt, QVBoxLayout,
-)
+from aqt.qt import QButtonGroup, QComboBox, QDate, QDateEdit, QHBoxLayout, QPushButton, QSpinBox, Qt, QWidget
 
-from ..ui import attach_alive, esc, heading
+from ..ui import esc
 from .. import plans as P
 from . import build as B
 from . import edits as E
 from . import ops as O
 from . import view as V
-from .widgets import frame, mark, plain
+from .widgets import plain, segs, tool
 
 CATCHUP = ((0, "None"), (3, "Every 3rd week"), (4, "Every 4th week"))
 MODES = (("daily", "Up to"), ("end", "Fit to the end"), ("placed", "I set each date"))
@@ -28,54 +26,36 @@ def _iso(qd):
     return qd.toString("yyyy-MM-dd")
 
 
-class ShapeDialog(QDialog):
-    """win: the PlanWindow (its doc, as it shows with the changes waiting)."""
+class Shape:
+    """The plan's dates and pace as rows of Settings' form (round five; the
+    Change… window before): win is the PlanWindow, form the QFormLayout
+    they go in. load() puts the plan's in (as it shows, with the changes
+    waiting); a change says what it does under them, with its button."""
 
-    def __init__(self, win):
-        super().__init__(win)
+    def __init__(self, win, form):
         self.win = win
-        attach_alive(self)
-        self.setWindowTitle("The plan's shape")
-        self.setMinimumWidth(480)
-        doc = win.doc
-        self.doc = doc
-        self.pace = V.pace_of(doc)
-        self.start0 = B.plan_start(doc, B.next_monday(win.ops.today()))
-        self.ev0, self.end0 = V.ends_with(doc)
-        ph = doc.get("phases") or {}
+        self.doc, self.pace, self.start0, self.ev0, self.end0 = None, {}, "", None, None
         self._loading = True
-        root = QVBoxLayout(self)
-        heading(self, root)
-        form = QFormLayout()
-        form.setVerticalSpacing(10)
         self.start = QDateEdit()
         self.start.setCalendarPopup(True)
         self.start.setDisplayFormat("ddd d MMM yyyy")
-        self.start.setDate(QDate.fromString(self.start0, "yyyy-MM-dd"))
+        self.start.setToolTip("<span>Every date and quiz moves with it</span>")
         self.start.dateChanged.connect(lambda _d: self._said())
-        form.addRow("Starts", self.start)
+        row = QHBoxLayout()
+        row.addWidget(self.start)
+        row.addStretch(1)
+        form.addRow("Starts", row)
 
         ends = QHBoxLayout()
         self.ends = QComboBox()
-        evs = sorted((e for e in doc.get("events") or [] if isinstance(e, dict) and e.get("day")), key=lambda e: str(e["day"]))
-        for e in evs:
-            self.ends.addItem(f"{e.get('name') or '?'} · {P.fmt_day(e['day'])}", ("event", e["id"], e["day"]))
-        self.ends.addItem("A day…", ("day", None, None))
-        self.ends.addItem("Nothing yet", ("none", None, None))
-        if self.ev0 is not None:
-            self.ends.setCurrentIndex(self.ends.findData(("event", self.ev0["id"], self.ev0["day"])))
-        elif self.end0:
-            self.ends.setCurrentIndex(self.ends.count() - 2)
-        else:
-            self.ends.setCurrentIndex(self.ends.count() - 1)
         self.ends.currentIndexChanged.connect(lambda _i: self._said())
         ends.addWidget(self.ends, 1)
         self.end_day = QDateEdit()
         self.end_day.setCalendarPopup(True)
         self.end_day.setDisplayFormat("ddd d MMM yyyy")
-        self.end_day.setDate(QDate.fromString(self.end0 or E._later(self.start0, 55), "yyyy-MM-dd"))
         self._end_touched = False
-        self.end_day.dateChanged.connect(lambda _d: (setattr(self, "_end_touched", True), self._said()))
+        self.end_day.dateChanged.connect(lambda _d: (setattr(self, "_end_touched", not self._loading or self._end_touched),
+                                                     self._said()))
         ends.addWidget(self.end_day)
         form.addRow("Ends with", ends)
 
@@ -87,30 +67,29 @@ class ShapeDialog(QDialog):
             b.setProperty("dc", "seg")
             b.setCheckable(True)
             b.setAutoDefault(False)
-            b.setChecked(bool((self.pace.get("days") or [1] * 7)[i]))
             b.setToolTip(("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")[i])
             b.toggled.connect(lambda _on, i=i: self._day(i))
             days.addWidget(b)
             self.days.append(b)
+            segs([b])  # each day its own toggle, rounded as the boxes
         days.addStretch(1)
         form.addRow("Study days", days)
 
         new = QHBoxLayout()
         new.setSpacing(0)
-        self.mode = QButtonGroup(self)
-        for i, (key, label) in enumerate(MODES):
+        self.mode = QButtonGroup()
+        for i, (_key, label) in enumerate(MODES):
             b = QPushButton(label)
             b.setProperty("dc", "seg")
             b.setCheckable(True)
             b.setAutoDefault(False)
-            b.setChecked(self.pace.get("mode") == key)
             self.mode.addButton(b, i)
             new.addWidget(b)
+        segs(list(self.mode.buttons()))
         self.mode.idClicked.connect(lambda _i: self._said())
         new.addSpacing(8)
         self.daily = QSpinBox()
         self.daily.setRange(1, 5000)
-        self.daily.setValue(int(self.pace.get("daily") or 20))
         self.daily.setSuffix(" a day")
         self.daily.valueChanged.connect(lambda _v: self._said())
         new.addWidget(self.daily)
@@ -120,34 +99,92 @@ class ShapeDialog(QDialog):
         self.taper = QSpinBox()
         self.taper.setRange(0, 60)
         self.taper.setSuffix(" days")
-        self.taper.setValue(int(ph.get("taper") or 0))
         self.taper.valueChanged.connect(lambda _v: self._said())
-        form.addRow("No new cards before the end", self.taper)
+        row = QHBoxLayout()
+        row.addWidget(self.taper)
+        row.addStretch(1)
+        form.addRow("No new cards before the end", row)
         self.catchup = QComboBox()
-        for v, label in CATCHUP:
-            self.catchup.addItem(label, v)
-        c = int(ph.get("catchup") or 0)
-        if self.catchup.findData(c) < 0:
-            self.catchup.addItem(f"Every {c}th week", c)
-        self.catchup.setCurrentIndex(self.catchup.findData(c))
         self.catchup.currentIndexChanged.connect(lambda _i: self._said())
-        form.addRow("Catch-up weeks (nothing new)", self.catchup)
-        root.addLayout(form)
+        row = QHBoxLayout()
+        row.addWidget(self.catchup)
+        row.addStretch(1)
+        form.addRow("Catch-up weeks", row)
+        self.catchup.setToolTip("<span>A week now and then with no new cards</span>")
 
-        self.preview, pl = frame("foot", margins=(0, 8, 0, 0))
+        self.preview = QWidget()  # what a change does, and its button; nothing while nothing's changed
+        pl = QHBoxLayout(self.preview)
+        pl.setContentsMargins(0, 0, 0, 0)
         self.preview_words = plain()
         self.preview_words.setTextFormat(Qt.TextFormat.RichText)
-        pl.addWidget(self.preview_words)
-        root.addWidget(self.preview)
-        buttons = QDialogButtonBox()
-        buttons.addButton("Cancel", QDialogButtonBox.ButtonRole.RejectRole).clicked.connect(self.reject)
-        self.go = QPushButton("Add to the changes" if win.waiting() else "Save")
-        self.go.setDefault(True)
-        self.go.clicked.connect(self.accept)
-        buttons.addButton(self.go, QDialogButtonBox.ButtonRole.AcceptRole)
-        root.addWidget(buttons)
+        pl.addWidget(self.preview_words, 1, Qt.AlignmentFlag.AlignVCenter)
+        self.back = tool("Put it back", self.load)
+        pl.addWidget(self.back, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.go = QPushButton("Save")
+        self.go.setProperty("dc", "go")
+        self.go.setAutoDefault(False)
+        self.go.clicked.connect(self._go)
+        pl.addWidget(self.go, 0, Qt.AlignmentFlag.AlignVCenter)
+        form.addRow("", self.preview)
+        self.preview.hide()
         self._loading = False
+
+    def load(self):
+        """The plan's shape, as it shows (with the changes waiting), in the rows."""
+        win, doc = self.win, self.win.doc
+        if doc is None:
+            return
+        self._loading = True
+        try:
+            self.doc = doc
+            self.pace = V.pace_of(doc)
+            self.start0 = B.plan_start(doc, B.next_monday(win.ops.today()))
+            self.ev0, self.end0 = V.ends_with(doc)
+            ph = doc.get("phases") or {}
+            self.start.setDate(QDate.fromString(self.start0, "yyyy-MM-dd"))
+            self.ends.clear()
+            evs = sorted((e for e in doc.get("events") or [] if isinstance(e, dict) and e.get("day")), key=lambda e: str(e["day"]))
+            for e in evs:
+                self.ends.addItem(f"{e.get('name') or '?'} · {P.fmt_day(e['day'])}", ("event", e["id"], e["day"]))
+            self.ends.addItem("A day…", ("day", None, None))
+            self.ends.addItem("Nothing yet", ("none", None, None))
+            if self.ev0 is not None:
+                self.ends.setCurrentIndex(max(0, self.ends.findData(("event", self.ev0["id"], self.ev0["day"]))))
+            elif self.end0:
+                self.ends.setCurrentIndex(self.ends.count() - 2)
+            else:
+                self.ends.setCurrentIndex(self.ends.count() - 1)
+            self.end_day.setDate(QDate.fromString(self.end0 or E._later(self.start0, 55), "yyyy-MM-dd"))
+            self._end_touched = False
+            for i, b in enumerate(self.days):
+                b.setChecked(bool((self.pace.get("days") or [1] * 7)[i]))
+            for i, (key, _label) in enumerate(MODES):
+                self.mode.button(i).setChecked(self.pace.get("mode") == key)
+            self.daily.setValue(int(self.pace.get("daily") or 20))
+            self.taper.setValue(int(ph.get("taper") or 0))
+            self.catchup.clear()
+            for v, label in CATCHUP:
+                self.catchup.addItem(label, v)
+            c = int(ph.get("catchup") or 0)
+            if self.catchup.findData(c) < 0:
+                self.catchup.addItem(f"Every {c}th week", c)
+            self.catchup.setCurrentIndex(self.catchup.findData(c))
+        finally:
+            self._loading = False
         self._said()
+
+    def changed(self):
+        return bool(self.doc is not None and self.ops())
+
+    def busy_changed(self, busy):
+        for w in [self.start, self.ends, self.end_day, self.daily, self.taper, self.catchup, self.go] + self.days \
+                + list(self.mode.buttons()):
+            w.setEnabled(not busy)
+
+    def _go(self):
+        ops = self.ops()
+        if ops and self.win.changes(ops):
+            self.load()
 
     def _day(self, i):
         if self._loading:
@@ -194,16 +231,16 @@ class ShapeDialog(QDialog):
         return out
 
     def _said(self):
-        if self._loading:
+        if self._loading or self.doc is None or self.ends.currentData() is None:
             return
         self.end_day.setVisible(self.ends.currentData()[0] == "day")
         self.daily.setVisible(self._mode_key() == "daily")
         self.taper.setEnabled(bool(self._end()))
         ops = self.ops()
-        self.go.setEnabled(bool(ops))
-        mark(self.preview_words, "dc", None if ops else "n")  # what saving does; muted while nothing's changed
+        self.go.setEnabled(bool(ops) and not self.win.busy)
+        self.go.setText("Add to the changes" if self.win.waiting() else "Save")
+        self.preview.setVisible(bool(ops))
         if not ops:
-            self.preview_words.setText(esc("Nothing changed yet."))
             return
         doc, ctx, said = self.doc, self.win.ctx(), []
         try:
@@ -234,7 +271,5 @@ class ShapeDialog(QDialog):
         if int(ph.get("taper") or 0) and after.get("end"):
             n = int(ph["taper"])
             said.append(esc(f"The last {n:,} day{'s' if n != 1 else ''} before {P.fmt_day(after['end'])} have no new cards."))
-        if self.win.waiting():
-            said.append(esc("It waits with your other changes till you send them."))
         self.preview_words.setText(" ".join(said))
 

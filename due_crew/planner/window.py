@@ -1,10 +1,11 @@
 """Your plans (docs/planner.md; round five): the builder of duecrew.com,
-in Anki, as one window. An author's plan has three tabs: Plan (the
-plan's shape on top, its weeks and dates with the deck beside them, a
-paste box, and the changes waiting to be sent), Followers (how far they
-are, what was said to them) and Sharing (its code, name, who can follow,
-co-authors). A plan I follow has two: Plan (today, what's behind, its
-dates) and Mine (my dates, skips, how its cards open). Undo on top.
+in Anki, as one window, two tabs. An author's: Plan (the plan's shape on
+top, its weeks and dates, the picked one beside them or the deck while
+cards go on, a paste box, and the changes waiting to be sent) and
+Settings (its name, dates and pace, every-week lines; its code, who can
+follow, how many do and the posts to them, co-authors, the library; Your
+AI app). A plan I follow: Plan (today, what's behind, its dates) and
+Settings (my dates, skips, how its cards open). Undo on top.
 
 Every change is an op (ops.py). With anyone following, it waits under
 the plan (draft.py, kept on this computer) until Review and send, one
@@ -32,7 +33,7 @@ from . import ops as O
 from .widgets import fit, menu_button, plain, tip_keys
 
 TABS = {"dates": "plan", "layout": "plan", "text": "plan", "plan": "plan", "history": "plan",
-        "progress": "followers", "updates": "followers", "followers": "followers",
+        "progress": "sharing", "updates": "sharing", "followers": "sharing",
         "settings": "sharing", "sharing": "sharing", "mine": "mine"}
 
 
@@ -140,13 +141,11 @@ class PlanWindow(QDialog):
         root.addWidget(self.welcome, 1)
         self.pages = {}
         from .plan_tab import PlanTab
-        from .followers_tab import FollowersTab
         from .settings_tab import SettingsTab
         from .mine_tab import MineTab
         self._add_tab("plan", "Plan", PlanTab(self))
-        self._add_tab("followers", "Followers", FollowersTab(self))
-        self._add_tab("sharing", "Sharing", SettingsTab(self))
-        self._add_tab("mine", "Mine", MineTab(self))
+        self._add_tab("sharing", "Settings", SettingsTab(self))  # an author's: the plan's dates and pace, sharing it
+        self._add_tab("mine", "Settings", MineTab(self))  # a follower's: my dates, skips, how its cards open
         self.want_tab = TABS.get(tab or "", tab)
 
         bottom = QHBoxLayout()
@@ -224,7 +223,7 @@ class PlanWindow(QDialog):
             self.tabs.setCurrentIndex(i)
 
     def _role_tabs(self):
-        """Plan always; Followers and Sharing for its authors, Mine for a follower."""
+        """Plan always; Settings: an author's (SettingsTab) or a follower's (MineTab)."""
         for key, page in self.pages.items():
             shown = getattr(page, "shown", None)
             i = self.tabs.indexOf(page)

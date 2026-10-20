@@ -1,6 +1,6 @@
 """Round five's Plan tab (docs/planner.md): one screen to build a plan, or
 to follow one. For its authors: the plan's shape in one line (Change…),
-Today · Needs a look · All weeks open, the weeks with what each asks (new
+Today · Needs a look · Expand all / Collapse all, the weeks with what each asks (new
 cards and reviews a day; amber, with its fixes, when a day is over the
 pace), a line at today, each date with its cards as chips (no
 suggestions of what goes on one: the author puts every card there, Sam's
@@ -14,7 +14,7 @@ the deck's and the authors': plain text everywhere, escaped in rich text."""
 
 from aqt.qt import (
     QApplication, QDate, QFrame, QGridLayout, QHBoxLayout, QKeySequence, QLineEdit, QPlainTextEdit, QPushButton,
-    QScrollArea, QShortcut, QSizePolicy, QSplitter, QStackedWidget, Qt, QTabWidget, QTimer, QVBoxLayout, QWidget,
+    QScrollArea, QShortcut, QSizePolicy, QSplitter, QStackedWidget, Qt, QTimer, QVBoxLayout, QWidget,
 )
 
 from ..ui import ask_text, confirm, esc, role, tone
@@ -26,7 +26,7 @@ from . import model as M
 from . import view as V
 from .date_panel import DatePanel, EventPanel, ReviewPanel, chip_name
 from .deck_panel import DeckPanel
-from .widgets import DayCell, Elided, Row, flow_box, frame, keys, link, mark, menu_button, plain, tip_keys, tool
+from .widgets import DayCell, Elided, Row, flow_box, frame, keys, link, mark, menu_button, plain, segs, tip_keys, tool
 
 
 def _scroll(widget):
@@ -67,9 +67,10 @@ class PlanTab(QWidget):
         self.picked = None          # ("date", id) | ("event", id) | ("review", day)
         self.open_weeks = set()     # weeks opened (or closed) by hand, by their Monday
         self.closed_weeks = set()
-        self.all_open = False
+        self.all_open = None        # Expand all (True), Collapse all (False), or as it opens (None: past weeks collapsed)
         self.only_look = False
         self.mode = "list"
+        self.desc = False           # List: latest date first
         self.month = None           # the month Month shows (its first day)
         self.look, self.asks, self.counts = {}, {}, {}
         self.rows = {}              # key -> Row, as drawn
@@ -107,37 +108,14 @@ class PlanTab(QWidget):
         self.shape_box, sl = frame("line", horizontal=True, margins=(2, 0, 0, 0), spacing=12)
         self.shape_fields, self.shape_lay = flow_box(18, 2)
         sl.addWidget(self.shape_fields, 1, Qt.AlignmentFlag.AlignVCenter)
-        self.shape_btn = tool("Change…", self._shape, tip="Its start, end, study days and pace")
-        sl.addWidget(self.shape_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.shape_box.setToolTip("<span>Its dates and pace are in Settings</span>")
         root.addWidget(self.shape_box)
 
-        # the toolbar: find, today, what needs a look, the weeks; add; List or Month
+        # the toolbar, over the list it acts on: List or Month first, find, today, what needs a look, the weeks; Add
         bar = QHBoxLayout()
         bar.setSpacing(6)
-        self.find = QLineEdit()
-        self.find.setPlaceholderText("Find a date or tag")
-        self.find.setClearButtonEnabled(True)
-        self.find.setToolTip(tip_keys("Only the dates whose name or cards have these words; Enter picks the first", "Ctrl+F"))
-        self.find.setMaximumWidth(220)
-        self.find.textChanged.connect(self._found)
-        self.find.returnPressed.connect(self._find_first)
-        QShortcut(QKeySequence("Escape"), self.find, context=Qt.ShortcutContext.WidgetShortcut,
-                  activated=lambda: self.find.clear() if self.find.text() else self.views.currentWidget().setFocus())
-        bar.addWidget(self.find)
-        self.today_btn = tool("Today", self._go_today, tip="The date open today, or the next one", seq="Ctrl+T")
-        self.look_btn = tool("Needs a look", self._toggle_look, checkable=True,
-                             tip="Only the weeks with a date that has no cards here, or a day over the pace")
-        self.all_btn = tool("Open all weeks", self._toggle_all)
-        for w in (self.today_btn, self.look_btn, self.all_btn):
-            bar.addWidget(w)
-        bar.addStretch(1)
-        self.add_btn, self.add_menu = menu_button("Add", small=True)
-        for label, fn, seq in (("A date…", self.new_date, "Ctrl+N"), ("A quiz or exam…", lambda: self.new_event(), "Ctrl+E"),
-                               ("A review day…", self.new_review, None)):
-            a = self.add_menu.addAction(label + (f"\t{keys(seq)}" if seq else ""))
-            a.triggered.connect(lambda _=False, fn=fn: fn())
-        bar.addWidget(self.add_btn)
-        bar.addSpacing(6)
+        views = QHBoxLayout()
+        views.setSpacing(0)
         self.list_btn = QPushButton("List")
         self.month_btn = QPushButton("Month")
         for b, m, seq in ((self.list_btn, "list", "Ctrl+1"), (self.month_btn, "month", "Ctrl+2")):
@@ -146,7 +124,38 @@ class PlanTab(QWidget):
             b.setAutoDefault(False)
             b.setToolTip(tip_keys(m.capitalize(), seq))
             b.clicked.connect(lambda _=False, m=m: self._mode(m))
-            bar.addWidget(b)
+            views.addWidget(b)
+        segs([self.list_btn, self.month_btn])
+        bar.addLayout(views)
+        self.sort_btn = tool("Earliest first", self._toggle_sort, tip="The list's order: earliest date first, or latest first")
+        bar.addWidget(self.sort_btn)
+        bar.addSpacing(6)
+        self.find = QLineEdit()
+        self.find.setPlaceholderText("Find a date or tag")
+        self.find.setClearButtonEnabled(True)
+        self.find.setToolTip(tip_keys("Only the dates whose name or cards have these words; Enter picks the first", "Ctrl+F"))
+        self.find.setMaximumWidth(180)
+        self.find.textChanged.connect(self._found)
+        self.find.returnPressed.connect(self._find_first)
+        QShortcut(QKeySequence("Escape"), self.find, context=Qt.ShortcutContext.WidgetShortcut,
+                  activated=lambda: self.find.clear() if self.find.text() else self.views.currentWidget().setFocus())
+        bar.addWidget(self.find)
+        self.today_btn = tool("Today", self._go_today, tip="The date open today, or the next one", seq="Ctrl+T")
+        self.look_btn = tool("Needs a look", self._toggle_look, checkable=True,
+                             tip="Only the weeks with a date that has no cards here, or a day over the pace")
+        self.all_btn = tool("Expand all", self._toggle_all, tip="Every week expanded, or every week collapsed")
+        for w in (self.today_btn, self.look_btn, self.all_btn):
+            bar.addWidget(w)
+        self.add_btn, self.add_menu = menu_button("Add", small=True)
+        for label, fn, seq in (("A date…", self.new_date, "Ctrl+N"), ("A quiz or exam…", lambda: self.new_event(), "Ctrl+E"),
+                               ("A review day…", self.new_review, None)):
+            a = self.add_menu.addAction(label + (f"\t{keys(seq)}" if seq else ""))
+            a.triggered.connect(lambda _=False, fn=fn: fn())
+        self.add_menu.addSeparator()
+        self.lay_act = self.add_menu.addAction("Lay out from the deck…")  # ticks what the plan covers; laid out at its pace
+        self.lay_act.triggered.connect(lambda: self.lay_out_view())
+        bar.addWidget(self.add_btn)
+        bar.addStretch(1)  # all of it over the list; the date beside it has its own
         root.addLayout(bar)
 
         # the plan, and beside it the picked date or the deck
@@ -166,8 +175,7 @@ class PlanTab(QWidget):
         ll.addWidget(self.views)
         split.addWidget(left)
         right, rl = frame("card", margins=(0, 0, 0, 0))
-        self.side = QTabWidget()
-        self.side.setDocumentMode(True)
+        self.side = QStackedWidget()  # the picked date (or quiz, or review day); the deck while cards go on from it
         self.panels = QStackedWidget()
         self.date_panel = DatePanel(win, self)
         self.event_panel = EventPanel(win, self)
@@ -180,11 +188,10 @@ class PlanTab(QWidget):
         nl.addStretch(1)
         for p in (self.date_panel, self.event_panel, self.review_panel, self.none_panel):
             self.panels.addWidget(p)
-        self.side.addTab(_scroll(self.panels), "")
+        self.side_page = _scroll(self.panels)
+        self.side.addWidget(self.side_page)
         self.deck = DeckPanel(win, self)
-        self.side.addTab(self.deck, "The deck")
-        self.side.setTabToolTip(1, tip_keys("Tick the deck's tags for the picked date", "Ctrl+D"))
-        self.side.currentChanged.connect(self._side_changed)
+        self.side.addWidget(self.deck)
         rl.addWidget(self.side)
         split.addWidget(right)
         split.setStretchFactor(0, 5)
@@ -219,7 +226,7 @@ class PlanTab(QWidget):
         self.send_words.setTextInteractionFlags(Qt.TextInteractionFlag.LinksAccessibleByMouse)
         self.send_words.linkActivated.connect(self._go_change)
         xl.addWidget(self.send_words, 1)
-        xl.addWidget(link("Discard", lambda: self.win.discard()))
+        xl.addWidget(tool("Discard", lambda: self.win.discard(), tip="Take every change not sent back; nobody saw them"))
         self.send_go = QPushButton("Review and send")
         self.send_go.setProperty("dc", "go")
         self.send_go.setAutoDefault(False)
@@ -276,9 +283,10 @@ class PlanTab(QWidget):
             return
         if (win.plan or {}).get("id") != self.pid:
             self.pid = (win.plan or {}).get("id")
-            self.open_weeks, self.closed_weeks, self.all_open, self.only_look = set(), set(), False, False
+            self.open_weeks, self.closed_weeks, self.all_open, self.only_look = set(), set(), None, False
             self.picked, self.month = None, None
             self.deck.target = None
+            self.side.setCurrentWidget(self.side_page)
         self._work_out()
         self.date_panel.day_notes.plan_loaded(win.plan["id"], (win.raw or {}).get("library") is True)
         keep = win.keep
@@ -310,8 +318,7 @@ class PlanTab(QWidget):
 
     def busy_changed(self, win):
         idle = not win.busy
-        for w in (self.shape_btn, self.send_go):
-            w.setEnabled(idle)
+        self.send_go.setEnabled(idle)
         self._paste_changed()
         self.date_panel.busy_changed()
         self.event_panel.busy_changed()
@@ -464,9 +471,17 @@ class PlanTab(QWidget):
         self.only_look = self.look_btn.isChecked()
         self._draw()
 
+    def _all_expanded(self):
+        return all(self._is_open(w) for w in M.weeks(self.win.doc or {}, self.win.ops.today()))
+
     def _toggle_all(self):
-        self.all_open = not self.all_open
+        """Expand all, or Collapse all once every week is expanded."""
+        self.all_open = not self._all_expanded()
         self.open_weeks, self.closed_weeks = set(), set()
+        self._draw()
+
+    def _toggle_sort(self):
+        self.desc = not self.desc
         self._draw()
 
     def _mode(self, m):
@@ -481,7 +496,10 @@ class PlanTab(QWidget):
         self.look_btn.setText(f"Needs a look ({n:,})")
         mark(self.look_btn, "tone", "warm" if n and not self.only_look else "")
         self.look_btn.setChecked(self.only_look)
-        self.all_btn.setText("Fold past weeks" if self.all_open else "Open all weeks")
+        self.all_btn.setText("Collapse all" if self._all_expanded() else "Expand all")
+        self.all_btn.setVisible(self.mode == "list")
+        self.sort_btn.setText("Latest first" if self.desc else "Earliest first")
+        self.sort_btn.setVisible(self.mode == "list")
         if self.mode == "month":
             self._draw_month()
             self.views.setCurrentWidget(self.month_page)
@@ -496,9 +514,11 @@ class PlanTab(QWidget):
             return True
         if w["start"] in self.closed_weeks:
             return False
-        if self.all_open or self.only_look:
+        if self.all_open is not None and not self.only_look:
+            return self.all_open
+        if self.only_look:
             return True
-        return E._later(w["start"], 6) >= self.win.ops.today()  # past weeks fold
+        return E._later(w["start"], 6) >= self.win.ops.today()  # as it opens: past weeks collapsed
 
     def _fold(self, key):
         start = key[1]
@@ -526,7 +546,7 @@ class PlanTab(QWidget):
         fresh = win.draft.touched(win.ctx()) if win.draft else set()
         taper = self._taper()
         found = self._matches()
-        for w in weeks:
+        for w in (list(reversed(weeks)) if self.desc else weeks):
             items = ([(u.get("opens"), 0, u) for u in w["dates"]] + [(e.get("day"), 1, e) for e in w["events"]]
                      + [(r.get("day"), 2, r) for r in self.week_reviews(w["start"])])
             if taper and taper[0] <= E._later(w["start"], 6) and taper[1] >= w["start"]:
@@ -543,8 +563,8 @@ class PlanTab(QWidget):
             if self.heavy and V.monday(self.heavy["a"]) == w["start"] and author:
                 lay.addWidget(self._heavy_box())
             ruled = w["start"] > today or E._later(w["start"], 6) < today
-            for day, kind, x in sorted(items, key=lambda t: (str(t[0]), t[1])):
-                if not ruled and str(day) >= today:
+            for day, kind, x in sorted(items, key=lambda t: (str(t[0]), t[1]), reverse=self.desc):
+                if not ruled and (str(day) <= today if self.desc else str(day) >= today):  # the line at today, either way
                     lay.addWidget(self._today_rule())
                     ruled = True
                 if kind == 0:
@@ -571,6 +591,7 @@ class PlanTab(QWidget):
 
     def _week_head(self, w):
         row = Row(("week", w["start"]), self._fold, margins=(6, 8, 6, 4))
+        row.setToolTip("<span>Collapse</span>" if self._is_open(w) else "<span>Expand</span>")
         top = QHBoxLayout()
         top.setSpacing(6)
         opened = self._is_open(w)
@@ -640,15 +661,7 @@ class PlanTab(QWidget):
         if bits:
             under = plain(", ".join(bits), muted=True)
         elif author and u["id"] in self.look:
-            under = QWidget()
-            el = QHBoxLayout(under)
-            el.setContentsMargins(0, 0, 0, 0)
-            el.setSpacing(4)
-            words = plain("No cards yet", dc="warn")
-            words.setWordWrap(False)
-            el.addWidget(words)
-            el.addWidget(link("Add from the deck", lambda uid=u["id"]: self.tick_for(uid)))
-            el.addStretch(1)
+            under = plain("No cards yet", dc="warn")
         if under is not None:
             ind = QHBoxLayout()
             ind.setContentsMargins(64, 0, 0, 0)
@@ -777,11 +790,12 @@ class PlanTab(QWidget):
         lay.setSpacing(8)
         nav = QHBoxLayout()
         nav.setSpacing(2)
-        nav.addWidget(link("‹", lambda: self._month_step(-1), tip="The month before"))
+        nav.setSpacing(6)
+        nav.addWidget(tool("‹", lambda: self._month_step(-1), tip="The month before"))
         title = role(plain(self.month.toString("MMMM yyyy")), "head")
         title.setWordWrap(False)
         nav.addWidget(title)
-        nav.addWidget(link("›", lambda: self._month_step(1), tip="The month after"))
+        nav.addWidget(tool("›", lambda: self._month_step(1), tip="The month after"))
         nav.addStretch(1)
         lay.addLayout(nav)
         by_day = {}
@@ -909,7 +923,7 @@ class PlanTab(QWidget):
             return
         if tuple(key) != self.picked:
             self.pick(key)
-        self.side.setCurrentIndex(0)
+        self.back_from_deck()
         box = {"date": self.date_panel.name, "event": self.event_panel.name}.get(key[0])
         if box is not None and box.isVisible():
             box.setFocus(Qt.FocusReason.ShortcutFocusReason)
@@ -922,12 +936,15 @@ class PlanTab(QWidget):
         {"date": self.date_panel._delete, "event": self.event_panel._take, "review": self.review_panel._off}[self.picked[0]]()
 
     def _deck_key(self):
-        if self.side.isTabVisible(1):
+        if self._has_deck():
             if self.picked and self.picked[0] == "date":
                 self.tick_for(self.picked[1])
             else:
-                self.side.setCurrentIndex(1)
+                self.lay_out_view()
             self.deck.find.setFocus(Qt.FocusReason.ShortcutFocusReason)
+
+    def _has_deck(self):
+        return self.win.doc is not None and self.win.author() and self.win.deck_tree() is not None
 
     def _focus_find(self):
         self.find.setFocus(Qt.FocusReason.ShortcutFocusReason)
@@ -972,7 +989,7 @@ class PlanTab(QWidget):
                     self._draw()
         self._mark_picked()
         self._show_side()
-        if self.side.currentIndex() == 1 and self.picked and self.picked[0] == "date":
+        if self.side.currentWidget() is self.deck and self.picked and self.picked[0] == "date":
             self.deck.set_target(self.picked[1])
 
     def _mark_picked(self):
@@ -982,52 +999,44 @@ class PlanTab(QWidget):
     def _show_side(self):
         win = self.win
         key = self.picked
-        self.side.setTabVisible(1, win.author() and win.deck_tree() is not None)
+        self.lay_act.setEnabled(self._has_deck())
+        if self.side.currentWidget() is self.deck and not self._has_deck():
+            self.side.setCurrentWidget(self.side_page)
         if not key or win.doc is None:
-            self.side.setTabText(0, "Nothing picked")
             self.panels.setCurrentWidget(self.none_panel)
             return
         kind = key[0]
         if kind == "date":
-            u = win.unit(key[1])
-            self.side.setTabText(0, M.date_label(u))
-            self.date_panel.show_date(u)
+            self.date_panel.show_date(win.unit(key[1]))
             self.panels.setCurrentWidget(self.date_panel)
         elif kind == "event":
-            e = self._event(key[1])
-            self.side.setTabText(0, M.event_label(e))
-            self.event_panel.show_event(e)
+            self.event_panel.show_event(self._event(key[1]))
             self.panels.setCurrentWidget(self.event_panel)
         elif kind == "review":
-            r = self._review(key[1])
-            self.side.setTabText(0, f"{M.day_words(r.get('day'))} · Review")
-            self.review_panel.show_review(r)
+            self.review_panel.show_review(self._review(key[1]))
             self.panels.setCurrentWidget(self.review_panel)
-        if self.side.currentIndex() == 1 and kind != "date":
-            self.side.setCurrentIndex(0)
-
-    def _side_changed(self, i):
-        if i == 1:
-            self.deck.set_target(self.picked[1] if self.picked and self.picked[0] == "date" else None)
-        elif self.deck.target:
-            self.deck.target = None
+        if self.side.currentWidget() is self.deck and kind != "date" and self.deck.target:
+            self.back_from_deck()
 
     def tick_for(self, uid):
-        """+ From the deck: the date picked, the deck beside it, ticks adding to it."""
+        """Add from the deck: the date picked, the deck in its place, ticks adding to it (Done: the date again)."""
         if self.picked != ("date", uid):
             self.pick(("date", uid))
-        self.side.setCurrentIndex(1)
+        self.side.setCurrentWidget(self.deck)
         self.deck.set_target(uid)
 
-    # ---- the plan's shape ----
+    def lay_out_view(self):
+        """Add › Lay out from the deck…: the deck with no date picked to add to; ticks are what the plan
+        covers, laid out on its study days at its pace."""
+        if not self._has_deck():
+            return
+        self.side.setCurrentWidget(self.deck)
+        self.deck.set_target(None)
 
-    def _shape(self):
-        from .shape import ShapeDialog
-        dlg = ShapeDialog(self.win)
-        if dlg.exec():
-            ops = dlg.ops()
-            if ops:
-                self.win.changes(ops)
+    def back_from_deck(self):
+        """Done: the picked date (or quiz) in the deck's place again."""
+        self.deck.target = None
+        self.side.setCurrentWidget(self.side_page)
 
     # ---- new dates, quizzes, review days ----
 
@@ -1221,9 +1230,6 @@ class PlanTab(QWidget):
         self.ai_menu.clear()
         self.ai_menu.addAction("Plan the dates (a prompt to paste in your AI)").triggered.connect(lambda: self._prompt("plan"))
         self.ai_menu.addAction("Tag by objective (a prompt to paste in your AI)").triggered.connect(lambda: self._prompt("tags"))
-        self.ai_menu.addSeparator()
-        a = self.ai_menu.addAction("Let an AI app on this computer help…")
-        a.triggered.connect(self._mcp)
 
     def _prompt(self, which):
         from . import prompts
@@ -1239,11 +1245,3 @@ class PlanTab(QWidget):
         QApplication.clipboard().setText(text)
         win.status.setText("Copied. Paste it in your AI; paste what it answers in the box below, then Show the changes. "
                            "It has the deck's tag names and counts, never a card.")
-
-    def _mcp(self):
-        try:
-            from . import mcp_dialog
-        except ImportError:
-            self.win.status.setText("Not in this version yet.")
-            return
-        mcp_dialog.show(self.win)

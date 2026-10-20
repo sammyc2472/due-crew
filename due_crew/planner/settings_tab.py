@@ -1,7 +1,9 @@
 """Your plans' Sharing tab (3.9.3's Settings; round five), the builder's,
 for a plan's authors: its code and link first, its name and one line,
 where to get the deck, whether it's offered to one of my squads and who
-can follow (the owner's), its co-authors (asked, handed it, taken off; a
+can follow (the owner's), how many follow and the posts to them (Posts…:
+what they were told, a line to them; how far they are isn't shown, Sam's
+call: followers meet in the plan's squad), its co-authors (asked, handed it, taken off; a
 co-author leaves), the library (the owner's), a copy for next year, the
 dates as a table, and taking it down. The plan's end, catch-up weeks and
 the days before the end are its shape (the Plan tab's Change…). Each
@@ -18,7 +20,19 @@ from ..ui import ask_item, confirm, esc, note, role
 from .. import plans as P
 from . import edits as E
 from . import remote
-from .widgets import link
+from . import build as B
+from . import date_dialogs as DD
+from .shape import Shape
+from .widgets import tool
+
+
+def _ai_on():
+    """Your AI app's switch on this computer, in a word (nothing when it can't be read)."""
+    try:
+        from . import mcp_host
+        return "On" if mcp_host.settings()["on"] else "Off"
+    except Exception:
+        return ""
 
 
 class _Said(QLabel):
@@ -59,7 +73,7 @@ def _nth(n):
 
 
 def _link(text, fn, bad=False):
-    return link(text, fn, bad=bad)  # the plan windows' one link (widgets.link): green, flat, in line with the words
+    return tool(text, fn, bad=bad)  # an action is a button (the window's one kind); links are only ways to a date
 
 
 class SettingsTab(QWidget):
@@ -86,22 +100,7 @@ class SettingsTab(QWidget):
         form.setVerticalSpacing(10)
         self.form = form
 
-        cl = QHBoxLayout()
-        cl.setSpacing(8)
-        self.code = role(_plain(), "head")
-        self.code.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        cl.addWidget(self.code)
-        self.link_btn = QPushButton("Copy link")
-        self.link_btn.setAutoDefault(False)
-        self.link_btn.clicked.connect(self._copy_link)
-        cl.addWidget(self.link_btn)
-        page_btn = QPushButton("Open its page")
-        page_btn.setAutoDefault(False)
-        page_btn.clicked.connect(self._page)
-        cl.addWidget(page_btn)
-        cl.addStretch(1)
-        form.addRow("Code", cl)
-
+        self._section("The plan", first=True)
         self.name = QLineEdit()
         self.name.setMaxLength(60)
         self.line = QLineEdit()
@@ -118,6 +117,32 @@ class SettingsTab(QWidget):
         line_row.addWidget(self.line, 1)
         line_row.addWidget(self.meta_btn)  # shows once the name or the line changes
         form.addRow("One line", line_row)
+        self.shape = Shape(win, form)  # its dates and pace (round five: here, where Change… had them)
+        ev = QHBoxLayout()
+        ev.setSpacing(10)
+        self.every_words = _plain()
+        ev.addWidget(self.every_words, 1)
+        self.every_btn = tool("Change…", self._every, tip="Lines followers tick in Due on the same weekday every week of the plan")
+        ev.addWidget(self.every_btn, 0, Qt.AlignmentFlag.AlignTop)
+        form.addRow("Every week", ev)
+
+        self._section("Sharing")
+        cl = QHBoxLayout()
+        cl.setSpacing(8)
+        self.code = role(_plain(), "head")
+        self.code.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        cl.addWidget(self.code)
+        self.link_btn = QPushButton("Copy link")
+        self.link_btn.setAutoDefault(False)
+        self.link_btn.clicked.connect(self._copy_link)
+        cl.addWidget(self.link_btn)
+        page_btn = QPushButton("Open its page")
+        page_btn.setAutoDefault(False)
+        page_btn.clicked.connect(self._page)
+        cl.addWidget(page_btn)
+        cl.addStretch(1)
+        form.addRow("Code", cl)
+
 
         row = QHBoxLayout()
         self.url = QLineEdit()
@@ -146,6 +171,16 @@ class SettingsTab(QWidget):
         self.owner_only = _plain(muted=True)
         who.addWidget(self.owner_only)
         form.addRow("Who can follow", who)
+
+        fol = QHBoxLayout()
+        fol.setSpacing(10)
+        self.following = _plain()
+        self.following.setWordWrap(False)
+        fol.addWidget(self.following)
+        self.posts_btn = tool("Posts…", self._posts, tip="What followers were told (each send's line too), and a line to them")
+        fol.addWidget(self.posts_btn)
+        fol.addStretch(1)
+        form.addRow("Followers", fol)
 
         self.coas = QTreeWidget()
         self.coas.setHeaderHidden(True)
@@ -190,8 +225,20 @@ class SettingsTab(QWidget):
         lib.addWidget(self.lib_said)
         form.addRow("Library", lib)
 
+        self._section("This computer")
+        ai = QHBoxLayout()
+        ai.setSpacing(10)
+        self.ai_words = _plain()
+        self.ai_words.setWordWrap(False)
+        ai.addWidget(self.ai_words)
+        self.ai_btn = tool("Set up…", self._ai_app, tip="An AI app on this computer (Claude, say) reads your plans and puts "
+                           "changes under one for you to send; it never sends")
+        ai.addWidget(self.ai_btn)
+        ai.addStretch(1)
+        form.addRow("Your AI app", ai)
+
         row = QHBoxLayout()
-        row.setSpacing(2)
+        row.setSpacing(6)
         self.copy_btn = _link("Copy it for next year", self._next_year)
         row.addWidget(self.copy_btn)
         row.addWidget(_link("Copy as a table", self._table))
@@ -201,6 +248,13 @@ class SettingsTab(QWidget):
         form.addRow("This plan", row)
         self.said = _plain(said=True)
         form.addRow(self.said)
+
+    def _section(self, text, first=False):
+        if not first:
+            gap = QWidget()
+            gap.setFixedHeight(8)
+            self.form.addRow(gap)
+        self.form.addRow(role(_plain(text), "head"))
 
     # ---- the window asks ----
 
@@ -226,6 +280,12 @@ class SettingsTab(QWidget):
                     w.setText(val)  # what the plan says, unless I'd typed something here (a reload keeps that)
                 self._put[key] = val
             self._put["pid"] = win.plan.get("id")
+            n = win.followers()
+            self.following.setText(f"{n:,} following" if n else "Nobody follows it yet")
+            lines = B.every_clean(doc.get("every") or [])
+            self.every_words.setText("; ".join(f"{B.TODO_LABEL.get(x.get('k'), 'Do')}: {x.get('t') or ''}, {B.every_label(x['r'])}"
+                                               for x in lines) or "None")
+            self.ai_words.setText(_ai_on())
             code = str(raw.get("code") or "")
             self.code.setText(code or "none yet")
             self.link_btn.setEnabled(bool(code))
@@ -244,6 +304,9 @@ class SettingsTab(QWidget):
             self._loading = False
         self._coauthors()
         self._buttons()
+        if not (self.shape.changed() and self._put.get("shape") == win.plan.get("id")):
+            self.shape.load()  # what the plan says now, unless a change of its shape is being made here
+        self._put["shape"] = win.plan.get("id")
 
     def busy_changed(self, win):
         if win.author():
@@ -287,8 +350,26 @@ class SettingsTab(QWidget):
         self.off_btn.setVisible(owner and bool(e))
         self.off_btn.setText("Take back the invite" if e and e.get("pending") else "Take them off")
         self.leave_btn.setVisible(not owner)
-        for b in (self.add_btn, self.hand_btn, self.unhand_btn, self.off_btn, self.leave_btn):
+        for b in (self.add_btn, self.hand_btn, self.unhand_btn, self.off_btn, self.leave_btn, self.posts_btn, self.every_btn):
             b.setEnabled(not busy)
+        self.shape.busy_changed(busy)
+
+    def _every(self):
+        dlg = DD.LinesDialog(self, "Every week", (self.win.doc or {}).get("every") or [], every=True)
+        if dlg.exec():
+            self.win.change({"op": "set_every", "lines": dlg.lines()})
+
+    def _ai_app(self):
+        try:
+            from . import mcp_dialog
+        except ImportError:
+            self.said.setText("Not in this version yet.")
+            return
+        mcp_dialog.show(self.win)
+
+    def _posts(self):
+        from .send import PostsDialog
+        PostsDialog(self.win).exec()
 
     # ---- name, line, the deck's link, who can follow ----
 

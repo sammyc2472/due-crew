@@ -54,7 +54,6 @@ class DayNotes(QWidget):
         self.add_btn.clicked.connect(self._add)
         row.addWidget(self.add_btn)
         self.rm_btn = QPushButton("Take it off")
-        self.rm_btn.setFlat(True)
         self.rm_btn.clicked.connect(self._remove)
         row.addWidget(self.rm_btn)
         root.addLayout(row)

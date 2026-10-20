@@ -23,7 +23,7 @@ from .. import plans as P
 from . import edits as E
 from . import reading as R
 from .start_window import EXAMPLE, FILES, DropBox, pdf_text
-from .widgets import link, plain
+from .widgets import tool, plain
 
 
 def read_file(path):
@@ -103,10 +103,10 @@ class NewPlanWindow(QDialog):
         row = QHBoxLayout()
         self.said = plain("Read on this computer. Nothing is sent until you make the plan.", muted=True)
         row.addWidget(self.said, 1)
-        row.addWidget(link("Choose a file…", self._choose))
+        row.addWidget(tool("Choose a file…", self._choose))
         root.addLayout(row)
         if self.labs:
-            root.addWidget(link("Session by session, with Claude's stand-in (labs)…", self._labs), 0, Qt.AlignmentFlag.AlignLeft)
+            root.addWidget(tool("Session by session, with Claude's stand-in (labs)…", self._labs), 0, Qt.AlignmentFlag.AlignLeft)
         buttons = QDialogButtonBox()
         buttons.addButton("Cancel", QDialogButtonBox.ButtonRole.RejectRole).clicked.connect(self.reject)
         self.make_btn = QPushButton("Make the plan")
@@ -124,7 +124,7 @@ class NewPlanWindow(QDialog):
         self.code.setPlaceholderText("Their code")
         self.code.returnPressed.connect(self._follow)
         row.addWidget(self.code, 1)
-        row.addWidget(link("Follow", self._follow))
+        row.addWidget(tool("Follow", self._follow))
         root.addLayout(row)
         self.name.textChanged.connect(lambda _t: self._buttons())
         self._buttons()

@@ -1,10 +1,9 @@
-"""Your plans' History (Undo ▾'s, round five) and posts (the Followers
-tab's), the builder's, for a plan's authors. History: every save, who and
-what, newest first; the latest one undoes (the builder's Undo). Posts:
-what the authors said to followers, newest first, and a post of one line
-to them (five a day a plan), with how many followers' Anki has this
-version. Each is read when it's shown, one request; names and words are
-the authors': plain text."""
+"""Your plans' History (Undo's, round five) and Posts (Sharing's), the
+builder's, for a plan's authors. History: every save, who and what,
+newest first; the latest one undoes (the builder's Undo). Posts: what
+the authors said to followers, newest first (a send's line among them),
+and a post of one line to them (five a day a plan). Each is read when
+it's shown, one request; names and words are the authors': plain text."""
 
 from aqt.qt import QHBoxLayout, QHeaderView, QLabel, QLineEdit, QPushButton, Qt, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget
 
@@ -78,7 +77,6 @@ class HistoryTab(_Lazy):
         self.button_row = row  # History's window puts its Close in this row
         row.addStretch(1)
         self.again_btn = QPushButton("Try again")
-        self.again_btn.setFlat(True)
         self.again_btn.clicked.connect(self._read)
         row.addWidget(self.again_btn)
         self.undo_btn = QPushButton("Undo the latest")
@@ -157,8 +155,6 @@ class UpdatesTab(_Lazy):
         self.post_btn.clicked.connect(self._post)
         row.addWidget(self.post_btn)
         root.addLayout(row)
-        self.reached = _plain(muted=True)
-        root.addWidget(self.reached)
         self.status = _plain()
         root.addWidget(self.status)
         self.said = _plain(muted=True)
@@ -170,11 +166,9 @@ class UpdatesTab(_Lazy):
         self.button_row = row  # History's window puts its Close in this row
         row.addStretch(1)
         self.again_btn = QPushButton("Try again")
-        self.again_btn.setFlat(True)
         self.again_btn.clicked.connect(self._read)
         row.addWidget(self.again_btn)
         self.remove_btn = QPushButton("Remove it")
-        self.remove_btn.setFlat(True)
         self.remove_btn.clicked.connect(self._remove)
         row.addWidget(self.remove_btn)
         root.addLayout(row)
@@ -188,11 +182,7 @@ class UpdatesTab(_Lazy):
             self.status.setText("")  # the last plan's "Posted." isn't this one's
         if win.author():
             n = int((win.plan or {}).get("followers") or 0)
-            self.box.setPlaceholderText(f"Post to the {n:,} following" if n else "Post to its followers (nobody follows it yet)")
-            r = (win.raw or {}).get("reached") or [0, 0]
-            self.reached.setText(f"This version is in {int(r[0]):,} of {int(r[1]):,} followers' Anki."
-                                 if isinstance(r, list) and len(r) == 2 and r[1] else "")
-            self.reached.setVisible(bool(self.reached.text()))
+            self.box.setPlaceholderText(f"A line to the {n:,} following" if n else "A line to its followers (nobody follows it yet)")
         super().plan_loaded(win)
 
     def _count(self, text):
@@ -244,7 +234,7 @@ class UpdatesTab(_Lazy):
             who = "You" if me and x.get("uid") == me else str(x.get("name") or "?")
             if x.get("coauthor"):
                 who += " (co-author)"
-            it = QTreeWidgetItem([who, str(x.get("text") or "") + (" · sent with changes" if x.get("withSave") else ""), ago(x.get("at"))])
+            it = QTreeWidgetItem([who, str(x.get("text") or "") + (" (sent with changes)" if x.get("withSave") else ""), ago(x.get("at"))])
             it.setData(0, ROLE, i)
             it.setToolTip(1, f"<span>{esc(x.get('text') or '')}</span>")
             self.list.addTopLevelItem(it)

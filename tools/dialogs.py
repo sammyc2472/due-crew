@@ -1383,7 +1383,7 @@ def main(out):
                 reopened.append(pid)
 
         import json
-        from due_crew.planner import plan_tab as PTB, send as PS, shape as PSH, text_tab as PT, widgets as PW
+        from due_crew.planner import plan_tab as PTB, send as PS, shape as PSH, text_tab as PT, widgets as PW, model as M_
         from due_crew.planner import ops as PO
         reopened = []
         mine = PR.my_plans(CLIENT)
@@ -1401,7 +1401,7 @@ def main(out):
         dlg = PlanWindow_()
         tab = dlg.pages["plan"]
         shown = [dlg.tabs.tabText(i) for i in range(dlg.tabs.count()) if dlg.tabs.isTabVisible(i)]
-        if not dlg.pick.currentText().startswith("MS2 Block 2") or not dlg.author() or shown != ["Plan", "Followers", "Sharing"]:
+        if not dlg.pick.currentText().startswith("MS2 Block 2") or not dlg.author() or shown != ["Plan", "Settings"]:
             raise RuntimeError(f"planner: an author's tabs {shown}, {dlg.pick.currentText()!r}")
         dlg.resize(1180, 760)
         tab.pick(("date", "u1"))
@@ -1417,7 +1417,8 @@ def main(out):
             raise RuntimeError("planner: Pip in the plan window (round five: none)")
         shoot(dlg, os.path.join(out, "planner-date.png"))
         tab.pick(("date", "u2"))
-        if dp.name.text() != "HF drugs <b>" or "<b>" not in dlg.pages["plan"].side.tabText(0):
+        if dp.name.text() != "HF drugs <b>" or tab.rows[("date", "u2")].findChildren(QtWidgets.QLabel)[1].textFormat() \
+                != QtCore.Qt.TextFormat.PlainText:
             raise RuntimeError("planner: a date's name went in as markup")
         # nobody follows it: a change saves at once, and Undo ▾ takes it back
         dlg.change({"op": "add_cards", "date": "u2", "tags": [f"{root}::#Sketches::Pharm::HF_Drugs"]})
@@ -1450,8 +1451,13 @@ def main(out):
         dlg.change({"op": "add_cards", "date": made["id"], "tags": [f"{root}::#Book::Cardio::Heart_Failure"]}, keep=("date", made["id"]))
         if unit(made["id"]).get("tags") != [f"{root}::#Book::Cardio::Heart_Failure"]:
             raise RuntimeError(f"planner: cards put on a new date: {unit(made['id'])}")
-        # the shape: Change…
-        sh = PSH.ShapeDialog(dlg)
+        # the plan's dates and pace: rows of Settings (round five: no Change… window); the Plan tab's line only reads
+        if hasattr(tab, "shape_btn") or hasattr(PSH, "ShapeDialog"):
+            raise RuntimeError("planner: the shape is Settings' (no Change…)")
+        dlg._show_tab("sharing")
+        sh = dlg.pages["sharing"].shape
+        if not sh.preview.isHidden():
+            raise RuntimeError("planner: Settings' shape, nothing changed: nothing to save")
         sh.mode.button(0).click()  # Up to N a day
         sh.daily.setValue(25)
         sh.ends.setCurrentIndex(sh.ends.findText("A day…"))
@@ -1460,20 +1466,28 @@ def main(out):
         ops_ = sh.ops()
         if [o["op"] for o in ops_] != ["set_end", "set_pace", "set_phases"] or sh.go.text() != "Save" \
                 or "no new cards" not in sh.preview_words.text():
-            raise RuntimeError(f"planner: Change… {ops_}, {sh.go.text()!r}")
-        shoot(sh, os.path.join(out, "planner-shape.png"))
+            raise RuntimeError(f"planner: Settings' shape {ops_}, {sh.go.text()!r}")
+        shoot(dlg, os.path.join(out, "planner-settings-shape.png"))
         sh.start.setDate(sh.start.date().addDays(7))
         if not sh.ops() or sh.ops()[0] != {"op": "shift_all", "days": 7} or "Saving moves" not in sh.preview_words.text():
-            raise RuntimeError(f"planner: Change…, the start: {sh.ops()}, {sh.preview_words.text()!r}")
-        shoot(sh, os.path.join(out, "planner-shape-moves.png"))
-        # the deck beside it: ticks add to the picked date; with none picked, what the plan covers, laid out
+            raise RuntimeError(f"planner: Settings' shape, the start: {sh.ops()}, {sh.preview_words.text()!r}")
+        sh.load()  # Put it back
+        if sh.ops() or not sh.preview.isHidden():
+            raise RuntimeError("planner: Settings' shape, Put it back")
+        dlg._show_tab("plan")
+        # no deck tab: Add from the deck puts the deck in the date's place, ticks adding to it; Done, the date again
+        if tab.side.count() != 2 or isinstance(tab.side, QtWidgets.QTabWidget):
+            raise RuntimeError("planner: the side is the date, or the deck while cards go on (no tabs)")
         tab.tick_for("u3")
-        if tab.deck.bar.isHidden() or "Shock" not in tab.deck.bar_words.text() or tab.side.currentIndex() != 1:
+        if tab.deck.bar.isHidden() or "Shock" not in tab.deck.bar_words.text() or tab.side.currentWidget() is not tab.deck:
             raise RuntimeError("planner: Add from the deck")
         shoot(dlg, os.path.join(out, "planner-deck-date.png"))
         tab.deck._back()
-        tab.side.setCurrentIndex(1)
-        tab.deck.set_target(None)
+        if tab.side.currentWidget() is not tab.side_page or tab.picked != ("date", "u3"):
+            raise RuntimeError("planner: the deck's Done: the date again")
+        tab.lay_out_view()  # Add › Lay out from the deck…
+        if tab.side.currentWidget() is not tab.deck or tab.deck.target is not None:
+            raise RuntimeError("planner: Lay out from the deck")
         tab.deck.find.setText("#sketches")
         tab.deck._typing.stop()
         tab.deck.fill_tree()
@@ -1485,7 +1499,7 @@ def main(out):
         tab.deck._lay(tab.deck._go_how)
         if not any(u.get("tags") == [f"{root}::#Sketches"] for u in STORE.plans[pid]["doc"]["units"]):
             raise RuntimeError(f"planner: Lay them out: {dlg.status.text()!r}")
-        tab.side.setCurrentIndex(0)
+        tab.back_from_deck()
         # the text: plan lines pasted in, read, then added; the whole plan as text
         td = PT.TextDialog(dlg, False, f"{day(6)} | Shock again | tag:{root}::#Videos::Cardio::Shock | read: chapter 9\n"
                                       f"{day(4)} | event | Shock quiz")
@@ -1557,18 +1571,23 @@ def main(out):
         shoot(sd, os.path.join(out, "planner-send-ai.png"))
         sd.reject()
         dlg.take_change(0)
-        # Followers: how many, and the posts; no counts of how far they are (Sam's call: the plan's squad is where followers meet)
-        fol = dlg.pages["followers"]
-        dlg._show_tab("followers")
-        labels = [w.text() for w in fol.findChildren(QtWidgets.QLabel)]
-        if fol.head.text() != "4 following" or any("finished" in t or " done" in t or "in its squad" in t for t in labels) \
-                or fol.findChildren(QtWidgets.QProgressBar):
-            raise RuntimeError(f"planner: Followers {fol.head.text()!r}, {labels}")
-        fol.posts.box.setText("Week 3 moved: Shock is Thursday now.")
-        fol.posts._post()
-        if not fol.posts.status.text().startswith("Posted"):
-            raise RuntimeError(f"planner: a post {fol.posts.status.text()!r}")
-        shoot(dlg, os.path.join(out, "planner-followers.png"))
+        # no Followers tab (Sam's call): how many follow is a line in Sharing, and Posts… what they were told;
+        # nothing says how far they are or whose Anki has the last send (the plan's squad is where followers meet)
+        if "followers" in dlg.pages:
+            raise RuntimeError("planner: a Followers tab")
+        st = dlg.pages["sharing"]
+        if st.following.text() != "4 following" or st.posts_btn.isHidden():
+            raise RuntimeError(f"planner: Sharing's Followers line {st.following.text()!r}")
+        pd = PS.PostsDialog(dlg)
+        pd.tab.box.setText("Week 3 moved: Shock is Thursday now.")
+        pd.tab._post()
+        labels = [w.text() for w in pd.findChildren(QtWidgets.QLabel)]
+        if not pd.tab.status.text().startswith("Posted") or any("followers' Anki" in t or " done" in t for t in labels) \
+                or pd.findChildren(QtWidgets.QProgressBar):
+            raise RuntimeError(f"planner: Posts {pd.tab.status.text()!r}, {labels}")
+        pd.tab._read()
+        shoot(pd, os.path.join(out, "planner-posts.png"))
+        pd.reject()
         if dlg.draft:
             dlg.draft.clear()
         dlg.ops.keep_draft(pid, None)
@@ -1634,6 +1653,22 @@ def main(out):
         order = [k for k in tab.rows if k[0] in ("date", "event", "review")]
         if tab.picked != order[order.index(("date", "u1")) + 1]:
             raise RuntimeError(f"planner: ↓ picks the next one: {tab.picked}")
+        tab._toggle_all()
+        if tab.all_btn.text() != "Collapse all" or not all(tab._is_open(w) for w in M_.weeks(dlg.doc, TODAY)):
+            raise RuntimeError(f"planner: Expand all ({tab.all_btn.text()!r})")
+        tab._toggle_all()
+        if tab.all_btn.text() != "Expand all" or [k for k in tab.rows if k[0] == "date"]:
+            raise RuntimeError(f"planner: Collapse all ({tab.all_btn.text()!r}, {list(tab.rows)[:3]})")
+        tab.all_open = None
+        tab._toggle_sort()  # Latest first: the list the other way up, the line at today still between past and to come
+        order = [k for k in tab.rows if k[0] == "date"]
+        days = [dlg.unit(k[1])["opens"] for k in order]
+        if tab.sort_btn.text() != "Latest first" or days != sorted(days, reverse=True):
+            raise RuntimeError(f"planner: Latest first {days}")
+        tab._toggle_sort()
+        days = [dlg.unit(k[1])["opens"] for k in tab.rows if k[0] == "date"]
+        if tab.sort_btn.text() != "Earliest first" or days != sorted(days):
+            raise RuntimeError(f"planner: Earliest first {days}")
         tab.find.setText("heart")
         found = [k for k in tab.rows if k[0] == "date"]
         if not found or any("heart" not in (dlg.unit(k[1]).get("name") or "").lower()
@@ -1666,7 +1701,7 @@ def main(out):
         fw.resize(1180, 760)
         shown = [fw.tabs.tabText(i) for i in range(fw.tabs.count()) if fw.tabs.isTabVisible(i)]
         ft = fw.pages["plan"]
-        if shown != ["Plan", "Mine"] or fw.author() or ft.today_box.isHidden() or ft.behind_box.isHidden() \
+        if shown != ["Plan", "Settings"] or fw.author() or ft.today_box.isHidden() or ft.behind_box.isHidden() \
                 or not ft.paste_row.isHidden() or not ft.shape_box.isHidden() or not fw.undo_btn.isHidden():
             raise RuntimeError(f"planner: a follower's tabs {shown}")
         shoot(fw, os.path.join(out, "planner-follower.png"))

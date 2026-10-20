@@ -16,14 +16,14 @@ from aqt.qt import (
     QMenu, QPushButton, QSpinBox, QTimer, QVBoxLayout, QWidget,
 )
 
-from ..ui import attach_alive, confirm, heading, role
+from ..ui import attach_alive, confirm, esc, heading, role
 from .. import plans as P
 from . import build as B
 from . import date_dialogs as DD
 from . import edits as E
 from . import model as M
 from .day_notes import DayNotes
-from .widgets import Source, link, plain, small, tip_keys, tool
+from .widgets import Source, keys, link, plain, small, tool
 
 
 def _every_on(doc, x, day):
@@ -148,27 +148,15 @@ class DatePanel(QWidget):
         self.event = QComboBox()
         self.event.activated.connect(self._tested_on)
         grid.addWidget(self.event, 2, 1)
-        grid.addWidget(plain("Move", muted=True), 3, 0)
-        moves = QHBoxLayout()
-        moves.setSpacing(6)
-        self.earlier = QPushButton("−1 day")
-        self.earlier.setAutoDefault(False)
-        self.earlier.clicked.connect(lambda: self._nudge(-1))
-        self.later = QPushButton("+1 day")
-        self.later.setAutoDefault(False)
-        self.later.clicked.connect(lambda: self._nudge(1))
-        self.earlier.setToolTip(tip_keys("A day earlier", "Alt+Left"))
-        self.later.setToolTip(tip_keys("A day later", "Alt+Right"))
-        moves.addWidget(self.earlier)
-        moves.addWidget(self.later)
-        moves.addWidget(link("This and later dates…", self._move_from, tip="Move this date and every one after it"))
-        moves.addStretch(1)
-        grid.addLayout(moves, 3, 1)
+        self.opens.setToolTip(f"<span>The day its cards open. On the plan, <b>{esc(keys('Alt+Left'))}</b> or "
+                              f"<b>{esc(keys('Alt+Right'))}</b> moves it a day; in Month, drag it.</span>")
         grid.setColumnStretch(1, 1)
         fl.addLayout(grid)
         root.addWidget(self.fields)
 
-        # ---- a follower's line ----
+        # ---- a follower's title and line ----
+        self.title = role(plain(), "head")
+        root.addWidget(self.title)
         self.meta = plain(muted=True)
         root.addWidget(self.meta)
 
@@ -198,9 +186,7 @@ class DatePanel(QWidget):
         row = QHBoxLayout()
         row.setSpacing(6)
         self.browse_btn = tool("Show in Browse", lambda: self.win.ops.browse(self._cids()))
-        self.study_btn = tool("Study them", self._study)
         row.addWidget(self.browse_btn)
-        row.addWidget(self.study_btn)
         row.addStretch(1)
         root.addLayout(row)
 
@@ -218,7 +204,6 @@ class DatePanel(QWidget):
         tl.setSpacing(6)
         self.todo_btn = tool("Add a to-do…", self._todo, tip="Watch, read or do: lines followers tick in Due on this date")
         tl.addWidget(self.todo_btn)
-        tl.addWidget(tool("Every week…", self._every, tip="Lines on the same weekday every week of the plan"))
         tl.addStretch(1)
         root.addWidget(self.todo_links)
 
@@ -254,6 +239,8 @@ class DatePanel(QWidget):
         finally:
             self._loading = False
         self.meta.setVisible(not author)
+        self.title.setVisible(not author)
+        self.title.setText(M.date_label(u))
         if not author:
             when = [f"Opens {P.fmt_day(u['opens'])}" if str(u["opens"]) > win.ops.today() else f"Opened {P.fmt_day(u['opens'])}"]
             if u.get("due"):
@@ -341,10 +328,7 @@ class DatePanel(QWidget):
         idle = not self.win.busy
         for w in (self.fields, self.adds, self.todo_links):
             w.setEnabled(idle)
-        has = bool(self._cids())
-        self.browse_btn.setVisible(has)
-        self.study_btn.setVisible(has)
-        self.study_btn.setEnabled(idle)
+        self.browse_btn.setVisible(bool(self._cids()))
 
     # ---- an author's changes ----
 
@@ -427,17 +411,6 @@ class DatePanel(QWidget):
             self.win.change({"op": "add_picks", "date": u["id"], "notes": list(x["notes"]),
                              "cards": [list(c) for c in x["cards"]]})
 
-    def _biggest(self):
-        t = self.win.deck_tree()
-        if t is None or self.u is None or self.win.swap:
-            return None
-        return B.biggest(t, self.u, B.placed_keys(self.win.doc, t))
-
-    def _split_biggest(self):
-        k = self._biggest()
-        if k:
-            self.split((B.kind_of(k), B.path_of(k)))
-
     def split(self, key):
         """Split… on a tag or a subdeck of the date: evenly over N study days, or into its own tags."""
         u, win = self.u, self.win
@@ -477,10 +450,6 @@ class DatePanel(QWidget):
         win.change({"op": "split_tags", "date": u["id"], "field": field, "path": path, "items": items,
                     "cap": cap, "days": days})
 
-    def _review_day(self):
-        if self.u is not None:
-            self.tab.review_day(self.u["opens"])
-
     def _todo(self):
         u = self.u
         if u is None:
@@ -489,34 +458,14 @@ class DatePanel(QWidget):
         if dlg.exec():
             self.win.change({"op": "set_todo", "date": u["id"], "lines": dlg.lines()})
 
-    def _every(self):
-        dlg = DD.LinesDialog(self, "Every week", self.win.doc.get("every") or [], every=True)
-        if dlg.exec():
-            self.win.change({"op": "set_every", "lines": dlg.lines()})
-
-    def _study(self):
-        u = self.u
-        if u is None:
-            return
-        if self.win.own_steps():
-            self.win.study("date", u["id"])
-        else:
-            self.win.study("date", u["id"], self._cids(), str(u.get("name") or "date"))
-
     # ---- a chip's menu, and ⋯ ----
 
     def _chip_menu(self, r, pos):
         win, u = self.win, self.u
         menu = QMenu(self)
-        cids, name = set(r["cids"]), f"{u.get('name') or 'date'}: {chip_name(r)}"
+        cids = set(r["cids"])
         menu.addAction(f"Show these {len(cids):,} in Browse").triggered.connect(lambda: win.ops.browse(cids))
-        a = menu.addAction("Study these")
-        a.setEnabled(bool(cids) and not win.busy)
-        a.triggered.connect(lambda: win.study("date", u["id"], cids, name))
         if win.author():
-            a = menu.addAction("Open these in my Anki now")
-            a.setEnabled(bool(cids) and not win.busy)
-            a.triggered.connect(lambda: win.open_date(u["id"], cids, name))
             key = r["key"]
             menu.addSeparator()
             if key[0] in ("tag", "deck") and win.idx is not None:
@@ -551,24 +500,16 @@ class DatePanel(QWidget):
         menu.clear()
         if u is None or not win.author():
             return
-        if self._biggest() is not None:
-            menu.addAction("Split its biggest tag…").triggered.connect(self._split_biggest)
-        a = menu.addAction("Make it a review day")
-        a.setToolTip("That morning followers get a deck of what they've seen so far")
-        a.triggered.connect(self._review_day)
+        after = sum(1 for x in P.units(win.doc) if str(x.get("opens")) > str(u["opens"]))
+        a = menu.addAction(f"Move this and the {after:,} date{'s' if after != 1 else ''} after it…" if after
+                           else "Move this date…")
+        a.triggered.connect(self._move_from)
         menu.addSeparator()
         tags = [t for t in P.plan_tags(win.doc)]
         if tags and any(r["key"][0] == "tag" for r in win.rows(u)):
             keep = menu.addMenu("Keep only cards also tagged…")
             for t in tags:
                 keep.addAction(str(t.get("name") or "?")).triggered.connect(lambda _=False, t=t: self._keep_only(t))
-        for r in win.rows(u):
-            ex = self.tab.extras(u, r["key"])
-            if ex and not ex[1]:
-                n_ex = max(0, len(r["cids"]) - ex[3])
-                menu.addAction(f"Leave out {chip_name(r)}'s extras" + (f" ({n_ex:,} cards)" if n_ex else "")).triggered.connect(
-                    lambda _=False, ex=ex: win.change({"op": "set_extras", "date": u["id"], "path": ex[0], "without": True,
-                                                       "kids": ex[2], "main_n": ex[3]}))
         if u.get("due") and u["due"] > u["opens"]:
             a = menu.addAction(f"Spread its cards evenly to {P.fmt_day(u['due'])}")
             a.setCheckable(True)
@@ -653,12 +594,8 @@ class EventPanel(QWidget):
         self.list_lay.setContentsMargins(0, 0, 0, 0)
         root.addWidget(self.list)
         row = QHBoxLayout()
-        self.study_btn = QPushButton("Study for it")
-        self.study_btn.setAutoDefault(False)
-        self.study_btn.clicked.connect(self._study)
-        row.addWidget(self.study_btn)
         row.addStretch(1)
-        self.take_btn = link("Take it off…", self._take, bad=True)
+        self.take_btn = tool("Take it off…", self._take, bad=True)
         row.addWidget(self.take_btn)
         root.addLayout(row)
         root.addStretch(1)
@@ -686,14 +623,12 @@ class EventPanel(QWidget):
             cids |= mine
             self.list_lay.addWidget(link(f"{M.date_label(u)}" + (f" · {len(mine):,}" if self.win.idx is not None else ""),
                                          lambda uid=u["id"]: self.tab.pick(("date", uid))))
-        self.cids = cids
         if prep:
             c = M.counts(self.win.idx, cids) if self.win.idx is not None and cids else None
             self.said.setText(f"Tests {len(prep):,} date{'s' if len(prep) != 1 else ''}"
                               + (f" · {c['cards']:,} cards, {c['cards'] - c['new']:,} seen" if c else ""))
         else:
             self.said.setText("No date is tested on it yet: pick it as a date's Tested on.")
-        self.study_btn.setEnabled(bool(cids) and not self.win.busy)
 
     def busy_changed(self):
         idle = not self.win.busy
@@ -713,15 +648,6 @@ class EventPanel(QWidget):
         day = _iso(self.day.date())
         if day != self.e.get("day"):
             self.win.change({"op": "move_event", "event": self.e["id"], "to": day})
-
-    def _study(self):
-        e = self.e
-        if e is None:
-            return
-        if self.win.own_steps():
-            self.win.study("event", e["id"])
-        else:
-            self.win.study("event", e["id"], self.cids, str(e.get("name") or "the quiz"))
 
     def _take(self):
         e = self.e
@@ -748,8 +674,8 @@ class ReviewPanel(QWidget):
         self.said = plain(muted=True)
         root.addWidget(self.said)
         row = QHBoxLayout()
-        self.change_btn = link("Change its dates…", lambda: self.tab.review_day(self.r.get("day")) if self.r else None)
-        self.off_btn = link("No review day", self._off, bad=True)
+        self.change_btn = tool("Change its dates…", lambda: self.tab.review_day(self.r.get("day")) if self.r else None)
+        self.off_btn = tool("No review day", self._off, bad=True)
         row.addWidget(self.change_btn)
         row.addWidget(self.off_btn)
         row.addStretch(1)

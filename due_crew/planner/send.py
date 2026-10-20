@@ -1,16 +1,17 @@
-"""Round five's Review and send, and History (docs/planner.md). Review:
+"""Round five's Review and send, History and Posts (docs/planner.md). Review:
 each change waiting under the plan in words, who it touches (a date that
 opened: anyone who has its cards keeps them; one still to come: not open
 for anyone yet), a ✕ each to take one out, and the line followers get
 with it, filled in from the changes for the author to say better. Send is
 one save (PUT /plans/{id} with its post). History: every save of the
-plan, and Undo the latest. Names and words: plain text."""
+plan, and Undo the latest. Posts: what followers were told, and a line to
+them. Names and words: plain text."""
 
 from aqt.qt import QDialog, QDialogButtonBox, QFrame, QHBoxLayout, QPlainTextEdit, QPushButton, QScrollArea, Qt, QVBoxLayout, QWidget
 
 from ..ui import attach_alive, heading, role
 from . import ops as O
-from .history_tab import HistoryTab
+from .history_tab import HistoryTab, UpdatesTab
 from .widgets import frame, plain, small
 
 
@@ -133,3 +134,23 @@ class HistoryDialog(QDialog):
         close.setAutoDefault(False)
         close.clicked.connect(self.reject)
         self.tab.button_row.addWidget(close)
+
+
+class PostsDialog(QDialog):
+    """What followers were told (a send's line among it), newest first; a line to them."""
+
+    def __init__(self, win):
+        super().__init__(win)
+        attach_alive(self)
+        self.setWindowTitle("Posts")
+        self.setMinimumSize(640, 420)
+        root = QVBoxLayout(self)
+        n = win.followers()
+        heading(self, root, f"Posts to the {n:,} following" if n else "Posts")
+        self.tab = UpdatesTab(win)
+        root.addWidget(self.tab, 1)
+        close = QPushButton("Close")
+        close.setAutoDefault(False)
+        close.clicked.connect(self.reject)
+        self.tab.button_row.addWidget(close)
+        self.tab.plan_loaded(win)

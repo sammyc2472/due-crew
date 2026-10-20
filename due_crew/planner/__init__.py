@@ -15,9 +15,9 @@ hooks, mcp.py a local server an AI app on this computer may use (off by
 default), mcp_host.py and mcp_dialog.py its glue. model.py, qids.py,
 edits.py and reading.py are pure; actions.py is the one collection step
 it adds; remote.py its requests (routes the builder uses already); flow.py
-the glue; window.py (Plan · Followers · Sharing for authors, Plan · Mine
-for a follower), plan_tab.py, date_panel.py, deck_panel.py, shape.py,
-send.py, followers_tab.py, settings_tab.py (Sharing), mine_tab.py,
+the glue; window.py (Plan · Sharing for authors, Plan · Mine for a
+follower), plan_tab.py, date_panel.py, deck_panel.py, shape.py,
+send.py, settings_tab.py (Sharing), mine_tab.py,
 new_plan.py, text_tab.py, history_tab.py, day_notes.py, date_dialogs.py,
 picker.py, qid_window.py and start_window.py the Qt windows; widgets.py
 their small parts; build.py the builder's rules, text.py its Text.

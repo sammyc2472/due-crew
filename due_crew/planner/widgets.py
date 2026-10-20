@@ -64,10 +64,13 @@ def tip_keys(tip, seq=None):
     return f"<span>{esc(tip)}" + (f" <b>{esc(keys(seq))}</b>" if seq else "") + "</span>"
 
 
-def tool(text, fn=None, checkable=False, tip=None, seq=None):
-    """A small button of a toolbar's (or a panel's row of actions)."""
+def tool(text, fn=None, checkable=False, tip=None, seq=None, bad=False):
+    """An action's button, the window's one kind (the boxes' corners and
+    height); bad: one that takes something away, in red words."""
     b = QPushButton(str(text))
     b.setProperty("dc", "tool")
+    if bad:
+        b.setProperty("tone", "bad")
     b.setCheckable(checkable)
     b.setAutoDefault(False)
     if tip or seq:
@@ -75,6 +78,15 @@ def tool(text, fn=None, checkable=False, tip=None, seq=None):
     if fn is not None:
         b.clicked.connect(lambda _=False: fn())
     return b
+
+
+def segs(buttons):
+    """Buttons side by side as one control: the ends rounded as the boxes,
+    the joins square (QSS [pos]); only the ones shown count."""
+    shown = [b for b in buttons if not b.isHidden()] or list(buttons)
+    for i, b in enumerate(shown):
+        mark(b, "pos", "only" if len(shown) == 1 else "first" if i == 0 else "last" if i == len(shown) - 1 else "mid")
+    return buttons
 
 
 def menu_button(text, on_show=None, small=False, tip=None):

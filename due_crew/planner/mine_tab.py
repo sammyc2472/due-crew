@@ -11,7 +11,7 @@ from aqt.qt import QFormLayout, QHBoxLayout, QPushButton, Qt, QTimer, QVBoxLayou
 
 from ..ui import role
 from .. import plans as P
-from .widgets import Source, link, menu_button, plain
+from .widgets import Source, menu_button, plain, segs, tool
 
 
 class MineTab(QWidget):
@@ -35,6 +35,7 @@ class MineTab(QWidget):
         self.later = self._seg("Some days later…", lambda: self._shift(True))
         dates.addWidget(self.as_plan)
         dates.addWidget(self.later)
+        segs([self.as_plan, self.later])
         dates.addStretch(1)
         form.addRow("My dates", dates)
 
@@ -57,10 +58,11 @@ class MineTab(QWidget):
         self.ready.setToolTip("<span>Up next on the board opens the next date's cards when you say</span>")
         opens.addWidget(self.on_dates)
         opens.addWidget(self.ready)
+        segs([self.on_dates, self.ready])
         opens.addStretch(1)
         form.addRow("Cards open", opens)
 
-        self.held = link("", lambda: self._do("show_held"))
+        self.held = tool("", lambda: self._do("show_held"), tip="The cards Hold back keeps shut till their day")
         self.held_none = plain("Nothing held back.", muted=True)
         held = QHBoxLayout()
         held.addWidget(self.held)
@@ -84,7 +86,7 @@ class MineTab(QWidget):
         self.more_btn, self.more_menu = menu_button("More", self._more)
         row.addWidget(self.more_btn)
         row.addStretch(1)
-        row.addWidget(link("Stop following…", lambda: self._do("stop_following"), bad=True))
+        row.addWidget(tool("Stop following…", lambda: self._do("stop_following"), bad=True))
         root.addLayout(row)
         self.said = plain(muted=True)
         root.addWidget(self.said)
@@ -131,7 +133,7 @@ class MineTab(QWidget):
         self.on_dates.setChecked(not own)
         self.ready.setChecked(bool(own))
         n = win.ops.held_count(win.plan["id"])
-        self.held.setText(f"{n:,} card{'s' if n != 1 else ''} kept shut till their day…" if n else "")
+        self.held.setText(f"{n:,} card{'s' if n != 1 else ''}…" if n else "")
         self.held.setVisible(bool(n))
         self.held_none.setVisible(not n)
         inside = win.ops.in_team(win.plan["id"])

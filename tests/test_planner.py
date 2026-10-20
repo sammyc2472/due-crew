@@ -1007,13 +1007,13 @@ def test_rules_of_the_road():
     windows = {f: t for f, t in src.items() if "(QDialog)" in t}
     check("road: the windows, each wearing the board's look and saying what it is",
           sorted(windows) == ["date_dialogs.py", "date_panel.py", "mcp_dialog.py", "new_plan.py", "picker.py", "qid_window.py",
-                              "send.py", "shape.py", "start_window.py", "text_tab.py", "window.py"]
+                              "send.py", "start_window.py", "text_tab.py", "window.py"]
           and all(t.count("(QDialog)") == t.count("attach_alive(self)") == len(re.findall(r"\bheading\(self", t))
                   for t in windows.values()), sorted(windows))
     tabs = {f: t for f, t in src.items() if "(QWidget)" in t}  # round five: Your plans' tabs and panels
-    check("road: the tabs and panels (Plan with its date and deck panels, Followers, Sharing, Mine, the text, History, "
+    check("road: the tabs and panels (Plan with its date and deck panels, Sharing, Mine, the text, History and Posts, "
           "a date's notes), and no Pip in them",
-          sorted(tabs) == ["date_panel.py", "day_notes.py", "deck_panel.py", "followers_tab.py", "history_tab.py", "mine_tab.py",
+          sorted(tabs) == ["date_panel.py", "day_notes.py", "deck_panel.py", "history_tab.py", "mine_tab.py",
                            "plan_tab.py", "settings_tab.py", "text_tab.py"]
           and not [f for f, t in dict(windows, **tabs).items() if re.search(r"\bsev\b|pip_note", t)], sorted(tabs))
     windows_tabs = dict(windows, **tabs, **{"widgets.py": src["widgets.py"]})
@@ -1028,7 +1028,7 @@ def test_rules_of_the_road():
     check("road: the pure parts and the requests import no aqt",
           not [f for f in pure if re.search(r"^\s*(from aqt|import aqt)", src[f], re.M)])
     calls = set()
-    for f in ("flow.py", "window.py", "plan_tab.py", "date_panel.py", "deck_panel.py", "shape.py", "send.py", "followers_tab.py",
+    for f in ("flow.py", "window.py", "plan_tab.py", "date_panel.py", "deck_panel.py", "shape.py", "send.py",
               "mine_tab.py", "new_plan.py", "text_tab.py", "history_tab.py", "settings_tab.py", "day_notes.py", "qid_window.py",
               "picker.py", "start_window.py", "mcp_host.py", "mcp_dialog.py"):
         for node in ast.walk(ast.parse(src[f])):
@@ -1066,6 +1066,12 @@ def test_rules_of_the_road():
           not hallmarks and not re.search(r'frame\("(?:strip|warm|today|bar|go-bar)"', src["plan_tab.py"] + src["deck_panel.py"]
                                            + src["settings_tab.py"] + src["shape.py"])
           and ".upper()" not in src["send.py"], hallmarks)
+    check("road: one way to each thing (Sam, after the site mock): no Study in the plan window (the board studies), no deck tab "
+          "(Add from the deck puts the deck in the date's place), no Followers tab, no −1/+1 day (the date's field, Alt+← →, "
+          "Month's drag), the plan's dates and pace in Settings (no Change… window)",
+          not re.search(r'"Study (them|these|for it)"', src["date_panel.py"]) and "QTabWidget" not in src["plan_tab.py"]
+          and "followers_tab.py" not in src and '"−1 day"' not in src["date_panel.py"] and "ShapeDialog" not in src["shape.py"]
+          and "Shape(win, form)" in src["settings_tab.py"] and '"Settings"' in src["window.py"] and '"Sharing"' not in src["window.py"])
     keys_ = set(re.findall(r'on\("([^"]+)"', src["plan_tab.py"]))
     check("road: the Plan tab's keys (each in its button's tip)",
           {"Ctrl+N", "Ctrl+E", "Ctrl+F", "Ctrl+T", "Ctrl+1", "Ctrl+2", "Ctrl+D", "Ctrl+Z", "Ctrl+Return", "Up", "Down",

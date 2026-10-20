@@ -3177,3 +3177,19 @@ every release that changes how something works.
   Alt+← → a day, Enter/F2 its name, Delete), **Find** a date or tag,
   **Month's drag** to move a date or a quiz, the foot's **changes as
   links** to their dates, a double-click for a name.
+  **Then one way to each thing** (Sam, at the click-test): no Followers
+  tab (how many follow, and Posts…, are a line of Settings; the "last
+  send is in N of M followers' Anki" line went with it); **Sharing became
+  Settings**, with the plan's dates and pace in it as rows (no Change…
+  window; Put it back), its every-week lines and Your AI app; a
+  follower's Mine is their Settings. No deck tab: Add from the deck puts
+  the deck in the date's place (Done brings the date back), Add › Lay out
+  from the deck… with none picked. No Study them / Study these / Study for
+  it (the board studies), no −1/+1 day (the date's field, Alt+← →,
+  Month's drag), no ⋯ Split its biggest tag / Make it a review day /
+  per-source extras (each source's own menu, Add › A review day), no
+  row's Add from the deck link. Expand all / Collapse all for the weeks;
+  List | Month first in the toolbar, over the list; Earliest first /
+  Latest first. One button: every action the boxes' corners and height
+  (`widgets.tool`), side-by-side choices one control rounded at its ends
+  (`widgets.segs`), tabs underlined; a link is only a way to a date.

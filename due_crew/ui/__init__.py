@@ -382,25 +382,27 @@ QPushButton[dc="link"]::menu-indicator, QPushButton[dc="more"]::menu-indicator, 
 QPushButton[dc="tool"]::menu-indicator {{ image: none; width: 0; }}
 QPushButton[dc="x"] {{ background: transparent; color: {muted}; border: none; border-radius: 6px; padding: 0 3px; min-height: 0; font-size: 12px; }}
 QPushButton[dc="x"]:hover {{ background: {press}; color: {ink}; }}
-QPushButton[dc="tool"] {{ border-radius: 6px; padding: 3px 10px; min-height: 0; }}
-QPushButton[dc="tool"]:focus {{ padding: 2px 9px; }}
 QPushButton[dc="tool"]:checked {{ background: {you-bg}; border: 1px solid {accent}; color: {accent}; }}
 QPushButton[dc="tool"][tone="warm"] {{ color: {hours}; font-weight: 700; }}
+QPushButton[dc="tool"][tone="bad"] {{ color: {bad}; }}
 QPushButton[dc="menu"] {{ padding: 6px 30px 6px 14px; }}
 QPushButton[dc="menu"]:focus {{ padding: 5px 29px 5px 13px; }}
 QPushButton[dc="menu"]::menu-indicator {{ image: url("{i-down}"); width: 12px; height: 12px; subcontrol-origin: padding; subcontrol-position: center right; right: 10px; }}
-QPushButton[dc="menu"][small="true"] {{ border-radius: 6px; padding: 3px 26px 3px 10px; min-height: 0; }}
-QPushButton[dc="menu"][small="true"]:focus {{ padding: 2px 25px 2px 9px; }}
-QPushButton[dc="menu"][small="true"]::menu-indicator {{ right: 8px; }}
-QPushButton[dc="seg"] {{ border-radius: 0; padding: 4px 12px; min-height: 0; }}
+QPushButton[dc="seg"] {{ border-radius: 0; padding: 6px 14px; }}
+QPushButton[dc="seg"]:focus {{ padding: 5px 13px; }}
+QPushButton[dc="seg"][pos="mid"], QPushButton[dc="seg"][pos="last"] {{ border-left: none; }}
+QPushButton[dc="seg"][pos="first"] {{ border-top-left-radius: 8px; border-bottom-left-radius: 8px; }}
+QPushButton[dc="seg"][pos="last"] {{ border-top-right-radius: 8px; border-bottom-right-radius: 8px; }}
+QPushButton[dc="seg"][pos="only"] {{ border-radius: 8px; }}
 QPushButton[dc="seg"]:checked {{ background: {you-bg}; border: 1px solid {accent}; color: {accent}; }}
-QPushButton[dc="seg"][menu="true"] {{ padding: 4px 26px 4px 12px; }}
+QPushButton[dc="seg"][menu="true"] {{ padding: 6px 28px 6px 14px; }}
 QPushButton[dc="seg"][menu="true"]::menu-indicator {{ image: url("{i-down}"); width: 12px; height: 12px; subcontrol-origin: padding; subcontrol-position: center right; right: 8px; }}
 QProgressBar {{ border: 0; border-radius: 3px; background: {line}; max-height: 6px; min-height: 6px; }}
 QProgressBar::chunk {{ border-radius: 3px; background: {accent}; }}
 QTabWidget::pane {{ border: none; }}
-QTabBar::tab {{ background: {well}; color: {ink-2}; border: 1px solid {line}; padding: 5px 14px; margin: 0; }}
-QTabBar::tab:selected {{ background: {bg}; color: {mark}; font-weight: 700; border-bottom-color: {bg}; }}
+QTabBar {{ qproperty-drawBase: 0; }}
+QTabBar::tab {{ background: transparent; color: {muted}; border: none; border-bottom: 2px solid transparent; padding: 6px 2px; margin: 0 20px 0 0; font-weight: 700; }}
+QTabBar::tab:selected {{ color: {mark}; border-bottom: 2px solid {accent}; }}
 QTabBar::tab:hover {{ color: {ink}; }}
 """
 
