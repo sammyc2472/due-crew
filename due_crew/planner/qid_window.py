@@ -54,6 +54,7 @@ class QidWindow(QDialog):
         root.addWidget(self.text)
         counts = QHBoxLayout()
         self.lines = _plain()  # "5 questions · 14 cards · 10 suspended"
+        self.lines.setWordWrap(False)  # one line, Browse right after it (a wrapping label in a row is squeezed)
         counts.addWidget(self.lines)
         self.browse_btn = link("Browse", lambda: self.ops.browse(self.cids()))
         counts.addWidget(self.browse_btn)
