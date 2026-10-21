@@ -9519,6 +9519,10 @@ def test_board_motion_round_two_v380():
     js = open(os.path.join(REPO, "due_crew", "motion.js"), encoding="utf-8").read()
     for sel in ("th > a.on", ".dc-wrap", ".du-line", ".dc-room .fc > i", ".irow", ".tmap .tm", ".du-bh"):
         check(f"motion 2: a rule for {sel}", f'sel: "{sel}"' in js)
+    plan = js[js.index("    plan: function (el, was) {"):js.index("    map: function (el, was, v, snap)")]
+    check("3.9.3: switching plans slides (Sam): a rule for the names, the pressed one moves, the plan comes from its side, the box to its height",
+          'sel: ".psw", kind: "plan"' in js and "slide(el, x.on)" in plan and "now.i < x.on.i ? -1 : 1" in plan
+          and 'translateX(" + (24 * dir) + "px)' in plan and "inner(box, x.h)" in plan, plan[:300])
     check("motion 2: what leaves comes back for a moment only where it sat, under the same heading, and never twice",
           "function putBack(root, o, sel)" in js and "sig(p, sel) !== o.pc" in js and '"[data-dc-ghost]"' in js
           and 'g.style.pointerEvents = "none"' in js and 'removeAttribute("id")' in js)

@@ -3305,8 +3305,11 @@ every release that changes how something works.
   sets it, lets a jumped-to day go and redraws; Show on my plan sets it
   too, so its plan stays shown), else the first (`board._picked_plan`).
   `card_view` carries the plan's `name` for the switch. One plan: as
-  built. `test_plan_switch_round5`; `tools/motion_preview.py`'s
-  planpick; renders in `tools/preview.py`.
+  built. Switching slides (Sam: "switching plans should definitely
+  slide"): motion.js 8's `.psw` rule moves the pressed name over, slides
+  the plan in from its name's side and takes the box to its height.
+  `test_plan_switch_round5`; `tools/motion_preview.py`'s planpick (the
+  audit measures it); renders in `tools/preview.py`.
 - 3.9.3, QBank QIDs (Sam, on Missed questions: "this is some …
   awesome functionality that others have specific add ons for", "We also
   have some overly-explanatory language here that doesn't trust the

@@ -120,6 +120,9 @@
       val: function (el) { var on = el.querySelector("a.on, button.on"); return on ? words(on) : ""; } },
     // 8 the plan week's ‹ ›
     { sel: ".pwk", kind: "week", key: function () { return "pwk"; }, val: function (el) { return words(el.querySelector(".pc .d")); } },
+    // 8 two plans or more, one at a time (round five, pick 3): the other one slides in from its name's side
+    { sel: ".psw", kind: "plan", key: function () { return "psw"; }, val: function (el) { return words(el.querySelector("a.on")); },
+      extra: function (el) { var box = el.closest(".du"); return { on: onIn(el), h: box ? tall(box) : 0 }; } },
     // 9 the map, a level at a time
     { sel: ".tmap", kind: "map", key: function () { return "tmap"; },
       val: function (el) { return Array.prototype.map.call(el.querySelectorAll(".tm > span"), words).join("|"); } },
@@ -398,6 +401,24 @@
         anim(c, [{ opacity: 0, transform: "translateX(" + (24 * dir) + "px)" }, { opacity: 1, transform: "none" }],
              { duration: BASE, delay: i * 15, fill: "backwards" });
       });
+    },
+    plan: function (el, was) {
+      // Sam: "switching plans should definitely slide": the pressed name moves over, the plan under it
+      // slides in from that side (a name to the left, from the left), the box grows or shrinks to it
+      var x = was.x || {}, now = onIn(el), dir = x.on && now && now.i < x.on.i ? -1 : 1;
+      slide(el, x.on);
+      var head = el.closest(".psk"), card = el.closest(".dc-pc");
+      if (card) Array.prototype.forEach.call(card.children, function (c) {
+        if (c === head || c.matches("style, script")) return;
+        anim(c, [{ opacity: 0, transform: "translateX(" + (24 * dir) + "px)" }, { opacity: 1, transform: "none" }], { duration: BASE, fill: "backwards" });
+      });
+      if (head && head.children[1]) rise(head.children[1]);
+      var box = el.closest(".du"), h = box ? tall(box) : 0;
+      if (box && x.h && Math.abs(h - x.h) > 2 && !box.style.minHeight) {
+        var clip = box.style.overflow;
+        box.style.overflow = "hidden";
+        done(anim(box, [{ height: inner(box, x.h) + "px" }, { height: inner(box, h) + "px" }], { duration: BASE }), function () { box.style.overflow = clip; });
+      }
     },
     map: function (el, was, v, snap) { zoom(el, snap.hint); },
     num: function (el, was, v) {
