@@ -8828,8 +8828,9 @@ def test_one_settings_keys_study_v380():
               and not os.path.exists(os.path.join(REPO, "due_crew", "ui", "settings_dialog.py")))
         # the keys: listed, one switch, and it applies at once
         st = board.settings_html({"tab": "board", "signed_in": True}, conf)
-        check("keys: Settings › Board lists both, with one switch", "Ctrl+Shift+S" in st and "Ctrl+Shift+Q" in st
-              and "duecrew:set:shortcuts:0" in st)
+        keys = ("⌘⇧S", "⌃⇧Q") if sys.platform == "darwin" else ("Ctrl+Shift+S", "Ctrl+Shift+Q")  # 3.9.3: the suite on a Mac too
+        check("keys: Settings › Board lists both, with one switch, in this computer's names", keys == (board.STUDY_KBD, board.ASK_KBD)
+              and all(k in st for k in keys) and "duecrew:set:shortcuts:0" in st, keys)
         check("keys: the switch is a setting, on by default", SM.change(["set", "shortcuts", "0"], {}) == {"shortcuts": False}
               and SM.BOARD_DEFAULTS["shortcuts"] is True and "shortcuts" not in __import__("due_crew.account", fromlist=["x"]).ACCOUNT_KEYS)
         applied = []
@@ -15523,9 +15524,10 @@ def test_native_emoji_picker_v391():
     from due_crew import app as appmod
     from aqt.deckbrowser import DeckBrowser
     evals, asked = [], []
-    saved = (appmod.board_eval, NE.catch, NE.drop)
+    saved = (appmod.board_eval, NE.catch, NE.drop, NE.available)
     appmod.board_eval = lambda code: evals.append(code)
     try:
+        NE.available = lambda platform=None: False  # 3.9.3: no picker, as on Linux, whatever this computer has
         dc._on_js(False, as_board("duecrew:emojipicker"), DeckBrowser())
         NE.catch = lambda x, y, w, h, then, gone: asked.append((x, y, w, h)) or then("🦋") or True
         dc._on_js(False, as_board("duecrew:emojipicker:412:230:72:44"), DeckBrowser())
@@ -15533,8 +15535,8 @@ def test_native_emoji_picker_v391():
         NE.drop = lambda: asked.append("off")
         dc._on_js(False, as_board("duecrew:emojipickeroff"), DeckBrowser())
     finally:
-        appmod.board_eval, NE.catch, NE.drop = saved
-    check("emojipicker from the Decks screen: here (no picker to open) the window is told to open its drawer",
+        appmod.board_eval, NE.catch, NE.drop, NE.available = saved
+    check("emojipicker from the Decks screen: with no picker to open, the window is told to open its drawer",
           evals[0] == "window.dcCheerNoNative && window.dcCheerNoNative();", evals)
     check("3.9.2's audit: a quick pick, a scroll or a resize puts Anki's box away (it sat where 'pick one' was)",
           "b.addEventListener('click', function () { unpick(); choose(x, true); });" in js
