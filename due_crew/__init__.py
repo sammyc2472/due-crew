@@ -1429,7 +1429,16 @@ def _settings_view():
             "emoji": c.get("emoji"), "status": c.get("status"), "sync": sync, "crew": crew,
             "squads": [s.get("name") for s in (c.get("squads") or []) if isinstance(s, dict) and s.get("name")],
             "decks": decks,
-            "fsrs": _fsrs_on()}  # 3.9.1: two buttons' note, with FSRS off
+            "fsrs": _fsrs_on(),  # 3.9.1: two buttons' note, with FSRS off
+            "leech_reach": _leech_reach()}  # 3.9.3: Recover leeches' line, by this profile's answer
+
+
+def _leech_reach():
+    """This profile's answer to Recover's one question ("deck", "eight"), or None."""
+    try:
+        return plan_flow._pcfg().get("leech_reach") if mw.col else None
+    except Exception:
+        return None
 
 
 def _fsrs_on():
@@ -1686,17 +1695,17 @@ STUDY_KEY, ASK_KEY = "Ctrl+Shift+S", ("Meta+Shift+Q" if sys.platform == "darwin"
 def _tools_menu():
     """Tools › Due Crew (3.1: a submenu, for plans). 3.8.0: Study what's
     next on top (Ctrl+Shift+S), Settings… opens the board's, and Show on
-    the Decks screen is the way back when the board is off."""
+    the Decks screen is the way back when the board is off. 3.9.3: one
+    Plans ▸ holds everything about plans (planner.plans_menu)."""
     from aqt.qt import QMenu, QShortcut, QKeySequence
     if getattr(mw, "_due_crew_menu", None) is not None:
         return  # a second profile open: the submenu is already there
+    from . import planner
     menu = QMenu("Due Crew", mw)
     for item in (("Study what’s next", due_flow.study_today), None,
                  ("Friends…", open_friends),
-                 ("Squads…", open_squads), None,
-                 ("Make a plan from a deck…", plan_flow.open_make),
-                 ("Follow a plan…", plan_flow.open_follow),
-                 ("Export cards for my AI…", plan_flow.open_export), None,
+                 ("Squads…", open_squads),
+                 "plans", None,  # 3.9.3: Plans ▸, the plan windows among its entries
                  ("Settings…", open_settings),
                  ("Pip’s closet…", lambda: open_closet()),
                  ("Your year…", lambda: open_wrapped()),
@@ -1704,6 +1713,9 @@ def _tools_menu():
                  ("Send feedback…", open_feedback)):
         if item is None:
             menu.addSeparator()
+            continue
+        if item == "plans":
+            menu.addMenu(planner.plans_menu(menu))
             continue
         label, fn = item
         action = QAction(label, mw)
@@ -1800,6 +1812,10 @@ def _on_profile_close():
     app.generation += 1  # nothing in flight lands after this
     try:
         rooms.on_close()  # 2.12: closing Anki leaves the room
+    except Exception:
+        traceback.print_exc()
+    try:
+        app.ai_app(on=False)  # Your AI app's local server goes with the profile
     except Exception:
         traceback.print_exc()
 

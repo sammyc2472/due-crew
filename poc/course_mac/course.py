@@ -254,3 +254,93 @@ def key_tag(root, label):
     s = re.sub(r'["*\\%]', "", s).replace(":", "-")
     s = re.sub(r"_+", "_", s).strip("_-") or "tag"
     return f"{root.rstrip(':')}::{s}"
+
+
+# ---- the simple window (0.2.0): words for someone who's never seen the details ----
+
+def course_name(text, deck=""):
+    """A name for a new course: the calendar's first line that isn't a
+    session ("BLOCK 2 · WEEK 1" → "Block 2"), else the deck's."""
+    from . import cal
+    today = dt.date.today()
+    for line in str(text or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if cal.parse_date(line, today)[0]:
+            break  # the sessions have started: no heading
+        name = re.split(r"\s+[·|–—-]\s+|\s*\|\s*", line)[0].strip(" :·-")
+        if len(name) >= 3:
+            if name.isupper():
+                name = name.title()
+            return name[:40]
+    last = str(deck or "").split("::")[-1].strip()
+    return f"{last} course"[:40] if last else "My course"
+
+
+def biggest_deck(decks):
+    """[(did, name, cards)] → the did with the most cards (a tie: the
+    shorter name), or 0. The simple window starts on it."""
+    best = max(decks, key=lambda d: (d[2], -len(d[1])), default=None)
+    return int(best[0]) if best and best[2] > 0 else 0
+
+
+def day_label(iso):
+    """"2026-10-26" → "Mon 26 Oct"."""
+    try:
+        d = dt.date.fromisoformat(iso)
+    except (TypeError, ValueError):
+        return str(iso or "")
+    return f"{d:%a} {d.day} {d:%b}"
+
+
+def lecture_status(course, lec, idx):
+    """(words, openable): a lecture's line in the simple window."""
+    if not studied(lec):
+        return lec.get("kind") or "", False
+    st = lec.get("state")
+    if st in ("queued", "running"):
+        return "reading…", False
+    if st == "error":
+        return "couldn't be read (All the details says why)", False
+    if st != "done" or idx is None:
+        return "waiting to be read", False
+    n = summary(course, lec, idx)["new"]
+    if n:
+        return f"{n:,} card{'s' if n != 1 else ''} to open", True
+    if lec.get("opened"):
+        return "opened", False
+    return "nothing new to open", False
+
+
+def next_up(course, idx, today_iso):
+    """The first lecture from today on, for the window's top line."""
+    for lec in lectures(course):
+        if studied(lec) and (lec.get("date") or "") >= today_iso:
+            return lec
+    return None
+
+
+def wait_for_open(course, today_iso):
+    """A new course opens each lecture on its day from today on. Lectures
+    already past wait for their Open button, so the first start after the
+    course is made doesn't open the whole block at once."""
+    for lec in course.get("lectures") or []:
+        if (lec.get("date") or "") < today_iso:
+            lec["auto_done"] = "before"
+
+
+def read_by(course):
+    """"model" when any read lecture used the Mac's model, "rules" when the
+    read ones all fell back to plain matching, "" before any is read."""
+    hows = [str(h) for l in course.get("lectures") or [] if l.get("state") == "done"
+            for k, h in (l.get("how") or {}).items() if k != "terms" or h != "yours"]
+    if any(h.startswith("model") for h in hows):
+        return "model"
+    return "rules" if hows else ""
+
+
+def reading_order(course, today_iso):
+    """The lectures to read, today's and the next ones first, then the past."""
+    todo = [l for l in lectures(course) if studied(l) and l.get("state") != "done"]
+    return [l for l in todo if l["date"] >= today_iso] + [l for l in todo if l["date"] < today_iso]

@@ -105,7 +105,7 @@
     { sel: ".du-bx", kind: "tick", key: function (el) { return "bx:" + (cmdOf(el) || words(rowOf(el))); },
       val: function (el) { return el.classList.contains("on") ? "1" : el.classList.contains("part") ? "p" : "0"; } },
     // 2 the day's bar, and a plan date's
-    { sel: ".wbar > i", kind: "bar", key: function (el) { return "bar:" + words(rowOf(el)).replace(/\d[\d,]*/g, "#"); },
+    { sel: ".wbar > i", kind: "bar", key: function (el) { return "bar:" + (el.classList.contains("lt") ? "lt:" : "") + words(rowOf(el)).replace(/\d[\d,]*/g, "#"); },
       val: function (el) { return el.style.width; } },
     { sel: ".du-n", kind: "text", key: function () { return "dun"; }, val: function (el) { return words(el); } },
     // 3 done for today, 6 Hide and Show
@@ -120,6 +120,9 @@
       val: function (el) { var on = el.querySelector("a.on, button.on"); return on ? words(on) : ""; } },
     // 8 the plan week's ‹ ›
     { sel: ".pwk", kind: "week", key: function () { return "pwk"; }, val: function (el) { return words(el.querySelector(".pc .d")); } },
+    // 8 two plans or more, one at a time (round five, pick 3): the other one slides in from its name's side
+    { sel: ".psw", kind: "plan", key: function () { return "psw"; }, val: function (el) { return words(el.querySelector("a.on")); },
+      extra: function (el) { var box = el.closest(".du"); return { on: onIn(el), h: box ? tall(box) : 0 }; } },
     // 9 the map, a level at a time
     { sel: ".tmap", kind: "map", key: function () { return "tmap"; },
       val: function (el) { return Array.prototype.map.call(el.querySelectorAll(".tm > span"), words).join("|"); } },
@@ -163,9 +166,7 @@
       extra: function (el) { return getComputedStyle(el).backgroundColor; } },
     // 29 caught up: Behind goes, saying so
     { sel: ".du-bh", kind: "behind", key: function () { return "bh"; }, val: function () { return ""; },
-      leave: { ctx: dueTab, fx: "caught", mem: true } },
-    // 35 Study today names the next deck
-    { sel: ".du-go .nm", kind: "text", key: function () { return "go"; }, val: function (el) { return words(el); } }
+      leave: { ctx: dueTab, fx: "caught", mem: true } }
   ];
   // what can move when the board comes back from a review (the memory): changes only, never a tab or a fold
   var MEMO = { tick: 1, bar: 1, text: 1, due: 1, row: 1, num: 1, pop: 1, stamp: 1, shout: 1, irow: 1, shade: 1 };
@@ -401,6 +402,24 @@
              { duration: BASE, delay: i * 15, fill: "backwards" });
       });
     },
+    plan: function (el, was) {
+      // Sam: "switching plans should definitely slide": the pressed name moves over, the plan under it
+      // slides in from that side (a name to the left, from the left), the box grows or shrinks to it
+      var x = was.x || {}, now = onIn(el), dir = x.on && now && now.i < x.on.i ? -1 : 1;
+      slide(el, x.on);
+      var head = el.closest(".psk"), card = el.closest(".dc-pc");
+      if (card) Array.prototype.forEach.call(card.children, function (c) {
+        if (c === head || c.matches("style, script")) return;
+        anim(c, [{ opacity: 0, transform: "translateX(" + (24 * dir) + "px)" }, { opacity: 1, transform: "none" }], { duration: BASE, fill: "backwards" });
+      });
+      if (head && head.children[1]) rise(head.children[1]);
+      var box = el.closest(".du"), h = box ? tall(box) : 0;
+      if (box && x.h && Math.abs(h - x.h) > 2 && !box.style.minHeight) {
+        var clip = box.style.overflow;
+        box.style.overflow = "hidden";
+        done(anim(box, [{ height: inner(box, x.h) + "px" }, { height: inner(box, h) + "px" }], { duration: BASE }), function () { box.style.overflow = clip; });
+      }
+    },
     map: function (el, was, v, snap) { zoom(el, snap.hint); },
     num: function (el, was, v) {
       count(el, was.t, v); glow(el);
@@ -542,6 +561,26 @@
     done(anim(el, [{ height: h + "px", opacity: 1 }, { height: "0px", opacity: 0, paddingTop: "0px", paddingBottom: "0px", marginTop: "0px", marginBottom: (pull ? 0 : -r) + "px",
                                                       borderTopWidth: "0px", borderBottomWidth: "0px", borderTopStyle: "none", borderBottomStyle: "none" }],
               { duration: BASE, delay: delay || 0, fill: "forwards" }), function () { el.remove(); if (pull) pull.cancel(); if (f) f(); });
+  }
+
+  // 8: a day's details, shut by a second click on its day, put back for a fold to nothing and hidden
+  // at its end (unless the day was picked again meanwhile); what the page has after is just as it was
+  function shutDay(el, cell) {
+    if (!el.hidden) return;
+    var keep = el.style.cssText;
+    el.hidden = false;
+    var h = tall(el), r = room(el);
+    el.style.overflow = "hidden";
+    el.style.boxSizing = "border-box";
+    var a = anim(el, [{ height: h + "px", opacity: 1 }, { height: "0px", opacity: 0, paddingTop: "0px", paddingBottom: "0px", marginTop: "0px",
+                                                       marginBottom: -r + "px", borderTopWidth: "0px", borderBottomWidth: "0px",
+                                                       borderTopStyle: "none", borderBottomStyle: "none" }],
+                 { duration: BASE, fill: "forwards", easing: "cubic-bezier(.4,0,1,1)" });
+    done(a, function () {
+      if (!cell.classList.contains("sel")) el.hidden = true;
+      if (a) a.cancel();
+      el.style.cssText = keep;
+    });
   }
 
   // 20: a 🔥 rises from a streak that just grew
@@ -1022,13 +1061,17 @@
       }, 10000);
       return;
     }
-    // 8: the day you pick on a plan's week: the outline glides there, its card slides in
-    var cell = t.closest(".pwk .pc");
+    // 8: the day you pick on a plan's week: the outline glides there, its card slides in; round five
+    // (Sam: "animate in and out"): the first day picked unfolds its details, the same day again folds them away
+    var cell = t.closest(".pwk .pc[onclick]");
     if (cell && M.ok()) {
       var wk = cell.parentNode, old = wk.querySelector(".pc.sel");
       var a = old && old !== cell ? old.getBoundingClientRect() : null, list = Array.prototype.slice.call(wk.children);
       var dir = old ? (list.indexOf(cell) > list.indexOf(old) ? 1 : -1) : 1;
+      var open = wk.parentNode.querySelector(".pday:not([hidden])");
+      var going = old === cell ? open : null, was = open && old && old !== cell ? tall(open) : 0;
       requestAnimationFrame(function () {
+        if (going) { shutDay(going, cell); return; }
         if (!cell.classList.contains("sel")) return;
         var b = cell.getBoundingClientRect(), w = wk.getBoundingClientRect();
         if (a) {
@@ -1046,7 +1089,18 @@
           });
         }
         var box = wk.parentNode.querySelector(".pday:not([hidden])");
-        if (box) anim(box, [{ opacity: 0, transform: "translateX(" + (12 * dir) + "px)" }, { opacity: 1, transform: "none" }], { duration: 180 });
+        if (box && old) {
+          // another day's: its words slide in, and the box grows or shrinks from the last one's height
+          var now = tall(box);
+          if (was && Math.abs(was - now) > 0.5) {
+            var keep = box.style.overflow;
+            box.style.overflow = "hidden";
+            done(anim(box, [{ height: inner(box, was) + "px" }, { height: inner(box, now) + "px" }], { duration: BASE }),
+                 function () { box.style.overflow = keep; });
+          }
+          anim(box, [{ opacity: 0, transform: "translateX(" + (12 * dir) + "px)" }, { opacity: 1, transform: "none" }], { duration: 180 });
+        }
+        else if (box) unfold(box);
       });
     }
   }, true);

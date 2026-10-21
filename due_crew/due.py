@@ -383,13 +383,21 @@ def sibling_line(n, buried):
     return f"done \u00b7 {n:,} sibling{'s' if n != 1 else ''} {'tomorrow' if buried else 'later'}"
 
 
-def date_state(x, ticks):
+def through(x):
+    """3.9.3: a date's cards through for today: seen, and not back later today
+    (x's `later`: in their learning steps, due again today)."""
+    return max(0, int(x.get("seen") or 0) - int(x.get("later") or 0))
+
+
+def date_state(x, ticks, today=False):
     """(done, part): a date is done when its cards are seen and its author's
-    lines are ticked; part when anything of it is."""
+    lines are ticked; part when anything of it is. today (3.9.3, the Today
+    box's tick): its cards are through for today, not only seen, so the tick
+    and the bar agree; a date behind still counts what's been seen."""
     lines = x.get("todo") or []
     ticked = sum(line_ticked(x, ticks))
     total, seen = int(x.get("total") or 0), int(x.get("seen") or 0)
-    cards_done = seen >= total if total else True
+    cards_done = (through(x) if today else seen) >= total if total else True
     if not total and not lines:
         # nothing of it here: done once its day came and the deck was read
         # (3.7.2), so Due can fold; never before it's been counted
@@ -399,24 +407,25 @@ def date_state(x, ticks):
 
 
 def _date_row(x, ticks, today, short=False):
-    done, part = date_state(x, ticks)
+    done, part = date_state(x, ticks, today=True)
     lines = []
     if not short:
-        for g, s, t in x.get("parts") or []:
-            lines.append({"kind": "part", "label": g, "seen": int(s), "total": int(t),
-                          "done": int(t) > 0 and int(s) >= int(t)})
+        for g, s, t, *back in x.get("parts") or []:
+            th = max(0, int(s) - int(back[0] if back else 0))  # 3.9.3: through for today
+            lines.append({"kind": "part", "label": g, "seen": th, "total": int(t),
+                          "done": int(t) > 0 and th >= int(t)})
         keys, on = line_keys(x["pid"], x["uid"], x.get("todo")), line_ticked(x, ticks)
         for n, td in enumerate(x.get("todo") or []):
             lines.append({"kind": "todo", "label": TODO_KINDS.get(td.get("k"), "Do"), "text": str(td.get("t") or ""),
                           "url": str(td.get("url") or ""), "key": keys[n], "done": on[n],
                           "can": x["opens"] <= today})
-    total, seen = int(x.get("total") or 0), int(x.get("seen") or 0)
+    total, seen, th = int(x.get("total") or 0), int(x.get("seen") or 0), through(x)
     if x["opens"] > today:
         n = f"{total:,} new" if total else ""
     elif total:
-        n = "all seen" if seen >= total else f"{seen:,} / {total:,}"
+        n = "all done" if th >= total else f"{th:,} / {total:,}"
         sib, buried = (x.get("sibs") or [0, 0])[:2]
-        if sib and seen >= total:
+        if sib and th >= total:
             n = sibling_line(sib, buried)
     else:
         n = ""
@@ -425,7 +434,10 @@ def _date_row(x, ticks, today, short=False):
             "rm": x.get("rm") or [],  # 3.8.1: the authors' notes under its topics
             "done": done, "part": part,
             "future": x["opens"] > today, "n": n, "seen": seen, "total": total, "lines": lines,
-            "crew": x.get("crew"), "prep": x.get("prep"), "upd": int(x.get("upd") or 0)}
+            "through": min(th, total), "later": min(int(x.get("later") or 0), total),  # 3.9.3: its bar
+            "crew": x.get("crew"), "prep": x.get("prep"), "upd": int(x.get("upd") or 0),
+            # round five: its details on a click (board._date_more), the Plans tab's week's
+            "own": bool(x.get("own")), "moved": bool(x.get("moved")), "shut": bool(x.get("shut")), "why": x.get("why")}
 
 
 # ---- 3.8.0: a plan's lines every week ----
@@ -505,11 +517,15 @@ def view(today, dates, items, ticks, tab="today", events=(), review_days=(), rev
     today_rows += [_item_row(it, today) for it in items if (on_day(it, today) if it.get("r") else it["d"] == today)]
     today_rows += [_every_row(p, ln, key, ticks, today, today) for p, ln, key in _every_all(every) if every_on(p, ln, today)]
     if reviews is not None:
-        # 3.8.0: learning cards back later today keep the row open
-        due_r, back = int(reviews.get("due") or 0), int(reviews.get("back") or 0)
-        today_rows.insert(0, {"kind": "reviews", "due": due_r, "back": back, "at": str(reviews.get("at") or ""),
-                              "done": not due_r and not back and bool(reviews.get("done"))})
-    counted = [r for r in today_rows if r["kind"] != "reviews" or r["due"] or r["back"] or r["done"]]
+        today_rows.insert(0, reviews_row(reviews))
+        # 3.9.3: a New cards row when no plan's date is on today (its dates are
+        # the new cards then); on such a day, Other new cards, once I've
+        # started some none of its dates holds
+        plan_day = any(r["kind"] == "plan" for r in today_rows)
+        nr = new_row(reviews.get("other" if plan_day else "new"), plan_day)
+        if nr:
+            today_rows.insert(1, nr)
+    counted = [r for r in today_rows if r["kind"] != "reviews" or shown(r)]
     done_n = sum(1 for r in counted if r["done"])
     # Upcoming: today in short, then each day ahead with something on it
     by_day = {}
@@ -581,10 +597,51 @@ def view(today, dates, items, ticks, tab="today", events=(), review_days=(), rev
                        "plan": ev_soon[0].get("plan") or ""} if ev_soon else None),
             "start": ({"pid": start["pid"], "uid": start["uid"], "name": start["name"]} if start else None),
             # 3.8.0: Study today has something to walk: reviews due, or a plan's date not done
-            "study": any((r["kind"] == "reviews" and r["due"]) or (r["kind"] == "plan" and not r["done"])
+            "study": any((r["kind"] == "reviews" and r["due"]) or (r["kind"] in ("plan", "new") and not r["done"])
                          for r in today_rows),
             "suggestions": list(suggestions)[:2], "notes": list(notes),
             "full": open_count(items) >= MAX_OPEN}
+
+
+def reviews_row(r):
+    """The day's reviews: {kind, due (what Anki shows now, Study today's),
+    whole, through, later, left, back, at, done}. 3.9.3: whole, through
+    and later from bars() (through for today: answered, next due tomorrow
+    or later; later: answered, back later today; left: due now; back: due
+    later today, the first at `at`). A count from before 3.9.3 ({due, done,
+    back, at}) has whole None: a number, no bar."""
+    due, back = int(r.get("due") or 0), int(r.get("back") or 0)
+    row = {"kind": "reviews", "due": due, "back": back, "at": str(r.get("at") or "")}
+    if r.get("whole") is None:
+        # 3.8.0: learning cards back later today keep the row open
+        row.update(whole=None, done=not due and not back and bool(r.get("done")))
+        return row
+    whole = int(r["whole"])
+    th = min(int(r.get("through") or 0), whole)
+    row.update(whole=whole, through=th, later=min(int(r.get("later") or 0), whole - th),
+               left=int(r.get("left") or 0), done=whole > 0 and th >= whole)
+    return row
+
+
+def shown(r):
+    """The Reviews row has something to say today."""
+    if r.get("whole") is None:
+        return bool(r["due"] or r["back"] or r["done"])
+    return r["whole"] > 0
+
+
+def new_row(n, other=False):
+    """3.9.3: New cards, from bars()' `new` ({whole, through, later, decks:
+    [[top deck, through, whole, later]]}), or Other new cards (`other`, on a
+    plan's day); None with nothing in it."""
+    if not isinstance(n, dict) or int(n.get("whole") or 0) <= 0:
+        return None
+    whole = int(n["whole"])
+    th = min(int(n.get("through") or 0), whole)
+    decks = [[str(d[0]), int(d[1]), int(d[2]), int(d[3])] for d in n.get("decks") or [] if int(d[2]) > 0]
+    return {"kind": "new", "other": bool(other), "whole": whole, "through": th,
+            "later": min(int(n.get("later") or 0), whole - th), "decks": decks, "done": th >= whole,
+            "part": th > 0 or int(n.get("later") or 0) > 0}
 
 
 def fmt_range(a, b):

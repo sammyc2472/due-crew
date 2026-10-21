@@ -71,6 +71,7 @@ def plan_dates(today):
     prog = _state.get("plan_progress") or {}
     parts = _state.get("plan_parts") or {}
     sibs = _state.get("plan_sibs") or {}
+    later = _state.get("plan_later") or {}
     state = pf._state_cfg()
     end = D.iso(D.d(today) + datetime.timedelta(days=D.AHEAD))
     dates, events, reviews = [], [], []
@@ -86,6 +87,9 @@ def plan_dates(today):
         upd = (_state.get("plan_updates") or {}).get(p["id"]) or {}
         own = P.own_pace(p)  # 3.8.0: the dates I opened are today's, till seen; nothing is behind or upcoming
         own_days = st.get("own_opened") or {}
+        # round five: what a date's details say and offer, as the Plans tab's week had it
+        moved, shut = p.get("moved") or {}, pf._shut_dates(p, st, prog.get(p["id"]))
+        lee, miss = st.get("leeches") or {}, st.get("missing") or {}
         for u in P.units(doc):
             opens = str(u.get("opens") or "")
             a = applied.get(u["id"])
@@ -108,8 +112,10 @@ def plan_dates(today):
             if not int(t) and opens < today and not u.get("todo"):
                 continue  # nothing of it in my deck: nothing to be behind on
             ev = evs.get(u.get("for"))
+            m = miss.get(u["id"]) if isinstance(miss.get(u["id"]), (list, tuple)) else None
             dates.append({"pid": p["id"], "uid": u["id"], "plan": title, "name": str(u.get("name") or "?"),
                           "opens": opens, "seen": int(s),
+                          "later": int((later.get(p["id"]) or {}).get(u["id"]) or 0),  # 3.9.3: back later today
                           "total": int(o) if running else int(t) or (P.unit_total(u) if opens > today else 0),
                           # counted here and nothing of it in my deck: done once it's open (3.7.2)
                           "counted": pr is not None and opens <= today,
@@ -127,7 +133,10 @@ def plan_dates(today):
                           # 3.7.3: an author's update adds to it, waiting for Open (its count when it's
                           # the only date the update touches; -1: one of several)
                           "upd": (0 if u["id"] not in (upd.get("units") or []) else
-                                  int(upd.get("n") or 0) if len(upd["units"]) == 1 else -1)})
+                                  int(upd.get("n") or 0) if len(upd["units"]) == 1 else -1),
+                          "own": own, "moved": bool(moved.get(u["id"])), "shut": opens <= today and u["id"] in shut,
+                          # what it left shut when it opened: its leeches (Browse) and picks this copy hasn't
+                          "why": {"lee": int(lee.get(u["id"]) or 0), "miss": int(m[0]) if m else 0} if a else None})
         for e in evs.values():
             if today <= str(e.get("day") or "") <= end:
                 events.append({"day": e["day"], "name": str(e.get("name") or "?"), "plan": title})
@@ -170,6 +179,26 @@ def _every_line(key, today, any_day=False):
     return None, None
 
 
+_QIDS = {"key": None, "has": False}
+
+
+def has_qids():
+    """3.9.3: a tag here ends in a question's number (3 to 9 digits, what
+    QBank QIDs finds: planner.qids), so the box's head offers it. Anki's tag
+    list, not the notes: read once a profile and day."""
+    col = mw.col
+    key = (app.generation, id(col), _today())
+    if _QIDS["key"] != key:
+        pats = " OR ".join(f"tag GLOB '*::{'[0-9]' * k}'" for k in range(3, 10))
+        try:
+            has = bool(col.db.scalar(f"SELECT 1 FROM tags WHERE {pats} LIMIT 1"))
+        except Exception:
+            traceback.print_exc()
+            has = False
+        _QIDS.update(key=key, has=has)
+    return _QIDS["has"]
+
+
 _TREE = {"key": None, "at": 0.0, "until": 0.0, "tree": None}
 
 
@@ -197,9 +226,11 @@ def deck_tree(col):
 
 
 def _reviews():
-    """{due, done, back, at}: reviews and learning due now across my decks,
-    whether I've reviewed today, and the learning cards back later today
-    (how many, the first one's time). Cached a little: the board redraws often."""
+    """{due, done}: what Anki shows now across my decks (Study today's
+    walk), answers today; and 3.9.3's bars
+    (bars()): the reviews' whole, through, later, left, back and at, and the
+    new cards' (`new`, and `other`: started today outside today's plan
+    dates). Cached a little: the board redraws often."""
     hit = _state.get("due_reviews")
     if hit and time.time() - hit[0] < REVIEWS_FRESH:
         return hit[1]
@@ -209,19 +240,100 @@ def _reviews():
         due = sum(int(n.review_count) + int(n.learn_count) for n in tree.children)
         start = (mw.col.sched.day_cutoff - 86400) * 1000
         done = int(mw.col.db.scalar("SELECT count() FROM revlog WHERE id >= ? AND ease > 0", start) or 0)
-        # 3.8.0: learning cards that come back later today (past Anki's learn-ahead)
         now = int(time.time())
         ahead = int(mw.col.get_config("collapseTime", 1200) or 0)
-        back, first = mw.col.db.first("SELECT count(), min(due) FROM cards WHERE queue = 1 AND due > ? AND due < ?",
-                                      now + ahead, int(mw.col.sched.day_cutoff)) or (0, None)
-        t = time.localtime(int(first)) if back and first else None
-        out = {"due": due, "done": done, "back": int(back or 0), "at": f"{t.tm_hour}:{t.tm_min:02d}" if t else "",
-               "next": _next_deck(tree)}
-        if back and first:
-            _flip_at(int(first) - ahead)
+        out = {"due": due, "done": done}
+        try:
+            got = bars(mw.col, tree, now, ahead, set(_state.get("plan_today") or ()))
+        except Exception:
+            traceback.print_exc()  # the count alone, as before 3.9.3
+            got = {}
+        when = got.pop("_first", 0)
+        if got.pop("first", False):
+            _flip_at(int(when) - ahead)
+        out.update(got)
     except Exception:
         traceback.print_exc()
     _state["due_reviews"] = (time.time(), out)
+    return out
+
+
+def bars(col, tree, now, ahead, plan_cids=()):
+    """3.9.3: the Today box's bars, from today's answers and today's learning
+    cards. A card is through for today once it's answered and next due
+    tomorrow or later; later: answered, back later today.
+
+    Reviews are the cards due from before today: reviews, relearning, and
+    learning carried over from an earlier day (whole: those I've answered
+    today and the ones still due). New cards are the ones I started today
+    (a first answer of a new card), and what Anki's limits still give;
+    `other`, the ones I started today that none of today's plan dates holds
+    (plan_cids). back/at: reviews back later today, past Anki's learn-ahead,
+    and the first one's time. first/_first: any learning card back later
+    today, for the box's one timer."""
+    cut, day = int(col.sched.day_cutoff), int(col.sched.today)
+    start = (cut - 86400) * 1000
+    first = {}  # cid -> (its first answer today's type, last interval)
+    for cid, kind, last in col.db.all("SELECT cid, type, lastIvl FROM revlog WHERE id >= ? AND ease > 0 ORDER BY id", start):
+        first.setdefault(int(cid), (int(kind), int(last or 0)))
+    fresh = {c for c, (kind, last) in first.items() if kind == 0 and last == 0}  # a new card's first answer
+    tops = {}  # deck id -> its top deck's (id, name), from Anki's tree
+
+    def walk(node, top):
+        tops[int(node.deck_id)] = top
+        for ch in node.children:
+            walk(ch, top)
+    for ch in tree.children:
+        walk(ch, (int(ch.deck_id), str(getattr(ch, "name", "") or "")))
+    rv = {"through": 0, "later": 0}
+    nw, ot = {}, {}  # top deck id -> [through, later]
+    if first:
+        ids = ",".join(str(c) for c in first)
+        for cid, queue, due, did in col.db.all(f"SELECT id, queue, due, did FROM cards WHERE id IN ({ids})"):
+            queue, due = int(queue), int(due or 0)
+            k = "later" if (queue == 1 and due < cut) or (queue in (2, 3) and due <= day) else "through"
+            if int(cid) not in fresh:
+                rv[k] += 1
+                continue
+            top = tops.get(int(did), (0, ""))
+            for got, on in ((nw, True), (ot, int(cid) not in plan_cids)):
+                if on:
+                    got.setdefault(top, [0, 0])[k == "later"] += 1
+    # what's still due today and not yet answered: reviews by Anki's limits,
+    # and (re)learning cards, which no limit holds back
+    todo_r = sum(int(n.review_count) for n in tree.children)
+    left = todo_r
+    back, at, any_at = 0, None, None
+    for cid, queue, due in col.db.all("SELECT id, queue, due FROM cards WHERE (queue = 1 AND due < ?) OR (queue = 3 AND due <= ?)",
+                                      cut, day):
+        cid, queue, due = int(cid), int(queue), int(due or 0)
+        if queue == 1 and due > now + ahead:
+            any_at = due if any_at is None else min(any_at, due)
+        if cid in fresh:
+            continue
+        if cid not in first:
+            todo_r += 1
+        if queue == 3 or due <= now + ahead:
+            left += 1
+        else:
+            back += 1
+            at = due if at is None else min(at, due)
+    answered = rv["through"] + rv["later"]
+    t = time.localtime(at) if at else None
+    out = {"whole": answered + todo_r, "through": rv["through"], "later": rv["later"], "left": left, "back": back,
+           "at": f"{t.tm_hour}:{t.tm_min:02d}" if t else "", "first": any_at is not None, "_first": any_at or 0}
+    decks = []
+    for ch in tree.children:
+        top = (int(ch.deck_id), str(getattr(ch, "name", "") or ""))
+        th, lt = nw.get(top, [0, 0])
+        more = int(getattr(ch, "new_count", 0) or 0)
+        if th + lt + more:
+            decks.append([top[1], th, th + lt + more, lt])
+    out["new"] = {"through": sum(d[1] for d in decks), "later": sum(d[3] for d in decks),
+                  "whole": sum(d[2] for d in decks), "decks": decks}
+    od = [[name, th, th + lt, lt] for (_d, name), (th, lt) in ot.items() if name]
+    out["other"] = {"through": sum(d[1] for d in od), "later": sum(d[3] for d in od),
+                    "whole": sum(d[2] for d in od), "decks": sorted(od, key=lambda d: -d[2])}
     return out
 
 
@@ -294,8 +406,10 @@ def suggestions(c, today):
 def notes():
     _pc, st = _day_state()
     n = len(st.get("recovered") or [])
-    return [{"key": "recovered", "text": f"Recovered {n:,} leech{'es' if n != 1 else ''} as new cards",
-             "go": "See them"}] if n and "recovered" not in (st.get("dismissed") or []) else []
+    # 3.9.3 (Sam): one card is "it": "Recovered 1 leech as a new card · See it"
+    text = f"Recovered {n:,} leeches as new cards" if n != 1 else "Recovered 1 leech as a new card"
+    return [{"key": "recovered", "text": text, "go": "See them" if n != 1 else "See it"}] \
+        if n and "recovered" not in (st.get("dismissed") or []) else []
 
 
 YOU_TABS = D.TABS + ("plans", "insights")  # 3.8.0: the You bubble's tabs, Due's lists first
@@ -336,7 +450,7 @@ def view(c):
             x = more.get((r.get("pid"), r.get("uid"))) if r.get("kind") == "plan" else None
             if x:  # 3.8.1: what due.view's rows don't carry: "after" its event, Study
                 r["after"], r["study"] = bool(x.get("after")), bool(x.get("study"))
-        v["study_to"] = ((_reviews() or {}).get("next") or "") if v.get("study") and mw.col else ""
+        v["qids"] = has_qids() if mw.col else False  # 3.9.3: QBank QIDs in the head
         # 3.8.1: "Fifteen?", when the day hasn't started by my usual time
         from . import rooms
         v["nudge"] = rooms.nudge(c, v, _day_state()[1].get("dismissed") or ())
@@ -365,7 +479,8 @@ def parts(col, idxs, today):
         return
     pf = _pf()
     state = pf._state_cfg()
-    out, sibs = {}, {}  # sibs: {pid: {uid: [counted, buried today]}}
+    out, sibs, later = {}, {}, {}  # sibs: {pid: {uid: [counted, buried today]}}; later: {pid: {uid: n}}
+    on_today = set()  # 3.9.3: the cards of today's dates, so the box's Other new cards are the rest
     for p in pf.followed():
         st = state.get(p["id"])
         if p.get("paused") or not st or not pf._deck_ok(col, st.get("deck_id")):
@@ -385,27 +500,79 @@ def parts(col, idxs, today):
                 got = P.parts(idx, u, pf._swap(st), doc)
                 if got:
                     out.setdefault(p["id"], {})[u["id"]] = got
-                sib = idx.siblings(idx.match(u, pf._swap(st), doc))
+                cids = idx.match(u, pf._swap(st), doc)
+                sib = idx.siblings(cids)
                 if sib[0]:
                     sibs.setdefault(p["id"], {})[u["id"]] = list(sib)
+                back = len(cids & idx.again)  # 3.9.3: seen, back later today: not through for today
+                if back:
+                    later.setdefault(p["id"], {})[u["id"]] = back
+                if opens == today:
+                    on_today |= cids
     _state["plan_parts"] = out
     _state["plan_sibs"] = sibs
+    _state["plan_later"] = later
+    _state["plan_today"] = sorted(on_today)
 
 
-def recover_leeches(col, label="Due Crew: recover leeches", cap=RECOVER_MAX):
+def leech_sets(rows, limits, out=()):
+    """(deck, eight, extra): the leeches Recover takes, of rows [(card id,
+    note id, lapses, queue, its home deck)] of notes tagged leech whose
+    card lapsed. A suspended one always; one Anki kept in my reviews (Tag
+    Only) at its deck's leech count (limits: {deck id: (leech count,
+    action)}, leech_flow._limits; 3.9.3, Sam's pick A: one meaning of a
+    leech, as Insights' Leeches counts them), or at 8 lapses (Recover's
+    line until 3.9.3); extra: the ones only the deck's count takes. None I
+    left out (Leeches' Leave it out). Pure."""
+    deck, eight = [], []
+    for cid, _nid, lapses, queue, did in rows:
+        cid, lapses = int(cid), int(lapses or 0)
+        if cid in out or lapses <= 0:
+            continue
+        if int(queue) == -1:
+            deck.append(cid)
+            eight.append(cid)
+            continue
+        if lapses >= int((limits.get(int(did)) or (8, 0))[0]):
+            deck.append(cid)
+        if lapses >= 8:
+            eight.append(cid)
+    has = set(eight)
+    return deck, eight, [c for c in deck if c not in has]
+
+
+def _leech_rows(col):
+    return col.db.all(
+        "SELECT c.id, c.nid, c.lapses, c.queue, CASE WHEN c.odid THEN c.odid ELSE c.did END FROM cards c "
+        "JOIN notes n ON n.id = c.nid WHERE (' ' || lower(n.tags) || ' ') LIKE '% leech %' AND c.lapses > 0 "
+        "ORDER BY c.id LIMIT 20000")
+
+
+def leech_plan(col, out=()):
+    """(deck, eight, extra, counts): leech_sets over this collection, and the
+    leech counts of the decks the extra ones are in (for the question)."""
+    from . import leech_flow
+    rows = _leech_rows(col)
+    limits = leech_flow._limits(col, {int(r[4]) for r in rows}, {})
+    deck, eight, extra = leech_sets(rows, limits, out)
+    of = {int(r[0]): int(r[4]) for r in rows}
+    counts = sorted({int(limits[of[c]][0]) for c in extra if of.get(c) in limits})
+    return deck, eight, extra, counts
+
+
+def recover_leeches(col, label="Due Crew: recover leeches", cap=RECOVER_MAX, cids=None, reach="deck", out=()):
     """Leeches back as new cards: the leech tag off, unsuspended, and reset
     (Anki's own Forget, back to their place among the new cards), as one
-    undo step. A leech is a card of a note tagged leech that's suspended or
-    has lapsed 8 times or more (a note's other cards are left alone).
-    Returns the card ids."""
-    rows = col.db.all(
-        "SELECT c.id, c.nid FROM cards c JOIN notes n ON n.id = c.nid "
-        "WHERE (' ' || lower(n.tags) || ' ') LIKE '% leech %' AND c.lapses > 0 AND (c.queue = -1 OR c.lapses >= 8) "
-        f"ORDER BY c.id LIMIT {int(cap)}")
-    if not rows:
+    undo step. A leech: leech_sets' (by its deck's leech count; reach
+    "eight", Recover's 8 lapses, for one who said Not these), or these
+    cids. A note's other cards are left alone. Returns the card ids."""
+    if cids is None:
+        deck, eight, _extra, _n = leech_plan(col, out)
+        cids = eight if reach == "eight" else deck
+    cids = [int(c) for c in cids][:int(cap)]
+    if not cids:
         return []
-    cids = [int(r[0]) for r in rows]
-    nids = sorted({int(r[1]) for r in rows})
+    nids = sorted({int(n) for n in col.db.list(f"SELECT nid FROM cards WHERE id IN ({','.join(map(str, cids))})")})
     pos = None
     if hasattr(col, "add_custom_undo_entry"):
         try:
@@ -423,39 +590,104 @@ def recover_leeches(col, label="Due Crew: recover leeches", cap=RECOVER_MAX):
     return cids
 
 
+def _left_out():
+    try:
+        from . import leech_flow
+        return leech_flow._out()
+    except Exception:
+        return set()
+
+
 def morning(c):
     """Once per Anki day, at the refresh: recover leeches when asked. Only on
     the Decks screen: mid-review its undo step would sit on my last answer
-    (as the plans' morning waits for Decks)."""
+    (as the plans' morning waits for Decks). 3.9.3 (Sam's pick A): by each
+    deck's own leech count. The first morning that would take leeches
+    Recover's old line (8 lapses) left in my reviews, it takes what it
+    always took and asks once about the rest (this profile's plans.json,
+    `leech_reach`: "deck", or "eight" after Not these; switching Recover
+    off and on asks again)."""
     if not c.get("due_leeches") or not mw.col or not _today() or getattr(mw, "state", "") != "deckBrowser":
         return
     pc, st = _day_state()
     if st.get("leeches_done"):
         return
     st["leeches_done"] = True
+    ask = None
     try:
-        st["recovered"] = recover_leeches(mw.col)
+        reach = pc.get("leech_reach")
+        deck, eight, extra, counts = leech_plan(mw.col, _left_out())
+        if reach is None and not extra:
+            reach = pc["leech_reach"] = "deck"  # nothing the old line left: the deck's count, no question
+        if reach is None:
+            ask = (len(extra), counts)
+        st["recovered"] = recover_leeches(mw.col, cids=eight if reach != "deck" else deck)
     except Exception:
         traceback.print_exc()
         st["recovered"] = []
     _put_day(pc, st)
     if st["recovered"]:
         _pf()._after_change()
+    if ask:
+        from aqt.qt import QTimer
+        QTimer.singleShot(0, lambda: ask_reach(*ask))
+
+
+def ask_reach(n, counts):
+    """The one question: the leeches only the deck's count takes, learned
+    fresh too (one undo step), or Not these (Recover keeps to 8 lapses)."""
+    from . import sheets
+    gen = app.generation
+    count = (f"your deck's leech count ({counts[0]} lapses)" if len(counts) == 1 else "your decks' leech counts")
+    them = "them" if n != 1 else "it"
+    sheets.confirm(f"Learn {n:,} more leech{'es' if n != 1 else ''} fresh?",
+                   f"Anki tagged {them} at {count} and kept {them} in your reviews. Recover took only suspended "
+                   f"leeches and ones at 8 lapses. Edit › Undo puts {them} back.",
+                   "Learn them fresh" if n != 1 else "Learn it fresh",
+                   lambda: gen == app.generation and set_reach(True),
+                   no=lambda: gen == app.generation and set_reach(False), no_label="Not these")
+
+
+def set_reach(wide):
+    """The question's answer, for good (on this profile): the deck's count,
+    and today's extra ones now; or Recover's 8 lapses."""
+    pc = _pf()._pcfg()
+    pc["leech_reach"] = "deck" if wide else "eight"
+    _pf()._psave(pc)
+    if not wide or not mw.col:
+        return
+    _deck, _eight, extra, _n = leech_plan(mw.col, _left_out())
+    try:
+        got = recover_leeches(mw.col, cids=extra)
+    except Exception:
+        traceback.print_exc()
+        return
+    pc, st = _day_state()
+    st["recovered"] = list(st.get("recovered") or []) + got
+    st["dismissed"] = [d for d in st.get("dismissed") or [] if d != "recovered"]
+    _put_day(pc, st)
+    if got:
+        _pf()._after_change()
+        tooltip(f"{len(got):,} leeches back as new cards. Edit › Undo puts them back." if len(got) != 1
+                else "1 leech back as a new card. Edit › Undo puts it back.")
 
 
 def recover_now():
     """3.8.0: Recover leeches switched on: today's go now, and it says what
-    happened (it waited for the next refresh and said nothing)."""
+    happened (it waited for the next refresh and said nothing). 3.9.3:
+    switched on, its one question can come again."""
     c = cfg()
     if not c.get("due_leeches") or not mw.col or not _today():
         return
     pc, st = _day_state()
     st["leeches_done"] = False
+    pc.pop("leech_reach", None)
     _put_day(pc, st)
     morning(c)
     _pc, st = _day_state()
     n = len(st.get("recovered") or [])
-    tooltip(f"{n:,} leech{'es' if n != 1 else ''} back as new cards. Edit › Undo puts {'them' if n != 1 else 'it'} back."
+    tooltip((f"{n:,} leeches back as new cards. Edit › Undo puts them back." if n != 1
+             else "1 leech back as a new card. Edit › Undo puts it back.")
             if n else "No leeches to recover now. Each morning looks again.")
 
 
@@ -772,18 +1004,6 @@ def _due_now(col, dids, tree=None):
     for ch in (tree or deck_tree(col)).children:
         walk(ch, True)
     return out
-
-
-def _next_deck(tree):
-    """3.8.0 (Board in Motion, 35): the deck Study today opens first, its
-    last name, for the button; from the tree _reviews already read."""
-    try:
-        plan = _plan_decks()
-        step = D.study_next(plan, _due_now(mw.col, set(plan), tree))
-        return str(mw.col.decks.name(int(step[1]))).split("::")[-1] if step else ""
-    except Exception:
-        traceback.print_exc()
-        return ""
 
 
 def study_today():

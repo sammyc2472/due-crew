@@ -196,12 +196,20 @@ class DeckIndex:
             _STATIC[key] = (sig, {k: getattr(self, k) for k in _STATIC_KEYS}, ref)
         self.cards = {}      # cid -> (queue, type)
         self.order = {}      # cid -> the deck's own order: cards seen before first, then new by position
+        self.again = set()   # 3.9.3: in (re)learning and due again today: answered, not through for today
+        try:
+            day, cut = int(col.sched.today), int(col.sched.day_cutoff)
+        except Exception:
+            day = cut = None
         home = self.home
         for cid, queue, ctype, due in col.db.all(f"SELECT c.id, c.queue, c.type, c.due FROM cards c {where}"):
             cid = int(cid)
             if cid in home:
-                self.cards[cid] = (int(queue), int(ctype))
-                self.order[cid] = (int(ctype) == 0, int(due or 0), cid)
+                queue, due = int(queue), int(due or 0)
+                self.cards[cid] = (queue, int(ctype))
+                self.order[cid] = (int(ctype) == 0, due, cid)
+                if day is not None and ((queue == 1 and due < cut) or (queue == 3 and due <= day)):
+                    self.again.add(cid)
         self.fell_back = set()  # unit ids matched by their note ids (C5)
         self._started = None  # note ids with a card answered: siblings wait on these
         self._before = None  # 3.9.1: (first_seen, the notes started before today), for buried_today
@@ -648,6 +656,20 @@ def _cards(n):
     return f"{n:,} card{'s' if n != 1 else ''}"
 
 
+def _missing(idx, u, of, n, swap=None, doc=None):
+    """The cards of a date the author has and this copy doesn't, each
+    counted once. The author's count adds up each tag's and subdeck's cards
+    (the builder's, from the tag tree: a card under two of a date's tags,
+    a video's and a system's, counts twice); this copy counted the same way
+    says how many are missing, then each card once as the date's tags here
+    hold them (3.9.3, Sam's pick: "14 of 28" when nothing was missing)."""
+    deck = str((doc or {}).get("deck") or "")
+    mine = (sum(len(idx.tag_cards(swapped(t, swap))) for t in u.get("tags") or [])
+            + sum(len(idx.deck_cards(d, deck)) for d in u.get("decks") or []))
+    gap = max(0, int(of) - mine)
+    return round(gap * n / mine) if mine > n else gap
+
+
 def match_rows(idx, doc, swap=None, shown=5):
     """[(label, text, missing)] for the match list: a unit's tags and
     subdecks as one row (found of the author's count when the plan has
@@ -662,7 +684,8 @@ def match_rows(idx, doc, swap=None, shown=5):
         if u.get("tags") or u.get("decks"):
             n = len(idx.match(dict(u, cards=[], nids=[], cids=[], notes=[], idr=[]), swap, doc))
             of = u.get("n")  # the author's count, when the builder saved one
-            text = (f"{n:,} of {of:,}" if isinstance(of, int) and of else _cards(n)) if n else "not in your copy"
+            text = (f"{n:,} of {n + _missing(idx, u, of, n, swap, doc):,}" if isinstance(of, int) and of else _cards(n)) \
+                if n else "not in your copy"
             rows.append((name, text, not n))
         if u.get("nids") or u.get("cids") or u.get("notes"):
             found = len(idx.id_cards(u))
@@ -813,6 +836,9 @@ def week_view(doc, prog, today, start, skipped=(), ld=None, shut=()):
             rm = topic_remarks(doc, [u])
             if rm:
                 rows[-1]["rm"] = rm  # 3.8.1: the authors' notes under the topics they name
+            todo = [x for x in u.get("todo") or [] if isinstance(x, dict)]
+            if todo and not skip:
+                rows[-1]["todo"] = todo  # round five: its authors' lines, in its day's details
             if u.get("for") and not skip and for_words(doc, u):
                 rows[-1]["ev"] = for_words(doc, u)  # 3.8.1: "for Heme quiz", or "after Heme quiz"
             if not skip and state != "later" and u["id"] in shut:
@@ -1148,7 +1174,7 @@ def topics(unit):
 
 
 def parts(idx, unit, swap=None, plan=""):
-    """Due: [[group, seen, total]] for a date's resources here, grouped as
+    """Due: [[group, seen, total, back later today]] for a date's resources here, grouped as
     `topics` groups its tags (a video series, a book); what else it opens
     (subdecks, searches, picks) is "Other". [] when there's one group or
     none: then the date's own numbers say it all."""
@@ -1175,7 +1201,7 @@ def parts(idx, unit, swap=None, plan=""):
     out = []
     for g, cids in named:
         _o, seen, total = idx.counts(cids)
-        out.append([g or "Other", seen, total])
+        out.append([g or "Other", seen, total, len(cids & idx.again)])  # 3.9.3: and back later today
     return out
 
 

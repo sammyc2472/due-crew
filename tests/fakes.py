@@ -82,6 +82,19 @@ class FakeSched:
         if self.col is not None:
             self.col.undo_steps.append(("Reposition", ids))
 
+    def set_due_date(self, card_ids, days, config_key=None):
+        """Anki's Set due date: "0-2" (a range, in days from today) or "3";
+        each card due on a day of it, in turn, its interval kept (no "!").
+        A card that isn't suspended goes to the review queue. An undoable op."""
+        lo, _, hi = str(days).partition("-")
+        lo, hi = int(lo), int(hi or lo)
+        ids = [int(i) for i in card_ids]
+        for k, cid in enumerate(ids):
+            self.db.conn.execute("UPDATE cards SET due = ?, type = 2, queue = CASE WHEN queue = -1 THEN -1 ELSE 2 END "
+                                 "WHERE id = ?", (self.today + lo + k % (hi - lo + 1), cid))
+        if self.col is not None:
+            self.col.undo_steps.append(("Set Due Date", ids))
+
     def suspend_cards(self, ids):
         """Anki's: queue -1, whatever it was. An undoable op."""
         ids = [int(i) for i in ids]
@@ -178,6 +191,7 @@ def make_collection(conn):
                  "odid INTEGER DEFAULT 0, type INTEGER DEFAULT 0, "
                  "queue INTEGER DEFAULT 0, ivl INTEGER DEFAULT 0, ord INTEGER DEFAULT 0, "
                  "due INTEGER DEFAULT 0, lapses INTEGER DEFAULT 0, data TEXT DEFAULT '', odue INTEGER DEFAULT 0)")
+    conn.execute("CREATE TABLE tags (tag TEXT PRIMARY KEY, usn INTEGER DEFAULT 0, collapsed INTEGER DEFAULT 0, config BLOB)")  # Anki's tag list
     conn.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY, guid TEXT, mid INTEGER DEFAULT 0, flds TEXT DEFAULT '', "
                  "tags TEXT DEFAULT '', mod INTEGER DEFAULT 0, sfld TEXT DEFAULT '')")  # sfld: 3.9.2's leeches show it
     # Anki bumps a note's mod on every edit; the plan index keeps tags by it
@@ -424,11 +438,15 @@ class FakeWorker:
         self.new_codes = {}  # uid -> POST /codes today (20 a day)
         self.reports = []    # what POST /reports kept (3.8.1: the Worker keeps them for the admin too)
         self.feedback = []   # 3.6.5, P6: [{uid, text, ver}] for the admin's page
+        self.admins = set()  # notices.ts isAdmin: wrangler.toml's ADMINS (and the ADMIN_UIDS secret)
+        self.plan_log = []   # plans.ts logSave: (plan, version, uid, summary, at), a save's history line
+        self.plan_prev = {}  # plans.ts plan_log.prev: a plan's doc before its latest save, for undo
         self.otp = {}        # email -> code
         # 3.1: plans (worker/src/plans.ts)
         self.plans = {}      # id -> {code, owner, name, line, audience, squad, doc, version,
         #                      editors: {uid} (said yes), invited: {uid: n} (3.8.1, waiting), handover: uid or None}
         self.plan_posts = {} # 3.7.3: plan id -> [{id, name, text, withSave, at}]
+        self.plan_notes = [] # plans.ts plan_notes: [{id, plan, uid, day, text, at}], a note on a day
         self.team = {}       # 3.7.3: (plan, uid) -> {joined, days: [label], play}
         self.team_asks = []  # 3.7.3: [{id, plan, uid, parent, text, guid, ord, topic, helped, at, act}]
         self.plan_trees = {}  # (uid, deck) -> {tags, decks}
@@ -630,7 +648,8 @@ class FakeWorker:
         me = self._me(auth)
         if what == "me" and method == "GET":
             u = self.users[me]
-            return 200, {"uid": me, "email": u["email"], "name": u["name"], "emoji": u["emoji"]}
+            out = {"uid": me, "email": u["email"], "name": u["name"], "emoji": u["emoji"]}
+            return 200, dict(out, admin=True) if me in self.admins else out  # 3.2.1: the site shows Admin
         if what == "link" and method == "POST" and len(rest) == 1:
             token = f"link-{me}-{len(self.links)}".ljust(43, "x")[:43]
             self.links[token] = me
@@ -676,11 +695,26 @@ class FakeWorker:
         return ([{"id": pid, "name": q["name"], "kind": "owner", "by": by(q)} for pid, q in offers]
                 + [{"id": pid, "name": q["name"], "kind": "coauthor", "by": by(q)} for _at, pid, q in asked])[:10]
 
+    def _post_with_save(self, pid, me, body, version):
+        """plans.ts postWithSave: a save's line to followers (round five's
+        send), {posted: {id, text}}; past five a day {posted: {error}}, the
+        save kept all the same. {} with none."""
+        if "post" not in body:
+            return {}
+        text = _one_line(body["post"], 200)
+        now = int(time.time())
+        if sum(1 for x in self.plan_posts.get(pid, []) if x["at"] > now - 86400) >= 5:
+            return {"posted": {"error": "too_many_posts"}}
+        self.add_post(pid, me, text)
+        self.plan_posts[pid][-1]["withSave"] = True
+        self.plan_posts[pid] = sorted(self.plan_posts[pid], key=lambda x: -x["id"])[:50]
+        return {"posted": {"id": self._post_n, "text": text}}
+
     def add_post(self, pid, uid, text):
         """3.7.3, setup helper: an author's post to followers."""
         self._post_n = getattr(self, "_post_n", 0) + 1
         self.plan_posts.setdefault(pid, []).append({"id": self._post_n, "name": (self.users.get(uid) or {}).get("name") or "?",
-                                                    "text": text, "withSave": False, "at": int(time.time())})
+                                                    "text": text, "withSave": False, "at": int(time.time()), "_uid": uid})
 
     def _look_of(self, uid):
         """3.8.2: what someone's Pip has on, from their settings, as board.ts
@@ -1348,7 +1382,10 @@ class FakeWorker:
 
     def add_plan(self, owner, name, deck, units, audience="code", squad=None, code=None):
         """Setup helper: a plan as the builder saved it. (id, code)."""
-        pid = f"p{len(self.plans):015d}"
+        n = len(self.plans)
+        while f"p{n:015d}" in self.plans:  # one taken down leaves a gap
+            n += 1
+        pid = f"p{n:015d}"
         code = code or "".join(SQUAD_ALPHABET[(len(self.plans) * 5 + i * 7 + 3) % 32] for i in range(8))
         self.plans[pid] = {"code": code, "owner": owner, "name": name, "line": "", "audience": audience,
                            "squad": squad, "doc": self._plan_doc({"deck": deck, "units": units}), "version": 1}
@@ -1357,8 +1394,15 @@ class FakeWorker:
     def edit_plan(self, pid, units):
         """The author saves new dates on the site: version + 1 (plans.ts put, keepIdr)."""
         p = self.plans[pid]
-        old = {u["id"]: u for u in p["doc"]["units"]}
-        doc = self._plan_doc(dict(p["doc"], units=units))
+        p["doc"] = self._keep_idr(self._plan_doc(dict(p["doc"], units=units)), p["doc"])
+        p["version"] += 1
+
+    @staticmethod
+    def _keep_idr(doc, was):
+        """plans.ts keepIdr: what only the author's Anki sends (a date's idr,
+        pn, ids, pl) is the stored doc's, never a save's, while what it was
+        worked out from is unchanged."""
+        old = {u["id"]: u for u in (was or {}).get("units") or []}
         for u in doc["units"]:  # 3.6.5: idr only from the author's Anki, kept while the ids are
             o = old.get(u["id"]) or {}
             u.pop("idr", None)
@@ -1376,8 +1420,7 @@ class FakeWorker:
             u.pop("pl", None)  # 3.8.1: what its picks are, while they're the same picks
             if o.get("pl") and _picks(o) == _picks(u):
                 u["pl"] = o["pl"]
-        p["doc"] = doc
-        p["version"] += 1
+        return doc
 
     # 3.8.1's review: who sees which plan, as plans.ts SEES, authorOnly and forBoard's offers
     def _sees(self, p, me):
@@ -1687,6 +1730,13 @@ class FakeWorker:
             x = self.users.get(u) or {}
             return {"uid": u, "name": x.get("name") or "?", "emoji": x.get("emoji") or ""}
         authors = role in ("owner", "editor")
+        out["library"] = p.get("listed") == 1  # 3.5, B; its authors see the switch's state (and the admin's note)
+        if authors:
+            out["listed"] = p.get("listed", 0)
+            if p.get("listed") == -1:
+                out["listedNote"] = p.get("listedNote", "")
+        if p.get("basedOn"):
+            out["basedOn"] = p["basedOn"]
         out["editors"] = [ed(u) for u in sorted(p.get("editors") or ()) if u in self.users] + (
             [dict(ed(u), pending=True) for u, _at in sorted((p.get("invited") or {}).items(), key=lambda x: x[1]) if u in self.users]
             if authors else [])
@@ -1767,6 +1817,17 @@ class FakeWorker:
             self._count("plan_follows")
             if body.get("team") is True:  # 3.7.6: following onto its team; share alone does nothing now
                 self._join_team(pid, me)
+            return 200, self._plan_view(pid, me)
+        if not rest and method == "POST":
+            # plans.ts create: a new plan, no units yet; I'm its author (PLANS_MAX of my own)
+            name = " ".join(str(body.get("name") or "").split())[:60]
+            if not name:
+                raise Bad(400, "bad_name")
+            if sum(1 for q in self.plans.values() if q["owner"] == me) >= 50:
+                raise Bad(409, "too_many_plans")
+            pid, _code = self.add_plan(me, name, str(body.get("deck") or ""), [])
+            self.plans[pid]["line"] = " ".join(str(body.get("line") or "").split())[:120]
+            self._count("plans")
             return 200, self._plan_view(pid, me)
         pid = rest[0] if rest else ""
         if rest[1:] == ["follow"] and method == "DELETE":
@@ -2038,9 +2099,204 @@ class FakeWorker:
                 p["version"] += 1
                 self._count("plans")
             return 200, self._plan_view(pid, me)
+        if rest[1:] == ["progress"] and method == "GET":  # plans.ts progress: its squad's counts a date, for its authors
+            if not self._writes(p, me):
+                raise Bad(403, "not_author")
+            units = {u["id"]: {"opened": 0, "done": 0} for u in p["doc"].get("units") or []}
+            sharing = [g for (pl, _u), g in self.follows.items() if pl == pid and g.get("share") and g.get("progress")]
+            for g in sharing:
+                for uid, (opened, seen, total) in json.loads(g["progress"]).items():
+                    if uid in units:
+                        units[uid]["opened"] += opened > 0
+                        units[uid]["done"] += total > 0 and seen >= total
+            return 200, {"followers": sum(1 for (pl, _u) in self.follows if pl == pid), "sharing": len(sharing), "units": units}
+        if rest[1:] == ["listed"] and method == "PUT":  # library.ts setListed: the owner's switch
+            if p["owner"] != me:
+                raise Bad(403, "not_owner")
+            if not isinstance(body.get("listed"), bool) or set(body) != {"listed"}:
+                raise Bad(400, "bad_listed")
+            if p.get("listed") == -1:
+                raise Bad(403, "taken_out")
+            if not body["listed"]:
+                if p.get("listed") == 1:
+                    p["listed"] = 0
+            elif p.get("listed") != 1:
+                if p["audience"] != "code":
+                    raise Bad(409, "squad_plan")
+                if not (p["doc"].get("units") or []):
+                    raise Bad(409, "no_dates")
+                if sum(1 for q in self.plans.values() if q["owner"] == me and q.get("listed") == 1) >= 20:
+                    raise Bad(409, "too_many_listed")
+                p["listed"] = 1
+            return 200, self._plan_view(pid, me)
+        if rest[1:] == ["copy"] and method == "POST":  # library.ts copy: a plan of my own, its first date on start
+            if not (self._writes(p, me) or (p.get("listed") == 1 and p["audience"] == "code")):
+                raise Bad(404, "no_plan")
+            if not DATE_RE.fullmatch(str(body.get("start") or "")) or set(body) != {"start"}:
+                raise Bad(400, "bad_start")
+            if sum(1 for q in self.plans.values() if q["owner"] == me) >= 50:
+                raise Bad(409, "too_many_plans")
+            doc = p["doc"]
+            firsts = sorted([u["opens"] for u in doc.get("units") or []] + [e["day"] for e in doc.get("events") or []])
+            n = (datetime.date.fromisoformat(body["start"]) - datetime.date.fromisoformat(firsts[0])).days if firsts else 0
+
+            def later(d):
+                return (datetime.date.fromisoformat(d) + datetime.timedelta(days=n)).isoformat()
+            new = json.loads(json.dumps(doc))
+            for u in new.get("units") or []:
+                for k in ("opens", "due", "check"):
+                    if u.get(k):
+                        u[k] = later(u[k])
+            for x in (new.get("reviews") or []) + (new.get("events") or []):
+                x["day"] = later(x["day"])
+            if new.get("end"):
+                new["end"] = later(new["end"])
+            name = f"{p['name']} (copy)"[:60] if p["owner"] == me else p["name"]
+            nid, _code = self.add_plan(me, name, new.get("deck") or "", [])
+            self.plans[nid].update(doc=new, line=p["line"])
+            if p["owner"] != me:
+                self.plans[nid]["basedOn"] = {"id": pid, "name": p["name"], "owner": (self.users.get(p["owner"]) or {}).get("name") or "?"}
+            self.plan_log.append((nid, 1, me, f"copied from {p['name']}"[:120], int(time.time())))
+            self._count("plans")
+            return 200, self._plan_view(nid, me)
+        if not rest[1:] and method == "DELETE":  # plans.ts remove: the owner takes it down; followers keep what's open
+            if p["owner"] != me:
+                raise Bad(403, "not_owner")
+            del self.plans[pid]
+            for key in [k for k in self.follows if k[0] == pid]:
+                del self.follows[key]
+            self.plan_posts.pop(pid, None)
+            self.plan_prev.pop(pid, None)
+            self.plan_notes = [x for x in self.plan_notes if x["plan"] != pid]
+            return 200, {"ok": True}
+        if rest[1:] == ["notes"] or (len(rest) == 3 and rest[1] == "notes"):  # plans.ts notes: anyone in the plan
+            if not (self._writes(p, me) or (pid, me) in self.follows):
+                raise Bad(404, "no_plan")
+            author = self._writes(p, me)
+            authors = {p["owner"], *(p.get("editors") or ())}
+            if len(rest) == 2 and method == "GET":  # every note, oldest first; in the library, its authors' and my own
+                return 200, {"notes": [{"id": x["id"], "uid": x["uid"], "name": (self.users.get(x["uid"]) or {}).get("name") or "?",
+                                        "emoji": "", "day": x["day"], "text": x["text"], "at": x["at"], "mine": x["uid"] == me,
+                                        "remove": x["uid"] == me or author}
+                                       for x in sorted(self.plan_notes, key=lambda x: x["id"])
+                                       if x["plan"] == pid and (p.get("listed") != 1 or x["uid"] in authors or x["uid"] == me)][:500]}
+            if len(rest) == 2 and method == "POST":  # addNote: one line, 280; in the library only its authors
+                if p.get("listed") == 1 and me not in authors:
+                    raise Bad(403, "authors_only")
+                day, raw = body.get("day"), body.get("text")
+                if not (isinstance(day, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", day)) or not isinstance(raw, str) \
+                        or not 1 <= len(raw) <= 280 * 4 or not _one_line(raw, 280):
+                    raise Bad(400, "bad_note")
+                mine = [x for x in self.plan_notes if x["plan"] == pid]
+                if len(mine) >= 500 or (sum(1 for x in mine if x["uid"] == me) >= 50 and me not in authors):
+                    raise Bad(409, "too_many_notes")
+                self._note_n = getattr(self, "_note_n", 0) + 1
+                self.plan_notes.append({"id": self._note_n, "plan": pid, "uid": me, "day": day, "text": _one_line(raw, 280),
+                                        "at": int(time.time())})
+                return 200, {"id": self._note_n, "day": day, "text": _one_line(raw, 280)}
+            if len(rest) == 3 and method == "DELETE" and rest[2].isdigit():  # removeNote: its writer, or an author
+                self.plan_notes = [x for x in self.plan_notes
+                                   if not (x["plan"] == pid and x["id"] == int(rest[2]) and (author or x["uid"] == me))]
+                return 200, {"ok": True}
+        if rest[1:] == ["log"] and method == "GET":  # plans.ts log: every save, newest first (LOG_KEEP); the latest undoes
+            if not self._writes(p, me):
+                raise Bad(403, "not_author")
+            rows = sorted((x for x in self.plan_log if x[0] == pid), key=lambda x: -x[1])[:30]
+            return 200, {"log": [{"version": x[1], "uid": x[2], "name": (self.users.get(x[2]) or {}).get("name") or "?",
+                                  "at": x[4] if len(x) > 4 else 0, "summary": x[3], "undo": i == 0 and pid in self.plan_prev}
+                                 for i, x in enumerate(rows)]}
+        if rest[1:] == ["posts"] and method == "GET":  # plans.ts posts: anyone in the plan, newest first
+            if not (self._writes(p, me) or (pid, me) in self.follows):
+                raise Bad(404, "no_plan")
+            eds = set(p.get("editors") or ())
+            return 200, {"posts": [{"id": x["id"], "uid": x.get("_uid"), "name": x["name"], "emoji": "", "text": x["text"],
+                                    "withSave": x["withSave"], "at": x["at"], "coauthor": x.get("_uid") in eds,
+                                    "remove": x.get("_uid") == me or p["owner"] == me}
+                                   for x in sorted(self.plan_posts.get(pid, []), key=lambda x: -x["id"])[:50]]}
+        if rest[1:] == ["posts"] and method == "POST":  # plans.ts addPost: one line, 5 a day a plan, the newest 50 kept
+            if not self._writes(p, me):
+                raise Bad(403, "not_author")
+            raw = body.get("text")
+            text = _one_line(raw, 200) if isinstance(raw, str) and 1 <= len(raw) <= 800 else ""
+            if not text:
+                raise Bad(400, "bad_post")
+            now = int(time.time())
+            if sum(1 for x in self.plan_posts.get(pid, []) if x["at"] > now - 86400) >= 5:
+                raise Bad(429, "too_many_posts")
+            self.add_post(pid, me, text)
+            self.plan_posts[pid] = sorted(self.plan_posts[pid], key=lambda x: -x["id"])[:50]
+            return 200, {"id": self._post_n, "text": text}
+        if len(rest) == 3 and rest[1] == "posts" and method == "DELETE":  # plans.ts removePost: its writer, or the owner
+            if not self._writes(p, me):
+                raise Bad(403, "not_author")
+            self.plan_posts[pid] = [x for x in self.plan_posts.get(pid, [])
+                                    if not (str(x["id"]) == rest[2] and (p["owner"] == me or x.get("_uid") == me))]
+            return 200, {"ok": True}
         if len(rest) == 1 and method == "GET":
             if not self._may_read(p, pid, me, self._norm(query.get("code"))):
                 raise Bad(404, "no_plan")
+            return 200, self._plan_view(pid, me)
+        if len(rest) == 1 and method == "PUT":  # plans.ts put: an author's save, from the version it started at
+            if not self._writes(p, me):
+                raise Bad(403, "not_author")
+            if not set(body) <= {"version", "name", "line", "audience", "squad", "doc", "summary", "post"}:
+                raise Bad(400, "bad_plan")
+            if p["owner"] != me and (("audience" in body and body["audience"] != p["audience"])
+                                     or ("squad" in body and body["squad"] != p["squad"])):
+                raise Bad(403, "not_owner")
+            if not _is_int(body.get("version"), 1):
+                raise Bad(400, "bad_version")
+            name = " ".join(str(body["name"]).split())[:60] if "name" in body else p["name"]
+            if not name:
+                raise Bad(400, "bad_name")
+            line = " ".join(str(body["line"] or "").split())[:120] if "line" in body else p["line"]
+            audience, squad = p["audience"], p["squad"]
+            if "audience" in body:
+                if body["audience"] not in ("code", "squad"):
+                    raise Bad(400, "bad_audience")
+                audience = body["audience"]
+            if "squad" in body:
+                if body["squad"] is not None and (not isinstance(body["squad"], str) or (body["squad"], me) not in self.members):
+                    raise Bad(400, "bad_squad")
+                squad = body["squad"]
+            if audience == "squad" and not squad:
+                raise Bad(400, "bad_squad")
+            try:
+                doc = self._keep_idr(self._plan_doc(body["doc"]), p["doc"]) if "doc" in body else p["doc"]
+            except Bad as e:  # the Worker's V.bad("plan") is "bad_plan"
+                raise Bad(e.status, e.code if e.code.startswith("bad_") else "bad_" + e.code) from None
+            if "post" in body:  # plans.ts put: a post that comes with a save is checked before it
+                raw = body["post"]
+                if not isinstance(raw, str) or not 1 <= len(raw) <= 800 or not _one_line(raw, 200):
+                    raise Bad(400, "bad_post")
+            if name == p["name"] and line == p["line"] and doc == p["doc"] and audience == p["audience"] and squad == p["squad"]:
+                out = self._plan_view(pid, me)  # nothing changed: nothing written (but its line, as postWithSave)
+                return 200, dict(out, **self._post_with_save(pid, me, body, None))
+            if body["version"] != p["version"]:
+                raise Bad(409, "stale", {"version": p["version"]})
+            self.plan_prev[pid] = p["doc"]
+            if audience == "squad" and p.get("listed") == 1:
+                p["listed"] = 0  # a plan for one squad leaves the library
+            p.update(name=name, line=line, doc=doc, audience=audience, squad=squad)
+            p["version"] += 1
+            self.plan_log.append((pid, p["version"], me, " ".join(str(body.get("summary") or "").split())[:120]
+                                  or "changed the plan", int(time.time())))
+            self._count("plans")
+            return 200, dict(self._plan_view(pid, me), **self._post_with_save(pid, me, body, p["version"]))
+        if rest[1:] == ["undo"] and method == "POST":  # plans.ts undo: what the latest save replaced, back
+            if not self._writes(p, me):
+                raise Bad(403, "not_author")
+            if body.get("version") != p["version"]:
+                raise Bad(409, "stale", {"version": p["version"]})
+            prev = self.plan_prev.get(pid)
+            if prev is None:
+                raise Bad(404, "nothing_to_undo")
+            self.plan_prev[pid] = p["doc"]  # its own undo puts it back again
+            p["doc"] = prev
+            p["version"] += 1
+            last = next((x[3] for x in reversed(self.plan_log) if x[0] == pid), "")
+            self.plan_log.append((pid, p["version"], me, f"undid: {last}"[:120], int(time.time())))
+            self._count("plans")
             return 200, self._plan_view(pid, me)
         raise Bad(405, "method")
 
@@ -2213,7 +2469,8 @@ class FakeWorker:
                           "shift": f.get("shift", 0), "until": f.get("until"), "since": f.get("since"), "skipped": f.get("skipped", []),
                           "moved": f.get("moved", {}), **({"own": f["own"]} if f.get("own") else {}),
                           "followers": followers, "crewDone": done,
-                          "posts": [dict(x) for x in sorted(self.plan_posts.get(pid, []), key=lambda x: -x["id"])[:3]]})
+                          "posts": [{k: v for k, v in x.items() if not k.startswith("_")}
+                                    for x in sorted(self.plan_posts.get(pid, []), key=lambda x: -x["id"])[:3]]})
         offers = [{"id": pid, "name": p["name"], "code": p["code"], "squad": p["squad"],
                    "ownerName": (self.users.get(p["owner"]) or {}).get("name") or "?"}
                   for pid, p in sorted(self.plans.items()) if self._offered(pid, p, me)]

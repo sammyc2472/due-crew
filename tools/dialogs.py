@@ -177,12 +177,17 @@ def fits(dlg):
     other; a window shorter or narrower than its rows need. [] when none."""
     W = QtWidgets
     bad = []
+    sheet = bool(dlg.property("every_control"))  # the kitchen: every control at once, not a window anyone opens
+    if not sheet and (dlg.width() > 1280 or dlg.height() > 800):  # round five: a window, as it is now, fits a laptop's screen
+        bad.append(f"window {dlg.width()}x{dlg.height()}: bigger than a 1280x800 screen")
     lay = dlg.layout()
     if lay is not None:
         least = lay.totalMinimumSize()
+        if not sheet and (least.width() > 1240 or least.height() > 740):
+            bad.append(f"its rows need {least.width()}x{least.height()}: more than a 1280x800 screen has")
         if dlg.width() < least.width() or dlg.height() < least.height():
             bad.append(f"window {dlg.width()}x{dlg.height()} under its rows' {least.width()}x{least.height()}")
-        elif lay.hasHeightForWidth() and dlg.height() < lay.totalHeightForWidth(dlg.width()):
+        elif lay.hasHeightForWidth() and not dlg.property("dcOwnSize") and dlg.height() < lay.totalHeightForWidth(dlg.width()):
             bad.append(f"window {dlg.height()} tall, its words need {lay.totalHeightForWidth(dlg.width())}")
     shown = [w for w in dlg.findChildren(W.QWidget) if w.isVisibleTo(dlg) and w.window() is dlg]
     for w in shown:
@@ -382,6 +387,7 @@ def main(out):
         extra.setEnabled(False)
         root.addWidget(bb)
         dlg.resize(560, 10)
+        dlg.setProperty("every_control", True)
         shoot(dlg, os.path.join(out, "kitchen.png"))
         dlg.show()
         settle(100)
@@ -480,6 +486,24 @@ def main(out):
             raise RuntimeError(f"make: opened {opened!r} {dlg.status.text()!r} {STORE.log[-3:]}")
         if ("sam", "Big Step 1") not in STORE.plan_trees:
             raise RuntimeError("make: the tree didn't go")
+        # 3.9.3: made in Anki: named, POST /plans, and Your plans opens on it
+        from due_crew.planner import remote as PR
+        made = []
+        dlg = MakePlanDialog(None, CLIENT, aqt.mw.col, "https://duecrew.com", open_link=opened.append,
+                             make=lambda name, deck: PR.create(CLIENT, name, deck), on_made=made.append)
+        if dlg.go.text() != "Make the plan" or dlg.site_btn is None or dlg.name.placeholderText() != "Big Step 1":
+            raise RuntimeError(f"make here: {dlg.go.text()!r}, {dlg.name.placeholderText()!r}")
+        dlg.name.setText("MS2 <b>Block</b> 3")
+        shoot(dlg, os.path.join(out, "plan-make-here.png"))
+        dlg = MakePlanDialog(None, CLIENT, aqt.mw.col, "https://duecrew.com", open_link=opened.append,
+                             make=lambda name, deck: PR.create(CLIENT, name, deck), on_made=made.append)
+        dlg.show()
+        dlg.name.setText("  MS2   Block 3 ")
+        dlg._make()
+        settle()
+        if len(made) != 1 or STORE.plans.get(made[0].get("id"), {}).get("name") != "MS2 Block 3":
+            raise RuntimeError(f"make here: {made!r} {dlg.status.text()!r}")
+        STORE.plans.pop(made[0]["id"])  # the renders after this one count Sam's plans
 
         today = datetime.date.today()
         day = lambda n: (today + datetime.timedelta(days=n)).isoformat()
@@ -644,11 +668,16 @@ def main(out):
         if len(subs) != 1:
             raise RuntimeError(f"tools menu: {len(subs)} Due Crew submenus")
         items = [a.text() or "—" for a in subs[0].actions()]
-        want = ["Study what’s next", "—", "Friends…", "Squads…", "—", "Make a plan from a deck…",
-                "Follow a plan…", "Export cards for my AI…", "—", "Settings…", "Pip’s closet…", "Your year…", "Show on the Decks screen",
-                "Send feedback…"]
+        want = ["Study what’s next", "—", "Friends…", "Squads…", "Plans", "—", "Settings…", "Pip’s closet…", "Your year…",
+                "Show on the Decks screen", "Send feedback…"]
         if items != want:
             raise RuntimeError(f"tools menu: {items}")
+        # 3.9.3: Plans ▸, everything about plans, the plan windows among it
+        plans = [a.menu() for a in subs[0].actions() if a.menu()]
+        got = [a.text() or "—" for a in plans[0].actions()] if len(plans) == 1 else []
+        if got != ["Your plans…", "New plan…", "Follow a plan…", "—",
+                   "QBank QIDs…", "Export cards for my AI…"]:
+            raise RuntimeError(f"tools menu: Plans {got}")
         # 3.8.0: Study what's next carries Ctrl+Shift+S; Show on the Decks screen is a check
         acts = {a.text(): a for a in subs[0].actions()}
         if acts["Study what’s next"].shortcut().toString() != "Ctrl+Shift+S":
@@ -937,12 +966,967 @@ def main(out):
             raise RuntimeError("remark: a card with none starts empty, Save off")
         shoot(dlg, os.path.join(out, "plan-remark-new.png"))
 
+    def ai_app():
+        """Your AI app (planner/mcp_dialog.py): the local MCP server's switch, off;
+        then on, its address, the token hidden, and the setup to copy (the shim's,
+        the token in its environment; the address with the bearer header)."""
+        import json as _json
+        from due_crew.planner import mcp as MCP
+        from due_crew.planner.mcp_dialog import AiAppDialog, SWITCH
+
+        class AiOps:
+            s = {"on": False, "running": False, "port": 0, "url": "", "token": "", "said": ""}
+
+            def state(self):
+                return dict(self.s)
+
+            def set_on(self, on):
+                self.s = (dict(self.s, on=True, running=True, port=48123, url="http://127.0.0.1:48123/mcp",
+                               token=self.s["token"] or "tok-" + "x" * 28) if on
+                          else dict(self.s, on=False, running=False, url=""))
+                return self.state()
+
+            def new_token(self):
+                self.s = dict(self.s, token="tok-" + "y" * 28)
+                return self.state()
+
+            def setup(self, http=False):
+                return MCP.setup(self.s["port"], self.s["token"], "/Users/sam/Library/Application Support/Anki2/addons21/2035408484/planner/mcp_shim.py", http=http)
+
+        ops = AiOps()
+        dlg = AiAppDialog(None, ops)
+        if heading_of(dlg) != "Your AI app" or dlg.switch.text() != SWITCH or dlg.switch.isChecked() or not dlg.on_box.isHidden():
+            raise RuntimeError(f"ai app: off {heading_of(dlg)!r}, {dlg.switch.isChecked()}")
+        shoot(dlg, os.path.join(out, "planner-ai-app-off.png"))
+        dlg = AiAppDialog(None, ops)
+        dlg.show()
+        dlg.switch.setChecked(True)  # as a click: set_on, then its address and token
+        settle(100)
+        if (dlg.on_box.isHidden() or dlg.address.text() != "http://127.0.0.1:48123/mcp"
+                or dlg.token.echoMode() != QtWidgets.QLineEdit.EchoMode.Password or not dlg.setup_btn.isEnabled()):
+            raise RuntimeError(f"ai app: on {dlg.address.text()!r}, {dlg.setup_btn.isEnabled()}")
+        stdio = _json.loads(ops.setup())["mcpServers"]["due-crew"]
+        http = _json.loads(ops.setup(http=True))["mcpServers"]["due-crew"]
+        if ("--port" not in stdio["args"] or "48123" not in stdio["args"] or any(ops.s["token"] in a for a in stdio["args"])
+                or stdio["env"]["DUE_CREW_MCP_TOKEN"] != ops.s["token"] or http["headers"]["Authorization"] != "Bearer " + ops.s["token"]):
+            raise RuntimeError(f"ai app: the setup {stdio} {http}")
+        dlg.setup_btn.click()
+        if dlg.said.text() != "Setup copied." or dlg.said.textFormat() != QtCore.Qt.TextFormat.PlainText:
+            raise RuntimeError(f"ai app: Copy setup said {dlg.said.text()!r}")
+        shoot(dlg, os.path.join(out, "planner-ai-app-on.png"))
+
+    def _col_texts(tree, col):
+        """Every row's text in one column of a tree, its children too."""
+        out = []
+        for i in range(tree.topLevelItemCount()):
+            top = tree.topLevelItem(i)
+            out.append(top.text(col))
+            out.extend(top.child(j).text(col) for j in range(top.childCount()))
+        return out
+
+    def start_window(STORE, PF, PR, P):
+        """New plan from a calendar (start_window.py): empty; for everyone (labs off); a
+        calendar read (plain rules' ticks, the stand-in's where they found
+        nothing, a quiz and an exam); an exam's line read; What Claude would
+        get; Make the plan end to end (POST /plans, then its save); prose,
+        which only the stand-in reads, and with it off."""
+        import sqlite3
+        from due_crew.planner import reading as R
+        from due_crew.planner import start_window as SW
+        ROLE_ = SW.ROLE
+        conn = sqlite3.connect(":memory:")
+        fakes.make_collection(conn)
+        root = "#Big_Step1_v3"
+        cid = 0
+        for tag, n in ((f"{root}::#Videos::Cardio::Heart_Failure {root}::^Systems::Cardio::Heart_Failure", 14),
+                       (f"{root}::#Book::Cardio::Heart_Failure", 6), (f"{root}::#Videos::Cardio::Systolic_Dysfunction", 5),
+                       (f"{root}::#Videos::Pharm::Antiarrhythmics", 8), (f"{root}::#Book::Renal::Diuretics", 6),
+                       (f"{root}::#Videos::Renal::Acid_Base", 7), (f"{root}::#Bank::10234", 3)):
+            for i in range(n):
+                cid += 1
+                fakes.add_card(conn, cid, 1, tags=tag)
+        col = fakes.FakeCol(conn, fakes.day_cutoff_for(datetime.date.today()))
+        col.decks = fakes.FakeDecks({1: "Big Step 1", 2: "Mine"})
+        monday = datetime.date.today() + datetime.timedelta(days=7 - datetime.date.today().weekday())
+        d = lambda n: (lambda x: f"{x:%a} {x.month}/{x.day}")(monday + datetime.timedelta(days=n))
+        cal = (f"BLOCK 2 · Cardiovascular\nWEEK 1\n{d(0)}  LEC  Heart failure\n"
+               "    SLG 1  Define systolic and diastolic heart failure\n    Watch: heart failure 1-2\n"
+               f"{d(1)}  LEC  HFrEF\n{d(2)}  Holiday, no class\n{d(3)}  LEC  Antiarrhythmic drugs\n"
+               f"{d(4)}  QUIZ  Cardio quiz 1\nWEEK 2\n{d(7)}  LEC  Diuretics\n{d(8)}  LEC  Acid-base\n"
+               f"{d(11)}  EXAM  Exam 1\n")
+        opened = []
+
+        class SOps(PF.StartOps):
+            def today(self):
+                return datetime.date.today()
+
+            def index(self, did):
+                return P.DeckIndex(col, did)
+
+            def make(self, owner, name, doc, done, pid=None):
+                outcome, raw = PR.create(CLIENT, name, doc.get("deck") or "")
+                done(PR.save(CLIENT, raw["id"], raw["version"], doc, "made in Anki from a calendar")
+                     if outcome == "saved" else (outcome, raw))
+
+            def open_plan(self, pid):
+                opened.append(pid)
+
+        decks = [(1, "Big Step 1", cid), (2, "Mine", 0)]
+        w = SW.StartWindow(None, decks, SOps())
+        if w.make_btn.isEnabled() or w.would_btn.isEnabled():
+            raise RuntimeError("start: nothing read, nothing to make")
+        shoot(w, os.path.join(out, "planner-start-empty.png"))
+        # 3.9.3: for everyone, labs off: plain rules alone, no stand-in, no What Claude would get
+        w = SW.StartWindow(None, decks, SOps(), labs=False)
+        w.resize(820, 720)
+        w.text.setPlainText(cal)
+        w._read()
+        if (w.stand_in.isVisible() or w.stand_in.isChecked() or w.would_btn.isVisible()
+                or any(r in ("Claude’s stand-in",) for r in _col_texts(w.tree, 2))):
+            raise RuntimeError("start: labs off shows Claude's stand-in")
+        if not w.make_btn.isEnabled():
+            raise RuntimeError("start: labs off, plain rules' reading can't be made")
+        shoot(w, os.path.join(out, "planner-start-release.png"))
+
+        def read(text, stand_in=True):
+            w = SW.StartWindow(None, decks, SOps())
+            w.resize(820, 720)
+            w.text.setPlainText(text)
+            w.stand_in.setChecked(stand_in)
+            w._read()
+            return w
+        w = read(cal)
+        rows = {w.tree.topLevelItem(i).text(0).split(" · ", 1)[1]: w.tree.topLevelItem(i)
+                for i in range(w.tree.topLevelItemCount())}
+        picks = {w.sessions[i]["title"]: v for i, v in w.picks().items()}
+        if (w.name.text() != "BLOCK 2 · Cardiovascular" or len(w.sessions) != 7
+                or picks["Heart failure"] != [f"{root}::#Book::Cardio::Heart_Failure", f"{root}::#Videos::Cardio::Heart_Failure"]
+                or picks["HFrEF"] != [f"{root}::#Videos::Cardio::Systolic_Dysfunction"]
+                or picks["Antiarrhythmic drugs"] != [f"{root}::#Videos::Pharm::Antiarrhythmics"]
+                or rows["HFrEF"].text(2) != "Claude’s stand-in" or rows["Heart failure"].text(2) != "plain rules"
+                or "Cardio quiz 1 (quiz)" not in rows or "Exam 1 (exam)" not in rows or not w.make_btn.isEnabled()):
+            raise RuntimeError(f"start: read {w.name.text()!r} {picks} {sorted(rows)}")
+        shoot(w, os.path.join(out, "planner-start-read.png"))
+        w = read(cal)
+        exam = next(w.tree.topLevelItem(i) for i in range(w.tree.topLevelItemCount())
+                    if w.tree.topLevelItem(i).text(0).endswith("(exam)"))
+        w.tree.setCurrentItem(exam)
+        saved = SW.ask_text
+        SW.ask_text = lambda *a, **k: ("Exam 1 covers week 1 and week 2's renal lectures", True)
+        try:
+            w._scope()
+        finally:
+            SW.ask_text = saved
+        covered = sorted(w.sessions[i]["title"] for i in next(iter(w.scopes.values()))[0])
+        said = [exam.child(i).text(2) for i in range(exam.childCount())]
+        if covered != ["Acid-base", "Antiarrhythmic drugs", "Diuretics", "HFrEF", "Heart failure"] or said[:2] != [
+                "plain rules", "Claude’s stand-in"]:
+            raise RuntimeError(f"start: the exam's line {covered} {said}")
+        shoot(w, os.path.join(out, "planner-start-scope.png"))
+        jobs = [r["job"] for r in w.would_get()]
+        tags = [[t["tag"] for t in r["input"]["tags"]] for r in w.would_get()[:2]]
+        if (jobs != ["Match a session to the deck's tags"] * 2 + ["What an exam covers"]
+                or f"{root}::#Videos::Cardio::Systolic_Dysfunction" not in tags[0]
+                or f"{root}::#Videos::Pharm::Antiarrhythmics" not in tags[1]):
+            raise RuntimeError(f"start: what Claude would get {jobs} {tags}")
+        dlg = w.would_window()
+        dlg.resize(680, 560)
+        shoot(dlg, os.path.join(out, "planner-start-would.png"))
+        saved = SW.confirm
+        SW.confirm = lambda *a, **k: True
+        try:
+            w.show()
+            w._make()
+        finally:
+            SW.confirm = saved
+        plan = STORE.plans.get(opened[-1]) if opened else None
+        if (not plan or plan["name"] != "BLOCK 2 · Cardiovascular" or len(plan["doc"]["units"]) != 5
+                or [e["name"] for e in plan["doc"]["events"]] != ["Cardio quiz 1", "Exam 1"]
+                or {u["name"]: u.get("for") for u in plan["doc"]["units"]}["Diuretics"] != plan["doc"]["events"][1]["id"]):
+            raise RuntimeError(f"start: Make the plan {plan and plan['doc']}")
+        w.close()
+        prose = (f"We meet on {(monday):%b} {monday.day} for heart failure.\n"
+                 f"The cardio quiz is on {(monday + datetime.timedelta(days=4)):%b} {(monday + datetime.timedelta(days=4)).day}.")
+        w = read(prose)
+        if w.name.text() or [x["title"] for x in w.sessions] != ["Heart failure", "Cardio quiz"] or w.head.text() != "Calendar read by Claude’s stand-in":
+            raise RuntimeError(f"start: prose {w.sessions} {w.head.text()!r}")
+        shoot(w, os.path.join(out, "planner-start-prose.png"))
+        w = read(prose, stand_in=False)
+        if w.sessions or w.name.text() or "stand-in could" not in w.said.text():
+            raise RuntimeError(f"start: prose, stand-in off: {w.said.text()!r}")
+        shoot(w, os.path.join(out, "planner-start-none.png"))
+        # a calendar's file dragged over the box, then dropped: a PDF, made here as a school's would be
+        pdf = os.path.join(tempfile.mkdtemp(), "MS2_Block_2 calendar.pdf")
+        writer = QtGui.QPdfWriter(pdf)
+        writer.setResolution(96)
+        painter = QtGui.QPainter(writer)
+        painter.setFont(QtGui.QFont("DejaVu Sans", 11))
+        rows = [("Week 1", "", ""), (d(0), "Heart failure", "Room B2"), (d(1), "HFrEF", "Room B2"),
+                (d(3), "Antiarrhythmic drugs", "Room B4"), (d(4), "Cardio quiz 1", "Hall A"), ("Week 2", "", ""),
+                (d(7), "Diuretics", "Room B2"), (d(11), "Exam 1", "Hall A")]
+        for n, (a, b, c) in enumerate(rows):
+            for x, t in ((40, a), (180, b), (460, c)):
+                painter.drawText(x, 60 + 24 * n, t)
+        painter.end()
+        w = SW.StartWindow(None, decks, SOps())
+        w.resize(820, 720)
+        mime = QtCore.QMimeData()
+        mime.setUrls([QtCore.QUrl.fromLocalFile(pdf)])
+        if SW.DropBox.path_of(mime) != pdf:
+            raise RuntimeError("start: a dragged file's path")
+        two = QtCore.QMimeData()
+        two.setUrls([QtCore.QUrl.fromLocalFile(pdf), QtCore.QUrl.fromLocalFile(pdf + "2")])
+        if SW.DropBox.path_of(two) is not None:
+            raise RuntimeError("start: two files at once are dropped as nothing")
+        enter = QtGui.QDragEnterEvent(QtCore.QPoint(20, 20), QtCore.Qt.DropAction.CopyAction, mime,
+                                      QtCore.Qt.MouseButton.LeftButton, QtCore.Qt.KeyboardModifier.NoModifier)
+        w.text.dragEnterEvent(enter)
+        if not enter.isAccepted() or w.text.property("over") is not True:
+            raise RuntimeError("start: a file over the box")
+        w.show()
+        settle()
+        w.grab().save(os.path.join(out, "planner-start-drag.png"))
+        drop = QtGui.QDropEvent(QtCore.QPointF(20, 20), QtCore.Qt.DropAction.CopyAction, mime,
+                                QtCore.Qt.MouseButton.LeftButton, QtCore.Qt.KeyboardModifier.NoModifier)
+        w.text.dropEvent(drop)
+        titles = [x["title"] for x in w.sessions]
+        if (w.text.property("over") is not False or w.file != os.path.basename(pdf) or w.name.text() != "MS2 Block 2 calendar"
+                or titles != ["Heart failure", "HFrEF", "Antiarrhythmic drugs", "Cardio quiz 1", "Diuretics", "Exam 1"]
+                or [x["week"] for x in w.sessions] != [1, 1, 1, 1, 2, 2]):
+            raise RuntimeError(f"start: the PDF dropped {w.name.text()!r} {titles} {w.text.toPlainText()!r}")
+        shoot(w, os.path.join(out, "planner-start-dropped.png"))
+        bits = os.path.join(tempfile.mkdtemp(), "bits.pdf")
+        writer = QtGui.QPdfWriter(bits)
+        writer.setResolution(96)
+        painter = QtGui.QPainter(writer)
+        painter.drawText(40, 60, "Mon 10/26 Heart failure")  # no font: Qt reads it back a letter a line
+        painter.end()
+        w = SW.StartWindow(None, decks, SOps())
+        w._load_file(bits)
+        if SW.pdf_text(bits) and not R.scrambled(SW.pdf_text(bits)):
+            pass  # this Qt reads it whole: nothing to say
+        elif w.sessions or "pieces" not in w.said.text():
+            raise RuntimeError(f"start: a PDF read in pieces: {w.said.text()!r}")
+        # a lecture's slides dropped on its session's row: its objectives and its slides' titles find its tags
+        import zipfile
+        from xml.sax.saxutils import escape
+        deck = os.path.join(tempfile.mkdtemp(), "Renal 4 - Diuretics.pptx")
+        ns = ('xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" '
+              'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
+              'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"')
+        slides = [("Diuretics", []), ("Learning objectives", ["Describe the site of action of loop diuretics",
+                                                              "Explain the acid-base effects of thiazides"]),
+                  ("Loop diuretics", ["Furosemide"]), ("Acid-base effects", []), ("Questions?", [])]
+        with zipfile.ZipFile(deck, "w") as z:
+            for n, (title, body) in enumerate(slides, 1):
+                sp = (f'<p:sp><p:nvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:txBody><a:p><a:r><a:t>{escape(title)}'
+                      '</a:t></a:r></a:p></p:txBody></p:sp>')
+                sp += "<p:sp><p:nvSpPr><p:nvPr/></p:nvSpPr><p:txBody>" + "".join(
+                    f"<a:p><a:r><a:t>{escape(t)}</a:t></a:r></a:p>" for t in body) + "</p:txBody></p:sp>"
+                z.writestr(f"ppt/slides/slide{n}.xml", f'<p:sld {ns}><p:cSld><p:spTree>{sp}</p:spTree></p:cSld></p:sld>')
+            z.writestr("ppt/presentation.xml", f'<p:presentation {ns}><p:sldIdLst>' + "".join(
+                f'<p:sldId id="{256 + n}" r:id="rId{n}"/>' for n in range(1, len(slides) + 1)) + "</p:sldIdLst></p:presentation>")
+            z.writestr("ppt/_rels/presentation.xml.rels", '<Relationships xmlns="http://schemas.openxmlformats.org/package/'
+                       '2006/relationships">' + "".join(f'<Relationship Id="rId{n}" Target="slides/slide{n}.xml"/>'
+                                                       for n in range(1, len(slides) + 1)) + "</Relationships>")
+        w = read(cal)
+        row = next(w.tree.topLevelItem(i) for i in range(w.tree.topLevelItemCount())
+                   if w.tree.topLevelItem(i).text(0).endswith("Diuretics"))
+        di = row.data(0, ROLE_)[1]
+        w.show()
+        settle()
+        w.tree.scrollToItem(row)
+        at = QtCore.QPointF(w.tree.visualItemRect(row).center())
+        dmime = QtCore.QMimeData()
+        dmime.setUrls([QtCore.QUrl.fromLocalFile(deck)])
+        move = QtGui.QDragMoveEvent(at.toPoint(), QtCore.Qt.DropAction.CopyAction, dmime,
+                                    QtCore.Qt.MouseButton.LeftButton, QtCore.Qt.KeyboardModifier.NoModifier)
+        w.tree.dragMoveEvent(move)
+        if not move.isAccepted() or w.tree.currentItem() is not row:
+            raise RuntimeError("start: a deck over a session's row")
+        w.tree.dropEvent(QtGui.QDropEvent(at, QtCore.Qt.DropAction.CopyAction, dmime,
+                                          QtCore.Qt.MouseButton.LeftButton, QtCore.Qt.KeyboardModifier.NoModifier))
+        s_ = w.sessions[di]
+        tags_ = [c["tag"] for c in w.cands[di]]
+        if (s_.get("slides") != ["Loop diuretics", "Acid-base effects"] or len(s_["objectives"]) != 2
+                or f"{root}::#Videos::Renal::Acid_Base" not in tags_ or "with its slides" not in w.who[di][1]
+                or "2 slide titles and 2 objectives" not in w.said.text()
+                or w.tree.currentItem() is None or w.tree.currentItem().data(0, ROLE_) != ("session", di)
+                or not w.slides_btn.isEnabled()):
+            raise RuntimeError(f"start: slides onto a session {s_} {tags_} {w.who[di]} {w.said.text()!r}")
+        shoot(w, os.path.join(out, "planner-start-slides.png"))
+        w = SW.StartWindow(None, decks, SOps())
+        sheet = os.path.join(tempfile.mkdtemp(), "block.xlsx")
+        with open(sheet, "wb") as f:
+            f.write(b"PK")
+        w._load_file(sheet)
+        if "CSV" not in w.said.text() or w.text.toPlainText():
+            raise RuntimeError(f"start: a sheet: {w.said.text()!r}")
+
+    def planner():
+        """Labs (due_crew/planner, docs/planner.md): the plan window an author
+        sees (a date's sources by resource, system and other, with what each
+        holds here; a week; an event; Change ▾), a change saved end to end,
+        the picker (the deck's tree, then a search), and QBank QIDs (a paste
+        found across two banks, Study now, then Unsuspend: one undo step).
+        Names are the author's: plain text."""
+        import sqlite3
+        from due_crew import plans as P
+        from due_crew.planner import actions as PA, flow as PF, remote as PR
+        from due_crew.planner.picker import Picker
+        from due_crew.planner.qid_window import QidWindow
+        from due_crew.planner.window import PlanWindow
+        conn = sqlite3.connect(":memory:")
+        fakes.make_collection(conn)
+        root = "#Big_Step1_v3"
+        tags = [(f"{root}::#Videos::Cardio::Heart_Failure {root}::^Systems::Cardio::Heart_Failure", 14),
+                (f"{root}::#Book::Cardio::Heart_Failure", 6), (f"{root}::#Videos::Pharm::HF_Drugs", 9),
+                (f"{root}::#Sketches::Pharm::HF_Drugs", 4), (f"{root}::#Videos::Cardio::Shock", 7),
+                ("Pharm::Antibiotics", 3)]
+        cid = 0
+        for tag, n in tags:
+            for i in range(n):
+                cid += 1
+                fakes.add_card(conn, cid, 1, ctype=2 if i % 3 == 0 else 0, queue=-1 if i % 4 == 1 else (2 if i % 3 == 0 else 0),
+                               ivl=9, tags=tag)
+        for q, n, on in ((10234, 2, "^Systems::Cardio::Heart_Failure"), (10911, 1, "^Systems::Cardio::Shock"),
+                         (11002, 1, "^Systems::Renal::AKI"), (12118, 2, "^Systems::Cardio::Heart_Failure")):
+            for i in range(n):
+                cid += 1
+                fakes.add_card(conn, cid, 1, ctype=2 if i else 0, queue=-1, ivl=6,
+                               tags=f"{root}::#Bank::{q} {root}::{on} {root}::#Videos::Cardio::Heart_Failure" if "Heart" in on
+                               else f"{root}::#Bank::{q} {root}::{on}")
+        cid += 1
+        fakes.add_card(conn, cid, 1, tags=f"{root}::#Other_Bank::10234")
+        col = fakes.FakeCol(conn, fakes.day_cutoff_for(datetime.date.today()))
+        col.decks = fakes.FakeDecks({1: "Big Step 1", 3: "Big Step 1::Cardio"})
+        monday = datetime.date.today() - datetime.timedelta(days=datetime.date.today().weekday())
+        day = lambda n: (monday + datetime.timedelta(days=n)).isoformat()
+        units = [{"id": "u1", "name": "Heart failure", "opens": day(0), "due": day(2),
+                  "tags": [f"{root}::#Videos::Cardio::Heart_Failure", f"{root}::^Systems::Cardio::Heart_Failure",
+                           f"{root}::#Bank::10234", f"{root}::#Bank::10911"],
+                  "todo": [{"k": "watch", "t": "Heart failure 1–2"}, {"k": "read", "t": "pp. 290–295"}], "for": "e1"},
+                 {"id": "u2", "name": "HF drugs <b>", "opens": day(1), "tags": [f"{root}::#Videos::Pharm::HF_Drugs"]},
+                 {"id": "u3", "name": "Shock", "opens": day(3), "tags": [f"{root}::#Videos::Cardio::Shock"]},
+                 {"id": "u4", "name": "Antibiotics", "opens": day(-7), "tags": ["Pharm::Antibiotics"]}]
+        pid, _code = STORE.add_plan("sam", "MS2 Block 2", "Big Step 1", units)
+        STORE.plans[pid]["doc"]["events"] = [{"id": "e1", "day": day(4), "name": "Heme quiz"}]
+        next(u for u in STORE.plans[pid]["doc"]["units"] if u["id"] == "u1")["for"] = "e1"  # add_plan drops a `for` with no event yet
+
+        class Ops(PF.Ops):
+            """The window's asks, on this render's collection and client, at once."""
+            def today(self):
+                return TODAY
+
+            def context(self, plan, doc):
+                return P.DeckIndex(col, 1), None, "named"
+
+            def followed_here(self, pid, version=None):
+                return False
+
+            def load(self, owner, pid, done):
+                done(PR.load(CLIENT, pid))
+
+            def save(self, owner, pid, version, doc, summary, done):
+                done(PR.save(CLIENT, pid, version, doc, summary))
+
+            def undo(self, owner, pid, version, done):
+                done(PR.undo(CLIENT, pid, version))
+
+            def open_page(self, path):
+                pass
+
+            def me(self):
+                return CLIENT.user_id
+
+            def ask(self, owner, fn, done):
+                try:
+                    got = fn(CLIENT)
+                except Exception:  # noqa: BLE001 (the real one's _bg says None)
+                    got = None
+                done(got)
+
+            def my_squads(self):
+                return [{"id": "sq1", "name": "Study buddies"}]
+
+            drafts = {}   # this render's plan_drafts.json
+
+            def draft(self, pid):
+                from due_crew.planner.draft import Draft
+                return Draft.from_json(pid, self.drafts.get(str(pid)))
+
+            def keep_draft(self, pid, d):
+                if d is None or not len(d):
+                    self.drafts.pop(str(pid), None)
+                else:
+                    self.drafts[str(pid)] = json.loads(json.dumps(d.to_json()))
+
+            def send(self, owner, pid, version, doc, summary, post, done):
+                done(PR.save(CLIENT, pid, version, doc, summary, post))
+
+            def now_words(self):
+                return "Tue 2:14 pm"
+
+            def site_url(self, path):
+                return "https://duecrew.com" + path
+
+            def my_doc(self, plan):
+                return plan["doc"]
+
+            def follow_plan(self):
+                reopened.append("follow")
+
+            def new_plan(self):
+                reopened.append("new")
+
+            def reopen(self, pid):
+                reopened.append(pid)
+
+        import json
+        from due_crew.planner import plan_tab as PTB, send as PS, shape as PSH, text_tab as PT, widgets as PW, model as M_
+        from due_crew.planner import ops as PO
+        reopened = []
+        mine = PR.my_plans(CLIENT)
+
+        def PlanWindow_(plans=mine):
+            w = PlanWindow(None, col, plans, Ops())
+            if plans:
+                w.pick.setCurrentIndex(w.pick.findData(pid))  # earlier renders left plans of Sam's in the store
+            return w
+
+        def unit(uid):
+            return next(u for u in STORE.plans[pid]["doc"]["units"] if u["id"] == uid)
+
+        yes = lambda *a, **k: True  # noqa: E731 (a confirm said yes to)
+        dlg = PlanWindow_()
+        tab = dlg.pages["plan"]
+        shown = [dlg.tabs.tabText(i) for i in range(dlg.tabs.count()) if dlg.tabs.isTabVisible(i)]
+        if not dlg.pick.currentText().startswith("MS2 Block 2") or not dlg.author() or shown != ["Plan", "Insights", "Settings"]:
+            raise RuntimeError(f"planner: an author's tabs {shown}, {dlg.pick.currentText()!r}")
+        dlg.resize(1180, 760)
+        tab.pick(("date", "u1"))
+        dp = tab.date_panel
+        chips = [c.words.full for c in dp.chips.findChildren(PW.Source)]
+        if "Videos › Cardio › Heart Failure" not in chips or not any(c.startswith("Systems") for c in chips) \
+                or not any(c.startswith("Bank") for c in chips) or dp.name.text() != "Heart failure":
+            raise RuntimeError(f"planner: the date's chips {chips}, {dp.name.text()!r}")
+        shape = [w.text() for w in tab.shape_fields.findChildren(QtWidgets.QLabel)]
+        if tab.shape_box.isHidden() or "Dates" not in shape or "Study days" not in shape or not tab.send_box.isHidden():
+            raise RuntimeError(f"planner: the shape line {shape}")
+        if [w for w in dlg.findChildren(QtWidgets.QLabel) if w.pixmap() is not None and not w.pixmap().isNull()]:
+            raise RuntimeError("planner: Pip in the plan window (round five: none)")
+        shoot(dlg, os.path.join(out, "planner-date.png"))
+        # Insights, between Plan and Settings: what each week asks, how much of the deck, what's in it
+        dlg._show_tab("insights")
+        it = dlg.pages["insights"]
+        said = [w.text() for w in it.findChildren(QtWidgets.QLabel) if w.isVisibleTo(it)]
+        if "Workload" not in said or "How much of the deck" not in said or "What's in it" not in said \
+                or not any(" cards (" in t for t in said) or not any(t.startswith("Week 1") for t in said) \
+                or any(t.startswith("You've seen") for t in said) or not any(t.startswith("By ") for t in said) \
+                or "Inside Cardio" not in said:
+            raise RuntimeError(f"planner: Insights {said}")
+        shoot(dlg, os.path.join(out, "planner-insights.png"))
+        it.body.grab().save(os.path.join(out, "planner-insights-all.png"))  # the whole of it, to look at
+        kept_doc = dlg.doc  # a pace of 5 a day, weekdays: the pace's line down the column, a week over it
+        dlg.doc = dict(kept_doc, pace={"mode": "daily", "days": [1, 1, 1, 1, 1, 0, 0], "daily": 5})
+        it.draw()
+        said = [w.text() for w in it.findChildren(QtWidgets.QLabel) if w.isVisibleTo(it)]
+        if not any(t.startswith("Over the pace") for t in said) or not any("your pace: 5" in t for t in said) \
+                or not any("busiest day" in t for t in said):
+            raise RuntimeError(f"planner: Insights with a pace {said}")
+        it.body.grab().save(os.path.join(out, "planner-insights-pace.png"))
+        dlg.doc = kept_doc
+        it.draw()
+        picks = [r for r in it.findChildren(PW.Row) if r.key[0] == "date"]
+        picks[0].on_pick(picks[0].key)
+        if dlg.tabs.currentWidget() is not tab or tab.picked != picks[0].key:
+            raise RuntimeError(f"planner: a date picked in Insights, on the Plan tab: {tab.picked}")
+        tab.pick(("date", "u2"))
+        if dp.name.text() != "HF drugs <b>" or tab.rows[("date", "u2")].findChildren(QtWidgets.QLabel)[1].textFormat() \
+                != QtCore.Qt.TextFormat.PlainText:
+            raise RuntimeError("planner: a date's name went in as markup")
+        # nobody follows it: a change saves at once, and Undo ▾ takes it back
+        dlg.change({"op": "add_cards", "date": "u2", "tags": [f"{root}::#Sketches::Pharm::HF_Drugs"]})
+        u2 = unit("u2")
+        if (STORE.plans[pid]["version"] != 2 or u2["tags"][-1] != f"{root}::#Sketches::Pharm::HF_Drugs" or u2.get("n") != 13
+                or not dlg.status.text().startswith("Saved") or tab.picked != ("date", "u2") or dlg.draft is not None):
+            raise RuntimeError(f"planner: a change saved: v{STORE.plans[pid]['version']}, {u2}, {dlg.status.text()!r}")
+        shoot(dlg, os.path.join(out, "planner-saved.png"))
+        dlg.change({"op": "add_cards", "date": "u2", "tags": [f"{root}::#Sketches::Pharm::HF_Drugs"]})
+        if STORE.plans[pid]["version"] != 2 or "has those already" not in dlg.status.text():
+            raise RuntimeError(f"planner: the same change again saves nothing: {dlg.status.text()!r}")
+        dlg._undo_entries()
+        if not [a for a in dlg.undo_menu.actions() if a.text() == "Undo your last save"]:
+            raise RuntimeError(f"planner: Undo ▾ {[a.text() for a in dlg.undo_menu.actions()]}")
+        dlg._undo()
+        if STORE.plans[pid]["version"] != 3 or f"{root}::#Sketches::Pharm::HF_Drugs" in unit("u2")["tags"] or dlg.status.text() != "Undone.":
+            raise RuntimeError(f"planner: Undo: v{STORE.plans[pid]['version']}, {dlg.status.text()!r}")
+        STORE.plans[pid]["version"] += 1  # someone saves on the site meanwhile: the window's next change goes on theirs
+        dlg.change({"op": "rename", "date": "u2", "name": "HF drugs"})
+        if unit("u2")["name"] != "HF drugs" or not dlg.status.text().startswith("Saved"):
+            raise RuntimeError(f"planner: a stale save, put on theirs: {dlg.status.text()!r}")
+        # a new date named for a deck tag: nothing suggested (Sam's call); no cards till the author puts them on
+        dlg.change({"op": "add_date", "day": day(5), "name": "Heart failure book"}, keep="made")
+        made = next(u for u in STORE.plans[pid]["doc"]["units"] if u.get("name") == "Heart failure book")
+        said = [w.text() for w in tab.findChildren(QtWidgets.QLabel) if w.isVisibleTo(tab)]
+        if tab.picked != ("date", made["id"]) or any(t.startswith("Maybe") for t in said) or hasattr(tab, "sure_box") \
+                or "No cards yet" not in said:
+            raise RuntimeError(f"planner: a new date, nothing suggested: picked {tab.picked}, {said}")
+        shoot(dlg, os.path.join(out, "planner-date-new.png"))
+        dlg.change({"op": "add_cards", "date": made["id"], "tags": [f"{root}::#Book::Cardio::Heart_Failure"]}, keep=("date", made["id"]))
+        if unit(made["id"]).get("tags") != [f"{root}::#Book::Cardio::Heart_Failure"]:
+            raise RuntimeError(f"planner: cards put on a new date: {unit(made['id'])}")
+        # the plan's dates and pace: rows of Settings (round five: no Change… window); the Plan tab's line only reads
+        if hasattr(tab, "shape_btn") or hasattr(PSH, "ShapeDialog"):
+            raise RuntimeError("planner: the shape is Settings' (no Change…)")
+        dlg._show_tab("sharing")
+        sh = dlg.pages["sharing"].shape
+        if not sh.preview.isHidden():
+            raise RuntimeError("planner: Settings' shape, nothing changed: nothing to save")
+        sh.mode.button(0).click()  # Up to N a day
+        sh.daily.setValue(25)
+        sh.ends.setCurrentIndex(sh.ends.findText("A day…"))
+        sh.end_day.setDate(QtCore.QDate.fromString(day(30), "yyyy-MM-dd"))
+        sh.taper.setValue(2)
+        ops_ = sh.ops()
+        if [o["op"] for o in ops_] != ["set_end", "set_pace", "set_phases"] or sh.go.text() != "Save" \
+                or "no new cards" not in sh.preview_words.text():
+            raise RuntimeError(f"planner: Settings' shape {ops_}, {sh.go.text()!r}")
+        shoot(dlg, os.path.join(out, "planner-settings-shape.png"))
+        sh.start.setDate(sh.start.date().addDays(7))
+        if not sh.ops() or sh.ops()[0] != {"op": "shift_all", "days": 7} or "Saving moves" not in sh.preview_words.text():
+            raise RuntimeError(f"planner: Settings' shape, the start: {sh.ops()}, {sh.preview_words.text()!r}")
+        sh.load()  # Put it back
+        if sh.ops() or not sh.preview.isHidden():
+            raise RuntimeError("planner: Settings' shape, Put it back")
+        dlg._show_tab("plan")
+        # no deck tab: Add from the deck puts the deck in the date's place, ticks adding to it; Done, the date again
+        if tab.side.count() != 2 or isinstance(tab.side, QtWidgets.QTabWidget):
+            raise RuntimeError("planner: the side is the date, or the deck while cards go on (no tabs)")
+        tab.tick_for("u3")
+        if tab.deck.bar.isHidden() or "Shock" not in tab.deck.bar_words.text() or tab.side.currentWidget() is not tab.deck:
+            raise RuntimeError("planner: Add from the deck")
+        shoot(dlg, os.path.join(out, "planner-deck-date.png"))
+        tab.deck._back()
+        if tab.side.currentWidget() is not tab.side_page or tab.picked != ("date", "u3"):
+            raise RuntimeError("planner: the deck's Done: the date again")
+        tab.lay_out_view()  # Add › Lay out from the deck…
+        if tab.side.currentWidget() is not tab.deck or tab.deck.target is not None:
+            raise RuntimeError("planner: Lay out from the deck")
+        # a search keeps the tags' structure: what's found under the tags above it, a line of one-way tags one row
+        deck = tab.deck
+        deck.find.setText("heart failure")
+        deck._typing.stop()
+        deck.fill_tree()
+        top = deck.tree.topLevelItem(0)
+        kids = [top.child(i).text(0) for i in range(top.childCount())] if top else []
+        if deck.tree.topLevelItemCount() != 1 or top.text(0) != "Big Step 1" or not top.isExpanded() \
+                or kids != ["Book › Cardio › Heart Failure", "Videos › Cardio › Heart Failure"] or deck.cover:
+            raise RuntimeError(f"planner: the deck's search, kept as a tree: {top and top.text(0)!r} {kids}, {deck.cover}")
+        shoot(dlg, os.path.join(out, "planner-deck-search.png"))
+        deck.view_btns["system"].click()  # a view button narrows the search to its tags
+        top = deck.tree.topLevelItem(0)
+        if deck.tree.topLevelItemCount() != 1 or top.text(0) != "Big Step 1 › Systems › Cardio › Heart Failure":
+            raise RuntimeError(f"planner: the search by system: {top and top.text(0)!r}")
+        deck.find.setText("sketches")
+        deck._typing.stop()
+        deck.fill_tree()
+        rows = [deck.tree.topLevelItem(i).text(0) for i in range(deck.tree.topLevelItemCount())]
+        if rows != ["Nothing here has \u201csketches\u201d.", "By resource has 1"]:
+            raise RuntimeError(f"planner: nothing by system: {rows}")
+        deck.more_btn.setChecked(True)  # a click opens More's menu and ticks it: only its own views tick it
+        if deck.more_btn.isChecked() or not deck.view_btns["system"].isChecked():
+            raise RuntimeError("planner: More ticked while By system shows")
+        deck._clicked(deck.tree.topLevelItem(1), 0)
+        if deck.view != "resource" or deck.tree.topLevelItem(0).text(0) != "Big Step 1 › Sketches":
+            raise RuntimeError(f"planner: By resource has 1: {deck.view}")
+        tab.deck.find.setText("#sketches")
+        tab.deck._typing.stop()
+        tab.deck.fill_tree()
+        it = tab.deck.tree.topLevelItem(0)
+        it.setCheckState(0, QtCore.Qt.CheckState.Checked)
+        if tab.deck.cover != {f"tag:{root}::#Sketches"} or tab.deck.go.isHidden() or "ticked, not on a date" not in tab.deck.fill_words.text():
+            raise RuntimeError(f"planner: the deck's ticks {tab.deck.cover}, {tab.deck.fill_words.text()!r}")
+        shoot(dlg, os.path.join(out, "planner-deck-fill.png"))
+        tab.deck._lay(tab.deck._go_how)
+        if not any(u.get("tags") == [f"{root}::#Sketches"] for u in STORE.plans[pid]["doc"]["units"]):
+            raise RuntimeError(f"planner: Lay them out: {dlg.status.text()!r}")
+        tab.back_from_deck()
+        # the text: plan lines pasted in, read, then added; the whole plan as text
+        td = PT.TextDialog(dlg, False, f"{day(6)} | Shock again | tag:{root}::#Videos::Cardio::Shock | read: chapter 9\n"
+                                      f"{day(4)} | event | Shock quiz")
+        if td.tab.go_btn.isHidden() or td.tab.go_btn.text() != "Add to the plan" or "1 date, 1 quiz or exam." not in td.tab.status.text():
+            raise RuntimeError(f"planner: plan lines read: {td.tab.status.text()!r}")
+        shoot(td, os.path.join(out, "planner-text-add.png"))
+        td.tab._go()
+        if not any(u.get("name") == "Shock again" for u in STORE.plans[pid]["doc"]["units"]) or td.result() != 1:
+            raise RuntimeError(f"planner: plan lines added: {td.tab.status.text()!r}")
+        td = PT.TextDialog(dlg, True)
+        if not any("| Shock again |" in x for x in td.tab.box.toPlainText().split("\n")):
+            raise RuntimeError("planner: the whole plan as text")
+        shoot(td, os.path.join(out, "planner-text-whole.png"))
+        # a course calendar pasted in: its sessions as dates, its quiz as a quiz
+        tab.paste.setPlainText(f"WEEK 3\n{P.fmt_day(day(8))}  LEC  Arrhythmias\n{P.fmt_day(day(9))}  QUIZ  Cardio quiz 2")
+        was = PTB.confirm
+        PTB.confirm = yes
+        try:
+            tab._show_changes()
+        finally:
+            PTB.confirm = was
+        doc = STORE.plans[pid]["doc"]
+        if not any(u.get("name") == "Arrhythmias" for u in doc["units"]) or not any(e.get("name") == "Cardio quiz 2" for e in doc["events"]) \
+                or tab.paste.toPlainText():
+            raise RuntimeError(f"planner: a calendar pasted: {dlg.status.text()!r}")
+        # with people following: changes wait under the plan, Review and send is one save with its line
+        for who, prog in (("kai", {"u4": [1, 1, 1], "u1": [1, 1, 2]}), ("dre", {"u4": [1, 0, 3]}), ("lee", {"u4": [1, 0, 3], "u1": [1, 0, 2]})):
+            STORE.follows[(pid, who)] = {"share": True, "paused": False, "sched": None, "progress": json.dumps(prog)}
+        STORE.follows[(pid, "mo")] = {"share": False, "paused": False, "sched": None, "progress": None}
+        dlg._load()
+        v = STORE.plans[pid]["version"]
+        tab.pick(("date", "u3"))
+        dp._nudge(1)
+        dlg.change({"op": "set_todo", "date": "u3", "lines": [{"k": "watch", "t": "Shock, part 2"}]})
+        if STORE.plans[pid]["version"] != v or not dlg.draft or len(dlg.draft) != 2 or tab.send_box.isHidden() \
+                or "2 changes not sent" not in tab.send_words.text() or 'href="u3"' not in tab.send_words.text() \
+                or unit("u3")["opens"] != day(3):
+            raise RuntimeError(f"planner: changes wait: {tab.send_words.text()!r}, v{STORE.plans[pid]['version']}")
+        shoot(dlg, os.path.join(out, "planner-waiting.png"))
+        sd = PS.SendDialog(dlg)
+        if not sd.why().startswith("Shock moved") or sd.go.text() != "Send to 4" or "Not open for anyone yet" not in \
+                " ".join(w.text() for w in sd.findChildren(QtWidgets.QLabel)):
+            raise RuntimeError(f"planner: Review and send: {sd.why()!r}, {sd.go.text()!r}")
+        shoot(sd, os.path.join(out, "planner-send.png"))
+        dlg.send(sd.why() + " The school moved the lecture.")
+        if STORE.plans[pid]["version"] != v + 1 or unit("u3")["opens"] != day(4) or dlg.draft is not None \
+                or not dlg.status.text().startswith("Sent to 4") or not STORE.plan_posts.get(pid):
+            raise RuntimeError(f"planner: Send: v{STORE.plans[pid]['version']} (was {v}), u3 {unit('u3')['opens']} vs {day(4)}, "
+                               f"draft {dlg.draft}, posts {STORE.plan_posts.get(pid)}, {dlg.status.text()!r}")
+        dlg._undo_entries()
+        if not [a for a in dlg.undo_menu.actions() if a.text().startswith("Undo your send of Tue 2:14 pm (2 changes)")]:
+            raise RuntimeError(f"planner: Undo ▾ after a send {[a.text() for a in dlg.undo_menu.actions()]}")
+        shoot(dlg, os.path.join(out, "planner-sent.png"))
+        # a co-author saves while changes wait: they go on theirs when it loads
+        dlg.change({"op": "rename", "date": "u3", "name": "Shock and sepsis"})
+        STORE.plans[pid]["version"] += 1
+        dlg._load()
+        if not dlg.draft or dlg.draft.version != STORE.plans[pid]["version"] or dlg.unit("u3")["name"] != "Shock and sepsis":
+            raise RuntimeError("planner: waiting changes, replayed on a co-author's save")
+        dlg.take_change(0)
+        if dlg.draft is not None or not tab.send_box.isHidden():
+            raise RuntimeError("planner: a waiting change taken out")
+        # an AI app's change (what the local MCP server adds): marked in Review and send, its reason the line
+        dlg.change({"op": "rename", "date": "u3", "name": "Shock and sepsis", "by": "ai", "why": "Named as the course names it."})
+        sd = PS.SendDialog(dlg)
+        if sd.why() != "Named as the course names it." or "From your AI app" not in \
+                [w.text() for w in sd.findChildren(QtWidgets.QLabel)]:
+            raise RuntimeError(f"planner: an AI app's change in Review and send: {sd.why()!r}")
+        shoot(sd, os.path.join(out, "planner-send-ai.png"))
+        sd.reject()
+        dlg.take_change(0)
+        # no Followers tab (Sam's call): how many follow is a line in Sharing, and Posts… what they were told;
+        # nothing says how far they are or whose Anki has the last send (the plan's squad is where followers meet)
+        if "followers" in dlg.pages:
+            raise RuntimeError("planner: a Followers tab")
+        st = dlg.pages["sharing"]
+        if st.following.text() != "4 following" or st.posts_btn.isHidden():
+            raise RuntimeError(f"planner: Sharing's Followers line {st.following.text()!r}")
+        pd = PS.PostsDialog(dlg)
+        pd.tab.box.setText("Week 3 moved: Shock is Thursday now.")
+        pd.tab._post()
+        labels = [w.text() for w in pd.findChildren(QtWidgets.QLabel)]
+        if not pd.tab.status.text().startswith("Posted") or any("followers' Anki" in t or " done" in t for t in labels) \
+                or pd.findChildren(QtWidgets.QProgressBar):
+            raise RuntimeError(f"planner: Posts {pd.tab.status.text()!r}, {labels}")
+        pd.tab._read()
+        shoot(pd, os.path.join(out, "planner-posts.png"))
+        pd.reject()
+        if dlg.draft:
+            dlg.draft.clear()
+        dlg.ops.keep_draft(pid, None)
+        dlg._load()
+        # Sharing: its code and link first; the name and line; the deck's link (a change)
+        st = dlg.pages["sharing"]
+        dlg._show_tab("sharing")
+        if st.code.text() != STORE.plans[pid]["code"] or st.squad.count() != 2 or st.delete_btn.isHidden():
+            raise RuntimeError(f"planner: Sharing: {st.code.text()!r}")
+        st.line.setText("Organ systems, one a week.")
+        st._save_meta()
+        if STORE.plans[pid].get("line") != "Organ systems, one a week." or not st.said.text().startswith("Saved"):
+            raise RuntimeError(f"planner: Sharing, the line: {st.said.text()!r}")
+        shoot(dlg, os.path.join(out, "planner-sharing.png"))
+        # History: every save, the latest undone
+        hd = PS.HistoryDialog(dlg)
+        hd.tab._read()
+        if hd.tab.list.topLevelItemCount() < 5 or hd.tab.undo_btn.isHidden():
+            raise RuntimeError("planner: History")
+        shoot(hd, os.path.join(out, "planner-history.png"))
+        # notes on a day, on the picked date
+        heart = unit("u1")
+        STORE.follows[(pid, "ameya")] = {"share": False, "paused": False, "sched": None, "progress": None}
+        STORE._note_n = 1
+        STORE.plan_notes.append({"id": 1, "plan": pid, "uid": "ameya", "day": heart["opens"], "text": "Lecture's in room 4B today", "at": 0})
+        dlg._show_tab("plan")
+        dlg._load()
+        tab.pick(("date", "u1"))
+        dn = dp.day_notes
+        dn.box.setText("Lab day, keep it light")
+        dn._add()
+        rows = [(dn.list.topLevelItem(i).text(0), dn.list.topLevelItem(i).text(1)) for i in range(dn.list.topLevelItemCount())]
+        if rows != [("Ameya", "Lecture's in room 4B today"), ("You", "Lab day, keep it light")]:
+            raise RuntimeError(f"planner: notes on a day: {rows}")
+        tab._mode("month")
+        shoot(dlg, os.path.join(out, "planner-month.png"))
+        # Month: a date dragged onto another day moves there (with people following, it waits); Ctrl+Z takes it back
+        cells = {c.day: c for c in tab.month_body.findChildren(PW.DayCell)}
+        to = QtCore.QDate.fromString(unit("u1")["opens"], "yyyy-MM-dd").addDays(2).toString("yyyy-MM-dd")
+        drags = [r for r in tab.month_body.findChildren(PW.Row) if r.drag]
+        if to not in cells or not cells[to].acceptDrops() or not drags:
+            raise RuntimeError(f"planner: Month takes a dragged date ({to} in {sorted(cells)[:3]}…)")
+        was = PTB.confirm
+        PTB.confirm = yes
+        try:
+            cells[to].on_drop("date", "u1", to)
+        finally:
+            PTB.confirm = was
+        if not dlg.draft or dlg.draft.ops[-1].get("op") != "move" or dlg.unit("u1")["opens"] != to:
+            raise RuntimeError(f"planner: a date dropped on another day: {dlg.draft and dlg.draft.ops}")
+        dlg.undo_key()
+        if dlg.draft is not None:
+            raise RuntimeError("planner: Ctrl+Z takes back the last change not sent")
+        tab._mode("list")
+        # the Plan tab's keys, and Find
+        seqs = {x.key().toString() for x in tab.findChildren(QtGui.QShortcut)}
+        want = {"Ctrl+N", "Ctrl+E", "Ctrl+F", "Ctrl+T", "Ctrl+1", "Ctrl+2", "Ctrl+D", "Ctrl+Z", "Ctrl+Return",
+                "Up", "Down", "Alt+Left", "Alt+Right", "Return", "F2", "Del"}
+        if not want <= seqs:
+            raise RuntimeError(f"planner: the Plan tab's keys, missing {sorted(want - seqs)}")
+        tab.pick(("date", "u1"))
+        tab.step(1)
+        order = [k for k in tab.rows if k[0] in ("date", "event", "review")]
+        if tab.picked != order[order.index(("date", "u1")) + 1]:
+            raise RuntimeError(f"planner: ↓ picks the next one: {tab.picked}")
+        tab._toggle_all()
+        if tab.all_btn.text() != "Collapse all" or not all(tab._is_open(w) for w in M_.weeks(dlg.doc, TODAY)):
+            raise RuntimeError(f"planner: Expand all ({tab.all_btn.text()!r})")
+        tab._toggle_all()
+        if tab.all_btn.text() != "Expand all" or [k for k in tab.rows if k[0] == "date"]:
+            raise RuntimeError(f"planner: Collapse all ({tab.all_btn.text()!r}, {list(tab.rows)[:3]})")
+        tab.all_open = None
+        tab._toggle_sort()  # Latest first: the list the other way up, the line at today still between past and to come
+        order = [k for k in tab.rows if k[0] == "date"]
+        days = [dlg.unit(k[1])["opens"] for k in order]
+        if tab.sort_btn.text() != "Latest first" or days != sorted(days, reverse=True):
+            raise RuntimeError(f"planner: Latest first {days}")
+        tab._toggle_sort()
+        days = [dlg.unit(k[1])["opens"] for k in tab.rows if k[0] == "date"]
+        if tab.sort_btn.text() != "Earliest first" or days != sorted(days):
+            raise RuntimeError(f"planner: Earliest first {days}")
+        tab.find.setText("heart")
+        found = [k for k in tab.rows if k[0] == "date"]
+        if not found or any("heart" not in (dlg.unit(k[1]).get("name") or "").lower()
+                            and not any("heart" in str(t).lower() for t in dlg.unit(k[1]).get("tags") or []) for k in found):
+            raise RuntimeError(f"planner: Find keeps the dates with its words: {found}")
+        tab._find_first()
+        if tab.picked != found[0]:
+            raise RuntimeError("planner: Find's Enter picks the first")
+        tab.find.clear()
+        tab._go_change("u3")
+        if tab.picked != ("date", "u3"):
+            raise RuntimeError("planner: a change in the foot, clicked, picks its date")
+        # a plan I follow: Plan (today, behind, its dates to read) and Mine
+        pid2, _code2 = STORE.add_plan("kai", "Kai's Renal", "Big Step 1", [
+            {"id": "k1", "name": "Heart failure", "opens": day(-6), "tags": [f"{root}::#Videos::Cardio::Heart_Failure"]},
+            {"id": "k2", "name": "Shock", "opens": TODAY, "tags": [f"{root}::#Videos::Cardio::Shock"]}])
+        STORE.follows[(pid2, "sam")] = {"share": True, "paused": False, "sched": None, "progress": None}
+
+        class FOps(Ops):
+            def follow_state(self, pid_):
+                return {"id": pid_, "name": "Kai's Renal", "shift": 2, "skipped": ["k1"], "own": ""}
+
+            def held_count(self, pid_):
+                return 3
+
+            def in_team(self, pid_):
+                return True
+
+            def can_reset(self, pid_):
+                return True
+
+        fw = PlanWindow(None, col, PR.my_plans(CLIENT), FOps(), select=pid2)
+        fw.resize(1180, 760)
+        shown = [fw.tabs.tabText(i) for i in range(fw.tabs.count()) if fw.tabs.isTabVisible(i)]
+        ft = fw.pages["plan"]
+        if shown != ["Plan", "Insights", "Settings"] or fw.author() or ft.today_box.isHidden() or ft.behind_box.isHidden() \
+                or not ft.paste_row.isHidden() or not ft.shape_box.isHidden() or not fw.undo_btn.isHidden():
+            raise RuntimeError(f"planner: a follower's tabs {shown}")
+        shoot(fw, os.path.join(out, "planner-follower.png"))
+        fw._show_tab("insights")
+        fi = fw.pages["insights"]
+        said = [w.text() for w in fi.findChildren(QtWidgets.QLabel) if w.isVisibleTo(fi)]
+        if not any(t.startswith("You've seen") for t in said) or "Workload" not in said:
+            raise RuntimeError(f"planner: a follower's Insights {said}")
+        shoot(fw, os.path.join(out, "planner-insights-follower.png"))
+        fi.body.grab().save(os.path.join(out, "planner-insights-follower-all.png"))
+        fw._show_tab("mine")
+        mt = fw.pages["mine"]
+        if mt.later.text() != "2 days later" or mt.held.isHidden():
+            raise RuntimeError(f"planner: Mine {mt.later.text()!r}")
+        mt._more()  # round five: what the board's Plan ▾ held besides is under More
+        more = [a.text() for a in mt.more_menu.actions()]
+        nxt = next((a for a in mt.more_menu.actions() if a.text().startswith("When I'm ready, the next")), None)
+        if not {"Change deck…", "Open everything now", "Open early", "Reset to default…"} <= set(more) \
+                or nxt is None or nxt.isEnabled() or "My schedule…" in more:
+            raise RuntimeError(f"planner: Settings' More (a follower's) {more}")
+        shoot(fw, os.path.join(out, "planner-mine.png"))
+        # a picked date whose plan lost its dates, then a load that fails: no crash, no stale pick
+        crash = PlanWindow_()
+        crash.pages["plan"].pick(("date", "u1"))
+        raw0, plan0 = PR.load(CLIENT, pid)
+        bare = dict(raw0, doc=dict(raw0["doc"], units=[], reviews=[], events=[]))
+        crash._loaded(pid, (bare, dict(plan0, doc=dict(plan0["doc"], units=[], events=[]))))
+        if crash.pages["plan"].picked is not None:
+            raise RuntimeError("planner: a picked date outlived its plan's dates")
+        crash._loaded(pid, None)
+        if crash.pages["plan"].picked is not None or "didn't load" not in crash.status.text():
+            raise RuntimeError(f"planner: a load that failed: {crash.status.text()!r}")
+        crash._load()
+        if crash.busy or crash.plan is None:
+            raise RuntimeError("planner: picked again after a load that failed")
+        empty = PlanWindow_([])
+        if not empty.tabs.isHidden() or empty.welcome.isHidden() or not empty.pick.isHidden():
+            raise RuntimeError("planner: no plans yet: the welcome, no tabs")
+        [b for b in empty.welcome.findChildren(QtWidgets.QPushButton) if b.text() == "Follow a plan…"][0].click()
+        if reopened[-1:] != ["follow"]:
+            raise RuntimeError("planner: no plans yet: Follow a plan…")
+        shoot(empty, os.path.join(out, "planner-empty.png"))
+        # New plan: the one way to start, a calendar pasted
+        from due_crew.planner.new_plan import NewPlanWindow
+
+        class NOps:
+            def today(self):
+                return datetime.date.fromisoformat(TODAY)
+
+            def index(self, did):
+                return P.DeckIndex(col, did)
+
+            def make(self, owner, name, doc, done, pid=None):
+                outcome, raw = PR.create(CLIENT, name, doc.get("deck") or "")
+                done(PR.save(CLIENT, raw["id"], raw.get("version") or 1, doc, "made"))
+
+            def open_plan(self, pid_):
+                reopened.append(("new", pid_))
+
+            def follow(self, code):
+                reopened.append(("follow", code))
+
+            def labs_window(self):
+                pass
+
+        nw = NewPlanWindow(None, [(1, "Big Step 1", 60)], NOps())
+        nw.text.setPlainText(f"BLOCK 2 · Cardiovascular\nWEEK 1\n{P.fmt_day(day(7))}  LEC  Heart failure\n"
+                             f"{P.fmt_day(day(8))}  LEC  Something new\n{P.fmt_day(day(11))}  EXAM  Block 2 exam")
+        nw._read()
+        doc_, n_ = nw.doc()
+        if nw.name.text() != "BLOCK 2 · Cardiovascular" or nw.end_name.text() != "Block 2 exam" or n_ != 2 \
+                or any(u.get("tags") or u.get("decks") for u in doc_["units"]) or doc_.get("deck") != "Big Step 1" \
+                or doc_.get("end") != day(11) or len(doc_.get("events") or []) != 1:
+            raise RuntimeError(f"new plan: {nw.name.text()!r}, {nw.end_name.text()!r}, {n_}, {doc_}")
+        shoot(nw, os.path.join(out, "planner-new.png"))
+        was = __import__("due_crew.planner.new_plan", fromlist=["confirm"]).confirm
+        import due_crew.planner.new_plan as PNP
+        PNP.confirm = yes
+        try:
+            nw._make()
+        finally:
+            PNP.confirm = was
+        if not reopened or reopened[-1][0] != "new":
+            raise RuntimeError(f"new plan: made {nw.said.text()!r}")
+        STORE.plans.pop(reopened[-1][1], None)
+        STORE.plans.pop(pid2, None)
+        if PO.why_line([]) != "":
+            raise RuntimeError("planner: an empty why")
+        idx = P.DeckIndex(col, 1)
+        pick = Picker(None, idx, "Add to Tue " + day(1)[-2:], "Big Step 1")
+        top = pick.tree.topLevelItem(0)
+        pick.tree.expandItem(top)
+        settle(50)
+        for i in range(top.childCount()):
+            if top.child(i).text(0) == "Videos":
+                pick.tree.expandItem(top.child(i))
+        shoot(pick, os.path.join(out, "planner-picker.png"))
+        pick = Picker(None, idx, "Add to Tue", "Big Step 1")
+        pick.find.setText("heart failure")
+        pick._fill()
+        pick.tree.topLevelItem(0).setCheckState(0, QtCore.Qt.CheckState.Checked)
+        if pick.value() != ([f"{root}::#Book::Cardio::Heart_Failure"], []) or not pick.go.isEnabled():
+            raise RuntimeError(f"picker: ticked {pick.value()}")
+        shoot(pick, os.path.join(out, "planner-picker-find.png"))
+
+        # QBank QIDs on its own copy of the deck: its Unsuspend changes nothing the windows after it read
+        qconn = sqlite3.connect(":memory:")
+        conn.commit()  # a backup waits forever on a source with a write still open
+        conn.backup(qconn)
+        qcol = fakes.FakeCol(qconn, fakes.day_cutoff_for(datetime.date.today()))
+        qcol.decks = fakes.FakeDecks({1: "Big Step 1", 3: "Big Step 1::Cardio", 5: "Due Crew::QBank cards"})
+
+        class QOps(PF.QidOps):
+            def index(self, did):
+                return P.DeckIndex(qcol, did)
+
+            def default_deck(self, choices):
+                return 1
+
+            def plan_dates(self, did, idx, cids):
+                return [("MS2 Block 2", [P.fmt_day(day(0))])]
+
+            def unsuspend(self, cids):
+                return PA.unsuspend(qcol, cids, "Due Crew: unsuspend")
+
+            def study(self, cids):
+                QOps.studied = sorted(cids)
+                return True
+
+            def browse(self, cids):
+                QOps.browsed = sorted(cids)
+
+        q = QidWindow(None, qcol, [(1, "Big Step 1")], QOps())
+        if q.study_btn.isEnabled() or q.unsuspend_btn.isEnabled() or q.lines.text() or not q.browse_btn.isHidden():
+            raise RuntimeError("qids: nothing pasted, nothing to do")
+        shoot(q, os.path.join(out, "planner-qids-empty.png"))
+        q = QidWindow(None, qcol, [(1, "Big Step 1")], QOps())
+        q.text.setPlainText("Block 3 · 12 Oct 2026\nMissed: 10234, 10911, 11002, 12118 · 65%")
+        q._count()
+        if (q.found["found"] != ["10234", "10911", "11002", "12118"] or not q.bank.isHidden() or not q.study_btn.isEnabled()
+                or q.unsuspend_btn.text() != "Unsuspend 6" or q.lines.text() != "4 questions · 6 cards · 6 suspended"):
+            raise RuntimeError(f"qids: {q.found}, {q.unsuspend_btn.text()!r}, {q.lines.text()!r}")
+        shoot(q, os.path.join(out, "planner-qids.png"))
+        q.study_btn.click()
+        if QOps.studied != sorted(q.cids()) or len(QOps.studied) != 6:
+            raise RuntimeError(f"qids: Study took {QOps.studied}")
+        q = QidWindow(None, qcol, [(1, "Big Step 1")], QOps())
+        q.text.setPlainText("10234")
+        q._count()
+        if q.bank.isHidden() or q.bank_label.text() != "Question bank" or q.bank.count() != 2:
+            raise RuntimeError("qids: a number in two banks asks which")
+        shoot(q, os.path.join(out, "planner-qids-bank.png"))
+        q = QidWindow(None, qcol, [(1, "Big Step 1")], QOps())
+        q.text.setPlainText("10234 10911 11002 12118")
+        q._count()
+        q._unsuspend()
+        if not q.said.text().startswith("Unsuspended 6") or len(qcol.undo_steps) != 1 or q.unsuspend_btn.isEnabled():
+            raise RuntimeError(f"qids: Unsuspend said {q.said.text()!r}, {qcol.undo_steps}")
+        shoot(q, os.path.join(out, "planner-qids-done.png"))
+        start_window(STORE, PF, PR, P)
+
     for label, build in (("kitchen", kitchen), ("questions", questions), ("tools menu", tools_menu), ("friends", friends), ("decks", decks),
                          ("squads", squads), ("auth", auth),
                          ("welcome", welcome), ("logo", logo), ("room", room), ("emoji", emoji),
                          ("report", report), ("plans", plans), ("schedule", schedule), ("map card", map_card),
                          ("share card", share_card), ("why", why), ("plan tags", plan_tags), ("open cards", open_cards),
-                         ("remark", remark), ("held back", held), ("welcome back", away)):
+                         ("remark", remark), ("held back", held), ("welcome back", away), ("planner", planner),
+                         ("ai app", ai_app)):
+        if os.environ.get("DC_ONLY") and label not in os.environ["DC_ONLY"].split(","):
+            continue  # DC_ONLY=planner,plans: just those (while working on them)
         attempt(label, build)
     if failures:
         print("FAILED:", *failures, sep="\n  ")

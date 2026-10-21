@@ -73,6 +73,15 @@ S = {
                  "addlater"),
     "plans": (R(due=DV_BASE, plans=PV.PLANS, you=you("plans")), None, "day"),
 }
+# round five, pick A: the day's click again shuts its details; another day's slides them across
+_wk = PV.PLAN_CARD["week"]
+_on = lambda i: dict(PV.PLANS, cards=[dict(PV.PLAN_CARD, focus=_wk[i]["day"])])  # noqa: E731
+# round five, pick 3: two plans, the switch to the other
+_two = dict(PV.PLANS, cards=[PV.PLAN_CARD, PV._TWO["cards"][1]])
+S["planpick"] = (R(due=DV_BASE, plans=_two, you=you("plans", plans=_two)),
+                 R(cfg={"period": "today", "plan_pick": "p2"}, due=DV_BASE, plans=_two, you=you("plans", plans=_two)), None)
+S.update({"dayshut": (R(due=DV_BASE, plans=_on(4), you=you("plans", plans=_on(4))), None, "day"),
+          "dayswitch": (R(due=DV_BASE, plans=_on(2), you=you("plans", plans=_on(2))), None, "day")})
 # round two (each a swap; a profile, a bingo square and the logo are buttons)
 from due_crew import room_model  # noqa: E402
 ins = lambda **kw: R(due=DV_BASE, plans=PV.PLANS, you=you("insights", insights=dict(PV._PLAN_INS, view=dict(PV._PLAN_INS["view"], **kw))))  # noqa: E731
@@ -102,7 +111,6 @@ S.update({
     "shade": (ins(), ins(map=mp), None),
     "caught": (base, R(due=dict(DV_BASE, behind_n=0, behind_plans=[], behind_mine=[]), you=you("today")), None),
     "notein": (base, R(due=toast, you=you("today")), None), "noteout": (R(due=toast, you=you("today")), base, None),
-    "studyto": (R(due=dict(DV_BASE, study_to="Pharm"), you=you("today")), R(due=dict(DV_BASE, study_to="Renal"), you=you("today")), None),
 })
 # 3.8.1: Pip by the logo for a moment (it goes by itself after sev.LOGO_SECONDS), and the session's line
 from due_crew import sev as SV
@@ -122,7 +130,8 @@ out = {k: {"a": a, "swap": ((B.swap_js(b) + B.keep_me_in_view_js(scripts=False))
 NAMES = {"tick": "1 A tick you can see (and 2, the bar)", "done": "3 Done for today", "add": "4 A to-do lands (today)",
          "addlater": "4 A to-do lands (another day)", "learn": "5 Learning back, flagged", "fold": "6 Hide", "unfold": "6 Show",
          "duetabs": "7 Tabs: You", "pills": "7 Tabs: Crew to Squads", "views": "7 Tabs: Today to Week",
-         "plans": "8 The plan week: a day", "map": "9 The map opens a tile", "nums": "10 Numbers that changed",
+         "plans": "8 The plan week: a day", "dayshut": "8 The plan week: the day again shuts it",
+         "dayswitch": "8 The plan week: another day", "planpick": "8 Two plans: the other one", "map": "9 The map opens a tile", "nums": "10 Numbers that changed",
          "nothing": "A refresh with nothing new (nothing moves)", "squares": "11 A friend's day fills in",
          "decks": "12 Decks bars grow in", "upd": "14 Refreshing: Updated", "insights": "16 Insights' line draws in",
          "settings": "18 Settings slides in", "setback": "18 Back to the board", "sort": "19 The column you sort by",
@@ -130,7 +139,7 @@ NAMES = {"tick": "1 A tick you can see (and 2, the bar)", "done": "3 Done for to
          "knockout": "23 A knock goes", "roomjoin": "24 Someone joins the room", "roomleave": "24 Someone leaves the room",
          "planweek": "25 A plan week's bars grow in", "sticking": "26 A topic starts sticking",
          "sticklast": "26 The last topic sticks", "shade": "27 A map tile changes shade", "caught": "29 Caught up",
-         "notein": "30 A note slides in", "noteout": "30 A note goes", "studyto": "35 Study today names the next deck",
+         "notein": "30 A note slides in", "noteout": "30 A note goes",
          "sevhop": "Pip: the day's done (a hop, the week's squares fly)", "sevcheer": "Pip: a cheer lands",
          "sevexam": "Pip: exam eve", "sevhello": "Pip: back from away", "fifteendone": "Pip: the session's line (a square a fifteen)",
          "sevhop.twirl": "Pip: the day's done, a twirl", "sevhop.shuffle": "Pip: the day's done, a little dance",

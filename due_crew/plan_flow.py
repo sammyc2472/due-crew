@@ -884,10 +884,19 @@ def card_view(plan, st, prog, today, session=None, week_offset=0):
     if st and st.get("snapshot") is not None and st.get("seen_version") != plan.get("version"):
         change = P.change_note(plan.get("ownerName"), st["snapshot"], _plan_doc(plan))
     own = P.own_pace(plan) and not plan.get("paused") and not no_deck
+    # round five: the card's line about the plan's day (Due's Today and Upcoming have each date):
+    # what today's dates have left, and what's behind (past its day, not seen) and since when
+    status = None
+    if not (no_deck or plan.get("paused") or own):
+        left = lambda u: max(0, int(_t3(prog, u)[2]) - int(_t3(prog, u)[1]))
+        late = sorted(str(u["due"]) for u in us if u.get("due") and str(u["due"]) < today and left(u))
+        status = {"togo": sum(left(u) for u in us if str(u.get("opens") or "") == today),
+                  "behind": sum(left(u) for u in us if u.get("due") and str(u["due"]) < today),
+                  "since": P.weekday_or_day(late[0], today) if late else ""}
     if own:  # 3.8.0: no Behind at my own pace; what's next, and where the plan is
         sub = f"at your pace · {followers:,} following"
         waiting, catch, session = 0, None, None
-    return {"id": plan["id"], "title": P.plan_title(plan), "sub": sub, "rows": rows,
+    return {"id": plan["id"], "title": P.plan_title(plan), "name": str(plan.get("name") or "Plan"), "sub": sub, "rows": rows,
             "own": own_view(plan, st, prog, today) if own else None,
             "lines": [] if no_deck or plan.get("paused") or own else P.ahead_behind(doc, prog or {}, today),
             "change": change, "no_deck": no_deck, "paused": bool(plan.get("paused")),
@@ -905,8 +914,13 @@ def card_view(plan, st, prog, today, session=None, week_offset=0):
             "put_off": put_off, "waiting": waiting,
             # 3.8.1: put off by Welcome back's Not today: tomorrow morning asks again
             "put_off_ask": bool(put_off) and str(((st or {}).get("away") or {}).get("day") or "") == today,
-            "week": week, "week_offset": int(week_offset),
+            "week": week, "week_offset": int(week_offset), "status": status,
             "catch": {"extra": int(catch.get("extra") or 0), "until": _short_day(catch["until"], today)} if catch else None}
+
+
+def _t3(prog, u):
+    """A date's [opened, seen, total] here."""
+    return (list((prog or {}).get(u["id"]) or []) + [0, 0, 0])[:3]
 
 
 def _shut_dates(plan, st, prog):
@@ -1849,7 +1863,8 @@ def build_checks(plan_list):
 
 
 # 3.9.1: what refresh_progress leaves in _state; its last answer, and what it was read from
-_WRITES = ("plan_progress", "plan_load", "plan_picks", "plan_reviews", "plan_session", "plan_parts", "plan_sibs")
+_WRITES = ("plan_progress", "plan_load", "plan_picks", "plan_reviews", "plan_session", "plan_parts", "plan_sibs",
+           "plan_later", "plan_today")
 _last = {"key": None, "got": None}
 
 
@@ -2224,6 +2239,13 @@ def on_message(cmd, parts):
         step = parts[3]
         weeks[arg] = 0 if step == "0" else max(-26, min(26, int(weeks.get(arg, 0)) + (1 if step == "next" else -1)))
         app.swap(cfg())
+    elif cmd == "planpick" and re.fullmatch(r"[A-Za-z0-9_-]{1,128}", arg or ""):
+        # round five, pick 3: the plan You › Plans shows, with two or more (this computer's)
+        c = cfg()
+        c["plan_pick"] = arg
+        _state.pop("plan_focus", None)  # another plan lets go of a jumped-to day
+        save_cfg(c)
+        app.swap(c)
     elif cmd == "planshift" and arg:
         set_shift(arg)
     elif cmd == "plansite" and arg and re.fullmatch(r"[A-Za-z0-9_-]{1,128}", arg):
@@ -2231,7 +2253,15 @@ def on_message(cmd, parts):
     elif cmd == "planlibrary":
         open_site("/library")
     elif cmd == "planmake":
-        open_make()
+        _planner_flow().open_new()  # round five: one New plan
+    elif cmd == "planyours":  # 3.9.3: Your plans, on a plan when the click names one
+        open_yours(arg if re.fullmatch(r"[A-Za-z0-9_-]{1,128}", arg or "") else None)
+    elif cmd == "plannew":  # 3.9.3: You › Plans' New plan ▾
+        new_plan_menu()
+    elif cmd == "planstart":  # 3.9.3: New plan from a calendar (round five: the one New plan)
+        _planner_flow().open_new()
+    elif cmd == "planmissed":  # 3.9.3: QBank QIDs, from Due's head or on Insights' deck
+        _planner_flow().open_qids(int(arg) if arg.isdigit() else None)
     elif cmd == "planresume" and arg:
         p = next((x for x in followed() if x["id"] == arg), None)
         if p:
@@ -3135,12 +3165,34 @@ def set_early(pid, days):
     _bg(lambda: cl.set_early(pid, days), done)
 
 
+def _planner_flow():
+    from .planner import flow
+    return flow
+
+
+def open_yours(pid=None):
+    """3.9.3: Your plans (the plan window), on this plan when one's named."""
+    _planner_flow().open_plans(select=pid)
+
+
+def new_plan_menu():
+    """3.9.3: You › Plans' New plan ▾ (round five: New plan, in Anki, the
+    one way to start one; or on duecrew.com)."""
+    from aqt.qt import QCursor, QMenu
+    menu = QMenu(mw)
+    menu.addAction("New plan…").triggered.connect(lambda: _planner_flow().open_new())
+    menu.addAction("On duecrew.com ↗").triggered.connect(lambda: open_site("/plans"))
+    menu.exec(QCursor.pos())
+
+
 def plan_menu(pid):
     p = next((p for p in followed() if p["id"] == pid), None)
     if p is None:
         return
     from aqt.qt import QCursor, QMenu
     menu = QMenu(mw)
+    menu.addAction("Open in Your plans").triggered.connect(lambda: open_yours(pid))  # 3.9.3
+    menu.addSeparator()
     if p.get("sched"):  # 3.3: new follows do the plan's days; a 3.2 schedule can still change or go
         menu.addAction("My schedule…").triggered.connect(lambda: open_schedule(pid))
     how = menu.addMenu("How its cards open")  # 3.8.0: at my own pace
@@ -3852,7 +3904,9 @@ def open_make():
     if not mw.col:
         return
     from .ui.plan_dialog import MakePlanDialog
-    MakePlanDialog(mw, client(), mw.col, site_base(), on_sent=note_tree).exec()
+    from .planner import flow as planner_flow
+    make, made = planner_flow.make_here(client())
+    MakePlanDialog(mw, client(), mw.col, site_base(), on_sent=note_tree, make=make, on_made=made).exec()
 
 
 def open_site(path):
@@ -4080,6 +4134,7 @@ def jump_to(pid, day):
     _state.setdefault("plan_week", {})[pid] = max(-26, min(26, weeks))
     _state["plan_focus"] = {pid: day}
     c = cfg()
+    c["plan_pick"] = pid  # with two or more plans, this one stays shown once the day lets go
     show_plans(c, swap=False)
     if getattr(mw, "state", "") != "deckBrowser":
         mw.moveToState("deckBrowser")

@@ -114,6 +114,61 @@ def shot(w, name, size=None):
     w.grab().save(os.path.join(OUT, name + ".png"))
 
 
+# 0.2.0: the window everyone sees first. No course yet: paste, Make my course
+from course_mac_poc import simple  # noqa: E402
+
+app.data = {"courses": [], "current": 0}
+app.runner.available = lambda: (True, "scripted")
+sw = simple.SimpleWindow(app)
+app.simple = sw
+check(sw.pages.currentIndex() == 0, "no course: the start page")
+check(sw.deck.currentData() == t.did, f"the biggest deck picked: {sw.deck.currentText()}")
+shot(sw, "0a-start", (720, 640))
+sw.make()
+check("Paste the calendar first" in sw.start_state.text(), "an empty calendar says so")
+sw.cal_text.setPlainText("no dates here at all")
+sw.make()
+check("No dated sessions" in sw.start_state.text(), f"no sessions says so: {sw.start_state.text()}")
+sw.cal_text.setPlainText(T.CALENDAR)
+sw.make()
+c0 = app.course()
+check(c0 and c0["name"] == "Block 2" and c0.get("auto_open"), f"made: {c0 and c0['name']}")
+check(sw.pages.currentIndex() == 1, "made: the course page")
+check(all(l.get("state") == "done" for l in c0["lectures"] if C.studied(l)), "every lecture read")
+check(sw.list.topLevelItemCount() == 3, f"lectures listed: {sw.list.topLevelItemCount()}")
+hf0 = next(l for l in c0["lectures"] if l["title"] == "Heart failure")
+check("Heart failure" in sw.next_lbl.text() and sw.next_btn.isVisible(), f"next up: {sw.next_lbl.text()}")
+check("read by your Mac's model" in sw.sub.text(), f"sub line: {sw.sub.text()}")
+shot(sw, "0b-course", (720, 640))
+n_sus0 = t.col.db.scalar("SELECT count() FROM cards WHERE queue = -1")
+sw.next_btn.click()
+check(t.col.db.scalar("SELECT count() FROM cards WHERE queue = -1") < n_sus0, "Open them now opened cards")
+check(any("Opened" in x and "Heart failure" in x for x in tips), f"tooltip: {tips[-1:]}")
+check(hf0.get("opened"), "the lecture remembers it opened")
+t.col.undo()
+check(t.col.db.scalar("SELECT count() FROM cards WHERE queue = -1") == n_sus0, "one undo puts them back")
+sw.checked = ("helper", False, "Apple Intelligence is off (System Settings › Apple Intelligence & Siri)")
+sw.fill_sub()
+check("plain matching: Apple Intelligence is off" in sw.sub.text(), f"not ready says why: {sw.sub.text()}")
+# a model that isn't ready: plain matching, and the reason stays through the second ask
+sw.checked = None
+app.runner = t.scripted()
+app.runner.available = lambda: (False, "unavailable(.appleIntelligenceNotEnabled)")
+sw.ready_runner()
+sw.ready_runner()  # now the plain-matching stand-in: the reason is kept
+sw.fill_sub()
+check(app.runner.name == "none", "not ready: plain matching stands in")
+check("Apple Intelligence is off" in sw.sub.text(), f"the reason kept: {sw.sub.text()}")
+sw.details(hf0["id"])
+check(app.window is not None and app.window.cur == hf0["id"], "double-click opens All the details on it")
+app.window.close()
+sw.close()
+
+# the full window, as before, on a course of its own
+app.data = {"courses": [C.new_course("Block 2", t.did, "Big Step 1")], "current": 0}
+app.idx = None
+app.runner = t.scripted()
+
 # the course window, its calendar
 win = ui.CourseWindow(app)
 app.window = win

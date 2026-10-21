@@ -1,25 +1,30 @@
 """Make a plan from a deck (3.1): the deck's tag and subdeck
 names with card counts go to Due Crew, and the builder opens on the site,
 signed in by a one-time link. Names and counts only, never card text.
+3.9.3: with `make`, the plan is made here (its name, POST /plans) and opens
+in Your plans; the builder on the site is the other button.
 
-The deck is read on the main thread (one query per deck picked); the two
-requests (PUT /plans/trees, POST /auth/link) run in the background."""
+The deck is read on the main thread (one query per deck picked); the
+requests (PUT /plans/trees, then POST /auth/link or POST /plans) run in the
+background."""
 
 from urllib.parse import quote
 
 from aqt.qt import (
-    QComboBox, QDialog, QDialogButtonBox, QFormLayout, QLabel, QVBoxLayout,
+    QComboBox, QDialog, QDialogButtonBox, QFormLayout, QLabel, QLineEdit, Qt, QVBoxLayout,
 )
 
 from . import attach_alive, esc, heading, note, run_bg
 from .. import plans as P
 
 class MakePlanDialog(QDialog):
-    def __init__(self, parent, client, col, site, open_link=None, on_sent=None):
+    def __init__(self, parent, client, col, site, open_link=None, on_sent=None, make=None, on_made=None):
         super().__init__(parent)
         self.client, self.col, self.site = client, col, site
         self.open_link = open_link   # tests pass their own; Anki's openLink otherwise
         self.on_sent = on_sent       # 3.8.1: main thread, (deck, tags, decks) once the tree is up
+        self.make = make             # 3.9.3: background, (name, deck) -> ("saved", raw) | ("refused", words)
+        self.on_made = on_made       # 3.9.3: main thread, (raw) once it's made
         self.indexes = {}            # did -> DeckIndex, read once per deck
         self.url = None
         attach_alive(self)
@@ -33,6 +38,11 @@ class MakePlanDialog(QDialog):
         for did, name in P.deck_choices(col):
             self.deck.addItem(name, did)
         form.addRow("Deck", self.deck)
+        self.name = QLineEdit()
+        self.name.setMaxLength(60)
+        self.name.setPlaceholderText("MS2 Block 2")
+        if make is not None:
+            form.addRow("Name", self.name)
         root.addLayout(form)
         # a plan is one deck and everything under it
         two = QLabel("To plan two decks, put them under one parent deck in Anki.")
@@ -41,14 +51,21 @@ class MakePlanDialog(QDialog):
         self.found = note(QLabel(""))
         root.addWidget(self.found)
         self.status = QLabel("")
+        self.status.setTextFormat(Qt.TextFormat.PlainText)  # a refusal's words are the server's
         self.status.setWordWrap(True)
         root.addWidget(self.status)
 
         self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok
                                         | QDialogButtonBox.StandardButton.Cancel)
         self.go = self.buttons.button(QDialogButtonBox.StandardButton.Ok)
-        self.go.setText("Open the builder")
-        self.buttons.accepted.connect(self._open)
+        self.go.setText("Make the plan" if make is not None else "Open the builder")
+        self.site_btn = None
+        if make is not None:
+            self.site_btn = self.buttons.addButton("Open the builder instead", QDialogButtonBox.ButtonRole.ActionRole)
+            self.site_btn.setFlat(True)
+            self.site_btn.setToolTip("<span>Make it on duecrew.com, in the builder there</span>")
+            self.site_btn.clicked.connect(self._open)
+        self.buttons.accepted.connect(self._make if make is not None else self._open)
         self.buttons.rejected.connect(self.reject)
         root.addWidget(self.buttons)
 
@@ -72,6 +89,9 @@ class MakePlanDialog(QDialog):
             return
         self.found.setText("Sends its tag and subdeck names with card counts. Never card text.")
         self.go.setEnabled(bool(tags or decks))
+        if self.site_btn is not None:
+            self.site_btn.setEnabled(bool(tags or decks))
+        self.name.setPlaceholderText(name)
         if not (tags or decks):
             self.found.setText(f"{esc(name)} has no cards yet.")
 
@@ -103,5 +123,39 @@ class MakePlanDialog(QDialog):
                 from aqt.utils import openLink as opener
             opener(url)
             self.accept()
+
+        run_bg(self, job, done)
+
+    def _make(self):
+        """3.9.3: the plan made here, named, no dates yet; it opens in Your plans."""
+        deck, tags, decks = self._tree()
+        if not deck:
+            return
+        title = " ".join(self.name.text().split()) or deck
+        # while it's being made, nothing else: a second plan, or one made with nobody told
+        held = [self.go, self.site_btn, self.buttons.button(QDialogButtonBox.StandardButton.Cancel)]
+        for b in held:
+            if b is not None:
+                b.setEnabled(False)
+        self.status.setText("Making the plan…")
+        cl, make = self.client, self.make
+
+        def job():
+            if not cl.put_tree(deck, tags, decks):
+                return None
+            return make(title, deck)
+
+        def done(got, err):
+            if not got or got[0] != "saved":
+                for b in held:
+                    if b is not None:
+                        b.setEnabled(True)
+                self.status.setText(str(got[1]) if got else "Couldn't reach Due Crew. Check your connection.")
+                return
+            if self.on_sent:
+                self.on_sent(deck, tags, decks)
+            self.accept()
+            if self.on_made:
+                self.on_made(got[1])
 
         run_bg(self, job, done)

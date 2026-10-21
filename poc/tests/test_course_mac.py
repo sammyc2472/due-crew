@@ -213,6 +213,121 @@ def _note(col, model, deck_id, fields, tags, suspend=True, study=False):
     return n
 
 
+class SimpleWindowWords(unittest.TestCase):
+    """0.2.0, the window everyone sees first: its course name, deck, lines
+    and order come from here."""
+
+    def test_course_name_and_deck(self):
+        self.assertEqual(C.course_name(CALENDAR, "Big Step 1"), "Block 2")
+        self.assertEqual(C.course_name("Mon 10/26 LEC Heart failure", "Big Step 1"), "Big Step 1 course")
+        self.assertEqual(C.course_name("", ""), "My course")
+        self.assertEqual(C.course_name("MS2 Cardio-Renal | Fall 2026\nMon 10/26 LEC Heart failure"), "MS2 Cardio-Renal")  # mixed case kept as written
+        self.assertEqual(C.biggest_deck([(1, "Spanish", 300), (2, "Big Step 1", 28000), (3, "Default", 0)]), 2)
+        self.assertEqual(C.biggest_deck([(3, "Default", 0)]), 0)
+        self.assertEqual(C.biggest_deck([]), 0)
+        self.assertEqual(C.day_label("2026-10-26"), "Mon 26 Oct")
+
+    def test_lines_and_order(self):
+        c = C.new_course("Block 2", 1, "Big Step 1")
+        past = C.new_lecture("2026-10-01", "Lipids")
+        hf = C.new_lecture("2026-10-26", "Heart failure")
+        quiz = C.new_lecture("2026-10-30", "Cardio quiz 1", "quiz")
+        c["lectures"] = [quiz, hf, past]
+        self.assertEqual(C.lecture_status(c, quiz, None), ("quiz", False))
+        self.assertEqual(C.lecture_status(c, hf, None), ("waiting to be read", False))
+        hf["state"] = "running"
+        self.assertEqual(C.lecture_status(c, hf, None), ("reading…", False))
+        hf["state"] = "error"
+        self.assertFalse(C.lecture_status(c, hf, None)[1])
+        hf["state"] = "new"
+        self.assertEqual([l["title"] for l in C.reading_order(c, "2026-10-20")], ["Heart failure", "Lipids"])
+        self.assertIs(C.next_up(c, None, "2026-10-20"), hf)
+        self.assertIsNone(C.next_up(c, None, "2026-10-27"))  # a quiz is never "next up"
+        C.wait_for_open(c, "2026-10-20")
+        self.assertEqual(past.get("auto_done"), "before")
+        self.assertNotIn("auto_done", hf)
+
+    def test_read_by(self):
+        c = C.new_course()
+        self.assertEqual(C.read_by(c), "")
+        a, b = C.new_lecture("2026-10-26", "A"), C.new_lecture("2026-10-27", "B")
+        c["lectures"] = [a, b]
+        a.update(state="done", how={"terms": "rules (unavailable)", "pick": "rules (unavailable)", "read": "model"})
+        self.assertEqual(C.read_by(c), "model")
+        a["how"] = {"terms": "yours", "pick": "rules (timeout)", "read": "rules"}
+        self.assertEqual(C.read_by(c), "rules")
+
+    def test_plain_why(self):
+        self.assertIn("System Settings", M.plain_why("unavailable(.appleIntelligenceNotEnabled)"))
+        self.assertIn("downloading", M.plain_why("unavailable(.modelNotReady)"))
+        self.assertEqual(M.plain_why("something else"), "")
+
+
+XCODE_LICENSE = ("You have not agreed to the Xcode license agreements. Please run 'sudo xcodebuild -license' from "
+                 "within a Terminal window to review and agree to the Xcode and Apple SDKs license.")
+
+
+class SetupTests(unittest.TestCase):
+    """Sam's first try (19 Oct): Build stopped on Apple's Xcode license, four
+    times over. It says so once, in a few words, and on macOS 27 nothing
+    needs building at all."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.saved = (M.subprocess.run, M.shutil.which, M.FmRunner)
+        self.calls = []
+
+    def tearDown(self):
+        M.subprocess.run, M.shutil.which, M.FmRunner = self.saved
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def fake(self, xcrun, swiftc, fm=None):
+        class R:
+            def __init__(self, code, out="", err=""):
+                self.returncode, self.stdout, self.stderr = code, out, err
+
+        def run(cmd, **kw):
+            self.calls.append(cmd[0])
+            return R(*xcrun) if cmd[0] == "xcrun" else R(*swiftc)
+        M.subprocess.run = run
+        M.shutil.which = lambda name: "/usr/bin/swiftc" if name == "swiftc" else None
+        M.FmRunner = lambda *a, **k: type("Fm", (), {"path": fm})()
+
+    def test_the_license_is_said_once_in_plain_words(self):
+        self.assertTrue(M.license_blocked(XCODE_LICENSE))
+        self.assertFalse(M.license_blocked("error: cannot find 'SystemLanguageModel' in scope"))
+        # xcrun refuses, and swiftc's shim would too: nothing is compiled
+        self.fake((69, "", XCODE_LICENSE), (69, "", XCODE_LICENSE))
+        ok, said = M.HelperRunner(self.dir).build()
+        self.assertFalse(ok)
+        self.assertIn("sudo xcodebuild -license accept", said)
+        self.assertNotIn("Variant", said)
+        self.assertNotIn("swiftc", self.calls[1:])
+        self.assertNotIn("fm command", said)  # no fm on this Mac: no way round offered
+
+    def test_a_compile_that_hits_the_license_stops_at_once(self):
+        self.fake((1, "", "xcrun: error: unable to find utility"), (1, "", XCODE_LICENSE), fm="/usr/bin/fm")
+        ok, said = M.HelperRunner(self.dir).build()
+        self.assertFalse(ok)
+        self.assertEqual(self.calls.count("/usr/bin/swiftc"), 1)  # not four builds saying the same
+        self.assertIn("sudo xcodebuild -license accept", said)
+        self.assertIn("this Mac has the fm command", said)
+
+    def test_settings_says_fm_needs_nothing_built(self):
+        helper = M.HelperRunner(self.dir)
+        fm = type("Fm", (), {"path": "/usr/bin/fm"})()
+        none = type("Fm", (), {"path": None})()
+        self.assertIn("the fm command, nothing to build", M.setup_line(helper, fm))
+        self.assertIn("optional", M.setup_line(helper, fm))
+        self.assertIn("Build the helper", M.setup_line(helper, none))
+        os.makedirs(helper.folder, exist_ok=True)
+        with open(helper.bin, "w") as f:
+            f.write("")
+        with open(helper.stamp, "w") as f:
+            f.write(f"{helper.source_hash()} permissive\n")
+        self.assertIn("the built helper (permissive guardrails)", M.setup_line(helper, fm))
+
+
 @unittest.skipIf(Collection is None, "needs `pip install anki`")
 class EngineTests(unittest.TestCase):
     def setUp(self):

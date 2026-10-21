@@ -2943,3 +2943,425 @@ every release that changes how something works.
   `test_offline_stays_off_stderr_v392` runs `_bg` both ways and checks no
   handler that prints a traceback around a request lets a TransportError
   reach it.
+- 3.9.3, one leech is "it" (Sam, of Due's "Recovered 1 leech as new cards ·
+  See them": "for a singular recovered card, should be 'see it'"). Due's
+  morning note says "Recovered 1 leech as a new card · See it", the toast
+  when Recover leeches is switched on "1 leech back as a new card. Edit ›
+  Undo puts it back.", and Insights' leech line "See it" when it names one
+  card. `test_one_leech_is_it_v393`.
+- 3.9.3, Today's bars (Sam: "a similar progress bar for reviews as appears
+  with the new cards... perhaps all of them should fill as cards are pushed
+  to at least tomorrow"; the Today's Bars mock, his yes to its picks). One
+  rule for every bar in the Today box: a card fills its bar once it's
+  through for today, answered and next due tomorrow or later; answered and
+  back later today (learning, relearning) is the bar's lighter part, so the
+  bar moves with every answer and fills only when the day's done. Each bar
+  is its row's, under its words and numbers, the row's whole width, so the
+  bars line up. **Reviews** has a bar: the cards due from before today
+  (reviews, relearning, learning carried in from an earlier day), "84 /
+  140", and once started a line with the ones back later today and the ones
+  due now ("6 back at 14:30 · 50 still due"). **A plan's date** counts the
+  same way and ticks itself when its bar is full ("all done"; it said "all
+  seen"); a date behind still counts what's been seen, so a card in its
+  steps today doesn't put it behind. **New cards** (no plan's date today):
+  the ones started today (a new card's first answer: type 0, lastIvl 0 in
+  the revlog, checked on Anki's own engine) and what Anki's limits still
+  give, a line a top deck when there's more than one. On a plan's day, the
+  plan's dates are the new cards; **Other new cards** shows only once I've
+  started some none of today's dates holds, so their steps keep the day
+  open as the Reviews row did for every learning card (3.8.0). The plan's
+  progress, the crew's "N of M done" and the server stay on "seen": they're
+  about what's covered. Where: `due_flow.bars` (one pass over today's
+  answers and today's learning cards; `_reviews` keeps Study today's
+  count), `plans.DeckIndex.again` (a date's cards in their steps today,
+  from the read it already makes) and `P.parts`' fourth number,
+  `due_flow.parts` (`plan_later`, `plan_today`), `due.reviews_row` /
+  `new_row` / `through`, `board._due_reviews` / `_due_new` / `_wbar2`;
+  motion.js gives a bar's light part its own key (both copies). A count
+  from before 3.9.3 still draws as a number. `test_todays_bars_v393`.
+- 3.9.3, one meaning of a leech (Sam's pick A: Recover leeches took a
+  leech at a fixed 8 lapses, Insights' Leeches at the deck's own count,
+  so a deck at 5 showed 61 "still in your reviews" Recover never took).
+  Recover leeches now takes a suspended leech, or one Anki kept in my
+  reviews at its deck's leech count (`due_flow.leech_sets`, the deck's
+  options read as `leech_flow._limits` reads them), never one I left out
+  (Leeches' Leave it out). The first morning it would take ones the old
+  line left, it takes what it always took and asks once on the board
+  (`ask_reach`: "Learn 61 more leeches fresh?", Learn them fresh · Not
+  these), the answer kept in this profile's plans.json (`leech_reach`:
+  "deck", or "eight" to keep to 8 lapses); with nothing the old line
+  left there's no question. Switching Recover off and on asks again.
+  Settings › Due says which line it uses. `sheets.confirm` takes a
+  `no_label` for the board's Cancel. `test_recover_by_deck_count_v393`.
+- 3.9.3, a card counted once (Sam's pick: a date with a video's tag and a
+  system's on the same notes read "14 of 28" in the Follow window with
+  nothing missing). A date's count (`n`) is still the builder's, each tag's
+  and subdeck's cards added up: the site has a count per tag, not which
+  cards a tag holds, so it can't see two tags share them. The follower's
+  Anki now counts its own copy the same way to find what's missing, then
+  says it as cards (`plans._missing`): "14 of 14", or "12 of 14" with two
+  notes gone. The site's numbers for such a date (the builder's load, the
+  plan page, the calendar feed) still count a shared card twice.
+- 3.9.3, Your plans for everyone, and the builder in Anki (Sam: "the plans
+  one which doesn't actually need claude we can try to find a way to
+  integrate into the public release"; then "go with your picks... your goal
+  is to duplicate the website plans functionality in the add on"). The
+  labs windows open for anyone signed in, named as the proposals page
+  picked: Your plans (the plan window), New plan from a calendar, Missed
+  questions (Question IDs). Ways in: Tools › Due Crew › Plans (a submenu
+  with Follow a plan, New plan from a deck and Export cards for my AI), You
+  › Plans' head row (Open plans, New plan ▾) and each card's Open, an
+  Insights line for a deck with a bank's question tags (Missed questions),
+  and Find a setting (`board.FIND_WINDOWS`; `planyours`, `plannew`,
+  `planstart`, `planmissed`). Labs keeps Claude's stand-in and What Claude
+  would get. Your plans has tabs. **Dates**: the builder's day panel as
+  Change ▾ and New ▾ (a search or IDs, notes: and cards:, Suggested from
+  its name, Split by its tags or evenly, a cut, without its extras, a note
+  on a tag, prep for, spread evenly, to-dos, review days, quizzes and
+  exams). **Lay it out**, for authors (`layout_tab.py`): What to cover by
+  resource, system, the rest or subdecks (a tag holding two views covers
+  this view's part of it), the pace (Starts moves every date, study days,
+  Finish by a date or an event, Cards a day, placed by hand), Fill and Just
+  next week (to an end, a tenth more a day until it fits, seven tries), Put
+  it on a day (the builder's +), the day over the pace with Split and Give
+  it till, the reviews line, the plan's own tags (rename and delete: the
+  dates, cuts, searches, notes and names using them follow), Every week,
+  Notes on cards. Ticks and the pace wait in the tab until Fill or Save the
+  pace, one save, and a save tried again on someone else's uses what was
+  set at the click. New plan from a deck makes the plan in Anki (a name,
+  Make the plan, then Your plans on it at Lay it out; Open the builder
+  instead is the site). The builder's rules are restated in
+  `planner/build.py` and its edits in `planner/edits.py`, twins of
+  builder.js (`test_builder_twins_v393` runs builder.js's Todo, Every,
+  Remarks, Picks, Suggest, Work, Reviews and Tags in node against them);
+  Fill, layOut and the tag edits are checked by hand-worked plans
+  (`test_build_fill_v393`, `test_lay_out_v393`, `test_plan_edits_v393`).
+  **Text**, for authors (`text_tab.py`, `text.py`, builder.js's toText and
+  fromText restated): Add dates and Edit the whole plan, Read it's
+  preview (moved, renamed, what goes, a tag a date still uses with Take
+  them off those dates too or Keep the tags, a day over the pace), one
+  save read again on the plan as it is (`test_plan_text_v393`). The
+  window's height stays the window's: Lay it out's right side scrolls, and
+  Text sits in a splitter with smaller size hints. **Updates** (posts to
+  followers, five a day, taken back) and **History** (every save, Undo the
+  latest), `history_tab.py`; the fake Worker gained plans.ts's log and
+  posts (`test_history_and_posts_v393`). A history line says "1 search",
+  not "1 searche". **Progress** (its squad's counts a date, three in it or
+  more; the dates most of the class hasn't finished, with Look at that day
+  and Give the class a day) and **Settings** (name and line, the deck's
+  link, a squad and who can follow, co-authors asked from my crew, handed
+  it, taken off or leaving, the end, catch-up weeks, review-only days, the
+  library, Copy for next year, Delete), `settings_tab.py`; the fake Worker
+  gained progress, listed, copy, delete and audience/squad in a save, and
+  reads a follow's progress as the JSON text the Worker keeps
+  (`test_settings_edits_v393`, `test_settings_remote_v393`). **Notes on a
+  day** (`day_notes.py`), under a date, a quiz or a review day on Dates and
+  by day under a week: read once when a plan is picked, added (one line),
+  taken off by their writer or an author, authors only on a plan in the
+  library; the fake Worker gained plans.ts's notes (`test_day_notes_v393`).
+  Still the site's: the AI prompts. No new route, nothing on a refresh or a
+  sync.
+- 3.9.3, Your plans checked over (Sam: "check your work and find places to
+  add pip / make things friendlier, clearer, and more efficient"). Three
+  reviews of the new windows, then: **Pip and words**: with no plans, a
+  welcome with Pip waving (as Settings › Pip says) and the three ways to
+  start; Progress's "Nobody follows it yet" and, with no date behind,
+  "The class is keeping up with every date so far." with Pip cheering; a
+  tab's words go when another opens; one Undo on History. **Data**: Split
+  by its tags kept the date it split (it made new ones, and the name, due
+  date, prep, to-dos, review day and followers' progress went with the old
+  id); an answer that comes back for a plan no longer picked is dropped,
+  and Progress, History and Updates read again when the plan changed under
+  them; the window closes at sign-out. Text says a day that isn't one on
+  its own line and cuts names as the Worker counts them (an emoji whole);
+  Settings keeps what's typed across a reload, and a wheel scrolls its
+  page, not its boxes; Enter twice posts an update once. **Lay it out**:
+  the dates are named as the site names them (`build.tag_word`, Tags.word:
+  "5 · Renal", "Step 1"; one `build.auto_name` with cut names; renameAll
+  on every save, `edits.name_dates`, so "· the rest" and a renamed plan
+  tag reach the names, and a typed name stays), and the tree sorts as the
+  site's (`build.natural`, localeCompare's order, checked in node on
+  every pair). The pace saves as the builder saves it (5,000 a day at most,
+  the top ticks in the deck's order, 500 at most: a Fill to a near end
+  date was refused before); ticks that didn't save wait still; the day over
+  the pace is one that isn't past; a plan with an end and no pace opens as
+  Finish by; the start waits for a typed date, and a wheel over it
+  scrolls; "²" in a cards: line is a bad token, not a crash; a cut's
+  search goes on a date once. Fill says "Put 1 card on Mon 9 Nov." and
+  "from … to …", and what to do about what didn't fit, on the site too
+  (putWords). **Speed** on a big shared deck (12,244 tags, 60 dates):
+  placed keys 1.8 s to 0.03, a Finish by date at every pace step 1.8 s to
+  0.008, a Fill to an end date 7 s to 0.4 (the extras map worked out once
+  a tree, `build.Placed` looking up above and below instead of scanning);
+  the deck's index and tree kept through a save; searches wait for a
+  pause in the typing; Change ▾ is built when it opens. No new route.
+  `test_lay_out_review_fixes_v393`, `test_text_review_fixes_v393`,
+  `test_split_keeps_the_date_v393`; `tools/dialogs.py` checks the welcome,
+  the kept ticks and Finish by.
+- 3.9.3, Pip in three more places of Your plans (Sam: "add the pip spots you
+  suggested"): hopping beside Lay it out's words after a Fill that puts
+  everything ticked on a date; waving beside "Posted." on Updates; peeking
+  into a new plan's History ("No saves yet. Each one shows here, who made
+  it and what it changed, and the latest can be undone."). Still, as
+  Settings › Pip says, by `planner/pip_note.PipNote` (a line of words; the
+  next words take Pip away). A Fill's words now show once it saved: one
+  that didn't save no longer says it put cards (the window's foot says
+  why), and Updates' "Posted." goes when another plan is picked.
+  `tools/dialogs.py` renders each, and History with Settings › Pip off.
+- 3.9.3, round five: Your plans rebuilt as one screen (Sam's ten picks on
+  the "Simpler Plan Builder" page, all A, after four reviewers' pass; the
+  mocks are its v2). **Every change is an op** (`planner/ops.py`: a small
+  JSON object naming a date by its id, day or name, checked, run by the
+  builder's own edits, said in words, with who it touches): the window's,
+  a pasted calendar's and an AI's alike. **Changes wait to be sent** when
+  anyone follows the plan (`draft.py`, kept per profile in
+  `plan_drafts.json`, replayed on the plan as the server has it so a
+  co-author's save or a restart loses nothing; one that no longer fits is
+  dropped and said): "3 changes, not sent", Review and send (each change in
+  words, who it touches, a ✕ each, Tell them why filled in), one save with
+  its line to followers (`PUT /plans/{id}`'s `post`; the fake Worker
+  gained postWithSave), Undo ▾ takes the whole send back. With nobody
+  following, a change saves at once. **Tabs**: Plan · Followers · Sharing
+  for authors, Plan · Mine for a follower; Dates, Lay it out and Text
+  became the Plan tab (the deck beside the plan, `deck_panel.py`, ticking
+  for the picked date or for what the plan covers, with Fit them before
+  the exam when they'd run past it; the text a window of its own; History
+  under Undo ▾). **The plan's shape** on one line with Change… (`shape.py`:
+  start, end, study days, new cards, the last days, catch-up weeks; it says
+  what moves first). **Each week** says what it asks (new cards and a
+  typical card's reviews a day, amber with its fixes when over the pace,
+  `view.py`). **A date** is changed where it's shown (`date_panel.py`:
+  fields, −1/+1 day, This and every date after, its cards as chips with ✕,
+  the rest under ⋯ in plain words). **No suggestions** of what goes on a date
+  (Sam's call after the picks: plain rules aren't trusted to choose cards
+  and it isn't AI), so a calendar's sessions, pasted or in New plan,
+  become named dates with no cards, and the author puts every card on. **Followers** shows how many follow,
+  whose Anki has the last send, and the posts; how far each date's class
+  is came out (Sam's call: it added nothing; followers meet in the plan's
+  squad). **The windows keep their size**: `ui._fit` grew a window to its
+  wrapped words' height at every layout change, so each redraw of Your
+  plans grew it toward the screen's height; a window that scrolls its
+  own (`dcOwnSize`) grows only to its rows' minimum, opens sized to the
+  screen (`widgets.fit`), and the renders fail any window past a
+  1280x800 screen. Month is seven even columns, each name one line cut
+  with … (`widgets.Elided`), two a day and +N more. **One New plan** (`new_plan.py`: name, deck, the exam it ends
+  with, the calendar if there is one, read as it's typed; a friend's code
+  instead) in place of New plan from a calendar and from a deck (the
+  calendar window stays in labs). **A paste box** for plan lines or a new
+  calendar, Edit the whole plan as text, and Copy a prompt for your AI
+  (Plan the dates, Tag by objective: `prompts.py`, builder.js's Prompts
+  restated, a twin). **No Pip in the plan windows** (pick 10;
+  `pip_note.py` went). Behind the scenes, **the AI hooks** (`ai.py`: jobs
+  whose requests carry tag names and counts, never a card; answers checked
+  into ops; runners off, the stand-in in labs, your own AI by a copied
+  prompt, Claude once connected) and **Your AI app** (`mcp.py`, off by
+  default: a local MCP server on 127.0.0.1 with a bearer token that reads
+  my plans and puts changes under one for me to send, never sending; a
+  stdio shim). New ops beyond the builder's edits: `lay_out` (Fill as one
+  change), `move_from`, `add_date` with no cards (`edits.add_empty_date`;
+  the server keeps a date with none). Nothing new on the server.
+  `tests/test_plan_ops.py`; `tools/dialogs.py` renders every state.
+  **Then plain and quick** (Sam, after the site mock: "a few of our UI
+  elements are AI hallmarks; we are going for extreme functionality"):
+  the accent stripe on the picked row and today, the tinted banners (the
+  shape, today and behind, the deck's target, the send bar, the code),
+  chips, ◆, "+ A …" links, capitals for a change's kind, ▾ and ↗ in words,
+  and lines that explained a control all went. The shape is label by
+  label; a date's sources are a muted line in the list and a list (name,
+  count, ✕) in the panel; a quiz is one line; adds are buttons that say
+  what they do (the list's adds one Add menu in the toolbar); a button
+  with a menu has the boxes' chevron (`ui.QSS` `dc="menu"`); explanations
+  are tips. And quicker: **keys** (Ctrl+N a date, Ctrl+E a quiz, Ctrl+F
+  Find, Ctrl+T Today, Ctrl+1/2 List/Month, Ctrl+D the deck, Ctrl+Z the
+  last change not sent, Ctrl+Return Review and send; on the plan, ↑ ↓,
+  Alt+← → a day, Enter/F2 its name, Delete), **Find** a date or tag,
+  **Month's drag** to move a date or a quiz, the foot's **changes as
+  links** to their dates, a double-click for a name.
+  **Then one way to each thing** (Sam, at the click-test): no Followers
+  tab (how many follow, and Posts…, are a line of Settings; the "last
+  send is in N of M followers' Anki" line went with it); **Sharing became
+  Settings**, with the plan's dates and pace in it as rows (no Change…
+  window; Put it back), its every-week lines and Your AI app; a
+  follower's Mine is their Settings. No deck tab: Add from the deck puts
+  the deck in the date's place (Done brings the date back), Add › Lay out
+  from the deck… with none picked. No Study them / Study these / Study for
+  it (the board studies), no −1/+1 day (the date's field, Alt+← →,
+  Month's drag), no ⋯ Split its biggest tag / Make it a review day /
+  per-source extras (each source's own menu, Add › A review day), no
+  row's Add from the deck link. Expand all / Collapse all for the weeks;
+  List | Month first in the toolbar, over the list; Earliest first /
+  Latest first. One button: every action the boxes' corners and height
+  (`widgets.tool`), side-by-side choices one control rounded at its ends
+  (`widgets.segs`), tabs underlined; a link is only a way to a date.
+  **Then Insights** (Sam, before the click-test: "the tab we should have
+  between plan and settings is an insights tab on workload / content /
+  amount of the deck relative to the whole"), `planner/insights.py` (pure)
+  and `insights_tab.py`, for authors and followers alike, worked out when
+  it's looked at, never sent: **Workload**, a row a week from the first to
+  the end, new cards a study day against the pace (a line down the
+  column; a week over it amber, with its busiest day) and reviews a day,
+  each on its own scale and never added (a study day and a day aren't the
+  same day; Sam asked for the pictures to be thought through, and a first
+  stacked bar summed the two), the week's quiz or exam beside it, the
+  busiest week by its whole; **How much of the deck**, the plan's cards of
+  the deck's as one bar (a follower's: seen, then to go), and of each part
+  (a big shared deck's resources and its systems, else subdecks, else top
+  tags) drawn on one scale, so a big part looks big, and the parts it
+  holds none of named; **What's in it**, each quiz or exam and what its
+  dates hold, the biggest dates (a click: that one on the Plan tab), cards
+  on two dates, leeches that stay shut. `test_insights_tab`; renders with
+  and without a pace, and a follower's. Then the deck's parts as the
+  topic map's (Sam: "we need better insights … same organization problem
+  we had for the bento where we're choosing to highlight strange
+  resources"): the first cut took a tag's # part as a resource and the
+  part under its ^ as a system, so a big shared deck showed its banks and
+  sketch series side by side as if they split it. Now `team.subjects_by`
+  over the whole deck chooses (the map's rules: topics over ratings, a
+  bank's ids never), By ▾ is the map's own pick for the deck, the parts
+  the plan holds come most held first, and the part it's mostly in
+  opens into its own parts ("Inside Cardio", the ones left out named).
+  Then the deck beside the plan (Sam, a screenshot of "helminth" found
+  seven times as the same "Step 1 › B&B › 14 · Infectious Disease › 5 ·
+  Parasites an…": "if in the search some tags are nested to each other,
+  let's keep that structure"): a search matched every tag whose path had
+  the word, so all of a found tag's children came too, flat and cut off
+  at the right. Now a tag is found by its own name (or across parts of
+  its path, from where the words start), each find sits under the tags
+  above it, a line of tags with one way down reads as one row
+  (`widgets.fit_parts`: "B&B › … › 5 · Parasites and Helminths", whole
+  parts dropped from the middle as the panel narrows), a find with finds
+  below it shows them, one without opens onto its own parts. By resource
+  and By system narrow the search to their tags (before, they changed
+  nothing while it was on), and a view without the word says which has
+  it ("By system has 4", a click). And the buttons themselves ("check on
+  these buttons"): `segs` marked each button's place with a property
+  named `pos`, which is every widget's own position, so no rule for the
+  rounded ends or the shared edge ever matched, and every side-by-side
+  choice in Your plans drew as boxes stuck together; it's `seg` now, the
+  edge between two keeps its width as the tick moves (no 1px shuffle),
+  and More, which a click ticked while its menu was open, is ticked only
+  while one of its own views shows.
+  Then the board's You › Plans (Sam: "let's also consider the optimal UI
+  for this surface", then "what happens when you click on a date?
+  worried about overlap with the today page"): a day's click on the
+  Plans tab's week opened what Due's Today and Upcoming already listed,
+  so the dates now live there alone, and each opens its details under
+  it, a click on its name (`board._date_more`: Browse its cards, the
+  ones left, Open now ahead of its day or shut again, Move…, Skip it,
+  Put it back, why it left cards shut; Upcoming's with its topics too).
+  `due_flow.plan_dates` carries what they need (`moved`, `shut`, `why`,
+  `own`) and `due._date_row` hands them on. The Plans tab is the plan's
+  own card: its name, Your plans… (the head row's Open plans and New plan
+  ▾ went, and the card's Open and Plan ▾: a follow's every setting is
+  Your plans' Settings, whose More now has the next-once-seen pace, My
+  schedule… and Reset to default…), its day in a line
+  (`card_view`'s `status`, `board._plan_status`: "24 to go today, and 54
+  behind since Monday", Catch up…; a catch-up running isn't called
+  behind, and the older "new from earlier days waiting" note goes when
+  the line has Catch up…), a quiz coming, the next exam's cards at risk
+  (no Insights ›, the tab beside it), one note, its squad. The week stays
+  for Due's lists off, and for the day Browse › Show on my plan asks for
+  (with Done, no ‹ Today ›: a step lets the day go); no Month ↗. With no
+  plan followed, the ways in end with Your plans… for the plans I write.
+  `test_date_details_round5`; the plan card's checks in
+  `test_plans_tab_v341`; renders in `tools/preview.py`.
+  Then the tab again (Sam: "i don't know that I prefer this new plans
+  tab, give some alternative options", five mocked on the spec page, and
+  "let's go with option A and when a day is clicked, the full
+  assignments for that day open in that plans tab (animate in and
+  out)"): A, seven small days. Under its day's line, This week ‹ Today ›
+  and the days (`board._week_html`), each its bar (amber when it's
+  behind) and what's left ("16 left", "24 to go", "38 new", ✓, rest; a
+  rest day keeps the bar's place, so every day's words sit on one
+  line), a quiz's name under its day; narrow, the words go and a quiz
+  day is underlined. A day's click opens its assignments under the week,
+  whole: each date (`_day_unit`: its name, moved or for its quiz, seen of
+  its cards and its bar, its topics by resource opening Browse with the
+  authors' notes, the authors' lines by `_todo_lines`, a link opening by
+  Due's `duelink` key, so `plans.week_view` carries `todo`; Browse, the
+  ones left, Open now, Study, Move…, Skip it, Put it back, Undo skip,
+  why it left cards shut) and a quiz by name (`_day_event`: Study for it
+  stays the quiz row under the week, one way to it). The same click
+  shuts them; another day's switches. motion.js 8 (the site's copy too)
+  unfolds them, folds them on the second click (`shutDay`), and on a
+  switch slides the ring and the words over while the box grows or
+  shrinks from the last day's height; nothing with Reduce motion. The
+  week shows with Due's lists on or off (last round's Done went), and
+  Show on my plan's day opens in it. A day's Push my dates back… went:
+  Settings › My dates has it. Today's and Upcoming's details on a date's
+  name stay. `test_plans_tab_v341`, `test_plan_load_3781`;
+  `tools/motion_preview.py`'s dayshut and dayswitch (the audit measures
+  both); renders in `tools/preview.py`.
+  Then two plans followed (Sam: "with multiple plans, we don't need two
+  buttons for your plans. doesn't make too much sense. think through how
+  to best present", four ways mocked on the spec page, then "Let's go
+  with 3"): one at a time. With two or more, the card's head is their
+  names as a switch (`board._plan_switch`: the one shown pressed, an
+  amber dot on any that's behind, a catch-up running isn't; a name two
+  plans share shows their whole titles), the shown plan's line ("week 3
+  of 9 · 6 following") and one Your plans… on it; under it that plan's
+  card as one plan has it. Which one: the plan Browse › Show on my plan
+  jumped to, else this computer's pick (`plan_pick`, config; `planpick`
+  sets it, lets a jumped-to day go and redraws; Show on my plan sets it
+  too, so its plan stays shown), else the first (`board._picked_plan`).
+  `card_view` carries the plan's `name` for the switch. One plan: as
+  built. Switching slides (Sam: "switching plans should definitely
+  slide"): motion.js 8's `.psw` rule moves the pressed name over, slides
+  the plan in from its name's side and takes the box to its height.
+  `test_plan_switch_round5`; `tools/motion_preview.py`'s planpick (the
+  audit measures it); renders in `tools/preview.py`.
+- 3.9.3, QBank QIDs (Sam, on Missed questions: "this is some …
+  awesome functionality that others have specific add ons for", "We also
+  have some overly-explanatory language here that doesn't trust the
+  user", "should we put this in a more accessible place?"; options on the
+  spec page, then "Let's go with 1 but maybe like QBank QIDs?"). The
+  window is QBank QIDs now (`planner/qid_window.py`), opened from the You
+  box's head in Study today's place, on every tab and on the folded line
+  (`board._due_html`, `planmissed` with no deck: the one my plan runs on;
+  Sam, on the README's pictures: "missing the QID chip on the top right";
+  then "the QBank piece is a bit higher than everything else": the head's
+  words take one line height, so Hide's ▴ from a fallback font no longer
+  drops Hide a pixel, and the folded line sits on one baseline, Due's
+  bigger word too, its bar still centred), shown only when a tag here ends in a question's number
+  (`due_flow.has_qids`: Anki's tag list, not the notes, read once a
+  profile and day), and from Insights' line, Tools › Due Crew › Plans and
+  Find a setting as before. No intro and no privacy line; the counts in
+  Anki's words ("5 questions · 14 cards · 10 suspended") with Browse
+  after them (`qids.words`). Bring back went (Sam: "i just don't
+  understand why it would do it over the next three days", then "we just
+  do study now which then resets their intervals"): nothing moves a due
+  date. Two buttons: Unsuspend N (new ones first in line,
+  `actions.unsuspend`) and Study now, which unsuspends them and builds a
+  Due Crew filtered deck over what's in it already and these, so each
+  paste adds to it ("or add to a misses deck ya know"; named QBank cards,
+  Sam: "not necessarily Missed Questions always"), rescheduling by my
+  answers, one undo step (`actions.study`), then Anki's Study screen on
+  it; Sam's line under it, "Study now adds them to Due Crew › QBank
+  cards. Each card goes back to its own deck once you've done it." This
+  paste only (Sam: "get rid of all 41 so far option"): All my misses,
+  Forget and `qids.json` went, nothing is kept. In common went too (Sam:
+  "this should be covered under insights"): what's not sticking is
+  Insights' to say, from my answers. Which bank (Sam: "what does bank
+  mean here?", then "yeah do both"): asked only when it's close, the
+  runner-up with half as many of the numbers or more (`qids.close`; one
+  stray number in another bank used to bring the box up), and labelled
+  Question bank. `tests/test_planner.py`
+  (`test_unsuspend_and_study`, `test_nothing_kept`, the glue),
+  `test_due_crew`'s ways in; `tools/real_anki.py` runs both on Anki's
+  engine (one undo step each, the second paste adding to the deck, undo
+  taking both back whole); renders in `tools/dialogs.py`.
+- 3.9.3, no Study today (Sam: "let's get rid of study today on the top
+  right also"): the Due box's head and its folded line lose it, and with
+  it the name of the deck it opened first (motion.js 35, `_next_deck`,
+  `study_to`). Ctrl+Shift+S still walks the day (`due_flow.study_today`),
+  a Fifteen still starts it, and a date's own Study stays.
+- 3.9.3, the release (21 Oct 2026): Your plans for everyone (round five:
+  Plan · Insights · Settings, changes waiting till sent, New plan, the AI
+  prompts and Your AI app), You › Plans' seven days with a day's
+  assignments under them and two plans switched by name, Today's bars,
+  QBank QIDs, no Study today, one meaning of a leech, a card counted once.
+  The README says where the plan menus went (New plan, Settings › More ›
+  Open early, Plans › Export cards) and its board.png and plans.png are
+  rendered again (`tools/readme_images.py` draws both now). No Worker
+  change and no migration: `tools/deploy.sh` puts the site's builder.js
+  and motion.js out; MIN_CLIENT stays.

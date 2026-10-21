@@ -1,10 +1,11 @@
-"""Render the README's board picture (docs/images/board.png) from the
-add-on's own board: a sample crew in their colours and looks, your day
-folded above it. CLAUDE.md: the README's images are renders of the board,
-re-rendered when it changes.
+"""Render the README's board pictures from the add-on's own board:
+docs/images/board.png, a sample crew in their colours and looks, your day
+folded above it; and docs/images/plans.png (3.9.3), You › Plans with
+today's assignments open. CLAUDE.md: the README's images are renders of the
+board, re-rendered when it changes.
 
-    python3 tools/readme_images.py            # writes tools/readme_board.html
-    node tools/readme_images.js               # screenshots it to docs/images/board.png
+    python3 tools/readme_images.py            # writes tools/readme_board.html and readme_plans.html
+    node tools/readme_images.js               # screenshots them to docs/images/board.png and plans.png
 
 (The second step needs Playwright; the first is enough to look at it.)"""
 
@@ -49,6 +50,17 @@ page = f"""<!doctype html><html><head><meta charset="utf-8"><title>README board<
 #shot {{ width: 640px; }}</style></head>
 <body class="fancy"><center><div id="shot">{html}</div></center></body></html>"""
 out = os.path.join(HERE, "readme_board.html")
+with open(out, "w", encoding="utf-8") as f:
+    f.write(page)
+print("wrote", out)
+
+# You › Plans: the plan's card, today's day open under its week
+card = P["PLAN_CARD"]
+today = next((d["day"] for d in card.get("week") or [] if d.get("today")), (card.get("week") or [{}])[0].get("day"))
+plans = dict(P["PLANS"], cards=[dict(card, focus=today)])
+html = board.render(DATA, ME, P["now_ts"] - 30, due=P["_DV"], plans=plans, you=P["_YOU"]("plans", plans=plans))
+page = page.replace(page[page.index('<div id="shot">'):page.index("</center>")], f'<div id="shot">{html}</div>')
+out = os.path.join(HERE, "readme_plans.html")
 with open(out, "w", encoding="utf-8") as f:
     f.write(page)
 print("wrote", out)

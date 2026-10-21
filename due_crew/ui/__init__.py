@@ -155,6 +155,9 @@ def tokens():
               "press": _mix(t["well"], t["line"], .7), "go-hover": _mix(t["accent"], toward, .12),
               "bad-hover": _mix(t["bad"], toward, .12), "go-ring": _mix(t["accent"], t["mark"], .3),
               "ink-2": _mix(t["muted"], t["ink"], .4)})
+    # round five's plan window: a week that asks too much, a maybe, a change not sent, a fill past the exam
+    t.update({"warm": _mix(t["bg"], t["hours"], .12), "warm-line": _mix(t["line"], t["hours"], .55),
+              "bad-bg": _mix(t["bg"], t["bad"], .1)})
     return t
 
 
@@ -167,7 +170,7 @@ def tone(key):
     except Exception:
         return {"muted": "#7a7a72", "faded": "#aaaaa2", "line": "#e2e2da", "well": "#f2f2ec", "bg": "#ffffff",
                 "ink": "#333333", "ink-2": "#5e5e58", "mark": "#242424", "accent": "#2e7d32",
-                "you-bg": "#e9f2e9", "hours": "#b26a00"}.get(key, "#7a7a72")
+                "you-bg": "#e9f2e9", "hours": "#b26a00", "warm": "#f8efe2"}.get(key, "#7a7a72")
 
 
 def title(text):
@@ -246,6 +249,9 @@ QLineEdit:hover, QPlainTextEdit:hover, QTextEdit:hover, QAbstractSpinBox:hover, 
 QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus {{ border: 2px solid {accent}; padding: 5px 9px; }}
 QLineEdit:disabled, QPlainTextEdit:disabled, QTextEdit:disabled, QAbstractSpinBox:disabled, QComboBox:disabled {{ color: {faded}; border-color: {line}; background: {bg}; }}
 QPlainTextEdit, QTextEdit {{ padding: 6px 8px; }}
+QPlainTextEdit[dc="drop"] {{ border: 2px dashed {edge-2}; padding: 5px 7px; }}
+QPlainTextEdit[dc="drop"]:focus {{ border: 2px solid {accent}; }}
+QPlainTextEdit[dc="drop"][over="true"] {{ border: 2px dashed {accent}; background: {you-bg}; }}
 
 QComboBox {{ padding: 6px 30px 6px 10px; combobox-popup: 0; }}
 QComboBox:focus, QComboBox:on {{ border: 2px solid {accent}; padding: 5px 29px 5px 9px; }}
@@ -324,6 +330,82 @@ QMenu::item {{ background: transparent; padding: 5px 16px; margin: 0; border-rad
 QMenu::item:selected {{ background: {you-bg}; color: {ink}; }}
 QMenu::separator {{ height: 1px; background: {line}; margin: 4px 8px; }}
 QToolTip {{ background: {bg}; color: {ink}; border: 1px solid {edge}; padding: 4px 6px; }}
+
+QFrame[dc="card"] {{ background: {bg}; border: 1px solid {edge}; border-radius: 10px; }}
+QFrame[dc="strip"] {{ background: {well}; border: none; border-radius: 8px; }}
+QFrame[dc="warm"] {{ background: {warm}; border: none; border-radius: 8px; }}
+QFrame[dc="bad"] {{ background: {bad-bg}; border: none; border-radius: 8px; }}
+QFrame[dc="bar"] {{ background: {you-bg}; border: 1px solid {accent}; border-radius: 10px; }}
+QFrame[dc="go-bar"] {{ background: {accent}; border: none; border-radius: 8px; }}
+QFrame[dc="go-bar"] QLabel {{ color: {accent-ink}; font-weight: 700; }}
+QFrame[dc="go-bar"] QPushButton[dc="link"] {{ color: {accent-ink}; text-decoration: underline; }}
+QFrame[dc="go-bar"] QPushButton[dc="link"]:hover {{ background: {go-hover}; }}
+QFrame[dc="today"] {{ background: {you-bg}; border: none; border-left: 3px solid {accent}; border-radius: 8px; }}
+QFrame[dc="row"] {{ background: transparent; border: none; border-radius: 8px; }}
+QFrame[dc="row"]:hover {{ background: {well}; }}
+QFrame[dc="row"][on="true"] {{ background: {you-bg}; }}
+QFrame[dc="row"][past="true"] QLabel {{ color: {muted}; }}
+QFrame[dc="rule"] {{ border: none; border-top: 1px solid {accent}; background: transparent; }}
+QFrame[dc="foot"] {{ border: none; border-top: 1px solid {edge}; border-radius: 0; background: transparent; }}
+QFrame[dc="src"] {{ background: transparent; border: none; border-radius: 6px; }}
+QFrame[dc="src"]:hover {{ background: {well}; }}
+QFrame[dc="chip"] {{ background: {well}; border: 1px solid {line}; border-radius: 11px; }}
+QFrame[dc="chip"][kind="sug"] {{ background: {bg}; border: 1px dashed {edge-2}; }}
+QFrame[dc="chip"][kind="maybe"] {{ background: {warm}; border: 1px dashed {hours}; }}
+QFrame[dc="chip"][kind="fresh"] {{ background: {you-bg}; border: 1px solid {accent}; }}
+QFrame[dc="chip"] QLabel {{ font-size: 12px; color: {ink-2}; }}
+QLabel[dc="n"] {{ color: {muted}; }}
+QLabel[dc="warn"] {{ color: {hours}; font-weight: 700; }}
+QLabel[dc="ok"] {{ color: {accent}; font-weight: 700; }}
+QLabel[dc="cal"] {{ color: {accent}; }}
+QLabel[dc="calev"] {{ color: {mark}; font-weight: 700; }}
+QLabel[dc="calhead"] {{ color: {muted}; }}
+QLabel[dc="calnum"] {{ color: {muted}; }}
+QLabel[dc="calnum"][today="true"] {{ color: {accent}; font-weight: 700; }}
+QFrame[dc="calgrid"] {{ background: {line}; border: none; border-radius: 0; }}
+QFrame[dc="calday"] {{ background: {bg}; border: none; border-radius: 0; }}
+QFrame[dc="calday"][out="true"] {{ background: {well}; }}
+QFrame[dc="calday"][today="true"] {{ background: {you-bg}; }}
+QFrame[dc="calday"][over="true"] {{ background: {you-bg}; border: 1px solid {accent}; }}
+QFrame[dc="calrow"] {{ background: transparent; border: none; border-radius: 4px; }}
+QFrame[dc="calrow"]:hover {{ background: {well}; }}
+QFrame[dc="calrow"][on="true"] {{ background: {accent}; }}
+QFrame[dc="calrow"][on="true"] QLabel {{ color: {accent-ink}; }}
+QLabel[dc="bad"] {{ color: {bad}; }}
+QLabel[dc="event"] {{ font-weight: 700; color: {mark}; }}
+QLabel[dc="fresh"] {{ color: {accent}; }}
+QPushButton[dc="link"] {{ background: transparent; color: {accent}; border: 1px solid transparent; border-radius: 6px; padding: 2px 4px; min-height: 0; }}
+QPushButton[dc="link"]:hover {{ background: {well}; }}
+QPushButton[dc="link"]:disabled {{ color: {faded}; }}
+QPushButton[dc="link"][tone="bad"] {{ color: {bad}; }}
+QPushButton[dc="link"]::menu-indicator, QPushButton[dc="more"]::menu-indicator, QPushButton[dc="seg"]::menu-indicator,
+QPushButton[dc="tool"]::menu-indicator {{ image: none; width: 0; }}
+QPushButton[dc="x"] {{ background: transparent; color: {muted}; border: none; border-radius: 6px; padding: 0 3px; min-height: 0; font-size: 12px; }}
+QPushButton[dc="x"]:hover {{ background: {press}; color: {ink}; }}
+QPushButton[dc="tool"]:checked {{ background: {you-bg}; border: 1px solid {accent}; color: {accent}; }}
+QPushButton[dc="tool"][tone="warm"] {{ color: {hours}; font-weight: 700; }}
+QPushButton[dc="tool"][tone="bad"] {{ color: {bad}; }}
+QPushButton[dc="menu"] {{ padding: 6px 30px 6px 14px; }}
+QPushButton[dc="menu"]:focus {{ padding: 5px 29px 5px 13px; }}
+QPushButton[dc="menu"]::menu-indicator {{ image: url("{i-down}"); width: 12px; height: 12px; subcontrol-origin: padding; subcontrol-position: center right; right: 10px; }}
+QPushButton[dc="seg"] {{ border-radius: 0; padding: 6px 14px; }}
+QPushButton[dc="seg"]:focus {{ padding: 5px 13px; }}
+QPushButton[dc="seg"][seg="mid"], QPushButton[dc="seg"][seg="last"] {{ border-left-color: transparent; }}
+QPushButton[dc="seg"][seg="first"] {{ border-top-left-radius: 8px; border-bottom-left-radius: 8px; }}
+QPushButton[dc="seg"][seg="last"] {{ border-top-right-radius: 8px; border-bottom-right-radius: 8px; }}
+QPushButton[dc="seg"][seg="only"] {{ border-radius: 8px; }}
+QPushButton[dc="seg"]:checked {{ background: {you-bg}; border: 1px solid {accent}; color: {accent}; }}
+QPushButton[dc="seg"][next="on"] {{ border-right-color: transparent; }}
+QPushButton[dc="seg"][menu="true"] {{ padding: 6px 28px 6px 14px; }}
+QPushButton[dc="seg"][menu="true"]:focus {{ padding: 5px 27px 5px 13px; }}
+QPushButton[dc="seg"][menu="true"]::menu-indicator {{ image: url("{i-down}"); width: 12px; height: 12px; subcontrol-origin: padding; subcontrol-position: center right; right: 8px; }}
+QProgressBar {{ border: 0; border-radius: 3px; background: {line}; max-height: 6px; min-height: 6px; }}
+QProgressBar::chunk {{ border-radius: 3px; background: {accent}; }}
+QTabWidget::pane {{ border: none; }}
+QTabBar {{ qproperty-drawBase: 0; }}
+QTabBar::tab {{ background: transparent; color: {muted}; border: none; border-bottom: 2px solid transparent; padding: 6px 2px; margin: 0 20px 0 0; font-weight: 700; }}
+QTabBar::tab:selected {{ color: {mark}; border-bottom: 2px solid {accent}; }}
+QTabBar::tab:hover {{ color: {ink}; }}
 """
 
 # a chevron or a tick, drawn on a 16px square; each a file the style sheet names
@@ -504,7 +586,10 @@ def _fit(window):
     other; and a window with a minimum width of its own never widens for a
     row that grows after it opened (Friends' code, once it arrives), so the
     row's buttons slid over each other. It grows to what they need, up to
-    the screen it's on. It never shrinks a window."""
+    the screen it's on. It never shrinks a window. A window that scrolls
+    what it holds (dcOwnSize: Your plans) grows only to its rows' minimum:
+    grown to its words, every click that redraws it grew it, to the
+    screen's height (round five)."""
     try:
         window.setProperty("dcFit", False)
         lay = window.layout()
@@ -519,7 +604,7 @@ def _fit(window):
         if room is not None:
             need_w = min(need_w, room.width() - frame_w)
         need_h = max(h, least.height())
-        if lay.hasHeightForWidth():
+        if lay.hasHeightForWidth() and not window.property("dcOwnSize"):  # dcOwnSize: it scrolls its own (Your plans)
             need_h = max(need_h, lay.totalHeightForWidth(need_w))
         if room is not None:
             need_h = min(need_h, room.height() - frame_h)

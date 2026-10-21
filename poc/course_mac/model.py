@@ -272,21 +272,26 @@ class HelperRunner(Runner):
 
     @staticmethod
     def swiftc():
+        """(the compiler's path or None, what xcrun said when it found none)."""
+        said = ""
         try:
             r = subprocess.run(["xcrun", "--find", "swiftc"], capture_output=True, text=True, timeout=30)
             p = r.stdout.strip()
             if r.returncode == 0 and p and os.path.exists(p):
-                return p
+                return p, ""
+            said = r.stderr or r.stdout
         except (OSError, subprocess.SubprocessError):
             pass
-        return shutil.which("swiftc")
+        return shutil.which("swiftc"), said
 
     def build(self):
         """(ok, what happened). Main thread or not; takes a minute or two."""
-        swiftc = self.swiftc()
+        swiftc, said_xcrun = self.swiftc()
+        if license_blocked(said_xcrun):
+            return False, license_help()
         if not swiftc:
             return False, ("No Swift compiler on this Mac. Install Apple's Command Line Tools "
-                           "(run `xcode-select --install` in Terminal), then Build again.")
+                           "(run `xcode-select --install` in Terminal), then Build again." + _fm_note())
         os.makedirs(self.folder, exist_ok=True)
         with open(HELPER_SRC, encoding="utf-8") as f:
             src = f.read()
@@ -299,6 +304,8 @@ class HelperRunner(Runner):
                 r = subprocess.run([swiftc, "-O", path, "-o", self.bin], capture_output=True, text=True, timeout=900)
             except (OSError, subprocess.SubprocessError) as e:
                 return False, f"swiftc didn't run: {e}"
+            if license_blocked(r.stderr or r.stdout):
+                return False, license_help()  # every variant would say the same
             if r.returncode == 0:
                 self.close()
                 with open(self.stamp, "w") as f:
@@ -423,6 +430,25 @@ class HelperRunner(Runner):
                     pass
 
 
+def license_blocked(text):
+    """A full Xcode whose license was never accepted: Apple's tools (xcrun,
+    swiftc) refuse to run, and say so, until someone accepts it once."""
+    t = (text or "").lower()
+    return "license" in t and ("xcodebuild" in t or "agree" in t)
+
+
+def _fm_note():
+    return ("\n\nOr skip the helper: this Mac has the fm command, and Model \u203a Auto uses it "
+            "with nothing to build." if FmRunner().path else "")
+
+
+def license_help():
+    """What to do about license_blocked, in a few words."""
+    return ("Apple's developer tools need their license accepted once. In Terminal, run\n"
+            "    sudo xcodebuild -license accept\n"
+            "and type your Mac's password, then Build again." + _fm_note())
+
+
 class FmRunner(Runner):
     """The `fm` command (macOS 27). Plain text in; the answer read as JSON."""
     name = "fm"
@@ -498,6 +524,30 @@ def json_schema(s):
     if s.get("enum"):
         return {"type": "string", "enum": s["enum"]}
     return {"type": t or "string"}
+
+
+def plain_why(why):
+    """Why Apple's model isn't ready, in words a person knows, or ""."""
+    t = str(why or "")
+    if "appleIntelligenceNotEnabled" in t:
+        return "Apple Intelligence is off (System Settings \u203a Apple Intelligence & Siri)"
+    if "deviceNotEligible" in t:
+        return "this Mac can't run Apple's model"
+    if "modelNotReady" in t:
+        return "Apple's model is still downloading"
+    return ""
+
+
+def setup_line(helper, fm):
+    """Settings' first words: the model Auto will use, and whether anything
+    needs building. With macOS 27's fm, nothing does."""
+    if helper.built():
+        return f"Model: the built helper ({helper.guardrails() or '?'} guardrails). Check the model to try it."
+    if fm.path:
+        return ("Model: the fm command, nothing to build. Check the model to try it.\n"
+                "Building the helper is optional; it needs Apple's developer tools.")
+    return ("No Mac model yet: Build the helper (it needs Apple's Command Line Tools). "
+            "Until then Auto runs on plain rules.")
 
 
 def pick_runner(choice, folder, log=_nolog, timeout=90, fm_schema_flag=False):

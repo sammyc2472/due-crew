@@ -42,6 +42,26 @@ add-on.
   colours the studied days with the user's accent: the board's title is
   the one-line logo (inline SVG on the `--dc-*` tokens), and the stacked
   one tops the sign-in and welcome screens.
+- `due_crew/planner/` — `docs/planner.md`: Your plans (the duecrew.com
+  builder in Anki; round five: Plan · Insights · Settings (Insights: the
+  workload by week, how much of the deck and of each part, what's in it;
+  an author's Settings: the plan's dates and pace, sharing, posts; a
+  follower's: my follow), Undo on top, no Pip, one way to each thing), New plan (one way
+  to start: a name, the deck, the exam it ends with, the calendar if
+  there is one) and QBank QIDs, Python-native, for everyone signed
+  in since 3.9.3 (Tools › Due Crew › Plans, You › Plans, Insights, Find a
+  setting). Every change is an op (`ops.py`, pure), waiting under the
+  plan till Review and send when anyone follows it (`draft.py`, kept per
+  profile in `plan_drafts.json`); `view.py` works out the Plan tab. AI
+  hooks: `prompts.py` (the prompts for your own AI), `ai.py` (jobs whose
+  requests carry names and counts, answers checked into ops), `mcp.py`
+  (Your AI app: a local MCP server, off by default, 127.0.0.1 and a
+  bearer token, that puts changes under a plan and never sends). Labs
+  (this computer's `"labs": true`, no window sets it) keeps only Claude's
+  stand-in (`claude.py`, sends nothing), the calendar window session by
+  session, and What Claude would get. Routes the builder uses already;
+  nothing new on the server. Its tests: `tests/test_planner.py`,
+  `tests/test_plan_ops.py`.
 - `poc/course_mac/` — Course on a Mac, a separate add-on proof of concept
   (Sam's, on his Mac; not part of Due Crew and never talks to its server): a
   block's calendar read, each lecture's cards found by Apple's on-device model
@@ -167,6 +187,18 @@ same commit, each with its test:
   `DOODLE_PEN_MAX` in all three)
 - `ahead.GENERIC`'s cards ↔ `Reviews.CURVE` in builder.js (a typical card's
   next six weeks, 3.9.2; the suite checks)
+- `planner/build.py` ↔ builder.js (3.9.3): Todo, Every, Remarks, Picks,
+  Suggest, Work, Reviews, `Tags.ankiSearch`, `Tags.word`/`name`/`natural`,
+  searchName (checked in node); pieces, fill, layOut and its putWords,
+  autoName (with renameAll, `edits.name_dates` on every save), What to
+  cover's toggle and inView, heavyNote (checked by hand-worked plans);
+  `planner/edits.py` ↔ the builder's edits
+  (a date's sources, cuts, splits, events, review days, retag and dropSay);
+  `planner/text.py` ↔ toText, fromText and the Text tab's use, takeOff
+  (its date line is `plans._date_line`); `text.pick_note` ↔ `pickNote`
+  (Read it's "To pick in Anki:" line)
+- `planner/prompts.py` ↔ `Prompts` in builder.js (round five: Plan the
+  dates and Tag by objective, the prompts for your own AI; checked in node)
 - the Worker ↔ `tests/fakes.FakeWorker` (the suite's server)
 
 ## Where things live
@@ -182,14 +214,15 @@ same commit, each with its test:
 | Who knows this, asks, tips (3.9.0: the day's first sync asks about the cards due today too, so a first miss shows it; with Pip on, the knower's Pip peeks in from the corner, and a tip's tipper's; a tip's, an ask's or a plan note's words fold till Show, so a one-by-one card isn't given away) | `cards.py`, `together.py` | `cards.ts` |
 | Study rooms (3.9.1: room sounds, a speaker on the chip: brown noise (made in the top bar's page), rain, fire, waves (CC0 recordings, seamless loops, `sounds/` and its CREDITS.md, cut by `tools/cut_sound.sh`); each person their own pick, this computer's config, never sent; the speaker says "Sound" or the sound's name; Settings › Room sounds takes it all away) | `rooms.py` (`_sound_files`), `room_model.py` (`sound_pick`/`sound_state`/`sound_files`/`sound_js`, the chip's picker), `sounds.js` | rides my week (the sound never does) |
 | The Fifteen (3.8.1): ▶ Fifteen? in the top bar, the nudge, the question at its end, Take five / Another now / Stop | `room_model.make_fifteen`/`fifteen_next`, `rooms.start_fifteen`/`fifteen_answer` | studying now only (never a room on my week) |
-| Pip (3.8.1, Block; called Sev until 3.8.2, and still `sev` in code: sev.py, the `sev*` keys, `.sv`, sev.js's `Sev`): by the logo for a moment, in a fifteen's chip, question and break, the nudge, the session's line; hopping across the week picture card; a study room's seats, each crewmate's in their accent; waving in Welcome back and on the signed-out card; hopping on a crewmate's big-streak banner (not on crew rows: Sam's no). Each place has its mix of moves (`sev.MOVES`), never the same twice in a row. 3.9.1: its loops play about twelve seconds and rest (`--sv-on`), pointing plays them on; the break's breathing goes on; the fridge's are still till pointed at | `sev.py` (one drawing; the widgets get its markup, the week card and Welcome back `sev.still`; `pick`/`nth` the variety), `rooms.board_sev`/`pick`/`milestone_sevs`/`signed_out_sev`, `sharecard.hops`, `room_model.seats`/`vary_seed`, `ui.sev_label` | never sent; cards.js keeps a copy of `sev.still` (the suite checks it) |
+| Pip (3.8.1, Block; called Sev until 3.8.2, and still `sev` in code: sev.py, the `sev*` keys, `.sv`, sev.js's `Sev`): by the logo for a moment, in a fifteen's chip, question and break, the nudge, the session's line; hopping across the week picture card; a study room's seats, each crewmate's in their accent; waving in Welcome back and on the signed-out card; hopping on a crewmate's big-streak banner (not on crew rows: Sam's no); never in the plan windows (round five, Sam's pick). Each place has its mix of moves (`sev.MOVES`), never the same twice in a row. 3.9.1: its loops play about twelve seconds and rest (`--sv-on`), pointing plays them on; the break's breathing goes on; the fridge's are still till pointed at | `sev.py` (one drawing; the widgets get its markup, the week card and Welcome back `sev.still`; `pick`/`nth` the variety), `rooms.board_sev`/`pick`/`milestone_sevs`/`signed_out_sev`, `sharecard.hops`, `room_model.seats`/`vary_seed`, `ui.sev_label` | never sent; cards.js keeps a copy of `sev.still` (the suite checks it) |
 | Pip's closet (3.8.2): 61 things earned by showing up, coming back, together, plans, card care, seasons, secrets; one per place, a costume over the look; in place of the board (Yours by place, To earn by how); each crew row's, profile card's and (3.8.21) squadmate's Pip in the emoji's place (3.8.22: a plan card's squad line too, by `who` on `/board`'s `teams`; the review chip, a squadmate's card, Settings › You, bingo stamps; the site's account page and home feed, `pipFor`; the Friends dialog is names alone) | `closet.py` (pure: things, wear/clean/shown, facts from days and hours; 3.8.22: `halloween`/`spooky`), `closet_art.py` (the drawings), `closet_flow.py` (facts, tallies in wrap.json, a year of them for Wrapped, earned, worn, `halloween_view`), `board.closet_html`/`closet_line`/`row_sev`/`card_sev`/`squad_pip`/`halloween_html` | account keys `sev_look`, `sev_closet`; a mutual friend's look on /board (`lookOf` in `board.ts`) |
-| Plans (follow, morning, week, load; You › Plans) | `plans.py`, `schedule.py`, `plan_flow.py` | `plans.ts`, `library.ts`; `builder.js`, app.js |
+| Plans (follow, morning, week, load; You › Plans: the plan's card, seven small days, a day's click opening its assignments under them, round five pick A; two or more plans one at a time, their names a switch, pick 3 (`plan_pick`); a date's details on its name in Today and Upcoming) | `plans.py`, `schedule.py`, `plan_flow.py`, `board._plan_card_html`/`_plan_switch`/`_week_html`/`_day_unit`/`_date_more` | `plans.ts`, `library.ts`; `builder.js`, app.js |
+| Your plans (3.9.3: the builder in Anki; round five: Plan · Insights · Settings for authors and followers, changes waiting to be sent), New plan, QBank QIDs (paste the misses: Unsuspend, or Study now into Due Crew › QBank cards; this paste only), the AI hooks and Your AI app | `planner/` (`window.py`, `plan_tab.py`, `date_panel.py`, `deck_panel.py`, `shape.py`, `send.py`, `insights_tab.py`, `settings_tab.py`, `mine_tab.py`, `new_plan.py`, `text_tab.py`, `history_tab.py`, `day_notes.py`, `widgets.py`; pure: `ops.py`, `draft.py`, `view.py`, `insights.py`, `prompts.py`, `ai.py`, `build.py`, `edits.py`, `text.py`; `mcp.py`, `mcp_host.py`, `mcp_dialog.py`; `flow.py`) | routes the builder uses; `builder.js` the twin |
 | A plan's squad (3.8.0, on the Squads tab; its team on the server) | `team.py`, `team_flow.py` | `team.ts`; `PlanSquad` in builder.js |
 | Insights (the deck's, a plan only sharpens it; You › Insights; the topic map, tiles open into parts, or by the week I started them (3.9.2); its card and text, shared by hand; my exam's scope, since my last exam (3.9.2)) | `team.py`, `team_flow.py`, `mapcard.py`, `ui/map_card_dialog.py` | never sent |
 | Reviews ahead (3.9.2: six weeks of a deck counted from my log; its ways and Stop new cards, Anki's today-only limit each morning; the track record; the board's line when reviews climb) | `ahead.py` (pure), `ahead_flow.py`, `board._ins_ahead`/`ahead_line` | never sent; the builder's `Reviews` (a typical curve) |
 | Leeches (3.9.2: in Insights' place; one button a card, Bring back, Learn it fresh, Leave it out) | `leech_flow.py`, `board._ins_leeches` | never sent (tips ride the stuck list) |
-| Due (the bubble's Today, Upcoming, Later; Study today, 3.8.0) | `due.py`, `due_flow.py`, `board._due_html` | settings doc |
+| Due (the bubble's Today, Upcoming, Later; 3.9.3: no Study today button, Ctrl+Shift+S walks the day; QBank QIDs in the box's head, every tab and folded, when a tag ends in a question's number) | `due.py`, `due_flow.py` (`has_qids`), `board._due_html` | settings doc |
 | Invites, codes | `__init__.py`, `ui/friends_dialog.py`, `ui/welcome_dialog.py` | `invites.ts`, `social.ts` |
 | Sign-in, sessions, quiet accounts | `ui/auth_dialog.py`, `backend/api.py` | `auth.ts`, `quiet.ts`, `mydata.ts` |
 | Shares: text, and picture cards (made in Anki since 3.8.0) | `share.py`, `shares.py`, `sharecard.py`, `ui/share_card_dialog.py` | `site/public/cards.js` |

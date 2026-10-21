@@ -430,6 +430,30 @@ def check(path):
        lc.id in got and back.type == 0 and back.queue == 0 and back.lapses == 0
        and "leech" not in [t.lower() for t in back.note().tags] and col.undo_status().undo == "Due Crew: recover leeches",
        f"{len(got)} recovered, undo {col.undo_status().undo!r}")
+    # 3.9.3 (Sam's pick A): by the deck's own leech count, read from its options on Anki's engine: Tag Only at 5,
+    # a card Anki kept in my reviews at 6 lapses is a leech now (8 was Recover's line); taken once asked, one undo step
+    sdid = col.decks.id_for_name("Step Deck")
+    conf = col.decks.config_dict_for_deck_id(sdid)
+    was = (conf["lapse"]["leechFails"], conf["lapse"]["leechAction"])
+    conf["lapse"]["leechFails"], conf["lapse"]["leechAction"] = 5, 1
+    col.decks.update_config(conf)
+    kc = col.get_card(next(c for c in col.find_cards('deck:"Step Deck" -tag:leech -is:suspended')
+                           if len(col.get_note(col.get_card(c).nid).card_ids()) == 1))
+    kc.type, kc.queue, kc.lapses, kc.ivl, kc.due = 2, 2, 6, 5, col.sched.today + 3
+    col.update_card(kc)
+    kn = kc.note()
+    kn.add_tag("leech")
+    col.update_note(kn)
+    deck, eight, extra, counts = DF.leech_plan(col)
+    ok("leeches 3.9.3: the deck's own count, read from its options on Anki's engine",
+       kc.id in deck and kc.id not in eight and kc.id in extra and counts == [5], f"extra {len(extra)}, counts {counts}")
+    got = DF.recover_leeches(col, cids=extra)
+    back = col.get_card(kc.id)
+    ok("leeches 3.9.3: the one kept in my reviews back as new, its tag off, one undo step",
+       kc.id in got and back.type == 0 and back.lapses == 0 and "leech" not in [t.lower() for t in back.note().tags]
+       and col.undo_status().undo == "Due Crew: recover leeches", f"{len(got)} recovered, undo {col.undo_status().undo!r}")
+    conf["lapse"]["leechFails"], conf["lapse"]["leechAction"] = was
+    col.decks.update_config(conf)
     t = tm()
     days = col.db.list(
         f"SELECT DISTINCT CAST((? - id / 1000) / 86400 AS INTEGER) FROM revlog WHERE id >= ? AND id < ? AND ease > 0 "
@@ -1033,11 +1057,164 @@ def check_392(tmp):
     return failed
 
 
+def check_planner(path):
+    """Labs (due_crew/planner, docs/planner.md) on the real engine, on the big
+    collection: question IDs found among 12,000 question tags, QBank QIDs'
+    Unsuspend and Study now, each one undo step that Anki's undo takes back
+    whole, and the picker's tree and search, timed."""
+    import time
+    from anki.collection import Collection
+    from due_crew import plans as P
+    from due_crew.planner import actions as A, edits as E, model as M, qids as Q
+    failed = []
+
+    def ok(name, cond, extra=""):
+        print(("PASS " if cond else "FAIL ") + "planner: " + name, extra)
+        if not cond:
+            failed.append("planner: " + name)
+    col = Collection(path)
+    try:
+        did = col.decks.id_for_name("Step Deck")
+        R = "#Big_Step1_v12"
+        idx = P.DeckIndex(col, did)
+        t = time.perf_counter(); banks = Q.banks(idx); t_b = time.perf_counter() - t
+        qb = banks.get("QBank") or {}
+        have = {k.rsplit("::", 1)[-1] for k in idx.tag_keys if k.rsplit("::", 1)[-1].isdigit()}  # the ones sampled onto notes
+        ok("question tags read by bank", set(qb) == have and len(qb) > 11000 and list(banks) == ["QBank"],
+           f"{len(qb):,} numbers, {t_b*1000:.0f} ms")
+        picked = sorted(qb)[:15]
+        cids = set().union(*(qb[n] for n in picked))
+        cl = sorted(cids)
+        # some seen before (review cards a month out), some of those shut, one a leech
+        col.sched.set_due_date(cl[:8], "30")
+        col.sched.suspend_cards(cl[4:12])
+        leech = col.get_card(cl[0]).note()
+        leech.tags = list(leech.tags) + ["leech"]
+        col.update_note(leech)
+        idx = P.DeckIndex(col, did)
+        text = "Block 3 · 12 Oct 2026\nMissed: " + ", ".join(picked) + " · 65%"
+        t = time.perf_counter(); f = Q.find(idx, text); t_f = time.perf_counter() - t
+        ok("a paste: its 15 questions found, the date and the score aren't questions",
+           f["found"] == picked and f["missing"] == ["2026"] and f["cids"] == cids, f"{len(cids)} cards, {t_f*1000:.0f} ms, missing {f['missing']}")
+        from due_crew import plan_flow as F
+        snap = lambda: {c: (col.get_card(c).queue, col.get_card(c).due, col.get_card(c).ivl, col.get_card(c).did)  # noqa: E731
+                        for c in cl}
+        before = snap()
+        shut = P.openable_ids(col, cids)
+        leech_ids = {c for c in cl if col.get_card(c).nid == leech.id}
+        n = A.unsuspend(col, cids, "Due Crew: unsuspend 15 questions")
+        cards = {c: col.get_card(c) for c in cl}
+        ok("Unsuspend: the suspended ones, never the leech's cards; no due date or interval moves",
+           n == len(shut) > 0 and all(cards[c].queue != -1 for c in shut)
+           and all(cards[c].queue == -1 for c in leech_ids if before[c][0] == -1)
+           and all((cards[c].due, cards[c].ivl) == before[c][1:3] for c in cl if cards[c].type == 2), f"unsuspended {n}")
+        ok("Unsuspend: one undo step, named", col.undo_status().undo == "Due Crew: unsuspend 15 questions", repr(col.undo_status().undo))
+        col.undo()
+        ok("Unsuspend: Anki's undo takes it back", snap() == before, str([c for c in cl if snap()[c] != before[c]][:5]))
+        name = P.our_deck(A.DECK)
+        build = lambda want: F._filtered(col, name, want, order=F.STUDY_ORDER)  # noqa: E731
+        kept = {c for c in leech_ids if before[c][0] == -1}  # a leech Anki suspended stays out; its open cards may go in
+        first, rest = set(cl[:8]), set(cl[8:])
+        got = A.study(col, first, "Due Crew: study 8 QBank cards", name, build)
+        mdid = col.decks.id_for_name(name)
+        deck = col.decks.get(mdid) if mdid else {}
+        cards = {c: col.get_card(c) for c in cl}
+        took = {c for c in first if cards[c].did == mdid}
+        ok("Study now: a filtered deck under Due Crew that reschedules by my answers, the cards that can go in it",
+           bool(deck.get("dyn")) and bool(deck.get("resched")) and took == first - kept and got[1] == len(took),
+           f"{got}, {len(took)} in {name}")
+        ok("Study now: the suspended ones unsuspended first, never the leech's; no review's due or interval moves",
+           all(cards[c].queue != -1 for c in first if c in shut) and all(cards[c].queue == -1 for c in kept if c in first)
+           and all((cards[c].odue or cards[c].due, cards[c].ivl) == before[c][1:3] for c in first if cards[c].type == 2), f"unsuspended {got[0]}")
+        ok("Study now: one undo step, named", col.undo_status().undo == "Due Crew: study 8 QBank cards", repr(col.undo_status().undo))
+        got2 = A.study(col, rest, "Due Crew: study 7 QBank cards", name, build)
+        cards = {c: col.get_card(c) for c in cl}
+        ok("Study now: the next paste adds to the deck, the last one's still in it",
+           {c for c in cl if cards[c].did == mdid} == set(cl) - kept and got2[1] == len(set(cl) - kept), f"{got2}, {len(kept)} kept out")
+        col.undo()
+        col.undo()
+        ok("Study now: Anki's undo takes both back whole, every card home as it was", snap() == before,
+           str([c for c in cl if snap()[c] != before[c]][:5]))
+        t = time.perf_counter(); kids = M.children(idx, R); t_c = time.perf_counter() - t
+        ok("picker: the root's parts, #s first, then ^", [p.rsplit("::", 1)[-1] for p, _n, _m in kids][-1] == "^Systems" and len(kids) == 8,
+           f"{[p.rsplit('::', 1)[-1] for p, _n, _m in kids]}, {t_c*1000:.0f} ms")
+        t = time.perf_counter(); hits = M.find(idx, "cardio topic"); t_s = time.perf_counter() - t
+        t = time.perf_counter(); hits2 = M.find(idx, "renal"); t_s2 = time.perf_counter() - t
+        ok("picker: a search over every path, quick once read", hits and all("cardio" in h.lower() for h in hits) and t_s2 < 0.5,
+           f"{len(hits)} hits, first {t_s*1000:.0f} ms (reads the paths), then {t_s2*1000:.0f} ms ({len(hits2)} hits)")
+        t = time.perf_counter(); n = M.tag_count(idx, f"{R}::#V&B"); t_n = time.perf_counter() - t
+        ok("picker: a big part's count", n[0] > 1000, f"{n}, {t_n*1000:.0f} ms")
+        unit = {"id": "u1", "name": "Cardio", "opens": "2026-11-09", "tags": [h for h in hits[:30]] + [f"{R}::#QBank::Step::{picked[0]}"]}
+        doc = {"deck": "Step Deck", "units": [unit]}
+        t = time.perf_counter(); rows = M.sources(idx, unit, doc); t_r = time.perf_counter() - t
+        ok("a date's sources by resource", rows and rows[-1]["kind"] == "question" and all(r["cids"] for r in rows[:-1]),
+           f"{len(rows)} rows, {t_r*1000:.0f} ms")
+        t = time.perf_counter(); rc = E.recount(doc, idx, {"u1"}); t_rc = time.perf_counter() - t
+        ok("a changed date counted as the builder counts it", rc["units"][0]["n"] == sum(len(idx.tag_cards(x)) for x in unit["tags"]),
+           f"n {rc['units'][0]['n']:,}, {t_rc*1000:.0f} ms")
+    finally:
+        col.close()
+    return failed
+
+
+def check_bars(tmp):
+    """3.9.3's Today bars (due_flow.bars) on the real engine, on a small
+    collection of its own: reviews answered (one missed, so relearning),
+    new cards started, and Anki's own revlog, tree and queues read back."""
+    import time
+    from anki.collection import Collection
+    from due_crew import due_flow as F
+    failed = []
+
+    def ok(name, cond, extra=""):
+        print(("PASS " if cond else "FAIL ") + "bars: " + name, extra)
+        if not cond:
+            failed.append("bars: " + name)
+    col = Collection(os.path.join(tmp, "bars.anki2"))
+    try:
+        m = col.models.by_name("Basic")
+        big, pharm = col.decks.id("Big Step 1"), col.decks.id("Pharm")
+        for i in range(12):
+            n = col.new_note(m)
+            n["Front"], n["Back"] = f"q{i}", "a"
+            col.add_note(n, big if i < 8 else pharm)
+        cids = sorted(col.find_cards(""))
+        col.sched.set_due_date(cids[:4], "0")  # four reviews due today
+        col.decks.select(big)
+
+        def answer(rating):
+            q = col.sched.get_queued_cards()
+            c = col.get_card(q.cards[0].card.id)
+            c.start_timer()
+            col.sched.answer_card(col.sched.build_answer(card=c, states=col._backend.get_scheduling_states(c.id),
+                                                         rating=rating))
+            return c
+        first = answer(0)  # a review, Again: relearning
+        for _ in range(5):
+            answer(2)  # Good
+        tree = col.sched.deck_due_tree()
+        got = F.bars(col, tree, int(time.time()), int(col.get_config("collapseTime", 1200) or 0), set())
+        fresh = col.db.list("SELECT cid FROM revlog WHERE type = 0 AND lastIvl = 0 AND ease > 0")
+        ok("a new card's first answer is type 0, lastIvl 0 in Anki's revlog", len(fresh) == 3, str(fresh))
+        ok("Reviews: four due, two through, the missed one back later today, two due now",
+           (got["whole"], got["through"], got["later"]) == (4, 2, 1) and got["left"] == 2, str(got))
+        ok("New cards: three started, in their steps; what Anki still gives, a line a deck",
+           got["new"]["later"] == 3 and got["new"]["through"] == 0
+           and [d[0] for d in got["new"]["decks"]] == ["Big Step 1", "Pharm"]
+           and got["new"]["decks"][0][2] == 3 + int(tree.children[0].new_count), str(got["new"]))
+        ok("the missed review is relearning, Anki's own", col.get_card(first.id).type == 3)
+    finally:
+        col.close()
+    return failed
+
+
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory() as tmp:
         p = os.path.join(tmp, "big.anki2")
         make(p)
         failed = check(p)
         failed += check_392(tmp)
+        failed += check_planner(p)
+        failed += check_bars(tmp)
     print(f"\n{len(failed)} failed" + (": " + "; ".join(failed) if failed else ""))
     sys.exit(1 if failed else 0)
