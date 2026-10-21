@@ -9,9 +9,9 @@ Your friends' studying next to yours, on Anki's Decks screen.
 
 Studying for a big exam is more fun with friends! Due Crew puts your crew on
 Anki's Decks screen: who's studied today, who's studying now, how far
-each of you has gotten. Above them is your own day, and one button to
-study it. You only see people you've added, and they see you once they
-add you back. Your cards never leave your computer.
+each of you has gotten. Above them is your own day: what's due, what
+your plans open, your to-dos. You only see people you've added, and they
+see you once they add you back. Your cards never leave your computer.
 
 ## Your crew
 
