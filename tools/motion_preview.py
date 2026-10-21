@@ -76,6 +76,10 @@ S = {
 # round five, pick A: the day's click again shuts its details; another day's slides them across
 _wk = PV.PLAN_CARD["week"]
 _on = lambda i: dict(PV.PLANS, cards=[dict(PV.PLAN_CARD, focus=_wk[i]["day"])])  # noqa: E731
+# round five, pick 3: two plans, the switch to the other
+_two = dict(PV.PLANS, cards=[PV.PLAN_CARD, PV._TWO["cards"][1]])
+S["planpick"] = (R(due=DV_BASE, plans=_two, you=you("plans", plans=_two)),
+                 R(cfg={"period": "today", "plan_pick": "p2"}, due=DV_BASE, plans=_two, you=you("plans", plans=_two)), None)
 S.update({"dayshut": (R(due=DV_BASE, plans=_on(4), you=you("plans", plans=_on(4))), None, "day"),
           "dayswitch": (R(due=DV_BASE, plans=_on(2), you=you("plans", plans=_on(2))), None, "day")})
 # round two (each a swap; a profile, a bingo square and the logo are buttons)
@@ -128,7 +132,7 @@ NAMES = {"tick": "1 A tick you can see (and 2, the bar)", "done": "3 Done for to
          "addlater": "4 A to-do lands (another day)", "learn": "5 Learning back, flagged", "fold": "6 Hide", "unfold": "6 Show",
          "duetabs": "7 Tabs: You", "pills": "7 Tabs: Crew to Squads", "views": "7 Tabs: Today to Week",
          "plans": "8 The plan week: a day", "dayshut": "8 The plan week: the day again shuts it",
-         "dayswitch": "8 The plan week: another day", "map": "9 The map opens a tile", "nums": "10 Numbers that changed",
+         "dayswitch": "8 The plan week: another day", "planpick": "8 Two plans: the other one", "map": "9 The map opens a tile", "nums": "10 Numbers that changed",
          "nothing": "A refresh with nothing new (nothing moves)", "squares": "11 A friend's day fills in",
          "decks": "12 Decks bars grow in", "upd": "14 Refreshing: Updated", "insights": "16 Insights' line draws in",
          "settings": "18 Settings slides in", "setback": "18 Back to the board", "sort": "19 The column you sort by",

@@ -896,7 +896,7 @@ def card_view(plan, st, prog, today, session=None, week_offset=0):
     if own:  # 3.8.0: no Behind at my own pace; what's next, and where the plan is
         sub = f"at your pace · {followers:,} following"
         waiting, catch, session = 0, None, None
-    return {"id": plan["id"], "title": P.plan_title(plan), "sub": sub, "rows": rows,
+    return {"id": plan["id"], "title": P.plan_title(plan), "name": str(plan.get("name") or "Plan"), "sub": sub, "rows": rows,
             "own": own_view(plan, st, prog, today) if own else None,
             "lines": [] if no_deck or plan.get("paused") or own else P.ahead_behind(doc, prog or {}, today),
             "change": change, "no_deck": no_deck, "paused": bool(plan.get("paused")),
@@ -2239,6 +2239,13 @@ def on_message(cmd, parts):
         step = parts[3]
         weeks[arg] = 0 if step == "0" else max(-26, min(26, int(weeks.get(arg, 0)) + (1 if step == "next" else -1)))
         app.swap(cfg())
+    elif cmd == "planpick" and re.fullmatch(r"[A-Za-z0-9_-]{1,128}", arg or ""):
+        # round five, pick 3: the plan You › Plans shows, with two or more (this computer's)
+        c = cfg()
+        c["plan_pick"] = arg
+        _state.pop("plan_focus", None)  # another plan lets go of a jumped-to day
+        save_cfg(c)
+        app.swap(c)
     elif cmd == "planshift" and arg:
         set_shift(arg)
     elif cmd == "plansite" and arg and re.fullmatch(r"[A-Za-z0-9_-]{1,128}", arg):
@@ -4127,6 +4134,7 @@ def jump_to(pid, day):
     _state.setdefault("plan_week", {})[pid] = max(-26, min(26, weeks))
     _state["plan_focus"] = {pid: day}
     c = cfg()
+    c["plan_pick"] = pid  # with two or more plans, this one stays shown once the day lets go
     show_plans(c, swap=False)
     if getattr(mw, "state", "") != "deckBrowser":
         mw.moveToState("deckBrowser")

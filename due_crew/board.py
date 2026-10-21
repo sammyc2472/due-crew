@@ -804,6 +804,17 @@ def _css(cfg):
     #due-crew .dc-pc .pk .acts a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; font-size: 11.5px; }}
     /* round five: Your plans…, the card's one button, as the head row's was */
     #due-crew .dc-pc .pk .acts a.pbt {{ border: 1px solid var(--dc-line); border-radius: 7px; padding: 3px 10px; }}
+    /* round five, pick 3: two or more plans, one at a time: their names a switch in the head */
+    #due-crew .dc-pc .psk {{ align-items: center; }}
+    #due-crew .dc-pc .psw {{ display: inline-flex; flex-wrap: wrap; max-width: 100%; border: 1px solid var(--dc-line);
+      border-radius: 8px; overflow: hidden; }}
+    #due-crew .dc-pc .psw a {{ padding: 3px 11px; font-size: 12px; font-weight: 700; color: var(--dc-muted); text-decoration: none;
+      white-space: nowrap; max-width: 16em; overflow: hidden; text-overflow: ellipsis; }}
+    #due-crew .dc-pc .psw a + a {{ border-left: 1px solid var(--dc-line); }}
+    #due-crew .dc-pc .psw a:hover {{ color: var(--dc-ink); }}
+    #due-crew .dc-pc .psw a.on {{ background: var(--dc-you-bg); color: var(--dc-ink); }}
+    #due-crew .dc-pc .psw .dot {{ display: inline-block; width: 6px; height: 6px; border-radius: 3px; background: var(--dc-hours);
+      margin-left: 6px; vertical-align: 2px; }}
     #due-crew .dc-pc .pst {{ font-size: 12px; padding: 6px 0 0; border-top: 1px solid var(--dc-line); margin-top: 6px;
       display: flex; gap: 6px 10px; flex-wrap: wrap; align-items: baseline; }}
     #due-crew .dc-pc .pst .late {{ color: var(--dc-hours); font-weight: 700; }}
@@ -1665,9 +1676,47 @@ def _decks_html(data, deltas=None, tricky=None, plans=None, mine=None, sticking=
 
 
 def _plans_html(plans, people=None, cfg=None):
-    """3.3: the plans, a card each; 3.5.0: with none, the ways in."""
+    """3.3: the plans, a card each; 3.5.0: with none, the ways in. Round
+    five (Sam's pick 3): two or more, one at a time, their names a switch
+    in the card's head (_plan_switch) with one Your plans…; the one shown
+    is the plan Browse › Show on my plan jumped to, else this computer's
+    pick (`plan_pick`), else the first."""
     cards = (plans or {}).get("cards") or []
-    return "".join(_plan_card_html(card, people, cfg) for card in cards) if cards else _plans_empty_html()
+    if not cards:
+        return _plans_empty_html()
+    if len(cards) == 1:
+        return _plan_card_html(cards[0], people, cfg)
+    card = _picked_plan(cards, cfg)
+    return _plan_card_html(card, people, cfg, head=_plan_switch(cards, card))
+
+
+def _picked_plan(cards, cfg=None):
+    """The plan You › Plans shows when there are two or more."""
+    pick = (cfg or {}).get("plan_pick")
+    return (next((c for c in cards if c.get("focus")), None)
+            or next((c for c in cards if pick and str(c.get("id")) == str(pick)), None) or cards[0])
+
+
+def _plan_switch(cards, card):
+    """Round five, pick 3: the card's head with two or more plans: their
+    names, the one shown pressed and an amber dot on any that's behind, its
+    line ("week 3 of 9 · 6 following"), and Your plans… on it. A name two
+    plans share shows their whole titles. The authors' words: escaped."""
+    e = _html.escape
+    names = [str(c.get("name") or str(c.get("title") or "Plan").split(" · ")[0]) for c in cards]
+    pills = ""
+    for c, nm in zip(cards, names):
+        word = nm if names.count(nm) == 1 else str(c.get("title") or nm)
+        late = 0 if c.get("catch") else int((c.get("status") or {}).get("behind") or 0)
+        dot = f'<i class="dot" title="{late:,} behind"></i>' if late else ""
+        on = c is card
+        pills += (f'<a href="#" class="{"on" if on else ""}" aria-pressed="{"true" if on else "false"}" '
+                  f'title="{e(str(c.get("title") or nm))}" onclick="{_pycmd("planpick:" + str(c.get("id", "")))}">'
+                  f'{e(word)}{dot}</a>')
+    pid = str(card.get("id", ""))
+    return (f'<div class="pk psk"><span class="psw">{pills}</span><span>{e(str(card.get("sub") or ""))}</span>'
+            f'<span class="acts"><a class="pbt" href="#" title="Its weeks and dates, Insights, and your settings for it" '
+            f'onclick="{_pycmd("planyours:" + pid)}">Your plans&hellip;</a></span></div>')
 
 
 def _you_plans(plans, opened=None, people=None, cfg=None):
@@ -1749,7 +1798,7 @@ def _plans_empty_html():
             f'</div></div>')
 
 
-def _plan_card_html(card, people=None, cfg=None):
+def _plan_card_html(card, people=None, cfg=None, head=None):
     """3.5.0, a plan I follow (You › Plans since 3.8.0). Round five: the
     plan's card, Your plans… its one button (its weeks and dates, Insights,
     my settings for it, where Plan ▾ and Open went), its day in a line
@@ -1757,14 +1806,16 @@ def _plan_card_html(card, people=None, cfg=None):
     day's dates whole under it (Sam's pick A: "when a day is clicked, the
     full assignments for that day open in that plans tab"), what it says
     about now (_plan_now: a quiz coming, cards at risk), one note at most,
-    and the crew. Plan, date and event names are the author's: escaped
+    and the crew. head: the switch between plans in place of its name
+    (_plan_switch). Plan, date and event names are the author's: escaped
     here."""
     e = _html.escape
     pid = str(card.get("id", ""))
-    out = (f'<div class="dc-pc"><div class="pk"><b>{e(str(card.get("title") or "Plan"))}</b>'
-           f'<span>{e(str(card.get("sub") or ""))}</span>'
-           f'<span class="acts"><a class="pbt" href="#" title="Its weeks and dates, Insights, and your settings for it" '
-           f'onclick="{_pycmd("planyours:" + pid)}">Your plans&hellip;</a></span></div>')
+    out = '<div class="dc-pc">' + (head or (
+        f'<div class="pk"><b>{e(str(card.get("title") or "Plan"))}</b>'
+        f'<span>{e(str(card.get("sub") or ""))}</span>'
+        f'<span class="acts"><a class="pbt" href="#" title="Its weeks and dates, Insights, and your settings for it" '
+        f'onclick="{_pycmd("planyours:" + pid)}">Your plans&hellip;</a></span></div>'))
     tabs = card.get("tabs") or {}
     if card.get("no_deck"):
         out += (f'<div class="dc-line">No deck here has this plan&rsquo;s cards yet. '

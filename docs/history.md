@@ -3292,3 +3292,18 @@ every release that changes how something works.
   name stay. `test_plans_tab_v341`, `test_plan_load_3781`;
   `tools/motion_preview.py`'s dayshut and dayswitch (the audit measures
   both); renders in `tools/preview.py`.
+  Then two plans followed (Sam: "with multiple plans, we don't need two
+  buttons for your plans. doesn't make too much sense. think through how
+  to best present", four ways mocked on the spec page, then "Let's go
+  with 3"): one at a time. With two or more, the card's head is their
+  names as a switch (`board._plan_switch`: the one shown pressed, an
+  amber dot on any that's behind, a catch-up running isn't; a name two
+  plans share shows their whole titles), the shown plan's line ("week 3
+  of 9 · 6 following") and one Your plans… on it; under it that plan's
+  card as one plan has it. Which one: the plan Browse › Show on my plan
+  jumped to, else this computer's pick (`plan_pick`, config; `planpick`
+  sets it, lets a jumped-to day go and redraws; Show on my plan sets it
+  too, so its plan stays shown), else the first (`board._picked_plan`).
+  `card_view` carries the plan's `name` for the switch. One plan: as
+  built. `test_plan_switch_round5`; `tools/motion_preview.py`'s
+  planpick; renders in `tools/preview.py`.

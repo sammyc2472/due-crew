@@ -240,7 +240,7 @@ _SQ = {"cards": [dict(PLAN_CARD, tabs={"unread": 2, "summary": {
     "last": {"name": "Maya"}}})], "offers": []}
 sections.append("<h3>3.8.0: a plan I follow, in its squad (the line goes there); Due off</h3>" + board.render(
     DATA, {"period": "week", "due_show": False}, now_ts - 60, plans=_SQ, you=_YOU("plans", plans=_SQ)))
-# two plans followed: a card each, each with its own week
+# two plans followed: one at a time, their names a switch in the head (round five, Sam's pick 3)
 _MD = {"pace": {"days": [1, 1, 1, 1, 1, 0, 0]}, "events": [],
        "units": [{"id": "m1", "name": "Micro · Gram positives", "opens": "2026-10-05", "n": 120},
                  {"id": "m2", "name": "Micro · Gram negatives", "opens": "2026-10-07", "n": 140},
@@ -248,7 +248,8 @@ _MD = {"pace": {"days": [1, 1, 1, 1, 1, 0, 0]}, "events": [],
 _TWO = {"cards": [_SQ["cards"][0], dict(PLAN_CARD, id="p2", title="Micro · Priya's plan", sub="week 1 of 6 · 3 following",
                                          week=PL.week_view(_MD, {"m1": [120, 120, 120], "m2": [140, 30, 140]}, _PT, PL.week_start(_PT)),
                                          status={"togo": 110, "behind": 0, "since": ""}, ins=None, waiting=0, rows=[])], "offers": []}
-sections.append("<h3>round five, pick A: two plans followed (a card each, each its week)</h3>" + board.render(
+sections.append("<h3>round five, pick 3: two plans followed, one at a time (their names a switch, one Your plans&hellip;, "
+                "an amber dot on the one behind)</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=_TWO, due=_DV, you=_YOU("plans", plans=_TWO))
     .replace("dc-pd-p", "dc-pd2-p").replace('id="du-', 'id="du2-'))
 # 3.8.0: at my own pace: Up next with Open, what follows, the last step's Undo, quiet lines (no Behind)

@@ -27,6 +27,7 @@ Raw keys, for reference:
 | `room_chip_side` | right / left | Which end of Anki's top bar the study-room chip sits at |
 | `hidden_tabs` | list of decks / squads / plans / insights | What this computer doesn't show (Settings › Shows); Crew always shows |
 | `due_tab` | today / upcoming / later / plans / insights | The tab open in the box above the board |
+| `plan_pick` | plan id | The plan You › Plans shows when you follow two or more; picked by its name at the top |
 | `due_show` | true/false | Today, Upcoming and Later in that box (Plans and Insights stay) |
 | `shortcuts` | true/false | Ctrl+Shift+S (study what's next) and Ctrl+Shift+Q (ask the squad about this card), on this computer |
 | `fifteen` | true/false | ▶ Fifteen? in the top bar, and the nudge when you haven't started by your usual time, on this computer |

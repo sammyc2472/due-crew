@@ -3818,7 +3818,8 @@ def test_browse_from_the_board_380():
         F._browse = lambda cids, q=None, empty="": shown.append((sorted(cids), q)) if cids else said.append(empty)
         F.tooltip = lambda msg, **k: said.append(msg)
         F.app.swap = lambda c=None: None
-        F.save_cfg = lambda c: None
+        kept = []
+        F.save_cfg = lambda c: kept.append(dict(c))
         mw.col = col
         dc._on_js(False, as_board("duecrew:planleft:pB:a"), DeckBrowser())
         check("left: a date's cards I haven't seen, shut ones too (its \"left\" counts them); a seen leech isn't left",
@@ -3843,6 +3844,7 @@ def test_browse_from_the_board_380():
         week = (datetime.date.fromisoformat(P.week_start(_day(4))) - datetime.date.fromisoformat(P.week_start(_day(0)))).days // 7
         check("show on my plan: the Plans tab on that date's week, the day open",
               _state["plan_week"].get("pB") == week and _state["plan_focus"] == {"pB": _day(4)} and "Rhythm" in said[-1], said[-1])
+        check("show on my plan: that plan stays the one shown (round five, pick 3)", kept and kept[-1].get("plan_pick") == "pB", kept[-1:])
         F.show_on_plan(types.SimpleNamespace(selected_cards=lambda: [7]))
         check("show on my plan: a card in no plan I follow says so", said[-1] == "It isn't on a plan you follow.", said[-1])
         wk = P.week_view(F.mine(plan)["doc"], {}, _day(0), P.week_start(_day(4)))
@@ -7582,6 +7584,70 @@ def test_remaining_oct():
     check("ticks: the site hashes lines the same way (FNV-1a, code points)",
           "0x811c9dc5" in app_js and "0x01000193" in app_js and "codePointAt" in app_js
           and _re.search(r"ticks\[keys\[i\]\]", app_js))
+
+
+def test_plan_switch_round5():
+    """Round five, Sam's pick 3 ("with multiple plans, we don't need two
+    buttons for your plans", then "Let's go with 3"): two or more plans
+    followed show one at a time, their names a switch in the card's head
+    with one Your plans… on the plan shown; this computer keeps the pick
+    (`plan_pick`), and Browse › Show on my plan's plan comes first."""
+    from due_crew import plans as P
+    from due_crew.app import _state
+    from aqt.deckbrowser import DeckBrowser
+    import due_crew as dc
+    import due_crew.plan_flow as F
+    t = _day(0)
+
+    def card(pid, name, behind=0, **kw):
+        doc = {"pace": {"days": [1] * 7}, "events": [], "units": [{"id": "u" + pid, "name": name + " date", "opens": t, "n": 10}]}
+        return dict({"id": pid, "title": f"{name} · Dre\u2019s plan", "name": name, "sub": f"{name} line", "rows": [], "lines": [],
+                     "change": None, "no_deck": False, "paused": False, "waiting": 0, "aside": [0, 0, 0], "aside_ok": [0, 0],
+                     "week": P.week_view(doc, {}, t, P.week_start(t)), "week_offset": 0,
+                     "status": {"togo": 10, "behind": behind, "since": "Monday"}}, **kw)
+
+    a, b = card("pa", "Block <1>", behind=54), card("pb", "Micro")
+    one = board._plans_html({"cards": [a]}, None, {})
+    check("one plan: as built, its name and its Your plans…, no switch",
+          'class="psw"' not in one and one.count("planyours:") == 1 and "Block &lt;1&gt; · Dre" in one, one[:600])
+    two = board._plans_html({"cards": [a, b]}, None, {})
+    check("two: one Your plans…, on the plan shown", two.count("planyours:") == 1 and "duecrew:planyours:pa" in two, two[:900])
+    check("two: their names a switch, the first pressed; names escaped",
+          'class="psw"' in two and two.count('aria-pressed="true"') == 1 and "duecrew:planpick:pa" in two
+          and "duecrew:planpick:pb" in two and ">Block &lt;1&gt;<i" in two and "Block <1>" not in two, two[:900])
+    check("two: the one shown's week and line alone", "dc-pd-pa-" in two and "dc-pd-pb-" not in two
+          and "Micro date" not in two and "Block &lt;1&gt; line" in two and "Micro line" not in two)
+    check("two: an amber dot on the one behind, none on the other", two.count('class="dot"') == 1 and 'title="54 behind"' in two)
+    picked = board._plans_html({"cards": [a, b]}, None, {"plan_pick": "pb"})
+    on = lambda h, pid: 'aria-pressed="true" title="' in h and h.split('aria-pressed="true"')[1].split("</a>")[0].count(f"planpick:{pid}") == 1  # noqa: E731
+    check("the pick: Micro shown, its Your plans…", on(picked, "pb") and "duecrew:planyours:pb" in picked
+          and "dc-pd-pb-" in picked and "dc-pd-pa-" not in picked, picked[:900])
+    jumped = board._plans_html({"cards": [a, dict(b, focus=t)]}, None, {"plan_pick": "pa"})
+    check("Show on my plan's plan comes before the pick", on(jumped, "pb") and "dc-pd-pb-" in jumped)
+    check("a pick no longer followed: the first", on(board._plans_html({"cards": [a, b]}, None, {"plan_pick": "gone"}), "pa"))
+    check("a catch-up running isn't behind: no dot",
+          'class="dot"' not in board._plans_html({"cards": [dict(a, catch={"extra": 5, "until": "Fri"}), b]}, None, {}))
+    same = board._plans_html({"cards": [b, dict(card("pc", "Micro"), title="Micro · Priya\u2019s plan")]}, None, {})
+    check("two plans of one name: their whole titles", ">Micro · Dre\u2019s plan</a>" in same and ">Micro · Priya\u2019s plan</a>" in same, same[:900])
+    # the click, as the board sends it
+    conf, saves, swaps = {"period": "today"}, [], []
+    saved = (F.cfg, F.save_cfg, F.app.swap)
+    try:
+        F.cfg = lambda: conf
+        F.save_cfg = lambda c: saves.append(dict(c))
+        F.app.swap = lambda c=None: swaps.append(1)
+        _state["plan_focus"] = {"pa": t}
+        dc._on_js(False, as_board("duecrew:planpick:pb"), DeckBrowser())
+        check("planpick: kept on this computer, a jumped-to day let go, the board drawn again",
+              conf.get("plan_pick") == "pb" and saves and saves[-1].get("plan_pick") == "pb"
+              and "plan_focus" not in _state and swaps, (conf, saves, swaps))
+        n = len(saves)
+        dc._on_js(False, as_board("duecrew:planpick:no<pe"), DeckBrowser())
+        dc._on_js(False, as_board("duecrew:planpick"), DeckBrowser())
+        check("planpick: anything but a plan id does nothing", conf["plan_pick"] == "pb" and len(saves) == n)
+    finally:
+        (F.cfg, F.save_cfg, F.app.swap) = saved
+        _state.pop("plan_focus", None)
 
 
 def test_date_details_round5():

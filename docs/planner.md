@@ -19,10 +19,11 @@ card on, from the deck beside the date or a search.
 
 - **Tools › Due Crew › Plans**: Your plans…, New plan…, Follow a plan…;
   Missed questions…, Export cards for my AI….
-- **You › Plans**: each plan card's one button, *Your plans…* (on that
+- **You › Plans**: the card's one button, *Your plans…* (on that
   plan; round five, where the card's Open and Plan ▾ and the head row's
   Open plans and New plan ▾ went: a follow's every setting is its
-  Settings tab); following none, the ways in end with *New plan…* and
+  Settings tab); with two or more plans, one at a time, their names a
+  switch beside it (Sam's pick 3); following none, the ways in end with *New plan…* and
   *Your plans…*. The card is the plan's own: its day in a line ("24 to
   go today, and 54 behind since Monday", Catch up…), a quiz coming, one
   note, its squad; under its day's line, the week as seven small days
