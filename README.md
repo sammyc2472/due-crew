@@ -58,8 +58,8 @@ Above the board is yours.
   each week.
 - **Upcoming** is the next two weeks, and **Later** whatever has no day
   yet.
-- **QBank QIDs**: after a practice block, paste the IDs of the questions
-  you missed. Unsuspend their cards, or study them now.
+- **QBank QIDs**: after a practice block, paste its QIDs. Unsuspend
+  their cards, or study them now.
 - **Fifteen?** One click in Anki's top bar starts fifteen minutes of
   study, your plans' decks first. At the end: take five, go again, or stop there. Your crew
   sees you're studying. Not started by your usual time? Today nudges you.

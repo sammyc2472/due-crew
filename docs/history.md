@@ -3369,3 +3369,14 @@ every release that changes how something works.
   took Linux for granted, the emoji picker's "no picker, the drawer" (a
   Mac has one, so the test pins none) and Settings' key names (⌘⇧S and
   ⌃⇧Q on a Mac). Tests only; the add-on is as deployed.
+- 3.9.4, QBank QIDs' words and its button (Sam: "The language for the
+  QIDs page shouldn't be paste QIDs of questions missed. Not necessarily
+  missed. Just paste QBank QIDs here. And I liked the study now button
+  when it was blue"): the box says "Paste QBank QIDs here"; Insights' line
+  "After a practice block: paste its QIDs to unsuspend or study their
+  cards", Due's link "Paste QBank QIDs to find their cards", the README's
+  bullet the same (re-paste AnkiWeb's description). Study now is in the
+  accent again: `ui._mark` colours a window's default button only when no
+  button is marked, and 3.9.3's Browse link (`dc="link"`) is one, so the
+  window marks it itself (`dc="go"`, as the plan windows' do;
+  `tools/dialogs.py` checks it).

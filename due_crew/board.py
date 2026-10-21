@@ -2547,8 +2547,8 @@ def _insights_html(did, v):
     out = ""
     if v.get("bank"):
         # 3.9.3: a deck with a bank's question tags: QBank QIDs, on this deck
-        out += (f'<div class="iline">After a practice block: paste the questions you missed, and see what they have '
-                f'in common. <a href="#" onclick="{_pycmd(f"planmissed:{int(did)}")}">QBank QIDs&hellip;</a></div>')
+        out += (f'<div class="iline">After a practice block: paste its QIDs to unsuspend or study their cards. '
+                f'<a href="#" onclick="{_pycmd(f"planmissed:{int(did)}")}">QBank QIDs&hellip;</a></div>')
     r = v.get("right") or {}
     now, before = r.get("now") or [0, 0], r.get("before") or [0, 0]
     if now[1] >= 50:
@@ -7452,7 +7452,7 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
     today = e(v["today"])
     # 3.9.3 (Sam's pick 1, in Study today's place): QBank QIDs, after a practice block, when a deck here has
     # question IDs; in the head on every tab and on the folded line ("missing the QID chip on the top right")
-    qids = (f'<a href="#" class="du-go" title="Find the cards of the questions you missed" '
+    qids = (f'<a href="#" class="du-go" title="Paste QBank QIDs to find their cards" '
             f'onclick="{_pycmd("planmissed")}">QBank QIDs</a>' if v.get("qids") else "")
     done_n, total_n = int(v["done_n"]), int(v["total_n"])
     count = f"{done_n} of {total_n} done" if total_n else ""

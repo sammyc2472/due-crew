@@ -1,6 +1,6 @@
 """QBank QIDs (docs/planner.md; Question IDs in labs, for everyone since
-3.9.3): after a practice block, paste the IDs of the questions you missed,
-any way the bank copies them. Due Crew picks out the numbers, finds their
+3.9.3): paste a block's QIDs (any of them, missed or not: 3.9.4, Sam), any
+way the bank copies them. Due Crew picks out the numbers, finds their
 cards by the deck's question tags, and says what it found (and what isn't
 a question here). This paste only (3.9.3, Sam): nothing is kept and
 nothing is sent; what's not sticking is Insights' to say.
@@ -48,7 +48,7 @@ class QidWindow(QDialog):
         form.addRow(self.bank_label, self.bank)
         root.addLayout(form)
         self.text = QPlainTextEdit()
-        self.text.setPlaceholderText("Paste the IDs of the questions you missed")
+        self.text.setPlaceholderText("Paste QBank QIDs here")
         self.text.setTabChangesFocus(True)
         self.text.setMinimumHeight(96)
         root.addWidget(self.text)
@@ -76,6 +76,7 @@ class QidWindow(QDialog):
         buttons.addWidget(close)
         self.study_btn = QPushButton("Study now")
         self.study_btn.setDefault(True)
+        self.study_btn.setProperty("dc", "go")  # 3.9.4 (Sam): in the accent; Browse's link kept ui._mark from it
         self.study_btn.clicked.connect(self._study)
         buttons.addWidget(self.study_btn)
         root.addLayout(buttons)
