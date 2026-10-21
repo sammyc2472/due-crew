@@ -7304,12 +7304,15 @@ def test_plan_windows_ways_in_v393():
     dv = D.view(TODAY.isoformat(), [], [], {}, reviews={"due": 10, "done": 0})
     head = board._due_html(dict(dv, qids=True))
     head = head[:head.index("</div>")]
-    check("ways in: 3.9.3, QBank QIDs in Today's head (Sam's pick 1), on Today only, only when a deck has question IDs",
-          "duecrew:planmissed|" in head, head)
-    check("ways in: …and its words, nowhere else in the box",
-          ">QBank QIDs</a>" in head and "planmissed" not in board._due_html(dv)
-          and "planmissed" not in board._due_html(dict(dv, qids=True, tab="upcoming"))
-          and "planmissed" not in board._due_html(dict(dv, qids=True, folded=True)), head)
+    check("ways in: 3.9.3, QBank QIDs in the box's head (Sam's pick 1), only when a deck has question IDs",
+          "duecrew:planmissed|" in head and ">QBank QIDs</a>" in head and "planmissed" not in board._due_html(dv), head)
+    up = board._due_html(dict(dv, qids=True, tab="upcoming"))
+    one = board._due_html(dict(dv, qids=True, folded=True))
+    plans_tab = board._due_html(dict(dv, qids=True), more=[("plans", "Plans")], more_tab="plans", more_body="<p>x</p>")
+    check("ways in: …on every tab and on the folded line, in Study today's place (Sam: \"missing the QID chip on the top right\")",
+          "duecrew:planmissed|" in up[:up.index("</div>")] and "duecrew:planmissed|" in one
+          and one.index("planmissed") < one.index("du-fold") and "duecrew:planmissed|" in plans_tab[:plans_tab.index("</div>")]
+          and "planmissed" not in board._due_html(dict(dv, folded=True)), one)
     from due_crew import due_flow
     tconn = sqlite3.connect(":memory:")
     tconn.execute("CREATE TABLE tags (tag TEXT PRIMARY KEY)")

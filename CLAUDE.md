@@ -222,7 +222,7 @@ same commit, each with its test:
 | Insights (the deck's, a plan only sharpens it; You › Insights; the topic map, tiles open into parts, or by the week I started them (3.9.2); its card and text, shared by hand; my exam's scope, since my last exam (3.9.2)) | `team.py`, `team_flow.py`, `mapcard.py`, `ui/map_card_dialog.py` | never sent |
 | Reviews ahead (3.9.2: six weeks of a deck counted from my log; its ways and Stop new cards, Anki's today-only limit each morning; the track record; the board's line when reviews climb) | `ahead.py` (pure), `ahead_flow.py`, `board._ins_ahead`/`ahead_line` | never sent; the builder's `Reviews` (a typical curve) |
 | Leeches (3.9.2: in Insights' place; one button a card, Bring back, Learn it fresh, Leave it out) | `leech_flow.py`, `board._ins_leeches` | never sent (tips ride the stuck list) |
-| Due (the bubble's Today, Upcoming, Later; 3.9.3: no Study today button, Ctrl+Shift+S walks the day; QBank QIDs in Today's head when a tag ends in a question's number) | `due.py`, `due_flow.py` (`has_qids`), `board._due_html` | settings doc |
+| Due (the bubble's Today, Upcoming, Later; 3.9.3: no Study today button, Ctrl+Shift+S walks the day; QBank QIDs in the box's head, every tab and folded, when a tag ends in a question's number) | `due.py`, `due_flow.py` (`has_qids`), `board._due_html` | settings doc |
 | Invites, codes | `__init__.py`, `ui/friends_dialog.py`, `ui/welcome_dialog.py` | `invites.ts`, `social.ts` |
 | Sign-in, sessions, quiet accounts | `ui/auth_dialog.py`, `backend/api.py` | `auth.ts`, `quiet.ts`, `mydata.ts` |
 | Shares: text, and picture cards (made in Anki since 3.8.0) | `share.py`, `shares.py`, `sharecard.py`, `ui/share_card_dialog.py` | `site/public/cards.js` |

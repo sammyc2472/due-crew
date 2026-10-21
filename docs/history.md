@@ -3315,9 +3315,10 @@ every release that changes how something works.
   have some overly-explanatory language here that doesn't trust the
   user", "should we put this in a more accessible place?"; options on the
   spec page, then "Let's go with 1 but maybe like QBank QIDs?"). The
-  window is QBank QIDs now (`planner/qid_window.py`), opened from Today's
-  head (`board._due_html`, `planmissed` with no deck: the one my plan runs
-  on), shown only when a tag here ends in a question's number
+  window is QBank QIDs now (`planner/qid_window.py`), opened from the You
+  box's head in Study today's place, on every tab and on the folded line
+  (`board._due_html`, `planmissed` with no deck: the one my plan runs on;
+  Sam, on the README's pictures: "missing the QID chip on the top right"), shown only when a tag here ends in a question's number
   (`due_flow.has_qids`: Anki's tag list, not the notes, read once a
   profile and day), and from Insights' line, Tools › Due Crew › Plans and
   Find a setting as before. No intro and no privacy line; the counts in

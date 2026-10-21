@@ -33,8 +33,8 @@ card on, from the deck beside the date or a search.
   back, why it left cards shut), unfolding; the same click folds them.
   Due's Today and Upcoming open a date's details on its name too.
 - **Insights**: *QBank QIDs…* for a deck with a bank's question tags.
-- **Today's head**: *QBank QIDs*, when a tag here ends in a question's
-  number (Anki's tag list, read once a profile and day: `due_flow.has_qids`).
+- **The You box's head** (every tab, and the folded line): *QBank QIDs*,
+  when a tag here ends in a question's number (Anki's tag list, read once a profile and day: `due_flow.has_qids`).
 - **Settings' Find a setting** finds the three windows by their words.
 - **Labs** is what stays behind this computer's switch, `"labs": true` in
   the add-on's config (no window sets it): Claude's stand-in, session by

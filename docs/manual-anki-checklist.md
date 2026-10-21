@@ -671,7 +671,7 @@ In Anki (as a follower):
 ### 3.9.3: QBank QIDs, and no Study today
 
 - [ ] Today's head: no Study today, open or folded. Ctrl+Shift+S still walks the day's decks; a Fifteen still starts one.
-- [ ] A profile with a deck whose tags end in question numbers (#…::12345): QBank QIDs in Today's head, after the count; not on Upcoming or Later, not on the folded line. A profile without one: no link. Import such a deck: the link is there tomorrow (or after a restart).
+- [ ] A profile with a deck whose tags end in question numbers (#…::12345): QBank QIDs in the box's head, after the count, on every tab, and on the folded line before Show. A profile without one: no link. Import such a deck: the link is there tomorrow (or after a restart).
 - [ ] QBank QIDs: the window opens on the deck your plan runs on (with two plans, the one You › Plans shows). Paste a block's results with a date and a score in them: "4 questions · 9 cards · 6 suspended", Browse after it, the numbers that aren't questions under it, your plan's dates. No In common, no All my misses, no explanation at the top.
 - [ ] Unsuspend 6: they're unsuspended (a leech stays suspended), the new ones first in line; no review's due date moves. Edit › Undo takes it back in one step.
 - [ ] Study now: Anki opens Due Crew › QBank cards on its overview, the cards in random order. Answer Again on one you knew: it lapses as in any review. Good on one not due yet: its interval still grows. Each goes back to its own deck once done. Edit › Undo (before studying) takes back the unsuspends and the deck in one step.

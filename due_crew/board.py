@@ -7446,6 +7446,10 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
                 f'<span class="sp"></span><a href="#" class="du-fold" title="Fold to one line" '
                 f'onclick="{_pycmd("duefold")}">Hide &#9652;</a></div>{more_body}</div>')
     today = e(v["today"])
+    # 3.9.3 (Sam's pick 1, in Study today's place): QBank QIDs, after a practice block, when a deck here has
+    # question IDs; in the head on every tab and on the folded line ("missing the QID chip on the top right")
+    qids = (f'<a href="#" class="du-go" title="Find the cards of the questions you missed" '
+            f'onclick="{_pycmd("planmissed")}">QBank QIDs</a>' if v.get("qids") else "")
     done_n, total_n = int(v["done_n"]), int(v["total_n"])
     count = f"{done_n} of {total_n} done" if total_n else ""
     if v["folded"]:
@@ -7461,7 +7465,7 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
                 f'{", ".join(e(x) for x in nxt)}</span>' if nxt else "")
         return (f'<div class="du du-one" data-today="{today}"><a href="#" onclick="{_pycmd("duefold")}" title="Show">'
                 f'<b>{e(v["name"])}</b></a><span class="du-n">{count or "nothing today"}</span>{bar}{behind}'
-                f'<span class="sp"></span>{go}<a href="#" class="du-fold" title="Show the whole list" '
+                f'<span class="sp"></span>{go}{qids}<a href="#" class="du-fold" title="Show the whole list" '
                 f'onclick="{_pycmd("duefold")}">Show &#9662;</a></div>')
     tab = more_tab if more_tab in dict(more) else v["tab"]
     # 3.8.0: Later shows only when it holds something; adding one shows it
@@ -7478,9 +7482,6 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
             f'<a href="#" role="tab" aria-selected="{"true" if k == tab else "false"}" class="{"on" if k == tab else ""}" onclick="{_pycmd("duetab:" + k)}">{lb}</a>' for k, lb in more)
     if v.get("done") and tab == "today":
         count = "&#10003; Done for today"  # 3.8.0: as the folded line says it (and motion.js lights the box once)
-    # 3.9.3 (Sam's pick 1): QBank QIDs, after a practice block, when a deck here has question IDs
-    qids = (f'<a href="#" class="du-go" title="Find the cards of the questions you missed" '
-            f'onclick="{_pycmd("planmissed")}">QBank QIDs</a>' if tab == "today" and v.get("qids") else "")
     head = (f'<div class="du-h"><span class="du-tabs" role="tablist" aria-label="{e(v["name"])}">{tabs}</span>'
             f'<span class="sp"></span><span class="du-n">{count if tab in ("today", "upcoming") else ""}</span>{qids}'
             f'<a href="#" class="du-fold" title="Fold to one line" onclick="{_pycmd("duefold")}">Hide &#9652;</a></div>')
