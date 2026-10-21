@@ -3365,3 +3365,7 @@ every release that changes how something works.
   rendered again (`tools/readme_images.py` draws both now). No Worker
   change and no migration: `tools/deploy.sh` puts the site's builder.js
   and motion.js out; MIN_CLIENT stays.
+  The suite on a Mac (Sam's `tools/release.sh` stopped there): two checks
+  took Linux for granted, the emoji picker's "no picker, the drawer" (a
+  Mac has one, so the test pins none) and Settings' key names (⌘⇧S and
+  ⌃⇧Q on a Mac). Tests only; the add-on is as deployed.
