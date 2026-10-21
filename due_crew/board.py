@@ -797,6 +797,7 @@ def _css(cfg):
     #due-crew .dc-card a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
     /* 3.1: a plan I follow (You › Plans since 3.8.0) */
     #due-crew .dc-pc {{ margin-bottom: 14px; }}
+    #due-crew .dc-pc:last-child {{ margin-bottom: 0; }}  /* the box's own padding is the chin under the last card */
     #due-crew .dc-pc .pk {{ display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin: 2px 0 6px; }}
     #due-crew .dc-pc .pk b {{ font-size: 12.5px; }}
     #due-crew .dc-pc .pk span {{ font-size: 11px; color: var(--dc-muted); }}
