@@ -1892,6 +1892,8 @@ def main(out):
         q = QidWindow(None, qcol, [(1, "Big Step 1")], QOps())
         if q.study_btn.isEnabled() or q.unsuspend_btn.isEnabled() or q.lines.text() or not q.browse_btn.isHidden():
             raise RuntimeError("qids: nothing pasted, nothing to do")
+        if q.study_btn.property("dc") != "go" or q.text.placeholderText() != "Paste QBank QIDs here":
+            raise RuntimeError("qids: Study now in the accent, and the box asks for QIDs (3.9.4, Sam)")
         shoot(q, os.path.join(out, "planner-qids-empty.png"))
         q = QidWindow(None, qcol, [(1, "Big Step 1")], QOps())
         q.text.setPlainText("Block 3 · 12 Oct 2026\nMissed: 10234, 10911, 11002, 12118 · 65%")

@@ -331,8 +331,9 @@ ticked tag comes with it. Read from the deck index on the main thread.
 ## QBank QIDs
 
 (Missed questions until 3.9.3; Question IDs in labs.) After a practice
-block: paste the IDs of the questions I missed, any way the bank copies
-them. Every run of 3 to 9 digits is a number; only the ones the deck has
+block: paste its QIDs, missed or not (3.9.4, Sam: "Just paste QBank QIDs
+here"), any way the bank copies them. Study now is the window's button in
+the accent. Every run of 3 to 9 digits is a number; only the ones the deck has
 as a question count (a tag whose last part is that number, under a bank's
 #part), so a date or a score pasted with them is said as "isn't a question
 here", never guessed at. With two banks, the one with the most of them;

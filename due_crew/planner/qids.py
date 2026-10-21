@@ -1,5 +1,5 @@
-"""QBank QIDs (docs/planner.md): after a practice block, the IDs of the
-questions I missed, pasted any way the bank copies them, found in a deck by
+"""QBank QIDs (docs/planner.md): a block's question IDs (missed or not),
+pasted any way the bank copies them, found in a deck by
 its question tags (a last part of digits, under a bank's #part). Pure over
 a DeckIndex: the numbers come from the text, the cards from the deck.
 Counted here; nothing is sent, nothing kept (3.9.3: the window reads this

@@ -7297,11 +7297,15 @@ def test_plan_windows_ways_in_v393():
           calls == [("plans", None), ("plans", "p1"), ("plans", None), ("new",), ("start",), ("qids", 20), ("qids", None),
                     ("qids", None)], calls)
     v = {"right": {}, "target": 90}
+    from due_crew import due as D
+    dv = D.view(TODAY.isoformat(), [], [], {}, reviews={"due": 10, "done": 0})
     check("ways in: Insights' QBank QIDs line only on a deck with a bank's question tags",
           "duecrew:planmissed:20|" in board._insights_html(20, dict(v, bank=True)) and "QBank QIDs&hellip;" in board._insights_html(20, dict(v, bank=True))
           and "planmissed" not in board._insights_html(20, v))
-    from due_crew import due as D
-    dv = D.view(TODAY.isoformat(), [], [], {}, reviews={"due": 10, "done": 0})
+    check("3.9.4 (Sam: \"Not necessarily missed. Just paste QBank QIDs here\"): Insights' line and Due's link ask for QIDs, not misses",
+          "paste its QIDs to unsuspend or study their cards" in board._insights_html(20, dict(v, bank=True))
+          and "you missed" not in board._insights_html(20, dict(v, bank=True))
+          and 'title="Paste QBank QIDs to find their cards"' in board._due_html(dict(dv, qids=True)))
     head = board._due_html(dict(dv, qids=True))
     head = head[:head.index("</div>")]
     check("ways in: 3.9.3, QBank QIDs in the box's head (Sam's pick 1), only when a deck has question IDs",
