@@ -163,9 +163,7 @@
       extra: function (el) { return getComputedStyle(el).backgroundColor; } },
     // 29 caught up: Behind goes, saying so
     { sel: ".du-bh", kind: "behind", key: function () { return "bh"; }, val: function () { return ""; },
-      leave: { ctx: dueTab, fx: "caught", mem: true } },
-    // 35 Study today names the next deck
-    { sel: ".du-go .nm", kind: "text", key: function () { return "go"; }, val: function (el) { return words(el); } }
+      leave: { ctx: dueTab, fx: "caught", mem: true } }
   ];
   // what can move when the board comes back from a review (the memory): changes only, never a tab or a fold
   var MEMO = { tick: 1, bar: 1, text: 1, due: 1, row: 1, num: 1, pop: 1, stamp: 1, shout: 1, irow: 1, shade: 1 };

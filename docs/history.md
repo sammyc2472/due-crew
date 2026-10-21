@@ -3307,3 +3307,39 @@ every release that changes how something works.
   `card_view` carries the plan's `name` for the switch. One plan: as
   built. `test_plan_switch_round5`; `tools/motion_preview.py`'s
   planpick; renders in `tools/preview.py`.
+- 3.9.3, QBank QIDs (Sam, on Missed questions: "this is some …
+  awesome functionality that others have specific add ons for", "We also
+  have some overly-explanatory language here that doesn't trust the
+  user", "should we put this in a more accessible place?"; options on the
+  spec page, then "Let's go with 1 but maybe like QBank QIDs?"). The
+  window is QBank QIDs now (`planner/qid_window.py`), opened from Today's
+  head (`board._due_html`, `planmissed` with no deck: the one my plan runs
+  on), shown only when a tag here ends in a question's number
+  (`due_flow.has_qids`: Anki's tag list, not the notes, read once a
+  profile and day), and from Insights' line, Tools › Due Crew › Plans and
+  Find a setting as before. No intro and no privacy line; the counts in
+  Anki's words ("5 questions · 14 cards · 10 suspended") with Browse
+  after them (`qids.words`). Bring back went (Sam: "i just don't
+  understand why it would do it over the next three days", then "we just
+  do study now which then resets their intervals"): nothing moves a due
+  date. Two buttons: Unsuspend N (new ones first in line,
+  `actions.unsuspend`) and Study now, which unsuspends them and builds a
+  Due Crew filtered deck over what's in it already and these, so each
+  paste adds to it ("or add to a misses deck ya know"; named QBank cards,
+  Sam: "not necessarily Missed Questions always"), rescheduling by my
+  answers, one undo step (`actions.study`), then Anki's Study screen on
+  it; Sam's line under it, "Study now adds them to Due Crew › QBank
+  cards. Each card goes back to its own deck once you've done it." This
+  paste only (Sam: "get rid of all 41 so far option"): All my misses,
+  Forget and `qids.json` went, nothing is kept. In common went too (Sam:
+  "this should be covered under insights"): what's not sticking is
+  Insights' to say, from my answers. `tests/test_planner.py`
+  (`test_unsuspend_and_study`, `test_nothing_kept`, the glue),
+  `test_due_crew`'s ways in; `tools/real_anki.py` runs both on Anki's
+  engine (one undo step each, the second paste adding to the deck, undo
+  taking both back whole); renders in `tools/dialogs.py`.
+- 3.9.3, no Study today (Sam: "let's get rid of study today on the top
+  right also"): the Due box's head and its folded line lose it, and with
+  it the name of the deck it opened first (motion.js 35, `_next_deck`,
+  `study_to`). Ctrl+Shift+S still walks the day (`due_flow.study_today`),
+  a Fifteen still starts it, and a date's own Study stays.

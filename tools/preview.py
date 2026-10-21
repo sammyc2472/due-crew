@@ -196,6 +196,7 @@ _DV = _D.view(_T, _DATES, _ITEMS, {}, events=[{"day": _d(4), "name": "KSA F3-2",
                       "lines": [{"k": "do", "t": "Practice questions (40)", "r": "0123456"},
                                 {"k": "watch", "t": "Weekly review session", "r": str((_D.d(_T).weekday() + 3) % 7),
                                  "url": "https://example.com/r"}]}])
+_DV["qids"] = True  # 3.9.3: a deck here has question IDs: QBank QIDs in Today's head
 from due_crew import plans as PL  # noqa: E402
 _PT = "2026-10-07"
 _PDOC = {"pace": {"days": [1, 1, 1, 1, 1, 0, 0]},

@@ -179,6 +179,26 @@ def _every_line(key, today, any_day=False):
     return None, None
 
 
+_QIDS = {"key": None, "has": False}
+
+
+def has_qids():
+    """3.9.3: a tag here ends in a question's number (3 to 9 digits, what
+    QBank QIDs finds: planner.qids), so the box's head offers it. Anki's tag
+    list, not the notes: read once a profile and day."""
+    col = mw.col
+    key = (app.generation, id(col), _today())
+    if _QIDS["key"] != key:
+        pats = " OR ".join(f"tag GLOB '*::{'[0-9]' * k}'" for k in range(3, 10))
+        try:
+            has = bool(col.db.scalar(f"SELECT 1 FROM tags WHERE {pats} LIMIT 1"))
+        except Exception:
+            traceback.print_exc()
+            has = False
+        _QIDS.update(key=key, has=has)
+    return _QIDS["has"]
+
+
 _TREE = {"key": None, "at": 0.0, "until": 0.0, "tree": None}
 
 
@@ -206,8 +226,8 @@ def deck_tree(col):
 
 
 def _reviews():
-    """{due, done, next}: what Anki shows now across my decks (Study today's
-    walk), answers today, the deck Study today opens first; and 3.9.3's bars
+    """{due, done}: what Anki shows now across my decks (Study today's
+    walk), answers today; and 3.9.3's bars
     (bars()): the reviews' whole, through, later, left, back and at, and the
     new cards' (`new`, and `other`: started today outside today's plan
     dates). Cached a little: the board redraws often."""
@@ -222,7 +242,7 @@ def _reviews():
         done = int(mw.col.db.scalar("SELECT count() FROM revlog WHERE id >= ? AND ease > 0", start) or 0)
         now = int(time.time())
         ahead = int(mw.col.get_config("collapseTime", 1200) or 0)
-        out = {"due": due, "done": done, "next": _next_deck(tree)}
+        out = {"due": due, "done": done}
         try:
             got = bars(mw.col, tree, now, ahead, set(_state.get("plan_today") or ()))
         except Exception:
@@ -430,7 +450,7 @@ def view(c):
             x = more.get((r.get("pid"), r.get("uid"))) if r.get("kind") == "plan" else None
             if x:  # 3.8.1: what due.view's rows don't carry: "after" its event, Study
                 r["after"], r["study"] = bool(x.get("after")), bool(x.get("study"))
-        v["study_to"] = ((_reviews() or {}).get("next") or "") if v.get("study") and mw.col else ""
+        v["qids"] = has_qids() if mw.col else False  # 3.9.3: QBank QIDs in the head
         # 3.8.1: "Fifteen?", when the day hasn't started by my usual time
         from . import rooms
         v["nudge"] = rooms.nudge(c, v, _day_state()[1].get("dismissed") or ())
@@ -984,18 +1004,6 @@ def _due_now(col, dids, tree=None):
     for ch in (tree or deck_tree(col)).children:
         walk(ch, True)
     return out
-
-
-def _next_deck(tree):
-    """3.8.0 (Board in Motion, 35): the deck Study today opens first, its
-    last name, for the button; from the tree _reviews already read."""
-    try:
-        plan = _plan_decks()
-        step = D.study_next(plan, _due_now(mw.col, set(plan), tree))
-        return str(mw.col.decks.name(int(step[1]))).split("::")[-1] if step else ""
-    except Exception:
-        traceback.print_exc()
-        return ""
 
 
 def study_today():

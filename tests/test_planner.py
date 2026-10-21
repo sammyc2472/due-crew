@@ -126,7 +126,7 @@ def test_gate():
         qt.QMenu = saved
     check("gate: Tools › Due Crew › Plans holds everything about plans, the three windows among it, for everyone",
           m.title == "Plans" and m.items == ["Your plans…", "New plan…",
-                                             "Follow a plan…", "—", "Missed questions…", "Export cards for my AI…"], m.items)
+                                             "Follow a plan…", "—", "QBank QIDs…", "Export cards for my AI…"], m.items)
     init = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
     check("gate: Tools › Due Crew puts the Plans submenu in, and the old plan entries at its root are gone",
           "planner.plans_menu(menu)" in init and "Make a plan from a deck…" not in init and "(labs)" not in init)
@@ -286,11 +286,13 @@ def test_qids():
     check("qids: what they are here: open, shut (would open), a leech (stays shut), seen before",
           t == {"cards": 4, "open": 1, "shut": 2, "leech": 1, "new_shut": 1, "review": 2}, t)
     words = Q.words(f, Q.tally(idx, f["cids"]), [("MS2 Block 2", ["Mon 9 Nov", "Tue 10 Nov"])])
-    check("qids: its lines, plainly",
-          words == ["3 questions · 3 cards here", "1 open already, 2 still shut",
+    check("qids: its lines, plainly, the counts first in Anki's words (3.9.3)",
+          words == ["3 questions · 3 cards · 2 suspended",
                     "2 numbers aren’t questions here: 2026, 99999", "On MS2 Block 2: Mon 9 Nov, Tue 10 Nov"], words)
-    check("qids: nothing pasted, or nothing a question",
-          Q.words(Q.find(idx, ""), Q.tally(idx, set())) == ["Paste the IDs: Due Crew picks out the numbers."]
+    lw = Q.words(Q.find(idx, "10234 10911"), Q.tally(idx, {7, 8, 12}))
+    check("qids: a leech is said, and stays suspended", lw[0] == "2 questions · 3 cards · 2 suspended · 1 leech left suspended", lw)
+    check("qids: nothing pasted says nothing (the box says what to paste); nothing a question says so",
+          Q.words(Q.find(idx, ""), Q.tally(idx, set())) == []
           and Q.words(Q.find(idx, "55555"), Q.tally(idx, set())) == ["None of these are questions in this deck."])
     cold = collection()
     cold.db.conn.execute("UPDATE notes SET tags = ' x '")
@@ -298,112 +300,56 @@ def test_qids():
           and Q.find(P.DeckIndex(cold, 1), "10234")["bank"] is None)
 
 
-def test_threads():
-    """Sam: "take ... mistakes from qbanks ... and develop insights into common
-    threads": what the missed questions share, by the deck's own tags."""
-    conn = sqlite3.connect(":memory:")
-    fakes.make_collection(conn)
-    cardio, renal = f"{ROOT}::^Systems::Cardio", f"{ROOT}::^Systems::Renal"
-    hf = f"{ROOT}::#Videos::Cardio::Heart_Failure"
-    rows = [(1, f"{ROOT}::#Bank::101 {cardio}::Heart_Failure {hf}"), (2, f"{ROOT}::#Bank::102 {cardio}::Heart_Failure {hf}"),
-            (3, f"{ROOT}::#Bank::103 {cardio}::Shock"), (4, f"{ROOT}::#Bank::103 {cardio}::Shock leech"),
-            (5, f"{ROOT}::#Bank::104 {renal}::AKI"), (6, f"{ROOT}::#Bank::105 {renal}::AKI"), (7, f"{ROOT}::#Bank::106 Misc")]
-    for cid, tags in rows:
-        fakes.add_card(conn, cid, 1, tags=tags)
-    col = fakes.FakeCol(conn, fakes.day_cutoff_for(datetime.date(2026, 11, 9)))
-    col.decks = fakes.FakeDecks({1: "Big Step 1"})
-    idx = P.DeckIndex(col, 1)
-    f = Q.find(idx, "101 102 103 104 105 106")
-    ts = Q.threads(idx, f["by"])
-    got = [(t["label"], t["n"], t["of"]) for t in ts]
-    check("threads: the tags most of the questions share, a question once however many cards, most first",
-          got == [("Systems › Cardio", 3, 6), ("Videos › Cardio › Heart Failure", 2, 6), ("Systems › Renal › AKI", 2, 6)], got)
-    check("threads: each line of tags named once, at its deepest with them all; one question is no thread",
-          not any("Heart Failure" in t["label"] and t["label"].startswith("Systems") for t in ts)
-          and not any("Misc" in t["label"] or "Shock" in t["label"] for t in ts))
-    check("threads: a thread's cards are its questions' cards on it; its questions by number",
-          ts[0]["cids"] == {1, 2, 3, 4} and ts[0]["qids"] == ["101", "102", "103"] and ts[2]["cids"] == {5, 6} and ts[1]["cids"] == {1, 2})
-    check("threads: in words", Q.thread_words(ts[0]) == "Systems › Cardio · 3 of 6 questions")
-    check("threads: the plans' own tags, a leech's and the question's never are one",
-          Q._topic_paths("DueCrew::MS2::SLG_1") == [] and Q._topic_paths("leech") == [] and Q._topic_paths(f"{ROOT}::#Bank::101") == []
-          and Q._topic_paths("Pharm::Antibiotics") == ["Pharm", "Pharm::Antibiotics"]
-          and Q._topic_paths(cardio) == [cardio])
-    check("threads: none without questions", Q.threads(idx, {}) == [])
-
-
-def test_kept_misses():
-    log = Q.keep([], "2026-11-09", 1, "Bank", ["101", "102", "x"])
-    log = Q.keep(log, "2026-11-09", 1, "Bank", ["102", "103"])
-    log = Q.keep(log, "2026-11-10", 1, "Bank", ["101", "104"])
-    log = Q.keep(log, "2026-11-10", 2, "Bank", ["900"])
-    check("kept: one entry a day, deck and bank, each number once in it",
-          [(e["day"], e["deck"], e["n"]) for e in log]
-          == [("2026-11-09", 1, ["101", "102", "103"]), ("2026-11-10", 1, ["101", "104"]), ("2026-11-10", 2, ["900"])], log)
-    check("kept: a deck's questions once each, the newest paste's first, with its pastes and first day",
-          Q.kept(log, 1) == (["101", "104", "102", "103"], 2, "2026-11-09") and Q.kept(log, 3) == ([], 0, None))
-    rest, gone = Q.forget(log, 1)
-    check("kept: forget takes a deck's out and says which", [e["deck"] for e in rest] == [2] and len(gone) == 2)
-    big = []
-    for i in range(Q.KEEP_PASTES + 5):
-        big = Q.keep(big, f"d{i:04d}", 1, "Bank", [str(1000 + i)])
-    check("kept: the newest 200 pastes", len(big) == Q.KEEP_PASTES and big[0]["day"] == "d0005")
-    check("kept: nothing kept for no numbers", Q.keep([], "d", 1, "Bank", []) == [])
+def test_nothing_kept():
+    """3.9.3 (Sam): the window reads the paste in it, nothing more: no
+    misses kept on this computer, no All my misses, no In common (what's not
+    sticking is Insights')."""
     from due_crew.planner import flow
-    from due_crew import app
-    tmp = tempfile.mkdtemp()
-    saved = (app._profile_files, flow.plan_flow._today)
-    try:
-        app._profile_files = lambda: tmp
-        flow.plan_flow._today = lambda: "2026-11-09"
-        ops = flow.QidOps()
-        ops.keep(1, "Bank", ["101", "102"])
-        check("kept: on this computer, in the profile's qids.json, numbers only",
-              ops.kept(1) == (["101", "102"], 1, "2026-11-09") and os.listdir(tmp) == ["qids.json"]
-              and open(os.path.join(tmp, "qids.json")).read() == '{"v": 1, "misses": [{"day": "2026-11-09", "deck": 1, "bank": "Bank", "n": ["101", "102"]}]}')
-        gone = ops.forget(1)
-        check("kept: Forget, then Undo, the same screen", ops.kept(1)[0] == [] and (ops.unforget(gone) or True)
-              and ops.kept(1) == (["101", "102"], 1, "2026-11-09"))
-        with open(os.path.join(tmp, "qids.json"), "w") as f:
-            f.write("{not json")
-        check("kept: a file that won't read is none kept, never an error", flow.misses_log() == [])
-    finally:
-        app._profile_files, flow.plan_flow._today = saved
+    check("kept: no misses kept, no qids.json", not hasattr(flow, "misses_log") and not hasattr(Q, "keep")
+          and "qids.json" not in open(flow.__file__, encoding="utf-8").read())
+    check("kept: no threads", not hasattr(Q, "threads") and "In common" not in open(Q.__file__.replace("qids.py", "qid_window.py"), encoding="utf-8").read())
 
 
-def test_bring_back():
+def test_unsuspend_and_study():
     col = collection()
     before = state(col)
-    cids = {7, 8, 9, 12, 15, 3}
-    got = A.bring_back(col, cids, "Due Crew: bring back 6 cards")
+    n = A.unsuspend(col, {7, 8, 9, 12, 15, 3}, "Due Crew: unsuspend 2 cards")
     after = state(col)
-    check("bring back: the shut ones open (never the leech), one undo step under its name",
-          after[7][0] == 0 and after[8][0] == 2 and after[12][0] == -1 and len(col.undo_steps) == 1
-          and col.undo_steps[0][0] == "Due Crew: bring back 6 cards", (after, col.undo_steps))
-    check("bring back: the review ones (open, or just opened) come due over the next 3 days, in their own deck only",
-          got == {"opened": 2, "due": 3} and {after[c][2] for c in (3, 8, 9)} <= {1000, 1001, 1002}
-          and after[15] == before[15] and after[7][1] == 0, (got, after))
-    check("bring back: a new one opened goes first in Anki's line", after[7][2] == 0 and before[7][2] == 0
+    check("unsuspend: the suspended ones (never the leech), one undo step under its name",
+          n == 2 and after[7][0] == 0 and after[8][0] == 2 and after[12][0] == -1 and len(col.undo_steps) == 1
+          and col.undo_steps[0][0] == "Due Crew: unsuspend 2 cards", (n, after, col.undo_steps))
+    check("unsuspend: no due date moves (3.9.3: nothing comes back over 3 days)",
+          all(after[c][2] == before[c][2] for c in (3, 8, 9, 15)) and "set_due_date" not in open(A.__file__).read(), after)
+    check("unsuspend: a new one goes first in Anki's line", after[7][2] == 0
           and any(n == "Reposition" or 7 in ids for n, ids in col.undo_steps), col.undo_steps)
-    col3 = collection()
-    col3.db.conn.execute("UPDATE cards SET due = 990 WHERE id = 3")   # overdue
-    col3.db.conn.execute("UPDATE cards SET due = 1001 WHERE id = 9")  # due tomorrow, inside the 3 days
-    moves = A.reviews(col3, {3, 9, 8}, {8})  # what the window's count says first
-    got3 = A.bring_back(col3, {3, 9, 8}, "Due Crew: bring back 3 cards")
-    after3 = state(col3)
-    check("bring back: never puts a card later: one overdue or due inside the 3 days stays as it is",
-          moves == [8] and got3 == {"opened": 1, "due": 1} and after3[3][2] == 990 and after3[9][2] == 1001
-          and after3[8][2] in (1000, 1001, 1002), (moves, got3, after3))
-    col2 = collection()
-    got2 = A.bring_back(col2, {7, 8, 9}, "Due Crew: open 3", back=False)
-    after2 = state(col2)
-    check("bring back: Just open opens the shut ones, moves nothing",
-          got2 == {"opened": 2, "due": 0} and after2[9] == state(collection())[9] and after2[8][0] == 2 and len(col2.undo_steps) == 1)
-    col3 = collection()
-    col3.db.conn.execute("UPDATE cards SET queue = -1 WHERE id = 9")
-    col3.db.conn.execute("UPDATE notes SET tags = tags || ' leech ' WHERE id = 9")
-    check("bring back: nothing to do, no undo step", A.bring_back(col3, {12, 15, 9}, "x") == {"opened": 0, "due": 0}
-          and not col3.undo_steps)
-    check("bring back: one day is today", A.BACK_DAYS == 3 and "\"0\" if int(days) <= 1" in open(A.__file__).read())
+    check("unsuspend: nothing suspended, nothing done, no undo step",
+          A.unsuspend(col, {7, 8, 9}, "x") == 0 and len(col.undo_steps) == 1)
+    col = collection()
+    col.decks = fakes.FakeDecks({1: "Big Step 1", 2: "Big Step 1::Cardio", 3: "Mine", 4: "Due Crew::Cram",
+                                 5: "Due Crew::QBank cards"})
+    col.db.conn.execute("UPDATE cards SET odid = did, did = 5 WHERE id = 14")  # an earlier paste's, not done yet
+    before = state(col)
+    built = []
+
+    def build(want):
+        built.append(list(want))
+        col.db.conn.execute(f"UPDATE cards SET odid = did, did = 5 WHERE odid = 0 AND id IN ({','.join(map(str, want))})")
+        return True
+    got = A.study(col, {7, 8, 9, 12, 15}, "Due Crew: study 5 QBank cards", "Due Crew::QBank cards", build)
+    after = state(col)
+    check("study: the suspended ones unsuspended (never the leech), then the deck over what's in it and these",
+          got == (2, 4) and built == [[7, 8, 9, 14]] and after[12][0] == -1 and after[7][0] == 0 and after[8][0] == 2, (got, built))
+    check("study: one undo step under its name; no due date moves",
+          len(col.undo_steps) == 1 and col.undo_steps[0][0] == "Due Crew: study 5 QBank cards"
+          and all(after[c][2] == before[c][2] for c in (8, 9)), (col.undo_steps, after))
+    check("study: a card in another filtered deck stays where it is", 15 not in built[0] and after[15] == before[15])
+    built.clear()
+    check("study: the same paste again opens the deck (they're in it), nothing new to build in",
+          A.study(col, {7, 8}, "y", "Due Crew::QBank cards", build) == (0, 4) and built == [[7, 8, 9, 14]])
+    built.clear()
+    steps = len(col.undo_steps)
+    check("study: none that can go in (a leech), nothing done, no undo step",
+          A.study(col, {12}, "z", "Due Crew::QBank cards", build) == (0, 0) and built == [] and len(col.undo_steps) == steps)
 
 
 # ---- an author's edits ----
@@ -549,7 +495,7 @@ def test_flow():
     from due_crew import plan_flow as F
     col = collection()
     saved = (F._state_cfg, flow.mw.col, F.followed, F._after_change, F._claim_opened, F.refresh_progress, flow.app.swap,
-             flow.cfg)
+             flow.cfg, F._filtered, getattr(flow.mw, "moveToState", None))
     calls = []
     try:
         flow.mw.col = col
@@ -587,13 +533,28 @@ def test_flow():
         F.refresh_progress = lambda: calls.append("progress")
         flow.app.swap = lambda c: calls.append("swap")
         flow.cfg = lambda: {}
-        got = qo.bring_back({7, 8, 9}, back=True)
-        check("glue: Do it is one undo step, then what an open does (Edit's undo, my pace, the board)",
-              got == {"opened": 2, "due": 2} and calls == ["undo", ("claim", [7, 8]), "progress", "swap"]
-              and col.undo_steps[-1][0] == "Due Crew: bring back 3 cards", (got, calls))
+        got = qo.unsuspend({7, 8, 9})
+        check("glue: Unsuspend is one undo step, then what an open does (Edit's undo, my pace, the board)",
+              got == 2 and calls == ["undo", ("claim", [7, 8]), "progress", "swap"]
+              and col.undo_steps[-1][0] == "Due Crew: unsuspend 2 cards", (got, calls))
+        calls.clear()
+        col.decks = fakes.FakeDecks({1: "Big Step 1", 2: "Big Step 1::Cardio", 3: "Mine", 4: "Due Crew::Cram",
+                                     5: "Due Crew::QBank cards"})
+        col.decks.select = lambda d: calls.append(("select", d))
+        flow.mw.moveToState = lambda s: calls.append(s)
+
+        def filtered(c, name, cids, order=4):
+            calls.append(("build", name, list(cids), order))
+            c.db.conn.execute(f"UPDATE cards SET odid = did, did = 5 WHERE odid = 0 AND id IN ({','.join(map(str, cids))})")
+            return True
+        F._filtered = filtered
+        check("glue: Study now builds Due Crew › QBank cards (in random order), one undo step, and opens it",
+              qo.study({7, 8, 9}) is True and calls == [("build", "Due Crew::QBank cards", [7, 8, 9], F.STUDY_ORDER), "undo",
+                                                        ("select", 5), "overview"]
+              and col.undo_steps[-1][0] == "Due Crew: study 3 QBank cards", (calls, col.undo_steps[-1:]))
     finally:
         (F._state_cfg, flow.mw.col, F.followed, F._after_change, F._claim_opened, F.refresh_progress, flow.app.swap,
-         flow.cfg) = saved
+         flow.cfg, F._filtered, flow.mw.moveToState) = saved
 
 
 # ---- a plan from a block's calendar (reading.py, claude.py's stand-in) ----

@@ -1,8 +1,9 @@
 """The plan windows (docs/planner.md): Your plans (a plan's weeks and
 dates with the deck beside them, written here by its authors), New plan
-and Missed questions, Python-native, for everyone since 3.9.3. Tools ›
+and QBank QIDs, Python-native, for everyone since 3.9.3. Tools ›
 Due Crew › Plans opens them, and the board: You › Plans' head row and
-each plan card's Open, Insights' Missed questions line, Find a setting.
+each plan card's Open, Today's head and Insights' line (QBank QIDs),
+Find a setting.
 
 Labs is what stays behind this computer's "labs" switch (a key no window
 sets; docs/planner.md says how): Claude's stand-in, session by session
@@ -51,7 +52,7 @@ def plans_menu(parent):
     menu = QMenu("Plans", parent)
     for item in (("Your plans…", flow.open_plans), ("New plan…", flow.open_new),
                  ("Follow a plan…", plan_flow.open_follow), None,
-                 ("Missed questions…", flow.open_qids), ("Export cards for my AI…", plan_flow.open_export)):
+                 ("QBank QIDs…", flow.open_qids), ("Export cards for my AI…", plan_flow.open_export)):
         if item is None:
             menu.addSeparator()
             continue

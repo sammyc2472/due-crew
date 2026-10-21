@@ -111,7 +111,6 @@ S.update({
     "shade": (ins(), ins(map=mp), None),
     "caught": (base, R(due=dict(DV_BASE, behind_n=0, behind_plans=[], behind_mine=[]), you=you("today")), None),
     "notein": (base, R(due=toast, you=you("today")), None), "noteout": (R(due=toast, you=you("today")), base, None),
-    "studyto": (R(due=dict(DV_BASE, study_to="Pharm"), you=you("today")), R(due=dict(DV_BASE, study_to="Renal"), you=you("today")), None),
 })
 # 3.8.1: Pip by the logo for a moment (it goes by itself after sev.LOGO_SECONDS), and the session's line
 from due_crew import sev as SV
@@ -140,7 +139,7 @@ NAMES = {"tick": "1 A tick you can see (and 2, the bar)", "done": "3 Done for to
          "knockout": "23 A knock goes", "roomjoin": "24 Someone joins the room", "roomleave": "24 Someone leaves the room",
          "planweek": "25 A plan week's bars grow in", "sticking": "26 A topic starts sticking",
          "sticklast": "26 The last topic sticks", "shade": "27 A map tile changes shade", "caught": "29 Caught up",
-         "notein": "30 A note slides in", "noteout": "30 A note goes", "studyto": "35 Study today names the next deck",
+         "notein": "30 A note slides in", "noteout": "30 A note goes",
          "sevhop": "Pip: the day's done (a hop, the week's squares fly)", "sevcheer": "Pip: a cheer lands",
          "sevexam": "Pip: exam eve", "sevhello": "Pip: back from away", "fifteendone": "Pip: the session's line (a square a fifteen)",
          "sevhop.twirl": "Pip: the day's done, a twirl", "sevhop.shuffle": "Pip: the day's done, a little dance",

@@ -1059,9 +1059,9 @@ def check_392(tmp):
 
 def check_planner(path):
     """Labs (due_crew/planner, docs/planner.md) on the real engine, on the big
-    collection: question IDs found among 12,000 question tags, Bring back as
-    one undo step that Anki's undo takes back whole, and the picker's tree
-    and search, timed."""
+    collection: question IDs found among 12,000 question tags, QBank QIDs'
+    Unsuspend and Study now, each one undo step that Anki's undo takes back
+    whole, and the picker's tree and search, timed."""
     import time
     from anki.collection import Collection
     from due_crew import plans as P
@@ -1096,24 +1096,45 @@ def check_planner(path):
         t = time.perf_counter(); f = Q.find(idx, text); t_f = time.perf_counter() - t
         ok("a paste: its 15 questions found, the date and the score aren't questions",
            f["found"] == picked and f["missing"] == ["2026"] and f["cids"] == cids, f"{len(cids)} cards, {t_f*1000:.0f} ms, missing {f['missing']}")
-        before = {c: (col.get_card(c).queue, col.get_card(c).due) for c in cl}
+        from due_crew import plan_flow as F
+        snap = lambda: {c: (col.get_card(c).queue, col.get_card(c).due, col.get_card(c).ivl, col.get_card(c).did)  # noqa: E731
+                        for c in cl}
+        before = snap()
         shut = P.openable_ids(col, cids)
-        reviews = A.reviews(col, cids, shut)
-        got = A.bring_back(col, cids, "Due Crew: bring back 15 questions")
-        today = col.sched.today
+        leech_ids = {c for c in cl if col.get_card(c).nid == leech.id}
+        n = A.unsuspend(col, cids, "Due Crew: unsuspend 15 questions")
         cards = {c: col.get_card(c) for c in cl}
-        leech_ids = {c for c in cl if cards[c].nid == leech.id}
-        ok("Bring back: the shut ones open, never the leech's cards",
-           all(cards[c].queue != -1 for c in shut) and all(cards[c].queue == -1 for c in leech_ids if before[c][0] == -1),
-           f"opened {got['opened']}, shut {len(shut)}")
-        ok("Bring back: the ones seen before due today to the day after tomorrow, their intervals kept",
-           got["due"] == len(reviews) > 0 and all(0 <= cards[c].due - today <= 2 for c in reviews) and all(cards[c].ivl > 0 for c in reviews),
-           f"{got['due']} due: {sorted(cards[c].due - today for c in reviews)}")
-        ok("Bring back: one undo step, named", col.undo_status().undo == "Due Crew: bring back 15 questions", repr(col.undo_status().undo))
+        ok("Unsuspend: the suspended ones, never the leech's cards; no due date or interval moves",
+           n == len(shut) > 0 and all(cards[c].queue != -1 for c in shut)
+           and all(cards[c].queue == -1 for c in leech_ids if before[c][0] == -1)
+           and all((cards[c].due, cards[c].ivl) == before[c][1:3] for c in cl if cards[c].type == 2), f"unsuspended {n}")
+        ok("Unsuspend: one undo step, named", col.undo_status().undo == "Due Crew: unsuspend 15 questions", repr(col.undo_status().undo))
         col.undo()
-        back = {c: (col.get_card(c).queue, col.get_card(c).due) for c in cl}
-        ok("Bring back: Anki's undo takes it all back, opens and due dates", back == before,
-           str([c for c in cl if back[c] != before[c]][:5]))
+        ok("Unsuspend: Anki's undo takes it back", snap() == before, str([c for c in cl if snap()[c] != before[c]][:5]))
+        name = P.our_deck(A.DECK)
+        build = lambda want: F._filtered(col, name, want, order=F.STUDY_ORDER)  # noqa: E731
+        kept = {c for c in leech_ids if before[c][0] == -1}  # a leech Anki suspended stays out; its open cards may go in
+        first, rest = set(cl[:8]), set(cl[8:])
+        got = A.study(col, first, "Due Crew: study 8 QBank cards", name, build)
+        mdid = col.decks.id_for_name(name)
+        deck = col.decks.get(mdid) if mdid else {}
+        cards = {c: col.get_card(c) for c in cl}
+        took = {c for c in first if cards[c].did == mdid}
+        ok("Study now: a filtered deck under Due Crew that reschedules by my answers, the cards that can go in it",
+           bool(deck.get("dyn")) and bool(deck.get("resched")) and took == first - kept and got[1] == len(took),
+           f"{got}, {len(took)} in {name}")
+        ok("Study now: the suspended ones unsuspended first, never the leech's; no review's due or interval moves",
+           all(cards[c].queue != -1 for c in first if c in shut) and all(cards[c].queue == -1 for c in kept if c in first)
+           and all((cards[c].odue or cards[c].due, cards[c].ivl) == before[c][1:3] for c in first if cards[c].type == 2), f"unsuspended {got[0]}")
+        ok("Study now: one undo step, named", col.undo_status().undo == "Due Crew: study 8 QBank cards", repr(col.undo_status().undo))
+        got2 = A.study(col, rest, "Due Crew: study 7 QBank cards", name, build)
+        cards = {c: col.get_card(c) for c in cl}
+        ok("Study now: the next paste adds to the deck, the last one's still in it",
+           {c for c in cl if cards[c].did == mdid} == set(cl) - kept and got2[1] == len(set(cl) - kept), f"{got2}, {len(kept)} kept out")
+        col.undo()
+        col.undo()
+        ok("Study now: Anki's undo takes both back whole, every card home as it was", snap() == before,
+           str([c for c in cl if snap()[c] != before[c]][:5]))
         t = time.perf_counter(); kids = M.children(idx, R); t_c = time.perf_counter() - t
         ok("picker: the root's parts, #s first, then ^", [p.rsplit("::", 1)[-1] for p, _n, _m in kids][-1] == "^Systems" and len(kids) == 8,
            f"{[p.rsplit('::', 1)[-1] for p, _n, _m in kids]}, {t_c*1000:.0f} ms")

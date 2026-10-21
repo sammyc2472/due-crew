@@ -16,7 +16,7 @@ from .. import app, plan_flow
 from .. import plans as P
 from ..app import _bg, _state, cfg, client, save_cfg
 from ..backend.shapes import TransportError
-from . import actions, enabled, qids, remote
+from . import actions, enabled, remote
 
 _open = {}       # "plans", "start", "qids" -> the window, while it's open
 _asking = []     # my plans on their way for Your plans (one ask at a time)
@@ -513,7 +513,7 @@ class NewOps(StartOps):
 # ---- question IDs ----
 
 def open_qids(did=None):
-    """Missed questions (3.9.3, for everyone; Question IDs in labs): this
+    """QBank QIDs (3.9.3, for everyone; Question IDs in labs): this
     collection only, nothing sent. did: the deck to start on (Insights')."""
     if not mw.col:
         return
@@ -544,57 +544,9 @@ def _top_deck(col, did):
         return None
 
 
-MISSES = "qids.json"  # this profile's kept misses: question numbers by day, deck and bank; never sent
-
-
-def _misses_path():
-    return os.path.join(app._profile_files(), MISSES)
-
-
-def misses_log():
-    """[{day, deck, bank, n}], oldest first; [] when there's none or it won't read."""
-    try:
-        with open(_misses_path(), encoding="utf-8") as f:
-            data = json.load(f)
-        log = data.get("misses") if isinstance(data, dict) else None
-        return [e for e in log if isinstance(e, dict)] if isinstance(log, list) else []
-    except (OSError, ValueError):
-        return []
-
-
-def _save_misses(log):
-    try:
-        os.makedirs(app._profile_files(), exist_ok=True)
-        tmp = _misses_path() + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump({"v": 1, "misses": log}, f)
-        os.replace(tmp, _misses_path())
-        return True
-    except OSError:
-        return False
-
-
 class QidOps:
     def index(self, did):
         return P.DeckIndex(mw.col, did)
-
-    def kept(self, did, bank=None):
-        """(numbers, pastes, since) this computer kept for a deck (qids.kept)."""
-        return qids.kept(misses_log(), did, bank)
-
-    def keep(self, did, bank, numbers):
-        """A paste's questions into the kept misses (main thread), once each a day."""
-        return _save_misses(qids.keep(misses_log(), plan_flow._today(), did, bank, numbers))
-
-    def forget(self, did):
-        """This deck's kept misses gone; the ones taken out, for Undo."""
-        log, gone = qids.forget(misses_log(), did)
-        _save_misses(log)
-        return gone
-
-    def unforget(self, gone):
-        """Undo: the pastes forget took out, back."""
-        _save_misses(sorted(misses_log() + list(gone or []), key=lambda e: str(e.get("day") or "")))
 
     def default_deck(self, choices):
         """The deck my plan runs on here (its top deck: question tags are
@@ -629,30 +581,44 @@ class QidOps:
                 out.append((str(p.get("name") or "Plan"), [P.fmt_day(u.get("opens")) for u in dates]))
         return out
 
-    def movable(self, cids):
-        """How many of these Bring back would move: the seen ones due after
-        its days (actions.reviews), with the shut ones it opens."""
+    def unsuspend(self, cids):
+        """Unsuspend: actions.unsuspend, then what plan_flow does after an
+        open (Edit's undo, at my own pace a date now all open)."""
         if not mw.col or not cids:
             return 0
-        return len(actions.reviews(mw.col, cids, P.openable_ids(mw.col, cids)))
-
-    def bring_back(self, cids, back):
-        """The window's Do it: actions.bring_back, then what plan_flow does
-        after an open (Edit's undo, at my own pace a date now all open)."""
-        if not mw.col:
-            return None
         shut = P.openable_ids(mw.col, cids)
-        n = len({int(c) for c in cids})
-        got = actions.bring_back(mw.col, cids, f"Due Crew: bring back {n:,} card{'s' if n != 1 else ''}", back=back)
-        if got["opened"] or got["due"]:
+        n = actions.unsuspend(mw.col, cids, f"Due Crew: unsuspend {len(shut):,} card{'s' if len(shut) != 1 else ''}")
+        if n:
             plan_flow._after_change()
-            plan_flow._claim_opened(shut if got["opened"] else ())
+            plan_flow._claim_opened(shut)
             plan_flow.refresh_progress()
             app.swap(cfg())
-        return got
+        return n
+
+    def study(self, cids):
+        """Study now: actions.study into Due Crew › QBank cards (each
+        paste adds to it; a card goes back to its own deck once done), then
+        Anki's Study screen on it. False when none of them can go in."""
+        if not mw.col or not cids:
+            return False
+        name = P.our_deck(actions.DECK)
+        shut = P.openable_ids(mw.col, cids)
+        n = len({int(c) for c in cids})
+        opened, had = actions.study(mw.col, cids, f"Due Crew: study {n:,} QBank card{'s' if n != 1 else ''}", name,
+                                    lambda want: plan_flow._filtered(mw.col, name, want, order=plan_flow.STUDY_ORDER))
+        if opened:
+            plan_flow._claim_opened(shut)
+            plan_flow.refresh_progress()
+        if opened or had:
+            plan_flow._after_change()
+        if not had:
+            tooltip("None of them can be studied now (buried, or in another filtered deck).")
+            return False
+        did = mw.col.decks.id_for_name(name)
+        if did:
+            mw.col.decks.select(did)
+            mw.moveToState("overview")
+        return True
 
     def browse(self, cids):
         plan_flow._browse(cids, empty="None of them are in this deck.")
-
-    def study_cards(self, idx, cids, name):
-        return study_cards(idx, cids, name)

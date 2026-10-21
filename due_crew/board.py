@@ -2546,9 +2546,9 @@ def _insights_html(did, v):
         return _ins_leeches(did, v["leech"], v.get("deck_name"))  # 3.9.2: the leeches view, in Insights' place
     out = ""
     if v.get("bank"):
-        # 3.9.3: a deck with a bank's question tags: Missed questions, on this deck
+        # 3.9.3: a deck with a bank's question tags: QBank QIDs, on this deck
         out += (f'<div class="iline">After a practice block: paste the questions you missed, and see what they have '
-                f'in common. <a href="#" onclick="{_pycmd(f"planmissed:{int(did)}")}">Missed questions&hellip;</a></div>')
+                f'in common. <a href="#" onclick="{_pycmd(f"planmissed:{int(did)}")}">QBank QIDs&hellip;</a></div>')
     r = v.get("right") or {}
     now, before = r.get("now") or [0, 0], r.get("before") or [0, 0]
     if now[1] >= 50:
@@ -4121,7 +4121,7 @@ FIND_WORDS = {
 FIND_WINDOWS = (
     ("planyours", "Your plans", "plan plans dates weeks schedule write edit author builder follow"),
     ("planstart", "New plan", "new plan calendar syllabus block schedule file pdf word powerpoint slides import make deck"),
-    ("planmissed", "Missed questions", "missed questions question ids bank practice block qbank wrong incorrect"),
+    ("planmissed", "QBank QIDs", "qbank qids missed questions question ids bank practice block wrong incorrect unsuspend"),
 )
 
 
@@ -7420,14 +7420,6 @@ def _due_add(v, default):
 
 # 3.8.0: the two keys as this computer writes them (a Mac: Command for Study, Control for Ask, __init__.py)
 STUDY_KBD, ASK_KBD = ("⌘⇧S", "⌃⇧Q") if _sys.platform == "darwin" else ("Ctrl+Shift+S", "Ctrl+Shift+Q")
-def _study_to(v):
-    """3.8.0 (Board in Motion, 35): the deck Study today opens first, named
-    on the button (due_flow works it out from Anki's deck tree)."""
-    to = v.get("study_to")
-    return f' <span class="nm">{_html.escape(str(to))}</span>' if to else ""
-
-
-STUDY_TIP = f"Each deck with cards due, your plans&rsquo; first ({STUDY_KBD})"
 
 
 def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
@@ -7458,9 +7450,7 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
     count = f"{done_n} of {total_n} done" if total_n else ""
     if v["folded"]:
         bar = _wbar(done_n, total_n) if total_n else ""
-        # 3.8.0: Study today walks the day (the plans' decks first), as the box's
-        go = (f'<a href="#" class="du-go" title="{STUDY_TIP}" onclick="{_pycmd("duestudy")}">'
-              f'Study today &rsaquo;{_study_to(v)}</a>' if v.get("study") else "")
+        go = ""  # 3.9.3: no Study today (Sam); Ctrl+Shift+S still walks the day
         behind = f'<span class="du-n" style="color:#c77700">{int(v["behind_n"])} behind</span>' if v["behind_n"] else ""
         if v.get("done"):
             # the day's done: what's next, in place of the bar
@@ -7486,12 +7476,13 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
         # 3.8.0: Plans and Insights, after a gap: what's mine beyond the day
         tabs += '</span><span class="du-tabs du-more" role="tablist" aria-label="Plans and Insights">' + "".join(
             f'<a href="#" role="tab" aria-selected="{"true" if k == tab else "false"}" class="{"on" if k == tab else ""}" onclick="{_pycmd("duetab:" + k)}">{lb}</a>' for k, lb in more)
-    study = (f'<a href="#" class="du-go" title="{STUDY_TIP}" onclick="{_pycmd("duestudy")}">Study today &rsaquo;{_study_to(v)}</a>'
-             if tab == "today" and v.get("study") else "")
     if v.get("done") and tab == "today":
         count = "&#10003; Done for today"  # 3.8.0: as the folded line says it (and motion.js lights the box once)
+    # 3.9.3 (Sam's pick 1): QBank QIDs, after a practice block, when a deck here has question IDs
+    qids = (f'<a href="#" class="du-go" title="Find the cards of the questions you missed" '
+            f'onclick="{_pycmd("planmissed")}">QBank QIDs</a>' if tab == "today" and v.get("qids") else "")
     head = (f'<div class="du-h"><span class="du-tabs" role="tablist" aria-label="{e(v["name"])}">{tabs}</span>'
-            f'<span class="sp"></span><span class="du-n">{count if tab in ("today", "upcoming") else ""}</span>{study}'
+            f'<span class="sp"></span><span class="du-n">{count if tab in ("today", "upcoming") else ""}</span>{qids}'
             f'<a href="#" class="du-fold" title="Fold to one line" onclick="{_pycmd("duefold")}">Hide &#9652;</a></div>')
     if tab in dict(more):
         return f'<div class="du" data-today="{today}">{head}{more_body}</div>'

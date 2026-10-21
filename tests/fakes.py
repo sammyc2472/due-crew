@@ -191,6 +191,7 @@ def make_collection(conn):
                  "odid INTEGER DEFAULT 0, type INTEGER DEFAULT 0, "
                  "queue INTEGER DEFAULT 0, ivl INTEGER DEFAULT 0, ord INTEGER DEFAULT 0, "
                  "due INTEGER DEFAULT 0, lapses INTEGER DEFAULT 0, data TEXT DEFAULT '', odue INTEGER DEFAULT 0)")
+    conn.execute("CREATE TABLE tags (tag TEXT PRIMARY KEY, usn INTEGER DEFAULT 0, collapsed INTEGER DEFAULT 0, config BLOB)")  # Anki's tag list
     conn.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY, guid TEXT, mid INTEGER DEFAULT 0, flds TEXT DEFAULT '', "
                  "tags TEXT DEFAULT '', mod INTEGER DEFAULT 0, sfld TEXT DEFAULT '')")  # sfld: 3.9.2's leeches show it
     # Anki bumps a note's mod on every edit; the plan index keeps tags by it

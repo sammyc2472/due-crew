@@ -127,7 +127,7 @@ class Picker(QDialog):
             item.addChild(self._row("tag", p, name, more))
         q = M.questions(self.idx, path)
         if q:
-            extra = QTreeWidgetItem([f"{q:,} question ID{'s' if q != 1 else ''}: Question IDs finds them by number", "", ""])
+            extra = QTreeWidgetItem([f"{q:,} question ID{'s' if q != 1 else ''}: QBank QIDs finds them by number", "", ""])
             extra.setFlags(Qt.ItemFlag.ItemIsEnabled)
             item.addChild(extra)
         if not item.childCount():

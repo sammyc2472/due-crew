@@ -2260,7 +2260,7 @@ def on_message(cmd, parts):
         new_plan_menu()
     elif cmd == "planstart":  # 3.9.3: New plan from a calendar (round five: the one New plan)
         _planner_flow().open_new()
-    elif cmd == "planmissed":  # 3.9.3: Insights' Missed questions, on its deck
+    elif cmd == "planmissed":  # 3.9.3: QBank QIDs, from Due's head or on Insights' deck
         _planner_flow().open_qids(int(arg) if arg.isdigit() else None)
     elif cmd == "planresume" and arg:
         p = next((x for x in followed() if x["id"] == arg), None)

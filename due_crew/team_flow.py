@@ -619,7 +619,7 @@ MY_EXAM = "~exam"  # my own exam date, among a plan's events
 
 def _has_bank(col, deck):
     """3.9.3: a card of the deck has a question bank's tag (a tag whose last
-    part is 3 to 9 digits, the numbers Missed questions finds: planner.qids).
+    part is 3 to 9 digits, the numbers QBank QIDs finds: planner.qids).
     A tag ends at a space (Anki keeps a note's tags between spaces)."""
     pats = " OR ".join(f"(n.tags || ' ') GLOB '*::{'[0-9]' * k} *'" for k in range(3, 10))
     try:
@@ -652,7 +652,7 @@ def _work_out(did, pid=None, exam=""):
     since = lambda days: (cutoff - days * 86400) * 1000  # noqa: E731
     out = {"target": int(round(100 * target)), "did": did, "deck_name": str(col.decks.name(did) or "").split("::")[-1],
            "fsrs_on": bool(_fsrs(col))}  # 3.9.2's audit: Anki aims for a retention only with FSRS on
-    out["bank"] = _has_bank(col, deck)  # 3.9.3: Missed questions' line, for a deck with a bank's question tags
+    out["bank"] = _has_bank(col, deck)  # 3.9.3: QBank QIDs' line, for a deck with a bank's question tags
 
     # the header: right on this deck's reviews, first answer of each card each day
     # 3.9.2: split by the cards I started in these two weeks, when the mix shifted (T.right_split)

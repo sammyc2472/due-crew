@@ -7289,16 +7289,53 @@ def test_plan_windows_ways_in_v393():
     plan_flow.new_plan_menu = lambda: calls.append(("new",))
     try:
         send = lambda m: dc._on_js(False, as_board("duecrew:" + m), DeckBrowser())
-        for m in ("planyours", "planyours:p1", "planyours:bad id!", "plannew", "planstart", "planmissed:20", "planmissed:x"):
+        for m in ("planyours", "planyours:p1", "planyours:bad id!", "plannew", "planstart", "planmissed:20", "planmissed:x", "planmissed"):
             send(m)
     finally:
         pflow.open_plans, pflow.open_new, pflow.open_qids, plan_flow.new_plan_menu = saved
-    check("ways in: each click reaches its window (a plan's id, nothing else, picks the plan; a deck's id the deck)",
-          calls == [("plans", None), ("plans", "p1"), ("plans", None), ("new",), ("start",), ("qids", 20), ("qids", None)], calls)
+    check("ways in: each click reaches its window (a plan's id, nothing else, picks the plan; a deck's id the deck; Due's QBank QIDs, none)",
+          calls == [("plans", None), ("plans", "p1"), ("plans", None), ("new",), ("start",), ("qids", 20), ("qids", None),
+                    ("qids", None)], calls)
     v = {"right": {}, "target": 90}
-    check("ways in: Insights' Missed questions line only on a deck with a bank's question tags",
-          "duecrew:planmissed:20|" in board._insights_html(20, dict(v, bank=True))
+    check("ways in: Insights' QBank QIDs line only on a deck with a bank's question tags",
+          "duecrew:planmissed:20|" in board._insights_html(20, dict(v, bank=True)) and "QBank QIDs&hellip;" in board._insights_html(20, dict(v, bank=True))
           and "planmissed" not in board._insights_html(20, v))
+    from due_crew import due as D
+    dv = D.view(TODAY.isoformat(), [], [], {}, reviews={"due": 10, "done": 0})
+    head = board._due_html(dict(dv, qids=True))
+    head = head[:head.index("</div>")]
+    check("ways in: 3.9.3, QBank QIDs in Today's head (Sam's pick 1), on Today only, only when a deck has question IDs",
+          "duecrew:planmissed|" in head, head)
+    check("ways in: …and its words, nowhere else in the box",
+          ">QBank QIDs</a>" in head and "planmissed" not in board._due_html(dv)
+          and "planmissed" not in board._due_html(dict(dv, qids=True, tab="upcoming"))
+          and "planmissed" not in board._due_html(dict(dv, qids=True, folded=True)), head)
+    from due_crew import due_flow
+    tconn = sqlite3.connect(":memory:")
+    tconn.execute("CREATE TABLE tags (tag TEXT PRIMARY KEY)")
+    tconn.executemany("INSERT INTO tags VALUES (?)", [("Spanish::Unit_12",), ("Spanish::Verbs",)])
+    reads = []
+
+    class TagDB:
+        def scalar(self, sql, *a):
+            reads.append(sql)
+            return tconn.execute(sql, a).fetchone()
+    saved = (due_flow.mw.col, due_flow._today, dict(due_flow._QIDS))
+    try:
+        due_flow.mw.col = types.SimpleNamespace(db=TagDB())
+        due_flow._today = lambda: "2026-10-21"
+        due_flow._QIDS.update(key=None, has=False)
+        no = due_flow.has_qids()
+        tconn.execute("INSERT INTO tags VALUES ('Step1::#Bank::Step::10234')")
+        same_day = due_flow.has_qids()
+        due_flow._today = lambda: "2026-10-22"
+        yes = due_flow.has_qids()
+        check("ways in: a deck here has question IDs when a tag ends in 3 to 9 digits (Unit_12 isn't one); Anki's tag list, once a day",
+              no is False and same_day is False and yes is True and len(reads) == 2, reads)
+    finally:
+        due_flow.mw.col, due_flow._today = saved[0], saved[1]
+        due_flow._QIDS.clear()
+        due_flow._QIDS.update(saved[2])
     conn = sqlite3.connect(":memory:")
     fakes.make_collection(conn)
     fakes.add_card(conn, 1, did=10, tags="Step1::#Bank::10234")
@@ -7310,8 +7347,8 @@ def test_plan_windows_ways_in_v393():
     ix = board.settings_index({"tab": "board", "signed_in": True}, {"accent": "green"})
     wins = {x["l"]: x for x in ix if x.get("p")}
     check("ways in: Find a setting finds the three windows by the words people use, after every setting",
-          set(wins) == {"Your plans", "New plan", "Missed questions"}
-          and "calendar" in wins["New plan"]["k"] and "missed" in wins["Missed questions"]["k"]
+          set(wins) == {"Your plans", "New plan", "QBank QIDs"}
+          and "calendar" in wins["New plan"]["k"] and "missed" in wins["QBank QIDs"]["k"]
           and wins["Your plans"]["p"] == "planyours" and all(x.get("p") for x in ix[-3:]), list(wins))
     check("ways in: a window picked in Find a setting is opened, not looked for on a tab",
           "if (h.p) { pycmd('duecrew:' + h.p + '|' + window.dcBK); return; }" in board.FIND_JS)
@@ -8844,16 +8881,14 @@ def test_one_settings_keys_study_v380():
         v = D.view(T0, [{"pid": "p", "uid": "u", "plan": "P", "name": "A", "opens": T0, "seen": 2, "total": 5}], [], {},
                    reviews={"due": 10, "done": 0})
         h = board._due_html(v)
-        check("study: Today's head has Study today", "duecrew:duestudy" in h and "Study today &rsaquo;" in h)
-        check("study: the folded line's Study is the same walk", "duecrew:duestudy" in board._due_html(dict(v, folded=True)))
-        nothing = D.view(T0, [], [], {}, reviews={"due": 0, "done": 5})
-        check("study: nothing to walk, no button", "duestudy" not in board._due_html(nothing))
+        check("study: 3.9.3, Today's head has no Study today (Sam), open or folded",
+              "duestudy" not in h and "Study today" not in h and "duestudy" not in board._due_html(dict(v, folded=True)))
         one = D.view(T0, [{"pid": "p", "uid": "u", "plan": "P", "name": "A", "opens": T0, "seen": 2, "total": 5},
                           {"pid": "p", "uid": "o", "plan": "P", "name": "Old", "opens": "2026-09-30", "seen": 0, "total": 4}], [], {},
                      reviews={"due": 10, "done": 0})
         oh = board._due_html(one)
-        check("study: one Study in the box, Study today (no Study on a date or on Behind)",
-              oh.count("Study") == 1 and "planstudy:" not in oh and "plancatch:p" in oh, oh[:2500])
+        check("study: no Study in the box (none on a date or on Behind; 3.9.3, Study today gone too)",
+              "Study" not in oh and "planstudy:" not in oh and "plancatch:p" in oh, oh[:2500])
     finally:
         (dc._board_on_screen, dc._swap, dc._rerender, ms, mw.state, dc.cfg, dc.save_cfg,
          _state["settings_tab"], dc._apply_keys, TF.tooltip, F.tooltip) = saved
@@ -9482,7 +9517,7 @@ def test_board_motion_round_two_v380():
     review) move what changed while I was away; the glue's parts: a friend
     arriving once, Study today's next deck, Copied ✓ on the link itself."""
     js = open(os.path.join(REPO, "due_crew", "motion.js"), encoding="utf-8").read()
-    for sel in ("th > a.on", ".dc-wrap", ".du-line", ".dc-room .fc > i", ".irow", ".tmap .tm", ".du-bh", ".du-go .nm"):
+    for sel in ("th > a.on", ".dc-wrap", ".du-line", ".dc-room .fc > i", ".irow", ".tmap .tm", ".du-bh"):
         check(f"motion 2: a rule for {sel}", f'sel: "{sel}"' in js)
     check("motion 2: what leaves comes back for a moment only where it sat, under the same heading, and never twice",
           "function putBack(root, o, sel)" in js and "sig(p, sel) !== o.pc" in js and '"[data-dc-ghost]"' in js
@@ -9511,9 +9546,8 @@ def test_board_motion_round_two_v380():
     v = D.view(day, [], [], {}, reviews={"due": 30, "done": 5})
     full = board._due_html(dict(v, study_to="<Cardio>"))
     one = board._due_html(dict(v, study_to="<Cardio>", folded=True))
-    check("motion 2: Study today names the deck it opens first, escaped, open or folded; none, no name",
-          'Study today &rsaquo; <span class="nm">&lt;Cardio&gt;</span>' in full and '<span class="nm">&lt;Cardio&gt;</span>' in one
-          and 'class="nm"' not in board._due_html(v), full[:400])
+    check("3.9.3: no Study today in the box, open or folded (Sam); Ctrl+Shift+S still walks the day",
+          "duestudy" not in full and "Study today" not in full and "duestudy" not in one and "Study today" not in one, full[:400])
     site = open(os.path.join(REPO, "site", "public", "app.js"), encoding="utf-8").read()
     builder = open(os.path.join(REPO, "site", "public", "builder.js"), encoding="utf-8").read()
     check("motion 2: duecrew.com's copies say Copied ✓ in place; the code's digits land; a year waves once a page",
@@ -9570,23 +9604,6 @@ def test_board_motion_round_two_glue_v380():
           "keep, fridge = _board_js(drawn=True)\n    mw.web.eval(\"window.dcBK=%s;\" % board._json.dumps(board.BOARD_KEY)" in src
           and "                + keep + _arrive_js()" in src
           and "keep, fridge = _board_js()\n    js = board.swap_js(html_out) + keep + _arrive_js()" in src)
-    from due_crew import due_flow as F
-    node = lambda did, n, kids=(): types.SimpleNamespace(deck_id=did, review_count=n, learn_count=0, new_count=0, children=list(kids))  # noqa: E731
-    tree = types.SimpleNamespace(children=[node(1, 5, [node(11, 3)]), node(2, 40)])
-    names = {1: "Big Step 1", 11: "Big Step 1::Cardio", 2: "Languages::Spanish"}
-    saved = (F._plan_decks, dc_mw().col)
-    try:
-        dc_mw().col = types.SimpleNamespace(decks=types.SimpleNamespace(name=lambda d: names[d]))
-        F._plan_decks = lambda: [11]
-        a = F._next_deck(tree)
-        F._plan_decks = lambda: []
-        b = F._next_deck(tree)
-        tree0 = types.SimpleNamespace(children=[node(1, 0), node(2, 0)])
-        c = F._next_deck(tree0)
-        check("study: the button names a plan's deck first (its last name), else the most due, else nothing",
-              (a, b, c) == ("Cardio", "Spanish", ""), (a, b, c))
-    finally:
-        F._plan_decks, dc_mw().col = saved
     from due_crew import ui as U
     said = []
     saved = (U._clip, getattr(U.mw, "web", None))

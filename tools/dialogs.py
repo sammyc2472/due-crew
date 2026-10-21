@@ -676,7 +676,7 @@ def main(out):
         plans = [a.menu() for a in subs[0].actions() if a.menu()]
         got = [a.text() or "—" for a in plans[0].actions()] if len(plans) == 1 else []
         if got != ["Your plans…", "New plan…", "Follow a plan…", "—",
-                   "Missed questions…", "Export cards for my AI…"]:
+                   "QBank QIDs…", "Export cards for my AI…"]:
             raise RuntimeError(f"tools menu: Plans {got}")
         # 3.8.0: Study what's next carries Ctrl+Shift+S; Show on the Decks screen is a check
         acts = {a.text(): a for a in subs[0].actions()}
@@ -1267,9 +1267,9 @@ def main(out):
         """Labs (due_crew/planner, docs/planner.md): the plan window an author
         sees (a date's sources by resource, system and other, with what each
         holds here; a week; an event; Change ▾), a change saved end to end,
-        the picker (the deck's tree, then a search), and Question IDs (a paste
-        found across two banks, then Do it: one undo step). Names are the
-        author's: plain text."""
+        the picker (the deck's tree, then a search), and QBank QIDs (a paste
+        found across two banks, Study now, then Unsuspend: one undo step).
+        Names are the author's: plain text."""
         import sqlite3
         from due_crew import plans as P
         from due_crew.planner import actions as PA, flow as PF, remote as PR
@@ -1862,9 +1862,16 @@ def main(out):
             raise RuntimeError(f"picker: ticked {pick.value()}")
         shoot(pick, os.path.join(out, "planner-picker-find.png"))
 
+        # QBank QIDs on its own copy of the deck: its Unsuspend changes nothing the windows after it read
+        qconn = sqlite3.connect(":memory:")
+        conn.commit()  # a backup waits forever on a source with a write still open
+        conn.backup(qconn)
+        qcol = fakes.FakeCol(qconn, fakes.day_cutoff_for(datetime.date.today()))
+        qcol.decks = fakes.FakeDecks({1: "Big Step 1", 3: "Big Step 1::Cardio", 5: "Due Crew::QBank cards"})
+
         class QOps(PF.QidOps):
             def index(self, did):
-                return P.DeckIndex(col, did)
+                return P.DeckIndex(qcol, did)
 
             def default_deck(self, choices):
                 return 1
@@ -1872,59 +1879,37 @@ def main(out):
             def plan_dates(self, did, idx, cids):
                 return [("MS2 Block 2", [P.fmt_day(day(0))])]
 
-            def bring_back(self, cids, back):
-                return PA.bring_back(col, cids, "Due Crew: bring back", back=back)
+            def unsuspend(self, cids):
+                return PA.unsuspend(qcol, cids, "Due Crew: unsuspend")
 
-            def movable(self, cids):
-                return len(PA.reviews(col, cids, P.openable_ids(col, cids))) if cids else 0
+            def study(self, cids):
+                QOps.studied = sorted(cids)
+                return True
 
-            log = []  # this render's kept misses (qids.json in Anki)
+            def browse(self, cids):
+                QOps.browsed = sorted(cids)
 
-            def kept(self, did, bank=None):
-                from due_crew.planner import qids as PQ
-                return PQ.kept(self.log, did, bank)
-
-            def keep(self, did, bank, numbers):
-                from due_crew.planner import qids as PQ
-                self.log[:] = PQ.keep(self.log, TODAY, did, bank, numbers)
-
-        q = QidWindow(None, col, [(1, "Big Step 1")], QOps())
+        q = QidWindow(None, qcol, [(1, "Big Step 1")], QOps())
+        if q.study_btn.isEnabled() or q.unsuspend_btn.isEnabled() or q.lines.text() or not q.browse_btn.isHidden():
+            raise RuntimeError("qids: nothing pasted, nothing to do")
         shoot(q, os.path.join(out, "planner-qids-empty.png"))
-        q = QidWindow(None, col, [(1, "Big Step 1")], QOps())
+        q = QidWindow(None, qcol, [(1, "Big Step 1")], QOps())
         q.text.setPlainText("Block 3 · 12 Oct 2026\nMissed: 10234, 10911, 11002, 12118 · 65%")
         q._count()
-        if q.found["found"] != ["10234", "10911", "11002", "12118"] or q.bank.isHidden() or not q.go.isEnabled():
-            raise RuntimeError(f"qids: {q.found}")
-        threads = [q.thread_list.item(i).text() for i in range(q.thread_list.count())]
-        if threads[:1] != ["Systems › Cardio · 3 of 4 questions"] or q.thread_list.isHidden():
-            raise RuntimeError(f"qids: the threads {threads}")
+        if (q.found["found"] != ["10234", "10911", "11002", "12118"] or q.bank.isHidden() or not q.study_btn.isEnabled()
+                or q.unsuspend_btn.text() != "Unsuspend 6" or q.lines.text() != "4 questions · 6 cards · 6 suspended"):
+            raise RuntimeError(f"qids: {q.found}, {q.unsuspend_btn.text()!r}, {q.lines.text()!r}")
         shoot(q, os.path.join(out, "planner-qids.png"))
-        q = QidWindow(None, col, [(1, "Big Step 1")], QOps())
+        q.study_btn.click()
+        if QOps.studied != sorted(q.cids()) or len(QOps.studied) != 6:
+            raise RuntimeError(f"qids: Study took {QOps.studied}")
+        q = QidWindow(None, qcol, [(1, "Big Step 1")], QOps())
         q.text.setPlainText("10234 10911 11002 12118")
         q._count()
-        q.thread_list.setCurrentRow(0)
-        if q.study_btn.text() != "Study this thread" or q.cids() != q.threads[0]["cids"]:
-            raise RuntimeError("qids: a picked thread is what Browse and Study take")
-        shoot(q, os.path.join(out, "planner-qids-thread.png"))
-        q = QidWindow(None, col, [(1, "Big Step 1")], QOps())
-        q.text.setPlainText("10234 10911 11002 12118")
-        q._count()
-        q._do()
-        if not q.said.text().startswith("Opened 6") or len(col.undo_steps) != 1:
-            raise RuntimeError(f"qids: Do it said {q.said.text()!r}, {col.undo_steps}")
+        q._unsuspend()
+        if not q.said.text().startswith("Unsuspended 6") or len(qcol.undo_steps) != 1 or q.unsuspend_btn.isEnabled():
+            raise RuntimeError(f"qids: Unsuspend said {q.said.text()!r}, {qcol.undo_steps}")
         shoot(q, os.path.join(out, "planner-qids-done.png"))
-        if [e["n"] for e in QOps.log] != [["10234", "10911", "11002", "12118"]]:
-            raise RuntimeError(f"qids: Do it keeps the paste: {QOps.log}")
-        q = QidWindow(None, col, [(1, "Big Step 1")], QOps())
-        q.all.setChecked(True)
-        if (not q.all.isEnabled() or not q.text.isReadOnly() or q.found["found"] != ["10234", "10911", "11002", "12118"]
-                or q.text.toPlainText().split() != ["10234", "10911", "11002", "12118"]):
-            raise RuntimeError(f"qids: All my misses: {q.all.text()!r}")
-        q.paste.setChecked(True)
-        if q.text.isReadOnly() or q.text.toPlainText():
-            raise RuntimeError("qids: This paste gives the box back")
-        q.all.setChecked(True)
-        shoot(q, os.path.join(out, "planner-qids-all.png"))
         start_window(STORE, PF, PR, P)
 
     for label, build in (("kitchen", kitchen), ("questions", questions), ("tools menu", tools_menu), ("friends", friends), ("decks", decks),

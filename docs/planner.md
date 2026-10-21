@@ -1,7 +1,7 @@
 # Your plans, and the plan windows
 
 Python-native plan work inside Anki: Your plans (the duecrew.com builder,
-in Anki), New plan and Missed questions, in their own package,
+in Anki), New plan and QBank QIDs, in their own package,
 `due_crew/planner/`. Built in labs (round three's mocks, "Resource tags
 and a Python-native plan window", the design-spec artifact), for everyone
 signed in since 3.9.3, and rebuilt in round five (Sam's picks on the
@@ -18,7 +18,7 @@ card on, from the deck beside the date or a search.
 ## Ways in
 
 - **Tools › Due Crew › Plans**: Your plans…, New plan…, Follow a plan…;
-  Missed questions…, Export cards for my AI….
+  QBank QIDs…, Export cards for my AI….
 - **You › Plans**: the card's one button, *Your plans…* (on that
   plan; round five, where the card's Open and Plan ▾ and the head row's
   Open plans and New plan ▾ went: a follow's every setting is its
@@ -32,7 +32,9 @@ card on, from the deck beside the date or a search.
   lines, Browse, the ones left, Open now, Study, Move…, Skip it, Put it
   back, why it left cards shut), unfolding; the same click folds them.
   Due's Today and Upcoming open a date's details on its name too.
-- **Insights**: *Missed questions* for a deck with a bank's question tags.
+- **Insights**: *QBank QIDs…* for a deck with a bank's question tags.
+- **Today's head**: *QBank QIDs*, when a tag here ends in a question's
+  number (Anki's tag list, read once a profile and day: `due_flow.has_qids`).
 - **Settings' Find a setting** finds the three windows by their words.
 - **Labs** is what stays behind this computer's switch, `"labs": true` in
   the add-on's config (no window sets it): Claude's stand-in, session by
@@ -326,36 +328,35 @@ cards and new ones here, then its subdecks; or a search over every tag's
 path ("heart failure"). Tick what goes on the date; everything under a
 ticked tag comes with it. Read from the deck index on the main thread.
 
-## Missed questions
+## QBank QIDs
 
-(Question IDs in labs.) After a practice block: paste the IDs of the
-questions I missed, any way
-the bank copies them. Every run of 3 to 9 digits is a number; only the
-ones the deck has as a question count (a tag whose last part is that
-number, under a bank's #part), so a date or a score pasted with them is
-said as "isn't a question here", never guessed at. With two banks, the
-one with the most of them, or the one picked.
+(Missed questions until 3.9.3; Question IDs in labs.) After a practice
+block: paste the IDs of the questions I missed, any way the bank copies
+them. Every run of 3 to 9 digits is a number; only the ones the deck has
+as a question count (a tag whose last part is that number, under a bank's
+#part), so a date or a score pasted with them is said as "isn't a question
+here", never guessed at. With two banks, the one with the most of them, or
+the one picked. This paste only: nothing is kept, nothing is sent (3.9.3,
+Sam: All my misses and its `qids.json` went, and so did What they have in
+common: what's not sticking is Insights' to say, from my answers).
 
-- What they are here: open already, still shut, leeches that stay shut,
-  and the dates of my plans they're on.
-- **What they have in common**: the deck's own tags most of them share,
-  by system and by resource ("Systems › Cardio · 9 of 15 questions"), a
-  question counted once a thread, each line of tags named once at its
-  deepest. Picking one makes Show in Browse, Study and Do it about it.
-- **Open 6, bring back 8** (the button says what it does): the shut ones
-  open (never a leech, new ones first in Anki's line) and, ticked, the ones
-  seen before come due over the next 3 days (Anki's Set due date,
-  intervals kept; not a card in a filtered deck; one due already or inside
-  the 3 days is left as it is, so nothing is put later), one undo step,
-  `actions.bring_back`. More than 200 to bring back asks first. **Study
-  them now** (or this thread): a Due Crew deck of their open cards. The
-  deck list is top decks (question tags are deck-wide); a bank I pick holds
-  for this paste and deck only.
-- **All my misses**: a paste I act on (Do it, Study) is kept on this
-  computer, in this profile's `qids.json`: the numbers, by day, deck and
-  bank, never card text, never sent (200 pastes, 20,000 numbers). All my
-  misses reads every one kept for the deck and bank: its threads across
-  blocks, and a deck of all of them. Forget my misses, with its Undo.
+- What they are here, in one line ("5 questions · 14 cards · 10
+  suspended", leeches left suspended said too) with **Browse** after it;
+  under it what isn't a question here and the dates of my plans they're on.
+- **Unsuspend 10**: the suspended ones, never a leech, new ones first in
+  Anki's line; one undo step (`actions.unsuspend`).
+- **Study now** (the default): the suspended ones unsuspended, then a Due
+  Crew filtered deck, *QBank cards* (`actions.DECK`), built over what's
+  in it already and these, so each paste adds to it; random order,
+  rescheduling by my answers (Again is a lapse, Good an early review),
+  each card going back to its own deck once done, and the morning clears
+  the deck once it's empty. One undo step (`actions.study`), then Anki's
+  Study screen on it. Nothing moves a due date (3.9.3, Sam: Bring back's
+  "over the next 3 days" went; a card I know comes back when Study now
+  asks it).
+- The deck list is top decks (question tags are deck-wide), starting on
+  the one my plan runs on; a bank I pick holds for this paste and deck
+  only.
 - The plan windows close with the profile.
 
 ## New plan
@@ -543,7 +544,7 @@ and sends in Anki (Your plans › the plan › Review and send).
 | `planner/edits.py` | pure: an author's changes to the doc (the builder's edits), the count, the history line |
 | `planner/build.py` | pure: the builder's rules restated (Todo, Every, Remarks, Picks, Suggest, Work, Reviews, Tags, Fill, Split, layOut, What to cover) |
 | `planner/text.py` | pure: the builder's Text (toText, fromText, Add and Replace, what it would change) |
-| `planner/actions.py` | Bring back, the one collection step it adds |
+| `planner/actions.py` | QBank QIDs' Unsuspend and Study now, the collection steps it adds |
 | `planner/remote.py` | its requests (who I am, my plans, one plan, a save, its history and posts, its settings, a copy, day notes) |
 | `planner/reading.py` | pure: a calendar read, a session's tags, an exam's line, by plain rules |
 | `planner/claude.py` | pure: Claude's stand-in, and what Claude would get (`request`) |
@@ -554,7 +555,7 @@ and sends in Anki (Your plans › the plan › Review and send).
 | `planner/view.py` | pure, round five: what the Plan tab shows (the shape line, each week's asks, needs a look, today) |
 | `planner/insights.py` | pure, round five: what the Insights tab shows (the workload by week, how much of the deck and of each part as the topic map splits it, what each quiz tests, the biggest dates) |
 | `planner/prompts.py` | pure: the prompts for your own AI, builder.js's `Prompts` restated |
-| `planner/flow.py` | the glue: the windows' asks (`Ops`, `StartOps`, `NewOps`, `QidOps`), `make_here`, `plan_drafts.json`, `qids.json` |
+| `planner/flow.py` | the glue: the windows' asks (`Ops`, `StartOps`, `NewOps`, `QidOps`), `make_here`, `plan_drafts.json` |
 | `planner/window.py`, `plan_tab.py`, `date_panel.py`, `deck_panel.py`, `shape.py`, `send.py`, `insights_tab.py`, `settings_tab.py`, `mine_tab.py`, `new_plan.py`, `text_tab.py`, `history_tab.py`, `day_notes.py`, `date_dialogs.py`, `widgets.py`, `picker.py`, `qid_window.py`, `start_window.py` | the Qt windows and their parts, in the board's look |
 
 Checks: `tests/test_planner.py` (the pure parts, `build.py` against
@@ -572,7 +573,7 @@ people following (the foot's links), Review and send, Undo after a send, a co-au
 save under waiting changes, no Followers tab and Settings' Posts…, Settings, History, a
 day's notes, Month and a date dragged to another day, Ctrl+Z, the Plan tab's keys, Expand all and Collapse all, Latest first, ↓ and Find, a follower's Plan and Settings, a plan that lost its
 dates and a load that failed, no plans yet, New plan from a calendar,
-no Pip anywhere in them, Missed questions, the calendar window in labs),
+no Pip anywhere in them, QBank QIDs, the calendar window in labs),
 and `check_planner` in `tools/real_anki.py` (12,000 question tags, Bring
 back and Anki's undo of it, the picker's timings).
 
