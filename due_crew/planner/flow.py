@@ -597,11 +597,16 @@ class QidOps:
         _save_misses(sorted(misses_log() + list(gone or []), key=lambda e: str(e.get("day") or "")))
 
     def default_deck(self, choices):
-        """The deck most of my plans run on here, else Anki's current deck's top."""
+        """The deck my plan runs on here (its top deck: question tags are
+        deck-wide, and the window lists top decks): the plan You › Plans
+        shows first, else the one most of my plans run on, else Anki's
+        current deck's top."""
         state = plan_flow._state_cfg()
-        ids = [st.get("deck_id") for st in state.values() if isinstance(st, dict)]
+        top = lambda st: _top_deck(mw.col, st["deck_id"]) if isinstance(st, dict) and st.get("deck_id") else None  # noqa: E731
+        shown = top(state.get(cfg().get("plan_pick")))
+        ids = [d for d in map(top, state.values()) if d]
         have = {d for d, _n in choices}
-        for did in sorted(set(ids), key=ids.count, reverse=True):
+        for did in ([shown] if shown else []) + sorted(set(ids), key=ids.count, reverse=True):
             if did in have:
                 return did
         try:

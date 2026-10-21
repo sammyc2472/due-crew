@@ -565,6 +565,17 @@ def test_flow():
         qo = flow.QidOps()
         choices = P.deck_choices(col)
         check("glue: question IDs start on the deck my plans run on", qo.default_deck(choices) == 1)
+        conf = {}
+        flow.cfg = lambda: conf
+        F._state_cfg = lambda c=None: {"p1": {"deck_id": 2}}
+        check("glue: a plan on a subdeck starts them on its top deck (question tags are deck-wide)", qo.default_deck(choices) == 1)
+        F._state_cfg = lambda c=None: {"p1": {"deck_id": 3}, "p2": {"deck_id": 1}, "p3": {"deck_id": 2}}
+        check("glue: the deck most of my plans run on", qo.default_deck(choices) == 1)
+        conf["plan_pick"] = "p1"
+        check("glue: with two or more, the plan You › Plans shows first", qo.default_deck(choices) == 3)
+        conf["plan_pick"] = "gone"
+        check("glue: a pick no longer followed: the most", qo.default_deck(choices) == 1)
+        F._state_cfg = lambda c=None: {"p1": {"deck_id": 1, "swap": None, "applied": {}}}
         F.followed = lambda: [{"id": "p1", "name": "MS2 Block 2",
                                "doc": {"deck": "Big Step 1", "units": [{"id": "a", "name": "HF", "opens": "2026-11-09", "tags": [f"{ROOT}::#Bank"]},
                                                                        {"id": "b", "name": "Shock", "opens": "2026-11-12", "tags": [VID]}]}}]
