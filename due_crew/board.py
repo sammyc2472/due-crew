@@ -6892,6 +6892,10 @@ DUE_CSS = """
     #due-crew .du-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     @media (max-width: 460px) { #due-crew .du-h > .du-n { display: none; } }  /* Hide stays on the tabs' line */
     #due-crew .du-h .sp { flex: 1; }
+    /* 3.9.3 (Sam: "the QBank piece is a bit higher than everything else"): one line height for the head's words,
+       or Hide's ▴ (a fallback font's taller line) and Due's bigger word sit a pixel under the rest */
+    #due-crew .du-h > .du-n, #due-crew .du-h > .du-go, #due-crew .du-h > .du-fold,
+    #due-crew .du-one > a, #due-crew .du-one > .du-n { line-height: 16px; }
     #due-crew .du-n { color: var(--dc-muted); font-size: 11.5px; white-space: nowrap; }
     #due-crew .du-fold { font-size: 11.5px; font-weight: 600; color: var(--dc-muted); white-space: nowrap; flex: none;
       margin-left: auto; }
@@ -6969,9 +6973,9 @@ DUE_CSS = """
     #due-crew .du-ln.done > span:nth-child(2) { color: var(--dc-muted); text-decoration: line-through; }
     #due-crew .du-q { color: var(--dc-faded); font-size: 11.5px; padding: 3px 0 3px 25px; }
     #due-crew .du-evl { color: #c77700; font-weight: 700; font-size: 12px; padding-left: 25px; }
-    #due-crew .du-one { display: flex; align-items: center; gap: 6px 12px; padding: 10px 18px; white-space: nowrap; }
+    #due-crew .du-one { display: flex; align-items: baseline; gap: 6px 12px; padding: 10px 18px; white-space: nowrap; }
     #due-crew .du-one > * { flex: none; }
-    #due-crew .du-one .wbar { flex: 0 1 90px; width: auto; min-width: 24px; margin: 0; }
+    #due-crew .du-one .wbar { flex: 0 1 90px; width: auto; min-width: 24px; margin: 0; align-self: center; }
     #due-crew .du-one .sp { flex: 1 1 0; }
     #due-crew .du-one .sp { flex: 1; }
     #due-crew .du-one > a:first-child b { color: var(--dc-accent); font-size: 12.5px; }

@@ -3318,7 +3318,11 @@ every release that changes how something works.
   window is QBank QIDs now (`planner/qid_window.py`), opened from the You
   box's head in Study today's place, on every tab and on the folded line
   (`board._due_html`, `planmissed` with no deck: the one my plan runs on;
-  Sam, on the README's pictures: "missing the QID chip on the top right"), shown only when a tag here ends in a question's number
+  Sam, on the README's pictures: "missing the QID chip on the top right";
+  then "the QBank piece is a bit higher than everything else": the head's
+  words take one line height, so Hide's ▴ from a fallback font no longer
+  drops Hide a pixel, and the folded line sits on one baseline, Due's
+  bigger word too, its bar still centred), shown only when a tag here ends in a question's number
   (`due_flow.has_qids`: Anki's tag list, not the notes, read once a
   profile and day), and from Insights' line, Tools › Due Crew › Plans and
   Find a setting as before. No intro and no privacy line; the counts in

@@ -7313,6 +7313,9 @@ def test_plan_windows_ways_in_v393():
           "duecrew:planmissed|" in up[:up.index("</div>")] and "duecrew:planmissed|" in one
           and one.index("planmissed") < one.index("du-fold") and "duecrew:planmissed|" in plans_tab[:plans_tab.index("</div>")]
           and "planmissed" not in board._due_html(dict(dv, folded=True)), one)
+    check("ways in: …on one baseline with the rest (Sam: \"a bit higher than everything else\"): one line height for the head's words, the folded line by baseline",
+          "#due-crew .du-one > a, #due-crew .du-one > .du-n { line-height: 16px; }" in open(board.__file__, encoding="utf-8").read()
+          and "#due-crew .du-one { display: flex; align-items: baseline;" in open(board.__file__, encoding="utf-8").read())
     from due_crew import due_flow
     tconn = sqlite3.connect(":memory:")
     tconn.execute("CREATE TABLE tags (tag TEXT PRIMARY KEY)")
