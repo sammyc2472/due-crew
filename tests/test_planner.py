@@ -280,6 +280,10 @@ def test_qids():
     check("qids: a paste reads the bank with the most of its numbers; what isn't a question is said",
           f["bank"] == "Bank" and f["found"] == ["10234", "10911", "11002"] and f["missing"] == ["2026", "99999"]
           and f["cids"] == {7, 8, 9} and f["banks"] == [("Bank", 3), ("Other Bank", 1)], f)
+    check("qids: which bank is asked only when it's close (the runner-up has half as many or more); one stray number isn't",
+          not Q.close(f) and Q.close(Q.find(idx, "10234")) and not Q.close(Q.find(idx, "10911"))
+          and Q.close({"banks": [("A", 4), ("B", 2)]}) and not Q.close({"banks": [("A", 5), ("B", 2)]})
+          and not Q.close({"banks": [("A", 0)]}))
     g = Q.find(idx, "10234 10911", bank="Other Bank")
     check("qids: another bank, when asked", g["bank"] == "Other Bank" and g["cids"] == {10} and g["missing"] == ["10911"])
     t = Q.tally(idx, f["cids"] | {12})

@@ -1896,10 +1896,16 @@ def main(out):
         q = QidWindow(None, qcol, [(1, "Big Step 1")], QOps())
         q.text.setPlainText("Block 3 · 12 Oct 2026\nMissed: 10234, 10911, 11002, 12118 · 65%")
         q._count()
-        if (q.found["found"] != ["10234", "10911", "11002", "12118"] or q.bank.isHidden() or not q.study_btn.isEnabled()
+        if (q.found["found"] != ["10234", "10911", "11002", "12118"] or not q.bank.isHidden() or not q.study_btn.isEnabled()
                 or q.unsuspend_btn.text() != "Unsuspend 6" or q.lines.text() != "4 questions · 6 cards · 6 suspended"):
             raise RuntimeError(f"qids: {q.found}, {q.unsuspend_btn.text()!r}, {q.lines.text()!r}")
         shoot(q, os.path.join(out, "planner-qids.png"))
+        q = QidWindow(None, qcol, [(1, "Big Step 1")], QOps())
+        q.text.setPlainText("10234")
+        q._count()
+        if q.bank.isHidden() or q.bank_label.text() != "Question bank" or q.bank.count() != 2:
+            raise RuntimeError("qids: a number in two banks asks which")
+        shoot(q, os.path.join(out, "planner-qids-bank.png"))
         q.study_btn.click()
         if QOps.studied != sorted(q.cids()) or len(QOps.studied) != 6:
             raise RuntimeError(f"qids: Study took {QOps.studied}")

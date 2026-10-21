@@ -3333,7 +3333,11 @@ every release that changes how something works.
   paste only (Sam: "get rid of all 41 so far option"): All my misses,
   Forget and `qids.json` went, nothing is kept. In common went too (Sam:
   "this should be covered under insights"): what's not sticking is
-  Insights' to say, from my answers. `tests/test_planner.py`
+  Insights' to say, from my answers. Which bank (Sam: "what does bank
+  mean here?", then "yeah do both"): asked only when it's close, the
+  runner-up with half as many of the numbers or more (`qids.close`; one
+  stray number in another bank used to bring the box up), and labelled
+  Question bank. `tests/test_planner.py`
   (`test_unsuspend_and_study`, `test_nothing_kept`, the glue),
   `test_due_crew`'s ways in; `tools/real_anki.py` runs both on Anki's
   engine (one undo step each, the second paste adding to the deck, undo

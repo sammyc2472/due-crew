@@ -335,8 +335,10 @@ block: paste the IDs of the questions I missed, any way the bank copies
 them. Every run of 3 to 9 digits is a number; only the ones the deck has
 as a question count (a tag whose last part is that number, under a bank's
 #part), so a date or a score pasted with them is said as "isn't a question
-here", never guessed at. With two banks, the one with the most of them, or
-the one picked. This paste only: nothing is kept, nothing is sent (3.9.3,
+here", never guessed at. With two banks, the one with the most of them;
+*Question bank* asks which only when it's close (the runner-up has half as
+many or more, `qids.close`: one stray number in another bank isn't a
+question), and stays once I've picked one. This paste only: nothing is kept, nothing is sent (3.9.3,
 Sam: All my misses and its `qids.json` went, and so did What they have in
 common: what's not sticking is Insights' to say, from my answers).
 

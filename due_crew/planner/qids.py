@@ -66,6 +66,14 @@ def find(idx, text, bank=None):
             "missing": [n for n in nums if n not in by], "cids": cids, "by": by}
 
 
+def close(found):
+    """Whether the paste's banks are close enough to ask which (3.9.3, Sam):
+    the runner-up has at least half as many of its numbers as the first. One
+    stray number in another bank isn't a question."""
+    hits = [n for _b, n in found.get("banks") or () if n]
+    return len(hits) > 1 and 2 * hits[1] >= hits[0]
+
+
 def tally(idx, cids):
     """{cards, open, shut (Unsuspend would open), leech (stay suspended),
     new_shut, review}: review, the ones seen before (Anki's review cards,

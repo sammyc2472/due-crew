@@ -44,7 +44,7 @@ class QidWindow(QDialog):
             self.deck.addItem(name, did_)
         form.addRow("Deck", self.deck)
         self.bank = QComboBox()
-        self.bank_label = QLabel("Bank")
+        self.bank_label = QLabel("Question bank")
         form.addRow(self.bank_label, self.bank)
         root.addLayout(form)
         self.text = QPlainTextEdit()
@@ -144,7 +144,7 @@ class QidWindow(QDialog):
         if self.found["bank"] in names:
             self.bank.setCurrentIndex(names.index(self.found["bank"]))
         self.bank.blockSignals(False)
-        many = len(banks) > 1
+        many = Q.close(self.found) or bool(self.picked)  # asked only when it's close, or kept once I've picked
         self.bank.setVisible(many)
         self.bank_label.setVisible(many)
         dates = self.ops.plan_dates(self.deck.currentData(), self.idx, self.found["cids"]) if self.found["cids"] else []
