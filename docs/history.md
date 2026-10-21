@@ -3350,3 +3350,13 @@ every release that changes how something works.
   it the name of the deck it opened first (motion.js 35, `_next_deck`,
   `study_to`). Ctrl+Shift+S still walks the day (`due_flow.study_today`),
   a Fifteen still starts it, and a date's own Study stays.
+- 3.9.3, the release (21 Oct 2026): Your plans for everyone (round five:
+  Plan · Insights · Settings, changes waiting till sent, New plan, the AI
+  prompts and Your AI app), You › Plans' seven days with a day's
+  assignments under them and two plans switched by name, Today's bars,
+  QBank QIDs, no Study today, one meaning of a leech, a card counted once.
+  The README says where the plan menus went (New plan, Settings › More ›
+  Open early, Plans › Export cards) and its board.png and plans.png are
+  rendered again (`tools/readme_images.py` draws both now). No Worker
+  change and no migration: `tools/deploy.sh` puts the site's builder.js
+  and motion.js out; MIN_CLIENT stays.

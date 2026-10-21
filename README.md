@@ -5,7 +5,7 @@
 
 Your friends' studying next to yours, on Anki's Decks screen.
 
-<img alt="The Due Crew board on the Decks screen, your day folded above it" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/board.png?v=8" width="600">
+<img alt="The Due Crew board on the Decks screen, your day folded above it" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/board.png?v=9" width="600">
 
 Studying for a big exam is more fun with friends! Due Crew puts your crew on
 Anki's Decks screen: who's studied today, who's studying now, how far
@@ -82,16 +82,21 @@ turns it off.
 
 ## Study plans
 
-Plan a class's or a crew's studying on a calendar at duecrew.com: pick
-chapters from a deck (Tools → Due Crew → Make a plan from a deck), set a
-pace, mark the exam, and share the code. Everyone following gets that
+Plan a class's or a crew's studying, in Anki (Tools → Due Crew → Plans →
+New plan…) or on a calendar at duecrew.com: pick chapters from a deck, set
+a pace, mark the exam, and share the code. Everyone following gets that
 day's cards each morning. Behind? **Catch up** or **Push my dates back**.
 
-<img alt="You › Plans: a plan's week" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/plans.png?v=6" width="600">
+<img alt="You › Plans: a plan's week, today's assignments open" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/plans.png?v=7" width="600">
 
+- **Your week.** You › Plans shows the plan's seven days; click one for
+  its assignments. Following two plans? Switch between them by name.
+- **Your plans…** in Anki: the plan's weeks and dates beside your deck,
+  Insights (the workload week by week, how much of the deck it covers),
+  and its settings. An author's changes wait under the plan until sent.
 - **Each morning, in Anki.** Cards open in Anki on your computer, after
   its sync; sync again and your phone has them. Studying on your phone
-  first? The plan's ··· menu › Open early.
+  first? Your plans… › Settings › More › Open early.
 - **Hold back.** A deck with every card showing? Follow holds the later
   dates back until their day.
 - **Study a date, or a quiz.** Each date has **Study**: its cards in one
@@ -101,8 +106,8 @@ day's cards each morning. Behind? **Catch up** or **Push my dates back**.
   ready**: **Up next** opens the next date, first in Anki's line of new
   cards, or opens it by itself once you've seen most of the last one.
   Your pace and when it gets you to the end show underneath.
-- **Draft it with your own AI.** Tools → Due Crew → Export cards for my
-  AI, then the prompt in the plan's Text tab
+- **Draft it with your own AI.** Tools → Due Crew → Plans → Export cards
+  for my AI, then the plan's AI prompt (Plan the dates, or Tag by objective)
   ([the format](https://duecrew.com/plan-text)). Your cards stay on your
   computer.
 - **Plan tags.** A plan can put its own tags on your notes
