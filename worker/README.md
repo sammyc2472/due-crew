@@ -328,6 +328,18 @@ without followers, notes or co-authors. `POST /plans/{id}/report {reason:
 spam|copied|other, note?}` is kept for the admin's Inbox like a person's (3.8.1) and mailed to REPORT_TO when it's set. The admin:
 `POST /admin/library/{id} {note}` takes one out, `DELETE` puts it back,
 `GET /admin/library` lists those taken out.
+3.9.5, starters (migration 0030): `POST /admin/library/{id}/starter {on}`
+(the admin's; anyone else gets 404) makes a listed plan a starter, or not
+(`409 not_listed` for one outside the library), kept in the audit log by
+the plan's name and id. Taking a plan out of the library (its owner's
+switch, the admin's Take out, or making it one squad's) ends it. `GET
+/library` with no filter and no search returns `starters` apart (page 0,
+newest listed first, 8 at most) and leaves them out of the grid; a starter,
+wherever it shows, has `starter: true` and `ownerName` "Due Crew", and a
+copy of one is `basedOn` Due Crew's. `GET /board?decks=1` (not `keep=1`)
+adds `starters: [{id, name, deck, days, perDay, line}]` (4 at most) when I
+own, co-write and follow no plan; the add-on's empty Plans tab offers
+them, and its Use it is `POST /plans/{id}/copy` with today as the start.
 3.5, H/L/X (migration 0009): `GET /board?keep=1&feed=1` (the site's home
 only) adds `feed`: who added me back, notes on days of plans I'm in, and
 others' saves to those plans (`summary`), the last 14 days, 20 at most,

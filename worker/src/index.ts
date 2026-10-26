@@ -140,6 +140,7 @@ authed("POST", r(`/plans/${ID}/copy`), L.copy);
 authed("POST", r(`/plans/${ID}/report`), L.report);
 authed("GET", r("/admin/library"), (_q, s, env) => L.takenOut(s, env));
 authed("POST", r(`/admin/library/${ID}`), L.takeOut);
+authed("POST", r(`/admin/library/${ID}/starter`), L.setStarter);  // 3.9.5: a starter, or not
 authed("DELETE", r(`/admin/library/${ID}`), (_q, s, env, p) => L.putBack(s, env, p));
 // 3.3: plans together
 authed("GET", r(`/plans/${ID}/log`), (_q, s, env, p) => P.log(s, env, p));

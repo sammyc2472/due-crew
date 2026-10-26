@@ -76,7 +76,7 @@ type Obj = Record<string, unknown>;
 export type Plan = { id: string; code: string; owner: string; name: string; line: string; audience: string;
   squad: string | null; doc: string; version: number; updated_at: number;
   listed?: number; listed_note?: string | null; lib?: string | null; based_on?: string | null; tagroot?: string | null;
-  totals?: string | null; totals_at?: number | null; handover?: string | null };
+  totals?: string | null; totals_at?: number | null; handover?: string | null; starter?: number };
 
 export function draw(n: number): string {
   const bytes = crypto.getRandomValues(new Uint8Array(n));
@@ -1031,10 +1031,12 @@ export async function put(req: Request, s: Session, env: Env, [id]: string[]): P
   const listed = next.audience === "squad" && p.listed === 1 ? 0 : (p.listed ?? 0);
   const lib = listed === 1 && next.doc !== p.doc ? JSON.stringify(libCard(JSON.parse(next.doc))) : (p.lib ?? null);
   if (next.doc !== p.doc) await roomForSave(env, p, next.doc, lib);  // 3.7.2
+  // 3.9.5: and out of the library, out of the starters (the admin's mark is kept while it's listed)
   const r = await env.DB.prepare(
-    `UPDATE plans SET name = ?, line = ?, audience = ?, squad = ?, doc = ?, listed = ?, lib = ?, tagroot = ?, version = version + 1, updated_at = ?
+    `UPDATE plans SET name = ?, line = ?, audience = ?, squad = ?, doc = ?, listed = ?, lib = ?, tagroot = ?, version = version + 1, updated_at = ?,
+            starter = CASE WHEN ? = 1 THEN starter ELSE 0 END
      WHERE id = ? AND version = ?`,
-  ).bind(next.name, next.line, next.audience, next.squad, next.doc, listed, lib, next.tagroot, nowSec(), id, body.version).run().catch(rootTaken);
+  ).bind(next.name, next.line, next.audience, next.squad, next.doc, listed, lib, next.tagroot, nowSec(), listed, id, body.version).run().catch(rootTaken);
   if (!r.meta.changes) throw new HttpError(409, "stale", { version: (await getPlan(env, id)).version });
   await logSave(env, id, (body.version as number) + 1, s.uid, summary || "changed the plan", next.doc !== p.doc ? p.doc : null);
   const posted = body.post !== undefined ? await postWithSave(env, p, s.uid, body.post, (body.version as number) + 1) : undefined;

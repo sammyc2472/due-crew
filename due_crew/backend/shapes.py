@@ -890,6 +890,23 @@ def clean_offer(o):
             "ownerName": clean_note(o.get("ownerName"), 60) or "?"}
 
 
+STARTERS_MAX = 4  # library.ts STARTERS_BOARD
+
+
+def clean_starters(v):
+    """3.9.5: the starters the day's first board offers someone who owns and
+    follows no plan: [{id, name, deck, days, perDay, line}], four at most.
+    The words are the server's: the board escapes them."""
+    out = []
+    for x in v if isinstance(v, list) else []:
+        pid = x.get("id") if isinstance(x, dict) else None
+        if isinstance(pid, str) and _PLAN_ID.fullmatch(pid) and pid not in {s["id"] for s in out}:
+            out.append({"id": pid, "name": clean_note(x.get("name"), 60) or "Plan", "deck": clean_note(x.get("deck"), 120),
+                        "days": _nat(x.get("days"), 100000), "perDay": _nat(x.get("perDay"), 100000),
+                        "line": clean_note(x.get("line"), 120)})
+    return out[:STARTERS_MAX]
+
+
 # ---- 3.7.3: a plan's team ----
 
 _UID = re.compile(r"[A-Za-z0-9_-]{1,128}")
