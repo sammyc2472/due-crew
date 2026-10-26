@@ -559,6 +559,11 @@ def you_view(c):
         since = (view.get("aim") or {}).get("since") if (view.get("aim") or {}).get("kind") == "exam" else ""
         ms = _since_ms(since, mw.col.sched.day_cutoff, _plans_flow()._today()) if since else None
         out["view"]["leech"] = leech_flow.current(mw.col, d["did"], _deck_sql(mw.col, d["did"]), ms)
+    try:
+        from . import habits_flow
+        out["habits"] = habits_flow.board_view()  # 3.9.5: How you study, all decks, its line or its view
+    except Exception:
+        traceback.print_exc()
     return out
 
 
@@ -1132,10 +1137,19 @@ def pick_deck(did):
     """Insights' picker: a deck of mine, remembered on this computer."""
     if not any(d["did"] == did for d in you_decks()):
         return
+    _habits_shut()  # 3.9.5: a deck picked is that deck's Insights, not How you study
     c = cfg()
     c["ins_deck"] = did
     save_cfg(c)
     app.swap(c)
+
+
+def _habits_shut():
+    try:
+        from . import habits_flow
+        habits_flow.shut()
+    except Exception:
+        traceback.print_exc()
 
 
 def go_insights(did):
@@ -1145,6 +1159,7 @@ def go_insights(did):
     c["due_tab"] = "insights"
     c["due_fold"] = {"day": _today(), "folded": False}
     (_state.get("leech_open") or {}).pop(int(did), None)  # 3.9.2's QoL pass: Insights itself, not a leeches view left open
+    _habits_shut()  # 3.9.5: nor How you study
     if "insights" in (c.get("hidden_tabs") or []):
         c["hidden_tabs"] = [k for k in c["hidden_tabs"] if k != "insights"]
     if mw.col and mw.col.decks.get(did, default=False):
@@ -1268,6 +1283,9 @@ def on_message(cmd, parts):
         elif cmd == "insaheadx":
             from . import ahead_flow
             ahead_flow.hide_line(did)
+        elif cmd == "inshabits":
+            from . import habits_flow
+            return habits_flow.on_message(x)  # 3.9.5: How you study (open, shut, see, slow)
         else:
             return False
         return True

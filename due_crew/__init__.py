@@ -672,6 +672,8 @@ def _on_did_render(deck_browser):
     if not _closing:
         from aqt.qt import QTimer
         QTimer.singleShot(1500, ahead_flow.check)  # 3.9.2: once a day, the board's line when reviews climb
+        from . import habits_flow
+        QTimer.singleShot(2500, habits_flow.check)  # 3.9.5: once a day, How you study (and the Fifteen at 35)
     sheets.redraw()  # 3.9.1: a question that was open goes back up on the page drawn anew
     rooms.refresh_widgets()
 

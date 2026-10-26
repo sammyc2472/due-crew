@@ -2156,7 +2156,188 @@ def _you_insights(ins):
            f'<input class="ixd" type="date" value="{e(ex)}" aria-label="Exam date" '
            f'onchange="pycmd(\'duecrew:setexam:\'+(this.value||\'off\')+\'|\'+window.dcBK);">{off}</span>')
     head = f'<div class="ihead">{pick}<span class="ictx">{ctx}</span></div>'
-    return head + _insights_html(did, ins.get("view") or {})
+    # 3.9.5: How you study (all decks): its view in Insights' place, or its line atop Insights
+    hv = ins.get("habits") if isinstance(ins.get("habits"), dict) else None
+    if hv and hv.get("open"):
+        return head + _habits_html(did, hv)
+    view = ins.get("view") or {}
+    line = _habits_line(did, hv) if hv and not isinstance(view.get("leech"), dict) else ""
+    return head + line + _insights_html(did, view)
+
+
+# ---- 3.9.5: How you study (habits.py, habits_flow.py): mine alone, never sent ----
+
+HABITS_CSS = """
+    #due-crew .hs-in { display: flex; gap: 4px 10px; flex-wrap: wrap; align-items: baseline; text-align: left; font-size: 12px;
+      color: var(--dc-muted); padding: 2px 0 10px; }
+    #due-crew .hs-in a { color: var(--dc-accent); font-weight: 700; text-decoration: none; }
+    #due-crew .hs-in b { color: var(--dc-ink); }
+    #due-crew .dc-hv { text-align: left; }
+    #due-crew .hv-h { display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: baseline; text-align: left; margin: 0 0 8px; }
+    #due-crew .hv-h a { color: var(--dc-accent); font-weight: 700; text-decoration: none; font-size: 12px; }
+    #due-crew .hv-h b { font-size: 13.5px; color: var(--dc-ink); }
+    #due-crew .hv-h .r { margin-left: auto; font-size: 11.5px; color: var(--dc-muted); }
+    #due-crew .hv-h .r b { font-size: 11.5px; }
+    #due-crew .ht { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; text-align: left; margin: 2px 0 6px; }
+    #due-crew .ht > div { background: var(--dc-well); border-radius: 10px; padding: 10px 12px 9px; display: grid; gap: 7px;
+      align-content: start; min-width: 0; }
+    #due-crew .ht > div:only-child { max-width: 300px; }
+    #due-crew .ht .big { font-size: 24px; font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; color: var(--dc-ink); }
+    #due-crew .ht .big small { display: block; font-size: 12px; font-weight: 600; color: var(--dc-muted); margin-top: 3px; line-height: 1.25; }
+    #due-crew .ht a.go { justify-self: start; color: var(--dc-accent); font-weight: 700; font-size: 12px; text-decoration: none; }
+    #due-crew .ht .hs-t { font-size: 11.5px; color: var(--dc-muted); }
+    #due-crew .ht svg { width: 100%; max-width: 210px; height: auto; display: block; overflow: visible; }
+    #due-crew .ht .t-tint { fill: color-mix(in srgb, var(--dc-accent) 34%, var(--dc-well)); }
+    #due-crew .ht .t-on { fill: var(--dc-accent); }
+    #due-crew .ht .t-lab { fill: var(--dc-muted); font-size: 9px; }
+    #due-crew .ht .t-val { fill: var(--dc-ink); font-size: 9.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    #due-crew .ht .t-base { stroke: var(--dc-faded); stroke-width: 1; }
+    #due-crew .ht .t-grid { stroke: var(--dc-line); stroke-width: 1; }
+    #due-crew .ht .t-mark { stroke: var(--dc-muted); stroke-width: 1; stroke-dasharray: 2 2; }
+    #due-crew .ht .t-line { stroke: var(--dc-accent); stroke-width: 2; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+    #due-crew .ht .t-dot { fill: var(--dc-accent); stroke: var(--dc-well); stroke-width: 2; }
+    #due-crew .hs-more { font-size: 11.5px; color: var(--dc-muted); text-align: left; }
+"""
+
+
+def _hs_pts(x):
+    return int(round(100 * float(x)))
+
+
+def _hs_day(iso):
+    try:
+        d = _dt.date.fromisoformat(str(iso))
+    except ValueError:
+        return ""
+    return f"{d.day} {d:%b}"
+
+
+def _habits_line(did, h):
+    """Atop Insights' main view: the way to How you study, and the week's win."""
+    n = int((h.get("matured") or {}).get("n") or 0)
+    return (f'<style>{HABITS_CSS}</style><div class="hs-in"><a href="#" onclick="{_pycmd(f"inshabits:{int(did)}:open")}">'
+            f'How you study &rsaquo;</a><span><b>{n:,}</b> matured this week</span></div>')
+
+
+def _hs_matured_svg(m):
+    """The win's bars: cards matured each of the last 8 weeks, this week solid."""
+    vals = [max(0, int(x)) for x in (m.get("weeks") or [])][-8:]
+    froms = list(m.get("from") or [])[-8:]
+    if len(vals) < 2:
+        return ""
+    froms += [""] * (len(vals) - len(froms))
+    top, w, gap, h0 = max(vals) or 1, 16, 4, 40
+    s = '<svg viewBox="0 0 160 52" role="img" aria-label="Cards matured, each of the last 8 weeks">'
+    for i, v in enumerate(vals):
+        hh = v / top * 34
+        last = i == len(vals) - 1
+        when = "This week" if last else f"Week of {_hs_day(froms[i])}"
+        s += (f'<rect class="{"t-on" if last else "t-tint"}" x="{2 + i * (w + gap)}" y="{h0 - hh:.1f}" width="{w}" '
+              f'height="{hh:.1f}" rx="2"><title>{when}: {v:,} matured</title></rect>')
+    return (s + f'<line class="t-base" x1="0" x2="160" y1="{h0}" y2="{h0}"/>'
+            '<text class="t-lab" x="2" y="51">8 weeks ago</text><text class="t-lab" x="158" y="51" text-anchor="end">now</text></svg>')
+
+
+def _hs_two_svg(quick, slow, said):
+    """Missed next time: the quicker right answers, then the slow ones (solid);
+    said: the matched gap and its range, in each bar's tip."""
+    vals, labs = (quick, slow), ("others", "slow")
+    names = ("Quicker right answers", "Slow right answers")
+    top, h0 = max(max(vals), 1), 42
+    s = '<svg viewBox="0 0 160 56" role="img" aria-label="Missed next time: slow right answers against the rest">'
+    for i, v in enumerate(vals):
+        x, hh = 30 + i * 64, v / top * 30
+        tip = f"{names[i]}: {v}% missed next time" + (f"\n{said}" if said else "")
+        s += (f'<rect class="{"t-on" if i else "t-tint"}" x="{x}" y="{h0 - hh:.1f}" width="36" height="{hh:.1f}" rx="3">'
+              f'<title>{tip}</title></rect>'
+              f'<text class="t-val" x="{x + 18}" y="{h0 - hh - 3:.1f}" text-anchor="middle">{v}%</text>'
+              f'<text class="t-lab" x="{x + 18}" y="53" text-anchor="middle">{labs[i]}</text>')
+    return s + f'<line class="t-base" x1="14" x2="146" y1="{h0}" y2="{h0}"/></svg>'
+
+
+def _hs_sit_svg(curve, at):
+    """Right % by minutes into a sitting, a point a band (0-15 … 90+), the
+    `at` minutes marked; the axis from just under the lowest to just over."""
+    import math
+    pts = []
+    for i, c in enumerate(curve[:6]):
+        if c[2] is not None:
+            pts.append((i, float(c[2]), c))
+    if len(pts) < 2:
+        return ""
+    vs = [v for _i, v, _c in pts]
+    lo, hi = math.floor(min(vs) - 2), math.ceil(max(vs) + 2)
+    if hi - lo < 10:
+        mid = (hi + lo) / 2
+        lo, hi = math.floor(mid - 5), math.ceil(mid + 5)
+
+    def x(i):
+        return 8 + 28 * i
+
+    def y(v):
+        return 6 + (hi - v) / (hi - lo) * 34
+    s = '<svg viewBox="0 0 160 56" role="img" aria-label="Right, by minutes into a sitting">'
+    g = 5 * round((lo + hi) / 10)
+    if lo < g < hi:
+        s += f'<line class="t-grid" x1="0" x2="160" y1="{y(g):.1f}" y2="{y(g):.1f}"/>'
+    edges = [int(c[0]) for c in curve[:6]]
+    k = max(j for j, e in enumerate(edges) if e <= at)
+    span = (int(curve[k][1]) - edges[k]) if curve[k][1] is not None else 15
+    mx = 8 + 28 * (k - 0.5) + (at - edges[k]) / max(1, span) * 28
+    s += (f'<line class="t-mark" x1="{mx:.1f}" x2="{mx:.1f}" y1="2" y2="44"/>'
+          f'<text class="t-lab" x="{mx + 3:.1f}" y="9">{int(at)}</text>')
+    s += '<polyline class="t-line" points="' + " ".join(f"{x(i)},{y(v):.1f}" for i, v, _c in pts) + '"/>'
+    for i, v, c in pts:
+        band = f"{int(c[0])}&ndash;{int(c[1])}" if c[1] is not None else f"{int(c[0])}+"
+        s += (f'<circle class="t-dot" cx="{x(i)}" cy="{y(v):.1f}" r="3.5"><title>{band} min in: {round(v)}% right '
+              f'({int(c[3]):,} answers)</title></circle>')
+    (i0, v0), (i1, v1) = pts[0][:2], pts[-1][:2]
+    s += f'<text class="t-val" x="{x(i0)}" y="{y(v0) - 6:.1f}" text-anchor="start">{round(v0)}%</text>'
+    s += f'<text class="t-val" x="{x(i1) + 4}" y="{y(v1) + 12:.1f}" text-anchor="end">{round(v1)}%</text>'
+    return s + '<text class="t-lab" x="2" y="54">start</text><text class="t-lab" x="158" y="54" text-anchor="end">90 min</text></svg>'
+
+
+def _habits_html(did, h):
+    """3.9.5, How you study, in Insights' place (‹ Insights goes back): my
+    time in its head; the win, cards matured, always; Slow but right only
+    when its finding passes, with Study N and, once it has one, its track
+    record; long sittings only when theirs passes, with Start a Fifteen.
+    Nothing passed: the win and one line. All decks, worked out from my
+    own log (habits_flow.board_view). Numbers only: nothing to escape but
+    what's built here."""
+    from .habits import SIT_AT
+    did = int(did)
+    mins, secs = h.get("mins"), h.get("secs")
+    r = (f'<span class="r"><b>{_hm(max(1, round(float(mins))))}</b> a day &middot; <b>{max(1, round(float(secs)))} s</b> a card</span>'
+         if mins is not None and secs is not None else "")
+    head = (f'<div class="hv-h"><a href="#" onclick="{_pycmd(f"inshabits:{did}:shut")}">&lsaquo; Insights</a>'
+            f'<b>How you study</b>{r}</div>')
+    m = h.get("matured") or {}
+    n = int(m.get("n") or 0)
+    tiles = (f'<div><div class="big" title="Next review 3 weeks or more away">{n:,}<small>matured this week</small></div>'
+             f'{_hs_matured_svg(m)}'
+             + (f'<a href="#" class="go" onclick="{_pycmd(f"inshabits:{did}:see")}">See them</a>' if n else "") + "</div>")
+    sp, sit = h.get("speed"), h.get("sit")
+    if isinstance(sp, dict):
+        slow, quick = _hs_pts(sp["slow"]), _hs_pts(sp["quick"])
+        said = ""
+        if sp.get("gap") is not None and sp.get("lo") is not None and sp.get("hi") is not None:
+            said = (f"At the same intervals: {_hs_pts(sp['gap']):+d} points, "
+                    f"could be {_hs_pts(sp['lo'])} to {_hs_pts(sp['hi'])}")
+        tr = h.get("track") if isinstance(h.get("track"), dict) else None
+        line = (f'<div class="hs-t">Studied ones: {_hs_pts(tr["studied"])}% missed next time &middot; '
+                f'{_hs_pts(tr["rest"])}% the rest</div>' if tr else "")
+        k = int(h.get("study") or 0)
+        go = f'<a href="#" class="go" onclick="{_pycmd(f"inshabits:{did}:slow")}">Study {k:,}</a>' if k > 0 else ""
+        tiles += (f'<div><div class="big">{slow}%<small>of slow right answers missed next time &middot; {quick}% otherwise</small></div>'
+                  f'{_hs_two_svg(quick, slow, said)}{line}{go}</div>')
+    if isinstance(sit, dict):
+        tiles += (f'<div><div class="big">{round(float(sit["from"]))} &rarr; {round(float(sit["to"]))}%'
+                  f'<small>after {SIT_AT} minutes in one go</small></div>{_hs_sit_svg(sit.get("curve") or [], SIT_AT)}'
+                  f'<a href="#" class="go" title="Fifteen minutes, then one question" onclick="{_pycmd("room15")}">'
+                  f'Start a Fifteen</a></div>')
+    more = "" if isinstance(sp, dict) or isinstance(sit, dict) else '<div class="hs-more">More as you study.</div>'
+    return f'<style>{HABITS_CSS}</style><div class="dc-hv">{head}<div class="ht">{tiles}</div>{more}</div>'
 
 
 def _ins_r(x):
