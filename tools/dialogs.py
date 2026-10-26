@@ -1327,6 +1327,8 @@ def main(out):
         if not w.line.text().startswith("34 dates · ~") or w.line.property("dc") != "note" \
                 or w.line.text() != SH.line(laid, today + datetime.timedelta(days=60), "Step 1")[0] or not w.make_btn.isEnabled():
             raise RuntimeError(f"new plan shapes: one a day {w.line.text()!r}")
+        if w.make_btn.property("dc") != "go":
+            raise RuntimeError("new plan shapes: Make the plan in the accent")
         shoot(w, os.path.join(out, "planner-new-shape.png"))
         w.shape_btns["exam"].click()
         doc_, n_ = w.doc()

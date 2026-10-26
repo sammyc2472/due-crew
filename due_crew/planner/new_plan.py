@@ -198,6 +198,7 @@ class NewPlanWindow(QDialog):
         buttons.addButton("Cancel", QDialogButtonBox.ButtonRole.RejectRole).clicked.connect(self.reject)
         self.make_btn = QPushButton("Make the plan")
         self.make_btn.setDefault(True)
+        self.make_btn.setProperty("dc", "go")  # 3.9.5: in the accent, as the mock had it (the Shape tiles kept ui._mark from it)
         self.make_btn.clicked.connect(self._make)
         buttons.addButton(self.make_btn, QDialogButtonBox.ButtonRole.AcceptRole)
         root.addWidget(buttons)
