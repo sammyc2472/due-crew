@@ -224,7 +224,9 @@ class _Glue:
     def __enter__(self):
         f = self.flow
         self.saved = ({k: getattr(f, k) for k in ("client", "_bg", "tooltip", "open_plans", "cfg")},
-                      {k: getattr(plan_flow, k) for k in ("_today",)}, (app.swap, app.refresh, f.mw.col))
+                      {k: getattr(plan_flow, k) for k in ("_today", "open_follow")}, (app.swap, app.refresh, f.mw.col))
+        self.follows = []
+        plan_flow.open_follow = lambda code="": self.follows.append(code)
         f.client, f.cfg = (lambda: self.cl), (lambda: {})
         f._bg = lambda job, done=None: done(self._run(job))
         f.tooltip = lambda text, **kw: self.toasts.append(text)
@@ -258,7 +260,7 @@ def _send(message):
     return dc._on_js(False, as_board(message), DeckBrowser())
 
 
-def test_use_it_copies_today_and_opens_it():
+def test_use_it_copies_today_and_follows_it():
     store, _sam, maya, pids = starters_world(3)
     maya.fetch_board(LABELS, TOMORROW, with_decks=True)
     pid = pids[2]
@@ -274,8 +276,9 @@ def test_use_it_copies_today_and_opens_it():
     check("use it: a plan of my own, its dates from today, crediting Due Crew",
           len(mine) == 1 and [u["opens"] for u in mine[0][1]["doc"]["units"]] == ["2026-10-26", "2026-11-16"]
           and mine[0][1]["basedOn"] == {"id": pid, "name": "Starter 3", "owner": "Due Crew"}, mine)
-    check("use it: then Your plans on it, the board drawn again and refreshed",
-          g.opened == [mine[0][0]] and g.swaps and len(g.refreshes) == 1 and not g.toasts, (g.opened, g.swaps, g.refreshes, g.toasts))
+    check("use it: then Follow on my copy (its code, as the box opens one), the board drawn again and refreshed",
+          g.follows == [mine[0][1]["code"]] and g.opened == [] and g.swaps and len(g.refreshes) == 1 and not g.toasts,
+          (g.follows, g.opened, g.swaps, g.refreshes, g.toasts))
     check("use it: the starters go from the board (I own a plan now), kept so",
           maya.session.get("plan_starters") == [] and json.load(open(maya.session_file)).get("plan_starters") == [])
     maya.fetch_board(LABELS, TOMORROW, with_decks=True)
@@ -299,7 +302,7 @@ def test_use_it_failing_says_so():
         quiet = store.log[n:]
         opened = list(g.opened)
     check("use it: refused, the board says so in its words, nothing opens",
-          refused == ["That didn't copy. This plan was deleted."] and not opened, refused)
+          refused == ["That didn't copy. This plan was deleted."] and not opened and not g.follows, refused)
     check("use it: no answer, it says so", offline == ["Couldn't reach Due Crew. Check your connection."], offline)
     check("use it: only a starter the board offered; nothing sent otherwise", quiet == [], quiet)
     check("use it: a failure keeps the starters", [s["id"] for s in maya.session.get("plan_starters")] == [pids[1], pids[0]])
@@ -307,7 +310,8 @@ def test_use_it_failing_says_so():
     with _Glue(maya) as g:
         g.flow._bg = lambda job, done=None: (job(), setattr(app, "generation", app.generation + 1), done(("saved", {"id": "x1"})))
         _send(f"duecrew:planstarter:{pids[1]}")
-        check("use it: an answer for another profile or account is dropped", g.opened == [] and not g.refreshes, g.opened)
+        check("use it: an answer for another profile or account is dropped",
+              g.opened == [] and g.follows == [] and not g.refreshes, (g.opened, g.follows))
 
 
 def test_the_command_has_a_handler():

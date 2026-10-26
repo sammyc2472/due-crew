@@ -92,7 +92,9 @@ def make_here(cl):
 def use_starter(pid):
     """3.9.5, Use it on a starter (the empty Plans tab's Or start from one):
     my own copy, its first date today (remote.copy, the library's Copy),
-    then Your plans on it, and the board again. One request on the click;
+    then Follow on it, as a code typed in the box opens it (its deck, its
+    days, my own pace), so its cards start opening; the copy's mine to
+    change in Your plans. One request on the click, Follow's on its own;
     the starters go from the board with it (I own a plan now: the server
     stops offering them). Refused or unanswered, a line says so."""
     cl = client()
@@ -110,7 +112,10 @@ def use_starter(pid):
             return
         cl.session["plan_starters"] = []
         cl._save_session()
-        open_plans(select=got[1]["id"])
+        if got[1].get("code"):
+            plan_flow.open_follow(str(got[1]["code"]))  # modal: its Follow sends its own request
+        else:
+            open_plans(select=got[1]["id"])
         app.swap(cfg())
         app.refresh()  # the plan I own now (its stamp moved), for Browse and the morning
     _bg(lambda: remote.copy(cl, pid, start), done)
