@@ -3380,3 +3380,71 @@ every release that changes how something works.
   button is marked, and 3.9.3's Browse link (`dc="link"`) is one, so the
   window marks it itself (`dc="go"`, as the plan windows' do;
   `tools/dialogs.py` checks it).
+- 3.9.5, Today (the Five mocks, reviewed page; Sam: "give it a shot
+  building all of it"): the head says about how long what's left takes,
+  "· 1h 08m left", at my own pace (`due.minutes_left`; `due_flow._pace`:
+  a review's answer, a learning step and a new card's first day, from the
+  last four weeks of my log, worked out once a day; Today only, till the
+  day's done). Under a done Reviews row, today's misses are back: "214
+  reviews, 23 missed: Renal 9 · Pharm 6 · Cardio 4 · 4 elsewhere · Study
+  the 23 again" (`due_flow._misses`: reviews answered Again today, a card
+  once; the parts from the map of the deck I reviewed most today,
+  `_miss_topics`, each its own Study of just those, `duego:again0..`).
+  Today's misses had no way in since 3.8.1 (its `duego:again` handler was
+  there, nothing sent it). Once gone over, the line says how it went
+  ("all 23 gone over again · 19 right this time", from what's answered
+  since the deck was built, `misses_built` in plans.json). Next up takes
+  the suggestion's place once the reviews are through (`_next_up`): the
+  first that applies, from Insights' own numbers for the deck I reviewed
+  most today: an exam within 7 days with 10+ cards at risk (Study N
+  early), a topic not sticking with 8+ missed (Study N), slow but right
+  (How you study, when my log shows it), 5+ cards one miss from a leech
+  (Insights' leeches view); else new leeches, as before. Not today puts
+  it away and none steps in till tomorrow. A Due Crew deck I studied that
+  runs out says so on the board, Pip hopping, "Slow but right: all 46
+  cleared · Nice" (`_watch_ours` on Anki's state change: counted as its
+  review starts, empty as I leave it). Never sent.
+- 3.9.5, Study where the cards are (no Study sheet: a Study sits on what
+  names the cards). Insights › What you know names its weakest part
+  under the key, "Weakest: Renal · Physiology, 66% · Study the 41 you
+  missed" (lowest % among the tiles showing one, ties to more missed,
+  only with 5+ missed: `team.weakest`), and an open part's trail gets
+  "Study the N you missed" before Browse all (`team_flow.study_map`,
+  `duecrew:insmapstudy`). Missed: Again in a review in the map's four
+  weeks, in the deck, not suspended (`team_flow._missed`). QBank QIDs says
+  Their topics after a paste: the map's parts the questions are in, a
+  question once in each, "2 questions · 66% here", Study on a part with
+  misses (`qids.topics`, `team_flow.deck_map`: Insights' map while
+  fresh, else worked out alone); five rows at most, the rest named on one
+  line. One helper builds every such deck (`team_flow.study_deck`: Due
+  Crew › the part, most lapses first, as Insights' Study). Never sent.
+- 3.9.5, starter plans (a user: "I keep refreshing the library and it's
+  always empty"). The admin marks listed plans as starters (migration
+  0030, `plans.starter`; `POST /admin/library/{id}/starter {on}`, admin
+  only, in the audit log); leaving the library ends it. The library shows
+  them in a row of their own above the grid, under Due Crew, when nothing
+  is filtered or searched (8 at most), and a copy is based on Due Crew's.
+  The day's first `/board` carries up to 4 (`starters`) for someone who
+  owns, co-writes and follows no plan, and the empty Plans tab lists them
+  under "Or start from one": name, "deck · N weeks", Use it. Use it
+  (`planstarter`) is the library's Copy with today's Anki day as its
+  start, then Follow on the copy, as a code in the box opens it (a copy
+  alone was a plan I own and don't follow: nothing opened). No new
+  request: they ride `GET /board?decks=1`; Use it is one on the click.
+  Deploy the Worker first (0030); older add-ons ignore the field.
+- 3.9.5, Shapes in New plan (`planner/shapes.py`, `new_plan.py`): with
+  no calendar, a Shape (One a day · Done by the exam · A week each, each a
+  small calendar picture) and From (a tag folder of the deck): each tag in
+  it a date, named as the builder names one, nothing else on it. Done by
+  the exam leaves the last week free (the last fifth of a short span) and
+  shares dates when it must; the last date of a stretch carries its
+  finish-by so its cards spread like the others; the pace is what the
+  shape asks a study day. A line says what it makes ("34 dates · ~40 new a
+  study day · done Mon 30 Nov"), red when it runs to the exam or past it.
+  A calendar read still wins; From at None makes the plan as before. Make
+  the plan is in the accent (the tiles kept `ui._mark` from it). Why:
+  people got most of the way to a plan and stalled.
+- 3.9.5, the dialogs check went red on a commit that touched no window:
+  its calendar PDF, drawn three cells a row, came out of Qt's reader a
+  letter a line in 41 weeks of a year (it reads next Monday's dates; the
+  start window rightly turned it down as scrambled). A row is one line now.
