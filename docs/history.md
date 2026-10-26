@@ -3404,6 +3404,33 @@ every release that changes how something works.
   runs out says so on the board, Pip hopping, "Slow but right: all 46
   cleared · Nice" (`_watch_ours` on Anki's state change: counted as its
   review starts, empty as I leave it). Never sent.
+- 3.9.5, How you study (`habits.py` pure, `habits_flow.py` the glue):
+  what my own last eight weeks of log say about how I study, all decks,
+  worked out on this computer and never sent. A line atop Insights, "How
+  you study › 38 matured this week" (from two weeks of log; matured is
+  Anki's word, Sam's pick over "reached 3 weeks": next review 3 weeks or
+  more away), opens it in Insights' place: my time a day and a card in its
+  head; the cards matured each of eight weeks (See them, in Browse); Slow
+  but right (right answers at 1.5–3× the card's usual time, missed more
+  next time, held at the same intervals: "22% of slow right answers missed
+  next time · 13% otherwise", its range from 300 resamples of cards in the
+  bars' titles), with Study N into Due Crew's filtered deck and a track
+  record (`slow_studied` in plans.json: once 30 studied cards have had a
+  next answer, "Studied ones: 14% missed next time · 22% the rest", and if
+  they aren't missed less, Study goes); long sittings (right % by minutes
+  in, held at the interval mix; 45+ minutes against the first 20 in
+  hour-long sittings, a range from resampled sittings: "84 → 79% after 35
+  minutes in one go"), with Start a Fifteen. A finding shows only once it
+  clears its bar (4 weeks and 1,500 compared answers, the range above
+  zero; 20 hour-long sittings, a 3-point drop, the range below zero);
+  otherwise "More as you study." Checked on made-up logs: a planted
+  effect found, none found where none was planted. The Fifteen at 35 (no
+  new break): when my sittings finding passes, past 35 minutes in one go
+  while reviewing, the top bar's ▶ Fifteen? says "35 min in · Take five",
+  which starts a Fifteen already in its break (`room15sit`; × for the
+  sitting, `room15sitx`). Today's Next up offers Slow but right
+  (`habits_flow.next_up`). The log is read once a day; a big one is worked
+  out off the main thread (about 2 s for 166,000 answers).
 - 3.9.5, Study where the cards are (no Study sheet: a Study sits on what
   names the cards). Insights › What you know names its weakest part
   under the key, "Weakest: Renal · Physiology, 66% · Study the 41 you
