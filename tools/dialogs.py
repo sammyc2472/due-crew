@@ -1263,6 +1263,127 @@ def main(out):
         if "CSV" not in w.said.text() or w.text.toPlainText():
             raise RuntimeError(f"start: a sheet: {w.said.text()!r}")
 
+    def new_plan_shapes(NOps, reopened, yes):
+        """3.9.5: Shapes in New plan (shapes.py): a folder of the deck's tags
+        (From) and a shape, the plan made filled. From at None: as it was; a
+        calendar pasted wins; a deck with no folder shows neither; the narrow
+        window with a shape that runs past the exam (its line in red)."""
+        import random
+        import sqlite3
+        from due_crew import plans as P
+        from due_crew.planner import edits as PE, shapes as SH
+        import due_crew.planner.new_plan as PNP
+        conn = sqlite3.connect(":memory:")
+        fakes.make_collection(conn)
+        root = "#Big_Step1_v3"
+        path = f"{root}::#Resources::#Pathology_videos"
+        names = ("Cell_injury", "Inflammation", "Tissue_repair", "Hemodynamics", "Immunopathology", "Neoplasia", "Genetics",
+                 "Nutrition", "Infections", "Blood_vessels", "Heart", "Red_cells", "White_cells", "Bleeding", "Lung",
+                 "Head_and_neck", "GI_tract", "Liver", "Pancreas", "Kidney", "Urinary_tract", "Male_genital",
+                 "Female_genital", "Breast", "Endocrine", "Skin", "Bone", "Joints", "Muscle", "Nerve", "Brain", "Eye",
+                 "Pediatrics", "Environment")
+        cid = 0
+        for i, name in enumerate(names, 1):
+            for _ in range(30 + (i * 7) % 21):
+                cid += 1
+                fakes.add_card(conn, cid, 1, tags=f"{path}::{i:02d}_{name} {root}::^Systems::{('Cardio', 'Renal', 'Pulm')[i % 3]}")
+        for i in range(1, 13):
+            for _ in range(5):
+                cid += 1
+                fakes.add_card(conn, cid, 1, tags=f"{root}::#Resources::#Review_book::Chapter_{i}")
+        for _ in range(4):
+            cid += 1
+            fakes.add_card(conn, cid, 2)
+        scol = fakes.FakeCol(conn, fakes.day_cutoff_for(datetime.date.today()))
+        scol.decks = fakes.FakeDecks({1: "Big Step 1", 2: "Mine"})
+
+        class SOps(NOps):
+            def index(self, did):
+                return P.DeckIndex(scol, did)
+
+        today = datetime.date.today()
+        later = lambda n: QtCore.QDate.fromString((today + datetime.timedelta(days=n)).isoformat(), "yyyy-MM-dd")  # noqa: E731
+        decks = [(1, "Big Step 1", cid - 4), (2, "Mine", 4)]
+        w = PNP.NewPlanWindow(None, decks, SOps())
+        if (w.frm.currentText() != PNP.NO_FROM or w.line.text() != PNP.PICK_FROM or w.tiles.isHidden() or w.frm.isHidden()
+                or [w.frm.itemText(i) for i in range(1, w.frm.count())] != [
+                    "Big Step 1", "› Resources", "› Resources › Pathology videos", "› Resources › Review book",
+                    "› Systems"]):
+            raise RuntimeError(f"new plan shapes: From {[w.frm.itemText(i) for i in range(w.frm.count())]} {w.line.text()!r}")
+        w.end_name.setText("Step 1")
+        w.end_day.setDate(later(60))
+        random.seed(3)
+        got = w.doc()
+        random.seed(3)
+        was = PE.new_plan_doc("Big Step 1", [], "Step 1", (today + datetime.timedelta(days=60)).isoformat())
+        if got != (was[0], 0):
+            raise RuntimeError(f"new plan shapes: no From isn't New plan as it was: {got} {was}")
+        w.frm.setCurrentIndex(w.frm.findData(path))
+        if w.name.text() != "Pathology videos":
+            raise RuntimeError(f"new plan shapes: named {w.name.text()!r}")
+        w.name.setText("Path videos, a chapter a day")
+        laid = SH.lay("day", SH.kids(SH.tree_of(P.DeckIndex(scol, 1)), path), today, today + datetime.timedelta(days=60))
+        if not w.line.text().startswith("34 dates · ~") or w.line.property("dc") != "note" \
+                or w.line.text() != SH.line(laid, today + datetime.timedelta(days=60), "Step 1")[0] or not w.make_btn.isEnabled():
+            raise RuntimeError(f"new plan shapes: one a day {w.line.text()!r}")
+        shoot(w, os.path.join(out, "planner-new-shape.png"))
+        w.shape_btns["exam"].click()
+        doc_, n_ = w.doc()
+        end = (today + datetime.timedelta(days=60)).isoformat()
+        free = (today + datetime.timedelta(days=53)).isoformat()
+        if not w.shape_btns["exam"].isChecked() or w.shape_btns["day"].isChecked() or n_ != 34 \
+                or any(u["opens"] >= free or len(u["tags"]) != 1 for u in doc_["units"]) or doc_["end"] != end \
+                or doc_["units"][0]["name"] != "1 · Cell injury" or "done" not in w.line.text():
+            raise RuntimeError(f"new plan shapes: done by the exam {w.line.text()!r} {doc_}")
+        for b in w.shape_btns.values():
+            if b.minimumWidth() < b.pic.width() or b.width() < b.minimumWidth() or b.words.width() < b.words.sizeHint().width():
+                raise RuntimeError(f"new plan shapes: {b.shape} squeezed {b.width()} {b.words.width()}")
+        shoot(w, os.path.join(out, "planner-new-shape-exam.png"))
+        was_confirm = PNP.confirm
+        PNP.confirm = yes
+        try:
+            w._make()
+        finally:
+            PNP.confirm = was_confirm
+        made = STORE.plans.get(reopened[-1][1]) if reopened and reopened[-1][0] == "new" else None
+        if not made or made["name"] != "Path videos, a chapter a day" or len(made["doc"]["units"]) != 34 \
+                or made["doc"]["units"][-1].get("due") is None or made["doc"]["pace"]["mode"] != "end":
+            raise RuntimeError(f"new plan shapes: made {made and made['doc']}")
+        STORE.plans.pop(reopened[-1][1], None)
+        # a calendar pasted wins: Shape and From go, the calendar's dates are the plan's
+        w = PNP.NewPlanWindow(None, decks, SOps())
+        w.frm.setCurrentIndex(w.frm.findData(path))
+        w.text.setPlainText(f"BLOCK 2\n{P.fmt_day((today + datetime.timedelta(days=7)).isoformat())}  LEC  Heart failure")
+        w._read()
+        doc_, n_ = w.doc()
+        if not (w.tiles.isHidden() and w.frm.isHidden() and w.line.isHidden()) or n_ != 1 or doc_["units"][0]["tags"]:
+            raise RuntimeError(f"new plan shapes: a calendar didn't win {n_} {doc_}")
+        w.text.setPlainText("")
+        w._read()
+        if w.tiles.isHidden() or w.picked() != path:
+            raise RuntimeError("new plan shapes: the calendar taken out, Shape and From back")
+        w.deck.setCurrentIndex(1)
+        if not (w.tiles.isHidden() and w.frm.isHidden() and w.line.isHidden()) or w.picked() is not None:
+            raise RuntimeError("new plan shapes: a deck with no folder shows Shape and From")
+        w.close()
+        # the narrow window: a week each, past a near exam, in red
+        w = PNP.NewPlanWindow(None, decks, SOps())
+        w.end_name.setText("Block 2 exam")
+        w.end_day.setDate(later(20))
+        w.frm.setCurrentIndex(w.frm.findData(path))
+        w.shape_btns["week"].click()
+        if "after Block 2 exam" not in w.line.text() or w.line.property("dc") != "bad" or not w.make_btn.isEnabled():
+            raise RuntimeError(f"new plan shapes: past the exam {w.line.text()!r}")
+        w.resize(w.minimumWidth(), 10)
+        shoot(w, os.path.join(out, "planner-new-shape-narrow.png"))
+        w = PNP.NewPlanWindow(None, decks, SOps())
+        w.end_day.setDate(later(0))
+        w.frm.setCurrentIndex(w.frm.findData(path))
+        w.shape_btns["exam"].click()
+        if w.line.text() != "No study days before the exam." or w.make_btn.isEnabled():
+            raise RuntimeError(f"new plan shapes: no study days {w.line.text()!r}")
+        w.close()
+
     def planner():
         """Labs (due_crew/planner, docs/planner.md): the plan window an author
         sees (a date's sources by resource, system and other, with what each
@@ -1842,6 +1963,7 @@ def main(out):
         if not reopened or reopened[-1][0] != "new":
             raise RuntimeError(f"new plan: made {nw.said.text()!r}")
         STORE.plans.pop(reopened[-1][1], None)
+        new_plan_shapes(NOps, reopened, yes)
         STORE.plans.pop(pid2, None)
         if PO.why_line([]) != "":
             raise RuntimeError("planner: an empty why")

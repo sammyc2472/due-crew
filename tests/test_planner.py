@@ -2448,6 +2448,170 @@ def test_insights_tab():
     check("insights: each card's tags as written; each subdeck card's path below the deck",
           VID in sp[1] and SYS in sp[1] and I.deck_paths(idx2) == {13: ["Cardio"], 14: ["Cardio"]}, (sp.get(1), I.deck_paths(idx2)))
 
+
+# ---- 3.9.5: Shapes in New plan (shapes.py) ----
+
+def test_shapes_v395():
+    """3.9.5: New plan's Shape and From: a tag folder of the deck, each tag
+    in it a date, one a day, done by the exam (the last week free) or a week
+    each; the line of what it makes; the doc New plan sends; with no From,
+    New plan as it was."""
+    import math
+    from due_crew.planner import shapes as SH
+    path = f"{ROOT}::#Resources::#Path_videos"
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    cid = 0
+    for tag, n in ((f"{path}::Chapter_10", 10), (f"{path}::Chapter_2", 20), (f"{path}::Chapter_1", 30), (f"{path}::Chapter_3", 40),
+                   (f"{ROOT}::^Systems::10_Renal", 3), (f"{ROOT}::^Systems::02_Cardio", 4), (f"{ROOT}::#Bank::10234", 1),
+                   (f"{ROOT}::#Bank::10911", 1), ("Pharm::Antibiotics", 2)):
+        for _ in range(n):
+            cid += 1
+            fakes.add_card(conn, cid, 1, tags=tag)
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(datetime.date(2026, 11, 2)))
+    col.decks = fakes.FakeDecks({1: "Big Step 1"})
+    idx = P.DeckIndex(col, 1)
+    counted = []
+    spy = types.SimpleNamespace(tag_names=idx.tag_names, tag_cards=lambda p: counted.append(p) or idx.tag_cards(p))
+    t = SH.tree_of(spy)
+    fs = SH.folders(t)
+    check("shapes: From lists the deck's tag folders holding two or more tags, in its order; a bank's question ids "
+          "and a folder of one tag aren't one; nothing counted to find them",
+          fs == [ROOT, path, f"{ROOT}::^Systems"] and counted == [], (fs, counted))
+    ks = SH.kids(t, path)
+    check("shapes: a folder's tags in natural order, as the planner sorts tag names (Chapter 2 before Chapter 10), "
+          "each with its cards, counted only for the folder picked",
+          ks == [(f"{path}::Chapter_1", 30), (f"{path}::Chapter_2", 20), (f"{path}::Chapter_3", 40), (f"{path}::Chapter_10", 10)]
+          and [p.split("::")[-1] for p, _n in SH.kids(t, f"{ROOT}::^Systems")] == ["02_Cardio", "10_Renal"]
+          and SH.kids(t, f"{ROOT}::#Bank") == [] and len(counted) == 6, (ks, counted))
+    check("shapes: From reads a folder's path, the root they all share left off (the mock's), the plan named for it",
+          SH.labels(fs) == {ROOT: "Big Step 1", path: "› Resources › Path videos", f"{ROOT}::^Systems": "› Systems"}
+          and SH.labels(["Pharm::Antibiotics", "Micro::Bugs"]) == {"Pharm::Antibiotics": "Pharm › Antibiotics",
+                                                                   "Micro::Bugs": "Micro › Bugs"}
+          and SH.name_of(path) == "Path videos", SH.labels(fs))
+
+    seven = [(f"P::Chapter_{i}", 40) for i in range(1, 8)]
+    day = SH.lay("day", seven, "2026-11-06")
+    check("shapes: One a day: each tag its own date, one a study day from today, the weekend skipped",
+          [(x["opens"], x["tags"]) for x in day["dates"]]
+          == [(d, [f"P::Chapter_{i}"]) for i, d in enumerate(("2026-11-06", "2026-11-09", "2026-11-10", "2026-11-11",
+                                                                  "2026-11-12", "2026-11-13", "2026-11-16"), 1)]
+          and not any("due" in x for x in day["dates"]) and day["study"] == 7 and day["last"] == "2026-11-16"
+          and SH.lay("day", seven, "2026-11-07")["dates"][0]["opens"] == "2026-11-09", day)
+    check("shapes: the line: dates, about how many new a study day, the last date",
+          SH.line(day, "2026-11-20", "Step 1") == ("7 dates · ~40 new a study day · done Mon 16 Nov", False)
+          and SH.line(SH.lay("day", seven[:1] * 2, "2026-11-06"), "2026-11-20")[0].startswith("2 dates · ~40 new")
+          and SH.line(SH.lay("day", [("P::A", 1), ("P::B", 1)], "2026-11-06"))[0].startswith("2 dates · ~1 new"),
+          SH.line(day, "2026-11-20", "Step 1"))
+    check("shapes: a shape that runs to the exam or past it says so (in red), by the exam's name",
+          SH.line(day, "2026-11-13", "Step 1") == ("7 dates · ~40 new a study day · done Mon 16 Nov, 3 days after Step 1", True)
+          and SH.line(day, "2026-11-16", "") == ("7 dates · ~40 new a study day · done Mon 16 Nov, the day of the exam", True)
+          and SH.line(day, "2026-11-15", "Step 1")[0].endswith(", 1 day after Step 1"))
+
+    ten = [(f"P::Chapter_{i}", 29) for i in range(1, 11)]
+    ex = SH.lay("exam", ten, "2026-11-02", "2026-12-18")
+    opens = [x["opens"] for x in ex["dates"]]
+    study, d = [], datetime.date(2026, 11, 2)
+    while d <= datetime.date(2026, 12, 10):
+        if d.weekday() < 5:
+            study.append(d.isoformat())
+        d += datetime.timedelta(days=1)
+    at = [study.index(o) for o in opens]
+    gaps = [b - a for a, b in zip(at, at[1:] + [len(study)])]
+    check("shapes: Done by the exam: spread as evenly as the study days allow, the last week before the exam free, "
+          "the last date due at the end of its stretch",
+          opens == ["2026-11-02", "2026-11-04", "2026-11-09", "2026-11-12", "2026-11-17", "2026-11-20", "2026-11-25",
+                    "2026-11-30", "2026-12-03", "2026-12-08"]
+          and set(gaps) == {2, 3} and ex["dates"][-1]["due"] == "2026-12-10" and ex["last"] == "2026-12-10"
+          and ex["study"] == 29 == len(study) and [x["tags"] for x in ex["dates"]] == [[p] for p, _n in ten]
+          and SH.line(ex, "2026-12-18", "Step 1") == ("10 dates · ~10 new a study day · done Thu 10 Dec", False), (opens, gaps, ex))
+    forty = [(f"P::Chapter_{i}", 5) for i in range(1, 41)]
+    sh = SH.lay("exam", forty, "2026-11-02", "2026-12-18")
+    per = [len(x["tags"]) for x in sh["dates"]]
+    check("shapes: Done by the exam: more tags than study days share dates, as evenly, in order, every study day one",
+          len(sh["dates"]) == 29 and set(per) == {1, 2} and sum(per) == 40
+          and [p for x in sh["dates"] for p in x["tags"]] == [p for p, _n in forty]
+          and [x["opens"] for x in sh["dates"]] == study and "due" not in sh["dates"][-1], per)
+    short = SH.lay("exam", ten[:5], "2026-11-02", "2026-11-17")
+    check("shapes: Done by the exam, a short span: the last fifth free (3 of 15 days), not a week",
+          [x["opens"] for x in short["dates"]] == ["2026-11-02", "2026-11-04", "2026-11-06", "2026-11-10", "2026-11-12"]
+          and short["last"] == "2026-11-13" and short["study"] == 10, short)
+    check("shapes: no study days before the exam, or no exam: no dates, and why",
+          SH.lay("exam", ten, "2026-11-02", "2026-11-02")["why"] == "No study days before the exam."
+          and SH.lay("exam", ten, "2026-11-07", "2026-11-09")["why"] == "No study days before the exam."
+          and SH.lay("exam", ten, "2026-11-02")["why"] == "Pick the exam's day."
+          and SH.line(SH.lay("exam", ten, "2026-11-02", "2026-11-02"), "2026-11-02") == ("No study days before the exam.", True))
+
+    wk = SH.lay("week", ten[:3], "2026-11-04")
+    check("shapes: A week each: one a week on the week's first study day (from next week, past it today), "
+          "the last due at its week's end",
+          [(x["opens"], x.get("due")) for x in wk["dates"]] == [("2026-11-09", None), ("2026-11-16", None), ("2026-11-23", "2026-11-27")]
+          and wk["study"] == 15 and wk["last"] == "2026-11-27"
+          and SH.lay("week", ten[:3], "2026-11-02")["dates"][0]["opens"] == "2026-11-02"
+          and [x["opens"] for x in SH.lay("week", ten[:2], "2026-11-02", days=(0, 1, 1, 1, 0, 0, 0))["dates"]]
+          == ["2026-11-03", "2026-11-10"]
+          and SH.lay("week", ten[:2], "2026-11-02", days=(0, 1, 1, 1, 0, 0, 0))["dates"][-1]["due"] == "2026-11-12", wk)
+    many = [(f"P::{i:03d}_Topic", 1) for i in range(201)]
+    check("shapes: what a plan can't hold says so: 200 dates, 50 tags a date; no study day",
+          SH.lay("day", many, "2026-11-02")["why"] == "A plan holds up to 200 dates."
+          and SH.lay("exam", many[:60], "2026-11-02", "2026-11-03")["why"] == "A date holds up to 50 tags."
+          and SH.lay("day", ten, "2026-11-02", days=(0,) * 7)["why"] == "Pick a study day.")
+
+    # the doc New plan makes: with no From, as it was; a calendar wins; a shape's dates, each its tags and nothing else
+    random.seed(7)
+    was = E.new_plan_doc("Big Step 1", [], "Step 1", "2026-12-18")
+    random.seed(7)
+    now = SH.new_doc("Big Step 1", [], "Step 1", "2026-12-18", None, t)
+    sessions = [{"date": "2026-11-09", "kind": "lecture", "title": "Heart failure"}]
+    random.seed(7)
+    cal = E.new_plan_doc("Big Step 1", sessions, "Step 1", "2026-12-18")
+    random.seed(7)
+    cal2 = SH.new_doc("Big Step 1", sessions, "Step 1", "2026-12-18", ex, t)
+    check("shapes: New plan with no From is New plan as it was (edits.new_plan_doc), and a calendar wins over a shape",
+          now == was and not now[0]["units"] and cal2 == cal and [u["name"] for u in cal2[0]["units"]] == ["Heart failure"])
+    doc, uids = SH.new_doc("Big Step 1", [], "Step 1", "2026-12-18", ex, t)
+    us = doc["units"]
+    exam = doc["events"][0]
+    check("shapes: a shape's doc: each date its tag and nothing else, named as the builder names one, tested on the exam; "
+          "the plan's end the exam, its pace the cards a study day it asks",
+          len(uids) == 10 == len(us) and [u["name"] for u in us] == [f"Chapter {i}" for i in range(1, 11)]
+          and all(u["tags"] == [f"P::Chapter_{i}"] and u["decks"] == [] and u["cards"] == [] and u["for"] == exam["id"]
+                  and set(u) == {"id", "name", "opens", "tags", "decks", "cards", "for"} | ({"due"} if i == 10 else set())
+                  for i, u in enumerate(us, 1))
+          and exam["name"] == "Step 1" and exam["day"] == doc["end"] == "2026-12-18"
+          and doc["pace"] == {"mode": "end", "days": [1, 1, 1, 1, 1, 0, 0], "daily": math.ceil(290 / 29)}, doc)
+    shared, _u = SH.new_doc("Big Step 1", [], "Step 1", "2026-12-18", sh, t)
+    check("shapes: a date two tags share is named as the builder names it, its first + 1 more",
+          shared["units"][0]["name"] == "Chapter 1 + 1 more" and shared["units"][0]["tags"] == ["P::Chapter_1", "P::Chapter_2"],
+          shared["units"][0])
+    try:
+        SH.new_doc("Big Step 1", [], "Step 1", "2026-12-18", SH.lay("day", many, "2026-11-02"), t)
+        refused = None
+    except E.Refused as e:
+        refused = str(e)
+    check("shapes: one a plan can't hold isn't made", refused == "A plan holds up to 200 dates.", refused)
+    store = world({"sam": "Sammy"})
+    sam = new_client(store, "sam")
+    outcome, raw = R.create(sam, "Path videos", "Big Step 1")
+    got = R.save(sam, raw["id"], raw["version"], doc, "made in Anki from a calendar: Path videos")
+    kept = store.plans[raw["id"]]["doc"]
+    check("shapes: Make the plan as before (POST /plans, then the builder's save): the server keeps the shape's dates",
+          outcome == "saved" and got[0] == "saved" and [u["name"] for u in kept["units"]] == [u["name"] for u in us]
+          and kept["units"][-1].get("due") == "2026-12-10" and kept["pace"]["daily"] == 10, (got[0], kept))
+
+    check("shapes: each shape's picture, three weeks: one a day weekdays; done by the exam its last week free, the exam last; "
+          "a week each the weeks in turn",
+          [SH.cell("day", 0, c) for c in range(7)] == ["on"] * 5 + ["off"] * 2
+          and [SH.cell("exam", 2, c) for c in range(7)] == ["free"] * 6 + ["exam"] and SH.cell("exam", 1, 6) == "off"
+          and [SH.cell("week", r, 3) for r in range(3)] == ["on", "soft", "on"] and SH.cell("week", 1, 6) == "soft")
+    src = open(os.path.join(REPO, "due_crew", "planner", "shapes.py")).read()
+    win = open(os.path.join(REPO, "due_crew", "planner", "new_plan.py")).read()
+    check("shapes: pure (no aqt), and New plan makes its doc through it, Shape and From gone with a calendar or no folder",
+          not re.search(r"^\s*(from aqt|import aqt)", src, re.M)
+          and "SH.new_doc(deck, self.sessions, end_name, end_day, self._laid(), self.tree)" in win
+          and "on = self.frm.count() > 1 and not self.sessions" in win and 'NO_FROM = "None (an empty plan)"' in win)
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:
