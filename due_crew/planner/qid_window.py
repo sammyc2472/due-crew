@@ -8,13 +8,20 @@ nothing is sent; what's not sticking is Insights' to say.
 Two things to do with them (3.9.3, Sam: no moving due dates): Unsuspend,
 the new ones first in line; or Study now, a deck of them (Due Crew ›
 QBank cards, each paste adding to it) that reschedules by my answers,
-each card going back to its own deck once done. Browse shows them."""
+each card going back to its own deck once done. Browse shows them.
 
-from aqt.qt import QComboBox, QDialog, QFormLayout, QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, Qt, QTimer, QVBoxLayout
+3.9.5 (Study where the cards are): under the counts, Their topics: the
+parts of the deck's topic map the questions are in (as Insights splits
+it), each with the map's % there and a Study of the ones I missed there
+(the map's own deck of them)."""
 
-from ..ui import attach_alive, heading, note
+from aqt.qt import (QComboBox, QDialog, QFormLayout, QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, Qt, QTimer,
+                    QVBoxLayout, QWidget)
+
+from ..team import study_missed
+from ..ui import attach_alive, heading, note, role
 from . import qids as Q
-from .widgets import link
+from .widgets import frame, link
 
 def _plain(text="", muted=False):
     w = QLabel(str(text))
@@ -31,6 +38,8 @@ class QidWindow(QDialog):
         super().__init__(parent)
         self.col, self.ops, self.choices = col, ops, list(choices)
         self.idx = self.found = self.t = None
+        self.maps = {}  # 3.9.5: deck id -> its map (tiles, missed), read once a deck while the window's open
+        self.topic_rows = []
         self.picked = None  # the bank I picked, while it's this paste's and this deck's
         attach_alive(self)
         self.setWindowTitle("QBank QIDs")
@@ -62,6 +71,12 @@ class QidWindow(QDialog):
         root.addLayout(counts)
         self.more = _plain(muted=True)  # what isn't a question here; my plan's dates
         root.addWidget(self.more)
+        self.topics = QWidget()  # 3.9.5: Their topics, drawn again with each count
+        self.topics_lay = QVBoxLayout(self.topics)
+        self.topics_lay.setContentsMargins(0, 4, 0, 0)
+        self.topics_lay.setSpacing(0)
+        self.topics.setVisible(False)
+        root.addWidget(self.topics)
         self.said = _plain(muted=True)
         root.addWidget(self.said)
         buttons = QHBoxLayout()
@@ -131,6 +146,7 @@ class QidWindow(QDialog):
             self.found, self.t = None, None
             self.lines.setText("No deck to look in.")
             self.more.setText("")
+            self._topics()
             self._show()
             return
         self.found = Q.find(self.idx, self.text.toPlainText(), self.picked)
@@ -156,7 +172,51 @@ class QidWindow(QDialog):
         self.lines.setText(lines[0] if lines else "")
         self.more.setText("\n".join(lines[1:]))
         self.more.setVisible(len(lines) > 1)
+        self._topics()
         self._show()
+
+    def _topics(self):
+        """3.9.5: Their topics, the map's parts this paste's questions are in
+        (qids.topics): each its name, its questions and the map's % there,
+        and Study when I missed some there these 4 weeks."""
+        while self.topics_lay.count():
+            w = self.topics_lay.takeAt(0).widget()
+            if w is not None:
+                w.hide()
+                w.deleteLater()
+        rows = []
+        if self.idx is not None and self.found and self.found["cids"]:
+            did = self.deck.currentData()
+            if did not in self.maps:
+                self.maps[did] = self.ops.deck_map(did)
+            tiles, missed = self.maps[did]
+            rows = Q.topics(self.idx, self.found, tiles, missed)
+        self.topic_rows = rows
+        self.topics.setVisible(bool(rows))
+        if not rows:
+            return
+        head = role(_plain("Their topics"), "head")
+        head.setContentsMargins(0, 0, 0, 4)
+        self.topics_lay.addWidget(head)
+        for r, line in list(zip(rows, Q.topic_words(rows)))[:Q.TOPICS_SHOWN]:
+            row, lay = frame("foot", horizontal=True, margins=(0, 6, 0, 6), spacing=12)  # a line above each
+            words = QVBoxLayout()
+            words.setContentsMargins(0, 0, 0, 0)
+            words.setSpacing(1)
+            name = role(_plain(r["name"]), "head")
+            name.setWordWrap(False)  # a part's name is 60 long at most (team.NAME_MAX)
+            words.addWidget(name)
+            said = _plain(line, muted=True)
+            said.setWordWrap(False)
+            words.addWidget(said)
+            lay.addLayout(words, 1)
+            if r["missed"]:
+                lay.addWidget(link("Study", lambda r=r: self._study_topic(r), tip=study_missed(len(r["missed"]))),
+                              0, Qt.AlignmentFlag.AlignVCenter)
+            self.topics_lay.addWidget(row)
+        more = Q.more_topics(rows)
+        if more:
+            self.topics_lay.addWidget(_plain(more, muted=True))
 
     def _show(self):
         cids = self.cids()
@@ -177,4 +237,9 @@ class QidWindow(QDialog):
 
     def _study(self):
         if self.ops.study(self.cids()):
+            self.accept()
+
+    def _study_topic(self, r):
+        """3.9.5: a topic's Study, the map's deck of what I missed there."""
+        if self.ops.study_topic(r["name"], r["missed"]):
             self.accept()

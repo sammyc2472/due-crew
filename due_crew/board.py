@@ -2607,7 +2607,7 @@ def _insights_html(did, v):
                     f'<span class="c"><b>{st + fg}</b> of {of}</span>'
                     f'<a href="#" onclick="{_pycmd(f"insstudy:{did}:{i}")}">Study {st + fg}</a></div>')
         out += "</div>"
-    out += _ins_map(did, v.get("map") or [], v.get("map_by"), v.get("map_at"), v.get("map_ways"))
+    out += _ins_map(did, v.get("map") or [], v.get("map_by"), v.get("map_at"), v.get("map_ways"), v.get("_map_missed"))
     if v.get("ahead"):
         out += _ins_ahead(did, v["ahead"], v.get("deck_name"))
     f = v.get("fsrs")
@@ -2651,7 +2651,7 @@ def _insights_html(did, v):
     return f'<div class="dc-ins">{out}</div>'
 
 
-def _ins_map(did, tiles, by, at=(), ways=()):
+def _ins_map(did, tiles, by, at=(), ways=(), missed=None):
     """3.8.0, the topic map: each subject a tile, sized by its cards in play,
     shaded by how much I know now of the ones I've started (a bar along its
     foot: how many I've started; none yet, "new"). A tile that splits again
@@ -2659,11 +2659,15 @@ def _ins_map(did, tiles, by, at=(), ways=()):
     goes back, and Browse all opens the open one's cards; a tile that
     doesn't, its cards. ways: how else it can split (Systems, a resource,
     Subdecks), a pick in its heading ("by Systems ▾"). Mine alone, from my
-    own Anki. Two tiles at least, or it says nothing."""
+    own Anki. Two tiles at least, or it says nothing.
+    3.9.5 (Study where the cards are): missed, the cards I answered Again
+    these 4 weeks (team_flow._missed). At the top, its weakest part under
+    the key, with a Study of the ones I missed there; opened, the trail's
+    Study the ones missed in the open part."""
     if len(tiles) < 2:
         return ""
     e = _html.escape
-    from .team import map_level, map_shade
+    from .team import map_level, map_shade, missed_in, study_missed, weakest
     trail, cur = map_level(tiles, at)
     big = max(int(t["n"]) for t in cur) or 1
     how = "you’d remember now (FSRS)" if by == "fsrs" else "right in their reviews these 4 weeks"  # escaped with the tip
@@ -2693,9 +2697,18 @@ def _ins_map(did, tiles, by, at=(), ways=()):
         last = trail[-1]
         steps.append(f'<b>{e(str(last["name"]))}</b>')
         lk = last.get("know")
+        gone = len(missed_in(last, missed))
+        study = (f'&middot; <a href="#" onclick="{_pycmd(f"insmapstudy:{did}:open")}">{study_missed(gone)}</a> '
+                 if gone else "")
         path = (f'<div class="tmt">{" &rsaquo; ".join(steps)} &middot; {int(last["n"]):,} card{"" if int(last["n"]) == 1 else "s"}'
-                f'{"" if lk is None else f", {int(lk)}%"} '
+                f'{"" if lk is None else f", {int(lk)}%"} {study}'
                 f'&middot; <a href="#" onclick="{_pycmd(f"insmapall:{did}")}">Browse all</a></div>')
+    else:
+        weak = weakest(cur, missed)
+        if weak:
+            wt = cur[weak[0]]
+            path = (f'<div class="tmt">Weakest: <b>{e(str(wt["name"]))}</b>, {int(wt["know"])}% &middot; '
+                    f'<a href="#" onclick="{_pycmd(f"insmapstudy:{did}:{weak[0]}")}">{study_missed(len(weak[1]))}</a></div>')
     # 3.9.2 (the students: what's the %, what's the bar?): said in the key; a tile's cards beside its %
     pct = "% you&rsquo;d recall now" if by == "fsrs" else "% right, 4 weeks"
     grey = ", ".join(w for w, on in (("new", fresh), ("too soon", soon_any)) if on)

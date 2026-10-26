@@ -1889,6 +1889,28 @@ def main(out):
             def browse(self, cids):
                 QOps.browsed = sorted(cids)
 
+            # 3.9.5, Their topics: the deck's map as Insights would draw it, a part a system; the questions' cards
+            # are all suspended, so each falls in its part by its tag (qids.topics), as they do in a real deck
+            long_name = ""
+
+            def deck_map(self, did):
+                qidx = P.DeckIndex(qcol, did)
+                play = lambda tag: sorted(c for c in qidx.tag_cards(f"{root}::{tag}") if qidx.cards[c][0] != -1)  # noqa: E731
+                hf, shock, drugs = (play("^Systems::Cardio::Heart_Failure"), play("#Videos::Cardio::Shock"),
+                                    play("#Videos::Pharm::HF_Drugs"))
+                part = lambda name, tag, cids, know, n=None: {  # noqa: E731
+                    "key": tag.lower(), "name": name, "n": n or len(cids), "started": len(cids) if know is not None else 0,
+                    "know": know, "find": {"tags": [f"{root}::{tag}"]}, "_cids": cids}
+                tiles = [part(QOps.long_name or "Cardio · Heart Failure", "^Systems::Cardio::Heart_Failure", hf, 66),
+                         part("Pharm · HF Drugs", "#Videos::Pharm::HF_Drugs", drugs, 81),
+                         part("Cardio · Shock", "^Systems::Cardio::Shock", shock, 84),
+                         part("Renal · AKI", "^Systems::Renal::AKI", [], None, n=12)]
+                return tiles, set(hf[:5]) | set(shock[:2]) | set(drugs)
+
+            def study_topic(self, name, cids):
+                QOps.topic = (name, sorted(cids))
+                return True
+
         q = QidWindow(None, qcol, [(1, "Big Step 1")], QOps())
         if q.study_btn.isEnabled() or q.unsuspend_btn.isEnabled() or q.lines.text() or not q.browse_btn.isHidden():
             raise RuntimeError("qids: nothing pasted, nothing to do")
@@ -1901,10 +1923,34 @@ def main(out):
         if (q.found["found"] != ["10234", "10911", "11002", "12118"] or not q.bank.isHidden() or not q.study_btn.isEnabled()
                 or q.unsuspend_btn.text() != "Unsuspend 6" or q.lines.text() != "4 questions · 6 cards · 6 suspended"):
             raise RuntimeError(f"qids: {q.found}, {q.unsuspend_btn.text()!r}, {q.lines.text()!r}")
+        # 3.9.5: Their topics, a question once in each part its cards are in; the map's % there; Study when I missed some
+        said = [lab.text() for lab in q.topics.findChildren(QtWidgets.QLabel) if lab.isVisibleTo(q)]
+        studies = [b for b in q.topics.findChildren(QtWidgets.QPushButton) if b.isVisibleTo(q)]
+        if (q.topics.isHidden() or [(r["name"], r["questions"]) for r in q.topic_rows]
+                != [("Cardio · Heart Failure", 2), ("Cardio · Shock", 1), ("Renal · AKI", 1)]
+                or said != ["Their topics", "Cardio · Heart Failure", "2 questions · 66% here", "Cardio · Shock", "1 question · 84%",
+                            "Renal · AKI", "1 question · new"]
+                or [b.text() for b in studies] != ["Study", "Study"] or "Study the 5 you missed" not in studies[0].toolTip()
+                or any(lab.textFormat() != QtCore.Qt.TextFormat.PlainText for lab in q.topics.findChildren(QtWidgets.QLabel))):
+            raise RuntimeError(f"qids: their topics {q.topic_rows}, {said}, {[b.toolTip() for b in studies]} (names in plain text)")
         shoot(q, os.path.join(out, "planner-qids.png"))
+        q.show()
+        settle(50)  # the paste's own count came in the shot: its rows drawn again
+        [b for b in q.topics.findChildren(QtWidgets.QPushButton) if b.isVisibleTo(q)][1].click()
+        if QOps.topic[0] != "Cardio · Shock" or len(QOps.topic[1]) != 2 or q.isVisible():
+            raise RuntimeError(f"qids: a topic's Study took {QOps.topic}, the window still open: {q.isVisible()}")
+        q = QidWindow(None, qcol, [(1, "Big Step 1")], QOps())
+        q.text.setPlainText("10234 10911 11002 12118")
+        q._count()
         q.study_btn.click()
         if QOps.studied != sorted(q.cids()) or len(QOps.studied) != 6:
             raise RuntimeError(f"qids: Study took {QOps.studied}")
+        QOps.long_name = "Cardiovascular Physiology and Pathology · Heart Failure Treatment"[:60]  # team.NAME_MAX
+        q = QidWindow(None, qcol, [(1, "Big Step 1")], QOps())
+        q.text.setPlainText("10234 10911 11002 12118")
+        q._count()
+        shoot(q, os.path.join(out, "planner-qids-topics-long.png"))
+        QOps.long_name = ""
         q = QidWindow(None, qcol, [(1, "Big Step 1")], QOps())
         q.text.setPlainText("10234")
         q._count()

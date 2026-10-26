@@ -622,3 +622,15 @@ class QidOps:
 
     def browse(self, cids):
         plan_flow._browse(cids, empty="None of them are in this deck.")
+
+    def deck_map(self, did):
+        """3.9.5, Their topics: the deck's topic map as Insights draws it, its
+        top level, and the cards I missed these 4 weeks: (tiles, missed)."""
+        from .. import team_flow
+        return team_flow.deck_map(did)
+
+    def study_topic(self, name, cids):
+        """3.9.5: a topic's Study, the map's deck of what I missed there
+        (team_flow.study_deck). True when it took."""
+        from .. import team_flow
+        return team_flow.study_deck(name, cids)

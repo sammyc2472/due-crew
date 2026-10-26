@@ -730,6 +730,7 @@ def _work_out(did, pid=None, exam=""):
     # 3.8.0, the topic map: what I know now, by topic
     try:
         out["map"], out["map_by"], out["_map_know"], out["map_ways"] = _map(col, did, deck, cutoff)
+        out["_map_missed"] = _missed(col, deck, cutoff) if out["map"] else set()  # 3.9.5: the map's Study
         _map_week(out, did, today)
     except Exception:
         traceback.print_exc()
@@ -855,6 +856,16 @@ def _know(col, deck, cutoff):
             out.update({int(c): 1.0 if int(e) > 1 else 0.0
                         for c, e in col.db.all(f"SELECT cid, ease FROM revlog WHERE id IN ({_in(pick)})")})
     return out, ("right" if out else "")
+
+
+def _missed(col, deck, cutoff):
+    """3.9.5 (Study where the cards are): {cid} the map's Study takes: the
+    deck's cards I answered Again in a review in the window its % covers
+    (KNOW_DAYS), still in the deck and not suspended (a leech Anki set aside
+    stays out)."""
+    return {int(c) for c in col.db.list(
+        f"SELECT DISTINCT r.cid FROM revlog r JOIN cards c ON c.id = r.cid WHERE r.id >= ? AND r.type = 1 AND r.ease = 1 "
+        f"AND c.queue != -1 AND r.cid IN ({deck})", (int(cutoff) - KNOW_DAYS * 86400) * 1000)}
 
 
 def _tag_plans(col, did):
@@ -1066,6 +1077,39 @@ def browse_map(did):
         _plans_flow()._browse(_find_cids(mw.col, did, trail[-1].get("find")), empty="Nothing to show.")
 
 
+def study_map(did, x):
+    """3.9.5 (Study where the cards are): the map's Study, the cards I missed
+    in a part (T.missed_in) as Due Crew's deck named after it: the weakest
+    ("Weakest: …", x its place on the level shown) or the part open (x
+    "open", the trail's)."""
+    view = ((_state.get("insights") or {}).get(did) or {}).get("view") or {}
+    trail, cur = _map_at(did)
+    t = (trail[-1] if trail else None) if x == "open" else (cur[int(x)] if int(x) < len(cur) else None)
+    if t is not None:
+        study_deck(str(t["name"]), T.missed_in(t, view.get("_map_missed")))
+
+
+def deck_map(did):
+    """3.9.5, QBank QIDs' topics: (tiles, missed) of a deck's map, its top
+    level, as Insights draws it: Insights' own while it's fresh, else the
+    map alone (_map: the same split, the way I picked for it). Main thread."""
+    did = int(did)
+    have = (_state.get("insights") or {}).get(did)
+    view = have["view"] if have and time.time() - have["at"] < INSIGHTS_FRESH else {}
+    if "_map_missed" in view:
+        return view.get("map") or [], view["_map_missed"]
+    col = mw.col
+    if not col or not col.decks.get(did, default=False):
+        return [], set()
+    try:
+        deck, cutoff = _deck_sql(col, did), int(col.sched.day_cutoff)
+        tiles = _map(col, did, deck, cutoff)[0]
+        return tiles, (_missed(col, deck, cutoff) if tiles else set())
+    except Exception:
+        traceback.print_exc()
+        return [], set()
+
+
 def _pick(did, key):
     """(cids, title) of the exam box ("h") or a topic's row, as Insights shows them."""
     view = ((_state.get("insights") or {}).get(did) or {}).get("view") or {}
@@ -1089,16 +1133,27 @@ def _pick(did, key):
 def study(did, key):
     """Anki's filtered deck of the exam box's cards ("h") or a topic's, and into it."""
     cids, title = _pick(did, key)
+    study_deck(title, cids)
+
+
+def study_deck(title, cids):
+    """Due Crew's filtered deck of these cards, named after what they are
+    (Due Crew::Renal), the most missed first (plan_flow._filtered's order
+    4), rescheduled by my answers as every Due Crew deck is; then Anki's
+    Study screen on it. Insights' Study, the map's (3.9.5) and QBank QIDs'
+    topics' Study. True when it took. Main thread."""
     if not cids or not mw.col:
-        return
+        return False
     pf = _plans_flow()
     name = pf._deck_name(title)
-    if pf._filtered(mw.col, name, cids):
-        pf._after_change()
-        fid = mw.col.decks.id_for_name(name)
-        if fid:
-            mw.col.decks.select(fid)
-            mw.moveToState("overview")
+    if not pf._filtered(mw.col, name, cids):
+        return False
+    pf._after_change()
+    fid = mw.col.decks.id_for_name(name)
+    if fid:
+        mw.col.decks.select(fid)
+        mw.moveToState("overview")
+    return True
 
 
 def browse(did, key):
@@ -1243,6 +1298,8 @@ def on_message(cmd, parts):
             map_up(did, int(x))
         elif cmd == "insmapall":
             browse_map(did)
+        elif cmd == "insmapstudy" and (x.isdigit() or x == "open"):
+            study_map(did, x)  # 3.9.5: the weakest part's, or the open one's
         elif cmd == "insmapby" and x.isdigit():
             pick_map(did, int(x))
         elif cmd == "insmapshare":

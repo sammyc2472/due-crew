@@ -417,9 +417,17 @@ _INS = dict(_INS, ahead=_AHEAD_BIG, deck_name="Big Step 1")
 # 3.9.2 (Sam's deck): a week of new cards, right % apart for them
 _INS["right"] = dict(_INS["right"], young=[560, 700], older=[748, 819])
 _DECKS = [{"did": 10, "name": "Big Step 1", "full": "Big Step 1"}, {"did": 20, "name": "Spanish", "full": "Languages::Spanish"}]
+_NEXT_CID = [1]
+
+
 def _tile(name, n, kn, kids=(), st=None):
+    if kids:  # 3.9.5: a part's cards are its parts' (the trail's Study counts them)
+        cids = [c for k in kids for c in k["_cids"]]
+    else:
+        cids = list(range(_NEXT_CID[0], _NEXT_CID[0] + n))
+        _NEXT_CID[0] += n
     t = {"key": name.lower(), "name": name, "n": n, "know": kn, "started": n if st is None else st,
-         "find": {"tags": ["Big::^Systems::" + name]}}
+         "find": {"tags": ["Big::^Systems::" + name]}, "_cids": cids}
     return dict(t, kids=list(kids)) if kids else t
 
 
@@ -428,8 +436,10 @@ _MAP = [_tile("Cardio · Physiology", 412, 86, [_tile("Cardiac output", 160, 91)
                                                _tile("Vessels", 36, 94)]),
         _tile("Cardio · Pathology", 318, 77, st=240), _tile("Cardio · Pharm", 260, 84, st=120), _tile("Renal · Physiology", 190, 66),
         _tile("Pulm · Pathology", 150, 88), _tile("Heme", 120, None, st=0), _tile("Endo", 96, 71, st=60), _tile("MSK", 64, 94)]
+# 3.9.5 (Study where the cards are): Again these 4 weeks: 41 in Renal (the weakest), 30 in Cardio · Pathology, some in Cardio's parts
+_MISSED = set(_MAP[3]["_cids"][:41]) | set(_MAP[1]["_cids"][:30]) | set(_MAP[0]["_cids"][::18])
 _PLAN_INS = {"decks": _DECKS, "did": 10, "exam": True, "plan": {"id": "p1", "name": "MS2 Block 1 · Dre's plan"},
-             "view": dict(_INS, did=10, pid="p1", leeches=3, map=_MAP, map_by="right",
+             "view": dict(_INS, did=10, pid="p1", leeches=3, map=_MAP, map_by="right", _map_missed=_MISSED,
                           map_ways=[{"key": "s", "name": "Systems", "on": True}, {"key": "b", "name": "Videos", "on": False},
                                     {"key": "y", "name": "HighYield", "on": False}, {"key": "~decks", "name": "Subdecks", "on": False}])}
 sections.append("<h3>3.8.0: You › Insights, a deck with my plan on it (Sam's numbers)</h3>" + board.render(

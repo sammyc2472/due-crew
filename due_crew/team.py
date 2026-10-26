@@ -439,7 +439,7 @@ def plan_tiles(held, know, active):
             continue
         n_st, pct = _shade(play, know)
         tiles.append({"key": path, "name": str(name)[:NAME_MAX], "n": len(play), "started": n_st, "know": pct,
-                      "find": {"tags": [path]}})
+                      "find": {"tags": [path]}, "_cids": play})
     tiles.sort(key=lambda t: (-t["n"], t["name"].lower()))
     return tiles, none
 
@@ -687,6 +687,45 @@ def map_level(tiles, at, know=None):
 def map_shade(know):
     """A tile's shade: 3 at 90% and up, 2 from 80, 1 from 70, 0 under."""
     return 3 if know >= 90 else 2 if know >= 80 else 1 if know >= 70 else 0
+
+
+# 3.9.5 (Study where the cards are, Sam's pick): a Study sits on what names the cards; no Study sheet
+WEAK_MIN = 5  # the map names its weakest part with this many missed cards or more
+
+
+def tile_cards(t):
+    """A tile's cards in play, the ones its % is over: a part's, a plan
+    tag's, a week's I started, or the ones not started yet."""
+    return t.get("_cids") or t.get("_batch") or (t.get("find") or {}).get("cids") or ()
+
+
+def missed_in(t, missed):
+    """The tile's cards I missed, sorted. missed: the map's (team_flow._missed:
+    Again in a review these 4 weeks, in the deck, not suspended)."""
+    missed = missed if isinstance(missed, (set, frozenset, dict)) else set(missed or ())
+    return sorted(c for c in tile_cards(t) if c in missed)
+
+
+def weakest(tiles, missed):
+    """3.9.5: the level's weakest part, (its place, its missed cards), or
+    None: the lowest % of the tiles that show one (not new, not too soon),
+    a tie to the one with more missed (then the bigger); said only with
+    WEAK_MIN missed or more."""
+    missed = missed if isinstance(missed, (set, frozenset, dict)) else set(missed or ())
+    best = None
+    for i, t in enumerate(tiles or ()):
+        if t.get("know") is None:
+            continue
+        got = missed_in(t, missed)
+        rank = (int(t["know"]), -len(got))
+        if best is None or rank < best[0]:
+            best = (rank, i, got)
+    return (best[1], best[2]) if best and len(best[2]) >= WEAK_MIN else None
+
+
+def study_missed(n):
+    """The map's Study, in words: "Study the 41 you missed"."""
+    return "Study the one you missed" if n == 1 else f"Study the {n:,} you missed"
 
 
 def fsrs_gap(right, n, target):
