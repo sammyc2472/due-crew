@@ -2163,8 +2163,10 @@ def board_view(c):
     pc = _pcfg()
     state = _state_cfg(pc)
     today = _state["labels"][0] if _state["labels"] else ""
+    # 3.9.5: following and owning none, the starters the day's first board brought
+    starters = list(client().session.get("plan_starters") or [])
     if not today:
-        return {"cards": [], "offers": [], "invites": list(client().session.get("plan_invites") or [])}
+        return {"cards": [], "offers": [], "invites": list(client().session.get("plan_invites") or []), "starters": starters}
     prog = _state.get("plan_progress") or {}
     here = lambda st: st if st and mw.col and _deck_ok(mw.col, st.get("deck_id")) else None
     sess = _state.get("plan_session") or {}
@@ -2188,7 +2190,7 @@ def board_view(c):
     # 3.8.1: an invite to co-write a plan, or to keep one, from the day's first board; and
     # the morning's dates, for its line here when Due is off (__init__ hands over morning_opened())
     return {"cards": cards, "offers": offers, "invites": list(client().session.get("plan_invites") or []),
-            "opened_dates": opened_dates()}
+            "opened_dates": opened_dates(), "starters": starters}
 
 
 # ---- board commands ----
@@ -2252,6 +2254,8 @@ def on_message(cmd, parts):
         open_site(f"/plans/{arg}")  # an id, nothing else: the link carries a sign-in token
     elif cmd == "planlibrary":
         open_site("/library")
+    elif cmd == "planstarter" and re.fullmatch(r"[a-z0-9]{1,32}", arg or ""):
+        _planner_flow().use_starter(arg)  # 3.9.5: Use it, on a starter in the empty Plans tab
     elif cmd == "planmake":
         _planner_flow().open_new()  # round five: one New plan
     elif cmd == "planyours":  # 3.9.3: Your plans, on a plan when the click names one

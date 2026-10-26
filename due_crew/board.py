@@ -1061,6 +1061,15 @@ def _css(cfg):
     #due-crew .dc-pways .way a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
     #due-crew .dc-pways input {{ font: inherit; font-size: 12px; padding: 3px 7px; border: 1px solid var(--dc-line);
       border-radius: 6px; background: var(--dc-bg); color: var(--dc-ink); min-width: 0; }}
+    /* 3.9.5: Or start from one, a starter a row, Use it on the right */
+    #due-crew .dc-exs {{ display: grid; gap: 2px; text-align: left; }}
+    #due-crew .dc-exs .t {{ margin-bottom: 4px; }}
+    #due-crew .dc-ex {{ display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 10px; padding: 6px 0;
+      border-top: 1px solid var(--dc-line); }}
+    #due-crew .dc-ex b {{ font-size: 13px; overflow-wrap: anywhere; }}
+    #due-crew .dc-ex small {{ grid-column: 1; color: var(--dc-muted); font-size: 11.5px; overflow-wrap: anywhere; }}
+    #due-crew .dc-ex a {{ grid-row: 1 / 3; grid-column: 2; align-self: center; color: var(--dc-accent); font-weight: 700;
+      text-decoration: none; font-size: 12px; white-space: nowrap; }}
     @media (max-width: 560px) {{
       #due-crew .wk2 {{ grid-template-columns: minmax(0, 1fr) auto auto; gap: 3px 10px; }}
       #due-crew .wk2 .acts {{ grid-column: 1 / -1; }}
@@ -1685,7 +1694,7 @@ def _plans_html(plans, people=None, cfg=None):
     pick (`plan_pick`), else the first."""
     cards = (plans or {}).get("cards") or []
     if not cards:
-        return _plans_empty_html()
+        return _plans_empty_html((plans or {}).get("starters"))
     if len(cards) == 1:
         return _plan_card_html(cards[0], people, cfg)
     card = _picked_plan(cards, cfg)
@@ -1784,8 +1793,10 @@ def _segs(segments):
     return "".join(f"<b>{_html.escape(str(t))}</b>" if b else _html.escape(str(t)) for t, b in segments)
 
 
-def _plans_empty_html():
-    """3.5.0: the Plans tab with no plan: three ways in (round five: Make one is the one New plan)."""
+def _plans_empty_html(starters=None):
+    """3.5.0: the Plans tab with no plan: three ways in (round five: Make one
+    is the one New plan). 3.9.5: under them, Or start from one, the starters
+    the day's first board brought (_starters_html)."""
     add = ("var v=(document.getElementById('dc-plancode').value||'').toUpperCase()"
            ".replace(/[^A-Z0-9 \\/]/g,' ').slice(0,200);"
            "pycmd('duecrew:addcode:'+v+'|'+window.dcBK);return false;")
@@ -1797,7 +1808,27 @@ def _plans_empty_html():
             # round five: the plans I write, with no head row above
             f'<div class="way"><b>Write one</b><a href="#" title="Every plan you write or follow" '
             f'onclick="{_pycmd("planyours")}">Your plans&hellip;</a></div>'
-            f'</div></div>')
+            f'</div>{_starters_html(starters)}</div>')
+
+
+def _starters_html(starters):
+    """3.9.5: Or start from one: a starter a row, its name, "deck · N weeks"
+    under it, and Use it (planstarter: a copy of my own, starting today, in
+    Your plans). "" with none. The names are the server's: escaped."""
+    e = _html.escape
+    rows = ""
+    for s in (starters or [])[:4]:
+        pid = str(s.get("id") or "")
+        if not _re.fullmatch(r"[a-z0-9]{1,32}", pid):
+            continue
+        days = int(s.get("days") or 0)
+        weeks = max(1, int(days / 7 + 0.5))  # as the library's card says it
+        sub = " &middot; ".join(x for x in (e(str(s.get("deck") or "")), f'{weeks} week{"" if weeks == 1 else "s"}' if days else "") if x)
+        line = f' title="{e(str(s["line"]))}"' if s.get("line") else ""  # its line, on hover
+        rows += (f'<div class="dc-ex"><b{line}>{e(str(s.get("name") or "Plan"))}</b><small>{sub}</small>'
+                 f'<a href="#" title="A copy of your own, starting today, in Your plans" '
+                 f'onclick="{_pycmd("planstarter:" + pid)}">Use it</a></div>')
+    return f'<div class="dc-exs"><b class="t">Or start from one</b>{rows}</div>' if rows else ""
 
 
 def _plan_card_html(card, people=None, cfg=None, head=None):

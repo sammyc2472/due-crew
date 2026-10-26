@@ -527,6 +527,14 @@ sections.append("<h3>3.8.0: You › Insights, no exam date, nothing yet</h3>" + 
     you=_YOU("insights", insights={"decks": _DECKS[1:], "did": 20, "exam": False, "plan": None, "view": {}})))
 sections.append("<h3>3.8.0: You › Plans, following nothing</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, due=_DV, you=_YOU("plans", plans={"cards": [], "offers": []})))
+# 3.9.5: no plan, and the starters the day's first board brought: Or start from one, Use it on each
+_STARTERS = [{"id": "s1", "name": "A chapter a day", "deck": "Big Step 1", "days": 42, "perDay": 40, "line": "The pathology videos"},
+             {"id": "s2", "name": "Rapid review in 30 days", "deck": "Big Step 1", "days": 30, "perDay": 220, "line": ""},
+             {"id": "s3", "name": "One block in 4 weeks, by system, with two review days and a long name", "deck": "Big Step 1::Systems",
+              "days": 28, "perDay": 60, "line": ""},
+             {"id": "s4", "name": "Dedicated: 8 weeks", "deck": "Big Step 1", "days": 56, "perDay": 300, "line": ""}]
+sections.append("<h3>3.9.5: You › Plans, no plan: Or start from one (the starters), Use it on each</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, due=_DV, you=_YOU("plans", plans={"cards": [], "offers": [], "starters": _STARTERS})))
 sections.append("<h3>3.8.0: Due off, folded: Plans and Insights on one line</h3>" + board.render(
     DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS, you=_YOU("plans", folded=True)))
 # 3.5.0: Settings in the board, each tab, and a Decks tab with asks both ways
