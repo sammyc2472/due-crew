@@ -24,6 +24,7 @@ from datetime import date as _date, datetime, timezone
 
 from .logo import board_mark
 from . import room_model
+from . import due as _D
 from . import closet as _closet, emoji_drawer as _emoji_drawer, fridge as _fridge, sev as _sev, shows as _shows
 from .backend.shapes import DOODLE_INKS, clean_doodle
 from .stats.decks import sig_match
@@ -6955,6 +6956,17 @@ DUE_CSS = """
     #due-crew .du-sg { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 9px; font-size: 12px;
       padding: 5px 0; border-top: 1px solid var(--dc-line); align-items: baseline; }
     #due-crew .du-sg .x { color: var(--dc-muted); font-weight: 400; margin-left: 10px; }
+    /* 3.9.5: the day in minutes in the head; today's misses under a done Reviews row; a deck run out */
+    #due-crew .du-h .du-min { font-size: 11.5px; color: var(--dc-muted); white-space: nowrap; }
+    #due-crew .du-h .du-min b { color: var(--dc-ink); font-weight: 600; }
+    #due-crew .du-rc { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 2px 9px; font-size: 12px;
+      color: var(--dc-muted); padding: 0 0 6px; align-items: baseline; text-align: left; }
+    #due-crew .du-rc b { color: var(--dc-ink); font-weight: 600; }
+    #due-crew .du-rc .end { white-space: nowrap; }
+    #due-crew .du-rc a { color: var(--dc-accent); font-weight: 700; text-decoration: none; }
+    #due-crew .du-rc a.tp { font-weight: inherit; }
+    #due-crew .dc-wrap.du-clr { text-align: left; padding: 14px 12px 6px 8px; margin: 2px 0 8px; }
+    #due-crew .dc-wrap.du-clr b { font-weight: 700; }
     #due-crew .du-add { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding-top: 3px; }
     #due-crew .du-add input[type=text] { flex: 1 1 160px; min-width: 0; font: inherit; font-size: 12.5px; color: var(--dc-ink);
       background: var(--dc-bg); border: 1px solid var(--dc-line); border-radius: 7px; padding: 4px 8px; }
@@ -7349,6 +7361,21 @@ def _due_reviews(r):
             f'<span class="end"><span class="n">{_due_count(r, "due")}</span></span>{bar}</div>')
 
 
+def _due_misses(m):
+    """3.9.5: under a done Reviews row, today's misses and Study the N
+    again (the misses' deck had no way in since 3.8.1); once gone over, how
+    that went. m: due_flow._misses, or None."""
+    said = _D.misses_text(m)
+    if not said:
+        return ""
+    e = _html.escape
+    line, go = said
+    head, _sep, rest = line.partition(", ")
+    text = f'{e(head)}, <b>{e(rest)}</b>' if go and rest else e(line)
+    link = f'<span class="end"><a href="#" onclick="{_pycmd("duego:again")}">{e(go)}</a></span>' if go else '<span class="end"></span>'
+    return f'<div class="du-rc"><span></span><span>{text}</span>{link}</div>'
+
+
 def _due_new(r):
     """3.9.3: New cards (what Anki gives today: the ones I've started and what
     its limits still give, a line a deck when there's more than one), or Other
@@ -7486,8 +7513,12 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
             f'<a href="#" role="tab" aria-selected="{"true" if k == tab else "false"}" class="{"on" if k == tab else ""}" onclick="{_pycmd("duetab:" + k)}">{lb}</a>' for k, lb in more)
     if v.get("done") and tab == "today":
         count = "&#10003; Done for today"  # 3.8.0: as the folded line says it (and motion.js lights the box once)
+    # 3.9.5: about how long what's left takes me, at my own pace (Today only, till the day's done)
+    mins = (f'<span class="du-min" title="At your own pace, from the last four weeks">&middot; '
+            f'<b>{_D.fmt_minutes(v["mins"])}</b> left</span>'
+            if tab == "today" and int(v.get("mins") or 0) > 0 and not v.get("done") else "")
     head = (f'<div class="du-h"><span class="du-tabs" role="tablist" aria-label="{e(v["name"])}">{tabs}</span>'
-            f'<span class="sp"></span><span class="du-n">{count if tab in ("today", "upcoming") else ""}</span>{qids}'
+            f'<span class="sp"></span><span class="du-n">{count if tab in ("today", "upcoming") else ""}</span>{mins}{qids}'
             f'<a href="#" class="du-fold" title="Fold to one line" onclick="{_pycmd("duefold")}">Hide &#9652;</a></div>')
     if tab in dict(more):
         return f'<div class="du" data-today="{today}">{head}{more_body}</div>'
@@ -7498,6 +7529,12 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
                  f'<a href="#" onclick="{_pycmd("dueshow:" + v["toast"]["tab"])}">Show</a></div>')
     body = ""
     if tab == "today":
+        cl = v.get("cleared")
+        if cl:
+            # 3.9.5: a Due Crew deck I studied ran out; Nice puts it away
+            body += (f'<div class="dc-wrap du-clr">{v.get("cleared_sev") or ""}<span><b>{e(cl["name"])}</b>: '
+                     f'{"all " + format(int(cl["n"]), ",") + " cleared" if int(cl["n"]) > 1 else "cleared"}</span>'
+                     f'<a href="#" class="wc" onclick="{_pycmd("duex:cleared")}">Nice</a></div>')
         if v.get("nudge"):
             # 3.8.1: once a day, past my usual start, nothing studied yet: Fifteen?
             peek = f'<span class="nz">{v["nudge_sev"]}</span>' if v.get("nudge_sev") else "<span>&#9654;</span>"
@@ -7508,7 +7545,7 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
         for r in v["rows"]:
             if r["kind"] == "reviews":
                 if r.get("whole") is not None:
-                    body += _due_reviews(r)
+                    body += _due_reviews(r) + _due_misses(v.get("misses") if r.get("done") else None)
                     continue
                 back = int(r.get("back") or 0)
                 if not r["due"] and not r["done"] and not back:
@@ -7527,8 +7564,11 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
                 body += _due_mine(r)
         body += _opened_line(v.get("opened"))
         for sg in v["suggestions"] + v["notes"]:
-            body += (f'<div class="du-sg"><span>&#10022;</span><span>{e(sg["text"])}</span><span>'
-                     f'<a href="#" onclick="{_pycmd("duego:" + sg["key"])}">{e(sg["go"])}</a>'
+            # 3.9.5: Next up, its button a command of its own (Insights' Study, say)
+            lead = f'<b>{e(sg["lead"])}</b> ' if sg.get("lead") else ""
+            go = _pycmd(sg["cmd"]) if sg.get("cmd") else _pycmd("duego:" + sg["key"])
+            body += (f'<div class="du-sg"><span>&#10022;</span><span>{lead}{e(sg["text"])}</span><span>'
+                     f'<a href="#" onclick="{go}">{e(sg["go"])}</a>'
                      f'<a href="#" class="x" title="Not today" onclick="{_pycmd("duex:" + sg["key"])}">&times;</a></span></div>')
         if not v["rows"] and not v["suggestions"] and not v["notes"]:
             body += '<div class="du-empty">Nothing due today.</div>'

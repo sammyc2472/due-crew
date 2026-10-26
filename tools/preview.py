@@ -190,7 +190,7 @@ _DV = _D.view(_T, _DATES, _ITEMS, {}, events=[{"day": _d(4), "name": "KSA F3-2",
               # 3.9.3: the day's reviews through for today, some back later; new cards outside the plan's dates
               reviews={"due": 214, "done": 120, "whole": 214, "through": 96, "later": 8, "left": 110, "back": 5,
                        "at": "15:40", "other": {"whole": 6, "through": 2, "later": 4, "decks": [["Pharm", 2, 6, 4]]}},
-              suggestions=[{"key": "again", "text": "Go over today's 23 misses", "go": "Study"}],
+              suggestions=[{"key": "leeches", "text": "4 new leeches this week", "go": "See them"}],
               # 3.8.0: a plan's lines every week
               every=[{"pid": "p1", "plan": "Big Step 1", "first": _d(-30), "last": _d(40),
                       "lines": [{"k": "do", "t": "Practice questions (40)", "r": "0123456"},
@@ -235,6 +235,24 @@ sections.append("<h3>round five: Today, a plan's date opened (a click on its nam
 sections.append("<h3>round five: Upcoming, a date ahead opened</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=dict(_DV, tab="upcoming"), you=_YOU("upcoming"))
     .replace('id="dc-dd-p1-u3" hidden>', 'id="dc-dd-p1-u3">').replace('id="du-', 'id="duu-'))
+# 3.9.5 (Five mocks, reviewed): the head's minutes left; reviews done, today's misses with Study the 23 again,
+# Next up in the suggestion's place, and a Due Crew deck that ran out with Pip
+sections.append("<h3>3.9.5: Today, the head says what's left in minutes, at my own pace</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=dict(_DV, mins=68), you=_YOU("today"))
+    .replace('id="du-', 'id="dum-'))
+from due_crew import sev as _sev2  # noqa: E402
+_DONE = _D.view(_T, [_DATES[2]], [_ITEMS[1]], {}, reviews={"due": 0, "done": 214, "whole": 214, "through": 214, "later": 0,
+                                                       "left": 0, "back": 0, "at": ""},
+                suggestions=[{"key": "next", "lead": "Next up:", "cmd": "insstudy:10:0", "go": "Study 14",
+                              "text": "Renal \u00b7 Physiology isn\u2019t sticking: 14 of 41 missed in two weeks"}])
+_DONE.update(misses={"n": 23, "reviews": 214}, cleared={"name": "Slow but right", "n": 46, "day": _T},
+             cleared_sev=_sev2.slot(_sev2.move("hop", "twirl"), 44))
+sections.append("<h3>3.9.5: Today, reviews done: today's misses (Study the 23 again), Next up, a deck that ran out</h3>"
+                + board.render(DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DONE, you=_YOU("today"))
+                .replace('id="du-', 'id="dun-'))
+_GONE = dict(_DONE, misses={"n": 23, "reviews": 214, "of": 23, "over": 23, "right": 19}, cleared=None)
+sections.append("<h3>3.9.5: the misses gone over again</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_GONE, you=_YOU("today")).replace('id="du-', 'id="dug-'))
 # 3.8.0: the plan's squad: a line on the plan card, and a pill on the Squads tab
 _SQ = {"cards": [dict(PLAN_CARD, tabs={"unread": 2, "summary": {
     "shown": 5, "of": 12, "faces": ["\U0001F419", "\U0001F98A", "\U0001F331"], "who": ["dre", "marisa", "sam"],  # 3.8.22: their Pips

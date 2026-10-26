@@ -31,6 +31,11 @@ MISSES = P.our_deck("Today's misses")  # their filtered deck, under Due Crew's p
 LEECH_MIN = 3  # new leeches this week before it suggests a look
 RECOVER_MAX = 200  # leeches recovered in a morning, at most
 REVIEWS_FRESH = 30.0  # seconds a reviews-due count is good for
+# 3.9.5: Next up, once the day's reviews are through (Five mocks, reviewed)
+NEXT_EXAM_DAYS, NEXT_EXAM_MIN = 7, 10  # an exam this close, with this many cards at risk
+NEXT_TOPIC_MIN = 8   # a topic with this many missed in Insights' two weeks
+NEXT_NEAR_MIN = 5    # cards one miss from a leech
+NEXT_KEYS = ("next", "leeches")  # Not today on a Next up line: none steps in till tomorrow
 
 
 def _pf():
@@ -252,9 +257,67 @@ def _reviews():
         if got.pop("first", False):
             _flip_at(int(when) - ahead)
         out.update(got)
+        try:
+            out["mins"] = D.minutes_left(out, _pace(mw.col))  # 3.9.5: the head's "22 min left"
+        except Exception:
+            traceback.print_exc()
     except Exception:
         traceback.print_exc()
     _state["due_reviews"] = (time.time(), out)
+    return out
+
+
+def _pace(col):
+    """3.9.5: my own seconds a review's answer, a learning step and a new
+    card's first day, from the last D.PACE_DAYS of my log; worked out once a
+    day. Main thread."""
+    hit = _state.get("due_pace")
+    if hit and hit[0] == _today():
+        return hit[1]
+    since = (int(col.sched.day_cutoff) - D.PACE_DAYS * 86400) * 1000
+    out = {}
+    for key, kinds in (("review", "1"), ("learn", "0, 2")):
+        tot, n = col.db.first(f"SELECT total(time), count() FROM revlog WHERE id >= ? AND ease > 0 AND type IN ({kinds})",
+                              since) or (0, 0)
+        if int(n or 0) >= D.PACE_MIN:
+            out[key] = float(tot or 0) / int(n) / 1000
+    # a new card's first day: every answer within a day of its first (a new card's first answer: lastIvl 0)
+    first, spent = {}, {}
+    for cid, rid, ms, kind, last in col.db.all("SELECT cid, id, time, type, lastIvl FROM revlog WHERE id >= ? AND ease > 0 "
+                                               "ORDER BY id", since):
+        if cid not in first:
+            if int(kind) != 0 or int(last or 0) != 0:
+                first[cid] = None  # already started before the window
+                continue
+            first[cid] = int(rid)
+        if first[cid] is not None and int(rid) - first[cid] < 86400000:
+            spent[cid] = spent.get(cid, 0) + int(ms or 0)
+    if len(spent) >= D.PACE_MIN:
+        out["new"] = sum(spent.values()) / len(spent) / 1000
+    _state["due_pace"] = (_today(), out)
+    return out
+
+
+def _misses(col):
+    """3.9.5: today's misses: the reviews I answered Again today (a card
+    once, first missed first), the reviews I answered today, and, once
+    Study the N again has run today, how many of its cards I've answered
+    since and how many right the first time. Main thread."""
+    start = (int(col.sched.day_cutoff) - 86400) * 1000
+    cids = [int(c) for c, _m in col.db.all("SELECT cid, min(id) FROM revlog WHERE id >= ? AND ease = 1 AND type = 1 "
+                                           "GROUP BY cid ORDER BY 2", start)]
+    out = {"n": len(cids), "cids": cids[:500],
+           "reviews": int(col.db.scalar("SELECT count(DISTINCT cid) FROM revlog WHERE id >= ? AND ease > 0 AND type = 1",
+                                        start) or 0)}
+    built = _pf()._pcfg().get("misses_built")
+    if isinstance(built, dict) and built.get("day") == _today() and built.get("cids"):
+        mine = {int(c) for c in built["cids"]}
+        seen = {}
+        for cid, ease in col.db.all("SELECT cid, ease FROM revlog WHERE id >= ? AND ease > 0 ORDER BY id",
+                                    int(float(built.get("at") or 0) * 1000)):
+            if int(cid) in mine:
+                seen.setdefault(int(cid), int(ease))
+        out.update(of=len(mine), over=len(seen), right=sum(1 for x in seen.values() if x > 1))
     return out
 
 
@@ -376,31 +439,100 @@ def _put_day(pc, st):
 
 
 def suggestions(c, today):
-    """At most two, from my own Anki: today's misses, new leeches."""
+    """At most two, from my own Anki. 3.9.5: once the day's reviews are
+    through, Next up (_next_up); else new leeches, as before."""
     if not c.get("due_suggest", True) or not mw.col:
         return []
     _pc, st = _day_state()
     gone = set(st.get("dismissed") or [])
+    r = _reviews() or {}
+    through = r.get("whole") is not None and not int(r.get("left") or 0) and not int(r.get("back") or 0)
     # every render asks; the answer changes only when the collection does
-    key = (getattr(mw.col, "mod", None), _today(), tuple(sorted(gone)), bool(c.get("due_leeches")))
+    key = (getattr(mw.col, "mod", None), _today(), tuple(sorted(gone)), bool(c.get("due_leeches")), through)
     hit = _state.get("due_suggest")
     if key[0] is not None and hit and hit[0] == key:
         return list(hit[1])
     out = []
     try:
+        nxt = _next_up(c, gone) if through and not gone & set(NEXT_KEYS) else None
+        if nxt:
+            out.append(nxt)
         # 3.8.0: today's misses are Study today's last step, not a suggestion of their own
-        if not c.get("due_leeches"):
+        # (3.9.5: they're under the Reviews row once it's done)
+        elif not c.get("due_leeches") and not gone & set(NEXT_KEYS):
             week = (mw.col.sched.day_cutoff - 8 * 86400) * 1000
             lee = int(mw.col.db.scalar(
                 "SELECT count(DISTINCT c.nid) FROM cards c JOIN notes n ON n.id = c.nid "
                 "WHERE (' ' || lower(n.tags) || ' ') LIKE '% leech %' "
                 "AND c.id IN (SELECT cid FROM revlog WHERE id >= ? AND ease = 1)", week) or 0)
-            if lee >= LEECH_MIN and "leeches" not in gone:
-                out.append({"key": "leeches", "text": f"{lee:,} new leeches this week", "go": "See them"})
+            if lee >= LEECH_MIN:
+                out.append({"key": "leeches", "text": f"{lee:,} new leeches this week", "go": "See them",
+                            "lead": "Next up:" if through else ""})
     except Exception:
         traceback.print_exc()
     _state["due_suggest"] = (key, out[:2])
     return out[:2]
+
+
+def _today_deck(col):
+    """The top deck I reviewed most today (a Due Crew deck's cards count for their home deck), or None."""
+    start = (int(col.sched.day_cutoff) - 86400) * 1000
+    roots = {}
+    for did, n in col.db.all("SELECT CASE WHEN c.odid THEN c.odid ELSE c.did END, count() FROM revlog r "
+                             "JOIN cards c ON c.id = r.cid WHERE r.id >= ? AND r.ease > 0 GROUP BY 1", start):
+        root = str(col.decks.name(int(did)) or "").split("::")[0]
+        if root:
+            roots[root] = roots.get(root, 0) + int(n)
+    for root, _n in sorted(roots.items(), key=lambda x: (-x[1], x[0].lower())):
+        rid = col.decks.id_for_name(root)
+        if rid:
+            return int(rid)
+    return None
+
+
+def _next_up(c, gone):
+    """3.9.5 (Five mocks, reviewed): one line once the day's reviews are
+    through, the first that applies, from Insights' own numbers for the deck
+    I reviewed most today: an exam within NEXT_EXAM_DAYS with NEXT_EXAM_MIN
+    or more cards Anki won't show me before it; a topic not sticking,
+    NEXT_TOPIC_MIN or more missed; slow but right (How you study, when my
+    log shows it); NEXT_NEAR_MIN or more cards one miss from a leech. Its
+    button is Insights' own Study. Not today puts it away, and none steps
+    in till tomorrow. None when nothing applies."""
+    from . import team_flow
+    did = _today_deck(mw.col)
+    view = {}
+    if did:
+        d = next((x for x in team_flow.you_decks() if x["did"] == did), None)
+        view = team_flow.insights(did, (d or {}).get("pid"), str(c.get("exam_date") or "")) or {}
+    aim, hero = view.get("aim") or {}, view.get("hero") or []
+    if aim.get("name") and int(aim.get("in") or 99) <= NEXT_EXAM_DAYS and len(hero) >= NEXT_EXAM_MIN:
+        try:
+            when = f'{datetime.date.fromisoformat(str(aim["day"])):%a}'
+        except ValueError:
+            when = ""
+        return {"key": "next", "lead": "Next up:", "cmd": f"insstudy:{did}:h", "go": f"Study {len(hero):,} early",
+                "text": f'{aim["name"]}{" " + when if when else ""}: {len(hero):,} cards Anki won\u2019t show you before then'}
+    rows = view.get("rows") or []
+    if rows and int(rows[0].get("stuck") or 0) + int(rows[0].get("forgot") or 0) >= NEXT_TOPIC_MIN:
+        k = int(rows[0]["stuck"]) + int(rows[0]["forgot"])
+        return {"key": "next", "lead": "Next up:", "cmd": f"insstudy:{did}:0", "go": f"Study {k:,}",
+                "text": f'{rows[0]["name"]} isn\u2019t sticking: {k:,} of {int(rows[0].get("of") or k):,} missed in two weeks'}
+    try:
+        from . import habits_flow
+        slow = habits_flow.next_up()
+    except ImportError:
+        slow = None
+    except Exception:
+        traceback.print_exc()
+        slow = None
+    if slow:
+        return {"key": "next", "lead": "Next up:", "cmd": "duego:slow", "go": slow["go"], "text": slow["text"]}
+    near = int(view.get("near") or 0)
+    if did and near >= NEXT_NEAR_MIN:
+        return {"key": "next", "lead": "Next up:", "cmd": "duego:near", "go": "See them",
+                "text": f"{near:,} cards are one miss from a leech"}
+    return None
 
 
 def notes():
@@ -451,6 +583,13 @@ def view(c):
             if x:  # 3.8.1: what due.view's rows don't carry: "after" its event, Study
                 r["after"], r["study"] = bool(x.get("after")), bool(x.get("study"))
         v["qids"] = has_qids() if mw.col else False  # 3.9.3: QBank QIDs in the head
+        # 3.9.5: the day in minutes (the head), today's misses (under a done Reviews row), a deck run out
+        rv = next((r for r in v.get("rows") or [] if r.get("kind") == "reviews"), None)
+        v["mins"] = int(((_reviews() or {}) if mw.col else {}).get("mins") or 0)
+        v["misses"] = _misses(mw.col) if mw.col and rv and rv.get("done") else None
+        cl = _state.get("due_cleared")
+        v["cleared"] = cl if isinstance(cl, dict) and cl.get("day") == today else None
+        v["cleared_sev"] = _cleared_sev(v["cleared"]) if v["cleared"] else None
         # 3.8.1: "Fifteen?", when the day hasn't started by my usual time
         from . import rooms
         v["nudge"] = rooms.nudge(c, v, _day_state()[1].get("dismissed") or ())
@@ -898,18 +1037,28 @@ def go(key):
         return
     pf = _pf()
     if key == "again":
-        start = (mw.col.sched.day_cutoff - 86400) * 1000
-        cids = [int(x) for x in mw.col.db.list(
-            "SELECT DISTINCT cid FROM revlog WHERE id >= ? AND ease = 1", start)][:500]
+        # 3.9.5: Study the N again, under the Reviews row once it's done: the reviews I missed today
+        # (it had no way in since 3.8.1); what's answered since is how the line says they've been gone over
+        cids = _misses(mw.col)["cids"]
         if cids and pf._filtered(mw.col, MISSES, cids):
             c = pf._pcfg()
             c["misses_day"] = pf._today()  # 3.8.1: the next morning empties it back if it's left
+            c["misses_built"] = {"day": pf._today(), "at": time.time(), "cids": cids}
             pf._psave(c)
             pf._after_change()
             did = mw.col.decks.id_for_name(MISSES)
             if did:
                 mw.col.decks.select(did)
                 mw.moveToState("overview")
+    elif key == "slow":
+        from . import habits_flow  # 3.9.5: How you study's deck, from Next up
+        habits_flow.study_slow()
+    elif key == "near":
+        did = _today_deck(mw.col)  # 3.9.5: Next up's cards one miss from a leech: Insights' leeches view
+        if did:
+            from . import leech_flow, team_flow
+            team_flow.go_insights(did)
+            leech_flow.open_view(did)
     elif key in ("leeches", "recovered"):
         import aqt
         browser = aqt.dialogs.open("Browser", mw)
@@ -923,6 +1072,10 @@ def go(key):
 
 
 def dismiss(key):
+    if key == "cleared":  # 3.9.5: Nice, on a deck that ran out
+        _state["due_cleared"] = None
+        _swap(cfg())
+        return
     pc, st = _day_state()
     st["dismissed"] = list(dict.fromkeys(list(st.get("dismissed") or []) + [key]))[-20:]
     _put_day(pc, st)
@@ -1065,10 +1218,67 @@ def stop_walk():
         tooltip("Study today stopped. This deck stays open.")
 
 
+def _ours(col, did):
+    """A Due Crew deck's own name (the part after Due Crew's parent), when
+    did is a filtered deck of ours; else None."""
+    try:
+        d = col.decks.get(int(did), default=False)
+        name = str(col.decks.name(int(did)) or "")
+    except Exception:
+        return None
+    if not d or not d.get("dyn") or not name.startswith(P.PARENT + "::"):
+        return None
+    return name.split("::")[-1]
+
+
+def _cleared_sev(cl):
+    """Pip hopping by a deck that ran out (a move from the hop's mix, never
+    the last one); drawn again, it rests there. None with Pip off."""
+    from . import rooms, sev
+    if not rooms.sev_on():
+        return None
+    key = (cl.get("name"), cl.get("n"), cl.get("day"))
+    have = _state.get("due_cleared_move")
+    rest = isinstance(have, tuple) and have[0] == key
+    if not rest:
+        _state["due_cleared_move"] = (key, rooms.pick("hop"))
+    return sev.slot(sev.move("hop", _state["due_cleared_move"][1], rest=rest, label="Pip: all cleared",
+                             look=rooms.my_look()), 44)
+
+
+def _watch_ours(new, old):
+    """3.9.5: a Due Crew deck I studied that ran out says so on the board,
+    with Pip (Nice puts it away). How many it held is counted as its review
+    starts; it ran out when nothing's left in it as I leave the review."""
+    col = mw.col
+    if not col:
+        return
+    try:
+        if new == "review":
+            did = int(col.decks.get_current_id())
+            name = _ours(col, did)
+            had = _state.get("due_ours")
+            if name and not (isinstance(had, dict) and had.get("did") == did):
+                n = int(col.db.scalar("SELECT count() FROM cards WHERE did = ?", did) or 0)
+                _state["due_ours"] = {"did": did, "name": name, "n": n}
+            elif not name:
+                _state["due_ours"] = None
+            return
+        had = _state.get("due_ours")
+        if old != "review" or not isinstance(had, dict):
+            return
+        if not int(col.db.scalar("SELECT count() FROM cards WHERE did = ?", int(had["did"])) or 0) and int(had["n"]) > 0:
+            _state["due_cleared"] = {"name": had["name"], "n": int(had["n"]), "day": _today()}
+            _state["due_ours"] = None
+    except Exception:
+        traceback.print_exc()
+
+
 def on_state(new, old):
     """Anki's screen changed: a walk goes on when its deck runs out (Anki's
     review hands over to the deck's overview with nothing left), and ends
     when I leave it any other way."""
+    _watch_ours(new, old)
     if not _state.get("study_walk") or new == "review":
         return
     if new == "overview" and old == "review" and mw.col:

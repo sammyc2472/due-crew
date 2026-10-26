@@ -18289,6 +18289,211 @@ def test_todays_bars_v393():
     check("bars: a bar's light part moves on its own key", '(el.classList.contains("lt") ? "lt:" : "")' in js)
 
 
+def test_today_v395():
+    """3.9.5 (Five mocks, reviewed; Sam: "give it a shot building all of
+    it"): the head says about how long what's left takes me, at my own pace;
+    today's misses are back under a done Reviews row with Study the N again
+    (no way in since 3.8.1); Next up, once the reviews are through, from
+    Insights' own numbers; a Due Crew deck that runs out says so, with Pip."""
+    from due_crew import due as D, due_flow as F, app as appmod, plan_flow as PF
+    from due_crew.app import _state
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    T = TODAY.isoformat()
+    # ---- pure: minutes, misses ----
+    r = {"whole": 214, "left": 40, "back": 2, "new": {"whole": 24, "through": 4, "later": 2}}
+    check("today: minutes left: 42 reviews at 9.4 s, 18 new at 45 s, 2 in their steps at 7.9 s: about 21 min",
+          D.minutes_left(r, {"review": 9.4, "learn": 7.9, "new": 45}) == 21, D.minutes_left(r, {"review": 9.4, "learn": 7.9, "new": 45}))
+    check("today: minutes left: my pace where my log says it, the default elsewhere; nothing left, a count from before 3.9.3: 0",
+          D.minutes_left(r, {"review": 9.4, "new": "x"}) == D.minutes_left(r, {"review": 9.4, "learn": 8, "new": 30})
+          and D.minutes_left(dict(r, left=0, back=0, new={})) == 0 and D.minutes_left({"due": 3, "done": 1}) == 0)
+    check("today: minutes said as 5 min, 1h 08m", D.fmt_minutes(5) == "5 min" and D.fmt_minutes(68) == "1h 08m")
+    check("today: misses said: none, one, 23; gone over, how it went, no button",
+          D.misses_text({"n": 0}) is None and D.misses_text({"n": 1}) == ("1 missed", "Study it again")
+          and D.misses_text({"n": 23, "reviews": 214}) == ("214 reviews, 23 missed", "Study the 23 again")
+          and D.misses_text({"n": 23, "reviews": 214, "of": 23, "over": 23, "right": 19})
+          == ("214 reviews, 23 missed, all 23 gone over again · 19 right this time", None))
+    # ---- my pace and today's misses, from a log ----
+    cut = fakes.day_cutoff_for(TODAY)
+    conn = fakes.make_collection(sqlite3.connect(":memory:"))
+    col = fakes.FakeCol(conn, cut)
+    start = (cut - 86400) * 1000
+    old = (cut - 10 * 86400) * 1000
+    for i in range(30):
+        fakes.add_review(conn, old + i * 1000, time_ms=9000, cid=1000 + i, last_ivl=5, ivl=12)  # reviews at 9 s
+    for i in range(25):  # new cards: a first answer at 20 s and a step at 10 s that day
+        fakes.add_review(conn, old + 100000 + i * 1000, time_ms=20000, rtype=0, cid=2000 + i, last_ivl=0, ivl=-600)
+        fakes.add_review(conn, old + 700000 + i * 1000, time_ms=10000, rtype=0, cid=2000 + i, last_ivl=-600, ivl=1)
+    saved = (F._today, F.mw.col, F._pf)
+    F._today = lambda: T
+    _state["due_pace"] = None
+    try:
+        pace = F._pace(col)
+        check("today: my pace from four weeks of my log: 9 s a review, 15 s a step, 30 s a new card's first day",
+              round(pace.get("review", 0), 1) == 9.0 and round(pace.get("learn", 0), 1) == 15.0
+              and round(pace.get("new", 0), 1) == 30.0, pace)
+        for i in range(5):
+            fakes.add_review(conn, start + 1000 + i, ease=1, cid=3000 + i, last_ivl=9, ivl=1)  # five reviews missed today
+            fakes.add_review(conn, start + 2000 + i, ease=1, rtype=2, cid=3000 + i)            # and again in relearning
+        for i in range(10):
+            fakes.add_review(conn, start + 5000 + i, cid=4000 + i, last_ivl=9, ivl=20)           # ten right
+        fakes.add_review(conn, start + 9000, ease=1, rtype=0, cid=5000)                         # a new card's Again: not a miss
+        box = {}
+        F._pf = lambda: types.SimpleNamespace(_pcfg=lambda: box)
+        m = F._misses(col)
+        check("today: misses are reviews answered Again today, a card once, first missed first; reviews counted by card",
+              m["n"] == 5 and m["cids"] == [3000, 3001, 3002, 3003, 3004] and m["reviews"] == 15 and "of" not in m, m)
+        box["misses_built"] = {"day": T, "at": (start + 50000) / 1000, "cids": [3000, 3001, 3002, 3003, 3004]}
+        fakes.add_review(conn, start + 60000, cid=3000, last_ivl=1, ivl=3)
+        fakes.add_review(conn, start + 61000, ease=1, rtype=2, cid=3001)
+        fakes.add_review(conn, start + 62000, cid=3001, rtype=2)
+        m2 = F._misses(col)
+        check("today: after Study the 5 again, what's answered since (first answer each), how many right",
+              (m2["of"], m2["over"], m2["right"]) == (5, 2, 1), m2)
+        box["misses_built"]["day"] = "2026-01-01"
+        check("today: an earlier day's Study the N again says nothing today", "of" not in F._misses(col))
+    finally:
+        F._today, F.mw.col, F._pf = saved
+        _state["due_pace"] = None
+    # ---- the board ----
+    rv = {"due": 0, "done": 214, "whole": 214, "through": 214, "later": 0, "left": 0, "back": 0, "at": ""}
+    v = D.view(T, [], [], {}, reviews=rv)
+    v.update(mins=22, misses={"n": 23, "reviews": 214, "cids": []}, cleared=None)
+    mid = D.view(T, [], [], {}, reviews=dict(rv, through=100, left=114, done=100))
+    h_mid = board._due_html(dict(mid, mins=68))
+    check("today board: the head says about how long what's left takes, on Today",
+          'class="du-min"' in h_mid and "<b>1h 08m</b> left" in h_mid
+          and "du-min" not in board._due_html(dict(mid, mins=68, tab="upcoming"))
+          and "du-min" not in board._due_html(dict(mid, mins=0)), h_mid[:1500])
+    h = board._due_html(dict(v, done=False))
+    rh = h[h.index("<b>Reviews</b>"):]
+    check("today board: under a done Reviews row, today's misses and Study the 23 again, sent as the board sends",
+          "214 reviews, <b>23 missed</b>" in rh and "Study the 23 again" in rh and "duecrew:duego:again" in rh
+          and rh.index("du-rc") < rh.index("Study the 23 again"), rh[:1200])
+    over = board._due_html(dict(v, misses={"n": 23, "reviews": 214, "of": 23, "over": 23, "right": 19}))
+    check("today board: gone over, it says how it went, and no button",
+          "all 23 gone over again · 19 right this time" in over and "duego:again" not in over, over[:1500])
+    check("today board: not a word while the reviews aren't done",
+          "du-rc" not in board._due_html(dict(mid, misses=None)))
+    nxt = {"key": "next", "lead": "Next up:", "cmd": "insstudy:10:0", "go": "Study 14",
+           "text": "Renal <Physiology> isn’t sticking: 14 of 41 missed in two weeks"}
+    hn = board._due_html(dict(v, suggestions=[nxt]))
+    check("today board: Next up, its lead bold, escaped, its button Insights' own Study, Not today on its key",
+          "<b>Next up:</b> Renal &lt;Physiology&gt;" in hn and "duecrew:insstudy:10:0" in hn and "duecrew:duex:next" in hn
+          and "<Physiology>" not in hn, hn[hn.index("du-sg"):][:600])
+    hc = board._due_html(dict(v, cleared={"name": "Slow <but> right", "n": 46, "day": T}, cleared_sev="<i>PIP</i>"))
+    check("today board: a Due Crew deck that ran out: its name escaped, all 46 cleared, Pip, Nice puts it away",
+          "<b>Slow &lt;but&gt; right</b>: all 46 cleared" in hc and "<i>PIP</i>" in hc and "duecrew:duex:cleared" in hc
+          and hc.index("du-clr") < hc.index("<b>Reviews</b>"), hc[:1500])
+    # ---- Next up: the first that applies ----
+    from due_crew import team_flow as TF
+    conf = {"due_suggest": True, "exam_date": ""}
+    views = {"v": {}}
+    saved = (F.cfg, F._today, F._reviews, F._today_deck, F._day_state, TF.you_decks, TF.insights, F.mw.col)
+    F.cfg = lambda: conf
+    F._today = lambda: T
+    F._today_deck = lambda col: 10
+    day = {"day": T, "dismissed": [], "recovered": []}
+    F._day_state = lambda: ({}, day)
+    TF.you_decks = lambda: [{"did": 10, "pid": None}]
+    TF.insights = lambda did, pid=None, exam="": views["v"]
+    F.mw.col = types.SimpleNamespace(mod=None, db=types.SimpleNamespace(scalar=lambda *a: 0), sched=types.SimpleNamespace(day_cutoff=cut))
+    revs = {"r": dict(rv)}
+    F._reviews = lambda: revs["r"]
+    try:
+        hero = list(range(53))
+        views["v"] = {"aim": {"day": "2026-09-04", "name": "KSA F3-3", "in": 3}, "hero": hero,
+                      "rows": [{"name": "Renal", "stuck": 9, "forgot": 5, "of": 41}], "near": 12}
+        s1 = F.suggestions(conf, T)
+        check("next up: an exam in 3 days with 53 at risk comes first, Insights' Study N early",
+              len(s1) == 1 and s1[0]["key"] == "next" and s1[0]["cmd"] == "insstudy:10:h" and s1[0]["go"] == "Study 53 early"
+              and s1[0]["text"].startswith("KSA F3-3 Fri: 53 cards"), s1)
+        views["v"] = dict(views["v"], aim={"day": "2026-09-08", "name": "", "in": 7})
+        s2 = F.suggestions(conf, T)
+        check("next up: no exam named this week: the topic not sticking, 14 of 41", s2 and s2[0]["cmd"] == "insstudy:10:0"
+              and s2[0]["go"] == "Study 14" and "14 of 41 missed" in s2[0]["text"], s2)
+        views["v"] = dict(views["v"], rows=[{"name": "Renal", "stuck": 3, "forgot": 2, "of": 41}])
+        s3 = F.suggestions(conf, T)
+        check("next up: then cards one miss from a leech (no How you study line yet), into Insights' leeches",
+              s3 and s3[0]["cmd"] == "duego:near" and s3[0]["text"].startswith("12 cards are one miss"), s3)
+        revs["r"] = dict(rv, left=3, through=211)
+        check("next up: nothing while reviews are still due", not any(x["key"] == "next" for x in F.suggestions(conf, T)))
+        revs["r"] = dict(rv)
+        day["dismissed"] = ["next"]
+        check("next up: Not today, and none steps in till tomorrow", F.suggestions(conf, T) == [])
+    finally:
+        F.cfg, F._today, F._reviews, F._today_deck, F._day_state, TF.you_decks, TF.insights, F.mw.col = saved
+        _state["due_suggest"] = None
+    # ---- a Due Crew deck that runs out ----
+    conn2 = fakes.make_collection(sqlite3.connect(":memory:"))
+    col2 = fakes.FakeCol(conn2, cut)
+    decks = fakes.FakeDecks({10: "Big Step 1", 77: "Due Crew::Slow but right"})
+    base_get = decks.get
+    decks.get = lambda did, default=True: dict(base_get(did, default), dyn=1) if did == 77 else base_get(did, default)
+    cur = {"id": 77}
+    decks.get_current_id = lambda: cur["id"]
+    col2.decks = decks
+    for i in range(3):
+        fakes.add_card(conn2, 100 + i, 77, ctype=2, queue=2, odid=10)
+    saved = (F.mw.col, F._today)
+    F.mw.col, F._today = col2, (lambda: T)
+    _state["due_ours"] = _state["due_cleared"] = None
+    try:
+        F.on_state("review", "overview")
+        check("cleared: its review starts: ours, three cards", _state["due_ours"] == {"did": 77, "name": "Slow but right", "n": 3})
+        F.on_state("overview", "review")
+        check("cleared: left with cards still in it: nothing yet", _state["due_cleared"] is None and _state["due_ours"])
+        conn2.execute("DELETE FROM cards WHERE did = 77")
+        F.on_state("review", "overview")
+        F.on_state("overview", "review")
+        check("cleared: left with nothing in it: it ran out, all 3", _state["due_cleared"] == {"name": "Slow but right", "n": 3, "day": T})
+        cur["id"] = 10
+        _state["due_ours"] = None
+        F.on_state("review", "overview")
+        check("cleared: a deck of my own isn't ours", _state["due_ours"] is None)
+        conf2 = {}
+        saved2 = (F.cfg, appmod.swap)
+        F.cfg, appmod.swap = (lambda: conf2), (lambda c, focus=None: None)
+        try:
+            dc._on_js(False, as_board("duecrew:duex:cleared"), DeckBrowser())
+            check("cleared: Nice puts it away, through the board's own handler", _state["due_cleared"] is None)
+        finally:
+            F.cfg, appmod.swap = saved2
+    finally:
+        F.mw.col, F._today = saved
+        _state["due_ours"] = _state["due_cleared"] = None
+    # ---- Study the N again: the misses' deck, from Today ----
+    conn3 = fakes.make_collection(sqlite3.connect(":memory:"))
+    col3 = fakes.FakeCol(conn3, cut)
+    col3.decks = fakes.FakeDecks({10: "Big Step 1", 88: PF.P.our_deck("Today's misses")})
+    for i in range(4):
+        fakes.add_review(conn3, start + 1000 + i, ease=1, cid=600 + i, last_ivl=9, ivl=1)
+    built, box = [], {}
+    pf = types.SimpleNamespace(_filtered=lambda col, name, cids: built.append((name, list(cids))) or True,
+                               _pcfg=lambda: box, _psave=lambda c: None, _today=lambda: T, _after_change=lambda: None)
+    saved = (F.mw.col, F._pf, F._today, F.mw.moveToState if hasattr(F.mw, "moveToState") else None)
+    F.mw.col, F._pf, F._today = col3, (lambda: pf), (lambda: T)
+    col3.decks.select = lambda did: None
+    F.mw.moveToState = lambda st: None
+    try:
+        conf3 = {}
+        saved3 = F.cfg
+        F.cfg = lambda: conf3
+        try:
+            dc._on_js(False, as_board("duecrew:duego:again"), DeckBrowser())
+        finally:
+            F.cfg = saved3
+        check("misses: Study the 4 again builds Today's misses of the reviews missed today, and says when",
+              built == [(PF.P.our_deck("Today's misses"), [600, 601, 602, 603])]
+              and box.get("misses_built", {}).get("cids") == [600, 601, 602, 603] and box.get("misses_day") == T, (built, box))
+    finally:
+        F.mw.col, F._pf, F._today = saved[:3]
+        if saved[3] is None:
+            del F.mw.moveToState
+        else:
+            F.mw.moveToState = saved[3]
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:
