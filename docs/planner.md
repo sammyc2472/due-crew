@@ -346,6 +346,17 @@ common: what's not sticking is Insights' to say, from my answers).
 - What they are here, in one line ("5 questions · 14 cards · 10
   suspended", leeches left suspended said too) with **Browse** after it;
   under it what isn't a question here and the dates of my plans they're on.
+- **Their topics** (3.9.5, Study where the cards are): the parts of the
+  deck's topic map the questions are in, the map's own split and way
+  (`team_flow.deck_map`: Insights' map while it's fresh, else the map
+  alone), the most questions first, five rows and the rest named
+  ("Also: …"). A question counts once in each part its cards are in; a
+  card in play falls in its tile, a suspended one in the biggest part
+  whose tag or subdeck it has (`qids.topics`). Each row: the part, "2
+  questions · 66% here" (the map's %, or new), and **Study** when I
+  missed some there these 4 weeks: the map's own deck of them
+  (`team_flow.study_deck`, Due Crew › the part, most lapses first), and
+  the window closes.
 - **Unsuspend 10**: the suspended ones, never a leech, new ones first in
   Anki's line; one undo step (`actions.unsuspend`).
 - **Study now** (the default): the suspended ones unsuspended, then a Due
