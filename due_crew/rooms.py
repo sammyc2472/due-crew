@@ -360,10 +360,11 @@ def refresh_widgets():
             c = cfg()
             t.append(room_model.widget_js("start", room_model.start_data(
                 _accent_pair(), c.get("room_chip_side"), sev_on(), nap=not _studied_today(),
-                compact=bool(c.get("room_compact")), look=my_look())))
+                compact=bool(c.get("room_compact")), look=my_look(), sit=_sit())))
         b.append(room_model.BAR_BALANCE)
         _draw(top, t), _draw(main, m), _draw(bottom, b)
         return
+    _habits(lambda hf: hf.hold_sitting())  # 3.9.5: the Fifteen at 35 counts from the end of this one
     data = _data(room)
     where = _where()
     t += [room_model.widget_js("start", None), room_model.widget_js("chip", data if where == "chip" else None)]
@@ -645,6 +646,11 @@ def on_message(cmd, parts):
         fifteen_answer(cmd[6:])
     elif cmd == "room15x":
         dismiss_fifteen_done()
+    elif cmd == "room15sit":
+        take_five()  # 3.9.5, the Fifteen at 35's Take five
+    elif cmd == "room15sitx":
+        _habits(lambda hf: hf.dismiss_sit())  # its ×: not again this sitting
+        refresh_widgets()
     elif cmd == "roomsound":
         set_sound(parts)  # 3.9.1: the chip's speaker
     elif cmd == "roomtick":
@@ -766,6 +772,44 @@ def start_fifteen():
     if mw.state != "review":
         from . import due_flow
         due_flow.study_today()
+
+
+def _habits(do):
+    """3.9.5: tell habits_flow (the Fifteen at 35); never in the way of a room."""
+    try:
+        from . import habits_flow
+        return do(habits_flow)
+    except Exception:
+        traceback.print_exc()
+        return None
+
+
+def _sit():
+    """3.9.5, the Fifteen at 35: the minutes the top bar's chip says, while
+    reviewing, once my own log shows the slide (habits_flow.sit_chip); 0, ▶ Fifteen?."""
+    from .habits import SIT_AT
+    return SIT_AT if _habits(lambda hf: hf.sit_chip()) else 0
+
+
+def take_five():
+    """3.9.5, the Fifteen at 35's Take five: a fifteen already in its break,
+    its first fifteen counted as just ended; the break's countdown, then a
+    fifteen and its question, as ever (the break in place of the card)."""
+    cl = client()
+    if not cl.signed_in:
+        tooltip("Sign in to Due Crew first.")
+        return
+    if my_room():
+        show_card()
+        return
+    room = room_model.fifteen_in_break(cl.user_id, _now())
+    cl.session["fifteen_began"] = room["start"]
+    cl.session.pop("fifteen_done", None)
+    _habits(lambda hf: hf.hold_sitting())
+    _fifteen_live(room)
+    _set_room(room, None)
+    if mw.state == "review":
+        _show_break(room)
 
 
 def _show_ask(room):

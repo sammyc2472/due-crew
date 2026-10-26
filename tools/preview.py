@@ -531,6 +531,28 @@ sections.append("<h3>3.9.2: Leeches, in Insights' place (one button a card)</h3>
     DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
     you=_YOU("insights", insights={"decks": _DECKS, "did": 20, "exam": "2026-10-14", "plan": None,
                                    "view": dict(_DECK_INS, leech=_LEECH)})))
+# 3.9.5: How you study (habits.summary's shape, as habits_flow.board_view hands it over)
+_HV = {"open": True, "mins": 113.0, "secs": 9.2, "span": 56, "study": 46, "track": None,
+       "matured": {"n": 38, "weeks": [12, 18, 15, 22, 26, 24, 31, 38],
+                   "from": [(datetime.date(2026, 10, 20) - datetime.timedelta(days=7 * k)).isoformat() for k in reversed(range(8))]},
+       "speed": {"slow": 0.221, "quick": 0.131, "gap": 0.081, "lo": 0.042, "hi": 0.118, "n_slow": 310, "n_quick": 2400},
+       "sit": {"curve": [[0, 15, 84.1, 900], [15, 30, 83.4, 800], [30, 45, 78.9, 700], [45, 60, 79.9, 500],
+                         [60, 90, 75.5, 300], [90, None, 73.7, 90]], "from": 84.1, "to": 78.9, "gap": -0.05, "lo": -0.08,
+               "hi": -0.02, "n": 26}}
+_HV_INS = {"decks": _DECKS, "did": 10, "exam": "", "plan": None, "view": dict(_INS, ahead=None)}
+sections.append("<h3>3.9.5: Insights, How you study's line on top</h3>" + board.render(
+    DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
+    you=_YOU("insights", insights=dict(_HV_INS, habits=dict(_HV, open=False)))))
+sections.append("<h3>3.9.5: How you study, both findings pass</h3>" + board.render(
+    DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
+    you=_YOU("insights", insights=dict(_HV_INS, habits=_HV))))
+sections.append("<h3>3.9.5: How you study, Slow but right's track record (and its Study)</h3>" + board.render(
+    DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
+    you=_YOU("insights", insights=dict(_HV_INS, habits=dict(_HV, sit=None, track={"studied": 0.14, "rest": 0.22, "n": 34})))))
+sections.append("<h3>3.9.5: How you study, nothing passed yet</h3>" + board.render(
+    DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
+    you=_YOU("insights", insights=dict(_HV_INS, habits=dict(_HV, speed=None, sit=None, study=0, mins=48.0, secs=7.4,
+                                                              matured=dict(_HV["matured"], n=9, weeks=[0, 0, 2, 3, 5, 4, 7, 9]))))))
 sections.append("<h3>3.9.2: the board's line when reviews climb</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, ahead={"did": 10, "name": "Big Step 1", "day": "2026-10-12", "n": 420, "week": 310,
                                                    "cause": 1180}))
