@@ -786,6 +786,41 @@ def esc(text):
     return html.escape(str(text))
 
 
+def date_dialog(parent, title, day, lo=None, hi=None):
+    """3.9.5: one day picked in a calendar, in the board's look: (dialog,
+    calendar). day, lo, hi: datetime.date (lo and hi the first and last
+    that can be picked). The board's own date fields used the page's date
+    picker, which a redraw on its change could pull out from under itself
+    (Sam: Anki quit)."""
+    from aqt.qt import QCalendarWidget, QDate, QDialog, QDialogButtonBox, QVBoxLayout
+    dlg = styled(QDialog(parent))
+    dlg.setWindowTitle(title)
+    lay = QVBoxLayout(dlg)
+    heading(dlg, lay)
+    cal = QCalendarWidget(dlg)
+    if lo:
+        cal.setMinimumDate(QDate(lo.year, lo.month, lo.day))
+    if hi:
+        cal.setMaximumDate(QDate(hi.year, hi.month, hi.day))
+    cal.setSelectedDate(QDate(day.year, day.month, day.day))
+    lay.addWidget(cal)
+    bb = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+    bb.accepted.connect(dlg.accept)
+    bb.rejected.connect(dlg.reject)
+    lay.addWidget(bb)
+    return dlg, cal
+
+
+def pick_date(parent, title, day, lo=None, hi=None):
+    """The day picked (an ISO date), or None on Cancel."""
+    import datetime
+    dlg, cal = date_dialog(parent, title, day, lo, hi)
+    if not dlg.exec():
+        return None
+    q = cal.selectedDate()
+    return datetime.date(q.year(), q.month(), q.day()).isoformat()
+
+
 def confirm(parent, title, text, yes, danger=False):
     """The one way to ask before a step that can't be taken back: the button
     says what happens ("Remove", "Leave"), Cancel is the default, and the

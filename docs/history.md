@@ -3381,11 +3381,7 @@ every release that changes how something works.
   window marks it itself (`dc="go"`, as the plan windows' do;
   `tools/dialogs.py` checks it).
 - 3.9.5, Today (the Five mocks, reviewed page; Sam: "give it a shot
-  building all of it"): the head says about how long what's left takes,
-  "· 1h 08m left", at my own pace (`due.minutes_left`; `due_flow._pace`:
-  a review's answer, a learning step and a new card's first day, from the
-  last four weeks of my log, worked out once a day; Today only, till the
-  day's done). Under a done Reviews row, today's misses are back: "214
+  building all of it"). Under a done Reviews row, today's misses are back: "214
   reviews, 23 missed: Renal 9 · Pharm 6 · Cardio 4 · 4 elsewhere · Study
   the 23 again" (`due_flow._misses`: reviews answered Again today, a card
   once; the parts from the map of the deck I reviewed most today,
@@ -3396,11 +3392,20 @@ every release that changes how something works.
   since the deck was built, `misses_built` in plans.json). Next up takes
   the suggestion's place once the reviews are through (`_next_up`): the
   first that applies, from Insights' own numbers for the deck I reviewed
-  most today: an exam within 7 days with 10+ cards at risk (Study N
-  early), a topic not sticking with 8+ missed (Study N), slow but right
-  (How you study, when my log shows it), 5+ cards one miss from a leech
-  (Insights' leeches view); else new leeches, as before. Not today puts
-  it away and none steps in till tomorrow. A Due Crew deck I studied that
+  most today: a topic not sticking with 8+ missed (Study N), 5+ cards one
+  miss from a leech (Insights' leeches view); else new leeches, as before.
+  Not today puts it away and none steps in till tomorrow. Super decks
+  (Sam, click-testing: "where do I find superdecks?", "i don't see any
+  super decks"), a heading of their own in Today (`due_flow.supers`,
+  `board._due_supers`): every Due Crew deck with cards in it (what's left,
+  Study into it, × to put them back: Anki's Empty), then the ones ready to
+  make today: Today's misses (a review missed today), Slow but right (How
+  you study, when my log shows it), and once the reviews are through,
+  Before my exam (an exam within 7 days with 10+ cards at risk, Insights'
+  Study N early); Study on one makes it. With Today's misses a super deck,
+  the misses line keeps its parts and loses its Study. The head's "1h 08m
+  left" went before it shipped (Sam: "it can feel insurmountable when
+  phrased as time remaining"). A Due Crew deck I studied that
   runs out says so on the board, Pip hopping, "Slow but right: all 46
   cleared · Nice" (`_watch_ours` on Anki's state change: counted as its
   review starts, empty as I leave it). Never sent.
@@ -3475,3 +3480,18 @@ every release that changes how something works.
   its calendar PDF, drawn three cells a row, came out of Qt's reader a
   letter a line in 41 weeks of a year (it reads next Monday's dates; the
   start window rightly turned it down as scrambled). A row is one line now.
+- 3.9.5, Sam's first click-test. Insights' exam date and its scope's
+  Change are picked in a Qt calendar (`ui.date_dialog`/`pick_date`;
+  `exampick`, `scopepick`): "removing an exam date and then clicking add
+  exam date makes anki quit", the page's own date picker (`showPicker()` on
+  a hidden input) with the board redrawn on its change. An exam date comes
+  off the Anki day after it (`due_flow.exam_gone`, at the refresh: as ×
+  takes it, kept as my last exam for the next one's scope; Sam: "when an
+  exam date passes let's remove it"). Insights' "After a practice block:
+  paste its QIDs…" line went ("extra because QIDs is in the header"); with
+  Due's lists off, QBank QIDs is in the bubble's head instead
+  (`_you`'s `qids`). How you study's slow tile says the cards to look at
+  again ("46 · right, but slow, this week") with the bars, quick and slow,
+  "missed next time" under them, in place of "20% of slow right answers
+  missed next time · 14% otherwise" ("doesn't make much sense"); the
+  sittings tile, "35 min · then you start missing more".

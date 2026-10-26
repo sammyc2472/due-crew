@@ -235,21 +235,21 @@ sections.append("<h3>round five: Today, a plan's date opened (a click on its nam
 sections.append("<h3>round five: Upcoming, a date ahead opened</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=dict(_DV, tab="upcoming"), you=_YOU("upcoming"))
     .replace('id="dc-dd-p1-u3" hidden>', 'id="dc-dd-p1-u3">').replace('id="du-', 'id="duu-'))
-# 3.9.5 (Five mocks, reviewed): the head's minutes left; reviews done, today's misses with Study the 23 again,
-# Next up in the suggestion's place, and a Due Crew deck that ran out with Pip
-sections.append("<h3>3.9.5: Today, the head says what's left in minutes, at my own pace</h3>" + board.render(
-    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=dict(_DV, mins=68), you=_YOU("today"))
-    .replace('id="du-', 'id="dum-'))
+# 3.9.5 (Five mocks, reviewed): reviews done, Super decks, today's misses by part, Next up in the suggestion's
+# place, and a Due Crew deck that ran out with Pip
 from due_crew import sev as _sev2  # noqa: E402
 _DONE = _D.view(_T, [_DATES[2]], [_ITEMS[1]], {}, reviews={"due": 0, "done": 214, "whole": 214, "through": 214, "later": 0,
                                                        "left": 0, "back": 0, "at": ""},
                 suggestions=[{"key": "next", "lead": "Next up:", "cmd": "insstudy:10:0", "go": "Study 14",
                               "text": "Renal \u00b7 Physiology isn\u2019t sticking: 14 of 41 missed in two weeks"}])
-_DONE.update(misses={"n": 23, "reviews": 214, "elsewhere": 4,
+_DONE.update(supers=[{"did": 71, "name": "Slow but right", "n": 31, "cmd": "duedeck:71", "x": "duedeckx:71"},
+                     {"name": "Today's misses", "n": 23, "cmd": "duego:again"},
+                     {"name": "Before KSA F3-3", "n": 53, "cmd": "insstudy:10:h"}],
+             misses={"n": 23, "reviews": 214, "elsewhere": 4, "in_deck": True,
                      "topics": [("Renal \u00b7 Physiology", list(range(9))), ("Pharm", list(range(6))), ("Cardio", list(range(4)))]},
              cleared={"name": "Slow but right", "n": 46, "day": _T},
              cleared_sev=_sev2.slot(_sev2.move("hop", "twirl"), 44))
-sections.append("<h3>3.9.5: Today, reviews done: today's misses (Study the 23 again), Next up, a deck that ran out</h3>"
+sections.append("<h3>3.9.5: Today, reviews done: Super decks, today's misses by part, Next up, a deck that ran out</h3>"
                 + board.render(DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DONE, you=_YOU("today"))
                 .replace('id="du-', 'id="dun-'))
 _GONE = dict(_DONE, misses={"n": 23, "reviews": 214, "of": 23, "over": 23, "right": 19}, cleared=None)

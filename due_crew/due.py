@@ -16,7 +16,6 @@ I typed, nothing else: never a card.
 """
 
 import datetime
-import math
 import re
 import uuid
 
@@ -694,37 +693,7 @@ def study_next(plan_decks, due_now):
     return None
 
 
-# ---- 3.9.5 (Five mocks, reviewed): the day in minutes, today's misses, Next up ----
-
-PACE_DAYS = 28  # my pace: the last four weeks of my log
-PACE_MIN = 20   # answers (or new cards) before my own pace replaces the default
-PACE_DEFAULT = {"review": 10.0, "learn": 8.0, "new": 30.0}  # seconds: a review's answer, a step, a new card's first day
-
-
-def minutes_left(r, pace=None):
-    """About how long what's left today takes me, in whole minutes: the
-    reviews due now and back later today, the new cards Anki still gives
-    and the ones in their steps, at my own pace ({review, learn, new},
-    seconds; PACE_DEFAULT where my log doesn't say yet). 0 with nothing
-    left, or with a count from before 3.9.3 (no bars)."""
-    if not isinstance(r, dict) or r.get("whole") is None:
-        return 0
-    p = dict(PACE_DEFAULT)
-    for k, x in (pace or {}).items():
-        if k in p and isinstance(x, (int, float)) and x > 0:
-            p[k] = float(x)
-    secs = (int(r.get("left") or 0) + int(r.get("back") or 0)) * p["review"]
-    n = r.get("new") if isinstance(r.get("new"), dict) else {}
-    th, lt = int(n.get("through") or 0), int(n.get("later") or 0)
-    secs += max(0, int(n.get("whole") or 0) - th - lt) * p["new"] + lt * p["learn"]
-    return int(math.ceil(secs / 60)) if secs > 0 else 0
-
-
-def fmt_minutes(m):
-    """22 min, 1h 08m."""
-    m = max(0, int(m))
-    return f"{m} min" if m < 60 else f"{m // 60}h {m % 60:02d}m"
-
+# ---- 3.9.5 (Five mocks, reviewed): today's misses ----
 
 def misses_text(m):
     """Today's misses under a done Reviews row: (line, go) or None. m:

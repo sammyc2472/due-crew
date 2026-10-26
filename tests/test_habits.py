@@ -300,12 +300,15 @@ def test_board():
           'title="Next review 3 weeks or more away">38<small>matured this week</small>' in v
           and v.count("matured</title>") == 8 and "This week: 38 matured</title>" in v
           and "duecrew:inshabits:7:see" in v)
-    check("…Slow but right: the raw rates, two bars with the range in their titles, Study N",
-          ">22%<small>of slow right answers missed next time &middot; 13% otherwise</small>" in v
+    check("…Slow but right (3.9.5, Sam: \"this doesn't make much sense\"): the cards to look at again, the raw rates "
+          "as two bars, quick and slow, missed next time, the range in their titles, Study N",
+          ">46<small>right, but slow, this week</small>" in v and ">quick</text>" in v and ">slow</text>" in v
+          and '<div class="hs-cap">missed next time</div>' in v and ">13%</text>" in v and ">22%</text>" in v
           and v.count("At the same intervals: +8 points, could be 4 to 12</title>") == 2
           and ">Study 46</a>" in v and "duecrew:inshabits:7:slow" in v)
     check("…long sittings: the first band to the 30-45 one, 35 marked, a point a band with its title, Start a Fifteen",
-          "84 &rarr; 79%<small>after 35 minutes in one go</small>" in v and ">35</text>" in v
+          ">35 min<small>then you start missing more</small>" in v and 'title="84% right in your first 15 minutes, 79% at 30 to 45"' in v
+          and '<div class="hs-cap">right, by minutes in one go</div>' in v and ">35</text>" in v
           and v.count('class="t-dot"') == 6 and "0&ndash;15 min in: 84% right (900 answers)</title>" in v
           and f"duecrew:room15|{board.BOARD_KEY}" in v and "Start a Fifteen" in v)
     check("…charts on the board's tokens (dark works): no colour of their own",
@@ -318,7 +321,7 @@ def test_board():
     check("…a finding that doesn't pass has no tile", "Start a Fifteen" not in only and "Study 46" in only
           and "More as you study." not in only)
     gone = board._you_insights(_ins(_hv(study=0)))
-    check("…Study gone (its record against it, or none to study): the tile stays", "Study " not in gone and ">22%<small>" in gone)
+    check("…Study gone (its record against it, or none to study): the tile stays", "Study " not in gone and ">0<small>right, but slow" in gone)
     tr = {"n": 34, "studied": 0.14, "rest": 0.22, "rest_n": 300, "ready": True, "against": False}
     rec = board._you_insights(_ins(_hv(track=tr)))
     check("…its track record, once it has one", "Studied ones: 14% missed next time &middot; 22% the rest" in rec)

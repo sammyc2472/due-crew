@@ -432,6 +432,12 @@ def main(out):
         finally:
             QtWidgets.QDialog.exec = was
             due_flow.mw = main
+        # 3.9.5: Insights' exam date in a Qt calendar (the page's own picker went down with a redraw)
+        t = datetime.date.fromisoformat(TODAY)
+        dlg, cal = ui.date_dialog(holder, "Exam date", t + datetime.timedelta(days=7), lo=t, hi=t + datetime.timedelta(days=730))
+        if cal.selectedDate().toString("yyyy-MM-dd") != (t + datetime.timedelta(days=7)).isoformat() or dlg.windowTitle() != "Due Crew":
+            raise RuntimeError("exam date: a week out, picked; the frame says Due Crew")
+        shoot(dlg, os.path.join(out, "exam-date.png"))
 
     def room():
         from due_crew.ui.room_dialog import RoomDialog

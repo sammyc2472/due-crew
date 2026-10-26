@@ -595,6 +595,8 @@ def _you(c, due, plans):
     Plans or Insights it draws. Only the one on screen is worked out."""
     from . import team_flow
     you = {"tab": due_flow.you_tab(c), "folded": due_flow.folded(c, due), "plans": plans, "insights": None}
+    if not due and mw.col:
+        you["qids"] = due_flow.has_qids()  # 3.9.5: QBank QIDs in the head with Due's lists off too
     if you["folded"]:
         return you
     hidden = board.hidden_tabs(c)
@@ -1032,6 +1034,8 @@ def _on_js(handled, message, context):
         _browse_day(parts[2])
     elif cmd in SETTINGS_CMDS:
         _settings_cmd(cmd, parts[2:])  # 3.5.0: Settings in the board; parts[2:] are its values
+    elif cmd in ("exampick", "scopepick"):
+        _pick_exam_day(cmd)  # 3.9.5: Insights' exam date and its scope, in a Qt calendar
     elif cmd == "ecard" and len(parts) > 2:
         _open_squad_card(parts[2])
     elif cmd == "squad" and len(parts) > 2:
@@ -1494,6 +1498,37 @@ def _settings_cmd(cmd, parts):
         changed = change([cmd] + parts, c)
         if changed:
             _apply_settings(changed, focus="label" if cmd == "setlabel" else focus)
+
+
+def _pick_exam_day(cmd):
+    """3.9.5 (Sam: "removing an exam date and then clicking add exam date
+    makes anki quit"): Insights' Add exam date (exampick) and its scope's
+    Change (scopepick) pick the day in a Qt calendar, then change it as
+    Settings does (setexam, setscope)."""
+    from .settings_model import change
+    from .ui import pick_date
+    c = cfg()
+    today = datetime.date.today()
+    try:
+        today = datetime.date.fromisoformat(plan_flow._today() or "")
+    except ValueError:
+        pass
+    if cmd == "exampick":
+        try:
+            now = datetime.date.fromisoformat(str(c.get("exam_date") or ""))
+        except ValueError:
+            now = today + datetime.timedelta(days=7)
+        day = pick_date(mw, "Exam date", max(now, today), lo=today, hi=today + datetime.timedelta(days=730))
+        changed = change(["setexam", day], c, today=today) if day else None
+    else:
+        try:
+            now = datetime.date.fromisoformat(str(c.get("exam_since") or ""))
+        except ValueError:
+            now = today - datetime.timedelta(days=14)
+        day = pick_date(mw, "Count the cards started since", min(now, today), hi=today)
+        changed = change(["setscope", day], c, today=today) if day else None
+    if changed:
+        _apply_settings(changed)
 
 
 def _apply_settings(changed, focus=None):
