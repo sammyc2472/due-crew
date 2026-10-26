@@ -18317,6 +18317,7 @@ def test_today_v395():
     cut = fakes.day_cutoff_for(TODAY)
     conn = fakes.make_collection(sqlite3.connect(":memory:"))
     col = fakes.FakeCol(conn, cut)
+    col.decks = fakes.FakeDecks({10: "Big Step 1"})
     start = (cut - 86400) * 1000
     old = (cut - 10 * 86400) * 1000
     for i in range(30):
@@ -18352,6 +18353,25 @@ def test_today_v395():
               (m2["of"], m2["over"], m2["right"]) == (5, 2, 1), m2)
         box["misses_built"]["day"] = "2026-01-01"
         check("today: an earlier day's Study the N again says nothing today", "of" not in F._misses(col))
+        check("today: no map for the deck: the misses aren't split", (m["topics"], m["elsewhere"]) == ([], 0), m)
+        from due_crew import team_flow as TF
+        saved_map = (TF.deck_map, F._today_deck)
+        TF.deck_map = lambda did: ([{"name": "Renal <x>", "_cids": [3000, 3001, 3002]}, {"name": "Cardio", "_cids": [3003, 9]},
+                                    {"name": "Endo", "_cids": [8]}], set())
+        F._today_deck = lambda col: 10
+        _state["due_miss_topics"] = None
+        try:
+            m3 = F._misses(col)
+            check("today: misses by the map's parts for today's deck, the most first, the rest elsewhere",
+                  m3["topics"] == [("Renal <x>", [3000, 3001, 3002]), ("Cardio", [3003])] and m3["elsewhere"] == 1, m3)
+            hm = board._due_html(dict(D.view(T, [], [], {}, reviews={"due": 0, "done": 9, "whole": 9, "through": 9, "later": 0,
+                                                                     "left": 0, "back": 0, "at": ""}), misses=m3, mins=0))
+            check("today board: each part a link to Study just those, escaped; the rest elsewhere",
+                  "Renal &lt;x&gt; 3</a>" in hm and "duecrew:duego:again0" in hm and "Cardio 1</a>" in hm
+                  and "duecrew:duego:again1" in hm and "1 elsewhere" in hm and "<x>" not in hm, hm[hm.index("du-rc"):][:900])
+        finally:
+            TF.deck_map, F._today_deck = saved_map
+            _state["due_miss_topics"] = None
     finally:
         F._today, F.mw.col, F._pf = saved
         _state["due_pace"] = None
@@ -18486,6 +18506,16 @@ def test_today_v395():
         check("misses: Study the 4 again builds Today's misses of the reviews missed today, and says when",
               built == [(PF.P.our_deck("Today's misses"), [600, 601, 602, 603])]
               and box.get("misses_built", {}).get("cids") == [600, 601, 602, 603] and box.get("misses_day") == T, (built, box))
+        _state["due_miss_topics"] = ((T, (600, 601, 602, 603)), ([("Renal", [601, 603]), ("Cardio", [600])], 1))
+        F.cfg = lambda: conf3
+        try:
+            dc._on_js(False, as_board("duecrew:duego:again0"), DeckBrowser())
+            dc._on_js(False, as_board("duecrew:duego:again7"), DeckBrowser())  # a part that isn't there: nothing
+        finally:
+            F.cfg = saved3
+        check("misses: a part's link studies just its misses", built[1:] == [(PF.P.our_deck("Today's misses"), [601, 603])]
+              and box["misses_built"]["cids"] == [601, 603], built)
+        _state["due_miss_topics"] = None
     finally:
         F.mw.col, F._pf, F._today = saved[:3]
         if saved[3] is None:

@@ -7416,6 +7416,13 @@ def _due_misses(m):
     line, go = said
     head, _sep, rest = line.partition(", ")
     text = f'{e(head)}, <b>{e(rest)}</b>' if go and rest else e(line)
+    if go and m.get("topics"):
+        # where they were, by the map's parts: each its own Study of just those
+        parts = [f'<a class="tp" href="#" title="Study just these" onclick="{_pycmd(f"duego:again{i}")}">'
+                 f'{e(str(name))} {len(cids):,}</a>' for i, (name, cids) in enumerate(m["topics"])]
+        if int(m.get("elsewhere") or 0):
+            parts.append(f'{int(m["elsewhere"]):,} elsewhere')
+        text += ": " + " &middot; ".join(parts)
     link = f'<span class="end"><a href="#" onclick="{_pycmd("duego:again")}">{e(go)}</a></span>' if go else '<span class="end"></span>'
     return f'<div class="du-rc"><span></span><span>{text}</span>{link}</div>'
 

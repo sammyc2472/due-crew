@@ -309,6 +309,7 @@ def _misses(col):
     out = {"n": len(cids), "cids": cids[:500],
            "reviews": int(col.db.scalar("SELECT count(DISTINCT cid) FROM revlog WHERE id >= ? AND ease > 0 AND type = 1",
                                         start) or 0)}
+    out["topics"], out["elsewhere"] = _miss_topics(col, cids)
     built = _pf()._pcfg().get("misses_built")
     if isinstance(built, dict) and built.get("day") == _today() and built.get("cids"):
         mine = {int(c) for c in built["cids"]}
@@ -472,6 +473,41 @@ def suggestions(c, today):
         traceback.print_exc()
     _state["due_suggest"] = (key, out[:2])
     return out[:2]
+
+
+MISS_TOPICS = 3  # today's misses named by part: the three with the most, the rest "elsewhere"
+
+
+def _miss_topics(col, cids):
+    """3.9.5: today's misses by the map's parts for the deck I reviewed most
+    today (team_flow.deck_map, its top level): ([(part, [cid])] the
+    MISS_TOPICS with the most, how many fall elsewhere), or ([], 0) when
+    they don't split (one part, or no map). Worked out again only when the
+    misses change. Main thread."""
+    key = (_today(), tuple(cids))
+    hit = _state.get("due_miss_topics")
+    if hit and hit[0] == key:
+        return hit[1]
+    out = ([], 0)
+    try:
+        did = _today_deck(col) if cids else None
+        if did:
+            from . import team, team_flow
+            tiles, _missed = team_flow.deck_map(did)
+            left, groups = set(cids), []
+            for t in tiles:
+                got = [c for c in cids if c in left and c in set(team.tile_cards(t))]
+                if got:
+                    groups.append((str(t.get("name") or ""), got))
+                    left -= set(got)
+            groups.sort(key=lambda g: -len(g[1]))
+            if len(groups) > 1:
+                top = groups[:MISS_TOPICS]
+                out = (top, len(cids) - sum(len(g) for _n, g in top))
+    except Exception:
+        traceback.print_exc()
+    _state["due_miss_topics"] = (key, out)
+    return out
 
 
 def _today_deck(col):
@@ -1036,10 +1072,15 @@ def go(key):
     if not mw.col:
         return
     pf = _pf()
-    if key == "again":
+    if key == "again" or (key[:5] == "again" and key[5:].isdigit()):
         # 3.9.5: Study the N again, under the Reviews row once it's done: the reviews I missed today
-        # (it had no way in since 3.8.1); what's answered since is how the line says they've been gone over
-        cids = _misses(mw.col)["cids"]
+        # (it had no way in since 3.8.1), or a part's alone (again0, again1, ...: its link on the line);
+        # what's answered since is how the line says they've been gone over
+        m = _misses(mw.col)
+        cids = m["cids"]
+        if key != "again":
+            got = m["topics"][int(key[5:])] if int(key[5:]) < len(m["topics"]) else None
+            cids = got[1] if got else []
         if cids and pf._filtered(mw.col, MISSES, cids):
             c = pf._pcfg()
             c["misses_day"] = pf._today()  # 3.8.1: the next morning empties it back if it's left

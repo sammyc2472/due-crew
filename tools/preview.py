@@ -245,7 +245,9 @@ _DONE = _D.view(_T, [_DATES[2]], [_ITEMS[1]], {}, reviews={"due": 0, "done": 214
                                                        "left": 0, "back": 0, "at": ""},
                 suggestions=[{"key": "next", "lead": "Next up:", "cmd": "insstudy:10:0", "go": "Study 14",
                               "text": "Renal \u00b7 Physiology isn\u2019t sticking: 14 of 41 missed in two weeks"}])
-_DONE.update(misses={"n": 23, "reviews": 214}, cleared={"name": "Slow but right", "n": 46, "day": _T},
+_DONE.update(misses={"n": 23, "reviews": 214, "elsewhere": 4,
+                     "topics": [("Renal \u00b7 Physiology", list(range(9))), ("Pharm", list(range(6))), ("Cardio", list(range(4)))]},
+             cleared={"name": "Slow but right", "n": 46, "day": _T},
              cleared_sev=_sev2.slot(_sev2.move("hop", "twirl"), 44))
 sections.append("<h3>3.9.5: Today, reviews done: today's misses (Study the 23 again), Next up, a deck that ran out</h3>"
                 + board.render(DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DONE, you=_YOU("today"))
