@@ -1164,9 +1164,10 @@ def main(out):
         rows = [("Week 1", "", ""), (d(0), "Heart failure", "Room B2"), (d(1), "HFrEF", "Room B2"),
                 (d(3), "Antiarrhythmic drugs", "Room B4"), (d(4), "Cardio quiz 1", "Hall A"), ("Week 2", "", ""),
                 (d(7), "Diuretics", "Room B2"), (d(11), "Exam 1", "Hall A")]
-        for n, (a, b, c) in enumerate(rows):
-            for x, t in ((40, a), (180, b), (460, c)):
-                painter.drawText(x, 60 + 24 * n, t)
+        # a row a line: three cells each drawn alone came out of Qt's reader a letter a line in 41 weeks
+        # of a year (the scrambled case, which the window rightly turns down), so this passed by the date
+        for n, row in enumerate(rows):
+            painter.drawText(40, 60 + 24 * n, "    ".join(t for t in row if t))
         painter.end()
         w = SW.StartWindow(None, decks, SOps())
         w.resize(820, 720)
