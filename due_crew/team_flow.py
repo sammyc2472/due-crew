@@ -1083,7 +1083,7 @@ def study_map(did, x):
         _plans_flow()._browse(cids)  # 3.9.5: no date to aim at, so no deck
         return
     aim = view.get("aim") or {}
-    study_deck(str(t["name"]), cids, kind="part", until=_until(aim), day=_until(aim))
+    study_deck(str(t["name"]), cids, until=_until(aim))
 
 
 def deck_map(did):
@@ -1136,7 +1136,7 @@ def dated(did):
 
 
 def exam_deck(did):
-    """3.9.5, Before your exam (a super deck): (cids, title, aim) of the
+    """3.9.5, the exam box's Study: (cids, title, aim) of the
     exam box's cards, and with my own exam, Slow but right's in the deck
     that Anki won't show before it (FSRS doesn't see answer time); None
     without a date (dated) or cards."""
@@ -1184,25 +1184,24 @@ def study(did, key):
     if key == "h":
         got = exam_deck(did)
         if got:
-            study_deck(got[1], got[0], kind="exam" if aim.get("kind") == "exam" else "quiz", until=_until(aim),
-                       day=_until(aim))
+            study_deck(got[1], got[0], until=_until(aim))
         return
     cids, title = _pick(did, key)
-    study_deck(title, cids, kind="part", until=_until(aim), day=_until(aim))
+    study_deck(title, cids, until=_until(aim))
 
 
-def study_deck(title, cids, kind=None, **info):
+def study_deck(title, cids, until=None):
     """Due Crew's filtered deck of these cards, named after what they are
     (Due Crew::Renal), the most missed first (plan_flow._filtered's order
     4), rescheduled by my answers as every Due Crew deck is; then Anki's
     Study screen on it. Insights' Study, the map's (3.9.5) and QBank QIDs'
-    topics' Study; kind and info, the super deck's (plan_flow._filtered).
+    topics' Study; until, the last day it's for (plan_flow._filtered).
     True when it took. Main thread."""
     if not cids or not mw.col:
         return False
     pf = _plans_flow()
     name = pf._deck_name(title)
-    if not pf._filtered(mw.col, name, cids, kind=kind, **info):
+    if not pf._filtered(mw.col, name, cids, until=until):
         return False
     pf._after_change()
     fid = mw.col.decks.id_for_name(name)

@@ -3395,47 +3395,28 @@ every release that changes how something works.
   leeches, as before. Not today puts it away and none steps in till
   tomorrow. The head's "1h 08m left" went before it shipped (Sam: "it can
   feel insurmountable when phrased as time remaining"). A Due Crew deck I
-  studied that runs out says so on the board, Pip hopping, "Leeches: all
-  12 cleared · Nice" (`_watch_ours` on Anki's state change: counted as its
-  review starts, empty as I leave it), on Today and on Super decks. Never
-  sent.
-- 3.9.5, Super decks, a tab of their own (Sam, click-testing: "where do
-  I find superdecks?", then "feels tacked on to today"; the Meeting Super
-  Decks mock, his pick B, then his rule: "a lot of anki's utility comes
-  from its scheduling engine FSRS so we have to only include these such
-  that they are necessary or helpful"). In the You bubble between Today's
-  lists and Plans, "Super decks 4" (hideable in Settings like the others):
-  Due Crew's own filtered decks, only for what Anki's scheduler can't
-  know, grouped by why. Before a date: Before your exam (from a week out,
-  Insights' exam box, with Slow but right's cards Anki won't show before
-  it: FSRS doesn't see answer time) and Before a quiz (a plan's quiz from
-  three days out, its prep dates' open cards; the deck is "Before Cardio
-  quiz"; an Insights part or row studied before a date lands here too).
-  New: the plan's day (a plan's dates open by today, the cards I
-  haven't seen, in the deck's order, "MS2 · Today", for today), a
-  section's cards (below), Leeches (Sam's: Study starts them over, new
-  cards with the leech tag off and unsuspended, one undo step,
-  `recover_leeches`, then the deck; Leave it out's stay out). From outside
-  Anki: QBank cards. A deck is a tile you can see (a stack, its second
-  edge at 20 cards; its count, what's left of what it held with a bar
-  once built; Study; Browse; × puts a built one back); its name opens its
-  page in the tab: In it, Why a deck, Leaves, Then (`superdecks.facts`),
-  Browse. Browse works made or not, on the cards it would hold (Sam: "want
-  the option to look at the cards in the browse view or open the filtered
-  deck"; `due_flow.sd_cids`, `sdbrowse:<key>`). With none, the kinds and
-  when each shows up. No Pip and no count on the tab (Sam, click-testing:
-  "don't want the pip on super decks and don't want the number of super
-  decks... kinda overwhelming"). What a deck is and held is
-  noted when it's built (`plan_flow._note_built`'s kind, plans.json `sd`);
-  an exam's or a quiz's is emptied the morning after its day, the plan's
-  day's the next morning. `superdecks.py` is pure (the words, the tab's
-  shape); `due_flow.super_decks`/`super_view` the glue, kept a little while
-  the collection doesn't change (its count is on the tab at every draw);
-  `board._supers_html`/`_sd_tile`/`_sd_page`. Commands: `sdgo:<what>`,
-  `sdpage[:<key>]`, `sdbrowse:<key>`. Never sent.
-- 3.9.5, Sam's FSRS rule, everywhere a Study made a deck: a date ahead,
-  cards not started yet, a miss outside Anki; anything else is reviews
-  ahead of their date, and FSRS has those. So: Today's misses and Slow but
+  studied that runs out says so on the board, "Pharmacokinetics: all 46
+  cleared · Nice" (`_watch_ours` on Anki's state change: counted as its
+  review starts, empty as I leave it; no Pip since Sam's click-test).
+  Never sent.
+- 3.9.5, Super decks, built and taken out before it shipped (Sam,
+  click-testing: "where do I find superdecks?", "feels tacked on to
+  today"; the Meeting Super Decks mock, his pick B; then "kinda
+  overwhelming" and "let's get rid of super decks for now"). For a while a
+  tab of their own, Due Crew's decks grouped by why (Before a date, New,
+  From outside Anki), each a tile with Study and Browse and a page of what
+  it is, with Leeches started over on Study and the plan's day as a deck.
+  What stays: his FSRS rule (below), a plan topic's Study and Browse on
+  Today, and Pip off the cleared line ("take pip off the cleared line
+  too"). A deck made for a date (a quiz's, my exam's) remembers it
+  (plans.json `until`) and the morning after, it's emptied back
+  (`plan_flow.untils`, `tidy_decks`); 3.9.5's `sd` notes are dropped. The
+  way back is in git, `superdecks.py`.
+- 3.9.5, Sam's FSRS rule ("a lot of anki's utility comes from its
+  scheduling engine FSRS so we have to only include these such that they
+  are necessary or helpful"), everywhere a Study made a deck: a date
+  ahead, cards not started yet, a miss outside Anki; anything else is
+  reviews ahead of their date, and FSRS has those. So: Today's misses and Slow but
   right are no longer decks (the morning empties one left from before,
   `plan_flow.RETIRED`); a date's Study, on Today, the plan's week and the
   builder, takes its new cards and the ones due today (`plans.new_and_due`;
@@ -3449,7 +3430,9 @@ every release that changes how something works.
   (Sam: "if one clicks on a tagged section on a plan (like a video tags)
   then it moves them into a filtered deck?", then "need that option to
   browse or make the filtered deck") shows its two ways beside its name
-  when clicked (`board._topic_go`): Study, its cards I haven't seen and
+  when clicked (`board._topic_go`; the name stays underlined while they
+  show, the one clicked stays marked: "they should underline and show
+  that they are being selected"): Study, its cards I haven't seen and
   the ones due today, as they come, a deck named for it
   (`plan_flow.study_topic`, `plantopicstudy`; a card another Due Crew deck
   holds comes out of it first and that deck is built again, `_free`, as
@@ -3466,8 +3449,9 @@ every release that changes how something works.
   next time, held at the same intervals: "22% of slow right answers missed
   next time · 13% otherwise", its range from 300 resamples of cards in the
   bars' titles), with See them (Browse; a finding, not a deck, by Sam's
-  FSRS rule: with an exam set they join Before your exam; the deck and its
-  track record went before it shipped); long sittings (right % by minutes
+  FSRS rule: with an exam set, the ones Anki won't show before it join the
+  exam box's Study, `team_flow.exam_deck`; the deck and its track record
+  went before it shipped); long sittings (right % by minutes
   in, held at the interval mix; 45+ minutes against the first 20 in
   hour-long sittings, a range from resampled sittings: "84 → 79% after 35
   minutes in one go"), with Start a Fifteen. A finding shows only once it

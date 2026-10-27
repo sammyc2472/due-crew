@@ -516,7 +516,7 @@ def notes():
         if n and "recovered" not in (st.get("dismissed") or []) else []
 
 
-YOU_TABS = D.TABS + ("supers", "plans", "insights")  # 3.8.0: the You bubble's tabs, Due's lists first; 3.9.5: Super decks
+YOU_TABS = D.TABS + ("plans", "insights")  # 3.8.0: the You bubble's tabs, Due's lists first
 
 
 def you_tab(c):
@@ -558,7 +558,7 @@ def view(c):
         # 3.9.5: today's misses (under a done Reviews row), a deck run out
         rv = next((r for r in v.get("rows") or [] if r.get("kind") == "reviews"), None)
         v["misses"] = _misses(mw.col) if mw.col and rv and rv.get("done") else None
-        v["cleared"], v["cleared_sev"] = cleared()
+        v["cleared"] = cleared()
         # 3.8.1: "Fifteen?", when the day hasn't started by my usual time
         from . import rooms
         v["nudge"] = rooms.nudge(c, v, _day_state()[1].get("dismissed") or ())
@@ -1069,8 +1069,6 @@ def on_message(cmd, parts):
     c = cfg()
     arg = parts[2] if len(parts) > 2 else ""
     if cmd == "duetab" and arg in YOU_TABS:
-        if arg == "supers":
-            _state["sd_page"] = None  # the tab itself: its list
         if arg in (c.get("hidden_tabs") or []):
             c["hidden_tabs"] = [k for k in c["hidden_tabs"] if k != arg]  # a link to it shows it again
         c["due_tab"] = arg
@@ -1099,18 +1097,7 @@ def on_message(cmd, parts):
         open_link(":".join(parts[2:5]))
     elif cmd == "duego" and arg:
         go(arg)
-    elif cmd == "duedeck" and arg.isdigit():
-        study_ours(int(arg))  # 3.9.5: a super deck's Study
-    elif cmd == "sdgo" and arg:
-        sd_go(parts)  # 3.9.5: a super deck's Study, made first when it's ready to make
-    elif cmd == "sdpage":
-        sd_page(":".join(parts[2:]))
-    elif cmd == "sdbrowse" and arg and mw.col:
-        cids = sd_cids(parts[2:])  # 3.9.5 (Sam: "want the option to look at the cards in the browse view")
-        if cids is not None:
-            _pf()._browse(cids, empty="None in it right now.")
-    elif cmd == "duedeckx" and arg.isdigit():
-        put_back(int(arg))
+
     elif cmd == "duestudy":
         study_today()  # 3.8.0
     elif cmd == "duex" and arg:
@@ -1227,295 +1214,16 @@ def _ours(col, did):
     return name.split("::")[-1]
 
 
-# ---- 3.9.5: Super decks, a tab of their own (superdecks.py: their words and the tab's shape) ----
-
-EXAM_DAYS = 7  # Before your exam: from a week out
-SD_FRESH = 30.0  # seconds the tab's decks are good for, while the collection doesn't change
-
-
-def _sd_name(name):
-    """A deck's own name as Due Crew builds it (P.our_deck), the part after Due Crew's parent."""
-    return P.our_deck(name)[len(P.PARENT) + 2:]
-
-
-def super_decks(c):
-    """[deck] (superdecks' shape): every Due Crew deck with cards in it
-    (Study goes into it, × puts them back; its kind and what it held from
-    plan_flow.sd_info), then the ones ready to make that aren't made:
-    Before your exam, Before a quiz, the plan's day, Leeches. Kept a little
-    while the collection doesn't change: the tab's count is on every draw.
-    Main thread."""
-    if not mw.col:
-        return []
-    key = (getattr(mw.col, "mod", None), _today(), str(c.get("exam_date") or ""), id(_state.get("plan_progress")))
-    hit = _state.get("sd_decks")
-    if key[0] is not None and hit and hit[0] == key and time.time() - hit[1] < SD_FRESH:
-        return [dict(d) for d in hit[2]]
-    info = _pf().sd_info()
-    out = []
-    for d in _our_decks(mw.col):
-        x = info.get(d["did"]) or {}
-        made = int(x.get("n") or 0)
-        out.append(dict({k: v for k, v in x.items() if k in ("kind", "day", "plan", "src")},
-                        key=f"d:{d['did']}", did=d["did"], name=d["name"], n=d["n"],
-                        made=made if made > d["n"] else None, cmd=f"duedeck:{d['did']}", x=f"duedeckx:{d['did']}"))
-    have = {d["name"] for d in out}
-    for ready in (_ready_exam, _ready_quizzes, _ready_days, _ready_leech):
-        try:
-            for d in ready(c):
-                if d["name"] not in have and int(d["n"]) > 0:
-                    out.append(d)
-                    have.add(d["name"])
-        except Exception:
-            traceback.print_exc()
-    _state["sd_decks"] = (key, time.time(), [dict(d) for d in out])
-    return out
-
-
-def _ready_exam(c):
-    """Before your exam, from EXAM_DAYS out: Insights' exam box for the deck
-    I reviewed most today (else Insights' first), with Slow but right's
-    (team_flow.exam_deck)."""
-    exam, today = str(c.get("exam_date") or ""), _today()
-    if not exam or not today or exam < today or (D.d(exam) - D.d(today)).days > EXAM_DAYS:
-        return []
-    from . import team_flow
-    decks = team_flow.you_decks()
-    did = _today_deck(mw.col) or (decks[0]["did"] if decks else None)
-    if not did:
-        return []
-    d = next((x for x in decks if x["did"] == did), None)
-    team_flow.insights(did, (d or {}).get("pid"), exam)
-    got = team_flow.exam_deck(did)
-    if not got or got[2].get("kind") != "exam":
-        return []
-    return [{"key": f"exam:{did}", "kind": "exam", "name": _sd_name(got[1]), "n": len(got[0]),
-             "day": str(got[2].get("day") or ""), "cmd": f"sdgo:exam:{did}"}]
-
-
-def _ready_quizzes(c):
-    """Before a quiz: a plan's quiz from P.QUIZ_DAYS out (P.quiz: the open
-    cards of the dates that prep for it)."""
-    pf, today = _pf(), _today()
-    prog, state = _state.get("plan_progress") or {}, pf._state_cfg()
-    out = []
-    for p in pf.followed():
-        st = state.get(p["id"])
-        if p.get("paused") or not st or not pf._deck_ok(mw.col, st.get("deck_id")):
-            continue
-        q = P.quiz(p["doc"], today, prog.get(p["id"]))
-        if q:
-            out.append({"key": f"quiz:{p['id']}:{q['id']}", "kind": "quiz", "name": _sd_name(f"Before {q['name']}"),
-                        "n": int(q["open"]), "day": q["day"], "cmd": f"sdgo:quiz:{p['id']}:{q['id']}"})
-    return out
-
-
-def _ready_days(c):
-    """The plan's day: the open cards I haven't seen of a plan's dates open
-    by today (plan_dates, as Today has them), a deck a plan."""
-    today = _today()
-    prog = _state.get("plan_progress") or {}
-    by = {}
-    for x in plan_dates(today)[0]:
-        if x["opens"] > today:
-            continue
-        o, s_, _t = ((prog.get(x["pid"]) or {}).get(x["uid"]) or [0, 0, 0])[:3]
-        left = max(0, int(o or 0) - int(s_ or 0))
-        if left:
-            got = by.setdefault(x["pid"], [x["plan"], 0])
-            got[1] += left
-    return [{"key": f"day:{pid}", "kind": "day", "name": _sd_name(f"{plan} \u00b7 Today"), "plan": plan, "n": n,
-             "cmd": f"sdgo:day:{pid}"} for pid, (plan, n) in by.items()]
-
-
-def _ready_leech(c):
-    """Leeches (Sam's): the cards leech_plan counts, Leave it out's kept out."""
-    key = getattr(mw.col, "mod", None)
-    hit = _state.get("sd_leech")
-    if key is not None and hit and hit[0] == key:
-        n = hit[1]
-    else:
-        n = len(leech_plan(mw.col, _left_out())[0])
-        _state["sd_leech"] = (key, n)
-    return [{"key": "leech", "kind": "leech", "name": "Leeches", "n": min(n, RECOVER_MAX), "cmd": "sdgo:leech"}] if n else []
-
-
-def super_view(c):
-    """The Super decks tab (superdecks.view), with an open deck's page's
-    words. Main thread."""
-    from . import superdecks
-    sv = superdecks.view(super_decks(c), page=_state.get("sd_page"))
-    if sv["page"]:
-        sv["page"]["facts"] = superdecks.facts(sv["page"])
-    for d in [x for _t, ds in sv["groups"] for x in ds] + sv["rest"]:
-        d["what"] = superdecks.what(d)
-    return sv
-
-
 def cleared():
-    """(the Due Crew deck that ran out today, Pip by it), or (None, None)."""
+    """The Due Crew deck that ran out today, or None (no Pip: Sam, "take
+    pip off the cleared line too")."""
     cl = _state.get("due_cleared")
-    cl = cl if isinstance(cl, dict) and cl.get("day") == _today() else None
-    return cl, (_cleared_sev(cl) if cl else None)
-
-
-def _into(name):
-    """Into a Due Crew deck just built: Anki's overview on it."""
-    _pf()._after_change()
-    did = mw.col.decks.id_for_name(name)
-    if did:
-        mw.col.decks.select(did)
-        mw.moveToState("overview")
-
-
-def sd_go(parts):
-    """sdgo:<what>: a super deck's Study, made first when it's ready to
-    make: exam:<deck>, quiz:<plan>:<event>, day:<plan>, leech."""
-    if not mw.col:
-        return
-    what = parts[2] if len(parts) > 2 else ""
-    _state["sd_decks"] = None
-    if what == "exam" and len(parts) > 3 and parts[3].isdigit():
-        from . import team_flow
-        team_flow.study(int(parts[3]), "h")
-    elif what == "quiz" and len(parts) > 4:
-        _pf().study_quiz(parts[3], parts[4])
-    elif what == "day" and len(parts) > 3:
-        study_day(parts[3])
-    elif what == "leech":
-        study_leeches()
-
-
-def _day_cards(pid):
-    """(the plan's day's cards: the open ones I haven't seen of its dates
-    open by today, in the deck's order; its title), or ([], None)."""
-    pf = _pf()
-    got = pf._plan_idx(pid)
-    if not got:
-        return [], None
-    p, st, doc, idx = got
-    today = _today()
-    uids = {x["uid"] for x in plan_dates(today)[0] if x["pid"] == pid and x["opens"] <= today}
-    cids = set()
-    for u in P.units(doc):
-        if u["id"] in uids:
-            cids |= idx.match(u, pf._swap(st), doc)
-    return (sorted((x for x in cids if idx.cards.get(x) == (0, 0)), key=lambda x: idx.order.get(x, (True, 0, x))),
-            P.plan_title(p))
-
-
-def study_day(pid):
-    """The plan's day (_day_cards) as Due Crew's "<plan> · Today", for today
-    (the morning empties it); then Anki's Study screen on it."""
-    new, title = _day_cards(pid)
-    if not new:
-        tooltip("Nothing new in it.")
-        return
-    name = P.our_deck(f"{title} \u00b7 Today")
-    if _pf()._filtered(mw.col, name, new, order=_pf().NEW_ORDER, kind="day", until=_today(), plan=title):
-        _into(name)
-
-
-def sd_cids(parts):
-    """The cards a super deck holds, or would once made (sdbrowse's): d:<deck>
-    (ours only), exam:<deck>, quiz:<plan>:<event>, day:<plan>, leech."""
-    what = parts[0] if parts else ""
-    if what == "d" and len(parts) > 1 and parts[1].isdigit() and _ours(mw.col, int(parts[1])):
-        return mw.col.db.list("SELECT id FROM cards WHERE did = ?", int(parts[1]))
-    if what == "exam" and len(parts) > 1 and parts[1].isdigit():
-        from . import team_flow
-        got = team_flow.exam_deck(int(parts[1]))
-        return got[0] if got else []
-    if what == "quiz" and len(parts) > 2:
-        return _pf().quiz_cards(parts[1], parts[2])[0]
-    if what == "day" and len(parts) > 1:
-        return _day_cards(parts[1])[0]
-    if what == "leech":
-        return leech_plan(mw.col, _left_out())[0][:RECOVER_MAX]
-    return None
-
-
-def study_leeches():
-    """Leeches (Sam: "a leech superdeck that resets the cards and removes the
-    leech tag upon starting it"): the leeches started over (recover_leeches:
-    new cards, the leech tag off, unsuspended, one undo step), with the ones
-    already in it, as Due Crew's "Leeches"; then Anki's Study screen on it."""
-    col, pf = mw.col, _pf()
-    name = P.our_deck("Leeches")
-    did = col.decks.id_for_name(name)
-    had = [int(x) for x in col.db.list("SELECT id FROM cards WHERE did = ?", int(did))] if did else []
-    cids = recover_leeches(col, "Due Crew: start leeches over", out=_left_out())
-    _state["sd_leech"] = None
-    if not cids and not had:
-        tooltip("No leeches right now.")
-        return
-    if pf._filtered(col, name, had + [x for x in cids if x not in set(had)], order=pf.NEW_ORDER, kind="leech"):
-        _into(name)
-
-
-def sd_page(key):
-    """A super deck's name: its page, in the tab (an empty key goes back)."""
-    _state["sd_page"] = key or None
-    _swap(cfg())
-
-
-def _our_decks(col):
-    """3.9.5: [{did, name, n}] Due Crew's filtered decks (under its parent)
-    with cards in them, as Anki's deck list has them. Main thread."""
-    out = []
-    try:
-        for d in col.decks.all_names_and_ids(include_filtered=True):
-            name = str(d.name or "")
-            if not name.startswith(P.PARENT + "::") or not _ours(col, int(d.id)):
-                continue
-            n = int(col.db.scalar("SELECT count() FROM cards WHERE did = ?", int(d.id)) or 0)
-            if n:
-                out.append({"did": int(d.id), "name": name.split("::")[-1], "n": n})
-    except Exception:
-        traceback.print_exc()
-    return out
-
-
-def study_ours(did):
-    """A Due Crew deck's row's Study: into it (Anki's overview), ours only."""
-    if not mw.col or not _ours(mw.col, did):
-        return
-    mw.col.decks.select(int(did))
-    mw.moveToState("overview")
-
-
-def put_back(did):
-    """A Due Crew deck's row's ×: its cards go back to their own decks
-    (Anki's Empty, one undo step); the morning's tidy takes the empty deck."""
-    if not mw.col or not _ours(mw.col, did):
-        return
-    try:
-        mw.col.sched.empty_filtered_deck(int(did))
-        _state["sd_decks"] = _state["sd_page"] = None
-        _pf()._after_change()
-    except Exception:
-        traceback.print_exc()
-    _swap(cfg())
-
-
-def _cleared_sev(cl):
-    """Pip hopping by a deck that ran out (a move from the hop's mix, never
-    the last one); drawn again, it rests there. None with Pip off."""
-    from . import rooms, sev
-    if not rooms.sev_on():
-        return None
-    key = (cl.get("name"), cl.get("n"), cl.get("day"))
-    have = _state.get("due_cleared_move")
-    rest = isinstance(have, tuple) and have[0] == key
-    if not rest:
-        _state["due_cleared_move"] = (key, rooms.pick("hop"))
-    return sev.slot(sev.move("hop", _state["due_cleared_move"][1], rest=rest, label="Pip: all cleared",
-                             look=rooms.my_look()), 44)
+    return cl if isinstance(cl, dict) and cl.get("day") == _today() else None
 
 
 def _watch_ours(new, old):
-    """3.9.5: a Due Crew deck I studied that ran out says so on the board,
-    with Pip (Nice puts it away). How many it held is counted as its review
+    """3.9.5: a Due Crew deck I studied that ran out says so on the board
+    (Nice puts it away). How many it held is counted as its review
     starts; it ran out when nothing's left in it as I leave the review."""
     col = mw.col
     if not col:

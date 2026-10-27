@@ -5513,8 +5513,8 @@ def test_plans_tab_v33():
     check("tabs: hidden in Settings, gone, and a saved Plans period falls back to Crew's Today",
           "duetab:plans" not in hidden and "Step 1 · Dre" not in hidden and "period:decks" not in hidden
           and "period:squads" in hidden and 'dc-pill on" href="#" onclick="pycmd(\'duecrew:period:today' in hidden)
-    bare = board.render(data, {"hidden_tabs": ["supers", "plans", "insights"]}, 0, plans=plans, you={"tab": "plans", "plans": plans})
-    check("You: Due off, Super decks, Plans and Insights hidden: no bubble at all", 'class="du' not in bare and "duetab" not in bare)
+    bare = board.render(data, {"hidden_tabs": ["plans", "insights"]}, 0, plans=plans, you={"tab": "plans", "plans": plans})
+    check("You: Due off, Plans and Insights hidden: no bubble at all", 'class="du' not in bare and "duetab" not in bare)
     old = board.render(data, {"hidden_tabs": ["today", "week"]}, 0)
     check("tabs: Crew can't be hidden, nor Week (Crew's picker since 3.8.0)",
           "period:today" in old and "period:week" in old)
@@ -6595,8 +6595,8 @@ def test_you_bubble_v380():
     plans = {"cards": [{"id": "p1", "title": "Block <b>", "sub": "week 1 of 4", "rows": [], "lines": []}], "offers": []}
     tabs = lambda h: re.findall(r"duecrew:duetab:([a-z]+)", h.split('class="dc-sheet"')[0])
     html = board.render(data, {"period": "today"}, 0, plans=plans, due=dv, you={"tab": "today", "plans": plans})
-    check("you: over the board, Due's lists then Super decks, Plans and Insights",
-          tabs(html) == ["today", "upcoming", "supers", "plans", "insights"] and 'class="du-tabs du-more"' in html
+    check("you: over the board, Due's lists then Plans and Insights",
+          tabs(html) == ["today", "upcoming", "plans", "insights"] and 'class="du-tabs du-more"' in html
           and html.index('class="du"') < html.index('class="dc-sheet"') and "dc-split" in html, tabs(html))
     check("you: Today's list, escaped; the board under it is Crew and Squads",
           "Read &lt;b&gt;ch 3&lt;/b&gt;" in html and "<b>ch 3" not in html and "period:squads" in html
@@ -6607,16 +6607,16 @@ def test_you_bubble_v380():
     hid = board.render(data, {"period": "today", "hidden_tabs": ["plans"]}, 0, plans=plans, due=dv,
                        you={"tab": "plans", "plans": plans})
     check("you: a tab hidden in Settings is gone, and a saved one falls back to Today",
-          tabs(hid) == ["today", "upcoming", "supers", "insights"] and "Block &lt;b&gt;" not in hid and "Read &lt;b&gt;" in hid)
+          tabs(hid) == ["today", "upcoming", "insights"] and "Block &lt;b&gt;" not in hid and "Read &lt;b&gt;" in hid)
     off = board.render(data, {"period": "today", "due_show": False}, 0, plans=plans, due=None, you={"tab": "today", "plans": plans})
-    check("you: Due off, Super decks, Plans and Insights still there, Plans open", tabs(off) == ["supers", "plans", "insights"]
+    check("you: Due off, Plans and Insights still there, Plans first", tabs(off) == ["plans", "insights"]
           and "Block &lt;b&gt;" in off and "Hide &#9652;" in off)
     folded = board.render(data, {"period": "today"}, 0, plans=plans, due=None, you={"tab": "plans", "plans": plans, "folded": True})
     check("you: Due off and folded, one line naming what's in it, with Show",
-          "<b>Super decks &middot; Plans &middot; Insights</b>" in folded and "Show &#9662;" in folded and "Block" not in folded)
-    none = board.render(data, {"period": "today", "hidden_tabs": ["supers", "plans", "insights"]}, 0, plans=plans, due=None,
+          "<b>Plans &middot; Insights</b>" in folded and "Show &#9662;" in folded and "Block" not in folded)
+    none = board.render(data, {"period": "today", "hidden_tabs": ["plans", "insights"]}, 0, plans=plans, due=None,
                         you={"tab": "plans", "plans": plans})
-    check("you: Due off and all three hidden, no bubble", "duetab" not in none and "duefold" not in none)
+    check("you: Due off and both hidden, no bubble", "duetab" not in none and "duefold" not in none)
     check("you: the old render (no you) is Due alone", "duetab:plans" not in board.render(data, {"period": "today"}, 0, due=dv))
     # 3.8.0, refined: calmer, nothing lost
     lb0 = labels[0]
@@ -6630,7 +6630,7 @@ def test_you_bubble_v380():
     dv2 = DUE.view(lb0, dates, [], {}, events=[{"day": tm, "name": "Quiz <q>", "plan": "Big Step 1"}])
     th = board._due_html(dv2)
     check("refined: a date's topics on their resource's row; what has no resource stays on its own line",
-          "<b>Video Series</b> &middot; <a class=\"tp\"" in th and "Kidney &lt;b&gt;</a>" in th and "<b>Kidney" not in th
+          "<b>Video Series</b> &middot; <a class=\"tp dc-tpn\"" in th and "Kidney &lt;b&gt;</a>" in th and "<b>Kidney" not in th
           and "duecrew:plantopicstudy:p1:u1:1" in th and "<b>Search</b> &middot; <a" in th and "Video Series</b> &middot; <a" in th
           and th.count("Video Series") == 1, th[:3000])
     up = board._due_html(dict(dv2, tab="upcoming"))
@@ -7720,8 +7720,12 @@ def test_date_details_round5():
     check("details: today's row keeps its topics on the row (each its Study and Browse, 3.9.5), not again under it",
           h.count("plantopicstudy:p1:u1:0") == 1 and h.count("plantopic:p1:u1:0") == 1)
     check("details: a topic's name shows its two ways beside it (Sam: \"need that option to browse or make the filtered deck\")",
-          'id="dc-tp-p1u1-0" hidden><a href="#" onclick="pycmd(\'duecrew:plantopicstudy:p1:u1:0|' in h
+          'id="dc-tp-p1u1-0" hidden><a href="#" onclick="' in h and "pycmd('duecrew:plantopicstudy:p1:u1:0|" in h
           and "document.getElementById('dc-tp-p1u1-0')" in h and ">Browse</a></span>" in h, h)
+    check("details: the name stays underlined while they show; the one clicked stays marked (Sam: \"they should underline "
+          "and show that they are being selected\")",
+          "this.classList.toggle('on',!x.hidden)" in h and h.count("this.classList.add('on')") == 2
+          and "a.dc-tpn.on { text-decoration: underline" in board.DUE_CSS and ".du-tpgo a:hover" in board.DUE_CSS, h)
     up = board._due_short(D._date_row(dict(base, opens="2026-10-09", seen=0), {}, T, short=True))
     check("details: an Upcoming date: Open now, Move…, Skip it, Browse, and its topics (the line has none)",
           all(c in up for c in ("plannow:p1:u1", "planmove:p1:u1", "planskip:p1:u1", "planbrowse:p1:u1", "plantopic:p1:u1:0"))
@@ -8727,10 +8731,10 @@ def test_tidy_filtered_v380():
         check("tidy: one step, the empty ones of ours; the parent stays while a deck under it has cards",
               n == 3 and col.decks.removed == [[1, 3, 6]] and pc["built"] == [2, 8], (n, col.decks.removed, pc))
         check("tidy: 3.9.5, Today's misses (a deck Due Crew no longer makes) is emptied back into its decks", emptied == [2], emptied)
-        pc["sd"] = {"2": {"kind": "quiz", "until": "2026-10-14"}}
+        pc["until"] = {"2": "2026-10-14"}
         F._today = lambda: "2026-10-15"
         F.tidy_decks(col)
-        check("tidy: 3.9.5, a super deck past its day (a quiz gone) is emptied back too", emptied == [2, 2, 2], emptied)
+        check("tidy: 3.9.5, a deck past its day (a quiz gone) is emptied back too", emptied == [2, 2, 2], emptied)
         cards[2] = 0
         n = F.tidy_decks(col)
         check("tidy: the last one under it studied, it goes with the parent, one step",
@@ -18403,8 +18407,9 @@ def test_today_v395():
           "<b>Next up:</b> Renal &lt;Physiology&gt;" in hn and "duecrew:insstudy:10:0" in hn and "duecrew:duex:next" in hn
           and "<Physiology>" not in hn, hn[hn.index("du-sg"):][:600])
     hc = board._due_html(dict(v, cleared={"name": "Slow <but> right", "n": 46, "day": T}, cleared_sev="<i>PIP</i>"))
-    check("today board: a Due Crew deck that ran out: its name escaped, all 46 cleared, Pip, Nice puts it away",
-          "<b>Slow &lt;but&gt; right</b>: all 46 cleared" in hc and "<i>PIP</i>" in hc and "duecrew:duex:cleared" in hc
+    check("today board: a Due Crew deck that ran out: its name escaped, all 46 cleared, Nice puts it away; no Pip "
+          "(Sam: \"take pip off the cleared line too\")",
+          "<b>Slow &lt;but&gt; right</b>: all 46 cleared" in hc and "PIP" not in hc and "duecrew:duex:cleared" in hc
           and hc.index("du-clr") < hc.index("<b>Reviews</b>"), hc[:1500])
     # ---- Next up: the first that applies ----
     from due_crew import team_flow as TF
@@ -18505,12 +18510,9 @@ def test_click_test_v395():
     picked in a Qt calendar (the page's own date picker went down with a
     redraw: "removing an exam date and then clicking add exam date makes
     anki quit"); an exam date comes off the day after it ("when an exam
-    date passes let's remove it"); every Due Crew deck with cards in it is
-    a super deck ("where do I find superdecks?"; a tab of their own since
-    Sam's pick B: test_super_decks_v395)."""
+    date passes let's remove it")."""
     import due_crew as dc
     from due_crew import due_flow as F, plan_flow as PF, ui as UI
-    from due_crew.app import _state
     from aqt.deckbrowser import DeckBrowser
     T = TODAY.isoformat()
     conf = {"exam_date": "", "exam_since": "", "exam_last": ""}
@@ -18555,241 +18557,28 @@ def test_click_test_v395():
               not F.exam_gone(c2) and c2["exam_date"] == "2026-09-20" and not F.exam_gone({"exam_date": ""}))
     finally:
         F._today, F.save_cfg = saved
-    # Due Crew's decks
-    cut = fakes.day_cutoff_for(TODAY)
-    conn = fakes.make_collection(sqlite3.connect(":memory:"))
-    col = fakes.FakeCol(conn, cut)
-    names = {10: "Big Step 1", 70: "Due Crew", 71: "Due Crew::Slow but right", 72: "Due Crew::Today's misses",
-             73: "Due Crew::Renal <x>", 74: "Mine::Cram"}
-    decks = fakes.FakeDecks(names)
-    base = decks.get
-    decks.get = lambda did, default=True: dict(base(did, default), dyn=1) if did in (71, 72, 73, 74) else base(did, default)
-    col.decks = decks
-    for i, did in enumerate((71, 71, 72, 73, 74)):
-        fakes.add_card(conn, 500 + i, did, ctype=2, queue=2, odid=10)
-    ours = F._our_decks(col)
-    check("ours: the Due Crew decks with cards in them, by their own names; a filtered deck of mine isn't one",
-          ours == [{"did": 71, "name": "Slow but right", "n": 2}, {"did": 72, "name": "Today's misses", "n": 1},
-                   {"did": 73, "name": "Renal <x>", "n": 1}], ours)
-    went, emptied = [], []
-    col.decks.select = lambda did: went.append(did)
-    col.sched.empty_filtered_deck = lambda did: emptied.append(did)
-    saved = (F.mw.col, F.cfg, F._pf, getattr(F.mw, "moveToState", None), F.app.swap)
-    F.mw.col, F.cfg = col, (lambda: {})
-    F._pf = lambda: types.SimpleNamespace(_after_change=lambda: None)
-    F.mw.moveToState = lambda st: went.append(st)
-    F.app.swap = lambda c, focus=None: None
-    try:
-        send = lambda m: dc._on_js(False, as_board("duecrew:" + m), DeckBrowser())  # noqa: E731
-        send("duedeck:71")
-        send("duedeck:74")  # a filtered deck of mine: not from here
-        send("duedeckx:72")
-        send("duedeckx:10")  # not a Due Crew deck: nothing
-        check("ours: Study opens the deck; × empties it back into its decks; only ours, through the board's own handler",
-              went == [71, "overview"] and emptied == [72], (went, emptied))
-    finally:
-        F.mw.col, F.cfg, F._pf = saved[:3]
-        if saved[3] is None:
-            del F.mw.moveToState
-        else:
-            F.mw.moveToState = saved[3]
-        F.app.swap = saved[4]
-        _state["due_ours"] = None
-
-
-def test_super_decks_v395():
-    """3.9.5, Super decks (Sam's pick B, then his rule: only for what Anki's
-    scheduler can't know: a date ahead, cards not started, a miss outside
-    Anki): a tab of their own in the You bubble, grouped by why, no Pip and
-    no count on it ("kinda overwhelming"); a deck's page on its name; each
-    one's cards in Browse, made or not ("want the option to look at the
-    cards in the browse view"); with none, the kinds and when; Leeches
-    (Sam's) start over on Study. Every click through the board's own
-    handler."""
-    import due_crew as dc
-    from due_crew import superdecks as SD, due_flow as F, plan_flow as PF, team_flow as TF, app as appmod
-    from due_crew.app import _state
-    from aqt.deckbrowser import DeckBrowser
+def test_super_decks_gone_v395():
+    """3.9.5: Super decks, built and click-tested, went before it shipped
+    (Sam: "i think let's get rid of super decks for now"). What stays:
+    a plan topic's Study and Browse on Today, the cleared line without Pip,
+    and a deck made for a date goes the morning after it."""
+    from due_crew import plan_flow as PF, settings_model, due_flow as F
+    check("gone: no Super decks tab, nothing to hide in Settings, no tab Due's handler knows",
+          [k for k, _l in board.YOU_MORE] == ["plans", "insights"] and "supers" not in settings_model.HIDEABLE
+          and "supers" not in F.YOU_TABS and not os.path.exists(os.path.join(REPO, "due_crew", "superdecks.py")))
+    pc = {"sd": {"71": {"kind": "quiz"}}}
     day = (TODAY + datetime.timedelta(days=2)).isoformat()
-    dow = f"{TODAY + datetime.timedelta(days=2):%a}"
-    exam = {"key": "exam:10", "kind": "exam", "name": "Before your exam", "n": 53, "day": day, "cmd": "sdgo:exam:10"}
-    quiz = {"key": "quiz:p1:q", "kind": "quiz", "name": "Before Cardio <quiz>", "n": 64, "day": day, "cmd": "sdgo:quiz:p1:q"}
-    pday = {"key": "day:p1", "kind": "day", "name": "MS2 \u00b7 Today", "plan": "MS2", "n": 24, "cmd": "sdgo:day:p1"}
-    sec = {"key": "d:71", "did": 71, "kind": "new", "src": "Video Series", "name": "Pharmacokinetics", "n": 83, "made": 85,
-           "cmd": "duedeck:71", "x": "duedeckx:71"}
-    leech = {"key": "leech", "kind": "leech", "name": "Leeches", "n": 12, "cmd": "sdgo:leech"}
-    qb = {"key": "d:72", "did": 72, "kind": "qbank", "name": "QBank cards", "n": 12, "cmd": "duedeck:72", "x": "duedeckx:72"}
-    old = {"key": "d:73", "did": 73, "name": "Today's misses", "n": 3, "cmd": "duedeck:73", "x": "duedeckx:73"}
-    every = [qb, leech, sec, pday, quiz, exam, old]
-    # ---- the words ----
-    check("words: each tile says what it is in a few words",
-          [SD.what(d) for d in (exam, quiz, pday, sec, leech, qb, old)]
-          == [f"would slip by {dow}", f"would slip by {dow}", "the plan\u2019s day", "Video Series", "start fresh", "from your QIDs", ""])
-    fx = {d["key"]: dict(SD.facts(d)) for d in every}
-    check("words: a page says what's in it, why it's a deck (what Anki's scheduler can't know), when a card leaves, then",
-          all(list(dict(SD.facts(d))) == ["In it", "Why a deck", "Leaves", "Then"] for d in every[:-1])
-          and fx["exam:10"]["Why a deck"] == f"Anki aims for your retention every day, not on {dow}."
-          and fx["quiz:p1:q"]["In it"] == "Cards from the dates Cardio <quiz> tests."
-          and "The plan does." in fx["day:p1"]["Why a deck"] and fx["d:72"]["Why a deck"] == "A miss in a question bank is one Anki never saw."
-          and "Study starts them over" in fx["leech"]["Then"] and "Study starts them over" not in dict(SD.facts(dict(leech, did=9)))["Then"]
-          and list(fx["d:73"]) == ["Leaves", "Then"], fx)
-    v = SD.view(every)
-    check("view: grouped by why, in the kinds' order; a deck from before kinds has no group",
-          [(t, [d["key"] for d in ds]) for t, ds in v["groups"]]
-          == [("Before a date", ["exam:10", "quiz:p1:q"]), ("New", ["day:p1", "d:71", "leech"]), ("From outside Anki", ["d:72"])]
-          and [d["key"] for d in v["rest"]] == ["d:73"] and v["n"] == 7 and v["soon"] == [] and "first" not in v
-          and v["page"] is None, v)
-    v0 = SD.view([])
-    check("view: none yet, the kinds and when each shows up", v0["n"] == 0 and len(v0["soon"]) == 6 and v0["groups"] == []
-          and v0["soon"][3] == ("A section\u2019s cards", "a click on one, under a plan\u2019s date"), v0["soon"])
-    part = {"key": "d:74", "did": 74, "kind": "part", "name": "Renal", "n": 9, "day": day, "cmd": "duedeck:74"}
-    check("words: a part studied before a date (Insights' row or map): missed lately, before it; its page says so",
-          SD.what(part) == f"missed lately, before {dow}" and dict(SD.facts(part))["In it"] == "Renal: the cards you missed lately."
-          and [t for t, _ds in SD.view([part])["groups"]] == ["Before a date"])
-    check("view: with decks, no list of what's to come", SD.view([pday])["soon"] == [])
-    check("view: a deck's page by its key", SD.view(every, page="d:71")["page"] is sec and SD.view(every, page="d:99")["page"] is None)
-    # ---- the board ----
-    for d in every:
-        d["what"] = SD.what(d)
-    h = board._supers_html(v)
-    check("tab: its groups in order, names escaped, what each is",
-          h.index(">Before a date<") < h.index(">New<") < h.index(">From outside Anki<")
-          and "Before Cardio &lt;quiz&gt;</a>" in h and "<quiz>" not in h and f"would slip by {dow}" in h, h[:2000])
-    t71 = h[h.index("duecrew:duedeck:71"):][:900]
-    check("tab: a built one says what's left of what it held, a bar, Browse, × puts them back; the tile and Study go in",
-          "83<small>left</small>" in t71 and 'style="width:2%"' in t71 and "duecrew:duedeckx:71" in t71
-          and "duecrew:sdpage:d:71" in t71 and "duecrew:sdbrowse:d:71" in t71, t71)
-    check("tab: every one has its Browse, made or not", all(f"duecrew:sdbrowse:{d['key']}|" in h for d in every), h[:400])
-    check("tab: one ready to make: its count, Study makes it, no ×; a stack's second edge at 20 cards",
-          'class="sd thick" onclick="pycmd(\'duecrew:sdgo:leech' not in h and 'class="sd" onclick="pycmd(\'duecrew:sdgo:leech' in h
-          and 'class="sd thick" onclick="pycmd(\'duecrew:sdgo:exam:10' in h and "sdgo:exam:10" in h
-          and h.count("duedeckx:") == 3, h[:400])
-    empty = board._supers_html(v0)
-    check("tab: none yet, then the kinds and when", "None yet." in empty and empty.count("<b>") == 6
-          and "A section&rsquo;s cards" not in empty and "A section\u2019s cards" in empty, empty)
-    calm = board._supers_html(dict(v, cleared={"name": "Leeches", "n": 12, "day": "x"}, cleared_sev="<i>PIP</i>"))
-    check("tab: no Pip, no first-time line, no deck-ran-out line (Sam: \"kinda overwhelming\")",
-          "PIP" not in calm and "Your first" not in calm and "cleared" not in calm and "Still to come" not in calm)
-    pg = board._supers_html({"page": dict(sec, facts=SD.facts(sec))})
-    check("page: ‹ Super decks back, its tile, how far along, Study, its four lines, Browse and Put them back",
-          "duecrew:sdpage|" in pg and "&lsaquo; Super decks" in pg and "<b>2 of 85 done</b>" in pg and "Study 83</a>" in pg
-          and ">Why a deck</span>" in pg and "duecrew:sdbrowse:d:71" in pg and "Put them back</a>" in pg and pg.count("duedeckx") == 1, pg)
-    lp = board._supers_html({"page": dict(leech, facts=SD.facts(leech))})
-    check("page: one ready to make: Browse what it would hold, nothing to put back; it says Study starts them over",
-          "duecrew:sdbrowse:leech" in lp and "duedeckx" not in lp and "Study starts them over" in lp and "Study 12</a>" in lp, lp)
-    tabs = board.you_html({}, None, {"tab": "supers", "supers": v})
-    check("tab: Super decks before Plans and Insights, no count on it, its decks under it",
-          ">Super decks</a>" in tabs and "Super decks 7" not in tabs and tabs.index("duetab:supers") < tabs.index("duetab:plans")
-          and "sdgo:leech" in tabs, tabs[:1200])
-    check("tab: hidden in Settings, gone", "Super decks" not in board.you_html({"hidden_tabs": ["supers"]}, None, {"tab": "supers"}))
-    # ---- the glue: what's built and what's ready ----
-    saved = (F.mw.col, F._our_decks, F._ready_exam, F._ready_quizzes, F._ready_days, F._ready_leech, F._pf, F._today)
-    F.mw.col = types.SimpleNamespace(mod=1)
-    F._today = lambda: TODAY.isoformat()
-    F._our_decks = lambda col: [{"did": 71, "name": "Pharmacokinetics", "n": 83}, {"did": 73, "name": "Leeches", "n": 3}]
-    F._pf = lambda: types.SimpleNamespace(sd_info=lambda: {71: {"kind": "new", "n": 85, "src": "Video Series"}})
-    F._ready_exam = lambda c: [dict(exam)]
-    F._ready_quizzes = lambda c: [dict(quiz), dict(quiz, key="quiz:p2:q", name="Empty", n=0)]
-    F._ready_days = lambda c: []
-    F._ready_leech = lambda c: [dict(leech)]
-    _state["sd_decks"] = None
-    try:
-        got = F.super_decks({})
-        check("glue: the built ones (kind and what they held, from what was noted when built), then the ready ones;"
-              " one built isn't offered again, an empty one never",
-              [(d["key"], d.get("kind"), d.get("made")) for d in got]
-              == [("d:71", "new", 85), ("d:73", None, None), ("exam:10", "exam", None), ("quiz:p1:q", "quiz", None)], got)
-        F._ready_exam = lambda c: 1 / 0
-        check("glue: kept a little while the collection doesn't change", len(F.super_decks({})) == 4)
-        _state["sd_decks"] = None
-        check("glue: a kind that fails leaves the rest", [d["key"] for d in F.super_decks({})] == ["d:71", "d:73", "quiz:p1:q"])
-    finally:
-        F.mw.col, F._our_decks, F._ready_exam, F._ready_quizzes, F._ready_days, F._ready_leech, F._pf, F._today = saved
-        _state["sd_decks"] = None
-    # ---- every click, as the board sends it ----
-    conf, calls = {}, []
-    saved = (F.cfg, F.save_cfg, appmod.swap, F.mw.col, TF.study, PF.study_quiz, F.study_day, F.study_leeches, F._pf, F._ours)
-    F.cfg, F.save_cfg, appmod.swap = (lambda: conf), (lambda c, **k: conf.update(c)), (lambda c, focus=None: calls.append("swap"))
-    F.mw.col = types.SimpleNamespace(db=types.SimpleNamespace(list=lambda q, *a: [500, 501]))
-    TF.study = lambda did, key: calls.append(("exam", did, key))
-    PF.study_quiz = lambda pid, eid: calls.append(("quiz", pid, eid))
-    F.study_day = lambda pid: calls.append(("day", pid))
-    F.study_leeches = lambda: calls.append("leech")
-    F._ours = lambda col, did: "x" if did == 71 else None
-    F._pf = lambda: types.SimpleNamespace(study_quiz=PF.study_quiz, _browse=lambda cids, **k: calls.append(("browse", list(cids))),
-                                          quiz_cards=lambda pid, eid: ([9], {}) if (pid, eid) == ("p1", "q") else ([], None))
-    send = lambda m: dc._on_js(False, as_board("duecrew:" + m), DeckBrowser())  # noqa: E731
-    try:
-        send("sdpage:d:71")
-        check("sdpage: a deck's name opens its page", _state.get("sd_page") == "d:71" and calls[-1] == "swap")
-        send("sdpage")
-        check("sdpage: ‹ Super decks goes back", _state.get("sd_page") is None)
-        send("sdpage:quiz:p1:q")
-        send("duetab:supers")
-        check("duetab:supers: the tab itself is its list", _state.get("sd_page") is None and conf.get("due_tab") == "supers")
-        calls.clear()
-        for m in ("sdgo:exam:10", "sdgo:quiz:p1:q", "sdgo:day:p1", "sdgo:leech", "sdgo:exam:x", "sdgo:nope", "sdgo:quiz:p1"):
-            send(m)
-        check("sdgo: a ready one's Study makes it (exam, quiz, the plan's day, leeches); nothing else does",
-              calls == [("exam", 10, "h"), ("quiz", "p1", "q"), ("day", "p1"), "leech"], calls)
-        calls.clear()
-        send("sdbrowse:d:71")
-        send("sdbrowse:d:72")  # not one of ours: nothing
-        check("sdbrowse: a built one's cards in Browse, ours only", calls == [("browse", [500, 501])], calls)
-        calls.clear()
-        keep = (TF.exam_deck, F._day_cards, F.leech_plan, F._left_out)
-        TF.exam_deck = lambda did: ([7, 8], "Before your exam", {}) if did == 10 else None
-        F._day_cards = lambda pid: ([5], "MS2") if pid == "p1" else ([], None)
-        F.leech_plan = lambda col, out=(): ([3, 4], [], [], [])
-        F._left_out = lambda: set()
-        try:
-            for m in ("sdbrowse:exam:10", "sdbrowse:quiz:p1:q", "sdbrowse:day:p1", "sdbrowse:leech", "sdbrowse:nope",
-                      "sdbrowse:exam:x", "sdbrowse:quiz:p1"):
-                send(m)
-        finally:
-            TF.exam_deck, F._day_cards, F.leech_plan, F._left_out = keep
-        check("sdbrowse: one ready to make, the cards it would hold, in Browse (Sam: \"want the option to look at the cards\")",
-              calls == [("browse", [7, 8]), ("browse", [9]), ("browse", [5]), ("browse", [3, 4])], calls)
-    finally:
-        (F.cfg, F.save_cfg, appmod.swap, F.mw.col, TF.study, PF.study_quiz, F.study_day, F.study_leeches, F._pf, F._ours) = saved
-        _state["sd_page"] = None
-    # ---- Leeches: start them over, then the deck ----
-    built, into = [], []
-    pf = types.SimpleNamespace(NEW_ORDER=6, _filtered=lambda col, name, cids, order=4, kind=None, **kw: built.append(
-        (name, list(cids), order, kind)) or True)
-    col = types.SimpleNamespace(decks=types.SimpleNamespace(id_for_name=lambda n: 88),
-                                db=types.SimpleNamespace(list=lambda q, *a: [7]))
-    saved = (F.mw.col, F._pf, F.recover_leeches, F._left_out, F._into, F.tooltip)
-    F.mw.col, F._pf, F._left_out = col, (lambda: pf), (lambda: {3})
-    F.recover_leeches = lambda c, label, out=(): calls.append(("recover", label, sorted(out))) or [5, 6, 7]
-    F._into = lambda name: into.append(name)
-    F.tooltip = lambda t, **k: calls.append(t)
-    calls.clear()
-    try:
-        F.study_leeches()
-        check("leeches: Study starts them over (Leave it out's stay out), then Due Crew's Leeches with the ones already in it",
-              calls == [("recover", "Due Crew: start leeches over", [3])]
-              and built == [(PF.P.our_deck("Leeches"), [7, 5, 6], 6, "leech")] and into == [PF.P.our_deck("Leeches")], (calls, built))
-        F.recover_leeches = lambda c, label, out=(): []
-        col.db.list = lambda q, *a: []
-        F.study_leeches()
-        check("leeches: none, and none in it: it says so, builds nothing", len(built) == 1 and calls[-1] == "No leeches right now.")
-    finally:
-        F.mw.col, F._pf, F.recover_leeches, F._left_out, F._into, F.tooltip = saved
-    # ---- what's noted when one's built ----
-    pc = {}
-    saved = (PF._pcfg, PF._psave, PF.mw.col)
+    saved = (PF._pcfg, PF._psave)
     PF._pcfg, PF._psave = (lambda: pc), (lambda c: None)
-    PF.mw.col = types.SimpleNamespace(db=types.SimpleNamespace(scalar=lambda q, *a: 40))
     try:
-        PF._note_built(71, "quiz", {"until": day, "day": day, "src": None})
+        PF._note_built(71, day)
         PF._note_built(72)
-        check("noted: a super deck's kind, what it held, its day; a deck without one, none",
-              PF.sd_info() == {71: {"kind": "quiz", "n": 40, "until": day, "day": day}} and pc["built"] == [71, 72], pc)
+        check("noted: a deck for a date keeps its day (the morning after, it's emptied); one without, none; "
+              "3.9.5's Super decks' notes go", PF.untils() == {71: day} and pc["built"] == [71, 72] and "sd" not in pc, pc)
         PF._note_built(71)
-        check("noted: built again without a kind, its kind goes", PF.sd_info() == {}, pc)
+        check("noted: built again without a date, its day goes", PF.untils() == {}, pc)
     finally:
-        PF._pcfg, PF._psave, PF.mw.col = saved
+        PF._pcfg, PF._psave = saved
 
 
 def main():

@@ -1,5 +1,5 @@
 """3.9.5, How you study, the glue (habits.py is pure): Insights' line and
-view, Slow but right's cards (for Before your exam), and the Fifteen at 35. Mine alone: worked out here from my own Anki log,
+view, Slow but right's cards (for the exam box's Study), and the Fifteen at 35. Mine alone: worked out here from my own Anki log,
 never sent (no request, no account key, nothing on the server).
 
 The log is read once per Anki day (and again after an hour while Insights
@@ -11,8 +11,8 @@ account changed meanwhile (app.generation).
 Slow but right: the cards whose latest review answer, in the last 7 days,
 was right but took 1.5 to 3 times their usual; not suspended, buried or in
 a filtered deck already. Since 3.9.5's FSRS rule, a finding with See them,
-not a deck: with an exam set, the ones in its scope join Before your exam
-(due_flow.supers). Never sent.
+not a deck: with an exam set, the ones in its deck Anki won't show before
+it join the exam box's Study (team_flow.exam_deck). Never sent.
 
 The Fifteen at 35: only for someone whose long-sittings finding passes.
 While reviewing, at each card, the sitting going on (answers 10 minutes

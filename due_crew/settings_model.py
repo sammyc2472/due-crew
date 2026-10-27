@@ -21,7 +21,7 @@ CHOICES = {"theme": ("auto", "light", "dark"),
            "accent": ("green", "blue", "purple", "teal", "amber", "rose"),
            "room_chip_side": ("left", "right"),
            "sev_break": ("breathe", "stretch")}  # 3.8.1: a fifteen's break
-HIDEABLE = ("decks", "squads", "supers", "plans", "insights")  # 3.8.0: board.HIDEABLE_TABS: Crew's Decks, Squads; (3.9.5) Super decks, Plans, Insights
+HIDEABLE = ("decks", "squads", "plans", "insights")  # 3.8.0: board.HIDEABLE_TABS: Crew's Decks, Squads; Plans, Insights
 PRIVACY = ("numbers", "showup", "paused")
 LABEL_MAX = 24
 # what Reset board puts back: the Board tab, never anything on Privacy

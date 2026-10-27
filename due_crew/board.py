@@ -75,10 +75,9 @@ SORT_KEYS = ("reviews", "time", "retention", "streak", "week")  # week: squads o
 PERIODS = ("today", "week", "decks", "squads")
 # 3.5.0: tabs a person can hide in Settings (per computer); Today always shows
 # 3.8.0: Today and Week are always there; the rest can be hidden in Settings
-HIDEABLE_TABS = (("decks", "Decks"), ("squads", "Squads"), ("supers", "Super decks"), ("plans", "Plans"),
-                 ("insights", "Insights"))
+HIDEABLE_TABS = (("decks", "Decks"), ("squads", "Squads"), ("plans", "Plans"), ("insights", "Insights"))
 CREW_VIEWS = (("today", "Today"), ("week", "Week"), ("decks", "Decks"))
-YOU_MORE = (("supers", "Super decks"), ("plans", "Plans"), ("insights", "Insights"))  # 3.9.5: Super decks
+YOU_MORE = (("plans", "Plans"), ("insights", "Insights"))
 
 
 def hidden_tabs(cfg):
@@ -2337,7 +2336,7 @@ def _habits_html(did, h):
     """3.9.5, How you study, in Insights' place (‹ Insights goes back): my
     time in its head; the win, cards matured, always; Slow but right only
     when its finding passes, with See them (a finding, not a deck, since
-    3.9.5's FSRS rule: with an exam set they join Before your exam); long
+    3.9.5's FSRS rule: with an exam set they join the exam box's Study); long
     sittings only when theirs passes, with Start a Fifteen.
     Nothing passed: the win and one line. All decks, worked out from my
     own log (habits_flow.board_view). Numbers only: nothing to escape but
@@ -3146,10 +3145,14 @@ def _topic_go(pid, uids, name, i):
     the ones due today, a deck of its own) and Browse."""
     e = _html.escape
     tid = "dc-tp-" + _re.sub(r"[^A-Za-z0-9]", "", f"{pid}-{uids}") + f"-{int(i)}"
-    return (f'<a class="tp" href="#" onclick="var x=document.getElementById(\'{tid}\');if(x)x.hidden=!x.hidden;return false;">'
+    # 3.9.5 (Sam: "they should underline and show that they are being selected"): the name stays
+    # underlined while its two ways show; the one clicked stays marked
+    pick = "this.parentNode.querySelectorAll('a').forEach(function(y){y.classList.remove('on')});this.classList.add('on');"
+    return (f'<a class="tp dc-tpn" href="#" onclick="var x=document.getElementById(\'{tid}\');'
+            f'if(x){{x.hidden=!x.hidden;this.classList.toggle(\'on\',!x.hidden);}}return false;">'
             f'{e(str(name))}</a><span class="du-tpgo" id="{tid}" hidden>'
-            f'<a href="#" onclick="{_pycmd(f"plantopicstudy:{pid}:{uids}:{int(i)}")}">Study</a>'
-            f'<a href="#" onclick="{_pycmd(f"plantopic:{pid}:{uids}:{int(i)}")}">Browse</a></span>')
+            f'<a href="#" onclick="{pick}{_pycmd(f"plantopicstudy:{pid}:{uids}:{int(i)}")}">Study</a>'
+            f'<a href="#" onclick="{pick}{_pycmd(f"plantopic:{pid}:{uids}:{int(i)}")}">Browse</a></span>')
 
 
 def _load_words(ld, now):
@@ -4065,11 +4068,9 @@ def you_html(cfg, due=None, you=None, people=None):
     keys = (["today", "upcoming", "later"] if due else []) + [k for k, _l in more]
     if not keys:
         return ""
-    # a saved tab that's gone: Today, else Plans (Due off: as before Super decks came), else the first
-    tab = you.get("tab") if you.get("tab") in keys else next((k for k in ("today", "plans") if k in keys), keys[0])
+    tab = you.get("tab") if you.get("tab") in keys else keys[0]
     body = (_you_plans(you.get("plans"), None if due else you.get("opened"), people, cfg) if tab == "plans"
-            else _you_insights(you.get("insights")) if tab == "insights"
-            else _supers_html(you.get("supers")) if tab == "supers" else "")
+            else _you_insights(you.get("insights")) if tab == "insights" else "")
     return _due_html(due, more, tab if tab in dict(more) else None, body, folded=bool(you.get("folded")),
                      qids=bool(you.get("qids")))
 
@@ -4349,7 +4350,7 @@ def _st_toggle_cmd(cmd, on, label):
 FIND_WORDS = {
     "set:theme:": "dark light night mode", "set:accent:": "colour color green purple blue", "set:compact:": "dense small",
     "set:sync_notifications:": "notify notification alert", "set:show_leaderboard:": "hide off board decks screen",
-    "settabs:": "tabs hide squads decks super decks plans insights", "set:due_suggest:": "hard habit misses again",
+    "settabs:": "tabs hide squads decks plans insights", "set:due_suggest:": "hard habit misses again",
     "set:due_leeches:": "leech suspended", "set:shortcuts:": "keys keyboard", "set:share_time:": "minutes hours privacy private",
     "set:share_reviews:": "cards numbers privacy private", "set:share_heatmap:": "year squares", "exam": "test date countdown",
     "af": "holiday vacation trip break", "setprivacy:paused": "pause break hide", "setprivacy:showup": "show up numbers squares",
@@ -7203,64 +7204,22 @@ DUE_CSS = """
     #due-crew .du-sg { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 9px; font-size: 12px;
       padding: 5px 0; border-top: 1px solid var(--dc-line); align-items: baseline; }
     #due-crew .du-sg .x { color: var(--dc-muted); font-weight: 400; margin-left: 10px; }
-    /* 3.9.5: today's misses under a done Reviews row; Super decks; a deck run out */
+    /* 3.9.5: today's misses under a done Reviews row; a deck run out */
     #due-crew .du-rc { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 2px 9px; font-size: 12px;
       color: var(--dc-muted); padding: 0 0 6px; align-items: baseline; text-align: left; }
     #due-crew .du-rc b { color: var(--dc-ink); font-weight: 600; }
     #due-crew .du-rc .end { white-space: nowrap; }
     #due-crew .du-rc a { color: var(--dc-accent); font-weight: 700; text-decoration: none; }
     #due-crew .du-rc a.tp { font-weight: inherit; }
-    #due-crew .dc-wrap.du-clr { text-align: left; padding: 14px 12px 6px 8px; margin: 2px 0 8px; }
+    #due-crew .dc-wrap.du-clr { text-align: left; padding: 9px 12px; margin: 2px 0 8px; }
     #due-crew .dc-wrap.du-clr b { font-weight: 700; }
-    /* 3.9.5: Super decks, a tab of their own: a deck you can see (its edges a stack), grouped by why */
-    #due-crew .sd-g { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
-      color: var(--dc-muted); text-align: left; padding: 12px 0 0; }
-    #due-crew .sd-g:first-child { padding-top: 2px; }
-    #due-crew .sd-shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px;
-      text-align: left; padding: 8px 0 4px; }
-    #due-crew .sd { --sd-edge: color-mix(in srgb, var(--dc-faded) 55%, var(--dc-line)); position: relative; display: grid;
-      gap: 2px; align-content: start; padding: 8px 10px 9px; margin-top: 6px; background: var(--dc-bg); cursor: pointer;
-      border: 1px solid var(--sd-edge); border-radius: 8px; color: var(--dc-ink); min-width: 0;
-      box-shadow: 0 -8px 0 -6px var(--dc-bg), 0 -8px 0 -5px var(--sd-edge); }
-    #due-crew .sd.thick { margin-top: 8px; box-shadow: 0 -8px 0 -6px var(--dc-bg), 0 -8px 0 -5px var(--sd-edge),
-      0 -16px 0 -11px var(--dc-bg), 0 -16px 0 -10px var(--sd-edge); }
-    #due-crew .sd:hover { border-color: var(--dc-accent); }
-    #due-crew .sd .top { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
-    #due-crew .sd .n { font-size: 21px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
-    #due-crew .sd .n small { font-size: 11.5px; font-weight: 600; color: var(--dc-muted); margin-left: 3px; }
-    #due-crew .sd .go { font-size: 11.5px; font-weight: 700; color: var(--dc-accent); text-decoration: none; }
-    #due-crew .sd .nm { font-size: 12.5px; font-weight: 600; line-height: 1.25; color: var(--dc-ink); text-decoration: none;
-      overflow-wrap: break-word; justify-self: start; }
-    #due-crew .sd .nm:hover { text-decoration: underline; }
-    #due-crew .sd .w { font-size: 11.5px; color: var(--dc-muted); line-height: 1.3; }
-    #due-crew .sd .lo { display: flex; gap: 8px; align-items: center; margin-top: 5px; }
-    #due-crew .sd .sd-bar { flex: 1; height: 3px; border-radius: 2px; background: var(--dc-line); overflow: hidden; }
-    #due-crew .sd .sd-bar i { display: block; height: 100%; background: var(--dc-accent); border-radius: 2px; }
-    #due-crew .sd .x { font-size: 13px; color: var(--dc-muted); line-height: 1; text-decoration: none; }
-    #due-crew .sd .br { margin-left: auto; font-size: 11.5px; color: var(--dc-muted); text-decoration: none; }
-    #due-crew .sd .br:hover { color: var(--dc-accent); }
-    #due-crew .sd-cat { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 5px 16px; font-size: 12px;
-      text-align: left; padding: 6px 0 2px; }
-    #due-crew .sd-cat b { font-weight: 600; }
-    #due-crew .sd-cat span { color: var(--dc-muted); }
-    #due-crew .du-tpgo a { font-weight: 700; color: var(--dc-accent); text-decoration: none; margin-left: 7px; }
-    #due-crew .sd-hd { display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: baseline; text-align: left; margin: 0 0 8px; }
-    #due-crew .sd-hd a { color: var(--dc-accent); font-weight: 700; text-decoration: none; font-size: 12px; }
-    #due-crew .sd-hd b { font-size: 13.5px; }
-    #due-crew .sd-top { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 8px 18px; align-items: center;
-      text-align: left; padding: 2px 0 12px; }
-    #due-crew .sd-top .p { display: grid; gap: 6px; font-size: 12px; color: var(--dc-muted); justify-items: start; }
-    #due-crew .sd-top .p b { color: var(--dc-ink); font-size: 13px; }
-    #due-crew .sd-top .du-go { font-size: 12px; }
-    #due-crew .sd-facts { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 7px 12px; text-align: left;
-      font-size: 12.5px; border-top: 1px solid var(--dc-line); padding: 10px 0; }
-    #due-crew .sd-facts .k { color: var(--dc-muted); font-size: 12px; }
-    #due-crew .sd-acts { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; text-align: left;
-      border-top: 1px solid var(--dc-line); padding-top: 9px; }
-    #due-crew .sd-acts a { color: var(--dc-accent); font-weight: 700; text-decoration: none; }
-    #due-crew .sd-acts a.q { color: var(--dc-muted); font-weight: 400; }
-    @media (max-width: 460px) { #due-crew .sd-top { grid-template-columns: minmax(0, 1fr); }
-      #due-crew .sd-cat, #due-crew .sd-facts { grid-template-columns: minmax(0, 1fr); gap: 2px 0; } }
+    /* 3.9.5: a plan topic on Today, its two ways (Study, Browse) beside its name */
+    #due-crew a.dc-tpn.on { text-decoration: underline; text-underline-offset: 2px; }
+    #due-crew .du-tpgo a { font-weight: 700; color: var(--dc-accent); text-decoration: none; margin-left: 7px; cursor: pointer;
+      border-radius: 4px; padding: 0 3px; }
+    #due-crew .du-tpgo a:hover, #due-crew .du-tpgo a:focus-visible { text-decoration: underline; text-underline-offset: 2px; }
+    #due-crew .du-tpgo a:active, #due-crew .du-tpgo a.on { background: color-mix(in srgb, var(--dc-accent) 16%, transparent);
+      text-decoration: underline; text-underline-offset: 2px; }
     #due-crew .du-add { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding-top: 3px; }
     #due-crew .du-add input[type=text] { flex: 1 1 160px; min-width: 0; font: inherit; font-size: 12.5px; color: var(--dc-ink);
       background: var(--dc-bg); border: 1px solid var(--dc-line); border-radius: 7px; padding: 4px 8px; }
@@ -7674,78 +7633,16 @@ def _due_misses(m):
     return f'<div class="du-rc"><span></span><span>{text}</span><span class="end"></span></div>'
 
 
-def _cleared_html(cl, sev=None):
-    """3.9.5: a Due Crew deck I studied ran out, with Pip; Nice puts it away."""
+def _cleared_html(cl):
+    """3.9.5: a Due Crew deck I studied ran out; Nice puts it away (no Pip:
+    Sam, "take pip off the cleared line too")."""
     if not cl:
         return ""
     e = _html.escape
     n = int(cl.get("n") or 0)
-    return (f'<div class="dc-wrap du-clr">{sev or ""}<span><b>{e(str(cl["name"]))}</b>: '
+    return (f'<div class="dc-wrap du-clr"><span><b>{e(str(cl["name"]))}</b>: '
             f'{"all " + format(n, ",") + " cleared" if n > 1 else "cleared"}</span>'
             f'<a href="#" class="wc" onclick="{_pycmd("duex:cleared")}">Nice</a></div>')
-
-
-def _sd_tile(d):
-    """A super deck you can see: its count (what's left of what it held,
-    once built), Study, its name (its page), what it is; Browse its cards
-    (or the ones it would hold); × puts a built one's cards back. The tile
-    itself is Study."""
-    e = _html.escape
-    n, made = int(d.get("n") or 0), int(d.get("made") or 0)
-    stop = "event.stopPropagation();"
-    left = "<small>left</small>" if made else ""
-    bar = (f'<span class="sd-bar"><i style="width:{round(100 * (made - n) / made)}%"></i></span>' if made > n else "")
-    x = (f'<a href="#" class="x" title="Put them back" onclick="{stop}{_pycmd(d["x"])}">&times;</a>' if d.get("x") else "")
-    # 3.9.5 (Sam: "want the option to look at the cards in the browse view or open the filtered deck")
-    br = f'<a href="#" class="br" onclick="{stop}{_pycmd("sdbrowse:" + str(d["key"]))}">Browse</a>'
-    lo = f'<span class="lo">{bar}{br}{x}</span>'
-    what = f'<span class="w">{e(str(d["what"]))}</span>' if d.get("what") else ""
-    return (f'<div class="sd{" thick" if n >= 20 else ""}" onclick="{_pycmd(d["cmd"])}">'
-            f'<span class="top"><span class="n">{n:,}{left}</span><a href="#" class="go" onclick="{stop}{_pycmd(d["cmd"])}">Study</a></span>'
-            f'<a href="#" class="nm" onclick="{stop}{_pycmd("sdpage:" + str(d["key"]))}">{e(str(d["name"]))}</a>'
-            f'{what}{lo}</div>')
-
-
-def _supers_html(sv):
-    """3.9.5, Super decks (Sam's pick B): Due Crew's own decks, only for what
-    Anki's scheduler can't know, grouped by why (Before a date, New, From
-    outside Anki); with none, the kinds and when each shows up; a deck's
-    page in place of the list. sv: due_flow.super_view; every string
-    escaped here."""
-    if not sv:
-        return ""
-    e = _html.escape
-    if sv.get("page"):
-        return _sd_page(sv["page"])
-    out = ""
-    for title, decks in sv.get("groups") or []:
-        out += f'<div class="sd-g">{e(title)}</div><div class="sd-shelf">{"".join(_sd_tile(d) for d in decks)}</div>'
-    if sv.get("rest"):
-        out += f'<div class="sd-shelf">{"".join(_sd_tile(d) for d in sv["rest"])}</div>'
-    soon = sv.get("soon") or []
-    if soon:
-        out += ('<div class="du-empty">None yet.</div><div class="sd-cat">'
-                + "".join(f"<b>{e(n)}</b><span>{e(w)}</span>" for n, w in soon) + "</div>")
-    return out
-
-
-def _sd_page(d):
-    """A super deck's page (its name's click): ‹ Super decks, its tile, how
-    far along, Study; then what it is, in four lines; Browse (a built one),
-    Put them back."""
-    e = _html.escape
-    n, made = int(d.get("n") or 0), int(d.get("made") or 0)
-    head = (f'<div class="sd-hd"><a href="#" onclick="{_pycmd("sdpage")}">&lsaquo; Super decks</a>'
-            f'<b>{e(str(d["name"]))}</b></div>')
-    said = f"<b>{made - n:,} of {made:,} done</b>" if made > n else f"<b>{n:,} card{'s' if n != 1 else ''}</b>"
-    top = (f'<div class="sd-top">{_sd_tile(dict(d, x=None))}<div class="p">{said}'
-           f'<a href="#" class="du-go" onclick="{_pycmd(d["cmd"])}">Study {n:,}</a></div></div>')
-    facts = "".join(f'<span class="k">{e(k)}</span><span>{e(v)}</span>' for k, v in d.get("facts") or [])
-    acts = [f'<a href="#" onclick="{_pycmd("sdbrowse:" + str(d["key"]))}">Browse</a>']
-    if d.get("x"):
-        acts.append(f'<a href="#" class="q" onclick="{_pycmd(d["x"])}">Put them back</a>')
-    return (head + top + (f'<div class="sd-facts">{facts}</div>' if facts else "")
-            + (f'<div class="sd-acts">{"".join(acts)}</div>' if acts else ""))
 
 
 def _due_new(r):
@@ -7900,7 +7797,7 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None, qids=False):
                  f'<a href="#" onclick="{_pycmd("dueshow:" + v["toast"]["tab"])}">Show</a></div>')
     body = ""
     if tab == "today":
-        body += _cleared_html(v.get("cleared"), v.get("cleared_sev"))
+        body += _cleared_html(v.get("cleared"))
         if v.get("nudge"):
             # 3.8.1: once a day, past my usual start, nothing studied yet: Fifteen?
             peek = f'<span class="nz">{v["nudge_sev"]}</span>' if v.get("nudge_sev") else "<span>&#9654;</span>"

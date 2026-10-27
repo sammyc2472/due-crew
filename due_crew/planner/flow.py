@@ -429,7 +429,7 @@ def study_cards(idx, cids, name):
         tooltip("Nothing new or due in it.")
         return False
     deck = P.our_deck(name)
-    if not plan_flow._filtered(mw.col, deck, cids, order=plan_flow.NEW_ORDER, kind="new"):
+    if not plan_flow._filtered(mw.col, deck, cids, order=plan_flow.NEW_ORDER):
         return False
     plan_flow._after_change()
     did = mw.col.decks.id_for_name(deck)
@@ -638,8 +638,7 @@ class QidOps:
         shut = P.openable_ids(mw.col, cids)
         n = len({int(c) for c in cids})
         opened, had = actions.study(mw.col, cids, f"Due Crew: study {n:,} QBank card{'s' if n != 1 else ''}", name,
-                                    lambda want: plan_flow._filtered(mw.col, name, want, order=plan_flow.STUDY_ORDER,
-                                                                     kind="qbank"))
+                                    lambda want: plan_flow._filtered(mw.col, name, want, order=plan_flow.STUDY_ORDER))
         if opened:
             plan_flow._claim_opened(shut)
             plan_flow.refresh_progress()
@@ -667,4 +666,4 @@ class QidOps:
         """3.9.5: a topic's Study, the map's deck of what I missed there
         (team_flow.study_deck). True when it took."""
         from .. import team_flow
-        return team_flow.study_deck(name, cids, kind="qbank")
+        return team_flow.study_deck(name, cids)
