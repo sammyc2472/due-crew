@@ -235,26 +235,51 @@ sections.append("<h3>round five: Today, a plan's date opened (a click on its nam
 sections.append("<h3>round five: Upcoming, a date ahead opened</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=dict(_DV, tab="upcoming"), you=_YOU("upcoming"))
     .replace('id="dc-dd-p1-u3" hidden>', 'id="dc-dd-p1-u3">').replace('id="du-', 'id="duu-'))
-# 3.9.5 (Five mocks, reviewed): reviews done, Super decks, today's misses by part, Next up in the suggestion's
-# place, and a Due Crew deck that ran out with Pip
-from due_crew import sev as _sev2  # noqa: E402
+# 3.9.5 (Five mocks, reviewed): reviews done, today's misses by part, Next up in the suggestion's place, and a
+# Due Crew deck that ran out with Pip
+from due_crew import sev as _sev2, superdecks as _SD  # noqa: E402
 _DONE = _D.view(_T, [_DATES[2]], [_ITEMS[1]], {}, reviews={"due": 0, "done": 214, "whole": 214, "through": 214, "later": 0,
                                                        "left": 0, "back": 0, "at": ""},
                 suggestions=[{"key": "next", "lead": "Next up:", "cmd": "insstudy:10:0", "go": "Study 14",
                               "text": "Renal \u00b7 Physiology isn\u2019t sticking: 14 of 41 missed in two weeks"}])
-_DONE.update(supers=[{"did": 71, "name": "Slow but right", "n": 31, "cmd": "duedeck:71", "x": "duedeckx:71"},
-                     {"name": "Today's misses", "n": 23, "cmd": "duego:again"},
-                     {"name": "Before KSA F3-3", "n": 53, "cmd": "insstudy:10:h"}],
-             misses={"n": 23, "reviews": 214, "elsewhere": 4, "in_deck": True,
+_DONE.update(misses={"n": 23, "reviews": 214, "elsewhere": 4,
                      "topics": [("Renal \u00b7 Physiology", list(range(9))), ("Pharm", list(range(6))), ("Cardio", list(range(4)))]},
-             cleared={"name": "Slow but right", "n": 46, "day": _T},
+             cleared={"name": "Pharmacokinetics", "n": 46, "day": _T},
              cleared_sev=_sev2.slot(_sev2.move("hop", "twirl"), 44))
-sections.append("<h3>3.9.5: Today, reviews done: Super decks, today's misses by part, Next up, a deck that ran out</h3>"
+sections.append("<h3>3.9.5: Today, reviews done: today's misses by part, Next up, a deck that ran out</h3>"
                 + board.render(DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DONE, you=_YOU("today"))
                 .replace('id="du-', 'id="dun-'))
-_GONE = dict(_DONE, misses={"n": 23, "reviews": 214, "of": 23, "over": 23, "right": 19}, cleared=None)
-sections.append("<h3>3.9.5: the misses gone over again</h3>" + board.render(
-    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_GONE, you=_YOU("today")).replace('id="du-', 'id="dug-'))
+# 3.9.5 (Sam's pick B, then his FSRS rule): Super decks, a tab of their own: only what Anki's scheduler can't know
+_SDAY = (datetime.date.fromisoformat(_T) + datetime.timedelta(days=4)).isoformat()
+_SDS = [{"key": "exam:10", "kind": "exam", "name": "Before your exam", "n": 53, "day": _SDAY, "cmd": "sdgo:exam:10"},
+        {"key": "quiz:p1:q", "kind": "quiz", "name": "Before Cardio quiz", "n": 64, "day": _SDAY, "cmd": "sdgo:quiz:p1:q"},
+        {"key": "day:p1", "kind": "day", "name": "MS2 Block 1 \u00b7 Today", "plan": "MS2 Block 1", "n": 24, "cmd": "sdgo:day:p1"},
+        {"key": "d:71", "did": 71, "kind": "new", "src": "Video Series", "name": "Pharmacokinetics", "n": 61, "made": 85,
+         "cmd": "duedeck:71", "x": "duedeckx:71"},
+        {"key": "leech", "kind": "leech", "name": "Leeches", "n": 12, "cmd": "sdgo:leech"},
+        {"key": "d:72", "did": 72, "kind": "qbank", "name": "QBank cards", "n": 12, "cmd": "duedeck:72", "x": "duedeckx:72"}]
+
+
+def _sv(decks, met=True, page=None, **kw):
+    v = _SD.view([dict(d) for d in decks], met=met, page=page)
+    for d in [x for _t, ds in v["groups"] for x in ds] + v["rest"]:
+        d["what"] = _SD.what(d)
+    if v["page"]:
+        v["page"]["facts"] = _SD.facts(v["page"])
+    return dict(v, **kw)
+
+
+for _k, (_what, _sv_) in enumerate((
+        ("a usual day: two", _sv([_SDS[0], _SDS[2]])),
+        ("every kind at once", _sv(_SDS)),
+        ("the first one, Pip by it, what's still to come", _sv([_SDS[2]], met=False, first_sev=_sev2.slot(_sev2.svg(
+            "again", size=48, rest=True), 48))),
+        ("none yet", _sv([])),
+        ("a deck's page (its name's click)", _sv(_SDS, page="d:71")),
+        ("Leeches' page: Study starts them over", _sv(_SDS, page="leech")))):
+    sections.append(f"<h3>3.9.5: Super decks, {_what}</h3>" + board.render(
+        DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DONE, you=_YOU("supers", supers=_sv_))
+        .replace('id="du-', f'id="dus{_k}-'))
 # 3.8.0: the plan's squad: a line on the plan card, and a pill on the Squads tab
 _SQ = {"cards": [dict(PLAN_CARD, tabs={"unread": 2, "summary": {
     "shown": 5, "of": 12, "faces": ["\U0001F419", "\U0001F98A", "\U0001F331"], "who": ["dre", "marisa", "sam"],  # 3.8.22: their Pips

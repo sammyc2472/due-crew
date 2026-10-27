@@ -1,8 +1,8 @@
 """3.9.5, How you study (due_crew/habits.py, habits_flow.py): the findings on
 synthetic logs (a planted effect is found and passes; a log with none
-doesn't, over several seeds), the board's line and view, Slow but right and
-its track record, the Fifteen at 35, and each new duecrew: command through
-the add-on's own handler. Standard library only.
+doesn't, over several seeds), the board's line and view, Slow but right (a
+finding with See them since Sam's FSRS rule), the Fifteen at 35, and each
+new duecrew: command through the add-on's own handler. Standard library only.
 
 Run: python3 tests/test_habits.py
 """
@@ -191,69 +191,25 @@ def test_slow_cards():
             + _card(7, [8000] * 3, 3, last_time=11000))           # 1.375x: quick enough
     r = H.work_out(sorted(rows), CUT)
     check("Slow but right: the cards whose latest review answer, in 7 days, was right and took 1.5-3x their usual; slowest first",
-          r["slow"] == [6, 1] and set(r["slow_at"]) == {1, 6}, r["slow"])
+          r["slow"] == [6, 1], r["slow"])
 
 
-def _tracked(n_studied, missed, rest_cards, rest_missed, built_days=40, look=True):
-    """Studied cards (built `built_days` ago, looked at an hour later, then a
-    review answer 10 days after) and never-studied slow ones."""
-    rows, book = [], {}
-    for k in range(n_studied):
-        cid = 1000 + k
-        built = at(built_days, k)
-        book[cid] = built
-        rows += [(at(built_days + 20 + j, k), cid, 3, 10, 5, 8000, 1) for j in range(3)]
-        if look:
-            rows.append((built + 3600000, cid, 3, 4, 10, 9000, 3))  # the look, in the filtered deck
-        rows.append((at(built_days - 10, k), cid, 1 if k < missed else 3, 5, 10, 8000, 1))
-    for k in range(rest_cards):
-        cid = 5000 + k
-        rows += [(at(45 + j, k), cid, 3, 10, 5, 8000, 1) for j in range(3)]
-        rows.append((at(30, k), cid, 3, 12, 10, 16000, 1))   # slow, right
-        rows.append((at(20, k), cid, 1 if k < rest_missed else 3, 1, 12, 8000, 1))
-    return sorted(rows), book
-
-
-def test_track_record():
-    rows, book = _tracked(30, 3, 20, 6)
-    t = H.work_out(rows, CUT, book)["track"]
-    check("track record: studied ones by their next review answer after the look, against the slow ones never studied",
-          t["n"] == 30 and abs(t["studied"] - 0.1) < 1e-9 and abs(t["rest"] - 0.3) < 1e-9 and t["ready"] and not t["against"], t)
-    rows, book = _tracked(29, 3, 20, 6)
-    check("…said only once 30 have had a next answer", not H.work_out(rows, CUT, book)["track"]["ready"])
-    rows, book = _tracked(30, 3, 20, 6, built_days=20)
-    t = H.work_out(rows, CUT, book)["track"]
-    check("…and 4 weeks have passed since the first went in", not t["ready"], t)
-    rows, book = _tracked(30, 10, 20, 6)
-    t = H.work_out(rows, CUT, book)["track"]
-    check("…studied ones not missed less: against it", t["ready"] and t["against"] and t["studied"] >= t["rest"], t)
-    rows, book = _tracked(30, 3, 20, 6, look=False)
-    t = H.work_out(rows, CUT, book)["track"]
-    check("…a card that went in but wasn't answered within 3 days isn't one studied", t["n"] == 0 and not t["ready"], t)
-    check("…nothing studied, no record", H.work_out(rows, CUT)["track"] is None)
-
-
-def _res(speed=True, sit=True, track=None, span=40, n=38):
+def _res(speed=True, sit=True, span=40, n=38):
     sp = {"pass": speed, "slow": 0.22, "quick": 0.13, "gap": 0.08, "lo": 0.04, "hi": 0.12, "n_slow": 310, "n_quick": 2000, "n": 2310}
     curve = [[0, 15, 84.1, 900], [15, 30, 83.4, 800], [30, 45, 78.9, 700], [45, 60, 79.9, 500], [60, 90, 75.5, 300], [90, None, 73.7, 90]]
     return {"day": CUT, "span": span, "mins": 113.0, "secs": 9.2,
             "matured": {"n": n, "weeks": [12, 18, 15, 22, 26, 24, 31, n], "cids": list(range(n)),
                         "from": [(TODAY - datetime.timedelta(days=7 * k + 6)).isoformat() for k in reversed(range(8))]},
-            "speed": sp, "slow": [1, 2], "slow_at": {1: 1, 2: 2}, "track": track,
+            "speed": sp, "slow": [1, 2],
             "sit": {"pass": sit, "curve": curve, "gap": -0.05, "lo": -0.08, "hi": -0.02, "n": 26}}
 
 
 def test_summary():
     s = H.summary(_res(), 46)
-    check("summary: what passes, with Study N", s["speed"] and s["sit"] and s["study"] == 46 and s["track"] is None
-          and (s["sit"]["from"], s["sit"]["to"]) == (84.1, 78.9))
+    check("summary: what passes, with this week's slow ones", s["speed"] and s["sit"] and s["slow"] == 46
+          and "track" not in s and "study" not in s and (s["sit"]["from"], s["sit"]["to"]) == (84.1, 78.9))
     s = H.summary(_res(speed=False, sit=False), 46)
-    check("…a finding that doesn't pass isn't there at all (nor Study)", s["speed"] is None and s["sit"] is None and s["study"] == 0)
-    tr = {"n": 34, "studied": 0.14, "rest": 0.22, "rest_n": 300, "ready": True, "against": False}
-    s = H.summary(_res(track=tr), 46)
-    check("…the track record, once it's ready", s["track"] == {"studied": 0.14, "rest": 0.22, "n": 34} and s["study"] == 46)
-    s = H.summary(_res(track=dict(tr, studied=0.25, against=True)), 46)
-    check("…against it: Study goes away, the tile stays", s["speed"] and s["study"] == 0 and s["track"]["studied"] == 0.25)
+    check("…a finding that doesn't pass isn't there at all", s["speed"] is None and s["sit"] is None and s["slow"] == 0)
 
 
 def test_sitting_now():
@@ -274,7 +230,7 @@ def test_sitting_now():
 # ---- the board ----
 
 def _hv(**kw):
-    s = H.summary(_res(**{k: v for k, v in kw.items() if k in ("speed", "sit", "track", "n")}), kw.get("study", 46))
+    s = H.summary(_res(**{k: v for k, v in kw.items() if k in ("speed", "sit", "n")}), kw.get("slow", 46))
     s["open"] = kw.get("open", True)
     return s
 
@@ -300,12 +256,12 @@ def test_board():
           'title="Next review 3 weeks or more away">38<small>matured this week</small>' in v
           and v.count("matured</title>") == 8 and "This week: 38 matured</title>" in v
           and "duecrew:inshabits:7:see" in v)
-    check("…Slow but right (3.9.5, Sam: \"this doesn't make much sense\"): the cards to look at again, the raw rates "
-          "as two bars, quick and slow, missed next time, the range in their titles, Study N",
+    check("…Slow but right (3.9.5, Sam: \"this doesn't make much sense\"): this week's slow ones, the raw rates "
+          "as two bars, quick and slow, missed next time, the range in their titles, See them (a finding, not a deck)",
           ">46<small>right, but slow, this week</small>" in v and ">quick</text>" in v and ">slow</text>" in v
           and '<div class="hs-cap">missed next time</div>' in v and ">13%</text>" in v and ">22%</text>" in v
           and v.count("At the same intervals: +8 points, could be 4 to 12</title>") == 2
-          and ">Study 46</a>" in v and "duecrew:inshabits:7:slow" in v)
+          and "Study 46" not in v and ">See them</a>" in v and "duecrew:inshabits:7:slow" in v)
     check("…long sittings: the first band to the 30-45 one, 35 marked, a point a band with its title, Start a Fifteen",
           ">35 min<small>then you start missing more</small>" in v and 'title="84% right in your first 15 minutes, 79% at 30 to 45"' in v
           and '<div class="hs-cap">right, by minutes in one go</div>' in v and ">35</text>" in v
@@ -315,16 +271,13 @@ def test_board():
           not re.search(r"#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?\b", board.HABITS_CSS)
           and "color-mix(in srgb, var(--dc-accent) 34%" in board.HABITS_CSS and "fill=" not in v)
     none = board._you_insights(_ins(_hv(speed=False, sit=False)))
-    check("nothing passed: the win, and one line", "More as you study." in none and "Study 46" not in none
+    check("nothing passed: the win, and one line", "More as you study." in none and "inshabits:7:slow" not in none
           and "Start a Fifteen" not in none and "missed next time" not in none and "matured this week" in none)
     only = board._you_insights(_ins(_hv(sit=False)))
-    check("…a finding that doesn't pass has no tile", "Start a Fifteen" not in only and "Study 46" in only
+    check("…a finding that doesn't pass has no tile", "Start a Fifteen" not in only and "inshabits:7:slow" in only
           and "More as you study." not in only)
-    gone = board._you_insights(_ins(_hv(study=0)))
-    check("…Study gone (its record against it, or none to study): the tile stays", "Study " not in gone and ">0<small>right, but slow" in gone)
-    tr = {"n": 34, "studied": 0.14, "rest": 0.22, "rest_n": 300, "ready": True, "against": False}
-    rec = board._you_insights(_ins(_hv(track=tr)))
-    check("…its track record, once it has one", "Studied ones: 14% missed next time &middot; 22% the rest" in rec)
+    gone = board._you_insights(_ins(_hv(slow=0)))
+    check("…none slow right now: the tile stays, no See them", "inshabits:7:slow" not in gone and ">0<small>right, but slow" in gone)
     zero = board._you_insights(_ins(_hv(n=0, speed=False, sit=False)))
     check("…none matured this week: no See them", "inshabits:7:see" not in zero and ">0<small>" in zero)
     hv = _hv()
@@ -377,8 +330,8 @@ class Rig:
         PF._pcfg = lambda: self.pc
         PF._psave = lambda c: self.pc.update(c)
         PF._browse = lambda cids, q=None, empty="": self.browsed.append(list(cids))
-        PF._filtered = lambda col_, name, cids, order=4: (self.built.append((name, list(cids))),
-                                                          col_.decks.names.__setitem__(99, name)) and True
+        PF._filtered = lambda col_, name, cids, order=4, **kw: (self.built.append((name, list(cids))),
+                                                                col_.decks.names.__setitem__(99, name)) and True
         PF._after_change = lambda: None
         F.mw.moveToState = lambda s: self.moved.append(s)
         col.decks.select = lambda did: None
@@ -402,31 +355,23 @@ def test_flow():
     F = rig.F
     try:
         check("flow: nothing worked out yet, then once a day: one read, the sums (off the main thread in Anki)",
-              F.result() is None and F.next_up() is not None and F.result()["day"] == CUT and rig.swaps == [1])
+              F.result() is None and F.board_view() is not None and F.result()["day"] == CUT and rig.swaps == [1])
         F.check()
         check("…asked again the same day, nothing new is read or drawn", len(rig.swaps) == 1)
         live = F.slow_now()
         check("…Slow but right as the collection is now: not suspended, buried or in a filtered deck",
-              live == [c for c in cand if c not in shut] and len(live) >= H.NEXT_UP_MIN, (len(cand), len(live)))
-        nu = F.next_up()
+              live == [c for c in cand if c not in shut] and len(live) >= 10, (len(cand), len(live)))
         n = len(live)
-        check("Next up: the slow ones, with their Study", nu == {"key": "slow", "text": f"{n} you got right, but slowly. One more look.",
-                                                                  "go": f"Study {n}", "n": n}, nu)
         bv = F.board_view()
-        check("…and the view: the finding, Study N, closed", bv["speed"] and bv["study"] == n and bv["open"] is False)
-        F.study_slow()
-        name, cids = rig.built[-1]
-        book = rig.pc.get("slow_studied") or {}
-        check("Study N: Due Crew's filtered deck, Slow but right, slowest first, and into it",
-              name == "Due Crew::Slow but right" and cids == live and rig.moved == ["overview"], (name, len(cids)))
-        check("…each card kept with when it went in (this profile's plans.json, never sent)",
-              sorted(int(k) for k in book) == sorted(live) and all(isinstance(v, int) and v > 0 for v in book.values()))
-        rig.F.mw.col.mod = 2
-        check("…studied since: none left, so no Next up", F.slow_now() == [] and F.next_up() is None)
-        F._mine()["res"]["track"] = {"against": True}
-        rig.pc["slow_studied"] = {}
-        check("a track record against it: no Next up, no Study", F.next_up() is None and F.board_view()["study"] == 0)
-        F._mine()["res"]["track"] = None
+        check("…and the view: the finding, this week's slow ones, closed", bv["speed"] and bv["slow"] == n and bv["open"] is False)
+        F.see_slow()
+        check("See them (3.9.5, Sam's FSRS rule: a finding, not a deck): the slow ones in the browser, no deck built",
+              rig.browsed == [live] and rig.built == [] and "slow_studied" not in rig.pc, rig.browsed)
+        rig.browsed.clear()
+        F._mine()["res"]["speed"]["pass"] = False
+        F._mine()["live"] = None
+        check("…the finding not passing: none", F.slow_now() == [])
+        F._mine()["res"]["speed"]["pass"] = True
         F.see_matured()
         check("See them: this week's matured, in the browser", rig.browsed == [res["matured"]["cids"]])
         gen = rig.A.generation
@@ -477,7 +422,7 @@ def test_commands():
     rows = speed_log(4)
     rig = Rig(_col(rows))
     got = []
-    saved = (F.study_slow,)
+    saved = (F.see_slow,)
     try:
         send = lambda m: dc._on_js(False, as_board("duecrew:" + m), DeckBrowser())  # noqa: E731
         F.check()
@@ -489,9 +434,9 @@ def test_commands():
         check("…:shut, back to Insights", F._mine().get("open") is False and len(rig.swaps) == n0 + 2, (n0, rig.swaps))
         send("inshabits:7:see")
         check("…:see, this week's matured in the browser", rig.browsed == [F.result()["matured"]["cids"]])
-        F.study_slow = lambda: got.append("slow")
+        F.see_slow = lambda: got.append("slow")
         send("inshabits:7:slow")
-        check("…:slow, Study N", got == ["slow"])
+        check("…:slow, See them", got == ["slow"])
         send("inshabits:x:slow")
         send("inshabits:7:nope")
         dc._on_js(False, "duecrew:inshabits:7:slow", DeckBrowser())  # no board key: a page before's, not the board's
@@ -513,7 +458,7 @@ def test_commands():
         check("…the board's commands here are inshabits and room15, each handled",
               cmds == {"inshabits", "room15"} and all(f'cmd == "{c}"' in src for c in cmds), cmds)
     finally:
-        F.study_slow = saved[0]
+        F.see_slow = saved[0]
         rig.close()
     # the top bar's chip: Take five and ×, keyed, from the top bar only
     tb = types.ModuleType("aqt.toolbar")

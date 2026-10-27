@@ -1076,8 +1076,14 @@ def study_map(did, x):
     view = ((_state.get("insights") or {}).get(did) or {}).get("view") or {}
     trail, cur = _map_at(did)
     t = (trail[-1] if trail else None) if x == "open" else (cur[int(x)] if int(x) < len(cur) else None)
-    if t is not None:
-        study_deck(str(t["name"]), T.missed_in(t, view.get("_map_missed")))
+    if t is None:
+        return
+    cids = T.missed_in(t, view.get("_map_missed"))
+    if not dated(did):
+        _plans_flow()._browse(cids)  # 3.9.5: no date to aim at, so no deck
+        return
+    aim = view.get("aim") or {}
+    study_deck(str(t["name"]), cids, kind="part", until=_until(aim), day=_until(aim))
 
 
 def deck_map(did):
@@ -1121,23 +1127,82 @@ def _pick(did, key):
     return cids, title
 
 
+def dated(did):
+    """3.9.5 (Sam's FSRS rule): Insights' Study only before a date: my exam,
+    or a plan's event, in the exam box; else its cards Browse (reviews ahead
+    of their date with no date to aim at are FSRS's to schedule)."""
+    view = ((_state.get("insights") or {}).get(did) or {}).get("view") or {}
+    return bool((view.get("aim") or {}).get("name"))
+
+
+def exam_deck(did):
+    """3.9.5, Before your exam (a super deck): (cids, title, aim) of the
+    exam box's cards, and with my own exam, Slow but right's in the deck
+    that Anki won't show before it (FSRS doesn't see answer time); None
+    without a date (dated) or cards."""
+    view = ((_state.get("insights") or {}).get(did) or {}).get("view") or {}
+    aim = view.get("aim") or {}
+    if not aim.get("name") or not mw.col:
+        return None
+    cids, title = _pick(did, "h")
+    cids = list(cids)
+    if aim.get("kind") == "exam":
+        have = set(cids)
+        cids += [c for c in _slow_before(mw.col, did, int(aim.get("in") or 0)) if c not in have]
+    return (cids, title, aim) if cids else None
+
+
+def _slow_before(col, did, k):
+    """Slow but right's cards in this deck (and its subdecks) that Anki has
+    due k days out or later: it won't show them before then."""
+    from . import habits_flow
+    slow = habits_flow.slow_now()
+    if not slow:
+        return []
+    try:
+        tree = ",".join(str(int(d)) for d in col.decks.deck_and_child_ids(int(did)))
+        ids = ",".join(str(int(c)) for c in slow[:2000])
+        return [int(c) for c in col.db.list(
+            f"SELECT id FROM cards WHERE id IN ({ids}) AND did IN ({tree}) AND queue = 2 AND due - ? >= ?",
+            int(col.sched.today), int(k))]
+    except Exception:
+        traceback.print_exc()
+        return []
+
+
+def _until(aim):
+    return str(aim.get("day") or "") or None
+
+
 def study(did, key):
-    """Anki's filtered deck of the exam box's cards ("h") or a topic's, and into it."""
+    """Anki's filtered deck of the exam box's cards ("h") or a topic's, and
+    into it; 3.9.5: only before a date (dated), else Browse."""
+    if not dated(did):
+        browse(did, key)
+        return
+    aim = (((_state.get("insights") or {}).get(did) or {}).get("view") or {}).get("aim") or {}
+    if key == "h":
+        got = exam_deck(did)
+        if got:
+            study_deck(got[1], got[0], kind="exam" if aim.get("kind") == "exam" else "quiz", until=_until(aim),
+                       day=_until(aim))
+        return
     cids, title = _pick(did, key)
-    study_deck(title, cids)
+    study_deck(title, cids, kind="part", until=_until(aim), day=_until(aim))
 
 
-def study_deck(title, cids):
+def study_deck(title, cids, kind=None, **info):
     """Due Crew's filtered deck of these cards, named after what they are
     (Due Crew::Renal), the most missed first (plan_flow._filtered's order
     4), rescheduled by my answers as every Due Crew deck is; then Anki's
     Study screen on it. Insights' Study, the map's (3.9.5) and QBank QIDs'
-    topics' Study. True when it took. Main thread."""
+    topics' Study; kind and info, the super deck's (plan_flow._filtered).
+    True when it took. Main thread."""
     if not cids or not mw.col:
         return False
     pf = _plans_flow()
     name = pf._deck_name(title)
-    if not pf._filtered(mw.col, name, cids):
+    if not pf._filtered(mw.col, name, cids, kind=kind, **info):
         return False
     pf._after_change()
     fid = mw.col.decks.id_for_name(name)

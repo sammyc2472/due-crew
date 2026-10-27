@@ -696,15 +696,11 @@ def study_next(plan_decks, due_now):
 # ---- 3.9.5 (Five mocks, reviewed): today's misses ----
 
 def misses_text(m):
-    """Today's misses under a done Reviews row: (line, go) or None. m:
-    {n, reviews, over, right, of} from due_flow; over/of once Study the N
-    again has been: how many of those I've answered since, right the first
-    time since."""
+    """Today's misses under a done Reviews row: "214 reviews, 23 missed", or
+    None. m: {n, reviews} from due_flow. 3.9.5 (Sam's FSRS rule): a line,
+    not a deck: Anki's relearning steps bring a miss back, and FSRS sets
+    the next look."""
     n = int((m or {}).get("n") or 0)
     if n <= 0:
         return None
-    head = f'{int(m.get("reviews") or 0):,} reviews, {n:,} missed' if m.get("reviews") else f"{n:,} missed"
-    of = int(m.get("of") or 0)
-    if of and int(m.get("over") or 0) >= of:
-        return f'{head}, all {of:,} gone over again · {int(m.get("right") or 0):,} right this time', None
-    return head, ("Study it again" if n == 1 else f"Study the {n:,} again")
+    return f'{int(m.get("reviews") or 0):,} reviews, {n:,} missed' if m.get("reviews") else f"{n:,} missed"

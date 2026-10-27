@@ -82,10 +82,15 @@ def test_map_html():
     missed = set(range(40, 81))  # 30 in Renal (15 + 15), 11 in Pulm
     mh = board._ins_map(10, tiles, "right", (), (), missed)
     line = re.search(r'<div class="tmt">Weakest: .*?</div>', mh)
-    check("map: the weakest part under the key, its name escaped, its %, and Study the ones missed there",
+    check("map: the weakest part under the key, its name escaped (opening it), its %, and Study the ones missed there",
           line is not None and line.group(0) == (
-              '<div class="tmt">Weakest: <b>&lt;b&gt;Renal &amp; co</b>, 66% &middot; <a href="#" onclick="pycmd(\'duecrew:'
+              f'<div class="tmt">Weakest: <a class="tp" href="#" onclick="pycmd(\'duecrew:insmap:10:1|{KK}\'); return false;">'
+              '<b>&lt;b&gt;Renal &amp; co</b></a>, 66% &middot; <a href="#" onclick="pycmd(\'duecrew:'
               f'insmapstudy:10:1|{KK}\'); return false;">Study the 30 you missed</a></div>') and "<b>Renal" not in mh, mh[:1600])
+    undated = board._ins_map(10, tiles, "right", (), (), missed, dated=False)
+    check("map: 3.9.5 (Sam's FSRS rule), no date ahead: the weakest named, no Study; opened, no Study either",
+          "Weakest: <a" in undated and "insmapstudy" not in undated
+          and "insmapstudy" not in board._ins_map(10, tiles, "right", ["r"], (), missed, dated=False), undated[:1600])
     check("map: the line sits under the key line, before the tiles",
           mh.index('class="ikey"') < mh.index("Weakest:") < mh.index('class="tmap"'))
     check("map: no missed given (an older view), no line; under 5 missed, none",
@@ -176,7 +181,7 @@ def test_glue():
         F._today = lambda: TODAY.isoformat()
         F._pcfg = lambda: pc
         F._psave = lambda d: None
-        F._filtered = lambda c, name, cids: built.append((name, sorted(cids))) or True
+        F._filtered = lambda c, name, cids, **kw: built.append((name, sorted(cids))) or True
         F._browse = lambda cids, q=None, empty="": shown.append(sorted(cids) if cids else empty)
         TF.app.swap = lambda c=None: None
         TF.cfg = dc.cfg = lambda: conf
@@ -184,7 +189,8 @@ def test_glue():
         mw.col = col
         _state["insights"], _state["map_at"] = {}, {}
         alone = TF.deck_map(30)
-        v = TF.insights(30)
+        exam = (TODAY + datetime.timedelta(days=5)).isoformat()  # 3.9.5: a Study only before a date
+        v = TF.insights(30, None, exam)
         tiles = v.get("map") or []
         check("glue: the map, by the deck's systems: Cardio (it opens), Renal, Pulm",
               [(t["name"], t["n"], bool(t.get("kids"))) for t in tiles] == [("Cardio", 30, True), ("Renal", 23, False), ("Pulm", 15, False)],
@@ -196,7 +202,7 @@ def test_glue():
               and TF.deck_map(30)[0] is tiles and TF.deck_map(99) == ([], set()))
         html = board._insights_html(30, dict(v, map_at=[]))
         check("glue: Renal is the weakest, its 10 missed",
-              "Weakest: <b>Renal</b>, 55% &middot;" in html and f"duecrew:insmapstudy:30:1|{KK}" in html
+              "<b>Renal</b></a>, 55% &middot;" in html and f"duecrew:insmapstudy:30:1|{KK}" in html
               and "Study the 10 you missed" in html, html[:400])
         send = lambda m: dc._on_js(False, m + "|" + KK, DeckBrowser())  # noqa: E731
         send("duecrew:insmapstudy:30:1")
@@ -225,6 +231,16 @@ def test_glue():
         check("insmapstudy: no such part, no deck's id, or nothing open: nothing", len(built) == n, built[n:])
         send("duecrew:insmapstudy:30:2")
         check("insmapstudy: a part with none missed builds nothing", len(built) == n, built[n:])
+        # 3.9.5 (Sam's FSRS rule): no date ahead, the map's Study is Browse, and no deck
+        _state["insights"] = {}
+        undated = TF.insights(30)
+        n, m = len(built), len(shown)
+        send("duecrew:insmapup:30:0")
+        send("duecrew:insmapstudy:30:1")
+        check("insmapstudy: no date ahead, the part's missed in Browse, no deck",
+              len(built) == n and shown[m:] == [list(range(100, 110))] and not (undated.get("aim") or {}).get("name"), (built[n:], shown[m:]))
+        _state["insights"] = {}
+        TF.insights(30, None, exam)
         check("study: Insights' own Study still goes through the one helper",
               TF.study_deck("Renal", []) is False and TF.study_deck("Renal", [1]) is True and built[-1] == ("Due Crew::Renal", [1]))
         # ---- QBank QIDs' topics ----
@@ -245,7 +261,8 @@ def test_glue():
         check("qids: the topics' lines, the first % says here", Q.topic_words(rows) == ["4 questions · 55% here", "1 question · 80%",
                                                                                        "1 question · 100%"], Q.topic_words(rows))
         ops = PF.QidOps()
-        check("qids: the window's map is the deck's (QidOps.deck_map)", ops.deck_map(30)[0] is tiles)
+        check("qids: the window's map is the deck's (QidOps.deck_map)",
+              [t["name"] for t in ops.deck_map(30)[0]] == [t["name"] for t in tiles])
         built.clear()
         check("qids: a topic's Study, the same helper as the map's: Due Crew's deck named after it",
               ops.study_topic(rows[0]["name"], rows[0]["missed"]) is True and built == [("Due Crew::Renal", list(range(100, 110)))],

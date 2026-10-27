@@ -601,7 +601,7 @@ def _you(c, due, plans):
         return you
     hidden = board.hidden_tabs(c)
     keys = (["today", "upcoming", "later"] if due else []) + [k for k, _l in board.YOU_MORE if k not in hidden]
-    shown = you["tab"] if you["tab"] in keys else (keys[0] if keys else None)
+    shown = you["tab"] if you["tab"] in keys else next((k for k in ("today", "plans") if k in keys), keys[0] if keys else None)
     try:
         if shown == "plans":
             team_flow.plan_lines(plans.get("cards"))  # the next exam's cards at risk, a line a plan
@@ -609,6 +609,11 @@ def _you(c, due, plans):
                 you["opened"] = plan_flow.morning_opened()  # Due off: its Not today is here
         elif shown == "insights":
             you["insights"] = team_flow.you_view(c)
+    except Exception:
+        traceback.print_exc()
+    try:
+        if "supers" in keys and mw.col:
+            you["supers"] = due_flow.super_view(c)  # 3.9.5: its count is on the tab, whichever tab shows
     except Exception:
         traceback.print_exc()
     return you
@@ -882,8 +887,8 @@ def _on_js(handled, message, context):
     c = cfg()
     if cmd.startswith("plan"):
         plan_flow.on_message(cmd, parts)  # 3.1
-    elif cmd.startswith("due"):
-        due_flow.on_message(cmd, parts)  # Due
+    elif cmd.startswith("due") or cmd.startswith("sd"):
+        due_flow.on_message(cmd, parts)  # Due; 3.9.5: Super decks (sdgo, sdpage, sdbrowse)
     elif cmd.startswith("ins") or cmd == "youins":
         from . import team_flow
         team_flow.on_message(cmd, parts)  # 3.8.0: You › Insights, a deck's

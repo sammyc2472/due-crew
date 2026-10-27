@@ -24,11 +24,11 @@ One read, the last WEEKS weeks of revlog over every deck, as rows
   the first 20, with a range from 300 resamples of sittings (Random(7)).
   It shows only with 20 such sittings, a drop of 3 points or more, and the
   range's high end below zero.
-- The track record of Slow but right (studied: {card id: when it went into
-  the deck, ms}): the ones studied (answered within LOOK_DAYS of going in),
-  by their next review answer after that look, against the slow ones never
-  studied. Said once 4 weeks have passed and 30 have had a next answer; if
-  the studied ones aren't missed less, Study goes away.
+
+Slow but right is a finding, not a deck (3.9.5, Sam's FSRS rule: a super
+deck only for what Anki's scheduler can't know): FSRS doesn't see answer
+time, so with an exam date set, the slow ones in its scope join Before your
+exam (due_flow); otherwise FSRS catches them at their next look.
 """
 
 import datetime
@@ -53,10 +53,6 @@ SPEED_DAYS, SPEED_N = 28, 1500
 SIT_N, SIT_DROP = 20, 0.03
 VIEW_DAYS = 14              # under two weeks of log, no How you study at all
 SIT_AT = 35                 # the Fifteen at 35: minutes into a sitting
-TRACK_DAYS, TRACK_N = 28, 30
-LOOK_DAYS = 3               # a card studied: answered this soon after going into the deck
-NEXT_UP_MIN = 10            # Today's Next up asks for this many slow ones
-STUDY_MAX = 500             # cards a Slow but right deck takes, slowest first
 
 
 def band(ivl):
@@ -82,10 +78,6 @@ def median(xs):
     if not n:
         return 0
     return xs[n // 2] if n % 2 else (xs[n // 2 - 1] + xs[n // 2]) / 2
-
-
-def _rate(miss, n):
-    return miss / n if n else None
 
 
 # ---- the ranges: resamples of whole cards, or whole sittings ----
@@ -139,17 +131,14 @@ def matched_gap(tot):
 
 # ---- the whole log, once a day ----
 
-def work_out(rows, cutoff, studied=None):
-    """Everything How you study says, from the log (rows oldest first) and
-    the Slow but right decks built ({card id: ms}). Plain values only."""
+def work_out(rows, cutoff):
+    """Everything How you study says, from the log (rows oldest first).
+    Plain values only."""
     cutoff = int(cutoff)
-    studied = {int(k): int(v) for k, v in (studied or {}).items()}
-    now_ms = cutoff * 1000
     weeks = [set() for _ in range(WEEKS)]
     t_ms, t_days, r_ms, r_n = 0, set(), 0, 0
     first = None
     by_card = {}       # cid: [(id, ease, ivl, time)], its review answers
-    every = {}         # a studied card's answers: [(id, ease, type)]
     sits, cur = [], None
     for row in rows:
         i, cid, ease, ivl, last, t, ty = (int(x or 0) for x in row[:7])
@@ -170,8 +159,6 @@ def work_out(rows, cutoff, studied=None):
             by_card.setdefault(cid, []).append((i, ease, ivl, t))
             if last < MATURE <= ivl:
                 weeks[d // 7].add(cid)
-        if cid in studied:
-            every.setdefault(cid, []).append((i, ease, ty))
         # sittings: every answer, a gap over 10 minutes starts one
         if cur is None or i - cur["last"] > GAP_MS:
             cur = {"start": i - min(t, GAP_MS), "last": i, "rev": []}
@@ -187,16 +174,15 @@ def work_out(rows, cutoff, studied=None):
            "matured": {"n": len(weeks[0]), "weeks": [len(w) for w in reversed(weeks)],
                        "from": [(today - datetime.timedelta(days=7 * k + 6)).isoformat() for k in reversed(range(WEEKS))],
                        "cids": sorted(weeks[0])}}
-    out.update(_speed(by_card, cutoff, span, studied, every, now_ms))
+    out.update(_speed(by_card, cutoff, span))
     out["sit"] = _sittings(sits)
     return out
 
 
-def _speed(by_card, cutoff, span, studied, every, now_ms):
-    """The speed finding, Slow but right's cards, and its track record."""
+def _speed(by_card, cutoff, span):
+    """The speed finding, and Slow but right's cards."""
     vecs, tot = [], [0] * 16
-    rest_n = rest_miss = 0
-    slow, slow_at = [], {}
+    slow = []
     for cid, xs in by_card.items():
         rights = [t for _i, e, _v, t in xs if e > 1]
         if len(rights) < USUAL_MIN:
@@ -219,18 +205,14 @@ def _speed(by_card, cutoff, span, studied, every, now_ms):
             vecs.append(_sparse(cells))
             for j, x in enumerate(cells):
                 tot[j] += x
-            if cid not in studied:
-                rest_n += sum(cells[4 * b + 2] for b in range(4))
-                rest_miss += sum(cells[4 * b + 3] for b in range(4))
         # Slow but right: the card's latest review answer, in the last 7 days, right and slow
         i, e, _v, t = xs[-1]
         ratio = t / usual
         if e > 1 and days_ago(i, cutoff) < SLOW_DAYS and QUICK_TO <= ratio < SLOW_TO:
             slow.append((-ratio, cid))
-            slow_at[cid] = i
     n_slow = sum(tot[4 * b + 2] for b in range(4))
     n_quick = sum(tot[4 * b] for b in range(4))
-    out = {"slow": [c for _r, c in sorted(slow)], "slow_at": slow_at, "speed": None, "track": None}
+    out = {"slow": [c for _r, c in sorted(slow)], "speed": None}
     if n_slow and n_quick:
         gap = matched_gap(tot)
         rng = resample(vecs, matched_gap) if gap is not None else None
@@ -240,32 +222,7 @@ def _speed(by_card, cutoff, span, studied, every, now_ms):
             "n_slow": n_slow, "n_quick": n_quick, "n": n_slow + n_quick, "gap": gap,
             "lo": rng[0] if rng else None, "hi": rng[1] if rng else None,
             "pass": bool(span >= SPEED_DAYS and n_slow + n_quick >= SPEED_N and rng and rng[0] > 0)}
-    out["track"] = track(studied, every, by_card, rest_n, rest_miss, now_ms)
     return out
-
-
-def track(studied, every, by_card, rest_n, rest_miss, now_ms):
-    """Slow but right's track record: the cards studied (answered within
-    LOOK_DAYS of going into the deck), each by its next review answer after
-    that look, against the slow right answers of cards never studied. None
-    before anything was studied."""
-    if not studied:
-        return None
-    n = miss = 0
-    for cid, at in studied.items():
-        xs = every.get(cid) or []
-        look = next((i for i, _e, _ty in xs if at <= i < at + LOOK_DAYS * DAY_MS), None)
-        if look is None:
-            continue
-        nxt = next((e for i, e, _v, _t in by_card.get(cid) or [] if i > look), None)
-        if nxt is None:
-            continue
-        n += 1
-        miss += nxt == 1
-    ready = bool(now_ms - min(studied.values()) >= TRACK_DAYS * DAY_MS and n >= TRACK_N and rest_n)
-    mine, rest = _rate(miss, n), _rate(rest_miss, rest_n)
-    return {"n": n, "studied": mine, "rest": rest, "rest_n": rest_n, "ready": ready,
-            "against": bool(ready and mine is not None and rest is not None and mine >= rest)}
 
 
 def _bin(minutes):
@@ -319,19 +276,16 @@ def _sittings(sits):
 
 # ---- what the board draws ----
 
-def summary(res, study=0):
+def summary(res, slow=0):
     """The view's shape (board._habits_html) from a worked-out log: a
-    finding only when it passes. study: the Slow but right cards there are
-    now (habits_flow, as the collection is); 0 when Study goes away."""
-    sp, sit, tr = res.get("speed") or {}, res.get("sit") or {}, res.get("track") or {}
+    finding only when it passes. slow: this week's Slow but right cards as
+    the collection is now (habits_flow), the tile's number and its See them."""
+    sp, sit = res.get("speed") or {}, res.get("sit") or {}
     out = {"mins": res.get("mins"), "secs": res.get("secs"), "span": int(res.get("span") or 0),
-           "matured": {k: res["matured"][k] for k in ("n", "weeks", "from")}, "speed": None, "sit": None,
-           "study": 0, "track": None}
+           "matured": {k: res["matured"][k] for k in ("n", "weeks", "from")}, "speed": None, "sit": None, "slow": 0}
     if sp.get("pass"):
         out["speed"] = {k: sp[k] for k in ("slow", "quick", "gap", "lo", "hi", "n_slow", "n_quick")}
-        out["study"] = 0 if tr.get("against") else int(study or 0)
-        if tr.get("ready"):
-            out["track"] = {"studied": tr["studied"], "rest": tr["rest"], "n": tr["n"]}
+        out["slow"] = int(slow or 0)
     if sit.get("pass"):
         out["sit"] = {"curve": sit["curve"], "from": sit["curve"][0][2], "to": sit["curve"][2][2], "gap": sit["gap"],
                       "lo": sit["lo"], "hi": sit["hi"], "n": sit["n"]}

@@ -547,7 +547,7 @@ def test_flow():
         col.decks.select = lambda d: calls.append(("select", d))
         flow.mw.moveToState = lambda s: calls.append(s)
 
-        def filtered(c, name, cids, order=4):
+        def filtered(c, name, cids, order=4, **kw):
             calls.append(("build", name, list(cids), order))
             c.db.conn.execute(f"UPDATE cards SET odid = did, did = 5 WHERE odid = 0 AND id IN ({','.join(map(str, cids))})")
             return True

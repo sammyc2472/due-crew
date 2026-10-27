@@ -197,6 +197,7 @@ class DeckIndex:
         self.cards = {}      # cid -> (queue, type)
         self.order = {}      # cid -> the deck's own order: cards seen before first, then new by position
         self.again = set()   # 3.9.3: in (re)learning and due again today: answered, not through for today
+        self.due_now = set()  # 3.9.5: what Anki has due today: reviews due by today, and learning ones
         try:
             day, cut = int(col.sched.today), int(col.sched.day_cutoff)
         except Exception:
@@ -210,6 +211,8 @@ class DeckIndex:
                 self.order[cid] = (int(ctype) == 0, due, cid)
                 if day is not None and ((queue == 1 and due < cut) or (queue == 3 and due <= day)):
                     self.again.add(cid)
+                if queue == 1 or (day is not None and queue in (2, 3) and due <= day):
+                    self.due_now.add(cid)
         self.fell_back = set()  # unit ids matched by their note ids (C5)
         self._started = None  # note ids with a card answered: siblings wait on these
         self._before = None  # 3.9.1: (first_seen, the notes started before today), for buried_today
@@ -1699,6 +1702,14 @@ def study_cards(idx, cids):
     """Study this date: its open cards, new and review, due or not (a cram
     before a quiz): not suspended (a leech stays out) and not buried."""
     return sorted(c for c in cids if c in idx.cards and idx.cards[c][0] >= 0)
+
+
+def new_and_due(idx, cids):
+    """3.9.5 (Sam's FSRS rule: never reviews ahead of their date): of these,
+    the open new cards and the ones Anki has due today, in the deck's order
+    (seen ones first, then new by their place)."""
+    got = [c for c in cids if c in idx.cards and (idx.cards[c] == (0, 0) or c in idx.due_now)]
+    return sorted(got, key=lambda c: idx.order.get(c, (True, 0, c)))
 
 
 def held_rows(idx, doc, held, swap=None):

@@ -75,9 +75,10 @@ SORT_KEYS = ("reviews", "time", "retention", "streak", "week")  # week: squads o
 PERIODS = ("today", "week", "decks", "squads")
 # 3.5.0: tabs a person can hide in Settings (per computer); Today always shows
 # 3.8.0: Today and Week are always there; the rest can be hidden in Settings
-HIDEABLE_TABS = (("decks", "Decks"), ("squads", "Squads"), ("plans", "Plans"), ("insights", "Insights"))
+HIDEABLE_TABS = (("decks", "Decks"), ("squads", "Squads"), ("supers", "Super decks"), ("plans", "Plans"),
+                 ("insights", "Insights"))
 CREW_VIEWS = (("today", "Today"), ("week", "Week"), ("decks", "Decks"))
-YOU_MORE = (("plans", "Plans"), ("insights", "Insights"))
+YOU_MORE = (("supers", "Super decks"), ("plans", "Plans"), ("insights", "Insights"))  # 3.9.5: Super decks
 
 
 def hidden_tabs(cfg):
@@ -1907,7 +1908,9 @@ def _plan_now(card, pid):
         when = (f'<b>{e(str(ins["name"]))}</b> on {wd} {dn}' if ins.get("name") else f"{wd} {dn}")
         out += (f'<div class="pn"><span><a class="tp" href="#" title="Browse them" onclick="{_pycmd(f"insbrowse:{did}:h")}">'
                 f'{n:,} card{"s" if n != 1 else ""}</a> Anki won&rsquo;t show you before {when}</span>'
-                f'<span class="acts"><a href="#" onclick="{_pycmd(f"insstudy:{did}:h")}">Study {n:,}</a></span></div>')
+                # 3.9.5 (Sam's FSRS rule): a deck only before a date
+                + (f'<span class="acts"><a href="#" onclick="{_pycmd(f"insstudy:{did}:h")}">Study {n:,}</a></span>'
+                   if ins.get("name") else "") + '</div>')
     return out
 
 
@@ -2218,7 +2221,6 @@ HABITS_CSS = """
     #due-crew .ht .big { font-size: 24px; font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; color: var(--dc-ink); }
     #due-crew .ht .big small { display: block; font-size: 12px; font-weight: 600; color: var(--dc-muted); margin-top: 3px; line-height: 1.25; }
     #due-crew .ht a.go { justify-self: start; color: var(--dc-accent); font-weight: 700; font-size: 12px; text-decoration: none; }
-    #due-crew .ht .hs-t { font-size: 11.5px; color: var(--dc-muted); }
     #due-crew .ht .hs-cap { font-size: 11px; color: var(--dc-muted); margin-top: -4px; }
     #due-crew .ht svg { width: 100%; max-width: 210px; height: auto; display: block; overflow: visible; }
     #due-crew .ht .t-tint { fill: color-mix(in srgb, var(--dc-accent) 34%, var(--dc-well)); }
@@ -2334,8 +2336,9 @@ def _hs_sit_svg(curve, at):
 def _habits_html(did, h):
     """3.9.5, How you study, in Insights' place (‹ Insights goes back): my
     time in its head; the win, cards matured, always; Slow but right only
-    when its finding passes, with Study N and, once it has one, its track
-    record; long sittings only when theirs passes, with Start a Fifteen.
+    when its finding passes, with See them (a finding, not a deck, since
+    3.9.5's FSRS rule: with an exam set they join Before your exam); long
+    sittings only when theirs passes, with Start a Fifteen.
     Nothing passed: the win and one line. All decks, worked out from my
     own log (habits_flow.board_view). Numbers only: nothing to escape but
     what's built here."""
@@ -2358,15 +2361,12 @@ def _habits_html(did, h):
         if sp.get("gap") is not None and sp.get("lo") is not None and sp.get("hi") is not None:
             said = (f"At the same intervals: {_hs_pts(sp['gap']):+d} points, "
                     f"could be {_hs_pts(sp['lo'])} to {_hs_pts(sp['hi'])}")
-        tr = h.get("track") if isinstance(h.get("track"), dict) else None
-        line = (f'<div class="hs-t">Studied ones: {_hs_pts(tr["studied"])}% missed next time &middot; '
-                f'{_hs_pts(tr["rest"])}% the rest</div>' if tr else "")
-        k = int(h.get("study") or 0)
-        go = f'<a href="#" class="go" onclick="{_pycmd(f"inshabits:{did}:slow")}">Study {k:,}</a>' if k > 0 else ""
+        k = int(h.get("slow") or 0)
+        go = f'<a href="#" class="go" onclick="{_pycmd(f"inshabits:{did}:slow")}">See them</a>' if k > 0 else ""
         # 3.9.5 (Sam, of "20% of slow right answers missed next time · 14% otherwise": "this doesn't make
-        # much sense"): the number is the cards to look at again, the bars say why
+        # much sense"): the number is this week's slow ones, the bars say why
         tiles += (f'<div><div class="big">{k:,}<small>right, but slow, this week</small></div>'
-                  f'{_hs_two_svg(quick, slow, said)}<div class="hs-cap">missed next time</div>{line}{go}</div>')
+                  f'{_hs_two_svg(quick, slow, said)}<div class="hs-cap">missed next time</div>{go}</div>')
     if isinstance(sit, dict):
         tiles += (f'<div><div class="big" title="{round(float(sit["from"]))}% right in your first 15 minutes, '
                   f'{round(float(sit["to"]))}% at 30 to 45">{SIT_AT} min<small>then you start missing more</small></div>'
@@ -2793,7 +2793,9 @@ def _insights_html(did, v):
                 f'<a class="tp" href="#" title="Browse them" onclick="{_pycmd(f"insbrowse:{did}:h")}">'
                 f'{len(hero):,} card{"s" if len(hero) != 1 else ""}</a> Anki won&rsquo;t show you before {when}</div>'
                 f'{_ins_scope(aim) if mine else ""}'
-                f'<a class="bt" href="#" onclick="{_pycmd(f"insstudy:{did}:h")}">Study {len(hero):,} early</a></div>')
+                # 3.9.5 (Sam's FSRS rule): Study only before a date, my exam or a plan's event
+                + (f'<a class="bt" href="#" onclick="{_pycmd(f"insstudy:{did}:h")}">Study {len(hero):,} early</a>'
+                   if aim.get("name") else "") + '</div>')
     elif aim.get("kind") == "exam":
         # 3.9.2: my exam with nothing at risk still says what it covers, and keeps its Change; without
         # FSRS nothing was looked at (what's at risk is FSRS's), so it says only the day (the audit)
@@ -2803,6 +2805,7 @@ def _insights_html(did, v):
         out += (f'<div class="iline">{int(v["behind"]):,} new cards behind &middot; '
                 f'<a href="#" onclick="{_pycmd("plancatch:" + str(v["pid"]))}">Catch up&hellip;</a></div>')
     rows = v.get("rows") or []
+    dated = bool((v.get("aim") or {}).get("name"))  # 3.9.5 (Sam's FSRS rule): a Study only before a date
     if rows:
         # 3.9.2 (the students: "not right yet" and "forgot" read alike): Anki's own Stats' words
         out += ('<div class="isec"><div class="ik">Not sticking yet<span>&nbsp;&middot; last 2 weeks</span>'
@@ -2816,9 +2819,11 @@ def _insights_html(did, v):
                     f'<span class="ib"><i class="st" style="width:{100 * st / of:.1f}%"></i>'
                     f'<i class="fg" style="left:{100 * st / of:.1f}%;width:{100 * fg / of:.1f}%"></i></span>'
                     f'<span class="c"><b>{st + fg}</b> of {of}</span>'
-                    f'<a href="#" onclick="{_pycmd(f"insstudy:{did}:{i}")}">Study {st + fg}</a></div>')
+                    + (f'<a href="#" onclick="{_pycmd(f"insstudy:{did}:{i}")}">Study {st + fg}</a>' if dated else "")
+                    + '</div>')
         out += "</div>"
-    out += _ins_map(did, v.get("map") or [], v.get("map_by"), v.get("map_at"), v.get("map_ways"), v.get("_map_missed"))
+    out += _ins_map(did, v.get("map") or [], v.get("map_by"), v.get("map_at"), v.get("map_ways"), v.get("_map_missed"),
+                    dated=dated)
     if v.get("ahead"):
         out += _ins_ahead(did, v["ahead"], v.get("deck_name"))
     f = v.get("fsrs")
@@ -2862,7 +2867,7 @@ def _insights_html(did, v):
     return f'<div class="dc-ins">{out}</div>'
 
 
-def _ins_map(did, tiles, by, at=(), ways=(), missed=None):
+def _ins_map(did, tiles, by, at=(), ways=(), missed=None, dated=True):
     """3.8.0, the topic map: each subject a tile, sized by its cards in play,
     shaded by how much I know now of the ones I've started (a bar along its
     foot: how many I've started; none yet, "new"). A tile that splits again
@@ -2910,7 +2915,7 @@ def _ins_map(did, tiles, by, at=(), ways=(), missed=None):
         lk = last.get("know")
         gone = len(missed_in(last, missed))
         study = (f'&middot; <a href="#" onclick="{_pycmd(f"insmapstudy:{did}:open")}">{study_missed(gone)}</a> '
-                 if gone else "")
+                 if gone and dated else "")
         path = (f'<div class="tmt">{" &rsaquo; ".join(steps)} &middot; {int(last["n"]):,} card{"" if int(last["n"]) == 1 else "s"}'
                 f'{"" if lk is None else f", {int(lk)}%"} {study}'
                 f'&middot; <a href="#" onclick="{_pycmd(f"insmapall:{did}")}">Browse all</a></div>')
@@ -2918,8 +2923,11 @@ def _ins_map(did, tiles, by, at=(), ways=(), missed=None):
         weak = weakest(cur, missed)
         if weak:
             wt = cur[weak[0]]
-            path = (f'<div class="tmt">Weakest: <b>{e(str(wt["name"]))}</b>, {int(wt["know"])}% &middot; '
-                    f'<a href="#" onclick="{_pycmd(f"insmapstudy:{did}:{weak[0]}")}">{study_missed(len(weak[1]))}</a></div>')
+            # 3.9.5 (Sam's FSRS rule): its Study only before a date; else its name opens it
+            go = (f' &middot; <a href="#" onclick="{_pycmd(f"insmapstudy:{did}:{weak[0]}")}">{study_missed(len(weak[1]))}</a>'
+                  if dated else "")
+            path = (f'<div class="tmt">Weakest: <a class="tp" href="#" onclick="{_pycmd(f"insmap:{did}:{weak[0]}")}">'
+                    f'<b>{e(str(wt["name"]))}</b></a>, {int(wt["know"])}%{go}</div>')
     # 3.9.2 (the students: what's the %, what's the bar?): said in the key; a tile's cards beside its %
     pct = "% you&rsquo;d recall now" if by == "fsrs" else "% right, 4 weeks"
     grey = ", ".join(w for w, on in (("new", fresh), ("too soon", soon_any)) if on)
@@ -3129,6 +3137,13 @@ def _topic_a(pid, uids, name, i):
     """3.8.0: a plan's topic as a link to its cards in Anki's browser."""
     return (f'<a class="tp" href="#" title="Browse its cards" '
             f'onclick="{_pycmd(f"plantopic:{pid}:{uids}:{int(i)}")}">{_html.escape(str(name))}</a>')
+
+
+def _topic_go(pid, uids, name, i):
+    """3.9.5 (Sam's): a plan's topic on Today as a link to study it: its new
+    cards and the ones due today, in a super deck of its own."""
+    return (f'<a class="tp" href="#" title="Study it" '
+            f'onclick="{_pycmd(f"plantopicstudy:{pid}:{uids}:{int(i)}")}">{_html.escape(str(name))}</a>')
 
 
 def _load_words(ld, now):
@@ -4044,9 +4059,14 @@ def you_html(cfg, due=None, you=None, people=None):
     keys = (["today", "upcoming", "later"] if due else []) + [k for k, _l in more]
     if not keys:
         return ""
-    tab = you.get("tab") if you.get("tab") in keys else keys[0]
+    # a saved tab that's gone: Today, else Plans (Due off: as before Super decks came), else the first
+    tab = you.get("tab") if you.get("tab") in keys else next((k for k in ("today", "plans") if k in keys), keys[0])
     body = (_you_plans(you.get("plans"), None if due else you.get("opened"), people, cfg) if tab == "plans"
-            else _you_insights(you.get("insights")) if tab == "insights" else "")
+            else _you_insights(you.get("insights")) if tab == "insights"
+            else _supers_html(you.get("supers")) if tab == "supers" else "")
+    n = int((you.get("supers") or {}).get("n") or 0)
+    if n:  # 3.9.5: how many super decks, on the tab, as Later says its count
+        more = tuple((k, f"{lb} {n}" if k == "supers" else lb) for k, lb in more)
     return _due_html(due, more, tab if tab in dict(more) else None, body, folded=bool(you.get("folded")),
                      qids=bool(you.get("qids")))
 
@@ -4326,7 +4346,7 @@ def _st_toggle_cmd(cmd, on, label):
 FIND_WORDS = {
     "set:theme:": "dark light night mode", "set:accent:": "colour color green purple blue", "set:compact:": "dense small",
     "set:sync_notifications:": "notify notification alert", "set:show_leaderboard:": "hide off board decks screen",
-    "settabs:": "tabs hide squads decks plans insights", "set:due_suggest:": "hard habit misses again",
+    "settabs:": "tabs hide squads decks super decks plans insights", "set:due_suggest:": "hard habit misses again",
     "set:due_leeches:": "leech suspended", "set:shortcuts:": "keys keyboard", "set:share_time:": "minutes hours privacy private",
     "set:share_reviews:": "cards numbers privacy private", "set:share_heatmap:": "year squares", "exam": "test date countdown",
     "af": "holiday vacation trip break", "setprivacy:paused": "pause break hide", "setprivacy:showup": "show up numbers squares",
@@ -7189,8 +7209,54 @@ DUE_CSS = """
     #due-crew .du-rc a.tp { font-weight: inherit; }
     #due-crew .dc-wrap.du-clr { text-align: left; padding: 14px 12px 6px 8px; margin: 2px 0 8px; }
     #due-crew .dc-wrap.du-clr b { font-weight: 700; }
-    #due-crew .du-ours .x { color: var(--dc-muted); font-weight: 400; margin-left: 8px; text-decoration: none; }
-    #due-crew .du-sec.du-sup { padding-top: 8px; text-align: left; }
+    /* 3.9.5: Super decks, a tab of their own: a deck you can see (its edges a stack), grouped by why */
+    #due-crew .sd-g { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+      color: var(--dc-muted); text-align: left; padding: 12px 0 0; }
+    #due-crew .sd-g:first-child { padding-top: 2px; }
+    #due-crew .sd-shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px;
+      text-align: left; padding: 8px 0 4px; }
+    #due-crew .sd { --sd-edge: color-mix(in srgb, var(--dc-faded) 55%, var(--dc-line)); position: relative; display: grid;
+      gap: 2px; align-content: start; padding: 8px 10px 9px; margin-top: 6px; background: var(--dc-bg); cursor: pointer;
+      border: 1px solid var(--sd-edge); border-radius: 8px; color: var(--dc-ink); min-width: 0;
+      box-shadow: 0 -8px 0 -6px var(--dc-bg), 0 -8px 0 -5px var(--sd-edge); }
+    #due-crew .sd.thick { margin-top: 8px; box-shadow: 0 -8px 0 -6px var(--dc-bg), 0 -8px 0 -5px var(--sd-edge),
+      0 -16px 0 -11px var(--dc-bg), 0 -16px 0 -10px var(--sd-edge); }
+    #due-crew .sd:hover { border-color: var(--dc-accent); }
+    #due-crew .sd .top { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+    #due-crew .sd .n { font-size: 21px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+    #due-crew .sd .n small { font-size: 11.5px; font-weight: 600; color: var(--dc-muted); margin-left: 3px; }
+    #due-crew .sd .go { font-size: 11.5px; font-weight: 700; color: var(--dc-accent); text-decoration: none; }
+    #due-crew .sd .nm { font-size: 12.5px; font-weight: 600; line-height: 1.25; color: var(--dc-ink); text-decoration: none;
+      overflow-wrap: break-word; justify-self: start; }
+    #due-crew .sd .nm:hover { text-decoration: underline; }
+    #due-crew .sd .w { font-size: 11.5px; color: var(--dc-muted); line-height: 1.3; }
+    #due-crew .sd .lo { display: flex; gap: 8px; align-items: center; margin-top: 5px; }
+    #due-crew .sd .sd-bar { flex: 1; height: 3px; border-radius: 2px; background: var(--dc-line); overflow: hidden; }
+    #due-crew .sd .sd-bar i { display: block; height: 100%; background: var(--dc-accent); border-radius: 2px; }
+    #due-crew .sd .x { margin-left: auto; font-size: 13px; color: var(--dc-muted); line-height: 1; text-decoration: none; }
+    #due-crew .sd-first { display: flex; gap: 10px; align-items: center; text-align: left; font-size: 13px;
+      background: var(--dc-well); border-radius: 12px; padding: 8px 14px 8px 6px; margin: 2px 0 6px; }
+    #due-crew .sd-cat { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 5px 16px; font-size: 12px;
+      text-align: left; padding: 6px 0 2px; }
+    #due-crew .sd-cat b { font-weight: 600; }
+    #due-crew .sd-cat span { color: var(--dc-muted); }
+    #due-crew .sd-hd { display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: baseline; text-align: left; margin: 0 0 8px; }
+    #due-crew .sd-hd a { color: var(--dc-accent); font-weight: 700; text-decoration: none; font-size: 12px; }
+    #due-crew .sd-hd b { font-size: 13.5px; }
+    #due-crew .sd-top { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 8px 18px; align-items: center;
+      text-align: left; padding: 2px 0 12px; }
+    #due-crew .sd-top .p { display: grid; gap: 6px; font-size: 12px; color: var(--dc-muted); justify-items: start; }
+    #due-crew .sd-top .p b { color: var(--dc-ink); font-size: 13px; }
+    #due-crew .sd-top .du-go { font-size: 12px; }
+    #due-crew .sd-facts { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 7px 12px; text-align: left;
+      font-size: 12.5px; border-top: 1px solid var(--dc-line); padding: 10px 0; }
+    #due-crew .sd-facts .k { color: var(--dc-muted); font-size: 12px; }
+    #due-crew .sd-acts { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; text-align: left;
+      border-top: 1px solid var(--dc-line); padding-top: 9px; }
+    #due-crew .sd-acts a { color: var(--dc-accent); font-weight: 700; text-decoration: none; }
+    #due-crew .sd-acts a.q { color: var(--dc-muted); font-weight: 400; }
+    @media (max-width: 460px) { #due-crew .sd-top { grid-template-columns: minmax(0, 1fr); }
+      #due-crew .sd-cat, #due-crew .sd-facts { grid-template-columns: minmax(0, 1fr); gap: 2px 0; } }
     #due-crew .du-add { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding-top: 3px; }
     #due-crew .du-add input[type=text] { flex: 1 1 160px; min-width: 0; font: inherit; font-size: 12.5px; color: var(--dc-ink);
       background: var(--dc-bg); border: 1px solid var(--dc-line); border-radius: 7px; padding: 4px 8px; }
@@ -7496,7 +7562,7 @@ def _due_plan(r):
         for k, (g, xs) in enumerate(groups):
             if k not in used and (g == label or (label == "Other" and not g)):
                 used.add(k)
-                return (" &middot; " + ", ".join(_topic_a(r["pid"], r["uid"], x, i) for x, i in xs)
+                return (" &middot; " + ", ".join(_topic_go(r["pid"], r["uid"], x, i) for x, i in xs)
                         + _remark_lines(xs, r.get("rm"), "du-rm"))  # 3.8.1: the authors' notes under it
         return ""
     subs = ""
@@ -7525,9 +7591,9 @@ def _due_plan(r):
         extra.append(f'{said} &middot; <a href="#" onclick="{_pycmd("planupdopen:" + r["pid"])}">Open</a>')
     meta = " &middot; ".join([f'{e(r["plan"])}'] + extra)
     rest = [(g, xs) for k, (g, xs) in enumerate(groups) if k not in used]
-    if rest:  # 3.8.0: each topic opens its cards in Browse
+    if rest:  # 3.8.0: each topic opens its cards in Browse; 3.9.5: studies them
         # as the Plans tab's day writes them: the group in bold, then its topics
-        what = "<small>" + " &middot; ".join((f"<b>{e(str(g))}</b> &middot; " if g else "") + ", ".join(_topic_a(r["pid"], r["uid"], x, i) for x, i in xs)
+        what = "<small>" + " &middot; ".join((f"<b>{e(str(g))}</b> &middot; " if g else "") + ", ".join(_topic_go(r["pid"], r["uid"], x, i) for x, i in xs)
                                               for g, xs in rest) + "</small>"
         what += "".join(_remark_lines(xs, r.get("rm"), "du-rm") for _g, xs in rest)  # 3.8.1
     elif groups:
@@ -7586,48 +7652,98 @@ def _due_reviews(r):
 
 
 def _due_misses(m):
-    """3.9.5: under a done Reviews row, today's misses and Study the N
-    again (the misses' deck had no way in since 3.8.1); once gone over, how
-    that went. m: due_flow._misses, or None."""
+    """3.9.5: under a done Reviews row, today's misses, and where they were
+    (each part opens Browse). A line, not a deck (Sam's FSRS rule). m:
+    due_flow._misses, or None."""
     said = _D.misses_text(m)
     if not said:
         return ""
     e = _html.escape
-    line, go = said
-    over = go is None  # gone over again: the line says how it went, and that's all
-    head, _sep, rest = line.partition(", ")
-    text = f'{e(head)}, <b>{e(rest)}</b>' if not over and rest else e(line)
-    if m.get("in_deck"):
-        go = None  # 3.9.5: Today's misses is a super deck, with its own Study
-    if not over and m.get("topics"):
-        # where they were, by the map's parts: each its own Study of just those
-        parts = [f'<a class="tp" href="#" title="Study just these" onclick="{_pycmd(f"duego:again{i}")}">'
+    head, _sep, rest = said.partition(", ")
+    text = f'{e(head)}, <b>{e(rest)}</b>' if rest else e(said)
+    if m.get("topics"):
+        parts = [f'<a class="tp" href="#" title="Browse them" onclick="{_pycmd(f"duego:miss{i}")}">'
                  f'{e(str(name))} {len(cids):,}</a>' for i, (name, cids) in enumerate(m["topics"])]
         if int(m.get("elsewhere") or 0):
             parts.append(f'{int(m["elsewhere"]):,} elsewhere')
         text += ": " + " &middot; ".join(parts)
-    link = f'<span class="end"><a href="#" onclick="{_pycmd("duego:again")}">{e(go)}</a></span>' if go else '<span class="end"></span>'
-    return f'<div class="du-rc"><span></span><span>{text}</span>{link}</div>'
+    return f'<div class="du-rc"><span></span><span>{text}</span><span class="end"></span></div>'
 
 
-def _due_supers(decks):
-    """3.9.5 (Sam: "where do I find superdecks?"): Super decks, under their
-    own heading: each Due Crew deck with cards in it (what's left, Study, ×
-    to put them back) and the ones ready to make today (how many, Study
-    makes it). due_flow.supers."""
-    if not decks:
+def _cleared_html(cl, sev=None):
+    """3.9.5: a Due Crew deck I studied ran out, with Pip; Nice puts it away."""
+    if not cl:
         return ""
     e = _html.escape
-    out = '<div class="du-sec du-sup">Super decks</div>'
-    for d in decks:
-        n = int(d.get("n") or 0)
-        made = bool(d.get("x"))
-        x = (f'<a href="#" class="x" title="Put them back in their own decks" onclick="{_pycmd(d["x"])}">&times;</a>'
-             if made else "")
-        out += (f'<div class="du-r du-ours"><span class="du-bx auto{" part" if made else ""}"></span><span class="t">'
-                f'<b>{e(str(d["name"]))}</b></span><span class="end"><span class="n">{n:,}{" left" if made else ""}</span>'
-                f'<a href="#" class="du-go" onclick="{_pycmd(d["cmd"])}">Study</a>{x}</span></div>')
+    n = int(cl.get("n") or 0)
+    return (f'<div class="dc-wrap du-clr">{sev or ""}<span><b>{e(str(cl["name"]))}</b>: '
+            f'{"all " + format(n, ",") + " cleared" if n > 1 else "cleared"}</span>'
+            f'<a href="#" class="wc" onclick="{_pycmd("duex:cleared")}">Nice</a></div>')
+
+
+def _sd_tile(d):
+    """A super deck you can see: its count (what's left of what it held,
+    once built), Study, its name (its page), what it is; × puts a built
+    one's cards back. The tile itself is Study."""
+    e = _html.escape
+    n, made = int(d.get("n") or 0), int(d.get("made") or 0)
+    stop = "event.stopPropagation();"
+    left = "<small>left</small>" if made else ""
+    bar = (f'<span class="sd-bar"><i style="width:{round(100 * (made - n) / made)}%"></i></span>' if made > n else "")
+    x = (f'<a href="#" class="x" title="Put them back" onclick="{stop}{_pycmd(d["x"])}">&times;</a>' if d.get("x") else "")
+    lo = f'<span class="lo">{bar}{x}</span>' if bar or x else ""
+    what = f'<span class="w">{e(str(d["what"]))}</span>' if d.get("what") else ""
+    return (f'<div class="sd{" thick" if n >= 20 else ""}" onclick="{_pycmd(d["cmd"])}">'
+            f'<span class="top"><span class="n">{n:,}{left}</span><a href="#" class="go" onclick="{stop}{_pycmd(d["cmd"])}">Study</a></span>'
+            f'<a href="#" class="nm" onclick="{stop}{_pycmd("sdpage:" + str(d["key"]))}">{e(str(d["name"]))}</a>'
+            f'{what}{lo}</div>')
+
+
+def _supers_html(sv):
+    """3.9.5, Super decks (Sam's pick B): Due Crew's own decks, only for what
+    Anki's scheduler can't know, grouped by why (Before a date, New, From
+    outside Anki); a deck that ran out; Pip by the first ones till the tab's
+    met; the kinds still to come, with none or till then; a deck's page in
+    place of the list. sv: due_flow.super_view; every string escaped here."""
+    if not sv:
+        return ""
+    e = _html.escape
+    if sv.get("page"):
+        return _sd_page(sv["page"])
+    out = _cleared_html(sv.get("cleared"), sv.get("cleared_sev"))
+    if sv.get("first"):
+        out += (f'<div class="sd-first">{sv.get("first_sev") or ""}'
+                f'<b>Your first super deck{"s" if int(sv.get("n") or 0) > 1 else ""}.</b></div>')
+    for title, decks in sv.get("groups") or []:
+        out += f'<div class="sd-g">{e(title)}</div><div class="sd-shelf">{"".join(_sd_tile(d) for d in decks)}</div>'
+    if sv.get("rest"):
+        out += f'<div class="sd-shelf">{"".join(_sd_tile(d) for d in sv["rest"])}</div>'
+    soon = sv.get("soon") or []
+    if soon:
+        out += ('<div class="sd-g">Still to come</div>' if int(sv.get("n") or 0) else '<div class="du-empty">None yet.</div>')
+        out += '<div class="sd-cat">' + "".join(f"<b>{e(n)}</b><span>{e(w)}</span>" for n, w in soon) + "</div>"
     return out
+
+
+def _sd_page(d):
+    """A super deck's page (its name's click): ‹ Super decks, its tile, how
+    far along, Study; then what it is, in four lines; Browse (a built one),
+    Put them back."""
+    e = _html.escape
+    n, made = int(d.get("n") or 0), int(d.get("made") or 0)
+    head = (f'<div class="sd-hd"><a href="#" onclick="{_pycmd("sdpage")}">&lsaquo; Super decks</a>'
+            f'<b>{e(str(d["name"]))}</b></div>')
+    said = f"<b>{made - n:,} of {made:,} done</b>" if made > n else f"<b>{n:,} card{'s' if n != 1 else ''}</b>"
+    top = (f'<div class="sd-top">{_sd_tile(dict(d, x=None))}<div class="p">{said}'
+           f'<a href="#" class="du-go" onclick="{_pycmd(d["cmd"])}">Study {n:,}</a></div></div>')
+    facts = "".join(f'<span class="k">{e(k)}</span><span>{e(v)}</span>' for k, v in d.get("facts") or [])
+    acts = []
+    if d.get("did"):
+        acts.append(f'<a href="#" onclick="{_pycmd("sdbrowse:" + str(int(d["did"])))}">Browse</a>')
+    if d.get("x"):
+        acts.append(f'<a href="#" class="q" onclick="{_pycmd(d["x"])}">Put them back</a>')
+    return (head + top + (f'<div class="sd-facts">{facts}</div>' if facts else "")
+            + (f'<div class="sd-acts">{"".join(acts)}</div>' if acts else ""))
 
 
 def _due_new(r):
@@ -7782,12 +7898,7 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None, qids=False):
                  f'<a href="#" onclick="{_pycmd("dueshow:" + v["toast"]["tab"])}">Show</a></div>')
     body = ""
     if tab == "today":
-        cl = v.get("cleared")
-        if cl:
-            # 3.9.5: a Due Crew deck I studied ran out; Nice puts it away
-            body += (f'<div class="dc-wrap du-clr">{v.get("cleared_sev") or ""}<span><b>{e(cl["name"])}</b>: '
-                     f'{"all " + format(int(cl["n"]), ",") + " cleared" if int(cl["n"]) > 1 else "cleared"}</span>'
-                     f'<a href="#" class="wc" onclick="{_pycmd("duex:cleared")}">Nice</a></div>')
+        body += _cleared_html(v.get("cleared"), v.get("cleared_sev"))
         if v.get("nudge"):
             # 3.8.1: once a day, past my usual start, nothing studied yet: Fifteen?
             peek = f'<span class="nz">{v["nudge_sev"]}</span>' if v.get("nudge_sev") else "<span>&#9654;</span>"
@@ -7815,7 +7926,6 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None, qids=False):
                 body += _due_every(r)
             else:
                 body += _due_mine(r)
-        body += _due_supers(v.get("supers"))  # 3.9.5: Super decks, made and ready
         body += _opened_line(v.get("opened"))
         for sg in v["suggestions"] + v["notes"]:
             # 3.9.5: Next up, its button a command of its own (Insights' Study, say)
@@ -7824,7 +7934,7 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None, qids=False):
             body += (f'<div class="du-sg"><span>&#10022;</span><span>{lead}{e(sg["text"])}</span><span>'
                      f'<a href="#" onclick="{go}">{e(sg["go"])}</a>'
                      f'<a href="#" class="x" title="Not today" onclick="{_pycmd("duex:" + sg["key"])}">&times;</a></span></div>')
-        if not v["rows"] and not v["suggestions"] and not v["notes"] and not v.get("supers"):
+        if not v["rows"] and not v["suggestions"] and not v["notes"]:
             body += '<div class="du-empty">Nothing due today.</div>'
         body += _due_add(v, "today")
     elif tab == "upcoming":

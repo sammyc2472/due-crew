@@ -3381,34 +3381,75 @@ every release that changes how something works.
   window marks it itself (`dc="go"`, as the plan windows' do;
   `tools/dialogs.py` checks it).
 - 3.9.5, Today (the Five mocks, reviewed page; Sam: "give it a shot
-  building all of it"). Under a done Reviews row, today's misses are back: "214
-  reviews, 23 missed: Renal 9 · Pharm 6 · Cardio 4 · 4 elsewhere · Study
-  the 23 again" (`due_flow._misses`: reviews answered Again today, a card
+  building all of it"). Under a done Reviews row, today's misses and where
+  they were: "214 reviews, 23 missed: Renal 9 · Pharm 6 · Cardio 4 · 4
+  elsewhere" (`due_flow._misses`: reviews answered Again today, a card
   once; the parts from the map of the deck I reviewed most today,
-  `_miss_topics`, each its own Study of just those, `duego:again0..`).
-  Today's misses had no way in since 3.8.1 (its `duego:again` handler was
-  there, nothing sent it). Once gone over, the line says how it went
-  ("all 23 gone over again · 19 right this time", from what's answered
-  since the deck was built, `misses_built` in plans.json). Next up takes
-  the suggestion's place once the reviews are through (`_next_up`): the
-  first that applies, from Insights' own numbers for the deck I reviewed
-  most today: a topic not sticking with 8+ missed (Study N), 5+ cards one
-  miss from a leech (Insights' leeches view); else new leeches, as before.
-  Not today puts it away and none steps in till tomorrow. Super decks
-  (Sam, click-testing: "where do I find superdecks?", "i don't see any
-  super decks"), a heading of their own in Today (`due_flow.supers`,
-  `board._due_supers`): every Due Crew deck with cards in it (what's left,
-  Study into it, × to put them back: Anki's Empty), then the ones ready to
-  make today: Today's misses (a review missed today), Slow but right (How
-  you study, when my log shows it), and once the reviews are through,
-  Before my exam (an exam within 7 days with 10+ cards at risk, Insights'
-  Study N early); Study on one makes it. With Today's misses a super deck,
-  the misses line keeps its parts and loses its Study. The head's "1h 08m
-  left" went before it shipped (Sam: "it can feel insurmountable when
-  phrased as time remaining"). A Due Crew deck I studied that
-  runs out says so on the board, Pip hopping, "Slow but right: all 46
-  cleared · Nice" (`_watch_ours` on Anki's state change: counted as its
-  review starts, empty as I leave it). Never sent.
+  `_miss_topics`, each opening its cards in Browse, `duego:miss0..`). A
+  line, not a deck (Sam's FSRS rule, below): Anki's relearning steps bring
+  a miss back, and FSRS sets the next look. Next up takes the suggestion's
+  place once the reviews are through (`_next_up`): the first that
+  applies, from Insights' own numbers for the deck I reviewed most today:
+  a topic not sticking with 8+ missed (Study N before a date, else Browse
+  N), 5+ cards one miss from a leech (Insights' leeches view); else new
+  leeches, as before. Not today puts it away and none steps in till
+  tomorrow. The head's "1h 08m left" went before it shipped (Sam: "it can
+  feel insurmountable when phrased as time remaining"). A Due Crew deck I
+  studied that runs out says so on the board, Pip hopping, "Leeches: all
+  12 cleared · Nice" (`_watch_ours` on Anki's state change: counted as its
+  review starts, empty as I leave it), on Today and on Super decks. Never
+  sent.
+- 3.9.5, Super decks, a tab of their own (Sam, click-testing: "where do
+  I find superdecks?", then "feels tacked on to today"; the Meeting Super
+  Decks mock, his pick B, then his rule: "a lot of anki's utility comes
+  from its scheduling engine FSRS so we have to only include these such
+  that they are necessary or helpful"). In the You bubble between Today's
+  lists and Plans, "Super decks 4" (hideable in Settings like the others):
+  Due Crew's own filtered decks, only for what Anki's scheduler can't
+  know, grouped by why. Before a date: Before your exam (from a week out,
+  Insights' exam box, with Slow but right's cards Anki won't show before
+  it: FSRS doesn't see answer time) and Before a quiz (a plan's quiz from
+  three days out, its prep dates' open cards; the deck is "Before Cardio
+  quiz"; an Insights part or row studied before a date lands here too).
+  New: the plan's day (a plan's dates open by today, the cards I
+  haven't seen, in the deck's order, "MS2 · Today", for today), a
+  section's cards (below), Leeches (Sam's: Study starts them over, new
+  cards with the leech tag off and unsuspended, one undo step,
+  `recover_leeches`, then the deck; Leave it out's stay out). From outside
+  Anki: QBank cards. A deck is a tile you can see (a stack, its second
+  edge at 20 cards; its count, what's left of what it held with a bar
+  once built; Study; × puts a built one back); its name opens its page in
+  the tab: In it, Why a deck, Leaves, Then (`superdecks.facts`), Browse.
+  Pip, holding a card, by the first ones ("Your first super deck.") till
+  one's studied (`sd_met`, this computer's); with none, or till then, the
+  kinds still to come and when each shows up. What a deck is and held is
+  noted when it's built (`plan_flow._note_built`'s kind, plans.json `sd`);
+  an exam's or a quiz's is emptied the morning after its day, the plan's
+  day's the next morning. `superdecks.py` is pure (the words, the tab's
+  shape); `due_flow.super_decks`/`super_view` the glue, kept a little while
+  the collection doesn't change (its count is on the tab at every draw);
+  `board._supers_html`/`_sd_tile`/`_sd_page`. Commands: `sdgo:<what>`,
+  `sdpage[:<key>]`, `sdbrowse:<deck>`. Never sent.
+- 3.9.5, Sam's FSRS rule, everywhere a Study made a deck: a date ahead,
+  cards not started yet, a miss outside Anki; anything else is reviews
+  ahead of their date, and FSRS has those. So: Today's misses and Slow but
+  right are no longer decks (the morning empties one left from before,
+  `plan_flow.RETIRED`); a date's Study, on Today, the plan's week and the
+  builder, takes its new cards and the ones due today (`plans.new_and_due`;
+  3.8.1 had made it every open card, due or not), as they come in the
+  deck; a quiz's Study keeps every open card (a date's coming). Insights'
+  exam box, its Not sticking rows and the map's Study build a deck only
+  with a date ahead (my exam, or a plan's event: `team_flow.dated`); else
+  the cards open in Browse, and the weakest part's name opens it. A plan's
+  review day builds its deck only before a quiz (an event within three
+  days after it, `plan_flow.quiz_after`). On Today a plan date's topics
+  (Sam: "if one clicks on a tagged section on a plan (like a video tags)
+  then it moves them into a filtered deck?") study it: its cards I haven't
+  seen and the ones due today, as they come, a deck named for it
+  (`plan_flow.study_topic`, `plantopicstudy`); a card another Due Crew
+  deck holds comes out of it first and that deck is built again
+  (`_free`; Anki keeps a card in one filtered deck); nothing new or due,
+  Browse as before. Upcoming and the Plans tab's topics still Browse.
 - 3.9.5, How you study (`habits.py` pure, `habits_flow.py` the glue):
   what my own last eight weeks of log say about how I study, all decks,
   worked out on this computer and never sent. A line atop Insights, "How
@@ -3419,10 +3460,9 @@ every release that changes how something works.
   but right (right answers at 1.5–3× the card's usual time, missed more
   next time, held at the same intervals: "22% of slow right answers missed
   next time · 13% otherwise", its range from 300 resamples of cards in the
-  bars' titles), with Study N into Due Crew's filtered deck and a track
-  record (`slow_studied` in plans.json: once 30 studied cards have had a
-  next answer, "Studied ones: 14% missed next time · 22% the rest", and if
-  they aren't missed less, Study goes); long sittings (right % by minutes
+  bars' titles), with See them (Browse; a finding, not a deck, by Sam's
+  FSRS rule: with an exam set they join Before your exam; the deck and its
+  track record went before it shipped); long sittings (right % by minutes
   in, held at the interval mix; 45+ minutes against the first 20 in
   hour-long sittings, a range from resampled sittings: "84 → 79% after 35
   minutes in one go"), with Start a Fifteen. A finding shows only once it
@@ -3433,15 +3473,15 @@ every release that changes how something works.
   new break): when my sittings finding passes, past 35 minutes in one go
   while reviewing, the top bar's ▶ Fifteen? says "35 min in · Take five",
   which starts a Fifteen already in its break (`room15sit`; × for the
-  sitting, `room15sitx`). Today's Next up offers Slow but right
-  (`habits_flow.next_up`). The log is read once a day; a big one is worked
+  sitting, `room15sitx`). The log is read once a day; a big one is worked
   out off the main thread (about 2 s for 166,000 answers).
 - 3.9.5, Study where the cards are (no Study sheet: a Study sits on what
   names the cards). Insights › What you know names its weakest part
   under the key, "Weakest: Renal · Physiology, 66% · Study the 41 you
   missed" (lowest % among the tiles showing one, ties to more missed,
-  only with 5+ missed: `team.weakest`), and an open part's trail gets
-  "Study the N you missed" before Browse all (`team_flow.study_map`,
+  only with 5+ missed: `team.weakest`; Study only with a date ahead, by
+  Sam's FSRS rule), and an open part's trail gets "Study the N you
+  missed" before Browse all (`team_flow.study_map`,
   `duecrew:insmapstudy`). Missed: Again in a review in the map's four
   weeks, in the deck, not suspended (`team_flow._missed`). QBank QIDs says
   Their topics after a paste: the map's parts the questions are in, a

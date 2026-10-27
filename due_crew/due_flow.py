@@ -27,7 +27,6 @@ from . import plans as P
 from .app import _state, cfg, save_cfg
 
 AGAIN_MIN = 10  # today's misses before the box suggests going over them
-MISSES = P.our_deck("Today's misses")  # their filtered deck, under Due Crew's parent
 LEECH_MIN = 3  # new leeches this week before it suggests a look
 RECOVER_MAX = 200  # leeches recovered in a morning, at most
 REVIEWS_FRESH = 30.0  # seconds a reviews-due count is good for
@@ -265,9 +264,8 @@ def _reviews():
 
 def _misses(col):
     """3.9.5: today's misses: the reviews I answered Again today (a card
-    once, first missed first), the reviews I answered today, and, once
-    Study the N again has run today, how many of its cards I've answered
-    since and how many right the first time. Main thread."""
+    once, first missed first), the reviews I answered today, and where they
+    were (_miss_topics). Main thread."""
     start = (int(col.sched.day_cutoff) - 86400) * 1000
     cids = [int(c) for c, _m in col.db.all("SELECT cid, min(id) FROM revlog WHERE id >= ? AND ease = 1 AND type = 1 "
                                            "GROUP BY cid ORDER BY 2", start)]
@@ -275,15 +273,6 @@ def _misses(col):
            "reviews": int(col.db.scalar("SELECT count(DISTINCT cid) FROM revlog WHERE id >= ? AND ease > 0 AND type = 1",
                                         start) or 0)}
     out["topics"], out["elsewhere"] = _miss_topics(col, cids)
-    built = _pf()._pcfg().get("misses_built")
-    if isinstance(built, dict) and built.get("day") == _today() and built.get("cids"):
-        mine = {int(c) for c in built["cids"]}
-        seen = {}
-        for cid, ease in col.db.all("SELECT cid, ease FROM revlog WHERE id >= ? AND ease > 0 ORDER BY id",
-                                    int(float(built.get("at") or 0) * 1000)):
-            if int(cid) in mine:
-                seen.setdefault(int(cid), int(ease))
-        out.update(of=len(mine), over=len(seen), right=sum(1 for x in seen.values() if x > 1))
     return out
 
 
@@ -496,9 +485,9 @@ def _next_up(c, gone):
     through, the first that applies, from Insights' own numbers for the deck
     I reviewed most today: a topic not sticking, NEXT_TOPIC_MIN or more
     missed; NEXT_NEAR_MIN or more cards one miss from a leech. Its button
-    is Insights' own. Not today puts it away, and none steps in till
-    tomorrow. None when nothing applies. (Before my exam and Slow but right
-    are Super decks, in their own rows: `supers`.)"""
+    is Insights' own: a topic's Study only before a date (team_flow.dated,
+    Sam's FSRS rule), else Browse. Not today puts it away, and none steps
+    in till tomorrow. None when nothing applies."""
     from . import team_flow
     did = _today_deck(mw.col)
     view = {}
@@ -508,7 +497,8 @@ def _next_up(c, gone):
     rows = view.get("rows") or []
     if rows and int(rows[0].get("stuck") or 0) + int(rows[0].get("forgot") or 0) >= NEXT_TOPIC_MIN:
         k = int(rows[0]["stuck"]) + int(rows[0]["forgot"])
-        return {"key": "next", "lead": "Next up:", "cmd": f"insstudy:{did}:0", "go": f"Study {k:,}",
+        go = "insstudy" if (view.get("aim") or {}).get("name") else "insbrowse"  # team_flow.dated: a deck only before a date
+        return {"key": "next", "lead": "Next up:", "cmd": f"{go}:{did}:0", "go": f"{'Study' if go == 'insstudy' else 'Browse'} {k:,}",
                 "text": f'{rows[0]["name"]} isn\u2019t sticking: {k:,} of {int(rows[0].get("of") or k):,} missed in two weeks'}
     near = int(view.get("near") or 0)
     if did and near >= NEXT_NEAR_MIN:
@@ -526,7 +516,7 @@ def notes():
         if n and "recovered" not in (st.get("dismissed") or []) else []
 
 
-YOU_TABS = D.TABS + ("plans", "insights")  # 3.8.0: the You bubble's tabs, Due's lists first
+YOU_TABS = D.TABS + ("supers", "plans", "insights")  # 3.8.0: the You bubble's tabs, Due's lists first; 3.9.5: Super decks
 
 
 def you_tab(c):
@@ -568,14 +558,7 @@ def view(c):
         # 3.9.5: today's misses (under a done Reviews row), a deck run out
         rv = next((r for r in v.get("rows") or [] if r.get("kind") == "reviews"), None)
         v["misses"] = _misses(mw.col) if mw.col and rv and rv.get("done") else None
-        cl = _state.get("due_cleared")
-        v["cleared"] = cl if isinstance(cl, dict) and cl.get("day") == today else None
-        v["cleared_sev"] = _cleared_sev(v["cleared"]) if v["cleared"] else None
-        # 3.9.5 (Sam: "where do I find superdecks?", "i don't see any super decks"): Today's Super decks,
-        # the Due Crew decks with cards in them and the ones ready to make today
-        v["supers"] = supers(c, v) if mw.col else []
-        if v["misses"] and v["supers"]:
-            v["misses"]["in_deck"] = True  # Today's misses is a super deck there; the line says where they were
+        v["cleared"], v["cleared_sev"] = cleared()
         # 3.8.1: "Fifteen?", when the day hasn't started by my usual time
         from . import rooms
         v["nudge"] = rooms.nudge(c, v, _day_state()[1].get("dismissed") or ())
@@ -1047,29 +1030,11 @@ def go(key):
     """A suggestion's or a note's button."""
     if not mw.col:
         return
-    pf = _pf()
-    if key == "again" or (key[:5] == "again" and key[5:].isdigit()):
-        # 3.9.5: Study the N again, under the Reviews row once it's done: the reviews I missed today
-        # (it had no way in since 3.8.1), or a part's alone (again0, again1, ...: its link on the line);
-        # what's answered since is how the line says they've been gone over
+    if key[:4] == "miss" and key[4:].isdigit():
+        # 3.9.5: a part of today's misses, under a done Reviews row: its cards in Browse (a line, not a deck)
         m = _misses(mw.col)
-        cids = m["cids"]
-        if key != "again":
-            got = m["topics"][int(key[5:])] if int(key[5:]) < len(m["topics"]) else None
-            cids = got[1] if got else []
-        if cids and pf._filtered(mw.col, MISSES, cids):
-            c = pf._pcfg()
-            c["misses_day"] = pf._today()  # 3.8.1: the next morning empties it back if it's left
-            c["misses_built"] = {"day": pf._today(), "at": time.time(), "cids": cids}
-            pf._psave(c)
-            pf._after_change()
-            did = mw.col.decks.id_for_name(MISSES)
-            if did:
-                mw.col.decks.select(did)
-                mw.moveToState("overview")
-    elif key == "slow":
-        from . import habits_flow  # 3.9.5: How you study's deck, from Next up
-        habits_flow.study_slow()
+        got = m["topics"][int(key[4:])] if int(key[4:]) < len(m["topics"]) else None
+        _pf()._browse(got[1] if got else [])
     elif key == "near":
         did = _today_deck(mw.col)  # 3.9.5: Next up's cards one miss from a leech: Insights' leeches view
         if did:
@@ -1104,6 +1069,8 @@ def on_message(cmd, parts):
     c = cfg()
     arg = parts[2] if len(parts) > 2 else ""
     if cmd == "duetab" and arg in YOU_TABS:
+        if arg == "supers":
+            _state["sd_page"] = None  # the tab itself: its list
         if arg in (c.get("hidden_tabs") or []):
             c["hidden_tabs"] = [k for k in c["hidden_tabs"] if k != arg]  # a link to it shows it again
         c["due_tab"] = arg
@@ -1133,7 +1100,13 @@ def on_message(cmd, parts):
     elif cmd == "duego" and arg:
         go(arg)
     elif cmd == "duedeck" and arg.isdigit():
-        study_ours(int(arg))  # 3.9.5: a Due Crew deck's row
+        study_ours(int(arg))  # 3.9.5: a super deck's Study
+    elif cmd == "sdgo" and arg:
+        sd_go(parts)  # 3.9.5: a super deck's Study, made first when it's ready to make
+    elif cmd == "sdpage":
+        sd_page(":".join(parts[2:]))
+    elif cmd == "sdbrowse" and arg.isdigit() and mw.col and _ours(mw.col, int(arg)):
+        _pf()._browse(mw.col.db.list("SELECT id FROM cards WHERE did = ?", int(arg)))
     elif cmd == "duedeckx" and arg.isdigit():
         put_back(int(arg))
     elif cmd == "duestudy":
@@ -1252,51 +1225,231 @@ def _ours(col, did):
     return name.split("::")[-1]
 
 
-def supers(c, v):
-    """3.9.5: Today's Super decks, [{name, n, cmd, x?}]: every Due Crew deck
-    with cards in it (its Study goes into it, × puts them back), then the
-    ones ready to make today that aren't made: Today's misses (a review I
-    missed today), Slow but right (How you study, when my log shows it),
-    and, once the reviews are through, Before my exam (Insights' Study N
-    early, an exam within NEXT_EXAM_DAYS with NEXT_EXAM_MIN at risk).
-    Study on one of those makes it."""
-    out = [dict(d, cmd=f"duedeck:{d['did']}", x=f"duedeckx:{d['did']}") for d in _our_decks(mw.col)]
+# ---- 3.9.5: Super decks, a tab of their own (superdecks.py: their words and the tab's shape) ----
+
+EXAM_DAYS = 7  # Before your exam: from a week out
+SD_FRESH = 30.0  # seconds the tab's decks are good for, while the collection doesn't change
+
+
+def _sd_name(name):
+    """A deck's own name as Due Crew builds it (P.our_deck), the part after Due Crew's parent."""
+    return P.our_deck(name)[len(P.PARENT) + 2:]
+
+
+def super_decks(c):
+    """[deck] (superdecks' shape): every Due Crew deck with cards in it
+    (Study goes into it, × puts them back; its kind and what it held from
+    plan_flow.sd_info), then the ones ready to make that aren't made:
+    Before your exam, Before a quiz, the plan's day, Leeches. Kept a little
+    while the collection doesn't change: the tab's count is on every draw.
+    Main thread."""
+    if not mw.col:
+        return []
+    key = (getattr(mw.col, "mod", None), _today(), str(c.get("exam_date") or ""), id(_state.get("plan_progress")))
+    hit = _state.get("sd_decks")
+    if key[0] is not None and hit and hit[0] == key and time.time() - hit[1] < SD_FRESH:
+        return [dict(d) for d in hit[2]]
+    info = _pf().sd_info()
+    out = []
+    for d in _our_decks(mw.col):
+        x = info.get(d["did"]) or {}
+        made = int(x.get("n") or 0)
+        out.append(dict({k: v for k, v in x.items() if k in ("kind", "day", "plan", "src")},
+                        key=f"d:{d['did']}", did=d["did"], name=d["name"], n=d["n"],
+                        made=made if made > d["n"] else None, cmd=f"duedeck:{d['did']}", x=f"duedeckx:{d['did']}"))
     have = {d["name"] for d in out}
-    try:
-        n = len(_misses(mw.col)["cids"])
-        if n and MISSES.split("::")[-1] not in have:
-            out.append({"name": MISSES.split("::")[-1], "n": n, "cmd": "duego:again"})
-        from . import habits_flow
-        slow = habits_flow.next_up()
-        if slow and habits_flow.DECK not in have:
-            out.append({"name": habits_flow.DECK, "n": int(slow["n"]), "cmd": "duego:slow"})
-        ex = _exam_ready(c, v)
-        if ex and ex["name"] not in have:
-            out.append(ex)
-    except ImportError:
-        pass
-    except Exception:
-        traceback.print_exc()
+    for ready in (_ready_exam, _ready_quizzes, _ready_days, _ready_leech):
+        try:
+            for d in ready(c):
+                if d["name"] not in have and int(d["n"]) > 0:
+                    out.append(d)
+                    have.add(d["name"])
+        except Exception:
+            traceback.print_exc()
+    _state["sd_decks"] = (key, time.time(), [dict(d) for d in out])
     return out
 
 
-def _exam_ready(c, v):
-    """Before my exam, as a super deck ready to make: only once the day's
-    reviews are through (Insights is worked out for it then, as Next up's)."""
-    rv = next((r for r in v.get("rows") or [] if r.get("kind") == "reviews"), None)
-    if rv and not rv.get("done"):
-        return None
+def _ready_exam(c):
+    """Before your exam, from EXAM_DAYS out: Insights' exam box for the deck
+    I reviewed most today (else Insights' first), with Slow but right's
+    (team_flow.exam_deck)."""
+    exam, today = str(c.get("exam_date") or ""), _today()
+    if not exam or not today or exam < today or (D.d(exam) - D.d(today)).days > EXAM_DAYS:
+        return []
     from . import team_flow
-    did = _today_deck(mw.col)
+    decks = team_flow.you_decks()
+    did = _today_deck(mw.col) or (decks[0]["did"] if decks else None)
     if not did:
+        return []
+    d = next((x for x in decks if x["did"] == did), None)
+    team_flow.insights(did, (d or {}).get("pid"), exam)
+    got = team_flow.exam_deck(did)
+    if not got or got[2].get("kind") != "exam":
+        return []
+    return [{"key": f"exam:{did}", "kind": "exam", "name": _sd_name(got[1]), "n": len(got[0]),
+             "day": str(got[2].get("day") or ""), "cmd": f"sdgo:exam:{did}"}]
+
+
+def _ready_quizzes(c):
+    """Before a quiz: a plan's quiz from P.QUIZ_DAYS out (P.quiz: the open
+    cards of the dates that prep for it)."""
+    pf, today = _pf(), _today()
+    prog, state = _state.get("plan_progress") or {}, pf._state_cfg()
+    out = []
+    for p in pf.followed():
+        st = state.get(p["id"])
+        if p.get("paused") or not st or not pf._deck_ok(mw.col, st.get("deck_id")):
+            continue
+        q = P.quiz(p["doc"], today, prog.get(p["id"]))
+        if q:
+            out.append({"key": f"quiz:{p['id']}:{q['id']}", "kind": "quiz", "name": _sd_name(f"Before {q['name']}"),
+                        "n": int(q["open"]), "day": q["day"], "cmd": f"sdgo:quiz:{p['id']}:{q['id']}"})
+    return out
+
+
+def _ready_days(c):
+    """The plan's day: the open cards I haven't seen of a plan's dates open
+    by today (plan_dates, as Today has them), a deck a plan."""
+    today = _today()
+    prog = _state.get("plan_progress") or {}
+    by = {}
+    for x in plan_dates(today)[0]:
+        if x["opens"] > today:
+            continue
+        o, s_, _t = ((prog.get(x["pid"]) or {}).get(x["uid"]) or [0, 0, 0])[:3]
+        left = max(0, int(o or 0) - int(s_ or 0))
+        if left:
+            got = by.setdefault(x["pid"], [x["plan"], 0])
+            got[1] += left
+    return [{"key": f"day:{pid}", "kind": "day", "name": _sd_name(f"{plan} \u00b7 Today"), "plan": plan, "n": n,
+             "cmd": f"sdgo:day:{pid}"} for pid, (plan, n) in by.items()]
+
+
+def _ready_leech(c):
+    """Leeches (Sam's): the cards leech_plan counts, Leave it out's kept out."""
+    key = getattr(mw.col, "mod", None)
+    hit = _state.get("sd_leech")
+    if key is not None and hit and hit[0] == key:
+        n = hit[1]
+    else:
+        n = len(leech_plan(mw.col, _left_out())[0])
+        _state["sd_leech"] = (key, n)
+    return [{"key": "leech", "kind": "leech", "name": "Leeches", "n": min(n, RECOVER_MAX), "cmd": "sdgo:leech"}] if n else []
+
+
+def super_view(c):
+    """The Super decks tab (superdecks.view), with the deck that ran out
+    today and Pip, by the first decks till the tab's met (`sd_met`, set by
+    a first Study in one), and an open deck's page's words. Main thread."""
+    from . import superdecks
+    sv = superdecks.view(super_decks(c), met=bool(c.get("sd_met")), page=_state.get("sd_page"))
+    if sv["page"]:
+        sv["page"]["facts"] = superdecks.facts(sv["page"])
+    for d in [x for _t, ds in sv["groups"] for x in ds] + sv["rest"]:
+        d["what"] = superdecks.what(d)
+    sv["cleared"], sv["cleared_sev"] = cleared()
+    sv["first_sev"] = _first_sev() if sv["first"] else None
+    return sv
+
+
+def _first_sev():
+    """Pip, holding a card, by the first super decks. None with Pip off."""
+    from . import rooms, sev
+    if not rooms.sev_on():
         return None
-    d = next((x for x in team_flow.you_decks() if x["did"] == did), None)
-    view = team_flow.insights(did, (d or {}).get("pid"), str(c.get("exam_date") or "")) or {}
-    aim, hero = view.get("aim") or {}, view.get("hero") or []
-    if not (aim.get("name") and int(aim.get("in") or 99) <= NEXT_EXAM_DAYS and len(hero) >= NEXT_EXAM_MIN):
-        return None
-    _cids, title = team_flow._pick(did, "h")
-    return {"name": title, "n": len(hero), "cmd": f"insstudy:{did}:h"}
+    return sev.slot(sev.svg("again", size=48, rest=True, label="Pip", look=rooms.my_look()), 48)
+
+
+def cleared():
+    """(the Due Crew deck that ran out today, Pip by it), or (None, None)."""
+    cl = _state.get("due_cleared")
+    cl = cl if isinstance(cl, dict) and cl.get("day") == _today() else None
+    return cl, (_cleared_sev(cl) if cl else None)
+
+
+def _met():
+    c = cfg()
+    if not c.get("sd_met"):
+        c["sd_met"] = True
+        save_cfg(c)
+
+
+def _into(name):
+    """Into a Due Crew deck just built: Anki's overview on it."""
+    _pf()._after_change()
+    did = mw.col.decks.id_for_name(name)
+    if did:
+        mw.col.decks.select(did)
+        mw.moveToState("overview")
+
+
+def sd_go(parts):
+    """sdgo:<what>: a super deck's Study, made first when it's ready to
+    make: exam:<deck>, quiz:<plan>:<event>, day:<plan>, leech."""
+    if not mw.col:
+        return
+    what = parts[2] if len(parts) > 2 else ""
+    _met()
+    _state["sd_decks"] = None
+    if what == "exam" and len(parts) > 3 and parts[3].isdigit():
+        from . import team_flow
+        team_flow.study(int(parts[3]), "h")
+    elif what == "quiz" and len(parts) > 4:
+        _pf().study_quiz(parts[3], parts[4])
+    elif what == "day" and len(parts) > 3:
+        study_day(parts[3])
+    elif what == "leech":
+        study_leeches()
+
+
+def study_day(pid):
+    """The plan's day: the open cards I haven't seen of its dates open by
+    today, in the deck's order, as Due Crew's "<plan> · Today", for today
+    (the morning empties it); then Anki's Study screen on it."""
+    pf = _pf()
+    got = pf._plan_idx(pid)
+    if not got:
+        return
+    p, st, doc, idx = got
+    today = _today()
+    uids = {x["uid"] for x in plan_dates(today)[0] if x["pid"] == pid and x["opens"] <= today}
+    cids = set()
+    for u in P.units(doc):
+        if u["id"] in uids:
+            cids |= idx.match(u, pf._swap(st), doc)
+    new = sorted((x for x in cids if idx.cards.get(x) == (0, 0)), key=lambda x: idx.order.get(x, (True, 0, x)))
+    if not new:
+        tooltip("Nothing new in it.")
+        return
+    title = P.plan_title(p)
+    name = P.our_deck(f"{title} \u00b7 Today")
+    if pf._filtered(mw.col, name, new, order=pf.NEW_ORDER, kind="day", until=today, plan=title):
+        _into(name)
+
+
+def study_leeches():
+    """Leeches (Sam: "a leech superdeck that resets the cards and removes the
+    leech tag upon starting it"): the leeches started over (recover_leeches:
+    new cards, the leech tag off, unsuspended, one undo step), with the ones
+    already in it, as Due Crew's "Leeches"; then Anki's Study screen on it."""
+    col, pf = mw.col, _pf()
+    name = P.our_deck("Leeches")
+    did = col.decks.id_for_name(name)
+    had = [int(x) for x in col.db.list("SELECT id FROM cards WHERE did = ?", int(did))] if did else []
+    cids = recover_leeches(col, "Due Crew: start leeches over", out=_left_out())
+    _state["sd_leech"] = None
+    if not cids and not had:
+        tooltip("No leeches right now.")
+        return
+    if pf._filtered(col, name, had + [x for x in cids if x not in set(had)], order=pf.NEW_ORDER, kind="leech"):
+        _into(name)
+
+
+def sd_page(key):
+    """A super deck's name: its page, in the tab (an empty key goes back)."""
+    _state["sd_page"] = key or None
+    _swap(cfg())
 
 
 def _our_decks(col):
@@ -1320,6 +1473,7 @@ def study_ours(did):
     """A Due Crew deck's row's Study: into it (Anki's overview), ours only."""
     if not mw.col or not _ours(mw.col, did):
         return
+    _met()
     mw.col.decks.select(int(did))
     mw.moveToState("overview")
 
@@ -1331,6 +1485,7 @@ def put_back(did):
         return
     try:
         mw.col.sched.empty_filtered_deck(int(did))
+        _state["sd_decks"] = _state["sd_page"] = None
         _pf()._after_change()
     except Exception:
         traceback.print_exc()
