@@ -1717,24 +1717,33 @@ def study_date(pid, uid):
 QUIZ_ORDER = 2  # Anki's filtered-deck order: smallest intervals first, the shakiest (and the unseen) first
 
 
+def quiz_cards(pid, eid):
+    """(cids, event) a quiz's Study takes: the open cards of the dates that
+    prep for it (P.quiz: open by today, not one after it); ([], None)
+    without the plan here or the event."""
+    got = _plan_idx(pid)
+    if not got:
+        return [], None
+    _p, st, doc, idx = got
+    ev = next((e for e in doc.get("events") or [] if isinstance(e, dict) and e.get("id") == eid), None)
+    if not ev:
+        return [], None
+    cids, today = set(), _today()
+    for u in P.units(doc):  # the dates its line counts (P.quiz): prep dates open by today, not one after it
+        if u.get("for") == eid and not P.reinforces(doc, u) and str(u.get("opens") or "9999") <= today:
+            cids |= idx.match(u, _swap(st), doc)
+    return P.study_cards(idx, cids), ev
+
+
 def study_quiz(pid, eid):
     """3.8.1 (plans, rethought), Study for a quiz: one Due Crew deck of the
     open cards of every date that preps for the event (P.quiz: not a date
     after it), the shakiest first, Anki rescheduling them as it would; one
     undo step of Anki's own, then Anki's Study screen on it. A search run
     here; nothing is sent, and nobody else sees it."""
-    got = _plan_idx(pid)
-    if not got:
+    cids, ev = quiz_cards(pid, eid)
+    if ev is None:
         return
-    _p, st, doc, idx = got
-    ev = next((e for e in doc.get("events") or [] if isinstance(e, dict) and e.get("id") == eid), None)
-    if not ev:
-        return
-    cids, today = set(), _today()
-    for u in P.units(doc):  # the dates its line counts (P.quiz): prep dates open by today, not one after it
-        if u.get("for") == eid and not P.reinforces(doc, u) and str(u.get("opens") or "9999") <= today:
-            cids |= idx.match(u, _swap(st), doc)
-    cids = P.study_cards(idx, cids)
     if not cids:
         tooltip("None of its cards are open yet.")
         return

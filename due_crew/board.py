@@ -3140,10 +3140,16 @@ def _topic_a(pid, uids, name, i):
 
 
 def _topic_go(pid, uids, name, i):
-    """3.9.5 (Sam's): a plan's topic on Today as a link to study it: its new
-    cards and the ones due today, in a super deck of its own."""
-    return (f'<a class="tp" href="#" title="Study it" '
-            f'onclick="{_pycmd(f"plantopicstudy:{pid}:{uids}:{int(i)}")}">{_html.escape(str(name))}</a>')
+    """3.9.5 (Sam: "for the filtered decks opening from a plan especially need
+    that option to browse or make the filtered deck"): a plan's topic on
+    Today: its name shows its two ways beside it, Study (its new cards and
+    the ones due today, a deck of its own) and Browse."""
+    e = _html.escape
+    tid = "dc-tp-" + _re.sub(r"[^A-Za-z0-9]", "", f"{pid}-{uids}") + f"-{int(i)}"
+    return (f'<a class="tp" href="#" onclick="var x=document.getElementById(\'{tid}\');if(x)x.hidden=!x.hidden;return false;">'
+            f'{e(str(name))}</a><span class="du-tpgo" id="{tid}" hidden>'
+            f'<a href="#" onclick="{_pycmd(f"plantopicstudy:{pid}:{uids}:{int(i)}")}">Study</a>'
+            f'<a href="#" onclick="{_pycmd(f"plantopic:{pid}:{uids}:{int(i)}")}">Browse</a></span>')
 
 
 def _load_words(ld, now):
@@ -4064,9 +4070,6 @@ def you_html(cfg, due=None, you=None, people=None):
     body = (_you_plans(you.get("plans"), None if due else you.get("opened"), people, cfg) if tab == "plans"
             else _you_insights(you.get("insights")) if tab == "insights"
             else _supers_html(you.get("supers")) if tab == "supers" else "")
-    n = int((you.get("supers") or {}).get("n") or 0)
-    if n:  # 3.9.5: how many super decks, on the tab, as Later says its count
-        more = tuple((k, f"{lb} {n}" if k == "supers" else lb) for k, lb in more)
     return _due_html(due, more, tab if tab in dict(more) else None, body, folded=bool(you.get("folded")),
                      qids=bool(you.get("qids")))
 
@@ -7233,13 +7236,14 @@ DUE_CSS = """
     #due-crew .sd .lo { display: flex; gap: 8px; align-items: center; margin-top: 5px; }
     #due-crew .sd .sd-bar { flex: 1; height: 3px; border-radius: 2px; background: var(--dc-line); overflow: hidden; }
     #due-crew .sd .sd-bar i { display: block; height: 100%; background: var(--dc-accent); border-radius: 2px; }
-    #due-crew .sd .x { margin-left: auto; font-size: 13px; color: var(--dc-muted); line-height: 1; text-decoration: none; }
-    #due-crew .sd-first { display: flex; gap: 10px; align-items: center; text-align: left; font-size: 13px;
-      background: var(--dc-well); border-radius: 12px; padding: 8px 14px 8px 6px; margin: 2px 0 6px; }
+    #due-crew .sd .x { font-size: 13px; color: var(--dc-muted); line-height: 1; text-decoration: none; }
+    #due-crew .sd .br { margin-left: auto; font-size: 11.5px; color: var(--dc-muted); text-decoration: none; }
+    #due-crew .sd .br:hover { color: var(--dc-accent); }
     #due-crew .sd-cat { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 5px 16px; font-size: 12px;
       text-align: left; padding: 6px 0 2px; }
     #due-crew .sd-cat b { font-weight: 600; }
     #due-crew .sd-cat span { color: var(--dc-muted); }
+    #due-crew .du-tpgo a { font-weight: 700; color: var(--dc-accent); text-decoration: none; margin-left: 7px; }
     #due-crew .sd-hd { display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: baseline; text-align: left; margin: 0 0 8px; }
     #due-crew .sd-hd a { color: var(--dc-accent); font-weight: 700; text-decoration: none; font-size: 12px; }
     #due-crew .sd-hd b { font-size: 13.5px; }
@@ -7683,15 +7687,18 @@ def _cleared_html(cl, sev=None):
 
 def _sd_tile(d):
     """A super deck you can see: its count (what's left of what it held,
-    once built), Study, its name (its page), what it is; × puts a built
-    one's cards back. The tile itself is Study."""
+    once built), Study, its name (its page), what it is; Browse its cards
+    (or the ones it would hold); × puts a built one's cards back. The tile
+    itself is Study."""
     e = _html.escape
     n, made = int(d.get("n") or 0), int(d.get("made") or 0)
     stop = "event.stopPropagation();"
     left = "<small>left</small>" if made else ""
     bar = (f'<span class="sd-bar"><i style="width:{round(100 * (made - n) / made)}%"></i></span>' if made > n else "")
     x = (f'<a href="#" class="x" title="Put them back" onclick="{stop}{_pycmd(d["x"])}">&times;</a>' if d.get("x") else "")
-    lo = f'<span class="lo">{bar}{x}</span>' if bar or x else ""
+    # 3.9.5 (Sam: "want the option to look at the cards in the browse view or open the filtered deck")
+    br = f'<a href="#" class="br" onclick="{stop}{_pycmd("sdbrowse:" + str(d["key"]))}">Browse</a>'
+    lo = f'<span class="lo">{bar}{br}{x}</span>'
     what = f'<span class="w">{e(str(d["what"]))}</span>' if d.get("what") else ""
     return (f'<div class="sd{" thick" if n >= 20 else ""}" onclick="{_pycmd(d["cmd"])}">'
             f'<span class="top"><span class="n">{n:,}{left}</span><a href="#" class="go" onclick="{stop}{_pycmd(d["cmd"])}">Study</a></span>'
@@ -7702,26 +7709,23 @@ def _sd_tile(d):
 def _supers_html(sv):
     """3.9.5, Super decks (Sam's pick B): Due Crew's own decks, only for what
     Anki's scheduler can't know, grouped by why (Before a date, New, From
-    outside Anki); a deck that ran out; Pip by the first ones till the tab's
-    met; the kinds still to come, with none or till then; a deck's page in
-    place of the list. sv: due_flow.super_view; every string escaped here."""
+    outside Anki); with none, the kinds and when each shows up; a deck's
+    page in place of the list. sv: due_flow.super_view; every string
+    escaped here."""
     if not sv:
         return ""
     e = _html.escape
     if sv.get("page"):
         return _sd_page(sv["page"])
-    out = _cleared_html(sv.get("cleared"), sv.get("cleared_sev"))
-    if sv.get("first"):
-        out += (f'<div class="sd-first">{sv.get("first_sev") or ""}'
-                f'<b>Your first super deck{"s" if int(sv.get("n") or 0) > 1 else ""}.</b></div>')
+    out = ""
     for title, decks in sv.get("groups") or []:
         out += f'<div class="sd-g">{e(title)}</div><div class="sd-shelf">{"".join(_sd_tile(d) for d in decks)}</div>'
     if sv.get("rest"):
         out += f'<div class="sd-shelf">{"".join(_sd_tile(d) for d in sv["rest"])}</div>'
     soon = sv.get("soon") or []
     if soon:
-        out += ('<div class="sd-g">Still to come</div>' if int(sv.get("n") or 0) else '<div class="du-empty">None yet.</div>')
-        out += '<div class="sd-cat">' + "".join(f"<b>{e(n)}</b><span>{e(w)}</span>" for n, w in soon) + "</div>"
+        out += ('<div class="du-empty">None yet.</div><div class="sd-cat">'
+                + "".join(f"<b>{e(n)}</b><span>{e(w)}</span>" for n, w in soon) + "</div>")
     return out
 
 
@@ -7737,9 +7741,7 @@ def _sd_page(d):
     top = (f'<div class="sd-top">{_sd_tile(dict(d, x=None))}<div class="p">{said}'
            f'<a href="#" class="du-go" onclick="{_pycmd(d["cmd"])}">Study {n:,}</a></div></div>')
     facts = "".join(f'<span class="k">{e(k)}</span><span>{e(v)}</span>' for k, v in d.get("facts") or [])
-    acts = []
-    if d.get("did"):
-        acts.append(f'<a href="#" onclick="{_pycmd("sdbrowse:" + str(int(d["did"])))}">Browse</a>')
+    acts = [f'<a href="#" onclick="{_pycmd("sdbrowse:" + str(d["key"]))}">Browse</a>']
     if d.get("x"):
         acts.append(f'<a href="#" class="q" onclick="{_pycmd(d["x"])}">Put them back</a>')
     return (head + top + (f'<div class="sd-facts">{facts}</div>' if facts else "")

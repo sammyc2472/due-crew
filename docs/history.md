@@ -3418,18 +3418,21 @@ every release that changes how something works.
   `recover_leeches`, then the deck; Leave it out's stay out). From outside
   Anki: QBank cards. A deck is a tile you can see (a stack, its second
   edge at 20 cards; its count, what's left of what it held with a bar
-  once built; Study; × puts a built one back); its name opens its page in
-  the tab: In it, Why a deck, Leaves, Then (`superdecks.facts`), Browse.
-  Pip, holding a card, by the first ones ("Your first super deck.") till
-  one's studied (`sd_met`, this computer's); with none, or till then, the
-  kinds still to come and when each shows up. What a deck is and held is
+  once built; Study; Browse; × puts a built one back); its name opens its
+  page in the tab: In it, Why a deck, Leaves, Then (`superdecks.facts`),
+  Browse. Browse works made or not, on the cards it would hold (Sam: "want
+  the option to look at the cards in the browse view or open the filtered
+  deck"; `due_flow.sd_cids`, `sdbrowse:<key>`). With none, the kinds and
+  when each shows up. No Pip and no count on the tab (Sam, click-testing:
+  "don't want the pip on super decks and don't want the number of super
+  decks... kinda overwhelming"). What a deck is and held is
   noted when it's built (`plan_flow._note_built`'s kind, plans.json `sd`);
   an exam's or a quiz's is emptied the morning after its day, the plan's
   day's the next morning. `superdecks.py` is pure (the words, the tab's
   shape); `due_flow.super_decks`/`super_view` the glue, kept a little while
   the collection doesn't change (its count is on the tab at every draw);
   `board._supers_html`/`_sd_tile`/`_sd_page`. Commands: `sdgo:<what>`,
-  `sdpage[:<key>]`, `sdbrowse:<deck>`. Never sent.
+  `sdpage[:<key>]`, `sdbrowse:<key>`. Never sent.
 - 3.9.5, Sam's FSRS rule, everywhere a Study made a deck: a date ahead,
   cards not started yet, a miss outside Anki; anything else is reviews
   ahead of their date, and FSRS has those. So: Today's misses and Slow but
@@ -3442,14 +3445,16 @@ every release that changes how something works.
   with a date ahead (my exam, or a plan's event: `team_flow.dated`); else
   the cards open in Browse, and the weakest part's name opens it. A plan's
   review day builds its deck only before a quiz (an event within three
-  days after it, `plan_flow.quiz_after`). On Today a plan date's topics
+  days after it, `plan_flow.quiz_after`). On Today a plan date's topic
   (Sam: "if one clicks on a tagged section on a plan (like a video tags)
-  then it moves them into a filtered deck?") study it: its cards I haven't
-  seen and the ones due today, as they come, a deck named for it
-  (`plan_flow.study_topic`, `plantopicstudy`); a card another Due Crew
-  deck holds comes out of it first and that deck is built again
-  (`_free`; Anki keeps a card in one filtered deck); nothing new or due,
-  Browse as before. Upcoming and the Plans tab's topics still Browse.
+  then it moves them into a filtered deck?", then "need that option to
+  browse or make the filtered deck") shows its two ways beside its name
+  when clicked (`board._topic_go`): Study, its cards I haven't seen and
+  the ones due today, as they come, a deck named for it
+  (`plan_flow.study_topic`, `plantopicstudy`; a card another Due Crew deck
+  holds comes out of it first and that deck is built again, `_free`, as
+  Anki keeps a card in one filtered deck; nothing new or due, Browse), and
+  Browse. Upcoming and the Plans tab's topics still Browse.
 - 3.9.5, How you study (`habits.py` pure, `habits_flow.py` the glue):
   what my own last eight weeks of log say about how I study, all decks,
   worked out on this computer and never sent. A line atop Insights, "How

@@ -16,7 +16,7 @@ GROUPS = (("date", "Before a date"), ("new", "New"), ("outside", "From outside A
 KINDS = ("exam", "quiz", "part", "day", "new", "leech", "qbank")
 GROUP = {"exam": "date", "quiz": "date", "part": "date", "day": "new", "new": "new", "leech": "new", "qbank": "outside"}
 
-# the kinds a new tab lists till they show up: (kind, name, when)
+# the kinds an empty tab lists, and when each shows up: (kind, name, when)
 SOON = (("exam", "Before your exam", "once you add its date"),
         ("quiz", "Before a quiz", "three days before a plan’s quiz"),
         ("day", "The plan’s day", "when you follow a plan"),
@@ -84,16 +84,16 @@ def facts(d):
     return [("Leaves", "When you get it right."), ("Then", "Gone when it’s empty.")]
 
 
-def view(decks, met=True, page=None):
+def view(decks, page=None):
     """The tab: {n, groups: [(title, [deck])], rest: [deck] (no kind),
-    first: Pip's line (decks here, the tab not met yet), soon: [(name,
-    when)] the kinds not here (with none, or not met), page: the deck
-    whose page is open, or None}."""
+    soon: [(name, when)] every kind and when it shows up, with none here,
+    page: the deck whose page is open, or None}. 3.9.5 (Sam: "don't want
+    the pip on super decks and don't want the number of super decks...
+    kinda overwhelming"): no Pip, no first-time line, no count."""
     decks = sorted(decks, key=lambda d: (KINDS.index(d["kind"]) if d.get("kind") in KINDS else len(KINDS),
                                          str(d.get("name") or "").lower()))
     groups = [(title, [d for d in decks if GROUP.get(d.get("kind")) == g]) for g, title in GROUPS]
-    have = {d.get("kind") for d in decks}
-    soon = [(name, when) for k, name, when in SOON if k not in have] if not met or not decks else []
     return {"n": len(decks), "groups": [(t, ds) for t, ds in groups if ds],
-            "rest": [d for d in decks if d.get("kind") not in GROUP], "first": bool(decks) and not met,
-            "soon": soon, "page": next((d for d in decks if d.get("key") == page), None) if page else None}
+            "rest": [d for d in decks if d.get("kind") not in GROUP],
+            "soon": [] if decks else [(name, when) for _k, name, when in SOON],
+            "page": next((d for d in decks if d.get("key") == page), None) if page else None}

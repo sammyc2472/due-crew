@@ -1105,8 +1105,10 @@ def on_message(cmd, parts):
         sd_go(parts)  # 3.9.5: a super deck's Study, made first when it's ready to make
     elif cmd == "sdpage":
         sd_page(":".join(parts[2:]))
-    elif cmd == "sdbrowse" and arg.isdigit() and mw.col and _ours(mw.col, int(arg)):
-        _pf()._browse(mw.col.db.list("SELECT id FROM cards WHERE did = ?", int(arg)))
+    elif cmd == "sdbrowse" and arg and mw.col:
+        cids = sd_cids(parts[2:])  # 3.9.5 (Sam: "want the option to look at the cards in the browse view")
+        if cids is not None:
+            _pf()._browse(cids, empty="None in it right now.")
     elif cmd == "duedeckx" and arg.isdigit():
         put_back(int(arg))
     elif cmd == "duestudy":
@@ -1339,26 +1341,15 @@ def _ready_leech(c):
 
 
 def super_view(c):
-    """The Super decks tab (superdecks.view), with the deck that ran out
-    today and Pip, by the first decks till the tab's met (`sd_met`, set by
-    a first Study in one), and an open deck's page's words. Main thread."""
+    """The Super decks tab (superdecks.view), with an open deck's page's
+    words. Main thread."""
     from . import superdecks
-    sv = superdecks.view(super_decks(c), met=bool(c.get("sd_met")), page=_state.get("sd_page"))
+    sv = superdecks.view(super_decks(c), page=_state.get("sd_page"))
     if sv["page"]:
         sv["page"]["facts"] = superdecks.facts(sv["page"])
     for d in [x for _t, ds in sv["groups"] for x in ds] + sv["rest"]:
         d["what"] = superdecks.what(d)
-    sv["cleared"], sv["cleared_sev"] = cleared()
-    sv["first_sev"] = _first_sev() if sv["first"] else None
     return sv
-
-
-def _first_sev():
-    """Pip, holding a card, by the first super decks. None with Pip off."""
-    from . import rooms, sev
-    if not rooms.sev_on():
-        return None
-    return sev.slot(sev.svg("again", size=48, rest=True, label="Pip", look=rooms.my_look()), 48)
 
 
 def cleared():
@@ -1366,13 +1357,6 @@ def cleared():
     cl = _state.get("due_cleared")
     cl = cl if isinstance(cl, dict) and cl.get("day") == _today() else None
     return cl, (_cleared_sev(cl) if cl else None)
-
-
-def _met():
-    c = cfg()
-    if not c.get("sd_met"):
-        c["sd_met"] = True
-        save_cfg(c)
 
 
 def _into(name):
@@ -1390,7 +1374,6 @@ def sd_go(parts):
     if not mw.col:
         return
     what = parts[2] if len(parts) > 2 else ""
-    _met()
     _state["sd_decks"] = None
     if what == "exam" and len(parts) > 3 and parts[3].isdigit():
         from . import team_flow
@@ -1403,14 +1386,13 @@ def sd_go(parts):
         study_leeches()
 
 
-def study_day(pid):
-    """The plan's day: the open cards I haven't seen of its dates open by
-    today, in the deck's order, as Due Crew's "<plan> · Today", for today
-    (the morning empties it); then Anki's Study screen on it."""
+def _day_cards(pid):
+    """(the plan's day's cards: the open ones I haven't seen of its dates
+    open by today, in the deck's order; its title), or ([], None)."""
     pf = _pf()
     got = pf._plan_idx(pid)
     if not got:
-        return
+        return [], None
     p, st, doc, idx = got
     today = _today()
     uids = {x["uid"] for x in plan_dates(today)[0] if x["pid"] == pid and x["opens"] <= today}
@@ -1418,14 +1400,39 @@ def study_day(pid):
     for u in P.units(doc):
         if u["id"] in uids:
             cids |= idx.match(u, pf._swap(st), doc)
-    new = sorted((x for x in cids if idx.cards.get(x) == (0, 0)), key=lambda x: idx.order.get(x, (True, 0, x)))
+    return (sorted((x for x in cids if idx.cards.get(x) == (0, 0)), key=lambda x: idx.order.get(x, (True, 0, x))),
+            P.plan_title(p))
+
+
+def study_day(pid):
+    """The plan's day (_day_cards) as Due Crew's "<plan> · Today", for today
+    (the morning empties it); then Anki's Study screen on it."""
+    new, title = _day_cards(pid)
     if not new:
         tooltip("Nothing new in it.")
         return
-    title = P.plan_title(p)
     name = P.our_deck(f"{title} \u00b7 Today")
-    if pf._filtered(mw.col, name, new, order=pf.NEW_ORDER, kind="day", until=today, plan=title):
+    if _pf()._filtered(mw.col, name, new, order=_pf().NEW_ORDER, kind="day", until=_today(), plan=title):
         _into(name)
+
+
+def sd_cids(parts):
+    """The cards a super deck holds, or would once made (sdbrowse's): d:<deck>
+    (ours only), exam:<deck>, quiz:<plan>:<event>, day:<plan>, leech."""
+    what = parts[0] if parts else ""
+    if what == "d" and len(parts) > 1 and parts[1].isdigit() and _ours(mw.col, int(parts[1])):
+        return mw.col.db.list("SELECT id FROM cards WHERE did = ?", int(parts[1]))
+    if what == "exam" and len(parts) > 1 and parts[1].isdigit():
+        from . import team_flow
+        got = team_flow.exam_deck(int(parts[1]))
+        return got[0] if got else []
+    if what == "quiz" and len(parts) > 2:
+        return _pf().quiz_cards(parts[1], parts[2])[0]
+    if what == "day" and len(parts) > 1:
+        return _day_cards(parts[1])[0]
+    if what == "leech":
+        return leech_plan(mw.col, _left_out())[0][:RECOVER_MAX]
+    return None
 
 
 def study_leeches():
@@ -1473,7 +1480,6 @@ def study_ours(did):
     """A Due Crew deck's row's Study: into it (Anki's overview), ours only."""
     if not mw.col or not _ours(mw.col, did):
         return
-    _met()
     mw.col.decks.select(int(did))
     mw.moveToState("overview")
 

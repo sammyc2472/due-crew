@@ -260,8 +260,8 @@ _SDS = [{"key": "exam:10", "kind": "exam", "name": "Before your exam", "n": 53, 
         {"key": "d:72", "did": 72, "kind": "qbank", "name": "QBank cards", "n": 12, "cmd": "duedeck:72", "x": "duedeckx:72"}]
 
 
-def _sv(decks, met=True, page=None, **kw):
-    v = _SD.view([dict(d) for d in decks], met=met, page=page)
+def _sv(decks, page=None, **kw):
+    v = _SD.view([dict(d) for d in decks], page=page)
     for d in [x for _t, ds in v["groups"] for x in ds] + v["rest"]:
         d["what"] = _SD.what(d)
     if v["page"]:
@@ -269,11 +269,12 @@ def _sv(decks, met=True, page=None, **kw):
     return dict(v, **kw)
 
 
+sections.append("<h3>3.9.5: Today, a plan topic's two ways (a click on its name: Study, Browse)</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("today"))
+    .replace('class="du-tpgo" id="dc-tp-p1u1-0" hidden>', 'class="du-tpgo" id="dc-tp-p1u1-0">').replace('id="du-', 'id="dut-'))
 for _k, (_what, _sv_) in enumerate((
         ("a usual day: two", _sv([_SDS[0], _SDS[2]])),
         ("every kind at once", _sv(_SDS)),
-        ("the first one, Pip by it, what's still to come", _sv([_SDS[2]], met=False, first_sev=_sev2.slot(_sev2.svg(
-            "again", size=48, rest=True), 48))),
         ("none yet", _sv([])),
         ("a deck's page (its name's click)", _sv(_SDS, page="d:71")),
         ("Leeches' page: Study starts them over", _sv(_SDS, page="leech")))):
