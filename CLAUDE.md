@@ -116,8 +116,9 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   plan tags and plan squad questions carry a note guid and card number, and
   each reader's Anki reads its own copy. The one exception is game night
   (3.9.5, Sam's yes): Rounds' black card, hands and plays, and Links'
-  board when a scope's topics run short, pass through a table to phones in
-  the room, never kept; Trivia's words stay on the TV (phones get shapes).
+  board when a scope's topics run short (both with answers from the cards
+  around the scope, `gamenight_flow.near`), pass through a table to phones
+  in the room, never kept; Trivia's words stay on the TV (phones get shapes).
 - Settings that belong to a person (`account.ACCOUNT_KEYS`) live on the
   server; an install pulls before it uploads (`account.ensure()`). Since
   3.8.1 a save names the rev it started from; one made over an older rev

@@ -3709,7 +3709,13 @@ every release that changes how something works.
   prompt. Trivia sends no card's words: phones show four shapes. Rounds is
   the one place card words reach phones (Sam's yes): the black card, each
   hand, what's played; Links' board is topic names, filled with short
-  answers when a scope has fewer than 25. Links is two teams, as on
+  answers when a scope has fewer than 25. The cards around tonight's
+  (`gamenight_flow.near`: under their tags' parents, their decks, then a
+  few from anywhere) are never asked, but give the wrong answers, half the
+  white cards at least, and the board and prompts when tonight's run short:
+  Sam's first night, on a week's handful of misses, dealt a hand of six
+  alike (a refill that dealt the one card left again and again; now no card
+  is dealt twice, and a hand is seven, or an even share of a small pack). Links is two teams, as on
   horsepaste: Green and Purple pick sides on their phones (Even out,
   Shuffle), each picks a clue giver; 9 for whoever goes first, 8, 7
   nobody's, 1 Code blue; clues typed so the TV shows them; a timer if
