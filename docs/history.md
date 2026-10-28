@@ -3564,4 +3564,5 @@ every release that changes how something works.
   test pool pins (Wrangler, miniflare, zod 4.6.7) and patched undici
   7.30.1, vite 8.3.4, source-map-js 1.2.2; the pool itself stays 0.22.0.
   The fake (`tests/fakes.py`) restates COUNTED, COUNTS_MIN and
-  SQUADS_MAX; `tools/dialogs.py` renders the two new squad refusals.
+  SQUADS_MAX; `tools/dialogs.py` renders the two new squad refusals; the
+  live smoke (`tools/smoke_worker.py`) expects no counts from one person sharing.
