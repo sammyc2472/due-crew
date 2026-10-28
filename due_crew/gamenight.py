@@ -331,7 +331,7 @@ def tag_topic(tag):
             continue
         if SECTION.match(n):
             up = next((part_name(parts[j]) for j in range(i - 1, 0, -1) if part_name(parts[j]) and not SECTION.match(part_name(parts[j]))), "")
-            if up and _stems(n) <= _stems(up):
+            if up and (_stems(n) <= _stems(up) or norm(n)[:5] == norm(up)[:5]):  # "Immunology" under "Immune"
                 n = up
             elif up:
                 both = f"{up} {n[0].lower() + n[1:]}"
@@ -476,9 +476,7 @@ class _Pool:
         for it in items:
             ps = set()
             for t in it.get("tags") or ([it["tag"]] if it["tag"] else []):
-                parts = str(t).split("::")
-                for d in range(2, len(parts) + 1):
-                    ps.add("::".join(parts[:d]).lower())
+                ps.update(_prefixes(str(t)))
             pre.append(ps)
             for x in ps:
                 df[x] = df.get(x, 0) + 1
@@ -545,6 +543,13 @@ class _Pool:
 _CUE = re.compile(r"\b(?:(diagnosis|disease|syndrome|condition|disorder)|(drug|medication|treated with|treatment of choice|agent))\b", re.I)
 
 
+@functools.lru_cache(maxsize=50000)
+def _prefixes(tag):
+    """A tag and its parents, two parts deep and more, lower case."""
+    parts = tag.split("::")
+    return tuple("::".join(parts[:d]).lower() for d in range(2, len(parts) + 1))
+
+
 def _cased(a, like):
     """A wrong answer in the right answer's case, so neither stands out
     ("loop" among "loop", "thiazide"; acronyms as they are)."""
@@ -596,11 +601,12 @@ def _items(rows, dup):
 
 def _topics(items):
     """The cards' topic names, the most carded first, and {tag path: name}."""
-    counts, named = {}, {}
+    counts, named, shown = {}, {}, {}
     for it in items:
         if it.get("topic"):
-            counts[it["topic"]] = counts.get(it["topic"], 0) + 1
-            named.setdefault(it["tag"], it["topic"])
+            t = shown.setdefault(norm(it["topic"]), it["topic"])  # one topic, however it's capitalised
+            counts[t] = counts.get(t, 0) + 1
+            named.setdefault(it["tag"], t)
     return sorted(counts, key=lambda t: -counts[t]), named
 
 
@@ -724,24 +730,25 @@ def twins(items, rng, named=None):
     stenosis", "Aortic stenosis murmur"). A few of each one's answers, none
     the other's, to tell them apart. named: unused (the cards carry their
     topics)."""
-    by, path = {}, {}
+    by, path, name = {}, {}, {}
     for it in items:
         if it.get("topic"):
-            by.setdefault(it["topic"], []).append(it)
-            path.setdefault(it["topic"], it["tag"])
+            t = name.setdefault(norm(it["topic"]), it["topic"])  # one topic, however it's capitalised
+            by.setdefault(t, []).append(it)
+            path.setdefault(t, it["tag"])
     facts = {t: _unique(x["a"] for x in its if _card(x["a"], WHITE_MAX)) for t, its in by.items()}
     ts = sorted(t for t, its in by.items() if len(its) >= 2 and facts[t] and _concept(t) and _plain(t))
     pairs = []
     for i, a in enumerate(ts):
         for b in ts[i + 1:]:
             na, nb = _one(a), _one(b)
-            if na in nb or nb in na or _words(a) <= _words(b) or _words(b) <= _words(a) or _numbered(a, b) or _alike(a, b):
-                continue
             same = len(os.path.commonprefix([na, nb]))
             share = len(_stems(a) & _stems(b))
             up_a, up_b = path[a].rsplit("::", 1)[0], path[b].rsplit("::", 1)[0]
             sib = "::" in path[a] and up_a == up_b
-            if same < 4 and not share and not sib:
+            if same < 4 and not share and not sib:  # unrelated: the most pairs, and the cheapest to tell
+                continue
+            if na in nb or nb in na or _words(a) <= _words(b) or _words(b) <= _words(a) or _numbered(a, b) or _alike(a, b):
                 continue
             pairs.append((-(same + 3 * share + 2 * sib), rng.random(), a, b, up_a if sib else ""))
     pairs.sort()
@@ -792,8 +799,13 @@ def _alike(a, b):
 
 def _numbered(a, b):
     """Two parts of one heading: "Pharmacology I" and "Pharmacology II"."""
-    strip = lambda n: re.sub(r"\s+([ivx]+|\d+)$", "", n.strip(), flags=re.I).lower()
-    return strip(a) == strip(b) or strip(a) in strip(b) or strip(b) in strip(a)
+    x, y = _unnumbered(a), _unnumbered(b)
+    return x == y or x in y or y in x
+
+
+@functools.lru_cache(maxsize=20000)
+def _unnumbered(n):
+    return re.sub(r"\s+([ivx]+|\d+)$", "", n.strip(), flags=re.I).lower()
 
 
 def _unique(xs):
