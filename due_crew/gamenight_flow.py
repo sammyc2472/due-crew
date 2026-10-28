@@ -36,7 +36,7 @@ def shown():
     try:
         from .planner import enabled as labs
         c = client()
-        return bool(c.signed_in()) and (TESTERS is None or c.user_id() in TESTERS or labs())
+        return bool(c.signed_in) and (TESTERS is None or c.user_id in TESTERS or labs())
     except Exception:
         return False
 
