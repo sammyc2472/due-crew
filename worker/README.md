@@ -390,7 +390,7 @@ add-on whose config lost them puts them back.
 
 | Route | What it does |
 |---|---|
-| `POST /table` | Signed in: open a table. `{code, key, hours}`: four letters (no I or O) for the phones, and a key, kept only as a hash, that makes the page holding it the host. 10 an hour a person. |
+| `POST /table` | Signed in, and while Sam tests it an admin (anyone else: 404 `not_found`, `ADMINS_ONLY`): open a table. `{code, key, hours}`: four letters (no I or O) for the phones, and a key, kept only as a hash, that makes the page holding it the host. 10 an hour a person. |
 | `GET /table/{code}` | Before a socket: `{open, full, door, crew}` (`door` is `ask`, `crew` or `open`; `crew`, whether this visitor, signed in, is the host's crew: mutual friends, or the host). 404 `no_table`. Shares 200 an hour an address with the socket. |
 | `GET /table/{code}/ws?c=&k=` | The socket, from a page of ours (its Origin). `c` is the tab's own id (16 to 64 of `A-Za-z0-9_-`): the table calls it by a hash of it, and the same id again keeps its seat. `k`, the key, makes it the host. Messages are JSON: `{t: "p", p}` sets my presence (a plain object, 4 KB); the table sends `hi` (who I am and who's sitting here, or `wait` at the door), `p` (someone's presence; the host also hears `crew` and `wait`), `bye`, `door`, `err`. The host alone sends `admit`, `away {peer}`, `door {door}` and `lock {on}`. Closes: 4000 the table closed, 4001 this seat opened elsewhere, 4002 another host, 4003 turned away, 4004 crew only, 4005 locked, 4006 full. |
 

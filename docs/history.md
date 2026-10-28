@@ -3669,3 +3669,11 @@ every release that changes how something works.
   the alarm, through the site's binding) and the suite's
   `test_game_night_one_player_v395` (every game, one to eight players, in
   node).
+  Then (Sam: "confirm that I'm the only one who can access"): while he
+  tests it, only an admin (`ADMINS`, `ADMIN_UIDS`) opens a table (anyone
+  else's `POST /table` is the 404 an admin route gives, `ADMINS_ONLY` in
+  table.ts) and has duecrew.com/table (the site Worker asks `/auth/me`;
+  signed out it's sign-in, anyone else goes home: `TABLE_ADMINS_ONLY` in
+  site/src/index.ts). A join link (`/t/CODE`) is anyone's, and reaches only
+  a table an admin opened, through its door; it has no way round to
+  hosting or bots. Set both false when it goes wider.

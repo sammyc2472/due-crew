@@ -19,8 +19,13 @@
 import { DurableObject } from "cloudflare:workers";
 import { authenticate } from "./auth";
 import { limitOrThrow } from "./limits";
+import { isAdmin } from "./notices";
 import { Env, HttpError, clientIp, json, newToken, sha256Hex, timingSafeEqual } from "./util";
 
+/** While Sam tests it, only the admins (ADMINS, ADMIN_UIDS) open a table, and
+ *  duecrew.com/table is theirs alone; anyone they let in still plays from a
+ *  join link. Set it false, here and in site/src/index.ts, when it goes wider. */
+export const ADMINS_ONLY = true;
 export const TABLE_HOURS = 4;
 export const HOST_GONE_MIN = 15;
 export const SEATS = 12;            // sat down at once, the TV's included: eight players, and room to reconnect
@@ -257,8 +262,10 @@ async function crewName(req: Request, env: Env, hostUid: string): Promise<string
 }
 
 /** POST /table: open a table; its code for the phones, and the key that
- *  makes this page its host. Signed in only. */
+ *  makes this page its host. Signed in only (and while testing, an admin:
+ *  anyone else gets the 404 an admin route gives). */
 export async function create(uid: string, env: Env): Promise<Response> {
+  if (ADMINS_ONLY && !isAdmin(env, uid)) throw new HttpError(404, "not_found");
   await limitOrThrow(env, `table:${uid}`, TABLES_PER_HOUR, 3600);
   for (let i = 0; i < 6; i++) {
     const code = tableCode();
