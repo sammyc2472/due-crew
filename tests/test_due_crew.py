@@ -18668,7 +18668,8 @@ for (const id of ORDER) {
     out.push({ id, N, min: g.min, need: need(g), phases, err, leaked });
   }
 }
-console.log(JSON.stringify({ out, needs: NEEDS }));
+const soft = ["Spironolactone", "Nitroglycerin", "interstitial edema", "Arrhythmia", "magnesium", "Na-K-2Cl", "Asthma"].map((w) => Links.soft(w).replace(/\u00ad/g, "-"));
+console.log(JSON.stringify({ out, needs: NEEDS, soft }));
 """
 
 GAME_ROWS = [  # a collection's cards in gamenight's rows: (cid, ord, cloze, fields, tags)
@@ -18744,8 +18745,8 @@ def test_game_night_one_player_v395():
     tests it, any game starts with one player (FEW; each game's own min
     stays on its tile). Each game, one player through its most, starts, and
     the stand-in players' answers move it on: alone, Rounds has no
-    Attending, Imposter has nobody to vote for, and Links' clue giver taps
-    too. What every phone gets carries no card's words in Trivia, no other
+    Attending, Imposter has nobody to vote for, and Links' clue giver picks
+    on the TV too. What every phone gets carries no card's words in Trivia, no other
     hand in Rounds, no key in Links, no twin in Imposter: those are each
     seat's own (secrets), whispered."""
     import shutil
@@ -18780,6 +18781,13 @@ def test_game_night_one_player_v395():
     check("game night: alone, Imposter's vote ends it; Draw it is a chain of one; Links' clue giver guesses",
           by[("imposter", 1)]["phases"] == ["clue", "clue", "vote", "end"] and by[("draw", 1)]["phases"] == ["step", "reveal"]
           and by[("links", 1)]["phases"][:2] == ["clue", "guess"] and len(by[("links", 1)]["phases"]) >= 3, by[("links", 1)])
+    check("game night: Links' key on the clue giver's phone breaks a long word once, at a syllable; short ones and odd ones whole",
+          got["soft"] == ["Spirono-lactone", "Nitro-glycerin", "inter-stitial edema", "Arrhyth-mia", "magne-sium", "Na-K-2Cl", "Asthma"], got["soft"])
+    phone = src[src.index("const Links = {"):]
+    phone = phone[phone.index("  phone(x, seat, p) {"):]
+    phone = phone[:phone.index("\n  },\n")]
+    check("game night: Links is picked on the TV; a phone has no board to tap (Sam: too small), the clue giver's the key alone",
+          "tap:" not in phone and "keyed: true" in phone and "p.answer({ t:" not in phone, phone[:200])
     check("game night: what each game needs from the pack is gamenight.NEEDS (the twin)",
           {k: list(v) for k, v in G.NEEDS.items()} == got["needs"], got["needs"])
     node = subprocess.run(["node", "--check", "-"], input=src, capture_output=True, text=True)

@@ -704,12 +704,54 @@ const Links = {
     return Object.assign({}, S, { teams, givers: Links.givers(teams, S.givers) });
   },
   grid(x, o) {
-    return h("div", { class: "grid5" + (o.small ? " sm" : "") }, x.tiles.map((t, k) => {
+    const el = h("div", { class: "grid5" + (o.small ? " sm" : "") + (o.keyed ? " keyed" : "") }, x.tiles.map((t, k) => {
       const shown = x.shown[k], key = o.key ? o.key[k] : "";
       const tap = o.tap && !shown;
       const fresh = shown && x.last && x.last.t === k;
-      return h(tap ? "button" : "div", Object.assign({ class: "lt5" + (shown ? ` r-${shown}` : key ? ` k-${key}` : "") + (fresh ? " new" : "") }, tap ? { type: "button", onclick: () => o.tap(k) } : {}), t);
+      return h(tap ? "button" : "div", Object.assign({ class: "lt5" + (shown ? ` r-${shown}` : key ? ` k-${key}` : "") + (fresh ? " new" : "") }, tap ? { type: "button", onclick: () => o.tap(k) } : {}), o.keyed ? h("span", {}, Links.soft(t)) : t);
     }));
+    if (o.keyed && typeof requestAnimationFrame === "function") requestAnimationFrame(() => el.isConnected && Links.fit(el));
+    return el;
+  },
+  // a long word's one place to break, a soft hyphen nearest its middle
+  // before a syllable's start: a consonant, or letters that start one
+  // together ("Nitro-glycerin", "inter-stitial", "Arrhyth-mia")
+  soft(t) {
+    const V = /[aeiouy]/i, C = (ch) => /[a-z]/i.test(ch || "") && !V.test(ch);
+    const ons = (o) => o.length === 1 ? C(o) : /^(?:[bcdfgkpt][lr]|[cpstw]h|s[cklmnpqtw]|qu|gn|kn|rh|wr|[cpst]hr|s[cpt][lr])$/i.test(o);
+    return t.split(" ").map((w) => {
+      if (w.length < 9 || /[^a-z]/i.test(w)) return w;
+      let at = -1;
+      for (let i = 3; i <= w.length - 3; i++) {
+        let j = i;
+        while (j < w.length && C(w[j])) j++;
+        const o = w.slice(i, j);
+        if (!o || j >= w.length || !ons(o) || !V.test(w.slice(0, i))) continue;
+        if ((C(w[i - 1]) && ons(w[i - 1] + o)) || (C(w[i - 2]) && C(w[i - 1]) && ons(w.slice(i - 2, i) + o))) continue;
+        if (at < 0 || Math.abs(i - w.length / 2) < Math.abs(at - w.length / 2)) at = i;
+      }
+      return at < 0 ? w : w.slice(0, at) + "\u00ad" + w.slice(at);
+    }).join(" ");
+  },
+  // the key's small tiles: each word as big as fits whole (13px down to 11),
+  // else broken at its hyphen (12 down to 10); remembered by word and width
+  FIT: new Map(),
+  fit(el) {
+    if (Links.FIT.size > 400) Links.FIT.clear();
+    for (const s of el.querySelectorAll(".lt5 > span")) {
+      const id = s.textContent + "|" + s.clientWidth;
+      let got = Links.FIT.get(id);
+      if (!got) {
+        const fits = (px, cut) => { s.style.fontSize = px + "px"; s.classList.toggle("cut", cut); return s.scrollWidth <= s.clientWidth; };
+        got = [10, true];
+        for (let px = 13; px >= 11; px -= 0.5) if (fits(px, false)) { got = [px, false]; break; }
+        if (got[0] === 10) for (let px = 12; px >= 10; px -= 0.5) if (fits(px, true)) { got = [px, true]; break; }
+        Links.FIT.set(id, got);
+      }
+      s.style.fontSize = got[0] + "px";
+      s.classList.toggle("cut", got[1]);
+      s.classList.add("fit");
+    }
   },
   names(x, c, t) { return x.teams.map((tt, i) => (tt === t ? i : -1)).filter((i) => i >= 0).map((i) => c.name(i) + (x.givers[t] === i ? " · clues" : "")); },
   tv(S, c) {
@@ -728,35 +770,39 @@ const Links = {
       : h("div", { class: "turn5" }, h("b", { class: S.turn }, `${TEAM[S.turn]}'s turn`), h("span", { class: "clue5" }, S.clue ? `${S.clue.w} · ${S.clue.n} · ${S.left} left` : `${Poss(c.name(S.givers[S.turn]))} clue…`),
         S.ends ? h("span", { class: "tm", "data-end": S.ends }) : null);
     return frag(h("div", { class: "head5" }, box("g"), turn, box("p")), lastLine ? h("p", { class: "lead" }, lastLine) : null,
-      Links.grid(x, { key: S.ph === "end" ? S.key : null }),
+      Links.grid(x, { key: S.ph === "end" ? S.key : null, tap: S.ph === "guess" ? (k) => c.go(Links.tap(S, k, -1)) : null }),  // the team picks on the TV
       S.ph === "end" ? h("div", { class: "row" }, btn("New board", () => c.go(Links.play(Object.assign({}, S, Links.board())))), btn("Back to games", () => c.lobby(), "plain"))
         : S.ph === "guess" ? h("div", { class: "row" }, btn(`End ${TEAM[S.turn]}'s turn`, () => c.go(Links.endTurn(S)), "plain")) : null);
   },
+  // a phone: its team and what the team has found; the clue giver's, the key
+  // (found tiles faded) and the clue. Picks are made on the TV's board.
   phone(x, seat, p) {
-    const mine = p.mine(), t = x.teams[seat], key = p.me && p.me.key;
-    const chip = h("div", { class: `who team-${t}` }, `${TEAM[t]}${x.givers[t] === seat ? " · you give the clues" : ""}`);
+    const mine = p.mine(), t = x.teams[seat], key = p.me && p.me.key, giver = x.givers[t] === seat;
+    const chip = h("div", { class: `who team-${t}` }, `${TEAM[t]}${giver ? " · you give the clues" : ""}`);
     if (x.ph === "teams") {
       return frag(chip, h("div", { class: "row" }, ["g", "p"].map((tt) => h("button", { type: "button", class: `btn ${tt === t ? "" : "plain"}`, onclick: () => p.answer({ team: tt }) }, TEAM[tt])),
-        x.givers[t] === seat ? null : btn("I'll give the clues", () => p.answer({ giver: 1 }), "plain")));
+        giver ? null : btn("I'll give the clues", () => p.answer({ giver: 1 }), "plain")));
     }
-    if (x.ph === "end") return frag(chip, h("div", { class: "big" }, x.result.blue ? `Code blue. ${TEAM[x.result.win]} takes it.` : `${TEAM[x.result.win]} found all theirs.`), Links.grid(x, { small: true, key: x.key }));
-    const giver = x.givers[x.turn] === seat, mineTurn = t === x.turn;
-    const solo = x.teams.filter((tt) => tt === x.turn).length === 1;
-    if (x.ph === "clue") {
-      if (!giver) return frag(chip, h("div", { class: "big" }, mineTurn ? `${p.name(x.givers[x.turn])}'s clue…` : `${TEAM[x.turn]}'s turn`), Links.grid(x, { small: true, key }));
-      if (mine) return frag(chip, h("div", { class: "big" }, `Your clue: ${mine.w} · ${mine.n}`), Links.grid(x, { small: true, key }));
-      const said = h("p", { class: "small", role: "status" });
-      const inp = p.draft("w", h("input", { type: "text", maxlength: 24, placeholder: "One word", "aria-label": "Your clue", autocomplete: "off", autocapitalize: "off" }));
-      const num = h("select", { "aria-label": "How many" }, [1, 2, 3, 4, 5].map((n) => h("option", { value: n }, String(n))));
-      return frag(chip, Links.grid(x, { small: true, key }),
-        h("form", { class: "f two", onsubmit: (e) => { e.preventDefault(); const w = one(clip(inp.value, 24)); if (!w) return; if (!Links.okClue(x, w)) { said.textContent = "That word's on the board."; return; } p.answer({ w, n: Number(num.value) }); } },
-          inp, num, h("button", { class: "btn", type: "submit" }, "Send")), said);
+    const words = (list, cls) => (list.length ? h("div", { class: "words5" }, list.map((w) => h("span", { class: cls }, w))) : h("p", { class: "small" }, "None yet."));
+    const found = (team) => x.tiles.filter((_, k) => x.shown[k] === team);
+    const foundOf = (team) => frag(h("div", { class: "lbl" }, `Found · ${found(team).length} of ${team === x.first ? 9 : 8}`), words(found(team), `w-${team}`));
+    if (x.ph === "end") return frag(chip, h("div", { class: "big" }, x.result.blue ? `Code blue. ${TEAM[x.result.win]} takes it.` : `${TEAM[x.result.win]} found all theirs.`), foundOf(t));
+    const ours = x.turn === t;
+    const status = ours ? (x.clue ? `${x.clue.w} · ${x.clue.n}` : giver ? "Your clue" : `${p.name(x.givers[t])}'s clue…`) : `${TEAM[x.turn]}'s turn`;
+    const solo = x.teams.filter((tt) => tt === t).length === 1;
+    const sub = ours && x.clue ? h("p", { class: "small" }, `${giver && !solo ? "Say nothing" : "Pick on the TV"} · ${x.left} left`) : null;
+    if (giver && key) {
+      const grid = Links.grid(x, { small: true, key, keyed: true });
+      if (x.ph === "clue" && ours && !mine) {
+        const said = h("p", { class: "small", role: "status" });
+        const inp = p.draft("w", h("input", { type: "text", maxlength: 24, placeholder: "One word", "aria-label": "Your clue", autocomplete: "off", autocapitalize: "off" }));
+        const num = h("select", { "aria-label": "How many" }, [1, 2, 3, 4, 5].map((n) => h("option", { value: n }, String(n))));
+        return frag(chip, h("form", { class: "f two", onsubmit: (e) => { e.preventDefault(); const w = one(clip(inp.value, 24)); if (!w) return; if (!Links.okClue(x, w)) { said.textContent = "That word's on the board."; return; } p.answer({ w, n: Number(num.value) }); } },
+          inp, num, h("button", { class: "btn", type: "submit" }, "Send")), said, grid);
+      }
+      return frag(chip, h("div", { class: "big" }, mine && x.ph === "clue" ? `Your clue: ${mine.w} · ${mine.n}` : status), sub, grid);
     }
-    const head = h("div", { class: "big" }, `${x.clue.w} · ${x.clue.n}`);
-    if (mineTurn && (!giver || solo)) {
-      return frag(chip, head, Links.grid(x, { small: true, key: solo ? key : null, tap: (k) => p.answer({ t: k }) }), h("div", { class: "row" }, btn("End turn", () => p.answer({ pass: 1 }), "plain"), h("span", { class: "small" }, `${x.left} left`)));
-    }
-    return frag(chip, head, Links.grid(x, { small: true, key }), h("p", { class: "small" }, giver ? "Say nothing." : `${TEAM[x.turn]}'s turn`));
+    return frag(chip, h("div", { class: "big" }, status), sub, foundOf(t));
   },
   mood(S) { return S.ph === "teams" ? "hello" : S.ph === "end" ? (S.result.blue ? "again" : "cheer") : S.last && S.last.kind && S.last.kind === S.turn ? "ready" : "focus"; },
   pmood(x, seat) { return x.ph === "end" && x.result && x.result.win === x.teams[seat] ? "cheer" : null; },

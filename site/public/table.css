@@ -322,3 +322,17 @@ button.lt5 { cursor: pointer; } button.lt5:hover { border-color: var(--w-edge); 
 .team5.g.on { box-shadow: 0 0 0 2px var(--tg); } .team5.p.on { box-shadow: 0 0 0 2px var(--tp); }
 @media (prefers-reduced-motion: no-preference) { .team5.on { animation: t5-on .6s ease-out; } @keyframes t5-on { 0% { transform: scale(.97); } 100% { transform: none; } } }
 @media (max-width: 560px) { .lt5 { font-size: 11.5px; min-height: 48px; padding: 4px 2px; overflow-wrap: anywhere; } }
+/* Links on a phone: words as lists, never the board */
+/* the clue giver's key: what's left in its colour, what's found faded */
+.grid5.keyed .lt5 { min-height: 50px; padding: 3px 1px; box-shadow: none; }
+.grid5.keyed .lt5 > span { display: block; width: 100%; min-width: 0; font-size: 13px; line-height: 1.15; overflow-wrap: normal; hyphens: none; }
+.grid5.keyed .lt5 > span.cut { hyphens: manual; }
+.grid5.keyed .lt5 > span.fit { overflow-wrap: anywhere; }
+.grid5.keyed .lt5.k-g { background: var(--tg-bg); border-color: var(--tg); color: var(--tg); }
+.grid5.keyed .lt5.k-p { background: var(--tp-bg); border-color: var(--tp); color: var(--tp); }
+.grid5.keyed .lt5.k-n { background: var(--tn); border-color: var(--tn); color: var(--tn-ink); }
+.grid5.keyed .lt5.k-x { background: var(--tx); border-color: var(--tx); color: var(--tx-ink); }
+.grid5.keyed .lt5[class*=" r-"] { opacity: .35; }
+.words5 { display: flex; flex-wrap: wrap; gap: 6px; }
+.words5 span { padding: 6px 11px; border-radius: 99px; font-weight: 700; font-size: 15px; line-height: 1.25; }
+.words5 .w-g { background: var(--tg-bg); color: var(--tg); } .words5 .w-p { background: var(--tp-bg); color: var(--tp); }
