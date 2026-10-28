@@ -389,14 +389,15 @@ def _save_drafts(data):
 
 
 def study_cards(idx, cids, name):
-    """A Due Crew deck of these cards' open ones, random (a date's Study), and
-    Anki's Study screen on it. False when none of them is open."""
-    cids = P.study_cards(idx, cids)
+    """A Due Crew deck of these cards' new ones and the ones due today (a
+    date's Study; 3.9.5, Sam's FSRS rule: never reviews ahead of their
+    date), and Anki's Study screen on it. False when there are none."""
+    cids = P.new_and_due(idx, cids)
     if not cids:
-        tooltip("None of them are open yet.")
+        tooltip("Nothing new or due in it.")
         return False
     deck = P.our_deck(name)
-    if not plan_flow._filtered(mw.col, deck, cids, order=plan_flow.STUDY_ORDER):
+    if not plan_flow._filtered(mw.col, deck, cids, order=plan_flow.NEW_ORDER):
         return False
     plan_flow._after_change()
     did = mw.col.decks.id_for_name(deck)
@@ -622,3 +623,15 @@ class QidOps:
 
     def browse(self, cids):
         plan_flow._browse(cids, empty="None of them are in this deck.")
+
+    def deck_map(self, did):
+        """3.9.5, Their topics: the deck's topic map as Insights draws it, its
+        top level, and the cards I missed these 4 weeks: (tiles, missed)."""
+        from .. import team_flow
+        return team_flow.deck_map(did)
+
+    def study_topic(self, name, cids):
+        """3.9.5: a topic's Study, the map's deck of what I missed there
+        (team_flow.study_deck). True when it took."""
+        from .. import team_flow
+        return team_flow.study_deck(name, cids)

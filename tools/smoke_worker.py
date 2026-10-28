@@ -159,12 +159,13 @@ check("plans: follow onto its team", st == 200 and followed_plan["following"] an
 ok4, _ = dre.push(labels, cfg, plans={pid: {"hf": [3, 3, 3], "nx": [0, 0, 1]}})
 bp = dre.fetch_board(labels, tomorrow, with_decks=True)["plans"]
 # 3.8.1: the board's counts are the plan's totals, up to an hour old (counted at the follow,
-# before this progress); the authors' Progress counts live
-check("plans: on the decks=1 board, with its totals' counts",
-      ok4 and [p["id"] for p in bp] == [pid] and bp[0]["followers"] == 1 and isinstance(bp[0]["crewDone"], dict), str(bp))
+# before this progress); the authors' Progress counts live. 3.9.5: a date's counts only from
+# three people counted, so with Dre alone sharing there are none, on either
+check("plans: on the decks=1 board, followers counted; no crew counts with one sharing",
+      ok4 and [p["id"] for p in bp] == [pid] and bp[0]["followers"] == 1 and bp[0]["crewDone"] is None, str(bp))
 _st, prog = sam._call("GET", f"/plans/{pid}/progress")
-check("plans: the author's Progress counts my progress at once",
-      _st == 200 and prog.get("units", {}).get("hf") == {"opened": 1, "done": 1}, str(prog))
+check("plans: the author's Progress counts my progress at once, and keeps one person's to itself",
+      _st == 200 and prog.get("sharing") == 1 and prog.get("inSquad", 0) < 3 and prog.get("units") == {}, str(prog))
 got, st = sam.add_plan_cards(pid, [["g2", 1]], unit="hf")
 check("plans: the author adds single cards", st == 200 and got["doc"]["units"][0]["cards"] == [["g2", 1]])
 check("plans: only the author", dre.add_plan_cards(pid, [["g2", 1]], opens=tomorrow)[1] == 403)

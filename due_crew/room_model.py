@@ -356,12 +356,23 @@ def widget_data(room, entries, accent_pair, compact=False, side="right", sev=Tru
             "soundKinds": list(SOUNDS), "soundLabels": dict(SOUND_LABELS)}
 
 
-def start_data(accent_pair, side="right", sev=True, nap=False, compact=False, look=()):
+def start_data(accent_pair, side="right", sev=True, nap=False, compact=False, look=(), sit=0):
     """3.8.1: ▶ Fifteen? in the top bar, whenever I'm in no room. look
-    (3.8.2): what my Pip has on from the closet."""
-    sevs, css, _turns = _sevs(("idle", "nap"), sev, look=look)
+    (3.8.2): what my Pip has on from the closet. sit (3.9.5, the Fifteen
+    at 35): the minutes a sitting has passed, and in its place the chip
+    says so with Take five (habits_flow.sit_chip); 0, as before."""
+    sevs, css, _turns = _sevs(("idle", "nap"), sev and not sit, look=look)
     return {"accent": list(accent_pair), "side": chip_side(side), "compact": bool(compact),
-            "nap": bool(nap), "sev": sevs, "sevcss": css, "slot": list(_sev.SLOT)}
+            "nap": bool(nap), "sev": sevs, "sevcss": css, "slot": list(_sev.SLOT), "sit": max(0, int(sit or 0))}
+
+
+def fifteen_in_break(host, now=None):
+    """3.9.5, the Fifteen at 35's Take five: a fifteen already in its break,
+    its first fifteen counted as just ended (the sitting so far stands in
+    for it); then the break's countdown, a fifteen and its question, as
+    after any first fifteen."""
+    now = _now(now)
+    return clean_room(dict(make_fifteen(host, now - datetime.timedelta(minutes=FIFTEEN)), rounds=2))
 
 
 SQUARES = ('<svg viewBox="0 27.7 484 48.3" style="display:block;width:100%;height:auto" aria-hidden="true">'
@@ -916,6 +927,27 @@ _RUNTIME = r"""
     update = function (p) {
       if (p.state !== 'ask' && !gone) { gone = true; send('roombreakend'); }
     };
+  } else if (KIND === 'start' && D.sit) {
+    // 3.9.5, the Fifteen at 35 (only when my own log shows the slide): in ▶ Fifteen?'s place,
+    // in the accent; Take five starts a fifteen in its break, × waves it off for this sitting
+    root = el('div', 'position:fixed;__SIDE__:10px;top:50%;transform:translateY(-50%);height:26px;display:flex;align-items:center;gap:6px;' +
+      'padding:0 5px 0 11px;border:1px solid ' + c.a + ';border-radius:14px;background:' + c.a + ';color:' + c.bg +
+      ';font:600 12px -apple-system,Segoe UI,sans-serif;z-index:99;white-space:nowrap;');
+    root.appendChild(el('span', '', D.sit + ' min in ·'));
+    var five = el('a', 'color:inherit;text-decoration:underline;cursor:pointer;', 'Take five');
+    five.title = 'Five minutes off, then a fifteen';
+    var no = el('a', 'color:inherit;opacity:.85;cursor:pointer;font-size:15px;line-height:1;padding:0 4px;', '×');
+    no.title = 'Not this time';
+    [[five, 'room15sit'], [no, 'room15sitx']].forEach(function (p) {
+      p[0].setAttribute('role', 'button'); p[0].tabIndex = 0;
+      p[0].onclick = function () { send(p[1]); };
+      p[0].onkeydown = function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); send(p[1]); } };
+    });
+    no.setAttribute('aria-label', 'Not this time');
+    root.appendChild(five); root.appendChild(no);
+    root.id = 'dc-room-start';
+    document.body.appendChild(root);
+    return;
   } else if (KIND === 'start') {
     // 3.8.1: ▶ Fifteen? in the top bar, at the chip's end, whenever I'm in no room
     root = el('div', 'position:fixed;__SIDE__:10px;top:50%;transform:translateY(-50%);height:26px;display:flex;align-items:center;gap:6px;' +

@@ -3369,3 +3369,303 @@ every release that changes how something works.
   took Linux for granted, the emoji picker's "no picker, the drawer" (a
   Mac has one, so the test pins none) and Settings' key names (⌘⇧S and
   ⌃⇧Q on a Mac). Tests only; the add-on is as deployed.
+- 3.9.4, QBank QIDs' words and its button (Sam: "The language for the
+  QIDs page shouldn't be paste QIDs of questions missed. Not necessarily
+  missed. Just paste QBank QIDs here. And I liked the study now button
+  when it was blue"): the box says "Paste QBank QIDs here"; Insights' line
+  "After a practice block: paste its QIDs to unsuspend or study their
+  cards", Due's link "Paste QBank QIDs to find their cards", the README's
+  bullet the same (re-paste AnkiWeb's description). Study now is in the
+  accent again: `ui._mark` colours a window's default button only when no
+  button is marked, and 3.9.3's Browse link (`dc="link"`) is one, so the
+  window marks it itself (`dc="go"`, as the plan windows' do;
+  `tools/dialogs.py` checks it).
+- 3.9.5, Today (the Five mocks, reviewed page; Sam: "give it a shot
+  building all of it"). Under a done Reviews row, today's misses and where
+  they were: "214 reviews, 23 missed: Renal 9 · Pharm 6 · Cardio 4 · 4
+  elsewhere" (`due_flow._misses`: reviews answered Again today, a card
+  once; the parts from the map of the deck I reviewed most today,
+  `_miss_topics`, each opening its cards in Browse, `duego:miss0..`). A
+  line, not a deck (Sam's FSRS rule, below): Anki's relearning steps bring
+  a miss back, and FSRS sets the next look. Next up takes the suggestion's
+  place once the reviews are through (`_next_up`): the first that
+  applies, from Insights' own numbers for the deck I reviewed most today:
+  a topic not sticking with 8+ missed (Study N before a date, else Browse
+  N), 5+ cards one miss from a leech (Insights' leeches view); else new
+  leeches, as before. Not today puts it away and none steps in till
+  tomorrow. The head's "1h 08m left" went before it shipped (Sam: "it can
+  feel insurmountable when phrased as time remaining"). A Due Crew deck I
+  studied that runs out says so on the board, "Pharmacokinetics: all 46
+  cleared · Nice" (`_watch_ours` on Anki's state change: counted as its
+  review starts, empty as I leave it; no Pip since Sam's click-test).
+  Never sent.
+- 3.9.5, Super decks, built and taken out before it shipped (Sam,
+  click-testing: "where do I find superdecks?", "feels tacked on to
+  today"; the Meeting Super Decks mock, his pick B; then "kinda
+  overwhelming" and "let's get rid of super decks for now"). For a while a
+  tab of their own, Due Crew's decks grouped by why (Before a date, New,
+  From outside Anki), each a tile with Study and Browse and a page of what
+  it is, with Leeches started over on Study and the plan's day as a deck.
+  What stays: his FSRS rule (below), a plan topic's Study and Browse on
+  Today, and Pip off the cleared line ("take pip off the cleared line
+  too"). A deck made for a date (a quiz's, my exam's) remembers it
+  (plans.json `until`) and the morning after, it's emptied back
+  (`plan_flow.untils`, `tidy_decks`); 3.9.5's `sd` notes are dropped. The
+  way back is in git, `superdecks.py`.
+- 3.9.5, Sam's FSRS rule ("a lot of anki's utility comes from its
+  scheduling engine FSRS so we have to only include these such that they
+  are necessary or helpful"), everywhere a Study made a deck: a date
+  ahead, cards not started yet, a miss outside Anki; anything else is
+  reviews ahead of their date, and FSRS has those. So: Today's misses and Slow but
+  right are no longer decks (the morning empties one left from before,
+  `plan_flow.RETIRED`); a date's Study, on Today, the plan's week and the
+  builder, takes its new cards and the ones due today (`plans.new_and_due`;
+  3.8.1 had made it every open card, due or not), as they come in the
+  deck; a quiz's Study keeps every open card (a date's coming). Insights'
+  exam box, its Not sticking rows and the map's Study build a deck only
+  with a date ahead (my exam, or a plan's event: `team_flow.dated`); else
+  the cards open in Browse, and the weakest part's name opens it. A plan's
+  review day builds its deck only before a quiz (an event within three
+  days after it, `plan_flow.quiz_after`). On Today a plan date's topic
+  (Sam: "if one clicks on a tagged section on a plan (like a video tags)
+  then it moves them into a filtered deck?", then "need that option to
+  browse or make the filtered deck") shows its two ways beside its name
+  when clicked (`board._topic_go`; the name stays underlined while they
+  show, the one clicked stays marked: "they should underline and show
+  that they are being selected"): Study, its cards I haven't seen and
+  the ones due today, as they come, a deck named for it
+  (`plan_flow.study_topic`, `plantopicstudy`; a card another Due Crew deck
+  holds comes out of it first and that deck is built again, `_free`, as
+  Anki keeps a card in one filtered deck; nothing new or due, Browse), and
+  Browse. Upcoming and the Plans tab's topics still Browse.
+- 3.9.5, How you study (`habits.py` pure, `habits_flow.py` the glue):
+  what my own last eight weeks of log say about how I study, all decks,
+  worked out on this computer and never sent. A line atop Insights, "How
+  you study › 38 matured this week" (from two weeks of log; matured is
+  Anki's word, Sam's pick over "reached 3 weeks": next review 3 weeks or
+  more away), opens it in Insights' place: my time a day and a card in its
+  head; the cards matured each of eight weeks (See them, in Browse); Slow
+  but right (right answers at 1.5–3× the card's usual time, missed more
+  next time, held at the same intervals: "22% of slow right answers missed
+  next time · 13% otherwise", its range from 300 resamples of cards in the
+  bars' titles), with See them (Browse; a finding, not a deck, by Sam's
+  FSRS rule: with an exam set, the ones Anki won't show before it join the
+  exam box's Study, `team_flow.exam_deck`; the deck and its track record
+  went before it shipped); long sittings (right % by minutes
+  in, held at the interval mix; 45+ minutes against the first 20 in
+  hour-long sittings, a range from resampled sittings: "84 → 79% after 35
+  minutes in one go"), with Start a Fifteen. A finding shows only once it
+  clears its bar (4 weeks and 1,500 compared answers, the range above
+  zero; 20 hour-long sittings, a 3-point drop, the range below zero);
+  otherwise "More as you study." Checked on made-up logs: a planted
+  effect found, none found where none was planted. The Fifteen at 35 (no
+  new break): when my sittings finding passes, past 35 minutes in one go
+  while reviewing, the top bar's ▶ Fifteen? says "35 min in · Take five",
+  which starts a Fifteen already in its break (`room15sit`; × for the
+  sitting, `room15sitx`). The log is read once a day; a big one is worked
+  out off the main thread (about 2 s for 166,000 answers).
+- 3.9.5, Study where the cards are (no Study sheet: a Study sits on what
+  names the cards). Insights › What you know names its weakest part
+  under the key, "Weakest: Renal · Physiology, 66% · Study the 41 you
+  missed" (lowest % among the tiles showing one, ties to more missed,
+  only with 5+ missed: `team.weakest`; Study only with a date ahead, by
+  Sam's FSRS rule), and an open part's trail gets "Study the N you
+  missed" before Browse all (`team_flow.study_map`,
+  `duecrew:insmapstudy`). Missed: Again in a review in the map's four
+  weeks, in the deck, not suspended (`team_flow._missed`). QBank QIDs says
+  Their topics after a paste: the map's parts the questions are in, a
+  question once in each, "2 questions · 66% here", Study on a part with
+  misses (`qids.topics`, `team_flow.deck_map`: Insights' map while
+  fresh, else worked out alone); five rows at most, the rest named on one
+  line. One helper builds every such deck (`team_flow.study_deck`: Due
+  Crew › the part, most lapses first, as Insights' Study). Never sent.
+- 3.9.5, starter plans (a user: "I keep refreshing the library and it's
+  always empty"). The admin marks listed plans as starters (migration
+  0030, `plans.starter`; `POST /admin/library/{id}/starter {on}`, admin
+  only, in the audit log); leaving the library ends it. The library shows
+  them in a row of their own above the grid, under Due Crew, when nothing
+  is filtered or searched (8 at most), and a copy is based on Due Crew's.
+  The day's first `/board` carries up to 4 (`starters`) for someone who
+  owns, co-writes and follows no plan, and the empty Plans tab lists them
+  under "Or start from one": name, "deck · N weeks", Use it. Use it
+  (`planstarter`) is the library's Copy with today's Anki day as its
+  start, then Follow on the copy, as a code in the box opens it (a copy
+  alone was a plan I own and don't follow: nothing opened). No new
+  request: they ride `GET /board?decks=1`; Use it is one on the click.
+  Deploy the Worker first (0030); older add-ons ignore the field.
+- 3.9.5, Shapes in New plan (`planner/shapes.py`, `new_plan.py`): with
+  no calendar, a Shape (One a day · Done by the exam · A week each, each a
+  small calendar picture) and From (a tag folder of the deck): each tag in
+  it a date, named as the builder names one, nothing else on it. Done by
+  the exam leaves the last week free (the last fifth of a short span) and
+  shares dates when it must; the last date of a stretch carries its
+  finish-by so its cards spread like the others; the pace is what the
+  shape asks a study day. A line says what it makes ("34 dates · ~40 new a
+  study day · done Mon 30 Nov"), red when it runs to the exam or past it.
+  A calendar read still wins; From at None makes the plan as before. Make
+  the plan is in the accent (the tiles kept `ui._mark` from it). Why:
+  people got most of the way to a plan and stalled.
+- 3.9.5, the dialogs check went red on a commit that touched no window:
+  its calendar PDF, drawn three cells a row, came out of Qt's reader a
+  letter a line in 41 weeks of a year (it reads next Monday's dates; the
+  start window rightly turned it down as scrambled). A row is one line now.
+- 3.9.5, Sam's first click-test. Insights' exam date and its scope's
+  Change are picked in a Qt calendar (`ui.date_dialog`/`pick_date`;
+  `exampick`, `scopepick`): "removing an exam date and then clicking add
+  exam date makes anki quit", the page's own date picker (`showPicker()` on
+  a hidden input) with the board redrawn on its change. An exam date comes
+  off the Anki day after it (`due_flow.exam_gone`, at the refresh: as ×
+  takes it, kept as my last exam for the next one's scope; Sam: "when an
+  exam date passes let's remove it"). Insights' "After a practice block:
+  paste its QIDs…" line went ("extra because QIDs is in the header"); with
+  Due's lists off, QBank QIDs is in the bubble's head instead
+  (`_you`'s `qids`). How you study's slow tile says the cards to look at
+  again ("46 · right, but slow, this week") with the bars, quick and slow,
+  "missed next time" under them, in place of "20% of slow right answers
+  missed next time · 14% otherwise" ("doesn't make much sense"); the
+  sittings tile, "35 min · then you start missing more".
+- 3.9.5, the security and efficiency audit of `4cbb6c9` (eight findings,
+  each fixed with its test; `worker/test/audit395.test.ts`, and S1/S2 in
+  `plans.test.ts`). S1: a date's counts came back for one or two people
+  sharing, and the add-on showed them to every follower ("crew 1/40"); the
+  three-person rule lived only in the site's Progress tab. Now the server
+  holds to it (`plans.COUNTS_MIN`): Progress sends no date's counts and
+  `/board` no `crewDone` under three counted, and the add-on draws no crew
+  count without one (`shapes.clean_plan` keeps it None; an older add-on
+  reads 0). S2: someone out of a squad kept counting for its plan, and
+  their syncs kept writing it. One rule for who counts, beside the team's
+  (`plans.STILL_IN`, `COUNTED`: sharing, on the team, may still see it) for
+  Progress and the kept totals alike; a sync writes progress only for a
+  plan I may still see (`SEES`); and leaving a team, unfollowing, a
+  co-author removed, a squad member removed or blocked (by the founder or
+  the admin), a squad deleted, an account deleted, or a save that moves a
+  plan to another audience or squad, each set the plan's `totals_at` to
+  NULL, so its counts are taken again at the next read, not in an hour
+  (kept totals from before carry no `s` and are counted again). S3: a
+  join's checks were reads before an unconditional insert, so a block, a
+  lock or a new code landing mid-join didn't hold; the code, the door, the
+  block list and both ceilings are now the insert's own conditions, one
+  statement, and the reason is looked up only when nothing went in
+  (`whyNot`). A2: no ceiling on one person's squads; `squads.SQUADS_MAX`
+  is 20, the add-on's own (`account.MAX_SQUADS`), on create (one
+  transaction) and join, `409 too_many_squads` ("You're in 20 squads.
+  Leave one to join another.", in Anki and on the site), the board's
+  restore and the sync carry as many; someone in more from before keeps
+  them; join tries are 30 an hour. A1: the board's team counts bound one
+  parameter a plan, and co-writing has no ceiling, so 101 teams was a 500;
+  `team.forBoard` goes 90 at a time. E1: `plans.deck_counts`, a deck's
+  cards up its path in one pass (was every subdeck against every other, on
+  the main thread: about a second at 4,000, now milliseconds). E2:
+  `totals()` read every follower's progress to skip the non-sharers'; now
+  only the counted rows' progress comes back (it matters more with the
+  starters, the most-followed plans). D1: the Worker's dev tools, no
+  advisories left (`npm audit`): Wrangler 4.149.0 (its miniflare
+  5.20261006.1-alpha), Vitest 4.1.12, and `overrides` for the copies the
+  test pool pins (Wrangler, miniflare, zod 4.6.7) and patched undici
+  7.30.1, vite 8.3.4, source-map-js 1.2.2; the pool itself stays 0.22.0.
+  The fake (`tests/fakes.py`) restates COUNTED, COUNTS_MIN and
+  SQUADS_MAX; `tools/dialogs.py` renders the two new squad refusals; the
+  live smoke (`tools/smoke_worker.py`) expects no counts from one person sharing.
+- 3.9.5, an author on the team counts toward the three (Sam: "count the
+  author too if they're on the team"). `plans.IN_SQUAD`: a follower whose
+  progress counts, and an author or co-author on the team, once each; the
+  counts themselves are still the followers' (an author's own progress is
+  in them only if they follow it too). Progress says `inSquad` beside
+  `sharing`, and the site's Progress tab and its class hint, and the
+  planner's twin (`edits.behind`), wait for three in it; a date's "under
+  half done" is of the followers sharing. The kept totals' `s` is the
+  same count (one grouped query a stale chunk). With the author and two
+  followers, each follower can tell from the crew count what the other
+  did on a date; with three followers, they can't.
+- 3.9.5, Sam's picks on the review page ("3.9.5 Keep or Remove": every
+  change drawn by the add-on's own code, a pick on each). Out before it
+  shipped: Next up (Today's suggestion is new leeches again, as before
+  3.9.5: `due_flow.suggestions`, no `_next_up`, no `duego:near`); a Due
+  Crew deck that runs out (`_watch_ours`, the cleared line); the map's
+  weakest part and an open part's Study (`team.weakest`,
+  `team_flow.study_map`, `insmapstudy`; the map's missed cards stay, for
+  QBank QIDs' topics and today's misses); starters both ways (the empty
+  Plans tab's Or start from one and the library's row: `library.ts`'s
+  starters, `POST /admin/library/{id}/starter`, `planstarter`,
+  `tests/test_starters.py`, `worker/test/starters.test.ts`; migration
+  0030 never shipped, so it's gone, not undone); and Shapes in New plan
+  (`planner/shapes.py`, with Make the plan back in its own look). Kept:
+  today's misses by part, a plan topic's Study and Browse, the FSRS rule,
+  an exam date off the day after, How you study and the Fifteen at 35,
+  the exam date's calendar window, QBank QIDs' topics and its place in
+  the bubble's head, and the audit's floors and ceilings. The way back is
+  in git.
+- 3.9.5, the second review of the PR (Sam: "Fix all of them, use the
+  two-besides-me rule for 1"). Two besides me: with the author on the
+  team counting toward the three, a count could still be one person's (an
+  owner and a co-author on the team with one follower sharing; or the
+  author and two followers, where each follower took their own away from
+  the crew count and read the other's). Now whoever reads a date's counts
+  finds two people's progress in them besides their own
+  (`plans.BESIDES_MIN`), on top of three in the squad: Progress says
+  `others` (the followers sharing who aren't me) and sends no date's
+  counts under two; `/board` sends `crewDone` only when the kept totals'
+  `c` (the follows the counts are made of), less one when I share, is two
+  or more (`crewShown`); kept totals without `c` are counted again. The
+  site's Progress tab says "Each date's counts show once 2 or more besides
+  you do.", and its class hint and `edits.behind` wait for it. With the
+  author and two followers, the author sees the two and the followers see
+  no crew count. Deleting an account takes the totals again for every plan
+  whose team I was on, not just the ones I follow (a co-author's place in
+  the three, and a quiet account's when its plans pass on). A plan topic's
+  Study gives the Due Crew deck it took a card from the rest of what it
+  held (`plan_flow._free`, `_refill`), not its first search again, which
+  took back the cards answered since as reviews ahead. A failure taking a
+  past exam date off no longer skips the morning (`due_flow.after_refresh`).
+  Today's misses by part build each part's set once, and the misses
+  themselves are worked out again only when the log has a new answer
+  (`_misses`, keyed on its last id). The long-sittings tile's hover is the
+  first 15 minutes against 45 to 60 (where the finding starts), not 30 to
+  45. `team.forBoard`'s chunks go in one batch. A join's 429 reached the
+  squad window as "Check your connection" (`api._call` raises it);
+  `join_squad` returns it, so it says "That's a lot of tries. Try again
+  in an hour.", and the fake restates the 30 an hour (`JOINS_PER_HOUR`);
+  `tools/dialogs.py` renders it.
+  CI's dialogs job pins PyQt6 6.11.0: 6.12.0, out the same day, ships
+  without QtPdf, so the dropped calendar PDF read as nothing (the add-on
+  itself already says so when an Anki's Qt has no PDF reader: `pdf_text`
+  is None).
+- 3.9.5, game night (Sam: "Throw it into due crew in a version I could
+  test with friends joining from their phones and me from my computer"):
+  duecrew.com/table, six party games for a table of friends (Imposter,
+  Rounds, Trivia, Draw it, Somewhere between, Links), the site's alone;
+  the add-on doesn't know it. One screen is the TV and holds the game; the
+  phones answer. `site/public/table.js` is the engine and the games,
+  `table-packs.js` their packs (Due Crew's own sample topics and
+  questions: no card's words, nothing from anyone's deck), `table.css`,
+  `table.html`; the site serves it at `/table` and `/t/CODE` (a join link,
+  the QR on the TV) with a policy that lets its socket out
+  (`site/src/index.ts`). A table is a Durable Object for one night
+  (`worker/src/table.ts`, migration `v1` in wrangler.toml, SQLite, the free
+  plan's): someone signed in opens it (`POST /table`, 10 an hour) and gets
+  its four letters and a key that makes their page the host; each
+  connection keeps one presence (a name and an answer; the host's is the
+  game) that the table hands to who's sitting there, and only the host's
+  is marked host, so a phone can't play the TV. A refused socket can't read
+  a body, so the table says why in the close (`SHUT`). Nothing is kept but
+  the rate limits: a table closes after four hours, or 15 minutes after its
+  host goes. This is the one live connection Due Crew has, a deliberate
+  change to what it costs (a Durable Object while a table is open; the
+  add-on's budget is as it was). The door (Sam: "is there a way to ensure
+  that they're crew or allowed"): the host's crew (signed in on the phone,
+  mutual friends; the host's own phone too) sit straight down, by the name
+  on their account, which only the host's TV hears; anyone else waits at
+  the door, showing the host a typed name and nothing more, till the host
+  lets them in ("Ask me", the default). The host can make it crew only,
+  let in anyone with the code, lock it (only who's sat down can come back)
+  and turn someone away for the night (that phone's seat, not a person:
+  crew only is the way to keep a stranger out). Six wait at the door at
+  most, twelve sit; a phone's reload keeps its seat (its id lives in the
+  tab). While Sam tests it, every game starts with one player (`FEW` in
+  table.js; each game's own min stays on its tile, and the lobby says
+  "Made for 3 or more"): alone, Rounds has no Attending, Imposter's vote
+  ends it, Links' clue giver taps too. Set `FEW` back before it goes wider.
+  Tests: `worker/test/table.test.ts` (the door, the presences, the seats,
+  the alarm, through the site's binding) and the suite's
+  `test_game_night_one_player_v395` (every game, one to eight players, in
+  node).

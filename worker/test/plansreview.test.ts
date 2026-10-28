@@ -205,12 +205,13 @@ describe("one total per plan, kept on its row", () => {
     const nia = await person("nia");
     expect((await maya.call("POST", "/plans/follow", { code: p.code, team: true })).body.followers).toBe(1);
     const k1 = await kept(p.id);
-    expect(JSON.parse(k1!.totals!)).toEqual({ v: p.version, n: 1, m: 1, r: 0, done: {} });
+    expect(JSON.parse(k1!.totals!)).toEqual({ v: p.version, n: 1, m: 1, r: 0, done: {}, s: 0, c: 0 });
     await maya.call("POST", "/sync", { plans: { [p.id]: { hf: [10, 10, 10] } } });
     await nia.call("POST", "/plans/follow", { code: p.code, team: true });
     // under an hour old: every reader reads it as kept, and nothing is written
     const onBoard = async (who: Who) => (await who.call("GET", "/board?decks=1")).body.plans.find((x: any) => x.id === p.id);
-    expect(await onBoard(maya)).toMatchObject({ followers: 1, crewDone: {} });
+    expect(await onBoard(maya)).toMatchObject({ followers: 1 });
+    expect(await onBoard(maya)).not.toHaveProperty("crewDone");  // 3.9.5: no crew counts under three counted
     // ...but the authors' "reached" is counted live: both follow, and Maya's board just carried this version
     expect((await dre.call("GET", `/plans/${p.id}`)).body).toMatchObject({ followers: 1, reached: [1, 2] });
     expect((await dre.call("GET", "/plans/mine")).body.plans[0].followers).toBe(1);
@@ -222,9 +223,10 @@ describe("one total per plan, kept on its row", () => {
     expect((await maya.call("GET", `/plans/${p.id}`)).body.following.progress).toEqual({ hf: [10, 10, 10], ar: [3, 1, 9] });
     // an hour on: counted again, once, and kept with its time
     await anHourOn();
-    expect(await onBoard(nia)).toMatchObject({ followers: 2, crewDone: { hf: 1 } });
+    expect(await onBoard(nia)).toMatchObject({ followers: 2 });
+    expect(await onBoard(nia)).not.toHaveProperty("crewDone");  // Maya alone is counted: no date's count
     const k2 = await kept(p.id);
-    expect(JSON.parse(k2!.totals!)).toEqual({ v: p.version, n: 2, m: 2, r: 1, done: { hf: 1 } });  // Maya's board carried it; Nia's is this one
+    expect(JSON.parse(k2!.totals!)).toEqual({ v: p.version, n: 2, m: 2, r: 1, done: {}, s: 1, c: 1 });  // Maya's board carried it; Nia's is this one
     expect(k2!.totals_at).toBeGreaterThan(Math.floor(Date.now() / 1000) - 60);
     expect((await dre.call("GET", `/plans/${p.id}`)).body).toMatchObject({ followers: 2, reached: [2, 2] });  // live: Nia's board too
     expect(await kept(p.id)).toEqual(k2);

@@ -830,19 +830,20 @@ def card_view(plan, st, prog, today, session=None, week_offset=0):
         sub += f" · opens {n} day{'s' if n != 1 else ''} early"
     sub += f" · {int(plan.get('followers') or 0):,} following"
     followers = int(plan.get("followers") or 0)
-    crew = plan.get("crewDone") or {}
+    crew = plan.get("crewDone")  # 3.9.5: only from three people counted; none, no crew count
     rows = []
     open_units = P.opened_by_date(doc, today)
     current = [u for u in open_units if u.get("due") and u["due"] >= today]
     now_id = current[0]["id"] if current else (open_units[-1]["id"] if open_units else None)
     for u in open_units:
         o, s, t = (prog or {}).get(u["id"], [0, 0, 0])
-        done = int(crew.get(u["id"]) or 0)
-        n = f"crew {done:,}/{followers:,}"
+        done = int(crew.get(u["id"]) or 0) if isinstance(crew, dict) else None
+        bits = [f"crew {done:,}/{followers:,}"] if done is not None else []
         if u["id"] == now_id and u.get("due") and u["due"] >= today:
-            n += f" · due {_short_day(u['due'], today)}"
+            bits.append(f"due {_short_day(u['due'], today)}")
         rows.append({"name": u.get("name") or "?", "uid": u["id"], "state": "now" if u["id"] == now_id else "open",
-                     "seen": [s, t], "crew": [done, followers], "n": n, "missing": not t})
+                     "seen": [s, t], "crew": [done, followers] if done is not None else None, "n": " · ".join(bits),
+                     "missing": not t})
     nxt = P.next_unit(doc, today)
     # G3: dates I skip, around now: crossed out, with Undo skip
     skipped = set(plan.get("skipped") or [])
@@ -1641,7 +1642,10 @@ CHECK_DAYS = 3  # a checkpoint missed by more than this many mornings isn't buil
 
 def checks_due(doc, st, sched, today):
     """Checkpoints and (3.3) review days that are today on my dates (or up
-    to CHECK_DAYS ago) and not built here yet: [(key, name, [units], n)]."""
+    to CHECK_DAYS ago) and not built here yet: [(key, name, [units], n)].
+    3.9.5 (Sam's FSRS rule): a review day only before a quiz (an event
+    within P.QUIZ_DAYS after it); otherwise it'd be reviews ahead of their
+    date with no date to aim at, and FSRS has those."""
     day = S.d(today)
     shift = S.shift_days(doc, sched)
     done = st.get("checks") or {}
@@ -1655,7 +1659,7 @@ def checks_due(doc, st, sched, today):
     for r in doc.get("reviews") or []:
         key = f"r:{r['day']}:{r['from']}:{r['to']}"
         a, b = by_id.get(r["from"]), by_id.get(r["to"])
-        if key in done or not a or not b or not due(r["day"]):
+        if key in done or not a or not b or not due(r["day"]) or not quiz_after(doc, S.d(r["day"]) + datetime.timedelta(days=shift)):
             continue
         lo, hi = sorted([a["opens"], b["opens"]])
         span = [u for u in us if lo <= u["opens"] <= hi]
@@ -1667,16 +1671,30 @@ def checks_due(doc, st, sched, today):
 REVIEW_CARDS = 200  # 3.3, C4: a review day's deck
 
 
+def quiz_after(doc, day):
+    """3.9.5: an event of the plan's within P.QUIZ_DAYS after `day` (a date;
+    events never move)."""
+    for e in doc.get("events") or []:
+        try:
+            gap = (datetime.date.fromisoformat(str((e or {}).get("day") or "")) - day).days
+        except (TypeError, ValueError):
+            continue
+        if 0 <= gap <= P.QUIZ_DAYS:
+            return True
+    return False
+
+
 STUDY_ORDER = 1  # Anki's filtered-deck order: random
+NEW_ORDER = 6  # as they come in the deck: new cards by their place in it
 
 
 def study_date(pid, uid):
-    """3.3, C4: Study on a date (the plan's week, and a plan's date in Due).
-    3.8.1, a cram before a quiz: a Due Crew deck of the date's open cards,
-    new and review, due or not, in random order, Anki rescheduling them as
-    it would (P.study_cards, _filtered: one undo step of Anki's own), then
-    Anki's Study screen on it. Before 3.8.1 it took only the cards I'd
-    seen, most-missed first. A search run here; nothing is sent."""
+    """3.3, C4: Study on a date (the plan's week, and a plan's date in Due):
+    a Due Crew deck of the date's cards, Anki rescheduling them as it would
+    (_filtered: one undo step of Anki's own), then Anki's Study screen on
+    it. 3.9.5 (Sam's FSRS rule): its new cards and the ones due today
+    (P.new_and_due), never reviews ahead of their date; a quiz's Study keeps
+    those (study_quiz). A search run here; nothing is sent."""
     got = _plan_idx(pid)
     if not got:
         return
@@ -1684,12 +1702,12 @@ def study_date(pid, uid):
     u = next((x for x in P.units(doc) if x["id"] == uid), None)
     if not u:
         return
-    cids = P.study_cards(idx, idx.match(u, _swap(st), doc))
+    cids = P.new_and_due(idx, idx.match(u, _swap(st), doc))
     if not cids:
-        tooltip("None of its cards are open yet.")
+        tooltip("Nothing new or due in it.")
         return
     name = _deck_name(u.get('name') or 'date')
-    if _filtered(mw.col, name, cids, order=STUDY_ORDER):
+    if _filtered(mw.col, name, cids, order=NEW_ORDER):
         _after_change()
         did = mw.col.decks.id_for_name(name)
         if did:
@@ -1700,29 +1718,38 @@ def study_date(pid, uid):
 QUIZ_ORDER = 2  # Anki's filtered-deck order: smallest intervals first, the shakiest (and the unseen) first
 
 
+def quiz_cards(pid, eid):
+    """(cids, event) a quiz's Study takes: the open cards of the dates that
+    prep for it (P.quiz: open by today, not one after it); ([], None)
+    without the plan here or the event."""
+    got = _plan_idx(pid)
+    if not got:
+        return [], None
+    _p, st, doc, idx = got
+    ev = next((e for e in doc.get("events") or [] if isinstance(e, dict) and e.get("id") == eid), None)
+    if not ev:
+        return [], None
+    cids, today = set(), _today()
+    for u in P.units(doc):  # the dates its line counts (P.quiz): prep dates open by today, not one after it
+        if u.get("for") == eid and not P.reinforces(doc, u) and str(u.get("opens") or "9999") <= today:
+            cids |= idx.match(u, _swap(st), doc)
+    return P.study_cards(idx, cids), ev
+
+
 def study_quiz(pid, eid):
     """3.8.1 (plans, rethought), Study for a quiz: one Due Crew deck of the
     open cards of every date that preps for the event (P.quiz: not a date
     after it), the shakiest first, Anki rescheduling them as it would; one
     undo step of Anki's own, then Anki's Study screen on it. A search run
     here; nothing is sent, and nobody else sees it."""
-    got = _plan_idx(pid)
-    if not got:
+    cids, ev = quiz_cards(pid, eid)
+    if ev is None:
         return
-    _p, st, doc, idx = got
-    ev = next((e for e in doc.get("events") or [] if isinstance(e, dict) and e.get("id") == eid), None)
-    if not ev:
-        return
-    cids, today = set(), _today()
-    for u in P.units(doc):  # the dates its line counts (P.quiz): prep dates open by today, not one after it
-        if u.get("for") == eid and not P.reinforces(doc, u) and str(u.get("opens") or "9999") <= today:
-            cids |= idx.match(u, _swap(st), doc)
-    cids = P.study_cards(idx, cids)
     if not cids:
         tooltip("None of its cards are open yet.")
         return
-    name = _deck_name(f"{ev.get('name') or 'quiz'}")
-    if _filtered(mw.col, name, cids, order=QUIZ_ORDER):
+    name = _deck_name(f"Before {ev.get('name') or 'the quiz'}")  # 3.9.5: named for what it's before
+    if _filtered(mw.col, name, cids, order=QUIZ_ORDER, until=str(ev.get("day") or "") or None):
         _after_change()
         did = mw.col.decks.id_for_name(name)
         if did:
@@ -1748,10 +1775,12 @@ def check_cards(col, idx, cids, n=CHECK_CARDS):
     return [int(c) for c, _l in out[:n]]
 
 
-def _filtered(col, name, cids, order=4):
+def _filtered(col, name, cids, order=4, until=None):
     """Anki's own filtered deck over these cards, most lapses first (order 4;
     6, as they come in the deck, for new cards; 1, random, a date's Study);
-    built (or rebuilt) under `name`. Returns True when it took."""
+    built (or rebuilt) under `name`. 3.9.5: until, the last day it's for (a
+    quiz's, an exam's): the morning after, it's emptied (tidy_decks).
+    Returns True when it took."""
     try:
         did = col.decks.id_for_name(name) or 0
         had = col.decks.id_for_name(P.PARENT)  # a "Due Crew" deck of the person's own isn't ours to tidy
@@ -1766,7 +1795,7 @@ def _filtered(col, name, cids, order=4):
         term.order = order
         deck.config.reschedule = True
         col.sched.add_or_update_filtered_deck(deck)
-        _note_built(col.decks.id_for_name(name))
+        _note_built(col.decks.id_for_name(name), until)
         parent = col.decks.id_for_name(P.PARENT)
         if parent and (not had or int(parent) in (_pcfg().get("built") or [])):
             _note_built(parent)  # made with it (or before, by us), so the tidy may clear it
@@ -1779,32 +1808,48 @@ def _filtered(col, name, cids, order=4):
 BUILT_KEEP = 200  # filtered decks remembered for the morning's tidy
 
 
-def _note_built(did):
+def _note_built(did, until=None):
     """3.8.0: a filtered deck Due Crew built, remembered (plans.json, this
-    profile's) so the morning clears it once it's empty."""
+    profile's) so the morning clears it once it's empty. 3.9.5: the last
+    day it's for, when it has one (`until`: {did: day})."""
     if not did:
         return
     c = _pcfg()
     ids = [x for x in c.get("built") or [] if isinstance(x, int) and x != int(did)]
     c["built"] = (ids + [int(did)])[-BUILT_KEEP:]
+    days = {k: v for k, v in (c.get("until") or {}).items() if str(k).isdigit() and int(k) in c["built"] and k != str(int(did))}
+    if until:
+        days[str(int(did))] = str(until)
+    c["until"] = days
+    c.pop("sd", None)  # 3.9.5's Super decks, gone before it shipped
     _psave(c)
+
+
+def untils():
+    """3.9.5: {did: the last day it's for}, of the decks built here with one."""
+    return {int(k): str(v) for k, v in (_pcfg().get("until") or {}).items() if str(k).isdigit() and v}
+
+
+RETIRED = ("Today's misses", "Slow but right")  # 3.9.5 (Sam's FSRS rule): decks Due Crew no longer makes
 
 
 def tidy_decks(col):
     """3.8.0, the morning, before it unsuspends (its undo step stays the
     latest): the filtered decks Due Crew built that are empty now go, and
     the Due Crew parent deck once nothing's under it, in one step (Anki's
-    Delete Deck). Returns how many. 3.8.1 (Sam): "Today's misses" is
-    today's: one left from an earlier day is emptied back into its decks
-    first (Anki's Empty), so it goes with the rest."""
+    Delete Deck). Returns how many. 3.9.5: a deck past its day (`until`:
+    an exam or a quiz gone) and the decks Due Crew no longer makes
+    (RETIRED) are emptied back into their decks first (Anki's Empty), so
+    they go with the rest."""
     try:
         normal = {int(d.id) for d in col.decks.all_names_and_ids(include_filtered=False)}
-        mid = col.decks.id_for_name(P.our_deck("Today's misses"))
-        if mid and int(mid) not in normal and _pcfg().get("misses_day") != _today():
-            col.sched.empty_filtered_deck(int(mid))
-            c = _pcfg()
-            c.pop("misses_day", None)
-            _psave(c)
+        dyn = {int(d.id) for d in col.decks.all_names_and_ids(include_filtered=True)} - normal
+        today = _today()
+        old = [col.decks.id_for_name(P.our_deck(n)) for n in RETIRED]
+        old += [did for did, day in untils().items() if day < today]
+        for did in old:
+            if did and int(did) in dyn:
+                col.sched.empty_filtered_deck(int(did))
         rows = [(int(d.id), d.name, col.db.scalar("SELECT count() FROM cards WHERE did = ?", int(d.id)) or 0)
                 for d in col.decks.all_names_and_ids(include_filtered=True) if int(d.id) not in normal]
         c = _pcfg()
@@ -2216,6 +2261,8 @@ def on_message(cmd, parts):
         browse_left(arg, [x for x in (parts[3] if len(parts) > 3 else "").split("-") if x])
     elif cmd == "plantopic" and arg and len(parts) > 4:
         browse_topic(arg, [x for x in parts[3].split("-") if x], int(parts[4]) if parts[4].isdigit() else -1)
+    elif cmd == "plantopicstudy" and arg and len(parts) > 4:  # 3.9.5: a topic on Today, as a deck of its own
+        study_topic(arg, [x for x in parts[3].split("-") if x], int(parts[4]) if parts[4].isdigit() else -1)
     elif cmd == "planputback" and arg:
         open_put_off(arg)
     elif cmd == "planmove" and arg and len(parts) > 3:
@@ -2553,6 +2600,80 @@ def browse_topic(pid, uids, i):
     _browse(cids, _tag_search(mw.col, st["deck_id"], src, _swap(st), cids) if cids else None)
 
 
+def study_topic(pid, uids, i):
+    """3.9.5 (Sam: "if one clicks on a tagged section on a plan (like a video
+    tags) then it moves them into a filtered deck?"): a topic of a date on
+    Today, as a deck named for it: its cards I haven't seen and the
+    ones due today (P.new_and_due; never reviews ahead of their date), in
+    the deck's order. A card another Due Crew deck holds comes out of it
+    first (Anki keeps a card in one filtered deck), and that deck gets back
+    the rest of what it held after. Nothing new or due: Browse, as before. A
+    search run here; nothing is sent."""
+    p = next((x for x in followed() if x["id"] == pid), None)
+    st = _state_cfg().get(pid)
+    if p is None or not st or not mw.col or not _deck_ok(mw.col, st.get("deck_id")):
+        return
+    pm = mine(p)
+    by_id = {u["id"]: u for u in P.units(named(pid, pm["doc"]))}
+    items = P.topic_items([by_id[x] for x in uids if x in by_id])
+    if not 0 <= i < len(items):
+        return
+    group, title, src = items[i]
+    try:
+        idx = P.DeckIndex(mw.col, st["deck_id"])
+        cids = P.new_and_due(idx, P.topic_cards(idx, src, _swap(st), pm["doc"]))
+    except Exception:
+        traceback.print_exc()
+        return
+    if not cids:
+        browse_topic(pid, uids, i)
+        return
+    name = _deck_name(title)
+    back = _free(mw.col, cids, name)
+    ok = _filtered(mw.col, name, cids, order=NEW_ORDER)
+    for did, keep in back:
+        try:
+            _refill(mw.col, did, keep)
+        except Exception:
+            traceback.print_exc()
+    _after_change()
+    did = mw.col.decks.id_for_name(name) if ok else None
+    if did:
+        mw.col.decks.select(did)
+        mw.moveToState("overview")
+
+
+def _free(col, cids, name):
+    """The Due Crew decks (but `name`'s own) holding any of these cards,
+    emptied so the cards can move: [(its id, the cards it held but these)],
+    to fill again after with just those (_refill). Built again from its own
+    search, it would take back the cards answered since, as reviews ahead."""
+    own = col.decks.id_for_name(name)
+    ids = ",".join(str(int(c)) for c in cids) or "0"
+    moving = {int(c) for c in cids}
+    out = []
+    for did in col.db.list(f"SELECT DISTINCT did FROM cards WHERE odid != 0 AND id IN ({ids})"):
+        did = int(did)
+        if did != (int(own) if own else 0) and str(col.decks.name(did) or "").startswith(P.PARENT + "::"):
+            held = [int(c) for c in col.db.list("SELECT id FROM cards WHERE did = ?", did)]
+            col.sched.empty_filtered_deck(did)
+            out.append((did, [c for c in held if c not in moving]))
+    return out
+
+
+def _refill(col, did, cids):
+    """A Due Crew deck _free emptied, with these cards again (its order and
+    rescheduling as they were); one with none left stays empty, for the
+    morning's tidy."""
+    if not cids:
+        return
+    deck = col.sched.get_or_create_filtered_deck(deck_id=did)
+    term = deck.config.search_terms[0]
+    term.search = "cid:" + ",".join(str(int(c)) for c in cids)
+    term.limit = len(cids)
+    col.sched.add_or_update_filtered_deck(deck)
+
+
 def _tag_search(col, deck_id, src, swap, cids):
     """A topic's tags as Anki's own search, kept to the plan's deck, when it
     finds exactly the cards the plan means (the search bar then reads as
@@ -2674,7 +2795,7 @@ def open_next(pid, study=False, uid=None):
         idx = P.DeckIndex(mw.col, st["deck_id"])
         new = [c2 for c2 in idx.match(u, _swap(st), p["doc"]) if idx.cards[c2] == (0, 0)]
         name = _deck_name(u.get("name") or "date")
-        if new and _filtered(mw.col, name, new, order=6):
+        if new and _filtered(mw.col, name, new, order=NEW_ORDER):
             _after_change()
             did = mw.col.decks.id_for_name(name)
             if did:
@@ -4060,7 +4181,7 @@ def open_cards_now(cids, name, first=True, study=False):
             chunk = ",".join(str(c) for c in cl[i:i + 500])
             new += mw.col.db.list(f"SELECT id FROM cards WHERE type = 0 AND queue = 0 AND id IN ({chunk})")
         deck = _deck_name(name)
-        if new and _filtered(mw.col, deck, new, order=6):
+        if new and _filtered(mw.col, deck, new, order=NEW_ORDER):
             _after_change()
             did = mw.col.decks.id_for_name(deck)
             if did:

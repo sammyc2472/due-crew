@@ -27,7 +27,6 @@ from . import plans as P
 from .app import _state, cfg, save_cfg
 
 AGAIN_MIN = 10  # today's misses before the box suggests going over them
-MISSES = P.our_deck("Today's misses")  # their filtered deck, under Due Crew's parent
 LEECH_MIN = 3  # new leeches this week before it suggests a look
 RECOVER_MAX = 200  # leeches recovered in a morning, at most
 REVIEWS_FRESH = 30.0  # seconds a reviews-due count is good for
@@ -83,7 +82,7 @@ def plan_dates(today):
         named = {x["id"]: x for x in P.units(P.with_picks(doc, (_state.get("plan_picks") or {}).get(p["id"])))}  # 3.8.1
         evs = {e.get("id"): e for e in doc.get("events") or [] if isinstance(e, dict)}
         applied = st.get("applied") or {}
-        crew, followers = p.get("crewDone") or {}, int(p.get("followers") or 0)
+        crew, followers = p.get("crewDone"), int(p.get("followers") or 0)  # 3.9.5: crewDone only from three counted
         upd = (_state.get("plan_updates") or {}).get(p["id"]) or {}
         own = P.own_pace(p)  # 3.8.0: the dates I opened are today's, till seen; nothing is behind or upcoming
         own_days = st.get("own_opened") or {}
@@ -124,7 +123,7 @@ def plan_dates(today):
                           "todo": [x for x in u.get("todo") or [] if isinstance(x, dict)],
                           "what": P.topics_line([u]), "topics": P.topic_view([named.get(u["id"], u)]),  # 3.8.0: each a link
                           "rm": P.topic_remarks(doc, [named.get(u["id"], u)]),  # 3.8.1: the authors' notes under its topics
-                          "crew": [int(crew.get(u["id"]) or 0), followers] if followers > 1 else None,
+                          "crew": [int(crew.get(u["id"]) or 0), followers] if isinstance(crew, dict) and followers > 1 else None,
                           "prep": str(ev.get("name") or "") if ev else None,
                           # 3.8.1: a date after its event reinforces it ("after Heme quiz"); Study
                           # on a date with cards open (a Due Crew deck of them); view() adds both to its row
@@ -255,6 +254,26 @@ def _reviews():
     except Exception:
         traceback.print_exc()
     _state["due_reviews"] = (time.time(), out)
+    return out
+
+
+def _misses(col):
+    """3.9.5: today's misses: the reviews I answered Again today (a card
+    once, first missed first), the reviews I answered today, and where they
+    were (_miss_topics). Main thread. Worked out again only when the log
+    has a new answer (or lost one, to Undo): a board's redraw reads one row."""
+    start = (int(col.sched.day_cutoff) - 86400) * 1000
+    key = (start, col.db.scalar("SELECT max(id) FROM revlog"))
+    hit = _state.get("due_misses")
+    if hit and hit[0] == key:
+        return hit[1]
+    cids = [int(c) for c, _m in col.db.all("SELECT cid, min(id) FROM revlog WHERE id >= ? AND ease = 1 AND type = 1 "
+                                           "GROUP BY cid ORDER BY 2", start)]
+    out = {"n": len(cids), "cids": cids[:500],
+           "reviews": int(col.db.scalar("SELECT count(DISTINCT cid) FROM revlog WHERE id >= ? AND ease > 0 AND type = 1",
+                                        start) or 0)}
+    out["topics"], out["elsewhere"] = _miss_topics(col, cids)
+    _state["due_misses"] = (key, out)
     return out
 
 
@@ -389,6 +408,7 @@ def suggestions(c, today):
     out = []
     try:
         # 3.8.0: today's misses are Study today's last step, not a suggestion of their own
+        # (3.9.5: they're under the Reviews row once it's done)
         if not c.get("due_leeches"):
             week = (mw.col.sched.day_cutoff - 8 * 86400) * 1000
             lee = int(mw.col.db.scalar(
@@ -401,6 +421,58 @@ def suggestions(c, today):
         traceback.print_exc()
     _state["due_suggest"] = (key, out[:2])
     return out[:2]
+
+
+MISS_TOPICS = 3  # today's misses named by part: the three with the most, the rest "elsewhere"
+
+
+def _miss_topics(col, cids):
+    """3.9.5: today's misses by the map's parts for the deck I reviewed most
+    today (team_flow.deck_map, its top level): ([(part, [cid])] the
+    MISS_TOPICS with the most, how many fall elsewhere), or ([], 0) when
+    they don't split (one part, or no map). Worked out again only when the
+    misses change. Main thread."""
+    key = (_today(), tuple(cids))
+    hit = _state.get("due_miss_topics")
+    if hit and hit[0] == key:
+        return hit[1]
+    out = ([], 0)
+    try:
+        did = _today_deck(col) if cids else None
+        if did:
+            from . import team, team_flow
+            tiles, _missed = team_flow.deck_map(did)
+            left, groups = set(cids), []
+            for t in tiles:
+                inside = set(team.tile_cards(t))
+                got = [c for c in cids if c in left and c in inside]
+                if got:
+                    groups.append((str(t.get("name") or ""), got))
+                    left -= set(got)
+            groups.sort(key=lambda g: -len(g[1]))
+            if len(groups) > 1:
+                top = groups[:MISS_TOPICS]
+                out = (top, len(cids) - sum(len(g) for _n, g in top))
+    except Exception:
+        traceback.print_exc()
+    _state["due_miss_topics"] = (key, out)
+    return out
+
+
+def _today_deck(col):
+    """The top deck I reviewed most today (a Due Crew deck's cards count for their home deck), or None."""
+    start = (int(col.sched.day_cutoff) - 86400) * 1000
+    roots = {}
+    for did, n in col.db.all("SELECT CASE WHEN c.odid THEN c.odid ELSE c.did END, count() FROM revlog r "
+                             "JOIN cards c ON c.id = r.cid WHERE r.id >= ? AND r.ease > 0 GROUP BY 1", start):
+        root = str(col.decks.name(int(did)) or "").split("::")[0]
+        if root:
+            roots[root] = roots.get(root, 0) + int(n)
+    for root, _n in sorted(roots.items(), key=lambda x: (-x[1], x[0].lower())):
+        rid = col.decks.id_for_name(root)
+        if rid:
+            return int(rid)
+    return None
 
 
 def notes():
@@ -451,6 +523,9 @@ def view(c):
             if x:  # 3.8.1: what due.view's rows don't carry: "after" its event, Study
                 r["after"], r["study"] = bool(x.get("after")), bool(x.get("study"))
         v["qids"] = has_qids() if mw.col else False  # 3.9.3: QBank QIDs in the head
+        # 3.9.5: today's misses, under a done Reviews row
+        rv = next((r for r in v.get("rows") or [] if r.get("kind") == "reviews"), None)
+        v["misses"] = _misses(mw.col) if mw.col and rv and rv.get("done") else None
         # 3.8.1: "Fifteen?", when the day hasn't started by my usual time
         from . import rooms
         v["nudge"] = rooms.nudge(c, v, _day_state()[1].get("dismissed") or ())
@@ -695,9 +770,38 @@ def after_refresh():
     """Every refresh: a fresh reviews count, and the morning (once a day)."""
     _state["due_reviews"] = None
     try:
+        exam_gone(cfg())
+    except Exception:
+        traceback.print_exc()  # the morning still runs
+    try:
         morning(cfg())
     except Exception:
         traceback.print_exc()
+
+
+def exam_gone(c):
+    """3.9.5 (Sam: "when an exam date passes let's remove it"): the Anki day
+    after my exam, its date comes off as × takes it (settings_model's
+    setexam: kept as my last exam, so the next one's scope starts after
+    it); the crew stops seeing it with the next sync. True when it went."""
+    ex, today = str(c.get("exam_date") or ""), _today()
+    if not ex or not today or ex >= today:
+        return False
+    from .settings_model import change
+    try:
+        changed = change(["setexam", "off"], c, today=datetime.date.fromisoformat(today))
+    except ValueError:
+        return False
+    if not changed:
+        return False
+    c.update(changed)
+    save_cfg(c)
+    try:
+        from . import ahead_flow
+        ahead_flow.exam_moved()  # a pause to it ends with it
+    except Exception:
+        traceback.print_exc()
+    return True
 
 
 # ---- clicks ----
@@ -896,20 +1000,11 @@ def go(key):
     """A suggestion's or a note's button."""
     if not mw.col:
         return
-    pf = _pf()
-    if key == "again":
-        start = (mw.col.sched.day_cutoff - 86400) * 1000
-        cids = [int(x) for x in mw.col.db.list(
-            "SELECT DISTINCT cid FROM revlog WHERE id >= ? AND ease = 1", start)][:500]
-        if cids and pf._filtered(mw.col, MISSES, cids):
-            c = pf._pcfg()
-            c["misses_day"] = pf._today()  # 3.8.1: the next morning empties it back if it's left
-            pf._psave(c)
-            pf._after_change()
-            did = mw.col.decks.id_for_name(MISSES)
-            if did:
-                mw.col.decks.select(did)
-                mw.moveToState("overview")
+    if key[:4] == "miss" and key[4:].isdigit():
+        # 3.9.5: a part of today's misses, under a done Reviews row: its cards in Browse (a line, not a deck)
+        m = _misses(mw.col)
+        got = m["topics"][int(key[4:])] if int(key[4:]) < len(m["topics"]) else None
+        _pf()._browse(got[1] if got else [])
     elif key in ("leeches", "recovered"):
         import aqt
         browser = aqt.dialogs.open("Browser", mw)
@@ -962,6 +1057,7 @@ def on_message(cmd, parts):
         open_link(":".join(parts[2:5]))
     elif cmd == "duego" and arg:
         go(arg)
+
     elif cmd == "duestudy":
         study_today()  # 3.8.0
     elif cmd == "duex" and arg:

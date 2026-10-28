@@ -559,6 +559,11 @@ def you_view(c):
         since = (view.get("aim") or {}).get("since") if (view.get("aim") or {}).get("kind") == "exam" else ""
         ms = _since_ms(since, mw.col.sched.day_cutoff, _plans_flow()._today()) if since else None
         out["view"]["leech"] = leech_flow.current(mw.col, d["did"], _deck_sql(mw.col, d["did"]), ms)
+    try:
+        from . import habits_flow
+        out["habits"] = habits_flow.board_view()  # 3.9.5: How you study, all decks, its line or its view
+    except Exception:
+        traceback.print_exc()
     return out
 
 
@@ -617,19 +622,6 @@ def _fsrs(col):
 MY_EXAM = "~exam"  # my own exam date, among a plan's events
 
 
-def _has_bank(col, deck):
-    """3.9.3: a card of the deck has a question bank's tag (a tag whose last
-    part is 3 to 9 digits, the numbers QBank QIDs finds: planner.qids).
-    A tag ends at a space (Anki keeps a note's tags between spaces)."""
-    pats = " OR ".join(f"(n.tags || ' ') GLOB '*::{'[0-9]' * k} *'" for k in range(3, 10))
-    try:
-        return bool(col.db.scalar(f"SELECT 1 FROM cards c JOIN notes n ON n.id = c.nid "
-                                  f"WHERE c.id IN ({deck}) AND ({pats}) LIMIT 1"))
-    except Exception:
-        traceback.print_exc()
-        return False
-
-
 def _work_out(did, pid=None, exam=""):
     col = mw.col
     if not col or not col.decks.get(did, default=False):
@@ -652,7 +644,6 @@ def _work_out(did, pid=None, exam=""):
     since = lambda days: (cutoff - days * 86400) * 1000  # noqa: E731
     out = {"target": int(round(100 * target)), "did": did, "deck_name": str(col.decks.name(did) or "").split("::")[-1],
            "fsrs_on": bool(_fsrs(col))}  # 3.9.2's audit: Anki aims for a retention only with FSRS on
-    out["bank"] = _has_bank(col, deck)  # 3.9.3: QBank QIDs' line, for a deck with a bank's question tags
 
     # the header: right on this deck's reviews, first answer of each card each day
     # 3.9.2: split by the cards I started in these two weeks, when the mix shifted (T.right_split)
@@ -730,6 +721,7 @@ def _work_out(did, pid=None, exam=""):
     # 3.8.0, the topic map: what I know now, by topic
     try:
         out["map"], out["map_by"], out["_map_know"], out["map_ways"] = _map(col, did, deck, cutoff)
+        out["_map_missed"] = _missed(col, deck, cutoff) if out["map"] else set()  # 3.9.5: the map's Study
         _map_week(out, did, today)
     except Exception:
         traceback.print_exc()
@@ -855,6 +847,16 @@ def _know(col, deck, cutoff):
             out.update({int(c): 1.0 if int(e) > 1 else 0.0
                         for c, e in col.db.all(f"SELECT cid, ease FROM revlog WHERE id IN ({_in(pick)})")})
     return out, ("right" if out else "")
+
+
+def _missed(col, deck, cutoff):
+    """3.9.5 (Study where the cards are): {cid} the map's Study takes: the
+    deck's cards I answered Again in a review in the window its % covers
+    (KNOW_DAYS), still in the deck and not suspended (a leech Anki set aside
+    stays out)."""
+    return {int(c) for c in col.db.list(
+        f"SELECT DISTINCT r.cid FROM revlog r JOIN cards c ON c.id = r.cid WHERE r.id >= ? AND r.type = 1 AND r.ease = 1 "
+        f"AND c.queue != -1 AND r.cid IN ({deck})", (int(cutoff) - KNOW_DAYS * 86400) * 1000)}
 
 
 def _tag_plans(col, did):
@@ -1066,6 +1068,27 @@ def browse_map(did):
         _plans_flow()._browse(_find_cids(mw.col, did, trail[-1].get("find")), empty="Nothing to show.")
 
 
+def deck_map(did):
+    """3.9.5, QBank QIDs' topics: (tiles, missed) of a deck's map, its top
+    level, as Insights draws it: Insights' own while it's fresh, else the
+    map alone (_map: the same split, the way I picked for it). Main thread."""
+    did = int(did)
+    have = (_state.get("insights") or {}).get(did)
+    view = have["view"] if have and time.time() - have["at"] < INSIGHTS_FRESH else {}
+    if "_map_missed" in view:
+        return view.get("map") or [], view["_map_missed"]
+    col = mw.col
+    if not col or not col.decks.get(did, default=False):
+        return [], set()
+    try:
+        deck, cutoff = _deck_sql(col, did), int(col.sched.day_cutoff)
+        tiles = _map(col, did, deck, cutoff)[0]
+        return tiles, (_missed(col, deck, cutoff) if tiles else set())
+    except Exception:
+        traceback.print_exc()
+        return [], set()
+
+
 def _pick(did, key):
     """(cids, title) of the exam box ("h") or a topic's row, as Insights shows them."""
     view = ((_state.get("insights") or {}).get(did) or {}).get("view") or {}
@@ -1086,19 +1109,88 @@ def _pick(did, key):
     return cids, title
 
 
+def dated(did):
+    """3.9.5 (Sam's FSRS rule): Insights' Study only before a date: my exam,
+    or a plan's event, in the exam box; else its cards Browse (reviews ahead
+    of their date with no date to aim at are FSRS's to schedule)."""
+    view = ((_state.get("insights") or {}).get(did) or {}).get("view") or {}
+    return bool((view.get("aim") or {}).get("name"))
+
+
+def exam_deck(did):
+    """3.9.5, the exam box's Study: (cids, title, aim) of the
+    exam box's cards, and with my own exam, Slow but right's in the deck
+    that Anki won't show before it (FSRS doesn't see answer time); None
+    without a date (dated) or cards."""
+    view = ((_state.get("insights") or {}).get(did) or {}).get("view") or {}
+    aim = view.get("aim") or {}
+    if not aim.get("name") or not mw.col:
+        return None
+    cids, title = _pick(did, "h")
+    cids = list(cids)
+    if aim.get("kind") == "exam":
+        have = set(cids)
+        cids += [c for c in _slow_before(mw.col, did, int(aim.get("in") or 0)) if c not in have]
+    return (cids, title, aim) if cids else None
+
+
+def _slow_before(col, did, k):
+    """Slow but right's cards in this deck (and its subdecks) that Anki has
+    due k days out or later: it won't show them before then."""
+    from . import habits_flow
+    slow = habits_flow.slow_now()
+    if not slow:
+        return []
+    try:
+        tree = ",".join(str(int(d)) for d in col.decks.deck_and_child_ids(int(did)))
+        ids = ",".join(str(int(c)) for c in slow[:2000])
+        return [int(c) for c in col.db.list(
+            f"SELECT id FROM cards WHERE id IN ({ids}) AND did IN ({tree}) AND queue = 2 AND due - ? >= ?",
+            int(col.sched.today), int(k))]
+    except Exception:
+        traceback.print_exc()
+        return []
+
+
+def _until(aim):
+    return str(aim.get("day") or "") or None
+
+
 def study(did, key):
-    """Anki's filtered deck of the exam box's cards ("h") or a topic's, and into it."""
-    cids, title = _pick(did, key)
-    if not cids or not mw.col:
+    """Anki's filtered deck of the exam box's cards ("h") or a topic's, and
+    into it; 3.9.5: only before a date (dated), else Browse."""
+    if not dated(did):
+        browse(did, key)
         return
+    aim = (((_state.get("insights") or {}).get(did) or {}).get("view") or {}).get("aim") or {}
+    if key == "h":
+        got = exam_deck(did)
+        if got:
+            study_deck(got[1], got[0], until=_until(aim))
+        return
+    cids, title = _pick(did, key)
+    study_deck(title, cids, until=_until(aim))
+
+
+def study_deck(title, cids, until=None):
+    """Due Crew's filtered deck of these cards, named after what they are
+    (Due Crew::Renal), the most missed first (plan_flow._filtered's order
+    4), rescheduled by my answers as every Due Crew deck is; then Anki's
+    Study screen on it. Insights' Study, the map's (3.9.5) and QBank QIDs'
+    topics' Study; until, the last day it's for (plan_flow._filtered).
+    True when it took. Main thread."""
+    if not cids or not mw.col:
+        return False
     pf = _plans_flow()
     name = pf._deck_name(title)
-    if pf._filtered(mw.col, name, cids):
-        pf._after_change()
-        fid = mw.col.decks.id_for_name(name)
-        if fid:
-            mw.col.decks.select(fid)
-            mw.moveToState("overview")
+    if not pf._filtered(mw.col, name, cids, until=until):
+        return False
+    pf._after_change()
+    fid = mw.col.decks.id_for_name(name)
+    if fid:
+        mw.col.decks.select(fid)
+        mw.moveToState("overview")
+    return True
 
 
 def browse(did, key):
@@ -1132,10 +1224,19 @@ def pick_deck(did):
     """Insights' picker: a deck of mine, remembered on this computer."""
     if not any(d["did"] == did for d in you_decks()):
         return
+    _habits_shut()  # 3.9.5: a deck picked is that deck's Insights, not How you study
     c = cfg()
     c["ins_deck"] = did
     save_cfg(c)
     app.swap(c)
+
+
+def _habits_shut():
+    try:
+        from . import habits_flow
+        habits_flow.shut()
+    except Exception:
+        traceback.print_exc()
 
 
 def go_insights(did):
@@ -1145,6 +1246,7 @@ def go_insights(did):
     c["due_tab"] = "insights"
     c["due_fold"] = {"day": _today(), "folded": False}
     (_state.get("leech_open") or {}).pop(int(did), None)  # 3.9.2's QoL pass: Insights itself, not a leeches view left open
+    _habits_shut()  # 3.9.5: nor How you study
     if "insights" in (c.get("hidden_tabs") or []):
         c["hidden_tabs"] = [k for k in c["hidden_tabs"] if k != "insights"]
     if mw.col and mw.col.decks.get(did, default=False):
@@ -1268,6 +1370,9 @@ def on_message(cmd, parts):
         elif cmd == "insaheadx":
             from . import ahead_flow
             ahead_flow.hide_line(did)
+        elif cmd == "inshabits":
+            from . import habits_flow
+            return habits_flow.on_message(x)  # 3.9.5: How you study (open, shut, see, slow)
         else:
             return False
         return True

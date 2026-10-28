@@ -23,15 +23,12 @@ const REPLIES_MAX = 50;      // a thread's replies
 const THREADS_PER_DAY = 10;  // one person's new questions to one plan, a day
 const TEAMS_PER_SYNC = 20;   // P.FOLLOWS_MAX
 const ACT_ON_BOARD = 20;
+const TEAMS_A_QUERY = 90;  // 3.9.5: plans.ts inChunks' margin under D1's 100
 const TEAM_MAX = P.TEAM_MAX;
 
-/** A team row whose member may still see the plan: an author, or a
- *  follower (of a squad's plan, while in the squad). Losing that ends what
- *  the team shows of them and to them, without a write. `t` is plan_team. */
-const STILL_IN = `(EXISTS (SELECT 1 FROM plans o WHERE o.id = t.plan AND o.owner = t.uid)
-  OR EXISTS (SELECT 1 FROM plan_editors e WHERE e.plan = t.plan AND e.uid = t.uid AND e.accepted_at IS NOT NULL)
-  OR EXISTS (SELECT 1 FROM plan_follows f JOIN plans fp ON fp.id = f.plan WHERE f.plan = t.plan AND f.uid = t.uid
-             AND (fp.audience != 'squad' OR fp.squad IN (SELECT squad FROM members WHERE uid = t.uid))))`;
+/** A team row whose member may still see the plan (plans.ts, since 3.9.5 also
+ *  whose progress counts). `t` is plan_team. */
+const STILL_IN = P.STILL_IN;
 
 type Obj = Record<string, unknown>;
 type Member = { uid: string; days: string | null; play: string | null; joined_at: number; name: string | null;
@@ -298,18 +295,28 @@ export async function forBoard(env: Env, uid: string) {
   const mine = (await env.DB.prepare(`SELECT t.plan FROM plan_team t WHERE t.uid = ? AND ${STILL_IN}`)
     .bind(uid).all<{ plan: string }>()).results.map((r) => r.plan);
   if (!mine.length) return undefined;
-  const qs = mine.map(() => "?").join(",");
-  const [mem, acts] = await env.DB.batch<any>([
-    env.DB.prepare(
-      `SELECT t.plan, t.uid, t.last_day, u.emoji, u.tz, u.rollover FROM plan_team t
-         JOIN users u ON u.uid = t.uid WHERE t.plan IN (${qs}) AND ${STILL_IN}`).bind(...mine),
-    env.DB.prepare(
-      `SELECT plan, uid, act, act_by, text, name FROM (
-         SELECT a.plan, a.uid, a.act, a.act_by, a.text, u.name,
-                ROW_NUMBER() OVER (PARTITION BY a.plan ORDER BY a.act DESC, a.id DESC) AS k
-           FROM plan_asks a LEFT JOIN users u ON u.uid = a.uid WHERE a.plan IN (${qs}) AND a.parent IS NULL)
-        WHERE k <= ${ACT_ON_BOARD} ORDER BY act DESC`).bind(...mine),
-  ]);
+  // 3.9.5 (the audit's A1): D1 binds at most 100 a statement, and co-writing has no ceiling
+  // of its own, so the plans go 90 at a time; each plan's rows are its own, so nothing else changes
+  // (the second review: every part in one batch, one round trip however many)
+  const stmts: D1PreparedStatement[] = [];
+  for (let i = 0; i < mine.length; i += TEAMS_A_QUERY) {
+    const part = mine.slice(i, i + TEAMS_A_QUERY);
+    const qs = part.map(() => "?").join(",");
+    stmts.push(
+      env.DB.prepare(
+        `SELECT t.plan, t.uid, t.last_day, u.emoji, u.tz, u.rollover FROM plan_team t
+           JOIN users u ON u.uid = t.uid WHERE t.plan IN (${qs}) AND ${STILL_IN}`).bind(...part),
+      env.DB.prepare(
+        `SELECT plan, uid, act, act_by, text, name FROM (
+           SELECT a.plan, a.uid, a.act, a.act_by, a.text, u.name,
+                  ROW_NUMBER() OVER (PARTITION BY a.plan ORDER BY a.act DESC, a.id DESC) AS k
+             FROM plan_asks a LEFT JOIN users u ON u.uid = a.uid WHERE a.plan IN (${qs}) AND a.parent IS NULL)
+          WHERE k <= ${ACT_ON_BOARD} ORDER BY act DESC`).bind(...part),
+    );
+  }
+  const got = stmts.length ? await env.DB.batch<any>(stmts) : [];
+  const mem = { results: got.filter((_r, k) => k % 2 === 0).flatMap((r) => r.results) };
+  const acts = { results: got.filter((_r, k) => k % 2 === 1).flatMap((r) => r.results) };
   const muted = await mutedOf(env, uid);
   const now = nowSec();
   const out: Record<string, Obj> = {};

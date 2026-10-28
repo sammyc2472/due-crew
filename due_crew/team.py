@@ -439,7 +439,7 @@ def plan_tiles(held, know, active):
             continue
         n_st, pct = _shade(play, know)
         tiles.append({"key": path, "name": str(name)[:NAME_MAX], "n": len(play), "started": n_st, "know": pct,
-                      "find": {"tags": [path]}})
+                      "find": {"tags": [path]}, "_cids": play})
     tiles.sort(key=lambda t: (-t["n"], t["name"].lower()))
     return tiles, none
 
@@ -687,6 +687,27 @@ def map_level(tiles, at, know=None):
 def map_shade(know):
     """A tile's shade: 3 at 90% and up, 2 from 80, 1 from 70, 0 under."""
     return 3 if know >= 90 else 2 if know >= 80 else 1 if know >= 70 else 0
+
+
+# 3.9.5 (Study where the cards are): a part's missed cards, for QBank QIDs' topics and today's misses
+
+
+def tile_cards(t):
+    """A tile's cards in play, the ones its % is over: a part's, a plan
+    tag's, a week's I started, or the ones not started yet."""
+    return t.get("_cids") or t.get("_batch") or (t.get("find") or {}).get("cids") or ()
+
+
+def missed_in(t, missed):
+    """The tile's cards I missed, sorted. missed: the map's (team_flow._missed:
+    Again in a review these 4 weeks, in the deck, not suspended)."""
+    missed = missed if isinstance(missed, (set, frozenset, dict)) else set(missed or ())
+    return sorted(c for c in tile_cards(t) if c in missed)
+
+
+def study_missed(n):
+    """The map's Study, in words: "Study the 41 you missed"."""
+    return "Study the one you missed" if n == 1 else f"Study the {n:,} you missed"
 
 
 def fsrs_gap(right, n, target):

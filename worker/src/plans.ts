@@ -607,6 +607,36 @@ export const OWN_PACE = ["ready", "next"];
  *  team, my progress counts go to its authors; off it, they don't. */
 export const TEAM_MAX = 500;        // members of one plan's team
 
+/** A team row whose member may still see the plan: an author, or a
+ *  follower (of a squad's plan, while in the squad). Losing that ends what
+ *  the team shows of them and to them, without a write. `t` is plan_team.
+ *  3.9.5 (the audit's S2): and whose progress counts (COUNTED), by the same rule. */
+export const STILL_IN = `(EXISTS (SELECT 1 FROM plans o WHERE o.id = t.plan AND o.owner = t.uid)
+  OR EXISTS (SELECT 1 FROM plan_editors e WHERE e.plan = t.plan AND e.uid = t.uid AND e.accepted_at IS NOT NULL)
+  OR EXISTS (SELECT 1 FROM plan_follows f JOIN plans fp ON fp.id = f.plan WHERE f.plan = t.plan AND f.uid = t.uid
+             AND (fp.audience != 'squad' OR fp.squad IN (SELECT squad FROM members WHERE uid = t.uid))))`;
+
+/** 3.9.5 (the audit's S1, S2): whose progress the counts are made of, for
+ *  the authors' Progress and the followers' crew counts alike: a follow
+ *  sharing (on the team, 3.7.6) whose follower may still see the plan.
+ *  `f` is plan_follows, LEFT JOINed to its team row `t` (WITH_TEAM). */
+const WITH_TEAM = "plan_follows f LEFT JOIN plan_team t ON t.plan = f.plan AND t.uid = f.uid";
+const COUNTED = `f.share = 1 AND t.uid IS NOT NULL AND ${STILL_IN}`;
+/** A date's counts show from this many in the squad, on the server too
+ *  (the site's Progress has said so since 3.6): fewer, and a count is a person.
+ *  Who's in it toward the three (IN_SQUAD, `t` a plan_team row): a follower
+ *  whose progress counts, and (Sam, 3.9.5: "count the author too if they're
+ *  on the team") an author or co-author on the team, whose own progress
+ *  isn't in the counts unless they follow it too. Once each. */
+export const COUNTS_MIN = 3;
+/** 3.9.5 (Sam's pick, after the second review): and whoever reads a date's
+ *  counts, an author or a follower, finds two people's progress in them
+ *  besides their own, so taking mine away never leaves one person's. */
+export const BESIDES_MIN = 2;
+const IN_SQUAD = `${STILL_IN} AND (EXISTS (SELECT 1 FROM plans o WHERE o.id = t.plan AND o.owner = t.uid)
+  OR EXISTS (SELECT 1 FROM plan_editors e WHERE e.plan = t.plan AND e.uid = t.uid AND e.accepted_at IS NOT NULL)
+  OR EXISTS (SELECT 1 FROM plan_follows c WHERE c.plan = t.plan AND c.uid = t.uid AND c.share = 1 AND c.progress IS NOT NULL))`;
+
 /** Put me on a plan's team (sharing), or false when it's full. */
 export async function joinTeam(env: Env, plan: string, uid: string): Promise<boolean> {
   const on = await env.DB.prepare("SELECT 1 FROM plan_team WHERE plan = ? AND uid = ?").bind(plan, uid).first();
@@ -627,6 +657,7 @@ export async function leaveTeam(env: Env, plan: string, uid: string): Promise<vo
   await env.DB.batch([
     env.DB.prepare("DELETE FROM plan_team WHERE plan = ? AND uid = ?").bind(plan, uid),
     env.DB.prepare("UPDATE plan_follows SET share = 0, team_ask = 0 WHERE plan = ? AND uid = ? AND (share != 0 OR team_ask != 0)").bind(plan, uid),
+    recount(env, plan),  // 3.9.5: out of the counts now, not in an hour
   ]);
 }
 
@@ -737,8 +768,16 @@ const editorsOf = (env: Env, ids: string[]) => inChunks(ids, (part) => env.DB.pr
 /** A plan's totals (migration 0025), as its readers show them: `n` follow
  *  it, `m` of them not its owner, `r` of those have version `v` in their
  *  Anki (3.7.3), and `done` per date, how many on its team have every card
- *  of it seen. Counts, never who. */
-export type Totals = { v: number; n: number; m: number; r: number; done: Record<string, number> };
+ *  of it seen. Counts, never who. 3.9.5: `s` in its squad toward the three
+ *  (IN_SQUAD), `c` whose progress the counts are made of (COUNTED, with some). */
+export type Totals = { v: number; n: number; m: number; r: number; done: Record<string, number>; s: number; c: number };
+
+/** 3.9.5 (the audit's S2): a plan's kept totals are counted again at the next
+ *  read, when someone's place in its counts ended (left the team, unfollowed,
+ *  a co-author removed). Squads (squads.ts, adminsquads.ts) and deleting an
+ *  account (auth.ts) say it for the plans they touch. Writes only a row that holds totals. */
+export const recount = (env: Env, plan: string) =>
+  env.DB.prepare("UPDATE plans SET totals_at = NULL WHERE id = ? AND totals_at IS NOT NULL").bind(plan);
 type Counted = { id: string; version: number; owner: string | null; totals?: string | null; totals_at?: number | null };
 
 /** One total per plan, kept on its row: a board, a plan's page, my list of
@@ -756,16 +795,19 @@ export async function totals(env: Env, plans: Counted[]): Promise<Map<string, To
     let t: Totals | null = null;
     if (p.totals && (p.totals_at ?? 0) > now - TOTALS_EVERY) {
       try { t = JSON.parse(p.totals) as Totals; } catch { t = null; }
+      if (t && typeof t.c !== "number") t = null;  // 3.9.5: kept before COUNTED; count again
     }
     if (t) out.set(p.id, t.v === p.version ? t : { ...t, v: p.version, r: 0 });
     else if (!out.has(p.id) && !stale.some((x) => x.id === p.id)) stale.push(p);
   }
   if (!stale.length) return out;
-  const fresh = new Map<string, Totals>(stale.map((p) => [p.id, { v: p.version, n: 0, m: 0, r: 0, done: {} }]));
+  const fresh = new Map<string, Totals>(stale.map((p) => [p.id, { v: p.version, n: 0, m: 0, r: 0, done: {}, s: 0, c: 0 }]));
   const owners = new Map(stale.map((p) => [p.id, p.owner ?? ""]));
+  // 3.9.5 (the audit's E2): progress only for the follows that count; nobody else's is read to be skipped
   const rows = await inChunks(stale.map((p) => p.id), (part) => env.DB.prepare(
-    `SELECT plan, uid, share, progress, seen_version FROM plan_follows WHERE plan IN (${part.map(() => "?").join(",")})`,
-  ).bind(...part).all<{ plan: string; uid: string; share: number; progress: string | null; seen_version: number | null }>());
+    `SELECT f.plan, f.uid, f.seen_version, CASE WHEN ${COUNTED} THEN f.progress END AS progress
+       FROM ${WITH_TEAM} WHERE f.plan IN (${part.map(() => "?").join(",")})`,
+  ).bind(...part).all<{ plan: string; uid: string; progress: string | null; seen_version: number | null }>());
   for (const r of rows.results) {
     const t = fresh.get(r.plan)!;
     t.n++;
@@ -773,12 +815,19 @@ export async function totals(env: Env, plans: Counted[]): Promise<Map<string, To
       t.m++;
       if (r.seen_version === t.v) t.r++;
     }
-    if (r.share === 1 && r.progress) {
+    if (r.progress) {
+      t.c++;
       for (const [u, [, seen, total]] of Object.entries(JSON.parse(r.progress) as Record<string, number[]>)) {
         if (total > 0 && seen >= total) t.done[u] = (t.done[u] ?? 0) + 1;
       }
     }
   }
+  const squads = await inChunks(stale.map((p) => p.id), (part) => env.DB.prepare(
+    `SELECT t.plan, COUNT(*) AS n FROM plan_team t WHERE t.plan IN (${part.map(() => "?").join(",")}) AND ${IN_SQUAD} GROUP BY t.plan`,
+  ).bind(...part).all<{ plan: string; n: number }>());
+  for (const q of squads.results) fresh.get(q.plan)!.s = q.n;
+  // 3.9.5 (S1): under three in the squad, or with nobody's counts from two besides their own, no date's count
+  for (const t of fresh.values()) if (t.s < COUNTS_MIN || t.c < BESIDES_MIN) t.done = {};
   // Kept with its time, once an hour at most per plan: the time has to move
   // even when the counts didn't, or every read would count again. Only the
   // stale row is written (two readers at once write it once), and a plan no
@@ -1031,10 +1080,13 @@ export async function put(req: Request, s: Session, env: Env, [id]: string[]): P
   const listed = next.audience === "squad" && p.listed === 1 ? 0 : (p.listed ?? 0);
   const lib = listed === 1 && next.doc !== p.doc ? JSON.stringify(libCard(JSON.parse(next.doc))) : (p.lib ?? null);
   if (next.doc !== p.doc) await roomForSave(env, p, next.doc, lib);  // 3.7.2
+  // another audience or squad changes who may see it, so its kept totals are counted again (3.9.5, S2)
+  const moved = next.audience !== p.audience || (next.squad ?? null) !== (p.squad ?? null) ? 1 : 0;
   const r = await env.DB.prepare(
-    `UPDATE plans SET name = ?, line = ?, audience = ?, squad = ?, doc = ?, listed = ?, lib = ?, tagroot = ?, version = version + 1, updated_at = ?
+    `UPDATE plans SET name = ?, line = ?, audience = ?, squad = ?, doc = ?, listed = ?, lib = ?, tagroot = ?, version = version + 1, updated_at = ?,
+            totals_at = CASE WHEN ? = 1 THEN NULL ELSE totals_at END
      WHERE id = ? AND version = ?`,
-  ).bind(next.name, next.line, next.audience, next.squad, next.doc, listed, lib, next.tagroot, nowSec(), id, body.version).run().catch(rootTaken);
+  ).bind(next.name, next.line, next.audience, next.squad, next.doc, listed, lib, next.tagroot, nowSec(), moved, id, body.version).run().catch(rootTaken);
   if (!r.meta.changes) throw new HttpError(409, "stale", { version: (await getPlan(env, id)).version });
   await logSave(env, id, (body.version as number) + 1, s.uid, summary || "changed the plan", next.doc !== p.doc ? p.doc : null);
   const posted = body.post !== undefined ? await postWithSave(env, p, s.uid, body.post, (body.version as number) + 1) : undefined;
@@ -1207,6 +1259,7 @@ export async function removeEditor(s: Session, env: Env, [id, uid]: string[]): P
   await env.DB.batch([
     env.DB.prepare("DELETE FROM plan_editors WHERE plan = ? AND uid = ?").bind(id, uid),
     env.DB.prepare("UPDATE plans SET handover = NULL WHERE id = ? AND handover = ?").bind(id, uid),
+    recount(env, id),  // 3.9.5: a squad's plan may be out of their sight now
   ]);
   return json({ ok: true });
 }
@@ -1756,6 +1809,7 @@ export async function unfollow(s: Session, env: Env, [id]: string[]): Promise<Re
   await env.DB.batch([
     env.DB.prepare("DELETE FROM plan_follows WHERE plan = ? AND uid = ?").bind(id, s.uid),
     env.DB.prepare("DELETE FROM plan_team WHERE plan = ? AND uid = ?").bind(id, s.uid),  // 3.7.3: off its team too
+    recount(env, id),  // 3.9.5
   ]);
   return json({ ok: true });
 }
@@ -1845,8 +1899,10 @@ export async function progressWrites(env: Env, uid: string, part: ReturnType<typ
   if (!ids.length) return [];
   const rows = await env.DB.prepare(
     // 3.7.6: kept whether or not I share, for my own views (the site's home, my log);
-    // only the team's progress reaches the authors' and the crew's counts
-    `SELECT plan, progress, hist FROM plan_follows WHERE uid = ? AND plan IN (${ids.map(() => "?").join(",")})`,
+    // only the team's progress reaches the authors' and the crew's counts.
+    // 3.9.5 (the audit's S2): and only for a plan I may still see; a squad's, once I've left it, is skipped
+    `SELECT f.plan, f.progress, f.hist FROM plan_follows f JOIN plans p ON p.id = f.plan
+      WHERE f.uid = ?1 AND ${SEES("p")} AND f.plan IN (${ids.map(() => "?").join(",")})`,
   ).bind(uid, ...ids).all<{ plan: string; progress: string | null; hist: string | null }>();
   return rows.results
     .map((r) => ({ r, doc: JSON.stringify(part[r.plan]) }))
@@ -1855,13 +1911,29 @@ export async function progressWrites(env: Env, uid: string, part: ReturnType<typ
       .bind(doc, histNext(r.hist, part[r.plan], today), r.plan, uid));
 }
 
+/** 3.9.5: a follower's crew counts show when the squad has three and the
+ *  counts hold two people's progress besides mine (mine is in them when I share). */
+const crewShown = (t: Totals | undefined, sharing: boolean) =>
+  !!t && t.s >= COUNTS_MIN && t.c - (sharing ? 1 : 0) >= BESIDES_MIN;
+
 /** GET /plans/{id}/progress: for its authors, per unit, how many followers
- *  (among those sharing) have it opened and done. Counts, never names. */
+ *  (among those sharing) have it opened and done. Counts, never names.
+ *  3.9.5 (the audit's S1, S2): only the follows that count (COUNTED), and no
+ *  date's counts under COUNTS_MIN in the squad: `sharing` says how many
+ *  followers' progress the counts hold, `inSquad` how many are in it toward the three,
+ *  `others` how many of those followers aren't me; none under BESIDES_MIN. */
 export async function progress(s: Session, env: Env, [id]: string[]): Promise<Response> {
   const p = await authorOnly(env, id, s);
-  const rows = await env.DB.prepare("SELECT progress FROM plan_follows WHERE plan = ? AND share = 1 AND progress IS NOT NULL")
-    .bind(id).all<{ progress: string }>();
+  const rows = await env.DB.prepare(`SELECT f.uid, f.progress FROM ${WITH_TEAM} WHERE f.plan = ? AND f.progress IS NOT NULL AND ${COUNTED}`)
+    .bind(id).all<{ uid: string; progress: string }>();
   const units: Record<string, { opened: number; done: number }> = {};
+  const [followers, inSquad] = await env.DB.batch<{ n: number }>([
+    env.DB.prepare("SELECT COUNT(*) AS n FROM plan_follows WHERE plan = ?").bind(id),
+    env.DB.prepare(`SELECT COUNT(*) AS n FROM plan_team t WHERE t.plan = ? AND ${IN_SQUAD}`).bind(id),
+  ]);
+  const head = { followers: followers.results[0]?.n ?? 0, sharing: rows.results.length, inSquad: inSquad.results[0]?.n ?? 0,
+    others: rows.results.filter((r) => r.uid !== s.uid).length };
+  if (head.inSquad < COUNTS_MIN || head.others < BESIDES_MIN) return json({ ...head, units });
   for (const u of (JSON.parse(p.doc).units as Obj[])) units[u.id as string] = { opened: 0, done: 0 };
   for (const r of rows.results) {
     for (const [uid, [opened, seen, total]] of Object.entries(JSON.parse(r.progress) as Record<string, number[]>)) {
@@ -1870,8 +1942,7 @@ export async function progress(s: Session, env: Env, [id]: string[]): Promise<Re
       if (total > 0 && seen >= total) units[uid].done++;
     }
   }
-  const followers = await env.DB.prepare("SELECT COUNT(*) AS n FROM plan_follows WHERE plan = ?").bind(id).first<number>("n");
-  return json({ followers: followers ?? 0, sharing: rows.results.length, units });
+  return json({ ...head, units });
 }
 
 // ---- the board ----
@@ -1973,7 +2044,10 @@ export async function forBoard(env: Env, uid: string, same = false) {
     plans: mineRows.results.map((r) => ({ id: r.id, name: r.name, owner: r.owner, ownerName: r.owner_name || (r.owner ? "?" : "a former member"),
       version: r.version, ...(same ? { same: true } : { doc: JSON.parse(r.doc) }), share: r.share === 1, ...(r.team_ask === 1 ? { teamAsk: true } : {}), paused: r.paused === 1,
       sched: r.sched ? JSON.parse(r.sched) : null, early: r.early ?? 0, ...followDays(r),
-      followers: crew.get(r.id)?.n ?? 0, crewDone: crew.get(r.id)?.done ?? {}, posts: posts.get(r.id) ?? [] })),
+      // 3.9.5 (S1): a crew's counts only from COUNTS_MIN in the squad, and from BESIDES_MIN besides me
+      // (sharing, I'm taken as in them); else none at all (an older add-on reads 0)
+      followers: crew.get(r.id)?.n ?? 0, ...(crewShown(crew.get(r.id), r.share === 1) ? { crewDone: crew.get(r.id)!.done } : {}),
+      posts: posts.get(r.id) ?? [] })),
     planOffers: offers.results.map((r) => ({ id: r.id, name: r.name, code: r.code, squad: r.squad, ownerName: r.owner_name || (r.owner ? "?" : "a former member") })),
     planInvites: await planInvites(env, uid),  // 3.8.1
   };

@@ -691,3 +691,16 @@ def study_next(plan_decks, due_now):
     if rest:
         return ("deck", max(rest, key=lambda x: (x[0], -int(x[1])))[1])
     return None
+
+
+# ---- 3.9.5 (Five mocks, reviewed): today's misses ----
+
+def misses_text(m):
+    """Today's misses under a done Reviews row: "214 reviews, 23 missed", or
+    None. m: {n, reviews} from due_flow. 3.9.5 (Sam's FSRS rule): a line,
+    not a deck: Anki's relearning steps bring a miss back, and FSRS sets
+    the next look."""
+    n = int((m or {}).get("n") or 0)
+    if n <= 0:
+        return None
+    return f'{int(m.get("reviews") or 0):,} reviews, {n:,} missed' if m.get("reviews") else f"{n:,} missed"

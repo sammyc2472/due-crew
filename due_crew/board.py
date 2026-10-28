@@ -24,6 +24,7 @@ from datetime import date as _date, datetime, timezone
 
 from .logo import board_mark
 from . import room_model
+from . import due as _D
 from . import closet as _closet, emoji_drawer as _emoji_drawer, fridge as _fridge, sev as _sev, shows as _shows
 from .backend.shapes import DOODLE_INKS, clean_doodle
 from .stats.decks import sig_match
@@ -1875,7 +1876,9 @@ def _plan_now(card, pid):
         when = (f'<b>{e(str(ins["name"]))}</b> on {wd} {dn}' if ins.get("name") else f"{wd} {dn}")
         out += (f'<div class="pn"><span><a class="tp" href="#" title="Browse them" onclick="{_pycmd(f"insbrowse:{did}:h")}">'
                 f'{n:,} card{"s" if n != 1 else ""}</a> Anki won&rsquo;t show you before {when}</span>'
-                f'<span class="acts"><a href="#" onclick="{_pycmd(f"insstudy:{did}:h")}">Study {n:,}</a></span></div>')
+                # 3.9.5 (Sam's FSRS rule): a deck only before a date
+                + (f'<span class="acts"><a href="#" onclick="{_pycmd(f"insstudy:{did}:h")}">Study {n:,}</a></span>'
+                   if ins.get("name") else "") + '</div>')
     return out
 
 
@@ -2151,12 +2154,195 @@ def _you_insights(ins):
     said = f"Exam {x:%a} {x.day} {x:%b}" if x else "Add exam date"
     off = (f' <a class="q" href="#" title="Take your exam date off" aria-label="Take your exam date off" '
            f'onclick="{_pycmd("setexam:off")}">&times;</a>' if x else "")
+    # 3.9.5 (Sam: "removing an exam date and then clicking add exam date makes anki quit"): the day is
+    # picked in a Qt calendar (exampick), not the page's own date picker, which the board's redraw on its
+    # change could pull out from under itself
     ctx = (f'<span class="iexam" title="Your exam date. Your crew sees it for the two weeks before.">'
-           f'<a href="#" onclick="var i=this.nextElementSibling;try{{i.showPicker();}}catch(x){{i.classList.remove(\'ixd\');i.focus();}}return false;">{said}</a>'
-           f'<input class="ixd" type="date" value="{e(ex)}" aria-label="Exam date" '
-           f'onchange="pycmd(\'duecrew:setexam:\'+(this.value||\'off\')+\'|\'+window.dcBK);">{off}</span>')
+           f'<a href="#" onclick="{_pycmd("exampick")}">{said}</a>{off}</span>')
     head = f'<div class="ihead">{pick}<span class="ictx">{ctx}</span></div>'
-    return head + _insights_html(did, ins.get("view") or {})
+    # 3.9.5: How you study (all decks): its view in Insights' place, or its line atop Insights
+    hv = ins.get("habits") if isinstance(ins.get("habits"), dict) else None
+    if hv and hv.get("open"):
+        return head + _habits_html(did, hv)
+    view = ins.get("view") or {}
+    line = _habits_line(did, hv) if hv and not isinstance(view.get("leech"), dict) else ""
+    return head + line + _insights_html(did, view)
+
+
+# ---- 3.9.5: How you study (habits.py, habits_flow.py): mine alone, never sent ----
+
+HABITS_CSS = """
+    #due-crew .hs-in { display: flex; gap: 4px 10px; flex-wrap: wrap; align-items: baseline; text-align: left; font-size: 12px;
+      color: var(--dc-muted); padding: 2px 0 10px; }
+    #due-crew .hs-in a { color: var(--dc-accent); font-weight: 700; text-decoration: none; }
+    #due-crew .hs-in b { color: var(--dc-ink); }
+    #due-crew .dc-hv { text-align: left; }
+    #due-crew .hv-h { display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: baseline; text-align: left; margin: 0 0 8px; }
+    #due-crew .hv-h a { color: var(--dc-accent); font-weight: 700; text-decoration: none; font-size: 12px; }
+    #due-crew .hv-h b { font-size: 13.5px; color: var(--dc-ink); }
+    #due-crew .hv-h .r { margin-left: auto; font-size: 11.5px; color: var(--dc-muted); }
+    #due-crew .hv-h .r b { font-size: 11.5px; }
+    #due-crew .ht { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; text-align: left; margin: 2px 0 6px; }
+    #due-crew .ht > div { background: var(--dc-well); border-radius: 10px; padding: 10px 12px 9px; display: grid; gap: 7px;
+      align-content: start; min-width: 0; }
+    #due-crew .ht > div:only-child { max-width: 300px; }
+    #due-crew .ht .big { font-size: 24px; font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; color: var(--dc-ink); }
+    #due-crew .ht .big small { display: block; font-size: 12px; font-weight: 600; color: var(--dc-muted); margin-top: 3px; line-height: 1.25; }
+    #due-crew .ht a.go { justify-self: start; color: var(--dc-accent); font-weight: 700; font-size: 12px; text-decoration: none; }
+    #due-crew .ht .hs-cap { font-size: 11px; color: var(--dc-muted); margin-top: -4px; }
+    #due-crew .ht svg { width: 100%; max-width: 210px; height: auto; display: block; overflow: visible; }
+    #due-crew .ht .t-tint { fill: color-mix(in srgb, var(--dc-accent) 34%, var(--dc-well)); }
+    #due-crew .ht .t-on { fill: var(--dc-accent); }
+    #due-crew .ht .t-lab { fill: var(--dc-muted); font-size: 9px; }
+    #due-crew .ht .t-val { fill: var(--dc-ink); font-size: 9.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    #due-crew .ht .t-base { stroke: var(--dc-faded); stroke-width: 1; }
+    #due-crew .ht .t-grid { stroke: var(--dc-line); stroke-width: 1; }
+    #due-crew .ht .t-mark { stroke: var(--dc-muted); stroke-width: 1; stroke-dasharray: 2 2; }
+    #due-crew .ht .t-line { stroke: var(--dc-accent); stroke-width: 2; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+    #due-crew .ht .t-dot { fill: var(--dc-accent); stroke: var(--dc-well); stroke-width: 2; }
+    #due-crew .hs-more { font-size: 11.5px; color: var(--dc-muted); text-align: left; }
+"""
+
+
+def _hs_pts(x):
+    return int(round(100 * float(x)))
+
+
+def _hs_day(iso):
+    try:
+        d = _dt.date.fromisoformat(str(iso))
+    except ValueError:
+        return ""
+    return f"{d.day} {d:%b}"
+
+
+def _habits_line(did, h):
+    """Atop Insights' main view: the way to How you study, and the week's win."""
+    n = int((h.get("matured") or {}).get("n") or 0)
+    return (f'<style>{HABITS_CSS}</style><div class="hs-in"><a href="#" onclick="{_pycmd(f"inshabits:{int(did)}:open")}">'
+            f'How you study &rsaquo;</a><span><b>{n:,}</b> matured this week</span></div>')
+
+
+def _hs_matured_svg(m):
+    """The win's bars: cards matured each of the last 8 weeks, this week solid."""
+    vals = [max(0, int(x)) for x in (m.get("weeks") or [])][-8:]
+    froms = list(m.get("from") or [])[-8:]
+    if len(vals) < 2:
+        return ""
+    froms += [""] * (len(vals) - len(froms))
+    top, w, gap, h0 = max(vals) or 1, 16, 4, 40
+    s = '<svg viewBox="0 0 160 52" role="img" aria-label="Cards matured, each of the last 8 weeks">'
+    for i, v in enumerate(vals):
+        hh = v / top * 34
+        last = i == len(vals) - 1
+        when = "This week" if last else f"Week of {_hs_day(froms[i])}"
+        s += (f'<rect class="{"t-on" if last else "t-tint"}" x="{2 + i * (w + gap)}" y="{h0 - hh:.1f}" width="{w}" '
+              f'height="{hh:.1f}" rx="2"><title>{when}: {v:,} matured</title></rect>')
+    return (s + f'<line class="t-base" x1="0" x2="160" y1="{h0}" y2="{h0}"/>'
+            '<text class="t-lab" x="2" y="51">8 weeks ago</text><text class="t-lab" x="158" y="51" text-anchor="end">now</text></svg>')
+
+
+def _hs_two_svg(quick, slow, said):
+    """Missed next time: the quicker right answers, then the slow ones (solid);
+    said: the matched gap and its range, in each bar's tip."""
+    vals, labs = (quick, slow), ("quick", "slow")
+    names = ("Quicker right answers", "Slow right answers")
+    top, h0 = max(max(vals), 1), 42
+    s = '<svg viewBox="0 0 160 56" role="img" aria-label="Missed next time: slow right answers against the rest">'
+    for i, v in enumerate(vals):
+        x, hh = 30 + i * 64, v / top * 30
+        tip = f"{names[i]}: {v}% missed next time" + (f"\n{said}" if said else "")
+        s += (f'<rect class="{"t-on" if i else "t-tint"}" x="{x}" y="{h0 - hh:.1f}" width="36" height="{hh:.1f}" rx="3">'
+              f'<title>{tip}</title></rect>'
+              f'<text class="t-val" x="{x + 18}" y="{h0 - hh - 3:.1f}" text-anchor="middle">{v}%</text>'
+              f'<text class="t-lab" x="{x + 18}" y="53" text-anchor="middle">{labs[i]}</text>')
+    return s + f'<line class="t-base" x1="14" x2="146" y1="{h0}" y2="{h0}"/></svg>'
+
+
+def _hs_sit_svg(curve, at):
+    """Right % by minutes into a sitting, a point a band (0-15 … 90+), the
+    `at` minutes marked; the axis from just under the lowest to just over."""
+    import math
+    pts = []
+    for i, c in enumerate(curve[:6]):
+        if c[2] is not None:
+            pts.append((i, float(c[2]), c))
+    if len(pts) < 2:
+        return ""
+    vs = [v for _i, v, _c in pts]
+    lo, hi = math.floor(min(vs) - 2), math.ceil(max(vs) + 2)
+    if hi - lo < 10:
+        mid = (hi + lo) / 2
+        lo, hi = math.floor(mid - 5), math.ceil(mid + 5)
+
+    def x(i):
+        return 8 + 28 * i
+
+    def y(v):
+        return 6 + (hi - v) / (hi - lo) * 34
+    s = '<svg viewBox="0 0 160 56" role="img" aria-label="Right, by minutes into a sitting">'
+    g = 5 * round((lo + hi) / 10)
+    if lo < g < hi:
+        s += f'<line class="t-grid" x1="0" x2="160" y1="{y(g):.1f}" y2="{y(g):.1f}"/>'
+    edges = [int(c[0]) for c in curve[:6]]
+    k = max(j for j, e in enumerate(edges) if e <= at)
+    span = (int(curve[k][1]) - edges[k]) if curve[k][1] is not None else 15
+    mx = 8 + 28 * (k - 0.5) + (at - edges[k]) / max(1, span) * 28
+    s += (f'<line class="t-mark" x1="{mx:.1f}" x2="{mx:.1f}" y1="2" y2="44"/>'
+          f'<text class="t-lab" x="{mx + 3:.1f}" y="9">{int(at)}</text>')
+    s += '<polyline class="t-line" points="' + " ".join(f"{x(i)},{y(v):.1f}" for i, v, _c in pts) + '"/>'
+    for i, v, c in pts:
+        band = f"{int(c[0])}&ndash;{int(c[1])}" if c[1] is not None else f"{int(c[0])}+"
+        s += (f'<circle class="t-dot" cx="{x(i)}" cy="{y(v):.1f}" r="3.5"><title>{band} min in: {round(v)}% right '
+              f'({int(c[3]):,} answers)</title></circle>')
+    (i0, v0), (i1, v1) = pts[0][:2], pts[-1][:2]
+    s += f'<text class="t-val" x="{x(i0)}" y="{y(v0) - 6:.1f}" text-anchor="start">{round(v0)}%</text>'
+    s += f'<text class="t-val" x="{x(i1) + 4}" y="{y(v1) + 12:.1f}" text-anchor="end">{round(v1)}%</text>'
+    return s + '<text class="t-lab" x="2" y="54">start</text><text class="t-lab" x="158" y="54" text-anchor="end">90 min</text></svg>'
+
+
+def _habits_html(did, h):
+    """3.9.5, How you study, in Insights' place (‹ Insights goes back): my
+    time in its head; the win, cards matured, always; Slow but right only
+    when its finding passes, with See them (a finding, not a deck, since
+    3.9.5's FSRS rule: with an exam set they join the exam box's Study); long
+    sittings only when theirs passes, with Start a Fifteen.
+    Nothing passed: the win and one line. All decks, worked out from my
+    own log (habits_flow.board_view). Numbers only: nothing to escape but
+    what's built here."""
+    from .habits import SIT_AT
+    did = int(did)
+    mins, secs = h.get("mins"), h.get("secs")
+    r = (f'<span class="r"><b>{_hm(max(1, round(float(mins))))}</b> a day &middot; <b>{max(1, round(float(secs)))} s</b> a card</span>'
+         if mins is not None and secs is not None else "")
+    head = (f'<div class="hv-h"><a href="#" onclick="{_pycmd(f"inshabits:{did}:shut")}">&lsaquo; Insights</a>'
+            f'<b>How you study</b>{r}</div>')
+    m = h.get("matured") or {}
+    n = int(m.get("n") or 0)
+    tiles = (f'<div><div class="big" title="Next review 3 weeks or more away">{n:,}<small>matured this week</small></div>'
+             f'{_hs_matured_svg(m)}'
+             + (f'<a href="#" class="go" onclick="{_pycmd(f"inshabits:{did}:see")}">See them</a>' if n else "") + "</div>")
+    sp, sit = h.get("speed"), h.get("sit")
+    if isinstance(sp, dict):
+        slow, quick = _hs_pts(sp["slow"]), _hs_pts(sp["quick"])
+        said = ""
+        if sp.get("gap") is not None and sp.get("lo") is not None and sp.get("hi") is not None:
+            said = (f"At the same intervals: {_hs_pts(sp['gap']):+d} points, "
+                    f"could be {_hs_pts(sp['lo'])} to {_hs_pts(sp['hi'])}")
+        k = int(h.get("slow") or 0)
+        go = f'<a href="#" class="go" onclick="{_pycmd(f"inshabits:{did}:slow")}">See them</a>' if k > 0 else ""
+        # 3.9.5 (Sam, of "20% of slow right answers missed next time · 14% otherwise": "this doesn't make
+        # much sense"): the number is this week's slow ones, the bars say why
+        tiles += (f'<div><div class="big">{k:,}<small>right, but slow, this week</small></div>'
+                  f'{_hs_two_svg(quick, slow, said)}<div class="hs-cap">missed next time</div>{go}</div>')
+    if isinstance(sit, dict):
+        tiles += (f'<div><div class="big" title="{round(float(sit["from"]))}% right in your first 15 minutes, '
+                  f'{round(float(sit["to"]))}% at 45 to 60">{SIT_AT} min<small>then you start missing more</small></div>'
+                  f'{_hs_sit_svg(sit.get("curve") or [], SIT_AT)}<div class="hs-cap">right, by minutes in one go</div>'
+                  f'<a href="#" class="go" title="Fifteen minutes, then one question" onclick="{_pycmd("room15")}">'
+                  f'Start a Fifteen</a></div>')
+    more = "" if isinstance(sp, dict) or isinstance(sit, dict) else '<div class="hs-more">More as you study.</div>'
+    return f'<style>{HABITS_CSS}</style><div class="dc-hv">{head}<div class="ht">{tiles}</div>{more}</div>'
 
 
 def _ins_r(x):
@@ -2525,11 +2711,7 @@ def _ins_scope(aim):
         said = "Whole deck"
         other = (f'<a class="q" href="#" onclick="{_pycmd("setscope:auto")}">Since your last exam</a>'
                  if aim.get("since_pick") == "all" else "")
-    max_ = f' max="{_html.escape(str(aim["today"]))}"' if aim.get("today") else ""  # a later day is no scope
-    pick = (f'<span class="iexam"><a class="q" href="#" onclick="var i=this.nextElementSibling;try{{i.showPicker();}}'
-            f'catch(x){{i.classList.remove(\'ixd\');i.focus();}}return false;">Change</a>'
-            f'<input class="ixd" type="date" value="{_html.escape(since)}"{max_} aria-label="Count the cards started since" '
-            f'onchange="if(this.value)pycmd(\'duecrew:setscope:\'+this.value+\'|\'+window.dcBK);"></span>')
+    pick = f'<span class="iexam"><a class="q" href="#" onclick="{_pycmd("scopepick")}">Change</a></span>'  # 3.9.5: a Qt calendar
     return f'<div class="isc">{said} &middot; {pick}{(" &middot; " + other) if other else ""}</div>'
 
 
@@ -2545,10 +2727,7 @@ def _insights_html(did, v):
     if isinstance(v.get("leech"), dict):
         return _ins_leeches(did, v["leech"], v.get("deck_name"))  # 3.9.2: the leeches view, in Insights' place
     out = ""
-    if v.get("bank"):
-        # 3.9.3: a deck with a bank's question tags: QBank QIDs, on this deck
-        out += (f'<div class="iline">After a practice block: paste the questions you missed, and see what they have '
-                f'in common. <a href="#" onclick="{_pycmd(f"planmissed:{int(did)}")}">QBank QIDs&hellip;</a></div>')
+    # 3.9.5 (Sam: "this line is extra because QIDs is in the header"): no QBank QIDs line here; the head has it
     r = v.get("right") or {}
     now, before = r.get("now") or [0, 0], r.get("before") or [0, 0]
     if now[1] >= 50:
@@ -2582,7 +2761,9 @@ def _insights_html(did, v):
                 f'<a class="tp" href="#" title="Browse them" onclick="{_pycmd(f"insbrowse:{did}:h")}">'
                 f'{len(hero):,} card{"s" if len(hero) != 1 else ""}</a> Anki won&rsquo;t show you before {when}</div>'
                 f'{_ins_scope(aim) if mine else ""}'
-                f'<a class="bt" href="#" onclick="{_pycmd(f"insstudy:{did}:h")}">Study {len(hero):,} early</a></div>')
+                # 3.9.5 (Sam's FSRS rule): Study only before a date, my exam or a plan's event
+                + (f'<a class="bt" href="#" onclick="{_pycmd(f"insstudy:{did}:h")}">Study {len(hero):,} early</a>'
+                   if aim.get("name") else "") + '</div>')
     elif aim.get("kind") == "exam":
         # 3.9.2: my exam with nothing at risk still says what it covers, and keeps its Change; without
         # FSRS nothing was looked at (what's at risk is FSRS's), so it says only the day (the audit)
@@ -2592,6 +2773,7 @@ def _insights_html(did, v):
         out += (f'<div class="iline">{int(v["behind"]):,} new cards behind &middot; '
                 f'<a href="#" onclick="{_pycmd("plancatch:" + str(v["pid"]))}">Catch up&hellip;</a></div>')
     rows = v.get("rows") or []
+    dated = bool((v.get("aim") or {}).get("name"))  # 3.9.5 (Sam's FSRS rule): a Study only before a date
     if rows:
         # 3.9.2 (the students: "not right yet" and "forgot" read alike): Anki's own Stats' words
         out += ('<div class="isec"><div class="ik">Not sticking yet<span>&nbsp;&middot; last 2 weeks</span>'
@@ -2605,7 +2787,8 @@ def _insights_html(did, v):
                     f'<span class="ib"><i class="st" style="width:{100 * st / of:.1f}%"></i>'
                     f'<i class="fg" style="left:{100 * st / of:.1f}%;width:{100 * fg / of:.1f}%"></i></span>'
                     f'<span class="c"><b>{st + fg}</b> of {of}</span>'
-                    f'<a href="#" onclick="{_pycmd(f"insstudy:{did}:{i}")}">Study {st + fg}</a></div>')
+                    + (f'<a href="#" onclick="{_pycmd(f"insstudy:{did}:{i}")}">Study {st + fg}</a>' if dated else "")
+                    + '</div>')
         out += "</div>"
     out += _ins_map(did, v.get("map") or [], v.get("map_by"), v.get("map_at"), v.get("map_ways"))
     if v.get("ahead"):
@@ -2905,6 +3088,23 @@ def _topic_a(pid, uids, name, i):
     """3.8.0: a plan's topic as a link to its cards in Anki's browser."""
     return (f'<a class="tp" href="#" title="Browse its cards" '
             f'onclick="{_pycmd(f"plantopic:{pid}:{uids}:{int(i)}")}">{_html.escape(str(name))}</a>')
+
+
+def _topic_go(pid, uids, name, i):
+    """3.9.5 (Sam: "for the filtered decks opening from a plan especially need
+    that option to browse or make the filtered deck"): a plan's topic on
+    Today: its name shows its two ways beside it, Study (its new cards and
+    the ones due today, a deck of its own) and Browse."""
+    e = _html.escape
+    tid = "dc-tp-" + _re.sub(r"[^A-Za-z0-9]", "", f"{pid}-{uids}") + f"-{int(i)}"
+    # 3.9.5 (Sam: "they should underline and show that they are being selected"): the name stays
+    # underlined while its two ways show; the one clicked stays marked
+    pick = "this.parentNode.querySelectorAll('a').forEach(function(y){y.classList.remove('on')});this.classList.add('on');"
+    return (f'<a class="tp dc-tpn" href="#" onclick="var x=document.getElementById(\'{tid}\');'
+            f'if(x){{x.hidden=!x.hidden;this.classList.toggle(\'on\',!x.hidden);}}return false;">'
+            f'{e(str(name))}</a><span class="du-tpgo" id="{tid}" hidden>'
+            f'<a href="#" onclick="{pick}{_pycmd(f"plantopicstudy:{pid}:{uids}:{int(i)}")}">Study</a>'
+            f'<a href="#" onclick="{pick}{_pycmd(f"plantopic:{pid}:{uids}:{int(i)}")}">Browse</a></span>')
 
 
 def _load_words(ld, now):
@@ -3823,8 +4023,8 @@ def you_html(cfg, due=None, you=None, people=None):
     tab = you.get("tab") if you.get("tab") in keys else keys[0]
     body = (_you_plans(you.get("plans"), None if due else you.get("opened"), people, cfg) if tab == "plans"
             else _you_insights(you.get("insights")) if tab == "insights" else "")
-    return _due_html(due, more, tab if tab in dict(more) else None, body, folded=bool(you.get("folded")))
-
+    return _due_html(due, more, tab if tab in dict(more) else None, body, folded=bool(you.get("folded")),
+                     qids=bool(you.get("qids")))
 
 
 # ---- 3.5.0: Settings, in the board ----
@@ -6955,6 +7155,20 @@ DUE_CSS = """
     #due-crew .du-sg { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 9px; font-size: 12px;
       padding: 5px 0; border-top: 1px solid var(--dc-line); align-items: baseline; }
     #due-crew .du-sg .x { color: var(--dc-muted); font-weight: 400; margin-left: 10px; }
+    /* 3.9.5: today's misses under a done Reviews row; a deck run out */
+    #due-crew .du-rc { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 2px 9px; font-size: 12px;
+      color: var(--dc-muted); padding: 0 0 6px; align-items: baseline; text-align: left; }
+    #due-crew .du-rc b { color: var(--dc-ink); font-weight: 600; }
+    #due-crew .du-rc .end { white-space: nowrap; }
+    #due-crew .du-rc a { color: var(--dc-accent); font-weight: 700; text-decoration: none; }
+    #due-crew .du-rc a.tp { font-weight: inherit; }
+    /* 3.9.5: a plan topic on Today, its two ways (Study, Browse) beside its name */
+    #due-crew a.dc-tpn.on { text-decoration: underline; text-underline-offset: 2px; }
+    #due-crew .du-tpgo a { font-weight: 700; color: var(--dc-accent); text-decoration: none; margin-left: 7px; cursor: pointer;
+      border-radius: 4px; padding: 0 3px; }
+    #due-crew .du-tpgo a:hover, #due-crew .du-tpgo a:focus-visible { text-decoration: underline; text-underline-offset: 2px; }
+    #due-crew .du-tpgo a:active, #due-crew .du-tpgo a.on { background: color-mix(in srgb, var(--dc-accent) 16%, transparent);
+      text-decoration: underline; text-underline-offset: 2px; }
     #due-crew .du-add { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding-top: 3px; }
     #due-crew .du-add input[type=text] { flex: 1 1 160px; min-width: 0; font: inherit; font-size: 12.5px; color: var(--dc-ink);
       background: var(--dc-bg); border: 1px solid var(--dc-line); border-radius: 7px; padding: 4px 8px; }
@@ -7260,7 +7474,7 @@ def _due_plan(r):
         for k, (g, xs) in enumerate(groups):
             if k not in used and (g == label or (label == "Other" and not g)):
                 used.add(k)
-                return (" &middot; " + ", ".join(_topic_a(r["pid"], r["uid"], x, i) for x, i in xs)
+                return (" &middot; " + ", ".join(_topic_go(r["pid"], r["uid"], x, i) for x, i in xs)
                         + _remark_lines(xs, r.get("rm"), "du-rm"))  # 3.8.1: the authors' notes under it
         return ""
     subs = ""
@@ -7289,9 +7503,9 @@ def _due_plan(r):
         extra.append(f'{said} &middot; <a href="#" onclick="{_pycmd("planupdopen:" + r["pid"])}">Open</a>')
     meta = " &middot; ".join([f'{e(r["plan"])}'] + extra)
     rest = [(g, xs) for k, (g, xs) in enumerate(groups) if k not in used]
-    if rest:  # 3.8.0: each topic opens its cards in Browse
+    if rest:  # 3.8.0: each topic opens its cards in Browse; 3.9.5: studies them
         # as the Plans tab's day writes them: the group in bold, then its topics
-        what = "<small>" + " &middot; ".join((f"<b>{e(str(g))}</b> &middot; " if g else "") + ", ".join(_topic_a(r["pid"], r["uid"], x, i) for x, i in xs)
+        what = "<small>" + " &middot; ".join((f"<b>{e(str(g))}</b> &middot; " if g else "") + ", ".join(_topic_go(r["pid"], r["uid"], x, i) for x, i in xs)
                                               for g, xs in rest) + "</small>"
         what += "".join(_remark_lines(xs, r.get("rm"), "du-rm") for _g, xs in rest)  # 3.8.1
     elif groups:
@@ -7347,6 +7561,25 @@ def _due_reviews(r):
     bar = "" if r["done"] else _wbar2(r["through"], r["later"], r["whole"])
     return (f'<div class="du-r{" done" if r["done"] else ""}">{box}<span class="t"><b>Reviews</b>{small}</span>'
             f'<span class="end"><span class="n">{_due_count(r, "due")}</span></span>{bar}</div>')
+
+
+def _due_misses(m):
+    """3.9.5: under a done Reviews row, today's misses, and where they were
+    (each part opens Browse). A line, not a deck (Sam's FSRS rule). m:
+    due_flow._misses, or None."""
+    said = _D.misses_text(m)
+    if not said:
+        return ""
+    e = _html.escape
+    head, _sep, rest = said.partition(", ")
+    text = f'{e(head)}, <b>{e(rest)}</b>' if rest else e(said)
+    if m.get("topics"):
+        parts = [f'<a class="tp" href="#" title="Browse them" onclick="{_pycmd(f"duego:miss{i}")}">'
+                 f'{e(str(name))} {len(cids):,}</a>' for i, (name, cids) in enumerate(m["topics"])]
+        if int(m.get("elsewhere") or 0):
+            parts.append(f'{int(m["elsewhere"]):,} elsewhere')
+        text += ": " + " &middot; ".join(parts)
+    return f'<div class="du-rc"><span></span><span>{text}</span><span class="end"></span></div>'
 
 
 def _due_new(r):
@@ -7426,7 +7659,7 @@ def _due_add(v, default):
 STUDY_KBD, ASK_KBD = ("⌘⇧S", "⌃⇧Q") if _sys.platform == "darwin" else ("Ctrl+Shift+S", "Ctrl+Shift+Q")
 
 
-def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
+def _due_html(v, more=(), more_tab=None, more_body="", folded=None, qids=False):
     """The You bubble (3.8.0; Due above the board until then): Due's lists,
     Today, Upcoming and Later, when Due is on (v: due.view, from
     due_flow.view), then `more`, [(key, label)] (Plans, Insights), with
@@ -7437,22 +7670,25 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
         return ""
     e = _html.escape
     if not v:
-        # Due's lists off: Plans and Insights only, folded or not
+        # Due's lists off: Plans and Insights only, folded or not; 3.9.5: QBank QIDs in its head too (qids: the
+        # glue's due_flow.has_qids), where Insights' own line was
+        ql = (f'<a href="#" class="du-go" title="Paste QBank QIDs to find their cards" '
+              f'onclick="{_pycmd("planmissed")}">QBank QIDs</a>' if qids else "")
         if folded:
             names = " &middot; ".join(lb for _k, lb in more)
             return (f'<div class="du du-one"><a href="#" onclick="{_pycmd("duefold")}" title="Show"><b>{names}</b></a>'
-                    f'<span class="sp"></span><a href="#" class="du-fold" title="Show" '
+                    f'<span class="sp"></span>{ql}<a href="#" class="du-fold" title="Show" '
                     f'onclick="{_pycmd("duefold")}">Show &#9662;</a></div>')
         tab = more_tab if more_tab in dict(more) else more[0][0]
         tabs = "".join(f'<a href="#" role="tab" aria-selected="{"true" if k == tab else "false"}" class="{"on" if k == tab else ""}" onclick="{_pycmd("duetab:" + k)}">{lb}</a>'
                        for k, lb in more)
         return (f'<div class="du"><div class="du-h"><span class="du-tabs" role="tablist" aria-label="You">{tabs}</span>'
-                f'<span class="sp"></span><a href="#" class="du-fold" title="Fold to one line" '
+                f'<span class="sp"></span>{ql}<a href="#" class="du-fold" title="Fold to one line" '
                 f'onclick="{_pycmd("duefold")}">Hide &#9652;</a></div>{more_body}</div>')
     today = e(v["today"])
     # 3.9.3 (Sam's pick 1, in Study today's place): QBank QIDs, after a practice block, when a deck here has
     # question IDs; in the head on every tab and on the folded line ("missing the QID chip on the top right")
-    qids = (f'<a href="#" class="du-go" title="Find the cards of the questions you missed" '
+    qids = (f'<a href="#" class="du-go" title="Paste QBank QIDs to find their cards" '
             f'onclick="{_pycmd("planmissed")}">QBank QIDs</a>' if v.get("qids") else "")
     done_n, total_n = int(v["done_n"]), int(v["total_n"])
     count = f"{done_n} of {total_n} done" if total_n else ""
@@ -7508,7 +7744,7 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
         for r in v["rows"]:
             if r["kind"] == "reviews":
                 if r.get("whole") is not None:
-                    body += _due_reviews(r)
+                    body += _due_reviews(r) + _due_misses(v.get("misses") if r.get("done") else None)
                     continue
                 back = int(r.get("back") or 0)
                 if not r["due"] and not r["done"] and not back:

@@ -823,7 +823,7 @@ def clean_plan(p):
     if not isinstance(p, dict) or not _PLAN_ID.fullmatch(str(p.get("id") or "")):
         return None
     following = p.get("following") if isinstance(p.get("following"), dict) else {}
-    crew = p.get("crewDone") if isinstance(p.get("crewDone"), dict) else {}
+    crew = p.get("crewDone") if isinstance(p.get("crewDone"), dict) else None  # 3.9.5: only from three counted
     return {"id": p["id"], "name": clean_note(p.get("name"), 60) or "Plan",
             "owner": str(p.get("owner") or ""), "ownerName": clean_note(p.get("ownerName"), 60) or "?",
             "role": p.get("role") if p.get("role") in ("owner", "editor", "follower", "reader") else "",
@@ -832,7 +832,7 @@ def clean_plan(p):
             "teamAsk": p.get("teamAsk", following.get("teamAsk")) is True,  # asked once to join (shared before 3.7.6)
             "paused": bool(p.get("paused", following.get("paused", False))),
             "followers": _as_int(p.get("followers")) or 0,
-            "crewDone": {str(k): _as_int(v) for k, v in crew.items() if _as_int(v) is not None},
+            "crewDone": {str(k): _as_int(v) for k, v in crew.items() if _as_int(v) is not None} if crew is not None else None,
             "code": normalize_code(p.get("code")) if p.get("code") else "",
             "following": bool(following) or "share" in p,
             "sched": clean_sched(p.get("sched", following.get("sched"))),

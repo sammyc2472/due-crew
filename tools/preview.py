@@ -190,7 +190,7 @@ _DV = _D.view(_T, _DATES, _ITEMS, {}, events=[{"day": _d(4), "name": "KSA F3-2",
               # 3.9.3: the day's reviews through for today, some back later; new cards outside the plan's dates
               reviews={"due": 214, "done": 120, "whole": 214, "through": 96, "later": 8, "left": 110, "back": 5,
                        "at": "15:40", "other": {"whole": 6, "through": 2, "later": 4, "decks": [["Pharm", 2, 6, 4]]}},
-              suggestions=[{"key": "again", "text": "Go over today's 23 misses", "go": "Study"}],
+              suggestions=[{"key": "leeches", "text": "4 new leeches this week", "go": "See them"}],
               # 3.8.0: a plan's lines every week
               every=[{"pid": "p1", "plan": "Big Step 1", "first": _d(-30), "last": _d(40),
                       "lines": [{"k": "do", "t": "Practice questions (40)", "r": "0123456"},
@@ -235,6 +235,19 @@ sections.append("<h3>round five: Today, a plan's date opened (a click on its nam
 sections.append("<h3>round five: Upcoming, a date ahead opened</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=dict(_DV, tab="upcoming"), you=_YOU("upcoming"))
     .replace('id="dc-dd-p1-u3" hidden>', 'id="dc-dd-p1-u3">').replace('id="du-', 'id="duu-'))
+# 3.9.5 (Five mocks, reviewed): reviews done, today's misses by part
+_DONE = _D.view(_T, [_DATES[2]], [_ITEMS[1]], {}, reviews={"due": 0, "done": 214, "whole": 214, "through": 214, "later": 0,
+                                                       "left": 0, "back": 0, "at": ""})
+_DONE.update(misses={"n": 23, "reviews": 214, "elsewhere": 4,
+                     "topics": [("Renal \u00b7 Physiology", list(range(9))), ("Pharm", list(range(6))), ("Cardio", list(range(4)))]})
+sections.append("<h3>3.9.5: Today, reviews done: today's misses by part</h3>"
+                + board.render(DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DONE, you=_YOU("today"))
+                .replace('id="du-', 'id="dun-'))
+sections.append("<h3>3.9.5: Today, a plan topic's two ways (a click on its name: Study, Browse)</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("today"))
+    .replace('class="du-tpgo" id="dc-tp-p1u1-0" hidden>', 'class="du-tpgo" id="dc-tp-p1u1-0">')
+    .replace('class="tp dc-tpn" href="#" onclick="var x=document.getElementById(\'dc-tp-p1u1-0\')',
+             'class="tp dc-tpn on" href="#" onclick="var x=document.getElementById(\'dc-tp-p1u1-0\')').replace('id="du-', 'id="dut-'))
 # 3.8.0: the plan's squad: a line on the plan card, and a pill on the Squads tab
 _SQ = {"cards": [dict(PLAN_CARD, tabs={"unread": 2, "summary": {
     "shown": 5, "of": 12, "faces": ["\U0001F419", "\U0001F98A", "\U0001F331"], "who": ["dre", "marisa", "sam"],  # 3.8.22: their Pips
@@ -417,9 +430,17 @@ _INS = dict(_INS, ahead=_AHEAD_BIG, deck_name="Big Step 1")
 # 3.9.2 (Sam's deck): a week of new cards, right % apart for them
 _INS["right"] = dict(_INS["right"], young=[560, 700], older=[748, 819])
 _DECKS = [{"did": 10, "name": "Big Step 1", "full": "Big Step 1"}, {"did": 20, "name": "Spanish", "full": "Languages::Spanish"}]
+_NEXT_CID = [1]
+
+
 def _tile(name, n, kn, kids=(), st=None):
+    if kids:  # 3.9.5: a part's cards are its parts' (the trail's Study counts them)
+        cids = [c for k in kids for c in k["_cids"]]
+    else:
+        cids = list(range(_NEXT_CID[0], _NEXT_CID[0] + n))
+        _NEXT_CID[0] += n
     t = {"key": name.lower(), "name": name, "n": n, "know": kn, "started": n if st is None else st,
-         "find": {"tags": ["Big::^Systems::" + name]}}
+         "find": {"tags": ["Big::^Systems::" + name]}, "_cids": cids}
     return dict(t, kids=list(kids)) if kids else t
 
 
@@ -428,8 +449,10 @@ _MAP = [_tile("Cardio · Physiology", 412, 86, [_tile("Cardiac output", 160, 91)
                                                _tile("Vessels", 36, 94)]),
         _tile("Cardio · Pathology", 318, 77, st=240), _tile("Cardio · Pharm", 260, 84, st=120), _tile("Renal · Physiology", 190, 66),
         _tile("Pulm · Pathology", 150, 88), _tile("Heme", 120, None, st=0), _tile("Endo", 96, 71, st=60), _tile("MSK", 64, 94)]
+# 3.9.5 (Study where the cards are): Again these 4 weeks, as QBank QIDs' topics count them: 41 in Renal, 30 in Cardio · Pathology, some in Cardio's parts
+_MISSED = set(_MAP[3]["_cids"][:41]) | set(_MAP[1]["_cids"][:30]) | set(_MAP[0]["_cids"][::18])
 _PLAN_INS = {"decks": _DECKS, "did": 10, "exam": True, "plan": {"id": "p1", "name": "MS2 Block 1 · Dre's plan"},
-             "view": dict(_INS, did=10, pid="p1", leeches=3, map=_MAP, map_by="right",
+             "view": dict(_INS, did=10, pid="p1", leeches=3, map=_MAP, map_by="right", _map_missed=_MISSED,
                           map_ways=[{"key": "s", "name": "Systems", "on": True}, {"key": "b", "name": "Videos", "on": False},
                                     {"key": "y", "name": "HighYield", "on": False}, {"key": "~decks", "name": "Subdecks", "on": False}])}
 sections.append("<h3>3.8.0: You › Insights, a deck with my plan on it (Sam's numbers)</h3>" + board.render(
@@ -501,6 +524,28 @@ sections.append("<h3>3.9.2: Leeches, in Insights' place (one button a card)</h3>
     DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
     you=_YOU("insights", insights={"decks": _DECKS, "did": 20, "exam": "2026-10-14", "plan": None,
                                    "view": dict(_DECK_INS, leech=_LEECH)})))
+# 3.9.5: How you study (habits.summary's shape, as habits_flow.board_view hands it over)
+_HV = {"open": True, "mins": 113.0, "secs": 9.2, "span": 56, "study": 46, "track": None,
+       "matured": {"n": 38, "weeks": [12, 18, 15, 22, 26, 24, 31, 38],
+                   "from": [(datetime.date(2026, 10, 20) - datetime.timedelta(days=7 * k)).isoformat() for k in reversed(range(8))]},
+       "speed": {"slow": 0.221, "quick": 0.131, "gap": 0.081, "lo": 0.042, "hi": 0.118, "n_slow": 310, "n_quick": 2400},
+       "sit": {"curve": [[0, 15, 84.1, 900], [15, 30, 83.4, 800], [30, 45, 78.9, 700], [45, 60, 79.9, 500],
+                         [60, 90, 75.5, 300], [90, None, 73.7, 90]], "from": 84.1, "to": 79.9, "gap": -0.05, "lo": -0.08,
+               "hi": -0.02, "n": 26}}
+_HV_INS = {"decks": _DECKS, "did": 10, "exam": "", "plan": None, "view": dict(_INS, ahead=None)}
+sections.append("<h3>3.9.5: Insights, How you study's line on top</h3>" + board.render(
+    DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
+    you=_YOU("insights", insights=dict(_HV_INS, habits=dict(_HV, open=False)))))
+sections.append("<h3>3.9.5: How you study, both findings pass</h3>" + board.render(
+    DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
+    you=_YOU("insights", insights=dict(_HV_INS, habits=_HV))))
+sections.append("<h3>3.9.5: How you study, Slow but right's track record (and its Study)</h3>" + board.render(
+    DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
+    you=_YOU("insights", insights=dict(_HV_INS, habits=dict(_HV, sit=None, track={"studied": 0.14, "rest": 0.22, "n": 34})))))
+sections.append("<h3>3.9.5: How you study, nothing passed yet</h3>" + board.render(
+    DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
+    you=_YOU("insights", insights=dict(_HV_INS, habits=dict(_HV, speed=None, sit=None, study=0, mins=48.0, secs=7.4,
+                                                              matured=dict(_HV["matured"], n=9, weeks=[0, 0, 2, 3, 5, 4, 7, 9]))))))
 sections.append("<h3>3.9.2: the board's line when reviews climb</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, ahead={"did": 10, "name": "Big Step 1", "day": "2026-10-12", "n": 420, "week": 310,
                                                    "cause": 1180}))

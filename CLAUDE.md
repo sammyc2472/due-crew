@@ -28,7 +28,9 @@ add-on.
   plain JS, no framework: sign-in, plans, the builder). Its Worker
   (`site/src/index.ts`) sends `/api/*` to the API by service binding, so
   the site's session is a same-site HttpOnly cookie, and draws a plan
-  link's preview (`site/src/og.ts`).
+  link's preview (`site/src/og.ts`). Game night (3.9.5) is the site's
+  alone: `/table` and `/t/CODE`, `public/table.*`, its tables a Durable
+  Object on the API (`worker/src/table.ts`).
 - `README.md` — from the tagline down, doubles verbatim as the AnkiWeb
   listing description; keep them in sync when it changes. The logo block
   above the tagline is GitHub-only (AnkiWeb shows its own title).
@@ -48,7 +50,8 @@ add-on.
   an author's Settings: the plan's dates and pace, sharing, posts; a
   follower's: my follow), Undo on top, no Pip, one way to each thing), New plan (one way
   to start: a name, the deck, the exam it ends with, the calendar if
-  there is one) and QBank QIDs, Python-native, for everyone signed
+  there is one)
+  and QBank QIDs (3.9.5: their topics, each a Study), Python-native, for everyone signed
   in since 3.9.3 (Tools › Due Crew › Plans, You › Plans, Insights, Find a
   setting). Every change is an op (`ops.py`, pure), waiting under the
   plan till Review and send when anyone follows it (`draft.py`, kept per
@@ -104,7 +107,8 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   stranger's uid gets the same 404 as no account.
   `worker/test/consent.test.ts` is the model.
 - A squad row is an UPDATE, never an insert; the join (with its code) is
-  the only way in.
+  the only way in, and since 3.9.5 its checks are the insert's own
+  conditions, one statement; 20 squads a person (`squads.SQUADS_MAX`).
 - Card text never leaves the computer: flags, asks, knows, plan picks,
   plan tags and plan squad questions carry a note guid and card number, and
   each reader's Anki reads its own copy.
@@ -135,12 +139,16 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   3.9.2: Reviews ahead, its track record and the pause it asks for, and
   the leeches view (plans.json: `new_off`, `ahead_trust`, `ahead_line_x`,
   `leech_out`); my exam's scope rides my settings (`exam_last`, `exam_since`).
+  3.9.5: How you study.
   Pip's closet is mine (an account key only I read); what my Pip has on
   rides with my accent to mutual friends, as names. A plan's squad (its team on the server) shares only
   that I showed up, my questions and answers, and bingo stamps; never my
   numbers by name, never weak spots. While I'm in it, my per-date progress
   joins the counts its authors see (Progress, never named, per date only
-  from three people up).
+  from three in its squad, an author on the team among them, and from two
+  besides whoever reads them; since 3.9.5 the server holds to that,
+  `plans.COUNTS_MIN`/`IN_SQUAD`/`BESIDES_MIN`, and counts only who may
+  still see the plan, `plans.COUNTED`).
 - Days are the person's Anki day (their rollover), on both sides (`ankiDay`
   in the Worker).
 - Background jobs capture `app.generation` (bumped at profile open/close,
@@ -216,13 +224,14 @@ same commit, each with its test:
 | The Fifteen (3.8.1): ▶ Fifteen? in the top bar, the nudge, the question at its end, Take five / Another now / Stop | `room_model.make_fifteen`/`fifteen_next`, `rooms.start_fifteen`/`fifteen_answer` | studying now only (never a room on my week) |
 | Pip (3.8.1, Block; called Sev until 3.8.2, and still `sev` in code: sev.py, the `sev*` keys, `.sv`, sev.js's `Sev`): by the logo for a moment, in a fifteen's chip, question and break, the nudge, the session's line; hopping across the week picture card; a study room's seats, each crewmate's in their accent; waving in Welcome back and on the signed-out card; hopping on a crewmate's big-streak banner (not on crew rows: Sam's no); never in the plan windows (round five, Sam's pick). Each place has its mix of moves (`sev.MOVES`), never the same twice in a row. 3.9.1: its loops play about twelve seconds and rest (`--sv-on`), pointing plays them on; the break's breathing goes on; the fridge's are still till pointed at | `sev.py` (one drawing; the widgets get its markup, the week card and Welcome back `sev.still`; `pick`/`nth` the variety), `rooms.board_sev`/`pick`/`milestone_sevs`/`signed_out_sev`, `sharecard.hops`, `room_model.seats`/`vary_seed`, `ui.sev_label` | never sent; cards.js keeps a copy of `sev.still` (the suite checks it) |
 | Pip's closet (3.8.2): 61 things earned by showing up, coming back, together, plans, card care, seasons, secrets; one per place, a costume over the look; in place of the board (Yours by place, To earn by how); each crew row's, profile card's and (3.8.21) squadmate's Pip in the emoji's place (3.8.22: a plan card's squad line too, by `who` on `/board`'s `teams`; the review chip, a squadmate's card, Settings › You, bingo stamps; the site's account page and home feed, `pipFor`; the Friends dialog is names alone) | `closet.py` (pure: things, wear/clean/shown, facts from days and hours; 3.8.22: `halloween`/`spooky`), `closet_art.py` (the drawings), `closet_flow.py` (facts, tallies in wrap.json, a year of them for Wrapped, earned, worn, `halloween_view`), `board.closet_html`/`closet_line`/`row_sev`/`card_sev`/`squad_pip`/`halloween_html` | account keys `sev_look`, `sev_closet`; a mutual friend's look on /board (`lookOf` in `board.ts`) |
-| Plans (follow, morning, week, load; You › Plans: the plan's card, seven small days, a day's click opening its assignments under them, round five pick A; two or more plans one at a time, their names a switch, pick 3 (`plan_pick`); a date's details on its name in Today and Upcoming) | `plans.py`, `schedule.py`, `plan_flow.py`, `board._plan_card_html`/`_plan_switch`/`_week_html`/`_day_unit`/`_date_more` | `plans.ts`, `library.ts`; `builder.js`, app.js |
+| Plans (follow, morning, week, load; You › Plans: the plan's card, seven small days, a day's click opening its assignments under them, round five pick A; two or more plans one at a time, their names a switch, pick 3 (`plan_pick`); a date's details on its name in Today and Upcoming) | `plans.py`, `schedule.py`, `plan_flow.py`, `board._plan_card_html`/`_plan_switch`/`_week_html`/`_day_unit`/`_date_more` | `plans.ts`; `builder.js`, app.js |
 | Your plans (3.9.3: the builder in Anki; round five: Plan · Insights · Settings for authors and followers, changes waiting to be sent), New plan, QBank QIDs (paste the misses: Unsuspend, or Study now into Due Crew › QBank cards; this paste only), the AI hooks and Your AI app | `planner/` (`window.py`, `plan_tab.py`, `date_panel.py`, `deck_panel.py`, `shape.py`, `send.py`, `insights_tab.py`, `settings_tab.py`, `mine_tab.py`, `new_plan.py`, `text_tab.py`, `history_tab.py`, `day_notes.py`, `widgets.py`; pure: `ops.py`, `draft.py`, `view.py`, `insights.py`, `prompts.py`, `ai.py`, `build.py`, `edits.py`, `text.py`; `mcp.py`, `mcp_host.py`, `mcp_dialog.py`; `flow.py`) | routes the builder uses; `builder.js` the twin |
 | A plan's squad (3.8.0, on the Squads tab; its team on the server) | `team.py`, `team_flow.py` | `team.ts`; `PlanSquad` in builder.js |
-| Insights (the deck's, a plan only sharpens it; You › Insights; the topic map, tiles open into parts, or by the week I started them (3.9.2); its card and text, shared by hand; my exam's scope, since my last exam (3.9.2)) | `team.py`, `team_flow.py`, `mapcard.py`, `ui/map_card_dialog.py` | never sent |
+| Insights (the deck's, a plan only sharpens it; You › Insights; the topic map, tiles open into parts, or by the week I started them (3.9.2); its card and text, shared by hand; my exam's scope, since my last exam (3.9.2); 3.9.5: `team_flow.study_deck` for every Study's deck; a Study only with a date ahead, `team_flow.dated`) | `team.py`, `team_flow.py`, `mapcard.py`, `ui/map_card_dialog.py` | never sent |
+| How you study (3.9.5: a line atop Insights, the view in its place: matured a week, Slow but right (See them; with an exam set, its cards join the exam box's Study), long sittings; the Fifteen at 35 in the top bar; a finding only once it clears its bar) | `habits.py` (pure), `habits_flow.py`, `board` (its view), `rooms.take_five` | never sent |
 | Reviews ahead (3.9.2: six weeks of a deck counted from my log; its ways and Stop new cards, Anki's today-only limit each morning; the track record; the board's line when reviews climb) | `ahead.py` (pure), `ahead_flow.py`, `board._ins_ahead`/`ahead_line` | never sent; the builder's `Reviews` (a typical curve) |
 | Leeches (3.9.2: in Insights' place; one button a card, Bring back, Learn it fresh, Leave it out) | `leech_flow.py`, `board._ins_leeches` | never sent (tips ride the stuck list) |
-| Due (the bubble's Today, Upcoming, Later; 3.9.3: no Study today button, Ctrl+Shift+S walks the day; QBank QIDs in the box's head, every tab and folded, when a tag ends in a question's number) | `due.py`, `due_flow.py` (`has_qids`), `board._due_html` | settings doc |
+| Due (the bubble's Today, Upcoming, Later; 3.9.3: no Study today button, Ctrl+Shift+S walks the day; QBank QIDs in the box's head, every tab and folded, when a tag ends in a question's number; 3.9.5: today's misses by part under a done Reviews row (each part Browse); an exam date comes off the day after; a plan topic's Study (its new and due cards, a deck of its own) and Browse beside its name; Sam's FSRS rule: a deck only for a date ahead, cards not started, a miss outside Anki; Super decks, Next up and a deck-ran-out line built and taken out before shipping) | `due.py`, `due_flow.py` (`has_qids`, `_misses`, `exam_gone`), `board._due_html`/`_topic_go`, `plan_flow.study_topic`/`_free`/`untils` | settings doc |
 | Invites, codes | `__init__.py`, `ui/friends_dialog.py`, `ui/welcome_dialog.py` | `invites.ts`, `social.ts` |
 | Sign-in, sessions, quiet accounts | `ui/auth_dialog.py`, `backend/api.py` | `auth.ts`, `quiet.ts`, `mydata.ts` |
 | Shares: text, and picture cards (made in Anki since 3.8.0) | `share.py`, `shares.py`, `sharecard.py`, `ui/share_card_dialog.py` | `site/public/cards.js` |
@@ -238,6 +247,7 @@ same commit, each with its test:
 | A follower's day (3.8.1): Welcome back, what Hold back keeps, Study a date or a quiz | `plan_flow.welcome_back`/`show_held`/`study_date`/`study_quiz`, `plans.quiz`, `ui/away_dialog.py`, `ui/held_dialog.py` | never sent (Push my dates back is the follow's shift) |
 | The builder's day's work and suggestions (3.8.1) | | `Work`, `Suggest` in builder.js |
 | Previews of a plan or invite link | | `site/src/og.ts` |
+| Game night (3.9.5): duecrew.com/table, six party games, a TV and phones; the door (the host's crew straight in, anyone else waits till let in; crew only, open, lock, turn away); while Sam tests it every game starts with one player (`FEW` in table.js: set it back before it goes wider) | | `site/public/table.js` (engine, games), `table-packs.js`, `table.css`, `table.html`; `worker/src/table.ts` (a Durable Object a table, nothing kept); `test/table.test.ts`, `test_game_night_one_player_v395` |
 
 ## Releasing
 

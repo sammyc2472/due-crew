@@ -40,6 +40,16 @@ migrations_dir = "migrations"
 name = "EMAIL"
 allowed_sender_addresses = ["codes@duecrew.com"]
 
+# 3.9.5, game night: a table is a Durable Object for one night (src/table.ts),
+# on the SQLite backend (the free plan's). Nothing it holds is kept.
+[[durable_objects.bindings]]
+name = "TABLES"
+class_name = "Table"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Table"]
+
 # Housekeeping, daily: spent codes, old rate-limit windows, idle sessions.
 [triggers]
 crons = ["17 4 * * *"]
@@ -64,6 +74,14 @@ migrations_dir = "migrations"
 
 [env.dev.triggers]
 crons = ["17 4 * * *"]
+
+[[env.dev.durable_objects.bindings]]
+name = "TABLES"
+class_name = "Table"
+
+[[env.dev.migrations]]
+tag = "v1"
+new_sqlite_classes = ["Table"]
 
 [[env.dev.send_email]]
 name = "EMAIL"

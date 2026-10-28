@@ -1127,9 +1127,11 @@ def first_day(doc):
 
 def behind(doc, progress, today, total_of=None):
     """classHints: a date most of the class hasn't finished two days after it
-    (3 or more sharing, under half done), the latest two. [(unit, done, days late)]."""
+    (3 or more in its squad, 3.9.5: an author on the team among them, and 2
+    sharing besides me; under half of the followers sharing done), the latest
+    two. [(unit, done, days late)]."""
     sharing = int(progress.get("sharing") or 0)
-    if sharing < 3:
+    if int(progress.get("inSquad", sharing) or 0) < 3 or int(progress.get("others", sharing) or 0) < 2 or not sharing:
         return []
     units = progress.get("units") or {}
     out = []

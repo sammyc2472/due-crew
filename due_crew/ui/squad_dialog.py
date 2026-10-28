@@ -168,8 +168,9 @@ class SquadDialog(QDialog):
             return
         if not self._alive:
             return
-        self._say("Locked." if status == 403 else "Couldn't join. Check your connection.",
-                  join=status != 403)
+        said = {403: "Locked.", 409: "You're in 20 squads. Leave one to join another.",
+                429: "That's a lot of tries. Try again in an hour."}  # 3.9.5: the squads' ceiling, and a join's budget
+        self._say(said.get(status, "Couldn't join. Check your connection."), join=status not in said)
 
     # ---- create ----
     def _made(self, text):
@@ -186,12 +187,16 @@ class SquadDialog(QDialog):
         _bg(lambda: cl.create_squad(name), self._created)
 
     def _created(self, squad):
-        if squad:
+        full = bool(squad and squad.get("error") == "too_many_squads")  # 3.9.5
+        if squad and not full:
             copy_text(invite_text(squad["name"], squad["code"]))
             self.on_joined(squad)
         if not self._alive:
             return
         self.create_btn.setEnabled(True)
+        if full:
+            self._made("You're in 20 squads. Leave one to make another.")
+            return
         if not squad:
             self._made("Couldn't create it. Check your connection.")
             return

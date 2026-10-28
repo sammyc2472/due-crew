@@ -11,13 +11,19 @@
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@cloudflare/workers-types": "^5.20260926.1",
-    "@vitest/runner": "^4.1.11",
-    "@vitest/snapshot": "^4.1.11",
+    "@vitest/runner": "^4.1.12",
+    "@vitest/snapshot": "^4.1.12",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.11",
-    "wrangler": "^4.141.0"
+    "vitest": "^4.1.12",
+    "wrangler": "4.149.0"
   },
   "overrides": {
-    "sharp": "^0.35.4"
+    "sharp": "^0.35.4",
+    "wrangler": "$wrangler",
+    "miniflare": "5.20261006.1-alpha",
+    "undici": "7.30.1",
+    "vite": "8.3.4",
+    "source-map-js": "1.2.2",
+    "zod": "4.6.7"
   }
 }

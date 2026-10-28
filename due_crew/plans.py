@@ -197,6 +197,7 @@ class DeckIndex:
         self.cards = {}      # cid -> (queue, type)
         self.order = {}      # cid -> the deck's own order: cards seen before first, then new by position
         self.again = set()   # 3.9.3: in (re)learning and due again today: answered, not through for today
+        self.due_now = set()  # 3.9.5: what Anki has due today: reviews due by today, and learning ones
         try:
             day, cut = int(col.sched.today), int(col.sched.day_cutoff)
         except Exception:
@@ -210,6 +211,8 @@ class DeckIndex:
                 self.order[cid] = (int(ctype) == 0, due, cid)
                 if day is not None and ((queue == 1 and due < cut) or (queue == 3 and due <= day)):
                     self.again.add(cid)
+                if queue == 1 or (day is not None and queue in (2, 3) and due <= day):
+                    self.due_now.add(cid)
         self.fell_back = set()  # unit ids matched by their note ids (C5)
         self._started = None  # note ids with a card answered: siblings wait on these
         self._before = None  # 3.9.1: (first_seen, the notes started before today), for buried_today
@@ -508,9 +511,9 @@ class DeckIndex:
             tags = sorted(tags[:cap] if cap else tags, key=lambda x: x[0].lower())
         decks = []
         if with_decks:
-            for rel, d in self.rel.items():
-                n = sum(len(self.by_deck.get(dd, ())) for r, dd in self.rel.items()
-                        if not rel or r == rel or r.startswith(rel + _SEP))
+            under = deck_counts(self.rel, self.by_deck)
+            for rel in self.rel:
+                n = under[rel]
                 if n:
                     # 3.3: the deck itself too, for a deck with no tags or subdecks
                     decks.append([f"{self.name}{_SEP}{self.spelled[rel]}" if rel else self.name, n])
@@ -526,6 +529,29 @@ class DeckIndex:
             out.setdefault(first.lower(), first)
         return out
 
+
+
+def deck_counts(rel, by_deck):
+    """{rel: cards in it and below} for DeckIndex.rel (lowercased path under
+    the plan's deck, "" the deck itself -> did) and by_deck (did -> cids):
+    each deck's own cards go to it and to every deck above it, in one pass
+    (3.9.5, the audit's E1: it was every deck against every deck, on the
+    main thread). Above means as the subdeck tree reads it: a path a "::" in
+    it cuts short, and the deck itself."""
+    under = dict.fromkeys(rel, 0)
+    for r, d in rel.items():
+        c = len(by_deck.get(d, ()))
+        if not c:
+            continue
+        up = {r, ""}
+        i = r.find(_SEP)
+        while i != -1:
+            up.add(r[:i])
+            i = r.find(_SEP, i + 1)
+        for p in up:
+            if p in under:
+                under[p] += c
+    return under
 
 # ---- the tree as it goes up (3.3) ----
 
@@ -1699,6 +1725,14 @@ def study_cards(idx, cids):
     """Study this date: its open cards, new and review, due or not (a cram
     before a quiz): not suspended (a leech stays out) and not buried."""
     return sorted(c for c in cids if c in idx.cards and idx.cards[c][0] >= 0)
+
+
+def new_and_due(idx, cids):
+    """3.9.5 (Sam's FSRS rule: never reviews ahead of their date): of these,
+    the open new cards and the ones Anki has due today, in the deck's order
+    (seen ones first, then new by their place)."""
+    got = [c for c in cids if c in idx.cards and (idx.cards[c] == (0, 0) or c in idx.due_now)]
+    return sorted(got, key=lambda c: idx.order.get(c, (True, 0, c)))
 
 
 def held_rows(idx, doc, held, swap=None):
