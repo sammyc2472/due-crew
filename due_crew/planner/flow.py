@@ -89,38 +89,6 @@ def make_here(cl):
     return (lambda name, deck: remote.create(cl, name, deck)), made
 
 
-def use_starter(pid):
-    """3.9.5, Use it on a starter (the empty Plans tab's Or start from one):
-    my own copy, its first date today (remote.copy, the library's Copy),
-    then Follow on it, as a code typed in the box opens it (its deck, its
-    days, my own pace), so its cards start opening; the copy's mine to
-    change in Your plans. One request on the click, Follow's on its own;
-    the starters go from the board with it (I own a plan now: the server
-    stops offering them). Refused or unanswered, a line says so."""
-    cl = client()
-    if not mw.col or not cl.signed_in or not any(s.get("id") == pid for s in cl.session.get("plan_starters") or []):
-        return
-    start, gen = plan_flow._today(), app.generation
-
-    def done(got):
-        if gen != app.generation or not mw.col:
-            return  # another profile or account since
-        if not got or got[0] != "saved":
-            words = str(got[1]) if got else ""
-            tooltip("Couldn't reach Due Crew. Check your connection." if not got
-                    else "That didn't copy. Try again." if words.startswith("That didn't") else f"That didn't copy. {words}")
-            return
-        cl.session["plan_starters"] = []
-        cl._save_session()
-        if got[1].get("code"):
-            plan_flow.open_follow(str(got[1]["code"]))  # modal: its Follow sends its own request
-        else:
-            open_plans(select=got[1]["id"])
-        app.swap(cfg())
-        app.refresh()  # the plan I own now (its stamp moved), for Browse and the morning
-    _bg(lambda: remote.copy(cl, pid, start), done)
-
-
 def show_plans(plans, select=None, tab=None):
     from .window import PlanWindow
     w = PlanWindow(mw, mw.col, plans, Ops(), select=select, tab=tab)

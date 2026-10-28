@@ -6,7 +6,6 @@ import { accentOf, type Session } from "./auth";
 import { listKnocks, withoutFlags } from "./social";
 import * as B from "./bingo";
 import * as C from "./cards";
-import * as L from "./library";
 import * as N from "./notices";
 import * as P from "./plans";
 import * as T from "./team";
@@ -179,11 +178,6 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
     ).bind(s.uid, SQUADS_MAX).all<{ id: string; name: string; founder: string }>()).results;
     const card = await B.forMember(env, s.uid, params.get("wk"));
     if (card) out.bingo = card;
-    // 3.9.5: someone who owns and follows no plan (co-writes none either): a few starters
-    // for the Plans tab's Or start from one, with the plans that came just now
-    if (!(out.plans as unknown[] | undefined)?.length && !(out.authored as unknown[] | undefined)?.length) {
-      out.starters = await L.startersForBoard(env);
-    }
   }
   // 3.7.3: the teams I'm on: counts for the Plan tab and the Team badge
   if (!keep) {

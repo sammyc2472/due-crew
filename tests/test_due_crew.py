@@ -18407,10 +18407,10 @@ def test_todays_bars_v393():
 def test_today_v395():
     """3.9.5 (Five mocks, reviewed; Sam: "give it a shot building all of
     it"): today's misses under a done Reviews row, where they were (each
-    part opens Browse: a line, not a deck, Sam's FSRS rule); Next up, once
-    the reviews are through, from Insights' own numbers (a Study only before
-    a date); a Due Crew deck that runs out says so, with Pip."""
-    from due_crew import due as D, due_flow as F, app as appmod
+    part opens Browse: a line, not a deck, Sam's FSRS rule). Next up and
+    the deck-ran-out line went before it shipped (Sam's picks on the 3.9.5
+    review page): the suggestion is new leeches, as before."""
+    from due_crew import due as D, due_flow as F
     from due_crew.app import _state
     import due_crew as dc
     from aqt.deckbrowser import DeckBrowser
@@ -18463,7 +18463,7 @@ def test_today_v395():
     # ---- the board ----
     rv = {"due": 0, "done": 214, "whole": 214, "through": 214, "later": 0, "left": 0, "back": 0, "at": ""}
     v = D.view(T, [], [], {}, reviews=rv)
-    v.update(misses={"n": 23, "reviews": 214, "cids": []}, cleared=None)
+    v.update(misses={"n": 23, "reviews": 214, "cids": []})
     mid = D.view(T, [], [], {}, reviews=dict(rv, through=100, left=114, done=100))
     check("today board: 3.9.5 (Sam: \"i don't love telling someone how much time they have left\"): no minutes left",
           "du-min" not in board._due_html(dict(mid, mins=68)) and " left</span>" not in board._due_html(mid))
@@ -18473,95 +18473,34 @@ def test_today_v395():
           "214 reviews, <b>23 missed</b>" in rh and "again" not in rh[:rh.index("du-rc") + 400] and "Super decks" not in h, rh[:1200])
     check("today board: not a word while the reviews aren't done",
           "du-rc" not in board._due_html(dict(mid, misses=None)))
-    nxt = {"key": "next", "lead": "Next up:", "cmd": "insstudy:10:0", "go": "Study 14",
-           "text": "Renal <Physiology> isn’t sticking: 14 of 41 missed in two weeks"}
-    hn = board._due_html(dict(v, suggestions=[nxt]))
-    check("today board: Next up, its lead bold, escaped, its button Insights' own Study, Not today on its key",
-          "<b>Next up:</b> Renal &lt;Physiology&gt;" in hn and "duecrew:insstudy:10:0" in hn and "duecrew:duex:next" in hn
-          and "<Physiology>" not in hn, hn[hn.index("du-sg"):][:600])
-    hc = board._due_html(dict(v, cleared={"name": "Slow <but> right", "n": 46, "day": T}, cleared_sev="<i>PIP</i>"))
-    check("today board: a Due Crew deck that ran out: its name escaped, all 46 cleared, Nice puts it away; no Pip "
-          "(Sam: \"take pip off the cleared line too\")",
-          "<b>Slow &lt;but&gt; right</b>: all 46 cleared" in hc and "PIP" not in hc and "duecrew:duex:cleared" in hc
-          and hc.index("du-clr") < hc.index("<b>Reviews</b>"), hc[:1500])
-    # ---- Next up: the first that applies ----
+    # ---- Sam's picks: no Next up, no deck-ran-out line ----
+    check("today board (Sam's picks): no Next up and no deck-ran-out line",
+          "Next up" not in board._due_html(v) and "du-clr" not in board._due_html(v) and "cleared" not in board._due_html(v))
     from due_crew import team_flow as TF
     conf = {"due_suggest": True, "exam_date": ""}
-    views = {"v": {}}
-    saved = (F.cfg, F._today, F._reviews, F._today_deck, F._day_state, TF.you_decks, TF.insights, F.mw.col)
+    saved = (F.cfg, F._today, F._day_state, TF.insights, F.mw.col)
     F.cfg = lambda: conf
     F._today = lambda: T
-    F._today_deck = lambda col: 10
     day = {"day": T, "dismissed": [], "recovered": []}
     F._day_state = lambda: ({}, day)
-    TF.you_decks = lambda: [{"did": 10, "pid": None}]
-    TF.insights = lambda did, pid=None, exam="": views["v"]
-    F.mw.col = types.SimpleNamespace(mod=None, db=types.SimpleNamespace(scalar=lambda *a: 0), sched=types.SimpleNamespace(day_cutoff=cut))
-    revs = {"r": dict(rv)}
-    F._reviews = lambda: revs["r"]
+    asked = []
+    TF.insights = lambda *a, **k: asked.append(a) or {}
+    leeches = {"n": 4}
+    F.mw.col = types.SimpleNamespace(mod=None, db=types.SimpleNamespace(scalar=lambda *a: leeches["n"]),
+                                     sched=types.SimpleNamespace(day_cutoff=cut))
     try:
-        hero = list(range(53))
-        views["v"] = {"aim": {"day": "2026-09-04", "name": "KSA F3-3", "in": 3}, "hero": hero,
-                      "rows": [{"name": "Renal", "stuck": 9, "forgot": 5, "of": 41}], "near": 12}
+        _state["due_suggest"] = None
         s1 = F.suggestions(conf, T)
-        check("next up: a topic not sticking first, 14 of 41, Insights' own Study with an exam ahead",
-              len(s1) == 1 and s1[0]["key"] == "next" and s1[0]["cmd"] == "insstudy:10:0" and s1[0]["go"] == "Study 14"
-              and "14 of 41 missed" in s1[0]["text"], s1)
-        views["v"] = dict(views["v"], aim={"day": "2026-09-04", "name": "", "in": 7})
+        check("suggestions: new leeches, as before 3.9.5; Insights isn't asked for a next thing",
+              [x["key"] for x in s1] == ["leeches"] and s1[0]["text"] == "4 new leeches this week" and not asked, s1)
+        day["dismissed"] = ["leeches"]
         _state["due_suggest"] = None
-        s2 = F.suggestions(conf, T)
-        check("next up: no date ahead, Browse them (Sam's FSRS rule: reviews ahead of their date are FSRS's)",
-              s2 and s2[0]["cmd"] == "insbrowse:10:0" and s2[0]["go"] == "Browse 14", s2)
-        views["v"] = dict(views["v"], rows=[{"name": "Renal", "stuck": 3, "forgot": 2, "of": 41}])
-        s3 = F.suggestions(conf, T)
-        check("next up: then cards one miss from a leech, into Insights' leeches",
-              s3 and s3[0]["cmd"] == "duego:near" and s3[0]["text"].startswith("12 cards are one miss"), s3)
-        revs["r"] = dict(rv, left=3, through=211)
-        check("next up: nothing while reviews are still due", not any(x["key"] == "next" for x in F.suggestions(conf, T)))
-        revs["r"] = dict(rv)
-        day["dismissed"] = ["next"]
-        check("next up: Not today, and none steps in till tomorrow", F.suggestions(conf, T) == [])
+        check("suggestions: Not today puts it away", F.suggestions(conf, T) == [])
+        check("glue: no Next up and no cleared watch left in Due's glue",
+              not hasattr(F, "_next_up") and not hasattr(F, "_watch_ours") and not hasattr(F, "cleared"))
     finally:
-        F.cfg, F._today, F._reviews, F._today_deck, F._day_state, TF.you_decks, TF.insights, F.mw.col = saved
+        F.cfg, F._today, F._day_state, TF.insights, F.mw.col = saved
         _state["due_suggest"] = None
-    # ---- a Due Crew deck that runs out ----
-    conn2 = fakes.make_collection(sqlite3.connect(":memory:"))
-    col2 = fakes.FakeCol(conn2, cut)
-    decks = fakes.FakeDecks({10: "Big Step 1", 77: "Due Crew::Slow but right"})
-    base_get = decks.get
-    decks.get = lambda did, default=True: dict(base_get(did, default), dyn=1) if did == 77 else base_get(did, default)
-    cur = {"id": 77}
-    decks.get_current_id = lambda: cur["id"]
-    col2.decks = decks
-    for i in range(3):
-        fakes.add_card(conn2, 100 + i, 77, ctype=2, queue=2, odid=10)
-    saved = (F.mw.col, F._today)
-    F.mw.col, F._today = col2, (lambda: T)
-    _state["due_ours"] = _state["due_cleared"] = None
-    try:
-        F.on_state("review", "overview")
-        check("cleared: its review starts: ours, three cards", _state["due_ours"] == {"did": 77, "name": "Slow but right", "n": 3})
-        F.on_state("overview", "review")
-        check("cleared: left with cards still in it: nothing yet", _state["due_cleared"] is None and _state["due_ours"])
-        conn2.execute("DELETE FROM cards WHERE did = 77")
-        F.on_state("review", "overview")
-        F.on_state("overview", "review")
-        check("cleared: left with nothing in it: it ran out, all 3", _state["due_cleared"] == {"name": "Slow but right", "n": 3, "day": T})
-        cur["id"] = 10
-        _state["due_ours"] = None
-        F.on_state("review", "overview")
-        check("cleared: a deck of my own isn't ours", _state["due_ours"] is None)
-        conf2 = {}
-        saved2 = (F.cfg, appmod.swap)
-        F.cfg, appmod.swap = (lambda: conf2), (lambda c, focus=None: None)
-        try:
-            dc._on_js(False, as_board("duecrew:duex:cleared"), DeckBrowser())
-            check("cleared: Nice puts it away, through the board's own handler", _state["due_cleared"] is None)
-        finally:
-            F.cfg, appmod.swap = saved2
-    finally:
-        F.mw.col, F._today = saved
-        _state["due_ours"] = _state["due_cleared"] = None
     # ---- a part of today's misses: its cards in Browse ----
     shown = []
     pf = types.SimpleNamespace(_browse=lambda cids, q=None, empty="": shown.append(list(cids)))
@@ -18630,11 +18569,13 @@ def test_click_test_v395():
               not F.exam_gone(c2) and c2["exam_date"] == "2026-09-20" and not F.exam_gone({"exam_date": ""}))
     finally:
         F._today, F.save_cfg = saved
+
+
 def test_super_decks_gone_v395():
     """3.9.5: Super decks, built and click-tested, went before it shipped
     (Sam: "i think let's get rid of super decks for now"). What stays:
-    a plan topic's Study and Browse on Today, the cleared line without Pip,
-    and a deck made for a date goes the morning after it."""
+    a plan topic's Study and Browse on Today, and a deck made for a date
+    goes the morning after it."""
     from due_crew import plan_flow as PF, settings_model, due_flow as F
     check("gone: no Super decks tab, nothing to hide in Settings, no tab Due's handler knows",
           [k for k, _l in board.YOU_MORE] == ["plans", "insights"] and "supers" not in settings_model.HIDEABLE

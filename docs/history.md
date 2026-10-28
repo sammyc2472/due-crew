@@ -3577,3 +3577,21 @@ every release that changes how something works.
   same count (one grouped query a stale chunk). With the author and two
   followers, each follower can tell from the crew count what the other
   did on a date; with three followers, they can't.
+- 3.9.5, Sam's picks on the review page ("3.9.5 Keep or Remove": every
+  change drawn by the add-on's own code, a pick on each). Out before it
+  shipped: Next up (Today's suggestion is new leeches again, as before
+  3.9.5: `due_flow.suggestions`, no `_next_up`, no `duego:near`); a Due
+  Crew deck that runs out (`_watch_ours`, the cleared line); the map's
+  weakest part and an open part's Study (`team.weakest`,
+  `team_flow.study_map`, `insmapstudy`; the map's missed cards stay, for
+  QBank QIDs' topics and today's misses); starters both ways (the empty
+  Plans tab's Or start from one and the library's row: `library.ts`'s
+  starters, `POST /admin/library/{id}/starter`, `planstarter`,
+  `tests/test_starters.py`, `worker/test/starters.test.ts`; migration
+  0030 never shipped, so it's gone, not undone); and Shapes in New plan
+  (`planner/shapes.py`, with Make the plan back in its own look). Kept:
+  today's misses by part, a plan topic's Study and Browse, the FSRS rule,
+  an exam date off the day after, How you study and the Fifteen at 35,
+  the exam date's calendar window, QBank QIDs' topics and its place in
+  the bubble's head, and the audit's floors and ceilings. The way back is
+  in git.

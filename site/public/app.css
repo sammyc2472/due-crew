@@ -569,11 +569,6 @@ details.fmt > summary { cursor: pointer; color: var(--muted); }
 .lctags { display: flex; flex-wrap: wrap; gap: 4px; }
 .lctags span { background: var(--well); color: var(--muted); border-radius: 99px; padding: 1px 8px; font-size: 12px; }
 .lc .row .btn, .lc .row button { padding: 5px 12px; font-size: 13px; }
-/* 3.9.5: the starters, a row of their own above the grid, under Due Crew */
-.starters { margin: 0 0 16px; }
-.starters[hidden] { display: none; }
-.starters h2 { margin: 4px 0 8px; }
-.lc.st { border-color: var(--accent); }
 .copyform { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; }
 .copyform .status { margin: 0; }
 .libnote { padding: 10px 12px; border-radius: 8px; background: var(--well); display: grid; gap: 6px; }

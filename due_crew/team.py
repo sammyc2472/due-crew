@@ -689,8 +689,7 @@ def map_shade(know):
     return 3 if know >= 90 else 2 if know >= 80 else 1 if know >= 70 else 0
 
 
-# 3.9.5 (Study where the cards are, Sam's pick): a Study sits on what names the cards; no Study sheet
-WEAK_MIN = 5  # the map names its weakest part with this many missed cards or more
+# 3.9.5 (Study where the cards are): a part's missed cards, for QBank QIDs' topics and today's misses
 
 
 def tile_cards(t):
@@ -704,23 +703,6 @@ def missed_in(t, missed):
     Again in a review these 4 weeks, in the deck, not suspended)."""
     missed = missed if isinstance(missed, (set, frozenset, dict)) else set(missed or ())
     return sorted(c for c in tile_cards(t) if c in missed)
-
-
-def weakest(tiles, missed):
-    """3.9.5: the level's weakest part, (its place, its missed cards), or
-    None: the lowest % of the tiles that show one (not new, not too soon),
-    a tie to the one with more missed (then the bigger); said only with
-    WEAK_MIN missed or more."""
-    missed = missed if isinstance(missed, (set, frozenset, dict)) else set(missed or ())
-    best = None
-    for i, t in enumerate(tiles or ()):
-        if t.get("know") is None:
-            continue
-        got = missed_in(t, missed)
-        rank = (int(t["know"]), -len(got))
-        if best is None or rank < best[0]:
-            best = (rank, i, got)
-    return (best[1], best[2]) if best and len(best[2]) >= WEAK_MIN else None
 
 
 def study_missed(n):

@@ -1,7 +1,8 @@
 """3.9.5, Study where the cards are: a Study sits on the thing that names
-the cards, no Study sheet. The topic map's weakest part and its trail's
-Study (team.py, team_flow.py, board._ins_map), and QBank QIDs' Their
-topics (planner/qids.py), against a fake collection (tests/fakes.py).
+the cards, no Study sheet. QBank QIDs' Their topics (planner/qids.py) and
+the map's missed cards they count (team.py, team_flow.py), against a fake
+collection (tests/fakes.py). The map's weakest part and its trail's Study
+went before it shipped (Sam's picks on the 3.9.5 review page).
 Standard library only.
 
 Run: python3 tests/test_where.py
@@ -48,21 +49,12 @@ def tile(key, name, cids, know, started=None, kids=None, tags=None):
     return t
 
 
-# ---- the weakest part ----
+# ---- a part's missed cards ----
 
-def test_weakest():
+def test_missed():
     tiles = [tile("c", "Cardio", range(0, 40), 80), tile("r", "Renal", range(40, 70), 66), tile("p", "Pulm", range(70, 90), 66),
              tile("h", "Heme", range(90, 100), None, started=0), tile("e", "Endo", range(100, 110), None, started=4)]
     missed = set(range(40, 47)) | set(range(70, 79)) | set(range(0, 20)) | set(range(90, 100))
-    check("weakest: the lowest %, a tie to the one with more missed (Pulm's 9 over Renal's 7)",
-          T.weakest(tiles, missed) == (2, list(range(70, 79))), T.weakest(tiles, missed))
-    check("weakest: new and too soon show no %, so they're never it, however many missed",
-          T.weakest(tiles[3:], missed) is None and T.weakest([tiles[0], tiles[3]], missed)[0] == 0)
-    check("weakest: under 5 missed there, nothing said (not the next one either)",
-          T.weakest(tiles, set(range(70, 74)) | set(range(0, 30))) is None
-          and T.weakest(tiles, set(range(70, 75)))[0] == 2 and T.WEAK_MIN == 5)
-    check("weakest: missed may come as a list; one level of tiles, a tie of everything to the bigger",
-          T.weakest([tile("a", "A", range(10), 70), tile("b", "B", range(10, 20), 70)], list(range(20))) == (0, list(range(10))))
     check("missed in: a part's cards, a week's batch, the ones not started (their find)",
           T.missed_in(tiles[1], missed) == list(range(40, 47))
           and T.missed_in({"_batch": [1, 2, 3], "find": {"cids": [1, 2, 3]}}, {2, 3}) == [2, 3]
@@ -79,36 +71,17 @@ def test_map_html():
     e = "<b>Renal & co"
     kids = [tile("a", "Acid–base", range(40, 55), 58), tile("t", "Tubules", range(55, 70), 74)]
     tiles = [tile("c", "Cardio", range(0, 40), 86), tile("r", e, range(40, 70), 66, kids=kids), tile("p", "Pulm", range(70, 90), 88)]
-    missed = set(range(40, 81))  # 30 in Renal (15 + 15), 11 in Pulm
-    mh = board._ins_map(10, tiles, "right", (), (), missed)
-    line = re.search(r'<div class="tmt">Weakest: .*?</div>', mh)
-    check("map: the weakest part under the key, its name escaped (opening it), its %, and Study the ones missed there",
-          line is not None and line.group(0) == (
-              f'<div class="tmt">Weakest: <a class="tp" href="#" onclick="pycmd(\'duecrew:insmap:10:1|{KK}\'); return false;">'
-              '<b>&lt;b&gt;Renal &amp; co</b></a>, 66% &middot; <a href="#" onclick="pycmd(\'duecrew:'
-              f'insmapstudy:10:1|{KK}\'); return false;">Study the 30 you missed</a></div>') and "<b>Renal" not in mh, mh[:1600])
-    undated = board._ins_map(10, tiles, "right", (), (), missed, dated=False)
-    check("map: 3.9.5 (Sam's FSRS rule), no date ahead: the weakest named, no Study; opened, no Study either",
-          "Weakest: <a" in undated and "insmapstudy" not in undated
-          and "insmapstudy" not in board._ins_map(10, tiles, "right", ["r"], (), missed, dated=False), undated[:1600])
-    check("map: the line sits under the key line, before the tiles",
-          mh.index('class="ikey"') < mh.index("Weakest:") < mh.index('class="tmap"'))
-    check("map: no missed given (an older view), no line; under 5 missed, none",
-          "Weakest" not in board._ins_map(10, tiles, "right") and "Weakest" not in board._ins_map(10, tiles, "right", (), (), {40, 41}))
-    deep = board._ins_map(10, tiles, "right", ["r"], (), missed)
+    mh = board._ins_map(10, tiles, "right", ())
+    deep = board._ins_map(10, tiles, "right", ["r"])
     trail = re.search(r'<div class="tmt">.*?</div>', deep).group(0)
-    check("map: opened, the trail says the part, its cards and %, then Study the ones missed in it, then Browse all",
-          ("<b>&lt;b&gt;Renal &amp; co</b> &middot; 30 cards, 66% &middot; <a href=\"#\" onclick=\"pycmd('duecrew:insmapstudy:10:open|"
-           + KK + "'); return false;\">Study the 30 you missed</a> &middot; <a href=\"#\" onclick=\"pycmd('duecrew:insmapall:10|")
-          in trail and "Weakest" not in deep, trail)
-    one = board._ins_map(10, tiles, "right", ["r"], (), {40})
-    none = board._ins_map(10, tiles, "right", ["r"], (), set(range(0, 40)))
-    check("map: one missed in the open part, said as one; none, no Study (Browse all as it was)",
-          "Study the one you missed" in one and "insmapstudy" not in none
-          and "30 cards, 66% &middot; <a href=\"#\" onclick=\"pycmd('duecrew:insmapall:10|" in none, none[:1200])
-    view = {"map": tiles, "map_by": "right", "_map_missed": missed}
-    check("insights: the view's own missed reach the map", "Weakest:" in board._insights_html(10, view)
-          and "Weakest:" not in board._insights_html(10, dict(view, _map_missed=None)))
+    check("map (Sam's picks): no weakest part named, and no Study on an open part's trail",
+          "Weakest" not in mh and "insmapstudy" not in mh + deep and "you missed" not in mh + deep, mh[:1200])
+    check("map: opened, the trail says the part, its cards and %, then Browse all, as before 3.9.5",
+          ("<b>&lt;b&gt;Renal &amp; co</b> &middot; 30 cards, 66% &middot; <a href=\"#\" onclick=\"pycmd('duecrew:insmapall:10|"
+           + KK) in trail, trail)
+    view = {"map": tiles, "map_by": "right", "_map_missed": set(range(40, 81))}
+    check("insights: the view's missed (QBank's topics count them) draw nothing on the map",
+          "Weakest" not in board._insights_html(10, view) and "you missed" not in board._insights_html(10, view))
 
 
 # ---- the glue, on a collection ----
@@ -200,47 +173,9 @@ def test_glue():
         check("glue: QBank's map, worked out alone, is Insights' (the same split); fresh, Insights' own",
               [t["name"] for t in alone[0]] == [t["name"] for t in tiles] and alone[1] == got
               and TF.deck_map(30)[0] is tiles and TF.deck_map(99) == ([], set()))
-        html = board._insights_html(30, dict(v, map_at=[]))
-        check("glue: Renal is the weakest, its 10 missed",
-              "<b>Renal</b></a>, 55% &middot;" in html and f"duecrew:insmapstudy:30:1|{KK}" in html
-              and "Study the 10 you missed" in html, html[:400])
         send = lambda m: dc._on_js(False, m + "|" + KK, DeckBrowser())  # noqa: E731
         send("duecrew:insmapstudy:30:1")
-        check("insmapstudy: through the board's _on_js, Due Crew's deck of the part's missed, named after it",
-              built == [("Due Crew::Renal", list(range(100, 110)))], built)
-        built.clear()
-        dc._on_js(False, "duecrew:insmapstudy:30:1", DeckBrowser())
-        check("insmapstudy: without the board's key (a card's script on the way back to Decks), nothing", built == [], built)
-        send("duecrew:insmap:30:0")
-        send("duecrew:insmapstudy:30:open")
-        check("insmapstudy: opened on Cardio, the trail's Study: its missed, the deck named Cardio",
-              _state["map_at"].get(30) == ["cardio"] and built == [("Due Crew::Cardio", list(range(200, 206)))], built)
-        deep = board._insights_html(30, dict(v, map_at=_state["map_at"][30]))
-        check("glue: the trail says it, before Browse all", "Study the 6 you missed</a> &middot; <a href=\"#\" onclick=\"pycmd("
-              "'duecrew:insmapall:30|" in deep and "Weakest" not in deep, deep[:900])
-        n = len(built)
-        send("duecrew:insmapstudy:30:0")  # inside Cardio: Rhythm, then Valves (as big: by name); none missed in Rhythm
-        send("duecrew:insmapstudy:30:1")
-        check("insmapstudy: a part on the level shown, by its place; one with none missed, nothing",
-              built[n:] == [("Due Crew::Valves", list(range(200, 206)))], built[n:])
-        n = len(built)
-        for bad in ("insmapstudy:30:9", "insmapstudy:30:x", "insmapstudy:x:0", "insmapstudy:30:"):
-            send("duecrew:" + bad)
-        send("duecrew:insmapup:30:0")
-        send("duecrew:insmapstudy:30:open")
-        check("insmapstudy: no such part, no deck's id, or nothing open: nothing", len(built) == n, built[n:])
-        send("duecrew:insmapstudy:30:2")
-        check("insmapstudy: a part with none missed builds nothing", len(built) == n, built[n:])
-        # 3.9.5 (Sam's FSRS rule): no date ahead, the map's Study is Browse, and no deck
-        _state["insights"] = {}
-        undated = TF.insights(30)
-        n, m = len(built), len(shown)
-        send("duecrew:insmapup:30:0")
-        send("duecrew:insmapstudy:30:1")
-        check("insmapstudy: no date ahead, the part's missed in Browse, no deck",
-              len(built) == n and shown[m:] == [list(range(100, 110))] and not (undated.get("aim") or {}).get("name"), (built[n:], shown[m:]))
-        _state["insights"] = {}
-        TF.insights(30, None, exam)
+        check("insmapstudy (Sam's picks): gone, so the board's handler builds nothing", built == [], built)
         check("study: Insights' own Study still goes through the one helper",
               TF.study_deck("Renal", []) is False and TF.study_deck("Renal", [1]) is True and built[-1] == ("Due Crew::Renal", [1]))
         # ---- QBank QIDs' topics ----
@@ -289,13 +224,14 @@ def test_qid_words():
 
 
 def test_commands():
-    """Every duecrew: command these parts emit has its handler (the suite's
+    """Every duecrew: command the map emits has its handler (the suite's
     test_every_board_command_has_a_handler, for this front's)."""
     src = open(os.path.join(REPO, "due_crew", "board.py")).read()
     flow = open(os.path.join(REPO, "due_crew", "team_flow.py")).read()
     emitted = set(re.findall(r'_pycmd\(f"(insmap[a-z]*)', src))
     handled = set(re.findall(r'cmd == "([a-z0-9]+)"', flow))
-    check("commands: the map's Study is emitted, and handled", "insmapstudy" in emitted and emitted <= handled, (emitted, handled))
+    check("commands: the map's are handled; its Study is neither emitted nor handled (Sam's picks)",
+          emitted <= handled and "insmapstudy" not in emitted | handled and not hasattr(T, "weakest"), (emitted, handled))
 
 
 def main():

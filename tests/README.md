@@ -14,9 +14,6 @@ CI runs it in the worker job.
 
 `tests/test_planner.py` is the labs plan window's (`due_crew/planner`,
 `docs/planner.md`), on the same fakes: `python3 tests/test_planner.py`.
-`tests/test_starters.py` (3.9.5) is starter plans': the board's payload,
-the empty Plans tab, Use it through `_on_js`, and the fake's library twin
-of `worker/test/starters.test.ts`: `python3 tests/test_starters.py`.
 
 Requirements: Python 3.9+ and the standard library for the first layer
 (`sqlite3` backs the fake collection); Node 22 for the Worker. CI runs

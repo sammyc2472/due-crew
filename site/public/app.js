@@ -415,9 +415,6 @@ async function libraryPage() {
   const f = { deck: q.get("deck") || "", len: q.get("len") || "", q: q.get("q") || "" };
   let pg = 0;
   const grid = h("div", { class: "lib" });
-  // 3.9.5: the starters, a row of their own above the grid (no filter, no search)
-  const startRow = h("div", { class: "lib" });
-  const starters = h("section", { class: "starters", hidden: true }, h("h2", {}, "Starters"), startRow);
   const more = h("button", { class: "quiet", hidden: true }, "More");
   const filters = h("div", { class: "filters" });
   const search = h("input", { type: "search", value: f.q, placeholder: "Search plans", "aria-label": "Search plans", style: "flex:1 1 200px" });
@@ -427,10 +424,9 @@ async function libraryPage() {
     p.reviews ? `${p.reviews} review day${p.reviews === 1 ? "" : "s"}` : null, p.events ? `${p.events} event${p.events === 1 ? "" : "s"}` : null].filter(Boolean);
   function card(p) {
     const extra = h("div");
-    const el = h("div", { class: p.starter ? "lc st" : "lc" },
+    const el = h("div", { class: "lc" },
       h("a", { href: `/plans/${p.id}`, "data-go": "", class: "lcname" }, p.name),
-      // 3.9.5: a starter names Due Crew (the server's ownerName for it)
-      h("span", { class: "muted small" }, [p.starter ? p.ownerName : `${p.ownerName}'s plan`, p.deck, credit(p.basedOn)].filter(Boolean).join(" · ")),
+      h("span", { class: "muted small" }, [`${p.ownerName}'s plan`, p.deck, credit(p.basedOn)].filter(Boolean).join(" · ")),
       p.line ? h("span", { class: "small" }, p.line) : null,
       h("div", { class: "lctags" }, tags(p).map((t) => h("span", {}, t))),
       h("span", { class: "muted small" }, `${p.followers.toLocaleString()} following`),
@@ -442,11 +438,6 @@ async function libraryPage() {
           h("summary", { "aria-label": "More" }, "⋯"),
           h("div", { class: "calpop" },
             p.mine ? null : h("button", { class: "linkish", onclick: (e) => { e.target.closest("details").open = false; extra.replaceChildren(reportForm(p, () => extra.replaceChildren())); } }, "Report…"),
-            // 3.9.5: the admin's: a starter, or not (it moves rows)
-            me.admin ? h("button", { class: "linkish", onclick: async (e) => {
-              e.target.closest("details").open = false;
-              try { await api("POST", `/admin/library/${p.id}/starter`, { on: !p.starter }); await load(true); } catch { alert("That didn't work."); }
-            } }, p.starter ? "Not a starter" : "Make a starter") : null,
             me.admin ? h("button", { class: "linkish warn", onclick: async () => {
               const note = prompt("Take it out of the library. Its author reads why:", "Not a study plan");
               if (!note) return;
@@ -470,21 +461,17 @@ async function libraryPage() {
       ...r.decks.map(([d]) => pill("deck", d, d)),
       r.decks.length ? h("span", { class: "muted" }, "·") : null,
       pill("len", "short", "Up to 4 weeks"), pill("len", "mid", "4–12 weeks"), pill("len", "long", "Longer"));
-    if (fresh) {
-      grid.replaceChildren();
-      startRow.replaceChildren(...(r.starters || []).map(card));
-      starters.hidden = !startRow.children.length;
-    }
+    if (fresh) grid.replaceChildren();
     grid.append(...r.plans.map(card));
     more.hidden = !r.more;
-    empty.hidden = grid.children.length > 0 || !starters.hidden;
+    empty.hidden = grid.children.length > 0;
     empty.textContent = f.deck || f.len || f.q ? "Nothing matches. Try fewer filters." : "Nothing here yet. List a plan of yours from its Settings.";
   }
   more.addEventListener("click", () => { pg++; load(false); });
   let t = null;
   search.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => { f.q = search.value.trim(); load(true); }, 300); });
   page(phead("Library", "Plans people list for anyone to follow or copy. Newest first."),
-    h("div", { class: "row" }, search), filters, starters, grid, empty, more);
+    h("div", { class: "row" }, search), filters, grid, empty, more);
   await load(true);
 }
 

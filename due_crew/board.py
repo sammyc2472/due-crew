@@ -1061,15 +1061,6 @@ def _css(cfg):
     #due-crew .dc-pways .way a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
     #due-crew .dc-pways input {{ font: inherit; font-size: 12px; padding: 3px 7px; border: 1px solid var(--dc-line);
       border-radius: 6px; background: var(--dc-bg); color: var(--dc-ink); min-width: 0; }}
-    /* 3.9.5: Or start from one, a starter a row, Use it on the right */
-    #due-crew .dc-exs {{ display: grid; gap: 2px; text-align: left; }}
-    #due-crew .dc-exs .t {{ margin-bottom: 4px; }}
-    #due-crew .dc-ex {{ display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 10px; padding: 6px 0;
-      border-top: 1px solid var(--dc-line); }}
-    #due-crew .dc-ex b {{ font-size: 13px; overflow-wrap: anywhere; }}
-    #due-crew .dc-ex small {{ grid-column: 1; color: var(--dc-muted); font-size: 11.5px; overflow-wrap: anywhere; }}
-    #due-crew .dc-ex a {{ grid-row: 1 / 3; grid-column: 2; align-self: center; color: var(--dc-accent); font-weight: 700;
-      text-decoration: none; font-size: 12px; white-space: nowrap; }}
     @media (max-width: 560px) {{
       #due-crew .wk2 {{ grid-template-columns: minmax(0, 1fr) auto auto; gap: 3px 10px; }}
       #due-crew .wk2 .acts {{ grid-column: 1 / -1; }}
@@ -1694,7 +1685,7 @@ def _plans_html(plans, people=None, cfg=None):
     pick (`plan_pick`), else the first."""
     cards = (plans or {}).get("cards") or []
     if not cards:
-        return _plans_empty_html((plans or {}).get("starters"))
+        return _plans_empty_html()
     if len(cards) == 1:
         return _plan_card_html(cards[0], people, cfg)
     card = _picked_plan(cards, cfg)
@@ -1793,10 +1784,8 @@ def _segs(segments):
     return "".join(f"<b>{_html.escape(str(t))}</b>" if b else _html.escape(str(t)) for t, b in segments)
 
 
-def _plans_empty_html(starters=None):
-    """3.5.0: the Plans tab with no plan: three ways in (round five: Make one
-    is the one New plan). 3.9.5: under them, Or start from one, the starters
-    the day's first board brought (_starters_html)."""
+def _plans_empty_html():
+    """3.5.0: the Plans tab with no plan: three ways in (round five: Make one is the one New plan)."""
     add = ("var v=(document.getElementById('dc-plancode').value||'').toUpperCase()"
            ".replace(/[^A-Z0-9 \\/]/g,' ').slice(0,200);"
            "pycmd('duecrew:addcode:'+v+'|'+window.dcBK);return false;")
@@ -1808,27 +1797,7 @@ def _plans_empty_html(starters=None):
             # round five: the plans I write, with no head row above
             f'<div class="way"><b>Write one</b><a href="#" title="Every plan you write or follow" '
             f'onclick="{_pycmd("planyours")}">Your plans&hellip;</a></div>'
-            f'</div>{_starters_html(starters)}</div>')
-
-
-def _starters_html(starters):
-    """3.9.5: Or start from one: a starter a row, its name, "deck · N weeks"
-    under it, and Use it (planstarter: a copy of my own, starting today, in
-    Your plans). "" with none. The names are the server's: escaped."""
-    e = _html.escape
-    rows = ""
-    for s in (starters or [])[:4]:
-        pid = str(s.get("id") or "")
-        if not _re.fullmatch(r"[a-z0-9]{1,32}", pid):
-            continue
-        days = int(s.get("days") or 0)
-        weeks = max(1, int(days / 7 + 0.5))  # as the library's card says it
-        sub = " &middot; ".join(x for x in (e(str(s.get("deck") or "")), f'{weeks} week{"" if weeks == 1 else "s"}' if days else "") if x)
-        line = f' title="{e(str(s["line"]))}"' if s.get("line") else ""  # its line, on hover
-        rows += (f'<div class="dc-ex"><b{line}>{e(str(s.get("name") or "Plan"))}</b><small>{sub}</small>'
-                 f'<a href="#" title="A copy of your own, starting today, in Your plans" '
-                 f'onclick="{_pycmd("planstarter:" + pid)}">Use it</a></div>')
-    return f'<div class="dc-exs"><b class="t">Or start from one</b>{rows}</div>' if rows else ""
+            f'</div></div>')
 
 
 def _plan_card_html(card, people=None, cfg=None, head=None):
@@ -2821,8 +2790,7 @@ def _insights_html(did, v):
                     + (f'<a href="#" onclick="{_pycmd(f"insstudy:{did}:{i}")}">Study {st + fg}</a>' if dated else "")
                     + '</div>')
         out += "</div>"
-    out += _ins_map(did, v.get("map") or [], v.get("map_by"), v.get("map_at"), v.get("map_ways"), v.get("_map_missed"),
-                    dated=dated)
+    out += _ins_map(did, v.get("map") or [], v.get("map_by"), v.get("map_at"), v.get("map_ways"))
     if v.get("ahead"):
         out += _ins_ahead(did, v["ahead"], v.get("deck_name"))
     f = v.get("fsrs")
@@ -2866,7 +2834,7 @@ def _insights_html(did, v):
     return f'<div class="dc-ins">{out}</div>'
 
 
-def _ins_map(did, tiles, by, at=(), ways=(), missed=None, dated=True):
+def _ins_map(did, tiles, by, at=(), ways=()):
     """3.8.0, the topic map: each subject a tile, sized by its cards in play,
     shaded by how much I know now of the ones I've started (a bar along its
     foot: how many I've started; none yet, "new"). A tile that splits again
@@ -2874,15 +2842,11 @@ def _ins_map(did, tiles, by, at=(), ways=(), missed=None, dated=True):
     goes back, and Browse all opens the open one's cards; a tile that
     doesn't, its cards. ways: how else it can split (Systems, a resource,
     Subdecks), a pick in its heading ("by Systems ▾"). Mine alone, from my
-    own Anki. Two tiles at least, or it says nothing.
-    3.9.5 (Study where the cards are): missed, the cards I answered Again
-    these 4 weeks (team_flow._missed). At the top, its weakest part under
-    the key, with a Study of the ones I missed there; opened, the trail's
-    Study the ones missed in the open part."""
+    own Anki. Two tiles at least, or it says nothing."""
     if len(tiles) < 2:
         return ""
     e = _html.escape
-    from .team import map_level, map_shade, missed_in, study_missed, weakest
+    from .team import map_level, map_shade
     trail, cur = map_level(tiles, at)
     big = max(int(t["n"]) for t in cur) or 1
     how = "you’d remember now (FSRS)" if by == "fsrs" else "right in their reviews these 4 weeks"  # escaped with the tip
@@ -2912,21 +2876,9 @@ def _ins_map(did, tiles, by, at=(), ways=(), missed=None, dated=True):
         last = trail[-1]
         steps.append(f'<b>{e(str(last["name"]))}</b>')
         lk = last.get("know")
-        gone = len(missed_in(last, missed))
-        study = (f'&middot; <a href="#" onclick="{_pycmd(f"insmapstudy:{did}:open")}">{study_missed(gone)}</a> '
-                 if gone and dated else "")
         path = (f'<div class="tmt">{" &rsaquo; ".join(steps)} &middot; {int(last["n"]):,} card{"" if int(last["n"]) == 1 else "s"}'
-                f'{"" if lk is None else f", {int(lk)}%"} {study}'
+                f'{"" if lk is None else f", {int(lk)}%"} '
                 f'&middot; <a href="#" onclick="{_pycmd(f"insmapall:{did}")}">Browse all</a></div>')
-    else:
-        weak = weakest(cur, missed)
-        if weak:
-            wt = cur[weak[0]]
-            # 3.9.5 (Sam's FSRS rule): its Study only before a date; else its name opens it
-            go = (f' &middot; <a href="#" onclick="{_pycmd(f"insmapstudy:{did}:{weak[0]}")}">{study_missed(len(weak[1]))}</a>'
-                  if dated else "")
-            path = (f'<div class="tmt">Weakest: <a class="tp" href="#" onclick="{_pycmd(f"insmap:{did}:{weak[0]}")}">'
-                    f'<b>{e(str(wt["name"]))}</b></a>, {int(wt["know"])}%{go}</div>')
     # 3.9.2 (the students: what's the %, what's the bar?): said in the key; a tile's cards beside its %
     pct = "% you&rsquo;d recall now" if by == "fsrs" else "% right, 4 weeks"
     grey = ", ".join(w for w, on in (("new", fresh), ("too soon", soon_any)) if on)
@@ -4073,7 +4025,6 @@ def you_html(cfg, due=None, you=None, people=None):
             else _you_insights(you.get("insights")) if tab == "insights" else "")
     return _due_html(due, more, tab if tab in dict(more) else None, body, folded=bool(you.get("folded")),
                      qids=bool(you.get("qids")))
-
 
 
 # ---- 3.5.0: Settings, in the board ----
@@ -7211,8 +7162,6 @@ DUE_CSS = """
     #due-crew .du-rc .end { white-space: nowrap; }
     #due-crew .du-rc a { color: var(--dc-accent); font-weight: 700; text-decoration: none; }
     #due-crew .du-rc a.tp { font-weight: inherit; }
-    #due-crew .dc-wrap.du-clr { text-align: left; padding: 9px 12px; margin: 2px 0 8px; }
-    #due-crew .dc-wrap.du-clr b { font-weight: 700; }
     /* 3.9.5: a plan topic on Today, its two ways (Study, Browse) beside its name */
     #due-crew a.dc-tpn.on { text-decoration: underline; text-underline-offset: 2px; }
     #due-crew .du-tpgo a { font-weight: 700; color: var(--dc-accent); text-decoration: none; margin-left: 7px; cursor: pointer;
@@ -7633,18 +7582,6 @@ def _due_misses(m):
     return f'<div class="du-rc"><span></span><span>{text}</span><span class="end"></span></div>'
 
 
-def _cleared_html(cl):
-    """3.9.5: a Due Crew deck I studied ran out; Nice puts it away (no Pip:
-    Sam, "take pip off the cleared line too")."""
-    if not cl:
-        return ""
-    e = _html.escape
-    n = int(cl.get("n") or 0)
-    return (f'<div class="dc-wrap du-clr"><span><b>{e(str(cl["name"]))}</b>: '
-            f'{"all " + format(n, ",") + " cleared" if n > 1 else "cleared"}</span>'
-            f'<a href="#" class="wc" onclick="{_pycmd("duex:cleared")}">Nice</a></div>')
-
-
 def _due_new(r):
     """3.9.3: New cards (what Anki gives today: the ones I've started and what
     its limits still give, a line a deck when there's more than one), or Other
@@ -7797,7 +7734,6 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None, qids=False):
                  f'<a href="#" onclick="{_pycmd("dueshow:" + v["toast"]["tab"])}">Show</a></div>')
     body = ""
     if tab == "today":
-        body += _cleared_html(v.get("cleared"))
         if v.get("nudge"):
             # 3.8.1: once a day, past my usual start, nothing studied yet: Fifteen?
             peek = f'<span class="nz">{v["nudge_sev"]}</span>' if v.get("nudge_sev") else "<span>&#9654;</span>"
@@ -7827,11 +7763,8 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None, qids=False):
                 body += _due_mine(r)
         body += _opened_line(v.get("opened"))
         for sg in v["suggestions"] + v["notes"]:
-            # 3.9.5: Next up, its button a command of its own (Insights' Study, say)
-            lead = f'<b>{e(sg["lead"])}</b> ' if sg.get("lead") else ""
-            go = _pycmd(sg["cmd"]) if sg.get("cmd") else _pycmd("duego:" + sg["key"])
-            body += (f'<div class="du-sg"><span>&#10022;</span><span>{lead}{e(sg["text"])}</span><span>'
-                     f'<a href="#" onclick="{go}">{e(sg["go"])}</a>'
+            body += (f'<div class="du-sg"><span>&#10022;</span><span>{e(sg["text"])}</span><span>'
+                     f'<a href="#" onclick="{_pycmd("duego:" + sg["key"])}">{e(sg["go"])}</a>'
                      f'<a href="#" class="x" title="Not today" onclick="{_pycmd("duex:" + sg["key"])}">&times;</a></span></div>')
         if not v["rows"] and not v["suggestions"] and not v["notes"]:
             body += '<div class="du-empty">Nothing due today.</div>'

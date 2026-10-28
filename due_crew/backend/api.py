@@ -29,7 +29,7 @@ from .shapes import (
     AuthError, REPORT_NOTE_MAX, TransportError, TIMEOUT, WEEK_WINDOW, _clean_day, _clean_decks, _clean_member,
     _exam_value, _live_room, _week_days, away_range, clean_accent, clean_days, clean_doodle, clean_look, clean_emoji, clean_squad_name, clean_note, clean_offer, clean_authored, clean_plan, clean_sched, clean_recap, clean_cards, clean_notice,
     clean_tricky, day_doc, friend_code_from, invite_code_from, live_now, normalize_code,
-    clean_team_view, clean_teams, clean_plan_invites, clean_starters,
+    clean_team_view, clean_teams, clean_plan_invites,
 )
 
 FEEDBACK_MAX = 2000  # 3.6.5, P6: the Worker's own limit
@@ -425,12 +425,6 @@ class ApiClient:
             card = _bingo.clean_card(data.get("bingo"))  # 3.6: none when I'm in no squad
             if card != self.session.get("bingo"):
                 self.session["bingo"] = card
-                self._save_session()
-            # 3.9.5: a few starters, while I own and follow no plan (none: I have one); kept
-            # for the Plans tab's Or start from one until the next day's first refresh
-            starters = clean_starters(data.get("starters"))
-            if starters != (self.session.get("plan_starters") or []):
-                self.session["plan_starters"] = starters
                 self._save_session()
         return {"entries": entries,
                 "plans": list(self.session.get("plans") or []),

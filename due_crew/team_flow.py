@@ -1068,24 +1068,6 @@ def browse_map(did):
         _plans_flow()._browse(_find_cids(mw.col, did, trail[-1].get("find")), empty="Nothing to show.")
 
 
-def study_map(did, x):
-    """3.9.5 (Study where the cards are): the map's Study, the cards I missed
-    in a part (T.missed_in) as Due Crew's deck named after it: the weakest
-    ("Weakest: …", x its place on the level shown) or the part open (x
-    "open", the trail's)."""
-    view = ((_state.get("insights") or {}).get(did) or {}).get("view") or {}
-    trail, cur = _map_at(did)
-    t = (trail[-1] if trail else None) if x == "open" else (cur[int(x)] if int(x) < len(cur) else None)
-    if t is None:
-        return
-    cids = T.missed_in(t, view.get("_map_missed"))
-    if not dated(did):
-        _plans_flow()._browse(cids)  # 3.9.5: no date to aim at, so no deck
-        return
-    aim = view.get("aim") or {}
-    study_deck(str(t["name"]), cids, until=_until(aim))
-
-
 def deck_map(did):
     """3.9.5, QBank QIDs' topics: (tiles, missed) of a deck's map, its top
     level, as Insights draws it: Insights' own while it's fresh, else the
@@ -1363,8 +1345,6 @@ def on_message(cmd, parts):
             map_up(did, int(x))
         elif cmd == "insmapall":
             browse_map(did)
-        elif cmd == "insmapstudy" and (x.isdigit() or x == "open"):
-            study_map(did, x)  # 3.9.5: the weakest part's, or the open one's
         elif cmd == "insmapby" and x.isdigit():
             pick_map(did, int(x))
         elif cmd == "insmapshare":

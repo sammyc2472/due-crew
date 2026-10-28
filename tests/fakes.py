@@ -278,10 +278,6 @@ DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 EMOJI_RE = re.compile(r"[^A-Za-z0-9 ]+")
 SQUAD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 ACCENTS = ("green", "blue", "purple", "teal", "amber", "rose")  # auth.ts ACCENTS
-# 3.9.5, library.ts: the starters the library's row and the board carry, and who a starter's card names
-STARTERS_LIBRARY, STARTERS_BOARD, STARTER_BY = 8, 4, "Due Crew"
-LIBRARY_PAGE = 24
-LIBRARY_LENGTHS = {"short": (0, 28), "mid": (29, 84), "long": (85, 100000)}
 
 
 def _u16(s):
@@ -472,8 +468,6 @@ class FakeWorker:
         self.fail_status = None  # every request answers this (a 5xx, say)
         self.lock = threading.RLock()
         self._seq = 0
-        self.listed_seq = 0  # 3.9.5: the order plans went in the library (library.ts listed_at)
-        self.admin_log = []  # admin.ts logAction: (action, detail), as far as the fake keeps one
 
     # -- setup helpers ---------------------------------------------------
     def add_user(self, uid, name, email=None, code=None):
@@ -595,10 +589,6 @@ class FakeWorker:
             return self._team_route(method, me, parts[1], parts[2:], query, body or {})
         if parts[:1] == ["plans"]:
             return self._plans(method, me, parts[1:], query, body or {})
-        if m == ("GET", "library") and len(parts) == 1:  # 3.5, B; 3.9.5: its starters apart
-            return 200, self._library(me, query)
-        if parts[:2] == ["admin", "library"] and len(parts) in (3, 4):
-            return self._admin_library(method, me, parts[2:], body or {})
         if m == ("POST", "tips") and parts[1:] == ["helped"]:
             b = body or {}
             if not set(b) <= {"guid", "from", "helped"}:
@@ -797,9 +787,6 @@ class FakeWorker:
             out["decks"] = self._decks_for(me)
             # 3.1; 3.8.1: same=1 and an unmoved stamp: each plan without its doc
             out.update(self._plans_for_board(me, same and stamp is not None and pv == stamp))
-            # 3.9.5: owning, co-writing and following no plan: a few starters (board.ts)
-            if not keep and not out["plans"] and not out["authored"]:
-                out["starters"] = self._starters_for_board()
             # 3.6: the week's bingo card, to anyone in a squad (3.7.3: or on a plan's team)
             if wk in self.bingo_cards and (any(u == me for (_s, u) in self.members) or any(u == me for (_p, u) in self.team)):
                 out["bingo"] = self.bingo_cards[wk]
@@ -2175,7 +2162,6 @@ class FakeWorker:
             if not body["listed"]:
                 if p.get("listed") == 1:
                     p["listed"] = 0
-                    p["starter"] = 0  # 3.9.5: out of the library, out of the starters
             elif p.get("listed") != 1:
                 if p["audience"] != "code":
                     raise Bad(409, "squad_plan")
@@ -2184,8 +2170,6 @@ class FakeWorker:
                 if sum(1 for q in self.plans.values() if q["owner"] == me and q.get("listed") == 1) >= 20:
                     raise Bad(409, "too_many_listed")
                 p["listed"] = 1
-                self.listed_seq += 1
-                p["listedAt"] = self.listed_seq  # library.ts listed_at: newest first
             return 200, self._plan_view(pid, me)
         if rest[1:] == ["copy"] and method == "POST":  # library.ts copy: a plan of my own, its first date on start
             if not (self._writes(p, me) or (p.get("listed") == 1 and p["audience"] == "code")):
@@ -2212,9 +2196,8 @@ class FakeWorker:
             name = f"{p['name']} (copy)"[:60] if p["owner"] == me else p["name"]
             nid, _code = self.add_plan(me, name, new.get("deck") or "", [])
             self.plans[nid].update(doc=new, line=p["line"])
-            if p["owner"] != me:  # 3.9.5: a starter's copy is based on Due Crew's
-                self.plans[nid]["basedOn"] = {"id": pid, "name": p["name"], "owner": STARTER_BY if p.get("starter") else
-                                              (self.users.get(p["owner"]) or {}).get("name") or "?"}
+            if p["owner"] != me:
+                self.plans[nid]["basedOn"] = {"id": pid, "name": p["name"], "owner": (self.users.get(p["owner"]) or {}).get("name") or "?"}
             self.plan_log.append((nid, 1, me, f"copied from {p['name']}"[:120], int(time.time())))
             self._count("plans")
             return 200, self._plan_view(nid, me)
@@ -2336,7 +2319,6 @@ class FakeWorker:
             self.plan_prev[pid] = p["doc"]
             if audience == "squad" and p.get("listed") == 1:
                 p["listed"] = 0  # a plan for one squad leaves the library
-                p["starter"] = 0  # 3.9.5: and the starters
             p.update(name=name, line=line, doc=doc, audience=audience, squad=squad)
             p["version"] += 1
             self.plan_log.append((pid, p["version"], me, " ".join(str(body.get("summary") or "").split())[:120]
@@ -2541,110 +2523,6 @@ class FakeWorker:
             or u.get("notes") or u.get("cards")]}, **{k: p["doc"][k] for k in ("tagroot", "tags", "remarks") if p["doc"].get(k)})}  # 3.8.0: its own tags; 3.8.1: its notes
             for pid, p in sorted(self.plans.items()) if self._writes(p, me)]
         return {"plans": plans, "planOffers": offers, "authored": authored, "planInvites": self._plan_invites(me)}
-
-    # -- 3.5, B: the library; 3.9.5: its starters (worker/src/library.ts) ----
-    @staticmethod
-    def _lib_card(doc):
-        """plans.ts libCard: the few numbers a library card shows (the Worker
-        keeps them on the plan while it's listed; here, from its doc)."""
-        day = datetime.date.fromisoformat
-        units = doc.get("units") or []
-        frm = units[0]["opens"] if units else None
-        to = max((u.get("due") or u["opens"] for u in units), default=None)
-        days = (day(to) - day(frm)).days + 1 if frm and to else 0
-        week = (doc.get("pace") or {}).get("days") or [1] * 7
-        study = sum(1 for i in range(days) if week[(day(frm) + datetime.timedelta(days=i)).weekday()])
-        n = sum((u.get("n") or 0) + len(u.get("cards") or []) + sum((u.get("sn") or {}).values())
-                + (u["idn"] if u.get("idn") is not None else len(u.get("nids") or []) + len(u.get("cids") or []) + len(u.get("notes") or []))
-                for u in units)
-        return {"deck": doc.get("deck"), "dates": len(units), "daysOn": len({u["opens"] for u in units}), "from": frm, "to": to,
-                "days": days, "n": n, "perDay": int(n / study + 0.5) if study else 0,
-                "reviews": len(doc.get("reviews") or []), "events": len(doc.get("events") or []),
-                "ids": 1 if any(u.get("nids") or u.get("cids") for u in units) else 0}
-
-    def _starters(self, n):
-        """library.ts starterRows: listed plans the admin marked, newest listed first."""
-        rows = [(pid, p) for pid, p in self.plans.items() if p.get("starter") and p.get("listed") == 1 and p["audience"] == "code"]
-        return sorted(rows, key=lambda x: -x[1].get("listedAt", 0))[:n]
-
-    def _starters_for_board(self):
-        """library.ts startersForBoard: what the day's first board offers someone with no plan."""
-        out = []
-        for pid, p in self._starters(STARTERS_BOARD):
-            lib = self._lib_card(p["doc"])
-            out.append({"id": pid, "name": p["name"], "deck": lib["deck"] if isinstance(lib["deck"], str) else "",
-                        "days": lib["days"], "perDay": lib["perDay"], "line": p.get("line") or ""})
-        return out
-
-    def _library(self, me, query):
-        """library.ts list: listed plans anyone with the code can follow, newest
-        first (a search puts name matches first); with no filter and no search,
-        the starters apart on page 0 and out of the grid. A starter names Due Crew."""
-        from urllib.parse import unquote_plus
-        deck = unquote_plus(query.get("deck") or "")
-        span = LIBRARY_LENGTHS.get(query.get("len") or "")
-        q = " ".join(unquote_plus(query.get("q") or "").split())[:60]
-        page = min(19, max(0, int(query.get("page") or 0) if str(query.get("page") or "0").isdigit() else 0))
-        plain = not deck and not span and not q
-        hit = lambda s: q.lower() in str(s or "").lower()
-
-        def card(pid, p):
-            owner = self.users.get(p["owner"])
-            return dict({"id": pid, "code": p["code"], "name": p["name"], "line": p.get("line") or "",
-                         "ownerName": STARTER_BY if p.get("starter") else (owner or {}).get("name") or ("?" if p["owner"] else "a former member"),
-                         "followers": sum(1 for (pl, _u) in self.follows if pl == pid), "listedAt": p.get("listedAt", 0),
-                         "mine": p["owner"] == me, **({"starter": True} if p.get("starter") else {})},
-                        **self._lib_card(p["doc"]), **({"basedOn": p["basedOn"]} if p.get("basedOn") else {}))
-        rows = []
-        for pid, p in self.plans.items():
-            lib = self._lib_card(p["doc"])
-            if p.get("listed") != 1 or p["audience"] != "code" or (plain and p.get("starter")):
-                continue
-            if (deck and lib["deck"] != deck) or (span and not span[0] <= lib["days"] <= span[1]):
-                continue
-            if q and not (hit(p["name"]) or hit(p.get("line")) or hit(lib["deck"])):
-                continue
-            rows.append((pid, p))
-        rows.sort(key=lambda x: ((not hit(x[1]["name"])) if q else False, -x[1].get("listedAt", 0)))
-        shown = rows[page * LIBRARY_PAGE:(page + 1) * LIBRARY_PAGE]
-        decks = {}
-        for p in self.plans.values():
-            if p.get("listed") == 1 and p["audience"] == "code" and p["doc"].get("deck"):
-                decks[p["doc"]["deck"]] = decks.get(p["doc"]["deck"], 0) + 1
-        return dict({"plans": [card(*r) for r in shown], "more": len(rows) > (page + 1) * LIBRARY_PAGE,
-                     "decks": [[d, decks[d]] for d in sorted(decks, key=str.lower)][:40]},
-                    **({"starters": [card(*r) for r in self._starters(STARTERS_LIBRARY)]} if plain and page == 0 else {}))
-
-    def _admin_library(self, method, me, rest, body):
-        """library.ts takeOut, putBack and (3.9.5) setStarter: the admin's, as if
-        there were no such route for anyone else."""
-        if me not in self.admins:
-            raise Bad(404, "not_found")
-        pid = rest[0]
-        if pid not in self.plans:
-            raise Bad(404, "no_plan")
-        p = self.plans[pid]
-        if rest[1:] == ["starter"] and method == "POST":
-            if not isinstance(body.get("on"), bool) or set(body) != {"on"}:
-                raise Bad(400, "bad_on")
-            if body["on"] and not (p.get("listed") == 1 and p["audience"] == "code"):
-                raise Bad(409, "not_listed")
-            if bool(p.get("starter")) != body["on"]:
-                p["starter"] = 1 if body["on"] else 0
-                self.admin_log.append(("made a starter" if body["on"] else "took a starter off", f"{p['name'][:80]} (plan {pid})"))
-            return 200, {"ok": True, "starter": body["on"]}
-        if not rest[1:] and method == "POST":  # takeOut: its author reads why; a starter no more
-            note = body.get("note")
-            if not isinstance(note, str) or not note.strip():
-                raise Bad(400, "bad_note")
-            p.update(listed=-1, listedNote=" ".join(note.split())[:200], starter=0)
-            return 200, {"ok": True}
-        if not rest[1:] and method == "DELETE":  # putBack: unlisted, the author may list it
-            if p.get("listed") == -1:
-                p["listed"] = 0
-                p.pop("listedNote", None)
-            return 200, {"ok": True}
-        raise Bad(405, "method")
 
     def _delete_account(self, me):
         email = self.users[me]["email"]

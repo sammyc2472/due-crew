@@ -33,8 +33,7 @@ jobs:
       - run: python3 tests/test_due_crew.py
       - run: python3 tests/test_planner.py  # labs: the plan window (docs/planner.md)
       - run: python3 tests/test_plan_ops.py  # round five: plan changes as ops, waiting to be sent
-      - run: python3 tests/test_starters.py  # 3.9.5: starter plans, in the library and the empty Plans tab
-      - run: python3 tests/test_where.py  # 3.9.5: Study where the cards are (the map's weakest part, QBank's topics)
+      - run: python3 tests/test_where.py  # 3.9.5: Study where the cards are (QBank's topics)
       - run: python3 tests/test_habits.py  # 3.9.5: How you study, from my own log (never sent)
 
   dialogs:

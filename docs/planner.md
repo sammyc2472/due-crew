@@ -389,14 +389,7 @@ puts them on in Your plans: nothing is picked for them); its quizzes and
 the exam its events; each date tested on the next one; the pace fitting
 what's ticked to the end. Your plans opens on it. Without a calendar it's
 an empty plan with its exam and end: the deck beside it, to tick what the
-exam covers and lay it out. 3.9.5: with no calendar, **Shape** and
-**From** (`shapes.py`): a tag folder of the deck, each tag in it a date
-(One a day; Done by the exam, its last week free, or its last fifth when
-the span is short; A week each), named as the builder names one, nothing
-else on it; a line says what it makes ("34 dates · ~40 new a study day ·
-done Mon 30 Nov"), red when it runs to the exam or past it; the pace is
-what it asks a study day. A calendar read wins, and From at None is the
-empty plan as before. **Following a friend's plan instead?** Their
+exam covers and lay it out. **Following a friend's plan instead?** Their
 code, Follow. In labs, a link opens the calendar window below, session by
 session with Claude's stand-in.
 
@@ -576,7 +569,6 @@ and sends in Anki (Your plans › the plan › Review and send).
 | `planner/view.py` | pure, round five: what the Plan tab shows (the shape line, each week's asks, needs a look, today) |
 | `planner/insights.py` | pure, round five: what the Insights tab shows (the workload by week, how much of the deck and of each part as the topic map splits it, what each quiz tests, the biggest dates) |
 | `planner/prompts.py` | pure: the prompts for your own AI, builder.js's `Prompts` restated |
-| `planner/shapes.py` | pure, 3.9.5: New plan's Shape and From (a tag folder's tags laid out as dates: one a day, done by the exam, a week each) |
 | `planner/flow.py` | the glue: the windows' asks (`Ops`, `StartOps`, `NewOps`, `QidOps`), `make_here`, `plan_drafts.json` |
 | `planner/window.py`, `plan_tab.py`, `date_panel.py`, `deck_panel.py`, `shape.py`, `send.py`, `insights_tab.py`, `settings_tab.py`, `mine_tab.py`, `new_plan.py`, `text_tab.py`, `history_tab.py`, `day_notes.py`, `date_dialogs.py`, `widgets.py`, `picker.py`, `qid_window.py`, `start_window.py` | the Qt windows and their parts, in the board's look |
 

@@ -8,29 +8,22 @@ mine (POST /plans, then the builder's save) and opens it in Your plans:
 with a calendar, its sessions are its dates, named and with no cards (the
 author puts every card on: nothing is picked for them), and its quizzes
 its quizzes; without one, the deck beside an empty plan, to tick what the
-exam covers. 3.9.5: with no calendar, a Shape and From (a tag folder of
-the deck; shapes.py): each tag in it a date, one a day, done by the exam
-or a week each, the plan made filled; From left at None, it's as it was.
-A friend's plan instead: its code, Follow.
+exam covers. A friend's plan instead: its code, Follow.
 Names are the calendar's and the deck's: plain text everywhere."""
 
 import os
 
 from aqt.qt import (
-    QButtonGroup, QColor, QComboBox, QDate, QDateEdit, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QFrame,
-    QHBoxLayout, QLayout, QLineEdit, QPainter, QPushButton, QRectF, QSizePolicy, Qt, QTimer, QVBoxLayout, QWidget,
+    QDate, QDateEdit, QDialog, QDialogButtonBox, QComboBox, QFileDialog, QFormLayout, QFrame, QHBoxLayout, QLineEdit,
+    QPushButton, Qt, QTimer, QVBoxLayout,
 )
 
-from ..ui import _mix, attach_alive, confirm, esc, heading, role, tone
+from ..ui import attach_alive, confirm, heading, role
 from .. import plans as P
 from . import edits as E
 from . import reading as R
-from . import shapes as SH
 from .start_window import EXAMPLE, FILES, DropBox, pdf_text
-from .widgets import mark, tool, plain
-
-NO_FROM = "None (an empty plan)"
-PICK_FROM = "Pick a folder of tags: each becomes a date."
+from .widgets import tool, plain
 
 
 def read_file(path):
@@ -53,59 +46,6 @@ def read_file(path):
         return "", "That file couldn't be opened."
 
 
-class ShapePic(QFrame):
-    """A shape's picture: three weeks of a calendar, each day a cell in the
-    colour of what the shape makes of it (shapes.cell), in the board's."""
-
-    CELL, GAP, ROWS = (13, 11), (3, 3), 3
-
-    def __init__(self, shape):
-        super().__init__()
-        self.shape = shape
-        (w, h), (gx, gy) = self.CELL, self.GAP
-        self.setFixedSize(7 * w + 6 * gx, self.ROWS * h + (self.ROWS - 1) * gy)
-
-    def paintEvent(self, _e):  # noqa: N802 (Qt's)
-        accent, bg = tone("accent"), tone("bg")
-        fill = {"on": accent, "off": tone("well"), "soft": _mix(accent, bg, .6), "free": _mix(accent, bg, .6),
-                "exam": tone("hours")}
-        (w, h), (gx, gy) = self.CELL, self.GAP
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        p.setPen(Qt.PenStyle.NoPen)
-        for r in range(self.ROWS):
-            for c in range(7):
-                p.setBrush(QColor(fill[SH.cell(self.shape, r, c)]))
-                p.drawRoundedRect(QRectF(c * (w + gx), r * (h + gy), w, h), 2, 2)
-        p.end()
-
-
-class ShapeTile(QPushButton):
-    """One of the shapes to pick: its name over its picture, ticked as the
-    window's tool buttons are (the accent round it). Its parts let a click
-    through to it."""
-
-    def __init__(self, shape, text):
-        super().__init__()
-        self.shape = shape
-        self.setProperty("dc", "tool")
-        self.setCheckable(True)
-        self.setAutoDefault(False)
-        self.setAccessibleName(text)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(10, 8, 10, 8)
-        lay.setSpacing(6)
-        self.words = role(plain(text), "head")
-        self.words.setWordWrap(False)
-        self.pic = ShapePic(shape)
-        for w in (self.words, self.pic):
-            w.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-            lay.addWidget(w)
-        lay.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)  # as big as its parts, not a button's words
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-
-
 class NewPlanWindow(QDialog):
     """decks: [(deck id, name, cards)], biggest first; ops: flow.NewOps, or a render's or test's own."""
 
@@ -118,10 +58,6 @@ class NewPlanWindow(QDialog):
         self.file = ""
         self._named = ""       # the name a reading gave (a name typed in stays)
         self._ended = ("", "")  # the exam a reading gave (one typed in stays)
-        self.shape = "day"
-        self.tree = None       # the picked deck's tags (shapes.tree_of), read once a deck
-        self._decks = {}       # deck id: (tree, its folders)
-        self._kids = {}        # (deck id, folder): its tags and their cards
         attach_alive(self)
         self.setWindowTitle("New plan")
         self.setModal(False)
@@ -148,30 +84,7 @@ class NewPlanWindow(QDialog):
         self.end_day.setDate(QDate.fromString(E._later(str(ops.today()), 28), "yyyy-MM-dd"))
         ends.addWidget(self.end_day)
         form.addRow("Ends with", ends)
-        self.tiles = QWidget()
-        row = QHBoxLayout(self.tiles)
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(8)
-        self.shape_btns = {}
-        group = QButtonGroup(self)
-        for key, label in SH.SHAPES:
-            b = ShapeTile(key, label)
-            b.setChecked(key == self.shape)
-            b.clicked.connect(lambda _=False, key=key: self._shape(key))
-            group.addButton(b)
-            row.addWidget(b, 1)
-            self.shape_btns[key] = b
-        form.addRow("Shape", self.tiles)
-        self.frm = QComboBox()
-        self.frm.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
-        self.frm.setMinimumContentsLength(24)  # a long folder's path ends in … rather than widening the window
-        self.frm.setMaxVisibleItems(20)
-        self.frm.currentIndexChanged.connect(lambda _i: self._from())
-        form.addRow("From", self.frm)
-        self.form = form
         root.addLayout(form)
-        self.line = plain(PICK_FROM, muted=True)
-        root.addWidget(self.line)
         row = QHBoxLayout()
         row.addWidget(role(plain("The course calendar"), "head"))
         row.addWidget(plain("optional", muted=True))
@@ -198,7 +111,6 @@ class NewPlanWindow(QDialog):
         buttons.addButton("Cancel", QDialogButtonBox.ButtonRole.RejectRole).clicked.connect(self.reject)
         self.make_btn = QPushButton("Make the plan")
         self.make_btn.setDefault(True)
-        self.make_btn.setProperty("dc", "go")  # 3.9.5: in the accent, as the mock had it (the Shape tiles kept ui._mark from it)
         self.make_btn.clicked.connect(self._make)
         buttons.addButton(self.make_btn, QDialogButtonBox.ButtonRole.AcceptRole)
         root.addWidget(buttons)
@@ -215,86 +127,10 @@ class NewPlanWindow(QDialog):
         row.addWidget(tool("Follow", self._follow))
         root.addLayout(row)
         self.name.textChanged.connect(lambda _t: self._buttons())
-        self.deck.currentIndexChanged.connect(lambda _i: self._deck())
-        self.end_name.textChanged.connect(lambda _t: self._line())
-        self.end_day.dateChanged.connect(lambda _d: self._line())
-        self._deck()
+        self._buttons()
 
     def _buttons(self):
-        laid = self._laid()
-        self.make_btn.setEnabled(bool(self.name.text().strip()) and self.deck.count() > 0
-                                 and not (laid and laid.get("why")))
-
-    # ---- 3.9.5: a shape, from a tag folder ----
-
-    def _deck(self):
-        """The picked deck's tag folders in From (None first: as before shapes), read once a deck."""
-        did = self.deck.currentData()
-        if did is not None and did not in self._decks:
-            tree = SH.tree_of(self.ops.index(did))
-            self._decks[did] = (tree, SH.folders(tree))
-        self.tree, folders = self._decks.get(did) or (None, [])
-        self.frm.blockSignals(True)
-        self.frm.clear()
-        self.frm.addItem(NO_FROM, None)
-        names = SH.labels(folders)
-        for path in folders:
-            self.frm.addItem(names[path], path)
-            self.frm.setItemData(self.frm.count() - 1, f"<span>{esc(path)}</span>", Qt.ItemDataRole.ToolTipRole)
-        self.frm.blockSignals(False)
-        self._shown()
-
-    def _shown(self):
-        """Shape and From while there's a folder to fill from and no calendar (a calendar's sessions win)."""
-        on = self.frm.count() > 1 and not self.sessions
-        for w in (self.tiles, self.frm):
-            w.setVisible(on)
-            label = self.form.labelForField(w)
-            if label is not None:
-                label.setVisible(on)
-        self.line.setVisible(on)
-        self._line()
-
-    def _shape(self, key):
-        self.shape = key
-        for k, b in self.shape_btns.items():
-            b.setChecked(k == key)
-        self._line()
-
-    def _from(self):
-        path = self.frm.currentData()
-        if path and (not self.name.text().strip() or self.name.text() == self._named):
-            self._named = SH.name_of(path)
-            self.name.setText(self._named)
-        self._line()
-
-    def picked(self):
-        """The folder From has picked, while Shape and From show; else None (as before shapes)."""
-        return self.frm.currentData() if self.frm.count() > 1 and not self.sessions else None
-
-    def _end(self):
-        return self.end_day.date().toString("yyyy-MM-dd")
-
-    def _laid(self):
-        """shapes.lay's dates for the shape and the folder picked, or None (none picked)."""
-        path = self.picked()
-        if not path:
-            return None
-        key = (self.deck.currentData(), path)
-        if key not in self._kids:
-            self._kids[key] = SH.kids(self.tree, path)
-        return SH.lay(self.shape, self._kids[key], self.ops.today(), self._end())
-
-    def _line(self):
-        laid = self._laid()
-        if laid is None:
-            words, late = PICK_FROM, False
-        else:
-            words, late = SH.line(laid, self._end(), self.end_name.text())
-        self.line.setText(words)
-        mark(self.line, "dc", "bad" if late else "note")  # in red on the plan window's band for a fill past the exam
-        self.line.setContentsMargins(*((6, 3, 6, 3) if late else (0, 0, 0, 0)))
-        self._buttons()
+        self.make_btn.setEnabled(bool(self.name.text().strip()) and self.deck.count() > 0)
 
     # ---- the calendar ----
 
@@ -315,7 +151,6 @@ class NewPlanWindow(QDialog):
     def _read(self):
         text = self.text.toPlainText()
         self.sessions = R.number_weeks(R.read_calendar(text, self.ops.today())) if text.strip() else []
-        self._shown()
         if not text.strip():
             self.said.setText("Read on this computer. Nothing is sent until you make the plan.")
             return
@@ -342,8 +177,8 @@ class NewPlanWindow(QDialog):
         """(doc, dates) as Make the plan would make it."""
         deck = next((name for did, name, _n in self.decks if did == self.deck.currentData()), "")
         end_name = self.end_name.text().strip()
-        end_day = self._end() if end_name or not self.sessions else None
-        doc, uids = SH.new_doc(deck, self.sessions, end_name, end_day, self._laid(), self.tree)
+        end_day = self.end_day.date().toString("yyyy-MM-dd") if end_name or not self.sessions else None
+        doc, uids = E.new_plan_doc(deck, self.sessions, end_name, end_day)
         return doc, len(uids)
 
     def _make(self):
@@ -356,12 +191,9 @@ class NewPlanWindow(QDialog):
             self.said.setText(str(e))
             return
         n_ev = len(doc.get("events") or [])
-        laid = self._laid()
         if self.made is None and not confirm(
                 self, f"Make {name}?",
-                (f"{n:,} date{'s' if n != 1 else ''} from {SH.name_of(self.picked())}, done {P.fmt_day(laid['last'])}. "
-                 if laid else
-                 f"{n:,} date{'s' if n != 1 else ''} and {n_ev:,} quiz{'zes' if n_ev != 1 else ''} or exams, "
+                (f"{n:,} date{'s' if n != 1 else ''} and {n_ev:,} quiz{'zes' if n_ev != 1 else ''} or exams, "
                  "the dates with no cards yet. " if n else
                  "An empty plan that ends with " + (f"{doc['end'] and P.fmt_day(doc['end'])}. " if doc.get("end") else "nothing yet. "))
                 + "It's yours: nobody follows it till you share its code.", "Make it"):

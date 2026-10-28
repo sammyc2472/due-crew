@@ -76,7 +76,7 @@ type Obj = Record<string, unknown>;
 export type Plan = { id: string; code: string; owner: string; name: string; line: string; audience: string;
   squad: string | null; doc: string; version: number; updated_at: number;
   listed?: number; listed_note?: string | null; lib?: string | null; based_on?: string | null; tagroot?: string | null;
-  totals?: string | null; totals_at?: number | null; handover?: string | null; starter?: number };
+  totals?: string | null; totals_at?: number | null; handover?: string | null };
 
 export function draw(n: number): string {
   const bytes = crypto.getRandomValues(new Uint8Array(n));
@@ -1073,14 +1073,13 @@ export async function put(req: Request, s: Session, env: Env, [id]: string[]): P
   const listed = next.audience === "squad" && p.listed === 1 ? 0 : (p.listed ?? 0);
   const lib = listed === 1 && next.doc !== p.doc ? JSON.stringify(libCard(JSON.parse(next.doc))) : (p.lib ?? null);
   if (next.doc !== p.doc) await roomForSave(env, p, next.doc, lib);  // 3.7.2
-  // 3.9.5: and out of the library, out of the starters (the admin's mark is kept while it's listed);
-  // another audience or squad changes who may see it, so its kept totals are counted again (S2)
+  // another audience or squad changes who may see it, so its kept totals are counted again (3.9.5, S2)
   const moved = next.audience !== p.audience || (next.squad ?? null) !== (p.squad ?? null) ? 1 : 0;
   const r = await env.DB.prepare(
     `UPDATE plans SET name = ?, line = ?, audience = ?, squad = ?, doc = ?, listed = ?, lib = ?, tagroot = ?, version = version + 1, updated_at = ?,
-            starter = CASE WHEN ? = 1 THEN starter ELSE 0 END, totals_at = CASE WHEN ? = 1 THEN NULL ELSE totals_at END
+            totals_at = CASE WHEN ? = 1 THEN NULL ELSE totals_at END
      WHERE id = ? AND version = ?`,
-  ).bind(next.name, next.line, next.audience, next.squad, next.doc, listed, lib, next.tagroot, nowSec(), listed, moved, id, body.version).run().catch(rootTaken);
+  ).bind(next.name, next.line, next.audience, next.squad, next.doc, listed, lib, next.tagroot, nowSec(), moved, id, body.version).run().catch(rootTaken);
   if (!r.meta.changes) throw new HttpError(409, "stale", { version: (await getPlan(env, id)).version });
   await logSave(env, id, (body.version as number) + 1, s.uid, summary || "changed the plan", next.doc !== p.doc ? p.doc : null);
   const posted = body.post !== undefined ? await postWithSave(env, p, s.uid, body.post, (body.version as number) + 1) : undefined;

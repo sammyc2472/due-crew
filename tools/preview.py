@@ -235,16 +235,12 @@ sections.append("<h3>round five: Today, a plan's date opened (a click on its nam
 sections.append("<h3>round five: Upcoming, a date ahead opened</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=dict(_DV, tab="upcoming"), you=_YOU("upcoming"))
     .replace('id="dc-dd-p1-u3" hidden>', 'id="dc-dd-p1-u3">').replace('id="du-', 'id="duu-'))
-# 3.9.5 (Five mocks, reviewed): reviews done, today's misses by part, Next up in the suggestion's place, and a
-# Due Crew deck that ran out with Pip
+# 3.9.5 (Five mocks, reviewed): reviews done, today's misses by part
 _DONE = _D.view(_T, [_DATES[2]], [_ITEMS[1]], {}, reviews={"due": 0, "done": 214, "whole": 214, "through": 214, "later": 0,
-                                                       "left": 0, "back": 0, "at": ""},
-                suggestions=[{"key": "next", "lead": "Next up:", "cmd": "insstudy:10:0", "go": "Study 14",
-                              "text": "Renal \u00b7 Physiology isn\u2019t sticking: 14 of 41 missed in two weeks"}])
+                                                       "left": 0, "back": 0, "at": ""})
 _DONE.update(misses={"n": 23, "reviews": 214, "elsewhere": 4,
-                     "topics": [("Renal \u00b7 Physiology", list(range(9))), ("Pharm", list(range(6))), ("Cardio", list(range(4)))]},
-             cleared={"name": "Pharmacokinetics", "n": 46, "day": _T})
-sections.append("<h3>3.9.5: Today, reviews done: today's misses by part, Next up, a deck that ran out</h3>"
+                     "topics": [("Renal \u00b7 Physiology", list(range(9))), ("Pharm", list(range(6))), ("Cardio", list(range(4)))]})
+sections.append("<h3>3.9.5: Today, reviews done: today's misses by part</h3>"
                 + board.render(DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DONE, you=_YOU("today"))
                 .replace('id="du-', 'id="dun-'))
 sections.append("<h3>3.9.5: Today, a plan topic's two ways (a click on its name: Study, Browse)</h3>" + board.render(
@@ -453,7 +449,7 @@ _MAP = [_tile("Cardio · Physiology", 412, 86, [_tile("Cardiac output", 160, 91)
                                                _tile("Vessels", 36, 94)]),
         _tile("Cardio · Pathology", 318, 77, st=240), _tile("Cardio · Pharm", 260, 84, st=120), _tile("Renal · Physiology", 190, 66),
         _tile("Pulm · Pathology", 150, 88), _tile("Heme", 120, None, st=0), _tile("Endo", 96, 71, st=60), _tile("MSK", 64, 94)]
-# 3.9.5 (Study where the cards are): Again these 4 weeks: 41 in Renal (the weakest), 30 in Cardio · Pathology, some in Cardio's parts
+# 3.9.5 (Study where the cards are): Again these 4 weeks, as QBank QIDs' topics count them: 41 in Renal, 30 in Cardio · Pathology, some in Cardio's parts
 _MISSED = set(_MAP[3]["_cids"][:41]) | set(_MAP[1]["_cids"][:30]) | set(_MAP[0]["_cids"][::18])
 _PLAN_INS = {"decks": _DECKS, "did": 10, "exam": True, "plan": {"id": "p1", "name": "MS2 Block 1 · Dre's plan"},
              "view": dict(_INS, did=10, pid="p1", leeches=3, map=_MAP, map_by="right", _map_missed=_MISSED,
@@ -558,14 +554,6 @@ sections.append("<h3>3.8.0: You › Insights, no exam date, nothing yet</h3>" + 
     you=_YOU("insights", insights={"decks": _DECKS[1:], "did": 20, "exam": False, "plan": None, "view": {}})))
 sections.append("<h3>3.8.0: You › Plans, following nothing</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, due=_DV, you=_YOU("plans", plans={"cards": [], "offers": []})))
-# 3.9.5: no plan, and the starters the day's first board brought: Or start from one, Use it on each
-_STARTERS = [{"id": "s1", "name": "A chapter a day", "deck": "Big Step 1", "days": 42, "perDay": 40, "line": "The pathology videos"},
-             {"id": "s2", "name": "Rapid review in 30 days", "deck": "Big Step 1", "days": 30, "perDay": 220, "line": ""},
-             {"id": "s3", "name": "One block in 4 weeks, by system, with two review days and a long name", "deck": "Big Step 1::Systems",
-              "days": 28, "perDay": 60, "line": ""},
-             {"id": "s4", "name": "Dedicated: 8 weeks", "deck": "Big Step 1", "days": 56, "perDay": 300, "line": ""}]
-sections.append("<h3>3.9.5: You › Plans, no plan: Or start from one (the starters), Use it on each</h3>" + board.render(
-    DATA, {"period": "today"}, now_ts - 60, due=_DV, you=_YOU("plans", plans={"cards": [], "offers": [], "starters": _STARTERS})))
 sections.append("<h3>3.8.0: Due off, folded: Plans and Insights on one line</h3>" + board.render(
     DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS, you=_YOU("plans", folded=True)))
 # 3.5.0: Settings in the board, each tab, and a Decks tab with asks both ways
