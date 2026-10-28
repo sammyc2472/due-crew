@@ -16,8 +16,12 @@ const PLAN_PAGE = /^\/p\/([A-Za-z0-9]{8})\/?$/;
 const PLAN_PNG = /^\/p\/([A-Za-z0-9]{8})\.png$/;
 const INVITE_PAGE = /^\/i\/([A-Za-z0-9]{6}|[A-Za-z0-9]{10})\/?$/;
 const INVITE_PNG = /^\/i\/([A-Za-z0-9]{6}|[A-Za-z0-9]{10})\.png$/;
-// 3.9.5, game night: the table page and its join links (duecrew.com/t/MKQZ)
+// 3.9.5, game night: the table page and its join links (duecrew.com/t/MKQZ).
+// While Sam tests it, /table is the admins' alone (worker/src/table.ts's
+// ADMINS_ONLY: set both false when it goes wider); a join link is anyone's,
+// and only reaches a table an admin opened, through its door.
 const TABLE = /^\/(table|t\/[A-Za-z]{4})\/?$/;
+const TABLE_ADMINS_ONLY = true;
 const TABLE_CSP = [
   "default-src 'self'", "img-src 'self' data:", "style-src 'self' 'unsafe-inline'", "script-src 'self'",
   "connect-src 'self' wss://duecrew.com wss://www.duecrew.com", "base-uri 'none'", "form-action 'none'", "frame-ancestors 'none'",
@@ -135,6 +139,11 @@ export default {
       return new Response(null, { status: 302, headers: { location: "/home", "cache-control": "no-store" } });
     }
     if (TABLE.test(url.pathname)) {
+      if (TABLE_ADMINS_ONLY && !url.pathname.startsWith("/t/")) {
+        const me = await env.API.fetch(new Request(new URL("/api/auth/me", url), { method: "GET", headers: req.headers }));
+        const admin = me.status === 200 && ((await me.json()) as { admin?: boolean }).admin === true;
+        if (!admin) return new Response(null, { status: 302, headers: { location: me.status === 401 ? "/sign-in?next=/table" : "/home", "cache-control": "no-store" } });
+      }
       const page = await env.ASSETS.fetch(new Request(new URL("/table", url), { method: "GET" }));
       const headers = new Headers(page.headers);
       headers.set("content-security-policy", TABLE_CSP);

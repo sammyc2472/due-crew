@@ -247,7 +247,7 @@ same commit, each with its test:
 | A follower's day (3.8.1): Welcome back, what Hold back keeps, Study a date or a quiz | `plan_flow.welcome_back`/`show_held`/`study_date`/`study_quiz`, `plans.quiz`, `ui/away_dialog.py`, `ui/held_dialog.py` | never sent (Push my dates back is the follow's shift) |
 | The builder's day's work and suggestions (3.8.1) | | `Work`, `Suggest` in builder.js |
 | Previews of a plan or invite link | | `site/src/og.ts` |
-| Game night (3.9.5): duecrew.com/table, six party games, a TV and phones; the door (the host's crew straight in, anyone else waits till let in; crew only, open, lock, turn away); while Sam tests it every game starts with one player (`FEW` in table.js: set it back before it goes wider) | | `site/public/table.js` (engine, games), `table-packs.js`, `table.css`, `table.html`; `worker/src/table.ts` (a Durable Object a table, nothing kept); `test/table.test.ts`, `test_game_night_one_player_v395` |
+| Game night (3.9.5): duecrew.com/table, six party games, a TV and phones; the door (the host's crew straight in, anyone else waits till let in; crew only, open, lock, turn away); while Sam tests it every game starts with one player (`FEW` in table.js) and only an admin opens a table or has /table (`ADMINS_ONLY` in table.ts, `TABLE_ADMINS_ONLY` in site/src/index.ts; join links are anyone's): set all three back before it goes wider | | `site/public/table.js` (engine, games), `table-packs.js`, `table.css`, `table.html`; `worker/src/table.ts` (a Durable Object a table, nothing kept); `test/table.test.ts`, `test_game_night_one_player_v395` |
 
 ## Releasing
 

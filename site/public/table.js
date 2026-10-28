@@ -990,7 +990,7 @@ function Phone(root, client, name) {
     P.key = key;
     const head = h("div", { class: "ph-top" }, h("b", {}, name), h("span", {}, client.shut ? "" : client.waiting ? "At the door" : tv ? `Game night · ${clip(tv.presence.code, 8)}` : "Looking for the TV"));
     let body;
-    if (client.shut && SHUT[client.shut]) body = frag(h("div", { class: "big" }, SHUT[client.shut][0]), h("p", { class: "small" }, SHUT[client.shut][1]), h("div", { class: "row" }, btn("Back to game night", () => { bye(); history.replaceState(null, "", "/table"); home(); }, "plain")));
+    if (client.shut && SHUT[client.shut]) body = frag(h("div", { class: "big" }, SHUT[client.shut][0]), h("p", { class: "small" }, SHUT[client.shut][1]), h("div", { class: "row" }, joinOnly ? btn("Join again", () => { bye(); joinView(""); }, "plain") : btn("Back to game night", () => { bye(); history.replaceState(null, "", "/table"); home(); }, "plain")));
     else if (client.waiting) body = frag(h("div", { class: "big" }, `At the door, ${name}.`), h("p", { class: "small" }, "The host lets you in from the TV."));
     else if (!tv) body = frag(h("div", { class: "big" }, "Looking for the TV…"), h("p", { class: "small" }, "The code has to match the one on the TV."));
     else if (pub.m !== "game") body = frag(h("div", { class: "big" }, `You're in, ${name}.`), h("p", { class: "small" }, `Watch the TV.${GAMES[pub.gm] ? ` Up next: ${GAMES[pub.gm].name}.` : ""}`), pip("hello"));
@@ -1034,8 +1034,9 @@ const store = {
   drop(k, s) { try { (s ? sessionStorage : localStorage).removeItem(k); } catch (_) { /* fine */ } },
 };
 let leaving = null;
+const joinOnly = /^\/t\//.test(location.pathname);  // a join link: a phone's page, nothing to host from
 function bye() { if (leaving) { try { leaving(); } catch (_) { /* fine */ } leaving = null; } conn.textContent = ""; }
-const back = () => h("button", { type: "button", class: "back", onclick: () => { bye(); history.replaceState(null, "", "/table"); home(); } }, "← Game night");
+const back = () => (joinOnly ? document.createTextNode("") : h("button", { type: "button", class: "back", onclick: () => { bye(); history.replaceState(null, "", "/table"); home(); } }, "← Game night"));
 const STATES = { open: "", waiting: "", reconnecting: "Reconnecting…", closed: "The table closed.", elsewhere: "This seat is open in another tab.", another: "This table's TV is open on another screen.", gone: "Lost the table. Check your connection, then join again." };
 // why a table sent a phone off, as the phone says it
 const SHUT = {

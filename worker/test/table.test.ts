@@ -54,9 +54,13 @@ async function leave(...socks: Sock[]) {
   await until(() => socks.every((s) => s.closed), "everyone gone");
 }
 
+// while Sam tests it, an admin opens a table (ADMINS_ONLY)
+const ADMIN = { ADMIN_UIDS: "sam" } as any;
+const open = (who: { token: string }) => api("POST", "/table", { token: who.token, env: ADMIN });
+
 async function opened() {
   const sam = await person("sam");
-  const t = await sam.call("POST", "/table");
+  const t = await open(sam);
   expect(t.status).toBe(200);
   expect(t.body.code).toMatch(/^[A-HJ-NP-Z]{4}$/);
   return { ...(t.body as { code: string; key: string }), sam };
@@ -272,16 +276,18 @@ describe("game night: a table", () => {
     expect((await seat(code, cid("ana"))).status).toBe(404);
   });
 
-  it("has a ceiling on tables opened", async () => {
-    const sam = await person("sam");
-    for (let i = 0; i < 10; i++) expect((await sam.call("POST", "/table")).status).toBe(200);
-    expect((await sam.call("POST", "/table")).status).toBe(429);
+  it("is opened by an admin alone while Sam tests it, and has a ceiling", async () => {
+    const sam = await person("sam"), dre = await person("dre");
+    expect((await api("POST", "/table", { token: dre.token, env: ADMIN })).body).toEqual({ error: "not_found" });  // as an admin route answers
+    expect((await sam.call("POST", "/table")).status).toBe(404);  // sam, with no admins set
+    for (let i = 0; i < 10; i++) expect((await open(sam)).status).toBe(200);
+    expect((await open(sam)).status).toBe(429);
   });
 
   it("is reached through duecrew.com: the page with a policy that lets its socket out, and the socket through the API's binding", async () => {
     const siteEnv = {
       ASSETS: { fetch: async (req: Request) => new Response(new URL(req.url).pathname === "/table" ? "<main id=app></main>" : "static", { headers: { "content-type": "text/html" } }) },
-      API: { fetch: (req: Request) => worker.fetch(req, { ...env, EMAIL: undefined } as any) },
+      API: { fetch: (req: Request) => worker.fetch(req, { ...env, EMAIL: undefined, ...ADMIN } as any) },
     };
     const via = async (path: string, headers: Record<string, string> = {}) => {
       const ctx = createExecutionContext();
@@ -289,15 +295,22 @@ describe("game night: a table", () => {
       await waitOnExecutionContext(ctx);
       return res;
     };
-    for (const path of ["/table", "/t/MKQZ", "/t/mkqz/"]) {
-      const res = await via(path);
+    const sam = await person("sam"), dre = await person("dre");
+    // while Sam tests it, /table is an admin's alone; a join link is anyone's
+    const signedOut = await via("/table");
+    expect([signedOut.status, signedOut.headers.get("location")]).toEqual([302, "/sign-in?next=/table"]);
+    const notAdmin = await via("/table", { Cookie: `dc_session=${dre.token}` });
+    expect([notAdmin.status, notAdmin.headers.get("location")]).toEqual([302, "/home"]);
+    for (const [path, who] of [["/table", sam.token], ["/table/", sam.token], ["/t/MKQZ", ""], ["/t/mkqz/", ""], ["/t/MKQZ", dre.token]]) {
+      const res = await via(path, who ? { Cookie: `dc_session=${who}` } : {});
       expect(res.status).toBe(200);
       expect(await res.text()).toContain("<main id=app>");
       expect(res.headers.get("content-security-policy")).toContain("connect-src 'self' wss://duecrew.com");
       expect(res.headers.get("cache-control")).toBe("no-store");
     }
     expect(await (await via("/t/MKQZ5")).text()).toBe("static");  // not a code: the static files', as before
-    const { code, key } = await opened();
+    const t = await open(sam);
+    const { code, key } = t.body;
     const res = await via(`/api/table/${code}/ws?c=${cid("tv")}&k=${key}`, { Upgrade: "websocket", Origin: "https://duecrew.com" });
     expect(res.status).toBe(101);
     const ws = res.webSocket!;
