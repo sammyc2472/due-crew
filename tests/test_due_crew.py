@@ -18631,6 +18631,81 @@ def test_super_decks_gone_v395():
         PF._pcfg, PF._psave = saved
 
 
+GAMES_SIM_JS = r"""
+const out = [];
+for (const id of ORDER) {
+  const g = GAMES[id];
+  for (let N = 1; N <= g.max; N++) {
+    const seats = Array.from({ length: N }, (_, i) => ({ peer: "p" + i, n: "P" + i }));
+    const pres = seats.map(() => ({}));
+    let step = 1, A = seats.map(() => null);
+    const c = () => ({ N, seats, name: (i) => (seats[i] ? seats[i].n : "?"), A, pres: (i) => pres[i] || {}, here: () => true, bots: true });
+    let S, phases = [], err = "";
+    try {
+      S = g.start(c());
+      phases.push(S.ph);
+      for (let k = 0; k < 3; k++) {
+        const x = g.pub(S, c());
+        A = seats.map((_, i) => {
+          const p = g.bot(x, i, { s: step, seat: i, seats, N, pres: (j) => pres[j] || {} });
+          if (!p) return null;
+          if (p.d) pres[i] = { d: Object.assign({ s: step }, p.d) };
+          return p.a ? Object.assign({ s: step }, p.a) : null;
+        });
+        const S2 = g.collect(S, A, c()) || (g.force && g.force(S, c()));
+        if (!S2) break;
+        S = S2; step++; A = seats.map(() => null);
+        phases.push(S.ph);
+      }
+      if (id === "rounds") phases.push(Rounds.next(S, c()).ph);
+    } catch (e) { err = String(e && e.stack || e).slice(0, 300); }
+    out.push({ id, N, min: g.min, need: need(g), phases, err });
+  }
+}
+console.log(JSON.stringify(out));
+"""
+
+
+def test_game_night_one_player_v395():
+    """3.9.5, game night (duecrew.com/table): while Sam tests it, any game
+    starts with one player (site/public/table.js's FEW; each game's own min
+    stays on its tile). Each game, one player through its most, starts, and
+    the bots' answers move it on: alone, Rounds has no Attending, Imposter
+    has nobody to vote for, and Links' clue giver guesses too."""
+    import shutil
+    import subprocess
+    if not shutil.which("node"):
+        check("game night: node runs the games (skipped: no node)", True)
+        return
+    src = open(os.path.join(REPO, "site", "public", "table.js"), encoding="utf-8").read()
+    packs = open(os.path.join(REPO, "site", "public", "table-packs.js"), encoding="utf-8").read()
+    a, b = src.index("const D = GN_PACKS;"), src.index("// ---------- hubs")
+    # the games and their helpers alone: nothing before the hubs draws until asked
+    js = packs + "\nconst matchMedia = () => ({ matches: true });\n" + src[a:b] + GAMES_SIM_JS
+    r = subprocess.run(["node", "-e", js], capture_output=True, text=True, timeout=60)
+    check("game night: the games run in node", r.returncode == 0, r.stderr[:400])
+    if r.returncode:
+        return
+    runs = json.loads(r.stdout)
+    by = {(x["id"], x["N"]): x for x in runs}
+    check("game night: all six games, one player through eight, start and take their first answers without an error",
+          len({x["id"] for x in runs}) == 6 and all(not x["err"] for x in runs) and all((g, 1) in by for g in {x["id"] for x in runs}),
+          [x for x in runs if x["err"]][:2])
+    check("game night: while testing, every game starts with one player; each keeps its own min for its tile",
+          all(x["need"] == 1 for x in runs) and by[("imposter", 1)]["min"] == 3 and by[("between", 1)]["min"] == 2)
+    check("game night: alone, every game moves on from its first step (none waits on a second player)",
+          all(len(by[(g, 1)]["phases"]) >= 2 for g in ("imposter", "rounds", "trivia", "draw", "between", "links")),
+          {g: by[(g, 1)]["phases"] for g in ("imposter", "rounds", "trivia", "draw", "between", "links")})
+    check("game night: alone, Rounds plays straight to the chart and on to the next round; with two, the Attending picks",
+          by[("rounds", 1)]["phases"] == ["play", "chart", "play"] and by[("rounds", 2)]["phases"][:3] == ["play", "pick", "chart"])
+    check("game night: alone, Imposter's vote ends it (nobody to vote for); Draw it is a chain of one",
+          by[("imposter", 1)]["phases"] == ["clue", "clue", "vote", "end"] and by[("draw", 1)]["phases"] == ["step", "reveal"])
+    check("game night: alone, Links' clue giver can tap too; with two, only the other one taps",
+          "if ((i === S.giver && c.N > 1) || !a) continue;" in src and "if (giver && p.seats.length > 1)" in src)
+    node = subprocess.run(["node", "--check", "-"], input=src, capture_output=True, text=True)
+    check("game night: table.js parses", node.returncode == 0, node.stderr[:300])
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

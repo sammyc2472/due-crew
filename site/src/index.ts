@@ -16,6 +16,12 @@ const PLAN_PAGE = /^\/p\/([A-Za-z0-9]{8})\/?$/;
 const PLAN_PNG = /^\/p\/([A-Za-z0-9]{8})\.png$/;
 const INVITE_PAGE = /^\/i\/([A-Za-z0-9]{6}|[A-Za-z0-9]{10})\/?$/;
 const INVITE_PNG = /^\/i\/([A-Za-z0-9]{6}|[A-Za-z0-9]{10})\.png$/;
+// 3.9.5, game night: the table page and its join links (duecrew.com/t/MKQZ)
+const TABLE = /^\/(table|t\/[A-Za-z]{4})\/?$/;
+const TABLE_CSP = [
+  "default-src 'self'", "img-src 'self' data:", "style-src 'self' 'unsafe-inline'", "script-src 'self'",
+  "connect-src 'self' wss://duecrew.com wss://www.duecrew.com", "base-uri 'none'", "form-action 'none'", "frame-ancestors 'none'",
+].join("; ");
 const CSP = [
   "default-src 'self'", "img-src 'self' data:", "style-src 'self' 'unsafe-inline'", "script-src 'self'", "connect-src 'self'",
   "base-uri 'none'", "form-action 'none'", "frame-ancestors 'none'",
@@ -127,6 +133,14 @@ export default {
     // The cookie is only a hint here: the home asks the API who you are.
     if (url.pathname === "/" && /(?:^|;\s*)dc_session=/.test(req.headers.get("cookie") || "")) {
       return new Response(null, { status: 302, headers: { location: "/home", "cache-control": "no-store" } });
+    }
+    if (TABLE.test(url.pathname)) {
+      const page = await env.ASSETS.fetch(new Request(new URL("/table", url), { method: "GET" }));
+      const headers = new Headers(page.headers);
+      headers.set("content-security-policy", TABLE_CSP);
+      headers.set("cache-control", "no-store");
+      headers.set("referrer-policy", "no-referrer");  // a table's code never leaves in a Referer
+      return new Response(page.body, { status: page.status, headers });
     }
     if (APP.test(url.pathname)) {
       const page = await env.ASSETS.fetch(new Request(new URL("/app", url), { method: "GET" }));

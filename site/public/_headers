@@ -17,3 +17,9 @@
   Cache-Control: public, max-age=300
 /landing.js
   Cache-Control: public, max-age=300
+/table.js
+  Cache-Control: public, max-age=300
+/table-packs.js
+  Cache-Control: public, max-age=300
+/table.css
+  Cache-Control: public, max-age=300

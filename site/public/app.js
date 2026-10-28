@@ -56,6 +56,7 @@ function leaveOk() {
 
 function go(path) {
   if (!leaveOk()) return;
+  if (/^\/(table|t\/)/.test(path)) { location.assign(path); return; }  // 3.9.5: game night is a page of its own (table.html)
   history.pushState(null, "", path);
   route();
 }

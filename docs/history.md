@@ -3630,3 +3630,42 @@ every release that changes how something works.
   without QtPdf, so the dropped calendar PDF read as nothing (the add-on
   itself already says so when an Anki's Qt has no PDF reader: `pdf_text`
   is None).
+- 3.9.5, game night (Sam: "Throw it into due crew in a version I could
+  test with friends joining from their phones and me from my computer"):
+  duecrew.com/table, six party games for a table of friends (Imposter,
+  Rounds, Trivia, Draw it, Somewhere between, Links), the site's alone;
+  the add-on doesn't know it. One screen is the TV and holds the game; the
+  phones answer. `site/public/table.js` is the engine and the games,
+  `table-packs.js` their packs (Due Crew's own sample topics and
+  questions: no card's words, nothing from anyone's deck), `table.css`,
+  `table.html`; the site serves it at `/table` and `/t/CODE` (a join link,
+  the QR on the TV) with a policy that lets its socket out
+  (`site/src/index.ts`). A table is a Durable Object for one night
+  (`worker/src/table.ts`, migration `v1` in wrangler.toml, SQLite, the free
+  plan's): someone signed in opens it (`POST /table`, 10 an hour) and gets
+  its four letters and a key that makes their page the host; each
+  connection keeps one presence (a name and an answer; the host's is the
+  game) that the table hands to who's sitting there, and only the host's
+  is marked host, so a phone can't play the TV. A refused socket can't read
+  a body, so the table says why in the close (`SHUT`). Nothing is kept but
+  the rate limits: a table closes after four hours, or 15 minutes after its
+  host goes. This is the one live connection Due Crew has, a deliberate
+  change to what it costs (a Durable Object while a table is open; the
+  add-on's budget is as it was). The door (Sam: "is there a way to ensure
+  that they're crew or allowed"): the host's crew (signed in on the phone,
+  mutual friends; the host's own phone too) sit straight down, by the name
+  on their account, which only the host's TV hears; anyone else waits at
+  the door, showing the host a typed name and nothing more, till the host
+  lets them in ("Ask me", the default). The host can make it crew only,
+  let in anyone with the code, lock it (only who's sat down can come back)
+  and turn someone away for the night (that phone's seat, not a person:
+  crew only is the way to keep a stranger out). Six wait at the door at
+  most, twelve sit; a phone's reload keeps its seat (its id lives in the
+  tab). While Sam tests it, every game starts with one player (`FEW` in
+  table.js; each game's own min stays on its tile, and the lobby says
+  "Made for 3 or more"): alone, Rounds has no Attending, Imposter's vote
+  ends it, Links' clue giver taps too. Set `FEW` back before it goes wider.
+  Tests: `worker/test/table.test.ts` (the door, the presences, the seats,
+  the alarm, through the site's binding) and the suite's
+  `test_game_night_one_player_v395` (every game, one to eight players, in
+  node).

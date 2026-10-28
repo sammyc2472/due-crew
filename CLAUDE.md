@@ -28,7 +28,9 @@ add-on.
   plain JS, no framework: sign-in, plans, the builder). Its Worker
   (`site/src/index.ts`) sends `/api/*` to the API by service binding, so
   the site's session is a same-site HttpOnly cookie, and draws a plan
-  link's preview (`site/src/og.ts`).
+  link's preview (`site/src/og.ts`). Game night (3.9.5) is the site's
+  alone: `/table` and `/t/CODE`, `public/table.*`, its tables a Durable
+  Object on the API (`worker/src/table.ts`).
 - `README.md` — from the tagline down, doubles verbatim as the AnkiWeb
   listing description; keep them in sync when it changes. The logo block
   above the tagline is GitHub-only (AnkiWeb shows its own title).
@@ -245,6 +247,7 @@ same commit, each with its test:
 | A follower's day (3.8.1): Welcome back, what Hold back keeps, Study a date or a quiz | `plan_flow.welcome_back`/`show_held`/`study_date`/`study_quiz`, `plans.quiz`, `ui/away_dialog.py`, `ui/held_dialog.py` | never sent (Push my dates back is the follow's shift) |
 | The builder's day's work and suggestions (3.8.1) | | `Work`, `Suggest` in builder.js |
 | Previews of a plan or invite link | | `site/src/og.ts` |
+| Game night (3.9.5): duecrew.com/table, six party games, a TV and phones; the door (the host's crew straight in, anyone else waits till let in; crew only, open, lock, turn away); while Sam tests it every game starts with one player (`FEW` in table.js: set it back before it goes wider) | | `site/public/table.js` (engine, games), `table-packs.js`, `table.css`, `table.html`; `worker/src/table.ts` (a Durable Object a table, nothing kept); `test/table.test.ts`, `test_game_night_one_player_v395` |
 
 ## Releasing
 

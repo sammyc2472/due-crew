@@ -19,7 +19,10 @@ import * as Bingo from "./bingo";
 import * as S from "./social";
 import * as Quiet from "./quiet";
 import * as Mine from "./mydata";
+import * as Tb from "./table";
 import { ANY_BODY_MAX, Env, HttpError, json } from "./util";
+
+export { Table } from "./table";  // game night's Durable Object
 
 
 type Open = (req: Request, env: Env, params: string[]) => Promise<Response>;
@@ -47,6 +50,14 @@ authed("POST", r("/auth/signout"), (q, s, env) => A.signOut(s, env, q));
 authed("POST", r("/auth/signout-all"), (q, s, env) => A.signOutAll(s, env, q));
 authed("GET", r("/auth/places"), (_q, s, env) => A.places(s, env));
 authed("DELETE", r("/account"), (_q, s, env) => A.deleteAccount(s, env));
+// 3.9.5: game night (duecrew.com/table). The host opens a table signed in; a
+// phone joins with the code alone, from a page of ours (a socket's Origin)
+authed("POST", r("/table"), (_q, s, env) => Tb.create(s.uid, env));
+open("GET", r("/table/([A-Za-z]{4})"), (q, env, p) => Tb.check(q, env, p));
+open("GET", r("/table/([A-Za-z]{4})/ws"), (q, env, p) => {
+  if (!ourPage(q.headers.get("origin"))) throw new HttpError(403, "csrf");
+  return Tb.connect(q, env, p);
+});
 
 authed("GET", r("/board"), B.board);
 authed("POST", r("/sync"), B.sync);

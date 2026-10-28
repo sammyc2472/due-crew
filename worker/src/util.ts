@@ -2,6 +2,8 @@
 
 export interface Env {
   DB: D1Database;
+  /** Game night: a Durable Object per table (table.ts). */
+  TABLES: DurableObjectNamespace<import("./table").Table>;
   API_VERSION: string;
   MIN_CLIENT: string;
   MAIL_FROM: string;
