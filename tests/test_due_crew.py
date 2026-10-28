@@ -18869,6 +18869,14 @@ def test_game_night_questions_make_sense_v395():
     wrong = G._Pool(pool).wrong(0, random.Random(1))
     check("game night: never a wrong answer that holds the answer (\"acute pancreatitis\"), nor a number for a word",
           all("pancreatitis" not in w.lower() for w in wrong) and "12 mmHg" not in wrong, wrong)
+    ras = [row(f"{t} {{{{c1::{a}}}}} in case {k}", ("D::Onc::Ras",)) for k, (t, a) in enumerate([
+        ("Mutations of Ras that alter the binding site of", "GTPase activating protein (GAP)"),
+        ("Ras is switched off by", "GTPase activating proteins (GAPs)"), ("Ras passes the growth signal on as one of the", "signal transducers"),
+        ("Cyclins act at the cell cycle's", "checkpoints (restriction points)"), ("Growth factors bind", "receptor tyrosine kinases")])]
+    ras = [(n, *r[1:]) for n, r in enumerate(ras, 100)]
+    wrong = G._Pool([x for x in (G.item(r) for r in ras) if x]).wrong(0, random.Random(2))
+    check("game night: never a wrong answer that is the right one in the plural (Sam's \"GAPs\" for \"GAP\")",
+          not any("gtpase" in w.lower() for w in wrong) and G._unique(["GAP", "GAPs", "gaps"]) == ["GAP"], wrong)
     check("game night: a wrong answer takes the right one's case, so neither stands out (acronyms and Greek as they are)",
           G._cased("Mitral", "pulmonic") == "mitral" and G._cased("aortic", "Pulmonic") == "Aortic" and G._cased("ACE", "pulmonic") == "ACE"
           and G._cased("β-blocker", "Pulmonic") == "β-blocker")

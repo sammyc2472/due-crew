@@ -445,7 +445,13 @@ def _style(a):
 
 @functools.lru_cache(maxsize=20000)
 def _words(a):
-    return frozenset(re.findall(r"[a-z0-9]+", str(a).lower()))
+    """An answer's words, in the singular ("proteins" is "protein")."""
+    return frozenset(_sing(w) for w in re.findall(r"[a-z0-9]+", str(a).lower()))
+
+
+def _sing(w):
+    return w[:-3] + "y" if w.endswith("ies") and len(w) > 4 else w[:-2] if w.endswith(("ses", "xes", "ches", "shes")) else (
+        w[:-1] if w.endswith("s") and not w.endswith("ss") and len(w) > 3 else w)
 
 
 def _overlaps(a, b):
@@ -454,9 +460,9 @@ def _overlaps(a, b):
     wa, wb = _words(a), _words(b)
     if not wa or not wb or norm(a) == norm(b):
         return True
-    if wa <= wb or wb <= wa:
+    if wa <= wb or wb <= wa:  # in the singular: "GAP" and "GAPs" are one answer
         return True
-    na, nb = norm(a), norm(b)
+    na, nb = _one(a), _one(b)
     return (len(na) >= 4 and na in nb) or (len(nb) >= 4 and nb in na) or len(wa & wb) * 2 > min(len(wa), len(wb)) * 1.5
 
 
@@ -772,7 +778,7 @@ def twins(items, rng, named=None):
 @functools.lru_cache(maxsize=20000)
 def _one(name):
     """A name in the singular, for telling two names of one thing apart."""
-    return "".join(re.sub(r"(ies|es|s)$", lambda m: "y" if m.group(1) == "ies" else "", w) for w in re.findall(r"[a-z0-9]+", name.lower()))
+    return "".join(_sing(w) for w in re.findall(r"[a-z0-9]+", str(name).lower()))
 
 
 def _concept(name):
@@ -809,9 +815,10 @@ def _unnumbered(n):
 
 
 def _unique(xs):
+    """The first of each, a plural and its singular one ("GAP", "GAPs")."""
     seen, out = set(), []
     for x in xs:
-        k = norm(x)
+        k = _one(x)
         if x and k and k not in seen:
             seen.add(k)
             out.append(x)

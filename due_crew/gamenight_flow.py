@@ -453,7 +453,7 @@ def _pip(place):
         m = sev.pick(place, last=last.get(place)) if place in sev.MOVES else None
         last[place] = m
         TAB["pip"] = (place, m)
-    return sev.slot(sev.move(place, TAB["pip"][1], look=rooms.my_look(), size=72), 72)
+    return sev.move(place, TAB["pip"][1], look=rooms.my_look(), size=64)  # whole, in the tab's box (board .pp-pip)
 
 
 def tab_view(c):

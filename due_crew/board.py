@@ -2189,8 +2189,8 @@ def party_html(v):
     fit = v.get("fit") or None
     n = next((int(x.get("n") or 0) for x in srcs if x.get("key") == pick), 0)
     thin = set(fit["thin"]) if fit else set()
-    games = ('<div class="pp-games" aria-label="Tonight&rsquo;s games">' + "".join(
-        f'<span class="pp-g{"" if g in thin else " on"}" title="{"Not enough cards for this one" if g in thin else "Ready"}">{lb}</span>'
+    games = ('<div class="du-sec">On the menu</div><div class="pp-games" aria-label="On the menu">' + "".join(
+        f'<span class="pp-g{"" if g in thin else " on"}" title="{"Not enough cards for this one" if g in thin else "On tonight"}">{lb}</span>'
         for g, lb in _GAMES) + "</div>") if n and fit else ""
     can = bool(n) and len(thin) < len(_GAMES)
     busy = bool(v.get("busy"))
@@ -7303,16 +7303,23 @@ DUE_CSS = """
     /* 3.9.5's last round, You › Pip Party: Pip, what to play from, the six it fills, Host */
     #due-crew .pp { display: grid; gap: 7px; text-align: left; }
     #due-crew .pp-top { display: flex; align-items: center; gap: 10px; position: relative; }
-    #due-crew .pp-pip { flex: none; position: relative; }
+    /* Pip whole, in its own box: what it wears (a halo, wings, a balloon) stays
+       inside it, clear of the tabs above and the words beside (sev.py's box is
+       its drawing's; only a balloon reaches 11px over it) */
+    #due-crew .pp-pip { flex: none; position: relative; width: 64px; height: 64px; padding-top: 10px; }
+    #due-crew .pp-pip > svg.sv { width: 64px; height: 64px; }
     #due-crew .pp:not(.burst):not(:hover) .pp-pip .sv, #due-crew .pp:not(.burst):not(:hover) .pp-pip .sv * { animation: none !important; }
     #due-crew .pp:hover .pp-pip .sv { --sv-on: infinite; }
     #due-crew .pp-hi { display: grid; gap: 1px; min-width: 0; }
     #due-crew .pp-hi b { font-size: 13px; }
     #due-crew .pp-hi small, #due-crew .pp-open small, #due-crew .pp-say { color: var(--dc-muted); font-size: 11.5px; }
-    #due-crew .pp-list { display: grid; border-top: 1px solid var(--dc-line); }
+    /* what's on tonight's menu, one highlight for both: the pick (its row) and the games it fills (their chips) */
+    #due-crew .pp-list { display: grid; gap: 2px; }
     #due-crew .pp-o { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 9px; align-items: center;
-      padding: 6px 0; border-bottom: 1px solid var(--dc-line); color: var(--dc-ink); font-size: 12.5px; cursor: pointer; }
+      padding: 7px 10px; border-radius: 9px; color: var(--dc-ink); font-size: 12.5px; cursor: pointer; }
+    #due-crew .pp-o:hover { background: rgba(127, 127, 127, .08); }
     #due-crew .pp-o i { box-sizing: border-box; width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--dc-faded); }
+    #due-crew .pp-o.on, #due-crew .pp-o.on:hover { background: var(--dc-you-bg); box-shadow: inset 3px 0 0 var(--dc-accent); }
     #due-crew .pp-o.on i { border: 4px solid var(--dc-accent); }
     #due-crew .pp-o.on .t { font-weight: 700; }
     #due-crew .pp-o .t { min-width: 0; overflow-wrap: anywhere; }
@@ -7320,10 +7327,11 @@ DUE_CSS = """
     #due-crew .pp-o.none { cursor: default; color: var(--dc-muted); }
     #due-crew .pp-o.pp-c i { border-style: dashed; }
     #due-crew .pp-o.pp-c .t { color: var(--dc-accent); font-weight: 700; }
-    #due-crew .pp-games { display: flex; flex-wrap: wrap; gap: 5px; padding-top: 3px; }
-    #due-crew .pp-g { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 99px; border: 1px dashed var(--dc-line);
+    #due-crew .pp-games { display: flex; flex-wrap: wrap; gap: 5px; }
+    #due-crew .pp-g { font-size: 11.5px; font-weight: 700; padding: 3px 10px; border-radius: 99px; border: 1px dashed var(--dc-line);
       color: var(--dc-faded); white-space: nowrap; }
-    #due-crew .pp-g.on { border: 1px solid var(--dc-accent); color: var(--dc-ink); background: var(--dc-you-bg); }
+    #due-crew .pp-g.on { border: 1px solid transparent; color: var(--dc-ink); background: var(--dc-you-bg); box-shadow: inset 0 0 0 1.5px var(--dc-accent); }
+    #due-crew .pp-g.on::before { content: "\\2713"; color: var(--dc-accent); margin-right: 5px; }
     #due-crew .pp-go { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; padding-top: 2px; }
     #due-crew .pp-b { background: var(--dc-accent); color: var(--dc-accent-ink); font-weight: 700; font-size: 12.5px;
       padding: 5px 18px; border-radius: 99px; cursor: pointer; }
@@ -7337,7 +7345,7 @@ DUE_CSS = """
     #due-crew .pp-url { font-family: Menlo, Consolas, monospace; font-size: 12px; overflow-wrap: anywhere; }
     #due-crew .pp-open a { color: var(--dc-accent); font-weight: 700; margin-left: 6px; white-space: nowrap; }
     /* a burst round Pip as a table opens (once: the tab draws it the one time); none with Reduce motion */
-    #due-crew .pp-fx { position: absolute; left: 21px; top: 50%; width: 0; height: 0; pointer-events: none; display: none; }
+    #due-crew .pp-fx { position: absolute; left: 32px; top: calc(50% + 5px); width: 0; height: 0; pointer-events: none; display: none; }
     @media (prefers-reduced-motion: no-preference) {
       #due-crew .pp.burst .pp-fx { display: block; }
       #due-crew .pp-fx i { position: absolute; left: -3px; top: -3px; width: 6px; height: 6px; border-radius: 2px;

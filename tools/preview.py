@@ -472,10 +472,11 @@ sections.append("<h3>3.8.0: You › Insights, a deck with no plan (my exam date,
 from due_crew import sev as _SV  # noqa: E402
 _PSRC = [{"key": "misses", "label": "This week's misses", "n": 42}, {"key": "plan:p1", "label": "Block 2, this week", "n": 318},
          {"key": "saved:Renal <nights>", "label": "Renal <nights> & friends", "n": 26}, {"key": "saved:Empty", "label": "Empty one", "n": 0}]
-_PIP = lambda place, m=None: _SV.slot(_SV.move(place, m, size=72), 72)  # noqa: E731
+_PIP = lambda place, m=None, look=None: _SV.move(place, m, size=64, look=look or [])  # noqa: E731
 _PARTY = {"sources": _PSRC, "pick": "misses", "fit": {"n": 42, "have": {}, "thin": ["imposter", "links"]}, "busy": False,
           "said": "", "open": None, "burst": False, "pip": _PIP("hello")}
 for _h, _pv in (("the pick fills four of the six", _PARTY),
+                ("Pip in a halo, bat wings, a monocle and a bow tie (Sam's): all of it in its box", dict(_PARTY, pip=_PIP("hello", look=["halo", "batwings", "monocle", "bowtie"]), sources=_PSRC[:2] + [{"key": "plan:p2", "label": "AnKing-sized plan name that goes on and on, this week", "n": 624}], fit={"n": 42, "have": {}, "thin": []})),
                 ("a plan's week, all six", dict(_PARTY, pick="plan:p1", fit={"n": 318, "have": {}, "thin": []}, pip=_PIP("hello", "walkin"))),
                 ("Host clicked: opening a table", dict(_PARTY, busy=True, said="Opening a table…", pip=_PIP("ready"))),
                 ("a refusal, said on the tab", dict(_PARTY, said="That's a lot of tables for one hour. Try again in a while.", pip=_PIP("again"))),
