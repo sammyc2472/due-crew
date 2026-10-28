@@ -2337,7 +2337,7 @@ def _habits_html(did, h):
                   f'{_hs_two_svg(quick, slow, said)}<div class="hs-cap">missed next time</div>{go}</div>')
     if isinstance(sit, dict):
         tiles += (f'<div><div class="big" title="{round(float(sit["from"]))}% right in your first 15 minutes, '
-                  f'{round(float(sit["to"]))}% at 30 to 45">{SIT_AT} min<small>then you start missing more</small></div>'
+                  f'{round(float(sit["to"]))}% at 45 to 60">{SIT_AT} min<small>then you start missing more</small></div>'
                   f'{_hs_sit_svg(sit.get("curve") or [], SIT_AT)}<div class="hs-cap">right, by minutes in one go</div>'
                   f'<a href="#" class="go" title="Fifteen minutes, then one question" onclick="{_pycmd("room15")}">'
                   f'Start a Fifteen</a></div>')

@@ -270,7 +270,7 @@ def _sittings(sits):
     gap = matched_gap(tot) if vecs else None
     rng = resample(vecs, matched_gap) if gap is not None else None
     ok = bool(longs >= SIT_N and gap is not None and gap <= -SIT_DROP + 1e-9 and rng and rng[1] < 0
-              and curve[0][2] is not None and curve[2][2] is not None)
+              and curve[0][2] is not None and curve[3][2] is not None)
     return {"curve": curve, "gap": gap, "lo": rng[0] if rng else None, "hi": rng[1] if rng else None,
             "n": longs, "pass": ok}
 
@@ -288,7 +288,8 @@ def summary(res, slow=0):
         out["speed"] = {k: sp[k] for k in ("slow", "quick", "gap", "lo", "hi", "n_slow", "n_quick")}
         out["slow"] = int(slow or 0)
     if sit.get("pass"):
-        out["sit"] = {"curve": sit["curve"], "from": sit["curve"][0][2], "to": sit["curve"][2][2], "gap": sit["gap"],
+        # the second review: "to" is the 45-60 band, where the finding (45 on against the first 20) starts
+        out["sit"] = {"curve": sit["curve"], "from": sit["curve"][0][2], "to": sit["curve"][3][2], "gap": sit["gap"],
                       "lo": sit["lo"], "hi": sit["hi"], "n": sit["n"]}
     return out
 

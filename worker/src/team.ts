@@ -297,12 +297,12 @@ export async function forBoard(env: Env, uid: string) {
   if (!mine.length) return undefined;
   // 3.9.5 (the audit's A1): D1 binds at most 100 a statement, and co-writing has no ceiling
   // of its own, so the plans go 90 at a time; each plan's rows are its own, so nothing else changes
-  const mem = { results: [] as any[] };
-  const acts = { results: [] as any[] };
+  // (the second review: every part in one batch, one round trip however many)
+  const stmts: D1PreparedStatement[] = [];
   for (let i = 0; i < mine.length; i += TEAMS_A_QUERY) {
     const part = mine.slice(i, i + TEAMS_A_QUERY);
     const qs = part.map(() => "?").join(",");
-    const [m, a] = await env.DB.batch<any>([
+    stmts.push(
       env.DB.prepare(
         `SELECT t.plan, t.uid, t.last_day, u.emoji, u.tz, u.rollover FROM plan_team t
            JOIN users u ON u.uid = t.uid WHERE t.plan IN (${qs}) AND ${STILL_IN}`).bind(...part),
@@ -312,10 +312,11 @@ export async function forBoard(env: Env, uid: string) {
                   ROW_NUMBER() OVER (PARTITION BY a.plan ORDER BY a.act DESC, a.id DESC) AS k
              FROM plan_asks a LEFT JOIN users u ON u.uid = a.uid WHERE a.plan IN (${qs}) AND a.parent IS NULL)
           WHERE k <= ${ACT_ON_BOARD} ORDER BY act DESC`).bind(...part),
-    ]);
-    mem.results.push(...m.results);
-    acts.results.push(...a.results);
+    );
   }
+  const got = stmts.length ? await env.DB.batch<any>(stmts) : [];
+  const mem = { results: got.filter((_r, k) => k % 2 === 0).flatMap((r) => r.results) };
+  const acts = { results: got.filter((_r, k) => k % 2 === 1).flatMap((r) => r.results) };
   const muted = await mutedOf(env, uid);
   const now = nowSec();
   const out: Record<string, Obj> = {};

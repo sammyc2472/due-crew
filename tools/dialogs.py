@@ -266,6 +266,9 @@ def main(out):
         full._joined(full.peek or {}, 409)
         app.processEvents()
         shoot(full, os.path.join(out, "squads-join-full.png"))
+        full._joined(full.peek or {}, 429)  # 3.9.5: a join's budget, 30 tries an hour
+        app.processEvents()
+        shoot(full, os.path.join(out, "squads-join-tries.png"))
         made = SquadDialog(None, CLIENT, noop)
         made.name_edit.setText("Anatomy")
         made._created({"error": "too_many_squads"})

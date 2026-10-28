@@ -3595,3 +3595,34 @@ every release that changes how something works.
   the exam date's calendar window, QBank QIDs' topics and its place in
   the bubble's head, and the audit's floors and ceilings. The way back is
   in git.
+- 3.9.5, the second review of the PR (Sam: "Fix all of them, use the
+  two-besides-me rule for 1"). Two besides me: with the author on the
+  team counting toward the three, a count could still be one person's (an
+  owner and a co-author on the team with one follower sharing; or the
+  author and two followers, where each follower took their own away from
+  the crew count and read the other's). Now whoever reads a date's counts
+  finds two people's progress in them besides their own
+  (`plans.BESIDES_MIN`), on top of three in the squad: Progress says
+  `others` (the followers sharing who aren't me) and sends no date's
+  counts under two; `/board` sends `crewDone` only when the kept totals'
+  `c` (the follows the counts are made of), less one when I share, is two
+  or more (`crewShown`); kept totals without `c` are counted again. The
+  site's Progress tab says "Each date's counts show once 2 or more besides
+  you do.", and its class hint and `edits.behind` wait for it. With the
+  author and two followers, the author sees the two and the followers see
+  no crew count. Deleting an account takes the totals again for every plan
+  whose team I was on, not just the ones I follow (a co-author's place in
+  the three, and a quiet account's when its plans pass on). A plan topic's
+  Study gives the Due Crew deck it took a card from the rest of what it
+  held (`plan_flow._free`, `_refill`), not its first search again, which
+  took back the cards answered since as reviews ahead. A failure taking a
+  past exam date off no longer skips the morning (`due_flow.after_refresh`).
+  Today's misses by part build each part's set once, and the misses
+  themselves are worked out again only when the log has a new answer
+  (`_misses`, keyed on its last id). The long-sittings tile's hover is the
+  first 15 minutes against 45 to 60 (where the finding starts), not 30 to
+  45. `team.forBoard`'s chunks go in one batch. A join's 429 reached the
+  squad window as "Check your connection" (`api._call` raises it);
+  `join_squad` returns it, so it says "That's a lot of tries. Try again
+  in an hour.", and the fake restates the 30 an hour (`JOINS_PER_HOUR`);
+  `tools/dialogs.py` renders it.

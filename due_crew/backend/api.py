@@ -920,7 +920,12 @@ class ApiClient:
         """200, or 403 when the door is locked (or I'm blocked, or the code
         doesn't match), 404 gone; 409 when I'm in 20 squads already, 429
         after a lot of tries (3.9.5). The code is what only a join sends."""
-        return self._call("POST", f"/squads/{sid}/join", {"code": code})[0]
+        try:
+            return self._call("POST", f"/squads/{sid}/join", {"code": code})[0]
+        except TransportError as e:
+            if e.status == 429:  # the second review: _call raises it; the squad window has its own words for it
+                return 429
+            raise
 
     def leave_squad(self, sid):
         return self._call("DELETE", f"/squads/{sid}/members/{self.user_id}")[0] == 200

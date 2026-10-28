@@ -260,14 +260,20 @@ def _reviews():
 def _misses(col):
     """3.9.5: today's misses: the reviews I answered Again today (a card
     once, first missed first), the reviews I answered today, and where they
-    were (_miss_topics). Main thread."""
+    were (_miss_topics). Main thread. Worked out again only when the log
+    has a new answer (or lost one, to Undo): a board's redraw reads one row."""
     start = (int(col.sched.day_cutoff) - 86400) * 1000
+    key = (start, col.db.scalar("SELECT max(id) FROM revlog"))
+    hit = _state.get("due_misses")
+    if hit and hit[0] == key:
+        return hit[1]
     cids = [int(c) for c, _m in col.db.all("SELECT cid, min(id) FROM revlog WHERE id >= ? AND ease = 1 AND type = 1 "
                                            "GROUP BY cid ORDER BY 2", start)]
     out = {"n": len(cids), "cids": cids[:500],
            "reviews": int(col.db.scalar("SELECT count(DISTINCT cid) FROM revlog WHERE id >= ? AND ease > 0 AND type = 1",
                                         start) or 0)}
     out["topics"], out["elsewhere"] = _miss_topics(col, cids)
+    _state["due_misses"] = (key, out)
     return out
 
 
@@ -438,7 +444,8 @@ def _miss_topics(col, cids):
             tiles, _missed = team_flow.deck_map(did)
             left, groups = set(cids), []
             for t in tiles:
-                got = [c for c in cids if c in left and c in set(team.tile_cards(t))]
+                inside = set(team.tile_cards(t))
+                got = [c for c in cids if c in left and c in inside]
                 if got:
                     groups.append((str(t.get("name") or ""), got))
                     left -= set(got)
@@ -764,6 +771,9 @@ def after_refresh():
     _state["due_reviews"] = None
     try:
         exam_gone(cfg())
+    except Exception:
+        traceback.print_exc()  # the morning still runs
+    try:
         morning(cfg())
     except Exception:
         traceback.print_exc()

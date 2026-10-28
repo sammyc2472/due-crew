@@ -1621,6 +1621,8 @@ def test_settings_edits_v393():
     check("progress (3.9.5): an author on the team makes the three; half is of the followers sharing",
           [(u["id"], done) for u, done, _d in E.behind(doc, two, "2026-11-16")] == [("b", 0), ("c", 0)]
           and E.behind(doc, dict(two, sharing=0), "2026-11-16") == [], E.behind(doc, two, "2026-11-16"))
+    check("progress (3.9.5, Sam): and two sharing besides me; one besides me, none",
+          E.behind(doc, dict(two, others=1), "2026-11-16") == [] and len(E.behind(doc, dict(two, others=2), "2026-11-16")) == 2)
 
 
 def test_settings_remote_v393():

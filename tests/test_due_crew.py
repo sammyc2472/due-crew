@@ -712,8 +712,8 @@ def test_squads_ceiling_v395():
     (account.MAX_SQUADS); the 21st join and a 21st squad are refused, said
     so, and leaving one opens the door again."""
     from due_crew.account import MAX_SQUADS
-    store = world({"sam": "Sammy", "dre": "Dre", "kai": "Kai"})
-    sam, dre, kai = (new_client(store, u) for u in ("sam", "dre", "kai"))
+    store = world({"sam": "Sammy", "dre": "Dre", "kai": "Kai", "eve": "Eve"})
+    sam, dre, kai, eve = (new_client(store, u) for u in ("sam", "dre", "kai", "eve"))
     made = [(sam if i < 11 else kai).create_squad(f"s{i}") for i in range(21)]
     joins = [dre.join_squad(q["id"], q["code"]) for q in made]
     check("ceiling: the server's is the add-on's", store.SQUADS_MAX == MAX_SQUADS == 20)
@@ -721,6 +721,10 @@ def test_squads_ceiling_v395():
     check("ceiling: so is a squad of my own, said apart from a failure", dre.create_squad("mine") == {"error": "too_many_squads"})
     dre.leave_squad(made[0]["id"])
     check("ceiling: leave one and the door opens", dre.join_squad(made[20]["id"], made[20]["code"]) == 200)
+    tries = [eve.join_squad(made[1]["id"], "AAAAAAAA") for _ in range(31)]
+    check("join tries (the second review): 30 an hour, right code or not, then a 429 (tools/dialogs.py draws what it says)",
+          store.JOINS_PER_HOUR == 30 and tries[:30] == [403] * 30 and tries[30] == 429
+          and eve.join_squad(made[1]["id"], made[1]["code"]) == 429, tries[-2:])
 
 
 def test_squad_view_html():
@@ -4162,8 +4166,8 @@ def test_plans_glue_v31():
         dre = new_client(store, "dre", "Dre")
         dre.team_join(pid)
         board_plan = maya.fetch_board(labels, with_decks=True)["plans"][0]
-        check("crew (3.9.5, Sam): the author on the team makes three; the counts are the followers'",
-              board_plan["crewDone"] == {"hf": 1, "rn": 1}, str(board_plan))
+        check("crew (3.9.5, Sam): the author on the team makes three, but my own taken away leaves one person's: none",
+              store._in_squad(pid) == 3 and board_plan["crewDone"] is None, str(board_plan))
         dre.team_leave(pid)
         lee = new_client(store, "lee", "Lee")
         lee.follow_plan(code, team=True)
@@ -11711,9 +11715,20 @@ def test_study_this_date_v381():
         col.sched.empty_filtered_deck = emptied.append
         col.db.conn.execute("UPDATE cards SET odid = did, did = 98 WHERE id = 1")
         col.db.conn.execute("UPDATE cards SET odid = did, did = 97 WHERE id = 2")
-        check("topic: a card another Due Crew deck holds comes out of it first (to be built again); a deck of mine is left alone",
-              F._free(col, [1, 2, 3], "Due Crew::Heart failure") == [98] and emptied == [98], emptied)
+        col.db.conn.execute("UPDATE cards SET odid = did, did = 98 WHERE id = 8")
+        freed = F._free(col, [1, 2, 3], "Due Crew::Heart failure")
+        check("topic: a card another Due Crew deck holds comes out of it first, with what else it held (to go back); "
+              "a deck of mine is left alone", freed == [(98, [8])] and emptied == [98], (freed, emptied))
         check("topic: the deck being built isn't emptied", F._free(col, [1], "Due Crew::MS2 \u00b7 Today") == [])
+        made, term = [], types.SimpleNamespace(search="cid:1,5,8", limit=3, order=1)
+        col.sched.get_or_create_filtered_deck = lambda deck_id: made.append(("get", deck_id)) or types.SimpleNamespace(
+            config=types.SimpleNamespace(search_terms=[term]))
+        col.sched.add_or_update_filtered_deck = lambda d: made.append(("put", term.search, term.limit, term.order))
+        F._refill(col, 98, [8])
+        F._refill(col, 97, [])
+        check("topic (the second review): the deck it came out of gets back the rest of what it held, its order kept; "
+              "not its first search, which would take back the cards answered since as reviews ahead",
+              made == [("get", 98), ("put", "cid:8", 1, 1)], made)
         F._state["plan_progress"] = F.progress(col, F.followed(), F._state_cfg())
         p = next(x for x in F.followed() if x["id"] == pid)
         v = F.card_view(p, F._state_cfg()[pid], F._state["plan_progress"][pid], _day(0))
@@ -11986,10 +12001,13 @@ def test_builder_review_wording_v381():
           "and pick ${doc.deck}: the deck in Anki needs that name." in builder)
     check("words: at my own pace, the next once I've seen most of the last",
           "when I'm ready, the next once I've seen most of the last" in builder and "the next once I've seen the last\"" not in builder)
-    check("words: Progress shows per-date counts only from 3 in the squad (3.9.5: an author on the team among them), as the class hint",
+    check("words: Progress shows per-date counts only from 3 in the squad (3.9.5: an author on the team among them) "
+          "and 2 sharing besides me, as the class hint",
           "const inSquad = pr.inSquad ?? pr.sharing;" in builder and "if (inSquad < 3) {" in builder
-          and "if ((pr.inSquad ?? pr.sharing) < 3 || !pr.sharing) return null;" in builder
-          and "Each date's counts show once 3 or more are in it." in builder)
+          and "const others = pr.others ?? pr.sharing;" in builder and "if (others < 2) {" in builder
+          and "if ((pr.inSquad ?? pr.sharing) < 3 || (pr.others ?? pr.sharing) < 2 || !pr.sharing) return null;" in builder
+          and "Each date's counts show once 3 or more are in it." in builder
+          and "Each date's counts show once 2 or more besides you do." in builder)
     check("words: For classes says the plan's squad", "among those in the plan&rsquo;s squad" in classes and "among those who share it" not in classes)
     check("words: the Format box links the whole format; both prompts name it",
           'h("a", { class: "small", href: "/plan-text"' in builder and "The whole format ›" in builder
@@ -18440,24 +18458,28 @@ def test_today_v395():
         check("today: misses are reviews answered Again today, a card once, first missed first; reviews counted by card",
               m["n"] == 5 and m["cids"] == [3000, 3001, 3002, 3003, 3004] and m["reviews"] == 15 and "of" not in m, m)
         check("today: no map for the deck: the misses aren't split", (m["topics"], m["elsewhere"]) == ([], 0), m)
+        check("today (the second review): a redraw with no new answer is the one worked out", F._misses(col) is m)
+        fakes.add_review(conn, start + 9500, ease=1, cid=4000, last_ivl=20, ivl=1)
+        m2 = F._misses(col)
+        check("…a new miss, worked out again", m2 is not m and m2["n"] == 6 and m2["cids"][-1] == 4000, m2)
         from due_crew import team_flow as TF
         saved_map = (TF.deck_map, F._today_deck)
         TF.deck_map = lambda did: ([{"name": "Renal <x>", "_cids": [3000, 3001, 3002]}, {"name": "Cardio", "_cids": [3003, 9]},
                                     {"name": "Endo", "_cids": [8]}], set())
         F._today_deck = lambda col: 10
-        _state["due_miss_topics"] = None
+        _state["due_miss_topics"] = _state["due_misses"] = None
         try:
             m3 = F._misses(col)
             check("today: misses by the map's parts for today's deck, the most first, the rest elsewhere",
-                  m3["topics"] == [("Renal <x>", [3000, 3001, 3002]), ("Cardio", [3003])] and m3["elsewhere"] == 1, m3)
+                  m3["topics"] == [("Renal <x>", [3000, 3001, 3002]), ("Cardio", [3003])] and m3["elsewhere"] == 2, m3)
             hm = board._due_html(dict(D.view(T, [], [], {}, reviews={"due": 0, "done": 9, "whole": 9, "through": 9, "later": 0,
                                                                      "left": 0, "back": 0, "at": ""}), misses=m3, mins=0))
             check("today board: each part a link to Browse just those, escaped; the rest elsewhere",
                   "Renal &lt;x&gt; 3</a>" in hm and "duecrew:duego:miss0" in hm and "Cardio 1</a>" in hm
-                  and "duecrew:duego:miss1" in hm and "1 elsewhere" in hm and "<x>" not in hm, hm[hm.index("du-rc"):][:900])
+                  and "duecrew:duego:miss1" in hm and "2 elsewhere" in hm and "<x>" not in hm, hm[hm.index("du-rc"):][:900])
         finally:
             TF.deck_map, F._today_deck = saved_map
-            _state["due_miss_topics"] = None
+            _state["due_miss_topics"] = _state["due_misses"] = None
     finally:
         F._today, F.mw.col, F._pf = saved
     # ---- the board ----
@@ -18569,6 +18591,20 @@ def test_click_test_v395():
               not F.exam_gone(c2) and c2["exam_date"] == "2026-09-20" and not F.exam_gone({"exam_date": ""}))
     finally:
         F._today, F.save_cfg = saved
+    # the second review: a failure taking it off never costs the day its morning
+    saved = (F.exam_gone, F.morning, F.cfg)
+    ran = []
+    F.cfg = lambda: {}
+    F.morning = lambda c: ran.append("morning")
+
+    def broken(c):
+        raise RuntimeError("bad exam_last")
+    F.exam_gone = broken
+    try:
+        F.after_refresh()
+        check("exam gone: an error in it, and the morning still runs", ran == ["morning"], ran)
+    finally:
+        F.exam_gone, F.morning, F.cfg = saved
 
 
 def test_super_decks_gone_v395():

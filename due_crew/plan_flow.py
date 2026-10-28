@@ -2606,9 +2606,9 @@ def study_topic(pid, uids, i):
     Today, as a deck named for it: its cards I haven't seen and the
     ones due today (P.new_and_due; never reviews ahead of their date), in
     the deck's order. A card another Due Crew deck holds comes out of it
-    first (Anki keeps a card in one filtered deck), and that deck is built
-    again after. Nothing new or due: Browse, as before. A search run here;
-    nothing is sent."""
+    first (Anki keeps a card in one filtered deck), and that deck gets back
+    the rest of what it held after. Nothing new or due: Browse, as before. A
+    search run here; nothing is sent."""
     p = next((x for x in followed() if x["id"] == pid), None)
     st = _state_cfg().get(pid)
     if p is None or not st or not mw.col or not _deck_ok(mw.col, st.get("deck_id")):
@@ -2631,9 +2631,9 @@ def study_topic(pid, uids, i):
     name = _deck_name(title)
     back = _free(mw.col, cids, name)
     ok = _filtered(mw.col, name, cids, order=NEW_ORDER)
-    for did in back:
+    for did, keep in back:
         try:
-            mw.col.sched.rebuild_filtered_deck(did)
+            _refill(mw.col, did, keep)
         except Exception:
             traceback.print_exc()
     _after_change()
@@ -2645,15 +2645,33 @@ def study_topic(pid, uids, i):
 
 def _free(col, cids, name):
     """The Due Crew decks (but `name`'s own) holding any of these cards,
-    emptied so the cards can move; their ids, to build again after."""
+    emptied so the cards can move: [(its id, the cards it held but these)],
+    to fill again after with just those (_refill). Built again from its own
+    search, it would take back the cards answered since, as reviews ahead."""
     own = col.decks.id_for_name(name)
     ids = ",".join(str(int(c)) for c in cids) or "0"
+    moving = {int(c) for c in cids}
     out = []
     for did in col.db.list(f"SELECT DISTINCT did FROM cards WHERE odid != 0 AND id IN ({ids})"):
-        if int(did) != (int(own) if own else 0) and str(col.decks.name(int(did)) or "").startswith(P.PARENT + "::"):
-            col.sched.empty_filtered_deck(int(did))
-            out.append(int(did))
+        did = int(did)
+        if did != (int(own) if own else 0) and str(col.decks.name(did) or "").startswith(P.PARENT + "::"):
+            held = [int(c) for c in col.db.list("SELECT id FROM cards WHERE did = ?", did)]
+            col.sched.empty_filtered_deck(did)
+            out.append((did, [c for c in held if c not in moving]))
     return out
+
+
+def _refill(col, did, cids):
+    """A Due Crew deck _free emptied, with these cards again (its order and
+    rescheduling as they were); one with none left stays empty, for the
+    morning's tidy."""
+    if not cids:
+        return
+    deck = col.sched.get_or_create_filtered_deck(deck_id=did)
+    term = deck.config.search_terms[0]
+    term.search = "cid:" + ",".join(str(int(c)) for c in cids)
+    term.limit = len(cids)
+    col.sched.add_or_update_filtered_deck(deck)
 
 
 def _tag_search(col, deck_id, src, swap, cids):

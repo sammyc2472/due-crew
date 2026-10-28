@@ -530,7 +530,7 @@ _HV = {"open": True, "mins": 113.0, "secs": 9.2, "span": 56, "study": 46, "track
                    "from": [(datetime.date(2026, 10, 20) - datetime.timedelta(days=7 * k)).isoformat() for k in reversed(range(8))]},
        "speed": {"slow": 0.221, "quick": 0.131, "gap": 0.081, "lo": 0.042, "hi": 0.118, "n_slow": 310, "n_quick": 2400},
        "sit": {"curve": [[0, 15, 84.1, 900], [15, 30, 83.4, 800], [30, 45, 78.9, 700], [45, 60, 79.9, 500],
-                         [60, 90, 75.5, 300], [90, None, 73.7, 90]], "from": 84.1, "to": 78.9, "gap": -0.05, "lo": -0.08,
+                         [60, 90, 75.5, 300], [90, None, 73.7, 90]], "from": 84.1, "to": 79.9, "gap": -0.05, "lo": -0.08,
                "hi": -0.02, "n": 26}}
 _HV_INS = {"decks": _DECKS, "did": 10, "exam": "", "plan": None, "view": dict(_INS, ahead=None)}
 sections.append("<h3>3.9.5: Insights, How you study's line on top</h3>" + board.render(

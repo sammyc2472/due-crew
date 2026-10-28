@@ -629,6 +629,10 @@ const COUNTED = `f.share = 1 AND t.uid IS NOT NULL AND ${STILL_IN}`;
  *  on the team") an author or co-author on the team, whose own progress
  *  isn't in the counts unless they follow it too. Once each. */
 export const COUNTS_MIN = 3;
+/** 3.9.5 (Sam's pick, after the second review): and whoever reads a date's
+ *  counts, an author or a follower, finds two people's progress in them
+ *  besides their own, so taking mine away never leaves one person's. */
+export const BESIDES_MIN = 2;
 const IN_SQUAD = `${STILL_IN} AND (EXISTS (SELECT 1 FROM plans o WHERE o.id = t.plan AND o.owner = t.uid)
   OR EXISTS (SELECT 1 FROM plan_editors e WHERE e.plan = t.plan AND e.uid = t.uid AND e.accepted_at IS NOT NULL)
   OR EXISTS (SELECT 1 FROM plan_follows c WHERE c.plan = t.plan AND c.uid = t.uid AND c.share = 1 AND c.progress IS NOT NULL))`;
@@ -764,8 +768,9 @@ const editorsOf = (env: Env, ids: string[]) => inChunks(ids, (part) => env.DB.pr
 /** A plan's totals (migration 0025), as its readers show them: `n` follow
  *  it, `m` of them not its owner, `r` of those have version `v` in their
  *  Anki (3.7.3), and `done` per date, how many on its team have every card
- *  of it seen. Counts, never who. */
-export type Totals = { v: number; n: number; m: number; r: number; done: Record<string, number>; s: number };
+ *  of it seen. Counts, never who. 3.9.5: `s` in its squad toward the three
+ *  (IN_SQUAD), `c` whose progress the counts are made of (COUNTED, with some). */
+export type Totals = { v: number; n: number; m: number; r: number; done: Record<string, number>; s: number; c: number };
 
 /** 3.9.5 (the audit's S2): a plan's kept totals are counted again at the next
  *  read, when someone's place in its counts ended (left the team, unfollowed,
@@ -790,13 +795,13 @@ export async function totals(env: Env, plans: Counted[]): Promise<Map<string, To
     let t: Totals | null = null;
     if (p.totals && (p.totals_at ?? 0) > now - TOTALS_EVERY) {
       try { t = JSON.parse(p.totals) as Totals; } catch { t = null; }
-      if (t && typeof t.s !== "number") t = null;  // 3.9.5: kept before COUNTED; count again
+      if (t && typeof t.c !== "number") t = null;  // 3.9.5: kept before COUNTED; count again
     }
     if (t) out.set(p.id, t.v === p.version ? t : { ...t, v: p.version, r: 0 });
     else if (!out.has(p.id) && !stale.some((x) => x.id === p.id)) stale.push(p);
   }
   if (!stale.length) return out;
-  const fresh = new Map<string, Totals>(stale.map((p) => [p.id, { v: p.version, n: 0, m: 0, r: 0, done: {}, s: 0 }]));
+  const fresh = new Map<string, Totals>(stale.map((p) => [p.id, { v: p.version, n: 0, m: 0, r: 0, done: {}, s: 0, c: 0 }]));
   const owners = new Map(stale.map((p) => [p.id, p.owner ?? ""]));
   // 3.9.5 (the audit's E2): progress only for the follows that count; nobody else's is read to be skipped
   const rows = await inChunks(stale.map((p) => p.id), (part) => env.DB.prepare(
@@ -811,6 +816,7 @@ export async function totals(env: Env, plans: Counted[]): Promise<Map<string, To
       if (r.seen_version === t.v) t.r++;
     }
     if (r.progress) {
+      t.c++;
       for (const [u, [, seen, total]] of Object.entries(JSON.parse(r.progress) as Record<string, number[]>)) {
         if (total > 0 && seen >= total) t.done[u] = (t.done[u] ?? 0) + 1;
       }
@@ -820,7 +826,8 @@ export async function totals(env: Env, plans: Counted[]): Promise<Map<string, To
     `SELECT t.plan, COUNT(*) AS n FROM plan_team t WHERE t.plan IN (${part.map(() => "?").join(",")}) AND ${IN_SQUAD} GROUP BY t.plan`,
   ).bind(...part).all<{ plan: string; n: number }>());
   for (const q of squads.results) fresh.get(q.plan)!.s = q.n;
-  for (const t of fresh.values()) if (t.s < COUNTS_MIN) t.done = {};  // 3.9.5 (S1): under three in the squad, no date's count
+  // 3.9.5 (S1): under three in the squad, or with nobody's counts from two besides their own, no date's count
+  for (const t of fresh.values()) if (t.s < COUNTS_MIN || t.c < BESIDES_MIN) t.done = {};
   // Kept with its time, once an hour at most per plan: the time has to move
   // even when the counts didn't, or every read would count again. Only the
   // stale row is written (two readers at once write it once), and a plan no
@@ -1904,22 +1911,29 @@ export async function progressWrites(env: Env, uid: string, part: ReturnType<typ
       .bind(doc, histNext(r.hist, part[r.plan], today), r.plan, uid));
 }
 
+/** 3.9.5: a follower's crew counts show when the squad has three and the
+ *  counts hold two people's progress besides mine (mine is in them when I share). */
+const crewShown = (t: Totals | undefined, sharing: boolean) =>
+  !!t && t.s >= COUNTS_MIN && t.c - (sharing ? 1 : 0) >= BESIDES_MIN;
+
 /** GET /plans/{id}/progress: for its authors, per unit, how many followers
  *  (among those sharing) have it opened and done. Counts, never names.
  *  3.9.5 (the audit's S1, S2): only the follows that count (COUNTED), and no
  *  date's counts under COUNTS_MIN in the squad: `sharing` says how many
- *  followers' progress the counts hold, `inSquad` how many are in it toward the three. */
+ *  followers' progress the counts hold, `inSquad` how many are in it toward the three,
+ *  `others` how many of those followers aren't me; none under BESIDES_MIN. */
 export async function progress(s: Session, env: Env, [id]: string[]): Promise<Response> {
   const p = await authorOnly(env, id, s);
-  const rows = await env.DB.prepare(`SELECT f.progress FROM ${WITH_TEAM} WHERE f.plan = ? AND f.progress IS NOT NULL AND ${COUNTED}`)
-    .bind(id).all<{ progress: string }>();
+  const rows = await env.DB.prepare(`SELECT f.uid, f.progress FROM ${WITH_TEAM} WHERE f.plan = ? AND f.progress IS NOT NULL AND ${COUNTED}`)
+    .bind(id).all<{ uid: string; progress: string }>();
   const units: Record<string, { opened: number; done: number }> = {};
   const [followers, inSquad] = await env.DB.batch<{ n: number }>([
     env.DB.prepare("SELECT COUNT(*) AS n FROM plan_follows WHERE plan = ?").bind(id),
     env.DB.prepare(`SELECT COUNT(*) AS n FROM plan_team t WHERE t.plan = ? AND ${IN_SQUAD}`).bind(id),
   ]);
-  const head = { followers: followers.results[0]?.n ?? 0, sharing: rows.results.length, inSquad: inSquad.results[0]?.n ?? 0 };
-  if (head.inSquad < COUNTS_MIN) return json({ ...head, units });
+  const head = { followers: followers.results[0]?.n ?? 0, sharing: rows.results.length, inSquad: inSquad.results[0]?.n ?? 0,
+    others: rows.results.filter((r) => r.uid !== s.uid).length };
+  if (head.inSquad < COUNTS_MIN || head.others < BESIDES_MIN) return json({ ...head, units });
   for (const u of (JSON.parse(p.doc).units as Obj[])) units[u.id as string] = { opened: 0, done: 0 };
   for (const r of rows.results) {
     for (const [uid, [opened, seen, total]] of Object.entries(JSON.parse(r.progress) as Record<string, number[]>)) {
@@ -2030,8 +2044,9 @@ export async function forBoard(env: Env, uid: string, same = false) {
     plans: mineRows.results.map((r) => ({ id: r.id, name: r.name, owner: r.owner, ownerName: r.owner_name || (r.owner ? "?" : "a former member"),
       version: r.version, ...(same ? { same: true } : { doc: JSON.parse(r.doc) }), share: r.share === 1, ...(r.team_ask === 1 ? { teamAsk: true } : {}), paused: r.paused === 1,
       sched: r.sched ? JSON.parse(r.sched) : null, early: r.early ?? 0, ...followDays(r),
-      // 3.9.5 (S1): a crew's counts only from COUNTS_MIN in the squad; under it, none at all (an older add-on reads 0)
-      followers: crew.get(r.id)?.n ?? 0, ...((crew.get(r.id)?.s ?? 0) >= COUNTS_MIN ? { crewDone: crew.get(r.id)!.done } : {}),
+      // 3.9.5 (S1): a crew's counts only from COUNTS_MIN in the squad, and from BESIDES_MIN besides me
+      // (sharing, I'm taken as in them); else none at all (an older add-on reads 0)
+      followers: crew.get(r.id)?.n ?? 0, ...(crewShown(crew.get(r.id), r.share === 1) ? { crewDone: crew.get(r.id)!.done } : {}),
       posts: posts.get(r.id) ?? [] })),
     planOffers: offers.results.map((r) => ({ id: r.id, name: r.name, code: r.code, squad: r.squad, ownerName: r.owner_name || (r.owner ? "?" : "a former member") })),
     planInvites: await planInvites(env, uid),  // 3.8.1

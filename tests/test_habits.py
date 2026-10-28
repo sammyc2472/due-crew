@@ -207,7 +207,7 @@ def _res(speed=True, sit=True, span=40, n=38):
 def test_summary():
     s = H.summary(_res(), 46)
     check("summary: what passes, with this week's slow ones", s["speed"] and s["sit"] and s["slow"] == 46
-          and "track" not in s and "study" not in s and (s["sit"]["from"], s["sit"]["to"]) == (84.1, 78.9))
+          and "track" not in s and "study" not in s and (s["sit"]["from"], s["sit"]["to"]) == (84.1, 79.9))
     s = H.summary(_res(speed=False, sit=False), 46)
     check("…a finding that doesn't pass isn't there at all", s["speed"] is None and s["sit"] is None and s["slow"] == 0)
 
@@ -262,8 +262,9 @@ def test_board():
           and '<div class="hs-cap">missed next time</div>' in v and ">13%</text>" in v and ">22%</text>" in v
           and v.count("At the same intervals: +8 points, could be 4 to 12</title>") == 2
           and "Study 46" not in v and ">See them</a>" in v and "duecrew:inshabits:7:slow" in v)
-    check("…long sittings: the first band to the 30-45 one, 35 marked, a point a band with its title, Start a Fifteen",
-          ">35 min<small>then you start missing more</small>" in v and 'title="84% right in your first 15 minutes, 79% at 30 to 45"' in v
+    check("…long sittings: the first band to the 45-60 one, where the finding starts (the second review), 35 marked, "
+          "a point a band with its title, Start a Fifteen",
+          ">35 min<small>then you start missing more</small>" in v and 'title="84% right in your first 15 minutes, 80% at 45 to 60"' in v
           and '<div class="hs-cap">right, by minutes in one go</div>' in v and ">35</text>" in v
           and v.count('class="t-dot"') == 6 and "0&ndash;15 min in: 84% right (900 answers)</title>" in v
           and f"duecrew:room15|{board.BOARD_KEY}" in v and "Start a Fifteen" in v)
