@@ -1617,6 +1617,10 @@ def test_settings_edits_v393():
     late = E.behind(doc, prog, "2026-11-16")
     check("progress: a date most of the class hasn't finished two days after it; fewer than 3 sharing, none",
           [(u["id"], done, days) for u, done, days in late] == [("c", 0, 3), ("a", 1, 6)] and E.behind(doc, dict(prog, sharing=2), "2026-11-16") == [], late)
+    two = dict(prog, sharing=2, inSquad=3, units={"a": {"opened": 2, "done": 1}, "c": {"opened": 0, "done": 0}})
+    check("progress (3.9.5): an author on the team makes the three; half is of the followers sharing",
+          [(u["id"], done) for u, done, _d in E.behind(doc, two, "2026-11-16")] == [("b", 0), ("c", 0)]
+          and E.behind(doc, dict(two, sharing=0), "2026-11-16") == [], E.behind(doc, two, "2026-11-16"))
 
 
 def test_settings_remote_v393():

@@ -165,7 +165,7 @@ check("plans: on the decks=1 board, followers counted; no crew counts with one s
       ok4 and [p["id"] for p in bp] == [pid] and bp[0]["followers"] == 1 and bp[0]["crewDone"] is None, str(bp))
 _st, prog = sam._call("GET", f"/plans/{pid}/progress")
 check("plans: the author's Progress counts my progress at once, and keeps one person's to itself",
-      _st == 200 and prog == {"followers": 1, "sharing": 1, "units": {}}, str(prog))
+      _st == 200 and prog.get("sharing") == 1 and prog.get("inSquad", 0) < 3 and prog.get("units") == {}, str(prog))
 got, st = sam.add_plan_cards(pid, [["g2", 1]], unit="hf")
 check("plans: the author adds single cards", st == 200 and got["doc"]["units"][0]["cards"] == [["g2", 1]])
 check("plans: only the author", dre.add_plan_cards(pid, [["g2", 1]], opens=tomorrow)[1] == 403)

@@ -622,9 +622,16 @@ export const STILL_IN = `(EXISTS (SELECT 1 FROM plans o WHERE o.id = t.plan AND 
  *  `f` is plan_follows, LEFT JOINed to its team row `t` (WITH_TEAM). */
 const WITH_TEAM = "plan_follows f LEFT JOIN plan_team t ON t.plan = f.plan AND t.uid = f.uid";
 const COUNTED = `f.share = 1 AND t.uid IS NOT NULL AND ${STILL_IN}`;
-/** A date's counts show from this many people counted, on the server too
- *  (the site's Progress has said so since 3.6): fewer, and a count is a person. */
+/** A date's counts show from this many in the squad, on the server too
+ *  (the site's Progress has said so since 3.6): fewer, and a count is a person.
+ *  Who's in it toward the three (IN_SQUAD, `t` a plan_team row): a follower
+ *  whose progress counts, and (Sam, 3.9.5: "count the author too if they're
+ *  on the team") an author or co-author on the team, whose own progress
+ *  isn't in the counts unless they follow it too. Once each. */
 export const COUNTS_MIN = 3;
+const IN_SQUAD = `${STILL_IN} AND (EXISTS (SELECT 1 FROM plans o WHERE o.id = t.plan AND o.owner = t.uid)
+  OR EXISTS (SELECT 1 FROM plan_editors e WHERE e.plan = t.plan AND e.uid = t.uid AND e.accepted_at IS NOT NULL)
+  OR EXISTS (SELECT 1 FROM plan_follows c WHERE c.plan = t.plan AND c.uid = t.uid AND c.share = 1 AND c.progress IS NOT NULL))`;
 
 /** Put me on a plan's team (sharing), or false when it's full. */
 export async function joinTeam(env: Env, plan: string, uid: string): Promise<boolean> {
@@ -804,13 +811,16 @@ export async function totals(env: Env, plans: Counted[]): Promise<Map<string, To
       if (r.seen_version === t.v) t.r++;
     }
     if (r.progress) {
-      t.s++;
       for (const [u, [, seen, total]] of Object.entries(JSON.parse(r.progress) as Record<string, number[]>)) {
         if (total > 0 && seen >= total) t.done[u] = (t.done[u] ?? 0) + 1;
       }
     }
   }
-  for (const t of fresh.values()) if (t.s < COUNTS_MIN) t.done = {};  // 3.9.5 (S1): under three, no date's count
+  const squads = await inChunks(stale.map((p) => p.id), (part) => env.DB.prepare(
+    `SELECT t.plan, COUNT(*) AS n FROM plan_team t WHERE t.plan IN (${part.map(() => "?").join(",")}) AND ${IN_SQUAD} GROUP BY t.plan`,
+  ).bind(...part).all<{ plan: string; n: number }>());
+  for (const q of squads.results) fresh.get(q.plan)!.s = q.n;
+  for (const t of fresh.values()) if (t.s < COUNTS_MIN) t.done = {};  // 3.9.5 (S1): under three in the squad, no date's count
   // Kept with its time, once an hour at most per plan: the time has to move
   // even when the counts didn't, or every read would count again. Only the
   // stale row is written (two readers at once write it once), and a plan no
@@ -1898,16 +1908,19 @@ export async function progressWrites(env: Env, uid: string, part: ReturnType<typ
 /** GET /plans/{id}/progress: for its authors, per unit, how many followers
  *  (among those sharing) have it opened and done. Counts, never names.
  *  3.9.5 (the audit's S1, S2): only the follows that count (COUNTED), and no
- *  date's counts under COUNTS_MIN of them: `sharing` says how many there are. */
+ *  date's counts under COUNTS_MIN in the squad: `sharing` says how many
+ *  followers' progress the counts hold, `inSquad` how many are in it toward the three. */
 export async function progress(s: Session, env: Env, [id]: string[]): Promise<Response> {
   const p = await authorOnly(env, id, s);
   const rows = await env.DB.prepare(`SELECT f.progress FROM ${WITH_TEAM} WHERE f.plan = ? AND f.progress IS NOT NULL AND ${COUNTED}`)
     .bind(id).all<{ progress: string }>();
   const units: Record<string, { opened: number; done: number }> = {};
-  if (rows.results.length < COUNTS_MIN) {
-    const followers = await env.DB.prepare("SELECT COUNT(*) AS n FROM plan_follows WHERE plan = ?").bind(id).first<number>("n");
-    return json({ followers: followers ?? 0, sharing: rows.results.length, units });
-  }
+  const [followers, inSquad] = await env.DB.batch<{ n: number }>([
+    env.DB.prepare("SELECT COUNT(*) AS n FROM plan_follows WHERE plan = ?").bind(id),
+    env.DB.prepare(`SELECT COUNT(*) AS n FROM plan_team t WHERE t.plan = ? AND ${IN_SQUAD}`).bind(id),
+  ]);
+  const head = { followers: followers.results[0]?.n ?? 0, sharing: rows.results.length, inSquad: inSquad.results[0]?.n ?? 0 };
+  if (head.inSquad < COUNTS_MIN) return json({ ...head, units });
   for (const u of (JSON.parse(p.doc).units as Obj[])) units[u.id as string] = { opened: 0, done: 0 };
   for (const r of rows.results) {
     for (const [uid, [opened, seen, total]] of Object.entries(JSON.parse(r.progress) as Record<string, number[]>)) {
@@ -1916,8 +1929,7 @@ export async function progress(s: Session, env: Env, [id]: string[]): Promise<Re
       if (total > 0 && seen >= total) units[uid].done++;
     }
   }
-  const followers = await env.DB.prepare("SELECT COUNT(*) AS n FROM plan_follows WHERE plan = ?").bind(id).first<number>("n");
-  return json({ followers: followers ?? 0, sharing: rows.results.length, units });
+  return json({ ...head, units });
 }
 
 // ---- the board ----
@@ -2019,7 +2031,7 @@ export async function forBoard(env: Env, uid: string, same = false) {
     plans: mineRows.results.map((r) => ({ id: r.id, name: r.name, owner: r.owner, ownerName: r.owner_name || (r.owner ? "?" : "a former member"),
       version: r.version, ...(same ? { same: true } : { doc: JSON.parse(r.doc) }), share: r.share === 1, ...(r.team_ask === 1 ? { teamAsk: true } : {}), paused: r.paused === 1,
       sched: r.sched ? JSON.parse(r.sched) : null, early: r.early ?? 0, ...followDays(r),
-      // 3.9.5 (S1): a crew's counts only from COUNTS_MIN counted; under it, none at all (an older add-on reads 0)
+      // 3.9.5 (S1): a crew's counts only from COUNTS_MIN in the squad; under it, none at all (an older add-on reads 0)
       followers: crew.get(r.id)?.n ?? 0, ...((crew.get(r.id)?.s ?? 0) >= COUNTS_MIN ? { crewDone: crew.get(r.id)!.done } : {}),
       posts: posts.get(r.id) ?? [] })),
     planOffers: offers.results.map((r) => ({ id: r.id, name: r.name, code: r.code, squad: r.squad, ownerName: r.owner_name || (r.owner ? "?" : "a former member") })),

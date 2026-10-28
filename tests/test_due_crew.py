@@ -4159,6 +4159,12 @@ def test_plans_glue_v31():
         board_plan = maya.fetch_board(labels, with_decks=True)["plans"][0]
         check("crew (3.9.5, the audit's S1): two counted are two people, so no counts come at all",
               board_plan["followers"] == 2 and board_plan["crewDone"] is None, str(board_plan))
+        dre = new_client(store, "dre", "Dre")
+        dre.team_join(pid)
+        board_plan = maya.fetch_board(labels, with_decks=True)["plans"][0]
+        check("crew (3.9.5, Sam): the author on the team makes three; the counts are the followers'",
+              board_plan["crewDone"] == {"hf": 1, "rn": 1}, str(board_plan))
+        dre.team_leave(pid)
         lee = new_client(store, "lee", "Lee")
         lee.follow_plan(code, team=True)
         store.follows[(pid, "lee")]["progress"] = json.dumps({"hf": [2, 2, 2], "rn": [1, 1, 1]})
@@ -11980,8 +11986,10 @@ def test_builder_review_wording_v381():
           "and pick ${doc.deck}: the deck in Anki needs that name." in builder)
     check("words: at my own pace, the next once I've seen most of the last",
           "when I'm ready, the next once I've seen most of the last" in builder and "the next once I've seen the last\"" not in builder)
-    check("words: Progress shows per-date counts only from 3 in the squad, as the class hint",
-          "if (pr.sharing < 3) {" in builder and "Each date's counts show once 3 or more are in it." in builder)
+    check("words: Progress shows per-date counts only from 3 in the squad (3.9.5: an author on the team among them), as the class hint",
+          "const inSquad = pr.inSquad ?? pr.sharing;" in builder and "if (inSquad < 3) {" in builder
+          and "if ((pr.inSquad ?? pr.sharing) < 3 || !pr.sharing) return null;" in builder
+          and "Each date's counts show once 3 or more are in it." in builder)
     check("words: For classes says the plan's squad", "among those in the plan&rsquo;s squad" in classes and "among those who share it" not in classes)
     check("words: the Format box links the whole format; both prompts name it",
           'h("a", { class: "small", href: "/plan-text"' in builder and "The whole format ›" in builder

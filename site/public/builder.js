@@ -3190,8 +3190,10 @@ async function builder(id) {
     const pr = progressData;
     if (pr.failed) { progressData = null; return h("p", { class: "muted" }, "Couldn't load it. Open the tab again."); }
     byOpens();
-    if (pr.sharing < 3) {
-      return h("div", {}, h("p", { class: "muted small" }, `${pr.sharing} of ${pr.followers} ${pr.sharing === 1 ? "is" : "are"} in its squad. Each date's counts show once 3 or more are in it.`));
+    // 3.9.5: an author on the team counts toward the three (inSquad); the counts are the followers'
+    const inSquad = pr.inSquad ?? pr.sharing;
+    if (inSquad < 3) {
+      return h("div", {}, h("p", { class: "muted small" }, `${inSquad} ${inSquad === 1 ? "is" : "are"} in its squad. Each date's counts show once 3 or more are in it.`));
     }
     return h("div", {},
       classHints(pr),
@@ -3210,7 +3212,7 @@ async function builder(id) {
    *  helps is on the dates still to come: a day's breather, or a look at
    *  that day to split what's like it. */
   function classHints(pr) {
-    if (pr.sharing < 3) return null;
+    if ((pr.inSquad ?? pr.sharing) < 3 || !pr.sharing) return null;
     const t = today();
     const behind = doc.units.filter((u) => addDays(u.due || u.opens, 2) <= t && (pr.units[u.id]?.done || 0) < pr.sharing / 2)
       .sort((a, b) => (b.due || b.opens).localeCompare(a.due || a.opens)).slice(0, 2);

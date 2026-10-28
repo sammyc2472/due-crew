@@ -143,8 +143,9 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   that I showed up, my questions and answers, and bingo stamps; never my
   numbers by name, never weak spots. While I'm in it, my per-date progress
   joins the counts its authors see (Progress, never named, per date only
-  from three people up; since 3.9.5 the server holds to that,
-  `plans.COUNTS_MIN`, and counts only who may still see the plan, `plans.COUNTED`).
+  from three in its squad, an author on the team among them; since 3.9.5
+  the server holds to that, `plans.COUNTS_MIN`/`IN_SQUAD`, and counts only
+  who may still see the plan, `plans.COUNTED`).
 - Days are the person's Anki day (their rollover), on both sides (`ankiDay`
   in the Worker).
 - Background jobs capture `app.generation` (bumped at profile open/close,

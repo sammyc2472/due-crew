@@ -3566,3 +3566,14 @@ every release that changes how something works.
   The fake (`tests/fakes.py`) restates COUNTED, COUNTS_MIN and
   SQUADS_MAX; `tools/dialogs.py` renders the two new squad refusals; the
   live smoke (`tools/smoke_worker.py`) expects no counts from one person sharing.
+- 3.9.5, an author on the team counts toward the three (Sam: "count the
+  author too if they're on the team"). `plans.IN_SQUAD`: a follower whose
+  progress counts, and an author or co-author on the team, once each; the
+  counts themselves are still the followers' (an author's own progress is
+  in them only if they follow it too). Progress says `inSquad` beside
+  `sharing`, and the site's Progress tab and its class hint, and the
+  planner's twin (`edits.behind`), wait for three in it; a date's "under
+  half done" is of the followers sharing. The kept totals' `s` is the
+  same count (one grouped query a stale chunk). With the author and two
+  followers, each follower can tell from the crew count what the other
+  did on a date; with three followers, they can't.

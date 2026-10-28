@@ -188,7 +188,7 @@ describe("plans: following", () => {
     expect((await nia.call("POST", "/sync", { plans: prog })).body.wrote.plans).toBe(true);  // kept for her own views, counted for nobody
     // 3.9.5 (the audit's S1): one person counted is that person, so no date's counts till three
     const p = await dre.call("GET", `/plans/${plan.id}/progress`);
-    expect(p.body).toEqual({ followers: 2, sharing: 1, units: {} });
+    expect(p.body).toEqual({ followers: 2, sharing: 1, inSquad: 1, units: {} });
     await anHourOn();  // the board's counts are the plan's totals, up to an hour old (the authors' are live)
     const b = (await nia.call("GET", "/board?decks=1")).body.plans[0];
     expect(b).toMatchObject({ followers: 2 });
@@ -345,16 +345,39 @@ describe("limits the audit asked for", () => {
     const prog = { [plan.id]: { hf: [48, 48, 48], arr: [30, 10, 61] } };
     await crew[0].call("POST", "/sync", { plans: prog });
     await crew[1].call("POST", "/sync", { plans: prog });
-    expect((await dre.call("GET", `/plans/${plan.id}/progress`)).body).toEqual({ followers: 3, sharing: 2, units: {} });
+    expect((await dre.call("GET", `/plans/${plan.id}/progress`)).body).toEqual({ followers: 3, sharing: 2, inSquad: 2, units: {} });
     await crew[2].call("POST", "/sync", { plans: prog });
     expect((await dre.call("GET", `/plans/${plan.id}/progress`)).body)
-      .toEqual({ followers: 3, sharing: 3, units: { hf: { opened: 3, done: 3 }, arr: { opened: 3, done: 0 } } });
+      .toEqual({ followers: 3, sharing: 3, inSquad: 3, units: { hf: { opened: 3, done: 3 }, arr: { opened: 3, done: 0 } } });
     await anHourOn();
     expect((await crew[0].call("GET", "/board?decks=1")).body.plans[0]).toMatchObject({ followers: 3, crewDone: { hf: 3 } });
     // one off the team: under three again, at once (the kept totals are counted again, not in an hour)
     await crew[2].call("PATCH", `/plans/${plan.id}/follow`, { share: false });
-    expect((await dre.call("GET", `/plans/${plan.id}/progress`)).body).toEqual({ followers: 3, sharing: 2, units: {} });
+    expect((await dre.call("GET", `/plans/${plan.id}/progress`)).body).toEqual({ followers: 3, sharing: 2, inSquad: 2, units: {} });
     expect((await crew[0].call("GET", "/board?decks=1")).body.plans[0]).not.toHaveProperty("crewDone");
+  });
+
+  it("3.9.5 (Sam): an author on the team counts toward the three; the counts are the followers'", async () => {
+    const { dre, plan } = await authored();
+    expect((await dre.call("POST", `/plans/${plan.id}/team`)).status).toBe(200);
+    const crew = [await person("maya"), await person("kai")];
+    const prog = { [plan.id]: { hf: [48, 48, 48], arr: [30, 10, 61] } };
+    for (const who of crew) {
+      await who.call("POST", "/plans/follow", { code: plan.code, team: true });
+      await who.call("POST", "/sync", { plans: prog });
+    }
+    expect((await dre.call("GET", `/plans/${plan.id}/progress`)).body)
+      .toEqual({ followers: 2, sharing: 2, inSquad: 3, units: { hf: { opened: 2, done: 2 }, arr: { opened: 2, done: 0 } } });
+    await anHourOn();
+    expect((await crew[0].call("GET", "/board?decks=1")).body.plans[0]).toMatchObject({ crewDone: { hf: 2 } });
+    // the author off the team: two in it, no counts, at once
+    await dre.call("DELETE", `/plans/${plan.id}/team`);
+    expect((await dre.call("GET", `/plans/${plan.id}/progress`)).body).toEqual({ followers: 2, sharing: 2, inSquad: 2, units: {} });
+    expect((await crew[0].call("GET", "/board?decks=1")).body.plans[0]).not.toHaveProperty("crewDone");
+    // an author who also follows and shares is in it once
+    await dre.call("POST", "/plans/follow", { code: plan.code, team: true });
+    await dre.call("POST", "/sync", { plans: prog });
+    expect((await dre.call("GET", `/plans/${plan.id}/progress`)).body).toMatchObject({ followers: 3, sharing: 3, inSquad: 3 });
   });
 
   it("3.9.5 (the audit's S2): out of a squad, out of its plan's counts at once, and a sync no longer writes them", async () => {
@@ -373,7 +396,7 @@ describe("limits the audit asked for", () => {
     expect((await crew[0].call("GET", "/board?decks=1")).body.plans[0].crewDone).toEqual({ hf: 3 });
     await dre.call("DELETE", `/squads/${sq.id}/members/lee`);
     // her follow and her team row stay (rejoining brings her back), but she counts for nobody
-    expect((await dre.call("GET", `/plans/${plan.id}/progress`)).body).toEqual({ followers: 3, sharing: 2, units: {} });
+    expect((await dre.call("GET", `/plans/${plan.id}/progress`)).body).toEqual({ followers: 3, sharing: 2, inSquad: 2, units: {} });
     expect((await crew[0].call("GET", "/board?decks=1")).body.plans[0]).not.toHaveProperty("crewDone");
     expect((await dre.call("GET", `/plans/${plan.id}/team`)).body.count).toBe(2);  // the team says the same: Maya, Kai
     // an older add-on still syncing it changes nothing she can't see

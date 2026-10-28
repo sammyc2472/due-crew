@@ -1475,6 +1475,16 @@ class FakeWorker:
         return [g for (pl, u), g in self.follows.items()
                 if pl == pid and g.get("share") and g.get("progress") and (pid, u) in self.team and self._still_in(pid, u)]
 
+    def _in_squad(self, pid):
+        """plans.ts IN_SQUAD: who's in a plan's squad toward the three, once
+        each: a follower whose progress counts, and an author or co-author on
+        the team (Sam, 3.9.5)."""
+        p = self.plans.get(pid) or {}
+        counted = {u for (pl, u), g in self.follows.items()
+                   if pl == pid and g.get("share") and g.get("progress") and (pid, u) in self.team and self._still_in(pid, u)}
+        authors = {u for (pl, u) in self.team if pl == pid and (u == p.get("owner") or u in (p.get("editors") or ()))}
+        return len(counted | authors)
+
     def _totals(self, pid):
         """A plan's totals, as plans.ts totals: how many follow, and per date how
         many counted have it done, from COUNTS_MIN counted (3.9.5; else None). The
@@ -1483,7 +1493,7 @@ class FakeWorker:
         time (what a client sees is the same, only fresher)."""
         rows = [g for (pl, _u), g in self.follows.items() if pl == pid]
         counted = self._counted(pid)
-        if len(counted) < self.COUNTS_MIN:
+        if self._in_squad(pid) < self.COUNTS_MIN:
             return len(rows), None
         done = {}
         for g in counted:
@@ -2145,14 +2155,16 @@ class FakeWorker:
         if rest[1:] == ["progress"] and method == "GET":  # plans.ts progress: its squad's counts a date, for its authors
             if not self._writes(p, me):
                 raise Bad(403, "not_author")
-            sharing = self._counted(pid)  # 3.9.5: who counts, and no date's counts under three of them
-            units = {u["id"]: {"opened": 0, "done": 0} for u in p["doc"].get("units") or []} if len(sharing) >= self.COUNTS_MIN else {}
+            sharing = self._counted(pid)  # 3.9.5: who counts, and no date's counts under three in the squad
+            in_squad = self._in_squad(pid)
+            units = {u["id"]: {"opened": 0, "done": 0} for u in p["doc"].get("units") or []} if in_squad >= self.COUNTS_MIN else {}
             for g in sharing if units else ():
                 for uid, (opened, seen, total) in json.loads(g["progress"]).items():
                     if uid in units:
                         units[uid]["opened"] += opened > 0
                         units[uid]["done"] += total > 0 and seen >= total
-            return 200, {"followers": sum(1 for (pl, _u) in self.follows if pl == pid), "sharing": len(sharing), "units": units}
+            return 200, {"followers": sum(1 for (pl, _u) in self.follows if pl == pid), "sharing": len(sharing),
+                         "inSquad": in_squad, "units": units}
         if rest[1:] == ["listed"] and method == "PUT":  # library.ts setListed: the owner's switch
             if p["owner"] != me:
                 raise Bad(403, "not_owner")
