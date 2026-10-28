@@ -60,7 +60,8 @@ def open_tv(parent, site, payload):
     tvs = getattr(parent, "_due_crew_tvs", None)
     if tvs is None:
         tvs = parent._due_crew_tvs = []
-    tvs[:] = [t for t in tvs if t.isVisible()] + [w]  # kept alive while open
+    tvs.append(w)  # kept alive while open; closed, Qt deletes it (WA_DeleteOnClose), so it leaves the list then
+    w.destroyed.connect(lambda *_: w in tvs and tvs.remove(w))
     w.show()
     w.raise_()
     return w
