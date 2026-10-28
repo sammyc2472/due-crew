@@ -3524,3 +3524,44 @@ every release that changes how something works.
   "missed next time" under them, in place of "20% of slow right answers
   missed next time · 14% otherwise" ("doesn't make much sense"); the
   sittings tile, "35 min · then you start missing more".
+- 3.9.5, the security and efficiency audit of `4cbb6c9` (eight findings,
+  each fixed with its test; `worker/test/audit395.test.ts`, and S1/S2 in
+  `plans.test.ts`). S1: a date's counts came back for one or two people
+  sharing, and the add-on showed them to every follower ("crew 1/40"); the
+  three-person rule lived only in the site's Progress tab. Now the server
+  holds to it (`plans.COUNTS_MIN`): Progress sends no date's counts and
+  `/board` no `crewDone` under three counted, and the add-on draws no crew
+  count without one (`shapes.clean_plan` keeps it None; an older add-on
+  reads 0). S2: someone out of a squad kept counting for its plan, and
+  their syncs kept writing it. One rule for who counts, beside the team's
+  (`plans.STILL_IN`, `COUNTED`: sharing, on the team, may still see it) for
+  Progress and the kept totals alike; a sync writes progress only for a
+  plan I may still see (`SEES`); and leaving a team, unfollowing, a
+  co-author removed, a squad member removed or blocked (by the founder or
+  the admin), a squad deleted, an account deleted, or a save that moves a
+  plan to another audience or squad, each set the plan's `totals_at` to
+  NULL, so its counts are taken again at the next read, not in an hour
+  (kept totals from before carry no `s` and are counted again). S3: a
+  join's checks were reads before an unconditional insert, so a block, a
+  lock or a new code landing mid-join didn't hold; the code, the door, the
+  block list and both ceilings are now the insert's own conditions, one
+  statement, and the reason is looked up only when nothing went in
+  (`whyNot`). A2: no ceiling on one person's squads; `squads.SQUADS_MAX`
+  is 20, the add-on's own (`account.MAX_SQUADS`), on create (one
+  transaction) and join, `409 too_many_squads` ("You're in 20 squads.
+  Leave one to join another.", in Anki and on the site), the board's
+  restore and the sync carry as many; someone in more from before keeps
+  them; join tries are 30 an hour. A1: the board's team counts bound one
+  parameter a plan, and co-writing has no ceiling, so 101 teams was a 500;
+  `team.forBoard` goes 90 at a time. E1: `plans.deck_counts`, a deck's
+  cards up its path in one pass (was every subdeck against every other, on
+  the main thread: about a second at 4,000, now milliseconds). E2:
+  `totals()` read every follower's progress to skip the non-sharers'; now
+  only the counted rows' progress comes back (it matters more with the
+  starters, the most-followed plans). D1: the Worker's dev tools, no
+  advisories left (`npm audit`): Wrangler 4.149.0 (its miniflare
+  5.20261006.1-alpha), Vitest 4.1.12, and `overrides` for the copies the
+  test pool pins (Wrangler, miniflare, zod 4.6.7) and patched undici
+  7.30.1, vite 8.3.4, source-map-js 1.2.2; the pool itself stays 0.22.0.
+  The fake (`tests/fakes.py`) restates COUNTED, COUNTS_MIN and
+  SQUADS_MAX; `tools/dialogs.py` renders the two new squad refusals.

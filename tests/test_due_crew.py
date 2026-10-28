@@ -707,6 +707,22 @@ def test_knocks_squad():
     check("knock: delete clears it", sam.list_knocks() == [])
 
 
+def test_squads_ceiling_v395():
+    """3.9.5 (the audit's A2): 20 squads a person, as the add-on keeps
+    (account.MAX_SQUADS); the 21st join and a 21st squad are refused, said
+    so, and leaving one opens the door again."""
+    from due_crew.account import MAX_SQUADS
+    store = world({"sam": "Sammy", "dre": "Dre", "kai": "Kai"})
+    sam, dre, kai = (new_client(store, u) for u in ("sam", "dre", "kai"))
+    made = [(sam if i < 11 else kai).create_squad(f"s{i}") for i in range(21)]
+    joins = [dre.join_squad(q["id"], q["code"]) for q in made]
+    check("ceiling: the server's is the add-on's", store.SQUADS_MAX == MAX_SQUADS == 20)
+    check("ceiling: 20 joins go in, the 21st is refused as too many", joins[:20] == [200] * 20 and joins[20] == 409, joins)
+    check("ceiling: so is a squad of my own, said apart from a failure", dre.create_squad("mine") == {"error": "too_many_squads"})
+    dre.leave_squad(made[0]["id"])
+    check("ceiling: leave one and the door opens", dre.join_squad(made[20]["id"], made[20]["code"]) == 200)
+
+
 def test_squad_view_html():
     rows = [
         {"user_id": "u1", "name": "StepQueen <s>", "day": "2026-09-01", "reviews": 1412,
@@ -3331,6 +3347,36 @@ def test_plans_events_f1():
           "For <b>Micro &lt;quiz&gt;</b> on Thu &middot; 2 more days of prep" in html, html)
 
 
+def test_deck_counts_v395():
+    """3.9.5 (the audit's E1): a plan deck's subdecks counted in one pass up
+    each path, the same as every deck against every deck was: nested, empty
+    parents, the deck itself, a name with ":::" in it; and fast at 4,000."""
+    import random
+    import time as _t
+    from due_crew import plans as P
+
+    def brute(rel, by_deck):
+        return {k: sum(len(by_deck.get(dd, ())) for r, dd in rel.items() if not k or r == k or r.startswith(k + "::"))
+                for k in rel}
+    rel = {"": 1, "a": 2, "a::b": 3, "a::b::c": 4, "a::bc": 5, "a:": 6, "a:::b": 7, "z": 8, "z::y": 9}
+    by_deck = {1: [1], 3: [2, 3], 4: [4], 5: [5], 6: [6], 7: [7, 8], 9: [9]}
+    check("deck counts: nested, empty parents, the deck itself, odd names",
+          P.deck_counts(rel, by_deck) == brute(rel, by_deck), (P.deck_counts(rel, by_deck), brute(rel, by_deck)))
+    rnd = random.Random(7)
+    rel = {"": 0}
+    for i in range(1, 400):
+        parent = rnd.choice(list(rel))
+        rel[(parent + "::" if parent else "") + f"d{i}"] = i
+    by_deck = {d: list(range(rnd.randint(0, 3))) for d in rel.values()}
+    check("deck counts: a random tree of 400 the same", P.deck_counts(rel, by_deck) == brute(rel, by_deck))
+    flat = {"": 0, **{f"d{i}": i for i in range(1, 4001)}}
+    t0 = _t.perf_counter()
+    out = P.deck_counts(flat, {i: [i] for i in range(4001)})
+    took = _t.perf_counter() - t0
+    check("deck counts: 4,000 subdecks in well under a tenth of a second (was about a second)",
+          out[""] == 4001 and out["d7"] == 1 and took < 0.1, took)
+
+
 def test_plans_buried_siblings():
     """A new card whose note has a card answered counts as seen: Anki
     buries and spaces siblings, so the date is done and never behind for
@@ -4060,7 +4106,7 @@ def test_plans_glue_v31():
     while sharing; the board's plans only on decks=1; the budget."""
     from due_crew import plan_flow as F
     from due_crew.app import _state
-    store = world({"dre": "Dre", "maya": "Maya", "kai": "Kai"})
+    store = world({"dre": "Dre", "maya": "Maya", "kai": "Kai", "lee": "Lee"})  # 3.9.5: Lee makes three counted
     pid, code = store.add_plan("dre", "Step 1 <i>", "Step 1", _plan_units())
     maya = new_client(store, "maya", "Maya")
     col = _plan_col()
@@ -4111,12 +4157,18 @@ def test_plans_glue_v31():
         kai.follow_plan(code, team=True)
         store.follows[(pid, "kai")]["progress"] = json.dumps({"hf": [2, 2, 2]})
         board_plan = maya.fetch_board(labels, with_decks=True)["plans"][0]
-        check("crew: followers and units done, counts only",
-              board_plan["followers"] == 2 and board_plan["crewDone"] == {"hf": 1, "rn": 1}, str(board_plan))
+        check("crew (3.9.5, the audit's S1): two counted are two people, so no counts come at all",
+              board_plan["followers"] == 2 and board_plan["crewDone"] is None, str(board_plan))
+        lee = new_client(store, "lee", "Lee")
+        lee.follow_plan(code, team=True)
+        store.follows[(pid, "lee")]["progress"] = json.dumps({"hf": [2, 2, 2], "rn": [1, 1, 1]})
+        board_plan = maya.fetch_board(labels, with_decks=True)["plans"][0]
+        check("crew: from three counted, followers and units done, counts only",
+              board_plan["followers"] == 3 and board_plan["crewDone"] == {"hf": 2, "rn": 2}, str(board_plan))
         maya.set_follow(pid, share=False)
-        check("sharing off (3.7.6: off the team): out of everyone's counts, still mine for my own views",
+        check("sharing off (3.7.6: off the team): out of everyone's counts (two left: none), still mine for my own views",
               store.follows[(pid, "maya")]["progress"] is not None and (pid, "maya") not in store.team
-              and maya.fetch_board(labels, with_decks=True)["plans"][0]["crewDone"] == {"hf": 1})
+              and maya.fetch_board(labels, with_decks=True)["plans"][0]["crewDone"] is None)
         check("sharing off: the sync still carries it, for my own views", pid in F.for_sync())
         maya.set_follow(pid, share=True)
         maya.push(labels, {}, plans=F.for_sync())
@@ -4134,6 +4186,7 @@ def test_plans_glue_v31():
               F.waiting(col, F.followed()[0], box["cfg"]["plans"][pid], _day(3)) == (1, 1))
 
         # the card: names escaped, crew counts, today's step, ahead and behind, the change note
+        maya.fetch_board(labels, with_decks=True)  # 3.9.5: three counted again since sharing came back on
         _state["labels"] = labels
         _state["plan_progress"] = F.progress(col, F.followed(), box["cfg"]["plans"])
         box["cfg"]["plans_opened"] = {"day": _day(0), "label": "Due Crew: open 2 dates",
@@ -4144,10 +4197,22 @@ def test_plans_glue_v31():
         html = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []},
                             {"period": "today"}, 0, plans=view, you={"tab": "plans", "plans": view})
         check("card: You › Plans, the plan's title, week and followers",
-              "Step 1 &lt;i&gt; · Dre’s plan" in html and "week 2 of 4 · 2 following" in html)
+              "Step 1 &lt;i&gt; · Dre’s plan" in html and "week 2 of 4 · 3 following" in html)
         check("card: the crew line; no Today box (Due's Today has today), names escaped",
-              "Crew: 1 done with" in html and "ptoday" not in html and "planstudy:" not in html
+              "Crew: 2 done with" in html and "ptoday" not in html and "planstudy:" not in html
               and "<b>failure" not in html, re.sub(r"<style.*?</style>", "", html, flags=re.S)[-2500:])
+        cached = [p for p in F.client().session.get("plans") or [] if p.get("id") == pid]
+        kept_crew = [p.get("crewDone") for p in cached]
+        for p in cached:
+            p["crewDone"] = None  # as the board brings it under three counted (3.9.5)
+        few = F.board_view(box["cfg"])
+        fh = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []},
+                          {"period": "today"}, 0, plans=few, you={"tab": "plans", "plans": few})
+        check("card (3.9.5): under three counted, no crew line and no date's crew count",
+              cached and "Crew:" not in fh and "crew 0/" not in fh and "crew 0 of" not in fh and "3 following" in fh,
+              re.sub(r"<style.*?</style>", "", fh, flags=re.S)[-1500:])
+        for p, c in zip(cached, kept_crew):
+            p["crewDone"] = c
         check("morning: what it opened, while it's still Anki's latest step", F.morning_opened()["n"] == 3, F.morning_opened())
         from due_crew import due as DUE
         dv = dict(DUE.view(_day(0), [], [], {}), opened=F.morning_opened())

@@ -87,7 +87,7 @@ def plan_dates(today):
         named = {x["id"]: x for x in P.units(P.with_picks(doc, (_state.get("plan_picks") or {}).get(p["id"])))}  # 3.8.1
         evs = {e.get("id"): e for e in doc.get("events") or [] if isinstance(e, dict)}
         applied = st.get("applied") or {}
-        crew, followers = p.get("crewDone") or {}, int(p.get("followers") or 0)
+        crew, followers = p.get("crewDone"), int(p.get("followers") or 0)  # 3.9.5: crewDone only from three counted
         upd = (_state.get("plan_updates") or {}).get(p["id"]) or {}
         own = P.own_pace(p)  # 3.8.0: the dates I opened are today's, till seen; nothing is behind or upcoming
         own_days = st.get("own_opened") or {}
@@ -128,7 +128,7 @@ def plan_dates(today):
                           "todo": [x for x in u.get("todo") or [] if isinstance(x, dict)],
                           "what": P.topics_line([u]), "topics": P.topic_view([named.get(u["id"], u)]),  # 3.8.0: each a link
                           "rm": P.topic_remarks(doc, [named.get(u["id"], u)]),  # 3.8.1: the authors' notes under its topics
-                          "crew": [int(crew.get(u["id"]) or 0), followers] if followers > 1 else None,
+                          "crew": [int(crew.get(u["id"]) or 0), followers] if isinstance(crew, dict) and followers > 1 else None,
                           "prep": str(ev.get("name") or "") if ev else None,
                           # 3.8.1: a date after its event reinforces it ("after Heme quiz"); Study
                           # on a date with cards open (a Due Crew deck of them); view() adds both to its row

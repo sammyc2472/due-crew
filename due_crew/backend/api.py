@@ -904,7 +904,11 @@ class ApiClient:
     # ---- squads ----
 
     def create_squad(self, name):
+        """The new squad, {"error": "too_many_squads"} when I'm in 20 already
+        (3.9.5), or None."""
         status, data = self._call("POST", "/squads", {"name": name})
+        if status == 409 and isinstance(data, dict) and data.get("error") == "too_many_squads":
+            return {"error": "too_many_squads"}
         if status != 200:
             return None
         return {k: data[k] for k in ("id", "code", "name", "founder")}
@@ -920,7 +924,8 @@ class ApiClient:
 
     def join_squad(self, sid, code=""):
         """200, or 403 when the door is locked (or I'm blocked, or the code
-        doesn't match), 404 gone. The code is what only a join sends."""
+        doesn't match), 404 gone; 409 when I'm in 20 squads already, 429
+        after a lot of tries (3.9.5). The code is what only a join sends."""
         return self._call("POST", f"/squads/{sid}/join", {"code": code})[0]
 
     def leave_squad(self, sid):
@@ -1044,7 +1049,7 @@ class ApiClient:
         """A plan just followed joins the cached board plans at once, so the
         Decks tab shows it before the next day's first refresh."""
         plans = [p for p in self.session.get("plans") or [] if p.get("id") != plan["id"]]
-        plans.append(dict(plan, crewDone=plan.get("crewDone") or {}))
+        plans.append(dict(plan, crewDone=plan.get("crewDone")))  # 3.9.5: None till three are counted
         self.session["plans"] = plans
         self.session["plan_offers"] = [o for o in self.session.get("plan_offers") or []
                                        if o.get("id") != plan["id"]]

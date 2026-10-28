@@ -970,7 +970,8 @@ class FakeWorker:
             for pid, units in progress.items():
                 f = self.follows.get((pid, me))
                 text = json.dumps(units, sort_keys=True)
-                if f and f["progress"] != text:
+                # 3.9.5 (the audit's S2): only a plan I may still see
+                if f and f["progress"] != text and pid in self.plans and self._sees(self.plans[pid], me):
                     f["progress"] = text
                     wrote["plans"] = True
                     self._count("plan_follows")
@@ -1309,12 +1310,19 @@ class FakeWorker:
             out["code"] = code
         return out
 
+    SQUADS_MAX = 20  # squads.ts SQUADS_MAX (3.9.5, the audit's A2): the squads one person is in
+
+    def _squads_full(self, me):
+        return sum(1 for (_s, u) in self.members if u == me) >= self.SQUADS_MAX
+
     def _squad(self, method, me, rest, query, body):
         if method == "POST" and len(rest) == 1:
             raise Bad(405, "method")  # the path is GET's and PATCH's (3.8.0: POST /squads/restore is gone)
         if method == "POST" and not rest:
             if set(body) != {"name"} or not str(body["name"]).strip() or len(body["name"].strip()) > 24:
                 raise Bad(400, "bad_name")
+            if self._squads_full(me):
+                raise Bad(409, "too_many_squads")
             n = len(self.squads)
             while True:
                 code = "".join(SQUAD_ALPHABET[(n * 7 + i * 13) % 32] for i in range(8))
@@ -1346,6 +1354,8 @@ class FakeWorker:
                 raise Bad(403, "blocked")
             if not sq["open"]:
                 raise Bad(403, "locked")
+            if self._squads_full(me):
+                raise Bad(409, "too_many_squads")
             self._join(sid, me)
             return 200, self._info(sid)
         if method == "GET" and len(rest) == 1:
@@ -1448,18 +1458,38 @@ class FakeWorker:
         """Offered to a squad I'm in, not mine, not followed yet."""
         return bool(p["squad"]) and (p["squad"], me) in self.members and p["owner"] != me and (pid, me) not in self.follows
 
+    COUNTS_MIN = 3  # plans.ts COUNTS_MIN: a date's counts from three people counted (3.9.5)
+
+    def _still_in(self, pid, uid):
+        """plans.ts STILL_IN: on a plan's team and may still see it (an author, a
+        co-author who said yes, or a follower of a squad's plan while in the squad)."""
+        p = self.plans.get(pid)
+        if not p:
+            return False
+        return (p["owner"] == uid or uid in (p.get("editors") or ())
+                or ((pid, uid) in self.follows and (p["audience"] != "squad" or (p["squad"], uid) in self.members)))
+
+    def _counted(self, pid):
+        """plans.ts COUNTED (3.9.5, the audit's S1/S2): the follows whose progress
+        makes a plan's counts: sharing, on its team, and still in it."""
+        return [g for (pl, u), g in self.follows.items()
+                if pl == pid and g.get("share") and g.get("progress") and (pid, u) in self.team and self._still_in(pid, u)]
+
     def _totals(self, pid):
         """A plan's totals, as plans.ts totals: how many follow, and per date how
-        many on its team have it done. The Worker keeps them on the plan's row
-        and counts again at most hourly; the fake counts them live every time
-        (what a client sees is the same, only fresher)."""
+        many counted have it done, from COUNTS_MIN counted (3.9.5; else None). The
+        Worker keeps them on the plan's row and counts again at most hourly (and
+        at once when someone leaves the counts); the fake counts them live every
+        time (what a client sees is the same, only fresher)."""
         rows = [g for (pl, _u), g in self.follows.items() if pl == pid]
+        counted = self._counted(pid)
+        if len(counted) < self.COUNTS_MIN:
+            return len(rows), None
         done = {}
-        for g in rows:
-            if g["share"] and g["progress"]:
-                for unit, (_o, seen, total) in json.loads(g["progress"]).items():
-                    if total > 0 and seen >= total:
-                        done[unit] = done.get(unit, 0) + 1
+        for g in counted:
+            for unit, (_o, seen, total) in json.loads(g["progress"]).items():
+                if total > 0 and seen >= total:
+                    done[unit] = done.get(unit, 0) + 1
         return len(rows), done
 
     @staticmethod
@@ -2115,9 +2145,9 @@ class FakeWorker:
         if rest[1:] == ["progress"] and method == "GET":  # plans.ts progress: its squad's counts a date, for its authors
             if not self._writes(p, me):
                 raise Bad(403, "not_author")
-            units = {u["id"]: {"opened": 0, "done": 0} for u in p["doc"].get("units") or []}
-            sharing = [g for (pl, _u), g in self.follows.items() if pl == pid and g.get("share") and g.get("progress")]
-            for g in sharing:
+            sharing = self._counted(pid)  # 3.9.5: who counts, and no date's counts under three of them
+            units = {u["id"]: {"opened": 0, "done": 0} for u in p["doc"].get("units") or []} if len(sharing) >= self.COUNTS_MIN else {}
+            for g in sharing if units else ():
                 for uid, (opened, seen, total) in json.loads(g["progress"]).items():
                     if uid in units:
                         units[uid]["opened"] += opened > 0
@@ -2486,7 +2516,7 @@ class FakeWorker:
                           "paused": f["paused"], "sched": f.get("sched"), "early": f.get("early", 0),
                           "shift": f.get("shift", 0), "until": f.get("until"), "since": f.get("since"), "skipped": f.get("skipped", []),
                           "moved": f.get("moved", {}), **({"own": f["own"]} if f.get("own") else {}),
-                          "followers": followers, "crewDone": done,
+                          "followers": followers, **({"crewDone": done} if done is not None else {}),
                           "posts": [{k: v for k, v in x.items() if not k.startswith("_")}
                                     for x in sorted(self.plan_posts.get(pid, []), key=lambda x: -x["id"])[:3]]})
         offers = [{"id": pid, "name": p["name"], "code": p["code"], "squad": p["squad"],

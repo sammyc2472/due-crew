@@ -830,19 +830,20 @@ def card_view(plan, st, prog, today, session=None, week_offset=0):
         sub += f" · opens {n} day{'s' if n != 1 else ''} early"
     sub += f" · {int(plan.get('followers') or 0):,} following"
     followers = int(plan.get("followers") or 0)
-    crew = plan.get("crewDone") or {}
+    crew = plan.get("crewDone")  # 3.9.5: only from three people counted; none, no crew count
     rows = []
     open_units = P.opened_by_date(doc, today)
     current = [u for u in open_units if u.get("due") and u["due"] >= today]
     now_id = current[0]["id"] if current else (open_units[-1]["id"] if open_units else None)
     for u in open_units:
         o, s, t = (prog or {}).get(u["id"], [0, 0, 0])
-        done = int(crew.get(u["id"]) or 0)
-        n = f"crew {done:,}/{followers:,}"
+        done = int(crew.get(u["id"]) or 0) if isinstance(crew, dict) else None
+        bits = [f"crew {done:,}/{followers:,}"] if done is not None else []
         if u["id"] == now_id and u.get("due") and u["due"] >= today:
-            n += f" · due {_short_day(u['due'], today)}"
+            bits.append(f"due {_short_day(u['due'], today)}")
         rows.append({"name": u.get("name") or "?", "uid": u["id"], "state": "now" if u["id"] == now_id else "open",
-                     "seen": [s, t], "crew": [done, followers], "n": n, "missing": not t})
+                     "seen": [s, t], "crew": [done, followers] if done is not None else None, "n": " · ".join(bits),
+                     "missing": not t})
     nxt = P.next_unit(doc, today)
     # G3: dates I skip, around now: crossed out, with Undo skip
     skipped = set(plan.get("skipped") or [])

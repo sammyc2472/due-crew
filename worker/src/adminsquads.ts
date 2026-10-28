@@ -140,6 +140,7 @@ export async function remove(req: Request, s: Session, env: Env, [id, uid]: stri
   await env.DB.batch([
     env.DB.prepare("INSERT INTO bans (squad, uid) VALUES (?, ?) ON CONFLICT DO NOTHING").bind(id, uid),
     env.DB.prepare("DELETE FROM members WHERE squad = ? AND uid = ?").bind(id, uid),
+    env.DB.prepare("UPDATE plans SET totals_at = NULL WHERE squad = ? AND audience = 'squad' AND totals_at IS NOT NULL").bind(id),  // 3.9.5: its plans count again without them (S2)
   ]);
   await tellFounder(env, q, `Due Crew removed ${who} from your squad. They can't rejoin with its code.${why ? `\n\nWhy: ${why}` : ""}`);
   await logAction(env, "removed from a squad", { uid, squad: id });
@@ -156,6 +157,7 @@ export async function del(req: Request, s: Session, env: Env, [id]: string[]): P
   await tellFounder(env, q, "Due Crew deleted your squad. Its members are still each other's crew where they added each other.");
   await env.DB.batch([
     env.DB.prepare("DELETE FROM members WHERE squad = ?").bind(id),
+    env.DB.prepare("UPDATE plans SET totals_at = NULL WHERE squad = ? AND audience = 'squad' AND totals_at IS NOT NULL").bind(id),  // 3.9.5 (S2)
     env.DB.prepare("DELETE FROM bans WHERE squad = ?").bind(id),
     env.DB.prepare("DELETE FROM squad_codes WHERE squad = ?").bind(id),
     env.DB.prepare("DELETE FROM squads WHERE id = ?").bind(id),

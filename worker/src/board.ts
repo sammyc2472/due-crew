@@ -10,11 +10,12 @@ import * as L from "./library";
 import * as N from "./notices";
 import * as P from "./plans";
 import * as T from "./team";
+import { SQUADS_MAX } from "./squads";
 import * as V from "./validate";
 import { ankiDay, Env, HttpError, json, nowSec, readJson } from "./util";
 
 const SEEN_EVERY = 3600;  // users.last_seen is written at most hourly
-const SQUADS_PER_SYNC = 20;
+const SQUADS_PER_SYNC = SQUADS_MAX;  // 3.9.5: the squads one person may be in
 
 export const iso = (sec: number | null | undefined) => (sec ? new Date(sec * 1000).toISOString().replace(/\.\d{3}Z$/, "Z") : "");
 
@@ -174,8 +175,8 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
   // and the squads I'm in, so an add-on whose config was reset finds them
   if (withDecks && !keep) {
     out.squads = (await db.prepare(
-      "SELECT q.id, q.name, q.founder FROM members m JOIN squads q ON q.id = m.squad WHERE m.uid = ? ORDER BY m.joined_at LIMIT 50",
-    ).bind(s.uid).all<{ id: string; name: string; founder: string }>()).results;
+      "SELECT q.id, q.name, q.founder FROM members m JOIN squads q ON q.id = m.squad WHERE m.uid = ? ORDER BY m.joined_at LIMIT ?",
+    ).bind(s.uid, SQUADS_MAX).all<{ id: string; name: string; founder: string }>()).results;
     const card = await B.forMember(env, s.uid, params.get("wk"));
     if (card) out.bingo = card;
     // 3.9.5: someone who owns and follows no plan (co-writes none either): a few starters

@@ -105,7 +105,8 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   stranger's uid gets the same 404 as no account.
   `worker/test/consent.test.ts` is the model.
 - A squad row is an UPDATE, never an insert; the join (with its code) is
-  the only way in.
+  the only way in, and since 3.9.5 its checks are the insert's own
+  conditions, one statement; 20 squads a person (`squads.SQUADS_MAX`).
 - Card text never leaves the computer: flags, asks, knows, plan picks,
   plan tags and plan squad questions carry a note guid and card number, and
   each reader's Anki reads its own copy.
@@ -142,7 +143,8 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   that I showed up, my questions and answers, and bingo stamps; never my
   numbers by name, never weak spots. While I'm in it, my per-date progress
   joins the counts its authors see (Progress, never named, per date only
-  from three people up).
+  from three people up; since 3.9.5 the server holds to that,
+  `plans.COUNTS_MIN`, and counts only who may still see the plan, `plans.COUNTED`).
 - Days are the person's Anki day (their rollover), on both sides (`ankiDay`
   in the Worker).
 - Background jobs capture `app.generation` (bumped at profile open/close,

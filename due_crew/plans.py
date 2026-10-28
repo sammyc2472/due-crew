@@ -511,9 +511,9 @@ class DeckIndex:
             tags = sorted(tags[:cap] if cap else tags, key=lambda x: x[0].lower())
         decks = []
         if with_decks:
-            for rel, d in self.rel.items():
-                n = sum(len(self.by_deck.get(dd, ())) for r, dd in self.rel.items()
-                        if not rel or r == rel or r.startswith(rel + _SEP))
+            under = deck_counts(self.rel, self.by_deck)
+            for rel in self.rel:
+                n = under[rel]
                 if n:
                     # 3.3: the deck itself too, for a deck with no tags or subdecks
                     decks.append([f"{self.name}{_SEP}{self.spelled[rel]}" if rel else self.name, n])
@@ -529,6 +529,29 @@ class DeckIndex:
             out.setdefault(first.lower(), first)
         return out
 
+
+
+def deck_counts(rel, by_deck):
+    """{rel: cards in it and below} for DeckIndex.rel (lowercased path under
+    the plan's deck, "" the deck itself -> did) and by_deck (did -> cids):
+    each deck's own cards go to it and to every deck above it, in one pass
+    (3.9.5, the audit's E1: it was every deck against every deck, on the
+    main thread). Above means as the subdeck tree reads it: a path a "::" in
+    it cuts short, and the deck itself."""
+    under = dict.fromkeys(rel, 0)
+    for r, d in rel.items():
+        c = len(by_deck.get(d, ()))
+        if not c:
+            continue
+        up = {r, ""}
+        i = r.find(_SEP)
+        while i != -1:
+            up.add(r[:i])
+            i = r.find(_SEP, i + 1)
+        for p in up:
+            if p in under:
+                under[p] += c
+    return under
 
 # ---- the tree as it goes up (3.3) ----
 

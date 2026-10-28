@@ -622,7 +622,10 @@ function codeBox() {
           await api("POST", `/squads/${sq.id}/join`, { code: c });
           await squadToSettings(sq);
           done(`You're in ${sq.name}. It shows in Anki's Squads next time Anki opens.`);
-        } catch { say("bad", h("span", {}, "That didn't work. The squad may have just closed.")); }
+        } catch (err) {
+          say("bad", h("span", {}, err.body?.error === "too_many_squads" ? "You're in 20 squads. Leave one to join another."
+            : err.status === 429 ? "That's a lot of tries. Try again in an hour." : "That didn't work. The squad may have just closed."));
+        }
       } }, "Join") : null);
     } catch (err) {
       say("bad", h("span", {}, err.status === 429 ? "That's a lot of codes. Try again in an hour."

@@ -258,6 +258,19 @@ def main(out):
         dlg._look_up()
         app.processEvents()
         shoot(dlg, os.path.join(out, "squads.png"))
+        # 3.9.5: in 20 squads already, a join and a new squad are refused and said so
+        full = SquadDialog(None, CLIENT, noop)
+        full.code_edit.setText(SQUAD["code"])
+        full._look_up()
+        app.processEvents()
+        full._joined(full.peek or {}, 409)
+        app.processEvents()
+        shoot(full, os.path.join(out, "squads-join-full.png"))
+        made = SquadDialog(None, CLIENT, noop)
+        made.name_edit.setText("Anatomy")
+        made._created({"error": "too_many_squads"})
+        app.processEvents()
+        shoot(made, os.path.join(out, "squads-create-full.png"))
 
     def auth():
         from due_crew.ui.auth_dialog import AuthDialog

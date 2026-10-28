@@ -14,6 +14,11 @@ export const SQUAD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";  // no 0/O/1/I
 export const SQUAD_CODE_LEN = 8;
 const BANS_MAX = 200;
 const MEMBERS_MAX = 500;  // a squad's board is one query: it stays bounded
+/** 3.9.5 (the audit's A2): the squads one person is in, the add-on's own
+ *  ceiling (account.MAX_SQUADS) and what a sync carries (board.ts). Someone
+ *  in more from before keeps them, and joins again once under it. */
+export const SQUADS_MAX = 20;
+const JOINS_PER_HOUR = 30;  // tries, right code or not
 
 export function normalizeCode(code: string): string {
   return [...code.toUpperCase()].filter((c) => SQUAD_ALPHABET.includes(c)).join("");
@@ -71,12 +76,6 @@ async function myName(env: Env, uid: string): Promise<string> {
   return (await nameOf(env, uid))?.name ?? "?";
 }
 
-function joinStmt(env: Env, id: string, uid: string, name: string) {
-  return env.DB.prepare(
-    "INSERT INTO members (squad, uid, name, joined_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING",
-  ).bind(id, uid, name, nowSec());
-}
-
 /** POST /squads {name}: a new squad, its code, and me as founder and member. */
 export async function create(req: Request, s: Session, env: Env): Promise<Response> {
   const body = await readJson(req);
@@ -87,12 +86,21 @@ export async function create(req: Request, s: Session, env: Env): Promise<Respon
   for (let i = 0; i < 3; i++) {
     const code = drawCode();
     const id = await squadId(code);
-    const r = await env.DB.prepare(
-      "INSERT INTO squads (id, name, founder, open, created_at) VALUES (?, ?, ?, 1, ?) ON CONFLICT DO NOTHING",
-    ).bind(id, name, s.uid, nowSec()).run();
-    if (!r.meta.changes) continue;
-    await joinStmt(env, id, s.uid, me).run();
-    return json({ id, code, name, founder: s.uid, open: true });
+    const now = nowSec();
+    // 3.9.5 (A2): one transaction, the squad only while I'm under SQUADS_MAX, and me in it only if it's the one just made
+    const [r] = await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO squads (id, name, founder, open, created_at) SELECT ?1, ?2, ?3, 1, ?4
+          WHERE (SELECT COUNT(*) FROM members WHERE uid = ?3) < ?5 ON CONFLICT DO NOTHING`,
+      ).bind(id, name, s.uid, now, SQUADS_MAX),
+      env.DB.prepare(
+        `INSERT INTO members (squad, uid, name, joined_at) SELECT ?1, ?2, ?3, ?4
+          WHERE EXISTS (SELECT 1 FROM squads WHERE id = ?1 AND founder = ?2 AND created_at = ?4)
+            AND NOT EXISTS (SELECT 1 FROM members WHERE squad = ?1) ON CONFLICT DO NOTHING`,
+      ).bind(id, s.uid, me, now),
+    ]);
+    if (r.meta.changes) return json({ id, code, name, founder: s.uid, open: true });
+    if (await squadsFull(env, s.uid)) throw new HttpError(409, "too_many_squads");
   }
   throw new HttpError(503, "try_again");
 }
@@ -117,24 +125,42 @@ export async function join(req: Request, s: Session, env: Env, [id]: string[]): 
   // The code is what only a join sends, and it must be this squad's (since
   // 3.6.2, with MIN_CLIENT 3.1.0: 3.0.x add-ons sent none, and an id alone,
   // which members and past members know, let anyone back in).
+  await limitOrThrow(env, `squadjoin:${s.uid}`, JOINS_PER_HOUR, 3600);  // 3.9.5 (A2)
   const body = await readJson(req);
   const code = typeof body.code === "string" ? body.code : null;
   if (code === null || !(await codeIsLive(env, id, code))) throw new HttpError(403, "wrong_code");
-  return joinById(s, env, id);
-}
-
-/** The join itself, once whoever called has shown the code (or is 3.0.x). */
-async function joinById(s: Session, env: Env, id: string): Promise<Response> {
   const sq = await getSquad(env, id);
   if (await isMember(env, id, s.uid)) return json(info(sq));
-  if (await env.DB.prepare("SELECT 1 FROM bans WHERE squad = ? AND uid = ?").bind(id, s.uid).first()) {
-    throw new HttpError(403, "blocked");
-  }
-  if (sq.open !== 1) throw new HttpError(403, "locked");
-  const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM members WHERE squad = ?").bind(id).first<number>("n");
-  if ((n ?? 0) >= MEMBERS_MAX) throw new HttpError(403, "full");  // the add-on says the door is shut
-  await joinStmt(env, id, s.uid, await myName(env, s.uid)).run();
+  // 3.9.5 (the audit's S3): the code, the door, the block list and both
+  // ceilings are the insert's own conditions, one statement, so a block, a
+  // lock or a new code that lands while I'm joining still holds. Only when
+  // nothing went in is the reason looked up, in the order the door says it.
+  const r = await env.DB.prepare(
+    `INSERT INTO members (squad, uid, name, joined_at) SELECT ?1, ?2, ?3, ?4
+      WHERE EXISTS (SELECT 1 FROM squads WHERE id = ?1 AND open = 1 AND COALESCE(code_id, id) = ?5)
+        AND NOT EXISTS (SELECT 1 FROM bans WHERE squad = ?1 AND uid = ?2)
+        AND (SELECT COUNT(*) FROM members WHERE squad = ?1) < ?6
+        AND (SELECT COUNT(*) FROM members WHERE uid = ?2) < ?7
+     ON CONFLICT DO NOTHING`,
+  ).bind(id, s.uid, await myName(env, s.uid), nowSec(), await squadId(code), MEMBERS_MAX, SQUADS_MAX).run();
+  if (!r.meta.changes) await whyNot(env, id, s.uid, code);
   return json(info(sq));
+}
+
+/** Why a join put nothing in, as the checks before 3.9.5 said it; nothing
+ *  to say when I'm in after all (another join of mine got there first). */
+async function whyNot(env: Env, id: string, uid: string, code: string): Promise<void> {
+  const sq = await getSquad(env, id);
+  if (await isMember(env, id, uid)) return;
+  if (await env.DB.prepare("SELECT 1 FROM bans WHERE squad = ? AND uid = ?").bind(id, uid).first()) throw new HttpError(403, "blocked");
+  if (sq.open !== 1) throw new HttpError(403, "locked");
+  if (!(await codeIsLive(env, id, code))) throw new HttpError(403, "wrong_code");
+  if (await squadsFull(env, uid)) throw new HttpError(409, "too_many_squads");
+  throw new HttpError(403, "full");  // the add-on says the door is shut
+}
+
+async function squadsFull(env: Env, uid: string): Promise<boolean> {
+  return ((await env.DB.prepare("SELECT COUNT(*) AS n FROM members WHERE uid = ?").bind(uid).first<number>("n")) ?? 0) >= SQUADS_MAX;
 }
 
 /** GET /squads/{id}[?wk=2026-W40]: the squad and every member's row, one
@@ -192,6 +218,8 @@ export async function removeMember(s: Session, env: Env, [id, uid]: string[]): P
   const db = env.DB;
   await db.batch([
     db.prepare("DELETE FROM members WHERE squad = ? AND uid = ?").bind(id, uid),
+    // 3.9.5 (the audit's S2): the squad's plans count again without them, not in an hour
+    db.prepare("UPDATE plans SET totals_at = NULL WHERE squad = ? AND audience = 'squad' AND totals_at IS NOT NULL").bind(id),
     // a founder who leaves hands the squad to its longest-standing member
     // (as deleting the account does), or it goes with the last one out
     db.prepare(`UPDATE squads SET founder = (SELECT uid FROM members WHERE squad = ?1 ORDER BY joined_at, uid LIMIT 1)
@@ -213,6 +241,7 @@ export async function block(s: Session, env: Env, [id, uid]: string[]): Promise<
   await env.DB.batch([
     env.DB.prepare("INSERT INTO bans (squad, uid) VALUES (?, ?) ON CONFLICT DO NOTHING").bind(id, uid),
     env.DB.prepare("DELETE FROM members WHERE squad = ? AND uid = ?").bind(id, uid),
+    env.DB.prepare("UPDATE plans SET totals_at = NULL WHERE squad = ? AND audience = 'squad' AND totals_at IS NOT NULL").bind(id),  // 3.9.5 (S2)
   ]);
   return json({ ok: true });
 }

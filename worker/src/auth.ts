@@ -251,6 +251,8 @@ export async function deleteAccount(s: Session, env: Env): Promise<Response> {
       "DELETE FROM squad_codes WHERE squad = ?1 AND NOT EXISTS (SELECT 1 FROM squads WHERE id = ?1)").bind(id));
   }
   for (const sql of [
+    // 3.9.5 (the audit's S2): the plans I follow count again without me, not in an hour
+    "UPDATE plans SET totals_at = NULL WHERE totals_at IS NOT NULL AND id IN (SELECT plan FROM plan_follows WHERE uid = ?1)",
     "DELETE FROM members WHERE uid = ?1",
     "DELETE FROM bans WHERE uid = ?1",
     "DELETE FROM friends WHERE owner = ?1 OR friend = ?1",
