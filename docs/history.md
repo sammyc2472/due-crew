@@ -3626,3 +3626,7 @@ every release that changes how something works.
   `join_squad` returns it, so it says "That's a lot of tries. Try again
   in an hour.", and the fake restates the 30 an hour (`JOINS_PER_HOUR`);
   `tools/dialogs.py` renders it.
+  CI's dialogs job pins PyQt6 6.11.0: 6.12.0, out the same day, ships
+  without QtPdf, so the dropped calendar PDF read as nothing (the add-on
+  itself already says so when an Anki's Qt has no PDF reader: `pdf_text`
+  is None).
