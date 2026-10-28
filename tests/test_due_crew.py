@@ -18738,6 +18738,47 @@ def test_game_night_from_your_cards_v395():
     check("game night: a thin scope says which games it can't fill (three cards: no three wrong answers, no twins, no board)",
           G.fit(G.build(GAME_ROWS[:3], seed=1))[1] == ["imposter", "links", "trivia"])
     check("game night: the pack has its caps", all(len(pack[k]) <= n for k, n in G.CAPS.items()) and pack["n"] == len(GAME_ROWS))
+    # a small scope, and the cards around it (Sam's first night: a hand of six alike)
+    few, around = GAME_ROWS[:6], GAME_ROWS[6:]
+    alone, nearby = G.build(few, seed=2), G.build(few, seed=2, near=around)
+    asked = {G.item(r)["q"] for r in few if G.item(r)}
+    check("game night: the cards around tonight's are never asked: questions and black cards are tonight's alone",
+          {q["q"] for q in nearby["qs"]} <= asked and {b["a"] for b in nearby["blacks"]} == {b["a"] for b in alone["blacks"]} and len(nearby["qs"]) >= len(alone["qs"]))
+    check("game night: ...but they deal the hands and fill the board: tonight's answers first, then theirs",
+          len(alone["whites"]) == 6 and len(nearby["whites"]) > 20 and nearby["whites"][:6] == alone["whites"]
+          and len(nearby["words"]) > len(alone["words"]) and len({w.lower() for w in nearby["whites"]}) == len(nearby["whites"]), (len(nearby["whites"]), len(nearby["words"])))
+    wrong = {o for q in nearby["qs"] for i, o in enumerate(q["opts"]) if i != q["ans"]}
+    check("game night: ...and give the wrong answers (some from outside tonight's cards)",
+          wrong - {G.item(r)["a"] for r in few if G.item(r)}, wrong)
+    from due_crew import gamenight_flow as GF
+    import random
+    import sqlite3
+    db = sqlite3.connect(":memory:")
+    db.executescript("CREATE TABLE cards (id INTEGER, nid INTEGER, did INTEGER, ord INTEGER); CREATE TABLE notes (id INTEGER, mid INTEGER, flds TEXT, tags TEXT);")
+    for k, (cid, ord_, is_cloze, fields, tags) in enumerate(GAME_ROWS):
+        db.execute("INSERT INTO cards VALUES (?, ?, ?, ?)", (cid, cid, 1 if k % 2 else 2, ord_))
+        db.execute("INSERT INTO notes VALUES (?, ?, ?, ?)", (cid, 2 if is_cloze else 1, "\x1f".join(fields), " " + " ".join(tags) + " "))
+    db.execute("INSERT INTO cards VALUES (999, 999, 3, 0)")
+    db.execute("INSERT INTO notes VALUES (999, 1, ?, ' Elsewhere::Odd ')", ("Far front\x1ffar back",))
+
+    def tagged(search):
+        want = re.findall(r'"tag:((?:[^"\\]|\\.)*)"', search)
+        want = [w.replace("\\_", "_") for w in want]
+        return [cid for cid, tags in db.execute("SELECT c.id, n.tags FROM cards c JOIN notes n ON n.id = c.nid")
+                if any(t == w or t.startswith(w + "::") for t in tags.split() for w in want)]
+    col = types.SimpleNamespace(find_cards=tagged, models=types.SimpleNamespace(get=lambda mid: {"type": 1 if mid == 2 else 0}),
+                                db=types.SimpleNamespace(all=lambda q: db.execute(q).fetchall(), list=lambda q: [r[0] for r in db.execute(q)]))
+    was = GF._col
+    GF._col = lambda: col
+    try:
+        mine = [r[0] for r in few]
+        got = GF.near(GF.rows(mine), mine, cap=30, rng=random.Random(4))
+        under = {r[0] for r in GAME_ROWS if any(t.startswith(G.deepest(few[0][4]).rsplit("::", 1)[0]) for t in r[4])}
+    finally:
+        GF._col = was
+    ids = [r[0] for r in got]
+    check("game night: near reads the cards around tonight's: under their tags' parents, their decks, then anywhere; never tonight's own",
+          ids and not set(ids) & set(mine) and len(ids) == len(set(ids)) and set(ids) & (under - set(mine)) and 999 in ids, ids)
 
 
 def test_game_night_one_player_v395():
@@ -18781,6 +18822,27 @@ def test_game_night_one_player_v395():
     check("game night: alone, Imposter's vote ends it; Draw it is a chain of one; Links' clue giver guesses",
           by[("imposter", 1)]["phases"] == ["clue", "clue", "vote", "end"] and by[("draw", 1)]["phases"] == ["step", "reveal"]
           and by[("links", 1)]["phases"][:2] == ["clue", "guess"] and len(by[("links", 1)]["phases"]) >= 3, by[("links", 1)])
+    small = G.build(GAME_ROWS[:6], seed=2, near=GAME_ROWS[6:])
+    deal = subprocess.run(["node", "-e", "const matchMedia = () => ({ matches: true });\n" + src[a:b].replace("let D = null;", "let D = " + json.dumps(small) + ";", 1) + r"""
+const out = [];
+for (const N of [1, 3, 5]) {
+  const c = { N, seats: Array.from({ length: N }, (_, i) => ({ n: "P" + i })), A: {}, here: () => true, name: (i) => "P" + i };
+  let S = Rounds.start(c), dup = 0, short = 0;
+  for (let r = 0; r < 15; r++) {
+    const all = S.hands.flat().map(norm);
+    if (new Set(all).size !== all.length) dup++;
+    if (S.hands.some((hd, i) => i !== S.att && !hd.length)) short++;
+    c.A = {}; S.hands.forEach((hd, i) => { if (i !== S.att && hd.length) c.A[i] = { c: hd[0] }; });
+    S = Rounds.force(S, c) || S; if (S.ph === "pick") { c.A[S.att] = { f: 0 }; S = Rounds.force(S, c); } S = Rounds.next(S, c);
+  }
+  out.push([N, dup, short, Rounds.per(N)]);
+}
+console.log(JSON.stringify(out));
+"""], capture_output=True, text=True, timeout=60)
+    dealt = json.loads(deal.stdout or "[]")
+    check("game night: Rounds never deals a card twice, in a hand or across them, and nobody's hand is empty (a small scope, 1 to 5 players)",
+          dealt and all(d == 0 and e == 0 for _n, d, e, _p in dealt), dealt or deal.stderr[:300])
+    check("game night: a hand is seven when there are cards enough", [p for _n, _d, _e, p in dealt] == [7, 7, 4], dealt)
     check("game night: Links' key on the clue giver's phone breaks a long word once, at a syllable; short ones and odd ones whole",
           got["soft"] == ["Spirono-lactone", "Nitro-glycerin", "inter-stitial edema", "Arrhyth-mia", "magne-sium", "Na-K-2Cl", "Asthma"], got["soft"])
     phone = src[src.index("const Links = {"):]

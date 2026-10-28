@@ -2,10 +2,10 @@
 
 The window (ui/game_night_window.py) picks tonight's cards: this week's
 misses, a plan's week, a saved scope, or a custom one. This reads them
-from the collection (main thread), builds the pack (gamenight.py), opens a
-table on the API (one request, on the click) and the TV
-(ui/game_night_tv.py): the table page in a window of Anki's, handed the
-pack. Try it with bots needs no table. What reaches phones is the games'
+from the collection (main thread), and the cards around them for answer
+choices (near), builds the pack (gamenight.py), opens a table on the API
+(one request, on the click) and the TV (ui/game_night_tv.py): the table
+page in a window of Anki's, handed the pack. Try it with bots needs no table. What reaches phones is the games'
 business (gamenight.py). Saved scopes are this profile's,
 user_files/<profile>/game_night.json; nothing about them is sent.
 
@@ -36,7 +36,7 @@ def shown():
     try:
         from .planner import enabled as labs
         c = client()
-        return bool(c.signed_in()) and (TESTERS is None or c.user_id() in TESTERS or labs())
+        return bool(c.signed_in) and (TESTERS is None or c.user_id in TESTERS or labs())
     except Exception:
         return False
 
@@ -190,16 +190,56 @@ def rows(cids, cap=G.READ_MAX, rng=None):
     return out
 
 
+def near(got, cids, cap=G.NEAR_MAX, rng=None):
+    """Cards around tonight's, for answer choices and white cards (never
+    asked): two thirds from under their tags' parents, the rest from their
+    decks, and from anywhere when those run short, for the odd pairing.
+    got: tonight's rows; cids: all of tonight's cards (left out)."""
+    rng = rng or random
+    mine = {int(c) for c in cids}
+    ups = {}
+    for r in got:
+        t = G.deepest(r[4])
+        if t:
+            up = t.rsplit("::", 1)[0] if "::" in t else t
+            ups[up] = ups.get(up, 0) + 1
+    picked, seen = [], set(mine)
+
+    def take(found, k):
+        left = [c for c in dict.fromkeys(int(c) for c in found) if c not in seen]
+        got = rng.sample(left, k) if len(left) > k else left
+        picked.extend(got)
+        seen.update(got)
+    tops = sorted(ups, key=lambda t: -ups[t])[:8]
+    if tops:
+        take(find(" OR ".join(G.term("tag:" + t) for t in tops)), cap * 2 // 3)
+    col = _col()
+    try:
+        q = ",".join(str(c) for c in list(mine)[:2000]) or "0"
+        dids = [d for (d,) in col.db.all(f"SELECT DISTINCT did FROM cards WHERE id IN ({q})")]
+        if dids:
+            take(col.db.list(f"SELECT id FROM cards WHERE did IN ({','.join(str(int(d)) for d in dids)}) ORDER BY random() LIMIT {cap}"),
+                 cap - len(picked))
+        if len(picked) < cap:
+            take(col.db.list(f"SELECT id FROM cards ORDER BY random() LIMIT {cap * 2}"), cap - len(picked))
+    except Exception:
+        pass
+    return rows(picked, cap, rng)
+
+
 def pack_for(key, scope=None, name=""):
     cids = cards_for(key, scope)
-    return G.build(rows(cids), name, n=len(cids))
+    got = rows(cids)
+    return G.build(got, name, n=len(cids), near=near(got, cids))
 
 
 def preview(scope):
     """For the custom scope: {n, search, fit, samples}. The search shown is
     without a plan's or Slow but right's cards (those go by card number)."""
     cids = cards_of(scope)
-    pack = G.build(rows(cids, 400, random.Random(1)), n=len(cids), seed=1)
+    rng = random.Random(1)
+    got = rows(cids, 400, rng)
+    pack = G.build(got, n=len(cids), seed=1, near=near(got, cids, 200, rng))
     have, _thin = G.fit(pack)
     return {"n": len(cids), "search": G.scope_search(dict(scope, plan=None, slow=False)), "fit": have, "samples": pack["qs"][:2]}
 

@@ -699,6 +699,17 @@ def main(out):
         subs[0].aboutToShow.emit()
         if acts["Game night…"].isVisible():
             raise RuntimeError("tools menu: Game night… shows for someone who isn't a tester")
+        # ...and does show for one (signed_in and user_id are the client's properties)
+        from due_crew import gamenight_flow as GF
+        was = GF.client
+        try:
+            for uid, want_shown in ((GF.TESTERS[0], True), ("someone-else", False)):
+                GF.client = lambda uid=uid: types.SimpleNamespace(signed_in=True, user_id=uid)
+                subs[0].aboutToShow.emit()
+                if acts["Game night…"].isVisible() != want_shown:
+                    raise RuntimeError(f"tools menu: Game night… for {uid}: shown {not want_shown}")
+        finally:
+            GF.client = was
         # 3.9.3: Plans ▸, everything about plans, the plan windows among it
         plans = [a.menu() for a in subs[0].actions() if a.menu()]
         got = [a.text() or "—" for a in plans[0].actions()] if len(plans) == 1 else []

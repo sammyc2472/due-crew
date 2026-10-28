@@ -14,6 +14,9 @@ A pack: {name, n, qs, blacks, whites, words, prompts, twins}
   words   Links' board: topic names, then short answers
   prompts Draw it, Somewhere between: topic names, then short answers
   twins   Imposter: {part, a: {t, facts}, b: {t, facts}}, sibling tags
+Questions, black cards and twins come from tonight's cards; wrong answers,
+white cards, and the board and prompts when tonight's run short, also from
+the cards around them (`near`), so a small scope still plays.
 """
 
 import html
@@ -28,6 +31,11 @@ WORD_MAX = 18      # a Links tile
 TOPIC_MAX = 36
 CAPS = {"qs": 150, "blacks": 150, "whites": 300, "words": 80, "prompts": 80, "twins": 30}
 READ_MAX = 1500    # cards read for a pack: a big scope is sampled
+NEAR_MAX = 600     # and around it, for answer choices
+WHITES_MIN = 120   # a hand's cards: tonight's, and at least this many more from around them
+WORDS_MIN = 40     # Links' board, before it takes from around the scope
+PROMPTS_MIN = 30
+TWINS_MIN = 6
 BLANK = "____"
 # what each game needs from a pack before its tile lights up
 NEEDS = {"trivia": ("qs", 1), "rounds": ("blacks", 1), "links": ("words", 25), "imposter": ("twins", 1),
@@ -217,39 +225,68 @@ def distractors(it, pool, rng, k=3):
     return out
 
 
-def build(rows, name="", n=None, seed=None):
-    """The pack for rows of cards (item's rows); n: how many cards the scope
-    has (the rows may be a sample of it)."""
-    rng = random.Random(seed)
-    items, dup = [], set()
+def _items(rows, dup):
+    out = []
     for row in rows:
         it = item(row)
         if it and (norm(it["q"]), norm(it["a"])) not in dup:
             dup.add((norm(it["q"]), norm(it["a"])))
-            items.append(it)
+            out.append(it)
+    return out
+
+
+def _topics(items):
+    """The tags' topic names, the most carded first, and {tag: name}."""
+    counts = {}
+    for it in items:
+        if it["tag"]:
+            counts[it["tag"]] = counts.get(it["tag"], 0) + 1
+    named = names(counts)
+    return _unique(named[t] for t in sorted(counts, key=lambda t: -counts[t])), named
+
+
+def build(rows, name="", n=None, seed=None, near=()):
+    """The pack for rows of cards (item's rows); n: how many cards the scope
+    has (the rows may be a sample of it). near: rows of cards around the
+    scope (gamenight_flow.near): never asked, only answer choices, white
+    cards, and the Links board and prompts when the scope's run short."""
+    rng = random.Random(seed)
+    dup = set()
+    items = _items(rows, dup)
     rng.shuffle(items)
+    others = _items(near, dup)
+    rng.shuffle(others)
+    pool = items + others
     qs = []
     for it in items:
-        wrong = distractors(it, items, rng)
+        wrong = distractors(it, pool, rng)
         if len(wrong) == 3:
             opts = [it["a"]] + wrong
             rng.shuffle(opts)
             qs.append({"q": it["q"], "a": it["a"], "tag": it["where"], "opts": opts, "ans": opts.index(it["a"])})
     blacks = [{"q": it["q"] if BLANK in it["q"] else f"{it['q']} {BLANK}", "a": it["a"], "full": it["full"], "tag": it["where"]}
               for it in items if len(it["a"]) <= WHITE_MAX]
-    whites = _unique(it["a"] for it in items if len(it["a"]) <= WHITE_MAX)
-    counts = {}
-    for it in items:
-        if it["tag"]:
-            counts[it["tag"]] = counts.get(it["tag"], 0) + 1
-    named = names(counts)
-    topics = _unique(named[t] for t in sorted(counts, key=lambda t: -counts[t]))
-    short = _unique(it["a"] for it in items if len(it["a"]) <= WORD_MAX)
-    words = _unique([t for t in topics if len(t) <= WORD_MAX] + short)
-    prompts = _unique(topics + [it["a"] for it in items if len(it["a"]) <= TOPIC_MAX])
+    # a hand: tonight's answers and as many from around them, so a small
+    # scope still deals full, varied hands
+    mine = _unique(it["a"] for it in items if len(it["a"]) <= WHITE_MAX)
+    theirs = [a for a in _unique(it["a"] for it in others if len(it["a"]) <= WHITE_MAX) if norm(a) not in {norm(x) for x in mine}]
+    whites = _unique(mine + theirs[:max(len(mine), WHITES_MIN)])
+    topics, named = _topics(items)
+    near_topics, near_named = _topics(others)
+    short = lambda its, top: [it["a"] for it in its if len(it["a"]) <= top]
+    words = _unique([t for t in topics if len(t) <= WORD_MAX] + short(items, WORD_MAX))
+    if len(words) < WORDS_MIN:
+        words = _unique(words + [t for t in near_topics if len(t) <= WORD_MAX] + short(others, WORD_MAX))
+    prompts = _unique(topics + short(items, TOPIC_MAX))
+    if len(prompts) < PROMPTS_MIN:
+        prompts = _unique(prompts + near_topics + short(others, TOPIC_MAX))
+    pairs = twins(items, rng, named)
+    if len(pairs) < TWINS_MIN:  # tonight's topics first, then their neighbours'
+        have = {(p["a"]["t"], p["b"]["t"]) for p in pairs}
+        pairs += [p for p in twins(pool, rng, dict(near_named, **named)) if (p["a"]["t"], p["b"]["t"]) not in have]
     pack = {"name": str(name)[:60], "n": len(rows) if n is None else int(n),
             "qs": qs, "blacks": blacks, "whites": whites, "words": words, "prompts": prompts,
-            "twins": twins(items, rng, named)}
+            "twins": pairs}
     for k, cap in CAPS.items():
         pack[k] = pack[k][:cap]
     return pack

@@ -246,7 +246,7 @@ function fixRound(S) {
   const hands = S.hands.map((hd) => hd.slice());
   const deck = S.deck.filter((x) => norm(x) !== norm(ans));
   const ai = S.att >= 0 ? hands[S.att].findIndex((x) => norm(x) === norm(ans)) : -1;
-  if (ai >= 0 && deck.length) hands[S.att][ai] = deck.shift();
+  if (ai >= 0) hands[S.att].splice(ai, 1, ...deck.splice(0, 1));  // the Attending doesn't play it; next round refills
   const holders = hands.map((hd, i) => (i !== S.att && hd.some((x) => norm(x) === norm(ans)) ? i : -1)).filter((i) => i >= 0);
   if (!holders.length) {
     const j = pick(hands.map((_, i) => i).filter((i) => i !== S.att));
@@ -259,13 +259,16 @@ function fixRound(S) {
   return Object.assign({}, S, { hands, deck });
 }
 const Rounds = {
-  id: "rounds", name: "Rounds", like: "Like Cards Against Humanity", min: 3, max: 8,
+  id: "rounds", name: "Rounds", like: "Like Cards Against Humanity", min: 3, max: 8, HAND: 7,
   line: "One of your cards with its answer blanked. Everyone plays an answer from your other cards. The Attending picks a favorite, then the card says what it really was.",
   learn: "A wrong card is only funny if you know why it's wrong.",
+  // a hand's size: seven, or an even share of a small pack's cards
+  per(N) { return Math.max(1, Math.min(Rounds.HAND, Math.floor(D.whites.length / Math.max(1, N)))); },
   start(c) {
     const deck = shuffle(D.whites);
-    const hands = c.seats.map(() => deck.splice(0, 6));
-    return fixRound({ ph: "play", att: c.N > 1 ? 1 % c.N : -1, order: shuffle(D.blacks.map((_, i) => i)), bi: 0, hands, deck, played: null, flip: null, fseat: null, fav: null });
+    const per = Rounds.per(c.N);
+    const hands = c.seats.map(() => deck.splice(0, per));
+    return fixRound({ per, ph: "play", att: c.N > 1 ? 1 % c.N : -1, order: shuffle(D.blacks.map((_, i) => i)), bi: 0, hands, deck, played: null, flip: null, fseat: null, fav: null });
   },
   pub(S) {
     const b = D.blacks[S.order[S.bi]];
@@ -298,15 +301,18 @@ const Rounds = {
   },
   next(S, c) {
     let deck = S.deck.slice();
-    const hands = S.hands.map((hd, i) => {
-      const keep = hd.filter((x) => x !== (S.played && S.played[i]));
-      while (keep.length < 6) {
-        if (!deck.length) deck = shuffle(D.whites.filter((x) => !S.hands.some((h2) => h2.includes(x))));
+    const hands = S.hands.map((hd, i) => hd.filter((x) => x !== (S.played && S.played[i])));
+    const held = new Set(hands.flat().map(norm));  // no card twice, in a hand or across them
+    for (const keep of hands) {
+      while (keep.length < (S.per || Rounds.HAND)) {
+        if (!deck.length) deck = shuffle(D.whites.filter((x) => !held.has(norm(x))));
         if (!deck.length) break;
-        keep.push(deck.shift());
+        const x = deck.shift();
+        if (held.has(norm(x))) continue;
+        held.add(norm(x));
+        keep.push(x);
       }
-      return keep;
-    });
+    }
     return fixRound(Object.assign({}, S, { ph: "play", att: S.att < 0 ? -1 : (S.att + 1) % c.N, bi: (S.bi + 1) % D.blacks.length, hands, deck, played: null, flip: null, fseat: null, fav: null }));
   },
   tv(S, c) {
