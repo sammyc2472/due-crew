@@ -90,16 +90,21 @@ def find(search):
         return []
 
 
-def plan_week(pid):
+def plan_week(pid, idxs=None):
     """The cards of a followed plan's dates that open this week (Monday to
-    Sunday), as it runs here; [] without it."""
+    Sunday of my Anki day), as it runs here; [] without it. idxs: deck
+    reads shared across calls (plan_flow._index)."""
     from . import plan_flow as PF
     from . import plans as P
-    got = PF._plan_idx(pid)
-    if not got:
+    p = next((x for x in PF.followed() if x["id"] == pid), None)
+    st = PF._state_cfg().get(pid)
+    if p is None or not st or not mw.col or not PF._deck_ok(mw.col, st.get("deck_id")):
         return []
-    _p, st, doc, idx = got
-    today = datetime.date.today()
+    doc, idx = PF.mine(p)["doc"], PF._index(mw.col, st, idxs)
+    try:
+        today = datetime.date.fromisoformat(PF._today())
+    except (TypeError, ValueError):
+        today = datetime.date.today()
     mon = today - datetime.timedelta(days=today.weekday())
     lo, hi = mon.isoformat(), (mon + datetime.timedelta(days=6)).isoformat()
     out = set()
@@ -119,15 +124,24 @@ def _plans():
 
 def sources():
     """Play from: [{key, label, n}]: this week's misses, each plan's week,
-    the saved scopes."""
-    out = [{"key": "misses", "label": "This week's misses", "n": len(find(f"rated:{MISSED_DAYS}:1"))}]
+    the saved scopes. Each one's cards are kept a while (_IDS), so a pick
+    or Host doesn't search again."""
+    now, gen, idxs = time.time(), app.generation, {}
+
+    def keep(key, cids):
+        _IDS[key] = (gen, now, cids)
+        return len(cids)
+    out = [{"key": "misses", "label": "This week's misses", "n": keep("misses", find(f"rated:{MISSED_DAYS}:1"))}]
     for p in _plans():
-        n = len(plan_week(p["id"]))
+        n = keep(f"plan:{p['id']}", plan_week(p["id"], idxs))
         if n:
             out.append({"key": f"plan:{p['id']}", "label": f"{p.get('name') or 'A plan'}, this week", "n": n})
-    for s in saved():
-        out.append({"key": "saved:" + s["name"], "label": s["name"], "n": len(cards_of(s["scope"]))})
+    for sc in saved():
+        out.append({"key": "saved:" + sc["name"], "label": sc["name"], "n": keep("saved:" + sc["name"], cards_of(sc["scope"]))})
     return out
+
+
+_IDS = {}  # source key: (generation, when, its cards), as sources() found them
 
 
 def plans_for_scope():
@@ -165,6 +179,9 @@ def cards_of(scope):
 
 
 def cards_for(key, scope=None):
+    got = _IDS.get(key) if key != "custom" else None
+    if got and got[0] == app.generation and time.time() - got[1] <= SOURCES_FOR:
+        return got[2]
     if key == "misses":
         return find(f"rated:{MISSED_DAYS}:1")
     if key.startswith("plan:"):
@@ -195,16 +212,18 @@ def rows(cids, cap=G.READ_MAX, rng=None):
     return out
 
 
-def near(got, cids, cap=G.NEAR_MAX, rng=None):
+def near(got, cids, cap=G.NEAR_MAX, rng=None, slots=False):
     """Cards around tonight's, for answer choices and white cards (never
-    asked): two thirds from under their tags' parents, the rest from their
-    decks, and from anywhere when those run short, for the odd pairing.
+    asked): two thirds from under their topics' parent tags, the rest from
+    their decks, and from anywhere when those run short, for the odd
+    pairing. slots (Host's pack): also cards whose blank sits before the
+    same word as tonight's ("{{c1::…}} receptor"), the best wrong answers.
     got: tonight's rows; cids: all of tonight's cards (left out)."""
     rng = rng or random
     mine = {int(c) for c in cids}
     ups = {}
     for r in got:
-        t = G.deepest(r[4])
+        t = G.topic_of(r[4])[0]
         if t:
             up = t.rsplit("::", 1)[0] if "::" in t else t
             ups[up] = ups.get(up, 0) + 1
@@ -212,9 +231,9 @@ def near(got, cids, cap=G.NEAR_MAX, rng=None):
 
     def take(found, k):
         left = [c for c in dict.fromkeys(int(c) for c in found) if c not in seen]
-        got = rng.sample(left, k) if len(left) > k else left
-        picked.extend(got)
-        seen.update(got)
+        got_ = rng.sample(left, k) if len(left) > k else left
+        picked.extend(got_)
+        seen.update(got_)
     tops = sorted(ups, key=lambda t: -ups[t])[:8]
     if tops:
         take(find(" OR ".join(G.term("tag:" + t) for t in tops)), cap * 2 // 3)
@@ -227,15 +246,30 @@ def near(got, cids, cap=G.NEAR_MAX, rng=None):
                  cap - len(picked))
         if len(picked) < cap:
             take(col.db.list(f"SELECT id FROM cards ORDER BY random() LIMIT {cap * 2}"), cap - len(picked))
+        words = G.slots([x for x in (G.item(r) for r in got) if x]) if slots else []
+        if words:  # one pass over the notes; a word is letters and digits alone
+            like = " OR ".join("n.flds LIKE ?" for _ in words)
+            take(col.db.list(f"SELECT c.id FROM cards c JOIN notes n ON n.id = c.nid WHERE {like} LIMIT 3000",
+                             *[f"%}}}} {w}%" for w in words]), SLOT_MAX)
     except Exception:
-        pass
-    return rows(picked, cap, rng)
+        traceback.print_exc()
+    return rows(picked, cap + SLOT_MAX, rng)
+
+
+SLOT_MAX = 300  # of Host's pack's cards found by their blank
 
 
 def pack_for(key, scope=None, name=""):
+    args, kw = _pack_rows(key, scope)
+    return G.build(*args, name=name, **kw)
+
+
+def _pack_rows(key, scope=None):
+    """Host's reading of the collection (main thread): (rows, near=…, n=…)
+    as G.build takes them; the build itself can run anywhere."""
     cids = cards_for(key, scope)
     got = rows(cids)
-    return G.build(got, name, n=len(cids), near=near(got, cids))
+    return (got,), {"near": near(got, cids, slots=True), "n": len(cids)}
 
 
 def preview(scope):
@@ -267,7 +301,7 @@ def open_window(custom=False):
 class Ops:
     """What the window asks of the add-on."""
 
-    sources = staticmethod(sources)
+    sources = staticmethod(lambda: _sources())  # the tab's, kept a while
     tree = staticmethod(tree)
     plans = staticmethod(plans_for_scope)
     preview = staticmethod(preview)
@@ -280,20 +314,35 @@ class Ops:
     @staticmethod
     def start(key, scope, label, bots, done):
         """Build tonight's pack, open a table (unless bots), then the TV.
-        done(error) on the main thread: None, or what to say."""
-        pack = pack_for(key, scope, label)
-        _have, thin = G.fit(pack)
-        if len(thin) == len(G.NEEDS):
-            done("Not enough cards with short answers in that. Pick more.")
-            return
-        if bots:
-            _tv({"mode": "bots", "pack": pack})
-            done(None)
-            return
+        done(error) on the main thread: None, or what to say. The
+        collection is read here, on the main thread; the pack is built off
+        it; a profile changed or signed out meanwhile opens nothing."""
+        gen = app.generation
+        args, kw = _pack_rows(key, scope)
+        _bg(lambda: G.build(*args, name=label, **kw), lambda pack: built(pack))
 
-        def opened(got):
+        def built(pack):
+            if app.generation != gen:
+                done(None)
+                return
+            if not pack:
+                done("Couldn't read tonight's cards.")
+                return
+            _have, thin = G.fit(pack)
+            if len(thin) == len(G.NEEDS):
+                done("Not enough cards with short answers in that. Pick more.")
+                return
+            if bots:
+                _tv({"mode": "bots", "pack": pack})
+                done(None)
+                return
+            _bg(lambda: client().open_table(), lambda got: opened(got, pack))
+
+        def opened(got, pack):
             status, data = got if isinstance(got, tuple) else (0, {})
-            if status == 200 and data.get("code") and data.get("key"):
+            if app.generation != gen:
+                done(None)
+            elif status == 200 and data.get("code") and data.get("key"):
                 _tv({"mode": "tv", "code": data["code"], "key": data["key"], "pack": pack})
                 done(None)
             elif status == 404:
@@ -302,7 +351,6 @@ class Ops:
                 done("That's a lot of tables for one hour. Try again in a while.")
             else:
                 done("Couldn't open a table. Check your connection.")
-        _bg(lambda: client().open_table(), opened)
 
 
 def _tv(payload):
@@ -339,7 +387,7 @@ def _tv_closed(turn):
 
 PICK = "party_pick"
 SOURCES_FOR, FIT_FOR = 120, 600  # seconds a list and a fit hold
-TAB = {"busy": False, "said": "", "open": None, "burst": False, "turn": 0, "list": None, "fits": {}, "pip": None}
+TAB = {"busy": False, "said": "", "open": None, "burst": False, "turn": 0, "list": None, "fits": {}, "pip": None, "fitting": None}
 
 
 def _redraw():
@@ -351,8 +399,11 @@ def _redraw():
 
 
 def _fresh():
-    """Work the list out again next time (a scope saved, a game started)."""
+    """Work the list and the picks' fits out again next time (a scope saved,
+    a game started)."""
     TAB["list"] = None
+    TAB["fits"] = {}
+    _IDS.clear()
     _redraw()
 
 
@@ -364,17 +415,31 @@ def _sources():
 
 
 def _fit(key):
-    """{n, have, thin} for a pick: its pack's fit, on a sample, kept a while."""
-    now, got = time.time(), TAB["fits"].get(key)
-    if not got or got[0] != app.generation or now - got[1] > FIT_FOR:
-        rng = random.Random(1)
-        cids = cards_for(key)
-        rws = rows(cids, 300, rng)
-        have, thin = G.fit(G.build(rws, n=len(cids), seed=1, near=near(rws, cids, 150, rng)))
-        got = (app.generation, now, {"n": len(cids), "have": have, "thin": thin})
+    """{n, have, thin} for a pick: its pack's fit, on a sample, kept a while;
+    None while it's worked out (its cards read here, the build off the main
+    thread, then the tab drawn again)."""
+    now, gen, got = time.time(), app.generation, TAB["fits"].get(key)
+    if got and got[0] == gen and now - got[1] <= FIT_FOR:
+        return got[2]
+    if TAB.get("fitting") == (gen, key):
+        return None
+    TAB["fitting"] = (gen, key)
+    rng = random.Random(1)
+    cids = cards_for(key)
+    rws = rows(cids, 300, rng)
+    nr = near(rws, cids, 150, rng)
+
+    def done(fit):
+        if TAB.get("fitting") == (gen, key):
+            TAB["fitting"] = None
+        if app.generation != gen or fit is None:
+            return
         TAB["fits"] = {k: v for k, v in TAB["fits"].items() if now - v[1] <= FIT_FOR}
-        TAB["fits"][key] = got
-    return got[2]
+        TAB["fits"][key] = (gen, now, fit)
+        _redraw()
+    _bg(lambda: dict(zip(("have", "thin"), G.fit(G.build(rws, n=len(cids), seed=1, near=nr))), n=len(cids)), done)
+    got = TAB["fits"].get(key)  # there already when the job ran here
+    return got[2] if got and got[0] == gen else None
 
 
 def _pip(place):
@@ -393,7 +458,12 @@ def _pip(place):
 
 def tab_view(c):
     """You › Pip Party, for board.party_html: {sources, pick, fit, busy,
-    said, open, burst, pip}. Only when the tab's on screen (the glue)."""
+    said, open, burst, pip}. Only when the tab's on screen (the glue); while
+    the TV's open, the tab shows it alone, so nothing else is worked out."""
+    if TAB.get("open"):
+        burst, TAB["burst"] = TAB.get("burst"), False
+        return {"sources": [], "pick": None, "fit": None, "busy": False, "said": "", "open": TAB["open"],
+                "burst": bool(burst), "pip": _pip("cheer" if burst else "hop")}
     srcs = _sources()
     keys = [x["key"] for x in srcs]
     pick = c.get(PICK) if c.get(PICK) in keys else next((x["key"] for x in srcs if x["n"]), None)

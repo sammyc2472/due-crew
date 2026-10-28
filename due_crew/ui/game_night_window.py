@@ -31,13 +31,13 @@ class GameNightWindow(QDialog):
             r = QRadioButton(f"{s['label']} · {s['n']:,} card{'s' if s['n'] != 1 else ''}")
             r.setProperty("key", s["key"])
             r.setProperty("label", s["label"])
-            r.toggled.connect(self._picked)
+            r.toggled.connect(lambda on: on and self._picked())  # the one turned on: one preview, not two
             root.addWidget(r)
             self.radios.append(r)
         self.custom_r = QRadioButton("Custom…")
         self.custom_r.setProperty("key", "custom")
         self.custom_r.setProperty("label", "Custom")
-        self.custom_r.toggled.connect(self._picked)
+        self.custom_r.toggled.connect(lambda on: on and self._picked())  # the one turned on: one preview, not two
         root.addWidget(self.custom_r)
         self.radios.append(self.custom_r)
         first = self.custom_r if custom else next((r for r, s in zip(self.radios, self.sources) if s["n"]), self.custom_r)
