@@ -39,6 +39,8 @@ import re
 
 Q_MAX = 200        # a question, as the TV shows it
 A_MAX = 40         # an answer: a card with a longer one isn't a question
+EXTRA_MAX = 220    # a card's Extra, on the TV after the reveal
+FACT_MAX = 120     # a card's sentence among Imposter's "what tells them apart"
 WHITE_MAX = 32     # a white card in a hand
 WORD_MAX = 18      # a Links tile
 TOPIC_MAX = 36
@@ -54,8 +56,10 @@ NEEDS = {"trivia": ("qs", 1), "rounds": ("blacks", 1), "links": ("words", 25), "
          "draw": ("prompts", 1), "between": ("prompts", 1)}
 SKIP_TAGS = ("leech", "marked")
 # the six, as the lobby, the window and You › Pip Party name them
-GAMES = (("trivia", "Trivia"), ("rounds", "Rounds"), ("links", "Links"), ("imposter", "Imposter"),
-         ("draw", "Draw it"), ("between", "Somewhere between"))
+# what's on the menu (Sam, after a night on his own cards: "focus on the
+# ones that we know work"): Trivia, Imposter and Links. Rounds, Draw it and
+# Somewhere between are off it, their code kept (table.js's ORDER is this)
+GAMES = (("trivia", "Trivia"), ("imposter", "Imposter"), ("links", "Links"))
 # Rounds' written cards (3.9.5's last round): about one black card in four,
 # each {topic} one of tonight's. No answer of their own: the Attending's
 # pick is the round. Alone, nobody picks, so table.js leaves them out.
@@ -215,11 +219,29 @@ def item(row):
         return None
     if empty(a) or _shown(a, q) or len(re.findall(r"[A-Za-z]{2,}", q.replace(BLANK, ""))) < 2:
         return None
+    if re.search(r"[A-Za-z0-9]" + re.escape(BLANK) + r"|" + re.escape(BLANK) + r"[A-Za-z0-9]", q):
+        return None  # a blank inside a word ("____vascular": the card hid a piece of one)
     if "<img" in str(raw).lower() and _PICTURE.search(q):
         return None
     path, topic = topic_of(tags, f"{q} {a}")
     return {"cid": int(cid), "q": q, "a": a, "full": full[:Q_MAX + A_MAX], "tag": path, "where": topic, "topic": topic,
-            "tags": [str(t) for t in tags or []], "cloze": bool(is_cloze)}
+            "tags": [str(t) for t in tags or []], "cloze": bool(is_cloze), "extra": extra(fields[1] if is_cloze and len(fields) > 1 else
+                                                                                       fields[2] if len(fields) > 2 else "")}
+
+
+_CREDIT = re.compile(r"(photo|image|picture|figure)s?\s+(credit|source|from)|via wikimedia|creative commons|\bcc by\b|"
+                     r"^\s*(watch|see|source|ref|more about|personal notes?|missed)\b", re.I)
+
+
+def extra(text, top=EXTRA_MAX):
+    """A card's Extra as the TV shows it after the reveal: plain, without a
+    picture's credit or a pointer elsewhere ("Watch …"), at most `top` long."""
+    t = clean(text)
+    keep = [p for p in re.split(r"(?<=[.!?])\s+|\s+-\s+", t) if p and not _CREDIT.search(p)]
+    t = " ".join(keep).strip()
+    if len(t) > top:
+        t = t[:top].rsplit(" ", 1)[0].rstrip(",;:") + "…"
+    return t
 
 
 _PICTURE = re.compile(r"\b(image|picture|pictured|shown|photo|figure|arrows?|above|below|labell?ed)\b", re.I)
@@ -378,6 +400,53 @@ def topic_of(tags, text=""):
     return max(cands.values(), key=score)
 
 
+def rounds(qs, items):
+    """Each question's subject for Trivia's topic rounds (its "round"):
+    area_of, one subject under its names ("Cardio", "Cardiology": their first
+    five letters), the pack's most used of them shown."""
+    by_q = {(it["q"], it["a"]): it for it in items}
+    area = {}
+    for q in qs:
+        it = by_q.get((q["q"], q["a"]))
+        area[id(q)] = area_of(it["tags"], it["topic"]) if it else ""
+    names = {}
+    for q in qs:
+        a = area[id(q)]
+        if a:
+            names.setdefault(norm(a)[:5], {}).setdefault(a, 0)
+            names[norm(a)[:5]][a] += 1
+    for q in qs:
+        a = area[id(q)]
+        q["round"] = max(names[norm(a)[:5]].items(), key=lambda kv: (kv[1], -len(kv[0])))[0] if a else ""
+
+
+def area_of(tags, topic=""):
+    """A card's subject, a level over its topic, for Trivia's topic rounds
+    ("Renal", "Immunology", "Pharmacology"): the name its tags' middle parts
+    (not the root, not the topic's own) agree on most; "" without one."""
+    freq, cands = {}, {}
+    for t in tags or []:
+        t = str(t)
+        if t.lower() in SKIP_TAGS or t.lower().startswith("duecrew::"):
+            continue
+        parts = [p for p in t.split("::") if p]
+        if parts and _part(parts[-1])[0] == "id":
+            continue  # a question's tag: its parts are a question bank's, not a subject
+        for d, p in enumerate(parts[1:-1], 1):
+            kind, n = _part(p)
+            if kind != "ok" or norm(n) == norm(topic) or len(n) > WORD_MAX:
+                continue
+            for st in _stems(n):
+                freq[st] = freq.get(st, 0) + 1
+            if norm(n) not in cands or d > cands[norm(n)][1]:
+                cands[norm(n)] = (n, d)
+    if not cands:
+        return ""
+    # the most agreed on; between equals, the deeper (a subject sits under a resource's own name)
+    score = lambda c: (sum(freq[x] for x in _stems(c[0])) / max(1, len(_stems(c[0]))) ** 0.5, c[1], -len(c[0]))
+    return max(cands.values(), key=score)[0]
+
+
 @functools.lru_cache(maxsize=20000)
 def topic_name(part):
     """A tag's part as people read it: "01_Growth_Adaptations" → "Growth
@@ -399,6 +468,8 @@ def label(tag):
 
 _DRUG = re.compile(r"(mab|nib|pril|sartan|olol|azole|cillin|mycin|cycline|statin|dipine|tidine|prazole|azepam|"
                    r"ine|ide|ol|one|ate|ium|in|il)$")
+# a one-word answer that describes ("atrial", "pulmonic", "ventricular"): its wrong answers describe too
+_ADJ = re.compile(r"(al|ar|ic|ous|ive|ary|ory|ile|oid|eal|ial|ent|ant|less|ful|able|ible)$")
 _DX = re.compile(r"(itis|osis|emia|oma|pathy|syndrome|disease|failure|fibrillation|flutter|necrosis|ism|embolism|aneurysm|"
                  r"dissection|infarction|cancer|tumou?r|deficiency|insufficiency|prolapse|atresia|hernia|ulcer|abscess|"
                  r"infection|palsy|ataxia|plasia|trophy|lupus|stenosis|regurgitation|block|arrest|shock|injury)\b")
@@ -410,7 +481,7 @@ def _shape(a):
     name, a diagnosis, or a word; and its length, roughly."""
     t = a.lower().strip()
     kind = ("n" if re.match(r"^[<>~≈≤≥]?\s*[+-]?\d", t) else "rx" if " " not in t and _DRUG.search(t)
-            else "dx" if _DX.search(t) else "w")
+            else "dx" if _DX.search(t) else "adj" if " " not in t and _ADJ.search(t) else "w")
     return kind, min(4, len(t) // 8)
 
 
@@ -635,7 +706,9 @@ def build(rows, name="", n=None, seed=None, near=()):
         if len(wrong) == 3:
             opts = [it["a"]] + wrong
             rng.shuffle(opts)
-            qs.append({"q": it["q"], "a": it["a"], "tag": it["where"], "opts": opts, "ans": opts.index(it["a"])})
+            # the whole card (its sentence, its Extra) is for the TV after the reveal; phones get shapes
+            qs.append({"q": it["q"], "a": it["a"], "tag": it["where"], "opts": opts, "ans": opts.index(it["a"]),
+                       "full": it["full"] if it["cloze"] else "", "extra": it["extra"]})
     blacks = [{"q": it["q"] if BLANK in it["q"] else f"{it['q']} {BLANK}", "a": it["a"], "full": it["full"], "tag": it["where"]}
               for it in items if _card(it["a"], WHITE_MAX)]
     # a hand: tonight's answers and as many from around them, so a small
@@ -655,6 +728,7 @@ def build(rows, name="", n=None, seed=None, near=()):
         words = _apart(_unique(words + short(items, WORD_MAX) + short(others, WORD_MAX)), WORDS_MIN)
     prompts = _unique([t for t in topics + near_topics if _plain(t)])
     blacks = mixed(blacks, topics, rng)
+    rounds(qs, items)
     pairs = twins(items, rng, named)
     if len(pairs) < TWINS_MIN:  # tonight's topics first, then their neighbours'
         have = {(p["a"]["t"], p["b"]["t"]) for p in pairs}
@@ -742,7 +816,7 @@ def twins(items, rng, named=None):
             t = name.setdefault(norm(it["topic"]), it["topic"])  # one topic, however it's capitalised
             by.setdefault(t, []).append(it)
             path.setdefault(t, it["tag"])
-    facts = {t: _unique(x["a"] for x in its if _card(x["a"], WHITE_MAX)) for t, its in by.items()}
+    facts = {t: [x for x in its if _card(x["a"], WHITE_MAX)] for t, its in by.items()}
     ts = sorted(t for t, its in by.items() if len(its) >= 2 and facts[t] and _concept(t) and _plain(t))
     pairs = []
     for i, a in enumerate(ts):
@@ -760,9 +834,7 @@ def twins(items, rng, named=None):
     pairs.sort()
     out = []
     for _s, _r, a, b, up in pairs:
-        ok = lambda x: not _overlaps(x, a) and not _overlaps(x, b)  # a fact isn't either topic's own name
-        fa = [x for x in facts[a] if ok(x) and norm(x) not in {norm(y) for y in facts[b]}][:3]
-        fb = [x for x in facts[b] if ok(x) and norm(x) not in {norm(y) for y in facts[a]}][:3]
+        fa, fb = _apart_facts(facts[a], facts[b], a, b), _apart_facts(facts[b], facts[a], a, b)
         if not fa or not fb:
             continue
         part = tag_topic(up)[1] if up else ""
@@ -771,6 +843,24 @@ def twins(items, rng, named=None):
             part = " ".join(common) if common else "Tonight's cards"
         out.append({"part": part[0].upper() + part[1:], "a": {"t": a, "facts": fa}, "b": {"t": b, "facts": fb}})
         if len(out) == CAPS["twins"]:
+            break
+    return out
+
+
+def _apart_facts(mine, theirs, a, b, k=3):
+    """What tells a topic from its twin, as its cards say it: up to k of its
+    cards, each {a: its answer, s: its sentence, when short enough to read on
+    the TV}; none whose answer names either topic or is the twin's too."""
+    other = {_one(x["a"]) for x in theirs}
+    mark = (_words(a) ^ _words(b)) - _STOP  # the words that tell the two names apart ("B6", "C")
+    out, seen = [], set()
+    for x in mine:
+        if (_overlaps(x["a"], a) or _overlaps(x["a"], b) or _one(x["a"]) in other or _one(x["a"]) in seen
+                or _words(x["a"]) & mark):  # a fact that names its topic gives the game away
+            continue
+        seen.add(_one(x["a"]))
+        out.append({"a": x["a"], "s": x["full"] if x.get("cloze") and len(x["full"]) <= FACT_MAX else ""})
+        if len(out) == k:
             break
     return out
 
@@ -826,6 +916,7 @@ def _unique(xs):
 
 
 def fit(pack):
-    """{game: how much of what it needs the pack has}, and which can't run."""
+    """{game: how much of what it needs the pack has}, and which of the
+    menu's (GAMES) can't run."""
     have = {g: len((pack or {}).get(k) or []) for g, (k, _n) in NEEDS.items()}
-    return have, sorted(g for g, (_k, n) in NEEDS.items() if have[g] < n)
+    return have, sorted(g for g, _l in GAMES if have[g] < NEEDS[g][1])

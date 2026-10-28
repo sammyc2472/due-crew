@@ -2129,19 +2129,19 @@ _NUMS = ("no", "one", "two", "three", "four", "five", "six")
 
 
 def party_say(n, thin=None):
-    """The pick's line: its cards and how many of the six they fill (thin:
-    the ones it can't; None when that isn't worked out)."""
+    """The pick's line: its cards and how many of the menu's games (_GAMES)
+    they fill (thin: the ones it can't; None when that isn't worked out)."""
     if not n:
         return "Nothing here yet. Custom&hellip; picks decks and tags."
     cards = f"{n:,} card{'s' if n != 1 else ''}"
     if thin is None:
         return cards
-    k = len(_GAMES) - len(thin)
+    k, of = len(_GAMES) - len(thin), _NUMS[len(_GAMES)]
     if k >= len(_GAMES):
-        return f"{cards} &middot; enough for all six"
+        return f"{cards} &middot; enough for all {of}"
     if k <= 0:
         return f"{cards} &middot; too few short answers for a game"
-    return f"{cards} &middot; enough for {_NUMS[k]} of the six"
+    return f"{cards} &middot; enough for {_NUMS[k]} of the {of}"
 
 
 def party_html(v):

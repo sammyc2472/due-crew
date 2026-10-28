@@ -329,7 +329,7 @@ class Ops:
                 done("Couldn't read tonight's cards.")
                 return
             _have, thin = G.fit(pack)
-            if len(thin) == len(G.NEEDS):
+            if len(thin) == len(G.GAMES):
                 done("Not enough cards with short answers in that. Pick more.")
                 return
             if bots:

@@ -3821,3 +3821,24 @@ every release that changes how something works.
   `test_pip_party_host_off_the_main_thread_v395`, near's slot search, and
   `table.test.ts`'s door a network, probes and /64, the TV past a full
   table.
+- 3.9.5, Pip Party after Sam's first nights on his own cards ("if we can't
+  get some of them right, let's focus on the ones that we know work and
+  expand their functionality"): on the menu, Trivia, Imposter and Links
+  (`gamenight.GAMES`, table.js's ORDER; the tab says "On the menu", its
+  games and the pick under one highlight, Pip drawn whole in its own box
+  so its halo and wings stay off the tabs). Rounds, Draw it and Somewhere
+  between are off it, their code kept (Sam's pick, from "Keep"). Trivia
+  picks a subject on the TV first when tonight has two with six questions
+  or more (Mixed, or "Cardiology 14": `gamenight.rounds`, each card's
+  subject a level over its topic, what its tags' middle parts agree on, a
+  question bank's tags aside, Cardio and Cardiology one), and its end says
+  More Cardiology or Pick a topic; after each reveal the TV shows the
+  card, its sentence with the answer in bold and its Extra (photo credits
+  and pointers elsewhere out, `gamenight.extra`), never sent to phones.
+  Imposter's end, What tells them apart, is each topic's cards' sentences
+  (`_apart_facts`), none naming its own topic. Question fixes from his
+  screens: a plural is the same answer ("GAPs" for "GAP"); a blank inside
+  a word ("____vascular") isn't a question; a one-word describing answer
+  ("atrial") gets describing wrong ones. The empty card in a Rounds hand
+  was an older page on duecrew.com meeting the newer pack (a written card
+  has no answer): the deploy fixes it.

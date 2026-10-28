@@ -110,7 +110,14 @@ button.tile:hover { border-color: var(--w-acc); }
 .apart > div { border: 1px solid var(--w-line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 4px; font-size: 14px; }
 .apart > div b { font-size: 15px; }
 .apart > div.them { border-color: var(--o4); }
-.apart ul { margin: 0; padding-left: 18px; }
+.apart ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.apart li b { font-size: inherit; }
+/* Trivia: a block's topic, and the card after the reveal */
+.topics { display: flex; flex-wrap: wrap; gap: 10px; }
+.topics .btn small { color: var(--w-mut); font-weight: 600; margin-left: 4px; }
+.cardsay { border-left: 3px solid var(--w-acc); padding: 4px 0 4px 14px; display: grid; gap: 6px; max-width: 72ch; }
+.cardsay p { margin: 0; font-size: 18px; line-height: 1.4; color: var(--w-ink); }
+.cardsay p.x { font-size: 15px; color: var(--w-ink2); }
 @media (max-width: 560px) { .apart { grid-template-columns: minmax(0, 1fr); } }
 
 /* phones */
