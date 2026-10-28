@@ -1,4 +1,4 @@
-/* duecrew.com/table, game night: the TV and the phones, in the site's look
+/* duecrew.com/table, Pip Party: the TV and the phones, in the site's look
    (the colors are app.css's; the window tokens are the board's). Light and
    dark follow the device, as the rest of the site does. */
 :root {
@@ -55,12 +55,12 @@ h1 { font-family: var(--display); font-size: clamp(38px, 6vw, 56px); letter-spac
 button.tile { cursor: pointer; }
 button.tile:hover { border-color: var(--w-acc); }
 .tile.on { border-color: var(--w-acc); box-shadow: inset 0 0 0 1px var(--w-acc); background: var(--w-you); }
-.tile .like { font-size: 11.5px; font-weight: 700; color: var(--w-acc); }
+.tile .kind { font-size: 11.5px; font-weight: 700; color: var(--w-acc); }
 .tile b { font-family: var(--display); font-size: 21px; letter-spacing: -.01em; }
 .tile .ln { font-size: 13.5px; }
 .tile .lr, .tile .np { font-size: 12.5px; color: var(--w-mut); }
 .tiles.static .tile { background: var(--sf); border-color: var(--line); color: var(--ink); }
-.tiles.static .tile .like { color: var(--acc); }
+.tiles.static .tile .kind { color: var(--acc); }
 .tiles.static .tile .lr, .tiles.static .tile .np { color: var(--mut); }
 
 .tv { background: var(--w-bg); color: var(--w-ink); border: 1px solid var(--w-edge); border-radius: 14px; overflow: hidden; box-shadow: 0 12px 34px rgba(30, 40, 25, .10); min-width: 0; }

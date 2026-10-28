@@ -468,6 +468,25 @@ sections.append("<h3>3.8.0: You › Insights, the map opened on Cardio</h3>" + b
 sections.append("<h3>3.8.0: You › Insights, a deck with no plan (my exam date, its tags), Due off</h3>" + board.render(
     DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
     you=_YOU("insights", insights={"decks": _DECKS, "did": 20, "exam": True, "plan": None, "view": _DECK_INS})))
+# 3.9.5's last round: You › Pip Party, after Insights (testers for now)
+from due_crew import sev as _SV  # noqa: E402
+_PSRC = [{"key": "misses", "label": "This week's misses", "n": 42}, {"key": "plan:p1", "label": "Block 2, this week", "n": 318},
+         {"key": "saved:Renal <nights>", "label": "Renal <nights> & friends", "n": 26}, {"key": "saved:Empty", "label": "Empty one", "n": 0}]
+_PIP = lambda place, m=None: _SV.slot(_SV.move(place, m, size=72), 72)  # noqa: E731
+_PARTY = {"sources": _PSRC, "pick": "misses", "fit": {"n": 42, "have": {}, "thin": ["imposter", "links"]}, "busy": False,
+          "said": "", "open": None, "burst": False, "pip": _PIP("hello")}
+for _h, _pv in (("the pick fills four of the six", _PARTY),
+                ("a plan's week, all six", dict(_PARTY, pick="plan:p1", fit={"n": 318, "have": {}, "thin": []}, pip=_PIP("hello", "walkin"))),
+                ("Host clicked: opening a table", dict(_PARTY, busy=True, said="Opening a table…", pip=_PIP("ready"))),
+                ("a refusal, said on the tab", dict(_PARTY, said="That's a lot of tables for one hour. Try again in a while.", pip=_PIP("again"))),
+                ("the TV is open: its code, where phones join (the burst, once)", dict(_PARTY, burst=True, pip=_PIP("cheer"),
+                    open={"bots": False, "code": "RRJA", "url": "https://duecrew.com/t/RRJA"})),
+                ("bots on the TV", dict(_PARTY, open={"bots": True, "code": "", "url": ""}, pip=_PIP("hop"))),
+                ("nothing to play from yet", dict(_PARTY, sources=[{"key": "misses", "label": "This week's misses", "n": 0}], pick=None, fit=None))):
+    sections.append(f"<h3>3.9.5: You › Pip Party, {_h}</h3>" + board.render(
+        DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("party", party=_pv, party_on=True)))
+sections.append("<h3>3.9.5: You › Pip Party, Due off</h3>" + board.render(
+    DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS, you=_YOU("party", party=_PARTY, party_on=True)))
 sections.append("<h3>3.9.2: Reviews ahead, new cards stopped till the exam (Turn back on)</h3>" + board.render(
     DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
     you=_YOU("insights", insights={"decks": _DECKS, "did": 20, "exam": "2026-10-14", "plan": None,

@@ -26,7 +26,8 @@ Raw keys, for reference:
 | `shared_decks` | deck ids | Set from Tools → Due Crew → Shared decks |
 | `room_chip_side` | right / left | Which end of Anki's top bar the study-room chip sits at |
 | `hidden_tabs` | list of decks / squads / plans / insights | What this computer doesn't show (Settings › Shows); Crew always shows |
-| `due_tab` | today / upcoming / later / plans / insights | The tab open in the box above the board |
+| `due_tab` | today / upcoming / later / plans / insights / party | The tab open in the box above the board |
+| `party_pick` | a Pip Party source | What You › Pip Party plays from on this computer: this week's misses, a plan's week, a saved scope |
 | `plan_pick` | plan id | The plan You › Plans shows when you follow two or more; picked by its name at the top |
 | `due_show` | true/false | Today, Upcoming and Later in that box (Plans and Insights stay) |
 | `shortcuts` | true/false | Ctrl+Shift+S (study what's next) and Ctrl+Shift+Q (ask the squad about this card), on this computer |

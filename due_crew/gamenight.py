@@ -8,12 +8,15 @@ business (site/public/table.js): Trivia sends none of a card's words,
 Rounds sends each hand its answers (Sam's yes), and the rest send topic
 names, which plans already send.
 
-A pack: {name, n, qs, blacks, whites, words, prompts, twins}
+A pack: {name, n, qs, blacks, whites, words, prompts, twins, draws, scales}
   qs      Trivia: {q, a, tag, opts (four), ans (the right one's place)}
-  blacks  Rounds' black cards: {q, a, full, tag}; whites: answers
+  blacks  Rounds' black cards: {q, a, full, tag}, and written ones (w: 1,
+          no answer); whites: answers
   words   Links' board: topic names, then short answers
   prompts Draw it, Somewhere between: topic names, then short answers
   twins   Imposter: {part, a: {t, facts}, b: {t, facts}}, sibling tags
+  draws   Draw it's written prompts ("Renal pharm on its day off")
+  scales  Somewhere between's written ends ([left, right])
 Questions, black cards and twins come from tonight's cards; wrong answers,
 white cards, and the board and prompts when tonight's run short, also from
 the cards around them (`near`), so a small scope still plays.
@@ -29,7 +32,7 @@ A_MAX = 40         # an answer: a card with a longer one isn't a question
 WHITE_MAX = 32     # a white card in a hand
 WORD_MAX = 18      # a Links tile
 TOPIC_MAX = 36
-CAPS = {"qs": 150, "blacks": 150, "whites": 300, "words": 80, "prompts": 80, "twins": 30}
+CAPS = {"qs": 150, "blacks": 150, "whites": 300, "words": 80, "prompts": 80, "twins": 30, "draws": 10, "scales": 6}
 READ_MAX = 1500    # cards read for a pack: a big scope is sampled
 NEAR_MAX = 600     # and around it, for answer choices
 WHITES_MIN = 120   # a hand's cards: tonight's, and at least this many more from around them
@@ -41,6 +44,56 @@ BLANK = "____"
 NEEDS = {"trivia": ("qs", 1), "rounds": ("blacks", 1), "links": ("words", 25), "imposter": ("twins", 1),
          "draw": ("prompts", 1), "between": ("prompts", 1)}
 SKIP_TAGS = ("leech", "marked")
+# the six, as the lobby, the window and You › Pip Party name them
+GAMES = (("trivia", "Trivia"), ("rounds", "Rounds"), ("links", "Links"), ("imposter", "Imposter"),
+         ("draw", "Draw it"), ("between", "Somewhere between"))
+# Rounds' written cards (3.9.5's last round): about one black card in four,
+# each {topic} one of tonight's. No answer of their own: the Attending's
+# pick is the round. Alone, nobody picks, so table.js leaves them out.
+WRITTEN = (
+    "What the attending actually wanted on {topic}: ____",
+    "{topic}, explained in one card: ____",
+    "The real reason I keep missing {topic}: ____",
+    "My mnemonic for {topic}: ____",
+    "{topic} would be easy if not for ____",
+    "The card I'd suspend from {topic}: ____",
+    "What I wrote on the {topic} quiz: ____",
+    "Day three of {topic}, running on ____",
+    "Overheard in the library, about {topic}: ____",
+    "The one thing from {topic} I'll never forget: ____",
+    "{topic} has a new leech: ____",
+    "If {topic} were a person, it would be ____",
+    "My study group's new name: ____",
+    "What got me through the last block: ____",
+    "Tomorrow's me will thank today's me for ____",
+    "The last thing I see before I sleep: ____",
+)
+WRITTEN_TAG = "Pip Party"  # where a written card says it's from
+# Draw it's written prompts: a quarter of a round's chains start from one
+# (table.js mixes them in), each {topic} one of tonight's
+DRAWS = (
+    "{topic} as a superhero",
+    "{topic} at 3am",
+    "{topic} on its day off",
+    "{topic} as a monster",
+    "{topic} on a first date",
+    "{topic} at the gym",
+    "{topic} as a movie poster",
+    "{topic}, but tiny",
+    "{topic} running late",
+    "{topic} on vacation",
+)
+# Somewhere between's written ends, about study life, beside table.js's
+# fixed ones (a quarter of the dial's ends); the clue is still a topic
+SCALES = (
+    ("Forget it by Friday", "Know it forever"),
+    ("Skim it", "Make a card for it"),
+    ("A one-card topic", "A whole deck"),
+    ("Fun to explain", "Please don't ask me"),
+    ("Learned it today", "Learned it years ago"),
+    ("Easy to draw", "Impossible to draw"),
+)
+SCALES_IN = 4  # of SCALES in a pack: table.js has twelve of its own
 
 _CLOZE = re.compile(r"\{\{c(\d+)::(.*?)(?:::(.*?))?\}\}", re.S)
 
@@ -280,16 +333,60 @@ def build(rows, name="", n=None, seed=None, near=()):
     prompts = _unique(topics + short(items, TOPIC_MAX))
     if len(prompts) < PROMPTS_MIN:
         prompts = _unique(prompts + near_topics + short(others, TOPIC_MAX))
+    blacks = mixed(blacks, topics, rng)
     pairs = twins(items, rng, named)
     if len(pairs) < TWINS_MIN:  # tonight's topics first, then their neighbours'
         have = {(p["a"]["t"], p["b"]["t"]) for p in pairs}
         pairs += [p for p in twins(pool, rng, dict(near_named, **named)) if (p["a"]["t"], p["b"]["t"]) not in have]
     pack = {"name": str(name)[:60], "n": len(rows) if n is None else int(n),
             "qs": qs, "blacks": blacks, "whites": whites, "words": words, "prompts": prompts,
-            "twins": pairs}
+            "twins": pairs, "draws": draws(topics, rng), "scales": [list(x) for x in rng.sample(SCALES, SCALES_IN)] if topics else []}
     for k, cap in CAPS.items():
         pack[k] = pack[k][:cap]
     return pack
+
+
+def pick_key(key):
+    """A source's key (gamenight_flow.sources) for You › Pip Party's command,
+    as hex: keys hold ":" and names, and a board command carries only
+    letters, digits and :_.-"""
+    return str(key).encode("utf-8").hex()
+
+
+def unpick(arg):
+    try:
+        return bytes.fromhex(str(arg)).decode("utf-8")
+    except ValueError:
+        return None
+
+
+def written(topics, k, rng):
+    """k of Rounds' written cards, each its own, a {topic} one of tonight's;
+    none without topics."""
+    if not topics or k <= 0:
+        return []
+    out = []
+    for t in rng.sample(WRITTEN, min(k, len(WRITTEN))):
+        q = t.format(topic=rng.choice(topics)) if "{topic}" in t else t
+        out.append({"q": q[0].upper() + q[1:], "a": "", "full": "", "tag": WRITTEN_TAG, "w": 1})
+    return out
+
+
+def draws(topics, rng, k=8):
+    """Draw it's written prompts, k of them, each its own, filled with
+    tonight's topics (each used once while they last); none without topics."""
+    if not topics:
+        return []
+    names = rng.sample(topics, min(k, len(topics)))
+    return [t.format(topic=names[i % len(names)]) for i, t in enumerate(rng.sample(DRAWS, min(k, len(DRAWS))))]
+
+
+def mixed(blacks, topics, rng):
+    """Tonight's black cards with the written ones among them, one in four."""
+    out = list(blacks)
+    for b in written(topics, (len(blacks) + 1) // 3, rng):
+        out.insert(rng.randrange(len(out) + 1), b)
+    return out
 
 
 def names(tags):

@@ -1,6 +1,7 @@
-// duecrew.com/table, game night (3.9.5): party games for a table of
-// friends, from the host's own cards. One screen is the TV and holds the
-// game: a window in Anki (Tools › Due Crew › Game night), which opens a
+// duecrew.com/table, Pip Party (3.9.5; game night until its last round,
+// and still in code): party games for a table of friends, from the host's
+// own cards. One screen is the TV and holds the game: a window in Anki
+// (You › Pip Party, or Tools › Due Crew › Pip Party), which opens a
 // table on the API and hands this page tonight's pack (due_crew/gamenight.py)
 // with window.dcAnki. Phones join with the code and answer in their
 // presence (worker/src/table.ts passes presences round, marks only the TV's
@@ -42,7 +43,7 @@ const poss = (n) => (you(n) ? "your" : `${n}'s`);
 const Poss = (n) => (you(n) ? "Your" : `${n}'s`);
 const frag = (...kids) => h("div", { class: "stack" }, ...kids);
 const btn = (label, fn, cls) => h("button", { type: "button", class: "btn" + (cls ? " " + cls : ""), onclick: fn }, label);
-const warn = (e) => console.warn("game night:", e && (e.code || e.message || e));
+const warn = (e) => console.warn("pip party:", e && (e.code || e.message || e));
 // Pip (sev.js, the add-on's own drawing): at a place of the night's, moving; a seat's, still, in its colour
 const pip = (place, size, accent) => (typeof Sev !== "undefined" && Sev.stage ? Sev.stage(place, size, accent) : null);
 const SEAT_COLORS = [["#2e7d32", "#7cc47f"], ["#3b6fd8", "#8fb0ff"], ["#7b4fc9", "#b9a2f2"], ["#00897b", "#5fd3c2"], ["#b26a00", "#dda45c"], ["#b03a6b", "#e58bb0"]];
@@ -133,7 +134,7 @@ const BOT_WORDS = ["classic", "acute", "chronic", "labs", "imaging", "kids", "ra
 const seatsBut = (c, i) => c.seats.map((_, k) => k).filter((k) => k !== i);
 
 const Imposter = {
-  id: "imposter", name: "Imposter", like: "Like the imposter game", min: 3, max: 8,
+  id: "imposter", name: "Imposter", kind: "Find the odd one out", min: 3, max: 8,
   line: "Every phone shows the same topic but one. That one gets its twin, the topic beside it in your deck, and doesn't know.",
   learn: "Spotting what separates two things you'd confuse.",
   start(c) {
@@ -243,6 +244,7 @@ const Imposter = {
 
 function fixRound(S) {
   const ans = D.blacks[S.order[S.bi]].a;
+  if (!ans) return Object.assign({}, S);  // a written card: no answer to deal
   const hands = S.hands.map((hd) => hd.slice());
   const deck = S.deck.filter((x) => norm(x) !== norm(ans));
   const ai = S.att >= 0 ? hands[S.att].findIndex((x) => norm(x) === norm(ans)) : -1;
@@ -259,8 +261,8 @@ function fixRound(S) {
   return Object.assign({}, S, { hands, deck });
 }
 const Rounds = {
-  id: "rounds", name: "Rounds", like: "Like Cards Against Humanity", min: 3, max: 8, HAND: 7,
-  line: "One of your cards with its answer blanked. Everyone plays an answer from your other cards. The Attending picks a favorite, then the card says what it really was.",
+  id: "rounds", name: "Rounds", kind: "Fill in the blank", min: 3, max: 8, HAND: 7,
+  line: "One of your cards with its answer blanked, or one of Pip's. Everyone plays an answer from your other cards. The Attending picks a favorite, then the card says what it really was.",
   learn: "A wrong card is only funny if you know why it's wrong.",
   // a hand's size: seven, or an even share of a small pack's cards
   per(N) { return Math.max(1, Math.min(Rounds.HAND, Math.floor(D.whites.length / Math.max(1, N)))); },
@@ -268,13 +270,15 @@ const Rounds = {
     const deck = shuffle(D.whites);
     const per = Rounds.per(c.N);
     const hands = c.seats.map(() => deck.splice(0, per));
-    return fixRound({ per, ph: "play", att: c.N > 1 ? 1 % c.N : -1, order: shuffle(D.blacks.map((_, i) => i)), bi: 0, hands, deck, played: null, flip: null, fseat: null, fav: null });
+    // a written card (w) has no answer: only an Attending's pick makes it a round, so alone there are none
+    const order = shuffle(D.blacks.map((_, i) => i).filter((i) => c.N > 1 || !D.blacks[i].w));
+    return fixRound({ per, ph: "play", att: c.N > 1 ? 1 % c.N : -1, order, bi: 0, hands, deck, played: null, flip: null, fseat: null, fav: null });
   },
   pub(S) {
     const b = D.blacks[S.order[S.bi]];
     const x = { ph: S.ph, att: S.att, black: b.q };
     if (S.ph !== "play") x.flip = S.flip;
-    if (S.ph === "chart") Object.assign(x, { fav: S.fav, fseat: S.fseat, ans: b.a });
+    if (S.ph === "chart") Object.assign(x, { fav: S.fav, fseat: S.fseat, ans: b.a, w: b.w ? 1 : 0 });
     return x;
   },
   secrets(S, c) { return c.seats.map((_, i) => ({ hand: S.hands[i] || [] })); },
@@ -313,7 +317,7 @@ const Rounds = {
         keep.push(x);
       }
     }
-    return fixRound(Object.assign({}, S, { ph: "play", att: S.att < 0 ? -1 : (S.att + 1) % c.N, bi: (S.bi + 1) % D.blacks.length, hands, deck, played: null, flip: null, fseat: null, fav: null }));
+    return fixRound(Object.assign({}, S, { ph: "play", att: S.att < 0 ? -1 : (S.att + 1) % c.N, bi: (S.bi + 1) % S.order.length, hands, deck, played: null, flip: null, fseat: null, fav: null }));
   },
   tv(S, c) {
     const b = D.blacks[S.order[S.bi]], att = c.name(S.att), A = c.A, alone = S.att < 0;
@@ -332,7 +336,7 @@ const Rounds = {
     const rightBy = S.fseat.filter((_, k) => right(S.flip[k])).map(c.name);
     return frag(black, cards,
       alone ? null : h("div", { class: "honor" }, h("b", { class: "f" }, `${Poss(att)} pick:`), ` “${S.flip[S.fav]}”, ${you(c.name(S.fseat[S.fav])) ? "yours" : c.name(S.fseat[S.fav]) + "'s"}.`),
-      h("div", { class: "honor" }, h("b", { class: "c" }, `The card says: ${b.a}.`), rightBy.length ? ` ${rightBy.join(" and ")} played it.` : " Nobody played it."),
+      b.w ? null : h("div", { class: "honor" }, h("b", { class: "c" }, `The card says: ${b.a}.`), rightBy.length ? ` ${rightBy.join(" and ")} played it.` : " Nobody played it."),
       b.full ? h("p", { class: "sub" }, b.full) : null,
       h("div", { class: "row" }, btn(alone ? "Next round" : `Next round: ${you(c.name((S.att + 1) % c.N)) ? "you're" : c.name((S.att + 1) % c.N) + "'s"} the Attending`, () => c.go(Rounds.next(S, c))), btn("Back to games", () => c.lobby(), "plain")));
   },
@@ -350,13 +354,14 @@ const Rounds = {
       if (mine) return frag(h("div", { class: "big" }, "Picked."));
       return frag(h("div", { class: "who" }, "Pick a favorite"), black, h("div", { class: "hand" }, (x.flip || []).map((t, k) => card(t, "", () => p.answer({ f: k })))));
     }
-    const k = (x.fseat || []).indexOf(seat), myCard = k >= 0 ? x.flip[k] : null, ok = myCard && norm(myCard) === norm(x.ans);
+    const k = (x.fseat || []).indexOf(seat), myCard = k >= 0 ? x.flip[k] : null, ok = myCard && !x.w && norm(myCard) === norm(x.ans);
     const lines = [];
     if (myCard && k === x.fav && x.att >= 0) lines.push(`${att} picked yours.`);
     if (ok) lines.push("That's the card's answer.");
-    return frag(h("div", { class: "who" }, `The card says: ${x.ans}`), myCard ? card(myCard, (k === x.fav ? " fav" : "") + (ok ? " right" : "")) : null, lines.length ? h("p", { class: "small" }, lines.join(" ")) : null);
+    const top = x.w ? (seat === x.att ? `You picked “${(x.flip || [])[x.fav] || ""}”` : `${Poss(att)} pick: “${(x.flip || [])[x.fav] || ""}”`) : `The card says: ${x.ans}`;
+    return frag(h("div", { class: "who" }, top), myCard ? card(myCard, (k === x.fav ? " fav" : "") + (ok ? " right" : "")) : null, lines.length ? h("p", { class: "small" }, lines.join(" ")) : null);
   },
-  mood(S) { if (S.ph !== "chart") return "focus"; const b = D.blacks[S.order[S.bi]]; return S.flip.some((card) => norm(card) === norm(b.a)) ? "hop" : "peek"; },
+  mood(S) { if (S.ph !== "chart") return "focus"; const b = D.blacks[S.order[S.bi]]; return b.w || S.flip.some((card) => norm(card) === norm(b.a)) ? "hop" : "peek"; },
   bot(x, seat, b) {
     if (x.ph === "play" && seat !== x.att) { const hand = (b.me && b.me.hand) || []; return hand.length ? { a: { c: pick(hand) } } : null; }
     if (x.ph === "pick" && seat === x.att) return { a: { f: int((x.flip || [0]).length) } };
@@ -365,7 +370,7 @@ const Rounds = {
 };
 
 const Trivia = {
-  id: "trivia", name: "Trivia", like: "Like pub trivia", min: 1, max: 8, SECS: 20,
+  id: "trivia", name: "Trivia", kind: "Quiz", min: 1, max: 8, SECS: 20,
   line: "Your cards on the TV, four shapes on every phone. Call how many of you get it before the reveal. Most of you right on 7 of 10 clears the block.",
   learn: "Recall, ten at a time, and a check on what the table thinks it knows.",
   start() {
@@ -438,13 +443,19 @@ const Trivia = {
 };
 
 const DrawIt = {
-  id: "draw", name: "Draw it", like: "Like Telestrations", min: 3, max: 8, DRAW: 75, GUESS: 35,
+  id: "draw", name: "Draw it", kind: "Draw, guess, pass it on", min: 3, max: 8, DRAW: 75, GUESS: 35,
   line: "One of your topics goes round the phones: draw it, the next one guesses from the drawing, the next draws the guess. The reveal is every chain.",
   learn: "Drawing a thing means knowing what it looks like.",
   chainOf: (i, st, N) => (((i - st) % N) + N) % N,
+  // a chain's start: tonight's topics and answers, and about one in four a written prompt (D.draws)
+  starts(N) {
+    const k = Math.min((D.draws || []).length, Math.round(N / 4));
+    const own = shuffle(D.prompts).slice(0, N - k);
+    while (own.length < N - k) own.push(pick(D.prompts));
+    return shuffle(shuffle(D.draws || []).slice(0, k).concat(own));
+  },
   start(c) {
-    const prompts = shuffle(D.prompts).slice(0, c.N);
-    while (prompts.length < c.N) prompts.push(pick(D.prompts));
+    const prompts = DrawIt.starts(c.N);
     const T = c.N >= 4 ? 4 : c.N;
     return { ph: "step", st: 0, T, chains: prompts.map((t, i) => [{ k: "p", t, by: i }]), ends: Date.now() + DrawIt.DRAW * 1000, rc: 0, ri: 0 };
   },
@@ -535,19 +546,20 @@ const DrawIt = {
   botDelay: () => 2000 + int(3000),
 };
 
-// the dial's ends: what a topic is placed between
+// the dial's ends: what a topic is placed between; the pack adds a few about study life (D.scales)
 const SCALES = [["Rare", "Common"], ["Harmless", "Deadly"], ["Comes on slowly", "Comes on suddenly"], ["Cheap", "Pricey"],
   ["Easy to remember", "Impossible to remember"], ["Mild", "Severe"], ["In kids", "In old age"], ["Boring", "Fascinating"],
   ["Never asked", "On every exam"], ["Treat at home", "Straight to the ICU"], ["Clinic", "Emergency"], ["Ancient", "Brand new"]];
 const Between = {
-  id: "between", name: "Somewhere between", like: "Like Wavelength", min: 2, max: 8,
+  id: "between", name: "Somewhere between", kind: "Read the dial", min: 2, max: 8,
   line: "One person sees where a hidden target sits between two ends and names something there, from tonight's topics or their own. Everyone turns their dial; the table's dial is the average.",
   learn: "How bad, how common, how fast: putting what you know on a scale.",
   pts: (d) => (d <= 4 ? 4 : d <= 9 ? 3 : d <= 15 ? 2 : 0),
   sugg: () => shuffle(D.prompts).slice(0, 6),
-  start() { return { ph: "clue", psy: 0, order: shuffle(SCALES.map((_, i) => i)), wi: 0, target: 6 + int(89), clue: null, score: 0, rounds: 0, res: null, sugg: Between.sugg() }; },
+  ends: () => SCALES.concat((D.scales || []).filter((x) => Array.isArray(x) && x.length === 2)),
+  start() { const ends = shuffle(Between.ends()); return { ph: "clue", psy: 0, ends, wi: 0, target: 6 + int(89), clue: null, score: 0, rounds: 0, res: null, sugg: Between.sugg() }; },
   pub(S) {
-    const [L, R] = SCALES[S.order[S.wi]];
+    const [L, R] = S.ends[S.wi];
     const x = { ph: S.ph, psy: S.psy, L, R, score: S.score, rounds: S.rounds };
     if (S.clue) x.clue = S.clue;
     if (S.res) Object.assign(x, { res: S.res, target: S.target });
@@ -571,7 +583,7 @@ const Between = {
     return null;
   },
   tv(S, c) {
-    const [L, R] = SCALES[S.order[S.wi]], psy = c.name(S.psy), A = c.A;
+    const [L, R] = S.ends[S.wi], psy = c.name(S.psy), A = c.A;
     const head = h("div", { class: "row sp" }, h("span", { class: "sub" }, `Somewhere between · ${says(psy, "you have", "has")} the dial`), h("span", { class: "sub" }, `The table: ${plural(S.score, "point", "points")}`));
     if (S.ph === "clue") return frag(head, h("div", { class: "h" }, `${says(psy, "You're", "is")} picking a clue.`), dial({ L, R }));
     if (S.ph === "guess") {
@@ -587,7 +599,7 @@ const Between = {
       dial({ L, R, needle: r.avg, target: S.target, dots: r.g.map((v, i) => (v >= 0 ? [v, c.name(i)] : null)).filter(Boolean) }),
       h("div", { class: "say" }, `${words} ${r.pts ? "+" + r.pts : "No points"}, and the table has ${plural(S.score, "point", "points")}.`),
       last ? h("p", { class: "sub" }, `Everyone's had the dial: ${plural(S.score, "point", "points")} in ${plural(S.rounds, "round", "rounds")}.`) : null,
-      h("div", { class: "row" }, last ? btn("Play again", () => c.again()) : btn(`Next: ${says(c.name(nxt), "you have", "has")} the dial`, () => c.go(Object.assign({}, S, { ph: "clue", psy: nxt, wi: (S.wi + 1) % SCALES.length, target: 6 + int(89), clue: null, res: null, sugg: Between.sugg() }))),
+      h("div", { class: "row" }, last ? btn("Play again", () => c.again()) : btn(`Next: ${says(c.name(nxt), "you have", "has")} the dial`, () => c.go(Object.assign({}, S, { ph: "clue", psy: nxt, wi: (S.wi + 1) % S.ends.length, target: 6 + int(89), clue: null, res: null, sugg: Between.sugg() }))),
         btn("Back to games", () => c.lobby(), "plain")));
   },
   phone(x, seat, p) {
@@ -621,12 +633,12 @@ const Between = {
   },
 };
 
-// Links: two teams on one board, as on horsepaste. The key goes to the two
+// Links: two teams on one board, a clue giver each. The key goes to the two
 // clue givers alone; everyone else sees what's been turned over.
 const TEAM = { g: "Green", p: "Purple" };
 const other = (t) => (t === "g" ? "p" : "g");
 const Links = {
-  id: "links", name: "Links", like: "Like Codenames", min: 4, max: 10, TIMERS: [0, 60, 90, 120],
+  id: "links", name: "Links", kind: "Two teams, one board", min: 4, max: 10, TIMERS: [0, 60, 90, 120],
   line: "Two teams, 25 of your topics. Each clue giver sees which are their team's and gives one word and a number. Find yours first, and stay off Code blue.",
   learn: "One mechanism, three diseases: finding what ties your deck together.",
   board() {
@@ -1023,7 +1035,7 @@ function TV(root, client, opt) {
       p.crew ? h("i", { title: `Signed in as ${clip(p.crew, 40)}` }, " crew") : null,
       client.door ? h("button", { type: "button", class: "x", "aria-label": `Turn ${clip(p.presence.n, 16) || "them"} away`, onclick: () => { T.sure = p.peer; draw(true); } }, "×") : null)) : h("span", {}, "Nobody's here yet."));
     const tiles = h("div", { class: "tiles" }, ORDER.map((id) => { const gg = GAMES[id], ok = ready(gg); return h("button", { type: "button", class: "tile" + (id === T.chosen ? " on" : "") + (ok ? "" : " thin"), disabled: !ok, "aria-pressed": String(id === T.chosen), onclick: () => { T.chosen = id; publish(); draw(true); } },
-      h("span", { class: "like" }, gg.like), h("b", {}, gg.name), h("span", { class: "ln" }, gg.line), h("span", { class: "np" }, ok ? `${gg.min}–${gg.max} players` : "Not enough cards for this one")); }));
+      h("span", { class: "kind" }, gg.kind), h("b", {}, gg.name), h("span", { class: "ln" }, gg.line), h("span", { class: "np" }, ok ? `${gg.min}–${gg.max} players` : "Not enough cards for this one")); }));
     const short = ps.length < need(g), few = !short && ps.length < g.min;
     return frag(h("div", { class: "lobby" }, code, h("div", { class: "stack" }, h("div", { class: "lbl" }, `At the table · ${ps.length}`), people, sureView(), doorView())), h("div", { class: "lbl" }, "Pick a game"), tiles,
       h("div", { class: "row" }, h("button", { type: "button", class: "btn", disabled: short, onclick: start }, `Start ${g.name}`),
@@ -1115,7 +1127,7 @@ function Phone(root, client, name) {
     const key = JSON.stringify([!!tv, pub, seat, P.myA, deps, !!client.waiting, client.shut || "", client.secret || null]);
     if (!force && key === P.key) return;
     P.key = key;
-    top.replaceChildren(face, h("b", {}, name), h("span", {}, client.shut ? "" : client.waiting ? "At the door" : tv ? `Game night · ${clip(tv.presence.code, 8)}` : "Looking for the TV"));
+    top.replaceChildren(face, h("b", {}, name), h("span", {}, client.shut ? "" : client.waiting ? "At the door" : tv ? `Pip Party · ${clip(tv.presence.code, 8)}` : "Looking for the TV"));
     let body, mood = "idle";
     if (client.shut && SHUT[client.shut]) body = frag(h("div", { class: "big" }, SHUT[client.shut][0]), h("p", { class: "small" }, SHUT[client.shut][1]), h("div", { class: "row" }, btn("Join again", () => { bye(); joinView(""); }, "plain")));
     else if (client.waiting) { body = frag(h("div", { class: "big" }, `At the door, ${name}.`), h("p", { class: "small" }, "The host lets you in from the TV.")); mood = "peek"; }
@@ -1171,7 +1183,7 @@ const store = {
 let leaving = null;
 const joinOnly = /^\/t\//.test(location.pathname);  // a join link: a phone's page, nothing to host from
 function bye() { if (leaving) { try { leaving(); } catch (_) { /* fine */ } leaving = null; } conn.textContent = ""; }
-const back = () => (joinOnly ? document.createTextNode("") : h("button", { type: "button", class: "back", onclick: () => { bye(); history.replaceState(null, "", "/table"); home(); } }, "← Game night"));
+const back = () => (joinOnly ? document.createTextNode("") : h("button", { type: "button", class: "back", onclick: () => { bye(); history.replaceState(null, "", "/table"); home(); } }, "← Pip Party"));
 const STATES = { open: "", waiting: "", reconnecting: "Reconnecting…", closed: "The table closed.", elsewhere: "This seat is open in another tab.", another: "This table's TV is open on another screen.", gone: "Lost the table. Check your connection, then join again." };
 // why a table sent a phone off, as the phone says it
 const SHUT = {
@@ -1197,10 +1209,10 @@ function home() {
   bye();
   app.className = "home";
   app.replaceChildren(
-    h("header", { class: "hero" }, h("h1", {}, "Game night"),
-      h("p", { class: "lede" }, "Party games from your own cards. The TV is Anki: Tools › Due Crew › Game night. Everyone else plays on their phone."),
+    h("header", { class: "hero" }, h("h1", {}, "Pip Party"),
+      h("p", { class: "lede" }, "Party games on your own cards. The TV is Anki: You › Pip Party on the Decks screen. Everyone else plays on their phone."),
       h("div", { class: "modes" }, h("button", { type: "button", class: "mode go", onclick: () => joinView("") }, h("b", {}, "Join from your phone"), h("span", {}, "The four letters on the TV.")))),
-    h("section", { class: "games" }, h("div", { class: "lbl" }, "Six games"), h("div", { class: "tiles static" }, ORDER.map((id) => { const g = GAMES[id]; return h("div", { class: "tile" }, h("span", { class: "like" }, g.like), h("b", {}, g.name), h("span", { class: "ln" }, g.line), h("span", { class: "lr" }, g.learn), h("span", { class: "np" }, `${g.min}–${g.max} players`)); }))));
+    h("section", { class: "games" }, h("div", { class: "lbl" }, "Six games"), h("div", { class: "tiles static" }, ORDER.map((id) => { const g = GAMES[id]; return h("div", { class: "tile" }, h("span", { class: "kind" }, g.kind), h("b", {}, g.name), h("span", { class: "ln" }, g.line), h("span", { class: "lr" }, g.learn), h("span", { class: "np" }, `${g.min}–${g.max} players`)); }))));
 }
 
 /** The TV, in Anki's window: the table Anki opened, with tonight's pack. */
@@ -1209,7 +1221,7 @@ function tvView(code, key) {
   app.className = "host";
   const client = connect(code, key);
   leaving = () => client.leave();
-  const tv = h("div", { class: "tv big", id: "tv" }, h("div", { class: "bar" }, h("b", {}, `Due Crew · Game night · ${code}`),
+  const tv = h("div", { class: "tv big", id: "tv" }, h("div", { class: "bar" }, h("b", {}, `Due Crew · Pip Party · ${code}`),
     h("button", { type: "button", class: "ghost", onclick: () => { const el = document.getElementById("tv"); if (el && el.requestFullscreen) el.requestFullscreen().catch(() => {}); } }, "Full screen")),
     h("div", { class: "in", id: "tv-in", "aria-live": "polite" }), h("div", { class: "pipc", id: "tv-pip", "aria-hidden": "true" }), h("div", { class: "fx", id: "tv-fx", "aria-hidden": "true" }));
   app.replaceChildren(tv);
@@ -1254,7 +1266,7 @@ function botsView() {
   bye();
   app.className = "bots";
   const hub = new LocalHub();
-  const tv = h("div", { class: "tv" }, h("div", { class: "bar" }, h("b", {}, "Due Crew · Game night · the TV"), h("span", {}, "bots")), h("div", { class: "in", id: "tv-in", "aria-live": "polite" }),
+  const tv = h("div", { class: "tv" }, h("div", { class: "bar" }, h("b", {}, "Due Crew · Pip Party · the TV"), h("span", {}, "bots")), h("div", { class: "in", id: "tv-in", "aria-live": "polite" }),
     h("div", { class: "pipc", id: "tv-pip", "aria-hidden": "true" }), h("div", { class: "fx", id: "tv-fx", "aria-hidden": "true" }));
   const phone = h("div", {}, h("div", { class: "lbl" }, "Your phone"), h("div", { class: "phone" }, h("div", { class: "st" }, h("span", {}, "9:41"), h("span", {}, "●●●")), h("div", { class: "in", id: "ph-in", "aria-live": "polite" })));
   app.replaceChildren(h("div", { class: "stage" }, tv, phone));

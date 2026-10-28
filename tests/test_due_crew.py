@@ -18858,6 +18858,201 @@ console.log(JSON.stringify(out));
           not os.path.exists(os.path.join(REPO, "site", "public", "table-packs.js")) and "GN_PACKS" not in src)
 
 
+def test_pip_party_v395():
+    """3.9.5's last round (Sam: "build both right now"; game night is Pip
+    Party now, still gamenight in code). The pack's written cards: Rounds'
+    black cards with a topic (about one in four, no answer of their own:
+    the Attending's pick is the round, so alone there are none), Draw it's
+    written prompts (about a quarter of the chains), Somewhere between's
+    study-life ends beside its own; none without topics. You › Pip Party,
+    after Insights for those it's open to: what to play from, the six the
+    pick fills, Host or Try it with bots, the TV's code once it's open;
+    worked out only on screen and kept a while; every click through _on_js."""
+    import shutil
+    import subprocess
+    import due_crew as dc
+    from due_crew import gamenight as G, gamenight_flow as GF
+    from aqt.deckbrowser import DeckBrowser
+    pack = G.build(GAME_ROWS, "test", seed=3)
+    topics = {G.topic_name(r[4][0].split("::")[-1]) for r in GAME_ROWS} | set(G.names({r[4][0]: 1 for r in GAME_ROWS}).values())
+    w = [b for b in pack["blacks"] if b.get("w")]
+    mine = [b for b in pack["blacks"] if not b.get("w")]
+    check("pip party: Rounds' written cards are marked, have no answer, say they're Pip Party's, and are a quarter of the deck",
+          w and all(b["a"] == "" and b["tag"] == "Pip Party" and "____" in b["q"] for b in w)
+          and len(w) == (len(mine) + 1) // 3 and abs(len(w) / len(pack["blacks"]) - 0.25) < 0.05, (len(w), len(pack["blacks"])))
+    check("pip party: ...each {topic} one of tonight's topic names, the template filled, each template once",
+          all("{" not in b["q"] for b in w) and len({b["q"] for b in w}) == len(w)
+          and any(any(t in b["q"] for t in topics) for b in w), [b["q"] for b in w])
+    check("pip party: Draw it's written prompts are tonight's topics in a spot, Somewhere between gets four study-life ends",
+          len(pack["draws"]) == 8 and all("{" not in d and any(t in d for t in topics) for d in pack["draws"])
+          and len(pack["scales"]) == G.SCALES_IN and all(tuple(x) in G.SCALES for x in pack["scales"]), (pack["draws"][:3], pack["scales"]))
+    bare = G.build([(r[0], r[1], r[2], r[3], []) for r in GAME_ROWS], seed=3)
+    check("pip party: no topics, no written cards, prompts or ends",
+          not any(b.get("w") for b in bare["blacks"]) and bare["draws"] == [] and bare["scales"] == [])
+    for t in G.WRITTEN + G.DRAWS + tuple(" ".join(x) for x in G.SCALES):
+        if re.search(r"(?i)\b(compete|rival|beat|win)\b", t) or len(t) > 60:
+            check("pip party: written copy is terse and friendly", False, t)
+    if shutil.which("node"):
+        src = open(os.path.join(REPO, "site", "public", "table.js"), encoding="utf-8").read()
+        a, b = src.index("let D = null;"), src.index("// ---------- hubs")
+        js = "const matchMedia = () => ({ matches: true });\n" + src[a:b].replace("let D = null;", "let D = " + json.dumps(pack) + ";", 1) + r"""
+const mk = (N) => { const seats = Array.from({ length: N }, (_, i) => ({ n: "P" + i })); return { N, seats, A: [], here: () => true, name: (i) => "P" + i }; };
+const alone = mk(1), three = mk(3);
+const lone = Rounds.start(alone);
+const wi = D.blacks.findIndex((b) => b.w);
+let S = Rounds.start(three);
+S = fixRound(Object.assign({}, S, { order: [wi].concat(S.order.filter((i) => i !== wi)), bi: 0 }));
+three.A = S.hands.map((hd, i) => (i === S.att ? null : { c: hd[0] }));
+S = Rounds.collect(S, three.A, three);
+const picked = S.ph;
+three.A = []; three.A[S.att] = { f: 0 };
+S = Rounds.collect(S, three.A, three);
+const x = Rounds.pub(S, three);
+const starts = [1, 2, 3, 4, 8].map((N) => DrawIt.starts(N).filter((t) => D.draws.includes(t)).length);
+const st8 = DrawIt.starts(8);
+const B = Between.start(), ends = Between.ends();
+console.log(JSON.stringify({ loneWritten: lone.order.filter((i) => D.blacks[i].w).length, loneN: lone.order.length, picked, ph: S.ph, x,
+  hasBlank: JSON.stringify(S.hands).includes('""'),
+  starts, st8n: st8.length, ends: ends.length, scalesIn: D.scales.every((sc) => ends.some((e) => e[0] === sc[0])), bEnds: B.ends.length,
+  bPub: Object.keys(Between.pub(B)).join(",") }));
+"""
+        r = subprocess.run(["node", "-e", js], capture_output=True, text=True, timeout=60)
+        got = json.loads(r.stdout) if r.returncode == 0 and r.stdout.strip() else {}
+        check("pip party: alone, Rounds never draws a written card (nobody to pick)", got and got["loneWritten"] == 0 and got["loneN"] == len(mine), got or r.stderr[:300])
+        check("pip party: a written card plays through: everyone plays, the Attending picks, the chart has the pick and no answer",
+              got.get("picked") == "pick" and got.get("ph") == "chart" and got["x"].get("w") == 1 and got["x"].get("ans") == ""
+              and got["x"].get("fav") == 0 and not got.get("hasBlank"), got)
+        check("pip party: Draw it starts about a quarter of the chains from a written prompt (1, 2, 3, 4, 8 players)",
+              got.get("starts") == [0, 1, 1, 1, 2] and got.get("st8n") == 8, got.get("starts"))
+        check("pip party: Somewhere between's ends are its twelve and the pack's four; a round's ends ride its pub",
+              got.get("ends") == 16 and got.get("scalesIn") and got.get("bEnds") == 16 and "L" in got.get("bPub", ""), got)
+    else:
+        check("pip party: node runs the games (skipped: no node)", True)
+
+    # Sam: no game of anyone else's named, in the games, their glue or their pages
+    names = re.compile(r"(?i)cards against|\bcah\b|codenames|telestrations|wavelength|horsepaste|jackbox|spyfall|kahoot|pictionary"
+                       r"|trivial pursuit|apples to apples|quiplash|scattergories|taboo|werewolf|among us|dixit|charades")
+    files = [os.path.join(REPO, *f) for f in (("site", "public", "table.js"), ("site", "public", "table.html"), ("site", "public", "table.css"),
+                                              ("due_crew", "gamenight.py"), ("due_crew", "gamenight_flow.py"),
+                                              ("due_crew", "ui", "game_night_window.py"), ("due_crew", "ui", "game_night_tv.py"),
+                                              ("worker", "src", "table.ts"))]
+    named = [(os.path.basename(f), m.group(0)) for f in files for m in names.finditer(open(f, encoding="utf-8").read())]
+    check("pip party: no other game is named in its games, glue, window or pages (trademarks); each says its kind in our words",
+          not named and "kind: \"Fill in the blank\"" in open(files[0], encoding="utf-8").read() and "like:" not in open(files[0], encoding="utf-8").read(), named)
+
+    # You › Pip Party, drawn
+    src = [{"key": "misses", "label": "This week's misses", "n": 42}, {"key": "saved:R <b>", "label": "R <b> & co", "n": 7},
+           {"key": "saved:Empty", "label": "Empty", "n": 0}]
+    view = {"sources": src, "pick": "misses", "fit": {"n": 42, "have": {}, "thin": ["links"]}, "busy": False, "said": "",
+            "open": None, "burst": False, "pip": "<svg class='sv'></svg>"}
+    out = board.party_html(view)
+    check("pip party tab: what to play from, the pick on, names escaped, a pick's key as hex in its command; an empty one can't be picked",
+          'aria-checked="true" class="pp-o on"' in out and "R &lt;b&gt; &amp; co" in out and "R <b>" not in out
+          and f"party:pick:{G.pick_key('saved:R <b>')}" in out and G.unpick(G.pick_key("saved:R <b>")) == "saved:R <b>"
+          and f"party:pick:{G.pick_key('saved:Empty')}" not in out and "none yet" in out, out[:600])
+    check("pip party tab: the six as tiles, lit if the pick fills them; its line; Host and Try it with bots; Custom… opens the window",
+          out.count('class="pp-g on"') == 5 and out.count('class="pp-g"') == 1 and "42 cards &middot; enough for five of the six" in out
+          and "duecrew:party:host" in out and "duecrew:party:bots" in out and "duecrew:party:custom" in out and "Custom&hellip;" in out)
+    check("pip party tab: the line says all six, none, or nothing to play from",
+          board.party_say(318, []) == "318 cards &middot; enough for all six" and "too few" in board.party_say(3, [g for g, _l in G.GAMES])
+          and board.party_say(0).startswith("Nothing here yet") and board.party_say(5) == "5 cards")
+    busy = board.party_html(dict(view, busy=True, said="Opening a table…"))
+    check("pip party tab: while a table opens, Host and bots are off and it says so",
+          "duecrew:party:host" not in busy and "duecrew:party:bots" not in busy and 'aria-disabled="true">Host' in busy and "Opening a table…" in busy)
+    bad = board.party_html(dict(view, said="Pip Party isn't open <yet>"))
+    check("pip party tab: a refusal shows on the tab, escaped, and Host is there to try again",
+          'pp-said bad' in bad and "&lt;yet&gt;" in bad and "duecrew:party:host" in bad)
+    tv = board.party_html(dict(view, burst=True, open={"bots": False, "code": "RR<JA", "url": "https://duecrew.com/t/RRJA"}))
+    check("pip party tab: once the TV's open, its code and where phones join, Copy link; the list gone; the burst once",
+          "On the TV &middot; RR&lt;JA" in tv and "duecrew.com/t/RRJA" in tv and "https://" not in tv and "duecrew:party:copy" in tv
+          and "duecrew:party:host" not in tv and 'class="pp burst"' in tv and tv.count("<i style=\"--r:") == 10
+          and 'class="pp burst"' not in board.party_html(dict(view, open={"bots": True})) and "Bots are on the TV" in board.party_html(dict(view, open={"bots": True})))
+    check("pip party tab: its burst only moves without Reduce motion, and Pip is still till pointed at",
+          "@media (prefers-reduced-motion: no-preference) {\n      #due-crew .pp.burst .pp-fx { display: block; }" in board.DUE_CSS
+          and "#due-crew .pp:not(.burst):not(:hover) .pp-pip .sv" in board.DUE_CSS)
+    have = board.you_html({}, None, {"tab": "party", "party_on": True, "party": view})
+    gone = board.you_html({}, None, {"tab": "party", "party_on": False, "party": view})
+    check("pip party tab: after Insights for those it's open to, picked; nobody else has it",
+          ">Pip Party</a>" in have and have.index(">Insights</a>") < have.index(">Pip Party</a>") and "duecrew:duetab:party" in have
+          and 'class="pp' in have and ">Pip Party</a>" not in gone and 'class="pp' not in gone)
+
+    # the glue: worked out only on screen, and kept a while
+    calls = []
+    saved = (GF.shown, GF.sources, GF.cards_for, GF.rows, GF.near, GF._redraw, GF.cfg, GF.save_cfg, GF.Ops.start, GF.open_window,
+             GF._clip, GF.tooltip, dc.mw.col)
+    conf = {"due_tab": "party"}
+    GF.TAB.update(busy=False, said="", open=None, burst=False, list=None, fits={}, pip=None)
+    try:
+        GF.shown = lambda: True
+        GF.sources = lambda: calls.append("sources") or [dict(x) for x in src]
+        GF.cards_for = lambda key, scope=None: calls.append("fit:" + key) or [r[0] for r in GAME_ROWS]
+        GF.rows = lambda cids, cap=0, rng=None: list(GAME_ROWS)
+        GF.near = lambda got, cids, cap=0, rng=None: []
+        GF._redraw = lambda: calls.append("redraw")
+        GF.cfg, GF.save_cfg = (lambda: conf), (lambda c, **k: calls.append("saved"))
+        dc.mw.col = object()
+        you = dc._you(conf, None, {"cards": []})
+        dc._you(conf, None, {"cards": []})
+        check("pip party glue: on screen, the tab's view; the list and the pick's fit worked out once, kept for the next draw",
+              you["party_on"] and you["party"]["pick"] == "misses" and you["party"]["fit"]["n"] == len(GAME_ROWS)
+              and calls.count("sources") == 1 and calls.count("fit:misses") == 1, calls)
+        calls.clear()
+        you = dc._you(dict(conf, due_tab="insights"), None, {"cards": []})
+        check("pip party glue: another tab on screen, nothing of it worked out", "party" not in you and not calls, calls)
+        GF.shown = lambda: False
+        you = dc._you(conf, None, {"cards": []})
+        check("pip party glue: closed to this account, no tab and nothing worked out", not you["party_on"] and "party" not in you and not calls)
+        GF.shown = lambda: True
+        send = lambda m: dc._on_js(False, as_board("duecrew:" + m), DeckBrowser())
+        send("party:pick:" + G.pick_key("saved:R <b>"))
+        check("pip party: a pick's click is kept on this computer (config)", conf.get("party_pick") == "saved:R <b>" and "saved" in calls, conf)
+        send("party:pick:" + G.pick_key("saved:Nope"))
+        send("party:pick:zz")
+        check("pip party: a key that isn't on the list, or isn't hex, changes nothing", conf.get("party_pick") == "saved:R <b>")
+        started = []
+        GF.Ops.start = staticmethod(lambda key, scope, label, bots, done: started.append((key, label, bots, done)))
+        send("party:host")
+        check("pip party: Host plays the pick (Ops.start: a table, then the TV), and says it's opening",
+              started and started[0][:3] == ("saved:R <b>", "R <b> & co", False) and GF.TAB["busy"] and GF.TAB["said"] == "Opening a table…")
+        send("party:host")
+        send("party:bots")
+        check("pip party: while it opens, another Host or bots does nothing", len(started) == 1)
+        started[0][3]("That's a lot of tables for one hour. Try again in a while.")
+        check("pip party: a refusal ends the wait and is said on the tab", not GF.TAB["busy"] and GF.TAB["said"].startswith("That's a lot"))
+        send("party:bots")
+        check("pip party: Try it with bots plays the pick with bots", len(started) == 2 and started[1][2] is True and not GF.TAB["busy"])
+        opened = []
+        GF.open_window = lambda custom=False: opened.append(custom)
+        send("party:custom")
+        check("pip party: Custom… opens the window on Custom", opened == [True])
+        # the TV: open, its code on the tab; closed, back to the list
+        from due_crew.ui import game_night_tv as TV
+        sigs = []
+        tv_win = types.SimpleNamespace(destroyed=types.SimpleNamespace(connect=sigs.append))
+        was_tv, was_site = TV.open_tv, dc.plan_flow.site_base
+        TV.open_tv = lambda parent, site, payload: tv_win
+        dc.plan_flow.site_base = lambda: "https://duecrew.com"
+        try:
+            GF._tv({"mode": "tv", "code": "RRJA", "key": "k", "pack": {}})
+        finally:
+            TV.open_tv, dc.plan_flow.site_base = was_tv, was_site
+        clipped = []
+        GF._clip, GF.tooltip = clipped.append, (lambda *a, **k: None)
+        send("party:copy")
+        v = GF.tab_view(conf)
+        check("pip party: the TV open, the tab has its code and where phones join, once with its burst; Copy link copies it",
+              GF.TAB["open"] == {"bots": False, "code": "RRJA", "url": "https://duecrew.com/t/RRJA"} and v["burst"]
+              and not GF.tab_view(conf)["burst"] and clipped == ["https://duecrew.com/t/RRJA"], (GF.TAB["open"], clipped))
+        send("party:host")
+        check("pip party: with the TV open, Host does nothing (one table at a time)", len(started) == 2)
+        sigs[0]()
+        check("pip party: the TV closed, the tab is back to the list", GF.TAB["open"] is None)
+    finally:
+        (GF.shown, GF.sources, GF.cards_for, GF.rows, GF.near, GF._redraw, GF.cfg, GF.save_cfg, GF.Ops.start, GF.open_window,
+         GF._clip, GF.tooltip, dc.mw.col) = saved
+        GF.TAB.update(busy=False, said="", open=None, burst=False, list=None, fits={}, pip=None)
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

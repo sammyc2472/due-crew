@@ -3679,8 +3679,8 @@ every release that changes how something works.
   hosting or bots. Set both false when it goes wider.
 - 3.9.5, game night from Anki, on your own cards (Sam: "I want to practice
   using my actual stuff", then, on the mock "Your Cards at the Table",
-  "build it! … don't need to keep the sample questions", "the codenames
-  dupe should have two teams", "Yes you can do the CAH stuff", and before
+  "build it! … don't need to keep the sample questions", that Links
+  should have two teams, a yes to Rounds on your cards, and before
   testing "a UI review. Find ways to make it fun (pips included?)"). The TV
   is now a window of Anki's: Tools › Due Crew › Game night… (shown for
   `gamenight_flow.TESTERS` alone while Sam tests it) picks what to play
@@ -3715,8 +3715,9 @@ every release that changes how something works.
   white cards at least, and the board and prompts when tonight's run short:
   Sam's first night, on a week's handful of misses, dealt a hand of six
   alike (a refill that dealt the one card left again and again; now no card
-  is dealt twice, and a hand is seven, or an even share of a small pack). Links is two teams, as on
-  horsepaste: Green and Purple pick sides on their phones (Even out,
+  is dealt twice, and a hand is seven, or an even share of a small pack).
+  Links is two teams on one board, a clue giver each: Green and Purple
+  pick sides on their phones (Even out,
   Shuffle), each picks a clue giver; 9 for whoever goes first, 8, 7
   nobody's, 1 Code blue; clues typed so the TV shows them; a timer if
   wanted. The picking is on the TV (Sam: a 5×5 board on a phone was too
@@ -3746,3 +3747,33 @@ every release that changes how something works.
   `worker/test/table.test.ts`'s whisper, `tools/dialogs.py`'s Game night
   window; played end to end with the TV window itself in Qt's web engine
   against a local duecrew.com and a phone in a browser.
+- 3.9.5, Pip Party (Sam: "I like Pip Party... maybe as a tab on the due
+  thing next to insights", "make it fun as well as functional", "build both
+  right now"). Game night is Pip Party where people see it: the Tools menu
+  (Pip Party…), the window, the TV, duecrew.com/table and the phones'
+  header; still gamenight in code, as Pip is sev. You › Pip Party is the
+  bubble's tab after Insights, for those game night is open to
+  (`gamenight_flow.shown`): Pip at a game place (`sev.GAME_PLACES`, still
+  till pointed at, cheering once as a TV opens with a small burst round it,
+  none with Reduce motion); Play from, each source's cards, the pick kept
+  on this computer (`party_pick`); Custom… (the window, on Custom; a scope
+  saved there is on the list after); the six as tiles, lit if the pick
+  fills them, and a line ("42 cards · enough for five of the six"); Host
+  and Try it with bots (off while a table opens, a refusal said on the
+  tab), then the TV's code, where phones join and Copy link, till the TV
+  closes. The list and the pick's fit are worked out when the tab is on
+  screen and kept a while (`tab_view`; two minutes, ten for a fit, again
+  after a game, a pick or the window), never on every draw; nothing is
+  sent but Host's one request. The games say what kind they are in our own
+  words ("Fill in the blank", "Two teams, one board"): no other game is
+  named anywhere (Sam: trademarks; the suite checks the games, their glue
+  and their pages). Written cards (`gamenight.py`, Sam: "not creative
+  enough"): Rounds' black cards with one of tonight's topics, a quarter of
+  them ("The card I'd suspend from Renal pharm: ____"), no answer of their
+  own, so the Attending's pick is the round, and none alone; Draw it starts
+  about a quarter of its chains from a written prompt ("Nephritic as a
+  monster"); Somewhere between adds four study-life ends to its twelve
+  ("Skim it ↔ Make a card for it"); none without topics. Tests:
+  `test_pip_party_v395`, `tools/dialogs.py`'s menu and Custom…, the tab in
+  `tools/preview.py` (light, dark, narrow; a pick, all six, opening, a
+  refusal, the TV open, bots, nothing yet, Due off).

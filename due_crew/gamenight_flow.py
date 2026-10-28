@@ -1,4 +1,6 @@
-"""Game night from Anki (3.9.5): Tools › Due Crew › Game night….
+"""Pip Party from Anki (3.9.5; game night until its last round, and still
+gamenight in code): You › Pip Party on the board, or Tools › Due Crew ›
+Pip Party….
 
 The window (ui/game_night_window.py) picks tonight's cards: this week's
 misses, a plan's week, a saved scope, or a custom one. This reads them
@@ -16,12 +18,15 @@ import datetime
 import json
 import os
 import random
+import time
+import traceback
 
 from aqt import mw
 from aqt.utils import tooltip
 
+from . import app
 from . import gamenight as G
-from .app import _bg, _profile_files, client
+from .app import _bg, _profile_files, cfg, client, save_cfg
 
 # the accounts the menu shows for while Sam tests it (wrangler.toml's ADMINS);
 # None when it goes wider
@@ -31,7 +36,7 @@ MISSED_DAYS = 7
 
 
 def shown():
-    """Tools › Due Crew › Game night… is there: signed in, and (while testing)
+    """Pip Party is there (Tools › Due Crew, You › Pip Party): signed in, and (while testing)
     a tester, or this computer's labs switch on (the server still decides)."""
     try:
         from .planner import enabled as labs
@@ -246,15 +251,16 @@ def preview(scope):
 
 # ---- opening it ----
 
-def open_window():
+def open_window(custom=False):
     if not mw.col:
         return
     if not shown():
         tooltip("Sign in to Due Crew first.")
         return
     from .ui.game_night_window import GameNightWindow
-    w = GameNightWindow(mw, Ops())
+    w = GameNightWindow(mw, Ops(), custom=custom)
     mw._due_crew_game_night = w
+    w.finished.connect(lambda *_: _fresh())  # a scope saved there is on the tab's list
     w.show()
 
 
@@ -291,7 +297,7 @@ class Ops:
                 _tv({"mode": "tv", "code": data["code"], "key": data["key"], "pack": pack})
                 done(None)
             elif status == 404:
-                done("Game night isn't open for this account yet.")
+                done("Pip Party isn't open for this account yet.")
             elif status == 429:
                 done("That's a lot of tables for one hour. Try again in a while.")
             else:
@@ -302,4 +308,151 @@ class Ops:
 def _tv(payload):
     from . import plan_flow
     from .ui.game_night_tv import open_tv
-    open_tv(mw, plan_flow.site_base(), payload)
+    site = plan_flow.site_base()
+    w = open_tv(mw, site, payload)
+    # the tab says the TV's open (its code, where phones join) until it closes
+    code = str(payload.get("code") or "")
+    TAB["turn"] += 1
+    turn = TAB["turn"]
+    TAB["open"] = {"bots": payload.get("mode") == "bots", "code": code,
+                   "url": f"{site}/t/{code}" if code else ""}
+    TAB["burst"] = True
+    try:
+        w.destroyed.connect(lambda *_: _tv_closed(turn))
+    except Exception:
+        traceback.print_exc()
+    _redraw()
+
+
+def _tv_closed(turn):
+    if TAB.get("turn") == turn:  # the TV the tab tells of, not an older one
+        TAB["open"] = None
+        _redraw()
+
+
+# ---- You › Pip Party (3.9.5's last round): the bubble's tab ----
+# The pick is this computer's (config), as the bubble's tab is. What's on the
+# list, and how much of the six the pick fills, are worked out when the tab is
+# on screen and kept a while (Custom…'s window, a Host or bots, a pick, a
+# profile change: worked out again), never on every draw. Nothing is sent but
+# Host's one request.
+
+PICK = "party_pick"
+SOURCES_FOR, FIT_FOR = 120, 600  # seconds a list and a fit hold
+TAB = {"busy": False, "said": "", "open": None, "burst": False, "turn": 0, "list": None, "fits": {}, "pip": None}
+
+
+def _redraw():
+    try:
+        if app.swap:
+            app.swap(cfg())
+    except Exception:
+        traceback.print_exc()
+
+
+def _fresh():
+    """Work the list out again next time (a scope saved, a game started)."""
+    TAB["list"] = None
+    _redraw()
+
+
+def _sources():
+    now, got = time.time(), TAB.get("list")
+    if not got or got[0] != app.generation or now - got[1] > SOURCES_FOR:
+        got = TAB["list"] = (app.generation, now, sources())
+    return got[2]
+
+
+def _fit(key):
+    """{n, have, thin} for a pick: its pack's fit, on a sample, kept a while."""
+    now, got = time.time(), TAB["fits"].get(key)
+    if not got or got[0] != app.generation or now - got[1] > FIT_FOR:
+        rng = random.Random(1)
+        cids = cards_for(key)
+        rws = rows(cids, 300, rng)
+        have, thin = G.fit(G.build(rws, n=len(cids), seed=1, near=near(rws, cids, 150, rng)))
+        got = (app.generation, now, {"n": len(cids), "have": have, "thin": thin})
+        TAB["fits"] = {k: v for k, v in TAB["fits"].items() if now - v[1] <= FIT_FOR}
+        TAB["fits"][key] = got
+    return got[2]
+
+
+def _pip(place):
+    """Pip at the tab's place (sev.GAME_PLACES), in my accent and look; its
+    move picked once a place, never the last one there."""
+    from . import rooms, sev
+    if not rooms.sev_on():
+        return ""
+    if (TAB.get("pip") or ("",))[0] != place:
+        last = TAB.setdefault("last", {})
+        m = sev.pick(place, last=last.get(place)) if place in sev.MOVES else None
+        last[place] = m
+        TAB["pip"] = (place, m)
+    return sev.slot(sev.move(place, TAB["pip"][1], look=rooms.my_look(), size=72), 72)
+
+
+def tab_view(c):
+    """You › Pip Party, for board.party_html: {sources, pick, fit, busy,
+    said, open, burst, pip}. Only when the tab's on screen (the glue)."""
+    srcs = _sources()
+    keys = [x["key"] for x in srcs]
+    pick = c.get(PICK) if c.get(PICK) in keys else next((x["key"] for x in srcs if x["n"]), None)
+    n = next((x["n"] for x in srcs if x["key"] == pick), 0)
+    fit = None
+    if pick and n:
+        try:
+            fit = _fit(pick)
+        except Exception:
+            traceback.print_exc()
+    burst, TAB["burst"] = TAB.get("burst"), False
+    place = ("cheer" if TAB.get("open") and burst else "hop" if TAB.get("open") else "ready" if TAB.get("busy")
+             else "again" if TAB.get("said") else "hello")
+    return {"sources": srcs, "pick": pick, "fit": fit, "busy": bool(TAB.get("busy")), "said": TAB.get("said") or "",
+            "open": TAB.get("open"), "burst": bool(burst), "pip": _pip(place)}
+
+
+
+
+def on_message(parts):
+    """The tab's clicks: party:pick:KEY, party:host, party:bots,
+    party:custom, party:copy. Main thread."""
+    what = parts[2] if len(parts) > 2 else ""
+    c = cfg()
+    if what == "pick" and len(parts) > 3:
+        key = G.unpick(parts[3])
+        if key is not None and key in [x["key"] for x in _sources()]:
+            c[PICK] = key
+            save_cfg(c)
+            TAB["said"] = ""
+        _redraw()
+    elif what in ("host", "bots"):
+        if TAB.get("busy") or TAB.get("open"):
+            return  # one table at a time; the tab shows the open one
+        view = tab_view(c)
+        hit = next((x for x in view["sources"] if x["key"] == view["pick"]), None)
+        if not hit:
+            TAB["said"] = "Pick what to play from, or Custom…"
+            _redraw()
+            return
+        TAB["busy"], TAB["said"] = what == "host", ("Opening a table…" if what == "host" else "")
+
+        def done(err):
+            TAB["busy"] = False
+            TAB["said"] = err or ""
+            TAB["list"] = None
+            if err or not TAB.get("open"):
+                _redraw()  # an open TV drew the tab already (its burst with it)
+        _redraw()
+        Ops.start(hit["key"], None, hit["label"], what == "bots", done)
+    elif what == "custom":
+        open_window(custom=True)
+    elif what == "copy":
+        url = (TAB.get("open") or {}).get("url")
+        if url:
+            _clip(url)
+            tooltip("Copied. Send it to your crew.")
+
+
+def _clip(text):
+    from aqt.qt import QApplication
+    QApplication.clipboard().setText(text)
