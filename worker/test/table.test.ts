@@ -3,7 +3,7 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import site from "../../site/src/index";
 import worker from "../src/index";
-import { DOOR, PRESENCE_MAX, SEATS, SHUT, okPresence } from "../src/table";
+import { DOOR, DOOR_PER_NET, PRESENCE_MAX, SEATS, SHUT, netOf, okPresence } from "../src/table";
 import { BASE, api, befriend, person } from "./helpers";
 
 // 3.9.5, game night: a table is a live room for one night. Its host opens it
@@ -243,7 +243,7 @@ describe("game night: a table", () => {
     await leave(tv, ana);
   });
 
-  it("keeps a phone's seat when it comes back, and has room for twelve at the table and six at the door", async () => {
+  it("keeps a phone's seat when it comes back, and has room for twelve phones at the table (the TV is no seat) and six at the door", async () => {
     const { code, key } = await opened();
     const tv = await tvAt(code, key);
     const ana = (await seat(code, cid("ana"))).s!;
@@ -265,10 +265,40 @@ describe("game night: a table", () => {
     tell(tv, { t: "door", door: "open" });
     await until(() => door.every((s) => said(s, (m) => m.t === "hi" && !m.wait)), "the door let in");
     const more: Sock[] = [];
-    for (let i = 0; more.length + door.length + 2 < SEATS; i++) more.push((await seat(code, cid(`p${i}`), { ip: `198.51.100.${i}` })).s!);
+    for (let i = 0; more.length + door.length + 1 < SEATS; i++) more.push((await seat(code, cid(`p${i}`), { ip: `198.51.100.${i}` })).s!);
     expect(await refused(code, cid("late"), { ip: "198.51.100.200" })).toBe(SHUT.full);
     expect((await api("GET", `/table/${code}`)).body.full).toBe(true);
-    await leave(tv, again, ...door, ...more);
+    // a full table can't keep its own TV out: it comes back (a dropped line) and is the host still
+    const tv2 = (await seat(code, cid("tv"), { key })).s!;
+    expect((await hello(tv2)).host).toBe(true);
+    await leave(tv, tv2, again, ...door, ...more);
+  });
+
+  it("lets one network wait at the door three at a time, so a script with many ids can't fill it", async () => {
+    const { code, key } = await opened();
+    const tv = await tvAt(code, key);
+    const one: Sock[] = [];
+    for (let i = 0; i < DOOR_PER_NET; i++) one.push((await seat(code, cid(`n${i}`), { ip: "192.0.2.7" })).s!);
+    await Promise.all(one.map(hello));
+    expect(await refused(code, cid("n-more"), { ip: "192.0.2.7" })).toBe(SHUT.full);
+    const other = (await seat(code, cid("elsewhere"), { ip: "192.0.2.8" })).s!;  // someone else still knocks
+    expect((await hello(other)).wait).toBe(true);
+    await leave(tv, other, ...one);
+  });
+
+  it("tells a network that keeps trying codes that aren't a table to slow down, and groups IPv6 by /64", async () => {
+    const ip = "2001:db8:aa:bb:1:2:3:4";
+    let last = 0;
+    for (let i = 0; i < 61; i++) {
+      const r = await worker.fetch(new Request(`${BASE}/table/QQQ${String.fromCharCode(65 + (i % 26))}`, { headers: { "CF-Connecting-IP": i % 2 ? ip : "2001:db8:aa:bb::99" } }), { ...env } as any);
+      last = r.status;
+      if (i < 60) expect(r.status).toBe(404);
+    }
+    expect(last).toBe(429);  // both addresses are one /64
+    const net = (a: string) => netOf(new Request(BASE, { headers: { "CF-Connecting-IP": a } }));
+    expect(net("2001:db8::1")).toBe("2001:db8:0:0::/64");
+    expect(net("2001:0db8:00aa:bb:1:2:3:4")).toBe("2001:db8:aa:bb::/64");
+    expect(net("203.0.113.9")).toBe("203.0.113.9");
   });
 
   it("is no table without its code, from another site, or without a socket", async () => {

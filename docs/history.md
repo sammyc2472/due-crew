@@ -3777,3 +3777,47 @@ every release that changes how something works.
   `test_pip_party_v395`, `tools/dialogs.py`'s menu and Custom…, the tab in
   `tools/preview.py` (light, dark, narrow; a pick, all six, opening, a
   refusal, the TV open, bots, nothing yet, Due off).
+- 3.9.5, Pip Party's review (Sam: "check your work for security and
+  efficiency and make sure that question generation make sense. don't want
+  the questions to be dumb"). Questions, tried on a big shared deck's
+  export (35k cards, read in the scratch folder, never kept): a card's
+  topic is the name most of its tags agree on, counted over every tag and
+  the card's own words (`gamenight.topic_of`; such a deck tags a card by
+  each resource that covers it), past "Extra" and chapter numbers, and a
+  tag that ends in a question's id names nothing (it walked up to the
+  question bank's own name); no question from an answer that says nothing
+  alone (`EMPTY`: increased, Yes, a letter), one already in the question,
+  no words around the blank or a picture it needs; a cloze's hint after
+  its blank. Wrong answers are scored (`_Pool`): shared tags, the same
+  blank in other cards ("____ valve": tricuspid, aortic, mitral; Host also
+  finds such cards in the collection, one pass over the notes,
+  `gamenight_flow.near(slots=True)`), the answer's sort, size and look,
+  the question's own cue ("the likely diagnosis"); never one that holds
+  the answer ("acute pancreatitis" for "pancreatitis"), sits in the
+  question, or a number for a word; in the answer's case. White cards,
+  tiles and prompts are never a number or a thin word. Imposter pairs two
+  things (Nephritic and Nephrotic, Class I and Class II antiarrhythmics,
+  Aortic aneurysm and dissection), never a plural, a typo, one name inside
+  another or a heading, and no fact names either. Security (a review):
+  phones outside Rounds see topic names, and Links takes short answers only
+  when the topics run short of forty (it always had); the TV is no seat
+  (a stranger with the code filled the table and kept it out), and a
+  "full" close is a dropped line for it; one network waits at the door
+  three at a time (`DOOR_PER_NET`), joins are counted per network and
+  table with the TV's own aside (`isHost`), codes that aren't a table are
+  counted per network, IPv6 by its /64 (`netOf`, `PROBES_PER_HOUR`), so
+  the codes can't be walked; the TV floats a phone's reactions twice a
+  second at most; Host's build drops its TV when the profile changed
+  (`app.generation`). Efficiency (a review): a 1500-card pack 5.2 s to
+  0.65 s (cached text helpers; the board's no-word-inside-another check
+  stops at what it keeps), and built off the main thread, at Host and for
+  the tab's fit; nothing worked out while the TV is open; Play from's
+  cards kept for a pick, one deck read a plan, a plan's week by my Anki
+  day; the window previews once a switch; the TV draws once a frame; a
+  dial sends eight times a second, not every move; the pad draws a stroke's
+  new piece, not every stroke. Not done: the table's Durable Object can't
+  hibernate (its sockets are accepted the old way), about $0.02 a table
+  left open. Tests: `test_game_night_questions_make_sense_v395`,
+  `test_pip_party_host_off_the_main_thread_v395`, near's slot search, and
+  `table.test.ts`'s door a network, probes and /64, the TV past a full
+  table.

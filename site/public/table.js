@@ -76,9 +76,14 @@ function pad(onChange) {
   const cv = h("canvas", { class: "pad", width: 600, height: 600, "aria-label": "Draw here" });
   const g = cv.getContext("2d");
   const used = () => strokes.reduce((n, s) => n + s.length, 0) + (cur ? cur.length : 0);
+  let color = "";
+  const pen = () => { g.lineWidth = 10; g.lineCap = "round"; g.lineJoin = "round"; g.strokeStyle = color || (color = getComputedStyle(cv).color || "#222"); };
+  const px = (v) => (v / G) * 600;
+  function piece(a, b) { pen(); g.beginPath(); g.moveTo(px(a[0]), px(a[1])); g.lineTo(px(b[0]) + (a === b ? 0.5 : 0), px(b[1])); g.stroke(); }
   function paint() {
     g.clearRect(0, 0, 600, 600);
-    g.lineWidth = 10; g.lineCap = "round"; g.lineJoin = "round"; g.strokeStyle = getComputedStyle(cv).color || "#222";
+    color = "";
+    pen();
     for (const s of cur ? strokes.concat([cur]) : strokes) {
       const pts = decode([s])[0];
       if (!pts.length) continue;
@@ -89,16 +94,17 @@ function pad(onChange) {
     }
   }
   const at = (e) => { const r = cv.getBoundingClientRect(); const f = (v, a, b) => Math.max(0, Math.min(G, Math.round(((v - a) / b) * G))); return [f(e.clientX, r.left, r.width), f(e.clientY, r.top, r.height)]; };
-  cv.addEventListener("pointerdown", (e) => { if (used() + 2 > MAX) return; e.preventDefault(); try { cv.setPointerCapture(e.pointerId); } catch (_) { /* fine */ } const [x, y] = at(e); cur = enc(x, y); last = [x, y]; paint(); onChange(); });
+  cv.addEventListener("pointerdown", (e) => { if (used() + 2 > MAX) return; e.preventDefault(); try { cv.setPointerCapture(e.pointerId); } catch (_) { /* fine */ } const [x, y] = at(e); cur = enc(x, y); last = [x, y]; piece(last, last); onChange(); });
   cv.addEventListener("pointermove", (e) => {
     if (cur == null) return;
     const [x, y] = at(e);
     if (Math.abs(x - last[0]) + Math.abs(y - last[1]) < 2 || used() + 2 > MAX) return;
+    const was = last;
     cur += enc(x, y); last = [x, y];
     if (cur.length >= 996) { strokes.push(cur); cur = enc(x, y); }
-    paint(); onChange();
+    piece(was, last); onChange();  // only the new piece; undo and clear paint it all
   });
-  const end = () => { if (cur != null) { strokes.push(cur); cur = null; paint(); onChange(); } };
+  const end = () => { if (cur != null) { strokes.push(cur); cur = null; onChange(); } };
   cv.addEventListener("pointerup", end);
   cv.addEventListener("pointercancel", end);
   return { el: cv, strokes: () => strokes.slice(0, 12), undo() { strokes.pop(); paint(); onChange(); }, clear() { strokes.length = 0; paint(); onChange(); }, left: () => Math.max(0, 1 - used() / MAX), repaint: paint };
@@ -912,7 +918,7 @@ function wsClient(code, key, onState) {
       ws = null; hello = false;
       if (done) return;
       const why = { 4000: "closed", 4001: "elsewhere", 4002: "another", 4003: "away", 4004: "crewonly", 4005: "locked", 4006: "full" }[e.code];
-      if (why) { done = true; shut = why; others.clear(); fire(); onState(why); return; }
+      if (why && !(key && why === "full")) { done = true; shut = why; others.clear(); fire(); onState(why); return; }  // the TV is no seat: tried again
       if (++misses > 12) { done = true; shut = "gone"; fire(); onState("gone"); return; }
       onState("reconnecting");
       setTimeout(open, backoff);
@@ -951,7 +957,7 @@ function clientId() {
 
 // ---------- the TV: holds the game ----------
 function TV(root, client, opt) {
-  const T = { mode: "lobby", chosen: ORDER.find((id) => ready(GAMES[id])) || "trivia", game: null, S: null, step: 0, seats: [], peers: [], key: "", sure: "", told: {}, mood: "", rx: {}, joined: 0 };
+  const T = { mode: "lobby", chosen: ORDER.find((id) => ready(GAMES[id])) || "trivia", game: null, S: null, step: 0, seats: [], peers: [], key: "", sure: "", told: {}, mood: "", rx: {}, rxAt: {}, joined: 0 };
   const players = () => T.peers.filter((p) => !(p.isMe && p.sameTab) && !p.wait && p.presence && p.presence.r === "p" && typeof p.presence.n === "string")
     .sort((a, b) => (Number(a.presence.t) || 0) - (Number(b.presence.t) || 0) || (a.peer < b.peer ? -1 : 1));
   const peerOf = (i) => (T.seats[i] ? T.peers.find((x) => x.peer === T.seats[i].peer) : null);
@@ -987,16 +993,19 @@ function TV(root, client, opt) {
     go(g.start(ctx()));
   }
   function check() { if (T.mode !== "game") return; const c = ctx(); const S2 = T.game.collect(T.S, c.A, c); if (S2) go(S2); }
-  client.onPeers((ch) => { T.peers = ch.peers || []; check(); whisper(); reactions(); draw(); }, (e) => { root.replaceChildren(h("div", { class: "note" }, `The room closed (${e && e.code}).`)); });
+  let drawing = false;  // one draw a frame, however many phones moved (a dial sends often)
+  const soon = () => { if (drawing) return; drawing = true; (typeof requestAnimationFrame === "function" ? requestAnimationFrame : setTimeout)(() => { drawing = false; draw(); }); };
+  client.onPeers((ch) => { T.peers = ch.peers || []; check(); whisper(); reactions(); soon(); }, (e) => { root.replaceChildren(h("div", { class: "note" }, `The room closed (${e && e.code}).`)); });
   // a phone's reaction (one of REACTS, a count that moves) floats up the TV, with its name
   function reactions() {
     if (!opt.fx) return;
     for (const p of T.peers) {
       const rx = p.presence && p.presence.rx;
       if (!rx || typeof rx.n !== "number" || !Number.isInteger(rx.e) || !REACTS[rx.e]) continue;
-      const seen = T.rx[p.peer];
+      const seen = T.rx[p.peer], now = Date.now();
       T.rx[p.peer] = rx.n;
-      if (seen == null || rx.n <= seen) continue;
+      if (seen == null || rx.n <= seen || now - (T.rxAt[p.peer] || 0) < 500) continue;
+      T.rxAt[p.peer] = now;
       const el = h("span", { class: "rxf", style: `left:${8 + int(84)}%` }, REACTS[rx.e], h("small", {}, clip(p.presence.n, 16)));
       opt.fx.append(el);
       setTimeout(() => el.remove(), 2600);
@@ -1111,7 +1120,10 @@ function Phone(root, client, name) {
       me: client.secret && client.secret.gm === pub.gm ? client.secret : null,
       mine: () => (P.myA && P.myA.s === pub.s ? P.myA : null),
       answer(fields, extra) { const a = Object.assign({ s: pub.s }, fields); P.myA = a; client.presence(Object.assign({ a }, extra || {})).catch(warn); draw(true); },
-      live(fields) { client.presence({ a: Object.assign({ s: pub.s }, fields) }).catch(() => {}); },
+      live(fields) {  // as it moves (a dial): about eight a second, its last place always sent
+        P.live = Object.assign({ s: pub.s }, fields);
+        if (!P.liveT) P.liveT = setTimeout(() => { P.liveT = null; client.presence({ a: P.live }).catch(() => {}); }, 120);
+      },
       pres(i) { const s = pub.seats[i], p = s && P.peers.find((x) => x.peer === s.peer); return (p && p.presence) || {}; },
       draft(id, el) { const k = pub.s + ":" + id; if (P.drafts[k] != null) el.value = P.drafts[k]; el.addEventListener("input", () => { P.drafts[k] = el.value; }); return el; },
     };

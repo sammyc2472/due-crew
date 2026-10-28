@@ -20,7 +20,7 @@
 
 import { DurableObject } from "cloudflare:workers";
 import { authenticate } from "./auth";
-import { limitOrThrow } from "./limits";
+import { hit, limitOrThrow, peek } from "./limits";
 import { isAdmin } from "./notices";
 import { Env, HttpError, clientIp, json, newToken, sha256Hex, timingSafeEqual } from "./util";
 
@@ -30,7 +30,7 @@ import { Env, HttpError, clientIp, json, newToken, sha256Hex, timingSafeEqual } 
 export const ADMINS_ONLY = true;
 export const TABLE_HOURS = 4;
 export const HOST_GONE_MIN = 15;
-export const SEATS = 12;            // sat down at once, the TV's included: eight players, and room to reconnect
+export const SEATS = 12;            // phones sat down at once (the TV isn't one): eight players, and room to reconnect
 export const DOOR = 6;              // waiting at the door at once
 export const PRESENCE_MAX = 4096;   // one connection's presence, as JSON
 export const DOORS = ["ask", "crew", "open"] as const;
@@ -41,14 +41,16 @@ const MSG_MAX = 6000;
 const RATE = 30;                    // messages a second, a connection (a dial being turned)
 const HOST_RATE = 120;              // the host's: a presence and a whisper a seat, each step
 const TABLES_PER_HOUR = 10;         // tables one person opens
-const JOINS_PER_HOUR = 200;         // connections and checks from one address
+const JOINS_PER_HOUR = 200;         // connections and checks from one network, to one table (its TV's aside)
+const PROBES_PER_HOUR = 60;         // codes tried from one network that aren't a table
+export const DOOR_PER_NET = 3;      // waiting at the door from one network at once
 const REMEMBER = 64;                // who sat down, who was turned away: the newest
 const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";  // no I or O: read off a TV across a room
 const CREW = "x-dc-crew";           // set by connect() alone (it drops a client's own): the crew's name
 
 type Opened = { key: string; until: number; uid: string };
 type Room = { door: Door; locked: boolean; seated: string[]; away: string[] };
-type Conn = { peer: string; host: boolean; ok: boolean; crew: string | null; p: Record<string, unknown>; hits: number[] };
+type Conn = { peer: string; host: boolean; ok: boolean; crew: string | null; net: string; p: Record<string, unknown>; hits: number[] };
 
 const tableCode = () => Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) => LETTERS[b % LETTERS.length]).join("");
 const KEY_RE = /^[A-Za-z_][A-Za-z0-9_]{0,31}$/;
@@ -109,7 +111,14 @@ export class Table extends DurableObject<Env> {
     return { open: ok, uid: ok ? open!.uid : "", door: (await this.rules()).door, full: this.count(true) >= SEATS };
   }
 
-  private count(ok: boolean) { let n = 0; for (const c of this.socks.values()) if (c.ok === ok) n++; return n; }
+  /** Phones sat down (ok) or waiting; the TV is no seat, so nobody can fill its table on it. */
+  private count(ok: boolean) { let n = 0; for (const c of this.socks.values()) if (c.ok === ok && !c.host) n++; return n; }
+
+  /** For the API: whether k is this table's host key (its TV doesn't count against a network's joins). */
+  async isHost(k: string): Promise<boolean> {
+    const open = await this.ctx.storage.get<Opened>("open");
+    return !!open && open.until > Date.now() && !!k && timingSafeEqual(await sha256Hex(`table:${k}`), open.key);
+  }
 
   async fetch(req: Request): Promise<Response> {
     const open = await this.ctx.storage.get<Opened>("open");
@@ -139,14 +148,17 @@ export class Table extends DurableObject<Env> {
       }
     }
     const ok = host || crew !== null || back || room.door === "open";
-    if (!shut && this.count(ok) >= (ok ? SEATS : DOOR)) shut = SHUT.full;
+    const net = netOf(req);
+    if (!shut && !host && this.count(ok) >= (ok ? SEATS : DOOR)) shut = SHUT.full;
+    // one network can't fill the door (a script with many ids is still one network)
+    if (!shut && !ok && [...this.socks.values()].filter((c) => !c.ok && c.net === net).length >= DOOR_PER_NET) shut = SHUT.full;
     const [client, server] = Object.values(new WebSocketPair());
     server.accept();
     if (shut) {
       this.closeOne(server, shut, "no");
       return new Response(null, { status: 101, webSocket: client });
     }
-    const me: Conn = { peer, host, ok, crew, p: ok ? carried : atDoor(carried), hits: [] };
+    const me: Conn = { peer, host, ok, crew, net, p: ok ? carried : atDoor(carried), hits: [] };
     this.socks.set(server, me);
     server.addEventListener("message", (e) => { void this.message(server, e.data); });
     server.addEventListener("close", () => this.drop(server));
@@ -287,19 +299,44 @@ export async function create(uid: string, env: Env): Promise<Response> {
 /** GET /table/{code}: before a socket, is there a table, a seat, its door,
  *  and is this visitor the host's crew (so they go straight in). */
 export async function check(req: Request, env: Env, [code]: string[]): Promise<Response> {
-  await limitOrThrow(env, `tablews:${clientIp(req)}`, JOINS_PER_HOUR, 3600);
-  const t = await env.TABLES.get(env.TABLES.idFromName(code.toUpperCase())).info();
-  if (!t.open) throw new HttpError(404, "no_table");
+  const t = await tableFor(req, env, code);
+  await limitOrThrow(env, `tablews:${netOf(req)}:${code.toUpperCase()}`, JOINS_PER_HOUR, 3600);
   return json({ open: true, full: t.full, door: t.door, crew: (await crewName(req, env, t.uid)) !== null });
+}
+
+/** The table at a code, or a 404; a network that tries many codes that
+ *  aren't one is told to slow down before it reaches another (counted
+ *  only on a miss, so nobody's party writes a row a try). */
+async function tableFor(req: Request, env: Env, code: string) {
+  const probes = `tableprobe:${netOf(req)}`;
+  if ((await peek(env, probes, 3600)) >= PROBES_PER_HOUR) throw new HttpError(429, "slow_down", { retryAfter: 3600 });
+  const stub = env.TABLES.get(env.TABLES.idFromName(code.toUpperCase()));
+  const t = await stub.info();
+  if (!t.open) {
+    await hit(env, probes, PROBES_PER_HOUR, 3600);
+    throw new HttpError(404, "no_table");
+  }
+  return Object.assign(t, { stub });
+}
+
+/** One network: an IPv4 address, or an IPv6 /64 (one home's, its
+ *  addresses rotated at will). */
+export function netOf(req: Request): string {
+  const ip = clientIp(req);
+  if (!ip.includes(":")) return ip;
+  const [head, tail = ""] = ip.split("::");
+  const h = head ? head.split(":") : [], t = tail ? tail.split(":") : [];
+  const all = ip.includes("::") ? [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill("0"), ...t] : h;
+  return all.slice(0, 4).map((x) => x.toLowerCase().replace(/^0+(?=.)/, "")).join(":") + "::/64";
 }
 
 /** GET /table/{code}/ws: a seat at a table, from a page of ours. */
 export async function connect(req: Request, env: Env, [code]: string[]): Promise<Response> {
   if ((req.headers.get("upgrade") || "").toLowerCase() !== "websocket") throw new HttpError(426, "websocket");
-  await limitOrThrow(env, `tablews:${clientIp(req)}`, JOINS_PER_HOUR, 3600);
-  const stub = env.TABLES.get(env.TABLES.idFromName(code.toUpperCase()));
-  const t = await stub.info();
-  if (!t.open) throw new HttpError(404, "no_table");
+  const t = await tableFor(req, env, code), stub = t.stub;
+  const k = new URL(req.url).searchParams.get("k") || "";
+  // the party's phones share their network's joins to this table; its TV doesn't
+  if (!(k && (await stub.isHost(k)))) await limitOrThrow(env, `tablews:${netOf(req)}:${code.toUpperCase()}`, JOINS_PER_HOUR, 3600);
   const headers = new Headers(req.headers);
   headers.delete(CREW);  // only this says who's crew
   const crew = await crewName(req, env, t.uid);
