@@ -28,9 +28,12 @@ add-on.
   plain JS, no framework: sign-in, plans, the builder). Its Worker
   (`site/src/index.ts`) sends `/api/*` to the API by service binding, so
   the site's session is a same-site HttpOnly cookie, and draws a plan
-  link's preview (`site/src/og.ts`). Game night (3.9.5) is the site's
-  alone: `/table` and `/t/CODE`, `public/table.*`, its tables a Durable
-  Object on the API (`worker/src/table.ts`).
+  link's preview (`site/src/og.ts`). Game night (3.9.5): the TV is a
+  window of Anki's (`gamenight_flow.py`, `ui/game_night_window.py`,
+  `ui/game_night_tv.py`) running the site's `/t/CODE#anki` page
+  (`public/table.*`) on a pack of your own cards (`gamenight.py`); phones
+  join at `/t/CODE`; its tables a Durable Object on the API
+  (`worker/src/table.ts`).
 - `README.md` — from the tagline down, doubles verbatim as the AnkiWeb
   listing description; keep them in sync when it changes. The logo block
   above the tagline is GitHub-only (AnkiWeb shows its own title).
@@ -111,7 +114,10 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   conditions, one statement; 20 squads a person (`squads.SQUADS_MAX`).
 - Card text never leaves the computer: flags, asks, knows, plan picks,
   plan tags and plan squad questions carry a note guid and card number, and
-  each reader's Anki reads its own copy.
+  each reader's Anki reads its own copy. The one exception is game night
+  (3.9.5, Sam's yes): Rounds' black card, hands and plays, and Links'
+  board when a scope's topics run short, pass through a table to phones in
+  the room, never kept; Trivia's words stay on the TV (phones get shapes).
 - Settings that belong to a person (`account.ACCOUNT_KEYS`) live on the
   server; an install pulls before it uploads (`account.ensure()`). Since
   3.8.1 a save names the rev it started from; one made over an older rev
@@ -139,7 +145,7 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   3.9.2: Reviews ahead, its track record and the pause it asks for, and
   the leeches view (plans.json: `new_off`, `ahead_trust`, `ahead_line_x`,
   `leech_out`); my exam's scope rides my settings (`exam_last`, `exam_since`).
-  3.9.5: How you study.
+  3.9.5: How you study; game night's saved scopes (`game_night.json`).
   Pip's closet is mine (an account key only I read); what my Pip has on
   rides with my accent to mutual friends, as names. A plan's squad (its team on the server) shares only
   that I showed up, my questions and answers, and bingo stamps; never my
@@ -207,6 +213,8 @@ same commit, each with its test:
   (Read it's "To pick in Anki:" line)
 - `planner/prompts.py` ↔ `Prompts` in builder.js (round five: Plan the
   dates and Tag by objective, the prompts for your own AI; checked in node)
+- `gamenight.NEEDS` ↔ `NEEDS` in `site/public/table.js` (what each game
+  needs from tonight's pack, 3.9.5; the suite checks)
 - the Worker ↔ `tests/fakes.FakeWorker` (the suite's server)
 
 ## Where things live
@@ -222,7 +230,7 @@ same commit, each with its test:
 | Who knows this, asks, tips (3.9.0: the day's first sync asks about the cards due today too, so a first miss shows it; with Pip on, the knower's Pip peeks in from the corner, and a tip's tipper's; a tip's, an ask's or a plan note's words fold till Show, so a one-by-one card isn't given away) | `cards.py`, `together.py` | `cards.ts` |
 | Study rooms (3.9.1: room sounds, a speaker on the chip: brown noise (made in the top bar's page), rain, fire, waves (CC0 recordings, seamless loops, `sounds/` and its CREDITS.md, cut by `tools/cut_sound.sh`); each person their own pick, this computer's config, never sent; the speaker says "Sound" or the sound's name; Settings › Room sounds takes it all away) | `rooms.py` (`_sound_files`), `room_model.py` (`sound_pick`/`sound_state`/`sound_files`/`sound_js`, the chip's picker), `sounds.js` | rides my week (the sound never does) |
 | The Fifteen (3.8.1): ▶ Fifteen? in the top bar, the nudge, the question at its end, Take five / Another now / Stop | `room_model.make_fifteen`/`fifteen_next`, `rooms.start_fifteen`/`fifteen_answer` | studying now only (never a room on my week) |
-| Pip (3.8.1, Block; called Sev until 3.8.2, and still `sev` in code: sev.py, the `sev*` keys, `.sv`, sev.js's `Sev`): by the logo for a moment, in a fifteen's chip, question and break, the nudge, the session's line; hopping across the week picture card; a study room's seats, each crewmate's in their accent; waving in Welcome back and on the signed-out card; hopping on a crewmate's big-streak banner (not on crew rows: Sam's no); never in the plan windows (round five, Sam's pick). Each place has its mix of moves (`sev.MOVES`), never the same twice in a row. 3.9.1: its loops play about twelve seconds and rest (`--sv-on`), pointing plays them on; the break's breathing goes on; the fridge's are still till pointed at | `sev.py` (one drawing; the widgets get its markup, the week card and Welcome back `sev.still`; `pick`/`nth` the variety), `rooms.board_sev`/`pick`/`milestone_sevs`/`signed_out_sev`, `sharecard.hops`, `room_model.seats`/`vary_seed`, `ui.sev_label` | never sent; cards.js keeps a copy of `sev.still` (the suite checks it) |
+| Pip (3.8.1, Block; called Sev until 3.8.2, and still `sev` in code: sev.py, the `sev*` keys, `.sv`, sev.js's `Sev`): by the logo for a moment, in a fifteen's chip, question and break, the nudge, the session's line; hopping across the week picture card; a study room's seats, each crewmate's in their accent; waving in Welcome back and on the signed-out card; hopping on a crewmate's big-streak banner (not on crew rows: Sam's no); never in the plan windows (round five, Sam's pick); game night's TV corner, phones and lobby seats (3.9.5, `sev.GAME_PLACES`, the site kit's `stage`). Each place has its mix of moves (`sev.MOVES`), never the same twice in a row. 3.9.1: its loops play about twelve seconds and rest (`--sv-on`), pointing plays them on; the break's breathing goes on; the fridge's are still till pointed at | `sev.py` (one drawing; the widgets get its markup, the week card and Welcome back `sev.still`; `pick`/`nth` the variety), `rooms.board_sev`/`pick`/`milestone_sevs`/`signed_out_sev`, `sharecard.hops`, `room_model.seats`/`vary_seed`, `ui.sev_label` | never sent; cards.js keeps a copy of `sev.still` (the suite checks it) |
 | Pip's closet (3.8.2): 61 things earned by showing up, coming back, together, plans, card care, seasons, secrets; one per place, a costume over the look; in place of the board (Yours by place, To earn by how); each crew row's, profile card's and (3.8.21) squadmate's Pip in the emoji's place (3.8.22: a plan card's squad line too, by `who` on `/board`'s `teams`; the review chip, a squadmate's card, Settings › You, bingo stamps; the site's account page and home feed, `pipFor`; the Friends dialog is names alone) | `closet.py` (pure: things, wear/clean/shown, facts from days and hours; 3.8.22: `halloween`/`spooky`), `closet_art.py` (the drawings), `closet_flow.py` (facts, tallies in wrap.json, a year of them for Wrapped, earned, worn, `halloween_view`), `board.closet_html`/`closet_line`/`row_sev`/`card_sev`/`squad_pip`/`halloween_html` | account keys `sev_look`, `sev_closet`; a mutual friend's look on /board (`lookOf` in `board.ts`) |
 | Plans (follow, morning, week, load; You › Plans: the plan's card, seven small days, a day's click opening its assignments under them, round five pick A; two or more plans one at a time, their names a switch, pick 3 (`plan_pick`); a date's details on its name in Today and Upcoming) | `plans.py`, `schedule.py`, `plan_flow.py`, `board._plan_card_html`/`_plan_switch`/`_week_html`/`_day_unit`/`_date_more` | `plans.ts`; `builder.js`, app.js |
 | Your plans (3.9.3: the builder in Anki; round five: Plan · Insights · Settings for authors and followers, changes waiting to be sent), New plan, QBank QIDs (paste the misses: Unsuspend, or Study now into Due Crew › QBank cards; this paste only), the AI hooks and Your AI app | `planner/` (`window.py`, `plan_tab.py`, `date_panel.py`, `deck_panel.py`, `shape.py`, `send.py`, `insights_tab.py`, `settings_tab.py`, `mine_tab.py`, `new_plan.py`, `text_tab.py`, `history_tab.py`, `day_notes.py`, `widgets.py`; pure: `ops.py`, `draft.py`, `view.py`, `insights.py`, `prompts.py`, `ai.py`, `build.py`, `edits.py`, `text.py`; `mcp.py`, `mcp_host.py`, `mcp_dialog.py`; `flow.py`) | routes the builder uses; `builder.js` the twin |
@@ -247,7 +255,7 @@ same commit, each with its test:
 | A follower's day (3.8.1): Welcome back, what Hold back keeps, Study a date or a quiz | `plan_flow.welcome_back`/`show_held`/`study_date`/`study_quiz`, `plans.quiz`, `ui/away_dialog.py`, `ui/held_dialog.py` | never sent (Push my dates back is the follow's shift) |
 | The builder's day's work and suggestions (3.8.1) | | `Work`, `Suggest` in builder.js |
 | Previews of a plan or invite link | | `site/src/og.ts` |
-| Game night (3.9.5): duecrew.com/table, six party games, a TV and phones; the door (the host's crew straight in, anyone else waits till let in; crew only, open, lock, turn away); while Sam tests it every game starts with one player (`FEW` in table.js) and only an admin opens a table or has /table (`ADMINS_ONLY` in table.ts, `TABLE_ADMINS_ONLY` in site/src/index.ts; join links are anyone's): set all three back before it goes wider | | `site/public/table.js` (engine, games), `table-packs.js`, `table.css`, `table.html`; `worker/src/table.ts` (a Durable Object a table, nothing kept); `test/table.test.ts`, `test_game_night_one_player_v395` |
+| Game night (3.9.5): six party games on your own cards (Trivia, Rounds, Links as two teams, Imposter, Draw it, Somewhere between), the TV a window of Anki's, phones at duecrew.com/t/CODE; Play from: this week's misses, a plan's week, saved or custom scopes; each seat whispered its own part; the door (the host's crew straight in, anyone else waits till let in; crew only, open, lock, turn away); Pip and reactions; while Sam tests it every game starts with one player (`FEW` in table.js), only an admin opens a table or has /table (`ADMINS_ONLY` in table.ts, `TABLE_ADMINS_ONLY` in site/src/index.ts) and the menu shows for `gamenight_flow.TESTERS`: set all four back before it goes wider | `gamenight.py` (pure: scope search, the pack), `gamenight_flow.py` (sources, scopes, the request, the TV), `ui/game_night_window.py`, `ui/game_night_tv.py`; `test_game_night_from_your_cards_v395` | `site/public/table.js` (engine, games), `table.css`, `table.html`, `sev.js`'s `stage`; `worker/src/table.ts` (a Durable Object a table, whispers, nothing kept); `test/table.test.ts`, `test_game_night_one_player_v395` |
 
 ## Releasing
 

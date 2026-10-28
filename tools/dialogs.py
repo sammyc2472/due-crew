@@ -690,10 +690,15 @@ def main(out):
         if len(subs) != 1:
             raise RuntimeError(f"tools menu: {len(subs)} Due Crew submenus")
         items = [a.text() or "—" for a in subs[0].actions()]
-        want = ["Study what’s next", "—", "Friends…", "Squads…", "Plans", "—", "Settings…", "Pip’s closet…", "Your year…",
+        want = ["Study what’s next", "—", "Friends…", "Squads…", "Game night…", "Plans", "—", "Settings…", "Pip’s closet…", "Your year…",
                 "Show on the Decks screen", "Send feedback…"]
         if items != want:
             raise RuntimeError(f"tools menu: {items}")
+        # 3.9.5: Game night… shows for its testers alone, as the menu opens
+        acts = {a.text(): a for a in subs[0].actions()}
+        subs[0].aboutToShow.emit()
+        if acts["Game night…"].isVisible():
+            raise RuntimeError("tools menu: Game night… shows for someone who isn't a tester")
         # 3.9.3: Plans ▸, everything about plans, the plan windows among it
         plans = [a.menu() for a in subs[0].actions() if a.menu()]
         got = [a.text() or "—" for a in plans[0].actions()] if len(plans) == 1 else []
@@ -803,6 +808,65 @@ def main(out):
                     if img.pixelColor(int(x + z / 2), int(y + z * 38 / 80)).name() != color:  # its forehead, in the accent
                         raise RuntimeError(f"share card: Pip not drawn on the {name} card ({size}, {look})")
                     img.save(os.path.join(out, f"share-card-{name}-sev-{size}-{look}.png"))
+
+    def game_night():
+        # 3.9.5: Tools › Due Crew › Game night…: Play from, then Custom's scope builder
+        from due_crew.ui.game_night_window import GameNightWindow
+        asked, started = [], []
+
+        class Ops:
+            sources = staticmethod(lambda: [{"key": "misses", "label": "This week's misses", "n": 86},
+                                            {"key": "plan:p1", "label": "Block 2, this week", "n": 212},
+                                            {"key": "saved:Renal misses", "label": "Renal misses", "n": 41}])
+            tree = staticmethod(lambda: [("deck:Big Step 1", "Big Step 1", 0), ("deck:Big Step 1::Cardio", "Cardio", 1),
+                                         ("tag:Step1", "Step1", 0), ("tag:Step1::Renal", "Renal", 1), ("tag:Step1::Renal::Pharm", "Pharm", 2),
+                                         ("tag:Step1::Renal::Heart_failure", "Heart_failure", 2)])
+            plans = staticmethod(lambda: [("p1", "Block 2")])
+            saved = staticmethod(lambda: [])
+
+            @staticmethod
+            def preview(scope):
+                asked.append(scope)
+                return {"n": 64, "search": '"tag:Step1::Renal" -is:new rated:7:1', "fit": {"trivia": 52, "rounds": 40, "links": 31, "imposter": 3, "draw": 31, "between": 31},
+                        "samples": [{"q": "Loop diuretics block the ____ cotransporter", "opts": ["Na-Cl", "Na-K-2Cl", "ENaC", "Na-H"], "ans": 1}]}
+
+            @staticmethod
+            def save(name, scope):
+                return name or "My scope"
+
+            @staticmethod
+            def start(key, scope, label, bots, done):
+                started.append((key, label, bots))
+                done("Game night isn't open for this account yet." if not bots else None)
+
+        dlg = GameNightWindow(None, Ops())
+        if heading_of(dlg) != "Game night" or not dlg.radios[0].isChecked() or dlg.custom.isVisible():
+            raise RuntimeError("game night: opens on the first with cards, Custom folded")
+        shoot(dlg, os.path.join(out, "game-night.png"))
+        dlg = GameNightWindow(None, Ops())
+        dlg.custom_r.setChecked(True)
+        top = dlg.tree.topLevelItem(1).child(0).child(0)  # Tags › Step1 › Renal
+        dlg.tree.itemClicked.emit(top, 0)
+        dlg.tree.itemClicked.emit(top.child(0), 0)
+        dlg.tree.itemClicked.emit(top.child(0), 0)
+        dlg.missed.setChecked(True)
+        dlg.refresh()
+        sc = dlg.scope()
+        if sc["in"] != ["tag:Step1::Renal"] or sc["out"] != ["tag:Step1::Renal::Pharm"] or sc["missed"] != 7 or not sc["seen"]:
+            raise RuntimeError(f"game night: the scope {sc}")
+        if "64 cards" not in dlg.count.text() or "Trivia: 52" not in dlg.fit.text() or "→ Na-K-2Cl" not in dlg.samples.text():
+            raise RuntimeError("game night: the count, the fit, a sample")
+        if dlg.samples.textFormat() != QtCore.Qt.TextFormat.PlainText:
+            raise RuntimeError("game night: a card's words are plain text")
+        shoot(dlg, os.path.join(out, "game-night-custom.png"))
+        dlg = GameNightWindow(None, Ops())
+        dlg.show()
+        dlg.tv_btn.click()
+        if started[-1] != ("misses", "This week's misses", False) or "isn't open" not in dlg.said.text() or not dlg.tv_btn.isEnabled():
+            raise RuntimeError(f"game night: a refusal is said, and it can try again {started}")
+        dlg.bots_btn.click()
+        if started[-1][2] is not True or dlg.isVisible():
+            raise RuntimeError("game night: bots open and the window goes")
 
     def why():
         # 3.8.0, pick 9: Browse › why isn't it showing?, a few reasons and their fixes
@@ -1993,7 +2057,7 @@ def main(out):
                          ("squads", squads), ("auth", auth),
                          ("welcome", welcome), ("logo", logo), ("room", room), ("emoji", emoji),
                          ("report", report), ("plans", plans), ("schedule", schedule), ("map card", map_card),
-                         ("share card", share_card), ("why", why), ("plan tags", plan_tags), ("open cards", open_cards),
+                         ("share card", share_card), ("why", why), ("game night", game_night), ("plan tags", plan_tags), ("open cards", open_cards),
                          ("remark", remark), ("held back", held), ("welcome back", away), ("planner", planner),
                          ("ai app", ai_app)):
         if os.environ.get("DC_ONLY") and label not in os.environ["DC_ONLY"].split(","):

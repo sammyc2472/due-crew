@@ -32,9 +32,11 @@ def kit_js():
     k = sev.site_kit()
     j = lambda v: json.dumps(v, ensure_ascii=True)  # noqa: E731
     things = "".join(f"      {j(key)}: {j(t)},\n" for key, t in k["things"].items())
+    stage = "".join(f"      {j(key)}: {j(t)},\n" for key, t in k["stage"].items())
     return (f"  const KIT = {{\n    row: {j(k['row'])},\n    held: {j(k['held'])},\n"
             f"    slots: {j(k['slots'])}, costume: {j(k['costume'])}, max: {j(k['max'])},\n"
-            f"    things: {{\n{things}    }},\n  }};\n")
+            f"    things: {{\n{things}    }},\n"
+            f"    places: {j(k['places'])},\n    stage: {{\n{stage}    }},\n    css: {j(k['css'])},\n  }};\n")
 
 
 def render(text):

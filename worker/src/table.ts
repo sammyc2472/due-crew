@@ -11,6 +11,8 @@
 // lock the table, so only who's sat down can come back; and turn someone
 // away for the night. Only the host hears the door, and only the host learns
 // who's crew (their name on the account). A phone at the door hears nothing.
+// The host whispers each seat its own part of a game (a hand, a topic, the
+// key): to that phone alone, never kept.
 //
 // Nothing goes to D1 but the rate limits, and nothing is kept: a table
 // closes after TABLE_HOURS, or once its host has been gone HOST_GONE_MIN.
@@ -37,6 +39,7 @@ export type Door = (typeof DOORS)[number];
 export const SHUT = { closed: 4000, replaced: 4001, anotherHost: 4002, away: 4003, crewOnly: 4004, locked: 4005, full: 4006 } as const;
 const MSG_MAX = 6000;
 const RATE = 30;                    // messages a second, a connection (a dial being turned)
+const HOST_RATE = 120;              // the host's: a presence and a whisper a seat, each step
 const TABLES_PER_HOUR = 10;         // tables one person opens
 const JOINS_PER_HOUR = 200;         // connections and checks from one address
 const REMEMBER = 64;                // who sat down, who was turned away: the newest
@@ -167,9 +170,9 @@ export class Table extends DurableObject<Env> {
     if (typeof data !== "string" || data.length > MSG_MAX) { this.socks.delete(ws); this.closeOne(ws, 1009, "too big"); this.gone(me); return; }
     const now = Date.now();
     me.hits = me.hits.filter((t) => t > now - 1000);
-    if (me.hits.length >= RATE) return;
+    if (me.hits.length >= (me.host ? HOST_RATE : RATE)) return;
     me.hits.push(now);
-    let m: { t?: unknown; p?: unknown; peer?: unknown; door?: unknown; on?: unknown };
+    let m: { t?: unknown; p?: unknown; peer?: unknown; to?: unknown; door?: unknown; on?: unknown };
     try { m = JSON.parse(data); } catch { return; }
     if (!m || typeof m !== "object") return;
     if (m.t === "p") {
@@ -178,7 +181,13 @@ export class Table extends DurableObject<Env> {
       this.tell(ws, me);
       return;
     }
-    if (!me.host) return;  // the door is the host's alone
+    if (!me.host) return;  // the door and whispers are the host's alone
+    if (m.t === "w") {
+      if (typeof m.to !== "string" || !PEER_RE.test(m.to) || !okPresence(m.p)) { this.send(ws, { t: "err", error: "bad_whisper" }); return; }
+      const t = JSON.stringify({ t: "w", p: m.p });
+      for (const [w, c] of this.socks) if (c.peer === m.to && c.ok && !c.host) this.raw(w, t);
+      return;
+    }
     const room = await this.rules();
     const peer = typeof m.peer === "string" && PEER_RE.test(m.peer) ? m.peer : "";
     if (m.t === "admit" && peer) {

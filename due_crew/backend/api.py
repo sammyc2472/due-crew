@@ -987,6 +987,17 @@ class ApiClient:
         token = data.get("token") if status == 200 else None
         return token if isinstance(token, str) and token else None
 
+    def open_table(self):
+        """3.9.5, game night: (status, {code, key}) for a new table, its key
+        what makes the TV the host. Sent once (a POST that may have landed
+        isn't sent again); the key is never printed."""
+        try:
+            return self._call("POST", "/table", retry=False)
+        except TransportError as e:
+            if e.status == 429:  # ten an hour: the window says so
+                return 429, {}
+            raise
+
     def peek_plan(self, code):
         """(plan, status) for a code, before following. 404: no such plan,
         or one I may not follow (a squad plan outside the squad)."""
