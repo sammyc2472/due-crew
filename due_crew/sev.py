@@ -327,6 +327,10 @@ ROW_SIZE = 30  # px: a crew row's Pip (board.row_sev), in its slot()
 BLANKS = ("%B%", "%F%", "%H%")  # where a look's back, front and held things go
 
 
+# 3.9.5: game night's places (site/public/table.js), each with its moves as here
+GAME_PLACES = ("idle", "hello", "peek", "ready", "focus", "cheer", "hop", "again")
+
+
 def site_kit():
     """A crew row's Pip for the site, as data. row: the still idle Pip in
     its slot, BLANKS where the look goes, its colours the page's (--sv-a and
@@ -335,15 +339,19 @@ def site_kit():
     then a costume), COSTUME and LOOK_MAX; things: each thing's place, the
     other places it takes, and its drawing (front, back). Filled in as
     closet.art fills them, it's slot(svg("idle", rest=True, look=look),
-    ROW_SIZE), to the byte."""
+    ROW_SIZE), to the byte. 3.9.5, game night: stage, each of GAME_PLACES'
+    moves drawn as move() draws it ("place:moment" its key); places, the
+    keys a place has, its own first; css, the motion sheet (CSS)."""
     from . import closet
     from .closet_art import ART
     held = _held_in(BLANKS[2], POSES["idle"]["arms"])
     row = slot(svg("idle", rest=True, worn=BLANKS), ROW_SIZE)
     if row.count(held) != 1 or any(row.count(b) != 1 for b in BLANKS):
         raise ValueError("site_kit: a blank isn't where the look goes")
+    places = {pl: [f"{pl}:{m}" for m in moves(pl)] for pl in GAME_PLACES}
+    stage = {k: move(k.split(":")[0], k.split(":")[1]) for ks in places.values() for k in ks}
     return {"row": row.replace(held, BLANKS[2]), "held": held, "slots": list(closet.SLOTS), "costume": closet.COSTUME,
-            "max": closet.LOOK_MAX,
+            "max": closet.LOOK_MAX, "places": places, "stage": stage, "css": CSS,
             "things": {t["k"]: [t["slot"], list(t.get("also") or ()), ART[t["k"]][0], ART[t["k"]][1]]
                        for t in closet.THINGS}}
 

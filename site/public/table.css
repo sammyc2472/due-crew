@@ -85,11 +85,11 @@ button.tile:hover { border-color: var(--w-acc); }
 .foot { border-top: 1px solid var(--w-line); padding-top: 12px; margin-top: 4px; }
 .tv :focus-visible, .phone :focus-visible, .phone-solo :focus-visible, .card :focus-visible, .mode:focus-visible, .back:focus-visible { outline: 2px solid var(--w-acc); outline-offset: 2px; }
 .ppl { display: flex; flex-wrap: wrap; gap: 6px; }
-.ppl span { font-size: 13px; border: 1px solid var(--w-line); border-radius: 99px; padding: 3px 11px; color: var(--w-ink2); }
-.ppl span.ok { border-color: var(--w-acc); color: var(--w-acc); font-weight: 700; }
-.ppl span.bad { border-color: var(--o4); color: var(--o4); font-weight: 700; }
-.ppl span i { font-style: normal; color: var(--w-mut); font-weight: 500; }
-.ppl.big span { font-size: 16px; padding: 6px 14px; }
+.ppl > span { font-size: 13px; border: 1px solid var(--w-line); border-radius: 99px; padding: 3px 11px; color: var(--w-ink2); }
+.ppl > span.ok { border-color: var(--w-acc); color: var(--w-acc); font-weight: 700; }
+.ppl > span.bad { border-color: var(--o4); color: var(--o4); font-weight: 700; }
+.ppl > span > i { font-style: normal; color: var(--w-mut); font-weight: 500; }
+.ppl.big > span { font-size: 16px; padding: 6px 14px; }
 .lobby { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
 @media (max-width: 720px) { .lobby { grid-template-columns: minmax(0, 1fr); } }
 .code { display: grid; gap: 6px; }
@@ -248,3 +248,91 @@ h1 { font-family: var(--display); font-size: clamp(34px, 6vw, 52px); letter-spac
 .sure .btn { font-size: 13.5px; padding: 7px 12px; }
 .seg button.lock { margin-left: 8px; }
 [hidden] { display: none !important; }
+
+/* Trivia on a phone: shapes, the words are on the TV */
+.shapes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.sh { font: inherit; aspect-ratio: 1 / .78; border-radius: 14px; border: 2px solid color-mix(in srgb, var(--oc) 50%, var(--w-line)); background: color-mix(in srgb, var(--oc) 14%, var(--w-bg)); display: grid; place-items: center; }
+button.sh { cursor: pointer; }
+.sh .shp, .sh .shp svg { width: 46px; height: 46px; }
+.sh .shp svg { fill: var(--oc); }
+.sh.mine { background: var(--oc); } .sh.mine .shp svg { fill: var(--w-bg); }
+.sh.right { box-shadow: 0 0 0 3px var(--oc); } .sh.dim { opacity: .35; }
+
+/* a game tonight's cards can't fill */
+.tile.thin { opacity: .5; cursor: default; }
+.tile.thin .np { color: var(--o3); }
+
+/* Links: two teams */
+:root { --tg: #2e7d32; --tg-bg: #dcefdc; --tp: #6a4fb3; --tp-bg: #e7e0f6; --tn: #e6e3d6; --tn-ink: #5d5a4c; --tx: #17345f; --tx-ink: #ffffff; }
+@media (prefers-color-scheme: dark) { :root { --tg: #7cc47f; --tg-bg: #263a27; --tp: #b9a2f2; --tp-bg: #322a45; --tn: #3a3a33; --tn-ink: #c9c6b6; --tx: #0f2547; --tx-ink: #dfe8ff; } }
+.head5 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1fr); gap: 10px; align-items: center; }
+.team5 { display: grid; gap: 2px; padding: 8px 12px; border-radius: 12px; }
+.team5.g { background: var(--tg-bg); color: var(--tg); } .team5.p { background: var(--tp-bg); color: var(--tp); text-align: right; }
+.team5 b { font-size: 22px; font-variant-numeric: tabular-nums; } .team5 small { color: inherit; font-size: 12px; }
+.turn5 { display: grid; gap: 3px; justify-items: center; text-align: center; }
+.turn5 b { font-size: 17px; } .turn5 b.g { color: var(--tg); } .turn5 b.p { color: var(--tp); }
+.clue5 { font-family: var(--mono); font-size: 13px; letter-spacing: .04em; text-transform: uppercase; }
+.grid5 { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; }
+.grid5.sm { gap: 4px; }
+.lt5 { font: inherit; border: 1.5px solid var(--w-line); background: var(--w-bg); color: var(--w-ink); border-radius: 9px; min-height: 58px; padding: 6px 4px; font-weight: 700; font-size: 14px; line-height: 1.2; display: grid; place-items: center; text-align: center; overflow-wrap: break-word; hyphens: auto; }
+.grid5.sm .lt5 { min-height: 44px; font-size: 10.5px; border-radius: 7px; padding: 3px 2px; overflow-wrap: anywhere; }
+button.lt5 { cursor: pointer; } button.lt5:hover { border-color: var(--w-edge); }
+.lt5.k-g { box-shadow: inset 0 -5px 0 var(--tg); } .lt5.k-p { box-shadow: inset 0 -5px 0 var(--tp); } .lt5.k-n { box-shadow: inset 0 -5px 0 var(--tn); } .lt5.k-x { box-shadow: inset 0 -5px 0 var(--tx); }
+.lt5.r-g { background: var(--tg); border-color: var(--tg); color: var(--w-bg); } .lt5.r-p { background: var(--tp); border-color: var(--tp); color: var(--w-bg); }
+.lt5.r-n { background: var(--tn); border-color: var(--tn); color: var(--tn-ink); } .lt5.r-x { background: var(--tx); border-color: var(--tx); color: var(--tx-ink); }
+.teams5 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.teams5 > div { border-radius: 12px; padding: 10px 12px; display: grid; gap: 4px; align-content: start; font-size: 15px; }
+.teams5 .g { background: var(--tg-bg); } .teams5 .p { background: var(--tp-bg); }
+.teams5 b { font-size: 12px; letter-spacing: .05em; text-transform: uppercase; } .teams5 .g b { color: var(--tg); } .teams5 .p b { color: var(--tp); }
+.who.team-g { color: var(--tg); } .who.team-p { color: var(--tp); }
+@media (max-width: 560px) { .head5 { grid-template-columns: 1fr 1fr; } .head5 .turn5 { grid-column: 1 / -1; grid-row: 1; } }
+
+/* Pip: in the TV's corner, in a phone's header, a seat's in its colour */
+.tv { position: relative; }
+.tv > .in { padding-bottom: 64px; }
+.pipc { position: absolute; right: 18px; bottom: 6px; width: 96px; height: 96px; pointer-events: none; }
+.sv-stage { position: relative; display: inline-block; flex: none; }
+.sv-stage > svg.sv { width: 100%; height: 100%; }
+.pipc .sv-stage { width: 96px !important; height: 96px !important; }
+.ph-top { align-items: center; }
+.ph-pip { width: 40px; height: 40px; flex: none; margin: -6px 4px -6px -4px; }
+.ph-pip .sv-stage { width: 40px !important; height: 40px !important; }
+.rsev { --sv-a: var(--rs-l); --sv-line: var(--w-line); --sv-mut: var(--w-mut); display: inline-flex; vertical-align: middle; margin-right: 6px; }
+@media (prefers-color-scheme: dark) { .rsev { --sv-a: var(--rs-d); } }
+.teams5 .mem { display: flex; align-items: center; }
+
+/* reactions: a phone's, floating up the TV with its name */
+.fx { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.rxf { position: absolute; bottom: 8px; font-size: 40px; line-height: 1; display: grid; justify-items: center; gap: 2px; opacity: 0; }
+.rxf small { font-size: 12px; font-weight: 700; color: var(--w-ink2); background: var(--w-bg); border-radius: 99px; padding: 1px 7px; }
+@media (prefers-reduced-motion: no-preference) {
+  .rxf { animation: rx-up 2.5s ease-out forwards; }
+  @keyframes rx-up { 0% { transform: translateY(0) scale(.6); opacity: 0; } 12% { opacity: 1; transform: translateY(-30px) scale(1.1); } 80% { opacity: 1; } 100% { transform: translateY(-360px) scale(1); opacity: 0; } }
+  .lt5.new { animation: lt-pop .5s ease-out; }
+  @keyframes lt-pop { 0% { transform: rotateX(90deg); } 60% { transform: rotateX(-12deg) scale(1.04); } 100% { transform: none; } }
+}
+@media (prefers-reduced-motion: reduce) { .rxf { opacity: 1; animation: rx-still 1.6s step-end forwards; } @keyframes rx-still { to { opacity: 0; } } }
+.rxbar { display: flex; justify-content: space-between; gap: 6px; border-top: 1px solid var(--w-line); padding-top: 8px; margin-top: auto; }
+.rxbar button { font-size: 22px; line-height: 1; background: var(--w-well); border: 1px solid var(--w-line); border-radius: 12px; padding: 8px 0; flex: 1; cursor: pointer; }
+.rxbar button:active { transform: scale(.92); }
+.phone .in, .phone-solo { grid-template-rows: auto 1fr auto; align-content: stretch; }
+.ph-body { align-self: start; display: grid; gap: 12px; min-width: 0; }
+.ph-top b { margin-right: auto; }
+.rxbar { margin-top: 0; }
+.team5.g.on { box-shadow: 0 0 0 2px var(--tg); } .team5.p.on { box-shadow: 0 0 0 2px var(--tp); }
+@media (prefers-reduced-motion: no-preference) { .team5.on { animation: t5-on .6s ease-out; } @keyframes t5-on { 0% { transform: scale(.97); } 100% { transform: none; } } }
+@media (max-width: 560px) { .lt5 { font-size: 11.5px; min-height: 48px; padding: 4px 2px; overflow-wrap: anywhere; } }
+/* Links on a phone: words as lists, never the board */
+/* the clue giver's key: what's left in its colour, what's found faded */
+.grid5.keyed .lt5 { min-height: 50px; padding: 3px 1px; box-shadow: none; }
+.grid5.keyed .lt5 > span { display: block; width: 100%; min-width: 0; font-size: 13px; line-height: 1.15; overflow-wrap: normal; hyphens: none; }
+.grid5.keyed .lt5 > span.cut { hyphens: manual; }
+.grid5.keyed .lt5 > span.fit { overflow-wrap: anywhere; }
+.grid5.keyed .lt5.k-g { background: var(--tg-bg); border-color: var(--tg); color: var(--tg); }
+.grid5.keyed .lt5.k-p { background: var(--tp-bg); border-color: var(--tp); color: var(--tp); }
+.grid5.keyed .lt5.k-n { background: var(--tn); border-color: var(--tn); color: var(--tn-ink); }
+.grid5.keyed .lt5.k-x { background: var(--tx); border-color: var(--tx); color: var(--tx-ink); }
+.grid5.keyed .lt5[class*=" r-"] { opacity: .35; }
+.words5 { display: flex; flex-wrap: wrap; gap: 6px; }
+.words5 span { padding: 6px 11px; border-radius: 99px; font-weight: 700; font-size: 15px; line-height: 1.25; }
+.words5 .w-g { background: var(--tg-bg); color: var(--tg); } .words5 .w-p { background: var(--tp-bg); color: var(--tp); }

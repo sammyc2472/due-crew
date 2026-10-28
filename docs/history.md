@@ -3664,7 +3664,7 @@ every release that changes how something works.
   tab). While Sam tests it, every game starts with one player (`FEW` in
   table.js; each game's own min stays on its tile, and the lobby says
   "Made for 3 or more"): alone, Rounds has no Attending, Imposter's vote
-  ends it, Links' clue giver taps too. Set `FEW` back before it goes wider.
+  ends it, Links' clue giver picks too. Set `FEW` back before it goes wider.
   Tests: `worker/test/table.test.ts` (the door, the presences, the seats,
   the alarm, through the site's binding) and the suite's
   `test_game_night_one_player_v395` (every game, one to eight players, in
@@ -3677,3 +3677,66 @@ every release that changes how something works.
   site/src/index.ts). A join link (`/t/CODE`) is anyone's, and reaches only
   a table an admin opened, through its door; it has no way round to
   hosting or bots. Set both false when it goes wider.
+- 3.9.5, game night from Anki, on your own cards (Sam: "I want to practice
+  using my actual stuff", then, on the mock "Your Cards at the Table",
+  "build it! … don't need to keep the sample questions", "the codenames
+  dupe should have two teams", "Yes you can do the CAH stuff", and before
+  testing "a UI review. Find ways to make it fun (pips included?)"). The TV
+  is now a window of Anki's: Tools › Due Crew › Game night… (shown for
+  `gamenight_flow.TESTERS` alone while Sam tests it) picks what to play
+  from, this week's misses, a followed plan's dates this week, a saved
+  scope, or Custom (`ui/game_night_window.py`: decks and tags in or out,
+  seen before, missed in N days, due in N days, missed N times, flags, Slow
+  but right, a plan's week, and the Anki search it comes to, editable; a
+  live count, what each game can fill, two sample questions; Save keeps it
+  in this profile's `game_night.json`, never sent). `gamenight.py` (pure)
+  makes the pack: a cloze asks its own number with one blank, a basic card
+  its front (a reversed one its back), short answers only; Trivia's three
+  wrong answers come from the cards nearest it in the tag tree, a drug for
+  a drug and a value for a value first; topic names read as people say
+  them ("Renal pharm" where two tags end alike); Imposter's twins are
+  sibling tags, the likeliest mix-ups first, each with a few answers to
+  tell them apart. One request opens the table (`api.open_table`), then
+  `ui/game_night_tv.py` loads duecrew.com/t/CODE#anki in a web view (one
+  off-the-record profile, the page deleted before it) and hands the page
+  the pack once it loads from the site; Try it with bots needs no table.
+  The sample packs (table-packs.js) and the site's own hosting are gone:
+  duecrew.com/table says to host from Anki, and joins. What reaches phones:
+  the host whispers each seat its own part (`{t: "w", to, p}`, the host's
+  alone, to a seated phone alone, never kept; the host may send 120 a
+  second): a Rounds hand, an Imposter topic, the Links key to the two clue
+  givers, Somewhere between's target to whoever has the dial, a Draw it
+  prompt. Trivia sends no card's words: phones show four shapes. Rounds is
+  the one place card words reach phones (Sam's yes): the black card, each
+  hand, what's played; Links' board is topic names, filled with short
+  answers when a scope has fewer than 25. Links is two teams, as on
+  horsepaste: Green and Purple pick sides on their phones (Even out,
+  Shuffle), each picks a clue giver; 9 for whoever goes first, 8, 7
+  nobody's, 1 Code blue; clues typed so the TV shows them; a timer if
+  wanted. The picking is on the TV (Sam: a 5×5 board on a phone was too
+  small to tap): the team taps a tile on the TV's board, End turn there
+  too; a phone shows its team, the clue, how many are left and the words
+  its team has found. The clue giver's phone keeps the key as a grid
+  (what's left in its colour, what's found faded), each tile's word as big
+  as fits whole, 13px down to 11, else broken once at a syllable
+  ("Spirono-lactone", `Links.soft`/`fit`). Alone (testing), the clue giver
+  picks on the TV too, and an empty team's turns pass. Somewhere
+  between's ends are fixed scales, its clue one of tonight's topics or the
+  clue giver's own. A game the pack can't fill is greyed in the lobby
+  ("Not enough cards for this one"; `gamenight.NEEDS` is table.js's NEEDS,
+  the suite checks). The fun (the UI review): Pip in the TV's corner and
+  on each phone, at game night's places (`sev.GAME_PLACES`, its moves
+  never twice running: waving people in, heads down on a question, a hop
+  when most of the table got it, a cheer for a cleared block or a found
+  board, back to it after a miss), drawn from the site kit's new `stage`
+  (sev.js, `tools/gen_sev_js.py`); each player a little Pip in a seat
+  colour in the lobby and the Links teams; a reaction bar on every phone
+  (🎉 😂 😮 👏 ❤️) that floats up the TV with the name; Links' tiles flip as
+  they're turned and the team whose turn it is lights up; Trivia counts a
+  run ("3 in a row"); Skip ahead only where it skips. Tests:
+  `test_game_night_from_your_cards_v395` (the pack),
+  `test_game_night_one_player_v395` (every game on a pack in node, one to
+  its most, and what every phone gets holds nobody's secret),
+  `worker/test/table.test.ts`'s whisper, `tools/dialogs.py`'s Game night
+  window; played end to end with the TV window itself in Qt's web engine
+  against a local duecrew.com and a phone in a browser.

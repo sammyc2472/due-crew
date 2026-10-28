@@ -201,6 +201,29 @@ describe("game night: a table", () => {
     await leave(tv, d, jo, lee);
   });
 
+  it("whispers a seat its own part, from the host alone, and never to the door", async () => {
+    const { code, key } = await opened();
+    const tv = await tvAt(code, key);
+    const ana = (await seat(code, cid("ana"))).s!, kai = (await seat(code, cid("kai"))).s!;
+    const a = await hello(ana), k = await hello(kai);
+    tell(tv, { t: "admit", peer: a.you });
+    await until(() => said(ana, (m) => m.t === "hi" && !m.wait), "Ana in");
+    tell(tv, { t: "w", to: a.you, p: { gm: "rounds", hand: ["Na-K-2Cl", "ATN"] } });
+    tell(tv, { t: "w", to: k.you, p: { gm: "rounds", hand: ["at the door"] } });
+    const w = await until(() => said(ana, (m) => m.t === "w"), "Ana's whisper");
+    expect(w).toEqual({ t: "w", p: { gm: "rounds", hand: ["Na-K-2Cl", "ATN"] } });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(kai.got.filter((m) => m.t === "w")).toEqual([]);  // not let in: nothing
+    expect(tv.got.filter((m) => m.t === "w")).toEqual([]);
+    // a phone can't whisper; a bad one gets an error
+    tell(ana, { t: "w", to: k.you, p: { gm: "x" } });
+    tell(tv, { t: "w", to: "nobody", p: { a: 1 } });
+    await until(() => said(tv, (m) => m.t === "err" && m.error === "bad_whisper"), "a bad whisper");
+    await new Promise((r) => setTimeout(r, 30));
+    expect(kai.got.filter((m) => m.t === "w")).toEqual([]);
+    await leave(tv, ana, kai);
+  });
+
   it("passes on only plain presences of a size", async () => {
     const { code, key } = await opened();
     const tv = await tvAt(code, key, "open");

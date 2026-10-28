@@ -46,7 +46,7 @@ from .stats import heatmap as cached_heatmap
 from .stats.decks import gather_shared_decks
 from .stats.queries import StatsQueries
 from .ui import copy_text
-from . import account, ahead_flow, bingo_flow, due_flow, plan_flow, rooms, sheets, together, two_buttons
+from . import account, ahead_flow, bingo_flow, due_flow, gamenight_flow, plan_flow, rooms, sheets, together, two_buttons
 from . import cards as crew_cards
 from .wrap import (_arrivals, _deck_deltas, _exam_eve_info, _mute_knocker, _save_wrap, _update_returns,
                    _update_wrap, _wrap_data, _wrap_info)
@@ -1742,6 +1742,7 @@ def _tools_menu():
     for item in (("Study what’s next", due_flow.study_today), None,
                  ("Friends…", open_friends),
                  ("Squads…", open_squads),
+                 ("Game night…", open_game_night),  # 3.9.5: shown for its testers alone, for now
                  "plans", None,  # 3.9.3: Plans ▸, the plan windows among its entries
                  ("Settings…", open_settings),
                  ("Pip’s closet…", lambda: open_closet()),
@@ -1763,12 +1764,19 @@ def _tools_menu():
             menu.aboutToShow.connect(lambda a=action: a.setChecked(bool(cfg().get("show_leaderboard", True))))
         if fn is due_flow.study_today:
             mw._due_crew_study = action
+        if fn is open_game_night:
+            menu.aboutToShow.connect(lambda a=action: a.setVisible(gamenight_flow.shown()))
     ask = QShortcut(QKeySequence(ASK_KEY), mw)
     ask.activated.connect(_ask_this_card)
     mw._due_crew_ask = ask
     mw.form.menuTools.addMenu(menu)
     mw._due_crew_menu = menu  # kept alive with the window
     _apply_keys()
+
+
+def open_game_night():
+    """3.9.5: Tools › Due Crew › Game night… (gamenight_flow)."""
+    gamenight_flow.open_window()
 
 
 def _ask_this_card():

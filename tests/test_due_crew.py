@@ -18640,14 +18640,20 @@ for (const id of ORDER) {
     const pres = seats.map(() => ({}));
     let step = 1, A = seats.map(() => null);
     const c = () => ({ N, seats, name: (i) => (seats[i] ? seats[i].n : "?"), A, pres: (i) => pres[i] || {}, here: () => true, bots: true });
-    let S, phases = [], err = "";
+    let S, phases = [], err = "", leaked = [];
     try {
       S = g.start(c());
+      if (id === "links") S = Links.play(S);  // the TV's Start, past the teams
       phases.push(S.ph);
       for (let k = 0; k < 3; k++) {
-        const x = g.pub(S, c());
+        const x = g.pub(S, c()), sec = g.secrets ? g.secrets(S, c()) : [];
+        const said = JSON.stringify(x);
+        if (id === "trivia" && S.qs[S.k] && said.includes(JSON.stringify(S.qs[S.k].q))) leaked.push("question");
+        if (id === "rounds" && S.hands.some((hd) => hd.some((w) => said.includes(JSON.stringify(w)) && !(x.flip || []).includes(w) && w !== x.ans))) leaked.push("hand");
+        if (id === "links" && S.ph !== "end" && x.key) leaked.push("key");
+        if (id === "imposter" && (said.includes(JSON.stringify(S.b)) && S.ph !== "last" && S.ph !== "end")) leaked.push("twin");
         A = seats.map((_, i) => {
-          const p = g.bot(x, i, { s: step, seat: i, seats, N, pres: (j) => pres[j] || {} });
+          const p = g.bot(x, i, { s: step, seat: i, seats, N, me: Object.assign({ gm: id }, sec[i] || {}), pres: (j) => pres[j] || {} });
           if (!p) return null;
           if (p.d) pres[i] = { d: Object.assign({ s: step }, p.d) };
           return p.a ? Object.assign({ s: step }, p.a) : null;
@@ -18659,51 +18665,135 @@ for (const id of ORDER) {
       }
       if (id === "rounds") phases.push(Rounds.next(S, c()).ph);
     } catch (e) { err = String(e && e.stack || e).slice(0, 300); }
-    out.push({ id, N, min: g.min, need: need(g), phases, err });
+    out.push({ id, N, min: g.min, need: need(g), phases, err, leaked });
   }
 }
-console.log(JSON.stringify(out));
+const soft = ["Spironolactone", "Nitroglycerin", "interstitial edema", "Arrhythmia", "magnesium", "Na-K-2Cl", "Asthma"].map((w) => Links.soft(w).replace(/\u00ad/g, "-"));
+console.log(JSON.stringify({ out, needs: NEEDS, soft }));
 """
+
+GAME_ROWS = [  # a collection's cards in gamenight's rows: (cid, ord, cloze, fields, tags)
+    (n + 1, 0, True, [t, ""], [tag]) for n, (tag, t) in enumerate(
+        [("Step1::Renal::Pharm", "Loop diuretics block the {{c1::Na-K-2Cl}} cotransporter"),
+         ("Step1::Renal::Pharm", "Thiazides block the {{c1::Na-Cl}} cotransporter in the DCT"),
+         ("Step1::Renal::Pharm", "{{c1::Spironolactone}} blocks aldosterone at the collecting duct"),
+         ("Step1::Renal::Pharm", "{{c1::Acetazolamide}} inhibits carbonic anhydrase"),
+         ("Step1::Renal::Nephritic", "RBC casts point to {{c1::nephritic syndrome}}"),
+         ("Step1::Renal::Nephritic", "Post-strep GN shows {{c1::low C3}}"),
+         ("Step1::Renal::Nephritic", "Anti-GBM disease: {{c1::Goodpasture}}"),
+         ("Step1::Renal::Nephrotic", "Nephrotic range: more than {{c1::3.5 g}} protein a day"),
+         ("Step1::Renal::Nephrotic", "Most common in kids: {{c1::minimal change disease}}"),
+         ("Step1::Renal::Nephrotic", "Apple-green birefringence: {{c1::amyloidosis}}"),
+         ("Step1::Cardio::Pharm", "{{c1::Digoxin}} inhibits the Na-K ATPase"),
+         ("Step1::Cardio::Pharm", "{{c1::Amiodarone}} can cause pulmonary fibrosis"),
+         ("Step1::Cardio::Pharm", "{{c1::Hydralazine}} can cause drug-induced lupus"),
+         ("Step1::Cardio::Arrhythmia", "Delta wave: {{c1::WPW}}"),
+         ("Step1::Cardio::Arrhythmia", "Torsades: give {{c1::magnesium}}"),
+         ("Step1::Cardio::Arrhythmia", "Irregularly irregular: {{c1::atrial fibrillation}}"),
+         ("Step1::Pulm::Asthma", "Curschmann spirals: {{c1::asthma}}"),
+         ("Step1::Pulm::Asthma", "Rescue inhaler: {{c1::albuterol}}"),
+         ("Step1::Pulm::COPD", "Pink puffer: {{c1::emphysema}}"),
+         ("Step1::Pulm::COPD", "Panacinar: {{c1::alpha-1 antitrypsin}}"),
+         ("Step1::Neuro::Pharm", "Absence seizures: {{c1::ethosuximide}}"),
+         ("Step1::Neuro::Pharm", "Gingival hyperplasia: {{c1::phenytoin}}"),
+         ("Step1::Neuro::Stroke", "Leg weakness: {{c1::ACA}} stroke"),
+         ("Step1::Neuro::Stroke", "Lacunar strokes: {{c1::hypertension}}")])]
+
+
+def test_game_night_from_your_cards_v395():
+    """3.9.5, game night from Anki: tonight's cards become the six games'
+    pack (gamenight.py, pure). A cloze asks its own number with one blank;
+    a basic card its front; the wrong answers come from the tag nearest it;
+    topic names read as people say them; Imposter's twins are the likeliest
+    mix-ups first; a custom scope is one Anki search."""
+    from due_crew import gamenight as G
+    check("game night: a scope is one Anki search, names read as themselves",
+          G.scope_search({"in": ["deck:Step 1", "tag:Step1::Heart_failure"], "out": ["tag:Step1::Renal::Pharm"], "seen": True, "missed": 7,
+                          "due": 3, "lapses": 3, "flags": [1, 3, 9]})
+          == '("deck:Step 1" OR "tag:Step1::Heart\\_failure") -"tag:Step1::Renal::Pharm" -is:new rated:7:1 prop:due<=3 prop:lapses>=3 (flag:1 OR flag:3)')
+    check("game night: the person's own search wins; a plan's cards go by number; nothing ticked is everything",
+          G.scope_search({"search": " tag:x ", "in": ["deck:A"]}) == "tag:x" and G.scope_search({"in": ["deck:A"]}, [5, 7]) == '"deck:A" cid:5,7'
+          and G.scope_search({}) == "deck:*" and G.scope_search({}, []) == "cid:0" and G.term("note:x") == "")
+    check("game night: a cloze asks its own number, the others shown; two pieces of one number aren't asked",
+          G.cloze("{{c1::Loop}} diuretics block {{c2::Na-K-2Cl}}", 2) == ("Loop diuretics block ____", "Na-K-2Cl", "Loop diuretics block Na-K-2Cl")
+          and G.cloze("{{c1::a}} and {{c1::b}}", 1) is None and G.cloze("{{c1::a::hint}}", 1)[1] == "a")
+    it = G.item((9, 1, False, ["Front <b>side</b>", "Back&nbsp;side<br>[sound:x.mp3]"], ["leech", "A::B::C_d"]))
+    check("game night: a reversed card asks its back; fields as plain text; leech and plan tags aren't where it's from",
+          it and it["q"] == "Back side" and it["a"] == "Front side" and it["tag"] == "A::B::C_d" and it["where"] == "B › C d", it)
+    check("game night: no question from a long answer, a picture alone, or an answer the question gives away",
+          G.item((1, 0, False, ["Q", "x" * 41], [])) is None and G.item((1, 0, False, ["<img src=a.png>", "A"], [])) is None
+          and G.item((1, 0, False, ["Same", "same"], [])) is None)
+    check("game night: a tag reads as people say it; two that end alike take their parent's name",
+          G.topic_name("01_Growth_Adaptations") == "Growth Adaptations" and G.topic_name("#Path_Book") == "Path Book" and G.topic_name("12") == ""
+          and G.names(["S::Renal::Pharm", "S::Neuro::Pharm", "S::Renal::Nephritic"]) == {"S::Renal::Pharm": "Renal pharm", "S::Neuro::Pharm": "Neuro pharm", "S::Renal::Nephritic": "Nephritic"})
+    pack = G.build(GAME_ROWS, "Block 2, this week", seed=3)
+    have, thin = G.fit(pack)
+    q = next(x for x in pack["qs"] if x["a"] == "Na-K-2Cl")
+    check("game night: every game can run from two dozen cards; Trivia's wrong answers come from the same tag first",
+          not thin and have["links"] >= 25 and len(q["opts"]) == 4 and q["opts"][q["ans"]] == "Na-K-2Cl"
+          and sum(o in ("Na-Cl", "Spironolactone", "Acetazolamide") for o in q["opts"]) == 3, (have, q))
+    check("game night: Imposter's first twins are the likeliest mix-up, and say what tells them apart",
+          {pack["twins"][0]["a"]["t"], pack["twins"][0]["b"]["t"]} == {"Nephritic", "Nephrotic"} and pack["twins"][0]["part"] == "Step1 › Renal"
+          and "low C3" in pack["twins"][0]["a"]["facts"] + pack["twins"][0]["b"]["facts"], pack["twins"][:2])
+    check("game night: a thin scope says which games it can't fill (three cards: no three wrong answers, no twins, no board)",
+          G.fit(G.build(GAME_ROWS[:3], seed=1))[1] == ["imposter", "links", "trivia"])
+    check("game night: the pack has its caps", all(len(pack[k]) <= n for k, n in G.CAPS.items()) and pack["n"] == len(GAME_ROWS))
 
 
 def test_game_night_one_player_v395():
-    """3.9.5, game night (duecrew.com/table): while Sam tests it, any game
-    starts with one player (site/public/table.js's FEW; each game's own min
+    """3.9.5, game night (site/public/table.js, on tonight's pack): while Sam
+    tests it, any game starts with one player (FEW; each game's own min
     stays on its tile). Each game, one player through its most, starts, and
-    the bots' answers move it on: alone, Rounds has no Attending, Imposter
-    has nobody to vote for, and Links' clue giver guesses too."""
+    the stand-in players' answers move it on: alone, Rounds has no
+    Attending, Imposter has nobody to vote for, and Links' clue giver picks
+    on the TV too. What every phone gets carries no card's words in Trivia, no other
+    hand in Rounds, no key in Links, no twin in Imposter: those are each
+    seat's own (secrets), whispered."""
     import shutil
     import subprocess
+    from due_crew import gamenight as G
     if not shutil.which("node"):
         check("game night: node runs the games (skipped: no node)", True)
         return
     src = open(os.path.join(REPO, "site", "public", "table.js"), encoding="utf-8").read()
-    packs = open(os.path.join(REPO, "site", "public", "table-packs.js"), encoding="utf-8").read()
-    a, b = src.index("const D = GN_PACKS;"), src.index("// ---------- hubs")
+    a, b = src.index("let D = null;"), src.index("// ---------- hubs")
+    pack = G.build(GAME_ROWS, "test", seed=3)
     # the games and their helpers alone: nothing before the hubs draws until asked
-    js = packs + "\nconst matchMedia = () => ({ matches: true });\n" + src[a:b] + GAMES_SIM_JS
+    js = "const matchMedia = () => ({ matches: true });\n" + src[a:b].replace("let D = null;", "let D = " + json.dumps(pack) + ";", 1) + GAMES_SIM_JS
     r = subprocess.run(["node", "-e", js], capture_output=True, text=True, timeout=60)
     check("game night: the games run in node", r.returncode == 0, r.stderr[:400])
     if r.returncode:
         return
-    runs = json.loads(r.stdout)
+    got = json.loads(r.stdout)
+    runs = got["out"]
     by = {(x["id"], x["N"]): x for x in runs}
-    check("game night: all six games, one player through eight, start and take their first answers without an error",
-          len({x["id"] for x in runs}) == 6 and all(not x["err"] for x in runs) and all((g, 1) in by for g in {x["id"] for x in runs}),
-          [x for x in runs if x["err"]][:2])
+    check("game night: all six games, one player to their most, start and take their first answers without an error",
+          len({x["id"] for x in runs}) == 6 and all(not x["err"] for x in runs), [x for x in runs if x["err"]][:2])
+    check("game night: what every phone gets holds nobody's secret (Trivia's words, a hand, the key, the twin)",
+          all(not x["leaked"] for x in runs), [(x["id"], x["N"], x["leaked"]) for x in runs if x["leaked"]][:4])
     check("game night: while testing, every game starts with one player; each keeps its own min for its tile",
-          all(x["need"] == 1 for x in runs) and by[("imposter", 1)]["min"] == 3 and by[("between", 1)]["min"] == 2)
+          all(x["need"] == 1 for x in runs) and by[("imposter", 1)]["min"] == 3 and by[("links", 1)]["min"] == 4)
     check("game night: alone, every game moves on from its first step (none waits on a second player)",
           all(len(by[(g, 1)]["phases"]) >= 2 for g in ("imposter", "rounds", "trivia", "draw", "between", "links")),
           {g: by[(g, 1)]["phases"] for g in ("imposter", "rounds", "trivia", "draw", "between", "links")})
-    check("game night: alone, Rounds plays straight to the chart and on to the next round; with two, the Attending picks",
+    check("game night: alone, Rounds plays straight to the card's answer and on to the next round; with two, the Attending picks",
           by[("rounds", 1)]["phases"] == ["play", "chart", "play"] and by[("rounds", 2)]["phases"][:3] == ["play", "pick", "chart"])
-    check("game night: alone, Imposter's vote ends it (nobody to vote for); Draw it is a chain of one",
-          by[("imposter", 1)]["phases"] == ["clue", "clue", "vote", "end"] and by[("draw", 1)]["phases"] == ["step", "reveal"])
-    check("game night: alone, Links' clue giver can tap too; with two, only the other one taps",
-          "if ((i === S.giver && c.N > 1) || !a) continue;" in src and "if (giver && p.seats.length > 1)" in src)
+    check("game night: alone, Imposter's vote ends it; Draw it is a chain of one; Links' clue giver guesses",
+          by[("imposter", 1)]["phases"] == ["clue", "clue", "vote", "end"] and by[("draw", 1)]["phases"] == ["step", "reveal"]
+          and by[("links", 1)]["phases"][:2] == ["clue", "guess"] and len(by[("links", 1)]["phases"]) >= 3, by[("links", 1)])
+    check("game night: Links' key on the clue giver's phone breaks a long word once, at a syllable; short ones and odd ones whole",
+          got["soft"] == ["Spirono-lactone", "Nitro-glycerin", "inter-stitial edema", "Arrhyth-mia", "magne-sium", "Na-K-2Cl", "Asthma"], got["soft"])
+    phone = src[src.index("const Links = {"):]
+    phone = phone[phone.index("  phone(x, seat, p) {"):]
+    phone = phone[:phone.index("\n  },\n")]
+    check("game night: Links is picked on the TV; a phone has no board to tap (Sam: too small), the clue giver's the key alone",
+          "tap:" not in phone and "keyed: true" in phone and "p.answer({ t:" not in phone, phone[:200])
+    check("game night: what each game needs from the pack is gamenight.NEEDS (the twin)",
+          {k: list(v) for k, v in G.NEEDS.items()} == got["needs"], got["needs"])
     node = subprocess.run(["node", "--check", "-"], input=src, capture_output=True, text=True)
     check("game night: table.js parses", node.returncode == 0, node.stderr[:300])
+    check("game night: no sample packs: the site carries no questions of its own",
+          not os.path.exists(os.path.join(REPO, "site", "public", "table-packs.js")) and "GN_PACKS" not in src)
 
 
 def main():
