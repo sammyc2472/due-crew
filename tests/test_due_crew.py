@@ -18951,7 +18951,7 @@ def test_game_night_one_player_v395():
     check("game night: alone, Rounds plays straight to the card's answer and on to the next round; with two, the Attending picks",
           by[("rounds", 1)]["phases"] == ["play", "chart", "play"] and by[("rounds", 2)]["phases"][:3] == ["play", "pick", "chart"])
     check("game night: alone, Imposter's vote ends it; Draw it is a chain of one; Links' clue giver guesses",
-          by[("imposter", 1)]["phases"] == ["clue", "clue", "vote", "end"] and by[("draw", 1)]["phases"] == ["step", "reveal"]
+          by[("imposter", 1)]["phases"] == ["clue", "vote", "end"] and by[("draw", 1)]["phases"] == ["step", "reveal"]
           and by[("links", 1)]["phases"][:2] == ["clue", "guess"] and len(by[("links", 1)]["phases"]) >= 3, by[("links", 1)])
     small = G.build(GAME_ROWS[:6], seed=2, near=GAME_ROWS[6:])
     deal = subprocess.run(["node", "-e", "const matchMedia = () => ({ matches: true });\n" + src[a:b].replace("let D = null;", "let D = " + json.dumps(small) + ";", 1) + r"""
@@ -19008,12 +19008,14 @@ console.log(JSON.stringify({ ph: S.ph, ts: S.ts, pub: Trivia.pub(S), skip: Trivi
 
 def test_pip_party_said_out_loud_v395():
     """3.9.5, Pip Party (Sam: "you have to imagine that people are sitting
-    next to each other"): what can be said out loud isn't typed. Imposter's
-    words go round the room twice, said, from someone picked at random; the
-    one saying it taps Said it (or the TV skips), and anyone gone is passed
-    over. Links' clue giver says the word and taps how many it's for: the
-    clue on the table is a number. No text box in the menu's three; a link
-    with the code in it asks only for a name."""
+    next to each other"): what can be said out loud isn't typed. Imposter
+    (Sam: "the imposter doesn't have anything at all. the tv should
+    designate the order"): every phone has the topic but the imposter's;
+    the TV sets the order round the room, once or twice, and its Vote ends
+    the words; the caught imposter guesses among the topic, its twin and
+    two more. Links' clue giver says the word and taps how many it's for:
+    the clue on the table is a number. No text box in the menu's three; a
+    link with the code in it asks only for a name."""
     import shutil
     import subprocess
     from due_crew import gamenight as G
@@ -19025,30 +19027,21 @@ def test_pip_party_said_out_loud_v395():
     pack = G.build(GAME_ROWS, "test", seed=3)
     js = "const matchMedia = () => ({ matches: true });\n" + src[a:b].replace("let D = null;", "let D = " + json.dumps(pack) + ";", 1) + r"""
 const c = (N, A, here) => ({ N, seats: Array.from({ length: N }, (_, i) => ({ n: "P" + i })), A: A || [], here: here || (() => true), name: (i) => "P" + i });
-let S = Imposter.start(c(3));
-const order = S.order.slice(), pub = Object.keys(Imposter.pub(S, c(3))).sort(), turns = [];
-let early = false;
-while (S.ph === "clue" && turns.length < 10) {
-  const i = S.order[S.at], A = [];
-  turns.push([S.r, i]);
-  A[(i + 1) % 3] = { said: 1 };
-  if (Imposter.collect(S, A, c(3, A))) early = true;  // someone else's tap moves nothing
-  A[i] = { said: 1 };
-  S = Imposter.collect(S, A, c(3, A));
-}
-const G0 = Imposter.start(c(3)), gone = G0.order[0], G1 = Imposter.collect(G0, [], c(3, [], (i) => i !== gone));
-const skip = Imposter.force(Imposter.start(c(3)), c(3));
-const bot = Imposter.bot(Imposter.pub(G0, c(3)), G0.order[0], {}), notup = Imposter.bot(Imposter.pub(G0, c(3)), G0.order[1], {});
+const S = Imposter.start(c(3)), C = c(3);
+const order = S.order.slice(), sec = Imposter.secrets(S, C), pub = Object.keys(Imposter.pub(S, C)).sort();
+const waits = Imposter.collect(S, [{ said: 1 }, { said: 1 }, { said: 1 }], c(3, [{ said: 1 }, { said: 1 }, { said: 1 }]));
+const V = Imposter.force(S, C), votes = [0, 1, 2].map((i) => ({ v: i === S.imp ? (i + 1) % 3 : S.imp }));
+const L0 = Imposter.collect(V, votes, c(3, votes)), lastPub = L0 && Imposter.pub(L0, C);
+const E = L0 && Imposter.collect(L0, Object.assign([], { [S.imp]: { g: S.a } }), c(3, Object.assign([], { [S.imp]: { g: S.a } })));
 Imposter.laps = 1;  // the TV's Once round, kept for the next
-let O = Imposter.start(c(3));
-const once = [O.laps];
-for (let k = 0; k < 6 && O.ph === "clue"; k++) { const A = []; A[O.order[O.at]] = { said: 1 }; O = Imposter.collect(O, A, c(3, A)); once.push(O.ph); }
+const once = Imposter.start(c(3)).laps;
 Imposter.laps = 2;
+const bots = [0, 1, 2].map((i) => Imposter.bot(Imposter.pub(S, C), i, { seats: C.seats }));
 const L = Links.play(Links.start(c(4))), g = L.givers[L.turn], LA = [];
 LA[g] = { w: "typed", n: 3 };
 const L2 = Links.collect(L, LA, c(4, LA));
 const LB = []; LB[g] = { w: "typed" };
-console.log(JSON.stringify({ order, pub, turns, early, ph: S.ph, gone: G1 && G1.at, skip: skip && skip.at, bot, notup, once,
+console.log(JSON.stringify({ order, imp: S.imp, a: S.a, b: S.b, sec, pub, waits, vote: V.ph, last: L0 && L0.ph, lastPub, end: E && E.ph, endA: E && Imposter.pub(E, C).a, once, bots,
   links: L2 && { ph: L2.ph, clue: L2.clue, left: L2.left, pub: Links.pub(L2).clue }, wordOnly: Links.collect(L, LB, c(4, LB)) }));
 """
     r = subprocess.run(["node", "-e", js], capture_output=True, text=True, timeout=60)
@@ -19059,14 +19052,16 @@ console.log(JSON.stringify({ order, pub, turns, early, ph: S.ph, gone: G1 && G1.
     o = got["order"]
     check("Imposter: round the room from someone, each once, in the room's order",
           sorted(o) == [0, 1, 2] and all(o[k] == (o[0] + k) % 3 for k in range(3)), o)
-    check("Imposter: twice round, a word each (said, not sent), then the vote; only the one saying it moves it on",
-          got["turns"] == [[1, i] for i in o] + [[2, i] for i in o] and got["ph"] == "vote" and not got["early"], got)
-    check("Imposter: once round when the TV says so (Sam: \"choose one or two rounds\"), kept for the next round",
-          got["once"] == [1, "clue", "clue", "vote"], got["once"])
-    check("Imposter: every phone gets whose turn it is and how many times round, and no words (nobody typed any)",
-          got["pub"] == ["at", "laps", "order", "part", "ph", "r"], got["pub"])
-    check("Imposter: someone gone is passed over; the TV's Skip ahead passes a turn; a bot says its word only on its turn",
-          got["gone"] == 1 and got["skip"] == 1 and got["bot"] == {"a": {"said": 1}} and got["notup"] is None, got)
+    imp_ = got["imp"]
+    check("Imposter: every phone has the topic but the imposter's, which has nothing (Sam: \"doesn't have anything at all\")",
+          got["sec"][imp_] == {"imp": 1} and all(x == {"top": got["a"]} for i, x in enumerate(got["sec"]) if i != imp_), got["sec"])
+    check("Imposter: every phone gets the order and how many times round, and no words; nothing a phone sends moves the words on",
+          got["pub"] == ["laps", "order", "part", "ph"] and got["waits"] is None and got["bots"] == [None, None, None], got)
+    check("Imposter: the TV's Vote ends the words; caught, the guess is among the topic, its twin and two more, and the topic reaches phones only at the end",
+          got["vote"] == "vote" and got["last"] == "last" and len(got["lastPub"]["opts"]) == 4
+          and {got["a"], got["b"]} <= set(got["lastPub"]["opts"]) and "a" not in got["lastPub"]
+          and got["end"] == "end" and got["endA"] == got["a"], got)
+    check("Imposter: once round when the TV says so (Sam: \"choose one or two rounds\"), kept for the next round", got["once"] == 1, got["once"])
     check("Links: the clue giver says the word and taps how many; the clue on the table is the number (a typed word goes nowhere)",
           got["links"] == {"ph": "guess", "clue": {"n": 3}, "left": 4, "pub": {"n": 3}} and got["wordOnly"] is None, got["links"])
     def block(start, end):
@@ -19076,13 +19071,13 @@ console.log(JSON.stringify({ order, pub, turns, early, ph: S.ph, gone: G1 && G1.
     check("pip party out loud: no text box on a phone in Trivia, Imposter or Links",
           all('type: "text"' not in x and "p.draft(" not in x and "h(\"select\"" not in x for x in phones))
     imp = block("const Imposter = {", "\nfunction fixRound")
-    check("Imposter: Once round and Twice round on the TV while the first goes round; a picked one shows as picked",
-          '[[1, "Once round"], [2, "Twice round"]]' in imp and '"aria-pressed": String(S.laps === n)' in imp
+    check("Imposter: Once round and Twice round and Vote on the TV, the order's own way on (no Skip ahead beside it); a picked one shows as picked; no Said it",
+          '[[1, "Once round"], [2, "Twice round"]]' in imp and '"aria-pressed": String(S.laps === n)' in imp and '"data-next": ""' in imp
+          and 'body.querySelector("[data-next]")' in src and "Said it" not in imp
           and '.seg button[aria-pressed="true"]' in open(os.path.join(REPO, "site", "public", "table.css"), encoding="utf-8").read())
-    last = imp[imp.index('    if (S.ph === "last") {', imp.index("  tv(S, c) {")):]
-    last = last[:last.index("\n    }\n")]
-    check("Imposter: caught, the TV says what the imposter had, never what everyone else had, till their guess is in",
-          "S.b" in last and "S.a" not in last, last)
+    last = imp[imp.index('    if (S.ph === "last") return', imp.index("  tv(S, c) {")):]
+    last = last[:last.index("\n")]
+    check("Imposter: caught, the TV never says the topic till the guess is in", "S.a" not in last and "S.b" not in last, last)
     join = block("function joinView(pre) {", "\nfunction botsView")
     check("pip party out loud: a link with the code asks only for a name (the code's box shows for Another table, a bad code or none)",
           "cd.hidden = linked;" in join and join.count("typeIt();") >= 3 and "Another table" in join

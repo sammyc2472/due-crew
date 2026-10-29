@@ -139,35 +139,31 @@ const seatsBut = (c, i) => c.seats.map((_, k) => k).filter((k) => k !== i);
 
 const Imposter = {
   id: "imposter", name: "Imposter", kind: "Find the odd one out", min: 3, max: 8,
-  line: "Everyone has the same topic but one, and they don't know it. A word each, once or twice round; then vote.",
-  learn: "Spotting what separates two things you'd confuse.",
+  line: "Every phone shows the topic but the imposter's. A word each round the room, then vote.",
+  learn: "A topic in one word, and what it's easy to mix up with.",
   start(c) {
     const pr = pick(D.twins.slice(0, Math.max(3, Math.ceil(D.twins.length / 2))));  // the likeliest mix-ups come first
-    const [A, B] = rnd() < 0.5 ? [pr.a, pr.b] : [pr.b, pr.a];
+    const [A, B] = rnd() < 0.5 ? [pr.a, pr.b] : [pr.b, pr.a];  // the topic, and its twin: the guess's closest wrong answer
     const first = int(c.N), order = c.seats.map((_, k) => (first + k) % c.N);  // round the room from someone, said out loud
-    return { ph: "clue", r: 1, laps: Imposter.laps, order, at: 0, a: A.t, b: B.t, facts: { a: A.facts || [], b: B.facts || [] }, part: pr.part, imp: int(c.N), votes: null, last: null, opts: null, caught: null, most: null };
+    return { ph: "clue", laps: Imposter.laps, order, a: A.t, b: B.t, facts: { a: A.facts || [], b: B.facts || [] }, part: pr.part, imp: int(c.N), votes: null, last: null, opts: null, caught: null, most: null };
   },
   pub(S) {
-    const x = { ph: S.ph, r: S.r, laps: S.laps, part: S.part, order: S.order, at: S.at };
-    if (S.ph === "last" || S.ph === "end") Object.assign(x, { imp: S.imp, a: S.a, b: S.b, votes: S.votes, caught: S.caught });
+    const x = { ph: S.ph, laps: S.laps, part: S.part, order: S.order };
+    if (S.ph === "last" || S.ph === "end") Object.assign(x, { imp: S.imp, votes: S.votes, caught: S.caught });
     if (S.ph === "last") x.opts = S.opts;
-    if (S.ph === "end") x.last = S.last;
+    if (S.ph === "end") Object.assign(x, { a: S.a, last: S.last });  // the topic, every phone's, once the guess is in
     return x;
   },
-  secrets(S, c) { return c.seats.map((_, i) => ({ top: i === S.imp ? S.b : S.a })); },
+  secrets(S, c) { return c.seats.map((_, i) => (i === S.imp ? { imp: 1 } : { top: S.a })); },
   collect(S, A, c) {
     const all = (f) => A.every((a, i) => (a && f(a)) || !c.here(i));
-    if (S.ph === "clue") { const i = S.order[S.at]; return (A[i] && A[i].said === 1) || !c.here(i) ? Imposter.force(S, c) : null; }  // the one saying a word taps when they've said it
     if (S.ph === "vote" && (c.N < 2 || all((a) => Number.isInteger(a.v)))) return Imposter.force(S, c);  // alone, nobody to vote for
     if (S.ph === "last" && A[S.imp] && typeof A[S.imp].g === "string") return Imposter.force(S, c);
-    return null;
+    return null;  // the words are said round the room; the TV's Vote ends them
   },
   force(S, c) {
     const A = c.A;
-    if (S.ph === "clue") {
-      if (S.at + 1 < S.order.length) return Object.assign({}, S, { at: S.at + 1 });
-      return Object.assign({}, S, S.r < S.laps ? { r: S.r + 1, at: 0 } : { ph: "vote" });
-    }
+    if (S.ph === "clue") return Object.assign({}, S, { ph: "vote" });
     if (S.ph === "vote") {
       const votes = A.map((a, i) => (a && Number.isInteger(a.v) && a.v >= 0 && a.v < c.N && a.v !== i ? a.v : -1));
       const tally = Array(c.N).fill(0);
@@ -176,8 +172,8 @@ const Imposter = {
       const most = top ? tally.map((n, i) => (n === top ? i : -1)).filter((i) => i >= 0) : [];
       if (most.length === 1 && most[0] === S.imp) {
         const names = D.twins.flatMap((t) => [t.a.t, t.b.t]).concat(D.prompts);
-        const others = shuffle([...new Set(names)].filter((t) => norm(t) !== norm(S.a) && norm(t) !== norm(S.b))).slice(0, 3);
-        return Object.assign({}, S, { ph: "last", votes, caught: true, most, opts: shuffle([S.a].concat(others)) });
+        const others = shuffle([...new Set(names)].filter((t) => norm(t) !== norm(S.a) && norm(t) !== norm(S.b))).slice(0, 2);
+        return Object.assign({}, S, { ph: "last", votes, caught: true, most, opts: shuffle([S.a, S.b].concat(others)) });
       }
       return Object.assign({}, S, { ph: "end", votes, caught: false, most });
     }
@@ -201,56 +197,50 @@ const Imposter = {
     const A = c.A, nm = c.name;
     const head = h("div", { class: "sub" }, `Imposter · ${S.part}`);
     const status = (f) => h("div", { class: "ppl" }, c.seats.map((_, i) => { const ok = A[i] && f(A[i]); return h("span", { class: ok ? "ok" : "" }, nm(i), ok ? " ✓" : ""); }));
-    if (S.ph === "clue") {
-      const cur = nm(S.order[S.at]);
-      return frag(head, h("div", { class: "h" }, `${Poss(cur)} word`),
-        h("p", { class: "lead" }, S.r === 1 ? "A word that fits your topic." : "Once more round."),
-        h("div", { class: "ppl big" }, S.order.map((i, k) => h("span", { class: k === S.at ? "ok" : k < S.at ? "done" : "" }, nm(i)))),
-        S.r === 1 ? h("span", { class: "seg" }, [[1, "Once round"], [2, "Twice round"]].map(([n, label]) => h("button", { type: "button", "aria-pressed": String(S.laps === n),
-          onclick: () => { Imposter.laps = n; c.set(Object.assign({}, S, { laps: n })); } }, label))) : h("p", { class: "small" }, "Round 2 of 2"));
+    if (S.ph === "clue") {  // the TV sets the order; the words are said out loud
+      const first = nm(S.order[0]);
+      return frag(head, h("div", { class: "h" }, you(first) ? "You start." : `${first} starts.`),
+        h("div", { class: "ppl big order" }, S.order.map((i, k) => h("span", {}, h("i", {}, `${k + 1}`), nm(i)))),
+        h("div", { class: "row" }, h("span", { class: "seg" }, [[1, "Once round"], [2, "Twice round"]].map(([n, label]) => h("button", { type: "button", "aria-pressed": String(S.laps === n),
+          onclick: () => { Imposter.laps = n; c.set(Object.assign({}, S, { laps: n })); } }, label))),
+          h("button", { type: "button", class: "btn", "data-next": "", onclick: () => c.go(Imposter.force(S, c)) }, "Vote")));
     }
     if (S.ph === "vote") return frag(head, h("div", { class: "h" }, "Who's the imposter?"), status((a) => Number.isInteger(a.v)));
     const imp = nm(S.imp);
-    if (S.ph === "last") {
-      return frag(head, h("div", { class: "h" }, `Caught: ${you(imp) ? "you" : imp} had ${S.b}.`), h("p", { class: "lead" }, `${says(imp, "You get", "gets")} one guess at everyone else's.`));
-    }
+    if (S.ph === "last") return frag(head, h("div", { class: "h" }, `Caught: ${you(imp) ? "you" : imp}.`), h("p", { class: "lead" }, `${says(imp, "You get", "gets")} one guess at the topic.`));
     const named = S.caught && norm(S.last) === norm(S.a);
-    const headline = !S.caught ? `${imp} got away with ${S.b}.` : named ? `${imp} named it. ${you(imp) ? "You get" : "They get"} away.` : `Caught: ${you(imp) ? "you" : imp} had ${S.b}.`;
+    const headline = !S.caught ? `${imp} got away.` : named ? `${imp} named it and ${you(imp) ? "get" : "gets"} away.` : `Caught: ${you(imp) ? "you" : imp}.`;
     const why = !S.caught ? (S.most && S.most.length > 1 ? "The votes tied." : S.most && S.most.length ? `The votes landed on ${S.most.map(nm).join(" and ")}.` : "Nobody voted.") : named ? "" : S.last ? `Guessed ${S.last}.` : "";
     const tally = Array(c.N).fill(0);
     (S.votes || []).forEach((v) => { if (v >= 0) tally[v]++; });
-    return frag(head, h("div", { class: "h" }, headline), h("p", { class: "lead" }, [why, `Everyone else had ${S.a}.`].filter(Boolean).join(" ")),
+    return frag(head, h("div", { class: "h" }, headline), h("p", { class: "lead" }, [why, `The topic was ${S.a}.`].filter(Boolean).join(" ")),
       h("div", { class: "ppl" }, c.seats.map((_, i) => h("span", { class: i === S.imp ? "bad" : "" }, nm(i), tally[i] ? h("i", {}, " " + plural(tally[i], "vote", "votes")) : null))),
       S.facts.a.length || S.facts.b.length ? frag(h("div", { class: "lbl" }, "What tells them apart"), Imposter.apart(S)) : null,
       h("div", { class: "row" }, btn("Another round", () => c.again()), btn("Back to games", () => c.lobby(), "plain")));
   },
+  // a phone: the topic, or that it's the imposter's and has none
   phone(x, seat, p) {
-    const my = p.me && p.me.top, mine = p.mine();
-    if (!my) return h("p", { class: "small" }, "…");
-    const secret = h("div", { class: "secret" }, h("div", { class: "small" }, "Your topic"), h("div", { class: "big" }, my));
-    if (x.ph === "clue") {  // said out loud: a phone shows the topic, and whose turn it is
-      const order = x.order || [], cur = order[x.at], next = order[x.at + 1], round = x.laps > 1 ? `Round ${x.r} of ${x.laps}` : "";
-      if (cur === seat) return frag(h("div", { class: "who" }, [round, "your turn"].filter(Boolean).join(" · ")), secret, mine ? null : btn("Said it", () => p.answer({ said: 1 })));
-      return frag(round ? h("div", { class: "who" }, round) : null, secret, h("p", { class: "small" }, `${p.name(cur)}'s turn.${next === seat ? " You're next." : ""}`));
-    }
+    const me = p.me, mine = p.mine();
+    if (!me || (!me.top && !me.imp)) return h("p", { class: "small" }, "…");
+    const card = me.imp ? h("div", { class: "secret imp" }, h("div", { class: "big" }, "You're the imposter"))
+      : h("div", { class: "secret" }, h("div", { class: "small" }, "The topic"), h("div", { class: "big" }, me.top));
+    if (x.ph === "clue") return card;
     if (x.ph === "vote") {
       if (mine) return frag(h("div", { class: "big" }, `You voted ${p.name(mine.v)}.`));
-      return frag(h("div", { class: "who" }, "Who had a different topic?"), h("div", { class: "vote" }, p.seats.map((_, i) => (i === seat ? null : h("button", { type: "button", onclick: () => p.answer({ v: i }) }, p.name(i))))), h("p", { class: "small" }, `Yours: ${my}`));
+      return frag(h("div", { class: "who" }, "Who's the imposter?"), h("div", { class: "vote" }, p.seats.map((_, i) => (i === seat ? null : h("button", { type: "button", onclick: () => p.answer({ v: i }) }, p.name(i))))), card);
     }
     if (x.ph === "last") {
       if (seat !== x.imp) return frag(h("div", { class: "big" }, `Caught: ${p.name(x.imp)}.`), h("p", { class: "small" }, "One guess left for them."));
       if (mine) return frag(h("div", { class: "big" }, `You guessed ${mine.g}.`));
-      return frag(h("div", { class: "who" }, "You were the imposter"), h("div", { class: "big" }, `Yours was ${x.b}.`), h("p", { class: "small" }, "What did everyone else have?"),
+      return frag(h("div", { class: "who" }, "Caught"), h("div", { class: "big" }, "What's the topic?"),
         h("div", { class: "vote" }, (x.opts || []).map((o) => h("button", { type: "button", onclick: () => p.answer({ g: o }) }, o))));
     }
-    const me = seat === x.imp;
-    return frag(h("div", { class: "who" }, me ? "You were the imposter" : "You had the topic"), h("div", { class: "big" }, my), h("p", { class: "small" }, me ? `Everyone else had ${x.a}.` : `${p.name(x.imp)} had ${x.b}.`));
+    return frag(h("div", { class: "who" }, me.imp ? "You were the imposter" : `${p.name(x.imp)} was the imposter`), h("div", { class: "small" }, "The topic"), h("div", { class: "big" }, x.a));
   },
   mood(S) { return { clue: "peek", vote: "focus", last: "ready" }[S.ph] || (S.caught && norm(S.last) !== norm(S.a) ? "cheer" : "peek"); },
   bot(x, seat, b) {
-    if (x.ph === "clue") return x.order[x.at] === seat ? { a: { said: 1 } } : null;
     if (x.ph === "vote") { const o = seatsBut(b, seat); return o.length ? { a: { v: pick(o) } } : null; }
-    if (x.ph === "last" && seat === x.imp) return { a: { g: pick(x.opts || [x.a]) } };
+    if (x.ph === "last" && seat === x.imp) return { a: { g: pick(x.opts || [""]) } };
     return null;
   },
 };
@@ -1084,6 +1074,7 @@ function TV(root, client, opt) {
     if (at.length) body = frag(knocks(at), body);
     let skips = false;
     try { skips = !!(T.game.force && T.game.force(T.S, ctx())); } catch (e) { skips = false; }
+    if (body.querySelector("[data-next]")) skips = false;  // the game's own way on (Imposter's Vote)
     return own ? body : frag(body, h("div", { class: "row foot" }, skips ? btn("Skip ahead", () => { const S2 = T.game.force(T.S, ctx()); if (S2) go(S2); }, "ghost") : null, btn("Back to games", lobby, "ghost")));
   }
   function draw(force) {

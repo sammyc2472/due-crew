@@ -99,8 +99,9 @@ button.tile:hover { border-color: var(--w-acc); }
 .tm.low { color: var(--o3); }
 .note { padding: 14px; color: var(--w-mut); }
 
-/* imposter: round the room, the one saying a word lit, those who have faded */
-.ppl > span.done { opacity: .5; }
+/* imposter: the order round the room; the imposter's card, no topic on it */
+.ppl.order > span > i { color: var(--w-acc); font-weight: 800; margin-right: 6px; }
+.secret.imp { background: color-mix(in srgb, var(--o4) 16%, var(--w-bg)); }
 .apart { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .apart > div { border: 1px solid var(--w-line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 4px; font-size: 14px; }
 .apart > div b { font-size: 15px; }
