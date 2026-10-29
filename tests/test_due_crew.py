@@ -18858,6 +18858,9 @@ def test_pip_party_wrong_answers_of_its_sort_v395():
     got = G._Pool(pool).wrong(0, random.Random(4))
     check("wrong answers: an answer's last word names its sort; tests among tests", G._head("Coombs test") == "test" and sorted(got) == sorted(tests[1:]), got)
     check("wrong answers: a word alone, or a last word that's a little one, names nothing", G._head("Coombs") == "" and G._head("pouch of the") == "")
+    check("wrong answers: in a lowercase answer's case, but a name's disease keeps its capital",
+          [G._cased(a, "heart failure") for a in ("Graves disease", "Crohn's disease", "Hyperthyroidism", "Thyroid storm")]
+          == ["Graves disease", "Crohn's disease", "hyperthyroidism", "thyroid storm"])
 
 def test_game_night_questions_make_sense_v395():
     """3.9.5, Sam: "don't want the questions to be dumb". Checked on a big

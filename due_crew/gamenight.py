@@ -659,10 +659,15 @@ def _prefixes(tag):
     return tuple("::".join(parts[:d]).lower() for d in range(2, len(parts) + 1))
 
 
+_EPONYM = re.compile(r"^[A-Z][a-z]+(?:'s|s')?[ -](?:disease|syndrome|sign|test|reflex|triad|law|phenomenon|cells?|bod(?:y|ies)|nodes?|"
+                     r"reaction|tumou?r|lymphoma|maneuver|criteria|score|fracture|palsy|ulcer|ring|line|murmur|effect|hernia|duct|area)\b")
+
+
 def _cased(a, like):
     """A wrong answer in the right answer's case, so neither stands out
-    ("loop" among "loop", "thiazide"; acronyms as they are)."""
-    if not a or not a[:1].isascii() or not a[:1].isalpha() or _style(a) == "A" or (len(a) > 1 and a[1:2].isupper()):
+    ("loop" among "loop", "thiazide"; acronyms and a name's disease, "Graves
+    disease", as they are)."""
+    if not a or not a[:1].isascii() or not a[:1].isalpha() or _style(a) == "A" or (len(a) > 1 and a[1:2].isupper()) or _EPONYM.match(a):
         return a
     return (a[0].upper() if like[:1].isupper() else a[0].lower()) + a[1:]
 

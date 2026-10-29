@@ -668,6 +668,17 @@ In Anki (as a follower):
 - [ ] Your plans… › Settings › Cards open (and More's "the next once I've seen most of the last"): switch to When I'm ready (a deck with open later cards offers Hold back), and back to the plan's dates (dates passed since ask, as Resume does). duecrew.com's plan page shows "At your pace · next: …" and the same choice; changing it there reaches Anki at its next refresh.
 - [ ] Browse: right-click a tag in the sidebar › Due Crew: open its cards…: the sheet counts what opens, what's open already, the leeches (they stay suspended), and the plans that hold them; Open with First in line ticked puts them first in Anki's new cards; one Edit › Undo shuts them. Pick cards in the table › Due Crew: open these…: the same for just those. Signed out: both are there.
 
+### 3.9.5: Pip Party, round three (about 15 minutes; two phones)
+
+- [ ] You › Pip Party: three game boxes up top, each with its picture and tonight's count, First up on one; tap another and First up moves. Nothing on Today, Insights or Browse's right-click says Party; Tools › Due Crew › Pip Party… opens this tab.
+- [ ] What you know · by Systems: Insights' map of your deck (the deck switch above it with two decks). Tap a tile: it's ringed and joins the picks at the foot, the count drops to its cards; › opens it, the trail goes back. Tags: your tag tree; a level of question numbers is one tile. Decks: your decks. The ▾ hugs the word picked.
+- [ ] Find: type part of a tag's or deck's name (two words, like "renal ph"): the matches show in the map's place as you type, the box keeps its focus, each says where it sits; tap one to pick it; Esc or Clear brings the map back.
+- [ ] A pick at the foot: tap it, "Not …" (left out, the count drops); × drops it. Of their cards ▾ › missed in the last 7 days narrows the count. As a search ›: the search the picks come to; edit it and it's the pick.
+- [ ] Keep this pick: a button over the map; tomorrow (or after a restart) it's still there, and puts the picks back; × forgets it.
+- [ ] Host: Opening a table…, then the TV window. The tab shows the code and Copy link (it copies duecrew.com/t/CODE). Close the TV: the tab is back to the picks.
+- [ ] On the TV: What are we playing on? with a tile for each pick (or, nothing picked, each tile of the map), its cards on it. Two phones join; each taps a couple on "What should we play on?": their initials show on those tiles, and the ringed ones are what anyone voted for. Tap a tile on the TV: the host's say (Go with the votes undoes it). The games' counts follow; Play Trivia on these 2 plays only their questions, straight in (no Pick a topic).
+- [ ] Trivia's wrong answers look like the answer: a type III question offers II, IV, V; an "… test" answer other tests; "Graves disease" keeps its capital.
+
 ### 3.9.3: QBank QIDs, and no Study today
 
 - [ ] Today's head: no Study today, open or folded. Ctrl+Shift+S still walks the day's decks; a Fifteen still starts one.

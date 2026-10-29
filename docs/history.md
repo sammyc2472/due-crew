@@ -3892,3 +3892,47 @@ every release that changes how something works.
   "kinas"). A card's line break between sentences reads as two ("…cell
   proliferation. Ras proteins are…", `clean`), not one run on.
   `test_trivia_a_block_of_fair_questions_v395`.
+- 3.9.5, Pip Party round three (Sam's v3 of the tab: "the top is perfect!
+  and this looks amazing!"; and "make sure it's fun, doesn't overly
+  explain, trusts the user"). You › Pip Party is the one way in (Sam: "I do
+  not want parties to be prompted from the today page. their only access
+  should be from the pip party tab"; Tools › Due Crew › Pip Party… opens
+  it), and the window (`ui/game_night_window.py`) is gone. Up top, the
+  three games, each with its picture (Trivia's four shapes, Imposter's
+  three Pips, the odd one rose, Sam: not grey; Links' board), tonight's
+  count and First up on the one the TV opens on (a game the pick can't
+  fill hands it to the next that can; none, Host waits and says why).
+  Under them, What you know · by Systems ▾ (Insights' own map of a deck),
+  Tags or Decks: a tap picks a tile, › opens it, the trail goes back; a
+  level's biggest twelve and an "and N more" tile that opens Find; ten or
+  more question-number tags fold into one tile, picked whole. Find
+  matches the words across a tag's or deck's path and draws its matches
+  in the map's place without drawing the board again (the box keeps its
+  focus). Of their cards ▾ (all, seen, missed this week, missed 3 times,
+  due soon, flagged, slow but right) and As a search › (edited, it's the
+  pick). The picks gather at the foot (a Systems one says its deck); a
+  tap leaves one out, × drops it; Keep this pick makes it a button over
+  the map (kept picks are this profile's `game_night.json`; round one's
+  saved scopes read as kept picks). Nothing picked, the tiles on the map
+  are the night. Host reads each pick's share (or tile's) of what it
+  reads, and the pack marks every question, word and pair with its pick,
+  or its subject when nothing was picked, and lists them with their
+  cards (`subs`). The TV's lobby asks What are we playing on?: a tile a
+  pick, sized by its cards, with who voted for it; phones vote ("What
+  should we play on?", names alone reach them); the host's taps on the
+  TV win, Go with the votes undoes them, nothing chosen is all of it. The
+  boxes count the chosen part, Play plays it alone, and Trivia doesn't ask
+  for a subject again. The lobby fits the TV's window (the QR beside the
+  code). Wrong answers: a numeral after type, class, factor and the like
+  is offered its neighbours (III: II, IV, V), an answer's last word names
+  its sort ("Coombs test" among tests; on the same samples from a big
+  shared deck's export, multi-word answers offered one of their sort went
+  from 5% to 24%), and a name's disease keeps its capital ("Graves
+  disease" beside "heart failure"). The tab's pickers are the word picked
+  with the select laid over it (a select is as wide as its longest
+  option), a left-out tile shows a minus, and at a narrow window the
+  three games stay in one row. `test_pip_party_v395`,
+  `test_pip_party_only_from_its_tab_v395`,
+  `test_pip_party_the_table_votes_v395`,
+  `test_pip_party_wrong_answers_of_its_sort_v395`,
+  `test_pip_party_host_off_the_main_thread_v395`.
