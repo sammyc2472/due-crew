@@ -690,12 +690,14 @@ def _css(cfg):
     #due-crew .tmap .tm {{ position: relative; }}
     #due-crew .tmap .tm .tmb {{ position: absolute; left: 0; bottom: 0; height: 3px; background: currentColor; opacity: .45; }}
     #due-crew .tm.sn, #due-crew .sw.sn {{ background: var(--dc-well); color: var(--dc-muted); }}
-    #due-crew .ik select.tmby {{ -webkit-appearance: none; appearance: none; font: inherit; font-weight: 700;
-      color: var(--dc-accent); background: transparent; border: 0; padding: 0 0 0 2px; margin: 0; cursor: pointer;
-      text-transform: none; letter-spacing: 0; color-scheme: light dark; }}
+    #due-crew .dc-wp {{ position: relative; display: inline-flex; align-items: baseline; gap: 2px; color: var(--dc-accent); font-weight: 700;
+      text-transform: none; letter-spacing: 0; border-radius: 3px; }}
+    #due-crew .dc-wp > i {{ font-style: normal; font-size: 9px; pointer-events: none; }}
+    #due-crew .dc-wp > select {{ position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; margin: 0; padding: 0;
+      border: 0; font: inherit; -webkit-appearance: none; appearance: none; color-scheme: light dark; }}
+    #due-crew .dc-wp:focus-within {{ outline: 2px solid var(--dc-accent); outline-offset: 2px; }}
     #due-crew .ik .tmsh {{ margin-left: 8px; color: var(--dc-accent); font-weight: 700; text-decoration: none;
       text-transform: none; letter-spacing: 0; white-space: nowrap; }}
-    #due-crew .ik .tmbv {{ font-style: normal; font-size: 9px; color: var(--dc-accent); margin-left: 2px; pointer-events: none; }}
     #due-crew .tmap .tm span i {{ font-style: normal; margin-left: 3px; opacity: .7; }}
     #due-crew .tmt {{ font-size: 11.5px; color: var(--dc-muted); margin: 1px 0 4px; text-align: left; }}
     #due-crew .tmt b {{ color: var(--dc-ink); }}
@@ -2252,11 +2254,7 @@ def party_html(v):
     by = v.get("by") or "sys"
 
     def picker(cmd, label, opts, on):
-        """The word picked, its ▾, and the select laid over them (a select is as wide as its longest option)."""
-        word = next((w for k, w in opts if k == on), opts[0][1] if opts else "")
-        ops = "".join(f'<option value="{e(k)}"{" selected" if k == on else ""}>{e(w)}</option>' for k, w in opts)
-        return (f'<span class="pp-sel"><b>{e(word)}</b><i aria-hidden="true">&#9662;</i><select aria-label="{label}" '
-                f'onchange="pycmd(\'duecrew:party:{cmd}:\'+this.value+\'|\'+window.dcBK);">{ops}</select></span>')
+        return word_pick(f"party:{cmd}", label, opts, on)
     head = (f'<div class="pp-mh"><div class="ik">What you know <span class="pp-by">&middot; by '
             f'{picker("by", "Split by", (("sys", "Systems"), ("tag", "Tags"), ("deck", "Decks")), by)}</span></div>'
             f'<input id="pp-find" type="text" placeholder="Find a tag or deck" aria-label="Find a tag or deck" autocomplete="off" '
@@ -3006,6 +3004,18 @@ def _insights_html(did, v):
     return f'<div class="dc-ins">{out}</div>'
 
 
+def word_pick(cmd, label, opts, on):
+    """A pick in a line of words ("by Systems ▾"): the word picked and its ▾,
+    the select laid over them, so the ▾ sits by the word (a select is as
+    wide as its longest option). opts: [(value, words)]; a change sends
+    duecrew:<cmd>:<value>. The words are escaped here."""
+    e = _html.escape
+    word = next((w for k, w in opts if k == on), opts[0][1] if opts else "")
+    ops = "".join(f'<option value="{e(str(k))}"{" selected" if k == on else ""}>{e(str(w))}</option>' for k, w in opts)
+    return (f'<span class="dc-wp"><b>{e(str(word))}</b><i aria-hidden="true">&#9662;</i><select aria-label="{e(label)}" '
+            f'onchange="pycmd(\'duecrew:{cmd}:\'+this.value+\'|\'+window.dcBK);">{ops}</select></span>')
+
+
 def _ins_map(did, tiles, by, at=(), ways=()):
     """3.8.0, the topic map: each subject a tile, sized by its cards in play,
     shaded by how much I know now of the ones I've started (a bar along its
@@ -3059,11 +3069,9 @@ def _ins_map(did, tiles, by, at=(), ways=()):
            + (' &middot; <i class="sw bar"></i>started' if bars else ""))
     ways = [w for w in ways or () if isinstance(w, dict)]
     if len(ways) > 1:  # 3.8.0: another way to split it, this deck's, on this computer
-        opts = "".join(f'<option value="{i}"{" selected" if w.get("on") else ""}>{e(str(w.get("name") or "?"))}</option>'
-                       for i, w in enumerate(ways))
-        sub = (f'<span>&nbsp;&middot; by <select class="tmby" aria-label="Split by" '
-               f'onchange="pycmd(\'duecrew:insmapby:{int(did)}:\'+this.value+\'|\'+window.dcBK);">{opts}</select>'
-               f'<i class="tmbv" aria-hidden="true">&#9662;</i></span>')
+        on = next((str(i) for i, w in enumerate(ways) if w.get("on")), "0")
+        sub = (f'<span>&nbsp;&middot; by {word_pick(f"insmapby:{int(did)}", "Split by", [(str(i), str(w.get("name") or "?")) for i, w in enumerate(ways)], on)}'
+               '</span>')
     else:
         sub = "<span>&nbsp;&middot; by topic, now</span>"
     share = f' <a class="tmsh" href="#" title="A picture of it, or text" onclick="{_pycmd(f"insmapshare:{did}")}">Share &rsaquo;</a>'
@@ -7431,12 +7439,6 @@ DUE_CSS = """
     #due-crew .pp-mh { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 2px; }
     #due-crew .pp-mh .ik { margin: 0; }
     #due-crew .pp-by { text-transform: none; letter-spacing: 0; }
-    #due-crew .pp-sel { position: relative; display: inline-flex; align-items: baseline; gap: 2px; color: var(--dc-accent); font-weight: 700;
-      text-transform: none; letter-spacing: 0; border-radius: 3px; }
-    #due-crew .pp-sel i { font-style: normal; font-size: 9px; }
-    #due-crew .pp-sel select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; margin: 0; padding: 0; border: 0;
-      font: inherit; -webkit-appearance: none; appearance: none; color-scheme: light dark; }
-    #due-crew .pp-sel:focus-within { outline: 2px solid var(--dc-accent); outline-offset: 2px; }
     #due-crew #pp-find { margin-left: auto; flex: 0 1 200px; min-width: 0; box-sizing: border-box; font: inherit; font-size: 12px; padding: 4px 10px;
       border-radius: 99px; border: 1px solid var(--dc-line); background: var(--dc-well); color: var(--dc-ink); }
     #due-crew #pp-find:focus { outline: 2px solid var(--dc-accent); outline-offset: -1px; }

@@ -8477,6 +8477,13 @@ def test_insights_379():
           'aria-label="Split by"' in wy and "duecrew:insmapby:10:" in wy and '<option value="0" selected>Systems</option>' in wy
           and '<option value="1">&lt;Yield&gt;</option>' in wy and "by topic, now" not in wy
           and "Split by" not in board._ins_map(10, nest, "fsrs", (), [{"key": "a", "name": "Systems", "on": True}]), wy)
+    wy2 = board._ins_map(10, nest, "fsrs", (), [{"key": "a", "name": "Systems", "on": False}, {"key": "b", "name": "A much longer way <x>", "on": True}])
+    src = open(os.path.join(REPO, "due_crew", "board.py"), encoding="utf-8").read()
+    check("map (3.9.5, Sam: \"the carets are justified to the longest thing\"): the pick shows the way picked, its ▾ beside it, "
+          "the select laid over them; no ▾ on the board sits after a select",
+          '<span class="dc-wp"><b>Systems</b><i aria-hidden="true">&#9662;</i><select' in wy
+          and '<b>A much longer way &lt;x&gt;</b><i aria-hidden="true">&#9662;</i>' in wy2
+          and "</select><i" not in src and "#due-crew .dc-wp > select { position: absolute;" in board._css({}), wy2)
     check("map: one tile says nothing", board._ins_map(10, nest[:1], "fsrs") == ""
           and "right in their reviews these 4 weeks" in board._ins_map(10, nest, "right"))
     check("insights: nothing yet says so", "Insights fill in after a week of reviews." in board._insights_html(10, {"right": {"now": [1, 2]}}))

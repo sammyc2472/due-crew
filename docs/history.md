@@ -3928,9 +3928,11 @@ every release that changes how something works.
   its sort ("Coombs test" among tests; on the same samples from a big
   shared deck's export, multi-word answers offered one of their sort went
   from 5% to 24%), and a name's disease keeps its capital ("Graves
-  disease" beside "heart failure"). The tab's pickers are the word picked
-  with the select laid over it (a select is as wide as its longest
-  option), a left-out tile shows a minus, and at a narrow window the
+  disease" beside "heart failure"). The tab's pickers, and Insights' map's
+  "by Systems ▾" (Sam: "the carets are justified to the longest thing and
+  not next to them"), are the word picked with the select laid over it (a
+  select is as wide as its longest option; `board.word_pick`, checked in
+  Qt WebEngine too), a left-out tile shows a minus, and at a narrow window the
   three games stay in one row. `test_pip_party_v395`,
   `test_pip_party_only_from_its_tab_v395`,
   `test_pip_party_the_table_votes_v395`,
