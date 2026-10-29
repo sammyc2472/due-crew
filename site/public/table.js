@@ -836,7 +836,7 @@ const Links = {
 const FEW = 1;
 const need = (g) => Math.min(g.min, FEW);
 // what each game needs from tonight's pack (gamenight.NEEDS, the twin: the suite checks)
-const NEEDS = { trivia: ["qs", 1], rounds: ["blacks", 1], links: ["words", 25], imposter: ["twins", 1], draw: ["prompts", 1], between: ["prompts", 1] };
+const NEEDS = { trivia: ["qs", 10], rounds: ["blacks", 1], links: ["words", 25], imposter: ["twins", 1], draw: ["prompts", 1], between: ["prompts", 1] };
 const ready = (g) => !!D && (D[NEEDS[g.id][0]] || []).length >= NEEDS[g.id][1];
 
 const GAMES = { imposter: Imposter, rounds: Rounds, trivia: Trivia, draw: DrawIt, between: Between, links: Links };

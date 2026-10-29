@@ -3876,3 +3876,19 @@ every release that changes how something works.
   buttons now show which is picked (the pill's pressed look keyed only off
   a class the timer never set).
   `test_pip_party_said_out_loud_v395`.
+- 3.9.5, Trivia's block of two (Sam: "only saw two questions ... have now
+  officially replicated"), its label the answer ("Signal Transducers" over
+  "Ras proteins are ____ (class)") and a wrong answer of the wrong sort
+  ("autosomal recessive" for a class of protein): Trivia needs a block's
+  worth, ten, to be on the menu (`NEEDS`, both sides), and a scope short
+  of questions (long answers, pictures: a week's misses can be mostly
+  those) is filled from the cards around it to `QS_MIN`, thirty, its own
+  topics first. A hint after the blank picks wrong answers of its sort
+  (`_hint`, and Host searches the collection for cards with the same hint,
+  `hints`, beside the same word after the blank). A label that says the
+  answer is left off, and so is a subject that does. A wrong answer the
+  question shows in the singular or plural isn't offered ("proto-oncogene"
+  beside "proto-oncogenes"; `_shown` and `_sing`, where "kinases" was
+  "kinas"). A card's line break between sentences reads as two ("…cell
+  proliferation. Ras proteins are…", `clean`), not one run on.
+  `test_trivia_a_block_of_fair_questions_v395`.

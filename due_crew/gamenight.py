@@ -46,13 +46,14 @@ WORD_MAX = 18      # a Links tile
 TOPIC_MAX = 36
 CAPS = {"qs": 150, "blacks": 150, "whites": 300, "words": 80, "prompts": 80, "twins": 30, "draws": 10, "scales": 6}
 READ_MAX = 1500    # cards read for a pack: a big scope is sampled
+QS_MIN = 30        # Trivia's questions: tonight's cards, then (fewer than this) the cards around them
 NEAR_MAX = 600     # and around it, for answer choices
 WHITES_MIN = 120   # a hand's cards: tonight's, and at least this many more from around them
 WORDS_MIN = 40     # Links' board: topic names, then (fewer than this) short answers
 TWINS_MIN = 6
 BLANK = "____"
 # what each game needs from a pack before its tile lights up
-NEEDS = {"trivia": ("qs", 1), "rounds": ("blacks", 1), "links": ("words", 25), "imposter": ("twins", 1),
+NEEDS = {"trivia": ("qs", 10), "rounds": ("blacks", 1), "links": ("words", 25), "imposter": ("twins", 1),
          "draw": ("prompts", 1), "between": ("prompts", 1)}
 SKIP_TAGS = ("leech", "marked")
 # the six, as the lobby, the window and You › Pip Party name them
@@ -171,12 +172,19 @@ def _days(v, top):
 
 def clean(text):
     """A field as one plain line: scripts, styles, sounds and pictures out,
-    tags gone, entities read."""
+    tags gone, entities read. A line that ends without a stop and a next one
+    that starts a sentence are two sentences ("…for cell proliferation. Ras
+    proteins are…"), not one run on."""
     t = re.sub(r"<(script|style)\b.*?</\1\s*>", " ", str(text or ""), flags=re.S | re.I)
     t = re.sub(r"\[sound:[^\]]*\]|\[\[type:[^\]]*\]\]", " ", t)
-    t = re.sub(r"<br\s*/?>|</(div|p|li)>", " ", t, flags=re.I)
+    t = re.sub(r"<br\s*/?>|</(div|p|li)>", "\n", t, flags=re.I)
     t = re.sub(r"<[^>]*>", "", t)
-    return " ".join(html.unescape(t).split())
+    out = ""
+    for line in html.unescape(t).split("\n"):
+        line = " ".join(line.split())
+        if line:
+            out += line if not out else (". " if out[-1].isalnum() and line[:1].isupper() and not line[1:2].isupper() else " ") + line
+    return out
 
 
 def cloze(text, n):
@@ -264,9 +272,15 @@ def empty(a):
 
 
 def _shown(a, q):
-    """The answer, as words, already in the question (another cloze shows it)."""
-    w = _toks(a)
-    return bool(w) and f" {w} " in f" {_toks(q.replace(BLANK, ' '))} "
+    """The answer, as words, already in the question (another cloze shows
+    it), the singular and the plural one ("proto-oncogene" in "proto-oncogenes")."""
+    w = _stoks(a)
+    return bool(w) and f" {w} " in f" {_stoks(q.replace(BLANK, ' '))} "
+
+
+@functools.lru_cache(maxsize=20000)
+def _stoks(s):
+    return " ".join(_sing(w) for w in _toks(s).split())
 
 
 @functools.lru_cache(maxsize=20000)
@@ -408,7 +422,8 @@ def rounds(qs, items):
     area = {}
     for q in qs:
         it = by_q.get((q["q"], q["a"]))
-        area[id(q)] = area_of(it["tags"], it["topic"]) if it else ""
+        a = area_of(it["tags"], it["topic"]) if it else ""
+        area[id(q)] = "" if a and _overlaps(q["a"], a) else a
     names = {}
     for q in qs:
         a = area[id(q)]
@@ -496,6 +511,24 @@ def _slot(q):
     return (bw[0] if bw else ""), (aw[0] if aw else "")
 
 
+def _hint(q):
+    """The hint after a blank, lower case ("class" in "____ (class)")."""
+    m = re.search(re.escape(BLANK) + r"\s*\(([^)]{1,30})\)", q)
+    return " ".join(re.findall(r"[a-z0-9]+", m.group(1).lower())) if m else ""
+
+
+def hints(items, k=6):
+    """Tonight's blanks' hints, the most used first ("class", "drug"): the
+    glue finds other cards with the same hint, whose answers are the same
+    sort."""
+    count = {}
+    for it in items:
+        h = _hint(it["q"])
+        if 3 <= len(h) <= 24:
+            count[h] = count.get(h, 0) + 1
+    return sorted(count, key=lambda h: -count[h])[:k]
+
+
 def slots(items, k=8):
     """The words tonight's blanks sit before ("receptor" in "the ____
     receptor"), the most used first: the glue finds other cards with a blank
@@ -521,7 +554,7 @@ def _words(a):
 
 
 def _sing(w):
-    return w[:-3] + "y" if w.endswith("ies") and len(w) > 4 else w[:-2] if w.endswith(("ses", "xes", "ches", "shes")) else (
+    return w[:-3] + "y" if w.endswith("ies") and len(w) > 4 else w[:-2] if w.endswith(("sses", "xes", "ches", "shes")) else (
         w[:-1] if w.endswith("s") and not w.endswith("ss") and len(w) > 3 else w)
 
 
@@ -548,6 +581,7 @@ class _Pool:
         self.nw = [len(it["a"].split()) for it in items]
         self.style = [_style(it["a"]) for it in items]
         self.slot = [_slot(it["q"]) for it in items]
+        self.hint = [_hint(it["q"]) for it in items]
         pre = []
         df = {}
         for it in items:
@@ -568,12 +602,15 @@ class _Pool:
             for side, w in (("a", aw), ("b", bw)):
                 if len(w) >= 3 and w not in _STOP:
                     self.by_slot.setdefault((side, w), []).append(i)
+            if self.hint[i]:
+                self.by_slot.setdefault(("h", self.hint[i]), []).append(i)
 
     def wrong(self, i, rng, k=3):
         """k wrong answers for item i: answers of the same sort (a number for
         a number), from the cards nearest it, that fill the same blank in
-        other cards ("____ receptor"), alike in length and look; none that is
-        the answer, holds it, sits in the question, or is another's twin."""
+        other cards ("____ receptor") or answer the same hint ("(class)"),
+        alike in length and look; none that is the answer, holds it, sits in
+        the question, or is another's twin."""
         it, items = self.items[i], self.items
         rel = {}
         for x, wgt in self.pre[i].items():
@@ -584,6 +621,8 @@ class _Pool:
         for side, w, wgt in (("a", aw, 2.5), ("b", bw, 1.0)):
             for j in self.by_slot.get((side, w), ()) if len(w) >= 3 and w not in _STOP else ():
                 slot[j] = slot.get(j, 0) + wgt
+        for j in self.by_slot.get(("h", self.hint[i]), ()) if self.hint[i] else ():
+            slot[j] = slot.get(j, 0) + 3.0  # the card's own hint says what sort of answer
         cand = set(rel) | set(slot)
         if len(cand) < 40:
             cand |= set(rng.sample(range(len(items)), min(len(items), 80)))
@@ -690,8 +729,9 @@ def _topics(items):
 def build(rows, name="", n=None, seed=None, near=()):
     """The pack for rows of cards (item's rows); n: how many cards the scope
     has (the rows may be a sample of it). near: rows of cards around the
-    scope (gamenight_flow.near): never asked, only answer choices, white
-    cards, and the Links board and prompts when the scope's run short."""
+    scope (gamenight_flow.near): answer choices and white cards, and when
+    the scope's run short, Trivia's questions and the Links board and
+    prompts."""
     rng = random.Random(seed)
     dup = set()
     items = _items(rows, dup)
@@ -700,15 +740,29 @@ def build(rows, name="", n=None, seed=None, near=()):
     rng.shuffle(others)
     pool = items + others
     P = _Pool(pool)
-    qs = []
-    for i, it in enumerate(items[:CAPS["qs"] * 3 // 2]):  # a pack holds 150; a game asks ten
+    qs, asked = [], []
+
+    def ask(i):
+        it = pool[i]
         wrong = P.wrong(i, rng)
         if len(wrong) == 3:
             opts = [it["a"]] + wrong
             rng.shuffle(opts)
-            # the whole card (its sentence, its Extra) is for the TV after the reveal; phones get shapes
-            qs.append({"q": it["q"], "a": it["a"], "tag": it["where"], "opts": opts, "ans": opts.index(it["a"]),
+            # the whole card (its sentence, its Extra) is for the TV after the reveal; phones get shapes.
+            # Its label says where it's from, unless that says the answer ("Signal Transducers")
+            tag = it["where"] if it["where"] and not _overlaps(it["a"], it["where"]) else ""
+            qs.append({"q": it["q"], "a": it["a"], "tag": tag, "opts": opts, "ans": opts.index(it["a"]),
                        "full": it["full"] if it["cloze"] else "", "extra": it["extra"]})
+            asked.append(it)
+    for i in range(min(len(items), CAPS["qs"] * 3 // 2)):  # a pack holds 150; a game asks ten
+        ask(i)
+    if len(qs) < QS_MIN:  # a small or picture-heavy scope: the cards around it, its own topics first
+        mine = {norm(it["topic"]) for it in items if it["topic"]}
+        around = sorted(range(len(items), len(pool)), key=lambda j: norm(pool[j]["topic"]) not in mine)
+        for j in around:
+            if len(qs) >= QS_MIN:
+                break
+            ask(j)
     blacks = [{"q": it["q"] if BLANK in it["q"] else f"{it['q']} {BLANK}", "a": it["a"], "full": it["full"], "tag": it["where"]}
               for it in items if _card(it["a"], WHITE_MAX)]
     # a hand: tonight's answers and as many from around them, so a small
@@ -728,7 +782,7 @@ def build(rows, name="", n=None, seed=None, near=()):
         words = _apart(_unique(words + short(items, WORD_MAX) + short(others, WORD_MAX)), WORDS_MIN)
     prompts = _unique([t for t in topics + near_topics if _plain(t)])
     blacks = mixed(blacks, topics, rng)
-    rounds(qs, items)
+    rounds(qs, asked)
     pairs = twins(items, rng, named)
     if len(pairs) < TWINS_MIN:  # tonight's topics first, then their neighbours'
         have = {(p["a"]["t"], p["b"]["t"]) for p in pairs}

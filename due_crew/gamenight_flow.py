@@ -217,7 +217,8 @@ def near(got, cids, cap=G.NEAR_MAX, rng=None, slots=False):
     asked): two thirds from under their topics' parent tags, the rest from
     their decks, and from anywhere when those run short, for the odd
     pairing. slots (Host's pack): also cards whose blank sits before the
-    same word as tonight's ("{{c1::…}} receptor"), the best wrong answers.
+    same word as tonight's ("{{c1::…}} receptor") or has the same hint
+    ("{{c1::…::class}}"), the best wrong answers.
     got: tonight's rows; cids: all of tonight's cards (left out)."""
     rng = rng or random
     mine = {int(c) for c in cids}
@@ -246,11 +247,13 @@ def near(got, cids, cap=G.NEAR_MAX, rng=None, slots=False):
                  cap - len(picked))
         if len(picked) < cap:
             take(col.db.list(f"SELECT id FROM cards ORDER BY random() LIMIT {cap * 2}"), cap - len(picked))
-        words = G.slots([x for x in (G.item(r) for r in got) if x]) if slots else []
-        if words:  # one pass over the notes; a word is letters and digits alone
-            like = " OR ".join("n.flds LIKE ?" for _ in words)
-            take(col.db.list(f"SELECT c.id FROM cards c JOIN notes n ON n.id = c.nid WHERE {like} LIMIT 3000",
-                             *[f"%}}}} {w}%" for w in words]), SLOT_MAX)
+        its = [x for x in (G.item(r) for r in got) if x] if slots else []
+        # one pass over the notes: a blank before the same word, or with the same hint ("::class}}");
+        # each is letters, digits and spaces alone
+        like = [f"%}}}} {w}%" for w in G.slots(its)] + [f"%::{h}}}}}%" for h in G.hints(its)]
+        if like:
+            take(col.db.list(f"SELECT c.id FROM cards c JOIN notes n ON n.id = c.nid WHERE {' OR '.join('n.flds LIKE ?' for _ in like)} LIMIT 3000",
+                             *like), SLOT_MAX)
     except Exception:
         traceback.print_exc()
     return rows(picked, cap + SLOT_MAX, rng)

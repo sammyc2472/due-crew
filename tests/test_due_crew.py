@@ -18742,8 +18742,10 @@ def test_game_night_from_your_cards_v395():
     few, around = GAME_ROWS[:6], GAME_ROWS[6:]
     alone, nearby = G.build(few, seed=2), G.build(few, seed=2, near=around)
     asked = {G.item(r)["q"] for r in few if G.item(r)}
-    check("game night: the cards around tonight's are never asked: questions and black cards are tonight's alone",
-          {q["q"] for q in nearby["qs"]} <= asked and {b["a"] for b in nearby["blacks"]} == {b["a"] for b in alone["blacks"]} and len(nearby["qs"]) >= len(alone["qs"]))
+    k = len(alone["qs"])
+    check("game night: Trivia asks tonight's cards first, then (a small scope) the cards around them up to QS_MIN; black cards are tonight's alone",
+          {q["q"] for q in nearby["qs"][:k]} <= asked and len(nearby["qs"]) > k and len(nearby["qs"]) <= max(k, G.QS_MIN)
+          and {b["a"] for b in nearby["blacks"]} == {b["a"] for b in alone["blacks"]}, (k, len(nearby["qs"])))
     check("game night: ...but they deal the hands and fill the board: tonight's answers first, then theirs",
           len(alone["whites"]) == 6 and len(nearby["whites"]) > 20 and nearby["whites"][:6] == alone["whites"]
           and len(nearby["words"]) > len(alone["words"]) and len({w.lower() for w in nearby["whites"]}) == len(nearby["whites"]), (len(nearby["whites"]), len(nearby["words"])))
@@ -19004,6 +19006,59 @@ console.log(JSON.stringify({ ph: S.ph, ts: S.ts, pub: Trivia.pub(S), skip: Trivi
     check("game night: table.js parses", node.returncode == 0, node.stderr[:300])
     check("game night: no sample packs: the site carries no questions of its own",
           not os.path.exists(os.path.join(REPO, "site", "public", "table-packs.js")) and "GN_PACKS" not in src)
+
+
+def test_trivia_a_block_of_fair_questions_v395():
+    """3.9.5, Sam's Trivia of two questions ("only saw two questions"), its
+    label the answer ("Signal Transducers" over "____ (class)") and a wrong
+    answer of the wrong sort: Trivia needs a block's worth (ten) to be on
+    the menu, and a scope with few questions of its own (long answers,
+    pictures) is filled from the cards around it, its own topics first;
+    a hint after the blank picks wrong answers of its sort (Host also
+    searches for cards with the same hint); a label that says the answer
+    isn't shown; nor is a wrong answer the question shows in the plural; a
+    card's line break is a sentence's end, not a run on."""
+    from due_crew import gamenight as G
+    check("trivia: a line break between sentences reads as two, a <br> or a newline; a list keeps its colon",
+          G.clean("for cell proliferation<br>Ras proteins are") == "for cell proliferation. Ras proteins are"
+          and G.clean("<div>one line</div><div>Then another</div>") == "one line. Then another"
+          and G.clean("Causes:<br>fever") == "Causes: fever" and G.clean("the<br>ACE inhibitor") == "the ACE inhibitor"
+          and G.clean("a\nb") == "a b")
+    row = lambda n, text, tags: (n, 0, True, [text, ""], tags)
+    rows = [row(1, "The Ras family of proto-oncogenes are {{c1::signal transducers::class}} found in carcinomas", ["S::Path::Onc::Signal_Transducers"]),
+            row(2, "Myc proteins are {{c1::transcription factors::class}} that drive growth", ["S::Path::Onc::Nuclear"]),
+            row(3, "ERBB2 proteins are {{c1::receptor tyrosine kinases::class}} on the cell surface", ["S::Path::Onc::Receptors"]),
+            row(4, "Rb proteins are {{c1::tumor suppressors::class}} that hold the cell cycle", ["S::Path::Onc::Suppressors"]),
+            row(5, "Down syndrome is inherited as {{c1::nondisjunction}} most often", ["S::Path::Genetics::Trisomy"]),
+            row(6, "Cystic fibrosis is {{c1::autosomal recessive}} in inheritance", ["S::Path::Genetics::CF"]),
+            row(7, "Marfan syndrome is {{c1::autosomal dominant}} in inheritance", ["S::Path::Genetics::Marfan"]),
+            row(8, "Fragile X is {{c1::X-linked dominant}} in inheritance", ["S::Path::Genetics::FragX"]),
+            row(9, "Kinases add a {{c1::phosphate group}} to proteins", ["S::Biochem::Kinase"])]
+    pack = G.build(rows, seed=1)
+    ras = next(q for q in pack["qs"] if q["a"] == "signal transducers")
+    wrong = [o for o in ras["opts"] if o != ras["a"]]
+    check("trivia: a hint after the blank picks wrong answers of its sort (\"(class)\": classes, not modes of inheritance)",
+          set(wrong) == {"transcription factors", "receptor tyrosine kinases", "tumor suppressors"}, ras["opts"])
+    check("trivia: a label that says the answer isn't shown (the topic \"Signal Transducers\" over \"signal transducers\")",
+          ras["tag"] == "" and next(q for q in pack["qs"] if q["a"] == "transcription factors")["tag"] == "Nuclear", ras)
+    check("trivia: a wrong answer the question already shows, in the singular or the plural, isn't on offer",
+          G._shown("proto-oncogene", "The Ras family of proto-oncogenes encode ____") and G._shown("kinases", "a kinase adds ____")
+          and not G._shown("tumor suppressor", "The Ras family of proto-oncogenes encode ____"))
+    check("trivia: the hints tonight's blanks have, for Host's search (\"::class}}\")", G.hints([G.item(r) for r in rows]) == ["class"])
+    src = open(os.path.join(REPO, "due_crew", "gamenight_flow.py"), encoding="utf-8").read()
+    check("trivia: Host's search finds cards with a blank before tonight's word, or with tonight's hint",
+          'f"%}}}} {w}%" for w in G.slots(its)' in src and 'f"%::{h}}}}}%" for h in G.hints(its)' in src)
+    # a scope that makes few questions of its own: long answers, a picture
+    long = [(100 + k, 0, False, [f"Describe stage {k} of the long process", "A long answer that runs on well past what a TV can show as one choice"], ["S::Path::Onc::Long"]) for k in range(20)]
+    few = long + rows[:2]
+    jun = row(10, "Jun proteins bind DNA as {{c1::AP-1 partners}} in the nucleus", ["S::Path::Onc::Nuclear"])  # tonight's topic, around it
+    alone, filled = G.build(few, seed=1), G.build(few, seed=1, near=GAME_ROWS + rows[2:] + [jun])
+    check("trivia: needs a block's worth (ten) to be on the menu; the table's NEEDS says the same",
+          G.NEEDS["trivia"] == ("qs", 10) and "trivia" in G.fit(alone)[1] and len(alone["qs"]) < 10
+          and 'trivia: ["qs", 10]' in open(os.path.join(REPO, "site", "public", "table.js"), encoding="utf-8").read(), len(alone["qs"]))
+    check("trivia: a scope short of questions is filled from the cards around it, its own first, its own topics' next",
+          len(filled["qs"]) >= 10 and "trivia" not in G.fit(filled)[1] and {q["a"] for q in filled["qs"][:2]} == {"signal transducers", "transcription factors"}
+          and filled["qs"][2]["a"] == "AP-1 partners", [q["a"] for q in filled["qs"]][:6])
 
 
 def test_pip_party_said_out_loud_v395():
