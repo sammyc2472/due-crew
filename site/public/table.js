@@ -48,6 +48,13 @@ const warn = (e) => console.warn("pip party:", e && (e.code || e.message || e));
 const pip = (place, size, accent) => (typeof Sev !== "undefined" && Sev.stage ? Sev.stage(place, size, accent) : null);
 const SEAT_COLORS = [["#2e7d32", "#7cc47f"], ["#3b6fd8", "#8fb0ff"], ["#7b4fc9", "#b9a2f2"], ["#00897b", "#5fd3c2"], ["#b26a00", "#dda45c"], ["#b03a6b", "#e58bb0"]];
 const seatPip = (i, label, pair) => (typeof Sev !== "undefined" && Sev.row ? Sev.row([], pair || SEAT_COLORS[i % SEAT_COLORS.length], label) : null);
+// a seat's own colour, by the device's theme: a phone's Pip as the TV draws that seat's
+const seatTone = (i) => { const pr = SEAT_COLORS[((i % SEAT_COLORS.length) + SEAT_COLORS.length) % SEAT_COLORS.length]; return typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches ? pr[1] : pr[0]; };
+// who's at the table, in the order they sat down: the lobby's seats, a game's (the TV and every phone work it out alike)
+const seated = (peers) => (peers || []).filter((p) => !p.wait && p.presence && p.presence.r === "p" && typeof p.presence.n === "string")
+  .sort((a, b) => (Number(a.presence.t) || 0) - (Number(b.presence.t) || 0) || (a.peer < b.peer ? -1 : 1));
+// a player named with their Pip, in their seat's colour
+const who = (i, name) => [seatPip(i, `${name}'s Pip`), name];
 const REACTS = ["🎉", "😂", "😮", "👏", "❤️"];
 
 // ---------- drawings: strokes as text, two characters a point ----------
@@ -197,11 +204,11 @@ const Imposter = {
   tv(S, c) {
     const A = c.A, nm = c.name;
     const head = h("div", { class: "sub" }, `Imposter · ${S.part}`);
-    const status = (f) => h("div", { class: "ppl" }, c.seats.map((_, i) => { const ok = A[i] && f(A[i]); return h("span", { class: ok ? "ok" : "" }, nm(i), ok ? " ✓" : ""); }));
+    const status = (f) => h("div", { class: "ppl" }, c.seats.map((_, i) => { const ok = A[i] && f(A[i]); return h("span", { class: ok ? "ok" : "" }, who(i, nm(i)), ok ? " ✓" : ""); }));
     if (S.ph === "clue") {  // the TV sets the order; the words are said out loud
       const first = nm(S.order[0]);
       return frag(head, h("div", { class: "h" }, you(first) ? "You start." : `${first} starts.`),
-        h("div", { class: "ppl big order" }, S.order.map((i, k) => h("span", {}, h("i", {}, `${k + 1}`), nm(i)))),
+        h("div", { class: "ppl big order" }, S.order.map((i, k) => h("span", {}, h("i", {}, `${k + 1}`), who(i, nm(i))))),
         h("div", { class: "row" }, h("span", { class: "seg" }, [[1, "Once round"], [2, "Twice round"]].map(([n, label]) => h("button", { type: "button", "aria-pressed": String(S.laps === n),
           onclick: () => { Imposter.laps = n; c.set(Object.assign({}, S, { laps: n })); } }, label))),
           h("button", { type: "button", class: "btn", "data-next": "", onclick: () => c.go(Imposter.force(S, c)) }, "Vote")));
@@ -215,7 +222,7 @@ const Imposter = {
     const tally = Array(c.N).fill(0);
     (S.votes || []).forEach((v) => { if (v >= 0) tally[v]++; });
     return frag(head, h("div", { class: "h" }, headline), h("p", { class: "lead" }, [why, `The topic was ${S.a}.`].filter(Boolean).join(" ")),
-      h("div", { class: "ppl" }, c.seats.map((_, i) => h("span", { class: i === S.imp ? "bad" : "" }, nm(i), tally[i] ? h("i", {}, " " + plural(tally[i], "vote", "votes")) : null))),
+      h("div", { class: "ppl" }, c.seats.map((_, i) => h("span", { class: i === S.imp ? "bad" : "" }, who(i, nm(i)), tally[i] ? h("i", {}, " " + plural(tally[i], "vote", "votes")) : null))),
       S.facts.a.length || S.facts.b.length ? frag(h("div", { class: "lbl" }, "What tells them apart"), Imposter.apart(S)) : null,
       h("div", { class: "row" }, btn("Another round", () => c.again()), btn("Back to games", () => c.lobby(), "plain")));
   },
@@ -228,7 +235,7 @@ const Imposter = {
     if (x.ph === "clue") return card;
     if (x.ph === "vote") {
       if (mine) return frag(h("div", { class: "big" }, `You voted ${p.name(mine.v)}.`));
-      return frag(h("div", { class: "who" }, "Who's the imposter?"), h("div", { class: "vote" }, p.seats.map((_, i) => (i === seat ? null : h("button", { type: "button", onclick: () => p.answer({ v: i }) }, p.name(i))))), card);
+      return frag(h("div", { class: "who" }, "Who's the imposter?"), h("div", { class: "vote" }, p.seats.map((_, i) => (i === seat ? null : h("button", { type: "button", onclick: () => p.answer({ v: i }) }, who(i, p.name(i)))))), card);
     }
     if (x.ph === "last") {
       if (seat !== x.imp) return frag(h("div", { class: "big" }, `Caught: ${p.name(x.imp)}.`), h("p", { class: "small" }, "One guess left for them."));
@@ -771,13 +778,13 @@ const Links = {
     const say = { g: "Green", p: "Purple", n: "Nobody's", x: "Code blue" };
     return h("div", { class: "key5" }, key.map((k, i) => h("i", { class: `k-${k}${x.shown[i] ? " done" : ""}`, role: "img", "aria-label": `${x.tiles[i]}: ${say[k]}` })));
   },
-  names(x, c, t) { return x.teams.map((tt, i) => (tt === t ? i : -1)).filter((i) => i >= 0).map((i) => c.name(i) + (x.givers[t] === i ? " · clues" : "")); },
+  names(x, c, t) { return x.teams.map((tt, i) => (tt === t ? i : -1)).filter((i) => i >= 0).map((i) => [i, c.name(i) + (x.givers[t] === i ? " · clues" : "")]); },
   tv(S, c) {
     const x = Links.pub(S);
     const box = (t) => h("div", { class: `team5 ${t}${S.turn === t && S.ph !== "end" ? " on" : ""}` }, h("small", {}, `${TEAM[t]}${S.givers[t] >= 0 ? " · " + c.name(S.givers[t]) : ""}`), h("b", {}, S.ph === "teams" ? `${Links.members(S, t).length} in` : `${x.counts[t]} left`));
     if (S.ph === "teams") {
       return frag(h("div", { class: "sub" }, `Links · ${TEAM[S.first]} goes first, with 9 to find`),
-        h("div", { class: "teams5" }, ["g", "p"].map((t) => h("div", { class: t }, h("b", {}, TEAM[t]), Links.names(x, c, t).map((n) => h("span", { class: "mem" }, seatPip(0, "Pip", t === "g" ? ["#2e7d32", "#7cc47f"] : ["#6a4fb3", "#b9a2f2"]), n))))),
+        h("div", { class: "teams5" }, ["g", "p"].map((t) => h("div", { class: t }, h("b", {}, TEAM[t]), Links.names(x, c, t).map(([i, n]) => h("span", { class: "mem" }, who(i, n)))))),
         h("div", { class: "row" }, btn("Even out", () => c.go(Links.arrange(S, "even")), "plain"), btn("Shuffle", () => c.go(Links.arrange(S, "shuffle")), "plain"),
           h("span", { class: "seg" }, Links.TIMERS.map((s) => h("button", { type: "button", "aria-pressed": String(S.timer === s), onclick: () => c.set(Object.assign({}, S, { timer: s })) }, s ? `${s}s` : "No timer")))),
         h("div", { class: "row" }, btn("Start", () => c.go(Links.play(S)))));
@@ -971,8 +978,7 @@ function clientId() {
 function TV(root, client, opt) {
   const T = { mode: "lobby", chosen: ORDER.includes(opt.first) ? opt.first : ORDER.find((id) => ready(GAMES[id])) || "trivia", mine: null,
     game: null, S: null, step: 0, seats: [], peers: [], key: "", sure: "", told: {}, mood: "", rx: {}, rxAt: {}, joined: 0 };
-  const players = () => T.peers.filter((p) => !(p.isMe && p.sameTab) && !p.wait && p.presence && p.presence.r === "p" && typeof p.presence.n === "string")
-    .sort((a, b) => (Number(a.presence.t) || 0) - (Number(b.presence.t) || 0) || (a.peer < b.peer ? -1 : 1));
+  const players = () => seated(T.peers.filter((p) => !(p.isMe && p.sameTab)));
   const peerOf = (i) => (T.seats[i] ? T.peers.find((x) => x.peer === T.seats[i].peer) : null);
   const presOf = (i) => { const p = peerOf(i); return (p && p.presence) || {}; };
   const answers = () => T.seats.map((_, i) => { const a = presOf(i).a; return a && typeof a === "object" && a.s === T.step ? a : null; });
@@ -1094,11 +1100,11 @@ function TV(root, client, opt) {
         T.mine && votes().some((v) => v.length) ? btn("Go with the votes", () => { T.mine = null; publish(); draw(true); }, "ghost") : null),
       h("div", { class: "vmap" + (on.length ? " picking" : "") }, ss.map((x) => {
         const n = Number(x.n) || 0, sel = on.includes(x.name);
-        const who = ps.map((p, i) => [p, i]).filter(([p]) => Array.isArray(p.presence.v) && p.presence.v.includes(x.name));
+        const voters = ps.map((p, i) => [p, i]).filter(([p]) => Array.isArray(p.presence.v) && p.presence.v.includes(x.name));
         return h("button", { type: "button", class: "vt" + (sel ? " on" : ""), "aria-pressed": String(sel), style: `flex:${Math.max(1, n)} 1 ${120 + Math.round(110 * n / big)}px`, onclick: () => tap(x.name) },
           h("b", {}, clip(x.name, 36)), h("span", { class: "vn" }, plural(n, "card", "cards")),
-          who.length ? h("span", { class: "vv", "aria-label": `Votes: ${who.map(([p]) => clip(p.presence.n, 16) || "Someone").join(", ")}` },
-            who.map(([p, i]) => h("i", { style: `background:${SEAT_COLORS[i % SEAT_COLORS.length][0]}`, title: clip(p.presence.n, 16) }, (clip(p.presence.n, 16) || "?").slice(0, 1).toUpperCase()))) : null);
+          voters.length ? h("span", { class: "vv", "aria-label": `Votes: ${voters.map(([p]) => clip(p.presence.n, 16) || "Someone").join(", ")}` },
+            voters.map(([p, i]) => seatPip(i, `${clip(p.presence.n, 16) || "Someone"}'s Pip`))) : null);
       })));
   }
   // the door, the host's alone: who gets in, the lock, who's waiting
@@ -1198,7 +1204,8 @@ function Phone(root, client, name) {
       const g = GAMES[pub.gm];
       if (g && g.phoneDeps && seat >= 0) { try { deps = g.phoneDeps(pub.x, seat, pc(pub, seat)); } catch (e) { deps = 0; } }
     }
-    const key = JSON.stringify([!!tv, pub, seat, P.myA, deps, !!client.waiting, client.shut || "", client.secret || null, P.votes]);
+    const sat = seated(P.peers).findIndex((x) => x.peer === me);  // where I sat down: my Pip's colour till a game seats me
+    const key = JSON.stringify([!!tv, pub, seat, P.myA, deps, !!client.waiting, client.shut || "", client.secret || null, P.votes, sat]);
     if (!force && key === P.key) return;
     P.key = key;
     top.replaceChildren(face, h("b", {}, name), h("span", {}, client.shut ? "" : client.waiting ? "At the door" : tv ? `Pip Party · ${clip(tv.presence.code, 8)}` : "Looking for the TV"));
@@ -1215,8 +1222,10 @@ function Phone(root, client, name) {
     }
     box.replaceChildren(body);
     react.hidden = !(pub && pub.m === "game" && seat >= 0) || !!client.shut;
-    const mk = `${pub ? pub.s : ""}:${mood}`;
-    if (mk !== P.mood && !(mood === "idle" && P.mood.endsWith(":idle"))) { P.mood = mk; const el = pip(mood, 40); face.replaceChildren(...(el ? [el] : [])); }
+    // my seat: a game's, or where I sat down in the lobby; my Pip in its colour, as the TV draws me
+    const at = seat >= 0 ? seat : sat;
+    const mk = `${pub ? pub.s : ""}:${mood}:${at}`;
+    if (mk !== P.mood && !(mood === "idle" && P.mood.endsWith(`:idle:${at}`))) { P.mood = mk; const el = pip(mood, 40, at >= 0 ? seatTone(at) : null); face.replaceChildren(...(el ? [el] : [])); }
   }
   draw(true);
 }

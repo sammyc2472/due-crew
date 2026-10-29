@@ -1487,7 +1487,8 @@ def keep_me_in_view_js(scripts=True):
     Find), which a page keeps once it has them and which load only once
     (each checks it isn't there yet); without, only what each does after
     a draw (Find lands, the motion's memory), for a swap on a page that
-    has them (the glue's _board_js)."""
+    has them (the glue's _board_js). A part's own <script> never runs (a
+    swap draws by innerHTML), so Pip Party's (PARTY_JS) rides here too."""
     return """
     (function() {
         var box = document.querySelector('#due-crew .dc-scroll');
@@ -1497,7 +1498,7 @@ def keep_me_in_view_js(scripts=True):
         var want = me.offsetTop - (box.clientHeight - me.offsetHeight) / 2;
         if (want > 0) { box.scrollTop = want; }
     })();
-    """ + (DUE_JS + MOTION_JS + FIND_JS + VEIL_WATCH_JS if scripts else FIND_AFTER) + MOTION_DRAWN
+    """ + (DUE_JS + MOTION_JS + FIND_JS + VEIL_WATCH_JS + PARTY_JS if scripts else FIND_AFTER) + MOTION_DRAWN
 
 
 # 3.9.1 (Sam: "when cheering, the full background doesn't grey out"): a
@@ -2289,7 +2290,7 @@ def party_html(v):
             else f'<span class="pp-host off" aria-disabled="true">Host{" " + e(label) if label else ""}</span>')
     foot = (f'<div class="pp-foot"><div class="pp-say"><b>{count}</b>'
             f'{f"<div class=pp-picks>{chips}</div>" if chips else ""}{links}{why}</div>{host}</div>')
-    return (f'<div class="pp{burst}"><script>{PARTY_JS}</script><div class="pp-gms">{boxes}</div>{kept}{head}{decks}'
+    return (f'<div class="pp{burst}"><div class="pp-gms">{boxes}</div>{kept}{head}{decks}'
             f'{party_map_html(v)}{of}{foot}</div>')
 
 

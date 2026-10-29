@@ -18,6 +18,7 @@ profile's, user_files/<profile>/game_night.json; nothing about them is sent.
 While Sam tests it, the tab shows for TESTERS alone, and the server opens
 a table only for an admin (worker/src/table.ts's ADMINS_ONLY)."""
 
+import functools
 import json
 import os
 import random
@@ -212,7 +213,7 @@ def _clean_pick(p):
 
 # ---- the tab's state: what's picked, where the map is ----
 
-TAB = {"busy": False, "said": "", "open": None, "burst": False, "turn": 0, "gen": None,
+TAB = {"busy": False, "said": "", "open": None, "burst": False, "turn": 0, "gen": None, "indexing": False,
        "by": "sys", "did": 0, "at": [], "game": GAME_IDS[0], "of": "all", "picks": [], "find": "", "hits": [],
        "shown": [], "level": None, "corpus": None, "levels": {}, "fits": {}, "fitting": None, "counts": {}}
 
@@ -257,7 +258,7 @@ def pick_name(p):
     if p["by"] == "sys":
         return p.get("name") or "?"
     if p["by"] in ("tag", "deck"):
-        return _leaf(p["path"])
+        return _named(p["path"])
     if p["by"] == "search":
         return "Your search"
     return p.get("name") or "?"
@@ -267,6 +268,16 @@ def _leaf(path):
     return _show(str(path).split("::")[-1])
 
 
+def _named(path):
+    """A tag or deck pick as its chip and the vote say it: its parent and
+    itself, their running numbers off ("14_Renal::03_Physiology" is "Renal ›
+    Physiology"; Physiology alone could be any resource's)."""
+    bare = lambda x: re.sub(r"^\d+[\s.)-]+(?=\S)", "", _show(x)) or _show(x)
+    parts = str(path).split("::")
+    return " › ".join(bare(x) for x in parts[-2:]) if len(parts) > 1 else bare(parts[0])
+
+
+@functools.lru_cache(maxsize=200000)
 def _show(seg):
     """A tag's part as the map names it: "#AK_Step1_v12" is "AK Step1 v12"."""
     return " ".join(re.sub(r"^[#!^$*@]+", "", str(seg)).replace("_", " ").split()) or str(seg)
@@ -275,16 +286,27 @@ def _show(seg):
 # ---- the map: Systems (Insights'), tags, decks ----
 
 def _corpus():
-    """Every card in play (not suspended): (cid, tags, deck id), what I know
-    of each (team_flow._know: these four weeks' reviews), and the decks'
-    names; read once and kept CORPUS_FOR seconds."""
+    """Every card in play (not suspended): (cid, deck id), what I know
+    of each (team_flow._know: these four weeks' reviews), the decks' names,
+    and each tag's cards (full: a big shared deck has 18 times fewer tags
+    than a card's tags all told, so the map and Find walk these); read once
+    and kept CORPUS_FOR seconds."""
     got = TAB.get("corpus")
     if got and got[0] == app.generation and time.time() - got[1] <= CORPUS_FOR:
         return got[2]
     from . import team_flow
     col = _col()
-    rows_ = [(int(c), tuple(str(t or "").split()), int(d)) for c, t, d in col.db.all(
-        "SELECT c.id, n.tags, CASE WHEN c.odid THEN c.odid ELSE c.did END FROM cards c JOIN notes n ON n.id = c.nid WHERE c.queue != -1")]
+    rows_, full = [], {}
+    for c, tags, d in col.db.all("SELECT c.id, n.tags, CASE WHEN c.odid THEN c.odid ELSE c.did END FROM cards c "
+                                 "JOIN notes n ON n.id = c.nid WHERE c.queue != -1"):
+        c = int(c)
+        rows_.append((c, int(d)))
+        for t in str(tags or "").split():  # one pass, no tuple a card: a big shared deck's tags are 50 MB of text
+            got = full.get(t)
+            if got is None:
+                full[t] = [c]
+            else:
+                got.append(c)
     try:
         know = team_flow._know(col, "SELECT id FROM cards WHERE queue != -1", col.sched.day_cutoff)[0]
     except Exception:
@@ -294,12 +316,13 @@ def _corpus():
         decks = {int(d.id): str(d.name) for d in col.decks.all_names_and_ids()}
     except Exception:
         decks = {}
-    data = {"rows": rows_, "know": know, "decks": decks}
+    data = {"rows": rows_, "know": know, "decks": decks, "full": full}
     TAB["corpus"] = (app.generation, time.time(), data)
     TAB["levels"] = {}
     return data
 
 
+@functools.lru_cache(maxsize=200000)
 def _idlike(seg):
     s = re.sub(r"^[#!^$*@]+", "", str(seg))
     return bool(re.fullmatch(r"\d+[A-Za-z]?", s) or (re.fullmatch(r"[A-Za-z0-9]{5,10}", s) and re.search(r"\d", s) and re.search(r"[A-Za-z]", s)
@@ -322,19 +345,17 @@ def _tag_level(path):
     data = _corpus()
     pre = (path + "::").lower() if path else ""
     by, deeper, names, ids = {}, set(), {}, {}
-    for cid, tags, _d in data["rows"]:
-        for t in tags:
-            if pre and not t.lower().startswith(pre):
-                continue
-            rest = t[len(pre):]
-            seg, _, more = rest.partition("::")
-            if not seg:
-                continue
-            k = seg.lower()
-            names.setdefault(k, seg)
-            if more:
-                deeper.add(k)
-            (ids if _idlike(seg) else by).setdefault(k, set()).add(cid)
+    for t, cs in data["full"].items():
+        if pre and not t.lower().startswith(pre):
+            continue
+        seg, _, more = t[len(pre):].partition("::")
+        if not seg:
+            continue
+        k = seg.lower()
+        names.setdefault(k, seg)
+        if more:
+            deeper.add(k)
+        (ids if _idlike(seg) else by).setdefault(k, set()).update(cs)
     if len(ids) < IDS_MIN:  # a few numbers are tiles like any other
         for k, cs in ids.items():
             by.setdefault(k, set()).update(cs)
@@ -356,7 +377,7 @@ def _deck_level(path):
     pre = (path + "::") if path else ""
     by, deeper = {}, set()
     names = data["decks"]
-    for cid, _t, did in data["rows"]:
+    for cid, did in data["rows"]:
         name = names.get(did, "")
         if pre and not name.startswith(pre):
             continue
@@ -431,51 +452,111 @@ def _pick_of_tile(lv, t):
 
 # ---- find ----
 
+@functools.lru_cache(maxsize=200000)
+def _words(seg):
+    """A tag's or deck's part as words, lower case, each after a space
+    (" 03 physiology"), so a word typed is the start of one when " " + it
+    is in them ("phys" of "physiology"; "renal" not of "adrenal")."""
+    return "".join(" " + w for w in re.findall(r"[a-z0-9]+", _show(seg).lower()))
+
+
+def _find_ix(data):
+    """Find's index, built once a corpus: every tag and parent tag (a node)
+    with its own words and its path's, and where its cards lie in the tags
+    sorted (a node's tags are a run of them: the tag itself and those under
+    it), with a running count, so a keystroke is string checks and a
+    count only for the few shown."""
+    ix = data.get("find_ix")
+    if ix is not None:
+        return ix
+    tags = sorted(data["full"], key=str.lower)
+    low = [t.lower() for t in tags]
+    acc = [0]
+    for t in tags:
+        acc.append(acc[-1] + len(data["full"][t]))
+    nodes, seen = [], set()
+    for t in tags:
+        parts = t.split("::")
+        said = ""
+        for i, seg in enumerate(parts):
+            own = _words(seg)
+            said += own
+            path = "::".join(parts[:i + 1])
+            k = path.lower()
+            if k in seen or _idlike(seg):
+                continue  # a question number is never a match
+            seen.add(k)
+            nodes.append((path, k, own, said, _show(seg).lower(), " ".join(_show(x) for x in parts[max(0, i - 1):i + 1]).lower()))
+    ix = data["find_ix"] = {"tags": tags, "low": low, "acc": acc, "nodes": nodes}
+    return ix
+
+
+def _runs(ix, k):
+    """The tags under node k (lower case): the tag itself and those after "k::", as runs of the sorted tags."""
+    import bisect
+    low = ix["low"]
+    a = bisect.bisect_left(low, k)
+    b = a + 1 if a < len(low) and low[a] == k else a
+    c = bisect.bisect_left(low, k + "::")
+    d = bisect.bisect_left(low, k + "::\uffff")
+    return [(a, b), (c, d)]
+
+
 def hits(text):
-    """Up to FIND_MAX tags and decks whose name has the words typed, the
-    most carded first: [{by, path, name, where, n, know, kids}]."""
-    words = re.findall(r"[a-z0-9]+", str(text or "").lower())
+    """Up to FIND_MAX tags and decks with every word typed the start of one
+    on their way down, one of them in their own name: first those that have
+    what's typed as it is when it's more than words ("B&B"), then those whose words are all in their
+    name or their parent's ("Renal › Physiology" for "renal phys"), then the
+    most carded: [{by, path, name, where, n, know, kids}]."""
+    lit = " ".join(str(text or "").lower().split())
+    words = re.findall(r"[a-z0-9]+", lit)
+    if not re.search(r"[^a-z0-9\s]", lit):
+        lit = ""  # what's typed as it is counts only when its words alone lose something ("b&b" is more than "b b")
     if not words:
         return []
     data = _corpus()
-    know, full = data["know"], data.get("full")
-    if full is None:  # each tag's cards, worked out once a corpus
-        full = data["full"] = {}
-        for cid, tags, _d in data["rows"]:
-            for t in tags:
-                full.setdefault(t, []).append(cid)
-    cands = {}
-    for t, cs in full.items():
-        parts = t.split("::")
-        said = ""
-        for i in range(len(parts)):
-            name = _show(parts[i]).lower()
-            said += " " + name
-            # every word somewhere on the way down, one of them in this part (a question number is never a match)
-            if not _idlike(parts[i]) and all(w in said for w in words) and any(w in name for w in words):
-                cands.setdefault(("tag", "::".join(parts[:i + 1])), set()).update(cs)
+    know, full = data["know"], data["full"]
+    ix = _find_ix(data)
+    ws = [" " + w for w in words]
+    near_of = lambda own, said2: all(w in said2 for w in ws)
+    found = []
+    for path, k, own, said, leaf, near in ix["nodes"]:
+        if all(w in said for w in ws) and any(w in own for w in ws):
+            runs = _runs(ix, k)
+            n = sum(ix["acc"][y] - ix["acc"][x] for x, y in runs)  # cards counted once a tag: for the order only
+            near_w = "".join(" " + w for w in re.findall(r"[a-z0-9]+", near))
+            found.append(((bool(lit) and lit not in near, not near_of(own, near_w), -n, not leaf.startswith(words[0]), k), "tag", path, runs))
     for did, name in data["decks"].items():
-        said, leaf = " ".join(_show(x) for x in name.split("::")).lower(), _show(name.split("::")[-1]).lower()
-        if all(w in said for w in words) and any(w in leaf for w in words):
-            cands.setdefault(("deck", name), set())
-    if any(k[0] == "deck" for k in cands):
-        by_deck = {}
-        for cid, _t, did in data["rows"]:
-            by_deck.setdefault(data["decks"].get(did, ""), []).append(cid)
-        for (kind, name) in [k for k in cands if k[0] == "deck"]:
-            for dn, cs in by_deck.items():
-                if dn == name or dn.startswith(name + "::"):
-                    cands[(kind, name)].update(cs)
+        segs = name.split("::")
+        said, own = "".join(_words(x) for x in segs), _words(segs[-1])
+        if all(w in said for w in ws) and any(w in own for w in ws):
+            near = " ".join(_show(x) for x in segs[-2:]).lower()
+            found.append(((bool(lit) and lit not in near, not near_of(own, "".join(_words(x) for x in segs[-2:])), 0, False, name.lower()), "deck", name, None))
+    found.sort(key=lambda f: f[0])
     out = []
-    for (kind, path), cs in cands.items():
-        if not cs:
-            continue
+    by_deck = None
+    for key, kind, path, runs in found[:FIND_MAX * 3]:  # the exact cards, for the few that may show
+        if kind == "tag":
+            cs = set()
+            for x, y in runs:
+                for j in range(x, y):
+                    cs.update(full[ix["tags"][j]])
+        else:
+            if by_deck is None:
+                by_deck = {}
+                for cid, did in data["rows"]:
+                    by_deck.setdefault(data["decks"].get(did, ""), []).append(cid)
+            cs = {c for dn, l in by_deck.items() if dn == path or dn.startswith(path + "::") for c in l}
+        if cs:
+            out.append(((key[0], key[1], -len(cs)) + key[3:], kind, path, cs))
+    out.sort(key=lambda f: f[0])
+    tiles = []
+    for _key, kind, path, cs in out[:FIND_MAX]:
         parts = path.split("::")
         t = _tile(path, _show(parts[-1]), sorted(cs), know)
         t.update(by=kind, path=path, where=("Deck" if kind == "deck" else "Tag") + (" · " + " › ".join(_show(x) for x in parts[:-1]) if len(parts) > 1 else ""))
-        out.append(t)
-    out.sort(key=lambda t: (not t["name"].lower().startswith(words[0]), -t["n"]))
-    return out[:FIND_MAX]
+        tiles.append(t)
+    return tiles
 
 
 # ---- the picks' cards, the count, the fit ----
@@ -623,6 +704,10 @@ def tab_view(c):
     lv = TAB["level"] = level()
     TAB["shown"] = lv["tiles"][:SHOW_MAX]
     keys = {_pick_key(p): p for p in TAB["picks"]}
+    data = (TAB.get("corpus") or (0, 0, {}))[2]
+    if data and "find_ix" not in data and not TAB.get("indexing"):  # Find's index, made off the main thread before the first keystroke
+        TAB["indexing"] = True
+        _bg(lambda: _find_ix(data), lambda _ix: TAB.update(indexing=False))
 
     def marked(t, by=None, path=None):
         p = dict(by=by, path=path) if by else _pick_of_tile(lv, t)

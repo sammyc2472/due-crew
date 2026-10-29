@@ -19385,7 +19385,7 @@ console.log(JSON.stringify({ loneWritten: lone.order.filter((i) => D.blacks[i].w
         check("pip party tab: a match says where it sits", v["hits"] and v["hits"][0]["name"] == "Pharm" and v["hits"][0]["where"] == "Tag · Step1 › Renal", v["hits"][:1])
         send("party:hit:0")
         v = GF.tab_view(conf)
-        check("pip party tab: a match tapped is picked, its tag's cards", [p["name"] for p in v["picks"]][-1] == "Pharm" and v["n"] >= 2, v["picks"])
+        check("pip party tab: a match tapped is picked, its tag's cards, named with its parent", [p["name"] for p in v["picks"]][-1] == "Renal › Pharm" and v["n"] >= 2, v["picks"])
         send("party:find:")
         send("party:by:deck")
         v = GF.tab_view(conf)
@@ -19395,7 +19395,7 @@ console.log(JSON.stringify({ loneWritten: lone.order.filter((i) => D.blacks[i].w
         cards, subs, _w = GF.scope()
         pharm = [c for c in cards if any(t.startswith("Step1::Renal::Pharm") for t in dict((r[0], r[4]) for r in party_rows)[c])]
         check("pip party tab: Host plays on the picks, each card marked with its pick for the table's vote, a card in two the narrower one's",
-              set(subs.values()) == {"Step1", "Pharm"} and set(cards) == set(subs) and pharm and all(subs[c] == "Pharm" for c in pharm), set(subs.values()))
+              set(subs.values()) == {"Step1", "Renal › Pharm"} and set(cards) == set(subs) and pharm and all(subs[c] == "Renal › Pharm" for c in pharm), set(subs.values()))
         send("party:clear")
         cards, subs, _w = GF.scope()
         check("pip party tab: nothing picked, the tiles on the map are the night, each its own (the vote's choices)",
@@ -19586,6 +19586,99 @@ console.log(JSON.stringify({ names, none: Vote.picked(names, null, [[], []]), vo
           and "client.presence({ v: P.votes })" in phone and "What should we play on?" in phone and "What are we playing on?" in tv)
     check("pip party vote: Play plays the chosen part; the game Anki opened on is picked first; Go with the votes undoes the host's taps",
           "tonight();\n    const id = play()" in tv and "ORDER.includes(opt.first) ? opt.first" in tv and 'btn("Go with the votes", () => { T.mine = null;' in tv)
+
+def test_pip_party_find_v395():
+    """3.9.5 round three, Sam: "make sure the search works" and "as a
+    search hasn't worked to open things". The tab's own script (dcParty:
+    Find's typing, As a search, the and-N-more tile) never ran: a tab switch
+    draws by innerHTML, which runs no <script>; it rides with the board's
+    scripts now. Find, tried on a big shared deck's export (35k cards, 808k
+    tags on cards, 45k tags): a word typed is the start of one ("renal" not
+    in "adrenal"); a parent and its part both count ("Renal › Physiology"
+    first, the most carded); "b&b" is B&B; a keystroke is string checks on
+    an index made once (off the main thread when the tab draws)."""
+    import time as _t
+    from due_crew import app as _app, gamenight_flow as GF
+    js = board.keep_me_in_view_js()
+    check("find: the tab's script rides with the board's own, after every draw (a swap runs no <script>)",
+          board.PARTY_JS in js and board.PARTY_JS not in board.keep_me_in_view_js(scripts=False) and "window.dcParty = {" in board.PARTY_JS)
+    v = {"games": [], "by": "tag", "tiles": [{"key": "a", "name": "A", "n": 3, "know": None, "kids": True, "pick": ""}], "ofs": [("all", "all")],
+         "of": "all", "picks": [], "n": 3, "all": "All of your tags", "search": '"tag:a"', "more": 4}
+    out = board.party_html(v)
+    check("find: the tab carries no script of its own; Find, As a search and and-N-more call dcParty",
+          "<script" not in out and 'oninput="dcParty.find(this)"' in out and "dcParty.srch()" in out and "dcParty.focus()" in out, out[:300])
+    full = {"FA::14_Renal::03_Physiology::07_ADH": [1, 2, 3, 4, 5, 6], "FA::14_Renal::03_Physiology::08_GFR": [7, 8, 9],
+            "FA::08_Endocrine::02_Adrenal_steroids": [10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
+            "Sys::Renal::Physiology": [1, 2, 3, 20], "Other::Renal_Physiology_leaf": [21], "Big::B&B::04_Biochem": [30, 31],
+            "Big::Bootcamp::Biochem": [32, 33, 34, 35], "QB::Renal::123456": [40], "QB::Renal::123457": [41]}
+    rows = sorted({(c, 1) for cs in full.values() for c in cs})
+    data = {"rows": rows, "know": {c: 0.8 for c, _d in rows}, "decks": {1: "Big Step 1"}, "full": full}
+    saved = (dict(GF.TAB), GF._bg, GF._fit, GF.find)
+    try:
+        GF._fit, GF.find = (lambda: None), (lambda q: [])  # the counts and the quick build, not Find's business
+        GF.TAB.update(gen=_app.generation, corpus=(_app.generation, _t.time(), data), levels={})
+        names = lambda q: [(h["name"], h["n"]) for h in GF.hits(q)]
+        rp = names("renal phys")
+        check("find: a parent and its part both count, the most carded first; every word the start of one",
+              rp[:2] == [("03 Physiology", 9), ("Physiology", 4)] and ("Renal Physiology leaf", 1) in rp, rp)
+        check("find: renal isn't in adrenal", not any("Adrenal" in n for n, _k in names("renal")), names("renal"))
+        check("find: what's typed as it is counts when it's more than words (b&b is B&B, not every b)",
+              names("b&b")[0] == ("B&B", 2), names("b&b"))
+        check("find: a question number is never a match", not any(n.isdigit() for n, _k in names("12345")), names("12345"))
+        check("find: the index is made once a corpus", "find_ix" in data and GF._find_ix(data) is data["find_ix"])
+        check("find: a pick from it is named with its parent, its running numbers off (Physiology alone could be anyone's)",
+              GF.pick_name({"by": "tag", "path": "FA::14_Renal::03_Physiology"}) == "Renal › Physiology"
+              and GF.pick_name({"by": "tag", "path": "Step1"}) == "Step1")
+        made = []
+        GF._bg = lambda job, done=None: made.append(job)
+        data.pop("find_ix", None)
+        GF.TAB.update(by="tag", at=[], picks=[], indexing=False)
+        GF.tab_view({})
+        check("find: the tab drawn, Find's index starts off the main thread (once)", len(made) == 1 and GF.TAB["indexing"], made)
+        GF.tab_view({})
+        check("find: ...and not twice while it's made", len(made) == 1)
+    finally:
+        GF.TAB.clear()
+        GF.TAB.update(saved[0])
+        GF._bg, GF._fit, GF.find = saved[1:]
+        GF.TAB.update(gen=None, corpus=None, levels={}, indexing=False, counts={}, fits={}, fitting=None)
+
+def test_pip_party_everyones_pip_v395():
+    """3.9.5 round three (Sam: "make sure the user pips are showing up where
+    they should"): a player is named with their Pip, in their seat's colour,
+    everywhere: the lobby's seats and its votes, Imposter's order, who's in
+    and its tally, Imposter's vote on a phone, Links' teams (each their own
+    Pip; the team is its box's colour); and a phone's own Pip is its seat's,
+    as the TV draws it (where it sat down, till a game seats it). The TV and
+    every phone work out the order alike (seated)."""
+    import shutil
+    import subprocess
+    src = open(os.path.join(REPO, "site", "public", "table.js"), encoding="utf-8").read()
+    part = lambda a, b: src[src.index(a):src.index(b)]
+    imp, links = part("const Imposter = {", "\nfunction fixRound"), part("const Links = {", "\n// While we're testing")
+    tv, phone = part("function TV(root, client, opt) {", "// ---------- a phone"), part("function Phone(root, client, name) {", "// ---------- bots")
+    check("pips: Imposter's order, who's in and its tally name each player with their Pip; a phone's vote too",
+          "who(i, nm(i))" in imp and imp.count("who(i, nm(i))") >= 3 and "who(i, p.name(i))" in imp, imp[:200])
+    check("pips: Links' teams, each player's own Pip (no team-coloured one for everyone)", "who(i, n)" in links and "seatPip(0," not in src)
+    check("pips: the lobby's seats and the vote's voters are their Pips; the TV's seats are seated()'s order",
+          "seatPip(i, `${clip(p.presence.n, 16) || \"Someone\"}'s Pip`)" in tv and "const players = () => seated(" in tv
+          and "voters.map(([p, i]) => seatPip(i," in tv)
+    check("pips: a phone's own Pip in its seat's colour, where it sat down till a game seats it",
+          "seated(P.peers).findIndex((x) => x.peer === me)" in phone and "pip(mood, 40, at >= 0 ? seatTone(at) : null)" in phone and ", sat]);" in phone)
+    if not shutil.which("node"):
+        return
+    a, b = src.index("let D = null;"), src.index("// ---------- hubs")
+    js = "const matchMedia = () => ({ matches: true });\n" + src[a:b] + r"""
+const P = (peer, t, extra) => Object.assign({ peer, presence: { r: "p", n: peer, t } }, extra || {});
+const order = seated([P("c", 30), P("a", 10), { peer: "tv", presence: { r: "tv" } }, P("w", 5, { wait: true }), P("b", 10), { peer: "x", presence: { r: "p" } }]).map((p) => p.peer);
+console.log(JSON.stringify({ order, dark: seatTone(1), wrap: seatTone(7) }));
+"""
+    r = subprocess.run(["node", "-e", js], capture_output=True, text=True, timeout=60)
+    got = json.loads(r.stdout or "{}")
+    check("pips: seated is who sat down, in the order they did (a tie by id); not the TV, not one at the door, not one without a name",
+          got.get("order") == ["a", "b", "c"], got or r.stderr[:300])
+    check("pips: a seat's colour by the device's theme (night: the light one), round the six for a seventh",
+          got.get("dark") == "#8fb0ff" and got.get("wrap") == "#8fb0ff", got)
 
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
