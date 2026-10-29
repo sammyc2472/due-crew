@@ -3842,3 +3842,26 @@ every release that changes how something works.
   ("atrial") gets describing wrong ones. The empty card in a Rounds hand
   was an older page on duecrew.com meeting the newer pack (a written card
   has no answer): the deploy fixes it.
+- 3.9.5, Pip Party said out loud (Sam: "you have to imagine that people
+  are sitting next to each other when they do this"): what can be said
+  isn't typed, and a phone keeps what's secret and a tap. Imposter's words
+  go round the room twice, out loud, from someone picked at random (the
+  order and whose turn it is on the TV; on a phone, the topic and "Jo's
+  turn. You're next."); the one saying it taps Said it, the TV's Skip
+  ahead passes a turn, and anyone gone is passed over. Its clue table is
+  gone (nobody typed any); the vote and the imposter's one guess stay taps.
+  Links' clue giver says the word and taps how many it's for (1 to 5): the
+  TV shows "Clue for 2 · 3 left", the number big enough to read across the
+  room, and the table carries only the number (the old "that word's on
+  the board" check is the table's own now). A link or QR with the code
+  asks only for a name, Join focused when it's remembered (Another table,
+  a bad code or none shows the code's box). The clue giver's key is
+  coloured blocks in the board's places, a found one an empty place, Code
+  blue marked × (Sam: "can just put colorful blocks"); the words are on the
+  TV, so the phone's word fitting (soft hyphens, font sizes) is gone. The
+  copy says less (Sam: "trust the user"): the games' lines, the phones'
+  prompts ("Your turn", "Your clue. How many?"), the lobby's join line
+  (the address alone), the door's notes, the tab's small print. A fix on
+  the way: caught, Imposter's TV said everyone's topic while the imposter
+  was guessing it; it says what they had, and that they get a guess.
+  `test_pip_party_said_out_loud_v395`.

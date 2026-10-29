@@ -330,7 +330,7 @@ class Ops:
                 return
             _have, thin = G.fit(pack)
             if len(thin) == len(G.GAMES):
-                done("Not enough cards with short answers in that. Pick more.")
+                done("Not enough cards in that.")
                 return
             if bots:
                 _tv({"mode": "bots", "pack": pack})

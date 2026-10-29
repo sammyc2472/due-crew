@@ -18669,8 +18669,7 @@ for (const id of Object.keys(GAMES)) {  // the menu's three and the three off it
     out.push({ id, N, min: g.min, need: need(g), phases, err, leaked });
   }
 }
-const soft = ["Spironolactone", "Nitroglycerin", "interstitial edema", "Arrhythmia", "magnesium", "Na-K-2Cl", "Asthma"].map((w) => Links.soft(w).replace(/\u00ad/g, "-"));
-console.log(JSON.stringify({ out, needs: NEEDS, soft }));
+console.log(JSON.stringify({ out, needs: NEEDS }));
 """
 
 GAME_ROWS = [  # a collection's cards in gamenight's rows: (cid, ord, cloze, fields, tags)
@@ -18993,19 +18992,91 @@ console.log(JSON.stringify({ ph: S.ph, ts: S.ts, pub: Trivia.pub(S), skip: Trivi
           and t.get("skip") is None and t.get("tags") == ["Vasculitis"] and t.get("n") == 6 and t.get("mixed") == 10, t or topic.stderr[:300])
     check("pip party: after the reveal the card (its sentence, its Extra) is the TV's; phones get none of it",
           "The card says" not in t.get("phone", "x") and "Why" not in t.get("phone", "x") and "Q" not in t.get("phone", "Q"), t.get("phone"))
-    check("game night: Links' key on the clue giver's phone breaks a long word once, at a syllable; short ones and odd ones whole",
-          got["soft"] == ["Spirono-lactone", "Nitro-glycerin", "inter-stitial edema", "Arrhyth-mia", "magne-sium", "Na-K-2Cl", "Asthma"], got["soft"])
     phone = src[src.index("const Links = {"):]
     phone = phone[phone.index("  phone(x, seat, p) {"):]
     phone = phone[:phone.index("\n  },\n")]
-    check("game night: Links is picked on the TV; a phone has no board to tap (Sam: too small), the clue giver's the key alone",
-          "tap:" not in phone and "keyed: true" in phone and "p.answer({ t:" not in phone, phone[:200])
+    check("game night: Links is picked on the TV; a phone has no board to tap (Sam: too small), the clue giver's the key alone, "
+          "in colours (Sam: \"colorful blocks\"), the words on the TV",
+          "tap:" not in phone and "Links.blocks(x, key)" in phone and "Links.grid(" not in phone and "p.answer({ t:" not in phone, phone[:200])
     check("game night: what each game needs from the pack is gamenight.NEEDS (the twin)",
           {k: list(v) for k, v in G.NEEDS.items()} == got["needs"], got["needs"])
     node = subprocess.run(["node", "--check", "-"], input=src, capture_output=True, text=True)
     check("game night: table.js parses", node.returncode == 0, node.stderr[:300])
     check("game night: no sample packs: the site carries no questions of its own",
           not os.path.exists(os.path.join(REPO, "site", "public", "table-packs.js")) and "GN_PACKS" not in src)
+
+
+def test_pip_party_said_out_loud_v395():
+    """3.9.5, Pip Party (Sam: "you have to imagine that people are sitting
+    next to each other"): what can be said out loud isn't typed. Imposter's
+    words go round the room twice, said, from someone picked at random; the
+    one saying it taps Said it (or the TV skips), and anyone gone is passed
+    over. Links' clue giver says the word and taps how many it's for: the
+    clue on the table is a number. No text box in the menu's three; a link
+    with the code in it asks only for a name."""
+    import shutil
+    import subprocess
+    from due_crew import gamenight as G
+    if not shutil.which("node"):
+        check("pip party out loud: node runs the games (skipped: no node)", True)
+        return
+    src = open(os.path.join(REPO, "site", "public", "table.js"), encoding="utf-8").read()
+    a, b = src.index("let D = null;"), src.index("// ---------- hubs")
+    pack = G.build(GAME_ROWS, "test", seed=3)
+    js = "const matchMedia = () => ({ matches: true });\n" + src[a:b].replace("let D = null;", "let D = " + json.dumps(pack) + ";", 1) + r"""
+const c = (N, A, here) => ({ N, seats: Array.from({ length: N }, (_, i) => ({ n: "P" + i })), A: A || [], here: here || (() => true), name: (i) => "P" + i });
+let S = Imposter.start(c(3));
+const order = S.order.slice(), pub = Object.keys(Imposter.pub(S, c(3))).sort(), turns = [];
+let early = false;
+while (S.ph === "clue" && turns.length < 10) {
+  const i = S.order[S.at], A = [];
+  turns.push([S.r, i]);
+  A[(i + 1) % 3] = { said: 1 };
+  if (Imposter.collect(S, A, c(3, A))) early = true;  // someone else's tap moves nothing
+  A[i] = { said: 1 };
+  S = Imposter.collect(S, A, c(3, A));
+}
+const G0 = Imposter.start(c(3)), gone = G0.order[0], G1 = Imposter.collect(G0, [], c(3, [], (i) => i !== gone));
+const skip = Imposter.force(Imposter.start(c(3)), c(3));
+const bot = Imposter.bot(Imposter.pub(G0, c(3)), G0.order[0], {}), notup = Imposter.bot(Imposter.pub(G0, c(3)), G0.order[1], {});
+const L = Links.play(Links.start(c(4))), g = L.givers[L.turn], LA = [];
+LA[g] = { w: "typed", n: 3 };
+const L2 = Links.collect(L, LA, c(4, LA));
+const LB = []; LB[g] = { w: "typed" };
+console.log(JSON.stringify({ order, pub, turns, early, ph: S.ph, gone: G1 && G1.at, skip: skip && skip.at, bot, notup,
+  links: L2 && { ph: L2.ph, clue: L2.clue, left: L2.left, pub: Links.pub(L2).clue }, wordOnly: Links.collect(L, LB, c(4, LB)) }));
+"""
+    r = subprocess.run(["node", "-e", js], capture_output=True, text=True, timeout=60)
+    got = json.loads(r.stdout or "{}")
+    check("pip party out loud: the games run in node", r.returncode == 0 and got, r.stderr[:400])
+    if not got:
+        return
+    o = got["order"]
+    check("Imposter: round the room from someone, each once, in the room's order",
+          sorted(o) == [0, 1, 2] and all(o[k] == (o[0] + k) % 3 for k in range(3)), o)
+    check("Imposter: twice round, a word each (said, not sent), then the vote; only the one saying it moves it on",
+          got["turns"] == [[1, i] for i in o] + [[2, i] for i in o] and got["ph"] == "vote" and not got["early"], got)
+    check("Imposter: every phone gets whose turn it is, and no words (nobody typed any)",
+          got["pub"] == ["at", "order", "part", "ph", "r"], got["pub"])
+    check("Imposter: someone gone is passed over; the TV's Skip ahead passes a turn; a bot says its word only on its turn",
+          got["gone"] == 1 and got["skip"] == 1 and got["bot"] == {"a": {"said": 1}} and got["notup"] is None, got)
+    check("Links: the clue giver says the word and taps how many; the clue on the table is the number (a typed word goes nowhere)",
+          got["links"] == {"ph": "guess", "clue": {"n": 3}, "left": 4, "pub": {"n": 3}} and got["wordOnly"] is None, got["links"])
+    def block(start, end):
+        part = src[src.index(start):]
+        return part[:part.index(end)]
+    phones = [block("const Imposter = {", "\nfunction fixRound"), block("const Trivia = {", "\nconst DrawIt = {"), block("const Links = {", "\n// While we're testing")]
+    check("pip party out loud: no text box on a phone in Trivia, Imposter or Links",
+          all('type: "text"' not in x and "p.draft(" not in x and "h(\"select\"" not in x for x in phones))
+    imp = block("const Imposter = {", "\nfunction fixRound")
+    last = imp[imp.index('    if (S.ph === "last") {', imp.index("  tv(S, c) {")):]
+    last = last[:last.index("\n    }\n")]
+    check("Imposter: caught, the TV says what the imposter had, never what everyone else had, till their guess is in",
+          "S.b" in last and "S.a" not in last, last)
+    join = block("function joinView(pre) {", "\nfunction botsView")
+    check("pip party out loud: a link with the code asks only for a name (the code's box shows for Another table, a bad code or none)",
+          "cd.hidden = linked;" in join and join.count("typeIt();") >= 3 and "Another table" in join
+          and "(nm.value ? (linked ? go : cd) : nm).focus()" in join)
 
 
 def test_pip_party_v395():
@@ -19105,7 +19176,7 @@ console.log(JSON.stringify({ loneWritten: lone.order.filter((i) => D.blacks[i].w
           and ">On the menu</div>" in out and [g for g, _l in G.GAMES] == ["trivia", "imposter", "links"]
           and "duecrew:party:host" in out and "duecrew:party:bots" in out and "duecrew:party:custom" in out and "Custom&hellip;" in out)
     check("pip party tab: the line says all three, none, or nothing to play from",
-          board.party_say(318, []) == "318 cards &middot; enough for all three" and "too few" in board.party_say(3, [g for g, _l in G.GAMES])
+          board.party_say(318, []) == "318 cards &middot; enough for all three" and board.party_say(3, [g for g, _l in G.GAMES]) == "3 cards &middot; not enough for a game"
           and board.party_say(0).startswith("Nothing here yet") and board.party_say(5) == "5 cards")
     busy = board.party_html(dict(view, busy=True, said="Opening a table…"))
     check("pip party tab: while a table opens, Host and bots are off and it says so",

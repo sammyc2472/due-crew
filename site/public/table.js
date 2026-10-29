@@ -32,7 +32,6 @@ const int = (n) => Math.floor(rnd() * n);
 const pick = (a) => a[int(a.length)];
 function shuffle(a) { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) { const j = int(i + 1); [b[i], b[j]] = [b[j], b[i]]; } return b; }
 const norm = (w) => String(w == null ? "" : w).toLowerCase().replace(/[^a-z0-9]/g, "");
-const one = (w) => String(w || "").trim().split(/\s+/)[0].slice(0, 24);
 const clip = (w, n) => String(w || "").replace(/[\u0000-\u001f\u007f\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/g, "").trim().slice(0, n);
 const plural = (n, a, b) => `${n} ${n === 1 ? a : b}`;
 const clone = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
@@ -136,20 +135,20 @@ const shape = (i) => { const s = h("span", { class: "shp", "aria-hidden": "true"
 // secrets(state, ctx), what one seat sees (a hand, a topic, the key),
 // whispered to that phone alone; collect/force/timeout move it on; tv and
 // phone draw it; bot is a stand-in player (Try it with bots).
-const BOT_WORDS = ["classic", "acute", "chronic", "labs", "imaging", "kids", "rare", "common", "drugs", "fever", "pain", "genes"];
 const seatsBut = (c, i) => c.seats.map((_, k) => k).filter((k) => k !== i);
 
 const Imposter = {
   id: "imposter", name: "Imposter", kind: "Find the odd one out", min: 3, max: 8,
-  line: "Every phone shows the same topic but one. That one gets its twin, the topic beside it in your deck, and doesn't know.",
+  line: "Everyone has the same topic but one, and they don't know it. Twice round, a word each; then vote.",
   learn: "Spotting what separates two things you'd confuse.",
   start(c) {
     const pr = pick(D.twins.slice(0, Math.max(3, Math.ceil(D.twins.length / 2))));  // the likeliest mix-ups come first
     const [A, B] = rnd() < 0.5 ? [pr.a, pr.b] : [pr.b, pr.a];
-    return { ph: "clue", r: 1, a: A.t, b: B.t, facts: { a: A.facts || [], b: B.facts || [] }, part: pr.part, imp: int(c.N), clues: [], votes: null, last: null, opts: null, caught: null, most: null };
+    const first = int(c.N), order = c.seats.map((_, k) => (first + k) % c.N);  // round the room from someone, said out loud
+    return { ph: "clue", r: 1, order, at: 0, a: A.t, b: B.t, facts: { a: A.facts || [], b: B.facts || [] }, part: pr.part, imp: int(c.N), votes: null, last: null, opts: null, caught: null, most: null };
   },
   pub(S) {
-    const x = { ph: S.ph, r: S.r, part: S.part, clues: S.clues };
+    const x = { ph: S.ph, r: S.r, part: S.part, order: S.order, at: S.at };
     if (S.ph === "last" || S.ph === "end") Object.assign(x, { imp: S.imp, a: S.a, b: S.b, votes: S.votes, caught: S.caught });
     if (S.ph === "last") x.opts = S.opts;
     if (S.ph === "end") x.last = S.last;
@@ -158,7 +157,7 @@ const Imposter = {
   secrets(S, c) { return c.seats.map((_, i) => ({ top: i === S.imp ? S.b : S.a })); },
   collect(S, A, c) {
     const all = (f) => A.every((a, i) => (a && f(a)) || !c.here(i));
-    if (S.ph === "clue" && all((a) => typeof a.w === "string" && a.w)) return Imposter.force(S, c);
+    if (S.ph === "clue") { const i = S.order[S.at]; return (A[i] && A[i].said === 1) || !c.here(i) ? Imposter.force(S, c) : null; }  // the one saying a word taps when they've said it
     if (S.ph === "vote" && (c.N < 2 || all((a) => Number.isInteger(a.v)))) return Imposter.force(S, c);  // alone, nobody to vote for
     if (S.ph === "last" && A[S.imp] && typeof A[S.imp].g === "string") return Imposter.force(S, c);
     return null;
@@ -166,8 +165,8 @@ const Imposter = {
   force(S, c) {
     const A = c.A;
     if (S.ph === "clue") {
-      const clues = S.clues.concat([A.map((a) => (a && typeof a.w === "string" && one(clip(a.w, 24)) ? one(clip(a.w, 24)) : "…"))]);
-      return Object.assign({}, S, S.r === 1 ? { r: 2, clues } : { ph: "vote", clues });
+      if (S.at + 1 < S.order.length) return Object.assign({}, S, { at: S.at + 1 });
+      return Object.assign({}, S, S.r === 1 ? { r: 2, at: 0 } : { ph: "vote" });
     }
     if (S.ph === "vote") {
       const votes = A.map((a, i) => (a && Number.isInteger(a.v) && a.v >= 0 && a.v < c.N && a.v !== i ? a.v : -1));
@@ -200,17 +199,18 @@ const Imposter = {
   tv(S, c) {
     const A = c.A, nm = c.name;
     const head = h("div", { class: "sub" }, `Imposter · ${S.part}`);
-    const table = () => (S.clues.length ? h("div", { class: "ct" }, c.seats.map((_, i) => h("div", { class: "ct-r" + (S.ph === "end" && i === S.imp ? " bad" : "") }, h("b", {}, nm(i)), S.clues.map((r) => h("span", {}, r[i] || "…"))))) : null);
     const status = (f) => h("div", { class: "ppl" }, c.seats.map((_, i) => { const ok = A[i] && f(A[i]); return h("span", { class: ok ? "ok" : "" }, nm(i), ok ? " ✓" : ""); }));
     if (S.ph === "clue") {
-      return frag(head, h("div", { class: "h" }, `Clues, round ${S.r} of 2`),
-        h("p", { class: "lead" }, S.r === 1 ? "One word that fits your topic. One of you has a different one." : "One more word each."),
-        status((a) => a.w), table());
+      const cur = nm(S.order[S.at]);
+      return frag(head, h("div", { class: "h" }, `${Poss(cur)} word`),
+        h("p", { class: "lead" }, S.r === 1 ? "A word that fits your topic." : "Once more round."),
+        h("div", { class: "ppl big" }, S.order.map((i, k) => h("span", { class: k === S.at ? "ok" : k < S.at ? "done" : "" }, nm(i)))),
+        h("p", { class: "small" }, `Round ${S.r} of 2`));
     }
-    if (S.ph === "vote") return frag(head, h("div", { class: "h" }, "Who's the imposter?"), table(), status((a) => Number.isInteger(a.v)));
+    if (S.ph === "vote") return frag(head, h("div", { class: "h" }, "Who's the imposter?"), status((a) => Number.isInteger(a.v)));
     const imp = nm(S.imp);
     if (S.ph === "last") {
-      return frag(head, h("div", { class: "h" }, `Caught: ${you(imp) ? "you" : imp} had ${S.b}.`), h("p", { class: "lead" }, `Everyone else had ${S.a}. ${says(imp, "You get", "gets")} one guess at it.`), table());
+      return frag(head, h("div", { class: "h" }, `Caught: ${you(imp) ? "you" : imp} had ${S.b}.`), h("p", { class: "lead" }, `${says(imp, "You get", "gets")} one guess at everyone else's.`));
     }
     const named = S.caught && norm(S.last) === norm(S.a);
     const headline = !S.caught ? `${imp} got away with ${S.b}.` : named ? `${imp} named it. ${you(imp) ? "You get" : "They get"} away.` : `Caught: ${you(imp) ? "you" : imp} had ${S.b}.`;
@@ -219,18 +219,17 @@ const Imposter = {
     (S.votes || []).forEach((v) => { if (v >= 0) tally[v]++; });
     return frag(head, h("div", { class: "h" }, headline), h("p", { class: "lead" }, [why, `Everyone else had ${S.a}.`].filter(Boolean).join(" ")),
       h("div", { class: "ppl" }, c.seats.map((_, i) => h("span", { class: i === S.imp ? "bad" : "" }, nm(i), tally[i] ? h("i", {}, " " + plural(tally[i], "vote", "votes")) : null))),
-      table(), S.facts.a.length || S.facts.b.length ? frag(h("div", { class: "lbl" }, "What tells them apart"), Imposter.apart(S)) : null,
+      S.facts.a.length || S.facts.b.length ? frag(h("div", { class: "lbl" }, "What tells them apart"), Imposter.apart(S)) : null,
       h("div", { class: "row" }, btn("Another round", () => c.again()), btn("Back to games", () => c.lobby(), "plain")));
   },
   phone(x, seat, p) {
     const my = p.me && p.me.top, mine = p.mine();
     if (!my) return h("p", { class: "small" }, "…");
     const secret = h("div", { class: "secret" }, h("div", { class: "small" }, "Your topic"), h("div", { class: "big" }, my));
-    if (x.ph === "clue") {
-      if (mine) return frag(secret, h("p", {}, `Sent: ${mine.w}`));
-      const inp = p.draft("w", h("input", { type: "text", maxlength: 24, placeholder: "One word", "aria-label": "Your one word", autocomplete: "off", autocapitalize: "off" }));
-      return frag(h("div", { class: "who" }, `Clues, round ${x.r} of 2`), secret, x.r === 2 && x.clues[0] ? h("p", { class: "small" }, `Your first word: ${x.clues[0][seat]}`) : null,
-        h("form", { class: "f", onsubmit: (e) => { e.preventDefault(); const w = one(clip(inp.value, 24)); if (w) p.answer({ w }); } }, inp, h("button", { class: "btn", type: "submit" }, "Send")));
+    if (x.ph === "clue") {  // said out loud: a phone shows the topic, and whose turn it is
+      const order = x.order || [], cur = order[x.at], next = order[x.at + 1];
+      if (cur === seat) return frag(h("div", { class: "who" }, `Round ${x.r} of 2 · your turn`), secret, mine ? null : btn("Said it", () => p.answer({ said: 1 })));
+      return frag(h("div", { class: "who" }, `Round ${x.r} of 2`), secret, h("p", { class: "small" }, `${p.name(cur)}'s turn.${next === seat ? " You're next." : ""}`));
     }
     if (x.ph === "vote") {
       if (mine) return frag(h("div", { class: "big" }, `You voted ${p.name(mine.v)}.`));
@@ -247,7 +246,7 @@ const Imposter = {
   },
   mood(S) { return { clue: "peek", vote: "focus", last: "ready" }[S.ph] || (S.caught && norm(S.last) !== norm(S.a) ? "cheer" : "peek"); },
   bot(x, seat, b) {
-    if (x.ph === "clue") return { a: { w: pick(BOT_WORDS) } };
+    if (x.ph === "clue") return x.order[x.at] === seat ? { a: { said: 1 } } : null;
     if (x.ph === "vote") { const o = seatsBut(b, seat); return o.length ? { a: { v: pick(o) } } : null; }
     if (x.ph === "last" && seat === x.imp) return { a: { g: pick(x.opts || [x.a]) } };
     return null;
@@ -383,8 +382,8 @@ const Rounds = {
 
 const Trivia = {
   id: "trivia", name: "Trivia", kind: "Quiz", min: 1, max: 8, SECS: 20,
-  line: "Your cards on the TV, four shapes on every phone. Pick a topic or mix them, call how many of you get it, then see the card. Most of you right on 7 of 10 clears the block.",
-  learn: "Recall, ten at a time, the card itself after each, and a check on what the table thinks it knows.",
+  line: "Your cards on the TV, four shapes on every phone. Most of you right on 7 of 10 clears the block.",
+  learn: "Recall, ten at a time, and the card after each.",
   TOPIC_MIN: 6,  // a subject's questions for a block of its own
   // a question's subject for a topic round: the pack's ("Renal", gamenight.rounds), else its topic
   subj: (q) => q.round || q.tag || "",
@@ -454,7 +453,7 @@ const Trivia = {
       shown ? h("span", { class: "barx" }, h("i", { style: `width:${(100 * res.counts[i]) / Math.max(1, c.N)}%` })) : null)));
     if (!shown) {
       const inN = A.filter((a) => a && Number.isInteger(a.o)).length;
-      const calls = h("div", { class: "calls" }, h("span", {}, "Call it: how many of you get it?"), Array.from({ length: c.N + 1 }, (_, n) => h("button", { type: "button", "aria-pressed": String(S.call === n), onclick: () => c.set(Object.assign({}, S, { call: n })) }, String(n))));
+      const calls = h("div", { class: "calls" }, h("span", {}, "How many get it?"), Array.from({ length: c.N + 1 }, (_, n) => h("button", { type: "button", "aria-pressed": String(S.call === n), onclick: () => c.set(Object.assign({}, S, { call: n })) }, String(n))));
       return frag(top, h("div", { class: "h" }, q.q), opts, calls, h("div", { class: "row" }, h("span", { class: "tm", "data-end": S.ends }), h("span", { class: "sub" }, `${inN} of ${c.N} in`), btn("Reveal", () => c.go(Trivia.force(S, c)), "plain")));
     }
     let run = 0;
@@ -466,7 +465,7 @@ const Trivia = {
   },
   phone(x, seat, p) {
     const mine = p.mine();
-    if (x.ph === "topic") return frag(h("div", { class: "big" }, "The TV's picking a topic."));
+    if (x.ph === "topic") return frag(h("div", { class: "big" }, "Picking a topic…"));
     if (x.ph === "end") return frag(h("div", { class: "big" }, `Most of you right on ${(x.log || []).filter(Boolean).length} of ${x.n}.`));
     const s = (i, tap) => h(tap ? "button" : "div", Object.assign({ class: "sh" + (x.ph === "show" ? (i === x.ans ? " right" : " dim") : "") + (mine && mine.o === i ? " mine" : ""), style: `--oc: var(--o${i + 1})`, "aria-label": SHAPE_NAMES[i] },
       tap ? { type: "button", onclick: () => p.answer({ o: i }) } : {}), shape(i));
@@ -685,7 +684,7 @@ const TEAM = { g: "Green", p: "Purple" };
 const other = (t) => (t === "g" ? "p" : "g");
 const Links = {
   id: "links", name: "Links", kind: "Two teams, one board", min: 4, max: 10, TIMERS: [0, 60, 90, 120],
-  line: "Two teams, 25 of your topics. Each clue giver sees which are their team's and gives one word and a number. Find yours first, and stay off Code blue.",
+  line: "Two teams, 25 of your topics. The clue givers know whose is whose: one word, and how many. Find yours first; stay off Code blue.",
   learn: "One mechanism, three diseases: finding what ties your deck together.",
   board() {
     const tiles = shuffle(D.words).slice(0, 25), first = rnd() < 0.5 ? "g" : "p";
@@ -703,7 +702,6 @@ const Links = {
   members: (S, t) => S.teams.map((x, i) => (x === t ? i : -1)).filter((i) => i >= 0),
   leftOf: (S, t) => S.key.filter((k, i) => k === t && !S.shown[i]).length,
   tappers(S) { const m = Links.members(S, S.turn); return m.length > 1 ? m.filter((i) => i !== S.givers[S.turn]) : m; },
-  okClue(S, w) { const n = norm(w); return !!n && !S.tiles.some((t) => norm(t) === n || t.toLowerCase().split(/[\s-]+/).map(norm).includes(n)); },
   begin(S, t) { return Object.assign({}, S, { ph: "clue", turn: t, clue: null, left: 0, ends: S.timer ? Date.now() + S.timer * 1000 : 0 }); },
   play(S) { const t = Links.members(S, S.first).length ? S.first : other(S.first); return Links.begin(Object.assign({}, S, { last: null }), t); },
   endTurn(S) { const t = Links.members(S, other(S.turn)).length ? other(S.turn) : S.turn; return Links.begin(S, t); },
@@ -728,7 +726,7 @@ const Links = {
     if (S.ph === "clue") {
       if (!Links.members(S, S.turn).length) return Links.endTurn(S);
       const a = A[S.givers[S.turn]];
-      return a && typeof a.w === "string" && Number.isInteger(a.n) ? Links.force(S, c) : null;
+      return a && Number.isInteger(a.n) ? Links.force(S, c) : null;  // the word's said out loud; the phone sends how many
     }
     if (S.ph === "guess") {
       for (const i of Links.tappers(S)) {
@@ -744,10 +742,9 @@ const Links = {
   force(S, c) {
     if (S.ph === "clue") {
       const a = c.A[S.givers[S.turn]];
-      if (!a || typeof a.w !== "string") return Links.endTurn(S);
-      const w = Links.okClue(S, one(clip(a.w, 24))) ? one(clip(a.w, 24)) : "(no clue)";
-      const n = Number.isInteger(a.n) ? Math.max(1, Math.min(9, a.n)) : 1;
-      return Object.assign({}, S, { ph: "guess", clue: { w, n }, left: n + 1 });
+      if (!a || !Number.isInteger(a.n)) return Links.endTurn(S);
+      const n = Math.max(1, Math.min(9, a.n));
+      return Object.assign({}, S, { ph: "guess", clue: { n }, left: n + 1 });
     }
     if (S.ph === "guess") return Links.endTurn(S);
     return null;
@@ -768,54 +765,17 @@ const Links = {
     return Object.assign({}, S, { teams, givers: Links.givers(teams, S.givers) });
   },
   grid(x, o) {
-    const el = h("div", { class: "grid5" + (o.small ? " sm" : "") + (o.keyed ? " keyed" : "") }, x.tiles.map((t, k) => {
+    return h("div", { class: "grid5" }, x.tiles.map((t, k) => {
       const shown = x.shown[k], key = o.key ? o.key[k] : "";
       const tap = o.tap && !shown;
       const fresh = shown && x.last && x.last.t === k;
-      return h(tap ? "button" : "div", Object.assign({ class: "lt5" + (shown ? ` r-${shown}` : key ? ` k-${key}` : "") + (fresh ? " new" : "") }, tap ? { type: "button", onclick: () => o.tap(k) } : {}), o.keyed ? h("span", {}, Links.soft(t)) : t);
+      return h(tap ? "button" : "div", Object.assign({ class: "lt5" + (shown ? ` r-${shown}` : key ? ` k-${key}` : "") + (fresh ? " new" : "") }, tap ? { type: "button", onclick: () => o.tap(k) } : {}), t);
     }));
-    if (o.keyed && typeof requestAnimationFrame === "function") requestAnimationFrame(() => el.isConnected && Links.fit(el));
-    return el;
   },
-  // a long word's one place to break, a soft hyphen nearest its middle
-  // before a syllable's start: a consonant, or letters that start one
-  // together ("Nitro-glycerin", "inter-stitial", "Arrhyth-mia")
-  soft(t) {
-    const V = /[aeiouy]/i, C = (ch) => /[a-z]/i.test(ch || "") && !V.test(ch);
-    const ons = (o) => o.length === 1 ? C(o) : /^(?:[bcdfgkpt][lr]|[cpstw]h|s[cklmnpqtw]|qu|gn|kn|rh|wr|[cpst]hr|s[cpt][lr])$/i.test(o);
-    return t.split(" ").map((w) => {
-      if (w.length < 9 || /[^a-z]/i.test(w)) return w;
-      let at = -1;
-      for (let i = 3; i <= w.length - 3; i++) {
-        let j = i;
-        while (j < w.length && C(w[j])) j++;
-        const o = w.slice(i, j);
-        if (!o || j >= w.length || !ons(o) || !V.test(w.slice(0, i))) continue;
-        if ((C(w[i - 1]) && ons(w[i - 1] + o)) || (C(w[i - 2]) && C(w[i - 1]) && ons(w.slice(i - 2, i) + o))) continue;
-        if (at < 0 || Math.abs(i - w.length / 2) < Math.abs(at - w.length / 2)) at = i;
-      }
-      return at < 0 ? w : w.slice(0, at) + "\u00ad" + w.slice(at);
-    }).join(" ");
-  },
-  // the key's small tiles: each word as big as fits whole (13px down to 11),
-  // else broken at its hyphen (12 down to 10); remembered by word and width
-  FIT: new Map(),
-  fit(el) {
-    if (Links.FIT.size > 400) Links.FIT.clear();
-    for (const s of el.querySelectorAll(".lt5 > span")) {
-      const id = s.textContent + "|" + s.clientWidth;
-      let got = Links.FIT.get(id);
-      if (!got) {
-        const fits = (px, cut) => { s.style.fontSize = px + "px"; s.classList.toggle("cut", cut); return s.scrollWidth <= s.clientWidth; };
-        got = [10, true];
-        for (let px = 13; px >= 11; px -= 0.5) if (fits(px, false)) { got = [px, false]; break; }
-        if (got[0] === 10) for (let px = 12; px >= 10; px -= 0.5) if (fits(px, true)) { got = [px, true]; break; }
-        Links.FIT.set(id, got);
-      }
-      s.style.fontSize = got[0] + "px";
-      s.classList.toggle("cut", got[1]);
-      s.classList.add("fit");
-    }
+  // the clue giver's key: the board's places in their colours, the words on the TV
+  blocks(x, key) {
+    const say = { g: "Green", p: "Purple", n: "Nobody's", x: "Code blue" };
+    return h("div", { class: "key5" }, key.map((k, i) => h("i", { class: `k-${k}${x.shown[i] ? " done" : ""}`, role: "img", "aria-label": `${x.tiles[i]}: ${say[k]}` })));
   },
   names(x, c, t) { return x.teams.map((tt, i) => (tt === t ? i : -1)).filter((i) => i >= 0).map((i) => c.name(i) + (x.givers[t] === i ? " · clues" : "")); },
   tv(S, c) {
@@ -831,7 +791,7 @@ const Links = {
     const lastLine = S.last ? (S.last.pass ? `${c.name(S.last.by)} ended the turn.` : S.last.time ? "Time." : `${S.tiles[S.last.t]}: ${S.last.kind === "x" ? "Code blue." : S.last.kind === "n" ? "nobody's." : TEAM[S.last.kind] + "'s."}`) : "";
     const turn = S.ph === "end"
       ? h("div", { class: "turn5" }, h("b", {}, S.result.blue ? `Code blue. ${TEAM[S.result.win]} takes it.` : `${TEAM[S.result.win]} found all theirs.`))
-      : h("div", { class: "turn5" }, h("b", { class: S.turn }, `${TEAM[S.turn]}'s turn`), h("span", { class: "clue5" }, S.clue ? `${S.clue.w} · ${S.clue.n} · ${S.left} left` : `${Poss(c.name(S.givers[S.turn]))} clue…`),
+      : h("div", { class: "turn5" }, h("b", { class: S.turn }, `${TEAM[S.turn]}'s turn`), S.clue ? h("span", { class: "clue5" }, "Clue for ", h("i", {}, String(S.clue.n)), ` · ${S.left} left`) : h("span", { class: "clue5" }, `${Poss(c.name(S.givers[S.turn]))} clue…`),
         S.ends ? h("span", { class: "tm", "data-end": S.ends }) : null);
     return frag(h("div", { class: "head5" }, box("g"), turn, box("p")), lastLine ? h("p", { class: "lead" }, lastLine) : null,
       Links.grid(x, { key: S.ph === "end" ? S.key : null, tap: S.ph === "guess" ? (k) => c.go(Links.tap(S, k, -1)) : null }),  // the team picks on the TV
@@ -839,7 +799,8 @@ const Links = {
         : S.ph === "guess" ? h("div", { class: "row" }, btn(`End ${TEAM[S.turn]}'s turn`, () => c.go(Links.endTurn(S)), "plain")) : null);
   },
   // a phone: its team and what the team has found; the clue giver's, the key
-  // (found tiles faded) and the clue. Picks are made on the TV's board.
+  // in colours (found places empty) and how many their clue's for, the word said out
+  // loud. Picks are made on the TV's board.
   phone(x, seat, p) {
     const mine = p.mine(), t = x.teams[seat], key = p.me && p.me.key, giver = x.givers[t] === seat;
     const chip = h("div", { class: `who team-${t}` }, `${TEAM[t]}${giver ? " · you give the clues" : ""}`);
@@ -852,26 +813,22 @@ const Links = {
     const foundOf = (team) => frag(h("div", { class: "lbl" }, `Found · ${found(team).length} of ${team === x.first ? 9 : 8}`), words(found(team), `w-${team}`));
     if (x.ph === "end") return frag(chip, h("div", { class: "big" }, x.result.blue ? `Code blue. ${TEAM[x.result.win]} takes it.` : `${TEAM[x.result.win]} found all theirs.`), foundOf(t));
     const ours = x.turn === t;
-    const status = ours ? (x.clue ? `${x.clue.w} · ${x.clue.n}` : giver ? "Your clue" : `${p.name(x.givers[t])}'s clue…`) : `${TEAM[x.turn]}'s turn`;
-    const solo = x.teams.filter((tt) => tt === t).length === 1;
-    const sub = ours && x.clue ? h("p", { class: "small" }, `${giver && !solo ? "Say nothing" : "Pick on the TV"} · ${x.left} left`) : null;
+    const status = ours ? (x.clue ? `Clue for ${x.clue.n}` : giver ? "Your clue" : `${p.name(x.givers[t])}'s clue…`) : `${TEAM[x.turn]}'s turn`;
+    const sub = ours && x.clue ? h("p", { class: "small" }, `${x.left} left`) : null;
     if (giver && key) {
-      const grid = Links.grid(x, { small: true, key, keyed: true });
+      const grid = Links.blocks(x, key);
       if (x.ph === "clue" && ours && !mine) {
-        const said = h("p", { class: "small", role: "status" });
-        const inp = p.draft("w", h("input", { type: "text", maxlength: 24, placeholder: "One word", "aria-label": "Your clue", autocomplete: "off", autocapitalize: "off" }));
-        const num = h("select", { "aria-label": "How many" }, [1, 2, 3, 4, 5].map((n) => h("option", { value: n }, String(n))));
-        return frag(chip, h("form", { class: "f two", onsubmit: (e) => { e.preventDefault(); const w = one(clip(inp.value, 24)); if (!w) return; if (!Links.okClue(x, w)) { said.textContent = "That word's on the board."; return; } p.answer({ w, n: Number(num.value) }); } },
-          inp, num, h("button", { class: "btn", type: "submit" }, "Send")), said, grid);
+        return frag(chip, h("div", { class: "big" }, "Your clue. How many?"),
+          h("div", { class: "nums", role: "group", "aria-label": "How many it's for" }, [1, 2, 3, 4, 5].map((n) => h("button", { type: "button", onclick: () => p.answer({ n }) }, String(n)))), grid);
       }
-      return frag(chip, h("div", { class: "big" }, mine && x.ph === "clue" ? `Your clue: ${mine.w} · ${mine.n}` : status), sub, grid);
+      return frag(chip, h("div", { class: "big" }, mine && x.ph === "clue" ? `Clue for ${mine.n}` : status), sub, grid);
     }
     return frag(chip, h("div", { class: "big" }, status), sub, foundOf(t));
   },
   mood(S) { return S.ph === "teams" ? "hello" : S.ph === "end" ? (S.result.blue ? "again" : "cheer") : S.last && S.last.kind && S.last.kind === S.turn ? "ready" : "focus"; },
   pmood(x, seat) { return x.ph === "end" && x.result && x.result.win === x.teams[seat] ? "cheer" : null; },
   bot(x, seat, b) {
-    if (x.ph === "clue" && x.givers[x.turn] === seat) { const w = BOT_WORDS.find((ww) => Links.okClue(x, ww)) || "hmm"; return { a: { w, n: 1 } }; }
+    if (x.ph === "clue" && x.givers[x.turn] === seat) return { a: { n: 1 + int(2) } };
     if (x.ph === "guess" && x.teams[seat] === x.turn && (x.givers[x.turn] !== seat || x.teams.filter((t) => t === x.turn).length === 1)) {
       const open = x.tiles.map((_, k) => k).filter((k) => !x.shown[k]);
       return rnd() < 0.25 || !open.length ? { a: { pass: 1 } } : { a: { t: pick(open) } };
@@ -1077,9 +1034,9 @@ function TV(root, client, opt) {
   function lobbyView() {
     const ps = players(), g = GAMES[T.chosen];
     const code = h("div", { class: "code" }, h("div", { class: "lbl" }, opt.bots ? "Playing with bots" : "Join on your phones"),
-      opt.bots ? h("p", { class: "lead" }, "Maya, Dre and Jo are bots. You're the phone beside the TV.") : h("div", { class: "letters" }, opt.code),
+      opt.bots ? h("p", { class: "lead" }, "Maya, Dre and Jo are bots.") : h("div", { class: "letters" }, opt.code),
       opt.bots ? null : h("div", { class: "joinat" }, typeof QR !== "undefined" ? QR.svg(`${location.origin}/t/${opt.code}`, 132) : null,
-        h("p", { class: "lead" }, "Scan this, or go to ", h("b", {}, `${location.host}/t/${opt.code}`), ".")),
+        h("p", { class: "lead" }, h("b", {}, `${location.host}/t/${opt.code}`))),
       D && D.name ? h("p", { class: "sub" }, `From ${D.name} · ${plural(D.n || 0, "card", "cards")}`) : null);
     const people = h("div", { class: "ppl big" }, ps.length ? ps.map((p, i) => h("span", { class: "ok" }, seatPip(i, `${clip(p.presence.n, 16) || "Someone"}'s Pip`), clip(p.presence.n, 16) || "Someone",
       p.crew ? h("i", { title: `Signed in as ${clip(p.crew, 40)}` }, " crew") : null,
@@ -1089,7 +1046,7 @@ function TV(root, client, opt) {
     const short = ps.length < need(g), few = !short && ps.length < g.min;
     return frag(h("div", { class: "lobby" }, code, h("div", { class: "stack" }, h("div", { class: "lbl" }, `At the table · ${ps.length}`), people, sureView(), doorView())), h("div", { class: "lbl" }, "Pick a game"), tiles,
       h("div", { class: "row" }, h("button", { type: "button", class: "btn", disabled: short, onclick: start }, `Start ${g.name}`),
-        short ? h("span", { class: "sub" }, ps.length ? `${g.name} needs ${plural(need(g), "player", "players")} or more.` : "Waiting for a phone to join.") : few ? h("span", { class: "sub" }, `Made for ${g.min} or more. While we're testing, it starts with fewer.`) : null));
+        short ? h("span", { class: "sub" }, ps.length ? `${g.name} needs ${plural(need(g), "player", "players")} or more.` : "Waiting for a phone to join.") : few ? h("span", { class: "sub" }, `Made for ${g.min} or more.`) : null));
   }
   // the door, the host's alone: who gets in, the lock, who's waiting
   const waiting = () => T.peers.filter((p) => p.wait && !p.isMe);
@@ -1102,7 +1059,7 @@ function TV(root, client, opt) {
       h("div", { class: "lbl" }, "Who gets in"),
       h("div", { class: "seg", role: "group", "aria-label": "Who gets in" }, ways.map(([id, label]) => h("button", { type: "button", class: id === d.door ? "on" : "", "aria-pressed": String(id === d.door), onclick: () => client.setDoor(id) }, label)),
         h("button", { type: "button", class: "lock" + (d.locked ? " on" : ""), "aria-pressed": String(d.locked), onclick: () => client.lock(!d.locked) }, d.locked ? "Locked" : "Lock")),
-      h("p", { class: "small" }, d.locked ? "Locked: nobody new, though anyone who sat down can come back." : { ask: "Your crew, signed in, come straight in. Anyone else waits here till you let them in.", crew: "Only your crew, signed in on their phones.", open: "Anyone with the code comes straight in." }[d.door] || ""),
+      d.locked || d.door === "ask" ? h("p", { class: "small" }, d.locked ? "Nobody new. Anyone who sat down can come back." : "Your crew come straight in.") : null,
       at.length ? knocks(at) : null);
   }
   function knocks(at) {
@@ -1286,17 +1243,25 @@ function joinView(pre) {
   app.className = "join";
   const nm = h("input", { id: "j-name", type: "text", maxlength: 16, placeholder: "Your name", "aria-label": "Your name", value: store.get("gn-name"), autocomplete: "nickname" });
   const cd = h("input", { id: "j-code", type: "text", maxlength: 4, placeholder: "Code", "aria-label": "The TV's code", autocomplete: "off", autocapitalize: "characters", class: "codein", value: pre || "" });
+  // from the TV's link or its QR the code's in hand: a name and Join (a remembered name, Join alone)
+  const linked = codeOf(pre || "").length === 4;
+  const lbl = h("div", { class: "lbl" }, linked ? `Join table ${codeOf(pre)}` : "Join a game");
+  const typeIt = () => { cd.hidden = false; other.hidden = true; lbl.textContent = "Join a game"; };
+  const other = btn("Another table", () => { typeIt(); cd.select(); cd.focus(); }, "ghost");
+  cd.hidden = linked;
+  other.hidden = !linked;
+  const go = h("button", { class: "btn", type: "submit" }, "Join");
   const said = h("p", { class: "small", role: "status" });
   const foot = h("p", { class: "small" }, "No account needed. The host lets you in.");
   const form = h("form", { class: "f card", onsubmit: async (e) => {
     e.preventDefault();
     const name = clip(nm.value, 16), code = codeOf(cd.value);
     if (!name) { said.textContent = "Your name, so the table knows who you are."; nm.focus(); return; }
-    if (code.length !== 4) { said.textContent = "The code is the four letters on the TV."; cd.focus(); return; }
+    if (code.length !== 4) { typeIt(); said.textContent = "The code is the four letters on the TV."; cd.focus(); return; }
     store.set("gn-name", name);
     said.textContent = "Finding the table…";
     const r = await apiCall("GET", `/table/${code}`).catch(() => ({ status: 0 }));
-    if (r.status === 404) { said.textContent = "No table with that code. Check the TV."; return; }
+    if (r.status === 404) { typeIt(); said.textContent = "No table with that code. Check the TV."; return; }
     if (r.status === 429) { said.textContent = "That's a lot of tries. Wait a little, then try again."; return; }
     if (r.status !== 200) { said.textContent = "Couldn't reach the table. Check your connection."; return; }
     if (r.body && r.body.full) { said.textContent = "That table's full."; return; }
@@ -1310,9 +1275,9 @@ function joinView(pre) {
     const ph = h("div", { class: "phone-solo", "aria-live": "polite" });
     app.replaceChildren(ph);
     Phone(ph, client, name);
-  } }, h("div", { class: "lbl" }, "Join a game"), nm, cd, h("button", { class: "btn", type: "submit" }, "Join"), said, foot);
+  } }, lbl, nm, cd, go, other, said, foot);
   app.replaceChildren(back(), form);
-  (nm.value ? cd : nm).focus();
+  (nm.value ? (linked ? go : cd) : nm).focus();
 }
 
 function botsView() {

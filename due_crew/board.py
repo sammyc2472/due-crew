@@ -2132,7 +2132,7 @@ def party_say(n, thin=None):
     """The pick's line: its cards and how many of the menu's games (_GAMES)
     they fill (thin: the ones it can't; None when that isn't worked out)."""
     if not n:
-        return "Nothing here yet. Custom&hellip; picks decks and tags."
+        return "Nothing here yet."
     cards = f"{n:,} card{'s' if n != 1 else ''}"
     if thin is None:
         return cards
@@ -2140,7 +2140,7 @@ def party_say(n, thin=None):
     if k >= len(_GAMES):
         return f"{cards} &middot; enough for all {of}"
     if k <= 0:
-        return f"{cards} &middot; too few short answers for a game"
+        return f"{cards} &middot; not enough for a game"
     return f"{cards} &middot; enough for {_NUMS[k]} of the {of}"
 
 
@@ -2154,21 +2154,18 @@ def party_html(v):
     pip = f'<span class="pp-pip">{v["pip"]}</span>' if v.get("pip") else ""
     fx = ('<span class="pp-fx" aria-hidden="true">' + "".join(f'<i style="--r:{k * 36}deg"></i>' for k in range(10)) + "</span>"
           if v.get("burst") else "")
-    top = (f'<div class="pp-top">{pip}{fx}<span class="pp-hi"><b>Party games on your own cards</b>'
-           f'<small>The TV opens here. Phones join from it.</small></span></div>')
+    top = f'<div class="pp-top">{pip}{fx}<span class="pp-hi"><b>Party games on your own cards</b></span></div>'
     burst = " burst" if v.get("burst") else ""
     tv = v.get("open")
     if tv:
         if tv.get("bots"):
-            body = ('<div class="pp-open"><b>Bots are on the TV</b>'
-                    '<small>Close its window to stop.</small></div>')
+            body = '<div class="pp-open"><b>Bots are on the TV</b></div>'
         else:
             url = str(tv.get("url") or "")
             shown = _re.sub(r"^https?://", "", url)
             body = (f'<div class="pp-open"><b>On the TV &middot; {e(str(tv.get("code") or ""))}</b>'
                     f'<span>Phones: <span class="pp-url">{e(shown)}</span> '
-                    f'<a href="#" onclick="{_pycmd("party:copy")}">Copy link</a></span>'
-                    f'<small>Close the TV&rsquo;s window to end the night.</small></div>')
+                    f'<a href="#" onclick="{_pycmd("party:copy")}">Copy link</a></span></div>')
         return f'<div class="pp{burst}">{top}{body}</div>'
     srcs = v.get("sources") or []
     pick = v.get("pick")
@@ -7312,7 +7309,7 @@ DUE_CSS = """
     #due-crew .pp:hover .pp-pip .sv { --sv-on: infinite; }
     #due-crew .pp-hi { display: grid; gap: 1px; min-width: 0; }
     #due-crew .pp-hi b { font-size: 13px; }
-    #due-crew .pp-hi small, #due-crew .pp-open small, #due-crew .pp-say { color: var(--dc-muted); font-size: 11.5px; }
+    #due-crew .pp-say { color: var(--dc-muted); font-size: 11.5px; }
     /* what's on tonight's menu, one highlight for both: the pick (its row) and the games it fills (their chips) */
     #due-crew .pp-list { display: grid; gap: 2px; }
     #due-crew .pp-o { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 9px; align-items: center;
