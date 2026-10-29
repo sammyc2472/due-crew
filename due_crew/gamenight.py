@@ -52,6 +52,7 @@ QS_MIN = 30        # Trivia's questions: tonight's cards, then (fewer than this)
 # a pack over several picks or subjects (the table votes on them): enough of each for a game of its own
 PER_SUB = {"qs": 30, "words": 25, "twins": 4}
 SUB_CAPS = {"qs": 400, "words": 300, "twins": 80}
+SUBS_MAX = 16      # the picks (or subjects) the TV's vote shows, the most carded first
 NEAR_MAX = 600     # and around it, for answer choices
 WHITES_MIN = 120   # a hand's cards: tonight's, and at least this many more from around them
 WORDS_MIN = 40     # Links' board: topic names, then (fewer than this) short answers
@@ -543,6 +544,7 @@ class _Pool:
         self.style = [_style(it["a"]) for it in items]
         self.slot = [_slot(it["q"]) for it in items]
         self.hint = [_hint(it["q"]) for it in items]
+        self.head = [_head(it["a"]) for it in items]
         pre = []
         df = {}
         for it in items:
@@ -565,14 +567,20 @@ class _Pool:
                     self.by_slot.setdefault((side, w), []).append(i)
             if self.hint[i]:
                 self.by_slot.setdefault(("h", self.hint[i]), []).append(i)
+            if self.head[i]:
+                self.by_slot.setdefault(("w", self.head[i]), []).append(i)
 
     def wrong(self, i, rng, k=3):
         """k wrong answers for item i: answers of the same sort (a number for
         a number), from the cards nearest it, that fill the same blank in
         other cards ("____ receptor") or answer the same hint ("(class)"),
-        alike in length and look; none that is the answer, holds it, sits in
-        the question, or is another's twin."""
+        alike in length and look, ending in the same word ("Coombs test"
+        among other tests); none that is the answer, holds it, sits in the
+        question, or is another's twin. A numeral after "type", "class",
+        "factor" and the like is offered its neighbours (III: I, II, IV)."""
         it, items = self.items[i], self.items
+        if _ROMAN.match(it["a"].strip()) and self.slot[i][0] in _NUMERAL_AFTER:
+            return _numerals(it["a"].strip(), rng, k)
         rel = {}
         for x, wgt in self.pre[i].items():
             for j in self.by_pre.get(x, ()):
@@ -584,6 +592,8 @@ class _Pool:
                 slot[j] = slot.get(j, 0) + wgt
         for j in self.by_slot.get(("h", self.hint[i]), ()) if self.hint[i] else ():
             slot[j] = slot.get(j, 0) + 3.0  # the card's own hint says what sort of answer
+        for j in self.by_slot.get(("w", self.head[i]), ()) if self.head[i] else ():
+            slot[j] = slot.get(j, 0) + 2.0  # the same last word: the same sort of thing ("… test", "… valve")
         cand = set(rel) | set(slot)
         if len(cand) < 40:
             cand |= set(rng.sample(range(len(items)), min(len(items), 80)))
@@ -615,6 +625,28 @@ class _Pool:
             if len(out) == k:
                 break
         return [_cased(o, it["a"]) for o in out]
+
+
+# a numeral after these is a type's or a class's, its neighbours the fair wrong answers
+_ROMAN = re.compile(r"(?i)^(?:i{1,3}|iv|vi{0,3}|ix|xi{0,3}|xii|xiii)[ab]?$")
+_NUMERAL_AFTER = frozenset(("type", "types", "class", "factor", "factors", "polymerase", "grade", "stage", "phase", "complex", "nerve", "cn",
+                            "collagen", "neurophysin", "group", "degree", "zone", "level", "division", "lamina", "layer", "cranial"))
+_NUMERALS = ("I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII")
+
+
+def _numerals(a, rng, k=3):
+    """k numerals near a Roman numeral answer, its suffix and case kept ("XIIIa": "XIIa", "XIa", "Xa")."""
+    suf = a[-1] if a[-1:].lower() in ("a", "b") and a[:-1].upper() in _NUMERALS else ""
+    n = _NUMERALS.index((a[:-1] if suf else a).upper())
+    near = sorted((x for x in range(len(_NUMERALS)) if x != n), key=lambda x: (abs(x - n), rng.random()))[:k]
+    out = [_NUMERALS[x] + suf for x in sorted(near)]
+    return [o.lower() if a.islower() else o for o in out]
+
+
+def _head(a):
+    """An answer's last word, when it names its sort ("test", "valve", "kinase"), singular; "" for a word alone."""
+    ws = re.findall(r"[a-z]+", str(a).lower())
+    return _sing(ws[-1]) if len(ws) >= 2 and len(ws[-1]) >= 4 and ws[-1] not in _STOP else ""
 
 
 _CUE = re.compile(r"\b(?:(diagnosis|disease|syndrome|condition|disorder)|(drug|medication|treated with|treatment of choice|agent))\b", re.I)
@@ -695,7 +727,8 @@ def build(rows, name="", n=None, seed=None, near=(), subs=None):
     prompts. subs: {cid: the pick it's from}, for the table's vote; without
     it, each question's subject (its round) is what's voted on. Every
     question, word and pair carries its "sub" (words in "wsubs"), and a
-    pack over several holds enough of each to play on its own (PER_SUB)."""
+    pack over several holds enough of each to play on its own (PER_SUB);
+    "subs" lists them with their cards, for the TV's vote."""
     rng = random.Random(seed)
     dup = set()
     items = _items(rows, dup)
@@ -768,6 +801,14 @@ def build(rows, name="", n=None, seed=None, near=(), subs=None):
     for k, cap in caps.items():
         pack[k] = pack[k][:cap]
     pack["wsubs"] = {w: tsub[norm(w)] for w in pack["words"] if tsub.get(norm(w))}
+    # the vote's choices, each with its cards (the picks' own, or a subject's questions), those the pack can play
+    held = {q["sub"] for q in pack["qs"]} | set(pack["wsubs"].values()) | {p["sub"] for p in pack["twins"]}
+    count = {}
+    for v in (subs or {}).values() if subs else (q["sub"] for q in pack["qs"]):
+        v = str(v or "")[:TOPIC_MAX]
+        if v in held:
+            count[v] = count.get(v, 0) + 1
+    pack["subs"] = [{"name": k, "n": v} for k, v in sorted(count.items(), key=lambda x: (-x[1], x[0]))[:SUBS_MAX]]
     return pack
 
 

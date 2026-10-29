@@ -18830,6 +18830,35 @@ def test_pip_party_host_off_the_main_thread_v395():
         GF._pack_rows, GF._bg, GF._tv, GF.client, appmod.generation = saved
 
 
+def test_pip_party_wrong_answers_of_its_sort_v395():
+    """3.9.5 round three, from a real-sized pack in a browser ("factor ____"
+    offered Cleavage, Short, Bleeding): a numeral after type, class, factor
+    and the like is offered its neighbours; an answer's last word names its
+    sort, and answers ending in it come first ("Coombs test" among tests)."""
+    import random
+    from due_crew import gamenight as G
+    r = random.Random(1)
+    check("wrong answers: a numeral's neighbours, its suffix and case kept",
+          all(G._numerals("III", random.Random(k)) in (["I", "II", "IV"], ["II", "IV", "V"]) for k in range(6)))
+    check("wrong answers: XIIIa's are activated factors too; I's are II, III, IV",
+          G._numerals("XIIIa", r) == ["Xa", "XIa", "XIIa"] and G._numerals("I", r) == ["II", "III", "IV"] and G._numerals("ii", r)[0] in ("i", "iii"))
+    rows = [(1, 0, True, ["Rheumatoid arthritis is a type {{c1::III}} hypersensitivity reaction", ""], ["Step1::Immuno::Hypersensitivity"]),
+            (2, 0, True, ["Vancomycin is given {{c1::IV}} for C. diff? No: by mouth", ""], ["Step1::Micro::Drugs"])]
+    rows += [(10 + k, 0, True, [f"{{{{c1::{w}}}}} is an acronym in immunology", ""], ["Step1::Immuno::Hypersensitivity"]) for k, w in enumerate(("ATP", "RFLP", "MHC", "TCR"))]
+    pool = [G.item(x) for x in rows]
+    check("wrong answers: the made-up cards are questions", all(pool), [x is None for x in pool])
+    P = G._Pool([x for x in pool if x])
+    got = P.wrong(0, random.Random(3))
+    check("wrong answers: type ____ hypersensitivity: III among numerals, never ATP or RFLP", sorted(got) in (["I", "II", "IV"], ["II", "IV", "V"]), got)
+    check("wrong answers: IV with no type, class or factor before it is no numeral", G._ROMAN.match("IV") and P.slot[1][0] not in G._NUMERAL_AFTER)
+    tests = ["Coombs test", "KOH whiff test", "Tzanck test", "Schilling test"]
+    rows = [(30 + k, 0, True, [f"Next best step: {{{{c1::{a}}}}}", ""], ["Step1::Heme::Workup"]) for k, a in enumerate(tests)]
+    rows += [(40 + k, 0, True, [f"Seen with {{{{c1::{a}}}}}", ""], ["Step1::Heme::Workup"]) for k, a in enumerate(("Stokes-Adams attacks", "Premature adrenarche", "Silver nitrate", "Bamboo spine"))]
+    pool = [G.item(x) for x in rows]
+    got = G._Pool(pool).wrong(0, random.Random(4))
+    check("wrong answers: an answer's last word names its sort; tests among tests", G._head("Coombs test") == "test" and sorted(got) == sorted(tests[1:]), got)
+    check("wrong answers: a word alone, or a last word that's a little one, names nothing", G._head("Coombs") == "" and G._head("pouch of the") == "")
+
 def test_game_night_questions_make_sense_v395():
     """3.9.5, Sam: "don't want the questions to be dumb". Checked on a big
     shared deck's export (35k cards, every card tagged by each resource that
@@ -18989,7 +19018,7 @@ console.log(JSON.stringify(out));
           order == [g for g, _l in G.GAMES] == ["trivia", "imposter", "links"] and all(f"const {n} = {{" in src for n in ("Rounds", "DrawIt", "Between")))
     tq = [{"q": f"Q{k} {t}", "a": f"A{k}", "tag": t, "opts": [f"A{k}", "x", "y", "z"], "ans": 0, "full": f"The card says A{k}", "extra": "Why"}
           for t in ("Renal pharm", "Vasculitis") for k in range(6)] + [{"q": "Q lone", "a": "A", "tag": "Lone", "opts": ["A", "b", "c", "d"], "ans": 0, "full": "", "extra": ""}]
-    topic = subprocess.run(["node", "-e", "const matchMedia = () => ({ matches: true });\n" + src[a:b].replace("let D = null;", "let D = " + json.dumps(dict(small, qs=tq)) + ";", 1) + r"""
+    topic = subprocess.run(["node", "-e", "const matchMedia = () => ({ matches: true });\n" + src[a:b].replace("let D = null;", "let D = " + json.dumps(dict(small, qs=tq, subs=[])) + ";", 1) + r"""
 const S = Trivia.start(), B = Trivia.block("Vasculitis"), M = Trivia.block(null);
 const c = { N: 1, A: [{ o: 0 }], here: () => true };
 const shown = Trivia.force(B, c);
@@ -19490,6 +19519,63 @@ def test_pip_party_only_from_its_tab_v395():
     check("pip party: nothing in Browse's right-click", not any("party" in a.lower() for a in acts), acts)
     check("pip party: no way in but the tab (no send from elsewhere in the glue)",
           not hasattr(GF, "send") and not hasattr(GF, "from_insights") and hasattr(GF, "open_tab"))
+
+def test_pip_party_the_table_votes_v395():
+    """3.9.5 round three (Sam's v3, "At the party: the table votes"): Anki's
+    pack lists tonight's picks (or its subjects), each with its cards, and
+    marks every question, word and pair with its own. In the lobby the
+    phones vote, the host's taps on the TV win, nothing chosen is all of
+    it; the games play on the chosen part alone, the boxes' counts are
+    theirs, and Trivia doesn't ask for a subject again."""
+    import shutil
+    import subprocess
+    from due_crew import gamenight as G
+    subs = {r[0]: r[4][0].split("::")[1] for r in GAME_ROWS}
+    pack = G.build(GAME_ROWS, "test", seed=3, subs=subs)
+    names = [x["name"] for x in pack["subs"]]
+    check("pip party vote: the pack lists the picks, the most carded first, each with its cards (all of them, not the sample)",
+          pack["subs"][:2] == [{"name": "Renal", "n": 10}, {"name": "Cardio", "n": 6}] and set(names) == {"Renal", "Cardio", "Neuro", "Pulm"}, pack["subs"])
+    check("pip party vote: every question, pair and word it marks is one of them",
+          {q["sub"] for q in pack["qs"]} <= set(names) and {p["sub"] for p in pack["twins"]} <= set(names) | {""}
+          and set(pack["wsubs"].values()) <= set(names), ({q["sub"] for q in pack["qs"]}, pack["wsubs"]))
+    bare = G.build(GAME_ROWS, "test", seed=3)
+    check("pip party vote: nothing picked, the choices are the questions' subjects",
+          [x["name"] for x in bare["subs"]] and {x["name"] for x in bare["subs"]} <= {q["sub"] for q in bare["qs"]}, bare["subs"])
+    if not shutil.which("node"):
+        check("pip party vote: node runs the vote (skipped: no node)", True)
+        return
+    src = open(os.path.join(REPO, "site", "public", "table.js"), encoding="utf-8").read()
+    a, b = src.index("let D = null;"), src.index("// ---------- hubs")
+    js = "const matchMedia = () => ({ matches: true });\n" + src[a:b].replace("let D = null;", "let D = " + json.dumps(pack) + ";", 1) + r"""
+const names = Vote.subs(D).map((x) => x.name);
+const R = Vote.only(D, ["Renal"]), D0 = D;
+D = R; const t = Trivia.start(); D = D0;
+console.log(JSON.stringify({ names, none: Vote.picked(names, null, [[], []]), voted: Vote.picked(names, null, [["Renal"], ["Renal", "Pulm", "Nope"]]),
+  mine: Vote.picked(names, ["Cardio"], [["Renal"]]), cleared: Vote.picked(names, [], [["Renal"]]),
+  rq: [...new Set(R.qs.map((q) => q.sub))], rt: [...new Set(R.twins.map((x) => x.sub))],
+  rw: R.words.filter((w) => D.wsubs[w] && D.wsubs[w] !== "Renal").length, all: Vote.only(D, []) === D,
+  counts: ORDER.map((id) => Vote.count(R, id)), whole: ORDER.map((id) => Vote.count(D, id)), trivia: t.ph, tq: [...new Set(t.qs.map((q) => q.sub))] }));
+"""
+    r = subprocess.run(["node", "-e", js], capture_output=True, text=True, timeout=60)
+    got = json.loads(r.stdout or "{}")
+    check("pip party vote: the TV's helpers run in node", r.returncode == 0 and got, r.stderr[:400])
+    if not got:
+        return
+    check("pip party vote: nothing voted is all of it; the phones' votes pick (one not offered is nothing); the host's taps win, even none",
+          got["names"] == names and got["none"] == [] and got["voted"] == ["Renal", "Pulm"] and got["mine"] == ["Cardio"] and got["cleared"] == [], got)
+    check("pip party vote: the games play on the chosen part alone (questions, pairs, words); all chosen, the whole pack",
+          got["rq"] == ["Renal"] and set(got["rt"]) <= {"Renal"} and got["rw"] == 0 and got["all"] is True, got)
+    check("pip party vote: the boxes count the chosen part", got["counts"][0] == len(got and [q for q in pack["qs"] if q["sub"] == "Renal"])
+          and got["whole"] == [len(pack["qs"]), len(pack["twins"]), len(pack["words"])], (got["counts"], got["whole"]))
+    check("pip party vote: after a vote, Trivia goes straight to its questions (no subject asked again)",
+          got["trivia"] == "ask" and got["tq"] == ["Renal"], (got["trivia"], got["tq"]))
+    tv = src[src.index("function TV(root, client, opt) {"):src.index("// ---------- a phone")]
+    phone = src[src.index("function Phone(root, client, name) {"):src.index("// ---------- bots")]
+    check("pip party vote: the lobby tells phones the choices' names, nothing more (no counts, no cards); a phone's vote is its own presence",
+          "subs: names().length > 1 ? names() : []" in tv and "x.n" not in tv[tv.index("function publish()"):tv.index("// each seat's own part")]
+          and "client.presence({ v: P.votes })" in phone and "What should we play on?" in phone and "What are we playing on?" in tv)
+    check("pip party vote: Play plays the chosen part; the game Anki opened on is picked first; Go with the votes undoes the host's taps",
+          "tonight();\n    const id = play()" in tv and "ORDER.includes(opt.first) ? opt.first" in tv and 'btn("Go with the votes", () => { T.mine = null;' in tv)
 
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]

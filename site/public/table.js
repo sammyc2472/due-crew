@@ -9,7 +9,8 @@
 // runs the TV, a phone and three bots in the one window, with no table.
 "use strict";
 (() => {
-let D = null;  // tonight's pack, from Anki
+let D = null;  // tonight's pack, from Anki (in the lobby and a game, the vote's part of it)
+let ALL = null;  // the whole of it
 const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const NS = "http://www.w3.org/2000/svg";
 
@@ -379,8 +380,9 @@ const Trivia = {
   TOPIC_MIN: 6,  // a subject's questions for a block of its own
   // a question's subject for a topic round: the pack's ("Renal", gamenight.rounds), else its topic
   subj: (q) => q.round || q.tag || "",
-  // tonight's subjects with a block's worth of questions, the most first
+  // tonight's subjects with a block's worth of questions, the most first; none when the table voted on what to play (round three)
   topics() {
+    if (Vote.subs(D).length >= 2) return [];
     const n = {};
     for (const q of D.qs) { const t = Trivia.subj(q); if (t) n[t] = (n[t] || 0) + 1; }
     return Object.keys(n).filter((t) => n[t] >= Trivia.TOPIC_MIN).sort((a, b) => n[b] - n[a]).slice(0, 8).map((t) => [t, n[t]]);
@@ -842,6 +844,26 @@ const ready = (g) => !!D && (D[NEEDS[g.id][0]] || []).length >= NEEDS[g.id][1];
 const GAMES = { imposter: Imposter, rounds: Rounds, trivia: Trivia, draw: DrawIt, between: Between, links: Links };
 // on the menu (gamenight.GAMES): Rounds, Draw it and Somewhere between are off it, their code kept
 const ORDER = ["trivia", "imposter", "links"];
+const UNITS = { trivia: ["question", "questions"], imposter: ["topic", "topics"], links: ["word", "words"] };
+
+// ---------- the table's vote (round three): what we play on ----------
+// Anki marks every question, word and pair with its pick, or its subject when
+// nothing was picked (gamenight.build's "sub"; "subs", each with its cards).
+// Phones vote; the host's taps on the TV win; nothing chosen is all of it.
+const Vote = {
+  subs(P) { return ((P && P.subs) || []).filter((x) => x && typeof x.name === "string" && x.name).slice(0, 16); },
+  // what's picked: the host's taps once made, else what any phone voted for ([] is all of it)
+  picked(names, mine, votes) { return names.filter((n) => (mine ? mine.includes(n) : votes.some((v) => v.includes(n)))); },
+  // the pack, the picked ones' part of it; Links' board filled from around them when short
+  only(P, on) {
+    if (!P || !on || !on.length) return P;
+    const ok = new Set(on), ws = P.wsubs || {};
+    const words = (P.words || []).filter((w) => ok.has(ws[w]));
+    const fill = words.length < 40 ? (P.words || []).filter((w) => !ws[w]).slice(0, 40 - words.length) : [];
+    return Object.assign({}, P, { qs: (P.qs || []).filter((q) => ok.has(q.sub)), words: words.concat(fill), twins: (P.twins || []).filter((t) => ok.has(t.sub)) });
+  },
+  count(P, id) { return P ? (P[NEEDS[id][0]] || []).length : 0; },
+};
 
 // ---------- hubs: what a client needs is presence(patch), peers(), onPeers(fn) ----------
 class LocalHub {
@@ -947,17 +969,26 @@ function clientId() {
 
 // ---------- the TV: holds the game ----------
 function TV(root, client, opt) {
-  const T = { mode: "lobby", chosen: ORDER.find((id) => ready(GAMES[id])) || "trivia", game: null, S: null, step: 0, seats: [], peers: [], key: "", sure: "", told: {}, mood: "", rx: {}, rxAt: {}, joined: 0 };
+  const T = { mode: "lobby", chosen: ORDER.includes(opt.first) ? opt.first : ORDER.find((id) => ready(GAMES[id])) || "trivia", mine: null,
+    game: null, S: null, step: 0, seats: [], peers: [], key: "", sure: "", told: {}, mood: "", rx: {}, rxAt: {}, joined: 0 };
   const players = () => T.peers.filter((p) => !(p.isMe && p.sameTab) && !p.wait && p.presence && p.presence.r === "p" && typeof p.presence.n === "string")
     .sort((a, b) => (Number(a.presence.t) || 0) - (Number(b.presence.t) || 0) || (a.peer < b.peer ? -1 : 1));
   const peerOf = (i) => (T.seats[i] ? T.peers.find((x) => x.peer === T.seats[i].peer) : null);
   const presOf = (i) => { const p = peerOf(i); return (p && p.presence) || {}; };
   const answers = () => T.seats.map((_, i) => { const a = presOf(i).a; return a && typeof a === "object" && a.s === T.step ? a : null; });
+  // the vote: tonight's picks (or subjects), what the phones want, what the host tapped; D is the picked part
+  const names = () => Vote.subs(ALL).map((x) => x.name);
+  const votes = () => players().map((p) => (Array.isArray(p.presence.v) ? p.presence.v.filter((x) => typeof x === "string").slice(0, 16) : []));
+  const picked = () => Vote.picked(names(), T.mine, votes());
+  const tonight = () => { D = Vote.only(ALL, picked()); return D; };
+  const play = () => (ready(GAMES[T.chosen]) ? T.chosen : ORDER.find((id) => ready(GAMES[id])) || null);  // the one picked, or the next that fits
   function ctx() {
     return { N: T.seats.length, seats: T.seats, name: (i) => (T.seats[i] ? T.seats[i].n : "?"), A: answers(), pres: presOf, here: (i) => !!peerOf(i), bots: !!opt.bots, go, set, again, lobby };
   }
   function publish() {
-    const g = T.mode === "game" ? { m: "game", gm: T.game.id, s: T.step, seats: T.seats.map((s) => ({ peer: s.peer, n: s.n })), x: T.game.pub(T.S, ctx()) } : { m: "lobby", gm: T.chosen, s: T.step };
+    if (T.mode !== "game") tonight();
+    const g = T.mode === "game" ? { m: "game", gm: T.game.id, s: T.step, seats: T.seats.map((s) => ({ peer: s.peer, n: s.n })), x: T.game.pub(T.S, ctx()) }
+      : { m: "lobby", gm: play() || T.chosen, s: T.step, subs: names().length > 1 ? names() : [] };  // phones vote on the names, nothing more
     client.presence({ r: "tv", code: opt.code, g }).catch(warn);
     whisper();
   }
@@ -975,8 +1006,9 @@ function TV(root, client, opt) {
   function again() { go(T.game.start(ctx())); }
   function lobby() { T.mode = "lobby"; T.game = null; T.S = null; T.step++; publish(); draw(true); }
   function start() {
-    const g = GAMES[T.chosen], ps = players();
-    if (ps.length < need(g) || !ready(g)) return;
+    tonight();
+    const id = play(), g = GAMES[id], ps = players();
+    if (!id || ps.length < need(g)) return;
     T.game = g;
     T.seats = ps.slice(0, g.max).map((p) => ({ peer: p.peer, n: clip(p.presence.n, 16) || "Someone" }));
     T.mode = "game";
@@ -1024,21 +1056,50 @@ function TV(root, client, opt) {
     root.querySelectorAll("[data-end]").forEach((el) => { const left = Math.max(0, Number(el.dataset.end) - Date.now()); el.textContent = `${Math.ceil(left / 1000)}s`; el.classList.toggle("low", left < 6000); });
   }
   function lobbyView() {
-    const ps = players(), g = GAMES[T.chosen];
+    tonight();
+    const ps = players(), id = play(), g = GAMES[id || T.chosen];
+    // the code, where to join, and the QR beside them (room left for the vote under them)
     const code = h("div", { class: "code" }, h("div", { class: "lbl" }, opt.bots ? "Playing with bots" : "Join on your phones"),
-      opt.bots ? h("p", { class: "lead" }, "Maya, Dre and Jo are bots.") : h("div", { class: "letters" }, opt.code),
-      opt.bots ? null : h("div", { class: "joinat" }, typeof QR !== "undefined" ? QR.svg(`${location.origin}/t/${opt.code}`, 132) : null,
-        h("p", { class: "lead" }, h("b", {}, `${location.host}/t/${opt.code}`))),
-      D && D.name ? h("p", { class: "sub" }, `From ${D.name} · ${plural(D.n || 0, "card", "cards")}`) : null);
+      opt.bots ? h("p", { class: "lead" }, "Maya, Dre and Jo are bots.") : h("div", { class: "joinat" },
+        h("div", { class: "stack" }, h("div", { class: "letters" }, opt.code), h("p", { class: "lead" }, h("b", {}, `${location.host}/t/${opt.code}`))),
+        typeof QR !== "undefined" ? QR.svg(`${location.origin}/t/${opt.code}`, 112) : null),
+      ALL && ALL.n ? h("p", { class: "sub" }, `${Number(ALL.n).toLocaleString("en-US")} of your cards`) : null);
     const people = h("div", { class: "ppl big" }, ps.length ? ps.map((p, i) => h("span", { class: "ok" }, seatPip(i, `${clip(p.presence.n, 16) || "Someone"}'s Pip`), clip(p.presence.n, 16) || "Someone",
       p.crew ? h("i", { title: `Signed in as ${clip(p.crew, 40)}` }, " crew") : null,
       client.door ? h("button", { type: "button", class: "x", "aria-label": `Turn ${clip(p.presence.n, 16) || "them"} away`, onclick: () => { T.sure = p.peer; draw(true); } }, "×") : null)) : h("span", {}, "Nobody's here yet."));
-    const tiles = h("div", { class: "tiles" }, ORDER.map((id) => { const gg = GAMES[id], ok = ready(gg); return h("button", { type: "button", class: "tile" + (id === T.chosen ? " on" : "") + (ok ? "" : " thin"), disabled: !ok, "aria-pressed": String(id === T.chosen), onclick: () => { T.chosen = id; publish(); draw(true); } },
-      h("span", { class: "kind" }, gg.kind), h("b", {}, gg.name), h("span", { class: "ln" }, gg.line), h("span", { class: "np" }, ok ? `${gg.min}–${gg.max} players` : "Not enough cards for this one")); }));
-    const short = ps.length < need(g), few = !short && ps.length < g.min;
-    return frag(h("div", { class: "lobby" }, code, h("div", { class: "stack" }, h("div", { class: "lbl" }, `At the table · ${ps.length}`), people, sureView(), doorView())), h("div", { class: "lbl" }, "Pick a game"), tiles,
-      h("div", { class: "row" }, h("button", { type: "button", class: "btn", disabled: short, onclick: start }, `Start ${g.name}`),
-        short ? h("span", { class: "sub" }, ps.length ? `${g.name} needs ${plural(need(g), "player", "players")} or more.` : "Waiting for a phone to join.") : few ? h("span", { class: "sub" }, `Made for ${g.min} or more.`) : null));
+    const tiles = h("div", { class: "tiles" }, ORDER.map((gid) => {
+      const gg = GAMES[gid], ok = ready(gg), u = UNITS[gid];
+      return h("button", { type: "button", class: "tile" + (gid === id ? " on" : "") + (ok ? "" : " thin"), disabled: !ok, "aria-pressed": String(gid === id), onclick: () => { T.chosen = gid; publish(); draw(true); } },
+        h("span", { class: "kind" }, gg.kind), h("b", {}, gg.name), h("span", { class: "ln" }, gg.line),
+        h("span", { class: "np" }, ok ? `${plural(Vote.count(D, gid), u[0], u[1])} · ${gg.min}–${gg.max} players` : "Not enough cards for this one"));
+    }));
+    const on = picked(), short = !id || ps.length < need(g), few = !short && ps.length < g.min;
+    const what = !on.length ? "" : on.length === 1 ? ` on ${clip(on[0], 36)}` : ` on these ${on.length}`;
+    const why = !id ? (on.length ? "Too few cards in these for any game. Pick another." : "Too few cards for any game.")
+      : ps.length < need(g) ? (ps.length ? `${g.name} needs ${plural(need(g), "player", "players")} or more.` : "Waiting for a phone to join.")
+      : id !== T.chosen ? `${GAMES[T.chosen].name} needs more than these. ${g.name} it is.` : few ? `Made for ${g.min} or more.` : "";
+    return frag(h("div", { class: "lobby" }, code, h("div", { class: "stack" }, h("div", { class: "lbl" }, `At the table · ${ps.length}`), people, sureView(), doorView())),
+      voteView(), h("div", { class: "lbl" }, "Pick a game"), tiles,
+      h("div", { class: "row" }, h("button", { type: "button", class: "btn", disabled: short, onclick: start }, `Play ${g.name}${what}`),
+        why ? h("span", { class: "sub" }, why) : null));
+  }
+  // what we play on: a tile a pick (or subject), sized by its cards, with who voted for it; a tap is the host's say
+  function voteView() {
+    const ss = Vote.subs(ALL);
+    if (ss.length < 2) return null;
+    const on = picked(), ps = players(), big = Math.max(1, ...ss.map((x) => Number(x.n) || 0));
+    const tap = (n) => { const base = picked(); T.mine = base.includes(n) ? base.filter((x) => x !== n) : base.concat(n); publish(); draw(true); };
+    return h("div", { class: "stack" },
+      h("div", { class: "row vhead" }, h("div", { class: "lbl" }, "What are we playing on?"),
+        T.mine && votes().some((v) => v.length) ? btn("Go with the votes", () => { T.mine = null; publish(); draw(true); }, "ghost") : null),
+      h("div", { class: "vmap" + (on.length ? " picking" : "") }, ss.map((x) => {
+        const n = Number(x.n) || 0, sel = on.includes(x.name);
+        const who = ps.map((p, i) => [p, i]).filter(([p]) => Array.isArray(p.presence.v) && p.presence.v.includes(x.name));
+        return h("button", { type: "button", class: "vt" + (sel ? " on" : ""), "aria-pressed": String(sel), style: `flex:${Math.max(1, n)} 1 ${120 + Math.round(110 * n / big)}px`, onclick: () => tap(x.name) },
+          h("b", {}, clip(x.name, 36)), h("span", { class: "vn" }, plural(n, "card", "cards")),
+          who.length ? h("span", { class: "vv", "aria-label": `Votes: ${who.map(([p]) => clip(p.presence.n, 16) || "Someone").join(", ")}` },
+            who.map(([p, i]) => h("i", { style: `background:${SEAT_COLORS[i % SEAT_COLORS.length][0]}`, title: clip(p.presence.n, 16) }, (clip(p.presence.n, 16) || "?").slice(0, 1).toUpperCase()))) : null);
+      })));
   }
   // the door, the host's alone: who gets in, the lock, who's waiting
   const waiting = () => T.peers.filter((p) => p.wait && !p.isMe);
@@ -1079,7 +1140,8 @@ function TV(root, client, opt) {
   }
   function draw(force) {
     const c = ctx();
-    const key = JSON.stringify([T.mode, T.chosen, T.step, T.S, c.A, players().map((p) => [p.peer, p.presence.n, p.crew]), waiting().map((p) => [p.peer, p.presence.n]), client.door || null, T.sure]);
+    const key = JSON.stringify([T.mode, T.chosen, T.mine, T.step, T.S, c.A, players().map((p) => [p.peer, p.presence.n, p.crew, T.mode === "lobby" ? p.presence.v : 0]),
+      waiting().map((p) => [p.peer, p.presence.n]), client.door || null, T.sure]);
     if (!force && key === T.key) return;
     T.key = key;
     root.replaceChildren(T.mode === "lobby" ? lobbyView() : gameView(c));
@@ -1093,7 +1155,7 @@ function TV(root, client, opt) {
 
 // ---------- a phone: answers in its own presence ----------
 function Phone(root, client, name) {
-  const P = { key: "", myA: null, drafts: {}, peers: [], mood: "", rxn: 0, rxAt: 0 };
+  const P = { key: "", myA: null, drafts: {}, peers: [], mood: "", rxn: 0, rxAt: 0, votes: [] };
   const top = h("div", { class: "ph-top" }), face = h("span", { class: "ph-pip", "aria-hidden": "true" }), box = h("div", { class: "ph-body" });
   const react = h("div", { class: "rxbar", role: "group", "aria-label": "React" }, REACTS.map((e, i) => h("button", { type: "button", "aria-label": `React ${e}`, onclick: () => {
     if (Date.now() - P.rxAt < 600) return;
@@ -1119,6 +1181,15 @@ function Phone(root, client, name) {
       draft(id, el) { const k = pub.s + ":" + id; if (P.drafts[k] != null) el.value = P.drafts[k]; el.addEventListener("input", () => { P.drafts[k] = el.value; }); return el; },
     };
   }
+  // the lobby: what should we play on? a tap's my vote (the TV shows it; the host has the say)
+  function lobby(pub) {
+    const subs = Array.isArray(pub.subs) ? pub.subs.filter((x) => typeof x === "string").slice(0, 16) : [];
+    const vote = (n) => { P.votes = P.votes.includes(n) ? P.votes.filter((x) => x !== n) : P.votes.concat(n); client.presence({ v: P.votes }).catch(warn); draw(true); };
+    return frag(h("div", { class: "big" }, you(name) ? "You're in." : `You're in, ${name}.`),
+      subs.length > 1 ? h("div", { class: "stack" }, h("div", { class: "say" }, "What should we play on?"),
+        h("div", { class: "vlist" }, subs.map((n) => h("button", { type: "button", "aria-pressed": String(P.votes.includes(n)), onclick: () => vote(n) }, clip(n, 36))))) : null,
+      GAMES[pub.gm] ? h("p", { class: "small" }, `Up next: ${GAMES[pub.gm].name}`) : null);
+  }
   function draw(force) {
     const tv = tvOf(), pub = tv ? tv.presence.g : null, me = myPeer();
     let seat = -1, deps = 0;
@@ -1127,7 +1198,7 @@ function Phone(root, client, name) {
       const g = GAMES[pub.gm];
       if (g && g.phoneDeps && seat >= 0) { try { deps = g.phoneDeps(pub.x, seat, pc(pub, seat)); } catch (e) { deps = 0; } }
     }
-    const key = JSON.stringify([!!tv, pub, seat, P.myA, deps, !!client.waiting, client.shut || "", client.secret || null]);
+    const key = JSON.stringify([!!tv, pub, seat, P.myA, deps, !!client.waiting, client.shut || "", client.secret || null, P.votes]);
     if (!force && key === P.key) return;
     P.key = key;
     top.replaceChildren(face, h("b", {}, name), h("span", {}, client.shut ? "" : client.waiting ? "At the door" : tv ? `Pip Party · ${clip(tv.presence.code, 8)}` : "Looking for the TV"));
@@ -1135,7 +1206,7 @@ function Phone(root, client, name) {
     if (client.shut && SHUT[client.shut]) body = frag(h("div", { class: "big" }, SHUT[client.shut][0]), h("p", { class: "small" }, SHUT[client.shut][1]), h("div", { class: "row" }, btn("Join again", () => { bye(); joinView(""); }, "plain")));
     else if (client.waiting) { body = frag(h("div", { class: "big" }, `At the door, ${name}.`), h("p", { class: "small" }, "The host lets you in from the TV.")); mood = "peek"; }
     else if (!tv) body = frag(h("div", { class: "big" }, "Looking for the TV…"));
-    else if (pub.m !== "game") { body = frag(h("div", { class: "big" }, you(name) ? "You're in." : `You're in, ${name}.`), GAMES[pub.gm] ? h("p", { class: "small" }, `Up next: ${GAMES[pub.gm].name}`) : null); mood = "hello"; }
+    else if (pub.m !== "game") { body = lobby(pub); mood = "hello"; }
     else if (!GAMES[pub.gm]) body = h("p", {}, "…");
     else if (seat < 0) body = frag(h("div", { class: "big" }, "This one started without you."), h("p", { class: "small" }, "You're in the next one."));
     else {
@@ -1219,7 +1290,7 @@ function home() {
 }
 
 /** The TV, in Anki's window: the table Anki opened, with tonight's pack. */
-function tvView(code, key) {
+function tvView(code, key, first) {
   bye();
   app.className = "host";
   const client = connect(code, key);
@@ -1228,7 +1299,7 @@ function tvView(code, key) {
     h("button", { type: "button", class: "ghost", onclick: () => { const el = document.getElementById("tv"); if (el && el.requestFullscreen) el.requestFullscreen().catch(() => {}); } }, "Full screen")),
     h("div", { class: "in", id: "tv-in", "aria-live": "polite" }), h("div", { class: "pipc", id: "tv-pip", "aria-hidden": "true" }), h("div", { class: "fx", id: "tv-fx", "aria-hidden": "true" }));
   app.replaceChildren(tv);
-  TV(document.getElementById("tv-in"), client, { code, corner: document.getElementById("tv-pip"), fx: document.getElementById("tv-fx") });
+  TV(document.getElementById("tv-in"), client, { code, first, corner: document.getElementById("tv-pip"), fx: document.getElementById("tv-fx") });
 }
 
 function joinView(pre) {
@@ -1293,9 +1364,9 @@ let started = false;
 function fromAnki(d) {
   if (started || !d || typeof d !== "object" || !d.pack || typeof d.pack !== "object") return;
   started = true;
-  D = d.pack;
+  ALL = D = d.pack;
   if (d.mode === "bots") botsView();
-  else tvView(codeOf(d.code), String(d.key || ""));
+  else tvView(codeOf(d.code), String(d.key || ""), String(d.first || ""));
 }
 if (typeof Sev !== "undefined" && Sev.sheet) Sev.sheet();  // Pip's sheet, before any seat's Pip
 if (location.hash === "#anki") {
