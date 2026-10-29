@@ -2257,6 +2257,8 @@ def on_message(cmd, parts):
         open_date(arg, parts[3])
     elif cmd == "planbrowse" and arg and len(parts) > 3:
         browse_date(arg, parts[3])
+    elif cmd == "planparty" and arg and len(parts) > 3:  # 3.9.5 round three: Party on a date's cards
+        party_date(arg, parts[3])
     elif cmd == "planleft" and arg:
         browse_left(arg, [x for x in (parts[3] if len(parts) > 3 else "").split("-") if x])
     elif cmd == "plantopic" and arg and len(parts) > 4:
@@ -2477,23 +2479,37 @@ def _raw(pid):
     return next((p for p in client().session.get("plans") or [] if p.get("id") == pid), None)
 
 
-def browse_date(pid, uid):
-    """3.6.5, P7: Anki's browser on one date's cards in this copy (a search
-    run here; nothing is sent)."""
+def date_cards(pid, uid):
+    """(its name, its cards in this copy) of one of my plans' dates, or None."""
     p = next((x for x in followed() if x["id"] == pid), None)
     st = _state_cfg().get(pid)
     if p is None or not st or not mw.col or not _deck_ok(mw.col, st.get("deck_id")):
-        return
+        return None
     pm = mine(p)
     u = next((x for x in P.units(pm["doc"]) if x["id"] == uid), None)
     if u is None:
-        return
+        return None
     try:
-        cids = P.DeckIndex(mw.col, st["deck_id"]).match(u, _swap(st), pm["doc"])
+        return str(u.get("name") or "?"), P.DeckIndex(mw.col, st["deck_id"]).match(u, _swap(st), pm["doc"])
     except Exception:
         traceback.print_exc()
-        return
-    _browse(cids)
+        return None
+
+
+def browse_date(pid, uid):
+    """3.6.5, P7: Anki's browser on one date's cards in this copy (a search
+    run here; nothing is sent)."""
+    got = date_cards(pid, uid)
+    if got:
+        _browse(got[1])
+
+
+def party_date(pid, uid):
+    """3.9.5 round three: a date on Today, its cards one pick at Pip Party."""
+    got = date_cards(pid, uid)
+    if got:
+        from . import gamenight_flow
+        gamenight_flow.send("Today", got[0], got[1])
 
 
 def _browse(cids, q=None, empty="None of its cards are in your deck."):
@@ -4060,6 +4076,10 @@ def browser_menu(browser, menu):
     opn.triggered.connect(lambda: open_these(browser))
     if not client().signed_in:
         return
+    from . import gamenight_flow
+    if gamenight_flow.shown():  # 3.9.5 round three: the cards picked, one pick at Pip Party
+        party = menu.addAction("Due Crew: Pip Party with these")
+        party.triggered.connect(lambda: party_these(browser))
     if client().session.get("plans_authored"):  # the plans I write or co-author, from the day's refresh
         action = menu.addAction("Due Crew: add to a plan…")
         action.triggered.connect(lambda: add_to_plan(browser))
@@ -4404,6 +4424,18 @@ def tag_for_plan(browser):
                 period=5000)
 
     TagDialog(browser, client(), [guid_of[n] for n in nids if n in guid_of], on_done=done, outside=outside).exec()
+
+
+def party_these(browser):
+    """3.9.5 round three, Browse › Due Crew: Pip Party with these: the cards
+    picked, one pick at Pip Party ("214 cards")."""
+    try:
+        cids = [int(c) for c in (browser.selected_cards() if hasattr(browser, "selected_cards") else browser.selectedCards())]
+    except Exception:
+        traceback.print_exc()
+        return
+    from . import gamenight_flow
+    gamenight_flow.send("Browse", f'{len(cids):,} card{"" if len(cids) == 1 else "s"}', cids)
 
 
 def _one_card(browser):

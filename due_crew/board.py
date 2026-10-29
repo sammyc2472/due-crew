@@ -26,7 +26,7 @@ from .logo import board_mark
 from . import room_model
 from . import due as _D
 from . import closet as _closet, emoji_drawer as _emoji_drawer, fridge as _fridge, sev as _sev, shows as _shows
-from .gamenight import GAMES as _GAMES, pick_key as _pick_key
+from .gamenight import GAMES as _GAMES
 from .backend.shapes import DOODLE_INKS, clean_doodle
 from .stats.decks import sig_match
 
@@ -2125,81 +2125,175 @@ def _ins_spark(days):
             f'<path d="{path}"/><circle class="end" cx="{ex:.1f}" cy="{ey:.1f}" r="3"/>{dots}</svg>')
 
 
-_NUMS = ("no", "one", "two", "three", "four", "five", "six")
+_GAME_KIND = {"trivia": "Your cards, four shapes", "imposter": "One of you doesn't know", "links": "Two teams, one board"}
+_GAME_UNIT = {"trivia": ("question", "questions"), "imposter": ("topic", "topics"), "links": ("word", "words")}
+_PP_SHAPES = ('<path d="M12 3 L22 20 L2 20 Z"/>', '<path d="M12 2 L22 12 L12 22 L2 12 Z"/>', '<circle cx="12" cy="12" r="10"/>',
+              '<rect x="3" y="3" width="18" height="18" rx="2"/>')
+_PP_GRID = "gpgnngxpgnpggnpnpgngpnpgn"  # Links' key, a board of the two teams, nobody's and Code blue
 
 
-def party_say(n, thin=None):
-    """The pick's line: its cards and how many of the menu's games (_GAMES)
-    they fill (thin: the ones it can't; None when that isn't worked out)."""
-    if not n:
-        return "Nothing here yet."
-    cards = f"{n:,} card{'s' if n != 1 else ''}"
-    if thin is None:
-        return cards
-    k, of = len(_GAMES) - len(thin), _NUMS[len(_GAMES)]
-    if k >= len(_GAMES):
-        return f"{cards} &middot; enough for all {of}"
-    if k <= 0:
-        return f"{cards} &middot; not enough for a game"
-    return f"{cards} &middot; enough for {_NUMS[k]} of the {of}"
+def _party_art(gid):
+    """A game's little picture: Trivia's four shapes and Pip thinking;
+    Imposter's three Pips, the odd one in rose; Links' board."""
+    def pip(pose, accent, size):
+        return _sev.still(pose, accent=accent).replace('width="80" height="80"', f'width="{size}" height="{size}"', 1)
+    if gid == "trivia":
+        shapes = "".join(f'<svg class="pp-sh s{i}" viewBox="0 0 24 24" aria-hidden="true">{d}</svg>' for i, d in enumerate(_PP_SHAPES))
+        return f'<span class="pp-4">{shapes}</span>{pip("focus", "var(--dc-accent)", 30)}'
+    if gid == "imposter":
+        return (f'<span class="pp-3">{pip("hello", "var(--dc-accent)", 32)}'
+                f'<span class="pp-odd">{pip("peek", "#d0587f", 32)}<i>?</i></span>{pip("ready", "var(--dc-accent)", 32)}</span>')
+    return '<span class="pp-25">' + "".join(f'<i class="{c}"></i>' for c in _PP_GRID) + "</span>"
+
+
+def party_map_html(v):
+    """The map's part of You › Pip Party (its trail, its tiles), drawn again
+    alone while a find is typed (gamenight_flow._find_draw)."""
+    e = _html.escape
+    v = v or {}
+
+    def tile(t, cmd, i, where=""):
+        n, k, st = int(t.get("n") or 0), t.get("know"), int(t.get("started") or 0)
+        shade = "sn" if k is None else f"s{3 if k >= 90 else 2 if k >= 80 else 1 if k >= 70 else 0}"
+        mark = {"in": " pick", "out": " left"}.get(t.get("pick") or "", "")
+        bar = f'<i class="tmb" style="width:{100 * st / n:.0f}%"></i>' if k is not None and n and 0 < st < n else ""
+        say = f'{e(str(t["name"]))}{f"<i class=pp-wh>{e(where)}</i>" if where else ""}'
+        tip = f'{t["name"]}: {n:,} card{"" if n == 1 else "s"}' + ({"in": ", picked", "out": ", left out"}.get(t.get("pick") or "", ""))
+        op = (f'<a class="pp-op" href="#" aria-label="Open {e(str(t["name"]))}" onclick="{_pycmd(f"party:open:{i}")}">&rsaquo;</a>'
+              if t.get("kids") and not where else "")
+        big = max(1, int(v.get("_big") or n or 1))
+        return (f'<span class="pp-tw" style="flex:{n} 1 {70 + int(150 * n / big)}px">'
+                f'<a class="tm {shade}{mark}" href="#" role="button" aria-pressed="{"true" if mark else "false"}" title="{e(tip)}" '
+                f'onclick="{_pycmd(f"{cmd}:{i}")}"><span>{say}</span>'
+                f'<b>{"new" if k is None else f"{int(k)}%"}<small> &middot; {n:,}</small></b>{bar}'
+                f'<i class="pp-ck">{"&minus;" if t.get("pick") == "out" else "&#10003;"}</i></a>{op}</span>')
+    if v.get("find"):
+        hits = v.get("hits") or []
+        v = dict(v, _big=max([int(h.get("n") or 0) for h in hits] or [1]))
+        body = "".join(tile(h, "party:hit", i, h.get("where") or "") for i, h in enumerate(hits)) or '<span class="pp-none">Nothing by that name.</span>'
+        trail = (f'<div class="tmt">Matches for &ldquo;{e(v["find"])}&rdquo; &middot; '
+                 f'<a href="#" onclick="dcParty.clear();return false;">Clear</a></div>')
+        return f'<div id="pp-map">{trail}<div class="tmap{" picking" if any(h.get("pick") == "in" for h in hits) else ""}">{body}</div></div>'
+    tiles = v.get("tiles") or []
+    v = dict(v, _big=max([int(t.get("n") or 0) for t in tiles] + [int((v.get("ids") or {}).get("n") or 0), 1]))
+    trail = ""
+    if v.get("trail"):
+        steps = [f'<a href="#" onclick="{_pycmd("party:up:0")}">All</a>']
+        steps += [f'<a href="#" onclick="{_pycmd(f"party:up:{j}")}">{e(str(x))}</a>' for j, x in enumerate(v["trail"][:-1], 1)]
+        steps.append(f'<b>{e(str(v["trail"][-1]))}</b>')
+        trail = f'<div class="tmt">{" &rsaquo; ".join(steps)}</div>'
+    body = "".join(tile(t, "party:pick", i) for i, t in enumerate(tiles))
+    ids = v.get("ids")
+    if ids:
+        body += tile({"name": f'{int(ids["tags"]):,} question numbers', "n": ids["n"], "know": None, "pick": ids.get("pick")}, "party:ids", 0)
+    if v.get("more"):
+        body += (f'<span class="pp-tw" style="flex:1 1 120px"><a class="tm pp-more" href="#" onclick="dcParty.focus();return false;">'
+                 f'<span>and {int(v["more"]):,} more</span><b>Find one &rsaquo;</b></a></span>')
+    if not body:
+        body = ('<span class="pp-none">This deck doesn&rsquo;t split by system yet. Try Tags or Decks.</span>' if v.get("by") == "sys"
+                else '<span class="pp-none">Nothing here yet.</span>')
+    picking = any(t.get("pick") == "in" for t in tiles) or (ids or {}).get("pick") == "in"
+    return f'<div id="pp-map">{trail}<div class="tmap{" picking" if picking else ""}">{body}</div></div>'
+
+
+PARTY_JS = r"""
+(function () {
+  if (window.dcParty) { return; }
+  var t = null;
+  window.dcParty = {
+    send: function (cmd, text) { pycmd('duecrew:party:' + cmd + ':' + encodeURIComponent(text || '') + '|' + window.dcBK); },
+    find: function (inp, now) {
+      clearTimeout(t);
+      var v = inp.value.slice(0, 60);
+      t = setTimeout(function () { dcParty.send('find', v); }, now ? 0 : 220);
+    },
+    clear: function () { var i = document.getElementById('pp-find'); if (i) { i.value = ''; dcParty.find(i, 1); i.focus(); } },
+    focus: function () { var i = document.getElementById('pp-find'); if (i) { i.focus(); i.placeholder = 'Find one'; } },
+    srch: function () { var r = document.getElementById('pp-srch'); if (r) { r.hidden = !r.hidden; if (!r.hidden) { r.querySelector('input').focus(); } } }
+  };
+})();
+"""
 
 
 def party_html(v):
-    """3.9.5's last round, You › Pip Party: what to play from, the six it
-    fills, Host or Try it with bots; once the TV's open, its code and where
-    phones join. v: gamenight_flow.tab_view. Names (saved scopes, plans)
-    are mine, the code the server's: escaped."""
+    """3.9.5 round three, You › Pip Party (Sam's): the games up top, the one
+    the TV opens on lit; what to play on, picked on the map (Insights' own
+    tiles, the tag tree or the decks) or found by name; which of their
+    cards; the picks at the foot; Host. Once the TV's open, its code and
+    where phones join. v: gamenight_flow.tab_view. Names (tags, decks,
+    kept picks) are mine, the code the server's: escaped."""
     e = _html.escape
     v = v or {}
-    pip = f'<span class="pp-pip">{v["pip"]}</span>' if v.get("pip") else ""
-    fx = ('<span class="pp-fx" aria-hidden="true">' + "".join(f'<i style="--r:{k * 36}deg"></i>' for k in range(10)) + "</span>"
-          if v.get("burst") else "")
-    top = f'<div class="pp-top">{pip}{fx}<span class="pp-hi"><b>Party games on your own cards</b></span></div>'
     burst = " burst" if v.get("burst") else ""
     tv = v.get("open")
     if tv:
-        if tv.get("bots"):
-            body = '<div class="pp-open"><b>Bots are on the TV</b></div>'
-        else:
-            url = str(tv.get("url") or "")
-            shown = _re.sub(r"^https?://", "", url)
-            body = (f'<div class="pp-open"><b>On the TV &middot; {e(str(tv.get("code") or ""))}</b>'
-                    f'<span>Phones: <span class="pp-url">{e(shown)}</span> '
-                    f'<a href="#" onclick="{_pycmd("party:copy")}">Copy link</a></span></div>')
-        return f'<div class="pp{burst}">{top}{body}</div>'
-    srcs = v.get("sources") or []
-    pick = v.get("pick")
-    rows = []
-    for x in srcs:
-        n = int(x.get("n") or 0)
-        on = x.get("key") == pick
-        cnt = f"{n:,} card{'s' if n != 1 else ''}" if n else "none yet"
-        if n:
-            rows.append(f'<a href="#" role="radio" aria-checked="{"true" if on else "false"}" class="pp-o{" on" if on else ""}" '
-                        f'onclick="{_pycmd("party:pick:" + _pick_key(x.get("key")))}"><i></i><span class="t">{e(str(x.get("label") or ""))}</span>'
-                        f'<span class="n">{cnt}</span></a>')
-        else:
-            rows.append(f'<span class="pp-o none" aria-disabled="true"><i></i><span class="t">{e(str(x.get("label") or ""))}</span>'
-                        f'<span class="n">{cnt}</span></span>')
-    rows.append(f'<a href="#" class="pp-o pp-c" onclick="{_pycmd("party:custom")}"><i></i><span class="t">Custom&hellip;</span>'
-                f'<span class="n">decks, tags</span></a>')
-    fit = v.get("fit") or None
-    n = next((int(x.get("n") or 0) for x in srcs if x.get("key") == pick), 0)
-    thin = set(fit["thin"]) if fit else set()
-    games = ('<div class="du-sec">On the menu</div><div class="pp-games" aria-label="On the menu">' + "".join(
-        f'<span class="pp-g{"" if g in thin else " on"}" title="{"Not enough cards for this one" if g in thin else "On tonight"}">{lb}</span>'
-        for g, lb in _GAMES) + "</div>") if n and fit else ""
-    can = bool(n) and len(thin) < len(_GAMES)
-    busy = bool(v.get("busy"))
-    go = (f'<a href="#" class="pp-b" onclick="{_pycmd("party:host")}">Host</a>'
-          f'<a href="#" class="pp-b2" onclick="{_pycmd("party:bots")}">Try it with bots</a>') if can and not busy else (
-        '<span class="pp-b off" aria-disabled="true">Host</span><span class="pp-b2 off" aria-disabled="true">Try it with bots</span>')
+        fx = '<span class="pp-fx" aria-hidden="true">' + "".join(f'<i style="--r:{k * 36}deg"></i>' for k in range(10)) + "</span>" if burst else ""
+        url = str(tv.get("url") or "")
+        shown = _re.sub(r"^https?://", "", url)
+        return (f'<div class="pp{burst}">{fx}<div class="pp-open"><b>On the TV &middot; {e(str(tv.get("code") or ""))}</b>'
+                f'<span>Phones: <span class="pp-url">{e(shown)}</span> '
+                f'<a href="#" onclick="{_pycmd("party:copy")}">Copy link</a></span></div></div>')
+    first = v.get("first")
+    boxes = ""
+    for g in v.get("games") or []:
+        gid, n, need = g["id"], g.get("n"), int(g.get("need") or 1)
+        thin = n is not None and n < need
+        one, many = _GAME_UNIT.get(gid, ("", ""))
+        count = "&hellip;" if n is None else "Not enough cards" if thin else f"{n:,} {one if n == 1 else many}"
+        on = " on" if g.get("first") else ""
+        act = (f' href="#" onclick="{_pycmd("party:game:" + gid)}"' if not thin else ' aria-disabled="true"')
+        boxes += (f'<a class="pp-gm g-{e(gid)}{on}{" thin" if thin else ""}"{act} aria-pressed="{"true" if on else "false"}">'
+                  f'<span class="pp-first">First up</span><span class="pp-art" aria-hidden="true">{_party_art(gid)}</span>'
+                  f'<b>{e(g["label"])}</b><span class="pp-k">{e(_GAME_KIND.get(gid, ""))}</span><span class="pp-n">{count}</span></a>')
+    kept = "".join(f'<a class="pp-kb" href="#" onclick="{_pycmd(f"party:kept:{i}")}">{e(k)}'
+                   f'<i class="x" role="button" aria-label="Forget {e(k)}" onclick="event.stopPropagation();{_pycmd(f"party:forget:{i}")}">&times;</i></a>'
+                   for i, k in enumerate(v.get("kept") or []))
+    kept = f'<div class="pp-kept"><span>Kept:</span>{kept}</div>' if kept else ""
+    by = v.get("by") or "sys"
+
+    def picker(cmd, label, opts, on):
+        """The word picked, its ▾, and the select laid over them (a select is as wide as its longest option)."""
+        word = next((w for k, w in opts if k == on), opts[0][1] if opts else "")
+        ops = "".join(f'<option value="{e(k)}"{" selected" if k == on else ""}>{e(w)}</option>' for k, w in opts)
+        return (f'<span class="pp-sel"><b>{e(word)}</b><i aria-hidden="true">&#9662;</i><select aria-label="{label}" '
+                f'onchange="pycmd(\'duecrew:party:{cmd}:\'+this.value+\'|\'+window.dcBK);">{ops}</select></span>')
+    head = (f'<div class="pp-mh"><div class="ik">What you know <span class="pp-by">&middot; by '
+            f'{picker("by", "Split by", (("sys", "Systems"), ("tag", "Tags"), ("deck", "Decks")), by)}</span></div>'
+            f'<input id="pp-find" type="text" placeholder="Find a tag or deck" aria-label="Find a tag or deck" autocomplete="off" '
+            f'value="{e(str(v.get("find") or ""))}" oninput="dcParty.find(this)" '
+            f'onkeydown="if(event.key===\'Escape\'){{this.value=\'\';dcParty.find(this,1);}}"></div>')
+    decks = ""
+    if by == "sys" and len(v.get("decks") or []) > 1 and not v.get("find"):
+        decks = '<div class="pp-dt">' + "".join(
+            f'<a href="#" class="{"on" if int(d["did"]) == int(v.get("did") or 0) else ""}" onclick="{_pycmd("party:deck:" + str(int(d["did"])))}">'
+            f'{e(str(d["name"]))}</a>' for d in v["decks"]) + "</div>"
+    of = (f'<div class="pp-of">Of their cards: {picker("of", "Which of their cards", list(v.get("ofs") or []), v.get("of"))}'
+          f'<a href="#" class="pp-as" onclick="dcParty.srch();return false;">As a search &rsaquo;</a></div>'
+          f'<div id="pp-srch" class="pp-srch" hidden><input type="text" aria-label="As a search" value="{e(str(v.get("search") or ""))}" '
+          f'onchange="dcParty.send(\'search\', this.value.slice(0,400))"></div>')
+    chips = ""
+    for j, p in enumerate(v.get("picks") or []):
+        where = f'<span class="pp-fr">{e(p["from"])}:</span>' if p.get("from") and p.get("kind") == "sent" else ""
+        deck = f' &middot; {e(p["deck"])}' if p.get("kind") == "sys" and p.get("deck") else ""
+        flip = "" if p.get("kind") == "search" else f' onclick="{_pycmd(f"party:out:{j}")}"'
+        chips += (f'<span class="pp-pk{" out" if p.get("out") else ""}" role="button"{flip} '
+                  f'title="{"Put it back in" if p.get("out") else "Leave these out"}">{where}{"Not " if p.get("out") else ""}{e(p["name"])}{deck}'
+                  f'<a class="x" href="#" aria-label="Drop {e(p["name"])}" onclick="event.stopPropagation();{_pycmd(f"party:drop:{j}")}">&times;</a></span>')
+    n = int(v.get("n") or 0)
+    count = f'{e(v["all"])} &middot; {n:,} card{"" if n == 1 else "s"}' if v.get("all") else f'{n:,} card{"" if n == 1 else "s"}'
+    links = (f'<span class="pp-ln"><a href="#" onclick="{_pycmd("party:keep")}">Keep this pick</a>'
+             f'<a href="#" onclick="{_pycmd("party:clear")}">Clear</a></span>') if v.get("picks") else ""
     said = str(v.get("said") or "")
-    said = f'<span class="pp-said{"" if busy else " bad"}" role="status">{e(said)}</span>' if said else ""
-    return (f'<div class="pp{burst}">{top}<div class="du-sec">Play from</div>'
-            f'<div class="pp-list" role="radiogroup" aria-label="Play from">{"".join(rows)}</div>'
-            f'{games}<div class="pp-say">{party_say(n, fit["thin"] if fit else None)}</div>'
-            f'<div class="pp-go">{go}{said}</div></div>')
+    busy = bool(v.get("busy"))
+    why = ("" if first or not n else "Too few cards for any game here.") if not said else said
+    why = f'<span class="pp-said{"" if busy else " bad"}" role="status">{e(why)}</span>' if why else ""
+    label = dict(_GAMES).get(first, "")
+    host = (f'<a href="#" class="pp-host" onclick="{_pycmd("party:host")}">Host {e(label)}</a>' if first and n and not busy
+            else f'<span class="pp-host off" aria-disabled="true">Host{" " + e(label) if label else ""}</span>')
+    foot = (f'<div class="pp-foot"><div class="pp-say"><b>{count}</b>'
+            f'{f"<div class=pp-picks>{chips}</div>" if chips else ""}{links}{why}</div>{host}</div>')
+    return (f'<div class="pp{burst}"><script>{PARTY_JS}</script><div class="pp-gms">{boxes}</div>{kept}{head}{decks}'
+            f'{party_map_html(v)}{of}{foot}</div>')
 
 
 def _you_insights(ins):
@@ -2245,7 +2339,7 @@ def _you_insights(ins):
         return head + _habits_html(did, hv)
     view = ins.get("view") or {}
     line = _habits_line(did, hv) if hv and not isinstance(view.get("leech"), dict) else ""
-    return head + line + _insights_html(did, view)
+    return head + line + _insights_html(did, dict(view, party=True) if ins.get("party") else view)
 
 
 # ---- 3.9.5: How you study (habits.py, habits_flow.py): mine alone, never sent ----
@@ -2869,7 +2963,7 @@ def _insights_html(did, v):
                     + (f'<a href="#" onclick="{_pycmd(f"insstudy:{did}:{i}")}">Study {st + fg}</a>' if dated else "")
                     + '</div>')
         out += "</div>"
-    out += _ins_map(did, v.get("map") or [], v.get("map_by"), v.get("map_at"), v.get("map_ways"))
+    out += _ins_map(did, v.get("map") or [], v.get("map_by"), v.get("map_at"), v.get("map_ways"), party=bool(v.get("party")))
     if v.get("ahead"):
         out += _ins_ahead(did, v["ahead"], v.get("deck_name"))
     f = v.get("fsrs")
@@ -2913,7 +3007,7 @@ def _insights_html(did, v):
     return f'<div class="dc-ins">{out}</div>'
 
 
-def _ins_map(did, tiles, by, at=(), ways=()):
+def _ins_map(did, tiles, by, at=(), ways=(), party=False):
     """3.8.0, the topic map: each subject a tile, sized by its cards in play,
     shaded by how much I know now of the ones I've started (a bar along its
     foot: how many I've started; none yet, "new"). A tile that splits again
@@ -2921,7 +3015,8 @@ def _ins_map(did, tiles, by, at=(), ways=()):
     goes back, and Browse all opens the open one's cards; a tile that
     doesn't, its cards. ways: how else it can split (Systems, a resource,
     Subdecks), a pick in its heading ("by Systems ▾"). Mine alone, from my
-    own Anki. Two tiles at least, or it says nothing."""
+    own Anki. Two tiles at least, or it says nothing. party (3.9.5 round
+    three): Party ›, the open tile (or the map) at Pip Party."""
     if len(tiles) < 2:
         return ""
     e = _html.escape
@@ -2974,6 +3069,8 @@ def _ins_map(did, tiles, by, at=(), ways=()):
     else:
         sub = "<span>&nbsp;&middot; by topic, now</span>"
     share = f' <a class="tmsh" href="#" title="A picture of it, or text" onclick="{_pycmd(f"insmapshare:{did}")}">Share &rsaquo;</a>'
+    if party:
+        share = f' <a class="tmsh" href="#" title="Play on these" onclick="{_pycmd(f"insmapparty:{did}")}">Party &rsaquo;</a>' + share
     # 3.8.1: by a plan's own tags, the ones no card in this deck carries (a gap in the plan's coverage)
     none = next((w.get("none") or [] for w in ways if w.get("on")), [])
     gap = ""
@@ -4096,6 +4193,9 @@ def you_html(cfg, due=None, you=None, people=None):
         return _due_html(due)
     hidden = hidden_tabs(cfg)
     more = tuple(t for t in YOU_MORE if t[0] not in hidden) + ((PARTY_TAB,) if you.get("party_on") else ())
+    if you.get("party_on"):  # 3.9.5 round three: Party where cards already show (Today, Insights' map)
+        due = dict(due, party=True) if due else due
+        you = dict(you, insights=dict(you.get("insights") or {}, party=True))
     keys = (["today", "upcoming", "later"] if due else []) + [k for k, _l in more]
     if not keys:
         return ""
@@ -7297,56 +7397,108 @@ DUE_CSS = """
     #due-crew .du-dd .acts { display: flex; flex-wrap: wrap; gap: 3px 12px; }
     #due-crew .du-dd a { color: var(--dc-accent); font-weight: 700; }
     #due-crew .du-dd a.tp, #due-crew .du-dd .pwhy a.tp { font-weight: inherit; }
-    /* 3.9.5's last round, You › Pip Party: Pip, what to play from, the six it fills, Host */
-    #due-crew .pp { display: grid; gap: 7px; text-align: left; }
-    #due-crew .pp-top { display: flex; align-items: center; gap: 10px; position: relative; }
-    /* Pip whole, in its own box: what it wears (a halo, wings, a balloon) stays
-       inside it, clear of the tabs above and the words beside (sev.py's box is
-       its drawing's; only a balloon reaches 11px over it) */
-    #due-crew .pp-pip { flex: none; position: relative; width: 64px; height: 64px; padding-top: 10px; }
-    #due-crew .pp-pip > svg.sv { width: 64px; height: 64px; }
-    #due-crew .pp:not(.burst):not(:hover) .pp-pip .sv, #due-crew .pp:not(.burst):not(:hover) .pp-pip .sv * { animation: none !important; }
-    #due-crew .pp:hover .pp-pip .sv { --sv-on: infinite; }
-    #due-crew .pp-hi { display: grid; gap: 1px; min-width: 0; }
-    #due-crew .pp-hi b { font-size: 13px; }
-    #due-crew .pp-say { color: var(--dc-muted); font-size: 11.5px; }
-    /* what's on tonight's menu, one highlight for both: the pick (its row) and the games it fills (their chips) */
-    #due-crew .pp-list { display: grid; gap: 2px; }
-    #due-crew .pp-o { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 9px; align-items: center;
-      padding: 7px 10px; border-radius: 9px; color: var(--dc-ink); font-size: 12.5px; cursor: pointer; }
-    #due-crew .pp-o:hover { background: rgba(127, 127, 127, .08); }
-    #due-crew .pp-o i { box-sizing: border-box; width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--dc-faded); }
-    #due-crew .pp-o.on, #due-crew .pp-o.on:hover { background: var(--dc-you-bg); box-shadow: inset 3px 0 0 var(--dc-accent); }
-    #due-crew .pp-o.on i { border: 4px solid var(--dc-accent); }
-    #due-crew .pp-o.on .t { font-weight: 700; }
-    #due-crew .pp-o .t { min-width: 0; overflow-wrap: anywhere; }
-    #due-crew .pp-o .n { color: var(--dc-muted); font-size: 11.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-    #due-crew .pp-o.none { cursor: default; color: var(--dc-muted); }
-    #due-crew .pp-o.pp-c i { border-style: dashed; }
-    #due-crew .pp-o.pp-c .t { color: var(--dc-accent); font-weight: 700; }
-    #due-crew .pp-games { display: flex; flex-wrap: wrap; gap: 5px; }
-    #due-crew .pp-g { font-size: 11.5px; font-weight: 700; padding: 3px 10px; border-radius: 99px; border: 1px dashed var(--dc-line);
-      color: var(--dc-faded); white-space: nowrap; }
-    #due-crew .pp-g.on { border: 1px solid transparent; color: var(--dc-ink); background: var(--dc-you-bg); box-shadow: inset 0 0 0 1.5px var(--dc-accent); }
-    #due-crew .pp-g.on::before { content: "\\2713"; color: var(--dc-accent); margin-right: 5px; }
-    #due-crew .pp-go { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; padding-top: 2px; }
-    #due-crew .pp-b { background: var(--dc-accent); color: var(--dc-accent-ink); font-weight: 700; font-size: 12.5px;
-      padding: 5px 18px; border-radius: 99px; cursor: pointer; }
-    #due-crew .pp-b2 { color: var(--dc-accent); font-weight: 700; font-size: 12.5px; cursor: pointer; }
-    #due-crew .pp-b.off { opacity: .4; cursor: default; }
-    #due-crew .pp-b2.off { color: var(--dc-faded); cursor: default; }
+    /* 3.9.5 round three, You › Pip Party: the games up top, the map to pick from, the picks, Host */
+    #due-crew .pp { display: grid; gap: 8px; text-align: left; position: relative; }
+    #due-crew .pp-gms { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+    #due-crew .pp-gm { display: grid; gap: 1px; padding: 9px 11px; border-radius: 13px; border: 1.5px solid transparent; text-decoration: none;
+      color: var(--dc-ink); position: relative; overflow: hidden; min-width: 0; cursor: pointer; }
+    #due-crew .pp-gm.g-trivia { background: color-mix(in srgb, #3a9a40 15%, var(--dc-bg)); --pp-g: #3a9a40; }
+    #due-crew .pp-gm.g-imposter { background: color-mix(in srgb, #d0587f 15%, var(--dc-bg)); --pp-g: #d0587f; }
+    #due-crew .pp-gm.g-links { background: color-mix(in srgb, #7b5cd6 15%, var(--dc-bg)); --pp-g: #7b5cd6; }
+    #due-crew .pp-gm.on { border-color: var(--pp-g); }
+    #due-crew .pp-gm.thin { opacity: .5; cursor: default; }
+    #due-crew .pp-gm b { font-size: 14.5px; letter-spacing: -.01em; }
+    #due-crew .pp-k { font-size: 11px; color: var(--dc-muted); }
+    #due-crew .pp-n { font-size: 11.5px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 1px; }
+    #due-crew .pp-gm.thin .pp-n { color: var(--dc-hours); }
+    #due-crew .pp-first { position: absolute; top: 7px; right: 8px; font-size: 9.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+      padding: 1px 6px; border-radius: 99px; background: var(--dc-bg); color: var(--dc-ink); display: none; }
+    #due-crew .pp-gm.on .pp-first { display: block; }
+    #due-crew .pp-art { height: 40px; display: flex; align-items: center; gap: 4px; margin-bottom: 3px; }
+    #due-crew .pp-art svg { display: block; }
+    #due-crew .pp-4 { display: grid; grid-template-columns: 17px 17px; gap: 3px; }
+    #due-crew .pp-sh { width: 17px; height: 17px; }
+    #due-crew .pp-sh.s0 { fill: #3a9a40; } #due-crew .pp-sh.s1 { fill: #4f7fe0; } #due-crew .pp-sh.s2 { fill: #d08a1e; } #due-crew .pp-sh.s3 { fill: #d0587f; }
+    #due-crew .pp-3 { display: flex; align-items: flex-end; }
+    #due-crew .pp-3 > svg, #due-crew .pp-odd { margin-right: -7px; }
+    #due-crew .pp-odd { position: relative; display: inline-flex; }
+    #due-crew .pp-odd i { position: absolute; top: -3px; right: 3px; width: 14px; height: 14px; border-radius: 50%; display: grid; place-items: center;
+      font-style: normal; font-size: 10px; font-weight: 900; background: var(--dc-bg); color: #d0587f; }
+    #due-crew .pp-25 { display: grid; grid-template-columns: repeat(5, 7px); gap: 2px; }
+    #due-crew .pp-25 i { width: 7px; height: 7px; border-radius: 2px; background: var(--dc-line); }
+    #due-crew .pp-25 i.g { background: #3a9a40; } #due-crew .pp-25 i.p { background: #7b5cd6; } #due-crew .pp-25 i.x { background: #1f3f73; }
+    @media (prefers-reduced-motion: no-preference) {
+      #due-crew .pp-art > * { transition: transform .2s; }
+      #due-crew .pp-gm:not(.thin):hover .pp-art > * { transform: translateY(-2px); }
+    }
+    #due-crew .pp-kept { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; font-size: 11.5px; color: var(--dc-muted); }
+    #due-crew .pp-kb { display: inline-flex; align-items: center; gap: 3px; font-weight: 700; color: var(--dc-ink); text-decoration: none;
+      border: 1px solid var(--dc-line); border-radius: 99px; padding: 1px 4px 1px 9px; }
+    #due-crew .pp-kb .x, #due-crew .pp-pk .x { font-style: normal; color: var(--dc-muted); padding: 0 3px; cursor: pointer; text-decoration: none; }
+    #due-crew .pp-mh { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 2px; }
+    #due-crew .pp-mh .ik { margin: 0; }
+    #due-crew .pp-by { text-transform: none; letter-spacing: 0; }
+    #due-crew .pp-sel { position: relative; display: inline-flex; align-items: baseline; gap: 2px; color: var(--dc-accent); font-weight: 700;
+      text-transform: none; letter-spacing: 0; border-radius: 3px; }
+    #due-crew .pp-sel i { font-style: normal; font-size: 9px; }
+    #due-crew .pp-sel select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; margin: 0; padding: 0; border: 0;
+      font: inherit; -webkit-appearance: none; appearance: none; color-scheme: light dark; }
+    #due-crew .pp-sel:focus-within { outline: 2px solid var(--dc-accent); outline-offset: 2px; }
+    #due-crew #pp-find { margin-left: auto; flex: 0 1 200px; min-width: 0; box-sizing: border-box; font: inherit; font-size: 12px; padding: 4px 10px;
+      border-radius: 99px; border: 1px solid var(--dc-line); background: var(--dc-well); color: var(--dc-ink); }
+    #due-crew #pp-find:focus { outline: 2px solid var(--dc-accent); outline-offset: -1px; }
+    #due-crew .pp-dt { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; font-weight: 700; }
+    #due-crew .pp-dt a { color: var(--dc-muted); text-decoration: none; }
+    #due-crew .pp-dt a.on { color: var(--dc-ink); box-shadow: inset 0 -2px 0 var(--dc-accent); }
+    #due-crew .tmap > .pp-tw { display: flex; position: relative; min-width: 0; }
+    #due-crew .pp-tw > .tm { flex: 1; min-width: 0; }
+    #due-crew .pp-tw > .tm > span { padding-right: 14px; }
+    #due-crew .pp-op { position: absolute; right: 3px; top: 3px; padding: 1px 6px; border-radius: 5px; font-size: 13px; line-height: 1.1; text-decoration: none;
+      color: inherit; background: rgba(127, 127, 127, .18); }
+    #due-crew .pp-op:hover { background: rgba(127, 127, 127, .34); }
+    #due-crew .tm.s3 + .pp-op { color: var(--dc-accent-ink); }
+    #due-crew .tm .pp-ck { position: absolute; right: 5px; bottom: 5px; width: 15px; height: 15px; border-radius: 50%; display: none; place-items: center;
+      font-style: normal; font-size: 9.5px; font-weight: 900; background: var(--dc-ink); color: var(--dc-bg); }
+    #due-crew .tm.pick { box-shadow: inset 0 0 0 2px var(--dc-ink), inset 0 0 0 4px var(--dc-bg); }
+    #due-crew .tm.left { box-shadow: inset 0 0 0 2px var(--dc-hours); }
+    #due-crew .tm.pick .pp-ck, #due-crew .tm.left .pp-ck { display: grid; }
+    #due-crew .tm.left .pp-ck { background: var(--dc-hours); }
+    #due-crew .tmap.picking .tm:not(.pick):not(.pp-more) { filter: saturate(.55) opacity(.7); }
+    #due-crew .tm .pp-wh { display: block; font-style: italic; font-weight: 500; font-size: 10.5px; opacity: .85; }
+    #due-crew .tm.pp-more { background: transparent; box-shadow: inset 0 0 0 1.5px var(--dc-line); color: var(--dc-muted); }
+    #due-crew .pp-none { font-size: 12px; color: var(--dc-muted); padding: 6px 0; }
+    #due-crew .pp-of { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; font-size: 12px; color: var(--dc-muted); }
+    #due-crew .pp-as { margin-left: auto; color: var(--dc-accent); font-weight: 700; text-decoration: none; }
+    #due-crew .pp-srch[hidden] { display: none; }
+    #due-crew .pp-srch input { width: 100%; box-sizing: border-box; font-family: Menlo, Consolas, monospace; font-size: 11.5px; padding: 5px 8px;
+      border-radius: 6px; border: 1px solid var(--dc-line); background: var(--dc-well); color: var(--dc-ink); }
+    #due-crew .pp-foot { display: flex; gap: 10px 14px; align-items: center; flex-wrap: wrap; padding-top: 9px; border-top: 1px solid var(--dc-line); }
+    #due-crew .pp-say { flex: 1; min-width: 190px; display: grid; gap: 4px; }
+    #due-crew .pp-say > b { font-size: 13px; font-variant-numeric: tabular-nums; }
+    #due-crew .pp-picks { display: flex; flex-wrap: wrap; gap: 4px; }
+    #due-crew .pp-pk { display: inline-flex; align-items: center; gap: 2px; font-size: 11.5px; font-weight: 700; padding: 1px 3px 1px 9px; border-radius: 99px;
+      background: var(--dc-you-bg); color: var(--dc-accent); border: 1px solid var(--dc-accent); cursor: pointer; }
+    #due-crew .pp-pk.out { background: transparent; color: var(--dc-hours); border-color: var(--dc-hours); }
+    #due-crew .pp-pk .pp-fr { font-weight: 500; color: var(--dc-muted); margin-right: 3px; }
+    #due-crew .pp-ln { display: flex; gap: 12px; font-size: 11.5px; }
+    #due-crew .pp-ln a { color: var(--dc-accent); font-weight: 700; text-decoration: none; }
+    #due-crew .pp-host { background: var(--dc-accent); color: var(--dc-accent-ink); font-weight: 700; font-size: 13px; padding: 7px 20px;
+      border-radius: 99px; text-decoration: none; white-space: nowrap; }
+    #due-crew .pp-host.off { opacity: .4; cursor: default; }
     #due-crew .pp-said { font-size: 11.5px; color: var(--dc-muted); }
-    #due-crew .pp-said.bad { color: #d64035; }
+    #due-crew .pp-said.bad { color: var(--dc-hours); }
     #due-crew .pp-open { display: grid; gap: 3px; padding: 9px 12px; border-radius: 10px; background: var(--dc-you-bg); font-size: 12.5px; }
     #due-crew .pp-open b { font-size: 14px; letter-spacing: .02em; }
     #due-crew .pp-url { font-family: Menlo, Consolas, monospace; font-size: 12px; overflow-wrap: anywhere; }
     #due-crew .pp-open a { color: var(--dc-accent); font-weight: 700; margin-left: 6px; white-space: nowrap; }
-    /* a burst round Pip as a table opens (once: the tab draws it the one time); none with Reduce motion */
-    #due-crew .pp-fx { position: absolute; left: 32px; top: calc(50% + 5px); width: 0; height: 0; pointer-events: none; display: none; }
+    /* narrow: still three across, the picked one by its border (and Host's words) alone */
+    @media (max-width: 520px) { #due-crew .pp-gm { padding: 8px 8px 7px; } #due-crew .pp-k, #due-crew .pp-gm.on .pp-first { display: none; }
+      #due-crew .pp-art { height: 30px; transform: scale(.8); transform-origin: left center; } #due-crew .pp-gm.on { border-width: 2px; } }
+    #due-crew .pp-fx { position: absolute; left: 32px; top: 20px; width: 0; height: 0; pointer-events: none; display: none; }
     @media (prefers-reduced-motion: no-preference) {
       #due-crew .pp.burst .pp-fx { display: block; }
       #due-crew .pp-fx i { position: absolute; left: -3px; top: -3px; width: 6px; height: 6px; border-radius: 2px;
-        background: var(--dc-accent); opacity: 0; animation: ppfx .9s cubic-bezier(.2, .7, .3, 1) forwards; }
+        background: var(--dc-accent); animation: ppfx .9s ease-out forwards; }
       #due-crew .pp-fx i:nth-child(2n) { background: var(--dc-hours); border-radius: 50%; }
       #due-crew .pp-fx i:nth-child(3n) { background: var(--dc-muted); }
       @keyframes ppfx { 0% { opacity: 1; transform: rotate(var(--r)) translateY(-6px) scale(1); }
@@ -7596,7 +7748,7 @@ def _date_more(r, topics=False):
     return link, f'<div class="du-dd" id="{did}" hidden>{body}</div>'
 
 
-def _due_plan(r):
+def _due_plan(r, party=False):
     """A plan's date on Today, in full: its resources (each with its topics,
     3.8.0), the author's lines, its bar; round five: its name opens its
     details (_date_more)."""
@@ -7653,6 +7805,9 @@ def _due_plan(r):
         cmd = _pycmd(f"planstudydate:{r['pid']}:{r['uid']}")
         go = (f'<a href="#" class="du-go" title="A Due Crew deck of its open cards, new and review, in random order" '
               f'onclick="{cmd}">Study</a>')
+    if party and r.get("total"):  # 3.9.5 round three: its cards at Pip Party
+        cmd = _pycmd(f"planparty:{r['pid']}:{r['uid']}")
+        go += f'<a href="#" class="du-go" title="Play on its cards" onclick="{cmd}">Party</a>'
     n = f'<span class="n">{e(r["n"])}</span>' if r["n"] else ""
     name, more = _date_more(r)
     return (f'<div class="du-r{" done" if r["done"] else ""}">{box}<span class="t">{name}'
@@ -7698,10 +7853,10 @@ def _due_reviews(r):
             f'<span class="end"><span class="n">{_due_count(r, "due")}</span></span>{bar}</div>')
 
 
-def _due_misses(m):
+def _due_misses(m, party=False):
     """3.9.5: under a done Reviews row, today's misses, and where they were
     (each part opens Browse). A line, not a deck (Sam's FSRS rule). m:
-    due_flow._misses, or None."""
+    due_flow._misses, or None. party (round three): Party on them."""
     said = _D.misses_text(m)
     if not said:
         return ""
@@ -7714,7 +7869,9 @@ def _due_misses(m):
         if int(m.get("elsewhere") or 0):
             parts.append(f'{int(m["elsewhere"]):,} elsewhere')
         text += ": " + " &middot; ".join(parts)
-    return f'<div class="du-rc"><span></span><span>{text}</span><span class="end"></span></div>'
+    go = (f'<a href="#" class="du-go" title="Play on them" onclick="{_pycmd("duego:missparty")}">Party</a>'
+          if party and m.get("cids") else "")
+    return f'<div class="du-rc"><span></span><span>{text}</span><span class="end">{go}</span></div>'
 
 
 def _due_new(r):
@@ -7879,7 +8036,7 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None, qids=False):
         for r in v["rows"]:
             if r["kind"] == "reviews":
                 if r.get("whole") is not None:
-                    body += _due_reviews(r) + _due_misses(v.get("misses") if r.get("done") else None)
+                    body += _due_reviews(r) + _due_misses(v.get("misses") if r.get("done") else None, v.get("party"))
                     continue
                 back = int(r.get("back") or 0)
                 if not r["due"] and not r["done"] and not back:
@@ -7891,7 +8048,7 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None, qids=False):
             elif r["kind"] == "new":
                 body += _due_new(r)
             elif r["kind"] == "plan":
-                body += _due_plan(r)
+                body += _due_plan(r, v.get("party"))
             elif r["kind"] == "every":
                 body += _due_every(r)
             else:

@@ -1000,7 +1000,11 @@ def go(key):
     """A suggestion's or a note's button."""
     if not mw.col:
         return
-    if key[:4] == "miss" and key[4:].isdigit():
+    if key == "missparty":
+        # 3.9.5 round three: today's misses, one pick at Pip Party
+        from . import gamenight_flow
+        gamenight_flow.send("Today", "Today's misses", _misses(mw.col)["cids"])
+    elif key[:4] == "miss" and key[4:].isdigit():
         # 3.9.5: a part of today's misses, under a done Reviews row: its cards in Browse (a line, not a deck)
         m = _misses(mw.col)
         got = m["topics"][int(key[4:])] if int(key[4:]) < len(m["topics"]) else None

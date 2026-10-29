@@ -1,16 +1,16 @@
 """Game night from Anki (3.9.5): tonight's cards as the six games' pack.
 
-Pure: a scope as an Anki search, and a pack from rows of cards (the glue,
-gamenight_flow.py, reads them from the collection). The TV is a window in
-Anki (ui/game_night_window.py) that the add-on hands this pack; it never
-goes to duecrew.com. What reaches phones through the table is the games'
+Pure: a pack from rows of cards (the glue, gamenight_flow.py, reads them
+from the collection and works out the picks). The TV is a window in Anki
+(ui/game_night_tv.py) that the add-on hands this pack; it never goes to
+duecrew.com. What reaches phones through the table is the games'
 business (site/public/table.js): Trivia sends none of a card's words,
 Rounds sends each hand its answers (Sam's yes), Links' board short answers
 when the topics run short, and the rest send topic names, which plans
 already send.
 
 A pack: {name, n, qs, blacks, whites, words, prompts, twins, draws, scales}
-  qs      Trivia: {q, a, tag, opts (four), ans (the right one's place)}
+  qs      Trivia: {q, a, tag, opts (four), ans (the right one's place), sub}
   blacks  Rounds' black cards: {q, a, full, tag}, and written ones (w: 1,
           no answer); whites: answers
   words   Links' board: topic names, then (short of WORDS_MIN) short answers
@@ -18,6 +18,8 @@ A pack: {name, n, qs, blacks, whites, words, prompts, twins, draws, scales}
   twins   Imposter: {part, a: {t, facts}, b: {t, facts}}, look-alike topics
   draws   Draw it's written prompts ("Renal pharm on its day off")
   scales  Somewhere between's written ends ([left, right])
+  wsubs   {word: its pick}: with each question's and pair's sub, what the
+          table's vote keeps (round three: the vote filters the pack)
 Questions, black cards and twins come from tonight's cards; wrong answers,
 white cards and topic names also from the cards around them (`near`), so
 a small scope still plays.
@@ -47,6 +49,9 @@ TOPIC_MAX = 36
 CAPS = {"qs": 150, "blacks": 150, "whites": 300, "words": 80, "prompts": 80, "twins": 30, "draws": 10, "scales": 6}
 READ_MAX = 1500    # cards read for a pack: a big scope is sampled
 QS_MIN = 30        # Trivia's questions: tonight's cards, then (fewer than this) the cards around them
+# a pack over several picks or subjects (the table votes on them): enough of each for a game of its own
+PER_SUB = {"qs": 30, "words": 25, "twins": 4}
+SUB_CAPS = {"qs": 400, "words": 300, "twins": 80}
 NEAR_MAX = 600     # and around it, for answer choices
 WHITES_MIN = 120   # a hand's cards: tonight's, and at least this many more from around them
 WORDS_MIN = 40     # Links' board: topic names, then (fewer than this) short answers
@@ -125,50 +130,6 @@ def term(key):
     kind, _, name = str(key).partition(":")
     return _quoted(kind, name) if kind in ("deck", "tag") and name else ""
 
-
-def scope_search(scope, cids=None):
-    """A custom scope as one Anki search. scope: {in, out (keys as term()
-    takes), seen, missed (days), due (days), lapses (times), flags [1-7]};
-    `search`, when set, is the person's own and wins. cids: the cards a
-    plan's dates or Slow but right came to (the glue works those out)."""
-    s = scope or {}
-    own = str(s.get("search") or "").strip()
-    if own:
-        return own
-    parts = []
-    ins = [t for t in (term(k) for k in s.get("in") or []) if t]
-    if ins:
-        parts.append(ins[0] if len(ins) == 1 else "(" + " OR ".join(ins) + ")")
-    parts += ["-" + t for t in (term(k) for k in s.get("out") or []) if t]
-    if s.get("seen"):
-        parts.append("-is:new")
-    n = _days(s.get("missed"), 365)
-    if n:
-        parts.append(f"rated:{n}:1")
-    n = _days(s.get("due"), 365)
-    if n:
-        parts.append(f"prop:due<={n}")
-    n = _days(s.get("lapses"), 99)
-    if n:
-        parts.append(f"prop:lapses>={n}")
-    flags = sorted({int(f) for f in s.get("flags") or [] if str(f).isdigit() and 1 <= int(f) <= 7})
-    if flags:
-        fl = [f"flag:{f}" for f in flags]
-        parts.append(fl[0] if len(fl) == 1 else "(" + " OR ".join(fl) + ")")
-    if cids is not None:
-        parts.append("cid:" + (",".join(str(int(c)) for c in cids) or "0"))
-    return " ".join(parts) or "deck:*"
-
-
-def _days(v, top):
-    try:
-        n = int(v or 0)
-    except (TypeError, ValueError):
-        return 0
-    return max(0, min(top, n))
-
-
-# ---- cards into questions ----
 
 def clean(text):
     """A field as one plain line: scripts, styles, sounds and pictures out,
@@ -726,15 +687,20 @@ def _topics(items):
     return sorted(counts, key=lambda t: -counts[t]), named
 
 
-def build(rows, name="", n=None, seed=None, near=()):
+def build(rows, name="", n=None, seed=None, near=(), subs=None):
     """The pack for rows of cards (item's rows); n: how many cards the scope
     has (the rows may be a sample of it). near: rows of cards around the
     scope (gamenight_flow.near): answer choices and white cards, and when
     the scope's run short, Trivia's questions and the Links board and
-    prompts."""
+    prompts. subs: {cid: the pick it's from}, for the table's vote; without
+    it, each question's subject (its round) is what's voted on. Every
+    question, word and pair carries its "sub" (words in "wsubs"), and a
+    pack over several holds enough of each to play on its own (PER_SUB)."""
     rng = random.Random(seed)
     dup = set()
     items = _items(rows, dup)
+    for it in items:
+        it["sub"] = str((subs or {}).get(it["cid"]) or "")[:TOPIC_MAX]
     rng.shuffle(items)
     others = _items(near, dup)
     rng.shuffle(others)
@@ -752,9 +718,10 @@ def build(rows, name="", n=None, seed=None, near=()):
             # Its label says where it's from, unless that says the answer ("Signal Transducers")
             tag = it["where"] if it["where"] and not _overlaps(it["a"], it["where"]) else ""
             qs.append({"q": it["q"], "a": it["a"], "tag": tag, "opts": opts, "ans": opts.index(it["a"]),
-                       "full": it["full"] if it["cloze"] else "", "extra": it["extra"]})
+                       "full": it["full"] if it["cloze"] else "", "extra": it["extra"], "sub": it.get("sub") or ""})
             asked.append(it)
-    for i in range(min(len(items), CAPS["qs"] * 3 // 2)):  # a pack holds 150; a game asks ten
+    caps = _caps(items, bool(subs))
+    for i in range(min(len(items), caps["qs"] * 3 // 2)):  # a pack holds 150 (more over several picks); a game asks ten
         ask(i)
     if len(qs) < QS_MIN:  # a small or picture-heavy scope: the cards around it, its own topics first
         mine = {norm(it["topic"]) for it in items if it["topic"]}
@@ -777,36 +744,53 @@ def build(rows, name="", n=None, seed=None, near=()):
     # card answers only for the Links board, and only when the topics run
     # short of a board's worth and more (CLAUDE.md's game-night exception)
     short = lambda its, top: [it["a"] for it in its if _card(it["a"], top)]
-    words = _apart(_unique([t for t in topics + near_topics if len(t) <= WORD_MAX]), CAPS["words"])
+    words = _apart(_unique([t for t in topics + near_topics if len(t) <= WORD_MAX]), caps["words"])
     if len(words) < WORDS_MIN:
         words = _apart(_unique(words + short(items, WORD_MAX) + short(others, WORD_MAX)), WORDS_MIN)
     prompts = _unique([t for t in topics + near_topics if _plain(t)])
     blacks = mixed(blacks, topics, rng)
     rounds(qs, asked)
+    # what the table votes on: the picks, or (none) each question's subject
+    tsub = _topic_subs(asked if subs else [dict(it, sub=q.get("round") or "") for q, it in zip(qs, asked)])
+    for q, it in zip(qs, asked):
+        q["sub"] = (it.get("sub") or tsub.get(norm(it.get("topic") or ""), "")) if subs else (q.get("round") or q.get("tag") or "")
+    if not subs:
+        tsub = _topic_subs([dict(it, sub=q["sub"]) for q, it in zip(qs, asked)])
     pairs = twins(items, rng, named)
     if len(pairs) < TWINS_MIN:  # tonight's topics first, then their neighbours'
         have = {(p["a"]["t"], p["b"]["t"]) for p in pairs}
         pairs += [p for p in twins(pool, rng, dict(near_named, **named)) if (p["a"]["t"], p["b"]["t"]) not in have]
+    for p in pairs:
+        p["sub"] = tsub.get(norm(p["a"]["t"])) or tsub.get(norm(p["b"]["t"])) or ""
     pack = {"name": str(name)[:60], "n": len(rows) if n is None else int(n),
             "qs": qs, "blacks": blacks, "whites": whites, "words": words, "prompts": prompts,
             "twins": pairs, "draws": draws([t for t in topics if _plain(t)], rng), "scales": [list(x) for x in rng.sample(SCALES, SCALES_IN)] if topics else []}
-    for k, cap in CAPS.items():
+    for k, cap in caps.items():
         pack[k] = pack[k][:cap]
+    pack["wsubs"] = {w: tsub[norm(w)] for w in pack["words"] if tsub.get(norm(w))}
     return pack
 
 
-def pick_key(key):
-    """A source's key (gamenight_flow.sources) for You › Pip Party's command,
-    as hex: keys hold ":" and names, and a board command carries only
-    letters, digits and :_.-"""
-    return str(key).encode("utf-8").hex()
+def _caps(items, picked):
+    """CAPS, raised for a pack over several picks or subjects so each has
+    PER_SUB of its own (SUB_CAPS at most)."""
+    n = len({it.get("sub") for it in items if it.get("sub")}) if picked else len({area_of(it["tags"], it["topic"]) for it in items[:400]} - {""})
+    caps = dict(CAPS)
+    if n >= 2:
+        for k, per in PER_SUB.items():
+            caps[k] = max(CAPS[k], min(SUB_CAPS[k], per * n))
+    return caps
 
 
-def unpick(arg):
-    try:
-        return bytes.fromhex(str(arg)).decode("utf-8")
-    except ValueError:
-        return None
+def _topic_subs(items):
+    """{topic: the pick or subject most of its cards are from}."""
+    by = {}
+    for it in items:
+        t, sub = norm(it.get("topic") or ""), it.get("sub") or ""
+        if t and sub:
+            c = by.setdefault(t, {})
+            c[sub] = c.get(sub, 0) + 1
+    return {t: max(c, key=lambda k: (c[k], k)) for t, c in by.items()}
 
 
 def written(topics, k, rng):

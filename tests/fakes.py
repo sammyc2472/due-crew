@@ -2660,6 +2660,7 @@ def install_fake_aqt():
         web=types.SimpleNamespace(eval=lambda js: None),
         deckBrowser=types.SimpleNamespace(refresh=lambda: None),
         form=types.SimpleNamespace(menuTools=types.SimpleNamespace(addAction=lambda a: None)),
+        activateWindow=lambda: None, raise_=lambda: None,
     )
     hooks = types.ModuleType("aqt.gui_hooks")
     for name in ("deck_browser_will_render_content", "deck_browser_did_render",

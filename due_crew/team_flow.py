@@ -1349,6 +1349,9 @@ def on_message(cmd, parts):
             pick_map(did, int(x))
         elif cmd == "insmapshare":
             share_map(did)
+        elif cmd == "insmapparty":  # 3.9.5 round three: the open tile (or the deck's map) at Pip Party
+            from . import gamenight_flow
+            gamenight_flow.from_insights(did, [t["key"] for t in _map_at(did)[0]])
         elif cmd == "inshardno":
             _put_away("ins_hard_hide")
         elif cmd == "instwo":

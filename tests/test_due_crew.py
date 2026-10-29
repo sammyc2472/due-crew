@@ -18707,13 +18707,9 @@ def test_game_night_from_your_cards_v395():
     topic names read as people say them; Imposter's twins are the likeliest
     mix-ups first; a custom scope is one Anki search."""
     from due_crew import gamenight as G
-    check("game night: a scope is one Anki search, names read as themselves",
-          G.scope_search({"in": ["deck:Step 1", "tag:Step1::Heart_failure"], "out": ["tag:Step1::Renal::Pharm"], "seen": True, "missed": 7,
-                          "due": 3, "lapses": 3, "flags": [1, 3, 9]})
-          == '("deck:Step 1" OR "tag:Step1::Heart\\_failure") -"tag:Step1::Renal::Pharm" -is:new rated:7:1 prop:due<=3 prop:lapses>=3 (flag:1 OR flag:3)')
-    check("game night: the person's own search wins; a plan's cards go by number; nothing ticked is everything",
-          G.scope_search({"search": " tag:x ", "in": ["deck:A"]}) == "tag:x" and G.scope_search({"in": ["deck:A"]}, [5, 7]) == '"deck:A" cid:5,7'
-          and G.scope_search({}) == "deck:*" and G.scope_search({}, []) == "cid:0" and G.term("note:x") == "")
+    check("game night: a pick is one Anki search term, its name read as itself; nothing else is one",
+          G.term("deck:Step 1") == '"deck:Step 1"' and G.term("tag:Step1::Heart_failure") == '"tag:Step1::Heart\\_failure"'
+          and G.term('deck:a"b') == '"deck:a\\"b"' and G.term("note:x") == "" and G.term("tag:") == "")
     check("game night: a cloze asks its own number, the others shown; two pieces of one number aren't asked",
           G.cloze("{{c1::Loop}} diuretics block {{c2::Na-K-2Cl}}", 2) == ("Loop diuretics block ____", "Na-K-2Cl", "Loop diuretics block Na-K-2Cl")
           and G.cloze("{{c1::a}} and {{c1::b}}", 1) is None and G.cloze("{{c1::a::hint}}", 1)[1] == "a")
@@ -18791,33 +18787,45 @@ def test_game_night_from_your_cards_v395():
 def test_pip_party_host_off_the_main_thread_v395():
     """3.9.5's review: Host reads the collection on the main thread and
     builds tonight's pack off it (a big scope took seconds); the profile
-    changed or signed out meanwhile, nothing opens (app.generation)."""
+    changed or signed out meanwhile, nothing opens (app.generation). Round
+    three: the TV opens on the first game, and there are no bots' TVs."""
     import due_crew.app as appmod
     from due_crew import gamenight_flow as GF
     saved = (GF._pack_rows, GF._bg, GF._tv, GF.client, appmod.generation)
     jobs, tvs, said = [], [], []
     try:
-        GF._pack_rows = lambda key, scope=None: ((list(GAME_ROWS),), {"near": [], "n": len(GAME_ROWS)})
+        GF._pack_rows = lambda: ((list(GAME_ROWS),), {"near": [], "n": len(GAME_ROWS), "subs": {r[0]: "Renal" for r in GAME_ROWS}})
         GF._bg = lambda job, done=None: jobs.append((job, done))
-        GF._tv = lambda payload: tvs.append(payload["mode"])
+        GF._tv = lambda payload: tvs.append((payload["mode"], payload["first"], {q.get("sub") for q in payload["pack"]["qs"]}))
         GF.client = lambda: types.SimpleNamespace(open_table=lambda: (200, {"code": "ABCD", "key": "k" * 43}))
-        GF.Ops.start("misses", None, "Misses", True, said.append)
+        GF.Ops.start("trivia", said.append)
         check("pip party host: the pack's build is a background job; nothing opened yet", len(jobs) == 1 and not tvs and not said)
         job, done = jobs.pop()
         done(job())
-        check("pip party host: built, the bots' TV opens", tvs == ["bots"] and said == [None], (tvs, said))
-        GF.Ops.start("misses", None, "Misses", False, said.append)
+        check("pip party host: built, the table's request is one more background job", len(jobs) == 1 and not tvs, (jobs, tvs))
+        job, done = jobs.pop()
+        done(job())
+        check("pip party host: the table open, the TV opens on the first game, each question marked with its pick",
+              tvs == [("tv", "trivia", {"Renal"})] and said == [None], (tvs, said))
+        GF.Ops.start("trivia", said.append)
         job, done = jobs.pop()
         done(job())
         job, done = jobs.pop()  # the table's request
         appmod.generation += 1  # the profile changed while it was out
         done(job())
-        check("pip party host: the profile changed while the table opened, no TV", tvs == ["bots"] and said[-1] is None, (tvs, said))
-        GF.Ops.start("misses", None, "Misses", True, said.append)
+        check("pip party host: the profile changed while the table opened, no TV", len(tvs) == 1 and said[-1] is None, (tvs, said))
+        GF.Ops.start("trivia", said.append)
         job, done = jobs.pop()
         appmod.generation += 1
         done(job())
-        check("pip party host: ...nor while the pack was built", tvs == ["bots"], tvs)
+        check("pip party host: ...nor while the pack was built", len(tvs) == 1 and not jobs, tvs)
+        GF.client = lambda: types.SimpleNamespace(open_table=lambda: (429, {}))
+        GF.Ops.start("trivia", said.append)
+        job, done = jobs.pop()
+        done(job())
+        job, done = jobs.pop()
+        done(job())
+        check("pip party host: a refusal is said, no TV", len(tvs) == 1 and said[-1].startswith("That's a lot"), said[-1:])
     finally:
         GF._pack_rows, GF._bg, GF._tv, GF.client, appmod.generation = saved
 
@@ -19061,6 +19069,30 @@ def test_trivia_a_block_of_fair_questions_v395():
           and filled["qs"][2]["a"] == "AP-1 partners", [q["a"] for q in filled["qs"]][:6])
 
 
+def test_pip_party_pack_for_the_vote_v395():
+    """3.9.5, round three: the table votes on what to play, so the pack
+    carries each question's, word's and pair's pick (or, with no picks,
+    its subject), and a pack over several holds enough of each to play on
+    its own (PER_SUB, SUB_CAPS at most)."""
+    from due_crew import gamenight as G
+    rows = GAME_ROWS
+    subs = {r[0]: ("Renal" if "Renal" in " ".join(r[4]) else "Elsewhere") for r in rows}
+    pack = G.build(rows, seed=3, subs=subs)
+    check("vote pack: each question carries the pick its card is from",
+          pack["qs"] and all(q["sub"] == subs[next(r[0] for r in rows if G.item(r) and G.item(r)["q"] == q["q"])] for q in pack["qs"]),
+          [(q["a"], q["sub"]) for q in pack["qs"]][:6])
+    check("vote pack: words and pairs carry their topic's pick, where it has one",
+          set(pack["wsubs"].values()) <= {"Renal", "Elsewhere"} and pack["wsubs"] and all(p["sub"] in ("Renal", "Elsewhere", "") for p in pack["twins"]),
+          (pack["wsubs"], [p["sub"] for p in pack["twins"]]))
+    plain = G.build(rows, seed=3)
+    check("vote pack: with no picks, a question's sub is its subject (its round)",
+          all(q["sub"] == (q.get("round") or q.get("tag") or "") for q in plain["qs"]))
+    items = [{"sub": f"S{k % 8}", "tags": [], "topic": ""} for k in range(80)]
+    caps = G._caps(items, True)
+    check("vote pack: eight picks raise the caps to PER_SUB each, SUB_CAPS at most; one pick keeps CAPS",
+          caps["qs"] == 240 and caps["words"] == 200 and caps["twins"] == 32 and G._caps(items[:1], True) == G.CAPS, caps)
+
+
 def test_pip_party_said_out_loud_v395():
     """3.9.5, Pip Party (Sam: "you have to imagine that people are sitting
     next to each other"): what can be said out loud isn't typed. Imposter
@@ -19215,100 +19247,168 @@ console.log(JSON.stringify({ loneWritten: lone.order.filter((i) => D.blacks[i].w
                        r"|trivial pursuit|apples to apples|quiplash|scattergories|taboo|werewolf|among us|dixit|charades")
     files = [os.path.join(REPO, *f) for f in (("site", "public", "table.js"), ("site", "public", "table.html"), ("site", "public", "table.css"),
                                               ("due_crew", "gamenight.py"), ("due_crew", "gamenight_flow.py"),
-                                              ("due_crew", "ui", "game_night_window.py"), ("due_crew", "ui", "game_night_tv.py"),
+                                              ("due_crew", "board.py"), ("due_crew", "ui", "game_night_tv.py"),
                                               ("worker", "src", "table.ts"))]
     named = [(os.path.basename(f), m.group(0)) for f in files for m in names.finditer(open(f, encoding="utf-8").read())]
     check("pip party: no other game is named in its games, glue, window or pages (trademarks); each says its kind in our words",
           not named and "kind: \"Fill in the blank\"" in open(files[0], encoding="utf-8").read() and "like:" not in open(files[0], encoding="utf-8").read(), named)
 
-    # You › Pip Party, drawn
-    src = [{"key": "misses", "label": "This week's misses", "n": 42}, {"key": "saved:R <b>", "label": "R <b> & co", "n": 7},
-           {"key": "saved:Empty", "label": "Empty", "n": 0}]
-    view = {"sources": src, "pick": "misses", "fit": {"n": 42, "have": {}, "thin": ["links"]}, "busy": False, "said": "",
-            "open": None, "burst": False, "pip": "<svg class='sv'></svg>"}
-    out = board.party_html(view)
-    check("pip party tab: what to play from, the pick on, names escaped, a pick's key as hex in its command; an empty one can't be picked",
-          'aria-checked="true" class="pp-o on"' in out and "R &lt;b&gt; &amp; co" in out and "R <b>" not in out
-          and f"party:pick:{G.pick_key('saved:R <b>')}" in out and G.unpick(G.pick_key("saved:R <b>")) == "saved:R <b>"
-          and f"party:pick:{G.pick_key('saved:Empty')}" not in out and "none yet" in out, out[:600])
-    check("pip party tab: the menu's three (Trivia, Imposter, Links) under On the menu, lit if the pick fills them; its line; Host and Try it with bots; Custom… opens the window",
-          out.count('class="pp-g on"') == 2 and out.count('class="pp-g"') == 1 and "42 cards &middot; enough for two of the three" in out
-          and ">On the menu</div>" in out and [g for g, _l in G.GAMES] == ["trivia", "imposter", "links"]
-          and "duecrew:party:host" in out and "duecrew:party:bots" in out and "duecrew:party:custom" in out and "Custom&hellip;" in out)
-    check("pip party tab: the line says all three, none, or nothing to play from",
-          board.party_say(318, []) == "318 cards &middot; enough for all three" and board.party_say(3, [g for g, _l in G.GAMES]) == "3 cards &middot; not enough for a game"
-          and board.party_say(0).startswith("Nothing here yet") and board.party_say(5) == "5 cards")
-    busy = board.party_html(dict(view, busy=True, said="Opening a table…"))
-    check("pip party tab: while a table opens, Host and bots are off and it says so",
-          "duecrew:party:host" not in busy and "duecrew:party:bots" not in busy and 'aria-disabled="true">Host' in busy and "Opening a table…" in busy)
-    bad = board.party_html(dict(view, said="Pip Party isn't open <yet>"))
-    check("pip party tab: a refusal shows on the tab, escaped, and Host is there to try again",
-          'pp-said bad' in bad and "&lt;yet&gt;" in bad and "duecrew:party:host" in bad)
-    tv = board.party_html(dict(view, burst=True, open={"bots": False, "code": "RR<JA", "url": "https://duecrew.com/t/RRJA"}))
-    check("pip party tab: once the TV's open, its code and where phones join, Copy link; the list gone; the burst once",
-          "On the TV &middot; RR&lt;JA" in tv and "duecrew.com/t/RRJA" in tv and "https://" not in tv and "duecrew:party:copy" in tv
-          and "duecrew:party:host" not in tv and 'class="pp burst"' in tv and tv.count("<i style=\"--r:") == 10
-          and 'class="pp burst"' not in board.party_html(dict(view, open={"bots": True})) and "Bots are on the TV" in board.party_html(dict(view, open={"bots": True})))
-    check("pip party tab: its burst only moves without Reduce motion, and Pip is still till pointed at",
-          "@media (prefers-reduced-motion: no-preference) {\n      #due-crew .pp.burst .pp-fx { display: block; }" in board.DUE_CSS
-          and "#due-crew .pp:not(.burst):not(:hover) .pp-pip .sv" in board.DUE_CSS)
-    have = board.you_html({}, None, {"tab": "party", "party_on": True, "party": view})
-    gone = board.you_html({}, None, {"tab": "party", "party_on": False, "party": view})
-    check("pip party tab: after Insights for those it's open to, picked; nobody else has it",
-          ">Pip Party</a>" in have and have.index(">Insights</a>") < have.index(">Pip Party</a>") and "duecrew:duetab:party" in have
-          and 'class="pp' in have and ">Pip Party</a>" not in gone and 'class="pp' not in gone)
+    # You › Pip Party, round three: the glue against a small collection, every click as the board sends it
+    import sqlite3
+    import urllib.parse
+    from due_crew import app as _app
+    db = sqlite3.connect(":memory:")
+    db.executescript("CREATE TABLE cards (id INTEGER, nid INTEGER, did INTEGER, odid INTEGER, ord INTEGER, queue INTEGER, type INTEGER);"
+                     "CREATE TABLE notes (id INTEGER, mid INTEGER, flds TEXT, tags TEXT);")
+    decks = {1: "Step 1", 2: "Step 1::Renal", 3: "Block <2>"}
+    party_rows = list(GAME_ROWS) + [(900 + k, 0, False, [f"Q {k}", f"A {k}"], [f"QB::Block_A::{1001 + k}"]) for k in range(12)]
+    for k, (cid, ord_, is_cloze, fields, tags) in enumerate(party_rows):
+        did = 2 if "Renal" in " ".join(tags) else 3 if cid >= 900 else 1
+        db.execute("INSERT INTO cards VALUES (?, ?, ?, 0, ?, 0, 2)", (cid, cid, did, ord_))
+        db.execute("INSERT INTO notes VALUES (?, ?, ?, ?)", (cid, 2 if is_cloze else 1, "\x1f".join(fields), " " + " ".join(tags) + " "))
 
-    # the glue: worked out only on screen, and kept a while
-    calls = []
-    saved = (GF.shown, GF.sources, GF.cards_for, GF.rows, GF.near, GF._redraw, GF.cfg, GF.save_cfg, GF.Ops.start, GF.open_window,
-             GF._clip, GF.tooltip, dc.mw.col, GF._bg)
-    conf = {"due_tab": "party"}
-    GF.TAB.update(busy=False, said="", open=None, burst=False, list=None, fits={}, pip=None)
+    def found(search):
+        ids = [r[0] for r in db.execute("SELECT c.id FROM cards c")]
+        tags = {c: t.split() for c, t in db.execute("SELECT c.id, n.tags FROM cards c JOIN notes n ON n.id = c.nid")}
+        dids = dict(db.execute("SELECT id, did FROM cards"))
+        out = set(ids)
+        for neg, kind, name in re.findall(r'(-?)"?(tag|deck):((?:[^"\\]|\\.)*)"?', search):
+            name = name.replace("\\_", "_").replace('\\"', '"').lower()
+            if kind == "tag":
+                hit = {c for c in ids if any(t.lower() == name or t.lower().startswith(name + "::") for t in tags[c])}
+            else:
+                hit = {c for c in ids if decks[dids[c]].lower() == name or decks[dids[c]].lower().startswith(name + "::")}
+            out = out - hit if neg else out & hit
+        if "rated:7:1" in search:
+            out &= set(ids[:5])
+        return sorted(out)
+    col = types.SimpleNamespace(find_cards=found, sched=types.SimpleNamespace(day_cutoff=2000000000),
+                                models=types.SimpleNamespace(get=lambda mid: {"type": 1 if mid == 2 else 0}),
+                                decks=types.SimpleNamespace(all_names_and_ids=lambda: [types.SimpleNamespace(id=i, name=n) for i, n in decks.items()],
+                                                            name=lambda i: decks.get(int(i), "")),
+                                db=types.SimpleNamespace(all=lambda q, *a: db.execute(q, a).fetchall(), list=lambda q, *a: [r[0] for r in db.execute(q, a)]))
+    from due_crew import team_flow
+    calls, started, evals, clipped = [], [], [], []
+    conf = {"due_tab": "party", "party": {"by": "tag"}}
+    saved = (GF.shown, GF._col, GF._redraw, GF.cfg, GF.save_cfg, GF.Ops.start, GF._clip, GF.tooltip, dc.mw.col, GF._bg, GF._file,
+             team_flow._know, _app.board_eval, GF._sys_decks, GF._sys_level, GF.near)
+    kept_file = os.path.join(tempfile.mkdtemp(), "game_night.json")
     try:
-        GF.shown = lambda: True
-        GF.sources = lambda: calls.append("sources") or [dict(x) for x in src]
-        GF.cards_for = lambda key, scope=None: calls.append("fit:" + key) or [r[0] for r in GAME_ROWS]
-        GF.rows = lambda cids, cap=0, rng=None: list(GAME_ROWS)
-        GF.near = lambda got, cids, cap=0, rng=None, slots=False: []
-        GF._bg = lambda job, done=None: done(job())  # the fit's build, here and now
-        GF._redraw = lambda: calls.append("redraw")
+        GF.shown, GF._col, dc.mw.col = (lambda: True), (lambda: col), col
+        drawn = []
+        GF._redraw = lambda: (calls.append("redraw"), drawn.append(GF.tab_view(conf)))  # the board draws the tab again, as Anki would
         GF.cfg, GF.save_cfg = (lambda: conf), (lambda c, **k: calls.append("saved"))
-        dc.mw.col = object()
-        you = dc._you(conf, None, {"cards": []})
-        dc._you(conf, None, {"cards": []})
-        check("pip party glue: on screen, the tab's view; the list and the pick's fit worked out once, kept for the next draw",
-              you["party_on"] and you["party"]["pick"] == "misses" and you["party"]["fit"]["n"] == len(GAME_ROWS)
-              and calls.count("sources") == 1 and calls.count("fit:misses") == 1, calls)
-        calls.clear()
-        you = dc._you(dict(conf, due_tab="insights"), None, {"cards": []})
-        check("pip party glue: another tab on screen, nothing of it worked out", "party" not in you and not calls, calls)
-        GF.shown = lambda: False
-        you = dc._you(conf, None, {"cards": []})
-        check("pip party glue: closed to this account, no tab and nothing worked out", not you["party_on"] and "party" not in you and not calls)
-        GF.shown = lambda: True
+        GF._bg = lambda job, done=None: done(job())  # the builds, here and now
+        GF._file = lambda: kept_file
+        GF._clip, GF.tooltip = clipped.append, (lambda *a, **k: None)
+        GF.near = lambda got, cids, cap=0, rng=None, slots=False: []
+        team_flow._know = lambda c, deck, cutoff: ({r[0]: (0.95 if r[0] % 2 else 0.6) for r in party_rows[:20]}, "right")
+        _app.board_eval = evals.append
+        GF.TAB.update(gen=None)
         send = lambda m: dc._on_js(False, as_board("duecrew:" + m), DeckBrowser())
-        send("party:pick:" + G.pick_key("saved:R <b>"))
-        check("pip party: a pick's click is kept on this computer (config)", conf.get("party_pick") == "saved:R <b>" and "saved" in calls, conf)
-        send("party:pick:" + G.pick_key("saved:Nope"))
-        send("party:pick:zz")
-        check("pip party: a key that isn't on the list, or isn't hex, changes nothing", conf.get("party_pick") == "saved:R <b>")
-        started = []
-        GF.Ops.start = staticmethod(lambda key, scope, label, bots, done: started.append((key, label, bots, done)))
+        v = GF.tab_view(conf)
+        names = [t["name"] for t in v["tiles"]]
+        check("pip party tab: by Tags, the tree's top level, the most carded first, each tile's cards, what I know of them, and whether it opens",
+              names == ["Step1", "QB"] and v["tiles"][0]["n"] == len(GAME_ROWS) and v["tiles"][0]["kids"] and v["tiles"][0]["know"] is not None
+              and v["tiles"][1]["know"] is None and v["all"] == "All of your tags" and v["n"] == len(party_rows), (names, v["tiles"][:1], v["all"], v["n"]))
+        check("pip party tab: the three games up top with tonight's counts, the one the TV opens on first, kept picks, Host",
+              [g["id"] for g in v["games"]] == ["trivia", "imposter", "links"] and v["first"] in ("trivia", "imposter", "links")
+              and [g["first"] for g in v["games"]].count(True) == 1 and all(isinstance(g["n"], int) for g in v["games"]), v["games"])
+        send("party:open:1")
+        send("party:open:0")
+        v = GF.tab_view(conf)
+        check("pip party tab: › opens a tile; a level's question numbers fold into one tile (ten or more), the trail goes back",
+              v["trail"] == ["QB", "Block A"] and v["tiles"] == [] and v["ids"] == {"n": 12, "tags": 12, "pick": ""}, (v["trail"], v["tiles"], v["ids"]))
+        send("party:ids")
+        v = GF.tab_view(conf)
+        check("pip party tab: the folded tile picks its cards whole", v["picks"] and v["picks"][0]["kind"] == "ids" and v["n"] == 12 and v["ids"]["pick"] == "in", v["picks"])
+        send("party:up:0")
+        v = GF.tab_view(conf)
+        send("party:pick:0")
+        v = GF.tab_view(conf)
+        check("pip party tab: a tap picks a tile; picks gather at the foot, and the count is theirs, no more",
+              [p["name"] for p in v["picks"]] == ["12 cards by question number", "Step1"] and v["tiles"][0]["pick"] == "in"
+              and v["n"] == len(party_rows) and v["all"] == "", ([p["name"] for p in v["picks"]], v["n"]))
+        send("party:out:0")
+        v = GF.tab_view(conf)
+        check("pip party tab: a pick tapped at the foot is left out; the count drops it", v["picks"][0]["out"] and v["n"] == len(GAME_ROWS), v["n"])
+        send("party:drop:0")
+        send("party:of:missed")
+        v = GF.tab_view(conf)
+        check("pip party tab: which of their cards narrows it (missed in the last 7 days), and says so in the search",
+              v["of"] == "missed" and v["n"] == 5 and "rated:7:1" in v["search"] and conf["party"]["of"] == "missed", (v["n"], v["search"]))
+        send("party:of:all")
+        was = len(calls)
+        send("party:find:" + urllib.parse.quote("renal ph"))
+        check("pip party tab: typing in Find draws the matches in the map's place alone (the box keeps its focus)",
+              evals and "pp-map" in evals[-1] and "Renal" in evals[-1] and "redraw" not in calls[was:], (evals[-1:], calls[was:]))
+        v = GF.tab_view(conf)
+        check("pip party tab: a match says where it sits", v["hits"] and v["hits"][0]["name"] == "Pharm" and v["hits"][0]["where"] == "Tag · Step1 › Renal", v["hits"][:1])
+        send("party:hit:0")
+        v = GF.tab_view(conf)
+        check("pip party tab: a match tapped is picked, its tag's cards", [p["name"] for p in v["picks"]][-1] == "Pharm" and v["n"] >= 2, v["picks"])
+        send("party:find:")
+        send("party:by:deck")
+        v = GF.tab_view(conf)
+        check("pip party tab: by Decks, the decks, a deck's subdecks' cards in its tile; names escaped when drawn",
+              [t["name"] for t in v["tiles"]] == ["Step 1", "Block <2>"] and v["tiles"][0]["n"] == len(GAME_ROWS) and v["tiles"][0]["kids"]
+              and "Block &lt;2&gt;" in board.party_html(v) and "Block <2>" not in board.party_html(v), [t["name"] for t in v["tiles"]])
+        cards, subs, _w = GF.scope()
+        pharm = [c for c in cards if any(t.startswith("Step1::Renal::Pharm") for t in dict((r[0], r[4]) for r in party_rows)[c])]
+        check("pip party tab: Host plays on the picks, each card marked with its pick for the table's vote, a card in two the narrower one's",
+              set(subs.values()) == {"Step1", "Pharm"} and set(cards) == set(subs) and pharm and all(subs[c] == "Pharm" for c in pharm), set(subs.values()))
+        send("party:clear")
+        cards, subs, _w = GF.scope()
+        check("pip party tab: nothing picked, the tiles on the map are the night, each its own (the vote's choices)",
+              set(subs.values()) == {"Step 1", "Block <2>"} and len(cards) == len(party_rows), set(subs.values()))
+        send("party:pick:1")
+        send("party:keep")
+        v = GF.tab_view(conf)
+        check("pip party tab: Keep this pick keeps it (this profile's file), a button over the map", v["kept"] == ["Block <2>"], v["kept"])
+        send("party:clear")
+        send("party:kept:0")
+        v = GF.tab_view(conf)
+        check("pip party tab: a kept pick's button puts it back", [p["name"] for p in v["picks"]] == ["Block <2>"], v["picks"])
+        send("party:forget:0")
+        check("pip party tab: × forgets it", GF.tab_view(conf)["kept"] == [])
+        send("party:search:" + urllib.parse.quote('"deck:Step 1"'))
+        v = GF.tab_view(conf)
+        check("pip party tab: an edited search is the pick, one chip", [p["kind"] for p in v["picks"]] == ["search"] and v["n"] == len(GAME_ROWS), v["picks"])
+        send("party:game:links")
+        check("pip party tab: a game's box picks the one the TV opens on (this computer's)", conf["party"]["game"] == "links" and GF.TAB["game"] == "links")
+        send("party:game:nope")
+        check("pip party tab: a game that isn't one changes nothing", GF.TAB["game"] == "links")
+        # Host: the picks read here, the pack built, a table, the TV on the first game
+        GF.Ops.start = staticmethod(lambda first, done: started.append((first, done)))
         send("party:host")
-        check("pip party: Host plays the pick (Ops.start: a table, then the TV), and says it's opening",
-              started and started[0][:3] == ("saved:R <b>", "R <b> & co", False) and GF.TAB["busy"] and GF.TAB["said"] == "Opening a table…")
+        check("pip party: Host plays the picks, the TV opening on the first game that runs; it says it's opening",
+              started and started[0][0] in ("links", "trivia", "imposter") and GF.TAB["busy"] and GF.TAB["said"] == "Opening a table…", started)
         send("party:host")
-        send("party:bots")
-        check("pip party: while it opens, another Host or bots does nothing", len(started) == 1)
-        started[0][3]("That's a lot of tables for one hour. Try again in a while.")
+        check("pip party: while it opens, another Host does nothing", len(started) == 1)
+        started[0][1]("That's a lot of tables for one hour. Try again in a while.")
         check("pip party: a refusal ends the wait and is said on the tab", not GF.TAB["busy"] and GF.TAB["said"].startswith("That's a lot"))
-        send("party:bots")
-        check("pip party: Try it with bots plays the pick with bots", len(started) == 2 and started[1][2] is True and not GF.TAB["busy"])
-        opened = []
-        GF.open_window = lambda custom=False: opened.append(custom)
-        send("party:custom")
-        check("pip party: Custom… opens the window on Custom", opened == [True])
-        # the TV: open, its code on the tab; closed, back to the list
+        args, kw = GF._pack_rows()
+        check("pip party: Host's read: the picks' cards (each with its pick), the cards around them, a pack that carries the picks",
+              len(args[0]) == len(GAME_ROWS) and set(kw["subs"].values()) == {"Your search"} and kw["n"] == len(GAME_ROWS), (len(args[0]), kw["n"]))
+        # Party from Today, Insights or Browse
+        conf["due_tab"] = "today"
+        swapped = []
+        was_swap, was_today = _app.swap, team_flow._today
+        _app.swap, team_flow._today = swapped.append, (lambda: "2026-10-29")
+        try:
+            GF.send("Today", "Today's misses", [r[0] for r in GAME_ROWS[:4]])
+        finally:
+            _app.swap, team_flow._today = was_swap, was_today
+        v = GF.tab_view(conf)
+        check("pip party: Party from elsewhere adds its cards as one pick, from where it says, and opens the bubble on Pip Party",
+              v["picks"][-1] == {"name": "Today's misses", "from": "Today", "deck": "", "kind": "sent", "out": False}
+              and conf["due_tab"] == "party" and swapped, v["picks"][-1])
+        out = board.party_html(v)
+        check("pip party tab, drawn: the games' boxes (their pictures, First up on one), the map, Of their cards, the picks, Host the first game",
+              out.count('class="pp-gm g-') == 3 and out.count(" on\"") >= 1 and "pp-art" in out and 'id="pp-map"' in out and "Of their cards" in out
+              and "Today:</span>Today&#x27;s misses" in out and "duecrew:party:host" in out and "Try it with bots" not in out and "Host " in out, out[:500])
+        check("pip party tab: Imposter's odd Pip isn't grey (Sam): rose, with its question mark", "#d0587f" in board._party_art("imposter") and "<i>?</i>" in board._party_art("imposter"))
+        # the TV: open, its code on the tab; closed, back to the picks
         from due_crew.ui import game_night_tv as TV
         sigs = []
         tv_win = types.SimpleNamespace(destroyed=types.SimpleNamespace(connect=sigs.append))
@@ -19316,24 +19416,149 @@ console.log(JSON.stringify({ loneWritten: lone.order.filter((i) => D.blacks[i].w
         TV.open_tv = lambda parent, site, payload: tv_win
         dc.plan_flow.site_base = lambda: "https://duecrew.com"
         try:
-            GF._tv({"mode": "tv", "code": "RRJA", "key": "k", "pack": {}})
+            GF._tv({"mode": "tv", "code": "RRJA", "key": "k", "pack": {}, "first": "links"})
         finally:
             TV.open_tv, dc.plan_flow.site_base = was_tv, was_site
-        clipped = []
-        GF._clip, GF.tooltip = clipped.append, (lambda *a, **k: None)
+        v = drawn[-1]
         send("party:copy")
-        v = GF.tab_view(conf)
         check("pip party: the TV open, the tab has its code and where phones join, once with its burst; Copy link copies it",
               GF.TAB["open"] == {"bots": False, "code": "RRJA", "url": "https://duecrew.com/t/RRJA"} and v["burst"]
-              and not GF.tab_view(conf)["burst"] and clipped == ["https://duecrew.com/t/RRJA"], (GF.TAB["open"], clipped))
+              and not GF.tab_view(conf)["burst"] and clipped == ["https://duecrew.com/t/RRJA"], (GF.TAB["open"], v.get("burst"), clipped))
+        tvh = board.party_html(dict(v, burst=True))
+        check("pip party tab: once the TV's open, its code and Copy link, nothing to pick; the burst once",
+              "On the TV &middot; RRJA" in tvh and "duecrew:party:copy" in tvh and "duecrew:party:host" not in tvh and 'class="pp burst"' in tvh)
         send("party:host")
-        check("pip party: with the TV open, Host does nothing (one table at a time)", len(started) == 2)
+        send("party:pick:0")
+        check("pip party: with the TV open, Host and the map do nothing (one table at a time)", len(started) == 1)
         sigs[0]()
-        check("pip party: the TV closed, the tab is back to the list", GF.TAB["open"] is None)
+        check("pip party: the TV closed, the tab is back to the picks", GF.TAB["open"] is None and GF.tab_view(conf)["picks"])
+        # Systems: Insights' map of a deck, picked the same way
+        tiles = [{"key": "k1", "name": "Renal", "n": 10, "know": 72, "started": 8, "kids": [], "_cids": [r[0] for r in GAME_ROWS[:10]]},
+                 {"key": "k2", "name": "Cardio", "n": 6, "know": None, "started": 0, "kids": [], "_cids": [r[0] for r in GAME_ROWS[10:16]]}]
+        GF._sys_decks = lambda: [{"did": 1, "name": "Step 1"}, {"did": 3, "name": "Block <2>"}]
+        was_ins = team_flow.insights
+        team_flow.insights = lambda did, pid=None, exam="": {"map": tiles if did == 1 else [], "_map_know": {}}
+        try:
+            send("party:clear")
+            send("party:by:sys")
+            v = GF.tab_view(conf)
+            send("party:pick:1")
+            v2 = GF.tab_view(conf)
+            send("party:deck:3")
+            v3 = GF.tab_view(conf)
+        finally:
+            team_flow.insights = was_ins
+        check("pip party tab: by Systems, Insights' own tiles for the deck picked; a pick says its deck; a deck that doesn't split says so",
+              [t["name"] for t in v["tiles"]] == ["Renal", "Cardio"] and v["decks"][1]["name"] == "Block <2>"
+              and v2["picks"][0]["name"] == "Cardio" and v2["picks"][0]["deck"] == "Step 1" and v2["n"] == 6
+              and v3["tiles"] == [] and "doesn&rsquo;t split by system yet" in board.party_html(v3), (v["tiles"][:1], v2["picks"], v3["tiles"]))
+        # round one's saved scopes read as kept picks
+        with open(kept_file, "w", encoding="utf-8") as f:
+            json.dump({"scopes": [{"name": "Renal and more", "scope": {"in": ["tag:Step1::Renal"], "out": ["deck:Block <2>"], "missed": 7}}]}, f)
+        k = GF.kept()
+        check("pip party: round one's saved scopes are kept picks now (in, out, which cards)",
+              k == [{"name": "Renal and more", "picks": [{"by": "tag", "path": "Step1::Renal", "out": False}, {"by": "deck", "path": "Block <2>", "out": True}], "of": "missed"}], k)
     finally:
-        (GF.shown, GF.sources, GF.cards_for, GF.rows, GF.near, GF._redraw, GF.cfg, GF.save_cfg, GF.Ops.start, GF.open_window,
-         GF._clip, GF.tooltip, dc.mw.col, GF._bg) = saved
-        GF.TAB.update(busy=False, said="", open=None, burst=False, list=None, fits={}, pip=None, fitting=None)
+        (GF.shown, GF._col, GF._redraw, GF.cfg, GF.save_cfg, GF.Ops.start, GF._clip, GF.tooltip, dc.mw.col, GF._bg, GF._file,
+         team_flow._know, _app.board_eval, GF._sys_decks, GF._sys_level, GF.near) = saved
+        GF.TAB.update(busy=False, said="", open=None, burst=False, gen=None, fits={}, fitting=None, picks=[], corpus=None, levels={}, counts={})
+
+
+def test_pip_party_from_where_you_are_v395():
+    """3.9.5 round three (Sam's v3, "From where you are"): one Party where
+    cards already show: a plan's date and today's misses on Today, Party ›
+    on Insights' map, Browse's right-click. Each through the board's own
+    handler, its cards one pick on the tab (Insights': the same map there,
+    the open tile picked). None of it for someone the tab isn't open to."""
+    import due_crew as dc
+    from due_crew import due as D, due_flow as F, plan_flow as PF, team_flow as TF, gamenight_flow as GF, app as _app
+    from aqt.deckbrowser import DeckBrowser
+    T = "2026-10-07"
+    base = {"pid": "p1", "uid": "u1", "plan": "MS2", "name": "Path <Book> 2", "opens": T, "seen": 18, "total": 42,
+            "counted": True, "parts": [], "topics": [["Videos", [["Cardio", 0]]]], "rm": []}
+    row = D._date_row(base, {}, T)
+    on, off = board._due_plan(row, True), board._due_plan(row)
+    check("party: a plan's date on Today, with cards, has Party at its end; not for someone the tab isn't open to",
+          "duecrew:planparty:p1:u1" in on and on.count(">Party</a>") == 1 and "planparty" not in off, on[-700:])
+    check("party: ...a date with no cards here, no Party",
+          "planparty" not in board._due_plan(D._date_row(dict(base, total=0, seen=0, topics=[]), {}, T), True))
+    rv = {"due": 0, "done": 214, "whole": 214, "through": 214, "later": 0, "left": 0, "back": 0, "at": ""}
+    v = dict(D.view(T, [], [], {}, reviews=rv), misses={"n": 23, "reviews": 214, "cids": [600, 601]})
+    check("party: today's misses line has Party", "duecrew:duego:missparty" in board._due_html(v | {"party": True})
+          and "missparty" not in board._due_html(v))
+    you = {"tab": "today", "plans": None, "insights": None}
+    check("party: the bubble gives Today its Party when the tab is open to me, and only then",
+          "missparty" in board.you_html({}, v, dict(you, party_on=True)) and "missparty" not in board.you_html({}, v, dict(you, party_on=False)))
+    tiles = [{"key": "a", "name": "Cardio", "n": 10, "know": 80, "started": 10, "kids": []},
+             {"key": "b", "name": "Renal", "n": 6, "know": None, "started": 0, "kids": []}]
+    ins = {"decks": [{"did": 30, "name": "Big Step 1"}], "did": 30, "exam": "", "view": {"map": tiles}}
+    hi = board.you_html({}, None, dict(you, tab="insights", insights=ins, party_on=True))
+    check("party: Insights' map has Party › before Share; not for someone the tab isn't open to",
+          "duecrew:insmapparty:30" in hi and hi.index("insmapparty") < hi.index("insmapshare")
+          and "insmapparty" not in board.you_html({}, None, dict(you, tab="insights", insights=ins, party_on=False)))
+    # the clicks, as the board sends them
+    sent, froms = [], []
+    saved = (GF.send, GF.from_insights, PF.date_cards, F._misses, F.mw.col, TF._map_at)
+    try:
+        GF.send = lambda src, name, cids: sent.append((src, name, list(cids)))
+        GF.from_insights = lambda did, keys: froms.append((did, keys))
+        PF.date_cards = lambda pid, uid: ("Path <Book> 2", [5, 6]) if (pid, uid) == ("p1", "u1") else None
+        F._misses = lambda col: {"n": 2, "cids": [600, 601], "topics": []}
+        F.mw.col = types.SimpleNamespace()
+        TF._map_at = lambda did: ([{"key": "a"}, {"key": "a2"}], [])
+        for m in ("planparty:p1:u1", "planparty:p1:nope", "duego:missparty", "insmapparty:30"):
+            dc._on_js(False, as_board("duecrew:" + m), DeckBrowser())
+        check("party: a date's Party and the misses' send their cards, from Today; a date that isn't, nothing",
+              sent == [("Today", "Path <Book> 2", [5, 6]), ("Today", "Today's misses", [600, 601])], sent)
+        check("party: Insights' Party › hands over the deck and the tile it has open", froms == [(30, ["a", "a2"])], froms)
+    finally:
+        GF.send, GF.from_insights, PF.date_cards, F._misses, F.mw.col, TF._map_at = saved
+    # Insights' Party ›, on the tab: the same map, the open tile picked at its level
+    opened, conf = [], {}
+    saved = (GF._sys_level, GF._sys_decks, GF.open_tab, GF.cfg, GF.save_cfg)
+    try:
+        GF._sys_level = lambda did, at: (["Cardio", "Physiology"][:len(at)], [])
+        GF._sys_decks = lambda: [{"did": 30, "name": "Big Step 1"}]
+        GF.open_tab, GF.cfg, GF.save_cfg = (lambda: opened.append(1)), (lambda: conf), (lambda c, **k: None)
+        GF.TAB.update(gen=_app.generation, by="tag", did=0, at=["x"], picks=[{"by": "tag", "path": "Step1", "out": False}], find="re")
+        GF.from_insights(30, ["c", "p"])
+        GF.from_insights(30, ["c", "p"])
+        want = {"by": "sys", "did": 30, "keys": ["c", "p"], "name": "Physiology", "deck": "Big Step 1", "out": False}
+        check("party: from Insights, the tab by Systems on that deck, at the open tile's level, it picked (once), the picks kept",
+              GF.TAB["by"] == "sys" and GF.TAB["did"] == 30 and GF.TAB["at"] == ["c"] and GF.TAB["find"] == ""
+              and GF.TAB["picks"] == [{"by": "tag", "path": "Step1", "out": False}, want] and opened == [1, 1]
+              and conf["party"]["by"] == "sys", GF.TAB["picks"])
+        GF.from_insights(30, [])
+        check("party: from Insights' top, the deck's map, nothing more picked", GF.TAB["at"] == [] and len(GF.TAB["picks"]) == 2)
+    finally:
+        GF._sys_level, GF._sys_decks, GF.open_tab, GF.cfg, GF.save_cfg = saved
+        GF.TAB.update(gen=None, picks=[], by="sys", did=0, at=[], find="")
+    # Browse's right-click
+    acts, fired = [], {}
+
+    class Menu:
+        def addSeparator(self):
+            pass
+
+        def addAction(self, label):
+            acts.append(label)
+            return types.SimpleNamespace(triggered=types.SimpleNamespace(connect=lambda f: fired.setdefault(label, f)))
+    sent = []
+    saved = (PF.client, GF.shown, GF.send)
+    try:
+        PF.client = lambda: types.SimpleNamespace(signed_in=True, session={"plans_authored": [], "plans": []})
+        GF.send = lambda src, name, cids: sent.append((src, name, list(cids)))
+        GF.shown = lambda: True
+        PF.browser_menu(types.SimpleNamespace(selected_cards=lambda: [7, 8]), Menu())
+        fired["Due Crew: Pip Party with these"]()
+        GF.shown = lambda: False
+        n = len(acts)
+        PF.browser_menu(types.SimpleNamespace(selected_cards=lambda: [7, 8]), Menu())
+    finally:
+        PF.client, GF.shown, GF.send = saved
+    check("party: Browse's right-click, Pip Party with these: the cards picked, one pick (\"2 cards\", from Browse); not for someone the tab isn't open to",
+          "Due Crew: Pip Party with these" in acts[:n] and sent == [("Browse", "2 cards", [7, 8])]
+          and "Due Crew: Pip Party with these" not in acts[n:], (acts, sent))
 
 
 def main():

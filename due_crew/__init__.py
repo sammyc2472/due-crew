@@ -1748,7 +1748,7 @@ def _tools_menu():
     for item in (("Study what’s next", due_flow.study_today), None,
                  ("Friends…", open_friends),
                  ("Squads…", open_squads),
-                 ("Pip Party…", open_game_night),  # 3.9.5: shown for its testers alone, for now
+                 ("Pip Party…", open_game_night),  # 3.9.5: the You bubble on it; shown for its testers alone, for now
                  "plans", None,  # 3.9.3: Plans ▸, the plan windows among its entries
                  ("Settings…", open_settings),
                  ("Pip’s closet…", lambda: open_closet()),
@@ -1781,8 +1781,8 @@ def _tools_menu():
 
 
 def open_game_night():
-    """3.9.5: Tools › Due Crew › Pip Party… (gamenight_flow; game night until its last round)."""
-    gamenight_flow.open_window()
+    """3.9.5: Tools › Due Crew › Pip Party: the You bubble open on it (gamenight_flow; game night until its last round)."""
+    gamenight_flow.open_tab()
 
 
 def _ask_this_card():
