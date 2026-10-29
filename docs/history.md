@@ -3938,3 +3938,32 @@ every release that changes how something works.
   `test_pip_party_the_table_votes_v395`,
   `test_pip_party_wrong_answers_of_its_sort_v395`,
   `test_pip_party_host_off_the_main_thread_v395`.
+- 3.9.5, Pip Party round three in Sam's hands ("make sure the search
+  works", "as a search hasn't worked to open things", "make sure the user
+  pips are showing up where they should", "add some animation"). The
+  tab's own script (dcParty: Find's typing, As a search, the and-N-more
+  tile) sat in a <script> in the tab, and a tab switch draws by
+  innerHTML, which runs none: in Anki they did nothing. It rides with the
+  board's scripts (`keep_me_in_view_js`), and a harness drives the tab
+  through the real glue on that same switch. On a big shared deck's
+  export (35k cards, 808k tags on cards, 45k tags) the tab took 10.8 s to
+  draw and Find about a second a keystroke, both on the main thread: the
+  tags are now read in one pass into each tag's cards, the map walks
+  tags (not each card's copy) and remembers a part's number check (first
+  draw about 1.6 s, a tap 0.1 s), and Find keeps an index made once, off
+  the main thread as the tab draws (`_find_ix`; a keystroke 20 to 100
+  ms). A word typed is the start of one ("renal" isn't in "adrenal"), a
+  parent and its part count together ("Renal › Physiology" first, the
+  most carded), "b&b" is B&B; a pick is named with its parent, its
+  running numbers off ("Renal › Physiology"). Every player is named with
+  their Pip in their seat's colour: the lobby's seats and its voters,
+  Imposter's order, who's in and tally, its vote on a phone, Links' teams
+  (their own Pips, not one team colour); a phone's own Pip is its seat's
+  as the TV draws it (`seated`, the order both work out). The games'
+  pictures on the tab play while pointed at (the shapes pop in turn and
+  Pip thinks; the two Pips bob, the odd one looks about, its ? wobbling;
+  a wave crosses the board) and once when picked (`.just`, that draw
+  alone), transforms only, nothing with Reduce motion. Insights' map's
+  "by Systems ▾" got the tab's picker too (`board.word_pick`).
+  `test_pip_party_find_v395`, `test_pip_party_everyones_pip_v395`,
+  `test_pip_party_pictures_play_v395`.

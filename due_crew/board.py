@@ -2137,16 +2137,20 @@ _PP_GRID = "gpgnngxpgnpggnpnpgngpnpgn"  # Links' key, a board of the two teams, 
 
 def _party_art(gid):
     """A game's little picture: Trivia's four shapes and Pip thinking;
-    Imposter's three Pips, the odd one in rose; Links' board."""
+    Imposter's three Pips, the odd one in rose; Links' board. Still till
+    pointed at (the tab's Pips are); then each plays: the shapes pop in
+    turn and Pip thinks, the two Pips bob and the odd one looks about, its
+    ? wobbling, a wave crosses the board. Picked, it plays once (.just)."""
     def pip(pose, accent, size):
         return _sev.still(pose, accent=accent).replace('width="80" height="80"', f'width="{size}" height="{size}"', 1)
     if gid == "trivia":
         shapes = "".join(f'<svg class="pp-sh s{i}" viewBox="0 0 24 24" aria-hidden="true">{d}</svg>' for i, d in enumerate(_PP_SHAPES))
-        return f'<span class="pp-4">{shapes}</span>{pip("focus", "var(--dc-accent)", 30)}'
+        return f'<span class="pp-4">{shapes}</span><span class="pp-p">{pip("focus", "var(--dc-accent)", 30)}</span>'
     if gid == "imposter":
-        return (f'<span class="pp-3">{pip("hello", "var(--dc-accent)", 32)}'
-                f'<span class="pp-odd">{pip("peek", "#d0587f", 32)}<i>?</i></span>{pip("ready", "var(--dc-accent)", 32)}</span>')
-    return '<span class="pp-25">' + "".join(f'<i class="{c}"></i>' for c in _PP_GRID) + "</span>"
+        return (f'<span class="pp-3"><span class="pp-p p1">{pip("hello", "var(--dc-accent)", 32)}</span>'
+                f'<span class="pp-odd">{pip("peek", "#d0587f", 32)}<i>?</i></span><span class="pp-p p2">{pip("ready", "var(--dc-accent)", 32)}</span></span>')
+    # Links' board, its squares in rows of five: a wave runs corner to corner (--d, a square's row and column)
+    return '<span class="pp-25">' + "".join(f'<i class="{c}" style="--d:{k // 5 + k % 5}"></i>' for k, c in enumerate(_PP_GRID)) + "</span>"
 
 
 def party_map_html(v):
@@ -2245,7 +2249,7 @@ def party_html(v):
         count = "&hellip;" if n is None else "Not enough cards" if thin else f"{n:,} {one if n == 1 else many}"
         on = " on" if g.get("first") else ""
         act = (f' href="#" onclick="{_pycmd("party:game:" + gid)}"' if not thin else ' aria-disabled="true"')
-        boxes += (f'<a class="pp-gm g-{e(gid)}{on}{" thin" if thin else ""}"{act} aria-pressed="{"true" if on else "false"}">'
+        boxes += (f'<a class="pp-gm g-{e(gid)}{on}{" thin" if thin else ""}{" just" if g.get("just") and on else ""}"{act} aria-pressed="{"true" if on else "false"}">'
                   f'<span class="pp-first">First up</span><span class="pp-art" aria-hidden="true">{_party_art(gid)}</span>'
                   f'<b>{e(g["label"])}</b><span class="pp-k">{e(_GAME_KIND.get(gid, ""))}</span><span class="pp-n">{count}</span></a>')
     kept = "".join(f'<a class="pp-kb" href="#" onclick="{_pycmd(f"party:kept:{i}")}">{e(k)}'
@@ -7422,7 +7426,8 @@ DUE_CSS = """
     #due-crew .pp-sh { width: 17px; height: 17px; }
     #due-crew .pp-sh.s0 { fill: #3a9a40; } #due-crew .pp-sh.s1 { fill: #4f7fe0; } #due-crew .pp-sh.s2 { fill: #d08a1e; } #due-crew .pp-sh.s3 { fill: #d0587f; }
     #due-crew .pp-3 { display: flex; align-items: flex-end; }
-    #due-crew .pp-3 > svg, #due-crew .pp-odd { margin-right: -7px; }
+    #due-crew .pp-3 > .pp-p, #due-crew .pp-odd { margin-right: -7px; }
+    #due-crew .pp-p, #due-crew .pp-odd { display: inline-flex; transform-origin: 50% 100%; }
     #due-crew .pp-odd { position: relative; display: inline-flex; }
     #due-crew .pp-odd i { position: absolute; top: -3px; right: 3px; width: 14px; height: 14px; border-radius: 50%; display: grid; place-items: center;
       font-style: normal; font-size: 10px; font-weight: 900; background: var(--dc-bg); color: #d0587f; }
@@ -7430,8 +7435,24 @@ DUE_CSS = """
     #due-crew .pp-25 i { width: 7px; height: 7px; border-radius: 2px; background: var(--dc-line); }
     #due-crew .pp-25 i.g { background: #3a9a40; } #due-crew .pp-25 i.p { background: #7b5cd6; } #due-crew .pp-25 i.x { background: #1f3f73; }
     @media (prefers-reduced-motion: no-preference) {
-      #due-crew .pp-art > * { transition: transform .2s; }
-      #due-crew .pp-gm:not(.thin):hover .pp-art > * { transform: translateY(-2px); }
+      /* round three (Sam: "add some animation"): pointed at, a game's picture plays; picked, it plays once */
+      #due-crew .pp-gm:not(.thin):hover .pp-sh, #due-crew .pp-gm.just .pp-sh { animation: pp-pop 1.6s ease-in-out var(--k, 0s) infinite; }
+      #due-crew .pp-gm.just .pp-sh, #due-crew .pp-gm.just .pp-p, #due-crew .pp-gm.just .pp-odd, #due-crew .pp-gm.just .pp-odd i,
+      #due-crew .pp-gm.just .pp-25 i { animation-iteration-count: 1; }
+      #due-crew .pp-sh.s1 { --k: .18s; } #due-crew .pp-sh.s2 { --k: .36s; } #due-crew .pp-sh.s3 { --k: .54s; } #due-crew .pp-3 .pp-p.p2 { --k: .35s; }
+      #due-crew .pp-gm:not(.thin):hover .pp-4 + .pp-p, #due-crew .pp-gm.just .pp-4 + .pp-p { animation: pp-think 2.4s ease-in-out infinite; }
+      #due-crew .pp-gm:not(.thin):hover .pp-3 .pp-p, #due-crew .pp-gm.just .pp-3 .pp-p { animation: pp-bob 1.1s ease-in-out var(--k, 0s) infinite; }
+      #due-crew .pp-gm:not(.thin):hover .pp-odd, #due-crew .pp-gm.just .pp-odd { animation: pp-look 2.2s ease-in-out infinite; }
+      #due-crew .pp-gm:not(.thin):hover .pp-odd i, #due-crew .pp-gm.just .pp-odd i { animation: pp-q 1.1s ease-in-out infinite; }
+      #due-crew .pp-gm:not(.thin):hover .pp-25 i, #due-crew .pp-gm.just .pp-25 i { animation: pp-wave 1.6s ease-in-out calc(var(--d) * 70ms) infinite; }
+      #due-crew .pp-gm.just .pp-art { animation: pp-chosen .45s cubic-bezier(.34, 1.56, .64, 1) 1; }
+      @keyframes pp-pop { 0%, 55%, 100% { transform: none; } 18% { transform: translateY(-3px) scale(1.18); } }
+      @keyframes pp-think { 0%, 100% { transform: none; } 30% { transform: rotate(-7deg); } 65% { transform: rotate(5deg); } }
+      @keyframes pp-bob { 0%, 100% { transform: none; } 45% { transform: translateY(-3px); } }
+      @keyframes pp-look { 0%, 100% { transform: none; } 20% { transform: translateX(-2px) rotate(-6deg); } 50% { transform: translateX(2px) rotate(6deg); } 70% { transform: none; } }
+      @keyframes pp-q { 0%, 100% { transform: none; } 25% { transform: rotate(-14deg) scale(1.15); } 50% { transform: rotate(10deg); } 75% { transform: rotate(-6deg); } }
+      @keyframes pp-wave { 0%, 60%, 100% { transform: none; } 25% { transform: scale(1.35); } }
+      @keyframes pp-chosen { 0% { transform: scale(.9); } 60% { transform: scale(1.06); } 100% { transform: none; } }
     }
     #due-crew .pp-kept { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; font-size: 11.5px; color: var(--dc-muted); }
     #due-crew .pp-kb { display: inline-flex; align-items: center; gap: 3px; font-weight: 700; color: var(--dc-ink); text-decoration: none;

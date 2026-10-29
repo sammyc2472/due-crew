@@ -726,10 +726,11 @@ def tab_view(c):
     n = _count()
     have = _fit() if n else {g: 0 for g in G.NEEDS}
     first = first_game(have)
+    chose = TAB.pop("chose", None)  # once: the next draw lets it rest
     ins = [p for p in TAB["picks"] if not p.get("out")]
     return {"open": None, "burst": bool(burst), "busy": bool(TAB.get("busy")), "said": TAB.get("said") or "",
-            "games": [{"id": g, "label": lbl, "n": None if have is None else have.get(g, 0), "need": G.NEEDS[g][1], "first": g == first}
-                      for g, lbl in G.GAMES],
+            "games": [{"id": g, "label": lbl, "n": None if have is None else have.get(g, 0), "need": G.NEEDS[g][1], "first": g == first,
+                       "just": g == chose} for g, lbl in G.GAMES],
             "first": first, "kept": [k["name"] for k in kept()],
             "by": lv["by"], "decks": lv["decks"], "did": lv["did"], "trail": lv["trail"], "tiles": tiles, "ids": ids,
             "more": max(0, len(lv["tiles"]) - SHOW_MAX), "where": lv["where"], "find": TAB["find"], "hits": found,
@@ -799,6 +800,7 @@ def on_message(parts):
     redraw, keep = True, True
     if what == "game" and arg in GAME_IDS:
         TAB["game"] = arg
+        TAB["chose"] = arg  # its picture plays once, on the draw this makes
     elif what == "by" and arg in ("sys", "tag", "deck"):
         TAB["by"], TAB["at"] = arg, []
     elif what == "deck" and arg.isdigit():

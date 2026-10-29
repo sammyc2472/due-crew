@@ -19680,6 +19680,45 @@ console.log(JSON.stringify({ order, dark: seatTone(1), wrap: seatTone(7) }));
     check("pips: a seat's colour by the device's theme (night: the light one), round the six for a seventh",
           got.get("dark") == "#8fb0ff" and got.get("wrap") == "#8fb0ff", got)
 
+def test_pip_party_pictures_play_v395():
+    """3.9.5 round three (Sam: "add some animation to the trivia / imposter
+    / links pieces"): each game's picture is still till pointed at (the
+    tab's Pips are), then plays: Trivia's shapes pop in turn and Pip
+    thinks, Imposter's two Pips bob and the odd one looks about with its ?
+    wobbling, a wave crosses Links' board corner to corner. A box picked
+    plays its picture once, on that draw alone. Nothing moves with Reduce
+    motion; the logo's rule (transforms only) holds here too."""
+    import re as _re
+    from due_crew import gamenight_flow as GF
+    css = board.DUE_CSS
+    motion = css[css.index("@media (prefers-reduced-motion: no-preference)", css.index(".pp-art {")):]
+    motion = motion[:motion.index("\n    }\n")]
+    check("pictures: pointed at, each piece plays, and all of it under no-preference (nothing with Reduce motion)",
+          all(k in motion for k in (".pp-gm:not(.thin):hover .pp-sh", "pp-think", "pp-bob", "pp-look", "pp-q", "pp-wave", "pp-chosen")), motion[:300])
+    frames = _re.findall(r"@keyframes (pp-[a-z]+) \{(.*?)\} \}", motion)
+    check("pictures: transforms only, so nothing in the box moves but the picture's own pieces",
+          len(frames) == 7 and all(_re.sub(r"(transform: [^;]+;|none|[0-9%, ]+\{|\}| )", "", body) == "" for _n, body in frames), frames)
+    check("pictures: Trivia's four shapes take turns; Links' squares each know their row and column",
+          all(f"#due-crew .pp-sh.s{i} {{ --k: " in css for i in (1, 2, 3)) and board._party_art("links").count("style=\"--d:") == 25
+          and 'style="--d:8"' in board._party_art("links") and board._party_art("imposter").count('class="pp-p') == 2)
+    games = [{"id": "trivia", "label": "Trivia", "n": 40, "need": 10, "first": True, "just": True},
+             {"id": "links", "label": "Links", "n": 40, "need": 25, "first": False, "just": False}]
+    out = board.party_html({"games": games, "first": "trivia", "picks": [], "n": 40, "ofs": []})
+    check("pictures: the box just picked plays once (.just); the others rest", 'class="pp-gm g-trivia on just"' in out and "g-links just" not in out, out[:400])
+    saved = (GF._redraw, GF._keep_state, dict(GF.TAB))
+    try:
+        GF._redraw, GF._keep_state = (lambda: None), (lambda: None)
+        GF.TAB.update(open=None, gen=GF.app.generation)
+        GF.on_message(["duecrew", "party", "game", "links"])
+        check("pictures: a game's box picked asks for its play on the next draw", GF.TAB.get("chose") == "links")
+        GF.TAB.pop("chose", None)
+        GF.on_message(["duecrew", "party", "game", "nope"])
+        check("pictures: ...a game that isn't one asks for nothing", "chose" not in GF.TAB)
+    finally:
+        GF._redraw, GF._keep_state = saved[0], saved[1]
+        GF.TAB.clear()
+        GF.TAB.update(saved[2])
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:
