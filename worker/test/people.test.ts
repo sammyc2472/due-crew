@@ -87,7 +87,7 @@ describe("the admin's account lookup", () => {
     expect(r.status).toBe(200);
     expect(r.body.crew.map((c: any) => [c.uid, !!c.mine, !!c.theirs])).toEqual([["dre", true, true], ["kai", true, false], ["theo", false, true]]);
     expect(r.body.crew[0]).toMatchObject({ name: "Dre" });
-    expect(JSON.stringify(r.body)).not.toMatch(/412|reviews|zed|email/);
+    expect(JSON.stringify(r.body)).not.toMatch(/\b412\b|reviews|zed|email/);  // 412 the count alone: a timestamp can hold those digits
     const log = await db().prepare("SELECT action FROM admin_actions WHERE uid = 'maya'").all<{ action: string }>();
     expect(log.results.map((a) => a.action)).toContain("looked at their crew");
   });
