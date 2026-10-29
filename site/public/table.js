@@ -980,7 +980,7 @@ function TV(root, client, opt) {
   const names = () => Vote.subs(ALL).map((x) => x.name);
   const votes = () => players().map((p) => (Array.isArray(p.presence.v) ? p.presence.v.filter((x) => typeof x === "string").slice(0, 16) : []));
   const picked = () => Vote.picked(names(), T.mine, votes());
-  const tonight = () => { D = Vote.only(ALL, picked()); return D; };
+  const tonight = () => { const on = picked(); D = Vote.only(ALL, on.length < names().length ? on : []); return D; };  // every one picked: all of it
   const play = () => (ready(GAMES[T.chosen]) ? T.chosen : ORDER.find((id) => ready(GAMES[id])) || null);  // the one picked, or the next that fits
   function ctx() {
     return { N: T.seats.length, seats: T.seats, name: (i) => (T.seats[i] ? T.seats[i].n : "?"), A: answers(), pres: presOf, here: (i) => !!peerOf(i), bots: !!opt.bots, go, set, again, lobby };
