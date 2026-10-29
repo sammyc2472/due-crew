@@ -594,13 +594,15 @@ def _you(c, due, plans):
     """3.8.0, the You bubble over the board: its tab, folded or not, and the
     Plans or Insights it draws. Only the one on screen is worked out."""
     from . import team_flow
-    you = {"tab": due_flow.you_tab(c), "folded": due_flow.folded(c, due), "plans": plans, "insights": None}
+    you = {"tab": due_flow.you_tab(c), "folded": due_flow.folded(c, due), "plans": plans, "insights": None,
+           "party_on": gamenight_flow.shown()}  # 3.9.5's last round: You › Pip Party, for those it's open to
     if not due and mw.col:
         you["qids"] = due_flow.has_qids()  # 3.9.5: QBank QIDs in the head with Due's lists off too
     if you["folded"]:
         return you
     hidden = board.hidden_tabs(c)
-    keys = (["today", "upcoming", "later"] if due else []) + [k for k, _l in board.YOU_MORE if k not in hidden]
+    keys = ((["today", "upcoming", "later"] if due else []) + [k for k, _l in board.YOU_MORE if k not in hidden]
+            + ([board.PARTY_TAB[0]] if you["party_on"] else []))
     shown = you["tab"] if you["tab"] in keys else (keys[0] if keys else None)
     try:
         if shown == "plans":
@@ -609,6 +611,8 @@ def _you(c, due, plans):
                 you["opened"] = plan_flow.morning_opened()  # Due off: its Not today is here
         elif shown == "insights":
             you["insights"] = team_flow.you_view(c)
+        elif shown == "party" and mw.col:
+            you["party"] = gamenight_flow.tab_view(c)
     except Exception:
         traceback.print_exc()
     return you
@@ -884,6 +888,8 @@ def _on_js(handled, message, context):
         plan_flow.on_message(cmd, parts)  # 3.1
     elif cmd.startswith("due"):
         due_flow.on_message(cmd, parts)  # Due
+    elif cmd == "party":
+        gamenight_flow.on_message(parts)  # 3.9.5's last round: You › Pip Party
     elif cmd.startswith("ins") or cmd == "youins":
         from . import team_flow
         team_flow.on_message(cmd, parts)  # 3.8.0: You › Insights, a deck's
@@ -1742,7 +1748,7 @@ def _tools_menu():
     for item in (("Study what’s next", due_flow.study_today), None,
                  ("Friends…", open_friends),
                  ("Squads…", open_squads),
-                 ("Game night…", open_game_night),  # 3.9.5: shown for its testers alone, for now
+                 ("Pip Party…", open_game_night),  # 3.9.5: shown for its testers alone, for now
                  "plans", None,  # 3.9.3: Plans ▸, the plan windows among its entries
                  ("Settings…", open_settings),
                  ("Pip’s closet…", lambda: open_closet()),
@@ -1775,7 +1781,7 @@ def _tools_menu():
 
 
 def open_game_night():
-    """3.9.5: Tools › Due Crew › Game night… (gamenight_flow)."""
+    """3.9.5: Tools › Due Crew › Pip Party… (gamenight_flow; game night until its last round)."""
     gamenight_flow.open_window()
 
 

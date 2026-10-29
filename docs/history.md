@@ -3679,8 +3679,8 @@ every release that changes how something works.
   hosting or bots. Set both false when it goes wider.
 - 3.9.5, game night from Anki, on your own cards (Sam: "I want to practice
   using my actual stuff", then, on the mock "Your Cards at the Table",
-  "build it! … don't need to keep the sample questions", "the codenames
-  dupe should have two teams", "Yes you can do the CAH stuff", and before
+  "build it! … don't need to keep the sample questions", that Links
+  should have two teams, a yes to Rounds on your cards, and before
   testing "a UI review. Find ways to make it fun (pips included?)"). The TV
   is now a window of Anki's: Tools › Due Crew › Game night… (shown for
   `gamenight_flow.TESTERS` alone while Sam tests it) picks what to play
@@ -3715,8 +3715,9 @@ every release that changes how something works.
   white cards at least, and the board and prompts when tonight's run short:
   Sam's first night, on a week's handful of misses, dealt a hand of six
   alike (a refill that dealt the one card left again and again; now no card
-  is dealt twice, and a hand is seven, or an even share of a small pack). Links is two teams, as on
-  horsepaste: Green and Purple pick sides on their phones (Even out,
+  is dealt twice, and a hand is seven, or an even share of a small pack).
+  Links is two teams on one board, a clue giver each: Green and Purple
+  pick sides on their phones (Even out,
   Shuffle), each picks a clue giver; 9 for whoever goes first, 8, 7
   nobody's, 1 Code blue; clues typed so the TV shows them; a timer if
   wanted. The picking is on the TV (Sam: a 5×5 board on a phone was too
@@ -3746,3 +3747,126 @@ every release that changes how something works.
   `worker/test/table.test.ts`'s whisper, `tools/dialogs.py`'s Game night
   window; played end to end with the TV window itself in Qt's web engine
   against a local duecrew.com and a phone in a browser.
+- 3.9.5, Pip Party (Sam: "I like Pip Party... maybe as a tab on the due
+  thing next to insights", "make it fun as well as functional", "build both
+  right now"). Game night is Pip Party where people see it: the Tools menu
+  (Pip Party…), the window, the TV, duecrew.com/table and the phones'
+  header; still gamenight in code, as Pip is sev. You › Pip Party is the
+  bubble's tab after Insights, for those game night is open to
+  (`gamenight_flow.shown`): Pip at a game place (`sev.GAME_PLACES`, still
+  till pointed at, cheering once as a TV opens with a small burst round it,
+  none with Reduce motion); Play from, each source's cards, the pick kept
+  on this computer (`party_pick`); Custom… (the window, on Custom; a scope
+  saved there is on the list after); the six as tiles, lit if the pick
+  fills them, and a line ("42 cards · enough for five of the six"); Host
+  and Try it with bots (off while a table opens, a refusal said on the
+  tab), then the TV's code, where phones join and Copy link, till the TV
+  closes. The list and the pick's fit are worked out when the tab is on
+  screen and kept a while (`tab_view`; two minutes, ten for a fit, again
+  after a game, a pick or the window), never on every draw; nothing is
+  sent but Host's one request. The games say what kind they are in our own
+  words ("Fill in the blank", "Two teams, one board"): no other game is
+  named anywhere (Sam: trademarks; the suite checks the games, their glue
+  and their pages). Written cards (`gamenight.py`, Sam: "not creative
+  enough"): Rounds' black cards with one of tonight's topics, a quarter of
+  them ("The card I'd suspend from Renal pharm: ____"), no answer of their
+  own, so the Attending's pick is the round, and none alone; Draw it starts
+  about a quarter of its chains from a written prompt ("Nephritic as a
+  monster"); Somewhere between adds four study-life ends to its twelve
+  ("Skim it ↔ Make a card for it"); none without topics. Tests:
+  `test_pip_party_v395`, `tools/dialogs.py`'s menu and Custom…, the tab in
+  `tools/preview.py` (light, dark, narrow; a pick, all six, opening, a
+  refusal, the TV open, bots, nothing yet, Due off).
+- 3.9.5, Pip Party's review (Sam: "check your work for security and
+  efficiency and make sure that question generation make sense. don't want
+  the questions to be dumb"). Questions, tried on a big shared deck's
+  export (35k cards, read in the scratch folder, never kept): a card's
+  topic is the name most of its tags agree on, counted over every tag and
+  the card's own words (`gamenight.topic_of`; such a deck tags a card by
+  each resource that covers it), past "Extra" and chapter numbers, and a
+  tag that ends in a question's id names nothing (it walked up to the
+  question bank's own name); no question from an answer that says nothing
+  alone (`EMPTY`: increased, Yes, a letter), one already in the question,
+  no words around the blank or a picture it needs; a cloze's hint after
+  its blank. Wrong answers are scored (`_Pool`): shared tags, the same
+  blank in other cards ("____ valve": tricuspid, aortic, mitral; Host also
+  finds such cards in the collection, one pass over the notes,
+  `gamenight_flow.near(slots=True)`), the answer's sort, size and look,
+  the question's own cue ("the likely diagnosis"); never one that holds
+  the answer ("acute pancreatitis" for "pancreatitis"), sits in the
+  question, or a number for a word; in the answer's case. White cards,
+  tiles and prompts are never a number or a thin word. Imposter pairs two
+  things (Nephritic and Nephrotic, Class I and Class II antiarrhythmics,
+  Aortic aneurysm and dissection), never a plural, a typo, one name inside
+  another or a heading, and no fact names either. Security (a review):
+  phones outside Rounds see topic names, and Links takes short answers only
+  when the topics run short of forty (it always had); the TV is no seat
+  (a stranger with the code filled the table and kept it out), and a
+  "full" close is a dropped line for it; one network waits at the door
+  three at a time (`DOOR_PER_NET`), joins are counted per network and
+  table with the TV's own aside (`isHost`), codes that aren't a table are
+  counted per network, IPv6 by its /64 (`netOf`, `PROBES_PER_HOUR`), so
+  the codes can't be walked; the TV floats a phone's reactions twice a
+  second at most; Host's build drops its TV when the profile changed
+  (`app.generation`). Efficiency (a review): a 1500-card pack 5.2 s to
+  0.65 s (cached text helpers; the board's no-word-inside-another check
+  stops at what it keeps), and built off the main thread, at Host and for
+  the tab's fit; nothing worked out while the TV is open; Play from's
+  cards kept for a pick, one deck read a plan, a plan's week by my Anki
+  day; the window previews once a switch; the TV draws once a frame; a
+  dial sends eight times a second, not every move; the pad draws a stroke's
+  new piece, not every stroke. Not done: the table's Durable Object can't
+  hibernate (its sockets are accepted the old way), about $0.02 a table
+  left open. Tests: `test_game_night_questions_make_sense_v395`,
+  `test_pip_party_host_off_the_main_thread_v395`, near's slot search, and
+  `table.test.ts`'s door a network, probes and /64, the TV past a full
+  table.
+- 3.9.5, Pip Party after Sam's first nights on his own cards ("if we can't
+  get some of them right, let's focus on the ones that we know work and
+  expand their functionality"): on the menu, Trivia, Imposter and Links
+  (`gamenight.GAMES`, table.js's ORDER; the tab says "On the menu", its
+  games and the pick under one highlight, Pip drawn whole in its own box
+  so its halo and wings stay off the tabs). Rounds, Draw it and Somewhere
+  between are off it, their code kept (Sam's pick, from "Keep"). Trivia
+  picks a subject on the TV first when tonight has two with six questions
+  or more (Mixed, or "Cardiology 14": `gamenight.rounds`, each card's
+  subject a level over its topic, what its tags' middle parts agree on, a
+  question bank's tags aside, Cardio and Cardiology one), and its end says
+  More Cardiology or Pick a topic; after each reveal the TV shows the
+  card, its sentence with the answer in bold and its Extra (photo credits
+  and pointers elsewhere out, `gamenight.extra`), never sent to phones.
+  Imposter's end, What tells them apart, is each topic's cards' sentences
+  (`_apart_facts`), none naming its own topic. Question fixes from his
+  screens: a plural is the same answer ("GAPs" for "GAP"); a blank inside
+  a word ("____vascular") isn't a question; a one-word describing answer
+  ("atrial") gets describing wrong ones. The empty card in a Rounds hand
+  was an older page on duecrew.com meeting the newer pack (a written card
+  has no answer): the deploy fixes it.
+- 3.9.5, Pip Party said out loud (Sam: "you have to imagine that people
+  are sitting next to each other when they do this"): what can be said
+  isn't typed, and a phone keeps what's secret and a tap. Imposter's words
+  go round the room twice, out loud, from someone picked at random (the
+  order and whose turn it is on the TV; on a phone, the topic and "Jo's
+  turn. You're next."); the one saying it taps Said it, the TV's Skip
+  ahead passes a turn, and anyone gone is passed over. Its clue table is
+  gone (nobody typed any); the vote and the imposter's one guess stay taps.
+  Links' clue giver says the word and taps how many it's for (1 to 5): the
+  TV shows "Clue for 2 · 3 left", the number big enough to read across the
+  room, and the table carries only the number (the old "that word's on
+  the board" check is the table's own now). A link or QR with the code
+  asks only for a name, Join focused when it's remembered (Another table,
+  a bad code or none shows the code's box). The clue giver's key is
+  coloured blocks in the board's places, a found one an empty place, Code
+  blue marked × (Sam: "can just put colorful blocks"); the words are on the
+  TV, so the phone's word fitting (soft hyphens, font sizes) is gone. The
+  copy says less (Sam: "trust the user"): the games' lines, the phones'
+  prompts ("Your turn", "Your clue. How many?"), the lobby's join line
+  (the address alone), the door's notes, the tab's small print. A fix on
+  the way: caught, Imposter's TV said everyone's topic while the imposter
+  was guessing it; it says what they had, and that they get a guess.
+  Then (Sam: "imposter i think we need to choose one or two rounds"): Once
+  round or Twice round on the TV while the first goes round (twice to
+  start), kept for Another round; phones say "Round 1 of 2" only when
+  there are two. Links' timer buttons now show which is picked (the pill's
+  pressed look keyed only off a class the timer never set).
+  `test_pip_party_said_out_loud_v395`.

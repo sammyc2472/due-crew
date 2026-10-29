@@ -1,4 +1,4 @@
-/* duecrew.com/table, game night: the TV and the phones, in the site's look
+/* duecrew.com/table, Pip Party: the TV and the phones, in the site's look
    (the colors are app.css's; the window tokens are the board's). Light and
    dark follow the device, as the rest of the site does. */
 :root {
@@ -55,12 +55,12 @@ h1 { font-family: var(--display); font-size: clamp(38px, 6vw, 56px); letter-spac
 button.tile { cursor: pointer; }
 button.tile:hover { border-color: var(--w-acc); }
 .tile.on { border-color: var(--w-acc); box-shadow: inset 0 0 0 1px var(--w-acc); background: var(--w-you); }
-.tile .like { font-size: 11.5px; font-weight: 700; color: var(--w-acc); }
+.tile .kind { font-size: 11.5px; font-weight: 700; color: var(--w-acc); }
 .tile b { font-family: var(--display); font-size: 21px; letter-spacing: -.01em; }
 .tile .ln { font-size: 13.5px; }
 .tile .lr, .tile .np { font-size: 12.5px; color: var(--w-mut); }
 .tiles.static .tile { background: var(--sf); border-color: var(--line); color: var(--ink); }
-.tiles.static .tile .like { color: var(--acc); }
+.tiles.static .tile .kind { color: var(--acc); }
 .tiles.static .tile .lr, .tiles.static .tile .np { color: var(--mut); }
 
 .tv { background: var(--w-bg); color: var(--w-ink); border: 1px solid var(--w-edge); border-radius: 14px; overflow: hidden; box-shadow: 0 12px 34px rgba(30, 40, 25, .10); min-width: 0; }
@@ -99,18 +99,20 @@ button.tile:hover { border-color: var(--w-acc); }
 .tm.low { color: var(--o3); }
 .note { padding: 14px; color: var(--w-mut); }
 
-/* imposter */
-.ct { display: grid; border: 1px solid var(--w-line); border-radius: 12px; overflow: hidden; }
-.ct-r { display: grid; grid-template-columns: 90px repeat(2, minmax(0, 1fr)); gap: 10px; padding: 8px 12px; border-top: 1px solid var(--w-line); align-items: baseline; }
-.ct-r:first-child { border-top: 0; }
-.ct-r b { font-size: 13px; color: var(--w-ink2); overflow-wrap: anywhere; }
-.ct-r span { font-family: var(--display); font-size: 20px; font-weight: 700; overflow-wrap: anywhere; }
-.ct-r.bad { background: color-mix(in srgb, var(--o4) 12%, var(--w-bg)); }
+/* imposter: round the room, the one saying a word lit, those who have faded */
+.ppl > span.done { opacity: .5; }
 .apart { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .apart > div { border: 1px solid var(--w-line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 4px; font-size: 14px; }
 .apart > div b { font-size: 15px; }
 .apart > div.them { border-color: var(--o4); }
-.apart ul { margin: 0; padding-left: 18px; }
+.apart ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.apart li b { font-size: inherit; }
+/* Trivia: a block's topic, and the card after the reveal */
+.topics { display: flex; flex-wrap: wrap; gap: 10px; }
+.topics .btn small { color: var(--w-mut); font-weight: 600; margin-left: 4px; }
+.cardsay { border-left: 3px solid var(--w-acc); padding: 4px 0 4px 14px; display: grid; gap: 6px; max-width: 72ch; }
+.cardsay p { margin: 0; font-size: 18px; line-height: 1.4; color: var(--w-ink); }
+.cardsay p.x { font-size: 15px; color: var(--w-ink2); }
 @media (max-width: 560px) { .apart { grid-template-columns: minmax(0, 1fr); } }
 
 /* phones */
@@ -125,9 +127,10 @@ button.tile:hover { border-color: var(--w-acc); }
 .who { font-size: 12.5px; font-weight: 700; color: var(--w-acc); overflow-wrap: anywhere; }
 .secret { border-radius: 14px; background: var(--w-you); padding: 16px 14px; display: grid; gap: 6px; text-align: center; }
 .f { display: grid; gap: 8px; min-width: 0; }
-.f.two { grid-template-columns: minmax(0, 1fr) 72px; }
-.f.two .btn { grid-column: 1 / -1; }
 #app input[type="text"], #app select { font: inherit; font-size: 16px; padding: 10px 12px; border: 1px solid var(--w-line); border-radius: 10px; background: var(--w-bg); color: var(--w-ink); width: 100%; box-sizing: border-box; min-width: 0; }
+.nums { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.nums button { font: inherit; font-family: var(--display); font-size: 26px; font-weight: 800; padding: 12px 0; border-radius: 12px; border: 1px solid var(--w-line); background: var(--w-well); color: var(--w-ink); cursor: pointer; }
+.nums button:hover { border-color: var(--w-acc); }
 .vote { display: grid; gap: 8px; }
 .vote button { font: inherit; padding: 12px; border-radius: 10px; border: 1px solid var(--w-line); background: var(--w-well); color: var(--w-ink); font-weight: 700; font-size: 15px; text-align: left; cursor: pointer; text-wrap: balance; }
 .vote button:hover { border-color: var(--w-acc); }
@@ -240,7 +243,7 @@ h1 { font-family: var(--display); font-size: clamp(34px, 6vw, 52px); letter-spac
 .door { gap: 8px; border-top: 1px solid var(--w-line); padding-top: 12px; }
 .seg { display: flex; flex-wrap: wrap; gap: 6px; }
 .seg button { font: inherit; font-size: 13px; font-weight: 600; padding: 6px 11px; border-radius: 99px; border: 1px solid var(--w-line); background: var(--w-bg); color: var(--w-ink2); cursor: pointer; }
-.seg button.on { border-color: var(--w-acc); background: var(--w-you); color: var(--w-acc); }
+.seg button.on, .seg button[aria-pressed="true"] { border-color: var(--w-acc); background: var(--w-you); color: var(--w-acc); }
 .knocks { display: grid; gap: 8px; border: 1.5px solid var(--w-acc); background: var(--w-you); border-radius: 12px; padding: 10px 12px; }
 .knocks .row b { min-width: 0; overflow-wrap: anywhere; margin-right: auto; }
 .knocks .btn { font-size: 13.5px; padding: 7px 12px; }
@@ -272,10 +275,9 @@ button.sh { cursor: pointer; }
 .turn5 { display: grid; gap: 3px; justify-items: center; text-align: center; }
 .turn5 b { font-size: 17px; } .turn5 b.g { color: var(--tg); } .turn5 b.p { color: var(--tp); }
 .clue5 { font-family: var(--mono); font-size: 13px; letter-spacing: .04em; text-transform: uppercase; }
+.clue5 i { font-style: normal; font-family: var(--display); font-size: 32px; font-weight: 800; letter-spacing: 0; line-height: 1; vertical-align: -5px; margin: 0 3px; }  /* the clue's number, read across the room */
 .grid5 { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; }
-.grid5.sm { gap: 4px; }
 .lt5 { font: inherit; border: 1.5px solid var(--w-line); background: var(--w-bg); color: var(--w-ink); border-radius: 9px; min-height: 58px; padding: 6px 4px; font-weight: 700; font-size: 14px; line-height: 1.2; display: grid; place-items: center; text-align: center; overflow-wrap: break-word; hyphens: auto; }
-.grid5.sm .lt5 { min-height: 44px; font-size: 10.5px; border-radius: 7px; padding: 3px 2px; overflow-wrap: anywhere; }
 button.lt5 { cursor: pointer; } button.lt5:hover { border-color: var(--w-edge); }
 .lt5.k-g { box-shadow: inset 0 -5px 0 var(--tg); } .lt5.k-p { box-shadow: inset 0 -5px 0 var(--tp); } .lt5.k-n { box-shadow: inset 0 -5px 0 var(--tn); } .lt5.k-x { box-shadow: inset 0 -5px 0 var(--tx); }
 .lt5.r-g { background: var(--tg); border-color: var(--tg); color: var(--w-bg); } .lt5.r-p { background: var(--tp); border-color: var(--tp); color: var(--w-bg); }
@@ -324,15 +326,12 @@ button.lt5 { cursor: pointer; } button.lt5:hover { border-color: var(--w-edge); 
 @media (max-width: 560px) { .lt5 { font-size: 11.5px; min-height: 48px; padding: 4px 2px; overflow-wrap: anywhere; } }
 /* Links on a phone: words as lists, never the board */
 /* the clue giver's key: what's left in its colour, what's found faded */
-.grid5.keyed .lt5 { min-height: 50px; padding: 3px 1px; box-shadow: none; }
-.grid5.keyed .lt5 > span { display: block; width: 100%; min-width: 0; font-size: 13px; line-height: 1.15; overflow-wrap: normal; hyphens: none; }
-.grid5.keyed .lt5 > span.cut { hyphens: manual; }
-.grid5.keyed .lt5 > span.fit { overflow-wrap: anywhere; }
-.grid5.keyed .lt5.k-g { background: var(--tg-bg); border-color: var(--tg); color: var(--tg); }
-.grid5.keyed .lt5.k-p { background: var(--tp-bg); border-color: var(--tp); color: var(--tp); }
-.grid5.keyed .lt5.k-n { background: var(--tn); border-color: var(--tn); color: var(--tn-ink); }
-.grid5.keyed .lt5.k-x { background: var(--tx); border-color: var(--tx); color: var(--tx-ink); }
-.grid5.keyed .lt5[class*=" r-"] { opacity: .35; }
+/* the clue giver's key: the board's places in their colours, the words on the TV */
+.key5 { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.key5 i { aspect-ratio: 3 / 2; border-radius: 8px; display: grid; place-items: center; font-style: normal; font-weight: 800; font-size: 18px; line-height: 1; }
+.key5 .k-g { background: var(--tg); } .key5 .k-p { background: var(--tp); } .key5 .k-n { background: var(--tn); }
+.key5 .k-x { background: var(--tx); color: var(--tx-ink); } .key5 .k-x::after { content: "\00d7"; }
+.key5 i.done { background: none; box-shadow: inset 0 0 0 1.5px var(--w-line); }  /* found: an empty place */
 .words5 { display: flex; flex-wrap: wrap; gap: 6px; }
 .words5 span { padding: 6px 11px; border-radius: 99px; font-weight: 700; font-size: 15px; line-height: 1.25; }
 .words5 .w-g { background: var(--tg-bg); color: var(--tg); } .words5 .w-p { background: var(--tp-bg); color: var(--tp); }

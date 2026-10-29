@@ -18633,7 +18633,7 @@ def test_super_decks_gone_v395():
 
 GAMES_SIM_JS = r"""
 const out = [];
-for (const id of ORDER) {
+for (const id of Object.keys(GAMES)) {  // the menu's three and the three off it (their code kept)
   const g = GAMES[id];
   for (let N = 1; N <= g.max; N++) {
     const seats = Array.from({ length: N }, (_, i) => ({ peer: "p" + i, n: "P" + i }));
@@ -18644,6 +18644,7 @@ for (const id of ORDER) {
     try {
       S = g.start(c());
       if (id === "links") S = Links.play(S);  // the TV's Start, past the teams
+      if (id === "trivia" && S.ph === "topic") S = Trivia.block(S.ts[0][0]);  // the TV's pick of a subject
       phases.push(S.ph);
       for (let k = 0; k < 3; k++) {
         const x = g.pub(S, c()), sec = g.secrets ? g.secrets(S, c()) : [];
@@ -18668,8 +18669,7 @@ for (const id of ORDER) {
     out.push({ id, N, min: g.min, need: need(g), phases, err, leaked });
   }
 }
-const soft = ["Spironolactone", "Nitroglycerin", "interstitial edema", "Arrhythmia", "magnesium", "Na-K-2Cl", "Asthma"].map((w) => Links.soft(w).replace(/\u00ad/g, "-"));
-console.log(JSON.stringify({ out, needs: NEEDS, soft }));
+console.log(JSON.stringify({ out, needs: NEEDS }));
 """
 
 GAME_ROWS = [  # a collection's cards in gamenight's rows: (cid, ord, cloze, fields, tags)
@@ -18717,9 +18717,9 @@ def test_game_night_from_your_cards_v395():
     check("game night: a cloze asks its own number, the others shown; two pieces of one number aren't asked",
           G.cloze("{{c1::Loop}} diuretics block {{c2::Na-K-2Cl}}", 2) == ("Loop diuretics block ____", "Na-K-2Cl", "Loop diuretics block Na-K-2Cl")
           and G.cloze("{{c1::a}} and {{c1::b}}", 1) is None and G.cloze("{{c1::a::hint}}", 1)[1] == "a")
-    it = G.item((9, 1, False, ["Front <b>side</b>", "Back&nbsp;side<br>[sound:x.mp3]"], ["leech", "A::B::C_d"]))
-    check("game night: a reversed card asks its back; fields as plain text; leech and plan tags aren't where it's from",
-          it and it["q"] == "Back side" and it["a"] == "Front side" and it["tag"] == "A::B::C_d" and it["where"] == "B › C d", it)
+    it = G.item((9, 1, False, ["Front <b>side</b>", "Back&nbsp;side<br>[sound:x.mp3]"], ["leech", "Deck::Renal::Loop_diuretics::Extra"]))
+    check("game night: a reversed card asks its back; fields as plain text; leech and plan tags aren't where it's from, nor Extra",
+          it and it["q"] == "Back side" and it["a"] == "Front side" and it["tag"] == "Deck::Renal::Loop_diuretics" and it["where"] == "Loop diuretics", it)
     check("game night: no question from a long answer, a picture alone, or an answer the question gives away",
           G.item((1, 0, False, ["Q", "x" * 41], [])) is None and G.item((1, 0, False, ["<img src=a.png>", "A"], [])) is None
           and G.item((1, 0, False, ["Same", "same"], [])) is None)
@@ -18733,8 +18733,8 @@ def test_game_night_from_your_cards_v395():
           not thin and have["links"] >= 25 and len(q["opts"]) == 4 and q["opts"][q["ans"]] == "Na-K-2Cl"
           and sum(o in ("Na-Cl", "Spironolactone", "Acetazolamide") for o in q["opts"]) == 3, (have, q))
     check("game night: Imposter's first twins are the likeliest mix-up, and say what tells them apart",
-          {pack["twins"][0]["a"]["t"], pack["twins"][0]["b"]["t"]} == {"Nephritic", "Nephrotic"} and pack["twins"][0]["part"] == "Step1 › Renal"
-          and "low C3" in pack["twins"][0]["a"]["facts"] + pack["twins"][0]["b"]["facts"], pack["twins"][:2])
+          {pack["twins"][0]["a"]["t"], pack["twins"][0]["b"]["t"]} == {"Nephritic", "Nephrotic"} and pack["twins"][0]["part"] == "Renal"
+          and {"a": "low C3", "s": "Post-strep GN shows low C3"} in pack["twins"][0]["a"]["facts"] + pack["twins"][0]["b"]["facts"], pack["twins"][:2])
     check("game night: a thin scope says which games it can't fill (three cards: no three wrong answers, no twins, no board)",
           G.fit(G.build(GAME_ROWS[:3], seed=1))[1] == ["imposter", "links", "trivia"])
     check("game night: the pack has its caps", all(len(pack[k]) <= n for k, n in G.CAPS.items()) and pack["n"] == len(GAME_ROWS))
@@ -18760,6 +18760,8 @@ def test_game_night_from_your_cards_v395():
         db.execute("INSERT INTO notes VALUES (?, ?, ?, ?)", (cid, 2 if is_cloze else 1, "\x1f".join(fields), " " + " ".join(tags) + " "))
     db.execute("INSERT INTO cards VALUES (999, 999, 3, 0)")
     db.execute("INSERT INTO notes VALUES (999, 1, ?, ' Elsewhere::Odd ')", ("Far front\x1ffar back",))
+    db.execute("INSERT INTO cards VALUES (998, 998, 4, 0)")  # elsewhere, a blank before tonight's word ("____ cotransporter")
+    db.execute("INSERT INTO notes VALUES (998, 2, ?, ' Elsewhere::Endo ')", ("SGLT2 inhibitors block the {{c1::Na-glucose}} cotransporter\x1f",))
 
     def tagged(search):
         want = re.findall(r'"tag:((?:[^"\\]|\\.)*)"', search)
@@ -18767,18 +18769,147 @@ def test_game_night_from_your_cards_v395():
         return [cid for cid, tags in db.execute("SELECT c.id, n.tags FROM cards c JOIN notes n ON n.id = c.nid")
                 if any(t == w or t.startswith(w + "::") for t in tags.split() for w in want)]
     col = types.SimpleNamespace(find_cards=tagged, models=types.SimpleNamespace(get=lambda mid: {"type": 1 if mid == 2 else 0}),
-                                db=types.SimpleNamespace(all=lambda q: db.execute(q).fetchall(), list=lambda q: [r[0] for r in db.execute(q)]))
+                                db=types.SimpleNamespace(all=lambda q: db.execute(q).fetchall(), list=lambda q, *a: [r[0] for r in db.execute(q, a)]))
     was = GF._col
     GF._col = lambda: col
     try:
         mine = [r[0] for r in few]
         got = GF.near(GF.rows(mine), mine, cap=30, rng=random.Random(4))
-        under = {r[0] for r in GAME_ROWS if any(t.startswith(G.deepest(few[0][4]).rsplit("::", 1)[0]) for t in r[4])}
+        under = {r[0] for r in GAME_ROWS if any(t.startswith(G.topic_of(few[0][4])[0].rsplit("::", 1)[0]) for t in r[4])}
+        slot = [r[0] for r in GF.near(GF.rows(mine), mine, cap=2, rng=random.Random(4), slots=True)]
     finally:
         GF._col = was
     ids = [r[0] for r in got]
-    check("game night: near reads the cards around tonight's: under their tags' parents, their decks, then anywhere; never tonight's own",
+    check("game night: near reads the cards around tonight's: under their topics' parent tags, their decks, then anywhere; never tonight's own",
           ids and not set(ids) & set(mine) and len(ids) == len(set(ids)) and set(ids) & (under - set(mine)) and 999 in ids, ids)
+    check("game night: ...and Host's pack also the cards with a blank before the same word as tonight's (\"____ cotransporter\")",
+          G.slots([G.item(r) for r in few if G.item(r)])[:1] == ["cotransporter"] and 998 in slot and not set(slot) & set(mine), slot)
+
+
+def test_pip_party_host_off_the_main_thread_v395():
+    """3.9.5's review: Host reads the collection on the main thread and
+    builds tonight's pack off it (a big scope took seconds); the profile
+    changed or signed out meanwhile, nothing opens (app.generation)."""
+    import due_crew.app as appmod
+    from due_crew import gamenight_flow as GF
+    saved = (GF._pack_rows, GF._bg, GF._tv, GF.client, appmod.generation)
+    jobs, tvs, said = [], [], []
+    try:
+        GF._pack_rows = lambda key, scope=None: ((list(GAME_ROWS),), {"near": [], "n": len(GAME_ROWS)})
+        GF._bg = lambda job, done=None: jobs.append((job, done))
+        GF._tv = lambda payload: tvs.append(payload["mode"])
+        GF.client = lambda: types.SimpleNamespace(open_table=lambda: (200, {"code": "ABCD", "key": "k" * 43}))
+        GF.Ops.start("misses", None, "Misses", True, said.append)
+        check("pip party host: the pack's build is a background job; nothing opened yet", len(jobs) == 1 and not tvs and not said)
+        job, done = jobs.pop()
+        done(job())
+        check("pip party host: built, the bots' TV opens", tvs == ["bots"] and said == [None], (tvs, said))
+        GF.Ops.start("misses", None, "Misses", False, said.append)
+        job, done = jobs.pop()
+        done(job())
+        job, done = jobs.pop()  # the table's request
+        appmod.generation += 1  # the profile changed while it was out
+        done(job())
+        check("pip party host: the profile changed while the table opened, no TV", tvs == ["bots"] and said[-1] is None, (tvs, said))
+        GF.Ops.start("misses", None, "Misses", True, said.append)
+        job, done = jobs.pop()
+        appmod.generation += 1
+        done(job())
+        check("pip party host: ...nor while the pack was built", tvs == ["bots"], tvs)
+    finally:
+        GF._pack_rows, GF._bg, GF._tv, GF.client, appmod.generation = saved
+
+
+def test_game_night_questions_make_sense_v395():
+    """3.9.5, Sam: "don't want the questions to be dumb". Checked on a big
+    shared deck's export (35k cards, every card tagged by each resource that
+    covers it), restated here with made-up tags: a card's topic is what its
+    tags agree on, never "Extra", a chapter number, a question bank's id or
+    its name; a card isn't a question when its answer says nothing alone,
+    sits in plain sight or needs its picture; wrong answers are the
+    answer's sort, from the nearest cards and the same blank in others,
+    never one that holds the answer or sits in the question; Imposter's
+    pairs are two things, not one under two names."""
+    import random
+    from due_crew import gamenight as G
+    many = ["Big::#ResA::02_Immunology::03_Responses::13_Hypersensitivity_types", "Big::#ResB::Immunology::11_Hypersensitivities",
+            "Big::#ResC::04_Pathology::06_Hypersensitivity", "Big::#ResD::Immune::Hypersensitivity_Reactions::Extra",
+            "Big::#QB::Step::12275", "Big::#QB2::9OaNuk", "Big::Original_decks::Somebody::immuno", "Big::#Low/HighYield::1-HighYield"]
+    check("game night: a card's topic is what most of its tags say, not an id, a chapter, Extra or a resource's own name",
+          G.topic_of(many)[1] in ("Hypersensitivity", "Hypersensitivity types", "Hypersensitivities"), G.topic_of(many))
+    check("game night: ...a tag ending in a question's id names nothing; Extra and a chapter number are passed over; a section takes its parent",
+          G.tag_topic("Big::#QB::Step::12275") == ("", "") and G.tag_topic("Big::#QB2::9OaNuk") == ("", "")
+          and G.tag_topic("Deck::Renal::Loop_diuretics::Extra")[1] == "Loop diuretics" and G.tag_topic("Deck::Cardio::Week_3")[1] == "Cardio"
+          and G.tag_topic("Step1::Renal::Pharm")[1] == "Renal pharm", [G.tag_topic(t) for t in ("Deck::Cardio::Week_3", "Step1::Renal::Pharm")])
+    check("game night: ...and the card's own words break a tie (the topic it's about)",
+          G.topic_of(["D::Cardio::Misc_stuff", "D::Vascular::Cholesterol_embolism"], "Purple toes after an angiogram: cholesterol embolism")[1]
+          == "Cholesterol embolism")
+    row = lambda text, tags=("D::Renal::Pharm",): (1, 0, True, [text, ""], list(tags))
+    check("game night: no question from an answer that says nothing alone, one in plain sight, or no words around the blank",
+          G.item(row("Major depression raises cortisol: it's {{c1::increased}}")) is None
+          and G.item(row("Hydralazine and angina: {{c1::Increased (hyperkalemia)}}")) is None
+          and G.item(row("Is digoxin renally cleared? {{c1::Yes}}")) is None
+          and G.item(row("The {{c1::pulmonic}} valve closes late (pulmonic splitting)")) is None
+          and G.item(row("{{c1::Furosemide}}")) is None
+          and G.item(row("{{c1::Extra}}vascular hemolysis happens in the spleen")) is None
+          and G.item((1, 0, True, ["<img src=x.png> The arrow shows the {{c1::pulmonic}} valve", ""], ["D::Cardio"])) is None)
+    hint = G.item(row("Atrial flutter is treated like {{c1::atrial fibrillation::rhythm}}"))
+    check("game night: a cloze's hint shows after its blank", hint and hint["q"] == "Atrial flutter is treated like ____ (rhythm)", hint)
+    ex = G.item((5, 0, True, ["Bradykinin comes from {{c1::kallikrein}} cleaving HMWK", "It causes vasodilation and pain. Photo credit: Someone, CC BY-SA, via Wikimedia Commons"], ["D::Heme::Kinins"]))
+    check("pip party: a card's Extra rides along for the TV after the reveal, without a picture's credit; long ones cut at a word",
+          ex and ex["extra"] == "It causes vasodilation and pain." and G.extra("word " * 100).endswith("…") and len(G.extra("word " * 100)) <= G.EXTRA_MAX + 1, ex)
+    valves = [row(f"Inspiration delays closure of the {{{{c1::{v}}}}} valve in case {k}", ("D::Cardio::Heart_sounds",))
+              for k, v in enumerate(["pulmonic", "aortic", "mitral", "tricuspid"])]
+    junk = [row(f"Card {k} says {{{{c1::{a}}}}} about something else entirely", ("D::Cardio::Heart_sounds",))
+            for k, a in enumerate(["acute pancreatitis", "pancreatitis", "splitting", "12 mmHg", "Rheumatic fever", "ileocecal"])]
+    rows = [(n, *r[1:]) for n, r in enumerate(valves + junk, 1)]
+    q = G.item(rows[0])
+    P = G._Pool([q] + [x for x in (G.item(r) for r in rows[1:]) if x])
+    wrong = P.wrong(0, random.Random(3))
+    check("game night: wrong answers fill the same blank in other cards first (other valves for \"the ____ valve\")",
+          set(wrong) == {"aortic", "mitral", "tricuspid"}, wrong)
+    g = G.item(row("Gallstones cause acute {{c1::pancreatitis}} and cholangitis"))
+    pool = [g] + [x for x in (G.item(r) for r in rows) if x]
+    wrong = G._Pool(pool).wrong(0, random.Random(1))
+    check("game night: never a wrong answer that holds the answer (\"acute pancreatitis\"), nor a number for a word",
+          all("pancreatitis" not in w.lower() for w in wrong) and "12 mmHg" not in wrong, wrong)
+    ras = [row(f"{t} {{{{c1::{a}}}}} in case {k}", ("D::Onc::Ras",)) for k, (t, a) in enumerate([
+        ("Mutations of Ras that alter the binding site of", "GTPase activating protein (GAP)"),
+        ("Ras is switched off by", "GTPase activating proteins (GAPs)"), ("Ras passes the growth signal on as one of the", "signal transducers"),
+        ("Cyclins act at the cell cycle's", "checkpoints (restriction points)"), ("Growth factors bind", "receptor tyrosine kinases")])]
+    ras = [(n, *r[1:]) for n, r in enumerate(ras, 100)]
+    wrong = G._Pool([x for x in (G.item(r) for r in ras) if x]).wrong(0, random.Random(2))
+    check("game night: never a wrong answer that is the right one in the plural (Sam's \"GAPs\" for \"GAP\")",
+          not any("gtpase" in w.lower() for w in wrong) and G._unique(["GAP", "GAPs", "gaps"]) == ["GAP"], wrong)
+    check("game night: a wrong answer takes the right one's case, so neither stands out (acronyms and Greek as they are)",
+          G._cased("Mitral", "pulmonic") == "mitral" and G._cased("aortic", "Pulmonic") == "Aortic" and G._cased("ACE", "pulmonic") == "ACE"
+          and G._cased("β-blocker", "Pulmonic") == "β-blocker")
+    check("game night: Imposter's pairs are two things: plurals, typos, and one name inside another are one topic",
+          not G._alike("Nephritic", "Nephrotic") and not G._alike("Class I Antiarrhythmics", "Class II Antiarrhythmics")
+          and G._alike("Hypersensitivity Reactions", "Hypersensitvity reactions") and G._alike("Transplant and Rejection", "Transplant-Rejection-Prophylaxis")
+          and G._one("Cardiomyopathies") == G._one("Cardiomyopathy"))
+    check("pip party: a question's subject for topic rounds is a level over its topic, what its tags agree on, a question bank's tags aside",
+          G.area_of(["Big::#ResA::02_Immunology::03_Responses::Hypersensitivity", "Big::#ResB::Immunology::Hypersensitivities",
+                     "Big::#ResC::13_Immunology::Clinical::Hypersensitivity", "Big::#QB::Step::12275"], "Hypersensitivity") == "Immunology"
+          and G.area_of(["Step1::Renal::Pharm"], "Renal pharm") == "Renal" and G.area_of(["Lone"], "Lone") == "")
+    rq = [{"q": "a", "a": "x"}, {"q": "b", "a": "y"}]
+    G.rounds(rq, [{"q": "a", "a": "x", "tags": ["D::Cardio::HF"], "topic": "HF"}, {"q": "b", "a": "y", "tags": ["E::Cardiology::MI"], "topic": "MI"}])
+    check("pip party: one subject under its names (Cardio and Cardiology are one round)", rq[0]["round"] == rq[1]["round"] != "", rq)
+    check("game night: Links' board holds no word inside another (ACE and ACE inhibitors are one tile)",
+          G._apart(["ACE", "ACE inhibitors", "Digoxin", "digoxin toxicity", "Statins"]) == ["ACE", "Digoxin", "Statins"])
+    pack = G.build(GAME_ROWS, seed=3)
+    topics = {it["topic"] for it in (G.item(r) for r in GAME_ROWS) if it}
+    check("game night: what every phone sees outside Rounds is topic names; a card's answer joins Links' board only when the topics run short",
+          set(pack["prompts"]) <= topics and (len(topics) >= G.WORDS_MIN or len(pack["words"]) <= G.WORDS_MIN),
+          (pack["prompts"][:5], len(pack["words"])))
+    for x in pack["qs"]:
+        if any(G._overlaps(o, x["a"]) for i, o in enumerate(x["opts"]) if i != x["ans"]) or any(G._shown(o, x["q"]) for o in x["opts"]):
+            check("game night: no Trivia question offers a wrong answer that holds the right one or sits in the question", False, x)
+            break
+    else:
+        check("game night: no Trivia question offers a wrong answer that holds the right one or sits in the question", True)
+    check("game night: white cards and words are never a number or a thin word", not any(G.empty(w) or G._shape(w)[0] == "n" for w in pack["whites"] + pack["words"]),
+          [w for w in pack["whites"] + pack["words"] if G.empty(w) or G._shape(w)[0] == "n"])
 
 
 def test_game_night_one_player_v395():
@@ -18843,19 +18974,316 @@ console.log(JSON.stringify(out));
     check("game night: Rounds never deals a card twice, in a hand or across them, and nobody's hand is empty (a small scope, 1 to 5 players)",
           dealt and all(d == 0 and e == 0 for _n, d, e, _p in dealt), dealt or deal.stderr[:300])
     check("game night: a hand is seven when there are cards enough", [p for _n, _d, _e, p in dealt] == [7, 7, 4], dealt)
-    check("game night: Links' key on the clue giver's phone breaks a long word once, at a syllable; short ones and odd ones whole",
-          got["soft"] == ["Spirono-lactone", "Nitro-glycerin", "inter-stitial edema", "Arrhyth-mia", "magne-sium", "Na-K-2Cl", "Asthma"], got["soft"])
+    order = json.loads(re.search(r"const ORDER = (\[[^\]]*\]);", src).group(1))
+    check("pip party: on the menu are Trivia, Imposter and Links (table.js's ORDER is gamenight.GAMES); the other three are off it, kept",
+          order == [g for g, _l in G.GAMES] == ["trivia", "imposter", "links"] and all(f"const {n} = {{" in src for n in ("Rounds", "DrawIt", "Between")))
+    tq = [{"q": f"Q{k} {t}", "a": f"A{k}", "tag": t, "opts": [f"A{k}", "x", "y", "z"], "ans": 0, "full": f"The card says A{k}", "extra": "Why"}
+          for t in ("Renal pharm", "Vasculitis") for k in range(6)] + [{"q": "Q lone", "a": "A", "tag": "Lone", "opts": ["A", "b", "c", "d"], "ans": 0, "full": "", "extra": ""}]
+    topic = subprocess.run(["node", "-e", "const matchMedia = () => ({ matches: true });\n" + src[a:b].replace("let D = null;", "let D = " + json.dumps(dict(small, qs=tq)) + ";", 1) + r"""
+const S = Trivia.start(), B = Trivia.block("Vasculitis"), M = Trivia.block(null);
+const c = { N: 1, A: [{ o: 0 }], here: () => true };
+const shown = Trivia.force(B, c);
+console.log(JSON.stringify({ ph: S.ph, ts: S.ts, pub: Trivia.pub(S), skip: Trivia.force(S, c), tags: [...new Set(B.qs.map((q) => q.tag))], n: B.qs.length,
+  mixed: M.qs.length, phone: JSON.stringify(Trivia.pub(shown)), one: Trivia.start.call(null) && 1 }));
+"""], capture_output=True, text=True, timeout=60)
+    t = json.loads(topic.stdout or "{}")
+    check("pip party: Trivia picks a subject first when tonight has two with a block's worth (six or more), or mixes them",
+          t.get("ph") == "topic" and t.get("ts") == [["Renal pharm", 6], ["Vasculitis", 6]] and t.get("pub") == {"ph": "topic", "k": 0, "n": 0}
+          and t.get("skip") is None and t.get("tags") == ["Vasculitis"] and t.get("n") == 6 and t.get("mixed") == 10, t or topic.stderr[:300])
+    check("pip party: after the reveal the card (its sentence, its Extra) is the TV's; phones get none of it",
+          "The card says" not in t.get("phone", "x") and "Why" not in t.get("phone", "x") and "Q" not in t.get("phone", "Q"), t.get("phone"))
     phone = src[src.index("const Links = {"):]
     phone = phone[phone.index("  phone(x, seat, p) {"):]
     phone = phone[:phone.index("\n  },\n")]
-    check("game night: Links is picked on the TV; a phone has no board to tap (Sam: too small), the clue giver's the key alone",
-          "tap:" not in phone and "keyed: true" in phone and "p.answer({ t:" not in phone, phone[:200])
+    check("game night: Links is picked on the TV; a phone has no board to tap (Sam: too small), the clue giver's the key alone, "
+          "in colours (Sam: \"colorful blocks\"), the words on the TV",
+          "tap:" not in phone and "Links.blocks(x, key)" in phone and "Links.grid(" not in phone and "p.answer({ t:" not in phone, phone[:200])
     check("game night: what each game needs from the pack is gamenight.NEEDS (the twin)",
           {k: list(v) for k, v in G.NEEDS.items()} == got["needs"], got["needs"])
     node = subprocess.run(["node", "--check", "-"], input=src, capture_output=True, text=True)
     check("game night: table.js parses", node.returncode == 0, node.stderr[:300])
     check("game night: no sample packs: the site carries no questions of its own",
           not os.path.exists(os.path.join(REPO, "site", "public", "table-packs.js")) and "GN_PACKS" not in src)
+
+
+def test_pip_party_said_out_loud_v395():
+    """3.9.5, Pip Party (Sam: "you have to imagine that people are sitting
+    next to each other"): what can be said out loud isn't typed. Imposter's
+    words go round the room twice, said, from someone picked at random; the
+    one saying it taps Said it (or the TV skips), and anyone gone is passed
+    over. Links' clue giver says the word and taps how many it's for: the
+    clue on the table is a number. No text box in the menu's three; a link
+    with the code in it asks only for a name."""
+    import shutil
+    import subprocess
+    from due_crew import gamenight as G
+    if not shutil.which("node"):
+        check("pip party out loud: node runs the games (skipped: no node)", True)
+        return
+    src = open(os.path.join(REPO, "site", "public", "table.js"), encoding="utf-8").read()
+    a, b = src.index("let D = null;"), src.index("// ---------- hubs")
+    pack = G.build(GAME_ROWS, "test", seed=3)
+    js = "const matchMedia = () => ({ matches: true });\n" + src[a:b].replace("let D = null;", "let D = " + json.dumps(pack) + ";", 1) + r"""
+const c = (N, A, here) => ({ N, seats: Array.from({ length: N }, (_, i) => ({ n: "P" + i })), A: A || [], here: here || (() => true), name: (i) => "P" + i });
+let S = Imposter.start(c(3));
+const order = S.order.slice(), pub = Object.keys(Imposter.pub(S, c(3))).sort(), turns = [];
+let early = false;
+while (S.ph === "clue" && turns.length < 10) {
+  const i = S.order[S.at], A = [];
+  turns.push([S.r, i]);
+  A[(i + 1) % 3] = { said: 1 };
+  if (Imposter.collect(S, A, c(3, A))) early = true;  // someone else's tap moves nothing
+  A[i] = { said: 1 };
+  S = Imposter.collect(S, A, c(3, A));
+}
+const G0 = Imposter.start(c(3)), gone = G0.order[0], G1 = Imposter.collect(G0, [], c(3, [], (i) => i !== gone));
+const skip = Imposter.force(Imposter.start(c(3)), c(3));
+const bot = Imposter.bot(Imposter.pub(G0, c(3)), G0.order[0], {}), notup = Imposter.bot(Imposter.pub(G0, c(3)), G0.order[1], {});
+Imposter.laps = 1;  // the TV's Once round, kept for the next
+let O = Imposter.start(c(3));
+const once = [O.laps];
+for (let k = 0; k < 6 && O.ph === "clue"; k++) { const A = []; A[O.order[O.at]] = { said: 1 }; O = Imposter.collect(O, A, c(3, A)); once.push(O.ph); }
+Imposter.laps = 2;
+const L = Links.play(Links.start(c(4))), g = L.givers[L.turn], LA = [];
+LA[g] = { w: "typed", n: 3 };
+const L2 = Links.collect(L, LA, c(4, LA));
+const LB = []; LB[g] = { w: "typed" };
+console.log(JSON.stringify({ order, pub, turns, early, ph: S.ph, gone: G1 && G1.at, skip: skip && skip.at, bot, notup, once,
+  links: L2 && { ph: L2.ph, clue: L2.clue, left: L2.left, pub: Links.pub(L2).clue }, wordOnly: Links.collect(L, LB, c(4, LB)) }));
+"""
+    r = subprocess.run(["node", "-e", js], capture_output=True, text=True, timeout=60)
+    got = json.loads(r.stdout or "{}")
+    check("pip party out loud: the games run in node", r.returncode == 0 and got, r.stderr[:400])
+    if not got:
+        return
+    o = got["order"]
+    check("Imposter: round the room from someone, each once, in the room's order",
+          sorted(o) == [0, 1, 2] and all(o[k] == (o[0] + k) % 3 for k in range(3)), o)
+    check("Imposter: twice round, a word each (said, not sent), then the vote; only the one saying it moves it on",
+          got["turns"] == [[1, i] for i in o] + [[2, i] for i in o] and got["ph"] == "vote" and not got["early"], got)
+    check("Imposter: once round when the TV says so (Sam: \"choose one or two rounds\"), kept for the next round",
+          got["once"] == [1, "clue", "clue", "vote"], got["once"])
+    check("Imposter: every phone gets whose turn it is and how many times round, and no words (nobody typed any)",
+          got["pub"] == ["at", "laps", "order", "part", "ph", "r"], got["pub"])
+    check("Imposter: someone gone is passed over; the TV's Skip ahead passes a turn; a bot says its word only on its turn",
+          got["gone"] == 1 and got["skip"] == 1 and got["bot"] == {"a": {"said": 1}} and got["notup"] is None, got)
+    check("Links: the clue giver says the word and taps how many; the clue on the table is the number (a typed word goes nowhere)",
+          got["links"] == {"ph": "guess", "clue": {"n": 3}, "left": 4, "pub": {"n": 3}} and got["wordOnly"] is None, got["links"])
+    def block(start, end):
+        part = src[src.index(start):]
+        return part[:part.index(end)]
+    phones = [block("const Imposter = {", "\nfunction fixRound"), block("const Trivia = {", "\nconst DrawIt = {"), block("const Links = {", "\n// While we're testing")]
+    check("pip party out loud: no text box on a phone in Trivia, Imposter or Links",
+          all('type: "text"' not in x and "p.draft(" not in x and "h(\"select\"" not in x for x in phones))
+    imp = block("const Imposter = {", "\nfunction fixRound")
+    check("Imposter: Once round and Twice round on the TV while the first goes round; a picked one shows as picked",
+          '[[1, "Once round"], [2, "Twice round"]]' in imp and '"aria-pressed": String(S.laps === n)' in imp
+          and '.seg button[aria-pressed="true"]' in open(os.path.join(REPO, "site", "public", "table.css"), encoding="utf-8").read())
+    last = imp[imp.index('    if (S.ph === "last") {', imp.index("  tv(S, c) {")):]
+    last = last[:last.index("\n    }\n")]
+    check("Imposter: caught, the TV says what the imposter had, never what everyone else had, till their guess is in",
+          "S.b" in last and "S.a" not in last, last)
+    join = block("function joinView(pre) {", "\nfunction botsView")
+    check("pip party out loud: a link with the code asks only for a name (the code's box shows for Another table, a bad code or none)",
+          "cd.hidden = linked;" in join and join.count("typeIt();") >= 3 and "Another table" in join
+          and "(nm.value ? (linked ? go : cd) : nm).focus()" in join)
+
+
+def test_pip_party_v395():
+    """3.9.5's last round (Sam: "build both right now"; game night is Pip
+    Party now, still gamenight in code). The pack's written cards: Rounds'
+    black cards with a topic (about one in four, no answer of their own:
+    the Attending's pick is the round, so alone there are none), Draw it's
+    written prompts (about a quarter of the chains), Somewhere between's
+    study-life ends beside its own; none without topics. You › Pip Party,
+    after Insights for those it's open to: what to play from, the six the
+    pick fills, Host or Try it with bots, the TV's code once it's open;
+    worked out only on screen and kept a while; every click through _on_js."""
+    import shutil
+    import subprocess
+    import due_crew as dc
+    from due_crew import gamenight as G, gamenight_flow as GF
+    from aqt.deckbrowser import DeckBrowser
+    pack = G.build(GAME_ROWS, "test", seed=3)
+    topics = {G.topic_name(r[4][0].split("::")[-1]) for r in GAME_ROWS} | set(G.names({r[4][0]: 1 for r in GAME_ROWS}).values())
+    w = [b for b in pack["blacks"] if b.get("w")]
+    mine = [b for b in pack["blacks"] if not b.get("w")]
+    check("pip party: Rounds' written cards are marked, have no answer, say they're Pip Party's, and are a quarter of the deck",
+          w and all(b["a"] == "" and b["tag"] == "Pip Party" and "____" in b["q"] for b in w)
+          and len(w) == (len(mine) + 1) // 3 and abs(len(w) / len(pack["blacks"]) - 0.25) < 0.05, (len(w), len(pack["blacks"])))
+    check("pip party: ...each {topic} one of tonight's topic names, the template filled, each template once",
+          all("{" not in b["q"] for b in w) and len({b["q"] for b in w}) == len(w)
+          and any(any(t in b["q"] for t in topics) for b in w), [b["q"] for b in w])
+    check("pip party: Draw it's written prompts are tonight's topics in a spot, Somewhere between gets four study-life ends",
+          len(pack["draws"]) == 8 and all("{" not in d and any(t in d for t in topics) for d in pack["draws"])
+          and len(pack["scales"]) == G.SCALES_IN and all(tuple(x) in G.SCALES for x in pack["scales"]), (pack["draws"][:3], pack["scales"]))
+    bare = G.build([(r[0], r[1], r[2], r[3], []) for r in GAME_ROWS], seed=3)
+    check("pip party: no topics, no written cards, prompts or ends",
+          not any(b.get("w") for b in bare["blacks"]) and bare["draws"] == [] and bare["scales"] == [])
+    for t in G.WRITTEN + G.DRAWS + tuple(" ".join(x) for x in G.SCALES):
+        if re.search(r"(?i)\b(compete|rival|beat|win)\b", t) or len(t) > 60:
+            check("pip party: written copy is terse and friendly", False, t)
+    if shutil.which("node"):
+        src = open(os.path.join(REPO, "site", "public", "table.js"), encoding="utf-8").read()
+        a, b = src.index("let D = null;"), src.index("// ---------- hubs")
+        js = "const matchMedia = () => ({ matches: true });\n" + src[a:b].replace("let D = null;", "let D = " + json.dumps(pack) + ";", 1) + r"""
+const mk = (N) => { const seats = Array.from({ length: N }, (_, i) => ({ n: "P" + i })); return { N, seats, A: [], here: () => true, name: (i) => "P" + i }; };
+const alone = mk(1), three = mk(3);
+const lone = Rounds.start(alone);
+const wi = D.blacks.findIndex((b) => b.w);
+let S = Rounds.start(three);
+S = fixRound(Object.assign({}, S, { order: [wi].concat(S.order.filter((i) => i !== wi)), bi: 0 }));
+three.A = S.hands.map((hd, i) => (i === S.att ? null : { c: hd[0] }));
+S = Rounds.collect(S, three.A, three);
+const picked = S.ph;
+three.A = []; three.A[S.att] = { f: 0 };
+S = Rounds.collect(S, three.A, three);
+const x = Rounds.pub(S, three);
+const starts = [1, 2, 3, 4, 8].map((N) => DrawIt.starts(N).filter((t) => D.draws.includes(t)).length);
+const st8 = DrawIt.starts(8);
+const B = Between.start(), ends = Between.ends();
+console.log(JSON.stringify({ loneWritten: lone.order.filter((i) => D.blacks[i].w).length, loneN: lone.order.length, picked, ph: S.ph, x,
+  hasBlank: JSON.stringify(S.hands).includes('""'),
+  starts, st8n: st8.length, ends: ends.length, scalesIn: D.scales.every((sc) => ends.some((e) => e[0] === sc[0])), bEnds: B.ends.length,
+  bPub: Object.keys(Between.pub(B)).join(",") }));
+"""
+        r = subprocess.run(["node", "-e", js], capture_output=True, text=True, timeout=60)
+        got = json.loads(r.stdout) if r.returncode == 0 and r.stdout.strip() else {}
+        check("pip party: alone, Rounds never draws a written card (nobody to pick)", got and got["loneWritten"] == 0 and got["loneN"] == len(mine), got or r.stderr[:300])
+        check("pip party: a written card plays through: everyone plays, the Attending picks, the chart has the pick and no answer",
+              got.get("picked") == "pick" and got.get("ph") == "chart" and got["x"].get("w") == 1 and got["x"].get("ans") == ""
+              and got["x"].get("fav") == 0 and not got.get("hasBlank"), got)
+        check("pip party: Draw it starts about a quarter of the chains from a written prompt (1, 2, 3, 4, 8 players)",
+              got.get("starts") == [0, 1, 1, 1, 2] and got.get("st8n") == 8, got.get("starts"))
+        check("pip party: Somewhere between's ends are its twelve and the pack's four; a round's ends ride its pub",
+              got.get("ends") == 16 and got.get("scalesIn") and got.get("bEnds") == 16 and "L" in got.get("bPub", ""), got)
+    else:
+        check("pip party: node runs the games (skipped: no node)", True)
+
+    # Sam: no game of anyone else's named, in the games, their glue or their pages
+    names = re.compile(r"(?i)cards against|\bcah\b|codenames|telestrations|wavelength|horsepaste|jackbox|spyfall|kahoot|pictionary"
+                       r"|trivial pursuit|apples to apples|quiplash|scattergories|taboo|werewolf|among us|dixit|charades")
+    files = [os.path.join(REPO, *f) for f in (("site", "public", "table.js"), ("site", "public", "table.html"), ("site", "public", "table.css"),
+                                              ("due_crew", "gamenight.py"), ("due_crew", "gamenight_flow.py"),
+                                              ("due_crew", "ui", "game_night_window.py"), ("due_crew", "ui", "game_night_tv.py"),
+                                              ("worker", "src", "table.ts"))]
+    named = [(os.path.basename(f), m.group(0)) for f in files for m in names.finditer(open(f, encoding="utf-8").read())]
+    check("pip party: no other game is named in its games, glue, window or pages (trademarks); each says its kind in our words",
+          not named and "kind: \"Fill in the blank\"" in open(files[0], encoding="utf-8").read() and "like:" not in open(files[0], encoding="utf-8").read(), named)
+
+    # You › Pip Party, drawn
+    src = [{"key": "misses", "label": "This week's misses", "n": 42}, {"key": "saved:R <b>", "label": "R <b> & co", "n": 7},
+           {"key": "saved:Empty", "label": "Empty", "n": 0}]
+    view = {"sources": src, "pick": "misses", "fit": {"n": 42, "have": {}, "thin": ["links"]}, "busy": False, "said": "",
+            "open": None, "burst": False, "pip": "<svg class='sv'></svg>"}
+    out = board.party_html(view)
+    check("pip party tab: what to play from, the pick on, names escaped, a pick's key as hex in its command; an empty one can't be picked",
+          'aria-checked="true" class="pp-o on"' in out and "R &lt;b&gt; &amp; co" in out and "R <b>" not in out
+          and f"party:pick:{G.pick_key('saved:R <b>')}" in out and G.unpick(G.pick_key("saved:R <b>")) == "saved:R <b>"
+          and f"party:pick:{G.pick_key('saved:Empty')}" not in out and "none yet" in out, out[:600])
+    check("pip party tab: the menu's three (Trivia, Imposter, Links) under On the menu, lit if the pick fills them; its line; Host and Try it with bots; Custom… opens the window",
+          out.count('class="pp-g on"') == 2 and out.count('class="pp-g"') == 1 and "42 cards &middot; enough for two of the three" in out
+          and ">On the menu</div>" in out and [g for g, _l in G.GAMES] == ["trivia", "imposter", "links"]
+          and "duecrew:party:host" in out and "duecrew:party:bots" in out and "duecrew:party:custom" in out and "Custom&hellip;" in out)
+    check("pip party tab: the line says all three, none, or nothing to play from",
+          board.party_say(318, []) == "318 cards &middot; enough for all three" and board.party_say(3, [g for g, _l in G.GAMES]) == "3 cards &middot; not enough for a game"
+          and board.party_say(0).startswith("Nothing here yet") and board.party_say(5) == "5 cards")
+    busy = board.party_html(dict(view, busy=True, said="Opening a table…"))
+    check("pip party tab: while a table opens, Host and bots are off and it says so",
+          "duecrew:party:host" not in busy and "duecrew:party:bots" not in busy and 'aria-disabled="true">Host' in busy and "Opening a table…" in busy)
+    bad = board.party_html(dict(view, said="Pip Party isn't open <yet>"))
+    check("pip party tab: a refusal shows on the tab, escaped, and Host is there to try again",
+          'pp-said bad' in bad and "&lt;yet&gt;" in bad and "duecrew:party:host" in bad)
+    tv = board.party_html(dict(view, burst=True, open={"bots": False, "code": "RR<JA", "url": "https://duecrew.com/t/RRJA"}))
+    check("pip party tab: once the TV's open, its code and where phones join, Copy link; the list gone; the burst once",
+          "On the TV &middot; RR&lt;JA" in tv and "duecrew.com/t/RRJA" in tv and "https://" not in tv and "duecrew:party:copy" in tv
+          and "duecrew:party:host" not in tv and 'class="pp burst"' in tv and tv.count("<i style=\"--r:") == 10
+          and 'class="pp burst"' not in board.party_html(dict(view, open={"bots": True})) and "Bots are on the TV" in board.party_html(dict(view, open={"bots": True})))
+    check("pip party tab: its burst only moves without Reduce motion, and Pip is still till pointed at",
+          "@media (prefers-reduced-motion: no-preference) {\n      #due-crew .pp.burst .pp-fx { display: block; }" in board.DUE_CSS
+          and "#due-crew .pp:not(.burst):not(:hover) .pp-pip .sv" in board.DUE_CSS)
+    have = board.you_html({}, None, {"tab": "party", "party_on": True, "party": view})
+    gone = board.you_html({}, None, {"tab": "party", "party_on": False, "party": view})
+    check("pip party tab: after Insights for those it's open to, picked; nobody else has it",
+          ">Pip Party</a>" in have and have.index(">Insights</a>") < have.index(">Pip Party</a>") and "duecrew:duetab:party" in have
+          and 'class="pp' in have and ">Pip Party</a>" not in gone and 'class="pp' not in gone)
+
+    # the glue: worked out only on screen, and kept a while
+    calls = []
+    saved = (GF.shown, GF.sources, GF.cards_for, GF.rows, GF.near, GF._redraw, GF.cfg, GF.save_cfg, GF.Ops.start, GF.open_window,
+             GF._clip, GF.tooltip, dc.mw.col, GF._bg)
+    conf = {"due_tab": "party"}
+    GF.TAB.update(busy=False, said="", open=None, burst=False, list=None, fits={}, pip=None)
+    try:
+        GF.shown = lambda: True
+        GF.sources = lambda: calls.append("sources") or [dict(x) for x in src]
+        GF.cards_for = lambda key, scope=None: calls.append("fit:" + key) or [r[0] for r in GAME_ROWS]
+        GF.rows = lambda cids, cap=0, rng=None: list(GAME_ROWS)
+        GF.near = lambda got, cids, cap=0, rng=None, slots=False: []
+        GF._bg = lambda job, done=None: done(job())  # the fit's build, here and now
+        GF._redraw = lambda: calls.append("redraw")
+        GF.cfg, GF.save_cfg = (lambda: conf), (lambda c, **k: calls.append("saved"))
+        dc.mw.col = object()
+        you = dc._you(conf, None, {"cards": []})
+        dc._you(conf, None, {"cards": []})
+        check("pip party glue: on screen, the tab's view; the list and the pick's fit worked out once, kept for the next draw",
+              you["party_on"] and you["party"]["pick"] == "misses" and you["party"]["fit"]["n"] == len(GAME_ROWS)
+              and calls.count("sources") == 1 and calls.count("fit:misses") == 1, calls)
+        calls.clear()
+        you = dc._you(dict(conf, due_tab="insights"), None, {"cards": []})
+        check("pip party glue: another tab on screen, nothing of it worked out", "party" not in you and not calls, calls)
+        GF.shown = lambda: False
+        you = dc._you(conf, None, {"cards": []})
+        check("pip party glue: closed to this account, no tab and nothing worked out", not you["party_on"] and "party" not in you and not calls)
+        GF.shown = lambda: True
+        send = lambda m: dc._on_js(False, as_board("duecrew:" + m), DeckBrowser())
+        send("party:pick:" + G.pick_key("saved:R <b>"))
+        check("pip party: a pick's click is kept on this computer (config)", conf.get("party_pick") == "saved:R <b>" and "saved" in calls, conf)
+        send("party:pick:" + G.pick_key("saved:Nope"))
+        send("party:pick:zz")
+        check("pip party: a key that isn't on the list, or isn't hex, changes nothing", conf.get("party_pick") == "saved:R <b>")
+        started = []
+        GF.Ops.start = staticmethod(lambda key, scope, label, bots, done: started.append((key, label, bots, done)))
+        send("party:host")
+        check("pip party: Host plays the pick (Ops.start: a table, then the TV), and says it's opening",
+              started and started[0][:3] == ("saved:R <b>", "R <b> & co", False) and GF.TAB["busy"] and GF.TAB["said"] == "Opening a table…")
+        send("party:host")
+        send("party:bots")
+        check("pip party: while it opens, another Host or bots does nothing", len(started) == 1)
+        started[0][3]("That's a lot of tables for one hour. Try again in a while.")
+        check("pip party: a refusal ends the wait and is said on the tab", not GF.TAB["busy"] and GF.TAB["said"].startswith("That's a lot"))
+        send("party:bots")
+        check("pip party: Try it with bots plays the pick with bots", len(started) == 2 and started[1][2] is True and not GF.TAB["busy"])
+        opened = []
+        GF.open_window = lambda custom=False: opened.append(custom)
+        send("party:custom")
+        check("pip party: Custom… opens the window on Custom", opened == [True])
+        # the TV: open, its code on the tab; closed, back to the list
+        from due_crew.ui import game_night_tv as TV
+        sigs = []
+        tv_win = types.SimpleNamespace(destroyed=types.SimpleNamespace(connect=sigs.append))
+        was_tv, was_site = TV.open_tv, dc.plan_flow.site_base
+        TV.open_tv = lambda parent, site, payload: tv_win
+        dc.plan_flow.site_base = lambda: "https://duecrew.com"
+        try:
+            GF._tv({"mode": "tv", "code": "RRJA", "key": "k", "pack": {}})
+        finally:
+            TV.open_tv, dc.plan_flow.site_base = was_tv, was_site
+        clipped = []
+        GF._clip, GF.tooltip = clipped.append, (lambda *a, **k: None)
+        send("party:copy")
+        v = GF.tab_view(conf)
+        check("pip party: the TV open, the tab has its code and where phones join, once with its burst; Copy link copies it",
+              GF.TAB["open"] == {"bots": False, "code": "RRJA", "url": "https://duecrew.com/t/RRJA"} and v["burst"]
+              and not GF.tab_view(conf)["burst"] and clipped == ["https://duecrew.com/t/RRJA"], (GF.TAB["open"], clipped))
+        send("party:host")
+        check("pip party: with the TV open, Host does nothing (one table at a time)", len(started) == 2)
+        sigs[0]()
+        check("pip party: the TV closed, the tab is back to the list", GF.TAB["open"] is None)
+    finally:
+        (GF.shown, GF.sources, GF.cards_for, GF.rows, GF.near, GF._redraw, GF.cfg, GF.save_cfg, GF.Ops.start, GF.open_window,
+         GF._clip, GF.tooltip, dc.mw.col, GF._bg) = saved
+        GF.TAB.update(busy=False, said="", open=None, burst=False, list=None, fits={}, pip=None, fitting=None)
 
 
 def main():

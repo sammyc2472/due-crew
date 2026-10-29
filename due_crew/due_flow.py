@@ -484,7 +484,7 @@ def notes():
         if n and "recovered" not in (st.get("dismissed") or []) else []
 
 
-YOU_TABS = D.TABS + ("plans", "insights")  # 3.8.0: the You bubble's tabs, Due's lists first
+YOU_TABS = D.TABS + ("plans", "insights", "party")  # 3.8.0: the You bubble's tabs, Due's lists first; 3.9.5: Pip Party
 
 
 def you_tab(c):

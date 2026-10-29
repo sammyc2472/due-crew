@@ -690,15 +690,15 @@ def main(out):
         if len(subs) != 1:
             raise RuntimeError(f"tools menu: {len(subs)} Due Crew submenus")
         items = [a.text() or "—" for a in subs[0].actions()]
-        want = ["Study what’s next", "—", "Friends…", "Squads…", "Game night…", "Plans", "—", "Settings…", "Pip’s closet…", "Your year…",
+        want = ["Study what’s next", "—", "Friends…", "Squads…", "Pip Party…", "Plans", "—", "Settings…", "Pip’s closet…", "Your year…",
                 "Show on the Decks screen", "Send feedback…"]
         if items != want:
             raise RuntimeError(f"tools menu: {items}")
-        # 3.9.5: Game night… shows for its testers alone, as the menu opens
+        # 3.9.5: Pip Party… shows for its testers alone, as the menu opens
         acts = {a.text(): a for a in subs[0].actions()}
         subs[0].aboutToShow.emit()
-        if acts["Game night…"].isVisible():
-            raise RuntimeError("tools menu: Game night… shows for someone who isn't a tester")
+        if acts["Pip Party…"].isVisible():
+            raise RuntimeError("tools menu: Pip Party… shows for someone who isn't a tester")
         # ...and does show for one (signed_in and user_id are the client's properties)
         from due_crew import gamenight_flow as GF
         was = GF.client
@@ -706,8 +706,8 @@ def main(out):
             for uid, want_shown in ((GF.TESTERS[0], True), ("someone-else", False)):
                 GF.client = lambda uid=uid: types.SimpleNamespace(signed_in=True, user_id=uid)
                 subs[0].aboutToShow.emit()
-                if acts["Game night…"].isVisible() != want_shown:
-                    raise RuntimeError(f"tools menu: Game night… for {uid}: shown {not want_shown}")
+                if acts["Pip Party…"].isVisible() != want_shown:
+                    raise RuntimeError(f"tools menu: Pip Party… for {uid}: shown {not want_shown}")
         finally:
             GF.client = was
         # 3.9.3: Plans ▸, everything about plans, the plan windows among it
@@ -821,7 +821,7 @@ def main(out):
                     img.save(os.path.join(out, f"share-card-{name}-sev-{size}-{look}.png"))
 
     def game_night():
-        # 3.9.5: Tools › Due Crew › Game night…: Play from, then Custom's scope builder
+        # 3.9.5: Tools › Due Crew › Pip Party…: Play from, then Custom's scope builder
         from due_crew.ui.game_night_window import GameNightWindow
         asked, started = [], []
 
@@ -848,12 +848,16 @@ def main(out):
             @staticmethod
             def start(key, scope, label, bots, done):
                 started.append((key, label, bots))
-                done("Game night isn't open for this account yet." if not bots else None)
+                done("Pip Party isn't open for this account yet." if not bots else None)
 
         dlg = GameNightWindow(None, Ops())
-        if heading_of(dlg) != "Game night" or not dlg.radios[0].isChecked() or dlg.custom.isVisible():
+        if heading_of(dlg) != "Pip Party" or not dlg.radios[0].isChecked() or dlg.custom.isVisible():
             raise RuntimeError("game night: opens on the first with cards, Custom folded")
         shoot(dlg, os.path.join(out, "game-night.png"))
+        # You › Pip Party's Custom…: the window opens on Custom
+        dlg = GameNightWindow(None, Ops(), custom=True)
+        if not dlg.custom_r.isChecked() or dlg.custom.isHidden():
+            raise RuntimeError("pip party: Custom… opens the window on Custom")
         dlg = GameNightWindow(None, Ops())
         dlg.custom_r.setChecked(True)
         top = dlg.tree.topLevelItem(1).child(0).child(0)  # Tags › Step1 › Renal

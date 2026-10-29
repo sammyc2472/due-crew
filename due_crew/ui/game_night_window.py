@@ -1,27 +1,27 @@
-"""3.9.5, Tools › Due Crew › Game night…: what to play from tonight, then
-the TV (game_night_tv.py) or Try it with bots. Custom builds a scope:
-decks and tags in or out, which of their cards, and the Anki search it
-comes to, which can be edited. The counts are the collection's, worked out
+"""3.9.5, Tools › Due Crew › Pip Party… (and You › Pip Party's Custom…):
+what to play from tonight, then the TV (game_night_tv.py) or Try it with
+bots. Custom builds a scope: decks and tags in or out, which of their
+cards, and the Anki search it comes to, which can be edited. The counts are the collection's, worked out
 here on the main thread a moment after each change; nothing is sent until
 Open the TV (one request, gamenight_flow.Ops.start)."""
 
 from aqt.qt import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit,
                     QPushButton, QRadioButton, QSpinBox, Qt, QTimer, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
 
+from ..gamenight import GAMES
 from . import attach_alive, heading, note, role
 
 FLAGS = (("Red", 1), ("Orange", 2), ("Green", 3), ("Blue", 4))
 MARK = {"in": "✓ ", "out": "– ", "": ""}
-GAMES = (("trivia", "Trivia"), ("rounds", "Rounds"), ("links", "Links"), ("imposter", "Imposter"), ("draw", "Draw it"), ("between", "Somewhere between"))
 
 
 class GameNightWindow(QDialog):
-    def __init__(self, parent, ops):
+    def __init__(self, parent, ops, custom=False):
         super().__init__(parent)
         attach_alive(self)
         self.ops = ops
         self.marks = {}
-        self.setWindowTitle("Game night")
+        self.setWindowTitle("Pip Party")
         root = QVBoxLayout(self)
         heading(self, root)
         root.addWidget(role(QLabel("Play from"), "head"))
@@ -31,16 +31,16 @@ class GameNightWindow(QDialog):
             r = QRadioButton(f"{s['label']} · {s['n']:,} card{'s' if s['n'] != 1 else ''}")
             r.setProperty("key", s["key"])
             r.setProperty("label", s["label"])
-            r.toggled.connect(self._picked)
+            r.toggled.connect(lambda on: on and self._picked())  # the one turned on: one preview, not two
             root.addWidget(r)
             self.radios.append(r)
         self.custom_r = QRadioButton("Custom…")
         self.custom_r.setProperty("key", "custom")
         self.custom_r.setProperty("label", "Custom")
-        self.custom_r.toggled.connect(self._picked)
+        self.custom_r.toggled.connect(lambda on: on and self._picked())  # the one turned on: one preview, not two
         root.addWidget(self.custom_r)
         self.radios.append(self.custom_r)
-        first = next((r for r, s in zip(self.radios, self.sources) if s["n"]), self.custom_r)
+        first = self.custom_r if custom else next((r for r, s in zip(self.radios, self.sources) if s["n"]), self.custom_r)
         first.setChecked(True)
 
         self.custom = QWidget()

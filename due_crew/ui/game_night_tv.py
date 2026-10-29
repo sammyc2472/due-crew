@@ -1,4 +1,4 @@
-"""3.9.5, game night's TV: the table page (duecrew.com/t/CODE#anki) in a
+"""3.9.5, Pip Party's TV: the table page (duecrew.com/t/CODE#anki) in a
 window of Anki's own, handed tonight's pack once it loads. Drag it to the
 big screen; the page's Full screen fills it. Its web profile is off the
 record (nothing kept), and the pack goes only to a page of the site.
@@ -25,7 +25,7 @@ def open_tv(parent, site, payload):
     class TvWindow(QWidget):
         def __init__(self):
             super().__init__(None, Qt.WindowType.Window)
-            self.setWindowTitle("Due Crew · Game night")
+            self.setWindowTitle("Due Crew · Pip Party")
             self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)  # closed, its socket goes, and the table knows
             self.handed = False
             self.page = QWebEnginePage(_profile(), self)
@@ -60,7 +60,8 @@ def open_tv(parent, site, payload):
     tvs = getattr(parent, "_due_crew_tvs", None)
     if tvs is None:
         tvs = parent._due_crew_tvs = []
-    tvs[:] = [t for t in tvs if t.isVisible()] + [w]  # kept alive while open
+    tvs.append(w)  # kept alive while open; closed, Qt deletes it (WA_DeleteOnClose), so it leaves the list then
+    w.destroyed.connect(lambda *_: w in tvs and tvs.remove(w))
     w.show()
     w.raise_()
     return w
