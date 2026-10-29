@@ -238,15 +238,11 @@ sections.append("<h3>round five: Upcoming, a date ahead opened</h3>" + board.ren
 # 3.9.5 (Five mocks, reviewed): reviews done, today's misses by part
 _DONE = _D.view(_T, [_DATES[2]], [_ITEMS[1]], {}, reviews={"due": 0, "done": 214, "whole": 214, "through": 214, "later": 0,
                                                        "left": 0, "back": 0, "at": ""})
-_DONE.update(misses={"n": 23, "reviews": 214, "elsewhere": 4, "cids": list(range(23)),
+_DONE.update(misses={"n": 23, "reviews": 214, "elsewhere": 4,
                      "topics": [("Renal \u00b7 Physiology", list(range(9))), ("Pharm", list(range(6))), ("Cardio", list(range(4)))]})
 sections.append("<h3>3.9.5: Today, reviews done: today's misses by part</h3>"
                 + board.render(DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DONE, you=_YOU("today"))
                 .replace('id="du-', 'id="dun-'))
-# 3.9.5 round three: Party where cards already show, for those Pip Party is open to
-sections.append("<h3>3.9.5: Pip Party from Today: a plan's date and today's misses, each its Party</h3>"
-                + board.render(DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DONE, you=_YOU("today", party_on=True))
-                .replace('id="du-', 'id="dup-'))
 sections.append("<h3>3.9.5: Today, a plan topic's two ways (a click on its name: Study, Browse)</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("today"))
     .replace('class="du-tpgo" id="dc-tp-p1u1-0" hidden>', 'class="du-tpgo" id="dc-tp-p1u1-0">')
@@ -469,9 +465,6 @@ _DECK_INS = dict(_INS, did=20, behind=0, leeches=0, fsrs=None,
 sections.append("<h3>3.8.0: You › Insights, the map opened on Cardio</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV,
     you=_YOU("insights", insights=dict(_PLAN_INS, view=dict(_PLAN_INS["view"], map_at=["cardio · physiology"])))))
-sections.append("<h3>3.9.5: Pip Party from Insights: the map's Party ›, a tile open</h3>" + board.render(
-    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV,
-    you=_YOU("insights", party_on=True, insights=dict(_PLAN_INS, view=dict(_PLAN_INS["view"], map_at=["cardio · physiology"])))))
 sections.append("<h3>3.8.0: You › Insights, a deck with no plan (my exam date, its tags), Due off</h3>" + board.render(
     DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
     you=_YOU("insights", insights={"decks": _DECKS, "did": 20, "exam": True, "plan": None, "view": _DECK_INS})))
@@ -492,10 +485,10 @@ _PARTY = {"open": None, "burst": False, "games": _PG(400, 80, 300, "trivia"), "f
           "trail": [], "tiles": _SYS, "ids": None, "more": 9, "where": "Big Step 1", "find": "", "hits": [], "of": "all", "ofs": _OFS,
           "search": '"deck:Big Step 1"', "picks": [], "n": 14375, "all": "All of Big Step 1", "busy": False, "said": ""}
 _PICKED = dict(_PARTY, tiles=[dict(t, pick="in" if t["name"] in ("Renal", "Cardio") else "out" if t["name"] == "Pulm" else "") for t in _SYS],
-               picks=[{"name": "Renal", "from": "", "deck": "Big Step 1", "kind": "sys", "out": False},
-                      {"name": "Cardio", "from": "", "deck": "Big Step 1", "kind": "sys", "out": False},
-                      {"name": "Pulm", "from": "", "deck": "Big Step 1", "kind": "sys", "out": True},
-                      {"name": "Today's misses <3>", "from": "Today", "deck": "", "kind": "sent", "out": False}],
+               picks=[{"name": "Renal", "deck": "Big Step 1", "kind": "sys", "out": False},
+                      {"name": "Cardio", "deck": "Big Step 1", "kind": "sys", "out": False},
+                      {"name": "Pulm", "deck": "Big Step 1", "kind": "sys", "out": True},
+                      {"name": "Renal <3>", "deck": "", "kind": "tag", "out": False}],
                n=3087, all="", kept=["Renal and Cardio", "Block 2 <weekend>"], games=_PG(400, 32, 300, "links"), first="links")
 _TAGS = dict(_PARTY, by="tag", decks=[], trail=["Big_Step1", "Renal"], more=0, where="Big_Step1 › Renal", n=1205, all="All of Renal",
              tiles=[_PT("Pharm", 310, 68, kids=False), _PT("Nephritic", 220, 83, kids=False), _PT("Nephrotic", 190, 91, kids=False),
@@ -504,11 +497,11 @@ _TAGS = dict(_PARTY, by="tag", decks=[], trail=["Big_Step1", "Renal"], more=0, w
 _FIND = dict(_PARTY, find="renal ph", hits=[dict(_PT("Pharm", 310, 68, kids=False), where="Tag · Big_Step1 › Renal"),
                                             dict(_PT("Physiology", 402, 81, kids=False), where="Deck · Big Step 1 › Renal", pick="in"),
                                             dict(_PT("Renal phys <video>", 96, None, 0, kids=False), where="Tag · Videos › Renal")],
-             picks=[{"name": "Physiology", "from": "", "deck": "", "kind": "deck", "out": False}], n=402, all="")
+             picks=[{"name": "Physiology", "deck": "", "kind": "deck", "out": False}], n=402, all="")
 _FEW = dict(_PARTY, games=_PG(4, 0, 6, None), first=None, n=6, all="", tiles=[], more=0,
-            picks=[{"name": "Flagged <odd>", "from": "Browse", "deck": "", "kind": "sent", "out": False}])
+            picks=[{"name": "Odd <ones>", "deck": "", "kind": "deck", "out": False}])
 for _h, _pv in (("by Systems, nothing picked: the whole deck, the tiles the table's vote", _PARTY),
-                ("two picked, one left out, Today's misses sent, kept picks; Links first up", _PICKED),
+                ("three picked, one left out, kept picks; Links first up", _PICKED),
                 ("by Tags, opened into Renal: its question numbers folded into one tile, the trail back", _TAGS),
                 ("Find typed: the matches in the map's place, each saying where it sits", _FIND),
                 ("Of their cards: missed in the last 7 days", dict(_PICKED, of="missed", n=212)),

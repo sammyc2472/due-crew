@@ -19390,23 +19390,10 @@ console.log(JSON.stringify({ loneWritten: lone.order.filter((i) => D.blacks[i].w
         args, kw = GF._pack_rows()
         check("pip party: Host's read: the picks' cards (each with its pick), the cards around them, a pack that carries the picks",
               len(args[0]) == len(GAME_ROWS) and set(kw["subs"].values()) == {"Your search"} and kw["n"] == len(GAME_ROWS), (len(args[0]), kw["n"]))
-        # Party from Today, Insights or Browse
-        conf["due_tab"] = "today"
-        swapped = []
-        was_swap, was_today = _app.swap, team_flow._today
-        _app.swap, team_flow._today = swapped.append, (lambda: "2026-10-29")
-        try:
-            GF.send("Today", "Today's misses", [r[0] for r in GAME_ROWS[:4]])
-        finally:
-            _app.swap, team_flow._today = was_swap, was_today
-        v = GF.tab_view(conf)
-        check("pip party: Party from elsewhere adds its cards as one pick, from where it says, and opens the bubble on Pip Party",
-              v["picks"][-1] == {"name": "Today's misses", "from": "Today", "deck": "", "kind": "sent", "out": False}
-              and conf["due_tab"] == "party" and swapped, v["picks"][-1])
         out = board.party_html(v)
         check("pip party tab, drawn: the games' boxes (their pictures, First up on one), the map, Of their cards, the picks, Host the first game",
               out.count('class="pp-gm g-') == 3 and out.count(" on\"") >= 1 and "pp-art" in out and 'id="pp-map"' in out and "Of their cards" in out
-              and "Today:</span>Today&#x27;s misses" in out and "duecrew:party:host" in out and "Try it with bots" not in out and "Host " in out, out[:500])
+              and "Your search" in out and "duecrew:party:host" in out and "Try it with bots" not in out and "Host " in out, out[:500])
         check("pip party tab: Imposter's odd Pip isn't grey (Sam): rose, with its question mark", "#d0587f" in board._party_art("imposter") and "<i>?</i>" in board._party_art("imposter"))
         # the TV: open, its code on the tab; closed, back to the picks
         from due_crew.ui import game_night_tv as TV
@@ -19464,77 +19451,27 @@ console.log(JSON.stringify({ loneWritten: lone.order.filter((i) => D.blacks[i].w
         GF.TAB.update(busy=False, said="", open=None, burst=False, gen=None, fits={}, fitting=None, picks=[], corpus=None, levels={}, counts={})
 
 
-def test_pip_party_from_where_you_are_v395():
-    """3.9.5 round three (Sam's v3, "From where you are"): one Party where
-    cards already show: a plan's date and today's misses on Today, Party ›
-    on Insights' map, Browse's right-click. Each through the board's own
-    handler, its cards one pick on the tab (Insights': the same map there,
-    the open tile picked). None of it for someone the tab isn't open to."""
-    import due_crew as dc
-    from due_crew import due as D, due_flow as F, plan_flow as PF, team_flow as TF, gamenight_flow as GF, app as _app
-    from aqt.deckbrowser import DeckBrowser
+def test_pip_party_only_from_its_tab_v395():
+    """3.9.5 round three (Sam: "I do not want parties to be prompted from
+    the today page. their only access should be from the pip party tab"):
+    no Party on Today (a plan's date, today's misses), on Insights' map or
+    in Browse's right-click; Tools › Due Crew › Pip Party… opens the tab."""
+    from due_crew import due as D, plan_flow as PF, gamenight_flow as GF
     T = "2026-10-07"
-    base = {"pid": "p1", "uid": "u1", "plan": "MS2", "name": "Path <Book> 2", "opens": T, "seen": 18, "total": 42,
+    base = {"pid": "p1", "uid": "u1", "plan": "MS2", "name": "Path 2", "opens": T, "seen": 18, "total": 42,
             "counted": True, "parts": [], "topics": [["Videos", [["Cardio", 0]]]], "rm": []}
-    row = D._date_row(base, {}, T)
-    on, off = board._due_plan(row, True), board._due_plan(row)
-    check("party: a plan's date on Today, with cards, has Party at its end; not for someone the tab isn't open to",
-          "duecrew:planparty:p1:u1" in on and on.count(">Party</a>") == 1 and "planparty" not in off, on[-700:])
-    check("party: ...a date with no cards here, no Party",
-          "planparty" not in board._due_plan(D._date_row(dict(base, total=0, seen=0, topics=[]), {}, T), True))
     rv = {"due": 0, "done": 214, "whole": 214, "through": 214, "later": 0, "left": 0, "back": 0, "at": ""}
     v = dict(D.view(T, [], [], {}, reviews=rv), misses={"n": 23, "reviews": 214, "cids": [600, 601]})
-    check("party: today's misses line has Party", "duecrew:duego:missparty" in board._due_html(v | {"party": True})
-          and "missparty" not in board._due_html(v))
-    you = {"tab": "today", "plans": None, "insights": None}
-    check("party: the bubble gives Today its Party when the tab is open to me, and only then",
-          "missparty" in board.you_html({}, v, dict(you, party_on=True)) and "missparty" not in board.you_html({}, v, dict(you, party_on=False)))
+    v["rows"] = v["rows"] + [D._date_row(base, {}, T)]
     tiles = [{"key": "a", "name": "Cardio", "n": 10, "know": 80, "started": 10, "kids": []},
              {"key": "b", "name": "Renal", "n": 6, "know": None, "started": 0, "kids": []}]
     ins = {"decks": [{"did": 30, "name": "Big Step 1"}], "did": 30, "exam": "", "view": {"map": tiles}}
-    hi = board.you_html({}, None, dict(you, tab="insights", insights=ins, party_on=True))
-    check("party: Insights' map has Party › before Share; not for someone the tab isn't open to",
-          "duecrew:insmapparty:30" in hi and hi.index("insmapparty") < hi.index("insmapshare")
-          and "insmapparty" not in board.you_html({}, None, dict(you, tab="insights", insights=ins, party_on=False)))
-    # the clicks, as the board sends them
-    sent, froms = [], []
-    saved = (GF.send, GF.from_insights, PF.date_cards, F._misses, F.mw.col, TF._map_at)
-    try:
-        GF.send = lambda src, name, cids: sent.append((src, name, list(cids)))
-        GF.from_insights = lambda did, keys: froms.append((did, keys))
-        PF.date_cards = lambda pid, uid: ("Path <Book> 2", [5, 6]) if (pid, uid) == ("p1", "u1") else None
-        F._misses = lambda col: {"n": 2, "cids": [600, 601], "topics": []}
-        F.mw.col = types.SimpleNamespace()
-        TF._map_at = lambda did: ([{"key": "a"}, {"key": "a2"}], [])
-        for m in ("planparty:p1:u1", "planparty:p1:nope", "duego:missparty", "insmapparty:30"):
-            dc._on_js(False, as_board("duecrew:" + m), DeckBrowser())
-        check("party: a date's Party and the misses' send their cards, from Today; a date that isn't, nothing",
-              sent == [("Today", "Path <Book> 2", [5, 6]), ("Today", "Today's misses", [600, 601])], sent)
-        check("party: Insights' Party › hands over the deck and the tile it has open", froms == [(30, ["a", "a2"])], froms)
-    finally:
-        GF.send, GF.from_insights, PF.date_cards, F._misses, F.mw.col, TF._map_at = saved
-    # Insights' Party ›, on the tab: the same map, the open tile picked at its level
-    opened, conf = [], {}
-    saved = (GF._sys_level, GF._sys_decks, GF.open_tab, GF.cfg, GF.save_cfg)
-    try:
-        GF._sys_level = lambda did, at: (["Cardio", "Physiology"][:len(at)], [])
-        GF._sys_decks = lambda: [{"did": 30, "name": "Big Step 1"}]
-        GF.open_tab, GF.cfg, GF.save_cfg = (lambda: opened.append(1)), (lambda: conf), (lambda c, **k: None)
-        GF.TAB.update(gen=_app.generation, by="tag", did=0, at=["x"], picks=[{"by": "tag", "path": "Step1", "out": False}], find="re")
-        GF.from_insights(30, ["c", "p"])
-        GF.from_insights(30, ["c", "p"])
-        want = {"by": "sys", "did": 30, "keys": ["c", "p"], "name": "Physiology", "deck": "Big Step 1", "out": False}
-        check("party: from Insights, the tab by Systems on that deck, at the open tile's level, it picked (once), the picks kept",
-              GF.TAB["by"] == "sys" and GF.TAB["did"] == 30 and GF.TAB["at"] == ["c"] and GF.TAB["find"] == ""
-              and GF.TAB["picks"] == [{"by": "tag", "path": "Step1", "out": False}, want] and opened == [1, 1]
-              and conf["party"]["by"] == "sys", GF.TAB["picks"])
-        GF.from_insights(30, [])
-        check("party: from Insights' top, the deck's map, nothing more picked", GF.TAB["at"] == [] and len(GF.TAB["picks"]) == 2)
-    finally:
-        GF._sys_level, GF._sys_decks, GF.open_tab, GF.cfg, GF.save_cfg = saved
-        GF.TAB.update(gen=None, picks=[], by="sys", did=0, at=[], find="")
-    # Browse's right-click
-    acts, fired = [], {}
+    you = {"plans": None, "insights": ins, "party_on": True}
+    today, insights = board.you_html({}, v, dict(you, tab="today")), board.you_html({}, v, dict(you, tab="insights"))
+    check("pip party: Today and Insights say nothing of it, the tab open to me or not; its tab is there",
+          "Pip Party" in today and not re.search(r"(?i)party:|>Party<|Party &rsaquo;|missparty|planparty|insmapparty", today + insights)
+          and "Path 2" in today and "insmapshare" in insights, today[-600:])
+    acts = []
 
     class Menu:
         def addSeparator(self):
@@ -19542,24 +19479,17 @@ def test_pip_party_from_where_you_are_v395():
 
         def addAction(self, label):
             acts.append(label)
-            return types.SimpleNamespace(triggered=types.SimpleNamespace(connect=lambda f: fired.setdefault(label, f)))
-    sent = []
-    saved = (PF.client, GF.shown, GF.send)
+            return types.SimpleNamespace(triggered=types.SimpleNamespace(connect=lambda f: None))
+    saved = (PF.client, GF.shown)
     try:
         PF.client = lambda: types.SimpleNamespace(signed_in=True, session={"plans_authored": [], "plans": []})
-        GF.send = lambda src, name, cids: sent.append((src, name, list(cids)))
         GF.shown = lambda: True
         PF.browser_menu(types.SimpleNamespace(selected_cards=lambda: [7, 8]), Menu())
-        fired["Due Crew: Pip Party with these"]()
-        GF.shown = lambda: False
-        n = len(acts)
-        PF.browser_menu(types.SimpleNamespace(selected_cards=lambda: [7, 8]), Menu())
     finally:
-        PF.client, GF.shown, GF.send = saved
-    check("party: Browse's right-click, Pip Party with these: the cards picked, one pick (\"2 cards\", from Browse); not for someone the tab isn't open to",
-          "Due Crew: Pip Party with these" in acts[:n] and sent == [("Browse", "2 cards", [7, 8])]
-          and "Due Crew: Pip Party with these" not in acts[n:], (acts, sent))
-
+        PF.client, GF.shown = saved
+    check("pip party: nothing in Browse's right-click", not any("party" in a.lower() for a in acts), acts)
+    check("pip party: no way in but the tab (no send from elsewhere in the glue)",
+          not hasattr(GF, "send") and not hasattr(GF, "from_insights") and hasattr(GF, "open_tab"))
 
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]

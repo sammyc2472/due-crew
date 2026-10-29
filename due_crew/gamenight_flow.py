@@ -6,9 +6,8 @@ Round three (Sam's): the games up top, the one the TV opens on picked;
 under them, what to play on. The map is Insights' own (a deck's Systems),
 or the tag tree, or the decks; a tap picks a tile, › opens it, a find
 names one; which of their cards; the picks at the foot, each one left out
-or dropped there. Today (a plan's date, today's misses) and Browse each
-add one with their Party (send); Insights' Party › opens its map here
-(from_insights). Nothing picked, the tiles on the map are the night, and the table
+or dropped there. The tab is the one way in (Sam: no Party from Today or
+elsewhere). Nothing picked, the tiles on the map are the night, and the table
 votes among them. Host reads the cards here (main thread) and the cards
 around them (near), builds the pack off the main thread (gamenight.py,
 each question marked with its pick for the vote), opens a table on the API
@@ -43,7 +42,7 @@ IDS_MIN = 10       # question-number tags at a level, folded into one tile
 FIND_MAX = 8
 HOST_MAX = 2400    # cards Host reads at most, each pick's share among them
 CORPUS_FOR, FIT_FOR = 600, 600  # seconds the tag and deck counts, and a pick's fit, hold
-PARTY = "party"    # this computer's config: {by, did, game, of, picks} (the cards Party sent aren't kept)
+PARTY = "party"    # this computer's config: {by, did, game, of, picks} (a question-number tile's cards aren't kept)
 GAME_IDS = [g for g, _l in G.GAMES]
 # which of their cards: (key, words, the search, or None for slow but right)
 OF = (("all", "all", ""), ("seen", "seen before", "-is:new"), ("missed", "missed in the last 7 days", "rated:7:1"),
@@ -194,7 +193,7 @@ def _write(kept_list):
 
 
 def _clean_pick(p):
-    """A pick as kept or sent: {by, …, out}; None when it isn't one."""
+    """A pick as kept: {by, …, out}; None when it isn't one."""
     if not isinstance(p, dict):
         return None
     by, out = p.get("by"), bool(p.get("out"))
@@ -203,10 +202,9 @@ def _clean_pick(p):
     if by == "sys" and str(p.get("did") or "").isdigit() and isinstance(p.get("keys"), list):
         return {"by": "sys", "did": int(p["did"]), "keys": [str(k)[:120] for k in p["keys"]][:8], "name": str(p.get("name") or "")[:60],
                 "deck": str(p.get("deck") or "")[:60], "out": out}
-    if by in ("sent", "ids") and isinstance(p.get("cids"), list):
+    if by == "ids" and isinstance(p.get("cids"), list):
         cids = [int(c) for c in p["cids"] if str(c).isdigit()][:20000]
-        return {"by": by, "cids": cids, "name": str(p.get("name") or "")[:60], "from": str(p.get("from") or "")[:20],
-                "path": str(p.get("path") or "")[:200], "out": out} if cids else None
+        return {"by": by, "cids": cids, "name": str(p.get("name") or "")[:60], "path": str(p.get("path") or "")[:200], "out": out} if cids else None
     if by == "search" and str(p.get("text") or "").strip():
         return {"by": "search", "text": str(p["text"]).strip()[:400], "out": False}
     return None
@@ -596,7 +594,7 @@ def first_game(have):
 
 def search_text():
     """The picks as one Anki search, as the tab shows it (card numbers for
-    what Party sent or a number tile)."""
+    a Systems tile or a question-number tile)."""
     def term(p):
         if p["by"] in ("tag", "deck"):
             return G.term(f"{p['by']}:{p['path']}")
@@ -651,8 +649,7 @@ def tab_view(c):
             "by": lv["by"], "decks": lv["decks"], "did": lv["did"], "trail": lv["trail"], "tiles": tiles, "ids": ids,
             "more": max(0, len(lv["tiles"]) - SHOW_MAX), "where": lv["where"], "find": TAB["find"], "hits": found,
             "of": TAB["of"], "ofs": [(k, w) for k, w, _s in OF], "search": search_text(),
-            "picks": [{"name": pick_name(p), "from": p.get("from") or ("Systems" if p["by"] == "sys" else ""), "deck": p.get("deck") or "",
-                       "kind": p["by"], "out": bool(p.get("out"))} for p in TAB["picks"]],
+            "picks": [{"name": pick_name(p), "deck": p.get("deck") or "", "kind": p["by"], "out": bool(p.get("out"))} for p in TAB["picks"]],
             "n": n, "all": "" if ins else _sum_words(ins)}
 
 
@@ -668,39 +665,6 @@ def _toggle(p):
         TAB["picks"] = [x for x in TAB["picks"] if x["by"] != "search"] + [p]
     else:
         TAB["picks"].pop(i)
-
-
-def send(src, name, cids):
-    """Party from Today or Browse: their cards join the picks as one, and
-    the bubble opens on Pip Party."""
-    _state()
-    cids = [int(c) for c in cids or [] if str(c).isdigit()]
-    if not cids:
-        tooltip("No cards there to play on.")
-        return
-    p = _clean_pick({"by": "sent", "from": src, "name": name, "cids": cids})
-    TAB["picks"] = [x for x in TAB["picks"] if not (x["by"] == "sent" and x.get("name") == p["name"])] + [p]
-    TAB["said"] = ""
-    open_tab()
-
-
-def from_insights(did, keys):
-    """Insights' Party ›: the tab on the same map of that deck (Systems).
-    A tile opened there is picked, at its level; at the top, the deck's
-    tiles are the night (each its own choice in the table's vote)."""
-    _state()
-    did, keys = int(did), [str(k) for k in keys or []]
-    TAB.update(by="sys", did=did, at=[], find="", said="")
-    if keys:
-        trail, _tiles = _sys_level(did, keys)
-        if len(trail) == len(keys):
-            deck = next((d["name"] for d in _sys_decks() if d["did"] == did), "")
-            p = {"by": "sys", "did": did, "keys": keys, "name": trail[-1], "deck": deck, "out": False}
-            if not any(_pick_key(dict(x, out=False)) == _pick_key(p) for x in TAB["picks"]):
-                TAB["picks"] = [x for x in TAB["picks"] if x["by"] != "search"] + [p]
-            TAB["at"] = keys[:-1]
-    _keep_state()
-    open_tab()
 
 
 def open_tab():

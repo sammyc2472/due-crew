@@ -2273,11 +2273,10 @@ def party_html(v):
           f'onchange="dcParty.send(\'search\', this.value.slice(0,400))"></div>')
     chips = ""
     for j, p in enumerate(v.get("picks") or []):
-        where = f'<span class="pp-fr">{e(p["from"])}:</span>' if p.get("from") and p.get("kind") == "sent" else ""
         deck = f' &middot; {e(p["deck"])}' if p.get("kind") == "sys" and p.get("deck") else ""
         flip = "" if p.get("kind") == "search" else f' onclick="{_pycmd(f"party:out:{j}")}"'
         chips += (f'<span class="pp-pk{" out" if p.get("out") else ""}" role="button"{flip} '
-                  f'title="{"Put it back in" if p.get("out") else "Leave these out"}">{where}{"Not " if p.get("out") else ""}{e(p["name"])}{deck}'
+                  f'title="{"Put it back in" if p.get("out") else "Leave these out"}">{"Not " if p.get("out") else ""}{e(p["name"])}{deck}'
                   f'<a class="x" href="#" aria-label="Drop {e(p["name"])}" onclick="event.stopPropagation();{_pycmd(f"party:drop:{j}")}">&times;</a></span>')
     n = int(v.get("n") or 0)
     count = f'{e(v["all"])} &middot; {n:,} card{"" if n == 1 else "s"}' if v.get("all") else f'{n:,} card{"" if n == 1 else "s"}'
@@ -2339,7 +2338,7 @@ def _you_insights(ins):
         return head + _habits_html(did, hv)
     view = ins.get("view") or {}
     line = _habits_line(did, hv) if hv and not isinstance(view.get("leech"), dict) else ""
-    return head + line + _insights_html(did, dict(view, party=True) if ins.get("party") else view)
+    return head + line + _insights_html(did, view)
 
 
 # ---- 3.9.5: How you study (habits.py, habits_flow.py): mine alone, never sent ----
@@ -2963,7 +2962,7 @@ def _insights_html(did, v):
                     + (f'<a href="#" onclick="{_pycmd(f"insstudy:{did}:{i}")}">Study {st + fg}</a>' if dated else "")
                     + '</div>')
         out += "</div>"
-    out += _ins_map(did, v.get("map") or [], v.get("map_by"), v.get("map_at"), v.get("map_ways"), party=bool(v.get("party")))
+    out += _ins_map(did, v.get("map") or [], v.get("map_by"), v.get("map_at"), v.get("map_ways"))
     if v.get("ahead"):
         out += _ins_ahead(did, v["ahead"], v.get("deck_name"))
     f = v.get("fsrs")
@@ -3007,7 +3006,7 @@ def _insights_html(did, v):
     return f'<div class="dc-ins">{out}</div>'
 
 
-def _ins_map(did, tiles, by, at=(), ways=(), party=False):
+def _ins_map(did, tiles, by, at=(), ways=()):
     """3.8.0, the topic map: each subject a tile, sized by its cards in play,
     shaded by how much I know now of the ones I've started (a bar along its
     foot: how many I've started; none yet, "new"). A tile that splits again
@@ -3015,8 +3014,7 @@ def _ins_map(did, tiles, by, at=(), ways=(), party=False):
     goes back, and Browse all opens the open one's cards; a tile that
     doesn't, its cards. ways: how else it can split (Systems, a resource,
     Subdecks), a pick in its heading ("by Systems ▾"). Mine alone, from my
-    own Anki. Two tiles at least, or it says nothing. party (3.9.5 round
-    three): Party ›, the open tile (or the map) at Pip Party."""
+    own Anki. Two tiles at least, or it says nothing."""
     if len(tiles) < 2:
         return ""
     e = _html.escape
@@ -3069,8 +3067,6 @@ def _ins_map(did, tiles, by, at=(), ways=(), party=False):
     else:
         sub = "<span>&nbsp;&middot; by topic, now</span>"
     share = f' <a class="tmsh" href="#" title="A picture of it, or text" onclick="{_pycmd(f"insmapshare:{did}")}">Share &rsaquo;</a>'
-    if party:
-        share = f' <a class="tmsh" href="#" title="Play on these" onclick="{_pycmd(f"insmapparty:{did}")}">Party &rsaquo;</a>' + share
     # 3.8.1: by a plan's own tags, the ones no card in this deck carries (a gap in the plan's coverage)
     none = next((w.get("none") or [] for w in ways if w.get("on")), [])
     gap = ""
@@ -4193,9 +4189,6 @@ def you_html(cfg, due=None, you=None, people=None):
         return _due_html(due)
     hidden = hidden_tabs(cfg)
     more = tuple(t for t in YOU_MORE if t[0] not in hidden) + ((PARTY_TAB,) if you.get("party_on") else ())
-    if you.get("party_on"):  # 3.9.5 round three: Party where cards already show (Today, Insights' map)
-        due = dict(due, party=True) if due else due
-        you = dict(you, insights=dict(you.get("insights") or {}, party=True))
     keys = (["today", "upcoming", "later"] if due else []) + [k for k, _l in more]
     if not keys:
         return ""
@@ -7479,7 +7472,6 @@ DUE_CSS = """
     #due-crew .pp-pk { display: inline-flex; align-items: center; gap: 2px; font-size: 11.5px; font-weight: 700; padding: 1px 3px 1px 9px; border-radius: 99px;
       background: var(--dc-you-bg); color: var(--dc-accent); border: 1px solid var(--dc-accent); cursor: pointer; }
     #due-crew .pp-pk.out { background: transparent; color: var(--dc-hours); border-color: var(--dc-hours); }
-    #due-crew .pp-pk .pp-fr { font-weight: 500; color: var(--dc-muted); margin-right: 3px; }
     #due-crew .pp-ln { display: flex; gap: 12px; font-size: 11.5px; }
     #due-crew .pp-ln a { color: var(--dc-accent); font-weight: 700; text-decoration: none; }
     #due-crew .pp-host { background: var(--dc-accent); color: var(--dc-accent-ink); font-weight: 700; font-size: 13px; padding: 7px 20px;
@@ -7748,7 +7740,7 @@ def _date_more(r, topics=False):
     return link, f'<div class="du-dd" id="{did}" hidden>{body}</div>'
 
 
-def _due_plan(r, party=False):
+def _due_plan(r):
     """A plan's date on Today, in full: its resources (each with its topics,
     3.8.0), the author's lines, its bar; round five: its name opens its
     details (_date_more)."""
@@ -7805,9 +7797,6 @@ def _due_plan(r, party=False):
         cmd = _pycmd(f"planstudydate:{r['pid']}:{r['uid']}")
         go = (f'<a href="#" class="du-go" title="A Due Crew deck of its open cards, new and review, in random order" '
               f'onclick="{cmd}">Study</a>')
-    if party and r.get("total"):  # 3.9.5 round three: its cards at Pip Party
-        cmd = _pycmd(f"planparty:{r['pid']}:{r['uid']}")
-        go += f'<a href="#" class="du-go" title="Play on its cards" onclick="{cmd}">Party</a>'
     n = f'<span class="n">{e(r["n"])}</span>' if r["n"] else ""
     name, more = _date_more(r)
     return (f'<div class="du-r{" done" if r["done"] else ""}">{box}<span class="t">{name}'
@@ -7853,10 +7842,10 @@ def _due_reviews(r):
             f'<span class="end"><span class="n">{_due_count(r, "due")}</span></span>{bar}</div>')
 
 
-def _due_misses(m, party=False):
+def _due_misses(m):
     """3.9.5: under a done Reviews row, today's misses, and where they were
     (each part opens Browse). A line, not a deck (Sam's FSRS rule). m:
-    due_flow._misses, or None. party (round three): Party on them."""
+    due_flow._misses, or None."""
     said = _D.misses_text(m)
     if not said:
         return ""
@@ -7869,9 +7858,7 @@ def _due_misses(m, party=False):
         if int(m.get("elsewhere") or 0):
             parts.append(f'{int(m["elsewhere"]):,} elsewhere')
         text += ": " + " &middot; ".join(parts)
-    go = (f'<a href="#" class="du-go" title="Play on them" onclick="{_pycmd("duego:missparty")}">Party</a>'
-          if party and m.get("cids") else "")
-    return f'<div class="du-rc"><span></span><span>{text}</span><span class="end">{go}</span></div>'
+    return f'<div class="du-rc"><span></span><span>{text}</span><span class="end"></span></div>'
 
 
 def _due_new(r):
@@ -8036,7 +8023,7 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None, qids=False):
         for r in v["rows"]:
             if r["kind"] == "reviews":
                 if r.get("whole") is not None:
-                    body += _due_reviews(r) + _due_misses(v.get("misses") if r.get("done") else None, v.get("party"))
+                    body += _due_reviews(r) + _due_misses(v.get("misses") if r.get("done") else None)
                     continue
                 back = int(r.get("back") or 0)
                 if not r["due"] and not r["done"] and not back:
@@ -8048,7 +8035,7 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None, qids=False):
             elif r["kind"] == "new":
                 body += _due_new(r)
             elif r["kind"] == "plan":
-                body += _due_plan(r, v.get("party"))
+                body += _due_plan(r)
             elif r["kind"] == "every":
                 body += _due_every(r)
             else:
