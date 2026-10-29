@@ -139,16 +139,16 @@ const seatsBut = (c, i) => c.seats.map((_, k) => k).filter((k) => k !== i);
 
 const Imposter = {
   id: "imposter", name: "Imposter", kind: "Find the odd one out", min: 3, max: 8,
-  line: "Everyone has the same topic but one, and they don't know it. Twice round, a word each; then vote.",
+  line: "Everyone has the same topic but one, and they don't know it. A word each, once or twice round; then vote.",
   learn: "Spotting what separates two things you'd confuse.",
   start(c) {
     const pr = pick(D.twins.slice(0, Math.max(3, Math.ceil(D.twins.length / 2))));  // the likeliest mix-ups come first
     const [A, B] = rnd() < 0.5 ? [pr.a, pr.b] : [pr.b, pr.a];
     const first = int(c.N), order = c.seats.map((_, k) => (first + k) % c.N);  // round the room from someone, said out loud
-    return { ph: "clue", r: 1, order, at: 0, a: A.t, b: B.t, facts: { a: A.facts || [], b: B.facts || [] }, part: pr.part, imp: int(c.N), votes: null, last: null, opts: null, caught: null, most: null };
+    return { ph: "clue", r: 1, laps: Imposter.laps, order, at: 0, a: A.t, b: B.t, facts: { a: A.facts || [], b: B.facts || [] }, part: pr.part, imp: int(c.N), votes: null, last: null, opts: null, caught: null, most: null };
   },
   pub(S) {
-    const x = { ph: S.ph, r: S.r, part: S.part, order: S.order, at: S.at };
+    const x = { ph: S.ph, r: S.r, laps: S.laps, part: S.part, order: S.order, at: S.at };
     if (S.ph === "last" || S.ph === "end") Object.assign(x, { imp: S.imp, a: S.a, b: S.b, votes: S.votes, caught: S.caught });
     if (S.ph === "last") x.opts = S.opts;
     if (S.ph === "end") x.last = S.last;
@@ -166,7 +166,7 @@ const Imposter = {
     const A = c.A;
     if (S.ph === "clue") {
       if (S.at + 1 < S.order.length) return Object.assign({}, S, { at: S.at + 1 });
-      return Object.assign({}, S, S.r === 1 ? { r: 2, at: 0 } : { ph: "vote" });
+      return Object.assign({}, S, S.r < S.laps ? { r: S.r + 1, at: 0 } : { ph: "vote" });
     }
     if (S.ph === "vote") {
       const votes = A.map((a, i) => (a && Number.isInteger(a.v) && a.v >= 0 && a.v < c.N && a.v !== i ? a.v : -1));
@@ -187,6 +187,7 @@ const Imposter = {
     }
     return null;
   },
+  laps: 2,  // once or twice round: the TV's pick, kept for Another round
   // what tells the two apart, as their cards say it: each card's sentence, its answer in bold
   apart(S) {
     const fact = (f) => {
@@ -205,7 +206,8 @@ const Imposter = {
       return frag(head, h("div", { class: "h" }, `${Poss(cur)} word`),
         h("p", { class: "lead" }, S.r === 1 ? "A word that fits your topic." : "Once more round."),
         h("div", { class: "ppl big" }, S.order.map((i, k) => h("span", { class: k === S.at ? "ok" : k < S.at ? "done" : "" }, nm(i)))),
-        h("p", { class: "small" }, `Round ${S.r} of 2`));
+        S.r === 1 ? h("span", { class: "seg" }, [[1, "Once round"], [2, "Twice round"]].map(([n, label]) => h("button", { type: "button", "aria-pressed": String(S.laps === n),
+          onclick: () => { Imposter.laps = n; c.set(Object.assign({}, S, { laps: n })); } }, label))) : h("p", { class: "small" }, "Round 2 of 2"));
     }
     if (S.ph === "vote") return frag(head, h("div", { class: "h" }, "Who's the imposter?"), status((a) => Number.isInteger(a.v)));
     const imp = nm(S.imp);
@@ -227,9 +229,9 @@ const Imposter = {
     if (!my) return h("p", { class: "small" }, "…");
     const secret = h("div", { class: "secret" }, h("div", { class: "small" }, "Your topic"), h("div", { class: "big" }, my));
     if (x.ph === "clue") {  // said out loud: a phone shows the topic, and whose turn it is
-      const order = x.order || [], cur = order[x.at], next = order[x.at + 1];
-      if (cur === seat) return frag(h("div", { class: "who" }, `Round ${x.r} of 2 · your turn`), secret, mine ? null : btn("Said it", () => p.answer({ said: 1 })));
-      return frag(h("div", { class: "who" }, `Round ${x.r} of 2`), secret, h("p", { class: "small" }, `${p.name(cur)}'s turn.${next === seat ? " You're next." : ""}`));
+      const order = x.order || [], cur = order[x.at], next = order[x.at + 1], round = x.laps > 1 ? `Round ${x.r} of ${x.laps}` : "";
+      if (cur === seat) return frag(h("div", { class: "who" }, [round, "your turn"].filter(Boolean).join(" · ")), secret, mine ? null : btn("Said it", () => p.answer({ said: 1 })));
+      return frag(round ? h("div", { class: "who" }, round) : null, secret, h("p", { class: "small" }, `${p.name(cur)}'s turn.${next === seat ? " You're next." : ""}`));
     }
     if (x.ph === "vote") {
       if (mine) return frag(h("div", { class: "big" }, `You voted ${p.name(mine.v)}.`));

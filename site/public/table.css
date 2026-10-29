@@ -243,7 +243,7 @@ h1 { font-family: var(--display); font-size: clamp(34px, 6vw, 52px); letter-spac
 .door { gap: 8px; border-top: 1px solid var(--w-line); padding-top: 12px; }
 .seg { display: flex; flex-wrap: wrap; gap: 6px; }
 .seg button { font: inherit; font-size: 13px; font-weight: 600; padding: 6px 11px; border-radius: 99px; border: 1px solid var(--w-line); background: var(--w-bg); color: var(--w-ink2); cursor: pointer; }
-.seg button.on { border-color: var(--w-acc); background: var(--w-you); color: var(--w-acc); }
+.seg button.on, .seg button[aria-pressed="true"] { border-color: var(--w-acc); background: var(--w-you); color: var(--w-acc); }
 .knocks { display: grid; gap: 8px; border: 1.5px solid var(--w-acc); background: var(--w-you); border-radius: 12px; padding: 10px 12px; }
 .knocks .row b { min-width: 0; overflow-wrap: anywhere; margin-right: auto; }
 .knocks .btn { font-size: 13.5px; padding: 7px 12px; }

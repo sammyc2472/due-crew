@@ -3864,4 +3864,9 @@ every release that changes how something works.
   (the address alone), the door's notes, the tab's small print. A fix on
   the way: caught, Imposter's TV said everyone's topic while the imposter
   was guessing it; it says what they had, and that they get a guess.
+  Then (Sam: "imposter i think we need to choose one or two rounds"): Once
+  round or Twice round on the TV while the first goes round (twice to
+  start), kept for Another round; phones say "Round 1 of 2" only when
+  there are two. Links' timer buttons now show which is picked (the pill's
+  pressed look keyed only off a class the timer never set).
   `test_pip_party_said_out_loud_v395`.

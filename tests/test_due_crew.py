@@ -19039,11 +19039,16 @@ while (S.ph === "clue" && turns.length < 10) {
 const G0 = Imposter.start(c(3)), gone = G0.order[0], G1 = Imposter.collect(G0, [], c(3, [], (i) => i !== gone));
 const skip = Imposter.force(Imposter.start(c(3)), c(3));
 const bot = Imposter.bot(Imposter.pub(G0, c(3)), G0.order[0], {}), notup = Imposter.bot(Imposter.pub(G0, c(3)), G0.order[1], {});
+Imposter.laps = 1;  // the TV's Once round, kept for the next
+let O = Imposter.start(c(3));
+const once = [O.laps];
+for (let k = 0; k < 6 && O.ph === "clue"; k++) { const A = []; A[O.order[O.at]] = { said: 1 }; O = Imposter.collect(O, A, c(3, A)); once.push(O.ph); }
+Imposter.laps = 2;
 const L = Links.play(Links.start(c(4))), g = L.givers[L.turn], LA = [];
 LA[g] = { w: "typed", n: 3 };
 const L2 = Links.collect(L, LA, c(4, LA));
 const LB = []; LB[g] = { w: "typed" };
-console.log(JSON.stringify({ order, pub, turns, early, ph: S.ph, gone: G1 && G1.at, skip: skip && skip.at, bot, notup,
+console.log(JSON.stringify({ order, pub, turns, early, ph: S.ph, gone: G1 && G1.at, skip: skip && skip.at, bot, notup, once,
   links: L2 && { ph: L2.ph, clue: L2.clue, left: L2.left, pub: Links.pub(L2).clue }, wordOnly: Links.collect(L, LB, c(4, LB)) }));
 """
     r = subprocess.run(["node", "-e", js], capture_output=True, text=True, timeout=60)
@@ -19056,8 +19061,10 @@ console.log(JSON.stringify({ order, pub, turns, early, ph: S.ph, gone: G1 && G1.
           sorted(o) == [0, 1, 2] and all(o[k] == (o[0] + k) % 3 for k in range(3)), o)
     check("Imposter: twice round, a word each (said, not sent), then the vote; only the one saying it moves it on",
           got["turns"] == [[1, i] for i in o] + [[2, i] for i in o] and got["ph"] == "vote" and not got["early"], got)
-    check("Imposter: every phone gets whose turn it is, and no words (nobody typed any)",
-          got["pub"] == ["at", "order", "part", "ph", "r"], got["pub"])
+    check("Imposter: once round when the TV says so (Sam: \"choose one or two rounds\"), kept for the next round",
+          got["once"] == [1, "clue", "clue", "vote"], got["once"])
+    check("Imposter: every phone gets whose turn it is and how many times round, and no words (nobody typed any)",
+          got["pub"] == ["at", "laps", "order", "part", "ph", "r"], got["pub"])
     check("Imposter: someone gone is passed over; the TV's Skip ahead passes a turn; a bot says its word only on its turn",
           got["gone"] == 1 and got["skip"] == 1 and got["bot"] == {"a": {"said": 1}} and got["notup"] is None, got)
     check("Links: the clue giver says the word and taps how many; the clue on the table is the number (a typed word goes nowhere)",
@@ -19069,6 +19076,9 @@ console.log(JSON.stringify({ order, pub, turns, early, ph: S.ph, gone: G1 && G1.
     check("pip party out loud: no text box on a phone in Trivia, Imposter or Links",
           all('type: "text"' not in x and "p.draft(" not in x and "h(\"select\"" not in x for x in phones))
     imp = block("const Imposter = {", "\nfunction fixRound")
+    check("Imposter: Once round and Twice round on the TV while the first goes round; a picked one shows as picked",
+          '[[1, "Once round"], [2, "Twice round"]]' in imp and '"aria-pressed": String(S.laps === n)' in imp
+          and '.seg button[aria-pressed="true"]' in open(os.path.join(REPO, "site", "public", "table.css"), encoding="utf-8").read())
     last = imp[imp.index('    if (S.ph === "last") {', imp.index("  tv(S, c) {")):]
     last = last[:last.index("\n    }\n")]
     check("Imposter: caught, the TV says what the imposter had, never what everyone else had, till their guess is in",
