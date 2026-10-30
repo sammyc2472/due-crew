@@ -140,6 +140,11 @@ latest step. An author's update that arrives later in the day is asked,
 not opened (`midday`). A date closed with Edit › Undo offers Open now,
 which opens it whole.
 
+In Browse (3.9.5), a suspended card a date ahead will open says that
+day and the plan in Due ("Thu 5 Nov · Heme 2"; `plan_flow.browser_row`);
+my own pace, a leech, a paused plan and a date that opens in slices say
+Anki's words.
+
 ## A follower's plan box (3.8.1)
 
 The week marks a date after its event "after X" (reinforcement: no prep

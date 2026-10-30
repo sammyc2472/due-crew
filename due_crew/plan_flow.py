@@ -413,6 +413,7 @@ def run(col, plan_list, state, today, mode=None, everything=False, dry=False):
     each own-pace date as it stood before, so Not today can put it back."""
     all_cids, names, per, opened_units, spread, before = set(), [], {}, {}, {}, {}
     dates = []  # 3.8.1: [plan id, unit id, name, cards it opened], the morning's line by date
+    opens_reset()  # 3.9.5: what Browse's Due says of a date's cards changes with it
     for p in plan_list:
         p = mine(p)  # G3, G4: my shift, my skips
         st = state.get(p["id"])
@@ -4075,6 +4076,70 @@ def browser_menu(browser, menu):
     if followed():
         where = menu.addAction("Due Crew: show on my plan")
         where.triggered.connect(lambda: show_on_plan(browser))
+
+
+# ---- 3.9.5: Browse's Due column says when a plan opens a suspended card ----
+
+OPENS_FOR = 60  # seconds the cards' days are kept while Browse is open (Browse opening again works them out again)
+_OPENS = {"key": None, "at": 0.0, "cards": {}, "said": False}
+
+
+def opens_reset():
+    """Browse opening, or a morning's open: the cards' days are worked out again at the next row."""
+    _OPENS["key"] = None
+
+
+def opens_map():
+    """{card: (day, plan's name)} for the cards the plans I follow open on a
+    day ahead (plans.opens_ahead), the soonest plan's when two have it.
+    Main thread (Browse asks for its rows there); the decks' index is
+    the morning's own (DeckIndex, kept between reads). Nothing is sent."""
+    import time
+    today = _today()
+    key = (app.generation, today)
+    if _OPENS["key"] == key and time.time() - _OPENS["at"] < OPENS_FOR:
+        return _OPENS["cards"]
+    cards = {}
+    state = _state_cfg()
+    for p in followed():
+        st = state.get(p["id"])
+        if not st or not mw.col or not _deck_ok(mw.col, st.get("deck_id")):
+            continue
+        ahead = P.opens_ahead(P.units(p["doc"]), st.get("applied"), today, own=P.own_pace(p), paused=bool(p.get("paused")),
+                              sched=bool(p.get("sched")))
+        if not ahead:
+            continue
+        idx = P.DeckIndex(mw.col, st["deck_id"])
+        name = str(p.get("name") or "Plan")
+        for day, u in ahead:
+            for cid in idx.match(u, _swap(st), p["doc"]):
+                if cid not in cards or day < cards[cid][0]:
+                    cards[cid] = (day, name)
+    _OPENS.update(key=key, at=time.time(), cards=cards)
+    return cards
+
+
+def browser_row(item, is_note, row, columns):
+    """gui_hooks.browser_did_fetch_row (Sam: "I want to be able to see if a
+    card will be unsuspended by a plan in the due column"): a suspended card
+    a plan opens on a day says the day and the plan in Due, "Thu 5 Nov ·
+    Heme 2" (plans.opens_words). A leech never opens, so it keeps Anki's
+    words; so does every other card, and Notes mode. Never raises: Anki
+    drops a row hook that does."""
+    try:
+        if is_note or "cardDue" not in columns or not mw.col:
+            return
+        got = opens_map().get(int(item))
+        if not got:
+            return
+        q = mw.col.db.first("SELECT c.queue, n.tags FROM cards c JOIN notes n ON n.id = c.nid WHERE c.id = ?", int(item))
+        if not q or int(q[0]) != -1 or " leech " in f" {str(q[1] or '').lower()} ":
+            return
+        row.cells[list(columns).index("cardDue")].text = P.opens_words(got[0], got[1], _today())
+    except Exception as e:
+        if not _OPENS["said"]:  # once: stderr would be Anki's error window at every row
+            _OPENS["said"] = True
+            print(f"due crew: Browse's Due column: {e!r}")
 
 
 # ---- 3.8.0: open from Browse (a tag in the sidebar, or the picked cards) ----

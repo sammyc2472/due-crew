@@ -1905,6 +1905,10 @@ gui_hooks.reviewer_did_show_question.append(crew_cards.on_question)
 gui_hooks.browser_will_show_context_menu.append(plan_flow.browser_menu)
 if hasattr(gui_hooks, "browser_sidebar_will_show_context_menu"):  # 3.8.0: a tag's Due Crew: open its cards…
     gui_hooks.browser_sidebar_will_show_context_menu.append(plan_flow.sidebar_menu)
+if hasattr(gui_hooks, "browser_did_fetch_row"):  # 3.9.5: Due says when a plan opens a suspended card
+    gui_hooks.browser_did_fetch_row.append(plan_flow.browser_row)
+if hasattr(gui_hooks, "browser_will_show"):
+    gui_hooks.browser_will_show.append(lambda _browser: plan_flow.opens_reset())
 
 
 # 2.12: study rooms. The room follows Anki from screen to screen; the break

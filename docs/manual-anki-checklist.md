@@ -679,6 +679,12 @@ In Anki (as a follower):
 - [ ] On the TV: What are we playing on? with a tile for each pick (or, nothing picked, each tile of the map), its cards on it. Two phones join; each taps a couple on "What should we play on?": their initials show on those tiles, and the ringed ones are what anyone voted for. Tap a tile on the TV: the host's say (Go with the votes undoes it). The games' counts follow; Play Trivia on these 2 plays only their questions, straight in (no Pick a topic).
 - [ ] Trivia's wrong answers look like the answer: a type III question offers II, IV, V; an "… test" answer other tests; "Graves disease" keeps its capital.
 
+### 3.9.5: Browse's Due, when a plan opens a card
+
+- [ ] Follow a plan on its dates with later dates' cards suspended (Hold back, or your deck's own): Browse, sort by Due: those cards say "Thu 5 Nov · <plan>" (the day the morning opens them). A card not suspended, a leech, a card on no plan say what Anki says. Two plans with the same card: the sooner one's day and name.
+- [ ] Switch the plan to your own pace: the next time Browse opens, those cards say Anki's words. Notes mode: Anki's words.
+- [ ] Unsuspend one of them in Browse: its Due goes back to Anki's ("New #…") at once.
+
 ### 3.9.3: QBank QIDs, and no Study today
 
 - [ ] Today's head: no Study today, open or folded. Ctrl+Shift+S still walks the day's decks; a Fifteen still starts one.

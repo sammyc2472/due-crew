@@ -19719,6 +19719,82 @@ def test_pip_party_pictures_play_v395():
         GF.TAB.clear()
         GF.TAB.update(saved[2])
 
+def test_browse_due_says_when_a_plan_opens_v395():
+    """3.9.5 (Sam: "I want to be able to see if a card will be unsuspended
+    by a plan in the due column"; his pick B, "no up next or your pace or
+    leech or anything. just the date it will open then the plan"): in
+    Browse, a suspended card a plan I follow opens on a day ahead says
+    "Thu 5 Nov · Heme 2" in Due, the soonest plan's when two have it.
+    Every other card keeps Anki's words: not suspended, a leech, not on a
+    plan, a date already opened or skipped, my own pace (Sam: "let's pause
+    on it"), a paused plan, a date that opens in slices; Notes mode too."""
+    from due_crew import plan_flow as PF, plans as P
+    T = "2026-10-30"
+    units = [{"id": "u0", "opens": "2026-10-20"}, {"id": "u1", "opens": "2026-11-05"}, {"id": "u2", "opens": T},
+             {"id": "u3", "opens": "2026-11-12"}, {"id": "u4", "opens": "2026-11-19", "even": True}, {"id": "u5", "opens": "2026-12-01"}]
+    ahead = P.opens_ahead(units, {"u3": "sig", "u5": "skip:sig"}, T)
+    check("opens: a plan's dates still to open, from today on, soonest first; not opened or skipped here, not one in slices",
+          [u["id"] for _d, u in ahead] == ["u2", "u1"], ahead)
+    check("opens: none at my own pace, while paused, or on a schedule that opens in slices",
+          P.opens_ahead(units, {}, T, own=True) == [] and P.opens_ahead(units, {}, T, paused=True) == []
+          and P.opens_ahead(units, {}, T, sched=True) == [])
+    check("opens: the words are the day, then the plan (Sam's B); the year when it isn't this one",
+          P.opens_words("2026-11-05", "Heme 2", T) == "Thu 5 Nov · Heme 2" and P.opens_words("2027-01-05", "Heme 2", T) == "Tue 5 Jan 2027 · Heme 2")
+    plans = [{"id": "p1", "name": "Heme 2", "doc": {"units": units}},
+             {"id": "p2", "name": "MS2 block 3", "doc": {"units": [{"id": "v1", "opens": "2026-11-03"}]}},
+             {"id": "p3", "name": "My pace", "own": "own", "doc": {"units": [{"id": "w1", "opens": "2026-11-01"}]}}]
+    cards = {"u1": {10, 11, 12, 13}, "u2": {14}, "v1": {11}, "w1": {15}, "u3": {16}}
+    rows = {10: (-1, " heme "), 11: (-1, ""), 12: (0, ""), 13: (-1, " Leech heme "), 14: (-1, ""), 15: (-1, ""), 16: (-1, ""), 17: (-1, "")}
+
+    class Idx:
+        def __init__(self, col, did):
+            pass
+
+        def match(self, u, swap, doc):
+            return set(cards.get(u["id"], ()))
+    col = types.SimpleNamespace(db=types.SimpleNamespace(first=lambda q, cid: rows.get(cid)))
+    saved = (PF.followed, PF._state_cfg, PF._deck_ok, P.DeckIndex, PF._today, PF.mw.col, P.own_pace)
+    cols = ["noteFld", "template", "cardDue", "deck"]
+
+    def due(cid, is_note=False, columns=cols, anki="(New #39026)"):
+        row = types.SimpleNamespace(cells=tuple(types.SimpleNamespace(text=x) for x in ("Front", "Cloze 1", anki, "Big Step 1")))
+        PF.browser_row(cid, is_note, row, columns)
+        return row.cells[2].text
+    try:
+        PF.followed = lambda: plans
+        PF._state_cfg = lambda c=None: {"p1": {"deck_id": 1, "applied": {"u3": "sig"}}, "p2": {"deck_id": 1}, "p3": {"deck_id": 1}}
+        PF._deck_ok, P.DeckIndex, PF._today, PF.mw.col = (lambda c, d: True), Idx, (lambda: T), col
+        P.own_pace = lambda p: p.get("own") == "own"
+        PF.opens_reset()
+        check("opens: a suspended card a plan opens on a day ahead says the day and the plan in Due",
+              due(10) == "Thu 5 Nov · Heme 2" and due(14) == "Fri 30 Oct · Heme 2", (due(10), due(14)))
+        check("opens: two plans have it: the soonest one's day and name", due(11) == "Tue 3 Nov · MS2 block 3", due(11))
+        check("opens: Anki's words for a card not suspended, a leech, one on no plan, a date opened already, my own pace",
+              [due(c) for c in (12, 13, 17, 16, 15)] == ["(New #39026)"] * 5, [due(c) for c in (12, 13, 17, 16, 15)])
+        check("opens: Notes mode, or no Due column, leaves the row alone",
+              due(10, is_note=True) == "(New #39026)" and due(10, columns=["noteFld", "template", "deck", "cardMod"]) == "(New #39026)")
+        PF.followed = lambda: []
+        check("opens: the days are kept while Browse is open (Browse opening again, or a morning's open, works them out again)",
+              due(10) == "Thu 5 Nov · Heme 2")
+        PF.opens_reset()
+        check("opens: ...and worked out again after a reset", due(10) == "(New #39026)")
+
+        def broken():
+            raise RuntimeError("no deck")
+        PF.followed = broken
+        PF.opens_reset()
+        PF._OPENS["said"] = False
+        check("opens: never raises (Anki drops a row hook that does), and says so once", due(10) == "(New #39026)" and PF._OPENS["said"])
+    finally:
+        PF.followed, PF._state_cfg, PF._deck_ok, P.DeckIndex, PF._today, PF.mw.col, P.own_pace = saved
+        PF.opens_reset()
+        PF._OPENS["said"] = False
+    src = open(os.path.join(REPO, "due_crew", "__init__.py"), encoding="utf-8").read()
+    flow = open(os.path.join(REPO, "due_crew", "plan_flow.py"), encoding="utf-8").read()
+    check("opens: Browse's rows ask the hook; Browse opening works the days out again; so does the morning's open",
+          "gui_hooks.browser_did_fetch_row.append(plan_flow.browser_row)" in src and "plan_flow.opens_reset()" in src
+          and "    opens_reset()  # 3.9.5" in flow[flow.index("def run(col, plan_list"):flow.index("def run(col, plan_list") + 2500])
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

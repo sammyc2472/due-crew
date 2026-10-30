@@ -3967,3 +3967,21 @@ every release that changes how something works.
   "by Systems ▾" got the tab's picker too (`board.word_pick`).
   `test_pip_party_find_v395`, `test_pip_party_everyones_pip_v395`,
   `test_pip_party_pictures_play_v395`.
+- 3.9.5, Browse says when a plan opens a card (Sam: "I want to be able to
+  see if a card will be unsuspended by a plan in the due column"; of the
+  three mocked, his pick B, "just the date it will open then the plan").
+  A suspended card a plan I follow opens on a day ahead says "Thu 5 Nov ·
+  Heme 2" in Browse's Due (the year too when it isn't this one), the
+  soonest plan's when two have it. Every other card keeps Anki's words:
+  not suspended, a leech (a plan never opens one), on no plan, a date
+  opened or skipped here, a paused plan, a date that opens in slices, and
+  my own pace (Sam: "let's pause on it"); Notes mode too. Only the words:
+  Anki draws every cell in plain text, the row stays yellow, sorting by
+  Due is Anki's. Worked out from the plans on this computer once Browse
+  opens (`plan_flow.opens_map`, kept a minute; Browse opening again, or a
+  morning's open, works it out again), the decks' index the morning's own;
+  each row is one small read (`browser_row`, on `browser_did_fetch_row`,
+  which never raises: Anki drops a row hook that does). On Anki's own
+  engine with the big deck, 40 dates' cards in 90 ms, 0.2 ms a row
+  (`tools/real_anki.py --opens`). Nothing is sent.
+  `test_browse_due_says_when_a_plan_opens_v395`.

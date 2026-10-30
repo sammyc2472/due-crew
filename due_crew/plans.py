@@ -45,6 +45,30 @@ def fmt_day(iso):
     return f"{d:%a} {d.day} {d:%b}"
 
 
+def opens_ahead(units, applied, today, own=False, paused=False, sched=False):
+    """3.9.5, Browse's Due column: a plan's dates still to open here on
+    their day, [(day, unit)]: from today on, not applied or skipped here;
+    none at my own pace (no day to say: Sam's "let's pause on it"), none
+    while paused, and none that opens in slices (an even date, a 3.2
+    schedule: no one day a card opens)."""
+    if own or paused:
+        return []
+    out = []
+    for u in units or []:
+        day = str(u.get("opens") or "")
+        if day >= str(today) and not (applied or {}).get(u.get("id")) and not (u.get("even") or sched):
+            out.append((day, u))
+    return sorted(out, key=lambda x: x[0])
+
+
+def opens_words(day, plan, today):
+    """What Browse's Due says for a suspended card a plan opens (Sam's pick
+    B): the day it opens, then the plan, "Thu 5 Nov · Heme 2"; the year too
+    when it isn't this one."""
+    year = str(day)[:4]
+    return f"{fmt_day(day)}{'' if year == str(today)[:4] else ' ' + year} · {plan}"
+
+
 def weekday_or_day(iso, today):
     """"Monday" within the week before today, else "Mon 5 Oct"."""
     try:

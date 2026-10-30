@@ -1208,13 +1208,81 @@ def check_bars(tmp):
     return failed
 
 
+def check_opens(path):
+    """3.9.5, Browse's Due column (Sam's pick: "Thu 5 Nov · Heme 2"): Anki's
+    own rows for its own columns, a plan's dates ahead on the big deck, the
+    suspended cards they open saying the day and the plan, and how long
+    working the days out takes."""
+    import datetime as _dtm
+    import time
+    import types
+    REPO = os.path.dirname(HERE)
+    sys.path.insert(0, REPO); sys.path.insert(0, REPO + "/tests")
+    from anki.collection import Collection
+    import fakes
+    fakes.install_fake_requests(fakes.FakeWorker())
+    fakes.install_fake_aqt()
+    from due_crew import plans as P
+    from due_crew import plan_flow as F
+    failed = []
+
+    def ok(name, cond, extra=""):
+        print(("PASS " if cond else "FAIL ") + name, extra)
+        if not cond:
+            failed.append(name)
+    col = Collection(path)
+    try:
+        did = col.decks.id_for_name("Step Deck")
+        idx = P.DeckIndex(col, did)
+        tags, _decks = idx.tree()
+        lect = sorted({p for p, _ in tags if "#Lectures::Renal::" in p and p.count("::") == 4})[:40]
+        today = _dtm.date.today()
+        units = [{"id": f"o{i}", "name": x.rsplit("::", 1)[-1], "opens": str(today + _dtm.timedelta(days=i + 1)), "tags": [x], "decks": [], "cards": []}
+                 for i, x in enumerate(lect)]
+        units[0]["opens"] = str(today - _dtm.timedelta(days=3))  # opened already, here
+        plan = {"id": "pO", "name": "Heme 2", "doc": {"deck": "Step Deck", "units": units}}
+        ahead = idx.match(units[1], None, "Step Deck") | idx.match(units[5], None, "Step Deck")
+        col.sched.suspend_cards(sorted(ahead))
+        F.mw.col = col
+        F.followed = lambda: [plan]
+        F._state_cfg = lambda c=None: {"pO": {"deck_id": did, "applied": {"o0": "sig"}}}
+        F._today = lambda: str(today)
+        F.opens_reset()
+        t = time.perf_counter(); m = F.opens_map(); t_map = time.perf_counter() - t
+        ok("Browse: the days a plan opens its cards, worked out once on the big deck", len(m) > 0 and t_map < 1.0, f"{len(m):,} cards, {t_map*1000:.0f} ms")
+        columns = col.load_browser_card_columns()
+        ok("Browse: Anki's Due column is cardDue", "cardDue" in columns, str(columns))
+        cid = sorted(idx.match(units[1], None, "Step Deck"))[0]
+        cells, *_rest = col.browser_row_for_id(cid)
+        row = types.SimpleNamespace(cells=tuple(types.SimpleNamespace(text=c[0] if isinstance(c, tuple) else c.text) for c in cells))
+        was = row.cells[columns.index("cardDue")].text
+        t = time.perf_counter(); F.browser_row(cid, False, row, columns); t_row = time.perf_counter() - t
+        want = P.opens_words(units[1]["opens"], "Heme 2", str(today))
+        ok("Browse: a suspended card the plan opens says the day and the plan in Due", row.cells[columns.index("cardDue")].text == want,
+           f"{was!r} -> {row.cells[columns.index('cardDue')].text!r}, {t_row*1000:.1f} ms a row")
+        other = sorted(idx.match(units[2], None, "Step Deck") - ahead)[0]
+        cells, *_rest = col.browser_row_for_id(other)
+        row2 = types.SimpleNamespace(cells=tuple(types.SimpleNamespace(text=c[0] if isinstance(c, tuple) else c.text) for c in cells))
+        before = row2.cells[columns.index("cardDue")].text
+        F.browser_row(other, False, row2, columns)
+        ok("Browse: one the plan opens but isn't suspended keeps Anki's words", row2.cells[columns.index("cardDue")].text == before, repr(before))
+    finally:
+        col.close()
+    return failed
+
+
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory() as tmp:
         p = os.path.join(tmp, "big.anki2")
         make(p)
+        if "--opens" in sys.argv:  # this check alone
+            failed = check_opens(p)
+            print(f"\n{len(failed)} failed")
+            sys.exit(1 if failed else 0)
         failed = check(p)
         failed += check_392(tmp)
         failed += check_planner(p)
         failed += check_bars(tmp)
+        failed += check_opens(p)
     print(f"\n{len(failed)} failed" + (": " + "; ".join(failed) if failed else ""))
     sys.exit(1 if failed else 0)
