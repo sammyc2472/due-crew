@@ -594,13 +594,13 @@ def _you(c, due, plans):
     """3.8.0, the You bubble over the board: its tab, folded or not, and the
     Plans or Insights it draws. Only the one on screen is worked out."""
     from . import team_flow
+    hidden = board.hidden_tabs(c)
     you = {"tab": due_flow.you_tab(c), "folded": due_flow.folded(c, due), "plans": plans, "insights": None,
-           "party_on": gamenight_flow.shown()}  # 3.9.5's last round: You › Pip Party, for those it's open to
+           "party_on": "party" not in hidden and gamenight_flow.shown()}  # 3.9.5: You › Pip Party, unless hidden in Settings
     if not due and mw.col:
         you["qids"] = due_flow.has_qids()  # 3.9.5: QBank QIDs in the head with Due's lists off too
     if you["folded"]:
         return you
-    hidden = board.hidden_tabs(c)
     keys = ((["today", "upcoming", "later"] if due else []) + [k for k, _l in board.YOU_MORE if k not in hidden]
             + ([board.PARTY_TAB[0]] if you["party_on"] else []))
     shown = you["tab"] if you["tab"] in keys else (keys[0] if keys else None)

@@ -76,7 +76,8 @@ SORT_KEYS = ("reviews", "time", "retention", "streak", "week")  # week: squads o
 PERIODS = ("today", "week", "decks", "squads")
 # 3.5.0: tabs a person can hide in Settings (per computer); Today always shows
 # 3.8.0: Today and Week are always there; the rest can be hidden in Settings
-HIDEABLE_TABS = (("decks", "Decks"), ("squads", "Squads"), ("plans", "Plans"), ("insights", "Insights"))
+HIDEABLE_TABS = (("decks", "Decks"), ("squads", "Squads"), ("plans", "Plans"), ("insights", "Insights"),
+                 ("party", "Pip Party"))  # 3.9.5 (Sam: "make pip party something someone can unshow")
 CREW_VIEWS = (("today", "Today"), ("week", "Week"), ("decks", "Decks"))
 YOU_MORE = (("plans", "Plans"), ("insights", "Insights"))
 PARTY_TAB = ("party", "Pip Party")  # 3.9.5's last round: after Insights, for those it's open to (gamenight_flow.shown)
@@ -4493,7 +4494,7 @@ def _st_toggle_cmd(cmd, on, label):
 FIND_WORDS = {
     "set:theme:": "dark light night mode", "set:accent:": "colour color green purple blue", "set:compact:": "dense small",
     "set:sync_notifications:": "notify notification alert", "set:show_leaderboard:": "hide off board decks screen",
-    "settabs:": "tabs hide squads decks plans insights", "set:due_suggest:": "hard habit misses again",
+    "settabs:": "tabs hide squads decks plans insights pip party games", "set:due_suggest:": "hard habit misses again",
     "set:due_leeches:": "leech suspended", "set:shortcuts:": "keys keyboard", "set:share_time:": "minutes hours privacy private",
     "set:share_reviews:": "cards numbers privacy private", "set:share_heatmap:": "year squares", "exam": "test date countdown",
     "af": "holiday vacation trip break", "setprivacy:paused": "pause break hide", "setprivacy:showup": "show up numbers squares",

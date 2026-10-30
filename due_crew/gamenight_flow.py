@@ -755,12 +755,15 @@ def _toggle(p):
 
 
 def open_tab():
-    """The You bubble open on Pip Party, on the Decks screen, Anki in front."""
+    """The You bubble open on Pip Party, on the Decks screen, Anki in front
+    (Tools › Due Crew › Pip Party…); hidden in Settings › Board, it shows again."""
     if not mw.col or not shown():
         tooltip("Sign in to Due Crew first.")
         return
     c = cfg()
     c["due_tab"] = "party"
+    if "party" in (c.get("hidden_tabs") or []):
+        c["hidden_tabs"] = [k for k in c["hidden_tabs"] if k != "party"]  # hidden in Settings: asked for, it shows again
     from . import team_flow
     c["due_fold"] = {"day": team_flow._today(), "folded": False}
     save_cfg(c)

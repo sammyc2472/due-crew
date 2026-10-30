@@ -4017,3 +4017,11 @@ every release that changes how something works.
   a person opens (`TABLES_PER_DAY = 20`, beside ten an hour), since a table
   with its TV open lives four hours. `test_pip_party_for_everyone_v395`;
   `table.test.ts` tests it as users are: nobody's an admin.
+- 3.9.5, Pip Party can be hidden (Sam: "make pip party something someone
+  can unshow"): Settings › Board › Shows has Pip Party beside Decks,
+  Squads, Plans and Insights (`board.HIDEABLE_TABS`,
+  `settings_model.HIDEABLE`), this computer's `hidden_tabs` as theirs are.
+  Hidden: no tab, nothing worked out for it, not on the folded line
+  (`_you`'s `party_on`). Tools › Due Crew › Pip Party… shows it again,
+  open on it, as a link to a hidden tab does; so does Reset board.
+  `test_pip_party_can_be_hidden_v395`. Add-on only; in the AnkiWeb build.

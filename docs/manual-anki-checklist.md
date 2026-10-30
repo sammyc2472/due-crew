@@ -684,6 +684,7 @@ In Anki (as a follower):
 - [ ] Signed in as someone who isn't the admin: You › Pip Party is there, its tab saying BETA, and Tools › Due Crew › Pip Party…; signed out, neither.
 - [ ] As them, Host: a table opens and the TV shows its code. In the lobby with one phone, Imposter says it needs 3 players or more and Links 4; Trivia starts with one.
 - [ ] duecrew.com/table signed out: Pip Party's page with Join from your phone (no sign-in, no Home).
+- [ ] Settings › Board › Shows: untick Pip Party: its tab goes from the You bubble (and its folded line). Tools › Due Crew › Pip Party… brings it back, open on it, its pill ticked again.
 
 ### 3.9.5: Browse's Due, when a plan opens a card
 

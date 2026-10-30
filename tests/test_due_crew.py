@@ -19564,6 +19564,56 @@ def test_pip_party_for_everyone_v395():
     check("pip party for everyone: still Beta on its tab", "party" in board.BETA_TABS)
 
 
+def test_pip_party_can_be_hidden_v395():
+    """3.9.5 (Sam: "make pip party something someone can unshow"): Pip
+    Party is one of Settings › Board's tabs, hidden as the others are (this
+    computer's hidden_tabs): no tab, nothing worked out for it, not on the
+    folded line. Tools › Due Crew › Pip Party… brings it back, as a link to
+    a hidden tab does; so does Reset board."""
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    from due_crew import due_flow, gamenight_flow as GF, settings_model as SM
+    check("pip party hidden: Settings › Board hides it and shows it again, in the tabs' order",
+          SM.change(["settabs", "party", "0"], {"hidden_tabs": ["plans"]}) == {"hidden_tabs": ["plans", "party"]}
+          and SM.change(["settabs", "party", "1"], {"hidden_tabs": ["party"]}) == {"hidden_tabs": []}
+          and SM.BOARD_DEFAULTS["hidden_tabs"] == [])
+    shown_bd = board.settings_html({"tab": "board", "signed_in": True}, {"hidden_tabs": []})
+    hidden_bd = board.settings_html({"tab": "board", "signed_in": True}, {"hidden_tabs": ["party"]})
+    check("pip party hidden: its pill beside Decks, Squads, Plans and Insights, on or off as set",
+          "duecrew:settabs:party:0" in shown_bd and ">Pip Party</button>" in shown_bd and "duecrew:settabs:party:1" in hidden_bd,
+          re.findall(r"settabs:\w+:\d", hidden_bd))
+    conf = {"hidden_tabs": [], "due_tab": "party"}
+    calls = []
+    from due_crew import plan_flow, team_flow
+    saved = (dc._swap, dc.cfg, dc.save_cfg, GF.shown, GF.tab_view, GF.cfg, GF.save_cfg, GF.app.swap, dc.mw.col, due_flow._today,
+             due_flow.has_qids, plan_flow.morning_opened, team_flow.plan_lines)
+    due_flow.has_qids, plan_flow.morning_opened, team_flow.plan_lines = (lambda: False), (lambda: None), (lambda cards: None)
+    dc._swap = lambda c, focus=None: None
+    dc.cfg = GF.cfg = lambda: conf
+    dc.save_cfg = GF.save_cfg = lambda c, **k: None
+    GF.shown = lambda: True
+    GF.tab_view = lambda c: calls.append("party") or {"games": []}
+    GF.app.swap = lambda c: calls.append("swap")
+    dc.mw.col = object()
+    due_flow._today = lambda: "2026-10-30"
+    try:
+        on = dc._you(conf, None, {})
+        dc._on_js(False, as_board("duecrew:settabs:party:0"), DeckBrowser())
+        off = dc._you(conf, None, {})
+        drawn = board.you_html({}, None, dict(off, tab="party"))
+        folded = board.you_html({}, None, dict(off, tab="party", folded=True))
+        check("pip party hidden: the click hides it; no tab, nothing worked out for it, not on the folded line",
+              on["party_on"] is True and calls == ["party"] and conf["hidden_tabs"] == ["party"] and off["party_on"] is False
+              and "Pip Party" not in drawn and "party:" not in drawn and "Pip Party" not in folded, (conf, calls, folded[-200:]))
+        GF.open_tab()
+        check("pip party hidden: Tools › Due Crew › Pip Party… shows it again, open on it",
+              conf["hidden_tabs"] == [] and conf["due_tab"] == "party" and dc._you(conf, None, {})["party_on"] is True
+              and calls[-2:] == ["swap", "party"], (conf, calls))
+    finally:
+        (dc._swap, dc.cfg, dc.save_cfg, GF.shown, GF.tab_view, GF.cfg, GF.save_cfg, GF.app.swap, dc.mw.col, due_flow._today,
+         due_flow.has_qids, plan_flow.morning_opened, team_flow.plan_lines) = saved
+
+
 def test_pip_party_the_table_votes_v395():
     """3.9.5 round three (Sam's v3, "At the party: the table votes"): Anki's
     pack lists tonight's picks (or its subjects), each with its cards, and
