@@ -3985,3 +3985,16 @@ every release that changes how something works.
   engine with the big deck, 40 dates' cards in 90 ms, 0.2 ms a row
   (`tools/real_anki.py --opens`). Nothing is sent.
   `test_browse_due_says_when_a_plan_opens_v395`.
+- 3.9.5, Pip Party says Beta (Sam: "find a place to mark pip party as
+  beta"): on its tab in the You bubble, the one way into a party, a small
+  BETA beside its name in the tab row's own grey (`board.BETA_TABS`,
+  `_tab_word`); the folded line keeps the names alone. With Due's lists
+  and every tab on, the head's Hide goes to a second line about 40px
+  sooner (a 560px board). Its test is in
+  `test_pip_party_only_from_its_tab_v395`. tools/dialogs.py's Review and
+  send check read Thursday's date as still to come, so it failed Friday
+  to Sunday (CI on 30 Oct); it says what the date's day makes true now.
+  tools/real_anki.py's Study this date still asked for the reviews not
+  due that Sam's FSRS rule keeps home; it asks for the rule now (new and
+  due today, in the deck's order), and Browse's check unsuspends its
+  card first.

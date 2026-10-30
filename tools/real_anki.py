@@ -677,15 +677,17 @@ def check(path):
            f"{n_menu} opened, undo {step!r}, {t_held*1000:.0f} ms")
         col.undo()
         ok("held back: Edit › Undo shuts them again", all(col.get_card(c).queue == -1 for c in shut))
-        # 3.8.1, Study this date: a Due Crew deck of the date's open cards, new and review, due or not (a cram
-        # before a quiz), random order, Anki rescheduling them; Anki's own one undo step; its Study screen on it
+        # 3.8.1, Study this date: a Due Crew deck of the date's cards, Anki rescheduling them; Anki's own one
+        # undo step; its Study screen on it. 3.9.5 (Sam's FSRS rule): its new cards and the ones due today, in
+        # the deck's order, never reviews ahead of their date
         r0 = sorted(P.DeckIndex(col, did).match(rdates[0], None, "Step Deck"))
-        for c in [c for c in r0 if col.get_card(c).queue == 0][:8]:
+        ahead = [c for c in r0 if col.get_card(c).queue == 0][:8]
+        for c in ahead:
             card = col.get_card(c)
             card.type, card.queue, card.ivl, card.due = 2, 2, 20, col.sched.today + 15  # reviews, not due for weeks
             col.update_card(card)
         i11 = P.DeckIndex(col, did)
-        want = P.study_cards(i11, i11.match(rdates[0], None, "Step Deck"))
+        want = P.new_and_due(i11, i11.match(rdates[0], None, "Step Deck"))
         moved = []
         F.mw.moveToState = moved.append
         t = tm(); F.study_date("pM", "r0"); t_study = tm() - t
@@ -694,9 +696,11 @@ def check(path):
         sdeck = col.decks.get(sdid) if sdid else {}
         got = set(col.find_cards(f'"deck:{sname}"')) if sdid else set()
         reviews = sum(1 for c in got if col.get_card(c).type == 2)
-        ok("study this date: Anki's filtered deck of the date's open cards, new and reviews not due, random, rescheduling",
-           sdid and sdeck.get("dyn") and got == set(want) and 0 < reviews < len(got) == len(want)
-           and sdeck["terms"][0][2] == 1 and sdeck.get("resched") and moved == ["overview"] and col.decks.selected() == sdid
+        ok("study this date: Anki's filtered deck of the date's new cards and due ones, in the deck's order, "
+           "rescheduling; its reviews not due stay home",
+           sdid and sdeck.get("dyn") and got == set(want) and len(got) == len(want) > 0 and ahead and not got & set(ahead)
+           and reviews == sum(1 for c in want if c in i11.due_now)
+           and sdeck["terms"][0][2] == F.NEW_ORDER and sdeck.get("resched") and moved == ["overview"] and col.decks.selected() == sdid
            and not any(col.get_card(c).queue == -1 for c in got),
            f"{len(got)} cards ({reviews} reviews), terms {sdeck.get('terms')}, {t_study*1000:.0f} ms")
         sstep = col.undo_status().undo
@@ -1261,6 +1265,7 @@ def check_opens(path):
         ok("Browse: a suspended card the plan opens says the day and the plan in Due", row.cells[columns.index("cardDue")].text == want,
            f"{was!r} -> {row.cells[columns.index('cardDue')].text!r}, {t_row*1000:.1f} ms a row")
         other = sorted(idx.match(units[2], None, "Step Deck") - ahead)[0]
+        col.sched.unsuspend_cards([other])  # the checks before this one leave some suspended
         cells, *_rest = col.browser_row_for_id(other)
         row2 = types.SimpleNamespace(cells=tuple(types.SimpleNamespace(text=c[0] if isinstance(c, tuple) else c.text) for c in cells))
         before = row2.cells[columns.index("cardDue")].text

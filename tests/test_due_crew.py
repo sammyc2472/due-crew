@@ -19494,7 +19494,8 @@ def test_pip_party_only_from_its_tab_v395():
     """3.9.5 round three (Sam: "I do not want parties to be prompted from
     the today page. their only access should be from the pip party tab"):
     no Party on Today (a plan's date, today's misses), on Insights' map or
-    in Browse's right-click; Tools › Due Crew › Pip Party… opens the tab."""
+    in Browse's right-click; Tools › Due Crew › Pip Party… opens the tab.
+    Sam: "find a place to mark pip party as beta": its tab, the one way in."""
     from due_crew import due as D, plan_flow as PF, gamenight_flow as GF
     T = "2026-10-07"
     base = {"pid": "p1", "uid": "u1", "plan": "MS2", "name": "Path 2", "opens": T, "seen": 18, "total": 42,
@@ -19510,6 +19511,13 @@ def test_pip_party_only_from_its_tab_v395():
     check("pip party: Today and Insights say nothing of it, the tab open to me or not; its tab is there",
           "Pip Party" in today and not re.search(r"(?i)party:|>Party<|Party &rsaquo;|missparty|planparty|insmapparty", today + insights)
           and "Path 2" in today and "insmapshare" in insights, today[-600:])
+    folded = board.you_html({}, None, dict(you, tab="insights", folded=True))
+    alone = board.you_html({}, None, dict(you, tab="party"))
+    check("pip party: its tab says Beta beside its name (Sam's), with Due's lists or alone; no other tab does; "
+          "the folded line keeps the names",
+          all(h.count('Pip Party<span class="du-beta">Beta</span>') == 1 == h.count("du-beta") for h in (today, insights, alone))
+          and "Pip Party" in folded and "du-beta" not in folded and "#due-crew .du-tabs .du-beta" in board.DUE_CSS,
+          (today.count("du-beta"), alone.count("du-beta"), folded[-300:]))
     acts = []
 
     class Menu:

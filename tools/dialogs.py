@@ -1631,7 +1631,8 @@ def main(out):
             raise RuntimeError(f"planner: changes wait: {tab.send_words.text()!r}, v{STORE.plans[pid]['version']}")
         shoot(dlg, os.path.join(out, "planner-waiting.png"))
         sd = PS.SendDialog(dlg)
-        if not sd.why().startswith("Shock moved") or sd.go.text() != "Send to 4" or "Not open for anyone yet" not in \
+        who = "Not open for anyone yet" if day(3) > TODAY else f"Open since {P.fmt_day(day(3))}"  # Shock's Thursday, this week's
+        if not sd.why().startswith("Shock moved") or sd.go.text() != "Send to 4" or who not in \
                 " ".join(w.text() for w in sd.findChildren(QtWidgets.QLabel)):
             raise RuntimeError(f"planner: Review and send: {sd.why()!r}, {sd.go.text()!r}")
         shoot(sd, os.path.join(out, "planner-send.png"))

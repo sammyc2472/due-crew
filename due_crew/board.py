@@ -80,6 +80,12 @@ HIDEABLE_TABS = (("decks", "Decks"), ("squads", "Squads"), ("plans", "Plans"), (
 CREW_VIEWS = (("today", "Today"), ("week", "Week"), ("decks", "Decks"))
 YOU_MORE = (("plans", "Plans"), ("insights", "Insights"))
 PARTY_TAB = ("party", "Pip Party")  # 3.9.5's last round: after Insights, for those it's open to (gamenight_flow.shown)
+BETA_TABS = ("party",)  # Sam's (3.9.5): Pip Party says Beta on its tab, the one way in, while it's new
+
+
+def _tab_word(k, lb):
+    """A You tab's name; a tab in BETA_TABS says Beta beside it."""
+    return f'{lb}<span class="du-beta">Beta</span>' if k in BETA_TABS else lb
 
 
 def hidden_tabs(cfg):
@@ -7294,6 +7300,9 @@ DUE_CSS = """
     #due-crew .du-tabs a:hover { color: var(--dc-ink); }
     #due-crew .du-tabs a.on { color: var(--dc-ink); box-shadow: inset 0 -2px var(--dc-accent); }
     #due-crew .du-tabs.du-more { padding-left: 14px; border-left: 1px solid var(--dc-line); }
+    #due-crew .du-tabs .du-beta { margin-left: 5px; padding: 0 4px; border: 1px solid var(--dc-line); border-radius: 4px;
+      font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--dc-muted);
+      vertical-align: 1px; }
     #due-crew .du-r { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 2px 9px; align-items: start;
       padding: 5px 0 4px; border-top: 1px solid var(--dc-line); }
     #due-crew .du-r .t { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
@@ -7983,7 +7992,7 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None, qids=False):
                     f'<span class="sp"></span>{ql}<a href="#" class="du-fold" title="Show" '
                     f'onclick="{_pycmd("duefold")}">Show &#9662;</a></div>')
         tab = more_tab if more_tab in dict(more) else more[0][0]
-        tabs = "".join(f'<a href="#" role="tab" aria-selected="{"true" if k == tab else "false"}" class="{"on" if k == tab else ""}" onclick="{_pycmd("duetab:" + k)}">{lb}</a>'
+        tabs = "".join(f'<a href="#" role="tab" aria-selected="{"true" if k == tab else "false"}" class="{"on" if k == tab else ""}" onclick="{_pycmd("duetab:" + k)}">{_tab_word(k, lb)}</a>'
                        for k, lb in more)
         return (f'<div class="du"><div class="du-h"><span class="du-tabs" role="tablist" aria-label="You">{tabs}</span>'
                 f'<span class="sp"></span>{ql}<a href="#" class="du-fold" title="Fold to one line" '
@@ -8022,7 +8031,7 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None, qids=False):
     if more:
         # 3.8.0: Plans and Insights, after a gap: what's mine beyond the day
         tabs += '</span><span class="du-tabs du-more" role="tablist" aria-label="Plans and Insights">' + "".join(
-            f'<a href="#" role="tab" aria-selected="{"true" if k == tab else "false"}" class="{"on" if k == tab else ""}" onclick="{_pycmd("duetab:" + k)}">{lb}</a>' for k, lb in more)
+            f'<a href="#" role="tab" aria-selected="{"true" if k == tab else "false"}" class="{"on" if k == tab else ""}" onclick="{_pycmd("duetab:" + k)}">{_tab_word(k, lb)}</a>' for k, lb in more)
     if v.get("done") and tab == "today":
         count = "&#10003; Done for today"  # 3.8.0: as the folded line says it (and motion.js lights the box once)
     head = (f'<div class="du-h"><span class="du-tabs" role="tablist" aria-label="{e(v["name"])}">{tabs}</span>'
