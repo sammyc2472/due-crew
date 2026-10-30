@@ -3998,3 +3998,22 @@ every release that changes how something works.
   due that Sam's FSRS rule keeps home; it asks for the rule now (new and
   due today, in the deck's order), and Browse's check unsuspends its
   card first.
+- 3.9.5, Pip Party for everyone, still Beta (Sam: "let's make it available
+  to others now ... provided we think it's secure enough, we'll keep it as
+  beta"). The four testing switches are off: the tab and Tools › Due Crew ›
+  Pip Party… show for anyone signed in (`gamenight_flow.TESTERS = None`),
+  anyone signed in opens a table (`ADMINS_ONLY = false` in
+  `worker/src/table.ts`), duecrew.com/table is anyone's
+  (`TABLE_ADMINS_ONLY = false` in `site/src/index.ts`), and each game
+  starts at its own min again (`FEW = Infinity` in table.js: Imposter three,
+  Links four, Trivia one). Each switch stays, to make it a tester's again.
+  Reviewed first for a host who isn't trusted: what a host or a phone sends
+  is drawn as text, never markup (table.js's `h`; Pip's markup is the kit's
+  own), the table pages' policy runs no script but the site's, the TV
+  window in Anki has no way back into Anki (no channel, its own
+  off-the-record profile, the pack handed only to the site's page), the
+  door is "ask" by default, and every message, presence, seat, door and
+  code tried has its ceiling. The one thing added: a day's ceiling on tables
+  a person opens (`TABLES_PER_DAY = 20`, beside ten an hour), since a table
+  with its TV open lives four hours. `test_pip_party_for_everyone_v395`;
+  `table.test.ts` tests it as users are: nobody's an admin.

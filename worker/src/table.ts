@@ -24,10 +24,10 @@ import { hit, limitOrThrow, peek } from "./limits";
 import { isAdmin } from "./notices";
 import { Env, HttpError, clientIp, json, newToken, sha256Hex, timingSafeEqual } from "./util";
 
-/** While Sam tests it, only the admins (ADMINS, ADMIN_UIDS) open a table, and
- *  duecrew.com/table is theirs alone; anyone they let in still plays from a
- *  join link. Set it false, here and in site/src/index.ts, when it goes wider. */
-export const ADMINS_ONLY = true;
+/** Anyone signed in opens a table since 3.9.5's release (Pip Party, Beta).
+ *  True makes it the admins' alone again (ADMINS, ADMIN_UIDS), with
+ *  TABLE_ADMINS_ONLY in site/src/index.ts; a join link is anyone's either way. */
+export const ADMINS_ONLY = false;
 export const TABLE_HOURS = 4;
 export const HOST_GONE_MIN = 15;
 export const SEATS = 12;            // phones sat down at once (the TV isn't one): eight players, and room to reconnect
@@ -41,6 +41,7 @@ const MSG_MAX = 6000;
 const RATE = 30;                    // messages a second, a connection (a dial being turned)
 const HOST_RATE = 120;              // the host's: a presence and a whisper a seat, each step
 const TABLES_PER_HOUR = 10;         // tables one person opens
+const TABLES_PER_DAY = 20;          // and a day's ceiling: a table lives four hours, so an hour's ten aren't a day's forty
 const JOINS_PER_HOUR = 200;         // connections and checks from one network, to one table (its TV's aside)
 const PROBES_PER_HOUR = 60;         // codes tried from one network that aren't a table
 export const DOOR_PER_NET = 3;      // waiting at the door from one network at once
@@ -283,11 +284,12 @@ async function crewName(req: Request, env: Env, hostUid: string): Promise<string
 }
 
 /** POST /table: open a table; its code for the phones, and the key that
- *  makes this page its host. Signed in only (and while testing, an admin:
- *  anyone else gets the 404 an admin route gives). */
+ *  makes this page its host. Signed in only (with ADMINS_ONLY, an admin:
+ *  anyone else gets the 404 an admin route gives); ten an hour, twenty a day. */
 export async function create(uid: string, env: Env): Promise<Response> {
   if (ADMINS_ONLY && !isAdmin(env, uid)) throw new HttpError(404, "not_found");
   await limitOrThrow(env, `table:${uid}`, TABLES_PER_HOUR, 3600);
+  await limitOrThrow(env, `tableday:${uid}`, TABLES_PER_DAY, 86400);
   for (let i = 0; i < 6; i++) {
     const code = tableCode();
     const key = newToken();

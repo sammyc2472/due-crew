@@ -18962,9 +18962,9 @@ def test_game_night_questions_make_sense_v395():
 
 
 def test_game_night_one_player_v395():
-    """3.9.5, game night (site/public/table.js, on tonight's pack): while Sam
-    tests it, any game starts with one player (FEW; each game's own min
-    stays on its tile). Each game, one player through its most, starts, and
+    """3.9.5, game night (site/public/table.js, on tonight's pack): each game
+    starts at its own min since the release (FEW = Infinity; 1 while Sam
+    tested it). Each game, one player through its most, still starts, and
     the stand-in players' answers move it on: alone, Rounds has no
     Attending, Imposter has nobody to vote for, and Links' clue giver picks
     on the TV too. What every phone gets carries no card's words in Trivia, no other
@@ -18992,8 +18992,9 @@ def test_game_night_one_player_v395():
           len({x["id"] for x in runs}) == 6 and all(not x["err"] for x in runs), [x for x in runs if x["err"]][:2])
     check("game night: what every phone gets holds nobody's secret (Trivia's words, a hand, the key, the twin)",
           all(not x["leaked"] for x in runs), [(x["id"], x["N"], x["leaked"]) for x in runs if x["leaked"]][:4])
-    check("game night: while testing, every game starts with one player; each keeps its own min for its tile",
-          all(x["need"] == 1 for x in runs) and by[("imposter", 1)]["min"] == 3 and by[("links", 1)]["min"] == 4)
+    check("game night: released, every game needs its own min (Imposter three, Links four, Trivia one)",
+          all(x["need"] == x["min"] for x in runs) and by[("imposter", 1)]["need"] == 3 and by[("links", 1)]["need"] == 4
+          and by[("trivia", 1)]["need"] == 1, sorted({(x["id"], x["need"]) for x in runs}))
     check("game night: alone, every game moves on from its first step (none waits on a second player)",
           all(len(by[(g, 1)]["phases"]) >= 2 for g in ("imposter", "rounds", "trivia", "draw", "between", "links")),
           {g: by[(g, 1)]["phases"] for g in ("imposter", "rounds", "trivia", "draw", "between", "links")})
@@ -19193,7 +19194,7 @@ console.log(JSON.stringify({ order, imp: S.imp, a: S.a, b: S.b, sec, pub, waits,
     def block(start, end):
         part = src[src.index(start):]
         return part[:part.index(end)]
-    phones = [block("const Imposter = {", "\nfunction fixRound"), block("const Trivia = {", "\nconst DrawIt = {"), block("const Links = {", "\n// While we're testing")]
+    phones = [block("const Imposter = {", "\nfunction fixRound"), block("const Trivia = {", "\nconst DrawIt = {"), block("const Links = {", "\n// Each game starts at its own min")]
     check("pip party out loud: no text box on a phone in Trivia, Imposter or Links",
           all('type: "text"' not in x and "p.draft(" not in x and "h(\"select\"" not in x for x in phones))
     imp = block("const Imposter = {", "\nfunction fixRound")
@@ -19538,6 +19539,31 @@ def test_pip_party_only_from_its_tab_v395():
     check("pip party: no way in but the tab (no send from elsewhere in the glue)",
           not hasattr(GF, "send") and not hasattr(GF, "from_insights") and hasattr(GF, "open_tab"))
 
+def test_pip_party_for_everyone_v395():
+    """3.9.5's release (Sam: "let's make it available to others now ... we'll
+    keep it as beta"): the tab and Tools › Due Crew › Pip Party… for anyone
+    signed in, a table for anyone signed in (ten an hour, twenty a day), the
+    table page anyone's, every game at its own min; its tab still says Beta."""
+    from due_crew import gamenight_flow as GF
+    saved = GF.client
+    try:
+        got = []
+        for signed_in, uid in ((True, "someone"), (True, "FjrvFwUg6HNN3hy1YUmMp7ClR4v1"), (False, "someone")):
+            GF.client = lambda s=signed_in, u=uid: types.SimpleNamespace(signed_in=s, user_id=u)
+            got.append(GF.shown())
+    finally:
+        GF.client = saved
+    check("pip party for everyone: the tab shows for anyone signed in, never signed out", GF.TESTERS is None and got == [True, True, False], got)
+    src = {p: open(os.path.join(REPO, *p.split("/")), encoding="utf-8").read()
+           for p in ("worker/src/table.ts", "site/src/index.ts", "site/public/table.js")}
+    check("pip party for everyone: anyone signed in opens a table, the table page is anyone's, each game needs its own min",
+          "export const ADMINS_ONLY = false;" in src["worker/src/table.ts"] and "const TABLE_ADMINS_ONLY = false;" in src["site/src/index.ts"]
+          and "const FEW = Infinity;" in src["site/public/table.js"])
+    check("pip party for everyone: a day's ceiling on tables beside the hour's",
+          "TABLES_PER_DAY = 20" in src["worker/src/table.ts"] and "`tableday:${uid}`, TABLES_PER_DAY, 86400" in src["worker/src/table.ts"])
+    check("pip party for everyone: still Beta on its tab", "party" in board.BETA_TABS)
+
+
 def test_pip_party_the_table_votes_v395():
     """3.9.5 round three (Sam's v3, "At the party: the table votes"): Anki's
     pack lists tonight's picks (or its subjects), each with its cards, and
@@ -19663,7 +19689,7 @@ def test_pip_party_everyones_pip_v395():
     import subprocess
     src = open(os.path.join(REPO, "site", "public", "table.js"), encoding="utf-8").read()
     part = lambda a, b: src[src.index(a):src.index(b)]
-    imp, links = part("const Imposter = {", "\nfunction fixRound"), part("const Links = {", "\n// While we're testing")
+    imp, links = part("const Imposter = {", "\nfunction fixRound"), part("const Links = {", "\n// Each game starts at its own min")
     tv, phone = part("function TV(root, client, opt) {", "// ---------- a phone"), part("function Phone(root, client, name) {", "// ---------- bots")
     check("pips: Imposter's order, who's in and its tally name each player with their Pip; a phone's vote too",
           "who(i, nm(i))" in imp and imp.count("who(i, nm(i))") >= 3 and "who(i, p.name(i))" in imp, imp[:200])

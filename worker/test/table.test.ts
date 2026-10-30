@@ -54,9 +54,8 @@ async function leave(...socks: Sock[]) {
   await until(() => socks.every((s) => s.closed), "everyone gone");
 }
 
-// while Sam tests it, an admin opens a table (ADMINS_ONLY)
-const ADMIN = { ADMIN_UIDS: "sam" } as any;
-const open = (who: { token: string }) => api("POST", "/table", { token: who.token, env: ADMIN });
+// anyone signed in opens a table (3.9.5's release): sam is no admin here
+const open = (who: { token: string }) => api("POST", "/table", { token: who.token });
 
 async function opened() {
   const sam = await person("sam");
@@ -329,18 +328,25 @@ describe("game night: a table", () => {
     expect((await seat(code, cid("ana"))).status).toBe(404);
   });
 
-  it("is opened by an admin alone while Sam tests it, and has a ceiling", async () => {
+  it("is opened by anyone signed in, ten an hour and twenty a day", async () => {
     const sam = await person("sam"), dre = await person("dre");
-    expect((await api("POST", "/table", { token: dre.token, env: ADMIN })).body).toEqual({ error: "not_found" });  // as an admin route answers
-    expect((await sam.call("POST", "/table")).status).toBe(404);  // sam, with no admins set
+    expect((await api("POST", "/table", {})).status).toBe(401);  // signed out
+    expect((await open(dre)).status).toBe(200);  // nobody's an admin here
     for (let i = 0; i < 10; i++) expect((await open(sam)).status).toBe(200);
-    expect((await open(sam)).status).toBe(429);
+    expect((await open(sam)).status).toBe(429);  // the hour's ten
+    const anHourOn = () => env.DB.prepare("UPDATE limits SET window_start = window_start - 3601 WHERE key = ?").bind("table:sam").run();
+    await anHourOn();
+    for (let i = 0; i < 10; i++) expect((await open(sam)).status).toBe(200);
+    await anHourOn();
+    const day = await open(sam);
+    expect([day.status, day.body.error]).toEqual([429, "slow_down"]);  // the day's twenty, a new hour or not
+    expect((await open(dre)).status).toBe(200);  // one person's ceiling, not everyone's
   });
 
   it("is reached through duecrew.com: the page with a policy that lets its socket out, and the socket through the API's binding", async () => {
     const siteEnv = {
       ASSETS: { fetch: async (req: Request) => new Response(new URL(req.url).pathname === "/table" ? "<main id=app></main>" : "static", { headers: { "content-type": "text/html" } }) },
-      API: { fetch: (req: Request) => worker.fetch(req, { ...env, EMAIL: undefined, ...ADMIN } as any) },
+      API: { fetch: (req: Request) => worker.fetch(req, { ...env, EMAIL: undefined } as any) },
     };
     const via = async (path: string, headers: Record<string, string> = {}) => {
       const ctx = createExecutionContext();
@@ -349,12 +355,8 @@ describe("game night: a table", () => {
       return res;
     };
     const sam = await person("sam"), dre = await person("dre");
-    // while Sam tests it, /table is an admin's alone; a join link is anyone's
-    const signedOut = await via("/table");
-    expect([signedOut.status, signedOut.headers.get("location")]).toEqual([302, "/sign-in?next=/table"]);
-    const notAdmin = await via("/table", { Cookie: `dc_session=${dre.token}` });
-    expect([notAdmin.status, notAdmin.headers.get("location")]).toEqual([302, "/home"]);
-    for (const [path, who] of [["/table", sam.token], ["/table/", sam.token], ["/t/MKQZ", ""], ["/t/mkqz/", ""], ["/t/MKQZ", dre.token]]) {
+    // /table and a join link are anyone's, signed in or not (3.9.5's release; nobody's an admin here)
+    for (const [path, who] of [["/table", ""], ["/table", sam.token], ["/table/", dre.token], ["/t/MKQZ", ""], ["/t/mkqz/", ""], ["/t/MKQZ", dre.token]]) {
       const res = await via(path, who ? { Cookie: `dc_session=${who}` } : {});
       expect(res.status).toBe(200);
       expect(await res.text()).toContain("<main id=app>");

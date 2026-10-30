@@ -17,11 +17,11 @@ const PLAN_PNG = /^\/p\/([A-Za-z0-9]{8})\.png$/;
 const INVITE_PAGE = /^\/i\/([A-Za-z0-9]{6}|[A-Za-z0-9]{10})\/?$/;
 const INVITE_PNG = /^\/i\/([A-Za-z0-9]{6}|[A-Za-z0-9]{10})\.png$/;
 // 3.9.5, game night: the table page and its join links (duecrew.com/t/MKQZ).
-// While Sam tests it, /table is the admins' alone (worker/src/table.ts's
-// ADMINS_ONLY: set both false when it goes wider); a join link is anyone's,
-// and only reaches a table an admin opened, through its door.
+// Anyone's since 3.9.5's release (Pip Party, Beta); true makes /table the
+// admins' alone again, with worker/src/table.ts's ADMINS_ONLY. A join link is
+// anyone's either way, and only reaches a table through its door.
 const TABLE = /^\/(table|t\/[A-Za-z]{4})\/?$/;
-const TABLE_ADMINS_ONLY = true;
+const TABLE_ADMINS_ONLY = false;
 const TABLE_CSP = [
   "default-src 'self'", "img-src 'self' data:", "style-src 'self' 'unsafe-inline'", "script-src 'self'",
   "connect-src 'self' wss://duecrew.com wss://www.duecrew.com", "base-uri 'none'", "form-action 'none'", "frame-ancestors 'none'",

@@ -694,20 +694,16 @@ def main(out):
                 "Show on the Decks screen", "Send feedback…"]
         if items != want:
             raise RuntimeError(f"tools menu: {items}")
-        # 3.9.5: Pip Party… shows for its testers alone, as the menu opens
+        # 3.9.5: Pip Party… shows for anyone signed in (since its release), as the menu opens
         acts = {a.text(): a for a in subs[0].actions()}
-        subs[0].aboutToShow.emit()
-        if acts["Pip Party…"].isVisible():
-            raise RuntimeError("tools menu: Pip Party… shows for someone who isn't a tester")
-        # ...and does show for one (signed_in and user_id are the client's properties)
         from due_crew import gamenight_flow as GF
         was = GF.client
         try:
-            for uid, want_shown in ((GF.TESTERS[0], True), ("someone-else", False)):
-                GF.client = lambda uid=uid: types.SimpleNamespace(signed_in=True, user_id=uid)
+            for signed_in in (True, False):  # signed_in and user_id are the client's properties
+                GF.client = lambda signed_in=signed_in: types.SimpleNamespace(signed_in=signed_in, user_id="someone")
                 subs[0].aboutToShow.emit()
-                if acts["Pip Party…"].isVisible() != want_shown:
-                    raise RuntimeError(f"tools menu: Pip Party… for {uid}: shown {not want_shown}")
+                if acts["Pip Party…"].isVisible() != signed_in:
+                    raise RuntimeError(f"tools menu: Pip Party… signed {'in' if signed_in else 'out'}: shown {not signed_in}")
         finally:
             GF.client = was
         # 3.9.3: Plans ▸, everything about plans, the plan windows among it

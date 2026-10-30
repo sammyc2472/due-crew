@@ -839,10 +839,10 @@ const Links = {
   botDelay: () => 2500 + int(2500),
 };
 
-// While we're testing, before game night goes wider: any game starts with
-// one player. Each game's own min stays on its tile and in the lobby's word;
-// set FEW to Infinity then, and every game needs its min again.
-const FEW = 1;
+// Each game starts at its own min (on its tile, and the lobby's word). While
+// testing, FEW = 1 starts any game with one player; Infinity since 3.9.5's
+// release (Pip Party, Beta).
+const FEW = Infinity;
 const need = (g) => Math.min(g.min, FEW);
 // what each game needs from tonight's pack (gamenight.NEEDS, the twin: the suite checks)
 const NEEDS = { trivia: ["qs", 10], rounds: ["blacks", 1], links: ["words", 25], imposter: ["twins", 1], draw: ["prompts", 1], between: ["prompts", 1] };

@@ -15,8 +15,9 @@ each question marked with its pick for the vote), opens a table on the API
 phones is the games' business (gamenight.py). Kept picks are this
 profile's, user_files/<profile>/game_night.json; nothing about them is sent.
 
-While Sam tests it, the tab shows for TESTERS alone, and the server opens
-a table only for an admin (worker/src/table.ts's ADMINS_ONLY)."""
+Since 3.9.5's release it's everyone's who's signed in (Beta: its tab says
+so). TESTERS, a tuple of uids, makes the tab theirs alone again, with the
+server's ADMINS_ONLY (worker/src/table.ts)."""
 
 import functools
 import json
@@ -34,9 +35,9 @@ from . import app
 from . import gamenight as G
 from .app import _bg, _profile_files, cfg, client, save_cfg
 
-# the accounts the tab shows for while Sam tests it (wrangler.toml's ADMINS);
-# None when it goes wider
-TESTERS = ("FjrvFwUg6HNN3hy1YUmMp7ClR4v1",)
+# None: the tab is everyone's signed in (3.9.5's release); a tuple of uids
+# (wrangler.toml's ADMINS) makes it theirs alone, as while Sam tested it
+TESTERS = None
 KEPT_MAX = 20
 SHOW_MAX = 12      # a level's tiles on the map; the rest are a find away
 IDS_MIN = 10       # question-number tags at a level, folded into one tile

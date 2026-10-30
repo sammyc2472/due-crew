@@ -1748,7 +1748,7 @@ def _tools_menu():
     for item in (("Study what’s next", due_flow.study_today), None,
                  ("Friends…", open_friends),
                  ("Squads…", open_squads),
-                 ("Pip Party…", open_game_night),  # 3.9.5: the You bubble on it; shown for its testers alone, for now
+                 ("Pip Party…", open_game_night),  # 3.9.5: the You bubble on it; shown when it is (gamenight_flow.shown)
                  "plans", None,  # 3.9.3: Plans ▸, the plan windows among its entries
                  ("Settings…", open_settings),
                  ("Pip’s closet…", lambda: open_closet()),
