@@ -20,13 +20,16 @@ export async function sendCode(env: Env, email: string, code: string): Promise<v
   await sendMail(env, email, "Your Due Crew code", text);
 }
 
-/** One plain-text message, from MAIL_FROM. Without a way to send, nothing goes. */
-export async function sendMail(env: Env, to: string, subject: string, text: string): Promise<void> {
+/** One plain-text message, from MAIL_FROM's address (under `name` when
+ *  given), answered to `replyTo` when given. Without a way to send, nothing goes. */
+export async function sendMail(env: Env, to: string, subject: string, text: string,
+  opts: { name?: string; replyTo?: string } = {}): Promise<void> {
+  // the address alone: "codes@duecrew.com" out of "Due Crew <codes@duecrew.com>"
+  const addr = /<([^>]+)>/.exec(env.MAIL_FROM)?.[1] ?? env.MAIL_FROM;
   if (env.EMAIL) {
     try {
-      // the address alone: "codes@duecrew.com" out of "Due Crew <codes@duecrew.com>"
-      const from = /<([^>]+)>/.exec(env.MAIL_FROM)?.[1] ?? env.MAIL_FROM;
-      await env.EMAIL.send({ to, from, subject, text });
+      await env.EMAIL.send({ to, from: opts.name ? { name: opts.name, email: addr } : addr, subject, text,
+        ...(opts.replyTo ? { replyTo: opts.replyTo } : {}) });
     } catch {
       throw new HttpError(502, "mail_failed");
     }
@@ -36,7 +39,8 @@ export async function sendMail(env: Env, to: string, subject: string, text: stri
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },
-    body: JSON.stringify({ from: env.MAIL_FROM, to: [to], subject, text }),
+    body: JSON.stringify({ from: opts.name ? `${opts.name} <${addr}>` : env.MAIL_FROM, to: [to], subject, text,
+      ...(opts.replyTo ? { reply_to: opts.replyTo } : {}) }),
     signal: AbortSignal.timeout(10000),  // a slow mail service answers "try again", not a hung sign-in
   }).catch(() => { throw new HttpError(502, "mail_failed"); });
   if (!res.ok) throw new HttpError(502, "mail_failed");

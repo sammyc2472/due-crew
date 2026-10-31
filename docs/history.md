@@ -4025,3 +4025,11 @@ every release that changes how something works.
   (`_you`'s `party_on`). Tools › Due Crew › Pip Party… shows it again,
   open on it, as a link to a hidden tab does; so does Reset board.
   `test_pip_party_can_be_hidden_v395`. Add-on only; in the AnkiWeb build.
+- 3.9.5, a feedback reply is answered to Sam's mailbox (Sam: "send and
+  receive from sam@duecrew.com and just the send from codes"): sam@duecrew.com
+  is an iCloud+ mailbox (docs/cloudflare-setup.md §3, the addresses); the
+  app still sends from codes@duecrew.com. A feedback reply goes out as
+  "Sam from Due Crew" with Reply-To `FEEDBACK_REPLY_TO` (wrangler.toml's
+  vars, sam@duecrew.com), by the Email Service binding or Resend
+  (`mail.sendMail`'s `name` and `replyTo`); a sign-in code has neither.
+  Worker only. `feedback.test.ts`.

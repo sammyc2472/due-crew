@@ -69,7 +69,8 @@ export async function remove(s: Session, env: Env, [id]: string[]): Promise<Resp
 }
 
 /** POST /admin/feedback/{id}/reply {text}: mailed from Due Crew to the
- *  sender, with what they wrote quoted; marks it replied and done. */
+ *  sender, with what they wrote quoted, as "Sam from Due Crew"; an answer
+ *  goes to FEEDBACK_REPLY_TO (Sam's own mailbox). Marks it replied and done. */
 export async function reply(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
   adminOnly(env, s);
   const body = await readJson(req, 16 * 1024);
@@ -82,7 +83,8 @@ export async function reply(req: Request, s: Session, env: Env, [id]: string[]):
   if (!f) throw new HttpError(404, "not_found");
   const quoted = f.text.split("\n").map((l) => `> ${l}`).join("\n");
   await sendMail(env, f.email, "Sam from Due Crew, about your feedback",
-    `${text}\n\nYou wrote:\n${quoted}\n\n— Sam, Due Crew (duecrew.com)\n`);
+    `${text}\n\nYou wrote:\n${quoted}\n\n— Sam, Due Crew (duecrew.com)\n`,
+    { name: "Sam from Due Crew", replyTo: env.FEEDBACK_REPLY_TO || undefined });
   await env.DB.prepare("UPDATE feedback SET replied = 1, done = 1 WHERE id = ?").bind(id).run();
   return json({ ok: true });
 }

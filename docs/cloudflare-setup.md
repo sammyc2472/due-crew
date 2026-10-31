@@ -46,6 +46,15 @@ month included):
 3. The `send_email` binding goes in `wrangler.toml` (both environments),
    allowed to send only from `codes@duecrew.com`; then deploy.
 
+**The addresses** (Oct 2026): the app sends from `codes@duecrew.com`
+(Email Service, its records on `cf-bounce.duecrew.com`, locked). Sam's
+mailbox is `sam@duecrew.com` on iCloud+ Custom Email Domain (the root's MX,
+SPF `include:icloud.com`, DKIM `sig1._domainkey`, added through iCloud's
+one-time Cloudflare authorization), with `codes@duecrew.com` as a second
+iCloud address so an answer to an app mail lands too; a feedback reply's
+Reply-To is `sam@duecrew.com` (`FEEDBACK_REPLY_TO`). `_dmarc` is
+`p=reject`. Email Routing can't run beside iCloud (both want the root MX).
+
 **Resend** instead: make an account, add `duecrew.com`, add the DNS records
 it lists in Cloudflare DNS, add a DMARC record (`TXT _dmarc`,
 `v=DMARC1; p=none`), and `npx wrangler secret put RESEND_API_KEY` for each
@@ -104,8 +113,8 @@ attach a custom domain over one.
 - Security → Bots: leave **Bot Fight Mode off**. It challenges requests
   that don't come from a browser, and the add-on's requests don't.
 - SSL/TLS: Full (strict), and Always Use HTTPS on.
-- Optional: Email Routing, for an address like `hello@duecrew.com` that
-  forwards to you, and for DMARC reports.
+- Mail to duecrew.com goes to iCloud+ (§3, the addresses), so Email
+  Routing stays off.
 - The free Workers plan covers a crew of this size: 100,000 requests a
   day, and D1's free tier (5 million reads, 100,000 writes a day). The $5
   paid plan raises all of it; move when the dashboard says you're near.

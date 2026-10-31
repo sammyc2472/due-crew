@@ -25,12 +25,12 @@ export async function api(
 
 /** Catches the mail Resend would send; returns what was sent. */
 export function mailbox() {
-  const sent: { to: string; subject: string; text: string; auth: string }[] = [];
+  const sent: { to: string; subject: string; text: string; auth: string; from: string; replyTo?: string }[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input: any, init?: any) => {
     const url = typeof input === "string" ? input : input.url;
     if (!url.startsWith("https://api.resend.com/")) throw new Error(`unexpected fetch ${url}`);
     const b = JSON.parse(init.body);
-    sent.push({ to: b.to[0], subject: b.subject, text: b.text, auth: init.headers.authorization });
+    sent.push({ to: b.to[0], subject: b.subject, text: b.text, auth: init.headers.authorization, from: b.from, replyTo: b.reply_to });
     return new Response(JSON.stringify({ id: "x" }), { status: 200 });
   });
   return {

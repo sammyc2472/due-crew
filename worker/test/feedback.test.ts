@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { api, db, person } from "./helpers";
+import { api, db, mailbox, person } from "./helpers";
 
 // 3.6.5, P6: Send feedback, to the admin's page; replies by mail from Due Crew.
 
@@ -42,21 +42,38 @@ describe("feedback (3.6.5, P6)", () => {
     expect((await admin("GET", "/admin/feedback?state=all")).body.feedback).toHaveLength(1);
   });
 
-  it("reply: mailed from Due Crew to the sender with what they wrote quoted; marked replied and done", async () => {
+  it("reply: mailed from Due Crew to the sender with what they wrote quoted, an answer to Sam's mailbox; marked replied and done", async () => {
     const sam = await person("sam", "Sam");
     const maya = await person("maya", "Maya");
     await maya.call("POST", "/feedback", { text: "Bingo counted wrong\nfor me" });
     const sent: any[] = [];
     const EMAIL = { send: async (m: any) => { sent.push(m); } };
     const id = (await api("GET", "/admin/feedback", { token: sam.token, env })).body.feedback[0].id;
-    const r = await api("POST", `/admin/feedback/${id}/reply`, { token: sam.token, env: { ...env, EMAIL }, body: { text: "Thanks! Fixed in 3.6.6." } });
+    const to = { ...env, EMAIL, FEEDBACK_REPLY_TO: "sam@duecrew.com" };
+    const r = await api("POST", `/admin/feedback/${id}/reply`, { token: sam.token, env: to, body: { text: "Thanks! Fixed in 3.6.6." } });
     expect(r.status).toBe(200);
     expect(sent).toHaveLength(1);
-    expect(sent[0]).toMatchObject({ to: "maya@example.com", subject: "Sam from Due Crew, about your feedback" });
+    expect(sent[0]).toMatchObject({ to: "maya@example.com", subject: "Sam from Due Crew, about your feedback",
+      from: { name: "Sam from Due Crew", email: "codes@duecrew.com" }, replyTo: "sam@duecrew.com" });
     expect(sent[0].text).toContain("Thanks! Fixed in 3.6.6.");
     expect(sent[0].text).toContain("> Bingo counted wrong\n> for me");
     expect(await db().prepare("SELECT replied, done FROM feedback").first<any>()).toEqual({ replied: 1, done: 1 });
     expect((await api("POST", `/admin/feedback/${id}/reply`, { token: maya.token, env: { ...env, EMAIL }, body: { text: "x" } })).status).toBe(404);
+  });
+
+  it("reply by Resend: the same name and Reply-To; unset, no Reply-To; a sign-in code has neither", async () => {
+    const sam = await person("sam", "Sam");
+    const maya = await person("maya", "Maya");
+    await maya.call("POST", "/feedback", { text: "hi" });
+    const id = (await api("GET", "/admin/feedback", { token: sam.token, env })).body.feedback[0].id;
+    const box = mailbox();
+    expect((await api("POST", `/admin/feedback/${id}/reply`, { token: sam.token, env: { ...env, FEEDBACK_REPLY_TO: "sam@duecrew.com" }, body: { text: "Thanks" } })).status).toBe(200);
+    expect(box.sent[0]).toMatchObject({ to: "maya@example.com", from: "Sam from Due Crew <codes@duecrew.com>", replyTo: "sam@duecrew.com" });
+    expect((await api("POST", `/admin/feedback/${id}/reply`, { token: sam.token, env: { ...env, FEEDBACK_REPLY_TO: "" }, body: { text: "Again" } })).status).toBe(200);
+    expect(box.sent[1].replyTo).toBeUndefined();
+    expect((await api("POST", "/auth/code", { body: { email: "dre@example.com" } })).status).toBe(200);
+    expect(box.sent[2]).toMatchObject({ from: "Due Crew <codes@duecrew.com>" });
+    expect(box.sent[2].replyTo).toBeUndefined();
   });
 
   it("deleting an account deletes its feedback", async () => {
