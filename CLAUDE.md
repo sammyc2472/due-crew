@@ -1,6 +1,6 @@
 # Due Crew — project context
 
-Consent-based friends leaderboard add-on for Anki. Sam Caplan is the sole
+Consent-based friends leaderboard add-on for Anki. Sam is the sole
 maintainer. The repo is the source of truth; there is no build step for the
 add-on.
 
@@ -69,7 +69,7 @@ add-on.
   nothing new on the server. Its tests: `tests/test_planner.py`,
   `tests/test_plan_ops.py`.
 - `poc/course_mac/` — Course on a Mac, a separate add-on proof of concept
-  (Sam's, on his Mac; not part of Due Crew and never talks to its server): a
+  (Sam's; not part of Due Crew and never talks to its server): a
   block's calendar read, each lecture's cards found by Apple's on-device model
   (a Swift helper built on the Mac, or the `fm` command) or plain rules, ticked
   and opened; Copy as plan text is its one bridge to the builder. Its own

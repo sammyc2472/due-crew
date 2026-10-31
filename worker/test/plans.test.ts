@@ -151,7 +151,7 @@ describe("plans: following", () => {
 
   it("a squad plan: only members follow it, and members are offered it", async () => {
     const { dre, plan } = await authored();
-    const sq = (await dre.call("POST", "/squads", { name: "busm" })).body;
+    const sq = (await dre.call("POST", "/squads", { name: "orca" })).body;
     const maya = await person("maya");
     const zed = await person("zed");
     await maya.call("POST", `/squads/${sq.id}/join`, { code: sq.code });
@@ -434,7 +434,7 @@ describe("limits the audit asked for", () => {
 
   it("3.9.5 (the audit's S2): out of a squad, out of its plan's counts at once, and a sync no longer writes them", async () => {
     const { dre, plan } = await authored();
-    const sq = (await dre.call("POST", "/squads", { name: "busm" })).body;
+    const sq = (await dre.call("POST", "/squads", { name: "orca" })).body;
     await dre.call("PUT", `/plans/${plan.id}`, { version: 2, audience: "squad", squad: sq.id });
     const crew = [await person("maya"), await person("kai"), await person("lee")];
     const prog = { [plan.id]: { hf: [48, 48, 48] } };
@@ -462,7 +462,7 @@ describe("limits the audit asked for", () => {
 
   it("a squad plan closes to someone who leaves the squad, follow or not", async () => {
     const { dre, plan } = await authored();
-    const sq = (await dre.call("POST", "/squads", { name: "busm" })).body;
+    const sq = (await dre.call("POST", "/squads", { name: "orca" })).body;
     const maya = await person("maya");
     await maya.call("POST", `/squads/${sq.id}/join`, { code: sq.code });
     await dre.call("PUT", `/plans/${plan.id}`, { version: 2, audience: "squad", squad: sq.id });

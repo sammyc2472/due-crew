@@ -86,7 +86,7 @@ describe("the draw", () => {
 
   it("a card is drawn once and kept: an edit shows from the next draw", async () => {
     const sam = await person("sam");
-    const sq = (await sam.call("POST", "/squads", { name: "busm" })).body;
+    const sq = (await sam.call("POST", "/squads", { name: "orca" })).body;
     const wk = thisWeek();
     const first = (await sam.call("GET", `/squads/${sq.id}?wk=${wk}`)).body.bingo;
     expect(first.wk).toBe(wk);
@@ -98,7 +98,7 @@ describe("the draw", () => {
 
   it("the site gets where the squad stands (the same evaluate), never who stamped what", async () => {
     const sam = await person("sam");
-    const sq = (await sam.call("POST", "/squads", { name: "busm" })).body;
+    const sq = (await sam.call("POST", "/squads", { name: "orca" })).body;
     const wk = thisWeek();
     const n = Number(wk.replace("-W", ""));
     await sam.call("PUT", `/squads/${sq.id}/row`, { day: new Date().toISOString().slice(0, 10), reviews: 5, play: { v: 1, wk: n, s: 1 } });
@@ -117,7 +117,7 @@ describe("the board and my row", () => {
     const sam = await person("sam");
     const wk = thisWeek();
     expect((await sam.call("GET", `/board?decks=1&wk=${wk}`)).body.bingo).toBeUndefined();
-    await sam.call("POST", "/squads", { name: "busm" });
+    await sam.call("POST", "/squads", { name: "orca" });
     expect((await sam.call("GET", `/board?decks=1&wk=${wk}`)).body.bingo.wk).toBe(wk);
     expect((await sam.call("GET", `/board?wk=${wk}`)).body.bingo).toBeUndefined();          // not every refresh
     expect((await sam.call("GET", `/board?decks=1&keep=1&wk=${wk}`)).body.bingo).toBeUndefined();  // not the site's home
@@ -125,7 +125,7 @@ describe("the board and my row", () => {
 
   it("play rides the squad row: kept, compared before writing, cleared when absent, checked", async () => {
     const sam = await person("sam");
-    const sq = (await sam.call("POST", "/squads", { name: "busm" })).body;
+    const sq = (await sam.call("POST", "/squads", { name: "orca" })).body;
     const play = { wk: 202640, s: 5, d: 0b0010011, ch: 2 };
     const row = { name: "Sam", day: "2026-09-30", reviews: 40, play };
     expect((await sam.call("POST", "/sync", { squads: { row, ids: [sq.id] } })).body.wrote.squads).toBe(true);
@@ -232,7 +232,7 @@ describe("the admin's pool", () => {
   it("the daily counts: per square, by people and by squads, and nobody named", async () => {
     const sam = await person("sam");
     const dre = await person("dre");
-    const sq = (await sam.call("POST", "/squads", { name: "busm" })).body;
+    const sq = (await sam.call("POST", "/squads", { name: "orca" })).body;
     await dre.call("POST", `/squads/${sq.id}/join`, { code: sq.code });
     const now = new Date();
     const wk = B.isoWeek(now);

@@ -20,7 +20,7 @@ Raw keys, for reference:
 | `emoji` | one emoji | Shown in front of your name; set from your own card |
 | `sort` also takes `week` | | The squad board's 7-days column; the crew board reads it as reviews |
 | `squads`, `squad` | list, id | Squads you've joined (with their invite codes) and the one shown; managed from the board |
-| `crew_label` | text | The name your crew goes by in shares ("busm today") |
+| `crew_label` | text | The name your crew goes by in shares ("lab group today") |
 | `paused` | true/false | Crew sees "on a break" instead of numbers |
 | `exam_date` | ISO date or empty | 📖 by your name for the two weeks before; empty = off |
 | `shared_decks` | deck ids | Set from Tools → Due Crew → Shared decks |

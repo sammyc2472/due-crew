@@ -818,8 +818,8 @@ def _know(col, deck, cutoff):
     not due in them, its last review; one never due yet, None (3.9.2's
     audit: its last answer is the pass that graduated it, so the newest
     cards read best known; the map says "too soon").
-    3.9.2 (Sam's deck): FSRS's recall today read 93 to 96% on every tile
-    while he passed 77% of his reviews (it says how lately a card was seen
+    3.9.2 (a real deck): FSRS's recall today read 93 to 96% on every tile
+    while 77% of its reviews passed (it says how lately a card was seen
     more than what's known), and the last answer read a relearning step
     after a miss as right. The last review alone saturates too: a missed
     card comes back the next day and passes; the weeks' share keeps it."""

@@ -425,7 +425,7 @@ def test_shares_v21():
     check("share: today without retention",
           share.my_today("2026-09-09", 3, 60000, None, 1).split("\n")[1]
           == "📚 3 reviews · ⏱ 1m · 🔥 1")
-    crew = share.crew_week("busm", labels, [
+    crew = share.crew_week("orca", labels, [
         ("sammy", flags, ""),
         ("igk <b>\nx", [True] * 7, ""),
         ("Ameya", [True, False, True, True, False, True, True], "Tue"),
@@ -433,13 +433,13 @@ def test_shares_v21():
     ], 21430, 148320000)
     rows = crew.split("\n")
     check("share: crew week header, order (most days first), absence silent",
-          rows[0] == "busm · Sep 1–7" and len(rows) == 6
+          rows[0] == "orca · Sep 1–7" and len(rows) == 6
           and rows[1].endswith(" igk <b> x") and rows[2].endswith(" sammy")
           and rows[3] == "🟩⬜🟩🟩⬜🟩🟩 Ameya · as of Tue", crew)
     check("share: crew totals line",
           rows[4] == "21,430 reviews · 41h 12m together")
     check("share: nobody studied -> None",
-          share.crew_week("busm", labels, [("a", [False] * 7, "")], 0, 0) is None)
+          share.crew_week("orca", labels, [("a", [False] * 7, "")], 0, 0) is None)
     check("share: month-crossing range",
           share.date_range(["2026-08-30", "2026-09-05"]) == "Aug 30 – Sep 5")
     js = board.profile_overlay_js({"name": "Sammy", "you": True, "cells": None})
@@ -613,7 +613,7 @@ def test_away_flag():
     mine = share.my_week(week, [True, True, "away", "away", True, False, True], 900, 600000, 3)
     check("share: my week shows planes and counts studied days only",
           mine.split("\n")[1] == "🟩🟩✈️✈️🟩⬜🟩 4 of 7 days", mine)
-    crew = share.crew_week("busm", week, [
+    crew = share.crew_week("orca", week, [
         ("Ameya", ["away"] * 7, ""), ("igk", [True, "away", "away", True, True, True, True], "")],
         100, 60000)
     check("share: away-only week gets no row; planes in rows",
@@ -621,10 +621,10 @@ def test_away_flag():
 
 
 def _squad_fixture():
-    """Sam founds busm; Dre, Eve, and Zed exist and aren't members yet."""
+    """Sam founds orca; Dre, Eve, and Zed exist and aren't members yet."""
     store = world({"sam": "Sammy", "dre": "Dre", "eve": "Eve", "zed": "Zed"})
     sam = new_client(store, "sam", "Sammy")
-    squad = sam.create_squad("  busm  <b> ")
+    squad = sam.create_squad("  orca  <b> ")
     return store, sam, squad
 
 
@@ -647,7 +647,7 @@ def test_squads():
     store, sam, squad = _squad_fixture()
     sid = squad["id"]
     check("squad: create makes the squad and the founder's row",
-          bool(squad) and squad["name"] == "busm <b>" and sid in store.squads
+          bool(squad) and squad["name"] == "orca <b>" and sid in store.squads
           and (sid, "sam") in store.members, str(squad))
     check("squad: code is 8 safe chars; any spelling of it derives the id",
           len(squad["code"]) == 8
@@ -656,7 +656,7 @@ def test_squads():
     dre = new_client(store, "dre", "Dre")
     info, status = dre.peek_squad(squad["code"])
     check("squad: peek shows name, founder, open",
-          bool(info) and info["name"] == "busm <b>" and info["founder"] == "sam"
+          bool(info) and info["name"] == "orca <b>" and info["founder"] == "sam"
           and info["open"], str((info, status)))
     check("squad: unknown code is a 404, not an error", dre.peek_squad("ZZZZZZZZ") == (None, 404))
     check("squad: join while open", dre.join_squad(sid, squad["code"]) == 200)
@@ -740,9 +740,9 @@ def test_squad_view_html():
         {"user_id": "u4", "name": "Priya", "day": "2026-09-01", "reviews": 301,
          "time_ms": 2400000, "retention": 94.2, "streak": 2, "knocked_me": True},
     ]
-    view = {"state": "ok", "squads": [{"id": "abc", "name": "busm"},
+    view = {"state": "ok", "squads": [{"id": "abc", "name": "orca"},
                                       {"id": "def", "name": "MS2 <x>"}],
-            "current": "abc", "name": "busm", "open": False, "founder_me": True,
+            "current": "abc", "name": "orca", "open": False, "founder_me": True,
             "rows": rows, "day": "2026-09-01", "yesterday": "2026-08-31",
             "people": 5, "studying": 4, "reviews": 2713}
     html = board._squads_html(view, {})
@@ -752,7 +752,7 @@ def test_squad_view_html():
           "StepQueen &lt;s&gt;" in html and "ecard:u1" in html
           and "&middot; waiting" in html and "added you" in html and "&middot; crew" not in html)
     check("squad view: retention column and headline",
-          "92.1%" in html and "5 in busm &middot; locked &middot; 4 studying today "
+          "92.1%" in html and "5 in orca &middot; locked &middot; 4 studying today "
           "&middot; 2,713 reviews together" in html, html)
     check("squad view: yesterday's row is dim, unranked, and last",
           html.index("Marcus") > html.index("Priya") and "&middot; yesterday" in html
@@ -771,25 +771,25 @@ def test_squad_view_html():
     none = board._squads_html({"state": "none", "squads": [], "current": ""}, {})
     check("squad view: no squads yet offers join or create",
           "squadadd" in none and "<table>" not in none)
-    gone = board._squads_html({"state": "gone", "squads": [{"id": "abc", "name": "busm"}],
-                               "current": "abc", "name": "busm"}, {})
+    gone = board._squads_html({"state": "gone", "squads": [{"id": "abc", "name": "orca"}],
+                               "current": "abc", "name": "orca"}, {})
     check("squad view: removed -> Remove link", "squaddrop:abc" in gone)
     page = board.render({"entries": [], "labels": ["2026-09-01"], "tomorrow": "",
                          "pending": []}, {"period": "today"}, 0,
-                        knocks=[{"uid": "u4", "name": "Priya <p>", "squad": "busm"}])
+                        knocks=[{"uid": "u4", "name": "Priya <p>", "squad": "orca"}])
     check("knock banner: escaped name, Add back and Not now wired",
-          "Priya &lt;p&gt;" in page and "added you from busm" in page
+          "Priya &lt;p&gt;" in page and "added you from orca" in page
           and "addback:u4" in page and "knockmute:u4" in page)
     js = board.stranger_card_js({
         "uid": "u4", "name": "Priya <p>", "reviews": 301, "time_ms": 2400000,
-        "retention": 94.2, "streak": 2, "rank": 4, "squad": "busm", "today": True,
+        "retention": 94.2, "streak": 2, "rank": 4, "squad": "orca", "today": True,
         "pending": False, "knocked_me": True, "founder_me": True})
     check("squad card: retention, rank, Add back, founder Remove",
-          "94.2% retention" in js and "#4 in busm today" in js
+          "94.2% retention" in js and "#4 in orca today" in js
           and "duecrew:addback:u4" in js and "duecrew:squadkick:u4" in js)
     plain = board.stranger_card_js({
         "uid": "u1", "name": "Q", "reviews": 1, "time_ms": 1, "retention": None,
-        "streak": 1, "rank": None, "squad": "busm", "today": False,
+        "streak": 1, "rank": None, "squad": "orca", "today": False,
         "pending": False, "knocked_me": False, "founder_me": False})
     check("squad card: plain member gets Add, no Remove, no retention line",
           "duecrew:knock:u1" in plain and "squadkick" not in plain
@@ -885,7 +885,7 @@ def test_v25_edges_emoji_week():
           [e["user_id"] for e in fetch_as(store, eve, make_user_col([TODAY]))[0]["entries"]] == ["eve"])
 
     # ---- squads: week + emoji on rows, block, handoff ----
-    squad = sam.create_squad("busm")
+    squad = sam.create_squad("orca")
     sid = squad["id"]
     dre = new_client(store, "dre", "Dre")
     dre.join_squad(sid, squad["code"])
@@ -918,8 +918,8 @@ def test_v25_edges_emoji_week():
              "time_ms": 4320000, "retention": 91.6, "streak": 17, "week": 6, "you": True},
             {"user_id": "u3", "name": "Priya", "emoji": "", "day": labels[0], "reviews": 301,
              "time_ms": 2400000, "retention": 94.2, "streak": 2, "week": None}]
-    view = {"state": "ok", "squads": [{"id": "abc", "name": "busm"}], "current": "abc",
-            "name": "busm", "open": True, "founder_me": True, "rows": rows, "day": labels[0],
+    view = {"state": "ok", "squads": [{"id": "abc", "name": "orca"}], "current": "abc",
+            "name": "orca", "open": True, "founder_me": True, "rows": rows, "day": labels[0],
             "yesterday": labels[1], "people": 3, "studying": 3, "reviews": 2225}
     html = board._squads_html(view, {"sort": "week"})
     plain = board._squads_html(view, {"sort": "week", "sev": False})
@@ -947,18 +947,18 @@ def test_v25_edges_emoji_week():
           esc("🦊 Sammy") in js and "duecrew:emoji" in js and "Change emoji" in js)
     card = board.stranger_card_js({"uid": "u1", "name": "igk", "emoji": "🐢", "reviews": 1,
                                    "time_ms": 1, "retention": None, "streak": 1, "rank": 1,
-                                   "squad": "busm", "today": True, "pending": False,
+                                   "squad": "orca", "today": True, "pending": False,
                                    "knocked_me": False, "founder_me": True})
     check("squadmate card: founder sees Remove, Block, Make founder",
           "duecrew:squadkick:u1" in card and "duecrew:squadblock:u1" in card
           and "duecrew:squadfounder:u1" in card and esc("🐢 igk") in card)
-    text = share.squad_today("busm", labels[0], [("igk", "🐢", 1412), ("Sammy", "🦊", 512),
+    text = share.squad_today("orca", labels[0], [("igk", "🐢", 1412), ("Sammy", "🦊", 512),
                                                  ("Priya", "", 301), ("Zed", "", 5)], 4, 2230)
     check("squad share: headline, together line, top three with emoji",
           text.split("\n")[1] == "4 studying · 2,230 reviews together"
           and text.split("\n")[2] == "🟩 🐢 igk 1,412 · 🦊 Sammy 512 · Priya 301", text)
     week = list(reversed(labels))
-    crew_txt = share.crew_week("busm", week, [("Sammy", [True] * 7, "", "🦊"), ("igk", [True] * 7, "")], 1, 1)
+    crew_txt = share.crew_week("orca", week, [("Sammy", [True] * 7, "", "🦊"), ("igk", [True] * 7, "")], 1, 1)
     check("crew week share: emoji rows, plain rows unchanged",
           "🟩🟩🟩🟩🟩🟩🟩 🦊 Sammy" in crew_txt and "🟩🟩🟩🟩🟩🟩🟩 igk" in crew_txt)
     check("share module still has the four builders", callable(shares._crew_week_text))
@@ -1056,7 +1056,7 @@ def test_sync_reliability_v251():
     check("profile carries the client version and clock",
           store.users["sam"]["client_version"] == "3.0.0" and store.users["sam"]["tz"] == -240)
 
-    squad = cl.create_squad("busm")
+    squad = cl.create_squad("orca")
     sid = squad["id"]
     dre = new_client(store, "dre", "Dre")
     dre.join_squad(sid, squad["code"])
@@ -1591,7 +1591,7 @@ def test_code_knocks_v29():
           fc("k7q2zp") == "K7Q2ZP" and fc(" K7Q 2ZP ") == "K7Q2ZP"
           and fc("Study with me on Due Crew — Anki add-on 2035408484.\nMy friend code: K7Q2ZP") == "K7Q2ZP"
           and fc("Study with me on Due Crew · my code K7Q2ZP\n— Due Crew · Anki add-on 2035408484") == "K7Q2ZP"
-          and fc("Join busm on Due Crew · code ABCD2345") == "")
+          and fc("Join orca on Due Crew · code ABCD2345") == "")
     check("invite paste: a squad code from its invite, even from a squad named for codes",
           shapes.squad_code_from("Join code club on Due Crew · code ABCD2345\n— Due Crew") == "ABCD2345"
           and shapes.squad_code_from("abcd 2345") == "ABCD2345")
@@ -1646,7 +1646,7 @@ def test_settings_follow_account_v213():
     from due_crew.app import _state
     # pure: decks by id, else by name; junk dropped; bounds
     cfg_a = {"share_retention": False, "show_up": False, "exam_date": "2026-10-02",
-             "shared_decks": [11, 12], "squads": [{"id": "sq1", "code": "ABCD2345", "name": "busm", "founder": "x"}],
+             "shared_decks": [11, 12], "squads": [{"id": "sq1", "code": "ABCD2345", "name": "orca", "founder": "x"}],
              "status": "coffee", "accent": "rose", "sort": "time"}
     doc = account.pick(cfg_a, {11: "Big Deck", 12: "Path Book"}.get)
     check("pick: only what follows the account; decks with names; sort stays, the accent goes (3.5.0)",
@@ -2408,7 +2408,7 @@ def test_row_cap():
           "shares" not in d2 and "open Shared decks" not in d2)
     rows = [{"user_id": f"s{i}", "name": f"S{i}", "day": lb, "reviews": 500 - i, "time_ms": 1000,
              "retention": 90.0, "streak": 3, "you": i == 12} for i in range(14)]
-    view = {"state": "ok", "squads": [{"id": "x", "name": "busm"}], "current": "x", "name": "busm",
+    view = {"state": "ok", "squads": [{"id": "x", "name": "orca"}], "current": "x", "name": "orca",
             "open": True, "founder_me": False, "rows": rows, "day": lb, "yesterday": "", "people": 14,
             "studying": 14, "reviews": 1}
     sq = board.render(dict(base, entries=mk(1)), {"period": "squads"}, 0, squad_view=view)
@@ -2439,7 +2439,7 @@ def test_show_up():
     sam.push(labels, {"show_up": True})
     check("show-up: numbers already sent come off my week at the next sync",
           set(json.loads(store.weeks["sam"][0])["days"][lb]) == {"studied"})
-    sid = sam.create_squad("busm")["id"]
+    sid = sam.create_squad("orca")["id"]
     _row_sync(sam, {"name": "Sammy", "day": lb, "reviews": 500, "streak": 9}, [sid])
     _row_sync(sam, {"name": "Sammy", "week": 5, "day": lb}, [sid])
     m = store.members[(sid, "sam")]
@@ -2488,7 +2488,7 @@ def test_show_up():
           'class="sq away"' in mode and "&#9992;&#65039; back" in mode and "on a break" in mode)
     rows = [{"user_id": "a", "name": "Ann", "day": lb, "reviews": 500, "time_ms": 1000, "retention": 90.0, "streak": 3, "week": 4},
             {"user_id": "k", "name": "Kai", "day": lb, "reviews": None, "time_ms": None, "retention": None, "streak": None, "week": 5}]
-    view = {"state": "ok", "squads": [{"id": "x", "name": "busm"}], "current": "x", "name": "busm",
+    view = {"state": "ok", "squads": [{"id": "x", "name": "orca"}], "current": "x", "name": "orca",
             "open": True, "founder_me": False, "rows": rows, "day": lb, "yesterday": labels[1],
             "people": 2, "studying": 2, "reviews": 500}
     sq = board.render(base, {"period": "squads"}, 0, squad_view=view)
@@ -2499,15 +2499,15 @@ def test_show_up():
           sq_mode.count("&#10003;") == 2 and '<td class="rk">#1</td>' not in sq_mode and "showed up today" in sq_mode
           and "reviews together" not in sq_mode and sq_mode.index("Kai") < sq_mode.index("Ann"))
     card = board.stranger_card_js({"uid": "k", "name": "Kai", "reviews": None, "time_ms": None,
-                                   "retention": None, "streak": None, "rank": None, "squad": "busm",
+                                   "retention": None, "streak": None, "rank": None, "squad": "orca",
                                    "today": True, "week": 5})
     check("squadmate card for a show-up person: presence only",
           "showed up today" in card and "5/7 days this week" in card and "-day streak" not in card)
-    txt = share.crew_week("busm", labels[::-1], [("Sammy", [True, False, True], "")], None, None)
+    txt = share.crew_week("orca", labels[::-1], [("Sammy", [True, False, True], "")], None, None)
     check("share: in the mode the crew week is squares alone, no totals line",
           "reviews" not in txt and "together" not in txt and "Sammy" in txt)
     js = board.stranger_card_js({"uid": "a", "name": "Ann", "reviews": 500, "time_ms": 1000,
-                                 "retention": 90.0, "streak": 3, "rank": 1, "squad": "busm",
+                                 "retention": 90.0, "streak": 3, "rank": 1, "squad": "orca",
                                  "today": True, "week": 4, "show_up": True})
     check("squadmate card seen from the mode: their numbers stay out of sight",
           "showed up today" in js and "500" not in js and "-day streak" not in js)
@@ -2581,14 +2581,14 @@ def test_new_cards_v213():
     check("board: Week adds the days up", wk["new"] == 4 and wk["reviews"] == 15)
 
     # squad rows
-    sid = sam.create_squad("busm")["id"]
+    sid = sam.create_squad("orca")["id"]
     row = {"name": "Sammy", "day": lb, "reviews": 5, "newCards": 2}
     check("squad row: newCards lands", _row_sync(sam, row, [sid]) == (True, [])
           and store.members[(sid, "sam")]["newCards"] == 2)
     check("squad row: a negative count is refused", _row_sync(sam, dict(row, newCards=-1), [sid])[0] is False)
     drow = next(r for r in sam.fetch_squad(sid)["rows"] if r["user_id"] == "sam")
     check("squad row: read back as new_cards", drow["new_cards"] == 2)
-    view = {"state": "ok", "squads": [{"id": sid, "name": "busm"}], "current": sid, "name": "busm",
+    view = {"state": "ok", "squads": [{"id": sid, "name": "orca"}], "current": sid, "name": "orca",
             "open": True, "founder_me": True, "day": lb, "yesterday": "", "people": 1, "studying": 1,
             "reviews": 5, "rows": [dict(drow, you=True, crew=False, pending=False, knocked_me=False)]}
     sq = board.render(dict(base, entries=[]), {"period": "squads"}, 0, squad_view=view)
@@ -2998,12 +2998,12 @@ def test_settings_in_board_v341():
           reset["hidden_tabs"] == [] and reset["accent"] == "green"
           and not any(k.startswith("share_") or k in ("show_up", "paused", "exam_date") for k in reset))
     view = {"tab": "you", "signed_in": True, "name": "Sam <b>", "emoji": "🦊", "status": 'coffee "&" cards',
-            "sync": "sam@x.edu · Synced 2m ago · v3.5.0", "crew": 3, "squads": ["<i>BUSM</i>", "Block 3", "Lab"],
+            "sync": "sam@x.edu · Synced 2m ago · v3.5.0", "crew": 3, "squads": ["<i>ORCA</i>", "Block 3", "Lab"],
             "decks": ["Big Deck"]}
     you = board.settings_html(view, {"crew_label": "Crew"})
     check("settings: You, escaped; three squads read as two and 1 more",
-          'id="due-crew"' in you and "Sam &lt;b&gt;" in you and "&lt;i&gt;BUSM&lt;/i&gt;, Block 3 and 1 more" in you
-          and "coffee &quot;&amp;&quot; cards" in you and "3 in your crew" in you and "<i>BUSM" not in you
+          'id="due-crew"' in you and "Sam &lt;b&gt;" in you and "&lt;i&gt;ORCA&lt;/i&gt;, Block 3 and 1 more" in you
+          and "coffee &quot;&amp;&quot; cards" in you and "3 in your crew" in you and "<i>ORCA" not in you
           and "duecrew:setclose" in you and "Delete account" in you, you[-600:])
     bd = board.settings_html(dict(view, tab="board"), {"crew_label": 'a"><script>', "accent": "teal",
                                                          "hidden_tabs": ["decks"], "compact": True})
@@ -4288,7 +4288,7 @@ def test_plans_glue_v31():
               ahead["lines"][0][0] == "ahead" and "early" in "".join(t for t, _b in ahead["lines"][0][1]))
 
         # offers: from my squads, escaped, Look opens the follow
-        sq = new_client(store, "dre", "Dre").create_squad("busm")
+        sq = new_client(store, "dre", "Dre").create_squad("orca")
         store._join(sq["id"], "maya")
         store.add_plan("dre", "Pharm <script>", "Pharm", [], audience="squad", squad=sq["id"])
         box["cfg"]["squads"] = [dict(sq)]
@@ -4297,7 +4297,7 @@ def test_plans_glue_v31():
         html = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []},
                             {"period": "squads"}, 0, plans=view)
         check("offer: my squad's plan, as a banner with Look, escaped",
-              "offered busm a plan: Pharm &lt;script&gt;" in html and "duecrew:planlook:" in html
+              "offered orca a plan: Pharm &lt;script&gt;" in html and "duecrew:planlook:" in html
               and "<script>" not in html)
         opt = next(o for o in maya.session["plan_offers"])
         check("offer: a squad plan can't be followed from outside the squad",
@@ -6428,7 +6428,7 @@ def test_bingo_rules():
     check("evaluate: the middle row is a line; every square and the middle, all eight lines",
           lined["lines"] == 1 and lined["cells"] == [3, 4, 5] and whole["lines"] == 8)
     locked = B.evaluate(_bingo_card(middle={"type": "sum", "params": {"key": "ch"}, "goal": 99}), [row("a", {"s": 0b11000})])
-    text = B.share_text(_bingo_card(), locked, "busm <b>")
+    text = B.share_text(_bingo_card(), locked, "orca <b>")
     check("share: the grid in emoji, the middle locked until it's unlocked, no names",
           text.splitlines()[1:4] == ["⬜⬜⬜", "🟩🔒🟩", "⬜⬜⬜"] and "a" not in text.splitlines()[1] and "2 of 9" in text
           and B.closest(_bingo_card(middle={"type": "sum", "params": {"key": "ch"}, "goal": 99}), locked) == ["Picture day"], text)
@@ -6449,11 +6449,11 @@ def test_bingo_board():
             {"user_id": "dre", "emoji": "", "day": "2026-09-01", "joined": "2026-01-01", "play": {"wk": 202636, "s": 0b1}}]
     ev = B.evaluate(card, rows)
     bv = {"card": card, "ev": ev, "progress": [(True, "Done")] + [(False, "1 of 4 days")] * 7, "me": "sam",
-          "names": {"sam": ("Sammy", "😺"), "dre": ("Dre <x>", "")}, "squad": "busm <b>", "squad_id": "sq1",
+          "names": {"sam": ("Sammy", "😺"), "dre": ("Dre <x>", "")}, "squad": "orca <b>", "squad_id": "sq1",
           "new": True, "closest": B.closest(card, ev), "withheld": ["days"], "today": "2026-09-01"}
     full = board.bingo_html(bv, {})
     check("bingo: the card escapes the server's words and names",
-          "Early &lt;i&gt;" in full and "Picture &lt;b&gt;" in full and "busm &lt;b&gt;" in full and "Dre &lt;x&gt;" in full
+          "Early &lt;i&gt;" in full and "Picture &lt;b&gt;" in full and "orca &lt;b&gt;" in full and "Dre &lt;x&gt;" in full
           and "<i>" not in full.split("</style>")[-1].replace("<i style", "").replace("<i></i>", ""), full[-1500:])
     check("bingo: laid out left inside Anki's <center>, its buttons from the reset, [hidden] hidden",
           "#due-crew .bg-card, #due-crew.bg-full, #due-crew .bg-row, #due-crew .bg-bar, #due-crew .bg-info { text-align: left; }" in full
@@ -6474,7 +6474,7 @@ def test_bingo_board():
     later = board.bingo_card_html(dict(bv, new=False))
     check("bingo: later in the week, how far and what's closest, never who's ahead",
           "of 9" in later and "away from bingo" in later and "middle" not in later and "Sammy" not in later)
-    sv = {"state": "ok", "name": "busm", "rows": [], "people": 0, "day": "2026-09-01", "squads": [], "current": "sq1", "bingo": bv}
+    sv = {"state": "ok", "name": "orca", "rows": [], "people": 0, "day": "2026-09-01", "squads": [], "current": "sq1", "bingo": bv}
     tab = board._squads_html(sv, {})
     check("bingo: on the Squads tab, above the table", "bg-card" in tab and "bg-mini" in tab)
     check("bingo: no card yet, the full view says so and has its way back",
@@ -6559,7 +6559,7 @@ def test_bingo_end_to_end():
     from aqt.deckbrowser import DeckBrowser
     if "aqt.reviewer" not in sys.modules:
         sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
-    conf = {"period": "squads", "squads": [{"id": sid, "code": squad["code"], "name": "busm"}]}
+    conf = {"period": "squads", "squads": [{"id": sid, "code": squad["code"], "name": "orca"}]}
     copied, swaps = [], []
     saved = (dc._swap, dc.cfg, dc.save_cfg, dc._fetch_squad, dc.copy_text, dc._bingo_view, bingo_flow.seen)
     dc._swap = lambda c, focus=None: swaps.append(1)
@@ -6568,7 +6568,7 @@ def test_bingo_end_to_end():
     dc._fetch_squad = lambda force=False: None
     dc.copy_text = copied.append
     card = B.clean_card(store.bingo_cards[wk])
-    dc._bingo_view = lambda c: {"card": card, "ev": B.evaluate(card, []), "squad": "busm"}
+    dc._bingo_view = lambda c: {"card": card, "ev": B.evaluate(card, []), "squad": "orca"}
     bingo_flow.seen = lambda: None
     try:
         send = lambda m: dc._on_js(False, as_board("duecrew:" + m), DeckBrowser())
@@ -6581,7 +6581,7 @@ def test_bingo_end_to_end():
         send("period:today")
         check("bingo: Open, Copy and back reach their handlers; another tab closes the card",
               opened is True and back is False and dc._state.get("bingo_open") is False
-              and copied and copied[0].startswith("busm · squad bingo") and len(swaps) >= 4, (opened, back, copied))
+              and copied and copied[0].startswith("orca · squad bingo") and len(swaps) >= 4, (opened, back, copied))
     finally:
         dc._swap, dc.cfg, dc.save_cfg, dc._fetch_squad, dc.copy_text, dc._bingo_view, bingo_flow.seen = saved
         dc._state["bingo_open"] = False
@@ -6899,7 +6899,7 @@ def test_account_survives_a_reset_config():
     from due_crew import account, squads as SQ, app as appmod
     from due_crew.app import _state
     doc = {"at": "2026-09-28T10:00:00.000000Z",
-           "settings": {"squads": [{"id": "sq1", "code": "ABCD2345", "name": "busm", "founder": "x"}],
+           "settings": {"squads": [{"id": "sq1", "code": "ABCD2345", "name": "orca", "founder": "x"}],
                         "emoji": "🦊", "accent": "rose"}}
     box = {"cfg": {"squads": [], "emoji": "", "accent": "green"}}  # the defaults, after the reset
     saved = (account.cfg, appmod.save_cfg, account.client, appmod.swap)
@@ -6923,12 +6923,12 @@ def test_account_survives_a_reset_config():
         account.cfg, appmod.save_cfg, account.client, appmod.swap = saved
 
     saved = (SQ.cfg, SQ.save_cfg)
-    box = {"cfg": {"squads": [{"id": "sq1", "code": "ABCD2345", "name": "busm", "founder": "x"}]}}
+    box = {"cfg": {"squads": [{"id": "sq1", "code": "ABCD2345", "name": "orca", "founder": "x"}]}}
     SQ.cfg = lambda: dict(box["cfg"])
     SQ.save_cfg = lambda c: box.update(cfg=c)
     _state["squads_left"] = {"sqLeft"}
     try:
-        SQ.heal_squads([{"id": "sq1", "name": "busm", "founder": "x"}, {"id": "sq2", "name": "ms2", "founder": "y"},
+        SQ.heal_squads([{"id": "sq1", "name": "orca", "founder": "x"}, {"id": "sq2", "name": "ms2", "founder": "y"},
                         {"id": "sqLeft", "name": "old", "founder": "z"}, {"id": "sqGone", "name": "g", "founder": "z"}],
                        gone=["sqGone"])
         ids = [q["id"] for q in box["cfg"]["squads"]]
@@ -9317,7 +9317,7 @@ def test_head_row_b_v380():
     check("head row B: the old ways still draw (no picker)",
           "dc-pline" not in board._decks_body(data) and 'class="dkey"' in board._decks_body(data)
           and "<th></th><th></th>" in board._table_html(data, {}, "today"))
-    sq = {"state": "ok", "name": "<b>BUSM", "squads": [{"id": "x", "name": "<i>busm"}, {"id": "y", "name": "MS2"}],
+    sq = {"state": "ok", "name": "<b>ORCA", "squads": [{"id": "x", "name": "<i>orca"}, {"id": "y", "name": "MS2"}],
           "current": "x", "day": T0, "yesterday": "", "people": 2, "reviews": 40, "bingo": {"x": 1},
           "rows": [{"user_id": "a", "name": "A", "day": T0, "reviews": 30, "week": 5, "you": True},
                    {"user_id": "b", "name": "B", "day": T0, "reviews": 10, "week": 3}]}
@@ -9331,12 +9331,12 @@ def test_head_row_b_v380():
         board.bingo_card_html = saved
     check("head row B: a squad's names in its table's corner, escaped",
           '<th class="lt dc-corner" colspan="2">' + board._switcher(sq) + "</th>" in html
-          and "&lt;i&gt;busm" in html and "<i>busm" not in html and not html.startswith('<div class="dc-sw">'))
+          and "&lt;i&gt;orca" in html and "<i>orca" not in html and not html.startswith('<div class="dc-sw">'))
     check("head row B: the squad's headline, its week and its bingo card under the table, in that order",
-          html.index("</table>") < html.index("2 in &lt;b&gt;BUSM &middot; 2 studying today &middot; 40 reviews together")
+          html.index("</table>") < html.index("2 in &lt;b&gt;ORCA &middot; 2 studying today &middot; 40 reviews together")
           < html.index("Last 7 days") < html.index("BINGO") < html.index("squadinvite"), html[-700:])
     check("head row B: show-up mode the same, its own headline", "dc-corner" in up
-          and up.index("</table>") < up.index("2 in &lt;b&gt;BUSM &middot; 2 showed up today") and "&#128197; 7 days" in up)
+          and up.index("</table>") < up.index("2 in &lt;b&gt;ORCA &middot; 2 showed up today") and "&#128197; 7 days" in up)
     check("head row B: no table (nobody synced), the names stay on top",
           empty.startswith('<div class="dc-sw">') and "dc-corner" not in empty)
     for st in ("none", "loading", "error"):
@@ -9378,7 +9378,7 @@ def test_squad_week_v380():
     check("squad week: nothing to add", board.squad_week([], D) == (0, 0) and board.squad_week(None, D) == (0, 0)
           and board.squad_week(rows, "") == (0, 0))
     T0 = TODAY.isoformat()
-    sq = {"state": "ok", "name": "<b>BUSM", "day": T0, "yesterday": "", "people": 3,
+    sq = {"state": "ok", "name": "<b>ORCA", "day": T0, "yesterday": "", "people": 3,
           "rows": [{"user_id": "a", "name": "A", "day": T0, "reviews": 30, "week": 5, "you": True},
                    {"user_id": "b", "name": "B", "day": T0, "reviews": 10, "week": 3},
                    {"user_id": "c", "name": "C", "day": "", "week": 0}]}
@@ -9539,7 +9539,7 @@ def test_find_a_setting_v380():
     pick on another tab asks for that tab (an existing command)."""
     import html as H
     view = {"signed_in": True, "name": "Sammy Q", "emoji": "🦊", "status": "secret plans", "crew": 3,
-            "squads": ["busm <b>"], "decks": ["Private Deck"], "sync": "now", "tab": "board"}
+            "squads": ["orca <b>"], "decks": ["Private Deck"], "sync": "now", "tab": "board"}
     ix = board.settings_index(view, {})
     by = {x["l"]: x for x in ix}
     check("find: rows from all three tabs, each with where it lives",
@@ -9554,7 +9554,7 @@ def test_find_a_setting_v380():
           by["Study time"]["f"] == "set:share_time:" and by["Compact rows"]["f"] == "set:compact:")
     text = repr(ix)
     check("find: the person's name, status, squads and decks stay out of it",
-          not any(x in text for x in ("Sammy", "secret", "busm", "Private Deck")), text[:300])
+          not any(x in text for x in ("Sammy", "secret", "orca", "Private Deck")), text[:300])
     page = board.settings_html(view, {})
     got = re.search(r'<input type="search" class="st-in" placeholder="Find a setting"[^>]*data-ix="([^"]*)"', page)
     check("find: the box sits in Settings' bar with its index, which reads back the same",
@@ -14417,7 +14417,7 @@ def test_pips_where_emojis_were_v3822():
     # ---- a squadmate's card: a plain Pip ----
     fig = board.card_sev({"name": "igk"}, {})
     sq = board.stranger_card_js({"uid": "u1", "name": "igk <i>", "emoji": "🐢", "reviews": 1, "time_ms": 1, "retention": None,
-                                 "streak": 1, "rank": 1, "squad": "busm", "today": True, "pending": False,
+                                 "streak": 1, "rank": 1, "squad": "orca", "today": True, "pending": False,
                                  "knocked_me": False, "founder_me": False, "sev": fig})
     check("squadmate card: a plain Pip, in the default colour, no emoji; the name escaped",
           json.dumps(fig)[1:40] in sq and f"--sv-a: {plain[0]}" in fig and "🐢" not in sq and "\\ud83d\\udc22" not in sq
@@ -17220,7 +17220,7 @@ def test_reviews_ahead_392():
           A.climb([100] * 7, [0] + [100] * 5 + [140, 150, 145] + [100] * 33) == (7, 145)
           and A.climb([100] * 7, [0] + [120] * 41) is None and A.climb([10] * 7, [0] + [20] * 41) is None and A.climb([], [5] * 42) is None)
     held = A.starts([10.0] * 7, 0, 1000, h=14, stop=(0, 2), plan={1: 50}, pool=0)
-    check("ahead: a plan's date inside a stop still opens; its cards start after, at my pace (Sam's deck)",
+    check("ahead: a plan's date inside a stop still opens; its cards start after, at my pace (a real deck)",
           held[:3] == [0.0, 0.0, 0.0] and held[3:8] == [10.0] * 5 and sum(held) == 50, held)
     check("ahead: numbers as the chart says them", [A.r(x) for x in (7.4, 42, 187, 1234)] == [7, 40, 185, 1230])
     # ---- the track record: forecast from past days, against what really happened ----
@@ -17230,7 +17230,7 @@ def test_reviews_ahead_392():
           len(res) == 3 and tr is not None and tr[0] < 0.15 and len(tr[1]) == 6, tr)
     yrows, yfirst, ynow = _sim_log(days=80, pace=20, seed=4)
     yres = A.backtest(yrows, yfirst, ynow)
-    check("ahead: a deck under 12 weeks has a track record, the forecast as it would have run then (Sam's deck had none)",
+    check("ahead: a deck under 12 weeks has a track record, the forecast as it would have run then (a real deck had none)",
           A.curve(yrows, yfirst, -42) is None and len(yres) == 3 and A.trust(yres) is not None and A.trust(yres)[0] < 0.25,
           A.trust(yres))
     check("ahead: a past day with under 100 cards started before it is left out",
@@ -17268,7 +17268,7 @@ def test_reviews_ahead_392():
           "Next 2 weeks: <b>" in html and "a day from cards you&rsquo;ve started, <b>+" in html and "new at your pace" in html
           and " a day &middot; this week 100</div>" in html and "new at your pace, about " in html
           and "Exam week: about <b>" in html and ", not " in html, html)
-    check("board: a stop says what it holds back and when they start again (Sam's deck: the cost was unsaid)",
+    check("board: a stop says what it holds back and when they start again (a real deck: the cost was unsaid)",
           "220 new cards wait till Sat 12 " in html and "plan&rsquo;s dates" not in html, html)
     hv = A.view(A.existing([(1, 10)] * 20, *A.habits([])), A.GENERIC, [20.0] * 7, 0, 900, 100, [50] * 7, exam_in=10,
                 plan={2: 50, 20: 30}, pool=100)
@@ -17564,7 +17564,7 @@ def test_leeches_392():
         conn.execute("UPDATE notes SET sfld = ? WHERE id = ?", (sf, cid))
         fakes.add_review(conn, at(40), ease=3, cid=cid, rtype=0, time_ms=44000 if cid == 103 else 8000)
         fakes.add_review(conn, at(ago), ease=1, cid=cid, time_ms=44000 if cid == 103 else 8000)
-    # Sam's deck: Anki tags the note; a sibling the shared deck ships suspended, never answered, isn't a leech
+    # a real deck: Anki tags the note; a sibling the shared deck ships suspended, never answered, isn't a leech
     fakes.add_card(conn, 107, did=10, ctype=0, queue=-1, tags="Spanish::Ser_vs_estar leech", lapses=0)
     col = fakes.FakeCol(conn, cut)
     col.decks = fakes.FakeDecks({10: "Spanish"})
@@ -17986,7 +17986,7 @@ def test_scope_map_and_words_392():
     from due_crew import team as T, team_flow as TF, board
     from due_crew.settings_model import change
     from due_crew import account
-    # ---- 3.9.2, from Sam's deck: right % apart for the cards started these two weeks ----
+    # ---- 3.9.2, from a real deck: right % apart for the cards started these two weeks ----
     ans = [(c, 1, 3 if c % 3 else 1) for c in range(60)] + [(c, 1, 3 if c % 10 else 1) for c in range(100, 160)]
     rd = T.right_days(ans, set(range(60)))
     check("right: the cards started these two weeks apart from the rest", rd["young"] == [40, 60] and rd["older"] == [54, 60]
@@ -17997,7 +17997,7 @@ def test_scope_map_and_words_392():
     hd = board._insights_html(10, {"right": rd, "target": 90})
     check("right: the header says both, under the right %",
           "67% on the cards you started these 2 weeks (60 reviews) &middot; 90% on the rest" in hd, hd)
-    # ---- 3.9.2, from Sam's deck: a week's name in the map's own topics, never the deck a card came from ----
+    # ---- 3.9.2, from a real deck: a week's name in the map's own topics, never the deck a card came from ----
     tg = {c: ["Big::#Source_Decks::Deck_A::Bugs", "Big::#Systems::03_Microbiology::02_Clinical_Bacteriology"] for c in range(30)}
     tg.update({c: ["Big::#Source_Decks::Deck_B", "Big::#Systems::01_Biochem"] for c in range(30, 90)})
     tg.update({c: ["Big::#Source_Decks::Deck_C::Mixed", "Big::#Systems::" + ("04_Cardio", "05_Renal", "06_GI", "07_Neuro")[c % 4]
@@ -18023,7 +18023,7 @@ def test_scope_map_and_words_392():
           and T.batch_name(list(range(130, 150)), tg, wd, "big::#systems") == "")
     check("week names: plain tags are the map's way too", T.batch_name(list(range(150, 160)), tg, wd, T.TAGS_WAY) == "Drugs · Beta blockers",
           T.batch_name(list(range(150, 160)), tg, wd, T.TAGS_WAY))
-    # ---- 3.9.2, from Sam's deck: the map's shade is the last time a card came due ----
+    # ---- 3.9.2, from a real deck: the map's shade is the last time a card came due ----
     conn = sqlite3.connect(":memory:")
     fakes.make_collection(conn)
     cut = fakes.day_cutoff_for(TODAY)
@@ -19548,7 +19548,7 @@ def test_pip_party_for_everyone_v395():
     saved = GF.client
     try:
         got = []
-        for signed_in, uid in ((True, "someone"), (True, "FjrvFwUg6HNN3hy1YUmMp7ClR4v1"), (False, "someone")):
+        for signed_in, uid in ((True, "someone"), (True, "the-admins-uid"), (False, "someone")):
             GF.client = lambda s=signed_in, u=uid: types.SimpleNamespace(signed_in=s, user_id=u)
             got.append(GF.shown())
     finally:

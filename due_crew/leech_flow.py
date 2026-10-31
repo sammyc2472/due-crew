@@ -123,7 +123,7 @@ def counts(col, deck):
     miss from Anki suspending them, and leeches Anki tagged and kept in my
     reviews; none I left out. A leech lapsed: Anki tags the note, so a
     sibling a big shared deck ships suspended, never answered, carries the
-    tag without being one (Sam's deck, 3.9.2)."""
+    tag without being one (a real deck, 3.9.2)."""
     out = _out()
     gone = [c for c in col.db.list(
         f"SELECT c.id FROM cards c JOIN notes n ON n.id = c.nid WHERE c.id IN ({deck}) "

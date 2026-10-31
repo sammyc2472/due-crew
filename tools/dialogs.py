@@ -129,7 +129,7 @@ CLIENT.session = {"user_id": "sam", "token": STORE.session_for("sam"),
                   "display_name": "Sammy", "email": "sam@example.com",
                   "last_ok": (datetime.datetime.now(datetime.timezone.utc)
                               - datetime.timedelta(minutes=2)).strftime("%Y-%m-%dT%H:%M:%SZ")}
-SQUAD = CLIENT.create_squad("busm")
+SQUAD = CLIENT.create_squad("orca")
 STORE._join(SQUAD["id"], "priya")
 STORE.knocks[("sam", "priya")] = {"squad": SQUAD["id"], "at": "t"}
 
@@ -139,7 +139,7 @@ CONFIG = {
     "show_last_active": True, "highlight_me": True, "share_reviews": True,
     "share_time": True, "share_retention": True, "share_streak": True,
     "share_heatmap": True, "show_up": False, "paused": False, "exam_date": "2026-09-20",
-    "crew_label": "busm", "away_from": "", "away_to": "", "status": "coffee, then 400 cards",
+    "crew_label": "orca", "away_from": "", "away_to": "", "status": "coffee, then 400 cards",
     "shared_decks": [1], "squads": [SQUAD, {"id": "b" * 24, "code": "MS2XXXXX", "name": "MS2", "founder": "x"}],
     "squad": SQUAD["id"],
 }

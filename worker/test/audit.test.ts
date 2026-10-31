@@ -17,7 +17,7 @@ async function crew() {
 }
 
 async function squad(founder: { call: Function }, ...members: { call: Function }[]) {
-  const r = await (founder.call as any)("POST", "/squads", { name: "busm" });
+  const r = await (founder.call as any)("POST", "/squads", { name: "orca" });
   for (const m of members) await (m.call as any)("POST", `/squads/${r.body.id}/join`, { code: r.body.code });
   return r.body.id as string;
 }

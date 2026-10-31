@@ -9,7 +9,7 @@ import { api, db, mailbox, person } from "./helpers";
 
 type P = Awaited<ReturnType<typeof person>>;
 
-async function squadOf(founder: P, name = "busm") {
+async function squadOf(founder: P, name = "orca") {
   const r = await founder.call("POST", "/squads", { name });
   expect(r.status).toBe(200);
   return r.body as { id: string; code: string };

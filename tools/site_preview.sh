@@ -58,21 +58,21 @@ for uid, name in [("dre", "Dre"), ("maya", "Maya"), ("nia", "Nia"), ("jonah", "J
     out.append(f"INSERT INTO users (uid, email, name, code, created_at) VALUES ({q(uid)}, {q(uid + '@example.com')}, {q(name)}, {q(code)}, {now});")
     out.append(f"INSERT INTO codes (code, uid) VALUES ({q(code)}, {q(uid)});")
 out.append(f"INSERT INTO sessions (token_hash, uid, device, created_at, last_used) VALUES ({q(h)}, 'dre', 'preview', {now}, {now});")
-out.append(f"INSERT INTO squads (id, name, founder, open, created_at) VALUES ('busmpreview', 'Busm', 'dre', 1, {now});")
+out.append(f"INSERT INTO squads (id, name, founder, open, created_at) VALUES ('orcapreview', 'Orca', 'dre', 1, {now});")
 for uid in ["dre", "maya", "nia"]:
-    out.append(f"INSERT INTO members (squad, uid, name, joined_at) VALUES ('busmpreview', {q(uid)}, {q(uid.title())}, {now});")
+    out.append(f"INSERT INTO members (squad, uid, name, joined_at) VALUES ('orcapreview', {q(uid)}, {q(uid.title())}, {now});")
     if uid != "nia":
         rv = {"dre": 180, "maya": 240}.get(uid, 90)
         out.append(f"UPDATE members SET day = {q(today.isoformat())}, reviews = {rv}, study_time_ms = {rv * 17000}, accuracy = 88.5, streak = 4, week = 5, new_cards = 30 "
-                   f"WHERE squad = 'busmpreview' AND uid = {q(uid)};")
+                   f"WHERE squad = 'orcapreview' AND uid = {q(uid)};")
     else:
-        out.append(f"UPDATE members SET day = {q((today - datetime.timedelta(days=1)).isoformat())}, reviews = 292, week = 6 WHERE squad = 'busmpreview' AND uid = 'nia';")
+        out.append(f"UPDATE members SET day = {q((today - datetime.timedelta(days=1)).isoformat())}, reviews = 292, week = 6 WHERE squad = 'orcapreview' AND uid = 'nia';")
 out.append(f"INSERT INTO plan_trees (uid, deck, doc, at) VALUES ('dre', 'Step 1', {q(json.dumps({'tags': tags, 'decks': decks}))}, {now});")
 # 3.3: a teacher's language deck: units as subdecks, no tags
 es = {"tags": [], "decks": [["Español 1", 1200], ["Español 1::Unidad 1 · Saludos", 380], ["Español 1::Unidad 2 · La familia", 420], ["Español 1::Unidad 3 · La comida", 400]]}
 out.append(f"INSERT INTO plan_trees (uid, deck, doc, at) VALUES ('dre', 'Español 1', {q(json.dumps(es))}, {now});")
 out.append("INSERT INTO plans (id, code, owner, name, line, audience, squad, doc, version, created_at, updated_at) VALUES "
-           f"('stepplanpreview1', '7KQ4MX2D', 'dre', 'Step 1', 'Organ systems, one a week, done by January.', 'code', 'busmpreview', {q(json.dumps(doc))}, 3, {now}, {now});")
+           f"('stepplanpreview1', '7KQ4MX2D', 'dre', 'Step 1', 'Organ systems, one a week, done by January.', 'code', 'orcapreview', {q(json.dumps(doc))}, 3, {now}, {now});")
 prog = {"maya": {"hf": [48, 48, 48], "arr": [63, 63, 63], "renp": [212, 120, 212]},
         "nia": {"hf": [48, 48, 48], "arr": [63, 40, 63], "renp": [212, 30, 212]}}
 for uid, p in prog.items():

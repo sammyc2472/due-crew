@@ -298,7 +298,7 @@ def backtest(log, first, now, gone=(), back=BACK, h=H):
     T = -b in back: forecast with only what came before T (its starts what
     I really started), against what I really did: the forecast as it would
     have run then, the typical curve where mine wasn't old enough yet (3.9.2,
-    Sam's deck: a deck under 12 weeks had no track record at all). A day
+    a real deck: a deck under 12 weeks had no track record at all). A day
     with fewer than BACK_MIN cards started before it is left out. log
     reaches back to min(T) - LOOK at least."""
     out = []
@@ -377,7 +377,7 @@ def climb(past, cards):
 def cause(new14, before14):
     """The cards I started the last two weeks when they're the climb's
     likely cause (CAUSE_MIN at least, CAUSE_X times the two weeks before),
-    else 0. 3.9.2, Sam's deck: 2,480 against 262."""
+    else 0. 3.9.2, a real deck: 2,480 against 262."""
     new14, before14 = int(new14 or 0), int(before14 or 0)
     return new14 if new14 >= CAUSE_MIN and new14 >= CAUSE_X * before14 else 0
 
@@ -434,7 +434,7 @@ def view(started, cv, rate, wd0, left, unlocked, past, exam_in=None, off=None,
             hit = dict(with_new(started, cv, st), key="off", stop=off, starts=sum(st))
             ways.append(hit)
         on = hit["key"]
-    for w in ways:  # 3.9.2 (Sam's deck): what a stop holds back, said beside its Do it
+    for w in ways:  # 3.9.2 (a real deck): what a stop holds back, said beside its Do it
         if w.get("stop") and paced:
             a, b = int(w["stop"][0]), min(int(w["stop"][1]), len(paced) - 1)
             w["held"] = sum(paced[a:b + 1])

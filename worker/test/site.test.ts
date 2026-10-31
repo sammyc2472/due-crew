@@ -51,7 +51,7 @@ describe("a plan's link previews as the plan (3.5, A)", () => {
     const { priya, p } = await plan();
     expect((await get("/p/NOPE2345")).body).not.toContain("og:title");
     expect((await get("/plans")).body).not.toContain("og:title");
-    const sq = await priya.call("POST", "/squads", { name: "busm" });
+    const sq = await priya.call("POST", "/squads", { name: "orca" });
     await priya.call("PUT", `/plans/${p.id}`, { version: p.version, audience: "squad", squad: sq.body.id });
     const q = await plan("Another", "dre");
     expect((await get(`/p/${p.code}`)).body).not.toContain("og:title");  // a squad's plan

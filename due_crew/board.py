@@ -2697,7 +2697,7 @@ def _ins_ahead(did, a, deck_name=""):
         return sum(xs) / len(xs) if xs else 0
 
     def held(w):
-        """3.9.2 (Sam's deck): what a stop holds back, and till when; a plan's dates in it said."""
+        """3.9.2 (a real deck): what a stop holds back, and till when; a plan's dates in it said."""
         n, s = w.get("held") or 0, w.get("stop")
         if n < 1 or not s or 7 + int(s[1]) + 1 >= len(days):
             return ""
@@ -2711,7 +2711,7 @@ def _ins_ahead(did, a, deck_name=""):
     for w in ways:
         k = w["key"]
         if k == "pace":
-            # 3.9.2 (Sam's deck: 44% of the week ahead was new cards at his pace, a guess, in one number):
+            # 3.9.2 (a real deck: 44% of the week ahead was new cards at its pace, a guess, in one number):
             # the cards I've started first, what new ones add at my pace after it
             mins = (f", about {_hm(max(1, int(round(mean(w['answers'][:14]) * secs / 60.0))))} a day" if secs else "")
             st, nw = mean((w.get("started") or w["cards"])[:14]), mean((w.get("new") or [0])[:14])
@@ -2921,7 +2921,7 @@ def _insights_html(did, v):
                 f'{_ins_spark(r.get("days") or [])}</div>')
         from .team import right_split
         sp = right_split(r)
-        if sp:  # 3.9.2 (Sam's deck): a week of new cards reads as forgetting; said apart
+        if sp:  # 3.9.2 (a real deck): a week of new cards reads as forgetting; said apart
             out += (f'<div class="tmt">{sp[0]}% on the cards you started these 2 weeks ({sp[2]:,} reviews) '
                     f'&middot; {sp[1]}% on the rest</div>')
     aim = v.get("aim") or {}

@@ -28,7 +28,7 @@ describe("C1: a plan's link shows the plan before signing in", () => {
       units: [{ name: "Lecture 12", opens: "2026-10-05", n: 84 }, { name: "Lecture 13", opens: "2026-10-06", due: "2026-10-08", n: 62 }] });
     expect(JSON.stringify(r.body)).not.toContain("C::12");  // days and counts, not what's in them
     expect((await api("GET", "/plans/public?code=NOPE2345")).status).toBe(404);
-    const sq = await priya.call("POST", "/squads", { name: "busm" });
+    const sq = await priya.call("POST", "/squads", { name: "orca" });
     await priya.call("PUT", `/plans/${p.id}`, { version: p.version, audience: "squad", squad: sq.body.id });
     expect((await api("GET", `/plans/public?code=${p.code}`)).status).toBe(404);
   });

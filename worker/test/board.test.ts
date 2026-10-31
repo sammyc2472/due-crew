@@ -164,7 +164,7 @@ describe("POST /sync", () => {
   });
 
   it("squad rows update, never insert, and say which squads I'm out of", async () => {
-    const sq = (await sam.call("POST", "/squads", { name: "busm" })).body;
+    const sq = (await sam.call("POST", "/squads", { name: "orca" })).body;
     const row = { name: "Sam", day: TODAY, reviews: 5, newCards: 2 };
     const a = (await sam.call("POST", "/sync", { squads: { row, ids: [sq.id, "f".repeat(24)] } })).body;
     expect(a.gone).toEqual(["f".repeat(24)]);
@@ -227,8 +227,8 @@ describe("friends and codes", () => {
 
 describe("squads", () => {
   it("create hands back a code whose peek finds it, however it's typed", async () => {
-    const sq = (await sam.call("POST", "/squads", { name: "  busm  study " })).body;
-    expect(sq.name).toBe("busm study");
+    const sq = (await sam.call("POST", "/squads", { name: "  orca  study " })).body;
+    expect(sq.name).toBe("orca study");
     expect(sq.code).toMatch(/^[A-HJ-NP-Z2-9]{8}$/);
     const typed = sq.code.toLowerCase().replace(/(.{4})/, "$1-");
     expect((await dre.call("GET", `/squads/peek?code=${typed}`)).body.id).toBe(sq.id);
@@ -250,7 +250,7 @@ describe("squads", () => {
   });
 
   it("only the founder sees the block list", async () => {
-    const sq = (await sam.call("POST", "/squads", { name: "busm" })).body;
+    const sq = (await sam.call("POST", "/squads", { name: "orca" })).body;
     await dre.call("POST", `/squads/${sq.id}/join`, { code: sq.code });
     await nia.call("POST", `/squads/${sq.id}/join`, { code: sq.code });
     await sam.call("POST", `/squads/${sq.id}/block/nia`);

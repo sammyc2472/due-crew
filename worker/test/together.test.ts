@@ -195,7 +195,7 @@ describe("3.4, D2: the plan as a calendar", () => {
     expect(text).not.toContain("Dre");  // nobody's name
     const none = await worker.fetch(new Request("https://api.duecrew.com/plans/ics?code=NOPE2345"), { ...env } as any);
     expect(none.status).toBe(404);
-    const sq = await dre.call("POST", "/squads", { name: "Busm" });
+    const sq = await dre.call("POST", "/squads", { name: "Orca" });
     await dre.call("PUT", `/plans/${p.id}`, { version: p.version + 1, audience: "squad", squad: sq.body.id });
     const squad = await worker.fetch(new Request(`https://api.duecrew.com/plans/ics?code=${p.code}`), { ...env } as any);
     expect(squad.status).toBe(404);

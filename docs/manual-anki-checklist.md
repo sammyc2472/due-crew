@@ -13,7 +13,7 @@ installing — add-ons load at launch).
 - [ ] Switch Today / Week / Decks / Server; pills stay one row or wrap cleanly.
 
 ## Squads
-- [ ] Squads pill → "+ join or create" → Create "busm": the code appears, the invite lands on the clipboard, your row shows after the next sync.
+- [ ] Squads pill → "+ join or create" → Create "orca": the code appears, the invite lands on the clipboard, your row shows after the next sync.
 - [ ] A second account joins with the code: the preview shows the name, founder, and "open"; after Join both boards list both people with reviews, time, retention, and streak; plain ranks, no medals.
 - [ ] Founder → Lock: a third account's Join reads "Locked."; existing members still update. Open again works.
 - [ ] Tap a non-crew squadmate → Add sends a knock; the founder also sees Remove.
@@ -41,7 +41,7 @@ installing — add-ons load at launch).
 ## 2.5: emoji, squads week, block, Refresh
 - [ ] Your card → "Pick an emoji" → 🦊: it shows before your name on Today, on your card, in the Friends list, in the crew week share, and (after a sync) on the squad board.
 - [ ] Squads pill: a "Week" column shows N/7 for each member and sorts; the crew's Today/Week tables ignore that sort.
-- [ ] Squad footer → Share: copies "busm · <date> / N studying · M reviews together / 🟩 top three".
+- [ ] Squad footer → Share: copies "orca · <date> / N studying · M reviews together / 🟩 top three".
 - [ ] Founder → tap a member → Block: they vanish and cannot rejoin with the code while the squad is open. Make founder hands the Lock/Remove links to them.
 - [ ] Refresh on the board after studying without syncing: your own row updates.
 - [ ] Two accounts: after one adds the other, the Friends dialog shows ⏳ pending, and after the add-back both show ✓, with the second account never having synced its profile array (2.5 edges vouch alone).

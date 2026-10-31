@@ -18,7 +18,7 @@ beforeEach(async () => {
   await befriend(dave, alice);
 });
 
-async function squadOf(founder: P, name = "busm") {
+async function squadOf(founder: P, name = "orca") {
   const r = await founder.call("POST", "/squads", { name });
   expect(r.status).toBe(200);
   return r.body as { id: string; code: string };
@@ -30,10 +30,10 @@ describe("squads: the id is the invite; only the founder shapes it", () => {
   it("creation", async () => {
     const sq = await squadOf(alice);
     expect(sq.id, "squad: founder creates").toMatch(/^[0-9a-f]{24}$/);
-    expect(await bob.status("POST", "/squads", { name: "busm", founder: "alice" }), "squad: cannot name someone else as founder").toBe(400);
+    expect(await bob.status("POST", "/squads", { name: "orca", founder: "alice" }), "squad: cannot name someone else as founder").toBe(400);
     expect((await bob.call("POST", "/squads", { name: "mine" })).body.founder, "squad: the founder is whoever creates it").toBe("bob");
     expect(await bob.status("POST", "/squads", { name: "x".repeat(25) }), "squad: name too long rejected").toBe(400);
-    expect(await bob.status("POST", "/squads", { name: "busm", code: "KQ9P2X3A" }), "squad: extra field rejected").toBe(400);
+    expect(await bob.status("POST", "/squads", { name: "orca", code: "KQ9P2X3A" }), "squad: extra field rejected").toBe(400);
     const peek = await carol.call("GET", `/squads/peek?code=${sq.code}`);
     expect(peek.status, "squad: anyone signed in may get it").toBe(200);
     expect(Object.keys(peek.body).sort(), "squad: the preview is the name and the door, nothing else").toEqual(["code", "founder", "founderName", "id", "name", "open"]);
@@ -257,7 +257,7 @@ describe("retired paths: nothing answers", () => {
     expect(await alice.status("GET", `/boards/${DAY}/rows/alice`), "retired: Everyone rows unreadable").toBe(404);
     expect(await alice.status("PUT", `/boards/${DAY}/rows/alice`, { name: "x" }), "retired: Everyone rows unwritable").toBe(404);
     expect(await alice.status("PUT", "/server_board/alice", { name: "y" }), "retired: old server_board unwritable").toBe(404);
-    expect(await alice.status("GET", "/server_names/busm"), "retired: directory is gone").toBe(404);
+    expect(await alice.status("GET", "/server_names/orca"), "retired: directory is gone").toBe(404);
   });
 });
 

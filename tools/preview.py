@@ -126,11 +126,11 @@ SROWS = [
     {"user_id": "u4", "name": "Marcus", "day": L[1], "reviews": 220,
      "time_ms": 1860000, "retention": 87.4, "streak": 0},
 ]
-SQUAD_VIEW = {"state": "ok", "squads": [{"id": "abc", "name": "busm"}, {"id": "def", "name": "MS2"}],
-              "current": "abc", "name": "busm", "open": True, "founder_me": True,
+SQUAD_VIEW = {"state": "ok", "squads": [{"id": "abc", "name": "orca"}, {"id": "def", "name": "MS2"}],
+              "current": "abc", "name": "orca", "open": True, "founder_me": True,
               "rows": SROWS, "day": L[0], "yesterday": L[1], "people": 5, "studying": 4,
               "reviews": 2114}
-KNOCKS = [{"uid": "u3", "name": "Jordan", "squad": "busm"}]
+KNOCKS = [{"uid": "u3", "name": "Jordan", "squad": "orca"}]
 sections.append("<h3>today, two crewmates on show-up only (as everyone else sees them)</h3>"
                 + board.render(DATA_SHOWUP, {"period": "today"}, now_ts - 60))
 sections.append("<h3>week, same crew</h3>" + board.render(DATA_SHOWUP, {"period": "week"}, now_ts - 60))
@@ -363,7 +363,7 @@ _TEAM = {"on": True, "count": 12, "shown": 5, "streak": 4, "more": 4, "bingo": {
                    "at": int(NOW.timestamp()) - 18000, "act": int(NOW.timestamp()) - 18000, "topic": "", "guid": "", "ord": 0,
                    "mine": False, "remove": False, "author": False, "replies": []}]}
 _PSQ = {"kind": "plan", "pid": "p1", "name": "MS2 Block 1 \u00b7 Dre's plan", "current": "plan:p1",
-        "squads": [{"id": "abc", "name": "busm"}, {"id": "def", "name": "MS2"}],
+        "squads": [{"id": "abc", "name": "orca"}, {"id": "def", "name": "MS2"}],
         "plan_squads": [{"id": "plan:p1", "pid": "p1", "name": "MS2 Block 1 \u00b7 Dre's plan", "unread": 0},
                         {"id": "plan:p2", "pid": "p2", "name": "Step 1 dedicated", "unread": 3}],
         "team": _TEAM, "team_state": "ok", "me": "me", "known": {"down": ["g1"], "have": ["g1"]}}
@@ -427,7 +427,7 @@ def _ahead(pace, batch, exam_in, off=None, seed=5, unlocked=300, left=4000, done
 _AHEAD_BIG = _ahead(40, True, 6, unlocked=180, left=9000)       # a lecture's batch a week, the block exam Tue 13 Oct
 _AHEAD_SP = _ahead(20, False, 7, seed=9, unlocked=2400, left=2400, done=120, secs=7.0)  # Spanish, 20 a day, exam Wed 14 Oct
 _INS = dict(_INS, ahead=_AHEAD_BIG, deck_name="Big Step 1")
-# 3.9.2 (Sam's deck): a week of new cards, right % apart for them
+# 3.9.2 (a real deck): a week of new cards, right % apart for them
 _INS["right"] = dict(_INS["right"], young=[560, 700], older=[748, 819])
 _DECKS = [{"did": 10, "name": "Big Step 1", "full": "Big Step 1"}, {"did": 20, "name": "Spanish", "full": "Languages::Spanish"}]
 _NEXT_CID = [1]
@@ -455,7 +455,7 @@ _PLAN_INS = {"decks": _DECKS, "did": 10, "exam": True, "plan": {"id": "p1", "nam
              "view": dict(_INS, did=10, pid="p1", leeches=3, map=_MAP, map_by="right", _map_missed=_MISSED,
                           map_ways=[{"key": "s", "name": "Systems", "on": True}, {"key": "b", "name": "Videos", "on": False},
                                     {"key": "y", "name": "HighYield", "on": False}, {"key": "~decks", "name": "Subdecks", "on": False}])}
-sections.append("<h3>3.8.0: You › Insights, a deck with my plan on it (Sam's numbers)</h3>" + board.render(
+sections.append("<h3>3.8.0: You › Insights, a deck with my plan on it (a real deck's numbers)</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("insights", insights=_PLAN_INS)))
 _DECK_INS = dict(_INS, did=20, behind=0, leeches=0, fsrs=None,
                  aim={"day": "2026-10-14", "name": "Your exam", "in": 7, "scoped": False, "kind": "exam"},
@@ -605,9 +605,9 @@ sections.append("<h3>3.8.0: Due off, folded: Plans and Insights on one line</h3>
     DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS, you=_YOU("plans", folded=True)))
 # 3.5.0: Settings in the board, each tab, and a Decks tab with asks both ways
 SET_VIEW = {"signed_in": True, "name": "Sammy", "emoji": "\U0001F98A", "status": "coffee, then 400 cards",
-            "sync": "sam@school.edu · Synced 2m ago · v3.5.0", "crew": 6, "squads": ["BUSM 2028", "Block 3"],
+            "sync": "sam@school.edu · Synced 2m ago · v3.5.0", "crew": 6, "squads": ["Orca crew", "Block 3"],
             "decks": ["Big Step 1"]}
-SET_CFG = {"accent": "green", "hidden_tabs": ["squads"], "crew_label": "busm", "exam_date": "2026-10-14"}
+SET_CFG = {"accent": "green", "hidden_tabs": ["squads"], "crew_label": "orca", "exam_date": "2026-10-14"}
 for tab in ("you", "board", "privacy"):
     sections.append(f"<h3>3.5.0: Settings, {tab}</h3>" + board.settings_html(dict(SET_VIEW, tab=tab), SET_CFG))
 sections.append("<h3>3.5.0: decks, asked of you and your asks</h3>" + board.render(
@@ -688,7 +688,7 @@ def _bv(rows, new=False, show_up=False):
             "progress": [(True, "Done"), (False, "1 of 2 days"), (True, "Done"), (False, "2 of 4 days running"),
                          (False, "1 of 3 days"), (True, "Done"), (False, "38 to go today (your best is 212)"), (True, "Done")],
             "names": {"pat": ("Pat", "🐢"), "sam": ("Sammy", "😺"), "dre": ("Dre", "🦊"), "maya": ("Maya", "🐸"), "theo": ("Theo", "🐧"), "noah": ("Noah", "🦄")},
-            "squad": "BUSM 2028", "squad_id": "sq1", "closest": _B.closest(_CARD, ev)}
+            "squad": "Orca crew", "squad_id": "sq1", "closest": _B.closest(_CARD, ev)}
 _LINE = [dict(r, play=dict(r["play"], rm=1, s=r["play"]["s"] | (0b1000 if r["user_id"] == "sam" else 0)))
          for r in _ROWS if "play" in r]  # everyone updated; Sam also kept the same hour: the left column is a line
 sections.append("<h3>3.6: squad bingo on the Squads tab (Monday)</h3>" + board.render(
@@ -891,7 +891,7 @@ luck_js = board.luck_card_js("Marisa", [("Dre", "You've done the work. Go get it
 stranger_js = board.stranger_card_js({"uid": "u2", "name": "Maya R.",
                                       "reviews": 488, "time_ms": 3900000,
                                       "retention": 89.0, "streak": 31, "rank": 3,
-                                      "squad": "busm", "today": True,
+                                      "squad": "orca", "today": True,
                                       "pending": False, "knocked_me": False,
                                       "founder_me": True})
 

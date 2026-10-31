@@ -2737,14 +2737,13 @@ every release that changes how something works.
   week and 20 cards more, one line: "Reviews in Big Step 1 climb to about 420
   a day by Mon 12 Oct · this week 310", See ahead (You › Insights on it), ×
   for a week (`ahead_line_x`). A redraw only when there's a line.
-  On Sam's own deck (18 Oct, a plan, a batch of 1,295 the week before):
+  On a real deck (18 Oct, a plan, a batch of 1,295 the week before):
   a plan's date inside a stop still opens and its cards wait in the
   unlocked pile for after (`ahead.starts`), where the forecast had dropped
   them; `board.ahead_line` rounds its number itself, as the chart does.
-  Round two, the same day, on how his numbers read (Sam: "improve our
-  insights implementation based on your feedback from my data"): the
-  week ahead was 44% new cards at his pace, a guess, in one number, so the
-  line leads with the cards he'd started and adds new ones after ("Next 2
+  Round two, the same day, on how its numbers read: the
+  week ahead was 44% new cards at that pace, a guess, in one number, so the
+  line leads with the cards already started and adds new ones after ("Next 2
   weeks: 380 a day from cards you've started, +140 new at your pace"); a
   stop says what it holds back and when they start again, and a plan's
   share of them ("732 new cards wait till Sat 24, 434 of them your plan's
@@ -2752,7 +2751,7 @@ every release that changes how something works.
   exam); the board's line names the cause when it's new cards
   (`ahead.cause`: 200 at least in two weeks, twice the two before: "you
   started 2,480 cards in 2 weeks"). The track record forecasts each past
-  day as the chart would have then, the typical curve where his own wasn't
+  day as the chart would have then, the typical curve where the deck's own wasn't
   old enough (a deck under 12 weeks, most first-years in the fall, had
   none), leaving out a day with under 100 cards started before it.
 - 3.9.2, leeches, one button a card (S1-A, S2-A). Insights' line counts the
@@ -2771,7 +2770,7 @@ every release that changes how something works.
   Learn it fresh is Anki's Reset, lapses from zero; each one undo step. Who
   has it down and their tips are the stuck list's, back with each sync: no
   new request. A leech lapsed (`c.lapses > 0`, as Recover leeches has it):
-  Anki tags the note, so on Sam's deck a sibling the shared deck ships
+  Anki tags the note, so on a real deck a sibling the shared deck ships
   suspended, never answered, counted as one.
 - 3.9.2, the exam's scope (C1-A): my exam covers the cards I started since
   my last exam, when it was in the last 10 weeks, else the whole deck; an
@@ -2789,11 +2788,11 @@ every release that changes how something works.
   isn't on nearly every card I've started, "This week · Cardio · Pharm"),
   shaded by what I know now, opening into its topics; Browse, its cards.
   Worked out only when picked (one more read of the deck's log). A long
-  name ends on a whole word with an ellipsis (`team.clip`; Sam's deck had
+  name ends on a whole word with an ellipsis (`team.clip`; a real deck had
   "Reproductive Physiolo").
-- 3.9.2, the map and the right % read on Sam's deck (18 Oct). The map
-  shaded by FSRS's recall today read 93 to 96% on all 12 of his systems
-  and all 9 weeks while he passed 77% of his reviews: recall today says
+- 3.9.2, the map and the right % read on a real deck (18 Oct). The map
+  shaded by FSRS's recall today read 93 to 96% on all 12 of its systems
+  and all 9 weeks while 77% of its reviews passed: recall today says
   how lately a card was seen as much as what's known, and the scheduler
   keeps every card near the target. The old "right on their last review"
   counted a relearning step after a miss as right, and a last review alone
@@ -2805,7 +2804,7 @@ every release that changes how something works.
   never compared. Week names prefer the map's own tag tree ("Microbiology ·
   Clinical Bacteriology", not a video series). The header's right % says
   the cards started these two weeks apart from the rest when they're a
-  quarter of the reviews and 5 points apart (`team.right_split`: his 87%
+  quarter of the reviews and 5 points apart (`team.right_split`: its 87%
   to 77% came with four times the reviews, mostly first ones).
 - 3.9.2, the words three students tripped on (F1-A): "never passed" and
   "lapsed", as Anki's Stats say them; a map tile's % with its cards ("66% ·
@@ -4027,7 +4026,7 @@ every release that changes how something works.
   `test_pip_party_can_be_hidden_v395`. Add-on only; in the AnkiWeb build.
 - 3.9.5, a feedback reply is answered to Sam's mailbox (Sam: "send and
   receive from sam@duecrew.com and just the send from codes"): sam@duecrew.com
-  is an iCloud+ mailbox (docs/cloudflare-setup.md §3, the addresses); the
+  is a mailbox of its own (docs/cloudflare-setup.md §3, the addresses); the
   app still sends from codes@duecrew.com. A feedback reply goes out as
   "Sam from Due Crew" with Reply-To `FEEDBACK_REPLY_TO` (wrangler.toml's
   vars, sam@duecrew.com), by the Email Service binding or Resend

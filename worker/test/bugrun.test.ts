@@ -14,7 +14,7 @@ describe("the October bug run", () => {
     const alice = await person("alice");
     const bob = await person("bob");
     const carol = await person("carol");
-    const sq = (await alice.call("POST", "/squads", { name: "busm" })).body;
+    const sq = (await alice.call("POST", "/squads", { name: "orca" })).body;
     for (const p of [bob, carol]) expect((await p.call("POST", `/squads/${sq.id}/join`, { code: sq.code })).status).toBe(200);
     expect((await alice.call("DELETE", `/squads/${sq.id}/members/alice`)).status).toBe(200);
     expect(await db().prepare("SELECT founder FROM squads WHERE id = ?").bind(sq.id).first("founder")).toBe("bob");

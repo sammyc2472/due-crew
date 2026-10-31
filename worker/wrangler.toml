@@ -19,7 +19,7 @@ invocation_logs = false
 API_VERSION = "1"
 MIN_CLIENT = "3.1.0"
 MAIL_FROM = "Due Crew <codes@duecrew.com>"
-# Where an answer to a feedback reply goes (its Reply-To): Sam's mailbox, on iCloud+.
+# Where an answer to a feedback reply goes (its Reply-To): Sam's mailbox.
 FEEDBACK_REPLY_TO = "sam@duecrew.com"
 # The admin (duecrew.com/admin, notices): the maintainer's account. A uid alone
 # opens nothing; the account still signs in by emailed code.

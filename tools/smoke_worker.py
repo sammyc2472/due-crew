@@ -109,7 +109,7 @@ sam.session["cheers_got"] = got["cheers_at"]          # as the add-on's commit d
 check("cheer arrives, marked; kept until the next refresh says it arrived, then gone",
       len(c) == 1 and c[0]["luck"] and c[0]["name"] == "Dre" and len(again) == 1
       and sam.fetch_board(labels, tomorrow)["cheers"] == [], str(c))
-sq = sam.create_squad("busm")
+sq = sam.create_squad("orca")
 info, st = dre.peek_squad(sq["code"].lower())
 check("squad: peek and join", info and info["id"] == sq["id"] and dre.join_squad(sq["id"], sq["code"]) == 200 and dre.join_squad(sq["id"]) == 403)
 row = {"name": "Dre", "day": labels[0], "reviews": 205, "studyTimeMs": 3600000, "accuracy": 91.5, "streak": 12, "week": 5, "emoji": "🐢", "newCards": 20}

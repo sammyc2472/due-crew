@@ -1,7 +1,7 @@
 # Going live: 3.3.0
 
 Production already runs 3.x: the API at `api.duecrew.com` and the site at
-`duecrew.com`, deployed by hand from Sam's Mac. The tags' deploy job has
+`duecrew.com`, deployed by hand. The tags' deploy job has
 always stood down, because the GitHub secrets (§0, `CLOUDFLARE_API_TOKEN`
 and `CLOUDFLARE_ACCOUNT_ID`) aren't set. So a tag deploys nothing: deploy
 by hand (step 2b). The 2.x accounts were imported at 3.0; Firebase is gone

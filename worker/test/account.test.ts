@@ -51,17 +51,17 @@ describe("delete account", () => {
     const dre = await signIn("dre@example.com", box);
     const nia = await signIn("nia@example.com", box);
     await db().batch([
-      db().prepare("INSERT INTO squads (id, name, founder, open, created_at) VALUES ('busm', 'busm', ?, 1, 1), ('solo', 'solo', ?, 1, 1)").bind(sam.uid, sam.uid),
-      db().prepare("INSERT INTO members (squad, uid, name, joined_at) VALUES ('busm', ?, 'Sam', 1), ('busm', ?, 'Nia', 3), ('busm', ?, 'Dre', 2), ('solo', ?, 'Sam', 1)")
+      db().prepare("INSERT INTO squads (id, name, founder, open, created_at) VALUES ('orca', 'orca', ?, 1, 1), ('solo', 'solo', ?, 1, 1)").bind(sam.uid, sam.uid),
+      db().prepare("INSERT INTO members (squad, uid, name, joined_at) VALUES ('orca', ?, 'Sam', 1), ('orca', ?, 'Nia', 3), ('orca', ?, 'Dre', 2), ('solo', ?, 'Sam', 1)")
         .bind(sam.uid, nia.uid, dre.uid, sam.uid),
       db().prepare("INSERT INTO bans VALUES ('solo', 'someone')"),
     ]);
     expect((await api("DELETE", "/account", { token: sam.token })).status).toBe(200);
-    expect(await db().prepare("SELECT founder FROM squads WHERE id = 'busm'").first("founder")).toBe(dre.uid);
+    expect(await db().prepare("SELECT founder FROM squads WHERE id = 'orca'").first("founder")).toBe(dre.uid);
     expect(await count("squads WHERE id = 'solo'")).toBe(0);
     expect(await count("bans WHERE squad = 'solo'")).toBe(0);
     expect(await count("members WHERE uid = ?", sam.uid)).toBe(0);
-    expect(await count("members WHERE squad = 'busm'")).toBe(2);
+    expect(await count("members WHERE squad = 'orca'")).toBe(2);
   });
 
   it("needs a session", async () => {
