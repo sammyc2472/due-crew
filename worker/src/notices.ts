@@ -14,8 +14,8 @@ const VERSION = /^\d{1,3}(\.\d{1,3}){0,3}$/;
 
 export type Notice = { id: number; text: string; link: string | null; below: string | null; created_at: number; until: number };
 
-/** The admin: the uids in ADMINS (wrangler.toml: the maintainer's account)
- *  and in the optional ADMIN_UIDS secret. */
+/** The admin: the uids in the ADMIN_UIDS secret (and ADMINS, a var no
+ *  longer set: the uid stays out of the repo). */
 export function isAdmin(env: Env, uid: string): boolean {
   return [env.ADMINS, env.ADMIN_UIDS].join(",").split(",").map((x) => x.trim()).filter(Boolean).includes(uid);
 }

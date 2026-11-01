@@ -60,7 +60,12 @@ it lists in Cloudflare DNS, add a DMARC record (`TXT _dmarc`,
 `v=DMARC1; p=none`), and `npx wrangler secret put RESEND_API_KEY` for each
 environment.
 
-## 4. The admin token (gone in 3.8.0)
+## 4. The admin
+
+Who's the admin (duecrew.com/admin, notices) is the `ADMIN_UIDS` secret,
+your account's uid (comma-separated for more than one), never written in
+the repo: `npx wrangler secret put ADMIN_UIDS --env=""`, and `--env dev`
+for the dev Worker. Unset, nobody is.
 
 3.0's one-shot import from Firebase needed `ADMIN_TOKEN`; the import went
 with Firebase in 3.8.0. If it's still set, delete it:

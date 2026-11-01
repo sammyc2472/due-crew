@@ -36,7 +36,7 @@ from . import gamenight as G
 from .app import _bg, _profile_files, cfg, client, save_cfg
 
 # None: the tab is everyone's signed in (3.9.5's release); a tuple of uids
-# (wrangler.toml's ADMINS) makes it theirs alone, as while Sam tested it
+# (the admin's, the Worker's ADMIN_UIDS secret) makes it theirs alone, as while Sam tested it
 TESTERS = None
 KEPT_MAX = 20
 SHOW_MAX = 12      # a level's tiles on the map; the rest are a find away

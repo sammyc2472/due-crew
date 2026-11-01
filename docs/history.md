@@ -163,8 +163,9 @@ every release that changes how something works.
   local data only (`together.my_asks_view`).
 - 3.2 the site: signed in, `/` goes to `/home` (`GET /board?keep=1`,
   which leaves the cheers for Anki); `/log`; `/admin` for the admin.
-- 3.2.1 the admin's notice: the admin is Sam's "sammy" account (`ADMINS`
-  in wrangler.toml, plus the optional `ADMIN_UIDS` secret). From `/admin`
+- 3.2.1 the admin's notice: the admin is Sam's account (`ADMINS`
+  in wrangler.toml, plus the optional `ADMIN_UIDS` secret; since Nov 2026
+  the secret alone, so the uid isn't in the repo). From `/admin`
   Sam posts one line (a link optional, only to add-ons older than a
   version optional, for N days); `GET /board` carries the newest live one
   for the asking add-on's version (`notices`, migration 0005), and the
@@ -4032,3 +4033,9 @@ every release that changes how something works.
   vars, sam@duecrew.com), by the Email Service binding or Resend
   (`mail.sendMail`'s `name` and `replyTo`); a sign-in code has neither.
   Worker only. `feedback.test.ts`.
+- Nov 2026, nothing in the repo traces back to its maintainer (Sam: "make
+  sure pls that the docs don't have identifying / trace-back info to me"):
+  no surname, device or mail provider in the docs, a real deck's numbers
+  unattributed, test data's squad "orca", and the admin's uid only in the
+  Worker's `ADMIN_UIDS` secret (`ADMINS` gone from wrangler.toml). No
+  feedback's words or sender are ever written here.

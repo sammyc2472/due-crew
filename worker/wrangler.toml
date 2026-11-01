@@ -21,14 +21,12 @@ MIN_CLIENT = "3.1.0"
 MAIL_FROM = "Due Crew <codes@duecrew.com>"
 # Where an answer to a feedback reply goes (its Reply-To): Sam's mailbox.
 FEEDBACK_REPLY_TO = "sam@duecrew.com"
-# The admin (duecrew.com/admin, notices): the maintainer's account. A uid alone
-# opens nothing; the account still signs in by emailed code.
-ADMINS = "FjrvFwUg6HNN3hy1YUmMp7ClR4v1"
 # Where POST /reports mails a report. Unset: reports are only counted in the log.
 # REPORT_TO = "reports@duecrew.com"
 
-# Secrets (wrangler secret put): ADMIN_UIDS (3.2: comma-separated uids that may open
-# duecrew.com/admin; unset: nobody). RESEND_API_KEY only if mail ever moves off the EMAIL
+# Secrets (wrangler secret put): ADMIN_UIDS (the admin, duecrew.com/admin and notices:
+# comma-separated uids; unset: nobody. A uid alone opens nothing; the account still
+# signs in by emailed code. Kept out of the repo since Nov 2026). RESEND_API_KEY only if mail ever moves off the EMAIL
 # binding below.
 
 [[d1_databases]]
