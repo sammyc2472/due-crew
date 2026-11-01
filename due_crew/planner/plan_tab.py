@@ -131,23 +131,23 @@ class PlanTab(QWidget):
         bar.addWidget(self.sort_btn)
         bar.addSpacing(6)
         self.find = QLineEdit()
-        self.find.setPlaceholderText("Find a date or tag")
+        self.find.setPlaceholderText("Find a set or tag")
         self.find.setClearButtonEnabled(True)
-        self.find.setToolTip(tip_keys("Only the dates whose name or cards have these words; Enter picks the first", "Ctrl+F"))
+        self.find.setToolTip(tip_keys("Only the sets whose name or cards have these words; Enter picks the first", "Ctrl+F"))
         self.find.setMaximumWidth(180)
         self.find.textChanged.connect(self._found)
         self.find.returnPressed.connect(self._find_first)
         QShortcut(QKeySequence("Escape"), self.find, context=Qt.ShortcutContext.WidgetShortcut,
                   activated=lambda: self.find.clear() if self.find.text() else self.views.currentWidget().setFocus())
         bar.addWidget(self.find)
-        self.today_btn = tool("Today", self._go_today, tip="The date open today, or the next one", seq="Ctrl+T")
+        self.today_btn = tool("Today", self._go_today, tip="The set open today, or the next one", seq="Ctrl+T")
         self.look_btn = tool("Needs a look", self._toggle_look, checkable=True,
-                             tip="Only the weeks with a date that has no cards here, or a day over the pace")
+                             tip="Only the weeks with a set that has no cards here, or a day over the pace")
         self.all_btn = tool("Expand all", self._toggle_all, tip="Every week expanded, or every week collapsed")
         for w in (self.today_btn, self.look_btn, self.all_btn):
             bar.addWidget(w)
         self.add_btn, self.add_menu = menu_button("Add", small=True)
-        for label, fn, seq in (("A date…", self.new_date, "Ctrl+N"), ("A quiz or exam…", lambda: self.new_event(), "Ctrl+E"),
+        for label, fn, seq in (("A set…", self.new_date, "Ctrl+N"), ("A quiz or exam…", lambda: self.new_event(), "Ctrl+E"),
                                ("A review day…", self.new_review, None)):
             a = self.add_menu.addAction(label + (f"\t{keys(seq)}" if seq else ""))
             a.triggered.connect(lambda _=False, fn=fn: fn())
@@ -183,7 +183,7 @@ class PlanTab(QWidget):
         self.none_panel = QWidget()
         nl = QVBoxLayout(self.none_panel)
         nl.setContentsMargins(12, 12, 12, 12)
-        self.none_words = plain("Pick a date on the left to see its cards here.", muted=True)
+        self.none_words = plain("Pick a set on the left to see its cards here.", muted=True)
         nl.addWidget(self.none_words)
         nl.addStretch(1)
         for p in (self.date_panel, self.event_panel, self.review_panel, self.none_panel):
@@ -211,7 +211,7 @@ class PlanTab(QWidget):
         pr.addWidget(self.paste_go, 0, Qt.AlignmentFlag.AlignTop)
         self.text_btn = QPushButton("The plan as text")
         self.text_btn.setAutoDefault(False)
-        self.text_btn.setToolTip("<span>Every date, quiz and tag as plan lines, to read or edit</span>")
+        self.text_btn.setToolTip("<span>Every set, quiz and tag as plan lines, to read or edit</span>")
         self.text_btn.clicked.connect(lambda: self.text(True))
         pr.addWidget(self.text_btn, 0, Qt.AlignmentFlag.AlignTop)
         self.ai_btn, self.ai_menu = menu_button("AI prompt", self._ai_entries,
@@ -578,10 +578,10 @@ class PlanTab(QWidget):
             if not ruled:
                 lay.addWidget(self._today_rule())
         if not weeks:
-            lay.addWidget(plain("No dates yet. Paste the course's calendar below, tick what the plan covers in The deck, "
-                                "or Add › A date." if author else "No dates on this plan yet.", muted=True))
+            lay.addWidget(plain("No sets yet. Paste the course's calendar below, tick what the plan covers in The deck, "
+                                "or Add › A set." if author else "No sets on this plan yet.", muted=True))
         elif found is not None and not found:
-            lay.addWidget(plain(f"No date or quiz has “{self.find.text().strip()}” in its name or its cards.", muted=True))
+            lay.addWidget(plain(f"No set or quiz has “{self.find.text().strip()}” in its name or its cards.", muted=True))
         lay.addStretch(1)
         self.list_body = body
         self.list_scroll.setWidget(body)
@@ -601,7 +601,7 @@ class PlanTab(QWidget):
         words, warn = V.week_words(self.asks.get(w["start"]))
         if past and not opened:
             evs = ", ".join(e.get("name") or "?" for e in w["events"])
-            words = f"{len(w['dates']):,} date{'s' if len(w['dates']) != 1 else ''}" + (f", {evs}" if evs else "")
+            words = f"{len(w['dates']):,} set{'s' if len(w['dates']) != 1 else ''}" + (f", {evs}" if evs else "")
             warn = False
         said = plain(words, dc="warn" if warn else None, muted=not warn)
         said.setWordWrap(False)
@@ -686,7 +686,7 @@ class PlanTab(QWidget):
             a, b = min(str(u["opens"]) for u in prep), max(str(u.get("due") or u["opens"]) for u in prep)
             words = f"tests {M.day_words(a)} – {M.day_words(b)}" if a != b else f"tests {M.day_words(a)}"
         else:
-            words = "tests everything" if e is V.last_event(self.win.doc) else "tests no date yet"
+            words = "tests everything" if e is V.last_event(self.win.doc) else "tests no set yet"
         said = plain(words, dc="n")
         said.setWordWrap(False)
         top.addWidget(said, 0, Qt.AlignmentFlag.AlignTop)
@@ -738,7 +738,7 @@ class PlanTab(QWidget):
     def _heavy_box(self):
         hv, t = self.heavy, self.win.deck_tree()
         f, lay = frame("line", margins=(8, 6, 8, 8))
-        name = hv["unit"].get("name") or "a date"
+        name = hv["unit"].get("name") or "a set"
         when = M.day_words(hv["a"]) if hv["a"] == hv["b"] else f"{M.day_words(hv['a'])} – {M.day_words(hv['b'])}"
         top = QHBoxLayout()
         top.setSpacing(8)
@@ -1062,7 +1062,7 @@ class PlanTab(QWidget):
         other = next((x for x in P.units(self.win.doc) if x.get("opens") == day and x.get("id") != uid), None)
         if other is None:
             return True
-        return confirm(self, f"{P.fmt_day(day)} has {other.get('name') or 'a date'} already",
+        return confirm(self, f"{P.fmt_day(day)} has {other.get('name') or 'a set'} already",
                        "Put this one on that day too? Followers see both.", "Put it on")
 
     def _after_picked(self):
@@ -1076,7 +1076,7 @@ class PlanTab(QWidget):
 
     def new_date(self):
         from .window import ask_day
-        name, ok = ask_text(self, "A new date", "Its name, as followers see it (the lecture, the chapter):", "")
+        name, ok = ask_text(self, "A new set", "Its name, as followers see it (the lecture, the chapter):", "")
         if not ok or not name.strip():
             return
         day = ask_day(self, f"{name.strip()}: its day", "The day its cards open for followers.", self._after_picked(), "Put it on")
@@ -1090,7 +1090,7 @@ class PlanTab(QWidget):
             return
         u = self.win.unit(for_uid) if for_uid else None
         start = E._later(u["opens"], 3) if u else self._after_picked()
-        day = ask_day(self, f"{name.strip()}: its day", "Dates before it can be tested on it.", start, "Put it on")
+        day = ask_day(self, f"{name.strip()}: its day", "Sets before it can be tested on it.", start, "Put it on")
         if not day:
             return
         ops = [{"op": "add_event", "day": day, "name": name.strip()}]
@@ -1121,7 +1121,7 @@ class PlanTab(QWidget):
         """A review day on `day`: which dates it reviews, or none."""
         before = [u for u in sorted(P.units(self.win.doc), key=lambda x: str(x.get("opens") or "")) if str(u["opens"]) <= day]
         if not before:
-            self.win.status.setText("A review day comes after the dates it reviews: none open by then.")
+            self.win.status.setText("A review day comes after the sets it reviews: none open by then.")
             return
         r = self._review(day)
         dlg = DD.ReviewDialog(self, f"Review day · {P.fmt_day(day)}", [(u["id"], M.date_label(u)) for u in before],
@@ -1207,8 +1207,8 @@ class PlanTab(QWidget):
         if not ops:
             win.status.setText("Every session in that is on the plan already.")
             return
-        if not confirm(self, f"{n_dates:,} date{'s' if n_dates != 1 else ''} and {n_events:,} quiz{'zes' if n_events != 1 else ''} or exams "
-                       "from the calendar", "The dates come with their names and no cards: pick one, then Add from the deck."
+        if not confirm(self, f"{n_dates:,} set{'s' if n_dates != 1 else ''} and {n_events:,} quiz{'zes' if n_events != 1 else ''} or exams "
+                       "from the calendar", "The sets come with their names and no cards: pick one, then Add from the deck."
                        + (" They wait with your other changes till you send them." if win.waiting() else ""), "Put them on"):
             return
         if win.changes(ops):
@@ -1245,7 +1245,7 @@ class PlanTab(QWidget):
 
     def _ai_entries(self):
         self.ai_menu.clear()
-        self.ai_menu.addAction("Plan the dates (a prompt to paste in your AI)").triggered.connect(lambda: self._prompt("plan"))
+        self.ai_menu.addAction("Plan the sets (a prompt to paste in your AI)").triggered.connect(lambda: self._prompt("plan"))
         self.ai_menu.addAction("Tag by objective (a prompt to paste in your AI)").triggered.connect(lambda: self._prompt("tags"))
 
     def _prompt(self, which):

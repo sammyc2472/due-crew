@@ -149,7 +149,7 @@ class PlanWindow(QDialog, PlanCore):
         words = QVBoxLayout(page)
         words.setContentsMargins(0, 16, 0, 0)
         words.addWidget(role(plain("No plans yet"), "head"))
-        words.addWidget(plain("A plan puts a block's lectures on dates, and opens each date's cards in Anki "
+        words.addWidget(plain("A plan puts a block's lectures in sets on days, and opens each set's cards in Anki "
                               "as its day comes."))
         ways = QHBoxLayout()
         b = QPushButton("New plan…")

@@ -17,7 +17,7 @@ from .edits import _cut
 SAVE_WORDS = {
     "plans_full": "Your plans hold as much as one account can. Make this one smaller, or delete a plan.",
     "bad_plan": "The plan didn't take that change.",
-    "bad_name": "A date or an event has no name. Name it, then save.",
+    "bad_name": "A set or an event has no name. Name it, then save.",
     "not_author": "You're not one of this plan's authors any more.",
     "no_plan": "This plan was deleted.",
     "too_big": "The plan is too big to save.",
@@ -173,7 +173,7 @@ SETTINGS_WORDS = dict(SAVE_WORDS, **{
     "bad_squad": "That squad isn't one of yours.",
     "too_many_listed": "You have 20 plans in the library. Take one out first.",
     "squad_plan": "Only a plan anyone with the code can follow goes in the library.",
-    "no_dates": "Put some dates on it first.",
+    "no_dates": "Put some sets on it first.",
     "taken_out": "It was taken out of the library. Send feedback if that's a mistake.",
     "too_many_editors": "A plan has up to 10 co-authors.",
     "not_crew": "Co-authors come from your crew: you add each other.",

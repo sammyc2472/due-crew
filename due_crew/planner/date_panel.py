@@ -57,10 +57,10 @@ class MoveFromDialog(QDialog):
     def __init__(self, parent, name, after):
         super().__init__(parent)
         attach_alive(self)
-        self.setWindowTitle(f"Move {name} and every date after it")
+        self.setWindowTitle(f"Move {name} and every set after it")
         root = QVBoxLayout(self)
         heading(self, root)
-        root.addWidget(plain(f"{after:,} date{'s' if after != 1 else ''} after it move with it, and the review days "
+        root.addWidget(plain(f"{after:,} set{'s' if after != 1 else ''} after it move with it, and the review days "
                              "among them. Quizzes and exams stay on their days.", muted=True))
         row = QHBoxLayout()
         self.n = QSpinBox()
@@ -113,7 +113,7 @@ class DatePanel(QWidget):
         self.more = QPushButton("⋯")
         self.more.setProperty("dc", "more")
         self.more.setAutoDefault(False)
-        self.more.setToolTip("<span>More for this date: split, a review day, keep only some of its cards, spread, copy its search, delete</span>")
+        self.more.setToolTip("<span>More for this set: split, a review day, keep only some of its cards, spread, copy its search, delete</span>")
         self.more_menu = QMenu(self.more)
         self.more_menu.aboutToShow.connect(self._more)
         self.more.setMenu(self.more_menu)
@@ -179,7 +179,7 @@ class DatePanel(QWidget):
         al.setContentsMargins(0, 0, 0, 0)
         al.setSpacing(6)
         al.addWidget(tool("Add from the deck", lambda: self.tab.tick_for(self.u["id"]) if self.u else None,
-                          tip="Tick the deck's tags for this date, beside the plan", seq="Ctrl+D"))
+                          tip="Tick the deck's tags for this set, beside the plan", seq="Ctrl+D"))
         al.addWidget(tool("Add a search or IDs…", self._add_cards))
         al.addStretch(1)
         root.addWidget(self.adds)
@@ -202,7 +202,7 @@ class DatePanel(QWidget):
         tl = QHBoxLayout(self.todo_links)
         tl.setContentsMargins(0, 0, 0, 0)
         tl.setSpacing(6)
-        self.todo_btn = tool("Add a to-do…", self._todo, tip="Watch, read or do: lines followers tick in Due on this date")
+        self.todo_btn = tool("Add a to-do…", self._todo, tip="Watch, read or do: lines followers tick in Due on this set")
         tl.addWidget(self.todo_btn)
         tl.addStretch(1)
         root.addWidget(self.todo_links)
@@ -368,7 +368,7 @@ class DatePanel(QWidget):
         if u is None:
             return
         after = sum(1 for x in P.units(self.win.doc) if str(x.get("opens")) > str(u["opens"]))
-        dlg = MoveFromDialog(self, u.get("name") or "this date", after)
+        dlg = MoveFromDialog(self, u.get("name") or "this set", after)
         if dlg.exec():
             self.win.change({"op": "move_from", "date": u["id"], "days": dlg.days()})
 
@@ -490,7 +490,7 @@ class DatePanel(QWidget):
             if key[0] in ("tag", "cut"):
                 menu.addAction("A note for followers on it…").triggered.connect(lambda: self.tab.remark(key[1]))
             menu.addSeparator()
-            menu.addAction("Take it off this date").triggered.connect(
+            menu.addAction("Take it off this set").triggered.connect(
                 lambda: win.change({"op": "take_cards", "date": u["id"], "key": list(key)}))
         menu.exec(pos)
 
@@ -501,8 +501,8 @@ class DatePanel(QWidget):
         if u is None or not win.author():
             return
         after = sum(1 for x in P.units(win.doc) if str(x.get("opens")) > str(u["opens"]))
-        a = menu.addAction(f"Move this and the {after:,} date{'s' if after != 1 else ''} after it…" if after
-                           else "Move this date…")
+        a = menu.addAction(f"Move this and the {after:,} set{'s' if after != 1 else ''} after it…" if after
+                           else "Move this set…")
         a.triggered.connect(self._move_from)
         menu.addSeparator()
         tags = [t for t in P.plan_tags(win.doc)]
@@ -524,7 +524,7 @@ class DatePanel(QWidget):
         a.setEnabled(bool(self._cids()) and not win.busy)
         a.triggered.connect(lambda: win.open_date(u["id"], None if win.own_steps() else self._cids(), str(u.get("name") or "")))
         menu.addSeparator()
-        a = menu.addAction("Delete this date…")
+        a = menu.addAction("Delete this set…")
         a.triggered.connect(self._delete)
 
     def _keep_only(self, t):
@@ -625,10 +625,10 @@ class EventPanel(QWidget):
                                          lambda uid=u["id"]: self.tab.pick(("date", uid))))
         if prep:
             c = M.counts(self.win.idx, cids) if self.win.idx is not None and cids else None
-            self.said.setText(f"Tests {len(prep):,} date{'s' if len(prep) != 1 else ''}"
+            self.said.setText(f"Tests {len(prep):,} set{'s' if len(prep) != 1 else ''}"
                               + (f" · {c['cards']:,} cards, {c['cards'] - c['new']:,} seen" if c else ""))
         else:
-            self.said.setText("No date is tested on it yet: pick it as a date's Tested on.")
+            self.said.setText("No set is tested on it yet: pick it as a set's Tested on.")
 
     def busy_changed(self):
         idle = not self.win.busy
@@ -655,7 +655,7 @@ class EventPanel(QWidget):
             return
         n = len(self.tab.prep(e))
         if confirm(self, f"Take {e.get('name') or 'it'} off?",
-                   f"{n:,} date{'s' if n != 1 else ''} are tested on it; they stay, tested on nothing." if n
+                   f"{n:,} set{'s' if n != 1 else ''} are tested on it; they stay, tested on nothing." if n
                    else "It comes off the plan.", "Take it off", danger=True):
             self.win.change({"op": "take_event", "event": e["id"]}, keep=("gone",))
 
@@ -674,7 +674,7 @@ class ReviewPanel(QWidget):
         self.said = plain(muted=True)
         root.addWidget(self.said)
         row = QHBoxLayout()
-        self.change_btn = tool("Change its dates…", lambda: self.tab.review_day(self.r.get("day")) if self.r else None)
+        self.change_btn = tool("Change its sets…", lambda: self.tab.review_day(self.r.get("day")) if self.r else None)
         self.off_btn = tool("No review day", self._off, bad=True)
         row.addWidget(self.change_btn)
         row.addWidget(self.off_btn)
@@ -687,7 +687,7 @@ class ReviewPanel(QWidget):
         us = self.tab.review_units(r)
         self.title.setText(self.tab.review_label(r))
         self.said.setText(f"That morning, followers get a Due Crew deck of what they've seen from these "
-                          f"{len(us):,} date{'s' if len(us) != 1 else ''}, most missed first.")
+                          f"{len(us):,} set{'s' if len(us) != 1 else ''}, most missed first.")
         for w in (self.change_btn, self.off_btn):
             w.setVisible(self.win.author())
 

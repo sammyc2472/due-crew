@@ -42,7 +42,7 @@ class AddCardsDialog(QDialog):
         wrow.addWidget(self.unit, 1)
         ol.addLayout(wrow)
         orow = QHBoxLayout()
-        self.own = QRadioButton("New date")
+        self.own = QRadioButton("New set")
         self.date = QDateEdit()
         self.date.setCalendarPopup(True)
         self.date.setDisplayFormat("ddd d MMM yyyy")
@@ -61,10 +61,10 @@ class AddCardsDialog(QDialog):
         self.with_unit.setChecked(True)
         self.unit.currentIndexChanged.connect(lambda *_: self.with_unit.setChecked(True))
         self.date.dateChanged.connect(lambda *_: self.own.setChecked(True))
-        form.addRow("Date", opens)
+        form.addRow("Set", opens)
         root.addLayout(form)
         # 3.6.5: a follower's Anki opens a date once; what's added after comes the next morning
-        self.opened = QLabel("This date has opened. Followers who opened it get these tomorrow morning.")
+        self.opened = QLabel("This set has opened. Followers who opened it get these tomorrow morning.")
         note(self.opened)
         self.opened.setVisible(False)
         root.addWidget(self.opened)
@@ -170,7 +170,7 @@ class AddCardsDialog(QDialog):
             if got is None:
                 self.add_btn.setEnabled(True)
                 self.status.setText({403: "Only the plan's author can add cards.",
-                                     404: "That date is gone. Pick another.",
+                                     404: "That set is gone. Pick another.",
                                      400: "That's more single cards than a plan can hold."}.get(
                     status, "Couldn't add them. Check your connection."))
                 return

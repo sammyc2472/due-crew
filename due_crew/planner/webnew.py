@@ -125,7 +125,7 @@ class NewPlan:
             return out
         dates = sm.get("dates") or []
         out["ok"] = bool(dates)
-        out["summary"] = (f"{_pl(int(sm.get('lessons') or len(dates)), 'lesson')}, {int(sm.get('new') or 0):,} new · "
+        out["summary"] = (f"{_pl(int(sm.get('lessons') or len(dates)), 'set')}, {int(sm.get('new') or 0):,} new · "
                           f"{P.fmt_day(sm['first'])} – {P.fmt_day(sm['last'])}" if dates else "")
         if dates and sm.get("busiest"):
             out["summary"] += f" · busiest day {int(sm['busiest']):,} new"
@@ -236,7 +236,7 @@ class NewPlan:
             doc, sm = self._resource_doc(idx, tree)
             name = st["name"].strip() or M.resource_name(st["res"], st["only"])
             n = int(sm.get("lessons") or len(sm.get("dates") or []))
-            words = (f"{_pl(n, 'lesson')} from {M.label(st['res'])}, {int(sm.get('new') or 0):,} new, "
+            words = (f"{_pl(n, 'set')} from {M.label(st['res'])}, {int(sm.get('new') or 0):,} new, "
                      f"{P.fmt_day(sm['first'])} to {P.fmt_day(sm['last'])}. ") if n else ""
             return name, doc, words
         name = st["name"].strip()
@@ -280,7 +280,7 @@ class NewPlan:
             return
         if got[0] == "made":
             st["made"] = got[1]
-            st["said"] = f"The plan is on duecrew.com, but its lessons didn't save. {got[2]} Make tries them again, on it."
+            st["said"] = f"The plan is on duecrew.com, but its sets didn't save. {got[2]} Make tries them again, on it."
             self.push()
             return
         outcome, raw = got

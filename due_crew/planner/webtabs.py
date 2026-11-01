@@ -13,9 +13,9 @@ plan_flow's when it has it).
 Qt-free: a dialog that isn't HTML (Every week's lines, Your AI app)
 opens lazily from the one click that needs it, parented to the window.
 Requests only on a click, by the routes the Qt tabs use (remote.py,
-flow.Ops). Where the Qt tabs say "date" for a plan's lesson, this says
-"lesson", as the window's Plan tab does. Names are the server's, the
-authors' and the deck's: the page sets them as text."""
+flow.Ops). A plan's unit is a "set" here, as on the window's Plan tab
+and in the Qt tabs. Names are the server's, the authors' and the deck's:
+the page sets them as text."""
 
 import datetime
 
@@ -29,7 +29,7 @@ from . import remote
 from . import view as V
 
 CATCHUP = ((0, "None"), (3, "Every 3rd week"), (4, "Every 4th week"))
-MODES = (("daily", "Up to"), ("end", "Fit to the end"), ("placed", "I set each lesson"))
+MODES = (("daily", "Up to"), ("end", "Fit to the end"), ("placed", "I place each set"))
 EARLY = ((0, "Off"), (1, "1 day"), (2, "2 days"), (3, "3 days"), (5, "5 days"), (7, "7 days"))
 FOLLOW_KEYS = ("shift", "skipped", "moved", "paused", "own")
 SOON_MS = 1800  # a follow's step, read again once its request is likely back (mine_tab._again)
@@ -113,7 +113,7 @@ def _insights(w):
         return {"none": "This plan's deck isn't in this Anki, so there's nothing here to count."}
     per, cards = INS.held(w.idx, doc, w.swap)
     if not per:
-        return {"none": "Nothing to count yet: the plan has no lessons."}
+        return {"none": "Nothing to count yet: the plan has no sets."}
     return {"work": _workload(w, doc), "deck": _deck(w, cards), "has": _contents(w, doc, per, cards)}
 
 
@@ -126,7 +126,7 @@ def _workload(w, doc):
     asks = V.week_asks(doc, t, pace) if t is not None else {}
     rows = INS.workload(doc, asks, w.ops.today())
     if not rows:
-        return {"empty": "No new cards on its lessons yet."}
+        return {"empty": "No new cards on its sets yet."}
     words, over = INS.workload_words(doc, rows, V.work(doc, t, pace))
     cap = max(x["cap"] for x in rows)
     new_top = max([x["new"] for x in rows] + [cap]) or 1
@@ -190,12 +190,12 @@ def _parts(rows, none):
 
 
 def _exam_words(x):
-    """insights.exam_words, a lesson for a date: "55 cards from 3 lessons"."""
+    """insights.exam_words, as the page says it: "55 cards from 3 sets"."""
     if x["all"]:
         return f"everything: {x['cards']:,} cards"
     if not x["dates"]:
-        return "no lesson for it yet"
-    return f"{x['cards']:,} cards from {_pl(x['dates'], 'lesson')}"
+        return "no set for it yet"
+    return f"{x['cards']:,} cards from {_pl(x['dates'], 'set')}"
 
 
 def _contents(w, doc, per, cards):
@@ -208,10 +208,10 @@ def _contents(w, doc, per, cards):
            "lines": []}
     two = INS.on_two(per)
     if two:
-        out["lines"].append(f"{two:,} card{'s are' if two != 1 else ' is'} on two lessons or more; each opens with the first.")
+        out["lines"].append(f"{two:,} card{'s are' if two != 1 else ' is'} on two sets or more; each opens with the first.")
     leech = M.counts(w.idx, cards)["leech"]
     if leech:
-        out["lines"].append(f"{leech:,} lee{'ches' if leech != 1 else 'ch'} on its lessons stay{'' if leech != 1 else 's'} "
+        out["lines"].append(f"{leech:,} lee{'ches' if leech != 1 else 'ch'} on its sets stay{'' if leech != 1 else 's'} "
                             "shut: a plan never opens one.")
     return out
 
@@ -293,7 +293,7 @@ def _author(w):
                      "off": ("Take back the invite" if pending else "Take them off") if owner else ""})
     listed = raw.get("listed")
     why = ("Only a plan anyone with the code can follow goes in the library." if raw.get("audience") != "code"
-           else "Put some lessons on it first." if not P.units(doc) else "")
+           else "Put some sets on it first." if not P.units(doc) else "")
     lib_said = (f"Taken out of the library. {raw.get('listedNote') or ''} It stays yours, and its followers keep following. "
                 "Send feedback if it's a mistake." if listed == -1
                 else "Its owner lists it in the library." if not owner else why)
@@ -411,13 +411,13 @@ def _preview(w, ops):
                  and u["id"] in now and now[u["id"]] != u.get("opens"))
     out = []
     if moved or ev_moved:
-        bits = [_pl(moved, "lesson") if moved else "",
+        bits = [_pl(moved, "set") if moved else "",
                 f"{ev_moved:,} quiz{'zes' if ev_moved != 1 else ''} or exam{'s' if ev_moved != 1 else ''}" if ev_moved else ""]
         out += [["", "Saving moves "], ["b", " and ".join(b for b in bits if b)], ["", "."]]
         if opened:
             out.append(["", f" {opened:,} of them opened already: followers who have their cards keep them."])
     else:
-        out.append(["", "No lesson moves."])
+        out.append(["", "No set moves."])
     ph = after.get("phases") or {}
     if int(ph.get("taper") or 0) and after.get("end"):
         n = int(ph["taper"])
@@ -821,7 +821,7 @@ def c_next_year(w):
     doc = _raw(w).get("doc") or {}
     first = E.first_day(doc)
     if not first:
-        w.say("The plan has no lessons to copy.")
+        w.say("The plan has no sets to copy.")
         return
     pid, name = w.plan["id"], E.next_year_name(_raw(w).get("name"))
     start = E._later(first, 364)
@@ -846,7 +846,7 @@ def c_next_year(w):
         elif got[0] != "saved":
             w.say(str(got[1]))
         else:
-            w.say(f"Copied: {got[1].get('name')}, its first lesson {P.fmt_day(start)}.")
+            w.say(f"Copied: {got[1].get('name')}, its first set {P.fmt_day(start)}.")
             w.ops.reopen(got[1]["id"])
     w.ops.ask(w, job, done)
 
@@ -856,7 +856,7 @@ def c_table(w):
     if not w.author():
         return
     doc = w.doc or {}
-    lines = ["Day\tLesson\tFinish by\tTested on\tCards"]
+    lines = ["Day\tSet\tFinish by\tTested on\tCards"]
     for u in sorted(P.units(doc), key=lambda u: str(u.get("opens") or "")):
         n = len(w.idx.match(u, w.swap, doc)) if w.idx is not None else ""
         ev = next((e.get("name") for e in doc.get("events") or [] if isinstance(e, dict) and e.get("id") == u.get("for")), "")
@@ -864,7 +864,7 @@ def c_table(w):
     for e in doc.get("events") or []:
         if isinstance(e, dict):
             lines.append("\t".join((str(e.get("day")), str(e.get("name") or ""), "", "(quiz or exam)", "")))
-    w._copy("\n".join(lines) + "\n", f"Copied: {_pl(len(P.units(doc)), 'lesson')} as a table. Paste it into a spreadsheet.")
+    w._copy("\n".join(lines) + "\n", f"Copied: {_pl(len(P.units(doc)), 'set')} as a table. Paste it into a spreadsheet.")
 
 
 def c_delete_plan(w, sure=False):
@@ -939,7 +939,7 @@ def _follower(w):
     skips = []
     for uid in p.get("skipped") or []:
         u = names.get(uid)
-        skips.append({"uid": uid, "label": f"{P.fmt_day(u['opens'])} · {u.get('name') or '?'}" if u else "a lesson taken off"})
+        skips.append({"uid": uid, "label": f"{P.fmt_day(u['opens'])} · {u.get('name') or '?'}" if u else "a set taken off"})
     today, have = w.ops.today(), set(p.get("skipped") or [])
     ahead = [u for u in sorted(names.values(), key=lambda u: str(u.get("opens") or ""))
              if str(u.get("opens") or "") >= today and u["id"] not in have][:20]

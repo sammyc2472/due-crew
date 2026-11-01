@@ -331,7 +331,7 @@ class SettingsTab(QWidget):
         self.owner_only.setVisible(not owner)
         listed = raw.get("listed")
         why = ("Only a plan anyone with the code can follow goes in the library." if raw.get("audience") != "code"
-               else "Put some dates on it first." if not P.units(doc) else "")
+               else "Put some sets on it first." if not P.units(doc) else "")
         self.listed.setVisible(owner and listed != -1)
         self.listed.setEnabled(owner and not busy and (not why or listed == 1))
         self.lib_said.setText(
@@ -435,7 +435,7 @@ class SettingsTab(QWidget):
     def _table(self):
         """The dates as a table (tab-separated: paste into a spreadsheet)."""
         doc = self.win.doc or {}
-        lines = ["Day\tDate\tFinish by\tTested on\tCards"]
+        lines = ["Day\tSet\tFinish by\tTested on\tCards"]
         for u in sorted(P.units(doc), key=lambda u: str(u.get("opens") or "")):
             n = len(self.win.idx.match(u, self.win.swap, doc)) if self.win.idx is not None else ""
             ev = next((e.get("name") for e in doc.get("events") or [] if isinstance(e, dict) and e.get("id") == u.get("for")), "")
@@ -444,7 +444,7 @@ class SettingsTab(QWidget):
             if isinstance(e, dict):
                 lines.append("\t".join((str(e.get("day")), str(e.get("name") or ""), "", "(quiz or exam)", "")))
         QApplication.clipboard().setText("\n".join(lines) + "\n")
-        self.said.setText(f"Copied: {len(P.units(doc)):,} dates as a table. Paste it into a spreadsheet.")
+        self.said.setText(f"Copied: {len(P.units(doc)):,} sets as a table. Paste it into a spreadsheet.")
 
     def _who(self):
         if self._loading or not self._owner():
@@ -557,7 +557,7 @@ class SettingsTab(QWidget):
         doc = self._raw().get("doc") or {}
         first = E.first_day(doc)
         if not first:
-            self.said.setText("The plan has no dates to copy.")
+            self.said.setText("The plan has no sets to copy.")
             return
         pid, name = self.win.plan["id"], E.next_year_name(self._raw().get("name"))
         start = E._later(first, 364)
@@ -582,7 +582,7 @@ class SettingsTab(QWidget):
             elif got[0] != "saved":
                 self.said.setText(str(got[1]))
             else:
-                self.said.setText(f"Copied: {got[1].get('name')}, its first date {P.fmt_day(start)}.")
+                self.said.setText(f"Copied: {got[1].get('name')}, its first set {P.fmt_day(start)}.")
                 self.win.ops.reopen(got[1]["id"])
         self.win.ops.ask(self.win, job, done)
 

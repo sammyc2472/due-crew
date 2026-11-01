@@ -19,7 +19,7 @@ from . import view as V
 from .widgets import plain, segs, tool
 
 CATCHUP = ((0, "None"), (3, "Every 3rd week"), (4, "Every 4th week"))
-MODES = (("daily", "Up to"), ("end", "Fit to the end"), ("placed", "I set each date"))
+MODES = (("daily", "Up to"), ("end", "Fit to the end"), ("placed", "I place each set"))
 
 
 def _iso(qd):
@@ -39,7 +39,7 @@ class Shape:
         self.start = QDateEdit()
         self.start.setCalendarPopup(True)
         self.start.setDisplayFormat("ddd d MMM yyyy")
-        self.start.setToolTip("<span>Every date and quiz moves with it</span>")
+        self.start.setToolTip("<span>Every set and quiz moves with it</span>")
         self.start.dateChanged.connect(lambda _d: self._said())
         row = QHBoxLayout()
         row.addWidget(self.start)
@@ -260,13 +260,13 @@ class Shape:
         opened = sum(1 for u in P.units(doc) if str(u.get("opens")) <= today and before_days.get(u["id"]) and
                      any(x["id"] == u["id"] and x.get("opens") != u.get("opens") for x in P.units(after)))
         if moved or ev_moved:
-            bits = [f"{moved:,} date{'s' if moved != 1 else ''}" if moved else "",
+            bits = [f"{moved:,} set{'s' if moved != 1 else ''}" if moved else "",
                     f"{ev_moved:,} quiz{'zes' if ev_moved != 1 else ''} or exam{'s' if ev_moved != 1 else ''}" if ev_moved else ""]
             said.append(f"Saving moves <b>{esc(' and '.join(b for b in bits if b))}</b>.")
             if opened:
                 said.append(esc(f"{opened:,} of them opened already: followers who have their cards keep them."))
         else:
-            said.append(esc("No date moves."))
+            said.append(esc("No set moves."))
         ph = after.get("phases") or {}
         if int(ph.get("taper") or 0) and after.get("end"):
             n = int(ph["taper"])

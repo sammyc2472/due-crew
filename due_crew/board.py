@@ -1746,7 +1746,7 @@ def _plan_switch(cards, card):
                   f'{e(word)}{dot}</a>')
     pid = str(card.get("id", ""))
     return (f'<div class="pk psk"><span class="psw">{pills}</span><span>{e(str(card.get("sub") or ""))}</span>'
-            f'<span class="acts"><a class="pbt" href="#" title="Its weeks and dates, Insights, and your settings for it" '
+            f'<span class="acts"><a class="pbt" href="#" title="Its weeks and sets, Insights, and your settings for it" '
             f'onclick="{_pycmd("planyours:" + pid)}">Your plans&hellip;</a></span></div>')
 
 
@@ -1862,7 +1862,7 @@ def _plan_card_html(card, people=None, cfg=None, head=None):
     out = '<div class="dc-pc">' + (head or (
         f'<div class="pk"><b>{e(str(card.get("title") or "Plan"))}</b>'
         f'<span>{e(str(card.get("sub") or ""))}</span>'
-        f'<span class="acts"><a class="pbt" href="#" title="Its weeks and dates, Insights, and your settings for it" '
+        f'<span class="acts"><a class="pbt" href="#" title="Its weeks and sets, Insights, and your settings for it" '
         f'onclick="{_pycmd("planyours:" + pid)}">Your plans&hellip;</a></span></div>'))
     tabs = card.get("tabs") or {}
     if card.get("no_deck"):
@@ -1940,7 +1940,7 @@ def _plan_path(card):
     said += f', then {e(str(end.get("name") or "Exam"))} on {when}' if ev else ""
     gap = "" if len(ls) <= 30 else " g2" if len(ls) <= 60 else " g1" if len(ls) <= 120 else " g0"
     right = (f'{e(str(end.get("name") or "Exam"))} &middot; {when}' if ev else f"Ends {when}" if when else "")
-    return (f'<div class="ppath{gap}" role="img" aria-label="Lessons: {said}">{segs}</div>'
+    return (f'<div class="ppath{gap}" role="img" aria-label="Sets: {said}">{segs}</div>'
             f'<div class="ppl"><span>{_ins_dname(p.get("first"), long=True)}</span><span>{right}</span></div>')
 
 
@@ -2014,8 +2014,8 @@ def _quiz_line(card, pid):
     when = "today" if qz.get("today") else f'on {e(str(qz.get("when") or ""))}'
     return (f'<div class="pn"><span>For <b>{e(str(qz.get("name") or "?"))}</b> {when}'
             + (f' &middot; {left} more day{"s" if left != 1 else ""} of prep' if left else "")
-            + f' &middot; {n:,} card{"s" if n != 1 else ""} open from its dates</span>'
-            f'<span class="acts"><a href="#" title="Its dates&rsquo; open cards in one deck, the shakiest first" '
+            + f' &middot; {n:,} card{"s" if n != 1 else ""} open from its sets</span>'
+            f'<span class="acts"><a href="#" title="Its sets&rsquo; open cards in one deck, the shakiest first" '
             f'onclick="{_pycmd(f"planquiz:{pid}:" + str(qz.get("id") or ""))}">Study for it</a></span></div>')
 
 
@@ -2047,7 +2047,7 @@ def _own_html(ow, pid):
         if then:
             out += f'<div class="pq">Then {" &middot; ".join(then)}{f" &middot; {more:,} more" if more else ""}</div>'
     else:
-        out += '<div class="pq">Every date of it is open.</div>'
+        out += '<div class="pq">Every set of it is open.</div>'
     if ow.get("last"):
         out += (f'<div class="pnl">{e(str(ow["last"]))} '
                 f'<a href="#" onclick="{_pycmd("planpaceundo:" + pid)}">Undo</a></div>')
@@ -2810,7 +2810,7 @@ def _ins_ahead(did, a, deck_name=""):
         one = _ahead_r(n) == 1
         return (f" {_ins_r(n)} new card{'' if one else 's'} wait{'s' if one else ''} "
                 f"till {_ins_dname(days[7 + int(s[1]) + 1], long=True)}"
-                + (f", {_ins_r(ph)} of them your plan&rsquo;s dates" if ph >= 1 else "") + ".")
+                + (f", {_ins_r(ph)} of them in your plan&rsquo;s sets" if ph >= 1 else "") + ".")
 
     blocks, pills, acts = "", "", ""
     for w in ways:
@@ -3042,7 +3042,7 @@ def _insights_html(did, v):
         lab = (f'{e(str(aim["name"]))} &middot; {when} {dn} &middot; {days}' if scoped
                else f'Your exam &middot; {when} {dn} &middot; {days}' if mine
                else f'Before {when} {dn} &middot; {days}')
-        whose = "the plan&rsquo;s prep dates for it" if scoped else "this deck"
+        whose = "the plan&rsquo;s prep sets for it" if scoped else "this deck"
         out += (f'<div class="ihero"><div class="k">{lab}</div>'
                 f'<div class="t" title="Started cards of {whose} that Anki won&rsquo;t show you before then, under your {int(v.get("target") or 90)}% by then (FSRS)">'
                 f'<a class="tp" href="#" title="Browse them" onclick="{_pycmd(f"insbrowse:{did}:h")}">'
@@ -3460,7 +3460,7 @@ def _plan_notes(card, pid):
         # 3.7.3: an author's update adds to today or earlier: nothing opens until I say
         n = int(upd["n"])
         names = [str(x) for x in upd.get("names") or []]
-        what = " and ".join(f"<b>{e(x)}</b>" for x in names) if len(names) <= 2 else f"<b>{len(names)} dates</b>"
+        what = " and ".join(f"<b>{e(x)}</b>" for x in names) if len(names) <= 2 else f"<b>{len(names)} sets</b>"
         who = e(str(card.get("owner_name") or "The plan"))
         lim = s.get("limit")
         over = (f' Anki shows {int(lim):,} new a day in this deck.'
@@ -3503,7 +3503,7 @@ def _plan_notes(card, pid):
                    f'<span class="acts"><a href="#" onclick="{_pycmd("planlimit:" + pid)}">Raise to {want:,}</a></span></div>')
     fb = int(s.get("fell_back") or 0)
     if fb and not card.get("fallback_ok"):
-        out.append(f'<div class="pn"><span>{fb} date{"s use tags" if fb != 1 else " uses a tag"} your deck names differently, '
+        out.append(f'<div class="pn"><span>{fb} set{"s use tags" if fb != 1 else " uses a tag"} your deck names differently, '
                    f'matched by their cards.</span><span class="acts"><a href="#" onclick="{_pycmd("planidsok:" + pid)}">OK</a></span></div>')
     # 3.6.5: what the plan left shut here, said once (OK until it grows).
     # 3.8.0: the leeches are the deck's, so they're on Insights
@@ -3524,7 +3524,7 @@ def _plan_notes(card, pid):
                    f'<span class="acts"><a href="#" onclick="{_pycmd("plancatch:" + pid)}">Catch up&hellip;</a></span></div>')
     if card.get("put_off"):
         names = [str(n) for n in card["put_off"]]
-        what = " and ".join(f"<b>{e(n)}</b>" for n in names) if len(names) <= 2 else f"<b>{len(names)} dates</b>"
+        what = " and ".join(f"<b>{e(n)}</b>" for n in names) if len(names) <= 2 else f"<b>{len(names)} sets</b>"
         # 3.8.1: put off by Welcome back's Not today, they wait: tomorrow morning asks again
         when = (f'wait{"s" if len(names) == 1 else ""} for tomorrow morning' if card.get("put_off_ask")
                 else f'open{"s" if len(names) == 1 else ""} tomorrow morning')
@@ -8051,7 +8051,7 @@ def _due_behind(v):
     out = '<div class="du-bh"><div class="du-sec warn">Behind</div>'
     for p in v["behind_plans"]:
         left = int(p["left"])
-        what = f'{int(p["dates"])} date{"s" if p["dates"] != 1 else ""}' + (
+        what = f'{int(p["dates"])} set{"s" if p["dates"] != 1 else ""}' + (
             f' &middot; <a class="tp" href="#" title="Browse them" onclick="{_pycmd("planleft:" + p["pid"])}">{left:,} cards to see</a>'
             if left else "")
         out += (f'<div class="du-r">{_due_box("", auto=True)}<span class="t"><b>{e(p["plan"])}</b><small>{what}</small></span>'

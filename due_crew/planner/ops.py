@@ -71,7 +71,7 @@ def find_date(doc, ref):
     ref = str(ref or "").strip()
     us = _units(doc)
     if not ref:
-        raise Refused("Which date? Name it by its day or its name.")
+        raise Refused("Which set? Name it by its day or its name.")
     by_id = [u for u in us if u["id"] == ref]
     if by_id:
         return ref
@@ -82,8 +82,8 @@ def find_date(doc, ref):
     if len(hits) == 1:
         return hits[0]["id"]
     if not hits:
-        raise Refused(f"No date on the plan is {ref}.")
-    raise Refused(f"{len(hits)} dates are {ref}: say its day too.")
+        raise Refused(f"No set on the plan is {ref}.")
+    raise Refused(f"{len(hits)} sets are {ref}: say its day too.")
 
 
 def find_event(doc, ref):
@@ -159,7 +159,7 @@ def _date_ref(doc, o, key="date"):
 
 def _label(doc, uid):
     u = next((x for x in _units(doc) if x["id"] == uid), None)
-    return M.date_label(u) if u else "a date"
+    return M.date_label(u) if u else "a set"
 
 
 def _src_words(tags=(), decks=(), tree=None):
@@ -188,7 +188,7 @@ class AddCards(Op):
     def run(self, doc, o, ctx):
         doc, took = E.add_sources(doc, o["date"], o["tags"], o["decks"])
         if not took:
-            raise Refused("That date has those already.")
+            raise Refused("That set has those already.")
         return doc, set()
 
     def words(self, o, before, after, ctx):
@@ -324,7 +324,7 @@ class MoveFrom(Op):
         day = next((u.get("opens") for u in _units(before) if u["id"] == o["date"]), "")
         n = sum(1 for u in _units(before) if str(u.get("opens") or "") >= day) - 1
         d = abs(o["days"])
-        return [_entry("Moved", _label(after, o["date"]) + (f" and the {n:,} date{'s' if n != 1 else ''} after it" if n else ""),
+        return [_entry("Moved", _label(after, o["date"]) + (f" and the {n:,} set{'s' if n != 1 else ''} after it" if n else ""),
                        f"{d} day{'s' if d != 1 else ''} {'later' if o['days'] > 0 else 'earlier'}", o["date"], day)]
 
 
@@ -392,7 +392,7 @@ class AddDate(Op):
         o["name"] = E._name(o["name"]) if o.get("name") else None
         o["join"] = bool(o.get("join"))
         if not (o["tags"] or o["decks"]) and not o["name"]:
-            raise Refused("A new date needs a name or something on it.")
+            raise Refused("A new set needs a name or something on it.")
         return o
 
     def _joins(self, doc, o):
@@ -405,7 +405,7 @@ class AddDate(Op):
         if on is not None:
             doc, took = E.add_sources(doc, on["id"], o["tags"], o["decks"])
             if not took:
-                raise Refused("That date has those already.")
+                raise Refused("That set has those already.")
             if o["name"]:
                 doc = E.rename(doc, on["id"], o["name"])
             return doc, {on["id"]}
@@ -495,7 +495,7 @@ class MoveEvent(_EventOp):
         out = [_entry("Moved", self._label(after, o["event"]), f"from {P.fmt_day(old)}" if old else "", None, old)]
         late = [u for u in _units(after) if u.get("for") == o["event"] and str(u.get("due") or u.get("opens") or "") >= o["to"]]
         if late:
-            out[0]["detail"] += f" · {len(late):,} date{'s' if len(late) != 1 else ''} now finish on it or after"
+            out[0]["detail"] += f" · {len(late):,} set{'s' if len(late) != 1 else ''} now finish on it or after"
         return out
 
 
@@ -505,7 +505,7 @@ class TakeEvent(_EventOp):
         return E.take_event(doc, o["event"]), set()
 
     def words(self, o, before, after, ctx):
-        return [_entry("Gone", self._label(before, o["event"]), "the dates for it stay")]
+        return [_entry("Gone", self._label(before, o["event"]), "the sets for it stay")]
 
 
 @op("set_todo")
@@ -688,7 +688,7 @@ class MoveSource(Op):
         elif o.get("day"):
             o["day"] = _iso(o["day"])
         else:
-            raise Refused("Move them where? Name a date or a day.")
+            raise Refused("Move them where? Name a set or a day.")
         return o
 
     def run(self, doc, o, ctx):
@@ -704,7 +704,7 @@ class MoveSource(Op):
         what = _source_words(before, o["key"])
         x = _entry("Moved", what, f"from {_label(before, o['date'])} to {_label(after, tid)}"
                    + ("; nothing else was on the first, so it went" if went else ""), tid, min(days) if days else None)
-        name = next((u.get("name") for u in _units(after) if u["id"] == tid), "") or "another date"
+        name = next((u.get("name") for u in _units(after) if u["id"] == tid), "") or "another set"
         x["line"] = f"{what} moved to {name}"  # why_line's: a source isn't "Day · name"
         return [x]
 
@@ -788,7 +788,7 @@ class SplitTags(Op):
 
     def words(self, o, before, after, ctx):
         n = len(_units(after)) - len(_units(before)) + 1
-        return [_entry("Split", _label(before, o["date"]), f"{M.label(o['path'])} by its tags, over {max(1, n):,} dates", o["date"])]
+        return [_entry("Split", _label(before, o["date"]), f"{M.label(o['path'])} by its tags, over {max(1, n):,} sets", o["date"])]
 
 
 @op("place")
@@ -827,7 +827,7 @@ class SetPace(Op):
     def check(self, doc, o):
         o = dict(o)
         if o.get("mode") not in ("end", "daily", "placed"):
-            raise Refused("Up to a number a day, fit to the end, or each date set by hand?")
+            raise Refused("Up to a number a day, fit to the end, or each set placed by hand?")
         o["days"] = [1 if x else 0 for x in _list(o.get("days"), "days")][:7]
         if len(o["days"]) != 7 or not any(o["days"]):
             raise Refused("Pick a study day or more.")
@@ -840,7 +840,7 @@ class SetPace(Op):
 
     def words(self, o, before, after, ctx):
         names = "".join("MTWTFSS"[i] for i, on in enumerate(o["days"]) if on)
-        how = {"daily": f"up to {o['daily'] or 20} new cards a day", "end": "fit to the end", "placed": "each date set by hand"}[o["mode"]]
+        how = {"daily": f"up to {o['daily'] or 20} new cards a day", "end": "fit to the end", "placed": "each set placed by hand"}[o["mode"]]
         return [_entry("Changed", "The plan’s shape", f"{how}, study days {names}")]
 
 
@@ -897,7 +897,7 @@ class ShiftAll(Op):
 
     def words(self, o, before, after, ctx):
         d = abs(o["days"])
-        return [_entry("Moved", "Every date, quiz and review day", f"{d} day{'s' if d != 1 else ''} {'later' if o['days'] > 0 else 'earlier'}")]
+        return [_entry("Moved", "Every set, quiz and review day", f"{d} day{'s' if d != 1 else ''} {'later' if o['days'] > 0 else 'earlier'}")]
 
 
 @op("lay_out")
@@ -968,7 +968,7 @@ class LayOut(Op):
         if not new:
             return diff_words(before, after)
         days = sorted(str(u.get("opens")) for u in new)
-        return [_entry("Laid out", f"{len(new):,} new date{'s' if len(new) != 1 else ''}",
+        return [_entry("Laid out", f"{len(new):,} new set{'s' if len(new) != 1 else ''}",
                        f"{P.fmt_day(days[0])} – {P.fmt_day(days[-1])}" if len(days) > 1 else P.fmt_day(days[0]),
                        None, days[0])]
 
@@ -996,7 +996,7 @@ class Breather(Op):
 
     def words(self, o, before, after, ctx):
         n = sum(1 for u in _units(before) if str(u.get("opens") or "") > o["today"])
-        return [_entry("Moved", f"The {n:,} date{'s' if n != 1 else ''} still to come", "a study day later; quizzes stay")]
+        return [_entry("Moved", f"The {n:,} set{'s' if n != 1 else ''} still to come", "a study day later; quizzes stay")]
 
 
 @op("rename_plan_tag")

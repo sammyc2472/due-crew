@@ -194,7 +194,7 @@ var dcPlan = (function () {
           h("i.shut", { style: "width:" + (100 * c.shut / tot) + "%" })]),
         h("div.lg", {}, [h("span", {}, [h("i.seen"), c.seen.toLocaleString() + " seen"]), h("span", {}, [h("i.open"), c.open.toLocaleString() + " open"]),
           h("span", {}, [h("i.shut"), c.shut.toLocaleString() + " still shut"]),
-          author() ? h("span", { text: "Not in a lesson: " + (c.outside || 0).toLocaleString() }) : null])]));
+          author() ? h("span", { text: "Not in a set: " + (c.outside || 0).toLocaleString() }) : null])]));
     }
     return out;
   }
@@ -207,7 +207,7 @@ var dcPlan = (function () {
     });
     bar.appendChild(seg);
     if (ui.mode === "list") { bar.appendChild(btn(ui.desc ? "Latest first" : "Earliest first", function () { ui.desc = !ui.desc; render(); }, "t")); }
-    var find = h("input.in", { placeholder: "Find a lesson or tag", "data-keep": "find", style: "width:200px", title: "Only the lessons whose name or cards have these words; Enter picks the first (Ctrl+F)" });
+    var find = h("input.in", { placeholder: "Find a set or tag", "data-keep": "find", style: "width:200px", title: "Only the sets whose name or cards have these words; Enter picks the first (Ctrl+F)" });
     find.value = ui.find;
     find.addEventListener("input", function () { ui.find = this.value; if (ui.find.trim()) { ui.mode = "list"; } render(); });
     find.addEventListener("keydown", function (e) {
@@ -215,17 +215,17 @@ var dcPlan = (function () {
       if (e.key === "Escape") { if (this.value) { ui.find = ""; render(); } else { this.blur(); } }
     });
     bar.appendChild(find);
-    bar.appendChild(btn("Today", goToday, "", { title: "The lesson open today, or the next one (Ctrl+T)" }));
+    bar.appendChild(btn("Today", goToday, "", { title: "The set open today, or the next one (Ctrl+T)" }));
     if (author() && (p.lookN || ui.look)) {
       bar.appendChild(btn("Needs a look (" + p.lookN + ")", function () { ui.look = !ui.look; render(); }, ui.look ? "pri" : "",
-        { title: "Only the weeks with a lesson that has no cards here, or a day over the pace" }));
+        { title: "Only the weeks with a set that has no cards here, or a day over the pace" }));
     }
     if (ui.mode === "list") { bar.appendChild(btn(allOpen(p) ? "Collapse all" : "Expand all", function () { ui.all = !allOpen(p); ui.opened = {}; ui.closed = {}; render(); })); }
     if (author()) {
       bar.appendChild(btn("Add", function (e, b) {
-        menu([{ label: "A lesson…  Ctrl+N", cmd: "new_date_form" }, { label: "A quiz, exam or day…  Ctrl+E", cmd: "new_event_form" },
+        menu([{ label: "A set…  Ctrl+N", cmd: "new_date_form" }, { label: "A quiz, exam or day…  Ctrl+E", cmd: "new_event_form" },
           { label: "A review day…", cmd: "new_review_form" }, { sep: true },
-          { label: "Lessons from the deck…", off: !p.hasDeck, cmd: "deck", args: {} }, { sep: true },
+          { label: "Sets from the deck…", off: !p.hasDeck, cmd: "deck", args: {} }, { sep: true },
           { label: "Give everyone a day…", cmd: "breather" }], b);
       }, "ch", { disabled: busy() }));
     }
@@ -290,8 +290,8 @@ var dcPlan = (function () {
       });
       if (!ruled) { box.appendChild(h("div.todayl", { text: "Today, " + p.todayw })); }
     });
-    if (!p.weeks.length) { box.appendChild(h("div.empty", { text: p.empty || "No lessons yet." })); }
-    else if (!any && ui.find.trim()) { box.appendChild(h("div.empty", { text: "No lesson or quiz has “" + ui.find.trim() + "” in its name or its cards." })); }
+    if (!p.weeks.length) { box.appendChild(h("div.empty", { text: p.empty || "No sets yet." })); }
+    else if (!any && ui.find.trim()) { box.appendChild(h("div.empty", { text: "No set or quiz has “" + ui.find.trim() + "” in its name or its cards." })); }
     return box;
   }
   function visibleKeys() {
@@ -427,7 +427,7 @@ var dcPlan = (function () {
       function rename() { if (name.value.trim() && name.value.trim() !== pn.name) { send("rename", { uid: pn.uid, name: name.value }); } }
       name.addEventListener("change", rename);
       name.addEventListener("keydown", function (e) { if (e.key === "Enter") { name.blur(); } if (e.key === "Escape") { name.value = pn.name; name.blur(); } });
-      box.appendChild(h("div.row", {}, [name, btn("⋯", function (e, b) { menu(menuItems(pn.more), b); }, "", { title: "More for this lesson" })]));
+      box.appendChild(h("div.row", {}, [name, btn("⋯", function (e, b) { menu(menuItems(pn.more), b); }, "", { title: "More for this set" })]));
       var ev = h("select.in", { onchange: function () { send("set_for", { uid: pn.uid, eid: this.value }); } });
       ev.appendChild(h("option", { value: "", text: "Nothing" }));
       pn.events.forEach(function (e) { var o = h("option", { value: e.id, text: e.label }); if (e.id === pn.for) { o.selected = true; } ev.appendChild(o); });
@@ -449,13 +449,13 @@ var dcPlan = (function () {
       if (s.menu) { items.push({ sep: true }); items = items.concat(menuItems(s.menu)); }
       box.appendChild(h("div.src", { title: s.raw, onclick: function (e) { if (items.length) { e.stopPropagation(); menu(items, this); } } }, [
         h("span", { text: s.name }), h("span.n", { text: s.n !== null && s.n !== undefined ? s.n.toLocaleString() : "" }),
-        a && s.key ? h("button.x", { type: "button", title: "Take it off this lesson", text: "✕", onclick: function (e) {
+        a && s.key ? h("button.x", { type: "button", title: "Take it off this set", text: "✕", onclick: function (e) {
           e.stopPropagation(); send("op", { op: { op: "take_cards", date: pn.uid, key: s.key } });
         } }) : h("span")]));
     });
     var acts = h("div.row", { style: "margin-top:6px" });
     if (a) {
-      acts.appendChild(btn("Add from the deck", function () { send("deck", { uid: pn.uid }); }, "", { title: "Tick the deck's tags for this lesson (Ctrl+D)" }));
+      acts.appendChild(btn("Add from the deck", function () { send("deck", { uid: pn.uid }); }, "", { title: "Tick the deck's tags for this set (Ctrl+D)" }));
       acts.appendChild(btn("Add a search or IDs…", function () { send("add_search"); }));
     }
     if (pn.n) { acts.appendChild(btn("Show the " + pn.n.toLocaleString() + " in Browse", function () { send("browse", { key: S.picked }); })); }
@@ -489,7 +489,7 @@ var dcPlan = (function () {
   }
   function reviewPanel(pn) {
     return h("div", {}, [h("h3", { text: pn.title }), h("div.muted.sm", { text: pn.said, style: "margin:6px 0" }),
-      pn.author ? h("div.row", {}, [btn("Change its lessons…", function () { send("review_day", { day: pn.day }); }),
+      pn.author ? h("div.row", {}, [btn("Change its sets…", function () { send("review_day", { day: pn.day }); }),
         btn("No review day", function () { send("delete"); }, "bad")]) : null]);
   }
 
@@ -530,11 +530,11 @@ var dcPlan = (function () {
     function rowMenu(n, anchor) {
       if (!author()) { return; }
       var items = [];
-      if (n.uid) { items.push({ label: "Go to its lesson (" + n.where.replace("on ", "") + ")", cmd: "pick", args: { key: ["date", n.uid] } }); }
+      if (n.uid) { items.push({ label: "Go to its set (" + n.where.replace("on ", "") + ")", cmd: "pick", args: { key: ["date", n.uid] } }); }
       if (String(n.key).indexOf("tag:") === 0) { items.push({ label: "A note for followers on it…", cmd: "remark", args: { path: n.path } }); }
       if (/^(tag|deck):/.test(String(n.key)) && !n.ptag && !n.off) {
-        items.push({ label: "A lesson of its own, next free day", cmd: "lesson_from", args: { key: n.key, day: "next" } },
-          { label: "A lesson of its own on a day…", cmd: "lesson_from", args: { key: n.key, day: null } });
+        items.push({ label: "A set of its own, next free day", cmd: "lesson_from", args: { key: n.key, day: "next" } },
+          { label: "A set of its own on a day…", cmd: "lesson_from", args: { key: n.key, day: null } });
       }
       if (n.ptag) { items.push({ sep: true }, { label: "Rename the tag…", cmd: "ptag_rename", args: { ptag: n.ptag } }, { label: "Delete the tag…", cmd: "ptag_delete", args: { ptag: n.ptag } }); }
       if (items.length) { menu(items, anchor); }
@@ -584,10 +584,10 @@ var dcPlan = (function () {
       ta.value = ui.paste;
       ta.addEventListener("input", function () { var was = ui.paste.indexOf("\n") >= 0; ui.paste = this.value; if (was !== (ui.paste.indexOf("\n") >= 0)) { this.classList.toggle("tall"); } });
       out.push(h("div.paste", {}, [ta, btn("Show the changes", function () { if (ui.paste.trim()) { send("paste", { text: ui.paste }); } }, "", { disabled: busy() }),
-        btn("The plan as text", function () { send("text"); }, "", { title: "Every lesson, quiz and tag as plan lines, to read or edit" }),
+        btn("The plan as text", function () { send("text"); }, "", { title: "Every set, quiz and tag as plan lines, to read or edit" }),
         btn("AI prompt", function (e, b) {
-          menu([{ label: "Copy: Plan the lessons", cmd: "prompt", args: { which: "plan" } }, { label: "Copy: Tag by objective", cmd: "prompt", args: { which: "tags" } },
-            { sep: true }, { label: "See the prompt", sub: [{ label: "Plan the lessons", cmd: "see_prompt", args: { which: "plan" } },
+          menu([{ label: "Copy: Plan the sets", cmd: "prompt", args: { which: "plan" } }, { label: "Copy: Tag by objective", cmd: "prompt", args: { which: "tags" } },
+            { sep: true }, { label: "See the prompt", sub: [{ label: "Plan the sets", cmd: "see_prompt", args: { which: "plan" } },
               { label: "Tag by objective", cmd: "see_prompt", args: { which: "tags" } }] }], b);
         }, "ch", { title: "Copied for you to paste in your own AI; it gets tag names and counts, never a card" })]));
     }
@@ -616,7 +616,7 @@ var dcPlan = (function () {
   function kit() { return { h: h, btn: btn, send: send, menu: menu, sheet: sheet, S: S, ui: ui, dateInput: dateInput }; }
   function welcome() {
     return h("div.welcome", {}, [h("h2", { text: "No plans yet" }),
-      h("p.muted", { text: "A plan puts a deck's lessons on days, and opens each one's cards in Anki as its day comes." }),
+      h("p.muted", { text: "A plan puts a deck's cards in sets on days, and opens each set's cards in Anki as its day comes." }),
       h("div.row", {}, [btn("New plan…", function () { send("new_plan"); }, "pri"), btn("Follow a plan…", function () { send("follow_plan"); })])]);
   }
 

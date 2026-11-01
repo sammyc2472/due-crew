@@ -334,7 +334,7 @@ def from_text(doc, tree, text, whole=False, start="", plan_name="", new_id=None)
             errors.append(f"Line {i + 1}: needs a tag:, a deck:, a search: or notes:.")
             continue
         if len(e["nids"]) > IDS_MAX or len(e["cids"]) > IDS_MAX or len(pk["notes"]) > IDS_MAX:
-            errors.append(f"Line {i + 1}: a date takes up to 5,000 IDs.")
+            errors.append(f"Line {i + 1}: a set takes up to 5,000 IDs.")
             continue
         bad_day = next((d for d in (e["opens"], e["due"]) if d and not _real_day(d)), None)
         if bad_day:
@@ -347,10 +347,10 @@ def from_text(doc, tree, text, whole=False, start="", plan_name="", new_id=None)
             errors.append(f"Line {i + 1}: \"even\" needs a due date after it opens.")
             continue
         if len(set(e["searches"])) + len(e["cuts"]) > SEARCH_MAX:
-            errors.append(f"Line {i + 1}: a date holds up to {SEARCH_MAX} searches and cuts.")
+            errors.append(f"Line {i + 1}: a set holds up to {SEARCH_MAX} searches and cuts.")
             continue
         if len(set(e["tags"])) > SOURCES_MAX or len(set(e["decks"])) > SOURCES_MAX:
-            errors.append(f"Line {i + 1}: a date holds up to {SOURCES_MAX} tags and {SOURCES_MAX} subdecks.")
+            errors.append(f"Line {i + 1}: a set holds up to {SOURCES_MAX} tags and {SOURCES_MAX} subdecks.")
             continue
         if _u16(e["name"]) > 60:
             warns.append(f"Line {i + 1}: the name is cut to 60 characters.")
@@ -452,7 +452,7 @@ def from_text(doc, tree, text, whole=False, start="", plan_name="", new_id=None)
         if (u.get("nids") or u.get("cids")) and not (old.get("idr") and [old.get("nids"), old.get("cids")] == [u.get("nids"), u.get("cids")]):
             local_ids += 1
         if len(e["todo"]) > B.TODO_MAX:
-            warns.append(f"Line {e['i'] + 1}: a date keeps {B.TODO_MAX} lines to tick; the rest are left off.")
+            warns.append(f"Line {e['i'] + 1}: a set keeps {B.TODO_MAX} lines to tick; the rest are left off.")
         if e["todo"]:
             u["todo"] = e["todo"][:B.TODO_MAX]
         if e["for"]:
@@ -490,7 +490,7 @@ def from_text(doc, tree, text, whole=False, start="", plan_name="", new_id=None)
         else:
             errors.append(f"\"for {n}\": no event by that name. Add a line like 2026-10-15 | event | {n}")
     if local_ids:
-        warns.append(f"{local_ids} date{' uses' if local_ids == 1 else 's use'} nids: or cids:, your Anki's own numbers. "
+        warns.append(f"{local_ids} set{' uses' if local_ids == 1 else 's use'} nids: or cids:, your Anki's own numbers. "
                      "Open Anki after you save, and they'll work in everyone's copy.")
     if len(tags_in) + len([t for t in P.plan_tags(doc) if not any(x["id"] == t.get("id") for x in tags_in)]) > TAGS_MAX:
         errors.append(f"A plan holds up to {TAGS_MAX} tags.")
@@ -500,7 +500,7 @@ def from_text(doc, tree, text, whole=False, start="", plan_name="", new_id=None)
     ids_now = {u.get("id"): u for u in P.units(doc)}
     dates = len(units) if whole else len(ids_now) + len([u for u in units if u["id"] not in ids_now])
     if dates > UNITS_MAX:
-        errors.append(f"A plan holds up to {UNITS_MAX} dates; this would make {dates}.")
+        errors.append(f"A plan holds up to {UNITS_MAX} sets; this would make {dates}.")
     ev_n = len(evs) if whole else len([x for x in _events(doc) if not any(y["id"] == x.get("id") for y in evs)]) + len(evs)
     if ev_n > EVENTS_MAX:
         errors.append(f"A plan holds up to {EVENTS_MAX} events; this would make {ev_n}.")
@@ -509,7 +509,7 @@ def from_text(doc, tree, text, whole=False, start="", plan_name="", new_id=None)
             x = ids_now.get(u["id"])
             if x and len(set(x.get("search") or []) | set(u.get("search") or [])) + len(
                     [c for c in u.get("cut") or [] if not any(y.get("tag") == c["tag"] and y.get("in") == c["in"] for y in x.get("cut") or [])]) > SEARCH_MAX:
-                errors.append(f"{P.fmt_day(x['opens'])}, {x.get('name')}: a date holds up to {SEARCH_MAX} searches and cuts.")
+                errors.append(f"{P.fmt_day(x['opens'])}, {x.get('name')}: a set holds up to {SEARCH_MAX} searches and cuts.")
     return {"units": units, "errors": errors, "missing": missing, "notes": notes, "events": evs, "warns": warns,
             "why": [w for w in why if w][:60], "tags": tags_in, "renamed": renamed, "remarks": remarks_in}
 

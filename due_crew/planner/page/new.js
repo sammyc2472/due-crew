@@ -39,8 +39,8 @@
       return i;
     }
     function lesson() {
-      return row("Today's lesson", seg([["deck", "In " + (n.deckName || "your deck")], ["own", "Its own deck"]], n.lesson,
-        function (v) { set("lesson", v); }, "Today's lesson"));
+      return row("Today's set", seg([["deck", "In " + (n.deckName || "your deck")], ["own", "Its own deck"]], n.lesson,
+        function (v) { set("lesson", v); }, "Today's set"));
     }
     function makeRow(nameInput, nameHint, inFoot) {
       var later = btn("Make it, start later", go(false)), start = btn("Start it", go(true), "pri");

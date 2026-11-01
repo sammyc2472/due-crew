@@ -290,7 +290,7 @@ class WebFace(NewPlan, PlanCore):
     def _u(self, uid):
         u = self.unit(uid)
         if u is None:
-            self.say("That lesson isn't on the plan now.")
+            self.say("That set isn't on the plan now.")
         return u
 
     def _day_taken(self, day, uid=None):
@@ -309,7 +309,7 @@ class WebFace(NewPlan, PlanCore):
             return
         other = self._day_taken(to, uid)
         if other is not None and not sure:
-            self.ask(f"{P.fmt_day(to)} has {other.get('name') or 'a lesson'} already",
+            self.ask(f"{P.fmt_day(to)} has {other.get('name') or 'a set'} already",
                      "Put this one on that day too? Followers see both.", "Put it on", "move", {"uid": uid, "to": to})
             self.push()  # the day it was, back in its box
             return
@@ -465,7 +465,7 @@ class WebFace(NewPlan, PlanCore):
         if u is None:
             return
         if day is None:
-            self.sheet({"title": "Move it to a day", "words": "That day's lesson takes it, or it gets a lesson of its own there.",
+            self.sheet({"title": "Move it to a day", "words": "That day's set takes it, or it gets a set of its own there.",
                         "fields": [{"name": "day", "type": "date", "value": u.get("opens") or ""}], "yes": "Move it",
                         "cmd": "move_source_form", "args": {"i": i}})
             return
@@ -523,7 +523,7 @@ class WebFace(NewPlan, PlanCore):
             if not sure:
                 n = len(V.prep(self.doc, e))
                 self.ask(f"Take {e.get('name') or 'it'} off?",
-                         f"{n:,} lesson{'s' if n != 1 else ''} lead up to it; they stay, leading up to nothing." if n
+                         f"{n:,} set{'s' if n != 1 else ''} lead up to it; they stay, leading up to nothing." if n
                          else "It comes off the plan.", "Take it off", "delete", danger=True)
                 return
             self.change({"op": "take_event", "event": key}, keep=("gone",))
@@ -536,7 +536,7 @@ class WebFace(NewPlan, PlanCore):
         if u is None:
             return
         after = sum(1 for x in P.units(self.doc) if str(x.get("opens")) > str(u["opens"]))
-        dlg = MoveFromDialog(self, u.get("name") or "this lesson", after)
+        dlg = MoveFromDialog(self, u.get("name") or "this set", after)
         if dlg.exec():
             self.change({"op": "move_from", "date": u["id"], "days": dlg.days()})
 
@@ -641,7 +641,7 @@ class WebFace(NewPlan, PlanCore):
     def c_new_date_form(self):
         if not self.author():
             return
-        self.sheet({"title": "A new lesson", "words": "Its name as followers see it, and the day its cards open.",
+        self.sheet({"title": "A new set", "words": "Its name as followers see it, and the day its cards open.",
                     "fields": [{"name": "name", "label": "Name", "value": "", "max": 60},
                                {"name": "day", "label": "Opens", "type": "date", "value": self._after_picked()}],
                     "yes": "Put it on", "cmd": "new_date"})
@@ -652,7 +652,7 @@ class WebFace(NewPlan, PlanCore):
             return
         other = self._day_taken(day)
         if other is not None and not sure:
-            self.ask(f"{P.fmt_day(day)} has {other.get('name') or 'a lesson'} already",
+            self.ask(f"{P.fmt_day(day)} has {other.get('name') or 'a set'} already",
                      "Put this one on that day too? Followers see both.", "Put it on", "new_date", {"name": name, "day": day})
             return
         self.change({"op": "add_date", "day": day, "name": name}, keep="made")
@@ -662,7 +662,7 @@ class WebFace(NewPlan, PlanCore):
             return
         u = self.unit(for_uid) if for_uid else None
         start = E._later(u["opens"], 3) if u else self._after_picked()
-        self.sheet({"title": "A quiz, exam or day", "words": "Lessons before it can lead up to it.",
+        self.sheet({"title": "A quiz, exam or day", "words": "Sets before it can lead up to it.",
                     "fields": [{"name": "name", "label": "Name", "value": "", "max": 60,
                                 "hint": "Cardio quiz 1, Block 2 exam, a lecture"},
                                {"name": "day", "label": "Day", "type": "date", "value": start}],
@@ -699,7 +699,7 @@ class WebFace(NewPlan, PlanCore):
         from . import date_dialogs as DD
         before = [u for u in sorted(P.units(self.doc), key=lambda x: str(x.get("opens") or "")) if str(u["opens"]) <= day]
         if not before:
-            self.say("A review day comes after the lessons it reviews: none open by then.")
+            self.say("A review day comes after the sets it reviews: none open by then.")
             return
         r = self.review_of(day)
         dlg = DD.ReviewDialog(self, f"Review day · {P.fmt_day(day)}", [(u["id"], M.date_label(u)) for u in before],
@@ -794,7 +794,7 @@ class WebFace(NewPlan, PlanCore):
         if kind not in ("tag", "deck"):
             return
         if day is None:
-            self.sheet({"title": "A lesson of its own", "words": f"{M.label(path)}, on a day.",
+            self.sheet({"title": "A set of its own", "words": f"{M.label(path)}, on a day.",
                         "fields": [{"name": "day", "type": "date", "value": self.ops.today()}], "yes": "Add it",
                         "cmd": "lesson_from", "args": {"key": key}})
             return
@@ -812,7 +812,7 @@ class WebFace(NewPlan, PlanCore):
             if not ahead:
                 self.say("Nothing is still to come to move.")
                 return
-            self.ask("Give everyone a day?", f"The {ahead:,} lesson{'s' if ahead != 1 else ''} still to come move a study day later, "
+            self.ask("Give everyone a day?", f"The {ahead:,} set{'s' if ahead != 1 else ''} still to come move a study day later, "
                      "their finish-by days and review days with them. Quizzes and exams stay.", "Move them", "breather")
             return
         self.change({"op": "breather", "today": self.ops.today()})
@@ -837,7 +837,7 @@ class WebFace(NewPlan, PlanCore):
         if t is None:
             return
         if name is None:
-            self.sheet({"title": "Rename the tag", "words": "Its name (40 characters); the lessons, searches and notes using it change with it.",
+            self.sheet({"title": "Rename the tag", "words": "Its name (40 characters); the sets, searches and notes using it change with it.",
                         "fields": [{"name": "name", "value": str(t.get("name") or ""), "max": 40}], "yes": "Rename",
                         "cmd": "ptag_rename", "args": {"ptag": ptag}})
             return
@@ -875,7 +875,7 @@ class WebFace(NewPlan, PlanCore):
                 self.eval_js("dcPlan.pasted()")
             return
         self.say(" ".join(r["errors"][:2]) if r["errors"] else
-                 "Nothing in that reads as plan lines: a lesson's line starts with its day (2026-11-02 | Cell injury | tag:…).")
+                 "Nothing in that reads as plan lines: a set's line starts with its day (2026-11-02 | Cell injury | tag:…).")
 
     def _text(self, whole, pasted=""):
         from .text_tab import TextDialog

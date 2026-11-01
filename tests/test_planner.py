@@ -380,7 +380,7 @@ def test_edits():
         refused = None
     except E.Refused as e:
         refused = str(e)
-    check("edits: a date holds 50 tags, as the server does", refused == "A date holds up to 50 tags.", refused)
+    check("edits: a set holds 50 tags, as the server does", refused == "A set holds up to 50 tags.", refused)
     d3 = E.take_source(d, "u2", ("cut", BOOK, "t1"))
     u = d3["units"][1]
     check("edits: a cut comes off with its search and its count; the rest stays",
@@ -390,7 +390,7 @@ def test_edits():
         last = None
     except E.Refused as e:
         last = str(e)
-    check("edits: not the last thing on a date", last and "delete the date" in last, last)
+    check("edits: not the last thing on a set", last and "delete the set" in last, last)
     u = next(x for x in E.take_source(d, "u2", ("search", "q2"))["units"] if x["id"] == "u2")
     check("edits: a search comes off here too (3.9.3), its count with it", "q2" not in (u.get("search") or [])
           and "q2" not in (u.get("sn") or {}), u)
@@ -406,7 +406,7 @@ def test_edits():
         early = None
     except E.Refused as e:
         early = str(e)
-    check("edits: a due date before it opens is refused", early == "The due date is before the date opens.")
+    check("edits: a due date before it opens is refused", early == "The due date is before the set opens.")
     check("edits: a name as the server keeps one", E.rename(d, "u1", "  Heart\n failure,  part 2 ")["units"][0]["name"]
           == "Heart failure, part 2")
     try:
@@ -414,7 +414,7 @@ def test_edits():
         blank = None
     except E.Refused as e:
         blank = str(e)
-    check("edits: a date needs a name", blank == "A date needs a name.")
+    check("edits: a set needs a name", blank == "A set needs a name.")
     a, uid = E.add_date(d, "2026-11-11", [SYS, BOOK], rng=random.Random(7))
     new = next(x for x in a["units"] if x["id"] == uid)
     check("edits: a new date, its id as the builder makes one, named for what's on it, in order",
@@ -425,7 +425,7 @@ def test_edits():
         empty = None
     except E.Refused as e:
         empty = str(e)
-    check("edits: a new date needs something on it", empty == "Pick something for the date first.")
+    check("edits: a new set needs something on it", empty == "Pick something for the set first.")
     gone = E.delete_date(d, "u2")
     check("edits: a date deleted takes the review days that name it", [x["id"] for x in gone["units"]] == ["u1"]
           and "reviews" not in gone)
@@ -1447,7 +1447,7 @@ def test_plan_edits_v393():
     check("plan: no two of the plan's tags named alike", clash == "There's a tag called SLG 13 already.", clash)
     say = E.drop_say(doc, "t1")
     check("plan: what deleting a tag does, said first",
-          say == "SLG 12 is on 3 dates: Mon 9 Nov, Tue 10 Nov, Wed 11 Nov. Mon 9 Nov has nothing else, so it goes, to-dos too."
+          say == "SLG 12 is on 3 sets: Mon 9 Nov, Tue 10 Nov, Wed 11 Nov. Mon 9 Nov has nothing else, so it goes, to-dos too."
           " A tag kept to it there is all of that tag again.", say)
     d = E.delete_plan_tag(doc, "t1")
     us = {u["id"]: u for u in d["units"]}
@@ -2022,7 +2022,7 @@ def test_ai_answers():
           [(o["op"], o["date"]) for o in ops] == [("move", "u1"), ("move_from", "u3")]
           and "bogus" not in ops[0] and ops[0]["seed"] != 7, ops)
     check("ai: an op nobody knows, one naming a date that isn't there and one that changes nothing are each said, never applied",
-          [w for _o, w in refused] == ["There's no change called fly.", "No date on the plan is Nope.",
+          [w for _o, w in refused] == ["There's no change called fly.", "No set on the plan is Nope.",
                                       "Nothing to change: the plan has that already."]
           and json.dumps(doc, sort_keys=True) == before, refused)
     many = [{"op": "rename", "date": "u1", "name": f"Shock {i}"} for i in range(O.OPS_MAX + 5)]
@@ -2044,7 +2044,7 @@ def test_ai_answers():
           [(o["op"], o["date"], o["tags"]) for o in ops] == [("add_cards", "u2", ["Cardio::Valves::Valve_disease"])]
           and refused and "Renal::Made_up" in refused[0][1], (ops, refused))
     ops, refused = ai.answer_ops("pick", {"ops": [{"op": "add_cards", "date": "u1", "tags": ["Cardio::Valves"]}]}, doc, ctx, req)
-    check("ai: a pick for another date is refused", not ops and refused[0][1] == "That's not the date it was asked about.")
+    check("ai: a pick for another set is refused", not ops and refused[0][1] == "That's not the set it was asked about.")
     sreq = ai.request_for("scope", doc, tree, ref="Cardio quiz", said="the shock lecture")
     got = []
     ai.StandIn().run(sreq, lambda a, w: got.append(a))
@@ -2225,7 +2225,7 @@ def test_mcp_server():
             check("mcp: preview_changes: each change in words with who it touches, one that won't go on with why; nothing kept",
                   [e["verb"] for c in data["changes"] for e in c["entries"]] == ["Moved"]
                   and data["changes"][0]["entries"][0]["who"] == "Not open for anyone yet"
-                  and data["refused"] == [{"op": ops[1], "why": "No date on the plan is Nope."}]
+                  and data["refused"] == [{"op": ops[1], "why": "No set on the plan is Nope."}]
                   and not any(host.drafts.values()) and not host.heard and not res["isError"], data)
             _s, res, data = _tool(port, "add_to_changes", {"plan": "p1", "ops": ops, "why": "Shock a day later"})
             kept = json.loads(host.drafts["p1"])
@@ -2383,8 +2383,8 @@ def test_insights_tab():
           I.deck_split(idx) is I.deck_split(idx) and isinstance(ways, list), ways)
     xs = I.exams(doc, per, cards)
     check("insights: each quiz or exam by its day, what its dates hold; the last with no date for it tests everything",
-          [(x["name"], I.exam_words(x)) for x in xs] == [("Cardio quiz", "2 cards from 1 date"), ("Block exam", "everything: 8 cards")]
-          and I.exam_words({"all": False, "dates": 0, "cards": 0}) == "no date for it yet", xs)
+          [(x["name"], I.exam_words(x)) for x in xs] == [("Cardio quiz", "2 cards from 1 set"), ("Block exam", "everything: 8 cards")]
+          and I.exam_words({"all": False, "dates": 0, "cards": 0}) == "no set for it yet", xs)
     check("insights: the biggest dates, most first", [(u["id"], n) for u, n in I.biggest(doc, per)] == [("u2", 6), ("u1", 5), ("u3", 2)])
     check("insights: the leech on its dates is counted (a plan never opens one)", M.counts(idx, cards)["leech"] == 1)
     tags, decks = idx.tree()

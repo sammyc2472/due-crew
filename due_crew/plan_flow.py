@@ -831,7 +831,7 @@ def card_view(plan, st, prog, today, session=None, week_offset=0):
     elif week == 0 and us:
         sub = f"starts {P.fmt_day(us[0]['opens'])}"
     else:
-        sub = f"lesson {path['at']} of {path['of']}" if path["at"] else f"week {week} of {weeks}"
+        sub = f"set {path['at']} of {path['of']}" if path["at"] else f"week {week} of {weeks}"
     if int(plan.get("shift") or 0):
         sub += f" · your dates +{int(plan['shift'])} day{'s' if int(plan['shift']) != 1 else ''}"
     if int(plan.get("early") or 0) and not plan.get("paused"):
@@ -987,7 +987,7 @@ def opened_line(res):
     """The toast: "Due Crew opened Renal physiology: 204 cards", escaped."""
     if not res or not res["n"]:
         return None
-    what = res["names"][0] if len(res["names"]) == 1 else f"{len(res['names'])} dates"
+    what = res["names"][0] if len(res["names"]) == 1 else f"{len(res['names'])} sets"
     return f"Due Crew opened {html.escape(what)}: {res['n']:,} card{'s' if res['n'] != 1 else ''}"
 
 
@@ -1539,10 +1539,10 @@ def _hold_words(name, n, own=False):
     """offer_hold's question (plain text: the plan's name is the author's)."""
     cards = f"{n:,} card{'s' if n != 1 else ''}"
     if own:
-        text = (f"{name} is new on this computer. Hold back {cards} of its later dates until you open them?"
+        text = (f"{name} is new on this computer. Hold back {cards} of its later sets until you open them?"
                 "\n\nOne undo step; stopping the plan opens them again.")
     else:
-        text = (f"{name} is new on this computer. Hold back {cards} of its later dates until their day?"
+        text = (f"{name} is new on this computer. Hold back {cards} of its later sets until their day?"
                 "\n\nThey open on their day. One undo step; stopping the plan opens them again.")
     return "Hold back later cards", text, "Hold back"
 
@@ -1975,8 +1975,8 @@ def build_checks(plan_list):
 # longer followed here takes its decks along); `lesson_next` {plan id: true}
 # is B chosen for a plan before it runs here.
 
-LESSON_STEP = "Due Crew: lesson decks"
-LESSON_OFF = "Due Crew: lesson decks off"
+LESSON_STEP = "Due Crew: sets' decks"
+LESSON_OFF = "Due Crew: sets' decks off"
 
 
 def lesson_deck_on(pid):
@@ -3117,7 +3117,7 @@ def open_date(pid, uid):
         _after_change()
         tooltip(opened_line(res), period=5000)
     else:
-        tooltip(f"Nothing new to open in {html.escape(res['names'][0] if res['names'] else 'that date')}.")
+        tooltip(f"Nothing new to open in {html.escape(res['names'][0] if res['names'] else 'that set')}.")
     refresh_progress()
     app.swap(cfg())
 
@@ -3166,7 +3166,7 @@ def open_next(pid, study=False, uid=None):
             else P.up_next(p["doc"], st.get("applied"), prog))
     if not left:
         if not uid:
-            tooltip("Every date of this plan is open.")
+            tooltip("Every set of this plan is open.")
         return
     u = left[0]
     # 3.8.1: a date further down Up next, opened first: the line says ahead of which
@@ -3233,7 +3233,7 @@ def put_back_own(pid):
         if x["id"] != u["id"] and P.opened_here(applied, x):
             others |= idx.match(x, _swap(st), deck)
     cids = {c2 for c2 in idx.match(u, _swap(st), deck) - others if idx.cards[c2] == (0, 0)}
-    label = f"Due Crew: put back {u.get('name') or 'a date'}"
+    label = f"Due Crew: put back {u.get('name') or 'a set'}"
     was = _was(st, u["id"])
     n = P.hold_cards(mw.col, cids, label) if cids else 0
     if n and st.get("lesson_deck"):
@@ -3320,10 +3320,10 @@ def set_own(pid, own):
         elif own and not was:
             offer_hold([pid], words=lambda name, n, _own: (
                 "Hold back the rest",
-                f"{name}: {n:,} card{'s' if n != 1 else ''} of dates you haven't opened are open already. "
-                "Hold them back until you open their date?\n\nOne undo step; stopping the plan opens them again.",
+                f"{name}: {n:,} card{'s' if n != 1 else ''} of sets you haven't opened are open already. "
+                "Hold them back until you open their set?\n\nOne undo step; stopping the plan opens them again.",
                 "Hold back"))
-            tooltip("Nothing opens by itself now. Open the next date from You › Plans.", period=5000)
+            tooltip("Nothing opens by itself now. Open the next set from You › Plans.", period=5000)
         app.swap(cfg())
 
     _bg(lambda: cl.set_own(pid, own or None), done)
@@ -3360,7 +3360,7 @@ def own_view(plan, st, prog, today):
             # 3.8.1: each a link, Open on that date (open_next(pid, uid))
             "then_items": [{"uid": u["id"], "name": str(u.get("name") or "?"), "n": to_open(u)} for u in left[1:4]],
             "at": P.plan_at(real, today),
-            "pace": f"You opened {recent} date{'s' if recent != 1 else ''} in the last two weeks." if recent else None,
+            "pace": f"You opened {recent} set{'s' if recent != 1 else ''} in the last two weeks." if recent else None,
             "finish": P.finish_check(real, len(left), recent, today), "last": last, "back": back}
 
 
@@ -3396,7 +3396,7 @@ def move_menu(pid, uid):
     ev = P.event_of(p["doc"], u)  # 3.8.1: by the event's id (its name never matched)
     from aqt.qt import QCursor, QMenu
     menu = QMenu(mw)
-    head = menu.addAction(f"Move {u.get('name') or 'this date'} to")
+    head = menu.addAction(f"Move {u.get('name') or 'this set'} to")
     head.setEnabled(False)
     for k in range(1, 8):
         day = P._later(u["opens"], k)
@@ -3443,11 +3443,11 @@ def reset_lines(p):
     names = {u["id"]: str(u.get("name") or "?") for u in P.units(p.get("doc"))}
     sk = [names.get(u, "?") for u in p.get("skipped") or [] if u in names]
     if sk:
-        out.append(f"{len(sk)} skipped date{'s come' if len(sk) != 1 else ' comes'} back: " + ", ".join(sk[:3])
+        out.append(f"{len(sk)} skipped set{'s come' if len(sk) != 1 else ' comes'} back: " + ", ".join(sk[:3])
                    + (f" and {len(sk) - 3} more" if len(sk) > 3 else ""))
     mv = [names.get(u, "?") for u in (p.get("moved") or {}) if u in names]
     if mv:
-        out.append(f"{len(mv)} moved date{'s go' if len(mv) != 1 else ' goes'} back: " + ", ".join(mv[:3])
+        out.append(f"{len(mv)} moved set{'s go' if len(mv) != 1 else ' goes'} back: " + ", ".join(mv[:3])
                    + (f" and {len(mv) - 3} more" if len(mv) > 3 else ""))
     if p.get("paused") or p.get("until") or p.get("since"):
         out.append("Your pause ends")
@@ -3466,7 +3466,7 @@ def reset_days(pid):
         return
     from . import sheets
     sheets.confirm("Reset to default?", "\n".join("\u2022 " + x for x in lines)
-                   + "\n\nCards already open stay open. Dates that come back and have passed count as behind.",
+                   + "\n\nCards already open stay open. Sets that come back and have passed count as behind.",
                    "Reset", lambda: _reset_days(pid))
 
 
@@ -3748,7 +3748,7 @@ def plan_menu(pid):
         a.setChecked(int(p.get("early") or 0) == n)
         a.triggered.connect(lambda _=False, n=n: set_early(pid, n))
     # G3: skip a date I already know (the ones around now and ahead)
-    skip = menu.addMenu("Skip a date")
+    skip = menu.addMenu("Skip a set")
     today = _today()
     week_ago = S.iso(S.d(today) - datetime.timedelta(days=7))
     ahead = [u for u in P.units(p["doc"]) if str(u.get("opens") or "") >= week_ago][:20]
@@ -3872,7 +3872,7 @@ def open_schedule(pid, then=None):
                 _open_now([fresh], toast=False)  # today's share, on the new schedule
             refresh_progress()
             app.swap(cfg())
-            tooltip("Schedule saved." if want else "Schedule off: dates open whole, as the plan has them.")
+            tooltip("Schedule saved." if want else "Schedule off: sets open whole, as the plan has them.")
         if then:
             then()
     _bg(lambda: cl.set_schedule(pid, want), done)
@@ -4156,14 +4156,14 @@ def held_view(pid):
     lines = []
     for name, opens, n in P.held_rows(idx, doc, held, _swap(st)):
         if name is None:
-            lines.append(f"On no date now · {n:,}")
+            lines.append(f"On no set now · {n:,}")
         else:
             lines.append(f"{name} · {n:,}" if own or not opens else f"{name} · {P.fmt_day(opens)} · {n:,}")
     if holding:
-        why = ("You said yes to Hold back: the new cards of dates you haven't opened wait, suspended, till you open them."
-               if own else "You said yes to Hold back: the new cards of dates still to come wait, suspended, till their day.")
+        why = ("You said yes to Hold back: the new cards of sets you haven't opened wait, suspended, till you open them."
+               if own else "You said yes to Hold back: the new cards of sets still to come wait, suspended, till their day.")
     elif own:
-        why = "You put these back. They open when you open their date again."
+        why = "You put these back. They open when you open their set again."
     else:
         why = "Hold back is off; these stayed shut."
     return {"name": str(p.get("name") or "The plan"), "n": len(held), "lines": lines[:HELD_LINES],
@@ -4442,7 +4442,7 @@ def on_followed(plan, deck_id, swap, late, hold=False, lesson=None):
         # "skip:" saved the passed dates as skipped on my follow, so today's opens as usual
         res = _open_now([fresh], mode="skip" if kind == "skip" and not rest else "open")
         if not ok:
-            tooltip("Following. Couldn't save how you start, so the earlier dates wait here; "
+            tooltip("Following. Couldn't save how you start, so the earlier sets wait here; "
                     "Plan \u25be \u203a Push my dates back… or Open now on each.", period=7000)
             app.swap(cfg())
             return
@@ -4841,7 +4841,7 @@ def copy_selector(browser):
     from aqt.qt import QApplication
     QApplication.clipboard().setText(text)
     what = f"{n:,} note{'s' if n != 1 else ''}" if notes_mode else f"{n:,} card{'s' if n != 1 else ''}"
-    tooltip(f"Copied {what}. Paste into a date on duecrew.com." + (" A date takes up to 5,000." if n > 5000 else ""))
+    tooltip(f"Copied {what}. Paste into a set on duecrew.com." + (" A set takes up to 5,000." if n > 5000 else ""))
 
 
 def tag_for_plan(browser):
