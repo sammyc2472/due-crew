@@ -63,18 +63,27 @@ def ask_text(title, text, then, value="", most=280, hint="", yes="Save"):
         then(str(words or "")[:most])
 
 
-def ask_item(title, text, items, then, at=0, yes="OK"):
-    """One of items: then(index)."""
+def ask_item(title, text, items, then, at=0, yes="OK", notes=None, yes_each=None, no_label=None):
+    """One of items: then(index). Plans, end to end (Behind…): notes, a
+    quiet line under each item; yes_each, the button's word for each
+    (it follows the pick); no_label, the board's Cancel says this ("Not
+    now"). Off the board, Qt's list has each item with its note."""
     items = [str(x) for x in items]
     if not items:
         return
-    if _board(dict(title=title, text=text, yes=yes, field={"kind": "pick", "items": items, "at": at}),
-              lambda a: then(a["at"]) if isinstance(a.get("at"), int) and 0 <= a["at"] < len(items) else None):
+    field = {"kind": "pick", "items": items, "at": at}
+    if notes:
+        field["notes"] = [str(x) for x in notes]
+    if yes_each:
+        field["go"] = [str(x) for x in yes_each]
+    view = dict(title=title, text=text, yes=yes, field=field, **({"no": no_label} if no_label else {}))
+    if _board(view, lambda a: then(a["at"]) if isinstance(a.get("at"), int) and 0 <= a["at"] < len(items) else None):
         return
     from .ui import ask_item as qt_item
-    name, ok = qt_item(mw, title, text, items, at)
-    if ok and name in items:
-        then(items.index(name))
+    shown = [f"{x}: {n}" if n else x for x, n in zip(items, list(notes or []) + [""] * len(items))]
+    name, ok = qt_item(mw, title, text, shown, at)
+    if ok and name in shown:
+        then(shown.index(name))
 
 
 def _board(view, then, no=None):

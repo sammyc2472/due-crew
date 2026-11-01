@@ -833,6 +833,20 @@ def _css(cfg):
     #due-crew .dc-pc .pst .late {{ color: var(--dc-hours); font-weight: 700; }}
     #due-crew .dc-pc .pst .acts {{ margin-left: auto; display: flex; gap: 12px; }}
     #due-crew .dc-pc .pst a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; white-space: nowrap; }}
+    /* plans, end to end: the whole plan as a path, a segment a lesson, the exam a diamond at its end */
+    #due-crew .ppath {{ display: flex; gap: 3px; align-items: center; height: 12px; margin: 4px 0 3px; }}
+    #due-crew .ppath.g2 {{ gap: 2px; }} #due-crew .ppath.g1 {{ gap: 1px; }} #due-crew .ppath.g0 {{ gap: 0; }}
+    #due-crew .ppath i {{ flex: 1 1 0; min-width: 0; height: 8px; border-radius: 3px; background: var(--dc-line); display: block; }}
+    #due-crew .ppath.g1 i, #due-crew .ppath.g0 i {{ border-radius: 1px; }}
+    #due-crew .ppath i.d {{ background: var(--dc-accent); }}
+    #due-crew .ppath i.b {{ background: var(--dc-hours); }}
+    #due-crew .ppath i.c {{ background: var(--dc-accent); opacity: .45; }}
+    #due-crew .ppath i.t {{ height: 12px; background: var(--dc-bg); box-shadow: inset 0 0 0 2px var(--dc-accent); }}
+    #due-crew .ppath i.d.t {{ background: var(--dc-accent); }}
+    #due-crew .ppath i.s {{ background: transparent; box-shadow: inset 0 0 0 1px var(--dc-line); }}
+    #due-crew .ppath em {{ flex: none; box-sizing: border-box; width: 9px; height: 9px; margin: 0 2px 0 4px;
+      transform: rotate(45deg); border: 2px solid var(--dc-ink); border-radius: 2px; }}
+    #due-crew .ppl {{ display: flex; justify-content: space-between; gap: 10px; font-size: 11px; color: var(--dc-muted); }}
     #due-crew .dc-pc .miss {{ color: var(--dc-hours); font-size: 11px; }}
     #due-crew .dc-pc .n {{ color: var(--dc-muted); font-variant-numeric: tabular-nums; text-align: right;
       white-space: nowrap; font-size: 11px; }}
@@ -1064,14 +1078,18 @@ def _css(cfg):
     #due-crew .wk2 .tr.dn {{ color: var(--dc-accent); }}
     #due-crew .wk2 .acts {{ display: flex; gap: 10px; }}
     #due-crew .wk2.hd {{ font-size: 10.5px; color: var(--dc-muted); font-weight: 700; padding-bottom: 3px; }}
-    #due-crew .dc-pways {{ display: grid; gap: 10px; margin: 4px 0 8px; }}
-    #due-crew .dc-pways .t {{ font-size: 14px; }}
-    #due-crew .dc-pways .ways {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }}
-    #due-crew .dc-pways .way {{ display: grid; gap: 6px; align-content: start; font-size: 12px; }}
-    #due-crew .dc-pways .way b {{ font-size: 13px; }}
-    #due-crew .dc-pways .way a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
-    #due-crew .dc-pways input {{ font: inherit; font-size: 12px; padding: 3px 7px; border: 1px solid var(--dc-line);
-      border-radius: 6px; background: var(--dc-bg); color: var(--dc-ink); min-width: 0; }}
+    /* plans, end to end (frame 1): a plan's code or link with Follow, my exam, a plan of my own */
+    #due-crew .dc-pways {{ display: grid; gap: 8px; margin: 4px 0 4px; font-size: 12.5px; }}
+    #due-crew .dc-pways .pfw {{ display: flex; gap: 8px; align-items: center; }}
+    #due-crew .dc-pways input {{ flex: 1; font: inherit; font-size: 12.5px; height: 30px; padding: 0 10px; border: 1px solid var(--dc-line);
+      border-radius: 8px; background: var(--dc-well); color: var(--dc-ink); min-width: 0; box-sizing: border-box; }}
+    #due-crew .dc-pways input:focus {{ outline: 2px solid var(--dc-accent); outline-offset: 0; }}
+    #due-crew .dc-pways a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; white-space: nowrap; }}
+    #due-crew .dc-pways a.pbt {{ border: 1px solid var(--dc-accent); border-radius: 8px; padding: 5px 14px; }}
+    #due-crew .dc-pways .pwl {{ display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; padding-top: 8px;
+      border-top: 1px solid var(--dc-line); }}
+    #due-crew .dc-pways .pwl .mu {{ color: var(--dc-muted); }}
+    #due-crew .dc-pways .pwl .acts {{ margin-left: auto; display: flex; flex-wrap: wrap; gap: 4px 14px; }}
     @media (max-width: 560px) {{
       #due-crew .wk2 {{ grid-template-columns: minmax(0, 1fr) auto auto; gap: 3px 10px; }}
       #due-crew .wk2 .acts {{ grid-column: 1 / -1; }}
@@ -1080,7 +1098,6 @@ def _css(cfg):
       #due-crew .pwk .pc {{ padding: 5px 5px 6px; }}
       #due-crew .pwk .pc .dow, #due-crew .pwk .pc .w, #due-crew .pwk .pc .ev {{ display: none; }}
       #due-crew .pwk .pc.ev1 {{ border-bottom: 3px solid var(--dc-ink); }}
-      #due-crew .dc-pways .ways {{ grid-template-columns: 1fr; }}
       #due-crew .pwh {{ flex-wrap: wrap; }}
     }}
     </style>
@@ -1697,7 +1714,7 @@ def _plans_html(plans, people=None, cfg=None):
     pick (`plan_pick`), else the first."""
     cards = (plans or {}).get("cards") or []
     if not cards:
-        return _plans_empty_html()
+        return _plans_empty_html(plans)
     if len(cards) == 1:
         return _plan_card_html(cards[0], people, cfg)
     card = _picked_plan(cards, cfg)
@@ -1796,20 +1813,33 @@ def _segs(segments):
     return "".join(f"<b>{_html.escape(str(t))}</b>" if b else _html.escape(str(t)) for t, b in segments)
 
 
-def _plans_empty_html():
-    """3.5.0: the Plans tab with no plan: three ways in (round five: Make one is the one New plan)."""
-    add = ("var v=(document.getElementById('dc-plancode').value||'').toUpperCase()"
-           ".replace(/[^A-Z0-9 \\/]/g,' ').slice(0,200);"
-           "pycmd('duecrew:addcode:'+v+'|'+window.dcBK);return false;")
-    return (f'<div class="dc-pways"><b class="t">Follow a plan</b><div class="ways">'
-            f'<div class="way"><b>Got a code?</b><input id="dc-plancode" placeholder="N4AP ULM2" '
-            f'onkeydown="if(event.key===\'Enter\'){{{add}}}"><a href="#" onclick="{add}">Follow</a></div>'
-            f'<div class="way"><b>Find one</b><a href="#" onclick="{_pycmd("planlibrary")}">The library &#8599;</a></div>'
-            f'<div class="way"><b>Make one</b><a href="#" onclick="{_pycmd("planstart")}">New plan&hellip;</a></div>'
-            # round five: the plans I write, with no head row above
-            f'<div class="way"><b>Write one</b><a href="#" title="Every plan you write or follow" '
-            f'onclick="{_pycmd("planyours")}">Your plans&hellip;</a></div>'
-            f'</div></div>')
+def _plans_empty_html(plans=None):
+    """3.5.0: the Plans tab with no plan. Plans, end to end (frame 1): a box
+    for a plan's code or its link, with Follow (plan_flow's Follow, the code
+    looked up); my exam, when Settings has one ahead and no plan I follow
+    or write ends by it, with Plan the way there (a new plan finishing by
+    it); and Make a plan and the library, with Your plans… when I write
+    one. What's typed goes as typed (encoded: a link has its ':'), and
+    Python reads the code from it."""
+    e = _html.escape
+    plans = plans or {}
+    add = ("var v=(document.getElementById('dc-plancode').value||'').trim().slice(0,300);"
+           "pycmd('duecrew:planfollowcode:'+encodeURIComponent(v)+'|'+window.dcBK);return false;")
+    out = (f'<div class="dc-pways"><div class="pfw"><input id="dc-plancode" placeholder="A plan&rsquo;s code or link" '
+           f'aria-label="A plan&rsquo;s code or link" onkeydown="if(event.key===\'Enter\'){{{add}}}">'
+           f'<a class="pbt" href="#" onclick="{add}">Follow</a></div>')
+    ex = plans.get("exam") or {}
+    if ex.get("day") and int(ex.get("days") or 0) > 0:
+        n = int(ex["days"])
+        out += (f'<div class="pwl"><span>Your exam: <b>{e(_ins_dname(ex["day"], long=True))}</b>, '
+                f'{"tomorrow" if n == 1 else f"in {n:,} days"}</span><span class="acts">'
+                f'<a href="#" title="A new plan that finishes by then" onclick="{_pycmd("planopennew:" + str(ex["day"]))}">'
+                f'Plan the way there</a></span></div>')
+    yours = (f'<a href="#" title="Every plan you write or follow" onclick="{_pycmd("planyours")}">Your plans&hellip;</a>'
+             if plans.get("writes") else "")
+    return out + (f'<div class="pwl"><span class="mu">Or a plan of your own</span><span class="acts">'
+                  f'<a href="#" onclick="{_pycmd("planopennew")}">Make a plan</a>{yours}'
+                  f'<a href="#" onclick="{_pycmd("planlibrary")}">The library &#8599;</a></span></div></div>')
 
 
 def _plan_card_html(card, people=None, cfg=None, head=None):
@@ -1821,8 +1851,10 @@ def _plan_card_html(card, people=None, cfg=None, head=None):
     full assignments for that day open in that plans tab"), what it says
     about now (_plan_now: a quiz coming, cards at risk), one note at most,
     and the crew. head: the switch between plans in place of its name
-    (_plan_switch). Plan, date and event names are the author's: escaped
-    here."""
+    (_plan_switch). Plans, end to end (frame 16): the whole plan as a path
+    above the week (_plan_path), and what's behind its own line with
+    Behind… (_plan_behind), where Catch up… was. Plan, date and event names
+    are the author's: escaped here."""
     e = _html.escape
     pid = str(card.get("id", ""))
     out = '<div class="dc-pc">' + (head or (
@@ -1834,7 +1866,7 @@ def _plan_card_html(card, people=None, cfg=None, head=None):
     if card.get("no_deck"):
         out += (f'<div class="dc-line">No deck here has this plan&rsquo;s cards yet. '
                 f'<a href="#" onclick="{_pycmd("plandeck:" + pid)}">Pick a deck</a></div>')
-    out += _plan_status(card, pid) + _week_html(card, pid) + _plan_now(card, pid)
+    out += _plan_path(card) + _plan_status(card, pid) + _plan_behind(card, pid) + _week_html(card, pid) + _plan_now(card, pid)
     notes = _plan_notes(card, pid)
     if notes:
         out += notes[0]
@@ -1851,19 +1883,72 @@ def _plan_card_html(card, people=None, cfg=None, head=None):
 
 
 def _plan_status(card, pid):
-    """Round five: the plan's day in a line, "93 to go today, and 133
-    behind since Monday", with Catch up… (a catch-up running says so in its
-    note); "" when today's dates are seen and nothing's behind."""
-    st = card.get("status") or {}
-    # a catch-up running says what it's catching up on in its own note, never "behind"
-    togo, late = int(st.get("togo") or 0), 0 if card.get("catch") else int(st.get("behind") or 0)
-    if not togo and not late:
+    """Round five: the plan's day in a line, "93 to go today"; "" when
+    today's dates are seen. Plans, end to end: what's behind is a line of
+    its own (_plan_behind)."""
+    togo = int((card.get("status") or {}).get("togo") or 0)
+    if not togo:
         return ""
-    since = f' since {_html.escape(str(st["since"]))}' if st.get("since") else ""
-    words = ([f"<b>{togo:,}</b> to go today"] if togo else []) + (
-        [f'<span class="late">{late:,} behind{since}</span>'] if late else [])
-    act = f'<a href="#" onclick="{_pycmd("plancatch:" + pid)}">Catch up&hellip;</a>' if late else ""
-    return f'<div class="pst"><span>{", and ".join(words)}</span><span class="acts">{act}</span></div>'
+    return f'<div class="pst"><span><b>{togo:,}</b> to go today</span></div>'
+
+
+PATH_WORDS = {"done": "d", "behind": "b", "catch": "c", "now": "t", "ahead": "a", "skip": "s"}
+
+
+def _plan_path(card):
+    """Plans, end to end (frame 16): the whole plan as a path, a segment a
+    lesson in its order (done filled, behind amber, today outlined, ahead
+    plain, skipped hollow), its last quiz or exam a small diamond at the
+    end; under it the first lesson's day and the end's name and day. Each
+    segment says its lesson on a hover. While a catch-up runs, what it's
+    catching up on isn't called behind (round five's rule): half filled. A
+    long plan's segments close up (no gaps past 120). Names are the
+    author's: escaped here."""
+    e = _html.escape
+    p = card.get("path") or {}
+    ls = [x for x in p.get("lessons") or [] if isinstance(x, dict)]
+    if not ls:
+        return ""
+    segs, n = "", {}
+    for x in ls:
+        st = str(x.get("state") or "ahead")
+        if st == "behind" and card.get("catch"):
+            st = "catch"
+        n[st] = n.get(st, 0) + 1
+        word = {"done": "done", "behind": f'{int(x.get("left") or 0):,} left', "skip": "skipped",
+                "catch": f'catching up &middot; {int(x.get("left") or 0):,} left',
+                "now": "today" + (f' &middot; {int(x.get("left") or 0):,} to go' if x.get("left") else "")}.get(
+            st, _ins_dname(x.get("opens"), long=True))
+        cls = PATH_WORDS.get(st, "a") + (" t" if x.get("today") and st == "done" else "")
+        segs += f'<i class="{cls}" title="{e(str(x.get("name") or "?"))} &middot; {word}"></i>'
+    end = p.get("end") or {}
+    ev = bool(end.get("event"))
+    when = _ins_dname(end.get("day"), long=True)
+    if ev:
+        segs += f'<em title="{e(str(end.get("name") or "Exam"))} &middot; {when}"></em>'
+    said = ", ".join(f"{n[k]} {w}" for k, w in (("done", "done"), ("behind", "behind"), ("catch", "catching up"),
+                                                 ("now", "today"), ("ahead", "to come"), ("skip", "skipped")) if n.get(k))
+    said += f', then {e(str(end.get("name") or "Exam"))} on {when}' if ev else ""
+    gap = "" if len(ls) <= 30 else " g2" if len(ls) <= 60 else " g1" if len(ls) <= 120 else " g0"
+    right = (f'{e(str(end.get("name") or "Exam"))} &middot; {when}' if ev else f"Ends {when}" if when else "")
+    return (f'<div class="ppath{gap}" role="img" aria-label="Lessons: {said}">{segs}</div>'
+            f'<div class="ppl"><span>{_ins_dname(p.get("first"), long=True)}</span><span>{right}</span></div>')
+
+
+def _plan_behind(card, pid):
+    """Plans, end to end (frame 18): what's behind, one line, "Behind · 2 ·
+    Inflammation, 31 left", with Behind… (the sheet: Slide, Fit it in, Skip
+    what's left; plan_board.behind). None while a catch-up runs (its own
+    note says so) or while 3.2's missed-days question is up (it has its
+    own three ways). The lesson's name is the author's: escaped here."""
+    b = card.get("behind") or {}
+    if not b.get("left") or card.get("catch") or (card.get("session") or {}).get("ask"):
+        return ""
+    more = int(b.get("more") or 0)
+    name = _html.escape(str(b.get("name") or "?")) + (f" and {more} more" if more else "")
+    return (f'<div class="pst pbh"><span class="late">Behind &middot; {name}, {int(b["left"]):,} left</span>'
+            f'<span class="acts"><a href="#" title="Slide your dates, fit it in, or skip what&rsquo;s left" '
+            f'onclick="{_pycmd("planbehind:" + pid)}">Behind&hellip;</a></span></div>')
 
 
 def _plan_now(card, pid):
@@ -6287,6 +6372,8 @@ SHEET_JS = r"""
         '#dc-sheet .ls button:hover{background:' + bg + ';}' +
         '#dc-sheet .ls button[aria-selected=true]{border-color:' + accent + ';background:' + you + ';font-weight:600;}' +
         '#dc-sheet .ls .none{color:' + muted + ';padding:6px 10px;font-size:12px;}' +
+        '#dc-sheet .ls.nts{max-height:none;gap:3px;}#dc-sheet .ls.nts button{padding:7px 10px;}' +
+        '#dc-sheet .ls .nm{display:block;font-weight:600;}#dc-sheet .ls .nt{display:block;font-size:12px;font-weight:400;color:' + muted + ';margin-top:1px;line-height:1.35;}' +
         '#dc-sheet .ck{display:flex;align-items:flex-start;gap:8px;cursor:pointer;line-height:1.35;}' +
         '#dc-sheet .ck input{accent-color:' + accent + ';width:15px;height:15px;margin-top:1px;flex:none;}' +
         '#dc-sheet .ft{display:flex;align-items:center;gap:8px;}' +
@@ -6322,12 +6409,14 @@ SHEET_JS = r"""
         card.appendChild(wrap);
     } else if (f && f.kind === 'pick') {
         // one of a few (a deck): a list in the board's look; a box to narrow it when it's long
-        var find = null, ls = el('div', 'ls');
+        // plans, end to end (Behind…): a few ways out, each with a quiet line under its name
+        var find = null, ls = el('div', f.notes ? 'ls nts' : 'ls');
         ls.setAttribute('role', 'listbox');
         ls.setAttribute('aria-label', V.title);
         at = Math.max(0, Math.min((f.items || []).length - 1, f.at || 0));
         (f.items || []).forEach(function (name, i) {
-            var b = el('button', null, name);
+            var b = el('button', null, f.notes ? null : name);
+            if (f.notes) { b.appendChild(el('span', 'nm', name)); if (f.notes[i]) { b.appendChild(el('span', 'nt', f.notes[i])); } }
             b.type = 'button';
             b.setAttribute('role', 'option');
             b.addEventListener('click', function () { pick(i); });
@@ -6368,6 +6457,7 @@ SHEET_JS = r"""
     function pick(i) {
         at = i;
         rows.forEach(function (b, j) { b.setAttribute('aria-selected', j === i ? 'true' : 'false'); });
+        if (f && f.go && f.go[i] && go) { go.textContent = f.go[i]; }  // the button says what the pick does
         var r = rows[i], box = r.parentNode;
         if (r.offsetTop < box.scrollTop) { box.scrollTop = r.offsetTop - 4; }
         else if (r.offsetTop + r.offsetHeight > box.scrollTop + box.clientHeight) { box.scrollTop = r.offsetTop + r.offsetHeight - box.clientHeight + 4; }
@@ -6463,7 +6553,9 @@ def sheet_js(view):
              "hint": str(f.get("hint") or "")}
     elif f and f.get("kind") == "pick":
         items = [str(x) for x in f.get("items") or []]
-        f = {"kind": "pick", "items": items, "at": max(0, min(len(items) - 1, int(f.get("at") or 0)))} if items else None
+        # plans, end to end (Behind…): a quiet line under each, and the button's word for each
+        more = {k: ([str(x) for x in f[k]] + [""] * len(items))[:len(items)] for k in ("notes", "go") if f.get(k)}
+        f = dict({"kind": "pick", "items": items, "at": max(0, min(len(items) - 1, int(f.get("at") or 0)))}, **more) if items else None
     else:
         f = None
     ck = view.get("check")

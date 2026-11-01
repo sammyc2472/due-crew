@@ -286,6 +286,55 @@ sections.append("<h3>3.8.0: a plan I follow, not in its squad, behind</h3>" + bo
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [dict(
         PLAN_CARD, tabs={"summary": None}, ins=None, status={"togo": 24, "behind": 54, "since": "Monday"},
         lines=[("behind", [("Path Book 1 · Cell injury", True), (" was due Mon. 54 cards not seen yet.", False)])])], "offers": []})))
+# plans, end to end (frames 1, 16, 18): the whole plan as a path above the week, "lesson 3 of 19";
+# Behind as one line with Behind… (its sheet: the "behind" button up top); the empty tab
+_ET = "2026-11-05"  # Thu 5 Nov, as frame 16
+_EDAYS = ["2026-11-02", "2026-11-04", "2026-11-05", "2026-11-06", "2026-11-09", "2026-11-10", "2026-11-12", "2026-11-16",
+          "2026-11-18", "2026-11-20", "2026-11-23", "2026-11-25", "2026-11-27", "2026-11-30", "2026-12-02", "2026-12-04",
+          "2026-12-07", "2026-12-09", "2026-12-11"]
+_ENAMES = ["Cell injury", "Inflammation", "Neoplasia", "Hemodynamics", "Immunology", "Genetics", "Environment", "Infectious",
+           "Blood vessels", "Heart", "Hematopoietic", "Lung", "Head and neck", "GI tract", "Liver", "Pancreas", "Kidney",
+           "Endocrine", "Skin"]
+_EDOC = {"pace": {"days": [1, 1, 1, 1, 1, 0, 0]},
+         "units": [dict({"id": f"e{i}", "name": f"{i + 1} · {n}", "opens": d, "n": 40 + (i * 13) % 50},
+                        **({"tags": ["#Path_Book::03_Neoplasia::Nomenclature", "#Path_Book::03_Neoplasia::Tumor_progression",
+                                     "#Path_Book::03_Neoplasia::Carcinogenesis"], "todo": [{"k": "read", "t": "Chapter 3"}]}
+                           if i == 2 else {}))
+                   for i, (d, n) in enumerate(zip(_EDAYS, _ENAMES))],
+         "events": [{"id": "ex", "day": "2026-12-18", "name": "Exam"}]}
+_EAPPLIED = {"e0": "s", "e1": "s", "e2": "s"}
+
+
+def _end_card(prog, **kw):
+    path = PL.path(_EDOC, prog, _ET, applied=_EAPPLIED)
+    late = PL.behind_of(path, _ET)
+    left = lambda uid: max(0, prog.get(uid, [0, 0, 0])[2] - prog.get(uid, [0, 0, 0])[1])  # noqa: E731
+    return dict(PLAN_CARD, id="pe", title="Path Book, high yield · Dre's plan", name="Path Book, high yield",
+                sub=f"lesson {path['at']} of {path['of']} · 6 following", tabs={"summary": None}, ins=None, waiting=0,
+                week=PL.week_view(_EDOC, prog, _ET, PL.week_start(_ET)), path=path, behind=late,
+                status={"togo": left("e2"), "behind": late["left"] if late else 0, "since": ""}, **kw)
+
+
+_ON = _end_card({"e0": [40, 40, 40], "e1": [53, 53, 53], "e2": [84, 30, 84]})
+_BEHIND = _end_card({"e0": [40, 40, 40], "e1": [53, 22, 53], "e2": [84, 0, 84]})
+sections.append("<h3>plans, end to end: You › Plans, a plan on track (the path above the week, lesson 3 of 19)</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [_ON], "offers": []}))
+    .replace("dc-pd-pe-", "dc-pd-pe1-").replace('id="du-', 'id="due1-'))
+sections.append("<h3>plans, end to end: a plan behind (Behind &middot; its lesson, with Behind&hellip;; the button 'behind' "
+                "up top opens its sheet)</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [_BEHIND], "offers": []}))
+    .replace("dc-pd-pe-", "dc-pd-pe2-").replace('id="du-', 'id="due2-'))
+_BS = PL.behind_sheet(_BEHIND["name"], _BEHIND["behind"], _BEHIND["path"], 31)
+SHEET_BEHIND = {"id": "p5", "title": _BS["title"], "text": _BS["text"], "yes": _BS["ways"][0]["yes"], "no": "Not now",
+                "field": {"kind": "pick", "at": 0, "items": [w["label"] for w in _BS["ways"]],
+                          "notes": [w["note"] for w in _BS["ways"]], "go": [w["yes"] for w in _BS["ways"]]}}
+sections.append("<h3>plans, end to end: the empty tab, an exam ahead and no plan ending by it</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV,
+    you=_YOU("plans", plans={"cards": [], "offers": [], "exam": {"day": "2026-12-18", "days": 47}, "writes": True}))
+    .replace('id="dc-plancode"', 'id="dc-plancode1"').replace('id="du-', 'id="due3-'))
+sections.append("<h3>plans, end to end: the empty tab, no exam</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [], "offers": []}))
+    .replace('id="du-', 'id="due4-'))
 # 3.8.1, plans round three: an invite to co-write and a hand-over above the plans; today's date
 # with an author's note under the topic it names, and its picked cards named by their resource here
 _R3DOC = dict(_PDOC, remarks=[{"id": "r1", "tag": "#Deck::#Path_Book::02_Inflammation", "text": "Figures 2-4 are on the quiz <b>"}],
@@ -905,6 +954,7 @@ sheet_danger = board.sheet_js({"id": "p2", "title": "Stop following Step 1 \u00b
                                "check": {"label": "Take Step 1 \u00b7 Micro block's tags off your notes too", "on": True}})
 sheet_delete = board.sheet_js({"id": "p3", "title": "Delete account?", "yes": "Delete Account", "danger": True,
                                "text": "This deletes your stats, your code, and your account for good. No undo."})
+sheet_behind = board.sheet_js(SHEET_BEHIND)  # plans, end to end: Behind\u2026, one of a few with a line under each
 sheet_pick = board.sheet_js({"id": "p4", "title": "Change deck", "text": "Run Step 1 \u00b7 Micro block on",
                              "field": {"kind": "pick", "at": 3, "items": ["Big Step 1"] + [f"Big Step 1::{x}" for x in (
                                  "Biochem", "Cardio", "Endo", "GI", "Heme", "Immuno", "Micro", "Neuro", "Pharm",
@@ -940,6 +990,7 @@ page = f"""<!doctype html><html><head><meta charset="utf-8">
   <button onclick="eval(SHEET_DANGER)">stop</button>
   <button onclick="eval(SHEET_DELETE)">delete</button>
   <button onclick="eval(SHEET_PICK)">deck</button>
+  <button onclick="eval(SHEET_BEHIND)">behind</button>
 </div>
 <center>{''.join(sections)}</center>
 <script>
@@ -952,6 +1003,7 @@ page = f"""<!doctype html><html><head><meta charset="utf-8">
   var SHEET_DANGER = {json.dumps(sheet_danger)};
   var SHEET_DELETE = {json.dumps(sheet_delete)};
   var SHEET_PICK = {json.dumps(sheet_pick)};
+  var SHEET_BEHIND = {json.dumps(sheet_behind)};
 </script>
 </body></html>"""
 
