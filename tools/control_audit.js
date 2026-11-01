@@ -18,14 +18,18 @@ const fs = require("fs");
 const path = require("path");
 const { chromium } = require("playwright");
 
-// Anki 25.02's css/webview.css, its rules on controls (restated: what they set)
+// Anki 25.02's css/webview.css, its rules on controls (from the aqt 25.02.7 wheel, its variables filled in);
+// its body has isMac and, unless minimalist, fancy (theme.body_class): .fancy button's raised shadow, deeper on hover
 const ANKI = `
+.isWin button { font-size: 12px; }
 .isMac button { font-size: 13px; }
 button { outline: none !important; background: #fcfcfc; border-radius: 5px; border: 1px solid #e4e4e4; font-weight: 500;
   padding: 8px 10px; margin: 0 4px; -webkit-appearance: none; cursor: pointer; border-bottom-color: #c4c4c4; color: #020202; }
 button:hover { background: linear-gradient(180deg, white 0%, #fcfcfc 100%); border: 1px solid #c4c4c4; }
 button:active { box-shadow: inset 0 0.66px 2px rgba(0,0,0,.35); border-color: #e4e4e4; }
 button[disabled], button[disabled]:hover { cursor: not-allowed; color: #858585; box-shadow: none !important; background-color: #fcfcfc; }
+.fancy button { border-radius: 9px; box-shadow: 0px 2px 1px -1px rgba(20,20,20,.12), 0px 1px 1px 0px rgba(20,20,20,.06), 0px 1px 3px 0px rgba(20,20,20,.04); }
+.fancy button:hover { box-shadow: 0px 3px 1px -2px rgba(20,20,20,.2), 0px 2px 2px 0px rgba(20,20,20,.14), 0px 1px 5px 0px rgba(20,20,20,.12); }
 textarea:focus, input:focus, input[type]:focus { outline: 0 none; border-color: #3b82f6; }
 html { font-family: -apple-system, sans-serif; }
 `;
@@ -62,7 +66,7 @@ function pages(args) {
 async function look(page, client, host) {
   if (host) {
     await page.addStyleTag({ content: (SITE ? "" : ANKI) + NATIVE });
-    if (!SITE) await page.evaluate(() => { document.body.classList.add("isMac"); });
+    if (!SITE) await page.evaluate(() => { document.body.classList.add("isMac", "fancy"); });
   }
   await page.evaluate(() => { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); });
   await page.waitForTimeout(50);
