@@ -12,6 +12,10 @@
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   color-scheme: light;
 }
+/* every control drawn as styled here, never by the system (Safari on iOS and macOS 26+ draws one whose
+   appearance isn't none, Liquid Glass and all; tools/control_audit.js --site checks); a range keeps its own */
+button, select, textarea, input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]) {
+  -webkit-appearance: none; appearance: none; }
 @media (prefers-color-scheme: dark) {
   :root {
     --pg: #161715; --sf: #1f201e; --ink: #dfe1dc; --mut: #9a9e97; --line: #3d403b; --acc: #7cc47f;

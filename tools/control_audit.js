@@ -5,7 +5,8 @@
 // a native-control layer standing in for macOS's own look (Liquid Glass on
 // macOS 26/27 draws a control natively whenever its `appearance` isn't none).
 //
-//   node tools/control_audit.js PAGE.html [PAGE.html ...]  (or a directory of them)
+//   node tools/control_audit.js [--site] PAGE.html|DIR|URL ...  (a directory of pages, or a served page:
+//   node tools/plan_site_preview.js serves duecrew.com's plan pages at http://localhost:8790)
 //
 // For each page: each control's look at rest, hovered, pressed, focused (and
 // disabled where it is), first as the page alone, then under the host's CSS;
@@ -42,9 +43,13 @@ const PROPS = ["appearance", "background-color", "background-image", "color", "b
 const SEL = "button, select, input:not([type=hidden]), textarea, [role=button], [role=checkbox], [role=radio], a.b";
 const STATES = [[], ["hover"], ["active"], ["focus", "focus-visible"]];
 
+// --site: a page of duecrew.com's, in a browser: no Anki CSS on top, only macOS's own controls
+const SITE = process.argv.includes("--site");
+
 function pages(args) {
   const out = [];
   for (const a of args) {
+    if (/^https?:/.test(a)) { out.push(a); continue; }
     if (fs.existsSync(a) && fs.statSync(a).isDirectory()) {
       fs.readdirSync(a).filter((f) => f.endsWith(".html")).sort().forEach((f) => out.push(path.resolve(a, f)));
     } else out.push(path.resolve(a));
@@ -54,8 +59,8 @@ function pages(args) {
 
 async function look(page, client, host) {
   if (host) {
-    await page.addStyleTag({ content: ANKI + NATIVE });
-    await page.evaluate(() => { document.body.classList.add("isMac"); });
+    await page.addStyleTag({ content: (SITE ? "" : ANKI) + NATIVE });
+    if (!SITE) await page.evaluate(() => { document.body.classList.add("isMac"); });
   }
   await page.evaluate(() => { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); });
   await page.waitForTimeout(50);
@@ -93,7 +98,7 @@ async function look(page, client, host) {
 function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 
 (async () => {
-  const files = pages(process.argv.slice(2));
+  const files = pages(process.argv.slice(2).filter((a) => a !== "--site"));
   if (!files.length) { console.error("usage: node tools/control_audit.js PAGE.html|DIR ..."); process.exit(2); }
   const browser = await chromium.launch();
   let bad = 0;
@@ -101,8 +106,9 @@ function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
     const probs = [];
     const run = async (host) => {
       const page = await browser.newPage({ viewport: { width: 1240, height: 820 } });
-      await page.goto("file://" + f);
-      await page.waitForTimeout(150);
+      await page.goto(/^https?:/.test(f) ? f : "file://" + f);
+      await page.waitForLoadState("networkidle").catch(() => {});
+      await page.waitForTimeout(250);
       const client = await page.context().newCDPSession(page);
       await client.send("DOM.enable"); await client.send("CSS.enable");
       const got = await look(page, client, host);
@@ -117,13 +123,13 @@ function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
       if (a.states.rest.appearance !== "none" && !/\[(checkbox|radio|range|color|file)\]$/.test(a.tag)) {
         probs.push(`${name}: appearance ${a.states.rest.appearance} (macOS draws it natively)`);
       }
-      for (const st of Object.keys(a.states)) {
+      for (const st of SITE ? [] : Object.keys(a.states)) {  // the site has no host CSS on top: what's drawn natively is what counts
         const quiet = (s) => s["outline-style"] === "none";  // an outline's width means nothing without one
         const diff = PROPS.filter((p) => a.states[st][p] !== b.states[st][p] && p !== "appearance"
           && !(p === "outline-width" && quiet(a.states[st]) && quiet(b.states[st])));
         if (diff.length) probs.push(`${name} [${st}] the host changes: ` + diff.map((p) => `${p} ${a.states[st][p]} → ${b.states[st][p]}`).join("; "));
       }
-      if (a.w !== b.w || a.h !== b.h) probs.push(`${name}: the host resizes it ${a.w}×${a.h} → ${b.w}×${b.h}`);
+      if (!SITE && (a.w !== b.w || a.h !== b.h)) probs.push(`${name}: the host resizes it ${a.w}×${a.h} → ${b.w}×${b.h}`);
       const f0 = a.states.focus, r0 = a.states.rest, fb = b.states.focus;
       const visible = (s, r) => s["outline-style"] !== "none" && s["outline-width"] !== "0px" || s["box-shadow"] !== r["box-shadow"]
         || s["border-top-color"] !== r["border-top-color"] || s["background-color"] !== r["background-color"];
@@ -132,7 +138,7 @@ function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
     }
     if (mine.length !== host.length) probs.push(`controls differ in number: ${mine.length} vs ${host.length}`);
     const uniq = [...new Set(probs)];
-    console.log(`${uniq.length ? "FAIL" : "ok  "} ${path.basename(f)} (${mine.filter((x) => x.vis).length} controls)`);
+    console.log(`${uniq.length ? "FAIL" : "ok  "} ${/^https?:/.test(f) ? f.replace(/^https?:\/\/[^/]+/, "") : path.basename(f)} (${mine.filter((x) => x.vis).length} controls)`);
     uniq.slice(0, 40).forEach((p) => console.log("     " + p));
     if (uniq.length > 40) console.log(`     … ${uniq.length - 40} more`);
     bad += uniq.length ? 1 : 0;
