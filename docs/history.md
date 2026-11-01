@@ -4261,5 +4261,8 @@ every release that changes how something works.
   inputs, pickers and boxes start from a reset (`:where`, so each part's
   own look still wins), the day picker draws its own chevron, the
   overlays and the profile and good-luck cards reset theirs, and a
-  button's focus ring is `!important` back. The plan window (its own
-  reset since round six) and the site's pages come out clean.
+  button's focus ring is `!important` back. The top bar's room widget
+  (the sound picker, the Fifteen's question, the break) starts every
+  button from a reset in its `el()`, its focus ring an inline `!important`
+  on keyboard focus. The plan window (its own reset since round six) and
+  the site's pages come out clean.
