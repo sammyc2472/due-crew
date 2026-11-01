@@ -1786,6 +1786,8 @@ def _opened_line(op):
     sync = (f'<a href="#" title="Anki&rsquo;s sync, so your phone has them" onclick="{_pycmd("plansync")}">Sync now</a>'
             if op.get("sync") else "")
     by = _opened_dates(op.get("dates"))
+    if op.get("decks"):  # Today's lesson, B: each lesson a deck of its own
+        by = f"{by}, in your decks" + ("" if by else ".")
     return (f'<div class="du-line"><span>This morning opened {n:,} new card{"s" if n != 1 else ""}{by or "."}</span>'
             f'<span class="acts">{sync}<a href="#" title="They open tomorrow morning" onclick="{_pycmd("plannottoday")}">'
             f'Not today</a></span></div>')
@@ -1860,9 +1862,14 @@ def _plan_status(card, pid):
     if not togo and not late:
         return ""
     since = f' since {_html.escape(str(st["since"]))}' if st.get("since") else ""
-    words = ([f"<b>{togo:,}</b> to go today"] if togo else []) + (
+    lesson = card.get("lesson_deck") or {}  # Today's lesson, B: today's is a deck of its own
+    words = ([f"<b>{togo:,}</b> to go today" + (", in your decks" if lesson else "")] if togo else []) + (
         [f'<span class="late">{late:,} behind{since}</span>'] if late else [])
     act = f'<a href="#" onclick="{_pycmd("plancatch:" + pid)}">Catch up&hellip;</a>' if late else ""
+    if togo and lesson.get("today"):
+        uid = str(lesson["today"])
+        act = (f'<a href="#" title="Its deck, in Anki" '
+               f'onclick="{_pycmd(f"planstudydate:{pid}:{uid}")}">Study</a>') + act
     return f'<div class="pst"><span>{", and ".join(words)}</span><span class="acts">{act}</span></div>'
 
 

@@ -328,6 +328,14 @@ sections.append("<h3>3.8.1: the morning's line, four or more dates</h3>" + board
         ["p1", f"u{i}", n, k] for i, (n, k) in enumerate((("Renal physiology", 80), ("Antiarrhythmics", 40),
                                                           ("Heart failure", 96), ("Valves", 128)))]}),
     you=_YOU("today")).replace('id="du-', 'id="du4-'))
+# Today's lesson, B (the plans redesign): each open lesson a deck of its own; the card's line and the morning's say so
+_LB = {"cards": [dict(PLAN_CARD, tabs={"summary": None}, ins=None, status={"togo": 84, "behind": 31, "since": "Wednesday"},
+                      lesson_deck={"today": "b", "held": 0})], "offers": []}
+sections.append("<h3>Today's lesson, B: the card's line (in your decks, Study)</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=_LB, due=_DV, you=_YOU("plans", plans=_LB)).replace('id="du-', 'id="dub-'))
+sections.append("<h3>Today's lesson, B: the morning's line</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=dict(_DV3, opened={"n": 78, "decks": True, "dates": [
+        ["p1", "u1", "Cell injury", 78]]}), you=_YOU("today")).replace('id="du-', 'id="dub2-'))
 sections.append("<h3>3.8.1: You › Plans: a past date left cards shut (its details open); Study on each open date</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [
         dict(_C3, focus="2026-10-05")], "offers": []})))
