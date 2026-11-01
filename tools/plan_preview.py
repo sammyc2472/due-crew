@@ -169,6 +169,12 @@ class Ops:
     def site_url(self, path):
         return "https://duecrew.com" + path
 
+    def top_decks(self):
+        return [(1, "Big Step 1", COL.db.scalar("SELECT count() FROM cards")), (2, "Spanish", 1840)]
+
+    def index(self, did):
+        return P.DeckIndex(COL, did) if did == 1 else None
+
     def __getattr__(self, name):
         return lambda *a, **k: None
 
@@ -218,6 +224,14 @@ def main(out):
     follower = Face(mine, SAM, select=PID2)
     page(follower, "follower", out)
     page(follower, "follower-month", out, "dcPlan.set({mode:'month'})")
+    fresh = Face(mine, SAM, select=PID)
+    fresh._on_cmd("dcplan:" + json.dumps({"c": "new_plan", "a": {}}))
+    page(fresh, "new-pick", out)
+    for step in ("empty", "someone", "resource"):
+        fresh._on_cmd("dcplan:" + json.dumps({"c": "new_step", "a": {"step": step}}))
+        page(fresh, "new-" + step, out)
+    fresh._on_cmd("dcplan:" + json.dumps({"c": "new_set", "a": {"key": "pace", "value": "by"}}))
+    page(fresh, "new-resource-by", out)
     print("wrote", out)
 
 

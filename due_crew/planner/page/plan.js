@@ -145,6 +145,7 @@ var dcPlan = (function () {
       hd.plans.forEach(function (p) { var o = h("option", { value: p.id, text: p.label }); if (p.id === hd.pid) { o.selected = true; } sel.appendChild(o); });
       top.appendChild(sel);
     } else { top.appendChild(h("div.grow")); }
+    if (S.new) { return top; }
     if (hd.author) {
       top.appendChild(btn("Undo", function (e, b) { undoMenu(b); }, "ch", { id: "dcp-undo", title: "The last change not sent, your last save or send; History (Ctrl+Z)" }));
       top.appendChild(btn("Share…", function () { send("tab", { tab: "settings" }); }));
@@ -596,8 +597,9 @@ var dcPlan = (function () {
   function otherTab(name) {
     var data = S[name], draw = dcPlan.tabs && dcPlan.tabs[name];
     if (!data || data.todo || !draw) { return h("div.body", {}, [h("div.empty", { text: "Loading…" })]); }
-    return h("div.body", { "data-scroll": name }, [draw(data, { h: h, btn: btn, send: send, menu: menu, sheet: sheet, S: S, ui: ui })]);
+    return h("div.body", { "data-scroll": name }, [draw(data, kit())]);
   }
+  function kit() { return { h: h, btn: btn, send: send, menu: menu, sheet: sheet, S: S, ui: ui, dateInput: dateInput }; }
   function welcome() {
     return h("div.welcome", {}, [h("h2", { text: "No plans yet" }),
       h("p.muted", { text: "A plan puts a deck's lessons on days, and opens each one's cards in Anki as its day comes." }),
@@ -632,11 +634,15 @@ var dcPlan = (function () {
     closeMenu();
     root.textContent = "";
     root.appendChild(renderTop());
-    if (S.plan) { root.appendChild(renderTabs()); }
-    if (S.welcome) { root.appendChild(welcome()); }
-    else if (!S.plan) { root.appendChild(h("div.body", {}, [h("div.empty", { text: S.head.plans.length ? "Loading the plan…" : "" })])); }
-    else if (S.tab === "plan") { root.appendChild(planTab()); }
-    else { root.appendChild(otherTab(S.tab)); }
+    if (S.new && dcPlan.newPlan) {  /* New plan, in the tabs' place */
+      root.appendChild(h("div.body", { "data-scroll": "new" }, [dcPlan.newPlan(S.new, kit())]));
+    } else {
+      if (S.plan) { root.appendChild(renderTabs()); }
+      if (S.welcome) { root.appendChild(welcome()); }
+      else if (!S.plan) { root.appendChild(h("div.body", {}, [h("div.empty", { text: S.head.plans.length ? "Loading the plan…" : "" })])); }
+      else if (S.tab === "plan") { root.appendChild(planTab()); }
+      else { root.appendChild(otherTab(S.tab)); }
+    }
     root.appendChild(h("div.foot", {}, [h("span.status", { text: S.status || "", role: "status" }), btn("Close", function () { send("close"); }, "t")]));
     restore(st);
     if (sh) { sheet(sh); }

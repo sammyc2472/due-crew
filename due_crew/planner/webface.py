@@ -14,6 +14,7 @@ from . import model as M
 from . import view as V
 from . import webmodel as WM
 from .core import PlanCore
+from .webnew import NewPlan
 
 PREFIX = "dcplan:"
 TABS = {"insights": "insights", "settings": "settings", "sharing": "settings", "mine": "settings"}
@@ -32,11 +33,11 @@ class _Said:
         return self.win._status
 
 
-class WebFace(PlanCore):
+class WebFace(NewPlan, PlanCore):
     """The window's state and clicks. A shell sets eval_js (the page's
     script, run) and calls web_init."""
 
-    def web_init(self, col, plans, ops, select=None, tab=None, cfg=None):
+    def web_init(self, col, plans, ops, select=None, tab=None, cfg=None, new=None):
         self.core_init(col, plans, ops)
         self.cfg = cfg or {}
         self.status = _Said(self)
@@ -52,6 +53,8 @@ class WebFace(PlanCore):
         self._ready = False
         if self.plans:
             self.pid = select if any(p["id"] == select for p in self.plans) else self.plans[0]["id"]
+        if new is not None or not self.plans:
+            self.new_open(**{k: v for k, v in (new or {}).items() if k in ("finish_by", "exam", "start")})
 
     def eval_js(self, js):
         """The page's script, run (the shell's)."""
@@ -93,6 +96,7 @@ class WebFace(PlanCore):
                 u = u or (sorted(us, key=lambda x: str(x.get("opens")))[-1] if us else None)
                 self.picked = ("date", u["id"]) if u else None
             self._read_notes()
+            self.new_loaded()
         if self.tab == "settings" and not self.author() and self.doc is None:
             self.tab = "plan"
         self.push()
@@ -135,7 +139,9 @@ class WebFace(PlanCore):
                 st["settings"] = self._settings()
         else:
             st["plan"] = None
-            st["welcome"] = not self.plans
+            st["welcome"] = not self.plans and self.new is None
+        if self.new is not None:
+            st["new"] = self.new_view()
         return st
 
     def push(self, status_only=False):
@@ -190,6 +196,11 @@ class WebFace(PlanCore):
         self.push()
 
     def c_pick_plan(self, pid):
+        if self.new is not None and not self.new["busy"] and any(p["id"] == pid for p in self.plans):
+            self.new = None
+            if pid == self.pid and self.plan is not None:
+                self.push()
+                return
         if pid != self.pid and any(p["id"] == pid for p in self.plans) and not self.busy:
             self.pid, self.picked, self.side = pid, None, "panel"
             self.load(pid)
@@ -203,9 +214,6 @@ class WebFace(PlanCore):
 
     def c_close(self):
         self.close()
-
-    def c_new_plan(self):
-        self.ops.new_plan()
 
     def c_follow_plan(self):
         self.ops.follow_plan()

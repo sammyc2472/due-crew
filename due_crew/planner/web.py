@@ -21,9 +21,9 @@ from .widgets import fit
 class PlanWeb(QDialog, WebFace):
     """Your plans. plans: remote.my_plans' (each with its role); ops: flow.Ops."""
 
-    def __init__(self, parent, col, plans, ops, select=None, tab=None, cfg=None):
+    def __init__(self, parent, col, plans, ops, select=None, tab=None, cfg=None, new=None):
         super().__init__(parent)
-        self.web_init(col, plans, ops, select, tab, cfg)
+        self.web_init(col, plans, ops, select, tab, cfg, new)
         attach_alive(self)
         self.setWindowTitle("Your plans")
         self.setModal(False)
@@ -63,3 +63,9 @@ class PlanWeb(QDialog, WebFace):
         except Exception:
             pass
         super().closeEvent(e)
+
+
+def open_new(start=None, finish_by=None, exam=None):
+    """New plan, in this window (the board's ways in call it): flow's."""
+    from .flow import open_new as go
+    go(start=start, finish_by=finish_by, exam=exam)

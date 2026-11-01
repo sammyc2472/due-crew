@@ -27,10 +27,17 @@ def whose(p):
     return f"{who}’s · following" if who else "following"
 
 
+def others(p):
+    """Who follows a plan besides me: an author studying their own plan
+    (New plan's Start it) isn't someone its changes wait for."""
+    n = int((p or {}).get("followers") or 0)
+    return max(0, n - (1 if (p or {}).get("following") else 0))
+
+
 def pick_label(p):
     bits = [str(p.get("name") or "Plan"), whose(p)]
     if p.get("role") in ("owner", "editor"):
-        n = int(p.get("followers") or 0)
+        n = others(p)
         bits.append(f"{n:,} following" if n else "nobody following yet")
     return " · ".join(bits)
 
@@ -103,7 +110,7 @@ class PlanCore:
         return bool(self.plan) and self.plan.get("role") in ("owner", "editor") and self.raw is not None
 
     def followers(self):
-        return int((self.plan or {}).get("followers") or 0)
+        return others(self.plan)
 
     def waiting(self):
         """Changes wait to be sent: someone follows it, or some wait already (an AI app's)."""
@@ -155,7 +162,7 @@ class PlanCore:
         self._take_draft(pid)
         for i, p in enumerate(self.plans):
             if p.get("id") == pid:
-                self.plans[i] = dict(p, **{k: plan.get(k) for k in ("name", "followers", "role") if k in plan})
+                self.plans[i] = dict(p, **{k: plan.get(k) for k in ("name", "followers", "role", "following") if k in plan})
         self.label_changed(pid, plan)
         self.plan_shown()
 

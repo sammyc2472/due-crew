@@ -146,7 +146,7 @@ def test_for_everyone():
     try:
         flow.enabled = lambda: False
         flow._bg = lambda job, done: done(job())
-        flow.show_plans = lambda plans, select=None, tab=None: shown.append((plans, select, tab))
+        flow.show_plans = lambda plans, select=None, tab=None, new=None: shown.append((plans, select, tab))
         flow.tooltip = lambda text, **k: tips.append(text)
         flow.plan_flow._signed_in = lambda: True
         flow.mw.col = object()

@@ -45,15 +45,27 @@ def _raise(key):
 
 # ---- the plan window ----
 
-def open_plans(select=None, tab=None):
+def web_window():
+    """The HTML plan window (round six), unless this computer's config says
+    "plan_window": "qt" (the Qt one, kept as it was)."""
+    return str(cfg().get("plan_window") or "") != "qt"
+
+
+def open_plans(select=None, tab=None, new=None):
     """Your plans (3.9.3, for everyone; labs before): signed in, a
     collection open. One request on the click: my plans. select: a plan's
-    id to start on; tab: the tab to start on ("dates", "layout"...)."""
+    id to start on; tab: the tab to start on ("dates", "layout"...); new:
+    New plan in it ({finish_by, exam, start}: the HTML window's)."""
     if not mw.col:
         return
     w = _open.get("plans")
     if w is not None and getattr(w, "_alive", False):
-        if not select or w.go_to_plan(select, tab):
+        if new is not None and hasattr(w, "new_open"):
+            w.new_open(**new)
+            w.raise_()
+            w.activateWindow()
+            return
+        if new is None and (not select or w.go_to_plan(select, tab)):
             w.raise_()
             w.activateWindow()
             return
@@ -73,7 +85,7 @@ def open_plans(select=None, tab=None):
         w = _open.get("plans")
         if w is not None and getattr(w, "_alive", False):
             w.close()  # one opened meanwhile (a plan made): this one, with every plan, in its place
-        show_plans(plans, select, tab)
+        show_plans(plans, select, tab, new)
     _bg(lambda: remote.my_plans(cl), done)
 
 
@@ -89,9 +101,13 @@ def make_here(cl):
     return (lambda name, deck: remote.create(cl, name, deck)), made
 
 
-def show_plans(plans, select=None, tab=None):
-    from .window import PlanWindow
-    w = PlanWindow(mw, mw.col, plans, Ops(), select=select, tab=tab)
+def show_plans(plans, select=None, tab=None, new=None):
+    if web_window():
+        from .web import PlanWeb
+        w = PlanWeb(mw, mw.col, plans, Ops(), select=select, tab=tab, cfg=cfg(), new=new)
+    else:
+        from .window import PlanWindow
+        w = PlanWindow(mw, mw.col, plans, Ops(), select=select, tab=tab)
     _gone_on_close(w)
     _open["plans"] = w
     w.show()
@@ -260,6 +276,60 @@ class Ops:
         """Round five: the one New plan window."""
         open_new()
 
+    # -- New plan in the HTML window (webnew.py) --
+
+    def top_decks(self):
+        return top_decks(mw.col)
+
+    def index(self, did):
+        return P.DeckIndex(mw.col, did)
+
+    def make(self, owner, name, doc, done, pid=None):
+        """The plan made and its lessons saved, one click (StartOps.make's)."""
+        StartOps().make(owner, name, doc, done, pid=pid)
+
+    def follow_code(self, code):
+        """Someone's plan: Follow with its code, then Your plans again, with it in."""
+        plan_flow.open_follow(code)
+        self.reopen(None)
+
+    def start_own(self, owner, raw, did, own, lesson_deck, done):
+        """Start it: my plan just made, followed here on `did` (POST
+        /plans/follow with its code: the morning opens it like anyone's),
+        at my own pace when own is "ready"; today's lesson its own deck when
+        lesson_deck. done(ok) on the main thread while `owner` is open."""
+        code = str(raw.get("code") or "")
+        if not code:
+            done(False)
+            return
+        cl, gen = client(), app.generation
+
+        def followed(res):
+            got = res[0] if isinstance(res, tuple) else None
+            if gen != app.generation or not mw.col or not getattr(owner, "_alive", False):
+                return
+            if got is None:
+                tooltip("The plan is made, but it didn't start here. Follow it with its code from Settings.")
+                done(False)
+                return
+            got = dict(got, paused=False, following=True, own=got.get("own") or own or "")
+            set_deck = getattr(plan_flow, "set_lesson_deck", None)
+            plan_flow.on_followed(got, did, None, "open", False)
+            if lesson_deck and set_deck is not None:
+                set_deck(got["id"], True)
+            done(True)
+        _bg(lambda: cl.follow_plan(code, False, own=own), followed)
+
+    def lesson_deck_on(self, pid):
+        """Today's lesson as its own deck on my follow here (None: not followed here, or no lesson decks)."""
+        fn = getattr(plan_flow, "lesson_deck_on", None)
+        return fn(pid) if fn is not None else None
+
+    def set_lesson_deck(self, pid, on):
+        fn = getattr(plan_flow, "set_lesson_deck", None)
+        if fn is not None:
+            fn(pid, bool(on))
+
     def now_words(self):
         """"Tue 2:14 pm", for Undo ▾'s line about a send."""
         import datetime
@@ -409,11 +479,16 @@ def study_cards(idx, cids, name):
 
 # ---- round five: New plan, the one way to start ----
 
-def open_new():
-    """New plan: signed in (it makes a plan on the server), a collection open."""
-    if not mw.col or _raise("new"):
+def open_new(start=None, finish_by=None, exam=None):
+    """New plan: signed in (it makes a plan on the server), a collection open.
+    In the HTML window (round six) it's that window's first screen; the
+    board's exam line passes finish_by (and the exam's name)."""
+    if not mw.col or not plan_flow._signed_in():
         return
-    if not plan_flow._signed_in():
+    if web_window():
+        open_plans(new={"start": start, "finish_by": finish_by, "exam": exam})
+        return
+    if _raise("new"):
         return
     from .new_plan import NewPlanWindow
     w = NewPlanWindow(mw, top_decks(mw.col), NewOps(), labs=enabled())

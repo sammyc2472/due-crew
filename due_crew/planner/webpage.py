@@ -6,7 +6,7 @@ import json
 import os
 
 PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "page")
-PREFIX = "dcplan:"
+PARTS = ("tabs", "new")  # page/<part>.js (and .css), each adding to dcPlan: Insights and Settings, New plan
 
 
 def page_html(state, colors_css, night=False, preview=False):
@@ -14,12 +14,13 @@ def page_html(state, colors_css, night=False, preview=False):
     def read(name):
         with open(os.path.join(PAGE, name), encoding="utf-8") as f:
             return f.read()
-    first = json.dumps(state, ensure_ascii=True).replace("</", "<\\/")
-    tabs = read("tabs.js") if os.path.exists(os.path.join(PAGE, "tabs.js")) else ""
-    css = read("tabs.css") if os.path.exists(os.path.join(PAGE, "tabs.css")) else ""
+    first = json.dumps(state, ensure_ascii=True).replace("<", "\\u003c")  # nothing in it reads as markup
+    parts = [n for n in PARTS if os.path.exists(os.path.join(PAGE, n + ".js"))]
+    css = "\n".join(read(n + ".css") for n in parts if os.path.exists(os.path.join(PAGE, n + ".css")))
+    js = "\n".join(read(n + ".js") for n in parts)
     return (f"<style>{colors_css}\n{read('plan.css')}\n{css}</style>"
             f"<div id=\"dcp\" class=\"dcp{' night' if night else ''}\"></div>"
-            f"<script>{read('plan.js')}\n{tabs}</script>"
+            f"<script>{read('plan.js')}\n{js}</script>"
             f"<script>dcPlan.start({first}, {json.dumps(bool(preview))});</script>")
 
 

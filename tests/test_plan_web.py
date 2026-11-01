@@ -81,6 +81,7 @@ COL = collection()
 class Ops:
     def __init__(self, cl):
         self.cl, self.drafts, self.browsed, self.opened, self.studied = cl, {}, [], [], []
+        self.started, self.followed, self.pages = [], [], []
         self.follow = False
 
     def today(self):
@@ -136,6 +137,41 @@ class Ops:
     def study_cards(self, idx, cids, name):
         self.studied.append((set(cids), name))
         return True
+
+    def top_decks(self):
+        return [(1, "Big Step 1", 36)]
+
+    def index(self, did):
+        return P.DeckIndex(COL, did)
+
+    def make(self, owner, name, doc, done, pid=None):
+        if pid is None:
+            outcome, raw = PR.create(self.cl, name, doc.get("deck") or "")
+            if outcome != "saved":
+                done((outcome, raw))
+                return
+            pid, version = raw["id"], raw.get("version") or 1
+        else:
+            version = PR.load(self.cl, pid)[0].get("version") or 1
+        if self.fail_save:
+            self.fail_save = False
+            done(("made", pid, "Check your connection."))
+            return
+        outcome, raw = PR.save(self.cl, pid, version, doc, f"made in Anki: {name}")
+        done(("saved", dict(raw, id=raw.get("id") or pid)) if outcome == "saved" else ("made", pid, "It changed since."))
+
+    fail_save = False
+
+    def start_own(self, owner, raw, did, own, lesson_deck, done):
+        got, _status = self.cl.follow_plan(raw["code"], False, own=own)
+        self.started.append((raw["id"], did, own, lesson_deck, got is not None))
+        done(got is not None)
+
+    def follow_code(self, code):
+        self.followed.append(code)
+
+    def open_page(self, path):
+        self.pages.append(path)
 
     def __getattr__(self, name):
         return lambda *a, **k: None
@@ -306,21 +342,93 @@ def test_a_followers_window():
     check("web: Study the N: what's behind, studied", w.ops.studied and w.ops.studied[-1][1] == "what's behind", w.ops.studied)
 
 
+def test_new_plan():
+    STORE.add_user("nia", "Nia", code="NIA123")
+    w = Face(client("nia"))
+    v = w.last() or w.view()
+    v = w.view()
+    check("web: with no plans, the window opens on New plan's first screen", v["new"] and v["new"]["step"] == "pick"
+          and not v.get("welcome"), v.get("new"))
+    w.click("new_step", step="nope")
+    check("web: a step that isn't one does nothing", w.view()["new"]["step"] == "pick")
+    w.click("new_step", step="someone")
+    w.click("new_follow", code="  ABC  123 ")
+    check("web: Someone's plan: Follow… with its code (the Follow window's)", w.ops.followed == ["ABC 123"], w.ops.followed)
+    w.click("new_library")
+    check("web: and the library, on duecrew.com", w.ops.pages == ["/library"])
+    w.click("new_step", step="empty")
+    w.click("new_set", key="end_day", value="1999-01-01")
+    check("web: a day already gone isn't taken", w.view()["new"]["endDay"] > TODAY.isoformat())
+    w.click("new_set", key="name", value="  Heme   block ")
+    w.click("new_set", key="end_name", value="Heme exam")
+    w.click("new_set", key="end_day", value=day(20))
+    w.click("new_set", key="lesson", value="sideways")
+    nv = w.view()["new"]
+    check("web: Start empty: a name, the deck, the exam it ends with; today's lesson in the deck by default",
+          nv["name"] == "Heme block" and nv["endName"] == "Heme exam" and nv["endDay"] == day(20) and nv["lesson"] == "deck"
+          and nv["canMake"] and nv["deckName"] == "Big Step 1", nv)
+    w.click("new_make", start=False)
+    sh = w.last("sheet")
+    check("web: Make asks first, saying what it makes", sh and sh["title"] == "Make Heme block?" and "Heme exam" in sh["words"]
+          and sh["yes"] == "Make it" and sh["args"] == {"start": False, "sure": True}, sh)
+    before = len(STORE.plans)
+    w.ops.fail_save = True
+    w.click("new_make", **sh["args"])
+    nv = w.view()["new"]
+    check("web: made but its lessons not saved: it says so, and Make tries them again on the same plan",
+          nv and "didn't save" in nv["said"] and len(STORE.plans) == before + 1, nv and nv["said"])
+    w.click("new_make", start=False)
+    v = w.view()
+    pid = w.pid
+    check("web: then it's made once, mine, and open in the window on the deck, to lay it out",
+          len(STORE.plans) == before + 1 and v.get("new") is None and STORE.plans[pid]["owner"] == "nia"
+          and STORE.plans[pid]["doc"].get("end") == day(20) and v["side"] == "deck" and v["head"]["author"]
+          and any(p["id"] == pid for p in v["head"]["plans"]), (v.get("side"), STORE.plans.get(pid, {}).get("doc")))
+    check("web: nobody started it here (Make it, start later)", w.ops.started == [])
+    w.click("new_plan")
+    w.click("new_step", step="empty")
+    w.click("new_set", key="name", value="Mine to study")
+    w.click("new_set", key="lesson", value="own")
+    w.click("new_make", start=True, sure=True)
+    started = w.ops.started[-1] if w.ops.started else None
+    check("web: Start it follows my own plan here, today's lesson as its own deck as asked",
+          started and started[1] == 1 and started[3] is True and started[4], w.ops.started)
+    v = w.view()
+    check("web: and my own follow isn't someone my changes wait for", w.plan and w.plan.get("following")
+          and w.followers() == 0 and not w.waiting() and "nobody following yet" in next(p["label"] for p in v["head"]["plans"]
+                                                                                    if p["id"] == w.pid), w.plan and w.plan.get("followers"))
+    w.click("new_plan")
+    check("web: New plan… from a plan: the new screen in the tabs' place", w.view()["new"]["step"] == "pick")
+    w.click("new_cancel")
+    check("web: Cancel: back to the plan", w.view().get("new") is None and w.view()["plan"] is not None)
+    w.click("new_plan", finish_by=day(30), exam="Block exam")
+    nv = w.view()["new"]
+    check("web: from the board's exam line, New plan knows the exam: Finish by its day", nv["endDay"] == day(30)
+          and nv["endName"] == "Block exam" and w.new["pace"] == "by" and w.new["by"] == day(30), (nv, w.new["pace"]))
+    w.click("pick_plan", pid=w.pid)
+    check("web: picking a plan leaves New plan", w.view().get("new") is None)
+
+
 def test_the_page():
     pid, _code = plan([{"id": "u1", "name": "<b>Bold</b> & co", "opens": day(0), "tags": [f"{R}::01_Cell_injury"]}])
     w = Face(client("sam"), select=pid)
     html = page_html(w.view(), colors({}))
-    check("web: a name reaches the page as data, never as markup", "<b>Bold</b>" not in html and "\\u003c" not in html
-          and "<\\/b>" in html or "\\u003cb" in html.lower() or "<b>Bold" not in html, html[:0])
-    js = open(os.path.join(REPO, "due_crew", "planner", "page", "plan.js")).read()
-    check("web: the page sets names as text: no innerHTML anywhere in its script", "innerHTML" not in js)
+    check("web: a name reaches the page as data, never as markup", "<b>Bold" not in html and "\\u003cb>Bold" in html)
+    import glob
+    js = "\n".join(open(f).read() for f in sorted(glob.glob(os.path.join(REPO, "due_crew", "planner", "page", "*.js"))))
+    check("web: the page sets names as text: no innerHTML anywhere in its scripts", "innerHTML" not in js and "insertAdjacentHTML" not in js)
     cmds = set(re.findall(r'send\("([a-z_]+)"', js)) | set(re.findall(r'cmd: "([a-z_]+)"', js))
     cmds |= {c for m in re.findall(r'"cmd": "([a-z_]+)"', open(os.path.join(REPO, "due_crew", "planner", "webmodel.py")).read() +
                                     open(os.path.join(REPO, "due_crew", "planner", "webface.py")).read()) for c in [m]}
     missing = sorted(c for c in cmds if not hasattr(WebFace, "c_" + c))
     check("web: every command the page or the view sends has its handler", not missing, missing)
-    node = subprocess.run(["node", "--check", os.path.join(REPO, "due_crew", "planner", "page", "plan.js")], capture_output=True, text=True)
-    check("web: the page's script parses", node.returncode == 0, node.stderr)
+    bad = []
+    for f in sorted(glob.glob(os.path.join(REPO, "due_crew", "planner", "page", "*.js"))):
+        node = subprocess.run(["node", "--check", f], capture_output=True, text=True)
+        if node.returncode:
+            bad.append(node.stderr)
+    check("web: the page's scripts parse", not bad, bad)
+    check("web: each part of the page is in it", all(f"dcPlan.{x}" in html for x in ("newPlan",)), "")
     check("web: the deck panel's views are the Qt panel's", [k for k, _ in WM.VIEWS] == ["resource", "system", "other", "deck", "plan"])
 
 
