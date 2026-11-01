@@ -270,6 +270,14 @@ def _refused(o, d, c, words):
         return words in str(e)
 
 
+def _raises(fn, words):
+    try:
+        fn()
+        return False
+    except E.Refused as e:
+        return words in str(e)
+
+
 def test_leave_out_is_the_builders_but_not():
     """Leave out cards also tagged: the builder's Overlap "but not", the
     search it writes ("tag:A" -"tag:B", both as Tags.ankiSearch writes a
@@ -321,10 +329,18 @@ def test_leave_out_is_the_builders_but_not():
           _refused({"op": "leave_out", "date": "u2", "key": ["tag", SHOCK], "tag": PEDS}, d, c, "not on this set"))
     dk = dict(d, units=[dict(x) for x in d["units"]])
     dk["units"][1] = dict(dk["units"][1], decks=["Big Step 1::Cardio Videos"])
-    a6, e6, _t = O.apply(dk, O.check(dk, {"op": "leave_out", "date": "u2", "key": ["deck", "Big Step 1::Cardio Videos"], "tag": PEDS}), c)
-    check("leave out: a subdeck too, its name read with its spaces",
-          _u(a6, "u2")["search"] == [f'"deck:Big Step 1::Cardio Videos" -{B.anki_search("tag", PEDS)}'] and not _u(a6, "u2")["decks"]
-          and e6[0]["detail"] == "Cardio Videos but not Peds", (_u(a6, "u2"), e6))
+    check("leave out: never a subdeck (3.9.6's review): it's read in each follower's own deck, a search as typed",
+          _refused({"op": "leave_out", "date": "u2", "key": ["deck", "Big Step 1::Cardio Videos"], "tag": PEDS}, dk, c, "Leave them out of which")
+          and _raises(lambda: E.leave_out(dk, "u2", ["deck", "Big Step 1::Cardio Videos"], PEDS), "add its tag instead"))
+    orq = f"{B.anki_search('tag', SHOCK)} OR {B.anki_search('tag', DRUGS)}"
+    d7 = dict(d, units=[dict(x) for x in d["units"]])
+    d7["units"][2] = dict(d7["units"][2], tags=[], search=[orq])
+    a7, _e, _t = O.apply(d7, O.check(d7, {"op": "leave_out", "date": "u3", "key": ["search", orq], "tag": PEDS}), c)
+    inq = f'{B.anki_search("tag", SHOCK)} "deck:a or b"'
+    check("leave out: a search with an OR at its top in brackets, so the -tag holds for all of it (Anki reads A OR B -C as A OR (B -C)); "
+          "an OR in quotes or brackets is no top",
+          _u(a7, "u3")["search"] == [f"({orq}) -{B.anki_search('tag', PEDS)}"] and E._bracket(inq) == inq
+          and E._bracket(f"({orq}) -x") == f"({orq}) -x", _u(a7, "u3"))
 
 
 def test_move_source_is_the_builders_move_chip():

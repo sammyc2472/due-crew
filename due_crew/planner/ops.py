@@ -646,7 +646,7 @@ class LeaveOut(Op):
 
     def check(self, doc, o):
         o = _date_ref(doc, o)
-        o["key"] = _source_key(o, ("tag", "deck", "cut", "search"), "Leave them out of which of its cards?")
+        o["key"] = _source_key(o, ("tag", "cut", "search"), "Leave them out of which of its cards?")  # never a subdeck (edits.leave_out)
         if o.get("ptag"):
             t = next((x for x in P.plan_tags(doc) if x.get("id") == o["ptag"] or _norm(x.get("name")) == _norm(o["ptag"])), None)
             if t is None:

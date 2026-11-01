@@ -2115,12 +2115,12 @@ def _lesson_sync(col, plan_list, state, today, fold=None):
         q = mine(p)
         idx = P.DeckIndex(col, st["deck_id"])
         places = P.lesson_places(_plan_doc(p))
-        folder = P.lesson_folder(p.get("name"))
+        folder = P.lesson_folder_free(p.get("name"), lambda n: bool(col.decks.id_for_name(n)) and _dyn(col, col.decks.id_for_name(n)))
         taken = set().union(*[v for k, v in every.items() if k != p["id"]])  # another plan's, by the same names
         mapped = {k: int(v) for k, v in (st.get("lesson_decks") or {}).items() if _dyn(col, v)}
         lessons = []
         for u in _open_lessons(p, st, today):
-            name = P.lesson_deck(p.get("name"), places.get(u["id"], len(places) + 1), len(places), u.get("name"))
+            name = P.lesson_deck(p.get("name"), places.get(u["id"], len(places) + 1), len(places), u.get("name"), folder=folder)
             did = mapped.get(u["id"])
             if did is None:  # a deck by its name (AnkiWeb brought it from another computer): its own
                 by = col.decks.id_for_name(name)
@@ -2146,6 +2146,8 @@ def _lesson_sync(col, plan_list, state, today, fold=None):
             st["lesson_held"] = held
         else:
             st.pop("lesson_held", None)
+    # one whose folder is a filtered deck can't be built (Anki nests nothing under one): left, so no empty undo step
+    jobs = [j for j in jobs if not _dyn(col, col.decks.id_for_name(state[j[0]]["lesson_folder"]) or 0)]
     if jobs:
         pos = _fold_at(col, fold)
         if pos is None and hasattr(col, "add_custom_undo_entry"):
@@ -2218,7 +2220,10 @@ def _lesson_drop(col, st, uids=None, fold=None):
     fid = col.decks.id_for_name(folder) if folder else None
     if uids is None and fid and not _dyn(col, fid):
         kids = [int(x) for x in col.decks.deck_and_child_ids(fid) if int(x) != int(fid)]
-        ids |= {k for k in kids if _dyn(col, k)}
+        # another plan's by the same name share the folder: theirs stay (3.9.6's review)
+        theirs = {int(d) for s in _state_cfg().values() if isinstance(s, dict)
+                  for d in (s.get("lesson_decks") or {}).values()} - set(mapped.values())
+        ids |= {k for k in kids if _dyn(col, k) and k not in theirs}
         if set(kids) <= ids and int(fid) in (_pcfg().get("built") or []) \
                 and not col.db.scalar("SELECT count() FROM cards WHERE did = ? OR odid = ?", int(fid), int(fid)):
             ids.add(int(fid))  # empty and ours: removing it can't take a card with it

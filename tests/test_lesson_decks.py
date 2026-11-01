@@ -647,6 +647,43 @@ def test_board():
     check("the card's Study is planstudydate, which plan_flow handles", 'cmd == "planstudydate"' in flow and "planstudydate" in src)
 
 
+def test_review_round_v396():
+    """3.9.6's review: two plans by one name share a folder, and one going
+    to A (or stopped) takes only its own decks; a plan whose folder's name
+    is a Study deck (a set named as its plan, studied on A) builds its decks
+    in a folder beside it, one undo step."""
+    units2 = [{"id": "m1", "name": "Neoplasia", "opens": day(-1), "due": day(1), "tags": ["Path::Neoplasia"]},
+              {"id": "m2", "name": "Healing", "opens": day(0), "tags": ["Path::Healing"]}]
+    with World() as w:
+        pid2, code2 = w.store.add_plan("dre", "Path Book", "Big Step 1", copy.deepcopy(units2))
+        w.follow(lesson=True)
+        plan2, _ = w.cl.follow_plan(code2)
+        F.on_followed(plan2, BIG, None, "open", lesson=True)
+        st1, st2 = F._state_cfg()[w.pid], F._state_cfg()[pid2]
+        same = st1.get("lesson_folder") == st2.get("lesson_folder") and st2.get("lesson_decks")
+        F.set_lesson_deck(w.pid, False)
+        st2 = F._state_cfg()[pid2]
+        alive = {k: F._dyn(w.col, v) for k, v in (st2.get("lesson_decks") or {}).items()}
+        check("review: two plans by one name share a folder; one going to A takes its own decks, never the other's",
+              same and alive == {"m1": True, "m2": True} and not any(" Cell injury" in n for n in w.filtered()), (alive, w.filtered()))
+    units = copy.deepcopy(UNITS)
+    units[1]["name"] = "Path Book"  # a set named as its plan
+    with World(units=units) as w:
+        w.follow()
+        F.study_date(w.pid, "l2")  # A's Study: "Due Crew::Path Book", a filtered deck
+        n0 = len(w.col.steps)
+        F.set_lesson_deck(w.pid, True)
+        made = [w.col.decks.name(d) for d in (w.st().get("lesson_decks") or {}).values()]
+        steps = [x[1] for x in w.col.steps[n0:]]
+        check("review: a plan whose folder is a Study deck's name builds its decks beside it, in one undo step",
+              made and all(n.startswith("Due Crew::Path Book · sets::") for n in made) and steps == [F.LESSON_STEP]
+              and w.st().get("lesson_folder") == "Due Crew::Path Book · sets", (made, steps))
+    check("review: the folder beside it only when the plan's own is a filtered deck",
+          P.lesson_folder_free("Path Book", lambda n: False) == "Due Crew::Path Book"
+          and P.lesson_folder_free("Path Book", lambda n: n == "Due Crew::Path Book") == "Due Crew::Path Book · sets"
+          and P.lesson_deck("Path Book", 1, 9, "Cell", folder="Due Crew::X") == "Due Crew::X::01 Cell")
+
+
 def main():
     for n in [n for n in list(globals()) if n.startswith("test_")]:
         globals()[n]()

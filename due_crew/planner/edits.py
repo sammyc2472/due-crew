@@ -1158,6 +1158,27 @@ def _cut_key(u, key):
     return key
 
 
+def _bracket(q):
+    """A search with an OR at its top in brackets, so what's added after it
+    holds for all of it: Anki reads `A OR B -C` as `A OR (B -C)`."""
+    depth, quoted, word, top_or = 0, False, "", False
+    for ch in str(q) + " ":
+        if ch == '"':
+            quoted = not quoted
+        if quoted:
+            word = ""
+            continue
+        if ch in "()":
+            depth += 1 if ch == "(" else -1
+        if ch.isspace() or ch in "()":
+            if depth == 0 and word.lower() == "or":
+                top_or = True
+            word = ""
+        else:
+            word += ch
+    return f"({q})" if top_or else q
+
+
 def leave_out(doc, uid, key, other, n=None):
     """Leave out cards also tagged (the builder's Overlap, "but not"): one of
     a date's sources less the cards also tagged `other` (a deck tag, or one
@@ -1182,11 +1203,14 @@ def leave_out(doc, uid, key, other, n=None):
         p = str(path).lower()
         return p == low or p.startswith(low + "::")
     at = None
-    if k in ("tag", "deck"):
-        field = "tags" if k == "tag" else "decks"
-        if key[1] not in (u.get(field) or []):
+    if k == "deck":
+        # a subdeck is read in each follower's own deck (deck_cards); a search runs as typed, so
+        # "deck:<my path>" finds nothing where theirs sits elsewhere (3.9.6's review)
+        raise Refused("A subdeck's cards can't be left out by a tag: add its tag instead, then leave them out of that.")
+    if k == "tag":
+        if key[1] not in (u.get("tags") or []):
             raise Refused("That's not on this set any more.")
-        if k == "tag" and covers(key[1]):
+        if covers(key[1]):
             raise Refused("Every one of its cards is tagged that: take it off instead.")
         q = f"{B.anki_search(k, key[1])} {neg}"
     elif k == "search":
@@ -1194,7 +1218,7 @@ def leave_out(doc, uid, key, other, n=None):
             raise Refused("That's not on this set any more.")
         if neg in key[1]:
             raise Refused("It leaves those out already.")
-        q, at = f"{key[1]} {neg}", have.index(key[1])
+        q, at = f"{_bracket(key[1])} {neg}", have.index(key[1])
     elif k == "cut":
         c = next((c for c in u.get("cut") or [] if c.get("tag") == key[1] and c.get("in") == key[2]), None)
         if c is None:
@@ -1210,8 +1234,8 @@ def leave_out(doc, uid, key, other, n=None):
         raise Refused("That's on this set already.")
     if at is None and len(have) >= B.SEARCH_MAX:
         raise Refused(f"A set holds up to {B.SEARCH_MAX} searches and cuts.")
-    if k in ("tag", "deck"):
-        u[field] = [x for x in u.get(field) or [] if x != key[1]]
+    if k == "tag":
+        u["tags"] = [x for x in u.get("tags") or [] if x != key[1]]
         u["search"] = have + [q]
     else:
         old = have[at] if at is not None else c["q"]

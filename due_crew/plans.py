@@ -2606,11 +2606,22 @@ def lesson_folder(plan_name):
     return our_deck(plan_name or "Plan")
 
 
-def lesson_deck(plan_name, place, of, lesson_name):
+def lesson_deck(plan_name, place, of, lesson_name, folder=None):
     """A lesson's deck: "Due Crew::Path Book::03 Neoplasia", its place two
-    digits (three from a 100th lesson on), so the decks sort as the plan goes."""
+    digits (three from a 100th lesson on), so the decks sort as the plan goes.
+    folder: its folder when it isn't the plan's own (lesson_folder_free)."""
     name = " ".join(str(lesson_name or "").replace("::", ": ").split())[:120] or "Lesson"
-    return f"{lesson_folder(plan_name)}::{int(place):0{max(2, len(str(int(of))))}d} {name}"
+    return f"{folder or lesson_folder(plan_name)}::{int(place):0{max(2, len(str(int(of))))}d} {name}"
+
+
+def lesson_folder_free(plan_name, filtered):
+    """The plan's folder, or beside it when that name is a filtered deck
+    (Anki puts no deck under one): a set named as its plan, studied on A,
+    makes "Due Crew::Path Book" a Study deck. filtered(name): whether it is."""
+    folder = lesson_folder(plan_name)
+    if not filtered(folder):
+        return folder
+    return lesson_folder(f"{plan_name or 'Plan'} · sets")
 
 
 def lesson_cards(idx, cids):

@@ -380,7 +380,7 @@ def date_panel(w, u):
                          "Leave out its extras" if not without else "Put its extras back")
                 menu.append({"label": label, "cmd": "op", "args": {"op": {
                     "op": "set_extras", "date": u["id"], "path": path, "without": not without, "kids": kids, "main_n": main_n}}})
-            if key[0] in ("tag", "deck", "cut", "search") and w.idx is not None:
+            if key[0] in ("tag", "cut", "search") and w.idx is not None:  # a subdeck's are read in each follower's deck
                 also = _also(w, u, key, r["cids"])
                 if also:
                     menu.append({"label": "Leave out cards also tagged", "sub": [
