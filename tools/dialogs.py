@@ -2071,4 +2071,10 @@ def main(out):
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1] if len(sys.argv) > 1 else "dialog-shots"))
+    code = main(sys.argv[1] if len(sys.argv) > 1 else "dialog-shots")
+    # The verdict is in. Leave without Python tearing Qt down: now and then (offscreen,
+    # with web views built) that teardown segfaults after "all dialogs built", which
+    # would turn a pass into exit 139 in CI. The verdict stays the exit code.
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(code)
