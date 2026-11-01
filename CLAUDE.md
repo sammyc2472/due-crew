@@ -328,7 +328,14 @@ clean `main` does the migrations, the API, then the site, then
   parts are centred by it on purpose; a new part sets `text-align: left`
   itself, and buttons start from the reset in `_css`. `tools/preview.py`
   renders inside the same `<center>` and button style: look at a new part
-  there (light, dark, narrow) before calling it done.
+  there (light, dark, narrow) before calling it done. A control starts
+  from its page's reset (`appearance: none`: macOS draws any other
+  natively, Liquid Glass over ours; a focus ring on a button needs
+  `!important` under Anki's `outline: none !important`);
+  `tools/control_audit.js` checks every control against Anki's
+  webview.css and a native stand-in (the plan window's and the site's
+  pages as they are, `--site`; the board's preview a section at a time,
+  `AUDIT_WITHIN`).
   `tools/motion_preview.py` plays each motion on the real board; a
   redraw's motion lives in `motion.js` (only what changed moves, nothing
   with Reduce motion, no row ever slides past another; what leaves is put
