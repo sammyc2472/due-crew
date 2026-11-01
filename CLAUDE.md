@@ -226,7 +226,10 @@ same commit, each with its test:
   plan window's page, the same on duecrew.com, 3.9.6; `tools/gen_plan_page.py`
   writes the copies, the suite checks); `planner/webface.py` and its views
   (`webmodel`, `webtabs`, `webnew`) ↔ `site/public/planface.js` (the same
-  view and commands from builder.js's state; `tests/planface_test.js`)
+  view and commands from builder.js's state; `tests/planface_test.js`);
+  `planner/ics.py` ↔ `Ics` in planface.js (Add to my calendar, the suite
+  checks byte for byte); `plans.my_doc` ↔ `myDoc` in planface.js (a
+  follower's own days)
 - `gamenight.NEEDS` ↔ `NEEDS` in `site/public/table.js` (what each game
   needs from tonight's pack, 3.9.5; the suite checks)
 - the Worker ↔ `tests/fakes.FakeWorker` (the suite's server)

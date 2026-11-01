@@ -338,6 +338,14 @@ def test_a_followers_window():
     w.click("rename", uid="c1", name="Mine now")
     check("web: a follower's click on an author's change does nothing", next(u for u in STORE.plans[pid]["doc"]["units"]
                                                                              if u["id"] == "c1")["name"] == "Anemias")
+    w.notes, w.notes_of = [{"id": "n1", "day": TODAY.isoformat(), "text": "Bring the smear atlas", "name": "Dre"}], pid
+    w.plan = dict(w.plan, doc=dict(w.plan["doc"]))
+    w.doc = P.my_doc(w.plan["doc"], shift=2)
+    w.click("pick", key=["date", "c2"])
+    nv = w.last()["panel"]["notes"]
+    check("web: a follower whose days run later sees a set's notes on the plan's day for it (where everyone posts them)",
+          [r["text"] for r in nv["rows"]] == ["Bring the smear atlas"] and nv["day"] == TODAY.isoformat()
+          and nv["dayw"] == P.fmt_day((TODAY + datetime.timedelta(days=2)).isoformat()), nv)
     w.click("study", kind="behind", key=v["plan"]["behind"]["uids"])
     check("web: Study the N: what's behind, studied", w.ops.studied and w.ops.studied[-1][1] == "what's behind", w.ops.studied)
 

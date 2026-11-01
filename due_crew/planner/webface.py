@@ -130,7 +130,8 @@ class WebFace(NewPlan, PlanCore):
             st["plan"] = self._plan_cache[1]
             st["panel"] = WM.panel(self, self.picked)
             if st["panel"].get("kind") == "date":
-                st["panel"]["notes"] = self._notes_view(st["panel"]["opens"])
+                st["panel"]["notes"] = self._notes_view(self.note_day(st["panel"]["uid"], st["panel"]["opens"]),
+                                                        st["panel"]["opens"])
             if self.side == "deck" and self.author():
                 st["deck"] = WM.deck_panel(self, self.deck)
             if self.tab == "insights":
@@ -930,12 +931,12 @@ class WebFace(NewPlan, PlanCore):
             self.push()
         self.ops.ask(self, lambda cl: remote.notes(cl, pid), done)
 
-    def _notes_view(self, day):
+    def _notes_view(self, day, shown=None):
         writes = self.notes_of is not None and not ((self.raw or {}).get("library") is True and not self.author())
         rows = sorted((x for x in self.notes if x.get("day") == day), key=lambda x: (str(x["day"]), x["id"]))
         return {"rows": [{"id": x["id"], "who": "You" if x.get("mine") else str(x.get("name") or "?"),
                           "text": str(x.get("text") or ""), "remove": bool(x.get("remove"))} for x in rows],
-                "writes": writes, "day": day, "dayw": P.fmt_day(day), "loading": self.notes_of is None}
+                "writes": writes, "day": day, "dayw": P.fmt_day(shown or day), "loading": self.notes_of is None}
 
     def note_days(self):
         return {x.get("day") for x in self.notes}

@@ -251,7 +251,8 @@ class DatePanel(QWidget):
             self.meta.setText(" · ".join(when))
         self._cards()
         self._todos()
-        self.day_notes.show_for({u["opens"]}, u["opens"])  # the day it's on here, sent or not
+        day = self.win.note_day(u["id"], u["opens"]) if hasattr(self.win, "note_day") else u["opens"]
+        self.day_notes.show_for({day}, day)  # its notes live on the plan's day for it (a follower's days may run later)
         self.busy_changed()
 
     def _cids(self):

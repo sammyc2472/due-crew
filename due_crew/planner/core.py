@@ -116,6 +116,14 @@ class PlanCore:
         """Changes wait to be sent: someone follows it, or some wait already (an AI app's)."""
         return self.author() and (self.followers() > 0 or bool(self.draft and len(self.draft)))
 
+    def note_day(self, uid, shown):
+        """A set's notes live on the plan's own day for it: a follower whose
+        days run later (my shift, a set I moved) reads and posts them there."""
+        if self.author():
+            return shown
+        u = next((x for x in P.units((self.plan or {}).get("doc") or {}) if x.get("id") == uid), None)
+        return str(u["opens"]) if u and u.get("opens") else shown
+
     def plan_name(self):
         return str((self.plan or {}).get("name") or "")
 

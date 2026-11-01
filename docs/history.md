@@ -4164,3 +4164,17 @@ every release that changes how something works.
   `/plans/{id}?page`; followers keep the old page for now. A set on the
   site's pages too. `tests/planface_test.js` (every view drawn, every
   control fired, a save the builder's own PUT); `tools/plan_site_preview.js`.
+- 3.9.6, the site's plan page for followers too (Sam: "make the new page
+  work for followers too"): a follower's `/plans/{id}` is the add-on's
+  follower page, on my days (`myDoc`, `plans.my_doc`'s twin: my shift, my
+  skips, a set I moved): Plan read-only (Today and Behind from what my
+  Anki syncs, each set's left, List, Week and Month), Insights on my sets,
+  and Settings' my follow on the routes the old page and Anki use (my
+  dates, Skip a set, Cards open, Open early, Pause until… and Resume,
+  Reset, its squad, Make my own copy, Stop following). Add to my calendar
+  is built on the site from my days (`Ics`, `ics.py`'s twin), for authors
+  too. What only Anki does is left out; the old page's newest post,
+  calendar subscription and finished card stay at `/plans/{id}?page`.
+  Fixed on the way, in both of Anki's windows: a set's notes live on the
+  plan's day for it, so a follower whose days run later reads and posts
+  them there (`PlanCore.note_day`).
