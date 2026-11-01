@@ -331,6 +331,23 @@ class Ops:
     def reset_days(self, pid):
         plan_flow.reset_days(pid)
 
+    def lesson_deck_on(self, pid):
+        """Today's lesson in a deck of its own too (B) or only in my deck (A):
+        plan_flow's, or None when this version hasn't the choice (Settings hides it)."""
+        fn = getattr(plan_flow, "lesson_deck_on", None)
+        if not callable(fn):
+            return None
+        try:
+            on = fn(pid)
+        except Exception:  # noqa: BLE001 (a choice that can't be read isn't offered)
+            return None
+        return None if on is None else bool(on)
+
+    def set_lesson_deck(self, pid, on):
+        fn = getattr(plan_flow, "set_lesson_deck", None)
+        if callable(fn):
+            fn(pid, bool(on))
+
     def copy_plan(self, owner, pid, said):
         """Make my own copy (a library plan): the same dates, mine to change; then Your plans on it."""
         p = self.follow_state(pid) or {}
