@@ -501,7 +501,7 @@ def _css(cfg):
        corners, which the board's buttons start without */
     #due-crew button {{ -webkit-appearance: none; appearance: none; margin: 0; box-shadow: none;
       min-width: 0; min-height: 0; text-shadow: none; background-image: none;
-      -webkit-backdrop-filter: none; backdrop-filter: none; letter-spacing: normal; }}
+      -webkit-backdrop-filter: none; backdrop-filter: none; letter-spacing: normal; color: inherit; font-weight: normal; }}
     /* 3.9.6: its boxes and pickers are the board's to draw: macOS draws any control whose
        appearance isn't none in its own look (Liquid Glass) over the board's. Anki's
        `button {{ outline: none !important }}` takes every focus ring: the board's come back */
@@ -710,7 +710,7 @@ def _css(cfg):
       text-transform: none; letter-spacing: 0; border-radius: 3px; }}
     #due-crew .dc-wp > i {{ font-style: normal; font-size: 9px; pointer-events: none; }}
     #due-crew .dc-wp > select {{ position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; margin: 0; padding: 0;
-      border: 0; font: inherit; -webkit-appearance: none; appearance: none; color-scheme: light dark; }}
+      border: 0; font: inherit; -webkit-appearance: none; appearance: none; color-scheme: light dark; background: transparent; }}
     #due-crew .dc-wp:focus-within {{ outline: 2px solid var(--dc-accent); outline-offset: 2px; }}
     #due-crew .ik .tmsh {{ margin-left: 8px; color: var(--dc-accent); font-weight: 700; text-decoration: none;
       text-transform: none; letter-spacing: 0; white-space: nowrap; }}
@@ -5761,7 +5761,7 @@ CHEER_WINDOW_JS = r"""
         '#dc-cheer .cw{width:440px;max-width:100%;border-radius:14px;padding:16px 18px 14px;text-align:left;display:grid;gap:12px;font-family:' + font + ';' +
           'box-shadow:0 16px 60px rgba(0,0,0,.35);background:' + bg + ';color:' + ink + ';border:1px solid ' + line + ';font-size:13px;}' +
         '#dc-cheer button,#dc-cheer input,#dc-cheer textarea{-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;font-family:inherit;color:inherit;' +
-        'text-shadow:none;min-height:0;min-width:0;-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;}#dc-cheer button{cursor:pointer;}' +
+        'text-shadow:none;min-height:0;min-width:0;-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;font-weight:400;}#dc-cheer button{cursor:pointer;}' +
         '#dc-cheer .hd{display:flex;align-items:center;gap:10px;}' +
         '#dc-cheer .hd .pp{width:40px;height:40px;flex:none;display:grid;place-items:center;}' +
         '#dc-cheer .hd .pp svg{width:44px;height:44px;overflow:visible;}' +
@@ -6484,7 +6484,7 @@ SHEET_JS = r"""
         '#dc-sheet .cw{width:420px;max-width:100%;border-radius:14px;padding:16px 18px 14px;text-align:left;display:grid;gap:12px;font-family:' + font + ';' +
           'box-shadow:0 16px 60px rgba(0,0,0,.35);background:' + bg + ';color:' + ink + ';border:1px solid ' + line + ';font-size:13px;}' +
         '#dc-sheet button,#dc-sheet input,#dc-sheet textarea{-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;font-family:inherit;color:inherit;' +
-        'text-shadow:none;min-height:0;min-width:0;-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;}#dc-sheet button{cursor:pointer;}' +
+        'text-shadow:none;min-height:0;min-width:0;-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;font-weight:400;}#dc-sheet button{cursor:pointer;}' +
         '#dc-sheet .hd{font-size:16px;font-weight:700;}' +
         '#dc-sheet .bd{white-space:pre-line;line-height:1.45;max-height:46vh;overflow-y:auto;overflow-wrap:anywhere;}' +
         '#dc-sheet .tx{width:100%;height:32px;border-radius:8px;border:1px solid ' + line + ';background:' + bg + ';color:' + ink + ';font-size:13px;padding:0 10px;}' +
@@ -7126,7 +7126,7 @@ def stranger_card_js(info):
         back.id = 'dc-profile';
         var reset = document.createElement('style');  // 3.9.6: Anki's button look (and macOS's own) off the card's; its focus ring back
         reset.textContent = '#dc-profile button{-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;text-shadow:none;' +
-            'min-height:0;min-width:0;-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;}' +
+            'min-height:0;min-width:0;-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;font-weight:400;}' +
             '#dc-profile button:focus-visible{outline:2px solid ' + accent + ' !important;outline-offset:2px;}';
         back.appendChild(reset);
         back.style.cssText = 'position:fixed;inset:0;z-index:80;background:rgba(0,0,0,0.35);' +
@@ -7230,7 +7230,7 @@ def luck_card_js(name, lines):
         back.id = 'dc-profile';
         var reset = document.createElement('style');  // 3.9.6: Anki's button look (and macOS's own) off the card's; its focus ring back
         reset.textContent = '#dc-profile button{-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;text-shadow:none;' +
-            'min-height:0;min-width:0;-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;}' +
+            'min-height:0;min-width:0;-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;font-weight:400;}' +
             '#dc-profile button:focus-visible{outline:2px solid ' + accent + ' !important;outline-offset:2px;}';
         back.appendChild(reset);
         back.style.cssText = 'position:fixed;inset:0;z-index:80;background:rgba(0,0,0,0.35);' +
@@ -7478,7 +7478,7 @@ def profile_overlay_js(profile):
         back.id = 'dc-profile';
         var reset = document.createElement('style');  // 3.9.6: Anki's button look (and macOS's own) off the card's; its focus ring back
         reset.textContent = '#dc-profile button{-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;text-shadow:none;' +
-            'min-height:0;min-width:0;-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;}' +
+            'min-height:0;min-width:0;-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;font-weight:400;}' +
             '#dc-profile button:focus-visible{outline:2px solid ' + accent + ' !important;outline-offset:2px;}';
         back.appendChild(reset);
         back.style.cssText = 'position:fixed;inset:0;z-index:80;background:rgba(0,0,0,0.35);' +

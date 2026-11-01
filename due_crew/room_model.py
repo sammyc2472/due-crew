@@ -560,7 +560,21 @@ _RUNTIME = r"""
   function hm(ms) { return new Date(ms).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}); }
   function mins(ms) { return Math.max(1, Math.ceil(ms / 60000)); }
   function mmss(ms) { var s = Math.max(0, Math.round(ms / 1000)); return Math.floor(s / 60) + ':' + ('0' + s % 60).slice(-2); }
-  function el(tag, css, text) { var e = document.createElement(tag); if (css) { e.style.cssText = css; } if (text != null) { e.textContent = text; } return e; }
+  // 3.9.6: a button's look is the widget's own, never Anki's (a margin, a pressed shadow) or macOS's (Liquid Glass)
+  var BTN = '-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;min-height:0;min-width:0;text-shadow:none;' +
+    '-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;';
+  function el(tag, css, text) {
+    var e = document.createElement(tag), btn = tag === 'button';
+    if (css || btn) { e.style.cssText = (btn ? BTN : '') + (css || ''); }
+    if (text != null) { e.textContent = text; }
+    if (btn) {  // Anki's button { outline: none !important } takes the focus ring: an inline !important brings it back
+      e.addEventListener('focus', function () {
+        if (e.matches && e.matches(':focus-visible')) { e.style.setProperty('outline', '2px solid ' + ((typeof c !== 'undefined' && c && c.a) || '#2e7d32'), 'important'); e.style.outlineOffset = '2px'; }
+      });
+      e.addEventListener('blur', function () { e.style.removeProperty('outline'); });
+    }
+    return e;
+  }
   function ring(size, c) {
     var r = el('span', 'width:' + size + 'px;height:' + size + 'px;border-radius:50%;display:inline-grid;place-items:center;flex:none;');
     var inner = el('b', 'width:' + (size - Math.max(6, size * .12)) + 'px;height:' + (size - Math.max(6, size * .12)) +
