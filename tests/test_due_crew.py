@@ -3062,7 +3062,9 @@ def test_every_board_command_has_a_handler():
     import glob
     src = {p: open(p).read() for p in glob.glob(os.path.join(REPO, "due_crew", "**", "*.py"), recursive=True)}
     emitted = set()
-    for text in src.values():
+    for path, text in src.items():
+        if os.sep + os.path.join("planner", "web") in path:
+            continue  # the HTML plan window's own bridge ("dcplan:"), tests/test_plan_web.py's
         for rx in (r'_pycmd\(\s*f?["\']([a-z]+)', r'_st_click\(\s*f?["\']([a-z]+)', r'duecrew:([a-z]+)',
                    r'"(?:cmd|actcmd)":\s*f?"([a-z]+)'):
             emitted |= set(re.findall(rx, text))

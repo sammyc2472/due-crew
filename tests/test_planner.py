@@ -980,11 +980,15 @@ def test_start_flow():
 
 def test_rules_of_the_road():
     src = {os.path.basename(p): open(p).read() for p in glob.glob(os.path.join(REPO, "due_crew", "planner", "*.py"))}
-    windows = {f: t for f, t in src.items() if "(QDialog)" in t}
+    windows = {f: t for f, t in src.items() if re.search(r"\(QDialog[,)]", t) and f != "web.py"}  # PlanWindow(QDialog, PlanCore) too
+    web = src["web.py"]  # the HTML window: a page in the board's look says what it is; no Qt label in it
+    check("road: the HTML window wears the board's look, its page on Anki's bridge, no Qt labels",
+          "attach_alive(self)" in web and "colors(self.cfg)" in web and "set_bridge_command(self._on_cmd" in web
+          and "QLabel" not in web and "setStyleSheet" not in web)
     check("road: the windows, each wearing the board's look and saying what it is",
           sorted(windows) == ["date_dialogs.py", "date_panel.py", "mcp_dialog.py", "new_plan.py", "picker.py", "qid_window.py",
                               "send.py", "start_window.py", "text_tab.py", "window.py"]
-          and all(t.count("(QDialog)") == t.count("attach_alive(self)") == len(re.findall(r"\bheading\(self", t))
+          and all(len(re.findall(r"\(QDialog[,)]", t)) == t.count("attach_alive(self)") == len(re.findall(r"\bheading\(self", t))
                   for t in windows.values()), sorted(windows))
     tabs = {f: t for f, t in src.items() if "(QWidget)" in t}  # round five: Your plans' tabs and panels
     check("road: the tabs and panels (Plan with its date and deck panels, Insights, Settings, Mine, the text, History and Posts, "
@@ -1000,7 +1004,8 @@ def test_rules_of_the_road():
           all("setTextFormat(Qt.TextFormat.PlainText)" in t or (not labels[f] and "plain(" in t) for f, t in windows_tabs.items())
           and not [f for f, t in windows_tabs.items() if re.search(r'setToolTip\(0, (?!f"<span>\{esc\()', t)])
     pure = ("model.py", "qids.py", "edits.py", "actions.py", "remote.py", "reading.py", "claude.py", "build.py", "text.py",
-            "ops.py", "draft.py", "view.py", "prompts.py", "ai.py", "mcp.py", "mcp_shim.py", "insights.py")
+            "ops.py", "draft.py", "view.py", "prompts.py", "ai.py", "mcp.py", "mcp_shim.py", "insights.py",
+            "core.py", "webface.py", "webmodel.py", "webpage.py")
     check("road: the pure parts and the requests import no aqt",
           not [f for f in pure if re.search(r"^\s*(from aqt|import aqt)", src[f], re.M)])
     calls = set()
