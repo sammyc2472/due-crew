@@ -4055,3 +4055,52 @@ every release that changes how something works.
   joins are 600 an hour a network and table.
   `test_pip_party_keeps_its_socket_v395` (wsClient in node, its clock and
   socket stood in for); `table.test.ts`: a pong, and the TV gone a moment.
+- 3.9.6, plans end to end (Sam's picks after the "Plans end to end"
+  mock: the plan maker as a page, full parity, older add-ons untouched;
+  the class calendar import waits). **Your plans is an HTML window** in
+  the board's look (`planner/web.py`, a Qt shell on Anki's web view and
+  bridge; `webface.py` its clicks, "dcplan:" + JSON; `webmodel.py`,
+  `webtabs.py`, `webnew.py` its pure views; `page/` its scripts, text
+  only, never markup). Its logic is `core.PlanCore`, moved out of the Qt
+  window, which both run; the Qt window stays for `"plan_window": "qt"`
+  in this computer's config. Plan (List, Week, Month with drag, Find,
+  Needs a look, a lesson's panel, the deck beside it, changes waiting
+  and Review and send, the paste box, the keys), Insights and Settings
+  (an author's: the plan, sharing, co-authors, posts, history, the
+  library, Your AI app; a follower's: my follow) are all there; the
+  text, Spread, Add a search and review days open their Qt dialogs over
+  it. **New plan** is its first screen (`webnew.py`): A resource, at my
+  pace (`edits.resource_plan`: a lesson a chapter of a resource in the
+  deck's order, "· the rest" for what no chapter holds, Only as the
+  plan's own tag with 3.8.1 cuts, laid out at about N new a day, by a
+  finish day with its exam, or for When I'm ready, on my study days;
+  `model.resource_parts`, `only_count`, `also_tagged`); Someone's plan (a
+  code into Follow, or the library); Start empty (a name, the deck, the
+  exam it ends with, then the deck beside it). Make it, start later; or
+  Start it, which also follows it here (`Ops.start_own`, `POST
+  /plans/follow` with its code), today's lesson in my deck or its own.
+  An author following their own plan isn't someone its changes wait for
+  (`core.others`). No days off (a plan has no field for them). **The
+  builder's site-only tools**, as ops: Leave out cards also tagged (the
+  Overlap "but not", `leave_out`), Move a source to a lesson or a day
+  (`move_source`, the builder's moveChip), a lesson straight from a tag
+  (`add_date`'s "next" and `join`), Lay out before any quiz or exam
+  (`lay_out`'s `upto`; the plan's own end stays), Give everyone a day
+  (`breather` in one click), Copy its search per source
+  (`model.source_search`). No new doc field: the site and older add-ons
+  read every change as before; nothing new on the server. **You ›
+  Plans** (`plan_board.py`): the whole plan as a path above the week, a
+  segment a lesson (done, behind, today, ahead, skipped), its last quiz
+  or exam at the end, "lesson 3 of 19"; Behind… where Catch up… was (a
+  sheet: Slide N days on my follow's shift, Fit it in over three days or
+  a week, Skip what's left, Not now); a lesson with no finish-by day is
+  behind once its day passes with cards left, as Due's Behind counts.
+  The empty tab: a box for a plan's code or link (any other code goes
+  the way the box's codes always went), my exam with Plan the way there
+  (New plan finishing by it), Make a plan, the library. Fixed on the way:
+  an author's window loaded the cleaned plan, so Shape and Lay out read
+  its pace as placed by hand till the first save (it loads the plan as
+  the server keeps it); `clean_plan` keeps `library`, so Make my own
+  copy shows for a library plan. `test_plan_web.py`,
+  `test_plan_web_tabs.py`, `test_plan_board.py`, `test_plan_ops.py`'s
+  new ops; `tools/plan_preview.py` and `.js` render the window.
