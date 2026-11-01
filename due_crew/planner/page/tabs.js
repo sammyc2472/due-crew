@@ -269,12 +269,15 @@
     if (lib.length) { share.push(fr(h, "Library", [h("div.tstack", {}, lib)])); }
     box.appendChild(sec(h, "Sharing", share));
     /* this computer */
-    box.appendChild(sec(h, "This computer", [
-      fr(h, "Your AI app", [h("span", { text: d.ai }), c.btn("Set up…", function () { run(c.send, "ai_app"); }, "",
+    /* d.ai null and d.here: a host with no AI app of its own (duecrew.com); Anki's view always has d.ai and no d.here */
+    box.appendChild(sec(h, d.here || "This computer", [
+      d.ai === null ? null : fr(h, "Your AI app", [h("span", { text: d.ai }), c.btn("Set up…", function () { run(c.send, "ai_app"); }, "",
         { title: "An AI app on this computer (Claude, say) reads your plans and puts changes under one for you to send; it never sends" })]),
       fr(h, "This plan", [c.btn("Copy it for next year", function () { run(c.send, "next_year"); }, "", { disabled: busy || !d.canCopy }),
-        c.btn("Copy as a table", function () { run(c.send, "table"); }), h("span.grow"),
-        d.delete ? c.btn("Delete this plan…", function () { run(c.send, "delete_plan"); }, "bad", { disabled: busy }) : null])]));
+        c.btn("Copy as a table", function () { run(c.send, "table"); })].concat(
+        /* d.more: a host's own ways on from here ([{label, name}], duecrew.com's); Anki's view has none */
+        (d.more || []).map(function (x) { return c.btn(x.label, function () { run(c.send, x.name); }); }), [h("span.grow"),
+        d.delete ? c.btn("Delete this plan…", function () { run(c.send, "delete_plan"); }, "bad", { disabled: busy }) : null]))]));
     return box;
   }
 

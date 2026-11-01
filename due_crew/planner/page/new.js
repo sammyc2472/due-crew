@@ -63,7 +63,9 @@
     if (n.step === "pick") {
       box.appendChild(head("New plan"));
       [["resource", "A resource, at my pace", "Chapters of something in your deck, in order."],
-        ["someone", "Someone's plan", "A code, or the library."]].forEach(function (o) {
+        ["someone", "Someone's plan", "A code, or the library."]].filter(function (o) {
+        return !n.ways || n.ways.indexOf(o[0]) >= 0;  /* n.ways: the ways this host has (duecrew.com's); Anki's view has every one */
+      }).forEach(function (o) {
         box.appendChild(h("div.opt", { tabindex: 0, role: "button", onclick: function () { send("new_step", { step: o[0] }); },
           onkeydown: function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); send("new_step", { step: o[0] }); } } },
           [h("span.rd"), h("span", {}, [h("b", { text: o[1] }), h("span.m", { text: o[2] })])]));
@@ -92,7 +94,7 @@
       box.appendChild(row("Deck", deckSelect()));
       box.appendChild(row("Ends with", h("div.row", {}, [text("end_name", n.endName, "Block 2 exam (or leave it empty)", "newend"),
         date("end_day", n.endDay, "newendday")])));
-      box.appendChild(lesson());
+      if (n.lesson) { box.appendChild(lesson()); }  /* no Today's set where there's no Anki (duecrew.com) */
       box.appendChild(makeRow(nm, ""));
     }
 

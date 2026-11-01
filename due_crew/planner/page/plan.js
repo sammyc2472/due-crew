@@ -44,6 +44,9 @@ var dcPlan = (function () {
     } }, attrs || {}));
   }
   function author() { return S && S.head && S.head.author; }
+  /* what this host can do: duecrew.com's view lists what only Anki can ("browse", "search") in
+     S.without; Anki's view never sets it, so everything shows there */
+  function has(x) { return !(S && S.without && S.without.indexOf(x) >= 0); }
   function busy() { return S && S.head && S.head.busy; }
   function keyStr(k) { return k ? k.join("\u0001") : ""; }
   function same(a, b) { return keyStr(a) === keyStr(b); }
@@ -445,8 +448,8 @@ var dcPlan = (function () {
     if (pn.said) { box.appendChild(h("div.muted.sm", { text: pn.said, style: "margin:-2px 0 6px" })); }
     pn.sources.forEach(function (s) {
       var items = [];
-      if (s.n) { items.push({ label: "Show these " + s.n.toLocaleString() + " in Browse", cmd: "browse", args: { key: S.picked, i: s.i } }); }
-      if (s.menu) { items.push({ sep: true }); items = items.concat(menuItems(s.menu)); }
+      if (s.n && has("browse")) { items.push({ label: "Show these " + s.n.toLocaleString() + " in Browse", cmd: "browse", args: { key: S.picked, i: s.i } }); }
+      if (s.menu) { if (items.length || has("browse")) { items.push({ sep: true }); } items = items.concat(menuItems(s.menu)); }
       box.appendChild(h("div.src", { title: s.raw, onclick: function (e) { if (items.length) { e.stopPropagation(); menu(items, this); } } }, [
         h("span", { text: s.name }), h("span.n", { text: s.n !== null && s.n !== undefined ? s.n.toLocaleString() : "" }),
         a && s.key ? h("button.x", { type: "button", title: "Take it off this set", text: "✕", onclick: function (e) {
@@ -456,9 +459,9 @@ var dcPlan = (function () {
     var acts = h("div.row", { style: "margin-top:6px" });
     if (a) {
       acts.appendChild(btn("Add from the deck", function () { send("deck", { uid: pn.uid }); }, "", { title: "Tick the deck's tags for this set (Ctrl+D)" }));
-      acts.appendChild(btn("Add a search or IDs…", function () { send("add_search"); }));
+      if (has("search")) { acts.appendChild(btn("Add a search or IDs…", function () { send("add_search"); })); }
     }
-    if (pn.n) { acts.appendChild(btn("Show the " + pn.n.toLocaleString() + " in Browse", function () { send("browse", { key: S.picked }); })); }
+    if (pn.n && has("browse")) { acts.appendChild(btn("Show the " + pn.n.toLocaleString() + " in Browse", function () { send("browse", { key: S.picked }); })); }
     box.appendChild(acts);
     if (a || pn.todo.length || pn.every.length) {
       box.appendChild(h("div.sh", { text: "To do" }));

@@ -9577,6 +9577,52 @@ def test_find_a_setting_v380():
           and 'cmd == "settab"' in open(os.path.join(REPO, "due_crew", "__init__.py")).read())
 
 
+def test_site_plan_page_is_the_addons():
+    """Your plans on duecrew.com is the add-on's plan page (Sam's call): one
+    look, one set of page scripts. site/public/planpage/ holds
+    due_crew/planner/page/*.js and *.css byte for byte (tools/gen_plan_page.py
+    writes them; running it again changes nothing); the site's face
+    (planface.js) draws its view on builder.js's plan. tests/planface_test.js
+    drives the face in node: every command the page can send has its handler,
+    a save goes out as the builder's, changes wait while anyone follows."""
+    import importlib.util
+    import json
+    import shutil
+    import subprocess
+    page = os.path.join(REPO, "due_crew", "planner", "page")
+    site = os.path.join(REPO, "site", "public")
+    names = sorted(n for n in os.listdir(page) if n.endswith((".js", ".css")))
+    same = [n for n in names if os.path.exists(os.path.join(site, "planpage", n))
+            and open(os.path.join(page, n), "rb").read() == open(os.path.join(site, "planpage", n), "rb").read()]
+    check("the site's plan page: each of the add-on's page files, byte for byte (tools/gen_plan_page.py)",
+          names and same == names and sorted(os.listdir(os.path.join(site, "planpage"))) == names, sorted(set(names) - set(same)))
+    spec = importlib.util.spec_from_file_location("gen_plan_page", os.path.join(REPO, "tools", "gen_plan_page.py"))
+    gen = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gen)
+    check("the site's plan page: running tools/gen_plan_page.py again changes nothing", gen.stale() == [], gen.stale())
+    html = open(os.path.join(site, "app.html"), encoding="utf-8").read()
+    want = ['<link rel="stylesheet" href="/planpage/plan.css">', '<link rel="stylesheet" href="/planface.css">',
+            '<script src="/builder.js" defer></script>\n<script src="/planpage/plan.js" defer></script>\n<script src="/planpage/tabs.js" defer></script>\n'
+            '<script src="/planpage/new.js" defer></script>\n<script src="/planface.js" defer></script>']
+    check("the site's plan page: the app page loads the page's files, then the face, after builder.js", all(x in html for x in want))
+    face = open(os.path.join(site, "planface.js"), encoding="utf-8").read()
+    check("the site's plan page: the face sets no markup (the page sets every name as text)",
+          "innerHTML" not in face and "insertAdjacentHTML" not in face)
+    node = shutil.which("node")
+    if not node:
+        print("SKIP the site's plan face in node: no node")
+        return
+    got = subprocess.run([node, os.path.join(REPO, "tests", "planface_test.js")], capture_output=True, text=True, timeout=180)
+    try:
+        out = json.loads(got.stdout)
+    except ValueError:
+        check("the site's plan face ran in node", False, (got.stdout + got.stderr)[-1500:])
+        return
+    check("the site's plan face ran in node", not out.get("crash"), out.get("crash"))
+    for name, ok, detail in out["checks"]:
+        check(name, ok, detail)
+
+
 def test_board_motion_v380():
     """3.8.0, "Board in Motion" (all seventeen): one motion.js, byte for byte
     on the board and duecrew.com; the swap notes the board before and moves
@@ -11891,8 +11937,8 @@ def test_plan_tags_builder_v381():
           'if (ovl.op === "and" && !pt)' in builder and "const cs = picks ? picks.cards : [];" in builder
           and "(t.cards || []).length ? Picks.cardsText(t.cards)" in builder)
     check("r2 site: the whole plan's text names the dates a removed tag is still on, and offers both ways",
-          '"Take them off those dates too"' in builder and '"Keep the tags"' in builder and '"Replace anyway"' in builder
-          and "What these dates already opened stays open." in builder)
+          '"Take them off those sets too"' in builder and '"Keep the tags"' in builder and '"Replace anyway"' in builder
+          and "What these sets already opened stays open." in builder)
     check("r2 site: the tagging prompt gives the root, the tags as they stand and the #cards rule",
           "In Anki each one becomes the tag DueCrew::${a.root}::NAME" in builder and "root: tagRootNow()" in builder
           and "This plan's tags now, as they stand" in builder and "#cards column" in builder
@@ -11904,7 +11950,7 @@ def test_plan_tags_builder_v381():
           "...(t.search || []).map((x) => `search:${x}`)].filter(Boolean);" in builder and '"tag", t.name, ...tagSrcs(t)' in builder)
     check("r2 site: a cut chip dragged to another day moves as a cut; a cut's search is never trimmed away",
           "else if (c.cut) {" in builder and "takeCut(c.u, x);" in builder and ".slice(-10)" not in builder
-          and 'note = "A date holds up to 10 searches and cuts."' in builder)
+          and 'note = "A set holds up to 10 searches and cuts."' in builder)
     check("r2 site: a heavy day's Split takes a whole tag or subdeck only; a redraw keeps the page where it was",
           "const big = u.even ? null : srcs(u).filter((k) => !uncounted(k) && eff(k) > 0)" in builder  # 3.8.1: srcs are tags and subdecks
           and "const y = window.scrollY;\n    drawNow();\n    if (y) window.scrollTo(0, y);" in builder)
@@ -12006,7 +12052,7 @@ def test_builder_review_wording_v381():
           "Followers who opened it are asked at their next refresh" in builder and "tomorrow morning" not in builder)
     check("words: the empty List says Fill", "Tick what to cover and Fill, or drag" in builder and "Lay it out, or drag" not in builder)
     check("words: Edit the whole plan says nothing changes before Replace and Save",
-          "Nothing does until you Replace the plan's dates, and Save." in builder and "Saving replaces the plan's dates with this text." not in builder)
+          "Nothing does until you Replace the plan's sets, and Save." in builder and "Saving replaces the plan's dates with this text." not in builder)
     check("words: Settings offers it to one of my squads, not the plan's squad",
           '"Offer it to one of my squads"' in builder and '"Only people in that squad of mine"' in builder and '"Offer it to a squad"' not in builder)
     check("words: each example has a neutral one beside the med one",
@@ -12014,7 +12060,7 @@ def test_builder_review_wording_v381():
           and "2026-10-12 | Chapter 4 | tag:Chemistry::Unit_3::Chapter_4" in builder and '"tag | Unit 3 | tag:Chemistry::Unit_3"' in builder
           and "Heart failure | tag:Step1::Cardio::Heart_failure" in builder)
     check("words: Make it a review day says followers get a Due Crew deck of what they've seen, that morning",
-          "That morning, followers get a Due Crew deck of what they've seen from these dates" in builder)
+          "That morning, followers get a Due Crew deck of what they've seen from these sets" in builder)
     check("words: the empty tree names the plan's deck, and Anki's deck needs that name",
           "and pick ${doc.deck}: the deck in Anki needs that name." in builder)
     check("words: at my own pace, the next once I've seen most of the last",
@@ -12024,8 +12070,8 @@ def test_builder_review_wording_v381():
           "const inSquad = pr.inSquad ?? pr.sharing;" in builder and "if (inSquad < 3) {" in builder
           and "const others = pr.others ?? pr.sharing;" in builder and "if (others < 2) {" in builder
           and "if ((pr.inSquad ?? pr.sharing) < 3 || (pr.others ?? pr.sharing) < 2 || !pr.sharing) return null;" in builder
-          and "Each date's counts show once 3 or more are in it." in builder
-          and "Each date's counts show once 2 or more besides you do." in builder)
+          and "Each set's counts show once 3 or more are in it." in builder
+          and "Each set's counts show once 2 or more besides you do." in builder)
     check("words: For classes says the plan's squad", "among those in the plan&rsquo;s squad" in classes and "among those who share it" not in classes)
     check("words: the Format box links the whole format; both prompts name it",
           'h("a", { class: "small", href: "/plan-text"' in builder and "The whole format ›" in builder
@@ -17519,7 +17565,7 @@ def test_builder_audit_v392():
           got[:4] == ["Pharm block (next year)", "x" * 48 + " (next year)", "Pharm block (next year)", "Cardio (next year)"]
           and all(len(x) <= 60 for x in got) and got[4] == "Pharm for second years with Dr. Lopez and the (next year)"
           and "PUT\", `/plans/${mine.id}`" in ny and "name: named(got.name || plan.name)" in ny and "go(`/plans/${mine.id}`)" in ny
-          and "The saved plan has no dates to copy." in ny and "That didn't copy: check your connection" in ny,
+          and "The saved plan has no sets to copy." in ny and "That didn't copy: check your connection" in ny,
           (got, out.stderr[-300:]))
     rev = js[js.index("const Reviews = (() => {"):js.index("})();", js.index("const Reviews = (() => {")) + 5]
     wk = js[js.index("function weekly(ws) {"):js.index("\n  }", js.index("function weekly(ws) {")) + 4]

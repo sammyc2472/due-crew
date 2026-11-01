@@ -117,6 +117,26 @@ sends has its handler, no innerHTML, each script parses);
 `tools/plan_preview.py` writes the window's pages from the fakes and
 `tools/plan_preview.js` screenshots them (light, dark, 760 px).
 
+**duecrew.com is the same page** (Sam's call). `site/public/planpage/`
+holds `page/*.js` and `*.css` byte for byte: `tools/gen_plan_page.py`
+writes them (run it after the page changes; the suite fails while a copy
+is behind). `site/public/planface.js` is the site's face, webface's twin
+in JS: the same view JSON and the same `c` names, built on builder.js's
+plan (`builder(id, face)` hands over its working copy and logic, its
+draw is the face's). A change waits under the plan while anyone follows
+it and goes out with Review and send as one builder save (with its line
+to followers); with nobody following it saves at once and Undo is `POST
+/plans/{id}/undo`. What only Anki does isn't in the site's view: Browse
+(`S.without`), Study, opening cards, Your AI app (`d.ai: null`), Today's
+set (`n.lesson` empty), a resource at my pace (`n.ways`); a source's count
+is the deck tree's, Add to my calendar is the site's `/p/CODE.ics`. The
+seams are no-ops in Anki: its view never sets them. An author's plan opens
+there at `/plans/{id}` and `/plans/{id}/edit`; anyone else's, and
+`?page` for its authors (progress, the poster), is builder.js's page as
+before. `tests/planface_test.js` drives the face in node (run by the
+suite); `tools/plan_site_preview.js --shots DIR` renders the site's pages
+against a stub API.
+
 ## Your plans
 
 Round five (Sam's picks on the "Simpler Plan Builder" page, all A): one

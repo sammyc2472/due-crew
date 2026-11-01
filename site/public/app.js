@@ -350,14 +350,14 @@ async function plansList() {
   const mineP = plans.filter(writes);
   const followed = plans.filter((p) => !writes(p));
   // 3.4 review, H10: the name, then what it runs on and when, and who follows
-  const span = (p) => { const u = Sched.units(p.doc); return u.length ? `${pretty(u[0].opens)} – ${pretty(u[u.length - 1].due || u[u.length - 1].opens)}` : "no dates yet"; };
+  const span = (p) => { const u = Sched.units(p.doc); return u.length ? `${pretty(u[0].opens)} – ${pretty(u[u.length - 1].due || u[u.length - 1].opens)}` : "no sets yet"; };
   const row = (p) => h("a", { class: "plan-row", href: `/plans/${p.id}`, "data-go": "" },
     h("b", {}, p.name), h("small", { class: "fol" }, `${p.followers} following`),
     h("small", {}, [writes(p) ? (p.role === "editor" ? `with ${p.ownerName}` : null) : `${p.ownerName}'s plan`,
       p.doc.deck !== p.name ? p.doc.deck : null, planDays(p.doc), span(p)].filter(Boolean).join(" · ")));
   const how = h("p", { class: "muted small", hidden: true }, "Pick the deck in Anki: Tools › Due Crew › Make a plan from a deck. It opens here.");
   page(
-    phead("Plans", "Dates for a deck; your Anki opens each one on its day.",
+    phead("Plans", "A deck's cards in sets, on days; your Anki opens each set on its day.",
       h("button", { onclick: () => { how.hidden = !how.hidden; } }, "New plan")), how,
     h("h2", {}, "Yours"),
     mineP.length ? h("div", { class: "plans" }, mineP.map(row))
@@ -379,7 +379,7 @@ const credit = (b) => (b ? `based on ${b.name}${b.owner && b.owner !== "?" ? `, 
 
 /** Copy a plan into one of my own: its first date on the day I pick. */
 function copyForm(p, done) {
-  const start = h("input", { type: "date", value: nextMonday(), "aria-label": "Its first date" });
+  const start = h("input", { type: "date", value: nextMonday(), "aria-label": "Its first set's day" });
   const status = h("span", { class: "status", role: "status" });
   const btn = h("button", { onclick: async () => {
     if (!start.value) return;
@@ -600,7 +600,7 @@ function codeBox() {
       if (plan) {
         if (plan.following) return say("", h("b", {}, plan.name), h("span", { class: "muted" }, "you follow it"), link(`/plans/${plan.id}`, "Open"));
         return say("", h("b", {}, plan.name), h("span", { class: "muted" }, `${plan.ownerName}'s plan · ${planDays(plan.doc)}`), h("button", { onclick: async () => {
-          try { await api("POST", "/plans/follow", { code: c }); done("Following. Each date's cards open in Anki on their day; the first time, Anki asks about holding later ones back."); }
+          try { await api("POST", "/plans/follow", { code: c }); done("Following. Each set's cards open in Anki on its day; the first time, Anki asks about holding later ones back."); }
           catch { say("bad", h("span", {}, "That didn't work. Try again.")); }
         } }, "Follow"));
       }
@@ -661,7 +661,7 @@ function planIntro(p) {
   const last = u.length ? u[u.length - 1] : null;
   const shown = u.slice(0, 4);
   return [h("h1", {}, p.name),
-    h("p", { class: "muted" }, `${p.ownerName}'s plan · ${u.length} date${u.length === 1 ? "" : "s"}${u.length ? `, ${pretty(u[0].opens)} to ${pretty(last.due || last.opens)}` : ""} · ${p.followers} following`),
+    h("p", { class: "muted" }, `${p.ownerName}'s plan · ${u.length} set${u.length === 1 ? "" : "s"}${u.length ? `, ${pretty(u[0].opens)} to ${pretty(last.due || last.opens)}` : ""} · ${p.followers} following`),
     p.line ? h("p", {}, p.line) : null,
     u.length ? h("div", { class: "pdates" }, shown.map((x) => h("div", {}, h("small", {}, pretty(x.opens)), h("span", {}, x.name), h("small", {}, x.n ? `${x.n.toLocaleString()} card${x.n === 1 ? "" : "s"}` : ""))),
       u.length > shown.length ? h("div", {}, h("small", {}), h("span", { class: "muted" }, `and ${u.length - shown.length} more, to ${pretty(last.due || last.opens)}`), h("small", {})) : null) : null];
@@ -679,7 +679,7 @@ function followBox(p, code, followed) {
     btn.disabled = true; out.className = "status"; out.textContent = "";
     try {
       await api("POST", "/plans/follow", { code });
-      box.replaceChildren(h("p", {}, h("b", {}, "Following. "), "Due Crew in your Anki picks it up at its next refresh and opens each date's cards on their day. The first time, it asks about holding later ones back. ", open));
+      box.replaceChildren(h("p", {}, h("b", {}, "Following. "), "Due Crew in your Anki picks it up at its next refresh and opens each set's cards on its day. The first time, it asks about holding later ones back. ", open));
       followed?.();
     } catch (err) {
       btn.disabled = false; out.className = "status bad";
@@ -857,7 +857,7 @@ function yourData(lg, set) {
       "Delete my log", "/log", "Deleted. It starts again from this past week.")
       : row("Your log", "Nothing yet."),
     items.length || ticks ? ask("Your to-dos", `${open} open, ${items.length - open} ticked.`,
-      ["Delete your to-dos?", "Your own to-dos and ticks, on every computer at its next refresh. A plan's dates stay on your list."],
+      ["Delete your to-dos?", "Your own to-dos and ticks, on every computer at its next refresh. A plan's sets stay on your list."],
       "Delete my to-dos", "/account/todos", "Deleted. Anki takes it at its next refresh.")
       : row("Your to-dos", "None."));
 }
@@ -1684,7 +1684,7 @@ function todayStrip(followed, mine) {
       null)
       : card("", "Opens today", "Nothing new", h("small", { class: "muted" }, "A day for reviews")));
   }
-  if (behind) cards.push(card("", "From earlier dates", behind.toLocaleString(), h("span", {}, "new cards waiting"), h("small", { class: "muted" }, "Catch up in Anki")));
+  if (behind) cards.push(card("", "From earlier sets", behind.toLocaleString(), h("span", {}, "new cards waiting"), h("small", { class: "muted" }, "Catch up in Anki")));
   if (next) {
     const preps = followed.some((p) => Sched.units(p.doc).some((u) => u.for === next.ev.id && opening.some(([, o]) => o.id === u.id)));
     cards.push(card("", "Next", next.ev.name, h("span", {}, `${next.ev.day === t ? "Today" : pretty(next.ev.day)}${preps ? " · today preps for it" : ""}`),
@@ -2071,7 +2071,7 @@ function planLoad(p) {
         x.known ? h("span", { class: "lfoot" }, askBar(size([x]), loadAsk(x, t), of, x.day < t)) : null,
         h("small", { class: "muted nums" }, x.known ? how(x) : "not counted yet"),
         ...loadMore(p, x)))
-        : h("small", { class: "muted" }, "No plan dates."));
+        : h("small", { class: "muted" }, "No plan sets that day."));
     box.replaceChildren(head, nav, h("div", { class: "lweek" }, cells), det);
   };
   draw();
@@ -2133,7 +2133,7 @@ function onTrackChart(p) {
   svg.append(dot, s("text", { x: x(ti) + 8, y: y(seen) + 4, class: "lab" }, `You ${seen.toLocaleString()}`));
   return h("div", {}, h("div", { class: "key" }, h("span", {}, h("i", { class: "k-you" }), "you"),
     hist.length > 1 ? [h("span", {}, h("i", { class: "k-seen" }), "seen"), h("span", {}, h("i", { class: "k-open" }), "opened for you")] : null,
-    h("span", {}, h("i", { class: "k-plan" }), sched ? "your schedule" : "the plan's dates")), svg);
+    h("span", {}, h("i", { class: "k-plan" }), sched ? "your schedule" : "the plan's sets")), svg);
 }
 
 function barChart(values, labels, cap, unit) {
@@ -2992,10 +2992,12 @@ function feedbackPanel(nav) {
 async function route() {
   here = location.pathname + location.search;
   window.onbeforeunload = null;  // the builder sets it again when it opens
+  if (typeof PlanFace === "object") PlanFace.stop();  // off a plan page: its keys and clicks stop
   const path = location.pathname.replace(/\/+$/, "") || "/";
   try {
     if (path === "/sign-in") return signIn();
-    if (path === "/plans/new") return await newPlan();
+    // Your plans: the add-on's plan page (planface.js); the expired link's words are newPlan's
+    if (path === "/plans/new") return me && typeof PlanFace === "object" ? await PlanFace.newPlan() : await newPlan();
     let m;
     if ((m = /^\/p\/([A-Za-z0-9]{1,16})$/.exec(path))) return await codePage(m[1].toUpperCase());
     if ((m = /^\/i\/([A-Za-z0-9]{1,12})$/.exec(path))) return await invitePage(m[1].toUpperCase());
@@ -3007,8 +3009,11 @@ async function route() {
     if (path === "/admin") return await adminPage();
     if (path === "/account") return account();
     if (path === "/feedback") return feedbackPage();
-    if ((m = /^\/plans\/([a-z0-9]{16})\/edit$/.exec(path))) return await builder(m[1]);
-    if ((m = /^\/plans\/([a-z0-9]{16})$/.exec(path))) return await builder(m[1]);
+    // an author's plan on the shared plan page; anyone else's on its own page (builder.js), as before;
+    // ?page: its own page for its authors too (its followers' progress, the poster, the calendar menu)
+    if ((m = /^\/plans\/([a-z0-9]{16})(?:\/edit)?$/.exec(path))) {
+      return await (typeof PlanFace === "object" && !new URLSearchParams(location.search).has("page") ? PlanFace.open(m[1]) : builder(m[1]));
+    }
     page(h("h1", {}, "Not here"), link("/plans", "Your plans"));
   } catch (err) {
     if (err.status === 401) { me = null; renderNav(); return needSignIn(); }
