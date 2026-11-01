@@ -139,7 +139,7 @@ const PlanFace = (() => {
     const F = {
       B, plans: sortPlans(o.plans || (B ? [B.plan] : [])), tab: ["insights", "settings"].includes(o.tab) ? o.tab : "plan",
       picked: null, side: "panel", status: "", busy: false,
-      changes: [], hold: false, undoable: null, sent: null,
+      changes: [], hold: false, undoable: null, sent: null, behind: false,
       deck: { target: null, view: "resource", find: "", opened: new Set(), dirty: false },
       shape: {}, posts: [], crew: null, newSt: null, ready: false,
     };
@@ -168,6 +168,22 @@ const PlanFace = (() => {
     };
     /** changes wait under the plan: someone follows it, or a save of them didn't go (core.waiting) */
     const waiting = () => author() && (others(plan()) > 0 || F.hold);
+    /** a set new here with nothing on it yet: it waits till it has cards (builder.js's save keeps
+     *  only the server's own sets with none, as Anki's window sends them from a calendar) */
+    const bare = (u) => !(B.srcs(u).length || (u.cards || []).length || (u.search || []).length || (u.cut || []).length || B.hasIds(u));
+    const heldIds = () => {
+      const was = new Set((B.base.units || []).map((u) => u.id));
+      return new Set(units().filter((u) => bare(u) && !was.has(u.id)).map((u) => u.id));
+    };
+    const heldOf = (c, ids) => !!(c.key && c.key[0] === "date" && ids.has(c.key[1]));
+    /** what a send takes: the changes not on a set that waits */
+    const sendable = (ids = heldIds()) => F.changes.filter((c) => !heldOf(c, ids));
+    const HELD = "A set with no cards waits till it has some: add some from the deck.";
+    const heldWords = (ids) => {
+      const us = units().filter((u) => ids.has(u.id));
+      return !us.length ? "" : us.length === 1 ? `${us[0].name || "A set"} has no cards yet: it waits till it has some.`
+        : `${us.length} sets have no cards yet: they wait till they have some.`;
+    };
     const planStart = () => B.start || Sched.start(B.doc) || nextMonday();
     const paceOf = () => B.pace;
     /** the quiz or exam the plan ends with, and its day (view.ends_with) */
@@ -246,16 +262,21 @@ const PlanFace = (() => {
     /** a change in: saved now when nobody follows (a set with no cards yet waits for them) */
     function after() {
       if (waiting()) { push(); return; }
-      if (units().some((u) => !(B.srcs(u).length || (u.cards || []).length || (u.search || []).length || (u.cut || []).length || B.hasIds(u)))) {
-        say("A set is saved once it has cards: add some from the deck.");
-        push();
-        return;
-      }
       saveNow(false);
     }
+    /** a save (a send, with followers): the builder's, judged by its reply (one that changed nothing
+     *  comes back with the same version). A set new here with no cards stays out of it and waits,
+     *  a change of its own, till it has some. */
     async function saveNow(sending, why = "") {
       if (F.busy || !author()) return;
-      const v0 = plan().version, n = F.changes.length;
+      const ids = heldIds(), go = sendable(ids);
+      if (!go.length) { say(HELD); push(); return; }
+      const v0 = plan().version, n = go.length;
+      const held = units().filter((u) => ids.has(u.id));
+      const was = JSON.stringify(B.doc);
+      const revs = (B.doc.reviews || []).filter((r) => ids.has(r.from) || ids.has(r.to));
+      const autos = new Set(held.filter((u) => B.auto.has(u.id)).map((u) => u.id));
+      if (held.length) B.doc.units = B.doc.units.filter((u) => !ids.has(u.id));
       F.busy = true;
       say(sending ? "Sending…" : "Saving…");
       push();
@@ -263,30 +284,60 @@ const PlanFace = (() => {
       try { await B.save(); } catch { /* the builder said why */ }
       F.busy = false;
       const said = B.status.textContent;
-      if (!B.dirty && plan().version !== v0) {
-        F.changes = []; F.hold = false; F.undoable = plan().version;
-        F.sent = sending && others(plan()) ? [new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }), n] : null;
-        say(/didn't go|kept/.test(said) ? said : sending && others(plan())
-          ? `Sent to ${others(plan()).toLocaleString()} following. They get it at their next refresh.` : "Saved.");
-        relabel();
-      } else {
+      if (B.dirty || /\bbad\b/.test(String(B.status.className || ""))) {  // not saved: the working copy as it was
+        const d = JSON.parse(was);
+        for (const k of Object.keys(B.doc)) delete B.doc[k];
+        Object.assign(B.doc, d);
         F.hold = F.changes.length > 0;
         say(said && said !== "Saving…" ? said : "That didn't save. Try again.");
+        push();
+        return;
       }
+      // saved: the working copy is the server's plan; a set that waits goes back on it, a change of its own
+      const moved = plan().version !== v0;
+      F.changes = []; F.hold = false; F.behind = false;
+      for (const u of held) {
+        B.doc.units.push(u);
+        const on = new Set(B.doc.units.map((x) => x.id));
+        const back = revs.filter((r) => on.has(r.from) && on.has(r.to) && !(B.doc.reviews || []).some((x) => x.day === r.day));
+        if (back.length) B.doc.reviews = [...(B.doc.reviews || []), ...back].sort((a, b) => String(a.day).localeCompare(String(b.day)));
+        if (autos.has(u.id)) B.auto.add(u.id);
+        B.byOpens();
+        B.mark();
+        F.changes.push({ verb: "Added", what: `${dw(u.opens)} · ${u.name || "?"}`, detail: "no cards yet", key: ["date", u.id] });
+      }
+      if (moved) {  // a save that changed nothing isn't one to undo
+        F.undoable = plan().version;
+        F.sent = sending && others(plan()) ? [new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }), n] : null;
+      }
+      const f = sending ? others(plan()) : 0, posted = !!(plan().posted && !plan().posted.error), kept = /kept/.test(said);
+      const words = /didn't go/.test(said) ? said
+        : f && !moved ? (posted ? "Your line went to followers. The plan itself was already so." : "The plan was already so: nothing new went to followers.")
+        : f ? `Sent to ${f.toLocaleString()} following${kept ? ", with the other changes kept" : ""}. They get it at their next refresh.`
+        : kept ? said : "Saved.";
+      say(held.length ? `${words} ${heldWords(ids)}` : words);
+      relabel();
       push();
     }
     function relabel() {
       const p = plan();
       F.plans = F.plans.map((x) => (x.id === p.id ? { ...x, name: p.name, followers: p.followers, role: p.role, following: p.following } : x));
     }
-    /** a settings request's answer: the plan as it is now, the working copy kept */
+    /** a settings request's answer: the plan as it is now. Changes waiting were made on the plan as
+     *  this page read it (B.base, at its version): a version with someone else's doc is never taken
+     *  under them, so their send's 409 puts them on it, as builder.js's save merges. With nothing
+     *  waiting, the page is the server's plan. */
     function took(r, said) {
       if (!r || !r.id) return;
-      B.plan = { ...plan(), ...r };
+      const p0 = plan();
+      const under = F.changes.length > 0 && r.version !== undefined && r.version !== p0.version
+        && r.doc !== undefined && JSON.stringify(r.doc) !== JSON.stringify(p0.doc);
+      B.plan = under ? { ...p0, ...r, version: p0.version, doc: p0.doc } : { ...p0, ...r };
       B.meta = { name: r.name ?? B.meta.name, line: r.line ?? B.meta.line, audience: r.audience ?? B.meta.audience, squad: r.squad ?? "" };
-      if (!F.changes.length && r.doc) B.reload(r.doc);
+      if (under) F.behind = true;
+      if (!F.changes.length && r.doc) { B.reload(r.doc); F.behind = false; }
       relabel();
-      if (said) say(said);
+      if (said) say(under ? `${said} Someone else saved meanwhile: what's waiting goes on top of theirs when you send.` : said);
       push();
     }
     function failed(err, words) {
@@ -304,8 +355,9 @@ const PlanFace = (() => {
         const c = F.changes[F.changes.length - 1];
         es.push({ label: `Take back the last change, not sent (${c.what} ${String(c.verb).toLowerCase()})`, what: ["take", F.changes.length - 1], on: B.undos > 0 && !F.busy });
       }
-      if (F.undoable) {
-        es.push({ label: F.sent ? `Undo your send of ${F.sent[0]} (${pl(F.sent[1], "change")})` : "Undo your last save", what: ["undo"], on: !F.busy });
+      if (F.undoable) {  // only with nothing waiting: the changes waiting were made on the plan it undoes
+        const what = F.sent ? `Undo your send of ${F.sent[0]} (${pl(F.sent[1], "change")})` : "Undo your last save";
+        es.push({ label: F.changes.length ? `${what}: send or discard what's waiting first` : what, what: ["undo"], on: !F.busy && !F.changes.length });
       }
       if (!es.length) es.push({ label: "Nothing of yours to undo here", what: null, on: false });
       es.push({ label: "History: every save…", what: ["history"], on: true });
@@ -1141,13 +1193,22 @@ const PlanFace = (() => {
     function takeBack() {
       if (!F.changes.length || !B.undos || F.busy) return;
       F.changes.pop();
-      B.undo();  // the builder's step back (its draw is this page's push)
-      if (!F.changes.length) F.hold = false;
+      // the builder's step back (its draw is this page's push); the name, the line and who can follow
+      // saved at once (Settings), so a take back keeps them as the server has them
+      const saved = B.meta;
+      B.undo();
+      B.meta = saved;
       say("Taken back.");
       push();
+      if (!F.changes.length) { F.hold = false; caughtUp(); }
+    }
+    /** nothing waits now, and someone saved meanwhile (took kept the plan my changes were made on): the plan as it is now */
+    function caughtUp() {
+      if (F.behind) api("GET", `/plans/${B.id}`).then((r) => { if (!F.changes.length && !F.busy) took(r, ""); }).catch(() => {});
     }
     async function undoSave(version = F.undoable) {
       if (!version || F.busy) return;
+      if (F.changes.length) { say("Send or discard your changes first: Undo puts back the plan as it was saved."); push(); return; }
       F.busy = true; say("Undoing…"); push();
       try {
         const r = await api("POST", `/plans/${B.id}/undo`, { version });
@@ -1172,6 +1233,7 @@ const PlanFace = (() => {
       F.changes = []; F.hold = false; F.deck.dirty = false;
       say("Discarded.");
       push();
+      caughtUp();
     };
     /** a send's line to followers, from its changes (ops.why_line): "Shock moved from Wed 21 to Thu 22; Valve disease added." */
     function whyLine(cs) {
@@ -1189,17 +1251,23 @@ const PlanFace = (() => {
       for (const b of [...new Set(bits)]) { const nxt = (line ? `${line}; ` : "") + b; if (nxt.length + 1 > WHY_MAX) break; line = nxt; }
       return line ? `${line[0].toUpperCase()}${line.slice(1)}.` : "";
     }
+    /** Review and send: what goes (a set with no cards waits, out of the rows and the line, and says so) */
     function sendView() {
-      const n = F.changes.length, f = others(plan());
-      const rows2 = F.changes.map((c, i) => ({ i: i === n - 1 && B.undos > 0 ? i : null, verb: c.verb, what: c.what, detail: c.detail || "", who: "", warn: false, ai: false }));
-      return { kind: "send", title: f ? `Send ${pl(n, "change")} to ${f.toLocaleString()} following` : `Save ${pl(n, "change")}`, rows: rows2,
-        why: whyLine(F.changes), max: WHY_MAX, yes: f ? `Send to ${f.toLocaleString()}` : "Save", cmd: "send" };
+      const ids = heldIds(), last = F.changes.length - 1, f = others(plan());
+      const go = F.changes.map((c, i) => [c, i]).filter(([c]) => !heldOf(c, ids)), n = go.length;
+      const rows2 = go.map(([c, i]) => ({ i: i === last && B.undos > 0 ? i : null, verb: c.verb, what: c.what, detail: c.detail || "", who: "", warn: false, ai: false }));
+      return { kind: "send", title: f ? `Send ${pl(n, "change")} to ${f.toLocaleString()} following` : `Save ${pl(n, "change")}`, words: heldWords(ids), rows: rows2,
+        why: whyLine(go.map(([c]) => c)), max: WHY_MAX, yes: f ? `Send to ${f.toLocaleString()}` : "Save", cmd: "send" };
     }
-    C.review_send = () => { if (F.changes.length && !F.busy) sheet(sendView()); };
+    C.review_send = () => {
+      if (!F.changes.length || F.busy) return;
+      if (!sendable().length) { say(HELD); push(); return; }
+      sheet(sendView());
+    };
     C.take_change = ({ i, again }) => {
       if (Number(i) !== F.changes.length - 1) return;  // the last one: a step back of the builder's
       takeBack();
-      if (again && F.changes.length) sheet(sendView());
+      if (again && F.changes.length) C.review_send();
     };
     C.send = ({ why } = {}) => saveNow(true, why);
 
@@ -1794,17 +1862,20 @@ const PlanFace = (() => {
       const lines = Every.clean(everyLines(text));
       change(() => { if (lines.length) B.doc.every = lines; else delete B.doc.every; }, ["Changed", "Every week's lines"]);
     };
-    /** a settings change that's the plan's own (PUT /plans/{id}, the version it read): saved now */
+    /** a settings change that's the plan's own (PUT /plans/{id}, the version it read): saved now.
+     *  Someone saved since (409): what I changed, field by field, goes on their plan, no doc with it;
+     *  took() keeps any changes waiting on the plan they were made on. */
     async function putMeta(fields, summary, said) {
       if (F.busy) return;
       F.busy = true; push();
-      const body = { version: plan().version, summary, ...fields };
+      const p0 = plan(), body = { version: p0.version, summary, ...fields };
       try {
         let r;
         try { r = await api("PUT", `/plans/${B.id}`, body); } catch (err) {
           if (err.status !== 409) throw err;
           const theirs = await api("GET", `/plans/${B.id}`);
-          r = await api("PUT", `/plans/${B.id}`, { ...body, version: theirs.version });
+          const mine = Object.fromEntries(Object.entries(fields).filter(([k, v]) => (v ?? null) !== ((k === "line" ? p0[k] || "" : p0[k]) ?? null)));
+          r = Object.keys(mine).length ? await api("PUT", `/plans/${B.id}`, { version: theirs.version, summary, ...mine }) : theirs;
         }
         F.busy = false;
         took(r, said);

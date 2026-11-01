@@ -557,7 +557,7 @@ function drawAll(x, view, sheet, mode) {
   await run(e0, "new_date", { name: "Neoplasia", day: e0.day(22) });
   const ns0 = e0.store.log.length, mk = e0.B.doc.units.find((u) => u.name === "Neoplasia");
   check("planface: a set with no cards yet isn't saved (the builder's save would drop it): it waits for them",
-    ns0 === 0 && mk && e0.shown[e0.shown.length - 1].plan.sending && /saved once it has cards/.test(e0.shown[e0.shown.length - 1].status), [ns0, e0.shown[e0.shown.length - 1].status]);
+    ns0 === 0 && mk && e0.shown[e0.shown.length - 1].plan.sending && /waits till it has some/.test(e0.shown[e0.shown.length - 1].status), [ns0, e0.shown[e0.shown.length - 1].status]);
   await run(e0, "deck_tick", { key: `tag:${ROOTTAG}::#Path_Book::03_Neoplasia`, on: true });
   const put0 = e0.store.log[0];
   check("planface: …then its first cards save it, the two changes as one save", e0.store.log.length === 1
@@ -590,6 +590,155 @@ function drawAll(x, view, sheet, mode) {
   check("planface: the shape's preview, then Add to the changes", v.settings.shape.preview && v.settings.shape.go === "Add to the changes", v.settings.shape);
   await run(t, "tabcmd", { name: "shape_save" });
   check("planface: the shape's change waits with the others", t.f.F.changes.length === 1 && t.B.pace.days[5] === 1, t.B.pace);
+
+  // -- review 3 (1): a take back undoes a change waiting, never what Settings saved at once --
+  const tb = await face(2);
+  const tbDue = tb.B.doc.units.find((u) => u.id === "u1").due;
+  await run(tb, "set_due", { uid: "u1", due: tb.ctx.addDays(tb.B.doc.units.find((u) => u.id === "u1").opens, 5) });
+  await run(tb, "tab", { tab: "settings" });
+  await run(tb, "tabcmd", { name: "who", args: { squad: "sq1", audience: "squad" } });
+  await run(tb, "tabcmd", { name: "meta", args: { name: "Path plan, squad only", line: "Path, then questions." } });
+  await run(tb, "undo_key");
+  const tbMeta = { ...tb.B.meta }, tbBack = tb.B.doc.units.find((u) => u.id === "u1").due;
+  await run(tb, "set_due", { uid: "u2", due: tb.ctx.addDays(tb.B.doc.units.find((u) => u.id === "u2").opens, 2) });
+  await run(tb, "send", { why: "" });
+  const tbPut = tb.store.log[tb.store.log.length - 1], tbNow = tb.store.now();
+  check("planface: Take back (Ctrl+Z) undoes the change waiting, not Settings' saves: the next send keeps the new name and who can follow",
+    tbBack === tbDue && tbMeta.name === "Path plan, squad only" && tbMeta.audience === "squad" && tbMeta.squad === "sq1"
+    && tbPut.name === "Path plan, squad only" && tbPut.audience === undefined && tbPut.squad === undefined
+    && tbNow.name === "Path plan, squad only" && tbNow.audience === "squad" && tbNow.squad === "sq1", [tbMeta, tbPut.name, tbPut.audience, tbNow.audience, tbNow.squad]);
+
+  // -- review 3 (2): Undo your send isn't offered while changes wait (they were made on the plan it undoes) --
+  const uw = await face(2);
+  const uwDue = uw.B.doc.units.find((u) => u.id === "u1").due, uwNew = uw.ctx.addDays(uw.B.doc.units.find((u) => u.id === "u1").opens, 5);
+  await run(uw, "set_due", { uid: "u1", due: uwNew });
+  await run(uw, "send", { why: "" });
+  await run(uw, "set_due", { uid: "u2", due: uw.ctx.addDays(uw.B.doc.units.find((u) => u.id === "u2").opens, 2) });
+  const uwUndo = uw.shown[uw.shown.length - 1].head.undo.find((e) => e.what && e.what[0] === "undo"), uwN = uw.site.calls.length;
+  await run(uw, "undo", { what: ["undo"] });
+  const uwPosted = uw.site.calls.slice(uwN).some(([m, u]) => m === "POST" && u.endsWith("/undo")), uwSaid = uw.f.F.status;
+  await run(uw, "send", { why: "" });
+  check("planface: with changes waiting, Undo your send waits for them (send or discard first), and asked anyway undoes nothing that comes back",
+    uwUndo && !uwUndo.on && /send or discard what's waiting first/.test(uwUndo.label) && !uwPosted && /Send or discard your changes first/.test(uwSaid)
+    && uw.store.now().doc.units.find((u) => u.id === "u1").due === uwNew && uw.store.now().doc.units.find((u) => u.id === "u2").due, [uwUndo, uwPosted, uwSaid]);
+  await run(uw, "set_due", { uid: "u3", due: uw.ctx.addDays(uw.B.doc.units.find((u) => u.id === "u3").opens, 1) });
+  await run(uw, "discard", { sure: true });
+  const uwOn = uw.shown[uw.shown.length - 1].head.undo.find((e) => e.what && e.what[0] === "undo");
+  await run(uw, "undo", { what: ["undo"] });
+  check("planface: …with nothing waiting, it's offered again: the plan as it was before the send, here and on the server",
+    uwOn && uwOn.on && uw.f.F.status === "Undone." && uw.B.doc.units.find((u) => u.id === "u1").due === uwDue && uw.store.now().doc.units.find((u) => u.id === "u1").due === uwDue,
+    [uwOn, uw.f.F.status]);
+
+  // -- review 3 (3): someone else saves while my changes wait: a Settings save never takes their version under them --
+  const coSave = async (x, id) => {  // Maya, a co-author, puts a set on the plan
+    const cur = x.store.now(), d = JSON.parse(JSON.stringify(cur.doc));
+    d.units.push({ id, name: "Maya's set", opens: d.units[2].opens, tags: [`${ROOTTAG}::^Systems::Cardio`], decks: [], cards: [] });
+    await x.store.fn("PUT", `/plans/${cur.id}`, { version: cur.version, name: cur.name, doc: d, summary: "added Maya's set" });
+  };
+  const mo = await face(2);
+  const moNew = mo.ctx.addDays(mo.B.doc.units.find((u) => u.id === "u1").opens, 5);
+  await run(mo, "set_due", { uid: "u1", due: moNew });
+  await coSave(mo, "maya01");
+  await run(mo, "tab", { tab: "settings" });
+  await run(mo, "tabcmd", { name: "meta", args: { name: "Path plan, fall", line: "Path, then questions." } });
+  const moV = mo.B.plan.version, moSaid = mo.f.F.status;
+  await run(mo, "send", { why: "" });
+  const moNow = mo.store.now();
+  check("planface: a rename while changes wait, after a co-author's save: the send puts mine on theirs (their set kept), the new name too",
+    moV === 3 && /Someone else saved meanwhile/.test(moSaid) && moNow.doc.units.some((u) => u.id === "maya01")
+    && moNow.doc.units.find((u) => u.id === "u1").due === moNew && moNow.name === "Path plan, fall" && /with the other changes kept/.test(mo.f.F.status),
+    [moV, moSaid, moNow.doc.units.map((u) => u.id), mo.f.F.status]);
+  const ml = await face(2);
+  await run(ml, "set_due", { uid: "u1", due: ml.ctx.addDays(ml.B.doc.units.find((u) => u.id === "u1").opens, 5) });
+  await coSave(ml, "maya02");
+  await run(ml, "tab", { tab: "settings" });
+  await run(ml, "tabcmd", { name: "listed", args: { on: true } });
+  await run(ml, "send", { why: "" });
+  check("planface: …the library's switch the same (its reply is the plan as it is now): their set kept",
+    ml.store.now().listed === 1 && ml.store.now().doc.units.some((u) => u.id === "maya02"), ml.store.now().doc.units.map((u) => u.id));
+  const md = await face(2);
+  await run(md, "set_due", { uid: "u1", due: md.ctx.addDays(md.B.doc.units.find((u) => u.id === "u1").opens, 5) });
+  await coSave(md, "maya03");
+  await run(md, "tab", { tab: "settings" });
+  await run(md, "tabcmd", { name: "meta", args: { name: "Path plan, fall", line: "Path." } });
+  await run(md, "discard", { sure: true });
+  const mdHere = md.B.doc.units.some((u) => u.id === "maya03"), mdV = md.B.plan.version;
+  await run(md, "set_due", { uid: "u2", due: md.ctx.addDays(md.B.doc.units.find((u) => u.id === "u2").opens, 2) });
+  await run(md, "send", { why: "" });
+  check("planface: …and Discard: the plan as the server has it now (their set here), the next send on it",
+    mdHere && mdV === md.store.now().version - 1 && md.store.now().doc.units.some((u) => u.id === "maya03"), [mdHere, mdV, md.store.now().doc.units.map((u) => u.id)]);
+
+  const mt = await face(2);
+  await run(mt, "set_due", { uid: "u1", due: mt.ctx.addDays(mt.B.doc.units.find((u) => u.id === "u1").opens, 5) });
+  await coSave(mt, "maya04");
+  await run(mt, "tab", { tab: "settings" });
+  await run(mt, "tabcmd", { name: "meta", args: { name: "Path plan, fall", line: "Path." } });
+  await run(mt, "undo_key");
+  check("planface: …and the last change waiting taken back: the plan as the server has it now, its new name kept",
+    mt.B.doc.units.some((u) => u.id === "maya04") && mt.B.plan.version === mt.store.now().version && mt.B.meta.name === "Path plan, fall" && !mt.f.F.changes.length,
+    [mt.B.doc.units.map((u) => u.id), mt.B.plan.version, mt.store.now().version, mt.B.meta.name]);
+
+  // -- review 3 (4): a new set with no cards waits on a send too, out of its rows and its line --
+  const es = await face(2);
+  const esDay = es.ctx.addDays(es.B.lastDay(), 3);
+  await run(es, "new_date", { name: "Renal week", day: esDay });
+  await run(es, "deck_done");
+  const esId = es.B.doc.units.find((u) => u.name === "Renal week").id, esN = es.sheets.length;
+  await run(es, "review_send");
+  check("planface: Review and send with only a set with no cards: nothing to send, and it says it waits",
+    es.sheets.length === esN && /waits till it has some/.test(es.f.F.status) && es.store.log.length === 0, [es.sheets.slice(esN), es.f.F.status]);
+  await run(es, "set_due", { uid: "u1", due: es.ctx.addDays(es.B.doc.units.find((u) => u.id === "u1").opens, 5) });
+  await run(es, "review_send");
+  const esSh = es.sheets[es.sheets.length - 1];
+  await run(es, "send", { why: esSh.why });
+  const esPut = es.store.log[es.store.log.length - 1];
+  check("planface: …with another change: the sheet sends that one, says the set waits, its line doesn't say it was added",
+    esSh.rows.length === 1 && !esSh.rows.some((r) => /Renal/.test(r.what)) && /Renal week has no cards yet: it waits till it has some/.test(esSh.words)
+    && !/Renal/.test(esSh.why) && /^Send 1 change to 2 following$/.test(esSh.title) && !esPut.doc.units.some((u) => u.name === "Renal week") && !/Renal/.test(esPut.post || ""),
+    [esSh.title, esSh.rows, esSh.words, esSh.why, esPut.post]);
+  const esV = es.shown[es.shown.length - 1];
+  check("planface: …sent, the set still waits here, a change of its own, and the status says so",
+    es.f.F.changes.length === 1 && es.f.F.changes[0].verb === "Added" && /Renal week/.test(es.f.F.changes[0].what) && es.B.doc.units.some((u) => u.id === esId)
+    && esV.plan.sending && esV.plan.sending.n === 1 && /Sent to 2 following/.test(es.f.F.status) && /waits till it has some/.test(es.f.F.status), [es.f.F.changes, es.f.F.status]);
+  await run(es, "deck", { uid: esId });
+  await run(es, "deck_tick", { key: `tag:${ROOTTAG}::^Systems::Cardio`, on: true });
+  await run(es, "review_send");
+  const esSh2 = es.sheets[es.sheets.length - 1];
+  await run(es, "send", { why: esSh2.why });
+  check("planface: …its cards on, it goes with the next send, added",
+    esSh2.rows.some((r) => /Renal week/.test(r.what)) && /Renal week/.test(esSh2.why) && es.store.now().doc.units.some((u) => u.id === esId) && !es.f.F.changes.length,
+    [esSh2.rows, es.store.now().doc.units.map((u) => u.name)]);
+  // a set the server has with no cards (Anki's window sends one from a calendar) stays at a save
+  const ek = await face(0);
+  ek.store.now().doc.units.push({ id: "cal001", name: "Lecture 9", opens: ek.day(23), tags: [], decks: [], cards: [] });
+  const ekGot = await ek.store.fn("GET", `/plans/${ek.p.id}`);
+  ek.B.plan = ekGot; ek.B.reload(ekGot.doc);
+  await run(ek, "set_due", { uid: "u1", due: ek.ctx.addDays(ek.B.doc.units.find((u) => u.id === "u1").opens, 4) });
+  check("planface: a set the server has with no cards yet (from Anki's calendar) stays when another change saves",
+    ek.store.log.length === 1 && ek.store.log[0].doc.units.some((u) => u.id === "cal001") && !ek.f.F.changes.length, [ek.store.log.length, ek.f.F.status]);
+
+  // -- review 3 (5): a save that changed nothing (the same version back) is a save: nothing left waiting --
+  const no = await face(0);
+  const canon = (v) => (Array.isArray(v) ? v.map(canon) : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().filter((k) => v[k] !== undefined).map((k) => [k, canon(v[k])])) : v);
+  const noApi = no.ctx.api;
+  no.ctx.api = async (m, u, b) => {  // plans.ts's PUT: nothing changed, nothing written, the plan as it is
+    const p = no.store.now();
+    if (m === "PUT" && u === `/plans/${p.id}` && b.version === p.version && (b.name ?? p.name) === p.name && (b.line ?? p.line) === p.line
+        && JSON.stringify(canon(b.doc)) === JSON.stringify(canon(p.doc))) { no.site.calls.push([m, u, b]); return JSON.parse(JSON.stringify(p)); }
+    return noApi(m, u, b);
+  };
+  const empty = { deck: "Big Step 1", pace: { mode: "daily", days: [1, 1, 1, 1, 1, 0, 0], daily: 30 }, units: [] };
+  no.store.now().doc = JSON.parse(JSON.stringify(empty)); no.B.reload(empty); no.B.plan.doc = JSON.parse(JSON.stringify(empty));
+  await run(no, "tab", { tab: "settings" });
+  await run(no, "tabcmd", { name: "shape", args: { key: "start", value: no.ctx.addDays(no.B.start, 14) } });
+  await run(no, "tabcmd", { name: "shape_save" });
+  const noV = no.shown[no.shown.length - 1], noSaid = no.f.F.status, noWait = no.f.F.changes.length, noHold = no.f.F.hold;
+  await run(no, "tab", { tab: "plan" });
+  await run(no, "lesson_from", { key: `tag:${ROOTTAG}::^Systems::Heme`, day: no.B.start });
+  check("planface: a save the server found nothing in (the same version back): saved, nothing waits, no Undo of it; the next change saves at once",
+    noSaid === "Saved." && !noWait && !noHold && !noV.plan.sending && !noV.head.undo.some((e) => e.what && e.what[0] === "undo")
+    && no.site.calls.filter(([m]) => m === "PUT").length === 2 && no.store.now().doc.units.length === 1 && !no.f.F.changes.length,
+    [noSaid, noWait, noHold, no.site.calls.filter(([m]) => m === "PUT").length]);
 
   // -- New plan: someone's plan, start empty --
   const ns = makeSite(makeStore(plans(() => "2030-01-01", 0)).fn);

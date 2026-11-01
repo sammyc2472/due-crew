@@ -9,6 +9,11 @@
   --dc-you-bg: var(--you); --dc-fresh: var(--accent); --dc-mark: var(--ink);
 }
 
+/* planpage/plan.css fills Anki's window (html, body { height: 100% }); here every other page of the
+   app keeps its own height, and the plan page fills the window by body.dcplan below */
+html { height: auto; }
+body:not(.dcplan) { height: auto; }
+
 /* the page fills the window under the site's header, as it fills Anki's */
 body.dcplan { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
 body.dcplan > header.top { flex: none; width: 100%; max-width: 1280px; padding-bottom: 0; }
