@@ -4266,3 +4266,27 @@ every release that changes how something works.
   button from a reset in its `el()`, its focus ring an inline `!important`
   on keyboard focus. The plan window (its own reset since round six) and
   the site's pages come out clean.
+- 3.9.6, after Sam's first click test. Your plans' window draws its own
+  days: every date box (a set's Cards open and Finish by, A new set's
+  Opens, a quiz's day, Settings' Starts and end day, New plan's) is a
+  button holding its day, and the calendar it opens is the page's (Monday
+  weeks, today ringed, the day filled; arrows, Page Up/Down, Enter, Esc;
+  over a sheet, a click off it closing it alone). Sam: "forced quit anki
+  when i tried to add a new set to a date", Anki quitting unexpectedly
+  just after Put it on, and nothing reproduces it here (the Python path,
+  every day, a follower or none; Qt's own web engine on Linux, the date
+  box, its calendar and Put it on). On a Mac, the computer's date box opens
+  a native popup that the web view runs inside Anki's own process, in
+  Liquid Glass: the one native piece of the window, gone. Add to my
+  calendar (Sam's pick: straight to the calendar) writes the .ics to
+  Downloads and opens it with the calendar app, no save window (macOS's
+  own, Liquid Glass); a one-time import, not a subscription. The window's
+  buttons hold flat on hover: Anki's webview.css gives `.fancy
+  button:hover` a raised shadow (`fancy` on its body unless minimalist),
+  more specific than the page's reset (Sam: "strange hovering here too",
+  on the tabs). Every Qt dropdown's list draws its one border, rounded,
+  in a frameless, shadowless, clear window (QBank QIDs' had macOS's frame
+  round our square one: "the square around the drops").
+  `tools/control_audit.js` now carries Anki 25.02's real button rules,
+  `.fancy`'s among them. `test_the_page_draws_its_own_days_v396`.
+

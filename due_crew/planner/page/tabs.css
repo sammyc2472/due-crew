@@ -62,7 +62,7 @@
 .dcp .fr.top > .lb { padding-top: 5px; }
 .dcp .fr > .lb { color: var(--dc-muted); font-size: 13px; }
 .dcp .fr > .ctl { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; min-width: 0; font-size: 13.5px; }
-.dcp .fr > .ctl > .in:not(.num):not(select):not([type=date]) { flex: 1 1 220px; min-width: 0; }
+.dcp .fr > .ctl > .in:not(.num):not(select):not(.date) { flex: 1 1 220px; min-width: 0; }
 .dcp .fr > .ctl > select.in { max-width: 100%; }
 .dcp .fr .code { font-size: 15px; letter-spacing: .04em; user-select: text; -webkit-user-select: text; }
 .dcp .in.num { width: 84px; }

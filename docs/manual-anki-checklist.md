@@ -687,6 +687,12 @@ In Anki (as a follower):
 
 - [ ] Edits right after one another (nobody following): rename a set, then at once change its Finish by: both save, one after the other ("Saving…", then "Saved."). New plan… open over a plan: Alt+arrows, Ctrl+Z and Backspace do nothing to the plan behind it. Offline, pick a plan: "The plan didn't load." with Try again; back online, Try again loads it.
 
+### 3.9.6: after the first click test (about 10 minutes)
+- [ ] Your plans › Add › A set…: a name, Opens (the page's calendar: arrows, Page Up/Down, Enter; Esc closes it alone), Put it on: the set is on the day, Anki stays up. The same for a set's Cards open and Finish by, a quiz's day, Settings' Starts and end day, New plan's days: no Mac date popup anywhere in the window.
+- [ ] Hover the window's tabs and buttons: no raised shadow (light, dark).
+- [ ] Add to my calendar…: no save window; Calendar opens asking which calendar to add the plan to; the file is in Downloads.
+- [ ] QBank QIDs (and any Due Crew window's dropdown): the open list has one rounded border, no square round it.
+
 ### 3.9.6: Pip Party, quicker, and nothing again (about 10 minutes; two phones)
 - [ ] From Decks (or Today) to You › Pip Party on a big collection: the tab is there at once, "Reading your cards…" a moment, then the map. Tap a tile: it's picked at once, its counts follow. Type in Find while it reads: the box keeps what you typed and where you are.
 - [ ] Imposter, eight rounds or so in a sitting: no pair again, and no topic again while a pair of new ones is left; a subject with four pairs plays all four before any comes back. Trivia's Another block and Links' New board: new questions and words first. (A site change: deploy the site first.)

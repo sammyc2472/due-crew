@@ -56,19 +56,27 @@ class PlanWeb(QDialog, WebFace):
     def copy(self, text):
         QApplication.clipboard().setText(text)
 
-    def save_file(self, name, text):
+    def to_calendar(self, name, text):
+        """Add to my calendar (Sam's pick: straight to the calendar, no save
+        window, which on a Mac is the system's own, in Liquid Glass): the
+        file in Downloads (the same name each time: no pile of copies), then
+        opened with the computer's calendar app, which asks which calendar
+        to add it to. A one-time import: a later change to the plan isn't in
+        it till it's added again."""
         import os
-        from aqt.qt import QFileDialog, QStandardPaths
+        from aqt.qt import QDesktopServices, QStandardPaths, QUrl
         where = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DownloadLocation) or os.path.expanduser("~")
-        path, _f = QFileDialog.getSaveFileName(self, "Add to my calendar", os.path.join(where, name), "Calendar (*.ics)")
-        if not path:
-            return False
+        path = os.path.join(where, name)
         try:
+            os.makedirs(where, exist_ok=True)
             with open(path, "w", encoding="utf-8", newline="") as f:
                 f.write(text)
         except OSError:
-            self.say("That file couldn't be saved there. Try another folder.")
+            self.say("The calendar file couldn't be saved in Downloads.")
             return False
+        if not QDesktopServices.openUrl(QUrl.fromLocalFile(path)):
+            self.say(f"Saved as {name} in Downloads: open it to add the plan to your calendar.")
+            return None
         return True
 
     def closeEvent(self, e):  # noqa: N802 (Qt's)

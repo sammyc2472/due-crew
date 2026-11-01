@@ -577,9 +577,13 @@ def test_add_to_my_calendar():
     w.click("calendar")
     name, text = w._saved_file
     ymd = lambda n: day(n).replace("-", "")  # noqa: E731
-    check("web: Add to my calendar: an .ics file named for the plan, saved where I pick", name == "Path Book high yield.ics"
+    check("web: Add to my calendar: an .ics file named for the plan, straight to the calendar app (Sam's pick, no save window)",
+          name == "Path Book high yield.ics"
           and text.startswith("BEGIN:VCALENDAR\r\nVERSION:2.0\r\n") and text.endswith("END:VCALENDAR\r\n")
-          and "Saved." in w._status, (name, w._status))
+          and "Opened in your calendar app" in w._status, (name, w._status))
+    web = open(os.path.join(REPO, "due_crew", "planner", "web.py"), encoding="utf-8").read()
+    check("web: the shell writes it to Downloads and opens it with the calendar app; no save dialog",
+          "QDesktopServices.openUrl(QUrl.fromLocalFile(path))" in web and "QFileDialog" not in web)
     check("web: each set an all-day event over its days (a spread one to its finish-by day), each quiz too",
           text.count("BEGIN:VEVENT") == 3 and f"DTSTART;VALUE=DATE:{ymd(7)}\r\nDTEND;VALUE=DATE:{ymd(10)}" in text
           and f"DTSTART;VALUE=DATE:{ymd(12)}\r\nDTEND;VALUE=DATE:{ymd(13)}" in text, text)
@@ -819,6 +823,23 @@ def test_the_review_round_v396():
     w.click("pick", key=["date", "c1"])
     check("review: a library plan's follower gets no note box (it's the plan's authors' alone)",
           w.plan.get("library") is True and w.raw is None and w.last()["panel"]["notes"]["writes"] is False)
+
+
+def test_the_page_draws_its_own_days_v396():
+    """3.9.6 (Sam's click test: Anki quit as a set was put on just after a
+    day was picked): no date box in the window is the computer's own (on a
+    Mac its popup is native, inside Anki's process, and Liquid Glass); every
+    day is picked on the page's calendar, which opens over a sheet."""
+    page = os.path.join(REPO, "due_crew", "planner", "page")
+    js = {f: open(os.path.join(page, f), encoding="utf-8").read() for f in ("plan.js", "tabs.js", "new.js")}
+    css = open(os.path.join(page, "plan.css"), encoding="utf-8").read()
+    check("page: no native date box anywhere in the window's scripts",
+          not any(re.search(r'type:\s*"date"|type=\\?"date|\.type\s*=\s*"date"', t) for t in js.values()), "")
+    check("page: the day boxes are the page's (plan.js dateInput, calPop); Settings' use it too; a sheet's date field too",
+          "function calPop(" in js["plan.js"] and 'h("button.in.date"' in js["plan.js"] and "c.dateInput(" in js["tabs.js"]
+          and 'f.type === "date" ? dateInput(' in js["plan.js"])
+    z = lambda sel: int(re.search(re.escape(sel) + r" \{[^}]*z-index: (\d+)", css).group(1))  # noqa: E731
+    check("page: the calendar opens over a sheet's veil", z(".dcp .calp") > z(".dcp .veil"), (z(".dcp .calp"), z(".dcp .veil")))
 
 
 def main():

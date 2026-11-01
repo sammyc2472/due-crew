@@ -428,9 +428,11 @@ class WebFace(NewPlan, PlanCore):
     def copy(self, text):
         """The clipboard (the shell's)."""
 
-    def save_file(self, name, text):
-        """A file the person saves where they pick (the shell's: a save
-        dialog); True once it's written."""
+    def to_calendar(self, name, text):
+        """The plan's .ics into the person's calendar (the shell's: Downloads,
+        then opened with the computer's calendar app; Sam's pick, no save
+        window). True once it's opened, None saved but not opened (the shell
+        says where), False not saved (the shell says why)."""
         self._saved_file = (name, text)
         return True
 
@@ -448,8 +450,8 @@ class WebFace(NewPlan, PlanCore):
         skipped = [] if self.author() else list((self.plan or {}).get("skipped") or [])
         name = self.plan_name()
         text = ics.calendar((self.plan or {}).get("id") or "plan", name, self.doc, counts, skipped)
-        if self.save_file(ics.file_name(name), text):
-            self.say("Saved. Open the file to add the plan to your calendar.")
+        if self.to_calendar(ics.file_name(name), text):
+            self.say("Opened in your calendar app: add it there. The file's in Downloads too.")
 
     def _copy(self, text, said):
         self.copy(text)

@@ -103,11 +103,12 @@ var dcPlan = (function () {
       if (sh.cmd) { send(sh.cmd, args); }
     }
     (sh.fields || []).forEach(function (f, i) {
-      var input = f.type === "area" ? h("textarea.in", { rows: 4, maxlength: f.max || 280 }) :
+      var input = f.type === "date" ? dateInput(f.value || "", null, null, { clear: !!f.optional }) :
+        f.type === "area" ? h("textarea.in", { rows: 4, maxlength: f.max || 280 }) :
         h("input.in", { type: f.type || "text", maxlength: f.max || 200, placeholder: f.hint || "" });
-      input.value = f.value || "";
+      if (f.type !== "date") { input.value = f.value || ""; }
       input.addEventListener("keydown", function (e) {
-        if (e.key === "Enter" && f.type !== "area") { e.preventDefault(); submit(); }
+        if (e.key === "Enter" && f.type !== "area" && f.type !== "date") { e.preventDefault(); submit(); }
       });
       fields[f.name] = input;
       body.appendChild(h("div.fld", {}, [f.label ? h("label", { text: f.label }) : null, input]));
@@ -137,7 +138,9 @@ var dcPlan = (function () {
     go = btn(sh.yes || "OK", submit, "pri" + (sh.danger ? " bad" : ""), { title: sh.tip || null });
     if (sh.danger) { go.style.background = "#c62828"; go.style.borderColor = "#c62828"; go.style.color = "#fff"; }
     body.appendChild(h("div.acts", {}, [btn(sh.no || (sh.kind === "send" ? "Back" : "Cancel"), closeSheet), sh.yes === null ? null : go]));
-    var veil = h("div.veil", { onclick: function (e) { if (e.target === veil) { closeSheet(); } } }, [body]);
+    var veil = h("div.veil", { onclick: function (e) {
+      if (ui.menu && ui.menu.length) { closeMenu(); return; }  /* a click off an open calendar closes it alone */
+      if (e.target === veil) { closeSheet(); } } }, [body]);
     root.appendChild(veil);
     if (!(sh.fields || []).length) { setTimeout(function () { go.focus(); }, 0); }
   }
@@ -394,11 +397,84 @@ var dcPlan = (function () {
 
   /* the picked one, beside the plan */
   function focusName() { var n = root.querySelector("[data-keep=name]"); if (n) { n.focus(); n.select(); } }
-  function dateInput(value, onchange, keep) {
-    var i = h("input.in", { type: "date", "data-keep": keep });
-    i.value = value || "";
-    i.addEventListener("change", function () { onchange(this.value); });
-    return i;
+  /* 3.9.6: a day, picked on a calendar the page draws. Never the computer's own date popup: on a Mac
+     the web view opens it as a native popup inside Anki's own process, drawn in Liquid Glass (Sam's
+     click test: Anki quit as a set was put on just after one). The box is a button that holds the day
+     as its value ("" for none); opts: {disabled, title, clear (a Clear on the calendar), placeholder}. */
+  function okDay(v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || "")) && !isNaN(d(v).getTime()); }
+  function dayWords(v) {
+    var x = d(v), now = new Date();
+    return short(v) + (x.getFullYear() !== now.getFullYear() ? " " + x.getFullYear() : "");
+  }
+  function dateInput(value, onchange, keep, opts) {
+    opts = opts || {};
+    var b = h("button.in.date", { type: "button", "data-keep": keep, disabled: !!opts.disabled, title: opts.title || null,
+      "aria-haspopup": "dialog" });
+    function show(v) {
+      b.value = okDay(v) ? v : "";
+      b.textContent = b.value ? dayWords(b.value) : (opts.placeholder || "Pick a day");
+      b.classList.toggle("none", !b.value);
+    }
+    function take(v) { show(v); if (onchange) { onchange(b.value); } }
+    show(value);
+    b.addEventListener("click", function (e) { e.stopPropagation(); calPop(b, b.value, take, opts); });
+    b.addEventListener("keydown", function (e) {  /* the box's own keys: never the plan's shortcuts */
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); e.stopPropagation(); b.click(); return; }
+      if (e.key === "Backspace" || e.key === "Delete") { e.preventDefault(); e.stopPropagation(); if (opts.clear && b.value) { take(""); } return; }
+      if (e.key === "Enter" || e.key === " " || e.key.indexOf("Arrow") === 0) { e.stopPropagation(); }
+    });
+    return b;
+  }
+  function calPop(anchor, value, pick, opts) {
+    closeMenu(); ui.menu = [];
+    var now = new Date(), today = (S && S.plan && S.plan.today) || iso(now), cur = okDay(value) ? value : today;
+    var shown = d(cur); shown.setDate(1);
+    var m = h("div.menu.calp", { role: "dialog", "aria-label": "Pick a day" });
+    m.addEventListener("click", function (e) { e.stopPropagation(); });
+    function done(v) { closeMenu(); pick(v); try { anchor.focus(); } catch (err) { /* gone */ } }
+    function month(k) { shown.setMonth(shown.getMonth() + k); draw(); }
+    function focusCur() { var c = m.querySelector(".cd.cur"); if (c) { c.focus(); } }
+    function draw() {
+      m.textContent = "";
+      var y = shown.getFullYear(), mo = shown.getMonth();
+      m.appendChild(h("div.ch", {}, [
+        h("button.cn", { type: "button", text: "\u2039", "aria-label": "The month before", onclick: function () { month(-1); } }),
+        h("b", { text: MONTHS[mo] + " " + y }),
+        h("button.cn", { type: "button", text: "\u203a", "aria-label": "The month after", onclick: function () { month(1); } })]));
+      var g = h("div.cg", { role: "grid" });
+      DAYS.forEach(function (w) { g.appendChild(h("span.cw", { text: w.slice(0, 2) })); });
+      var first = monday(iso(new Date(y, mo, 1)));
+      for (var i = 0; i < 42; i++) {
+        (function (v) {
+          var x = d(v);
+          g.appendChild(h("button.cd" + (x.getMonth() !== mo ? ".out" : "") + (v === today ? ".td" : "") + (v === value ? ".on" : "") +
+            (v === cur ? ".cur" : ""), { type: "button", text: String(x.getDate()), "data-day": v, "aria-label": dayWords(v),
+            "aria-pressed": v === value ? "true" : "false", tabindex: v === cur ? "0" : "-1", onclick: function () { done(v); } }));
+        })(addDays(first, i));
+      }
+      m.appendChild(g);
+      if (opts && opts.clear && value) { m.appendChild(h("div.cf", {}, [btn("Clear", function () { done(""); }, "t")])); }
+    }
+    m.addEventListener("keydown", function (e) {
+      var step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[e.key];
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeMenu(); try { anchor.focus(); } catch (err) { /* gone */ } return; }
+      if (step || e.key === "PageUp" || e.key === "PageDown") {
+        e.preventDefault(); e.stopPropagation();
+        if (step) { cur = addDays(cur, step); } else { var x = d(cur); x.setMonth(x.getMonth() + (e.key === "PageUp" ? -1 : 1)); cur = iso(x); }
+        shown = d(cur); shown.setDate(1); draw(); focusCur();
+        return;
+      }
+      if (e.key === "Enter" || e.key === " " || e.key === "Tab") { e.stopPropagation(); }  /* a day's own click; never the plan's keys */
+    });
+    draw();
+    root.appendChild(m);
+    ui.menu.push(m);
+    var r = anchor.getBoundingClientRect(), mr = m.getBoundingClientRect(), x = r.left, y = r.bottom + 4;
+    if (x + mr.width > window.innerWidth - 8) { x = window.innerWidth - mr.width - 8; }
+    if (y + mr.height > window.innerHeight - 8) { y = Math.max(8, r.top - mr.height - 4); }
+    m.style.left = Math.max(8, x) + "px";
+    m.style.top = y + "px";
+    setTimeout(focusCur, 0);
   }
   function menuItems(list) {
     return (list || []).map(function (x) {

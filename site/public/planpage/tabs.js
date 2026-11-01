@@ -156,11 +156,8 @@
   function shape(c, d) {
     var h = c.h, s = d.shape, busy = d.busy, rows = [];
     function put(key, value) { run(c.send, "shape", { key: key, value: value }); }
-    function date(keep, value, key, title) {
-      var i = h("input.in", { type: "date", "data-keep": keep, disabled: busy, title: title || null });
-      i.value = value || "";
-      i.addEventListener("change", function () { if (this.value) { put(key, this.value); } });
-      return i;
+    function date(keep, value, key, title) {  /* the page's own picker (plan.js dateInput), never the computer's */
+      return c.dateInput(value || "", function (v) { if (v) { put(key, v); } }, keep, { disabled: busy, title: title });
     }
     rows.push(fr(h, "Starts", [date("tb-start", s.start, "start", "Every set and quiz moves with it")]));
     rows.push(fr(h, "Ends with", [select(h, s.ends, s.end, function (v) { put("end", v); }, { disabled: busy, "aria-label": "Ends with" }),
