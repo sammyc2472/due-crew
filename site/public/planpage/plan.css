@@ -6,8 +6,39 @@ body { background: var(--dc-bg, #fff); }
   background: var(--dc-bg); color: var(--dc-ink); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   padding: 14px 18px 10px; text-align: left; }
 .dcp *, .dcp *::before, .dcp *::after { box-sizing: border-box; }
-.dcp button { font: inherit; margin: 0; box-shadow: none; text-shadow: none; }
-.dcp input, .dcp textarea, .dcp select { font: inherit; color: var(--dc-ink); }
+/* Every control is ours, whatever the host puts on top: Anki's webview.css
+   (a button's padding, side margin, hover gradient, pressed shadow, macOS's
+   13px, outline: none !important) and macOS's own controls (Liquid Glass draws
+   any control whose appearance isn't none). "body .dcp" outranks Anki's
+   button rules in any order; our classes outrank this. tools/control_audit.js
+   checks it. */
+body .dcp button, body .dcp select, body .dcp input, body .dcp textarea {
+  appearance: none; -webkit-appearance: none; font: inherit; letter-spacing: inherit; line-height: inherit;
+  text-transform: none; margin: 0; min-height: 0; min-width: 0; box-shadow: none; text-shadow: none;
+  backdrop-filter: none; -webkit-backdrop-filter: none; outline: none; }
+body .dcp button { color: inherit; background: none; border: 0; padding: 0; border-radius: 0; cursor: pointer; }
+body .dcp input, body .dcp textarea, body .dcp select { color: var(--dc-ink); }
+body .dcp button:active { box-shadow: none; }
+/* a select's arrow, ours (appearance none takes the native one away) */
+body .dcp select { padding-right: 26px !important; background-image: linear-gradient(45deg, transparent 50%, var(--dc-muted) 50%),
+  linear-gradient(135deg, var(--dc-muted) 50%, transparent 50%) !important; background-position: calc(100% - 14px) 52%,
+  calc(100% - 9px) 52% !important; background-size: 5px 5px, 5px 5px !important; background-repeat: no-repeat !important; cursor: pointer; }
+/* ticks and dots, ours */
+body .dcp input[type=checkbox], body .dcp input[type=radio] { width: 16px; height: 16px; flex: none; display: inline-grid;
+  place-content: center; vertical-align: -3px; border: 1.5px solid var(--dc-faded); background: var(--dc-bg); cursor: pointer; padding: 0; }
+body .dcp input[type=radio] { border-radius: 50%; }
+body .dcp input[type=checkbox] { border-radius: 4px; }
+body .dcp input[type=radio]:checked { border: 5px solid var(--dc-accent); }
+body .dcp input[type=checkbox]:checked { background: var(--dc-accent); border-color: var(--dc-accent); }
+body .dcp input[type=checkbox]:checked::after { content: ""; width: 8px; height: 4px; border-left: 2px solid var(--dc-accent-ink);
+  border-bottom: 2px solid var(--dc-accent-ink); transform: translateY(-1px) rotate(-45deg); }
+body .dcp input:disabled, body .dcp select:disabled, body .dcp textarea:disabled { opacity: .55; cursor: default; }
+body .dcp input[type=number]::-webkit-inner-spin-button, body .dcp input[type=number]::-webkit-outer-spin-button { opacity: .6; }
+body .dcp input[type=date]::-webkit-calendar-picker-indicator { cursor: pointer; opacity: .65; }
+/* focus: a ring Anki's outline: none can't take away (keyboards, and Tab) */
+body .dcp button:focus-visible, body .dcp [role=button]:focus-visible, body .dcp [role=checkbox]:focus-visible,
+body .dcp [role=radio]:focus-visible, body .dcp input[type=checkbox]:focus-visible, body .dcp input[type=radio]:focus-visible,
+body .dcp [tabindex]:focus-visible { box-shadow: 0 0 0 2px var(--dc-bg), 0 0 0 4px var(--dc-accent) !important; }
 .dcp .muted { color: var(--dc-muted); }
 .dcp .sm { font-size: 12.5px; }
 .dcp .warn { color: var(--dc-hours); }
@@ -22,6 +53,11 @@ body { background: var(--dc-bg, #fff); }
 .dcp .b.pri { background: var(--dc-accent); border-color: var(--dc-accent); color: var(--dc-accent-ink); }
 .dcp .b.bad { color: #c62828; }
 .dcp .b.t { border: 0; padding: 2px 4px; background: none; }
+/* a disabled one keeps its own look under Anki's button[disabled]:hover too */
+body .dcp .b:disabled, body .dcp .b:disabled:hover { background-color: var(--dc-bg); color: var(--dc-accent); }
+body .dcp .b.pri:disabled, body .dcp .b.pri:disabled:hover { background-color: var(--dc-accent); color: var(--dc-accent-ink); }
+body .dcp .b.t:disabled, body .dcp .b.t:disabled:hover { background-color: transparent; }
+body .dcp .b.bad:disabled, body .dcp .b.bad:disabled:hover { color: #c62828; }
 .dcp .b.ch::after { content: ""; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
   transform: rotate(45deg) translateY(-2px); opacity: .7; }
 .dcp .x { border: 0; background: none; color: var(--dc-muted); cursor: pointer; padding: 0 4px; font-size: 13px; }

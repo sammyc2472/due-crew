@@ -574,6 +574,10 @@ def test_the_page():
         if node.returncode:
             bad.append(node.stderr)
     check("web: the page's scripts parse", not bad, bad)
+    css = open(os.path.join(REPO, "due_crew", "planner", "page", "plan.css")).read()
+    check("web: every control is ours on macOS too: appearance none, outranking Anki's button rules, a focus ring outline:none can't take",
+          "body .dcp button, body .dcp select, body .dcp input, body .dcp textarea {\n  appearance: none; -webkit-appearance: none;" in css
+          and "box-shadow: 0 0 0 2px var(--dc-bg), 0 0 0 4px var(--dc-accent) !important" in css and "body .dcp .b:disabled:hover" in css)
     check("web: each part of the page is in it", all(f"dcPlan.{x}" in html for x in ("newPlan",)), "")
     check("web: the deck panel's views are the Qt panel's", [k for k, _ in WM.VIEWS] == ["resource", "system", "other", "deck", "plan"])
 
