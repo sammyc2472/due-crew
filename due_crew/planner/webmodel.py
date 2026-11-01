@@ -316,6 +316,29 @@ def extras(w, key):
     return path, without, kids, main
 
 
+def _also(w, u, key, cids):
+    """Leave out cards also tagged's choices for one source, worked out once
+    a plan version (a big deck's tags are read card by card)."""
+    cache = getattr(w, "_also_cache", None)
+    if cache is None or cache[0] != w._ver:
+        cache = w._also_cache = (w._ver, {})
+    k = (u["id"], tuple(str(x) for x in key))
+    if k not in cache[1]:
+        skip = [key[1]] if key[0] in ("tag", "cut") else []
+        cache[1][k] = M.also_tagged(w.idx, cids, skip=skip, most=12)
+    return cache[1][k]
+
+
+def _move_to(doc, u, most=10):
+    """[(label, uid)]: the lessons nearest this one by day, for Move to."""
+    us = sorted((x for x in P.units(doc) if x.get("id") != u["id"]), key=lambda x: (str(x.get("opens")), str(x.get("name"))))
+    if not us:
+        return []
+    at = sum(1 for x in us if str(x.get("opens")) < str(u.get("opens")))
+    lo = max(0, min(at - most // 2, len(us) - most))
+    return [(f"{x.get('name') or '?'} · {P.fmt_day(x.get('opens'))}", x["id"]) for x in us[lo:lo + most]]
+
+
 def date_panel(w, u):
     doc, author, today = w.doc, w.author(), w.ops.today()
     out = {"kind": "date", "uid": u["id"], "name": str(u.get("name") or ""), "label": M.date_label(u),
@@ -357,6 +380,18 @@ def date_panel(w, u):
                          "Leave out its extras" if not without else "Put its extras back")
                 menu.append({"label": label, "cmd": "op", "args": {"op": {
                     "op": "set_extras", "date": u["id"], "path": path, "without": not without, "kids": kids, "main_n": main_n}}})
+            if key[0] in ("tag", "deck", "cut", "search") and w.idx is not None:
+                also = _also(w, u, key, r["cids"])
+                if also:
+                    menu.append({"label": "Leave out cards also tagged", "sub": [
+                        {"label": f"{M.label(t)} ({n:,})", "cmd": "op", "args": {"op": {
+                            "op": "leave_out", "date": u["id"], "key": key, "tag": t, "n": max(0, len(r["cids"]) - n)}}}
+                        for t, n in also]})
+            moves = _move_to(doc, u)
+            menu.append({"label": "Move to", "sub": [
+                {"label": lb, "cmd": "op", "args": {"op": {"op": "move_source", "date": u["id"], "key": key, "to": uid}}}
+                for lb, uid in moves] + ([{"sep": True}] if moves else []) + [
+                {"label": "Another day…", "cmd": "move_source_form", "args": {"i": i}}]})
             if key[0] in ("tag", "cut"):
                 menu.append({"label": "A note for followers on it…", "cmd": "remark", "args": {"path": key[1]}})
             menu.append({"label": "Copy its search", "cmd": "copy_source", "args": {"i": i}})
@@ -667,6 +702,9 @@ def _fill(w, st):
     ev, end = V.ends_with(doc)
     who = (ev or {}).get("name") or "the end"
     fin = B.finish_by(doc, t, pace, st.cover, start, daily)
+    out["upto"] = [{"label": f"Before {e.get('name') or '?'} · {P.fmt_day(e.get('day'))}", "eid": e.get("id")}
+                   for e in sorted((e for e in doc.get("events") or [] if isinstance(e, dict) and str(e.get("day") or "") > start),
+                                   key=lambda e: str(e.get("day")))]
     out["week"] = True
     out["head"] = f"{left:,} ticked, not on a lesson."
     if end and fin and fin >= end:

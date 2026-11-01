@@ -108,9 +108,16 @@ def skip(pid, uids):
 
 
 def follow(raw):
-    """The empty tab's Follow: the code in what was typed (P.link_code),
-    into Follow, which looks it up (and with nothing typed, opens to type one)."""
-    F.open_follow(P.link_code(unquote(str(raw or ""))[:600]))
+    """The empty tab's Follow: a plan's link (duecrew.com/p/...) or nothing
+    typed opens Follow (P.link_code); any other code goes the way the box's
+    codes always went (__init__._add_code: a plan's opens Follow, a
+    friend's adds them, a squad's opens Squads, an invite is redeemed)."""
+    typed = unquote(str(raw or ""))[:600]
+    if not typed.strip() or "/p/" in typed:
+        F.open_follow(P.link_code(typed))
+        return
+    from . import _add_code
+    _add_code(typed.upper())
 
 
 def open_new(day=""):

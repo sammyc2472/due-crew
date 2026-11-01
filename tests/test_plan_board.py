@@ -552,16 +552,18 @@ def test_follow_and_new_commands():
     from due_crew import planner
     from due_crew.planner import flow as pflow
     got = []
-    saved = (F.open_follow, pflow.open_new, sys.modules.get("due_crew.planner.web"), getattr(planner, "web", None))
+    saved = (F.open_follow, pflow.open_new, sys.modules.get("due_crew.planner.web"), getattr(planner, "web", None), dc._add_code)
     send = lambda msg: dc._on_js(False, as_board("duecrew:" + msg), DeckBrowser())  # noqa: E731
     try:
         F.open_follow = lambda code="": got.append(("follow", code))
+        dc._add_code = lambda code: got.append(("code", code))
         pflow.open_new = lambda: got.append(("new",))
         for typed in ("https://duecrew.com/p/N4APULM2?ref=crew", "n4ap ulm2", ""):
             send("planfollowcode:" + quote(typed, safe=""))
         dc._on_js(False, "duecrew:planfollowcode:N4APULM2", DeckBrowser())  # no board key
-        check("Follow: a link's code, or the code as typed, into Follow; nothing typed, Follow to type one; no key, nothing",
-              got == [("follow", "N4APULM2"), ("follow", "N4APULM2"), ("follow", "")], got)
+        check("Follow: a link's code into Follow; a code as typed the way the box's codes always went (a plan's, a friend's, "
+              "a squad's, an invite); nothing typed, Follow to type one; no key, nothing",
+              got == [("follow", "N4APULM2"), ("code", "N4AP ULM2"), ("follow", "")], got)
         got.clear()
         sys.modules["due_crew.planner.web"] = None  # this build has no new plan window
         if hasattr(planner, "web"):
@@ -579,7 +581,7 @@ def test_follow_and_new_commands():
         check("…with it, the new plan window: Plan the way there finishing by my exam's day; anything but a day, none",
               got == [("web", None, None), ("web", None, "2026-12-18"), ("web", None, None)], got)
     finally:
-        F.open_follow, pflow.open_new = saved[0], saved[1]
+        F.open_follow, pflow.open_new, dc._add_code = saved[0], saved[1], saved[4]
         if saved[2] is None:
             sys.modules.pop("due_crew.planner.web", None)
         else:

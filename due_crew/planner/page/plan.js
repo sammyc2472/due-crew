@@ -223,7 +223,8 @@ var dcPlan = (function () {
       bar.appendChild(btn("Add", function (e, b) {
         menu([{ label: "A lesson…  Ctrl+N", cmd: "new_date_form" }, { label: "A quiz, exam or day…  Ctrl+E", cmd: "new_event_form" },
           { label: "A review day…", cmd: "new_review_form" }, { sep: true },
-          { label: "Lessons from the deck…", off: !p.hasDeck, cmd: "deck", args: {} }], b);
+          { label: "Lessons from the deck…", off: !p.hasDeck, cmd: "deck", args: {} }, { sep: true },
+          { label: "Give everyone a day…", cmd: "breather" }], b);
       }, "ch", { disabled: busy() }));
     }
     return bar;
@@ -529,6 +530,10 @@ var dcPlan = (function () {
       var items = [];
       if (n.uid) { items.push({ label: "Go to its lesson (" + n.where.replace("on ", "") + ")", cmd: "pick", args: { key: ["date", n.uid] } }); }
       if (String(n.key).indexOf("tag:") === 0) { items.push({ label: "A note for followers on it…", cmd: "remark", args: { path: n.path } }); }
+      if (/^(tag|deck):/.test(String(n.key)) && !n.ptag && !n.off) {
+        items.push({ label: "A lesson of its own, next free day", cmd: "lesson_from", args: { key: n.key, day: "next" } },
+          { label: "A lesson of its own on a day…", cmd: "lesson_from", args: { key: n.key, day: null } });
+      }
       if (n.ptag) { items.push({ sep: true }, { label: "Rename the tag…", cmd: "ptag_rename", args: { ptag: n.ptag } }, { label: "Delete the tag…", cmd: "ptag_delete", args: { ptag: n.ptag } }); }
       if (items.length) { menu(items, anchor); }
     }
@@ -542,6 +547,11 @@ var dcPlan = (function () {
       var acts = h("div.row", { style: "margin-top:8px" });
       if (f.go) { acts.appendChild(btn(f.go.label, function () { send("deck_lay", { how: f.go.how }); }, "pri", { disabled: busy() })); }
       if (f.alt) { acts.appendChild(btn(f.alt.label, function () { send("deck_lay", { how: f.alt.how }); })); }
+      if (f.upto && f.upto.length) {
+        acts.appendChild(btn("Before a quiz or exam", function (e, b) {
+          menu(f.upto.map(function (x) { return { label: x.label, cmd: "deck_lay", args: { how: ["end", false, null], upto: x.eid } }; }), b);
+        }, "ch", { disabled: busy() }));
+      }
       if (f.week) { acts.appendChild(btn("Next week only", function () { send("deck_week"); }, "", { title: "Lay out only what fits next week" })); }
       if (f.keep) { acts.appendChild(btn("Save the ticks only", function () { send("deck_keep"); }, "", { title: "Saves the ticks as what the plan covers, without laying them out" })); }
       fb.appendChild(acts);

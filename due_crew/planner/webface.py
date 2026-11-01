@@ -428,20 +428,35 @@ class WebFace(NewPlan, PlanCore):
         self.copy(text)
         self.say(said)
 
-    def c_copy_source(self, i):
+    def _source(self, i):
+        """(lesson, its i'th source's key) of the picked lesson, or (None, None)."""
         u = self.unit(self.picked[1]) if self.picked and self.picked[0] == "date" else None
         rows = self.rows(u) if u else []
-        if not (0 <= int(i) < len(rows)):
+        try:
+            i = int(i)
+        except (TypeError, ValueError):
+            return None, None
+        return (u, rows[i]["key"]) if 0 <= i < len(rows) else (None, None)
+
+    def c_move_source_form(self, i, day=None):
+        """Move to › Another day…: a day's first lesson takes it, or a new one there."""
+        u, key = self._source(i)
+        if u is None:
             return
-        key = rows[int(i)]["key"]
-        if key[0] in ("tag", "deck"):
-            q = B.anki_search(key[0], key[1])
-        elif key[0] == "search":
-            q = str(key[1])
-        elif key[0] == "cut":
-            q = next((str(c.get("q") or "") for c in u.get("cut") or [] if c.get("tag") == key[1] and c.get("in") == key[2]), "")
-        else:
-            q = ""
+        if day is None:
+            self.sheet({"title": "Move it to a day", "words": "That day's lesson takes it, or it gets a lesson of its own there.",
+                        "fields": [{"name": "day", "type": "date", "value": u.get("opens") or ""}], "yes": "Move it",
+                        "cmd": "move_source_form", "args": {"i": i}})
+            return
+        day = str(day or "")
+        if len(day) == 10 and day != u.get("opens"):
+            self.change({"op": "move_source", "date": u["id"], "key": list(key), "day": day})
+
+    def c_copy_source(self, i):
+        u, key = self._source(i)
+        if u is None:
+            return
+        q = M.source_search(u, list(key), self.swap)
         if not q:
             self.say("Its cards are picked one by one: Show in Browse finds them.")
             return
@@ -730,7 +745,8 @@ class WebFace(NewPlan, PlanCore):
         st.dirty = True
         self.push()
 
-    def c_deck_lay(self, how):
+    def c_deck_lay(self, how, upto=None):
+        """Lay them out (how: [mode, next week only, [end, aim] or None]); upto: before that quiz or exam."""
         if not isinstance(how, list) or len(how) < 3 or self.busy:
             return
         mode, week_ahead, fitting = how
@@ -740,11 +756,45 @@ class WebFace(NewPlan, PlanCore):
              "week_ahead": bool(week_ahead)}
         if fitting:
             o["end"], o["aim"] = fitting[0], fitting[1]
+        if upto:
+            o["upto"] = str(upto)
 
         def done(ok):
             if ok:
                 self.deck.dirty = False
         self.change(o, then=done)
+
+    def c_lesson_from(self, key, day="next", sure=False):
+        """A tag's or a subdeck's row › A lesson of its own: on the next free
+        study day (day "next"), or a day asked for (day None: the form)."""
+        if self.busy or not key or not self.author():
+            return
+        kind, path = B.kind_of(key), B.path_of(key)
+        if kind not in ("tag", "deck"):
+            return
+        if day is None:
+            self.sheet({"title": "A lesson of its own", "words": f"{M.label(path)}, on a day.",
+                        "fields": [{"name": "day", "type": "date", "value": self.ops.today()}], "yes": "Add it",
+                        "cmd": "lesson_from", "args": {"key": key}})
+            return
+        tags, decks = ([path], []) if kind == "tag" else ([], [path])
+        if self.swap:
+            tags = [P.swapped(x, (self.swap[1], self.swap[0])) for x in tags]
+        self.change({"op": "add_date", "day": str(day), "tags": tags, "decks": decks, "today": self.ops.today()})
+
+    def c_breather(self, sure=False):
+        """Give everyone a day: every lesson still to come a study day later; quizzes and exams stay."""
+        if self.busy or not self.author():
+            return
+        if not sure:
+            ahead = sum(1 for u in P.units(self.doc or {}) if str(u.get("opens") or "") > self.ops.today())
+            if not ahead:
+                self.say("Nothing is still to come to move.")
+                return
+            self.ask("Give everyone a day?", f"The {ahead:,} lesson{'s' if ahead != 1 else ''} still to come move a study day later, "
+                     "their finish-by days and review days with them. Quizzes and exams stay.", "Move them", "breather")
+            return
+        self.change({"op": "breather", "today": self.ops.today()})
 
     def c_deck_week(self):
         self.c_deck_lay(["daily", True, None])

@@ -409,6 +409,99 @@ def test_new_plan():
     check("web: picking a plan leaves New plan", w.view().get("new") is None)
 
 
+def test_the_builders_tools_in_the_window():
+    pid, _code = plan([{"id": "u1", "name": "Cell injury", "opens": day(7), "tags": [f"{R}::01_Cell_injury"]},
+                       {"id": "u2", "name": "Inflammation", "opens": day(8), "tags": [f"{R}::02_Inflammation"]}],
+                      [{"id": "e1", "day": day(12), "name": "Heme quiz"}])
+    w = Face(client("sam"), select=pid)
+    w.click("pick", key=["date", "u1"])
+    src = w.last()["panel"]["sources"][0]
+    menu = {m.get("label"): m for m in src["menu"]}
+    leave = menu.get("Leave out cards also tagged")
+    hy = next((x for x in (leave or {}).get("sub") or [] if x["label"].startswith("High Yield")), None)
+    check("web: a source's menu: Leave out cards also tagged, the tags some of its cards carry, with how many",
+          hy and hy["label"] == "High Yield (6)", leave and [x["label"] for x in leave["sub"]])
+    w.click("op", **hy["args"])
+    u1 = next(u for u in STORE.plans[pid]["doc"]["units"] if u["id"] == "u1")
+    check("web: and its click puts the builder's \"but not\" search in the tag's place",
+          not u1.get("tags") and any("-" in q and "High\\_Yield" in q for q in u1.get("search") or []), u1)
+    w.click("undo", what=["undo"])
+    moves = {m["label"].split(" · ")[0]: m for m in menu["Move to"]["sub"] if m.get("label")}
+    check("web: Move to: the nearest lessons, and another day", "Inflammation" in moves and "Another day…" in moves, list(moves))
+    w.click("op", **moves["Inflammation"]["args"])
+    doc = STORE.plans[pid]["doc"]
+    check("web: a source moved to another lesson; the lesson it left, empty, goes", [u["id"] for u in doc["units"]] == ["u2"]
+          and f"{R}::01_Cell_injury" in doc["units"][0]["tags"], doc["units"])
+    w.click("undo", what=["undo"])
+    w.click("pick", key=["date", "u1"])
+    w.click("move_source_form", i=0)
+    sh = w.last("sheet")
+    check("web: Move to › Another day… asks for the day in the page", sh and sh["cmd"] == "move_source_form"
+          and sh["fields"][0]["type"] == "date", sh)
+    w.click("move_source_form", i=0, day=day(10))
+    doc = STORE.plans[pid]["doc"]
+    check("web: and the day gets it, a lesson of its own there", any(u["opens"] == day(10) and f"{R}::01_Cell_injury" in (u.get("tags") or [])
+                                                                  for u in doc["units"]), doc["units"])
+    w.click("undo", what=["undo"])
+    w.click("deck")
+    w.click("deck_tick", key=f"tag:{R}::03_Neoplasia", on=True)
+    f = w.last()["deck"]["fill"]
+    check("web: the deck's lay out: before any quiz or exam", f and [x["eid"] for x in f.get("upto") or []] == ["e1"], f)
+    w.click("deck_lay", how=["end", False, None], upto="e1")
+    doc = STORE.plans[pid]["doc"]
+    neo = [u for u in doc["units"] if any(t.startswith(f"{R}::03_Neoplasia") for t in u.get("tags") or [])]
+    check("web: …laid out before it, for it", neo and all(u["opens"] < day(12) and u.get("for") == "e1" for u in neo), neo)
+    w.click("undo", what=["undo"])
+    w.click("deck_done")
+    w.click("lesson_from", key=f"tag:{R}::03_Neoplasia", day="next")
+    doc = STORE.plans[pid]["doc"]
+    new = [u for u in doc["units"] if f"{R}::03_Neoplasia" in (u.get("tags") or [])]
+    check("web: a deck row's A lesson of its own: on the next free study day, after the plan's last",
+          new and new[0]["opens"] > day(8), doc["units"])
+    w.click("lesson_from", key=f"tag:{R}::03_Neoplasia", day=None)
+    check("web: …or on a day asked for", (w.last("sheet") or {}).get("cmd") == "lesson_from")
+    w.click("breather")
+    sh = w.last("sheet")
+    check("web: Give everyone a day asks first, saying how many move", sh and sh["cmd"] == "breather" and "3 lessons" in sh["words"], sh)
+    before = {u["id"]: u["opens"] for u in STORE.plans[pid]["doc"]["units"]}
+    w.click("breather", sure=True)
+    after = {u["id"]: u["opens"] for u in STORE.plans[pid]["doc"]["units"]}
+    check("web: and its yes moves each a study day later; the quiz stays", all(after[k] > before[k] for k in before)
+          and STORE.plans[pid]["doc"]["events"][0]["day"] == day(12), (before, after))
+    w.click("undo", what=["undo"])
+
+
+def test_a_resource_at_my_pace():
+    STORE.add_user("rae", "Rae", code="RAE123")
+    w = Face(client("rae"))
+    w.click("new_step", step="resource")
+    r = w.view()["new"]["resource"]
+    pb = next((p for p in r["parts"] if p["name"].endswith("Path Book")), None)
+    check("web: A resource: the deck's resources, each with its chapters and cards", pb and pb["on"] and pb["sub"] == "3 chapters"
+          and pb["cards"] == 36, r["parts"])
+    check("web: its lessons a chapter each, on my days from tomorrow, at about 20 new a day", r["ok"] and r["dates"][0]["name"].endswith("Cell injury")
+          and r["summary"].startswith("3 lessons, 36 new") and w.view()["new"]["name"] == "Path Book", (r.get("summary"), r.get("dates")))
+    hy = next((o for o in r["only"] if o["label"] == "High Yield"), None)
+    check("web: Only: the tags some of it carries", hy and hy["n"] == 18, r["only"])
+    w.click("new_set", key="only", value=hy["path"])
+    r = w.view()["new"]["resource"]
+    check("web: with Only, its count and its name", r["onlyCount"] == "18 of 36" and r["name"] == "Path Book, high yield", r)
+    w.click("new_set", key="pace", value="by")
+    w.click("new_set", key="by", value=day(30))
+    w.click("new_set", key="end_name", value="Block exam")
+    w.click("new_set", key="day", value=5)
+    w.click("new_set", key="pace", value="ready")
+    w.click("new_set", key="daily", value="5")
+    r = w.view()["new"]["resource"]
+    check("web: When I'm ready lays it out at the pace given, Saturdays in", r["pace"] == "ready" and r["daily"] == 5 and r["days"][5] == 1, r)
+    w.click("new_make", start=True, sure=True)
+    started = w.ops.started[-1] if w.ops.started else None
+    doc = STORE.plans[w.pid]["doc"] if w.pid in STORE.plans else {}
+    check("web: Start it: the plan made with a lesson a chapter, and followed here at my own pace",
+          started and started[2] == "ready" and len(doc.get("units") or []) >= 3 and w.view().get("new") is None
+          and w.view()["side"] == "panel", (started, len(doc.get("units") or [])))
+
+
 def test_the_page():
     pid, _code = plan([{"id": "u1", "name": "<b>Bold</b> & co", "opens": day(0), "tags": [f"{R}::01_Cell_injury"]}])
     w = Face(client("sam"), select=pid)
