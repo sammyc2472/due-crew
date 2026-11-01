@@ -64,9 +64,27 @@ def _take(pid, way):
     if way["key"] == "slide":
         slide(pid, int(way["days"]))
     elif way["key"] == "fit":
-        F.start_catch(pid, int(way["days"]), int(way["extra"]))
+        fit(pid, int(way["waiting"]))
     elif way["key"] == "skip":
         skip(pid, way["uids"])
+
+
+def fit(pid, waiting):
+    """Fit it in…: over how many days (2 to 14), then catch-up's extra a
+    day over them (G5, Anki's today-only limit each morning). No request."""
+    from . import sheets
+    lo, hi, start = P.FIT_DAYS
+    a, b = P.fit_extra(waiting, start), P.fit_extra(waiting, 7)
+
+    def then(typed):
+        d = P.fit_days(typed)
+        if d is None:
+            F.tooltip(f"A number of days, {lo} to {hi}.")
+            return
+        F.start_catch(pid, d, P.fit_extra(waiting, d))
+    sheets.ask_text("Fit it in over how many days?",
+                    f"{lo} to {hi}. Three days is about {a:,} more new a day; a week, about {b:,}.",
+                    then, value=str(start), most=2, hint="days", yes="Fit it in")
 
 
 def slide(pid, days):
@@ -78,14 +96,52 @@ def slide(pid, days):
     shift = min(365, int(raw.get("shift") or 0) + int(days))
     cl = F.client()
 
+    was = int(raw.get("shift") or 0)
+
     def done(res):
         if res is None:
             F.tooltip("Couldn't reach Due Crew. Check your connection.")
             return
+        _slid(pid, {"day": F._today(), "days": int(days), "from": was})  # the card's Undo, for today
         F.tooltip(f"Your dates moved {days} day{'s' if days != 1 else ''} later. The crew's stay put.")
         F.app.swap(F.cfg())
 
     F._bg(lambda: cl.set_days(pid, shift=shift), done)
+
+
+def _slid(pid, rec):
+    """A slide made here today (rec), or none (None): plans.json, so the card can put it back."""
+    c = F._pcfg()
+    state = F._state_cfg(c)
+    st = state.get(pid)
+    if st is None:
+        return
+    if rec is None:
+        st.pop("slid", None)
+    else:
+        st["slid"] = rec
+    c["plans"] = state
+    F._psave(c)
+
+
+def unslide(pid):
+    """The card's Undo after a slide (the same day): my dates back as they
+    were (the follow's shift), one request."""
+    st = F._state_cfg(F._pcfg()).get(pid) or {}
+    rec = st.get("slid") if isinstance(st.get("slid"), dict) else None
+    if rec is None or rec.get("day") != F._today():
+        return
+    cl = F.client()
+
+    def done(res):
+        if res is None:
+            F.tooltip("Couldn't reach Due Crew. Check your connection.")
+            return
+        _slid(pid, None)
+        F.tooltip("Your dates are back where they were.")
+        F.app.swap(F.cfg())
+
+    F._bg(lambda: cl.set_days(pid, shift=max(0, int(rec.get("from") or 0))), done)
 
 
 def skip(pid, uids):

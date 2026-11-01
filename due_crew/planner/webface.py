@@ -422,6 +422,29 @@ class WebFace(NewPlan, PlanCore):
     def copy(self, text):
         """The clipboard (the shell's)."""
 
+    def save_file(self, name, text):
+        """A file the person saves where they pick (the shell's: a save
+        dialog); True once it's written."""
+        self._saved_file = (name, text)
+        return True
+
+    def c_calendar(self):
+        """Add to my calendar: the plan's sets, quizzes and exams and review
+        days as an .ics file (ics.py), mine as I run it when I follow it."""
+        if self.doc is None:
+            return
+        from . import ics
+        counts = {}
+        if self.idx is not None:
+            for u in P.units(self.doc):
+                rows = self.rows(u)
+                counts[u["id"]] = len(set().union(*[set(r["cids"]) for r in rows])) if rows else 0
+        skipped = [] if self.author() else list((self.plan or {}).get("skipped") or [])
+        name = self.plan_name()
+        text = ics.calendar((self.plan or {}).get("id") or "plan", name, self.doc, counts, skipped)
+        if self.save_file(ics.file_name(name), text):
+            self.say("Saved. Open the file to add the plan to your calendar.")
+
     def _copy(self, text, said):
         self.copy(text)
         self.say(said)

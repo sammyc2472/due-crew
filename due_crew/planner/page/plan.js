@@ -591,6 +591,8 @@ var dcPlan = (function () {
               { label: "Tag by objective", cmd: "see_prompt", args: { which: "tags" } }] }], b);
         }, "ch", { title: "Copied for you to paste in your own AI; it gets tag names and counts, never a card" })]));
     }
+    out.push(h("div.row.calrow", {}, [h("span.grow"), btn("Add to my calendar…", function () { send("calendar"); }, "t",
+      { title: "The sets, quizzes and review days as a calendar file, for Google, Apple or Outlook" })]));
     return out;
   }
 

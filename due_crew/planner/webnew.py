@@ -48,12 +48,23 @@ class NewPlan:
         board's exam line (Plan the way there), start from a link."""
         today = str(self.ops.today())
         decks = [(d, str(n), int(c)) for d, n, c in (self.ops.top_decks() or [])]
+        got = getattr(self.ops, "new_defaults", None)
+        try:
+            dflt = (got() if callable(got) else None) or {}
+        except Exception:  # noqa: BLE001 (no defaults: the plain ones)
+            dflt = {}
+        if _iso(dflt.get("exam")) and str(dflt["exam"]) > today and (not finish_by or finish_by == dflt["exam"]):
+            finish_by, exam = dflt["exam"], exam or "Exam"  # my exam (Settings): Finish by it
         by = _iso(finish_by) if finish_by else None
-        self.new = {"step": "pick", "decks": decks, "deck": decks[0][0] if decks else None, "name": "", "named": "",
+        mine = dflt.get("deck")
+        days = dflt.get("days")
+        days = [1 if x else 0 for x in days] if isinstance(days, list) and len(days) == 7 and any(days) else [1, 1, 1, 1, 1, 0, 0]
+        self.new = {"step": "pick", "decks": decks,
+                    "deck": mine if any(d == mine for d, _n, _c in decks) else decks[0][0] if decks else None, "name": "", "named": "",
                     "end_name": " ".join(str(exam or "").split())[:60], "end_day": by or _day(today, 28),
                     "lesson": "deck", "said": "", "busy": False, "made": None,
                     "res": None, "only": None, "pace": "by" if by else "daily", "daily": DAILY, "by": by or _day(today, 42),
-                    "days": [1, 1, 1, 1, 1, 0, 0], "starts": _iso(start) or _day(today, 1), "code": "",
+                    "days": days, "starts": _iso(start) or _day(today, 1), "code": "",
                     "_ctx": None}
         self.push()
 

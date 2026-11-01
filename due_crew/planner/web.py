@@ -56,6 +56,21 @@ class PlanWeb(QDialog, WebFace):
     def copy(self, text):
         QApplication.clipboard().setText(text)
 
+    def save_file(self, name, text):
+        import os
+        from aqt.qt import QFileDialog, QStandardPaths
+        where = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DownloadLocation) or os.path.expanduser("~")
+        path, _f = QFileDialog.getSaveFileName(self, "Add to my calendar", os.path.join(where, name), "Calendar (*.ics)")
+        if not path:
+            return False
+        try:
+            with open(path, "w", encoding="utf-8", newline="") as f:
+                f.write(text)
+        except OSError:
+            self.say("That file couldn't be saved there. Try another folder.")
+            return False
+        return True
+
     def closeEvent(self, e):  # noqa: N802 (Qt's)
         self._ready = False
         try:

@@ -1809,7 +1809,7 @@ def behind_of(p, today):
             "days": max(1, (t - (_iso(since) or t)).days)}
 
 
-CATCH_DAYS = (3, 7)  # Behind's Fit it in: catch-up's three days, and over a week (5 stays on Catch up…)
+FIT_DAYS = (2, 14, 3)  # Behind's Fit it in…: over the days I pick, 2 to 14, three to start (Sam's pick)
 
 
 def behind_sheet(name, b, p, waiting, shift=0):
@@ -1817,8 +1817,8 @@ def behind_sheet(name, b, p, waiting, shift=0):
     ways: [{key, label, note, yes, ...}]}, slide first. Slide N days: my
     shift, N more days (the days I'm behind; to 365 in all), its note the
     day my last lesson lands on then and the quiz or exam it falls after;
-    Fit it in: G5's catch-up on what earlier days opened and I haven't seen
-    (`waiting`), over three days, and over a week when that's fewer a day;
+    Fit it in…: G5's catch-up on what earlier days opened and I haven't seen
+    (`waiting`), over the days I pick then (2 to 14, three to start);
     Skip what's left: the lessons behind, skipped (their cards stay as they
     are). Raw words: the sheet draws them as text."""
     n_late, left = int(b["more"]) + 1, int(b["left"])
@@ -1838,19 +1838,28 @@ def behind_sheet(name, b, p, waiting, shift=0):
         ways.append({"key": "slide", "days": slide, "label": f"Slide {word}", "yes": f"Slide {word}",
                      "note": f"Everything still to come, {word} later." + (f" Ends {fmt_day(ends)}{after}." if ends else "")})
     waiting = int(waiting or 0)
-    last = None
-    for d in CATCH_DAYS if waiting else ():
-        extra = -(-waiting // d)
-        if last is not None and extra >= last:
-            break
-        last = extra
-        ways.append({"key": "fit", "days": d, "extra": extra, "yes": "Fit it in",
-                     "label": "Fit it in" if d == CATCH_DAYS[0] else "Fit it in over a week",
-                     "note": f"About {extra:,} more new card{'s' if extra != 1 else ''} a day for "
-                             + ("three days." if d == 3 else "a week." if d == 7 else f"{d} days.")})
+    if waiting:
+        d = FIT_DAYS[2]
+        extra = fit_extra(waiting, d)
+        ways.append({"key": "fit", "days": d, "extra": extra, "waiting": waiting, "yes": "Fit it in…", "label": "Fit it in…",
+                     "note": f"Over the days you pick: about {extra:,} more new card{'s' if extra != 1 else ''} a day for three days."})
     ways.append({"key": "skip", "uids": list(b["uids"]), "label": "Skip what's left", "yes": "Skip it" if n_late == 1 else "Skip them",
                  "note": f"The {left:,} stay as they are."})
     return {"title": f"{'A day' if days == 1 else f'{days} days'} behind on {name}", "text": text, "ways": ways}
+
+
+def fit_extra(waiting, days):
+    """Fit it in…: the more new cards a day that catch `waiting` up over `days`."""
+    return -(-max(0, int(waiting)) // max(1, int(days)))
+
+
+def fit_days(typed):
+    """Fit it in…'s box: the days typed, 2 to 14, or None when it isn't a number."""
+    try:
+        d = int(str(typed or "").strip().split()[0])
+    except (ValueError, IndexError):
+        return None
+    return max(FIT_DAYS[0], min(FIT_DAYS[1], d))
 
 
 def exam_way(exam, today, ends=()):

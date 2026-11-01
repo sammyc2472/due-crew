@@ -131,20 +131,19 @@ def test_behind():
     keys = [(w["key"], w["label"], w["yes"]) for w in s["ways"]]
     check("sheet: titled a day behind on the plan; what's left and what today opened",
           s["title"] == "A day behind on Path Book" and s["text"] == "2 · Inflammation <b> has 31 left; today 3 · Neoplasia opened 84.", s)
-    check("sheet: Slide a day, Fit it in (and over a week, fewer a day), Skip what's left; each button its own word",
-          keys == [("slide", "Slide a day", "Slide a day"), ("fit", "Fit it in", "Fit it in"),
-                   ("fit", "Fit it in over a week", "Fit it in"), ("skip", "Skip what's left", "Skip it")], keys)
+    check("sheet: Slide a day, Fit it in… (over the days I pick), Skip what's left; each button its own word",
+          keys == [("slide", "Slide a day", "Slide a day"), ("fit", "Fit it in…", "Fit it in…"),
+                   ("skip", "Skip what's left", "Skip it")], keys)
     notes = [w["note"] for w in s["ways"]]
     check("sheet: each way says what it does, in a line",
-          notes == ["Everything still to come, a day later. Ends Tue 10 Nov.", "About 11 more new cards a day for three days.",
-                    "About 5 more new cards a day for a week.", "The 31 stay as they are."], notes)
-    check("sheet: Slide is the days behind, Fit it in is catch-up's days and extra, Skip the lessons behind",
-          s["ways"][0]["days"] == 1 and (s["ways"][1]["days"], s["ways"][1]["extra"]) == (3, 11)
-          and (s["ways"][2]["days"], s["ways"][2]["extra"]) == (7, 5) and s["ways"][3]["uids"] == ["l2"])
-    few = P.behind_sheet("Path Book", b, p, 2)
-    check("sheet: a week's no fewer a day than three days: one Fit it in; nothing opened and unseen, none",
-          [w["label"] for w in few["ways"]] == ["Slide a day", "Fit it in", "Skip what's left"]
-          and [w["key"] for w in P.behind_sheet("X", b, p, 0)["ways"]] == ["slide", "skip"])
+          notes == ["Everything still to come, a day later. Ends Tue 10 Nov.",
+                    "Over the days you pick: about 11 more new cards a day for three days.", "The 31 stay as they are."], notes)
+    check("sheet: Slide is the days behind, Fit it in what's waiting, Skip the lessons behind",
+          s["ways"][0]["days"] == 1 and (s["ways"][1]["waiting"], s["ways"][1]["extra"]) == (31, 11) and s["ways"][2]["uids"] == ["l2"])
+    check("sheet: nothing opened and unseen, no Fit it in", [w["key"] for w in P.behind_sheet("X", b, p, 0)["ways"]] == ["slide", "skip"])
+    check("Fit it in…'s box: the days typed, 2 to 14; not a number, none",
+          [P.fit_days(x) for x in ("5", " 10 days", "1", "40", "", "soon")] == [5, 10, 2, 14, None, None]
+          and P.fit_extra(31, 5) == 7)
     pt = P.path(DOC, dict(PROG, l1=[40, 30, 40]), day(0), applied=APPLIED)
     s3 = P.behind_sheet("Path Book", two, pt, 41, shift=363)
     check("sheet: three days behind, two lessons; a slide keeps my dates within 365 days of the plan's",
@@ -471,9 +470,9 @@ def test_behind_sheet_glue():
             check("Behind…: the board's sheet, a day behind on the plan; no request to open it",
                   len(js) == 1 and v["title"] == "A day behind on Path Book" and len(store.log) == n
                   and v["text"] == "2 · Inflammation has 3 left; today 3 · Neoplasia opened 1." and v["no"] == "Not now", v)
-            check("Behind…: Slide a day, Fit it in, Skip what's left (a week's no fewer a day for three cards)",
-                  items == ["Slide a day", "Fit it in", "Skip what's left"] and v["field"]["go"] == ["Slide a day", "Fit it in", "Skip it"]
-                  and v["field"]["notes"][1] == "About 1 more new card a day for three days.", v.get("field"))
+            check("Behind…: Slide a day, Fit it in…, Skip what's left",
+                  items == ["Slide a day", "Fit it in…", "Skip what's left"] and v["field"]["go"] == ["Slide a day", "Fit it in…", "Skip it"]
+                  and v["field"]["notes"][1] == "Over the days you pick: about 1 more new card a day for three days.", v.get("field"))
             answer = lambda at, ok=True: dc._on_js(  # noqa: E731
                 False, f"duecrew:sheet:{v['id']}:{quote(json.dumps({'ok': ok, 'at': at}))}|{board.BOARD_KEY}", DeckBrowser())
             answer(0, ok=False)
@@ -491,14 +490,30 @@ def test_behind_sheet_glue():
             n0 = len(sent)
             send("planbehind:" + pid)
             check("Behind…: nothing behind any more: no sheet, the card's drawn again", len(sent) == n0 and g.swaps)
+            h = board._plan_card_html(card)
+            check("Slide: its way back on the same screen, today: \"Your dates moved 1 day later\" with Undo",
+                  card["slid"] == 1 and "Your dates moved 1 day later" in h and f"planunslide:{pid}|" in h, card.get("slid"))
+            k = len(store.log)
+            send("planunslide:" + pid)
+            card = F.card_view(F.followed()[0], F._state_cfg()[pid], F._state["plan_progress"][pid], day(0))
+            check("Undo: my dates back as they were, one request; the line goes",
+                  not store.follows[(pid, "maya")].get("shift") and len(store.log) == k + 1 and card["slid"] == 0
+                  and "Your dates moved" not in board._plan_card_html(card), (store.follows[(pid, "maya")], card.get("slid")))
+            send("planunslide:" + pid)
+            check("…and a second Undo does nothing", len(store.log) == k + 1)
+            n = len(store.log) - 1  # the checks below count from the slide's one request
             store.follows[(pid, "maya")]["shift"] = 0
             next(p for p in cl.session["plans"] if p["id"] == pid)["shift"] = 0
             send("planbehind:" + pid)
             v = _view(sent[-1])
             answer(1)
+            v = _view(sent[-1])
+            check("Fit it in…: then how many days, three to start, 2 to 14", v["title"] == "Fit it in over how many days?"
+                  and (v.get("field") or {}).get("value") == "3" and v["yes"] == "Fit it in", v)
+            dc._on_js(False, f"duecrew:sheet:{v['id']}:{quote(json.dumps({'ok': True, 'text': '5'}))}|{board.BOARD_KEY}", DeckBrowser())
             st = F._state_cfg()[pid]
-            check("Fit it in: catch-up's three days, its extra a day (G5, Anki's today-only limit each morning); no request",
-                  st.get("catch") == {"until": day(2), "extra": 1} and [x[:2] for x in store.log[n + 1:]] == [], (st.get("catch"), store.log[n:]))
+            check("Fit it in over 5 days: catch-up's extra a day for those days (G5, Anki's today-only limit each morning); no request",
+                  st.get("catch") == {"until": day(4), "extra": 1} and [x[:2] for x in store.log[n + 1:]] == [], (st.get("catch"), store.log[n:]))
             pc = F._pcfg()
             pc["plans"][pid].pop("catch", None)  # as Stop does (the fake decks keep no today-only limit to take off)
             F._psave(pc)

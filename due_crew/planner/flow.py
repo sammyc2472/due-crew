@@ -284,6 +284,42 @@ class Ops:
     def index(self, did):
         return P.DeckIndex(mw.col, did)
 
+    def new_defaults(self):
+        """New plan's first values, worked out here (the mock's "Filled in
+        for you"): the top deck I've studied most these 30 days, the
+        weekdays I've studied in most of the last six weeks, my exam
+        (Settings). {deck, days, exam}, each None when there's nothing to go
+        on. Two queries, on the click that opens New plan."""
+        import datetime
+        col, out = mw.col, {"deck": None, "days": None, "exam": None}
+        try:
+            since = (int(col.sched.day_cutoff) - 30 * 86400) * 1000
+            per = {}
+            for did, n in col.db.all("SELECT CASE WHEN c.odid THEN c.odid ELSE c.did END, count() FROM revlog r "
+                                     "JOIN cards c ON c.id = r.cid WHERE r.id > ? AND r.ease > 0 GROUP BY 1", since):
+                top = str(col.decks.name(did) or "").split("::")[0]
+                per[top] = per.get(top, 0) + int(n or 0)
+            tops = {name: did for did, name, _n in top_decks(col)}
+            best = max((name for name in per if name in tops), key=lambda x: per[x], default=None)
+            out["deck"] = tops.get(best) if best else None
+        except Exception:  # noqa: BLE001 (no default is fine)
+            pass
+        try:
+            from ..stats.queries import StatsQueries
+            ago = StatsQueries(col).studied_days_ago(42)
+            if len(ago) >= 6:
+                today = datetime.date.fromisoformat(plan_flow._today())
+                weeks = [0] * 7
+                for a in ago:
+                    weeks[(today - datetime.timedelta(days=int(a))).weekday()] += 1
+                days = [1 if n >= 3 else 0 for n in weeks]
+                out["days"] = days if any(days) else None
+        except Exception:  # noqa: BLE001
+            pass
+        exam = str(cfg().get("exam_date") or "")
+        out["exam"] = exam if len(exam) == 10 and exam > plan_flow._today() else None
+        return out
+
     def make(self, owner, name, doc, done, pid=None):
         """The plan made and its lessons saved, one click (StartOps.make's)."""
         StartOps().make(owner, name, doc, done, pid=pid)
@@ -547,6 +583,42 @@ class StartOps:
     def index(self, did):
         return P.DeckIndex(mw.col, did)
 
+    def new_defaults(self):
+        """New plan's first values, worked out here (the mock's "Filled in
+        for you"): the top deck I've studied most these 30 days, the
+        weekdays I've studied in most of the last six weeks, my exam
+        (Settings). {deck, days, exam}, each None when there's nothing to go
+        on. Two queries, on the click that opens New plan."""
+        import datetime
+        col, out = mw.col, {"deck": None, "days": None, "exam": None}
+        try:
+            since = (int(col.sched.day_cutoff) - 30 * 86400) * 1000
+            per = {}
+            for did, n in col.db.all("SELECT CASE WHEN c.odid THEN c.odid ELSE c.did END, count() FROM revlog r "
+                                     "JOIN cards c ON c.id = r.cid WHERE r.id > ? AND r.ease > 0 GROUP BY 1", since):
+                top = str(col.decks.name(did) or "").split("::")[0]
+                per[top] = per.get(top, 0) + int(n or 0)
+            tops = {name: did for did, name, _n in top_decks(col)}
+            best = max((name for name in per if name in tops), key=lambda x: per[x], default=None)
+            out["deck"] = tops.get(best) if best else None
+        except Exception:  # noqa: BLE001 (no default is fine)
+            pass
+        try:
+            from ..stats.queries import StatsQueries
+            ago = StatsQueries(col).studied_days_ago(42)
+            if len(ago) >= 6:
+                today = datetime.date.fromisoformat(plan_flow._today())
+                weeks = [0] * 7
+                for a in ago:
+                    weeks[(today - datetime.timedelta(days=int(a))).weekday()] += 1
+                days = [1 if n >= 3 else 0 for n in weeks]
+                out["days"] = days if any(days) else None
+        except Exception:  # noqa: BLE001
+            pass
+        exam = str(cfg().get("exam_date") or "")
+        out["exam"] = exam if len(exam) == 10 and exam > plan_flow._today() else None
+        return out
+
     def make(self, owner, name, doc, done, pid=None):
         """The plan made (POST /plans) and its dates saved (the builder's
         PUT), one click. done(("saved", raw) | ("made", pid, why): made,
@@ -627,6 +699,42 @@ def _top_deck(col, did):
 class QidOps:
     def index(self, did):
         return P.DeckIndex(mw.col, did)
+
+    def new_defaults(self):
+        """New plan's first values, worked out here (the mock's "Filled in
+        for you"): the top deck I've studied most these 30 days, the
+        weekdays I've studied in most of the last six weeks, my exam
+        (Settings). {deck, days, exam}, each None when there's nothing to go
+        on. Two queries, on the click that opens New plan."""
+        import datetime
+        col, out = mw.col, {"deck": None, "days": None, "exam": None}
+        try:
+            since = (int(col.sched.day_cutoff) - 30 * 86400) * 1000
+            per = {}
+            for did, n in col.db.all("SELECT CASE WHEN c.odid THEN c.odid ELSE c.did END, count() FROM revlog r "
+                                     "JOIN cards c ON c.id = r.cid WHERE r.id > ? AND r.ease > 0 GROUP BY 1", since):
+                top = str(col.decks.name(did) or "").split("::")[0]
+                per[top] = per.get(top, 0) + int(n or 0)
+            tops = {name: did for did, name, _n in top_decks(col)}
+            best = max((name for name in per if name in tops), key=lambda x: per[x], default=None)
+            out["deck"] = tops.get(best) if best else None
+        except Exception:  # noqa: BLE001 (no default is fine)
+            pass
+        try:
+            from ..stats.queries import StatsQueries
+            ago = StatsQueries(col).studied_days_ago(42)
+            if len(ago) >= 6:
+                today = datetime.date.fromisoformat(plan_flow._today())
+                weeks = [0] * 7
+                for a in ago:
+                    weeks[(today - datetime.timedelta(days=int(a))).weekday()] += 1
+                days = [1 if n >= 3 else 0 for n in weeks]
+                out["days"] = days if any(days) else None
+        except Exception:  # noqa: BLE001
+            pass
+        exam = str(cfg().get("exam_date") or "")
+        out["exam"] = exam if len(exam) == 10 and exam > plan_flow._today() else None
+        return out
 
     def default_deck(self, choices):
         """The deck my plan runs on here (its top deck: question tags are

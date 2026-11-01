@@ -471,6 +471,29 @@ def test_the_builders_tools_in_the_window():
     w.click("undo", what=["undo"])
 
 
+def test_new_plan_fills_in_what_it_knows():
+    STORE.add_user("lee", "Lee", code="LEE123")
+    cl = client("lee")
+    face = Face.__new__(Face)
+    face.js, face.copied = [], None
+    ops = Ops(cl)
+    ops.top_decks = lambda: [(1, "Big Step 1", 36), (2, "Spanish", 900)]
+    ops.new_defaults = lambda: {"deck": 1, "days": [1, 1, 0, 1, 1, 1, 0], "exam": day(40)}
+    face.web_init(COL, PR.my_plans(cl), ops, None, None, {})
+    face._ready = True
+    nv = face.view()["new"]
+    check("web: New plan fills in the deck I study most, the days I study and my exam (Settings) as Finish by",
+          nv["deck"] == 1 and face.new["days"] == [1, 1, 0, 1, 1, 1, 0] and face.new["pace"] == "by" and face.new["by"] == day(40)
+          and nv["endDay"] == day(40) and nv["endName"] == "Exam", (nv, face.new["days"], face.new["pace"]))
+    ops.new_defaults = lambda: {"deck": 99, "days": [0] * 7, "exam": "1999-01-01"}
+    face.new_open()
+    check("web: …and with nothing to go on, the plain ones (the biggest deck, weekdays, 20 a day)",
+          face.new["deck"] == 1 and face.new["days"] == [1, 1, 1, 1, 1, 0, 0] and face.new["pace"] == "daily", face.new)
+    ops.new_defaults = lambda: {"deck": 2, "days": None, "exam": day(40)}
+    face.new_open(finish_by=day(40))
+    check("web: from the board's Plan the way there, my exam keeps its name", face.new["end_name"] == "Exam" and face.new["deck"] == 2)
+
+
 def test_a_resource_at_my_pace():
     STORE.add_user("rae", "Rae", code="RAE123")
     w = Face(client("rae"))
@@ -500,6 +523,36 @@ def test_a_resource_at_my_pace():
     check("web: Start it: the plan made with a lesson a chapter, and followed here at my own pace",
           started and started[2] == "ready" and len(doc.get("units") or []) >= 3 and w.view().get("new") is None
           and w.view()["side"] == "panel", (started, len(doc.get("units") or [])))
+
+
+def test_add_to_my_calendar():
+    from due_crew.planner import ics
+    pid, code = plan([{"id": "u1", "name": "Cell injury, part 1", "opens": day(7), "due": day(9), "even": True,
+                       "tags": [f"{R}::01_Cell_injury"]},
+                      {"id": "u2", "name": "Inflammation", "opens": day(10), "tags": [f"{R}::02_Inflammation"]}],
+                     [{"id": "e1", "day": day(12), "name": "Heme quiz"}], name="Path Book; high yield")
+    w = Face(client("sam"), select=pid)
+    w.click("calendar")
+    name, text = w._saved_file
+    ymd = lambda n: day(n).replace("-", "")  # noqa: E731
+    check("web: Add to my calendar: an .ics file named for the plan, saved where I pick", name == "Path Book high yield.ics"
+          and text.startswith("BEGIN:VCALENDAR\r\nVERSION:2.0\r\n") and text.endswith("END:VCALENDAR\r\n")
+          and "Saved." in w._status, (name, w._status))
+    check("web: each set an all-day event over its days (a spread one to its finish-by day), each quiz too",
+          text.count("BEGIN:VEVENT") == 3 and f"DTSTART;VALUE=DATE:{ymd(7)}\r\nDTEND;VALUE=DATE:{ymd(10)}" in text
+          and f"DTSTART;VALUE=DATE:{ymd(12)}\r\nDTEND;VALUE=DATE:{ymd(13)}" in text, text)
+    check("web: its words escaped as the format asks, with each set's cards here",
+          "SUMMARY:Cell injury\\, part 1 · Path Book\\; high yield" in text and "12 cards" in text, text[:600])
+    check("web: long lines folded under 76 octets", all(len(x.encode()) <= 75 for x in text.split("\r\n")))
+    sam = client("maya")
+    sam.follow_plan(code)
+    STORE.follows[(pid, "maya")]["skipped"] = ["u2"]
+    f = Face(sam, select=pid)
+    f.plan["skipped"] = ["u2"]
+    f.click("calendar")
+    _n, text = f._saved_file
+    check("web: a follower's file: my days, without the sets I skip", text.count("BEGIN:VEVENT") == 2 and "Inflammation" not in text)
+    check("ics: a name with nothing safe in it", ics.file_name("///") == "Plan.ics")
 
 
 def test_the_page():

@@ -1868,7 +1868,8 @@ def _plan_card_html(card, people=None, cfg=None, head=None):
     if card.get("no_deck"):
         out += (f'<div class="dc-line">No deck here has this plan&rsquo;s cards yet. '
                 f'<a href="#" onclick="{_pycmd("plandeck:" + pid)}">Pick a deck</a></div>')
-    out += _plan_path(card) + _plan_status(card, pid) + _plan_behind(card, pid) + _week_html(card, pid) + _plan_now(card, pid)
+    out += (_plan_path(card) + _plan_status(card, pid) + _plan_slid(card, pid) + _plan_behind(card, pid) + _week_html(card, pid)
+            + _plan_now(card, pid))
     notes = _plan_notes(card, pid)
     if notes:
         out += notes[0]
@@ -1941,6 +1942,17 @@ def _plan_path(card):
     right = (f'{e(str(end.get("name") or "Exam"))} &middot; {when}' if ev else f"Ends {when}" if when else "")
     return (f'<div class="ppath{gap}" role="img" aria-label="Lessons: {said}">{segs}</div>'
             f'<div class="ppl"><span>{_ins_dname(p.get("first"), long=True)}</span><span>{right}</span></div>')
+
+
+def _plan_slid(card, pid):
+    """Slide on Behind…, today: the line that says so, with its Undo (the
+    way back on the same screen)."""
+    n = int(card.get("slid") or 0)
+    if n <= 0:
+        return ""
+    return (f'<div class="pst"><span>Your dates moved {n} day{"s" if n != 1 else ""} later</span>'
+            f'<span class="acts"><a href="#" title="Your dates back where they were" '
+            f'onclick="{_pycmd("planunslide:" + pid)}">Undo</a></span></div>')
 
 
 def _plan_behind(card, pid):

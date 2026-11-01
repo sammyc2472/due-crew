@@ -928,6 +928,8 @@ def card_view(plan, st, prog, today, session=None, week_offset=0):
             "week": week, "week_offset": int(week_offset), "status": status,
             "path": path if status is not None else None, "behind": behind,  # plans, end to end
             "lesson_deck": None if no_deck or plan.get("paused") else lesson_view(plan, st, today),  # Today's lesson, B
+            # Slide on Behind…, today: the card's Undo (plan_board.unslide)
+            "slid": int(((st or {}).get("slid") or {}).get("days") or 0) if ((st or {}).get("slid") or {}).get("day") == today else 0,
             "catch": {"extra": int(catch.get("extra") or 0), "until": _short_day(catch["until"], today)} if catch else None}
 
 
@@ -2664,6 +2666,9 @@ def on_message(cmd, parts):
     elif cmd == "planbehind" and arg:  # plans, end to end: You › Plans' Behind…, the sheet
         from . import plan_board
         plan_board.behind(arg)
+    elif cmd == "planunslide" and arg:  # ...the card's Undo after Slide, the same day
+        from . import plan_board
+        plan_board.unslide(arg)
     elif cmd == "planfollowcode":  # ...the empty tab's box: a plan's code or its link, into Follow
         from . import plan_board
         plan_board.follow(arg)
