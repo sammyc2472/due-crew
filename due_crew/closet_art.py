@@ -246,6 +246,46 @@ ART = {
          '<rect x="51.8" y="29" width="3.6" height="5.4" rx="1.2" style="fill:#f2b33d"/>'
          '<circle cx="40" cy="20.5" r="1.5" style="fill:#f2b33d"/>'),
         ""),
+    # 3.9.6 (the plan joys): the Finisher's ribbon on the body, a folded map and a kite in the hand
+    "rosette": (
+        ('<g transform="translate(50.6 57.6)">'
+         '<path d="M-2.4 1.6 L-5.2 10.6 L-3 9.6 L-2 11.8 L.6 2.4 Z" style="fill:#d9534f"/>'
+         '<path d="M2.4 1.6 L5.2 10.6 L3 9.6 L2 11.8 L-.6 2.4 Z" style="fill:#b8403c"/>'
+         '<circle cx="4.3" cy="0" r="1.75" style="fill:#fff6d8" stroke="#e3a21a" stroke-width=".5"/>'
+         '<circle cx="3.48" cy="2.53" r="1.75" style="fill:#fff6d8" stroke="#e3a21a" stroke-width=".5"/>'
+         '<circle cx="1.33" cy="4.09" r="1.75" style="fill:#fff6d8" stroke="#e3a21a" stroke-width=".5"/>'
+         '<circle cx="-1.33" cy="4.09" r="1.75" style="fill:#fff6d8" stroke="#e3a21a" stroke-width=".5"/>'
+         '<circle cx="-3.48" cy="2.53" r="1.75" style="fill:#fff6d8" stroke="#e3a21a" stroke-width=".5"/>'
+         '<circle cx="-4.3" cy="0" r="1.75" style="fill:#fff6d8" stroke="#e3a21a" stroke-width=".5"/>'
+         '<circle cx="-3.48" cy="-2.53" r="1.75" style="fill:#fff6d8" stroke="#e3a21a" stroke-width=".5"/>'
+         '<circle cx="-1.33" cy="-4.09" r="1.75" style="fill:#fff6d8" stroke="#e3a21a" stroke-width=".5"/>'
+         '<circle cx="1.33" cy="-4.09" r="1.75" style="fill:#fff6d8" stroke="#e3a21a" stroke-width=".5"/>'
+         '<circle cx="3.48" cy="-2.53" r="1.75" style="fill:#fff6d8" stroke="#e3a21a" stroke-width=".5"/>'
+         '<circle r="4" style="fill:#fff6d8"/><circle r="3.1" style="fill:#f2b33d" stroke="#c98a12" stroke-width=".6"/>'
+         '<path d="M-1.5 .1 L-.4 1.2 L1.6 -1.2" fill="none" stroke="#fff6d8" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></g>'),
+        ""),
+    "map": (
+        ('<path d="M62.6 45.2 L67.4 43.4 L67.4 55.4 L62.6 57.2 Z" style="fill:#f4efe6" stroke="#d6d0c4" stroke-width=".5" stroke-linejoin="round"/>'
+         '<path d="M67.4 43.4 L72.2 45.2 L72.2 57.2 L67.4 55.4 Z" style="fill:#e4dccb" stroke="#d6d0c4" stroke-width=".5" stroke-linejoin="round"/>'
+         '<path d="M72.2 45.2 L77 43.4 L77 55.4 L72.2 57.2 Z" style="fill:#f4efe6" stroke="#d6d0c4" stroke-width=".5" stroke-linejoin="round"/>'
+         '<path d="M64.6 46.6 C65.6 47.4 66.6 46.8 67.2 47.6 M73.4 52.6 C74.4 51.8 75.4 52.8 76 52" stroke="#9ec3a0" stroke-width="1.1" fill="none" stroke-linecap="round"/>'
+         '<path d="M64.2 54.2 C65.8 51 68.4 52.8 69.4 49.8 C70.4 47 72.8 48.6 74.8 46.8" fill="none" stroke="#d9534f" stroke-width="1" stroke-dasharray="1.5 1.1" stroke-linecap="round"/>'
+         '<circle cx="64.2" cy="54.2" r=".95" style="fill:#2f6fb5"/>'
+         '<path d="M75.2 44.2 C73.6 44.2 73 45.6 73.6 46.6 L75.2 49 L76.8 46.6 C77.4 45.6 76.8 44.2 75.2 44.2 Z" style="fill:#d9534f"/>'
+         '<circle cx="75.2" cy="45.9" r=".6" style="fill:#fff"/>'),
+        ""),
+    "kite": (
+        ('<g class="cl-bal">'
+         '<path d="M65 57 C69.5 49 66.5 41 69.6 25.2" stroke="#8a8f97" stroke-width=".8" fill="none"/>'
+         '<g transform="rotate(14 70.5 19)">'
+         '<path d="M70.5 7.5 L64 18 L70.5 18 Z" style="fill:#4f9dd6"/><path d="M70.5 7.5 L77 18 L70.5 18 Z" style="fill:#f2c230"/>'
+         '<path d="M64 18 L70.5 31 L70.5 18 Z" style="fill:#f2c230"/><path d="M77 18 L70.5 31 L70.5 18 Z" style="fill:#4f9dd6"/>'
+         '<path d="M70.5 7.5 V31 M64 18 H77" stroke="#5b3a29" stroke-width=".6" stroke-opacity=".55"/>'
+         '<path d="M70.5 31 C72.8 33.4 68.6 35.4 70.8 38.2 C73 41 69.2 42.6 71.4 45.4" stroke="#8a8f97" stroke-width=".7" fill="none"/>'
+         '<path d="M70 34.2 L67.6 32.8 L67.8 35.4 Z M70 34.2 L72.4 35.6 L72.2 33 Z" style="fill:#e0457b"/>'
+         '<path d="M70.6 40.8 L68.2 39.4 L68.4 42 Z M70.6 40.8 L73 42.2 L72.8 39.6 Z" style="fill:#e0457b"/>'
+         '</g></g>'),
+        ""),
     "umbrella": (
         ('<path d="M64 62 V24" stroke="#5b3a29" stroke-width="1.6"/>'
          '<path d="M64 62 C64 65.5 60.5 65.5 60.5 62.6" stroke="#5b3a29" stroke-width="1.6" fill="none" stroke-linecap="round"/>'

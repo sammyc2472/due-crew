@@ -133,10 +133,23 @@ class NewPlan:
         out["dates"] = [{"n": i + 1, "name": str(u.get("name") or ""), "when": self._when(u), "cards": int(u.get("n") or 0)}
                         for i, u in enumerate(dates[:3])]
         out["more"] = max(0, len(dates) - 3)
+        out["path"] = self._path_view(doc, dates)
         out["pace"] = st["pace"]
         if st["pace"] != "daily":
             out["daily"] = int(sm.get("daily") or st["daily"])
         return out
+
+    @staticmethod
+    def _path_view(doc, dates):
+        """3.9.6, day one (Sam's pick): the plan laid out set by set, as the
+        board's path will draw it: {n, first, end, event}: how many sets,
+        the first one's day, and what it ends with (its exam, or its last day)."""
+        if not dates:
+            return None
+        end = P.path_end(doc) or {}
+        when = P.fmt_day(end.get("day")) if end.get("day") else ""
+        return {"n": len(dates), "first": P.fmt_day(dates[0].get("opens")), "event": bool(end.get("event")),
+                "end": (f"{end.get('name') or 'Exam'} · {when}" if end.get("event") else f"Ends {when}" if when else "")}
 
     @staticmethod
     def _part_sub(p):

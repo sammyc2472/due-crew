@@ -6,7 +6,9 @@
    Pips are sev.py's own markup (a name only in its label, escaped there);
    every name, emoji and note goes in as textContent. Nothing here sends
    anything; a click anywhere (but on a present or a bubble) or Esc ends it.
-   Reduce motion never gets here: flurry_js stands the Pips in its banner. */
+   Reduce motion never gets here: flurry_js stands the Pips in its banner.
+   3.9.6: DCShow.finish, a plan's finish line in the same style (below);
+   its banner's Share is the one thing here that sends, with the board's key. */
 (function () {
   if (window.DCShow) { return; }
   var CSS = [
@@ -426,10 +428,133 @@
     if (onDown) { document.removeEventListener("pointerdown", onDown, true); onDown = null; }
   }
   function end(ms) { T.push(setTimeout(stop, ms)); }
+  function sheets(data) {
+    if (data.sevcss && !document.getElementById("dc-sev-css-show")) {
+      var sc = document.createElement("style"); sc.id = "dc-sev-css-show"; sc.textContent = data.sevcss; (document.head || document.body).appendChild(sc);
+    }
+    if (!document.getElementById("dc-show-css")) {
+      var st = document.createElement("style"); st.id = "dc-show-css"; st.textContent = CSS; (document.head || document.body).appendChild(st);
+    }
+  }
+
+  // ---- 3.9.6, the finish line (Sam's pick): a plan's last set's last card seen. Not one of the twelve
+  // (it's no cheer): the dimmed screen, the plan's path filling as Pip hops along it, the tape broken, a grad
+  // cap landing on Pip, confetti; the banner says it and stays a little past (board.finish_js starts it:
+  // D = {name, sub, n, share, a, pip: {hop, jump, still, cap} or null, ms, linger, bg, ink, line, accent,
+  // accentInk, amb, mut, dark, rm, sevcss}). Reduce motion: no show, the banner alone with Pip still in its
+  // cap. Its name and line go in as text; Pip and the cap are sev.py's and closet_art's own markup.
+  function banner(still) {
+    var b = add("div", "", "position:absolute;top:11%;left:50%;transform:translateX(-50%);z-index:6;width:max-content;max-width:92vw;box-sizing:border-box;display:flex;align-items:center;gap:12px;" +
+      "background:" + D.bg + ";color:" + D.ink + ";border:1px solid " + D.accent + ";border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,.3);" +
+      "padding:" + (still && D.pip ? "8px 18px 8px 10px" : "10px 22px 9px") + ";font:700 15px/1.3 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;text-align:" + (still && D.pip ? "left" : "center"));
+    if (still && D.pip) { pip(D.pip.still, D.a, 52, "position:relative;flex:none;", b); }
+    var w = add("div", "", "display:grid;gap:3px;justify-items:" + (still && D.pip ? "start" : "center") + ";min-width:0", b);
+    var t = add("b", "", "white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70vw", w); t.textContent = "Finished " + D.name;
+    var s = add("span", "", "font-size:13px;font-weight:400;opacity:.9", w); s.textContent = D.sub;
+    if (D.share && typeof pycmd !== "undefined") {
+      var a = add("a", "", "font-size:12px;color:" + D.accent + ";text-decoration:none;margin-top:2px", w); a.textContent = "Share"; a.href = "#";
+      clickable(a, "Share: as text or a picture", function () { pycmd(D.share + "|" + window.dcBK); });
+    }
+    return b;
+  }
+  function finish(data) {
+    stop();
+    if (!data || !data.name || (!data.rm && !document.body.animate)) { return false; }
+    D = data;
+    sheets(D);
+    ov = document.createElement("div"); ov.id = "dc-show"; ov.setAttribute("aria-hidden", "false");
+    document.body.appendChild(ov);
+    onKey = function (e) { if (e.key === "Escape") { stop(); } };
+    onDown = function (e) { if (!(e.target && e.target.closest && e.target.closest(".dcs-click"))) { stop(); } };
+    document.addEventListener("keydown", onKey, true);
+    document.addEventListener("pointerdown", onDown, true);
+    var ms = D.ms || 7000, linger = D.linger || 3000;
+    if (D.rm) { banner(true); end(ms + linger); return true; }
+    dim(0.55, ms);
+    var sw = Math.min(600, W() * 0.9), top = H() * 0.4 - 84, n = Math.max(1, D.n | 0);
+    var stage = add("div", "", "position:absolute;left:" + (W() - sw) / 2 + "px;top:" + top + "px;width:" + sw + "px;height:96px;");
+    stage.animate([{ opacity: 0, transform: "translateY(26px)" }, { opacity: 1, transform: "none", offset: 0.06 },
+                   { opacity: 1, transform: "none", offset: 0.91 }, { opacity: 0, transform: "translateY(8px)" }], { duration: ms, fill: "both" });
+    // the path, a set a segment, filling in turn
+    var fw = 92, tw = sw - fw - 8, gap = n > 30 ? 2 : 4, bw = (tw - gap * (n - 1)) / n, xs = [];
+    for (var i = 0; i < n; i++) {
+      var seg = add("b", "", "position:absolute;left:" + i * (bw + gap) + "px;top:70px;width:" + bw + "px;height:12px;border-radius:" + Math.min(4, bw / 3) + "px;" +
+        "background:rgba(255,255,255,.26);overflow:hidden;", stage);
+      var fill = add("i", "", "position:absolute;inset:0;background:#7cc47f;transform-origin:0 50%;", seg);
+      var at = 500 + i * 1690 / n;
+      fill.animate([{ transform: "scaleX(0)" }, { transform: "scaleX(1)" }], { duration: 260, delay: at, easing: "ease-out", fill: "both" });
+      seg.animate([{ transform: "none" }, { transform: "scaleY(1.45)", offset: 0.45 }, { transform: "none" }], { duration: 300, delay: at + 200, easing: "ease-out" });
+      xs.push(i * (bw + gap) + bw / 2);
+    }
+    // the finish: its ground, two posts, the tape that breaks
+    var fx = tw + 8, xf = fx + fw / 2;
+    add("i", "", "position:absolute;left:" + (fx + 6) + "px;top:71px;width:" + (fw - 12) + "px;height:12px;border-radius:3px;opacity:.9;" +
+      "background:repeating-conic-gradient(#f4efe6 0 25%,#2b2d29 0 50%) 0 0/8px 8px;", stage);
+    [fx + 3, fx + fw - 8].forEach(function (x) {
+      add("i", "", "position:absolute;left:" + x + "px;top:19px;width:5px;height:64px;border-radius:3px;background:#f4efe6;z-index:3;", stage);
+      add("i", "", "position:absolute;left:" + (x - 2) + "px;top:15px;width:9px;height:9px;border-radius:50%;background:#f2b33d;z-index:3;", stage);
+    });
+    var tape = "position:absolute;top:43px;width:" + (fw / 2 - 7) + "px;height:5px;background:#e2582b;z-index:3;" +
+      "background-image:linear-gradient(90deg,transparent 0 70%,rgba(255,255,255,.55) 70% 82%,transparent 82%);background-size:12px 5px;";
+    var tl = add("i", "", tape + "left:" + (fx + 7) + "px;transform-origin:0 50%;border-radius:2px 0 0 2px;", stage);
+    var tr = add("i", "", tape + "left:" + (xf) + "px;transform-origin:100% 50%;border-radius:0 2px 2px 0;", stage);
+    [[tl, 1], [tr, -1]].forEach(function (p) {
+      var k = p[1];
+      p[0].animate([{ transform: "none" }, { transform: "rotate(" + 84 * k + "deg)", offset: 0.4 }, { transform: "rotate(" + 68 * k + "deg)", offset: 0.6 },
+                    { transform: "rotate(" + 80 * k + "deg)", offset: 0.8 }, { transform: "rotate(" + 76 * k + "deg)" }], { duration: 900, delay: 2620, easing: "ease-out", fill: "both" });
+    });
+    // Pip hops along the path to the tape, through it, and the grad cap lands on it
+    if (D.pip) {
+      var ck = [0, 1, 2, 3, 4, 5].map(function (j) { return xs[Math.round(j * (n - 1) / 5)]; });
+      var rail = add("div", "", "position:absolute;left:0;top:70px;width:0;height:0;z-index:2;", stage);
+      var X = [[0, ck[0]], [0.167, ck[0]], [0.273, ck[1]], [0.38, ck[2]], [0.487, ck[3]], [0.593, ck[4]], [0.7, ck[5]], [0.8, xf], [1, xf]];
+      rail.animate(X.map(function (p) { return { transform: "translateX(" + p[1] + "px)", offset: p[0] }; }), { duration: 3000, fill: "both" });
+      var hy = add("div", "", "position:absolute;left:0;top:0;", rail), Y = [];
+      [[0, 0.167, 0.273, 30], [0, 0.273, 0.38, 30], [0, 0.38, 0.487, 30], [0, 0.487, 0.593, 26], [0, 0.593, 0.7, 26], [0, 0.7, 0.8, 34]].forEach(function (h, j) {
+        if (!j) { Y.push({ transform: "none", offset: 0 }); }
+        Y.push({ transform: "none", offset: h[1], easing: "ease-out" }, { transform: "translateY(-" + h[3] + "px)", offset: (h[1] + h[2]) / 2, easing: "ease-in" });
+      });
+      Y.push({ transform: "none", offset: 0.8 }, { transform: "none", offset: 1 });
+      hy.animate(Y, { duration: 3000, fill: "both" });
+      var pb = add("div", "", "position:absolute;left:-36px;top:-65px;width:72px;height:72px;transform-origin:50% 90%;", hy);
+      pb.animate([{ transform: "none" }, { transform: "translateY(6px) scale(1.32)" }], { duration: 500, delay: 2550, easing: "ease-out", fill: "both" });
+      var p1 = pip(D.pip.hop, D.a, 72, "left:0;top:0;", pb);
+      p1.animate([{ opacity: 0 }, { opacity: 0, offset: 0.124 }, { opacity: 1, offset: 0.125 }, { opacity: 1, offset: 0.999 }, { opacity: 0 }], { duration: 2400, fill: "both" });
+      later(2400, function () {
+        pip(D.pip.jump, D.a, 72, "left:0;top:0;", pb);  // its own jump plays as it comes
+        var cap = svgEl('<svg viewBox="0 0 80 80" width="72" height="72" style="overflow:visible">' + D.pip.cap + "</svg>", 0, 0, 72, 72);
+        pb.appendChild(cap);
+        cap.animate([{ opacity: 0, transform: "translateY(-70px) rotate(-14deg)" }, { opacity: 1, offset: 0.12 }, { transform: "none", offset: 0.72 },
+                     { transform: "translateY(-3px) rotate(4deg)", offset: 0.84 }, { opacity: 1, transform: "none" }],
+                    { duration: 600, delay: 1050, easing: "cubic-bezier(.5,0,.75,0)", fill: "both" });
+      });
+    }
+    // confetti out of the tape, then it rains over everything
+    later(2620, function () {
+      var b = box(stage), x = b.x + xf, y = b.y + 45;
+      for (var k = 0; k < 34; k++) {
+        var a = (-170 + R() * 160) * Math.PI / 180, sp = 70 + R() * 120;
+        fly(x, y, null, { vx: Math.cos(a) * sp * 1.1, vy: Math.sin(a) * sp * 0.75 - 30, g: 260, dur: 1900, rot: (R() - 0.5) * 1080, delay: R() * 80 });
+      }
+    });
+    for (var r = 0; r < 26; r++) {
+      var c = add("span", "dcs-cf", "left:" + R() * 96 + "%;top:-16px;background:" + [acc(D.a), "#f2b33d", "#3d8be0", "#e2589c", "#7b5cd6"][r % 5]);
+      gone(c.animate([{ opacity: 0, transform: "translate(0,0) rotate(0)" }, { opacity: 1, offset: 0.06 }, { opacity: 1, offset: 0.85 },
+                      { opacity: 0, transform: "translate(" + (R() - 0.5) * 80 + "px," + (H() + 40) + "px) rotate(" + (R() - 0.5) * 600 + "deg)" }],
+                     { duration: 2600 + R() * 1000, delay: 2750 + R() * 1800, easing: "linear", fill: "both" }), c);
+    }
+    var bn = banner(false);
+    bn.animate([{ opacity: 0, transform: "translateX(-50%) translateY(-10px) scale(.96)" }, { opacity: 1, transform: "translateX(-50%)", offset: 0.06 },
+                { opacity: 1, transform: "translateX(-50%)", offset: 0.93 }, { opacity: 0, transform: "translateX(-50%)" }],
+               { duration: ms + linger - 2800, delay: 2800, easing: "ease-out", fill: "both" });
+    end(ms + linger);
+    return true;
+  }
 
   window.DCShow = {
     kinds: Object.keys(SHOW),
     stop: stop,
+    finish: finish,
     play: function (kind, data) {
       stop();
       if (!SHOW[kind] || !data || !data.senders || !data.senders.length || !document.body.animate) { return false; }

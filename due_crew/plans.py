@@ -1885,6 +1885,214 @@ def link_code(text):
     return normalize_code(t)
 
 
+# ---- 3.9.6: the plan's joys (Sam's picks, the "Joy on the plan card" mock) ----
+# A set done, a pop; halfway, three-quarters and the last set, a line each;
+# the finish line, a show over the Decks screen; caught up; day one. What
+# has played is kept in plans.json's "joy", this profile's and never sent;
+# what's so the first time a plan is looked at is history, and plays nothing
+# (but day one).
+
+JOY_POP = 5.0   # s: a set done's pop, Pip on its segment as long as it's out by the logo (sev.LOGO_SECONDS)
+JOY_LINE = 1.4  # s: a milestone's line slides in, its set sparkles
+JOY_TADA = 1.8  # s: caught up's 🎉 pops
+JOY_GO = 5.0    # s: day one's Pip, its let's-go
+MILES = (("half", 1, 2), ("threeq", 3, 4))  # counted in sets: halfway the 10th of 19, three-quarters the 15th
+JOY_KEYS = ("half", "threeq", "last", "fin")  # a joy line's Share (and × for the three milestones)
+JOY_KEPT = 500  # the sets known done, kept for a plan
+
+
+def joy_sets(p):
+    """The sets a plan's joys count: each one not skipped, in its order."""
+    return [x for x in (p or {}).get("lessons") or [] if x.get("state") != "skip"]
+
+
+def _seen_through(x):
+    return int(x.get("total") or 0) > 0 and int(x.get("seen") or 0) >= int(x["total"])
+
+
+def joy_numbers(p):
+    """{sets, done, cards, seen, weeks}: a path in sets (the skipped ones
+    aside), how many are done, their cards and how many I've seen, and the
+    weeks from its first set's day to its last's (as the builder's finished
+    card counts them)."""
+    live = joy_sets(p)
+    opens = sorted(str(x["opens"]) for x in live if _iso(x.get("opens")))
+    weeks = max(1, -(-((_iso(opens[-1]) - _iso(opens[0])).days + 1) // 7)) if opens else 0
+    return {"sets": len(live), "done": sum(1 for x in live if x["state"] == "done"),
+            "cards": sum(int(x.get("total") or 0) for x in live),
+            "seen": sum(min(int(x.get("seen") or 0), int(x.get("total") or 0)) for x in live), "weeks": weeks}
+
+
+def joy_finished(p):
+    """Every set of it done (the skipped ones aside), with cards to it."""
+    live = joy_sets(p)
+    return bool(live) and all(x["state"] == "done" for x in live) and any(int(x.get("total") or 0) for x in live)
+
+
+def joy_words(num, cards=True):
+    """"19 sets · 2,046 cards · 6 weeks": a finished plan in a line (cards:
+    with its card count; a share follows Privacy's Reviews switch)."""
+    bits = [f"{num['sets']:,} set{'s' if num['sets'] != 1 else ''}"]
+    if cards:
+        bits.append(f"{num['cards']:,} card{'s' if num['cards'] != 1 else ''}")
+    if num.get("weeks"):
+        bits.append(f"{num['weeks']:,} week{'s' if num['weeks'] != 1 else ''}")
+    return " · ".join(bits)
+
+
+def joy_mark(n, a, b):
+    """The set that makes a/b of n: halfway is the 10th of 19, three-quarters the 15th."""
+    return -(-int(n) * a // b)
+
+
+def _miles(p, num):
+    """{key: {n, of, name, uid}}: the milestones a path is past now. half and
+    threeq: the set that makes them is done (n: the sets done), never when
+    that set would be the last (that's the finish); last: the last set is
+    today's (the morning it opens) and not every set's done."""
+    n, k, out = num["sets"], num["done"], {}
+    live = joy_sets(p)
+    if n < 2:
+        return out
+    done = [x for x in live if x["state"] == "done"]
+    for key, a, b in MILES:
+        mark = joy_mark(n, a, b)
+        if mark < n and k >= mark and (key == "half" or mark > joy_mark(n, 1, 2)):
+            out[key] = {"n": k, "of": n, "uid": done[mark - 1]["uid"] if len(done) >= mark else ""}
+    if live[-1].get("today") and not joy_finished(p):
+        out["last"] = {"n": n, "of": n, "name": str(live[-1].get("name") or ""), "uid": live[-1]["uid"]}
+    return out
+
+
+def _ago(rec, today, now, most):
+    """How long a moment's been on screen (s), while it's in its time; else None."""
+    if not isinstance(rec, dict) or rec.get("day") != today or not rec.get("at"):
+        return None
+    a = float(now) - float(rec["at"])
+    return round(a, 2) if 0 <= a < most else None
+
+
+def joy_step(st, p, behind, today, now, shown=False, name=""):
+    """One look at a plan's path for its joys: (state, view). st: what
+    plans.json keeps for the plan (None the first time: what's so then is
+    history and plays nothing, but day one). p: path(); behind: behind_of(p)
+    as the card has it (None when it's caught up, or paused). shown: this
+    draw is on screen (You › Plans, the Decks screen up): what's waiting is
+    claimed now and plays, once. A moment that waits past its day is gone.
+
+    view: {pop, line, fin, show, caught, day1}, each None or what the
+    card draws. pop {uid, ago}: a set's cards all seen, its segment fills
+    and Pip hops to it. line {key, n, of, name, uid, ago}: halfway, three-
+    quarters or the last set, today's until ×. fin {sets, cards, weeks,
+    words}: every set done, its line (show: its show over the Decks screen
+    still to play, plan_flow.joy_show's). caught {name, more, n, uids,
+    ago}: what was behind is all seen, for the rest of the day. day1
+    {ago}: the first set opens today. ago (s): how
+    long it's been on screen, so a redraw in its time keeps its place; None
+    while it waits (or when it's played). One moment at a time: the finish
+    over all, then caught up, then a milestone, then the pop. Pure."""
+    live = joy_sets(p)
+    if not live:
+        return st, None
+    num = joy_numbers(p)
+    done_now = [x["uid"] for x in live if x["state"] == "done" and _seen_through(x)]
+    fin = joy_finished(p)
+    reached = _miles(p, num)
+    one = (p or {}).get("lessons")[0]
+    day_one = one.get("state") != "skip" and bool(one.get("today")) and str(one.get("opens") or "") == str(today)
+    by = {x["uid"]: x for x in (p or {}).get("lessons") or []}
+    if not isinstance(st, dict):
+        st = {"done": done_now[-JOY_KEPT:], "miles": {k: {"day": ""} for k in reached}}
+        if fin:
+            st["fin"] = {"day": ""}
+        if behind:
+            st["late"] = {"uids": list(behind["uids"]), "name": str(behind["name"]), "more": int(behind.get("more") or 0)}
+    else:
+        st = json.loads(json.dumps(st))
+        late = st.pop("late", None)
+        caught_now = False
+        if behind:
+            st["late"] = {"uids": list(behind["uids"]), "name": str(behind["name"]), "more": int(behind.get("more") or 0)}
+            st.pop("caught", None)  # behind again: not caught up any more
+        elif isinstance(late, dict) and late.get("uids") and all(by.get(u, {}).get("state") == "done" for u in late["uids"]):
+            # what was behind, all seen (Slide and Skip what's left clear it their own ways, with their own lines)
+            st["caught"] = {"day": today, "at": 0, "name": str(late.get("name") or ""), "more": int(late.get("more") or 0),
+                            "n": sum(int(by[u].get("total") or 0) for u in late["uids"]), "uids": list(late["uids"])}
+            caught_now = True
+        known = set(st.get("done") or [])
+        new = [u for u in done_now if u not in known]
+        st["done"] = (list(st.get("done") or []) + new)[-JOY_KEPT:]
+        miles = st.setdefault("miles", {})
+        fresh = [k for k in ("last", "threeq", "half") if k in reached and k not in miles]
+        for k in fresh:
+            miles[k] = {"day": ""}  # passed; the one that plays gets its day below
+        fin_now = fin and "fin" not in st
+        line = None
+        if fin_now:
+            st["fin"] = dict(num, day=today, at=0, name=str(name or ""))
+            st.pop("caught", None)
+        elif fresh:
+            line = fresh[0]
+            miles[line] = dict(reached[line], day=today, at=0)
+        if new and not fin_now and not caught_now and not line:
+            st["pop"] = {"uid": new[-1], "day": today, "at": 0}
+    if day_one and "day1" not in st:
+        st["day1"] = {"day": today, "at": 0}
+    if shown:
+        for rec in [st.get("pop"), st.get("caught"), st.get("day1")] + list((st.get("miles") or {}).values()):
+            if isinstance(rec, dict) and rec.get("day") == today and not rec.get("at"):
+                rec["at"] = float(now)
+    view = {"pop": None, "line": None, "fin": None, "show": False, "caught": None, "day1": None}
+    pop = st.get("pop")
+    if fin:
+        f = st.get("fin") or {}
+        view["fin"] = {"sets": num["sets"], "cards": num["cards"], "weeks": num["weeks"], "words": joy_words(num)}
+        view["show"] = bool(f.get("day")) and not f.get("at")
+    else:
+        a = _ago(pop, today, now, JOY_POP)
+        if a is not None:
+            view["pop"] = {"uid": pop["uid"], "ago": a}
+        for k in ("last", "threeq", "half"):
+            rec = (st.get("miles") or {}).get(k)
+            if isinstance(rec, dict) and rec.get("day") == today and not rec.get("x"):
+                view["line"] = {"key": k, "n": int(rec.get("n") or 0), "of": int(rec.get("of") or 0),
+                                "name": str(rec.get("name") or ""), "uid": str(rec.get("uid") or ""),
+                                "ago": _ago(rec, today, now, JOY_LINE)}
+                break
+        c = st.get("caught")
+        if isinstance(c, dict) and c.get("day") == today and not behind:
+            view["caught"] = {"name": c.get("name") or "", "more": int(c.get("more") or 0), "n": int(c.get("n") or 0),
+                              "uids": list(c.get("uids") or []), "ago": _ago(c, today, now, JOY_TADA)}
+    if day_one:
+        view["day1"] = {"ago": _ago(st.get("day1"), today, now, JOY_GO)}
+    return st, view
+
+
+def joy_dismiss(st, key, today):
+    """× on a milestone's line: today's, gone (it'd be gone tomorrow either
+    way). The state after, or None when there's nothing to take off."""
+    rec = ((st or {}).get("miles") or {}).get(key) if isinstance(st, dict) else None
+    if key not in ("half", "threeq", "last") or not isinstance(rec, dict) or rec.get("day") != today or rec.get("x"):
+        return None
+    st = json.loads(json.dumps(st))
+    st["miles"][key]["x"] = True
+    return st
+
+
+def joy_text(key, name, num=None, line=None, cards=True):
+    """A joy as a line to paste: "Finished Path Book: 19 sets, 2,046 cards,
+    6 weeks. duecrew.com", "Halfway through Path Book: 10 of 19 sets. ...",
+    "The last set of Path Book: 19 · Skin, today. ...". cards: with the
+    card count (Privacy's Reviews switch)."""
+    if key == "fin":
+        return f"Finished {name}: {joy_words(num or {'sets': 0, 'cards': 0}, cards).replace(' · ', ', ')}. duecrew.com"
+    line = line or {}
+    if key == "last":
+        return f"The last set of {name}: {line.get('name') or ''}, today. duecrew.com"
+    head = "Halfway through" if key == "half" else "Three-quarters through"
+    return f"{head} {name}: {int(line.get('n') or 0):,} of {int(line.get('of') or 0):,} sets. duecrew.com"
+
+
 # ---- 3.8.1: a follower's day (plans, round three) ----
 
 AWAY_DAYS = 3   # Welcome back: this many days I studied nothing, whose dates a morning would open, ask first

@@ -3,6 +3,20 @@
 (function () {
   "use strict";
   var DAY1 = ["M", "T", "W", "T", "F", "S", "S"], DAYN = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  var laid = "";  // 3.9.6: the path last laid out; drawn again the same, it doesn't lay itself out again
+
+  /* 3.9.6, day one (Sam's pick): the plan as the board's path will draw it, set by set, the first
+     outlined (where I start), its exam a diamond at the end; its sets come in one after another
+     when the plan changes shape (new.css, nothing with Reduce motion). No Pip in the plan window. */
+  function path(h, p) {
+    var key = [p.n, p.first, p.end].join("|"), fresh = key !== laid, n = Math.min(400, p.n);
+    laid = key;
+    var step = Math.min(0.045, 1 / n), box = h("div.npath" + (fresh ? ".jin" : "") + (n > 120 ? ".g0" : n > 60 ? ".g1" : n > 30 ? ".g2" : ""),
+      { role: "img", "aria-label": n + " set" + (n === 1 ? "" : "s") + (p.event && p.end ? ", then " + p.end : "") });
+    for (var i = 0; i < n; i++) { box.appendChild(h("i", { style: "--d:" + (0.12 + i * step).toFixed(3) + "s" })); }
+    if (p.event) { box.appendChild(h("em", { style: "--d:" + (0.12 + n * step).toFixed(3) + "s" })); }
+    return [box, h("div.nppl", { style: "--d:" + (0.12 + n * step).toFixed(3) + "s" }, [h("span", { text: p.first || "" }), h("span", { text: p.end || "" })])];
+  }
 
   dcPlan.newPlan = function (n, k) {
     var h = k.h, btn = k.btn, send = k.send;
@@ -147,6 +161,7 @@
         if (r.summary) { sum.appendChild(h("div", {}, [h("b", { text: r.summary })])); }
         if (r.note) { sum.appendChild(h("div.muted.sm", { text: r.note })); }
         if (r.said) { sum.appendChild(h("div.bad", { text: r.said })); }
+        if (r.path && r.path.n) { path(h, r.path).forEach(function (el) { sum.appendChild(el); }); }
         (r.dates || []).forEach(function (u) {
           sum.appendChild(h("div.nl", {}, [h("span.muted", { text: String(u.n) }), h("span", { text: u.name }), h("span.muted", { text: u.when }),
             h("span.muted.n", { text: u.cards.toLocaleString() })]));

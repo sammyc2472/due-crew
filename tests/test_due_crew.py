@@ -14010,7 +14010,7 @@ def test_closet_core_v382():
     holds in its right hand, where the hand goes)."""
     from due_crew import closet as C, closet_art as CA, sev
     ks = [t["k"] for t in C.THINGS]
-    check("every thing has its drawing, and every drawing a thing", set(ks) == set(CA.ART) and len(ks) == len(set(ks)) == 61,
+    check("every thing has its drawing, and every drawing a thing", set(ks) == set(CA.ART) and len(ks) == len(set(ks)) == 64,
           (len(ks), set(ks) ^ set(CA.ART)))
     check("each thing has a place, a group and a rule; seasons say when",
           all(t["slot"] in C.SLOTS + (C.COSTUME,) and t["group"] in C.GROUPS and t["rule"] and t["name"] for t in C.THINGS)
@@ -14593,7 +14593,7 @@ def test_closet_flow_v382():
                         [{"id": "p1", "doc": {"units": [{"id": "u1"}, {"id": "u2"}], "events": [{"day": "2026-08-01", "name": "Exam"}]}}],
                         {"p1": {"u1": [5, 5, 5], "u2": [3, 3, 3]}}, "2026-09-01", {"sprout": "2025-08-01"})
     check("the board's facts: squads (one I started), a plan followed, done, exam and all; a year with my Pip",
-          bf == {"squads": 2, "founder": 1, "plans": 1, "plan_done": 1, "plan_exam": 1, "sev_days": 396}, bf)
+          bf == {"squads": 2, "founder": 1, "plans": 1, "plan_done": 1, "plan_exam": 1, "followed": 0, "sev_days": 396}, bf)
     from due_crew.wrap import _wrap_data
     w = _wrap_data()
     w["closet"] = {}

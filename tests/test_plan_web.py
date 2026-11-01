@@ -83,6 +83,10 @@ class Ops:
         self.cl, self.drafts, self.browsed, self.opened, self.studied = cl, {}, [], [], []
         self.started, self.followed, self.pages = [], [], []
         self.follow = False
+        self.gave = 0
+
+    def gave_day(self):
+        self.gave += 1  # 3.9.6: Give everyone a day saved, for Pip's Kite
 
     def today(self):
         return TODAY.isoformat()
@@ -476,7 +480,26 @@ def test_the_builders_tools_in_the_window():
     after = {u["id"]: u["opens"] for u in STORE.plans[pid]["doc"]["units"]}
     check("web: and its yes moves each a study day later; the quiz stays", all(after[k] > before[k] for k in before)
           and STORE.plans[pid]["doc"]["events"][0]["day"] == day(12), (before, after))
+    check("3.9.6: Give everyone a day, saved (nobody follows: at once), counts once for Pip's Kite", w.ops.gave == 1, w.ops.gave)
     w.click("undo", what=["undo"])
+    check("3.9.6: …and Undo doesn't count it again", w.ops.gave == 1, w.ops.gave)
+
+
+def test_give_everyone_a_day_with_followers_v396():
+    """3.9.6, the Kite: with someone following, Give everyone a day waits
+    under the plan like any change; it counts when it's sent, not before,
+    and a send without it doesn't."""
+    pid, code = plan([{"id": "u1", "name": "Cell injury", "opens": day(7), "tags": [f"{R}::01_Cell_injury"]},
+                      {"id": "u2", "name": "Inflammation", "opens": day(8), "tags": [f"{R}::02_Inflammation"]}])
+    client("maya").follow_plan(code)
+    w = Face(client("sam"), select=pid)
+    w.click("rename", uid="u1", name="Cells")
+    w.click("send", why="Renamed it")
+    check("kite: a send without it doesn't count", w.ops.gave == 0, w.ops.gave)
+    w.click("breather", sure=True)
+    check("kite: waiting under the plan, not yet", w.ops.gave == 0 and w.draft and len(w.draft) == 1, w.ops.gave)
+    w.click("send", why="A day for everyone")
+    check("kite: sent to the one following, it counts once", w.ops.gave == 1 and not w.draft, w.ops.gave)
 
 
 def test_new_plan_fills_in_what_it_knows():
@@ -517,9 +540,15 @@ def test_a_resource_at_my_pace():
     w.click("new_set", key="only", value=hy["path"])
     r = w.view()["new"]["resource"]
     check("web: with Only, its count and its name", r["onlyCount"] == "18 of 36" and r["name"] == "Path Book, high yield", r)
+    check("3.9.6, day one: the preview lays the path out set by set, from the first set's day to its end",
+          r["path"] and r["path"]["n"] == len(r["dates"]) + r["more"] and r["path"]["first"] == r["dates"][0]["when"].split(" – ")[0]
+          and r["path"]["end"].startswith("Ends ") and r["path"]["event"] is False, r.get("path"))
     w.click("new_set", key="pace", value="by")
     w.click("new_set", key="by", value=day(30))
     w.click("new_set", key="end_name", value="Block exam")
+    r = w.view()["new"]["resource"]
+    check("3.9.6, day one: finishing by an exam, the path ends with it", r["path"]["event"] is True
+          and r["path"]["end"] == f"Block exam · {P.fmt_day(day(30))}", r.get("path"))
     w.click("new_set", key="day", value=5)
     w.click("new_set", key="pace", value="ready")
     w.click("new_set", key="daily", value="5")

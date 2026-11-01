@@ -82,11 +82,31 @@ def open_plans(select=None, tab=None, new=None):
         if plans is None:
             tooltip("Due Crew couldn't be reached. Try again in a minute.")
             return
+        noted_followers(plans)
         w = _open.get("plans")
         if w is not None and getattr(w, "_alive", False):
             w.close()  # one opened meanwhile (a plan made): this one, with every plan, in its place
         show_plans(plans, select, tab, new)
     _bg(lambda: remote.my_plans(cl), done)
+
+
+def _closet(do):
+    """3.9.6: tell Pip's closet (closet_flow); never in the way of the window."""
+    try:
+        from .. import closet_flow
+        do(closet_flow)
+    except Exception:
+        import traceback
+        traceback.print_exc()
+
+
+def noted_followers(plans):
+    """3.9.6: my plans as Your plans lists them (GET /plans/mine, the one
+    request the window makes anyway): one I made with someone following it
+    besides me earns Pip's Folded map. Nothing else is asked or sent."""
+    from .core import others
+    if any(isinstance(p, dict) and p.get("role") == "owner" and others(p) > 0 for p in plans or []):
+        _closet(lambda cf: cf.note_followed())
 
 
 def make_here(cl):
@@ -192,6 +212,10 @@ class Ops:
         cl, gen = client(), app.generation
         _bg(lambda: remote.save(cl, pid, version, doc, summary, post),
             lambda got: getattr(owner, "_alive", False) and gen == app.generation and done(got))
+
+    def gave_day(self):
+        """3.9.6: Give everyone a day saved on a plan I write: Pip's Kite. Main thread."""
+        _closet(lambda cf: cf.note_gave_day())
 
     def draft(self, pid):
         """The changes waiting on this plan here (draft.Draft), or None."""
