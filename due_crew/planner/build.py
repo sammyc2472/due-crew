@@ -681,7 +681,7 @@ def pieces(tree, key, cap, placed):
 
 UNITS_MAX = 200
 SOURCES_MAX = 50
-FULL = f"A plan holds up to {UNITS_MAX} dates."
+FULL = f"A plan holds up to {UNITS_MAX} sets."
 
 
 class _Days:
@@ -751,7 +751,7 @@ def fill(doc, items, frm, until, cap, days, new_id, end=None, apart=False):
         f = "tags" if kind_of(key) == "tag" else "decks"
         had = None if apart else next((x for x in units if x.get("opens") == d and not x.get("even")), None)
         if had and path_of(key) not in (had.get(f) or []) and len(had.get(f) or []) >= SOURCES_MAX:
-            out["note"] = f"A date holds up to {SOURCES_MAX} {'tags' if f == 'tags' else 'subdecks'}."
+            out["note"] = f"A set holds up to {SOURCES_MAX} {'tags' if f == 'tags' else 'subdecks'}."
             return None
         u = unit_on(d)
         if u is None:
@@ -996,7 +996,7 @@ def lay_out(doc, tree, pace, cover, start, today, new_id, week_ahead=False, aim=
     out = {"note": "", "daily": None, "touched": set()}
     if until and dd.first(frm) > until:
         out["note"] = (f"Nothing fits by {P.fmt_day(end)}: "
-                       + (f"the dates already run to {P.fmt_day(last_day(doc))}" if last_day(doc) else f"the plan starts {P.fmt_day(start)}")
+                       + (f"the sets already run to {P.fmt_day(last_day(doc))}" if last_day(doc) else f"the plan starts {P.fmt_day(start)}")
                        + ". Move the finish date." if end and until == end else "No study days left in that week.")
         return out
     if pace.get("mode") == "end":
@@ -1033,7 +1033,7 @@ def lay_out(doc, tree, pace, cover, start, today, new_id, week_ahead=False, aim=
              else "No study days left in that week." if week_ahead else "Nothing fit."]
     if left_n and (r["note"] or not week_ahead):
         tip = (" Move the finish date." if end and not r["note"]
-               else " Raise the cards a day for fewer, bigger dates." if r["note"] and pace.get("mode") == "daily" else "")
+               else " Raise the cards a day for fewer, bigger sets." if r["note"] and pace.get("mode") == "daily" else "")
         words.append(f"{r['note'] + ' ' if r['note'] else ''}{left_n:,} didn't fit"
                      f"{' by ' + P.fmt_day(end) if end and not r['note'] else ''}: {left_names(r['left'])}.{tip}")
     out["note"] = " ".join(words)

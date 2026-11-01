@@ -318,8 +318,8 @@ def test_insights_an_authors():
     check("tabs: each part a row (the map's way), what it leaves out said",
           {"Cell injury", "Inflammation", "Neoplasia"} <= set(names) and dk["parts"]["rows"][0]["words"].endswith("all"), dk["parts"])
     has = ins["has"]
-    check("tabs: what's in it: each quiz and exam with what it tests, in lessons",
-          [x["name"] for x in has["exams"]] == ["Heme quiz", "Exam"] and has["exams"][0]["words"] == "24 cards from 2 lessons"
+    check("tabs: what's in it: each quiz and exam with what it tests, in sets",
+          [x["name"] for x in has["exams"]] == ["Heme quiz", "Exam"] and has["exams"][0]["words"] == "24 cards from 2 sets"
           and has["exams"][1]["words"].startswith("everything:"), has["exams"])
     check("tabs: its biggest lessons, most cards first", [x["name"] for x in has["big"]][:3] == ["Cell injury", "Inflammation", "Neoplasia"]
           and has["big"][0]["key"] == ["date", "u1"], has["big"])
@@ -349,7 +349,7 @@ def test_insights_nothing_to_count():
     check("tabs: its deck not in this Anki: said, nothing counted", "deck isn't in this Anki" in w.last()["insights"]["none"])
     pid, _code = plan([], name="No lessons")
     w = Face(client("sam"), select=pid, tab="insights")
-    check("tabs: no lessons yet: said", w.last()["insights"]["none"] == "Nothing to count yet: the plan has no lessons.", w.last()["insights"])
+    check("tabs: no sets yet: said", w.last()["insights"]["none"] == "Nothing to count yet: the plan has no sets.", w.last()["insights"])
 
 
 def test_insights_a_followers():
@@ -380,7 +380,7 @@ def test_settings_the_plan():
     w.tab_click("shape", key="day", value=5)
     sh = w.last()["settings"]["shape"]
     check("tabs: a study day ticked: said under the rows, nothing saved yet", sh["days"][5] == 1 and sh["preview"]
-          and sh["preview"]["parts"] == [["", "No lesson moves."]] and STORE.plans[pid]["doc"]["pace"]["days"][5] == 0, sh["preview"])
+          and sh["preview"]["parts"] == [["", "No set moves."]] and STORE.plans[pid]["doc"]["pace"]["days"][5] == 0, sh["preview"])
     w.tab_click("shape_save")
     pace = STORE.plans[pid]["doc"]["pace"]
     check("tabs: Save: the plan's pace with Saturday, its mode and 40 a day kept (the full doc's, not the cleaned one's)",
@@ -389,8 +389,8 @@ def test_settings_the_plan():
     w.tab_click("shape", key="start", value=day(0))
     sh = w.last()["settings"]["shape"]
     words = "".join(x[1] for x in sh["preview"]["parts"])
-    check("tabs: a new start: what it moves, said first (the lessons and quizzes, the ones open already)",
-          "Saving moves 4 lessons and 2 quizzes or exams." in words and "of them opened already" in words, words)
+    check("tabs: a new start: what it moves, said first (the sets and quizzes, the ones open already)",
+          "Saving moves 4 sets and 2 quizzes or exams." in words and "of them opened already" in words, words)
     w.tab_click("shape_back")
     check("tabs: Put it back: the rows as the plan has them", w.last()["settings"]["shape"]["start"] == day(-7)
           and w.last()["settings"]["shape"]["preview"] is None)
@@ -449,7 +449,7 @@ def test_settings_sharing():
     w.tab_click("listed", on=True)
     check("tabs: List it in the library", STORE.plans[pid].get("listed") == 1 and w.last("status")["status"] == "In the library.")
     w.tab_click("table")
-    check("tabs: Copy as a table: a lesson a line, then the quizzes", w.copied.startswith("Day\tLesson\tFinish by\tTested on\tCards\n")
+    check("tabs: Copy as a table: a set a line, then the quizzes", w.copied.startswith("Day\tSet\tFinish by\tTested on\tCards\n")
           and f"{day(-7)}\tCell injury\t\tHeme quiz\t12" in w.copied and "(quiz or exam)" in w.copied, w.copied[:200])
     n = len(STORE.plans)
     w.tab_click("next_year")
@@ -811,7 +811,7 @@ def test_the_page_draws_and_every_click_has_its_handler():
         check(f"tabs: page {key}: drawn and every control fired without an error ({o['controls']} controls)",
               not o["errors"] and o["controls"] > 0, o["errors"][:2])
     words = {
-        "author-insights": ["Workload", "How much of the deck", "What's in it", "Quizzes and exams", "Its biggest lessons", "Heme quiz"],
+        "author-insights": ["Workload", "How much of the deck", "What's in it", "Quizzes and exams", "Its biggest sets", "Heme quiz"],
         "author-settings": ["The plan", "Sharing", "This computer", "Saving moves", "Put it back", "Copy link", "Posts…",
                             "Ask one of my crew…", "List it in the library", "Copy it for next year", "Delete this plan…", "Maya"],
         "coauthor-settings": ["Leave this plan", "Its owner sets that."],
@@ -819,7 +819,7 @@ def test_the_page_draws_and_every_click_has_its_handler():
         "history": ["Undo the latest"],
         "pick": ["Ask a co-author", "Maya"],
         "follower-insights": ["You've seen", "To go"],
-        "follower-settings": ["My dates", "2 days later", "Skip a lesson", "When I'm ready", "Today's lesson", "Also its own deck",
+        "follower-settings": ["My dates", "2 days later", "Skip a set", "When I'm ready", "Today's set", "Also its own deck",
                               "7 cards…", "Stop following…", "Make my own copy"],
     }
     for key, want in words.items():

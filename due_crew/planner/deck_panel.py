@@ -49,13 +49,13 @@ class DeckPanel(QWidget):
         bl.addWidget(said)
         self.bar_words = role(plain(), "head")
         bl.addWidget(self.bar_words, 1)
-        bl.addWidget(tool("Done", self._back, tip="Back to the date"))
+        bl.addWidget(tool("Done", self._back, tip="Back to the set"))
         root.addWidget(self.bar)
         row = QHBoxLayout()
         self.head = role(plain("Tick what the plan covers"), "head")
         row.addWidget(self.head)
         row.addStretch(1)
-        row.addWidget(tool("Done", self._back, tip="Back to the plan's dates"))
+        row.addWidget(tool("Done", self._back, tip="Back to the plan's sets"))
         self.head_row = QWidget()
         self.head_row.setLayout(row)
         root.addWidget(self.head_row)
@@ -202,12 +202,12 @@ class DeckPanel(QWidget):
         return B.kind_of(key) == "tag" and view in B.kinds_below(t, key, self.kinds)
 
     def _where(self, key):
-        """("on this date" | "on Thu 22" | "", the date's id) for a row."""
+        """("on this set" | "on Thu 22" | "", the date's id) for a row."""
         doc, path = self.win.doc or {}, B.path_of(key)
         field = "tags" if B.kind_of(key) == "tag" else "decks"
         for u in sorted(P.units(doc), key=lambda u: str(u.get("opens") or "")):
             if any(str(x).lower() == path.lower() for x in u.get(field) or []):
-                return ("on this date" if u["id"] == self.target else f"on {M.day_words(u['opens'])}"), u["id"]
+                return ("on this set" if u["id"] == self.target else f"on {M.day_words(u['opens'])}"), u["id"]
         return "", None
 
     def _item(self, key, name=None, kids=True):
@@ -378,7 +378,7 @@ class DeckPanel(QWidget):
             it.setForeground(1, QBrush(QColor(tone("muted"))))
             if self.target:
                 it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                it.setCheckState(0, Qt.CheckState.Checked if where == "on this date" else Qt.CheckState.Unchecked)
+                it.setCheckState(0, Qt.CheckState.Checked if where == "on this set" else Qt.CheckState.Unchecked)
             self.tree.addTopLevelItem(it)
 
     def _expanded(self, item, marks=True):
@@ -481,13 +481,13 @@ class DeckPanel(QWidget):
             self.go.setVisible(False)
             return
         if not left:
-            self.fill_words.setText(esc("Everything ticked is on a date."))
+            self.fill_words.setText(esc("Everything ticked is on a set."))
             self.go.setVisible(False)
             return
         fin = B.finish_by(doc, t, pace, self.cover, start, daily)
         self.go.setVisible(True)
         self.week.setVisible(True)
-        b = f"<b>{left:,} ticked, not on a date.</b> "
+        b = f"<b>{left:,} ticked, not on a set.</b> "
         if end and fin and fin >= end:
             fit_end = E._later(end, -1) if ev else end
             d1 = B.end_daily(dict(doc, end=fit_end), t, pace, self.cover, start) or daily
@@ -549,7 +549,7 @@ class DeckPanel(QWidget):
         menu = QMenu(self)
         where, uid = self._where(key)
         if uid:
-            menu.addAction(f"Go to its date ({where.replace('on ', '')})").triggered.connect(lambda: self.tab.pick(("date", uid)))
+            menu.addAction(f"Go to its set ({where.replace('on ', '')})").triggered.connect(lambda: self.tab.pick(("date", uid)))
         if B.kind_of(key) == "tag":
             menu.addAction("A note for followers on it…").triggered.connect(lambda: self.tab.remark(B.path_of(key)))
         tid = it.data(1, ROLE)
@@ -563,7 +563,7 @@ class DeckPanel(QWidget):
             menu.exec(self.tree.viewport().mapToGlobal(pos))
 
     def _rename_tag(self, t):
-        name, ok = ask_text(self, "Rename the tag", "Its name (40 characters); the dates, searches and notes using it change with it:",
+        name, ok = ask_text(self, "Rename the tag", "Its name (40 characters); the sets, searches and notes using it change with it:",
                             str(t.get("name") or ""))
         if ok and name.strip() and name.strip() != t.get("name"):
             self.win.change({"op": "rename_plan_tag", "tag": t["id"], "name": name.strip()})

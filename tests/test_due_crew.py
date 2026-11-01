@@ -4032,7 +4032,7 @@ def test_plans_morning_v31():
     check("morning: what has opened opens, and only that",
           _open(col) == {1, 2, 3, 8} and res["n"] == 3, str(_open(col)))
     check("morning: one undo step, named for it",
-          [s[0] for s in col.undo_steps] == ["Due Crew: open 2 dates"]
+          [s[0] for s in col.undo_steps] == ["Due Crew: open 2 sets"]
           and sorted(col.undo_steps[0][1]) == [1, 2, 3] and res["label"] == P.step_label(["a", "b"]))
     check("morning: the toast's names and count", res["names"] == ["Heart failure", "Arrhythmia"]
           and res["per"][pid] == [["Heart failure", "Arrhythmia"], 3])
@@ -4145,7 +4145,7 @@ def test_plans_glue_v31():
         F.maybe_morning(awaiting_sync=False)
         check("morning: then runs, on the deck that matches, and says so",
               _open(col) == {1, 2, 3, 8} and box["cfg"]["plans_day"] == _day(0)
-              and toasts == ["Due Crew opened 2 dates: 3 cards"], str(toasts))
+              and toasts == ["Due Crew opened 2 sets: 3 cards"], str(toasts))
         F.maybe_morning(awaiting_sync=False)
         check("morning: once a day", len(col.undo_steps) == 1)
 
@@ -4201,15 +4201,15 @@ def test_plans_glue_v31():
         maya.fetch_board(labels, with_decks=True)  # 3.9.5: three counted again since sharing came back on
         _state["labels"] = labels
         _state["plan_progress"] = F.progress(col, F.followed(), box["cfg"]["plans"])
-        box["cfg"]["plans_opened"] = {"day": _day(0), "label": "Due Crew: open 2 dates",
+        box["cfg"]["plans_opened"] = {"day": _day(0), "label": "Due Crew: open 2 sets",
                                       "per": {pid: [["Heart <b>failure", "Arrhythmia"], 3]}}
-        col.undo_steps.append(("Due Crew: open 2 dates", []))
+        col.undo_steps.append(("Due Crew: open 2 sets", []))
         today["d"] = _day(0)
         view = F.board_view(box["cfg"])
         html = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []},
                             {"period": "today"}, 0, plans=view, you={"tab": "plans", "plans": view})
-        check("card: You › Plans, the plan's title, its lesson (plans, end to end: in place of its week) and followers",
-              "Step 1 &lt;i&gt; · Dre’s plan" in html and "lesson 2 of 5 · 3 following" in html)
+        check("card: You › Plans, the plan's title, its set (plans, end to end: in place of its week) and followers",
+              "Step 1 &lt;i&gt; · Dre’s plan" in html and "set 2 of 5 · 3 following" in html)
         check("card: the crew line; no Today box (Due's Today has today), names escaped",
               "Crew: 2 done with" in html and "ptoday" not in html and "planstudy:" not in html
               and "<b>failure" not in html, re.sub(r"<style.*?</style>", "", html, flags=re.S)[-2500:])
@@ -4670,8 +4670,8 @@ def test_your_own_days_376():
     check("late: nothing passed, nothing to ask", P.late_start({"units": _plan_units()[1:]}, _day(0))["passed"] == [])
     check("reset: says exactly what goes back, and nothing when nothing changed",
           F.reset_lines({"doc": doc, "shift": 3, "skipped": ["ex"], "moved": {"ar": 2}, "until": _day(4)})
-          == ["Your dates run 3 days later: back on time", "1 skipped date comes back: Extras",
-              "1 moved date goes back: Arrhythmia", "Your pause ends"]
+          == ["Your dates run 3 days later: back on time", "1 skipped set comes back: Extras",
+              "1 moved set goes back: Arrhythmia", "Your pause ends"]
           and F.reset_lines({"doc": doc}) == [])
 
     store = world({"dre": "Dre", "maya": "Maya"})
@@ -4835,7 +4835,7 @@ def test_plans_undo_waits_v311():
             plan, _ = maya.follow_plan(code)
             F.open_schedule = _skip_schedule
             F.on_followed(plan, 10, None, "open")
-            check("undo: set up", g.state().get("plans_opened", {}).get("label") == "Due Crew: open 2 dates")
+            check("undo: set up", g.state().get("plans_opened", {}).get("label") == "Due Crew: open 2 sets")
             F.undo_morning()
             check("undo: nothing is cleared before the undo has happened",
                   bool(g.state().get("plans_opened")) and 1 in _open(col))
@@ -5502,7 +5502,7 @@ def test_class_through_step_v33():
         dict(card, session=dict(card["session"], limit=80))))
     check("study: a day's date builds its deck, in the day's details", "planstudydate:p1:u1" in html and 'class="pday"' in html)
     enough = dict(card, session=dict(card["session"], limit=80))  # one note at a time: the limit comes first
-    check("renamed tags: said once, with OK", "3 dates use tags your deck names differently" in board._plan_card_html(enough)
+    check("renamed tags: said once, with OK", "3 sets use tags your deck names differently" in board._plan_card_html(enough)
           and "planidsok:p1" not in board._plan_card_html(dict(enough, fallback_ok=True)))
     # C2: the morning looks ahead
     store = world({"dre": "Dre", "maya": "Maya"})
@@ -7911,7 +7911,7 @@ def test_remaining_oct_spread_undo():
     plain Undo's meaning: they stay applied."""
     from due_crew import plan_flow as F
     pc = {"plans": {"p1": {"applied": {"e": "sig-e", "n": "sig-n"}, "src": {"e": [1], "n": [1]}}},
-          "plans_opened": {"day": "2026-10-05", "label": "Due Crew: open 2 dates",
+          "plans_opened": {"day": "2026-10-05", "label": "Due Crew: open 2 sets",
                            "units": {"p1": ["e", "n"]}, "spread": {"p1": ["e"]}}}
     saved = (F._pcfg, F._psave, F._undo_ok, F.refresh_progress, F.app.swap, F.cfg, sys.modules.get("aqt.operations"))
     undone = []
@@ -10200,10 +10200,10 @@ def test_study_for_a_quiz_v381():
                                       quiz=dict(qz, when="Thu")))
     check("quiz: one line for the event, its prep days and its cards, Study for it; its name escaped",
           "duecrew:planquiz:p1:q" in html and "Heme &lt;quiz&gt;" in html and "Heme <quiz>" not in html
-          and html.count("Heme &lt;quiz&gt;") == 1 and "1 more day of prep &middot; 70 cards open from its dates" in html, html[-1200:])
+          and html.count("Heme &lt;quiz&gt;") == 1 and "1 more day of prep &middot; 70 cards open from its sets" in html, html[-1200:])
     html2 = board._plan_card_html(dict({"id": "p1", "title": "Plan"}, prep={"name": "Other", "day": _day(1), "when": "Tue", "left": 0},
                                        quiz=dict(qz, when="Thu", today=False)))
-    check("quiz: beside the prep line when that names another event", "70 cards open from its dates" in html2
+    check("quiz: beside the prep line when that names another event", "70 cards open from its sets" in html2
           and "planquiz:p1:q" in html2 and "<b>Other</b>" in html2)
     units = [dict(u, **{"for": "q"}) if u["id"] in ("hf", "ar") else u for u in _plan_units()]
     store, pid, code, maya = _v381_world(units, [{"id": "q", "name": "Cardio quiz", "day": _day(2)}])
@@ -10773,8 +10773,8 @@ def test_plan_words_v381():
           'f"Push my dates back {days} day' in src["ui/days_dialog.py"] and "Pick up where" not in src["ui/days_dialog.py"])
     said = [F._hold_words("Step 1", 3, own=True)[1], F._hold_words("Step 1", 1)[1]]
     check("words: Hold back's question at my own pace: until you open them",
-          "3 cards of its later dates until you open them?" in said[0] and "their day" not in said[0]
-          and "1 card of its later dates until their day?" in said[1], said)
+          "3 cards of its later sets until you open them?" in said[0] and "their day" not in said[0]
+          and "1 card of its later sets until their day?" in said[1], said)
     acts = []
 
     class Menu:
@@ -11227,12 +11227,12 @@ def test_export_with_the_plan_v381():
                     {"id": "r2", "card": ["guid000005", 1], "text": "The second cloze"}]})
     lines = P.export_plan_lines(P.DeckIndex(col, 10), doc, "Block 1")
     check("export: the plan's lines, each a comment", lines and all(x.startswith("# ") for x in lines), lines)
-    check("export: a date as its text writes it, with its cards here and what another date has too",
+    check("export: a set as its text writes it, with its cards here and what another set has too",
           f"# 2026-10-05 | Viruses | tag:{R}::#Video_Series::05_Micro::Viruses | due 2026-10-09 | for Micro quiz | "
-          "watch: lecture 14 https://example.com/l14 | 8 cards here, 2 also on another date" in lines, lines)
+          "watch: lecture 14 https://example.com/l14 | 8 cards here, 2 also on another set" in lines, lines)
     check("export: picks as the text writes them (cards numbered from 1), a cut by its tag's name",
           "# 2026-10-06 | Herpes again | tag:Step1::Renal in SLG 12 | notes:guid000010 | cards:guid000001:1 guid000002:1 | "
-          "3 cards here, 2 also on another date" in lines, lines)
+          "3 cards here, 2 also on another set" in lines, lines)
     check("export: events, the plan's tags with their path and cards here, the authors' notes",
           "# 2026-10-09 | event | Micro quiz" in lines and "# tag | SLG 12 | DueCrew::Block_1::SLG_12 | 2 cards here" in lines
           and f"# note | tag:{R}::#Video_Series | Watch at 1.5x" in lines and "# note | card:guid000005:2 | The second cloze" in lines,
@@ -11247,7 +11247,7 @@ def test_export_with_the_plan_v381():
     check("export: without the plan, as before", P.export_notes(col, {1, 6})[0].split("\n")[7].startswith("guid000001\t"))
     src = open(os.path.join(REPO, "due_crew", "ui", "export_dialog.py"), encoding="utf-8").read()
     check("export: the box, on by default, only with a plan picked; the plan itself, not my days",
-          'QCheckBox("With the plan (its dates, tags, notes and what overlaps)")' in src and "self.with_plan.setChecked(True)" in src
+          'QCheckBox("With the plan (its sets, tags, notes and what overlaps)")' in src and "self.with_plan.setChecked(True)" in src
           and "self.with_plan.setVisible(bool(p))" in src and 'p.get("plan_doc") or p["doc"]' in src)
 
 
@@ -11344,7 +11344,7 @@ def test_welcome_back_v381():
         st = F._state_cfg()[pid]
         check("welcome back, Open them: everything waiting opens, in one undo step, and nothing waits",
               asked == [("Step 1", [_day(-3), _day(-2), _day(-1)], 5, 6)] and {1, 2, 3, 4, 6, 9} <= _open(col)
-              and 5 not in _open(col) and col.undo_status().undo == "Due Crew: open 5 dates"
+              and 5 not in _open(col) and col.undo_status().undo == "Due Crew: open 5 sets"
               and not st.get("later") and "away" not in st and (F.morning_opened() or {}).get("n") == 6, str(asked))
         F.welcome_back([pid], ask=lambda *a: asked.append(a) or "open")
         check("welcome back: asked once", len(asked) == 1)
@@ -11379,7 +11379,7 @@ def test_welcome_back_v381():
         v = F.card_view(p, st, F.progress(col, [p], F._state_cfg())[pid], _day(0))
         h = board._plan_card_html(v)
         check("welcome back, Not today: nothing opens; the card says they wait for tomorrow morning, with Open now",
-              not ({1, 2, 3, 4, 6, 9} & _open(col)) and v["put_off_ask"] and "5 dates</b> wait for tomorrow morning" in h
+              not ({1, 2, 3, 4, 6, 9} & _open(col)) and v["put_off_ask"] and "5 sets</b> wait for tomorrow morning" in h
               and f"duecrew:planputback:{pid}" in h, h[-900:])
         g.today["d"] = _day(1)
         col.sched.day_cutoff += 86400
@@ -12496,7 +12496,7 @@ def test_own_pace_v380():
     check("own: my pace is the dates I opened in the last two weeks", recent == 2, recent)
     late = P.finish_check(doc, 4, 2, _day(0))
     check("own: the exam check names the plan's exam and the day my pace gets there",
-          late == f"At that pace you open the last date on {P.fmt_day(_day(28))}, 8 days after Block exam.", late)
+          late == f"At that pace you open the last set on {P.fmt_day(_day(28))}, 8 days after Block exam.", late)
     check("own: in time says so; no pace, no exam: no line",
           "in time for Block exam" in P.finish_check(doc, 1, 7, _day(0))
           and P.finish_check(doc, 4, 0, _day(0)) is None and P.finish_check(dict(doc, events=[]), 4, 2, _day(0)) is None)
@@ -17280,7 +17280,7 @@ def test_reviews_ahead_392():
           and " a day &middot; this week 100</div>" in html and "new at your pace, about " in html
           and "Exam week: about <b>" in html and ", not " in html, html)
     check("board: a stop says what it holds back and when they start again (a real deck: the cost was unsaid)",
-          "220 new cards wait till Sat 12 " in html and "plan&rsquo;s dates" not in html, html)
+          "220 new cards wait till Sat 12 " in html and "plan&rsquo;s sets" not in html, html)
     hv = A.view(A.existing([(1, 10)] * 20, *A.habits([])), A.GENERIC, [20.0] * 7, 0, 900, 100, [50] * 7, exam_in=10,
                 plan={2: 50, 20: 30}, pool=100)
     hw = {w["key"]: w for w in hv["ways"]}
@@ -17289,7 +17289,7 @@ def test_reviews_ahead_392():
           and "held" not in hw["pace"], {k: (w.get("held"), w.get("plan_held")) for k, w in hw.items()})
     hh = board._ins_ahead(10, dict(_ahead_sample(exam_in=10), ways=hv["ways"]), "Step")
     check("board: a plan's share of what waits (the day with its month)",
-          "150 new cards wait till Sat 12 " in hh and ", 50 of them your plan&rsquo;s dates." in hh, hh)
+          "150 new cards wait till Sat 12 " in hh and ", 50 of them in your plan&rsquo;s sets." in hh, hh)
     check("ahead: new cards named the climb's cause only when they're it (200 in two weeks, twice the two before)",
           A.cause(2480, 262) == 2480 and A.cause(150, 0) == 0 and A.cause(500, 300) == 0 and A.cause(None, None) == 0)
     ln = board.ahead_line({"did": 1, "name": "Step", "day": "2026-10-19", "n": 1030, "week": 780, "cause": 2480})

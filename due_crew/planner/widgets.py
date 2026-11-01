@@ -261,7 +261,7 @@ class Source(QFrame):
             k.setProperty("dc", "n")
             row.addWidget(k)
         if on_take is not None:
-            row.addWidget(small("✕", on_take, "Take it off this date"))
+            row.addWidget(small("✕", on_take, "Take it off this set"))
         if on_click is not None:
             self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)

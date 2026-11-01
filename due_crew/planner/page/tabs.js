@@ -129,7 +129,7 @@
   function contents(d, c) {
     var h = c.h, kids = [];
     if (d.exams.length) { kids.push(h("div.tsub", { text: "Quizzes and exams" })); d.exams.forEach(function (x) { kids.push(goRow(c, x, true)); }); }
-    if (d.big.length) { kids.push(h("div.tsub", { text: "Its biggest lessons" })); d.big.forEach(function (x) { kids.push(goRow(c, x, false)); }); }
+    if (d.big.length) { kids.push(h("div.tsub", { text: "Its biggest sets" })); d.big.forEach(function (x) { kids.push(goRow(c, x, false)); }); }
     d.lines.forEach(function (t) { kids.push(h("p.tp.muted", { text: t })); });
     return sec(h, "What's in it", kids);
   }
@@ -162,7 +162,7 @@
       i.addEventListener("change", function () { if (this.value) { put(key, this.value); } });
       return i;
     }
-    rows.push(fr(h, "Starts", [date("tb-start", s.start, "start", "Every lesson and quiz moves with it")]));
+    rows.push(fr(h, "Starts", [date("tb-start", s.start, "start", "Every set and quiz moves with it")]));
     rows.push(fr(h, "Ends with", [select(h, s.ends, s.end, function (v) { put("end", v); }, { disabled: busy, "aria-label": "Ends with" }),
       s.end === "day" ? date("tb-endday", s.endDay, "end_day") : null]));
     var days = h("div.tdays", { role: "group", "aria-label": "Study days" });
@@ -291,19 +291,19 @@
       skip.appendChild(h("div.tli", {}, [h("span.grow", { text: x.label }), h("button.x", { type: "button", text: "✕", title: "Stop skipping it",
         onclick: function () { run(c.send, "skip", { uid: x.uid, on: false }); } })]));
     });
-    skip.appendChild(h("div", {}, [c.btn("Skip a lesson", function (e, b) {
+    skip.appendChild(h("div", {}, [c.btn("Skip a set", function (e, b) {
       c.menu(d.ahead.length ? d.ahead.map(function (u) { return item("skip", u.label, { uid: u.uid, on: true }); })
-        : [{ label: "No lesson ahead to skip", off: true }], b);
+        : [{ label: "No set ahead to skip", off: true }], b);
     }, "ch")]));
     rows.push(fr(h, "Skipping", [skip], { cls: "top" }));
     rows.push(fr(h, "Cards open", [seg(h, [
       { label: "Each morning, on their dates", on: !d.own, fn: function () { run(c.send, "own", { own: "" }); } },
-      { label: "When I'm ready", on: !!d.own, title: "Up next on the board opens the next lesson's cards when you say",
+      { label: "When I'm ready", on: !!d.own, title: "Up next on the board opens the next set's cards when you say",
         fn: function () { run(c.send, "own", { own: "ready" }); } }], { "aria-label": "Cards open" })]));
     if (d.lesson !== null && d.lesson !== undefined) {
-      rows.push(fr(h, "Today's lesson", [seg(h, [
+      rows.push(fr(h, "Today's set", [seg(h, [
         { label: "Opens in your deck", on: !d.lesson, fn: function () { run(c.send, "lesson_deck", { on: false }); } },
-        { label: "Also its own deck", on: !!d.lesson, fn: function () { run(c.send, "lesson_deck", { on: true }); } }], { "aria-label": "Today's lesson" })]));
+        { label: "Also its own deck", on: !!d.lesson, fn: function () { run(c.send, "lesson_deck", { on: true }); } }], { "aria-label": "Today's set" })]));
     }
     rows.push(fr(h, "Held back", [d.held ? c.btn(d.held, function () { run(c.send, "held"); }, "", { title: "The cards Hold back keeps shut till their day" })
       : h("span.muted", { text: "Nothing held back." })]));

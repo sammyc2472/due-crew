@@ -386,7 +386,7 @@ def test_default_is_a():
               and not {"lesson_deck", "lesson_decks", "lesson_held"} & set(w.st()), sorted(w.st()))
         check("A: the lessons open in the plan's deck, as ever; no deck of Due Crew's",
               all(w.queue(c) == 0 for c in (1, 2, 3, 5, 6)) and w.filtered() == [], w.filtered())
-        check("A: one undo step, the open's", [s[1] for s in w.col.steps] == ["Due Crew: open 2 dates"], w.col.steps)
+        check("A: one undo step, the open's", [s[1] for s in w.col.steps] == ["Due Crew: open 2 sets"], w.col.steps)
         card = F.card_view(F.followed()[0], w.st(), {}, day(0))
         check("A: the card has no lesson deck", card.get("lesson_deck") is None)
 
@@ -410,7 +410,7 @@ def test_follow_b():
               d1["dyn"] and len(d1["terms"]) == 1 and d1["terms"][0]["order"] == F.NEW_ORDER and d1["resched"]
               and d1["terms"][0]["limit"] >= 3, d1)
         check("B: the open and its decks are one undo step, the open's",
-              [s[1] for s in w.col.steps] == ["Due Crew: open 2 dates"], [s[1] for s in w.col.steps])
+              [s[1] for s in w.col.steps] == ["Due Crew: open 2 sets"], [s[1] for s in w.col.steps])
         st = w.st()
         check("B: what it knows here: the decks, the folder, what another add-on's deck holds",
               st.get("lesson_decks") == {"l1": w.deck(L1), "l2": w.deck(L2)} and st.get("lesson_folder") == "Due Crew::Path Book"

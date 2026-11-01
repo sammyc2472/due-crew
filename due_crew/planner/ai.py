@@ -578,7 +578,7 @@ def _pick_ops(answer, inp):
     for o in raw:
         if isinstance(o, dict) and o.get("op") == "add_cards":
             if date and o.get("date") not in (None, date):
-                refused.append((o, "That's not the date it was asked about."))
+                refused.append((o, "That's not the set it was asked about."))
                 continue
             o = dict(o, date=date or o.get("date"))
             if given is not None:
@@ -590,7 +590,7 @@ def _pick_ops(answer, inp):
                     if not (o["tags"] or o["decks"]):
                         continue
         elif isinstance(o, dict):
-            refused.append((o, "A date's cards are all pick changes."))
+            refused.append((o, "A set's cards are all pick changes."))
             continue
         ok.append(o)
     return ok, refused
@@ -614,7 +614,7 @@ def _scope_ops(answer, inp):
             refused.append((o, "That's not the quiz or exam it was asked about."))
             continue
         if given is not None and o.get("date") not in given:
-            refused.append((o, f"Not one of the dates it was given: {o.get('date')}."))
+            refused.append((o, f"Not one of the sets it was given: {o.get('date')}."))
             continue
         ok.append(dict(o, event=eid or o.get("event")))
     return ok, refused
@@ -728,7 +728,7 @@ class StandIn(Runner):
             done({"dates": [dates[i]["id"] for i in idx], "say": say},
                  say + (f" It couldn't place: {'; '.join(left)}." if left else ""))
         else:
-            done(None, "The stand-in reads calendars, picks a date's tags and finds what an exam covers; "
+            done(None, "The stand-in reads calendars, picks a set's tags and finds what an exam covers; "
                        "for this one, copy the prompt to your own AI.")
 
     def _pick(self, inp):

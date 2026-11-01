@@ -66,7 +66,7 @@ def test_ops_by_name():
     d = doc()
     for ref, want in (("u3", "u3"), ("2026-10-22", "u3"), ("Shock", "u3"), ("2026-10-22 Shock", "u3"), ("shock", "u3")):
         check(f"ops: a date named by {ref!r}", O.find_date(d, ref) == want)
-    for ref, words in (("Renal", "No date on the plan is Renal."), ("", "Which date?")):
+    for ref, words in (("Renal", "No set on the plan is Renal."), ("", "Which set?")):
         try:
             O.find_date(d, ref)
             check(f"ops: {ref!r} is refused", False)
@@ -105,9 +105,9 @@ def test_ops_apply_and_words():
           BOOK in next(u for u in a3["units"] if u["id"] == "u3")["tags"] and "6 cards" in e3[0]["detail"], e3)
     try:
         O.apply(d, O.check(d, {"op": "take_cards", "date": "u3", "key": ["tag", SHOCK]}), c)
-        check("ops: the last thing on a date doesn't come off", False)
+        check("ops: the last thing on a set doesn't come off", False)
     except E.Refused as e:
-        check("ops: the last thing on a date doesn't come off (delete the date instead)", "delete the date" in str(e), str(e))
+        check("ops: the last thing on a set doesn't come off (delete the set instead)", "delete the set" in str(e), str(e))
     o = O.check(d, {"op": "set_phases", "catchup": 0, "taper": None})
     check("ops: catch-up weeks can be turned off (0 is a value)", o["catchup"] == 0)
 
@@ -121,7 +121,7 @@ def test_lay_out_op():
     check("ops: lay_out puts what's ticked on study days after the last date, at the pace",
           new and all(u["opens"] > "2026-10-22" for u in new) and sum(len(u.get("tags") or []) for u in new) >= 1
           and after["pace"]["cover"] == [f"tag:{ROOT}::#Videos::Cardio::Arrhythmias"], new)
-    check("ops: lay_out said: Laid out, how many new dates", entries[0]["verb"] == "Laid out", entries)
+    check("ops: lay_out said: Laid out, how many new sets", entries[0]["verb"] == "Laid out", entries)
     try:
         O.apply(d, O.check(d, dict(o, cover=[f"tag:{VID}"])), c)
         check("ops: nothing to lay out is said", False)
@@ -317,8 +317,8 @@ def test_leave_out_is_the_builders_but_not():
           _refused({"op": "leave_out", "date": "u3", "key": ["picks"], "tag": PEDS}, d, c, "Leave them out of which"))
     check("leave out: twice is refused, said",
           _refused({"op": "leave_out", "date": "u3", "key": ["search", q], "tag": PEDS}, after, c, "already"))
-    check("leave out: a tag the date doesn't have is refused, said",
-          _refused({"op": "leave_out", "date": "u2", "key": ["tag", SHOCK], "tag": PEDS}, d, c, "not on this date"))
+    check("leave out: a tag the set doesn't have is refused, said",
+          _refused({"op": "leave_out", "date": "u2", "key": ["tag", SHOCK], "tag": PEDS}, d, c, "not on this set"))
     dk = dict(d, units=[dict(x) for x in d["units"]])
     dk["units"][1] = dict(dk["units"][1], decks=["Big Step 1::Cardio Videos"])
     a6, e6, _t = O.apply(dk, O.check(dk, {"op": "leave_out", "date": "u2", "key": ["deck", "Big Step 1::Cardio Videos"], "tag": PEDS}), c)
@@ -374,9 +374,9 @@ def test_move_source_is_the_builders_move_chip():
     a8, _e, _t = O.apply(pt, O.check(pt, {"op": "move_source", "date": "u1", "key": ["cut", VID, "t1"], "to": "u3"}), c)
     check("move: a cut onto a date with all of its tag just goes (moveChip's has)", "cut" not in _u(a8, "u3")
           and "search" not in _u(a8, "u3") and "cut" not in _u(a8, "u1"), _u(a8, "u3"))
-    check("move: onto its own date or day is refused, said",
+    check("move: onto its own set or day is refused, said",
           _refused({"op": "move_source", "date": "u3", "key": ["tag", SHOCK], "day": "2026-10-22"}, d, c, "on that day already")
-          and _refused({"op": "move_source", "date": "u3", "key": ["tag", SHOCK], "to": "u3"}, d, c, "on that date already"))
+          and _refused({"op": "move_source", "date": "u3", "key": ["tag", SHOCK], "to": "u3"}, d, c, "on that set already"))
     check("move: somewhere is needed", _refused({"op": "move_source", "date": "u3", "key": ["tag", SHOCK]}, d, c, "Move them where"))
     dr = D.Draft("p1", d, 1)
     dr.add({"op": "move_source", "date": "u2", "key": ["tag", BOOK], "day": "2026-10-26"}, c)

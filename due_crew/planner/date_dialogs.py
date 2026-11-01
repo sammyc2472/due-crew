@@ -126,7 +126,7 @@ class AddCardsDialog(QDialog):
             n = len(k[1])
             ok = n <= B.IDS_MAX
             words = (f"{n:,} ID{'s' if n != 1 else ''}. Your Anki turns them into notes everyone's copy has after you save."
-                     if ok else f"A date takes up to {B.IDS_MAX:,}. Split the list over two dates.")
+                     if ok else f"A set takes up to {B.IDS_MAX:,}. Split the list over two sets.")
         elif k[0] == "picks":
             n, m = len(k[1]["notes"]), len(k[1]["cards"])
             ok = n <= B.IDS_MAX
@@ -163,8 +163,8 @@ class LinesDialog(QDialog):
         self.setMinimumWidth(620)
         root = QVBoxLayout(self)
         heading(self, root, title)
-        root.addWidget(_plain("Lines followers tick in Due on those days, from the plan's first date to its last."
-                              if every else "What the date asks that cards can't measure: a lecture to watch, a chapter "
+        root.addWidget(_plain("Lines followers tick in Due on those days, from the plan's first set to its last."
+                              if every else "What the set asks that cards can't measure: a lecture to watch, a chapter "
                               "to read. Each follower ticks it in Due.", muted=True))
         self.grid = QGridLayout()
         root.addLayout(self.grid)
@@ -264,7 +264,7 @@ class ReviewDialog(QDialog):
         self.setMinimumWidth(460)
         root = QVBoxLayout(self)
         heading(self, root, title)
-        root.addWidget(_plain("That morning, followers get a Due Crew deck of what they've seen from these dates, "
+        root.addWidget(_plain("That morning, followers get a Due Crew deck of what they've seen from these sets, "
                               "most missed first.", muted=True))
         grid = QGridLayout()
         self.frm, self.to = QComboBox(), QComboBox()

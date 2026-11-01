@@ -34,7 +34,7 @@ class HeldDialog(QDialog):
         lines = [f"• {x}" for x in view.get("lines") or []]
         more = int(view.get("more") or 0)
         if more:
-            lines.append(f"and {more:,} more date{'s' if more != 1 else ''}")
+            lines.append(f"and {more:,} more set{'s' if more != 1 else ''}")
         self.list = _plain("\n".join(lines))
         self.list.setVisible(bool(lines))
         root.addWidget(self.list)
@@ -42,7 +42,7 @@ class HeldDialog(QDialog):
         note = ("Open them: one undo step."
                 + (f" {lee:,} more {'is a leech' if lee == 1 else 'are leeches'} and stay{'s' if lee == 1 else ''} shut."
                    if lee else "")
-                + (" What an author adds to later dates is still held back." if view.get("holding") else ""))
+                + (" What an author adds to later sets is still held back." if view.get("holding") else ""))
         self.note = _plain(note, muted=True)
         root.addWidget(self.note)
         buttons = QDialogButtonBox()

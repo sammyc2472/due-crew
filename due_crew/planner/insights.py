@@ -252,12 +252,12 @@ def exams(doc, per, cards):
 
 
 def exam_words(x):
-    """"55 cards from 3 dates", "everything: 1,284 cards", "no date for it yet"."""
+    """"55 cards from 3 sets", "everything: 1,284 cards", "no set for it yet"."""
     if x["all"]:
         return f"everything: {x['cards']:,} cards"
     if not x["dates"]:
-        return "no date for it yet"
-    return f"{x['cards']:,} cards from {x['dates']:,} date{'s' if x['dates'] != 1 else ''}"
+        return "no set for it yet"
+    return f"{x['cards']:,} cards from {x['dates']:,} set{'s' if x['dates'] != 1 else ''}"
 
 
 def biggest(doc, per, most=5):

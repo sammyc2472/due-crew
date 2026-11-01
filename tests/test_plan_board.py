@@ -78,18 +78,18 @@ def test_path():
     states = [x["state"] for x in p["lessons"]]
     check("path: a lesson each, in the plan's order: done, behind, today, ahead",
           states == ["done", "behind", "now", "ahead", "ahead"] and [x["uid"] for x in p["lessons"]] == ["l1", "l2", "l3", "l4", "l5"], states)
-    check("path: lesson 3 of 5; its first day and its end, the last exam (events never move)",
+    check("path: set 3 of 5; its first day and its end, the last exam (events never move)",
           p["at"] == 3 and p["of"] == 5 and p["first"] == day(-3)
           and p["end"] == {"name": "Exam", "day": day(43), "event": True}, (p["at"], p["of"], p["first"], p["end"]))
     l2 = p["lessons"][1]
     check("path: a lesson behind has what's left of it; today's is marked today", l2["left"] == 31 and p["lessons"][2]["today"]
           and not l2["today"] and l2["name"] == "2 · Inflammation <b>", l2)
     slid = P.path(DOC, PROG, day(0), applied=APPLIED, shift=1)
-    check("path: on my days: a day later, lesson 2 is today's, nothing behind, lesson 2 of 5",
+    check("path: on my days: a day later, set 2 is today's, nothing behind, set 2 of 5",
           [x["state"] for x in slid["lessons"]][:3] == ["done", "now", "ahead"] and slid["at"] == 2
           and slid["first"] == day(-2) and slid["end"]["day"] == day(43) and P.behind_of(slid, day(0)) is None, slid["lessons"][:3])
     skip = P.path(DOC, PROG, day(0), applied=APPLIED, skipped=["l2"])
-    check("path: a skipped lesson stays in its place, skipped, and isn't behind; still lesson 3 of 5",
+    check("path: a skipped set stays in its place, skipped, and isn't behind; still set 3 of 5",
           skip["lessons"][1]["state"] == "skip" and skip["at"] == 3 and skip["of"] == 5 and P.behind_of(skip, day(0)) is None)
     late = P.path(DOC, PROG, day(0), applied={"l1": "s", "l3": "s"})
     gone = P.path(DOC, PROG, day(0), applied={"l1": "s", "l2": "skip:s", "l3": "s"})
@@ -179,7 +179,7 @@ def test_exam_and_code():
 def _card(**kw):
     p = P.path(DOC, PROG, day(0), applied=APPLIED)
     wk = P.week_view({"units": DOC["units"], "events": DOC["events"]}, PROG, day(0), P.week_start(day(0)))
-    return dict({"id": "p1", "title": "Path Book <i> · Dre’s plan", "name": "Path Book", "sub": "lesson 3 of 5 · 6 following",
+    return dict({"id": "p1", "title": "Path Book <i> · Dre’s plan", "name": "Path Book", "sub": "set 3 of 5 · 6 following",
                  "rows": [], "lines": [], "change": None, "no_deck": False, "paused": False, "waiting": 31,
                  "aside": [0, 0, 0], "aside_ok": [0, 0], "week": wk, "week_offset": 0,
                  "status": {"togo": 84, "behind": 31, "since": "Wednesday"}, "path": p, "behind": P.behind_of(p, day(0)),
@@ -189,15 +189,15 @@ def _card(**kw):
 def test_card():
     h = board._plan_card_html(_card())
     path = h.split('<div class="ppath')[1].split("</div>")[0]
-    check("card: the head says lesson 3 of 5", "lesson 3 of 5 · 6 following" in h)
+    check("card: the head says set 3 of 5", "set 3 of 5 · 6 following" in h)
     check("card: the path, a segment a lesson: done, behind, today, ahead; the exam a diamond at its end",
           re.findall(r'<i class="([a-z ]+)"', path) == ["d", "b", "t", "a", "a"] and path.count("<em ") == 1
           and path.index("<em ") > path.rindex("<i "), path)
     check("card: under it the first lesson's day, and the exam by name and day",
           '<div class="ppl"><span>Mon 2 Nov</span><span>Exam &middot; Fri 18 Dec</span></div>' in h)
-    check("card: each segment says its lesson on a hover, the names escaped; the path read out in words",
+    check("card: each segment says its set on a hover, the names escaped; the path read out in words",
           'title="2 · Inflammation &lt;b&gt; &middot; 31 left"' in path and 'title="3 · Neoplasia &middot; today &middot; 84 to go"' in path
-          and 'role="img" aria-label="Lessons: 1 done, 1 behind, 1 today, 2 to come, then Exam on Fri 18 Dec"' in h
+          and 'role="img" aria-label="Sets: 1 done, 1 behind, 1 today, 2 to come, then Exam on Fri 18 Dec"' in h
           and "<b>" not in path, path)
     order = [h.index(x) for x in ('class="pk"', 'class="ppath', 'class="ppl"', '<b>84</b> to go today', 'class="pst pbh"', 'class="pwk"')]
     check("card: the path above the day's line, then Behind, then the week (round five's, kept)", order == sorted(order), order)
@@ -402,8 +402,8 @@ def test_card_view():
         states = [x["state"] for x in card["path"]["lessons"]]
         check("card view: the path from what's here: lesson 1 seen, 2 behind (opened, its day passed), 3 today, 4 ahead",
               states == ["done", "behind", "now", "ahead"], states)
-        check("card view: the head's lesson 3 of 4; what's behind, its line's words; status's behind is the same count",
-              card["sub"].startswith("lesson 3 of 4 · ") and card["behind"]["name"] == "2 · Inflammation"
+        check("card view: the head's set 3 of 4; what's behind, its line's words; status's behind is the same count",
+              card["sub"].startswith("set 3 of 4 · ") and card["behind"]["name"] == "2 · Inflammation"
               and card["behind"]["left"] == 3 and card["status"]["behind"] == 3 and card["status"]["togo"] == 1, (card["sub"], card["behind"]))
         check("card view: its end, the exam", card["path"]["end"] == {"name": "Exam", "day": day(43), "event": True})
         n = len(store.log)

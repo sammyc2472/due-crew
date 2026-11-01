@@ -70,7 +70,7 @@ class TextTab(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         row = QHBoxLayout()
         self.modes = QButtonGroup(self)
-        for i, label in enumerate(("Add dates", "Edit the whole plan")):
+        for i, label in enumerate(("Add sets", "Edit the whole plan")):
             b = QPushButton(label)
             b.setCheckable(True)
             b.setChecked(i == 0)
@@ -123,7 +123,7 @@ class TextTab(QWidget):
         self.said = _plain()
         low.addWidget(self.said)
         row = QHBoxLayout()
-        self.take_btn = QPushButton("Take them off those dates too")
+        self.take_btn = QPushButton("Take them off those sets too")
         self.take_btn.clicked.connect(self._take_all)
         self.keep_btn = QPushButton("Keep the tags")
         self.keep_btn.clicked.connect(self._keep_tags)
@@ -186,7 +186,7 @@ class TextTab(QWidget):
             self.box.setPlainText("")
             self._loading = False
         self._clear()
-        self.status.setText(f"{'Added. ' if not whole else ''}Now {n:,} date{'s' if n != 1 else ''}.")
+        self.status.setText(f"{'Added. ' if not whole else ''}Now {n:,} set{'s' if n != 1 else ''}.")
 
     # ---- the text ----
 
@@ -201,8 +201,8 @@ class TextTab(QWidget):
 
     def _hint(self):
         n = len(P.units(self._doc()))
-        self.hint.setText(f"Adds to the plan's {n:,} date{'s' if n != 1 else ''}. A line with a date's own day and name adds to that date."
-                          if not self.whole else "Read it shows what would change. Nothing does until you Replace the plan's dates.")
+        self.hint.setText(f"Adds to the plan's {n:,} set{'s' if n != 1 else ''}. A line with a set's own day and name adds to that set."
+                          if not self.whole else "Read it shows what would change. Nothing does until you Replace the plan's sets.")
 
     def _fill_whole(self):
         self._loading = True
@@ -262,7 +262,7 @@ class TextTab(QWidget):
         self.go_btn.setVisible(bool(r) and (self.whole or anything))
         self.go_btn.setEnabled(not busy)
         waits = self.win.waiting()
-        self.go_btn.setText("Replace anyway" if self.whole and using else "Replace the plan's dates" if self.whole
+        self.go_btn.setText("Replace anyway" if self.whole and using else "Replace the plan's sets" if self.whole
                             else "Add to the changes" if waits else "Add to the plan")
         self.go_btn.setProperty("dc", "bad" if self.whole and self.read_now and self.read_now[4] else "go")
         self.go_btn.style().unpolish(self.go_btn)
@@ -291,7 +291,7 @@ class TextTab(QWidget):
             self.status.setText("Nothing to read yet.")
             self._buttons()
             return
-        bits = [f"{len(r['units'])} date{'s' if len(r['units']) != 1 else ''}"]
+        bits = [f"{len(r['units'])} set{'s' if len(r['units']) != 1 else ''}"]
         for key, one, many in (("events", "quiz or exam", "quizzes or exams"), ("tags", "tag", "tags"), ("remarks", "note", "notes")):
             if r[key]:
                 bits.append(f"{len(r[key])} {one if len(r[key]) == 1 else many}")
@@ -315,7 +315,7 @@ class TextTab(QWidget):
             row("Tag" if was else "New tag", f"{t['name']}{extra}", what)
         for u in sorted(r["units"], key=lambda u: u["opens"]):
             old = olds.get(u["id"])
-            extra = (" · adds to this date" if not whole and old else
+            extra = (" · adds to this set" if not whole and old else
                      f" · moved from {P.fmt_day(old['opens'])}" if whole and old and old["opens"] != u["opens"] else
                      f" · was {old.get('name')}" if whole and old and str(old.get("name")).strip() != str(u["name"]).strip() else "")
             names = [B.label(tree, k, placed) if (tree is not None and tree.has(k)) or k.lower().startswith(ours) else f"{B.path_of(k)} (not found)"
@@ -335,7 +335,7 @@ class TextTab(QWidget):
         uses = T.using(doc, r, whole, self._name()) if self.taken is None else []
         said = []
         if gone_units:
-            said.append(f"Takes off {len(gone_units)} date{'s' if len(gone_units) != 1 else ''}: "
+            said.append(f"Takes off {len(gone_units)} set{'s' if len(gone_units) != 1 else ''}: "
                         + " · ".join(f"{P.fmt_day(u['opens'])}, {u.get('name')}" for u in gone_units[:6])
                         + (f" and {len(gone_units) - 6} more" if len(gone_units) > 6 else "") + ".")
         if gone_rmk:
@@ -346,9 +346,9 @@ class TextTab(QWidget):
             self.kept = []
         if gone_tags and uses:
             said.append(f"Takes off {len(gone_tags)} tag{'s' if len(gone_tags) != 1 else ''}: {', '.join(t.get('name') for t in gone_tags)}. "
-                        f"{len(uses)} date{' still uses' if len(uses) == 1 else 's still use'} {'it' if len(gone_tags) == 1 else 'them'}: "
+                        f"{len(uses)} set{' still uses' if len(uses) == 1 else 's still use'} {'it' if len(gone_tags) == 1 else 'them'}: "
                         + "; ".join(f"{P.fmt_day(u['opens'])} · {u['name']} ({why})" for u, why in uses[:8])
-                        + (f"; and {len(uses) - 8} more" if len(uses) > 8 else "") + ". What these dates already opened stays open.")
+                        + (f"; and {len(uses) - 8} more" if len(uses) > 8 else "") + ". What these sets already opened stays open.")
         elif gone_tags:
             said.append(f"Takes off {len(gone_tags)} tag{'s' if len(gone_tags) != 1 else ''}: {', '.join(t.get('name') for t in gone_tags)}."
                         + (" " + " ".join(self.taken[:8]) if self.taken else ""))
@@ -397,8 +397,8 @@ class TextTab(QWidget):
         text, whole, r = self.read_now[:3]
         gone_units, gone_tags, gone_rmk = T.gone(self._doc(), r, whole)
         if whole and (gone_units or gone_tags or gone_rmk) and not confirm(
-                self, "Replace the plan's dates?", "What the text leaves out comes off the plan, for everyone following it. "
-                "What their dates already opened stays open.", "Replace them", danger=True):
+                self, "Replace the plan's sets?", "What the text leaves out comes off the plan, for everyone following it. "
+                "What their sets already opened stays open.", "Replace them", danger=True):
             return
         pid = self.win.plan["id"]
         self.win.change({"op": "text", "mode": "replace" if whole else "add", "text": text, "take_tags": self.taken is not None},

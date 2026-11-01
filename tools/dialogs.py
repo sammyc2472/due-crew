@@ -362,7 +362,7 @@ def main(out):
         when.addStretch()
         root.addLayout(when)
         root.addWidget(ui.role(W.QLabel("How its cards open"), "head"))
-        a, b = W.QCheckBox("Hold back 2 cards of later dates until their day"), W.QCheckBox("Join this plan's squad")
+        a, b = W.QCheckBox("Hold back 2 cards of later sets until their day"), W.QCheckBox("Join this plan's squad")
         a.setChecked(True)
         root.addWidget(a)
         root.addWidget(b)
@@ -427,7 +427,7 @@ def main(out):
         holder = QtWidgets.QWidget()  # the main window's stand-in
         box, _go = ui._question(holder, "Remove igk?", "They come off your crew, and you off theirs.", "Remove", True)
         shoot(box, os.path.join(out, "q-confirm.png"))
-        box, _go = ui._question(holder, "Unfollow Step 1?", "Its dates stop opening. What opened stays open.", "Unfollow", False)
+        box, _go = ui._question(holder, "Unfollow Step 1?", "Its sets stop opening. What opened stays open.", "Unfollow", False)
         tick = QtWidgets.QCheckBox("Take its tags off my notes too")
         tick.setChecked(True)
         box.setCheckBox(tick)
@@ -871,20 +871,20 @@ def main(out):
         from due_crew.ui.held_dialog import HeldDialog
         view = {"name": "MS2 <b>Block</b> 1", "n": 1240, "more": 9, "holding": True, "leeches": 2,
                 "lines": ["Renal physiology <i> · Mon 19 Oct · 120", "Antiarrhythmics · Tue 20 Oct · 80",
-                          "Heart failure · Wed 21 Oct · 96", "On no date now · 4"],
-                "why": "You said yes to Hold back: the new cards of dates still to come wait, suspended, till their day."}
+                          "Heart failure · Wed 21 Oct · 96", "On no set now · 4"],
+                "why": "You said yes to Hold back: the new cards of sets still to come wait, suspended, till their day."}
         dlg = HeldDialog(None, view)
         settle()
         labels = dlg.findChildren(QtWidgets.QLabel)
         if any(w.textFormat() != QtCore.Qt.TextFormat.PlainText for w in labels):
             raise RuntimeError("held: a plan's or date's name went in as markup")
-        if not any("MS2 <b>Block</b> 1 holds back 1,240 cards" == w.text() for w in labels) or "and 9 more dates" not in dlg.list.text():
+        if not any("MS2 <b>Block</b> 1 holds back 1,240 cards" == w.text() for w in labels) or "and 9 more sets" not in dlg.list.text():
             raise RuntimeError(f"held: {[w.text() for w in labels]!r}")
         if "2 more are leeches and stay shut" not in dlg.note.text() or dlg.stop_btn.isHidden():
             raise RuntimeError(f"held: {dlg.note.text()!r}")
         shoot(dlg, os.path.join(out, "plan-held.png"))
         dlg = HeldDialog(None, dict(view, holding=False, leeches=0, more=0, lines=view["lines"][:1],
-                                    why="You put these back. They open when you open their date again."))
+                                    why="You put these back. They open when you open their set again."))
         dlg.show()
         if dlg.stop_btn.isVisible() or "leech" in dlg.note.text():
             raise RuntimeError("held: no yes, no Stop holding back")
@@ -892,7 +892,7 @@ def main(out):
         if dlg.choice != "open":
             raise RuntimeError(f"held: {dlg.choice!r}")
         shoot(HeldDialog(None, dict(view, holding=False, leeches=0, more=0, lines=view["lines"][:1],
-                                    why="You put these back. They open when you open their date again.")),
+                                    why="You put these back. They open when you open their set again.")),
               os.path.join(out, "plan-held-put-back.png"))
 
     def away():
@@ -913,7 +913,7 @@ def main(out):
             raise RuntimeError("away: the plan's name went in as markup")
         if (dlg.push_btn.text() != "Push my dates back 3 days"
                 or "3 days with no study in Anki: Mon 5 Oct, Tue 6 Oct and Wed 7 Oct." not in dlg.body.text()
-                or "4 dates would open now: 240 new cards." not in dlg.body.text()):
+                or "4 sets would open now: 240 new cards." not in dlg.body.text()):
             raise RuntimeError(f"away: {dlg.push_btn.text()!r} {dlg.body.text()!r}")
         shoot(dlg, os.path.join(out, "plan-welcome-back.png"))
         plain = AwayDialog(None, "MS2 <i>Block</i> 1", ["2026-10-05", "2026-10-06", "2026-10-07"], 4, 240)
@@ -1605,7 +1605,7 @@ def main(out):
         tab.deck.fill_tree()
         it = tab.deck.tree.topLevelItem(0)
         it.setCheckState(0, QtCore.Qt.CheckState.Checked)
-        if tab.deck.cover != {f"tag:{root}::#Sketches"} or tab.deck.go.isHidden() or "ticked, not on a date" not in tab.deck.fill_words.text():
+        if tab.deck.cover != {f"tag:{root}::#Sketches"} or tab.deck.go.isHidden() or "ticked, not on a set" not in tab.deck.fill_words.text():
             raise RuntimeError(f"planner: the deck's ticks {tab.deck.cover}, {tab.deck.fill_words.text()!r}")
         shoot(dlg, os.path.join(out, "planner-deck-fill.png"))
         tab.deck._lay(tab.deck._go_how)
@@ -1615,7 +1615,7 @@ def main(out):
         # the text: plan lines pasted in, read, then added; the whole plan as text
         td = PT.TextDialog(dlg, False, f"{day(6)} | Shock again | tag:{root}::#Videos::Cardio::Shock | read: chapter 9\n"
                                       f"{day(4)} | event | Shock quiz")
-        if td.tab.go_btn.isHidden() or td.tab.go_btn.text() != "Add to the plan" or "1 date, 1 quiz or exam." not in td.tab.status.text():
+        if td.tab.go_btn.isHidden() or td.tab.go_btn.text() != "Add to the plan" or "1 set, 1 quiz or exam." not in td.tab.status.text():
             raise RuntimeError(f"planner: plan lines read: {td.tab.status.text()!r}")
         shoot(td, os.path.join(out, "planner-text-add.png"))
         td.tab._go()

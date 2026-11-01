@@ -64,7 +64,7 @@ def work_out(w):
         if hv:
             big = B.biggest(t, hv["unit"], placed)
             till = B.give_till(doc, pace.get("days") or [1] * 7, hv["unit"], hv["total"], hv["cap"])
-            name = hv["unit"].get("name") or "a lesson"
+            name = hv["unit"].get("name") or "a set"
             when = M.day_words(hv["a"]) if hv["a"] == hv["b"] else f"{M.day_words(hv['a'])} – {M.day_words(hv['b'])}"
             heavy = {"week": V.monday(hv["a"]), "uid": hv["unit"]["id"],
                      "words": f"{when}: {hv['top']:,} new a day, your pace is {hv['cap']:,}. "
@@ -212,7 +212,7 @@ def _event_item(w, e, author):
         a, b = min(str(u["opens"]) for u in prep), max(str(u.get("due") or u["opens"]) for u in prep)
         words = f"tests {M.day_words(a)} – {M.day_words(b)}" if a != b else f"tests {M.day_words(a)}"
     else:
-        words = "tests everything" if e is V.last_event(w.doc) else "tests no lesson yet"
+        words = "tests everything" if e is V.last_event(w.doc) else "tests no set yet"
     item = {"kind": "event", "key": ["event", e["id"]], "day": e.get("day"), "dayw": M.day_words(e.get("day")),
             "name": str(e.get("name") or "?"), "right": words, "tone": "n", "hay": str(e.get("name") or "").lower()}
     if prep and not author and w.idx is not None:
@@ -253,7 +253,7 @@ def plan_tab(w):
         evs = ", ".join(e.get("name") or "?" for e in wk["events"])
         weeks.append({"start": wk["start"], "label": wk["label"] + (", this week" if wk["now"] else ""), "now": wk["now"],
                       "past": past, "words": words, "warn": warn,
-                      "folded": f"{_pl(len(wk['dates']), 'lesson')}" + (f", {evs}" if evs else ""),
+                      "folded": f"{_pl(len(wk['dates']), 'set')}" + (f", {evs}" if evs else ""),
                       "look": any(x["kind"] == "date" and x["key"][1] in look for x in items),
                       "heavy": heavy if heavy and heavy["week"] == wk["start"] and author else None,
                       "items": items})
@@ -274,8 +274,8 @@ def plan_tab(w):
            "cal": cal, "load": {d: n for d, n in per.items() if n}, "cap": cap or 0,
            "days": list(pace.get("days") or [1] * 7), "taper": list(taper) if taper else None,
            "sending": sending(w), "cover": cover(w), "hasDeck": w.deck_tree() is not None and author,
-           "empty": ("No lessons yet. Tick what the plan covers in the deck, or Add › A lesson." if author
-                     else "No lessons on this plan yet.") if not P.units(doc) and not doc.get("events") else ""}
+           "empty": ("No sets yet. Tick what the plan covers in the deck, or Add › A set." if author
+                     else "No sets on this plan yet.") if not P.units(doc) and not doc.get("events") else ""}
     out.update(strips(w))
     if author:
         out["shape"] = [list(x) for x in V.shape_line(doc, t, pace, asks)]
@@ -396,7 +396,7 @@ def date_panel(w, u):
                 menu.append({"label": "A note for followers on it…", "cmd": "remark", "args": {"path": key[1]}})
             menu.append({"label": "Copy its search", "cmd": "copy_source", "args": {"i": i}})
             menu.append({"sep": True})
-            menu.append({"label": "Take it off this lesson", "cmd": "op", "args": {"op": {
+            menu.append({"label": "Take it off this set", "cmd": "op", "args": {"op": {
                 "op": "take_cards", "date": u["id"], "key": key}}})
             s["menu"] = menu
         srcs.append(s)
@@ -429,7 +429,7 @@ def date_panel(w, u):
                     for x in B.every_clean(doc.get("every") or []) if _every_on(doc, x, u.get("opens"))]
     if author:
         after = sum(1 for x in P.units(doc) if str(x.get("opens")) > str(u["opens"]))
-        more = [{"label": (f"Move this and the {_pl(after, 'lesson')} after it…" if after else "Move this lesson…"),
+        more = [{"label": (f"Move this and the {_pl(after, 'set')} after it…" if after else "Move this set…"),
                  "cmd": "move_from"}, {"sep": True}]
         tags = P.plan_tags(doc)
         if tags and any(r["key"][0] == "tag" for r in rows):
@@ -440,9 +440,9 @@ def date_panel(w, u):
                          "cmd": "op", "args": {"op": {"op": "set_even", "date": u["id"], "on": not u.get("even")}}})
         else:
             more.append({"label": "Spread its cards evenly (give it a finish-by day first)", "off": True})
-        more += [{"sep": True}, {"label": "Copy the lesson's search", "cmd": "copy_search"},
+        more += [{"sep": True}, {"label": "Copy the set's search", "cmd": "copy_search"},
                  {"label": "Open its cards in my Anki now", "cmd": "open_now", "off": not cids or w.busy},
-                 {"sep": True}, {"label": "Delete this lesson…", "cmd": "delete", "bad": True}]
+                 {"sep": True}, {"label": "Delete this set…", "cmd": "delete", "bad": True}]
         out["more"] = more
     return out
 
@@ -456,9 +456,9 @@ def event_panel(w, e):
         items.append({"key": ["date", u["id"]], "label": M.date_label(u) + (f" · {len(mine):,}" if w.idx is not None else "")})
     if prep:
         c = M.counts(w.idx, cids) if w.idx is not None and cids else None
-        said = f"Tests {_pl(len(prep), 'lesson')}" + (f" · {c['cards']:,} cards, {c['cards'] - c['new']:,} seen" if c else "")
+        said = f"Tests {_pl(len(prep), 'set')}" + (f" · {c['cards']:,} cards, {c['cards'] - c['new']:,} seen" if c else "")
     else:
-        said = "No lesson leads up to it yet: pick it as a lesson's Leads up to."
+        said = "No set leads up to it yet: pick it as a set's Leads up to."
     return {"kind": "event", "eid": e.get("id"), "name": str(e.get("name") or ""), "day": e.get("day"),
             "title": f"{P.fmt_day(e.get('day'))} · {e.get('name') or '?'}", "author": w.author(),
             "items": items, "said": said, "n": len(prep)}
@@ -468,12 +468,12 @@ def review_panel(w, r):
     us = _review_units(w, r)
     return {"kind": "review", "day": r.get("day"), "title": review_label(w, r), "author": w.author(),
             "said": f"That morning, followers get a Due Crew deck of what they've seen from these "
-                    f"{_pl(len(us), 'lesson')}, most missed first."}
+                    f"{_pl(len(us), 'set')}, most missed first."}
 
 
 def panel(w, key):
     if not key or w.doc is None:
-        return {"kind": "none", "words": "Pick a lesson on the left to see its cards here."}
+        return {"kind": "none", "words": "Pick a set on the left to see its cards here."}
     kind = key[0]
     if kind == "date":
         u = w.unit(key[1])
@@ -523,7 +523,7 @@ def _where(w, st, key):
     field = "tags" if B.kind_of(key) == "tag" else "decks"
     for u in sorted(P.units(doc), key=lambda u: str(u.get("opens") or "")):
         if any(str(x).lower() == path.lower() for x in u.get(field) or []):
-            return ("on this lesson" if u["id"] == st.target else f"on {M.day_words(u['opens'])}"), u["id"]
+            return ("on this set" if u["id"] == st.target else f"on {M.day_words(u['opens'])}"), u["id"]
     return "", None
 
 
@@ -620,7 +620,7 @@ def deck_panel(w, st):
             where, uid = _where(w, st, key)
             out["nodes"].append({"key": key, "name": str(x.get("name") or "?"), "path": P.tag_path(doc, x), "where": where,
                                  "uid": uid, "n": n, "kids": False, "open": False, "children": [], "ptag": x.get("id"),
-                                 "check": 1 if where == "on this lesson" else 0, "off": not st.target})
+                                 "check": 1 if where == "on this set" else 0, "off": not st.target})
     else:
         term = st.find.strip().lower()
         if term:
@@ -695,7 +695,7 @@ def _fill(w, st):
     placed = B.placed_keys(doc, t)
     left = B.cover_left(t, st.cover, placed)
     if not left:
-        out["words"] = "Everything ticked is on a lesson."
+        out["words"] = "Everything ticked is on a set."
         return out
     daily = int(pace.get("daily") or 20)
     start = B.plan_start(doc, B.next_monday(w.ops.today()))
@@ -706,7 +706,7 @@ def _fill(w, st):
                    for e in sorted((e for e in doc.get("events") or [] if isinstance(e, dict) and str(e.get("day") or "") > start),
                                    key=lambda e: str(e.get("day")))]
     out["week"] = True
-    out["head"] = f"{left:,} ticked, not on a lesson."
+    out["head"] = f"{left:,} ticked, not on a set."
     if end and fin and fin >= end:
         fit_end = E._later(end, -1) if ev else end
         d1 = B.end_daily(dict(doc, end=fit_end), t, pace, st.cover, start) or daily

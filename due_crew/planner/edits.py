@@ -52,7 +52,7 @@ def _later(iso, days):
 def _unit(doc, uid):
     u = next((x for x in doc.get("units") or [] if isinstance(x, dict) and x.get("id") == uid), None)
     if u is None:
-        raise Refused("That date isn't on the plan any more.")
+        raise Refused("That set isn't on the plan any more.")
     return u
 
 
@@ -72,7 +72,7 @@ def _name(text):
     """A name as the server keeps one: one line, 60 characters as it counts them."""
     name = _cut(" ".join(str(text or "").split()), NAME_MAX).strip()
     if not name:
-        raise Refused("A date needs a name.")
+        raise Refused("A set needs a name.")
     return name
 
 
@@ -128,7 +128,7 @@ def add_sources(doc, uid, tags=(), decks=()):
             if p.lower() in low:
                 continue
             if len(have) >= SOURCES_MAX:
-                raise Refused(f"A date holds up to {SOURCES_MAX} {'tags' if field == 'tags' else 'subdecks'}.")
+                raise Refused(f"A set holds up to {SOURCES_MAX} {'tags' if field == 'tags' else 'subdecks'}.")
             have.append(p)
             low.add(p.lower())
             took += 1
@@ -171,7 +171,7 @@ def take_source(doc, uid, key):
     else:
         raise Refused("That one is changed on duecrew.com.")
     if not has_sources(u):
-        raise Refused("That's the last thing on this date: delete the date instead.")
+        raise Refused("That's the last thing on this set: delete the set instead.")
     return doc
 
 
@@ -200,7 +200,7 @@ def set_due(doc, uid, due):
     u = _unit(doc, uid)
     if due:
         if _day(due) < _day(u["opens"]):
-            raise Refused("The due date is before the date opens.")
+            raise Refused("The due date is before the set opens.")
         u["due"] = _day(due).isoformat()
     else:
         u.pop("due", None)
@@ -213,9 +213,9 @@ def add_date(doc, opens, tags=(), decks=(), name=None, rng=random):
     """A new date on `opens` with these sources. (doc, its id)."""
     doc = copy.deepcopy(doc)
     if len(doc.get("units") or []) >= UNITS_MAX:
-        raise Refused(f"A plan holds up to {UNITS_MAX} dates.")
+        raise Refused(f"A plan holds up to {UNITS_MAX} sets.")
     if not (tags or decks):
-        raise Refused("Pick something for the date first.")
+        raise Refused("Pick something for the set first.")
     uid = new_id(doc, rng)
     doc.setdefault("units", []).append({"id": uid, "name": _name(name or auto_name(tags, decks)),
                                         "opens": _day(opens).isoformat(), "tags": [], "decks": [], "cards": []})
@@ -229,7 +229,7 @@ def add_empty_date(doc, opens, name, rng=random):
     server keeps a date with no cards; it opens nothing. (doc, its id)."""
     doc = copy.deepcopy(doc)
     if len(doc.get("units") or []) >= UNITS_MAX:
-        raise Refused(f"A plan holds up to {UNITS_MAX} dates.")
+        raise Refused(f"A plan holds up to {UNITS_MAX} sets.")
     uid = new_id(doc, rng)
     doc.setdefault("units", []).append({"id": uid, "name": _name(name), "opens": _day(opens).isoformat(),
                                         "tags": [], "decks": [], "cards": []})
@@ -479,9 +479,9 @@ def add_search(doc, uid, q, n=None):
         raise Refused("That finds different cards in each person's Anki. Use tags or decks.")
     have = _searches(u)
     if q in have:
-        raise Refused("That search is on this date already.")
+        raise Refused("That search is on this set already.")
     if len(have) >= B.SEARCH_MAX:
-        raise Refused(f"A date holds up to {B.SEARCH_MAX} searches and cuts.")
+        raise Refused(f"A set holds up to {B.SEARCH_MAX} searches and cuts.")
     u["search"] = have + [q]
     if isinstance(n, int) and n >= 0:
         u["sn"] = dict(u.get("sn") or {}, **{q: n})
@@ -500,7 +500,7 @@ def add_ids(doc, uid, kind, ids):
         raise Refused("No IDs in that.")
     every = list(dict.fromkeys(list(u.get(kind) or []) + got))
     if len(every) > B.IDS_MAX:
-        raise Refused(f"A date takes up to {B.IDS_MAX:,} IDs of each kind.")
+        raise Refused(f"A set takes up to {B.IDS_MAX:,} IDs of each kind.")
     u[kind] = every
     u.pop("idn", None)
     return doc
@@ -516,7 +516,7 @@ def add_picks(doc, uid, notes=(), cards=()):
     if notes:
         every = list(dict.fromkeys(list(u.get("notes") or []) + [str(g) for g in notes]))
         if len(every) > B.IDS_MAX:
-            raise Refused(f"A date takes up to {B.IDS_MAX:,} notes.")
+            raise Refused(f"A set takes up to {B.IDS_MAX:,} notes.")
         u["notes"] = every
         u.pop("idn", None)
     have = {(str(g), int(o)) for g, o in u.get("cards") or []}
@@ -594,7 +594,7 @@ def set_todo(doc, uid, lines):
     u = _unit(doc, uid)
     clean = B.todo_clean(lines)
     if len([x for x in lines or [] if str((x or {}).get("t") or "").strip()]) > B.TODO_MAX:
-        raise Refused(f"A date keeps {B.TODO_MAX} lines to tick.")
+        raise Refused(f"A set keeps {B.TODO_MAX} lines to tick.")
     if clean:
         u["todo"] = clean
     else:
@@ -624,7 +624,7 @@ def set_review(doc, day, frm, to):
     if a["opens"] > b["opens"]:
         a, b = b, a
     if b["opens"] > day:
-        raise Refused("A review day comes after the dates it reviews.")
+        raise Refused("A review day comes after the sets it reviews.")
     rs = [r for r in doc.get("reviews") or [] if isinstance(r, dict) and r.get("day") != day]
     if len(rs) >= REVIEWS_MAX:
         raise Refused(f"A plan holds up to {REVIEWS_MAX} review days.")
@@ -661,7 +661,7 @@ def set_cut(doc, uid, tag_path, ptag_id):
     q = B.cut_q(tag_path, P.tag_path(doc, t))
     if q not in _searches(u):  # addSearch: an Overlap search from before 3.8.1 may be it already
         if len(_searches(u)) >= B.SEARCH_MAX:
-            raise Refused(f"A date holds up to {B.SEARCH_MAX} searches and cuts.")
+            raise Refused(f"A set holds up to {B.SEARCH_MAX} searches and cuts.")
         u["search"] = _searches(u) + [q]
     u["cut"] = list(u.get("cut") or []) + [{"tag": tag_path, "in": t["id"], "q": q}]
     return doc
@@ -676,7 +676,7 @@ def set_extras(doc, uid, path, without, extra_kids, main_n=None):
     if without:
         if q not in _searches(u):
             if len(_searches(u)) >= B.SEARCH_MAX:
-                raise Refused(f"A date holds up to {B.SEARCH_MAX} searches and cuts.")
+                raise Refused(f"A set holds up to {B.SEARCH_MAX} searches and cuts.")
             u["search"] = _searches(u) + [q]
         u["tags"] = [t for t in u.get("tags") or [] if t != path]
         if isinstance(main_n, int):
@@ -731,9 +731,9 @@ def split_even(doc, uid, source, study_days, rng=random):
     doc = copy.deepcopy(doc)
     u = _unit(doc, uid)
     if path not in (u.get(field) or []):
-        raise Refused("That's not on this date any more.")
+        raise Refused("That's not on this set any more.")
     if len(doc.get("units") or []) >= UNITS_MAX:
-        raise Refused(f"A plan holds up to {UNITS_MAX} dates.")
+        raise Refused(f"A plan holds up to {UNITS_MAX} sets.")
     u[field] = [x for x in u[field] if x != path]
     nid = new_id(doc, rng)
     doc["units"].append({"id": nid, "name": _name(auto_name(**{field: [path]})), "opens": study_days[0],
@@ -756,13 +756,13 @@ def place(doc, items, rng=random):
         u = next((x for x in doc.get("units") or [] if x.get("opens") == day and not x.get("even")), None)
         if u is None:
             if len(doc.get("units") or []) >= UNITS_MAX:
-                raise Refused(f"A plan holds up to {UNITS_MAX} dates.")
+                raise Refused(f"A plan holds up to {UNITS_MAX} sets.")
             u = {"id": new_id(doc, rng), "name": "", "opens": day, "tags": [], "decks": [], "cards": []}
             doc.setdefault("units", []).append(u)
         have = list(u.get(field) or [])
         if path not in have:
             if len(have) >= SOURCES_MAX:
-                raise Refused(f"A date holds up to {SOURCES_MAX} {'tags' if field == 'tags' else 'subdecks'}.")
+                raise Refused(f"A set holds up to {SOURCES_MAX} {'tags' if field == 'tags' else 'subdecks'}.")
             u[field] = have + [path]
         if not u.get("name"):
             u["name"] = _name(auto_name(u.get("tags") or [], u.get("decks") or []))
@@ -1036,12 +1036,12 @@ def drop_say(doc, tid):
                     or any(not _tag_re(path).search(q) for q in u.get("search") or []))
     us = sorted((u for u in P.units(doc) if uses(u)), key=lambda u: str(u["opens"]))
     if not us:
-        return f"{t.get('name')} is on no dates."
+        return f"{t.get('name')} is on no sets."
 
     def listed(xs):
         return ", ".join(P.fmt_day(u["opens"]) for u in xs[:4]) + (f" and {len(xs) - 4} more" if len(xs) > 4 else "")
     gone = [u for u in us if bare(u)]
-    out = f"{t.get('name')} is on {len(us)} date{'s' if len(us) != 1 else ''}: {listed(us)}."
+    out = f"{t.get('name')} is on {len(us)} set{'s' if len(us) != 1 else ''}: {listed(us)}."
     if gone:
         who = ("It has" if len(us) == 1 else "They have") if len(gone) == len(us) else f"{listed(gone)} ha{'s' if len(gone) == 1 else 've'}"
         out += f" {who} nothing else, so {'it goes' if len(gone) == 1 else 'they go'}, to-dos too."
@@ -1185,20 +1185,20 @@ def leave_out(doc, uid, key, other, n=None):
     if k in ("tag", "deck"):
         field = "tags" if k == "tag" else "decks"
         if key[1] not in (u.get(field) or []):
-            raise Refused("That's not on this date any more.")
+            raise Refused("That's not on this set any more.")
         if k == "tag" and covers(key[1]):
             raise Refused("Every one of its cards is tagged that: take it off instead.")
         q = f"{B.anki_search(k, key[1])} {neg}"
     elif k == "search":
         if key[1] not in have:
-            raise Refused("That's not on this date any more.")
+            raise Refused("That's not on this set any more.")
         if neg in key[1]:
             raise Refused("It leaves those out already.")
         q, at = f"{key[1]} {neg}", have.index(key[1])
     elif k == "cut":
         c = next((c for c in u.get("cut") or [] if c.get("tag") == key[1] and c.get("in") == key[2]), None)
         if c is None:
-            raise Refused("That's not on this date any more.")
+            raise Refused("That's not on this set any more.")
         if covers(c["tag"]):
             raise Refused("Every one of its cards is tagged that: take it off instead.")
         q, at = f"{c['q']} {neg}", have.index(c["q"]) if c.get("q") in have else None
@@ -1207,9 +1207,9 @@ def leave_out(doc, uid, key, other, n=None):
     if len(q) > B.SEARCH_LEN:
         raise Refused(f"A search is at most {B.SEARCH_LEN} characters.")
     if q in have:
-        raise Refused("That's on this date already.")
+        raise Refused("That's on this set already.")
     if at is None and len(have) >= B.SEARCH_MAX:
-        raise Refused(f"A date holds up to {B.SEARCH_MAX} searches and cuts.")
+        raise Refused(f"A set holds up to {B.SEARCH_MAX} searches and cuts.")
     if k in ("tag", "deck"):
         u[field] = [x for x in u.get(field) or [] if x != key[1]]
         u["search"] = have + [q]
@@ -1244,7 +1244,7 @@ def move_source(doc, uid, key, to=None, day=None, rng=random):
     made = False
     if to:
         if to == uid:
-            raise Refused("It's on that date already.")
+            raise Refused("It's on that set already.")
         t = _unit(doc, to)
     else:
         day = _day(day).isoformat()
@@ -1253,10 +1253,10 @@ def move_source(doc, uid, key, to=None, day=None, rng=random):
         t = next((x for x in doc.get("units") or [] if x.get("opens") == day and not x.get("even") and x is not u), None)
         if t is None:
             if len(doc.get("units") or []) >= UNITS_MAX:
-                raise Refused(f"A plan holds up to {UNITS_MAX} dates.")
+                raise Refused(f"A plan holds up to {UNITS_MAX} sets.")
             t, made = {"id": new_id(doc, rng), "name": "", "opens": day, "tags": [], "decks": [], "cards": []}, True
             doc["units"].append(t)
-    gone = "That's not on this date any more."
+    gone = "That's not on this set any more."
     if k in ("tag", "deck", "questions"):
         field = "decks" if k == "deck" else "tags"
         paths = [str(p) for p in key[1]] if k == "questions" else [str(key[1])]
@@ -1266,7 +1266,7 @@ def move_source(doc, uid, key, to=None, day=None, rng=random):
         for p in paths:
             if p not in moved:
                 if len(moved) >= SOURCES_MAX:
-                    raise Refused(f"A date holds up to {SOURCES_MAX} {'tags' if field == 'tags' else 'subdecks'}.")
+                    raise Refused(f"A set holds up to {SOURCES_MAX} {'tags' if field == 'tags' else 'subdecks'}.")
                 moved.append(p)
         t[field] = moved
         u[field] = [x for x in u.get(field) or [] if x not in paths]
@@ -1276,7 +1276,7 @@ def move_source(doc, uid, key, to=None, day=None, rng=random):
             raise Refused(gone)
         if q not in _searches(t):
             if len(_searches(t)) >= B.SEARCH_MAX:
-                raise Refused(f"A date holds up to {B.SEARCH_MAX} searches and cuts.")
+                raise Refused(f"A set holds up to {B.SEARCH_MAX} searches and cuts.")
             t["search"] = _searches(t) + [q]
         if (u.get("sn") or {}).get(q) is not None:
             t["sn"] = dict(t.get("sn") or {}, **{q: u["sn"][q]})
@@ -1290,7 +1290,7 @@ def move_source(doc, uid, key, to=None, day=None, rng=random):
         if not has:
             if c["q"] not in _searches(t):
                 if len(_searches(t)) >= B.SEARCH_MAX:
-                    raise Refused(f"A date holds up to {B.SEARCH_MAX} searches and cuts.")
+                    raise Refused(f"A set holds up to {B.SEARCH_MAX} searches and cuts.")
                 t["search"] = _searches(t) + [c["q"]]
             t["cut"] = list(t.get("cut") or []) + [dict(c)]
             if n0 is not None:
@@ -1306,7 +1306,7 @@ def move_source(doc, uid, key, to=None, day=None, rng=random):
             for x in ("nids", "cids", "notes"):
                 every = list(dict.fromkeys(list(t.get(x) or []) + list(u.get(x) or [])))
                 if len(every) > B.IDS_MAX:
-                    raise Refused(f"A date takes up to {B.IDS_MAX:,} IDs of each kind.")
+                    raise Refused(f"A set takes up to {B.IDS_MAX:,} IDs of each kind.")
                 if every:
                     t[x] = every
             t.pop("idn", None)
@@ -1470,7 +1470,7 @@ def resource_plan(idx, tree, path, start, days=(1, 1, 1, 1, 1, 0, 0), daily=None
         words.append(f"{r['note'] + ' ' if r['note'] else ''}{sum(x['n'] for x in r['left']):,} didn't fit"
                      f"{' by ' + P.fmt_day(end) if end and not r['note'] else ''}: {B.left_names(r['left'])}.")
     if rest_n and not rest_q:
-        words.append(f"{rest_n:,} of its cards are under none of its chapters: no date has them.")
+        words.append(f"{rest_n:,} of its cards are under none of its chapters: no set has them.")
     us = sorted(doc["units"], key=lambda u: str(u.get("opens")))
     summary = {"lessons": len(ids), "new": new, "first": us[0]["opens"] if us else None, "last": B.last_day(doc) or None,
                "busiest": work[top]["n"] if top else 0, "busiest_day": top, "daily": cap,

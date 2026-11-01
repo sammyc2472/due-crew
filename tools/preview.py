@@ -286,7 +286,7 @@ sections.append("<h3>3.8.0: a plan I follow, not in its squad, behind</h3>" + bo
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [dict(
         PLAN_CARD, tabs={"summary": None}, ins=None, status={"togo": 24, "behind": 54, "since": "Monday"},
         lines=[("behind", [("Path Book 1 · Cell injury", True), (" was due Mon. 54 cards not seen yet.", False)])])], "offers": []})))
-# plans, end to end (frames 1, 16, 18): the whole plan as a path above the week, "lesson 3 of 19";
+# plans, end to end (frames 1, 16, 18): the whole plan as a path above the week, "set 3 of 19";
 # Behind as one line with Behind… (its sheet: the "behind" button up top); the empty tab
 _ET = "2026-11-05"  # Thu 5 Nov, as frame 16
 _EDAYS = ["2026-11-02", "2026-11-04", "2026-11-05", "2026-11-06", "2026-11-09", "2026-11-10", "2026-11-12", "2026-11-16",
@@ -310,17 +310,17 @@ def _end_card(prog, **kw):
     late = PL.behind_of(path, _ET)
     left = lambda uid: max(0, prog.get(uid, [0, 0, 0])[2] - prog.get(uid, [0, 0, 0])[1])  # noqa: E731
     return dict(PLAN_CARD, id="pe", title="Path Book, high yield · Dre's plan", name="Path Book, high yield",
-                sub=f"lesson {path['at']} of {path['of']} · 6 following", tabs={"summary": None}, ins=None, waiting=0,
+                sub=f"set {path['at']} of {path['of']} · 6 following", tabs={"summary": None}, ins=None, waiting=0,
                 week=PL.week_view(_EDOC, prog, _ET, PL.week_start(_ET)), path=path, behind=late,
                 status={"togo": left("e2"), "behind": late["left"] if late else 0, "since": ""}, **kw)
 
 
 _ON = _end_card({"e0": [40, 40, 40], "e1": [53, 53, 53], "e2": [84, 30, 84]})
 _BEHIND = _end_card({"e0": [40, 40, 40], "e1": [53, 22, 53], "e2": [84, 0, 84]})
-sections.append("<h3>plans, end to end: You › Plans, a plan on track (the path above the week, lesson 3 of 19)</h3>" + board.render(
+sections.append("<h3>plans, end to end: You › Plans, a plan on track (the path above the week, set 3 of 19)</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [_ON], "offers": []}))
     .replace("dc-pd-pe-", "dc-pd-pe1-").replace('id="du-', 'id="due1-'))
-sections.append("<h3>plans, end to end: a plan behind (Behind &middot; its lesson, with Behind&hellip;; the button 'behind' "
+sections.append("<h3>plans, end to end: a plan behind (Behind &middot; its set, with Behind&hellip;; the button 'behind' "
                 "up top opens its sheet)</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [_BEHIND], "offers": []}))
     .replace("dc-pd-pe-", "dc-pd-pe2-").replace('id="du-', 'id="due2-'))
@@ -380,9 +380,9 @@ sections.append("<h3>3.8.1: the morning's line, four or more dates</h3>" + board
 # Today's lesson, B (the plans redesign): each open lesson a deck of its own; the card's line and the morning's say so
 _LB = {"cards": [dict(PLAN_CARD, tabs={"summary": None}, ins=None, status={"togo": 84, "behind": 31, "since": "Wednesday"},
                       lesson_deck={"today": "b", "held": 0})], "offers": []}
-sections.append("<h3>Today's lesson, B: the card's line (in your decks, Study)</h3>" + board.render(
+sections.append("<h3>Today's set, B: the card's line (in your decks, Study)</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=_LB, due=_DV, you=_YOU("plans", plans=_LB)).replace('id="du-', 'id="dub-'))
-sections.append("<h3>Today's lesson, B: the morning's line</h3>" + board.render(
+sections.append("<h3>Today's set, B: the morning's line</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=dict(_DV3, opened={"n": 78, "decks": True, "dates": [
         ["p1", "u1", "Cell injury", 78]]}), you=_YOU("today")).replace('id="du-', 'id="dub2-'))
 sections.append("<h3>3.8.1: You › Plans: a past date left cards shut (its details open); Study on each open date</h3>" + board.render(

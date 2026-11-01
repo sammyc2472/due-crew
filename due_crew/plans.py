@@ -752,7 +752,7 @@ def match_rows(idx, doc, swap=None, shown=5):
         cids = set()
         for u in rest:
             cids |= idx.match(u, swap, doc)
-        rows.append((f"… {len(rest)} more date{'s' if len(rest) != 1 else ''}", _cards(len(cids)), False))
+        rows.append((f"… {len(rest)} more set{'s' if len(rest) != 1 else ''}", _cards(len(cids)), False))
     return rows
 
 
@@ -1486,11 +1486,11 @@ def id_refs(idx, col, lean_doc, cap=50000):
 
 
 def step_label(names):
-    """The undo step: "Due Crew: open Renal physiology", or "… open 3 dates"."""
+    """The undo step: "Due Crew: open Renal physiology", or "… open 3 sets"."""
     names = list(names)
     if len(names) == 1:
         return f"Due Crew: open {names[0]}"
-    return f"Due Crew: open {len(names)} dates"
+    return f"Due Crew: open {len(names)} sets"
 
 
 # ---- lines only I see ----
@@ -1566,7 +1566,7 @@ def change_note(owner, old, doc):
 
     def names(items, verb, tail=None):
         if len(items) > 2:
-            return [(f"{verb} {len(items)} dates", False)]
+            return [(f"{verb} {len(items)} sets", False)]
         segs = [(verb + " ", False)]
         for i, it in enumerate(items):
             if i:
@@ -1710,8 +1710,8 @@ def finish_check(doc, left, recent, today, days=PACE_DAYS):
     late = (done - datetime.date.fromisoformat(day)).days
     when = fmt_day(done.isoformat())
     if late > 0:
-        return f"At that pace you open the last date on {when}, {late} day{'s' if late != 1 else ''} after {name}."
-    return f"At that pace you open the last date on {when}, in time for {name}."
+        return f"At that pace you open the last set on {when}, {late} day{'s' if late != 1 else ''} after {name}."
+    return f"At that pace you open the last set on {when}, in time for {name}."
 
 
 # ---- plans, end to end: You › Plans' path, Behind, the empty tab ----
@@ -1733,7 +1733,7 @@ def path(doc, prog, today, applied=None, shift=0, skipped=(), moved=None, sched=
     here, as Due's Behind leaves it), "done" (its cards all seen; nothing
     of it here once its day passed), "now" (today is one of its days),
     "behind" (its day passed, cards left), "ahead". at: the lesson today is
-    on ("lesson 3 of 19"; 0 before the first), by the days alone; of: how
+    on ("set 3 of 19"; 0 before the first), by the days alone; of: how
     many. first: the first lesson's day; end: path_end. Without applied,
     every passed lesson counts as opened here. Pure; names are raw."""
     prog, skipped = prog or {}, set(skipped or ())
@@ -2253,13 +2253,13 @@ def export_plan_lines(idx, doc, name="", swap=None):
     for cs in ms.values():
         for c in cs:
             seen[c] = seen.get(c, 0) + 1
-    out = [f'# The plan "{name or "Plan"}", as its Text tab writes it (duecrew.com/plan-text): each date with its cards '
-           "in this copy and how many of those another date has too; its tags; its notes. Its cards are the rows below, "
+    out = [f'# The plan "{name or "Plan"}", as its Text tab writes it (duecrew.com/plan-text): each set with its cards '
+           "in this copy and how many of those another set has too; its tags; its notes. Its cards are the rows below, "
            "by their #guid and #cards columns."]
     lines = []
     for u in us:
         n, also = len(ms[u["id"]]), sum(1 for c in ms[u["id"]] if seen[c] > 1)
-        lines.append(f"{_date_line(u, doc)} | {n:,} card{'s' if n != 1 else ''} here, {also:,} also on another date")
+        lines.append(f"{_date_line(u, doc)} | {n:,} card{'s' if n != 1 else ''} here, {also:,} also on another set")
     lines += [f"{e['day']} | event | {e.get('name') or '?'}" for e in (doc or {}).get("events") or []
               if isinstance(e, dict) and e.get("day")]
     out += [f"# {x}" for x in sorted(lines)]

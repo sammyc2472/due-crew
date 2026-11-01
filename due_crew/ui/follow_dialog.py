@@ -1,6 +1,6 @@
 """Follow a plan (3.1): a code (or a pasted link), a
 look at the plan, the deck to run it on, how much of it this copy has,
-what to do about units that have already opened, where today's lesson is
+what to do about units that have already opened, where today's set is
 (in that deck, or a deck of its own), and whether the crew sees my
 progress. The tag-swap question comes up once per deck, when my tags
 start differently.
@@ -33,10 +33,10 @@ def late_counts(idx, doc, today, swap=None):
 
 def late_label(n_units, n_cards, while_paused=False, passed=False):
     if while_paused:
-        return f"{n_units} date{'s' if n_units != 1 else ''} opened while paused ({n_cards:,} cards)"
+        return f"{n_units} set{'s' if n_units != 1 else ''} opened while paused ({n_cards:,} cards)"
     if passed:  # 3.7.6
-        return f"It started before today: {n_units} date{'s have' if n_units != 1 else ' has'} passed ({n_cards:,} cards)."
-    return (f"{n_units} date{'s have' if n_units != 1 else ' has'} already opened "
+        return f"It started before today: {n_units} set{'s have' if n_units != 1 else ' has'} passed ({n_cards:,} cards)."
+    return (f"{n_units} set{'s have' if n_units != 1 else ' has'} already opened "
             f"({n_cards:,} cards)")
 
 
@@ -82,8 +82,8 @@ class CatchUpDialog(QDialog):
         heading(self, root, late_label(n_units, n_cards, while_paused=True))
         self.now = QRadioButton("Open them now")
         self.now.setChecked(True)
-        self.next = QRadioButton(f"Start from the next date, {P.fmt_day(nxt['opens'])}" if nxt
-                                 else "Start from the next date")
+        self.next = QRadioButton(f"Start from the next set, {P.fmt_day(nxt['opens'])}" if nxt
+                                 else "Start from the next set")
         self.next.setEnabled(bool(nxt))
         group = QButtonGroup(self)
         group.addButton(self.now)
@@ -218,13 +218,13 @@ class FollowDialog(QDialog):
         for b in (self.how_dates, self.how_ready):
             how.addButton(b)
             how_col.addWidget(b)
-        self.lesson_label = role(QLabel("Today's lesson"), "head")
+        self.lesson_label = role(QLabel("Today's set"), "head")
         self.lesson_label.setContentsMargins(0, 6, 0, 0)
         lesson_col.addWidget(self.lesson_label)
         self.lesson_in = QRadioButton("In your deck")
         self.lesson_in.setChecked(True)
         self.lesson_own = QRadioButton("Its own deck")
-        self.lesson_own.setToolTip("Each open lesson is a deck of its own under Due Crew in Anki's deck list: "
+        self.lesson_own.setToolTip("Each open set is a deck of its own under Due Crew in Anki's deck list: "
                                    "its new cards and the ones you're learning. Reviews stay where they are.")
         lesson = QButtonGroup(self)
         for b in (self.lesson_in, self.lesson_own):
@@ -446,12 +446,12 @@ class FollowDialog(QDialog):
         held = self._held[1 if own else 0]
         self.hold.setVisible(held > 0)
         if held:
-            self.hold.setText(f"Hold back {held:,} card{'s' if held != 1 else ''} of later dates "
+            self.hold.setText(f"Hold back {held:,} card{'s' if held != 1 else ''} of later sets "
                               + ("until you open them" if own else "until their day"))
         self.about.setText("Each morning, that day's cards open." if own is None
                            else "Nothing opens by itself. Open the first from You › Plans; after that, the next "
                                 "opens the morning after you've seen most of the last one's new cards." if own == "next"
-                           else "Nothing opens by itself. Open the next date from You › Plans, or any topic from Browse.")
+                           else "Nothing opens by itself. Open the next set from You › Plans, or any topic from Browse.")
         self.adjustSize()
 
     def _late_notes(self):
@@ -460,7 +460,7 @@ class FollowDialog(QDialog):
         if not ls:
             return
         n, cards = len(ls["passed"]), int(ls["cards"])
-        self.late_skip_note.setText(f"The {n} earlier date{'s wait' if n != 1 else ' waits'} in your calendar, "
+        self.late_skip_note.setText(f"The {n} earlier set{'s wait' if n != 1 else ' waits'} in your calendar, "
                                     "each with Open now. You're not behind.")
         weeks = int(self.late_weeks.currentData() or 2)
         extra = -(-cards // (7 * weeks)) if cards else 0

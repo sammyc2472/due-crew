@@ -292,7 +292,7 @@ def test_the_deck_beside_the_plan():
     u = next(u for u in STORE.plans[pid]["doc"]["units"] if u["id"] == "u1")
     check("web: a tick puts the tag on the lesson", f"{R}::02_Inflammation" in (u.get("tags") or []), u)
     ch = find(w.last()["deck"]["nodes"], "Inflammation")
-    check("web: and the row says it's on this lesson", ch["check"] == 1 and ch["where"] == "on this lesson", ch)
+    check("web: and the row says it's on this set", ch["check"] == 1 and ch["where"] == "on this set", ch)
     w.click("deck_find", text="neopl")
     v = w.last()
     check("web: Find keeps the deck's structure: the find under the tags above it", find(v["deck"]["nodes"], "Neoplasia") is not None
@@ -462,7 +462,7 @@ def test_the_builders_tools_in_the_window():
     check("web: …or on a day asked for", (w.last("sheet") or {}).get("cmd") == "lesson_from")
     w.click("breather")
     sh = w.last("sheet")
-    check("web: Give everyone a day asks first, saying how many move", sh and sh["cmd"] == "breather" and "3 lessons" in sh["words"], sh)
+    check("web: Give everyone a day asks first, saying how many move", sh and sh["cmd"] == "breather" and "3 sets" in sh["words"], sh)
     before = {u["id"]: u["opens"] for u in STORE.plans[pid]["doc"]["units"]}
     w.click("breather", sure=True)
     after = {u["id"]: u["opens"] for u in STORE.plans[pid]["doc"]["units"]}
@@ -479,8 +479,8 @@ def test_a_resource_at_my_pace():
     pb = next((p for p in r["parts"] if p["name"].endswith("Path Book")), None)
     check("web: A resource: the deck's resources, each with its chapters and cards", pb and pb["on"] and pb["sub"] == "3 chapters"
           and pb["cards"] == 36, r["parts"])
-    check("web: its lessons a chapter each, on my days from tomorrow, at about 20 new a day", r["ok"] and r["dates"][0]["name"].endswith("Cell injury")
-          and r["summary"].startswith("3 lessons, 36 new") and w.view()["new"]["name"] == "Path Book", (r.get("summary"), r.get("dates")))
+    check("web: its sets a chapter each, on my days from tomorrow, at about 20 new a day", r["ok"] and r["dates"][0]["name"].endswith("Cell injury")
+          and r["summary"].startswith("3 sets, 36 new") and w.view()["new"]["name"] == "Path Book", (r.get("summary"), r.get("dates")))
     hy = next((o for o in r["only"] if o["label"] == "High Yield"), None)
     check("web: Only: the tags some of it carries", hy and hy["n"] == 18, r["only"])
     w.click("new_set", key="only", value=hy["path"])
