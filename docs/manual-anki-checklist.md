@@ -685,6 +685,12 @@ In Anki (as a follower):
 - [ ] Behind… › Slide: the card then says "Your dates moved N days later" with Undo (today only); Undo puts them back. Fit it in… asks how many days (2 to 14); 5 gives five days of extra new cards.
 - [ ] Add to my calendar… (under the plan, author and follower): saves a .ics; open it in Google, Apple or Outlook calendar: each set on its days (spread ones across them), quizzes and review days; a follower's on their own days, skipped sets left out.
 
+- [ ] Edits right after one another (nobody following): rename a set, then at once change its Finish by: both save, one after the other ("Saving…", then "Saved."). New plan… open over a plan: Alt+arrows, Ctrl+Z and Backspace do nothing to the plan behind it. Offline, pick a plan: "The plan didn't load." with Try again; back online, Try again loads it.
+
+### 3.9.6: Pip Party, quicker, and nothing again (about 10 minutes; two phones)
+- [ ] From Decks (or Today) to You › Pip Party on a big collection: the tab is there at once, "Reading your cards…" a moment, then the map. Tap a tile: it's picked at once, its counts follow. Type in Find while it reads: the box keeps what you typed and where you are.
+- [ ] Imposter, eight rounds or so in a sitting: no pair again, and no topic again while a pair of new ones is left; a subject with four pairs plays all four before any comes back. Trivia's Another block and Links' New board: new questions and words first. (A site change: deploy the site first.)
+
 ### 3.9.6: the plan joys (about 15 minutes; a small plan of your own, a few cards a set)
 - [ ] New plan › A resource, at my pace: under the preview's line, the plan as a path, a segment a set, the first outlined, its exam a diamond; change the pace or the days and it lays itself out again (Reduce motion: at once). No Pip in the window.
 - [ ] Start it on a plan whose first set opens today: You › Plans says "Day one · N to go today" and Pip pops up after the words, says let's go and goes; drawn again, the words, no Pip. Tomorrow, no Day one.
