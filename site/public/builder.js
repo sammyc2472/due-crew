@@ -805,8 +805,10 @@ async function builder(id, face = null, got = null) {
   const firstStudy = (d) => (isStudy(d) ? d : nextStudy(d));
   function studyDays(a, b) { let k = 0; for (let x = a; x <= b; x = addDays(x, 1)) if (isStudy(x)) k++; return k; }
   const lastDay = () => doc.units.reduce((m, u) => { const e = u.even && u.due ? u.due : u.opens; return e > m ? e : m; }, "");
-  const cleanup = () => {
-    doc.units = doc.units.filter((u) => srcs(u).length || (u.cards || []).length || (u.search || []).length || (u.cut || []).length || hasIds(u));
+  /** a date with nothing on it goes, and the review days that name it; kept: the ids that stay all the same */
+  const cleanup = (kept = null) => {
+    doc.units = doc.units.filter((u) => srcs(u).length || (u.cards || []).length || (u.search || []).length || (u.cut || []).length || hasIds(u)
+      || (kept && kept.has(u.id)));
     const ids = new Set(doc.units.map((u) => u.id));
     if (doc.reviews) { doc.reviews = doc.reviews.filter((r) => ids.has(r.from) && ids.has(r.to)); if (!doc.reviews.length) delete doc.reviews; }
   };
@@ -3559,7 +3561,9 @@ async function builder(id, face = null, got = null) {
     saveBtn.disabled = true;
     status.className = "status"; status.textContent = "Saving…";
     try {
-      syncCuts(); cleanup(); byOpens();
+      // the shared plan page (face): a set the server has stays at a save, cards or not, as Anki's window
+      // sends one from a calendar with none yet (the page keeps one new with none waiting till it has some)
+      syncCuts(); cleanup(face ? new Set((base.units || []).map((u) => u.id)) : null); byOpens();
       // the server refuses a date or an event with no name: a date is named for what's on it again
       for (const u of doc.units) if (!String(u.name || "").trim()) { auto.add(u.id); u.name = autoName(u); }
       for (const x of events()) if (!String(x.name || "").trim()) x.name = "Event";
