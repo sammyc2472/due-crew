@@ -106,7 +106,7 @@ function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
     const probs = [];
     const run = async (host) => {
       const page = await browser.newPage({ viewport: { width: 1240, height: 820 } });
-      await page.goto(/^https?:/.test(f) ? f : "file://" + f);
+      await page.goto(/^https?:/.test(f) ? f : "file://" + f, { waitUntil: "domcontentloaded", timeout: 60000 });
       await page.waitForLoadState("networkidle").catch(() => {});
       await page.waitForTimeout(250);
       const client = await page.context().newCDPSession(page);
@@ -139,8 +139,9 @@ function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
     if (mine.length !== host.length) probs.push(`controls differ in number: ${mine.length} vs ${host.length}`);
     const uniq = [...new Set(probs)];
     console.log(`${uniq.length ? "FAIL" : "ok  "} ${/^https?:/.test(f) ? f.replace(/^https?:\/\/[^/]+/, "") : path.basename(f)} (${mine.filter((x) => x.vis).length} controls)`);
-    uniq.slice(0, 40).forEach((p) => console.log("     " + p));
-    if (uniq.length > 40) console.log(`     … ${uniq.length - 40} more`);
+    const most = process.env.AUDIT_ALL ? Infinity : 40;
+    uniq.slice(0, most).forEach((p) => console.log("     " + p));
+    if (uniq.length > most) console.log(`     … ${uniq.length - most} more (AUDIT_ALL=1 lists them all)`);
     bad += uniq.length ? 1 : 0;
   }
   await browser.close();
