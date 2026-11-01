@@ -1711,6 +1711,168 @@ def finish_check(doc, left, recent, today, days=PACE_DAYS):
     return f"At that pace you open the last date on {when}, in time for {name}."
 
 
+# ---- plans, end to end: You › Plans' path, Behind, the empty tab ----
+
+def _iso(day):
+    try:
+        return datetime.date.fromisoformat(str(day))
+    except (TypeError, ValueError):
+        return None
+
+
+def path(doc, prog, today, applied=None, shift=0, skipped=(), moved=None, sched=False):
+    """The whole plan as a path, above You › Plans' week: {lessons, at, of,
+    first, end}. lessons, in the plan's order, each {uid, name, opens, day,
+    total, seen, opened, left, today, state} on my days (doc is the plan
+    itself; my shift and moves, a skipped lesson on the day it would have
+    had): day is its last (its due, else the day it opens), today when today
+    is one of its days. state: "skip" (skipped, or passed before it opened
+    here, as Due's Behind leaves it), "done" (its cards all seen; nothing
+    of it here once its day passed), "now" (today is one of its days),
+    "behind" (its day passed, cards left), "ahead". at: the lesson today is
+    on ("lesson 3 of 19"; 0 before the first), by the days alone; of: how
+    many. first: the first lesson's day; end: path_end. Without applied,
+    every passed lesson counts as opened here. Pure; names are raw."""
+    prog, skipped = prog or {}, set(skipped or ())
+    mdoc = my_doc(doc, shift, (), moved)  # every lesson on my days, the skipped ones too
+    mine = {u["id"]: u for u in units(mdoc)}
+    out = []
+    for u in units(doc):
+        m = mine.get(u["id"], u)
+        opens = str(m.get("opens") or "")
+        day = str(m.get("due") or opens)
+        o, s, t = (int(x or 0) for x in (list(prog.get(u["id"]) or []) + [0, 0, 0])[:3])
+        a = (applied or {}).get(u["id"])
+        running = not a and o > 0 and bool(u.get("even") or sched)  # opens in slices: applied when its days end
+        on = bool(opens) and opens <= today <= day
+        if u["id"] in skipped:
+            state = "skip"
+        elif t and s >= t:
+            state = "done"
+        elif on:
+            state = "now"
+        elif not opens or opens > today:
+            state = "ahead"
+        elif applied is not None and (not (a or running) or str(a).startswith("skip:")):
+            state = "skip"  # never opened here (followed after it): not mine to be behind on
+        else:
+            state = "behind" if t > s else "done"
+        out.append({"uid": u["id"], "name": str(u.get("name") or "?"), "opens": opens, "day": day,
+                    "total": t, "seen": s, "opened": o, "left": max(0, t - s), "today": on, "state": state})
+    now = next((i for i, x in enumerate(out) if x["today"]), None)
+    if now is None:
+        now = max((i for i, x in enumerate(out) if x["opens"] and x["opens"] <= today), default=-1)
+    return {"lessons": out, "at": now + 1, "of": len(out), "first": out[0]["opens"] if out else "", "end": path_end(mdoc)}
+
+
+def path_end(doc):
+    """What a plan ends with: its last quiz or exam (events never move)
+    {name, day, event: True}; else its end, or its last lesson's last day,
+    {name: "", day, event: False}. None for a plan with neither."""
+    evs = sorted((e for e in (doc or {}).get("events") or [] if isinstance(e, dict) and _iso(e.get("day"))),
+                 key=lambda e: str(e["day"]))
+    if evs:
+        return {"name": str(evs[-1].get("name") or "Exam"), "day": str(evs[-1]["day"]), "event": True}
+    exam = (doc or {}).get("exam")
+    if isinstance(exam, dict) and _iso(exam.get("date")):
+        return {"name": "Exam", "day": str(exam["date"]), "event": True}  # 3.2's schedule's exam
+    days = [str(u.get("due") or u.get("opens") or "") for u in units(doc)] + [str((doc or {}).get("end") or "")]
+    days = [d for d in days if _iso(d)]
+    return {"name": "", "day": max(days), "event": False} if days else None
+
+
+def last_day(doc):
+    """A plan's last day: its last lesson, quiz or exam, or its end ("" for
+    none). A lean doc (a plan I write, as the board brings it) has its
+    lessons' days alone."""
+    days = [str(u.get("due") or u.get("opens") or "") for u in units(doc)]
+    days += [str(e.get("day") or "") for e in (doc or {}).get("events") or [] if isinstance(e, dict)]
+    days.append(str((doc or {}).get("end") or ""))
+    return max((d for d in days if _iso(d)), default="")
+
+
+def behind_of(p, today):
+    """What a path says is behind: {uid, name, more, left, uids, since,
+    days}: the first lesson behind (in the plan's order), how many more
+    are, the cards left on them all, their ids, the earliest of their days
+    and how many days ago that was. None when nothing is."""
+    late = [x for x in (p or {}).get("lessons") or [] if x["state"] == "behind"]
+    t = _iso(today)
+    if not late or t is None:
+        return None
+    since = min(x["day"] for x in late)
+    return {"uid": late[0]["uid"], "name": late[0]["name"], "more": len(late) - 1,
+            "left": sum(x["left"] for x in late), "uids": [x["uid"] for x in late], "since": since,
+            "days": max(1, (t - (_iso(since) or t)).days)}
+
+
+CATCH_DAYS = (3, 7)  # Behind's Fit it in: catch-up's three days, and over a week (5 stays on Catch up…)
+
+
+def behind_sheet(name, b, p, waiting, shift=0):
+    """The Behind… sheet (sheets.ask_item's one of a few): {title, text,
+    ways: [{key, label, note, yes, ...}]}, slide first. Slide N days: my
+    shift, N more days (the days I'm behind; to 365 in all), its note the
+    day my last lesson lands on then and the quiz or exam it falls after;
+    Fit it in: G5's catch-up on what earlier days opened and I haven't seen
+    (`waiting`), over three days, and over a week when that's fewer a day;
+    Skip what's left: the lessons behind, skipped (their cards stay as they
+    are). Raw words: the sheet draws them as text."""
+    n_late, left = int(b["more"]) + 1, int(b["left"])
+    days = int(b["days"])
+    who = (f"{b['name']} has" if n_late == 1 else f"{b['name']} and {n_late - 1} more have")
+    now = next((x for x in (p or {}).get("lessons") or [] if x["today"] and x["state"] != "skip" and x["total"]), None)
+    text = f"{who} {left:,} left" + (
+        f"; today {now['name']} {'opened' if now['opened'] else 'opens'} {now['total']:,}." if now else ".")
+    ways = []
+    slide = min(days, 365 - int(shift or 0))
+    if slide > 0:
+        word = "a day" if slide == 1 else f"{slide} days"
+        live = [x["day"] for x in (p or {}).get("lessons") or [] if x["state"] != "skip" and x["day"]]
+        ends = _later(max(live), slide) if live else ""
+        end = (p or {}).get("end") or {}
+        after = f", after {end['name']}" if end.get("event") and ends and ends > end["day"] else ""
+        ways.append({"key": "slide", "days": slide, "label": f"Slide {word}", "yes": f"Slide {word}",
+                     "note": f"Everything still to come, {word} later." + (f" Ends {fmt_day(ends)}{after}." if ends else "")})
+    waiting = int(waiting or 0)
+    last = None
+    for d in CATCH_DAYS if waiting else ():
+        extra = -(-waiting // d)
+        if last is not None and extra >= last:
+            break
+        last = extra
+        ways.append({"key": "fit", "days": d, "extra": extra, "yes": "Fit it in",
+                     "label": "Fit it in" if d == CATCH_DAYS[0] else "Fit it in over a week",
+                     "note": f"About {extra:,} more new card{'s' if extra != 1 else ''} a day for "
+                             + ("three days." if d == 3 else "a week." if d == 7 else f"{d} days.")})
+    ways.append({"key": "skip", "uids": list(b["uids"]), "label": "Skip what's left", "yes": "Skip it" if n_late == 1 else "Skip them",
+                 "note": f"The {left:,} stay as they are."})
+    return {"title": f"{'A day' if days == 1 else f'{days} days'} behind on {name}", "text": text, "ways": ways}
+
+
+def exam_way(exam, today, ends=()):
+    """The empty Plans tab's line about my exam (Settings): {day, days} when
+    it's ahead and no plan I follow or write ends by it (its last day from
+    today to the exam); else None."""
+    e, t = _iso(exam), _iso(today)
+    if e is None or t is None or e <= t:
+        return None
+    if any(str(today) <= str(x) <= str(exam) for x in ends or () if _iso(x)):
+        return None
+    return {"day": e.isoformat(), "days": (e - t).days}
+
+
+def link_code(text):
+    """A plan's code from the Plans tab's box: the code as typed ("N4AP
+    ULM2"), or its link (duecrew.com/p/N4APULM2: the link's last path part).
+    '' when there's nothing."""
+    t = str(text or "").strip()[:300]
+    if "/" in t:
+        parts = [x for x in re.split(r"[?#]", t)[0].split("/") if x.strip()]
+        t = parts[-1] if parts else ""
+    return normalize_code(t)
+
+
 # ---- 3.8.1: a follower's day (plans, round three) ----
 
 AWAY_DAYS = 3   # Welcome back: this many days I studied nothing, whose dates a morning would open, ask first

@@ -4208,8 +4208,8 @@ def test_plans_glue_v31():
         view = F.board_view(box["cfg"])
         html = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []},
                             {"period": "today"}, 0, plans=view, you={"tab": "plans", "plans": view})
-        check("card: You › Plans, the plan's title, week and followers",
-              "Step 1 &lt;i&gt; · Dre’s plan" in html and "week 2 of 4 · 3 following" in html)
+        check("card: You › Plans, the plan's title, its lesson (plans, end to end: in place of its week) and followers",
+              "Step 1 &lt;i&gt; · Dre’s plan" in html and "lesson 2 of 5 · 3 following" in html)
         check("card: the crew line; no Today box (Due's Today has today), names escaped",
               "Crew: 2 done with" in html and "ptoday" not in html and "planstudy:" not in html
               and "<b>failure" not in html, re.sub(r"<style.*?</style>", "", html, flags=re.S)[-2500:])
@@ -4274,8 +4274,9 @@ def test_plans_glue_v31():
         today["d"] = _day(3)
         html = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []},
                             {"period": "today"}, 0, plans=view, you={"tab": "plans", "plans": view})
-        check("card: behind, only for me (round five: the card's line, with Catch up)",
-              '<span class="late">2 behind since ' in html and f"plancatch:{pid}" in html, "")
+        check("card: behind, only for me (plans, end to end: its own line, with Behind…)",
+              '<span class="late">Behind &middot; Heart failure, 2 left</span>' in html and f"planbehind:{pid}" in html
+              and f"plancatch:{pid}" not in html, "")
         store.edit_plan(pid, [dict(u, name="Arrhythmia & co") if u["id"] == "ar" else
                               dict(u, opens=_day(21)) if u["id"] == "rn" else u for u in _plan_units()])
         maya.fetch_board(labels, with_decks=True)
@@ -4642,9 +4643,9 @@ def test_plans_follower_days_g():
     weeks = lambda day: (datetime.date.fromisoformat(P.week_start(day)) - datetime.date.fromisoformat(P.week_start(_day(1)))).days // 7
     in_week = lambda day: board._plan_card_html(dict(F.card_view(dict(plan, skipped=["ex"]), state[pid], {"hf": [2, 0, 2]},
                                                                    _day(1), week_offset=weeks(day)), id=pid))
-    check("card: Open now (the next date's day), Undo skip (the skipped one's day) and Catch up",
+    check("card: Open now (the next date's day), Undo skip (the skipped one's day) and Behind… (plans, end to end)",
           f"plannow:{pid}:cz" in in_week(_day(7)) and f"planunskip:{pid}:ex" in in_week(_day(3))
-          and f"plancatch:{pid}" in html and "Skip it" in in_week(_day(7)), html[:400])
+          and f"planbehind:{pid}" in html and "Skip it" in in_week(_day(7)), html[:400])
 
 
 def test_your_own_days_376():
@@ -4773,8 +4774,9 @@ def test_your_own_days_376():
                   1 in _open(col3) and st.get("catch", {}).get("extra") == 2 and st["catch"]["until"] == _day(6), st.get("catch"))
             card = F.card_view(next(x for x in F.followed() if x["id"] == pid3), st, {"hf": [2, 0, 2]}, _day(0))
             h = board._plan_card_html(dict(card, session={"kind": "study", "target": 3, "done": 0, "behind": 2}))
-            check("late, catch up: what it's catching up on isn't called behind",
-                  "Catching up: +2 new a day" in h and "pn warn" not in h and "behind" not in h, h)
+            check("late, catch up: what it's catching up on isn't called behind (plans, end to end: on the path neither)",
+                  "Catching up: +2 new a day" in h and "pn warn" not in h and "behind" not in h
+                  and '<i class="c" title="Heart failure &middot; catching up' in h and "planbehind" not in h, h)
         finally:
             F._bg = saved[0]
 
@@ -5583,8 +5585,8 @@ def test_plans_tab_v33():
     decks = board.render(data, {"period": "decks"}, 0, plans=plans, you={"tab": "insights", "plans": plans})
     check("plans: the card isn't on Crew › Decks, nor under Insights", "Step 1 · Dre’s plan" not in decks)
     none = board.render(data, {"period": "today"}, 0, plans=empty, you={"tab": "plans", "plans": empty})
-    check("You › Plans: following nothing, three ways in",
-          "Follow a plan" in none and "planlibrary" in none and "planstart" in none and "dc-plancode" in none)
+    check("You › Plans: following nothing, the ways in (plans, end to end: a code or link, Make a plan, the library)",
+          "planfollowcode" in none and "planlibrary" in none and "planopennew" in none and "dc-plancode" in none)
     hidden = board.render(data, {"period": "plans", "hidden_tabs": ["plans", "decks"]}, 0, plans=plans,
                           you={"tab": "plans", "plans": plans})
     check("tabs: hidden in Settings, gone, and a saved Plans period falls back to Crew's Today",
@@ -6234,19 +6236,24 @@ def test_plans_tab_v341():
     check("now: a rest day says no new cards", "Today is a rest day: reviews, and no new cards." in rest)
     taper = board._plan_card_html(dict(base, session={"kind": "taper", "due": 212}))
     check("now: so does the taper", "in its taper" in taper)
-    behind = board._plan_card_html(dict(base, status={"togo": 24, "behind": 2, "since": "Monday"},
+    late = {"uid": "b", "name": "V&B <i>", "more": 0, "left": 2, "uids": ["b"], "since": "2026-10-06", "days": 1}
+    behind = board._plan_card_html(dict(base, status={"togo": 24, "behind": 2, "since": "Monday"}, behind=late,
                                         lines=[("behind", [("Path Book 1", True), (" was due Mon. 2 cards not seen yet.", False)])]))
-    check("behind: round five, the card's line about its day, with Catch up; not a note as well",
-          '<div class="pst"><span><b>24</b> to go today, and <span class="late">2 behind since Monday</span></span>' in behind
-          and behind.count("plancatch:p1") == 1 and "was due Mon." not in behind and 'class="pn warn"' not in behind, behind)
-    check("behind: nothing left today and nothing behind, no line; only behind, no 0 to go",
+    check("behind: round five's line says what's left today; plans, end to end: what's behind is its own line, "
+          "with Behind… where Catch up… was; not a note as well",
+          '<div class="pst"><span><b>24</b> to go today</span></div>' in behind
+          and '<div class="pst pbh"><span class="late">Behind &middot; V&amp;B &lt;i&gt;, 2 left</span>' in behind
+          and behind.count("planbehind:p1") == 1 and "plancatch:p1" not in behind
+          and "was due Mon." not in behind and 'class="pn warn"' not in behind, behind)
+    five = board._plan_card_html(dict(base, status={"togo": 0, "behind": 5}, behind=dict(late, left=5, more=1)))
+    check("behind: nothing left today and nothing behind, no line; only behind, no 0 to go, and how many more",
           'class="pst"' not in board._plan_card_html(dict(base, status={"togo": 0, "behind": 0}))
-          and '<span><span class="late">5 behind</span></span>' in board._plan_card_html(dict(base, status={"togo": 0, "behind": 5})))
-    catching = board._plan_card_html(dict(base, status={"togo": 24, "behind": 2, "since": "Monday"},
+          and "to go today" not in five and "Behind &middot; V&amp;B &lt;i&gt; and 1 more, 5 left" in five, five)
+    catching = board._plan_card_html(dict(base, status={"togo": 24, "behind": 2, "since": "Monday"}, behind=late,
                                           catch={"extra": 2, "until": "Mon"}))
     check("behind: a catch-up running says so in its note, and the line isn't called behind",
           "<b>24</b> to go today</span>" in catching and "behind" not in catching.split('class="pst"')[1].split("</div>")[0]
-          and "plancatch:p1" not in catching and "plancatchstop:p1" in catching)
+          and "plancatch:p1" not in catching and "planbehind:p1" not in catching and "plancatchstop:p1" in catching)
     from due_crew import due as D
     lists = board.you_html({}, due=D.view("2026-10-07", [], [], {}), you={"tab": "plans", "plans": {"cards": [base]}})
     check("due on: the week is on the card whether Due's lists are on or off (Sam's pick A)",
@@ -6261,9 +6268,9 @@ def test_plans_tab_v341():
     check("now: none at risk, no line", "insstudy" not in board._plan_card_html(dict(base, ins={"n": 0, "did": 10})))
     notes = board._plan_card_html(dict(base, waiting=16, put_off=["Path Book 2"], change=[("Dre moved a date", False)]))
     check("notes: one at a time, the most pressing first", notes.count('class="pn') == 1 and "planok:p1" in notes)
-    waits = board._plan_card_html(dict(base, waiting=16, status={"togo": 4, "behind": 9, "since": "Monday"}))
-    check("notes: one Catch up… a card: the line about its day has it, so the waiting note goes",
-          waits.count("plancatch:p1") == 1 and "new from earlier days waiting" not in waits
+    waits = board._plan_card_html(dict(base, waiting=16, status={"togo": 4, "behind": 9, "since": "Monday"}, behind=dict(late, left=9)))
+    check("notes: one way a card: the Behind line has it, so the waiting note (and its Catch up…) goes",
+          waits.count("planbehind:p1") == 1 and "plancatch:p1" not in waits and "new from earlier days waiting" not in waits
           and "new from earlier days waiting" in board._plan_card_html(dict(base, waiting=16)))
     plans = {"cards": [base], "offers": []}
     css = board.render({"entries": [], "labels": ["2026-10-07"], "tomorrow": "", "pending": []}, {"period": "today"}, 0,
@@ -7360,9 +7367,11 @@ def test_plan_windows_ways_in_v393():
           and "duecrew:planyours:p1|" in html and "Your plans&hellip;</a>" in html and "planmenu" not in html
           and "Plan &#9662;" not in html and ">Open</a>" not in html and "MS2 &lt;Block&gt; 1" in html, html[:400])
     none = board._you_plans({"cards": []})
-    check("ways in: no plan yet, Make one is the one New plan, and Your plans… for the plans I write",
-          "dc-ph" not in none and "duecrew:planstart|" in none and "duecrew:planmake|" not in none
-          and "New plan&hellip;" in none and "From a deck&hellip;" not in none and "duecrew:planyours|" in none)
+    writes = board._you_plans({"cards": [], "writes": True})
+    check("ways in: no plan yet, Make a plan (plans, end to end: the new plan window), and Your plans… for the plans I write",
+          "dc-ph" not in none and "duecrew:planopennew|" in none and "duecrew:planmake|" not in none
+          and "Make a plan</a>" in none and "From a deck&hellip;" not in none and "duecrew:planyours|" not in none
+          and "duecrew:planyours|" in writes)
     calls = []
     saved = (pflow.open_plans, pflow.open_new, pflow.open_qids, plan_flow.new_plan_menu)
     pflow.open_plans = lambda select=None, tab=None: calls.append(("plans", select))
@@ -11134,7 +11143,7 @@ def test_plan_invites_v381():
     check("invites: a line above the plans, names escaped, Yes and No",
           "<b>Dre &lt;b&gt;</b> asked you to co-write <b>Block &lt;1&gt;</b>. Its tags would go on your notes in Anki." in html
           and f"duecrew:planinvite:{pid}:yes" in html and f"duecrew:planinvite:{pid}:no" in html
-          and html.index("planinvite") < html.index("Follow a plan"), html[:600])
+          and html.index("planinvite") < html.index("dc-plancode"), html[:600])
     col = _plan_col()
     with _PlanGlue({"A": sam}, {"A": col}) as g, _SyncBg(g.F):
         check("invites: the board's view has them", F.board_view({})["invites"] == inv)

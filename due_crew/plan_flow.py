@@ -818,12 +818,16 @@ def card_view(plan, st, prog, today, session=None, week_offset=0):
     doc = plan["doc"]
     week, weeks = P.span_weeks(doc, today)
     us = P.units(doc)
+    # plans, end to end: the whole plan as a path, its lessons on my days, and what's behind on it
+    path = P.path(_plan_doc(plan), prog, today, applied=(st or {}).get("applied") if st else None,
+                  shift=int(plan.get("shift") or 0), skipped=plan.get("skipped") or (), moved=plan.get("moved"),
+                  sched=bool(plan.get("sched")))
     if plan.get("paused"):
         sub = f"paused until {P.fmt_day(plan['until'])}" if plan.get("until") else "paused"
     elif week == 0 and us:
         sub = f"starts {P.fmt_day(us[0]['opens'])}"
     else:
-        sub = f"week {week} of {weeks}"
+        sub = f"lesson {path['at']} of {path['of']}" if path["at"] else f"week {week} of {weeks}"
     if int(plan.get("shift") or 0):
         sub += f" · your dates +{int(plan['shift'])} day{'s' if int(plan['shift']) != 1 else ''}"
     if int(plan.get("early") or 0) and not plan.get("paused"):
@@ -887,14 +891,15 @@ def card_view(plan, st, prog, today, session=None, week_offset=0):
         change = P.change_note(plan.get("ownerName"), st["snapshot"], _plan_doc(plan))
     own = P.own_pace(plan) and not plan.get("paused") and not no_deck
     # round five: the card's line about the plan's day (Due's Today and Upcoming have each date):
-    # what today's dates have left, and what's behind (past its day, not seen) and since when
-    status = None
+    # what today's dates have left; plans, end to end: what's behind is the path's (a lesson whose
+    # last day passed with cards left, opened here), its own line with Behind…
+    status = behind = None
     if not (no_deck or plan.get("paused") or own):
         left = lambda u: max(0, int(_t3(prog, u)[2]) - int(_t3(prog, u)[1]))
-        late = sorted(str(u["due"]) for u in us if u.get("due") and str(u["due"]) < today and left(u))
+        behind = P.behind_of(path, today)
         status = {"togo": sum(left(u) for u in us if str(u.get("opens") or "") == today),
-                  "behind": sum(left(u) for u in us if u.get("due") and str(u["due"]) < today),
-                  "since": P.weekday_or_day(late[0], today) if late else ""}
+                  "behind": behind["left"] if behind else 0,
+                  "since": P.weekday_or_day(behind["since"], today) if behind else ""}
     if own:  # 3.8.0: no Behind at my own pace; what's next, and where the plan is
         sub = f"at your pace · {followers:,} following"
         waiting, catch, session = 0, None, None
@@ -917,6 +922,7 @@ def card_view(plan, st, prog, today, session=None, week_offset=0):
             # 3.8.1: put off by Welcome back's Not today: tomorrow morning asks again
             "put_off_ask": bool(put_off) and str(((st or {}).get("away") or {}).get("day") or "") == today,
             "week": week, "week_offset": int(week_offset), "status": status,
+            "path": path if status is not None else None, "behind": behind,  # plans, end to end
             "catch": {"extra": int(catch.get("extra") or 0), "until": _short_day(catch["until"], today)} if catch else None}
 
 
@@ -2231,10 +2237,15 @@ def board_view(c):
     names = {sq["id"]: sq.get("name") or "" for sq in _my_squads(c)}
     offers = offers_view(client().session.get("plan_offers"), names, {p["id"] for p in plan_list},
                          set(pc.get("plan_offers_dismissed") or []))
+    # plans, end to end: the empty tab's line about my exam (Settings), while no plan I follow or
+    # write ends by it; and whether I write any (its Your plans…)
+    authored = client().session.get("plans_authored") or []
+    ends = [P.last_day(p["doc"]) for p in plan_list] + [P.last_day(a.get("doc")) for a in authored]
     # 3.8.1: an invite to co-write a plan, or to keep one, from the day's first board; and
     # the morning's dates, for its line here when Due is off (__init__ hands over morning_opened())
     return {"cards": cards, "offers": offers, "invites": list(client().session.get("plan_invites") or []),
-            "opened_dates": opened_dates()}
+            "opened_dates": opened_dates(), "exam": P.exam_way(str((c or {}).get("exam_date") or ""), today, ends),
+            "writes": bool(authored)}
 
 
 # ---- board commands ----
@@ -2278,6 +2289,15 @@ def on_message(cmd, parts):
         set_skip(arg, parts[3], False)
     elif cmd == "plancatch" and arg:
         catch_menu(arg)
+    elif cmd == "planbehind" and arg:  # plans, end to end: You › Plans' Behind…, the sheet
+        from . import plan_board
+        plan_board.behind(arg)
+    elif cmd == "planfollowcode":  # ...the empty tab's box: a plan's code or its link, into Follow
+        from . import plan_board
+        plan_board.follow(arg)
+    elif cmd == "planopennew":  # ...Make a plan; Plan the way there, finishing by my exam's day
+        from . import plan_board
+        plan_board.open_new(arg)
     elif cmd == "plancatchstop" and arg:
         stop_catch(arg)
     elif cmd == "planweek" and arg and len(parts) > 3:
