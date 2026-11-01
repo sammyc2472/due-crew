@@ -210,7 +210,7 @@ class Face(WebFace):
 
     def __init__(self, plans, cl, select=None, tab=None):
         self.sent_js = []
-        self.web_init(COL, plans, Ops(cl), select, tab, {"theme": "auto", "accent": "green"})
+        self.web_init(COL, plans, Ops(cl), select, tab, {"theme": "auto", "accent": os.environ.get("DC_ACCENT", "green")})
         self._ready = True
         if self.pid:
             self.load(self.pid)

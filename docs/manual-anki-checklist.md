@@ -692,6 +692,8 @@ In Anki (as a follower):
 - [ ] Hover the window's tabs and buttons: no raised shadow (light, dark).
 - [ ] Add to my calendar…: no save window; Calendar opens asking which calendar to add the plan to; the file is in Downloads.
 - [ ] QBank QIDs (and any Due Crew window's dropdown): the open list has one rounded border, no square round it.
+- [ ] Your plans' look: every box you type in or pick from is white with an edge, in the grey panels too; buttons tint on hover; List · Week · Month's picked one stands up (light, dark).
+- [ ] The Plan tab's bar: List · Week · Month and Find on the left; "N need a look" (amber, only when something does: shows just those, again for all) and Add on the right. Today and Unfold all atop the list; Today by Week's and Month's arrows; Ctrl+T anywhere.
 
 ### 3.9.6: Pip Party, quicker, and nothing again (about 10 minutes; two phones)
 - [ ] From Decks (or Today) to You › Pip Party on a big collection: the tab is there at once, "Reading your cards…" a moment, then the map. Tap a tile: it's picked at once, its counts follow. Type in Find while it reads: the box keeps what you typed and where you are.

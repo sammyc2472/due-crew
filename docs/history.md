@@ -4289,4 +4289,20 @@ every release that changes how something works.
   round our square one: "the square around the drops").
   `tools/control_audit.js` now carries Anki 25.02's real button rules,
   `.fancy`'s among them. `test_the_page_draws_its_own_days_v396`.
+- 3.9.6, the plan window's look, after the click test (Sam: "some of the
+  colors don't pop / adequately show hierarchies / buttons / areas of
+  text input especially inside the more grey areas", then "i like your
+  new versions!"). Its panels and its boxes were the same well grey, so
+  a box on a panel was no box at all: now every box you type in or pick
+  from (a set's name, its days, Leads up to, Find, Paste plan lines, a
+  note) is white with a real edge (`--dc-edge`, ink over the card),
+  a ring in the accent while you type; the panels are edged; buttons
+  take a firmer edge and the accent's tint on hover, text links an
+  underline, Study now a darker fill; List · Week · Month a deeper track
+  with the picked one raised; the panels' labels a step darker. And the
+  Plan tab's bar (Sam: "the earliest first / today / expand all / those
+  filters kinda don't make too much sense"; his pick, "Ship it"): how you
+  look, what to show (Find; N need a look, amber), what to do (Add,
+  filled); Today and Unfold all head the list, Today by Week's and
+  Month's arrows; Earliest first gone. The same on duecrew.com's page.
 

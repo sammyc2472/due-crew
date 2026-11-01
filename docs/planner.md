@@ -87,6 +87,17 @@ Plans, Make a plan, Plan the way there) goes through `flow.open_plans` /
   month shown) stays in the page. Questions are sheets in the page (a
   yes resends with `sure`); a few heavier dialogs open as Qt over it
   (the text, History, Add a search, Spread, review days).
+- **The Plan tab's bar** (3.9.6, Sam: "the earliest first / today /
+  expand all / those filters ... are confusing in with the other
+  stuff") says three things, left to right: how you look (List · Week ·
+  Month), what to show (Find; **N need a look**, amber, only when
+  something does: it shows just those, again for all), what to do
+  (**Add**, the one filled button). Getting around lives in the view it
+  moves: **Today** and **Unfold all** head the list, Today sits by
+  Week's and Month's arrows (Ctrl+T anywhere). No Earliest first: the
+  list runs by date. Every box you type in or pick from is white with a
+  real edge wherever it sits; every day is picked on the page's own
+  calendar (`dateInput`, `calPop`), never the computer's date popup.
 - **New plan** is the window's first screen (`webnew.py`, `page/new.js`;
   with no plans, the window opens on it). Three ways: **A resource, at
   my pace** (the deck's resources and their chapters, `model.resource_parts`;

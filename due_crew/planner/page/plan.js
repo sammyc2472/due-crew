@@ -6,7 +6,7 @@
 var dcPlan = (function () {
   "use strict";
   var S = null, root = null, preview = false;
-  var ui = { mode: "list", desc: false, find: "", look: false, opened: {}, closed: {}, all: null, month: null, week: null,
+  var ui = { mode: "list", find: "", look: false, opened: {}, closed: {}, all: null, month: null, week: null,
     paste: "", menu: null, sheet: null, deckFind: null, deckTimer: null };
   var DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   var MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -206,15 +206,19 @@ var dcPlan = (function () {
     return out;
   }
   function toolbar(p) {
-    var bar = h("div.row");
+    /* 3.9.6 (Sam: "the earliest first / today / expand all / those filters kinda don't make too much
+       sense and are confusing in with the other stuff"): the bar is how you look (List, Week, Month),
+       what to show (Find; Needs a look, when something does) and what to do (Add, the one filled);
+       getting around (Today, Unfold all) lives in the view it moves. Earliest first is gone: the list
+       runs by date, Today takes you to now. */
+    var bar = h("div.row.ptools");
     var seg = h("div.seg", { role: "group", "aria-label": "View" });
     [["list", "List"], ["week", "Week"], ["month", "Month"]].forEach(function (m, i) {
       seg.appendChild(h("button" + (ui.mode === m[0] ? ".on" : ""), { type: "button", text: m[1], title: m[1] + " (Ctrl+" + (i + 1) + ")",
         onclick: function () { ui.mode = m[0]; render(); } }));
     });
     bar.appendChild(seg);
-    if (ui.mode === "list") { bar.appendChild(btn(ui.desc ? "Latest first" : "Earliest first", function () { ui.desc = !ui.desc; render(); }, "t")); }
-    var find = h("input.in", { placeholder: "Find a set or tag", "data-keep": "find", style: "width:200px", title: "Only the sets whose name or cards have these words; Enter picks the first (Ctrl+F)" });
+    var find = h("input.in.find", { placeholder: "Find a set or tag", "data-keep": "find", title: "Only the sets whose name or cards have these words; Enter picks the first (Ctrl+F)" });
     find.value = ui.find;
     find.addEventListener("input", function () { ui.find = this.value; if (ui.find.trim()) { ui.mode = "list"; } render(); });
     find.addEventListener("keydown", function (e) {
@@ -222,21 +226,26 @@ var dcPlan = (function () {
       if (e.key === "Escape") { if (this.value) { ui.find = ""; render(); } else { this.blur(); } }
     });
     bar.appendChild(find);
-    bar.appendChild(btn("Today", goToday, "", { title: "The set open today, or the next one (Ctrl+T)" }));
+    bar.appendChild(h("span.grow"));
     if (author() && (p.lookN || ui.look)) {
-      bar.appendChild(btn("Needs a look (" + p.lookN + ")", function () { ui.look = !ui.look; render(); }, ui.look ? "pri" : "",
-        { title: "Only the weeks with a set that has no cards here, or a day over the pace" }));
+      bar.appendChild(btn(ui.look ? "Showing what needs a look  \u2715" : p.lookN + (p.lookN === 1 ? " needs a look" : " need a look"),
+        function () { ui.look = !ui.look; render(); }, "look" + (ui.look ? " on" : ""),
+        { title: "Only the weeks with a set that has no cards here, or a day over the pace", "aria-pressed": ui.look ? "true" : "false" }));
     }
-    if (ui.mode === "list") { bar.appendChild(btn(allOpen(p) ? "Collapse all" : "Expand all", function () { ui.all = !allOpen(p); ui.opened = {}; ui.closed = {}; render(); })); }
     if (author()) {
       bar.appendChild(btn("Add", function (e, b) {
         menu([{ label: "A set…  Ctrl+N", cmd: "new_date_form" }, { label: "A quiz, exam or day…  Ctrl+E", cmd: "new_event_form" },
           { label: "A review day…", cmd: "new_review_form" }, { sep: true },
           { label: "Sets from the deck…", off: !p.hasDeck, cmd: "deck", args: {} }, { sep: true },
           { label: "Give everyone a day…", cmd: "breather" }], b);
-      }, "ch", { disabled: busy() }));
+      }, "pri ch", { disabled: busy() }));
     }
     return bar;
+  }
+  /* the list's own line: back to now, and every week open or folded */
+  function listHead(p) {
+    return h("div.lhd", {}, [btn("Today", goToday, "t", { title: "The set open today, or the next one (Ctrl+T)" }),
+      btn(allOpen(p) ? "Fold all" : "Unfold all", function () { ui.all = !allOpen(p); ui.opened = {}; ui.closed = {}; render(); }, "t")]);
   }
 
   function isOpen(w) {
@@ -268,8 +277,8 @@ var dcPlan = (function () {
     return row;
   }
   function listView(p) {
-    var box = h("div"), today = p.today, any = false;
-    var weeks = ui.desc ? p.weeks.slice().reverse() : p.weeks;
+    var box = h("div", {}, [listHead(p)]), today = p.today, any = false;
+    var weeks = p.weeks;
     weeks.forEach(function (w) {
       var items = w.items.filter(matches);
       if (ui.look && !w.look) { return; }
@@ -290,9 +299,8 @@ var dcPlan = (function () {
         box.appendChild(h("div.heavy", {}, [h("b", { text: "Over the pace " }), hv.words, acts]));
       }
       var ruled = w.start > today || addDays(w.start, 6) < today;
-      var its = ui.desc ? items.slice().reverse() : items;
-      its.forEach(function (it) {
-        if (!ruled && (ui.desc ? String(it.day) <= today : String(it.day) >= today)) { box.appendChild(h("div.todayl", { text: "Today, " + p.todayw })); ruled = true; }
+      items.forEach(function (it) {
+        if (!ruled && String(it.day) >= today) { box.appendChild(h("div.todayl", { text: "Today, " + p.todayw })); ruled = true; }
         box.appendChild(itemRow(it));
       });
       if (!ruled) { box.appendChild(h("div.todayl", { text: "Today, " + p.todayw })); }
@@ -370,7 +378,8 @@ var dcPlan = (function () {
     DAYS.forEach(function (x) { grid.appendChild(h("div.hd", { text: x })); });
     for (var i = 0; i < 7; i++) { grid.appendChild(dayCell(p, addDays(ui.week, i), by, true)); }
     return h("div", {}, [h("div.calnav", {}, [btn("‹", function () { ui.week = addDays(ui.week, -7); render(); }),
-      h("b", { text: "Week of " + short(ui.week) }), btn("›", function () { ui.week = addDays(ui.week, 7); render(); })]), grid]);
+      h("b", { text: "Week of " + short(ui.week) }), btn("›", function () { ui.week = addDays(ui.week, 7); render(); }),
+      h("span.grow"), btn("Today", goToday, "t", { title: "This week (Ctrl+T)" })]), grid]);
   }
   function monthView(p) {
     if (!ui.month) { ui.month = anchorDay(p).slice(0, 7) + "-01"; }
@@ -384,7 +393,8 @@ var dcPlan = (function () {
     }
     function step(n) { var x = d(ui.month); x.setMonth(x.getMonth() + n); ui.month = iso(x); render(); }
     return h("div", {}, [h("div.calnav", {}, [btn("‹", function () { step(-1); }),
-      h("b", { text: MONTHS[first.getMonth()] + " " + first.getFullYear() }), btn("›", function () { step(1); })]), grid]);
+      h("b", { text: MONTHS[first.getMonth()] + " " + first.getFullYear() }), btn("›", function () { step(1); }),
+      h("span.grow"), btn("Today", goToday, "t", { title: "This month (Ctrl+T)" })]), grid]);
   }
   function goToday() {
     var p = S.plan; if (!p) { return; }

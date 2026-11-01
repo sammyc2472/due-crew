@@ -244,3 +244,32 @@ body .dcp .b.bad:disabled, body .dcp .b.bad:disabled:hover { color: #c62828; }
 .dcp .calp .cd.on, .dcp .calp .cd.on:hover { background: var(--dc-accent); color: var(--dc-accent-ink); font-weight: 700; }
 .dcp .calp .cf { display: flex; justify-content: flex-end; margin-top: 6px; }
 
+/* 3.9.6, after the first click test (Sam: "some of the colors don't pop / adequately show hierarchies /
+   buttons / areas of text input especially inside the more grey areas"). Three layers, each its own:
+   the window white; its panels the well, edged; anything typed in or picked white with a real edge
+   wherever it sits (a well box on a well panel was no box at all); buttons white with a firmer edge, a
+   tint on hover; the panels' labels a step darker than small print. */
+.dcp { --dc-edge: color-mix(in srgb, var(--dc-ink) 22%, var(--dc-bg)); --dc-edge-2: color-mix(in srgb, var(--dc-ink) 42%, var(--dc-bg)); }
+.dcp .pane, .dcp .side { box-shadow: inset 0 0 0 1px var(--dc-line); }
+.dcp .in, .dcp select.in { background-color: var(--dc-bg); border-color: var(--dc-edge); }
+.dcp .in:hover:not(:disabled):not(:focus) { border-color: var(--dc-edge-2); }
+.dcp .in:focus { border-color: var(--dc-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--dc-accent) 22%, transparent); }
+.dcp .in::placeholder { color: var(--dc-muted); }
+.dcp .b { border-color: var(--dc-edge); box-shadow: 0 1px 0 color-mix(in srgb, var(--dc-ink) 7%, transparent); }
+.dcp .b:hover:not(:disabled):not(.off) { border-color: var(--dc-accent); background-color: var(--dc-you-bg); }
+.dcp .b.pri:hover:not(:disabled) { background-color: color-mix(in srgb, var(--dc-accent) 86%, #000); border-color: transparent; }
+.dcp .b.t, .dcp .b.t:hover:not(:disabled), .dcp .b:disabled, .dcp .b.off { box-shadow: none; }
+.dcp .b.t, .dcp .b.t:hover:not(:disabled) { background: none; }
+.dcp .b.t:hover:not(:disabled) { text-decoration: underline; text-underline-offset: 3px; }
+.dcp .seg { background: color-mix(in srgb, var(--dc-ink) 9%, var(--dc-bg)); }
+.dcp .seg button.on { background: var(--dc-bg); color: var(--dc-ink); box-shadow: 0 1px 2px rgba(0,0,0,.2), 0 0 0 1px var(--dc-edge); }
+.dcp .side .sh { color: color-mix(in srgb, var(--dc-ink) 72%, var(--dc-bg)); }
+/* the bar: how you look, what to show, what to do (3.9.6) */
+.dcp .ptools { flex: none; }
+.dcp .ptools .find { width: 240px; }
+.dcp .b.look { color: var(--dc-hours); border-color: color-mix(in srgb, var(--dc-hours) 55%, var(--dc-bg)); background: color-mix(in srgb, var(--dc-hours) 9%, var(--dc-bg)); }
+.dcp .b.look:hover:not(:disabled) { border-color: var(--dc-hours); background: color-mix(in srgb, var(--dc-hours) 16%, var(--dc-bg)); }
+.dcp .b.look.on { color: var(--dc-bg); background: var(--dc-hours); border-color: var(--dc-hours); }
+.dcp .lhd { display: flex; justify-content: space-between; gap: 8px; padding: 0 4px 2px; }
+.dcp .lhd .b.t { font-size: 12.5px; }
+
