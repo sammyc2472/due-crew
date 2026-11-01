@@ -222,6 +222,11 @@ same commit, each with its test:
   (Read it's "To pick in Anki:" line)
 - `planner/prompts.py` ↔ `Prompts` in builder.js (round five: Plan the
   dates and Tag by objective, the prompts for your own AI; checked in node)
+- `due_crew/planner/page/*` = `site/public/planpage/*`, byte for byte (the
+  plan window's page, the same on duecrew.com, 3.9.6; `tools/gen_plan_page.py`
+  writes the copies, the suite checks); `planner/webface.py` and its views
+  (`webmodel`, `webtabs`, `webnew`) ↔ `site/public/planface.js` (the same
+  view and commands from builder.js's state; `tests/planface_test.js`)
 - `gamenight.NEEDS` ↔ `NEEDS` in `site/public/table.js` (what each game
   needs from tonight's pack, 3.9.5; the suite checks)
 - the Worker ↔ `tests/fakes.FakeWorker` (the suite's server)

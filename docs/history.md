@@ -4146,3 +4146,21 @@ every release that changes how something works.
   the plan saves its sets, quizzes and exams and review days as an .ics
   file (`planner/ics.py`: all-day events, a spread set over its days, a
   follower's on their own days without what they skip; names only).
+- 3.9.6, Your plans on duecrew.com is the add-on's own page (Sam: "if
+  HTML, then theoretically it can also use the same stuff"): the plan
+  window's page scripts are copied to `site/public/planpage/` byte for
+  byte (`tools/gen_plan_page.py`, the suite checks), and
+  `site/public/planface.js` builds the same view and takes the same
+  commands from builder.js's state and the API's routes (nothing new on
+  the server). An author's `/plans/{id}` and `/edit` and `/plans/new`
+  draw it: Plan, Insights (from the deck tree Anki uploads), Settings and
+  New plan (someone's plan, or start empty; a resource at my pace stays
+  Anki's). What only Anki has is left out (Browse, Study, opening cards,
+  Your AI app, Today's set, Leave out cards also tagged); Anki's Qt
+  dialogs are sheets in the page; Add to my calendar downloads the
+  plan's `/p/CODE.ics`. With nobody following, a change saves at once
+  and Undo takes it back; with followers it waits for Review and send.
+  The old page's Progress, poster and calendar menu stay at
+  `/plans/{id}?page`; followers keep the old page for now. A set on the
+  site's pages too. `tests/planface_test.js` (every view drawn, every
+  control fired, a save the builder's own PUT); `tools/plan_site_preview.js`.
