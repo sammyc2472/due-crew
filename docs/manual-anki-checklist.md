@@ -682,6 +682,15 @@ In Anki (as a follower):
 - [ ] You › Plans: the plan as a path above the week (done, behind, today, ahead, skipped; the last quiz at the end); "lesson 3 of 19"; when behind, "Behind · …" with Behind…: Slide N days, Fit it in, Skip what's left, Not now.
 - [ ] You › Plans with no plan: the code box (a plan's code or its link opens Follow; a friend's code adds them, as before), your exam with Plan the way there (New plan, finishing by it), Make a plan, the library.
 
+### 3.9.6: the plan joys (about 15 minutes; a small plan of your own, a few cards a set)
+- [ ] New plan › A resource, at my pace: under the preview's line, the plan as a path, a segment a set, the first outlined, its exam a diamond; change the pace or the days and it lays itself out again (Reduce motion: at once). No Pip in the window.
+- [ ] Start it on a plan whose first set opens today: You › Plans says "Day one · N to go today" and Pip pops up after the words, says let's go and goes; drawn again, the words, no Pip. Tomorrow, no Day one.
+- [ ] Finish a set's last card, back to Decks › You › Plans (Refresh if the card hasn't caught up): its segment fills, seven little squares burst, Pip hops onto it from the set before and goes in about five seconds. Redraw (a tab and back): no pop again. With Reduce motion: Pip stands on it, still, then goes.
+- [ ] Get behind (a set's day passes with cards left), then see them: "Caught up · <set>, all N seen" where Behind was, a 🎉 that pops once; it stays the day; tomorrow it's gone. Slide or Skip what's left instead: no Caught up.
+- [ ] Halfway (the set that makes half), three-quarters, the last set's morning: a line under the path each, once; Share › As text pastes the line; As a picture… is the story card (the path so far, Pip on it); × takes it off for today.
+- [ ] The last set's last card: at the next board draw the show over the Decks screen (the path fills, Pip hops to the tape, a grad cap lands on it, confetti), about ten seconds with its banner; a click or Esc ends it at once; the banner's Share is the menu. It never plays again for that plan. Reduce motion: the banner alone, Pip still in its cap. The card then says "all N sets done" and "Finished · N sets · N cards · N weeks" with Share; the picture is Pip in its grad cap on the last set. Light and dark.
+- [ ] Pip's closet › Plans: Finisher's ribbon (three plans done), Folded map (Your plans… with someone following a plan you made), Kite (Give everyone a day saved on a plan you write); each comes with the board's "New for your Pip" line at the next refresh; the kite sways when pointed at.
+
 ### 3.9.5: Pip Party, round three (about 15 minutes; two phones)
 
 - [ ] You › Pip Party: three game boxes up top, each with its picture and tonight's count, First up on one; tap another and First up moves. Nothing on Today, Insights or Browse's right-click says Party; Tools › Due Crew › Pip Party… opens this tab.

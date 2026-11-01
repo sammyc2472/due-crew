@@ -319,9 +319,21 @@ class PlanCore:
             keep_now = keep
         self._busy(True, "Saving…")
         self.undoable = None
-        self.ops.save(self, pid, version, doc, summary,
-                      lambda got: self._saved(pid, got, keep_now, checked if again else None, then))
+        gave = any(o.get("op") == "breather" for o in checked)
+
+        def saved(got):
+            if gave and got and got[0] == "saved":
+                self._gave_day()
+            self._saved(pid, got, keep_now, checked if again else None, then)
+        self.ops.save(self, pid, version, doc, summary, saved)
         return True
+
+    def _gave_day(self):
+        """3.9.6: Give everyone a day saved on a plan I write: Pip's Kite (the
+        add-on's ops count it; a face's own stand-in may not)."""
+        f = getattr(self.ops, "gave_day", None)
+        if f is not None:
+            f()
 
     def _saved(self, pid, got, keep, retry=None, then=None):
         then = then or (lambda _ok: None)
@@ -387,6 +399,7 @@ class PlanCore:
         doc, summary, _line = self.draft.payload(ctx, self.idx, self.swap)
         pid, version, n = self.plan["id"], self.draft.version, len(self.draft)
         post = " ".join(str(why or "").split())[:O.WHY_MAX] or None
+        gave = any(o.get("op") == "breather" for o in self.draft.ops)
         self._busy(True, "Sending…")
 
         def done(got):
@@ -408,6 +421,8 @@ class PlanCore:
                 return
             self.ops.keep_draft(pid, None)
             self.draft = None
+            if gave:
+                self._gave_day()
             plan = clean_plan(what) or self.plan
             self._loaded(pid, (what, plan), saved=True)
             self.undoable = (pid, plan.get("version"))

@@ -433,6 +433,7 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
     if _state["board_shown"] and mw.state == "deckBrowser":
         _swap(cfg())        # page not rebuilt: safe to play cheers directly
         _play_cheers()
+        _joy_show()  # 3.9.6: after the cheers that came with it (it waits for their show)
     else:
         _rerender()         # deck_browser_did_render plays queued cheers
     rooms.refresh_widgets()  # 2.12: who's in the room, as of this fetch
@@ -607,6 +608,7 @@ def _you(c, due, plans):
     try:
         if shown == "plans":
             team_flow.plan_lines(plans.get("cards"))  # the next exam's cards at risk, a line a plan
+            plan_flow.joy_claim(plans.get("cards"), c)  # 3.9.6: what's waiting to play on the plan shown plays now, once
             if not due and mw.col:
                 you["opened"] = plan_flow.morning_opened()  # Due off: its Not today is here
         elif shown == "insights":
@@ -665,6 +667,7 @@ def _on_did_render(deck_browser):
                 + keep + _arrive_js() + (board.wrapped_js() if _state.get("wrapped_open") else "")
                 + fridge)  # 3.9.1: the doodles placed around the board, and draggable
     _play_cheers()
+    _joy_show()
     if _state.get("plans_midday") and not _closing:
         # 3.7.3: an update that came while reviewing waits for the Decks screen
         from aqt.qt import QTimer
@@ -1100,6 +1103,17 @@ def _swap(c, focus=None):
         js += ("(function(){var f=document.querySelector('#due-crew [data-f=\"%s\"]');"
                "if(f){f.focus({preventScroll:true});}})();" % re.sub(r"[^A-Za-z0-9:_-]", "", focus))
     app.board_eval(js)  # 3.9.1: never into the page before the Decks page (it'd carry the board's key)
+    if not _pending_cheers:  # cheers about to land play first; the finish follows them (_commit)
+        _joy_show()
+
+
+def _joy_show():
+    """3.9.6: a plan just finished: its show over the Decks screen, once
+    (plan_flow.joy_show); after a cheer's show, when one's playing."""
+    try:
+        plan_flow.joy_show()
+    except Exception:
+        traceback.print_exc()
 
 
 def open_auth():

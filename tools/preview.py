@@ -7,6 +7,7 @@ that flips the nightMode class, and buttons that run the real overlay JS.
 import html
 import datetime
 import json
+import re
 import sys
 
 import os
@@ -324,6 +325,56 @@ sections.append("<h3>plans, end to end: a plan behind (Behind &middot; its set, 
                 "up top opens its sheet)</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [_BEHIND], "offers": []}))
     .replace("dc-pd-pe-", "dc-pd-pe2-").replace('id="du-', 'id="due2-'))
+# 3.9.6, the plan joys (Sam's picks, the "Joy on the plan card" mock): each moment as the board draws it,
+# mid-moment (motion.js plays it from --ago; still with Reduce motion) and the rest of its day
+from due_crew import sev as _SV  # noqa: E402
+
+
+def _joy_prog(k, **x):
+    full = {f"e{i}": [n, n, n] for i, n in ((i, u["n"]) for i, u in enumerate(_EDOC["units"])) if i < k}
+    full.update(x)
+    return full
+
+
+def _joy_card(today, before, after, ago=0.4, then=None):
+    """A card at `today`, its joys from the step `before` (on `then`) -> `after` (progress), on screen `ago` s."""
+    st = None
+    for day, prog, shown, now in ((then or today, before, False, 1000.0), (today, after, True, 1001.0), (today, after, True, 1001.0 + ago)):
+        applied = {u["id"]: "s" for u in _EDOC["units"] if u["opens"] <= day}
+        path = PL.path(_EDOC, prog, day, applied=applied)
+        late = PL.behind_of(path, day)
+        st, view = PL.joy_step(st, path, late, day, now, shown=shown, name="Path Book, high yield")
+    if view.get("pop") and view["pop"].get("ago") is not None:
+        view["pop"]["pip"] = re.sub(r'<rect class="cf"[^>]*/>', "", _SV.move("hop", "hop", label="Pip: a set done"))
+    if view.get("day1") and view["day1"].get("ago") is not None:
+        view["day1"]["pip"] = _SV.move("ready", "ready", label="Pip: day one")
+    togo = sum(max(0, x["total"] - x["seen"]) for x in path["lessons"] if x["opens"] == today)
+    n = len(PL.joy_sets(path))
+    return dict(PLAN_CARD, id="pj", title="Path Book, high yield · Dre's plan", name="Path Book, high yield",
+                sub=(f"all {n} sets done" if PL.joy_finished(path) else f"set {path['at']} of {path['of']}") + " · 6 following",
+                tabs={"summary": None}, ins=None, waiting=0, week=PL.week_view(_EDOC, after, today, PL.week_start(today)),
+                path=path, behind=late, status={"togo": togo, "behind": late["left"] if late else 0, "since": ""}, joy=view)
+
+
+_JOY = [("a set done: its segment fills, the squares burst, Pip hops on (0.4 s in)",
+         _joy_card("2026-11-05", _joy_prog(2, e2=[84, 30, 84]), _joy_prog(3))),
+        ("halfway: a line under the path, Share and &times;", _joy_card("2026-11-20", _joy_prog(9), _joy_prog(10))),
+        ("three-quarters", _joy_card("2026-12-02", _joy_prog(14), _joy_prog(15))),
+        ("the last set, the morning it opens", _joy_card("2026-12-11", _joy_prog(17), _joy_prog(18, e18=[40, 0, 40]), then="2026-12-09")),
+        ("finished: the line the card keeps after the show", _joy_card("2026-12-11", _joy_prog(18, e18=[40, 0, 40]), _joy_prog(19))),
+        ("caught up: Behind cleared, for the rest of the day", _joy_card("2026-11-05", _joy_prog(1, e1=[53, 22, 53], e2=[84, 0, 84]),
+                                                                        _joy_prog(2, e2=[84, 0, 84]))),
+        ("day one: the line all day, Pip's let's-go once", _joy_card("2026-11-02", {}, {"e0": [40, 0, 40]}))]
+for _i, (_what, _c) in enumerate(_JOY):
+    sections.append(f"<h3>3.9.6, the plan joys: {_what}</h3>" + board.render(
+        DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [_c], "offers": []}))
+        .replace("dc-pd-pj-", f"dc-pd-pj{_i}-").replace('id="du-', f'id="duej{_i}-'))
+_JOY_FIN = board.finish_js({"pid": "pj", "name": "Path Book, high yield", "sets": 19, "cards": 1716, "weeks": 6,
+                            "a": ["#2e7d32", "#7cc47f"],
+                            "pip": {"hop": re.sub(r'<rect class="cf"[^>]*/>', "", _SV.move("hop", "hop", rest=True)),
+                                    "jump": re.sub(r'<rect class="cf"[^>]*/>', "", _SV.move("hop", "jump")),
+                                    "still": _SV.svg("hop", rest=True, look=["gradcap"]),
+                                    "cap": __import__("due_crew.closet_art", fromlist=["ART"]).ART["gradcap"][0]}})
 _BS = PL.behind_sheet(_BEHIND["name"], _BEHIND["behind"], _BEHIND["path"], 31)
 SHEET_BEHIND = {"id": "p5", "title": _BS["title"], "text": _BS["text"], "yes": _BS["ways"][0]["yes"], "no": "Not now",
                 "field": {"kind": "pick", "at": 0, "items": [w["label"] for w in _BS["ways"]],
@@ -999,6 +1050,7 @@ page = f"""<!doctype html><html><head><meta charset="utf-8">
   <button onclick="eval(SHEET_DELETE)">delete</button>
   <button onclick="eval(SHEET_PICK)">deck</button>
   <button onclick="eval(SHEET_BEHIND)">behind</button>
+  <button onclick="eval(JOY_FIN)">finished</button>
 </div>
 <center>{''.join(sections)}</center>
 <script>
@@ -1012,6 +1064,7 @@ page = f"""<!doctype html><html><head><meta charset="utf-8">
   var SHEET_DELETE = {json.dumps(sheet_delete)};
   var SHEET_PICK = {json.dumps(sheet_pick)};
   var SHEET_BEHIND = {json.dumps(sheet_behind)};
+  var JOY_FIN = {json.dumps(_JOY_FIN)};
 </script>
 </body></html>"""
 

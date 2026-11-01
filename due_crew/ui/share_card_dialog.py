@@ -65,16 +65,17 @@ def paint(kind, size, data, on, look="light"):
             p.setBrush(QColor(color))
             p.drawEllipse(QPointF(x, y), r, r)
         elif op[0] == "sev":
-            _o, pose, x, y, z, color = op
-            _sev(p, pose, color, QRectF(x, y, z, z))
+            _o, pose, x, y, z, color = op[:6]
+            _sev(p, pose, color, QRectF(x, y, z, z), op[6] if len(op) > 6 else ())
     p.end()
     return img
 
 
-def _sev(p, pose, color, rect):
+def _sev(p, pose, color, rect, wear=()):
     """Pip, still, in the card's accent: sev.py's one drawing, by QtSvg
     (where this Qt can't read SVG the card goes without). 3.8.2: in what it
-    has on from the closet (my cards are mine: my look)."""
+    has on from the closet (my cards are mine: my look). 3.9.6: wear, what
+    the card puts on it over that (a finished plan's grad cap)."""
     try:
         from PyQt6.QtSvg import QSvgRenderer
     except Exception:
@@ -84,6 +85,9 @@ def _sev(p, pose, color, rect):
         mine = look()
     except Exception:
         mine = None
+    if wear:  # over the look, a costume off (it would hide them)
+        from .. import closet
+        mine = closet.clean([k for k in closet.clean(mine or []) if closet.BY[k]["slot"] != closet.COSTUME] + list(wear))
     r = QSvgRenderer(QByteArray(sev.still(pose, color, look=mine).encode("utf-8")))
     if r.isValid():
         r.render(p, rect)

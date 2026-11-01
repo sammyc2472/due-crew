@@ -847,6 +847,23 @@ def _css(cfg):
     #due-crew .ppath em {{ flex: none; box-sizing: border-box; width: 9px; height: 9px; margin: 0 2px 0 4px;
       transform: rotate(45deg); border: 2px solid var(--dc-ink); border-radius: 2px; }}
     #due-crew .ppl {{ display: flex; justify-content: space-between; gap: 10px; font-size: 11px; color: var(--dc-muted); }}
+    /* 3.9.6: the plan's joys. A segment or line playing one is where its moment starts (motion.js's joy;
+       --ago: how long it's been out). Still (Reduce motion), a Pip stands where it lands, then goes */
+    #due-crew .ppath i[data-joy] {{ position: relative; }}
+    #due-crew .ppath .jpp {{ position: absolute; left: 50%; top: -31px; width: 34px; height: 34px; margin-left: -17px;
+      z-index: 3; pointer-events: none; transform-origin: 50% 100%;
+      animation: dcjoygo 0s linear calc(5s - var(--ago, 0s)) forwards; }}
+    #due-crew .ppath .jpp svg, #due-crew .dc-pc .jgp svg {{ display: block; width: 34px; height: 34px; overflow: visible; }}
+    #due-crew .dc-pc .pst .jgo {{ position: relative; display: inline-block; width: 34px; height: 12px; flex: none;
+      animation: dcjoygo 0s linear calc(5s - var(--ago, 0s)) forwards; }}
+    #due-crew .dc-pc .jgp {{ position: absolute; left: 0; bottom: -3px; width: 34px; height: 34px; pointer-events: none;
+      transform-origin: 50% 100%; }}
+    @keyframes dcjoygo {{ to {{ visibility: hidden; }} }}
+    #due-crew .dc-pc .pst .jd1 {{ color: var(--dc-accent); }}
+    #due-crew .dc-pc .pst.jml b, #due-crew .dc-pc .pst.jfin b {{ color: var(--dc-ink); }}
+    #due-crew .dc-pc .pst.jcu b {{ color: var(--dc-accent); }}
+    #due-crew .dc-pc .pst a.jx {{ color: var(--dc-muted); font-weight: 400; font-size: 15px; line-height: 1; }}
+    #due-crew .dc-pc .pst .jta {{ position: relative; display: inline-block; font-size: 13px; line-height: 1; }}
     #due-crew .dc-pc .miss {{ color: var(--dc-hours); font-size: 11px; }}
     #due-crew .dc-pc .n {{ color: var(--dc-muted); font-variant-numeric: tabular-nums; text-align: right;
       white-space: nowrap; font-size: 11px; }}
@@ -1868,8 +1885,8 @@ def _plan_card_html(card, people=None, cfg=None, head=None):
     if card.get("no_deck"):
         out += (f'<div class="dc-line">No deck here has this plan&rsquo;s cards yet. '
                 f'<a href="#" onclick="{_pycmd("plandeck:" + pid)}">Pick a deck</a></div>')
-    out += (_plan_path(card) + _plan_status(card, pid) + _plan_slid(card, pid) + _plan_behind(card, pid) + _week_html(card, pid)
-            + _plan_now(card, pid))
+    out += (_plan_path(card) + _joy_line(card, pid) + _plan_status(card, pid) + _plan_slid(card, pid)
+            + (_plan_behind(card, pid) or _joy_caught(card)) + _week_html(card, pid) + _plan_now(card, pid))
     notes = _plan_notes(card, pid)
     if notes:
         out += notes[0]
@@ -1897,7 +1914,12 @@ def _plan_status(card, pid):
     if lesson.get("today"):
         uid = str(lesson["today"])
         act = f'<a href="#" title="Its deck, in Anki" onclick="{_pycmd(f"planstudydate:{pid}:{uid}")}">Study</a>'
-    return (f'<div class="pst"><span><b>{togo:,}</b> to go today{", in your decks" if lesson else ""}</span>'
+    # 3.9.6: the first morning says so all day, and Pip says let's go just after the words, once
+    one = (card.get("joy") or {}).get("day1")
+    first = '<b class="jd1">Day one</b> &middot; ' if one else ""
+    pip = (f'<span class="jgo" data-joy="go"{_joy_ago(one["ago"])}><span class="jgp" aria-hidden="true">{one["pip"]}</span></span>'
+           if one and one.get("ago") is not None and one.get("pip") else "")
+    return (f'<div class="pst"><span>{first}<b>{togo:,}</b> to go today{", in your decks" if lesson else ""}</span>{pip}'
             + (f'<span class="acts">{act}</span>' if act else "") + '</div>')
 
 
@@ -1929,7 +1951,8 @@ def _plan_path(card):
                 "now": "today" + (f' &middot; {int(x.get("left") or 0):,} to go' if x.get("left") else "")}.get(
             st, _ins_dname(x.get("opens"), long=True))
         cls = PATH_WORDS.get(st, "a") + (" t" if x.get("today") and st == "done" else "")
-        segs += f'<i class="{cls}" title="{e(str(x.get("name") or "?"))} &middot; {word}"></i>'
+        play, inner = _joy_seg(card.get("joy"), str(x.get("uid") or ""), st)
+        segs += f'<i class="{cls}" title="{e(str(x.get("name") or "?"))} &middot; {word}"{play}>{inner}</i>'
     end = p.get("end") or {}
     ev = bool(end.get("event"))
     when = _ins_dname(end.get("day"), long=True)
@@ -1942,6 +1965,71 @@ def _plan_path(card):
     right = (f'{e(str(end.get("name") or "Exam"))} &middot; {when}' if ev else f"Ends {when}" if when else "")
     return (f'<div class="ppath{gap}" role="img" aria-label="Sets: {said}">{segs}</div>'
             f'<div class="ppl"><span>{_ins_dname(p.get("first"), long=True)}</span><span>{right}</span></div>')
+
+
+def _joy_ago(ago):
+    return f' style="--ago:{max(0.0, float(ago)):.2f}s"'
+
+
+def _joy_seg(joy, uid, state):
+    """3.9.6: a path segment playing one of the plan's joys (motion.js's
+    joy): (its attributes, what goes in it). A set done pops ("pop"), Pip
+    on it while it's out (still, then gone, with Reduce motion); what was
+    behind turns the accent ("caught"); a milestone's set sparkles
+    ("spark"). --ago: how long it's been out, so a redraw goes on from
+    there. The glue says what plays (plan_flow.joy); Pip is sev.py's."""
+    joy = joy or {}
+    pop, line, caught = joy.get("pop") or {}, joy.get("line") or {}, joy.get("caught") or {}
+    if state != "done" or not uid:
+        return "", ""
+    if pop.get("uid") == uid and pop.get("ago") is not None:
+        pip = f'<span class="jpp" aria-hidden="true">{pop["pip"]}</span>' if pop.get("pip") else ""
+        return f' data-joy="pop"{_joy_ago(pop["ago"])}', pip
+    if caught.get("ago") is not None and uid in (caught.get("uids") or []):
+        return f' data-joy="caught"{_joy_ago(caught["ago"])}', ""
+    if line.get("ago") is not None and line.get("key") in ("half", "threeq") and line.get("uid") == uid:
+        return f' data-joy="spark"{_joy_ago(line["ago"])}', ""
+    return "", ""
+
+
+def _joy_line(card, pid):
+    """3.9.6: the plan's line about where it's got to, under the path: a
+    milestone today (halfway, three-quarters, the last set), with Share and
+    × (gone for today, as it would be tomorrow); or, every set done, the
+    finish line, with Share, for as long as I follow it. The plan's and
+    set's names are the author's: escaped here."""
+    e = _html.escape
+    j = card.get("joy") or {}
+    share = lambda key: (f'<a href="#" title="As text or a picture" '  # noqa: E731
+                         f'onclick="{_pycmd(f"planjoyshare:{pid}:{key}")}">Share</a>')
+    if j.get("fin"):
+        return (f'<div class="pst jfin"><span><b>Finished</b> &middot; {e(str(j["fin"].get("words") or ""))}</span>'
+                f'<span class="acts">{share("fin")}</span></div>')
+    ln = j.get("line") or {}
+    key = ln.get("key")
+    if key not in ("half", "threeq", "last"):
+        return ""
+    name = e(str(card.get("name") or "the plan"))
+    words = {"half": f"Halfway through {name}", "threeq": f"Three-quarters through {name}", "last": f"The last set of {name}"}[key]
+    sub = (f'{e(str(ln.get("name") or ""))}, today' if key == "last"
+           else f'{int(ln.get("n") or 0):,} of {int(ln.get("of") or 0):,} sets')
+    play = f' data-joy="line"{_joy_ago(ln["ago"])}' if ln.get("ago") is not None else ""
+    return (f'<div class="pst jml"{play}><span><b>{words}</b> &middot; {sub}</span><span class="acts">{share(key)}'
+            f'<a class="jx" href="#" title="Not now" onclick="{_pycmd(f"planjoyx:{pid}:{key}")}">&times;</a></span></div>')
+
+
+def _joy_caught(card):
+    """3.9.6: Behind cleared, its line says so for the rest of the day, every
+    time: "Caught up · 2 · Inflammation, all 101 seen", a small 🎉 that pops
+    once. The set's name is the author's: escaped here."""
+    c = (card.get("joy") or {}).get("caught") or {}
+    if not c.get("uids"):
+        return ""
+    more = int(c.get("more") or 0)
+    name = _html.escape(str(c.get("name") or "?")) + (f" and {more} more" if more else "")
+    play = f' data-joy="tada"{_joy_ago(c["ago"])}' if c.get("ago") is not None else ""
+    return (f'<div class="pst jcu"><span><b>Caught up</b> &middot; {name}, all {int(c.get("n") or 0):,} seen</span>'
+            f'<span class="acts"><span class="jta" aria-hidden="true"{play}>&#127881;</span></span></div>')
 
 
 def _plan_slid(card, pid):
@@ -6629,6 +6717,48 @@ def and_more(names, most=3):
     if len(names) > most:
         return ", ".join(names[:most]) + f" and {len(names) - most} more"
     return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1] if names else ""
+
+
+def finish_js(view):
+    """3.9.6, the finish line (Sam's pick): a plan's last set's last card
+    seen, its show over the whole Decks screen (show.js's DCShow.finish):
+    the path fills as Pip hops along it, breaks the tape, a grad cap lands
+    on it; seven seconds, its banner three more, a click or Esc ends it.
+    Reduce motion: the banner alone, Pip still in its cap. view
+    (plan_flow._finish_view): {pid, name, sets, cards, weeks, a, pip}; the
+    colours are the board's tokens, read off the page. Injected by
+    board_eval, never in the board's HTML; the plan's name goes in as text."""
+    sets = int(view.get("sets") or 0)
+    num = {"sets": sets, "cards": int(view.get("cards") or 0), "weeks": int(view.get("weeks") or 0)}
+    bits = [f"{sets:,} set{'s' if sets != 1 else ''}", f"{num['cards']:,} card{'s' if num['cards'] != 1 else ''}"]
+    if num["weeks"]:
+        bits.append(f"{num['weeks']:,} week{'s' if num['weeks'] != 1 else ''}")
+    pip = view.get("pip") or None
+    data = {"name": str(view.get("name") or "the plan"), "sub": " · ".join(bits), "n": max(1, min(40, sets)),
+            "share": "duecrew:planjoyshare:" + _re.sub(r"[^A-Za-z0-9_-]", "", str(view.get("pid") or "")) + ":fin",
+            "a": list(view.get("a") or ["#2e7d32", "#7cc47f"]), "pip": pip, "ms": int(_shows.FINISH_SECONDS * 1000),
+            "linger": int(_shows.BANNER_SECONDS * 1000)}
+    return """
+    (function () {
+        var D = %s;
+        var dc = document.getElementById('due-crew'), cs = dc ? getComputedStyle(dc) : null;
+        var night = /night/i.test(document.body.className) || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        function tok(name, light, dark) { var v = cs && cs.getPropertyValue('--dc-' + name).trim(); return v || (night ? dark : light); }
+        D.bg = tok('bg', '#ffffff', '#1c1c1c'); D.ink = tok('ink', '#333333', '#dfe1dc'); D.line = tok('line', '#e2e2da', '#3d403b');
+        D.accent = tok('accent', '#2e7d32', '#7cc47f'); D.accentInk = tok('accent-ink', '#ffffff', '#122912');
+        D.amb = tok('hours', '#b26a00', '#dda45c'); D.mut = tok('muted', '#6f736b', '#9a9e94');
+        var m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(D.bg), n = m ? [m[1], m[2], m[3]].map(function (h) { return parseInt(h, 16); })
+            : (/(\\d+)\\D+(\\d+)\\D+(\\d+)/.exec(D.bg) || [0, 255, 255, 255]).slice(1).map(Number);
+        D.dark = n[0] * 0.299 + n[1] * 0.587 + n[2] * 0.114 < 128;
+        D.rm = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+        D.sevcss = %s;
+        %s
+        (function go(n) {  // a cheer's show that landed with it plays first (twenty seconds at most)
+            if (document.getElementById('dc-show') && n < 40) { setTimeout(function () { go(n + 1); }, 500); return; }
+            if (window.DCShow && window.DCShow.finish) { window.DCShow.finish(D); }
+        })(0);
+    })();
+    """ % (_json.dumps(data).replace("</", "<\\/"), _json.dumps(_sev.CSS).replace("</", "<\\/") if pip else "null", SHOW_JS)
 
 
 def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None, show=None, doodle=None):

@@ -124,6 +124,16 @@ S.update({f"fifteendone{'' if m == 'stack' else '.' + m}": (base, R(due=DV_BASE,
 S.update({f"streak.{m}": (base, R(due=DV_BASE, you=you("today"), milestones=[("dre", "Dre", 100)],
                                   milestone_sev={"dre": SV.move("hop", m, label="Pip: a big streak")}), None)
           for m in SV.moves("hop")})
+# 3.9.6, the plan joys: each moment on a swap, its markup at --ago 0 (motion.js's joy plays it from its start)
+_jp = lambda c: dict(PV.PLANS, cards=[c])  # noqa: E731
+for _k, (_t, _a, _b) in {"joypop": ("2026-11-05", PV._joy_prog(2, e2=[84, 30, 84]), PV._joy_prog(3)),
+                         "joyhalf": ("2026-11-20", PV._joy_prog(9), PV._joy_prog(10)),
+                         "joycaught": ("2026-11-05", PV._joy_prog(1, e1=[53, 22, 53], e2=[84, 0, 84]), PV._joy_prog(2, e2=[84, 0, 84])),
+                         "joyday1": ("2026-11-02", {}, {"e0": [40, 0, 40]})}.items():
+    _after = PV._joy_card(_t, _a, _b, ago=0.0)
+    _before = dict(_after, joy=None) if _k == "joyday1" else PV._joy_card(_t, _a, _a)
+    S[_k] = (R(due=DV_BASE, plans=_jp(_before), you=you("plans", plans=_jp(_before))),
+             R(due=DV_BASE, plans=_jp(_after), you=you("plans", plans=_jp(_after))), None)
 # 3.9.1: the page has the board's scripts from its load (init_js), so a swap sends their calls alone, as the add-on's do
 out = {k: {"a": a, "swap": ((B.swap_js(b) + B.keep_me_in_view_js(scripts=False)) if b else "")
            + (f"dcMotion.arrive({h.split(':', 1)[1]});" if h and h.startswith("arrive:") else ""), "hint": h} for k, (a, b, h) in S.items()}
@@ -146,6 +156,8 @@ NAMES = {"tick": "1 A tick you can see (and 2, the bar)", "done": "3 Done for to
          "sevhop.jump": "Pip: the day's done, a big jump", "sevcheer.hug": "Pip: a cheer lands, hugs the gift",
          "sevcheer.giftspin": "Pip: a cheer lands, spins with it", "sevexam.pep": "Pip: exam eve, a pep fist",
          "sevhello.walkin": "Pip: back from away, walks in", "sevhello.popup": "Pip: back from away, up from below",
+         "joypop": "3.9.6 A set done: it fills, the squares burst, Pip hops on", "joyhalf": "3.9.6 Halfway: the line, the sparkle",
+         "joycaught": "3.9.6 Caught up: amber to the accent, the 🎉", "joyday1": "3.9.6 Day one: Pip's let's-go",
          "fifteendone.wobble": "Pip: the session's line, the tower wobbles",
          "fifteendone.catch": "Pip: the session's line, steps under them",
          **{f"streak.{m}": f"Pip: a crewmate's 100-day streak ({m})" for m in SV.moves("hop")}}

@@ -840,6 +840,32 @@ def main(out):
                     if img.pixelColor(int(x + z / 2), int(y + z * 38 / 80)).name() != color:  # its forehead, in the accent
                         raise RuntimeError(f"share card: Pip not drawn on the {name} card ({size}, {look})")
                     img.save(os.path.join(out, f"share-card-{name}-sev-{size}-{look}.png"))
+        # 3.9.6, the plan joys: a plan's card (the mock's K4 redrawn), story only, its card count starting as
+        # Privacy's Reviews switch says; finished, Pip on the last set in its grad cap; on its way, where I am
+        from due_crew.ui.share_card_dialog import measure
+        plan_card = lambda d: {"kind": "plan", "title": "Share this plan", "sizes": ("story",),  # noqa: E731
+                               "file": "due-crew-plan-p1", "data": d}
+        pdlg = ShareCardDialog(None, lambda _k: plan_card(S.plan("Path Book", 19, 19, 2046, 6, cap=True)),
+                               priv=S.privacy({"share_reviews": False}))
+        shoot(pdlg, os.path.join(out, "share-card-plan-sheet.png"))
+        if pdlg.link.isVisible() or pdlg.switch["cards"].isChecked() or "Privacy" not in pdlg.switch["cards"].text():
+            raise RuntimeError("share card: a plan's is story only, its card count starting as Privacy's Reviews says")
+        pdlg.close()
+        for name, data in (("finished", S.plan("Path Book", 19, 19, 2046, 6, cap=True)),
+                           ("halfway", S.plan("Path Book", 19, 10, 1033, 6, brow="Halfway")),
+                           ("last", S.plan("Path Book", 19, 18, 1919, 6, brow="The last set", last="19 · Skin")),
+                           ("long", S.plan("Big Step 1, every chapter and then the questions after it", 140, 140, 9120, 31, cap=True))):
+            for look in ("light", "dark"):
+                img = paint("plan", "story", data, {"cards": True}, look)
+                sev = [o for o in S.draw("plan", "story", data, {"cards": True}, look, measure)[2] if o[0] == "sev"]
+                if len(sev) != 1:
+                    raise RuntimeError(f"share card: Pip isn't on the plan's {name} card")
+                x, y, z, color = sev[0][2:6]
+                if img.pixelColor(int(x + z / 2), int(y + z * 38 / 80)).name() != color:
+                    raise RuntimeError(f"share card: Pip not drawn on the plan's {name} card ({look})")
+                if data["cap"] and img.pixelColor(int(x + z * 34 / 80), int(y + z * 18 / 80)).name() != "#454b55":  # the cap's top
+                    raise RuntimeError(f"share card: no grad cap on the finished plan's Pip ({name}, {look})")
+                img.save(os.path.join(out, f"share-card-plan-{name}-{look}.png"))
 
     def why():
         # 3.8.0, pick 9: Browse › why isn't it showing?, a few reasons and their fixes
