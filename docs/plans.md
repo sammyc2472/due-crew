@@ -86,8 +86,8 @@ which Stop following opens), `hold_yes` (I said yes to Hold back; Put
 back never sets it), `later` (dates put off to a later morning),
 `own_opened`, `catch` (a catch-up's extra), `missed` (a 3.2 schedule's
 missed-days answer), and the plan tags this computer wrote. Today's
-lesson: `lesson_deck` (true: B, each open lesson a deck of its own; absent:
-A, in the plan's deck), with `lesson_decks` (lesson id: its deck),
+set: `lesson_deck` (true: B, each open set a deck of its own; absent:
+A, in the plan's deck), with `lesson_decks` (set id: its deck),
 `lesson_held` (cards another add-on's filtered deck holds) and
 `lesson_folder`. Per profile, `trees_sent` (what this computer last sent
 of each authored deck's tags) and `lesson_next` (B chosen for a plan
@@ -129,14 +129,14 @@ Once per Anki day, on the Decks screen, after AnkiWeb's sync
    A date whose plan changed since it opened opens just what the change
    adds (`_unit_cids`, the `pt` snapshot for plan tags). At my own pace
    it opens only what an author added to dates I opened, and ("next")
-   the next date once I've seen most of the last. Today's lesson, B (a
-   plan's choice on this computer, A by default): then each open lesson
+   the next date once I've seen most of the last. Today's set, B (a
+   plan's choice on this computer, A by default): then each open set
    with cards to learn is a filtered deck of its own,
    `Due Crew::<plan>::<NN> <lesson>`: its open new cards and its learning
    ones due now, never a review, as they come in the deck
    (`plan_flow._lesson_sync`), folded into the open's undo step, so Not
    today takes the decks too. A deck that holds them all is left alone; a
-   lesson behind keeps its deck till it's empty, then step 2 takes it (and
+   set behind keeps its deck till it's empty, then step 2 takes it (and
    the plan's folder with its last). A card another filtered deck holds
    stays there; another add-on's are counted for the plan's card. Open
    now, Open at my own pace, Welcome back's Open them and an update's

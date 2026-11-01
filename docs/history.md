@@ -4064,13 +4064,13 @@ every release that changes how something works.
   only, never markup). Its logic is `core.PlanCore`, moved out of the Qt
   window, which both run; the Qt window stays for `"plan_window": "qt"`
   in this computer's config. Plan (List, Week, Month with drag, Find,
-  Needs a look, a lesson's panel, the deck beside it, changes waiting
+  Needs a look, a set's panel, the deck beside it, changes waiting
   and Review and send, the paste box, the keys), Insights and Settings
   (an author's: the plan, sharing, co-authors, posts, history, the
   library, Your AI app; a follower's: my follow) are all there; the
   text, Spread, Add a search and review days open their Qt dialogs over
   it. **New plan** is its first screen (`webnew.py`): A resource, at my
-  pace (`edits.resource_plan`: a lesson a chapter of a resource in the
+  pace (`edits.resource_plan`: a set a chapter of a resource in the
   deck's order, "· the rest" for what no chapter holds, Only as the
   plan's own tag with 3.8.1 cuts, laid out at about N new a day, by a
   finish day with its exam, or for When I'm ready, on my study days;
@@ -4082,18 +4082,18 @@ every release that changes how something works.
   An author following their own plan isn't someone its changes wait for
   (`core.others`). No days off (a plan has no field for them). **The
   builder's site-only tools**, as ops: Leave out cards also tagged (the
-  Overlap "but not", `leave_out`), Move a source to a lesson or a day
-  (`move_source`, the builder's moveChip), a lesson straight from a tag
+  Overlap "but not", `leave_out`), Move a source to a set or a day
+  (`move_source`, the builder's moveChip), a set straight from a tag
   (`add_date`'s "next" and `join`), Lay out before any quiz or exam
   (`lay_out`'s `upto`; the plan's own end stays), Give everyone a day
   (`breather` in one click), Copy its search per source
   (`model.source_search`). No new doc field: the site and older add-ons
   read every change as before; nothing new on the server. **You ›
   Plans** (`plan_board.py`): the whole plan as a path above the week, a
-  segment a lesson (done, behind, today, ahead, skipped), its last quiz
-  or exam at the end, "lesson 3 of 19"; Behind… where Catch up… was (a
+  segment a set (done, behind, today, ahead, skipped), its last quiz
+  or exam at the end, "set 3 of 19"; Behind… where Catch up… was (a
   sheet: Slide N days on my follow's shift, Fit it in over three days or
-  a week, Skip what's left, Not now); a lesson with no finish-by day is
+  a week, Skip what's left, Not now); a set with no finish-by day is
   behind once its day passes with cards left, as Due's Behind counts.
   The empty tab: a box for a plan's code or link (any other code goes
   the way the box's codes always went), my exam with Plan the way there
@@ -4104,28 +4104,45 @@ every release that changes how something works.
   copy shows for a library plan. `test_plan_web.py`,
   `test_plan_web_tabs.py`, `test_plan_board.py`, `test_plan_ops.py`'s
   new ops; `tools/plan_preview.py` and `.js` render the window.
-- 3.9.6, Today's lesson, A or B (Sam's picks: per plan, chosen at the
+- 3.9.6, Today's set, A or B (Sam's picks: per plan, chosen at the
   start, A by default, changeable in Settings): a plan's choice on this
-  computer, made at Follow ("Today's lesson: In Big Step 1 · Its own
+  computer, made at Follow ("Today's set: In Big Step 1 · Its own
   deck", beside How its cards open), at New plan's Start it, or in the
   plan window's Settings (`plan_flow.set_lesson_deck`, `lesson_deck_on`;
   one made before the plan runs here waits in `lesson_next`). A opens a
-  lesson's cards in the plan's deck, as ever. B opens them the same way,
-  then each open lesson with cards to learn is a filtered deck of its own,
+  set's cards in the plan's deck, as ever. B opens them the same way,
+  then each open set with cards to learn is a filtered deck of its own,
   "Due Crew::Path Book::03 Neoplasia" (its place by opening day, so Anki
   lists them in order; `plans.lesson_deck`): its open new cards and its
   learning ones due now (one due later would show early), never a review
   (Sam's FSRS rule), in the deck's order (`_lesson_sync`). Built in the
   open's own undo step (Anki's `merge_undo_entries`), so Not today and
   Undo take the decks too: the morning, Open now, own pace's Open, Welcome
-  back's Open them, an update's Open, Browse's open. A lesson behind keeps
+  back's Open them, an update's Open, Browse's open. A set behind keeps
   its deck till it's empty; the morning's tidy takes it, and the plan's
   folder with its last. A, Stop following, a plan gone, Change deck and
   Put back take them down, cards home as they were; a card another
   filtered deck holds stays there. The card's line and the morning's say
-  "in your decks", and the card's Study goes to the lesson's deck (as does
+  "in your decks", and the card's Study goes to the set's deck (as does
   Study on a date, which now takes cards out of other Due Crew decks
   first, as a topic's does). The deck's index is cached by each card's
-  home deck, so studying a lesson's deck doesn't read the whole deck again
+  home deck, so studying a set's deck doesn't read the whole deck again
   (990 ms to 148 ms on 35,000 cards). plans.json only; nothing is sent.
   `tests/test_lesson_decks.py`, `tools/real_anki.py --lessons`.
+- 3.9.6, a set (Sam: "lesson assumes the material is related; date may
+  be more correct"; his pick of the words offered): a plan's unit is a
+  **set** wherever the add-on says it (the plan windows, New plan, the
+  board's card and day lines, Today and Upcoming, Follow and its
+  dialogs); "date" stays where it means a day. Only words changed: no
+  key, command, field or the text format's keywords; the AI prompts
+  keep "date" (the ops' field). Before the click test, Sam's other
+  answers: New plan fills in the deck I've studied most these 30 days,
+  the weekdays I've studied in most of the last six weeks and my exam
+  (Settings) as Finish by (`flow.Ops.new_defaults`, two queries on the
+  click); Slide on Behind… leaves "Your dates moved N days later · Undo"
+  on the card for the day (`plan_board.unslide`, `planunslide`; plans.json's
+  `slid`); Fit it in… asks over how many days, 2 to 14, three to start
+  (`plans.FIT_DAYS`, `fit_days`, `fit_extra`); Add to my calendar… under
+  the plan saves its sets, quizzes and exams and review days as an .ics
+  file (`planner/ics.py`: all-day events, a spread set over its days, a
+  follower's on their own days without what they skip; names only).

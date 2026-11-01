@@ -78,7 +78,7 @@ Plans, Make a plan, Plan the way there) goes through `flow.open_plans` /
   reaches it, never a card's script), the clipboard.
 - **Python owns the state; the page draws it.** `webface.view()` is the
   whole view as JSON (`webmodel`'s pure builders: the head, the Plan
-  tab's weeks and strips, a lesson's, quiz's or review day's panel, the
+  tab's weeks and strips, a set's, quiz's or review day's panel, the
   deck beside it; `webtabs` for Insights and Settings; `webnew` for New
   plan); the page (`page/plan.js`, `tabs.js`, `new.js`, their `.css`,
   inlined by `webpage.page_html`) draws it with textContent only, and
@@ -92,19 +92,19 @@ Plans, Make a plan, Plan the way there) goes through `flow.open_plans` /
   my pace** (the deck's resources and their chapters, `model.resource_parts`;
   Only, a tag some of it carries; About N new a day, Finish by… (with the
   exam), or When I'm ready (the follow's own pace); study days; Starts;
-  `edits.resource_plan` lays a lesson a chapter, the preview its lessons,
+  `edits.resource_plan` lays a set a chapter, the preview its sets,
   new cards, first and last day and busiest day); **Someone's plan** (a
   code into Follow, or the library on duecrew.com); **Start empty** (a
   name, the deck, the exam it ends with; then the deck beside it, to lay
   it out). **Make it, start later** makes it (`POST /plans`, the
   builder's save); **Start it** also follows it here (`Ops.start_own`:
-  `POST /plans/follow` with its code), today's lesson in my deck or its
+  `POST /plans/follow` with its code), today's set in my deck or its
   own deck. An author who follows their own plan isn't someone its
   changes wait for (`core.others`). No days off (a plan has no field
   for them); no class calendar yet (Sam: not yet).
 - **The builder's site-only tools**, as ops (`ops.py`): a source's
   **Leave out cards also tagged** (the builder's Overlap "but not") and
-  **Move to** (a lesson nearby, or another day); a deck row's **A lesson
+  **Move to** (a set nearby, or another day); a deck row's **A set
   of its own** (the next free study day, or a day); **Before a quiz or
   exam** under Lay them out (`lay_out`'s `upto`); **Give everyone a
   day** in Add (`breather`); **Copy its search** per source

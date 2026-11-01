@@ -670,17 +670,21 @@ In Anki (as a follower):
 
 ### 3.9.6: plans end to end (about 30 minutes; a second account helps)
 - [ ] Tools › Due Crew › Plans › Your plans…: an HTML window in the board's look (light and dark, Settings › Theme too), plans picked on top, Undo, Share…, New plan…; Plan · Insights · Settings. `"plan_window": "qt"` in the add-on's config (restart) brings back the Qt window, unchanged.
-- [ ] With no plans: the window opens on New plan. A resource, at my pace: the deck's resources with their chapters; pick one, Only (a tag some of it carries, its count), About N new a day / Finish by… (with the exam) / When I'm ready, study days, Starts, Today's lesson (In the deck / Its own deck); the preview's lessons, new cards and days change as you do. Start it: the plan is made, the window shows it, and it's followed here (You › Plans' card); nobody else sees it.
+- [ ] With no plans: the window opens on New plan. A resource, at my pace: the deck's resources with their chapters; pick one, Only (a tag some of it carries, its count), About N new a day / Finish by… (with the exam) / When I'm ready, study days, Starts, Today's set (In the deck / Its own deck); the preview's sets, new cards and days change as you do. Start it: the plan is made, the window shows it, and it's followed here (You › Plans' card); nobody else sees it.
 - [ ] Start empty: a name, the deck, Ends with (an exam and its day); Make it, start later: the window opens on the deck beside the empty plan; tick a chapter, Lay them out; Before a quiz or exam lays them out before the one picked.
-- [ ] Someone's plan: a code, Follow… opens Follow (its Today's lesson choice beside How its cards open); The library on duecrew.com opens the site.
-- [ ] A lesson: rename in its panel, move its day (Week and Month drag too; a taken day asks first), Leads up to, a source's ⋯: Leave out cards also tagged (a tag, its count), Move to (a lesson nearby, Another day…), Copy its search (paste in Browse: the same cards), Take it off. Undo takes each back.
-- [ ] The deck beside a lesson (Add from the deck): ticks add to it; a row's ⋯ › A lesson of its own, next free day / on a day…; Find keeps the tree.
-- [ ] Add › Give everyone a day…: asks, then every lesson still to come moves a study day; quizzes stay; Undo.
+- [ ] Someone's plan: a code, Follow… opens Follow (its Today's set choice beside How its cards open); The library on duecrew.com opens the site.
+- [ ] A set: rename in its panel, move its day (Week and Month drag too; a taken day asks first), Leads up to, a source's ⋯: Leave out cards also tagged (a tag, its count), Move to (a set nearby, Another day…), Copy its search (paste in Browse: the same cards), Take it off. Undo takes each back.
+- [ ] The deck beside a set (Add from the deck): ticks add to it; a row's ⋯ › A set of its own, next free day / on a day…; Find keeps the tree.
+- [ ] Add › Give everyone a day…: asks, then every set still to come moves a study day; quizzes stay; Undo.
 - [ ] With a follower (the second account follows by code): a change waits under the plan; Review and send lists it with a line for them; Send; their Anki gets it at the next refresh. Following your own plan doesn't make your changes wait.
-- [ ] Insights (author and follower) and Settings (author: the plan, sharing, co-authors, Posts…, History, the library, Copy it for next year, Your AI app; follower: My dates, Skip a lesson, Cards open, Today's lesson, Held back, Pause until…, Stop following…).
-- [ ] Today's lesson, B (Settings › Today's lesson › Also its own deck, or chosen at Follow): Decks shows Due Crew › <plan> › 01 <lesson> with its new cards (no reviews); the plan card says "N to go today, in your decks" with Study (opens that deck); next morning the lesson's deck is built with the open; Not today takes the open and the decks back in one step. Back to In your deck: the decks go, cards home.
-- [ ] You › Plans: the plan as a path above the week (done, behind, today, ahead, skipped; the last quiz at the end); "lesson 3 of 19"; when behind, "Behind · …" with Behind…: Slide N days, Fit it in, Skip what's left, Not now.
+- [ ] Insights (author and follower) and Settings (author: the plan, sharing, co-authors, Posts…, History, the library, Copy it for next year, Your AI app; follower: My dates, Skip a set, Cards open, Today's set, Held back, Pause until…, Stop following…).
+- [ ] Today's set, B (Settings › Today's set › Also its own deck, or chosen at Follow): Decks shows Due Crew › <plan> › 01 <set> with its new cards (no reviews); the plan card says "N to go today, in your decks" with Study (opens that deck); next morning the set's deck is built with the open; Not today takes the open and the decks back in one step. Back to In your deck: the decks go, cards home.
+- [ ] You › Plans: the plan as a path above the week (done, behind, today, ahead, skipped; the last quiz at the end); "set 3 of 19"; when behind, "Behind · …" with Behind…: Slide N days, Fit it in, Skip what's left, Not now.
 - [ ] You › Plans with no plan: the code box (a plan's code or its link opens Follow; a friend's code adds them, as before), your exam with Plan the way there (New plan, finishing by it), Make a plan, the library.
+
+- [ ] New plan fills in: the deck you've studied most lately, your study days (the weekdays you've studied most weeks), and your exam (Settings › exam date) as Finish by, named Exam.
+- [ ] Behind… › Slide: the card then says "Your dates moved N days later" with Undo (today only); Undo puts them back. Fit it in… asks how many days (2 to 14); 5 gives five days of extra new cards.
+- [ ] Add to my calendar… (under the plan, author and follower): saves a .ics; open it in Google, Apple or Outlook calendar: each set on its days (spread ones across them), quizzes and review days; a follower's on their own days, skipped sets left out.
 
 ### 3.9.5: Pip Party, round three (about 15 minutes; two phones)
 
