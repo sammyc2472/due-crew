@@ -1,9 +1,9 @@
-import { createExecutionContext, runDurableObjectAlarm, waitOnExecutionContext } from "cloudflare:test";
+import { createExecutionContext, runDurableObjectAlarm, runInDurableObject, waitOnExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import site from "../../site/src/index";
 import worker from "../src/index";
-import { DOOR, DOOR_PER_NET, PRESENCE_MAX, SEATS, SHUT, netOf, okPresence } from "../src/table";
+import { DOOR, DOOR_PER_NET, HOST_GONE_MIN, PRESENCE_MAX, SEATS, SHUT, netOf, okPresence } from "../src/table";
 import { BASE, api, befriend, person } from "./helpers";
 
 // 3.9.5, game night: a table is a live room for one night. Its host opens it
@@ -312,7 +312,7 @@ describe("game night: a table", () => {
     expect((await api("GET", `/table/${code === "ZZZZ" ? "YYYY" : "ZZZZ"}`)).status).toBe(404);
   });
 
-  it("closes once its host is gone, and stays while they're here", async () => {
+  it("closes once its host has been gone 15 minutes, not at a check that finds the TV reconnecting", async () => {
     const { code, key } = await opened();
     const stub = env.TABLES.get(env.TABLES.idFromName(code));
     const tv = await tvAt(code, key, "open");
@@ -322,10 +322,30 @@ describe("game night: a table", () => {
     expect(ana.closed).toBeNull();
     await leave(tv);
     await until(() => said(ana, (m) => m.t === "bye"), "the host left");
+    expect(await runDurableObjectAlarm(stub)).toBe(true);  // gone a moment: it stays, checked again when the 15 minutes are up
+    expect(ana.closed).toBeNull();
+    const tv2 = await tvAt(code, key);  // back: the clock stops
+    expect(await runInDurableObject(stub, (_o, state) => state.storage.get("gone"))).toBeUndefined();
+    await leave(tv2);
+    await until(() => said(ana, (m) => m.t === "bye" && ana.got.filter((x) => x.t === "bye").length >= 2), "the host left again");
+    await runInDurableObject(stub, (_o, state) => state.storage.put("gone", Date.now() - HOST_GONE_MIN * 60_000 - 1));
     expect(await runDurableObjectAlarm(stub)).toBe(true);
     await until(() => ana.closed, "closed");
     expect(ana.closed!.code).toBe(SHUT.closed);
     expect((await seat(code, cid("ana"))).status).toBe(404);
+  });
+
+  it("answers a ping with a pong, the TV's and a phone's alike, and a phone at the door's", async () => {
+    const { code, key } = await opened();
+    const tv = await tvAt(code, key);
+    const ana = (await seat(code, cid("ana"))).s!;
+    await hello(ana);  // at the door ("ask")
+    for (const s of [tv, ana]) { tell(s, { t: "ping" }); await until(() => said(s, (m) => m.t === "pong"), "a pong"); }
+    const heard = tv.got.length;
+    tell(ana, { t: "ping" });
+    await until(() => ana.got.filter((m) => m.t === "pong").length === 2, "the second pong");
+    expect(tv.got.length).toBe(heard);  // a ping says nothing to anyone else
+    await leave(tv, ana);
   });
 
   it("is opened by anyone signed in, ten an hour and twenty a day", async () => {

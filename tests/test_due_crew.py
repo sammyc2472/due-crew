@@ -19614,6 +19614,73 @@ def test_pip_party_can_be_hidden_v395():
          due_flow.has_qids, plan_flow.morning_opened, team_flow.plan_lines) = saved
 
 
+def test_pip_party_keeps_its_socket_v395():
+    """3.9.5 (Sam: "very frequent reloads on the website-end"): a table's
+    socket said nothing while the room did nothing (the lobby, between
+    rounds), Cloudflare closes a quiet socket, and a phone that slept lost
+    its own: each drop a "Reconnecting…", a seat blinking on the TV, and a
+    join counted. Now a quiet socket pings every beat (the table answers
+    pong); one whose ping goes unanswered a whole beat is dropped and opened
+    again; a phone woken or back online comes back at once; a moment's
+    reconnect isn't said. Run on table.js's own wsClient in node, its clock
+    and socket stood in for."""
+    import shutil
+    import subprocess
+    if not shutil.which("node"):
+        check("pip party socket: node runs it (skipped: no node)", True)
+        return
+    src = open(os.path.join(REPO, "site", "public", "table.js"), encoding="utf-8").read()
+    a, b = src.index("const BEAT = 25000"), src.index("// ---------- the TV: holds the game")
+    js = r"""
+let now = 1000, tid = 0; const timers = [];
+Date.now = () => now;
+global.setTimeout = (f, ms) => { const id = ++tid; timers.push({ id, at: now + ms, f, every: 0 }); return id; };
+global.setInterval = (f, ms) => { const id = ++tid; timers.push({ id, at: now + ms, f, every: ms }); return id; };
+global.clearTimeout = global.clearInterval = (id) => { const i = timers.findIndex((t) => t.id === id); if (i >= 0) timers.splice(i, 1); };
+function advance(ms) { const end = now + ms; for (;;) { timers.sort((x, y) => x.at - y.at); const t = timers[0]; if (!t || t.at > end) break; now = t.at; if (t.every) t.at += t.every; else timers.shift(); t.f(); } now = end; }
+const sockets = [];
+global.WebSocket = class { constructor(url) { this.url = url; this.readyState = 0; this.sent = []; sockets.push(this); } send(d) { this.sent.push(d); } close(code) { this.closedBy = code; this.readyState = 3; } };
+global.location = { protocol: "https:", host: "duecrew.com" };
+const on = {};
+global.document = { visibilityState: "visible", addEventListener: (e, f) => { (on[e] = on[e] || []).push(f); }, removeEventListener: (e, f) => { on[e] = (on[e] || []).filter((g) => g !== f); } };
+global.window = { addEventListener: (e, f) => { (on[e] = on[e] || []).push(f); }, removeEventListener: (e, f) => { on[e] = (on[e] || []).filter((g) => g !== f); } };
+global.sessionStorage = { getItem: () => "abcdefghijklmnopqrstu", setItem() {} };
+const warn = () => {}, clone = (v) => JSON.parse(JSON.stringify(v)), merge = (o, p) => Object.assign({}, o, p);
+""" + src[a:b] + r"""
+const out = {}, states = [];
+const c = wsClient("ABCD", "", (st) => states.push(st));
+const hi = (w) => { w.readyState = 1; w.onmessage({ data: JSON.stringify({ t: "hi", you: "p1", peers: [] }) }); };
+const pings = (w) => w.sent.filter((x) => x === '{"t":"ping"}').length;
+hi(sockets[0]);
+advance(BEAT - 1); out.quietBeforeBeat = pings(sockets[0]);
+advance(1); out.pingAtBeat = pings(sockets[0]);
+sockets[0].onmessage({ data: '{"t":"pong"}' });
+advance(BEAT); out.answeredKeeps = sockets.length === 1 && pings(sockets[0]) === 2;
+advance(BEAT); out.unansweredDropped = sockets[0].closedBy === 3000;
+advance(1000); out.openedAgain = sockets.length === 2; out.saidAfterASecond = states.includes("reconnecting");
+hi(sockets[1]); advance(3000); out.neverSaid = !states.includes("reconnecting");
+sockets[1].readyState = 3; sockets[1].onclose({ code: 1006 }); advance(1600); out.saidWhenLong = states.includes("reconnecting");
+const w2 = sockets[sockets.length - 1]; w2.readyState = 3; w2.onclose({ code: 1006 });  // that try failed too: the next waits on the backoff
+const n = sockets.length; (on.visibilitychange || []).forEach((f) => f()); out.wokeOpensAtOnce = sockets.length === n + 1;
+hi(sockets[sockets.length - 1]); now += 60000;
+document.visibilityState = "hidden"; const m = sockets.length; (on.visibilitychange || []).forEach((f) => f()); out.hiddenDoesNothing = sockets.length === m && pings(sockets[m - 1]) === 0;
+document.visibilityState = "visible"; (on.visibilitychange || []).forEach((f) => f()); out.wokeStalePings = pings(sockets[m - 1]) === 1;
+advance(WAKE_WAIT); out.wokeDeadReopens = sockets[m - 1].closedBy === 3000;
+c.leave(); const k = sockets.length; advance(60000); out.leftStaysLeft = sockets.length === k && !(on.visibilitychange || []).length;
+console.log(JSON.stringify(out));
+"""
+    r = subprocess.run(["node", "-e", js], capture_output=True, text=True, timeout=60)
+    got = json.loads(r.stdout or "{}") if r.returncode == 0 else {}
+    check("pip party socket: quiet, a ping every beat (none before it); answered, the socket stays",
+          got.get("quietBeforeBeat") == 0 and got.get("pingAtBeat") == 1 and got.get("answeredKeeps"), got or r.stderr[:400])
+    check("pip party socket: a ping unanswered a whole beat drops it and opens another; a moment's reconnect is never said",
+          got.get("unansweredDropped") and got.get("openedAgain") and not got.get("saidAfterASecond") and got.get("neverSaid"), got)
+    check("pip party socket: a longer outage says Reconnecting…", got.get("saidWhenLong"), got)
+    check("pip party socket: a phone woken comes back at once; hidden, nothing; woken on a stale socket, a ping, and no answer reopens it",
+          got.get("wokeOpensAtOnce") and got.get("hiddenDoesNothing") and got.get("wokeStalePings") and got.get("wokeDeadReopens"), got)
+    check("pip party socket: left, it stays left (no beat, no wake)", got.get("leftStaysLeft"), got)
+
+
 def test_pip_party_the_table_votes_v395():
     """3.9.5 round three (Sam's v3, "At the party: the table votes"): Anki's
     pack lists tonight's picks (or its subjects), each with its cards, and

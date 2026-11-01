@@ -895,16 +895,20 @@ class LocalHub {
     };
   }
 }
+const BEAT = 25000, WAKE_WAIT = 4000;  // a ping a beat when quiet; woken, how long a stale socket gets to answer
 /** A seat at a table on the API: one socket, my presence sent whole (at most
  *  25 times a second), everyone's kept as the table hands them on. Lost, it
- *  comes back with the same id, so its seat is still its own. A phone the
+ *  comes back with the same id, so its seat is still its own. A quiet socket
+ *  pings every BEAT (Cloudflare closes one that says nothing), and one whose
+ *  ping goes unanswered a whole beat is gone; a phone woken or back online
+ *  comes back at once, and a moment's reconnect isn't said. A phone the
  *  table hasn't let in yet waits at the door (`waiting`); the host's also
  *  holds the door (`door`, and admit, away, setDoor, lock) and whispers each
  *  seat its own part of the game; a phone keeps the last it was told (`secret`). */
 function wsClient(code, key, onState) {
   const cid = clientId();
   let ws = null, you = null, isHost = false, mine = {}, timer = null, backoff = 600, hello = false, misses = 0, done = false;
-  let waiting = false, door = null, shut = "", secret = null;
+  let waiting = false, door = null, shut = "", secret = null, heard = 0, pinged = 0, retry = null, saying = null;
   const others = new Map(), subs = [];
   let queued = false;
   const list = () => [{ peer: you, isMe: true, sameTab: true, host: isHost, presence: mine }].concat([...others].map(([peer, o]) => ({ peer, isMe: false, sameTab: false, host: o.host, wait: o.wait, crew: o.crew, presence: o.p })));
@@ -913,15 +917,18 @@ function wsClient(code, key, onState) {
   const one = (o) => ({ host: o.host === true, wait: o.wait === true, crew: typeof o.crew === "string" ? o.crew : null, p: Object.freeze(o.p && typeof o.p === "object" ? o.p : {}) });
   const tell = (m) => { if (isHost && ws && ws.readyState === 1 && hello) ws.send(JSON.stringify(m)); };
   function open() {
+    retry = null;
     const q = new URLSearchParams({ c: cid });
     if (key) q.set("k", key);
     ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/table/${encodeURIComponent(code)}/ws?${q}`);
     ws.onmessage = (e) => {
+      heard = Date.now();
       let m;
       try { m = JSON.parse(e.data); } catch (_) { return; }
       if (!m || typeof m !== "object") return;
       if (m.t === "hi") {
-        you = String(m.you || ""); isHost = m.host === true; waiting = m.wait === true; hello = true; backoff = 600; misses = 0;
+        you = String(m.you || ""); isHost = m.host === true; waiting = m.wait === true; hello = true; backoff = 600; misses = 0; pinged = 0;
+        if (saying) { clearTimeout(saying); saying = null; }
         if (isHost) door = { door: String(m.door || "ask"), locked: m.locked === true };
         others.clear();
         for (const o of Array.isArray(m.peers) ? m.peers : []) if (o && typeof o.peer === "string") others.set(o.peer, one(o));
@@ -938,12 +945,39 @@ function wsClient(code, key, onState) {
       if (done) return;
       const why = { 4000: "closed", 4001: "elsewhere", 4002: "another", 4003: "away", 4004: "crewonly", 4005: "locked", 4006: "full" }[e.code];
       if (why && !(key && why === "full")) { done = true; shut = why; others.clear(); fire(); onState(why); return; }  // the TV is no seat: tried again
-      if (++misses > 12) { done = true; shut = "gone"; fire(); onState("gone"); return; }
-      onState("reconnecting");
-      setTimeout(open, backoff);
-      backoff = Math.min(backoff * 2, 8000);
+      again();
     };
   }
+  function again() {
+    if (++misses > 12) { done = true; shut = "gone"; fire(); onState("gone"); return; }
+    if (!saying) saying = setTimeout(() => { saying = null; if (!hello && !done) onState("reconnecting"); }, 1500);  // a moment's reconnect isn't said
+    retry = setTimeout(open, backoff);
+    backoff = Math.min(backoff * 2, 8000);
+  }
+  /** A socket that's gone quiet for good (no pong): dropped here, and opened again. */
+  function lost() {
+    const w = ws;
+    if (!w || done) return;
+    ws = null; hello = false;
+    w.onclose = null; w.onmessage = null;
+    try { w.close(3000, "quiet"); } catch (_) { /* gone already */ }
+    again();
+  }
+  const ping = () => { pinged = Date.now(); try { ws.send('{"t":"ping"}'); } catch (_) { /* its close says so */ } };
+  const beat = setInterval(() => {
+    if (done) { clearInterval(beat); return; }
+    if (!ws || ws.readyState !== 1 || !hello) return;
+    if (pinged && heard < pinged) { lost(); return; }  // a whole beat and no answer
+    ping();
+  }, BEAT);
+  // a phone woken, a tab come back, the network back: at once, not after the backoff
+  const wake = () => {
+    if (done || (typeof document !== "undefined" && document.visibilityState === "hidden")) return;
+    if (!ws) { if (retry) { clearTimeout(retry); retry = null; } backoff = 600; open(); return; }
+    if (ws.readyState === 1 && hello && Date.now() - heard > 5000) { ping(); const asked = pinged; setTimeout(() => { if (ws && hello && heard < asked) lost(); }, WAKE_WAIT); }
+  };
+  if (typeof document !== "undefined") document.addEventListener("visibilitychange", wake);
+  if (typeof window !== "undefined") { window.addEventListener("online", wake); window.addEventListener("pageshow", wake); }
   open();
   return {
     get peer() { return you; },
@@ -959,7 +993,13 @@ function wsClient(code, key, onState) {
     away(peer) { tell({ t: "away", peer }); },
     setDoor(d) { tell({ t: "door", door: d }); },
     lock(on) { tell({ t: "lock", on }); },
-    leave() { done = true; try { if (ws) ws.close(1000, "bye"); } catch (_) { /* gone */ } return Promise.resolve(); },
+    leave() {
+      done = true; clearInterval(beat); if (retry) clearTimeout(retry); if (saying) clearTimeout(saying);
+      if (typeof document !== "undefined") document.removeEventListener("visibilitychange", wake);
+      if (typeof window !== "undefined") { window.removeEventListener("online", wake); window.removeEventListener("pageshow", wake); }
+      try { if (ws) ws.close(1000, "bye"); } catch (_) { /* gone */ }
+      return Promise.resolve();
+    },
   };
 }
 

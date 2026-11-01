@@ -4039,3 +4039,19 @@ every release that changes how something works.
   unattributed, test data's squad "orca", and the admin's uid only in the
   Worker's `ADMIN_UIDS` secret (`ADMINS` gone from wrangler.toml). No
   feedback's words or sender are ever written here.
+- 3.9.5, Pip Party's tables stay connected (Sam: "very frequent reloads on
+  the website-end"). A table's socket said nothing while the room did
+  nothing (the lobby, between rounds), and Cloudflare closes a quiet
+  socket; a phone that slept lost its own. Each drop was a "Reconnecting…",
+  a seat blinking on the TV and a join counted (200 an hour a network and
+  table, which a room of phones on one wifi could run out, ending in "Lost
+  the table"); and the 15-minute check closed a table whose TV it found
+  mid-reconnect. Now table.js's socket pings every 25 s when quiet (the
+  table answers pong, `table.ts`), one whose ping goes unanswered a whole
+  beat is dropped and opened again, a phone woken, back online or shown
+  again (pageshow) comes back at once, and a reconnect under 1.5 s isn't
+  said. The table closes once its host has been gone 15 minutes by the
+  clock (`gone`, kept when the TV leaves, cleared when it's back), and
+  joins are 600 an hour a network and table.
+  `test_pip_party_keeps_its_socket_v395` (wsClient in node, its clock and
+  socket stood in for); `table.test.ts`: a pong, and the TV gone a moment.

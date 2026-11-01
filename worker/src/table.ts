@@ -15,7 +15,9 @@
 // key): to that phone alone, never kept.
 //
 // Nothing goes to D1 but the rate limits, and nothing is kept: a table
-// closes after TABLE_HOURS, or once its host has been gone HOST_GONE_MIN.
+// closes after TABLE_HOURS, or once its host has been gone HOST_GONE_MIN
+// (a TV that drops for a moment and comes back keeps it). A ping is
+// answered with a pong, so a quiet table's sockets stay open.
 // No card's words come here: the games' packs are the page's own.
 
 import { DurableObject } from "cloudflare:workers";
@@ -42,7 +44,7 @@ const RATE = 30;                    // messages a second, a connection (a dial b
 const HOST_RATE = 120;              // the host's: a presence and a whisper a seat, each step
 const TABLES_PER_HOUR = 10;         // tables one person opens
 const TABLES_PER_DAY = 20;          // and a day's ceiling: a table lives four hours, so an hour's ten aren't a day's forty
-const JOINS_PER_HOUR = 200;         // connections and checks from one network, to one table (its TV's aside)
+const JOINS_PER_HOUR = 600;         // connections and checks from one network, to one table (its TV's aside): a room of phones on one wifi, each back after a sleep
 const PROBES_PER_HOUR = 60;         // codes tried from one network that aren't a table
 export const DOOR_PER_NET = 3;      // waiting at the door from one network at once
 const REMEMBER = 64;                // who sat down, who was turned away: the newest
@@ -101,7 +103,8 @@ export class Table extends DurableObject<Env> {
     this.room = null;
     const until = Date.now() + TABLE_HOURS * 3600_000;
     await this.ctx.storage.put("open", { key, until, uid });
-    await this.ctx.storage.setAlarm(Math.min(until, Date.now() + HOST_GONE_MIN * 60_000));  // a host who never comes
+    await this.ctx.storage.put("gone", Date.now());  // a host who never comes is gone from the start
+    await this.ctx.storage.setAlarm(Math.min(until, Date.now() + HOST_GONE_MIN * 60_000));
     return true;
   }
 
@@ -165,6 +168,7 @@ export class Table extends DurableObject<Env> {
     server.addEventListener("close", () => this.drop(server));
     server.addEventListener("error", () => this.drop(server));
     if (ok && !host && !back) { room.seated = keepNewest(room.seated, peer); await this.keep(); }
+    if (host) await this.ctx.storage.delete("gone");
     this.greet(server, me, room);
     this.tell(server, me);
     return new Response(null, { status: 101, webSocket: client });
@@ -188,6 +192,7 @@ export class Table extends DurableObject<Env> {
     let m: { t?: unknown; p?: unknown; peer?: unknown; to?: unknown; door?: unknown; on?: unknown };
     try { m = JSON.parse(data); } catch { return; }
     if (!m || typeof m !== "object") return;
+    if (m.t === "ping") { this.send(ws, { t: "pong" }); return; }  // a quiet table's sockets stay open, and a phone knows its own is alive
     if (m.t === "p") {
       if (!okPresence(m.p)) { this.send(ws, { t: "err", error: "bad_presence" }); return; }
       me.p = me.ok ? m.p : atDoor(m.p);
@@ -238,20 +243,23 @@ export class Table extends DurableObject<Env> {
     const me = this.socks.get(ws);
     if (!me || !this.socks.delete(ws)) return;
     this.gone(me);
+    // the TV left: when, so the table closes HOST_GONE_MIN on, not at a check that finds it reconnecting
+    if (me.host && ![...this.socks.values()].some((c) => c.host)) void this.ctx.storage.put("gone", Date.now());
   }
 
   async alarm() {
     const open = await this.ctx.storage.get<Opened>("open");
     const now = Date.now();
     const hosted = [...this.socks.values()].some((c) => c.host);
-    if (!open || open.until <= now || !hosted) {
+    const gone = hosted ? now : (await this.ctx.storage.get<number>("gone")) ?? 0;
+    if (!open || open.until <= now || now - gone >= HOST_GONE_MIN * 60_000) {
       for (const ws of this.socks.keys()) this.closeOne(ws, SHUT.closed, "table closed");
       this.socks.clear();
       this.room = null;
       await this.ctx.storage.deleteAll();
       return;
     }
-    await this.ctx.storage.setAlarm(Math.min(open.until, now + HOST_GONE_MIN * 60_000));
+    await this.ctx.storage.setAlarm(Math.min(open.until, gone + HOST_GONE_MIN * 60_000));
   }
 
   /** Someone's presence, to everyone who may hear it but `from`: the table
