@@ -4104,3 +4104,28 @@ every release that changes how something works.
   copy shows for a library plan. `test_plan_web.py`,
   `test_plan_web_tabs.py`, `test_plan_board.py`, `test_plan_ops.py`'s
   new ops; `tools/plan_preview.py` and `.js` render the window.
+- 3.9.6, Today's lesson, A or B (Sam's picks: per plan, chosen at the
+  start, A by default, changeable in Settings): a plan's choice on this
+  computer, made at Follow ("Today's lesson: In Big Step 1 · Its own
+  deck", beside How its cards open), at New plan's Start it, or in the
+  plan window's Settings (`plan_flow.set_lesson_deck`, `lesson_deck_on`;
+  one made before the plan runs here waits in `lesson_next`). A opens a
+  lesson's cards in the plan's deck, as ever. B opens them the same way,
+  then each open lesson with cards to learn is a filtered deck of its own,
+  "Due Crew::Path Book::03 Neoplasia" (its place by opening day, so Anki
+  lists them in order; `plans.lesson_deck`): its open new cards and its
+  learning ones due now (one due later would show early), never a review
+  (Sam's FSRS rule), in the deck's order (`_lesson_sync`). Built in the
+  open's own undo step (Anki's `merge_undo_entries`), so Not today and
+  Undo take the decks too: the morning, Open now, own pace's Open, Welcome
+  back's Open them, an update's Open, Browse's open. A lesson behind keeps
+  its deck till it's empty; the morning's tidy takes it, and the plan's
+  folder with its last. A, Stop following, a plan gone, Change deck and
+  Put back take them down, cards home as they were; a card another
+  filtered deck holds stays there. The card's line and the morning's say
+  "in your decks", and the card's Study goes to the lesson's deck (as does
+  Study on a date, which now takes cards out of other Due Crew decks
+  first, as a topic's does). The deck's index is cached by each card's
+  home deck, so studying a lesson's deck doesn't read the whole deck again
+  (990 ms to 148 ms on 35,000 cards). plans.json only; nothing is sent.
+  `tests/test_lesson_decks.py`, `tools/real_anki.py --lessons`.

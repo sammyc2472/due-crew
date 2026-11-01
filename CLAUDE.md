@@ -137,7 +137,10 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   (`plan_flow.mine` → `plans.my_doc`), and never changes the plan. The
   morning opens what's due once per Anki day, after the AnkiWeb sync, in
   one undo step; at my own pace it opens only what an author adds to dates
-  I opened (and, "next", the next once I've seen most of the last). A plan never suspends on
+  I opened (and, "next", the next once I've seen most of the last). Today's lesson (3.9.6) is a
+  plan's choice here: in its deck (A, the default) or also each open
+  lesson a filtered deck of its own (B: new and learning due now, never a
+  review), built in the open's undo step. A plan never suspends on
   its own (Hold back is the one suspend, and only when asked), a date that
   opened never closes again, and a leech never opens. Plan state is per
   profile (`user_files/<profile>/plans.json`), never the shared config:
