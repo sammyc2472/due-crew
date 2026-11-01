@@ -1663,7 +1663,8 @@ async function builder(id, face = null, got = null) {
     const days = us.map((u) => u.opens).sort();
     const cards = us.reduce((a, u) => a + prog[u.id][2], 0);
     const open = () => Cards.open({ kind: "plan", title: "Share this plan", file: `due-crew-plan-${plan.id}`, sizes: ["story"],
-      data: { name: plan.name, cards, weeks: Math.max(1, Math.ceil((Sched.diff(days[days.length - 1], days[0]) + 1) / 7)), code: plan.audience === "code" ? plan.code : null },
+      data: { name: plan.name, sets: us.length, done: us.length, cards, weeks: Math.max(1, Math.ceil((Sched.diff(days[days.length - 1], days[0]) + 1) / 7)),
+              code: plan.audience === "code" ? plan.code : null },
       switches: plan.audience === "code" && plan.code ? [{ k: "code", label: "Its code, so others can follow" }] : [] });
     return h("p", { class: "done-line" }, h("b", {}, "Finished. "), `You’ve seen all ${cards.toLocaleString()} cards. `, h("button", { class: "linkish", onclick: open }, "Share a card ›"));
   }
