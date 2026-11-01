@@ -4205,3 +4205,45 @@ every release that changes how something works.
   closet's tallies are wrap.json's (`plans_done`, `followed`, `gave_day`).
   Nothing is sent; a refresh and a sync stay one request each.
   `tests/test_plan_joy.py`.
+- 3.9.6, Pip Party quicker (Sam: "the transition from any other tab to pip
+  party takes a while, and clicks on bento sections also take a long
+  time"). The tab draws at once with its games and "Reading your cards…",
+  and reads every card's tags (or Insights' map) just after, on the next
+  tick (`gamenight_flow._soon`, mw.progress.single_shot); a tile's tap
+  shows first and its counts follow, their build off the main thread; each
+  redraw replaces Pip Party's part of the board alone (`#due-crew .pp`),
+  never the whole board, the Find box keeping its focus and caret; the
+  scope is worked out once a state. On a big collection: the tab in about
+  1 ms where it was 1.1–1.5 s, a tap in 23–59 ms where it was about 620
+  ms and two board draws. `test_pip_party_tab_shows_first_v396`.
+- 3.9.6, nothing again till it's all been played (Sam: Imposter "gave my
+  friends and I a repeat of a previously done item like three rounds
+  after"). Each round took a random pair from the likeliest half, with no
+  memory, and a voted subject keeps four. The TV now keeps what this
+  sitting played, by name (`Seen` in table.js, till the TV closes):
+  Imposter takes a pair whose topics nobody's seen first, then a pair not
+  played, and starts over only once every pair has; Trivia's blocks and
+  Links' boards draw new questions and words first the same way. A site
+  change (the TV runs the site's page). `test_pip_party_no_repeats_v396`.
+- 3.9.6, the reviews before Sam's click test. Your plans' window:
+  New plan's screen takes no keys or clicks meant for the plan behind it
+  (`webface.NEW_CMDS`, the page's keydown); an edit made while a save is
+  out saves after it (`core._next`), where it was dropped; a plan that
+  didn't load has Try again; Take back and Discard wait while changes
+  send; a change Your AI app puts under the plan during a send stays
+  waiting, rebased on the plan as sent (`core._after_send`); Make again
+  on a half-made plan renames it, and New plan doesn't start over under a
+  Make in flight; the board opening the plan already picked takes New
+  plan away; a library plan's follower gets no note box (Qt's too). The
+  engine: Leave out cards also tagged is never on a subdeck (read in each
+  follower's own deck, where the search it became ran as typed), and a
+  search with an OR at its top goes in brackets first; two plans by one
+  name share a folder of set decks, and one going to A takes only its
+  own; a plan whose folder's name is a Study deck builds its set decks
+  beside it ("Due Crew::Path Book · sets"), with no empty undo step. The
+  site's page: Take back keeps Settings' saves; Undo your last save waits
+  till nothing's waiting; a co-author's save is never written over (the
+  changes go on theirs at the send); a new set with no cards waits for
+  some instead of being dropped at the save; a save that changed nothing
+  clears what was waiting. `test_the_review_round_v396` (test_plan_web,
+  test_lesson_decks), test_plan_ops, `tests/planface_test.js`.
