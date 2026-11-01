@@ -288,7 +288,8 @@ class PlanTab(QWidget):
             self.deck.target = None
             self.side.setCurrentWidget(self.side_page)
         self._work_out()
-        self.date_panel.day_notes.plan_loaded(win.plan["id"], (win.raw or {}).get("library") is True)
+        self.date_panel.day_notes.plan_loaded(win.plan["id"], (win.plan or {}).get("library") is True
+                                             or (win.raw or {}).get("library") is True)  # a follower has no raw
         keep = win.keep
         win.keep = None
         if keep == ("gone",):

@@ -658,7 +658,12 @@ class StartOps:
                     return outcome, raw
                 got, version = raw["id"], raw.get("version") or 1
             else:
-                version = remote.load(cl, got)[0].get("version") or 1
+                have = remote.load(cl, got)[0]
+                version = have.get("version") or 1
+                if name and str(have.get("name") or "") != name:  # its name fixed since the first Make
+                    outcome, raw = remote.save_meta(cl, got, version, {"name": name}, f"named {name}"[:120])
+                    if outcome == "saved":
+                        version = raw.get("version") or version
             try:
                 outcome, raw = remote.save(cl, got, version, doc, f"made in Anki from a calendar: {name}")
             except TransportError:

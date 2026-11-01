@@ -18,6 +18,9 @@ from .webnew import NewPlan
 
 PREFIX = "dcplan:"
 TABS = {"insights": "insights", "settings": "settings", "sharing": "settings", "mine": "settings"}
+# what New plan's screen sends (webnew's, and the window's own); anything else is for the plan behind it
+NEW_CMDS = frozenset({"ready", "close", "pick_plan", "new_plan", "new_step", "new_cancel", "new_set", "new_library",
+                      "new_follow", "new_make"})
 
 
 class _Said:
@@ -179,6 +182,8 @@ class WebFace(NewPlan, PlanCore):
         if not isinstance(data, dict):
             return
         name = str(data.get("c") or "")
+        if self.new is not None and name not in NEW_CMDS:
+            return  # New plan's screen: the plan behind it takes no clicks or keys
         fn = getattr(self, "c_" + name, None) if name.replace("_", "").isalnum() else None
         if fn is None:
             return
@@ -932,7 +937,8 @@ class WebFace(NewPlan, PlanCore):
         self.ops.ask(self, lambda cl: remote.notes(cl, pid), done)
 
     def _notes_view(self, day, shown=None):
-        writes = self.notes_of is not None and not ((self.raw or {}).get("library") is True and not self.author())
+        library = (self.plan or {}).get("library") is True or (self.raw or {}).get("library") is True  # a follower has no raw
+        writes = self.notes_of is not None and not (library and not self.author())
         rows = sorted((x for x in self.notes if x.get("day") == day), key=lambda x: (str(x["day"]), x["id"]))
         return {"rows": [{"id": x["id"], "who": "You" if x.get("mine") else str(x.get("name") or "?"),
                           "text": str(x.get("text") or ""), "remove": bool(x.get("remove"))} for x in rows],
@@ -1012,6 +1018,8 @@ class WebFace(NewPlan, PlanCore):
             return False
         if tab:
             self.tab = TABS.get(tab, "plan")
+        if self.new is not None and not self.new["busy"]:
+            self.new = None  # the plan asked for, in New plan's place
         if pid != self.pid:
             self.c_pick_plan(pid)
         else:

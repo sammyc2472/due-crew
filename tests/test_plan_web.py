@@ -156,7 +156,12 @@ class Ops:
                 return
             pid, version = raw["id"], raw.get("version") or 1
         else:
-            version = PR.load(self.cl, pid)[0].get("version") or 1
+            have = PR.load(self.cl, pid)[0]
+            version = have.get("version") or 1
+            if name and str(have.get("name") or "") != name:  # flow.StartOps.make's: its name fixed since
+                outcome, raw = PR.save_meta(self.cl, pid, version, {"name": name}, f"named {name}"[:120])
+                if outcome == "saved":
+                    version = raw.get("version") or version
         if self.fail_save:
             self.fail_save = False
             done(("made", pid, "Check your connection."))
@@ -617,6 +622,203 @@ def test_the_page():
           and "box-shadow: 0 0 0 2px var(--dc-bg), 0 0 0 4px var(--dc-accent) !important" in css and "body .dcp .b:disabled:hover" in css)
     check("web: each part of the page is in it", all(f"dcPlan.{x}" in html for x in ("newPlan",)), "")
     check("web: the deck panel's views are the Qt panel's", [k for k, _ in WM.VIEWS] == ["resource", "system", "other", "deck", "plan"])
+
+
+class AsyncOps(Ops):
+    """Ops whose requests wait till run() (the real ones answer later)."""
+    def __init__(self, cl):
+        super().__init__(cl)
+        self.queue = []
+
+    def load(self, owner, pid, done):
+        self.queue.append(("load", lambda: done(PR.load(self.cl, pid))))
+
+    def save(self, owner, pid, version, doc, summary, done):
+        self.queue.append(("save", lambda: done(PR.save(self.cl, pid, version, doc, summary))))
+
+    def send(self, owner, pid, version, doc, summary, post, done):
+        self.queue.append(("send", lambda: done(PR.save(self.cl, pid, version, doc, summary, post))))
+
+    def make(self, owner, name, doc, done, pid=None):
+        self.queue.append(("make", lambda: Ops.make(self, owner, name, doc, done, pid)))
+
+    def run(self, kind=None):
+        while self.queue:
+            i = next((j for j, q in enumerate(self.queue) if kind is None or q[0] == kind), None)
+            if i is None:
+                return
+            fn = self.queue.pop(i)[1]
+            fn()
+            if kind is not None:
+                return
+
+
+class AFace(Face):
+    def __init__(self, cl, select=None, ops=None):
+        self.js, self.copied = [], None
+        self.web_init(COL, PR.my_plans(cl), ops or AsyncOps(cl), select, None, {})
+        self._ready = True
+        if self.pid:
+            self.load(self.pid)
+
+
+KEYS_JS = r"""
+const fs = require("fs"), vm = require("vm");
+const [PAGE, VIEW] = process.argv.slice(1);
+const src = ["plan.js", "tabs.js", "new.js"].map((f) => fs.readFileSync(PAGE + "/" + f, "utf8")).join("\n");
+function El(tag) { this.tagName = String(tag).toUpperCase(); this.children = []; this.attrs = {}; this.style = {}; this.className = ""; this._t = "";
+  this.ls = {}; this.value = ""; this.classList = { add() {}, remove() {}, toggle() {} }; }
+Object.defineProperty(El.prototype, "textContent", { get() { return this._t + this.children.map((c) => c.textContent || "").join(""); },
+  set(v) { this._t = String(v); this.children = []; } });
+Object.defineProperty(El.prototype, "childNodes", { get() { return this.children; } });
+El.prototype.appendChild = function (c) { this.children.push(c); return c; };
+El.prototype.remove = function () {};
+El.prototype.setAttribute = function (k, v) { this.attrs[k] = v; };
+El.prototype.getAttribute = function (k) { return k in this.attrs ? this.attrs[k] : null; };
+El.prototype.addEventListener = function (t, f) { (this.ls[t] = this.ls[t] || []).push(f); };
+El.prototype.querySelector = function () { return null; };
+El.prototype.querySelectorAll = function () { return []; };
+El.prototype.getBoundingClientRect = function () { return { left: 0, top: 0, right: 10, bottom: 10, width: 10, height: 10 }; };
+["focus", "blur", "select", "scrollIntoView", "setSelectionRange"].forEach((k) => { El.prototype[k] = function () {}; });
+function Text(t) { this.textContent = String(t); }
+const root = new El("div"), docLs = {}, sent = [];
+const ctx = { console, setTimeout: (f) => { try { f(); } catch (e) {} }, clearTimeout() {}, JSON,
+  document: { createElement: (t) => new El(t), createTextNode: (t) => new Text(t), getElementById: () => root, activeElement: new El("div"),
+    addEventListener: (t, f) => { (docLs[t] = docLs[t] || []).push(f); } } };
+ctx.window = ctx; ctx.innerWidth = 1240; ctx.innerHeight = 820; ctx.pycmd = (m) => sent.push(m);
+vm.createContext(ctx); vm.runInContext(src, ctx);
+ctx.dcPlan.start(JSON.parse(fs.readFileSync(VIEW, "utf8")), true);
+const key = (k, mods) => (docLs.keydown || []).forEach((f) => f(Object.assign({ key: k, ctrlKey: false, metaKey: false, altKey: false, preventDefault() {} }, mods || {})));
+key("ArrowLeft", { altKey: true }); key("z", { ctrlKey: true }); key("Backspace"); key("n", { ctrlKey: true }); key("e", { ctrlKey: true }); key("Enter");
+console.log(JSON.stringify({ sent, text: root.textContent }));
+"""
+
+
+def test_the_review_round_v396():
+    """3.9.6's review of the window, each finding as it was found:
+    keys and clicks under New plan reach the plan behind it no more; an
+    edit made while a save is out saves after it; a failed load says so
+    with Try again; take back and Discard wait while changes send; an AI
+    app's changes made during a send stay waiting; Make again renames the
+    half-made plan, and New plan doesn't start over under a Make; the board
+    opening the picked plan takes New plan away; a library plan's follower
+    gets no note box."""
+    import shutil
+    import tempfile
+    from due_crew.planner import webface as WF
+
+    # 1: under New plan, the plan behind it takes nothing
+    pid, _c = plan([{"id": "u1", "name": "Cell injury", "opens": day(7), "tags": [f"{R}::01_Cell_injury"]},
+                    {"id": "u2", "name": "Inflammation", "opens": day(8), "tags": [f"{R}::02_Inflammation"]}])
+    w = Face(client("sam"), select=pid)
+    w.click("pick", key=["date", "u1"])
+    w.click("new_plan")
+    before = json.dumps(STORE.plans[pid]["doc"], sort_keys=True)
+    n_js = len(w.js)
+    for c, a in (("nudge", {"k": -1}), ("undo_key", {}), ("delete", {}), ("new_date_form", {}), ("deck", {"uid": "u1"})):
+        w.click(c, **a)
+    check("review: under New plan, the keys' and clicks' commands reach nothing behind it (the plan as it was, no sheet)",
+          json.dumps(STORE.plans[pid]["doc"], sort_keys=True) == before and not any(j.startswith("dcPlan.sheet(") for j in w.js[n_js:])
+          and w.new is not None and "new_make" in WF.NEW_CMDS and "new_date_form" not in WF.NEW_CMDS)
+    v = w.view()
+    if shutil.which("node"):
+        f = os.path.join(tempfile.mkdtemp(), "view.json")
+        with open(f, "w", encoding="utf-8") as fh:
+            json.dump(v, fh)
+        r = subprocess.run(["node", "-e", KEYS_JS, os.path.join(REPO, "due_crew", "planner", "page"), f], capture_output=True, text=True, timeout=60)
+        got = json.loads(r.stdout or "{}")
+        check("review: the page sends no key's command while New plan is up", r.returncode == 0 and got.get("sent") == [], (got.get("sent"), r.stderr[-300:]))
+    # 7: the board opening the plan already picked: New plan goes
+    check("review: the board opening the picked plan takes New plan away", w.go_to_plan(pid, "settings") and w.new is None and w.view()["tab"] == "settings")
+
+    # 2: an edit made while a save is out saves after it
+    pid, _c = plan([{"id": "u1", "name": "Cell injury", "opens": day(7), "tags": [f"{R}::01_Cell_injury"]}])
+    w = AFace(client("sam"), select=pid)
+    w.ops.run()
+    w.click("pick", key=["date", "u1"])
+    w.click("rename", uid="u1", name="Cell injury and death")
+    w.click("set_due", uid="u1", due=day(9))
+    queued = [k for k, _f in w.ops.queue]
+    w.ops.run()
+    u = next(x for x in STORE.plans[pid]["doc"]["units"] if x["id"] == "u1")
+    check("review: an edit made while a save is out saves after it, never dropped",
+          queued == ["save"] and u["name"] == "Cell injury and death" and u.get("due") == day(9) and w._status == "Saved."
+          and w.last()["panel"]["due"] == day(9), (queued, u, w._status))
+
+    # 3: a load that failed says so, and the page can try again
+    pid, _c = plan([{"id": "u1", "name": "Cell injury", "opens": day(3), "tags": [f"{R}::01_Cell_injury"]}], owner="dre", name="Only plan")
+    cl = client("dre")
+    w = AFace(cl, select=pid)
+    w.ops.queue.pop(0)
+    w._loaded(pid, None)
+    w.click("pick_plan", pid=pid)
+    check("review: a failed load, then Try again (the same plan picked again) loads it", [k for k, _f in w.ops.queue] == ["load"])
+    w.ops.run()
+    js = open(os.path.join(REPO, "due_crew", "planner", "page", "plan.js"), encoding="utf-8").read()
+    check("review: ...and once it loads, the plan's there; the page's empty state has Try again", w.plan is not None
+          and 'btn("Try again", function () { send("pick_plan", { pid: S.head.pid }); }' in js and "The plan didn't load." in js)
+
+    # 4: take back and Discard wait while the changes send
+    pid, code = plan([{"id": "u1", "name": "Cell injury", "opens": day(3), "tags": [f"{R}::01_Cell_injury"]},
+                      {"id": "u2", "name": "Inflammation", "opens": day(4), "tags": [f"{R}::02_Inflammation"]}])
+    client("maya").follow_plan(code)
+    w = AFace(client("sam"), select=pid)
+    w.ops.run()
+    w.click("rename", uid="u1", name="A")
+    w.click("rename", uid="u2", name="B")
+    w.click("send", why="two renames")
+    undo = w.last()["head"]["undo"]
+    take = next(x for x in undo if x["what"] and x["what"][0] == "take")
+    w.click("undo", what=take["what"])
+    w.click("discard", sure=True)
+    check("review: while changes send, Take back is off and does nothing; Discard waits too",
+          take["on"] is False and len(w.draft) == 2 and 'send("discard"); }, "t", { disabled: busy(),' in js)
+    w.ops.run()
+    check("review: ...and both went, as they were shown", [x["name"] for x in STORE.plans[pid]["doc"]["units"]] == ["A", "B"] and w.draft is None)
+
+    # 5: Your AI app's change made while a send was out stays waiting
+    w.click("rename", uid="u1", name="A2")
+    w.click("send", why="a rename")
+    d = w.ops.draft(pid)
+    d.add({"op": "rename", "date": "u2", "name": "B from my AI"}, w.ctx())
+    w.ops.keep_draft(pid, d)
+    w.draft_changed(pid)
+    w.ops.run()
+    kept = w.ops.draft(pid)
+    check("review: a change Your AI app put under the plan during a send stays waiting, on the plan as sent",
+          kept is not None and len(kept) == 1 and kept.ops[0].get("name") == "B from my AI" and w.draft is not None and len(w.draft) == 1
+          and [x["name"] for x in w.doc["units"]] == ["A2", "B from my AI"] and "from your AI app is waiting" in w._status,
+          (kept and kept.ops, w._status))
+
+    # 6: Make again renames the half-made plan; New plan doesn't start over under a Make
+    STORE.add_user("zed", "Zed", code="ZED123")
+    w = AFace(client("zed"))
+    w.click("new_step", step="empty")
+    w.click("new_set", key="name", value="Heme blok")
+    w.ops.fail_save = True
+    w.click("new_make", start=False, sure=True)
+    w.new_open(finish_by=day(30), exam="Block exam")
+    still = w.new["step"] == "empty" and w.new["busy"]
+    w.ops.run("make")
+    made = w.new["made"]
+    w.click("new_set", key="name", value="Heme block")
+    w.click("new_make", start=False)
+    w.ops.run("make")
+    w.ops.run()
+    zed = [p for p in STORE.plans.values() if p["owner"] == "zed"]
+    check("review: New plan doesn't start over while a Make is out; Make again renames the half-made plan, one plan",
+          still and made and len(zed) == 1 and zed[0]["name"] == "Heme block", (still, made, [p["name"] for p in zed]))
+
+    # 8: a library plan's follower gets no note box
+    pid, code = plan([{"id": "c1", "name": "Anemias", "opens": TODAY.isoformat(), "tags": [f"{R}::03_Neoplasia"]}], owner="dre", name="Library plan")
+    STORE.plans[pid]["listed"] = 1
+    sam = client("sam")
+    sam.follow_plan(code)
+    w = Face(sam, select=pid)
+    w.notes, w.notes_of = [], pid
+    w.click("pick", key=["date", "c1"])
+    check("review: a library plan's follower gets no note box (it's the plan's authors' alone)",
+          w.plan.get("library") is True and w.raw is None and w.last()["panel"]["notes"]["writes"] is False)
 
 
 def main():

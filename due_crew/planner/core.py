@@ -59,6 +59,8 @@ class PlanCore:
         self.how = ""
         self.keep = None          # what the Plan tab picks once a plan (re)loads
         self.busy = False
+        self._saving = False      # a save of this window's is out (busy with it)
+        self._next = []           # changes made meanwhile: (plan id, ops, keep, then), saved after it in turn
         self.undoable = None      # (plan id, version) a save of this window's made, while its Undo shows
         self.sent = None          # (when, how many changes) the last send, for Undo's first line
         self._rows = {}           # uid -> model.sources, for this plan's index and doc
@@ -136,6 +138,7 @@ class PlanCore:
             return
         self._busy(True, "Loading the plan…")
         self.undoable = None
+        self._next = []
         self.forget_notes()
         self.ops.load(self, pid, lambda got: self._loaded(pid, got))
 
@@ -261,7 +264,15 @@ class PlanCore:
 
     def changes(self, ops, keep=None, then=None):
         then = then or (lambda _ok: None)
-        if not self.author() or self.busy or not ops:
+        if not self.author() or not ops:
+            then(False)
+            return False
+        if self.busy:
+            if self._saving and self.plan is not None:
+                # one made while the last one saves (the page's boxes stay live): it saves next, never dropped
+                self._next.append((self.plan["id"], list(ops), keep, then))
+                return True
+            self.say("One moment: try that again once this is done.")
             then(False)
             return False
         ctx = self.ctx()
@@ -326,15 +337,27 @@ class PlanCore:
         else:
             keep_now = keep
         self._busy(True, "Saving…")
+        self._saving = True
         self.undoable = None
         gave = any(o.get("op") == "breather" for o in checked)
 
         def saved(got):
+            self._saving = False
             if gave and got and got[0] == "saved":
                 self._gave_day()
             self._saved(pid, got, keep_now, checked if again else None, then)
+            self._save_next()
         self.ops.save(self, pid, version, doc, summary, saved)
         return True
+
+    def _save_next(self):
+        """The changes made while a save was out, each in turn on the plan as it is now."""
+        while self._next and not self.busy:
+            pid, ops, keep, then = self._next.pop(0)
+            if pid != self.current_pid() or self.plan is None or self.plan.get("id") != pid:
+                then(False)
+                continue
+            self.changes(ops, keep, then)
 
     def _gave_day(self):
         """3.9.6: Give everyone a day saved on a plan I write: Pip's Kite (the
@@ -376,8 +399,8 @@ class PlanCore:
     # ---- the changes waiting ----
 
     def discard(self):
-        if not self.draft or not len(self.draft):
-            return
+        if not self.draft or not len(self.draft) or self.busy:
+            return  # (while they send, they're on their way)
         if not self.ask_discard(len(self.draft)):
             return
         self.draft.clear()
@@ -388,8 +411,8 @@ class PlanCore:
         self.say("Discarded.")
 
     def take_change(self, i):
-        """One waiting change out (Review's ✕, or Undo's first line)."""
-        if not self.draft or not (0 <= i < len(self.draft)):
+        """One waiting change out (Review's ✕, or Undo's first line); not while they send."""
+        if not self.draft or not (0 <= i < len(self.draft)) or self.busy:
             return
         self.draft.take(i)
         self.ops.keep_draft(self.plan["id"], self.draft if len(self.draft) else None)
@@ -408,6 +431,7 @@ class PlanCore:
         pid, version, n = self.plan["id"], self.draft.version, len(self.draft)
         post = " ".join(str(why or "").split())[:O.WHY_MAX] or None
         gave = any(o.get("op") == "breather" for o in self.draft.ops)
+        sent = [dict(o) for o in self.draft.ops]
         self._busy(True, "Sending…")
 
         def done(got):
@@ -427,7 +451,7 @@ class PlanCore:
                 self.say("Someone saved this plan since your changes began: they're on theirs now. "
                          "Look them over, then send.")
                 return
-            self.ops.keep_draft(pid, None)
+            later = self._after_send(pid, sent)
             self.draft = None
             if gave:
                 self._gave_day()
@@ -436,8 +460,26 @@ class PlanCore:
             self.undoable = (pid, plan.get("version"))
             self.sent = (self.ops.now_words(), n)
             self.undo_shown()
-            self.say(f"Sent to {self.followers():,} following. They get it at their next refresh.")
+            self.say(f"Sent to {self.followers():,} following. They get it at their next refresh."
+                     + (f" {later:,} change{'s' if later != 1 else ''} from your AI app {'are' if later != 1 else 'is'} "
+                        "waiting: Review and send." if later else ""))
         self.ops.send(self, pid, version, doc, summary, post, done)
+
+    def _after_send(self, pid, sent):
+        """The changes sent come off the ones kept here; any put under the
+        plan while they went (Your AI app's: draft_changed waits while busy)
+        stay waiting, on the plan as sent (its load rebases them). How many."""
+        disk = self.ops.draft(pid)
+        rest = [dict(o) for o in (disk.ops if disk is not None else [])]
+        for o in sent:
+            if o in rest:
+                rest.remove(o)
+        if not rest:
+            self.ops.keep_draft(pid, None)
+            return 0
+        from .draft import Draft
+        self.ops.keep_draft(pid, Draft(pid, disk.base, disk.version, rest))
+        return len(rest)
 
     # ---- Undo ----
 
@@ -451,7 +493,7 @@ class PlanCore:
             es = self.draft.entries(self.ctx())
             last = es[-1:] if es else []
             what = f"{last[0]['what']} {last[0]['verb'].lower()}" if last else "the last change"
-            out.append((f"Take back the last change, not sent ({what})", ("take", len(self.draft) - 1), True))
+            out.append((f"Take back the last change, not sent ({what})", ("take", len(self.draft) - 1), not self.busy))
         if self.undoable and self.undoable[0] == (self.plan or {}).get("id"):
             label = (f"Undo your send of {self.sent[0]} ({self.sent[1]:,} change{'s' if self.sent[1] != 1 else ''})"
                      if self.sent else "Undo your last save")

@@ -580,7 +580,7 @@ var dcPlan = (function () {
         w.appendChild(x.key ? h("span.k", { text: x.words, onclick: function () { send("pick", { key: x.key }); } }) : h("span", { text: x.words }));
       });
       if (s.more > 0) { w.appendChild(document.createTextNode(", and " + s.more + " more")); }
-      out.push(h("div.waiting", {}, [w, btn("Discard", function () { send("discard"); }, "t", { title: "Take every change not sent back; nobody saw them" }),
+      out.push(h("div.waiting", {}, [w, btn("Discard", function () { send("discard"); }, "t", { disabled: busy(), title: "Take every change not sent back; nobody saw them" }),
         btn("Review and send", function () { send("review_send"); }, "pri", { disabled: busy(), title: "Every change waiting, and a line for followers (Ctrl+Enter)" })]));
     }
     if (author()) {
@@ -657,7 +657,11 @@ var dcPlan = (function () {
     } else {
       if (S.plan) { root.appendChild(renderTabs()); }
       if (S.welcome) { root.appendChild(welcome()); }
-      else if (!S.plan) { root.appendChild(h("div.body", {}, [h("div.empty", { text: S.head.plans.length ? "Loading the plan…" : "" })])); }
+      else if (!S.plan) {
+        var again = S.head.plans.length && !busy() && S.head.pid
+          ? btn("Try again", function () { send("pick_plan", { pid: S.head.pid }); }, "pri") : null;  /* the load failed: picking it again fires no change */
+        root.appendChild(h("div.body", {}, [h("div.empty", { text: !S.head.plans.length ? "" : again ? "The plan didn't load." : "Loading the plan…" }, again ? [again] : [])]));
+      }
       else if (S.tab === "plan") { root.appendChild(planTab()); }
       else { root.appendChild(otherTab(S.tab)); }
     }
@@ -673,6 +677,7 @@ var dcPlan = (function () {
     if (!S) { return; }
     if (ui.sheet) { if (e.key === "Escape") { closeSheet(); } return; }
     if (e.key === "Escape") { closeMenu(); }
+    if (S.new) { return; }  /* New plan's screen: the plan behind it takes no keys */
     var typing = /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || "");
     var mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
     if (mod && k === "n" && author()) { e.preventDefault(); send("new_date_form"); return; }

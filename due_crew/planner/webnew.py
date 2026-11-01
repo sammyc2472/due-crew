@@ -45,7 +45,11 @@ class NewPlan:
 
     def new_open(self, finish_by=None, exam=None, start=None):
         """New plan, on its first screen; finish_by and exam come from the
-        board's exam line (Plan the way there), start from a link."""
+        board's exam line (Plan the way there), start from a link. Not while
+        a Make is out: its answer belongs to the screen that asked."""
+        if self.new is not None and self.new["busy"]:
+            self.push()
+            return
         today = str(self.ops.today())
         decks = [(d, str(n), int(c)) for d, n, c in (self.ops.top_decks() or [])]
         got = getattr(self.ops, "new_defaults", None)
@@ -280,12 +284,12 @@ class NewPlan:
             return
         st["busy"], st["said"] = True, "Making it…"
         self.push()
-        self.ops.make(self, name, doc, lambda got: self._new_made(got, start, name), pid=st["made"])
+        self.ops.make(self, name, doc, lambda got: self._new_made(got, start, name, st), pid=st["made"])
 
-    def _new_made(self, got, start, name):
+    def _new_made(self, got, start, name, asked=None):
         st = self.new
-        if st is None:
-            return
+        if st is None or (asked is not None and st is not asked):
+            return  # New plan closed or began again meanwhile
         st["busy"] = False
         if not got:
             st["said"] = "That didn't make it: check your connection, then try again."
