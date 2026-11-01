@@ -552,7 +552,32 @@ def main(out):
         names = [w for w in dlg.match.findChildren(QtWidgets.QLabel) if w.text() == "Arrhythmia <b>"]
         if not names or names[0].textFormat() != QtCore.Qt.TextFormat.PlainText:
             raise RuntimeError("follow: a unit's name went in as markup")
+        # Today's lesson: in the deck it runs on (A) unless chosen otherwise
+        if (not dlg.lesson_in.isChecked() or dlg.lesson_own.isChecked() or dlg.lesson_in.isHidden()
+                or dlg.lesson_in.text() != "In " + dlg.deck.currentText()):
+            raise RuntimeError(f"follow: today's lesson {dlg.lesson_in.text()!r} {dlg.lesson_in.isChecked()}")
         shoot(dlg, os.path.join(out, "plan-follow.png"))
+        # B: its own deck, chosen; the choice reaches on_followed, and asked again it's still B
+        l_pid, l_code = STORE.add_plan("igk", "Path Book", "Step 1", units[:2])
+        took = []
+        dlg = FollowDialog(None, CLIENT, aqt.mw.col, code=l_code, today=today.isoformat(), swap_prompt=lambda sw, n: True,
+                           on_followed=lambda *a, **k: took.append(k), lesson_on=lambda pid: False)
+        settle()
+        dlg.lesson_own.setChecked(True)
+        shoot(dlg, os.path.join(out, "plan-follow-lesson-deck.png"))
+        dlg = FollowDialog(None, CLIENT, aqt.mw.col, code=l_code, today=today.isoformat(), swap_prompt=lambda sw, n: True,
+                           on_followed=lambda *a, **k: took.append(k), lesson_on=lambda pid: pid == l_pid)
+        settle()
+        if not dlg.lesson_own.isChecked():
+            raise RuntimeError("follow: today's lesson chosen before isn't picked")
+        dlg.show()
+        dlg._follow()
+        settle()
+        if took != [{"lesson": True}]:
+            raise RuntimeError(f"follow: today's lesson didn't reach on_followed {took!r}")
+        dlg.close()
+        STORE.follows.pop((l_pid, "sam"), None)
+        STORE.plans.pop(l_pid, None)  # the renders after this one count igk's and Sam's plans
         # 3.8.0: at my own pace: the late-start question goes, the box under it shows, the line says so
         dlg = FollowDialog(None, CLIENT, aqt.mw.col, code=code, today=today.isoformat(), swap_prompt=lambda sw, n: True)
         settle()

@@ -313,10 +313,7 @@ class Ops:
                 done(False)
                 return
             got = dict(got, paused=False, following=True, own=got.get("own") or own or "")
-            set_deck = getattr(plan_flow, "set_lesson_deck", None)
-            plan_flow.on_followed(got, did, None, "open", False)
-            if lesson_deck and set_deck is not None:
-                set_deck(got["id"], True)
+            plan_flow.on_followed(got, did, None, "open", False, lesson=bool(lesson_deck))  # Today's lesson, A or B
             done(True)
         _bg(lambda: cl.follow_plan(code, False, own=own), followed)
 

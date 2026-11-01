@@ -1803,6 +1803,8 @@ def _opened_line(op):
     sync = (f'<a href="#" title="Anki&rsquo;s sync, so your phone has them" onclick="{_pycmd("plansync")}">Sync now</a>'
             if op.get("sync") else "")
     by = _opened_dates(op.get("dates"))
+    if op.get("decks"):  # Today's lesson, B: each lesson a deck of its own
+        by = f"{by}, in your decks" + ("" if by else ".")
     return (f'<div class="du-line"><span>This morning opened {n:,} new card{"s" if n != 1 else ""}{by or "."}</span>'
             f'<span class="acts">{sync}<a href="#" title="They open tomorrow morning" onclick="{_pycmd("plannottoday")}">'
             f'Not today</a></span></div>')
@@ -1889,7 +1891,13 @@ def _plan_status(card, pid):
     togo = int((card.get("status") or {}).get("togo") or 0)
     if not togo:
         return ""
-    return f'<div class="pst"><span><b>{togo:,}</b> to go today</span></div>'
+    lesson = card.get("lesson_deck") or {}  # Today's lesson, B: today's is a deck of its own
+    act = ""
+    if lesson.get("today"):
+        uid = str(lesson["today"])
+        act = f'<a href="#" title="Its deck, in Anki" onclick="{_pycmd(f"planstudydate:{pid}:{uid}")}">Study</a>'
+    return (f'<div class="pst"><span><b>{togo:,}</b> to go today{", in your decks" if lesson else ""}</span>'
+            + (f'<span class="acts">{act}</span>' if act else "") + '</div>')
 
 
 PATH_WORDS = {"done": "d", "behind": "b", "catch": "c", "now": "t", "ahead": "a", "skip": "s"}

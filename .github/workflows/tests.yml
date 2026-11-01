@@ -38,6 +38,7 @@ jobs:
       - run: python3 tests/test_where.py  # 3.9.5: Study where the cards are (QBank's topics)
       - run: python3 tests/test_habits.py  # 3.9.5: How you study, from my own log (never sent)
       - run: python3 tests/test_plan_board.py  # plans, end to end: You › Plans' path, Behind…, the empty tab
+      - run: python3 tests/test_lesson_decks.py  # Today's lesson, B: each open lesson a deck of its own (never sent)
 
   dialogs:
     name: dialogs build (offscreen PyQt6)

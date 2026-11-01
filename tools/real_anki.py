@@ -1234,6 +1234,7 @@ def check_opens(path):
         print(("PASS " if cond else "FAIL ") + name, extra)
         if not cond:
             failed.append(name)
+    kept = ({k: getattr(F, k) for k in ("followed", "_state_cfg", "_today")}, F.mw.col)  # put back after, for the checks that follow
     col = Collection(path)
     try:
         did = col.decks.id_for_name("Step Deck")
@@ -1272,6 +1273,167 @@ def check_opens(path):
         F.browser_row(other, False, row2, columns)
         ok("Browse: one the plan opens but isn't suspended keeps Anki's words", row2.cells[columns.index("cardDue")].text == before, repr(before))
     finally:
+        for k, v in kept[0].items():
+            setattr(F, k, v)
+        F.mw.col = kept[1]
+        col.close()
+    return failed
+
+
+def check_lessons(path):
+    """Today's lesson, B (the plans redesign), on the big deck: the morning
+    opens a plan's lessons and makes each open one a filtered deck of its
+    own (its new cards and its learning ones due now, never a review, never
+    a card another add-on's deck holds), in the open's one undo step; Not
+    today takes it all back; a lesson studied through goes with the tidy;
+    back to A, the decks go and every card is home as it was. Timed."""
+    import datetime as _dtm
+    import time
+    import types
+    REPO = os.path.dirname(HERE)
+    sys.path.insert(0, REPO); sys.path.insert(0, REPO + "/tests")
+    from anki.collection import Collection
+    import fakes
+    fakes.install_fake_requests(fakes.FakeWorker())
+    fakes.install_fake_aqt()
+    from due_crew import plans as P
+    from due_crew import plan_flow as F
+    failed = []
+
+    def ok(name, cond, extra=""):
+        print(("PASS " if cond else "FAIL ") + "lessons: " + name, extra)
+        if not cond:
+            failed.append("lessons: " + name)
+    names = ("_pcfg", "_psave", "followed", "client", "_today", "tooltip", "refresh_progress")
+    kept = {k: getattr(F, k) for k in names}
+    kept_mw = (F.mw.col, F.app.swap, getattr(F.mw, "undo", None))
+    kept_read = P.DeckIndex._read_static
+    col = Collection(path)
+    try:
+        did = col.decks.id_for_name("Step Deck")
+        idx = P.DeckIndex(col, did)
+        tags, _decks = idx.tree()
+        secs = sorted({t for t, _n in tags if "#Path_Book::03_Chapter_3::" in t and t.count("::") == 3})[:6]
+        today = _dtm.date.today()
+        day = lambda n: str(today + _dtm.timedelta(days=n))  # noqa: E731
+        lessons = [{"id": f"s{i}", "name": t.rsplit("::", 1)[-1].replace("_", " ") + f" {i}", "opens": day(i - 2),
+                    "tags": [t], "decks": [], "cards": []} for i, t in enumerate(secs)]
+        plan = {"id": "pL", "name": "Path::Book", "doc": {"deck": "Step Deck", "units": lessons}}
+        every = sorted(set().union(*(idx.match(u, None, "Step Deck") for u in lessons)))
+        col.sched.schedule_cards_as_new(every)
+        col.sched.suspend_cards(every)
+        # in lesson s1: a review (FSRS's), a learning card due now, one due tomorrow, one in another add-on's deck
+        s1 = sorted(idx.match(lessons[1], None, "Step Deck") - idx.match(lessons[0], None, "Step Deck"))
+        rev, learn_now, learn_later, theirs = s1[:4]
+        col.sched.unsuspend_cards([rev, learn_now, learn_later, theirs])
+        for cid, (ctype, queue, due) in ((rev, (2, 2, col.sched.today + 20)), (learn_now, (1, 1, int(time.time()) + 600)),
+                                         (learn_later, (1, 3, col.sched.today + 1))):
+            c = col.get_card(cid)
+            c.type, c.queue, c.due, c.ivl, c.left = ctype, queue, due, 20 if ctype == 2 else 0, 1001
+            col.update_card(c)
+        cram = col.sched.get_or_create_filtered_deck(deck_id=0)
+        cram.name = "My cram"
+        del cram.config.search_terms[1:]
+        cram.config.search_terms[0].search, cram.config.search_terms[0].limit = f"cid:{theirs}", 1
+        col.sched.add_or_update_filtered_deck(cram)
+        cram_id = col.decks.id_for_name("My cram")
+        pos0 = {c: col.get_card(c).due for c in every}
+        pstore = {"plans": {"pL": F.new_state(col, plan, did)}, "plans_day": day(-1)}
+        F._pcfg, F._psave = (lambda: pstore), (lambda d: None)
+        F.followed = lambda: [F.mine(plan)]
+        F.client = lambda: types.SimpleNamespace(signed_in=True, session={})
+        F._today = lambda: day(0)
+        F.tooltip = lambda *a, **k: None
+        F.refresh_progress = lambda: {}
+        F.app.swap = lambda *a, **k: None
+        F.mw.col = col
+        F.mw.undo = col.undo
+        pstore["plans"]["pL"]["lesson_deck"] = True  # B, chosen at Follow
+        t = time.perf_counter(); F.maybe_morning(False); t_morn = time.perf_counter() - t
+        st = pstore["plans"]["pL"]
+        opened = pstore.get("plans_opened") or {}
+        decks = {u: col.decks.name(d) for u, d in (st.get("lesson_decks") or {}).items()}
+        ok("the morning: the lessons open by today, each a filtered deck of its own, named and numbered in order",
+           sorted(decks.values()) == [P.lesson_deck("Path::Book", i + 1, 6, lessons[i]["name"]) for i in range(3)]
+           and all(v.startswith("Due Crew::Path: Book::0") for v in decks.values()), f"{sorted(decks.values())}, {t_morn*1000:.0f} ms")
+        held = {u: set(col.find_cards(f"did:{d}")) for u, d in st["lesson_decks"].items()}
+        inside = set().union(*held.values())
+        kinds = {col.get_card(c).type for c in inside}
+        i2 = P.DeckIndex(col, did)
+        new_open = {c for u in lessons[:3] for c in i2.match(u, None, "Step Deck") if i2.cards[c] == (0, 0)} - {theirs}
+        ok("…its new cards and the learning one due now; never a review, a learning one due later, or another add-on's card",
+           kinds <= {0, 1} and learn_now in held["s1"] and rev not in inside and learn_later not in inside
+           and col.get_card(theirs).did == cram_id and new_open <= inside and len(inside) > 10,
+           f"{len(inside)} cards, kinds {sorted(kinds)}, held elsewhere {st.get('lesson_held')}")
+        dk = col.decks.get(st["lesson_decks"]["s0"])
+        ok("…Anki's filtered deck, rescheduling, as they come in the deck",
+           dk["dyn"] and dk["resched"] and len(dk["terms"]) == 1 and dk["terms"][0][2] == F.NEW_ORDER, str(dk["terms"]))
+        ok("…the open and the decks one undo step, still Anki's latest; the line says in your decks",
+           opened.get("label") and col.undo_status().undo == opened["label"] and (F.morning_opened() or {}).get("decks") is True,
+           repr(col.undo_status().undo))
+        t = time.perf_counter(); F.undo_morning(put_off_too=True); t_undo = time.perf_counter() - t
+        ok("Not today: one undo, the cards shut again and every lesson deck gone; the review, the learning cards and "
+           "another add-on's deck as they were",
+           not any(col.decks.id_for_name(v) for v in decks.values()) and not col.decks.id_for_name("Due Crew::Path: Book")
+           and all(col.get_card(c).queue == -1 for c in new_open) and col.get_card(learn_now).odid == 0
+           and col.get_card(theirs).did == cram_id and col.get_card(rev).due == col.sched.today + 20
+           and not st.get("lesson_decks"), f"{t_undo*1000:.0f} ms")
+        F._today = lambda: day(1)
+        t = time.perf_counter(); F.maybe_morning(False); t_m2 = time.perf_counter() - t
+        st = pstore["plans"]["pL"]
+        # three days of dates and no study on them (a collection studied in by the checks before has some):
+        # Welcome back asks first, and Open them opens them as the morning would
+        asked = bool(st.get("away"))
+        if asked:
+            t = time.perf_counter(); F.welcome_back(["pL"], ask=lambda *a: "open"); t_m2 = time.perf_counter() - t
+        ok("the next morning (or Welcome back's Open them): what Not today put off and the next lesson open, each with its deck",
+           sorted(st.get("lesson_decks") or {}) == ["s0", "s1", "s2", "s3"],
+           f"{sorted(st.get('lesson_decks') or {})}, {'asked first, ' if asked else ''}{t_m2*1000:.0f} ms")
+        first = st["lesson_decks"]["s0"]
+        reads, real_read = [], P.DeckIndex._read_static
+        P.DeckIndex._read_static = lambda self, *a: reads.append(1) or real_read(self, *a)
+        P.DeckIndex(col, did)
+        base = len(reads)  # read now, if it wasn't already
+        col.decks.select(first)
+        n_ans = 0
+        while n_ans < 500:
+            q = col.sched.get_queued_cards()
+            if not q.cards:
+                break
+            c = col.get_card(q.cards[0].card.id)
+            c.start_timer()
+            col.sched.answer_card(col.sched.build_answer(card=c, states=col._backend.get_scheduling_states(c.id), rating=3))
+            n_ans += 1
+        t = time.perf_counter(); P.DeckIndex(col, did); t_read = time.perf_counter() - t
+        P.DeckIndex._read_static = real_read
+        ok("the deck's read stays cached as a lesson's cards go home: its tags aren't read again",
+           len(reads) == base, f"{t_read*1000:.0f} ms")
+        left = len(col.find_cards(f"did:{first}"))
+        t = time.perf_counter(); n_tidy = F.tidy_decks(col); t_tidy = time.perf_counter() - t
+        ok("a lesson studied through: its cards home as reviews, and the tidy takes its deck; the folder stays",
+           n_ans and not left and n_tidy == 1 and not F._dyn(col, first) and col.decks.id_for_name("Due Crew::Path: Book")
+           and F._dyn(col, st["lesson_decks"]["s1"]), f"{n_ans} answered, {t_tidy*1000:.0f} ms")
+        steps = col.undo_status().undo
+        t = time.perf_counter(); F.set_lesson_deck("pL", True); t_same = time.perf_counter() - t
+        ok("switching to B again: nothing to do, no undo step", col.undo_status().undo == steps,
+           f"{col.undo_status().undo!r}, {t_same*1000:.0f} ms")
+        F.set_lesson_deck("pL", False)
+        rest = [c for c in every if col.get_card(c).type == 0]
+        ok("back to A: every lesson deck and the folder gone, one undo step; the cards home, new ones in their place, "
+           "the learning one still learning",
+           not col.find_cards('"deck:Due Crew::Path: Book*"') and not col.decks.id_for_name("Due Crew::Path: Book")
+           and col.undo_status().undo == F.LESSON_OFF and all(col.get_card(c).odid == 0 and col.get_card(c).did == did for c in every if c != theirs)
+           and all(col.get_card(c).due == pos0[c] for c in rest if c != theirs) and col.get_card(learn_now).type == 1,
+           repr(col.undo_status().undo))
+        col.undo()
+        ok("…Edit › Undo brings the decks back", F._dyn(col, col.decks.id_for_name(decks["s1"])))
+    finally:
+        for k, v in kept.items():
+            setattr(F, k, v)
+        F.mw.col, F.app.swap = kept_mw[:2]
+        if kept_mw[2] is None:
+            F.mw.__dict__.pop("undo", None)
+        P.DeckIndex._read_static = kept_read
         col.close()
     return failed
 
@@ -1284,10 +1446,15 @@ if __name__ == "__main__":
             failed = check_opens(p)
             print(f"\n{len(failed)} failed")
             sys.exit(1 if failed else 0)
+        if "--lessons" in sys.argv:  # this check alone
+            failed = check_lessons(p)
+            print(f"\n{len(failed)} failed")
+            sys.exit(1 if failed else 0)
         failed = check(p)
         failed += check_392(tmp)
         failed += check_planner(p)
         failed += check_bars(tmp)
         failed += check_opens(p)
+        failed += check_lessons(p)
     print(f"\n{len(failed)} failed" + (": " + "; ".join(failed) if failed else ""))
     sys.exit(1 if failed else 0)

@@ -201,9 +201,12 @@ class DeckIndex:
         self.col = col
         # 3.3: the tags, note ids and subdecks change only when notes do;
         # kept between refreshes while this fingerprint holds (a few ms),
-        # and only each card's state is read again
+        # and only each card's state is read again. Each card by its home deck
+        # (Today's lesson, B): a card going into a filtered deck or back home
+        # isn't a change here, so studying a lesson's deck doesn't read it all again
         sig = (tuple(sorted((d, names.get(d, "")) for d in tree)),
-               tuple(col.db.first("SELECT count(), max(n.mod), total(n.mod), max(c.id), sum(c.did), sum(c.odid), sum(c.ord) "
+               tuple(col.db.first("SELECT count(), max(n.mod), total(n.mod), max(c.id), "
+                                  "sum(CASE WHEN c.odid != 0 THEN c.odid ELSE c.did END), sum(c.ord) "
                                   f"FROM cards c JOIN notes n ON n.id = c.nid {where}") or ()))
         key = (id(col), self.did)
         kept = _STATIC.get(key)
@@ -2368,17 +2371,78 @@ def our_deck(name):
     return f"{PARENT}::" + (" ".join(str(name).replace("::", ": ").split())[:120] or "Cards")
 
 
-def tidy(filtered, built, parent=None):
+# ---- Today's lesson, B: a lesson's own deck ----
+# Per plan, this computer's choice (plan_flow.lesson_deck_on): A opens a
+# lesson's cards in the plan's deck, as ever; B also makes each open lesson
+# with cards to learn a filtered deck of its own, "Due Crew::<plan>::03 <lesson>".
+
+def lesson_places(doc):
+    """{unit id: its place in the plan, 1 first}, by opening day (the plan's
+    own order for a day with two), so Anki lists the lesson decks in order."""
+    us = sorted(enumerate(units(doc)), key=lambda iu: (str(iu[1].get("opens") or "9999"), iu[0]))
+    return {u["id"]: k for k, (_i, u) in enumerate(us, 1)}
+
+
+def lesson_folder(plan_name):
+    """The plan's folder of lesson decks: "Due Crew::Path Book" ("::" in the
+    name made safe, as our_deck does)."""
+    return our_deck(plan_name or "Plan")
+
+
+def lesson_deck(plan_name, place, of, lesson_name):
+    """A lesson's deck: "Due Crew::Path Book::03 Neoplasia", its place two
+    digits (three from a 100th lesson on), so the decks sort as the plan goes."""
+    name = " ".join(str(lesson_name or "").replace("::", ": ").split())[:120] or "Lesson"
+    return f"{lesson_folder(plan_name)}::{int(place):0{max(2, len(str(int(of))))}d} {name}"
+
+
+def lesson_cards(idx, cids):
+    """What a lesson's deck holds of these: its open new cards, and its
+    learning ones Anki has due now (one due later would show early in a
+    filtered deck), in the deck's order. Never a review: FSRS keeps its own
+    dates (Sam's FSRS rule)."""
+    got = [c for c in cids if c in idx.cards
+           and (idx.cards[c] == (0, 0) or (idx.cards[c][1] == 1 and c in idx.due_now))]
+    return sorted(got, key=lambda c: idx.order.get(c, (True, 0, c)))
+
+
+def lesson_plan(want, have, held):
+    """What one lesson's deck needs: "build" (it has none, and has cards to
+    take), "rebuild" (cards it should hold that it doesn't: a date's update
+    added some, a learning card came due), or None (it holds them all, or
+    there's nothing to take: an empty one goes with the morning's tidy).
+    want: the lesson's cards for it (lesson_cards); have: the cards in its
+    deck now, None without one; held: the ones another filtered deck holds
+    (Anki keeps a card in one), which it never takes."""
+    want = set(want) - set(held)
+    if not want:
+        return None
+    if have is None:
+        return "build"
+    return "rebuild" if want - set(have) else None
+
+
+def ours(name):
+    """A filtered deck Due Crew made: under its parent, or before 3.8.0 at the top."""
+    return str(name).startswith((FILTERED_PREFIX, PARENT + "::"))
+
+
+def tidy(filtered, built, parent=None, folders=()):
     """3.8.0: which of the filtered decks Due Crew built go: the empty ones.
     filtered: [(deck id, name, cards in it)], Anki's filtered decks; built:
     the ids Due Crew built here. Ours: built here, under "Due Crew::", or
     named "Due Crew · …" (before the parent, and the list). One with cards
     in it stays: a checkpoint not done yet, a date half studied. parent:
     (its id, the decks under it, cards in it): the parent deck, when Due
-    Crew made it, goes too once it's empty with nothing left under it."""
+    Crew made it, goes too once it's empty with nothing left under it.
+    folders (Today's lesson, B): [(id, the decks under it, cards in it)], a
+    plan's folder of lesson decks, deepest first, the same way."""
     built = {int(x) for x in built}
     gone = [int(d) for d, name, n in filtered
-            if not n and (int(d) in built or str(name).startswith((FILTERED_PREFIX, PARENT + "::")))]
+            if not n and (int(d) in built or ours(name))]
+    for fid, kids, n in folders:
+        if int(fid) in built and not n and {int(k) for k in kids} <= set(gone):
+            gone.append(int(fid))
     if parent:
         pid, kids, n = parent
         if int(pid) in built and not n and {int(k) for k in kids} <= set(gone):
