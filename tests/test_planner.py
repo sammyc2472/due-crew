@@ -2454,6 +2454,192 @@ def test_insights_tab():
     check("insights: each card's tags as written; each subdeck card's path below the deck",
           VID in sp[1] and SYS in sp[1] and I.deck_paths(idx2) == {13: ["Cardio"], 14: ["Cardio"]}, (sp.get(1), I.deck_paths(idx2)))
 
+
+# ---- plans end to end: A resource, at my pace, and the builder's site-only tools as pure Python ----
+
+PART = f"{ROOT}::#Path_Book"
+HY = f"{ROOT}::^High_Yield"
+CHAPTERS = [("01_Cell_injury", 30), ("02_Inflammation", 70), ("03_Neoplasia", 12), ("10_Vascular", 45), ("04_Hemostasis", 5)]
+
+
+def resource_deck(questions=False):
+    """Big Step 1 with a book of five chapters (every other card high yield),
+    six cards on the book alone (four high yield), and, asked for, two of a
+    bank's questions under the book too."""
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    cid = 1
+    for ch, n in CHAPTERS:
+        for i in range(n):
+            fakes.add_card(conn, cid, 1, tags=f"{PART}::{ch}" + (f" {HY}" if i % 2 == 0 else ""))
+            cid += 1
+    for i in range(6):
+        fakes.add_card(conn, cid, 1, tags=PART + (f" {HY}" if i < 4 else ""))
+        cid += 1
+    if questions:
+        for q in ("10234", "10911"):
+            fakes.add_card(conn, cid, 1, tags=f"{PART}::{q}")
+            cid += 1
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(datetime.date(2026, 11, 1)))
+    col.decks = fakes.FakeDecks({1: "Big Step 1"})
+    idx = P.DeckIndex(col, 1)
+    from due_crew.planner import build as B
+    return idx, B.Tree(*idx.tree())
+
+
+def test_resource_plan():
+    """A resource, at my pace: a date a chapter in the deck's order, the
+    rest of the part last, laid out by the builder's Fill (a big chapter
+    spread evenly), Only as the plan's one own tag with 3.8.1 cuts; the doc
+    the Worker takes and the plan's text reads back."""
+    from due_crew.planner import build as B
+    from due_crew.planner import text as T
+    idx, tree = resource_deck()
+    rng = random.Random(7)
+    doc, s = E.resource_plan(idx, tree, PART, "2026-11-02", daily=40, rng=rng)
+    us = doc["units"]
+    check("resource: a date a chapter, in the deck's order (10 after 4), then the rest of it",
+          [u["name"] for u in us] == ["1 · Cell injury", "2 · Inflammation", "3 · Neoplasia", "4 · Hemostasis", "10 · Vascular",
+                                      "Path Book · the rest"], [u["name"] for u in us])
+    check("resource: each chapter its own tag, counted as the builder counts a tag",
+          [u["tags"] for u in us[:5]] == [[f"{PART}::{c}"] for c in ("01_Cell_injury", "02_Inflammation", "03_Neoplasia",
+                                                                      "04_Hemostasis", "10_Vascular")]
+          and [u.get("n") for u in us[:5]] == [30, 70, 12, 5, 45], us)
+    rest_q = f'{B.anki_search("tag", PART)} -{B.anki_search("tag", PART)[:-1]}::*"'
+    check("resource: the rest is the part less every tag under it, as a search with its count (an older add-on reads it)",
+          us[5]["tags"] == [] and us[5]["search"] == [rest_q] and us[5]["sn"] == {rest_q: 6}
+          and M.search_label(rest_q) == "Path Book · the rest", us[5])
+    check("resource: Fill's days: chapters whole while they fit the pace, two to a day as dates of their own, a big one evenly to its due date",
+          [(u["opens"], u.get("due"), bool(u.get("even"))) for u in us]
+          == [("2026-11-02", None, False), ("2026-11-03", "2026-11-04", True), ("2026-11-05", None, False),
+              ("2026-11-05", None, False), ("2026-11-06", "2026-11-09", True), ("2026-11-10", None, False)], us)
+    check("resource: the pace kept as the builder's: about 40 new a study day, Mon to Fri, nothing ticked for Lay it out",
+          doc["pace"] == {"mode": "daily", "days": [1, 1, 1, 1, 1, 0, 0], "daily": 40} and "end" not in doc and "tags" not in doc, doc["pace"])
+    check("resource: what the window says: lessons, new cards, first and last day, the busiest day",
+          (s["lessons"], s["new"], s["first"], s["last"], s["busiest"], s["busiest_day"], s["rest"], s["left"])
+          == (6, 168, "2026-11-02", "2026-11-10", 35, "2026-11-03", 6, 0)
+          and [x["n"] for x in s["dates"]] == [30, 70, 12, 5, 45, 6], s)
+    check("resource: the Worker takes it as it is", bool(STORE._plan_doc(doc)))
+    hy, hs = E.resource_plan(idx, tree, PART, "2026-11-02", daily=20, only=HY, rng=random.Random(8))
+    t = hy["tags"][0]
+    ppath = P.tag_path(hy, t)
+    check("resource: Only is the plan's one own tag, holding the deck's tag, under the plan's own root",
+          len(hy["tags"]) == 1 and t["name"] == "High Yield" and t["tags"] == [HY]
+          and hy["tagroot"] == P.tag_root("Path Book, high yield") == P.tag_root(M.resource_name(PART, HY)), hy["tags"])
+    cuts = [u for u in hy["units"] if u.get("cut")]
+    check("resource: each chapter kept to it by a 3.8.1 cut, its search in `search` (an older add-on opens the same cards)",
+          len(cuts) == 5 and all(u["tags"] == [] and u["cut"][0]["in"] == t["id"] and u["cut"][0]["q"] == B.cut_q(u["cut"][0]["tag"], ppath)
+                                 and u["search"] == [u["cut"][0]["q"]] for u in cuts), cuts[:1])
+    check("resource: a cut finds just the chapter's high-yield cards here, counted",
+          [len(idx.match(u, None, hy)) for u in cuts] == [15, 35, 6, 3, 23] == [u["sn"][u["search"][0]] for u in cuts])
+    rest = hy["units"][-1]
+    check("resource: the rest kept to it too; named as the builder names the rest",
+          rest["name"] == "Path Book · the rest" and rest["search"] == [f"{B.anki_search('tag', ppath)} {rest_q}"]
+          and rest["sn"][rest["search"][0]] == 4 and M.search_label(rest["search"][0]) == "Path Book · the rest · High Yield", rest)
+    check("resource: Only's doc, the Worker takes it", bool(STORE._plan_doc(hy)))
+    r = T.from_text(hy, tree, T.to_text(hy), whole=True, start="2026-11-02", plan_name=M.resource_name(PART, HY))
+    back = T.apply(hy, r, True, M.resource_name(PART, HY))
+    same = lambda d: [(u["opens"], u.get("due"), u["name"], u.get("tags"), u.get("cut"), u.get("search")) for u in d["units"]]  # noqa: E731
+    check("resource: the plan as text reads back the same (Edit the whole plan)", not r["errors"] and same(back) == same(hy),
+          (r["errors"], same(back)[:2]))
+    by, bs = E.resource_plan(idx, tree, PART, "2026-11-02", by="2026-11-13", exam="Path exam", rng=random.Random(9))
+    ev = by["events"][0]
+    check("resource: finish by an exam: the dates end the day before it, each for it, the pace the fewest a day that fit",
+          by["end"] == "2026-11-13" and ev["day"] == "2026-11-13" and ev["name"] == "Path exam"
+          and all(u["for"] == ev["id"] for u in by["units"]) and B.last_day(by) == "2026-11-12"
+          and by["pace"]["mode"] == "end" and bs["daily"] == by["pace"]["daily"] and bs["left"] == 0, (by["units"], bs))
+    q_idx, q_tree = resource_deck(questions=True)
+    qd, qs = E.resource_plan(q_idx, q_tree, PART, "2026-11-02", daily=200, rng=random.Random(3))
+    check("resource: a bank's questions under the part aren't chapters: they're in the rest, the part less its chapters",
+          len(qd["units"]) == 6 and qd["units"][-1]["search"] == [B.without_q(PART, [f"{PART}::{c}" for c in
+                                                                   ("01_Cell_injury", "02_Inflammation", "03_Neoplasia", "04_Hemostasis", "10_Vascular")])]
+          and qs["rest"] == 8, (qd["units"][-1], qs))
+    one, os_ = E.resource_plan(idx, tree, f"{PART}::02_Inflammation", "2026-11-02", daily=30, rng=random.Random(4))
+    check("resource: a part with no chapters is one date, spread evenly when it's big",
+          len(one["units"]) == 1 and one["units"][0]["even"] and one["units"][0]["due"] == "2026-11-04" and os_["lessons"] == 1, one["units"])
+    for args, words in (({"only": f"{ROOT}::^Nothing"}, "None of its cards"), ({"days": [0] * 7}, "Pick a study day"),
+                        ({"by": "2026-11-01"}, "No study days")):
+        try:
+            E.resource_plan(idx, tree, PART, "2026-11-02", **args)
+            check(f"resource: refused, {words}", False)
+        except E.Refused as e:
+            check(f"resource: refused, said ({words})", words in str(e), str(e))
+
+
+def test_resource_window_helpers():
+    """What A resource's window lists: the deck's parts with their chapters,
+    a part's chapters, what Only keeps, the tags some of its cards carry,
+    the plan's name."""
+    idx, tree = resource_deck()
+    parts = M.resource_parts(idx, tree)
+    check("resource parts: the deck's resources with their chapters and cards",
+          parts and parts[0] == {"path": PART, "name": "Path Book", "chapters": 5, "questions": 0, "cards": 168}, parts)
+    check("resource parts: found by words", M.resource_parts(idx, tree, "path book")[0]["path"] == PART
+          and M.resource_parts(idx, tree, "nothing like it") == [])
+    check("resource: its chapters in the deck's order", [p.split("::")[-1] for p in M.chapters(tree, PART)]
+          == ["01_Cell_injury", "02_Inflammation", "03_Neoplasia", "04_Hemostasis", "10_Vascular"])
+    check("resource: what Only keeps of it", M.only_count(idx, PART, HY) == (86, 168) and M.only_count(idx, PART, None) == (168, 168))
+    check("resource: the tags some of its cards carry (Only's choices; Keep only and Leave out's too)",
+          M.also_tagged(idx, idx.tag_cards(PART), skip=[PART]) == [(HY, 86)], M.also_tagged(idx, idx.tag_cards(PART), skip=[PART]))
+    check("resource: the plan's name from the part and its Only",
+          M.resource_name(PART, HY) == "Path Book, high yield" and M.resource_name(PART) == "Path Book")
+
+
+def test_source_search_and_names():
+    """A source's own search (the builder's Copy search on a chip), the
+    date's whole search, a search's name, and where a tag is on the plan."""
+    from due_crew.planner import build as B
+    cq = B.cut_q(VID, "DueCrew::MS2::SLG_5")
+    u = {"id": "u1", "opens": "2026-11-09", "tags": [VID, f"{ROOT}::#Bank::10234", f"{ROOT}::#Bank::10911"],
+         "decks": ["Big Step 1::Cardio"], "cut": [{"tag": BOOK, "in": "t1", "q": cq}], "search": [cq, "tag:X -tag:Y"],
+         "cards": [["g1", 0]]}
+    check("source search: a tag's, a subdeck's, a cut's own, a search itself, a bank's questions any of them; picks none",
+          M.source_search(u, ("tag", VID)) == B.anki_search("tag", VID)
+          and M.source_search(u, ("deck", "Big Step 1::Cardio")) == '"deck:Big Step 1::Cardio"'
+          and M.source_search(u, ("cut", BOOK, "t1")) == cq and M.source_search(u, ("search", "tag:X -tag:Y")) == "tag:X -tag:Y"
+          and M.source_search(u, ("questions", (f"{ROOT}::#Bank::10234", f"{ROOT}::#Bank::10911"))).startswith('("tag:')
+          and M.source_search(u, ("picks",)) is None)
+    check("source search: a tag in this copy's spelling (a swap)",
+          M.source_search(u, ("tag", VID), ("#Big_Step1_v3", "#Big_Step1_v4")) == B.anki_search("tag", VID.replace("_v3", "_v4")))
+    whole = M.date_search(u)
+    check("date search: its tags and subdecks, each search in brackets, any of them",
+          whole.startswith(B.anki_search("tag", VID) + " OR ") and f"({cq})" in whole and M.date_search({"cards": [["g", 0]]}) is None)
+    check("search names: the builder's where it reads them, and the rest of a tag, a cut less a tag, a subdeck less one",
+          M.search_label('"tag:A::Cardio" -"tag:A::Cardio::Extra"') == B.search_name('"tag:A::Cardio" -"tag:A::Cardio::Extra"') == "Cardio but not Extra"
+          and M.search_label(cq) == B.search_name(cq) and M.search_label('"tag:A::B\\_c" -"tag:A::B\\_c::*"') == "B c · the rest"
+          and M.search_label(f'{cq} -"tag:A::Peds"') == "Heart Failure · SLG 5 but not Peds"
+          and M.search_label('"deck:Big Step 1::Cardio" -"tag:A::Peds"') == "Cardio but not Peds"
+          and M.search_label("deck:current") == "Search")
+    doc = {"units": [dict(u, id="u1"), {"id": "u2", "opens": "2026-11-10", "tags": [], "search": ['"tag:P" -"tag:P::*"']},
+                     {"id": "u3", "opens": "2026-11-11", "tags": [], "search": ['"tag:Q" -"tag:Q::Peds"']}]}
+    check("on dates: a tag as itself, under a date's tag, a cut's, a search's own; not one a search leaves out",
+          M.on_dates(doc, f"tag:{VID}::Extra") == ["u1"] and M.on_dates(doc, f"tag:{BOOK}") == ["u1"]
+          and M.on_dates(doc, "tag:P") == ["u2"] and M.on_dates(doc, "tag:P::Ch1") == [] and M.on_dates(doc, "tag:Q::Peds") == []
+          and M.on_dates(doc, "tag:Q::Other") == ["u3"] and M.on_dates(doc, "deck:Big Step 1::Cardio") == ["u1"])
+
+
+def test_fill_apart_and_the_next_free_day():
+    """build.fill's apart (the add-on's, a date a chapter) and the builder's
+    + on a tag (the first study day after the plan's last day)."""
+    from due_crew.planner import build as B
+    items = [{"key": "tag:C", "n": 9}, {"key": "tag:B", "n": 10}, {"key": "tag:A", "n": 50, "even": True}]
+    n = iter(f"u{i}" for i in range(99))
+    joined = {"deck": "x", "units": []}
+    B.fill(joined, [dict(x) for x in items], "2026-11-06", None, 30, [1, 1, 1, 1, 1, 0, 0], lambda: next(n))
+    apart = {"deck": "x", "units": []}
+    got = B.fill(apart, [dict(x) for x in items], "2026-11-06", None, 30, [1, 1, 1, 1, 1, 0, 0], lambda: next(n), apart=True)
+    check("fill: the builder's joins a day's pieces onto one date",
+          [(u["opens"], u["tags"]) for u in joined["units"]] == [("2026-11-06", ["C", "B"]), ("2026-11-09", ["A"])], joined["units"])
+    check("fill: apart, the same days, a date each",
+          [(u["opens"], u.get("due"), u["tags"]) for u in apart["units"]]
+          == [("2026-11-06", None, ["C"]), ("2026-11-06", None, ["B"]), ("2026-11-09", "2026-11-10", ["A"])] and got["placed"] == 69,
+          apart["units"])
+    doc = {"deck": "x", "units": [{"id": "a", "opens": "2026-11-05"}, {"id": "b", "opens": "2026-11-06", "due": "2026-11-09", "even": True}]}
+    check("next free day: after the last day (an even date's due date), a study day; with no dates, the start",
+          B.next_free_day(doc, [1, 1, 1, 1, 1, 0, 0], "2026-11-02") == "2026-11-10"
+          and B.next_free_day({"units": []}, [1, 1, 1, 1, 1, 0, 0], "2026-11-07") == "2026-11-09")
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

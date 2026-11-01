@@ -23,6 +23,7 @@ from .. import plans as P
 from . import build as B
 from . import edits as E
 from . import model as M
+from . import view as V
 
 Refused = E.Refused
 ISO = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -214,7 +215,7 @@ class TakeCards(Op):
     def words(self, o, before, after, ctx):
         k = o["key"]
         what = {"tag": lambda: M.label(k[1]), "deck": lambda: M.label(k[1]), "cut": lambda: M.label(k[1]),
-                "questions": lambda: f"{len(k[1]):,} questions", "search": lambda: B.search_name(k[1]),
+                "questions": lambda: f"{len(k[1]):,} questions", "search": lambda: M.search_label(k[1]),
                 "picks": lambda: "its picked cards"}[k[0]]()
         return [_entry("Took off", _label(before, o["date"]), what, o["date"])]
 
@@ -231,7 +232,7 @@ class AddSearch(Op):
 
     def words(self, o, before, after, ctx):
         n = o.get("n")
-        return [_entry("Added", _label(after, o["date"]), f"a search: {B.search_name(o['q'])}" + (f", {n:,} cards" if n else ""), o["date"])]
+        return [_entry("Added", _label(after, o["date"]), f"a search: {M.search_label(o['q'])}" + (f", {n:,} cards" if n else ""), o["date"])]
 
 
 @op("add_ids")
@@ -372,17 +373,42 @@ class SetEven(Op):
 
 @op("add_date")
 class AddDate(Op):
+    """A new date on a day: a name, cards, or both, named for what's on it
+    as the builder names it (renameAll). Plans end to end, a lesson straight from
+    a tag: day "next" is the next free study day (the builder's + on a tag:
+    the first study day after the plan's last day, or its start; worked
+    out once, at check, from today or the op's `today`); join puts the
+    cards on that day's date when it has one (the builder's unitOn, a drop
+    on a day), else a date of its own (Anki keeps two on a day)."""
+
     def check(self, doc, o):
         o = dict(o)
+        if str(o.get("day") or "").strip().lower() == "next":
+            today = _iso(o.get("today") or datetime.date.today().isoformat())
+            o["day"] = B.next_free_day(doc, V.pace_of(doc)["days"], B.plan_start(doc, B.next_monday(today)))
         o["day"] = _iso(o.get("day"))
         o["tags"] = [E._path(p) for p in _list(o.get("tags"), "tags")]
         o["decks"] = [E._path(p) for p in _list(o.get("decks"), "decks")]
         o["name"] = E._name(o["name"]) if o.get("name") else None
+        o["join"] = bool(o.get("join"))
         if not (o["tags"] or o["decks"]) and not o["name"]:
             raise Refused("A new date needs a name or something on it.")
         return o
 
+    def _joins(self, doc, o):
+        if not (o.get("join") and (o["tags"] or o["decks"])):
+            return None
+        return next((u for u in _units(doc) if u.get("opens") == o["day"] and not u.get("even")), None)
+
     def run(self, doc, o, ctx):
+        on = self._joins(doc, o)
+        if on is not None:
+            doc, took = E.add_sources(doc, on["id"], o["tags"], o["decks"])
+            if not took:
+                raise Refused("That date has those already.")
+            if o["name"]:
+                doc = E.rename(doc, on["id"], o["name"])
+            return doc, {on["id"]}
         if o["tags"] or o["decks"]:
             doc, uid = E.add_date(doc, o["day"], o["tags"], o["decks"], o["name"], _rng(o))
         else:
@@ -390,6 +416,9 @@ class AddDate(Op):
         return doc, {uid}
 
     def words(self, o, before, after, ctx):
+        on = self._joins(before, o)
+        if on is not None:
+            return [_entry("Added", _label(after, on["id"]), _src_words(o["tags"], o["decks"], ctx.tree), on["id"])]
         made = [u for u in _units(after) if u["id"] not in {x["id"] for x in _units(before)}]
         uid = made[0]["id"] if made else None
         what = _src_words(o["tags"], o["decks"], ctx.tree) or "no cards yet"
@@ -578,6 +607,106 @@ class SetExtras(Op):
 
     def words(self, o, before, after, ctx):
         return [_entry("Changed", _label(after, o["date"]), f"{M.label(o['path'])}: {'without' if o['without'] else 'with'} its extras", o["date"])]
+
+
+_SOURCES = ("tag", "deck", "cut", "questions", "search", "picks")
+
+
+def _source_key(o, kinds, what):
+    k = _list(o.get("key"), "key")
+    if not k or k[0] not in kinds:
+        raise Refused(what)
+    if k[0] == "questions":
+        k = ["questions", list(k[1] if len(k) > 1 else [])]
+    return k
+
+
+def _source_words(doc, k):
+    """A source (model.sources' key) in a change's words."""
+    return {"tag": lambda: _tag_words(doc, k[1]), "deck": lambda: M.label(k[1]), "cut": lambda: M.label(k[1]),
+            "questions": lambda: f"{len(k[1]):,} questions", "search": lambda: M.search_label(k[1]),
+            "picks": lambda: "its picked cards"}[k[0]]()
+
+
+def _tag_words(doc, path):
+    """A deck tag as a line names it; one of the plan's own by its name."""
+    t = P.plan_tag_map(doc).get(str(path).lower())
+    return str(t.get("name") or "?") if t else M.label(path)
+
+
+@op("leave_out")
+class LeaveOut(Op):
+    """Leave out cards also tagged (plans end to end; the builder's Overlap "but
+    not"): one of a date's sources less the cards also tagged `tag` (a deck
+    tag's path) or `ptag` (one of the plan's own, by id or name), as the
+    search the builder writes, in the source's place (edits.leave_out). The
+    date keeps its name ("5 · Red cell disorders", not "Search")."""
+
+    rename = False
+
+    def check(self, doc, o):
+        o = _date_ref(doc, o)
+        o["key"] = _source_key(o, ("tag", "deck", "cut", "search"), "Leave them out of which of its cards?")
+        if o.get("ptag"):
+            t = next((x for x in P.plan_tags(doc) if x.get("id") == o["ptag"] or _norm(x.get("name")) == _norm(o["ptag"])), None)
+            if t is None:
+                raise Refused(f"The plan has no tag {o['ptag']}.")
+            o["tag"] = P.tag_path(doc, t)
+            o.pop("ptag")
+        if not str(o.get("tag") or "").strip():
+            raise Refused("Leave out the cards also tagged what?")
+        o["tag"] = E._path(str(o["tag"]).strip())
+        try:
+            o["n"] = max(0, int(o["n"])) if o.get("n") is not None else None
+        except (TypeError, ValueError):
+            o["n"] = None  # a count it can't read: the author's Anki counts it
+        return o
+
+    def run(self, doc, o, ctx):
+        return E.leave_out(doc, o["date"], o["key"], o["tag"], o.get("n")), set()
+
+    def words(self, o, before, after, ctx):
+        was = set(next((u.get("search") or [] for u in _units(before) if u["id"] == o["date"]), []))
+        new = [q for q in next((u.get("search") or [] for u in _units(after) if u["id"] == o["date"]), []) if q not in was]
+        what = M.search_label(new[0]) if new else f"{_source_words(before, o['key'])} but not {_tag_words(before, o['tag'])}"
+        return [_entry("Changed", _label(after, o["date"]), what, o["date"])]
+
+
+@op("move_source")
+class MoveSource(Op):
+    """One of a date's sources onto another date (to: a date, as any op
+    names one) or onto a day (day: that day's date, a new one when it has
+    none): the builder's moveChip, a source's Move it to another lesson or
+    its drag in Month. The date it was on goes when nothing's left on it."""
+
+    def check(self, doc, o):
+        o = _date_ref(doc, o)
+        o["key"] = _source_key(o, _SOURCES, "Move which of its cards?")
+        if o.get("to"):
+            o["to"] = find_date(doc, o["to"])
+            o.pop("day", None)
+        elif o.get("day"):
+            o["day"] = _iso(o["day"])
+        else:
+            raise Refused("Move them where? Name a date or a day.")
+        return o
+
+    def run(self, doc, o, ctx):
+        doc, tid, _went = E.move_source(doc, o["date"], o["key"], o.get("to"), o.get("day"), _rng(o))
+        return doc, {tid}
+
+    def words(self, o, before, after, ctx):
+        tid = o.get("to") or next((u["id"] for u in _units(after) if u.get("opens") == o["day"] and not u.get("even")
+                                   and u["id"] != o["date"]), None)
+        went = o["date"] not in {u["id"] for u in _units(after)}
+        days = [d for d in (next((u.get("opens") for u in _units(before) if u["id"] == o["date"]), None),
+                            next((u.get("opens") for u in _units(after) if u["id"] == tid), None)) if d]
+        what = _source_words(before, o["key"])
+        x = _entry("Moved", what, f"from {_label(before, o['date'])} to {_label(after, tid)}"
+                   + ("; nothing else was on the first, so it went" if went else ""), tid, min(days) if days else None)
+        name = next((u.get("name") for u in _units(after) if u["id"] == tid), "") or "another date"
+        x["line"] = f"{what} moved to {name}"  # why_line's: a source isn't "Day · name"
+        return [x]
 
 
 @op("set_tag_remark")
@@ -776,7 +905,12 @@ class LayOut(Op):
     """Lay them out (the deck panel's, the builder's Fill): what's ticked
     and on no date yet, on the plan's study days after its last date, at
     its pace; the pace and the ticks kept with it. week_ahead: just next
-    week. aim: an event the new dates prep for (Fit them before the exam)."""
+    week. aim: an event the new dates prep for (Fit them before the exam).
+    upto (plans end to end, the builder's pace "or an event…" › Fill up to it):
+    any quiz or exam; what's ticked fits by the day before it, as Fill to
+    an end date fits it, and the new dates before it prep for it. The
+    builder also moves the plan's end to that day; here the end stays (it's
+    the exam the plan ends with), unless `end` says otherwise."""
 
     def check(self, doc, o):
         o = dict(o)
@@ -793,6 +927,7 @@ class LayOut(Op):
         o["start"] = _iso(o.get("start") or B.plan_start(doc, B.next_monday(datetime.date.today().isoformat())))
         o["end"] = _iso(o["end"]) if o.get("end") else None
         o["aim"] = find_event(doc, o["aim"]) if o.get("aim") else None
+        o["upto"] = find_event(doc, o["upto"]) if o.get("upto") else None
         o["week_ahead"] = bool(o.get("week_ahead"))
         return o
 
@@ -803,15 +938,28 @@ class LayOut(Op):
         doc = E.set_end(doc, o["end"]) if o["end"] else copy.deepcopy(doc)
         pace = dict(o["pace"])
         cover = set(o["cover"])
-        if pace["mode"] == "end":
-            d1 = B.end_daily(doc, ctx.tree, pace, cover, o["start"]) or pace["daily"]
-            pace["daily"] = max(1, min(5000, int(d1)))
+        ev = next((e for e in _events(doc) if e["id"] == o.get("upto")), None)
+        kept_end = doc.get("end")
+        fill_pace = dict(pace, mode="end") if ev else dict(pace)
+        if ev:
+            doc["end"] = E._later(ev["day"], -1)  # the builder's: finish the day before it
+        if fill_pace["mode"] == "end":
+            d1 = B.end_daily(doc, ctx.tree, fill_pace, cover, o["start"]) or pace["daily"]
+            fill_pace["daily"] = max(1, min(5000, int(d1)))
+            if pace["mode"] == "end":
+                pace["daily"] = fill_pace["daily"]
         doc = E.set_pace(doc, pace["mode"], pace["days"], pace.get("daily"), B.cover_items(ctx.tree, cover)[:500])
-        r = B.lay_out(doc, ctx.tree, dict(pace), cover, o["start"], ctx.today, lambda: E.new_id(doc, rng),
-                      week_ahead=o["week_ahead"], aim=o["aim"])
+        r = B.lay_out(doc, ctx.tree, fill_pace, cover, o["start"], ctx.today, lambda: E.new_id(doc, rng),
+                      week_ahead=o["week_ahead"], aim=ev["id"] if ev else o["aim"])
+        if ev:
+            if kept_end:
+                doc["end"] = kept_end
+            else:
+                doc.pop("end", None)
         if not r["touched"]:
-            raise Refused(r["note"] or "Nothing fit.")
-        if r.get("daily"):
+            note = r["note"] or "Nothing fit."
+            raise Refused(note.replace("Move the finish date.", "Lay them out before a later quiz or exam.") if ev else note)
+        if r.get("daily") and pace["mode"] == "end":  # the pace it was filled at (a day over it says so)
             doc["pace"]["daily"] = max(1, min(5000, int(r["daily"])))
         return doc, set(r["touched"])
 
@@ -827,12 +975,19 @@ class LayOut(Op):
 
 @op("breather")
 class Breather(Op):
+    """Give the class a day (the builder's classHints): every date still to
+    come a study day later, their finish-by days with them, and the review
+    days after today; quizzes and exams stay. One click: {"op": "breather"}
+    is today's, on the plan's own study days (its pace's, as the builder's
+    nextStudy counts them), both kept with the op so it replays the same."""
+
     rename = False
 
     def check(self, doc, o):
         o = dict(o)
-        o["today"] = _iso(o.get("today"))
-        o["days"] = [1 if x else 0 for x in _list(o.get("days"), "days")][:7] or [1, 1, 1, 1, 1, 0, 0]
+        o["today"] = _iso(o.get("today") or datetime.date.today().isoformat())
+        days = [1 if x else 0 for x in _list(o.get("days"), "days")][:7]
+        o["days"] = days if len(days) == 7 and any(days) else [1 if x else 0 for x in V.pace_of(doc)["days"]]
         return o
 
     def run(self, doc, o, ctx):
@@ -1007,6 +1162,9 @@ def why_line(entries):
     WHY_MAX): "Shock moved from Wed 21 to Thu 22; Valve disease added.\""""
     bits = []
     for x in entries:
+        if x.get("line"):  # an entry that says its own (a source moved)
+            bits.append(x["line"])
+            continue
         day, _sep, name = x["what"].partition(" · ")
         name = name or x["what"]
         verb, detail = x["verb"], x.get("detail") or ""

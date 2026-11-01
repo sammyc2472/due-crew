@@ -12,6 +12,7 @@ and counts only: the window escapes nothing because Qt shows them as text.
 import bisect
 import datetime
 import math
+import re
 import time
 
 from .. import plans as P
@@ -130,9 +131,9 @@ def sources(idx, unit, doc, swap=None):
     for q in unit.get("search") or []:
         if q in cut_q:
             continue
-        from .build import search_name  # 3.9.3: named as the builder names it ("SLG 12 but not Pharm")
+        # 3.9.3: named as the builder names it ("SLG 12 but not Pharm"); and "Path Book · the rest" (plans end to end)
         rows.append({"key": ("search", q), "kind": "search", "group": GROUP["search"],
-                     "name": search_name(q), "raw": str(q),
+                     "name": search_label(q), "raw": str(q),
                      "cids": idx.match({"search": [q]}, swap, doc)})
     picked = P.picks(unit)
     if picked:
@@ -359,3 +360,195 @@ def ago(at, now=None):
     if m < 1440:
         return f"{round(m / 60)} h ago"
     return P.fmt_day(datetime.date.fromtimestamp(int(at)).isoformat())
+
+
+# ---- plans end to end: a source's own search, a search's name, the tags beside some cards ----
+
+def source_search(unit, key, swap=None):
+    """One of a date's sources as an Anki search, to paste into Browse (the
+    builder's Copy search on a chip): a tag's or a subdeck's
+    (Tags.ankiSearch; a tag in this copy's spelling with a swap), a cut's
+    own search, a search itself, a bank's questions any of them. None for
+    picked cards: Show in Browse finds them."""
+    from . import build as B
+    k = key[0] if key else ""
+    if k == "tag":
+        return B.anki_search("tag", P.swapped(key[1], swap))
+    if k == "deck":
+        return B.anki_search("deck", key[1])
+    if k == "cut":
+        c = next((c for c in unit.get("cut") or [] if c.get("tag") == key[1] and c.get("in") == key[2]), None)
+        return str(c["q"]) if c and c.get("q") else None
+    if k == "search":
+        return str(key[1])
+    if k == "questions":
+        qs = [B.anki_search("tag", P.swapped(t, swap)) for t in key[1]]
+        return ("(" + " OR ".join(qs) + ")" if len(qs) > 1 else qs[0]) if qs else None
+    return None
+
+
+def date_search(unit, swap=None):
+    """The whole date as one Anki search (⋯ › Copy its search for Anki): its
+    tags and subdecks, and each of its searches in brackets, any of them;
+    None for a date of picked cards only."""
+    from . import build as B
+    parts = ([B.anki_search("tag", P.swapped(t, swap)) for t in unit.get("tags") or []]
+             + [B.anki_search("deck", d) for d in unit.get("decks") or []]
+             + [f"({q})" for q in unit.get("search") or []])
+    return (" OR ".join(parts) if len(parts) > 1 else parts[0]) if parts else None
+
+
+_TERM = re.compile(r'(-?)\(?(?:"(tag|deck):((?:\\.|[^"\\])+)"|(tag|deck):((?:\\.|[^\s"()])+))', re.I)
+
+
+def _terms(q):
+    """[(negated, "tag" | "deck", path)]: a search's tag and subdeck terms, quoted (a subdeck's spaces) or not."""
+    return [(neg == "-", (k1 or k2).lower(), re.sub(r"\\(.)", r"\1", p1 or p2)) for neg, k1, p1, k2, p2 in _TERM.findall(str(q))]
+
+
+def _term_word(path):
+    from . import build as B
+    parts = [x for x in str(path).split(SEP) if x.replace("*", "")]
+    return B.tag_word(parts[-1]).replace("*", "") if parts else ""
+
+
+def search_label(q):
+    """A search's name in Your plans: build.search_name's (the builder's),
+    and what that can't read: the rest of a tag, its cards on none of the
+    tags under it ("tag:X" -"tag:X::*": "Path Book · the rest"), and what
+    Leave out writes on a tag kept to one of the plan's own or on a subdeck
+    ("Hemolytic · High Yield but not Bank", "Cardio but not Extra")."""
+    from . import build as B
+    terms = _terms(q)
+    pos = [(k, p) for n, k, p in terms if not n]
+    have = {p.lower() for k, p in pos if k == "tag"}
+    rest = {p[:-3].lower() for n, k, p in terms if n and k == "tag" and p.endswith("::*") and p[:-3].lower() in have}
+    negs = [p for n, k, p in terms if n and not (k == "tag" and p.endswith("::*") and p[:-3].lower() in rest)]
+    own = [p for k, p in pos if k == "tag" and p.lower().startswith(P.TAG_PARENT.lower() + SEP)]
+    cut_like = len(pos) == 2 and len(own) == 1 and bool(negs)
+    deck_less = any(k == "deck" for k, _p in pos) and bool(negs)
+    if not pos or not (rest or cut_like or deck_less):
+        return B.search_name(q)
+    names = [_term_word(p) + (" · the rest" if k == "tag" and p.lower() in rest else "") for k, p in pos]
+    if len(pos) == 2 and len(own) == 1:
+        i = 0 if pos[0][1] == own[0] else 1
+        main = f"{names[1 - i]} · {names[i]}"
+    else:
+        main = " and ".join(names)
+    return f"{main} but not {', '.join(_term_word(p) for p in negs)}" if negs else main
+
+
+def also_tagged(idx, cids, skip=(), most=12):
+    """[(tag as written, n)]: the tags some of these cards carry and some
+    don't (each tag, and every tag above one), the most cards first: what
+    Keep only and Leave out cards also tagged can name, and A resource's
+    Only. skip: tags left out with everything under and above them (the
+    source's own); leech, marked, a bank's questions and Due Crew's never."""
+    cids = set(cids)
+    if not cids:
+        return []
+    of = P._tags_of(idx)
+    lows = [str(s).lower() for s in skip]
+
+    def skipped(low):
+        return any(low == s or low.startswith(s + SEP) or s.startswith(low + SEP) for s in lows)
+    count, spelled = {}, {}
+    for c in cids:
+        mine = set()
+        for low in of.get(c) or ():
+            parts, written = low.split(SEP), idx.tag_names.get(low, low).split(SEP)
+            for n in range(1, len(parts) + 1):
+                mine.add(SEP.join(parts[:n]))
+                spelled.setdefault(SEP.join(parts[:n]), SEP.join(written[:n]))
+        for low in mine:
+            count[low] = count.get(low, 0) + 1
+    out = [(spelled[low], n) for low, n in count.items()
+           if 0 < n < len(cids) and low.split(SEP)[0] not in ("leech", "marked", P.TAG_PARENT.lower())
+           and not is_question(low) and not skipped(low)]
+    out.sort(key=lambda x: (-x[1], x[0].count(SEP), x[0].lower()))
+    return out[:most]
+
+
+def on_dates(doc, key):
+    """The dates a deck tag or subdeck (a tree key, "tag:PATH") is on, in
+    date order: as itself or under one of a date's tags or subdecks, a cut's
+    tag (kept to a plan tag), or a search's own tag (what Leave out and the
+    rest of a tag write: its first tag that isn't the plan's): the deck's
+    "on Mon 9" for a chapter a resource plan keeps to its Only."""
+    kind_, path = key.split(":", 1)
+    low = path.lower()
+
+    def holds(p):
+        p = str(p).lower()
+        return low == p or low.startswith(p + SEP)
+    out = []
+    for u in sorted(P.units(doc), key=lambda x: str(x.get("opens") or "")):
+        srcs = list(u.get("tags" if kind_ == "tag" else "decks") or [])
+        if kind_ == "tag":
+            srcs += [c.get("tag") for c in u.get("cut") or []]
+        for q in u.get("search") or []:
+            terms = _terms(q)
+            main = next((p for n, k, p in terms if not n and k == kind_
+                         and not p.lower().startswith(P.TAG_PARENT.lower() + SEP)), None)
+            out_of = any(n and k == kind_ and (holds(p) or (p.endswith("::*") and low.startswith(p[:-3].lower() + SEP)))
+                         for n, k, p in terms)
+            if main and not out_of:
+                srcs.append(main)
+        if any(holds(p) for p in srcs):
+            out.append(u["id"])
+    return out
+
+
+# ---- plans end to end: A resource, at my pace (edits.resource_plan makes the plan) ----
+
+def resource_name(path, only=None):
+    """The plan's name from its part and its Only: "Path Book, high yield"."""
+    name = label(path)
+    if only:
+        name = f"{name}, {P._word(str(only).split(SEP)[-1]).lower()}"
+    return name[:60]
+
+
+def chapters(tree, path):
+    """A part's chapters, as A resource lays them out: the tags right under
+    it that aren't a bank's questions, in the deck's order (the tree's,
+    build.natural); [] for a part with none."""
+    from . import build as B
+    return [B.path_of(k) for k in tree.kids(f"tag:{path}") if B.kind_of(k) == "tag" and not is_question(B.path_of(k))]
+
+
+def only_count(idx, path, only):
+    """(the part's cards Only keeps, the part's cards) here: "2,110 of 3,924"."""
+    whole = idx.tag_cards(path)
+    return (len(whole & idx.tag_cards(only)) if only else len(whole)), len(whole)
+
+
+def resource_parts(idx, tree, text="", most=8):
+    """Which part (A resource's first question): [{path, name, chapters,
+    questions, cards}], the deck's tags with chapters (or a bank's
+    questions) right under them, found by `text`'s words (find's rule) or,
+    with none, the deck's resources (a #part, and each tag right under
+    one); the most chapters first, then the most cards."""
+    from . import build as B
+    if str(text or "").strip():
+        paths = find(idx, text, most=400)
+    else:
+        paths = []
+        for _k, v, _w in _paths(idx):
+            segs = v.split(SEP)
+            ri = P._resource_at(segs)
+            if ri >= 0 and ri >= len(segs) - 2:  # a resource itself, or a tag right under one
+                paths.append(v)
+    out, seen = [], set()
+    for p in paths:
+        if p.lower() in seen:
+            continue
+        seen.add(p.lower())
+        ch = chapters(tree, p) if tree is not None else [c for c, _n, _m in children(idx, p)]
+        qs = questions(idx, p)
+        if len(ch) < 2 and not qs:
+            continue
+        n = tree.n(f"tag:{p}") if tree is not None and tree.has(f"tag:{p}") else len(idx.tag_cards(p))
+        out.append({"path": p, "name": label(p), "chapters": len(ch), "questions": qs, "cards": n})
+    out.sort(key=lambda r: (r["chapters"] < 2, -r["chapters"], -r["cards"], B.natural(r["path"])))
+    return out[:most]
