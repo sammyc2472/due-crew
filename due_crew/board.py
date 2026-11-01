@@ -5760,7 +5760,7 @@ CHEER_WINDOW_JS = r"""
         '#dc-cheer *{box-sizing:border-box;}' +
         '#dc-cheer .cw{width:440px;max-width:100%;border-radius:14px;padding:16px 18px 14px;text-align:left;display:grid;gap:12px;font-family:' + font + ';' +
           'box-shadow:0 16px 60px rgba(0,0,0,.35);background:' + bg + ';color:' + ink + ';border:1px solid ' + line + ';font-size:13px;}' +
-        '#dc-cheer button,#dc-cheer input,#dc-cheer textarea{-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;font-family:inherit;color:inherit;' +
+        '#dc-cheer button,#dc-cheer input:where(:not([type=checkbox]):not([type=radio]):not([type=range])),#dc-cheer textarea{-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;font-family:inherit;color:inherit;' +
         'text-shadow:none;min-height:0;min-width:0;-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;font-weight:400;}#dc-cheer button{cursor:pointer;}' +
         '#dc-cheer .hd{display:flex;align-items:center;gap:10px;}' +
         '#dc-cheer .hd .pp{width:40px;height:40px;flex:none;display:grid;place-items:center;}' +
@@ -6483,7 +6483,7 @@ SHEET_JS = r"""
         '#dc-sheet *{box-sizing:border-box;}' +
         '#dc-sheet .cw{width:420px;max-width:100%;border-radius:14px;padding:16px 18px 14px;text-align:left;display:grid;gap:12px;font-family:' + font + ';' +
           'box-shadow:0 16px 60px rgba(0,0,0,.35);background:' + bg + ';color:' + ink + ';border:1px solid ' + line + ';font-size:13px;}' +
-        '#dc-sheet button,#dc-sheet input,#dc-sheet textarea{-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;font-family:inherit;color:inherit;' +
+        '#dc-sheet button,#dc-sheet input:where(:not([type=checkbox]):not([type=radio]):not([type=range])),#dc-sheet textarea{-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;font-family:inherit;color:inherit;' +
         'text-shadow:none;min-height:0;min-width:0;-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;font-weight:400;}#dc-sheet button{cursor:pointer;}' +
         '#dc-sheet .hd{font-size:16px;font-weight:700;}' +
         '#dc-sheet .bd{white-space:pre-line;line-height:1.45;max-height:46vh;overflow-y:auto;overflow-wrap:anywhere;}' +
@@ -6498,7 +6498,13 @@ SHEET_JS = r"""
         '#dc-sheet .ls.nts{max-height:none;gap:3px;}#dc-sheet .ls.nts button{padding:7px 10px;}' +
         '#dc-sheet .ls .nm{display:block;font-weight:600;}#dc-sheet .ls .nt{display:block;font-size:12px;font-weight:400;color:' + muted + ';margin-top:1px;line-height:1.35;}' +
         '#dc-sheet .ck{display:flex;align-items:flex-start;gap:8px;cursor:pointer;line-height:1.35;}' +
-        '#dc-sheet .ck input{accent-color:' + accent + ';width:15px;height:15px;margin-top:1px;flex:none;}' +
+        // 3.9.6: the tick is the sheet's to draw, as the plan window's are (macOS draws any other its own way)
+        '#dc-sheet .ck input{-webkit-appearance:none;appearance:none;width:15px;height:15px;min-height:0;margin:1px 0 0;flex:none;box-sizing:border-box;' +
+          'display:inline-grid;place-content:center;border:1.5px solid ' + muted + ';border-radius:4px;background:' + bg + ';box-shadow:none;cursor:pointer;}' +
+        '#dc-sheet .ck input:checked{background:' + accent + ';border-color:' + accent + ';}' +
+        '#dc-sheet .ck input:checked::after{content:"";width:7px;height:3px;border-left:2px solid ' + accentInk + ';border-bottom:2px solid ' + accentInk + ';' +
+          'transform:translateY(-1px) rotate(-45deg);}' +
+        '#dc-sheet .ck input:focus-visible{outline:2px solid ' + accent + ';outline-offset:2px;}' +
         '#dc-sheet .ft{display:flex;align-items:center;gap:8px;}' +
         '#dc-sheet .sp{flex:1;}' +
         '#dc-sheet .go{background:' + accent + ';color:' + accentInk + ';border:1px solid transparent;border-radius:8px;padding:6px 16px;font-weight:700;font-size:13px;}' +
