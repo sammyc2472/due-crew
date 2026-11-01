@@ -59,6 +59,64 @@ card on, from the deck beside the date or a search.
   one on a click, in the background. A refresh and a sync are unchanged
   (`test_request_budget`).
 
+## Round six: the plan maker as a page
+
+Sam's pick after "Plans end to end" (the HTML maker over Qt, full
+parity, older add-ons untouched; the calendar import waits): Your plans
+is a page in the board's look, in a window of Anki's. The Qt window
+stays, as it was, for `"plan_window": "qt"` in this computer's config
+(`flow.web_window`); every way in (Tools › Due Crew › Plans, You ›
+Plans, Make a plan, Plan the way there) goes through `flow.open_plans` /
+`flow.open_new`, which pick the window.
+
+- **One core, two faces.** `core.PlanCore` is the window's state and
+  steps (load, a change as an op, changes waiting, send, Undo, open and
+  study), Qt-free; `window.PlanWindow` (Qt) and `webface.WebFace` (the
+  page's) each implement its hooks (`say`, `plan_shown`, `ask_discard`,
+  `later`…). `web.PlanWeb` is the thin Qt shell: a dialog, Anki's web
+  view and its bridge (`set_bridge_command`: only this window's page
+  reaches it, never a card's script), the clipboard.
+- **Python owns the state; the page draws it.** `webface.view()` is the
+  whole view as JSON (`webmodel`'s pure builders: the head, the Plan
+  tab's weeks and strips, a lesson's, quiz's or review day's panel, the
+  deck beside it; `webtabs` for Insights and Settings; `webnew` for New
+  plan); the page (`page/plan.js`, `tabs.js`, `new.js`, their `.css`,
+  inlined by `webpage.page_html`) draws it with textContent only, and
+  sends each click back as `"dcplan:" + JSON`, `c_<name>` on the face.
+  What's only how it looks (List, Week, Month, a week folded, Find, the
+  month shown) stays in the page. Questions are sheets in the page (a
+  yes resends with `sure`); a few heavier dialogs open as Qt over it
+  (the text, History, Add a search, Spread, review days).
+- **New plan** is the window's first screen (`webnew.py`, `page/new.js`;
+  with no plans, the window opens on it). Three ways: **A resource, at
+  my pace** (the deck's resources and their chapters, `model.resource_parts`;
+  Only, a tag some of it carries; About N new a day, Finish by… (with the
+  exam), or When I'm ready (the follow's own pace); study days; Starts;
+  `edits.resource_plan` lays a lesson a chapter, the preview its lessons,
+  new cards, first and last day and busiest day); **Someone's plan** (a
+  code into Follow, or the library on duecrew.com); **Start empty** (a
+  name, the deck, the exam it ends with; then the deck beside it, to lay
+  it out). **Make it, start later** makes it (`POST /plans`, the
+  builder's save); **Start it** also follows it here (`Ops.start_own`:
+  `POST /plans/follow` with its code), today's lesson in my deck or its
+  own deck. An author who follows their own plan isn't someone its
+  changes wait for (`core.others`). No days off (a plan has no field
+  for them); no class calendar yet (Sam: not yet).
+- **The builder's site-only tools**, as ops (`ops.py`): a source's
+  **Leave out cards also tagged** (the builder's Overlap "but not") and
+  **Move to** (a lesson nearby, or another day); a deck row's **A lesson
+  of its own** (the next free study day, or a day); **Before a quiz or
+  exam** under Lay them out (`lay_out`'s `upto`); **Give everyone a
+  day** in Add (`breather`); **Copy its search** per source
+  (`model.source_search`). No new doc field: the site and older add-ons
+  read every change as before.
+
+Checks: `tests/test_plan_web.py` drives every click as the page sends it
+against the fake Worker (and checks every command the page or the view
+sends has its handler, no innerHTML, each script parses);
+`tools/plan_preview.py` writes the window's pages from the fakes and
+`tools/plan_preview.js` screenshots them (light, dark, 760 px).
+
 ## Your plans
 
 Round five (Sam's picks on the "Simpler Plan Builder" page, all A): one
