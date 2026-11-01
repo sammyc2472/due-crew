@@ -4178,3 +4178,30 @@ every release that changes how something works.
   Fixed on the way, in both of Anki's windows: a set's notes live on the
   plan's day for it, so a follower whose days run later reads and posts
   them there (`PlanCore.note_day`).
+- 3.9.6, the plan joys (Sam's picks on the "Joy on the plan card" mock,
+  "celebrate bigger" for the big ones). You › Plans, on the path: a set's
+  cards all seen, its segment fills, the logo's seven squares burst and
+  Pip hops to it from the set before, about five seconds (motion.js;
+  once a set; Reduce motion: Pip still, then gone). Halfway (the 10th set
+  of 19), three-quarters (the 15th) and the last set's morning: a line
+  each under the path, once, with Share (as text, or the picture) and ×.
+  Behind cleared by seeing it: "Caught up · <set>, all N seen" for the
+  rest of the day, its 🎉 popping once, every time. The first morning:
+  "Day one · N to go today", Pip's let's-go once. The finish line: the
+  last set's last card, a show over the Decks screen at the next board
+  draw (show.js's finish: the path fills, Pip hops to the tape, a grad
+  cap lands; seven seconds, its banner three more; a click or Esc ends
+  it; once a plan; after a cheer's show that lands with it; Reduce
+  motion: the banner, Pip still in its cap); the card then keeps
+  "Finished · 19 sets · 2,046 cards · 6 weeks" with Share. The picture
+  is sharecard.py's plan card, story size (the path, Pip's hop trail, in
+  its cap when finished), cards.js's K4 its twin. One moment at a time:
+  the finish, caught up, a milestone, then the pop. New plan's preview
+  lays the path out set by set (no Pip in the plan window). Pip's closet:
+  Finisher's ribbon (three plans with every set done; the Grad cap stays
+  the first's), Folded map (someone follows a plan you made), Kite (Give
+  everyone a day saved on a plan you write). Each moment is claimed the
+  first time it's on screen (plans.json's `joy`, this profile's); the
+  closet's tallies are wrap.json's (`plans_done`, `followed`, `gave_day`).
+  Nothing is sent; a refresh and a sync stay one request each.
+  `tests/test_plan_joy.py`.
