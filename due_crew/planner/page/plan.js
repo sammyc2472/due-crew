@@ -181,7 +181,8 @@ var dcPlan = (function () {
     }
     if (p.behind) {
       out.push(h("div.strip.late", {}, [h("span.h", { text: "Behind" }), h("span.grow", { text: p.behind.words }),
-        btn(p.behind.button, function () { send("study", { kind: "behind", key: p.behind.uids }); })]));
+        /* no button: a host where nothing's studied (duecrew.com); Anki's view always names one */
+        p.behind.button ? btn(p.behind.button, function () { send("study", { kind: "behind", key: p.behind.uids }); }) : null]));
     }
     if (p.shape) {
       var sh = h("div.shape");

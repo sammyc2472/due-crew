@@ -130,10 +130,21 @@ to followers); with nobody following it saves at once and Undo is `POST
 (`S.without`), Study, opening cards, Your AI app (`d.ai: null`), Today's
 set (`n.lesson` empty), a resource at my pace (`n.ways`); a source's count
 is the deck tree's, Add to my calendar is the site's `/p/CODE.ics`. The
-seams are no-ops in Anki: its view never sets them. An author's plan opens
-there at `/plans/{id}` and `/plans/{id}/edit`; anyone else's, and
-`?page` for its authors (progress, the poster), is builder.js's page as
-before. `tests/planface_test.js` drives the face in node (run by the
+seams are no-ops in Anki: its view never sets them. A plan I write or
+follow opens there at `/plans/{id}` and `/plans/{id}/edit`; one looked at
+from its code or the library, and `?page` for its authors (progress, the
+poster) and followers (the authors' post, the calendar link, the share
+card when it's done), is builder.js's page as before. A follower's is
+read-only on my days (the face's `myDoc`, plans.my_doc's twin: my shift,
+skips and moves), counted from what my Anki syncs (`following.progress`);
+its Settings are my follow, each click one `PATCH /plans/{id}/follow` as
+Anki's `set_days` and the old page send it (the team: `POST`/`DELETE
+/plans/{id}/team`); Held back, Today's set, Change deck, Open everything
+and My schedule are Anki's and hidden (`d.held: null`, `d.hide`). Add to
+my calendar is the face's `Ics`, ics.py's twin (the suite checks the file
+byte for byte): mine on my days, without the sets I skip. Notes on a
+set's day are on the plan's day, so a follower whose days run later
+still reads and writes that set's. `tests/planface_test.js` drives the face in node (run by the
 suite); `tools/plan_site_preview.js --shots DIR` renders the site's pages
 against a stub API.
 

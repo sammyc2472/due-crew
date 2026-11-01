@@ -1064,6 +1064,12 @@ def c_reset(w):
         _do(w, "reset_days")
 
 
+def c_team(w):
+    """Its squad, in or out: duecrew.com's button (d.team); this window never shows it, and says where it is."""
+    if _fresh(w):
+        w.say("Its squad is on the board's Squads tab: join or leave it there.")
+
+
 def c_stop_following(w):
     if _fresh(w):
         _do(w, "stop_following")
