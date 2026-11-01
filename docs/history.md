@@ -4247,3 +4247,19 @@ every release that changes how something works.
   some instead of being dropped at the save; a save that changed nothing
   clears what was waiting. `test_the_review_round_v396` (test_plan_web,
   test_lesson_decks), test_plan_ops, `tests/planface_test.js`.
+- 3.9.6, the board's controls are the board's to draw (Sam: "pay special
+  attention to how buttons appear (especially given macos27 liquid glass
+  overriding what we intend sometimes)"). `tools/control_audit.js` checks
+  every control on a page at rest, hovered, pressed and focused, first
+  alone, then under Anki's webview.css and a stand-in for macOS's own
+  controls, and says what the host changes; AUDIT_WITHIN keeps it to the
+  board's parts (the preview, split by section, a 20 MB page in one). It
+  found the board's boxes and Today's day picker left to the computer to
+  draw (no `appearance: none`, so Liquid Glass draws them), the Cheer
+  window's and the sheets' boxes the same, and every focus ring on a
+  button gone under Anki's `outline: none !important`. Now: the board's
+  inputs, pickers and boxes start from a reset (`:where`, so each part's
+  own look still wins), the day picker draws its own chevron, the
+  overlays and the profile and good-luck cards reset theirs, and a
+  button's focus ring is `!important` back. The plan window (its own
+  reset since round six) and the site's pages come out clean.

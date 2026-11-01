@@ -500,7 +500,16 @@ def _css(cfg):
        itself) and gives every button a margin, a shadow and rounded
        corners, which the board's buttons start without */
     #due-crew button {{ -webkit-appearance: none; appearance: none; margin: 0; box-shadow: none;
-      min-width: 0; min-height: 0; text-shadow: none; background-image: none; }}
+      min-width: 0; min-height: 0; text-shadow: none; background-image: none;
+      -webkit-backdrop-filter: none; backdrop-filter: none; letter-spacing: normal; }}
+    /* 3.9.6: its boxes and pickers are the board's to draw: macOS draws any control whose
+       appearance isn't none in its own look (Liquid Glass) over the board's. Anki's
+       `button {{ outline: none !important }}` takes every focus ring: the board's come back */
+    #due-crew :where(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]), select, textarea) {{
+      -webkit-appearance: none; appearance: none; text-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none;
+      box-shadow: none; min-height: 0; letter-spacing: normal; line-height: normal; }}
+    #due-crew :where(input, select, textarea):focus-visible {{ outline: 2px solid var(--dc-accent); outline-offset: 0; }}
+    #due-crew button:focus-visible {{ outline: 2px solid var(--dc-accent) !important; outline-offset: 2px; }}
     /* the board is one rounded card — white by day, near-black by night —
        and inside it there are no rules and no fills: rows separate by
        spacing and the you-row highlight alone */
@@ -5751,7 +5760,8 @@ CHEER_WINDOW_JS = r"""
         '#dc-cheer *{box-sizing:border-box;}' +
         '#dc-cheer .cw{width:440px;max-width:100%;border-radius:14px;padding:16px 18px 14px;text-align:left;display:grid;gap:12px;font-family:' + font + ';' +
           'box-shadow:0 16px 60px rgba(0,0,0,.35);background:' + bg + ';color:' + ink + ';border:1px solid ' + line + ';font-size:13px;}' +
-        '#dc-cheer button,#dc-cheer input{margin:0;box-shadow:none;font-family:inherit;color:inherit;}#dc-cheer button{cursor:pointer;}' +
+        '#dc-cheer button,#dc-cheer input,#dc-cheer textarea{-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;font-family:inherit;color:inherit;' +
+        'text-shadow:none;min-height:0;min-width:0;-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;}#dc-cheer button{cursor:pointer;}' +
         '#dc-cheer .hd{display:flex;align-items:center;gap:10px;}' +
         '#dc-cheer .hd .pp{width:40px;height:40px;flex:none;display:grid;place-items:center;}' +
         '#dc-cheer .hd .pp svg{width:44px;height:44px;overflow:visible;}' +
@@ -5797,7 +5807,7 @@ CHEER_WINDOW_JS = r"""
         '#dc-cheer .ft{display:flex;align-items:center;gap:8px;}' +
         '#dc-cheer .go{background:' + accent + ';color:' + accentInk + ';border:1px solid transparent;border-radius:8px;padding:6px 16px;font-weight:700;font-size:13px;}' +
         '#dc-cheer .no{background:none;border:1px solid ' + line + ';border-radius:8px;padding:6px 14px;font-size:13px;}' +
-        '#dc-cheer button:focus-visible{outline:2px solid ' + accent + ';outline-offset:2px;}' +
+        '#dc-cheer button:focus-visible{outline:2px solid ' + accent + ' !important;outline-offset:2px;}' +
         '#dc-cheer .hint{font-size:11px;color:' + muted + ';}';
     back.appendChild(css);
     var card = el('div', 'cw');
@@ -6473,7 +6483,8 @@ SHEET_JS = r"""
         '#dc-sheet *{box-sizing:border-box;}' +
         '#dc-sheet .cw{width:420px;max-width:100%;border-radius:14px;padding:16px 18px 14px;text-align:left;display:grid;gap:12px;font-family:' + font + ';' +
           'box-shadow:0 16px 60px rgba(0,0,0,.35);background:' + bg + ';color:' + ink + ';border:1px solid ' + line + ';font-size:13px;}' +
-        '#dc-sheet button,#dc-sheet input{margin:0;box-shadow:none;font-family:inherit;color:inherit;}#dc-sheet button{cursor:pointer;}' +
+        '#dc-sheet button,#dc-sheet input,#dc-sheet textarea{-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;font-family:inherit;color:inherit;' +
+        'text-shadow:none;min-height:0;min-width:0;-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;}#dc-sheet button{cursor:pointer;}' +
         '#dc-sheet .hd{font-size:16px;font-weight:700;}' +
         '#dc-sheet .bd{white-space:pre-line;line-height:1.45;max-height:46vh;overflow-y:auto;overflow-wrap:anywhere;}' +
         '#dc-sheet .tx{width:100%;height:32px;border-radius:8px;border:1px solid ' + line + ';background:' + bg + ';color:' + ink + ';font-size:13px;padding:0 10px;}' +
@@ -6494,7 +6505,7 @@ SHEET_JS = r"""
         '#dc-sheet .go.bad{background:' + bad + ';color:' + badInk + ';}' +
         '#dc-sheet .go:disabled{opacity:.45;cursor:default;}' +
         '#dc-sheet .no{background:none;border:1px solid ' + line + ';border-radius:8px;padding:6px 14px;font-size:13px;}' +
-        '#dc-sheet button:focus-visible{outline:2px solid ' + accent + ';outline-offset:2px;}';
+        '#dc-sheet button:focus-visible{outline:2px solid ' + accent + ' !important;outline-offset:2px;}';
     back.appendChild(css);
     var card = el('div', 'cw');
     back.appendChild(card);
@@ -7113,6 +7124,11 @@ def stranger_card_js(info):
             warn = tok('hours', '#b26a00', '#dda45c');
         var back = document.createElement('div');
         back.id = 'dc-profile';
+        var reset = document.createElement('style');  // 3.9.6: Anki's button look (and macOS's own) off the card's; its focus ring back
+        reset.textContent = '#dc-profile button{-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;text-shadow:none;' +
+            'min-height:0;min-width:0;-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;}' +
+            '#dc-profile button:focus-visible{outline:2px solid ' + accent + ' !important;outline-offset:2px;}';
+        back.appendChild(reset);
         back.style.cssText = 'position:fixed;inset:0;z-index:80;background:rgba(0,0,0,0.35);' +
             'display:flex;align-items:flex-start;justify-content:center;padding-top:16vh;';
         var card = document.createElement('div');
@@ -7212,6 +7228,11 @@ def luck_card_js(name, lines):
             accentInk = tok('accent-ink', '#ffffff', '#122912');
         var back = document.createElement('div');
         back.id = 'dc-profile';
+        var reset = document.createElement('style');  // 3.9.6: Anki's button look (and macOS's own) off the card's; its focus ring back
+        reset.textContent = '#dc-profile button{-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;text-shadow:none;' +
+            'min-height:0;min-width:0;-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;}' +
+            '#dc-profile button:focus-visible{outline:2px solid ' + accent + ' !important;outline-offset:2px;}';
+        back.appendChild(reset);
         back.style.cssText = 'position:fixed;inset:0;z-index:80;background:rgba(0,0,0,0.35);' +
             'display:flex;align-items:flex-start;justify-content:center;padding-top:14vh;';
         var card = document.createElement('div');
@@ -7455,6 +7476,11 @@ def profile_overlay_js(profile):
             warn = tok('hours', '#b26a00', '#dda45c');
         var back = document.createElement('div');
         back.id = 'dc-profile';
+        var reset = document.createElement('style');  // 3.9.6: Anki's button look (and macOS's own) off the card's; its focus ring back
+        reset.textContent = '#dc-profile button{-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;text-shadow:none;' +
+            'min-height:0;min-width:0;-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;}' +
+            '#dc-profile button:focus-visible{outline:2px solid ' + accent + ' !important;outline-offset:2px;}';
+        back.appendChild(reset);
         back.style.cssText = 'position:fixed;inset:0;z-index:80;background:rgba(0,0,0,0.35);' +
             'display:flex;align-items:flex-start;justify-content:center;padding-top:14vh;';
         var card = document.createElement('div');
@@ -7616,6 +7642,9 @@ DUE_CSS = """
       background: var(--dc-bg); border: 1px solid var(--dc-line); border-radius: 7px; padding: 4px 8px; }
     #due-crew .du-add select, #due-crew .du-add input[type=date] { font: inherit; font-size: 12px; color: var(--dc-ink);
       background: var(--dc-bg); border: 1px solid var(--dc-line); border-radius: 7px; padding: 3px 4px; color-scheme: light dark; }
+    #due-crew .du-add select { padding-right: 20px; background-repeat: no-repeat; background-size: 4px 4px;
+      background-image: linear-gradient(45deg, transparent 50%, var(--dc-muted) 50%), linear-gradient(135deg, var(--dc-muted) 50%, transparent 50%);
+      background-position: calc(100% - 11px) 55%, calc(100% - 7px) 55%; }
     #due-crew .du-said { font-size: 11.5px; color: var(--dc-accent); font-weight: 700; white-space: nowrap; }
     #due-crew .du-said a { color: var(--dc-muted); font-weight: 400; margin-left: 4px; }
     #due-crew .du-dh { display: flex; justify-content: space-between; gap: 10px; font-size: 11.5px; font-weight: 700;

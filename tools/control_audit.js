@@ -45,6 +45,8 @@ const STATES = [[], ["hover"], ["active"], ["focus", "focus-visible"]];
 
 // --site: a page of duecrew.com's, in a browser: no Anki CSS on top, only macOS's own controls
 const SITE = process.argv.includes("--site");
+// AUDIT_WITHIN="#due-crew, #dc-sheet": only the controls inside these (the board's preview draws some parts bare)
+const WITHIN = process.env.AUDIT_WITHIN || "";
 
 function pages(args) {
   const out = [];
@@ -85,7 +87,8 @@ async function look(page, client, host) {
         const r = this.getBoundingClientRect(), cs = getComputedStyle(this);
         const vis = r.width > 0 && r.height > 0 && cs.visibility !== "hidden" && cs.display !== "none";
         const words = (this.innerText || this.value || this.getAttribute("aria-label") || this.title || this.placeholder || "").trim().slice(0, 40);
-        return { tag: this.tagName.toLowerCase() + (this.type && this.tagName !== "BUTTON" ? "[" + this.type + "]" : ""),
+        const within = ${JSON.stringify(WITHIN)};
+        return { inside: !within || !!this.closest(within), tag: this.tagName.toLowerCase() + (this.type && this.tagName !== "BUTTON" ? "[" + this.type + "]" : ""),
                  cls: String(this.className || "").slice(0, 40), words, vis, w: Math.round(r.width), h: Math.round(r.height),
                  clipped: this.tagName === "BUTTON" && this.scrollWidth > this.clientWidth + 1, disabled: !!this.disabled };
       }` });
@@ -119,7 +122,7 @@ function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
     const n = Math.min(mine.length, host.length);
     for (let i = 0; i < n; i++) {
       const a = mine[i], b = host[i], name = `${a.tag}${a.cls ? "." + a.cls.split(" ").join(".") : ""} "${a.words}"`;
-      if (!a.vis) continue;
+      if (!a.vis || !a.inside) continue;
       if (a.states.rest.appearance !== "none" && !/\[(checkbox|radio|range|color|file)\]$/.test(a.tag)) {
         probs.push(`${name}: appearance ${a.states.rest.appearance} (macOS draws it natively)`);
       }
