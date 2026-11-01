@@ -39,6 +39,8 @@ def cap_of(doc, tree, pace):
         return 0
     if pace.get("mode") == "end" and tree is not None:
         start = B.plan_start(doc, "")
+        if not start:
+            return int(pace.get("daily") or 0)  # no lessons yet: nothing to start from
         return int(B.end_daily(doc, tree, pace, set(pace.get("cover") or []), start) or pace.get("daily") or 0)
     return int(pace.get("daily") or 0)
 

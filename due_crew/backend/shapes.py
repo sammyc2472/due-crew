@@ -834,6 +834,7 @@ def clean_plan(p):
             "followers": _as_int(p.get("followers")) or 0,
             "crewDone": {str(k): _as_int(v) for k, v in crew.items() if _as_int(v) is not None} if crew is not None else None,
             "code": normalize_code(p.get("code")) if p.get("code") else "",
+            "library": p.get("library") is True,  # in the library: a follower's Make my own copy
             "following": bool(following) or "share" in p,
             "sched": clean_sched(p.get("sched", following.get("sched"))),
             "early": _early(p.get("early", following.get("early"))),

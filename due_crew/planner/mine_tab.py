@@ -140,7 +140,7 @@ class MineTab(QWidget):
         self.squad.setText("You're in it" if inside else "Not in it: join from the board's Squads tab")
         self.squad.setToolTip("<span>Its squad sees that you showed up, never your numbers</span>" if inside else "")
         self.pause_btn.setText("Resume" if p.get("paused") else "Pause until…")
-        self.copy_btn.setVisible(bool(win.plan.get("listed")))
+        self.copy_btn.setVisible(bool(win.plan.get("listed") or win.plan.get("library")))
 
     # ---- what each does ----
 

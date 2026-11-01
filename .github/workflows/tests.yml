@@ -33,6 +33,7 @@ jobs:
       - run: python3 tests/test_due_crew.py
       - run: python3 tests/test_planner.py  # labs: the plan window (docs/planner.md)
       - run: python3 tests/test_plan_web.py  # the HTML plan window: its clicks, views and page
+      - run: python3 tests/test_plan_web_tabs.py  # its Insights and Settings: views, clicks, the page run in node
       - run: python3 tests/test_plan_ops.py  # round five: plan changes as ops, waiting to be sent
       - run: python3 tests/test_where.py  # 3.9.5: Study where the cards are (QBank's topics)
       - run: python3 tests/test_habits.py  # 3.9.5: How you study, from my own log (never sent)

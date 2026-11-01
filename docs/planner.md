@@ -628,6 +628,8 @@ and sends in Anki (Your plans › the plan › Review and send).
 | `planner/insights.py` | pure, round five: what the Insights tab shows (the workload by week, how much of the deck and of each part as the topic map splits it, what each quiz tests, the biggest dates) |
 | `planner/prompts.py` | pure: the prompts for your own AI, builder.js's `Prompts` restated |
 | `planner/flow.py` | the glue: the windows' asks (`Ops`, `StartOps`, `NewOps`, `QidOps`), `make_here`, `plan_drafts.json` |
+| `planner/core.py` | Qt-free, round six: the plan window's state and steps (`PlanCore`), both windows' |
+| `planner/web.py`, `webface.py`, `webmodel.py`, `webtabs.py`, `webnew.py`, `webpage.py`, `page/` | round six: the HTML window (its Qt shell, its clicks, its pure views, Insights and Settings, New plan, the page and its scripts) |
 | `planner/window.py`, `plan_tab.py`, `date_panel.py`, `deck_panel.py`, `shape.py`, `send.py`, `insights_tab.py`, `settings_tab.py`, `mine_tab.py`, `new_plan.py`, `text_tab.py`, `history_tab.py`, `day_notes.py`, `date_dialogs.py`, `widgets.py`, `picker.py`, `qid_window.py`, `start_window.py` | the Qt windows and their parts, in the board's look |
 
 Checks: `tests/test_planner.py` (the pure parts, `build.py` against

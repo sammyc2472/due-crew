@@ -129,9 +129,11 @@ var dcPlan = (function () {
       setTimeout(counted, 0);
     }
     if (sh.kind === "read") { body.appendChild(h("pre", { text: sh.text })); }
-    go = btn(sh.yes || "OK", submit, "pri" + (sh.danger ? " bad" : ""));
+    var own = dcPlan.sheets && dcPlan.sheets[sh.kind];  /* tabs.js's own kinds: Posts, History, a pick */
+    if (own) { own(sh, body, { h: h, btn: btn, send: send, close: closeSheet }); }
+    go = btn(sh.yes || "OK", submit, "pri" + (sh.danger ? " bad" : ""), { title: sh.tip || null });
     if (sh.danger) { go.style.background = "#c62828"; go.style.borderColor = "#c62828"; go.style.color = "#fff"; }
-    body.appendChild(h("div.acts", {}, [btn(sh.no || (sh.kind === "send" ? "Back" : "Cancel"), closeSheet), go]));
+    body.appendChild(h("div.acts", {}, [btn(sh.no || (sh.kind === "send" ? "Back" : "Cancel"), closeSheet), sh.yes === null ? null : go]));
     var veil = h("div.veil", { onclick: function (e) { if (e.target === veil) { closeSheet(); } } }, [body]);
     root.appendChild(veil);
     if (!(sh.fields || []).length) { setTimeout(function () { go.focus(); }, 0); }

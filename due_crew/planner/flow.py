@@ -320,16 +320,6 @@ class Ops:
             done(True)
         _bg(lambda: cl.follow_plan(code, False, own=own), followed)
 
-    def lesson_deck_on(self, pid):
-        """Today's lesson as its own deck on my follow here (None: not followed here, or no lesson decks)."""
-        fn = getattr(plan_flow, "lesson_deck_on", None)
-        return fn(pid) if fn is not None else None
-
-    def set_lesson_deck(self, pid, on):
-        fn = getattr(plan_flow, "set_lesson_deck", None)
-        if fn is not None:
-            fn(pid, bool(on))
-
     def now_words(self):
         """"Tue 2:14 pm", for Undo ▾'s line about a send."""
         import datetime
@@ -400,6 +390,23 @@ class Ops:
 
     def reset_days(self, pid):
         plan_flow.reset_days(pid)
+
+    def lesson_deck_on(self, pid):
+        """Today's lesson in a deck of its own too (B) or only in my deck (A):
+        plan_flow's, or None when this version hasn't the choice (Settings hides it)."""
+        fn = getattr(plan_flow, "lesson_deck_on", None)
+        if not callable(fn):
+            return None
+        try:
+            on = fn(pid)
+        except Exception:  # noqa: BLE001 (a choice that can't be read isn't offered)
+            return None
+        return None if on is None else bool(on)
+
+    def set_lesson_deck(self, pid, on):
+        fn = getattr(plan_flow, "set_lesson_deck", None)
+        if callable(fn):
+            fn(pid, bool(on))
 
     def copy_plan(self, owner, pid, said):
         """Make my own copy (a library plan): the same dates, mine to change; then Your plans on it."""

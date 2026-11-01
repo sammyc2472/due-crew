@@ -228,9 +228,7 @@ class WebFace(NewPlan, PlanCore):
         elif what[0] == "undo":
             self.undo()
         elif what[0] == "history":
-            from .send import HistoryDialog
-            HistoryDialog(self).exec()
-            self.push()
+            self.c_tabcmd("history")  # a sheet in the page (webtabs)
 
     def c_undo_key(self):
         if not self.undo_key():
@@ -973,15 +971,15 @@ class WebFace(NewPlan, PlanCore):
         except ImportError:
             return {"todo": True}
 
-    def c_tabcmd(self, name, args=None):
-        """Insights' and Settings' own clicks (webtabs)."""
+    def c_tabcmd(self, name, args=None, **more):
+        """Insights' and Settings' own clicks (webtabs); a sheet's fields and sure come as more."""
         try:
             from . import webtabs
         except ImportError:
             return
         fn = getattr(webtabs, "c_" + str(name), None) if str(name).replace("_", "").isalnum() else None
         if fn is not None:
-            fn(self, **(args if isinstance(args, dict) else {}))
+            fn(self, **dict(args if isinstance(args, dict) else {}, **more))
 
     # ---- from elsewhere ----
 

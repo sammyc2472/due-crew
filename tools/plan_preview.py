@@ -1,7 +1,8 @@
 """Render the HTML plan window (due_crew/planner/web.py) as standalone pages,
 from the real view code (webface, webmodel, webpage) on a sample deck and
 plan held by the fake Worker: an author's plan, a follower's, the deck
-beside the plan, Week and Month, a sheet open. No Anki, no Qt.
+beside the plan, Week and Month, a sheet open, Insights and Settings (an
+author's and a follower's, a change of the plan's shape, Posts). No Anki, no Qt.
 
     python3 tools/plan_preview.py OUT_DIR
 
@@ -106,8 +107,14 @@ PID2, CODE2 = STORE.add_plan("dre", "MS2 Block 2", "Big Step 1", [
      "todo": [{"k": "watch", "t": "Lecture 16"}]},
     {"id": "c3", "name": "Leukemias", "opens": day(4), "tags": [f"{R}::06_White_cell_disorders::Leukemias"]}])
 STORE.plans[PID2]["doc"]["events"] = [{"id": "q1", "day": day(5), "name": "Heme quiz"}]
+STORE.plans[PID]["line"] = "Pathology by chapter, high-yield first, done before the Heme quiz."
+STORE.plans[PID]["doc"]["deckUrl"] = "https://example.org/big-step-1"
+STORE.plans[PID]["doc"]["every"] = [{"k": "do", "t": "Practice questions", "r": "01234"}]
+STORE.plans[PID]["editors"] = {"maya"}
+STORE.plans[PID]["invited"] = {"dre": 1}
 SAM = client("sam")
 SAM.follow_plan(CODE2)
+PR.post(SAM, PID, "Neoplasia moved to Monday: the lecture did.")
 
 
 class Ops:
@@ -175,6 +182,25 @@ class Ops:
     def index(self, did):
         return P.DeckIndex(COL, did) if did == 1 else None
 
+    # a follow, as plan_flow keeps it (Settings, a follower's)
+    def follow_state(self, pid):
+        return {"id": pid, "name": "MS2 Block 2", "shift": 2, "skipped": ["c3"], "own": "", "early": 1, "paused": False}
+
+    def held_count(self, pid):
+        return 14
+
+    def in_team(self, pid):
+        return True
+
+    def can_reset(self, pid):
+        return True
+
+    def lesson_deck_on(self, pid):
+        return False
+
+    def map_by(self, did):
+        return None
+
     def __getattr__(self, name):
         return lambda *a, **k: None
 
@@ -221,6 +247,16 @@ def main(out):
     page(author, "author-event", out)
     author._on_cmd("dcplan:" + json.dumps({"c": "new_date_form", "a": {}}))
     page(author, "author-sheet", out, "dcPlan.sheet(" + author.sent_js[-1][len("dcPlan.sheet("):-1] + ")")
+    author._on_cmd("dcplan:" + json.dumps({"c": "tab", "a": {"tab": "insights"}}))
+    page(author, "author-insights", out)
+    author._on_cmd("dcplan:" + json.dumps({"c": "tab", "a": {"tab": "settings"}}))
+    page(author, "author-settings", out)
+    page(author, "author-settings-end", out, "document.querySelector('[data-scroll=settings]').scrollTop = 1e6")
+    author._on_cmd("dcplan:" + json.dumps({"c": "tabcmd", "a": {"name": "shape", "args": {"key": "start", "value": day(7)}}}))
+    page(author, "author-settings-shape", out)
+    author._on_cmd("dcplan:" + json.dumps({"c": "tabcmd", "a": {"name": "shape_back", "args": {}}}))
+    author._on_cmd("dcplan:" + json.dumps({"c": "tabcmd", "a": {"name": "posts", "args": {}}}))
+    page(author, "author-posts", out, "dcPlan.sheet(" + author.sent_js[-1][len("dcPlan.sheet("):-1] + ")")
     follower = Face(mine, SAM, select=PID2)
     page(follower, "follower", out)
     page(follower, "follower-month", out, "dcPlan.set({mode:'month'})")
@@ -232,6 +268,10 @@ def main(out):
         page(fresh, "new-" + step, out)
     fresh._on_cmd("dcplan:" + json.dumps({"c": "new_set", "a": {"key": "pace", "value": "by"}}))
     page(fresh, "new-resource-by", out)
+    follower._on_cmd("dcplan:" + json.dumps({"c": "tab", "a": {"tab": "insights"}}))
+    page(follower, "follower-insights", out)
+    follower._on_cmd("dcplan:" + json.dumps({"c": "tab", "a": {"tab": "settings"}}))
+    page(follower, "follower-settings", out)
     print("wrote", out)
 
 

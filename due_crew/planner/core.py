@@ -151,8 +151,9 @@ class PlanCore:
         fresh = (self.plan or {}).get("id") != pid
         self.plan = plan
         self.raw = raw if plan.get("role") in ("owner", "editor") else None
-        # an author's view is the plan's own dates; a follower's, mine (as my follow moves them)
-        self.doc = plan["doc"] if self.raw is not None else self.ops.my_doc(plan)
+        # an author's view is the plan's own dates, as the server keeps them (a save, a draft and
+        # Undo build on that doc; the cleaned one has the pace's days alone); a follower's, mine
+        self.doc = self.raw["doc"] if self.raw is not None else self.ops.my_doc(plan)
         if not same:
             self.idx, self.swap, self.how = self.ops.context(plan, self.doc)
             self._tree = None
