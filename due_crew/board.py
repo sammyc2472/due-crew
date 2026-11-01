@@ -2396,6 +2396,8 @@ def party_map_html(v):
     if v.get("more"):
         body += (f'<span class="pp-tw" style="flex:1 1 120px"><a class="tm pp-more" href="#" onclick="dcParty.focus();return false;">'
                  f'<span>and {int(v["more"]):,} more</span><b>Find one &rsaquo;</b></a></span>')
+    if not body and v.get("loading"):
+        body = '<span class="pp-none" role="status">Reading your cards&hellip;</span>'
     if not body:
         body = ('<span class="pp-none">This deck doesn&rsquo;t split by system yet. Try Tags or Decks.</span>' if v.get("by") == "sys"
                 else '<span class="pp-none">Nothing here yet.</span>')
@@ -2483,11 +2485,13 @@ def party_html(v):
                   f'<a class="x" href="#" aria-label="Drop {e(p["name"])}" onclick="event.stopPropagation();{_pycmd(f"party:drop:{j}")}">&times;</a></span>')
     n = int(v.get("n") or 0)
     count = f'{e(v["all"])} &middot; {n:,} card{"" if n == 1 else "s"}' if v.get("all") else f'{n:,} card{"" if n == 1 else "s"}'
+    if v.get("loading"):
+        count = "Reading your cards&hellip;"  # the map's reading follows the tab (gamenight_flow.tab_view)
     links = (f'<span class="pp-ln"><a href="#" onclick="{_pycmd("party:keep")}">Keep this pick</a>'
              f'<a href="#" onclick="{_pycmd("party:clear")}">Clear</a></span>') if v.get("picks") else ""
     said = str(v.get("said") or "")
     busy = bool(v.get("busy"))
-    why = ("" if first or not n else "Too few cards for any game here.") if not said else said
+    why = ("" if first or not n or v.get("loading") else "Too few cards for any game here.") if not said else said
     why = f'<span class="pp-said{"" if busy else " bad"}" role="status">{e(why)}</span>' if why else ""
     label = dict(_GAMES).get(first, "")
     host = (f'<a href="#" class="pp-host" onclick="{_pycmd("party:host")}">Host {e(label)}</a>' if first and n and not busy

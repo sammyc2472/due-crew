@@ -20031,6 +20031,49 @@ def test_browse_due_says_when_a_plan_opens_v395():
           "gui_hooks.browser_did_fetch_row.append(plan_flow.browser_row)" in src and "plan_flow.opens_reset()" in src
           and "    opens_reset()  # 3.9.5" in flow[flow.index("def run(col, plan_list"):flow.index("def run(col, plan_list") + 2500])
 
+def test_pip_party_tab_shows_first_v396():
+    """3.9.6 (Sam: "the transition from any other tab to pip party takes a
+    while, and clicks on bento sections also take a long time"): the tab
+    shows at once, saying it's reading your cards, and reads them just after
+    (mw.progress.single_shot); its redraws replace Pip Party's part of the
+    board alone, never the whole board, and the Find box keeps its focus."""
+    from due_crew import gamenight_flow as GF
+    queued, evals, swaps, read = [], [], [], []
+    conf = {"due_tab": "party", "party": {"by": "tag"}}
+    saved = (GF.mw.progress if hasattr(GF.mw, "progress") else None, GF._warm, GF.level, GF.cfg, GF.app.board_eval, GF.app.swap,
+             dict(GF.TAB))
+    try:
+        GF.mw.progress = types.SimpleNamespace(single_shot=lambda ms, fn, *a: queued.append((ms, fn)))
+        GF.cfg = lambda: conf
+        GF._warm = lambda: GF.TAB.get("warmed") is not None
+        GF.level = lambda: read.append("level") or {"tiles": [], "trail": [], "ids": None, "where": "", "at": [], "by": "tag", "decks": [], "did": 0}
+        GF.app.board_eval, GF.app.swap = evals.append, (lambda c: swaps.append(c))
+        GF.TAB.update(gen=None, warmed=None, warming=False, open=None)
+        v = GF.tab_view(conf)
+        html = board.party_html(v)
+        check("pip party tab shows first: the games and 'Reading your cards…', nothing read yet, the reading queued for after",
+              v.get("loading") is True and [g["id"] for g in v["games"]] == [g for g, _l in GF.G.GAMES] and "Reading your cards&hellip;" in html
+              and read == [] and len(queued) == 1 and queued[0][0] > 0, (v.get("loading"), read, queued))
+        GF.tab_view(conf)
+        check("pip party tab shows first: a second draw meanwhile doesn't queue the reading again", len(queued) == 1, queued)
+        queued.pop()[1]()
+        check("pip party tab shows first: the reading, then the tab drawn again in its place alone, never the whole board",
+              read and evals and not swaps and "#due-crew .pp" in evals[-1] and "outerHTML" in evals[-1], (read, swaps, evals[-1:]))
+        check("pip party tab shows first: what's typed in Find keeps its focus and caret through a redraw",
+              "pp-find" in evals[-1] and "setSelectionRange" in evals[-1] and "i.focus()" in evals[-1])
+    finally:
+        (prog, GF._warm, GF.level, GF.cfg, GF.app.board_eval, GF.app.swap, tab) = saved
+        if prog is None:
+            try:
+                del GF.mw.progress
+            except AttributeError:
+                pass
+        else:
+            GF.mw.progress = prog
+        GF.TAB.clear()
+        GF.TAB.update(tab)
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

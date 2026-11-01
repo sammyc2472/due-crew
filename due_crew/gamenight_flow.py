@@ -220,11 +220,30 @@ TAB = {"busy": False, "said": "", "open": None, "burst": False, "turn": 0, "gen"
 
 
 def _redraw():
+    """The tab drawn again in place, only Pip Party's part of the board
+    (nothing else on it changes with the tab): a tap shows at once, with no
+    redraw of the whole board. Nothing when the tab isn't on screen."""
     try:
-        if app.swap:
-            app.swap(cfg())
+        from . import board
+        html = board.party_html(tab_view(cfg()))
+        app.board_eval("(function(){var p=document.querySelector('#due-crew .pp');if(!p){return;}"
+                       "var f=document.activeElement,k=f&&f.id==='pp-find'?[f.value,f.selectionStart,f.selectionEnd]:null;"
+                       "p.outerHTML=%s;"
+                       "var i=k&&document.getElementById('pp-find');if(i){i.value=k[0];i.focus();try{i.setSelectionRange(k[1],k[2]);}catch(e){}}"
+                       "})();" % json.dumps(html))
     except Exception:
         traceback.print_exc()
+
+
+def _soon(fn, ms=40):
+    """fn on the main thread just after this draw shows (mw.progress.single_shot):
+    a tap paints first, its card reads follow. Without Anki's main window
+    (the suite, the previews), now."""
+    single = getattr(getattr(mw, "progress", None), "single_shot", None)
+    if not callable(single):
+        fn()
+        return
+    single(ms, fn, True)
 
 
 def _state():
@@ -583,7 +602,18 @@ def _cids_of(p):
 def scope():
     """(cards, {card: its pick's name}, words): what Host plays on. Nothing
     picked, the tiles on the map, each its own; then the picks left out
-    come off, and which of their cards narrows it."""
+    come off, and which of their cards narrows it. Worked out once a state
+    (the count and the fit both ask), for FIT_FOR seconds."""
+    k, gen, now = _state_key(), app.generation, time.time()
+    hit = TAB.get("scoped")
+    if hit and hit[0] == (gen, k) and now - hit[1] <= FIT_FOR:
+        return hit[2]
+    got = _scope()
+    TAB["scoped"] = ((gen, k), now, got)
+    return got
+
+
+def _scope():
     ins = [p for p in TAB["picks"] if not p.get("out")]
     subs = {}
     if ins:
@@ -647,10 +677,6 @@ def _fit():
     if TAB.get("fitting") == (gen, k):
         return None
     TAB["fitting"] = (gen, k)
-    cards, subs, _w = scope()
-    rng = random.Random(1)
-    rws = rows(cards, 300, rng)
-    nr = near(rws, cards, 150, rng)
 
     def done(have):
         if TAB.get("fitting") == (gen, k):
@@ -660,8 +686,19 @@ def _fit():
         TAB["fits"] = {x: v for x, v in TAB["fits"].items() if now - v[1] <= FIT_FOR}
         TAB["fits"][k] = (gen, now, have)
         _redraw()
-    _bg(lambda: G.fit(G.build(rws, n=len(cards), seed=1, near=nr, subs=subs))[0] if cards else {g: 0 for g in G.NEEDS}, done)
-    got = TAB["fits"].get(k)  # there already when the job ran here
+
+    def prep():  # main thread (the collection), after the tap has shown; the build itself off it
+        if TAB.get("fitting") != (gen, k) or app.generation != gen or _state_key() != k:
+            if TAB.get("fitting") == (gen, k):
+                TAB["fitting"] = None  # the picks changed meanwhile: the next draw asks again
+            return
+        cards, subs, _w = scope()
+        rng = random.Random(1)
+        rws = rows(cards, 300, rng)
+        nr = near(rws, cards, 150, rng)
+        _bg(lambda: G.fit(G.build(rws, n=len(cards), seed=1, near=nr, subs=subs))[0] if cards else {g: 0 for g in G.NEEDS}, done)
+    _soon(prep)
+    got = TAB["fits"].get(k)  # there already when the work ran here (no Anki window)
     return got[2] if got and got[0] == gen else None
 
 
@@ -702,6 +739,21 @@ def tab_view(c):
     burst, TAB["burst"] = TAB.get("burst"), False
     if TAB.get("open"):
         return {"open": TAB["open"], "burst": bool(burst)}
+    if not _warm():
+        if not TAB.get("warming"):
+            TAB["warming"] = True
+
+            def warm():  # the map's reading (every card's tags, or Insights' map), after the tab shows
+                try:
+                    level()
+                except Exception:
+                    traceback.print_exc()
+                TAB["warmed"] = (_warm_key(), time.time())
+                TAB["warming"] = False
+                _redraw()
+            _soon(warm, 60)
+        if TAB.get("warming"):
+            return _loading_view(burst)
     lv = TAB["level"] = level()
     TAB["shown"] = lv["tiles"][:SHOW_MAX]
     keys = {_pick_key(p): p for p in TAB["picks"]}
@@ -738,6 +790,40 @@ def tab_view(c):
             "of": TAB["of"], "ofs": [(k, w) for k, w, _s in OF], "search": search_text(),
             "picks": [{"name": pick_name(p), "deck": p.get("deck") or "", "kind": p["by"], "out": bool(p.get("out"))} for p in TAB["picks"]],
             "n": n, "all": "" if ins else _sum_words(ins)}
+
+
+def _warm_key():
+    return (app.generation, TAB["by"], TAB["did"])
+
+
+def _warm():
+    """The map's reading is at hand: every card's tags (Tags, Decks) or the
+    deck's Insights (Systems), kept from the last time; else the tab opens
+    first and reads after (tab_view)."""
+    got = TAB.get("warmed")
+    if got and got[0] == _warm_key() and time.time() - got[1] <= CORPUS_FOR:
+        return True
+    if TAB["by"] in ("tag", "deck"):
+        got = TAB.get("corpus")
+        return bool(got and got[0] == app.generation and time.time() - got[1] <= CORPUS_FOR)
+    from . import team_flow
+    if not team_flow.decks_ready():
+        return False
+    decks = _sys_decks()
+    d = next((x for x in decks if x["did"] == TAB["did"]), decks[0] if decks else None)
+    return d is None or team_flow.insights_ready(d["did"], d.get("pid"), str(cfg().get("exam_date") or ""))
+
+
+def _loading_view(burst):
+    """The tab while its map is read: the games, the picks, "Reading your cards…"."""
+    return {"open": None, "burst": bool(burst), "busy": False, "said": "", "loading": True,
+            "games": [{"id": g, "label": lbl, "n": None, "need": G.NEEDS[g][1], "first": g == TAB["game"], "just": False}
+                      for g, lbl in G.GAMES],
+            "first": TAB["game"], "kept": [k["name"] for k in kept()], "by": TAB["by"], "decks": [], "did": TAB["did"],
+            "trail": [], "tiles": [], "ids": None, "more": 0, "where": "", "find": TAB["find"], "hits": [], "of": TAB["of"],
+            "ofs": [(k, w) for k, w, _s in OF], "search": "",
+            "picks": [{"name": pick_name(p), "deck": p.get("deck") or "", "kind": p["by"], "out": bool(p.get("out"))} for p in TAB["picks"]],
+            "n": None, "all": ""}
 
 
 def _ids_pick(lv):
