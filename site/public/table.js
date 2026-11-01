@@ -44,6 +44,23 @@ const Poss = (n) => (you(n) ? "Your" : `${n}'s`);
 const frag = (...kids) => h("div", { class: "stack" }, ...kids);
 const btn = (label, fn, cls) => h("button", { type: "button", class: "btn" + (cls ? " " + cls : ""), onclick: fn }, label);
 const warn = (e) => console.warn("pip party:", e && (e.code || e.message || e));
+// what this sitting has played (the TV's, till it closes), by name: a game draws what's new first, and a
+// list starts over only once all of it has been had (3.9.6, Sam: Imposter gave a topic again three rounds on)
+const Seen = {
+  had: {},
+  of(kind) { return this.had[kind] || (this.had[kind] = new Set()); },
+  // n of list, the new ones first, topped up from the ones had (and then the list starts over, but for these)
+  draw(kind, list, n, key) {
+    const s = Seen.of(kind), fresh = shuffle(list.filter((x) => !s.has(key(x)))).slice(0, n);
+    if (fresh.length < n) {
+      const again = shuffle(list.filter((x) => s.has(key(x)))).slice(0, n - fresh.length);
+      for (const x of list) s.delete(key(x));
+      fresh.push(...again);
+    }
+    for (const x of fresh) s.add(key(x));
+    return shuffle(fresh);
+  },
+};
 // Pip (sev.js, the add-on's own drawing): at a place of the night's, moving; a seat's, still, in its colour
 const pip = (place, size, accent) => (typeof Sev !== "undefined" && Sev.stage ? Sev.stage(place, size, accent) : null);
 const SEAT_COLORS = [["#2e7d32", "#7cc47f"], ["#3b6fd8", "#8fb0ff"], ["#7b4fc9", "#b9a2f2"], ["#00897b", "#5fd3c2"], ["#b26a00", "#dda45c"], ["#b03a6b", "#e58bb0"]];
@@ -150,7 +167,13 @@ const Imposter = {
   line: "Every phone shows the topic but the imposter's. A word each round the room, then vote.",
   learn: "A topic in one word, and what it's easy to mix up with.",
   start(c) {
-    const pr = pick(D.twins.slice(0, Math.max(3, Math.ceil(D.twins.length / 2))));  // the likeliest mix-ups come first
+    // a pair whose topics nobody's seen tonight, else one not played yet, else all of them again; the likeliest mix-ups come first
+    const ts = Seen.of("topics"), ps = Seen.of("twins"), key = (t) => norm(t.a.t) + "|" + norm(t.b.t);
+    let left = D.twins.filter((t) => !ts.has(norm(t.a.t)) && !ts.has(norm(t.b.t)));
+    if (!left.length) left = D.twins.filter((t) => !ps.has(key(t)));
+    if (!left.length) { ts.clear(); ps.clear(); left = D.twins; }
+    const pr = pick(left.slice(0, Math.max(3, Math.ceil(left.length / 2))));
+    ps.add(key(pr)); ts.add(norm(pr.a.t)); ts.add(norm(pr.b.t));
     const [A, B] = rnd() < 0.5 ? [pr.a, pr.b] : [pr.b, pr.a];  // the topic, and its twin: the guess's closest wrong answer
     const first = int(c.N), order = c.seats.map((_, k) => (first + k) % c.N);  // round the room from someone, said out loud
     return { ph: "clue", laps: Imposter.laps, order, a: A.t, b: B.t, facts: { a: A.facts || [], b: B.facts || [] }, part: pr.part, imp: int(c.N), votes: null, last: null, opts: null, caught: null, most: null };
@@ -400,7 +423,7 @@ const Trivia = {
     return ts.length >= 2 ? { ph: "topic", ts, k: 0, qs: [], log: [], gots: [], res: null, call: null, ends: 0, topic: null } : Trivia.block(null);
   },
   block(topic) {
-    const qs = shuffle(topic ? D.qs.filter((q) => Trivia.subj(q) === topic) : D.qs).slice(0, 10);
+    const qs = Seen.draw("qs", topic ? D.qs.filter((q) => Trivia.subj(q) === topic) : D.qs, 10, (q) => norm(q.q) + "|" + norm(q.a));
     return { ph: "ask", k: 0, qs, ends: Date.now() + Trivia.SECS * 1000, call: null, log: [], gots: [], res: null, topic, ts: Trivia.topics() };
   },
   // the card after the reveal: its sentence with the answer in bold, and its Extra (the TV's alone)
@@ -688,7 +711,7 @@ const Links = {
   line: "Two teams, 25 of your topics. The clue givers know whose is whose: one word, and how many. Find yours first; stay off Code blue.",
   learn: "One mechanism, three diseases: finding what ties your deck together.",
   board() {
-    const tiles = shuffle(D.words).slice(0, 25), first = rnd() < 0.5 ? "g" : "p";
+    const tiles = Seen.draw("words", D.words, 25, norm), first = rnd() < 0.5 ? "g" : "p";
     return { tiles, first, key: shuffle(Array(9).fill(first).concat(Array(8).fill(other(first)), Array(7).fill("n"), ["x"])), shown: Array(25).fill("") };
   },
   start(c) {

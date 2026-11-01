@@ -20031,6 +20031,54 @@ def test_browse_due_says_when_a_plan_opens_v395():
           "gui_hooks.browser_did_fetch_row.append(plan_flow.browser_row)" in src and "plan_flow.opens_reset()" in src
           and "    opens_reset()  # 3.9.5" in flow[flow.index("def run(col, plan_list"):flow.index("def run(col, plan_list") + 2500])
 
+def test_pip_party_no_repeats_v396():
+    """3.9.6 (Sam: "imposter also gave my friends and I a repeat of a
+    previously done item like three rounds after we saw it before"): a
+    sitting remembers what it played, by name. Imposter plays a pair whose
+    topics nobody's seen first, then a pair not played, and starts over only
+    once all of them have been; Trivia's blocks and Links' boards draw what's
+    new first the same way."""
+    import shutil
+    import subprocess
+    if not shutil.which("node"):
+        check("pip party no repeats: node runs the games (skipped: no node)", True)
+        return
+    src = open(os.path.join(REPO, "site", "public", "table.js"), encoding="utf-8").read()
+    a, b = src.index("let D = null;"), src.index("// ---------- hubs")
+    t = lambda w: {"t": w, "facts": ["x"]}
+    twins = [{"part": "P", "a": t(x), "b": t(y)} for x, y in
+             (("A1", "B1"), ("A1", "C1"), ("A2", "B2"), ("A3", "B3"), ("B2", "C2"), ("A4", "B4"), ("A5", "B5"))]
+    qs = [{"q": f"Q{k}", "a": f"A{k}", "tag": "", "opts": [f"A{k}", "x", "y", "z"], "ans": 0} for k in range(35)]
+    words = [f"W{k}" for k in range(60)]
+    pack = {"twins": twins, "qs": qs, "words": words, "prompts": ["p"], "blacks": [], "whites": [], "draws": [], "scales": [], "subs": []}
+    js = ("const matchMedia = () => ({ matches: true });\n" + src[a:b].replace("let D = null;", "let D = " + json.dumps(pack) + ";", 1) + r"""
+const c = { N: 3, seats: [{}, {}, {}], A: [], here: () => true };
+const imp = [];
+for (let k = 0; k < 12; k++) { const S = Imposter.start(c); imp.push([S.a, S.b].sort().join("|")); }
+const tri = [];
+for (let k = 0; k < 4; k++) tri.push(Trivia.block(null).qs.map((q) => q.q));
+const lnk = [];
+for (let k = 0; k < 3; k++) lnk.push(Links.board().tiles);
+console.log(JSON.stringify({ imp, tri, lnk }));
+""")
+    r = subprocess.run(["node", "-e", js], capture_output=True, text=True, timeout=60)
+    got = json.loads(r.stdout or "{}")
+    imp = got.get("imp") or []
+    topics = lambda ps: [w for p in ps for w in p.split("|")]
+    # seven pairs over ten topics: the ones that share no topic come first, the rest before any pair plays again
+    first = imp[:5]
+    check("pip party no repeats: Imposter's first rounds never show a topic again while a pair of new ones is left",
+          len(imp) == 12 and len(set(topics(first))) == len(topics(first)) == 10, (imp, r.stderr[:300]))
+    check("pip party no repeats: no pair again till every pair has played, then it starts over",
+          len(set(imp[:7])) == 7 and set(imp[:7]) == {"|".join(sorted([p["a"]["t"], p["b"]["t"]])) for p in twins}, imp)
+    tri = got.get("tri") or []
+    check("pip party no repeats: Trivia's blocks of ten draw new questions first (35: three blocks, then a fourth starts over)",
+          len(tri) == 4 and all(len(x) == 10 for x in tri) and len(set(sum(tri[:3], []))) == 30
+          and len(set(tri[3]) & set(sum(tri[:3], []))) == 5, tri)
+    lnk = got.get("lnk") or []
+    check("pip party no repeats: Links' second board is 25 new words; the third tops up from the first",
+          len(lnk) == 3 and not set(lnk[0]) & set(lnk[1]) and len(set(lnk[2]) - set(lnk[0]) - set(lnk[1])) == 10, lnk)
+
 def test_pip_party_tab_shows_first_v396():
     """3.9.6 (Sam: "the transition from any other tab to pip party takes a
     while, and clicks on bento sections also take a long time"): the tab
