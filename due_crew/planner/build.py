@@ -712,13 +712,16 @@ class _Days:
         return n
 
 
-def fill(doc, items, frm, until, cap, days, new_id, end=None):
+def fill(doc, items, frm, until, cap, days, new_id, end=None, apart=False):
     """The builder's fill: puts `items` (pieces) on study days from `frm`
     (none starting after `until`), `cap` cards a day, chapters whole;
     nothing runs past `end` (an even piece there takes fewer days:
     clipped). Works on `doc` itself. {placed, last, left, clipped, note,
     touched}: the cards it put on, its last day, what didn't go on (in
-    order), the note a ceiling left, the dates it made or added to."""
+    order), the note a ceiling left, the dates it made or added to.
+    apart (the add-on's, A resource at my pace): each piece a date of its
+    own, in order, never joining a day's date; the days and the pace the
+    same (the builder's Fill, with apart False, is the twin)."""
     dd = _Days(doc, days)
     units = doc.setdefault("units", [])
     out = {"placed": 0, "last": None, "left": [], "clipped": False, "note": "", "touched": set()}
@@ -728,7 +731,7 @@ def fill(doc, items, frm, until, cap, days, new_id, end=None):
         state["d"], state["room"], state["used"] = dd.next(state["d"]), cap or float("inf"), 0
 
     def unit_on(d):
-        u = next((x for x in units if x.get("opens") == d and not x.get("even")), None)
+        u = None if apart else next((x for x in units if x.get("opens") == d and not x.get("even")), None)
         if u is None:
             if len(units) >= UNITS_MAX:
                 out["note"] = FULL
@@ -738,13 +741,15 @@ def fill(doc, items, frm, until, cap, days, new_id, end=None):
         return u
 
     def room_for(it):
+        if apart:
+            return True
         f = "tags" if kind_of(it["key"]) == "tag" else "decks"
         u = next((x for x in units if x.get("opens") == state["d"] and not x.get("even")), None)
         return u is None or path_of(it["key"]) in (u.get(f) or []) or len(u.get(f) or []) < SOURCES_MAX
 
     def add_to(d, key):
         f = "tags" if kind_of(key) == "tag" else "decks"
-        had = next((x for x in units if x.get("opens") == d and not x.get("even")), None)
+        had = None if apart else next((x for x in units if x.get("opens") == d and not x.get("even")), None)
         if had and path_of(key) not in (had.get(f) or []) and len(had.get(f) or []) >= SOURCES_MAX:
             out["note"] = f"A date holds up to {SOURCES_MAX} {'tags' if f == 'tags' else 'subdecks'}."
             return None
@@ -912,6 +917,14 @@ def last_day(doc):
 def plan_start(doc, fallback):
     us = S.units(doc)
     return min(str(u["opens"]) for u in us) if us else fallback
+
+
+def next_free_day(doc, days, start):
+    """The + on a tag (ptagsPanel's, with no day picked): the first study day
+    after the plan's last day (an even date's due date), or from its start
+    when it has no dates (start: plan_start's, the builder's)."""
+    ld = last_day(doc)
+    return _Days(doc, days).first(_iso(_d(ld) + datetime.timedelta(days=1)) if ld else start)
 
 
 def next_monday(today):
