@@ -51,6 +51,26 @@ function sample() {
       events: [{ id: "q1", day: day(11), name: "Heme quiz" }, { id: "x1", day: day(30), name: "Block exam" }], reviews: [{ day: day(13), from: "u1", to: "u4" }],
       tags: [{ id: "t1", name: "SLG 12", notes: ["n1", "n2"] }], tagroot: "Path_six_weeks", every: [{ k: "do", t: "Practice questions", r: "13" }] } };
 }
+/** Maya's plan I follow: my days 2 later, a set I skip, one I moved; what my Anki synced */
+function theirs() {
+  const t = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  const d = (n) => { const x = new Date(t); x.setUTCDate(x.getUTCDate() + n); return iso(x); };
+  const units = [
+    { id: "f1", name: "Cardio basics", opens: d(-16), due: d(-14), tags: [`${R}::#Video_Series::Cardio`], decks: [], cards: [], n: 400, todo: [{ k: "watch", t: "Cardio 1–3" }] },
+    { id: "f2", name: "Heart failure", opens: d(-9), tags: [`${R}::#Video_Series::Cardio::Heart_Failure`], decks: [], cards: [], n: 220 },
+    { id: "f3", name: "Arrhythmias", opens: d(-3), due: d(-1), tags: [`${R}::#Video_Series::Cardio::Arrhythmias`], decks: [], cards: [], n: 180 },
+    { id: "f4", name: "Anemia", opens: d(3), tags: [`${R}::#Video_Series::Heme::Anemia`], decks: [], cards: [], n: 180, for: "fq" },
+    { id: "f5", name: "Coagulation", opens: d(6), tags: [`${R}::#Video_Series::Heme::Coagulation`], decks: [], cards: [], n: 120, for: "fq" },
+    { id: "f6", name: "Heme questions", opens: d(10), tags: [`${R}::#Bank::10230`], decks: [], cards: [], n: 100 },
+  ];
+  return { id: "theirplanpreview", code: "MAYA2026", name: "Boards sprint", line: "Three systems, then questions.", role: "follower", owner: "maya", ownerName: "Maya",
+    audience: "code", followers: 9, version: 3, library: true,
+    following: { shift: 2, skipped: ["f6"], moved: { f4: 1 }, paused: false, since: null, until: null, own: null, early: 0, share: true, teamAsk: false,
+      progress: { f1: [400, 380, 400], f2: [220, 150, 220], f3: [180, 40, 180] } },
+    doc: { deck: "Big Step 1", pace: { mode: "daily", days: [1, 1, 1, 1, 1, 0, 0], daily: 60 }, units,
+      events: [{ id: "fq", day: d(14), name: "Heme quiz" }], reviews: [{ day: d(8), from: "f1", to: "f3" }] } };
+}
+let follow = theirs();
 let plan = sample();
 const log = [{ version: 7, uid: "maya", name: "Maya", at: Math.floor(Date.now() / 1000) - 3600, summary: "moved Neoplasia to Mon", undo: true }];
 const json = (res, code, body) => { res.writeHead(code, { "content-type": "application/json" }); res.end(JSON.stringify(body)); };
@@ -58,8 +78,11 @@ function api(req, res, url, body) {
   const p = url.pathname.replace(/^\/api/, ""), m = req.method;
   const id = plan.id;
   if (p === "/auth/me") return json(res, 200, { uid: "sam", name: "Sam", accent: process.env.ACCENT || "green", rollover: 4 });
-  if (m === "GET" && p === "/plans/mine") return json(res, 200, { plans: [{ ...plan, doc: { ...plan.doc, units: plan.doc.units } },
-    { id: "theirplanpreview", name: "Boards sprint", role: "follower", ownerName: "Maya", followers: 9, doc: { deck: "Big Step 1", units: [] } }] });
+  if (m === "GET" && p === "/plans/mine") return json(res, 200, { plans: [{ ...plan, doc: { ...plan.doc, units: plan.doc.units } }, { ...follow, doc: { ...follow.doc } }] });
+  if (m === "GET" && p === `/plans/${follow.id}`) return json(res, 200, follow);
+  if (m === "GET" && p === `/plans/${follow.id}/notes`) return json(res, 200, { notes: [{ id: "n2", day: follow.doc.units[2].opens, text: "Do the ECG questions twice", name: "Maya", mine: false, remove: false }] });
+  if (m === "PATCH" && p === `/plans/${follow.id}/follow`) { follow = { ...follow, following: { ...follow.following, ...body } }; return json(res, 200, follow.following); }
+  if (p === `/plans/${follow.id}/team`) { follow = { ...follow, following: { ...follow.following, share: m === "POST" } }; return json(res, 200, {}); }
   if (m === "GET" && p === "/plans/trees") return json(res, 200, { trees: url.searchParams.get("deck") ? [TREE] : [{ deck: "Big Step 1", at: TREE.at }, { deck: "Español 1", at: TREE.at }] });
   if (m === "GET" && p === "/squads/mine") return json(res, 200, { squads: [{ id: "orca", name: "Orca" }] });
   if (m === "GET" && p === `/plans/${id}`) return json(res, 200, plan);
@@ -117,13 +140,19 @@ async function shots(dir) {
     ["insights", "/plans/pathplanpreview1/edit", [cmd("tab", { tab: "insights" })]],
     ["settings", "/plans/pathplanpreview1/edit", [cmd("tab", { tab: "settings" })]],
     ["settings-shape", "/plans/pathplanpreview1/edit", [cmd("tab", { tab: "settings" }), cmd("tabcmd", { name: "shape", args: { key: "start", value: day(7) } })]],
+    ["follower", "/plans/theirplanpreview", []],
+    ["follower-set", "/plans/theirplanpreview", [cmd("pick", { key: ["date", "f3"] })]],
+    ["follower-month", "/plans/theirplanpreview", ["ui:month"]],
+    ["follower-insights", "/plans/theirplanpreview", [cmd("tab", { tab: "insights" })]],
+    ["follower-settings", "/plans/theirplanpreview", [cmd("tab", { tab: "settings" })]],
+    ["follower-more", "/plans/theirplanpreview", [cmd("tab", { tab: "settings" }), "click:.tacts .b.ch"]],
     ["new-pick", "/plans/new", []],
     ["new-empty", "/plans/new?deck=Big%20Step%201", []],
   ];
   let bad = 0;
   for (const [name, url, steps] of pages) {
     for (const [w, scheme] of [[1240, "light"], [1240, "dark"], [760, "light"], [760, "dark"]]) {
-      plan = sample();
+      plan = sample(); follow = theirs();
       const pg = await b.newPage({ viewport: { width: w, height: 860 }, colorScheme: scheme });
       const errs = [];
       pg.on("pageerror", (e) => errs.push(e.message));

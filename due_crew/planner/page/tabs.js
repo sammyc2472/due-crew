@@ -308,9 +308,13 @@
         { label: "Opens in your deck", on: !d.lesson, fn: function () { run(c.send, "lesson_deck", { on: false }); } },
         { label: "Also its own deck", on: !!d.lesson, fn: function () { run(c.send, "lesson_deck", { on: true }); } }], { "aria-label": "Today's set" })]));
     }
-    rows.push(fr(h, "Held back", [d.held ? c.btn(d.held, function () { run(c.send, "held"); }, "", { title: "The cards Hold back keeps shut till their day" })
+    /* d.held null: no Hold back where there's no Anki; d.team: a host's own way in and out of the squad;
+       d.hide: More's steps only Anki takes (duecrew.com's); Anki's view never sets the three */
+    var hide = d.hide || [];
+    rows.push(d.held === null ? null : fr(h, "Held back", [d.held ? c.btn(d.held, function () { run(c.send, "held"); }, "", { title: "The cards Hold back keeps shut till their day" })
       : h("span.muted", { text: "Nothing held back." })]));
-    rows.push(fr(h, "Squad", [h("span.muted", { text: d.squad, title: d.squadTip || null })]));
+    rows.push(fr(h, "Squad", [h("span.muted", { text: d.squad, title: d.squadTip || null }),
+      d.team ? c.btn(d.team, function () { run(c.send, "team"); }, "", { disabled: d.busy }) : null]));
     var acts = h("div.row.tacts", {}, [c.btn(d.paused ? "Resume" : "Pause until…", function () { run(c.send, "pause"); }),
       d.copy ? c.btn("Make my own copy", function () { run(c.send, "copy_mine"); }) : null,
       c.btn("More", function (e, b) {
@@ -320,8 +324,9 @@
             { on: d.own === "next", off: !d.own })];
         if (d.sched) { more.push(item("schedule", "My schedule…")); }
         if (d.reset) { more.push(item("reset", "Reset to default…")); }
-        c.menu(more, b);
-      }, "ch"), h("span.grow"), c.btn("Stop following…", function () { run(c.send, "stop_following"); }, "bad")]);
+        c.menu(more.filter(function (x) { return !(x.args && hide.indexOf(x.args.name) >= 0); }), b);
+      }, "ch")].concat((d.more || []).map(function (x) { return c.btn(x.label, function () { run(c.send, x.name); }); }),  /* a host's own, as the author's */
+      [h("span.grow"), c.btn("Stop following…", function () { run(c.send, "stop_following"); }, "bad")]));
     box.appendChild(sec(h, d.head, rows.concat([acts])));
     return box;
   }

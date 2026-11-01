@@ -107,7 +107,7 @@ function makeSite(store) {
   const sched = app.slice(app.indexOf("const Sched = (() => {"), app.indexOf("// ---- 3.2: home"));
   const src = [helpers, "let me = { uid: 'sam', name: 'Sam' };", sched, read("site/public/builder.js"),
     read("site/public/planpage/plan.js"), read("site/public/planpage/tabs.js"), read("site/public/planpage/new.js"), read("site/public/planface.js"),
-    "this.PlanFace = PlanFace; this.builder = builder; this.dcPlan = dcPlan; this.Sched = Sched; this.today = today; this.addDays = addDays;"].join("\n;\n");
+    "this.PlanFace = PlanFace; this.builder = builder; this.dcPlan = dcPlan; this.Sched = Sched; this.today = today; this.addDays = addDays; this.pretty = pretty;"].join("\n;\n");
   ctx.api = async (method, p, body) => {
     calls.push([method, p, body === undefined ? undefined : JSON.parse(JSON.stringify(body))]);
     return store(method, p, body);
@@ -140,7 +140,7 @@ function plans(day, followers) {
     audience: "code", squad: null, followers, version: 3, editors: [{ uid: "maya", name: "Maya" }], listed: 0, doc };
 }
 function makeStore(plan) {
-  const log = [];
+  const log = [], follows = [];
   let p = JSON.parse(JSON.stringify(plan));
   const fn = async (method, url, body) => {
     const [pth] = url.split("?");
@@ -160,6 +160,13 @@ function makeStore(plan) {
     if (method === "GET" && pth === `/plans/${p.id}/log`) return { log: [{ version: p.version, uid: "sam", name: "Sam", at: 1790000000, summary: "moved a set", undo: true }] };
     if (method === "GET" && pth === `/plans/${p.id}/posts`) return { posts: [{ id: "p1", uid: "sam", name: "Sam", text: "Hi all", at: 1790000000, remove: true }] };
     if (method === "POST" && pth === `/plans/${p.id}/posts`) return { id: "p2", text: body.text };
+    if (method === "PATCH" && pth === `/plans/${p.id}/follow`) {  // a follower's own days (plans.ts patchFollow)
+      follows.push(JSON.parse(JSON.stringify(body)));
+      p = { ...p, following: { ...p.following, ...body } };
+      return { share: !!p.following.share, paused: !!p.following.paused, ...p.following };
+    }
+    if (pth === `/plans/${p.id}/follow` && method === "DELETE") { follows.push("unfollow"); return {}; }
+    if (pth === `/plans/${p.id}/team`) { follows.push(`${method} team`); p = { ...p, following: { ...p.following, share: method === "POST" } }; return {}; }
     if (method === "DELETE") return {};
     if (method === "GET" && pth === "/friends") return { friends: [{ uid: "kai", name: "Kai", mutual: true }, { uid: "maya", name: "Maya", mutual: true }] };
     if (method === "POST" && pth === `/plans/${p.id}/editors`) return { editors: [...(p.editors || []), { uid: body.uid, name: "Kai", pending: true }] };
@@ -173,7 +180,7 @@ function makeStore(plan) {
     if (method === "POST" && pth === "/plans/follow") return { ok: true };
     const e = new Error(`no route ${method} ${url}`); e.status = 404; e.body = { error: "no_route" }; throw e;
   };
-  return { fn, log, now: () => p };
+  return { fn, log, follows, now: () => p };
 }
 
 // ---- a face on a sample plan ----
@@ -183,8 +190,9 @@ async function face(followers, opts = {}) {
   const { ctx } = site;
   const t0 = ctx.today(), mon = ctx.Sched.monday(t0);
   const day = (n) => ctx.addDays(mon, n);
-  const p = plans(day, followers);
+  const p = opts.follower ? mineToFollow((n) => ctx.addDays(t0, n), opts.following) : plans(day, followers);
   const st2 = makeStore(p);
+  site.files = {};
   ctx.api = async (method, url, body) => {
     site.calls.push([method, url, body === undefined ? undefined : JSON.parse(JSON.stringify(body))]);
     if (opts.noTree && url.startsWith("/plans/trees")) return { trees: [] };  // the deck's tags not sent from Anki yet
@@ -197,23 +205,38 @@ async function face(followers, opts = {}) {
   f = ctx.PlanFace.make(B, { plans: (await ctx.api("GET", "/plans/mine")).plans, tab: opts.tab, go: (u) => site.went.push(u),
     copy: async (t) => { site.copied.push(t); },
     out: { show: (v) => shown.push(v), sheet: (s) => sheets.push(s), status: (s) => said.push(s.status), openUndo() {}, pasted() {},
-      download: (u) => site.went.push(`download:${u}`) } });
+      download: (u, name, text) => { site.went.push(`download:${name}`); site.files[name] = text; } } });
   f.cmd("dcplan:" + JSON.stringify({ c: "ready", a: {} }));
-  return { site, ctx, f, B, store: st2, shown, sheets, said, day, p };
+  return { site, ctx, f, B, store: st2, shown, sheets, said, day: opts.follower ? (n) => ctx.addDays(t0, n) : day, p, t0 };
+}
+/** a plan Dre writes and I follow, its days from today: my shift 2, a set I skip, one I moved a day; what my Anki synced */
+function mineToFollow(day, following) {
+  const units = [
+    { id: "u1", name: "Cell injury", opens: day(-12), due: day(-10), tags: [`${ROOTTAG}::#Path_Book::01_Cell_injury`], decks: [], cards: [], todo: [{ k: "read", t: "Chapter 1" }] },
+    { id: "u2", name: "Inflammation", opens: day(-3), tags: [`${ROOTTAG}::#Path_Book::02_Inflammation`], decks: [], cards: [] },
+    { id: "u3", name: "Questions", opens: day(5), tags: [`${ROOTTAG}::#Bank::10230`], decks: [], cards: [] },
+    { id: "u4", name: "Neoplasia", opens: day(8), tags: [`${ROOTTAG}::#Path_Book::03_Neoplasia`], decks: [], cards: [], for: "q1", n: 220 },
+  ];
+  return { id: "planfffffffffffff".slice(0, 16), code: "DRE12345", name: "Dre's path", line: "Path, slowly.", role: "follower", owner: "dre", ownerName: "Dre",
+    audience: "code", followers: 9, version: 4, library: true,
+    following: { shift: 2, skipped: ["u3"], moved: { u2: 1 }, paused: false, since: null, until: null, own: null, early: 0, share: true, teamAsk: false,
+      progress: { u1: [120, 80, 120], u2: [50, 10, 160] }, ...(following || {}) },
+    doc: { deck: "Big Step 1", pace: { mode: "daily", days: [1, 1, 1, 1, 1, 0, 0], daily: 40 }, units,
+      events: [{ id: "q1", day: day(12), name: "Path quiz" }], reviews: [{ day: day(6), from: "u1", to: "u2" }] } };
 }
 const msg = (c, a) => "dcplan:" + JSON.stringify({ c, a: a || {} });
 const settle = () => new Promise((r) => setImmediate(r));
 async function run(x, c, a) { x.f.cmd(msg(c, a)); for (let i = 0; i < 6; i++) await settle(); return x.shown[x.shown.length - 1]; }
 
 // ---- the page, drawn from the face's view, every control fired ----
-function drawAll(x, view, sheet) {
+function drawAll(x, view, sheet, mode) {
   const { ctx, dom } = x.site;
   const root = new dom.El("div"); root.attrs.id = "dcp"; root.className = "dcp";
   dom.app.replaceChildren(root);
   const sent = [], errors = [];
   ctx.pycmd = (m) => sent.push(m);
-  const draw = () => { ctx.dcPlan.show(JSON.parse(JSON.stringify(view))); if (sheet) ctx.dcPlan.sheet(JSON.parse(JSON.stringify(sheet))); };
-  try { ctx.dcPlan.start(JSON.parse(JSON.stringify(view)), true); if (sheet) ctx.dcPlan.sheet(JSON.parse(JSON.stringify(sheet))); } catch (e) { errors.push(`draw: ${e.stack}`); }
+  const draw = () => { ctx.dcPlan.show(JSON.parse(JSON.stringify(view))); if (mode) ctx.dcPlan.set({ mode }); if (sheet) ctx.dcPlan.sheet(JSON.parse(JSON.stringify(sheet))); };
+  try { ctx.dcPlan.start(JSON.parse(JSON.stringify(view)), true); if (mode) ctx.dcPlan.set({ mode }); if (sheet) ctx.dcPlan.sheet(JSON.parse(JSON.stringify(sheet))); } catch (e) { errors.push(`draw: ${e.stack}`); }
   const text = root.textContent;
   const controls = () => { const xs = []; dom.walk(root, (el) => { if (el !== root && (el.ls.click || el.ls.change)) xs.push(el); }); return xs; };
   const menus = () => root.children.filter((c) => / menu/.test(` ${c.className}`));
@@ -394,10 +417,132 @@ function drawAll(x, view, sheet) {
   await run(l, "deck_tick", { key: `deck:Big Step 1::Extras`, on: true });
   check("planface: a tick with a set picked adds to that set", l.B.doc.units.find((u) => u.id === "u1").decks.includes("Big Step 1::Extras"), l.B.doc.units.find((u) => u.id === "u1"));
 
-  // -- Add to my calendar: the site's own calendar file of the plan (GET /plans/ics, at /p/CODE.ics) --
+  // -- Add to my calendar: the plan as a calendar file, made here (ics.py's twin) --
   await run(c, "calendar");
-  check("planface: Add to my calendar: the plan's calendar file the site serves (/p/CODE.ics), nothing new on the server",
-    c.site.went.includes("download:/p/PATH2026.ics") && /calendar/.test(c.f.F.status), [c.site.went, c.f.F.status]);
+  const ics = c.site.files["Path plan.ics"] || "";
+  check("planface: Add to my calendar: the plan's sets, quizzes and review days as a calendar file, its cards counted",
+    /^BEGIN:VCALENDAR\r\n/.test(ics) && (ics.match(/BEGIN:VEVENT/g) || []).length === 3 + 2 + 1 && ics.includes("SUMMARY:Cell injury · Path plan")
+    && ics.includes("DESCRIPTION:Path plan · 120 cards") && /Saved/.test(c.f.F.status), [Object.keys(c.site.files), c.f.F.status]);
+
+  // ======== a follower: the same page, read-only, on my days ========
+  const fo = await face(0, { follower: true });
+  const T0 = fo.t0, D = fo.day;
+  v = fo.shown[fo.shown.length - 1];
+  const mu = (id) => fo.B.doc.units.find((u) => u.id === id);
+  check("follower: the plan on my days: my shift, the set I skip left out, the one I moved a day later again (plans.my_doc)",
+    !mu("u3") && mu("u1").opens === D(-10) && mu("u1").due === D(-8) && mu("u2").opens === D(0) && mu("u2")._moved === 1 && mu("u4").opens === D(10)
+    && fo.B.doc.reviews[0].day === D(8) && fo.B.events()[0].day === D(12), fo.B.doc.units.map((u) => [u.id, u.opens]));
+  check("follower: a follower's head: no Undo, no Share; the view says nothing only Anki does",
+    v.head.author === false && !v.head.undo.length && v.without.includes("browse") && !v.plan.shape && !v.plan.sending, v.head);
+  check("follower: today's set and what's behind, from what my Anki synced; nothing to study here",
+    v.plan.now && v.plan.now.head === "Today" && v.plan.now.words === "Inflammation, 150 new of 160" && v.plan.now.study === false
+    && v.plan.behind && /Cell injury: 40 cards not seen yet/.test(v.plan.behind.words) && v.plan.behind.button === "", [v.plan.now, v.plan.behind]);
+  const items = v.plan.weeks.flatMap((w) => w.items);
+  const it = (id) => items.find((x) => x.key && x.key[1] === id);
+  check("follower: each set says what's left of it, behind in amber; one ahead says when it opens",
+    it("u1").right === "40 left, behind" && it("u1").tone === "warn" && it("u1").state === "late" && it("u2").right === "150 left" && it("u2").state === "now"
+    && /^opens /.test(it("u4").right) && !it("u3"), [it("u1"), it("u2"), it("u4")]);
+  check("follower: what my sets hold: seen, open, still shut", v.plan.cover && v.plan.cover.cards === 280 && v.plan.cover.seen === 90
+    && v.plan.cover.open === 80 && v.plan.cover.shut === 110, v.plan.cover);
+  check("follower: Month's load is my sets' cards on my days", Object.keys(v.plan.load).length > 0 && v.plan.cal.length === 4, v.plan.load);
+  const p2 = (await run(fo, "pick", { key: ["date", "u2"] })).panel;
+  check("follower: a set's panel: when it opened, my day for it, what's open and seen; its sources' names, no menu, nothing to change",
+    p2.author === false && /^Opened /.test(p2.meta) && /1 day later on your copy/.test(p2.meta) && p2.said === "50 open, 110 still shut, 10 seen"
+    && p2.n === 160 && p2.sources.length && p2.sources.every((s) => !s.menu && s.n === null) && !p2.more && p2.notes.writes === false, p2);
+  const p4 = (await run(fo, "pick", { key: ["date", "u4"] })).panel;
+  check("follower: a set ahead says when it opens and what it's for", /^Opens /.test(p4.meta) && /for Path quiz/.test(p4.meta), p4.meta);
+  const p1 = (await run(fo, "pick", { key: ["date", "u1"] })).panel;
+  check("follower: notes on its day are the plan's day's, on my set's day too (my days are 2 later)",
+    p1.notes.rows.length === 1 && p1.notes.day === D(-12) && p1.notes.dayw === fo.ctx.pretty(D(-10)) && /Chapter 1/.test(p1.todo.join()), p1.notes);
+  const pe = (await run(fo, "pick", { key: ["event", "q1"] })).panel;
+  check("follower: a quiz's panel: the sets that lead up to it", pe.kind === "event" && pe.items.length === 1 && /Tests 1 set/.test(pe.said), pe);
+  const fi = (await run(fo, "tab", { tab: "insights" })).insights;
+  check("follower: Insights: the workload on my days; my sets, what I've seen and what's to go",
+    fi.work && fi.work.rows && fi.work.rows.length && fi.deck.words === "500 cards on your sets" && fi.deck.key === "You've seen 90 of them; 410 to go."
+    && fi.has.exams.length === 1 && fi.has.big.length >= 3, [fi.deck, fi.work && fi.work.words]);
+  const fs2 = (await run(fo, "tab", { tab: "settings" })).settings;
+  check("follower: Settings: my follow, nothing only Anki does (Held back, Today's set, Change deck, Open everything, My schedule)",
+    fs2.role === "follower" && fs2.head === "Following Dre's path" && fs2.later === "2 days later" && fs2.skips.length === 1 && /Questions/.test(fs2.skips[0].label)
+    && fs2.held === null && fs2.lesson === null && fs2.sched === false && ["held", "change_deck", "open_everything"].every((k) => fs2.hide.includes(k))
+    && fs2.team === "Leave its squad" && fs2.copy && fs2.reset && fs2.ahead.some((x) => x.uid === "u4"), fs2);
+  // the page: every view and sheet drawn, every control fired, every message handled
+  const fviews = { "follower plan": [await run(fo, "tab", { tab: "plan" })], "follower month": [fo.shown[fo.shown.length - 1], null, "month"],
+    "follower week": [fo.shown[fo.shown.length - 1], null, "week"], "follower insights": [await run(fo, "tab", { tab: "insights" })],
+    "follower settings": [await run(fo, "tab", { tab: "settings" })] };
+  for (const [n, a2] of [["shift", { later: true }], ["pause", {}], ["reset", {}], ["stop_following", {}], ["copy_mine", {}]]) {
+    await run(fo, "tabcmd", { name: n, args: a2 });
+    fviews[`follower sheet ${n}`] = [fviews["follower settings"][0], fo.sheets[fo.sheets.length - 1]];
+  }
+  const fsent = [];
+  for (const [k, [view2, sh2, mode]] of Object.entries(fviews)) {
+    const d = drawAll(fo, view2, sh2, mode);
+    check(`follower: the page draws ${k} and every control fires without an error (${d.controls} controls)`, !d.errors.length && d.controls > 0, d.errors.slice(0, 2));
+    fsent.push(...d.sent);
+    if (k === "follower plan") {
+      check("follower: the page says the follower's words and nothing of an author's or Anki's",
+        /Today/.test(d.text) && /Behind/.test(d.text) && /150 left/.test(d.text) && /still shut/.test(d.text) && !/Undo|Share…|Paste plan lines|Needs a look|Study|in Browse/.test(d.text),
+        d.text.match(/Undo|Share…|Paste plan lines|Needs a look|.{20}Study.{20}|in Browse/g));
+    }
+    if (k === "follower settings") {
+      check("follower: Settings drawn: my dates, skipping, cards open, its squad's way in and out, pause, my own copy, its page; no Held back",
+        ["My dates", "Skip a set", "Each morning, on their dates", "Leave its squad", "Pause until…", "Make my own copy", "Its page", "Stop following…"].every((w) => d.text.includes(w))
+        && !/Held back|Today's set/.test(d.text), d.text.slice(0, 500));
+    }
+  }
+  const fnames = new Set(fsent.filter((m) => m.c === "tabcmd").map((m) => m.a.name));
+  check("follower: no click reaches what only Anki does", !["held", "change_deck", "open_everything", "schedule", "lesson_deck"].some((k) => fnames.has(k)), [...fnames]);
+  const funk = [...new Set(fsent.map((m) => m.c))].filter((c2) => !fo.f.handlers[c2]), funkT = [...fnames].filter((c2) => !fo.f.tabHandlers[c2]);
+  check("follower: every message the follower's page sent has its handler", !funk.length && !funkT.length && fsent.length > 20, [funk, funkT]);
+  const fb = await face(0, { follower: true });
+  threw = [];
+  for (const m of fsent) { try { fb.f.cmd(msg(m.c, m.a)); for (let i = 0; i < 4; i++) await settle(); } catch (e) { threw.push([m.c, e.message]); } }
+  check("follower: each message sent back through a follower's face: none throws", !threw.length, threw.slice(0, 3));
+
+  // -- my follow's changes: the PATCHes the old page and Anki send (worker/README.md: PATCH /plans/{id}/follow) --
+  const fp = await face(0, { follower: true });
+  const sent2 = async (c2, a2) => { const n0 = fp.store.follows.length; await run(fp, "tabcmd", { name: c2, args: a2 }); return fp.store.follows.slice(n0); };
+  check("follower: Cards open: When I'm ready, then on their dates again (the old page's own: own, or null)",
+    JSON.stringify(await sent2("own", { own: "ready" })) === JSON.stringify([{ own: "ready" }])
+    && JSON.stringify(await sent2("own_next", { on: true })) === JSON.stringify([{ own: "next" }])
+    && JSON.stringify(await sent2("own", { own: "" })) === JSON.stringify([{ own: null }]), fp.store.follows);
+  check("follower: My dates: some days later, then as the plan (Anki's set_days(shift))",
+    JSON.stringify(await sent2("shift", { later: true, days: 5 })) === JSON.stringify([{ shift: 5 }])
+    && JSON.stringify(await sent2("shift", { later: false })) === JSON.stringify([{ shift: 0 }]) && fp.B.doc.units.find((u) => u.id === "u1").opens === D(-12), fp.store.follows);
+  check("follower: Skip a set, and put it back (the whole list, as Anki sends it)",
+    JSON.stringify(await sent2("skip", { uid: "u4", on: true })) === JSON.stringify([{ skipped: ["u3", "u4"] }]) && !fp.B.doc.units.some((u) => u.id === "u4")
+    && JSON.stringify(await sent2("skip", { uid: "u3", on: false })) === JSON.stringify([{ skipped: ["u4"] }]), fp.store.follows);
+  check("follower: Pause until a day, then Resume, my sets pushed back the days I was away",
+    JSON.stringify(await sent2("pause", { until: D(9) })) === JSON.stringify([{ paused: true, since: T0, until: D(9) }]), fp.store.follows);
+  const back = await face(0, { follower: true, following: { paused: true, since: D(-4), until: D(3) } });
+  const nb = back.store.follows.length;
+  await run(back, "tabcmd", { name: "pause" });
+  const pick = back.sheets[back.sheets.length - 1];
+  await run(back, "tabcmd", { name: "pause", args: { uid: "push" } });
+  check("follower: Resume asks first (push my sets back, or keep my days), then one PATCH as Anki's back()",
+    pick.kind === "pick" && pick.options.length === 2 && JSON.stringify(back.store.follows.slice(nb)) === JSON.stringify([{ paused: false, since: null, until: null, shift: 6 }]), back.store.follows);
+  await run(fp, "tabcmd", { name: "reset" });
+  check("follower: Reset to default says what goes back first, then the old page's very PATCH",
+    /Reset to default/.test(fp.sheets[fp.sheets.length - 1].title) && JSON.stringify(await sent2("reset", { sure: true }))
+      === JSON.stringify([{ shift: 0, skipped: [], moved: {}, paused: false, until: null, since: null }]), fp.store.follows);
+  check("follower: its squad: leave, then join again (the old page's POST and DELETE /plans/{id}/team)",
+    JSON.stringify(await sent2("team")) === JSON.stringify(["DELETE team"]) && JSON.stringify(await sent2("team")) === JSON.stringify(["POST team"]), fp.store.follows);
+  await sent2("early", { n: 2 });
+  check("follower: Open early: the follow's early", JSON.stringify(fp.store.follows.slice(-1)) === JSON.stringify([{ early: 2 }]), fp.store.follows);
+  const nc = fp.site.calls.length;
+  await run(fp, "tabcmd", { name: "copy_mine", args: { start: D(14) } });
+  check("follower: Make my own copy (a library plan): POST /plans/{id}/copy, then my copy's page",
+    fp.site.calls.slice(nc).some(([m, u, b]) => m === "POST" && /\/copy$/.test(u) && b.start === D(14)) && fp.site.went.includes("/plans/copyplanxxxxxxxx/edit"), fp.site.went);
+  await run(fp, "tabcmd", { name: "stop_following", args: { sure: true } });
+  check("follower: Stop following: DELETE /plans/{id}/follow, then Plans", fp.store.follows.includes("unfollow") && fp.site.went.includes("/plans"), fp.store.follows);
+  for (const k of ["held", "change_deck", "open_everything"]) await run(fp, "tabcmd", { name: k });
+  check("follower: what only Anki does says so, and sends nothing", /done in Anki/.test(fp.f.F.status), fp.f.F.status);
+  // Add to my calendar: my days, without the sets I skip (ics.py's, as Anki makes a follower's)
+  const fc = await face(0, { follower: true });
+  await run(fc, "calendar");
+  const fics = fc.site.files["Dre s path.ics"] || "";
+  check("follower: Add to my calendar: my days, the set I skip left out, my Anki's counts",
+    fics.includes(`DTSTART;VALUE=DATE:${D(0).replace(/-/g, "")}`) && fics.includes("SUMMARY:Inflammation · Dre's path") && !fics.includes("Questions")
+    && fics.includes("Dre's path · 160 cards") && (fics.match(/BEGIN:VEVENT/g) || []).length === 3 + 1 + 1, [Object.keys(fc.site.files), fics.slice(0, 300)]);
 
   // -- the deck's tags not here yet (Anki sends them): no counts, nothing to tick, the page still whole --
   const nt = await face(0, { noTree: true });

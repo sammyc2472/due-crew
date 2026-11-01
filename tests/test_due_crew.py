@@ -9612,6 +9612,34 @@ def test_site_plan_page_is_the_addons():
     if not node:
         print("SKIP the site's plan face in node: no node")
         return
+    # Add to my calendar: the face's Ics restates planner/ics.py (change one, change both): the same file on the same docs
+    import datetime as _dt
+    from due_crew.planner import ics as ICS
+    docs = [("p1", "Path, six weeks; done", {"units": [
+                {"id": "a", "name": "Cell injury, part 1", "opens": "2026-11-02", "due": "2026-11-04"},
+                {"id": "b", "name": "Inflammation\nand more", "opens": "2026-11-05", "due": "2026-11-01"},
+                {"id": "c", "name": "", "opens": "2026-11-09"}, {"id": "d", "name": "Skipped", "opens": "2026-11-10"},
+                {"id": "e", "name": "Bad day", "opens": "2026-13-40"}, "not a set"],
+             "events": [{"id": "q1", "day": "2026-11-12", "name": "Heme quiz"}, {"id": "q2", "day": "x"}],
+             "reviews": [{"day": "2026-11-11", "from": "a", "to": "b"}]}, {"a": 120, "b": 1, "c": 0}, ["d"]),
+            ("p2", "Ünïcödé " + "名前 " * 30, {"units": [{"id": "u", "name": "Ωmega " * 20, "opens": "2026-12-31"}]}, {"u": 1234567}, []),
+            ("p3", None, {}, None, [])]
+    now = _dt.datetime(2026, 11, 1, 9, 5, 7, tzinfo=_dt.timezone.utc)
+    prog = ("const vm = require('vm'), fs = require('fs');"
+            "const ctx = { console, URL, Blob: undefined, Date, JSON, Math, Set, Map, Object, Array, String, Number, RegExp };"
+            "ctx.addDays = (s, n) => { const d = new Date(`${s}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };"
+            "vm.createContext(ctx); vm.runInContext(fs.readFileSync(process.argv[1], 'utf8') + ';this.PF = PlanFace;', ctx);"
+            "const cases = JSON.parse(process.argv[2]), now = new Date(process.argv[3]);"
+            "process.stdout.write(JSON.stringify(cases.map(([pid, name, doc, counts, skip]) => [ctx.PF.Ics.calendar(pid, name, doc, counts, skip, now), ctx.PF.Ics.fileName(name)])));")
+    got = subprocess.run([node, "-e", prog, os.path.join(site, "planface.js"), json.dumps(docs), now.isoformat()],
+                         capture_output=True, text=True, timeout=60)
+    try:
+        js = json.loads(got.stdout)
+    except ValueError:
+        js = None
+    want = [[ICS.calendar(pid, name, doc, counts, skip, now=now), ICS.file_name(name)] for pid, name, doc, counts, skip in docs]
+    check("the site's plan face: Add to my calendar makes ics.py's file, byte for byte, and its name (the face's Ics, its twin)",
+          js == want, (got.stderr[-600:] if js is None else [a[0][:400] for a, b in zip(js, want) if a != b][:1]))
     got = subprocess.run([node, os.path.join(REPO, "tests", "planface_test.js")], capture_output=True, text=True, timeout=180)
     try:
         out = json.loads(got.stdout)

@@ -82,6 +82,55 @@ const PlanFace = (() => {
   const sortPlans = (ps) => (ps || []).filter((p) => p && p.id).sort((a, b) => (isAuthor(a) ? 0 : 1) - (isAuthor(b) ? 0 : 1)
     || String(a.name || "").toLowerCase().localeCompare(String(b.name || "").toLowerCase()));
 
+  /** Add to my calendar (due_crew/planner/ics.py: change one, change both; the suite checks): a plan's
+   *  sets and its quizzes and exams as a calendar file (.ics, RFC 5545). Each set an all-day event on its
+   *  days, each quiz or exam one, each review day one. A follower's has their own days, skipped sets left out. */
+  const Ics = (() => {
+    const PRODID = "-//Due Crew//Plans//EN";
+    const esc = (t) => String(t ?? "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r\n|\n|\r/g, "\\n");
+    /** lines over 75 octets folded (a CRLF and a space), never inside a character */
+    function fold(line) {
+      const out = []; let cur = "", n = 0;
+      for (const ch of line) {
+        const c = ch.codePointAt(0), k = c < 0x80 ? 1 : c < 0x800 ? 2 : c < 0x10000 ? 3 : 4;  // its UTF-8 octets
+        if (n + k > (out.length ? 74 : 75)) { out.push(cur); cur = ""; n = 0; }
+        cur += ch; n += k;
+      }
+      out.push(cur);
+      return out.join("\r\n ");
+    }
+    const ok = (s) => /^\d{4}-\d\d-\d\d$/.test(String(s || "")) && !Number.isNaN(Date.parse(`${s}T00:00:00Z`));
+    const ymd = (s) => String(s).replace(/-/g, "");
+    function event(uid, stamp, first, last, summary, desc) {
+      const lines = ["BEGIN:VEVENT", `UID:${uid}`, `DTSTAMP:${stamp}`, `DTSTART;VALUE=DATE:${ymd(first)}`, `DTEND;VALUE=DATE:${ymd(addDays(last, 1))}`,
+        `SUMMARY:${esc(summary)}`, "TRANSP:TRANSPARENT"];
+      if (desc) lines.push(`DESCRIPTION:${esc(desc)}`);
+      lines.push("END:VEVENT");
+      return lines;
+    }
+    function calendar(pid, name, doc, counts = {}, skipped = [], now = new Date()) {
+      const stamp = now.toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
+      const plan = String(name || "Plan").split(/\s+/).filter(Boolean).join(" ");
+      let lines = ["BEGIN:VCALENDAR", "VERSION:2.0", `PRODID:${PRODID}`, "CALSCALE:GREGORIAN", "METHOD:PUBLISH", `X-WR-CALNAME:${esc(plan)}`];
+      const skip = new Set(skipped || []);
+      for (const u of (doc || {}).units || []) {
+        if (!u || typeof u !== "object" || skip.has(u.id) || !ok(u.opens)) continue;
+        let last = u.due && ok(u.due) ? u.due : u.opens;
+        if (last < u.opens) last = u.opens;
+        const n = (counts || {})[u.id];
+        lines = lines.concat(event(`${pid}-${u.id}@duecrew.com`, stamp, u.opens, last, `${u.name || "Set"} · ${plan}`,
+          `${plan}${n ? ` · ${Number(n).toLocaleString("en-US")} card${Number(n) !== 1 ? "s" : ""}` : ""}`));
+      }
+      for (const e of (doc || {}).events || []) if (e && ok(e.day)) lines = lines.concat(event(`${pid}-${e.id}@duecrew.com`, stamp, e.day, e.day, `${e.name || "Exam"} · ${plan}`, plan));
+      for (const r of (doc || {}).reviews || []) if (r && ok(r.day)) lines = lines.concat(event(`${pid}-r${ymd(r.day)}@duecrew.com`, stamp, r.day, r.day, `Review day · ${plan}`, plan));
+      lines.push("END:VCALENDAR");
+      return `${lines.map(fold).join("\r\n")}\r\n`;
+    }
+    /** a file name for it: the plan's name, safe on every system */
+    const fileName = (name) => `${String(name || "Plan").replace(/[^\p{L}\p{N} \-_.]/gu, " ").split(/\s+/).filter(Boolean).join(" ").slice(0, 60) || "Plan"}.ics`;
+    return { calendar, fileName };
+  })();
+
   // ---- the face: one plan's page ----
 
   /** B: builder.js's plan (builder(id, face)'s attach), or null for New plan
@@ -127,6 +176,35 @@ const PlanFace = (() => {
     const capOf = () => { const p = paceOf(); return p.mode === "placed" ? 0 : p.mode === "end" ? (B.endDaily() || p.daily || 0) : p.daily || 0; };
     const lastEvent = () => B.events().slice().sort((a, b) => a.day.localeCompare(b.day)).pop() || null;
     const prep = (e) => B.prepOf(e.id);
+
+    // ---- a follower's: my follow, my progress (what my Anki syncs), the plan on my days ----
+    const follower = () => !!B && !B.author && !!(B.plan && B.plan.following);
+    const follow = () => (B && B.plan && B.plan.following) || {};
+    /** [opened, seen, total] a set, as my Anki last synced it (POST /sync's plans) */
+    const progOf = (u) => { const p = (follow().progress || {})[u.id]; return Array.isArray(p) && p[2] > 0 ? p : null; };
+    /** a set's cards: my Anki's count, else the plan's (plans.unit_total; the tree's for an author) */
+    const totalOf = (u, placed) => { const p = !author() && progOf(u); return p ? p[2] : B.unitTotal(u, placed); };
+    /** the work each day asks (Work.map): the deck tree's counts for an author, my Anki's for me */
+    const workMap = () => (author() ? (tree() ? B.workMap() : new Map()) : Work.map(B.doc, (u) => totalOf(u), (paceOf().days || [1, 1, 1, 1, 1, 1, 1])));
+    /** the plan as I run it: my shift, my skips left out, a set I moved (plans.my_doc) */
+    function myDoc(d, f) {
+      const skipped = new Set(f.skipped || []), shift = Number(f.shift || 0);
+      const moved = Object.fromEntries(Object.entries(f.moved || {}).filter(([, v]) => Number.isInteger(v) && v > 0));
+      if (!shift && !skipped.size && !Object.keys(moved).length) return d;
+      const out2 = { ...d, units: (d.units || []).filter((u) => !skipped.has(u.id)).map((u) => {
+        const v = { ...u }, by = shift + (moved[u.id] || 0);
+        if (by) for (const k of ["opens", "due", "check"]) if (v[k]) v[k] = addDays(v[k], by);
+        if (moved[u.id]) v._moved = moved[u.id];
+        return v;
+      }) };
+      if (shift) {
+        if (out2.end) out2.end = addDays(out2.end, shift);
+        if (out2.reviews) out2.reviews = out2.reviews.map((r) => ({ ...r, day: addDays(r.day, shift) }));
+      }
+      return out2;
+    }
+    /** my days in the builder's working copy (a follower's is never saved: builder.js saves only an author's) */
+    const runMine = () => { if (follower()) B.reload(myDoc(B.plan.doc, follow())); };
 
     // ---- showing ----
     function push() { if (F.ready && out.show) out.show(view()); }
@@ -279,6 +357,7 @@ const PlanFace = (() => {
       if ((u.cards || []).length || B.hasIds(u)) {
         out.push({ key: ["picks"], kind: "picks", group: "Picked cards", name: B.picksText(u), n: B.hasIds(u) && u.idn == null ? null : B.picksN(u), raw: B.picksList(u) || "" });
       }
+      if (!author()) for (const r of out) r.n = null;  // a follower's counts are their own Anki's (the set's, from what it syncs)
       const ORDER = ["plan", "resource", "system", "other", "cut", "question", "deck", "search", "picks"];
       const first = new Map();
       out.forEach((r, i) => { const k = `${ORDER.indexOf(r.kind)}|${r.group}`; if (!first.has(k)) first.set(k, i); });
@@ -292,8 +371,7 @@ const PlanFace = (() => {
     // ---- the Plan tab ----
     /** {Monday: {new, reviews, top, over, cap, new_week, reviews_week}} (view.week_asks) */
     function weekAsks() {
-      if (!tree()) return {};
-      const work = B.workMap();
+      const work = workMap();
       if (!work.size) return {};
       const per = new Map([...work].map(([d, e]) => [d, e.n]));
       const rv = new Map();
@@ -380,11 +458,20 @@ const PlanFace = (() => {
       return { n: F.changes.length, items, more: F.changes.length - items.length };
     }
     function dateItem(u, fr, look, placed, t0) {
-      const n = total(u, placed);
+      const n = author() ? total(u, placed) : null;
       const it = { kind: "date", key: ["date", u.id], day: u.opens, dayw: dw(u.opens), name: String(u.name || "?"), notSent: fr.has(u.id),
         past: String(u.due || u.opens) < t0, right: n !== null ? n.toLocaleString() : "", tone: "n" };
       if (u.due && u.due !== u.opens) it.span = `${dw(u.opens)} – ${dw(u.due)}`;
-      it.state = u.opens <= t0 && t0 <= (u.due || u.opens) ? "now" : String(u.due || u.opens) < t0 ? "past" : "ahead";
+      if (!author()) {  // mine: opens, what's left of it, behind (webmodel._date_item, from what my Anki synced)
+        const due = String(u.due || u.opens), p = progOf(u), left = p ? Math.max(0, p[2] - p[1]) : 0;
+        if (u.opens > t0) it.right = `opens ${dw(u.opens)}`;
+        else if (p) {
+          it.right = !left ? "all seen" : `${left.toLocaleString()} left${due >= t0 ? "" : ", behind"}`;
+          it.tone = due >= t0 || !left ? "n" : "warn";
+          it.state = !left ? "done" : due < t0 ? "late" : u.opens <= t0 ? "now" : "ahead";
+        }
+      }
+      it.state = it.state || (u.opens <= t0 && t0 <= (u.due || u.opens) ? "now" : String(u.due || u.opens) < t0 ? "past" : "ahead");
       const rs = rows(u);
       const bits = rs.slice(0, 6).map((r) => rowName(r) + (r.n !== null && r.n !== undefined ? ` (${r.n.toLocaleString()})` : ""));
       if (rs.length > 6) bits.push(`and ${(rs.length - 6).toLocaleString()} more`);
@@ -399,7 +486,45 @@ const PlanFace = (() => {
         const a = us.map((u) => u.opens).sort()[0], b = us.map((u) => u.due || u.opens).sort().pop();
         words = a !== b ? `tests ${dw(a)} – ${dw(b)}` : `tests ${dw(a)}`;
       } else words = e === lastEvent() ? "tests everything" : "tests no set yet";
-      return { kind: "event", key: ["event", e.id], day: e.day, dayw: dw(e.day), name: String(e.name || "?"), right: words, tone: "n", hay: String(e.name || "").toLowerCase() };
+      const it = { kind: "event", key: ["event", e.id], day: e.day, dayw: dw(e.day), name: String(e.name || "?"), right: words, tone: "n", hay: String(e.name || "").toLowerCase() };
+      const [cards, seen, has] = mine(us);
+      if (us.length && !author() && has) { it.under = `${pl(cards, "card")}, ${seen.toLocaleString()} seen`; it.underTone = "muted"; }
+      return it;
+    }
+    /** [cards, seen, opened, any counted] of these sets, as my Anki synced them */
+    function mine(us) {
+      let cards = 0, seen = 0, opened = 0, has = false;
+      for (const u of us) { const p = progOf(u); if (p) { has = true; cards += p[2]; seen += Math.min(p[1], p[2]); opened += Math.min(p[0], p[2]); } }
+      return [cards, seen, has, opened];
+    }
+    /** a follower's today and behind (webmodel.strips), from my days and my progress; nothing to study here */
+    function strips() {
+      const o = { now: null, behind: null };
+      if (author()) return o;
+      const t0 = today0(), us = byOpens();
+      const now = us.filter((u) => u.opens <= t0 && t0 <= (u.due || u.opens)).pop(), next = us.find((u) => u.opens > t0);
+      const u = now || next;
+      if (u) {
+        const name = String(u.name || "?"), p = progOf(u);
+        o.now = now ? { head: "Today", words: p ? `${name}, ${Math.max(0, p[2] - p[1]).toLocaleString()} new of ${p[2].toLocaleString()}` : name, uid: u.id, study: false }
+          : { head: "Next", words: `${fmt(u.opens)}, ${name}`, uid: u.id, study: false };
+      }
+      const behind = us.filter((x) => String(x.due || x.opens) < t0).map((x) => [x, progOf(x)]).filter(([, p]) => p && p[2] > p[1]).map(([x, p]) => [x, p[2] - p[1]]);
+      if (behind.length) {
+        const left = behind.reduce((a, [, n]) => a + n, 0);
+        const names = behind.slice(0, 2).map(([x]) => `${dw(x.opens)} ${x.name || "?"}`).join(", ");
+        o.behind = { words: `${names}${behind.length > 2 ? `, and ${(behind.length - 2).toLocaleString()} more` : ""}: ${pl(left, "card")} not seen yet. Your Anki has them.`,
+          button: "", uids: behind.map(([x]) => x.id) };
+      }
+      return o;
+    }
+    /** what my sets hold: seen, open and not seen, still shut (webmodel.cover, from my progress) */
+    function coverMine() {
+      if (author()) return null;
+      const [cards, seen, has, opened] = mine(units());
+      if (!has || !cards) return null;
+      const open = Math.max(0, opened - seen);
+      return { cards, seen, open, shut: Math.max(0, cards - seen - open), outside: 0 };
     }
     function reviewUnits(r) {
       const a = unit(r.from), b = unit(r.to);
@@ -441,11 +566,13 @@ const PlanFace = (() => {
       const cal = byOpens().map((u) => ({ kind: "date", key: ["date", u.id], day: u.opens, last: u.due || u.opens, name: String(u.name || "?") }))
         .concat(B.events().map((e) => ({ kind: "event", key: ["event", e.id], day: e.day, last: e.day, name: String(e.name || "?") })));
       const load = {};
-      if (tree()) for (const [d, e] of B.workMap()) if (e.n) load[d] = e.n;
-      return { weeks, today: t0, todayw: dw(t0), look: [...look.keys()].sort(), lookN: look.size, cal, load, cap: capOf(),
-        days: (paceOf().days || [1, 1, 1, 1, 1, 1, 1]).slice(), taper: tp, sending: sending(), cover: null, hasDeck: tree() && author(),
-        empty: !units().length && !B.events().length ? "No sets yet. Tick what the plan covers in the deck, or Add › A set." : "",
-        now: null, behind: null, shape: shapeLine(asks) };
+      for (const [d, e] of workMap()) if (e.n) load[d] = e.n;
+      const out2 = { weeks, today: t0, todayw: dw(t0), look: [...look.keys()].sort(), lookN: look.size, cal, load, cap: capOf(),
+        days: (paceOf().days || [1, 1, 1, 1, 1, 1, 1]).slice(), taper: tp, sending: sending(), cover: coverMine(), hasDeck: tree() && author(),
+        empty: !units().length && !B.events().length ? (author() ? "No sets yet. Tick what the plan covers in the deck, or Add › A set." : "No sets on this plan yet.") : "",
+        ...strips() };
+      if (author()) out2.shape = shapeLine(asks);
+      return out2;
     }
 
     // ---- the picked one, beside the plan ----
@@ -498,10 +625,22 @@ const PlanFace = (() => {
         s.menu = menu;
         return s;
       });
-      const n = total(u);
+      if (!a) {  // mine: when it opens, its finish-by day, what it's for (webmodel.date_panel), on my days
+        const ev = u.for && B.evById(u.for);
+        out.meta = [u.opens > t0 ? `Opens ${fmt(u.opens)}` : `Opened ${fmt(u.opens)}`, u.due ? `finish by ${fmt(u.due)}` : "",
+          ev ? `${B.forWord(u)} ${ev.name || "?"}` : "", u._moved ? `${pl(u._moved, "day")} later on your copy` : ""].filter(Boolean).join(" · ");
+      }
+      const p = !a ? progOf(u) : null;
+      const n = a ? total(u) : p ? p[2] : null;
       out.n = n;
       const bits = a && fr.has(u.id) ? ["changed, not sent"] : [];
-      if (!tree()) bits.push(`the deck's tags come from your Anki (Due Crew sends them once ${B.doc.deck || "the deck"} has a plan there)`);
+      if (!a) {
+        if (!p) bits.push("your Anki counts it at its next sync");
+        else {
+          const opened = Math.min(p[0], p[2]), shut = p[2] - opened;
+          bits.push(shut ? `${opened.toLocaleString()} open, ${shut.toLocaleString()} still shut` : `all ${opened.toLocaleString()} open`, `${Math.min(p[1], p[2]).toLocaleString()} seen`);
+        }
+      } else if (!tree()) bits.push(`the deck's tags come from your Anki (Due Crew sends them once ${B.doc.deck || "the deck"} has a plan there)`);
       else if (n) {
         bits.push(`${pl(n, "card")}`);
         const [x, y] = Sched.win(B.doc, u, 0);
@@ -509,7 +648,7 @@ const PlanFace = (() => {
         for (let d = x; d <= y; d = addDays(d, 1)) if (B.isStudy(d)) k++;
         if (k > 1) bits.push(`over ${k} study days, about ${Math.ceil(n / k).toLocaleString()} a day`);
       }
-      if (rs.some((r) => r.n === null && r.kind !== "question")) bits.push("searches and picks are counted in your Anki");
+      if (a && rs.some((r) => r.n === null && r.kind !== "question")) bits.push("searches and picks are counted in your Anki");
       out.said = bits.join(", ");
       const lines = (u.todo || []).filter((x) => x && typeof x === "object");
       out.todo = lines.map((x) => `${Todo.LABEL[x.k] || "Do"}: ${x.t || ""}`);
@@ -527,15 +666,23 @@ const PlanFace = (() => {
         more.push({ sep: true }, { label: "Copy the set's search", cmd: "copy_search" }, { sep: true }, { label: "Delete this set…", cmd: "delete", bad: true });
         out.more = more;
       }
-      out.notes = notesView(u.opens);
+      // notes are on the plan's day (everyone's): a follower's set on a day of their own reads and writes its plan day's
+      const own = !a && ((plan().doc || {}).units || []).find((x) => x.id === u.id);
+      out.notes = notesView(own ? own.opens : u.opens, u.opens);
       return out;
     }
     function eventPanel(e) {
-      const us = prep(e), placed = B.placedKeys();
+      const us = prep(e), placed = B.placedKeys(), a = author();
       let cards = 0;
-      const items = us.map((u) => { const n = total(u, placed); cards += n || 0; return { key: ["date", u.id], label: `${dw(u.opens)} · ${u.name || "?"}${n !== null ? ` · ${n.toLocaleString()}` : ""}` }; });
-      return { kind: "event", eid: e.id, name: String(e.name || ""), day: e.day, title: `${fmt(e.day)} · ${e.name || "?"}`, author: author(), items, n: us.length,
-        said: us.length ? `Tests ${pl(us.length, "set")}${tree() ? ` · ${pl(cards, "card")}` : ""}` : "No set leads up to it yet: pick it as a set's Leads up to." };
+      const items = us.map((u) => {
+        const p = !a ? progOf(u) : null, n = a ? total(u, placed) : p ? p[2] : null;
+        cards += n || 0;
+        return { key: ["date", u.id], label: `${dw(u.opens)} · ${u.name || "?"}${n !== null ? ` · ${n.toLocaleString()}` : ""}` };
+      });
+      const [, seen, has] = mine(us);
+      const counted = a ? (tree() ? ` · ${pl(cards, "card")}` : "") : has ? ` · ${pl(cards, "card")}, ${seen.toLocaleString()} seen` : "";
+      return { kind: "event", eid: e.id, name: String(e.name || ""), day: e.day, title: `${fmt(e.day)} · ${e.name || "?"}`, author: a, items, n: us.length,
+        said: us.length ? `Tests ${pl(us.length, "set")}${counted}` : a ? "No set leads up to it yet: pick it as a set's Leads up to." : "No set leads up to it yet." };
     }
     function reviewPanel(r) {
       const us = reviewUnits(r), a = unit(r.from), b = unit(r.to);
@@ -551,11 +698,11 @@ const PlanFace = (() => {
       if (key[0] === "review") { const r = reviewOf(key[1]); return r ? reviewPanel(r) : none; }
       return none;
     }
-    function notesView(day) {
+    function notesView(day, shown = day) {
       const writes = !(plan().library && !author());
       const list = (B.notes || []).filter((x) => x.day === day).sort((a, b) => String(a.id).localeCompare(String(b.id)));
       return { rows: list.map((x) => ({ id: x.id, who: x.mine ? "You" : String(x.name || "?"), text: String(x.text || ""), remove: !!x.remove })),
-        writes, day, dayw: fmt(day), loading: false };
+        writes, day, dayw: fmt(shown), loading: false };
     }
 
     // ---- the deck beside the plan ----
@@ -683,8 +830,8 @@ const PlanFace = (() => {
     // ---- Insights: the site's (the deck tree's counts; nobody's cards) ----
     function insights() {
       if (!units().length) return { none: "Nothing to count yet: the plan has no sets." };
-      if (!tree()) return { none: `Nothing to count yet: ${B.doc.deck || "the deck"}'s tags come from your Anki.` };
-      const asks = weekAsks(), t0 = today0(), work = B.workMap();
+      if (author() && !tree()) return { none: `Nothing to count yet: ${B.doc.deck || "the deck"}'s tags come from your Anki.` };
+      const asks = weekAsks(), t0 = today0(), work = workMap();
       const days = [...units().map((u) => u.opens), ...B.events().map((e) => e.day)].sort();
       const lastD = [B.lastDay(), B.doc.end || "", ...B.events().map((e) => e.day)].filter(Boolean).sort().pop();
       const rowsW = [];
@@ -714,7 +861,20 @@ const PlanFace = (() => {
           rows: rowsW.map((x) => ({ week: `Week ${x.n}${x.now ? ", this week" : ""}`, now: x.now, past: x.past, span: x.span, events: x.events.join(", "), tip: tip(x),
             new: pct(x.new, newTop), has: !!x.new, over: x.over, newWords: newW(x), rv: pct(x.reviews, rvTop), hasRv: x.reviews > 0, rvWords: rvW(x) })) };
       }
-      return { work: wk, deck: deckInsight(), has: contents() };
+      return { work: wk, deck: author() ? deckInsight() : myDeck(), has: contents() };
+    }
+    /** a follower's: what my sets hold, what I've seen of it and what's to go (webtabs._deck's key), as my Anki synced it */
+    function myDeck() {
+      const [, seen, has] = mine(units());
+      const all = units().reduce((a, u) => a + totalOf(u), 0);  // my Anki's count of a set, else the plan's
+      const pct = (v, w) => (w ? Math.max(0, Math.min(100, Math.round((10000 * v) / w) / 100)) : 0);
+      const o = { words: `${pl(all, "card")} on your sets`, tip: "", bar: [{ v: has ? pct(seen, all) : 0, k: "fill", has: has && seen > 0 }] };
+      if (has) {
+        o.bar.push({ v: pct(all - seen, all), k: "soft", has: all > seen });
+        o.tip = `${seen.toLocaleString()} of ${all.toLocaleString()} seen`;
+        o.key = `You've seen ${seen.toLocaleString()} of them; ${(all - seen).toLocaleString()} to go.`;
+      } else o.by = "Your Anki counts what you've seen at its next sync.";
+      return o;
     }
     function deckInsight() {
       const placed = B.placedKeys();
@@ -744,16 +904,17 @@ const PlanFace = (() => {
       return o;
     }
     function contents() {
-      const placed = B.placedKeys(), last = lastEvent();
-      const held = units().reduce((a, u) => a + B.unitTotal(u, placed), 0);
+      const placed = B.placedKeys(), last = lastEvent(), of = (u) => totalOf(u, placed);
+      const held = units().reduce((a, u) => a + of(u), 0);
       const exams = B.events().slice().sort((a, b) => a.day.localeCompare(b.day)).map((e) => {
-        const us = prep(e), cards = us.reduce((a, u) => a + B.unitTotal(u, placed), 0);
+        const us = prep(e), cards = us.reduce((a, u) => a + of(u), 0);
         const words = !us.length && e === last ? `everything: ${pl(held, "card")}` : !us.length ? "no set for it yet" : `${pl(cards, "card")} from ${pl(us.length, "set")}`;
         return { key: ["event", e.id], day: e.day, dayw: dw(e.day), name: String(e.name || "?"), words };
       });
-      const big = units().map((u) => [u, B.unitTotal(u, placed)]).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1] || a[0].opens.localeCompare(b[0].opens)).slice(0, 5)
+      const big = units().map((u) => [u, of(u)]).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1] || a[0].opens.localeCompare(b[0].opens)).slice(0, 5)
         .map(([u, n]) => ({ key: ["date", u.id], day: u.opens, dayw: dw(u.opens), name: String(u.name || "?"), words: pl(n, "card") }));
-      return { exams, big, lines: ["Counts are the deck's tags as your Anki last sent them; searches and picked cards are counted in Anki."] };
+      return { exams, big, lines: [author() ? "Counts are the deck's tags as your Anki last sent them; searches and picked cards are counted in Anki."
+        : "Counts are your Anki's, as it last synced; a set it hasn't counted yet shows the plan's count."] };
     }
 
     // ---- Settings: an author's ----
@@ -819,7 +980,37 @@ const PlanFace = (() => {
         modes: MODES.map(([k, label]) => ({ v: k, label })), mode: v.mode, daily: v.daily, taper: v.taper, taperOff: !endOf(v),
         catchups, catchup: v.catchup, go: waiting() || others(plan()) ? "Add to the changes" : "Save", preview: changed ? shapePreview(base, v) : null };
     }
+    /** Reset to default's lines: what goes back to the plan's (plan_flow.reset_lines, the old page's resetBtn) */
+    function resetLines() {
+      const f = follow(), n = (f.skipped || []).length, m = Object.keys(f.moved || {}).length;
+      return [f.shift ? `Your sets back on time (now ${pl(f.shift, "day")} later)` : "", n ? `${pl(n, "skipped set")} back` : "",
+        m ? `${pl(m, "moved set")} back` : "", f.paused || f.until ? "Your pause ends" : ""].filter(Boolean);
+    }
+    const inTeam = () => !!(follow().share && !follow().teamAsk);
+    /** Settings, a follower's: my follow (webtabs._follower), wired to PATCH /plans/{id}/follow as the old page and Anki send it */
+    function mySettings() {
+      const p = plan(), f = follow();
+      if (!f || !Object.keys(f).length) return { role: "follower", pid: p.id, gone: "You don't follow it on this account any more." };
+      const shift = Number(f.shift || 0), own = String(f.own || ""), have = new Set(f.skipped || []);
+      const names = new Map(((p.doc || {}).units || []).map((u) => [u.id, u]));
+      const label = (u) => `${fmt(u.opens)} · ${u.name || "?"}`;
+      const t0 = today0(), early = Number(f.early || 0);
+      return { role: "follower", pid: p.id, busy: F.busy,
+        head: `Following ${p.name || "the plan"}${f.paused ? `, paused${f.until ? ` until ${fmt(f.until)}` : ""}` : ""}`,
+        shift, later: shift ? `${pl(shift, "day")} later` : "Some days later…",
+        skips: [...have].map((uid) => ({ uid, label: names.has(uid) ? label(names.get(uid)) : "a set taken off" })),
+        ahead: [...names.values()].filter((u) => String(u.opens || "") >= t0 && !have.has(u.id)).sort((a, b) => String(a.opens).localeCompare(String(b.opens)))
+          .slice(0, 20).map((u) => ({ uid: u.id, label: label(u) })),
+        own, held: null, lesson: null,
+        squad: inTeam() ? "You're in it" : "Not in it", squadTip: inTeam() ? "Its squad sees that you showed up, never your numbers" : "",
+        team: inTeam() ? "Leave its squad" : "Join its squad",
+        paused: !!f.paused, copy: !!(p.library || p.listed),
+        early: [[0, "Off"], [1, "1 day"], [2, "2 days"], [3, "3 days"], [5, "5 days"], [7, "7 days"]].map(([k, lb]) => ({ n: k, label: lb, on: early === k })),
+        sched: false, reset: resetLines().length > 0, hide: ["held", "change_deck", "open_everything", "schedule", "lesson_deck"],
+        more: [{ label: "Its page: posts, calendar link ›", name: "its_page" }] };
+    }
     function settings() {
+      if (!author()) return mySettings();
       const p = plan(), d = B.doc, own = owner(), eds = (p.editors || []).filter((e) => e && e.uid);
       const offered = p.handover;
       const coas = eds.map((e) => ({ uid: String(e.uid), name: String(e.name || "?"),
@@ -1506,16 +1697,17 @@ const PlanFace = (() => {
         B.syncCuts(); B.byOpens();
       }, ["Added", `${pl(r.units.length, "set")} from plan lines`])) { if (out.pasted) out.pasted(); }
     };
-    /** Add to my calendar: the site's own calendar file of the plan (/p/CODE.ics, the Worker's GET /plans/ics,
-     *  its sets, quizzes and review days, as ics.py makes Anki's); the plan as it's saved */
+    /** Add to my calendar (webface.c_calendar): the plan as it shows here as a calendar file (Ics, ics.py's twin):
+     *  an author's with the changes waiting, mine on my days without the sets I skip; each set's cards as counted here */
     C.calendar = () => {
-      const p = plan();
-      if (!p.code || p.audience === "squad") {
-        say("Only a plan anyone with the code can follow has its calendar file here. In Anki, Add to my calendar makes one of any plan.");
-        return;
-      }
-      (out.download || ((u) => window.open(u, "_blank", "noopener")))(`/p/${p.code}.ics`);
-      say(F.changes.length ? "The calendar file is the plan as it's saved: changes not sent aren't in it." : "Open the file to add the plan to your calendar.");
+      if (!B) return;
+      const p = plan(), counts = {}, placed = B.placedKeys();
+      for (const u of units()) { const n = author() ? (tree() ? B.unitTotal(u, placed) : 0) : (progOf(u) || [0, 0, 0])[2]; if (n) counts[u.id] = n; }
+      const text = Ics.calendar(p.id || "plan", p.name, B.doc, counts, author() ? [] : follow().skipped || []);
+      const url = typeof Blob === "function" && typeof URL === "function" && URL.createObjectURL
+        ? URL.createObjectURL(new Blob([text], { type: "text/calendar" })) : `data:text/calendar;charset=utf-8,${encodeURIComponent(text)}`;
+      if (out.download) out.download(url, Ics.fileName(p.name), text);
+      say("Saved. Open the file to add the plan to your calendar.");
     };
     C.text = () => sheet({ kind: "read", title: "The plan as text", words: "Every set, quiz and tag as plan lines (the builder's format: duecrew.com/plan-text).",
       text: B.toText(), yes: "Copy it", cmd: "copy_text" });
@@ -1765,10 +1957,128 @@ const PlanFace = (() => {
     T.ai_app = () => say("Your AI app is the add-on's, on your computer: in Anki, Your plans › Settings.");
     // the plan's own page (builder.js's, as it was): its followers' progress by set, the poster, the calendar menu
     T.its_page = () => goTo(`/plans/${B.id}?page`);
-    // a follower's own settings live on the plan's page here (this page is its authors')
-    for (const k of ["shift", "skip", "own", "own_next", "early", "pause", "held", "change_deck", "open_everything", "schedule", "reset", "stop_following", "copy_mine", "lesson_deck"]) {
-      T[k] = () => goTo(`/plans/${B.id}`);
+    // ---- a follower's: my follow (webtabs.c_<name>, plan_flow's steps), one PATCH /plans/{id}/follow a click ----
+    /** my follow changed on the server, then the plan as it is now (what the old page did: PATCH, then GET) */
+    async function patchFollow(body, said) {
+      if (!follower() || F.busy) return false;
+      F.busy = true; push();
+      try {
+        await api("PATCH", `/plans/${B.id}/follow`, body);
+        await reread(said);
+        return true;
+      } catch (err) {
+        F.busy = false;
+        failed(err, { not_following: "You don't follow it on this account any more.", bad_follow: "That didn't change. Try again." });
+        return false;
+      }
     }
+    /** the plan read again, on my days; what's picked kept when it's still there */
+    async function reread(said) {
+      const r = await api("GET", `/plans/${B.id}`);
+      B.plan = r;
+      runMine();
+      F.busy = false;
+      if (F.picked && !((F.picked[0] === "date" && unit(F.picked[1])) || (F.picked[0] === "event" && eventOf(F.picked[1])) || (F.picked[0] === "review" && reviewOf(F.picked[1])))) {
+        F.picked = null; pickDefault();
+      }
+      relabel();
+      if (said) say(said);
+      push();
+    }
+    T.shift = ({ later, days } = {}) => {
+      if (!follower()) return;
+      const was = Number(follow().shift || 0);
+      if (!later) { if (was) patchFollow({ shift: 0 }, "Back on the plan's days."); else push(); return; }
+      if (days === undefined || days === null) {
+        sheet({ title: "My sets, some days later", words: "How many days after the plan's your sets open (up to 365). Quizzes and exams stay on their days.",
+          fields: [{ name: "days", label: "Days later", type: "number", value: String(was || 7) }], yes: "Move my sets", cmd: "tabcmd", args: { name: "shift", later: true } });
+        return;
+      }
+      const n = Math.max(0, Math.min(365, Math.round(Number(days) || 0)));
+      if (n !== was) patchFollow({ shift: n }, n ? `Your sets open ${pl(n, "day")} after the plan's.` : "Back on the plan's days.");
+    };
+    T.skip = ({ uid, on = true }) => {
+      const f = follow(), had = f.skipped || [];
+      if (!follower() || typeof uid !== "string") return;
+      if (on && !((plan().doc || {}).units || []).some((u) => u.id === uid)) return;
+      if (!on && !had.includes(uid)) return;
+      patchFollow({ skipped: [...had.filter((x) => x !== uid), ...(on ? [uid] : [])] }, on ? "Skipped: it's not on your days now." : "Back on your days.");
+    };
+    T.own = ({ own }) => {
+      const v = own === "ready" ? "ready" : "";
+      if (follower() && String(follow().own || "") !== v) patchFollow({ own: v || null }, v ? "Its cards open when you're ready: Up next on the board in Anki." : "Its cards open each morning, on their days.");
+      else push();
+    };
+    T.own_next = ({ on }) => { if (follower() && follow().own) patchFollow({ own: on ? "next" : "ready" }); };
+    T.early = ({ n }) => {
+      const k = Number(n);
+      if (follower() && !follow().own && [0, 1, 2, 3, 5, 7].includes(k)) patchFollow({ early: k }, k ? `Each set opens ${pl(k, "day")} early.` : "Each set opens on its day.");
+    };
+    T.pause = ({ until, uid } = {}) => {
+      const f = follow(), t0 = today0();
+      if (!follower()) return;
+      if (f.paused) {  // back: my sets later by the days I was away, or as they are (plan_flow.back)
+        const days = Math.max(0, f.since ? Sched.diff(t0, f.since) : 0);
+        if (days && !f.own && uid === undefined) {
+          sheet({ kind: "pick", title: "Resume", words: `You paused ${pl(days, "day")} ago.`, yes: "Resume",
+            options: [{ v: "push", label: `Push my sets back ${pl(days, "day")}` }, { v: "open", label: "Keep my days: what opened meanwhile is behind" }],
+            cmd: "tabcmd", args: { name: "pause", uid: "push" } });
+          return;
+        }
+        const shift = Math.min(365, Number(f.shift || 0) + (uid === "push" ? days : 0));
+        patchFollow({ paused: false, since: null, until: null, shift }, "Resumed.");
+        return;
+      }
+      if (until === undefined) {
+        sheet({ title: "Pause until…", words: "Nothing opens till then; your Anki asks what to do when you're back.",
+          fields: [{ name: "until", label: "Until", type: "date", value: addDays(t0, 7) }], yes: "Pause", cmd: "tabcmd", args: { name: "pause" } });
+        return;
+      }
+      if (/^\d{4}-\d\d-\d\d$/.test(String(until)) && until >= t0) patchFollow({ paused: true, since: t0, until }, `Paused until ${fmt(until)}.`);
+    };
+    T.reset = ({ sure } = {}) => {
+      const lines = resetLines();
+      if (!follower() || !lines.length) return;
+      if (!sure) {
+        sheet({ title: "Reset to default?", words: `${lines.join(". ")}. Cards already open stay open. Sets that come back and have passed count as behind.`,
+          yes: "Reset", cmd: "tabcmd", args: { name: "reset", sure: true } });
+        return;
+      }
+      patchFollow({ shift: 0, skipped: [], moved: {}, paused: false, until: null, since: null }, "Back to the plan's days.");
+    };
+    T.team = async () => {
+      if (!follower() || F.busy) return;
+      const leaving = inTeam();
+      F.busy = true; push();
+      try {
+        await api(leaving ? "DELETE" : "POST", `/plans/${B.id}/team`);
+        await reread(leaving ? "You left its squad. Your questions and answers stay." : "You're in its squad: it's on the board's Squads tab.");
+      } catch (err) { F.busy = false; failed(err, { team_full: "This squad is full." }); }
+    };
+    T.stop_following = async ({ sure } = {}) => {
+      if (!follower()) return;
+      if (!sure) {
+        sheet({ title: `Stop following ${plan().name || "it"}?`, words: "Its cards you have open stay open in your Anki; nothing new opens.", yes: "Stop following", danger: true,
+          cmd: "tabcmd", args: { name: "stop_following", sure: true } });
+        return;
+      }
+      try { await api("DELETE", `/plans/${B.id}/follow`); goTo("/plans"); } catch (err) { failed(err); }
+    };
+    T.copy_mine = async ({ start } = {}) => {
+      const p = plan();
+      if (!follower() || !(p.library || p.listed)) return;
+      if (start === undefined) {
+        sheet({ title: "Make my own copy", words: "The same sets, yours to change. Its first set opens on:",
+          fields: [{ name: "start", type: "date", value: nextMonday() }], yes: "Copy it", cmd: "tabcmd", args: { name: "copy_mine" } });
+        return;
+      }
+      if (!/^\d{4}-\d\d-\d\d$/.test(String(start))) return;
+      try { const mine2 = await api("POST", `/plans/${B.id}/copy`, { start }); goTo(`/plans/${mine2.id}/edit`); }
+      catch (err) {
+        failed(err, { too_many_plans: "You have 50 plans. Delete one first.", plans_full: "Your plans hold as much as one account can. Delete one first." });
+      }
+    };
+    for (const k of ["held", "change_deck", "open_everything", "schedule", "lesson_deck"]) T[k] = anki;  // Anki's own (hidden here)
 
     // ---- New plan (webnew's, as the site has it: someone's plan, or start empty) ----
     function newOpen(o2 = {}) {
@@ -1834,6 +2144,7 @@ const PlanFace = (() => {
       F.picked = now ? ["date", now.id] : null;
     }
     if (B) {
+      runMine();  // a follower's: the plan on my days
       if (B.cover && B.cover.size === 0 && !units().length && tree()) F.side = "deck";  // a new plan: its deck first
       const vs = B.kindsBelow("root:tag");
       F.deck.view = vs.has("resource") ? "resource" : vs.has("system") ? "system" : vs.has("other") ? "other" : "deck";
@@ -1879,14 +2190,18 @@ const PlanFace = (() => {
   }
   const out = { show: (v) => dcPlan.show(v), sheet: (s) => dcPlan.sheet(s), status: (s) => dcPlan.status(s),
     openUndo: () => dcPlan.openUndo(), pasted: () => dcPlan.pasted(),
-    download: (url) => { const a = h("a", { href: url, download: "" }); document.body.append(a); a.click(); a.remove(); } };
+    download: (url, name) => {
+      const a = h("a", { href: url, download: name || "" });
+      document.body.append(a); a.click(); a.remove();
+      if (url.startsWith("blob:")) setTimeout(() => URL.revokeObjectURL(url), 30000);
+    } };
   async function mine() { try { return (await api("GET", "/plans/mine")).plans || []; } catch { return []; } }
 
-  /** /plans/{id}/edit and /plans/{id}: an author's plan on the shared page;
-   *  anyone else's, its page (builder.js) as before */
+  /** /plans/{id}/edit and /plans/{id}: a plan I write or follow on the shared page (a follower's on my
+   *  days); anyone else's (looked at from its code or the library), its page (builder.js) as before */
   async function open(id, tab = null) {
     const got = await api("GET", `/plans/${id}`);
-    if (!isAuthor(got)) return builder(id, null, got);
+    if (!isAuthor(got) && !got.following) return builder(id, null, got);
     let f = null;
     const plans = mine();
     const hook = { attach: (B) => B, drawn: () => { if (f) f.push(); } };
@@ -1903,5 +2218,5 @@ const PlanFace = (() => {
     const decks = [...new Set((trees.trees || []).map((t) => t.deck).filter(Boolean))];
     mount(make(null, { plans, out, newPlan: { decks, deck } }));
   }
-  return { open, newPlan, stop, make, _now: () => face };
+  return { open, newPlan, stop, make, Ics, _now: () => face };
 })();
