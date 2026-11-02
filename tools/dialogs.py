@@ -2022,7 +2022,7 @@ def main(out):
                 != [("Cardio · Heart Failure", 2), ("Cardio · Shock", 1), ("Renal · AKI", 1)]
                 or said != ["Their topics", "Cardio · Heart Failure", "2 questions · 66% here", "Cardio · Shock", "1 question · 84%",
                             "Renal · AKI", "1 question · new"]
-                or [b.text() for b in studies] != ["Study", "Study"] or "Study the 5 you missed" not in studies[0].toolTip()
+                or [b.text() for b in studies] != ["Study", "Study"] or "A filtered deck: the 5 you missed" not in studies[0].toolTip()
                 or any(lab.textFormat() != QtCore.Qt.TextFormat.PlainText for lab in q.topics.findChildren(QtWidgets.QLabel))):
             raise RuntimeError(f"qids: their topics {q.topic_rows}, {said}, {[b.toolTip() for b in studies]} (names in plain text)")
         shoot(q, os.path.join(out, "planner-qids.png"))
