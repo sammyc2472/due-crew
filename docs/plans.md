@@ -205,6 +205,18 @@ usable without it:
   settled once.
 - 3.8.0 plan tags: before 3.8.0 a date using one finds nothing until the
   author's ids (`ids`) are there; then it falls back to them.
+- 3.9.6 adds no field and nothing on the server. Every op, a resource
+  plan and the site's new page write fields 3.9.5 already keeps (Leave
+  out cards also tagged is a `search`, Move a source moves a `tags`
+  entry), and 3.9.5's index opens the same cards for each set. Today's
+  set (B), Fit it in, Slide's Undo and the joys are plans.json only;
+  Slide and Skip what's left are the follow's `shift` and `skipped`. A
+  set's own deck on one computer is a `Due Crew::` filtered deck to a
+  3.9.5 one: its cards count by their home deck, and 3.9.5's tidy takes
+  it only once it's empty. The closet's ribbon, map and kite are dropped
+  by an older `closet.clean` and the site's `sev.js` until it's deployed.
+  Links older add-ons open (`/plans/{id}`, `/plans/new?deck=`,
+  `/library`, `/p/CODE`) land on the new page, the token read first.
 
 `MIN_CLIENT` in `worker/wrangler.toml` stops a client too old to work at
 all; raising it is a decision, not a habit.
