@@ -6,7 +6,8 @@ What's mine: my song is an account key ("song", account.ACCOUNT_KEYS): it
 rides my settings and reaches my mutual friends on their /board, as my
 Pip's look does. This computer's: the floor on or off ("dance_floor"), its
 motion ("dance": gentle, lively, still), my music app ("music_app"), and
-which crewmates' songs I've seen ("song_seen", so a new one hops in once).
+folded down to its chip or open ("dance_folded"), and which crewmates' songs
+I've seen ("song_seen", so a new one hops in once).
 
 Requests: the search goes from this computer straight to Apple's public
 catalog (no account, no key), on typing that's paused; picking a song is
@@ -85,7 +86,8 @@ def floor_view(entries, c):
                          "look": list(e.get("look") or []), "song": s,
                          "fresh": seen is not None and uid in seen and seen[uid] != sigs[uid]})
     return {"me": mine(c), "crew": songs.newest_first(crew), "motion": motion(c), "app": app_key(c),
-            "playing": _play["uid"], "pip": bool(c.get("sev", True)), "_seen": sigs}
+            "playing": _play["uid"], "pip": bool(c.get("sev", True)), "folded": bool(c.get("dance_folded")),
+            "_seen": sigs}
 
 
 def mark_seen(view):
@@ -119,6 +121,8 @@ def on_message(cmd, parts):
         apple(arg)
     elif cmd in ("dancehide", "danceshow"):
         _set("dance_floor", cmd == "danceshow")
+    elif cmd == "dancefold" and arg in ("0", "1"):
+        _set("dance_folded", arg == "1", redraw=False)  # the page folds it itself; kept for the next draw
     elif cmd == "dancemotion" and arg in songs.MOTIONS:
         _set("dance", arg)
     else:
@@ -126,12 +130,13 @@ def on_message(cmd, parts):
     return True
 
 
-def _set(key, value):
+def _set(key, value, redraw=True):
     c = cfg()
     if c.get(key) != value:
         c[key] = value
         save_cfg(c)
-    _redraw()
+    if redraw:
+        _redraw()
 
 
 def _redraw():

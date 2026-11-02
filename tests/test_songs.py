@@ -295,6 +295,13 @@ def test_glue():
         g.say("duecrew:danceshow")
         g.say("duecrew:dancemotion:lively")
         check("Settings: shown again; Lively", g.c.get("dance_floor") is True and SF.motion(g.c) == "lively")
+        n = len(g.redraws)
+        g.say("duecrew:dancefold:1")
+        check("fold: kept on this computer, no redraw (the page folds itself)",
+              g.c.get("dance_folded") is True and len(g.redraws) == n and SF.floor_view([], g.c)["folded"] is True)
+        g.say("duecrew:dancefold:0")
+        g.say("duecrew:dancefold:x")
+        check("open again; anything else: nothing", g.c.get("dance_folded") is False)
         g.say("duecrew:dancemotion:wild")
         check("a motion that isn't one: nothing", SF.motion(g.c) == "lively")
         check("unknown: not ours", g.say("duecrew:songsomething:x") is False)
