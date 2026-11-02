@@ -250,6 +250,37 @@ describe("friendship consent unchanged", () => {
     await save(alice, { sev_look: [] });
     expect((await mine(alice)).look, "my look: nothing on, nothing sent").toBeUndefined();
   });
+
+  it("song (3.9.6): a song of the moment reaches a mutual friend and me, never a one-way connection", async () => {
+    const save = (p: P, song: unknown) => p.call("PUT", "/settings", { v: 1, at: new Date().toISOString(), settings: { song } });
+    const seen = async (p: P, uid: string) => (await p.call("GET", "/board")).body.friends.find((f: any) => f.uid === uid);
+    const mine = async (p: P) => (await p.call("GET", "/board")).body.me;
+    const song = { t: "Lantern Hours", a: "Mira Vale", al: "Lantern Hours", y: 2025, id: 1700000001,
+      url: "https://music.apple.com/us/album/lantern-hours/1700000000?i=1700000001",
+      art: "https://is1-ssl.mzstatic.com/image/thumb/Music/x/300x300bb.jpg",
+      prev: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview/x/mzaf_1.plus.aac.p.m4a", at: "2026-11-02" };
+    expect((await seen(dave, "alice")).song, "song: none saved, none sent").toBeUndefined();
+    await save(alice, song);
+    expect((await seen(dave, "alice")).song, "song: a mutual friend reads it whole").toEqual(song);
+    expect((await mine(alice)).song, "song: mine comes back on me, the same").toEqual(song);
+    expect((await mine(dave)).song, "song: only mine").toBeUndefined();
+    await befriend(carol, alice);
+    expect(await seen(carol, "alice"), "song: someone alice hasn't added gets a name and an emoji, nothing more")
+      .toEqual({ uid: "alice", name: "Alice", emoji: "", mutual: false });
+    await save(alice, { ...song, url: "https://example.com/x" });
+    expect((await seen(dave, "alice")).song, "song: its link only on Apple Music, or no song").toBeUndefined();
+    await save(alice, { ...song, url: "http://music.apple.com/us/album/x" });
+    expect((await seen(dave, "alice")).song, "song: https only").toBeUndefined();
+    await save(alice, { ...song, t: "x".repeat(121) });
+    expect((await seen(dave, "alice")).song, "song: a short title").toBeUndefined();
+    await save(alice, { ...song, id: "1" });
+    expect((await seen(dave, "alice")).song, "song: the catalog's id as a number").toBeUndefined();
+    await save(alice, { ...song, art: "https://evil.example/a.jpg", prev: "javascript:alert(1)", al: "a\u0007b", y: 3000, at: "soon" });
+    expect((await seen(dave, "alice")).song, "song: a cover, preview, album, year or day that doesn't hold is dropped, the rest kept")
+      .toEqual({ t: song.t, a: song.a, id: song.id, url: song.url });
+    await save(alice, null);
+    expect((await seen(dave, "alice")).song, "song: taken off, none sent").toBeUndefined();
+  });
 });
 
 describe("retired paths: nothing answers", () => {

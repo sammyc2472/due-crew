@@ -24,6 +24,7 @@ from aqt import mw
 
 from . import app
 from .app import _state, cfg, client
+from .songs import clean as songs_clean
 
 ACCOUNT_KEYS = ("share_reviews", "share_time", "share_retention", "share_streak",
                 "share_heatmap", "show_up", "paused", "exam_date", "away_from", "away_to",
@@ -33,7 +34,8 @@ ACCOUNT_KEYS = ("share_reviews", "share_time", "share_retention", "share_streak"
                 "sev_look", "sev_closet",  # 3.8.2: Pip's closet: what it has on, what it's earned
                 "wrapped_seen",  # 3.9.0: the year whose Wrapped line was put away, on every computer
                 "two_buttons",  # 3.9.1: Again and Good alone, a person's way of reviewing
-                "exam_last", "exam_since")  # 3.9.2: my last exam, kept once it's passed; what the next one covers
+                "exam_last", "exam_since",  # 3.9.2: my last exam, kept once it's passed; what the next one covers
+                "song")  # 3.9.6: my song of the moment (songs.clean): my mutual friends see it on their board
 ACCENT_NAMES = ("green", "blue", "purple", "teal", "amber", "rose")
 _BOOLS = ("share_reviews", "share_time", "share_retention", "share_streak",
           "share_heatmap", "show_up", "paused", "due_show", "due_suggest", "two_buttons")
@@ -111,6 +113,8 @@ def clean(s):
     if isinstance(s.get("sev_look"), list):
         from .closet import clean as clean_look
         out["sev_look"] = clean_look(s["sev_look"])
+    if isinstance(s.get("song"), dict) and songs_clean(s["song"]):
+        out["song"] = songs_clean(s["song"])  # 3.9.6
     if isinstance(s.get("sev_closet"), dict):
         from .closet import clean_closet
         out["sev_closet"] = clean_closet(s["sev_closet"])

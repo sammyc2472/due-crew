@@ -25,6 +25,7 @@ import requests
 
 from .. import bingo as _bingo
 from ..room_model import clean_room, is_fifteen, is_over
+from ..songs import clean as clean_song
 from .shapes import (
     AuthError, REPORT_NOTE_MAX, TransportError, TIMEOUT, WEEK_WINDOW, _clean_day, _clean_decks, _clean_member,
     _exam_value, _live_room, _week_days, away_range, clean_accent, clean_days, clean_doodle, clean_look, clean_emoji, clean_squad_name, clean_note, clean_offer, clean_authored, clean_plan, clean_sched, clean_recap, clean_cards, clean_notice,
@@ -347,6 +348,8 @@ class ApiClient:
                 "accent": "" if you else clean_accent(p.get("accent")),
                 # 3.8.2: what their Pip has on (mutual friends only); mine is this computer's
                 "look": [] if you else clean_look(p.get("look")),
+                # 3.9.6: their song of the moment (mutual friends only; mine is my account's)
+                "song": None if you else clean_song(p.get("song")),
                 "you": you,
                 "paused": bool(week.get("paused")),
                 "last_updated": max(stamps),

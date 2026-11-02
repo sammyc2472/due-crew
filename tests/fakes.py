@@ -725,6 +725,43 @@ class FakeWorker:
             return list(look)
         return None
 
+    def _song_of(self, uid):
+        """3.9.6: someone's song of the moment, from their settings, as board.ts
+        songOf takes it (its own restatement, not songs.clean): title and
+        artist, an id, an Apple Music link; the rest when it holds. Else None."""
+        v = ((self.settings.get(uid) or {}).get("settings") or {}).get("song")
+        if not isinstance(v, dict):
+            return None
+
+        def text(x):
+            if not isinstance(x, str):
+                return None
+            x = x.strip()
+            return x if x and len(x) <= 120 and not re.search(r"[\x00-\x1f\x7f]", x) else None
+
+        def link(x, host):
+            if not isinstance(x, str) or not x or len(x) > 400 or re.search(r"[\x00-\x1f\x7f ]", x):
+                return None
+            m = re.match(r"^https://([^/?#:@]+)(:443)?([/?#]|$)", x)
+            return x if m and re.fullmatch(host, m.group(1).lower()) else None
+
+        hosts = {"url": r"(music|itunes|geo\.music)\.apple\.com", "art": r"([a-z0-9-]+\.)*mzstatic\.com",
+                 "prev": r"([a-z0-9-]+\.)*(mzstatic\.com|itunes\.apple\.com)"}
+        t, a, url, i = text(v.get("t")), text(v.get("a")), link(v.get("url"), hosts["url"]), v.get("id")
+        if not (t and a and url) or isinstance(i, bool) or not isinstance(i, int) or not 0 < i < 2 ** 53:
+            return None
+        out = {"t": t, "a": a, "id": i, "url": url}
+        if text(v.get("al")):
+            out["al"] = text(v.get("al"))
+        if isinstance(v.get("y"), int) and not isinstance(v.get("y"), bool) and 1900 <= v["y"] <= 2100:
+            out["y"] = v["y"]
+        for k in ("art", "prev"):
+            if link(v.get(k), hosts[k]):
+                out[k] = v[k]
+        if isinstance(v.get("at"), str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", v["at"]):
+            out["at"] = v["at"]
+        return out
+
     def _board(self, me, with_decks, wk=None, got=None, pv=None, keep=False, same=False):
         u = self.users[me]
         if got is not None and int(got or 0) > 0:  # 3.7.2: the last reply's cheers arrived
@@ -748,6 +785,9 @@ class FakeWorker:
                 look = self._look_of(fid)
                 if look:
                     row["look"] = look
+                song = self._song_of(fid)  # 3.9.6: their song of the moment (board.ts songOf)
+                if song:
+                    row["song"] = song
                 friends.append(row)
             else:
                 friends.append({"uid": fid, "name": f["name"] or "?", "emoji": f["emoji"] or "",
@@ -772,6 +812,8 @@ class FakeWorker:
                "settingsAt": (self.settings.get(me) or {}).get("at") or ""}
         if self._look_of(me):  # 3.8.2: my own look, as my crew sees it (the site's rows draw it)
             out["me"]["look"] = self._look_of(me)
+        if self._song_of(me):  # 3.9.6: my song, as my crew sees it
+            out["me"]["song"] = self._song_of(me)
         stamp = None
         if pv is not None:  # 3.7.3: the plans again, when their stamp moved
             stamp = self._plan_stamp(me)
