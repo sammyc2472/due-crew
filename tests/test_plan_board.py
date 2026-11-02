@@ -225,14 +225,52 @@ def test_card():
            for i in range(150)]
     long = board._plan_card_html(_card(path={"lessons": big, "first": day(0), "end": {"name": "", "day": day(149), "event": False}}))
     mid = board._plan_card_html(_card(path={"lessons": big[:45], "first": day(0), "end": None}))
-    check("card: a long plan's segments close up; with no quiz or exam, no diamond and its last day",
-          'class="ppath g0"' in long and 'class="ppath g2"' in mid and "<em " not in long
-          and f"<span>Ends {board._ins_dname(day(149), long=True)}</span>" in long, long[:600])
+    check("card: a long plan folds what's far ahead (3.9.6, Sam's pick A); with no quiz or exam, no diamond and its last day",
+          'class="ppath fold"' in long and "<span>145 to come</span>" in long and "<span>40 to come</span>" in mid
+          and "<em " not in long and f"<span>Ends {board._ins_dname(day(149), long=True)}</span>" in long, long[:600])
     two = board._plans_html({"cards": [_card(), _card(id="p2", name="Micro", title="Micro · Kim’s plan", behind=None,
                                                     status={"togo": 3, "behind": 0})]}, None, {})
     check("card: two plans, the switch's dot on the one behind (its Behind line's count)",
           two.count('class="dot"') == 1 and 'title="31 behind"' in two)
 
+
+
+def test_long_path_folds_v396():
+    """3.9.6 (Sam: "if a plan is long, then this kinda seems overwhelming";
+    his pick A, past 16 sets): a long path shows one by one what needs me
+    (every set behind, the two before today's, today's, the next four, and a
+    set a joy plays on) and folds each run of the rest, done, to come or
+    skipped, into one piece with its count under it; a click on a fold opens
+    its nearest set's day. 16 sets or fewer: a segment a set, as ever."""
+    def lessons(states):
+        return [{"uid": f"u{i}", "name": f"{i + 1} · Set", "opens": day(i - 38), "state": st, "left": 3 if st == "behind" else 0,
+                 "today": st == "now"} for i, st in enumerate(states)]
+    states = ["done"] * 22 + ["behind"] * 7 + ["done"] * 5 + ["behind"] * 3 + ["done", "now", "ahead"]
+    card = _card(path={"lessons": lessons(states), "at": 39, "of": 40, "first": day(-38), "end": {}}, behind=None)
+    h = board._plan_card_html(card)
+    path = h.split('<div class="ppath')[1].split("</div>")[0]
+    pieces = re.findall(r'<i class="([a-z ]+)"', path)
+    check("long: 40 sets, one piece each for what needs me; the runs done fold, their counts under them",
+          pieces == ["run d"] + ["b"] * 7 + ["run d"] + ["b"] * 3 + ["d", "t", "a"]
+          and "<span>22 done</span>" in path and "<span>5 done</span>" in path and 'class="ppath fold' in h, pieces)
+    check("long: a fold says its first and last set, and its click opens the last done set's day",
+          'title="1 · Set to 22 · Set &middot; 22 done"' in path and f"planjump:p1:{day(-38 + 21)}|" in path, path[:400])
+    check("long: the path still reads out every set's state", "Sets: 28 done, 10 behind, 1 today, 1 to come" in h, h[:200])
+    far = ["done"] * 3 + ["now"] + ["ahead"] * 30
+    path = board._plan_card_html(_card(path={"lessons": lessons(far), "at": 4, "of": 34, "first": day(-38), "end": {}},
+                                       behind=None)).split('<div class="ppath')[1].split("</div>")[0]
+    pieces = re.findall(r'<i class="([a-z ]+)"', path)
+    check("long: early on, the sets far ahead fold into what's to come, at the end, its count under its right edge",
+          pieces == ["d"] * 3 + ["t"] + ["a"] * 4 + ["run a rl"] and "<span>26 to come</span>" in path, pieces)
+    joy = {"pop": {"uid": "u5", "ago": 0.5}}
+    pieces = re.findall(r'<i class="([a-z ]+)"', board._plan_card_html(_card(
+        path={"lessons": lessons(states), "at": 39, "of": 40, "first": day(-38), "end": {}}, behind=None, joy=joy)).split('<div class="ppath')[1].split("</div>")[0])
+    check("long: a set a joy plays on stays its own (Pip hops onto it from the fold before)",
+          pieces[:3] == ["run d", "d", "run d"], pieces[:4])
+    short = board._plan_card_html(_card(path={"lessons": lessons(["done"] * 15 + ["now"]), "at": 16, "of": 16, "first": day(-38),
+                                              "end": {}}, behind=None))
+    check("long: 16 sets or fewer, a segment a set", "run" not in short.split('<div class="ppath')[1].split("</div>")[0]
+          and 'class="ppath fold' not in short)
 
 def test_empty_tab():
     none = board._plans_empty_html({"cards": []})

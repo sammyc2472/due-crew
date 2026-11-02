@@ -4350,4 +4350,14 @@ every release that changes how something works.
   is closed, not set aside, so the week still offers Open now. A deck's
   update that adds suspended cards to a date already open sets them aside
   too: the plan never opened them, and nothing tells the two apart.
+- 3.9.6, a long plan's path folds (Sam: "if a plan is long, then this
+  kinda seems overwhelming as a visual"; his pick A on the "A calmer
+  path" mock, past 16 sets). You › Plans' path shows one by one what needs
+  me: every set behind (or catching up), the two before today's, today's,
+  the next four, and a set a joy plays on (so Pip still hops onto it from
+  the piece before). Each run of the rest folds into one piece with its
+  count under it, "22 done", "26 to come" or "3 skipped"; a click on a
+  fold opens its nearest set's day (the last done, the next to come).
+  16 sets or fewer: a segment a set, as before (`board._path_keep`,
+  `PATH_FOLD_PAST`).
 

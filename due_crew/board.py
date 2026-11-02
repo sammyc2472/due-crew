@@ -847,6 +847,11 @@ def _css(cfg):
     #due-crew .ppath.g2 {{ gap: 2px; }} #due-crew .ppath.g1 {{ gap: 1px; }} #due-crew .ppath.g0 {{ gap: 0; }}
     #due-crew .ppath i {{ flex: 1 1 0; min-width: 0; height: 8px; border-radius: 3px; background: var(--dc-line); display: block; }}
     #due-crew .ppath i[onclick] {{ cursor: pointer; }}
+    #due-crew .ppath.fold {{ margin-bottom: 16px; }}
+    #due-crew .ppath i.run {{ position: relative; min-width: 34px; }}
+    #due-crew .ppath i.run span {{ position: absolute; left: 0; top: 12px; font-size: 10.5px; line-height: 1; font-weight: 400;
+      font-style: normal; color: var(--dc-muted); white-space: nowrap; pointer-events: none; }}
+    #due-crew .ppath i.run.rl span {{ left: auto; right: 0; }}
     #due-crew .ppath.g1 i, #due-crew .ppath.g0 i {{ border-radius: 1px; }}
     #due-crew .ppath i.d {{ background: var(--dc-accent); }}
     #due-crew .ppath i.b {{ background: var(--dc-hours); }}
@@ -1953,21 +1958,45 @@ def _plan_path(card):
         return ""
     pid = _html.escape(str(card.get("id") or ""), quote=True) if _re.fullmatch(r"[A-Za-z0-9_-]{1,128}", str(card.get("id") or "")) else ""
     segs, n = "", {}
-    for x in ls:
+
+    def state(x):
         st = str(x.get("state") or "ahead")
-        if st == "behind" and card.get("catch"):
-            st = "catch"
+        return "catch" if st == "behind" and card.get("catch") else st
+
+    def jump(day):  # 3.9.6, after the last check: a click opens its day's details in the week below (plan_flow.jump_to)
+        day = str(day or "")
+        return f' onclick="{_pycmd(f"planjump:{pid}:{day}")}"' if pid and _re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) else ""
+
+    keep = _path_keep(ls, p, card.get("joy"))
+    pieces, i = 0, 0
+    while i < len(ls):
+        x, st = ls[i], state(ls[i])
         n[st] = n.get(st, 0) + 1
+        if keep is not None and i not in keep and st in PATH_FOLD:
+            j = i + 1
+            while j < len(ls) and j not in keep and state(ls[j]) == st:
+                n[st] += 1
+                j += 1
+            if j - i > 1:
+                # Sam's pick A (a long plan): a run of sets that don't need me folds into one, with its count under it
+                run, last = ls[i:j], j == len(ls)
+                first, end = str(run[0].get("name") or "?"), str(run[-1].get("name") or "?")
+                said = PATH_FOLD[st].format(n=j - i)
+                to = run[-1] if st == "done" else run[0]
+                segs += (f'<i class="run {PATH_WORDS.get(st, "a")}{" rl" if last else ""}" style="flex:{min(j - i, 8)} 1 0" '
+                         f'title="{e(first)} to {e(end)} &middot; {said}"{jump(to.get("opens"))}><span>{said}</span></i>')
+                pieces += 1
+                i = j
+                continue
         word = {"done": "done", "behind": f'{int(x.get("left") or 0):,} left', "skip": "skipped",
                 "catch": f'catching up &middot; {int(x.get("left") or 0):,} left',
                 "now": "today" + (f' &middot; {int(x.get("left") or 0):,} to go' if x.get("left") else "")}.get(
             st, _ins_dname(x.get("opens"), long=True))
         cls = PATH_WORDS.get(st, "a") + (" t" if x.get("today") and st == "done" else "")
         play, inner = _joy_seg(card.get("joy"), str(x.get("uid") or ""), st)
-        # 3.9.6, after the last check: a segment's click opens its day's details in the week below (plan_flow.jump_to)
-        day = str(x.get("opens") or "")
-        go = (f' onclick="{_pycmd(f"planjump:{pid}:{day}")}"' if pid and _re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) else "")
-        segs += f'<i class="{cls}" title="{e(str(x.get("name") or "?"))} &middot; {word}"{play}{go}>{inner}</i>'
+        segs += f'<i class="{cls}" title="{e(str(x.get("name") or "?"))} &middot; {word}"{play}{jump(x.get("opens"))}>{inner}</i>'
+        pieces += 1
+        i += 1
     end = p.get("end") or {}
     ev = bool(end.get("event"))
     when = _ins_dname(end.get("day"), long=True)
@@ -1976,10 +2005,36 @@ def _plan_path(card):
     said = ", ".join(f"{n[k]} {w}" for k, w in (("done", "done"), ("behind", "behind"), ("catch", "catching up"),
                                                  ("now", "today"), ("ahead", "to come"), ("skip", "skipped")) if n.get(k))
     said += f', then {e(str(end.get("name") or "Exam"))} on {when}' if ev else ""
-    gap = "" if len(ls) <= 30 else " g2" if len(ls) <= 60 else " g1" if len(ls) <= 120 else " g0"
+    gap = "" if pieces <= 30 else " g2" if pieces <= 60 else " g1" if pieces <= 120 else " g0"
+    gap += " fold" if keep is not None else ""
     right = (f'{e(str(end.get("name") or "Exam"))} &middot; {when}' if ev else f"Ends {when}" if when else "")
     return (f'<div class="ppath{gap}" role="img" aria-label="Sets: {said}">{segs}</div>'
             f'<div class="ppl"><span>{_ins_dname(p.get("first"), long=True)}</span><span>{right}</span></div>')
+
+
+PATH_FOLD_PAST = 16  # Sam's pick: a plan longer than this folds the sets that don't need me
+PATH_FOLD = {"done": "{n} done", "ahead": "{n} to come", "skip": "{n} skipped"}
+
+
+def _path_keep(ls, p, joy=None):
+    """Which sets a long path shows one by one (Sam's pick A, past
+    PATH_FOLD_PAST sets), or None to show them all: every set behind (or
+    catching up), the two before today's, today's, the next four, and any a
+    joy plays on (its pop, caught up, a milestone's sparkle); runs of the
+    rest fold, done, to come or skipped, each one piece with its count."""
+    if len(ls) <= PATH_FOLD_PAST:
+        return None
+    at = next((i for i, x in enumerate(ls) if x.get("state") == "now"), None)
+    if at is None:
+        k = int((p or {}).get("at") or 0)
+        at = max(0, min(len(ls) - 1, k - 1)) if k else 0
+    keep = {i for i in range(at - 2, at + 5) if 0 <= i < len(ls)}
+    keep |= {i for i, x in enumerate(ls) if x.get("state") == "behind"}
+    joy = joy or {}
+    hot = {str((joy.get("pop") or {}).get("uid") or ""), str((joy.get("line") or {}).get("uid") or "")}
+    hot |= {str(u) for u in (joy.get("caught") or {}).get("uids") or []}
+    keep |= {i for i, x in enumerate(ls) if str(x.get("uid") or "") in hot - {""}}
+    return keep
 
 
 def _joy_ago(ago):

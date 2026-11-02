@@ -15,6 +15,7 @@ Run: python3 tests/test_plan_joy.py
 
 import json
 import os
+import html
 import re
 import shutil
 import sqlite3
@@ -259,7 +260,10 @@ def test_board():
           and "duecrew:planjoyx:p1:half|" in h and 'class="pst jml" data-joy="line"' in h
           and h.index('class="ppl"') < h.index("jml") < h.index('class="pwk"'), h[:2000])
     segs = re.findall(r"<i class=[^>]*>", h.split('<div class="ppath')[1].split("</div>")[0])
-    check("board: …the set that made it sparkles", 'data-joy="spark"' in segs[9] and sum('data-joy' in x for x in segs) == 1, segs[8:11])
+    sparks = [x for x in segs if 'data-joy="spark"' in x]
+    name = html.escape(P.units(DOC)[9]["name"])
+    check("board: …the set that made it sparkles (its own segment, a long path's folds aside)",
+          len(sparks) == 1 and f'title="{name} &middot;' in sparks[0] and sum('data-joy' in x for x in segs) == 1, sparks)
     last = board._plan_card_html(_card("2026-12-11", upto(18), joy={"line": {"key": "last", "n": 19, "of": 19, "name": "19 · Skin <b>",
                                                                              "uid": "e18", "ago": None}}))
     check("board: the last set: its name escaped, today; no motion once it's played",
