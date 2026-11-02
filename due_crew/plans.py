@@ -2166,6 +2166,28 @@ def new_and_due(idx, cids):
     return sorted(got, key=lambda c: idx.order.get(c, (True, 0, c)))
 
 
+def day_cards(idx, doc, today, applied=None, swap=None):
+    """3.9.6, Study today (Sam: "study all for the day ... the filtered deck
+    of just those new / review cards for the day ... beyond the individual
+    sets"): (cards, new, due) of the plan's day, its FSRS rule's (as a date's
+    Study, new_and_due): today's sets' open new cards, and every card of its
+    sets opened here that Anki has due today; never a review ahead of its
+    date, nor what's behind from earlier sets (Behind… has those). doc: my
+    days (my_doc). Cards in the deck's order."""
+    applied = applied or {}
+    new, due = set(), set()
+    for u in units(doc):
+        have = applied.get(u["id"])
+        if not have or (isinstance(have, str) and have.startswith("skip:")):
+            continue
+        cids = idx.match(u, swap, doc)
+        due |= {c for c in cids if c in idx.due_now}
+        if str(u.get("opens") or "") <= str(today) <= str(u.get("due") or u.get("opens") or ""):
+            new |= {c for c in cids if idx.cards.get(c) == (0, 0)}
+    got = sorted(new | due, key=lambda c: idx.order.get(c, (True, 0, c)))
+    return got, len(new - due), len(due)
+
+
 def held_rows(idx, doc, held, swap=None):
     """Held back: what a plan holds shut here now, by date: [[name, opens,
     n]] in the plan's order, a card on its first date only; what's on no date

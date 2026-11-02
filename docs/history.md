@@ -4360,4 +4360,19 @@ every release that changes how something works.
   fold opens its nearest set's day (the last done, the next to come).
   16 sets or fewer: a segment a set, as before (`board._path_keep`,
   `PATH_FOLD_PAST`).
+- 3.9.6, Study today on You › Plans (Sam: "the option to study all for
+  the day and it pops out the filtered deck of just those new / review
+  cards for the day ... beyond the individual sets"). The plan's line says
+  "84 to go today · 31 due today" (the due part alone once the new are
+  seen) with Study today: one Due Crew deck, "Due Crew::<plan> · Today",
+  of today's sets' open new cards and every card of the plan's opened sets
+  that Anki has due today, learning included, in the deck's order; then
+  Anki's Study screen on it. Sam's FSRS rule as a date's Study: never a
+  review ahead of its date; earlier sets' unseen cards stay with Behind….
+  A card another Due Crew deck holds (a set's own, Today's set B) comes out
+  of it first and that deck keeps the rest; the deck empties the morning
+  after (`until`). On Today's set B the line keeps its own link, Today's
+  set. Counted with the progress at a refresh (`plan_flow.today_counts`,
+  `_state["plan_day"]`), a search here; nothing is sent
+  (`plans.day_cards`, `plan_flow.study_today`, `planstudytoday`).
 

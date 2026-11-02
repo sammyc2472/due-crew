@@ -1921,21 +1921,29 @@ def _plan_status(card, pid):
     """Round five: the plan's day in a line, "93 to go today"; "" when
     today's dates are seen. Plans, end to end: what's behind is a line of
     its own (_plan_behind)."""
-    togo = int((card.get("status") or {}).get("togo") or 0)
-    if not togo:
+    st = card.get("status") or {}
+    togo, due, study = int(st.get("togo") or 0), int(st.get("due") or 0), int(st.get("study") or 0)
+    if not togo and not due:
         return ""
     lesson = card.get("lesson_deck") or {}  # Today's lesson, B: today's is a deck of its own
-    act = ""
+    acts = []
+    if study:
+        # 3.9.6 (Sam: "study all for the day ... beyond the individual sets"): the plan's day in one deck
+        acts.append(f'<a href="#" title="Today&rsquo;s new cards and what&rsquo;s due today in this plan, one deck in Anki" '
+                    f'onclick="{_pycmd(f"planstudytoday:{pid}")}">Study today</a>')
     if lesson.get("today"):
         uid = str(lesson["today"])
-        act = f'<a href="#" title="Its deck, in Anki" onclick="{_pycmd(f"planstudydate:{pid}:{uid}")}">Study</a>'
+        acts.append(f'<a href="#" title="Today&rsquo;s set&rsquo;s own deck, in Anki" '
+                    f'onclick="{_pycmd(f"planstudydate:{pid}:{uid}")}">Today&rsquo;s set</a>')
     # 3.9.6: the first morning says so all day, and Pip says let's go just after the words, once
     one = (card.get("joy") or {}).get("day1")
     first = '<b class="jd1">Day one</b> &middot; ' if one else ""
     pip = (f'<span class="jgo" data-joy="go"{_joy_ago(one["ago"])}><span class="jgp" aria-hidden="true">{one["pip"]}</span></span>'
            if one and one.get("ago") is not None and one.get("pip") else "")
-    return (f'<div class="pst"><span>{first}<b>{togo:,}</b> to go today{", in your decks" if lesson else ""}</span>{pip}'
-            + (f'<span class="acts">{act}</span>' if act else "") + '</div>')
+    said = (f'<b>{togo:,}</b> to go today{", in your decks" if lesson else ""}' if togo else "")
+    said += (" &middot; " if togo and due else "") + (f'<b>{due:,}</b> due today' if due else "")
+    return (f'<div class="pst"><span>{first}{said}</span>{pip}'
+            + (f'<span class="acts">{" ".join(acts)}</span>' if acts else "") + '</div>')
 
 
 PATH_WORDS = {"done": "d", "behind": "b", "catch": "c", "now": "t", "ahead": "a", "skip": "s"}

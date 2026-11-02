@@ -562,6 +562,56 @@ def test_study():
               w.col.decks.cur == w.deck("Due Crew::Cell injury"), w.col.decks.cur)
 
 
+
+TODAY_DECK = "Due Crew::Path Book · Today"
+
+
+def test_study_today_v396():
+    """3.9.6, Study today on You › Plans (Sam: "study all for the day ...
+    the filtered deck of just those new / review cards for the day ...
+    beyond the individual sets"): one deck of the plan's day: today's sets'
+    open new cards and what Anki has due today in its opened sets; never a
+    review ahead, nor yesterday's unseen (Behind's); emptied the morning
+    after; on B, today's set's deck gives its cards up and keeps the rest."""
+    with World() as w:
+        w.follow()
+        idx = P.DeckIndex(w.col, BIG)
+        cids, n_new, n_due = P.day_cards(idx, F.mine(F.followed()[0])["doc"], day(0), w.st().get("applied"))
+        check("the day's cards: today's set's new ones and its learning card due now; not yesterday's unseen, not a review ahead",
+              5 in cids and 6 in cids and 7 in cids and not {1, 2, 3, 4} & set(cids) and n_new >= 2 and n_due >= 1, (cids, n_new, n_due))
+        F.study_today(w.pid)
+        got = w.cards_in(TODAY_DECK) or []
+        check("Study today: one deck, the plan's name and Today, Anki's Study screen on it",
+              {5, 6, 7} <= set(got) and w.col.decks.cur == w.deck(TODAY_DECK) and w.moved[-1:] == ["overview"], (got, w.filtered()))
+        check("…and it says what's in it", any(t.startswith("Today's ") and "in one deck" in t for t in w.toasts), w.toasts[-2:])
+        check("…for today only: the morning after empties it", F.untils().get(w.deck(TODAY_DECK)) == day(0), F.untils())
+        F.study_today(w.pid)
+        check("again: built again, the same deck", w.cards_in(TODAY_DECK) == got and w.filtered().count(TODAY_DECK) == 1, w.filtered())
+        w.today["d"] = day(1)
+        F.tidy_decks(w.col)
+        check("tomorrow: emptied and gone, the cards home", w.deck(TODAY_DECK) is None
+              and all(w.col.db.scalar("SELECT did FROM cards WHERE id = ?", c) == BIG for c in got), w.filtered())
+    with World() as w:
+        w.follow(lesson=True)
+        before = w.cards_in(L2) or []
+        F.study_today(w.pid)
+        check("B: today's set's own deck gives its cards to the day's; the day's has them",
+              {5, 6} <= set(w.cards_in(TODAY_DECK) or []) and not {5, 6} & set(w.cards_in(L2) or []), (before, w.cards_in(L2), w.cards_in(TODAY_DECK)))
+    with World(units=[dict(UNITS[2], opens=day(3), due=day(4))]) as w:
+        w.follow()
+        n = len(w.toasts)
+        F.study_today(w.pid)
+        check("nothing new or due today: said, no deck", w.deck(TODAY_DECK) is None
+              and w.toasts[n:] == ["Nothing new or due today in this plan."], w.toasts[n:])
+    h = board._plan_status({"status": {"togo": 0, "due": 12, "study": 12}}, "p1")
+    check("the card: with only reviews due, its line says so, with Study today",
+          "<b>12</b> due today" in h and "duecrew:planstudytoday:p1|" in h and "to go today" not in h, h)
+    h = board._plan_status({"status": {"togo": 30, "due": 12, "study": 42}, "lesson_deck": {"today": "l2"}}, "p1")
+    check("…and with today's new: both, Study today first, then Today's set (B's own deck)",
+          "<b>30</b> to go today, in your decks &middot; <b>12</b> due today" in h
+          and h.index("planstudytoday") < h.index("planstudydate:p1:l2"), h)
+    check("…nothing to do today: no line", board._plan_status({"status": {"togo": 0, "due": 0, "study": 0}}, "p1") == "")
+
 def test_not_followed():
     with World() as w:
         w.follow(lesson=True)
