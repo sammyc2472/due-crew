@@ -4386,4 +4386,49 @@ every release that changes how something works.
   box's, Insights' and Today's set's (B) Study, the plan window's Study now
   and Study the N, and QBank QIDs'; a day's Study's tooltip says "in a
   filtered deck". The word on the link stays Study.
+- 3.9.6, song of the moment and the dance floor (Sam: "leverage music
+  databases to put a song as their soundtrack / song of the moment";
+  "retro pip ... DJ shows the pips who have music dancing with a little
+  bubble with the song ... above their head"; his picks on the "Study
+  Soundtracks" mock: the dance floor, one bubble at a time, real covers,
+  the apps named only where needed, following each one's attribution
+  rules). Each person picks one song from Apple's public catalog (the
+  iTunes Search API: no account, no key, about 20 searches a minute a
+  computer, asked from this computer after a 400 ms pause, two letters at
+  least; songs.py, song_flow.search). It's an account key, "song"
+  (songs.clean: title, artist, the catalog's id, its Apple Music link;
+  album, year, cover, preview and the day picked when they hold; Apple's
+  hosts only): the Worker reads it with the settings and hands it, cleaned
+  by songOf (board.ts), to me and my mutual friends on /board beside their
+  look, so no new request; picking is the account's one save. The Decks
+  screen's bottom-right corner gets the dance floor (board.dance_html,
+  DANCE_JS in fridge_js): my Pip DJs at a booth (two decks, a mixer,
+  speakers, an equaliser in my accent; my look and the closet's
+  headphones) with my song on the decks; each mutual crewmate with a song
+  dances beside it in their colour and look, newest first, up to six then
+  "+N", one bubble at a time with their song's title (a fresh song hops in
+  once with a star; the first look is history). Motion: Gentle by default
+  (a slow sway, no pose swaps; Sam: "make it less jumpy"), Lively or Still
+  in Settings, still with Reduce motion; about twelve seconds after a
+  draw, then rest, as Pip's loops. ⌄ folds it to a chip (a record, "♪ N",
+  ★ for a fresh song; this computer remembers, no redraw), × takes it off
+  (Settings › Board › Song of the moment brings it back), and where the
+  open floor would cover the board's column it starts as its chip
+  (Sam's "remove from screen, collapse"); a tap opens it over the board.
+  A bubble's tap opens the song's card: the cover, title, artist · album
+  · year, ▶ 30 s (Apple's preview fetched to a file and played by Anki's
+  own player, as Anki's web view can't play AAC; the latest tap wins),
+  Listen, and Apple's "Listen on Apple Music" badge (its artwork as Apple
+  serves it, linked to the song's page; Apple's rule for its covers and
+  previews; plain words when the image doesn't load). Listen asks which
+  music app the first time (Apple Music, Spotify, YouTube Music, another)
+  and then just says "Listen in Spotify" (Sam): Apple Music opens the song
+  itself, Spotify and YouTube Music a search for its title and artist that
+  lands on it, another app copies the title and artist. Settings › Board ›
+  Song of the moment: the floor, Dancing (Gentle · Lively · Still), My
+  music app (Ask me the first time, or one). A crewmate's profile card
+  says their song with Listen; mine says mine. The bubble is the song they
+  picked, never what they're listening to, which Due Crew never knows.
+  An older add-on saving my settings on another computer drops the song,
+  as with every newer account key (it saves the keys it knows).
 

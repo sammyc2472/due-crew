@@ -987,6 +987,7 @@ profile_js = board.profile_overlay_js({
     "you": False, "paused": False, "exam": "",
     # 3.8.2: their Pip in the emoji's place, in their colour and look
     "sev": board.card_sev({"name": "Dre", "accent": "blue", "look": ["partyhat", "bowtie", "balloon"]}, {}),
+    "song": {"t": "Second Wind", "a": "Northbound", "id": 1702, "url": "https://music.apple.com/us/album/x/1?i=1702"},  # 3.9.6
     "duet": {"run": 5, "best": 23,
              "mine_week": [True, True, False, True, True, True, True],
              "theirs_week": [True, True, True, True, True, True, True]},
@@ -1018,6 +1019,90 @@ sheet_pick = board.sheet_js({"id": "p4", "title": "Change deck", "text": "Run St
                              "field": {"kind": "pick", "at": 3, "items": ["Big Step 1"] + [f"Big Step 1::{x}" for x in (
                                  "Biochem", "Cardio", "Endo", "GI", "Heme", "Immuno", "Micro", "Neuro", "Pharm",
                                  "Physio", "Psych", "Renal", "Repro", "Resp")] + ["Japanese Core 2k"]}})
+
+# 3.9.6, song of the moment: the dance floor in the Decks screen's bottom-right corner. Each case is a
+# Decks screen of its own (an iframe: the floor is fixed to its window), the board's real output and
+# dance_js, which puts the floor on the page from the board's template; data-floor names each for the
+# screenshots (light, dark, narrow).
+def _song(i, t, a, al, y, at="2026-08-28", prev=True):
+    s = {"t": t, "a": a, "al": al, "y": y, "id": 1700000000 + i, "at": at,
+         "url": f"https://music.apple.com/us/album/x/{1600000000 + i}?i={1700000000 + i}"}
+    if prev:
+        s["prev"] = f"https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview/{i}.m4a"
+    return s  # no cover here (the preview can't reach Apple's image host): each shows its colour tile
+
+
+_SONGS = [_song(1, "Lantern Hours", "Mira Vale", "Lantern Hours", 2025, "2026-08-31"),
+          _song(2, "Second Wind", "Northbound", "Mile Markers", 2022, "2026-08-27"),
+          _song(3, "Coffee at 2 a.m.", "Velvet Room", "Late Shift", 2021, "2026-08-20"),
+          _song(4, "Slow Burn", "Tide & Ember", "Slow Burn", 2026, "2026-08-11", prev=False),
+          _song(5, "Paper Cranes", "Ivy Lane", "Folded", 2026, "2026-08-08"),
+          _song(6, "Static Bloom", "Hollow Pines", "Static Bloom", 2025, "2026-08-05"),
+          _song(7, "Golden Hour Again", "June Atlas", "Small Weathers", 2023, "2026-08-02"),
+          _song(8, "Night Rounds", "Paper Harbor", "Night Rounds", 2024, "2026-07-30"),
+          _song(9, "Long Way Round <i>(Live)</i>", "Northbound & \"Friends\"", "Mile Markers", 2022, "2026-07-21")]
+_MY_SONG = _song(20, "Study Hall", "Mira Vale", "Lantern Hours", 2025, "2026-08-30")
+_DANCERS = [("dre", "Dre", "blue", ["dino"]), ("marisa", "Marisa K.", "teal", ["wizard"]), ("noah", "Noah", "rose", ["partyhat", "scarf"]),
+            ("priya", "Priya", "amber", ["sprout", "shades", "balloon"]), ("kai", "Kai", "purple", []), ("nia", "Nia", "green", ["beanie"]),
+            ("jun", "Jun", "teal", ["cap"]), ("lena", "Lena", "blue", []), ("bo", "Bartholomew Fitzgerald-Montgomery", "rose", ["bowtie"])]
+
+
+def _dance_view(n, me=True, fresh=(), **kw):
+    crew = [{"uid": u, "name": nm, "accent": a, "look": lk, "song": _SONGS[i], "fresh": u in fresh}
+            for i, (u, nm, a, lk) in enumerate(_DANCERS[:n])]
+    return dict({"me": _MY_SONG if me else None, "crew": crew, "motion": "gentle", "app": "spotify", "playing": "", "pip": True}, **kw)
+
+
+def _dance_frame(name, view, cfg=None, dark=False, width=1000, height=560, then=""):
+    """A Decks screen with the board and its floor: Anki's <center> and button look, the deck list above."""
+    cfg = dict({"period": "today", "sev_look": ["partyhat", "glasses"], "sev_closet": {"partyhat": "2026-09-01", "glasses": "2026-09-01"}},
+               **(cfg or {}))
+    board_html = board.render(dict(DATA, entries=DRESSED), cfg, now_ts - 60, dance=view)
+    decks = ("<table class='decks' style='margin:8px auto 0;font-size:13px'><tr><th align=left>Deck</th><th>Due</th><th>New</th></tr>"
+             + "".join(f"<tr><td style='padding:4px 18px 4px 0'>{d}</td><td style='color:#2b6fd1'>{a}</td><td style='color:#2e8b57'>{b}</td></tr>"
+                       for d, a, b in (("Big Step 1", 312, 20), ("Path Book", 84, 0), ("Pharm", 41, 10))) + "</table>")
+    script = ("function pycmd(c) { console.log('pycmd', c); return false; }\nwindow.dcBK = 'preview';\n"
+              + board.dance_js() + "\n" + then)
+    page = ("<!doctype html><html><head><meta charset='utf-8'><style>"
+            "body { margin: 0; padding: 12px; background: %s; color: %s; font-family: -apple-system, sans-serif; }"
+            "center button { margin: 4px 6px; padding: 6px 14px; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.3); min-width: 60px; }"
+            "</style></head><body class='%s'><center>%s<br>%s</center><script>%s</script></body></html>"
+            % ("#2c2c2c" if dark else "#f5f5f5", "#d7d7d7" if dark else "#222", "nightMode" if dark else "", decks,
+               board_html, script.replace("</", "<\\/")))
+    return (f"<iframe data-floor='{name}' style='width:{width}px;height:{height}px;border:1px solid #ccc;margin:0 0 8px;display:block' "
+            f"srcdoc=\"{html.escape(page, quote=True)}\"></iframe>")
+
+
+sections.append("<h3>3.9.6: the dance floor, four songs (Gentle; one bubble at a time)</h3>" + _dance_frame("four", _dance_view(4)))
+sections.append("<h3>3.9.6: Noah's new song: he hops on, a star on his bubble</h3>"
+                + _dance_frame("fresh", _dance_view(4, fresh=("noah",))))
+sections.append("<h3>3.9.6: nine songs: five dance, +4 in the sixth's place (the list)</h3>"
+                + _dance_frame("nine", _dance_view(9), then="dcDance.show('*');"))
+sections.append("<h3>3.9.6: no songs yet, none of mine: Put on a song?</h3>" + _dance_frame("none", _dance_view(0, me=False)))
+sections.append("<h3>3.9.6: a narrow window: the booth, one dancer, a count</h3>"
+                + _dance_frame("narrow", _dance_view(4), width=760))
+sections.append("<h3>3.9.6: dark, Lively, a preview playing</h3>"
+                + _dance_frame("dark", _dance_view(6, motion="lively", playing="dre"), cfg={"theme": "dark"}, dark=True))
+sections.append("<h3>3.9.6: a crewmate's song card (Listen in Spotify; Apple's badge beside the cover)</h3>"
+                + _dance_frame("card", _dance_view(4), then="dcDance.show('dre');"))
+sections.append("<h3>3.9.6: folded into the corner (a star: a new song), and opened again with a tap</h3>"
+                + _dance_frame("folded", _dance_view(4, fresh=("noah",), folded=True), height=300))
+sections.append("<h3>3.9.6: the song card, dark, a preview playing, no music app yet (Listen asks which)</h3>"
+                + _dance_frame("card-dark", _dance_view(4, app="", playing="marisa"), cfg={"theme": "dark"}, dark=True,
+                               then="dcDance.show('marisa');"))
+sections.append("<h3>3.9.6: my song's card</h3>" + _dance_frame("mine", _dance_view(4), then="dcDance.show('me');"))
+_RESULTS = json.dumps({"q": "lantern", "error": False, "songs": [
+    {"id": 1701, "t": "Lantern Hours", "a": "Mira Vale", "al": "Lantern Hours", "y": 2025},
+    {"id": 1702, "t": "Lanterns on the Water", "a": "June Atlas", "al": "Small Weathers", "y": 2023},
+    {"id": 1703, "t": "Lantern (Acoustic) <img src=x onerror=alert(1)>", "a": "Paper Harbor", "al": "Night Rounds", "y": 2024,
+     "art": "javascript:alert(1)"}]})
+_SEARCH = ("dcDance.search(); var q = document.querySelector('#dc-song .sq'); q.value = 'lantern'; "
+           "q.dispatchEvent(new Event('input')); setTimeout(function () { dcSong.results(%s); "
+           "document.querySelectorAll('#dc-song .sr button')[1].click(); }, 450);" % _RESULTS)
+sections.append("<h3>3.9.6: the search sheet (a result picked; Use this, Take it off)</h3>" + _dance_frame("search", _dance_view(4), then=_SEARCH))
+sections.append("<h3>3.9.6: the search sheet, dark</h3>" + _dance_frame("search-dark", _dance_view(4), cfg={"theme": "dark"}, dark=True, then=_SEARCH))
+sections.append("<h3>3.9.6: Settings › Board, song of the moment</h3>" + board.settings_html(
+    dict(SET_VIEW, tab="board"), dict(SET_CFG, dance="lively", music_app="spotify")))
 
 page = f"""<!doctype html><html><head><meta charset="utf-8">
 <title>Due Crew board preview</title>

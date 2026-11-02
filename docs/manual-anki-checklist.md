@@ -712,6 +712,18 @@ In Anki (as a follower):
 - [ ] A plan of more than 16 sets: You › Plans' path folds the runs done ("22 done") and far ahead ("26 to come") into one piece each, its count under it; sets behind, today's, the two before and the next four stay their own; a click on a fold opens its day. A plan of 16 or fewer: a segment a set. Light and dark.
 - [ ] You › Plans' week, click today: its details have one Study at the top right (no Study on each set, none on the card's line); it opens "Due Crew::<plan> · Today" on Anki's Study screen with today's new cards and the plan's reviews due today, nothing due tomorrow; the tooltip says how many of each. Click a past day behind: its Study builds "Due Crew::<plan> · <day>" with that day's cards not seen yet and its reviews due today. Today's set (B): its own deck loses those cards and keeps the rest. A day ahead: no Study. Tomorrow morning both decks are empty and gone.
 
+### 3.9.6: song of the moment and the dance floor (about 15 minutes; a crewmate on another computer helps)
+- [ ] Decks screen, a wide window: the floor in the bottom-right corner, my Pip at the booth. With no song, its bubble says "Put on a song?"; a tap opens the search.
+- [ ] Search: type two letters and stop: real songs from Apple with covers. Apple's "Listen on Apple Music" badge shows under them (not just its words); clicking it opens the picked song's page. Pick one, Use this: it's on the decks.
+- [ ] The crewmate picks a song; after a refresh their Pip hops onto my floor once with a ★ on its bubble, in their colour and look. Bubbles pass along one at a time, a fade, about every five seconds; pointing at a Pip shows its bubble.
+- [ ] Tap their bubble: the card with the cover, ▶ 30 s plays through the speakers (Anki's player) and ■ stops it; tapping ▶ on two songs quickly plays only the second. Apple's badge beside the cover opens the song on Apple Music.
+- [ ] Listen, the first time: asks which app. Pick Spotify: Spotify (app or browser) opens a search with the song first. From then on the card says "Listen in Spotify", no question. Settings › Board › Song of the moment › Ask me the first time: the next Listen asks again. Another app: copies "Title · Artist".
+- [ ] Gentle: a slow sway, nothing jumps. Lively: steps on the beat. Still: nothing moves. Reduce motion (system): still. They rest after about twelve seconds; pointing wakes them.
+- [ ] ⌄ folds it to the chip (record, ♪ N, ★ when there's a new song); a tap opens it; Anki restarted, it's as I left it. × takes it off; Settings brings it back. Reset board: on, Gentle, open.
+- [ ] Narrow the window until the floor would cover the crew list: it becomes its chip by itself; widen: it opens again. Tap the chip on a narrow window: it opens over the board and stays until folded.
+- [ ] A crewmate's profile card: "♪ title · artist" with Listen. Mine: my song with Change.
+- [ ] Offline: the search says it couldn't reach the catalog; nothing in Anki's error window.
+
 ### 3.9.6: Pip Party, quicker, and nothing again (about 10 minutes; two phones)
 - [ ] From Decks (or Today) to You › Pip Party on a big collection: the tab is there at once, "Reading your cards…" a moment, then the map. Tap a tile: it's picked at once, its counts follow. Type in Find while it reads: the box keeps what you typed and where you are.
 - [ ] Imposter, eight rounds or so in a sitting: no pair again, and no topic again while a pair of new ones is left; a subject with four pairs plays all four before any comes back. Trivia's Another block and Links' New board: new questions and words first. (A site change: deploy the site first.)

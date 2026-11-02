@@ -115,6 +115,8 @@ def on_message(cmd, parts):
         listen(arg)
     elif cmd == "songapp" and arg in dict(songs.APPS):
         set_app(arg)
+    elif cmd == "songapp" and arg == "ask":
+        set_app("")  # Settings' "Ask me the first time": the next Listen asks again
     elif cmd == "songprev" and arg:
         preview(arg)
     elif cmd == "songapple" and arg:
@@ -265,8 +267,9 @@ def _open(s, key):
 
 
 def apple(uid):
-    """Apple's badge beside a cover: the song's own page on Apple Music."""
-    s = song_of(uid)
+    """Apple's badge beside a cover: the song's own page on Apple Music. A
+    crewmate's or mine by uid; in the search, a result's by its track id."""
+    s = _last["songs"].get(int(uid)) if uid.isdigit() and len(uid) <= 16 else song_of(uid)
     if s:
         from aqt.utils import openLink
         openLink(s["url"])

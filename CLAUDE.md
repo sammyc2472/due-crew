@@ -109,7 +109,7 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   from `session.week_raw` with the current Privacy switches at every sync,
   so turning a switch off takes that number off every day.
 - Consent: friendship is two edges (`friends(owner, friend)`); only mutual
-  friends read my week, decks, heatmap and accent; a cheer lands only if its
+  friends read my week, decks, heatmap, accent and song of the moment; a cheer lands only if its
   recipient added the sender; a knock needs a squad in common or my code.
   Someone connected to me gets a name and an emoji, nothing more; a
   stranger's uid gets the same 404 as no account.
@@ -263,6 +263,7 @@ same commit, each with its test:
 | Shares: text, and picture cards (made in Anki since 3.8.0) | `share.py`, `shares.py`, `sharecard.py`, `ui/share_card_dialog.py` | `site/public/cards.js` |
 | Admin, notices, feedback, reports (kept for the Inbox, 3.8.1) | | `admin.ts`, `people.ts`, `notices.ts`, `feedback.ts`, `reports.ts` |
 | Your Wrapped (3.9.0): the year's story in the board's place, the board's line 1 Dec to 15 Jan, Tools › Your year… | `wrapped.py` (pure: facts, slides, words, SAD), `wrapped_flow.py` (one query, counts, the card), `board.wrapped_html`/`wrapped_js`/`wrapped_line`, `sharecard.year`'s Pip | never sent; the account's `wrapped_seen`; cards.js draws the year card's Pip the same |
+| Song of the moment and the dance floor (3.9.6): one song from Apple's public catalog, shown to my mutual friends; the Decks screen's bottom-right corner, my Pip DJing and my crew's Pips dancing with their songs' bubbles (Gentle by default, one bubble at a time, folds to a chip, starts folded where it would cover the board); a song's card with Apple's badge beside its cover and preview; Listen in my music app (asked once) | `songs.py` (pure), `song_flow.py` (search, Use this, Listen, the preview through Anki's player, the floor's view), `board.dance_html`/`DANCE_JS`/`_settings_songs`, `social._open_profile`; `tests/test_songs.py`, `tests/test_dance_floor.py` | account key `song`; `songOf` in `board.ts` (me and mutual friends, beside the look) |
 | Why isn't this card showing? (Browse right-click, 3.8.0) | `why.py`, `why_flow.py`, `ui/why_dialog.py` | never sent |
 | Browse's Due says when a plan opens a suspended card (3.9.5, Sam's pick: "Thu 5 Nov · Heme 2"; not at my own pace, not a leech) | `plans.opens_ahead`/`opens_words`, `plan_flow.opens_map`/`browser_row` (on `browser_did_fetch_row`; never raises) | never sent |
 | Two buttons (3.9.1): Again and Good alone, 2, 3 and 4 count as Good; Settings › Board › Reviewing, and Try two buttons on Insights' Hard habit line | `two_buttons.py` (on `reviewer_will_init_answer_buttons` and `reviewer_will_answer_card`), `board._settings_board`, `team_flow.try_two` | account key `two_buttons` |
@@ -315,6 +316,9 @@ clean `main` does the migrations, the API, then the site, then
 - Code, comments and test data name no third-party deck, question bank,
   video series or game (trademarks): "a big shared deck", "Big Step 1";
   Pip Party's games say what kind of game they are in our own words.
+  Music apps are named only where Listen can't work without them (its
+  chooser, their link hosts; Sam, 3.9.6), never a logo; Apple's covers and
+  previews only beside Apple's own badge.
 - Threading: collection access, config writes, and cache commits on the main
   thread only; all HTTP in background threads with timeouts.
 - Anything meant as an update must never create (a row is not a join), and

@@ -41,6 +41,7 @@ jobs:
       - run: python3 tests/test_lesson_decks.py  # Today's lesson, B: each open lesson a deck of its own (never sent)
       - run: python3 tests/test_plan_joy.py  # 3.9.6: the plan joys (a set done, milestones, the finish, caught up, day one)
       - run: python3 tests/test_songs.py  # 3.9.6: song of the moment (the song, the catalog, Listen, the floor's view)
+      - run: python3 tests/test_dance_floor.py  # 3.9.6: the dance floor on the Decks screen, its card and search
 
   dialogs:
     name: dialogs build (offscreen PyQt6)
