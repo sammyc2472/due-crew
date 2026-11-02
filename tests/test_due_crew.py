@@ -7808,7 +7808,7 @@ def test_date_details_round5():
     check("details: today's row keeps its topics on the row (each its Study and Browse, 3.9.5), not again under it",
           h.count("plantopicstudy:p1:u1:0") == 1 and h.count("plantopic:p1:u1:0") == 1)
     check("details: a topic's name shows its two ways beside it (Sam: \"need that option to browse or make the filtered deck\")",
-          'id="dc-tp-p1u1-0" hidden><a href="#" onclick="' in h and "pycmd('duecrew:plantopicstudy:p1:u1:0|" in h
+          'id="dc-tp-p1u1-0" hidden><a href="#" title="A filtered deck: ' in h and "pycmd('duecrew:plantopicstudy:p1:u1:0|" in h
           and "document.getElementById('dc-tp-p1u1-0')" in h and ">Browse</a></span>" in h, h)
     check("details: the name stays underlined while they show; the one clicked stays marked (Sam: \"they should underline "
           "and show that they are being selected\")",

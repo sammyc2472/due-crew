@@ -182,12 +182,14 @@ var dcPlan = (function () {
     var out = [];
     if (p.now) {
       out.push(h("div.strip", {}, [h("span.h", { text: p.now.head }), h("span.grow", { text: p.now.words }),
-        p.now.study ? btn("Study now", function () { send("study", { kind: "today", key: p.now.uid }); }, "pri") : null]));
+        p.now.study ? btn("Study now", function () { send("study", { kind: "today", key: p.now.uid }); }, "pri",
+          { title: "A filtered deck: today\u2019s set\u2019s new cards and the ones due today" }) : null]));
     }
     if (p.behind) {
       out.push(h("div.strip.late", {}, [h("span.h", { text: "Behind" }), h("span.grow", { text: p.behind.words }),
         /* no button: a host where nothing's studied (duecrew.com); Anki's view always names one */
-        p.behind.button ? btn(p.behind.button, function () { send("study", { kind: "behind", key: p.behind.uids }); }) : null]));
+        p.behind.button ? btn(p.behind.button, function () { send("study", { kind: "behind", key: p.behind.uids }); }, null,
+          { title: "A filtered deck of them" }) : null]));
     }
     if (p.shape) {
       var sh = h("div.shape");

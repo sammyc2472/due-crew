@@ -4379,4 +4379,11 @@ every release that changes how something works.
   count there, taken back before shipping: clutter). On a click, a search
   here; nothing is sent (`plans.day_cards`, `plan_flow.study_day`,
   `board._day_study`, `planstudyday`).
+- 3.9.6, every Study that builds a deck says so on hover, in Anki's word
+  (Sam: "change the wording of the hover"): "A filtered deck: its new cards
+  and the ones due today", "A filtered deck of them, the most missed
+  first", and so on, on a day's, a date's, a topic's, a quiz's, the exam
+  box's, Insights' and Today's set's (B) Study, the plan window's Study now
+  and Study the N, and QBank QIDs'; a day's Study's tooltip says "in a
+  filtered deck". The word on the link stays Study.
 

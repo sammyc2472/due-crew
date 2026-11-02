@@ -1822,7 +1822,7 @@ def study_day(pid, day):
         bits = [f"{n_new:,} new"] if n_new else []
         bits += [f"{n_due:,} due"] if n_due else []
         if bits:
-            tooltip(f"{'Today' + chr(8217) + 's' if day == today else when + ':'} {' and '.join(bits)}, in one deck.")
+            tooltip(f"{'Today' + chr(8217) + 's' if day == today else when + ':'} {' and '.join(bits)}, in a filtered deck.")
 
 
 def _day_words(day):

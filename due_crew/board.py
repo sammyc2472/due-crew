@@ -1929,7 +1929,7 @@ def _plan_status(card, pid):
     act = ""
     if lesson.get("today"):
         uid = str(lesson["today"])
-        act = f'<a href="#" title="Its deck, in Anki" onclick="{_pycmd(f"planstudydate:{pid}:{uid}")}">Study</a>'
+        act = f'<a href="#" title="A filtered deck: today&rsquo;s set&rsquo;s new cards and its learning ones due now" onclick="{_pycmd(f"planstudydate:{pid}:{uid}")}">Study</a>'
     # 3.9.6: the first morning says so all day, and Pip says let's go just after the words, once
     one = (card.get("joy") or {}).get("day1")
     first = '<b class="jd1">Day one</b> &middot; ' if one else ""
@@ -2153,7 +2153,7 @@ def _plan_now(card, pid):
         out += (f'<div class="pn"><span><a class="tp" href="#" title="Browse them" onclick="{_pycmd(f"insbrowse:{did}:h")}">'
                 f'{n:,} card{"s" if n != 1 else ""}</a> Anki won&rsquo;t show you before {when}</span>'
                 # 3.9.5 (Sam's FSRS rule): a deck only before a date
-                + (f'<span class="acts"><a href="#" onclick="{_pycmd(f"insstudy:{did}:h")}">Study {n:,}</a></span>'
+                + (f'<span class="acts"><a href="#" title="A filtered deck of them, the most missed first" onclick="{_pycmd(f"insstudy:{did}:h")}">Study {n:,}</a></span>'
                    if ins.get("name") else "") + '</div>')
     return out
 
@@ -2174,7 +2174,7 @@ def _quiz_line(card, pid):
     return (f'<div class="pn"><span>For <b>{e(str(qz.get("name") or "?"))}</b> {when}'
             + (f' &middot; {left} more day{"s" if left != 1 else ""} of prep' if left else "")
             + f' &middot; {n:,} card{"s" if n != 1 else ""} open from its sets</span>'
-            f'<span class="acts"><a href="#" title="Its sets&rsquo; open cards in one deck, the shakiest first" '
+            f'<span class="acts"><a href="#" title="A filtered deck: its sets&rsquo; open cards, the shakiest first" '
             f'onclick="{_pycmd(f"planquiz:{pid}:" + str(qz.get("id") or ""))}">Study for it</a></span></div>')
 
 
@@ -3212,7 +3212,7 @@ def _insights_html(did, v):
                 f'{len(hero):,} card{"s" if len(hero) != 1 else ""}</a> Anki won&rsquo;t show you before {when}</div>'
                 f'{_ins_scope(aim) if mine else ""}'
                 # 3.9.5 (Sam's FSRS rule): Study only before a date, my exam or a plan's event
-                + (f'<a class="bt" href="#" onclick="{_pycmd(f"insstudy:{did}:h")}">Study {len(hero):,} early</a>'
+                + (f'<a class="bt" href="#" title="A filtered deck of them, the most missed first" onclick="{_pycmd(f"insstudy:{did}:h")}">Study {len(hero):,} early</a>'
                    if aim.get("name") else "") + '</div>')
     elif aim.get("kind") == "exam":
         # 3.9.2: my exam with nothing at risk still says what it covers, and keeps its Change; without
@@ -3237,7 +3237,7 @@ def _insights_html(did, v):
                     f'<span class="ib"><i class="st" style="width:{100 * st / of:.1f}%"></i>'
                     f'<i class="fg" style="left:{100 * st / of:.1f}%;width:{100 * fg / of:.1f}%"></i></span>'
                     f'<span class="c"><b>{st + fg}</b> of {of}</span>'
-                    + (f'<a href="#" onclick="{_pycmd(f"insstudy:{did}:{i}")}">Study {st + fg}</a>' if dated else "")
+                    + (f'<a href="#" title="A filtered deck of them, the most missed first" onclick="{_pycmd(f"insstudy:{did}:{i}")}">Study {st + fg}</a>' if dated else "")
                     + '</div>')
         out += "</div>"
     out += _ins_map(did, v.get("map") or [], v.get("map_by"), v.get("map_at"), v.get("map_ways"))
@@ -3526,8 +3526,8 @@ def _day_study(pid, d):
     opened here; a set's own Study is this one."""
     if not any(u["state"] in ("open", "done") and not u.get("shut") for u in d.get("units") or []):
         return ""
-    tip = ("Today&rsquo;s new cards and what&rsquo;s due today in this plan, one deck in Anki" if d.get("today")
-           else "Its new cards not seen yet and what&rsquo;s due of it today, one deck in Anki")
+    tip = ("A filtered deck: today&rsquo;s new cards and what&rsquo;s due today in this plan" if d.get("today")
+           else "A filtered deck: its new cards not seen yet and what&rsquo;s due of it today")
     return (f'<span class="acts"><a href="#" title="{tip}" '
             f'onclick="{_pycmd("planstudyday:" + pid + ":" + str(d["day"]))}">Study</a></span>')
 
@@ -3575,7 +3575,7 @@ def _topic_go(pid, uids, name, i):
     return (f'<a class="tp dc-tpn" href="#" onclick="var x=document.getElementById(\'{tid}\');'
             f'if(x){{x.hidden=!x.hidden;this.classList.toggle(\'on\',!x.hidden);}}return false;">'
             f'{e(str(name))}</a><span class="du-tpgo" id="{tid}" hidden>'
-            f'<a href="#" onclick="{pick}{_pycmd(f"plantopicstudy:{pid}:{uids}:{int(i)}")}">Study</a>'
+            f'<a href="#" title="A filtered deck: its new cards and the ones due today" onclick="{pick}{_pycmd(f"plantopicstudy:{pid}:{uids}:{int(i)}")}">Study</a>'
             f'<a href="#" onclick="{pick}{_pycmd(f"plantopic:{pid}:{uids}:{int(i)}")}">Browse</a></span>')
 
 
@@ -8184,7 +8184,7 @@ def _due_plan(r):
     go = ""  # 3.8.0: one Study, the box's Study today (its first step is this plan's deck)
     if r.get("study"):  # 3.8.1: but a plan's date with cards open has its own: a cram of just it
         cmd = _pycmd(f"planstudydate:{r['pid']}:{r['uid']}")
-        go = (f'<a href="#" class="du-go" title="A Due Crew deck of its open cards, new and review, in random order" '
+        go = (f'<a href="#" class="du-go" title="A filtered deck: its new cards and the ones due today" '
               f'onclick="{cmd}">Study</a>')
     n = f'<span class="n">{e(r["n"])}</span>' if r["n"] else ""
     name, more = _date_more(r)

@@ -594,7 +594,7 @@ def test_study_a_day_v396():
         check("today's Study, as the board sends it: one deck, the plan's name and Today, Anki's Study screen on it",
               {4, 5, 6, 7} <= set(got) and w.col.decks.cur == w.deck(TODAY_DECK) and w.moved[-1:] == ["overview"], (got, w.filtered()))
         check("…and it says what's in it, as Anki built it (another add-on's deck keeps its card)",
-              9 not in got and w.toasts[-1:] == ["Today\u2019s 2 new and 2 due, in one deck."], w.toasts[-2:])
+              9 not in got and w.toasts[-1:] == ["Today\u2019s 2 new and 2 due, in a filtered deck."], w.toasts[-2:])
         check("…the morning after empties it", F.untils().get(w.deck(TODAY_DECK)) == day(0), F.untils())
         F.study_day(w.pid, day(0))
         check("again: built again, the same deck", w.cards_in(TODAY_DECK) == got and w.filtered().count(TODAY_DECK) == 1, w.filtered())
@@ -603,7 +603,7 @@ def test_study_a_day_v396():
         F.study_day(w.pid, day(-2))
         check("a past day's Study: its own deck by its day; the review it shares with today's moves over, today's keeps the rest",
               set(w.cards_in(past) or []) == {1, 2, 3, 4} and set(w.cards_in(TODAY_DECK) or []) == {5, 6, 7}
-              and w.toasts[-1] == f"{when}: 3 new and 1 due, in one deck.", (w.filtered(), w.toasts[-1:]))
+              and w.toasts[-1] == f"{when}: 3 new and 1 due, in a filtered deck.", (w.filtered(), w.toasts[-1:]))
         n = len(w.toasts)
         F.study_day(w.pid, day(-1))
         F.study_day(w.pid, day(2))

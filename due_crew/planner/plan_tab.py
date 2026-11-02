@@ -90,6 +90,7 @@ class PlanTab(QWidget):
         self.today_go.setProperty("dc", "go")
         self.today_go.setAutoDefault(False)
         self.today_go.clicked.connect(self._study_today)
+        self.today_go.setToolTip("A filtered deck: today’s set’s new cards and the ones due today")
         tl.addWidget(self.today_go)
         root.addWidget(self.today_box)
         self.behind_box, bl = frame("line", horizontal=True, margins=(2, 0, 0, 0))
@@ -101,6 +102,7 @@ class PlanTab(QWidget):
         self.behind_go = QPushButton("Study what's left")
         self.behind_go.setAutoDefault(False)
         self.behind_go.clicked.connect(self._study_behind)
+        self.behind_go.setToolTip("A filtered deck of them")
         bl.addWidget(self.behind_go)
         root.addWidget(self.behind_box)
 

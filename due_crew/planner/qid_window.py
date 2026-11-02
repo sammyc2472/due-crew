@@ -93,6 +93,7 @@ class QidWindow(QDialog):
         self.study_btn.setDefault(True)
         self.study_btn.setProperty("dc", "go")  # 3.9.4 (Sam): in the accent; Browse's link kept ui._mark from it
         self.study_btn.clicked.connect(self._study)
+        self.study_btn.setToolTip("A filtered deck of them: Due Crew › QBank cards")
         buttons.addWidget(self.study_btn)
         root.addLayout(buttons)
         self.where = _plain("Study now adds them to Due Crew › QBank cards. "
@@ -211,7 +212,7 @@ class QidWindow(QDialog):
             words.addWidget(said)
             lay.addLayout(words, 1)
             if r["missed"]:
-                lay.addWidget(link("Study", lambda r=r: self._study_topic(r), tip=study_missed(len(r["missed"]))),
+                lay.addWidget(link("Study", lambda r=r: self._study_topic(r), tip="A filtered deck: " + study_missed(len(r["missed"]))[6:]),
                               0, Qt.AlignmentFlag.AlignVCenter)
             self.topics_lay.addWidget(row)
         more = Q.more_topics(rows)
