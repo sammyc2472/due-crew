@@ -562,6 +562,54 @@ def test_behind_sheet_glue():
         sheets._open.clear()
 
 
+
+def test_cards_i_suspend_are_set_aside_v396():
+    """3.9.6 (Sam: "if i've chosen to suspend something after the plan opens
+    it, don't want it to make me behind"): a new card I suspend on a date that
+    opened here is set aside: not left, not behind, in none of its numbers,
+    nor in the day's Left. One the plan holds (Hold back) still counts; a
+    date all suspended again (Edit › Undo) is closed, not set aside; a date
+    that hasn't opened keeps its suspended cards to come."""
+    from due_crew import plans as P
+    store, cl = _world()
+    pid, code = store.add_plan("dre", "Path Book", "Step 1", UNITS)
+    with Glue(cl, _col()) as g:
+        g.follow(code)
+        F = g.F
+        prog = F._state["plan_progress"][pid]
+        check("suspend: before, lesson 2's three new cards are left on it (opened by the plan)",
+              prog["l2"] == [3, 0, 3], prog.get("l2"))
+        g.col.db.conn.execute("UPDATE cards SET queue = -1 WHERE id = 4")  # I suspend one of them in Anki
+        g.progress()
+        prog = F._state["plan_progress"][pid]
+        st = F._state_cfg()[pid]
+        check("suspend: the one I suspended is set aside: lesson 2 has two, both left",
+              prog["l2"] == [2, 0, 2] and P.set_aside(P.DeckIndex(g.col, 10), F.followed()[0]["doc"], None,
+                                                      st.get("applied"), st.get("held")) == {4}, prog.get("l2"))
+        card = F.card_view(F.followed()[0], st, prog, day(0))
+        b = card["behind"]
+        check("suspend: behind counts the two I didn't set aside, not three", b and b["left"] == 2, b)
+        g.col.db.conn.execute("UPDATE cards SET queue = 2, type = 2 WHERE id IN (3, 5)")  # and I see the other two
+        g.progress()
+        prog = F._state["plan_progress"][pid]
+        card = F.card_view(F.followed()[0], st, prog, day(0))
+        check("suspend: the rest seen, lesson 2 is done, and nothing's behind",
+              prog["l2"] == [2, 2, 2] and card["behind"] is None
+              and next(x for x in card["path"]["lessons"] if x["uid"] == "l2")["state"] == "done", (prog.get("l2"), card.get("behind")))
+        c = F._pcfg()
+        c["plans"][pid]["held"] = [4]  # the plan holds it (Hold back), not me
+        F._psave(c)
+        g.progress()
+        check("suspend: one the plan holds still counts (left till it opens)", F._state["plan_progress"][pid]["l2"] == [2, 2, 3])
+        c["plans"][pid]["held"] = []
+        F._psave(c)
+        g.col.db.conn.execute("UPDATE cards SET queue = -1 WHERE id IN (6)")  # lesson 3, opened today: its one card suspended again
+        g.progress()
+        check("suspend: a date with none of its cards open (Edit › Undo) is closed, not set aside",
+              F._state["plan_progress"][pid]["l3"] == [0, 0, 1])
+        check("suspend: a date that hasn't opened keeps its suspended cards to come",
+              F._state["plan_progress"][pid]["l4"] == [0, 0, 1])
+
 def test_qt_sheet():
     """Off the board (a window in front, the review screen), Qt's list: each way with its line."""
     from due_crew import app as A, sheets, ui

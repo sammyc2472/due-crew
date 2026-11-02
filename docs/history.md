@@ -4340,4 +4340,14 @@ every release that changes how something works.
   calendar" (the week, now that there's Add to my calendar) says they
   stay suspended, each with Open now in You › Plans. Two tests that
   failed on some days now name their day.
+- 3.9.6, cards I suspend aren't behind (Sam: "if i've chosen to suspend
+  something after the plan opens it, don't want it to make me behind"). A
+  new card suspended on a date that opened here is set aside
+  (`plans.set_aside`): in none of the date's numbers, so never left, never
+  behind on the path, nor in its Left, the week's load, the exam box or
+  the progress authors count. Not one the plan holds (Hold back, Put
+  back), nor a leech; and a date with none of its cards open (Edit › Undo)
+  is closed, not set aside, so the week still offers Open now. A deck's
+  update that adds suspended cards to a date already open sets them aside
+  too: the plan never opened them, and nothing tells the two apart.
 

@@ -457,7 +457,7 @@ def run(col, plan_list, state, today, mode=None, everything=False, dry=False):
                 was[u["id"]] = _was(st, u["id"])
             if p.get("own") == "next" and not dry:  # a morning's, never an update's line
                 idx = P.DeckIndex(col, st["deck_id"])
-                nxt = P.next_by_itself(doc, applied, st.get("own_opened"), P.progress(idx, doc, _swap(st)))
+                nxt = P.next_by_itself(doc, applied, st.get("own_opened"), P.progress(idx, doc, _swap(st), _aside(idx, st, doc)))
                 if nxt and nxt["id"] not in {u["id"] for u, _h in items} and str(later.get(nxt["id"]) or "") <= today:
                     was[nxt["id"]] = _was(st, nxt["id"])
                     applied.pop(nxt["id"], None)  # shut again since (Undo): it opens whole
@@ -644,8 +644,17 @@ def progress(col, plan_list, state, idxs=None):
         if not st or not _deck_ok(col, st.get("deck_id")):
             continue
         idx = _index(col, st, idxs)
-        out[p["id"]] = P.progress(idx, p["doc"], _swap(st))
+        out[p["id"]] = P.progress(idx, p["doc"], _swap(st), _aside(idx, st, p["doc"]))
     return out
+
+
+def _aside(idx, st, doc):
+    """3.9.6: the cards I suspended myself after their date opened here (P.set_aside)."""
+    try:
+        return P.set_aside(idx, doc, _swap(st), st.get("applied"), st.get("held"))
+    except Exception:  # noqa: BLE001 (a count, never a crash: nothing set aside)
+        traceback.print_exc()
+        return frozenset()
 
 
 _PICKS = {}  # 3.8.1: (deck id, a date's picks): (the deck's tag index they were named from, their labels)
@@ -699,7 +708,8 @@ def loads(col, plan_list, state, idxs=None):
         st = state.get(p["id"])
         if not st or not _deck_ok(col, st.get("deck_id")):
             continue
-        out[p["id"]] = P.load(_index(col, st, idxs), mine(p)["doc"], _swap(st))
+        idx = _index(col, st, idxs)
+        out[p["id"]] = P.load(idx, mine(p)["doc"], _swap(st), _aside(idx, st, mine(p)["doc"]))
     return out
 
 
@@ -1395,7 +1405,7 @@ def hold_new(plan_list, state, today, morning=False):
         idx = P.DeckIndex(mw.col, st["deck_id"])
         kept = _opened_cids(idx, st, q["doc"])
         if own and morning and p.get("own") == "next":
-            nxt = P.next_by_itself(q["doc"], st.get("applied"), st.get("own_opened"), P.progress(idx, q["doc"], _swap(st)))
+            nxt = P.next_by_itself(q["doc"], st.get("applied"), st.get("own_opened"), P.progress(idx, q["doc"], _swap(st), _aside(idx, st, q["doc"])))
             if nxt and str((st.get("later") or {}).get(nxt["id"]) or "") <= today:
                 kept |= idx.match(nxt, _swap(st), q["doc"])
         cids = P.holdable(idx, q["doc"], day, _swap(st), st.get("applied"), own=own, kept=kept)
@@ -3185,7 +3195,7 @@ def browse_left(pid, uids=()):
         cids = set()
         for u in us:
             cids |= idx.match(u, _swap(st), doc)
-        left = idx.unseen(cids)
+        left = idx.unseen(cids) - _aside(idx, st, doc)  # (not what I suspended myself)
         if not uids:
             left = {c for c in left if idx.cards[c][0] != -1}  # behind: opened, so waiting in my Anki now
     except Exception:

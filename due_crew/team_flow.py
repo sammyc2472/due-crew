@@ -674,7 +674,7 @@ def _work_out(did, pid=None, exam=""):
     mine = [{"day": exam, "name": "Your exam", "id": MY_EXAM}] if exam else []
     if p:
         ms = P.unit_matches(idx, doc, swap)
-        ld = P.load(idx, doc, swap)
+        ld = P.load(idx, doc, swap, pf._aside(idx, st, doc))  # 3.9.6: not what I suspended myself
         units = P.units(doc)
     day, name, k, eid = T.aim(list(doc.get("events") or []) + mine if p else mine, today)
     aimed, prep = deck, []

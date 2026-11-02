@@ -186,6 +186,15 @@ the builder says "Tags as of" its date); and the plan's own tags go on
 my notes. Make a plan from a deck sends the tree at once. A tag change
 made later in the day reaches the builder the next day.
 
+## Cards I set aside
+
+A new card I suspend myself after its date opened here is set aside
+(`plans.set_aside`, 3.9.6): it counts in none of the date's numbers, so
+it's never left or behind, and the progress my Anki sends leaves it out.
+The plan's own suspensions still count (Hold back's and Put back's
+`held`, a date that hasn't opened, a date Edit › Undo closed whole), and a
+leech is Anki's.
+
 ## Older add-ons and newer fields
 
 Each add-on cleans a plan on arrival (`backend/shapes.clean_plan_doc`)

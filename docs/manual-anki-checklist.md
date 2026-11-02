@@ -708,6 +708,7 @@ In Anki (as a follower):
 - [ ] "suspended", never "shut": a set's panel ("N open, M still suspended"), leeches ("stay suspended"), Held back's tip and window, the plan bar's legend.
 - [ ] Narrow the window to about 760 wide: the list over the set's panel, the whole page scrolls, Add from the deck reachable.
 - [ ] Settings (a follower): Squad › Join its squad asks what it shares, then joins; Leave its squad asks, then leaves.
+- [ ] On a set that's open and behind, suspend one of its new cards in Anki, then Refresh: You › Plans' path and Behind… count one fewer left; suspend all its unseen cards but see the rest: the set is done, not behind. Hold back's cards still count.
 
 ### 3.9.6: Pip Party, quicker, and nothing again (about 10 minutes; two phones)
 - [ ] From Decks (or Today) to You › Pip Party on a big collection: the tab is there at once, "Reading your cards…" a moment, then the map. Tap a tile: it's picked at once, its counts follow. Type in Find while it reads: the box keeps what you typed and where you are.

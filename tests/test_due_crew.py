@@ -3874,8 +3874,8 @@ def test_browse_from_the_board_380():
         F.save_cfg = lambda c: kept.append(dict(c))
         mw.col = col
         dc._on_js(False, as_board("duecrew:planleft:pB:a"), DeckBrowser())
-        check("left: a date's cards I haven't seen, shut ones too (its \"left\" counts them); a seen leech isn't left",
-              shown[-1][0] == [1, 2], shown)
+        check("left: a date's cards I haven't seen; one suspended on it after it opened is set aside (3.9.6, Sam), and a seen leech isn't left",
+              shown[-1][0] == [1], shown)
         dc._on_js(False, as_board("duecrew:planleft:pB:a-b"), DeckBrowser())
         check("left: a day's two dates together; a seen card isn't left", 8 not in shown[-1][0] and 1 in shown[-1][0], shown)
         dc._on_js(False, as_board("duecrew:planleft:pB"), DeckBrowser())

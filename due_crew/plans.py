@@ -644,9 +644,34 @@ def unit_matches(idx, doc, swap=None):
     return {u["id"]: idx.match(u, swap, doc) for u in units(doc)}
 
 
-def progress(idx, doc, swap=None):
-    """{unit id: [opened, seen, total]}."""
-    return {uid: idx.counts(cids) for uid, cids in unit_matches(idx, doc, swap).items()}
+def progress(idx, doc, swap=None, aside=frozenset()):
+    """{unit id: [opened, seen, total]}. aside (set_aside): cards I suspended
+    myself after their date opened, counted in none of the three."""
+    return {uid: idx.counts(cids - aside if aside else cids) for uid, cids in unit_matches(idx, doc, swap).items()}
+
+
+def set_aside(idx, doc, swap=None, applied=None, held=()):
+    """3.9.6 (Sam: "if i've chosen to suspend something after the plan opens
+    it, don't want it to make me behind"): the new cards I suspended myself
+    on a date that opened here (`applied`, not skipped), so they're never
+    left on it, never behind, and count in none of its numbers. Not one the
+    plan holds (`held`: Hold back, Put back), nor a leech (Anki's, already
+    seen). A date with none of its cards open isn't mine to set aside: Edit ›
+    Undo closed it, and the week offers Open now (plan_flow._shut_dates)."""
+    applied = applied or {}
+    if not applied:
+        return frozenset()
+    held = {int(c) for c in held or () if str(c).lstrip("-").isdigit()}
+    out = set()
+    for u in units(doc):
+        have = applied.get(u["id"])
+        if not have or (isinstance(have, str) and have.startswith("skip:")):
+            continue
+        cids = idx.match(u, swap, doc)
+        if not any(idx.cards[c][0] != -1 for c in cids):
+            continue  # all of it suspended again: closed, not set aside
+        out |= {c for c in cids if idx.cards[c][0] == -1 and idx.cards[c][1] == 0 and c not in held and c not in idx.leech}
+    return frozenset(out)
 
 
 def found_total(idx, doc, swap=None):
@@ -812,7 +837,7 @@ def week_start(today, offset=0):
     return (d - datetime.timedelta(days=d.weekday()) + datetime.timedelta(weeks=int(offset))).isoformat()
 
 
-def load(idx, doc, swap=None):
+def load(idx, doc, swap=None, aside=frozenset()):
     """3.7.81, plan load: {unit id: [seen, open, locked]} for my own dates
     (doc is my_doc: my days), each card counted on its earliest date only
     (keeping to the plan, I meet it there first) and a suspended leech left
@@ -823,7 +848,7 @@ def load(idx, doc, swap=None):
     started, nid_of = idx.started(), idx.nid_of
     before, out = set(), {}
     for u in sorted(units(doc), key=lambda x: str(x.get("opens") or "")):
-        mine = ms.get(u["id"]) or set()
+        mine = (ms.get(u["id"]) or set()) - aside  # (cards I set aside myself: set_aside)
         s_ = o_ = l_ = 0
         for cid in mine - before:
             queue, ctype = idx.cards[cid]
