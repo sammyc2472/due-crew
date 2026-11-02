@@ -5500,7 +5500,8 @@ def test_class_through_step_v33():
     check("limit: the card says Anki shows fewer, with Raise", "Anki shows 20 new a day" in html and "planlimit:p1" in html)
     check("limit: not when Anki shows enough", "planlimit" not in board._plan_card_html(
         dict(card, session=dict(card["session"], limit=80))))
-    check("study: a day's date builds its deck, in the day's details", "planstudydate:p1:u1" in html and 'class="pday"' in html)
+    check("study: a day's Study builds its deck, in the day's details (3.9.6: the day's, not a set's)",
+          "planstudyday:p1:2026-09-01" in html and "planstudydate" not in html and 'class="pday"' in html)
     enough = dict(card, session=dict(card["session"], limit=80))  # one note at a time: the limit comes first
     check("renamed tags: said once, with OK", "3 sets use tags your deck names differently" in board._plan_card_html(enough)
           and "planidsok:p1" not in board._plan_card_html(dict(enough, fallback_ok=True)))
@@ -6213,9 +6214,10 @@ def test_plans_tab_v341():
     check("week: a later day offers Open now, Skip it, Move…; a skipped date Undo skip (my dates later is Settings')",
           "plannow:p1:d" in h and "planskip:p1:d" in h and "planmove:p1:d" in h and "Undo skip" in h and "planshift" not in h)
     tue = h.split('id="dc-pd-p1-1"')[1].split('<div class="pday"')[0]
-    check("week: a day's details have its dates whole: name, seen of its cards, its bar, Browse, the ones left, Study",
+    check("week: a day's details have its dates whole: name, seen of its cards, its bar, Browse, the ones left; the day's Study",
           "<b>V&amp;B &lt;i&gt;</b>" in tue and "6 / 8" in tue and 'class="wbar"' in tue and "planbrowse:p1:b" in tue
-          and "planleft:p1:b" in tue and "planstudydate:p1:b" in tue and "planmove" not in tue)
+          and "planleft:p1:b" in tue and f"planstudyday:p1:{week[1]['day']}" in tue and "planstudydate" not in tue
+          and "planmove" not in tue)
     w2 = P.week_view(dict(doc, units=[dict(u, todo=[{"k": "watch", "t": "Lecture <14>", "url": "https://example.com/l14"}, {"k": "read", "t": "Ch 3"}])
                                       if u["id"] == "c" else u for u in doc["units"]]),
                      {"a": [40, 40, 40], "b": [8, 6, 8], "c": [42, 18, 42]}, "2026-10-07", mon)
@@ -11826,8 +11828,9 @@ def test_study_this_date_v381():
         v = F.card_view(p, F._state_cfg()[pid], F._state["plan_progress"][pid], _day(0))
         ar = next(r for d in v["week"] for r in d["units"] if r["uid"] == "ar")
         h = board._plan_card_html(v)
-        check("study: the week offers it on a date with cards open, though none is seen yet",
-              ar.get("study") and int(ar["seen"]) == 0 and f"duecrew:planstudydate:{pid}:ar" in h, str(ar))
+        ar_day = next(d["day"] for d in v["week"] for r in d["units"] if r["uid"] == "ar")
+        check("study: the week offers it on a date with cards open, though none is seen yet (3.9.6: its day's Study)",
+              ar.get("study") and int(ar["seen"]) == 0 and f"duecrew:planstudyday:{pid}:{ar_day}" in h, str(ar))
         dates, _e, _r = due_flow.plan_dates(_day(0))
         mine = {d["uid"]: d for d in dates if d["pid"] == pid}
         check("study: Due's plan dates say which have cards open", mine["ar"]["study"] and not mine.get("ex", {}).get("study"), str(mine.keys()))

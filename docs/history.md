@@ -4360,19 +4360,23 @@ every release that changes how something works.
   fold opens its nearest set's day (the last done, the next to come).
   16 sets or fewer: a segment a set, as before (`board._path_keep`,
   `PATH_FOLD_PAST`).
-- 3.9.6, Study today on You › Plans (Sam: "the option to study all for
-  the day and it pops out the filtered deck of just those new / review
-  cards for the day ... beyond the individual sets"). The plan's line says
-  "84 to go today · 31 due today" (the due part alone once the new are
-  seen) with Study today: one Due Crew deck, "Due Crew::<plan> · Today",
-  of today's sets' open new cards and every card of the plan's opened sets
-  that Anki has due today, learning included, in the deck's order; then
-  Anki's Study screen on it. Sam's FSRS rule as a date's Study: never a
-  review ahead of its date; earlier sets' unseen cards stay with Behind….
-  A card another Due Crew deck holds (a set's own, Today's set B) comes out
-  of it first and that deck keeps the rest; the deck empties the morning
-  after (`until`). On Today's set B the line keeps its own link, Today's
-  set. Counted with the progress at a refresh (`plan_flow.today_counts`,
-  `_state["plan_day"]`), a search here; nothing is sent
-  (`plans.day_cards`, `plan_flow.study_today`, `planstudytoday`).
+- 3.9.6, a day's Study in You › Plans' week (Sam: "the option to study all
+  for the day and it pops out the filtered deck of just those new / review
+  cards for the day ... not just for today for past days too ... when
+  you've clicked on one of the days and its stuff pops down"; "declutter
+  the plans tab, not add more clutter"). A day's details have one Study in
+  their head, today's or a past day's (any day with a set opened here): one
+  Due Crew deck, "Due Crew::<plan> · Today" or "· Mon 2 Nov", of the day's
+  sets' new cards not seen yet and their cards Anki has due today; today's
+  also every set's due today and a set still running. Then Anki's Study
+  screen on it, and a tooltip of how many new and due it holds (as Anki
+  built it: another add-on's deck keeps its cards). Sam's FSRS rule, as a
+  date's Study: never a review ahead of its date. A card another Due Crew
+  deck holds (a set's own, Today's set B) comes out of it first and that
+  deck keeps the rest; the deck empties the morning after (`until`). It
+  takes the place of each set's own Study in the day's details, one way to
+  it; the card's line is as it was (a first try put Study today and a due
+  count there, taken back before shipping: clutter). On a click, a search
+  here; nothing is sent (`plans.day_cards`, `plan_flow.study_day`,
+  `board._day_study`, `planstudyday`).
 

@@ -958,6 +958,7 @@ def _css(cfg):
     #due-crew .pday a.tp {{ font-weight: 600; }}
     #due-crew .pday .pev {{ display: flex; gap: 4px 12px; flex-wrap: wrap; align-items: baseline; padding-top: 8px; border-top: 1px solid var(--dc-line); }}
     #due-crew .pday .pev .acts {{ margin-left: auto; }}
+    #due-crew .pday .ph .acts {{ margin-left: auto; }}
     /* 3.8.1: why a date left cards shut */
     #due-crew .pday .pwhy {{ font-size: 11.5px; color: var(--dc-muted); }}
     #due-crew .pday .pwhy a.tp {{ font-weight: inherit; }}
@@ -1921,29 +1922,21 @@ def _plan_status(card, pid):
     """Round five: the plan's day in a line, "93 to go today"; "" when
     today's dates are seen. Plans, end to end: what's behind is a line of
     its own (_plan_behind)."""
-    st = card.get("status") or {}
-    togo, due, study = int(st.get("togo") or 0), int(st.get("due") or 0), int(st.get("study") or 0)
-    if not togo and not due:
+    togo = int((card.get("status") or {}).get("togo") or 0)
+    if not togo:
         return ""
     lesson = card.get("lesson_deck") or {}  # Today's lesson, B: today's is a deck of its own
-    acts = []
-    if study:
-        # 3.9.6 (Sam: "study all for the day ... beyond the individual sets"): the plan's day in one deck
-        acts.append(f'<a href="#" title="Today&rsquo;s new cards and what&rsquo;s due today in this plan, one deck in Anki" '
-                    f'onclick="{_pycmd(f"planstudytoday:{pid}")}">Study today</a>')
+    act = ""
     if lesson.get("today"):
         uid = str(lesson["today"])
-        acts.append(f'<a href="#" title="Today&rsquo;s set&rsquo;s own deck, in Anki" '
-                    f'onclick="{_pycmd(f"planstudydate:{pid}:{uid}")}">Today&rsquo;s set</a>')
+        act = f'<a href="#" title="Its deck, in Anki" onclick="{_pycmd(f"planstudydate:{pid}:{uid}")}">Study</a>'
     # 3.9.6: the first morning says so all day, and Pip says let's go just after the words, once
     one = (card.get("joy") or {}).get("day1")
     first = '<b class="jd1">Day one</b> &middot; ' if one else ""
     pip = (f'<span class="jgo" data-joy="go"{_joy_ago(one["ago"])}><span class="jgp" aria-hidden="true">{one["pip"]}</span></span>'
            if one and one.get("ago") is not None and one.get("pip") else "")
-    said = (f'<b>{togo:,}</b> to go today{", in your decks" if lesson else ""}' if togo else "")
-    said += (" &middot; " if togo and due else "") + (f'<b>{due:,}</b> due today' if due else "")
-    return (f'<div class="pst"><span>{first}{said}</span>{pip}'
-            + (f'<span class="acts">{" ".join(acts)}</span>' if acts else "") + '</div>')
+    return (f'<div class="pst"><span>{first}<b>{togo:,}</b> to go today{", in your decks" if lesson else ""}</span>{pip}'
+            + (f'<span class="acts">{act}</span>' if act else "") + '</div>')
 
 
 PATH_WORDS = {"done": "d", "behind": "b", "catch": "c", "now": "t", "ahead": "a", "skip": "s"}
@@ -3434,7 +3427,7 @@ def _week_html(card, pid):
         cells += f'<div class="{cls}"{click}>{num}{bar}<span class="n">{n}</span>{evs}</div>'
         if has:
             details += (f'<div class="pday" id="{did}"{"" if i == sel else " hidden"}><div class="ph"><b>{e(d["dow"])} {int(d["num"])} '
-                        f'{_mon(d["day"])}{" &middot; today" if d["today"] else ""}</b>{_day_line(d)}</div>'
+                        f'{_mon(d["day"])}{" &middot; today" if d["today"] else ""}</b>{_day_line(d)}{_day_study(pid, d)}</div>'
                         + "".join(_day_unit(pid, u, d) for u in d["units"])
                         + "".join(_day_event(x) for x in d["events"]) + '</div>')
     return out + f'<div class="pwk">{cells}</div>{details}'
@@ -3444,8 +3437,9 @@ def _day_unit(pid, u, d):
     """A date in its day's details, whole: its name (moved, for or after its
     quiz), what's left, its bar, its topics with the authors' notes, the
     authors' lines (Watch, Read, Do), and what can be done with it: Browse
-    its cards and the ones left, Open now, Study, Move…, Skip it, Put it
-    back, Undo skip; why it left cards shut."""
+    its cards and the ones left, Open now, Move…, Skip it, Put it back,
+    Undo skip; why it left cards shut. Its Study is the day's (3.9.6,
+    _day_study), one way to it."""
     e = _html.escape
     uid, state = str(u["uid"]), u["state"]
     total, seen = int(u["total"]), int(u["seen"])
@@ -3468,10 +3462,6 @@ def _day_unit(pid, u, d):
     if state == "later" or (state in ("open", "done") and u.get("shut")):
         # 3.8.1: a date whose cards are all shut again (Edit › Undo), or at my own pace not opened yet
         acts.append(f'<a href="#" onclick="{_pycmd(f"plannow:{pid}:{uid}")}">Open now</a>')
-    if state in ("open", "done") and (seen or u.get("study")):
-        # 3.8.1: Study, a Due Crew deck of its open cards (a cram before a quiz)
-        acts.append(f'<a href="#" title="A Due Crew deck of its open cards, new and review, in random order" '
-                    f'onclick="{_pycmd(f"planstudydate:{pid}:{uid}")}">Study</a>')
     if not d["past"] and state in ("later", "open"):  # 3.7.6: from today on, a date not done moves later on my copy
         acts.append(f'<a href="#" onclick="{_pycmd(f"planmove:{pid}:{uid}")}">Move&hellip;</a>')
     if state == "later":
@@ -3525,6 +3515,21 @@ def _why_shut(pid, uid, why):
     if miss:
         bits.append(f'{miss:,} pick{"s aren" if miss != 1 else " isn"}&rsquo;t in your copy')
     return f'<div class="pwhy">{" &middot; ".join(bits)}</div>' if bits else ""
+
+
+def _day_study(pid, d):
+    """3.9.6 (Sam: "study all for the day ... not just for today for past
+    days too ... when you've clicked on one of the days"): the day's details
+    have one Study, in their head: a Due Crew deck of what the day asks now,
+    its sets' new cards not seen yet and theirs due today (today: every set
+    of the plan's due today too), never a review ahead. On a day with a set
+    opened here; a set's own Study is this one."""
+    if not any(u["state"] in ("open", "done") and not u.get("shut") for u in d.get("units") or []):
+        return ""
+    tip = ("Today&rsquo;s new cards and what&rsquo;s due today in this plan, one deck in Anki" if d.get("today")
+           else "Its new cards not seen yet and what&rsquo;s due of it today, one deck in Anki")
+    return (f'<span class="acts"><a href="#" title="{tip}" '
+            f'onclick="{_pycmd("planstudyday:" + pid + ":" + str(d["day"]))}">Study</a></span>')
 
 
 def _day_line(d):

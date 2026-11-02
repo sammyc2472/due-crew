@@ -2166,23 +2166,29 @@ def new_and_due(idx, cids):
     return sorted(got, key=lambda c: idx.order.get(c, (True, 0, c)))
 
 
-def day_cards(idx, doc, today, applied=None, swap=None):
-    """3.9.6, Study today (Sam: "study all for the day ... the filtered deck
-    of just those new / review cards for the day ... beyond the individual
-    sets"): (cards, new, due) of the plan's day, its FSRS rule's (as a date's
-    Study, new_and_due): today's sets' open new cards, and every card of its
-    sets opened here that Anki has due today; never a review ahead of its
-    date, nor what's behind from earlier sets (Behind… has those). doc: my
-    days (my_doc). Cards in the deck's order."""
+def day_cards(idx, doc, day, today, applied=None, swap=None):
+    """3.9.6, a day's Study (Sam: "study all for the day ... the filtered
+    deck of just those new / review cards for the day ... not just for today
+    for past days too"): (cards, new, due) of what a day of the week asks
+    now, by its FSRS rule's (as a date's Study, new_and_due): the open new
+    cards not seen yet of the sets it opened, and theirs Anki has due today;
+    today also a set still running (opened before, due after) and every
+    set opened here that has cards due today. Never a review ahead of its
+    date. doc: my days (my_doc). Cards in the deck's order."""
     applied = applied or {}
+    day, today = str(day), str(today)
     new, due = set(), set()
     for u in units(doc):
         have = applied.get(u["id"])
         if not have or (isinstance(have, str) and have.startswith("skip:")):
             continue
+        opens = str(u.get("opens") or "")
+        its = opens == day or (day == today and opens <= today <= str(u.get("due") or opens))
+        if not its and day != today:
+            continue
         cids = idx.match(u, swap, doc)
         due |= {c for c in cids if c in idx.due_now}
-        if str(u.get("opens") or "") <= str(today) <= str(u.get("due") or u.get("opens") or ""):
+        if its:
             new |= {c for c in cids if idx.cards.get(c) == (0, 0)}
     got = sorted(new | due, key=lambda c: idx.order.get(c, (True, 0, c)))
     return got, len(new - due), len(due)

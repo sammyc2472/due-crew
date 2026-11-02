@@ -914,11 +914,9 @@ def card_view(plan, st, prog, today, session=None, week_offset=0):
     if not (no_deck or plan.get("paused") or own):
         left = lambda u: max(0, int(_t3(prog, u)[2]) - int(_t3(prog, u)[1]))
         behind = P.behind_of(path, today)
-        day_n = ((_state.get("plan_day") or {}).get(plan["id"]) or [0, 0]) if mw else [0, 0]
         status = {"togo": sum(left(u) for u in us if str(u.get("opens") or "") == today),
                   "behind": behind["left"] if behind else 0,
-                  "since": P.weekday_or_day(behind["since"], today) if behind else "",
-                  "study": int(day_n[0]) + int(day_n[1]), "due": int(day_n[1])}  # 3.9.6: Study today's deck, its due part
+                  "since": P.weekday_or_day(behind["since"], today) if behind else ""}
     if own:  # 3.8.0: no Behind at my own pace; what's next, and where the plan is
         sub = f"at your pace · {followers:,} following"
         waiting, catch, session = 0, None, None
@@ -1776,26 +1774,33 @@ def study_date(pid, uid):
             mw.moveToState("overview")
 
 
-def study_today(pid):
-    """3.9.6, Study today on You › Plans (Sam: "the option to study all for
-    the day and it pops out the filtered deck of just those new / review
-    cards for the day ... beyond the individual sets"): one Due Crew deck of
-    the plan's day (P.day_cards: today's sets' open new cards and what Anki
-    has due today in its opened sets, never a review ahead of its date),
-    "Due Crew::<plan> · Today", emptied the morning after (`until`). A card
-    another Due Crew deck holds (a set's own, Today's set B) comes out of it
-    first and that deck gets back the rest (_free), as a date's Study does.
-    Then Anki's Study screen on it. A search run here; nothing is sent."""
+def study_day(pid, day):
+    """3.9.6, a day's Study in You › Plans' week (Sam: "study all for the
+    day and it pops out the filtered deck of just those new / review cards
+    for the day ... not just for today for past days too ... when you've
+    clicked on one of the days"): one Due Crew deck of what the day asks now
+    (P.day_cards: its sets' new cards not seen yet and theirs due today;
+    today, every set's due today too; never a review ahead of its date),
+    "Due Crew::<plan> · Today" or "· Mon 2 Nov", emptied the morning after
+    (`until`). A card another Due Crew deck holds (a set's own, Today's set
+    B) comes out of it first and that deck gets back the rest (_free), as a
+    date's Study does. Then Anki's Study screen on it. A search run here;
+    nothing is sent."""
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(day or "")):
+        return
     got = _plan_idx(pid)
     if not got:
         return
     p, st, doc, idx = got
     today = _today()
-    cids, n_new, n_due = P.day_cards(idx, doc, today, st.get("applied"), _swap(st))
-    if not cids:
-        tooltip("Nothing new or due today in this plan.")
+    if day > today:
         return
-    name = _deck_name(f"{str(p.get('name') or 'Plan')} · Today")
+    when = "Today" if day == today else _day_words(day)
+    cids, n_new, n_due = P.day_cards(idx, doc, day, today, st.get("applied"), _swap(st))
+    if not cids:
+        tooltip("Nothing new or due today in this plan." if day == today else f"Nothing new or due from {when}.")
+        return
+    name = _deck_name(f"{str(p.get('name') or 'Plan')} · {when}")
     back = _free(mw.col, cids, name)
     ok = _filtered(mw.col, name, cids, order=NEW_ORDER, until=today)
     for bdid, keep in back:
@@ -1810,26 +1815,20 @@ def study_today(pid):
         if did:
             mw.col.decks.select(did)
             mw.moveToState("overview")
+            # what it holds, as Anki built it: a card another add-on's deck holds stays there
+            inn = set(mw.col.db.list("SELECT id FROM cards WHERE did = ?", did))
+            n_due = len(inn & set(idx.due_now))
+            n_new = len(inn) - n_due
         bits = [f"{n_new:,} new"] if n_new else []
         bits += [f"{n_due:,} due"] if n_due else []
-        tooltip(f"Today's {' and '.join(bits)}, in one deck.")
+        if bits:
+            tooltip(f"{'Today' + chr(8217) + 's' if day == today else when + ':'} {' and '.join(bits)}, in one deck.")
 
 
-def today_counts(col, plan_list, state, idxs=None):
-    """3.9.6: {plan id: [new, due]} of each plan's day here (P.day_cards), for
-    the card's line and its Study today; read with the progress."""
-    out = {}
-    for p in plan_list:
-        st = state.get(p["id"])
-        if not st or p.get("paused") or not _deck_ok(col, st.get("deck_id")):
-            continue
-        try:
-            _cids, n_new, n_due = P.day_cards(_index(col, st, idxs), mine(p)["doc"], _today(), st.get("applied"), _swap(st))
-        except Exception:
-            traceback.print_exc()
-            continue
-        out[p["id"]] = [n_new, n_due]
-    return out
+def _day_words(day):
+    """"Mon 2 Nov", a day of the week's in words."""
+    d = datetime.date.fromisoformat(day)
+    return f"{d:%a} {d.day} {d:%b}"
 
 
 QUIZ_ORDER = 2  # Anki's filtered-deck order: smallest intervals first, the shakiest (and the unseen) first
@@ -2363,7 +2362,7 @@ def lesson_view(plan, st, today):
 
 # 3.9.1: what refresh_progress leaves in _state; its last answer, and what it was read from
 _WRITES = ("plan_progress", "plan_load", "plan_picks", "plan_reviews", "plan_session", "plan_parts", "plan_sibs",
-           "plan_later", "plan_today", "plan_day")
+           "plan_later", "plan_today")
 _last = {"key": None, "got": None}
 
 
@@ -2409,11 +2408,6 @@ def refresh_progress():
     whole = True  # kept for the next ask only when every part was read
     try:
         _state["plan_load"] = loads(mw.col, followed(), _state_cfg(), idxs)  # 3.7.81
-    except Exception:
-        whole = False
-        traceback.print_exc()
-    try:
-        _state["plan_day"] = today_counts(mw.col, followed(), _state_cfg(), idxs)  # 3.9.6: Study today's counts
     except Exception:
         whole = False
         traceback.print_exc()
@@ -2945,8 +2939,8 @@ def on_message(cmd, parts):
             plan_board.behind(arg)
         else:
             catch_menu(arg)
-    elif cmd == "planstudytoday" and arg:  # 3.9.6: You › Plans' Study today, the plan's day in one deck
-        study_today(arg)
+    elif cmd == "planstudyday" and arg and len(parts) > 3:  # 3.9.6: a day's Study in You › Plans' week
+        study_day(arg, parts[3])
     elif cmd == "planbehind" and arg:  # plans, end to end: You › Plans' Behind…, the sheet
         from . import plan_board
         plan_board.behind(arg)

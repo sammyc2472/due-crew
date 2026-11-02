@@ -142,10 +142,11 @@ Once per Anki day, on the Decks screen, after AnkiWeb's sync
    now, Open at my own pace, Welcome back's Open them and an update's
    Open build the same way; A, Stop following, a plan gone and Change
    deck take the decks down (their cards home as they were).
-   Study today on You › Plans (3.9.6, on a click, either way) is one more:
-   `Due Crew::<plan> · Today`, today's sets' open new cards and every card
-   of the plan's opened sets that Anki has due today, never a review ahead
-   (`plans.day_cards`); step 2 empties it the morning after.
+   A day's Study in You › Plans' week (3.9.6, on a click, either way) is
+   one more: `Due Crew::<plan> · Today` (or `· Mon 2 Nov`), the day's sets'
+   new cards not seen yet and theirs Anki has due today (today: every
+   opened set's due today too), never a review ahead (`plans.day_cards`);
+   step 2 empties it the morning after.
 6. A pause that ended asks its question; a plan new here asks Follow's
    Hold back question. 3.8.1, Welcome back: when the open would take in
    dates from 3 or more days with no study at all (not at my own pace, on

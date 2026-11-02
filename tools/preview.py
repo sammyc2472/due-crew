@@ -215,7 +215,7 @@ PLAN_CARD = {"id": "p1", "title": "MS2 Block 1 · Dre's plan", "sub": "week 3 of
              "week_offset": 0, "session": {"kind": "study", "target": 42, "done": 18, "due": 311, "minutes": 48, "behind": 0},
              "lines": [], "change": None, "no_deck": False, "paused": False,
              "waiting": 16, "aside": [0, 0, 0], "aside_ok": [0, 0],
-             "status": {"togo": 24, "behind": 0, "since": "", "study": 55, "due": 31},  # round five: the card's line about its day
+             "status": {"togo": 24, "behind": 0, "since": ""},  # round five: the card's line about its day
              "ins": {"n": 53, "did": 10, "name": "KSA F3-3", "day": "2026-10-13"}}  # 3.8.0: the next exam's cards, from Insights
 PLANS = {"cards": [PLAN_CARD], "offers": []}
 _YOU = lambda tab, **kw: dict({"tab": tab, "plans": PLANS}, **kw)  # noqa: E731
