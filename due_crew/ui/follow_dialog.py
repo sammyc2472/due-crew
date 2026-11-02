@@ -1,8 +1,9 @@
 """Follow a plan (3.1): a code (or a pasted link), a
 look at the plan, the deck to run it on, how much of it this copy has,
-what to do about units that have already opened, and whether the crew
-sees my progress. The tag-swap question comes up once per deck, when my
-tags start differently.
+what to do about units that have already opened, where today's set is
+(in that deck, or a deck of its own), and whether the crew sees my
+progress. The tag-swap question comes up once per deck, when my tags
+start differently.
 
 Decks are read on the main thread; the peek and the follow are one
 request each, in the background. Every plan and unit name is the
@@ -32,10 +33,10 @@ def late_counts(idx, doc, today, swap=None):
 
 def late_label(n_units, n_cards, while_paused=False, passed=False):
     if while_paused:
-        return f"{n_units} date{'s' if n_units != 1 else ''} opened while paused ({n_cards:,} cards)"
+        return f"{n_units} set{'s' if n_units != 1 else ''} opened while paused ({n_cards:,} cards)"
     if passed:  # 3.7.6
-        return f"It started before today: {n_units} date{'s have' if n_units != 1 else ' has'} passed ({n_cards:,} cards)."
-    return (f"{n_units} date{'s have' if n_units != 1 else ' has'} already opened "
+        return f"It started before today: {n_units} set{'s have' if n_units != 1 else ' has'} passed ({n_cards:,} cards)."
+    return (f"{n_units} set{'s have' if n_units != 1 else ' has'} already opened "
             f"({n_cards:,} cards)")
 
 
@@ -81,8 +82,8 @@ class CatchUpDialog(QDialog):
         heading(self, root, late_label(n_units, n_cards, while_paused=True))
         self.now = QRadioButton("Open them now")
         self.now.setChecked(True)
-        self.next = QRadioButton(f"Start from the next date, {P.fmt_day(nxt['opens'])}" if nxt
-                                 else "Start from the next date")
+        self.next = QRadioButton(f"Start from the next set, {P.fmt_day(nxt['opens'])}" if nxt
+                                 else "Start from the next set")
         self.next.setEnabled(bool(nxt))
         group = QButtonGroup(self)
         group.addButton(self.now)
@@ -106,10 +107,11 @@ def ask_catch_up(parent, n_units, n_cards, nxt):
 
 
 class FollowDialog(QDialog):
-    def __init__(self, parent, client, col, code="", today="", on_followed=None, swap_prompt=None):
+    def __init__(self, parent, client, col, code="", today="", on_followed=None, swap_prompt=None, lesson_on=None):
         super().__init__(parent)
         self.client, self.col, self.today = client, col, today
-        self.on_followed = on_followed      # main thread: (plan, deck_id, swap, "open" | "skip", hold)
+        self.on_followed = on_followed      # main thread: (plan, deck_id, swap, "open" | "skip", hold, lesson=bool)
+        self.lesson_on = lesson_on          # plan id -> Today's lesson as chosen here before (B: True)
         self.swap_prompt = swap_prompt or (lambda sw, n: ask_swap(self, sw, n))
         self.plan = None
         self.choices = P.deck_choices(col)
@@ -202,17 +204,37 @@ class FollowDialog(QDialog):
             note(n).setContentsMargins(24, 0, 0, 0)  # under its choice's words
         self.late_weeks.currentIndexChanged.connect(lambda _=0: self._late_notes())
         self._late = None
-        # 3.8.0: how its cards open: on its dates, or at my own pace
+        # 3.8.0: how its cards open: on its dates, or at my own pace; beside it, where
+        # today's lesson is: in the deck it runs on (A), or a deck of its own in Anki's list (B)
+        cols = QHBoxLayout()
+        how_col, lesson_col = QVBoxLayout(), QVBoxLayout()
         self.how_label = role(QLabel("How its cards open"), "head")
         self.how_label.setContentsMargins(0, 6, 0, 0)
-        root.addWidget(self.how_label)
+        how_col.addWidget(self.how_label)
         self.how_dates = QRadioButton("On the plan's dates")
         self.how_dates.setChecked(True)
         self.how_ready = QRadioButton("When I'm ready")
         how = QButtonGroup(self)
         for b in (self.how_dates, self.how_ready):
             how.addButton(b)
-            root.addWidget(b)
+            how_col.addWidget(b)
+        self.lesson_label = role(QLabel("Today's set"), "head")
+        self.lesson_label.setContentsMargins(0, 6, 0, 0)
+        lesson_col.addWidget(self.lesson_label)
+        self.lesson_in = QRadioButton("In your deck")
+        self.lesson_in.setChecked(True)
+        self.lesson_own = QRadioButton("Its own deck")
+        self.lesson_own.setToolTip("Each open set is a deck of its own under Due Crew in Anki's deck list: "
+                                   "its new cards and the ones you're learning. Reviews stay where they are.")
+        lesson = QButtonGroup(self)
+        for b in (self.lesson_in, self.lesson_own):
+            lesson.addButton(b)
+            lesson_col.addWidget(b)
+        cols.addLayout(how_col)
+        cols.addSpacing(32)
+        cols.addLayout(lesson_col)
+        cols.addStretch()
+        root.addLayout(cols)
         self.how_next = QCheckBox("Open the next one by itself once I've seen most of the last")
         self.how_next.setChecked(True)
         self.how_next.setStyleSheet("margin-left: 24px;")
@@ -256,7 +278,8 @@ class FollowDialog(QDialog):
     def _plan_parts(self):
         return (self.title, self.deck_label, self.deck, self.best_hint, self.match, self.found,
                 self.late_label, self.late_skip, self.late_skip_note, self.late_open, self.late_weeks,
-                self.late_open_note, self.late_begin, self.late_begin_note, self.share, self.about)
+                self.late_open_note, self.late_begin, self.late_begin_note, self.lesson_label, self.lesson_in,
+                self.lesson_own, self.share, self.about)
 
     def _clear(self):
         self.plan = None
@@ -296,6 +319,9 @@ class FollowDialog(QDialog):
         self.title.setTextFormat(Qt.TextFormat.PlainText)
         for w in self._plan_parts():
             w.setVisible(True)
+        # Today's lesson: in the deck (A) unless chosen here before
+        own = bool(self.lesson_on(plan.get("id"))) if self.lesson_on and plan.get("id") else False
+        (self.lesson_own if own else self.lesson_in).setChecked(True)
         self._deck_link(plan["doc"])
         self.best, swap = P.best_deck(self.col, plan["doc"], self.choices)
         if self.best is not None:
@@ -364,6 +390,8 @@ class FollowDialog(QDialog):
             return
         did = self.deck.currentData()
         self.best_hint.setVisible(did is not None and did == self.best)
+        # a button's "&" marks its shortcut key: the deck's name as written
+        self.lesson_in.setText(f"In {self.deck.currentText()}".replace("&", "&&") if did is not None else "In your deck")
         if did is None:
             self._rows([("You have no decks yet.", "", False)])
             self.follow_btn.setEnabled(False)
@@ -418,12 +446,12 @@ class FollowDialog(QDialog):
         held = self._held[1 if own else 0]
         self.hold.setVisible(held > 0)
         if held:
-            self.hold.setText(f"Hold back {held:,} card{'s' if held != 1 else ''} of later dates "
+            self.hold.setText(f"Hold back {held:,} card{'s' if held != 1 else ''} of later sets "
                               + ("until you open them" if own else "until their day"))
         self.about.setText("Each morning, that day's cards open." if own is None
                            else "Nothing opens by itself. Open the first from You › Plans; after that, the next "
                                 "opens the morning after you've seen most of the last one's new cards." if own == "next"
-                           else "Nothing opens by itself. Open the next date from You › Plans, or any topic from Browse.")
+                           else "Nothing opens by itself. Open the next set from You › Plans, or any topic from Browse.")
         self.adjustSize()
 
     def _late_notes(self):
@@ -432,8 +460,8 @@ class FollowDialog(QDialog):
         if not ls:
             return
         n, cards = len(ls["passed"]), int(ls["cards"])
-        self.late_skip_note.setText(f"The {n} earlier date{'s wait' if n != 1 else ' waits'} in your calendar, "
-                                    "each with Open now. You're not behind.")
+        self.late_skip_note.setText(f"The {n} earlier set{'s stay' if n != 1 else ' stays'} suspended, "
+                                    f"{'each' if n != 1 else 'with'} Open now in You › Plans. You're not behind.")
         weeks = int(self.late_weeks.currentData() or 2)
         extra = -(-cards // (7 * weeks)) if cards else 0
         until = P._later(self.today, 7 * weeks - 1)
@@ -460,6 +488,7 @@ class FollowDialog(QDialog):
                     else f"begin:{int(self._late['shift'])}" if self.late_begin.isChecked()
                     else "skip:" + ",".join(self._late["passed"]))
         hold = self.hold.isVisible() and self.hold.isChecked()
+        lesson = self.lesson_own.isChecked()
         share = self.share.isChecked()
         code = self._code
         self.follow_btn.setEnabled(False)
@@ -478,7 +507,7 @@ class FollowDialog(QDialog):
                 tooltip("Following. The plan's squad is full.")
             got = dict(got, paused=False, following=True, own=got.get("own") or own or "")
             if self.on_followed:
-                self.on_followed(got, did, swap, late, hold)
+                self.on_followed(got, did, swap, late, hold, lesson=lesson)
             self.accept()
 
         run_bg(self, lambda: cl.follow_plan(code, share, own=own), done)

@@ -166,6 +166,20 @@ def year_options(days, today):
     return [(y, y) for y in sorted(ys, reverse=True)] + [("all", "All time")]
 
 
+def plan(name, sets, done, cards, weeks, brow="Finished", sev=True, cap=False, last="", code=None):
+    """3.9.6, a plan's card (Sam's pick, the mock's K4 redrawn): its path, a
+    segment a set, Pip hopping each one done and standing on the last (in
+    its new grad cap, finished); then "FINISHED", the plan's name and "19
+    sets · 2,046 cards · 6 weeks". On its way (a milestone's Share): brow
+    "Halfway" and the like, done the sets so far, cards those I've seen;
+    last: the last set's name, the morning it opens. sev: Pip on it
+    (Settings › Pip here; the site always); code: a code plan's, at the
+    foot when its switch is on. cards.js plan() draws the same."""
+    return {"name": str(name or ""), "sets": int(sets or 0), "done": int(done or 0), "cards": int(cards or 0),
+            "weeks": int(weeks or 0), "brow": str(brow or "Finished"), "sev": bool(sev), "cap": bool(cap),
+            "last": str(last or ""), "code": code or None}
+
+
 def privacy(cfg):
     """{switch: on} for my day and week: what my Privacy switches let out
     (Just show up lets none). A picture is mine to make, so these are
@@ -182,6 +196,9 @@ def switches(kind, d, priv=None, cheers_say=""):
     cheers switch says while the count isn't here ("counting…")."""
     priv = priv or {}
     home = "off in Privacy"
+    if kind == "plan":  # 3.9.6: the card count starts as Privacy's Reviews switch says; a code plan's code, off to start
+        return ([("cards", "How many cards", "" if priv.get("reviews", True) else home, priv.get("reviews", True), True)]
+                + ([("code", "Its code, so others can follow", "", False, True)] if d.get("code") else []))
     if kind in ("week", "today"):
         none = "none yet today" if kind == "today" else "none yet this week"
         return [("time", "Time studied", "" if priv.get("time", True) else home, priv.get("time", True), True),
@@ -229,8 +246,9 @@ class _Ops:
     def dot(self, x, y, r, color):
         self.ops.append(("dot", x, y, r, color))
 
-    def sev(self, pose, x, y, size, color):
-        self.ops.append(("sev", pose, x, y, size, color))
+    def sev(self, pose, x, y, size, color, wear=()):
+        # wear (3.9.6): things it has on for this card (the finish's grad cap), over what it has on
+        self.ops.append(("sev", pose, x, y, size, color) + ((tuple(wear),) if wear else ()))
 
     def fit(self, s, width, px, least, weight=400):
         """(s, px): the biggest size from px down to least that fits, else
@@ -250,11 +268,11 @@ def draw(kind, size, d, on, look, measure):
     """(W, H, ops): the card. kind: today, week, year or alltime; size:
     story or link (year is story only); on: {switch: bool}; measure(s,
     px, weight): a line's width in pixels."""
-    if kind == "year":
+    if kind in ("year", "plan"):
         size = "story"
     W, H = SIZES[size]
     o = _Ops(measure, LOOKS[look])
-    {"today": _week, "week": _week, "year": _year, "alltime": _alltime}[kind](o, W, H, size, d, on)
+    {"today": _week, "week": _week, "year": _year, "alltime": _alltime, "plan": _plan}[kind](o, W, H, size, d, on)
     return W, H, o.ops
 
 
@@ -490,4 +508,80 @@ def _alltime(o, W, H, size, d, on):
         o.text(v, x, y, 60, pal["ink"], 700)
         o.text(lb, x, y + 46, 30, pal["mut"])
     _cheered(o, d, on, P, H - P - 64)
+    o.text("duecrew.com", W - P, H - P, 34, pal["mut"], align="right")
+
+
+# 3.9.6, a plan's card (the mock's K4 redrawn): the path a segment a set, Pip
+# hopping each set done and standing on the last. cards.js plan() is its twin.
+PLAN_TOP, PLAN_H = 640, 30  # the path's top and height
+PLAN_SEV = (340, 280)       # Pip's drawing: finished, and on its way
+PLAN_HOP, PLAN_STEP, PLAN_DOT = 0.78, 15, 3.2  # a hop's height over a set's pitch (38 at most); the trail's step; a dot
+PLAN_TRAIL = 20  # px: sets closer than this (about 45 of them) have no trail
+
+
+def plan_gap(sets):
+    """The gap between two sets' segments: a long plan's close up."""
+    return 8 if sets <= 30 else 4 if sets <= 60 else 2 if sets <= 120 else 0
+
+
+def plan_hops(d, x0, w, gap, W):
+    """Pip on the plan card's path: {dots, r, sev: (x, y, size) or None}: a
+    hop from each set done to the next, Pip standing on the last one done
+    (bigger when every set is). No sets said (duecrew.com's builder): the
+    path is one segment, done. Pip off: none."""
+    segs = max(1, int(d.get("sets") or 0))
+    done = segs if not d.get("sets") else max(0, min(segs, int(d.get("done") or 0)))
+    out = {"dots": [], "r": PLAN_DOT, "sev": None}
+    if d.get("sev") is False or not done:
+        return out
+    pitch = w + gap
+
+    def foot(i):
+        return x0 + i * pitch + w / 2, PLAN_TOP
+    h = min(38, PLAN_HOP * pitch)
+    for i in range(done - 1 if pitch >= PLAN_TRAIL else 0):  # a long plan's sets are too close for a trail: Pip alone
+        out["dots"] += _trail(foot(i), foot(i + 1), h, PLAN_STEP)
+    z = PLAN_SEV[0] if done >= segs else PLAN_SEV[1]
+    fx, fy = foot(done - 1)
+    out["sev"] = (min(fx - z / 2, W - z + 8), fy - z * SEV_FEET, z)
+    return out
+
+
+def plan_sub(d, on):
+    """The line under the plan's name: "19 sets · 2,046 cards · 6 weeks";
+    on its way "10 of 19 sets · 1,033 cards"; the last set's morning "19 ·
+    Skin, today". The cards as its switch says."""
+    cards = on.get("cards", True) is not False
+    sets, done = int(d.get("sets") or 0), int(d.get("done") or 0)
+    if d.get("last"):
+        return f"{d['last']}, today"
+    if sets and done < sets:
+        return f"{n(done)} of {_plural(sets, 'set')}" + (f" · {_plural(d.get('cards') or 0, 'card')}" if cards else "")
+    bits = ([_plural(sets, "set")] if sets else []) + ([_plural(d.get("cards") or 0, "card")] if cards else [])
+    return " · ".join(bits + ([_plural(d["weeks"], "week")] if d.get("weeks") else []))
+
+
+def _plan(o, W, H, size, d, on):
+    pal = o.pal
+    P = 78
+    o.logo(P, P, 40)
+    segs = max(1, int(d.get("sets") or 0))
+    done = segs if not d.get("sets") else max(0, min(segs, int(d.get("done") or 0)))
+    gap = plan_gap(segs)
+    w = (W - 2 * P - (segs - 1) * gap) / segs
+    for i in range(segs):
+        o.rect(P + i * (w + gap), PLAN_TOP, w, PLAN_H, min(9, w / 3), pal["g"] if i < done else pal["g3"])
+    hp = plan_hops(d, P, w, gap, W)
+    if hp["sev"]:
+        for x, y in hp["dots"]:
+            o.dot(x, y, hp["r"], pal["g"])
+        cap = d["cap"] if "cap" in d else str(d.get("brow") or "Finished") == "Finished"  # the builder's says nothing: finished
+        o.sev("hop", *hp["sev"], pal["g"], ("gradcap",) if cap else ())
+    o.eyebrow(str(d.get("brow") or "Finished"), P, 790, 30)
+    s, z = o.fit(str(d.get("name") or ""), W - 2 * P, 96, 60, 700)
+    o.text(s, P, 902, z, pal["ink"], 700)
+    o.text(plan_sub(d, on), P, 980, 40, pal["mut"])
+    code = str(d.get("code") or "")
+    if on.get("code") and code:
+        o.text(f"Follow it: {code[:4]} {code[4:]}", P, H - P, 34, pal["mut"])
     o.text("duecrew.com", W - P, H - P, 34, pal["mut"], align="right")

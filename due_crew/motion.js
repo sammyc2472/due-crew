@@ -323,6 +323,7 @@
       keep.at[k] = { v: rule.val(el), w: el.style.width, t: words(el), x: rule.extra ? rule.extra(el) : null, go: go, kind: rule.kind };
     });
     try { sessionStorage.setItem(MEM, JSON.stringify(keep)); } catch (e) { /* no room: no memory */ }
+    M.joy(root);
   };
 
   // ---- small moves ----
@@ -922,6 +923,100 @@
     cells.forEach(function (x) {
       anim(x[0], [{ transform: "scale(0)" }, { transform: "scale(1)" }],
            { duration: 180, delay: (delay || 0) + Math.round(480 * (x[1].left - x0) / w + 50 * (x[1].top - y0) / h), fill: "backwards" });
+    });
+  };
+
+  // 3.9.6: the plan's joys (the "Joy on the plan card" mock). The glue says what plays (data-joy) and how
+  // long it's been out (--ago), so a redraw in its seconds goes on from where it was, never from the start;
+  // each element plays once. Transforms and opacity, and everything it adds is gone at its end (what's left
+  // is the page as drawn); nothing with Reduce motion, where the board's CSS stands its Pip still, then takes it.
+  function cover(el, color, d, ms) {
+    // a segment fills: what it was is laid over it and drawn back off to the right
+    var c = document.createElement("b");
+    c.setAttribute("aria-hidden", "true");
+    c.style.cssText = "position:absolute;left:0;top:0;right:0;bottom:0;border-radius:inherit;pointer-events:none;transform-origin:100% 50%;background:" + color;
+    el.insertBefore(c, el.firstChild);
+    done(anim(c, [{ transform: "scaleX(1)" }, { transform: "scaleX(0)" }], { duration: ms, delay: d, easing: "cubic-bezier(.3,.7,.4,1)", fill: "both" }),
+         function () { c.remove(); });
+  }
+  function fling(el, d, list, ms) {
+    // little squares fly out of el's middle and fade: list [[dx, dy, colour, turn]]
+    var box = document.createElement("span"), left = list.length;
+    box.setAttribute("aria-hidden", "true");
+    box.style.cssText = "position:absolute;left:50%;top:50%;width:0;height:0;pointer-events:none;z-index:2";
+    el.appendChild(box);
+    list.forEach(function (q) {
+      var b = document.createElement("b"), at = function (x, y, r, s) { return "translate(" + x + "px," + y + "px) rotate(" + r + "deg) scale(" + s + ")"; };
+      b.style.cssText = "position:absolute;left:-2.5px;top:-2.5px;width:5px;height:5px;border-radius:1.2px;opacity:0;background:" + q[2];
+      box.appendChild(b);
+      done(anim(b, [{ opacity: 0, transform: at(0, 0, 0, 0.3) }, { opacity: 1, offset: 0.18 }, { opacity: 1, transform: at(q[0], q[1], q[3], 1), offset: 0.65 },
+                    { opacity: 0, transform: at(q[0], q[1] + 7, q[3], 0.8) }], { duration: ms, delay: d, easing: "cubic-bezier(.2,.7,.3,1)", fill: "both" }),
+           function () { b.remove(); if (!--left) box.remove(); });
+    });
+  }
+  var ACC = "var(--dc-accent, #2e7d32)", OFF = "var(--dc-line, #e2e2da)";
+  var JOY = {
+    // a set done: its segment fills, the logo's seven squares fly out of it (the fourth, the day off, grey),
+    // and Pip hops onto it from the set before, stays its moment, and goes
+    pop: function (el, d) {
+      cover(el, OFF, d, 385);
+      anim(el, [{ transform: "none" }, { transform: "scale(1.08, 1.5)", offset: 0.5 }, { transform: "none" }], { duration: 220, delay: d + 385 });
+      fling(el, d + 380, [-165, -140, -115, -90, -65, -40, -15].map(function (a, i) {
+        var r = 15 + (i * 5) % 8, t = (a + (i % 2 ? 4 : -4)) * Math.PI / 180;
+        return [+(r * Math.cos(t)).toFixed(1), +(r * Math.sin(t)).toFixed(1), i === 3 ? OFF : ACC, (i * 97) % 320 - 160];
+      }), 1100);
+      var p = el.querySelector(".jpp"), was = el.previousElementSibling;
+      if (!p) return;
+      var dx = was ? Math.round(was.getBoundingClientRect().left - el.getBoundingClientRect().left) : 0;
+      var at = function (x, s, y) { return "translate(" + x + "px," + (y || 0) + "px) scale(" + s + ")"; };
+      done(anim(p, [{ opacity: 0, transform: at(dx, 0.2) }, { opacity: 0, transform: at(dx, 0.2), offset: 0.088 },
+                    { opacity: 1, transform: at(dx, 0.2), offset: 0.09 }, { opacity: 1, transform: at(dx, 1), offset: 0.124 },
+                    { opacity: 1, transform: at(0, 1), offset: 0.29 }, { opacity: 1, transform: at(0, 1), offset: 0.88 },
+                    { opacity: 0, transform: at(0, 0.5, 9), offset: 0.96 }, { opacity: 0, transform: at(0, 0.5, 9) }],
+                 { duration: 5000, delay: d, easing: "linear", fill: "both" }), function () { p.remove(); });
+    },
+    // caught up: what was behind turns from amber to the accent
+    caught: function (el, d) { cover(el, "var(--dc-hours, #b26a00)", d, 350); },
+    // halfway, three-quarters: the set that made it sparkles once
+    spark: function (el, d) {
+      var s = document.createElement("span");
+      s.setAttribute("aria-hidden", "true");
+      s.style.cssText = "position:absolute;left:50%;top:50%;width:18px;height:18px;margin:-17px 0 0 -9px;pointer-events:none;z-index:2;opacity:0";
+      s.innerHTML = '<svg viewBox="-10 -10 20 20" width="18" height="18" style="display:block;fill:var(--dc-hours,#b26a00)">' +
+        '<path d="M0 -9 Q0 0 9 0 Q0 0 0 9 Q0 0 -9 0 Q0 0 0 -9z"/></svg>';
+      el.appendChild(s);
+      done(anim(s, [{ opacity: 0, transform: "scale(.2) rotate(0deg)" }, { opacity: 1, transform: "scale(1.25) rotate(30deg)", offset: 0.3 },
+                    { opacity: 0, transform: "scale(.6) rotate(70deg)" }], { duration: 1300, delay: d + 250, easing: "ease-out", fill: "both" }),
+           function () { s.remove(); });
+    },
+    // a milestone's line opens into its place, the first moment it's out
+    line: function (el, d) { if (d > -200) unfold(el); },
+    // caught up's 🎉 pops, a few bits flying off it
+    tada: function (el, d) {
+      anim(el, [{ opacity: 0, transform: "scale(0) rotate(-20deg)" }, { opacity: 1, transform: "none" }],
+           { duration: 500, delay: d + 450, easing: "cubic-bezier(.34,1.56,.64,1)", fill: "backwards" });
+      fling(el, d + 500, [[-14, -12, "#e2582b", 40], [-5, -18, "#f2b33d", -60], [6, -17, "#3d8be0", 80],
+                          [14, -10, "#7b5cd6", -30], [16, 2, "#2e9d5b", 50], [-16, 3, "#e2589c", -70]], 1100);
+    },
+    // day one: Pip pops up just past the words, says let's go (its own move), and goes
+    go: function (el, d) {
+      var p = el.querySelector(".jgp");
+      if (!p) return;
+      var at = function (y, s) { return "translateY(" + y + "px) scale(" + s + ")"; };
+      done(anim(p, [{ opacity: 0, transform: at(0, 0) }, { opacity: 1, transform: at(0, 0.9), offset: 0.02 },
+                    { opacity: 1, transform: at(0, 1.12), offset: 0.06 }, { opacity: 1, transform: at(0, 1), offset: 0.08 },
+                    { opacity: 1, transform: at(0, 1), offset: 0.88 }, { opacity: 0, transform: at(9, 0.5), offset: 0.96 },
+                    { opacity: 0, transform: at(9, 0.5) }], { duration: 5000, delay: d, easing: "linear", fill: "both" }),
+           function () { p.remove(); });
+    }
+  };
+  M.joy = function (root) {
+    if (!root || !root.querySelectorAll || !M.ok()) return;
+    Array.prototype.forEach.call(root.querySelectorAll("[data-joy]"), function (el) {
+      if (el.__dcJoy || el.closest("[data-dc-ghost]")) return;
+      el.__dcJoy = 1;
+      var f = JOY[el.getAttribute("data-joy")], ago = parseFloat(el.style.getPropertyValue("--ago")) || 0;
+      if (f) f(el, -Math.round(ago * 1000));
     });
   };
 

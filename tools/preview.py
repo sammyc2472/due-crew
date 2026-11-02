@@ -7,6 +7,7 @@ that flips the nightMode class, and buttons that run the real overlay JS.
 import html
 import datetime
 import json
+import re
 import sys
 
 import os
@@ -269,7 +270,7 @@ sections.append("<h3>round five, pick 3: two plans followed, one at a time (thei
 # 3.8.0: at my own pace: Up next with Open, what follows, the last step's Undo, quiet lines (no Behind)
 _OWN = {"mode": "ready", "next": {"uid": "u2", "name": "SLG 13 · Heart failure", "n": 180},
         "then": ["SLG 14 · Arrhythmias · 96", "SLG 15 · Valves · 122", "SLG 16 · 140"], "more": 29,
-        "at": "The plan's dates are at SLG 14 today.", "pace": "You opened 5 dates in the last two weeks.",
+        "at": "The plan's sets are at SLG 14 today.", "pace": "You opened 5 sets in the last two weeks.",
         "finish": "At that pace you open the last date on Tue 8 Dec, 3 days after Block exam.",
         "last": "Opened SLG 12 · Cardiac receptors · 214 cards, first in line.", "back": None}
 sections.append("<h3>3.8.0: a plan at my own pace (When I'm ready), just after Open</h3>" + board.render(
@@ -286,6 +287,105 @@ sections.append("<h3>3.8.0: a plan I follow, not in its squad, behind</h3>" + bo
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [dict(
         PLAN_CARD, tabs={"summary": None}, ins=None, status={"togo": 24, "behind": 54, "since": "Monday"},
         lines=[("behind", [("Path Book 1 · Cell injury", True), (" was due Mon. 54 cards not seen yet.", False)])])], "offers": []})))
+# plans, end to end (frames 1, 16, 18): the whole plan as a path above the week, "set 3 of 19";
+# Behind as one line with Behind… (its sheet: the "behind" button up top); the empty tab
+_ET = "2026-11-05"  # Thu 5 Nov, as frame 16
+_EDAYS = ["2026-11-02", "2026-11-04", "2026-11-05", "2026-11-06", "2026-11-09", "2026-11-10", "2026-11-12", "2026-11-16",
+          "2026-11-18", "2026-11-20", "2026-11-23", "2026-11-25", "2026-11-27", "2026-11-30", "2026-12-02", "2026-12-04",
+          "2026-12-07", "2026-12-09", "2026-12-11"]
+_ENAMES = ["Cell injury", "Inflammation", "Neoplasia", "Hemodynamics", "Immunology", "Genetics", "Environment", "Infectious",
+           "Blood vessels", "Heart", "Hematopoietic", "Lung", "Head and neck", "GI tract", "Liver", "Pancreas", "Kidney",
+           "Endocrine", "Skin"]
+_EDOC = {"pace": {"days": [1, 1, 1, 1, 1, 0, 0]},
+         "units": [dict({"id": f"e{i}", "name": f"{i + 1} · {n}", "opens": d, "n": 40 + (i * 13) % 50},
+                        **({"tags": ["#Path_Book::03_Neoplasia::Nomenclature", "#Path_Book::03_Neoplasia::Tumor_progression",
+                                     "#Path_Book::03_Neoplasia::Carcinogenesis"], "todo": [{"k": "read", "t": "Chapter 3"}]}
+                           if i == 2 else {}))
+                   for i, (d, n) in enumerate(zip(_EDAYS, _ENAMES))],
+         "events": [{"id": "ex", "day": "2026-12-18", "name": "Exam"}]}
+_EAPPLIED = {"e0": "s", "e1": "s", "e2": "s"}
+
+
+def _end_card(prog, **kw):
+    path = PL.path(_EDOC, prog, _ET, applied=_EAPPLIED)
+    late = PL.behind_of(path, _ET)
+    left = lambda uid: max(0, prog.get(uid, [0, 0, 0])[2] - prog.get(uid, [0, 0, 0])[1])  # noqa: E731
+    return dict(PLAN_CARD, id="pe", title="Path Book, high yield · Dre's plan", name="Path Book, high yield",
+                sub=f"set {path['at']} of {path['of']} · 6 following", tabs={"summary": None}, ins=None, waiting=0,
+                week=PL.week_view(_EDOC, prog, _ET, PL.week_start(_ET)), path=path, behind=late,
+                status={"togo": left("e2"), "behind": late["left"] if late else 0, "since": ""}, **kw)
+
+
+_ON = _end_card({"e0": [40, 40, 40], "e1": [53, 53, 53], "e2": [84, 30, 84]})
+_BEHIND = _end_card({"e0": [40, 40, 40], "e1": [53, 22, 53], "e2": [84, 0, 84]})
+sections.append("<h3>plans, end to end: You › Plans, a plan on track (the path above the week, set 3 of 19)</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [_ON], "offers": []}))
+    .replace("dc-pd-pe-", "dc-pd-pe1-").replace('id="du-', 'id="due1-'))
+sections.append("<h3>plans, end to end: a plan behind (Behind &middot; its set, with Behind&hellip;; the button 'behind' "
+                "up top opens its sheet)</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [_BEHIND], "offers": []}))
+    .replace("dc-pd-pe-", "dc-pd-pe2-").replace('id="du-', 'id="due2-'))
+# 3.9.6, the plan joys (Sam's picks, the "Joy on the plan card" mock): each moment as the board draws it,
+# mid-moment (motion.js plays it from --ago; still with Reduce motion) and the rest of its day
+from due_crew import sev as _SV  # noqa: E402
+
+
+def _joy_prog(k, **x):
+    full = {f"e{i}": [n, n, n] for i, n in ((i, u["n"]) for i, u in enumerate(_EDOC["units"])) if i < k}
+    full.update(x)
+    return full
+
+
+def _joy_card(today, before, after, ago=0.4, then=None):
+    """A card at `today`, its joys from the step `before` (on `then`) -> `after` (progress), on screen `ago` s."""
+    st = None
+    for day, prog, shown, now in ((then or today, before, False, 1000.0), (today, after, True, 1001.0), (today, after, True, 1001.0 + ago)):
+        applied = {u["id"]: "s" for u in _EDOC["units"] if u["opens"] <= day}
+        path = PL.path(_EDOC, prog, day, applied=applied)
+        late = PL.behind_of(path, day)
+        st, view = PL.joy_step(st, path, late, day, now, shown=shown, name="Path Book, high yield")
+    if view.get("pop") and view["pop"].get("ago") is not None:
+        view["pop"]["pip"] = re.sub(r'<rect class="cf"[^>]*/>', "", _SV.move("hop", "hop", label="Pip: a set done"))
+    if view.get("day1") and view["day1"].get("ago") is not None:
+        view["day1"]["pip"] = _SV.move("ready", "ready", label="Pip: day one")
+    togo = sum(max(0, x["total"] - x["seen"]) for x in path["lessons"] if x["opens"] == today)
+    n = len(PL.joy_sets(path))
+    return dict(PLAN_CARD, id="pj", title="Path Book, high yield · Dre's plan", name="Path Book, high yield",
+                sub=(f"all {n} sets done" if PL.joy_finished(path) else f"set {path['at']} of {path['of']}") + " · 6 following",
+                tabs={"summary": None}, ins=None, waiting=0, week=PL.week_view(_EDOC, after, today, PL.week_start(today)),
+                path=path, behind=late, status={"togo": togo, "behind": late["left"] if late else 0, "since": ""}, joy=view)
+
+
+_JOY = [("a set done: its segment fills, the squares burst, Pip hops on (0.4 s in)",
+         _joy_card("2026-11-05", _joy_prog(2, e2=[84, 30, 84]), _joy_prog(3))),
+        ("halfway: a line under the path, Share and &times;", _joy_card("2026-11-20", _joy_prog(9), _joy_prog(10))),
+        ("three-quarters", _joy_card("2026-12-02", _joy_prog(14), _joy_prog(15))),
+        ("the last set, the morning it opens", _joy_card("2026-12-11", _joy_prog(17), _joy_prog(18, e18=[40, 0, 40]), then="2026-12-09")),
+        ("finished: the line the card keeps after the show", _joy_card("2026-12-11", _joy_prog(18, e18=[40, 0, 40]), _joy_prog(19))),
+        ("caught up: Behind cleared, for the rest of the day", _joy_card("2026-11-05", _joy_prog(1, e1=[53, 22, 53], e2=[84, 0, 84]),
+                                                                        _joy_prog(2, e2=[84, 0, 84]))),
+        ("day one: the line all day, Pip's let's-go once", _joy_card("2026-11-02", {}, {"e0": [40, 0, 40]}))]
+for _i, (_what, _c) in enumerate(_JOY):
+    sections.append(f"<h3>3.9.6, the plan joys: {_what}</h3>" + board.render(
+        DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [_c], "offers": []}))
+        .replace("dc-pd-pj-", f"dc-pd-pj{_i}-").replace('id="du-', f'id="duej{_i}-'))
+_JOY_FIN = board.finish_js({"pid": "pj", "name": "Path Book, high yield", "sets": 19, "cards": 1716, "weeks": 6,
+                            "a": ["#2e7d32", "#7cc47f"],
+                            "pip": {"hop": re.sub(r'<rect class="cf"[^>]*/>', "", _SV.move("hop", "hop", rest=True)),
+                                    "jump": re.sub(r'<rect class="cf"[^>]*/>', "", _SV.move("hop", "jump")),
+                                    "still": _SV.svg("hop", rest=True, look=["gradcap"]),
+                                    "cap": __import__("due_crew.closet_art", fromlist=["ART"]).ART["gradcap"][0]}})
+_BS = PL.behind_sheet(_BEHIND["name"], _BEHIND["behind"], _BEHIND["path"], 31)
+SHEET_BEHIND = {"id": "p5", "title": _BS["title"], "text": _BS["text"], "yes": _BS["ways"][0]["yes"], "no": "Not now",
+                "field": {"kind": "pick", "at": 0, "items": [w["label"] for w in _BS["ways"]],
+                          "notes": [w["note"] for w in _BS["ways"]], "go": [w["yes"] for w in _BS["ways"]]}}
+sections.append("<h3>plans, end to end: the empty tab, an exam ahead and no plan ending by it</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV,
+    you=_YOU("plans", plans={"cards": [], "offers": [], "exam": {"day": "2026-12-18", "days": 47}, "writes": True}))
+    .replace('id="dc-plancode"', 'id="dc-plancode1"').replace('id="du-', 'id="due3-'))
+sections.append("<h3>plans, end to end: the empty tab, no exam</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [], "offers": []}))
+    .replace('id="du-', 'id="due4-'))
 # 3.8.1, plans round three: an invite to co-write and a hand-over above the plans; today's date
 # with an author's note under the topic it names, and its picked cards named by their resource here
 _R3DOC = dict(_PDOC, remarks=[{"id": "r1", "tag": "#Deck::#Path_Book::02_Inflammation", "text": "Figures 2-4 are on the quiz <b>"}],
@@ -328,6 +428,14 @@ sections.append("<h3>3.8.1: the morning's line, four or more dates</h3>" + board
         ["p1", f"u{i}", n, k] for i, (n, k) in enumerate((("Renal physiology", 80), ("Antiarrhythmics", 40),
                                                           ("Heart failure", 96), ("Valves", 128)))]}),
     you=_YOU("today")).replace('id="du-', 'id="du4-'))
+# Today's lesson, B (the plans redesign): each open lesson a deck of its own; the card's line and the morning's say so
+_LB = {"cards": [dict(PLAN_CARD, tabs={"summary": None}, ins=None, status={"togo": 84, "behind": 31, "since": "Wednesday"},
+                      lesson_deck={"today": "b", "held": 0})], "offers": []}
+sections.append("<h3>Today's set, B: the card's line (in your decks, Study)</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=_LB, due=_DV, you=_YOU("plans", plans=_LB)).replace('id="du-', 'id="dub-'))
+sections.append("<h3>Today's set, B: the morning's line</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=dict(_DV3, opened={"n": 78, "decks": True, "dates": [
+        ["p1", "u1", "Cell injury", 78]]}), you=_YOU("today")).replace('id="du-', 'id="dub2-'))
 sections.append("<h3>3.8.1: You › Plans: a past date left cards shut (its details open); Study on each open date</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [
         dict(_C3, focus="2026-10-05")], "offers": []})))
@@ -879,6 +987,7 @@ profile_js = board.profile_overlay_js({
     "you": False, "paused": False, "exam": "",
     # 3.8.2: their Pip in the emoji's place, in their colour and look
     "sev": board.card_sev({"name": "Dre", "accent": "blue", "look": ["partyhat", "bowtie", "balloon"]}, {}),
+    "song": {"t": "Second Wind", "a": "Northbound", "id": 1702, "url": "https://music.apple.com/us/album/x/1?i=1702"},  # 3.9.6
     "duet": {"run": 5, "best": 23,
              "mine_week": [True, True, False, True, True, True, True],
              "theirs_week": [True, True, True, True, True, True, True]},
@@ -905,10 +1014,95 @@ sheet_danger = board.sheet_js({"id": "p2", "title": "Stop following Step 1 \u00b
                                "check": {"label": "Take Step 1 \u00b7 Micro block's tags off your notes too", "on": True}})
 sheet_delete = board.sheet_js({"id": "p3", "title": "Delete account?", "yes": "Delete Account", "danger": True,
                                "text": "This deletes your stats, your code, and your account for good. No undo."})
+sheet_behind = board.sheet_js(SHEET_BEHIND)  # plans, end to end: Behind\u2026, one of a few with a line under each
 sheet_pick = board.sheet_js({"id": "p4", "title": "Change deck", "text": "Run Step 1 \u00b7 Micro block on",
                              "field": {"kind": "pick", "at": 3, "items": ["Big Step 1"] + [f"Big Step 1::{x}" for x in (
                                  "Biochem", "Cardio", "Endo", "GI", "Heme", "Immuno", "Micro", "Neuro", "Pharm",
                                  "Physio", "Psych", "Renal", "Repro", "Resp")] + ["Japanese Core 2k"]}})
+
+# 3.9.6, song of the moment: the dance floor in the Decks screen's bottom-right corner. Each case is a
+# Decks screen of its own (an iframe: the floor is fixed to its window), the board's real output and
+# dance_js, which puts the floor on the page from the board's template; data-floor names each for the
+# screenshots (light, dark, narrow).
+def _song(i, t, a, al, y, at="2026-08-28", prev=True):
+    s = {"t": t, "a": a, "al": al, "y": y, "id": 1700000000 + i, "at": at,
+         "url": f"https://music.apple.com/us/album/x/{1600000000 + i}?i={1700000000 + i}"}
+    if prev:
+        s["prev"] = f"https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview/{i}.m4a"
+    return s  # no cover here (the preview can't reach Apple's image host): each shows its colour tile
+
+
+_SONGS = [_song(1, "Lantern Hours", "Mira Vale", "Lantern Hours", 2025, "2026-08-31"),
+          _song(2, "Second Wind", "Northbound", "Mile Markers", 2022, "2026-08-27"),
+          _song(3, "Coffee at 2 a.m.", "Velvet Room", "Late Shift", 2021, "2026-08-20"),
+          _song(4, "Slow Burn", "Tide & Ember", "Slow Burn", 2026, "2026-08-11", prev=False),
+          _song(5, "Paper Cranes", "Ivy Lane", "Folded", 2026, "2026-08-08"),
+          _song(6, "Static Bloom", "Hollow Pines", "Static Bloom", 2025, "2026-08-05"),
+          _song(7, "Golden Hour Again", "June Atlas", "Small Weathers", 2023, "2026-08-02"),
+          _song(8, "Night Rounds", "Paper Harbor", "Night Rounds", 2024, "2026-07-30"),
+          _song(9, "Long Way Round <i>(Live)</i>", "Northbound & \"Friends\"", "Mile Markers", 2022, "2026-07-21")]
+_MY_SONG = _song(20, "Study Hall", "Mira Vale", "Lantern Hours", 2025, "2026-08-30")
+_DANCERS = [("dre", "Dre", "blue", ["dino"]), ("marisa", "Marisa K.", "teal", ["wizard"]), ("noah", "Noah", "rose", ["partyhat", "scarf"]),
+            ("priya", "Priya", "amber", ["sprout", "shades", "balloon"]), ("kai", "Kai", "purple", []), ("nia", "Nia", "green", ["beanie"]),
+            ("jun", "Jun", "teal", ["cap"]), ("lena", "Lena", "blue", []), ("bo", "Bartholomew Fitzgerald-Montgomery", "rose", ["bowtie"])]
+
+
+def _dance_view(n, me=True, fresh=(), **kw):
+    crew = [{"uid": u, "name": nm, "accent": a, "look": lk, "song": _SONGS[i], "fresh": u in fresh}
+            for i, (u, nm, a, lk) in enumerate(_DANCERS[:n])]
+    return dict({"me": _MY_SONG if me else None, "crew": crew, "motion": "gentle", "app": "spotify", "playing": "", "pip": True}, **kw)
+
+
+def _dance_frame(name, view, cfg=None, dark=False, width=1000, height=560, then=""):
+    """A Decks screen with the board and its floor: Anki's <center> and button look, the deck list above."""
+    cfg = dict({"period": "today", "sev_look": ["partyhat", "glasses"], "sev_closet": {"partyhat": "2026-09-01", "glasses": "2026-09-01"}},
+               **(cfg or {}))
+    board_html = board.render(dict(DATA, entries=DRESSED), cfg, now_ts - 60, dance=view)
+    decks = ("<table class='decks' style='margin:8px auto 0;font-size:13px'><tr><th align=left>Deck</th><th>Due</th><th>New</th></tr>"
+             + "".join(f"<tr><td style='padding:4px 18px 4px 0'>{d}</td><td style='color:#2b6fd1'>{a}</td><td style='color:#2e8b57'>{b}</td></tr>"
+                       for d, a, b in (("Big Step 1", 312, 20), ("Path Book", 84, 0), ("Pharm", 41, 10))) + "</table>")
+    script = ("function pycmd(c) { console.log('pycmd', c); return false; }\nwindow.dcBK = 'preview';\n"
+              + board.dance_js() + "\n" + then)
+    page = ("<!doctype html><html><head><meta charset='utf-8'><style>"
+            "body { margin: 0; padding: 12px; background: %s; color: %s; font-family: -apple-system, sans-serif; }"
+            "center button { margin: 4px 6px; padding: 6px 14px; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.3); min-width: 60px; }"
+            "</style></head><body class='%s'><center>%s<br>%s</center><script>%s</script></body></html>"
+            % ("#2c2c2c" if dark else "#f5f5f5", "#d7d7d7" if dark else "#222", "nightMode" if dark else "", decks,
+               board_html, script.replace("</", "<\\/")))
+    return (f"<iframe data-floor='{name}' style='width:{width}px;height:{height}px;border:1px solid #ccc;margin:0 0 8px;display:block' "
+            f"srcdoc=\"{html.escape(page, quote=True)}\"></iframe>")
+
+
+sections.append("<h3>3.9.6: the dance floor, four songs (Gentle; one bubble at a time)</h3>" + _dance_frame("four", _dance_view(4)))
+sections.append("<h3>3.9.6: Noah's new song: he hops on, a star on his bubble</h3>"
+                + _dance_frame("fresh", _dance_view(4, fresh=("noah",))))
+sections.append("<h3>3.9.6: nine songs: five dance, +4 in the sixth's place (the list)</h3>"
+                + _dance_frame("nine", _dance_view(9), then="dcDance.show('*');"))
+sections.append("<h3>3.9.6: no songs yet, none of mine: Put on a song?</h3>" + _dance_frame("none", _dance_view(0, me=False)))
+sections.append("<h3>3.9.6: a narrow window: the booth, one dancer, a count</h3>"
+                + _dance_frame("narrow", _dance_view(4), width=760))
+sections.append("<h3>3.9.6: dark, Lively, a preview playing</h3>"
+                + _dance_frame("dark", _dance_view(6, motion="lively", playing="dre"), cfg={"theme": "dark"}, dark=True))
+sections.append("<h3>3.9.6: a crewmate's song card (Listen in Spotify; Apple's badge beside the cover)</h3>"
+                + _dance_frame("card", _dance_view(4), then="dcDance.show('dre');"))
+sections.append("<h3>3.9.6: folded into the corner (a star: a new song), and opened again with a tap</h3>"
+                + _dance_frame("folded", _dance_view(4, fresh=("noah",), folded=True), height=300))
+sections.append("<h3>3.9.6: the song card, dark, a preview playing, no music app yet (Listen asks which)</h3>"
+                + _dance_frame("card-dark", _dance_view(4, app="", playing="marisa"), cfg={"theme": "dark"}, dark=True,
+                               then="dcDance.show('marisa');"))
+sections.append("<h3>3.9.6: my song's card</h3>" + _dance_frame("mine", _dance_view(4), then="dcDance.show('me');"))
+_RESULTS = json.dumps({"q": "lantern", "error": False, "songs": [
+    {"id": 1701, "t": "Lantern Hours", "a": "Mira Vale", "al": "Lantern Hours", "y": 2025},
+    {"id": 1702, "t": "Lanterns on the Water", "a": "June Atlas", "al": "Small Weathers", "y": 2023},
+    {"id": 1703, "t": "Lantern (Acoustic) <img src=x onerror=alert(1)>", "a": "Paper Harbor", "al": "Night Rounds", "y": 2024,
+     "art": "javascript:alert(1)"}]})
+_SEARCH = ("dcDance.search(); var q = document.querySelector('#dc-song .sq'); q.value = 'lantern'; "
+           "q.dispatchEvent(new Event('input')); setTimeout(function () { dcSong.results(%s); "
+           "document.querySelectorAll('#dc-song .sr button')[1].click(); }, 450);" % _RESULTS)
+sections.append("<h3>3.9.6: the search sheet (a result picked; Use this, Take it off)</h3>" + _dance_frame("search", _dance_view(4), then=_SEARCH))
+sections.append("<h3>3.9.6: the search sheet, dark</h3>" + _dance_frame("search-dark", _dance_view(4), cfg={"theme": "dark"}, dark=True, then=_SEARCH))
+sections.append("<h3>3.9.6: Settings › Board, song of the moment</h3>" + board.settings_html(
+    dict(SET_VIEW, tab="board"), dict(SET_CFG, dance="lively", music_app="spotify")))
 
 page = f"""<!doctype html><html><head><meta charset="utf-8">
 <title>Due Crew board preview</title>
@@ -940,6 +1134,8 @@ page = f"""<!doctype html><html><head><meta charset="utf-8">
   <button onclick="eval(SHEET_DANGER)">stop</button>
   <button onclick="eval(SHEET_DELETE)">delete</button>
   <button onclick="eval(SHEET_PICK)">deck</button>
+  <button onclick="eval(SHEET_BEHIND)">behind</button>
+  <button onclick="eval(JOY_FIN)">finished</button>
 </div>
 <center>{''.join(sections)}</center>
 <script>
@@ -952,6 +1148,8 @@ page = f"""<!doctype html><html><head><meta charset="utf-8">
   var SHEET_DANGER = {json.dumps(sheet_danger)};
   var SHEET_DELETE = {json.dumps(sheet_delete)};
   var SHEET_PICK = {json.dumps(sheet_pick)};
+  var SHEET_BEHIND = {json.dumps(sheet_behind)};
+  var JOY_FIN = {json.dumps(_JOY_FIN)};
 </script>
 </body></html>"""
 

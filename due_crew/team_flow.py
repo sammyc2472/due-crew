@@ -601,6 +601,20 @@ def insights(did, pid=None, exam=""):
     return view
 
 
+def insights_ready(did, pid=None, exam=""):
+    """A deck's Insights is at hand (insights() wouldn't work it out again)."""
+    c = cfg()
+    key = f"{pid or ''}|{exam}|{c.get('exam_last') or ''}|{c.get('exam_since') or ''}"
+    have = (_state.get("insights") or {}).get(did)
+    return bool(have and have.get("key") == key and time.time() - have["at"] < INSIGHTS_FRESH)
+
+
+def decks_ready():
+    """Insights' picker is at hand (you_decks() wouldn't read it again)."""
+    have = _state.get("you_decks")
+    return bool(have and time.time() - have["at"] < INSIGHTS_FRESH)
+
+
 def _in(ids):
     return ",".join(str(int(c)) for c in ids) or "0"
 
@@ -660,7 +674,7 @@ def _work_out(did, pid=None, exam=""):
     mine = [{"day": exam, "name": "Your exam", "id": MY_EXAM}] if exam else []
     if p:
         ms = P.unit_matches(idx, doc, swap)
-        ld = P.load(idx, doc, swap)
+        ld = P.load(idx, doc, swap, pf._aside(idx, st, doc))  # 3.9.6: not what I suspended myself
         units = P.units(doc)
     day, name, k, eid = T.aim(list(doc.get("events") or []) + mine if p else mine, today)
     aimed, prep = deck, []

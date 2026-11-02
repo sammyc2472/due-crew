@@ -47,7 +47,7 @@ class MineTab(QWidget):
         self.skips_lay.setSpacing(0)
         self.skips.setMaximumWidth(420)  # its ✕ by the name, not across the window
         skip.addWidget(self.skips)
-        self.skip_btn, self.skip_menu = menu_button("Skip a date", self._skip_entries, small=True)
+        self.skip_btn, self.skip_menu = menu_button("Skip a set", self._skip_entries, small=True)
         skip.addWidget(self.skip_btn, 0, Qt.AlignmentFlag.AlignLeft)
         form.addRow("Skipping", skip)
 
@@ -55,14 +55,14 @@ class MineTab(QWidget):
         opens.setSpacing(0)
         self.on_dates = self._seg("Each morning, on their dates", lambda: self._own(""))
         self.ready = self._seg("When I'm ready", lambda: self._own("ready"))
-        self.ready.setToolTip("<span>Up next on the board opens the next date's cards when you say</span>")
+        self.ready.setToolTip("<span>Up next on the board opens the next set's cards when you say</span>")
         opens.addWidget(self.on_dates)
         opens.addWidget(self.ready)
         segs([self.on_dates, self.ready])
         opens.addStretch(1)
         form.addRow("Cards open", opens)
 
-        self.held = tool("", lambda: self._do("show_held"), tip="The cards Hold back keeps shut till their day")
+        self.held = tool("", lambda: self._do("show_held"), tip="The cards Hold back keeps suspended till their day")
         self.held_none = plain("Nothing held back.", muted=True)
         held = QHBoxLayout()
         held.addWidget(self.held)
@@ -126,7 +126,7 @@ class MineTab(QWidget):
         names = {u["id"]: u for u in P.units(win.plan.get("doc") or {})}
         for uid in p.get("skipped") or []:
             u = names.get(uid)
-            self.skips_lay.addWidget(Source(f"{P.fmt_day(u['opens'])} · {u.get('name') or '?'}" if u else "a date taken off",
+            self.skips_lay.addWidget(Source(f"{P.fmt_day(u['opens'])} · {u.get('name') or '?'}" if u else "a set taken off",
                                             on_take=lambda uid=uid: self._do("set_skip", uid, False)))
         self.skips.setVisible(self.skips_lay.count() > 0)
         own = p.get("own") or ""
@@ -140,7 +140,7 @@ class MineTab(QWidget):
         self.squad.setText("You're in it" if inside else "Not in it: join from the board's Squads tab")
         self.squad.setToolTip("<span>Its squad sees that you showed up, never your numbers</span>" if inside else "")
         self.pause_btn.setText("Resume" if p.get("paused") else "Pause until…")
-        self.copy_btn.setVisible(bool(win.plan.get("listed")))
+        self.copy_btn.setVisible(bool(win.plan.get("listed") or win.plan.get("library")))
 
     # ---- what each does ----
 
@@ -180,7 +180,7 @@ class MineTab(QWidget):
             a = self.skip_menu.addAction(f"{P.fmt_day(u['opens'])} · {u.get('name') or '?'}")
             a.triggered.connect(lambda _=False, uid=u["id"]: self._do("set_skip", uid, True))
         if not ahead:
-            self.skip_menu.addAction("No date ahead to skip").setEnabled(False)
+            self.skip_menu.addAction("No set ahead to skip").setEnabled(False)
 
     def _pause(self):
         self._do("resume" if (self.p or {}).get("paused") else "pause_until")

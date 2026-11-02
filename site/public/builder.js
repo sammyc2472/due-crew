@@ -548,9 +548,13 @@ const PlanSquad = (() => {
 })();
 
 /** The plan's page. Its authors (the owner and co-authors) edit it; anyone
- *  following sees the same calendar, read-only, with the notes. */
-async function builder(id) {
-  let plan = await api("GET", `/plans/${id}`);
+ *  following sees the same calendar, read-only, with the notes.
+ *  face (planface.js): the shared plan page draws an author's plan instead:
+ *  this loads it, keeps its logic and its working copy, and hands them over
+ *  (face.attach); draw() is the face's then, and nothing of this page's is
+ *  drawn. got: the plan (GET /plans/{id}), when the caller read it already. */
+async function builder(id, face = null, got = null) {
+  let plan = got || await api("GET", `/plans/${id}`);
   const author = plan.role === "owner" || plan.role === "editor";
   const owner = plan.role === "owner";
   const inPlan = plan.role !== "reader";
@@ -801,8 +805,10 @@ async function builder(id) {
   const firstStudy = (d) => (isStudy(d) ? d : nextStudy(d));
   function studyDays(a, b) { let k = 0; for (let x = a; x <= b; x = addDays(x, 1)) if (isStudy(x)) k++; return k; }
   const lastDay = () => doc.units.reduce((m, u) => { const e = u.even && u.due ? u.due : u.opens; return e > m ? e : m; }, "");
-  const cleanup = () => {
-    doc.units = doc.units.filter((u) => srcs(u).length || (u.cards || []).length || (u.search || []).length || (u.cut || []).length || hasIds(u));
+  /** a date with nothing on it goes, and the review days that name it; kept: the ids that stay all the same */
+  const cleanup = (kept = null) => {
+    doc.units = doc.units.filter((u) => srcs(u).length || (u.cards || []).length || (u.search || []).length || (u.cut || []).length || hasIds(u)
+      || (kept && kept.has(u.id)));
     const ids = new Set(doc.units.map((u) => u.id));
     if (doc.reviews) { doc.reviews = doc.reviews.filter((r) => ids.has(r.from) && ids.has(r.to)); if (!doc.reviews.length) delete doc.reviews; }
   };
@@ -860,7 +866,7 @@ async function builder(id) {
   /** a search onto a date, if it has room (a date holds 10; a cut's search must stay) */
   const addSearch = (u, q) => {
     if ((u.search || []).includes(q)) return true;
-    if ((u.search || []).length >= 10) { note = "A date holds up to 10 searches and cuts."; return false; }
+    if ((u.search || []).length >= 10) { note = "A set holds up to 10 searches and cuts."; return false; }
     u.search = [...(u.search || []), q];
     return true;
   };
@@ -935,11 +941,11 @@ async function builder(id) {
   /** what deleting a tag does to the dates, said before it's done (as Edit the whole plan's preview does) */
   function dropSay(t) {
     const us = doc.units.filter((u) => usesPtag(u, t)).sort((a, b) => a.opens.localeCompare(b.opens));
-    if (!us.length) return `${t.name} is on no dates.`;
+    if (!us.length) return `${t.name} is on no sets.`;
     const list = (xs) => `${xs.slice(0, 4).map((u) => pretty(u.opens)).join(", ")}${xs.length > 4 ? ` and ${xs.length - 4} more` : ""}`;
     const gone = us.filter((u) => bareWithout(u, t));
     const cuts = us.some((u) => (u.cut || []).some((c) => c.in === t.id));
-    return `${t.name} is on ${us.length} date${us.length === 1 ? "" : "s"}: ${list(us)}.`
+    return `${t.name} is on ${us.length} set${us.length === 1 ? "" : "s"}: ${list(us)}.`
       + (gone.length ? ` ${gone.length === us.length ? (us.length === 1 ? "It has" : "They have") : `${list(gone)} ha${gone.length === 1 ? "s" : "ve"}`} nothing else, so ${gone.length === 1 ? "it goes" : "they go"}, to-dos too.` : "")
       + (cuts ? " A tag kept to it there is all of that tag again." : "");
   }
@@ -973,7 +979,7 @@ async function builder(id) {
           h("button", { class: "add", title: picked ? `Put it on ${pretty(picked)}` : "Put it on the next free day", "aria-label": `Put ${t.name} on ${picked ? pretty(picked) : "the next free day"}`,
             onclick: () => { const d = picked || firstStudy(lastDay() ? addDays(lastDay(), 1) : start); dropped(d, { key: `tag:${path}` }); } }, "+"),
           h("button", { class: "linkish", onclick: () => { tagEdit = t.id; tagDrop = null; draw(); } }, "Rename"),
-          h("button", { class: "linkish", title: "Delete it (and from the dates that use it)", "aria-label": `Delete ${t.name}`, "aria-expanded": String(tagDrop === t.id),
+          h("button", { class: "linkish", title: "Delete it (and from the sets that use it)", "aria-label": `Delete ${t.name}`, "aria-expanded": String(tagDrop === t.id),
             onclick: () => { tagDrop = tagDrop === t.id ? null : t.id; draw(); } }, "\u00d7")),
         from.length ? h("div", { class: "muted small pfrom" }, `From ${from.join(", ")}`) : null,
         // the dates it's on, before it goes: a date with nothing else goes with it
@@ -1065,8 +1071,8 @@ async function builder(id) {
 
   // the server's ceilings (worker/src/plans.ts), said where they're hit, not at Save
   const UNITS_MAX = 200, EVENTS_MAX = 200, REVIEWS_MAX = 60, SOURCES_MAX = 50, SEARCH_MAX = 10;
-  const FULL = `A plan holds up to ${UNITS_MAX} dates.`;
-  const srcFull = (f) => `A date holds up to ${SOURCES_MAX} ${f === "tags" ? "tags" : "subdecks"}.`;
+  const FULL = `A plan holds up to ${UNITS_MAX} sets.`;
+  const srcFull = (f) => `A set holds up to ${SOURCES_MAX} ${f === "tags" ? "tags" : "subdecks"}.`;
   /** the day's date, made if it has none; null when the plan holds all it can (note says so) */
   function unitOn(d) {
     let u = doc.units.find((x) => x.opens === d && !x.even);
@@ -1117,9 +1123,9 @@ async function builder(id) {
   function mergeInto(into, u) {
     const union = (k) => [...new Set([...(into[k] || []), ...(u[k] || [])])];
     const no = (why) => ({ ok: false, why: `${pretty(into.opens)} can't take it: ${why}` });
-    if (union("search").length > SEARCH_MAX) return no(`a date holds up to ${SEARCH_MAX} searches and cuts.`);
+    if (union("search").length > SEARCH_MAX) return no(`a set holds up to ${SEARCH_MAX} searches and cuts.`);
     for (const f of ["tags", "decks"]) if (union(f).length > SOURCES_MAX) return no(srcFull(f).toLowerCase());
-    for (const k of ["nids", "cids", "notes"]) if (union(k).length > 5000) return no("a date takes up to 5,000 IDs of each kind.");
+    for (const k of ["nids", "cids", "notes"]) if (union(k).length > 5000) return no("a set takes up to 5,000 IDs of each kind.");
     for (const f of ["tags", "decks"]) into[f] = union(f);
     const have = new Set((into.cards || []).map(([g, o]) => `${g}:${o}`));
     into.cards = [...(into.cards || []), ...(u.cards || []).filter(([g, o]) => !have.has(`${g}:${o}`))];
@@ -1136,7 +1142,7 @@ async function builder(id) {
     if (u.for && !into.for) into.for = u.for;
     for (const r of doc.reviews || []) { if (r.from === u.id) r.from = into.id; if (r.to === u.id) r.to = into.id; }
     doc.units = doc.units.filter((x) => x !== u);
-    return { ok: true, why: lost ? `A date keeps ${Todo.MAX} lines to tick: ${lost} didn't fit.` : "" };
+    return { ok: true, why: lost ? `A set keeps ${Todo.MAX} lines to tick: ${lost} didn't fit.` : "" };
   }
 
   // ---- what to cover, and laying it out ----
@@ -1226,7 +1232,7 @@ async function builder(id) {
       anchor = mon; view = "week";
     }
     if (until && firstStudy(from) > until) {
-      note = end && until === end ? `Nothing fits by ${pretty(end)}: ${lastDay() ? `the dates already run to ${pretty(lastDay())}` : `the plan starts ${pretty(start)}`}. Move the finish date.`
+      note = end && until === end ? `Nothing fits by ${pretty(end)}: ${lastDay() ? `the sets already run to ${pretty(lastDay())}` : `the plan starts ${pretty(start)}`}. Move the finish date.`
         : "No study days left in that week.";
       return draw();
     }
@@ -1254,7 +1260,7 @@ async function builder(id) {
     renameAll(); byOpens(); mark();
     const leftN = r.left.reduce((a, x) => a + x.n, 0);
     // 3.9.3: what to do about what didn't fit, said (planner/build.py says the same)
-    const tip = end && !full ? " Move the finish date." : full && pace.mode === "daily" ? " Raise the cards a day for fewer, bigger dates." : "";
+    const tip = end && !full ? " Move the finish date." : full && pace.mode === "daily" ? " Raise the cards a day for fewer, bigger sets." : "";
     note = [r.placedN ? putWords(r.placedN, pretty(firstStudy(from)), pretty(r.lastD))
       : weekAhead ? "No study days left in that week." : "Nothing fit.",
     leftN && (full || !weekAhead) ? `${full ? `${full} ` : ""}${leftN.toLocaleString()} didn't fit${end && !full ? ` by ${pretty(end)}` : ""}: ${leftNames(r.left)}.${tip}` : ""]
@@ -1359,7 +1365,7 @@ async function builder(id) {
     else if (c.picks) {
       // 3.8.1: its picks move together, IDs and single cards
       const all = (k) => [...new Set([...(t[k] || []), ...(c.u[k] || [])])];
-      if (["nids", "cids", "notes"].some((k) => all(k).length > 5000)) { note = "A date takes up to 5,000 IDs of each kind."; cleanup(); draw(); return; }
+      if (["nids", "cids", "notes"].some((k) => all(k).length > 5000)) { note = "A set takes up to 5,000 IDs of each kind."; cleanup(); draw(); return; }
       if (hasIds(c.u)) { for (const k of ["nids", "cids", "notes"]) { t[k] = all(k); if (!t[k].length) delete t[k]; } delete t.idn; delete t.idr; takeIds(c.u); }
       const have = new Set((t.cards || []).map(([g, o]) => `${g}:${o}`));
       t.cards = [...(t.cards || []), ...(c.u.cards || []).filter(([g, o]) => !have.has(`${g}:${o}`))]; c.u.cards = [];
@@ -1529,7 +1535,7 @@ async function builder(id) {
         onchange: (e) => { const v = e.target.value.trim(); if (!v) delete x.url; else if (Todo.okUrl(v)) x.url = v; else { e.target.value = x.url || ""; e.target.placeholder = "A link starts with https://"; } set(); } }),
       h("button", { class: "x", "aria-label": "Take this line off", onclick: () => { lines.splice(i, 1); set(); draw(); } }, "×")));
     return h("div", { class: "every2" },
-      h("span", { class: "pi" }, h("b", {}, "Every week"), h("small", { class: "muted" }, " lines followers tick in Due on those days, from the first date to the last")),
+      h("span", { class: "pi" }, h("b", {}, "Every week"), h("small", { class: "muted" }, " lines followers tick in Due on those days, from the first set to the last")),
       rows,
       lines.length < Every.MAX ? h("button", { class: "linkish", onclick: () => {
         doc.every = [...lines, { k: "do", t: "", r: "4" }]; mark(); draw(); } }, "+ Add a line") : null);
@@ -1659,7 +1665,8 @@ async function builder(id) {
     const days = us.map((u) => u.opens).sort();
     const cards = us.reduce((a, u) => a + prog[u.id][2], 0);
     const open = () => Cards.open({ kind: "plan", title: "Share this plan", file: `due-crew-plan-${plan.id}`, sizes: ["story"],
-      data: { name: plan.name, cards, weeks: Math.max(1, Math.ceil((Sched.diff(days[days.length - 1], days[0]) + 1) / 7)), code: plan.audience === "code" ? plan.code : null },
+      data: { name: plan.name, sets: us.length, done: us.length, cards, weeks: Math.max(1, Math.ceil((Sched.diff(days[days.length - 1], days[0]) + 1) / 7)),
+              code: plan.audience === "code" ? plan.code : null },
       switches: plan.audience === "code" && plan.code ? [{ k: "code", label: "Its code, so others can follow" }] : [] });
     return h("p", { class: "done-line" }, h("b", {}, "Finished. "), `You’ve seen all ${cards.toLocaleString()} cards. `, h("button", { class: "linkish", onclick: open }, "Share a card ›"));
   }
@@ -1853,7 +1860,7 @@ async function builder(id) {
       const [n, rep, miss] = u.pn;
       const single = (u.cards || []).length;
       return h("small", { class: "opens" }, h("b", {}, `${(n + single).toLocaleString()} new here`),
-        rep ? h("span", { class: "muted" }, ` · ${rep.toLocaleString()} already on an earlier date`) : null,
+        rep ? h("span", { class: "muted" }, ` · ${rep.toLocaleString()} already on an earlier set`) : null,
         miss ? h("span", { class: "warn" }, ` · ${miss.toLocaleString()} picked note${miss === 1 ? "" : "s"} not in your deck`) : null);
     };
     for (const u of own) {
@@ -1906,7 +1913,7 @@ async function builder(id) {
       own.length ? todoBox(own[0]) : null,
       author ? h("div", { class: "addc" }, h("span", { class: "lbl" }, "Add cards"), searchBox(d),
         // 3.6.5: a follower's Anki opens a date once; what's added after comes the next morning
-        d <= today() && rows.length ? h("small", { class: "muted" }, "This date has opened. Followers who opened it are asked at their next refresh to open what you add.") : null) : null,
+        d <= today() && rows.length ? h("small", { class: "muted" }, "This set has opened. Followers who opened it are asked at their next refresh to open what you add.") : null) : null,
       overlapBox(d),
       moveIn ? h("label", { class: "inline" }, "Move to ", moveIn, h("button", { class: "quiet", onclick: (ev) => { ev.preventDefault(); moving = null; draw(); } }, "Cancel")) : null,
       moveLink || rvLink || makeEv ? h("div", { class: "acts" }, moveLink, rvLink, makeEv) : null,
@@ -2022,7 +2029,7 @@ async function builder(id) {
       const u = unitOn(d);
       if (!u) { why.textContent = FULL; return; }
       const notes = [...new Set([...(u.notes || []), ...r.notes])];
-      if (notes.length > 5000) { why.textContent = "A date takes up to 5,000 notes."; cleanup(); return; }
+      if (notes.length > 5000) { why.textContent = "A set takes up to 5,000 notes."; cleanup(); return; }
       if (r.notes.length) { u.notes = notes; delete u.idn; }
       const have = new Set((u.cards || []).map(([g, o]) => `${g}:${o}`));
       u.cards = [...(u.cards || []), ...r.cards.filter(([g, o]) => !have.has(`${g}:${o}`))];
@@ -2048,7 +2055,7 @@ async function builder(id) {
       found.replaceChildren(
         h("span", {}, h("b", {}, `${n.toLocaleString()} ${kind === "nids" ? "note" : "card"} ID${n === 1 ? "" : "s"}`),
           h("span", { class: "muted" }, kind === "nids" ? " · all their cards" : " · just those cards")),
-        n > 5000 ? h("span", { class: "warn" }, "A date takes up to 5,000. Split the list over two dates.") : h("span", { class: "muted small" }, "Your Anki counts them at its next refresh, as it does a search."),
+        n > 5000 ? h("span", { class: "warn" }, "A set takes up to 5,000. Split the list over two sets.") : h("span", { class: "muted small" }, "Your Anki counts them at its next refresh, as it does a search."),
         h("span", { class: "row" }, seg, n <= 5000 ? h("button", { onclick: addIds }, `Add ${n.toLocaleString()} ${kind === "nids" ? "note" : "card"}${n === 1 ? "" : "s"}`) : null));
     };
     const addIds = () => {
@@ -2056,7 +2063,7 @@ async function builder(id) {
       const u = unitOn(d);
       if (!u) { why.textContent = FULL; return; }
       const all = [...new Set([...(u[kind] || []), ...ids])];
-      if (all.length > 5000) { why.textContent = "A date takes up to 5,000 IDs of each kind."; cleanup(); return; }
+      if (all.length > 5000) { why.textContent = "A set takes up to 5,000 IDs of each kind."; cleanup(); return; }
       u[kind] = all; delete u.idn;
       renameAll(); mark(); draw();
     };
@@ -2087,11 +2094,11 @@ async function builder(id) {
     const before = us.filter((u) => u.opens <= d);
     if (!before.length) return null;
     if (!r && (doc.reviews || []).length >= REVIEWS_MAX) return h("small", { class: "muted" }, `A plan holds up to ${REVIEWS_MAX} review days.`);
-    if (!r) return h("button", { class: "linkish", title: "That morning, followers get a Due Crew deck of what they've seen from these dates, most missed first.", onclick: () => {
+    if (!r) return h("button", { class: "linkish", title: "That morning, followers get a Due Crew deck of what they've seen from these sets, most missed first.", onclick: () => {
       (doc.reviews ||= []).push({ day: d, from: before[Math.max(0, before.length - 5)].id, to: before[before.length - 1].id }); mark(); draw(); } }, "Make it a review day");
     const pick = (k) => h("select", { "aria-label": k === "from" ? "Review from" : "Review to", onchange: (e) => { r[k] = e.target.value; mark(); draw(); } },
       us.map((u) => h("option", { value: u.id, selected: r[k] === u.id }, `${u.name} · ${pretty(u.opens)}`)));
-    return h("div", { class: "rvbox" }, h("b", { title: "That morning, followers get a Due Crew deck of what they've seen from these dates, most missed first." }, "Review day"),
+    return h("div", { class: "rvbox" }, h("b", { title: "That morning, followers get a Due Crew deck of what they've seen from these sets, most missed first." }, "Review day"),
       h("div", { class: "row" }, pick("from"), "to", pick("to"),
         h("button", { class: "quiet", "aria-label": "No review day", onclick: () => { doc.reviews = doc.reviews.filter((x) => x !== r); if (!doc.reviews.length) delete doc.reviews; mark(); draw(); } }, "×")));
   }
@@ -2176,10 +2183,10 @@ async function builder(id) {
   // ---- the list: every date, with its dates to type ----
   function listView() {
     byOpens();
-    if (!doc.units.length) return h("p", { class: "muted" }, "No dates yet. Tick what to cover and Fill, or drag a tag onto the calendar.");
+    if (!doc.units.length) return h("p", { class: "muted" }, "No sets yet. Tick what to cover and Fill, or drag a tag onto the calendar.");
     const placed = placedKeys();
     return h("div", { class: "units" }, doc.units.map((u) => {
-      const name = h("input", { class: "uname", value: u.name, maxlength: 60, placeholder: autoName(u), "aria-label": "Date name",
+      const name = h("input", { class: "uname", value: u.name, maxlength: 60, placeholder: autoName(u), "aria-label": "Set name",
         oninput: (e) => { nameIt(u, e.target.value); }, onchange: (e) => { if (!e.target.value.trim()) { nameIt(u, ""); draw(); } } });
       const opens = h("input", { type: "date", value: u.opens, "aria-label": "Opens", onchange: (e) => { if (e.target.value) { const k = Sched.diff(e.target.value, u.opens); shiftUnit(u, k); if (u.check && u.check < u.opens) delete u.check; byOpens(); mark(); draw(); } } });
       const due = h("input", { type: "date", value: u.due || "", min: u.opens, "aria-label": "Due", onchange: (e) => { u.due = e.target.value && e.target.value >= u.opens ? e.target.value : undefined; if (!u.due || u.due === u.opens) delete u.even; mark(); draw(); } });
@@ -2345,12 +2352,12 @@ async function builder(id) {
       if (searches.some((q) => PERSONAL.test(q))) { errors.push(`Line ${i + 1}: that search finds different cards in each person's Anki; use tags.`); return; }
       if (picks.bad.length) { errors.push(`Line ${i + 1}: "${picks.bad[0].slice(0, 30)}" isn't a note's ID from Anki (cards: takes ID:N, N the card's number from 1).`); return; }
       if (!tags.length && !cutsHere.length && !decks.length && !searches.length && !ids.nids.length && !ids.cids.length && !picks.notes.length && !picks.cards.length && !keepCards) { errors.push(`Line ${i + 1}: needs a tag:, a deck:, a search: or notes:.`); return; }
-      if (ids.nids.length > 5000 || ids.cids.length > 5000 || picks.notes.length > 5000) { errors.push(`Line ${i + 1}: a date takes up to 5,000 IDs.`); return; }
+      if (ids.nids.length > 5000 || ids.cids.length > 5000 || picks.notes.length > 5000) { errors.push(`Line ${i + 1}: a set takes up to 5,000 IDs.`); return; }
       if (due && due < opens) { errors.push(`Line ${i + 1}: due is before it opens.`); return; }
       if (even && !(due && due > opens)) { errors.push(`Line ${i + 1}: "even" needs a due date after it opens.`); return; }
       // the server's ceilings for one date (worker/src/plans.ts)
-      if (new Set(searches).size + cutsHere.length > SEARCH_MAX) { errors.push(`Line ${i + 1}: a date holds up to ${SEARCH_MAX} searches and cuts.`); return; }
-      if (new Set(tags).size > SOURCES_MAX || new Set(decks).size > SOURCES_MAX) { errors.push(`Line ${i + 1}: a date holds up to ${SOURCES_MAX} tags and ${SOURCES_MAX} subdecks.`); return; }
+      if (new Set(searches).size + cutsHere.length > SEARCH_MAX) { errors.push(`Line ${i + 1}: a set holds up to ${SEARCH_MAX} searches and cuts.`); return; }
+      if (new Set(tags).size > SOURCES_MAX || new Set(decks).size > SOURCES_MAX) { errors.push(`Line ${i + 1}: a set holds up to ${SOURCES_MAX} tags and ${SOURCES_MAX} subdecks.`); return; }
       if (name.length > 60) warns.push(`Line ${i + 1}: the name is cut to 60 characters.`);
       // 3.6.5: names compared as they're kept (60 at most, trimmed), so a long one still finds its date
       const key = (name || leaf(tags[0] || decks[0] || cutsHere[0]?.tag) || "").slice(0, 60).trim();
@@ -2419,7 +2426,7 @@ async function builder(id) {
       if (hasIds(u) && old && JSON.stringify([old.nids, old.cids, old.notes]) === JSON.stringify([u.nids, u.cids, u.notes]) && old.idn != null) u.idn = old.idn;
       if (old?.pl && picksSig(old) === picksSig(u)) u.pl = old.pl;  // 3.8.1: what its picks are, while they're the same
       if ((u.nids || u.cids) && !(old?.idr && JSON.stringify([old.nids, old.cids]) === JSON.stringify([u.nids, u.cids]))) localIds++;
-      if (todo.length > Todo.MAX) warns.push(`Line ${i + 1}: a date keeps ${Todo.MAX} lines to tick; the rest are left off.`);
+      if (todo.length > Todo.MAX) warns.push(`Line ${i + 1}: a set keeps ${Todo.MAX} lines to tick; the rest are left off.`);
       if (todo.length) u.todo = todo.slice(0, Todo.MAX);
       if (forN) forName.set(u.id, forN);
       if (!u.due) delete u.due;
@@ -2447,21 +2454,21 @@ async function builder(id) {
       if (ev) u.for = ev.id; else errors.push(`"for ${n}": no event by that name. Add a line like 2026-10-15 | event | ${n}`);
     }
     // 3.6.5: pasted ids are this Anki's own numbers until the author's Anki sends what they are
-    if (localIds) warns.push(`${localIds} date${localIds === 1 ? " uses" : "s use"} nids: or cids:, your Anki's own numbers. Open Anki after you save, and they'll work in everyone's copy.`);
+    if (localIds) warns.push(`${localIds} set${localIds === 1 ? " uses" : "s use"} nids: or cids:, your Anki's own numbers. Open Anki after you save, and they'll work in everyone's copy.`);
     if (tagsIn.length + ptags().filter((t) => !tagsIn.some((x) => x.id === t.id)).length > 100) errors.push("A plan holds up to 100 tags.");
     const rmN = whole ? remarksIn.length : remarks().filter((y) => !remarksIn.some((x) => Remarks.same(x, y))).length + remarksIn.length;
     if (rmN > Remarks.MAX) errors.push(`A plan holds up to ${Remarks.MAX} notes on tags and cards; this would make ${rmN}.`);
     // the plan's ceilings, as it would be after this text (the whole plan, or added to it)
     const joins = (u) => doc.units.find((x) => x.id === u.id);
     const dates = whole ? units.length : doc.units.length + units.filter((u) => !joins(u)).length;
-    if (dates > UNITS_MAX) errors.push(`A plan holds up to ${UNITS_MAX} dates; this would make ${dates}.`);
+    if (dates > UNITS_MAX) errors.push(`A plan holds up to ${UNITS_MAX} sets; this would make ${dates}.`);
     const evN = whole ? evs.length : events().filter((x) => !evs.some((y) => y.id === x.id)).length + evs.length;
     if (evN > EVENTS_MAX) errors.push(`A plan holds up to ${EVENTS_MAX} events; this would make ${evN}.`);
     if (!whole) {
       for (const u of units) {
         const x = joins(u);
         if (x && new Set([...(x.search || []), ...(u.search || [])]).size + (u.cut || []).filter((c) => !(x.cut || []).some((y) => y.tag === c.tag && y.in === c.in)).length > SEARCH_MAX) {
-          errors.push(`${pretty(x.opens)}, ${x.name}: a date holds up to ${SEARCH_MAX} searches and cuts.`);
+          errors.push(`${pretty(x.opens)}, ${x.name}: a set holds up to ${SEARCH_MAX} searches and cuts.`);
         }
       }
     }
@@ -2497,7 +2504,7 @@ async function builder(id) {
   let textMode = "add";
   function textTab() {
     const adding = textMode === "add";
-    const ta = h("textarea", { rows: adding ? 8 : Math.max(10, doc.units.length + 3), "aria-label": adding ? "New dates as text" : "The plan as text",
+    const ta = h("textarea", { rows: adding ? 8 : Math.max(10, doc.units.length + 3), "aria-label": adding ? "New sets as text" : "The plan as text",
       placeholder: adding ? "Paste new lines here: an AI's answer, or your own.\n2026-10-07 | Adrenergics | tag:… | for Quiz 2\n2026-10-08 | Chapter 4 | tag:… | read: Chapter 4" : "" });
     ta.value = adding ? "" : toText();
     const out = h("div", { class: "status", role: "status" });
@@ -2513,7 +2520,7 @@ async function builder(id) {
       const render = () => {
       preview.replaceChildren();
       out.className = r.missing.length ? "status bad" : "status";
-      out.textContent = `${r.units.length} date${r.units.length === 1 ? "" : "s"}${r.events.length ? `, ${r.events.length} event${r.events.length === 1 ? "" : "s"}` : ""}${r.tags.length ? `, ${r.tags.length} tag${r.tags.length === 1 ? "" : "s"}` : ""}${r.remarks.length ? `, ${r.remarks.length} note${r.remarks.length === 1 ? "" : "s"}` : ""}.${r.missing.length ? ` Not in your deck (they'd find nothing): ${r.missing.slice(0, 5).map((k) => pathOf(k)).join(", ")}${r.missing.length > 5 ? "…" : ""}` : ""}`;
+      out.textContent = `${r.units.length} set${r.units.length === 1 ? "" : "s"}${r.events.length ? `, ${r.events.length} event${r.events.length === 1 ? "" : "s"}` : ""}${r.tags.length ? `, ${r.tags.length} tag${r.tags.length === 1 ? "" : "s"}` : ""}${r.remarks.length ? `, ${r.remarks.length} note${r.remarks.length === 1 ? "" : "s"}` : ""}.${r.missing.length ? ` Not in your deck (they'd find nothing): ${r.missing.slice(0, 5).map((k) => pathOf(k)).join(", ")}${r.missing.length > 5 ? "…" : ""}` : ""}`;
       const placed = new Set(r.units.flatMap(srcs));
       const joins = (u) => adding && doc.units.some((x) => x.id === u.id);
       // P1: a date as it was keeps its count from the author's Anki
@@ -2532,7 +2539,7 @@ async function builder(id) {
       const keptAs = (u) => { const was = !adding && doc.units.find((x) => x.id === u.id);
         return !was ? null : was.opens !== u.opens ? ` · moved from ${pretty(was.opens)}` : String(was.name).trim() !== String(u.name).trim() ? ` · was ${was.name}` : null; };
       const rows = r.units.slice().sort((a, b) => a.opens.localeCompare(b.opens)).map((u) => h("div", { class: "pvrow" },
-        h("span", {}, pretty(u.opens)), h("span", {}, h("b", {}, u.name), joins(u) ? h("span", { class: "muted small" }, " · adds to this date") : null,
+        h("span", {}, pretty(u.opens)), h("span", {}, h("b", {}, u.name), joins(u) ? h("span", { class: "muted small" }, " · adds to this set") : null,
           keptAs(u) ? h("span", { class: "muted small" }, keptAs(u)) : null, " ",
           h("span", { class: "muted small" }, [...srcs(u).map((k) => (count.has(k) || k.toLowerCase().startsWith(`tag:duecrew::${tagRootNow().toLowerCase()}::`) ? label(k, placed) : `${pathOf(k)} (not found)`)),
             ...(u.cut || []).map(cutText)].join(", "))),
@@ -2588,7 +2595,7 @@ async function builder(id) {
         }
         syncCuts();  // 3.8.1: each cut's search, for an add-on before 3.8.1
         byOpens(); mark(); preview.replaceChildren(); out.className = "status";
-        out.textContent = replace ? `Now ${doc.units.length} dates. Save to keep them.` : `Added. Now ${doc.units.length} dates. Save to keep them.`;
+        out.textContent = replace ? `Now ${doc.units.length} sets. Save to keep them.` : `Added. Now ${doc.units.length} sets. Save to keep them.`;
         ta.value = replace ? toText() : "";
       };
       const gone = adding ? [] : doc.units.filter((x) => !r.units.some((u) => u.id === x.id));
@@ -2653,16 +2660,16 @@ async function builder(id) {
       const heavy = Work.over(workMap({ ...doc, units: after }, placed), cap);
       const goneText = gone.slice(0, 6).map((u) => `${pretty(u.opens)}, ${u.name}`).join(" · ") + (gone.length > 6 ? ` and ${gone.length - 6} more` : "");
       preview.append(h("div", { class: "pv" }, tagRows, rows, rmkRows,
-        gone.length ? h("p", { class: "warn small" }, h("b", {}, `Takes off ${gone.length} date${gone.length === 1 ? "" : "s"}: `), goneText) : null,
+        gone.length ? h("p", { class: "warn small" }, h("b", {}, `Takes off ${gone.length} set${gone.length === 1 ? "" : "s"}: `), goneText) : null,
         goneRmk.length ? h("p", { class: "warn small" }, h("b", {}, `Takes off ${goneRmk.length} note${goneRmk.length === 1 ? "" : "s"}: `),
           goneRmk.slice(0, 4).map(rmkOn).join(" · ") + (goneRmk.length > 4 ? ` and ${goneRmk.length - 4} more` : "")) : null,
         keptNow.length ? h("div", { class: "pvrow" }, h("span", {}, "Tags"), h("span", {}, `${keptNow.join(", ")} stay${keptNow.length === 1 ? "s" : ""}: ${keptNow.length === 1 ? "its line is" : "their lines are"} back in the text.`)) : null,
         goneTags.length && using.length ? h("div", { class: "warnbox small" },
           h("b", {}, `Takes off ${goneTags.length} tag${goneTags.length === 1 ? "" : "s"}: ${goneTags.map((t) => t.name).join(", ")}.`),
-          ` ${using.length} date${using.length === 1 ? " still uses" : "s still use"} ${goneTags.length === 1 ? "it" : "them"}:`,
+          ` ${using.length} set${using.length === 1 ? " still uses" : "s still use"} ${goneTags.length === 1 ? "it" : "them"}:`,
           h("ul", {}, using.slice(0, 8).map((u) => h("li", {}, `${pretty(u.opens)} · ${u.name} (${usingWhy(u)})`)),
             using.length > 8 ? h("li", {}, `and ${using.length - 8} more`) : null),
-          h("div", { class: "muted" }, "What these dates already opened stays open."))
+          h("div", { class: "muted" }, "What these sets already opened stays open."))
           : goneTags.length ? h("p", { class: "warn small" }, h("b", {}, `Takes off ${goneTags.length} tag${goneTags.length === 1 ? "" : "s"}: `), goneTags.map((t) => t.name).join(", "),
             taken?.length ? h("ul", { style: "margin:4px 0 0;padding-left:20px;text-align:left" }, taken.slice(0, 8).map((x) => h("li", {}, x)), taken.length > 8 ? h("li", {}, `and ${taken.length - 8} more`) : null) : null) : null,
         heavy.length ? h("p", { class: "warn small" }, h("b", {}, "Over your pace: "), heavy.slice(0, 6).map((x) => `${x.a === x.b ? pretty(x.a) : `${pretty(x.a)} – ${pretty(x.b)}`}, ${x.top.toLocaleString()} new a day`).join(" · "),
@@ -2672,10 +2679,10 @@ async function builder(id) {
         r.why.length ? h("details", { class: "small", open: !r.units.length }, h("summary", {}, `The AI's notes (${r.why.length})`),
           h("ul", { class: "muted", style: "margin:4px 0 0;padding-left:20px;text-align:left" }, r.why.map((x) => h("li", {}, x.slice(0, 300))))) : null,
         h("div", { class: "row" },
-          using.length ? h("button", { onclick: takeAll }, "Take them off those dates too") : null,
+          using.length ? h("button", { onclick: takeAll }, "Take them off those sets too") : null,
           using.length ? h("button", { onclick: keepTags }, "Keep the tags") : null,
           adding ? (r.units.length || r.events.length || r.tags.length || r.remarks.length ? h("button", { onclick: () => use(false) }, "Add to the plan") : null)
-            : h("button", { class: gone.length || goneTags.length || goneRmk.length ? "danger" : "", onclick: () => use(true) }, using.length ? "Replace anyway" : "Replace the plan's dates"),
+            : h("button", { class: gone.length || goneTags.length || goneRmk.length ? "danger" : "", onclick: () => use(true) }, using.length ? "Replace anyway" : "Replace the plan's sets"),
           h("button", { class: "quiet", onclick: () => { preview.replaceChildren(); out.textContent = ""; } }, "Cancel"))));
       };
       render();
@@ -2683,11 +2690,11 @@ async function builder(id) {
     // N6: Read it turns solid once the text is new
     const readBtn = h("button", { class: "ghost", onclick: read }, "Read it");
     ta.addEventListener("input", () => readBtn.classList.remove("ghost"));
-    const modes = h("span", { class: "seg", role: "group", "aria-label": "Text" }, [["add", "Add dates"], ["all", "Edit the whole plan"]].map(([k, t]) =>
+    const modes = h("span", { class: "seg", role: "group", "aria-label": "Text" }, [["add", "Add sets"], ["all", "Edit the whole plan"]].map(([k, t]) =>
       h("button", { class: textMode === k ? "on" : "", "aria-pressed": String(textMode === k), onclick: () => { textMode = k; draw(); } }, t)));
     const aiBox = h("div", { class: "aibox" },
       h("b", {}, "Draft it with your own AI"),
-      h("p", { class: "muted small" }, "Copy this prompt into any AI chat, add your syllabus or what you want where it says, and paste its answer into Add dates. It can also check the plan you have. The prompt carries the plan's dates and your deck's tag names with counts; never a card."),
+      h("p", { class: "muted small" }, "Copy this prompt into any AI chat, add your syllabus or what you want where it says, and paste its answer into Add sets. It can also check the plan you have. The prompt carries the plan's sets and your deck's tag names with counts; never a card."),
       // 3.6.5: to pick card by card, the AI reads the cards themselves: the person's own export, to their own AI
       h("details", { class: "small" }, h("summary", {}, "Pick card by card: attach your cards"),
         h("ol", { class: "muted", style: "margin:6px 0 0;padding-left:20px;text-align:left" },
@@ -2703,18 +2710,18 @@ async function builder(id) {
         h("ol", { class: "muted small", style: "margin:4px 0;padding-left:20px;text-align:left" },
           h("li", {}, "In Anki: Tools › Due Crew › Export cards for my AI."),
           h("li", {}, "Copy this prompt, add your objectives where it says, and attach the export."),
-          h("li", {}, "Paste the answer into Add dates. The new tags show before anything changes.")),
+          h("li", {}, "Paste the answer into Add sets. The new tags show before anything changes.")),
         h("div", { class: "row" }, h("button", { class: "ghost", onclick: (e) => copy(tagPrompt(), e.target) }, "Copy the tagging prompt"),
           h("details", {}, h("summary", { class: "small" }, "See it"), h("pre", { class: "mono small muted aipre" }, tagPrompt())))));
     return h("div", { class: "stack" },
       aiBox,
       h("details", { class: "fmt" }, h("summary", { class: "small" }, "Format"),
-        h("p", { class: "muted small" }, "One line per date: when it opens, a name, the tags and subdecks (or notes: with note IDs: in Anki's browser, Due Crew › Copy as plan selector), and an optional due date, separated by |. Add even to split a date evenly up to its due date. A note line puts your words on a tag or a card, in followers' Anki. For example:"),
+        h("p", { class: "muted small" }, "One line per set: when it opens, a name, the tags and subdecks (or notes: with note IDs: in Anki's browser, Due Crew › Copy as plan selector), and an optional due date, separated by |. Add even to split a date evenly up to its due date. A note line puts your words on a tag or a card, in followers' Anki. For example:"),
         h("pre", { class: "mono small muted", style: "margin:0;white-space:pre-wrap" }, "2026-10-05 | Heart failure | tag:Step1::Cardio::Heart_failure | due 2026-10-09 | even\nweek 2 | Arrhythmia | tag:Step1::Cardio::Arrhythmia\n2026-10-19 | Lecture 12 | notes:Ab3$kL9qZ1 p&x8Hk!eQ2\n2026-10-20 | Chapter 4 | deck:Chemistry::Unit 3::Chapter 4 | read: Chapter 4, sections 1 to 3\nnote | tag:Step1::Cardio::Arrhythmia | Lecture 9's slides cover this better than the book."),
         h("a", { class: "small", href: "/plan-text", target: "_blank", rel: "noopener" }, "The whole format ›")),
       h("div", { class: "row" }, modes, h("span", { class: "muted small" }, adding
-        ? `Adds to the plan's ${doc.units.length} date${doc.units.length === 1 ? "" : "s"}. A line with a date's own day and name adds to that date.`
-        : "Read it shows what would change. Nothing does until you Replace the plan's dates, and Save.")),
+        ? `Adds to the plan's ${doc.units.length} set${doc.units.length === 1 ? "" : "s"}. A line with a set's own day and name adds to that set.`
+        : "Read it shows what would change. Nothing does until you Replace the plan's sets, and Save.")),
       ta, h("div", { class: "row" }, readBtn), out, preview);
   }
 
@@ -2835,7 +2842,7 @@ async function builder(id) {
         h("span", { class: "muted small" }, "It stays yours, and its followers keep following. Send feedback if it's a mistake."));
     }
     const why = plan.audience !== "code" ? "Only a plan anyone with the code can follow goes in the library."
-      : !plan.doc.units.length ? "Put some dates on it first." : null;
+      : !plan.doc.units.length ? "Put some sets on it first." : null;
     const status = h("span", { class: "status", role: "status" });
     const box = h("input", { type: "checkbox", id: "slisted", checked: plan.listed === 1, disabled: !!why && plan.listed !== 1, onchange: async (e) => {
       box.disabled = true;
@@ -2859,8 +2866,8 @@ async function builder(id) {
     const with_ = author && plan.owner !== me.uid ? ["you", ...eds] : eds;
     const f = !author && plan.following;
     const bits = [whose, with_.length ? `with ${with_.join(", ")}` : null, `${plan.followers} following`, meta.name === plan.doc.deck ? null : plan.doc.deck,
-      f && f.shift ? `your dates run ${f.shift} day${f.shift === 1 ? "" : "s"} later` : null,
-      f && Object.keys(f.moved || {}).length ? `${Object.keys(f.moved).length} date${Object.keys(f.moved).length === 1 ? "" : "s"} moved` : null,
+      f && f.shift ? `your sets run ${f.shift} day${f.shift === 1 ? "" : "s"} later` : null,
+      f && Object.keys(f.moved || {}).length ? `${Object.keys(f.moved).length} set${Object.keys(f.moved).length === 1 ? "" : "s"} moved` : null,
       f && f.paused ? (f.until ? `paused until ${pretty(f.until)}` : "paused") : null,
       plan.basedOn ? credit(plan.basedOn) : null, author && plan.listed === 1 ? "in the library" : null];
     return bits.filter(Boolean).join(" · ");
@@ -2874,9 +2881,9 @@ async function builder(id) {
     if (!f || !(f.shift || (f.skipped || []).length || Object.keys(f.moved || {}).length || f.paused || f.until)) return null;
     if (!resetAsk) return h("span", {}, " · ", h("button", { class: "linkish", onclick: () => { resetAsk = true; draw(); } }, "Reset to default…"));
     const n = (k) => (f[k] || []).length;
-    const what = [f.shift ? `dates back on time (now ${f.shift} day${f.shift === 1 ? "" : "s"} later)` : null,
-      n("skipped") ? `${n("skipped")} skipped date${n("skipped") === 1 ? "" : "s"} back` : null,
-      Object.keys(f.moved || {}).length ? `${Object.keys(f.moved).length} moved date${Object.keys(f.moved).length === 1 ? "" : "s"} back` : null,
+    const what = [f.shift ? `sets back on time (now ${f.shift} day${f.shift === 1 ? "" : "s"} later)` : null,
+      n("skipped") ? `${n("skipped")} skipped set${n("skipped") === 1 ? "" : "s"} back` : null,
+      Object.keys(f.moved || {}).length ? `${Object.keys(f.moved).length} moved set${Object.keys(f.moved).length === 1 ? "" : "s"} back` : null,
       f.paused || f.until ? "your pause ends" : null].filter(Boolean).join(", ");
     const st = h("span", { class: "status", role: "status" });
     return h("span", { class: "resetask" }, h("br"), `Reset to default? ${what}. Cards already open stay open. `,
@@ -2917,7 +2924,7 @@ async function builder(id) {
     } }, [["", "on the plan's dates"], ["ready", "when I'm ready"], ["next", "when I'm ready, the next once I've seen most of the last"]]
       .map(([v, t]) => h("option", { value: v, selected: own === v }, t)));
     return h("div", { class: "pacebox small" },
-      own ? h("div", {}, h("b", {}, "At your pace"), next ? ` · next: ${next.name || "?"}` : " · every date is open",
+      own ? h("div", {}, h("b", {}, "At your pace"), next ? ` · next: ${next.name || "?"}` : " · every set is open",
         h("span", { class: "muted" }, next ? ". Your Anki opens it from You › Plans." : ".")) : null,
       h("label", { class: "muted" }, "Cards open ", sel), st);
   }
@@ -2954,7 +2961,7 @@ async function builder(id) {
     const first = firstOf(doc);
     if (!first) return null;
     const st = h("span", { class: "status small", role: "status" });
-    const b = h("button", { class: "linkish", title: `Its first date on ${pretty(addDays(first, 364))}, every date 52 weeks on`, onclick: async () => {
+    const b = h("button", { class: "linkish", title: `Its first set on ${pretty(addDays(first, 364))}, every set 52 weeks on`, onclick: async () => {
       // 3.9.2's audit: the copy is made of the plan as saved, so it waits for a save, and its first
       // date comes from the saved plan as it is now (a co-author's save since), 364 days on: weekdays kept
       if (dirty) { st.className = "status small bad"; st.textContent = "Save your changes first, so they're in the copy."; return; }
@@ -2971,7 +2978,7 @@ async function builder(id) {
       } catch (err) {
         b.disabled = false; st.className = "status small bad";
         const code = err.body?.error;
-        st.textContent = err.message === "no dates" ? "The saved plan has no dates to copy."
+        st.textContent = err.message === "no dates" ? "The saved plan has no sets to copy."
           : code === "too_many_plans" ? "You have 50 plans. Delete one first."
           : code === "plans_full" ? "Your plans hold as much as one account can. Delete one first."
           : err.status === 429 ? "That's a lot of new plans. Try again in an hour."
@@ -3008,7 +3015,7 @@ async function builder(id) {
         h("button", { class: "quiet", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
         h("button", { class: "quiet", onclick: () => { anchor = today(); draw(); } }, "Today"),
         h("button", { class: "quiet", "aria-label": "Later", onclick: () => step(1) }, "›"),
-        h("b", { class: "ctitle" }, calTitle())) : h("b", {}, view === "text" ? "As text" : view === "print" ? "Print" : `${doc.units.length} dates`),
+        h("b", { class: "ctitle" }, calTitle())) : h("b", {}, view === "text" ? "As text" : view === "print" ? "Print" : `${doc.units.length} sets`),
       h("span", { class: "sp" }),
       // B5: the plan as text is a view of the calendar
       h("span", { class: "seg" }, vbtn("month", "Month"), vbtn("week", "Week"), author ? vbtn("list", "List") : null, author ? vbtn("text", "Text") : null, vbtn("print", "Print")));
@@ -3109,7 +3116,7 @@ async function builder(id) {
     const paper = h("div", { class: "printout poster" },
       h("h2", {}, meta.name || plan.name),
       us.length ? h("p", { class: "pm" }, [(meta.name || plan.name) === plan.doc.deck ? null : plan.doc.deck,
-        `${us.length} date${us.length === 1 ? "" : "s"}, ${pretty(us[0].opens)}${last !== us[0].opens ? ` – ${pretty(last)}` : ""}`].filter(Boolean).join(" · ")) : null,
+        `${us.length} set${us.length === 1 ? "" : "s"}, ${pretty(us[0].opens)}${last !== us[0].opens ? ` – ${pretty(last)}` : ""}`].filter(Boolean).join(" · ")) : null,
       qr,
       h("p", { class: "pcode" }, spaced(plan.code)),
       h("ol", { class: "psteps" },
@@ -3130,7 +3137,7 @@ async function builder(id) {
     const box = (k, t) => h("label", { class: "inline" }, h("input", { type: "checkbox", checked: printOpt[k], onchange: (e) => { printOpt[k] = e.target.checked; draw(); } }), t);
     const dateIn = (k, v) => h("input", { type: "date", value: v, "aria-label": k === "from" ? "From" : "To", onchange: (e) => { printOpt[k] = e.target.value || null; draw(); } });
     const posterOk = !!plan.code && plan.audience === "code";
-    const kind = posterOk ? h("span", { class: "seg" }, ...[[false, "Dates"], [true, "Poster"]].map(([v, t]) =>
+    const kind = posterOk ? h("span", { class: "seg" }, ...[[false, "Sets"], [true, "Poster"]].map(([v, t]) =>
       h("button", { class: printOpt.poster === v ? "on" : "", "aria-pressed": String(printOpt.poster === v), onclick: () => { printOpt.poster = v; draw(); } }, t))) : null;
     if (posterOk && printOpt.poster) return posterView(h("div", { class: "printbar" }, kind, h("button", { onclick: () => window.print() }, "Print")));
     const bar = h("div", { class: "printbar" }, kind, box("counts", "card counts"), box("notes", "notes"), box("off", "days off"),
@@ -3195,15 +3202,15 @@ async function builder(id) {
     const inSquad = pr.inSquad ?? pr.sharing;
     const others = pr.others ?? pr.sharing;
     if (inSquad < 3) {
-      return h("div", {}, h("p", { class: "muted small" }, `${inSquad} ${inSquad === 1 ? "is" : "are"} in its squad. Each date's counts show once 3 or more are in it.`));
+      return h("div", {}, h("p", { class: "muted small" }, `${inSquad} ${inSquad === 1 ? "is" : "are"} in its squad. Each set's counts show once 3 or more are in it.`));
     }
     if (others < 2) {
-      return h("div", {}, h("p", { class: "muted small" }, `${others} ${others === 1 ? "follower shares" : "followers share"} their progress here. Each date's counts show once 2 or more besides you do.`));
+      return h("div", {}, h("p", { class: "muted small" }, `${others} ${others === 1 ? "follower shares" : "followers share"} their progress here. Each set's counts show once 2 or more besides you do.`));
     }
     return h("div", {},
       classHints(pr),
       h("p", { class: "muted small" }, `${pr.sharing} of ${pr.followers} are in its squad; these counts are theirs.`),
-      h("div", { class: "prog" }, h("span", { class: "h" }, "Date"), h("span", { class: "h" }, "Opened"), h("span", { class: "h" }, "Done"), h("span"),
+      h("div", { class: "prog" }, h("span", { class: "h" }, "Set"), h("span", { class: "h" }, "Opened"), h("span", { class: "h" }, "Done"), h("span"),
         doc.units.flatMap((u) => {
           const c = pr.units[u.id] || { opened: 0, done: 0 };
           const w = (k) => `${pr.sharing ? Math.round((100 * k) / pr.sharing) : 0}%`;
@@ -3227,7 +3234,7 @@ async function builder(id) {
       // every date still to come, one study day later; events stay on their days
       for (const u of [...later].sort((a, b) => b.opens.localeCompare(a.opens))) shiftUnit(u, Sched.diff(nextStudy(u.opens), u.opens));
       for (const r of doc.reviews || []) if (r.day > t) r.day = nextStudy(r.day);
-      byOpens(); mark(); tab = "calendar"; note = `Moved the ${later.length} date${later.length === 1 ? "" : "s"} after today one study day later. Save to keep it.`; draw();
+      byOpens(); mark(); tab = "calendar"; note = `Moved the ${later.length} set${later.length === 1 ? "" : "s"} after today one study day later. Save to keep it.`; draw();
     };
     return h("div", { class: "stack", style: "margin-bottom:12px" }, behind.map((u) => {
       const done = pr.units[u.id]?.done || 0;
@@ -3358,12 +3365,13 @@ async function builder(id) {
       h("div", { class: "row" }, follow,
         plan.library ? h("button", { class: "ghost", onclick: () => { copying = !copying; draw(); } }, "Copy to my plans") : null, status),
       copying ? copyForm(plan, () => { copying = false; draw(); }) : null,
-      h("p", { class: "muted small" }, "Following opens each date's cards in Anki on its day", plan.code ? ["; or in Anki, Tools › Due Crew › Follow a plan, and paste ", h("b", { class: "mono" }, plan.code)] : null, "."));
+      h("p", { class: "muted small" }, "Following opens each set's cards in Anki on its day", plan.code ? ["; or in Anki, Tools › Due Crew › Follow a plan, and paste ", h("b", { class: "mono" }, plan.code)] : null, "."));
   }
 
   // 3.8.0 (Board in Motion, 34): ‹ › slide the calendar; a date moved to another day settles there
   let slid = 0;
   function draw() {
+    if (face) { face.drawn(); return; }  // the shared plan page draws it
     const M = window.dcMotion, at = `${view}|${anchor}`, was = M ? M.places(".cal2 .ch[data-k]", "data-k", ".d") : null;
     // the side's lists keep their place through a redraw (a click on a tag low in a list)
     const kept = [".ptags .ptlist", ".tree2 .tlist"].map((q) => [q, document.querySelector(q)?.scrollTop || 0]);
@@ -3450,11 +3458,11 @@ async function builder(id) {
     // a date whose only change is its name: "updated Fri 16 Oct" (its new name is no help in the history)
     const nameOnly = (u) => same({ ...follow(b.get(u.id)), name: "" }, { ...u, name: "" });
     const updated = changed.filter(nameOnly), other = changed.filter((u) => !nameOnly(u));
-    if (moved.length === 1) out.push(`moved ${moved[0].name} to ${pretty(moved[0].opens)}`); else if (moved.length) out.push(`moved ${moved.length} dates`);
-    if (added.length === 1) out.push(`added ${added[0].name} on ${pretty(added[0].opens)}`); else if (added.length) out.push(`added ${added.length} dates`);
-    if (gone.length === 1) out.push(`took off ${gone[0].name}`); else if (gone.length) out.push(`took off ${gone.length} dates`);
-    if (other.length === 1) out.push(`changed ${other[0].name}`); else if (other.length) out.push(`changed ${other.length} dates`);
-    if (updated.length === 1) out.push(`updated ${pretty(updated[0].opens)}`); else if (updated.length) out.push(`updated ${updated.length} dates`);
+    if (moved.length === 1) out.push(`moved ${moved[0].name} to ${pretty(moved[0].opens)}`); else if (moved.length) out.push(`moved ${moved.length} sets`);
+    if (added.length === 1) out.push(`added ${added[0].name} on ${pretty(added[0].opens)}`); else if (added.length) out.push(`added ${added.length} sets`);
+    if (gone.length === 1) out.push(`took off ${gone[0].name}`); else if (gone.length) out.push(`took off ${gone.length} sets`);
+    if (other.length === 1) out.push(`changed ${other[0].name}`); else if (other.length) out.push(`changed ${other.length} sets`);
+    if (updated.length === 1) out.push(`updated ${pretty(updated[0].opens)}`); else if (updated.length) out.push(`updated ${updated.length} sets`);
     const nTags = (k) => `${k} tag${k === 1 ? "" : "s"}`, nNotes2 = (k) => `${k} note${k === 1 ? "" : "s"}`;
     const tAdded = [...at.keys()].filter((id) => !bt.has(id)).length, tGone = [...bt.keys()].filter((id) => !at.has(id)).length;
     const tChanged = [...at.values()].filter((t) => bt.has(t.id) && !same({ ...bt.get(t.id), name: "" }, { ...t, name: "" })).length;
@@ -3519,12 +3527,12 @@ async function builder(id) {
 
   /** The server's ceilings (worker/src/plans.ts planDoc), checked before a save: what's over, by name. */
   function overLimit() {
-    if (doc.units.length > UNITS_MAX) return `A plan holds up to ${UNITS_MAX} dates; this one has ${doc.units.length}. Take some off.`;
+    if (doc.units.length > UNITS_MAX) return `A plan holds up to ${UNITS_MAX} sets; this one has ${doc.units.length}. Take some off.`;
     for (const u of doc.units) {
       const at = `${pretty(u.opens)}, ${u.name}`;
-      if ((u.search || []).length > SEARCH_MAX) return `${at}: a date holds up to ${SEARCH_MAX} searches and cuts.`;
-      if ((u.tags || []).length > SOURCES_MAX || (u.decks || []).length > SOURCES_MAX) return `${at}: a date holds up to ${SOURCES_MAX} tags and ${SOURCES_MAX} subdecks.`;
-      if (["nids", "cids", "notes"].some((k) => (u[k] || []).length > 5000)) return `${at}: a date takes up to 5,000 IDs of each kind.`;
+      if ((u.search || []).length > SEARCH_MAX) return `${at}: a set holds up to ${SEARCH_MAX} searches and cuts.`;
+      if ((u.tags || []).length > SOURCES_MAX || (u.decks || []).length > SOURCES_MAX) return `${at}: a set holds up to ${SOURCES_MAX} tags and ${SOURCES_MAX} subdecks.`;
+      if (["nids", "cids", "notes"].some((k) => (u[k] || []).length > 5000)) return `${at}: a set takes up to 5,000 IDs of each kind.`;
       if (u.due && u.due < u.opens) return `${at} is due before it opens.`;
     }
     if (events().length > EVENTS_MAX) return `A plan holds up to ${EVENTS_MAX} events.`;
@@ -3538,7 +3546,7 @@ async function builder(id) {
   const SAVE_ERRORS = {
     plans_full: "Your plans hold as much as one account can. Make this one smaller, or delete a plan.",
     bad_plan: "Something in the plan isn't valid. Undo your last change, or reload the page.",
-    bad_name: "A date or an event has no name. Name it, then save.",
+    bad_name: "A set or an event has no name. Name it, then save.",
     bad_line: "The plan's one line is too long.",
     bad_post: "The line to followers is too long: 200 characters at most.",
     bad_squad: "You're not in that squad any more. Pick another in Settings.",
@@ -3546,14 +3554,16 @@ async function builder(id) {
     not_owner: "Only the plan's owner changes who can follow it.",
     not_author: "You're not one of this plan's authors any more.",
     no_plan: "This plan was deleted.",
-    too_big: "The plan is too big to save. Take some IDs or dates off.",
+    too_big: "The plan is too big to save. Take some IDs or sets off.",
     slow_down: "That's a lot of saves today. Try again tomorrow.",
   };
   async function save() {
     saveBtn.disabled = true;
     status.className = "status"; status.textContent = "Saving…";
     try {
-      syncCuts(); cleanup(); byOpens();
+      // the shared plan page (face): a set the server has stays at a save, cards or not, as Anki's window
+      // sends one from a calendar with none yet (the page keeps one new with none waiting till it has some)
+      syncCuts(); cleanup(face ? new Set((base.units || []).map((u) => u.id)) : null); byOpens();
       // the server refuses a date or an event with no name: a date is named for what's on it again
       for (const u of doc.units) if (!String(u.name || "").trim()) { auto.add(u.id); u.name = autoName(u); }
       for (const x of events()) if (!String(x.name || "").trim()) x.name = "Event";
@@ -3621,6 +3631,40 @@ async function builder(id) {
     } finally { saveBtn.disabled = false; }
   }
 
+  // the shared plan page (planface.js): this plan's state and logic, as this page keeps them
+  if (face) {
+    settled();
+    return face.attach({
+      id, author, owner, inPlan, squads, treeAt, views,
+      get plan() { return plan; }, set plan(v) { plan = v; },
+      get doc() { return doc; }, get base() { return base; },
+      get meta() { return meta; }, set meta(v) { meta = v; },
+      get pace() { return pace; }, set pace(v) { pace = v; study.days = v.days; },
+      get cover() { return cover; }, set cover(v) { cover = v; },
+      get start() { return start; }, set start(v) { start = v; },
+      get dirty() { return dirty; }, get undos() { return undos.length; },
+      get note() { return note; }, set note(v) { note = v; },
+      get aimFor() { return aimFor; }, set aimFor(v) { aimFor = v; },
+      get notes() { return notes; }, set notes(v) { notes = v; },
+      status, tell, auto, count, order,
+      // the deck's tree
+      n, kidsOf, pathOf, kindOf, under, kindsBelow, extraKids, withoutQ, extrasOf, only, findKey,
+      // dates, their sources and names
+      srcs, placedKeys, isPlaced, placedBelow, eff, unitTotal, label, chipLabel, searchName, cutName, picksText, picksList, picksN,
+      hasIds, idsN, idsLen, takeIds, autoName, renameAll, nameIt, byOpens, cleanup, uncounted,
+      ptags, ptagPath, ptagByName, ptagSize, tagRootNow, isOwnTag, putTags, retag, dropSay, usesPtag,
+      remarks, putRemarks, tagRemark, remarkOn, setTagRemark, cutQ, cutOf, tagRe, setCut, takeCut, syncCuts, addSearch, takeSearch,
+      events, evById, evOn, afterEv, forWord, prepOf, addEvent, takeEvent,
+      unitOn, addTo, takeOut, evenUnit, shiftUnit, mergeInto,
+      isStudy, nextStudy, firstStudy, studyDays, lastDay,
+      // what to cover, and laying it out
+      coverItems, coverTotal, coverLeft, pieces, fill, layOut, fillOrSay, endDaily, finishBy, paceDaily, putWords, leftNames,
+      dayMap, workMap, toText, fromText, aiPrompt, tagPrompt, tagLine,
+      // a change, Undo, a save
+      mark, undo, settled, reload, fromDoc, save, describe, merge, overLimit,
+      LIMITS: { UNITS_MAX, EVENTS_MAX, REVIEWS_MAX, SOURCES_MAX, SEARCH_MAX, FULL },
+    });
+  }
   settled();  // Undo starts from the plan as it loaded
   draw();
 }

@@ -214,6 +214,7 @@ def shoot(dlg, path):
     pix = dlg.grab()
     pix.save(path)
     print(f"{os.path.basename(path)}: {pix.width()}x{pix.height()}")
+    dlg._may_close = True  # (a plan window with changes waiting closes here without asking, as the add-on's own closes do)
     dlg.close()
 
 
@@ -362,7 +363,7 @@ def main(out):
         when.addStretch()
         root.addLayout(when)
         root.addWidget(ui.role(W.QLabel("How its cards open"), "head"))
-        a, b = W.QCheckBox("Hold back 2 cards of later dates until their day"), W.QCheckBox("Join this plan's squad")
+        a, b = W.QCheckBox("Hold back 2 cards of later sets until their day"), W.QCheckBox("Join this plan's squad")
         a.setChecked(True)
         root.addWidget(a)
         root.addWidget(b)
@@ -427,7 +428,11 @@ def main(out):
         holder = QtWidgets.QWidget()  # the main window's stand-in
         box, _go = ui._question(holder, "Remove igk?", "They come off your crew, and you off theirs.", "Remove", True)
         shoot(box, os.path.join(out, "q-confirm.png"))
-        box, _go = ui._question(holder, "Unfollow Step 1?", "Its dates stop opening. What opened stays open.", "Unfollow", False)
+        box, _go = ui._question(holder, "2 changes not sent", "3 following it won't get them till you send. "
+                                "They wait here till then.", "Review and send", False)
+        box.defaultButton().setText("Close anyway")  # ui.confirm_or's: closing the Qt plan window with changes waiting
+        shoot(box, os.path.join(out, "q-close-unsent.png"))
+        box, _go = ui._question(holder, "Unfollow Step 1?", "Its sets stop opening. What opened stays open.", "Unfollow", False)
         tick = QtWidgets.QCheckBox("Take its tags off my notes too")
         tick.setChecked(True)
         box.setCheckBox(tick)
@@ -552,7 +557,32 @@ def main(out):
         names = [w for w in dlg.match.findChildren(QtWidgets.QLabel) if w.text() == "Arrhythmia <b>"]
         if not names or names[0].textFormat() != QtCore.Qt.TextFormat.PlainText:
             raise RuntimeError("follow: a unit's name went in as markup")
+        # Today's lesson: in the deck it runs on (A) unless chosen otherwise
+        if (not dlg.lesson_in.isChecked() or dlg.lesson_own.isChecked() or dlg.lesson_in.isHidden()
+                or dlg.lesson_in.text() != "In " + dlg.deck.currentText()):
+            raise RuntimeError(f"follow: today's lesson {dlg.lesson_in.text()!r} {dlg.lesson_in.isChecked()}")
         shoot(dlg, os.path.join(out, "plan-follow.png"))
+        # B: its own deck, chosen; the choice reaches on_followed, and asked again it's still B
+        l_pid, l_code = STORE.add_plan("igk", "Path Book", "Step 1", units[:2])
+        took = []
+        dlg = FollowDialog(None, CLIENT, aqt.mw.col, code=l_code, today=today.isoformat(), swap_prompt=lambda sw, n: True,
+                           on_followed=lambda *a, **k: took.append(k), lesson_on=lambda pid: False)
+        settle()
+        dlg.lesson_own.setChecked(True)
+        shoot(dlg, os.path.join(out, "plan-follow-lesson-deck.png"))
+        dlg = FollowDialog(None, CLIENT, aqt.mw.col, code=l_code, today=today.isoformat(), swap_prompt=lambda sw, n: True,
+                           on_followed=lambda *a, **k: took.append(k), lesson_on=lambda pid: pid == l_pid)
+        settle()
+        if not dlg.lesson_own.isChecked():
+            raise RuntimeError("follow: today's lesson chosen before isn't picked")
+        dlg.show()
+        dlg._follow()
+        settle()
+        if took != [{"lesson": True}]:
+            raise RuntimeError(f"follow: today's lesson didn't reach on_followed {took!r}")
+        dlg.close()
+        STORE.follows.pop((l_pid, "sam"), None)
+        STORE.plans.pop(l_pid, None)  # the renders after this one count igk's and Sam's plans
         # 3.8.0: at my own pace: the late-start question goes, the box under it shows, the line says so
         dlg = FollowDialog(None, CLIENT, aqt.mw.col, code=code, today=today.isoformat(), swap_prompt=lambda sw, n: True)
         settle()
@@ -815,6 +845,32 @@ def main(out):
                     if img.pixelColor(int(x + z / 2), int(y + z * 38 / 80)).name() != color:  # its forehead, in the accent
                         raise RuntimeError(f"share card: Pip not drawn on the {name} card ({size}, {look})")
                     img.save(os.path.join(out, f"share-card-{name}-sev-{size}-{look}.png"))
+        # 3.9.6, the plan joys: a plan's card (the mock's K4 redrawn), story only, its card count starting as
+        # Privacy's Reviews switch says; finished, Pip on the last set in its grad cap; on its way, where I am
+        from due_crew.ui.share_card_dialog import measure
+        plan_card = lambda d: {"kind": "plan", "title": "Share this plan", "sizes": ("story",),  # noqa: E731
+                               "file": "due-crew-plan-p1", "data": d}
+        pdlg = ShareCardDialog(None, lambda _k: plan_card(S.plan("Path Book", 19, 19, 2046, 6, cap=True)),
+                               priv=S.privacy({"share_reviews": False}))
+        shoot(pdlg, os.path.join(out, "share-card-plan-sheet.png"))
+        if pdlg.link.isVisible() or pdlg.switch["cards"].isChecked() or "Privacy" not in pdlg.switch["cards"].text():
+            raise RuntimeError("share card: a plan's is story only, its card count starting as Privacy's Reviews says")
+        pdlg.close()
+        for name, data in (("finished", S.plan("Path Book", 19, 19, 2046, 6, cap=True)),
+                           ("halfway", S.plan("Path Book", 19, 10, 1033, 6, brow="Halfway")),
+                           ("last", S.plan("Path Book", 19, 18, 1919, 6, brow="The last set", last="19 · Skin")),
+                           ("long", S.plan("Big Step 1, every chapter and then the questions after it", 140, 140, 9120, 31, cap=True))):
+            for look in ("light", "dark"):
+                img = paint("plan", "story", data, {"cards": True}, look)
+                sev = [o for o in S.draw("plan", "story", data, {"cards": True}, look, measure)[2] if o[0] == "sev"]
+                if len(sev) != 1:
+                    raise RuntimeError(f"share card: Pip isn't on the plan's {name} card")
+                x, y, z, color = sev[0][2:6]
+                if img.pixelColor(int(x + z / 2), int(y + z * 38 / 80)).name() != color:
+                    raise RuntimeError(f"share card: Pip not drawn on the plan's {name} card ({look})")
+                if data["cap"] and img.pixelColor(int(x + z * 34 / 80), int(y + z * 18 / 80)).name() != "#454b55":  # the cap's top
+                    raise RuntimeError(f"share card: no grad cap on the finished plan's Pip ({name}, {look})")
+                img.save(os.path.join(out, f"share-card-plan-{name}-{look}.png"))
 
     def why():
         # 3.8.0, pick 9: Browse › why isn't it showing?, a few reasons and their fixes
@@ -846,20 +902,20 @@ def main(out):
         from due_crew.ui.held_dialog import HeldDialog
         view = {"name": "MS2 <b>Block</b> 1", "n": 1240, "more": 9, "holding": True, "leeches": 2,
                 "lines": ["Renal physiology <i> · Mon 19 Oct · 120", "Antiarrhythmics · Tue 20 Oct · 80",
-                          "Heart failure · Wed 21 Oct · 96", "On no date now · 4"],
-                "why": "You said yes to Hold back: the new cards of dates still to come wait, suspended, till their day."}
+                          "Heart failure · Wed 21 Oct · 96", "On no set now · 4"],
+                "why": "You said yes to Hold back: the new cards of sets still to come wait, suspended, till their day."}
         dlg = HeldDialog(None, view)
         settle()
         labels = dlg.findChildren(QtWidgets.QLabel)
         if any(w.textFormat() != QtCore.Qt.TextFormat.PlainText for w in labels):
             raise RuntimeError("held: a plan's or date's name went in as markup")
-        if not any("MS2 <b>Block</b> 1 holds back 1,240 cards" == w.text() for w in labels) or "and 9 more dates" not in dlg.list.text():
+        if not any("MS2 <b>Block</b> 1 holds back 1,240 cards" == w.text() for w in labels) or "and 9 more sets" not in dlg.list.text():
             raise RuntimeError(f"held: {[w.text() for w in labels]!r}")
-        if "2 more are leeches and stay shut" not in dlg.note.text() or dlg.stop_btn.isHidden():
+        if "2 more are leeches and stay suspended" not in dlg.note.text() or dlg.stop_btn.isHidden():
             raise RuntimeError(f"held: {dlg.note.text()!r}")
         shoot(dlg, os.path.join(out, "plan-held.png"))
         dlg = HeldDialog(None, dict(view, holding=False, leeches=0, more=0, lines=view["lines"][:1],
-                                    why="You put these back. They open when you open their date again."))
+                                    why="You put these back. They open when you open their set again."))
         dlg.show()
         if dlg.stop_btn.isVisible() or "leech" in dlg.note.text():
             raise RuntimeError("held: no yes, no Stop holding back")
@@ -867,7 +923,7 @@ def main(out):
         if dlg.choice != "open":
             raise RuntimeError(f"held: {dlg.choice!r}")
         shoot(HeldDialog(None, dict(view, holding=False, leeches=0, more=0, lines=view["lines"][:1],
-                                    why="You put these back. They open when you open their date again.")),
+                                    why="You put these back. They open when you open their set again.")),
               os.path.join(out, "plan-held-put-back.png"))
 
     def away():
@@ -888,7 +944,7 @@ def main(out):
             raise RuntimeError("away: the plan's name went in as markup")
         if (dlg.push_btn.text() != "Push my dates back 3 days"
                 or "3 days with no study in Anki: Mon 5 Oct, Tue 6 Oct and Wed 7 Oct." not in dlg.body.text()
-                or "4 dates would open now: 240 new cards." not in dlg.body.text()):
+                or "4 sets would open now: 240 new cards." not in dlg.body.text()):
             raise RuntimeError(f"away: {dlg.push_btn.text()!r} {dlg.body.text()!r}")
         shoot(dlg, os.path.join(out, "plan-welcome-back.png"))
         plain = AwayDialog(None, "MS2 <i>Block</i> 1", ["2026-10-05", "2026-10-06", "2026-10-07"], 4, 240)
@@ -1580,7 +1636,7 @@ def main(out):
         tab.deck.fill_tree()
         it = tab.deck.tree.topLevelItem(0)
         it.setCheckState(0, QtCore.Qt.CheckState.Checked)
-        if tab.deck.cover != {f"tag:{root}::#Sketches"} or tab.deck.go.isHidden() or "ticked, not on a date" not in tab.deck.fill_words.text():
+        if tab.deck.cover != {f"tag:{root}::#Sketches"} or tab.deck.go.isHidden() or "ticked, not on a set" not in tab.deck.fill_words.text():
             raise RuntimeError(f"planner: the deck's ticks {tab.deck.cover}, {tab.deck.fill_words.text()!r}")
         shoot(dlg, os.path.join(out, "planner-deck-fill.png"))
         tab.deck._lay(tab.deck._go_how)
@@ -1590,7 +1646,7 @@ def main(out):
         # the text: plan lines pasted in, read, then added; the whole plan as text
         td = PT.TextDialog(dlg, False, f"{day(6)} | Shock again | tag:{root}::#Videos::Cardio::Shock | read: chapter 9\n"
                                       f"{day(4)} | event | Shock quiz")
-        if td.tab.go_btn.isHidden() or td.tab.go_btn.text() != "Add to the plan" or "1 date, 1 quiz or exam." not in td.tab.status.text():
+        if td.tab.go_btn.isHidden() or td.tab.go_btn.text() != "Add to the plan" or "1 set, 1 quiz or exam." not in td.tab.status.text():
             raise RuntimeError(f"planner: plan lines read: {td.tab.status.text()!r}")
         shoot(td, os.path.join(out, "planner-text-add.png"))
         td.tab._go()
@@ -1966,7 +2022,7 @@ def main(out):
                 != [("Cardio · Heart Failure", 2), ("Cardio · Shock", 1), ("Renal · AKI", 1)]
                 or said != ["Their topics", "Cardio · Heart Failure", "2 questions · 66% here", "Cardio · Shock", "1 question · 84%",
                             "Renal · AKI", "1 question · new"]
-                or [b.text() for b in studies] != ["Study", "Study"] or "Study the 5 you missed" not in studies[0].toolTip()
+                or [b.text() for b in studies] != ["Study", "Study"] or "A filtered deck: the 5 you missed" not in studies[0].toolTip()
                 or any(lab.textFormat() != QtCore.Qt.TextFormat.PlainText for lab in q.topics.findChildren(QtWidgets.QLabel))):
             raise RuntimeError(f"qids: their topics {q.topic_rows}, {said}, {[b.toolTip() for b in studies]} (names in plain text)")
         shoot(q, os.path.join(out, "planner-qids.png"))
@@ -2020,4 +2076,10 @@ def main(out):
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1] if len(sys.argv) > 1 else "dialog-shots"))
+    code = main(sys.argv[1] if len(sys.argv) > 1 else "dialog-shots")
+    # The verdict is in. Leave without Python tearing Qt down: now and then (offscreen,
+    # with web views built) that teardown segfaults after "all dialogs built", which
+    # would turn a pass into exit 139 in CI. The verdict stays the exit code.
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(code)

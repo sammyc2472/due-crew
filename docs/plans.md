@@ -85,8 +85,13 @@ opened date matched, so an update opens just what it adds), `held`
 which Stop following opens), `hold_yes` (I said yes to Hold back; Put
 back never sets it), `later` (dates put off to a later morning),
 `own_opened`, `catch` (a catch-up's extra), `missed` (a 3.2 schedule's
-missed-days answer), and the plan tags this computer wrote. Per profile,
-`trees_sent` (what this computer last sent of each authored deck's tags).
+missed-days answer), and the plan tags this computer wrote. Today's
+set: `lesson_deck` (true: B, each open set a deck of its own; absent:
+A, in the plan's deck), with `lesson_decks` (set id: its deck),
+`lesson_held` (cards another add-on's filtered deck holds) and
+`lesson_folder`. Per profile, `trees_sent` (what this computer last sent
+of each authored deck's tags) and `lesson_next` (B chosen for a plan
+before it runs here).
 
 ## A day's work, in the builder
 
@@ -124,7 +129,24 @@ Once per Anki day, on the Decks screen, after AnkiWeb's sync
    A date whose plan changed since it opened opens just what the change
    adds (`_unit_cids`, the `pt` snapshot for plan tags). At my own pace
    it opens only what an author added to dates I opened, and ("next")
-   the next date once I've seen most of the last.
+   the next date once I've seen most of the last. Today's set, B (a
+   plan's choice on this computer, A by default): then each open set
+   with cards to learn is a filtered deck of its own,
+   `Due Crew::<plan>::<NN> <lesson>`: its open new cards and its learning
+   ones due now, never a review, as they come in the deck
+   (`plan_flow._lesson_sync`), folded into the open's undo step, so Not
+   today takes the decks too. A deck that holds them all is left alone; a
+   set behind keeps its deck till it's empty, then step 2 takes it (and
+   the plan's folder with its last). A card another filtered deck holds
+   stays there; another add-on's are counted for the plan's card. Open
+   now, Open at my own pace, Welcome back's Open them and an update's
+   Open build the same way; A, Stop following, a plan gone and Change
+   deck take the decks down (their cards home as they were).
+   A day's Study in You › Plans' week (3.9.6, on a click, either way) is
+   one more: `Due Crew::<plan> · Today` (or `· Mon 2 Nov`), the day's sets'
+   new cards not seen yet and theirs Anki has due today (today: every
+   opened set's due today too), never a review ahead (`plans.day_cards`);
+   step 2 empties it the morning after.
 6. A pause that ended asks its question; a plan new here asks Follow's
    Hold back question. 3.8.1, Welcome back: when the open would take in
    dates from 3 or more days with no study at all (not at my own pace, on
@@ -169,6 +191,15 @@ the builder says "Tags as of" its date); and the plan's own tags go on
 my notes. Make a plan from a deck sends the tree at once. A tag change
 made later in the day reaches the builder the next day.
 
+## Cards I set aside
+
+A new card I suspend myself after its date opened here is set aside
+(`plans.set_aside`, 3.9.6): it counts in none of the date's numbers, so
+it's never left or behind, and the progress my Anki sends leaves it out.
+The plan's own suspensions still count (Hold back's and Put back's
+`held`, a date that hasn't opened, a date Edit › Undo closed whole), and a
+leech is Anki's.
+
 ## Older add-ons and newer fields
 
 Each add-on cleans a plan on arrival (`backend/shapes.clean_plan_doc`)
@@ -188,6 +219,18 @@ usable without it:
   settled once.
 - 3.8.0 plan tags: before 3.8.0 a date using one finds nothing until the
   author's ids (`ids`) are there; then it falls back to them.
+- 3.9.6 adds no field and nothing on the server. Every op, a resource
+  plan and the site's new page write fields 3.9.5 already keeps (Leave
+  out cards also tagged is a `search`, Move a source moves a `tags`
+  entry), and 3.9.5's index opens the same cards for each set. Today's
+  set (B), Fit it in, Slide's Undo and the joys are plans.json only;
+  Slide and Skip what's left are the follow's `shift` and `skipped`. A
+  set's own deck on one computer is a `Due Crew::` filtered deck to a
+  3.9.5 one: its cards count by their home deck, and 3.9.5's tidy takes
+  it only once it's empty. The closet's ribbon, map and kite are dropped
+  by an older `closet.clean` and the site's `sev.js` until it's deployed.
+  Links older add-ons open (`/plans/{id}`, `/plans/new?deck=`,
+  `/library`, `/p/CODE`) land on the new page, the token read first.
 
 `MIN_CLIENT` in `worker/wrangler.toml` stops a client too old to work at
 all; raising it is a decision, not a habit.

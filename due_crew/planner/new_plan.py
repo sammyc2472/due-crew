@@ -193,8 +193,8 @@ class NewPlanWindow(QDialog):
         n_ev = len(doc.get("events") or [])
         if self.made is None and not confirm(
                 self, f"Make {name}?",
-                (f"{n:,} date{'s' if n != 1 else ''} and {n_ev:,} quiz{'zes' if n_ev != 1 else ''} or exams, "
-                 "the dates with no cards yet. " if n else
+                (f"{n:,} set{'s' if n != 1 else ''} and {n_ev:,} quiz{'zes' if n_ev != 1 else ''} or exams, "
+                 "the sets with no cards yet. " if n else
                  "An empty plan that ends with " + (f"{doc['end'] and P.fmt_day(doc['end'])}. " if doc.get("end") else "nothing yet. "))
                 + "It's yours: nobody follows it till you share its code.", "Make it"):
             return
@@ -209,7 +209,7 @@ class NewPlanWindow(QDialog):
             return
         if got[0] == "made":
             self.made = got[1]
-            self.said.setText(f"The plan is on duecrew.com, but its dates didn't save. {got[2]} Make the plan tries them again, on it.")
+            self.said.setText(f"The plan is on duecrew.com, but its sets didn't save. {got[2]} Make the plan tries them again, on it.")
             return
         outcome, what = got
         if outcome != "saved":

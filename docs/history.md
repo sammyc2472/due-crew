@@ -4055,3 +4055,380 @@ every release that changes how something works.
   joins are 600 an hour a network and table.
   `test_pip_party_keeps_its_socket_v395` (wsClient in node, its clock and
   socket stood in for); `table.test.ts`: a pong, and the TV gone a moment.
+- 3.9.6, plans end to end (Sam's picks after the "Plans end to end"
+  mock: the plan maker as a page, full parity, older add-ons untouched;
+  the class calendar import waits). **Your plans is an HTML window** in
+  the board's look (`planner/web.py`, a Qt shell on Anki's web view and
+  bridge; `webface.py` its clicks, "dcplan:" + JSON; `webmodel.py`,
+  `webtabs.py`, `webnew.py` its pure views; `page/` its scripts, text
+  only, never markup). Its logic is `core.PlanCore`, moved out of the Qt
+  window, which both run; the Qt window stays for `"plan_window": "qt"`
+  in this computer's config. Plan (List, Week, Month with drag, Find,
+  Needs a look, a set's panel, the deck beside it, changes waiting
+  and Review and send, the paste box, the keys), Insights and Settings
+  (an author's: the plan, sharing, co-authors, posts, history, the
+  library, Your AI app; a follower's: my follow) are all there; the
+  text, Spread, Add a search and review days open their Qt dialogs over
+  it. **New plan** is its first screen (`webnew.py`): A resource, at my
+  pace (`edits.resource_plan`: a set a chapter of a resource in the
+  deck's order, "· the rest" for what no chapter holds, Only as the
+  plan's own tag with 3.8.1 cuts, laid out at about N new a day, by a
+  finish day with its exam, or for When I'm ready, on my study days;
+  `model.resource_parts`, `only_count`, `also_tagged`); Someone's plan (a
+  code into Follow, or the library); Start empty (a name, the deck, the
+  exam it ends with, then the deck beside it). Make it, start later; or
+  Start it, which also follows it here (`Ops.start_own`, `POST
+  /plans/follow` with its code), today's lesson in my deck or its own.
+  An author following their own plan isn't someone its changes wait for
+  (`core.others`). No days off (a plan has no field for them). **The
+  builder's site-only tools**, as ops: Leave out cards also tagged (the
+  Overlap "but not", `leave_out`), Move a source to a set or a day
+  (`move_source`, the builder's moveChip), a set straight from a tag
+  (`add_date`'s "next" and `join`), Lay out before any quiz or exam
+  (`lay_out`'s `upto`; the plan's own end stays), Give everyone a day
+  (`breather` in one click), Copy its search per source
+  (`model.source_search`). No new doc field: the site and older add-ons
+  read every change as before; nothing new on the server. **You ›
+  Plans** (`plan_board.py`): the whole plan as a path above the week, a
+  segment a set (done, behind, today, ahead, skipped), its last quiz
+  or exam at the end, "set 3 of 19"; Behind… where Catch up… was (a
+  sheet: Slide N days on my follow's shift, Fit it in over three days or
+  a week, Skip what's left, Not now); a set with no finish-by day is
+  behind once its day passes with cards left, as Due's Behind counts.
+  The empty tab: a box for a plan's code or link (any other code goes
+  the way the box's codes always went), my exam with Plan the way there
+  (New plan finishing by it), Make a plan, the library. Fixed on the way:
+  an author's window loaded the cleaned plan, so Shape and Lay out read
+  its pace as placed by hand till the first save (it loads the plan as
+  the server keeps it); `clean_plan` keeps `library`, so Make my own
+  copy shows for a library plan. `test_plan_web.py`,
+  `test_plan_web_tabs.py`, `test_plan_board.py`, `test_plan_ops.py`'s
+  new ops; `tools/plan_preview.py` and `.js` render the window.
+- 3.9.6, Today's set, A or B (Sam's picks: per plan, chosen at the
+  start, A by default, changeable in Settings): a plan's choice on this
+  computer, made at Follow ("Today's set: In Big Step 1 · Its own
+  deck", beside How its cards open), at New plan's Start it, or in the
+  plan window's Settings (`plan_flow.set_lesson_deck`, `lesson_deck_on`;
+  one made before the plan runs here waits in `lesson_next`). A opens a
+  set's cards in the plan's deck, as ever. B opens them the same way,
+  then each open set with cards to learn is a filtered deck of its own,
+  "Due Crew::Path Book::03 Neoplasia" (its place by opening day, so Anki
+  lists them in order; `plans.lesson_deck`): its open new cards and its
+  learning ones due now (one due later would show early), never a review
+  (Sam's FSRS rule), in the deck's order (`_lesson_sync`). Built in the
+  open's own undo step (Anki's `merge_undo_entries`), so Not today and
+  Undo take the decks too: the morning, Open now, own pace's Open, Welcome
+  back's Open them, an update's Open, Browse's open. A set behind keeps
+  its deck till it's empty; the morning's tidy takes it, and the plan's
+  folder with its last. A, Stop following, a plan gone, Change deck and
+  Put back take them down, cards home as they were; a card another
+  filtered deck holds stays there. The card's line and the morning's say
+  "in your decks", and the card's Study goes to the set's deck (as does
+  Study on a date, which now takes cards out of other Due Crew decks
+  first, as a topic's does). The deck's index is cached by each card's
+  home deck, so studying a set's deck doesn't read the whole deck again
+  (990 ms to 148 ms on 35,000 cards). plans.json only; nothing is sent.
+  `tests/test_lesson_decks.py`, `tools/real_anki.py --lessons`.
+- 3.9.6, a set (Sam: "lesson assumes the material is related; date may
+  be more correct"; his pick of the words offered): a plan's unit is a
+  **set** wherever the add-on says it (the plan windows, New plan, the
+  board's card and day lines, Today and Upcoming, Follow and its
+  dialogs); "date" stays where it means a day. Only words changed: no
+  key, command, field or the text format's keywords; the AI prompts
+  keep "date" (the ops' field). Before the click test, Sam's other
+  answers: New plan fills in the deck I've studied most these 30 days,
+  the weekdays I've studied in most of the last six weeks and my exam
+  (Settings) as Finish by (`flow.Ops.new_defaults`, two queries on the
+  click); Slide on Behind… leaves "Your dates moved N days later · Undo"
+  on the card for the day (`plan_board.unslide`, `planunslide`; plans.json's
+  `slid`); Fit it in… asks over how many days, 2 to 14, three to start
+  (`plans.FIT_DAYS`, `fit_days`, `fit_extra`); Add to my calendar… under
+  the plan saves its sets, quizzes and exams and review days as an .ics
+  file (`planner/ics.py`: all-day events, a spread set over its days, a
+  follower's on their own days without what they skip; names only).
+- 3.9.6, Your plans on duecrew.com is the add-on's own page (Sam: "if
+  HTML, then theoretically it can also use the same stuff"): the plan
+  window's page scripts are copied to `site/public/planpage/` byte for
+  byte (`tools/gen_plan_page.py`, the suite checks), and
+  `site/public/planface.js` builds the same view and takes the same
+  commands from builder.js's state and the API's routes (nothing new on
+  the server). An author's `/plans/{id}` and `/edit` and `/plans/new`
+  draw it: Plan, Insights (from the deck tree Anki uploads), Settings and
+  New plan (someone's plan, or start empty; a resource at my pace stays
+  Anki's). What only Anki has is left out (Browse, Study, opening cards,
+  Your AI app, Today's set, Leave out cards also tagged); Anki's Qt
+  dialogs are sheets in the page; Add to my calendar downloads the
+  plan's `/p/CODE.ics`. With nobody following, a change saves at once
+  and Undo takes it back; with followers it waits for Review and send.
+  The old page's Progress, poster and calendar menu stay at
+  `/plans/{id}?page`; followers keep the old page for now. A set on the
+  site's pages too. `tests/planface_test.js` (every view drawn, every
+  control fired, a save the builder's own PUT); `tools/plan_site_preview.js`.
+- 3.9.6, the site's plan page for followers too (Sam: "make the new page
+  work for followers too"): a follower's `/plans/{id}` is the add-on's
+  follower page, on my days (`myDoc`, `plans.my_doc`'s twin: my shift, my
+  skips, a set I moved): Plan read-only (Today and Behind from what my
+  Anki syncs, each set's left, List, Week and Month), Insights on my sets,
+  and Settings' my follow on the routes the old page and Anki use (my
+  dates, Skip a set, Cards open, Open early, Pause until… and Resume,
+  Reset, its squad, Make my own copy, Stop following). Add to my calendar
+  is built on the site from my days (`Ics`, `ics.py`'s twin), for authors
+  too. What only Anki does is left out; the old page's newest post,
+  calendar subscription and finished card stay at `/plans/{id}?page`.
+  Fixed on the way, in both of Anki's windows: a set's notes live on the
+  plan's day for it, so a follower whose days run later reads and posts
+  them there (`PlanCore.note_day`).
+- 3.9.6, the plan joys (Sam's picks on the "Joy on the plan card" mock,
+  "celebrate bigger" for the big ones). You › Plans, on the path: a set's
+  cards all seen, its segment fills, the logo's seven squares burst and
+  Pip hops to it from the set before, about five seconds (motion.js;
+  once a set; Reduce motion: Pip still, then gone). Halfway (the 10th set
+  of 19), three-quarters (the 15th) and the last set's morning: a line
+  each under the path, once, with Share (as text, or the picture) and ×.
+  Behind cleared by seeing it: "Caught up · <set>, all N seen" for the
+  rest of the day, its 🎉 popping once, every time. The first morning:
+  "Day one · N to go today", Pip's let's-go once. The finish line: the
+  last set's last card, a show over the Decks screen at the next board
+  draw (show.js's finish: the path fills, Pip hops to the tape, a grad
+  cap lands; seven seconds, its banner three more; a click or Esc ends
+  it; once a plan; after a cheer's show that lands with it; Reduce
+  motion: the banner, Pip still in its cap); the card then keeps
+  "Finished · 19 sets · 2,046 cards · 6 weeks" with Share. The picture
+  is sharecard.py's plan card, story size (the path, Pip's hop trail, in
+  its cap when finished), cards.js's K4 its twin. One moment at a time:
+  the finish, caught up, a milestone, then the pop. New plan's preview
+  lays the path out set by set (no Pip in the plan window). Pip's closet:
+  Finisher's ribbon (three plans with every set done; the Grad cap stays
+  the first's), Folded map (someone follows a plan you made), Kite (Give
+  everyone a day saved on a plan you write). Each moment is claimed the
+  first time it's on screen (plans.json's `joy`, this profile's); the
+  closet's tallies are wrap.json's (`plans_done`, `followed`, `gave_day`).
+  Nothing is sent; a refresh and a sync stay one request each.
+  `tests/test_plan_joy.py`.
+- 3.9.6, Pip Party quicker (Sam: "the transition from any other tab to pip
+  party takes a while, and clicks on bento sections also take a long
+  time"). The tab draws at once with its games and "Reading your cards…",
+  and reads every card's tags (or Insights' map) just after, on the next
+  tick (`gamenight_flow._soon`, mw.progress.single_shot); a tile's tap
+  shows first and its counts follow, their build off the main thread; each
+  redraw replaces Pip Party's part of the board alone (`#due-crew .pp`),
+  never the whole board, the Find box keeping its focus and caret; the
+  scope is worked out once a state. On a big collection: the tab in about
+  1 ms where it was 1.1–1.5 s, a tap in 23–59 ms where it was about 620
+  ms and two board draws. `test_pip_party_tab_shows_first_v396`.
+- 3.9.6, nothing again till it's all been played (Sam: Imposter "gave my
+  friends and I a repeat of a previously done item like three rounds
+  after"). Each round took a random pair from the likeliest half, with no
+  memory, and a voted subject keeps four. The TV now keeps what this
+  sitting played, by name (`Seen` in table.js, till the TV closes):
+  Imposter takes a pair whose topics nobody's seen first, then a pair not
+  played, and starts over only once every pair has; Trivia's blocks and
+  Links' boards draw new questions and words first the same way. A site
+  change (the TV runs the site's page). `test_pip_party_no_repeats_v396`.
+- 3.9.6, the reviews before Sam's click test. Your plans' window:
+  New plan's screen takes no keys or clicks meant for the plan behind it
+  (`webface.NEW_CMDS`, the page's keydown); an edit made while a save is
+  out saves after it (`core._next`), where it was dropped; a plan that
+  didn't load has Try again; Take back and Discard wait while changes
+  send; a change Your AI app puts under the plan during a send stays
+  waiting, rebased on the plan as sent (`core._after_send`); Make again
+  on a half-made plan renames it, and New plan doesn't start over under a
+  Make in flight; the board opening the plan already picked takes New
+  plan away; a library plan's follower gets no note box (Qt's too). The
+  engine: Leave out cards also tagged is never on a subdeck (read in each
+  follower's own deck, where the search it became ran as typed), and a
+  search with an OR at its top goes in brackets first; two plans by one
+  name share a folder of set decks, and one going to A takes only its
+  own; a plan whose folder's name is a Study deck builds its set decks
+  beside it ("Due Crew::Path Book · sets"), with no empty undo step. The
+  site's page: Take back keeps Settings' saves; Undo your last save waits
+  till nothing's waiting; a co-author's save is never written over (the
+  changes go on theirs at the send); a new set with no cards waits for
+  some instead of being dropped at the save; a save that changed nothing
+  clears what was waiting. `test_the_review_round_v396` (test_plan_web,
+  test_lesson_decks), test_plan_ops, `tests/planface_test.js`.
+- 3.9.6, the board's controls are the board's to draw (Sam: "pay special
+  attention to how buttons appear (especially given macos27 liquid glass
+  overriding what we intend sometimes)"). `tools/control_audit.js` checks
+  every control on a page at rest, hovered, pressed and focused, first
+  alone, then under Anki's webview.css and a stand-in for macOS's own
+  controls, and says what the host changes; AUDIT_WITHIN keeps it to the
+  board's parts (the preview, split by section, a 20 MB page in one). It
+  found the board's boxes and Today's day picker left to the computer to
+  draw (no `appearance: none`, so Liquid Glass draws them), the Cheer
+  window's and the sheets' boxes the same, and every focus ring on a
+  button gone under Anki's `outline: none !important`. Now: the board's
+  inputs, pickers and boxes start from a reset (`:where`, so each part's
+  own look still wins), the day picker draws its own chevron, the
+  overlays and the profile and good-luck cards reset theirs, and a
+  button's focus ring is `!important` back. The top bar's room widget
+  (the sound picker, the Fifteen's question, the break) starts every
+  button from a reset in its `el()`, its focus ring an inline `!important`
+  on keyboard focus. The plan window (its own reset since round six) and
+  the site's pages come out clean.
+- 3.9.6, after Sam's first click test. Your plans' window draws its own
+  days: every date box (a set's Cards open and Finish by, A new set's
+  Opens, a quiz's day, Settings' Starts and end day, New plan's) is a
+  button holding its day, and the calendar it opens is the page's (Monday
+  weeks, today ringed, the day filled; arrows, Page Up/Down, Enter, Esc;
+  over a sheet, a click off it closing it alone). Sam: "forced quit anki
+  when i tried to add a new set to a date", Anki quitting unexpectedly
+  just after Put it on, and nothing reproduces it here (the Python path,
+  every day, a follower or none; Qt's own web engine on Linux, the date
+  box, its calendar and Put it on). On a Mac, the computer's date box opens
+  a native popup that the web view runs inside Anki's own process, in
+  Liquid Glass: the one native piece of the window, gone. Add to my
+  calendar (Sam's pick: straight to the calendar) writes the .ics to
+  Downloads and opens it with the calendar app, no save window (macOS's
+  own, Liquid Glass); a one-time import, not a subscription. The window's
+  buttons hold flat on hover: Anki's webview.css gives `.fancy
+  button:hover` a raised shadow (`fancy` on its body unless minimalist),
+  more specific than the page's reset (Sam: "strange hovering here too",
+  on the tabs). Every Qt dropdown's list draws its one border, rounded,
+  in a frameless, shadowless, clear window (QBank QIDs' had macOS's frame
+  round our square one: "the square around the drops").
+  `tools/control_audit.js` now carries Anki 25.02's real button rules,
+  `.fancy`'s among them. `test_the_page_draws_its_own_days_v396`.
+- 3.9.6, the plan window's look, after the click test (Sam: "some of the
+  colors don't pop / adequately show hierarchies / buttons / areas of
+  text input especially inside the more grey areas", then "i like your
+  new versions!"). Its panels and its boxes were the same well grey, so
+  a box on a panel was no box at all: now every box you type in or pick
+  from (a set's name, its days, Leads up to, Find, Paste plan lines, a
+  note) is white with a real edge (`--dc-edge`, ink over the card),
+  a ring in the accent while you type; the panels are edged; buttons
+  take a firmer edge and the accent's tint on hover, text links an
+  underline, Study now a darker fill; List · Week · Month a deeper track
+  with the picked one raised; the panels' labels a step darker. And the
+  Plan tab's bar (Sam: "the earliest first / today / expand all / those
+  filters kinda don't make too much sense"; his pick, "Ship it"): how you
+  look, what to show (Find; N need a look, amber), what to do (Add,
+  filled); Today and Unfold all head the list, Today by Week's and
+  Month's arrows; Earliest first gone. The same on duecrew.com's page.
+- 3.9.6, after the last check (a fresh read of plans as an author and a
+  follower; Sam: "build them straight in, do all of them"). **An author's
+  own follow**: New plan's Start it follows my own plan, and the author's
+  Settings had no way to stop, pause or change it; now "Your follow" in
+  Settings has my follow's rows (`webtabs._mine_view`, the follower's
+  own; their steps take an author who follows it, `_mine`), and without a
+  follow, Start it here… (the Follow window on its code, so Make it,
+  start later can start later). The same on the site for an author who
+  follows. **Closing with changes not sent** asks first, in the page
+  (`WebFace.unsent_ask`: Review and send, or Close anyway; they wait
+  here) and in the Qt window (`ui.confirm_or`); the add-on's own closes
+  never ask (`flow._shut`). **Behind, one way**: Due's Catch up… opens
+  Behind's sheet (the old menu only where that has nothing); Skip what's
+  left says the cards stay open in your deck, no longer behind, and says
+  so after; Slide's line says "the plan's stay put" everywhere. A set's
+  segment on the path opens its day in the week (`planjump`). **The Plan
+  tab**: a week is named Monday to Sunday ("Week 3 · 9–15 Nov"), and a
+  week holding a set that runs today stays open; a quiz's panel ticks
+  its sets (`webmodel.event_picks`, a set_for each, one click for the
+  ones since the quiz before); a quiz or exam added after every set ends
+  a plan with no end (`WebFace.ends_here`); a follower's week says "over
+  the plan's 60", not "your"; Insights' Workload puts each count by its
+  own bar and the pace's line inside the bars; at 760 wide the window
+  scrolls whole, the set's panel all its height. **Words**: New plan's
+  "A resource, chapter by chapter" (at your pace is When I'm ready's);
+  Today's set is "In <deck> · Its own deck" with one tip everywhere;
+  "suspended", Anki's word, wherever a card was "shut" (Sam); "Finish by"
+  in its errors; a set numbered once in New plan's preview; the deck's
+  More a drawn chevron; Settings' This computer is Your AI app alone,
+  the copies and Delete under This plan; joining or leaving a plan's
+  squad from Anki's Settings too (asked in the window); a pasted plan
+  link is its code on the site's New plan; Follow's "wait in your
+  calendar" (the week, now that there's Add to my calendar) says they
+  stay suspended, each with Open now in You › Plans. Two tests that
+  failed on some days now name their day.
+- 3.9.6, cards I suspend aren't behind (Sam: "if i've chosen to suspend
+  something after the plan opens it, don't want it to make me behind"). A
+  new card suspended on a date that opened here is set aside
+  (`plans.set_aside`): in none of the date's numbers, so never left, never
+  behind on the path, nor in its Left, the week's load, the exam box or
+  the progress authors count. Not one the plan holds (Hold back, Put
+  back), nor a leech; and a date with none of its cards open (Edit › Undo)
+  is closed, not set aside, so the week still offers Open now. A deck's
+  update that adds suspended cards to a date already open sets them aside
+  too: the plan never opened them, and nothing tells the two apart.
+- 3.9.6, a long plan's path folds (Sam: "if a plan is long, then this
+  kinda seems overwhelming as a visual"; his pick A on the "A calmer
+  path" mock, past 16 sets). You › Plans' path shows one by one what needs
+  me: every set behind (or catching up), the two before today's, today's,
+  the next four, and a set a joy plays on (so Pip still hops onto it from
+  the piece before). Each run of the rest folds into one piece with its
+  count under it, "22 done", "26 to come" or "3 skipped"; a click on a
+  fold opens its nearest set's day (the last done, the next to come).
+  16 sets or fewer: a segment a set, as before (`board._path_keep`,
+  `PATH_FOLD_PAST`).
+- 3.9.6, a day's Study in You › Plans' week (Sam: "the option to study all
+  for the day and it pops out the filtered deck of just those new / review
+  cards for the day ... not just for today for past days too ... when
+  you've clicked on one of the days and its stuff pops down"; "declutter
+  the plans tab, not add more clutter"). A day's details have one Study in
+  their head, today's or a past day's (any day with a set opened here): one
+  Due Crew deck, "Due Crew::<plan> · Today" or "· Mon 2 Nov", of the day's
+  sets' new cards not seen yet and their cards Anki has due today; today's
+  also every set's due today and a set still running. Then Anki's Study
+  screen on it, and a tooltip of how many new and due it holds (as Anki
+  built it: another add-on's deck keeps its cards). Sam's FSRS rule, as a
+  date's Study: never a review ahead of its date. A card another Due Crew
+  deck holds (a set's own, Today's set B) comes out of it first and that
+  deck keeps the rest; the deck empties the morning after (`until`). It
+  takes the place of each set's own Study in the day's details, one way to
+  it; the card's line is as it was (a first try put Study today and a due
+  count there, taken back before shipping: clutter). On a click, a search
+  here; nothing is sent (`plans.day_cards`, `plan_flow.study_day`,
+  `board._day_study`, `planstudyday`).
+- 3.9.6, every Study that builds a deck says so on hover, in Anki's word
+  (Sam: "change the wording of the hover"): "A filtered deck: its new cards
+  and the ones due today", "A filtered deck of them, the most missed
+  first", and so on, on a day's, a date's, a topic's, a quiz's, the exam
+  box's, Insights' and Today's set's (B) Study, the plan window's Study now
+  and Study the N, and QBank QIDs'; a day's Study's tooltip says "in a
+  filtered deck". The word on the link stays Study.
+- 3.9.6, song of the moment and the dance floor (Sam: "leverage music
+  databases to put a song as their soundtrack / song of the moment";
+  "retro pip ... DJ shows the pips who have music dancing with a little
+  bubble with the song ... above their head"; his picks on the "Study
+  Soundtracks" mock: the dance floor, one bubble at a time, real covers,
+  the apps named only where needed, following each one's attribution
+  rules). Each person picks one song from Apple's public catalog (the
+  iTunes Search API: no account, no key, about 20 searches a minute a
+  computer, asked from this computer after a 400 ms pause, two letters at
+  least; songs.py, song_flow.search). It's an account key, "song"
+  (songs.clean: title, artist, the catalog's id, its Apple Music link;
+  album, year, cover, preview and the day picked when they hold; Apple's
+  hosts only): the Worker reads it with the settings and hands it, cleaned
+  by songOf (board.ts), to me and my mutual friends on /board beside their
+  look, so no new request; picking is the account's one save. The Decks
+  screen's bottom-right corner gets the dance floor (board.dance_html,
+  DANCE_JS in fridge_js): my Pip DJs at a booth (two decks, a mixer,
+  speakers, an equaliser in my accent; my look and the closet's
+  headphones) with my song on the decks; each mutual crewmate with a song
+  dances beside it in their colour and look, newest first, up to six then
+  "+N", one bubble at a time with their song's title (a fresh song hops in
+  once with a star; the first look is history). Motion: Gentle by default
+  (a slow sway, no pose swaps; Sam: "make it less jumpy"), Lively or Still
+  in Settings, still with Reduce motion; about twelve seconds after a
+  draw, then rest, as Pip's loops. ⌄ folds it to a chip (a record, "♪ N",
+  ★ for a fresh song; this computer remembers, no redraw), × takes it off
+  (Settings › Board › Song of the moment brings it back), and where the
+  open floor would cover the board's column it starts as its chip
+  (Sam's "remove from screen, collapse"); a tap opens it over the board.
+  A bubble's tap opens the song's card: the cover, title, artist · album
+  · year, ▶ 30 s (Apple's preview fetched to a file and played by Anki's
+  own player, as Anki's web view can't play AAC; the latest tap wins),
+  Listen, and Apple's "Listen on Apple Music" badge (its artwork as Apple
+  serves it, linked to the song's page; Apple's rule for its covers and
+  previews; plain words when the image doesn't load). Listen asks which
+  music app the first time (Apple Music, Spotify, YouTube Music, another)
+  and then just says "Listen in Spotify" (Sam): Apple Music opens the song
+  itself, Spotify and YouTube Music a search for its title and artist that
+  lands on it, another app copies the title and artist. Settings › Board ›
+  Song of the moment: the floor, Dancing (Gentle · Lively · Still), My
+  music app (Ask me the first time, or one). A crewmate's profile card
+  says their song with Listen; mine says mine. The bubble is the song they
+  picked, never what they're listening to, which Due Crew never knows.
+  An older add-on saving my settings on another computer drops the song,
+  as with every newer account key (it saves the keys it knows).
+

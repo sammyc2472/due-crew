@@ -25,6 +25,7 @@ plans.json, per profile:
   posts_seen             {plan id: the newest post read}
   aside_ok               {plan id: [leeches, missing]} as last OK'd
   fallback_ok            {plan id: true}: its renamed-tags note OK'd
+  lesson_next            {plan id: true}: Today's lesson B, chosen before the plan runs here (the last 50)
   due, team_seen, map_snaps, ins_fsrs_hide, ins_hard_hide: due_flow's and team_flow's
 
 plans[plan id], one plan on this computer:
@@ -45,6 +46,9 @@ plans[plan id], one plan on this computer:
   tag_news               {day, names, more, missing}: tags that came today, said once
   away                   3.8.1, Welcome back's question {day, days, units, n}: dates from days I studied
                          nothing, kept back (in `later`) till it's answered; asked again each morning
+  lesson_deck            Today's lesson: true, each open lesson a deck of its own (B); absent, in the deck (A)
+  lesson_decks, lesson_held, lesson_folder  B: {unit id: its deck id}, {unit id: cards another add-on's
+                         filtered deck holds}, the plan's folder of them ("Due Crew::Path Book")
 
 3.8.1, read as today's (_upgrade, _hold_yes): an old `catch` {mode, day}
 moves to `missed`; `held` without `hold_yes` was a yes on the plan's dates
@@ -453,7 +457,7 @@ def run(col, plan_list, state, today, mode=None, everything=False, dry=False):
                 was[u["id"]] = _was(st, u["id"])
             if p.get("own") == "next" and not dry:  # a morning's, never an update's line
                 idx = P.DeckIndex(col, st["deck_id"])
-                nxt = P.next_by_itself(doc, applied, st.get("own_opened"), P.progress(idx, doc, _swap(st)))
+                nxt = P.next_by_itself(doc, applied, st.get("own_opened"), P.progress(idx, doc, _swap(st), _aside(idx, st, doc)))
                 if nxt and nxt["id"] not in {u["id"] for u, _h in items} and str(later.get(nxt["id"]) or "") <= today:
                     was[nxt["id"]] = _was(st, nxt["id"])
                     applied.pop(nxt["id"], None)  # shut again since (Undo): it opens whole
@@ -640,8 +644,17 @@ def progress(col, plan_list, state, idxs=None):
         if not st or not _deck_ok(col, st.get("deck_id")):
             continue
         idx = _index(col, st, idxs)
-        out[p["id"]] = P.progress(idx, p["doc"], _swap(st))
+        out[p["id"]] = P.progress(idx, p["doc"], _swap(st), _aside(idx, st, p["doc"]))
     return out
+
+
+def _aside(idx, st, doc):
+    """3.9.6: the cards I suspended myself after their date opened here (P.set_aside)."""
+    try:
+        return P.set_aside(idx, doc, _swap(st), st.get("applied"), st.get("held"))
+    except Exception:  # noqa: BLE001 (a count, never a crash: nothing set aside)
+        traceback.print_exc()
+        return frozenset()
 
 
 _PICKS = {}  # 3.8.1: (deck id, a date's picks): (the deck's tag index they were named from, their labels)
@@ -695,7 +708,8 @@ def loads(col, plan_list, state, idxs=None):
         st = state.get(p["id"])
         if not st or not _deck_ok(col, st.get("deck_id")):
             continue
-        out[p["id"]] = P.load(_index(col, st, idxs), mine(p)["doc"], _swap(st))
+        idx = _index(col, st, idxs)
+        out[p["id"]] = P.load(idx, mine(p)["doc"], _swap(st), _aside(idx, st, mine(p)["doc"]))
     return out
 
 
@@ -818,12 +832,19 @@ def card_view(plan, st, prog, today, session=None, week_offset=0):
     doc = plan["doc"]
     week, weeks = P.span_weeks(doc, today)
     us = P.units(doc)
+    # plans, end to end: the whole plan as a path, its lessons on my days, and what's behind on it
+    path = P.path(_plan_doc(plan), prog, today, applied=(st or {}).get("applied") if st else None,
+                  shift=int(plan.get("shift") or 0), skipped=plan.get("skipped") or (), moved=plan.get("moved"),
+                  sched=bool(plan.get("sched")))
     if plan.get("paused"):
         sub = f"paused until {P.fmt_day(plan['until'])}" if plan.get("until") else "paused"
     elif week == 0 and us:
         sub = f"starts {P.fmt_day(us[0]['opens'])}"
+    elif st and P.joy_finished(path):  # 3.9.6: the finish line, kept on the card
+        n = len(P.joy_sets(path))
+        sub = f"all {n} set{'s' if n != 1 else ''} done"
     else:
-        sub = f"week {week} of {weeks}"
+        sub = f"set {path['at']} of {path['of']}" if path["at"] else f"week {week} of {weeks}"
     if int(plan.get("shift") or 0):
         sub += f" · your dates +{int(plan['shift'])} day{'s' if int(plan['shift']) != 1 else ''}"
     if int(plan.get("early") or 0) and not plan.get("paused"):
@@ -887,14 +908,15 @@ def card_view(plan, st, prog, today, session=None, week_offset=0):
         change = P.change_note(plan.get("ownerName"), st["snapshot"], _plan_doc(plan))
     own = P.own_pace(plan) and not plan.get("paused") and not no_deck
     # round five: the card's line about the plan's day (Due's Today and Upcoming have each date):
-    # what today's dates have left, and what's behind (past its day, not seen) and since when
-    status = None
+    # what today's dates have left; plans, end to end: what's behind is the path's (a lesson whose
+    # last day passed with cards left, opened here), its own line with Behind…
+    status = behind = None
     if not (no_deck or plan.get("paused") or own):
         left = lambda u: max(0, int(_t3(prog, u)[2]) - int(_t3(prog, u)[1]))
-        late = sorted(str(u["due"]) for u in us if u.get("due") and str(u["due"]) < today and left(u))
+        behind = P.behind_of(path, today)
         status = {"togo": sum(left(u) for u in us if str(u.get("opens") or "") == today),
-                  "behind": sum(left(u) for u in us if u.get("due") and str(u["due"]) < today),
-                  "since": P.weekday_or_day(late[0], today) if late else ""}
+                  "behind": behind["left"] if behind else 0,
+                  "since": P.weekday_or_day(behind["since"], today) if behind else ""}
     if own:  # 3.8.0: no Behind at my own pace; what's next, and where the plan is
         sub = f"at your pace · {followers:,} following"
         waiting, catch, session = 0, None, None
@@ -917,6 +939,10 @@ def card_view(plan, st, prog, today, session=None, week_offset=0):
             # 3.8.1: put off by Welcome back's Not today: tomorrow morning asks again
             "put_off_ask": bool(put_off) and str(((st or {}).get("away") or {}).get("day") or "") == today,
             "week": week, "week_offset": int(week_offset), "status": status,
+            "path": path if status is not None else None, "behind": behind,  # plans, end to end
+            "lesson_deck": None if no_deck or plan.get("paused") else lesson_view(plan, st, today),  # Today's lesson, B
+            # Slide on Behind…, today: the card's Undo (plan_board.unslide)
+            "slid": int(((st or {}).get("slid") or {}).get("days") or 0) if ((st or {}).get("slid") or {}).get("day") == today else 0,
             "catch": {"extra": int(catch.get("extra") or 0), "until": _short_day(catch["until"], today)} if catch else None}
 
 
@@ -974,7 +1000,7 @@ def opened_line(res):
     """The toast: "Due Crew opened Renal physiology: 204 cards", escaped."""
     if not res or not res["n"]:
         return None
-    what = res["names"][0] if len(res["names"]) == 1 else f"{len(res['names'])} dates"
+    what = res["names"][0] if len(res["names"]) == 1 else f"{len(res['names'])} sets"
     return f"Due Crew opened {html.escape(what)}: {res['n']:,} card{'s' if res['n'] != 1 else ''}"
 
 
@@ -997,6 +1023,12 @@ def _open_now(plan_list, mode=None, everything=False, toast=True):
                              "spread": res.get("spread") or {}, "was": res.get("was") or {},
                              "dates": [d for d in res.get("dates") or [] if d[3]][:OPENED_DATES]}  # 3.8.1
     _psave(c)
+    # Today's lesson, B: then each open lesson its own deck, in the open's undo step
+    lessons = lesson_sync(plan_list, fold=res["label"] if res["n"] else None)
+    if res["n"] and any(set(uids) & set(lessons["decks"].get(pid) or ())
+                        for pid, uids in (res.get("units") or {}).items()):
+        c["plans_opened"]["decks"] = True  # the morning's line: "in your decks"
+        _psave(c)
     if res["n"]:
         _after_change()
         if toast:
@@ -1192,8 +1224,9 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True, update=False):
         if fresh:
             ids = {p["id"] for p in plan_list}
             gone = [pid for pid in state if pid not in ids]
-            if not here and any(_shut_by_plan(state.get(pid)) or (state.get(pid) or {}).get("tags") for pid in gone):
-                return _morning_waits(awaiting_sync, fresh)
+            waits = any(_shut_by_plan(state.get(pid)) or (state.get(pid) or {}).get("tags") for pid in gone)
+            if not here and (waits or any((state.get(pid) or {}).get("lesson_decks") for pid in gone)):
+                return _morning_waits(awaiting_sync, fresh)  # Today's lesson, B: its decks go on Decks too
             for pid in gone:
                 was = state.pop(pid, None) or {}
                 held = _shut_by_plan(was)
@@ -1203,6 +1236,12 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True, update=False):
                     P.open_cards(mw.col, held, "Due Crew: a plan you followed ended")
                 if was.get("tags"):
                     _drop_plan_tags(was, "a plan you followed")  # 3.8.0: and its tags come off
+                if was.get("lesson_decks") and mw.col:
+                    try:
+                        if _lesson_drop(mw.col, was):  # Today's lesson, B: and its decks go
+                            _after_change()
+                    except Exception:
+                        traceback.print_exc()
             changed = bool(gone)
             for p in plan_list:
                 st = state.get(p["id"])
@@ -1232,6 +1271,7 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True, update=False):
                 st = new_state(mw.col, p)  # followed on another computer, or on the site
                 if st:
                     state[p["id"]] = first_here(mw.col, st, p, today)
+                    _take_next(c, p["id"], state[p["id"]])  # Today's lesson, if chosen before it ran here
                     new_here.append(p["id"])
         c["plans"] = state
         c["plans_day"] = today
@@ -1316,6 +1356,7 @@ def midday(plan_list, toast=True):
             st = new_state(mw.col, p)
             if st:
                 state[p["id"]] = first_here(mw.col, st, p, today)
+                _take_next(c, p["id"], state[p["id"]])
                 new_here.append(p["id"])
     c["plans"] = state
     _psave(c)
@@ -1364,7 +1405,7 @@ def hold_new(plan_list, state, today, morning=False):
         idx = P.DeckIndex(mw.col, st["deck_id"])
         kept = _opened_cids(idx, st, q["doc"])
         if own and morning and p.get("own") == "next":
-            nxt = P.next_by_itself(q["doc"], st.get("applied"), st.get("own_opened"), P.progress(idx, q["doc"], _swap(st)))
+            nxt = P.next_by_itself(q["doc"], st.get("applied"), st.get("own_opened"), P.progress(idx, q["doc"], _swap(st), _aside(idx, st, q["doc"])))
             if nxt and str((st.get("later") or {}).get(nxt["id"]) or "") <= today:
                 kept |= idx.match(nxt, _swap(st), q["doc"])
         cids = P.holdable(idx, q["doc"], day, _swap(st), st.get("applied"), own=own, kept=kept)
@@ -1511,10 +1552,10 @@ def _hold_words(name, n, own=False):
     """offer_hold's question (plain text: the plan's name is the author's)."""
     cards = f"{n:,} card{'s' if n != 1 else ''}"
     if own:
-        text = (f"{name} is new on this computer. Hold back {cards} of its later dates until you open them?"
+        text = (f"{name} is new on this computer. Hold back {cards} of its later sets until you open them?"
                 "\n\nOne undo step; stopping the plan opens them again.")
     else:
-        text = (f"{name} is new on this computer. Hold back {cards} of its later dates until their day?"
+        text = (f"{name} is new on this computer. Hold back {cards} of its later sets until their day?"
                 "\n\nThey open on their day. One undo step; stopping the plan opens them again.")
     return "Hold back later cards", text, "Hold back"
 
@@ -1695,25 +1736,99 @@ def study_date(pid, uid):
     (_filtered: one undo step of Anki's own), then Anki's Study screen on
     it. 3.9.5 (Sam's FSRS rule): its new cards and the ones due today
     (P.new_and_due), never reviews ahead of their date; a quiz's Study keeps
-    those (study_quiz). A search run here; nothing is sent."""
+    those (study_quiz). A search run here; nothing is sent. Today's lesson,
+    B: the lesson's own deck (built first if it needs it). A card another
+    Due Crew deck holds (a lesson's, a topic's) comes out of it first, and
+    that deck gets back the rest after (_free), as a topic's Study does."""
     got = _plan_idx(pid)
     if not got:
         return
-    _p, st, doc, idx = got
+    p, st, doc, idx = got
     u = next((x for x in P.units(doc) if x["id"] == uid), None)
     if not u:
         return
+    if st.get("lesson_deck"):
+        lesson_sync([p])
+        did = _lesson_did(pid, uid)
+        if did and _go_deck(did):
+            return
+        idx = P.DeckIndex(mw.col, st["deck_id"])
     cids = P.new_and_due(idx, idx.match(u, _swap(st), doc))
     if not cids:
         tooltip("Nothing new or due in it.")
         return
     name = _deck_name(u.get('name') or 'date')
-    if _filtered(mw.col, name, cids, order=NEW_ORDER):
+    back = _free(mw.col, cids, name)
+    ok = _filtered(mw.col, name, cids, order=NEW_ORDER)
+    for bdid, keep in back:
+        try:
+            _refill(mw.col, bdid, keep)
+        except Exception:
+            traceback.print_exc()
+    if ok or back:
         _after_change()
+    if ok:
         did = mw.col.decks.id_for_name(name)
         if did:
             mw.col.decks.select(did)
             mw.moveToState("overview")
+
+
+def study_day(pid, day):
+    """3.9.6, a day's Study in You › Plans' week (Sam: "study all for the
+    day and it pops out the filtered deck of just those new / review cards
+    for the day ... not just for today for past days too ... when you've
+    clicked on one of the days"): one Due Crew deck of what the day asks now
+    (P.day_cards: its sets' new cards not seen yet and theirs due today;
+    today, every set's due today too; never a review ahead of its date),
+    "Due Crew::<plan> · Today" or "· Mon 2 Nov", emptied the morning after
+    (`until`). A card another Due Crew deck holds (a set's own, Today's set
+    B) comes out of it first and that deck gets back the rest (_free), as a
+    date's Study does. Then Anki's Study screen on it. A search run here;
+    nothing is sent."""
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(day or "")):
+        return
+    got = _plan_idx(pid)
+    if not got:
+        return
+    p, st, doc, idx = got
+    today = _today()
+    if day > today:
+        return
+    when = "Today" if day == today else _day_words(day)
+    cids, n_new, n_due = P.day_cards(idx, doc, day, today, st.get("applied"), _swap(st))
+    if not cids:
+        tooltip("Nothing new or due today in this plan." if day == today else f"Nothing new or due from {when}.")
+        return
+    name = _deck_name(f"{str(p.get('name') or 'Plan')} · {when}")
+    back = _free(mw.col, cids, name)
+    ok = _filtered(mw.col, name, cids, order=NEW_ORDER, until=today)
+    for bdid, keep in back:
+        try:
+            _refill(mw.col, bdid, keep)
+        except Exception:
+            traceback.print_exc()
+    if ok or back:
+        _after_change()
+    if ok:
+        did = mw.col.decks.id_for_name(name)
+        if did:
+            mw.col.decks.select(did)
+            mw.moveToState("overview")
+            # what it holds, as Anki built it: a card another add-on's deck holds stays there
+            inn = set(mw.col.db.list("SELECT id FROM cards WHERE did = ?", did))
+            n_due = len(inn & set(idx.due_now))
+            n_new = len(inn) - n_due
+        bits = [f"{n_new:,} new"] if n_new else []
+        bits += [f"{n_due:,} due"] if n_due else []
+        if bits:
+            tooltip(f"{'Today' + chr(8217) + 's' if day == today else when + ':'} {' and '.join(bits)}, in a filtered deck.")
+
+
+def _day_words(day):
+    """"Mon 2 Nov", a day of the week's in words."""
+    d = datetime.date.fromisoformat(day)
+    return f"{d:%a} {d.day} {d:%b}"
 
 
 QUIZ_ORDER = 2  # Anki's filtered-deck order: smallest intervals first, the shakiest (and the unseen) first
@@ -1776,14 +1891,16 @@ def check_cards(col, idx, cids, n=CHECK_CARDS):
     return [int(c) for c, _l in out[:n]]
 
 
-def _filtered(col, name, cids, order=4, until=None):
+def _filtered(col, name, cids, order=4, until=None, did=None):
     """Anki's own filtered deck over these cards, most lapses first (order 4;
     6, as they come in the deck, for new cards; 1, random, a date's Study);
     built (or rebuilt) under `name`. 3.9.5: until, the last day it's for (a
     quiz's, an exam's): the morning after, it's emptied (tidy_decks).
-    Returns True when it took."""
+    did (Today's lesson, B): that deck, built again and named `name` (0: a
+    new one), not the one named so. Returns the deck's id (true) when it
+    took, else False."""
     try:
-        did = col.decks.id_for_name(name) or 0
+        did = (col.decks.id_for_name(name) or 0) if did is None else int(did)
         had = col.decks.id_for_name(P.PARENT)  # a "Due Crew" deck of the person's own isn't ours to tidy
         deck = col.sched.get_or_create_filtered_deck(deck_id=did)
         deck.name = name
@@ -1795,12 +1912,14 @@ def _filtered(col, name, cids, order=4, until=None):
         term.limit = len(cids)
         term.order = order
         deck.config.reschedule = True
-        col.sched.add_or_update_filtered_deck(deck)
-        _note_built(col.decks.id_for_name(name), until)
+        got = col.sched.add_or_update_filtered_deck(deck)
+        # Anki says which deck it built (a name taken by another deck gets a "+")
+        made = int(getattr(got, "id", 0) or 0) or col.decks.id_for_name(name)
+        _note_built(made, until)
         parent = col.decks.id_for_name(P.PARENT)
         if parent and (not had or int(parent) in (_pcfg().get("built") or [])):
             _note_built(parent)  # made with it (or before, by us), so the tidy may clear it
-        return True
+        return int(made) if made else True
     except Exception:
         traceback.print_exc()
         return False
@@ -1841,9 +1960,11 @@ def tidy_decks(col):
     Delete Deck). Returns how many. 3.9.5: a deck past its day (`until`:
     an exam or a quiz gone) and the decks Due Crew no longer makes
     (RETIRED) are emptied back into their decks first (Anki's Empty), so
-    they go with the rest."""
+    they go with the rest. Today's lesson, B: a plan's folder of lesson
+    decks ("Due Crew::Path Book", made with its first) goes with its last."""
     try:
-        normal = {int(d.id) for d in col.decks.all_names_and_ids(include_filtered=False)}
+        normals = col.decks.all_names_and_ids(include_filtered=False)
+        normal = {int(d.id) for d in normals}
         dyn = {int(d.id) for d in col.decks.all_names_and_ids(include_filtered=True)} - normal
         today = _today()
         old = [col.decks.id_for_name(P.our_deck(n)) for n in RETIRED]
@@ -1860,8 +1981,13 @@ def tidy_decks(col):
         if pid and int(pid) in normal:
             parent = (int(pid), [int(x) for x in col.decks.deck_and_child_ids(pid) if int(x) != int(pid)],
                       col.db.scalar("SELECT count() FROM cards WHERE did = ? OR odid = ?", int(pid), int(pid)) or 0)
-        gone = P.tidy(rows, built, parent)
-        keep = [x for x in built if (x in {r[0] for r in rows} or (parent and x == parent[0])) and x not in gone]
+        folders = sorted(((str(d.name).count("::"), int(d.id)) for d in normals
+                          if int(d.id) in built and str(d.name).startswith(P.PARENT + "::")), reverse=True)
+        folders = [(f, [int(x) for x in col.decks.deck_and_child_ids(f) if int(x) != f],
+                    col.db.scalar("SELECT count() FROM cards WHERE did = ? OR odid = ?", f, f) or 0) for _k, f in folders]
+        gone = P.tidy(rows, built, parent, folders)
+        keep = [x for x in built if (x in {r[0] for r in rows} or (parent and x == parent[0])
+                                     or x in {f[0] for f in folders}) and x not in gone]
         if keep != built:
             c["built"] = keep
             _psave(c)
@@ -1906,6 +2032,332 @@ def build_checks(plan_list):
     if built:
         _after_change()
     return built
+
+
+# ---- Today's lesson: in the plan's deck (A, the default), or a deck of its own (B) ----
+# This computer's choice, per plan (plans.json `lesson_deck`; never sent). A
+# opens a lesson's cards in the plan's deck, as ever. B opens them the same
+# way, then each open lesson with cards to learn here is a filtered deck of
+# its own, Due Crew::<plan>::<NN> <lesson>, in Anki's deck list; it goes with
+# the morning's tidy once it's empty. A plan's state keeps `lesson_decks`
+# {unit id: deck id}, `lesson_held` {unit id: cards another add-on's
+# filtered deck holds} and `lesson_folder` (its folder's name, so a plan no
+# longer followed here takes its decks along); `lesson_next` {plan id: true}
+# is B chosen for a plan before it runs here.
+
+LESSON_STEP = "Due Crew: sets' decks"
+LESSON_OFF = "Due Crew: sets' decks off"
+
+
+def lesson_deck_on(pid):
+    """Today's lesson for this plan here: True, a deck of its own (B); False,
+    in the plan's deck (A, the default). Main thread."""
+    c = _pcfg()
+    st = _state_cfg(c).get(pid)
+    if st is not None:
+        return bool(st.get("lesson_deck"))
+    return bool((c.get("lesson_next") or {}).get(pid))
+
+
+def set_lesson_deck(pid, on):
+    """Today's lesson, chosen (Follow, Start it, Settings › Me on it). B builds
+    the plan's open lessons' decks now; A empties and removes them (their
+    cards go home, as they were); one undo step either way. A plan not
+    running here yet keeps B for when it does (`lesson_next`). Main thread.
+    True when the choice is kept."""
+    if not mw.col:
+        return False
+    on = bool(on)
+    c = _pcfg()
+    state = _state_cfg(c)
+    st = state.get(pid)
+    if st is None:
+        nxt = {k: v for k, v in (c.get("lesson_next") or {}).items() if k != pid}
+        if on:
+            nxt[pid] = True
+        c["lesson_next"] = dict(list(nxt.items())[-50:])
+        _psave(c)
+        return True
+    if on:
+        st["lesson_deck"] = True
+    else:
+        st.pop("lesson_deck", None)
+    c["plans"] = state
+    _psave(c)
+    changed = False
+    try:
+        if on:
+            p = next((x for x in followed() if x["id"] == pid), None)
+            changed = bool(p) and bool(_lesson_sync(mw.col, [p], state, _today()).get("work"))
+        else:
+            changed = bool(_lesson_drop(mw.col, st))
+    except Exception:
+        traceback.print_exc()
+    c["plans"] = state
+    _psave(c)
+    if changed:
+        _after_change()
+    refresh_progress()
+    app.swap(cfg())
+    return True
+
+
+def _take_next(c, pid, st):
+    """B chosen for a plan before it ran here: its state takes it now."""
+    nxt = c.get("lesson_next") or {}
+    if st is not None and pid in nxt:
+        if nxt.get(pid):
+            st["lesson_deck"] = True
+        c["lesson_next"] = {k: v for k, v in nxt.items() if k != pid}
+
+
+def _dyn(col, did):
+    """A filtered deck with this id is here."""
+    try:
+        d = col.decks.get(int(did), default=False) if did else None
+    except Exception:
+        return False
+    return bool(d) and bool(d.get("dyn"))
+
+
+def _open_lessons(p, st, today):
+    """B: a plan's lessons open here, as I run it: opened here (not skipped),
+    or, on a 3.2 schedule or even dates, opening in slices since their day;
+    never one put off to a later morning (Not today, Welcome back's question)."""
+    q = mine(p)
+    applied, later = st.get("applied") or {}, st.get("later") or {}
+    slices = bool(q.get("sched") or S.has_even(q["doc"])) and not P.own_pace(q)  # as run() opens them
+    out = []
+    for u in P.units(q["doc"]):
+        if str(later.get(u["id"]) or "") > today:
+            continue
+        if P.opened_here(applied, u) or (slices and u["id"] not in applied and str(u.get("opens") or "9999") <= today):
+            out.append(u)
+    return out
+
+
+def _fold_at(col, label):
+    """The undo step to fold into: Anki's latest, while it's `label`'s."""
+    try:
+        st = col.undo_status()
+        pos = getattr(st, "last_step", None)
+        return pos if label and st.undo == label and pos is not None else None
+    except Exception:
+        return None
+
+
+def _held_by(col, cids):
+    """{card: the filtered deck holding it}, of these."""
+    out = {}
+    cl = sorted({int(c) for c in cids})
+    for i in range(0, len(cl), 500):
+        chunk = ",".join(str(c) for c in cl[i:i + 500])
+        out.update({int(c): int(d) for c, d in col.db.all(f"SELECT id, did FROM cards WHERE odid != 0 AND id IN ({chunk})")})
+    return out
+
+
+def _lesson_sync(col, plan_list, state, today, fold=None):
+    """B, main thread: each open lesson of these plans (the ones on B) with
+    cards to learn here, a filtered deck of its own (P.lesson_deck): its open
+    new cards and its learning ones due now (P.lesson_cards), as they come in
+    the deck, Anki rescheduling them. Built when it has none, built again
+    when it lacks some (an update added cards, a learning card came due),
+    renamed when its name changed; one that holds them all is left as it is
+    (a lesson behind keeps its deck till it's empty, then the morning's tidy
+    takes it). A card another filtered deck holds stays there (Anki keeps a
+    card in one); another add-on's are counted (`lesson_held`), for the
+    plan's card. One undo step: `fold`'s (the open just made, so Not today
+    and Undo take the decks too) while it's Anki's latest, else its own.
+    Mutates `state`. {"work": decks built or renamed, "decks": {plan id:
+    [unit ids with a deck]}}."""
+    runs = [(p, state.get(p["id"])) for p in plan_list if p and (state.get(p["id"]) or {}).get("lesson_deck")]
+    runs = [(p, st) for p, st in runs if _deck_ok(col, st.get("deck_id"))]
+    if not runs:
+        return {"work": 0, "decks": {}}
+    names = {int(d.id): str(d.name) for d in col.decks.all_names_and_ids()}
+    every = {pid: {int(d) for d in (st.get("lesson_decks") or {}).values()}
+             for pid, st in state.items() if isinstance(st, dict)}
+    jobs, out = [], {}
+    for p, st in runs:
+        q = mine(p)
+        idx = P.DeckIndex(col, st["deck_id"])
+        places = P.lesson_places(_plan_doc(p))
+        folder = P.lesson_folder_free(p.get("name"), lambda n: bool(col.decks.id_for_name(n)) and _dyn(col, col.decks.id_for_name(n)))
+        taken = set().union(*[v for k, v in every.items() if k != p["id"]])  # another plan's, by the same names
+        mapped = {k: int(v) for k, v in (st.get("lesson_decks") or {}).items() if _dyn(col, v)}
+        lessons = []
+        for u in _open_lessons(p, st, today):
+            name = P.lesson_deck(p.get("name"), places.get(u["id"], len(places) + 1), len(places), u.get("name"), folder=folder)
+            did = mapped.get(u["id"])
+            if did is None:  # a deck by its name (AnkiWeb brought it from another computer): its own
+                by = col.decks.id_for_name(name)
+                did = int(by) if by and _dyn(col, by) and int(by) not in taken else None
+            lessons.append((u["id"], name, P.lesson_cards(idx, idx.match(u, _swap(st), q["doc"])), did))
+        where = _held_by(col, {c for _u, _n, want, _d in lessons for c in want})
+        held = {}
+        for uid, name, want, did in lessons:
+            have = set(col.db.list("SELECT id FROM cards WHERE did = ?", did)) if did else None
+            other = {c for c in want if where.get(c) and where[c] != did}
+            foreign = sum(1 for c in other if not P.ours(names.get(where[c], "")))
+            if foreign:
+                held[uid] = foreign
+            kind = P.lesson_plan(want, have, other)
+            if kind:
+                jobs.append((p["id"], uid, name, [c for c in want if c not in other], did or 0))
+            elif did and names.get(did) != name:
+                jobs.append((p["id"], uid, name, None, did))  # renamed: the author's, or a lesson's place moved
+            if did:
+                mapped[uid] = did
+        st["lesson_decks"], st["lesson_folder"] = mapped, folder
+        if held:
+            st["lesson_held"] = held
+        else:
+            st.pop("lesson_held", None)
+    # one whose folder is a filtered deck can't be built (Anki nests nothing under one): left, so no empty undo step
+    jobs = [j for j in jobs if not _dyn(col, col.decks.id_for_name(state[j[0]]["lesson_folder"]) or 0)]
+    if jobs:
+        pos = _fold_at(col, fold)
+        if pos is None and hasattr(col, "add_custom_undo_entry"):
+            try:
+                pos = col.add_custom_undo_entry(LESSON_STEP)
+            except Exception:
+                pos = None
+        try:
+            for pid, uid, name, cids, did in jobs:
+                st = state[pid]
+                folder = st["lesson_folder"]
+                had = col.decks.id_for_name(folder)
+                try:
+                    if cids is None:
+                        col.decks.rename(did, name)
+                        made = did
+                    else:
+                        made = _filtered(col, name, cids, order=NEW_ORDER, did=did)
+                        made = col.decks.id_for_name(name) if made is True else made
+                except Exception:
+                    traceback.print_exc()
+                    made = None
+                if made:
+                    st.setdefault("lesson_decks", {})[uid] = int(made)
+                now = col.decks.id_for_name(folder)
+                if now and not had and not _dyn(col, now):
+                    _note_built(now)  # made with it, so the tidy may clear it
+        finally:
+            if pos is not None and hasattr(col, "merge_undo_entries"):
+                try:
+                    col.merge_undo_entries(pos)
+                except Exception:
+                    pass
+    for p, st in runs:
+        out[p["id"]] = [uid for uid, did in (st.get("lesson_decks") or {}).items() if _dyn(col, did)]
+    return {"work": len(jobs), "decks": out}
+
+
+def lesson_sync(plan_list, fold=None):
+    """Main thread: _lesson_sync for these plans, saved; the screens redraw
+    when a deck was built. Never raises."""
+    if not mw.col or not plan_list:
+        return {"work": 0, "decks": {}}
+    c = _pcfg()
+    state = _state_cfg(c)
+    if not any((state.get(p["id"]) or {}).get("lesson_deck") for p in plan_list if p):
+        return {"work": 0, "decks": {}}
+    try:
+        got = _lesson_sync(mw.col, plan_list, state, _today(), fold=fold)
+    except Exception:
+        traceback.print_exc()
+        return {"work": 0, "decks": {}}
+    c["plans"] = state
+    _psave(c)
+    if got["work"]:
+        _after_change()
+    return got
+
+
+def _lesson_drop(col, st, uids=None, fold=None):
+    """A plan's lesson decks (or just these lessons'), emptied and removed:
+    their cards go home as they were. The ones it knows, and any filtered
+    deck in its folder (AnkiWeb's, from another computer); then its folder
+    once nothing's in it or under it. One undo step: fold's while it's
+    Anki's latest (Put back's), else its own. Returns how many."""
+    st = st or {}
+    mapped = {k: int(v) for k, v in (st.get("lesson_decks") or {}).items()}
+    ids = {d for k, d in mapped.items() if (uids is None or k in uids) and _dyn(col, d)}
+    folder = st.get("lesson_folder")
+    fid = col.decks.id_for_name(folder) if folder else None
+    if uids is None and fid and not _dyn(col, fid):
+        kids = [int(x) for x in col.decks.deck_and_child_ids(fid) if int(x) != int(fid)]
+        # another plan's by the same name share the folder: theirs stay (3.9.6's review)
+        theirs = {int(d) for s in _state_cfg().values() if isinstance(s, dict)
+                  for d in (s.get("lesson_decks") or {}).values()} - set(mapped.values())
+        ids |= {k for k in kids if _dyn(col, k) and k not in theirs}
+        if set(kids) <= ids and int(fid) in (_pcfg().get("built") or []) \
+                and not col.db.scalar("SELECT count() FROM cards WHERE did = ? OR odid = ?", int(fid), int(fid)):
+            ids.add(int(fid))  # empty and ours: removing it can't take a card with it
+    for k in [k for k, d in mapped.items() if d in ids or not _dyn(col, d)]:
+        mapped.pop(k, None)
+    st["lesson_decks"] = mapped
+    if uids is None:
+        st.pop("lesson_held", None)
+    else:
+        for k in uids:
+            (st.get("lesson_held") or {}).pop(k, None)
+    if not ids:
+        return 0
+    pos = _fold_at(col, fold)
+    if pos is None and hasattr(col, "add_custom_undo_entry"):
+        try:
+            pos = col.add_custom_undo_entry(LESSON_OFF)
+        except Exception:
+            pos = None
+    try:
+        col.decks.remove(sorted(ids))
+    finally:
+        if pos is not None and hasattr(col, "merge_undo_entries"):
+            try:
+                col.merge_undo_entries(pos)
+            except Exception:
+                pass
+    return len(ids)
+
+
+def _lesson_prune(col, state):
+    """Each plan's lesson decks, the ones still here (an undo took some away)."""
+    for st in state.values():
+        if isinstance(st, dict) and st.get("lesson_decks"):
+            st["lesson_decks"] = {k: int(v) for k, v in st["lesson_decks"].items() if _dyn(col, v)}
+
+
+def _lesson_did(pid, uid):
+    """B: the deck a lesson is in now, with cards in it; None otherwise."""
+    st = _state_cfg().get(pid) or {}
+    did = (st.get("lesson_decks") or {}).get(uid)
+    if not did or not mw.col or not _dyn(mw.col, did):
+        return None
+    return int(did) if mw.col.db.scalar("SELECT count() FROM cards WHERE did = ?", int(did)) else None
+
+
+def _go_deck(did):
+    """Anki's Study screen on a deck."""
+    try:
+        mw.col.decks.select(int(did))
+        mw.moveToState("overview")
+        return True
+    except Exception:
+        traceback.print_exc()
+        return False
+
+
+def lesson_view(plan, st, today):
+    """B's part of the plan's card (None on A): today's lesson with a deck
+    (its unit id; the first, if two open today), and the cards of open
+    lessons another add-on's filtered deck holds, so the card can say so."""
+    if not st or not st.get("lesson_deck"):
+        return None
+    decks = st.get("lesson_decks") or {}
+    todays = [u["id"] for u in P.units(mine(plan)["doc"]) if str(u.get("opens") or "") == today]
+    first = next((x for x in todays if x in decks), todays[0] if todays else None)
+    return {"today": first, "held": sum(int(n) for n in (st.get("lesson_held") or {}).values())}
 
 
 # 3.9.1: what refresh_progress leaves in _state; its last answer, and what it was read from
@@ -2141,7 +2593,10 @@ def morning_opened():
     if not today or opened.get("day") != today or not _undo_ok(opened.get("label")):
         return None
     n = sum(int(v[1] or 0) for v in (opened.get("per") or {}).values() if isinstance(v, (list, tuple)) and len(v) > 1)
-    return {"n": n, "sync": _unsynced()} if n else None
+    if not n:
+        return None
+    # Today's lesson, B: they're in decks of their own
+    return dict({"n": n, "sync": _unsynced()}, **({"decks": True} if opened.get("decks") else {}))
 
 
 OPENED_DATES = 60  # 3.8.1: the dates an open names, kept for its line
@@ -2221,6 +2676,10 @@ def board_view(c):
         day = (_state.get("plan_focus") or {}).get(card["id"])
         if day:
             card["focus"] = day  # 3.8.0: Browse › Show on my plan
+        try:
+            joy(card, today)  # 3.9.6: what's happened to it since it was last looked at
+        except Exception:
+            traceback.print_exc()
     from . import team_flow
     for card in cards:
         try:
@@ -2231,10 +2690,208 @@ def board_view(c):
     names = {sq["id"]: sq.get("name") or "" for sq in _my_squads(c)}
     offers = offers_view(client().session.get("plan_offers"), names, {p["id"] for p in plan_list},
                          set(pc.get("plan_offers_dismissed") or []))
+    # plans, end to end: the empty tab's line about my exam (Settings), while no plan I follow or
+    # write ends by it; and whether I write any (its Your plans…)
+    authored = client().session.get("plans_authored") or []
+    ends = [P.last_day(p["doc"]) for p in plan_list] + [P.last_day(a.get("doc")) for a in authored]
     # 3.8.1: an invite to co-write a plan, or to keep one, from the day's first board; and
     # the morning's dates, for its line here when Due is off (__init__ hands over morning_opened())
     return {"cards": cards, "offers": offers, "invites": list(client().session.get("plan_invites") or []),
-            "opened_dates": opened_dates()}
+            "opened_dates": opened_dates(), "exam": P.exam_way(str((c or {}).get("exam_date") or ""), today, ends),
+            "writes": bool(authored)}
+
+
+# ---- 3.9.6: the plan's joys (plans.joy_step; Sam's picks, the "Joy on the plan card" mock) ----
+# A set done pops on the path and Pip hops to it; halfway, three-quarters and
+# the last set are a line each with Share and ×; the finish line is a show
+# over the Decks screen, then a line with Share; Behind cleared says Caught
+# up for the rest of the day; the first morning says Day one, Pip's let's-go.
+# What's played is plans.json's "joy" (this profile's, never sent): each
+# moment is claimed the first time it's on screen (You › Plans, the Decks
+# screen up) and plays from then, a redraw in its seconds going on from where
+# it is. Nothing new is asked of the server.
+
+JOY_KEY = "joy"
+
+
+def _joy_states(c=None):
+    j = (c if c is not None else _pcfg()).get(JOY_KEY)
+    return j if isinstance(j, dict) else {}
+
+
+def joy(card, today, shown=False, now=None):
+    """card["joy"]: the card's joys as the board draws them (P.joy_step's
+    view, with Pip's markup for its moments: Settings › Pip, in my look), or
+    None. What changed goes back in plans.json; a plan just finished counts
+    for the closet (closet_flow.note_plan_done). Main thread."""
+    import time
+    pid = str(card.get("id") or "")
+    if not card.get("path") or not pid:
+        card["joy"] = None
+        return None
+    pc = _pcfg()
+    states = _joy_states(pc)
+    st0 = states.get(pid)
+    st, view = P.joy_step(st0, card["path"], card.get("behind"), today, time.time() if now is None else now,
+                          shown=shown, name=str(card.get("name") or ""))
+    if st != st0 and st is not None:
+        states[pid] = st
+        pc[JOY_KEY] = states
+        _psave(pc)
+        f = st.get("fin") if isinstance(st.get("fin"), dict) else {}
+        if f.get("day") and not ((st0 or {}).get("fin") or {}).get("day"):
+            try:
+                from . import closet_flow
+                closet_flow.note_plan_done(pid)  # 3.9.6: three plans with every set done, the Finisher's ribbon
+            except Exception:
+                traceback.print_exc()
+    card["joy"] = _joy_pips(view, pid) if view else None
+    return card["joy"]
+
+
+def _joy_pips(view, pid):
+    """Pip for the moments that have one (a set done's hop, a move from the
+    day done's mix, never the last one, the same one through its redraws;
+    day one's let's-go), while they're out; none with Pip off."""
+    from . import rooms
+    if not rooms.sev_on():
+        return view
+    from . import sev
+    look = rooms.my_look()
+    pop, one = view.get("pop"), view.get("day1")
+    if pop and pop.get("ago") is not None:
+        moves = _state.setdefault("joy_moves", {})
+        key = f"{pid}:{pop['uid']}"
+        if key not in moves:
+            moves[key] = rooms.pick("hop")
+        pop["pip"] = re.sub(r'<rect class="cf"[^>]*/>', "", sev.move("hop", moves[key], rest=pop["ago"] > 1.5, look=look,
+                                                                      label="Pip: a set done"))
+    if one and one.get("ago") is not None:
+        one["pip"] = sev.move("ready", "ready", rest=one["ago"] > 1.5, look=look, label="Pip: day one")
+    return view
+
+
+def joy_claim(cards, c=None):
+    """You › Plans is drawn with the board up: the plan it shows claims what's
+    waiting for it, which plays from now (once). Main thread."""
+    if not cards or not app.board_up():
+        return
+    from . import board
+    card = board._picked_plan(cards, c if c is not None else cfg())
+    today = _state["labels"][0] if _state["labels"] else ""
+    if card and today:
+        try:
+            joy(card, today, shown=True)
+        except Exception:
+            traceback.print_exc()
+
+
+def joy_show():
+    """At a board draw on the Decks screen: a plan I follow just finished
+    plays its show over it (board.finish_js, show.js), once a plan; the next
+    one waits for the next draw. Main thread."""
+    import time
+    if not app.board_up() or not _state.get("board_shown"):
+        return False
+    pc = _pcfg()
+    states = _joy_states(pc)
+    mine = {p["id"]: p for p in followed()}
+    for pid, st in states.items():
+        f = (st or {}).get("fin") if isinstance(st, dict) else None
+        if not isinstance(f, dict) or not f.get("day") or f.get("at") or pid not in mine:
+            continue
+        f["at"] = time.time()
+        _psave(pc)
+        from . import board
+        app.board_eval(board.finish_js(_finish_view(pid, mine[pid], f)))
+        return True
+    return False
+
+
+def _finish_view(pid, plan, f):
+    """What the finish show draws: the plan's name, its numbers, Pip (in my
+    look, a hat or costume off for the grad cap that lands on it) and its
+    accent; Pip off, no Pip."""
+    from . import board, rooms
+    out = {"pid": pid, "name": str(f.get("name") or plan.get("name") or "the plan"),
+           "sets": int(f.get("sets") or 0), "cards": int(f.get("cards") or 0), "weeks": int(f.get("weeks") or 0),
+           "a": list(board.accent_pair(cfg().get("accent"))), "pip": None}
+    if rooms.sev_on():
+        from . import closet, sev
+        from .closet_art import ART
+        bare = [k for k in closet.clean(rooms.my_look())
+                if closet.BY[k]["slot"] != closet.COSTUME and "head" not in closet.places(k)]
+        cf = lambda s: re.sub(r'<rect class="cf"[^>]*/>', "", s)  # noqa: E731
+        out["pip"] = {"hop": cf(sev.move("hop", "hop", rest=True, look=bare, label="Pip")),
+                      "jump": cf(sev.move("hop", "jump", look=bare, label="Pip: finished")),
+                      "still": sev.svg("hop", rest=True, look=bare + ["gradcap"], label="Pip in its grad cap"),
+                      "cap": ART["gradcap"][0]}
+    return out
+
+
+def joy_x(pid, key):
+    """× on a milestone's line: gone for today (it would be tomorrow either way)."""
+    today = _state["labels"][0] if _state["labels"] else ""
+    pc = _pcfg()
+    states = _joy_states(pc)
+    st = P.joy_dismiss(states.get(pid), key, today)
+    if st is None:
+        return
+    states[pid] = st
+    pc[JOY_KEY] = states
+    _psave(pc)
+    app.swap(cfg())
+
+
+def _joy_menu(items):
+    """The joy line's Share: a menu at the pointer, as the board's Share is."""
+    from aqt.qt import QCursor, QMenu
+    menu = QMenu(mw)
+    for label, fn in items:
+        menu.addAction(label).triggered.connect(lambda _=False, f=fn: f())
+    menu.exec(QCursor.pos())
+
+
+def joy_share(pid, key):
+    """Share on a joy's line (or the finish show's banner): as text, or as a
+    picture (sharecard's plan card: the path, Pip with its hop trail). The
+    card count starts as Privacy's Reviews switch says. Made here; nothing
+    is posted. Main thread."""
+    if key not in P.JOY_KEYS:
+        return
+    c = cfg()
+    card = next((x for x in board_view(c).get("cards") or [] if str(x.get("id")) == str(pid)), None)
+    j = (card or {}).get("joy") or {}
+    line = j.get("line") if key != "fin" and (j.get("line") or {}).get("key") == key else None
+    if (key == "fin" and not j.get("fin")) or (key != "fin" and line is None):
+        return
+    from . import sharecard
+    from .ui import copy_text
+    num = P.joy_numbers(card["path"])
+    name = str(card.get("name") or "the plan")
+    text = P.joy_text(key, name, num, line, cards=sharecard.privacy(c)["reviews"])
+
+    def as_text():
+        copy_text(text)
+        tooltip("Copied.")
+    _joy_menu([("As text", as_text), ("As a picture…", lambda: joy_picture(pid, key, card))])
+
+
+def joy_picture(pid, key, card):
+    """Share › As a picture… on a joy: the story card, made here (sharecard.plan)."""
+    from . import sharecard as SC
+    from .rooms import sev_on
+    from .ui.share_card_dialog import ShareCardDialog
+    num = P.joy_numbers(card["path"])
+    line = (card.get("joy") or {}).get("line") or {}
+    brow = {"fin": "Finished", "half": "Halfway", "threeq": "Three-quarters", "last": "The last set"}[key]
+    d = SC.plan(str(card.get("name") or "the plan"), num["sets"], num["sets"] if key == "fin" else num["done"],
+                num["cards"] if key == "fin" else num["seen"], num["weeks"], brow=brow, sev=sev_on(), cap=key == "fin",
+                last=str(line.get("name") or "") if key == "last" else "")
+    pic = {"kind": "plan", "title": "Share this plan", "sizes": ("story",), "file": f"due-crew-plan-{pid}", "data": d}
+    dlg = ShareCardDialog(mw, lambda _k: pic, priv=SC.privacy(cfg()), tooltip=tooltip)
+    _state["share_card"] = dlg  # kept while it's open
+    dlg.show()
 
 
 # ---- board commands ----
@@ -2276,10 +2933,36 @@ def on_message(cmd, parts):
         set_skip(arg, parts[3], True)
     elif cmd == "planunskip" and arg and len(parts) > 3:
         set_skip(arg, parts[3], False)
-    elif cmd == "plancatch" and arg:
-        catch_menu(arg)
+    elif cmd == "plancatch" and arg:  # Due's Catch up…: Behind's sheet, as You › Plans has it; the old menu only where that has nothing
+        from . import plan_board
+        if plan_board.view(arg) is not None:
+            plan_board.behind(arg)
+        else:
+            catch_menu(arg)
+    elif cmd == "planstudyday" and arg and len(parts) > 3:  # 3.9.6: a day's Study in You › Plans' week
+        study_day(arg, parts[3])
+    elif cmd == "planbehind" and arg:  # plans, end to end: You › Plans' Behind…, the sheet
+        from . import plan_board
+        plan_board.behind(arg)
+    elif cmd == "planunslide" and arg:  # ...the card's Undo after Slide, the same day
+        from . import plan_board
+        plan_board.unslide(arg)
+    elif cmd == "planfollowcode":  # ...the empty tab's box: a plan's code or its link, into Follow
+        from . import plan_board
+        plan_board.follow(arg)
+    elif cmd == "planopennew":  # ...Make a plan; Plan the way there, finishing by my exam's day
+        from . import plan_board
+        plan_board.open_new(arg)
     elif cmd == "plancatchstop" and arg:
         stop_catch(arg)
+    elif cmd == "planjoyx" and arg and len(parts) > 3:  # 3.9.6: × on a milestone's line
+        joy_x(arg, parts[3])
+    elif cmd == "planjoyshare" and arg and len(parts) > 3:  # 3.9.6: Share on a joy's line, or the finish's banner
+        joy_share(arg, parts[3])
+    elif cmd == "planjump" and arg and len(parts) > 3 and re.fullmatch(r"\d{4}-\d{2}-\d{2}", parts[3]):
+        # 3.9.6, after the last check: a set's segment on the path: its day's details, in its week
+        if any(p.get("id") == arg for p in followed()):
+            jump_to(arg, parts[3])
     elif cmd == "planweek" and arg and len(parts) > 3:
         # 3.5.0: the Plans tab's week, back and on (0: this week again); not saved
         weeks = _state.setdefault("plan_week", {})
@@ -2446,6 +3129,8 @@ def undo_morning(put_off_too=False):
                 for uid in uids if pid in state else ():
                     (state[pid].get("applied") or {}).pop(uid, None)
                     (state[pid].get("src") or {}).pop(uid, None)
+        if mw.col:
+            _lesson_prune(mw.col, state)  # Today's lesson, B: the undo took the decks it built
         pc["plans"] = state
         pc["plans_opened"] = {}
         _psave(pc)
@@ -2569,7 +3254,7 @@ def browse_left(pid, uids=()):
         cids = set()
         for u in us:
             cids |= idx.match(u, _swap(st), doc)
-        left = idx.unseen(cids)
+        left = idx.unseen(cids) - _aside(idx, st, doc)  # (not what I suspended myself)
         if not uids:
             left = {c for c in left if idx.cards[c][0] != -1}  # behind: opened, so waiting in my Anki now
     except Exception:
@@ -2713,11 +3398,12 @@ def open_date(pid, uid):
         return
     c["plans"] = state
     _psave(c)
+    lesson_sync([p], fold=res["label"] if res["n"] else None)  # B: its deck, in the open's undo step
     if res["n"]:
         _after_change()
         tooltip(opened_line(res), period=5000)
     else:
-        tooltip(f"Nothing new to open in {html.escape(res['names'][0] if res['names'] else 'that date')}.")
+        tooltip(f"Nothing new to open in {html.escape(res['names'][0] if res['names'] else 'that set')}.")
     refresh_progress()
     app.swap(cfg())
 
@@ -2766,7 +3452,7 @@ def open_next(pid, study=False, uid=None):
             else P.up_next(p["doc"], st.get("applied"), prog))
     if not left:
         if not uid:
-            tooltip("Every date of this plan is open.")
+            tooltip("Every set of this plan is open.")
         return
     u = left[0]
     # 3.8.1: a date further down Up next, opened first: the line says ahead of which
@@ -2787,11 +3473,16 @@ def open_next(pid, study=False, uid=None):
         if ahead:
             c["own_last"]["ahead"] = str(ahead.get("name") or "?")
     _psave(c)
+    lesson_sync([p], fold=res["label"] if res["n"] else None)  # B: its deck, in the open's undo step (its Undo too)
     if res["n"]:
         _after_change()
     else:
         tooltip(f"Nothing in {html.escape(str(u.get('name') or 'it'))} to open: it's open already.")
     refresh_progress()
+    if study and lesson_deck_on(pid):
+        did = _lesson_did(pid, u["id"])  # B: Open and study goes to the lesson's own deck
+        if did and _go_deck(did):
+            return
     if study:
         idx = P.DeckIndex(mw.col, st["deck_id"])
         new = [c2 for c2 in idx.match(u, _swap(st), p["doc"]) if idx.cards[c2] == (0, 0)]
@@ -2828,9 +3519,14 @@ def put_back_own(pid):
         if x["id"] != u["id"] and P.opened_here(applied, x):
             others |= idx.match(x, _swap(st), deck)
     cids = {c2 for c2 in idx.match(u, _swap(st), deck) - others if idx.cards[c2] == (0, 0)}
-    label = f"Due Crew: put back {u.get('name') or 'a date'}"
+    label = f"Due Crew: put back {u.get('name') or 'a set'}"
     was = _was(st, u["id"])
     n = P.hold_cards(mw.col, cids, label) if cids else 0
+    if n and st.get("lesson_deck"):
+        try:
+            _lesson_drop(mw.col, st, uids=[u["id"]], fold=label)  # B: Up next again, so its deck goes, in Put back's step
+        except Exception:
+            traceback.print_exc()
     for k in ("applied", "src", "own_opened"):
         (st.get(k) or {}).pop(u["id"], None)
     st["hold_yes"] = _hold_yes(p, st)  # settled before Put back adds to `held`, which isn't a yes
@@ -2864,6 +3560,8 @@ def own_undo(pid):
                     (st.get(k) or {}).pop(last["uid"], None)
                 else:
                     st.setdefault(k, {})[last["uid"]] = v
+        if mw.col:
+            _lesson_prune(mw.col, state)  # B: an Open's undo took its deck too
         pc["plans"] = state
         pc["own_last"] = {}
         _psave(pc)
@@ -2908,10 +3606,10 @@ def set_own(pid, own):
         elif own and not was:
             offer_hold([pid], words=lambda name, n, _own: (
                 "Hold back the rest",
-                f"{name}: {n:,} card{'s' if n != 1 else ''} of dates you haven't opened are open already. "
-                "Hold them back until you open their date?\n\nOne undo step; stopping the plan opens them again.",
+                f"{name}: {n:,} card{'s' if n != 1 else ''} of sets you haven't opened are open already. "
+                "Hold them back until you open their set?\n\nOne undo step; stopping the plan opens them again.",
                 "Hold back"))
-            tooltip("Nothing opens by itself now. Open the next date from You › Plans.", period=5000)
+            tooltip("Nothing opens by itself now. Open the next set from You › Plans.", period=5000)
         app.swap(cfg())
 
     _bg(lambda: cl.set_own(pid, own or None), done)
@@ -2948,7 +3646,7 @@ def own_view(plan, st, prog, today):
             # 3.8.1: each a link, Open on that date (open_next(pid, uid))
             "then_items": [{"uid": u["id"], "name": str(u.get("name") or "?"), "n": to_open(u)} for u in left[1:4]],
             "at": P.plan_at(real, today),
-            "pace": f"You opened {recent} date{'s' if recent != 1 else ''} in the last two weeks." if recent else None,
+            "pace": f"You opened {recent} set{'s' if recent != 1 else ''} in the last two weeks." if recent else None,
             "finish": P.finish_check(real, len(left), recent, today), "last": last, "back": back}
 
 
@@ -2984,7 +3682,7 @@ def move_menu(pid, uid):
     ev = P.event_of(p["doc"], u)  # 3.8.1: by the event's id (its name never matched)
     from aqt.qt import QCursor, QMenu
     menu = QMenu(mw)
-    head = menu.addAction(f"Move {u.get('name') or 'this date'} to")
+    head = menu.addAction(f"Move {u.get('name') or 'this set'} to")
     head.setEnabled(False)
     for k in range(1, 8):
         day = P._later(u["opens"], k)
@@ -3031,11 +3729,11 @@ def reset_lines(p):
     names = {u["id"]: str(u.get("name") or "?") for u in P.units(p.get("doc"))}
     sk = [names.get(u, "?") for u in p.get("skipped") or [] if u in names]
     if sk:
-        out.append(f"{len(sk)} skipped date{'s come' if len(sk) != 1 else ' comes'} back: " + ", ".join(sk[:3])
+        out.append(f"{len(sk)} skipped set{'s come' if len(sk) != 1 else ' comes'} back: " + ", ".join(sk[:3])
                    + (f" and {len(sk) - 3} more" if len(sk) > 3 else ""))
     mv = [names.get(u, "?") for u in (p.get("moved") or {}) if u in names]
     if mv:
-        out.append(f"{len(mv)} moved date{'s go' if len(mv) != 1 else ' goes'} back: " + ", ".join(mv[:3])
+        out.append(f"{len(mv)} moved set{'s go' if len(mv) != 1 else ' goes'} back: " + ", ".join(mv[:3])
                    + (f" and {len(mv) - 3} more" if len(mv) > 3 else ""))
     if p.get("paused") or p.get("until") or p.get("since"):
         out.append("Your pause ends")
@@ -3054,7 +3752,7 @@ def reset_days(pid):
         return
     from . import sheets
     sheets.confirm("Reset to default?", "\n".join("\u2022 " + x for x in lines)
-                   + "\n\nCards already open stay open. Dates that come back and have passed count as behind.",
+                   + "\n\nCards already open stay open. Sets that come back and have passed count as behind.",
                    "Reset", lambda: _reset_days(pid))
 
 
@@ -3210,6 +3908,8 @@ def catch_menu(pid):
     today = _today()
     n = P.waiting_new(p["doc"], prog, today)
     if not n:
+        tooltip("Nothing's waiting from earlier sets now.")
+        app.swap(cfg())
         return
     from aqt.qt import QCursor, QMenu
     menu = QMenu(mw)
@@ -3336,7 +4036,7 @@ def plan_menu(pid):
         a.setChecked(int(p.get("early") or 0) == n)
         a.triggered.connect(lambda _=False, n=n: set_early(pid, n))
     # G3: skip a date I already know (the ones around now and ahead)
-    skip = menu.addMenu("Skip a date")
+    skip = menu.addMenu("Skip a set")
     today = _today()
     week_ago = S.iso(S.d(today) - datetime.timedelta(days=7))
     ahead = [u for u in P.units(p["doc"]) if str(u.get("opens") or "") >= week_ago][:20]
@@ -3410,7 +4110,7 @@ def push_back(pid):
             _psave(c)
         refresh_progress()
         app.swap(cfg())
-        tooltip(f"Your dates moved {ask['push']} day{'s' if ask['push'] != 1 else ''} later. The crew's stay put.")
+        tooltip(f"Your dates moved {ask['push']} day{'s' if ask['push'] != 1 else ''} later. The plan's stay put.")
     _bg(lambda: cl.set_schedule(pid, new), done)
 
 
@@ -3460,7 +4160,7 @@ def open_schedule(pid, then=None):
                 _open_now([fresh], toast=False)  # today's share, on the new schedule
             refresh_progress()
             app.swap(cfg())
-            tooltip("Schedule saved." if want else "Schedule off: dates open whole, as the plan has them.")
+            tooltip("Schedule saved." if want else "Schedule off: sets open whole, as the plan has them.")
         if then:
             then()
     _bg(lambda: cl.set_schedule(pid, want), done)
@@ -3517,6 +4217,11 @@ def _run_on(pid, did):
         from .ui.follow_dialog import ask_swap
         if not ask_swap(mw, swap, P.found_total(idx, p["doc"], swap)):
             swap = None
+    if st and st.get("lesson_decks") and int(st.get("deck_id") or 0) != int(did):
+        try:
+            _lesson_drop(mw.col, st)  # Today's lesson, B: the old deck's cards go home; the new deck's get decks
+        except Exception:
+            traceback.print_exc()
     if st:
         st.update(deck_id=did, swap=list(swap) if swap else None)
     else:
@@ -3600,6 +4305,12 @@ def _stop(pid, untag):
         if held and mw.col:
             P.open_cards(mw.col, held, f"Due Crew: stop {p.get('name') or 'plan'}")
             _after_change()
+        if mw.col and (state.get(pid) or {}).get("lesson_decks"):
+            try:
+                if _lesson_drop(mw.col, state.get(pid)):  # Today's lesson, B: its decks go with it
+                    _after_change()
+            except Exception:
+                traceback.print_exc()
         if untag:
             _drop_plan_tags(state.get(pid), p.get("name"))
         state.pop(pid, None)
@@ -3733,16 +4444,16 @@ def held_view(pid):
     lines = []
     for name, opens, n in P.held_rows(idx, doc, held, _swap(st)):
         if name is None:
-            lines.append(f"On no date now · {n:,}")
+            lines.append(f"On no set now · {n:,}")
         else:
             lines.append(f"{name} · {n:,}" if own or not opens else f"{name} · {P.fmt_day(opens)} · {n:,}")
     if holding:
-        why = ("You said yes to Hold back: the new cards of dates you haven't opened wait, suspended, till you open them."
-               if own else "You said yes to Hold back: the new cards of dates still to come wait, suspended, till their day.")
+        why = ("You said yes to Hold back: the new cards of sets you haven't opened wait, suspended, till you open them."
+               if own else "You said yes to Hold back: the new cards of sets still to come wait, suspended, till their day.")
     elif own:
-        why = "You put these back. They open when you open their date again."
+        why = "You put these back. They open when you open their set again."
     else:
-        why = "Hold back is off; these stayed shut."
+        why = "Hold back is off; these stayed suspended."
     return {"name": str(p.get("name") or "The plan"), "n": len(held), "lines": lines[:HELD_LINES],
             "more": max(0, len(lines) - HELD_LINES), "why": why, "holding": holding, "leeches": len(shut & idx.leech)}
 
@@ -3783,7 +4494,7 @@ def open_held(pid, stop=False):
     if n:
         _after_change()
     refresh_progress()
-    said = f"Opened {n:,} card{'s' if n != 1 else ''}. Edit › Undo shuts them again." if n else "Nothing to open."
+    said = f"Opened {n:,} card{'s' if n != 1 else ''}. Edit › Undo suspends them again." if n else "Nothing to open."
     tooltip(said + (" Nothing more is held back." if stop else ""), period=5000)
     app.swap(cfg())
 
@@ -3939,11 +4650,12 @@ def open_follow(code=""):
     if not mw.col:
         return
     from .ui.follow_dialog import FollowDialog
-    dlg = FollowDialog(mw, client(), mw.col, code=code, today=_today(), on_followed=on_followed)
+    dlg = FollowDialog(mw, client(), mw.col, code=code, today=_today(), on_followed=on_followed,
+                       lesson_on=lesson_deck_on)
     dlg.exec()
 
 
-def on_followed(plan, deck_id, swap, late, hold=False):
+def on_followed(plan, deck_id, swap, late, hold=False, lesson=None):
     """Main thread, after POST /plans/follow: this computer runs it on
     `deck_id`; late is "open" (open what has opened) or "skip". 3.7.6:
     "skip:a,b" starts where everyone is (the passed dates skipped on my
@@ -3953,16 +4665,36 @@ def on_followed(plan, deck_id, swap, late, hold=False):
     again keeps what this computer already applied: only the deck changes.
     hold (3.3, asked for at Follow): later dates' active, never-studied
     cards are suspended now, one undo step, and remembered so stopping
-    opens them again."""
+    opens them again. lesson: Today's lesson, True its own deck (B), False
+    in the plan's deck (A), None as it was (or as chosen before, `lesson_next`)."""
     cl = client()
     cl.remember_plan(plan)
     c = _pcfg()
     state = _state_cfg(c)
     st = state.get(plan["id"])
+    if st and st.get("lesson_decks") and int(st.get("deck_id") or 0) != int(deck_id) and mw.col:
+        try:
+            _lesson_drop(mw.col, st)  # Today's lesson, B: on another deck now, the old one's cards go home
+        except Exception:
+            traceback.print_exc()
     if st:
         st.update(deck_id=int(deck_id), swap=list(swap) if swap else None)
     else:
         state[plan["id"]] = new_state(mw.col, plan, deck_id, swap)
+    st = state[plan["id"]]
+    _take_next(c, plan["id"], st)
+    if lesson is not None and st is not None:
+        was = bool(st.get("lesson_deck"))
+        if lesson:
+            st["lesson_deck"] = True
+        else:
+            st.pop("lesson_deck", None)
+            if was and mw.col:
+                try:
+                    if _lesson_drop(mw.col, st):  # back to A: its decks go
+                        _after_change()
+                except Exception:
+                    traceback.print_exc()
     kind, _, rest = str(late).partition(":")
     if hold and mw.col:
         state[plan["id"]]["hold_yes"] = True  # 3.8.1: my yes, kept (hold_new holds what authors add later)
@@ -3998,7 +4730,7 @@ def on_followed(plan, deck_id, swap, late, hold=False):
         # "skip:" saved the passed dates as skipped on my follow, so today's opens as usual
         res = _open_now([fresh], mode="skip" if kind == "skip" and not rest else "open")
         if not ok:
-            tooltip("Following. Couldn't save how you start, so the earlier dates wait here; "
+            tooltip("Following. Couldn't save how you start, so the earlier sets wait here; "
                     "Plan \u25be \u203a Push my dates back… or Open now on each.", period=7000)
             app.swap(cfg())
             return
@@ -4231,13 +4963,16 @@ def open_cards_now(cids, name, first=True, study=False):
     if not mw.col:
         return 0
     shut = P.openable_ids(mw.col, cids)  # what this open unsuspends
-    n = P.open_cards(mw.col, cids, f"Due Crew: open {name}", first=first)
+    label = f"Due Crew: open {name}"
+    n = P.open_cards(mw.col, cids, label, first=first)
     if n:
         _after_change()
     try:
         _claim_opened(shut if n else ())
     except Exception:
         traceback.print_exc()
+    if n and not study:  # B: the lessons they're on, in decks of their own, in this undo step (Study makes its own)
+        lesson_sync(followed(), fold=label)
     refresh_progress()
     if study:
         cl = sorted({int(c) for c in cids})
@@ -4394,7 +5129,7 @@ def copy_selector(browser):
     from aqt.qt import QApplication
     QApplication.clipboard().setText(text)
     what = f"{n:,} note{'s' if n != 1 else ''}" if notes_mode else f"{n:,} card{'s' if n != 1 else ''}"
-    tooltip(f"Copied {what}. Paste into a date on duecrew.com." + (" A date takes up to 5,000." if n > 5000 else ""))
+    tooltip(f"Copied {what}. Paste into a set on duecrew.com." + (" A set takes up to 5,000." if n > 5000 else ""))
 
 
 def tag_for_plan(browser):

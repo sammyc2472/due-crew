@@ -681,7 +681,7 @@ def pieces(tree, key, cap, placed):
 
 UNITS_MAX = 200
 SOURCES_MAX = 50
-FULL = f"A plan holds up to {UNITS_MAX} dates."
+FULL = f"A plan holds up to {UNITS_MAX} sets."
 
 
 class _Days:
@@ -712,13 +712,16 @@ class _Days:
         return n
 
 
-def fill(doc, items, frm, until, cap, days, new_id, end=None):
+def fill(doc, items, frm, until, cap, days, new_id, end=None, apart=False):
     """The builder's fill: puts `items` (pieces) on study days from `frm`
     (none starting after `until`), `cap` cards a day, chapters whole;
     nothing runs past `end` (an even piece there takes fewer days:
     clipped). Works on `doc` itself. {placed, last, left, clipped, note,
     touched}: the cards it put on, its last day, what didn't go on (in
-    order), the note a ceiling left, the dates it made or added to."""
+    order), the note a ceiling left, the dates it made or added to.
+    apart (the add-on's, A resource at my pace): each piece a date of its
+    own, in order, never joining a day's date; the days and the pace the
+    same (the builder's Fill, with apart False, is the twin)."""
     dd = _Days(doc, days)
     units = doc.setdefault("units", [])
     out = {"placed": 0, "last": None, "left": [], "clipped": False, "note": "", "touched": set()}
@@ -728,7 +731,7 @@ def fill(doc, items, frm, until, cap, days, new_id, end=None):
         state["d"], state["room"], state["used"] = dd.next(state["d"]), cap or float("inf"), 0
 
     def unit_on(d):
-        u = next((x for x in units if x.get("opens") == d and not x.get("even")), None)
+        u = None if apart else next((x for x in units if x.get("opens") == d and not x.get("even")), None)
         if u is None:
             if len(units) >= UNITS_MAX:
                 out["note"] = FULL
@@ -738,15 +741,17 @@ def fill(doc, items, frm, until, cap, days, new_id, end=None):
         return u
 
     def room_for(it):
+        if apart:
+            return True
         f = "tags" if kind_of(it["key"]) == "tag" else "decks"
         u = next((x for x in units if x.get("opens") == state["d"] and not x.get("even")), None)
         return u is None or path_of(it["key"]) in (u.get(f) or []) or len(u.get(f) or []) < SOURCES_MAX
 
     def add_to(d, key):
         f = "tags" if kind_of(key) == "tag" else "decks"
-        had = next((x for x in units if x.get("opens") == d and not x.get("even")), None)
+        had = None if apart else next((x for x in units if x.get("opens") == d and not x.get("even")), None)
         if had and path_of(key) not in (had.get(f) or []) and len(had.get(f) or []) >= SOURCES_MAX:
-            out["note"] = f"A date holds up to {SOURCES_MAX} {'tags' if f == 'tags' else 'subdecks'}."
+            out["note"] = f"A set holds up to {SOURCES_MAX} {'tags' if f == 'tags' else 'subdecks'}."
             return None
         u = unit_on(d)
         if u is None:
@@ -914,6 +919,14 @@ def plan_start(doc, fallback):
     return min(str(u["opens"]) for u in us) if us else fallback
 
 
+def next_free_day(doc, days, start):
+    """The + on a tag (ptagsPanel's, with no day picked): the first study day
+    after the plan's last day (an even date's due date), or from its start
+    when it has no dates (start: plan_start's, the builder's)."""
+    ld = last_day(doc)
+    return _Days(doc, days).first(_iso(_d(ld) + datetime.timedelta(days=1)) if ld else start)
+
+
 def next_monday(today):
     d = _d(today)
     while d.weekday() != 0:
@@ -983,7 +996,7 @@ def lay_out(doc, tree, pace, cover, start, today, new_id, week_ahead=False, aim=
     out = {"note": "", "daily": None, "touched": set()}
     if until and dd.first(frm) > until:
         out["note"] = (f"Nothing fits by {P.fmt_day(end)}: "
-                       + (f"the dates already run to {P.fmt_day(last_day(doc))}" if last_day(doc) else f"the plan starts {P.fmt_day(start)}")
+                       + (f"the sets already run to {P.fmt_day(last_day(doc))}" if last_day(doc) else f"the plan starts {P.fmt_day(start)}")
                        + ". Move the finish date." if end and until == end else "No study days left in that week.")
         return out
     if pace.get("mode") == "end":
@@ -1020,7 +1033,7 @@ def lay_out(doc, tree, pace, cover, start, today, new_id, week_ahead=False, aim=
              else "No study days left in that week." if week_ahead else "Nothing fit."]
     if left_n and (r["note"] or not week_ahead):
         tip = (" Move the finish date." if end and not r["note"]
-               else " Raise the cards a day for fewer, bigger dates." if r["note"] and pace.get("mode") == "daily" else "")
+               else " Raise the cards a day for fewer, bigger sets." if r["note"] and pace.get("mode") == "daily" else "")
         words.append(f"{r['note'] + ' ' if r['note'] else ''}{left_n:,} didn't fit"
                      f"{' by ' + P.fmt_day(end) if end and not r['note'] else ''}: {left_names(r['left'])}.{tip}")
     out["note"] = " ".join(words)

@@ -53,18 +53,6 @@ const Cards = (() => {
     while (t.length > 1 && c.measureText(`${t}…`).width > max) t = t.slice(0, -1);
     return [t === s ? s : `${t.trimEnd()}…`, min];
   }
-  // up to n lines, words kept whole where they fit
-  function wrap(c, s, max, size, weight, n) {
-    c.font = `${weight} ${size}px ${FONT}`;
-    const out = []; let cur = "";
-    for (const w of s.split(/\s+/)) {
-      const t = cur ? `${cur} ${w}` : w;
-      if (c.measureText(t).width <= max || !cur) cur = t; else { out.push(cur); cur = w; }
-    }
-    if (cur) out.push(cur);
-    if (out.length > n) { out.length = n; out[n - 1] = fit(c, `${out[n - 1]} …`, max, size, size, weight)[0]; }
-    return out.map((l) => fit(c, l, max, size, size, weight)[0]);
-  }
   const eyebrow = (c, s, x, y, size, pal, align) => text(c, s.toUpperCase(), x, y, size, pal.mut, { weight: 700, track: size * 0.12, align });
   async function head(c, pal, look, x, y, hgt) {
     const img = await logo(look);
@@ -76,12 +64,14 @@ const Cards = (() => {
   // ---- 3.8.1: Pip hops across my week (sharecard.py's landings and hops: change one, change both) ----
   // sev.still("hop", "%A%") from due_crew/sev.py, the one drawing; the suite checks this copy is it
   const SEV = '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80"><g><g transform="translate(21.5 47) rotate(155)"><g><rect x="-2.6" y="-1" width="5.2" height="12.5" rx="2.6" style="fill:%A%"/></g></g><g transform="translate(58.5 47) rotate(-155)"><g><rect x="-2.6" y="-1" width="5.2" height="12.5" rx="2.6" style="fill:%A%"/></g></g><rect x="28.5" y="63" width="9" height="9.5" rx="3" style="fill:%A%"/><rect x="42.5" y="63" width="9" height="9.5" rx="3" style="fill:%A%"/><rect x="20" y="27" width="40" height="39" rx="12.5" style="fill:%A%"/><rect x="25" y="31" width="11" height="5" rx="2.5" style="fill:#fff" opacity=".22"/><g><path d="M28.8 44.4 q4.2 -4.6 8.4 0" fill="none" style="stroke:#1f2a1f" stroke-width="2.2" stroke-linecap="round"/><path d="M42.8 44.4 q4.2 -4.6 8.4 0" fill="none" style="stroke:#1f2a1f" stroke-width="2.2" stroke-linecap="round"/></g><path d="M35 50.5 q5 7 10 0 z" style="fill:#1f2a1f"/></g></svg>';
+  // 3.9.6: sev.still("hop", "%A%", look=["gradcap"]), a finished plan's Pip in its grad cap (the suite checks it too)
+  const SEV_CAP = '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80"><g><g transform="translate(21.5 47) rotate(155)"><g><rect x="-2.6" y="-1" width="5.2" height="12.5" rx="2.6" style="fill:%A%"/></g></g><g transform="translate(58.5 47) rotate(-155)"><g><rect x="-2.6" y="-1" width="5.2" height="12.5" rx="2.6" style="fill:%A%"/></g></g><rect x="28.5" y="63" width="9" height="9.5" rx="3" style="fill:%A%"/><rect x="42.5" y="63" width="9" height="9.5" rx="3" style="fill:%A%"/><rect x="20" y="27" width="40" height="39" rx="12.5" style="fill:%A%"/><rect x="25" y="31" width="11" height="5" rx="2.5" style="fill:#fff" opacity=".22"/><g><path d="M28.8 44.4 q4.2 -4.6 8.4 0" fill="none" style="stroke:#1f2a1f" stroke-width="2.2" stroke-linecap="round"/><path d="M42.8 44.4 q4.2 -4.6 8.4 0" fill="none" style="stroke:#1f2a1f" stroke-width="2.2" stroke-linecap="round"/></g><path d="M35 50.5 q5 7 10 0 z" style="fill:#1f2a1f"/><rect x="30" y="20" width="20" height="9" rx="2" style="fill:#30343b"/><path d="M21.5 20.5 L40 12.8 L58.5 20.5 L40 28.2 Z" style="fill:#454b55"/><path d="M40 20.5 L53 22 L53.6 30" stroke="#f2b33d" stroke-width="1.4" fill="none"/><rect x="51.8" y="29" width="3.6" height="5.4" rx="1.2" style="fill:#f2b33d"/><circle cx="40" cy="20.5" r="1.5" style="fill:#f2b33d"/></g></svg>';
   const SEV_SIZE = 1.8, SEV_FEET = 72.5 / 80, HOP = 0.45, DOT = 0.035, STEP = 0.16, ROOM = 100, YEAR_SEV = 220;
   const sevs = {};
-  const sevImg = (col) => (sevs[col] ||= new Promise((ok) => {
+  const sevImg = (col, cap) => (sevs[`${col}${cap ? ":cap" : ""}`] ||= new Promise((ok) => {
     const img = new Image();
     img.onload = () => ok(img); img.onerror = () => ok(null);
-    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(SEV.split("%A%").join(col))}`;
+    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent((cap ? SEV_CAP : SEV).split("%A%").join(col))}`;
   }));
   // the days Pip lands on: the days studied so far, or today alone on today's card
   const landings = (d) => (d.sev ? d.days.map((c, i) => (c.studied && !c.future && (c.today || !d.one) ? i : -1)).filter((i) => i >= 0) : []);
@@ -282,18 +272,46 @@ const Cards = (() => {
     text(c, "duecrew.com", W - P, H - P + 6, 32, pal.mut, { align: "right" });
   }
 
-  // ---- K4: a plan, finished ----
+  // ---- K4: a plan (3.9.6, the mock's redrawn: sharecard.py's plan card, change one, change both): its path a
+  // segment a set, Pip hopping each one done and standing on the last, in its grad cap when it's finished;
+  // "FINISHED", its name, "19 sets · 2,046 cards · 6 weeks" (on its way: "Halfway", "10 of 19 sets · 1,033 cards").
+  // d: {name, sets, done, cards, weeks, brow, cap, last, sev, code}; without sets (the builder's), one segment, done
+  const PLAN_TOP = 640, PLAN_H = 30, PLAN_SEV = [340, 280], PLAN_HOP = 0.78, PLAN_STEP = 15, PLAN_DOT = 3.2, PLAN_TRAIL = 20;
+  const planGap = (sets) => (sets <= 30 ? 8 : sets <= 60 ? 4 : sets <= 120 ? 2 : 0);
+  const plural = (k, w) => `${n(k)} ${w}${k === 1 ? "" : "s"}`;
+  function planHops(d, x0, w, gap, W) {
+    const segs = Math.max(1, d.sets || 0), done = !d.sets ? segs : Math.max(0, Math.min(segs, d.done || 0));
+    const out = { dots: [], r: PLAN_DOT, sev: null };
+    if (d.sev === false || !done) return out;
+    const pitch = w + gap, foot = (i) => [x0 + i * pitch + w / 2, PLAN_TOP], h = Math.min(38, PLAN_HOP * pitch);
+    for (let i = 0; i + 1 < (pitch >= PLAN_TRAIL ? done : 0); i++) out.dots.push(...trail(foot(i), foot(i + 1), h, PLAN_STEP));  // too close: Pip alone
+    const z = done >= segs ? PLAN_SEV[0] : PLAN_SEV[1], [fx, fy] = foot(done - 1);
+    out.sev = [Math.min(fx - z / 2, W - z + 8), fy - z * SEV_FEET, z];
+    return out;
+  }
+  function planSub(d, on) {
+    const cards = on.cards !== false, sets = d.sets || 0, done = d.done || 0;
+    if (d.last) return `${d.last}, today`;
+    if (sets && done < sets) return `${n(done)} of ${plural(sets, "set")}${cards ? ` · ${plural(d.cards || 0, "card")}` : ""}`;
+    return [...(sets ? [plural(sets, "set")] : []), ...(cards ? [plural(d.cards || 0, "card")] : []), ...(d.weeks ? [plural(d.weeks, "week")] : [])].join(" · ");
+  }
   async function plan(c, W, H, size, d, on, pal, look) {
     const P = 78;
     await head(c, pal, look, P, P, 40);
-    const cx = P + 170, cy = 420;
-    c.strokeStyle = pal.g; c.lineWidth = 46; c.beginPath(); c.arc(cx, cy, 147, 0, Math.PI * 2); c.stroke();
-    text(c, "✓", cx, cy + 6, 120, pal.g, { weight: 800, align: "center", base: "middle" });
-    eyebrow(c, "Finished", P, 700, 32, pal);
-    const lines = wrap(c, d.name, W - 2 * P, 92, 700, 3);
-    lines.forEach((l, i) => text(c, l, P, 812 + i * 104, 92, pal.ink, { weight: 700 }));
-    const y = 812 + (lines.length - 1) * 104 + 76;
-    text(c, `${n(d.cards)} card${d.cards === 1 ? "" : "s"}${d.weeks ? ` over ${d.weeks} week${d.weeks === 1 ? "" : "s"}` : ""}`, P, y, 38, pal.mut);
+    const segs = Math.max(1, d.sets || 0), done = !d.sets ? segs : Math.max(0, Math.min(segs, d.done || 0));
+    const gap = planGap(segs), w = (W - 2 * P - (segs - 1) * gap) / segs;
+    for (let i = 0; i < segs; i++) { c.fillStyle = i < done ? pal.g : pal.g3; rr(c, P + i * (w + gap), PLAN_TOP, w, PLAN_H, Math.min(9, w / 3)); c.fill(); }
+    const hp = planHops(d, P, w, gap, W);
+    if (hp.sev) {
+      c.fillStyle = pal.g;
+      hp.dots.forEach(([x, y]) => { c.beginPath(); c.arc(x, y, hp.r, 0, Math.PI * 2); c.fill(); });
+      const img = await sevImg(pal.g, "cap" in d ? !!d.cap : (d.brow || "Finished") === "Finished");  // the builder's says nothing: finished
+      if (img) c.drawImage(img, hp.sev[0], hp.sev[1], hp.sev[2], hp.sev[2]);
+    }
+    eyebrow(c, d.brow || "Finished", P, 790, 30, pal);
+    const [nm, z] = fit(c, d.name || "", W - 2 * P, 96, 60, 700);
+    text(c, nm, P, 902, z, pal.ink, { weight: 700 });
+    text(c, planSub(d, on), P, 980, 40, pal.mut);
     if (on.code && d.code) text(c, `Follow it: ${d.code.slice(0, 4)} ${d.code.slice(4)}`, P, H - P, 34, pal.mut);
     text(c, "duecrew.com", W - P, H - P, 34, pal.mut, { align: "right" });
   }

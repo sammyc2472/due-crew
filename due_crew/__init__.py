@@ -433,6 +433,7 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
     if _state["board_shown"] and mw.state == "deckBrowser":
         _swap(cfg())        # page not rebuilt: safe to play cheers directly
         _play_cheers()
+        _joy_show()  # 3.9.6: after the cheers that came with it (it waits for their show)
     else:
         _rerender()         # deck_browser_did_render plays queued cheers
     rooms.refresh_widgets()  # 2.12: who's in the room, as of this fetch
@@ -569,6 +570,7 @@ def _board_html(c):
         notice = None
     due = due_flow.view(c)  # Due: the day's to-do, on top
     plans = plan_flow.board_view(c)  # 3.3: the plans I follow (3.8.0: You › Plans; offers on Squads too)
+    _state["dance_view"] = _dance_view(c)  # 3.9.6: song of the moment's dance floor (seen once it's on the page)
     return board.render(_board_data(), c, _state["ts"], notice=notice,
                         wrap=_wrap_info(), deltas=_deck_deltas(),
                         exam_eve=_exam_eve_info(),
@@ -587,7 +589,28 @@ def _board_html(c):
                                                              _state["entries"], c),
                         wrapped=_wrapped_banner(c), ahead=ahead_flow.board_line(c),
                         fridge=closet_flow.fridge(client().user_id),
-                        fridge_gone=closet_flow.gone())
+                        fridge_gone=closet_flow.gone(), dance=_state["dance_view"])
+
+
+def _dance_view(c):
+    """3.9.6: the dance floor's view (song_flow.floor_view), or None; never in the way of the board."""
+    try:
+        from . import song_flow
+        return song_flow.floor_view(_state["entries"], c)
+    except Exception:
+        traceback.print_exc()
+        return None
+
+
+def _dance_seen():
+    """3.9.6: the floor just drawn is on the page: what it showed is seen, so a new song hops in once."""
+    view = _state.pop("dance_view", None)
+    if view:
+        try:
+            from . import song_flow
+            song_flow.mark_seen(view)
+        except Exception:
+            traceback.print_exc()
 
 
 def _you(c, due, plans):
@@ -607,6 +630,7 @@ def _you(c, due, plans):
     try:
         if shown == "plans":
             team_flow.plan_lines(plans.get("cards"))  # the next exam's cards at risk, a line a plan
+            plan_flow.joy_claim(plans.get("cards"), c)  # 3.9.6: what's waiting to play on the plan shown plays now, once
             if not due and mw.col:
                 you["opened"] = plan_flow.morning_opened()  # Due off: its Not today is here
         elif shown == "insights":
@@ -653,7 +677,8 @@ _SCRIPTS = {"page": None}
 
 def _board_js(drawn=False):
     """(keep_me_in_view_js, fridge_js) for this draw: with the scripts when
-    the page was just drawn (drawn) or is another since they went."""
+    the page was just drawn (drawn) or is another since they went. 3.9.6:
+    fridge_js brings the dance floor's (dance_js) with it."""
     whole = drawn or _SCRIPTS["page"] != app.pages[0]
     _SCRIPTS["page"] = app.pages[0]
     return board.keep_me_in_view_js(scripts=whole), board.fridge_js(scripts=whole)
@@ -663,8 +688,10 @@ def _on_did_render(deck_browser):
     keep, fridge = _board_js(drawn=True)
     mw.web.eval("window.dcBK=%s;" % board._json.dumps(board.BOARD_KEY)  # 3.9.1: as the page's own script set it
                 + keep + _arrive_js() + (board.wrapped_js() if _state.get("wrapped_open") else "")
-                + fridge)  # 3.9.1: the doodles placed around the board, and draggable
+                + fridge)  # 3.9.1: the doodles placed around the board, and draggable (3.9.6: and the dance floor)
+    _dance_seen()
     _play_cheers()
+    _joy_show()
     if _state.get("plans_midday") and not _closing:
         # 3.7.3: an update that came while reviewing waits for the Decks screen
         from aqt.qt import QTimer
@@ -890,6 +917,10 @@ def _on_js(handled, message, context):
         due_flow.on_message(cmd, parts)  # Due
     elif cmd == "party":
         gamenight_flow.on_message(parts)  # 3.9.5's last round: You › Pip Party
+    elif cmd in ("songsearch", "songuse", "songclear", "songlisten", "songapp", "songprev", "songapple",
+                 "dancehide", "danceshow", "dancemotion", "dancefold"):
+        from . import song_flow
+        song_flow.on_message(cmd, parts)  # 3.9.6: song of the moment, and its dance floor
     elif cmd.startswith("ins") or cmd == "youins":
         from . import team_flow
         team_flow.on_message(cmd, parts)  # 3.8.0: You › Insights, a deck's
@@ -1100,6 +1131,18 @@ def _swap(c, focus=None):
         js += ("(function(){var f=document.querySelector('#due-crew [data-f=\"%s\"]');"
                "if(f){f.focus({preventScroll:true});}})();" % re.sub(r"[^A-Za-z0-9:_-]", "", focus))
     app.board_eval(js)  # 3.9.1: never into the page before the Decks page (it'd carry the board's key)
+    _dance_seen()
+    if not _pending_cheers:  # cheers about to land play first; the finish follows them (_commit)
+        _joy_show()
+
+
+def _joy_show():
+    """3.9.6: a plan just finished: its show over the Decks screen, once
+    (plan_flow.joy_show); after a cheer's show, when one's playing."""
+    try:
+        plan_flow.joy_show()
+    except Exception:
+        traceback.print_exc()
 
 
 def open_auth():

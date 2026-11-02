@@ -21,3 +21,9 @@
   Cache-Control: public, max-age=300
 /table.css
   Cache-Control: public, max-age=300
+/planface.js
+  Cache-Control: public, max-age=300
+/planface.css
+  Cache-Control: public, max-age=300
+/planpage/*
+  Cache-Control: public, max-age=300

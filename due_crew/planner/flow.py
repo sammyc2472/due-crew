@@ -22,6 +22,13 @@ _open = {}       # "plans", "start", "qids" -> the window, while it's open
 _asking = []     # my plans on their way for Your plans (one ask at a time)
 
 
+def _shut(w):
+    """A plan window closed by the add-on itself (the profile going, a window
+    in its place): never asked about changes waiting; they're kept here."""
+    w._may_close = True
+    w.close()
+
+
 def close_all():
     """profile_will_close: the plan windows go with the profile (their cards
     and decks are its collection's)."""
@@ -29,7 +36,7 @@ def close_all():
         _open.pop(key, None)
         if w is not None and getattr(w, "_alive", False):
             try:
-                w.close()
+                _shut(w)
             except RuntimeError:
                 pass  # Qt has it gone already
 
@@ -45,19 +52,31 @@ def _raise(key):
 
 # ---- the plan window ----
 
-def open_plans(select=None, tab=None):
+def web_window():
+    """The HTML plan window (round six), unless this computer's config says
+    "plan_window": "qt" (the Qt one, kept as it was)."""
+    return str(cfg().get("plan_window") or "") != "qt"
+
+
+def open_plans(select=None, tab=None, new=None):
     """Your plans (3.9.3, for everyone; labs before): signed in, a
     collection open. One request on the click: my plans. select: a plan's
-    id to start on; tab: the tab to start on ("dates", "layout"...)."""
+    id to start on; tab: the tab to start on ("dates", "layout"...); new:
+    New plan in it ({finish_by, exam, start}: the HTML window's)."""
     if not mw.col:
         return
     w = _open.get("plans")
     if w is not None and getattr(w, "_alive", False):
-        if not select or w.go_to_plan(select, tab):
+        if new is not None and hasattr(w, "new_open"):
+            w.new_open(**new)
             w.raise_()
             w.activateWindow()
             return
-        w.close()  # a plan it doesn't list (one just made): my plans asked again
+        if new is None and (not select or w.go_to_plan(select, tab)):
+            w.raise_()
+            w.activateWindow()
+            return
+        _shut(w)  # a plan it doesn't list (one just made): my plans asked again
     if not plan_flow._signed_in() or _asking:
         return  # (a second click while my plans are on their way: the one window)
     cl, gen = client(), app.generation
@@ -70,11 +89,31 @@ def open_plans(select=None, tab=None):
         if plans is None:
             tooltip("Due Crew couldn't be reached. Try again in a minute.")
             return
+        noted_followers(plans)
         w = _open.get("plans")
         if w is not None and getattr(w, "_alive", False):
-            w.close()  # one opened meanwhile (a plan made): this one, with every plan, in its place
-        show_plans(plans, select, tab)
+            _shut(w)  # one opened meanwhile (a plan made): this one, with every plan, in its place
+        show_plans(plans, select, tab, new)
     _bg(lambda: remote.my_plans(cl), done)
+
+
+def _closet(do):
+    """3.9.6: tell Pip's closet (closet_flow); never in the way of the window."""
+    try:
+        from .. import closet_flow
+        do(closet_flow)
+    except Exception:
+        import traceback
+        traceback.print_exc()
+
+
+def noted_followers(plans):
+    """3.9.6: my plans as Your plans lists them (GET /plans/mine, the one
+    request the window makes anyway): one I made with someone following it
+    besides me earns Pip's Folded map. Nothing else is asked or sent."""
+    from .core import others
+    if any(isinstance(p, dict) and p.get("role") == "owner" and others(p) > 0 for p in plans or []):
+        _closet(lambda cf: cf.note_followed())
 
 
 def make_here(cl):
@@ -89,9 +128,13 @@ def make_here(cl):
     return (lambda name, deck: remote.create(cl, name, deck)), made
 
 
-def show_plans(plans, select=None, tab=None):
-    from .window import PlanWindow
-    w = PlanWindow(mw, mw.col, plans, Ops(), select=select, tab=tab)
+def show_plans(plans, select=None, tab=None, new=None):
+    if web_window():
+        from .web import PlanWeb
+        w = PlanWeb(mw, mw.col, plans, Ops(), select=select, tab=tab, cfg=cfg(), new=new)
+    else:
+        from .window import PlanWindow
+        w = PlanWindow(mw, mw.col, plans, Ops(), select=select, tab=tab)
     _gone_on_close(w)
     _open["plans"] = w
     w.show()
@@ -177,6 +220,10 @@ class Ops:
         _bg(lambda: remote.save(cl, pid, version, doc, summary, post),
             lambda got: getattr(owner, "_alive", False) and gen == app.generation and done(got))
 
+    def gave_day(self):
+        """3.9.6: Give everyone a day saved on a plan I write: Pip's Kite. Main thread."""
+        _closet(lambda cf: cf.note_gave_day())
+
     def draft(self, pid):
         """The changes waiting on this plan here (draft.Draft), or None."""
         from .draft import Draft
@@ -207,7 +254,7 @@ class Ops:
         """Your plans again, on `pid` (a copy just made), or on none (one taken down or left)."""
         w = _open.pop("plans", None)
         if w is not None and getattr(w, "_alive", False):
-            w.close()
+            _shut(w)
         open_plans(select=pid)
 
     def pip(self):
@@ -259,6 +306,83 @@ class Ops:
     def new_plan(self):
         """Round five: the one New plan window."""
         open_new()
+
+    # -- New plan in the HTML window (webnew.py) --
+
+    def top_decks(self):
+        return top_decks(mw.col)
+
+    def index(self, did):
+        return P.DeckIndex(mw.col, did)
+
+    def new_defaults(self):
+        """New plan's first values, worked out here (the mock's "Filled in
+        for you"): the top deck I've studied most these 30 days, the
+        weekdays I've studied in most of the last six weeks, my exam
+        (Settings). {deck, days, exam}, each None when there's nothing to go
+        on. Two queries, on the click that opens New plan."""
+        import datetime
+        col, out = mw.col, {"deck": None, "days": None, "exam": None}
+        try:
+            since = (int(col.sched.day_cutoff) - 30 * 86400) * 1000
+            per = {}
+            for did, n in col.db.all("SELECT CASE WHEN c.odid THEN c.odid ELSE c.did END, count() FROM revlog r "
+                                     "JOIN cards c ON c.id = r.cid WHERE r.id > ? AND r.ease > 0 GROUP BY 1", since):
+                top = str(col.decks.name(did) or "").split("::")[0]
+                per[top] = per.get(top, 0) + int(n or 0)
+            tops = {name: did for did, name, _n in top_decks(col)}
+            best = max((name for name in per if name in tops), key=lambda x: per[x], default=None)
+            out["deck"] = tops.get(best) if best else None
+        except Exception:  # noqa: BLE001 (no default is fine)
+            pass
+        try:
+            from ..stats.queries import StatsQueries
+            ago = StatsQueries(col).studied_days_ago(42)
+            if len(ago) >= 6:
+                today = datetime.date.fromisoformat(plan_flow._today())
+                weeks = [0] * 7
+                for a in ago:
+                    weeks[(today - datetime.timedelta(days=int(a))).weekday()] += 1
+                days = [1 if n >= 3 else 0 for n in weeks]
+                out["days"] = days if any(days) else None
+        except Exception:  # noqa: BLE001
+            pass
+        exam = str(cfg().get("exam_date") or "")
+        out["exam"] = exam if len(exam) == 10 and exam > plan_flow._today() else None
+        return out
+
+    def make(self, owner, name, doc, done, pid=None):
+        """The plan made and its lessons saved, one click (StartOps.make's)."""
+        StartOps().make(owner, name, doc, done, pid=pid)
+
+    def follow_code(self, code):
+        """Someone's plan: Follow with its code (or its link, P.link_code), then Your plans again, with it in."""
+        plan_flow.open_follow(P.link_code(code) or code)
+        self.reopen(None)
+
+    def start_own(self, owner, raw, did, own, lesson_deck, done):
+        """Start it: my plan just made, followed here on `did` (POST
+        /plans/follow with its code: the morning opens it like anyone's),
+        at my own pace when own is "ready"; today's lesson its own deck when
+        lesson_deck. done(ok) on the main thread while `owner` is open."""
+        code = str(raw.get("code") or "")
+        if not code:
+            done(False)
+            return
+        cl, gen = client(), app.generation
+
+        def followed(res):
+            got = res[0] if isinstance(res, tuple) else None
+            if gen != app.generation or not mw.col or not getattr(owner, "_alive", False):
+                return
+            if got is None:
+                tooltip("The plan is made, but it didn't start here. Follow it with its code from Settings.")
+                done(False)
+                return
+            got = dict(got, paused=False, following=True, own=got.get("own") or own or "")
+            plan_flow.on_followed(got, did, None, "open", False, lesson=bool(lesson_deck))  # Today's lesson, A or B
+            done(True)
+        _bg(lambda: cl.follow_plan(code, False, own=own), followed)
 
     def now_words(self):
         """"Tue 2:14 pm", for Undo ▾'s line about a send."""
@@ -318,6 +442,27 @@ class Ops:
     def stop_following(self, pid):
         plan_flow.stop_following(pid)
 
+    def start_here(self, code):
+        """Start it here…: my own plan followed on this account, the Follow
+        window on its code (it waits till that window closes)."""
+        plan_flow.open_follow(code)
+
+    def follow_deck_name(self, pid):
+        """The deck a plan I follow runs on here, by its name ("" when none)."""
+        st = plan_flow._state_cfg().get(pid) or {}
+        try:
+            return str(mw.col.decks.name(int(st["deck_id"]))) if mw.col and st.get("deck_id") else ""
+        except Exception:  # noqa: BLE001 (a deck gone: no name)
+            return ""
+
+    def team_join(self, pid):
+        from .. import team_flow
+        team_flow.join(pid, False)
+
+    def team_leave(self, pid):
+        from .. import team_flow
+        team_flow.leave(pid, False)
+
     def open_schedule(self, pid):
         plan_flow.open_schedule(pid)
 
@@ -330,6 +475,23 @@ class Ops:
 
     def reset_days(self, pid):
         plan_flow.reset_days(pid)
+
+    def lesson_deck_on(self, pid):
+        """Today's lesson in a deck of its own too (B) or only in my deck (A):
+        plan_flow's, or None when this version hasn't the choice (Settings hides it)."""
+        fn = getattr(plan_flow, "lesson_deck_on", None)
+        if not callable(fn):
+            return None
+        try:
+            on = fn(pid)
+        except Exception:  # noqa: BLE001 (a choice that can't be read isn't offered)
+            return None
+        return None if on is None else bool(on)
+
+    def set_lesson_deck(self, pid, on):
+        fn = getattr(plan_flow, "set_lesson_deck", None)
+        if callable(fn):
+            fn(pid, bool(on))
 
     def copy_plan(self, owner, pid, said):
         """Make my own copy (a library plan): the same dates, mine to change; then Your plans on it."""
@@ -409,11 +571,16 @@ def study_cards(idx, cids, name):
 
 # ---- round five: New plan, the one way to start ----
 
-def open_new():
-    """New plan: signed in (it makes a plan on the server), a collection open."""
-    if not mw.col or _raise("new"):
+def open_new(start=None, finish_by=None, exam=None):
+    """New plan: signed in (it makes a plan on the server), a collection open.
+    In the HTML window (round six) it's that window's first screen; the
+    board's exam line passes finish_by (and the exam's name)."""
+    if not mw.col or not plan_flow._signed_in():
         return
-    if not plan_flow._signed_in():
+    if web_window():
+        open_plans(new={"start": start, "finish_by": finish_by, "exam": exam})
+        return
+    if _raise("new"):
         return
     from .new_plan import NewPlanWindow
     w = NewPlanWindow(mw, top_decks(mw.col), NewOps(), labs=enabled())
@@ -468,6 +635,42 @@ class StartOps:
     def index(self, did):
         return P.DeckIndex(mw.col, did)
 
+    def new_defaults(self):
+        """New plan's first values, worked out here (the mock's "Filled in
+        for you"): the top deck I've studied most these 30 days, the
+        weekdays I've studied in most of the last six weeks, my exam
+        (Settings). {deck, days, exam}, each None when there's nothing to go
+        on. Two queries, on the click that opens New plan."""
+        import datetime
+        col, out = mw.col, {"deck": None, "days": None, "exam": None}
+        try:
+            since = (int(col.sched.day_cutoff) - 30 * 86400) * 1000
+            per = {}
+            for did, n in col.db.all("SELECT CASE WHEN c.odid THEN c.odid ELSE c.did END, count() FROM revlog r "
+                                     "JOIN cards c ON c.id = r.cid WHERE r.id > ? AND r.ease > 0 GROUP BY 1", since):
+                top = str(col.decks.name(did) or "").split("::")[0]
+                per[top] = per.get(top, 0) + int(n or 0)
+            tops = {name: did for did, name, _n in top_decks(col)}
+            best = max((name for name in per if name in tops), key=lambda x: per[x], default=None)
+            out["deck"] = tops.get(best) if best else None
+        except Exception:  # noqa: BLE001 (no default is fine)
+            pass
+        try:
+            from ..stats.queries import StatsQueries
+            ago = StatsQueries(col).studied_days_ago(42)
+            if len(ago) >= 6:
+                today = datetime.date.fromisoformat(plan_flow._today())
+                weeks = [0] * 7
+                for a in ago:
+                    weeks[(today - datetime.timedelta(days=int(a))).weekday()] += 1
+                days = [1 if n >= 3 else 0 for n in weeks]
+                out["days"] = days if any(days) else None
+        except Exception:  # noqa: BLE001
+            pass
+        exam = str(cfg().get("exam_date") or "")
+        out["exam"] = exam if len(exam) == 10 and exam > plan_flow._today() else None
+        return out
+
     def make(self, owner, name, doc, done, pid=None):
         """The plan made (POST /plans) and its dates saved (the builder's
         PUT), one click. done(("saved", raw) | ("made", pid, why): made,
@@ -483,7 +686,12 @@ class StartOps:
                     return outcome, raw
                 got, version = raw["id"], raw.get("version") or 1
             else:
-                version = remote.load(cl, got)[0].get("version") or 1
+                have = remote.load(cl, got)[0]
+                version = have.get("version") or 1
+                if name and str(have.get("name") or "") != name:  # its name fixed since the first Make
+                    outcome, raw = remote.save_meta(cl, got, version, {"name": name}, f"named {name}"[:120])
+                    if outcome == "saved":
+                        version = raw.get("version") or version
             try:
                 outcome, raw = remote.save(cl, got, version, doc, f"made in Anki from a calendar: {name}")
             except TransportError:
@@ -497,7 +705,7 @@ class StartOps:
         """The plan window, on the plan just made."""
         w = _open.get("plans")
         if w is not None and getattr(w, "_alive", False):
-            w.close()
+            _shut(w)
         open_plans(select=pid)
 
 
@@ -548,6 +756,42 @@ def _top_deck(col, did):
 class QidOps:
     def index(self, did):
         return P.DeckIndex(mw.col, did)
+
+    def new_defaults(self):
+        """New plan's first values, worked out here (the mock's "Filled in
+        for you"): the top deck I've studied most these 30 days, the
+        weekdays I've studied in most of the last six weeks, my exam
+        (Settings). {deck, days, exam}, each None when there's nothing to go
+        on. Two queries, on the click that opens New plan."""
+        import datetime
+        col, out = mw.col, {"deck": None, "days": None, "exam": None}
+        try:
+            since = (int(col.sched.day_cutoff) - 30 * 86400) * 1000
+            per = {}
+            for did, n in col.db.all("SELECT CASE WHEN c.odid THEN c.odid ELSE c.did END, count() FROM revlog r "
+                                     "JOIN cards c ON c.id = r.cid WHERE r.id > ? AND r.ease > 0 GROUP BY 1", since):
+                top = str(col.decks.name(did) or "").split("::")[0]
+                per[top] = per.get(top, 0) + int(n or 0)
+            tops = {name: did for did, name, _n in top_decks(col)}
+            best = max((name for name in per if name in tops), key=lambda x: per[x], default=None)
+            out["deck"] = tops.get(best) if best else None
+        except Exception:  # noqa: BLE001 (no default is fine)
+            pass
+        try:
+            from ..stats.queries import StatsQueries
+            ago = StatsQueries(col).studied_days_ago(42)
+            if len(ago) >= 6:
+                today = datetime.date.fromisoformat(plan_flow._today())
+                weeks = [0] * 7
+                for a in ago:
+                    weeks[(today - datetime.timedelta(days=int(a))).weekday()] += 1
+                days = [1 if n >= 3 else 0 for n in weeks]
+                out["days"] = days if any(days) else None
+        except Exception:  # noqa: BLE001
+            pass
+        exam = str(cfg().get("exam_date") or "")
+        out["exam"] = exam if len(exam) == 10 and exam > plan_flow._today() else None
+        return out
 
     def default_deck(self, choices):
         """The deck my plan runs on here (its top deck: question tags are

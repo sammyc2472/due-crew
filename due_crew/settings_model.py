@@ -28,7 +28,8 @@ LABEL_MAX = 24
 BOARD_DEFAULTS = {"show_leaderboard": True, "show_stale": True, "sync_notifications": True,
                   "theme": "auto", "accent": "green", "compact": False, "highlight_me": True,
                   "crew_label": "Crew", "room_chip_side": "right", "hidden_tabs": [], "shortcuts": True,
-                  "fifteen": True, "sev": True, "sev_break": "breathe", "room_sounds": True}
+                  "fifteen": True, "sev": True, "sev_break": "breathe", "room_sounds": True,
+                  "dance_floor": True, "dance": "gentle", "dance_folded": False}  # 3.9.6: the dance floor
 
 
 def _day(text):

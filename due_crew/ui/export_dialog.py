@@ -54,7 +54,7 @@ class ExportDialog(QDialog):
         self.plain.setChecked(True)
         root.addWidget(self.plain)
         # 3.8.1: the plan itself at the top of the file, as comment lines (never card text)
-        self.with_plan = QCheckBox("With the plan (its dates, tags, notes and what overlaps)")
+        self.with_plan = QCheckBox("With the plan (its sets, tags, notes and what overlaps)")
         self.with_plan.setChecked(True)
         root.addWidget(self.with_plan)
         note = QLabel("Saved as a file on this computer, for you to attach to your AI chat. "
@@ -129,7 +129,7 @@ class ExportDialog(QDialog):
         self.scope.blockSignals(True)
         self.scope.clear()
         if p:
-            self.scope.addItem("What the plan's dates open", "dates")
+            self.scope.addItem("What the plan's sets open", "dates")
             if ((p["doc"].get("pace") or {}).get("cover")):
                 self.scope.addItem("What the plan covers", "cover")
         self.scope.addItem("The whole deck", "deck")
@@ -155,7 +155,7 @@ class ExportDialog(QDialog):
             return
         size = P.export_size(self.col, nids)
         line = f"{len(nids):,} notes · about {_kb(size)}."
-        line += (" That's big for one AI chat: try what the plan's dates open, or a smaller deck."
+        line += (" That's big for one AI chat: try what the plan's sets open, or a smaller deck."
                  if size > BIG else " Most AI chats take a file this size.")
         self.size.setText(line)
         self.go.setEnabled(True)

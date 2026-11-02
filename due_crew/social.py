@@ -10,6 +10,7 @@ import traceback
 from aqt import mw
 from aqt.utils import tooltip
 
+from .songs import clean as songs_clean
 from . import app, board, native_emoji, shows
 from .app import (CHEER_QUICK, HEATMAP_DAYS, _bg, _pending_cheers,
                   _profile_files, _state, cfg, client, save_cfg)
@@ -273,6 +274,8 @@ def _open_profile(uid):
                 "duet": duet, "status": status, "away": away,
                 "emoji": entry.get("emoji") or "",
                 "sev": board.card_sev(entry, cfg()),  # 3.8.2: their Pip in the emoji's place
+                # 3.9.6: their song of the moment (mine is my account's)
+                "song": songs_clean(cfg().get("song")) if you else songs_clean(entry.get("song")),
                 "today": today_nums,
                 "start": my_labels[-1],  # the heatmap's first day, for its weekday rows
             }))

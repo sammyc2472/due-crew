@@ -12,6 +12,7 @@ dialog-shots/
 .claude/harness/
 .claude/worktrees/
 tools/preview.html
+tools/plan_preview/
 # the Firestore emulator's log, from the rules test
 firestore-debug.log
 wdev.log

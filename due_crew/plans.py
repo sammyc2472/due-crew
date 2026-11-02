@@ -201,9 +201,12 @@ class DeckIndex:
         self.col = col
         # 3.3: the tags, note ids and subdecks change only when notes do;
         # kept between refreshes while this fingerprint holds (a few ms),
-        # and only each card's state is read again
+        # and only each card's state is read again. Each card by its home deck
+        # (Today's lesson, B): a card going into a filtered deck or back home
+        # isn't a change here, so studying a lesson's deck doesn't read it all again
         sig = (tuple(sorted((d, names.get(d, "")) for d in tree)),
-               tuple(col.db.first("SELECT count(), max(n.mod), total(n.mod), max(c.id), sum(c.did), sum(c.odid), sum(c.ord) "
+               tuple(col.db.first("SELECT count(), max(n.mod), total(n.mod), max(c.id), "
+                                  "sum(CASE WHEN c.odid != 0 THEN c.odid ELSE c.did END), sum(c.ord) "
                                   f"FROM cards c JOIN notes n ON n.id = c.nid {where}") or ()))
         key = (id(col), self.did)
         kept = _STATIC.get(key)
@@ -641,9 +644,34 @@ def unit_matches(idx, doc, swap=None):
     return {u["id"]: idx.match(u, swap, doc) for u in units(doc)}
 
 
-def progress(idx, doc, swap=None):
-    """{unit id: [opened, seen, total]}."""
-    return {uid: idx.counts(cids) for uid, cids in unit_matches(idx, doc, swap).items()}
+def progress(idx, doc, swap=None, aside=frozenset()):
+    """{unit id: [opened, seen, total]}. aside (set_aside): cards I suspended
+    myself after their date opened, counted in none of the three."""
+    return {uid: idx.counts(cids - aside if aside else cids) for uid, cids in unit_matches(idx, doc, swap).items()}
+
+
+def set_aside(idx, doc, swap=None, applied=None, held=()):
+    """3.9.6 (Sam: "if i've chosen to suspend something after the plan opens
+    it, don't want it to make me behind"): the new cards I suspended myself
+    on a date that opened here (`applied`, not skipped), so they're never
+    left on it, never behind, and count in none of its numbers. Not one the
+    plan holds (`held`: Hold back, Put back), nor a leech (Anki's, already
+    seen). A date with none of its cards open isn't mine to set aside: Edit ›
+    Undo closed it, and the week offers Open now (plan_flow._shut_dates)."""
+    applied = applied or {}
+    if not applied:
+        return frozenset()
+    held = {int(c) for c in held or () if str(c).lstrip("-").isdigit()}
+    out = set()
+    for u in units(doc):
+        have = applied.get(u["id"])
+        if not have or (isinstance(have, str) and have.startswith("skip:")):
+            continue
+        cids = idx.match(u, swap, doc)
+        if not any(idx.cards[c][0] != -1 for c in cids):
+            continue  # all of it suspended again: closed, not set aside
+        out |= {c for c in cids if idx.cards[c][0] == -1 and idx.cards[c][1] == 0 and c not in held and c not in idx.leech}
+    return frozenset(out)
 
 
 def found_total(idx, doc, swap=None):
@@ -749,7 +777,7 @@ def match_rows(idx, doc, swap=None, shown=5):
         cids = set()
         for u in rest:
             cids |= idx.match(u, swap, doc)
-        rows.append((f"… {len(rest)} more date{'s' if len(rest) != 1 else ''}", _cards(len(cids)), False))
+        rows.append((f"… {len(rest)} more set{'s' if len(rest) != 1 else ''}", _cards(len(cids)), False))
     return rows
 
 
@@ -809,7 +837,7 @@ def week_start(today, offset=0):
     return (d - datetime.timedelta(days=d.weekday()) + datetime.timedelta(weeks=int(offset))).isoformat()
 
 
-def load(idx, doc, swap=None):
+def load(idx, doc, swap=None, aside=frozenset()):
     """3.7.81, plan load: {unit id: [seen, open, locked]} for my own dates
     (doc is my_doc: my days), each card counted on its earliest date only
     (keeping to the plan, I meet it there first) and a suspended leech left
@@ -820,7 +848,7 @@ def load(idx, doc, swap=None):
     started, nid_of = idx.started(), idx.nid_of
     before, out = set(), {}
     for u in sorted(units(doc), key=lambda x: str(x.get("opens") or "")):
-        mine = ms.get(u["id"]) or set()
+        mine = (ms.get(u["id"]) or set()) - aside  # (cards I set aside myself: set_aside)
         s_ = o_ = l_ = 0
         for cid in mine - before:
             queue, ctype = idx.cards[cid]
@@ -1483,11 +1511,11 @@ def id_refs(idx, col, lean_doc, cap=50000):
 
 
 def step_label(names):
-    """The undo step: "Due Crew: open Renal physiology", or "… open 3 dates"."""
+    """The undo step: "Due Crew: open Renal physiology", or "… open 3 sets"."""
     names = list(names)
     if len(names) == 1:
         return f"Due Crew: open {names[0]}"
-    return f"Due Crew: open {len(names)} dates"
+    return f"Due Crew: open {len(names)} sets"
 
 
 # ---- lines only I see ----
@@ -1563,7 +1591,7 @@ def change_note(owner, old, doc):
 
     def names(items, verb, tail=None):
         if len(items) > 2:
-            return [(f"{verb} {len(items)} dates", False)]
+            return [(f"{verb} {len(items)} sets", False)]
         segs = [(verb + " ", False)]
         for i, it in enumerate(items):
             if i:
@@ -1707,8 +1735,387 @@ def finish_check(doc, left, recent, today, days=PACE_DAYS):
     late = (done - datetime.date.fromisoformat(day)).days
     when = fmt_day(done.isoformat())
     if late > 0:
-        return f"At that pace you open the last date on {when}, {late} day{'s' if late != 1 else ''} after {name}."
-    return f"At that pace you open the last date on {when}, in time for {name}."
+        return f"At that pace you open the last set on {when}, {late} day{'s' if late != 1 else ''} after {name}."
+    return f"At that pace you open the last set on {when}, in time for {name}."
+
+
+# ---- plans, end to end: You › Plans' path, Behind, the empty tab ----
+
+def _iso(day):
+    try:
+        return datetime.date.fromisoformat(str(day))
+    except (TypeError, ValueError):
+        return None
+
+
+def path(doc, prog, today, applied=None, shift=0, skipped=(), moved=None, sched=False):
+    """The whole plan as a path, above You › Plans' week: {lessons, at, of,
+    first, end}. lessons, in the plan's order, each {uid, name, opens, day,
+    total, seen, opened, left, today, state} on my days (doc is the plan
+    itself; my shift and moves, a skipped lesson on the day it would have
+    had): day is its last (its due, else the day it opens), today when today
+    is one of its days. state: "skip" (skipped, or passed before it opened
+    here, as Due's Behind leaves it), "done" (its cards all seen; nothing
+    of it here once its day passed), "now" (today is one of its days),
+    "behind" (its day passed, cards left), "ahead". at: the lesson today is
+    on ("set 3 of 19"; 0 before the first), by the days alone; of: how
+    many. first: the first lesson's day; end: path_end. Without applied,
+    every passed lesson counts as opened here. Pure; names are raw."""
+    prog, skipped = prog or {}, set(skipped or ())
+    mdoc = my_doc(doc, shift, (), moved)  # every lesson on my days, the skipped ones too
+    mine = {u["id"]: u for u in units(mdoc)}
+    out = []
+    for u in units(doc):
+        m = mine.get(u["id"], u)
+        opens = str(m.get("opens") or "")
+        day = str(m.get("due") or opens)
+        o, s, t = (int(x or 0) for x in (list(prog.get(u["id"]) or []) + [0, 0, 0])[:3])
+        a = (applied or {}).get(u["id"])
+        running = not a and o > 0 and bool(u.get("even") or sched)  # opens in slices: applied when its days end
+        on = bool(opens) and opens <= today <= day
+        if u["id"] in skipped:
+            state = "skip"
+        elif t and s >= t:
+            state = "done"
+        elif on:
+            state = "now"
+        elif not opens or opens > today:
+            state = "ahead"
+        elif applied is not None and (not (a or running) or str(a).startswith("skip:")):
+            state = "skip"  # never opened here (followed after it): not mine to be behind on
+        else:
+            state = "behind" if t > s else "done"
+        out.append({"uid": u["id"], "name": str(u.get("name") or "?"), "opens": opens, "day": day,
+                    "total": t, "seen": s, "opened": o, "left": max(0, t - s), "today": on, "state": state})
+    now = next((i for i, x in enumerate(out) if x["today"]), None)
+    if now is None:
+        now = max((i for i, x in enumerate(out) if x["opens"] and x["opens"] <= today), default=-1)
+    return {"lessons": out, "at": now + 1, "of": len(out), "first": out[0]["opens"] if out else "", "end": path_end(mdoc)}
+
+
+def path_end(doc):
+    """What a plan ends with: its last quiz or exam (events never move)
+    {name, day, event: True}; else its end, or its last lesson's last day,
+    {name: "", day, event: False}. None for a plan with neither."""
+    evs = sorted((e for e in (doc or {}).get("events") or [] if isinstance(e, dict) and _iso(e.get("day"))),
+                 key=lambda e: str(e["day"]))
+    if evs:
+        return {"name": str(evs[-1].get("name") or "Exam"), "day": str(evs[-1]["day"]), "event": True}
+    exam = (doc or {}).get("exam")
+    if isinstance(exam, dict) and _iso(exam.get("date")):
+        return {"name": "Exam", "day": str(exam["date"]), "event": True}  # 3.2's schedule's exam
+    days = [str(u.get("due") or u.get("opens") or "") for u in units(doc)] + [str((doc or {}).get("end") or "")]
+    days = [d for d in days if _iso(d)]
+    return {"name": "", "day": max(days), "event": False} if days else None
+
+
+def last_day(doc):
+    """A plan's last day: its last lesson, quiz or exam, or its end ("" for
+    none). A lean doc (a plan I write, as the board brings it) has its
+    lessons' days alone."""
+    days = [str(u.get("due") or u.get("opens") or "") for u in units(doc)]
+    days += [str(e.get("day") or "") for e in (doc or {}).get("events") or [] if isinstance(e, dict)]
+    days.append(str((doc or {}).get("end") or ""))
+    return max((d for d in days if _iso(d)), default="")
+
+
+def behind_of(p, today):
+    """What a path says is behind: {uid, name, more, left, uids, since,
+    days}: the first lesson behind (in the plan's order), how many more
+    are, the cards left on them all, their ids, the earliest of their days
+    and how many days ago that was. None when nothing is."""
+    late = [x for x in (p or {}).get("lessons") or [] if x["state"] == "behind"]
+    t = _iso(today)
+    if not late or t is None:
+        return None
+    since = min(x["day"] for x in late)
+    return {"uid": late[0]["uid"], "name": late[0]["name"], "more": len(late) - 1,
+            "left": sum(x["left"] for x in late), "uids": [x["uid"] for x in late], "since": since,
+            "days": max(1, (t - (_iso(since) or t)).days)}
+
+
+FIT_DAYS = (2, 14, 3)  # Behind's Fit it in…: over the days I pick, 2 to 14, three to start (Sam's pick)
+
+
+def behind_sheet(name, b, p, waiting, shift=0):
+    """The Behind… sheet (sheets.ask_item's one of a few): {title, text,
+    ways: [{key, label, note, yes, ...}]}, slide first. Slide N days: my
+    shift, N more days (the days I'm behind; to 365 in all), its note the
+    day my last lesson lands on then and the quiz or exam it falls after;
+    Fit it in…: G5's catch-up on what earlier days opened and I haven't seen
+    (`waiting`), over the days I pick then (2 to 14, three to start);
+    Skip what's left: the lessons behind, skipped (their cards stay as they
+    are). Raw words: the sheet draws them as text."""
+    n_late, left = int(b["more"]) + 1, int(b["left"])
+    days = int(b["days"])
+    who = (f"{b['name']} has" if n_late == 1 else f"{b['name']} and {n_late - 1} more have")
+    now = next((x for x in (p or {}).get("lessons") or [] if x["today"] and x["state"] != "skip" and x["total"]), None)
+    text = f"{who} {left:,} left" + (
+        f"; today {now['name']} {'opened' if now['opened'] else 'opens'} {now['total']:,}." if now else ".")
+    ways = []
+    slide = min(days, 365 - int(shift or 0))
+    if slide > 0:
+        word = "a day" if slide == 1 else f"{slide} days"
+        live = [x["day"] for x in (p or {}).get("lessons") or [] if x["state"] != "skip" and x["day"]]
+        ends = _later(max(live), slide) if live else ""
+        end = (p or {}).get("end") or {}
+        after = f", after {end['name']}" if end.get("event") and ends and ends > end["day"] else ""
+        ways.append({"key": "slide", "days": slide, "label": f"Slide {word}", "yes": f"Slide {word}",
+                     "note": f"Everything still to come, {word} later." + (f" Ends {fmt_day(ends)}{after}." if ends else "")})
+    waiting = int(waiting or 0)
+    if waiting:
+        d = FIT_DAYS[2]
+        extra = fit_extra(waiting, d)
+        ways.append({"key": "fit", "days": d, "extra": extra, "waiting": waiting, "yes": "Fit it in…", "label": "Fit it in…",
+                     "note": f"Over the days you pick: about {extra:,} more new card{'s' if extra != 1 else ''} a day for three days."})
+    ways.append({"key": "skip", "uids": list(b["uids"]), "label": "Skip what's left", "yes": "Skip it" if n_late == 1 else "Skip them",
+                 "note": f"The {left:,} left stay open in your deck, no longer behind."})
+    return {"title": f"{'A day' if days == 1 else f'{days} days'} behind on {name}", "text": text, "ways": ways}
+
+
+def fit_extra(waiting, days):
+    """Fit it in…: the more new cards a day that catch `waiting` up over `days`."""
+    return -(-max(0, int(waiting)) // max(1, int(days)))
+
+
+def fit_days(typed):
+    """Fit it in…'s box: the days typed, 2 to 14, or None when it isn't a number."""
+    try:
+        d = int(str(typed or "").strip().split()[0])
+    except (ValueError, IndexError):
+        return None
+    return max(FIT_DAYS[0], min(FIT_DAYS[1], d))
+
+
+def exam_way(exam, today, ends=()):
+    """The empty Plans tab's line about my exam (Settings): {day, days} when
+    it's ahead and no plan I follow or write ends by it (its last day from
+    today to the exam); else None."""
+    e, t = _iso(exam), _iso(today)
+    if e is None or t is None or e <= t:
+        return None
+    if any(str(today) <= str(x) <= str(exam) for x in ends or () if _iso(x)):
+        return None
+    return {"day": e.isoformat(), "days": (e - t).days}
+
+
+def link_code(text):
+    """A plan's code from the Plans tab's box: the code as typed ("N4AP
+    ULM2"), or its link (duecrew.com/p/N4APULM2: the link's last path part).
+    '' when there's nothing."""
+    t = str(text or "").strip()[:300]
+    if "/" in t:
+        parts = [x for x in re.split(r"[?#]", t)[0].split("/") if x.strip()]
+        t = parts[-1] if parts else ""
+    return normalize_code(t)
+
+
+# ---- 3.9.6: the plan's joys (Sam's picks, the "Joy on the plan card" mock) ----
+# A set done, a pop; halfway, three-quarters and the last set, a line each;
+# the finish line, a show over the Decks screen; caught up; day one. What
+# has played is kept in plans.json's "joy", this profile's and never sent;
+# what's so the first time a plan is looked at is history, and plays nothing
+# (but day one).
+
+JOY_POP = 5.0   # s: a set done's pop, Pip on its segment as long as it's out by the logo (sev.LOGO_SECONDS)
+JOY_LINE = 1.4  # s: a milestone's line slides in, its set sparkles
+JOY_TADA = 1.8  # s: caught up's 🎉 pops
+JOY_GO = 5.0    # s: day one's Pip, its let's-go
+MILES = (("half", 1, 2), ("threeq", 3, 4))  # counted in sets: halfway the 10th of 19, three-quarters the 15th
+JOY_KEYS = ("half", "threeq", "last", "fin")  # a joy line's Share (and × for the three milestones)
+JOY_KEPT = 500  # the sets known done, kept for a plan
+
+
+def joy_sets(p):
+    """The sets a plan's joys count: each one not skipped, in its order."""
+    return [x for x in (p or {}).get("lessons") or [] if x.get("state") != "skip"]
+
+
+def _seen_through(x):
+    return int(x.get("total") or 0) > 0 and int(x.get("seen") or 0) >= int(x["total"])
+
+
+def joy_numbers(p):
+    """{sets, done, cards, seen, weeks}: a path in sets (the skipped ones
+    aside), how many are done, their cards and how many I've seen, and the
+    weeks from its first set's day to its last's (as the builder's finished
+    card counts them)."""
+    live = joy_sets(p)
+    opens = sorted(str(x["opens"]) for x in live if _iso(x.get("opens")))
+    weeks = max(1, -(-((_iso(opens[-1]) - _iso(opens[0])).days + 1) // 7)) if opens else 0
+    return {"sets": len(live), "done": sum(1 for x in live if x["state"] == "done"),
+            "cards": sum(int(x.get("total") or 0) for x in live),
+            "seen": sum(min(int(x.get("seen") or 0), int(x.get("total") or 0)) for x in live), "weeks": weeks}
+
+
+def joy_finished(p):
+    """Every set of it done (the skipped ones aside), with cards to it."""
+    live = joy_sets(p)
+    return bool(live) and all(x["state"] == "done" for x in live) and any(int(x.get("total") or 0) for x in live)
+
+
+def joy_words(num, cards=True):
+    """"19 sets · 2,046 cards · 6 weeks": a finished plan in a line (cards:
+    with its card count; a share follows Privacy's Reviews switch)."""
+    bits = [f"{num['sets']:,} set{'s' if num['sets'] != 1 else ''}"]
+    if cards:
+        bits.append(f"{num['cards']:,} card{'s' if num['cards'] != 1 else ''}")
+    if num.get("weeks"):
+        bits.append(f"{num['weeks']:,} week{'s' if num['weeks'] != 1 else ''}")
+    return " · ".join(bits)
+
+
+def joy_mark(n, a, b):
+    """The set that makes a/b of n: halfway is the 10th of 19, three-quarters the 15th."""
+    return -(-int(n) * a // b)
+
+
+def _miles(p, num):
+    """{key: {n, of, name, uid}}: the milestones a path is past now. half and
+    threeq: the set that makes them is done (n: the sets done), never when
+    that set would be the last (that's the finish); last: the last set is
+    today's (the morning it opens) and not every set's done."""
+    n, k, out = num["sets"], num["done"], {}
+    live = joy_sets(p)
+    if n < 2:
+        return out
+    done = [x for x in live if x["state"] == "done"]
+    for key, a, b in MILES:
+        mark = joy_mark(n, a, b)
+        if mark < n and k >= mark and (key == "half" or mark > joy_mark(n, 1, 2)):
+            out[key] = {"n": k, "of": n, "uid": done[mark - 1]["uid"] if len(done) >= mark else ""}
+    if live[-1].get("today") and not joy_finished(p):
+        out["last"] = {"n": n, "of": n, "name": str(live[-1].get("name") or ""), "uid": live[-1]["uid"]}
+    return out
+
+
+def _ago(rec, today, now, most):
+    """How long a moment's been on screen (s), while it's in its time; else None."""
+    if not isinstance(rec, dict) or rec.get("day") != today or not rec.get("at"):
+        return None
+    a = float(now) - float(rec["at"])
+    return round(a, 2) if 0 <= a < most else None
+
+
+def joy_step(st, p, behind, today, now, shown=False, name=""):
+    """One look at a plan's path for its joys: (state, view). st: what
+    plans.json keeps for the plan (None the first time: what's so then is
+    history and plays nothing, but day one). p: path(); behind: behind_of(p)
+    as the card has it (None when it's caught up, or paused). shown: this
+    draw is on screen (You › Plans, the Decks screen up): what's waiting is
+    claimed now and plays, once. A moment that waits past its day is gone.
+
+    view: {pop, line, fin, show, caught, day1}, each None or what the
+    card draws. pop {uid, ago}: a set's cards all seen, its segment fills
+    and Pip hops to it. line {key, n, of, name, uid, ago}: halfway, three-
+    quarters or the last set, today's until ×. fin {sets, cards, weeks,
+    words}: every set done, its line (show: its show over the Decks screen
+    still to play, plan_flow.joy_show's). caught {name, more, n, uids,
+    ago}: what was behind is all seen, for the rest of the day. day1
+    {ago}: the first set opens today. ago (s): how
+    long it's been on screen, so a redraw in its time keeps its place; None
+    while it waits (or when it's played). One moment at a time: the finish
+    over all, then caught up, then a milestone, then the pop. Pure."""
+    live = joy_sets(p)
+    if not live:
+        return st, None
+    num = joy_numbers(p)
+    done_now = [x["uid"] for x in live if x["state"] == "done" and _seen_through(x)]
+    fin = joy_finished(p)
+    reached = _miles(p, num)
+    one = (p or {}).get("lessons")[0]
+    day_one = one.get("state") != "skip" and bool(one.get("today")) and str(one.get("opens") or "") == str(today)
+    by = {x["uid"]: x for x in (p or {}).get("lessons") or []}
+    if not isinstance(st, dict):
+        st = {"done": done_now[-JOY_KEPT:], "miles": {k: {"day": ""} for k in reached}}
+        if fin:
+            st["fin"] = {"day": ""}
+        if behind:
+            st["late"] = {"uids": list(behind["uids"]), "name": str(behind["name"]), "more": int(behind.get("more") or 0)}
+    else:
+        st = json.loads(json.dumps(st))
+        late = st.pop("late", None)
+        caught_now = False
+        if behind:
+            st["late"] = {"uids": list(behind["uids"]), "name": str(behind["name"]), "more": int(behind.get("more") or 0)}
+            st.pop("caught", None)  # behind again: not caught up any more
+        elif isinstance(late, dict) and late.get("uids") and all(by.get(u, {}).get("state") == "done" for u in late["uids"]):
+            # what was behind, all seen (Slide and Skip what's left clear it their own ways, with their own lines)
+            st["caught"] = {"day": today, "at": 0, "name": str(late.get("name") or ""), "more": int(late.get("more") or 0),
+                            "n": sum(int(by[u].get("total") or 0) for u in late["uids"]), "uids": list(late["uids"])}
+            caught_now = True
+        known = set(st.get("done") or [])
+        new = [u for u in done_now if u not in known]
+        st["done"] = (list(st.get("done") or []) + new)[-JOY_KEPT:]
+        miles = st.setdefault("miles", {})
+        fresh = [k for k in ("last", "threeq", "half") if k in reached and k not in miles]
+        for k in fresh:
+            miles[k] = {"day": ""}  # passed; the one that plays gets its day below
+        fin_now = fin and "fin" not in st
+        line = None
+        if fin_now:
+            st["fin"] = dict(num, day=today, at=0, name=str(name or ""))
+            st.pop("caught", None)
+        elif fresh:
+            line = fresh[0]
+            miles[line] = dict(reached[line], day=today, at=0)
+        if new and not fin_now and not caught_now and not line:
+            st["pop"] = {"uid": new[-1], "day": today, "at": 0}
+    if day_one and "day1" not in st:
+        st["day1"] = {"day": today, "at": 0}
+    if shown:
+        for rec in [st.get("pop"), st.get("caught"), st.get("day1")] + list((st.get("miles") or {}).values()):
+            if isinstance(rec, dict) and rec.get("day") == today and not rec.get("at"):
+                rec["at"] = float(now)
+    view = {"pop": None, "line": None, "fin": None, "show": False, "caught": None, "day1": None}
+    pop = st.get("pop")
+    if fin:
+        f = st.get("fin") or {}
+        view["fin"] = {"sets": num["sets"], "cards": num["cards"], "weeks": num["weeks"], "words": joy_words(num)}
+        view["show"] = bool(f.get("day")) and not f.get("at")
+    else:
+        a = _ago(pop, today, now, JOY_POP)
+        if a is not None:
+            view["pop"] = {"uid": pop["uid"], "ago": a}
+        for k in ("last", "threeq", "half"):
+            rec = (st.get("miles") or {}).get(k)
+            if isinstance(rec, dict) and rec.get("day") == today and not rec.get("x"):
+                view["line"] = {"key": k, "n": int(rec.get("n") or 0), "of": int(rec.get("of") or 0),
+                                "name": str(rec.get("name") or ""), "uid": str(rec.get("uid") or ""),
+                                "ago": _ago(rec, today, now, JOY_LINE)}
+                break
+        c = st.get("caught")
+        if isinstance(c, dict) and c.get("day") == today and not behind:
+            view["caught"] = {"name": c.get("name") or "", "more": int(c.get("more") or 0), "n": int(c.get("n") or 0),
+                              "uids": list(c.get("uids") or []), "ago": _ago(c, today, now, JOY_TADA)}
+    if day_one:
+        view["day1"] = {"ago": _ago(st.get("day1"), today, now, JOY_GO)}
+    return st, view
+
+
+def joy_dismiss(st, key, today):
+    """× on a milestone's line: today's, gone (it'd be gone tomorrow either
+    way). The state after, or None when there's nothing to take off."""
+    rec = ((st or {}).get("miles") or {}).get(key) if isinstance(st, dict) else None
+    if key not in ("half", "threeq", "last") or not isinstance(rec, dict) or rec.get("day") != today or rec.get("x"):
+        return None
+    st = json.loads(json.dumps(st))
+    st["miles"][key]["x"] = True
+    return st
+
+
+def joy_text(key, name, num=None, line=None, cards=True):
+    """A joy as a line to paste: "Finished Path Book: 19 sets, 2,046 cards,
+    6 weeks. duecrew.com", "Halfway through Path Book: 10 of 19 sets. ...",
+    "The last set of Path Book: 19 · Skin, today. ...". cards: with the
+    card count (Privacy's Reviews switch)."""
+    if key == "fin":
+        return f"Finished {name}: {joy_words(num or {'sets': 0, 'cards': 0}, cards).replace(' · ', ', ')}. duecrew.com"
+    line = line or {}
+    if key == "last":
+        return f"The last set of {name}: {line.get('name') or ''}, today. duecrew.com"
+    head = "Halfway through" if key == "half" else "Three-quarters through"
+    return f"{head} {name}: {int(line.get('n') or 0):,} of {int(line.get('of') or 0):,} sets. duecrew.com"
 
 
 # ---- 3.8.1: a follower's day (plans, round three) ----
@@ -1757,6 +2164,34 @@ def new_and_due(idx, cids):
     (seen ones first, then new by their place)."""
     got = [c for c in cids if c in idx.cards and (idx.cards[c] == (0, 0) or c in idx.due_now)]
     return sorted(got, key=lambda c: idx.order.get(c, (True, 0, c)))
+
+
+def day_cards(idx, doc, day, today, applied=None, swap=None):
+    """3.9.6, a day's Study (Sam: "study all for the day ... the filtered
+    deck of just those new / review cards for the day ... not just for today
+    for past days too"): (cards, new, due) of what a day of the week asks
+    now, by its FSRS rule's (as a date's Study, new_and_due): the open new
+    cards not seen yet of the sets it opened, and theirs Anki has due today;
+    today also a set still running (opened before, due after) and every
+    set opened here that has cards due today. Never a review ahead of its
+    date. doc: my days (my_doc). Cards in the deck's order."""
+    applied = applied or {}
+    day, today = str(day), str(today)
+    new, due = set(), set()
+    for u in units(doc):
+        have = applied.get(u["id"])
+        if not have or (isinstance(have, str) and have.startswith("skip:")):
+            continue
+        opens = str(u.get("opens") or "")
+        its = opens == day or (day == today and opens <= today <= str(u.get("due") or opens))
+        if not its and day != today:
+            continue
+        cids = idx.match(u, swap, doc)
+        due |= {c for c in cids if c in idx.due_now}
+        if its:
+            new |= {c for c in cids if idx.cards.get(c) == (0, 0)}
+    got = sorted(new | due, key=lambda c: idx.order.get(c, (True, 0, c)))
+    return got, len(new - due), len(due)
 
 
 def held_rows(idx, doc, held, swap=None):
@@ -2088,13 +2523,13 @@ def export_plan_lines(idx, doc, name="", swap=None):
     for cs in ms.values():
         for c in cs:
             seen[c] = seen.get(c, 0) + 1
-    out = [f'# The plan "{name or "Plan"}", as its Text tab writes it (duecrew.com/plan-text): each date with its cards '
-           "in this copy and how many of those another date has too; its tags; its notes. Its cards are the rows below, "
+    out = [f'# The plan "{name or "Plan"}", as its Text tab writes it (duecrew.com/plan-text): each set with its cards '
+           "in this copy and how many of those another set has too; its tags; its notes. Its cards are the rows below, "
            "by their #guid and #cards columns."]
     lines = []
     for u in us:
         n, also = len(ms[u["id"]]), sum(1 for c in ms[u["id"]] if seen[c] > 1)
-        lines.append(f"{_date_line(u, doc)} | {n:,} card{'s' if n != 1 else ''} here, {also:,} also on another date")
+        lines.append(f"{_date_line(u, doc)} | {n:,} card{'s' if n != 1 else ''} here, {also:,} also on another set")
     lines += [f"{e['day']} | event | {e.get('name') or '?'}" for e in (doc or {}).get("events") or []
               if isinstance(e, dict) and e.get("day")]
     out += [f"# {x}" for x in sorted(lines)]
@@ -2206,17 +2641,89 @@ def our_deck(name):
     return f"{PARENT}::" + (" ".join(str(name).replace("::", ": ").split())[:120] or "Cards")
 
 
-def tidy(filtered, built, parent=None):
+# ---- Today's lesson, B: a lesson's own deck ----
+# Per plan, this computer's choice (plan_flow.lesson_deck_on): A opens a
+# lesson's cards in the plan's deck, as ever; B also makes each open lesson
+# with cards to learn a filtered deck of its own, "Due Crew::<plan>::03 <lesson>".
+
+def lesson_places(doc):
+    """{unit id: its place in the plan, 1 first}, by opening day (the plan's
+    own order for a day with two), so Anki lists the lesson decks in order."""
+    us = sorted(enumerate(units(doc)), key=lambda iu: (str(iu[1].get("opens") or "9999"), iu[0]))
+    return {u["id"]: k for k, (_i, u) in enumerate(us, 1)}
+
+
+def lesson_folder(plan_name):
+    """The plan's folder of lesson decks: "Due Crew::Path Book" ("::" in the
+    name made safe, as our_deck does)."""
+    return our_deck(plan_name or "Plan")
+
+
+def lesson_deck(plan_name, place, of, lesson_name, folder=None):
+    """A lesson's deck: "Due Crew::Path Book::03 Neoplasia", its place two
+    digits (three from a 100th lesson on), so the decks sort as the plan goes.
+    folder: its folder when it isn't the plan's own (lesson_folder_free)."""
+    name = " ".join(str(lesson_name or "").replace("::", ": ").split())[:120] or "Lesson"
+    return f"{folder or lesson_folder(plan_name)}::{int(place):0{max(2, len(str(int(of))))}d} {name}"
+
+
+def lesson_folder_free(plan_name, filtered):
+    """The plan's folder, or beside it when that name is a filtered deck
+    (Anki puts no deck under one): a set named as its plan, studied on A,
+    makes "Due Crew::Path Book" a Study deck. filtered(name): whether it is."""
+    folder = lesson_folder(plan_name)
+    if not filtered(folder):
+        return folder
+    return lesson_folder(f"{plan_name or 'Plan'} · sets")
+
+
+def lesson_cards(idx, cids):
+    """What a lesson's deck holds of these: its open new cards, and its
+    learning ones Anki has due now (one due later would show early in a
+    filtered deck), in the deck's order. Never a review: FSRS keeps its own
+    dates (Sam's FSRS rule)."""
+    got = [c for c in cids if c in idx.cards
+           and (idx.cards[c] == (0, 0) or (idx.cards[c][1] == 1 and c in idx.due_now))]
+    return sorted(got, key=lambda c: idx.order.get(c, (True, 0, c)))
+
+
+def lesson_plan(want, have, held):
+    """What one lesson's deck needs: "build" (it has none, and has cards to
+    take), "rebuild" (cards it should hold that it doesn't: a date's update
+    added some, a learning card came due), or None (it holds them all, or
+    there's nothing to take: an empty one goes with the morning's tidy).
+    want: the lesson's cards for it (lesson_cards); have: the cards in its
+    deck now, None without one; held: the ones another filtered deck holds
+    (Anki keeps a card in one), which it never takes."""
+    want = set(want) - set(held)
+    if not want:
+        return None
+    if have is None:
+        return "build"
+    return "rebuild" if want - set(have) else None
+
+
+def ours(name):
+    """A filtered deck Due Crew made: under its parent, or before 3.8.0 at the top."""
+    return str(name).startswith((FILTERED_PREFIX, PARENT + "::"))
+
+
+def tidy(filtered, built, parent=None, folders=()):
     """3.8.0: which of the filtered decks Due Crew built go: the empty ones.
     filtered: [(deck id, name, cards in it)], Anki's filtered decks; built:
     the ids Due Crew built here. Ours: built here, under "Due Crew::", or
     named "Due Crew · …" (before the parent, and the list). One with cards
     in it stays: a checkpoint not done yet, a date half studied. parent:
     (its id, the decks under it, cards in it): the parent deck, when Due
-    Crew made it, goes too once it's empty with nothing left under it."""
+    Crew made it, goes too once it's empty with nothing left under it.
+    folders (Today's lesson, B): [(id, the decks under it, cards in it)], a
+    plan's folder of lesson decks, deepest first, the same way."""
     built = {int(x) for x in built}
     gone = [int(d) for d, name, n in filtered
-            if not n and (int(d) in built or str(name).startswith((FILTERED_PREFIX, PARENT + "::")))]
+            if not n and (int(d) in built or ours(name))]
+    for fid, kids, n in folders:
+        if int(fid) in built and not n and {int(k) for k in kids} <= set(gone):
+            gone.append(int(fid))
     if parent:
         pid, kids, n = parent
         if int(pid) in built and not n and {int(k) for k in kids} <= set(gone):

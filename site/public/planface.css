@@ -1,0 +1,54 @@
+/* Your plans on duecrew.com: the add-on's plan page (planpage/*.css, a
+   copy of due_crew/planner/page) wearing the site's theme. The page draws
+   with the board's --dc-* tokens (board.palette in the add-on); here each
+   is the site's own, so its light and dark (and the accent I picked, which
+   app.js puts on --accent) reach it. Only the frame is the site's. */
+:root {
+  --dc-bg: var(--bg); --dc-ink: var(--ink); --dc-muted: var(--muted); --dc-line: var(--line); --dc-well: var(--well);
+  --dc-faded: var(--faint); --dc-hours: var(--warn); --dc-accent: var(--accent); --dc-accent-ink: var(--accent-ink);
+  --dc-you-bg: var(--you); --dc-fresh: var(--accent); --dc-mark: var(--ink);
+}
+
+/* planpage/plan.css fills Anki's window (html, body { height: 100% }); here every other page of the
+   app keeps its own height, and the plan page fills the window by body.dcplan below */
+html { height: auto; }
+body:not(.dcplan) { height: auto; }
+
+/* the page fills the window under the site's header, as it fills Anki's */
+body.dcplan { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+body.dcplan > header.top { flex: none; width: 100%; max-width: 1280px; padding-bottom: 0; }
+body.dcplan > main#app { flex: 1 1 auto; min-height: 0; width: 100%; max-width: 1280px; padding: 0 2px 0; display: flex; flex-direction: column; }
+body.dcplan > footer { display: none; }
+body.dcplan .dcp { flex: 1 1 auto; height: auto; min-height: 0; padding: 8px 18px 10px; }
+/* narrow (a phone): the page scrolls as a whole, as plan.css has it */
+@media (max-width: 760px) {
+  body.dcplan { height: auto; overflow: visible; }
+  body.dcplan > main#app { flex: none; }
+  body.dcplan .dcp { flex: none; min-height: 0; padding: 8px 12px 10px; }
+}
+
+/* the site's own buttons and boxes are the page's here (app.css styles every one) */
+.dcp button { font-size: inherit; font-weight: inherit; border-radius: 0; padding: 0; background: none; border: 0; color: inherit; display: revert; cursor: pointer; }
+.dcp input, .dcp select, .dcp textarea { font-size: inherit; padding: 0; border-radius: 0; background: none; border: 0; }
+.dcp textarea { width: auto; font-family: inherit; font-size: inherit; line-height: inherit; }
+.dcp label { display: revert; font-size: inherit; color: inherit; margin: 0; }
+.dcp h2, .dcp h3, .dcp h4 { letter-spacing: normal; }
+/* and the site's class names the page shares (app.css: .top, .seg, .ch, .note, .unit, .tlist) */
+.dcp .top { max-width: none; margin: 0; padding: 0; justify-content: flex-start; }
+.dcp .seg { border: 0; overflow: visible; }
+.dcp .ch { width: auto; justify-content: center; text-align: center; cursor: pointer; }
+.dcp .note { background: none; border-radius: 0; }
+.dcp .unit { padding: 0; border: 0; border-radius: 0; background: none; }
+.dcp .tlist { min-height: 0; }
+.dcp .dn { overflow: visible; text-overflow: clip; white-space: normal; }
+.dcp button:focus-visible, .dcp input:focus-visible, .dcp select:focus-visible, .dcp textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* a phone: one column that scrolls, the plan, then what's picked */
+@media (max-width: 760px) {
+  body.dcplan { height: auto; overflow: visible; display: block; }
+  body.dcplan .dcp { height: auto; min-height: calc(100vh - 60px); padding: 8px 12px 10px; }
+  body.dcplan .dcp .body { flex: none; }
+  body.dcplan .dcp .cols { display: flex; flex-direction: column; }
+  body.dcplan .dcp .pane { max-height: 60vh; }
+  body.dcplan .dcp .side { overflow: visible; }
+}

@@ -36,8 +36,8 @@ from .app import _profile_files, _state, cfg, save_cfg
 
 LOOK_KEY, CLOSET_KEY = "sev_look", "sev_closet"
 _TALLIES = ("fifteens", "fifteen_go", "fifteen_am", "rooms", "big_cheer", "cheered_by", "own_cards",
-            "clear", "bingo_line", "bingo_card", "crew_day", "crew")
-_LISTS = {"cheered": 40, "cheer_days": 40}
+            "clear", "bingo_line", "bingo_card", "crew_day", "crew", "followed", "gave_day")
+_LISTS = {"cheered": 40, "cheer_days": 40, "plans_done": 40}
 AM = 9  # a Fifteen begun before nine is a morning one
 YEAR_KEYS = ("fifteens", "rooms", "cheers_sent", "cheered_by", "crew_days")  # 3.8.22: a year's counts
 YEARS_KEPT = 6
@@ -200,6 +200,26 @@ def note_cheered():
     """A crewmate's cheer landed."""
     _bump("cheered_by")
     _ybump("cheered_by")
+
+
+# 3.9.6, the plan joys' things: from what the add-on already has; nothing new is sent or asked
+
+def note_plan_done(pid):
+    """A plan I follow, every set done (plan_flow.joy saw it): it counts
+    toward the Finisher's ribbon, here once I stop following it too."""
+    _add("plans_done", str(pid or ""))
+
+
+def note_followed():
+    """A plan I made has someone following it (the plan window's list of my
+    plans says so): the Folded map."""
+    _most("followed", 1)
+
+
+def note_gave_day():
+    """Give everyone a day, saved on a plan I write (the plan window's
+    breather): the Kite."""
+    _bump("gave_day")
 
 
 # ---- 3.9.1: the fridge, around the Decks screen (wrap.json's "fridge") ----
@@ -487,23 +507,27 @@ def revlog_facts(col):
 
 # ---- the board ----
 
-def board_facts(c, entries, me_uid, plans, progress, today, have):
+def board_facts(c, entries, me_uid, plans, progress, today, have, finished=(), followed=0):
     """What the board knows: squads (founded one?), plans followed and done,
-    a year with my Pip. Pure over its arguments."""
+    a year with my Pip. 3.9.6: finished, the plans this computer saw done
+    (a tally: they count once I stop following them too); followed, the
+    tally of a plan I made with someone following it, which a plan of mine
+    I follow says too (its followers, me among them). Pure over its arguments."""
     squads = [q for q in (c.get("squads") or []) if isinstance(q, dict)]
     out = {"squads": len(squads), "founder": int(any(me_uid and q.get("founder") == me_uid for q in squads)),
            "plans": len(plans or [])}
-    done = exam = 0
+    exam, done = 0, {str(x) for x in finished or () if x}
     for p in plans or []:
         prog = (progress or {}).get(p.get("id")) or {}
         units = [u for u in (p.get("doc") or {}).get("units") or [] if isinstance(u, dict) and u.get("id")]
         if units and all(int((prog.get(u["id"]) or [0, 0, 0])[2]) and
                          int((prog.get(u["id"]) or [0, 0, 0])[1]) >= int((prog.get(u["id"]) or [0, 0, 0])[2]) for u in units):
-            done += 1
+            done.add(str(p.get("id") or len(done)))
             evs = [str(e.get("day")) for e in (p.get("doc") or {}).get("events") or [] if isinstance(e, dict) and e.get("day")]
             if evs and max(evs) < today:
                 exam += 1
-    out.update(plan_done=done, plan_exam=exam)
+    mine = any(me_uid and p.get("owner") == me_uid and int(p.get("followers") or 0) >= 2 for p in plans or [])
+    out.update(plan_done=len(done), plan_exam=exam, followed=max(int(followed or 0), int(mine)))
     first = min(closet.clean_closet(have).values() or [today])
     try:
         out["sev_days"] = (datetime.date.fromisoformat(today) - datetime.date.fromisoformat(first)).days
@@ -526,7 +550,8 @@ def facts(c=None):
         from .app import client
         today = _state["labels"][0] if _state["labels"] else datetime.date.today().isoformat()
         out.update(board_facts(c, _state["entries"], client().session.get("user_id"), plan_flow.followed(),
-                               _state.get("plan_progress") or {}, today, c.get(CLOSET_KEY)))
+                               _state.get("plan_progress") or {}, today, c.get(CLOSET_KEY),
+                               finished=out.get("plans_done") or (), followed=out.get("followed") or 0))
     except Exception:
         traceback.print_exc()
     out["crew"] = max(out.get("crew", 0), len([e for e in _state["entries"] or [] if not e.get("you")]))

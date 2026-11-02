@@ -59,6 +59,106 @@ card on, from the deck beside the date or a search.
   one on a click, in the background. A refresh and a sync are unchanged
   (`test_request_budget`).
 
+## Round six: the plan maker as a page
+
+Sam's pick after "Plans end to end" (the HTML maker over Qt, full
+parity, older add-ons untouched; the calendar import waits): Your plans
+is a page in the board's look, in a window of Anki's. The Qt window
+stays, as it was, for `"plan_window": "qt"` in this computer's config
+(`flow.web_window`); every way in (Tools › Due Crew › Plans, You ›
+Plans, Make a plan, Plan the way there) goes through `flow.open_plans` /
+`flow.open_new`, which pick the window.
+
+- **One core, two faces.** `core.PlanCore` is the window's state and
+  steps (load, a change as an op, changes waiting, send, Undo, open and
+  study), Qt-free; `window.PlanWindow` (Qt) and `webface.WebFace` (the
+  page's) each implement its hooks (`say`, `plan_shown`, `ask_discard`,
+  `later`…). `web.PlanWeb` is the thin Qt shell: a dialog, Anki's web
+  view and its bridge (`set_bridge_command`: only this window's page
+  reaches it, never a card's script), the clipboard.
+- **Python owns the state; the page draws it.** `webface.view()` is the
+  whole view as JSON (`webmodel`'s pure builders: the head, the Plan
+  tab's weeks and strips, a set's, quiz's or review day's panel, the
+  deck beside it; `webtabs` for Insights and Settings; `webnew` for New
+  plan); the page (`page/plan.js`, `tabs.js`, `new.js`, their `.css`,
+  inlined by `webpage.page_html`) draws it with textContent only, and
+  sends each click back as `"dcplan:" + JSON`, `c_<name>` on the face.
+  What's only how it looks (List, Week, Month, a week folded, Find, the
+  month shown) stays in the page. Questions are sheets in the page (a
+  yes resends with `sure`); a few heavier dialogs open as Qt over it
+  (the text, History, Add a search, Spread, review days).
+- **The Plan tab's bar** (3.9.6, Sam: "the earliest first / today /
+  expand all / those filters ... are confusing in with the other
+  stuff") says three things, left to right: how you look (List · Week ·
+  Month), what to show (Find; **N need a look**, amber, only when
+  something does: it shows just those, again for all), what to do
+  (**Add**, the one filled button). Getting around lives in the view it
+  moves: **Today** and **Unfold all** head the list, Today sits by
+  Week's and Month's arrows (Ctrl+T anywhere). No Earliest first: the
+  list runs by date. Every box you type in or pick from is white with a
+  real edge wherever it sits; every day is picked on the page's own
+  calendar (`dateInput`, `calPop`), never the computer's date popup.
+- **New plan** is the window's first screen (`webnew.py`, `page/new.js`;
+  with no plans, the window opens on it). Three ways: **A resource, at
+  my pace** (the deck's resources and their chapters, `model.resource_parts`;
+  Only, a tag some of it carries; About N new a day, Finish by… (with the
+  exam), or When I'm ready (the follow's own pace); study days; Starts;
+  `edits.resource_plan` lays a set a chapter, the preview its sets,
+  new cards, first and last day and busiest day); **Someone's plan** (a
+  code into Follow, or the library on duecrew.com); **Start empty** (a
+  name, the deck, the exam it ends with; then the deck beside it, to lay
+  it out). **Make it, start later** makes it (`POST /plans`, the
+  builder's save); **Start it** also follows it here (`Ops.start_own`:
+  `POST /plans/follow` with its code), today's set in my deck or its
+  own deck. An author who follows their own plan isn't someone its
+  changes wait for (`core.others`). No days off (a plan has no field
+  for them); no class calendar yet (Sam: not yet).
+- **The builder's site-only tools**, as ops (`ops.py`): a source's
+  **Leave out cards also tagged** (the builder's Overlap "but not") and
+  **Move to** (a set nearby, or another day); a deck row's **A set
+  of its own** (the next free study day, or a day); **Before a quiz or
+  exam** under Lay them out (`lay_out`'s `upto`); **Give everyone a
+  day** in Add (`breather`); **Copy its search** per source
+  (`model.source_search`). No new doc field: the site and older add-ons
+  read every change as before.
+
+Checks: `tests/test_plan_web.py` drives every click as the page sends it
+against the fake Worker (and checks every command the page or the view
+sends has its handler, no innerHTML, each script parses);
+`tools/plan_preview.py` writes the window's pages from the fakes and
+`tools/plan_preview.js` screenshots them (light, dark, 760 px).
+
+**duecrew.com is the same page** (Sam's call). `site/public/planpage/`
+holds `page/*.js` and `*.css` byte for byte: `tools/gen_plan_page.py`
+writes them (run it after the page changes; the suite fails while a copy
+is behind). `site/public/planface.js` is the site's face, webface's twin
+in JS: the same view JSON and the same `c` names, built on builder.js's
+plan (`builder(id, face)` hands over its working copy and logic, its
+draw is the face's). A change waits under the plan while anyone follows
+it and goes out with Review and send as one builder save (with its line
+to followers); with nobody following it saves at once and Undo is `POST
+/plans/{id}/undo`. What only Anki does isn't in the site's view: Browse
+(`S.without`), Study, opening cards, Your AI app (`d.ai: null`), Today's
+set (`n.lesson` empty), a resource chapter by chapter (`n.ways`); a source's count
+is the deck tree's, Add to my calendar is the site's `/p/CODE.ics`. The
+seams are no-ops in Anki: its view never sets them. A plan I write or
+follow opens there at `/plans/{id}` and `/plans/{id}/edit`; one looked at
+from its code or the library, and `?page` for its authors (progress, the
+poster) and followers (the authors' post, the calendar link, the share
+card when it's done), is builder.js's page as before. A follower's is
+read-only on my days (the face's `myDoc`, plans.my_doc's twin: my shift,
+skips and moves), counted from what my Anki syncs (`following.progress`);
+its Settings are my follow, each click one `PATCH /plans/{id}/follow` as
+Anki's `set_days` and the old page send it (the team: `POST`/`DELETE
+/plans/{id}/team`); Held back, Today's set, Change deck, Open everything
+and My schedule are Anki's and hidden (`d.held: null`, `d.hide`). Add to
+my calendar is the face's `Ics`, ics.py's twin (the suite checks the file
+byte for byte): mine on my days, without the sets I skip. Notes on a
+set's day are on the plan's day, so a follower whose days run later
+still reads and writes that set's. `tests/planface_test.js` drives the face in node (run by the
+suite); `tools/plan_site_preview.js --shots DIR` renders the site's pages
+against a stub API.
+
 ## Your plans
 
 Round five (Sam's picks on the "Simpler Plan Builder" page, all A): one
@@ -236,7 +336,7 @@ sent; a follower's on my dates.
 - **What's in it**: each quiz or exam and what its dates hold (the last
   with no date for it, everything), the five biggest dates (a click: that
   one, picked on the Plan tab), how many cards are on two dates or more,
-  and the leeches on its dates that stay shut.
+  and the leeches on its dates that stay suspended.
 
 ### Settings (authors)
 
@@ -265,9 +365,20 @@ can"):
   do together is the plan's squad on the board's Squads tab). Co-authors
   (Ask one of my crew…, each says yes first; Hand it to them; Take them
   off; a co-author's Leave this plan); Library (the owner's).
+- **Your follow** (3.9.6, after the last check): an author who follows it
+  too (New plan's Start it) has my follow's rows here, as a follower's
+  Settings has them; not following it, Start it here… (the Follow window
+  on its code).
 - **This computer**: Your AI app, on or off, Set up… (AI hooks, below).
-- **Copy it for next year**; **Copy as a table** (the dates tab-separated,
-  for a spreadsheet); Delete this plan…, the owner's, asked first.
+- **This plan**: **Copy it for next year**; **Copy as a table** (the dates
+  tab-separated, for a spreadsheet); Delete this plan…, the owner's, asked first.
+
+Closing the window with changes not sent asks first (Review and send, or
+Close anyway: they wait here); the add-on's own closes (the profile
+going, a window in its place) never ask. A quiz's panel ticks the sets
+that lead up to it (each a set_for; one click for the ones since the
+quiz before), and a quiz or exam added after every set ends a plan that
+has no end.
 
 The `breather` op (every date still to come a study day later) stays for
 the text and an AI app.
@@ -570,6 +681,8 @@ and sends in Anki (Your plans › the plan › Review and send).
 | `planner/insights.py` | pure, round five: what the Insights tab shows (the workload by week, how much of the deck and of each part as the topic map splits it, what each quiz tests, the biggest dates) |
 | `planner/prompts.py` | pure: the prompts for your own AI, builder.js's `Prompts` restated |
 | `planner/flow.py` | the glue: the windows' asks (`Ops`, `StartOps`, `NewOps`, `QidOps`), `make_here`, `plan_drafts.json` |
+| `planner/core.py` | Qt-free, round six: the plan window's state and steps (`PlanCore`), both windows' |
+| `planner/web.py`, `webface.py`, `webmodel.py`, `webtabs.py`, `webnew.py`, `webpage.py`, `page/` | round six: the HTML window (its Qt shell, its clicks, its pure views, Insights and Settings, New plan, the page and its scripts) |
 | `planner/window.py`, `plan_tab.py`, `date_panel.py`, `deck_panel.py`, `shape.py`, `send.py`, `insights_tab.py`, `settings_tab.py`, `mine_tab.py`, `new_plan.py`, `text_tab.py`, `history_tab.py`, `day_notes.py`, `date_dialogs.py`, `widgets.py`, `picker.py`, `qid_window.py`, `start_window.py` | the Qt windows and their parts, in the board's look |
 
 Checks: `tests/test_planner.py` (the pure parts, `build.py` against

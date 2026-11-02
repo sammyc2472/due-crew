@@ -485,7 +485,7 @@ class StartWindow(QDialog):
                 top.setTextAlignment(1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         if self.sessions:
             bits = [f"{len(self.sessions):,} session{'s' if len(self.sessions) != 1 else ''}",
-                    f"{dates:,} date{'s' if dates != 1 else ''} with cards ({len(cids):,} in your {self.idx.name})"]
+                    f"{dates:,} set{'s' if dates != 1 else ''} with cards ({len(cids):,} in your {self.idx.name})"]
             if events:
                 bits.append(f"{events:,} quiz{'zes' if events != 1 else ''} and exams" if events != 1 else "1 quiz or exam")
             if none:
@@ -609,7 +609,7 @@ class StartWindow(QDialog):
             return
         if self.made is None and not confirm(
                 self, f"Make {name} on duecrew.com?",
-                f"{len(units):,} date{'s' if len(units) != 1 else ''} and {len(events):,} quiz"
+                f"{len(units):,} set{'s' if len(units) != 1 else ''} and {len(events):,} quiz"
                 f"{'zes' if len(events) != 1 else ''} or exams. It's yours: nobody follows it till you share "
                 "its code, and you can change anything in the plan window or the builder.", "Make it"):
             return
@@ -624,7 +624,7 @@ class StartWindow(QDialog):
             return
         if got[0] == "made":
             self.made = got[1]
-            self.said.setText(f"The plan is on duecrew.com, but its dates didn't save. {got[2]} "
+            self.said.setText(f"The plan is on duecrew.com, but its sets didn't save. {got[2]} "
                               "Make the plan tries them again, on it.")
             return
         outcome, what = got

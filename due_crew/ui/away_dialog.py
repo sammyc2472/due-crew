@@ -56,7 +56,7 @@ class AwayDialog(QDialog):
         words.addWidget(title(f"Welcome back to {name}"))
         self.setWindowTitle("Due Crew")  # the window says what it is (ui.heading)
         self.body = QLabel(f"{days_words(days)} "
-                           f"{n_dates:,} date{'s' if n_dates != 1 else ''} would open now: "
+                           f"{n_dates:,} set{'s' if n_dates != 1 else ''} would open now: "
                            f"{n_cards:,} new card{'s' if n_cards != 1 else ''}.")
         self.body.setTextFormat(Qt.TextFormat.PlainText)
         self.body.setWordWrap(True)

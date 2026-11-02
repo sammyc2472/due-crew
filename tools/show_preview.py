@@ -42,7 +42,9 @@ DECKS = [("&minus; Med school", 30, 12, 486, ""), ("Big Step 1", 20, 9, 412, "su
 rows = "".join(f'<tr class="deck"><td class="{c}">{n}</td><td class="n">{a}</td><td class="l">{b}</td><td class="d">{d}</td><td>&#9881;</td></tr>'
                for n, a, b, d, c in DECKS)
 plays = {f"{k}:{n}": landing(k, n) for k in shows.SHOWS for n in (1, 3)}
+plays["finish:1"] = P._JOY_FIN  # 3.9.6: a plan's finish line, its own show (tools/preview.py's sample plan)
 buttons = "".join(f'<button onclick="go(\'{k}\', 1)">{k} 1</button><button onclick="go(\'{k}\', 3)">3</button> ' for k in shows.SHOWS)
+buttons += '<button onclick="go(\'finish\', 1)">finish (a plan)</button>'
 out = f"""<!doctype html><html><head><meta charset="utf-8"><title>Cheer shows</title>
 <style>
   body {{ margin: 0; padding: 0 12px 60px; background: #f5f5f5; font: 14px -apple-system, sans-serif; color: #202020; }}

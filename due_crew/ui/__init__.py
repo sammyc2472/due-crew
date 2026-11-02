@@ -258,7 +258,8 @@ QComboBox:focus, QComboBox:on {{ border: 2px solid {accent}; padding: 5px 29px 5
 QComboBox::drop-down {{ subcontrol-origin: border; subcontrol-position: center right; width: 30px; border: none; background: transparent; margin: 0; padding: 0; }}
 QComboBox::down-arrow {{ image: url("{i-down}"); width: 12px; height: 12px; }}
 QComboBox::down-arrow:disabled {{ image: url("{i-down-off}"); }}
-QComboBox QAbstractItemView {{ background: {bg}; color: {ink}; border: 1px solid {edge}; padding: 4px; outline: 0; selection-background-color: {you-bg}; selection-color: {ink}; }}
+QComboBox QAbstractItemView {{ background: {bg}; color: {ink}; border: 1px solid {edge}; border-radius: 10px; padding: 4px; outline: 0; selection-background-color: {you-bg}; selection-color: {ink}; }}
+QComboBoxPrivateContainer {{ background: transparent; border: none; margin: 0; padding: 0; }}
 QComboBox QAbstractItemView::item {{ min-height: 28px; padding: 0 8px; border: none; border-radius: 6px; color: {ink}; background: transparent; }}
 QComboBox QAbstractItemView::item:hover, QComboBox QAbstractItemView::item:selected {{ background: {you-bg}; color: {ink}; }}
 
@@ -548,6 +549,12 @@ def _tidy(dialog):
             continue
         box.setProperty("dcTidy", True)
         box.setItemDelegate(QStyledItemDelegate(box))
+        # 3.9.6: the list's popup is a window of its own, which macOS frames (rounded, a shadow, Liquid Glass)
+        # round the list's own border: the one border is the list's, rounded, the window under it clear
+        pop = box.view().parentWidget()
+        if pop is not None and pop.isWindow():
+            pop.setWindowFlags(pop.windowFlags() | Qt.WindowType.FramelessWindowHint | Qt.WindowType.NoDropShadowWindowHint)
+            pop.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         box.setMinimumWidth(max(box.minimumWidth(), min(box.sizeHint().width(), 240)))
         changed = True
     cals = list(dialog.findChildren(QCalendarWidget))
@@ -829,6 +836,15 @@ def confirm(parent, title, text, yes, danger=False):
     (sheets.confirm, whose fallback this is): the title in bold over the
     words, no icon, the yes in the accent (danger: the board's red)."""
     box, go = _question(parent, title, text, yes, danger)
+    box.exec()
+    return box.clickedButton() is go
+
+
+def confirm_or(parent, title, text, yes, no):
+    """confirm, its other button named too ("Close anyway"): True for yes,
+    False for the other (Esc takes it, as Cancel)."""
+    box, go = _question(parent, title, text, yes, False)
+    box.defaultButton().setText(no)
     box.exec()
     return box.clickedButton() is go
 

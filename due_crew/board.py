@@ -500,7 +500,16 @@ def _css(cfg):
        itself) and gives every button a margin, a shadow and rounded
        corners, which the board's buttons start without */
     #due-crew button {{ -webkit-appearance: none; appearance: none; margin: 0; box-shadow: none;
-      min-width: 0; min-height: 0; text-shadow: none; background-image: none; }}
+      min-width: 0; min-height: 0; text-shadow: none; background-image: none;
+      -webkit-backdrop-filter: none; backdrop-filter: none; letter-spacing: normal; color: inherit; font-weight: normal; }}
+    /* 3.9.6: its boxes and pickers are the board's to draw: macOS draws any control whose
+       appearance isn't none in its own look (Liquid Glass) over the board's. Anki's
+       `button {{ outline: none !important }}` takes every focus ring: the board's come back */
+    #due-crew :where(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]), select, textarea) {{
+      -webkit-appearance: none; appearance: none; text-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none;
+      box-shadow: none; min-height: 0; letter-spacing: normal; line-height: normal; }}
+    #due-crew :where(input, select, textarea):focus-visible {{ outline: 2px solid var(--dc-accent); outline-offset: 0; }}
+    #due-crew button:focus-visible {{ outline: 2px solid var(--dc-accent) !important; outline-offset: 2px; }}
     /* the board is one rounded card — white by day, near-black by night —
        and inside it there are no rules and no fills: rows separate by
        spacing and the you-row highlight alone */
@@ -701,7 +710,7 @@ def _css(cfg):
       text-transform: none; letter-spacing: 0; border-radius: 3px; }}
     #due-crew .dc-wp > i {{ font-style: normal; font-size: 9px; pointer-events: none; }}
     #due-crew .dc-wp > select {{ position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; margin: 0; padding: 0;
-      border: 0; font: inherit; -webkit-appearance: none; appearance: none; color-scheme: light dark; }}
+      border: 0; font: inherit; -webkit-appearance: none; appearance: none; color-scheme: light dark; background: transparent; }}
     #due-crew .dc-wp:focus-within {{ outline: 2px solid var(--dc-accent); outline-offset: 2px; }}
     #due-crew .ik .tmsh {{ margin-left: 8px; color: var(--dc-accent); font-weight: 700; text-decoration: none;
       text-transform: none; letter-spacing: 0; white-space: nowrap; }}
@@ -833,6 +842,43 @@ def _css(cfg):
     #due-crew .dc-pc .pst .late {{ color: var(--dc-hours); font-weight: 700; }}
     #due-crew .dc-pc .pst .acts {{ margin-left: auto; display: flex; gap: 12px; }}
     #due-crew .dc-pc .pst a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; white-space: nowrap; }}
+    /* plans, end to end: the whole plan as a path, a segment a lesson, the exam a diamond at its end */
+    #due-crew .ppath {{ display: flex; gap: 3px; align-items: center; height: 12px; margin: 4px 0 3px; }}
+    #due-crew .ppath.g2 {{ gap: 2px; }} #due-crew .ppath.g1 {{ gap: 1px; }} #due-crew .ppath.g0 {{ gap: 0; }}
+    #due-crew .ppath i {{ flex: 1 1 0; min-width: 0; height: 8px; border-radius: 3px; background: var(--dc-line); display: block; }}
+    #due-crew .ppath i[onclick] {{ cursor: pointer; }}
+    #due-crew .ppath.fold {{ margin-bottom: 16px; }}
+    #due-crew .ppath i.run {{ position: relative; min-width: 34px; }}
+    #due-crew .ppath i.run span {{ position: absolute; left: 0; top: 12px; font-size: 10.5px; line-height: 1; font-weight: 400;
+      font-style: normal; color: var(--dc-muted); white-space: nowrap; pointer-events: none; }}
+    #due-crew .ppath i.run.rl span {{ left: auto; right: 0; }}
+    #due-crew .ppath.g1 i, #due-crew .ppath.g0 i {{ border-radius: 1px; }}
+    #due-crew .ppath i.d {{ background: var(--dc-accent); }}
+    #due-crew .ppath i.b {{ background: var(--dc-hours); }}
+    #due-crew .ppath i.c {{ background: var(--dc-accent); opacity: .45; }}
+    #due-crew .ppath i.t {{ height: 12px; background: var(--dc-bg); box-shadow: inset 0 0 0 2px var(--dc-accent); }}
+    #due-crew .ppath i.d.t {{ background: var(--dc-accent); }}
+    #due-crew .ppath i.s {{ background: transparent; box-shadow: inset 0 0 0 1px var(--dc-line); }}
+    #due-crew .ppath em {{ flex: none; box-sizing: border-box; width: 9px; height: 9px; margin: 0 2px 0 4px;
+      transform: rotate(45deg); border: 2px solid var(--dc-ink); border-radius: 2px; }}
+    #due-crew .ppl {{ display: flex; justify-content: space-between; gap: 10px; font-size: 11px; color: var(--dc-muted); }}
+    /* 3.9.6: the plan's joys. A segment or line playing one is where its moment starts (motion.js's joy;
+       --ago: how long it's been out). Still (Reduce motion), a Pip stands where it lands, then goes */
+    #due-crew .ppath i[data-joy] {{ position: relative; }}
+    #due-crew .ppath .jpp {{ position: absolute; left: 50%; top: -31px; width: 34px; height: 34px; margin-left: -17px;
+      z-index: 3; pointer-events: none; transform-origin: 50% 100%;
+      animation: dcjoygo 0s linear calc(5s - var(--ago, 0s)) forwards; }}
+    #due-crew .ppath .jpp svg, #due-crew .dc-pc .jgp svg {{ display: block; width: 34px; height: 34px; overflow: visible; }}
+    #due-crew .dc-pc .pst .jgo {{ position: relative; display: inline-block; width: 34px; height: 12px; flex: none;
+      animation: dcjoygo 0s linear calc(5s - var(--ago, 0s)) forwards; }}
+    #due-crew .dc-pc .jgp {{ position: absolute; left: 0; bottom: -3px; width: 34px; height: 34px; pointer-events: none;
+      transform-origin: 50% 100%; }}
+    @keyframes dcjoygo {{ to {{ visibility: hidden; }} }}
+    #due-crew .dc-pc .pst .jd1 {{ color: var(--dc-accent); }}
+    #due-crew .dc-pc .pst.jml b, #due-crew .dc-pc .pst.jfin b {{ color: var(--dc-ink); }}
+    #due-crew .dc-pc .pst.jcu b {{ color: var(--dc-accent); }}
+    #due-crew .dc-pc .pst a.jx {{ color: var(--dc-muted); font-weight: 400; font-size: 15px; line-height: 1; }}
+    #due-crew .dc-pc .pst .jta {{ position: relative; display: inline-block; font-size: 13px; line-height: 1; }}
     #due-crew .dc-pc .miss {{ color: var(--dc-hours); font-size: 11px; }}
     #due-crew .dc-pc .n {{ color: var(--dc-muted); font-variant-numeric: tabular-nums; text-align: right;
       white-space: nowrap; font-size: 11px; }}
@@ -912,6 +958,7 @@ def _css(cfg):
     #due-crew .pday a.tp {{ font-weight: 600; }}
     #due-crew .pday .pev {{ display: flex; gap: 4px 12px; flex-wrap: wrap; align-items: baseline; padding-top: 8px; border-top: 1px solid var(--dc-line); }}
     #due-crew .pday .pev .acts {{ margin-left: auto; }}
+    #due-crew .pday .ph .acts {{ margin-left: auto; }}
     /* 3.8.1: why a date left cards shut */
     #due-crew .pday .pwhy {{ font-size: 11.5px; color: var(--dc-muted); }}
     #due-crew .pday .pwhy a.tp {{ font-weight: inherit; }}
@@ -1064,14 +1111,18 @@ def _css(cfg):
     #due-crew .wk2 .tr.dn {{ color: var(--dc-accent); }}
     #due-crew .wk2 .acts {{ display: flex; gap: 10px; }}
     #due-crew .wk2.hd {{ font-size: 10.5px; color: var(--dc-muted); font-weight: 700; padding-bottom: 3px; }}
-    #due-crew .dc-pways {{ display: grid; gap: 10px; margin: 4px 0 8px; }}
-    #due-crew .dc-pways .t {{ font-size: 14px; }}
-    #due-crew .dc-pways .ways {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }}
-    #due-crew .dc-pways .way {{ display: grid; gap: 6px; align-content: start; font-size: 12px; }}
-    #due-crew .dc-pways .way b {{ font-size: 13px; }}
-    #due-crew .dc-pways .way a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
-    #due-crew .dc-pways input {{ font: inherit; font-size: 12px; padding: 3px 7px; border: 1px solid var(--dc-line);
-      border-radius: 6px; background: var(--dc-bg); color: var(--dc-ink); min-width: 0; }}
+    /* plans, end to end (frame 1): a plan's code or link with Follow, my exam, a plan of my own */
+    #due-crew .dc-pways {{ display: grid; gap: 8px; margin: 4px 0 4px; font-size: 12.5px; }}
+    #due-crew .dc-pways .pfw {{ display: flex; gap: 8px; align-items: center; }}
+    #due-crew .dc-pways input {{ flex: 1; font: inherit; font-size: 12.5px; height: 30px; padding: 0 10px; border: 1px solid var(--dc-line);
+      border-radius: 8px; background: var(--dc-well); color: var(--dc-ink); min-width: 0; box-sizing: border-box; }}
+    #due-crew .dc-pways input:focus {{ outline: 2px solid var(--dc-accent); outline-offset: 0; }}
+    #due-crew .dc-pways a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; white-space: nowrap; }}
+    #due-crew .dc-pways a.pbt {{ border: 1px solid var(--dc-accent); border-radius: 8px; padding: 5px 14px; }}
+    #due-crew .dc-pways .pwl {{ display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; padding-top: 8px;
+      border-top: 1px solid var(--dc-line); }}
+    #due-crew .dc-pways .pwl .mu {{ color: var(--dc-muted); }}
+    #due-crew .dc-pways .pwl .acts {{ margin-left: auto; display: flex; flex-wrap: wrap; gap: 4px 14px; }}
     @media (max-width: 560px) {{
       #due-crew .wk2 {{ grid-template-columns: minmax(0, 1fr) auto auto; gap: 3px 10px; }}
       #due-crew .wk2 .acts {{ grid-column: 1 / -1; }}
@@ -1080,7 +1131,6 @@ def _css(cfg):
       #due-crew .pwk .pc {{ padding: 5px 5px 6px; }}
       #due-crew .pwk .pc .dow, #due-crew .pwk .pc .w, #due-crew .pwk .pc .ev {{ display: none; }}
       #due-crew .pwk .pc.ev1 {{ border-bottom: 3px solid var(--dc-ink); }}
-      #due-crew .dc-pways .ways {{ grid-template-columns: 1fr; }}
       #due-crew .pwh {{ flex-wrap: wrap; }}
     }}
     </style>
@@ -1513,7 +1563,7 @@ def keep_me_in_view_js(scripts=True):
 # bottom bars to match (app.veil) while one is up. This tells it when: a
 # window comes, or the last one goes (a closing one gives up its id as it
 # starts to fade, motion.js, so the bars fade with it).
-VEIL_IDS = ("dc-cheer", "dc-profile", "dc-sheet")
+VEIL_IDS = ("dc-cheer", "dc-profile", "dc-sheet", "dc-song")  # 3.9.6: the song search
 VEIL_WATCH_JS = """
 (function () {
     if (window.dcVeil || typeof MutationObserver === 'undefined') { return; }
@@ -1697,7 +1747,7 @@ def _plans_html(plans, people=None, cfg=None):
     pick (`plan_pick`), else the first."""
     cards = (plans or {}).get("cards") or []
     if not cards:
-        return _plans_empty_html()
+        return _plans_empty_html(plans)
     if len(cards) == 1:
         return _plan_card_html(cards[0], people, cfg)
     card = _picked_plan(cards, cfg)
@@ -1729,7 +1779,7 @@ def _plan_switch(cards, card):
                   f'{e(word)}{dot}</a>')
     pid = str(card.get("id", ""))
     return (f'<div class="pk psk"><span class="psw">{pills}</span><span>{e(str(card.get("sub") or ""))}</span>'
-            f'<span class="acts"><a class="pbt" href="#" title="Its weeks and dates, Insights, and your settings for it" '
+            f'<span class="acts"><a class="pbt" href="#" title="Its weeks and sets, Insights, and your settings for it" '
             f'onclick="{_pycmd("planyours:" + pid)}">Your plans&hellip;</a></span></div>')
 
 
@@ -1786,6 +1836,8 @@ def _opened_line(op):
     sync = (f'<a href="#" title="Anki&rsquo;s sync, so your phone has them" onclick="{_pycmd("plansync")}">Sync now</a>'
             if op.get("sync") else "")
     by = _opened_dates(op.get("dates"))
+    if op.get("decks"):  # Today's lesson, B: each lesson a deck of its own
+        by = f"{by}, in your decks" + ("" if by else ".")
     return (f'<div class="du-line"><span>This morning opened {n:,} new card{"s" if n != 1 else ""}{by or "."}</span>'
             f'<span class="acts">{sync}<a href="#" title="They open tomorrow morning" onclick="{_pycmd("plannottoday")}">'
             f'Not today</a></span></div>')
@@ -1796,20 +1848,33 @@ def _segs(segments):
     return "".join(f"<b>{_html.escape(str(t))}</b>" if b else _html.escape(str(t)) for t, b in segments)
 
 
-def _plans_empty_html():
-    """3.5.0: the Plans tab with no plan: three ways in (round five: Make one is the one New plan)."""
-    add = ("var v=(document.getElementById('dc-plancode').value||'').toUpperCase()"
-           ".replace(/[^A-Z0-9 \\/]/g,' ').slice(0,200);"
-           "pycmd('duecrew:addcode:'+v+'|'+window.dcBK);return false;")
-    return (f'<div class="dc-pways"><b class="t">Follow a plan</b><div class="ways">'
-            f'<div class="way"><b>Got a code?</b><input id="dc-plancode" placeholder="N4AP ULM2" '
-            f'onkeydown="if(event.key===\'Enter\'){{{add}}}"><a href="#" onclick="{add}">Follow</a></div>'
-            f'<div class="way"><b>Find one</b><a href="#" onclick="{_pycmd("planlibrary")}">The library &#8599;</a></div>'
-            f'<div class="way"><b>Make one</b><a href="#" onclick="{_pycmd("planstart")}">New plan&hellip;</a></div>'
-            # round five: the plans I write, with no head row above
-            f'<div class="way"><b>Write one</b><a href="#" title="Every plan you write or follow" '
-            f'onclick="{_pycmd("planyours")}">Your plans&hellip;</a></div>'
-            f'</div></div>')
+def _plans_empty_html(plans=None):
+    """3.5.0: the Plans tab with no plan. Plans, end to end (frame 1): a box
+    for a plan's code or its link, with Follow (plan_flow's Follow, the code
+    looked up); my exam, when Settings has one ahead and no plan I follow
+    or write ends by it, with Plan the way there (a new plan finishing by
+    it); and Make a plan and the library, with Your plans… when I write
+    one. What's typed goes as typed (encoded: a link has its ':'), and
+    Python reads the code from it."""
+    e = _html.escape
+    plans = plans or {}
+    add = ("var v=(document.getElementById('dc-plancode').value||'').trim().slice(0,300);"
+           "pycmd('duecrew:planfollowcode:'+encodeURIComponent(v)+'|'+window.dcBK);return false;")
+    out = (f'<div class="dc-pways"><div class="pfw"><input id="dc-plancode" placeholder="A plan&rsquo;s code or link" '
+           f'aria-label="A plan&rsquo;s code or link" onkeydown="if(event.key===\'Enter\'){{{add}}}">'
+           f'<a class="pbt" href="#" onclick="{add}">Follow</a></div>')
+    ex = plans.get("exam") or {}
+    if ex.get("day") and int(ex.get("days") or 0) > 0:
+        n = int(ex["days"])
+        out += (f'<div class="pwl"><span>Your exam: <b>{e(_ins_dname(ex["day"], long=True))}</b>, '
+                f'{"tomorrow" if n == 1 else f"in {n:,} days"}</span><span class="acts">'
+                f'<a href="#" title="A new plan that finishes by then" onclick="{_pycmd("planopennew:" + str(ex["day"]))}">'
+                f'Plan the way there</a></span></div>')
+    yours = (f'<a href="#" title="Every plan you write or follow" onclick="{_pycmd("planyours")}">Your plans&hellip;</a>'
+             if plans.get("writes") else "")
+    return out + (f'<div class="pwl"><span class="mu">Or a plan of your own</span><span class="acts">'
+                  f'<a href="#" onclick="{_pycmd("planopennew")}">Make a plan</a>{yours}'
+                  f'<a href="#" onclick="{_pycmd("planlibrary")}">The library &#8599;</a></span></div></div>')
 
 
 def _plan_card_html(card, people=None, cfg=None, head=None):
@@ -1821,20 +1886,23 @@ def _plan_card_html(card, people=None, cfg=None, head=None):
     full assignments for that day open in that plans tab"), what it says
     about now (_plan_now: a quiz coming, cards at risk), one note at most,
     and the crew. head: the switch between plans in place of its name
-    (_plan_switch). Plan, date and event names are the author's: escaped
-    here."""
+    (_plan_switch). Plans, end to end (frame 16): the whole plan as a path
+    above the week (_plan_path), and what's behind its own line with
+    Behind… (_plan_behind), where Catch up… was. Plan, date and event names
+    are the author's: escaped here."""
     e = _html.escape
     pid = str(card.get("id", ""))
     out = '<div class="dc-pc">' + (head or (
         f'<div class="pk"><b>{e(str(card.get("title") or "Plan"))}</b>'
         f'<span>{e(str(card.get("sub") or ""))}</span>'
-        f'<span class="acts"><a class="pbt" href="#" title="Its weeks and dates, Insights, and your settings for it" '
+        f'<span class="acts"><a class="pbt" href="#" title="Its weeks and sets, Insights, and your settings for it" '
         f'onclick="{_pycmd("planyours:" + pid)}">Your plans&hellip;</a></span></div>'))
     tabs = card.get("tabs") or {}
     if card.get("no_deck"):
         out += (f'<div class="dc-line">No deck here has this plan&rsquo;s cards yet. '
                 f'<a href="#" onclick="{_pycmd("plandeck:" + pid)}">Pick a deck</a></div>')
-    out += _plan_status(card, pid) + _week_html(card, pid) + _plan_now(card, pid)
+    out += (_plan_path(card) + _joy_line(card, pid) + _plan_status(card, pid) + _plan_slid(card, pid)
+            + (_plan_behind(card, pid) or _joy_caught(card)) + _week_html(card, pid) + _plan_now(card, pid))
     notes = _plan_notes(card, pid)
     if notes:
         out += notes[0]
@@ -1851,19 +1919,215 @@ def _plan_card_html(card, people=None, cfg=None, head=None):
 
 
 def _plan_status(card, pid):
-    """Round five: the plan's day in a line, "93 to go today, and 133
-    behind since Monday", with Catch up… (a catch-up running says so in its
-    note); "" when today's dates are seen and nothing's behind."""
-    st = card.get("status") or {}
-    # a catch-up running says what it's catching up on in its own note, never "behind"
-    togo, late = int(st.get("togo") or 0), 0 if card.get("catch") else int(st.get("behind") or 0)
-    if not togo and not late:
+    """Round five: the plan's day in a line, "93 to go today"; "" when
+    today's dates are seen. Plans, end to end: what's behind is a line of
+    its own (_plan_behind)."""
+    togo = int((card.get("status") or {}).get("togo") or 0)
+    if not togo:
         return ""
-    since = f' since {_html.escape(str(st["since"]))}' if st.get("since") else ""
-    words = ([f"<b>{togo:,}</b> to go today"] if togo else []) + (
-        [f'<span class="late">{late:,} behind{since}</span>'] if late else [])
-    act = f'<a href="#" onclick="{_pycmd("plancatch:" + pid)}">Catch up&hellip;</a>' if late else ""
-    return f'<div class="pst"><span>{", and ".join(words)}</span><span class="acts">{act}</span></div>'
+    lesson = card.get("lesson_deck") or {}  # Today's lesson, B: today's is a deck of its own
+    act = ""
+    if lesson.get("today"):
+        uid = str(lesson["today"])
+        act = f'<a href="#" title="A filtered deck: today&rsquo;s set&rsquo;s new cards and its learning ones due now" onclick="{_pycmd(f"planstudydate:{pid}:{uid}")}">Study</a>'
+    # 3.9.6: the first morning says so all day, and Pip says let's go just after the words, once
+    one = (card.get("joy") or {}).get("day1")
+    first = '<b class="jd1">Day one</b> &middot; ' if one else ""
+    pip = (f'<span class="jgo" data-joy="go"{_joy_ago(one["ago"])}><span class="jgp" aria-hidden="true">{one["pip"]}</span></span>'
+           if one and one.get("ago") is not None and one.get("pip") else "")
+    return (f'<div class="pst"><span>{first}<b>{togo:,}</b> to go today{", in your decks" if lesson else ""}</span>{pip}'
+            + (f'<span class="acts">{act}</span>' if act else "") + '</div>')
+
+
+PATH_WORDS = {"done": "d", "behind": "b", "catch": "c", "now": "t", "ahead": "a", "skip": "s"}
+
+
+def _plan_path(card):
+    """Plans, end to end (frame 16): the whole plan as a path, a segment a
+    lesson in its order (done filled, behind amber, today outlined, ahead
+    plain, skipped hollow), its last quiz or exam a small diamond at the
+    end; under it the first lesson's day and the end's name and day. Each
+    segment says its lesson on a hover, and its click opens the day it opens
+    in the week below (3.9.6). While a catch-up runs, what it's
+    catching up on isn't called behind (round five's rule): half filled. A
+    long plan's segments close up (no gaps past 120). Names are the
+    author's: escaped here."""
+    e = _html.escape
+    p = card.get("path") or {}
+    ls = [x for x in p.get("lessons") or [] if isinstance(x, dict)]
+    if not ls:
+        return ""
+    pid = _html.escape(str(card.get("id") or ""), quote=True) if _re.fullmatch(r"[A-Za-z0-9_-]{1,128}", str(card.get("id") or "")) else ""
+    segs, n = "", {}
+
+    def state(x):
+        st = str(x.get("state") or "ahead")
+        return "catch" if st == "behind" and card.get("catch") else st
+
+    def jump(day):  # 3.9.6, after the last check: a click opens its day's details in the week below (plan_flow.jump_to)
+        day = str(day or "")
+        return f' onclick="{_pycmd(f"planjump:{pid}:{day}")}"' if pid and _re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) else ""
+
+    keep = _path_keep(ls, p, card.get("joy"))
+    pieces, i = 0, 0
+    while i < len(ls):
+        x, st = ls[i], state(ls[i])
+        n[st] = n.get(st, 0) + 1
+        if keep is not None and i not in keep and st in PATH_FOLD:
+            j = i + 1
+            while j < len(ls) and j not in keep and state(ls[j]) == st:
+                n[st] += 1
+                j += 1
+            if j - i > 1:
+                # Sam's pick A (a long plan): a run of sets that don't need me folds into one, with its count under it
+                run, last = ls[i:j], j == len(ls)
+                first, end = str(run[0].get("name") or "?"), str(run[-1].get("name") or "?")
+                said = PATH_FOLD[st].format(n=j - i)
+                to = run[-1] if st == "done" else run[0]
+                segs += (f'<i class="run {PATH_WORDS.get(st, "a")}{" rl" if last else ""}" style="flex:{min(j - i, 8)} 1 0" '
+                         f'title="{e(first)} to {e(end)} &middot; {said}"{jump(to.get("opens"))}><span>{said}</span></i>')
+                pieces += 1
+                i = j
+                continue
+        word = {"done": "done", "behind": f'{int(x.get("left") or 0):,} left', "skip": "skipped",
+                "catch": f'catching up &middot; {int(x.get("left") or 0):,} left',
+                "now": "today" + (f' &middot; {int(x.get("left") or 0):,} to go' if x.get("left") else "")}.get(
+            st, _ins_dname(x.get("opens"), long=True))
+        cls = PATH_WORDS.get(st, "a") + (" t" if x.get("today") and st == "done" else "")
+        play, inner = _joy_seg(card.get("joy"), str(x.get("uid") or ""), st)
+        segs += f'<i class="{cls}" title="{e(str(x.get("name") or "?"))} &middot; {word}"{play}{jump(x.get("opens"))}>{inner}</i>'
+        pieces += 1
+        i += 1
+    end = p.get("end") or {}
+    ev = bool(end.get("event"))
+    when = _ins_dname(end.get("day"), long=True)
+    if ev:
+        segs += f'<em title="{e(str(end.get("name") or "Exam"))} &middot; {when}"></em>'
+    said = ", ".join(f"{n[k]} {w}" for k, w in (("done", "done"), ("behind", "behind"), ("catch", "catching up"),
+                                                 ("now", "today"), ("ahead", "to come"), ("skip", "skipped")) if n.get(k))
+    said += f', then {e(str(end.get("name") or "Exam"))} on {when}' if ev else ""
+    gap = "" if pieces <= 30 else " g2" if pieces <= 60 else " g1" if pieces <= 120 else " g0"
+    gap += " fold" if keep is not None else ""
+    right = (f'{e(str(end.get("name") or "Exam"))} &middot; {when}' if ev else f"Ends {when}" if when else "")
+    return (f'<div class="ppath{gap}" role="img" aria-label="Sets: {said}">{segs}</div>'
+            f'<div class="ppl"><span>{_ins_dname(p.get("first"), long=True)}</span><span>{right}</span></div>')
+
+
+PATH_FOLD_PAST = 16  # Sam's pick: a plan longer than this folds the sets that don't need me
+PATH_FOLD = {"done": "{n} done", "ahead": "{n} to come", "skip": "{n} skipped"}
+
+
+def _path_keep(ls, p, joy=None):
+    """Which sets a long path shows one by one (Sam's pick A, past
+    PATH_FOLD_PAST sets), or None to show them all: every set behind (or
+    catching up), the two before today's, today's, the next four, and any a
+    joy plays on (its pop, caught up, a milestone's sparkle); runs of the
+    rest fold, done, to come or skipped, each one piece with its count."""
+    if len(ls) <= PATH_FOLD_PAST:
+        return None
+    at = next((i for i, x in enumerate(ls) if x.get("state") == "now"), None)
+    if at is None:
+        k = int((p or {}).get("at") or 0)
+        at = max(0, min(len(ls) - 1, k - 1)) if k else 0
+    keep = {i for i in range(at - 2, at + 5) if 0 <= i < len(ls)}
+    keep |= {i for i, x in enumerate(ls) if x.get("state") == "behind"}
+    joy = joy or {}
+    hot = {str((joy.get("pop") or {}).get("uid") or ""), str((joy.get("line") or {}).get("uid") or "")}
+    hot |= {str(u) for u in (joy.get("caught") or {}).get("uids") or []}
+    keep |= {i for i, x in enumerate(ls) if str(x.get("uid") or "") in hot - {""}}
+    return keep
+
+
+def _joy_ago(ago):
+    return f' style="--ago:{max(0.0, float(ago)):.2f}s"'
+
+
+def _joy_seg(joy, uid, state):
+    """3.9.6: a path segment playing one of the plan's joys (motion.js's
+    joy): (its attributes, what goes in it). A set done pops ("pop"), Pip
+    on it while it's out (still, then gone, with Reduce motion); what was
+    behind turns the accent ("caught"); a milestone's set sparkles
+    ("spark"). --ago: how long it's been out, so a redraw goes on from
+    there. The glue says what plays (plan_flow.joy); Pip is sev.py's."""
+    joy = joy or {}
+    pop, line, caught = joy.get("pop") or {}, joy.get("line") or {}, joy.get("caught") or {}
+    if state != "done" or not uid:
+        return "", ""
+    if pop.get("uid") == uid and pop.get("ago") is not None:
+        pip = f'<span class="jpp" aria-hidden="true">{pop["pip"]}</span>' if pop.get("pip") else ""
+        return f' data-joy="pop"{_joy_ago(pop["ago"])}', pip
+    if caught.get("ago") is not None and uid in (caught.get("uids") or []):
+        return f' data-joy="caught"{_joy_ago(caught["ago"])}', ""
+    if line.get("ago") is not None and line.get("key") in ("half", "threeq") and line.get("uid") == uid:
+        return f' data-joy="spark"{_joy_ago(line["ago"])}', ""
+    return "", ""
+
+
+def _joy_line(card, pid):
+    """3.9.6: the plan's line about where it's got to, under the path: a
+    milestone today (halfway, three-quarters, the last set), with Share and
+    × (gone for today, as it would be tomorrow); or, every set done, the
+    finish line, with Share, for as long as I follow it. The plan's and
+    set's names are the author's: escaped here."""
+    e = _html.escape
+    j = card.get("joy") or {}
+    share = lambda key: (f'<a href="#" title="As text or a picture" '  # noqa: E731
+                         f'onclick="{_pycmd(f"planjoyshare:{pid}:{key}")}">Share</a>')
+    if j.get("fin"):
+        return (f'<div class="pst jfin"><span><b>Finished</b> &middot; {e(str(j["fin"].get("words") or ""))}</span>'
+                f'<span class="acts">{share("fin")}</span></div>')
+    ln = j.get("line") or {}
+    key = ln.get("key")
+    if key not in ("half", "threeq", "last"):
+        return ""
+    name = e(str(card.get("name") or "the plan"))
+    words = {"half": f"Halfway through {name}", "threeq": f"Three-quarters through {name}", "last": f"The last set of {name}"}[key]
+    sub = (f'{e(str(ln.get("name") or ""))}, today' if key == "last"
+           else f'{int(ln.get("n") or 0):,} of {int(ln.get("of") or 0):,} sets')
+    play = f' data-joy="line"{_joy_ago(ln["ago"])}' if ln.get("ago") is not None else ""
+    return (f'<div class="pst jml"{play}><span><b>{words}</b> &middot; {sub}</span><span class="acts">{share(key)}'
+            f'<a class="jx" href="#" title="Not now" onclick="{_pycmd(f"planjoyx:{pid}:{key}")}">&times;</a></span></div>')
+
+
+def _joy_caught(card):
+    """3.9.6: Behind cleared, its line says so for the rest of the day, every
+    time: "Caught up · 2 · Inflammation, all 101 seen", a small 🎉 that pops
+    once. The set's name is the author's: escaped here."""
+    c = (card.get("joy") or {}).get("caught") or {}
+    if not c.get("uids"):
+        return ""
+    more = int(c.get("more") or 0)
+    name = _html.escape(str(c.get("name") or "?")) + (f" and {more} more" if more else "")
+    play = f' data-joy="tada"{_joy_ago(c["ago"])}' if c.get("ago") is not None else ""
+    return (f'<div class="pst jcu"><span><b>Caught up</b> &middot; {name}, all {int(c.get("n") or 0):,} seen</span>'
+            f'<span class="acts"><span class="jta" aria-hidden="true"{play}>&#127881;</span></span></div>')
+
+
+def _plan_slid(card, pid):
+    """Slide on Behind…, today: the line that says so, with its Undo (the
+    way back on the same screen)."""
+    n = int(card.get("slid") or 0)
+    if n <= 0:
+        return ""
+    return (f'<div class="pst"><span>Your dates moved {n} day{"s" if n != 1 else ""} later</span>'
+            f'<span class="acts"><a href="#" title="Your dates back where they were" '
+            f'onclick="{_pycmd("planunslide:" + pid)}">Undo</a></span></div>')
+
+
+def _plan_behind(card, pid):
+    """Plans, end to end (frame 18): what's behind, one line, "Behind · 2 ·
+    Inflammation, 31 left", with Behind… (the sheet: Slide, Fit it in, Skip
+    what's left; plan_board.behind). None while a catch-up runs (its own
+    note says so) or while 3.2's missed-days question is up (it has its
+    own three ways). The lesson's name is the author's: escaped here."""
+    b = card.get("behind") or {}
+    if not b.get("left") or card.get("catch") or (card.get("session") or {}).get("ask"):
+        return ""
+    more = int(b.get("more") or 0)
+    name = _html.escape(str(b.get("name") or "?")) + (f" and {more} more" if more else "")
+    return (f'<div class="pst pbh"><span class="late">Behind &middot; {name}, {int(b["left"]):,} left</span>'
+            f'<span class="acts"><a href="#" title="Slide your dates, fit it in, or skip what&rsquo;s left" '
+            f'onclick="{_pycmd("planbehind:" + pid)}">Behind&hellip;</a></span></div>')
 
 
 def _plan_now(card, pid):
@@ -1889,7 +2153,7 @@ def _plan_now(card, pid):
         out += (f'<div class="pn"><span><a class="tp" href="#" title="Browse them" onclick="{_pycmd(f"insbrowse:{did}:h")}">'
                 f'{n:,} card{"s" if n != 1 else ""}</a> Anki won&rsquo;t show you before {when}</span>'
                 # 3.9.5 (Sam's FSRS rule): a deck only before a date
-                + (f'<span class="acts"><a href="#" onclick="{_pycmd(f"insstudy:{did}:h")}">Study {n:,}</a></span>'
+                + (f'<span class="acts"><a href="#" title="A filtered deck of them, the most missed first" onclick="{_pycmd(f"insstudy:{did}:h")}">Study {n:,}</a></span>'
                    if ins.get("name") else "") + '</div>')
     return out
 
@@ -1909,8 +2173,8 @@ def _quiz_line(card, pid):
     when = "today" if qz.get("today") else f'on {e(str(qz.get("when") or ""))}'
     return (f'<div class="pn"><span>For <b>{e(str(qz.get("name") or "?"))}</b> {when}'
             + (f' &middot; {left} more day{"s" if left != 1 else ""} of prep' if left else "")
-            + f' &middot; {n:,} card{"s" if n != 1 else ""} open from its dates</span>'
-            f'<span class="acts"><a href="#" title="Its dates&rsquo; open cards in one deck, the shakiest first" '
+            + f' &middot; {n:,} card{"s" if n != 1 else ""} open from its sets</span>'
+            f'<span class="acts"><a href="#" title="A filtered deck: its sets&rsquo; open cards, the shakiest first" '
             f'onclick="{_pycmd(f"planquiz:{pid}:" + str(qz.get("id") or ""))}">Study for it</a></span></div>')
 
 
@@ -1942,7 +2206,7 @@ def _own_html(ow, pid):
         if then:
             out += f'<div class="pq">Then {" &middot; ".join(then)}{f" &middot; {more:,} more" if more else ""}</div>'
     else:
-        out += '<div class="pq">Every date of it is open.</div>'
+        out += '<div class="pq">Every set of it is open.</div>'
     if ow.get("last"):
         out += (f'<div class="pnl">{e(str(ow["last"]))} '
                 f'<a href="#" onclick="{_pycmd("planpaceundo:" + pid)}">Undo</a></div>')
@@ -2203,6 +2467,8 @@ def party_map_html(v):
     if v.get("more"):
         body += (f'<span class="pp-tw" style="flex:1 1 120px"><a class="tm pp-more" href="#" onclick="dcParty.focus();return false;">'
                  f'<span>and {int(v["more"]):,} more</span><b>Find one &rsaquo;</b></a></span>')
+    if not body and v.get("loading"):
+        body = '<span class="pp-none" role="status">Reading your cards&hellip;</span>'
     if not body:
         body = ('<span class="pp-none">This deck doesn&rsquo;t split by system yet. Try Tags or Decks.</span>' if v.get("by") == "sys"
                 else '<span class="pp-none">Nothing here yet.</span>')
@@ -2290,11 +2556,13 @@ def party_html(v):
                   f'<a class="x" href="#" aria-label="Drop {e(p["name"])}" onclick="event.stopPropagation();{_pycmd(f"party:drop:{j}")}">&times;</a></span>')
     n = int(v.get("n") or 0)
     count = f'{e(v["all"])} &middot; {n:,} card{"" if n == 1 else "s"}' if v.get("all") else f'{n:,} card{"" if n == 1 else "s"}'
+    if v.get("loading"):
+        count = "Reading your cards&hellip;"  # the map's reading follows the tab (gamenight_flow.tab_view)
     links = (f'<span class="pp-ln"><a href="#" onclick="{_pycmd("party:keep")}">Keep this pick</a>'
              f'<a href="#" onclick="{_pycmd("party:clear")}">Clear</a></span>') if v.get("picks") else ""
     said = str(v.get("said") or "")
     busy = bool(v.get("busy"))
-    why = ("" if first or not n else "Too few cards for any game here.") if not said else said
+    why = ("" if first or not n or v.get("loading") else "Too few cards for any game here.") if not said else said
     why = f'<span class="pp-said{"" if busy else " bad"}" role="status">{e(why)}</span>' if why else ""
     label = dict(_GAMES).get(first, "")
     host = (f'<a href="#" class="pp-host" onclick="{_pycmd("party:host")}">Host {e(label)}</a>' if first and n and not busy
@@ -2705,7 +2973,7 @@ def _ins_ahead(did, a, deck_name=""):
         one = _ahead_r(n) == 1
         return (f" {_ins_r(n)} new card{'' if one else 's'} wait{'s' if one else ''} "
                 f"till {_ins_dname(days[7 + int(s[1]) + 1], long=True)}"
-                + (f", {_ins_r(ph)} of them your plan&rsquo;s dates" if ph >= 1 else "") + ".")
+                + (f", {_ins_r(ph)} of them in your plan&rsquo;s sets" if ph >= 1 else "") + ".")
 
     blocks, pills, acts = "", "", ""
     for w in ways:
@@ -2937,14 +3205,14 @@ def _insights_html(did, v):
         lab = (f'{e(str(aim["name"]))} &middot; {when} {dn} &middot; {days}' if scoped
                else f'Your exam &middot; {when} {dn} &middot; {days}' if mine
                else f'Before {when} {dn} &middot; {days}')
-        whose = "the plan&rsquo;s prep dates for it" if scoped else "this deck"
+        whose = "the plan&rsquo;s prep sets for it" if scoped else "this deck"
         out += (f'<div class="ihero"><div class="k">{lab}</div>'
                 f'<div class="t" title="Started cards of {whose} that Anki won&rsquo;t show you before then, under your {int(v.get("target") or 90)}% by then (FSRS)">'
                 f'<a class="tp" href="#" title="Browse them" onclick="{_pycmd(f"insbrowse:{did}:h")}">'
                 f'{len(hero):,} card{"s" if len(hero) != 1 else ""}</a> Anki won&rsquo;t show you before {when}</div>'
                 f'{_ins_scope(aim) if mine else ""}'
                 # 3.9.5 (Sam's FSRS rule): Study only before a date, my exam or a plan's event
-                + (f'<a class="bt" href="#" onclick="{_pycmd(f"insstudy:{did}:h")}">Study {len(hero):,} early</a>'
+                + (f'<a class="bt" href="#" title="A filtered deck of them, the most missed first" onclick="{_pycmd(f"insstudy:{did}:h")}">Study {len(hero):,} early</a>'
                    if aim.get("name") else "") + '</div>')
     elif aim.get("kind") == "exam":
         # 3.9.2: my exam with nothing at risk still says what it covers, and keeps its Change; without
@@ -2969,7 +3237,7 @@ def _insights_html(did, v):
                     f'<span class="ib"><i class="st" style="width:{100 * st / of:.1f}%"></i>'
                     f'<i class="fg" style="left:{100 * st / of:.1f}%;width:{100 * fg / of:.1f}%"></i></span>'
                     f'<span class="c"><b>{st + fg}</b> of {of}</span>'
-                    + (f'<a href="#" onclick="{_pycmd(f"insstudy:{did}:{i}")}">Study {st + fg}</a>' if dated else "")
+                    + (f'<a href="#" title="A filtered deck of them, the most missed first" onclick="{_pycmd(f"insstudy:{did}:{i}")}">Study {st + fg}</a>' if dated else "")
                     + '</div>')
         out += "</div>"
     out += _ins_map(did, v.get("map") or [], v.get("map_by"), v.get("map_at"), v.get("map_ways"))
@@ -3159,7 +3427,7 @@ def _week_html(card, pid):
         cells += f'<div class="{cls}"{click}>{num}{bar}<span class="n">{n}</span>{evs}</div>'
         if has:
             details += (f'<div class="pday" id="{did}"{"" if i == sel else " hidden"}><div class="ph"><b>{e(d["dow"])} {int(d["num"])} '
-                        f'{_mon(d["day"])}{" &middot; today" if d["today"] else ""}</b>{_day_line(d)}</div>'
+                        f'{_mon(d["day"])}{" &middot; today" if d["today"] else ""}</b>{_day_line(d)}{_day_study(pid, d)}</div>'
                         + "".join(_day_unit(pid, u, d) for u in d["units"])
                         + "".join(_day_event(x) for x in d["events"]) + '</div>')
     return out + f'<div class="pwk">{cells}</div>{details}'
@@ -3169,8 +3437,9 @@ def _day_unit(pid, u, d):
     """A date in its day's details, whole: its name (moved, for or after its
     quiz), what's left, its bar, its topics with the authors' notes, the
     authors' lines (Watch, Read, Do), and what can be done with it: Browse
-    its cards and the ones left, Open now, Study, Move…, Skip it, Put it
-    back, Undo skip; why it left cards shut."""
+    its cards and the ones left, Open now, Move…, Skip it, Put it back,
+    Undo skip; why it left cards shut. Its Study is the day's (3.9.6,
+    _day_study), one way to it."""
     e = _html.escape
     uid, state = str(u["uid"]), u["state"]
     total, seen = int(u["total"]), int(u["seen"])
@@ -3193,10 +3462,6 @@ def _day_unit(pid, u, d):
     if state == "later" or (state in ("open", "done") and u.get("shut")):
         # 3.8.1: a date whose cards are all shut again (Edit › Undo), or at my own pace not opened yet
         acts.append(f'<a href="#" onclick="{_pycmd(f"plannow:{pid}:{uid}")}">Open now</a>')
-    if state in ("open", "done") and (seen or u.get("study")):
-        # 3.8.1: Study, a Due Crew deck of its open cards (a cram before a quiz)
-        acts.append(f'<a href="#" title="A Due Crew deck of its open cards, new and review, in random order" '
-                    f'onclick="{_pycmd(f"planstudydate:{pid}:{uid}")}">Study</a>')
     if not d["past"] and state in ("later", "open"):  # 3.7.6: from today on, a date not done moves later on my copy
         acts.append(f'<a href="#" onclick="{_pycmd(f"planmove:{pid}:{uid}")}">Move&hellip;</a>')
     if state == "later":
@@ -3246,10 +3511,25 @@ def _why_shut(pid, uid, why):
     bits = []
     if lee:
         bits.append(f'<a class="tp" href="#" title="Browse them" onclick="{_pycmd(f"planleech:{pid}:{uid}")}">'
-                    f'{lee:,} leech{"es" if lee != 1 else ""}</a> stay{"s" if lee == 1 else ""} shut')
+                    f'{lee:,} leech{"es" if lee != 1 else ""}</a> stay{"s" if lee == 1 else ""} suspended')
     if miss:
         bits.append(f'{miss:,} pick{"s aren" if miss != 1 else " isn"}&rsquo;t in your copy')
     return f'<div class="pwhy">{" &middot; ".join(bits)}</div>' if bits else ""
+
+
+def _day_study(pid, d):
+    """3.9.6 (Sam: "study all for the day ... not just for today for past
+    days too ... when you've clicked on one of the days"): the day's details
+    have one Study, in their head: a Due Crew deck of what the day asks now,
+    its sets' new cards not seen yet and theirs due today (today: every set
+    of the plan's due today too), never a review ahead. On a day with a set
+    opened here; a set's own Study is this one."""
+    if not any(u["state"] in ("open", "done") and not u.get("shut") for u in d.get("units") or []):
+        return ""
+    tip = ("A filtered deck: today&rsquo;s new cards and what&rsquo;s due today in this plan" if d.get("today")
+           else "A filtered deck: its new cards not seen yet and what&rsquo;s due of it today")
+    return (f'<span class="acts"><a href="#" title="{tip}" '
+            f'onclick="{_pycmd("planstudyday:" + pid + ":" + str(d["day"]))}">Study</a></span>')
 
 
 def _day_line(d):
@@ -3295,7 +3575,7 @@ def _topic_go(pid, uids, name, i):
     return (f'<a class="tp dc-tpn" href="#" onclick="var x=document.getElementById(\'{tid}\');'
             f'if(x){{x.hidden=!x.hidden;this.classList.toggle(\'on\',!x.hidden);}}return false;">'
             f'{e(str(name))}</a><span class="du-tpgo" id="{tid}" hidden>'
-            f'<a href="#" onclick="{pick}{_pycmd(f"plantopicstudy:{pid}:{uids}:{int(i)}")}">Study</a>'
+            f'<a href="#" title="A filtered deck: its new cards and the ones due today" onclick="{pick}{_pycmd(f"plantopicstudy:{pid}:{uids}:{int(i)}")}">Study</a>'
             f'<a href="#" onclick="{pick}{_pycmd(f"plantopic:{pid}:{uids}:{int(i)}")}">Browse</a></span>')
 
 
@@ -3355,7 +3635,7 @@ def _plan_notes(card, pid):
         # 3.7.3: an author's update adds to today or earlier: nothing opens until I say
         n = int(upd["n"])
         names = [str(x) for x in upd.get("names") or []]
-        what = " and ".join(f"<b>{e(x)}</b>" for x in names) if len(names) <= 2 else f"<b>{len(names)} dates</b>"
+        what = " and ".join(f"<b>{e(x)}</b>" for x in names) if len(names) <= 2 else f"<b>{len(names)} sets</b>"
         who = e(str(card.get("owner_name") or "The plan"))
         lim = s.get("limit")
         over = (f' Anki shows {int(lim):,} new a day in this deck.'
@@ -3398,7 +3678,7 @@ def _plan_notes(card, pid):
                    f'<span class="acts"><a href="#" onclick="{_pycmd("planlimit:" + pid)}">Raise to {want:,}</a></span></div>')
     fb = int(s.get("fell_back") or 0)
     if fb and not card.get("fallback_ok"):
-        out.append(f'<div class="pn"><span>{fb} date{"s use tags" if fb != 1 else " uses a tag"} your deck names differently, '
+        out.append(f'<div class="pn"><span>{fb} set{"s use tags" if fb != 1 else " uses a tag"} your deck names differently, '
                    f'matched by their cards.</span><span class="acts"><a href="#" onclick="{_pycmd("planidsok:" + pid)}">OK</a></span></div>')
     # 3.6.5: what the plan left shut here, said once (OK until it grows).
     # 3.8.0: the leeches are the deck's, so they're on Insights
@@ -3419,7 +3699,7 @@ def _plan_notes(card, pid):
                    f'<span class="acts"><a href="#" onclick="{_pycmd("plancatch:" + pid)}">Catch up&hellip;</a></span></div>')
     if card.get("put_off"):
         names = [str(n) for n in card["put_off"]]
-        what = " and ".join(f"<b>{e(n)}</b>" for n in names) if len(names) <= 2 else f"<b>{len(names)} dates</b>"
+        what = " and ".join(f"<b>{e(n)}</b>" for n in names) if len(names) <= 2 else f"<b>{len(names)} sets</b>"
         # 3.8.1: put off by Welcome back's Not today, they wait: tomorrow morning asks again
         when = (f'wait{"s" if len(names) == 1 else ""} for tomorrow morning' if card.get("put_off_ask")
                 else f'open{"s" if len(names) == 1 else ""} tomorrow morning')
@@ -4033,7 +4313,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
            rules_stale=False, squad_view=None, knocks=None, reviews=None,
            sync_error=False, live=False, tricky=None, milestones=None, room=None, plans=None,
            notice=None, asks=None, due=None, you=None, sticking=None, sev=None, milestone_sev=None, closet=None,
-           halloween=None, wrapped=None, fridge=None, fridge_gone=None, ahead=None):
+           halloween=None, wrapped=None, fridge=None, fridge_gone=None, ahead=None, dance=None):
     """3.8.0: two parts, apart. On top the You bubble (you_html): due,
     Due's view (due_flow.view, None when Due is off), and you, its Plans and
     Insights ({tab, folded, plans, insights}; None draws Due alone). Under it
@@ -4054,7 +4334,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     wrapped (3.9.0): {year, so_far, look} for the line that your year is ready (1 Dec to 15 Jan), or None.
     fridge (3.9.1): the doodles my crew sent (fridge.clean's), pinned around the Decks screen (fridge_html);
     fridge_gone: the one just taken down, for its Undo (closet_flow.gone).
-    ahead (3.9.2): {did, name, day, n, week} when reviews in my most reviewed deck climb (ahead_line)."""
+    ahead (3.9.2): {did, name, day, n, week} when reviews in my most reviewed deck climb (ahead_line).
+    dance (3.9.6): song of the moment's dance floor (song_flow.floor_view), for the Decks screen's corner (dance_html)."""
     period = cfg.get("period", "today")
     hidden = hidden_tabs(cfg)
     if period not in PERIODS or period in hidden:
@@ -4196,7 +4477,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     return (f'<div id="due-crew" class="dc-frame dc-split">{_css(cfg)}<style>{DUE_CSS}</style>{sheet}'
             f'{you_html(cfg, due, you, people)}<div class="dc-sheet">'
             f'{_head(period, show_up, hidden, cfg.get("crew_view") or period, sev)}{halloween_html(halloween, cfg)}{body}{foot}</div>'
-            f'{fridge_html(fridge, people, cfg, fridge_gone)}</div>')  # 3.9.1: the doodles, pinned around the Decks screen
+            f'{fridge_html(fridge, people, cfg, fridge_gone)}'  # 3.9.1: the doodles, pinned around the Decks screen
+            f'{dance_html(dance, cfg)}</div>')  # 3.9.6: the dance floor, in its corner (dance_js puts it there)
 
 
 def you_html(cfg, due=None, you=None, people=None):
@@ -4423,6 +4705,7 @@ def _settings_board(cfg, fsrs=None, reach=None):
             + _st_row("On a break", _st_seg("sev_break", (("breathe", "Breathe"), ("stretch", "Stretch")),
                                             cfg.get("sev_break", "breathe"), "On a break"),
                       "Breathe with Pip, four counts a side, or stretch")
+            + _settings_songs(cfg)  # 3.9.6: song of the moment, this computer's
             + '</div><div class="st-h">Due</div><div class="st-box">'
             + _st_row("Today, Upcoming, Later", _st_switch("due_show", g("due_show", True), "Today, Upcoming, Later"))
             + _st_row("Suggestions", _st_switch("due_suggest", g("due_suggest", True), "Suggestions"),
@@ -4444,6 +4727,31 @@ def _settings_board(cfg, fsrs=None, reach=None):
             + '</div>'
             + f'<div class="st-foot"><span></span>'
               f'<a class="st-lk" href="#" {_st_click("setreset")}>Reset board</a></div>')
+
+
+# 3.9.6: song of the moment, this computer's: the dance floor and how it dances, and the app Listen opens
+DANCE_MOTIONS = (("gentle", "Gentle"), ("lively", "Lively"), ("still", "Still"))
+MUSIC_APPS = (("ask", "Ask me the first time"), ("apple", "Apple Music"), ("spotify", "Spotify"),
+              ("youtube", "YouTube Music"), ("other", "Another app"))  # songs.APPS, with "" as ask
+
+
+def _settings_songs(cfg):
+    """Settings › Board's song rows: the dance floor on or off (its × hides it; this brings it back), its
+    motion, and my music app (Listen; a card's ▾ changes it too). Each one of song_flow's commands."""
+    on = cfg.get("dance_floor", True) is not False
+    motion = cfg.get("dance") if cfg.get("dance") in dict(DANCE_MOTIONS) else "gentle"
+    app = cfg.get("music_app") if cfg.get("music_app") in dict(MUSIC_APPS) else "ask"
+    seg = "".join(f'<button class="{"on" if k == motion else ""}" aria-pressed="{"true" if k == motion else "false"}" '
+                  f'{_st_click("dancemotion:" + k)}>{t}</button>' for k, t in DANCE_MOTIONS)
+    apps = "".join(f'<button class="st-pill{" on" if k == app else ""}" aria-pressed="{"true" if k == app else "false"}" '
+                   f'{_st_click("songapp:" + k)}>{t}</button>' for k, t in MUSIC_APPS)
+    return ('</div><div class="st-h">Song of the moment</div><div class="st-box">'
+            + _st_row("Dance floor", _st_toggle_cmd("dancehide" if on else "danceshow", on, "Dance floor"),
+                      "Your crew&rsquo;s songs, in the Decks screen&rsquo;s corner")
+            + _st_row("Dancing", f'<span class="st-seg" role="group" aria-label="Dancing">{seg}</span>',
+                      "Lively moves on the beat. Reduce motion keeps them still")
+            + _st_row("My music app", f'<span class="st-pills" role="group" aria-label="My music app">{apps}</span>',
+                      "Where Listen opens your crew&rsquo;s songs, on this computer"))
 
 
 def _settings_privacy(cfg):
@@ -4506,6 +4814,9 @@ FIND_WORDS = {
     "set:sev_break:": "breathe stretch rest",
     # 3.9.1
     "set:two_buttons:": "hard easy again good pass fail answer buttons keys review",
+    # 3.9.6: song of the moment
+    "dance": "music song songs dj party floor dancing pip motion animation corner",
+    "songapp": "music app listen spotify apple youtube song",
 }
 
 
@@ -5554,7 +5865,8 @@ CHEER_WINDOW_JS = r"""
         '#dc-cheer *{box-sizing:border-box;}' +
         '#dc-cheer .cw{width:440px;max-width:100%;border-radius:14px;padding:16px 18px 14px;text-align:left;display:grid;gap:12px;font-family:' + font + ';' +
           'box-shadow:0 16px 60px rgba(0,0,0,.35);background:' + bg + ';color:' + ink + ';border:1px solid ' + line + ';font-size:13px;}' +
-        '#dc-cheer button,#dc-cheer input{margin:0;box-shadow:none;font-family:inherit;color:inherit;}#dc-cheer button{cursor:pointer;}' +
+        '#dc-cheer button,#dc-cheer input:where(:not([type=checkbox]):not([type=radio]):not([type=range])),#dc-cheer textarea{-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;font-family:inherit;color:inherit;' +
+        'text-shadow:none;min-height:0;min-width:0;-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;font-weight:400;}#dc-cheer button{cursor:pointer;}' +
         '#dc-cheer .hd{display:flex;align-items:center;gap:10px;}' +
         '#dc-cheer .hd .pp{width:40px;height:40px;flex:none;display:grid;place-items:center;}' +
         '#dc-cheer .hd .pp svg{width:44px;height:44px;overflow:visible;}' +
@@ -5600,7 +5912,7 @@ CHEER_WINDOW_JS = r"""
         '#dc-cheer .ft{display:flex;align-items:center;gap:8px;}' +
         '#dc-cheer .go{background:' + accent + ';color:' + accentInk + ';border:1px solid transparent;border-radius:8px;padding:6px 16px;font-weight:700;font-size:13px;}' +
         '#dc-cheer .no{background:none;border:1px solid ' + line + ';border-radius:8px;padding:6px 14px;font-size:13px;}' +
-        '#dc-cheer button:focus-visible{outline:2px solid ' + accent + ';outline-offset:2px;}' +
+        '#dc-cheer button:focus-visible{outline:2px solid ' + accent + ' !important;outline-offset:2px;}' +
         '#dc-cheer .hint{font-size:11px;color:' + muted + ';}';
     back.appendChild(css);
     var card = el('div', 'cw');
@@ -6199,8 +6511,926 @@ def fridge_js(scripts=True):
     window's too small for waits in the corner and comes back at the next
     resize. Nothing when there's no fridge on the page. scripts: the
     script itself (dcFridge, loaded once a page) as well as its call, as
-    keep_me_in_view_js's."""
-    return (FRIDGE_JS if scripts else "") + "\nif (window.dcFridge) { window.dcFridge(); }\n"
+    keep_me_in_view_js's. 3.9.6: the dance floor's script (DANCE_JS) comes
+    with it, the other thing around the board, and the fridge's call puts the
+    floor in step first (a swap's calls stay the few they were)."""
+    return (FRIDGE_JS + DANCE_JS if scripts else "") + "\nif (window.dcFridge) { window.dcFridge(); }\n"
+
+
+# 3.9.6, song of the moment (Sam's sign-off on the mock's dance floor, with his
+# notes: "make it less jumpy", one bubble at a time). The Decks screen's
+# bottom-right corner: my Pip the DJ at its booth, my song on the decks; each
+# mutual crewmate who picked a song dancing beside it as their Pip (their colour
+# and look, as on their row), the song in a bubble over their head. A tap opens
+# the song's card. render() draws it into a <template> in the board; dance_js
+# puts it on the page outside the board, so a swap that changes nothing on the
+# floor leaves it as it is (dancing, resting, a card open), and keeps it in step.
+DANCE_W, DANCE_H = 392, 212  # px: the floor, the booth at its right
+DANCE_NW, DANCE_NH = 252, 196  # px: folded (a narrow window): the booth, one dancer, a count
+DANCE_NARROW = 900  # px: the window's width under which it folds
+DANCE_BOARD = 1448  # px: under this the floor's corner reaches the board's (640 wide, centred): room after it
+DANCE_MAX = 6  # dancers; past it five, and "+N" in the sixth's place (never on top of one)
+DANCE_SLOT = 66  # px: a dancer's place; the back row sits half a place along, higher
+DANCE_PIP, DANCE_PIP_BACK, DANCE_DJ = 80, 70, 96  # px: the drawings (slot()'s size): front row, back row, the DJ
+DANCE_REST = 12  # s: dancing when the board draws, then resting (Pip's loops); pointing plays it on
+DANCE_TICK = 0.4  # s: half a beat (Lively steps a move every two)
+DANCE_SAY = 12  # ticks: each bubble's turn, about five seconds
+DANCE_BULBS = ("#f2c14e", "#ef6f6c", "#6cc4a1", "#6ea8fe")
+
+
+def _rgba(colour, a):
+    """#rrggbb as rgba(), see-through by a (no color-mix in older webviews)."""
+    h = str(colour).lstrip("#")
+    try:
+        r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    except ValueError:
+        return f"rgba(0,0,0,{a})"
+    return f"rgba({r},{g},{b},{a})"
+
+
+def _dance_hue(text):
+    """A colour for a song with no cover yet (and its decks' labels): from its words, the same each time."""
+    return sum((i + 1) * ord(ch) for i, ch in enumerate(str(text or ""))) % 360
+
+
+def _dance_tokens(cfg, sel):
+    """The board's tokens on a part that sits outside it (the floor, the search), by Settings › Theme."""
+    accent = cfg.get("accent", DEFAULT_ACCENT)
+    lt, dk = palette("light", accent), palette("dark", accent)
+    more = lambda p, ink, sh: f"--df-glow: {_rgba(p['accent'], .28)}; --df-check: {ink}; --df-sh: {sh};"  # noqa: E731
+    return _by_theme(cfg, sel, _token_block(lt) + more(lt, "rgba(0,0,0,.06)", "0 3px 8px rgba(0,0,0,.14)"),
+                     _token_block(dk) + more(dk, "rgba(255,255,255,.07)", "0 3px 10px rgba(0,0,0,.5)"))
+
+
+DANCE_CSS = """
+#dc-dance { position: fixed; right: 12px; bottom: 6px; width: __W__px; height: __H__px; z-index: 6; pointer-events: none;
+  font-family: __FONT__; font-size: 13px; line-height: 1.3; color: var(--dc-ink); text-align: left;
+  --sv-line: var(--dc-line); --sv-amb: var(--dc-hours); --sv-mut: var(--dc-muted); --sv-a: var(--dc-accent); }
+#dc-dance *, #dc-song * { box-sizing: border-box; }
+#dc-dance [hidden], #dc-song [hidden] { display: none !important; }
+/* Anki's Decks screen gives every button its look (and macOS its own): ours start from none */
+#dc-dance button, #dc-song button, #dc-song input { -webkit-appearance: none; appearance: none; margin: 0; box-shadow: none;
+  min-width: 0; min-height: 0; text-shadow: none; background-image: none; -webkit-backdrop-filter: none; backdrop-filter: none;
+  letter-spacing: normal; font: inherit; color: inherit; border-radius: 0; }
+#dc-dance button { background: none; border: 0; padding: 0; cursor: pointer; text-align: inherit; }
+#dc-dance button:focus-visible, #dc-dance a:focus-visible, #dc-song button:focus-visible, #dc-song a:focus-visible {
+  outline: 2px solid var(--dc-accent) !important; outline-offset: 2px; }
+#dc-dance .df-sc { position: absolute; inset: 0; }
+#dc-dance .df-lt { position: absolute; left: 0; top: 0; width: 100%; height: 40px; pointer-events: none; }
+#dc-dance .df-lt .bulb { opacity: .85; }
+#dc-dance .df-fl { position: absolute; left: -10px; right: 112px; bottom: 0; height: 104px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 45%, var(--df-glow), transparent 72%),
+    repeating-conic-gradient(var(--df-check) 0 25%, transparent 0 50%) 0 0 / 20px 20px;
+  -webkit-mask: radial-gradient(ellipse at center, #000 52%, transparent 71%); mask: radial-gradient(ellipse at center, #000 52%, transparent 71%); }
+#dc-dance .df-dn { position: absolute; left: 0; bottom: 4px; width: __AREA__px; height: 176px; }
+#dc-dance .dz { position: absolute; bottom: 0; left: calc(var(--x) * 1px); width: 60px; display: block; text-align: center;
+  z-index: 2; color: var(--dc-ink); }
+#dc-dance .dz .dzb { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: auto; border-radius: 12px; }
+#dc-dance .dz.bk { bottom: 58px; z-index: 1; }
+#dc-dance .dz.say, #dc-dance .dz:hover, #dc-dance .dz:focus-within { z-index: 4; }
+#dc-dance .hp { display: block; }
+#dc-dance .pp { display: block; width: -webkit-fit-content; width: fit-content; margin: 0 auto; pointer-events: none; transform-origin: 50% 100%; }
+#dc-dance .pp .sv-slot { display: block; }
+#dc-dance .pp .fc { display: grid; place-items: center; width: 42px; height: 42px; margin: 4px auto 2px; border-radius: 50%;
+  border: 2px solid var(--sv-a); background: var(--dc-bg); font-size: 20px; font-weight: 800; color: var(--sv-a); }
+#dc-dance .dz .nm { display: block; font-size: 10.5px; font-weight: 700; line-height: 1.2; margin-top: 2px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+/* one bubble at a time (dance_js passes it along), and the one pointed at; it fades, never jumps */
+#dc-dance .bub { position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%); opacity: 0; pointer-events: none;
+  transition: opacity .45s ease; background: var(--dc-bg); color: var(--dc-ink); border: 1px solid var(--dc-line); border-radius: 11px;
+  padding: 3px 9px; box-shadow: var(--df-sh); z-index: 3; }
+#dc-dance .bub > span { display: block; max-width: 136px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11px; font-weight: 600; line-height: 1.35; }
+#dc-dance .bub::after { content: ""; position: absolute; left: 50%; bottom: -5px; width: 8px; height: 8px; margin-left: -4px;
+  background: var(--dc-bg); border-right: 1px solid var(--dc-line); border-bottom: 1px solid var(--dc-line); transform: rotate(45deg); }
+#dc-dance .dz.say .bub, #dc-dance .dz:hover .bub, #dc-dance .dz:focus-within .bub, #dc-dance .bub.on { opacity: 1; }
+#dc-dance .dz.say .bub, #dc-dance .dz:hover .bub, #dc-dance .dz:focus-within .bub { pointer-events: auto; cursor: pointer; }
+#dc-dance .bub .st { color: #d99a00; }
+#dc-dance .df-more, #dc-dance .df-ct { position: absolute; pointer-events: auto; border: 1px solid var(--dc-line); background: var(--dc-bg);
+  color: var(--dc-ink); border-radius: 99px; font-size: 11.5px; font-weight: 700; line-height: 1.3; padding: 3px 10px; box-shadow: var(--df-sh); }
+#dc-dance .df-more { left: calc(var(--x) * 1px + 6px); bottom: 80px; }
+#dc-dance .df-ct { display: none; left: 66px; bottom: 26px; }
+#dc-dance .df-em { position: absolute; left: 0; bottom: 34px; max-width: 220px; font-size: 12px; color: var(--dc-muted); pointer-events: none;
+  background: var(--dc-bg); border: 1px solid var(--dc-line); border-radius: 10px; padding: 5px 10px; box-shadow: var(--df-sh); }
+/* the booth: my Pip behind the desk, the decks, my song's name under it */
+#dc-dance .df-bo { position: absolute; right: 0; bottom: 0; width: __BOOTH__px; height: 152px; pointer-events: auto; display: block; }
+#dc-dance .df-bo .bsv { position: absolute; left: 0; bottom: 24px; width: 100%; height: auto; z-index: 1; pointer-events: none;
+  filter: drop-shadow(0 5px 8px rgba(0,0,0,.22)); }
+#dc-dance .df-bo .dj { position: absolute; left: 50%; bottom: 76px; transform: translateX(-50%); z-index: 0; pointer-events: none; }
+#dc-dance .df-bo .dj .bub { bottom: calc(100% + 10px); }
+#dc-dance .df-bo .tag { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); max-width: 100%; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; font-size: 11.5px; font-weight: 650; line-height: 1.3; padding: 2px 8px;
+  border: 1.5px solid var(--dc-accent); border-radius: 8px; background: var(--dc-bg); color: var(--dc-ink); pointer-events: none; }
+#dc-dance .df-bo .tag.no { border-color: var(--dc-line); color: var(--dc-muted); }
+#dc-dance .eqb { fill: var(--dc-accent); transform-box: fill-box; transform-origin: 50% 100%; transform: scaleY(.55); }
+#dc-dance .led { fill: var(--dc-accent); opacity: .5; }
+#dc-dance.playing .led { opacity: 1; }
+#dc-dance .woof { transform-box: fill-box; transform-origin: 50% 50%; }
+#dc-dance .spin { transform-box: view-box; transform-origin: 0 0; opacity: 0; }
+#dc-dance.playing .spin { opacity: 1; }
+#dc-dance .df-x { position: absolute; right: 0; top: 42px; pointer-events: auto; width: 22px; height: 22px; border-radius: 50%;
+  display: grid; place-items: center; color: var(--dc-muted); background: var(--dc-bg); border: 1px solid var(--dc-line);
+  font-size: 15px; line-height: 1; text-decoration: none; opacity: 0; transition: opacity .2s; }
+#dc-dance .df-fd { position: absolute; right: 28px; top: 42px; pointer-events: auto; width: 22px; height: 22px; border-radius: 50%;
+  display: grid; place-items: center; color: var(--dc-muted); background: var(--dc-bg); border: 1px solid var(--dc-line);
+  opacity: 0; transition: opacity .2s; }
+#dc-dance .df-fd svg { width: 12px; height: 12px; display: block; }
+#dc-dance:hover .df-x, #dc-dance:focus-within .df-x, #dc-dance .df-x:focus,
+#dc-dance:hover .df-fd, #dc-dance:focus-within .df-fd { opacity: 1; }
+/* folded: a chip in the corner, a record and how many songs (a star when one's new); a tap opens it again */
+#dc-dance .df-chip { display: none; position: absolute; right: 0; bottom: 0; pointer-events: auto; align-items: center; gap: 6px;
+  padding: 4px 11px 4px 5px; border-radius: 99px; border: 1px solid var(--dc-line); background: var(--dc-bg); color: var(--dc-ink);
+  font-size: 12px; font-weight: 700; line-height: 1.2; box-shadow: var(--df-sh); white-space: nowrap; }
+#dc-dance .df-chip svg { width: 22px; height: 22px; display: block; flex: none; }
+#dc-dance .df-chip .st { color: #d99a00; }
+#dc-dance.fold .df-sc, #dc-dance.fold .df-cards { display: none; }
+#dc-dance.fold .df-chip { display: inline-flex; }
+/* a song's card, over the floor */
+#dc-dance .df-pop { position: absolute; right: 0; bottom: calc(100% + 6px); width: 340px; max-width: calc(100vw - 24px);
+  max-height: calc(100vh - __H__px - 24px); overflow: auto; pointer-events: auto; z-index: 8; display: grid; gap: 8px;
+  background: var(--dc-bg); color: var(--dc-ink); border: 1px solid var(--dc-line); border-radius: 12px; padding: 10px 12px 12px;
+  box-shadow: 0 12px 32px rgba(0,0,0,.22); }
+@media (max-height: 520px) { #dc-dance .df-pop { bottom: 0; max-height: calc(100vh - 16px); } }
+#dc-dance .df-pop .ph { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; color: var(--dc-muted); }
+#dc-dance .df-pop .x { font-size: 19px; line-height: 1; color: var(--dc-muted); padding: 0 3px; border-radius: 6px; }
+#dc-dance .sg { display: flex; gap: 12px; align-items: flex-start; }
+#dc-dance .cov, #dc-song .cov { position: relative; flex: none; display: grid; place-items: center; overflow: hidden; border-radius: 8px;
+  color: #fff; font-weight: 800; background: linear-gradient(135deg, hsl(var(--h) 55% 46%), hsl(calc(var(--h) + 50) 60% 30%)); }
+#dc-dance .cov img, #dc-song .cov img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+#dc-dance .tx, #dc-song .tx { display: grid; gap: 2px; min-width: 0; }
+#dc-dance .tx b { font-size: 14px; overflow-wrap: anywhere; }
+#dc-dance .tx .mt, #dc-song .tx .mt { font-size: 12px; color: var(--dc-muted); overflow-wrap: anywhere; }
+#dc-dance .acts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
+#dc-dance .bt { border: 1px solid var(--dc-line); background: var(--dc-bg); border-radius: 8px; padding: 5px 10px; font-size: 12.5px;
+  font-weight: 600; line-height: 1.2; white-space: nowrap; }
+#dc-dance .bt.pri { background: var(--dc-accent); border-color: var(--dc-accent); color: var(--dc-accent-ink); }
+/* Apple's badge, as Apple serves it (never recoloured or redrawn); its words when it doesn't load */
+#dc-dance .bdg, #dc-song .bdg { display: flex; align-items: center; gap: 8px; }
+#dc-dance .bdg img, #dc-song .bdg img { display: block; height: 30px; width: auto; }
+#dc-dance .bdg a, #dc-song .bdg a { text-decoration: none; line-height: 0; }
+#dc-dance .bdg .bdt, #dc-song .bdg .bdt { line-height: 1.3; color: var(--dc-accent); font-size: 12px; font-weight: 700; }
+#dc-dance .df-ls { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 280px; overflow: auto; }
+#dc-dance .df-ls button { width: 100%; display: flex; gap: 9px; align-items: center; text-align: left; border-radius: 8px; padding: 5px 6px; }
+#dc-dance .df-ls button:hover { background: var(--dc-well); }
+#dc-dance .df-ls .nt { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px;
+  color: var(--dc-bg); background: var(--sv-a); }
+#dc-dance .df-ls .tx b { font-size: 13px; }
+#dc-dance .new { margin-left: auto; flex: none; font-size: 11px; font-weight: 700; color: var(--dc-accent); background: var(--dc-you-bg);
+  border-radius: 99px; padding: 1px 7px; }
+/* the search: a sheet over the board, as the board's questions are */
+#dc-song { position: fixed; inset: 0; z-index: 82; background: rgba(0,0,0,.35); display: flex; align-items: flex-start; justify-content: center;
+  padding: 10vh 16px 16px; overflow: auto; font-family: __FONT__; color: var(--dc-ink); text-align: left; }
+#dc-song .sw { width: 440px; max-width: 100%; border-radius: 14px; padding: 14px 16px; display: grid; gap: 10px; font-size: 13px; line-height: 1.35;
+  background: var(--dc-bg); border: 1px solid var(--dc-line); box-shadow: 0 16px 60px rgba(0,0,0,.35); }
+#dc-song .sh { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+#dc-song .sh b { font-size: 16px; }
+#dc-song .x { background: none; border: 0; font-size: 20px; line-height: 1; color: var(--dc-muted); padding: 0 3px; cursor: pointer; border-radius: 6px; }
+#dc-song .sq { width: 100%; height: 34px; border-radius: 8px; border: 1px solid var(--dc-line); background: var(--dc-well); color: var(--dc-ink);
+  font-size: 13.5px; padding: 0 10px; }
+#dc-song .sq:focus-visible { outline: 2px solid var(--dc-accent); outline-offset: 0; }
+#dc-song .ss { font-size: 12px; color: var(--dc-muted); }
+#dc-song .ss:empty { display: none; }
+#dc-song .sr { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 300px; overflow-y: auto; }
+#dc-song .sr button { width: 100%; display: flex; gap: 10px; align-items: center; text-align: left; background: none; border: 1px solid transparent;
+  border-radius: 10px; padding: 5px 6px; cursor: pointer; }
+#dc-song .sr button:hover { background: var(--dc-well); }
+#dc-song .sr button[aria-selected=true] { background: var(--dc-you-bg); border-color: var(--dc-accent); }
+#dc-song .sr .tx b { font-size: 13px; overflow-wrap: anywhere; font-weight: 700; }
+#dc-song .sn { font-size: 11.5px; color: var(--dc-muted); }
+#dc-song .sf { display: flex; align-items: center; gap: 8px; }
+#dc-song .sf .sp { flex: 1; }
+#dc-song .go { background: var(--dc-accent); color: var(--dc-accent-ink); border: 1px solid transparent; border-radius: 8px; padding: 6px 16px;
+  font-weight: 700; cursor: pointer; }
+#dc-song .go:disabled { opacity: .45; cursor: default; }
+#dc-song .no { background: none; border: 1px solid var(--dc-line); border-radius: 8px; padding: 6px 14px; cursor: pointer; }
+/* folded, on a narrow window: the booth, one dancer, and how many songs (the list) */
+@media (max-width: __NARROW__px) {
+  #dc-dance { width: __NW__px; height: __NH__px; }
+  #dc-dance .df-bo { width: 112px; height: 130px; }
+  #dc-dance .df-bo .dj { bottom: 58px; transform: translateX(-50%) scale(.78); transform-origin: 50% 100%; }
+  #dc-dance .df-fl { right: 80px; }
+  #dc-dance .df-dn { width: 130px; }
+  #dc-dance .dz:not(.d0), #dc-dance .df-more { display: none; }
+  #dc-dance .df-ct { display: block; }
+  #dc-dance .df-em { max-width: 124px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  /* Gentle (the default): a slow sway, each in its own time, from still and back to still (dance_js lets each finish its sway) */
+  #dc-dance.dm-gentle .dz.go .pp { animation: df-sway 2.8s ease-in-out calc(var(--i) * .35s) infinite; }
+  @keyframes df-sway { 0%, 100% { transform: none; } 25% { transform: rotate(-4deg) translateY(-1px); } 75% { transform: rotate(4deg) translateY(-1px); } }
+  #dc-dance.dm-gentle .dj.go .pp { animation: df-nod 1.6s ease-in-out infinite; }
+  @keyframes df-nod { 0%, 100% { transform: none; } 50% { transform: translateY(2px) rotate(-2deg); } }
+  /* Lively: a move on the beat (dance_js steps .b1 and .b3 in, with a rest between) */
+  #dc-dance.dm-lively .pp, #dc-dance.dm-lively .pp .sv-armL, #dc-dance.dm-lively .pp .sv-armR { transition: transform .2s ease-out; }
+  #dc-dance.dm-lively.b1 .dz.go.v0 .sv-armL, #dc-dance.dm-lively.b3 .dz.go.v2 .sv-armL { transform: rotate(118deg); }
+  #dc-dance.dm-lively.b1 .dz.go.v0 .sv-armR, #dc-dance.dm-lively.b3 .dz.go.v2 .sv-armR { transform: rotate(-118deg); }
+  #dc-dance.dm-lively.b1 .dz.go.v0 .pp { transform: translateY(-4px); }
+  #dc-dance.dm-lively.b3 .dz.go.v0 .pp { transform: scale(1.06, .94); }
+  #dc-dance.dm-lively.b1 .dz.go.v1 .sv-armR { transform: rotate(-120deg); }
+  #dc-dance.dm-lively.b1 .dz.go.v1 .pp { transform: rotate(-6deg); }
+  #dc-dance.dm-lively.b3 .dz.go.v1 .sv-armL { transform: rotate(120deg); }
+  #dc-dance.dm-lively.b3 .dz.go.v1 .pp { transform: rotate(6deg); }
+  #dc-dance.dm-lively.b1 .dz.go.v2 .pp { transform: translateY(-7px); }
+  #dc-dance.dm-lively.b1 .dj.go .pp, #dc-dance.dm-lively.b3 .dj.go .pp { transform: translateY(3px); }
+  #dc-dance.dm-lively.go .bulb, #dc-dance.playing:not(.dm-still) .bulb { animation: df-tw 1.1s ease-in-out var(--d) infinite alternate; }
+  @keyframes df-tw { from { opacity: .45; } to { opacity: 1; } }
+  #dc-dance.playing:not(.dm-still) .eqb { animation: df-eq .4s ease-in-out var(--d) infinite alternate; }
+  @keyframes df-eq { from { transform: scaleY(.3); } to { transform: scaleY(1); } }
+  #dc-dance.playing:not(.dm-still) .woof { animation: df-woof .4s ease-in-out infinite alternate; }
+  @keyframes df-woof { to { transform: scale(1.14); } }
+  #dc-dance.playing:not(.dm-still) .spin { animation: df-rot 1.8s linear infinite; }
+  @keyframes df-rot { to { transform: rotate(360deg); } }
+  /* a song that's new to me: its dancer hops onto the floor, once */
+  #dc-dance .dz.fresh .hp { animation: df-hop .9s cubic-bezier(.2, .8, .3, 1.2) .4s both; }
+  @keyframes df-hop { from { transform: translate(-48px, -26px); opacity: 0; } 55% { transform: translate(0, -12px); opacity: 1; } to { transform: none; } }
+  #dc-dance:hover .sv { --sv-on: infinite; }
+}
+""".replace("__W__", str(DANCE_W)).replace("__H__", str(DANCE_H)).replace("__NW__", str(DANCE_NW)).replace(
+    "__NH__", str(DANCE_NH)).replace("__NARROW__", str(DANCE_NARROW - 1)).replace("__AREA__", str(DANCE_W - 150 - 10)).replace(
+    "__BOOTH__", "150").replace("__FONT__", BOARD_FONT)
+
+
+# the folded floor's chip: a record, my colour on its label
+DANCE_RECORD = ('<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#151515"/>'
+                '<circle cx="12" cy="12" r="8.4" fill="none" stroke="#2c2c2c" stroke-width=".8"/>'
+                '<circle cx="12" cy="12" r="6.2" fill="none" stroke="#2c2c2c" stroke-width=".8"/>'
+                '<path d="M5.2 8.6 A7.6 7.6 0 0 1 10.4 4.6" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="1.4" stroke-linecap="round"/>'
+                '<circle cx="12" cy="12" r="4" style="fill:var(--dc-accent)"/><circle cx="12" cy="12" r="1" fill="#e8e8e8"/></svg>')
+
+
+def _dance_lights(w=DANCE_W):
+    """Party lights strung across the top: a garland of bulbs, each twinkling in its own time (Lively, or a preview on)."""
+    n = max(6, round(w / 28))
+    out = ""
+    for i in range(n):
+        t = (i + .5) / n
+        x, y = t * w, (1 - t) ** 2 * 4 + 2 * (1 - t) * t * 26 + t * t * 4
+        out += (f'<line x1="{x:.1f}" y1="{y:.1f}" x2="{x:.1f}" y2="{y + 3:.1f}" stroke="#5c6158" stroke-width="1.2"/>'
+                f'<circle class="bulb" style="--d:{-i * .31:.2f}s" cx="{x:.1f}" cy="{y + 6.5:.1f}" r="3.6" fill="{DANCE_BULBS[i % 4]}"/>')
+    return (f'<svg class="df-lt" viewBox="0 0 {w} 40" preserveAspectRatio="xMidYMin slice" aria-hidden="true">'
+            f'<path d="M0 4 Q{w / 2:g} 48 {w} 4" fill="none" stroke="#5c6158" stroke-width="1"/>{out}</svg>')
+
+
+def _dance_speaker(x):
+    return (f'<g><rect x="{x}" y="40" width="18" height="54" rx="4.5" fill="#232622" stroke="#3a3e38" stroke-width=".8"/>'
+            f'<circle cx="{x + 9}" cy="50" r="2.6" fill="#0f100f"/>'
+            f'<circle class="woof" cx="{x + 9}" cy="72" r="7" fill="#0f100f" stroke="#3a3e38" stroke-width="1.2"/>'
+            f'<circle cx="{x + 9}" cy="72" r="2.3" fill="#30342f"/></g>')
+
+
+def _dance_deck(cx, label):
+    """A deck seen from the front: the platter, my song's label, the arm; a glint that goes round while a preview plays."""
+    return (f'<ellipse cx="{cx}" cy="31" rx="20" ry="5.8" fill="#141514" stroke="#343832" stroke-width=".8"/>'
+            f'<ellipse cx="{cx}" cy="31" rx="13.5" ry="3.8" fill="none" stroke="#2b2e2a" stroke-width=".7"/>'
+            f'<ellipse cx="{cx}" cy="31" rx="5.6" ry="1.7" fill="{label}"/>'
+            f'<g transform="translate({cx} 31) scale(1 .28)"><g class="spin"><ellipse cx="15" cy="0" rx="1.2" ry="4.2" fill="#fff" opacity=".85"/></g></g>'
+            f'<path d="M{cx + 18} 26 L{cx + 10} 30" stroke="#c9ccc4" stroke-width="1.3" stroke-linecap="round"/>')
+
+
+def dance_booth_svg(song=None):
+    """The DJ booth (the mock's, redrawn): a dark desk with two decks and a mixer, a speaker each side, and an
+    equaliser in my colour that dances while a preview plays. My song's colour on the decks' labels."""
+    label = f"hsl({_dance_hue((song or {}).get('al') or (song or {}).get('t'))} 62% 56%)" if song else "#d9d2c3"
+    hs = (10, 17, 23, 14, 25, 19, 12, 21, 9)
+    bars = "".join(f'<rect class="eqb" style="--d:{-i * .17:.2f}s" x="{36 + i * 9.6:.1f}" y="{79 - h}" width="6" height="{h}" rx="2"/>'
+                   for i, h in enumerate(hs))
+    return ('<svg class="bsv" viewBox="0 0 150 96" aria-hidden="true">'
+            + _dance_speaker(0) + _dance_speaker(132)
+            + '<rect x="15" y="22" width="120" height="20" rx="7" fill="#4b5049"/>'
+            '<rect x="19" y="38" width="112" height="56" rx="10" fill="#2c302b" stroke="#3d423b" stroke-width=".8"/>'
+            '<rect x="19" y="38" width="112" height="3.5" fill="#363a34"/>'
+            + _dance_deck(43, label) + _dance_deck(107, label)
+            + '<rect x="64" y="26.5" width="22" height="8" rx="2.2" fill="#5d6359"/>'
+            '<circle cx="68.5" cy="29.3" r="1.3" fill="#cfd3c9"/><circle cx="75" cy="29.3" r="1.3" fill="#cfd3c9"/>'
+            '<circle cx="81.5" cy="29.3" r="1.3" fill="#cfd3c9"/><rect x="70" y="32" width="10" height="1.2" rx=".6" fill="#2b2e2a"/>'
+            f'<rect x="30" y="48" width="90" height="35" rx="7" fill="#171916"/>{bars}'
+            '<rect class="led" x="28" y="87.5" width="94" height="2.2" rx="1.1"/></svg>')
+
+
+def _dance_line(song):
+    """"Artist · Album · 2025": what's known, escaped."""
+    return " &middot; ".join(_html.escape(str(x)) for x in (song.get("a"), song.get("al"), song.get("y")) if x)
+
+
+def _dance_when(at, today=None):
+    """When they picked it: "today", "yesterday", or "since 30 Oct"; "" when it's not known."""
+    try:
+        d = _dt.date.fromisoformat(str(at or ""))
+    except ValueError:
+        return ""
+    n = ((today or _dt.date.today()) - d).days
+    return "picked today" if n <= 0 else "picked yesterday" if n == 1 else f"since {d.day} {d.strftime('%b')}"
+
+
+def _dance_cover(song, size=64):
+    """The song's cover from Apple's catalog, unaltered; till it loads (or when there's none), a tile in its colour."""
+    s = song or {}
+    words = str(s.get("al") or s.get("t") or "?")
+    ini = "".join(w[0] for w in words.split()[:2] if w).upper() or "?"
+    img = (f'<img src="{_html.escape(s["art"])}" alt="" width="{size}" height="{size}" loading="lazy" '
+           f'onerror="this.remove()">' if s.get("art") else "")
+    return (f'<span class="cov" style="--h:{_dance_hue(words)};width:{size}px;height:{size}px;font-size:{round(size / 2.6)}px" '
+            f'aria-hidden="true">{_html.escape(ini)}{img}</span>')
+
+
+def _dance_badge(who):
+    """Apple's "Listen on Apple Music" badge, as Apple serves it, opening the song on Apple Music
+    (duecrew:songapple); when the image doesn't load, the same words as a link."""
+    from . import songs as _songs
+    cmd = _pycmd(f"songapple:{who}")
+    return (f'<span class="bdg"><a href="#" title="Listen on Apple Music" onclick="{cmd}">'
+            f'<img src="{_html.escape(_songs.BADGE_URL)}" alt="Listen on Apple Music" height="30" loading="lazy" '
+            f'onerror="this.parentNode.hidden=true;this.parentNode.nextElementSibling.hidden=false"></a>'
+            f'<a class="bdt" href="#" hidden onclick="{cmd}">Listen on Apple Music</a></span>')
+
+
+def _dance_listen(who, view):
+    """Listen in my music app, by its name ("Listen in Spotify"; another app: the title and artist, copied).
+    Before I've said which app, just Listen: the first time, song_flow asks which. Changing it is Settings'."""
+    from . import songs as _songs
+    app = view.get("app") if view.get("app") in dict(_songs.APPS) else ""
+    word = ("Listen" if not app else "Copy title and artist" if app == "other"
+            else f"Listen in {_html.escape(_songs.app_name(app))}")
+    return f'<button type="button" class="bt pri" onclick="{_pycmd("songlisten:" + who)}">{word}</button>'
+
+
+def _dance_card(who, song, view, name=""):
+    """A song's card: its cover, title, artist · album · year, ▶ its 30 seconds (■ Stop while it plays), Listen in
+    my app, and Apple's badge beside its cover. Mine: Change… and Take it off instead of Listen."""
+    e = _html.escape
+    mine = who == "me"
+    head = ("&#9834; Your song of the moment &middot; on your crew&rsquo;s Decks screens" if mine
+            else f"&#9834; {e(name)}&rsquo;s song of the moment")
+    when = _dance_when(song.get("at"))
+    if when and not mine:
+        head += f" &middot; {when}"
+    on = view.get("playing") == who
+    prev = (f'<button type="button" class="bt pv" data-u="{e(who)}" aria-pressed="{"true" if on else "false"}" '
+            f'onclick="{_pycmd("songprev:" + who)}">{"&#9632; Stop" if on else "&#9654;&#xFE0E; 30 s"}</button>' if song.get("prev") else "")
+    if mine:
+        acts = (prev + '<button type="button" class="bt pri" data-find>Change&hellip;</button>'
+                f'<button type="button" class="bt" onclick="{_pycmd("songclear")}">Take it off</button>')
+    else:
+        acts = prev + _dance_listen(who, view)
+    label = "Your song" if mine else f"{name}’s song"
+    return (f'<div class="df-pop" data-card="{e(who)}" role="dialog" aria-label="{e(label)}" hidden>'
+            f'<div class="ph"><span>{head}</span><button type="button" class="x" data-close aria-label="Close">&times;</button></div>'
+            f'<div class="sg">{_dance_cover(song)}<div class="tx"><b>{e(song["t"])}</b><span class="mt">{_dance_line(song)}</span>'
+            f'<span class="acts">{acts}</span></div></div>{_dance_badge(who)}</div>')
+
+
+def _dance_list(crew):
+    """Everyone's songs (the "+N" and the folded floor's count open it): newest first, each opening its card."""
+    e = _html.escape
+    rows = "".join(
+        f'<li><button type="button" data-open="{e(p["uid"])}" style="--fa-l:{accent_pair(p.get("accent"))[0]};'
+        f'--fa-d:{accent_pair(p.get("accent"))[1]}"><span class="nt" aria-hidden="true">&#9834;</span>'
+        f'<span class="tx"><b>{e(p["song"]["t"])}</b><span class="mt">{e(p["name"])} &middot; {e(p["song"]["a"])}</span></span>'
+        f'{"<span class=new>new</span>" if p.get("fresh") else ""}</button></li>' for p in crew)
+    return (f'<div class="df-pop" data-card="*" role="dialog" aria-label="Your crew&rsquo;s songs" hidden>'
+            f'<div class="ph"><span>&#9834; Your crew&rsquo;s songs &middot; {len(crew)}</span>'
+            f'<button type="button" class="x" data-close aria-label="Close">&times;</button></div>'
+            f'<ul class="df-ls">{rows}</ul></div>')
+
+
+def _dance_dancer(i, p, view, place):
+    """A crewmate on the floor: their Pip (their colour and look) or, Pip off, their initial in their colour;
+    their name; the song in a bubble over their head (★ when it's new to me). The whole of it is the button;
+    the drawing never takes a click."""
+    e = _html.escape
+    s = p["song"]
+    back = i >= 3
+    name = str(p.get("name") or "?")
+    if view.get("pip", True):
+        fig = _sev.slot(_sev.svg("idle", rest=True, look=p.get("look") or None, label=e(f"{name}’s Pip")),
+                        DANCE_PIP_BACK if back else DANCE_PIP)
+    else:
+        fig = f'<span class="fc">{e(initial(name))}</span>'
+    light, dark = accent_pair(p.get("accent"))
+    mark = '<b class="st">&#9733;</b> ' if p.get("fresh") else "&#9834; "
+    cls = f'dz d{i} v{i % 3}{" bk" if back else ""}{" fresh" if p.get("fresh") else ""}{" say" if i == place else ""}'
+    x = (i - 3) * DANCE_SLOT + DANCE_SLOT // 2 if back else i * DANCE_SLOT
+    said = f"{name}’s song: {s['t']} by {s['a']}"
+    # the drawing, the name and the bubble spill out of the place (a hat, a long title); the button is laid over it
+    return (f'<span class="{cls}" style="--x:{x};--i:{i};--fa-l:{light};--fa-d:{dark}">'
+            f'<span class="bub" data-open="{e(p["uid"])}"><span>{mark}{e(s["t"])}</span></span>'
+            f'<span class="hp"><span class="pp">{fig}</span><span class="nm">{e(name)}</span></span>'
+            f'<button type="button" class="dzb" data-open="{e(p["uid"])}" aria-label="{e(said)}"></button></span>')
+
+
+def _dance_dj(view, cfg):
+    """My Pip behind the booth, headphones on (the closet's, over whatever's on its head); with no song of
+    mine it waves, a bubble asking for one. Pip off: my colour's ♪ in its place."""
+    me = view.get("me")
+    if view.get("pip", True):
+        look = my_look(cfg)
+        if "headphones" not in _closet.shown(look):
+            look = _closet.wear(look, "headphones")
+        fig = _sev.slot(_sev.svg("idle" if me else "hello", rest=True, look=look, label="Your Pip, the DJ"), DANCE_DJ)
+    else:
+        fig = '<span class="fc">&#9834;</span>'
+    ask = "" if me else '<span class="bub on"><span>Put on a song?</span></span>'
+    return f'<span class="dj"><span class="pp">{fig}</span>{ask}</span>'
+
+
+def _dance_keys(view, cfg):
+    """(scene, cards): what the floor is drawn from, and what its cards say besides. A swap that changes neither
+    keeps the floor on the page as it is; one that changes the cards alone redraws just those. A new song's hop
+    isn't in either: it plays when the floor is first drawn with it."""
+    import hashlib
+    crew = [[p.get("uid"), p.get("name"), p.get("accent"), p.get("look"), p.get("song")] for p in view.get("crew") or []]
+    scene = _json.dumps([crew, view.get("me"), bool(view.get("pip", True)), view.get("motion"), my_look(cfg),
+                         cfg.get("theme", "auto"), cfg.get("accent", DEFAULT_ACCENT)], sort_keys=True, default=str)
+    k = hashlib.sha1(scene.encode()).hexdigest()[:12]
+    c = hashlib.sha1(_json.dumps([k, view.get("app"), view.get("playing")]).encode()).hexdigest()[:12]
+    return k, c
+
+
+def dance_html(view, cfg):
+    """3.9.6, song of the moment: the dance floor for the Decks screen's corner, from song_flow.floor_view
+    ({me, crew: [{uid, name, accent, look, song, fresh}], motion, app, playing, pip}); "" when it's None. A
+    <template> in the board (and the room it needs after the board, while the two would meet), which dance_js
+    puts on the page as #dc-dance. Up to DANCE_MAX dancers, newest first, then "+N" (the whole list) in the
+    last one's place; on a narrow window, the booth, one dancer and a count. Folded (Sam's "collapse": the
+    view's folded, the page's own fold at once, dancefold), a chip in the corner: a record, how many songs, a
+    star when one's new; × hides it (dancehide). Every word in it is theirs or Apple's: escaped here, and
+    only cleaned songs (songs.clean) are drawn. Each click a keyed command, or a card's, the list's, the
+    fold's or the search's opening (dance_js)."""
+    if not view:
+        return ""
+    from . import songs as _songs
+    me = _songs.clean(view.get("me"))
+    crew = []
+    for p in view.get("crew") or []:
+        s = _songs.clean((p or {}).get("song"))
+        if s and p.get("uid"):
+            crew.append(dict(p, uid=str(p["uid"]), name=str(p.get("name") or "?"), song=s))
+    view = dict(view, me=me, crew=crew)
+    motion = view.get("motion") if view.get("motion") in _songs.MOTIONS else "gentle"
+    key, cards_key = _dance_keys(view, cfg)
+    many = len(crew) > DANCE_MAX
+    shown = crew[:DANCE_MAX - 1] if many else crew
+    place = next((i for i, p in enumerate(shown) if p.get("fresh")), 0)  # the first bubble: a new song's, else the newest
+    dancers = "".join(_dance_dancer(i, p, view, place) for i, p in enumerate(shown))
+    if many:
+        last = DANCE_MAX - 1
+        x = (last - 3) * DANCE_SLOT + DANCE_SLOT // 2 if last >= 3 else last * DANCE_SLOT
+        dancers += (f'<button type="button" class="df-more" data-open="*" style="--x:{x}" '
+                    f'aria-label="All {len(crew)} of your crew&rsquo;s songs">+{len(crew) - len(shown)}</button>')
+    if len(crew) > 1:
+        dancers += (f'<button type="button" class="df-ct" data-open="*" aria-label="All {len(crew)} of your crew&rsquo;s songs">'
+                    f'&#9834; {len(crew)}</button>')
+    if not crew:
+        dancers += '<span class="df-em">No one&rsquo;s picked a song yet.</span>'
+    e = _html.escape
+    said = f"Your song: {me['t']} by {me['a']}" if me else "Put on a song"
+    booth = (f'<button type="button" class="df-bo" data-open="{"me" if me else "search"}" aria-label="{e(said)}">'
+             f'{_dance_dj(view, cfg)}{dance_booth_svg(me)}'
+             f'<span class="tag{"" if me else " no"}">{"&#9834; " + e(me["t"]) if me else "No song yet"}</span></button>')
+    cards = ("".join(_dance_card(p["uid"], p["song"], view, p["name"]) for p in crew)
+             + (_dance_card("me", me, view) if me else "") + (_dance_list(crew) if crew else ""))
+    play = view.get("playing") if view.get("playing") in ["me"] + [p["uid"] for p in crew] else ""
+    # each crewmate in their colour, by day or by night as the board (one selector a call: _by_theme prefixes it)
+    tones = "\n".join(_by_theme(cfg, sel, "--sv-a: var(--fa-l);", "--sv-a: var(--fa-d);")
+                       for sel in ("#dc-dance .dz", "#dc-dance .df-ls button"))
+    folded = bool(view.get("folded"))
+    n = len(crew)
+    chip = (f'<button type="button" class="df-chip" data-fold="0" title="Open the dance floor" '
+            f'aria-label="Open the dance floor{f": {n} song" + ("" if n == 1 else "s") if n else ""}">{DANCE_RECORD}'
+            f'<span>&#9834;{f" {n}" if n else ""}</span>'
+            f'{"<b class=st>&#9733;</b>" if any(p.get("fresh") for p in crew) else ""}</button>')
+    floor = (f'<div id="dc-dance" class="dm-{motion}{" playing" if play else ""}{" fold" if folded else ""}" data-k="{key}" data-c="{cards_key}" '
+             f'data-me="{1 if me else 0}" data-play="{e(play)}" data-badge="{e(_songs.BADGE_URL)}" '
+             f'role="group" aria-label="Your crew&rsquo;s songs">'
+             f'<style>{_dance_tokens(cfg, "#dc-dance")}\n{_dance_tokens(cfg, "#dc-song")}\n{tones}</style>'  # DANCE_CSS: dance_js's
+             f'<div class="df-sc">{_dance_lights()}<div class="df-fl"></div><div class="df-dn">{dancers}</div>{booth}'
+             f'<button type="button" class="df-fd" data-fold="1" title="Fold it into the corner" aria-label="Fold the dance floor">'
+             f'<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 L6 8 L9.5 4.5" fill="none" stroke="currentColor" '
+             f'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>'
+             f'<a class="df-x" href="#" title="Hide the dance floor (Settings &rsaquo; Board brings it back)" '
+             f'aria-label="Hide the dance floor" onclick="{_pycmd("dancehide")}">&times;</a></div>'
+             f'<div class="df-cards">{cards}</div>{chip}</div>')
+    room = (f'<style>#due-crew #dc-dance-room {{ height: 0; }} @media (max-width: {DANCE_BOARD}px) {{ #due-crew #dc-dance-room '
+            f'{{ height: {DANCE_H + 8}px; }} #due-crew #dc-dance-room.fold {{ height: 40px; }} }} '
+            f'@media (max-width: {DANCE_NARROW - 1}px) {{ #due-crew #dc-dance-room {{ height: {DANCE_NH + 8}px; }} '
+            f'#due-crew #dc-dance-room.fold {{ height: 40px; }} }}</style>'
+            f'<div id="dc-dance-room"{" class=fold" if folded else ""} aria-hidden="true"></div>')
+    return f'<template id="dc-dance-src" data-k="{key}">{floor}</template>{room}'
+
+
+# The floor on the page: built from the board's <template> when what it's drawn from changed, else left as it
+# is (dancing or resting, a card open); its cards alone redrawn when only they changed. Dancing: DANCE_REST
+# seconds when it's drawn, then rest; pointing at it plays it on, a preview keeps it going; Still and Reduce
+# motion, never. Gentle sways (CSS), each Pip finishing the sway it's in when the floor rests, so nothing
+# jumps; Lively steps a move every beat (.b1, .b3), in place, never drawing a Pip again (a redraw on each
+# beat swallowed clicks in the mock). One bubble at a time, its turn passed along. The search's songs come
+# back as dcSong.results({q, songs, error}) and a preview's start and end as dcSong.playing(uid): words as
+# text, a cover only from Apple's image host.
+DANCE_JS = r"""
+window.dcDance = window.dcDance || (function () {
+    var REST = __REST__, TICK = __TICK__, SAY = __SAY__;
+    function look() {  // the floor's look, once a page (a swap carries only the floor), when there's a floor to draw
+        if (document.getElementById('dc-dance-css')) { return; }
+        var css = document.createElement('style');
+        css.id = 'dc-dance-css';
+        css.textContent = __CSS__;
+        (document.head || document.body).appendChild(css);
+    }
+    var ART = /^https:\/\/([a-z0-9-]+\.)*mzstatic\.com\/[^\s"'<>\\]*$/i;
+    var S = { open: null, was: null, say: 0, restAt: 0, beat: 0, n: 0, hover: false, timer: null, sheet: null, q: '', qt: null };
+    function floor() { return document.getElementById('dc-dance'); }
+    function reduce() { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+    function still(f) { return reduce() || f.classList.contains('dm-still'); }
+    function send(cmd) { if (typeof pycmd !== 'undefined') { pycmd('duecrew:' + cmd + '|' + window.dcBK); } }
+    function each(root, sel, fn) { Array.prototype.forEach.call(root.querySelectorAll(sel), fn); }
+    function el(tag, cls, text) {
+        var e = document.createElement(tag);
+        if (cls) { e.className = cls; }
+        if (text != null) { e.textContent = text; }
+        return e;
+    }
+    function focus(x) { if (x && x.isConnected && x.focus) { try { x.focus({ preventScroll: true }); } catch (err) { /* gone */ } } }
+    // the dancers on show (a narrow window folds the floor to one)
+    function dancers(f) { return Array.prototype.filter.call(f.querySelectorAll('.dz'), function (d) { return d.offsetParent !== null; }); }
+    function say(f, i) {
+        var ds = dancers(f);
+        each(f, '.dz.say', function (d) { d.classList.remove('say'); });
+        if (!ds.length) { return; }
+        S.say = ((i % ds.length) + ds.length) % ds.length;
+        ds[S.say].classList.add('say');
+    }
+    function beat(f, b) { f.classList.remove('b1', 'b2', 'b3'); if (b > 0) { f.classList.add('b' + b); } }
+    function wake(ms) { S.restAt = Math.max(S.restAt, Date.now() + (ms || REST)); }
+    function tick() {
+        var f = floor();
+        if (!f) { clearInterval(S.timer); S.timer = null; return; }
+        S.n++;
+        var on = !folded(f) && !still(f) && (S.hover || f.classList.contains('playing') || Date.now() < S.restAt);
+        if (on) {
+            if (!f.classList.contains('go')) { f.classList.add('go'); each(f, '.dz, .dj', function (d) { d.classList.add('go'); }); }
+            if (f.classList.contains('dm-lively') && S.n % 2 === 0) { S.beat = (S.beat + 1) % 4; beat(f, S.beat); }
+        } else if (f.classList.contains('go')) {
+            f.classList.remove('go');
+            beat(f, 0);  // Lively's moves ease back to still
+            // Gentle's sway goes back to still on its own: each Pip finishes the sway it's in (animationiteration)
+            if (!f.classList.contains('dm-gentle') || still(f) || folded(f)) { each(f, '.go', function (d) { d.classList.remove('go'); }); }
+        }
+        if (S.n % SAY === 0 && !document.hidden && !S.open && !folded(f)) { say(f, S.say + 1); }
+    }
+    function folded(f) { return f.classList.contains('fold'); }
+    function room(on) {  // the room after the board: the floor's, or the chip's while it's folded
+        var r = document.getElementById('dc-dance-room');
+        if (r) { r.classList.toggle('fold', on); }
+    }
+    // the fold (its chip, in the corner) and back: at once, on the page; the glue keeps it for the next draw (dancefold)
+    function fold(on, tell) {
+        var f = floor();
+        if (!f || on === folded(f)) { return; }
+        var had = !!(document.activeElement && f.contains(document.activeElement));
+        close();
+        if (tell) { S.userOpen = !on; f.removeAttribute('data-auto'); }  // a person's fold or open: fit leaves it be
+        f.classList.toggle('fold', on);
+        room(on);
+        if (tell) { send('dancefold:' + (on ? 1 : 0)); }
+        if (on) { tick(); } else { S.n = 0; wake(); tick(); say(f, S.say); }
+        if (had) { focus(f.querySelector(on ? '.df-chip' : '.df-fd')); }
+    }
+    function setup(f) {
+        S.open = null; S.was = null; S.n = 0; S.beat = 0; S.hover = false; S.restAt = 0;
+        if (!folded(f)) { wake(); }
+        var ds = dancers(f);
+        say(f, Math.max(0, ds.indexOf(f.querySelector('.dz.say'))));
+        f.addEventListener('click', click);
+        f.addEventListener('pointerover', function () { S.hover = true; wake(); });
+        f.addEventListener('pointerout', function (e) {
+            if (!e.relatedTarget || !f.contains(e.relatedTarget)) { S.hover = false; wake(2400); }
+        });
+        f.addEventListener('focusin', function () { wake(); });
+        f.addEventListener('animationiteration', function (e) {
+            if (f.classList.contains('go') || (e.animationName !== 'df-sway' && e.animationName !== 'df-nod')) { return; }
+            var d = e.target.closest('.dz, .dj');
+            if (d) { d.classList.remove('go'); }
+        });
+        if (!S.timer) { S.timer = setInterval(tick, TICK); }
+        tick();
+    }
+    // the floor open only where it fits beside the board; where it would cover the board, its chip
+    // (data-auto: folded for room, not by a person, so it opens again when the window has room)
+    function crowded(f) {
+        var b = document.getElementById('due-crew');
+        if (!b) { return false; }
+        var was = folded(f);
+        if (was) { f.classList.remove('fold'); }
+        var r = f.getBoundingClientRect(), br = b.getBoundingClientRect();
+        if (was) { f.classList.add('fold'); }
+        return r.width > 0 && br.width > 0 && r.left < br.right + 8;
+    }
+    function fit() {
+        var f = floor();
+        if (!f || S.userOpen) { return; }
+        if (!folded(f) && crowded(f)) {
+            close();
+            f.classList.add('fold');
+            f.setAttribute('data-auto', '1');
+            room(true);
+            tick();
+        } else if (folded(f) && f.hasAttribute('data-auto') && !crowded(f)) {
+            f.classList.remove('fold');
+            f.removeAttribute('data-auto');
+            room(false);
+            S.n = 0;
+            wake();
+            tick();
+        }
+    }
+    function sync() {
+        var t = document.getElementById('dc-dance-src'), cur = floor();
+        var src = t && t.content ? t.content.querySelector('#dc-dance') : null;
+        if (!src) {  // the board's off, or Settings, the closet or Wrapped in its place
+            closeSearch();
+            if (cur) { cur.remove(); }
+            return;
+        }
+        if (cur && cur.getAttribute('data-k') === src.getAttribute('data-k')) {
+            room(folded(cur));  // the page's fold, newer than the draw's
+            if (cur.getAttribute('data-c') !== src.getAttribute('data-c')) {  // only the cards say something new
+                var open = S.open, was = S.was, cards = cur.querySelector('.df-cards'), nu = src.querySelector('.df-cards');
+                if (cards && nu) { cards.parentNode.replaceChild(document.importNode(nu, true), cards); }
+                cur.setAttribute('data-c', src.getAttribute('data-c'));
+                S.open = null;
+                if (open) { show(open, true); S.was = was; }
+            }
+            playing(src.getAttribute('data-play') || '');
+            return;
+        }
+        look();
+        var f = document.importNode(src, true);
+        if (cur) {
+            f.classList.toggle('fold', folded(cur));
+            if (cur.hasAttribute('data-auto')) { f.setAttribute('data-auto', '1'); }
+            cur.parentNode.replaceChild(f, cur);
+        } else { document.body.appendChild(f); }
+        room(folded(f));
+        setup(f);
+        fit();
+        if (!S.fits) {
+            S.fits = true;
+            var ft = 0;
+            window.addEventListener('resize', function () { clearTimeout(ft); ft = setTimeout(fit, 150); });
+        }
+    }
+    function click(e) {
+        var f = floor(), t = e.target && e.target.closest ? e.target.closest('[data-open], [data-close], [data-fold], [data-find]') : null;
+        if (!t || !f || !f.contains(t)) { return; }
+        e.preventDefault();
+        if (t.hasAttribute('data-close')) { close(); }
+        else if (t.hasAttribute('data-fold')) { fold(t.getAttribute('data-fold') === '1', true); }
+        else if (t.hasAttribute('data-find')) { close(); search(); }
+        else if (t.getAttribute('data-open') === 'search') { search(); }
+        else { show(t.getAttribute('data-open')); }
+    }
+    // a song's card (or the list of them): one at a time, over the floor
+    function show(u, quiet) {
+        var f = floor(), card = null;
+        if (!f) { return; }
+        each(f, '.df-pop', function (p) { var it = p.getAttribute('data-card') === u; p.hidden = !it; if (it) { card = p; } });
+        if (!card) { S.open = null; return; }
+        if (!S.open) { S.was = document.activeElement; }
+        S.open = u;
+        wake();
+        if (!quiet) { focus(card.querySelector('[data-close]')); }
+    }
+    function close() {
+        var f = floor(), was = S.was;
+        if (f) { each(f, '.df-pop', function (p) { p.hidden = true; }); }
+        S.open = null; S.was = null;
+        focus(was);
+    }
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && S.open && !S.sheet && !document.getElementById('dc-sheet')) { close(); }
+    });
+    document.addEventListener('pointerdown', function (e) {
+        var f = floor();
+        if (S.open && f && !f.contains(e.target) && !S.sheet && !document.getElementById('dc-sheet')) { close(); }
+    }, true);
+    // a preview started or ended (song_flow): ■ Stop on its card, the booth's decks turning, the floor dancing on
+    function playing(uid) {
+        var f = floor();
+        uid = String(uid || '');
+        if (!f) { return; }
+        f.setAttribute('data-play', uid);
+        f.classList.toggle('playing', !!uid);
+        each(f, '.pv', function (b) {
+            var on = !!uid && b.getAttribute('data-u') === uid;
+            b.textContent = on ? '\u25A0 Stop' : '\u25B6\uFE0E 30 s';
+            b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+        if (uid) { wake(); }
+    }
+    // ---- my song: Apple's catalog, searched as I type ----
+    function hue(w) { var h = 0; for (var i = 0; i < w.length; i++) { h = (h + (i + 1) * w.charCodeAt(i)) % 360; } return h; }
+    function cover(song, size) {
+        var w = String(song.al || song.t || '?'), c = el('span', 'cov');
+        c.style.cssText = '--h:' + hue(w) + ';width:' + size + 'px;height:' + size + 'px;font-size:' + Math.round(size / 2.6) + 'px';
+        c.setAttribute('aria-hidden', 'true');
+        c.textContent = w.split(/\s+/).filter(Boolean).slice(0, 2).map(function (x) { return x.charAt(0); }).join('').toUpperCase() || '?';
+        if (typeof song.art === 'string' && ART.test(song.art)) {
+            var img = el('img');
+            img.alt = '';
+            img.width = img.height = size;
+            img.addEventListener('error', function () { img.remove(); });
+            img.src = song.art;
+            c.appendChild(img);
+        }
+        return c;
+    }
+    function badge(src) {  // Apple's, as served; its words when it doesn't load
+        var b = el('span', 'bdg'), img = el('img'), t = el('span', 'bdt', 'Listen on Apple Music');
+        img.alt = 'Listen on Apple Music';
+        img.height = 30;
+        t.hidden = true;
+        img.addEventListener('error', function () { img.hidden = true; t.hidden = false; });
+        img.src = src;
+        b.appendChild(img);
+        b.appendChild(t);
+        return b;
+    }
+    function search() {
+        var f = floor();
+        if (!f || S.sheet) { return; }
+        close();
+        var mine = f.getAttribute('data-me') === '1', src = f.getAttribute('data-badge') || '';
+        var back = el('div'), card = el('div', 'sw'), head = el('div', 'sh'), x = el('button', 'x', '×');
+        back.id = 'dc-song';
+        back.setAttribute('role', 'dialog');
+        back.setAttribute('aria-modal', 'true');
+        back.setAttribute('aria-label', 'Your song of the moment');
+        back.appendChild(card);
+        head.appendChild(el('b', null, 'Your song of the moment'));
+        x.type = 'button';
+        x.setAttribute('aria-label', 'Close');
+        head.appendChild(x);
+        card.appendChild(head);
+        var inp = el('input', 'sq');
+        inp.type = 'text';  // not 'search': its own clear button is the system's to draw
+        inp.placeholder = 'Search for a song or artist';
+        inp.setAttribute('aria-label', 'Search for a song or artist');
+        inp.autocomplete = 'off';
+        inp.spellcheck = false;
+        inp.maxLength = 80;
+        card.appendChild(inp);
+        var st = el('div', 'ss'), ls = el('ul', 'sr');
+        st.setAttribute('aria-live', 'polite');
+        ls.setAttribute('role', 'listbox');
+        ls.setAttribute('aria-label', 'Songs');
+        card.appendChild(st);
+        card.appendChild(ls);
+        if (src) {  // Apple's badge beside the covers: the picked song's page (or the first's)
+            var bd = badge(src), apple = function () {
+                var s2 = S.sheet, id = s2 && (s2.picked || (s2.rows[0] && s2.rows[0].getAttribute('data-id')));
+                if (id && /^\d{1,16}$/.test(id)) { send('songapple:' + id); }
+            };
+            bd.setAttribute('role', 'link');
+            bd.tabIndex = 0;
+            bd.title = 'Listen on Apple Music';
+            bd.style.cursor = 'pointer';
+            bd.addEventListener('click', apple);
+            bd.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); apple(); } });
+            card.appendChild(bd);
+        }
+        card.appendChild(el('div', 'sn', 'Your crew sees it on their Decks screens. The search goes from this computer to Apple Music.'));
+        var ft = el('div', 'sf'), go = el('button', 'go', 'Use this'), off = mine ? el('button', 'no', 'Take it off') : null,
+            no = el('button', 'no', 'Cancel');
+        go.type = no.type = 'button';
+        go.disabled = true;
+        ft.appendChild(go);
+        ft.appendChild(el('span', 'sp'));
+        if (off) { off.type = 'button'; ft.appendChild(off); }
+        ft.appendChild(no);
+        card.appendChild(ft);
+        var s = { back: back, inp: inp, st: st, ls: ls, go: go, rows: [], picked: '', was: document.activeElement };
+        S.sheet = s;
+        S.q = '';
+        inp.addEventListener('input', function () {
+            clearTimeout(S.qt);
+            var q = inp.value.replace(/\s+/g, ' ').trim();
+            if (q.length < 2) { S.q = ''; rows([]); st.textContent = ''; return; }
+            st.textContent = 'Searching…';
+            S.qt = setTimeout(function () { S.q = q; send('songsearch:' + encodeURIComponent(q)); }, 400);
+        });
+        inp.addEventListener('keydown', function (e) {
+            if (e.key === 'ArrowDown' && s.rows.length) { e.preventDefault(); pick(0); focus(s.rows[0]); }
+            else if (e.key === 'Enter') { e.preventDefault(); if (s.picked) { use(); } else if (s.rows.length) { pick(0); } }
+        });
+        ls.addEventListener('keydown', function (e) {
+            var at = s.rows.indexOf(document.activeElement);
+            if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && at >= 0) {
+                e.preventDefault();
+                var to = Math.max(0, Math.min(s.rows.length - 1, at + (e.key === 'ArrowDown' ? 1 : -1)));
+                pick(to);
+                focus(s.rows[to]);
+            }
+        });
+        go.addEventListener('click', use);
+        if (off) { off.addEventListener('click', function () { closeSearch(); send('songclear'); }); }
+        no.addEventListener('click', closeSearch);
+        x.addEventListener('click', closeSearch);
+        var downOnBack = false;
+        back.addEventListener('pointerdown', function (e) { downOnBack = e.target === back; });
+        back.addEventListener('click', function (e) { if (e.target === back && downOnBack) { closeSearch(); } });
+        s.key = function (e) {
+            if (e.key === 'Escape') { e.stopPropagation(); closeSearch(); return; }
+            if (e.key !== 'Tab') { return; }  // Tab stays in the sheet, never on the board under it
+            var fs = Array.prototype.filter.call(card.querySelectorAll('button, input'), function (b) { return !b.disabled && b.offsetParent !== null; });
+            var at = fs.indexOf(document.activeElement);
+            if (fs.length && (at < 0 || (e.shiftKey && at === 0) || (!e.shiftKey && at === fs.length - 1))) {
+                e.preventDefault();
+                focus(e.shiftKey ? fs[fs.length - 1] : fs[0]);
+            }
+        };
+        document.addEventListener('keydown', s.key, true);
+        document.body.appendChild(back);
+        if (window.dcMotion && !reduce()) { try { dcMotion.open(back, card); } catch (err) { /* it opens as it is */ } }
+        inp.focus();
+    }
+    function pick(i) {
+        var s = S.sheet;
+        if (!s || !s.rows[i]) { return; }
+        s.rows.forEach(function (b, j) { b.setAttribute('aria-selected', j === i ? 'true' : 'false'); });
+        s.picked = s.rows[i].getAttribute('data-id');
+        s.go.disabled = false;
+    }
+    function use() {
+        var s = S.sheet;
+        if (!s || !/^\d{1,16}$/.test(s.picked)) { return; }
+        var id = s.picked;
+        closeSearch();
+        send('songuse:' + id);
+    }
+    function rows(songs) {
+        var s = S.sheet;
+        if (!s) { return; }
+        while (s.ls.firstChild) { s.ls.removeChild(s.ls.firstChild); }
+        s.rows = [];
+        s.picked = '';
+        s.go.disabled = true;
+        songs.forEach(function (song) {
+            var li = el('li'), b = el('button'), tx = el('span', 'tx'), i = s.rows.length;
+            b.type = 'button';
+            b.setAttribute('role', 'option');
+            b.setAttribute('aria-selected', 'false');
+            b.setAttribute('data-id', String(song.id));
+            b.appendChild(cover(song, 40));
+            tx.appendChild(el('b', null, song.t));
+            tx.appendChild(el('span', 'mt', [song.a, song.al, song.y].filter(function (v) { return v; }).join(' · ')));
+            b.appendChild(tx);
+            b.addEventListener('click', function () { pick(i); });
+            b.addEventListener('dblclick', function () { pick(i); use(); });
+            li.appendChild(b);
+            s.ls.appendChild(li);
+            s.rows.push(b);
+        });
+    }
+    function results(o) {
+        var s = S.sheet;
+        if (!s || !o || String(o.q || '') !== S.q || !S.q) { return; }  // only the latest search lands
+        var got = (o.songs || []).filter(function (x) {
+            return x && /^\d{1,16}$/.test(String(x.id)) && typeof x.t === 'string' && typeof x.a === 'string';
+        });
+        rows(o.error ? [] : got);
+        s.st.textContent = o.error ? 'Couldn’t reach Apple Music just now. Try again in a moment.'
+            : got.length ? '' : 'Nothing by that name. Try the artist.';
+    }
+    function closeSearch() {
+        var s = S.sheet;
+        if (!s) { return; }
+        S.sheet = null;
+        S.q = '';
+        clearTimeout(S.qt);
+        document.removeEventListener('keydown', s.key, true);
+        s.back.removeAttribute('id');  // the bars' shade goes with it
+        s.back.remove();  // motion.js takes it out its own way, when it brought it in
+        focus(s.was);
+    }
+    window.dcSong = { results: results, playing: playing };
+    return { sync: sync, show: show, close: close, search: search, wake: wake, fold: fold, playing: playing, results: results };
+})();
+(function () {  // the board's draw calls the fridge (fridge_js): the floor is put in step with it, first
+    var f = window.dcFridge;
+    if (f && !f.dcDance) {
+        window.dcFridge = function () { try { window.dcDance.sync(); } catch (e) { /* the fridge still goes up */ } return f.apply(this, arguments); };
+        window.dcFridge.dcDance = true;
+    }
+})();
+""".replace("__REST__", str(DANCE_REST * 1000)).replace("__TICK__", str(round(DANCE_TICK * 1000))).replace(
+    "__SAY__", str(DANCE_SAY)).replace("__CSS__", _json.dumps(DANCE_CSS).replace("</", "<\\/"))
+
+
+def dance_js(scripts=True):
+    """3.9.6: after the board is drawn (and at every swap): the dance floor put on the page from the board's
+    template, or left as it is when nothing it's drawn from changed, or taken off with none. scripts: the
+    script itself (dcDance and dcSong, once a page) as well as its call, as fridge_js's."""
+    return (DANCE_JS if scripts else "") + "\nif (window.dcDance) { window.dcDance.sync(); }\n"
 
 
 def cheer_overlay_js(view):
@@ -6276,7 +7506,8 @@ SHEET_JS = r"""
         '#dc-sheet *{box-sizing:border-box;}' +
         '#dc-sheet .cw{width:420px;max-width:100%;border-radius:14px;padding:16px 18px 14px;text-align:left;display:grid;gap:12px;font-family:' + font + ';' +
           'box-shadow:0 16px 60px rgba(0,0,0,.35);background:' + bg + ';color:' + ink + ';border:1px solid ' + line + ';font-size:13px;}' +
-        '#dc-sheet button,#dc-sheet input{margin:0;box-shadow:none;font-family:inherit;color:inherit;}#dc-sheet button{cursor:pointer;}' +
+        '#dc-sheet button,#dc-sheet input:where(:not([type=checkbox]):not([type=radio]):not([type=range])),#dc-sheet textarea{-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;font-family:inherit;color:inherit;' +
+        'text-shadow:none;min-height:0;min-width:0;-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;font-weight:400;}#dc-sheet button{cursor:pointer;}' +
         '#dc-sheet .hd{font-size:16px;font-weight:700;}' +
         '#dc-sheet .bd{white-space:pre-line;line-height:1.45;max-height:46vh;overflow-y:auto;overflow-wrap:anywhere;}' +
         '#dc-sheet .tx{width:100%;height:32px;border-radius:8px;border:1px solid ' + line + ';background:' + bg + ';color:' + ink + ';font-size:13px;padding:0 10px;}' +
@@ -6287,15 +7518,23 @@ SHEET_JS = r"""
         '#dc-sheet .ls button:hover{background:' + bg + ';}' +
         '#dc-sheet .ls button[aria-selected=true]{border-color:' + accent + ';background:' + you + ';font-weight:600;}' +
         '#dc-sheet .ls .none{color:' + muted + ';padding:6px 10px;font-size:12px;}' +
+        '#dc-sheet .ls.nts{max-height:none;gap:3px;}#dc-sheet .ls.nts button{padding:7px 10px;}' +
+        '#dc-sheet .ls .nm{display:block;font-weight:600;}#dc-sheet .ls .nt{display:block;font-size:12px;font-weight:400;color:' + muted + ';margin-top:1px;line-height:1.35;}' +
         '#dc-sheet .ck{display:flex;align-items:flex-start;gap:8px;cursor:pointer;line-height:1.35;}' +
-        '#dc-sheet .ck input{accent-color:' + accent + ';width:15px;height:15px;margin-top:1px;flex:none;}' +
+        // 3.9.6: the tick is the sheet's to draw, as the plan window's are (macOS draws any other its own way)
+        '#dc-sheet .ck input{-webkit-appearance:none;appearance:none;width:15px;height:15px;min-height:0;margin:1px 0 0;flex:none;box-sizing:border-box;' +
+          'display:inline-grid;place-content:center;border:1.5px solid ' + muted + ';border-radius:4px;background:' + bg + ';box-shadow:none;cursor:pointer;}' +
+        '#dc-sheet .ck input:checked{background:' + accent + ';border-color:' + accent + ';}' +
+        '#dc-sheet .ck input:checked::after{content:"";width:7px;height:3px;border-left:2px solid ' + accentInk + ';border-bottom:2px solid ' + accentInk + ';' +
+          'transform:translateY(-1px) rotate(-45deg);}' +
+        '#dc-sheet .ck input:focus-visible{outline:2px solid ' + accent + ';outline-offset:2px;}' +
         '#dc-sheet .ft{display:flex;align-items:center;gap:8px;}' +
         '#dc-sheet .sp{flex:1;}' +
         '#dc-sheet .go{background:' + accent + ';color:' + accentInk + ';border:1px solid transparent;border-radius:8px;padding:6px 16px;font-weight:700;font-size:13px;}' +
         '#dc-sheet .go.bad{background:' + bad + ';color:' + badInk + ';}' +
         '#dc-sheet .go:disabled{opacity:.45;cursor:default;}' +
         '#dc-sheet .no{background:none;border:1px solid ' + line + ';border-radius:8px;padding:6px 14px;font-size:13px;}' +
-        '#dc-sheet button:focus-visible{outline:2px solid ' + accent + ';outline-offset:2px;}';
+        '#dc-sheet button:focus-visible{outline:2px solid ' + accent + ' !important;outline-offset:2px;}';
     back.appendChild(css);
     var card = el('div', 'cw');
     back.appendChild(card);
@@ -6322,12 +7561,14 @@ SHEET_JS = r"""
         card.appendChild(wrap);
     } else if (f && f.kind === 'pick') {
         // one of a few (a deck): a list in the board's look; a box to narrow it when it's long
-        var find = null, ls = el('div', 'ls');
+        // plans, end to end (Behind…): a few ways out, each with a quiet line under its name
+        var find = null, ls = el('div', f.notes ? 'ls nts' : 'ls');
         ls.setAttribute('role', 'listbox');
         ls.setAttribute('aria-label', V.title);
         at = Math.max(0, Math.min((f.items || []).length - 1, f.at || 0));
         (f.items || []).forEach(function (name, i) {
-            var b = el('button', null, name);
+            var b = el('button', null, f.notes ? null : name);
+            if (f.notes) { b.appendChild(el('span', 'nm', name)); if (f.notes[i]) { b.appendChild(el('span', 'nt', f.notes[i])); } }
             b.type = 'button';
             b.setAttribute('role', 'option');
             b.addEventListener('click', function () { pick(i); });
@@ -6368,6 +7609,7 @@ SHEET_JS = r"""
     function pick(i) {
         at = i;
         rows.forEach(function (b, j) { b.setAttribute('aria-selected', j === i ? 'true' : 'false'); });
+        if (f && f.go && f.go[i] && go) { go.textContent = f.go[i]; }  // the button says what the pick does
         var r = rows[i], box = r.parentNode;
         if (r.offsetTop < box.scrollTop) { box.scrollTop = r.offsetTop - 4; }
         else if (r.offsetTop + r.offsetHeight > box.scrollTop + box.clientHeight) { box.scrollTop = r.offsetTop + r.offsetHeight - box.clientHeight + 4; }
@@ -6463,7 +7705,9 @@ def sheet_js(view):
              "hint": str(f.get("hint") or "")}
     elif f and f.get("kind") == "pick":
         items = [str(x) for x in f.get("items") or []]
-        f = {"kind": "pick", "items": items, "at": max(0, min(len(items) - 1, int(f.get("at") or 0)))} if items else None
+        # plans, end to end (Behind…): a quiet line under each, and the button's word for each
+        more = {k: ([str(x) for x in f[k]] + [""] * len(items))[:len(items)] for k in ("notes", "go") if f.get(k)}
+        f = dict({"kind": "pick", "items": items, "at": max(0, min(len(items) - 1, int(f.get("at") or 0)))}, **more) if items else None
     else:
         f = None
     ck = view.get("check")
@@ -6517,6 +7761,48 @@ def and_more(names, most=3):
     if len(names) > most:
         return ", ".join(names[:most]) + f" and {len(names) - most} more"
     return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1] if names else ""
+
+
+def finish_js(view):
+    """3.9.6, the finish line (Sam's pick): a plan's last set's last card
+    seen, its show over the whole Decks screen (show.js's DCShow.finish):
+    the path fills as Pip hops along it, breaks the tape, a grad cap lands
+    on it; seven seconds, its banner three more, a click or Esc ends it.
+    Reduce motion: the banner alone, Pip still in its cap. view
+    (plan_flow._finish_view): {pid, name, sets, cards, weeks, a, pip}; the
+    colours are the board's tokens, read off the page. Injected by
+    board_eval, never in the board's HTML; the plan's name goes in as text."""
+    sets = int(view.get("sets") or 0)
+    num = {"sets": sets, "cards": int(view.get("cards") or 0), "weeks": int(view.get("weeks") or 0)}
+    bits = [f"{sets:,} set{'s' if sets != 1 else ''}", f"{num['cards']:,} card{'s' if num['cards'] != 1 else ''}"]
+    if num["weeks"]:
+        bits.append(f"{num['weeks']:,} week{'s' if num['weeks'] != 1 else ''}")
+    pip = view.get("pip") or None
+    data = {"name": str(view.get("name") or "the plan"), "sub": " · ".join(bits), "n": max(1, min(40, sets)),
+            "share": "duecrew:planjoyshare:" + _re.sub(r"[^A-Za-z0-9_-]", "", str(view.get("pid") or "")) + ":fin",
+            "a": list(view.get("a") or ["#2e7d32", "#7cc47f"]), "pip": pip, "ms": int(_shows.FINISH_SECONDS * 1000),
+            "linger": int(_shows.BANNER_SECONDS * 1000)}
+    return """
+    (function () {
+        var D = %s;
+        var dc = document.getElementById('due-crew'), cs = dc ? getComputedStyle(dc) : null;
+        var night = /night/i.test(document.body.className) || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        function tok(name, light, dark) { var v = cs && cs.getPropertyValue('--dc-' + name).trim(); return v || (night ? dark : light); }
+        D.bg = tok('bg', '#ffffff', '#1c1c1c'); D.ink = tok('ink', '#333333', '#dfe1dc'); D.line = tok('line', '#e2e2da', '#3d403b');
+        D.accent = tok('accent', '#2e7d32', '#7cc47f'); D.accentInk = tok('accent-ink', '#ffffff', '#122912');
+        D.amb = tok('hours', '#b26a00', '#dda45c'); D.mut = tok('muted', '#6f736b', '#9a9e94');
+        var m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(D.bg), n = m ? [m[1], m[2], m[3]].map(function (h) { return parseInt(h, 16); })
+            : (/(\\d+)\\D+(\\d+)\\D+(\\d+)/.exec(D.bg) || [0, 255, 255, 255]).slice(1).map(Number);
+        D.dark = n[0] * 0.299 + n[1] * 0.587 + n[2] * 0.114 < 128;
+        D.rm = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+        D.sevcss = %s;
+        %s
+        (function go(n) {  // a cheer's show that landed with it plays first (twenty seconds at most)
+            if (document.getElementById('dc-show') && n < 40) { setTimeout(function () { go(n + 1); }, 500); return; }
+            if (window.DCShow && window.DCShow.finish) { window.DCShow.finish(D); }
+        })(0);
+    })();
+    """ % (_json.dumps(data).replace("</", "<\\/"), _json.dumps(_sev.CSS).replace("</", "<\\/") if pip else "null", SHOW_JS)
 
 
 def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None, show=None, doodle=None):
@@ -6867,6 +8153,11 @@ def stranger_card_js(info):
             warn = tok('hours', '#b26a00', '#dda45c');
         var back = document.createElement('div');
         back.id = 'dc-profile';
+        var reset = document.createElement('style');  // 3.9.6: Anki's button look (and macOS's own) off the card's; its focus ring back
+        reset.textContent = '#dc-profile button{-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;text-shadow:none;' +
+            'min-height:0;min-width:0;-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;font-weight:400;}' +
+            '#dc-profile button:focus-visible{outline:2px solid ' + accent + ' !important;outline-offset:2px;}';
+        back.appendChild(reset);
         back.style.cssText = 'position:fixed;inset:0;z-index:80;background:rgba(0,0,0,0.35);' +
             'display:flex;align-items:flex-start;justify-content:center;padding-top:16vh;';
         var card = document.createElement('div');
@@ -6966,6 +8257,11 @@ def luck_card_js(name, lines):
             accentInk = tok('accent-ink', '#ffffff', '#122912');
         var back = document.createElement('div');
         back.id = 'dc-profile';
+        var reset = document.createElement('style');  // 3.9.6: Anki's button look (and macOS's own) off the card's; its focus ring back
+        reset.textContent = '#dc-profile button{-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;text-shadow:none;' +
+            'min-height:0;min-width:0;-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;font-weight:400;}' +
+            '#dc-profile button:focus-visible{outline:2px solid ' + accent + ' !important;outline-offset:2px;}';
+        back.appendChild(reset);
         back.style.cssText = 'position:fixed;inset:0;z-index:80;background:rgba(0,0,0,0.35);' +
             'display:flex;align-items:flex-start;justify-content:center;padding-top:14vh;';
         var card = document.createElement('div');
@@ -7026,6 +8322,25 @@ def _heat_level(n):
     return level
 
 
+def _profile_song(profile):
+    """3.9.6: their song of the moment on their card, "♪ Title · Artist", with Listen (in my music app); on
+    mine, Change, which opens the search. The song as songs.clean has it, escaped here; "" with none."""
+    from . import songs as _songs
+    song = _songs.clean(profile.get("song"))
+    if not song:
+        return ""
+    link = 'style="color: inherit; font-weight: 700; text-decoration: none; border-bottom: 1px dotted currentColor;"'
+    shut = "document.getElementById('dc-profile').remove();"
+    if profile.get("you"):
+        act = (f'<a href="#" {link} onclick="{shut}if(window.dcDance){{dcDance.search();}}return false;">Change</a>')
+    else:
+        act = f'<a href="#" {link} onclick="{shut}{_pycmd("songlisten:" + str(profile.get("uid") or ""))}">Listen</a>'
+    return (f'<div style="font-size: 12px; padding: 4px 0 0; display: flex; gap: 6px; align-items: baseline; min-width: 0;">'
+            f'<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;">&#9834; '
+            f'<b>{_html.escape(song["t"])}</b> &middot; {_html.escape(song["a"])}</span>'
+            f'<span style="flex: none;">{act}</span></div>')
+
+
 def profile_overlay_js(profile):
     """Build the profile overlay. `profile`:
       name, streak (int|None), last_active (str ts), cells (list of daily
@@ -7033,7 +8348,8 @@ def profile_overlay_js(profile):
       same_days (int|None), decks_line (str), uid, you (bool),
       paused (bool), exam (str, client-built text or ""), away (str, text
       or ""), status (str or ""), today ((reviews, new cards or None) or
-      None), sev (3.8.2: card_sev's markup, in the emoji's place, or None).
+      None), sev (3.8.2: card_sev's markup, in the emoji's place, or None),
+      song (3.9.6: their song of the moment, from their crew entry, or None).
     For your own card ("you") the overlay shows exactly what the crew sees,
     and the cheer button becomes a Privacy shortcut. Everything user-sourced
     is escaped here; the JS only injects the built HTML and wires buttons."""
@@ -7083,6 +8399,9 @@ def profile_overlay_js(profile):
         quoted = f'&ldquo;{_html.escape(status)}&rdquo;' if status else ""
         head += (f'<div style="font-size: 12px; opacity: 0.8; padding: 4px 0 0;">'
                  f'{quoted}{edit}</div>')
+    song_line = _profile_song(profile)
+    if song_line:
+        head += song_line
     if you:
         link = ('style="color: inherit; text-decoration: none; '
                 'border-bottom: 1px dotted currentColor;"')
@@ -7209,6 +8528,11 @@ def profile_overlay_js(profile):
             warn = tok('hours', '#b26a00', '#dda45c');
         var back = document.createElement('div');
         back.id = 'dc-profile';
+        var reset = document.createElement('style');  // 3.9.6: Anki's button look (and macOS's own) off the card's; its focus ring back
+        reset.textContent = '#dc-profile button{-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;text-shadow:none;' +
+            'min-height:0;min-width:0;-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;font-weight:400;}' +
+            '#dc-profile button:focus-visible{outline:2px solid ' + accent + ' !important;outline-offset:2px;}';
+        back.appendChild(reset);
         back.style.cssText = 'position:fixed;inset:0;z-index:80;background:rgba(0,0,0,0.35);' +
             'display:flex;align-items:flex-start;justify-content:center;padding-top:14vh;';
         var card = document.createElement('div');
@@ -7370,6 +8694,9 @@ DUE_CSS = """
       background: var(--dc-bg); border: 1px solid var(--dc-line); border-radius: 7px; padding: 4px 8px; }
     #due-crew .du-add select, #due-crew .du-add input[type=date] { font: inherit; font-size: 12px; color: var(--dc-ink);
       background: var(--dc-bg); border: 1px solid var(--dc-line); border-radius: 7px; padding: 3px 4px; color-scheme: light dark; }
+    #due-crew .du-add select { padding-right: 20px; background-repeat: no-repeat; background-size: 4px 4px;
+      background-image: linear-gradient(45deg, transparent 50%, var(--dc-muted) 50%), linear-gradient(135deg, var(--dc-muted) 50%, transparent 50%);
+      background-position: calc(100% - 11px) 55%, calc(100% - 7px) 55%; }
     #due-crew .du-said { font-size: 11.5px; color: var(--dc-accent); font-weight: 700; white-space: nowrap; }
     #due-crew .du-said a { color: var(--dc-muted); font-weight: 400; margin-left: 4px; }
     #due-crew .du-dh { display: flex; justify-content: space-between; gap: 10px; font-size: 11.5px; font-weight: 700;
@@ -7829,7 +9156,7 @@ def _due_plan(r):
     go = ""  # 3.8.0: one Study, the box's Study today (its first step is this plan's deck)
     if r.get("study"):  # 3.8.1: but a plan's date with cards open has its own: a cram of just it
         cmd = _pycmd(f"planstudydate:{r['pid']}:{r['uid']}")
-        go = (f'<a href="#" class="du-go" title="A Due Crew deck of its open cards, new and review, in random order" '
+        go = (f'<a href="#" class="du-go" title="A filtered deck: its new cards and the ones due today" '
               f'onclick="{cmd}">Study</a>')
     n = f'<span class="n">{e(r["n"])}</span>' if r["n"] else ""
     name, more = _date_more(r)
@@ -7939,7 +9266,7 @@ def _due_behind(v):
     out = '<div class="du-bh"><div class="du-sec warn">Behind</div>'
     for p in v["behind_plans"]:
         left = int(p["left"])
-        what = f'{int(p["dates"])} date{"s" if p["dates"] != 1 else ""}' + (
+        what = f'{int(p["dates"])} set{"s" if p["dates"] != 1 else ""}' + (
             f' &middot; <a class="tp" href="#" title="Browse them" onclick="{_pycmd("planleft:" + p["pid"])}">{left:,} cards to see</a>'
             if left else "")
         out += (f'<div class="du-r">{_due_box("", auto=True)}<span class="t"><b>{e(p["plan"])}</b><small>{what}</small></span>'

@@ -14,6 +14,12 @@ SHOWS = ("cannon", "pinata", "fireworks", "gift", "bubbles", "wave",
          "balloons", "rocket", "stamp", "disco", "hat", "snow")
 BAG_KEY = "cheer_bag"  # [the shows left in this bag, ..., the last one played]
 
+# 3.9.6, the finish line (Sam's pick): a plan's last set's last card seen, a
+# show of its own in the cheers' style (show.js's DCShow.finish, started by
+# board.finish_js), once a plan (plans.json). Not in the bag: it's no cheer.
+FINISH_SECONDS = 7  # the show
+BANNER_SECONDS = 3  # its banner, past it
+
 
 def next_show(bag, rng=random):
     """(the show to play, the bag after it). bag: what the config keeps,

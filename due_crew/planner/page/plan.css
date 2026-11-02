@@ -1,0 +1,290 @@
+/* Your plans, in the board's look: its --dc-* tokens (web.colors), its
+   pills and quiet lines. Names are set as text by plan.js. */
+html, body { margin: 0; padding: 0; height: 100%; }
+body { background: var(--dc-bg, #fff); }
+.dcp { --r: 12px; --gap: 10px; box-sizing: border-box; height: 100vh; display: flex; flex-direction: column;
+  background: var(--dc-bg); color: var(--dc-ink); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  padding: 14px 18px 10px; text-align: left; }
+.dcp *, .dcp *::before, .dcp *::after { box-sizing: border-box; }
+/* Every control is ours, whatever the host puts on top: Anki's webview.css
+   (a button's padding, side margin, hover gradient, pressed shadow, macOS's
+   13px, outline: none !important) and macOS's own controls (Liquid Glass draws
+   any control whose appearance isn't none). "body .dcp" outranks Anki's
+   button rules in any order; our classes outrank this. tools/control_audit.js
+   checks it. */
+body .dcp button, body .dcp select, body .dcp input, body .dcp textarea {
+  appearance: none; -webkit-appearance: none; font: inherit; letter-spacing: inherit; line-height: inherit;
+  text-transform: none; margin: 0; min-height: 0; min-width: 0; box-shadow: none; text-shadow: none;
+  backdrop-filter: none; -webkit-backdrop-filter: none; outline: none; }
+body .dcp button { color: inherit; background: none; border: 0; padding: 0; border-radius: 0; cursor: pointer; }
+body .dcp input, body .dcp textarea, body .dcp select { color: var(--dc-ink); }
+/* Anki's .fancy button:hover raises a button with a shadow (its body has .fancy unless minimalist): never ours */
+body .dcp button:hover, body .dcp button:active { box-shadow: none; transition: none; }
+/* a select's arrow, ours (appearance none takes the native one away) */
+body .dcp select { padding-right: 26px !important; background-image: linear-gradient(45deg, transparent 50%, var(--dc-muted) 50%),
+  linear-gradient(135deg, var(--dc-muted) 50%, transparent 50%) !important; background-position: calc(100% - 14px) 52%,
+  calc(100% - 9px) 52% !important; background-size: 5px 5px, 5px 5px !important; background-repeat: no-repeat !important; cursor: pointer; }
+/* ticks and dots, ours */
+body .dcp input[type=checkbox], body .dcp input[type=radio] { width: 16px; height: 16px; flex: none; display: inline-grid;
+  place-content: center; vertical-align: -3px; border: 1.5px solid var(--dc-faded); background: var(--dc-bg); cursor: pointer; padding: 0; }
+body .dcp input[type=radio] { border-radius: 50%; }
+body .dcp input[type=checkbox] { border-radius: 4px; }
+body .dcp input[type=radio]:checked { border: 5px solid var(--dc-accent); }
+body .dcp input[type=checkbox]:checked { background: var(--dc-accent); border-color: var(--dc-accent); }
+body .dcp input[type=checkbox]:checked::after { content: ""; width: 8px; height: 4px; border-left: 2px solid var(--dc-accent-ink);
+  border-bottom: 2px solid var(--dc-accent-ink); transform: translateY(-1px) rotate(-45deg); }
+body .dcp input:disabled, body .dcp select:disabled, body .dcp textarea:disabled { opacity: .55; cursor: default; }
+body .dcp input[type=number]::-webkit-inner-spin-button, body .dcp input[type=number]::-webkit-outer-spin-button { opacity: .6; }
+body .dcp input[type=date]::-webkit-calendar-picker-indicator { cursor: pointer; opacity: .65; }
+/* focus: a ring Anki's outline: none can't take away (keyboards, and Tab) */
+body .dcp button:focus-visible, body .dcp [role=button]:focus-visible, body .dcp [role=checkbox]:focus-visible,
+body .dcp [role=radio]:focus-visible, body .dcp input[type=checkbox]:focus-visible, body .dcp input[type=radio]:focus-visible,
+body .dcp [tabindex]:focus-visible { box-shadow: 0 0 0 2px var(--dc-bg), 0 0 0 4px var(--dc-accent) !important; }
+.dcp .muted { color: var(--dc-muted); }
+.dcp .sm { font-size: 12.5px; }
+.dcp .warn { color: var(--dc-hours); }
+.dcp .tn { font-variant-numeric: tabular-nums; }
+.dcp .grow { flex: 1 1 auto; min-width: 0; }
+
+/* buttons: the board's pills; .pri filled; .t a plain word */
+.dcp .b { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--dc-line); background: var(--dc-bg);
+  color: var(--dc-accent); font-weight: 650; border-radius: 999px; padding: 5px 12px; cursor: pointer; white-space: nowrap; line-height: 1.2; font-size: 13px; }
+.dcp .b:hover { border-color: var(--dc-accent); }
+.dcp .b:disabled, .dcp .b.off { opacity: .45; cursor: default; border-color: var(--dc-line); }
+.dcp .b.pri { background: var(--dc-accent); border-color: var(--dc-accent); color: var(--dc-accent-ink); }
+.dcp .b.bad { color: #c62828; }
+.dcp .b.t { border: 0; padding: 2px 4px; background: none; }
+/* a disabled one keeps its own look under Anki's button[disabled]:hover too */
+body .dcp .b:disabled, body .dcp .b:disabled:hover { background-color: var(--dc-bg); color: var(--dc-accent); }
+body .dcp .b.pri:disabled, body .dcp .b.pri:disabled:hover { background-color: var(--dc-accent); color: var(--dc-accent-ink); }
+body .dcp .b.t:disabled, body .dcp .b.t:disabled:hover { background-color: transparent; }
+body .dcp .b.bad:disabled, body .dcp .b.bad:disabled:hover { color: #c62828; }
+.dcp .b.ch::after { content: ""; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg) translateY(-2px); opacity: .7; }
+.dcp .x { border: 0; background: none; color: var(--dc-muted); cursor: pointer; padding: 0 4px; font-size: 13px; }
+.dcp .x:hover { color: var(--dc-ink); }
+.dcp .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.dcp .row.sp { justify-content: space-between; }
+
+/* boxes */
+.dcp .in, .dcp select.in { border: 1px solid transparent; background: var(--dc-well); border-radius: 10px; padding: 6px 10px; min-width: 0; outline: none; }
+.dcp .in:focus { border-color: var(--dc-accent); background: var(--dc-bg); }
+.dcp textarea.in { resize: vertical; line-height: 1.4; }
+.dcp .seg { display: inline-flex; background: var(--dc-well); border-radius: 999px; padding: 2px; flex-wrap: wrap; }
+.dcp .seg button { border: 0; background: none; color: var(--dc-muted); font-weight: 600; padding: 4px 11px; border-radius: 999px; cursor: pointer; font-size: 13px; }
+.dcp .seg button.on { background: var(--dc-bg); color: var(--dc-ink); box-shadow: 0 1px 2px rgba(0,0,0,.15); }
+
+/* the head */
+.dcp .top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.dcp .top select { flex: 1 1 280px; font-weight: 600; }
+.dcp .tabs { display: flex; gap: 18px; margin: 10px 0 8px; font-weight: 600; border-bottom: 1px solid var(--dc-line); }
+.dcp .tabs button { border: 0; background: none; color: var(--dc-muted); padding: 4px 0 7px; cursor: pointer; font-weight: 600; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.dcp .tabs button.on { color: var(--dc-ink); border-bottom-color: var(--dc-accent); }
+.dcp .body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.dcp .foot { display: flex; gap: 10px; align-items: center; padding-top: 8px; min-height: 30px; }
+.dcp .status { color: var(--dc-muted); font-size: 13px; flex: 1 1 auto; }
+
+/* strips over the plan */
+.dcp .strip { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.dcp .strip .h { font-weight: 700; color: var(--dc-accent); }
+.dcp .strip.late .h { color: var(--dc-hours); }
+.dcp .shape { display: flex; flex-wrap: wrap; gap: 3px 14px; font-size: 13px; align-items: baseline; }
+.dcp .shape span { color: var(--dc-muted); } .dcp .shape b { font-weight: 600; }
+.dcp .cover .br { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--dc-well); gap: 2px; }
+.dcp .cover .br i { display: block; height: 100%; }
+.dcp .cover .lg { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--dc-muted); margin-top: 4px; }
+.dcp .cover .lg i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.dcp .seen { background: var(--dc-accent); } .dcp .open { background: var(--dc-accent); opacity: .45; } .dcp .shut { background: var(--dc-faded); opacity: .45; }
+
+/* the plan and the panel beside it */
+.dcp .cols { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, .9fr); gap: 10px; }
+.dcp .pane { background: var(--dc-well); border-radius: var(--r); padding: 8px; overflow: auto; min-height: 0; position: relative; }
+.dcp .side { background: var(--dc-well); border-radius: var(--r); padding: 12px 14px; overflow: auto; min-height: 0; position: relative; }
+.dcp .wk { display: flex; justify-content: space-between; gap: 8px; padding: 8px 8px 3px; color: var(--dc-muted); font-size: 12.5px; cursor: pointer; user-select: none; }
+.dcp .wk b { color: var(--dc-ink); font-weight: 650; }
+.dcp .wk.past b { color: var(--dc-muted); }
+.dcp .wk .w.warn { color: var(--dc-hours); font-weight: 600; }
+.dcp .li { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 6px 8px;
+  border-radius: 9px; cursor: pointer; }
+.dcp .li:hover { background: var(--dc-bg); }
+.dcp .li.on { background: var(--dc-bg); box-shadow: inset 0 0 0 1.5px var(--dc-accent); }
+.dcp .li .s { font-size: 11px; text-align: center; color: var(--dc-faded); }
+.dcp .li .s.done, .dcp .li .s.now { color: var(--dc-accent); } .dcp .li .s.late { color: var(--dc-hours); }
+.dcp .li .nm b { font-weight: 650; } .dcp .li .nm .u { display: block; color: var(--dc-muted); font-size: 12.5px; }
+.dcp .li .nm .u.warn { color: var(--dc-hours); }
+.dcp .li .r { color: var(--dc-muted); font-size: 12.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dcp .li .r.warn { color: var(--dc-hours); }
+.dcp .li.past .nm b { color: var(--dc-muted); font-weight: 600; }
+.dcp .li.event .nm b { font-weight: 800; }
+.dcp .li.taper { cursor: default; color: var(--dc-muted); } .dcp .li.taper:hover { background: none; }
+.dcp .ns { font-size: 11px; font-weight: 700; color: var(--dc-accent); margin-left: 6px; }
+.dcp .todayl { border-top: 1.5px solid var(--dc-accent); color: var(--dc-accent); font-weight: 700; font-size: 12px; padding: 3px 8px; margin: 2px 0; }
+.dcp .heavy { margin: 4px 8px 6px; padding: 8px 10px; border-radius: 10px; background: var(--dc-bg); font-size: 13px; }
+.dcp .heavy b { color: var(--dc-hours); }
+.dcp .empty { color: var(--dc-muted); padding: 12px; }
+
+/* Week and Month */
+.dcp .cal { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) repeat(2, minmax(0, .6fr)); gap: 4px; font-size: 12px; }
+.dcp .cal.wkv { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.dcp .cal .hd { color: var(--dc-muted); font-weight: 600; padding: 0 4px; }
+.dcp .cal .c { min-height: 68px; padding: 4px 5px; background: var(--dc-bg); border-radius: 9px; display: flex; flex-direction: column; gap: 3px; border: 1.5px solid transparent; min-width: 0; }
+.dcp .cal.wkv .c { min-height: 260px; }
+.dcp .cal .c.out { opacity: .45; } .dcp .cal .c.rest { opacity: .7; }
+.dcp .cal .c.off { background: repeating-linear-gradient(45deg, var(--dc-bg) 0 6px, var(--dc-line) 6px 7px); }
+.dcp .cal .c.td { border-color: var(--dc-accent); }
+.dcp .cal .c.drop { border-color: var(--dc-accent); border-style: dashed; }
+.dcp .cal .dn { color: var(--dc-muted); font-weight: 600; font-variant-numeric: tabular-nums; display: flex; justify-content: space-between; }
+.dcp .cal .ev { font-size: 11.5px; padding: 2px 6px; border-radius: 6px; background: var(--dc-well); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.dcp .cal .ev.q { font-weight: 700; box-shadow: inset 0 0 0 1px var(--dc-ink); }
+.dcp .cal .ev.on { background: var(--dc-accent); color: var(--dc-accent-ink); }
+.dcp .cal .ev.cont { opacity: .6; }
+.dcp .cal .more { color: var(--dc-accent); font-weight: 600; cursor: pointer; font-size: 11.5px; }
+.dcp .cal .ld { display: block; height: 4px; border-radius: 2px; background: var(--dc-well); overflow: hidden; margin-top: auto; }
+.dcp .cal .ld i { display: block; height: 100%; background: var(--dc-accent); }
+.dcp .cal .ld.hv i { background: var(--dc-hours); }
+.dcp .cal .nb { font-size: 11px; color: var(--dc-muted); }
+.dcp .calnav { display: flex; gap: 8px; align-items: center; margin: 0 0 8px; }
+
+/* the panel */
+.dcp .side h3 { margin: 0; font-size: 15px; }
+.dcp .side .sh { margin: 14px 0 5px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dc-muted); font-weight: 700; }
+.dcp .fl { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 6px 10px; align-items: center; margin: 0 0 7px; }
+.dcp .fl > span:first-child { color: var(--dc-muted); font-size: 13px; }
+.dcp .src { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: baseline; padding: 4px 6px; border-radius: 8px; cursor: pointer; }
+.dcp .src:hover { background: var(--dc-bg); }
+.dcp .src .n { color: var(--dc-muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.dcp .line { display: flex; gap: 8px; justify-content: space-between; align-items: baseline; padding: 3px 0; font-size: 13.5px; }
+.dcp .note { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; font-size: 13px; padding: 3px 0; }
+.dcp .note b { font-weight: 650; }
+.dcp .link { color: var(--dc-accent); cursor: pointer; font-weight: 600; }
+
+/* the deck */
+.dcp .tree { font-size: 13.5px; }
+.dcp .tn2 { display: flex; gap: 7px; align-items: center; padding: 3px 4px; border-radius: 6px; }
+.dcp .tn2:hover { background: var(--dc-bg); }
+.dcp .tn2 .tw { width: 14px; color: var(--dc-muted); font-size: 10px; cursor: pointer; text-align: center; flex: none; user-select: none; }
+.dcp .tn2 .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dcp .tn2 .wh { color: var(--dc-muted); font-size: 12px; white-space: nowrap; }
+.dcp .tn2 .c { margin-left: auto; color: var(--dc-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.dcp .tn2.placed .nm { color: var(--dc-muted); font-style: italic; }
+.dcp .tn2.dis { opacity: .5; }
+.dcp .cb { width: 15px; height: 15px; border-radius: 4px; border: 1.5px solid var(--dc-faded); flex: none; display: inline-grid; place-items: center;
+  font-size: 10px; font-weight: 800; color: var(--dc-accent-ink); cursor: pointer; background: var(--dc-bg); }
+.dcp .cb.on { background: var(--dc-accent); border-color: var(--dc-accent); }
+.dcp .cb.on::after { content: "\2713"; }
+.dcp .cb.part { border-color: var(--dc-accent); }
+.dcp .cb.part::after { content: ""; width: 7px; height: 2px; background: var(--dc-accent); }
+.dcp .fillbar { margin-top: 10px; padding: 10px; border-radius: 10px; background: var(--dc-bg); font-size: 13px; }
+.dcp .fillbar.bad { box-shadow: inset 0 0 0 1.5px var(--dc-hours); }
+
+/* the foot: paste, text, AI; the changes waiting */
+.dcp .paste { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; }
+.dcp .paste textarea { flex: 1 1 260px; height: 34px; }
+.dcp .paste textarea.tall { height: 120px; }
+.dcp .waiting { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 8px 10px; border-radius: 10px; background: var(--dc-you-bg); }
+.dcp .waiting .w { flex: 1 1 auto; }
+.dcp .waiting .k { color: var(--dc-accent); cursor: pointer; font-weight: 600; }
+
+/* menus */
+.dcp .menu { position: fixed; z-index: 30; min-width: 220px; max-width: 420px; background: var(--dc-bg); border: 1px solid var(--dc-line); border-radius: 12px;
+  box-shadow: 0 14px 36px -14px rgba(0,0,0,.45); padding: 6px; font-size: 13.5px; }
+.dcp .menu .mi { padding: 6px 10px; border-radius: 7px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; gap: 8px; }
+.dcp .menu .mi:hover { background: var(--dc-accent); color: var(--dc-accent-ink); }
+.dcp .menu .mi.off { opacity: .45; cursor: default; } .dcp .menu .mi.off:hover { background: none; color: inherit; }
+.dcp .menu .mi.bad { color: #c62828; }
+.dcp .menu .mi .tick { width: 12px; flex: none; }
+.dcp .menu .mi.sub::after { content: "\203A"; margin-left: auto; padding-left: 10px; }
+.dcp .menu hr { border: 0; border-top: 1px solid var(--dc-line); margin: 4px 0; }
+
+/* sheets: the board's way to ask */
+.dcp .veil { position: fixed; inset: 0; z-index: 40; background: rgba(20, 22, 18, .38); display: grid; place-items: center; padding: 20px; }
+.dcp .sheet { background: var(--dc-bg); border-radius: 16px; width: min(480px, 100%); max-height: 90vh; overflow: auto; padding: 16px 18px;
+  box-shadow: 0 24px 60px -20px rgba(0,0,0,.55); }
+.dcp .sheet.wide { width: min(640px, 100%); }
+.dcp .sheet h4 { margin: 0 0 4px; font-size: 16px; }
+.dcp .sheet .sub { color: var(--dc-muted); margin: 0 0 12px; font-size: 13.5px; }
+.dcp .sheet .acts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.dcp .sheet .fld { display: grid; gap: 4px; margin: 0 0 10px; }
+.dcp .sheet .fld label { color: var(--dc-muted); font-size: 12.5px; }
+.dcp .sheet .chg { display: grid; grid-template-columns: 80px minmax(0, 1fr) auto; gap: 8px; padding: 7px 0; border-top: 1px solid var(--dc-line); font-size: 13.5px; }
+.dcp .sheet .chg .d { display: block; color: var(--dc-muted); font-size: 12.5px; }
+.dcp .sheet .chg .d.warn { color: var(--dc-hours); }
+.dcp .sheet pre { white-space: pre-wrap; font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--dc-well);
+  border-radius: 10px; padding: 10px; max-height: 50vh; overflow: auto; }
+.dcp .opt { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 10px; padding: 9px 10px; border: 1px solid var(--dc-line);
+  border-radius: 10px; margin: 0 0 6px; cursor: pointer; align-items: baseline; }
+.dcp .opt.on { border-color: var(--dc-accent); background: var(--dc-you-bg); }
+.dcp .opt .rd { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--dc-faded); transform: translateY(2px); }
+.dcp .opt.on .rd { border: 4.5px solid var(--dc-accent); }
+.dcp .opt b { display: block; } .dcp .opt .m { color: var(--dc-muted); font-size: 13px; }
+
+/* welcome, and tabs to come */
+.dcp .welcome { max-width: 520px; padding: 30px 6px; }
+.dcp .welcome h2 { margin: 0 0 6px; font-size: 20px; }
+
+@media (max-width: 760px) {
+  .dcp .cols { grid-template-columns: minmax(0, 1fr); }
+  /* narrow: the page scrolls as a whole; the list keeps a box of its own, the set's panel all of its height (3.9.6) */
+  .dcp { height: auto; min-height: 100vh; }
+  .dcp .body, .dcp .cols { flex: none; }
+  .dcp .pane { max-height: 62vh; }
+  .dcp .side { overflow: visible; }
+}
+
+/* 3.9.6: a day's box and its calendar, the page's own (never the computer's date popup) */
+.dcp .in.date { text-align: left; cursor: pointer; color: var(--dc-ink); padding-right: 30px; min-width: 9.5em; white-space: nowrap;
+  background-image: linear-gradient(45deg, transparent 50%, var(--dc-muted) 50%), linear-gradient(135deg, var(--dc-muted) 50%, transparent 50%);
+  background-position: calc(100% - 14px) 52%, calc(100% - 9px) 52%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
+.dcp .in.date.none { color: var(--dc-muted); }
+.dcp .in.date:disabled { opacity: .55; cursor: default; }
+.dcp .calp { min-width: 0; width: 264px; max-width: calc(100vw - 16px); padding: 10px; white-space: normal; z-index: 60; }  /* over a sheet's veil */
+.dcp .calp .ch { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 6px; }
+.dcp .calp .ch b { font-size: 13.5px; }
+.dcp .calp .cn { width: 30px; height: 28px; border-radius: 8px; font-size: 18px; line-height: 1; color: var(--dc-ink); }
+.dcp .calp .cn:hover { background: var(--dc-well); }
+.dcp .calp .cg { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.dcp .calp .cw { text-align: center; font-size: 11px; color: var(--dc-muted); padding: 2px 0 4px; }
+.dcp .calp .cd { height: 30px; border-radius: 8px; font-size: 13px; font-variant-numeric: tabular-nums; color: var(--dc-ink); text-align: center; }
+.dcp .calp .cd:hover { background: var(--dc-well); }
+.dcp .calp .cd.out { color: var(--dc-faded); }
+.dcp .calp .cd.td { box-shadow: inset 0 0 0 1.5px var(--dc-accent); }
+.dcp .calp .cd.on, .dcp .calp .cd.on:hover { background: var(--dc-accent); color: var(--dc-accent-ink); font-weight: 700; }
+.dcp .calp .cf { display: flex; justify-content: flex-end; margin-top: 6px; }
+
+/* 3.9.6, after the first click test (Sam: "some of the colors don't pop / adequately show hierarchies /
+   buttons / areas of text input especially inside the more grey areas"). Three layers, each its own:
+   the window white; its panels the well, edged; anything typed in or picked white with a real edge
+   wherever it sits (a well box on a well panel was no box at all); buttons white with a firmer edge, a
+   tint on hover; the panels' labels a step darker than small print. */
+.dcp { --dc-edge: color-mix(in srgb, var(--dc-ink) 22%, var(--dc-bg)); --dc-edge-2: color-mix(in srgb, var(--dc-ink) 42%, var(--dc-bg)); }
+.dcp .pane, .dcp .side { box-shadow: inset 0 0 0 1px var(--dc-line); }
+.dcp .in, .dcp select.in { background-color: var(--dc-bg); border-color: var(--dc-edge); }
+.dcp .in:hover:not(:disabled):not(:focus) { border-color: var(--dc-edge-2); }
+.dcp .in:focus { border-color: var(--dc-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--dc-accent) 22%, transparent); }
+.dcp .in::placeholder { color: var(--dc-muted); }
+.dcp .b { border-color: var(--dc-edge); box-shadow: 0 1px 0 color-mix(in srgb, var(--dc-ink) 7%, transparent); }
+.dcp .b:hover:not(:disabled):not(.off) { border-color: var(--dc-accent); background-color: var(--dc-you-bg); }
+.dcp .b.pri:hover:not(:disabled) { background-color: color-mix(in srgb, var(--dc-accent) 86%, #000); border-color: transparent; }
+.dcp .b.t, .dcp .b.t:hover:not(:disabled), .dcp .b:disabled, .dcp .b.off { box-shadow: none; }
+.dcp .b.t, .dcp .b.t:hover:not(:disabled) { background: none; }
+.dcp .b.t:hover:not(:disabled) { text-decoration: underline; text-underline-offset: 3px; }
+.dcp .seg { background: color-mix(in srgb, var(--dc-ink) 9%, var(--dc-bg)); }
+.dcp .seg button.on { background: var(--dc-bg); color: var(--dc-ink); box-shadow: 0 1px 2px rgba(0,0,0,.2), 0 0 0 1px var(--dc-edge); }
+.dcp .side .sh { color: color-mix(in srgb, var(--dc-ink) 72%, var(--dc-bg)); }
+/* the bar: how you look, what to show, what to do (3.9.6) */
+.dcp .ptools { flex: none; }
+.dcp .ptools .find { width: 240px; }
+.dcp .b.look { color: var(--dc-hours); border-color: color-mix(in srgb, var(--dc-hours) 55%, var(--dc-bg)); background: color-mix(in srgb, var(--dc-hours) 9%, var(--dc-bg)); }
+.dcp .b.look:hover:not(:disabled) { border-color: var(--dc-hours); background: color-mix(in srgb, var(--dc-hours) 16%, var(--dc-bg)); }
+.dcp .b.look.on { color: var(--dc-bg); background: var(--dc-hours); border-color: var(--dc-hours); }
+.dcp .lhd { display: flex; justify-content: space-between; gap: 8px; padding: 0 4px 2px; }
+.dcp .lhd .b.t { font-size: 12.5px; }
+/* a quiz's own ticks: each set by its day (3.9.6, after the last check) */
+.dcp .epicks { display: flex; flex-direction: column; gap: 2px; margin: 4px 0; text-align: left; }
+.dcp .epicks .ep { display: flex; align-items: center; gap: 8px; min-height: 26px; }
+.dcp .epicks .ep .link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; color: var(--dc-ink); font-weight: 450; }
+.dcp .epicks .ep .link:hover { color: var(--dc-accent); text-decoration: underline; }
+/* the deck's More, a drawn chevron as the bar's own (never a typed ▾) */
+.dcp .seg button.mch { display: inline-flex; align-items: center; gap: 6px; }
+.dcp .seg button.mch::after { content: ""; width: 5px; height: 5px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg); }

@@ -81,6 +81,49 @@ export function lookOf(v: unknown): string[] | null {
   return a.every((x) => typeof x === "string" && /^[a-z0-9]{2,16}$/.test(x)) ? (a as string[]) : null;
 }
 
+/** 3.9.6: a song of the moment from a settings doc (json_extract's text of it): the one
+ *  song someone picked from Apple's catalog to show their crew. Title and artist (short,
+ *  no control characters), the catalog's id, its page on Apple Music; and, when they hold,
+ *  album, year, cover, preview and the day it was picked. Links only on Apple's hosts,
+ *  https, as given. Anything else: none. The add-on's songs.clean is the same rule. */
+export const SONG_TEXT = 120, SONG_URL = 400;
+const SONG_HOSTS = {
+  url: /^(music|itunes|geo\.music)\.apple\.com$/,
+  art: /^([a-z0-9-]+\.)*mzstatic\.com$/,
+  prev: /^([a-z0-9-]+\.)*(mzstatic\.com|itunes\.apple\.com)$/,
+};
+function songText(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  return t && t.length <= SONG_TEXT && !/[\u0000-\u001f\u007f]/.test(t) ? t : null;
+}
+function songUrl(v: unknown, host: RegExp): string | null {
+  if (typeof v !== "string" || !v || v.length > SONG_URL || /[\u0000-\u001f\u007f ]/.test(v)) return null;
+  try {
+    const u = new URL(v);
+    return u.protocol === "https:" && !u.username && !u.password && (u.port === "" || u.port === "443")
+      && host.test(u.hostname.toLowerCase()) ? v : null;
+  } catch { return null; }
+}
+export function songOf(v: unknown): Record<string, unknown> | null {
+  let o: any = v;
+  if (typeof v === "string") { try { o = JSON.parse(v); } catch { return null; } }
+  if (!o || typeof o !== "object" || Array.isArray(o)) return null;
+  const t = songText(o.t), a = songText(o.a), url = songUrl(o.url, SONG_HOSTS.url);
+  const id = o.id;
+  if (!t || !a || !url || typeof id !== "number" || !Number.isSafeInteger(id) || id <= 0) return null;
+  const out: Record<string, unknown> = { t, a, id, url };
+  const al = songText(o.al);
+  if (al) out.al = al;
+  if (typeof o.y === "number" && Number.isInteger(o.y) && o.y >= 1900 && o.y <= 2100) out.y = o.y;
+  for (const k of ["art", "prev"] as const) {
+    const u = songUrl(o[k], SONG_HOSTS[k]);
+    if (u) out[k] = u;
+  }
+  if (typeof o.at === "string" && /^\d{4}-\d{2}-\d{2}$/.test(o.at)) out.at = o.at;
+  return out;
+}
+
 /** GET /board[?decks=1][&wk=2026-W40][&keep=1][&feed=1][&got=N][&pv=STAMP][&same=1]: me, the people I added (with
  *  their week and accent when they added me back, name and emoji only when they haven't
  *  yet), my cheers, my knocks. One request. keep=1 (3.2, the site's home)
@@ -103,14 +146,16 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
     // 3.8.2: and what my own Pip has on (the site's rows draw it), from the same settings row
     db.prepare(
       `SELECT u.uid, u.name, u.emoji, u.code, u.client_version, w.doc, w.updated_at,
-         t.at AS sat, json_extract(t.json, '$.muted') AS muted, json_extract(t.json, '$.sev_look') AS look FROM users u
+         t.at AS sat, json_extract(t.json, '$.muted') AS muted, json_extract(t.json, '$.sev_look') AS look,
+         json_extract(t.json, '$.song') AS song FROM users u
        LEFT JOIN weeks w ON w.uid = u.uid LEFT JOIN settings t ON t.uid = u.uid WHERE u.uid = ?`).bind(s.uid),
     // a week leaves the server only for someone its owner added; 3.8.1: so
     // does their accent (from their settings: their Pip wears it in a study room);
     // 3.8.2: and what their Pip has on from the closet (its look)
     db.prepare(
       `SELECT f.friend AS uid, u.name, u.emoji, b.owner IS NOT NULL AS mutual, w.doc, w.updated_at,
-         json_extract(t.json, '$.accent') AS accent, json_extract(t.json, '$.sev_look') AS look
+         json_extract(t.json, '$.accent') AS accent, json_extract(t.json, '$.sev_look') AS look,
+         json_extract(t.json, '$.song') AS song
        FROM friends f JOIN users u ON u.uid = f.friend
        LEFT JOIN friends b ON b.owner = f.friend AND b.friend = ?1
        LEFT JOIN weeks w ON w.uid = f.friend AND b.owner IS NOT NULL
@@ -125,7 +170,8 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
     ? { uid: f.uid, name: f.name || "?", emoji: f.emoji || "", mutual: true,
         week: f.doc ? JSON.parse(f.doc) : null, updatedAt: iso(f.updated_at),
         ...(accentOf(f.accent) ? { accent: f.accent as string } : {}),  // none, or not one of ours: none
-        ...(lookOf(f.look) ? { look: lookOf(f.look) } : {}) }
+        ...(lookOf(f.look) ? { look: lookOf(f.look) } : {}),
+        ...(songOf(f.song) ? { song: songOf(f.song) } : {}) }  // 3.9.6: their song of the moment
     : { uid: f.uid, name: f.name || "?", emoji: f.emoji || "", mutual: false });
   const byUid = new Map(friends.map((f) => [f.uid, f]));
   // 3.8.1 (the audit): someone I muted: their cheer goes as if read, on every screen
@@ -149,7 +195,8 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
   const out: Record<string, unknown> = {
     me: { uid: me.uid, name: me.name || "", emoji: me.emoji || "", code: me.code || "",
           week: me.doc ? JSON.parse(me.doc) : null, updatedAt: iso(me.updated_at),
-          ...(lookOf(me.look) ? { look: lookOf(me.look) } : {}) },  // 3.8.2: as my crew sees it
+          ...(lookOf(me.look) ? { look: lookOf(me.look) } : {}),  // 3.8.2: as my crew sees it
+          ...(songOf(me.song) ? { song: songOf(me.song) } : {}) },  // 3.9.6: my song, as my crew sees it
     friends, cheers, cheersAt, knocks: await listKnocks(env, s.uid),
     notice: await N.forBoard(env, me.client_version ?? null),  // 3.2.1
     settingsAt: me.sat || "",  // 3.7.1: an add-on pulls a save it hasn't seen

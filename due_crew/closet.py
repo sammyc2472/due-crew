@@ -75,7 +75,13 @@ _T = (
     ("facestar", "face", "Squads", "Star sticker", "A whole bingo card", ("bingo_card", 1)),
     ("flag", "hand", "Squads", "Squad flag", "Started a squad", ("founder", 1)),
     ("backpack", "back", "Plans", "Backpack", "Your first plan", ("plans", 1)),
-    ("gradcap", "head", "Plans", "Grad cap", "A plan, every date done", ("plan_done", 1)),
+    ("gradcap", "head", "Plans", "Grad cap", "A plan, every set done", ("plan_done", 1)),
+    # 3.9.6 (Sam's picks, the plan joys): a ribbon for the third plan done, a map and a kite for writing one
+    ("rosette", "body", "Plans", "Finisher’s ribbon", "3 plans, every set done", ("plan_done", 3),
+     {"tip": "Every set of three plans done (the Grad cap is the first one’s)"}),
+    ("map", "hand", "Plans", "Folded map", "Someone followed a plan you made", ("followed", 1)),
+    ("kite", "hand", "Plans", "Kite", "Gave everyone a day on a plan you write", ("gave_day", 1),
+     {"tip": "Give everyone a day, in Your plans, on a plan you write"}),
     ("umbrella", "hand", "Coming back", "Umbrella", "Back after a week away", ("back7", 1)),
     ("phoenix", "back", "Coming back", "Phoenix wings", "Back after a month away", ("back30", 1)),
     ("pencil", "hand", "Card care", "Pencil", "50 cards you added", ("own_cards", 50),
@@ -103,7 +109,7 @@ _T = (
     ("astronaut", COSTUME, "Showing up", "Astronaut", "1,000 days studied", ("days", 1000)),
     ("bee", COSTUME, "Crew", "Bee", "10 rooms with your crew", ("rooms", 10)),
     ("doctor", COSTUME, "Plans", "Doctor", "A plan finished, exam and all", ("plan_exam", 1),
-     {"tip": "Every date of a plan with an exam on it done, and the exam behind you"}),
+     {"tip": "Every set of a plan with an exam on it done, and the exam behind you"}),
     ("detective", COSTUME, "Card care", "Detective", "50 leeches turned around", ("leeches", 50),
      {"tip": "A card that lapsed 8 times, now going three weeks or more between reviews"}),
     ("ghost", COSTUME, "Seasons", "Ghost", "Four days of Halloween week", ("halloween", 4), {"when": "24 to 31 Oct"}),
@@ -120,7 +126,7 @@ UNITS = {"run": "days in a row", "days": "days studied", "mornings": "mornings b
          "evenings": "evenings after 9", "clear": "days with nothing left due", "reviews": "reviews",
          "learned": "cards learned", "fifteens": "Fifteens", "fifteen_am": "Fifteens before 9",
          "rooms": "rooms with your crew", "cheered": "crewmates cheered", "cheer_days": "days you cheered",
-         "own_cards": "cards added", "leeches": "leeches turned around"}
+         "own_cards": "cards added", "leeches": "leeches turned around", "plan_done": "plans finished"}
 
 
 def places(k):

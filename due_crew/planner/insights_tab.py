@@ -128,7 +128,7 @@ class InsightsTab(QWidget):
             return
         per, cards = I.held(win.idx, doc, win.swap)
         if not per:
-            lay.addWidget(plain("Nothing to count yet: the plan has no dates.", muted=True))
+            lay.addWidget(plain("Nothing to count yet: the plan has no sets.", muted=True))
             lay.addStretch(1)
             return
         self._workload(lay, doc)
@@ -157,7 +157,7 @@ class InsightsTab(QWidget):
         rows = I.workload(doc, asks, win.ops.today())
         self._head(lay, "Workload")
         if not rows:
-            lay.addWidget(plain("No new cards on its dates yet.", muted=True))
+            lay.addWidget(plain("No new cards on its sets yet.", muted=True))
             return
         words, over = I.workload_words(doc, rows, V.work(doc, t, pace))
         lay.addWidget(plain(words))
@@ -294,17 +294,17 @@ class InsightsTab(QWidget):
                 lay.addWidget(self._row(("event", x["id"]), x["day"], x["name"], I.exam_words(x), "event"))
         big = I.biggest(doc, per)
         if big:
-            lay.addWidget(_nowrap(plain("Its biggest dates", muted=True)))
+            lay.addWidget(_nowrap(plain("Its biggest sets", muted=True)))
             for u, n in big:
                 lay.addWidget(self._row(("date", u["id"]), u.get("opens"), u.get("name") or "?", f"{n:,} cards", None))
         lines = []
         two = I.on_two(per)
         if two:
-            lines.append(f"{two:,} card{'s are' if two != 1 else ' is'} on two dates or more; each opens with the first.")
+            lines.append(f"{two:,} card{'s are' if two != 1 else ' is'} on two sets or more; each opens with the first.")
         leech = M.counts(win.idx, cards)["leech"]
         if leech:
-            lines.append(f"{leech:,} lee{'ches' if leech != 1 else 'ch'} on its dates stay{'' if leech != 1 else 's'} "
-                         "shut: a plan never opens one.")
+            lines.append(f"{leech:,} lee{'ches' if leech != 1 else 'ch'} on its sets stay{'' if leech != 1 else 's'} "
+                         "suspended: a plan never opens one.")
         for w in lines:
             lay.addWidget(plain(w, muted=True))
 
