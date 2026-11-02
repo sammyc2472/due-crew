@@ -214,6 +214,7 @@ def shoot(dlg, path):
     pix = dlg.grab()
     pix.save(path)
     print(f"{os.path.basename(path)}: {pix.width()}x{pix.height()}")
+    dlg._may_close = True  # (a plan window with changes waiting closes here without asking, as the add-on's own closes do)
     dlg.close()
 
 
@@ -427,6 +428,10 @@ def main(out):
         holder = QtWidgets.QWidget()  # the main window's stand-in
         box, _go = ui._question(holder, "Remove igk?", "They come off your crew, and you off theirs.", "Remove", True)
         shoot(box, os.path.join(out, "q-confirm.png"))
+        box, _go = ui._question(holder, "2 changes not sent", "3 following it won't get them till you send. "
+                                "They wait here till then.", "Review and send", False)
+        box.defaultButton().setText("Close anyway")  # ui.confirm_or's: closing the Qt plan window with changes waiting
+        shoot(box, os.path.join(out, "q-close-unsent.png"))
         box, _go = ui._question(holder, "Unfollow Step 1?", "Its sets stop opening. What opened stays open.", "Unfollow", False)
         tick = QtWidgets.QCheckBox("Take its tags off my notes too")
         tick.setChecked(True)
@@ -906,7 +911,7 @@ def main(out):
             raise RuntimeError("held: a plan's or date's name went in as markup")
         if not any("MS2 <b>Block</b> 1 holds back 1,240 cards" == w.text() for w in labels) or "and 9 more sets" not in dlg.list.text():
             raise RuntimeError(f"held: {[w.text() for w in labels]!r}")
-        if "2 more are leeches and stay shut" not in dlg.note.text() or dlg.stop_btn.isHidden():
+        if "2 more are leeches and stay suspended" not in dlg.note.text() or dlg.stop_btn.isHidden():
             raise RuntimeError(f"held: {dlg.note.text()!r}")
         shoot(dlg, os.path.join(out, "plan-held.png"))
         dlg = HeldDialog(None, dict(view, holding=False, leeches=0, more=0, lines=view["lines"][:1],

@@ -183,8 +183,9 @@ def span_words(a, b):
 def weeks(doc, today):
     """The plan's weeks with something on them, first to last: [{start (its
     Monday), n (week n of the plan), label, now, dates: [unit], events: [event]}],
-    each date and event under the week of its day. label: "Week 3 · 9–13 Nov",
-    from the first to the last day with something on it."""
+    each date and event under the week of its day. label: "Week 3 · 9–15 Nov",
+    the week's Monday to Sunday (3.9.6: one day's item said only that day,
+    "Week 3 · Sun 15 Nov, this week", on a Monday)."""
     us = [u for u in P.units(doc) if _d(u.get("opens"))]
     evs = [e for e in (doc or {}).get("events") or [] if isinstance(e, dict) and _d(e.get("day"))]
     days = [_d(u["opens"]) for u in us] + [_d(e["day"]) for e in evs]
@@ -200,9 +201,8 @@ def weeks(doc, today):
     out = []
     for mon in sorted(by):
         w = by[mon]
-        on = [_d(u["opens"]) for u in w["dates"]] + [_d(e["day"]) for e in w["events"]]
         n = (mon - first).days // 7 + 1
-        out.append({"start": mon.isoformat(), "n": n, "label": f"Week {n} · {span_words(min(on), max(on))}",
+        out.append({"start": mon.isoformat(), "n": n, "label": f"Week {n} · {span_words(mon, mon + datetime.timedelta(days=6))}",
                     "now": now is not None and S.monday(now) == mon, "dates": w["dates"], "events": w["events"]})
     return out
 
@@ -499,7 +499,7 @@ def on_dates(doc, key):
     return out
 
 
-# ---- plans end to end: A resource, at my pace (edits.resource_plan makes the plan) ----
+# ---- plans end to end: A resource, chapter by chapter (edits.resource_plan makes the plan) ----
 
 def resource_name(path, only=None):
     """The plan's name from its part and its Only: "Path Book, high yield"."""

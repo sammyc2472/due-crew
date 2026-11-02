@@ -123,13 +123,15 @@ def week_asks(doc, tree, pace):
     return out
 
 
-def week_words(ask):
-    """"9 new, 34 reviews a day", or the amber "41 new a day (over your 20), 52 reviews"."""
+def week_words(ask, mine=True):
+    """"9 new, 34 reviews a day", or the amber "41 new a day (over your 20), 52 reviews".
+    mine False: a follower's, whose 20 is the plan's pace, not theirs ("over the plan's 20")."""
     if not ask:
         return "", False
     r = B.about(ask["reviews"])
     if ask["over"]:
-        return f"{ask['top']:,} new a day (over your {ask['cap']:,}), {r} reviews", True
+        whose = "your" if mine else "the plan's"
+        return f"{ask['top']:,} new a day (over {whose} {ask['cap']:,}), {r} reviews", True
     if not ask["new"] and r == "0":
         return "", False
     return f"{ask['new']:,} new, {r} reviews a day", False

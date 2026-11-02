@@ -218,8 +218,30 @@ class WebFace(NewPlan, PlanCore):
             self.tab = tab
             self.push()
 
-    def c_close(self):
+    def c_close(self, sure=False):
+        """Close: with changes waiting to be sent, asked first (unsent_ask); sure, it closes."""
+        if sure:
+            self._may_close = True
         self.close()
+
+    def unsent(self):
+        """Changes waiting under the plan, not sent: how many (0 none, or not an author's)."""
+        return len(self.draft) if self.author() and self.draft is not None and len(self.draft) and self.new is None else 0
+
+    def unsent_ask(self):
+        """Closing with changes waiting: a sheet first (Review and send, or Close
+        anyway: they stay waiting here). True when it asked, so the close waits."""
+        n = self.unsent()
+        if not n or getattr(self, "_may_close", False):
+            return False
+        m = self.followers()
+        who = f"{m:,} following it" if m else "Anyone following it"
+        self.sheet({"title": f"{n:,} change{'s' if n != 1 else ''} not sent",
+                    "words": f"{who} won't get {'them' if n != 1 else 'it'} till you send. "
+                             f"{'They wait' if n != 1 else 'It waits'} here till then.",
+                    "yes": "Review and send", "cmd": "review_send", "no": "Close anyway",
+                    "noCmd": "close", "noArgs": {"sure": True}})
+        return True
 
     def c_follow_plan(self):
         self.ops.follow_plan()
@@ -340,6 +362,23 @@ class WebFace(NewPlan, PlanCore):
             return
         if (eid or None) != u.get("for"):
             self.change({"op": "set_for", "date": uid, "event": eid or None})
+
+    def c_event_sets(self, eid, uids, on=True):
+        """A quiz's own ticks (webmodel.event_picks): each set given leads up
+        to it (on) or to nothing; one change for them all."""
+        e = self.event_of(eid) if isinstance(eid, str) else None
+        if e is None or not isinstance(uids, list):
+            return
+        ops = []
+        for uid in uids[:400]:
+            u = self._u(uid) if isinstance(uid, str) else None
+            if u is None:
+                continue
+            want = e["id"] if on else None
+            if (u.get("for") or None) != want and (on or u.get("for") == e["id"]):
+                ops.append({"op": "set_for", "date": uid, "event": want})
+        if ops:
+            self.changes(ops)
 
     def c_nudge(self, k):
         if not self.author() or not self.picked:
@@ -683,7 +722,17 @@ class WebFace(NewPlan, PlanCore):
         ops = [{"op": "add_event", "day": day, "name": name}]
         if for_uid:
             ops.append({"op": "set_for", "date": for_uid, "event": f"{day} {name}"})
+        if self.ends_here(day):
+            ops.append({"op": "set_end", "end": day})  # 3.9.6: a plan with no end ends with a quiz or exam after every set
         self.changes(ops, keep=("date", for_uid) if for_uid else None)
+
+    def ends_here(self, day):
+        """A quiz or exam on `day` ends the plan: it has no end yet, it has
+        sets, and the day is on or after the last day any of them reaches."""
+        doc = self.doc or {}
+        us = P.units(doc)
+        last = max((str(u.get("due") or u.get("opens") or "") for u in us), default="")
+        return bool(us) and not doc.get("end") and bool(last) and str(day) >= last
 
     def c_rename_event(self, eid, name):
         e = self.event_of(eid)

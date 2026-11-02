@@ -4305,4 +4305,39 @@ every release that changes how something works.
   look, what to show (Find; N need a look, amber), what to do (Add,
   filled); Today and Unfold all head the list, Today by Week's and
   Month's arrows; Earliest first gone. The same on duecrew.com's page.
+- 3.9.6, after the last check (a fresh read of plans as an author and a
+  follower; Sam: "build them straight in, do all of them"). **An author's
+  own follow**: New plan's Start it follows my own plan, and the author's
+  Settings had no way to stop, pause or change it; now "Your follow" in
+  Settings has my follow's rows (`webtabs._mine_view`, the follower's
+  own; their steps take an author who follows it, `_mine`), and without a
+  follow, Start it here… (the Follow window on its code, so Make it,
+  start later can start later). The same on the site for an author who
+  follows. **Closing with changes not sent** asks first, in the page
+  (`WebFace.unsent_ask`: Review and send, or Close anyway; they wait
+  here) and in the Qt window (`ui.confirm_or`); the add-on's own closes
+  never ask (`flow._shut`). **Behind, one way**: Due's Catch up… opens
+  Behind's sheet (the old menu only where that has nothing); Skip what's
+  left says the cards stay open in your deck, no longer behind, and says
+  so after; Slide's line says "the plan's stay put" everywhere. A set's
+  segment on the path opens its day in the week (`planjump`). **The Plan
+  tab**: a week is named Monday to Sunday ("Week 3 · 9–15 Nov"), and a
+  week holding a set that runs today stays open; a quiz's panel ticks
+  its sets (`webmodel.event_picks`, a set_for each, one click for the
+  ones since the quiz before); a quiz or exam added after every set ends
+  a plan with no end (`WebFace.ends_here`); a follower's week says "over
+  the plan's 60", not "your"; Insights' Workload puts each count by its
+  own bar and the pace's line inside the bars; at 760 wide the window
+  scrolls whole, the set's panel all its height. **Words**: New plan's
+  "A resource, chapter by chapter" (at your pace is When I'm ready's);
+  Today's set is "In <deck> · Its own deck" with one tip everywhere;
+  "suspended", Anki's word, wherever a card was "shut" (Sam); "Finish by"
+  in its errors; a set numbered once in New plan's preview; the deck's
+  More a drawn chevron; Settings' This computer is Your AI app alone,
+  the copies and Delete under This plan; joining or leaving a plan's
+  squad from Anki's Settings too (asked in the window); a pasted plan
+  link is its code on the site's New plan; Follow's "wait in your
+  calendar" (the week, now that there's Add to my calendar) says they
+  stay suspended, each with Open now in You › Plans. Two tests that
+  failed on some days now name their day.
 

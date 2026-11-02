@@ -1844,7 +1844,7 @@ def behind_sheet(name, b, p, waiting, shift=0):
         ways.append({"key": "fit", "days": d, "extra": extra, "waiting": waiting, "yes": "Fit it in…", "label": "Fit it in…",
                      "note": f"Over the days you pick: about {extra:,} more new card{'s' if extra != 1 else ''} a day for three days."})
     ways.append({"key": "skip", "uids": list(b["uids"]), "label": "Skip what's left", "yes": "Skip it" if n_late == 1 else "Skip them",
-                 "note": f"The {left:,} stay as they are."})
+                 "note": f"The {left:,} left stay open in your deck, no longer behind."})
     return {"title": f"{'A day' if days == 1 else f'{days} days'} behind on {name}", "text": text, "ways": ways}
 
 

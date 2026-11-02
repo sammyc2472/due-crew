@@ -20,6 +20,12 @@ body.dcplan > header.top { flex: none; width: 100%; max-width: 1280px; padding-b
 body.dcplan > main#app { flex: 1 1 auto; min-height: 0; width: 100%; max-width: 1280px; padding: 0 2px 0; display: flex; flex-direction: column; }
 body.dcplan > footer { display: none; }
 body.dcplan .dcp { flex: 1 1 auto; height: auto; min-height: 0; padding: 8px 18px 10px; }
+/* narrow (a phone): the page scrolls as a whole, as plan.css has it */
+@media (max-width: 760px) {
+  body.dcplan { height: auto; overflow: visible; }
+  body.dcplan > main#app { flex: none; }
+  body.dcplan .dcp { flex: none; min-height: 0; padding: 8px 12px 10px; }
+}
 
 /* the site's own buttons and boxes are the page's here (app.css styles every one) */
 .dcp button { font-size: inherit; font-weight: inherit; border-radius: 0; padding: 0; background: none; border: 0; color: inherit; display: revert; cursor: pointer; }

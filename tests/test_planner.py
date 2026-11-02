@@ -226,9 +226,9 @@ def test_weeks():
                                   {"id": "d", "name": "Block review", "opens": "2026-12-03"}],
            "events": [{"id": "e1", "day": "2026-11-13", "name": "Heme quiz"}, {"id": "e2", "day": "2026-11-30", "name": "Exam"}]}
     ws = M.weeks(doc, "2026-11-11")
-    check("weeks: numbered from the plan's first, only weeks with something on, the days on them",
+    check("weeks: numbered from the plan's first, only weeks with something on, each its Monday to Sunday (3.9.6)",
           [(w["n"], w["label"], w["now"]) for w in ws]
-          == [(1, "Week 1 · Wed 28 Oct", False), (3, "Week 3 · 9–13 Nov", True), (6, "Week 6 · 30 Nov–3 Dec", False)],
+          == [(1, "Week 1 · 26 Oct–1 Nov", False), (3, "Week 3 · 9–15 Nov", True), (6, "Week 6 · 30 Nov–6 Dec", False)],
           [(w["n"], w["label"]) for w in ws])
     check("weeks: dates and events each under their week",
           [u["id"] for u in ws[1]["dates"]] == ["a", "b"] and [e["id"] for e in ws[1]["events"]] == ["e1"]
@@ -406,7 +406,7 @@ def test_edits():
         early = None
     except E.Refused as e:
         early = str(e)
-    check("edits: a due date before it opens is refused", early == "The due date is before the set opens.")
+    check("edits: a due date before it opens is refused", early == "Finish by is before the set opens.")
     check("edits: a name as the server keeps one", E.rename(d, "u1", "  Heart\n failure,  part 2 ")["units"][0]["name"]
           == "Heart failure, part 2")
     try:

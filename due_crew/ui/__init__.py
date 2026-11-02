@@ -840,6 +840,15 @@ def confirm(parent, title, text, yes, danger=False):
     return box.clickedButton() is go
 
 
+def confirm_or(parent, title, text, yes, no):
+    """confirm, its other button named too ("Close anyway"): True for yes,
+    False for the other (Esc takes it, as Cancel)."""
+    box, go = _question(parent, title, text, yes, False)
+    box.defaultButton().setText(no)
+    box.exec()
+    return box.clickedButton() is go
+
+
 def confirm_check(parent, title, text, yes, check, checked=True, danger=False):
     """confirm, with one box to tick under the text (3.8.0: "Take its tags
     off my notes too"). Returns (yes, ticked)."""

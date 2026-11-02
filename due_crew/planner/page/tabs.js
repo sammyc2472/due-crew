@@ -78,17 +78,18 @@
     var g = h("div.wl");
     g.appendChild(h("span"));
     g.appendChild(h("span.wlh", { text: d.newHead }));
-    g.appendChild(h("span.wlh", { text: d.rvHead }));
+    g.appendChild(h("span.wlh", { text: d.rvHead }));  /* each spans its count and its bar */
     d.rows.forEach(function (r) {
       g.appendChild(h("div.wln" + (r.now ? ".now" : "") + (r.past ? ".past" : ""), { title: r.tip }, [
         h("span", {}, [h("b", { text: r.week }), " ", h("span.muted", { text: r.span })]),
         r.events ? h("span.evs", { text: r.events }) : null]));
-      var nb = h("div.wlb", { title: r.tip }, [bar(h, [{ v: r.new, k: r.over ? "over" : "fill", has: r.has }])]);
+      /* each count just before its own bar, so it reads with that bar (3.9.6, after the last check) */
+      var nb = h("div.wlb.wnew", { title: r.tip }, [bar(h, [{ v: r.new, k: r.over ? "over" : "fill", has: r.has }])]);
       if (d.line !== null && d.line !== undefined) { nb.appendChild(h("i.pl", { style: "left:" + d.line + "%" })); }
-      g.appendChild(nb);
       g.appendChild(h("span.wlw" + (r.over ? ".warn" : ""), { text: r.newWords }));
-      g.appendChild(h("div.wlb", { title: r.tip }, [bar(h, [{ v: r.rv, k: "fill", has: r.hasRv }])]));
+      g.appendChild(nb);
       g.appendChild(h("span.wlw", { text: r.rvWords }));
+      g.appendChild(h("div.wlb", { title: r.tip }, [bar(h, [{ v: r.rv, k: "fill", has: r.hasRv }])]));
     });
     kids.push(g);
     return sec(h, "Workload", kids, "twork");
@@ -265,24 +266,33 @@
     if (d.library.said) { lib.push(h("div.muted.sm", { text: d.library.said })); }
     if (lib.length) { share.push(fr(h, "Library", [h("div.tstack", {}, lib)])); }
     box.appendChild(sec(h, "Sharing", share));
-    /* this computer */
-    /* d.ai null and d.here: a host with no AI app of its own (duecrew.com); Anki's view always has d.ai and no d.here */
-    box.appendChild(sec(h, d.here || "This computer", [
-      d.ai === null ? null : fr(h, "Your AI app", [h("span", { text: d.ai }), c.btn("Set up…", function () { run(c.send, "ai_app"); }, "",
-        { title: "An AI app on this computer (Claude, say) reads your plans and puts changes under one for you to send; it never sends" })]),
-      fr(h, "This plan", [c.btn("Copy it for next year", function () { run(c.send, "next_year"); }, "", { disabled: busy || !d.canCopy }),
-        c.btn("Copy as a table", function () { run(c.send, "table"); })].concat(
-        /* d.more: a host's own ways on from here ([{label, name}], duecrew.com's); Anki's view has none */
-        (d.more || []).map(function (x) { return c.btn(x.label, function () { run(c.send, x.name); }); }), [h("span.grow"),
-        d.delete ? c.btn("Delete this plan…", function () { run(c.send, "delete_plan"); }, "bad", { disabled: busy }) : null]))]));
+    /* my own follow of it (d.mine): its rows, as a follower's; not following it, Start it here… (Anki's: the Follow window on its code) */
+    if (d.mine && d.mine.start) {
+      box.appendChild(sec(h, "Your follow", [fr(h, "On this account", [h("span.grow.muted", { text: "You don't follow it yet." }),
+        c.btn("Start it here…", function () { run(c.send, "start_here"); }, "", { disabled: busy,
+          title: "Follow it in this Anki: the deck it runs on, how its cards open, and Today's set" })])]));
+    } else if (d.mine) {
+      box.appendChild(sec(h, d.mine.head, followRows(d.mine, c)));
+    }
+    /* this computer: d.ai null where there's no AI app (duecrew.com) */
+    if (d.ai !== null) {
+      box.appendChild(sec(h, "This computer", [fr(h, "Your AI app", [h("span", { text: d.ai }), c.btn("Set up…", function () { run(c.send, "ai_app"); }, "",
+        { title: "An AI app on this computer (Claude, say) reads your plans and puts changes under one for you to send; it never sends" })])]));
+    }
+    box.appendChild(sec(h, "This plan", [
+      fr(h, "Copy", [c.btn("Copy it for next year", function () { run(c.send, "next_year"); }, "", { disabled: busy || !d.canCopy }),
+        c.btn("Copy as a table", function () { run(c.send, "table"); })]),
+      /* d.more: a host's own ways on from here ([{label, name}], duecrew.com's); Anki's view has none */
+      (d.more || []).length ? fr(h, "Its page", (d.more || []).map(function (x) { return c.btn(x.label, function () { run(c.send, x.name); }); })) : null,
+      d.delete ? fr(h, "Delete", [c.btn("Delete this plan…", function () { run(c.send, "delete_plan"); }, "bad", { disabled: busy })]) : null]));
     return box;
   }
 
   /* ---- Settings, a follower's: my follow ---- */
-  function follower(d, c) {
-    var h = c.h, box = h("div.tb.tset");
-    if (d.gone) { box.appendChild(h("div.empty", { text: d.gone })); return box; }
-    var rows = [];
+  var LESSON_TIP = "Each open set is a deck of its own under Due Crew in Anki's deck list: " +
+    "its new cards and the ones you're learning. Reviews stay where they are.";
+  function followRows(d, c) {
+    var h = c.h, rows = [];
     rows.push(fr(h, "My dates", [seg(h, [
       { label: "As the plan", on: !d.shift, fn: function () { run(c.send, "shift", { later: false }); } },
       { label: d.later, on: !!d.shift, again: true, fn: function () { run(c.send, "shift", { later: true }); } }], { "aria-label": "My dates" })]));
@@ -302,13 +312,13 @@
         fn: function () { run(c.send, "own", { own: "ready" }); } }], { "aria-label": "Cards open" })]));
     if (d.lesson !== null && d.lesson !== undefined) {
       rows.push(fr(h, "Today's set", [seg(h, [
-        { label: "Opens in your deck", on: !d.lesson, fn: function () { run(c.send, "lesson_deck", { on: false }); } },
-        { label: "Also its own deck", on: !!d.lesson, fn: function () { run(c.send, "lesson_deck", { on: true }); } }], { "aria-label": "Today's set" })]));
+        { label: "In " + (d.deckName || "your deck"), on: !d.lesson, fn: function () { run(c.send, "lesson_deck", { on: false }); } },
+        { label: "Its own deck", on: !!d.lesson, title: LESSON_TIP, fn: function () { run(c.send, "lesson_deck", { on: true }); } }], { "aria-label": "Today's set" })]));
     }
-    /* d.held null: no Hold back where there's no Anki; d.team: a host's own way in and out of the squad;
-       d.hide: More's steps only Anki takes (duecrew.com's); Anki's view never sets the three */
+    /* d.held null: no Hold back where there's no Anki; d.team: in or out of its squad;
+       d.hide: More's steps only Anki takes (duecrew.com's) */
     var hide = d.hide || [];
-    rows.push(d.held === null ? null : fr(h, "Held back", [d.held ? c.btn(d.held, function () { run(c.send, "held"); }, "", { title: "The cards Hold back keeps shut till their day" })
+    rows.push(d.held === null ? null : fr(h, "Held back", [d.held ? c.btn(d.held, function () { run(c.send, "held"); }, "", { title: "The cards Hold back keeps suspended till their day" })
       : h("span.muted", { text: "Nothing held back." })]));
     rows.push(fr(h, "Squad", [h("span.muted", { text: d.squad, title: d.squadTip || null }),
       d.team ? c.btn(d.team, function () { run(c.send, "team"); }, "", { disabled: d.busy }) : null]));
@@ -324,7 +334,12 @@
         c.menu(more.filter(function (x) { return !(x.args && hide.indexOf(x.args.name) >= 0); }), b);
       }, "ch")].concat((d.more || []).map(function (x) { return c.btn(x.label, function () { run(c.send, x.name); }); }),  /* a host's own, as the author's */
       [h("span.grow"), c.btn("Stop following…", function () { run(c.send, "stop_following"); }, "bad")]));
-    box.appendChild(sec(h, d.head, rows.concat([acts])));
+    return rows.concat([acts]);
+  }
+  function follower(d, c) {
+    var h = c.h, box = h("div.tb.tset");
+    if (d.gone) { box.appendChild(h("div.empty", { text: d.gone })); return box; }
+    box.appendChild(sec(h, d.head, followRows(d, c)));
     return box;
   }
 

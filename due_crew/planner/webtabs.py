@@ -32,6 +32,9 @@ CATCHUP = ((0, "None"), (3, "Every 3rd week"), (4, "Every 4th week"))
 MODES = (("daily", "Up to"), ("end", "Fit to the end"), ("placed", "I place each set"))
 EARLY = ((0, "Off"), (1, "1 day"), (2, "2 days"), (3, "3 days"), (5, "5 days"), (7, "7 days"))
 FOLLOW_KEYS = ("shift", "skipped", "moved", "paused", "own")
+# team_flow.JOIN_SAYS, word for word (the suite checks): what joining a plan's squad shares
+TEAM_SAYS = ("The others in it see your name and the days you show up, and your questions and answers; "
+             "your progress counts for the plan's authors. Never your numbers.")
 SOON_MS = 1800  # a follow's step, read again once its request is likely back (mine_tab._again)
 
 
@@ -129,10 +132,11 @@ def _workload(w, doc):
         return {"empty": "No new cards on its sets yet."}
     words, over = INS.workload_words(doc, rows, V.work(doc, t, pace))
     cap = max(x["cap"] for x in rows)
-    new_top = max([x["new"] for x in rows] + [cap]) or 1
+    new_top = (max([x["new"] for x in rows] + [cap]) or 1) * 1.15  # headroom: the pace's line inside the bars, never their edge
     rv_top = max(x["reviews"] for x in rows) or 1
+    whose = "your pace" if w.author() else "the plan's pace"
     return {"words": words, "over": over,
-            "newHead": "New a study day" + (f" · the line, your pace: {cap:,}" if cap else ""),
+            "newHead": "New a study day" + (f" · the line, {whose}: {cap:,}" if cap else ""),
             "rvHead": "Reviews a day", "line": _pct(cap, new_top) if cap else None,
             "rows": [{"week": f"Week {x['n']}" + (", this week" if x["now"] else ""), "now": x["now"], "past": x["past"],
                       "span": x["span"], "events": ", ".join(x["events"]), "tip": INS.week_words(x),
@@ -212,7 +216,7 @@ def _contents(w, doc, per, cards):
     leech = M.counts(w.idx, cards)["leech"]
     if leech:
         out["lines"].append(f"{leech:,} lee{'ches' if leech != 1 else 'ch'} on its sets stay{'' if leech != 1 else 's'} "
-                            "shut: a plan never opens one.")
+                            "suspended: a plan never opens one.")
     return out
 
 
@@ -316,7 +320,21 @@ def _author(w):
         "library": {"shown": owner and listed != -1, "on": listed == 1, "off": not (owner and not busy and (not why or listed == 1)),
                     "said": lib_said},
         "ai": _ai_on(), "canCopy": bool(E.first_day(doc)), "delete": owner,
+        "mine": _mine_view(w),
     }
+
+
+def _mine_view(w):
+    """An author's own follow (New plan's Start it, or its code followed):
+    my follow's rows, as a follower's; not following it, Start it here… (the
+    Follow window on its code) when it has one, else nothing."""
+    pid = _pid(w)
+    if pid and w.ops.follow_state(pid):
+        v = _follower(w)
+        v["head"] = "Your follow" + (", paused" if v.get("paused") else "")
+        return v
+    code = str(_raw(w).get("code") or "")
+    return {"start": True, "pid": pid} if pid and code else None
 
 
 # -- the plan's dates and pace (shape.py) --
@@ -924,7 +942,7 @@ def _follow_bits(w, pid):
         ops = w.ops
         st["follow"] = (key, {"p": ops.follow_state(pid) or {}, "held": int(ops.held_count(pid) or 0),
                               "team": bool(ops.in_team(pid)), "reset": bool(ops.can_reset(pid)),
-                              "lesson": _lesson_deck(w, pid)})
+                              "lesson": _lesson_deck(w, pid), "deck": str(ops.follow_deck_name(pid) or "")})
     return st["follow"][1]
 
 
@@ -950,13 +968,20 @@ def _follower(w):
         "head": f"Following {p.get('name') or 'the plan'}" + (", paused" if p.get("paused") else ""),
         "shift": shift, "later": f"{_pl(shift, 'day')} later" if shift else "Some days later…",
         "skips": skips, "ahead": [{"uid": u["id"], "label": f"{P.fmt_day(u['opens'])} · {u.get('name') or '?'}"} for u in ahead],
-        "own": own, "held": f"{_pl(n, 'card')}…" if n else "", "lesson": got["lesson"],
-        "squad": "You're in it" if inside else "Not in it: join from the board's Squads tab",
+        "own": own, "held": f"{_pl(n, 'card')}…" if n else "", "lesson": got["lesson"], "deckName": got["deck"],
+        "squad": "You're in it" if inside else "Not in it",
         "squadTip": "Its squad sees that you showed up, never your numbers" if inside else "",
+        "team": "Leave its squad" if inside else "Join its squad",
         "paused": bool(p.get("paused")), "copy": _in_library(w),
         "early": [{"n": k, "label": label, "on": early == k} for k, label in EARLY],
         "sched": bool(p.get("sched")), "reset": got["reset"],
     }
+
+
+def _mine(w):
+    """My follow's rows apply: a follower's window, or an author's who follows it too."""
+    pid = _pid(w)
+    return bool(pid) and (not w.author() or bool(w.ops.follow_state(pid)))
 
 
 def _do(w, what, *args):
@@ -964,7 +989,7 @@ def _do(w, what, *args):
     follow read again once its request is likely back, and the plan with it
     when my dates moved."""
     pid = _pid(w)
-    if not pid or w.author():
+    if not _mine(w):
         return
     was = dict(w.ops.follow_state(pid) or {})
     getattr(w.ops, what)(pid, *args)
@@ -972,7 +997,7 @@ def _do(w, what, *args):
 
 
 def _again(w, pid, was):
-    if not w.alive() or _pid(w) != pid or w.author():
+    if not w.alive() or _pid(w) != pid:
         return
     st = _st(w)
     st["tick"] += 1
@@ -987,7 +1012,7 @@ def _fresh(w):
     """My follow as it is now (the rows show what's so until a step changes it)."""
     st = _st(w)
     st["tick"] += 1
-    return _follow_bits(w, _pid(w))["p"] if _pid(w) and not w.author() else {}
+    return _follow_bits(w, _pid(w))["p"] if _mine(w) else {}
 
 
 def c_shift(w, later=False):
@@ -1064,10 +1089,30 @@ def c_reset(w):
         _do(w, "reset_days")
 
 
-def c_team(w):
-    """Its squad, in or out: duecrew.com's button (d.team); this window never shows it, and says where it is."""
-    if _fresh(w):
-        w.say("Its squad is on the board's Squads tab: join or leave it there.")
+def c_team(w, sure=False):
+    """Its squad, in or out (team_flow's join and leave), asked in the window first."""
+    if not _fresh(w):
+        return
+    inside = bool(_follow_bits(w, _pid(w))["team"])
+    if not sure:
+        if inside:
+            _ask(w, "team", "Leave this plan's squad?", "Your progress stops counting for its authors; "
+                 "your questions and answers stay.", "Leave")
+        else:
+            _ask(w, "team", "Join this plan's squad?", TEAM_SAYS, "Join")
+        return
+    _do(w, "team_leave" if inside else "team_join")
+
+
+def c_start_here(w):
+    """Start it here…: an author's own plan followed on this account (the
+    Follow window on its code: the deck, how its cards open, Today's set)."""
+    pid, code = _pid(w), str(_raw(w).get("code") or "")
+    if not pid or not w.author() or not code or w.ops.follow_state(pid):
+        return
+    w.ops.start_here(code)
+    _st(w)["tick"] += 1
+    w.push()
 
 
 def c_stop_following(w):
@@ -1084,7 +1129,7 @@ def c_copy_mine(w):
 def c_lesson_deck(w, on=False):
     """Today's lesson: A, it opens in my deck; B, in a deck of its own too."""
     pid = _pid(w)
-    if not pid or w.author() or _lesson_deck(w, pid) is None:
+    if not _mine(w) or _lesson_deck(w, pid) is None:
         return
     w.ops.set_lesson_deck(pid, bool(on))
     _st(w)["tick"] += 1

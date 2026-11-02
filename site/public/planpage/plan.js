@@ -137,7 +137,9 @@ var dcPlan = (function () {
     if (own) { own(sh, body, { h: h, btn: btn, send: send, close: closeSheet }); }
     go = btn(sh.yes || "OK", submit, "pri" + (sh.danger ? " bad" : ""), { title: sh.tip || null });
     if (sh.danger) { go.style.background = "#c62828"; go.style.borderColor = "#c62828"; go.style.color = "#fff"; }
-    body.appendChild(h("div.acts", {}, [btn(sh.no || (sh.kind === "send" ? "Back" : "Cancel"), closeSheet), sh.yes === null ? null : go]));
+    /* sh.noCmd: the other button does a thing of its own too (Close anyway) */
+    var no = sh.noCmd ? function () { closeSheet(); send(sh.noCmd, sh.noArgs || {}); } : closeSheet;
+    body.appendChild(h("div.acts", {}, [btn(sh.no || (sh.kind === "send" ? "Back" : "Cancel"), no), sh.yes === null ? null : go]));
     var veil = h("div.veil", { onclick: function (e) {
       if (ui.menu && ui.menu.length) { closeMenu(); return; }  /* a click off an open calendar closes it alone */
       if (e.target === veil) { closeSheet(); } } }, [body]);
@@ -196,11 +198,11 @@ var dcPlan = (function () {
     if (p.cover && p.cover.cards) {
       var c = p.cover, tot = c.cards || 1;
       out.push(h("div.cover", {}, [
-        h("div.br", { role: "img", "aria-label": c.seen + " seen, " + c.open + " open, " + c.shut + " still shut" }, [
+        h("div.br", { role: "img", "aria-label": c.seen + " seen, " + c.open + " open, " + c.shut + " still suspended" }, [
           h("i.seen", { style: "width:" + (100 * c.seen / tot) + "%" }), h("i.open", { style: "width:" + (100 * c.open / tot) + "%" }),
           h("i.shut", { style: "width:" + (100 * c.shut / tot) + "%" })]),
         h("div.lg", {}, [h("span", {}, [h("i.seen"), c.seen.toLocaleString() + " seen"]), h("span", {}, [h("i.open"), c.open.toLocaleString() + " open"]),
-          h("span", {}, [h("i.shut"), c.shut.toLocaleString() + " still shut"]),
+          h("span", {}, [h("i.shut"), c.shut.toLocaleString() + " still suspended"]),
           author() ? h("span", { text: "Not in a set: " + (c.outside || 0).toLocaleString() }) : null])]));
     }
     return out;
@@ -253,6 +255,7 @@ var dcPlan = (function () {
     if (ui.closed[w.start]) { return false; }
     if (ui.all !== null && !ui.look) { return ui.all; }
     if (ui.look) { return true; }
+    if (w.running) { return true; }  /* a set that opened in it runs today: it stays with this week */
     return addDays(w.start, 6) >= S.plan.today;
   }
   function allOpen(p) { return p.weeks.every(isOpen); }
@@ -573,7 +576,21 @@ var dcPlan = (function () {
       box.appendChild(h("div.fl", { style: "margin-top:10px" }, [h("span", { text: "On" }), dateInput(pn.day, function (v) { send("move_event", { eid: pn.eid, to: v }); }, "evday")]));
     } else { box.appendChild(h("h3", { text: pn.title })); }
     box.appendChild(h("div.muted.sm", { text: pn.said, style: "margin:6px 0" }));
-    pn.items.forEach(function (x) { box.appendChild(h("div.line", {}, [h("span.link", { text: x.label, onclick: function () { send("pick", { key: x.key }); } })])); });
+    if (pn.picks) {  /* an author's: each set by its day, ticked when it leads up to it */
+      var list = h("div.epicks", { role: "group", "aria-label": "Sets it tests" });
+      pn.picks.forEach(function (x) {
+        var cb = h("input", { type: "checkbox", "aria-label": "Leads up to " + pn.name + ": " + x.label });
+        cb.checked = !!x.on;
+        cb.addEventListener("change", function () { send("event_sets", { eid: pn.eid, uids: [x.uid], on: this.checked }); });
+        list.appendChild(h("div.line.ep" + (x.on ? ".on" : ""), {}, [cb,
+          h("span.link.grow", { text: x.label, title: "Show this set", onclick: function () { send("pick", { key: ["date", x.uid] }); } }),
+          x.other ? h("span.muted.sm", { text: "another quiz's", title: "Ticking it here moves it to this one" }) : null]));
+      });
+      box.appendChild(list);
+      if (pn.sinceWords) { box.appendChild(h("div.row", { style: "margin-top:6px" }, [btn(pn.sinceWords, function () { send("event_sets", { eid: pn.eid, uids: pn.since, on: true }); }, "t")])); }
+    } else {
+      pn.items.forEach(function (x) { box.appendChild(h("div.line", {}, [h("span.link", { text: x.label, onclick: function () { send("pick", { key: x.key }); } })])); });
+    }
     if (pn.author) { box.appendChild(h("div.row", { style: "margin-top:10px" }, [btn("Take it off…", function () { send("delete"); }, "bad")])); }
     return box;
   }
@@ -594,7 +611,7 @@ var dcPlan = (function () {
     dk.views.forEach(function (v) { seg.appendChild(h("button" + (dk.view === v.key ? ".on" : ""), { type: "button", text: v.label, onclick: function () { send("deck_view", { view: v.key }); } })); });
     if (dk.more.length) {
       var inMore = dk.more.filter(function (v) { return v.key === dk.view; })[0];
-      seg.appendChild(h("button" + (inMore ? ".on" : ""), { type: "button", text: inMore ? inMore.label : "More ▾",
+      seg.appendChild(h("button.mch" + (inMore ? ".on" : ""), { type: "button", text: inMore ? inMore.label : "More", "aria-haspopup": "menu",
         onclick: function (e) { e.stopPropagation(); menu(dk.more.map(function (v) { return { label: v.label, on: v.key === dk.view, cmd: "deck_view", args: { view: v.key } }; }), this); } }));
     }
     box.appendChild(seg);

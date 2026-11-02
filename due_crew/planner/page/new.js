@@ -31,7 +31,7 @@
     function seg(opts, on, fn, label) {
       var s = h("div.seg", { role: "group", "aria-label": label });
       opts.forEach(function (o) {
-        s.appendChild(h("button", { type: "button", text: o[1], cls: o[0] === on ? "on" : "", "aria-pressed": o[0] === on ? "true" : "false",
+        s.appendChild(h("button", { type: "button", text: o[1], title: o[2] || null, cls: o[0] === on ? "on" : "", "aria-pressed": o[0] === on ? "true" : "false",
           onclick: function () { if (o[0] !== on) { fn(o[0]); } } }));
       });
       return s;
@@ -53,7 +53,8 @@
       return i;
     }
     function lesson() {
-      return row("Today's set", seg([["deck", "In " + (n.deckName || "your deck")], ["own", "Its own deck"]], n.lesson,
+      return row("Today's set", seg([["deck", "In " + (n.deckName || "your deck")], ["own", "Its own deck", "Each open set is a deck of its own " +
+        "under Due Crew in Anki's deck list: its new cards and the ones you're learning. Reviews stay where they are."]], n.lesson,
         function (v) { set("lesson", v); }, "Today's set"));
     }
     function makeRow(nameInput, nameHint, inFoot) {
@@ -76,7 +77,7 @@
 
     if (n.step === "pick") {
       box.appendChild(head("New plan"));
-      [["resource", "A resource, at my pace", "Chapters of something in your deck, in order."],
+      [["resource", "A resource, chapter by chapter", "Chapters of something in your deck, in order, on your study days."],
         ["someone", "Someone's plan", "A code, or the library."]].filter(function (o) {
         return !n.ways || n.ways.indexOf(o[0]) >= 0;  /* n.ways: the ways this host has (duecrew.com's); Anki's view has every one */
       }).forEach(function (o) {
@@ -90,7 +91,7 @@
 
     if (n.step === "someone") {
       box.appendChild(head("Someone's plan"));
-      var code = h("input.in", { type: "text", placeholder: "Their code", maxlength: 40, "data-keep": "newcode", style: "width:16em" });
+      var code = h("input.in", { type: "text", placeholder: "Their code or link", maxlength: 300, "data-keep": "newcode", style: "width:16em" });
       code.value = n.code || "";
       var follow = btn("Follow…", function () { send("new_follow", { code: code.value }); }, "pri");
       code.addEventListener("input", function () { follow.disabled = !code.value.trim(); });
@@ -114,7 +115,7 @@
 
     if (n.step === "resource") {
       var r = n.resource || {};
-      box.appendChild(head("A resource, at my pace"));
+      box.appendChild(head("A resource, chapter by chapter"));
       box.appendChild(row("Deck", deckSelect()));
       if (r.empty || !(r.parts || []).length) {
         box.appendChild(h("p.muted", { text: r.empty || "Reading the deck…" }));

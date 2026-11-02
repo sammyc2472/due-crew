@@ -271,6 +271,55 @@ def test_an_authors_window():
     check("web: what isn't a command of the window's does nothing", True)
 
 
+
+def test_after_the_last_check_v396():
+    """3.9.6, after the last check: a quiz's panel picks its sets (a tick each,
+    one click for the ones since the last quiz); the week a set runs in today
+    stays open; a follower's week says the plan's pace; a quiz added after
+    every set ends a plan with no end; New plan's preview numbers a set once."""
+    us = [{"id": "u1", "name": "Cell injury", "opens": day(-9), "tags": [f"{R}::01_Cell_injury"]},
+          {"id": "u2", "name": "Inflammation", "opens": day(-8), "tags": [f"{R}::02_Inflammation"], "for": "e1"},
+          {"id": "u3", "name": "Neoplasia", "opens": day(-1), "due": day(1), "tags": [f"{R}::03_Neoplasia"]},
+          {"id": "u4", "name": "Hemostasis", "opens": day(2), "tags": [f"{R}::04_Hemostasis::Platelets"]}]
+    pid, _code = plan(us, [{"id": "e0", "day": day(-7), "name": "Cell quiz"}, {"id": "e1", "day": day(4), "name": "Heme quiz"}])
+    next(u for u in STORE.plans[pid]["doc"]["units"] if u["id"] == "u2")["for"] = "e1"  # (plan() keeps no `for`)
+    w = Face(client("sam"), select=pid)
+    w.click("pick", key=["event", "e1"])
+    pn = w.last()["panel"]
+    check("web: a quiz's panel, an author's: every set by its day, ticked when it leads up to it",
+          [(x["uid"], x["on"]) for x in pn["picks"]] == [("u1", False), ("u2", True), ("u3", False), ("u4", False)], pn.get("picks"))
+    check("web: …and one click for the ones since the quiz before it, not ticked yet", pn["since"] == ["u3", "u4"]
+          and pn["sinceWords"] == "Tick the 2 since Cell quiz", (pn.get("since"), pn.get("sinceWords")))
+    w.click("event_sets", eid="e1", uids=["u1"], on=True)
+    doc = STORE.plans[pid]["doc"]
+    check("web: a tick: that set leads up to it (set_for), saved at once with nobody following",
+          next(u for u in doc["units"] if u["id"] == "u1").get("for") == "e1")
+    w.click("event_sets", eid="e1", uids=["u2"], on=False)
+    check("web: untick: it leads up to nothing", "for" not in next(u for u in STORE.plans[pid]["doc"]["units"] if u["id"] == "u2"))
+    w.click("event_sets", eid="e1", uids=w.last()["panel"]["since"], on=True)
+    doc = STORE.plans[pid]["doc"]
+    check("web: the ones since: all of them, one save", all(next(u for u in doc["units"] if u["id"] == x).get("for") == "e1" for x in ("u3", "u4")))
+    w.click("event_sets", eid="nope", uids=["u1"], on=False)
+    w.click("event_sets", eid="e1", uids="u1", on=False)
+    check("web: a quiz that isn't one, or uids that aren't a list: nothing", next(u for u in STORE.plans[pid]["doc"]["units"] if u["id"] == "u1").get("for") == "e1")
+    weeks = w.last()["plan"]["weeks"]
+    held = [wk for wk in weeks if any(it.get("key") == ["date", "u3"] for it in wk["items"])]
+    check("web: the week a set opened in that still runs today says so (it stays open)", held and held[0]["running"]
+          and not any(wk["running"] for wk in weeks if wk is not held[0]), [(wk["label"], wk["running"]) for wk in weeks])
+    check("web: a week's name is its Monday to Sunday", all(" · " in wk["label"] and "–" in wk["label"] for wk in weeks), [wk["label"] for wk in weeks])
+    v = __import__("due_crew.planner.view", fromlist=["x"])
+    ask = {"over": True, "top": 70, "cap": 40, "new": 50, "reviews": 30}
+    check("web: a week over the pace: the author's 'your 40', a follower's 'the plan's 40'",
+          v.week_words(ask)[0].startswith("70 new a day (over your 40)") and v.week_words(ask, mine=False)[0].startswith("70 new a day (over the plan's 40)"))
+    STORE.plans[pid]["doc"].pop("end", None)
+    w.load()
+    w.click("new_event", name="Path exam", day=day(9))
+    check("web: a quiz or exam after every set ends a plan that has no end", STORE.plans[pid]["doc"].get("end") == day(9), STORE.plans[pid]["doc"].get("end"))
+    w.click("new_event", name="Later still", day=day(12))
+    check("web: …once: with an end, another after it changes nothing of the end", STORE.plans[pid]["doc"].get("end") == day(9))
+    w.click("new_event", name="Midterm", day=day(0))
+    check("web: and one before the last set never does", STORE.plans[pid]["doc"].get("end") == day(9))
+
 def test_the_deck_beside_the_plan():
     pid, _code = plan([{"id": "u1", "name": "Cell injury", "opens": day(0), "tags": []}])
     w = Face(client("sam"), select=pid)
@@ -540,6 +589,9 @@ def test_a_resource_at_my_pace():
           and pb["cards"] == 36, r["parts"])
     check("web: its sets a chapter each, on my days from tomorrow, at about 20 new a day", r["ok"] and r["dates"][0]["name"].endswith("Cell injury")
           and r["summary"].startswith("3 sets, 36 new") and w.view()["new"]["name"] == "Path Book", (r.get("summary"), r.get("dates")))
+    check("web: the preview numbers a set once (its name says 1 · Cell injury already)",
+          all(x["n"] == "" for x in r["dates"] if x["name"].startswith(f"{r['dates'].index(x) + 1} · ")) and r["dates"][0]["name"].startswith("1 · "),
+          r.get("dates"))
     hy = next((o for o in r["only"] if o["label"] == "High Yield"), None)
     check("web: Only: the tags some of it carries", hy and hy["n"] == 18, r["only"])
     w.click("new_set", key="only", value=hy["path"])

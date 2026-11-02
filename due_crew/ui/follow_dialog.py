@@ -460,8 +460,8 @@ class FollowDialog(QDialog):
         if not ls:
             return
         n, cards = len(ls["passed"]), int(ls["cards"])
-        self.late_skip_note.setText(f"The {n} earlier set{'s wait' if n != 1 else ' waits'} in your calendar, "
-                                    "each with Open now. You're not behind.")
+        self.late_skip_note.setText(f"The {n} earlier set{'s stay' if n != 1 else ' stays'} suspended, "
+                                    f"{'each' if n != 1 else 'with'} Open now in You › Plans. You're not behind.")
         weeks = int(self.late_weeks.currentData() or 2)
         extra = -(-cards // (7 * weeks)) if cards else 0
         until = P._later(self.today, 7 * weeks - 1)

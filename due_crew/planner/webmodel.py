@@ -248,11 +248,13 @@ def plan_tab(w):
                           "name": f"No new cards: {M.day_words(taper[0])} – {M.day_words(taper[1])}"})
         order = {"date": 0, "event": 1, "review": 2, "taper": 3}
         items.sort(key=lambda x: (str(x["day"]), order[x["kind"]]))
-        words, warn = V.week_words(asks.get(wk["start"]))
+        words, warn = V.week_words(asks.get(wk["start"]), mine=author)
         past = end < today
         evs = ", ".join(e.get("name") or "?" for e in wk["events"])
+        # 3.9.6: a week holding a set that runs today (opened before, due after) stays open with this one
+        running = any(str(u.get("opens") or "") <= today <= str(u.get("due") or u.get("opens") or "") for u in wk["dates"])
         weeks.append({"start": wk["start"], "label": wk["label"] + (", this week" if wk["now"] else ""), "now": wk["now"],
-                      "past": past, "words": words, "warn": warn,
+                      "past": past, "running": running, "words": words, "warn": warn,
                       "folded": f"{_pl(len(wk['dates']), 'set')}" + (f", {evs}" if evs else ""),
                       "look": any(x["kind"] == "date" and x["key"][1] in look for x in items),
                       "heavy": heavy if heavy and heavy["week"] == wk["start"] and author else None,
@@ -413,10 +415,10 @@ def date_panel(w, u):
         if author:
             bits.append(f"{c['new']:,} new")
             if c["leech"]:
-                bits.append(f"{_pl(c['leech'], 'leech', 'leeches')} stay shut")
+                bits.append(f"{_pl(c['leech'], 'leech', 'leeches')} stay suspended")
         else:
             left = c["shut"] - c["leech"]
-            bits.append(f"{c['open']:,} open, {left:,} still shut" if left else f"all {c['open']:,} open")
+            bits.append(f"{c['open']:,} open, {left:,} still suspended" if left else f"all {c['open']:,} open")
         pace = M.pace_words(doc, u, c["new"]) if author else ""
         if pace:
             bits.append(pace)
@@ -459,9 +461,32 @@ def event_panel(w, e):
         said = f"Tests {_pl(len(prep), 'set')}" + (f" · {c['cards']:,} cards, {c['cards'] - c['new']:,} seen" if c else "")
     else:
         said = "No set leads up to it yet: pick it as a set's Leads up to."
-    return {"kind": "event", "eid": e.get("id"), "name": str(e.get("name") or ""), "day": e.get("day"),
-            "title": f"{P.fmt_day(e.get('day'))} · {e.get('name') or '?'}", "author": w.author(),
-            "items": items, "said": said, "n": len(prep)}
+    out = {"kind": "event", "eid": e.get("id"), "name": str(e.get("name") or ""), "day": e.get("day"),
+           "title": f"{P.fmt_day(e.get('day'))} · {e.get('name') or '?'}", "author": w.author(),
+           "items": items, "said": said, "n": len(prep)}
+    if w.author():
+        out.update(event_picks(w.doc, e))
+    return out
+
+
+def event_picks(doc, e):
+    """3.9.6, after the last check: a quiz's or exam's own way to its sets,
+    for an author: every set that opens by its day, ticked when it leads up
+    to it (its `for`), each tick set_for; and since: the ones since the quiz
+    before it (or the plan's start) not ticked yet, for one click."""
+    day, eid = str(e.get("day") or ""), e.get("id")
+    us = sorted((u for u in P.units(doc) if str(u.get("opens") or "") <= day),
+                key=lambda u: (str(u.get("opens") or ""), str(u.get("name") or "")))  # planface's byOpens
+    before = [str(x.get("day") or "") for x in doc.get("events") or []
+              if isinstance(x, dict) and x.get("id") != eid and str(x.get("day") or "") < day]
+    prev = max(before) if before else ""
+    prev_name = next((x.get("name") for x in doc.get("events") or [] if isinstance(x, dict) and str(x.get("day") or "") == prev), "") if prev else ""
+    picks = [{"uid": u["id"], "label": M.date_label(u), "on": u.get("for") == eid,
+              "other": bool(u.get("for")) and u.get("for") != eid} for u in us]
+    since = [u["id"] for u in us if str(u.get("opens") or "") > prev and u.get("for") != eid]
+    return {"picks": picks, "since": since,
+            "sinceWords": (f"Tick the {len(since)} since {prev_name or 'the last quiz'}" if prev else f"Tick all {len(since)}")
+            if len(since) > 1 else ""}
 
 
 def review_panel(w, r):

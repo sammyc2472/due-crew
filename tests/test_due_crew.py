@@ -2981,9 +2981,9 @@ def test_settings_in_board_v341():
           and change(["setprivacy", "numbers"], cfg) == {"show_up": False, "paused": False})
     check("settings: the exam on (a week out), a date, off; nonsense is nothing",
           change(["setexam", "on"], cfg, today=day) == {"exam_date": "2026-10-05"}
-          and change(["setexam", "2026-11-02"], cfg) == {"exam_date": "2026-11-02"}
-          and change(["setexam", "off"], {"exam_date": "2026-11-02"}) == {"exam_date": ""}
-          and change(["setexam", "soon"], cfg) is None)
+          and change(["setexam", "2026-11-02"], cfg, today=day) == {"exam_date": "2026-11-02"}
+          and change(["setexam", "off"], {"exam_date": "2026-11-02"}, today=day) == {"exam_date": ""}  # (its own day: not passed yet)
+          and change(["setexam", "soon"], cfg, today=day) is None)
     check("settings: away on (tomorrow to a week), dates in either order, off",
           change(["setaway", "on"], cfg, today=day) == {"away_from": "2026-09-29", "away_to": "2026-10-05"}
           and change(["setaway", "2026-10-09", "2026-10-02"], cfg) == {"away_from": "2026-10-02", "away_to": "2026-10-09"}
@@ -11679,10 +11679,10 @@ def test_why_didnt_it_open_v381():
         check("why: the date's row says what stayed shut", 3 not in _open(col) and row.get("why") == {"lee": 1, "miss": 1}, str(row))
         h = board._plan_card_html(dict(v, week=[dict(d, units=[dict(r, name="Arr <i>") for r in d["units"]]) for d in v["week"]]))
         check("why: a quiet line under it, the leech a way to Browse, names escaped",
-              f'duecrew:planleech:{pid}:ar' in h and "1 leech</a> stays shut &middot; 1 pick isn&rsquo;t in your copy" in h
+              f'duecrew:planleech:{pid}:ar' in h and "1 leech</a> stays suspended &middot; 1 pick isn&rsquo;t in your copy" in h
               and "Arr &lt;i&gt;" in h and "<i>" not in h.replace("<i class", "").replace("<i style", ""), h[-2500:])
         two = board._why_shut("p", "u", {"lee": 2, "miss": 3})
-        check("why: in the plural", "2 leeches</a> stay shut &middot; 3 picks aren&rsquo;t in your copy" in two
+        check("why: in the plural", "2 leeches</a> stay suspended &middot; 3 picks aren&rsquo;t in your copy" in two
               and board._why_shut("p", "u", {}) == "", two)
         check("why: a date that left nothing shut says nothing",
               [r["uid"] for d in v["week"] for r in d["units"] if r.get("why")] == ["ar"])

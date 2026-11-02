@@ -137,7 +137,7 @@ def test_behind():
     notes = [w["note"] for w in s["ways"]]
     check("sheet: each way says what it does, in a line",
           notes == ["Everything still to come, a day later. Ends Tue 10 Nov.",
-                    "Over the days you pick: about 11 more new cards a day for three days.", "The 31 stay as they are."], notes)
+                    "Over the days you pick: about 11 more new cards a day for three days.", "The 31 left stay open in your deck, no longer behind."], notes)
     check("sheet: Slide is the days behind, Fit it in what's waiting, Skip the lessons behind",
           s["ways"][0]["days"] == 1 and (s["ways"][1]["waiting"], s["ways"][1]["extra"]) == (31, 11) and s["ways"][2]["uids"] == ["l2"])
     check("sheet: nothing opened and unseen, no Fit it in", [w["key"] for w in P.behind_sheet("X", b, p, 0)["ways"]] == ["slide", "skip"])
@@ -198,6 +198,9 @@ def test_card():
           'title="2 · Inflammation &lt;b&gt; &middot; 31 left"' in path and 'title="3 · Neoplasia &middot; today &middot; 84 to go"' in path
           and 'role="img" aria-label="Sets: 1 done, 1 behind, 1 today, 2 to come, then Exam on Fri 18 Dec"' in h
           and "<b>" not in path, path)
+    jumps = re.findall(r"duecrew:planjump:p1:(\d{4}-\d{2}-\d{2})\|", path)
+    check("card: each segment's click opens the day it opens in the week below (3.9.6, after the last check)",
+          len(jumps) == path.count("<i ") and jumps == sorted(jumps) and jumps, jumps)
     order = [h.index(x) for x in ('class="pk"', 'class="ppath', 'class="ppl"', '<b>84</b> to go today', 'class="pst pbh"', 'class="pwk"')]
     check("card: the path above the day's line, then Behind, then the week (round five's, kept)", order == sorted(order), order)
     check("card: behind is one line, with Behind… (not Catch up…); the waiting note goes",
@@ -523,6 +526,8 @@ def test_behind_sheet_glue():
             answer(2)
             check("Skip what's left: the lesson behind skipped on my follow, one request",
                   store.follows[(pid, "maya")].get("skipped") == ["l2"] and len(store.log) == k + 1)
+            check("Skip what's left: says so, and where its way back is (3.9.6, after the last check)",
+                  any(t.startswith("Skipped. Its cards stay open in your deck; the week has Undo skip.") for t in g.toasts), g.toasts[-3:])
             card = F.card_view(F.followed()[0], F._state_cfg()[pid], F._state["plan_progress"][pid], day(0))
             check("Skip what's left: off what's behind, in its place on the path, skipped; its cards as they were",
                   card["behind"] is None and card["path"]["lessons"][1]["state"] == "skip"
@@ -538,6 +543,20 @@ def test_behind_sheet_glue():
                   len(store.log) == k and len(sent) == ks, sent[ks:])
             send("planbehind:" + pid)
             check("…and with it, the sheet again (the test above was of something)", len(sent) == ks + 1)
+            F._state.pop("plan_focus", None)
+            send(f"planjump:{pid}:{day(1)}")
+            send(f"planjump:nope:{day(1)}")
+            send(f"planjump:{pid}:soon")
+            check("a segment's click: its day's details, in its week (jump_to); a plan I don't follow, or no day: nothing",
+                  F._state.get("plan_focus") == {pid: day(1)}, F._state.get("plan_focus"))
+            # 3.9.6, after the last check: Due's Catch up… is Behind's sheet too, one way to each thing
+            sheets._open.clear()
+            ks = len(sent)
+            send("plancatch:" + pid)
+            v = _view(sent[-1]) if len(sent) > ks else {}
+            check("Catch up… (Due's, Insights'): Behind's own sheet, not a menu of its own",
+                  len(sent) == ks + 1 and v.get("title") == "A day behind on Path Book"
+                  and (v.get("field") or {}).get("items") == ["Slide a day", "Fit it in…", "Skip what's left"], v)
     finally:
         m.state, m.web, A._decks[0] = saved
         sheets._open.clear()

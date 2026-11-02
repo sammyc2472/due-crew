@@ -214,6 +214,15 @@ class Ops:
     def lesson_deck_on(self, pid):
         return self.lesson
 
+    def follow_deck_name(self, pid):
+        return "Big Step 1" if self.follow else ""
+
+    def start_here(self, code):
+        """Start it here… (the Follow window on its code): say it followed."""
+        self.calls.append(("start_here", code))
+        self.follow = {"id": self.cl.session.get("_pid_started"), "name": "mine", "shift": 0, "skipped": [], "own": "", "early": 0,
+                       "paused": False}
+
     def set_lesson_deck(self, pid, on):
         self.calls.append(("set_lesson_deck", pid, on))
         self.lesson = bool(on)
@@ -243,6 +252,9 @@ class Face(WebFace):
 
     def eval_js(self, js):
         self.js.append(js)
+
+    def close(self):
+        self.closed = True
 
     def copy(self, text):
         self.copied = text
@@ -554,6 +566,23 @@ def test_changes_wait_with_followers():
     v = w.last()
     check("tabs: and the change waits under the plan, not saved", w.draft and len(w.draft) == 1 and STORE.plans[pid]["doc"]["pace"]["daily"] == 40
           and v["settings"]["shape"]["daily"] == 25 and v["settings"]["shape"]["preview"] is None, STORE.plans[pid]["doc"]["pace"])
+    # 3.9.6, after the last check: closing with a change waiting asks (web.py's closeEvent asks unsent_ask first)
+    w.closed = False
+    check("tabs: closing with a change waiting asks, and the close waits", w.unsent() == 1 and w.unsent_ask() is True)
+    sh = w.last("sheet")
+    check("tabs: its sheet: N not sent, who won't get it, Review and send or Close anyway",
+          sh["title"] == "1 change not sent" and sh["words"].startswith("1 following it won't get it till you send.")
+          and sh["yes"] == "Review and send" and sh["cmd"] == "review_send" and sh["no"] == "Close anyway"
+          and sh["noCmd"] == "close" and sh["noArgs"] == {"sure": True}, sh)
+    w.sheet_yes(sh)
+    check("tabs: Review and send: the send sheet", (w.last("sheet") or {}).get("kind") == "send" and not w.closed, w.last("sheet"))
+    w.click("close", sure=True)
+    check("tabs: Close anyway: it closes, the change still waiting here", w.closed and len(w.draft) == 1
+          and w.unsent_ask() is False, (w.closed, len(w.draft)))
+    w2 = Face(client("sam"), select=pid, tab="settings")
+    w2.closed = False
+    w2.click("close")
+    check("tabs: the window's own Close goes the same way (the frame's close asks; this one closes)", w2.closed)
 
 
 # ---- Settings, a follower's ----
@@ -638,6 +667,60 @@ def test_settings_a_followers():
     ops.follow = None
     w.load()
     check("tabs: not following it on this account any more: said", w.last()["settings"].get("gone"), w.last()["settings"])
+
+
+def test_settings_an_author_who_follows_it():
+    """3.9.6, after the last check: New plan's Start it follows my own plan,
+    and Make it, start later doesn't. The author's Settings has my follow
+    too: Start it here… (the Follow window on its code) till I follow it,
+    then my follow's rows, each step plan_flow's as a follower's."""
+    pid, code = plan(units(), EVENTS, owner="sam", name="Path Book, mine")
+    sam = client("sam")
+    ops = Ops(sam)
+    w = Face(sam, select=pid, tab="settings", ops=ops)
+    s = w.last()["settings"]
+    check("tabs: an author not following it: Start it here…", s["role"] == "author" and s["mine"] == {"start": True, "pid": pid}, s.get("mine"))
+    for name, args in (("shift", {"later": True}), ("pause", {}), ("stop_following", {}), ("lesson_deck", {"on": True}), ("team", {})):
+        w.tab_click(name, **args)
+    check("tabs: and my follow's steps do nothing till I follow it", not ops.calls, ops.calls)
+    sam.session["_pid_started"] = pid
+    w.tab_click("start_here")
+    s = w.last()["settings"]
+    check("tabs: Start it here…: the Follow window on its own code; then my follow's rows under the plan's",
+          ops.calls == [("start_here", code)] and s["role"] == "author" and s["mine"]["role"] == "follower"
+          and s["mine"]["head"] == "Your follow" and s["mine"]["deckName"] == "Big Step 1" and s["mine"]["team"] == "Join its squad",
+          (ops.calls, s.get("mine")))
+    w.tab_click("start_here")
+    check("tabs: Start it here… once it's followed: nothing", ops.calls == [("start_here", code)], ops.calls)
+    for name, args, want in (("shift", {"later": True}, ("set_shift", pid)),
+                             ("skip", {"uid": "u3", "on": True}, ("set_skip", pid, "u3", True)),
+                             ("own", {"own": "ready"}, ("set_own", pid, "ready")),
+                             ("pause", {}, ("pause_until", pid)),
+                             ("stop_following", {}, ("stop_following", pid))):
+        n = len(ops.calls)
+        w.tab_click(name, **args)
+        check(f"tabs: an author's own follow, {name}: plan_flow's step", ops.calls[n:n + 1] == [want], ops.calls[n:])
+    ops.lesson = False
+    w.load()
+    w.tab_click("lesson_deck", on=True)
+    check("tabs: an author's own follow, Today's set: plan_flow's set_lesson_deck", ops.calls[-1] == ("set_lesson_deck", pid, True), ops.calls[-1])
+    n = len(ops.calls)
+    w.tab_click("team")
+    sh = w.last("sheet")
+    check("tabs: Join its squad asks in the window first, saying what it shares", sh and sh["title"] == "Join this plan's squad?"
+          and sh["words"] == WT.TEAM_SAYS and len(ops.calls) == n, sh)
+    w.sheet_yes(sh)
+    check("tabs: and its yes is team_flow's join", ops.calls[n:] == [("team_join", pid)], ops.calls[n:])
+    ops.follow["paused"] = True
+    w.load()
+    check("tabs: paused, said on its head", w.last()["settings"]["mine"]["head"] == "Your follow, paused")
+
+
+def test_team_says_is_team_flows():
+    src = open(os.path.join(REPO, "due_crew", "team_flow.py")).read()
+    got = re.search(r"JOIN_SAYS = \(((?:\s*\"[^\"]*\")+)\)", src)
+    words = "".join(re.findall(r'"([^"]*)"', got.group(1))) if got else ""
+    check("tabs: Join its squad's words are team_flow.JOIN_SAYS word for word", words == WT.TEAM_SAYS, words)
 
 
 def test_flow_ops_reach_plan_flow_by_name():
@@ -756,6 +839,10 @@ def _page_states():
     states["pick"] = {"view": a.view(), "sheet": a.last("sheet")}
     m = Face(client("maya"), select=pid, tab="settings")
     states["coauthor-settings"] = {"view": m.view()}
+    mine = Ops(client("sam"))
+    mine.follow = {"id": pid, "name": "Page, the author's", "shift": 0, "skipped": [], "own": "", "early": 0, "paused": False}
+    mine.lesson = False
+    states["author-follows-settings"] = {"view": Face(client("sam"), select=pid, tab="settings", ops=mine).view()}
     us = units()
     us[2]["opens"] = (TODAY + datetime.timedelta(days=2)).isoformat()
     us[3]["opens"] = (TODAY + datetime.timedelta(days=9)).isoformat()
@@ -812,15 +899,18 @@ def test_the_page_draws_and_every_click_has_its_handler():
               not o["errors"] and o["controls"] > 0, o["errors"][:2])
     words = {
         "author-insights": ["Workload", "How much of the deck", "What's in it", "Quizzes and exams", "Its biggest sets", "Heme quiz"],
-        "author-settings": ["The plan", "Sharing", "This computer", "Saving moves", "Put it back", "Copy link", "Posts…",
+        "author-settings": ["The plan", "Sharing", "Your follow", "You don't follow it yet.", "Start it here…", "This computer",
+                            "This plan", "Saving moves", "Put it back", "Copy link", "Posts…",
                             "Ask one of my crew…", "List it in the library", "Copy it for next year", "Delete this plan…", "Maya"],
+        "author-follows-settings": ["Sharing", "Your follow", "My dates", "Today's set", "In Big Step 1", "Its own deck",
+                                    "Join its squad", "Stop following…", "This plan", "Delete this plan…"],
         "coauthor-settings": ["Leave this plan", "Its owner sets that."],
         "posts": ["Posts to the 1 following", "A line to them", "Remove it"],
         "history": ["Undo the latest"],
         "pick": ["Ask a co-author", "Maya"],
         "follower-insights": ["You've seen", "To go"],
-        "follower-settings": ["My dates", "2 days later", "Skip a set", "When I'm ready", "Today's set", "Also its own deck",
-                              "7 cards…", "Stop following…", "Make my own copy"],
+        "follower-settings": ["My dates", "2 days later", "Skip a set", "When I'm ready", "Today's set", "In Big Step 1",
+                              "Its own deck", "Join its squad", "7 cards…", "Stop following…", "Make my own copy"],
     }
     for key, want in words.items():
         text = out.get(key, {}).get("text", "")

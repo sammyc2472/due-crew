@@ -139,7 +139,7 @@ it and goes out with Review and send as one builder save (with its line
 to followers); with nobody following it saves at once and Undo is `POST
 /plans/{id}/undo`. What only Anki does isn't in the site's view: Browse
 (`S.without`), Study, opening cards, Your AI app (`d.ai: null`), Today's
-set (`n.lesson` empty), a resource at my pace (`n.ways`); a source's count
+set (`n.lesson` empty), a resource chapter by chapter (`n.ways`); a source's count
 is the deck tree's, Add to my calendar is the site's `/p/CODE.ics`. The
 seams are no-ops in Anki: its view never sets them. A plan I write or
 follow opens there at `/plans/{id}` and `/plans/{id}/edit`; one looked at
@@ -336,7 +336,7 @@ sent; a follower's on my dates.
 - **What's in it**: each quiz or exam and what its dates hold (the last
   with no date for it, everything), the five biggest dates (a click: that
   one, picked on the Plan tab), how many cards are on two dates or more,
-  and the leeches on its dates that stay shut.
+  and the leeches on its dates that stay suspended.
 
 ### Settings (authors)
 
@@ -365,9 +365,20 @@ can"):
   do together is the plan's squad on the board's Squads tab). Co-authors
   (Ask one of my crew…, each says yes first; Hand it to them; Take them
   off; a co-author's Leave this plan); Library (the owner's).
+- **Your follow** (3.9.6, after the last check): an author who follows it
+  too (New plan's Start it) has my follow's rows here, as a follower's
+  Settings has them; not following it, Start it here… (the Follow window
+  on its code).
 - **This computer**: Your AI app, on or off, Set up… (AI hooks, below).
-- **Copy it for next year**; **Copy as a table** (the dates tab-separated,
-  for a spreadsheet); Delete this plan…, the owner's, asked first.
+- **This plan**: **Copy it for next year**; **Copy as a table** (the dates
+  tab-separated, for a spreadsheet); Delete this plan…, the owner's, asked first.
+
+Closing the window with changes not sent asks first (Review and send, or
+Close anyway: they wait here); the add-on's own closes (the profile
+going, a window in its place) never ask. A quiz's panel ticks the sets
+that lead up to it (each a set_for; one click for the ones since the
+quiz before), and a quiz or exam added after every set ends a plan that
+has no end.
 
 The `breather` op (every date still to come a study day later) stays for
 the text and an AI app.

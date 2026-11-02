@@ -22,6 +22,13 @@ _open = {}       # "plans", "start", "qids" -> the window, while it's open
 _asking = []     # my plans on their way for Your plans (one ask at a time)
 
 
+def _shut(w):
+    """A plan window closed by the add-on itself (the profile going, a window
+    in its place): never asked about changes waiting; they're kept here."""
+    w._may_close = True
+    w.close()
+
+
 def close_all():
     """profile_will_close: the plan windows go with the profile (their cards
     and decks are its collection's)."""
@@ -29,7 +36,7 @@ def close_all():
         _open.pop(key, None)
         if w is not None and getattr(w, "_alive", False):
             try:
-                w.close()
+                _shut(w)
             except RuntimeError:
                 pass  # Qt has it gone already
 
@@ -69,7 +76,7 @@ def open_plans(select=None, tab=None, new=None):
             w.raise_()
             w.activateWindow()
             return
-        w.close()  # a plan it doesn't list (one just made): my plans asked again
+        _shut(w)  # a plan it doesn't list (one just made): my plans asked again
     if not plan_flow._signed_in() or _asking:
         return  # (a second click while my plans are on their way: the one window)
     cl, gen = client(), app.generation
@@ -85,7 +92,7 @@ def open_plans(select=None, tab=None, new=None):
         noted_followers(plans)
         w = _open.get("plans")
         if w is not None and getattr(w, "_alive", False):
-            w.close()  # one opened meanwhile (a plan made): this one, with every plan, in its place
+            _shut(w)  # one opened meanwhile (a plan made): this one, with every plan, in its place
         show_plans(plans, select, tab, new)
     _bg(lambda: remote.my_plans(cl), done)
 
@@ -247,7 +254,7 @@ class Ops:
         """Your plans again, on `pid` (a copy just made), or on none (one taken down or left)."""
         w = _open.pop("plans", None)
         if w is not None and getattr(w, "_alive", False):
-            w.close()
+            _shut(w)
         open_plans(select=pid)
 
     def pip(self):
@@ -349,8 +356,8 @@ class Ops:
         StartOps().make(owner, name, doc, done, pid=pid)
 
     def follow_code(self, code):
-        """Someone's plan: Follow with its code, then Your plans again, with it in."""
-        plan_flow.open_follow(code)
+        """Someone's plan: Follow with its code (or its link, P.link_code), then Your plans again, with it in."""
+        plan_flow.open_follow(P.link_code(code) or code)
         self.reopen(None)
 
     def start_own(self, owner, raw, did, own, lesson_deck, done):
@@ -434,6 +441,27 @@ class Ops:
 
     def stop_following(self, pid):
         plan_flow.stop_following(pid)
+
+    def start_here(self, code):
+        """Start it here…: my own plan followed on this account, the Follow
+        window on its code (it waits till that window closes)."""
+        plan_flow.open_follow(code)
+
+    def follow_deck_name(self, pid):
+        """The deck a plan I follow runs on here, by its name ("" when none)."""
+        st = plan_flow._state_cfg().get(pid) or {}
+        try:
+            return str(mw.col.decks.name(int(st["deck_id"]))) if mw.col and st.get("deck_id") else ""
+        except Exception:  # noqa: BLE001 (a deck gone: no name)
+            return ""
+
+    def team_join(self, pid):
+        from .. import team_flow
+        team_flow.join(pid, False)
+
+    def team_leave(self, pid):
+        from .. import team_flow
+        team_flow.leave(pid, False)
 
     def open_schedule(self, pid):
         plan_flow.open_schedule(pid)
@@ -677,7 +705,7 @@ class StartOps:
         """The plan window, on the plan just made."""
         w = _open.get("plans")
         if w is not None and getattr(w, "_alive", False):
-            w.close()
+            _shut(w)
         open_plans(select=pid)
 
 

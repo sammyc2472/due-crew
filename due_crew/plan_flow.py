@@ -2866,8 +2866,12 @@ def on_message(cmd, parts):
         set_skip(arg, parts[3], True)
     elif cmd == "planunskip" and arg and len(parts) > 3:
         set_skip(arg, parts[3], False)
-    elif cmd == "plancatch" and arg:
-        catch_menu(arg)
+    elif cmd == "plancatch" and arg:  # Due's Catch up…: Behind's sheet, as You › Plans has it; the old menu only where that has nothing
+        from . import plan_board
+        if plan_board.view(arg) is not None:
+            plan_board.behind(arg)
+        else:
+            catch_menu(arg)
     elif cmd == "planbehind" and arg:  # plans, end to end: You › Plans' Behind…, the sheet
         from . import plan_board
         plan_board.behind(arg)
@@ -2886,6 +2890,10 @@ def on_message(cmd, parts):
         joy_x(arg, parts[3])
     elif cmd == "planjoyshare" and arg and len(parts) > 3:  # 3.9.6: Share on a joy's line, or the finish's banner
         joy_share(arg, parts[3])
+    elif cmd == "planjump" and arg and len(parts) > 3 and re.fullmatch(r"\d{4}-\d{2}-\d{2}", parts[3]):
+        # 3.9.6, after the last check: a set's segment on the path: its day's details, in its week
+        if any(p.get("id") == arg for p in followed()):
+            jump_to(arg, parts[3])
     elif cmd == "planweek" and arg and len(parts) > 3:
         # 3.5.0: the Plans tab's week, back and on (0: this week again); not saved
         weeks = _state.setdefault("plan_week", {})
@@ -3831,6 +3839,8 @@ def catch_menu(pid):
     today = _today()
     n = P.waiting_new(p["doc"], prog, today)
     if not n:
+        tooltip("Nothing's waiting from earlier sets now.")
+        app.swap(cfg())
         return
     from aqt.qt import QCursor, QMenu
     menu = QMenu(mw)
@@ -4031,7 +4041,7 @@ def push_back(pid):
             _psave(c)
         refresh_progress()
         app.swap(cfg())
-        tooltip(f"Your dates moved {ask['push']} day{'s' if ask['push'] != 1 else ''} later. The crew's stay put.")
+        tooltip(f"Your dates moved {ask['push']} day{'s' if ask['push'] != 1 else ''} later. The plan's stay put.")
     _bg(lambda: cl.set_schedule(pid, new), done)
 
 
@@ -4374,7 +4384,7 @@ def held_view(pid):
     elif own:
         why = "You put these back. They open when you open their set again."
     else:
-        why = "Hold back is off; these stayed shut."
+        why = "Hold back is off; these stayed suspended."
     return {"name": str(p.get("name") or "The plan"), "n": len(held), "lines": lines[:HELD_LINES],
             "more": max(0, len(lines) - HELD_LINES), "why": why, "holding": holding, "leeches": len(shut & idx.leech)}
 
@@ -4415,7 +4425,7 @@ def open_held(pid, stop=False):
     if n:
         _after_change()
     refresh_progress()
-    said = f"Opened {n:,} card{'s' if n != 1 else ''}. Edit › Undo shuts them again." if n else "Nothing to open."
+    said = f"Opened {n:,} card{'s' if n != 1 else ''}. Edit › Undo suspends them again." if n else "Nothing to open."
     tooltip(said + (" Nothing more is held back." if stop else ""), period=5000)
     app.swap(cfg())
 

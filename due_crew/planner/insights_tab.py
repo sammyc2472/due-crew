@@ -304,7 +304,7 @@ class InsightsTab(QWidget):
         leech = M.counts(win.idx, cards)["leech"]
         if leech:
             lines.append(f"{leech:,} lee{'ches' if leech != 1 else 'ch'} on its sets stay{'' if leech != 1 else 's'} "
-                         "shut: a plan never opens one.")
+                         "suspended: a plan never opens one.")
         for w in lines:
             lay.addWidget(plain(w, muted=True))
 

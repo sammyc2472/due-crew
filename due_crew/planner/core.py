@@ -574,7 +574,7 @@ class PlanCore:
             u = self.unit(uid)
             cids = cids if cids is not None else (self.idx.match(u, self.swap, self.doc) if u and self.idx else set())
             if not self.ops.open_cards(cids, name or str((u or {}).get("name") or "date")):
-                self.say("Nothing to open: its cards here are open already (leeches stay shut).")
+                self.say("Nothing to open: its cards here are open already (leeches stay suspended).")
         self.later(self.recount)
 
     def study(self, kind, key, cids=None, name=""):

@@ -1,5 +1,5 @@
 """New plan in the HTML window ("Plans end to end", Sam's pick): the one way
-to start a plan, in the tabs' place. A resource, at my pace (its chapters
+to start a plan, in the tabs' place. A resource, chapter by chapter (its chapters
 in the deck's order, one lesson each, on my study days: edits.resource_plan);
 someone's plan (a code, or the library on duecrew.com); or start empty (a
 name, the deck, the exam it ends with, then the deck beside it to lay out).
@@ -134,8 +134,9 @@ class NewPlan:
         if dates and sm.get("busiest"):
             out["summary"] += f" · busiest day {int(sm['busiest']):,} new"
         out["note"] = str(sm.get("note") or "")
-        out["dates"] = [{"n": i + 1, "name": str(u.get("name") or ""), "when": self._when(u), "cards": int(u.get("n") or 0)}
-                        for i, u in enumerate(dates[:3])]
+        # a set's number once: a resource's sets are named "1 · Cell injury" already (3.9.6, after the last check)
+        out["dates"] = [{"n": "" if str(u.get("name") or "").startswith(f"{i + 1} · ") else i + 1, "name": str(u.get("name") or ""),
+                         "when": self._when(u), "cards": int(u.get("n") or 0)} for i, u in enumerate(dates[:3])]
         out["more"] = max(0, len(dates) - 3)
         out["path"] = self._path_view(doc, dates)
         out["pace"] = st["pace"]

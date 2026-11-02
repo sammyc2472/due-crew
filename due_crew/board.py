@@ -846,6 +846,7 @@ def _css(cfg):
     #due-crew .ppath {{ display: flex; gap: 3px; align-items: center; height: 12px; margin: 4px 0 3px; }}
     #due-crew .ppath.g2 {{ gap: 2px; }} #due-crew .ppath.g1 {{ gap: 1px; }} #due-crew .ppath.g0 {{ gap: 0; }}
     #due-crew .ppath i {{ flex: 1 1 0; min-width: 0; height: 8px; border-radius: 3px; background: var(--dc-line); display: block; }}
+    #due-crew .ppath i[onclick] {{ cursor: pointer; }}
     #due-crew .ppath.g1 i, #due-crew .ppath.g0 i {{ border-radius: 1px; }}
     #due-crew .ppath i.d {{ background: var(--dc-accent); }}
     #due-crew .ppath i.b {{ background: var(--dc-hours); }}
@@ -1940,7 +1941,8 @@ def _plan_path(card):
     lesson in its order (done filled, behind amber, today outlined, ahead
     plain, skipped hollow), its last quiz or exam a small diamond at the
     end; under it the first lesson's day and the end's name and day. Each
-    segment says its lesson on a hover. While a catch-up runs, what it's
+    segment says its lesson on a hover, and its click opens the day it opens
+    in the week below (3.9.6). While a catch-up runs, what it's
     catching up on isn't called behind (round five's rule): half filled. A
     long plan's segments close up (no gaps past 120). Names are the
     author's: escaped here."""
@@ -1949,6 +1951,7 @@ def _plan_path(card):
     ls = [x for x in p.get("lessons") or [] if isinstance(x, dict)]
     if not ls:
         return ""
+    pid = _html.escape(str(card.get("id") or ""), quote=True) if _re.fullmatch(r"[A-Za-z0-9_-]{1,128}", str(card.get("id") or "")) else ""
     segs, n = "", {}
     for x in ls:
         st = str(x.get("state") or "ahead")
@@ -1961,7 +1964,10 @@ def _plan_path(card):
             st, _ins_dname(x.get("opens"), long=True))
         cls = PATH_WORDS.get(st, "a") + (" t" if x.get("today") and st == "done" else "")
         play, inner = _joy_seg(card.get("joy"), str(x.get("uid") or ""), st)
-        segs += f'<i class="{cls}" title="{e(str(x.get("name") or "?"))} &middot; {word}"{play}>{inner}</i>'
+        # 3.9.6, after the last check: a segment's click opens its day's details in the week below (plan_flow.jump_to)
+        day = str(x.get("opens") or "")
+        go = (f' onclick="{_pycmd(f"planjump:{pid}:{day}")}"' if pid and _re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) else "")
+        segs += f'<i class="{cls}" title="{e(str(x.get("name") or "?"))} &middot; {word}"{play}{go}>{inner}</i>'
     end = p.get("end") or {}
     ev = bool(end.get("event"))
     when = _ins_dname(end.get("day"), long=True)
@@ -3452,7 +3458,7 @@ def _why_shut(pid, uid, why):
     bits = []
     if lee:
         bits.append(f'<a class="tp" href="#" title="Browse them" onclick="{_pycmd(f"planleech:{pid}:{uid}")}">'
-                    f'{lee:,} leech{"es" if lee != 1 else ""}</a> stay{"s" if lee == 1 else ""} shut')
+                    f'{lee:,} leech{"es" if lee != 1 else ""}</a> stay{"s" if lee == 1 else ""} suspended')
     if miss:
         bits.append(f'{miss:,} pick{"s aren" if miss != 1 else " isn"}&rsquo;t in your copy')
     return f'<div class="pwhy">{" &middot; ".join(bits)}</div>' if bits else ""

@@ -80,6 +80,9 @@ class PlanWeb(QDialog, WebFace):
         return True
 
     def closeEvent(self, e):  # noqa: N802 (Qt's)
+        if self._ready and self.unsent_ask():  # changes waiting: asked in the page, the close waits
+            e.ignore()
+            return
         self._ready = False
         try:
             self.web.cleanup()

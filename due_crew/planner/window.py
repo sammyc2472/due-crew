@@ -266,6 +266,21 @@ class PlanWindow(QDialog, PlanCore):
     def later(self, fn):
         QTimer.singleShot(0, fn)
 
+    def reject(self):  # noqa: D401 (Qt's: Esc and the frame's close come here)
+        """Closing with changes waiting to be sent: asked first (Review and
+        send keeps the window; Close anyway leaves them waiting here)."""
+        n = len(self.draft) if self.author() and self.draft is not None and len(self.draft) else 0
+        if n and not getattr(self, "_may_close", False):
+            from ..ui import confirm_or
+            m = self.followers()
+            who = f"{m:,} following it" if m else "Anyone following it"
+            if confirm_or(self, f"{n:,} change{'s' if n != 1 else ''} not sent",
+                          f"{who} won't get {'them' if n != 1 else 'it'} till you send. "
+                          f"{'They wait' if n != 1 else 'It waits'} here till then.", "Review and send", "Close anyway"):
+                self.review_send()
+                return
+        super().reject()
+
     # ---- this face's own ----
 
     def _load(self, *_):

@@ -287,10 +287,10 @@ class DatePanel(QWidget):
             if author:
                 bits.append(f"{c['new']:,} new")
                 if c["leech"]:
-                    bits.append(f"{c['leech']:,} leech{'es' if c['leech'] != 1 else ''} stay shut")
+                    bits.append(f"{c['leech']:,} leech{'es' if c['leech'] != 1 else ''} stay suspended")
             else:
                 left = c["shut"] - c["leech"]
-                bits.append(f"{c['open']:,} open, {left:,} still shut" if left else f"all {c['open']:,} open")
+                bits.append(f"{c['open']:,} open, {left:,} still suspended" if left else f"all {c['open']:,} open")
             pace = M.pace_words(win.doc, u, c["new"]) if author else ""
             if pace:
                 bits.append(pace)

@@ -195,6 +195,8 @@ const PlanFace = (() => {
 
     // ---- a follower's: my follow, my progress (what my Anki syncs), the plan on my days ----
     const follower = () => !!B && !B.author && !!(B.plan && B.plan.following);
+    /** my follow's steps apply: a follower, or an author who follows it too (webtabs._mine) */
+    const followsIt = () => !!B && !!(B.plan && B.plan.following);
     const follow = () => (B && B.plan && B.plan.following) || {};
     /** [opened, seen, total] a set, as my Anki last synced it (POST /sync's plans) */
     const progOf = (u) => { const p = (follow().progress || {})[u.id]; return Array.isArray(p) && p[2] > 0 ? p : null; };
@@ -438,11 +440,12 @@ const PlanFace = (() => {
       }
       return out;
     }
-    /** "9 new, 34 reviews a day", or the amber "41 new a day (over your 20), 52 reviews" (view.week_words) */
-    function weekWords(a) {
+    /** "9 new, 34 reviews a day", or the amber "41 new a day (over your 20), 52 reviews" (view.week_words);
+     *  a follower's 20 is the plan's: "over the plan's 20" */
+    function weekWords(a, mine = author()) {
       if (!a) return ["", false];
       const r = Reviews.about(a.reviews);
-      if (a.over) return [`${a.top.toLocaleString()} new a day (over your ${a.cap.toLocaleString()}), ${r} reviews`, true];
+      if (a.over) return [`${a.top.toLocaleString()} new a day (over ${mine ? "your" : "the plan's"} ${a.cap.toLocaleString()}), ${r} reviews`, true];
       if (!a.new && r === "0") return ["", false];
       return [`${a.new.toLocaleString()} new, ${r} reviews a day`, false];
     }
@@ -592,7 +595,6 @@ const PlanFace = (() => {
       const mons = [...by.keys()].sort(), first = mons[0];
       const weeks = mons.map((mon) => {
         const w = by.get(mon), end = addDays(mon, 6);
-        const on = [...w.dates.map((u) => u.opens), ...w.events.map((e) => e.day)].sort();
         const n = Math.round(Sched.diff(mon, first) / 7) + 1;
         const now = monday(t0) === mon;
         const items = [...w.dates.map((u) => dateItem(u, fr, look, placed, t0)), ...w.events.map(eventItem)];
@@ -611,7 +613,9 @@ const PlanFace = (() => {
         items.sort((a, b) => String(a.day).localeCompare(String(b.day)) || order[a.kind] - order[b.kind]);
         const [words, warn] = weekWords(asks[mon]);
         const evs = w.events.map((e) => e.name || "?").join(", ");
-        return { start: mon, label: `Week ${n} · ${spanWords(on[0], on[on.length - 1])}${now ? ", this week" : ""}`, now, past: end < t0, words, warn,
+        // webmodel.plan_tab's: its Monday to Sunday; a week holding a set that runs today stays open with this one
+        const running = w.dates.some((u) => String(u.opens || "") <= t0 && t0 <= String(u.due || u.opens || ""));
+        return { start: mon, label: `Week ${n} · ${spanWords(mon, end)}${now ? ", this week" : ""}`, now, past: end < t0, running, words, warn,
           folded: `${pl(w.dates.length, "set")}${evs ? `, ${evs}` : ""}`,
           look: items.some((x) => x.kind === "date" && look.has(x.key[1])), heavy: hv && hv.week === mon ? hv : null, items };
       });
@@ -690,7 +694,7 @@ const PlanFace = (() => {
         if (!p) bits.push("your Anki counts it at its next sync");
         else {
           const opened = Math.min(p[0], p[2]), shut = p[2] - opened;
-          bits.push(shut ? `${opened.toLocaleString()} open, ${shut.toLocaleString()} still shut` : `all ${opened.toLocaleString()} open`, `${Math.min(p[1], p[2]).toLocaleString()} seen`);
+          bits.push(shut ? `${opened.toLocaleString()} open, ${shut.toLocaleString()} still suspended` : `all ${opened.toLocaleString()} open`, `${Math.min(p[1], p[2]).toLocaleString()} seen`);
         }
       } else if (!tree()) bits.push(`the deck's tags come from your Anki (Due Crew sends them once ${B.doc.deck || "the deck"} has a plan there)`);
       else if (n) {
@@ -733,8 +737,20 @@ const PlanFace = (() => {
       });
       const [, seen, has] = mine(us);
       const counted = a ? (tree() ? ` · ${pl(cards, "card")}` : "") : has ? ` · ${pl(cards, "card")}, ${seen.toLocaleString()} seen` : "";
-      return { kind: "event", eid: e.id, name: String(e.name || ""), day: e.day, title: `${fmt(e.day)} · ${e.name || "?"}`, author: a, items, n: us.length,
+      const out = { kind: "event", eid: e.id, name: String(e.name || ""), day: e.day, title: `${fmt(e.day)} · ${e.name || "?"}`, author: a, items, n: us.length,
         said: us.length ? `Tests ${pl(us.length, "set")}${counted}` : a ? "No set leads up to it yet: pick it as a set's Leads up to." : "No set leads up to it yet." };
+      return a ? Object.assign(out, eventPicks(e)) : out;
+    }
+    /** webmodel.event_picks: every set by its day, ticked when it leads up to it; since: the ones since the quiz before, not ticked */
+    function eventPicks(e) {
+      const day = String(e.day || "");
+      const us = byOpens().filter((u) => String(u.opens || "") <= day);
+      const before = B.events().filter((x) => x.id !== e.id && String(x.day || "") < day).map((x) => String(x.day));
+      const prev = before.length ? before.sort()[before.length - 1] : "";
+      const prevName = prev ? (B.events().find((x) => String(x.day) === prev) || {}).name || "" : "";
+      const picks = us.map((u) => ({ uid: u.id, label: `${dw(u.opens)} · ${u.name || "?"}`, on: u.for === e.id, other: !!u.for && u.for !== e.id }));
+      const since = us.filter((u) => String(u.opens || "") > prev && u.for !== e.id).map((u) => u.id);
+      return { picks, since, sinceWords: since.length > 1 ? (prev ? `Tick the ${since.length} since ${prevName || "the last quiz"}` : `Tick all ${since.length}`) : "" };
     }
     function reviewPanel(r) {
       const us = reviewUnits(r), a = unit(r.from), b = unit(r.to);
@@ -906,10 +922,10 @@ const PlanFace = (() => {
         let words = `${pl(all, "new card")} over ${pl(rowsW.length, "week")}.`;
         if (best && best.cards > 0) words += ` Busiest: week ${best.n}, ${best.span}: ${best.new.toLocaleString()} new a study day, ${rvW(best)} reviews a day.`;
         const over = rowsW.filter((x) => x.over).map((x) => x.n);
-        const cap = Math.max(...rowsW.map((x) => x.cap)), newTop = Math.max(...rowsW.map((x) => x.new), cap) || 1, rvTop = Math.max(...rowsW.map((x) => x.reviews)) || 1;
+        const cap = Math.max(...rowsW.map((x) => x.cap)), newTop = (Math.max(...rowsW.map((x) => x.new), cap) || 1) * 1.15, rvTop = Math.max(...rowsW.map((x) => x.reviews)) || 1;
         const pct = (v, whole) => (whole ? Math.max(0, Math.min(100, Math.round((10000 * v) / whole) / 100)) : 0);
         wk = { words, over: over.length ? `Over the pace: ${over.length === 1 ? `week ${over[0]}` : `weeks ${over.slice(0, -1).join(", ")} and ${over[over.length - 1]}`}` : "",
-          newHead: `New a study day${cap ? ` · the line, your pace: ${cap.toLocaleString()}` : ""}`, rvHead: "Reviews a day", line: cap ? pct(cap, newTop) : null,
+          newHead: `New a study day${cap ? ` · the line, ${author() ? "your pace" : "the plan's pace"}: ${cap.toLocaleString()}` : ""}`, rvHead: "Reviews a day", line: cap ? pct(cap, newTop) : null,
           rows: rowsW.map((x) => ({ week: `Week ${x.n}${x.now ? ", this week" : ""}`, now: x.now, past: x.past, span: x.span, events: x.events.join(", "), tip: tip(x),
             new: pct(x.new, newTop), has: !!x.new, over: x.over, newWords: newW(x), rv: pct(x.reviews, rvTop), hasRv: x.reviews > 0, rvWords: rvW(x) })) };
       }
@@ -1082,8 +1098,10 @@ const PlanFace = (() => {
         library: { shown: own && p.listed !== -1, on: p.listed === 1, off: !(own && !F.busy && (!why || p.listed === 1)),
           said: p.listed === -1 ? `Taken out of the library. ${p.listedNote || ""} It stays yours, and its followers keep following. Send feedback if it's a mistake.`
             : !own ? "Its owner lists it in the library." : why },
-        ai: null, here: "More", canCopy: !!Sched.start(d) || B.events().length > 0, delete: own,
-        more: [{ label: "Its page: progress, poster ›", name: "its_page" }] };
+        ai: null, canCopy: !!Sched.start(d) || B.events().length > 0, delete: own,
+        more: [{ label: "Its page: progress, poster ›", name: "its_page" }],
+        /* my own follow of it (webtabs._mine_view): its rows; Start it here… is Anki's (a deck there) */
+        mine: followsIt() ? Object.assign(mySettings(), { head: `Your follow${follow().paused ? ", paused" : ""}` }) : null };
     }
 
     // ---- the view ----
@@ -1299,6 +1317,16 @@ const PlanFace = (() => {
       change(() => { B.shiftUnit(u, Sched.diff(to, u.opens)); B.byOpens(); }, () => setW(u, "Moved", `from ${dw(from)}`), ["date", uid]);
     };
     C.set_due = ({ uid, due }) => { const u = unit(uid); if (u && (due || null) !== (u.due || null)) op({ op: "set_due", date: uid, due }); };
+    /** a quiz's own ticks (webface.c_event_sets): each set given leads up to it, or to nothing; one change */
+    C.event_sets = ({ eid, uids, on = true }) => {
+      const e = eventOf(eid);
+      if (!e || !Array.isArray(uids)) return;
+      const us = uids.slice(0, 400).map(unit).filter((u) => u && (u.for || null) !== (on ? e.id : null) && (on || u.for === e.id));
+      if (!us.length) return;
+      change(() => { for (const u of us) { if (on) u.for = e.id; else delete u.for; } },
+        us.length === 1 ? setW(us[0], "Tested on", on ? e.name || "?" : "nothing") : ["Tested on", `${pl(us.length, "set")}`, on ? e.name || "?" : "nothing"],
+        ["event", e.id]);
+    };
     C.set_for = ({ uid, eid }) => {
       const u = unit(uid);
       if (!u) return;
@@ -1557,12 +1585,16 @@ const PlanFace = (() => {
       const v = norm(name).slice(0, 60);
       if (!v || !day) return;
       let ev = null;
+      // webface.ends_here: a plan with no end ends with a quiz or exam after every set
+      const us = units(), last = us.reduce((m, u) => { const x = String(u.due || u.opens || ""); return x > m ? x : m; }, "");
+      const ends = us.length > 0 && !B.doc.end && !!last && String(day) >= last;
       change(() => {
         ev = B.addEvent(day, v);
         if (!ev) return false;
         const u = for_uid ? unit(for_uid) : null;
         if (u) u.for = ev.id;
-      }, ["Added", `${dw(day)} · ${v}`], for_uid ? ["date", for_uid] : null);
+        if (ends) B.doc.end = day;
+      }, ["Added", `${dw(day)} · ${v}`, ends ? "the plan ends with it" : ""], for_uid ? ["date", for_uid] : null);
       if (ev && !for_uid) { F.picked = ["event", ev.id]; push(); }
     };
     C.rename_event = ({ eid, name }) => {
@@ -2031,7 +2063,7 @@ const PlanFace = (() => {
     // ---- a follower's: my follow (webtabs.c_<name>, plan_flow's steps), one PATCH /plans/{id}/follow a click ----
     /** my follow changed on the server, then the plan as it is now (what the old page did: PATCH, then GET) */
     async function patchFollow(body, said) {
-      if (!follower() || F.busy) return false;
+      if (!followsIt() || F.busy) return false;
       F.busy = true; push();
       try {
         await api("PATCH", `/plans/${B.id}/follow`, body);
@@ -2057,7 +2089,7 @@ const PlanFace = (() => {
       push();
     }
     T.shift = ({ later, days } = {}) => {
-      if (!follower()) return;
+      if (!followsIt()) return;
       const was = Number(follow().shift || 0);
       if (!later) { if (was) patchFollow({ shift: 0 }, "Back on the plan's days."); else push(); return; }
       if (days === undefined || days === null) {
@@ -2070,24 +2102,24 @@ const PlanFace = (() => {
     };
     T.skip = ({ uid, on = true }) => {
       const f = follow(), had = f.skipped || [];
-      if (!follower() || typeof uid !== "string") return;
+      if (!followsIt() || typeof uid !== "string") return;
       if (on && !((plan().doc || {}).units || []).some((u) => u.id === uid)) return;
       if (!on && !had.includes(uid)) return;
       patchFollow({ skipped: [...had.filter((x) => x !== uid), ...(on ? [uid] : [])] }, on ? "Skipped: it's not on your days now." : "Back on your days.");
     };
     T.own = ({ own }) => {
       const v = own === "ready" ? "ready" : "";
-      if (follower() && String(follow().own || "") !== v) patchFollow({ own: v || null }, v ? "Its cards open when you're ready: Up next on the board in Anki." : "Its cards open each morning, on their days.");
+      if (followsIt() && String(follow().own || "") !== v) patchFollow({ own: v || null }, v ? "Its cards open when you're ready: Up next on the board in Anki." : "Its cards open each morning, on their days.");
       else push();
     };
-    T.own_next = ({ on }) => { if (follower() && follow().own) patchFollow({ own: on ? "next" : "ready" }); };
+    T.own_next = ({ on }) => { if (followsIt() && follow().own) patchFollow({ own: on ? "next" : "ready" }); };
     T.early = ({ n }) => {
       const k = Number(n);
-      if (follower() && !follow().own && [0, 1, 2, 3, 5, 7].includes(k)) patchFollow({ early: k }, k ? `Each set opens ${pl(k, "day")} early.` : "Each set opens on its day.");
+      if (followsIt() && !follow().own && [0, 1, 2, 3, 5, 7].includes(k)) patchFollow({ early: k }, k ? `Each set opens ${pl(k, "day")} early.` : "Each set opens on its day.");
     };
     T.pause = ({ until, uid } = {}) => {
       const f = follow(), t0 = today0();
-      if (!follower()) return;
+      if (!followsIt()) return;
       if (f.paused) {  // back: my sets later by the days I was away, or as they are (plan_flow.back)
         const days = Math.max(0, f.since ? Sched.diff(t0, f.since) : 0);
         if (days && !f.own && uid === undefined) {
@@ -2109,7 +2141,7 @@ const PlanFace = (() => {
     };
     T.reset = ({ sure } = {}) => {
       const lines = resetLines();
-      if (!follower() || !lines.length) return;
+      if (!followsIt() || !lines.length) return;
       if (!sure) {
         sheet({ title: "Reset to default?", words: `${lines.join(". ")}. Cards already open stay open. Sets that come back and have passed count as behind.`,
           yes: "Reset", cmd: "tabcmd", args: { name: "reset", sure: true } });
@@ -2118,7 +2150,7 @@ const PlanFace = (() => {
       patchFollow({ shift: 0, skipped: [], moved: {}, paused: false, until: null, since: null }, "Back to the plan's days.");
     };
     T.team = async () => {
-      if (!follower() || F.busy) return;
+      if (!followsIt() || F.busy) return;
       const leaving = inTeam();
       F.busy = true; push();
       try {
@@ -2126,8 +2158,10 @@ const PlanFace = (() => {
         await reread(leaving ? "You left its squad. Your questions and answers stay." : "You're in its squad: it's on the board's Squads tab.");
       } catch (err) { F.busy = false; failed(err, { team_full: "This squad is full." }); }
     };
+    /** Start it here…: Anki's (the deck it runs on is there); the site never offers it */
+    T.start_here = () => say("Start it in Anki: Your plans, then Settings.");
     T.stop_following = async ({ sure } = {}) => {
-      if (!follower()) return;
+      if (!followsIt()) return;
       if (!sure) {
         sheet({ title: `Stop following ${plan().name || "it"}?`, words: "Its cards you have open stay open in your Anki; nothing new opens.", yes: "Stop following", danger: true,
           cmd: "tabcmd", args: { name: "stop_following", sure: true } });
@@ -2137,7 +2171,7 @@ const PlanFace = (() => {
     };
     T.copy_mine = async ({ start } = {}) => {
       const p = plan();
-      if (!follower() || !(p.library || p.listed)) return;
+      if (!followsIt() || !(p.library || p.listed)) return;
       if (start === undefined) {
         sheet({ title: "Make my own copy", words: "The same sets, yours to change. Its first set opens on:",
           fields: [{ name: "start", type: "date", value: nextMonday() }], yes: "Copy it", cmd: "tabcmd", args: { name: "copy_mine" } });
@@ -2179,7 +2213,13 @@ const PlanFace = (() => {
       push();
     };
     C.new_cancel = () => { if (B) { F.newSt = null; push(); } else goTo("/plans"); };
-    C.new_follow = ({ code }) => { const c = String(code || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase(); if (c) goTo(`/p/${c}`); };
+    /** a code as typed ("N4AP ULM2") or its link (duecrew.com/p/N4APULM2: the last path part), as plans.link_code reads the box */
+    C.new_follow = ({ code }) => {
+      let t = String(code || "").trim().slice(0, 300);
+      if (t.includes("/")) { const parts = t.split(/[?#]/)[0].split("/").filter((x) => x.trim()); t = parts.length ? parts[parts.length - 1] : ""; }
+      const c = t.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 16);
+      if (c) goTo(`/p/${c}`);
+    };
     C.new_library = () => goTo("/library");
     C.new_make = async ({ start: st0 } = {}) => {
       const st = F.newSt;

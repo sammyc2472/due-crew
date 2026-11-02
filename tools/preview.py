@@ -270,7 +270,7 @@ sections.append("<h3>round five, pick 3: two plans followed, one at a time (thei
 # 3.8.0: at my own pace: Up next with Open, what follows, the last step's Undo, quiet lines (no Behind)
 _OWN = {"mode": "ready", "next": {"uid": "u2", "name": "SLG 13 · Heart failure", "n": 180},
         "then": ["SLG 14 · Arrhythmias · 96", "SLG 15 · Valves · 122", "SLG 16 · 140"], "more": 29,
-        "at": "The plan's dates are at SLG 14 today.", "pace": "You opened 5 dates in the last two weeks.",
+        "at": "The plan's sets are at SLG 14 today.", "pace": "You opened 5 sets in the last two weeks.",
         "finish": "At that pace you open the last date on Tue 8 Dec, 3 days after Block exam.",
         "last": "Opened SLG 12 · Cardiac receptors · 214 cards, first in line.", "back": None}
 sections.append("<h3>3.8.0: a plan at my own pace (When I'm ready), just after Open</h3>" + board.render(

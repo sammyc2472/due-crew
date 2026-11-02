@@ -200,7 +200,7 @@ def set_due(doc, uid, due):
     u = _unit(doc, uid)
     if due:
         if _day(due) < _day(u["opens"]):
-            raise Refused("The due date is before the set opens.")
+            raise Refused("Finish by is before the set opens.")
         u["due"] = _day(due).isoformat()
     else:
         u.pop("due", None)
@@ -534,7 +534,7 @@ def set_even(doc, uid, on):
     u = _unit(doc, uid)
     if on:
         if not (u.get("due") and u["due"] > u["opens"]):
-            raise Refused("Give it a due date after it opens first.")
+            raise Refused("Give it a Finish by day after it opens first.")
         u["even"] = True
     else:
         u.pop("even", None)
@@ -1358,7 +1358,7 @@ def move_source(doc, uid, key, to=None, day=None, rng=random):
 
 def resource_plan(idx, tree, path, start, days=(1, 1, 1, 1, 1, 0, 0), daily=None, by=None, only=None,
                   deck=None, name=None, exam=None, rng=random):
-    """A resource, at my pace (plans end to end: New plan's window): a part of the deck,
+    """A resource, chapter by chapter (plans end to end: New plan's window): a part of the deck,
     `path` (a resource's tag, its chapters the tags under it), as a plan of
     its own. A date a chapter (model.chapters: each tag right under it that
     isn't a bank's question, in the deck's order), and, when there are any,

@@ -7,7 +7,7 @@
   today-only limit, each morning) over three days, and over a week when
   that's fewer a day (Catch up…'s five days stays on Due's and Insights'
   Catch up…); Skip what's left skips the lessons behind on my follow, one
-  request (their cards stay as they are; the week has Undo skip). Not now
+  request (their cards stay open; the week has Undo skip). Not now
   does nothing. The words are plans.behind_sheet's.
 - The empty tab's box (planfollowcode:<what was typed, encoded>): a plan's
   code, or its link (duecrew.com/p/CODE), into plan_flow's Follow.
@@ -103,7 +103,7 @@ def slide(pid, days):
             F.tooltip("Couldn't reach Due Crew. Check your connection.")
             return
         _slid(pid, {"day": F._today(), "days": int(days), "from": was})  # the card's Undo, for today
-        F.tooltip(f"Your dates moved {days} day{'s' if days != 1 else ''} later. The crew's stay put.")
+        F.tooltip(f"Your dates moved {days} day{'s' if days != 1 else ''} later. The plan's stay put.")
         F.app.swap(F.cfg())
 
     F._bg(lambda: cl.set_days(pid, shift=shift), done)
@@ -158,6 +158,7 @@ def skip(pid, uids):
         if res is None:
             F.tooltip("Couldn't reach Due Crew. Check your connection.")
             return
+        F.tooltip(f"Skipped. {'Its' if len(uids) == 1 else 'Their'} cards stay open in your deck; the week has Undo skip.")
         F.app.swap(F.cfg())
 
     F._bg(lambda: cl.set_days(pid, skipped=have + uids), done)

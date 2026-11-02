@@ -222,7 +222,14 @@ body .dcp .b.bad:disabled, body .dcp .b.bad:disabled:hover { color: #c62828; }
 .dcp .welcome { max-width: 520px; padding: 30px 6px; }
 .dcp .welcome h2 { margin: 0 0 6px; font-size: 20px; }
 
-@media (max-width: 760px) { .dcp .cols { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 760px) {
+  .dcp .cols { grid-template-columns: minmax(0, 1fr); }
+  /* narrow: the page scrolls as a whole; the list keeps a box of its own, the set's panel all of its height (3.9.6) */
+  .dcp { height: auto; min-height: 100vh; }
+  .dcp .body, .dcp .cols { flex: none; }
+  .dcp .pane { max-height: 62vh; }
+  .dcp .side { overflow: visible; }
+}
 
 /* 3.9.6: a day's box and its calendar, the page's own (never the computer's date popup) */
 .dcp .in.date { text-align: left; cursor: pointer; color: var(--dc-ink); padding-right: 30px; min-width: 9.5em; white-space: nowrap;
@@ -272,4 +279,12 @@ body .dcp .b.bad:disabled, body .dcp .b.bad:disabled:hover { color: #c62828; }
 .dcp .b.look.on { color: var(--dc-bg); background: var(--dc-hours); border-color: var(--dc-hours); }
 .dcp .lhd { display: flex; justify-content: space-between; gap: 8px; padding: 0 4px 2px; }
 .dcp .lhd .b.t { font-size: 12.5px; }
-
+/* a quiz's own ticks: each set by its day (3.9.6, after the last check) */
+.dcp .epicks { display: flex; flex-direction: column; gap: 2px; margin: 4px 0; text-align: left; }
+.dcp .epicks .ep { display: flex; align-items: center; gap: 8px; min-height: 26px; }
+.dcp .epicks .ep .link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; color: var(--dc-ink); font-weight: 450; }
+.dcp .epicks .ep .link:hover { color: var(--dc-accent); text-decoration: underline; }
+/* the deck's More, a drawn chevron as the bar's own (never a typed ▾) */
+.dcp .seg button.mch { display: inline-flex; align-items: center; gap: 6px; }
+.dcp .seg button.mch::after { content: ""; width: 5px; height: 5px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg); }

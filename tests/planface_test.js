@@ -301,7 +301,9 @@ function drawAll(x, view, sheet, mode) {
   check("planface: a set is a set (the site's word), nothing says lesson", !/lesson/i.test(JSON.stringify([v.plan, v.panel])), all.match(/.{30}lesson.{30}/i));
   check("planface: Browse is hidden on the site (S.without), no Study now, no Open its cards", v.without.includes("browse") && !v.plan.now
     && !all.includes("open_now") && !all.includes('"cmd":"study"') && !/Study now|in my Anki/.test(all), v.without);
-  check("planface: the first set picked is today's, or the next one ahead (webface.plan_shown)", v.picked && v.picked[1] === "u2", v.picked);
+  // u1 runs Monday to Wednesday of this week (plans(): day(0) to day(2)), u2 opens next Monday: today's while it runs, else the next ahead
+  const firstWant = a.ctx.today() <= a.ctx.addDays(a.ctx.Sched.monday(a.ctx.today()), 2) ? "u1" : "u2";
+  check("planface: the first set picked is today's, or the next one ahead (webface.plan_shown)", v.picked && v.picked[1] === firstWant, [v.picked, firstWant]);
   const u1 = (await run(a, "pick", { key: ["date", "u1"] })).panel;
   check("planface: a set's sources have the deck tree's counts", u1.sources.length && u1.sources[0].n === 120 && /Path Book › 1 · Cell injury/.test(u1.sources[0].name), u1.sources);
   check("planface: the source menu: Spread, Leave out its extras, Move to, a note, Copy its search, Take it off",
@@ -447,7 +449,7 @@ function drawAll(x, view, sheet, mode) {
   check("follower: Month's load is my sets' cards on my days", Object.keys(v.plan.load).length > 0 && v.plan.cal.length === 4, v.plan.load);
   const p2 = (await run(fo, "pick", { key: ["date", "u2"] })).panel;
   check("follower: a set's panel: when it opened, my day for it, what's open and seen; its sources' names, no menu, nothing to change",
-    p2.author === false && /^Opened /.test(p2.meta) && /1 day later on your copy/.test(p2.meta) && p2.said === "50 open, 110 still shut, 10 seen"
+    p2.author === false && /^Opened /.test(p2.meta) && /1 day later on your copy/.test(p2.meta) && p2.said === "50 open, 110 still suspended, 10 seen"
     && p2.n === 160 && p2.sources.length && p2.sources.every((s) => !s.menu && s.n === null) && !p2.more && p2.notes.writes === false, p2);
   const p4 = (await run(fo, "pick", { key: ["date", "u4"] })).panel;
   check("follower: a set ahead says when it opens and what it's for", /^Opens /.test(p4.meta) && /for Path quiz/.test(p4.meta), p4.meta);
@@ -460,6 +462,9 @@ function drawAll(x, view, sheet, mode) {
   check("follower: Insights: the workload on my days; my sets, what I've seen and what's to go",
     fi.work && fi.work.rows && fi.work.rows.length && fi.deck.words === "500 cards on your sets" && fi.deck.key === "You've seen 90 of them; 410 to go."
     && fi.has.exams.length === 1 && fi.has.big.length >= 3, [fi.deck, fi.work && fi.work.words]);
+  check("follower: the pace's line is the plan's, not mine (3.9.6, after the last check)",
+    !fi.work.newHead || (/the plan's pace/.test(fi.work.newHead) && !/your pace/.test(fi.work.newHead)), fi.work.newHead);
+  check("follower: a quiz's panel has no ticks (they're an author's)", !pe.picks, pe.picks);
   const fs2 = (await run(fo, "tab", { tab: "settings" })).settings;
   check("follower: Settings: my follow, nothing only Anki does (Held back, Today's set, Change deck, Open everything, My schedule)",
     fs2.role === "follower" && fs2.head === "Following Dre's path" && fs2.later === "2 days later" && fs2.skips.length === 1 && /Questions/.test(fs2.skips[0].label)
@@ -480,7 +485,7 @@ function drawAll(x, view, sheet, mode) {
     fsent.push(...d.sent);
     if (k === "follower plan") {
       check("follower: the page says the follower's words and nothing of an author's or Anki's",
-        /Today/.test(d.text) && /Behind/.test(d.text) && /150 left/.test(d.text) && /still shut/.test(d.text) && !/Undo|Share…|Paste plan lines|Needs a look|Study|in Browse/.test(d.text),
+        /Today/.test(d.text) && /Behind/.test(d.text) && /150 left/.test(d.text) && /still suspended/.test(d.text) && !/Undo|Share…|Paste plan lines|Needs a look|Study|in Browse/.test(d.text),
         d.text.match(/Undo|Share…|Paste plan lines|Needs a look|.{20}Study.{20}|in Browse/g));
     }
     if (k === "follower settings") {
@@ -573,6 +578,24 @@ function drawAll(x, view, sheet, mode) {
   check("planface: A set…: on the plan, picked, the deck beside it adding to it", made && v.side === "deck" && v.deck.target === made.id, v.side);
   await run(s, "new_event", { name: "Heme quiz", day: s.day(12), for_uid: "u2" });
   check("planface: A quiz, exam or day…: on its day, a set leading up to it", s.B.events().some((e) => e.name === "Heme quiz") && s.B.doc.units.find((u) => u.id === "u2").for === s.B.events().find((e) => e.name === "Heme quiz").id);
+
+  // -- 3.9.6, after the last check: a quiz picks its sets; weeks Monday to Sunday; a quiz after every set ends a plan with no end --
+  const qe = await face(0);
+  let qp = (await run(qe, "pick", { key: ["event", "q1"] })).panel;
+  check("planface: a quiz's panel, an author's: every set by its day, ticked when it leads up to it (webmodel.event_picks)",
+    JSON.stringify(qp.picks.map((x) => [x.uid, x.on])) === JSON.stringify([["u1", false], ["u2", true]]) && JSON.stringify(qp.since) === JSON.stringify(["u1"]) && qp.sinceWords === "", qp.picks);
+  await run(qe, "event_sets", { eid: "q1", uids: ["u1"], on: true });
+  await run(qe, "event_sets", { eid: "q1", uids: ["u2"], on: false });
+  check("planface: a tick leads it up to the quiz, an untick to nothing; saved at once with nobody following",
+    qe.B.doc.units.find((u) => u.id === "u1").for === "q1" && !qe.B.doc.units.find((u) => u.id === "u2").for && qe.store.log.length === 2, qe.store.log.length);
+  const qw = qe.shown[qe.shown.length - 1].plan.weeks;
+  check("planface: a week's name is its Monday to Sunday, and it says when a set in it runs today", qw.every((wk) => / · /.test(wk.label) && "running" in wk)
+    && qw[0].label.startsWith("Week 1 · ") && /–/.test(qw[0].label), qw.map((wk) => wk.label));
+  delete qe.B.doc.end;
+  await run(qe, "new_event", { name: "Path final", day: qe.day(30) });
+  check("planface: a quiz or exam after every set ends a plan with no end (webface.ends_here)", qe.B.doc.end === qe.day(30), qe.B.doc.end);
+  await run(qe, "new_event", { name: "Midterm", day: qe.day(3) });
+  check("planface: …one before the last set never does", qe.B.doc.end === qe.day(30), qe.B.doc.end);
   await run(s, "pick", { key: ["date", "u2"] });
   await run(s, "op", { op: { op: "move_source", date: "u2", key: ["search", `"tag:${ROOTTAG}::^Systems::Heme"`], to: "u3" } });
   check("planface: Move to: a search moves to another set", (s.B.doc.units.find((u) => u.id === "u3").search || []).length === 1 && !(s.B.doc.units.find((u) => u.id === "u2").search || []).length);
@@ -580,6 +603,19 @@ function drawAll(x, view, sheet, mode) {
   check("planface: plan lines pasted go on as the builder's text does", s.B.doc.units.some((u) => u.name === "Pasted"), s.B.doc.units.map((u) => u.name));
   await run(s, "discard", { sure: true });
   check("planface: Discard: the plan as it was saved", !s.B.doc.units.some((u) => u.name === "Neoplasia") && !s.f.F.changes.length);
+
+  // -- Settings, an author who follows it too (3.9.6, after the last check): my follow's rows under the plan's --
+  const af = await face(0, { tab: "settings" });
+  let afv = af.shown[af.shown.length - 1].settings;
+  check("planface: an author not following it: no follow of mine on the site (Start it here… is Anki's)", afv.role === "author" && afv.mine === null, afv.mine);
+  af.B.plan.following = { shift: 0, skipped: [], own: "" };
+  await run(af, "tab", { tab: "settings" });
+  afv = af.shown[af.shown.length - 1].settings;
+  check("planface: an author who follows it: Your follow, my follow's rows (mySettings)", afv.role === "author" && afv.mine && afv.mine.role === "follower"
+    && afv.mine.head === "Your follow" && afv.mine.team === "Join its squad" && !("here" in afv), afv.mine);
+  await run(af, "tabcmd", { name: "own", args: { own: "ready" } });
+  check("planface: and its steps reach the follow (PATCH /plans/{id}/follow), as a follower's do",
+    af.site.calls.some(([m, u, b]) => m === "PATCH" && u === `/plans/${af.p.id}/follow` && b && b.own === "ready"), af.site.calls.slice(-3));
 
   // -- Settings: the name saves at once; the shape is a change --
   const t = await face(2, { tab: "settings" });
@@ -747,7 +783,7 @@ function drawAll(x, view, sheet, mode) {
   nf.cmd(msg("ready"));
   check("planface: New plan: someone's plan and start empty; no resource on the site", nshown[0].new && nshown[0].new.step === "pick" && nshown[0].new.ways.join() === "someone", nshown[0].new);
   const nd = drawAll({ site: ns, day: () => "2030-01-06" }, nshown[0]);
-  check("planface: New plan's page: no resource, no Today's set", !/A resource, at my pace/.test(nd.text) && /Someone's plan/.test(nd.text) && !nd.errors.length, [nd.text.slice(0, 200), nd.errors[0]]);
+  check("planface: New plan's page: no resource, no Today's set", !/A resource, chapter by chapter/.test(nd.text) && /Someone's plan/.test(nd.text) && !nd.errors.length, [nd.text.slice(0, 200), nd.errors[0]]);
   nf.cmd(msg("new_step", { step: "empty" }));
   nf.cmd(msg("new_set", { key: "name", value: "Block 2" }));
   nf.cmd(msg("new_set", { key: "end_name", value: "Block 2 exam" }));
@@ -758,6 +794,8 @@ function drawAll(x, view, sheet, mode) {
   check("planface: Make it: POST /plans, its exam, then its page", ns.went.includes("/plans/newplanxxxxxxxxx/edit"), ns.went);
   nf.cmd(msg("new_follow", { code: "ab12 cd34" }));
   check("planface: Someone's plan: its code's page", ns.went.includes("/p/AB12CD34"), ns.went);
+  nf.cmd(msg("new_follow", { code: "https://duecrew.com/p/QW12ER34?from=x" }));
+  check("planface: Someone's plan: a pasted link is its code (plans.link_code)", ns.went.includes("/p/QW12ER34"), ns.went);
 
   process.stdout.write(JSON.stringify({ checks }));
   process.exit(checks.every((x) => x[1]) ? 0 : 1);

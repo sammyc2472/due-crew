@@ -40,7 +40,7 @@ class HeldDialog(QDialog):
         root.addWidget(self.list)
         lee = int(view.get("leeches") or 0)
         note = ("Open them: one undo step."
-                + (f" {lee:,} more {'is a leech' if lee == 1 else 'are leeches'} and stay{'s' if lee == 1 else ''} shut."
+                + (f" {lee:,} more {'is a leech' if lee == 1 else 'are leeches'} and stay{'s' if lee == 1 else ''} suspended."
                    if lee else "")
                 + (" What an author adds to later sets is still held back." if view.get("holding") else ""))
         self.note = _plain(note, muted=True)

@@ -62,7 +62,7 @@ class MineTab(QWidget):
         opens.addStretch(1)
         form.addRow("Cards open", opens)
 
-        self.held = tool("", lambda: self._do("show_held"), tip="The cards Hold back keeps shut till their day")
+        self.held = tool("", lambda: self._do("show_held"), tip="The cards Hold back keeps suspended till their day")
         self.held_none = plain("Nothing held back.", muted=True)
         held = QHBoxLayout()
         held.addWidget(self.held)
