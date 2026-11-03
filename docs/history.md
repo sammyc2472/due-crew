@@ -4451,3 +4451,15 @@ every release that changes how something works.
   An older add-on saving my settings on another computer drops the song,
   as with every newer account key (it saves the keys it knows).
 
+- 3.9.7, a newer emoji than Anki's Python knows (found in 3.9.6's release
+  run, one check failing on Sam's Mac). Python's isprintable() reads its
+  own Unicode tables, and Anki builds on Python 3.9 have Unicode 13: they
+  take 🫡, 🫠 or 🥹 (Unicode 14) and 🫨 or 🩷 (15) for unassigned, so the
+  Cheer window's emoji drawer offered faces clean_emoji then refused, and a
+  cheer note, a status, a squad's name, the crew's label or a share lost
+  them. shapes.printable is isprintable(), or a code point this Python
+  calls unassigned in the emoji planes (U+1F000-1FAFF), which only a newer
+  Unicode gives out; clean_emoji, clean_note, clean_squad_name, bingo's
+  _text, Settings' crew label and share.clean_name take it. Anything
+  unassigned outside those planes, and every control or zero-width
+  character, is still turned away.

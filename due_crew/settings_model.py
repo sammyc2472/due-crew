@@ -59,7 +59,8 @@ def change(parts, cfg, today=None):
         return {"hidden_tabs": [k for k in HIDEABLE if k in hidden]}
     if cmd == "setlabel":
         text = " ".join(unquote(":".join(parts[1:])).split())
-        text = "".join(ch for ch in text if ch.isprintable())[:LABEL_MAX]
+        from .backend.shapes import printable
+        text = "".join(ch for ch in text if printable(ch))[:LABEL_MAX]
         return {"crew_label": text or "Crew"}
     if cmd == "setprivacy" and arg in PRIVACY:
         # the numbers keep their switches under the other two, for when

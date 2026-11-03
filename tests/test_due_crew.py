@@ -15888,6 +15888,15 @@ def test_cheer_pill_and_window_v391():
     from due_crew import emoji_drawer as ED
     from due_crew.backend.shapes import DOODLE_INKS, clean_emoji
     every = [e for _, items in ED.GROUPS for e, _ in items]
+    from due_crew.backend.shapes import clean_note, clean_squad_name
+    from due_crew import share as SH
+    newer = ["\U0001FAE8", "\U0001FA77", "\U0001FAE9", "\U0001FAE1\U0001F3FD"]  # shaking face, pink heart (15.0), face with bags (16.0), a skin tone
+    check("an emoji newer than this Python's Unicode (Anki on 3.9 has 13.0) still sends, and a note, a squad's name and a share keep it",
+          all(clean_emoji(e) == e for e in newer) and clean_note("nice \U0001FAE8!") == "nice \U0001FAE8!"
+          and clean_squad_name("Heme \U0001FA77") == "Heme \U0001FA77" and SH.clean_name("Dre \U0001FAE9") == "Dre \U0001FAE9"
+          and clean_emoji("a") == "" and clean_emoji("\U0002FFFE") == "" and clean_note("x\U0002FFFE") == "x"
+          and clean_note("a\u200bb\x07") == "ab",
+          [(e, clean_emoji(e)) for e in newer])
     check("other opens a drawer of emoji, by group, each found by its words; every one can be sent (clean_emoji keeps it whole)",
           view["drawer"] == ED.view() and len(every) == len(set(every)) > 150
           and all(clean_emoji(e) == e for e in every) and all(w.strip() for _, items in ED.GROUPS for _, w in items)

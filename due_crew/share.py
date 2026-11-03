@@ -37,7 +37,8 @@ def squad_invite(name, code):
 
 def clean_name(name):
     one_line = " ".join(str(name).split())
-    text = "".join(ch for ch in one_line if ch.isprintable())
+    from .backend.shapes import printable
+    text = "".join(ch for ch in one_line if printable(ch))
     return (text[:NAME_MAX - 1] + "…") if len(text) > NAME_MAX else text or "?"
 
 

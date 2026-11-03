@@ -67,7 +67,8 @@ def _text(v, limit):
     if not isinstance(v, str):
         return ""
     one = " ".join(v.split())
-    return "".join(ch for ch in one if ch.isprintable())[:limit]
+    from .backend.shapes import printable
+    return "".join(ch for ch in one if printable(ch))[:limit]
 
 
 def _int(v, lo, hi):
