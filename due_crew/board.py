@@ -6670,9 +6670,11 @@ DANCE_CSS = """
 #dc-dance .bdg a, #dc-song .bdg a { text-decoration: none; line-height: 0; }
 #dc-dance .bdg .bdt, #dc-song .bdg .bdt { line-height: 1.3; color: var(--dc-accent); font-size: 12px; font-weight: 700; }
 /* a card's foot: Apple's credit and its badge, set apart from Listen */
-#dc-dance .ft, #dc-song .ft { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+#dc-dance .ft, #dc-song .ft { display: flex; align-items: center; justify-content: space-between; gap: 12px;
   border-top: 1px solid var(--dc-line); padding-top: 8px; }
-#dc-dance .ft .cr, #dc-song .ft .cr { font-size: 11px; color: var(--dc-muted); }
+/* the credit wraps; the badge keeps its place on the right (Sam) */
+#dc-dance .ft .cr, #dc-song .ft .cr { flex: 1 1 auto; min-width: 0; font-size: 11px; line-height: 1.35; color: var(--dc-muted); }
+#dc-dance .ft .bdg, #dc-song .ft .bdg { flex: none; margin-left: auto; }
 /* till I've picked my music app: the apps themselves, a tap picks one and opens the song there */
 #dc-dance .lsn { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 #dc-dance .lsn .lw { font-size: 12px; font-weight: 600; color: var(--dc-muted); margin-right: 2px; }

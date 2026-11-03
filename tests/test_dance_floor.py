@@ -235,6 +235,10 @@ def test_cards():
           foot.startswith('<span class="cr">Song and cover courtesy of Apple Music</span><span class="bdg">')
           and card("me").count('<span class="cr">Song and cover courtesy of Apple Music</span>') == 1
           and "border-top: 1px solid var(--dc-line)" in board.DANCE_CSS.split("#dc-dance .ft, #dc-song .ft {", 1)[1].split("}", 1)[0])
+    ft = board.DANCE_CSS.split("#dc-dance .ft, #dc-song .ft {", 1)[1].split("}", 1)[0]
+    check("the badge stays on the right: the credit wraps instead (Sam), the foot never does",
+          "flex-wrap" not in ft and "#dc-dance .ft .bdg, #dc-song .ft .bdg { flex: none; margin-left: auto; }" in board.DANCE_CSS
+          and "flex: 1 1 auto; min-width: 0;" in board.DANCE_CSS.split("#dc-dance .ft .cr, #dc-song .ft .cr {", 1)[1].split("}", 1)[0])
     check("the search: its own credit (Song search…) and the badge at its foot",
           "el('span', 'cr', \"Song search courtesy of Apple Music\")" in board.DANCE_JS
           and "img.height = 30;" in board.DANCE_JS)
