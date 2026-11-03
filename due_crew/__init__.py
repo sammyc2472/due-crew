@@ -917,7 +917,7 @@ def _on_js(handled, message, context):
         due_flow.on_message(cmd, parts)  # Due
     elif cmd == "party":
         gamenight_flow.on_message(parts)  # 3.9.5's last round: You › Pip Party
-    elif cmd in ("songsearch", "songuse", "songclear", "songlisten", "songapp", "songprev", "songapple",
+    elif cmd in ("songsearch", "songuse", "songclear", "songlisten", "songapp", "songapple",
                  "dancehide", "danceshow", "dancemotion", "dancefold"):
         from . import song_flow
         song_flow.on_message(cmd, parts)  # 3.9.6: song of the moment, and its dance floor

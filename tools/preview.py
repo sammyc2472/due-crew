@@ -1024,18 +1024,16 @@ sheet_pick = board.sheet_js({"id": "p4", "title": "Change deck", "text": "Run St
 # Decks screen of its own (an iframe: the floor is fixed to its window), the board's real output and
 # dance_js, which puts the floor on the page from the board's template; data-floor names each for the
 # screenshots (light, dark, narrow).
-def _song(i, t, a, al, y, at="2026-08-28", prev=True):
-    s = {"t": t, "a": a, "al": al, "y": y, "id": 1700000000 + i, "at": at,
-         "url": f"https://music.apple.com/us/album/x/{1600000000 + i}?i={1700000000 + i}"}
-    if prev:
-        s["prev"] = f"https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview/{i}.m4a"
-    return s  # no cover here (the preview can't reach Apple's image host): each shows its colour tile
+def _song(i, t, a, al, y, at="2026-08-28"):
+    # no cover here (the preview can't reach Apple's image host): each shows its colour tile
+    return {"t": t, "a": a, "al": al, "y": y, "id": 1700000000 + i, "at": at,
+            "url": f"https://music.apple.com/us/album/x/{1600000000 + i}?i={1700000000 + i}"}
 
 
 _SONGS = [_song(1, "Lantern Hours", "Mira Vale", "Lantern Hours", 2025, "2026-08-31"),
           _song(2, "Second Wind", "Northbound", "Mile Markers", 2022, "2026-08-27"),
           _song(3, "Coffee at 2 a.m.", "Velvet Room", "Late Shift", 2021, "2026-08-20"),
-          _song(4, "Slow Burn", "Tide & Ember", "Slow Burn", 2026, "2026-08-11", prev=False),
+          _song(4, "Slow Burn", "Tide & Ember", "Slow Burn", 2026, "2026-08-11"),
           _song(5, "Paper Cranes", "Ivy Lane", "Folded", 2026, "2026-08-08"),
           _song(6, "Static Bloom", "Hollow Pines", "Static Bloom", 2025, "2026-08-05"),
           _song(7, "Golden Hour Again", "June Atlas", "Small Weathers", 2023, "2026-08-02"),
@@ -1050,7 +1048,7 @@ _DANCERS = [("dre", "Dre", "blue", ["dino"]), ("marisa", "Marisa K.", "teal", ["
 def _dance_view(n, me=True, fresh=(), **kw):
     crew = [{"uid": u, "name": nm, "accent": a, "look": lk, "song": _SONGS[i], "fresh": u in fresh}
             for i, (u, nm, a, lk) in enumerate(_DANCERS[:n])]
-    return dict({"me": _MY_SONG if me else None, "crew": crew, "motion": "gentle", "app": "spotify", "playing": "", "pip": True}, **kw)
+    return dict({"me": _MY_SONG if me else None, "crew": crew, "motion": "gentle", "app": "spotify", "pip": True}, **kw)
 
 
 def _dance_frame(name, view, cfg=None, dark=False, width=1000, height=560, then=""):
@@ -1081,14 +1079,15 @@ sections.append("<h3>3.9.6: nine songs: five dance, +4 in the sixth's place (the
 sections.append("<h3>3.9.6: no songs yet, none of mine: Put on a song?</h3>" + _dance_frame("none", _dance_view(0, me=False)))
 sections.append("<h3>3.9.6: a narrow window: the booth, one dancer, a count</h3>"
                 + _dance_frame("narrow", _dance_view(4), width=760))
-sections.append("<h3>3.9.6: dark, Lively, a preview playing</h3>"
-                + _dance_frame("dark", _dance_view(6, motion="lively", playing="dre"), cfg={"theme": "dark"}, dark=True))
-sections.append("<h3>3.9.6: a crewmate's song card (Listen in Spotify; Apple's badge beside the cover)</h3>"
+sections.append("<h3>3.9.6: one song: its dancer by the booth, the floor under just them</h3>" + _dance_frame("one", _dance_view(1)))
+sections.append("<h3>3.9.6: dark, Lively (the booth plays along)</h3>"
+                + _dance_frame("dark", _dance_view(6, motion="lively"), cfg={"theme": "dark"}, dark=True))
+sections.append("<h3>3.9.6: a crewmate's song card (Listen in Spotify; Apple's credit and badge at its foot)</h3>"
                 + _dance_frame("card", _dance_view(4), then="dcDance.show('dre');"))
 sections.append("<h3>3.9.6: folded into the corner (a star: a new song), and opened again with a tap</h3>"
                 + _dance_frame("folded", _dance_view(4, fresh=("noah",), folded=True), height=300))
-sections.append("<h3>3.9.6: the song card, dark, a preview playing, no music app yet (Listen asks which)</h3>"
-                + _dance_frame("card-dark", _dance_view(4, app="", playing="marisa"), cfg={"theme": "dark"}, dark=True,
+sections.append("<h3>3.9.6: the song card, dark, no music app yet (the apps on the card)</h3>"
+                + _dance_frame("card-dark", _dance_view(4, app=""), cfg={"theme": "dark"}, dark=True,
                                then="dcDance.show('marisa');"))
 sections.append("<h3>3.9.6: my song's card</h3>" + _dance_frame("mine", _dance_view(4), then="dcDance.show('me');"))
 _RESULTS = json.dumps({"q": "lantern", "error": False, "songs": [

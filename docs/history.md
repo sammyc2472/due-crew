@@ -4397,32 +4397,45 @@ every release that changes how something works.
   computer, asked from this computer after a 400 ms pause, two letters at
   least; songs.py, song_flow.search). It's an account key, "song"
   (songs.clean: title, artist, the catalog's id, its Apple Music link;
-  album, year, cover, preview and the day picked when they hold; Apple's
-  hosts only): the Worker reads it with the settings and hands it, cleaned
+  album, year, cover and the day picked when they hold; Apple's hosts
+  only; a preview link is never kept): the Worker reads it with the settings and hands it, cleaned
   by songOf (board.ts), to me and my mutual friends on /board beside their
   look, so no new request; picking is the account's one save. The Decks
   screen's bottom-right corner gets the dance floor (board.dance_html,
   DANCE_JS in fridge_js): my Pip DJs at a booth (two decks, a mixer,
   speakers, an equaliser in my accent; my look and the closet's
   headphones) with my song on the decks; each mutual crewmate with a song
-  dances beside it in their colour and look, newest first, up to six then
-  "+N", one bubble at a time with their song's title (a fresh song hops in
+  dances beside it in their colour and look, newest first, the first
+  beside the booth and the rest toward the middle (Sam, after the click
+  test: they started at the far left), the checkered floor under just
+  them, up to six then "+N", one bubble at a time with their song's title (a fresh song hops in
   once with a star; the first look is history). Motion: Gentle by default
   (a slow sway, no pose swaps; Sam: "make it less jumpy"), Lively or Still
-  in Settings, still with Reduce motion; about twelve seconds after a
-  draw, then rest, as Pip's loops. ⌄ folds it to a chip (a record, "♪ N",
+  in Settings (Lively's booth plays along: the equaliser, the speakers),
+  still with Reduce motion; about twelve seconds after a draw, then rest,
+  as Pip's loops. No party lights (Sam: distracting). ⌄ folds it to a chip (a record, "♪ N",
   ★ for a fresh song; this computer remembers, no redraw), × takes it off
   (Settings › Board › Song of the moment brings it back), and where the
   open floor would cover the board's column it starts as its chip
   (Sam's "remove from screen, collapse"); a tap opens it over the board.
   A bubble's tap opens the song's card: the cover, title, artist · album
-  · year, ▶ 30 s (Apple's preview fetched to a file and played by Anki's
-  own player, as Anki's web view can't play AAC; the latest tap wins),
-  Listen, and Apple's "Listen on Apple Music" badge (its artwork as Apple
-  serves it, linked to the song's page; Apple's rule for its covers and
-  previews; plain words when the image doesn't load). Listen asks which
-  music app the first time (Apple Music, Spotify, YouTube Music, another)
-  and then just says "Listen in Spotify" (Sam): Apple Music opens the song
+  · year, Listen, and at its foot, under a line, "Courtesy of Apple Music"
+  beside Apple's "Listen on Apple Music" badge (its artwork as Apple serves
+  it, at its 30 px digital minimum, linked to the song's page; plain words
+  when the image doesn't load); the search sheet ends the same way.
+  Apple's Search API terms, as a public bug report quotes them (Apple's
+  page wouldn't load from the build): its covers and previews promote the
+  song beside its badge, credited "courtesy of", and a preview is only
+  ever streamed, never downloaded or kept. Anki's web view can't play
+  Apple's audio and its player can't stream a link (SoundOrVideoTag makes
+  any name a file path), so there's no preview (Sam's pick, after the
+  click test; it had been fetched to a file); the badge stays for
+  everyone, moved to the foot (Sam: "covers for all, small badge"). Till
+  I've picked my music app the card's own row says "Listen in" Apple
+  Music · Spotify · YouTube Music · Other, a tap keeping it on this
+  computer and opening the song there (songlisten:<uid>:<app>; Sam: "I
+  was never offered" the question, which only Listen on a profile card
+  still asks); then just "Listen in Spotify": Apple Music opens the song
   itself, Spotify and YouTube Music a search for its title and artist that
   lands on it, another app copies the title and artist. Settings › Board ›
   Song of the moment: the floor, Dancing (Gentle · Lively · Still), My

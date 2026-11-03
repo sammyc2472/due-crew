@@ -84,13 +84,13 @@ export function lookOf(v: unknown): string[] | null {
 /** 3.9.6: a song of the moment from a settings doc (json_extract's text of it): the one
  *  song someone picked from Apple's catalog to show their crew. Title and artist (short,
  *  no control characters), the catalog's id, its page on Apple Music; and, when they hold,
- *  album, year, cover, preview and the day it was picked. Links only on Apple's hosts,
- *  https, as given. Anything else: none. The add-on's songs.clean is the same rule. */
+ *  album, year, cover and the day it was picked (no preview: Apple's terms stream those only,
+ *  and Anki can't, so 3.9.6 shows none). Links only on Apple's hosts, https, as given.
+ *  Anything else: none. The add-on's songs.clean is the same rule. */
 export const SONG_TEXT = 120, SONG_URL = 400;
 const SONG_HOSTS = {
   url: /^(music|itunes|geo\.music)\.apple\.com$/,
   art: /^([a-z0-9-]+\.)*mzstatic\.com$/,
-  prev: /^([a-z0-9-]+\.)*(mzstatic\.com|itunes\.apple\.com)$/,
 };
 function songText(v: unknown): string | null {
   if (typeof v !== "string") return null;
@@ -116,10 +116,8 @@ export function songOf(v: unknown): Record<string, unknown> | null {
   const al = songText(o.al);
   if (al) out.al = al;
   if (typeof o.y === "number" && Number.isInteger(o.y) && o.y >= 1900 && o.y <= 2100) out.y = o.y;
-  for (const k of ["art", "prev"] as const) {
-    const u = songUrl(o[k], SONG_HOSTS[k]);
-    if (u) out[k] = u;
-  }
+  const art = songUrl(o.art, SONG_HOSTS.art);
+  if (art) out.art = art;
   if (typeof o.at === "string" && /^\d{4}-\d{2}-\d{2}$/.test(o.at)) out.at = o.at;
   return out;
 }

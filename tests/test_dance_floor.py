@@ -49,11 +49,9 @@ def as_board(message):
     return message + "|" + KEY
 
 
-def song(i, t="Lantern Hours", a="Mira Vale", al="Lantern Hours", y=2025, at="2026-10-30", prev=True, art=True):
+def song(i, t="Lantern Hours", a="Mira Vale", al="Lantern Hours", y=2025, at="2026-10-30", art=True):
     s = {"t": t, "a": a, "al": al, "y": y, "id": 1700000000 + i, "at": at,
          "url": f"https://music.apple.com/us/album/x/{1600000000 + i}?i={1700000000 + i}"}
-    if prev:
-        s["prev"] = f"https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview/{i}.m4a"
     if art:
         s["art"] = f"https://is1-ssl.mzstatic.com/image/thumb/Music/{i}/300x300bb.jpg"
     return s
@@ -68,7 +66,7 @@ def view(n=4, me=True, fresh=(), **kw):
     crew = [{"uid": u, "name": nm, "accent": acc, "look": lk, "song": song(i + 1, t=f"Song {i}"), "fresh": u in fresh}
             for i, (u, nm, acc, lk) in enumerate(NAMES[:n])]
     return dict({"me": song(50, t="Study Hall") if me else None, "crew": crew, "motion": "gentle", "app": "spotify",
-                 "playing": "", "pip": True, "folded": False}, **kw)
+                 "pip": True, "folded": False}, **kw)
 
 
 def floor(html):
@@ -134,6 +132,17 @@ def test_dancers_and_more():
           h.count('<li><button type="button" data-open=') == 9 and "&#9834; 9</button>" in h)
     check("front row then a back row half a place along, none on another",
           len(set(places)) == len(places) and [p for p in places if not p[1]] == [(0, False), (66, False), (132, False)])
+    css = board.DANCE_CSS
+    check("the places count from the booth (Sam: start by the DJ, then toward the middle); a new song hops in from it",
+          "#dc-dance .dz { position: absolute; bottom: 0; right: calc(var(--x) * 1px);" in css
+          and "right: calc(var(--x) * 1px + 6px)" in css and "translate(48px, -26px)" in css and "left: calc(var(--x)" not in css)
+    fl = lambda n: int(re.search(r'class="df-fl" style="--fl:(-?\d+)px"', board.dance_html(view(n), {})).group(1))  # noqa: E731
+    check("the checkered floor under just the dancers there are: one by the booth, a small floor; three or more, the whole",
+          fl(1) == board.DANCE_AREA - 60 - 24 and fl(2) == fl(1) - board.DANCE_SLOT and fl(3) == fl(2) - board.DANCE_SLOT
+          and fl(9) == -10
+          and fl(0) == -10, [fl(n) for n in (0, 1, 2, 3)])
+    check("no party lights (Sam: distracting)", "df-lt" not in h and "bulb" not in h and "bulb" not in css
+          and not hasattr(board, "_dance_lights"))
     one = board.dance_html(view(1), {})
     check("one song: no count (nothing more to list)", 'class="df-ct"' not in one)
     none = board.dance_html(view(0), {})
@@ -149,10 +158,10 @@ def test_fresh_and_bubbles():
     check("…no new song: the newest's bubble first", [u for c, u, _x in dancers(board.dance_html(view(4), {})) if " say" in c] == ["dre"])
     a, b = board._dance_keys(view(4, fresh=("noah",)), {}), board._dance_keys(view(4), {})
     check("the hop isn't in the floor's key: drawn again with it seen, the floor on the page stays as it is", a == b)
-    c = board._dance_keys(dict(view(4), playing="dre"), {})
+    c = board._dance_keys(dict(view(4), app="youtube"), {})
     d = board._dance_keys(dict(view(4), crew=view(5)["crew"]), {})
     e = board._dance_keys(dict(view(4), folded=True), {})
-    check("a preview playing changes the cards' key only; a new song the floor's; the fold neither (the page's own)",
+    check("my music app changes the cards' key only; a new song the floor's; the fold neither (the page's own)",
           c[0] == b[0] and c[1] != b[1] and d[0] != b[0] and e == b)
     check("the chip's star while a song's new", 'class="df-chip"' in h and h.split('class="df-chip"')[1].count("&#9733;") == 1
           and "&#9733;" not in board.dance_html(view(4), {}).split('class="df-chip"')[1])
@@ -199,30 +208,43 @@ def test_booth_and_dj():
 
 def test_cards():
     v = view(3)
-    v["crew"][2]["song"].pop("prev")
-    h = board.dance_html(dict(v, playing="marisa"), {})
+    v["crew"][2]["song"]["prev"] = "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview/1.m4a"
+    h = board.dance_html(v, {})
     card = lambda u: h.split(f'data-card="{u}"', 1)[1].split('<div class="df-pop"', 1)[0]  # noqa: E731
     check("a card: the cover (Apple's, from its host), title, artist · album · year, since when",
           '<img src="https://is1-ssl.mzstatic.com/' in card("dre") and "Song 0" in card("dre")
           and "Mira Vale &middot; Lantern Hours &middot; 2025" in card("dre") and "since 30 Oct" in card("dre"))
-    check("▶ 30 s where there's a preview (songprev), ■ Stop on the one playing; none without",
-          f"pycmd('duecrew:songprev:dre|{KEY}')" in card("dre") and "&#9654;&#xFE0E; 30 s" in card("dre")
-          and "&#9632; Stop" in card("marisa") and "songprev" not in card("noah"))
+    check("no preview anywhere (Apple's terms: streamed only), even for a song that came with one",
+          "songprev" not in h and "30 s" not in h and "&#9654;" not in h and "AudioPreview" not in h
+          and ".pv" not in board.DANCE_CSS and "playing" not in board.DANCE_JS and "playing" not in board.DANCE_CSS)
     check("Listen in my app, by its name (songlisten); no ▾ on the card: changing it is Settings'",
           f"pycmd('duecrew:songlisten:dre|{KEY}')" in card("dre") and ">Listen in Spotify</button>" in card("dre")
           and "&#9662;" not in h and "duecrew:songapp:" not in h)
-    check("no app yet: just Listen (song_flow asks which, the first time); another app: the title and artist, copied",
-          ">Listen</button>" in board.dance_html(dict(view(1), app=""), {})
-          and ">Copy title and artist</button>" in board.dance_html(dict(view(1), app="other"), {})
+    ask = board.dance_html(dict(view(1), app=""), {})
+    row = ask.split('<div class="lsn"', 1)[1].split("</div>", 1)[0] if '<div class="lsn"' in ask else ""
+    check("no app yet (Sam: never offered): the card's own row, Listen in Apple Music · Spotify · YouTube Music · Other,"
+          " each picking and opening (songlisten:<uid>:<app>), no lone Listen",
+          '<span class="lw">Listen in</span>' in row and ">Listen</button>" not in ask
+          and [m for m in re.findall(r"songlisten:dre:([a-z]+)\|", row)] == ["apple", "spotify", "youtube", "other"]
+          and ">Apple Music</button>" in row and ">Other</button>" in row and 'title="Copies the title and artist"' in row, row[:400])
+    check("another app picked: the title and artist, copied; YouTube Music by its name",
+          ">Copy title and artist</button>" in board.dance_html(dict(view(1), app="other"), {})
           and ">Listen in YouTube Music</button>" in board.dance_html(dict(view(1), app="youtube"), {}))
+    foot = card("dre").split('<div class="ft">', 1)[1] if '<div class="ft">' in card("dre") else ""
+    check("Apple's credit at the foot of every card, the badge beside it, apart from Listen",
+          foot.startswith('<span class="cr">Courtesy of Apple Music</span><span class="bdg">')
+          and card("me").count('<span class="cr">Courtesy of Apple Music</span>') == 1
+          and "border-top: 1px solid var(--dc-line)" in board.DANCE_CSS.split("#dc-dance .ft, #dc-song .ft {", 1)[1].split("}", 1)[0])
+    check("the search: the same credit and badge at its foot", "el('span', 'cr', \"Courtesy of Apple Music\")" in board.DANCE_JS
+          and "img.height = 30;" in board.DANCE_JS)
     badge = card("dre").split('<span class="bdg">', 1)[1]
     check("Apple's badge with every cover, as Apple serves it (its alt), opening the song (songapple); its words if it doesn't load",
           f'<img src="{songs.BADGE_URL.replace("&", "&amp;")}" alt="Listen on Apple Music"' in badge
           and badge.count(f"pycmd('duecrew:songapple:dre|{KEY}')") == 2 and ">Listen on Apple Music</a>" in badge
           and "this.parentNode.nextElementSibling.hidden=false" in badge and "filter" not in badge)
     mine = card("me")
-    check("my card: ▶ 30 s, Change… (the search), Take it off (songclear), the badge (songapple:me)",
-          "data-find" in mine and f"pycmd('duecrew:songclear|{KEY}')" in mine and "songprev:me" in mine
+    check("my card: Change… (the search), Take it off (songclear), the badge (songapple:me)",
+          "data-find" in mine and f"pycmd('duecrew:songclear|{KEY}')" in mine and "songprev" not in mine
           and "songapple:me" in mine and "songlisten" not in mine)
 
 
@@ -324,7 +346,7 @@ def test_commands_through_on_js():
                                  "collectionName": "Lantern Hours", "releaseDate": "2025-02-01T00:00:00Z",
                                  "trackViewUrl": "https://music.apple.com/us/album/x/1?i=1701",
                                  "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/a/100x100bb.jpg"}]}
-    names = ("cfg", "save_cfg", "_redraw", "_get", "_open", "apple", "preview", "_today")
+    names = ("cfg", "save_cfg", "_redraw", "_get", "_open", "apple", "_today")
     saved = {k: getattr(SF, k) for k in names}
     saved_app = (A._bg, A.board_eval, A._state.get("entries"))
     send = lambda msg: dc._on_js(False, as_board("duecrew:" + msg), DeckBrowser())  # noqa: E731
@@ -335,7 +357,6 @@ def test_commands_through_on_js():
         SF._get = lambda url, stream=False: did.append(("get", url)) or Resp()
         SF._open = lambda s, key: did.append(("open", s["t"], key))
         SF.apple = lambda uid: did.append(("apple", uid))
-        SF.preview = lambda uid: did.append(("prev", uid))
         SF._today = lambda: "2026-11-02"
         A._bg = lambda job, done=None: done(job()) if done else job()
         A.board_eval = lambda js: did.append(("eval", js))
@@ -351,11 +372,16 @@ def test_commands_through_on_js():
         check("songuse: that song is mine, picked today", box["cfg"]["song"]["id"] == 1701 and box["cfg"]["song"]["at"] == "2026-11-02")
         did.clear()
         send("songlisten:dre")
-        send("songprev:dre")
-        send("songprev:me")
         send("songapple:dre")
-        check("songlisten, songprev (theirs and mine), songapple: each to song_flow, for whom",
-              did == [("open", "Second Wind", "spotify"), ("prev", "dre"), ("prev", "me"), ("apple", "dre")], did)
+        check("songlisten, songapple: each to song_flow, for whom",
+              did == [("open", "Second Wind", "spotify"), ("apple", "dre")], did)
+        did.clear()
+        send("songlisten:dre:youtube")
+        check("songlisten:<uid>:<app>, a card's row: that app kept, the song opened there, the cards drawn again",
+              box["cfg"]["music_app"] == "youtube" and did == [("open", "Second Wind", "youtube"), "redraw"], did)
+        did.clear()
+        send("songprev:dre")
+        check("songprev: no more (the preview's gone)", not did, did)
         for msg, k, want in (("songapp:youtube", "music_app", "youtube"), ("dancemotion:lively", "dance", "lively"),
                              ("dancehide", "dance_floor", False), ("danceshow", "dance_floor", True),
                              ("dancefold:1", "dance_folded", True), ("dancefold:0", "dance_folded", False)):
@@ -391,7 +417,7 @@ def test_every_command_has_its_route():
     routed = set(re.findall(r'"([a-z]+)"', re.search(r'elif cmd in \(("songsearch"[^)]*)\):', src).group(1)))
     flow = open(os.path.join(REPO, "due_crew", "song_flow.py")).read()
     handled = set(re.findall(r'cmd == "([a-z]+)"', flow)) | set(re.findall(r'"([a-z]+)"', " ".join(re.findall(r"cmd in \(([^)]*)\)", flow))))
-    want = {"songsearch", "songuse", "songclear", "songlisten", "songapp", "songprev", "songapple", "dancehide", "danceshow",
+    want = {"songsearch", "songuse", "songclear", "songlisten", "songapp", "songapple", "dancehide", "danceshow",
             "dancemotion", "dancefold"}
     check("every song and dance command on the page is routed to song_flow, which handles it",
           want <= emitted and emitted <= routed and routed <= handled,
@@ -416,7 +442,6 @@ def test_scripts_parse():
     window.dcFridge();
     window.dcDance.sync();
     window.dcSong.results({q: 'x', songs: []});
-    window.dcSong.playing('dre');
     console.log('ok');
     """.replace("JS", json.dumps(board.fridge_js()))
     node = subprocess.run(["node", "-"], input=probe, capture_output=True, text=True)

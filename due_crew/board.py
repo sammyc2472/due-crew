@@ -26,6 +26,7 @@ from .logo import board_mark
 from . import room_model
 from . import due as _D
 from . import closet as _closet, emoji_drawer as _emoji_drawer, fridge as _fridge, sev as _sev, shows as _shows
+from . import songs as _songs
 from .gamenight import GAMES as _GAMES
 from .backend.shapes import DOODLE_INKS, clean_doodle
 from .stats.decks import sig_match
@@ -6530,12 +6531,13 @@ DANCE_NW, DANCE_NH = 252, 196  # px: folded (a narrow window): the booth, one da
 DANCE_NARROW = 900  # px: the window's width under which it folds
 DANCE_BOARD = 1448  # px: under this the floor's corner reaches the board's (640 wide, centred): room after it
 DANCE_MAX = 6  # dancers; past it five, and "+N" in the sixth's place (never on top of one)
-DANCE_SLOT = 66  # px: a dancer's place; the back row sits half a place along, higher
+DANCE_SLOT = 66  # px: a dancer's place, counted from the booth (Sam: start by the DJ, then toward the middle);
+#   the back row sits half a place along, higher
 DANCE_PIP, DANCE_PIP_BACK, DANCE_DJ = 80, 70, 96  # px: the drawings (slot()'s size): front row, back row, the DJ
 DANCE_REST = 12  # s: dancing when the board draws, then resting (Pip's loops); pointing plays it on
 DANCE_TICK = 0.4  # s: half a beat (Lively steps a move every two)
 DANCE_SAY = 12  # ticks: each bubble's turn, about five seconds
-DANCE_BULBS = ("#f2c14e", "#ef6f6c", "#6cc4a1", "#6ea8fe")
+DANCE_AREA = DANCE_W - 150 - 10  # px: the dancers' room, left of the booth
 
 
 def _rgba(colour, a):
@@ -6576,14 +6578,12 @@ DANCE_CSS = """
 #dc-dance button:focus-visible, #dc-dance a:focus-visible, #dc-song button:focus-visible, #dc-song a:focus-visible {
   outline: 2px solid var(--dc-accent) !important; outline-offset: 2px; }
 #dc-dance .df-sc { position: absolute; inset: 0; }
-#dc-dance .df-lt { position: absolute; left: 0; top: 0; width: 100%; height: 40px; pointer-events: none; }
-#dc-dance .df-lt .bulb { opacity: .85; }
-#dc-dance .df-fl { position: absolute; left: -10px; right: 112px; bottom: 0; height: 104px; border-radius: 50%; pointer-events: none;
+#dc-dance .df-fl { position: absolute; left: var(--fl, -10px); right: 112px; bottom: 0; height: 104px; border-radius: 50%; pointer-events: none;
   background: radial-gradient(ellipse at 50% 45%, var(--df-glow), transparent 72%),
     repeating-conic-gradient(var(--df-check) 0 25%, transparent 0 50%) 0 0 / 20px 20px;
   -webkit-mask: radial-gradient(ellipse at center, #000 52%, transparent 71%); mask: radial-gradient(ellipse at center, #000 52%, transparent 71%); }
 #dc-dance .df-dn { position: absolute; left: 0; bottom: 4px; width: __AREA__px; height: 176px; }
-#dc-dance .dz { position: absolute; bottom: 0; left: calc(var(--x) * 1px); width: 60px; display: block; text-align: center;
+#dc-dance .dz { position: absolute; bottom: 0; right: calc(var(--x) * 1px); width: 60px; display: block; text-align: center;
   z-index: 2; color: var(--dc-ink); }
 #dc-dance .dz .dzb { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: auto; border-radius: 12px; }
 #dc-dance .dz.bk { bottom: 58px; z-index: 1; }
@@ -6608,9 +6608,9 @@ DANCE_CSS = """
 #dc-dance .bub .st { color: #d99a00; }
 #dc-dance .df-more, #dc-dance .df-ct { position: absolute; pointer-events: auto; border: 1px solid var(--dc-line); background: var(--dc-bg);
   color: var(--dc-ink); border-radius: 99px; font-size: 11.5px; font-weight: 700; line-height: 1.3; padding: 3px 10px; box-shadow: var(--df-sh); }
-#dc-dance .df-more { left: calc(var(--x) * 1px + 6px); bottom: 80px; }
-#dc-dance .df-ct { display: none; left: 66px; bottom: 26px; }
-#dc-dance .df-em { position: absolute; left: 0; bottom: 34px; max-width: 220px; font-size: 12px; color: var(--dc-muted); pointer-events: none;
+#dc-dance .df-more { right: calc(var(--x) * 1px + 6px); bottom: 80px; }
+#dc-dance .df-ct { display: none; right: 66px; bottom: 26px; }
+#dc-dance .df-em { position: absolute; right: 0; bottom: 34px; max-width: 220px; font-size: 12px; color: var(--dc-muted); pointer-events: none;
   background: var(--dc-bg); border: 1px solid var(--dc-line); border-radius: 10px; padding: 5px 10px; box-shadow: var(--df-sh); }
 /* the booth: my Pip behind the desk, the decks, my song's name under it */
 #dc-dance .df-bo { position: absolute; right: 0; bottom: 0; width: __BOOTH__px; height: 152px; pointer-events: auto; display: block; }
@@ -6624,10 +6624,10 @@ DANCE_CSS = """
 #dc-dance .df-bo .tag.no { border-color: var(--dc-line); color: var(--dc-muted); }
 #dc-dance .eqb { fill: var(--dc-accent); transform-box: fill-box; transform-origin: 50% 100%; transform: scaleY(.55); }
 #dc-dance .led { fill: var(--dc-accent); opacity: .5; }
-#dc-dance.playing .led { opacity: 1; }
+#dc-dance.dm-lively.go .led { opacity: 1; }
 #dc-dance .woof { transform-box: fill-box; transform-origin: 50% 50%; }
 #dc-dance .spin { transform-box: view-box; transform-origin: 0 0; opacity: 0; }
-#dc-dance.playing .spin { opacity: 1; }
+#dc-dance.dm-lively.go .spin { opacity: 1; }
 #dc-dance .df-x { position: absolute; right: 0; top: 42px; pointer-events: auto; width: 22px; height: 22px; border-radius: 50%;
   display: grid; place-items: center; color: var(--dc-muted); background: var(--dc-bg); border: 1px solid var(--dc-line);
   font-size: 15px; line-height: 1; text-decoration: none; opacity: 0; transition: opacity .2s; }
@@ -6669,6 +6669,14 @@ DANCE_CSS = """
 #dc-dance .bdg img, #dc-song .bdg img { display: block; height: 30px; width: auto; }
 #dc-dance .bdg a, #dc-song .bdg a { text-decoration: none; line-height: 0; }
 #dc-dance .bdg .bdt, #dc-song .bdg .bdt { line-height: 1.3; color: var(--dc-accent); font-size: 12px; font-weight: 700; }
+/* a card's foot: Apple's credit and its badge, set apart from Listen */
+#dc-dance .ft, #dc-song .ft { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  border-top: 1px solid var(--dc-line); padding-top: 8px; }
+#dc-dance .ft .cr, #dc-song .ft .cr { font-size: 11px; color: var(--dc-muted); }
+/* till I've picked my music app: the apps themselves, a tap picks one and opens the song there */
+#dc-dance .lsn { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+#dc-dance .lsn .lw { font-size: 12px; font-weight: 600; color: var(--dc-muted); margin-right: 2px; }
+#dc-dance .lsn .bt { border-radius: 99px; }
 #dc-dance .df-ls { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 280px; overflow: auto; }
 #dc-dance .df-ls button { width: 100%; display: flex; gap: 9px; align-items: center; text-align: left; border-radius: 8px; padding: 5px 6px; }
 #dc-dance .df-ls button:hover { background: var(--dc-well); }
@@ -6708,7 +6716,7 @@ DANCE_CSS = """
   #dc-dance { width: __NW__px; height: __NH__px; }
   #dc-dance .df-bo { width: 112px; height: 130px; }
   #dc-dance .df-bo .dj { bottom: 58px; transform: translateX(-50%) scale(.78); transform-origin: 50% 100%; }
-  #dc-dance .df-fl { right: 80px; }
+  #dc-dance .df-fl { left: 20px; right: 80px; }
   #dc-dance .df-dn { width: 130px; }
   #dc-dance .dz:not(.d0), #dc-dance .df-more { display: none; }
   #dc-dance .df-ct { display: block; }
@@ -6732,21 +6740,20 @@ DANCE_CSS = """
   #dc-dance.dm-lively.b3 .dz.go.v1 .pp { transform: rotate(6deg); }
   #dc-dance.dm-lively.b1 .dz.go.v2 .pp { transform: translateY(-7px); }
   #dc-dance.dm-lively.b1 .dj.go .pp, #dc-dance.dm-lively.b3 .dj.go .pp { transform: translateY(3px); }
-  #dc-dance.dm-lively.go .bulb, #dc-dance.playing:not(.dm-still) .bulb { animation: df-tw 1.1s ease-in-out var(--d) infinite alternate; }
-  @keyframes df-tw { from { opacity: .45; } to { opacity: 1; } }
-  #dc-dance.playing:not(.dm-still) .eqb { animation: df-eq .4s ease-in-out var(--d) infinite alternate; }
+  /* Lively: the booth plays along (the equaliser, the speakers, a glint round the decks) */
+  #dc-dance.dm-lively.go .eqb { animation: df-eq .4s ease-in-out var(--d) infinite alternate; }
   @keyframes df-eq { from { transform: scaleY(.3); } to { transform: scaleY(1); } }
-  #dc-dance.playing:not(.dm-still) .woof { animation: df-woof .4s ease-in-out infinite alternate; }
+  #dc-dance.dm-lively.go .woof { animation: df-woof .4s ease-in-out infinite alternate; }
   @keyframes df-woof { to { transform: scale(1.14); } }
-  #dc-dance.playing:not(.dm-still) .spin { animation: df-rot 1.8s linear infinite; }
+  #dc-dance.dm-lively.go .spin { animation: df-rot 1.8s linear infinite; }
   @keyframes df-rot { to { transform: rotate(360deg); } }
-  /* a song that's new to me: its dancer hops onto the floor, once */
+  /* a song that's new to me: its dancer hops onto the floor from the booth, once */
   #dc-dance .dz.fresh .hp { animation: df-hop .9s cubic-bezier(.2, .8, .3, 1.2) .4s both; }
-  @keyframes df-hop { from { transform: translate(-48px, -26px); opacity: 0; } 55% { transform: translate(0, -12px); opacity: 1; } to { transform: none; } }
+  @keyframes df-hop { from { transform: translate(48px, -26px); opacity: 0; } 55% { transform: translate(0, -12px); opacity: 1; } to { transform: none; } }
   #dc-dance:hover .sv { --sv-on: infinite; }
 }
 """.replace("__W__", str(DANCE_W)).replace("__H__", str(DANCE_H)).replace("__NW__", str(DANCE_NW)).replace(
-    "__NH__", str(DANCE_NH)).replace("__NARROW__", str(DANCE_NARROW - 1)).replace("__AREA__", str(DANCE_W - 150 - 10)).replace(
+    "__NH__", str(DANCE_NH)).replace("__NARROW__", str(DANCE_NARROW - 1)).replace("__AREA__", str(DANCE_AREA)).replace(
     "__BOOTH__", "150").replace("__FONT__", BOARD_FONT)
 
 
@@ -6758,19 +6765,6 @@ DANCE_RECORD = ('<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy=
                 '<circle cx="12" cy="12" r="4" style="fill:var(--dc-accent)"/><circle cx="12" cy="12" r="1" fill="#e8e8e8"/></svg>')
 
 
-def _dance_lights(w=DANCE_W):
-    """Party lights strung across the top: a garland of bulbs, each twinkling in its own time (Lively, or a preview on)."""
-    n = max(6, round(w / 28))
-    out = ""
-    for i in range(n):
-        t = (i + .5) / n
-        x, y = t * w, (1 - t) ** 2 * 4 + 2 * (1 - t) * t * 26 + t * t * 4
-        out += (f'<line x1="{x:.1f}" y1="{y:.1f}" x2="{x:.1f}" y2="{y + 3:.1f}" stroke="#5c6158" stroke-width="1.2"/>'
-                f'<circle class="bulb" style="--d:{-i * .31:.2f}s" cx="{x:.1f}" cy="{y + 6.5:.1f}" r="3.6" fill="{DANCE_BULBS[i % 4]}"/>')
-    return (f'<svg class="df-lt" viewBox="0 0 {w} 40" preserveAspectRatio="xMidYMin slice" aria-hidden="true">'
-            f'<path d="M0 4 Q{w / 2:g} 48 {w} 4" fill="none" stroke="#5c6158" stroke-width="1"/>{out}</svg>')
-
-
 def _dance_speaker(x):
     return (f'<g><rect x="{x}" y="40" width="18" height="54" rx="4.5" fill="#232622" stroke="#3a3e38" stroke-width=".8"/>'
             f'<circle cx="{x + 9}" cy="50" r="2.6" fill="#0f100f"/>'
@@ -6779,7 +6773,7 @@ def _dance_speaker(x):
 
 
 def _dance_deck(cx, label):
-    """A deck seen from the front: the platter, my song's label, the arm; a glint that goes round while a preview plays."""
+    """A deck seen from the front: the platter, my song's label, the arm; a glint that goes round when it's Lively."""
     return (f'<ellipse cx="{cx}" cy="31" rx="20" ry="5.8" fill="#141514" stroke="#343832" stroke-width=".8"/>'
             f'<ellipse cx="{cx}" cy="31" rx="13.5" ry="3.8" fill="none" stroke="#2b2e2a" stroke-width=".7"/>'
             f'<ellipse cx="{cx}" cy="31" rx="5.6" ry="1.7" fill="{label}"/>'
@@ -6789,7 +6783,7 @@ def _dance_deck(cx, label):
 
 def dance_booth_svg(song=None):
     """The DJ booth (the mock's, redrawn): a dark desk with two decks and a mixer, a speaker each side, and an
-    equaliser in my colour that dances while a preview plays. My song's colour on the decks' labels."""
+    equaliser in my colour that plays along when it's Lively. My song's colour on the decks' labels."""
     label = f"hsl({_dance_hue((song or {}).get('al') or (song or {}).get('t'))} 62% 56%)" if song else "#d9d2c3"
     hs = (10, 17, 23, 14, 25, 19, 12, 21, 9)
     bars = "".join(f'<rect class="eqb" style="--d:{-i * .17:.2f}s" x="{36 + i * 9.6:.1f}" y="{79 - h}" width="6" height="{h}" rx="2"/>'
@@ -6836,27 +6830,33 @@ def _dance_cover(song, size=64):
 def _dance_badge(who):
     """Apple's "Listen on Apple Music" badge, as Apple serves it, opening the song on Apple Music
     (duecrew:songapple); when the image doesn't load, the same words as a link."""
-    from . import songs as _songs
     cmd = _pycmd(f"songapple:{who}")
     return (f'<span class="bdg"><a href="#" title="Listen on Apple Music" onclick="{cmd}">'
-            f'<img src="{_html.escape(_songs.BADGE_URL)}" alt="Listen on Apple Music" height="30" loading="lazy" '
+            f'<img src="{_html.escape(_songs.BADGE_URL)}" alt="Listen on Apple Music" height="{_songs.BADGE_H}" loading="lazy" '
             f'onerror="this.parentNode.hidden=true;this.parentNode.nextElementSibling.hidden=false"></a>'
             f'<a class="bdt" href="#" hidden onclick="{cmd}">Listen on Apple Music</a></span>')
 
 
 def _dance_listen(who, view):
     """Listen in my music app, by its name ("Listen in Spotify"; another app: the title and artist, copied).
-    Before I've said which app, just Listen: the first time, song_flow asks which. Changing it is Settings'."""
-    from . import songs as _songs
+    Till I've said which app (Sam, after the click test: "I was never offered"), the card's own row of them:
+    "Listen in" Apple Music · Spotify · YouTube Music · Other, a tap picking it for this computer and opening
+    the song there (songlisten:<uid>:<app>). Settings changes it."""
     app = view.get("app") if view.get("app") in dict(_songs.APPS) else ""
-    word = ("Listen" if not app else "Copy title and artist" if app == "other"
-            else f"Listen in {_html.escape(_songs.app_name(app))}")
-    return f'<button type="button" class="bt pri" onclick="{_pycmd("songlisten:" + who)}">{word}</button>'
+    if app:
+        word = "Copy title and artist" if app == "other" else f"Listen in {_html.escape(_songs.app_name(app))}"
+        return f'<button type="button" class="bt pri" onclick="{_pycmd("songlisten:" + who)}">{word}</button>'
+    short = {"other": "Other"}
+    tip = {"other": "Copies the title and artist"}
+    apps = "".join(f'<button type="button" class="bt" title="{tip.get(k, "Opens it in " + n)}" '
+                   f'onclick="{_pycmd(f"songlisten:{who}:{k}")}">{short.get(k, n)}</button>' for k, n in _songs.APPS)
+    return f'<div class="lsn" role="group" aria-label="Listen in"><span class="lw">Listen in</span>{apps}</div>'
 
 
 def _dance_card(who, song, view, name=""):
-    """A song's card: its cover, title, artist · album · year, ▶ its 30 seconds (■ Stop while it plays), Listen in
-    my app, and Apple's badge beside its cover. Mine: Change… and Take it off instead of Listen."""
+    """A song's card: its cover, title, artist · album · year, Listen in my app (till I've picked one, the apps
+    themselves, a row of their own), and at its foot Apple's credit and badge (songs.py: Apple's terms for a
+    cover). Mine: Change… and Take it off instead of Listen."""
     e = _html.escape
     mine = who == "me"
     head = ("&#9834; Your song of the moment &middot; on your crew&rsquo;s Decks screens" if mine
@@ -6864,19 +6864,19 @@ def _dance_card(who, song, view, name=""):
     when = _dance_when(song.get("at"))
     if when and not mine:
         head += f" &middot; {when}"
-    on = view.get("playing") == who
-    prev = (f'<button type="button" class="bt pv" data-u="{e(who)}" aria-pressed="{"true" if on else "false"}" '
-            f'onclick="{_pycmd("songprev:" + who)}">{"&#9632; Stop" if on else "&#9654;&#xFE0E; 30 s"}</button>' if song.get("prev") else "")
+    row = ""
     if mine:
-        acts = (prev + '<button type="button" class="bt pri" data-find>Change&hellip;</button>'
+        acts = ('<button type="button" class="bt pri" data-find>Change&hellip;</button>'
                 f'<button type="button" class="bt" onclick="{_pycmd("songclear")}">Take it off</button>')
     else:
-        acts = prev + _dance_listen(who, view)
+        listen = _dance_listen(who, view)
+        acts, row = ("", listen) if listen.startswith('<div class="lsn"') else (listen, "")
     label = "Your song" if mine else f"{name}’s song"
     return (f'<div class="df-pop" data-card="{e(who)}" role="dialog" aria-label="{e(label)}" hidden>'
             f'<div class="ph"><span>{head}</span><button type="button" class="x" data-close aria-label="Close">&times;</button></div>'
             f'<div class="sg">{_dance_cover(song)}<div class="tx"><b>{e(song["t"])}</b><span class="mt">{_dance_line(song)}</span>'
-            f'<span class="acts">{acts}</span></div></div>{_dance_badge(who)}</div>')
+            f'{f"<span class=acts>{acts}</span>" if acts else ""}</div></div>{row}'
+            f'<div class="ft"><span class="cr">{e(_songs.CREDIT)}</span>{_dance_badge(who)}</div></div>')
 
 
 def _dance_list(crew):
@@ -6942,23 +6942,23 @@ def _dance_keys(view, cfg):
     scene = _json.dumps([crew, view.get("me"), bool(view.get("pip", True)), view.get("motion"), my_look(cfg),
                          cfg.get("theme", "auto"), cfg.get("accent", DEFAULT_ACCENT)], sort_keys=True, default=str)
     k = hashlib.sha1(scene.encode()).hexdigest()[:12]
-    c = hashlib.sha1(_json.dumps([k, view.get("app"), view.get("playing")]).encode()).hexdigest()[:12]
+    c = hashlib.sha1(_json.dumps([k, view.get("app")]).encode()).hexdigest()[:12]
     return k, c
 
 
 def dance_html(view, cfg):
     """3.9.6, song of the moment: the dance floor for the Decks screen's corner, from song_flow.floor_view
-    ({me, crew: [{uid, name, accent, look, song, fresh}], motion, app, playing, pip}); "" when it's None. A
+    ({me, crew: [{uid, name, accent, look, song, fresh}], motion, app, pip, folded}); "" when it's None. A
     <template> in the board (and the room it needs after the board, while the two would meet), which dance_js
-    puts on the page as #dc-dance. Up to DANCE_MAX dancers, newest first, then "+N" (the whole list) in the
-    last one's place; on a narrow window, the booth, one dancer and a count. Folded (Sam's "collapse": the
-    view's folded, the page's own fold at once, dancefold), a chip in the corner: a record, how many songs, a
-    star when one's new; × hides it (dancehide). Every word in it is theirs or Apple's: escaped here, and
+    puts on the page as #dc-dance. Up to DANCE_MAX dancers, newest first, the first beside the booth and the
+    rest toward the middle (the checkered floor under just them), then "+N" (the whole list) in the last
+    one's place; on a narrow window, the booth, one dancer and a count. No lights (Sam: distracting).
+    Folded (Sam's "collapse": the view's folded, the page's own fold at once, dancefold), a chip in the
+    corner: a record, how many songs, a star when one's new; × hides it (dancehide). Every word in it is theirs or Apple's: escaped here, and
     only cleaned songs (songs.clean) are drawn. Each click a keyed command, or a card's, the list's, the
     fold's or the search's opening (dance_js)."""
     if not view:
         return ""
-    from . import songs as _songs
     me = _songs.clean(view.get("me"))
     crew = []
     for p in view.get("crew") or []:
@@ -6989,7 +6989,6 @@ def dance_html(view, cfg):
              f'<span class="tag{"" if me else " no"}">{"&#9834; " + e(me["t"]) if me else "No song yet"}</span></button>')
     cards = ("".join(_dance_card(p["uid"], p["song"], view, p["name"]) for p in crew)
              + (_dance_card("me", me, view) if me else "") + (_dance_list(crew) if crew else ""))
-    play = view.get("playing") if view.get("playing") in ["me"] + [p["uid"] for p in crew] else ""
     # each crewmate in their colour, by day or by night as the board (one selector a call: _by_theme prefixes it)
     tones = "\n".join(_by_theme(cfg, sel, "--sv-a: var(--fa-l);", "--sv-a: var(--fa-d);")
                        for sel in ("#dc-dance .dz", "#dc-dance .df-ls button"))
@@ -6999,11 +6998,14 @@ def dance_html(view, cfg):
             f'aria-label="Open the dance floor{f": {n} song" + ("" if n == 1 else "s") if n else ""}">{DANCE_RECORD}'
             f'<span>&#9834;{f" {n}" if n else ""}</span>'
             f'{"<b class=st>&#9733;</b>" if any(p.get("fresh") for p in crew) else ""}</button>')
-    floor = (f'<div id="dc-dance" class="dm-{motion}{" playing" if play else ""}{" fold" if folded else ""}" data-k="{key}" data-c="{cards_key}" '
-             f'data-me="{1 if me else 0}" data-play="{e(play)}" data-badge="{e(_songs.BADGE_URL)}" '
+    # the floor under the dancers there are: from the farthest one's left, less a little
+    xs = [(i - 3) * DANCE_SLOT + DANCE_SLOT // 2 if i >= 3 else i * DANCE_SLOT for i in range(len(shown) + many)]
+    fl = max(-10, DANCE_AREA - max(xs) - 60 - 24) if xs else -10
+    floor = (f'<div id="dc-dance" class="dm-{motion}{" fold" if folded else ""}" data-k="{key}" data-c="{cards_key}" '
+             f'data-me="{1 if me else 0}" data-badge="{e(_songs.BADGE_URL)}" '
              f'role="group" aria-label="Your crew&rsquo;s songs">'
              f'<style>{_dance_tokens(cfg, "#dc-dance")}\n{_dance_tokens(cfg, "#dc-song")}\n{tones}</style>'  # DANCE_CSS: dance_js's
-             f'<div class="df-sc">{_dance_lights()}<div class="df-fl"></div><div class="df-dn">{dancers}</div>{booth}'
+             f'<div class="df-sc"><div class="df-fl" style="--fl:{fl}px"></div><div class="df-dn">{dancers}</div>{booth}'
              f'<button type="button" class="df-fd" data-fold="1" title="Fold it into the corner" aria-label="Fold the dance floor">'
              f'<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 L6 8 L9.5 4.5" fill="none" stroke="currentColor" '
              f'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>'
@@ -7020,11 +7022,11 @@ def dance_html(view, cfg):
 
 # The floor on the page: built from the board's <template> when what it's drawn from changed, else left as it
 # is (dancing or resting, a card open); its cards alone redrawn when only they changed. Dancing: DANCE_REST
-# seconds when it's drawn, then rest; pointing at it plays it on, a preview keeps it going; Still and Reduce
+# seconds when it's drawn, then rest; pointing at it plays it on; Still and Reduce
 # motion, never. Gentle sways (CSS), each Pip finishing the sway it's in when the floor rests, so nothing
 # jumps; Lively steps a move every beat (.b1, .b3), in place, never drawing a Pip again (a redraw on each
 # beat swallowed clicks in the mock). One bubble at a time, its turn passed along. The search's songs come
-# back as dcSong.results({q, songs, error}) and a preview's start and end as dcSong.playing(uid): words as
+# back as dcSong.results({q, songs, error}): words as
 # text, a cover only from Apple's image host.
 DANCE_JS = r"""
 window.dcDance = window.dcDance || (function () {
@@ -7065,7 +7067,7 @@ window.dcDance = window.dcDance || (function () {
         var f = floor();
         if (!f) { clearInterval(S.timer); S.timer = null; return; }
         S.n++;
-        var on = !folded(f) && !still(f) && (S.hover || f.classList.contains('playing') || Date.now() < S.restAt);
+        var on = !folded(f) && !still(f) && (S.hover || Date.now() < S.restAt);
         if (on) {
             if (!f.classList.contains('go')) { f.classList.add('go'); each(f, '.dz, .dj', function (d) { d.classList.add('go'); }); }
             if (f.classList.contains('dm-lively') && S.n % 2 === 0) { S.beat = (S.beat + 1) % 4; beat(f, S.beat); }
@@ -7160,7 +7162,6 @@ window.dcDance = window.dcDance || (function () {
                 S.open = null;
                 if (open) { show(open, true); S.was = was; }
             }
-            playing(src.getAttribute('data-play') || '');
             return;
         }
         look();
@@ -7213,20 +7214,6 @@ window.dcDance = window.dcDance || (function () {
         var f = floor();
         if (S.open && f && !f.contains(e.target) && !S.sheet && !document.getElementById('dc-sheet')) { close(); }
     }, true);
-    // a preview started or ended (song_flow): ■ Stop on its card, the booth's decks turning, the floor dancing on
-    function playing(uid) {
-        var f = floor();
-        uid = String(uid || '');
-        if (!f) { return; }
-        f.setAttribute('data-play', uid);
-        f.classList.toggle('playing', !!uid);
-        each(f, '.pv', function (b) {
-            var on = !!uid && b.getAttribute('data-u') === uid;
-            b.textContent = on ? '\u25A0 Stop' : '\u25B6\uFE0E 30 s';
-            b.setAttribute('aria-pressed', on ? 'true' : 'false');
-        });
-        if (uid) { wake(); }
-    }
     // ---- my song: Apple's catalog, searched as I type ----
     function hue(w) { var h = 0; for (var i = 0; i < w.length; i++) { h = (h + (i + 1) * w.charCodeAt(i)) % 360; } return h; }
     function cover(song, size) {
@@ -7247,7 +7234,7 @@ window.dcDance = window.dcDance || (function () {
     function badge(src) {  // Apple's, as served; its words when it doesn't load
         var b = el('span', 'bdg'), img = el('img'), t = el('span', 'bdt', 'Listen on Apple Music');
         img.alt = 'Listen on Apple Music';
-        img.height = 30;
+        img.height = __BADGE_H__;
         t.hidden = true;
         img.addEventListener('error', function () { img.hidden = true; t.hidden = false; });
         img.src = src;
@@ -7285,7 +7272,8 @@ window.dcDance = window.dcDance || (function () {
         ls.setAttribute('aria-label', 'Songs');
         card.appendChild(st);
         card.appendChild(ls);
-        if (src) {  // Apple's badge beside the covers: the picked song's page (or the first's)
+        card.appendChild(el('div', 'sn', 'Your crew sees it on their Decks screens. The search goes from this computer to Apple Music.'));
+        if (src) {  // at the foot, Apple's credit and badge beside the covers: the picked song's page (or the first's)
             var bd = badge(src), apple = function () {
                 var s2 = S.sheet, id = s2 && (s2.picked || (s2.rows[0] && s2.rows[0].getAttribute('data-id')));
                 if (id && /^\d{1,16}$/.test(id)) { send('songapple:' + id); }
@@ -7296,9 +7284,11 @@ window.dcDance = window.dcDance || (function () {
             bd.style.cursor = 'pointer';
             bd.addEventListener('click', apple);
             bd.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); apple(); } });
-            card.appendChild(bd);
+            var cf = el('div', 'ft');
+            cf.appendChild(el('span', 'cr', __CREDIT__));
+            cf.appendChild(bd);
+            card.appendChild(cf);
         }
-        card.appendChild(el('div', 'sn', 'Your crew sees it on their Decks screens. The search goes from this computer to Apple Music.'));
         var ft = el('div', 'sf'), go = el('button', 'go', 'Use this'), off = mine ? el('button', 'no', 'Take it off') : null,
             no = el('button', 'no', 'Cancel');
         go.type = no.type = 'button';
@@ -7412,8 +7402,8 @@ window.dcDance = window.dcDance || (function () {
         s.back.remove();  // motion.js takes it out its own way, when it brought it in
         focus(s.was);
     }
-    window.dcSong = { results: results, playing: playing };
-    return { sync: sync, show: show, close: close, search: search, wake: wake, fold: fold, playing: playing, results: results };
+    window.dcSong = { results: results };
+    return { sync: sync, show: show, close: close, search: search, wake: wake, fold: fold, results: results };
 })();
 (function () {  // the board's draw calls the fridge (fridge_js): the floor is put in step with it, first
     var f = window.dcFridge;
@@ -7423,7 +7413,8 @@ window.dcDance = window.dcDance || (function () {
     }
 })();
 """.replace("__REST__", str(DANCE_REST * 1000)).replace("__TICK__", str(round(DANCE_TICK * 1000))).replace(
-    "__SAY__", str(DANCE_SAY)).replace("__CSS__", _json.dumps(DANCE_CSS).replace("</", "<\\/"))
+    "__SAY__", str(DANCE_SAY)).replace("__BADGE_H__", str(_songs.BADGE_H)).replace("__CREDIT__", _json.dumps(_songs.CREDIT)).replace(
+    "__CSS__", _json.dumps(DANCE_CSS).replace("</", "<\\/"))
 
 
 def dance_js(scripts=True):
@@ -8325,7 +8316,6 @@ def _heat_level(n):
 def _profile_song(profile):
     """3.9.6: their song of the moment on their card, "♪ Title · Artist", with Listen (in my music app); on
     mine, Change, which opens the search. The song as songs.clean has it, escaped here; "" with none."""
-    from . import songs as _songs
     song = _songs.clean(profile.get("song"))
     if not song:
         return ""

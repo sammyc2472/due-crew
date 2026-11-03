@@ -745,8 +745,7 @@ class FakeWorker:
             m = re.match(r"^https://([^/?#:@]+)(:443)?([/?#]|$)", x)
             return x if m and re.fullmatch(host, m.group(1).lower()) else None
 
-        hosts = {"url": r"(music|itunes|geo\.music)\.apple\.com", "art": r"([a-z0-9-]+\.)*mzstatic\.com",
-                 "prev": r"([a-z0-9-]+\.)*(mzstatic\.com|itunes\.apple\.com)"}
+        hosts = {"url": r"(music|itunes|geo\.music)\.apple\.com", "art": r"([a-z0-9-]+\.)*mzstatic\.com"}
         t, a, url, i = text(v.get("t")), text(v.get("a")), link(v.get("url"), hosts["url"]), v.get("id")
         if not (t and a and url) or isinstance(i, bool) or not isinstance(i, int) or not 0 < i < 2 ** 53:
             return None
@@ -755,9 +754,8 @@ class FakeWorker:
             out["al"] = text(v.get("al"))
         if isinstance(v.get("y"), int) and not isinstance(v.get("y"), bool) and 1900 <= v["y"] <= 2100:
             out["y"] = v["y"]
-        for k in ("art", "prev"):
-            if link(v.get(k), hosts[k]):
-                out[k] = v[k]
+        if link(v.get("art"), hosts["art"]):
+            out["art"] = v["art"]
         if isinstance(v.get("at"), str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", v["at"]):
             out["at"] = v["at"]
         return out
