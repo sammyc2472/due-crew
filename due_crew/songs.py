@@ -5,16 +5,18 @@ the catalog's answer holds, and where Listen goes in each music app.
 
 A song is {"t": title, "a": artist, "id": the catalog's track id, "url": its
 page on Apple Music} and, when there, "al" album, "y" year, "art" its cover,
-"prev" its 30-second preview, "at" the day it was picked. Only Apple's hosts
-for its links (the Worker's songOf in worker/src/board.ts holds to the same,
-and tests/fakes.py restates it); strings short, no control characters.
+"at" the day it was picked. Only Apple's hosts for its links (the Worker's
+songOf in worker/src/board.ts holds to the same, and tests/fakes.py restates
+it); strings short, no control characters.
 
-Apple's rule for its covers and previews (performance-partners.apple.com,
-Search API): they promote the song, next to Apple's own "Listen on Apple
-Music" badge, its artwork unaltered. So wherever a cover or a preview is
-shown, BADGE_URL is shown with it, linked to the song's page. Spotify and
-YouTube Music get a search link and nothing of theirs is shown, so they ask
-nothing of us.
+Apple's terms for the Search API's covers and previews: they promote the
+song, beside Apple's own badge linking to it, credited ("courtesy of"), and
+a preview only ever streamed, never downloaded or kept. Anki's web view
+can't play Apple's audio and its player can't stream a link, so there are
+no previews (Sam's pick, after the click test); every cover sits on a card
+whose foot credits Apple (CREDIT; the search sheet's, CREDIT_SEARCH) beside
+BADGE_URL, linked to the song's page, at Apple's 30 px digital minimum. Spotify and YouTube Music get
+a search link and nothing of theirs is shown, so they ask nothing of us.
 
 Due Crew never knows what anyone is actually listening to: only the song
 they chose to show."""
@@ -31,7 +33,6 @@ QUERY_MAX = 80
 _HOSTS = {
     "url": re.compile(r"^(music|itunes|geo\.music)\.apple\.com$"),
     "art": re.compile(r"^([a-z0-9-]+\.)*mzstatic\.com$"),
-    "prev": re.compile(r"^([a-z0-9-]+\.)*(mzstatic\.com|itunes\.apple\.com)$"),
 }
 _CTRL = re.compile(r"[\x00-\x1f\x7f]")
 _DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -41,6 +42,10 @@ MOTIONS = ("gentle", "lively", "still")
 
 # Apple's own badge, as its marketing tools serve it (never redrawn or altered)
 BADGE_URL = "https://tools.applemediaservices.com/api/badges/listen-on-apple-music/badge/en-us?size=250x83"
+BADGE_H = 30  # px: Apple's smallest on a screen
+# the credit Apple asks for, saying what it gave (Sam): a song's card, and the search sheet
+CREDIT = "Song and cover courtesy of Apple Music"
+CREDIT_SEARCH = "Song search courtesy of Apple Music"
 SEARCH_URL = "https://itunes.apple.com/search"
 
 
@@ -83,10 +88,9 @@ def clean(v):
     y = v.get("y")
     if isinstance(y, int) and not isinstance(y, bool) and 1900 <= y <= 2100:
         out["y"] = y
-    for k in ("art", "prev"):
-        u = _url(v.get(k), k)
-        if u:
-            out[k] = u
+    art = _url(v.get("art"), "art")
+    if art:
+        out["art"] = art
     at = v.get("at")
     if isinstance(at, str) and _DAY.match(at):
         out["at"] = at
@@ -126,7 +130,7 @@ def parse(data):
         y = int(rd[:4]) if rd[:4].isdigit() else None
         s = clean({"t": r.get("trackName"), "a": r.get("artistName"), "al": r.get("collectionName"),
                    "y": y, "id": r.get("trackId"), "url": r.get("trackViewUrl"),
-                   "art": _cover(r.get("artworkUrl100")), "prev": r.get("previewUrl")})
+                   "art": _cover(r.get("artworkUrl100"))})
         if s and s["id"] not in seen:
             seen.add(s["id"])
             out.append(s)

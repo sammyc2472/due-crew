@@ -257,11 +257,13 @@ describe("friendship consent unchanged", () => {
     const mine = async (p: P) => (await p.call("GET", "/board")).body.me;
     const song = { t: "Lantern Hours", a: "Mira Vale", al: "Lantern Hours", y: 2025, id: 1700000001,
       url: "https://music.apple.com/us/album/lantern-hours/1700000000?i=1700000001",
-      art: "https://is1-ssl.mzstatic.com/image/thumb/Music/x/300x300bb.jpg",
-      prev: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview/x/mzaf_1.plus.aac.p.m4a", at: "2026-11-02" };
+      art: "https://is1-ssl.mzstatic.com/image/thumb/Music/x/300x300bb.jpg", at: "2026-11-02" };
     expect((await seen(dave, "alice")).song, "song: none saved, none sent").toBeUndefined();
     await save(alice, song);
     expect((await seen(dave, "alice")).song, "song: a mutual friend reads it whole").toEqual(song);
+    await save(alice, { ...song, prev: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview/x/mzaf_1.plus.aac.p.m4a" });
+    expect((await seen(dave, "alice")).song, "song: never a preview (Apple's terms: streamed only; 3.9.6 shows none)").toEqual(song);
+    await save(alice, song);
     expect((await mine(alice)).song, "song: mine comes back on me, the same").toEqual(song);
     expect((await mine(dave)).song, "song: only mine").toBeUndefined();
     await befriend(carol, alice);
@@ -276,7 +278,7 @@ describe("friendship consent unchanged", () => {
     await save(alice, { ...song, id: "1" });
     expect((await seen(dave, "alice")).song, "song: the catalog's id as a number").toBeUndefined();
     await save(alice, { ...song, art: "https://evil.example/a.jpg", prev: "javascript:alert(1)", al: "a\u0007b", y: 3000, at: "soon" });
-    expect((await seen(dave, "alice")).song, "song: a cover, preview, album, year or day that doesn't hold is dropped, the rest kept")
+    expect((await seen(dave, "alice")).song, "song: a cover, album, year or day that doesn't hold is dropped, the rest kept")
       .toEqual({ t: song.t, a: song.a, id: song.id, url: song.url });
     await save(alice, null);
     expect((await seen(dave, "alice")).song, "song: taken off, none sent").toBeUndefined();

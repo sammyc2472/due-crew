@@ -1,11 +1,13 @@
-"""Song of the moment's glue (3.9.6): the catalog search, my pick, a
-song's preview, Listen in my music app, and the dance floor's view (the
-board draws it: board.py, the Decks screen's bottom-right corner).
+"""Song of the moment's glue (3.9.6): the catalog search, my pick, Listen
+in my music app, and the dance floor's view (the board draws it: board.py,
+the Decks screen's bottom-right corner). No previews: Apple's terms stream
+them only, and Anki can't (songs.py).
 
 What's mine: my song is an account key ("song", account.ACCOUNT_KEYS): it
 rides my settings and reaches my mutual friends on their /board, as my
 Pip's look does. This computer's: the floor on or off ("dance_floor"), its
-motion ("dance": gentle, lively, still), my music app ("music_app"), and
+motion ("dance": gentle, lively, still), my music app ("music_app": picked
+on a song's card the first time, or in Settings), and
 folded down to its chip or open ("dance_folded"), and which crewmates' songs
 I've seen ("song_seen", so a new one hops in once).
 
@@ -14,8 +16,6 @@ catalog (no account, no key), on typing that's paused; picking a song is
 the account's one save. Nothing about what anyone is listening to is ever
 read: the bubble is the song they chose. Main thread except the HTTP."""
 
-import os
-import tempfile
 import traceback
 import urllib.parse
 
@@ -25,11 +25,9 @@ from . import app, songs
 from .app import cfg, save_cfg
 
 TIMEOUT = 8
-PREVIEW_MAX = 2_000_000  # bytes: a 30-second preview is about half a megabyte
 SEEN_KEY = "song_seen"
 
 _last = {"q": "", "songs": {}}  # the last search: what Use this picks from
-_play = {"uid": "", "path": "", "want": "", "hooked": False}
 
 
 # ---- what's what ----
@@ -86,8 +84,7 @@ def floor_view(entries, c):
                          "look": list(e.get("look") or []), "song": s,
                          "fresh": seen is not None and uid in seen and seen[uid] != sigs[uid]})
     return {"me": mine(c), "crew": songs.newest_first(crew), "motion": motion(c), "app": app_key(c),
-            "playing": _play["uid"], "pip": bool(c.get("sev", True)), "folded": bool(c.get("dance_folded")),
-            "_seen": sigs}
+            "pip": bool(c.get("sev", True)), "folded": bool(c.get("dance_folded")), "_seen": sigs}
 
 
 def mark_seen(view):
@@ -103,7 +100,8 @@ def mark_seen(view):
 # ---- the commands the board sends ----
 
 def on_message(cmd, parts):
-    """The board's song and dance commands (songsearch, songuse, ..., dancemotion). True when handled."""
+    """The board's song and dance commands (songsearch, songuse, ..., dancemotion). True when handled.
+    songlisten:<uid>[:<app>]: a card's own row of apps names the one picked (kept, then opened)."""
     arg = parts[2] if len(parts) > 2 else ""
     if cmd == "songsearch":
         search(urllib.parse.unquote(arg))
@@ -112,13 +110,12 @@ def on_message(cmd, parts):
     elif cmd == "songclear":
         clear()
     elif cmd == "songlisten" and arg:
-        listen(arg)
+        pick = parts[3] if len(parts) > 3 else ""
+        listen(arg, pick if pick in dict(songs.APPS) else "")
     elif cmd == "songapp" and arg in dict(songs.APPS):
         set_app(arg)
     elif cmd == "songapp" and arg == "ask":
         set_app("")  # Settings' "Ask me the first time": the next Listen asks again
-    elif cmd == "songprev" and arg:
-        preview(arg)
     elif cmd == "songapple" and arg:
         apple(arg)
     elif cmd in ("dancehide", "danceshow"):
@@ -228,10 +225,20 @@ def set_app(key):
     _set("music_app", key)
 
 
-def listen(uid):
-    """Open a song in my music app; the first time, ask which app that is."""
+def listen(uid, pick=""):
+    """Open a song in my music app. pick: the app tapped on the song's card
+    (its row of apps, till I've picked one), kept for Listen from now on and
+    opened. Without one, and none kept (the profile card's Listen), ask."""
     s = song_of(uid)
     if not s:
+        return
+    if pick:
+        c = cfg()
+        if c.get("music_app") != pick:
+            c["music_app"] = pick
+            save_cfg(c)
+        _open(s, pick)
+        _redraw()  # the card says "Listen in …" now (only its cards change: it stays open)
         return
     a = app_key()
     if a:
@@ -273,96 +280,3 @@ def apple(uid):
     if s:
         from aqt.utils import openLink
         openLink(s["url"])
-
-
-# ---- the preview: Apple's 30 seconds, through Anki's own player ----
-
-def preview(uid):
-    """Play a song's preview, or stop the one playing. Anki's web view can't
-    play Apple's AAC, so it's fetched to a file and Anki's player plays it."""
-    if _play["uid"] == uid:
-        stop_preview()
-        return
-    s = song_of(uid)
-    if not s or not s.get("prev"):
-        from aqt.utils import tooltip
-        tooltip("No preview for this one.")
-        return
-    stop_preview()
-    _play["want"] = uid  # the latest ▶ wins: an earlier one still loading doesn't play
-    gen = app.generation
-    path = os.path.join(tempfile.gettempdir(), f"duecrew-preview-{s['id']}.m4a")
-
-    def job():
-        if os.path.exists(path) and os.path.getsize(path) > 0:
-            return path
-        try:
-            r = _get(s["prev"], stream=True)
-            if r.status_code != 200:
-                return None
-            got = b""
-            for chunk in r.iter_content(65536):
-                got += chunk
-                if len(got) > PREVIEW_MAX:
-                    return None
-            with open(path, "wb") as f:
-                f.write(got)
-            return path
-        except Exception as e:
-            print(f"due crew: song preview: {type(e).__name__}")
-            return None
-
-    def done(p):
-        if gen != app.generation or _play["want"] != uid:
-            return
-        _play["want"] = ""
-        if not p:
-            from aqt.utils import tooltip
-            tooltip("The preview didn't load.")
-            return
-        _play.update(uid=uid, path=p)
-        _hook()
-        try:
-            from aqt.sound import av_player
-            av_player.play_file(p)
-        except Exception:
-            traceback.print_exc()
-            _play.update(uid="", path="")
-        _playing()
-
-    app._bg(job, done)
-
-
-def stop_preview():
-    _play["want"] = ""
-    if not _play["uid"]:
-        return
-    _play.update(uid="", path="")
-    try:
-        from aqt.sound import av_player
-        av_player.stop_and_clear_queue()
-    except Exception:
-        traceback.print_exc()
-    _playing()
-
-
-def _playing():
-    import json
-    app.board_eval("window.dcSong&&dcSong.playing(" + json.dumps(_play["uid"]) + ")")
-
-
-def _ended(*_args):
-    if _play["uid"]:
-        _play.update(uid="", path="")
-        _playing()
-
-
-def _hook():
-    if _play["hooked"]:
-        return
-    try:
-        from aqt import gui_hooks
-        gui_hooks.av_player_did_end_playing.append(_ended)
-        _play["hooked"] = True
-    except Exception:
-        traceback.print_exc()

@@ -1,10 +1,10 @@
 """Song of the moment (3.9.6): what a song is (songs.py), the catalog's
 answer, Listen's links, the Worker's rule restated by the fake, the account
 key, a mutual friend's song on my board's entries, and the glue
-(song_flow.py): search, Use this, Take it off, Listen (asking the app the
-first time), Apple's page, the preview through Anki's player, the floor's
-view (fresh once, off, motion) and its settings. Standard library only:
-python3 tests/test_songs.py."""
+(song_flow.py): search, Use this, Take it off, Listen (the app picked on a
+card's row, or asked from the profile card), Apple's page, no preview (Apple
+streams them only), the floor's view (fresh once, off, motion) and its
+settings. Standard library only: python3 tests/test_songs.py."""
 
 import copy
 import os
@@ -35,14 +35,14 @@ def check(name, cond, detail=""):
 SONG = {"t": "Lantern Hours", "a": "Mira Vale", "al": "Lantern Hours", "y": 2025, "id": 1700000001,
         "url": "https://music.apple.com/us/album/lantern-hours/1700000000?i=1700000001",
         "art": "https://is1-ssl.mzstatic.com/image/thumb/Music/x/300x300bb.jpg",
-        "prev": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview/x/mzaf_1.plus.aac.p.m4a",
         "at": "2026-11-02"}
+PREV = "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview/x/mzaf_1.plus.aac.p.m4a"
 
 # the catalog's answer, as Apple's Search API documents it (made-up songs)
 CATALOG = {"resultCount": 4, "results": [
     {"wrapperType": "track", "kind": "song", "trackId": 1700000001, "trackName": "Lantern Hours",
      "artistName": "Mira Vale", "collectionName": "Lantern Hours", "releaseDate": "2025-03-14T12:00:00Z",
-     "trackViewUrl": SONG["url"], "previewUrl": SONG["prev"],
+     "trackViewUrl": SONG["url"], "previewUrl": PREV,
      "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Music/x/100x100bb.jpg"},
     {"wrapperType": "track", "kind": "song", "trackId": 1700000001, "trackName": "Lantern Hours (again)",
      "artistName": "Mira Vale", "trackViewUrl": SONG["url"]},
@@ -57,6 +57,8 @@ CATALOG = {"resultCount": 4, "results": [
 def test_pure():
     c = songs.clean(SONG)
     check("a song: every field kept as given", c == SONG, c)
+    check("no preview kept, ever (Apple's terms: streamed only, and Anki can't)",
+          songs.clean(dict(SONG, prev=PREV)) == SONG and all("prev" not in x for x in songs.parse(CATALOG)))
     for k in ("t", "a", "id", "url"):
         check(f"a song needs its {k}", songs.clean({x: v for x, v in SONG.items() if x != k}) is None)
     bad = [
@@ -101,7 +103,10 @@ def test_pure():
           [p["name"] for p in songs.newest_first(people)])
     check("the apps, Apple first; the motions, gentle first", [k for k, _ in songs.APPS] == ["apple", "spotify", "youtube", "other"]
           and songs.MOTIONS[0] == "gentle" and songs.app_name("youtube") == "YouTube Music")
-    check("Apple's badge: Apple's own, https", songs.BADGE_URL.startswith("https://tools.applemediaservices.com/"))
+    check("Apple's badge: Apple's own, https, at its 30 px minimum; the credit beside it",
+          songs.BADGE_URL.startswith("https://tools.applemediaservices.com/") and songs.BADGE_H == 30
+          and songs.CREDIT == "Song and cover courtesy of Apple Music"
+          and songs.CREDIT_SEARCH == "Song search courtesy of Apple Music")
 
 
 def test_worker_twin():
@@ -111,7 +116,7 @@ def test_worker_twin():
              dict(SONG, url="https://u@music.apple.com/x"), dict(SONG, url="https://music.apple.com:443/x"),
              dict(SONG, url="https://MUSIC.apple.com/x"), dict(SONG, t="x" * 121), dict(SONG, a="a\tb"),
              dict(SONG, id="1"), dict(SONG, id=True), dict(SONG, id=-3), dict(SONG, art="https://a.mzstatic.com/x.jpg"),
-             dict(SONG, art="https://mzstatic.com.evil.example/x"), dict(SONG, prev="https://itunes.apple.com/p.m4a"),
+             dict(SONG, art="https://mzstatic.com.evil.example/x"), dict(SONG, prev=PREV),
              dict(SONG, y=1899), dict(SONG, y=True), dict(SONG, at="2026-1-2"), dict(SONG, al=""), {"t": "x"}]
     w = fakes.FakeWorker()
     w.add_user("alice", "Alice")
@@ -160,7 +165,7 @@ class Glue:
 
     def __enter__(self):
         self.c = {}
-        self.evals, self.links, self.played, self.tips, self.asked, self.redraws, self.stopped = [], [], [], [], [], [], []
+        self.evals, self.links, self.tips, self.asked, self.redraws = [], [], [], [], []
         self.answer = {"status": 200, "json": copy.deepcopy(CATALOG), "bytes": b"\x00" * 1000}
         self.saved = {k: getattr(SF, k) for k in ("cfg", "save_cfg", "_today", "_get")}
         self.saved_app = (app.board_eval, app._bg, app._state.get("entries"))
@@ -190,17 +195,11 @@ class Glue:
         utils = sys.modules["aqt.utils"]
         utils.openLink = lambda u: self.links.append(u)
         utils.tooltip = lambda m, *a, **k: self.tips.append(m)
-        sound = types.ModuleType("aqt.sound")
-        sound.av_player = types.SimpleNamespace(play_file=lambda p: self.played.append(p),
-                                                stop_and_clear_queue=lambda: self.stopped.append(1))
-        sys.modules["aqt.sound"] = sound
-        sys.modules["aqt.gui_hooks"].av_player_did_end_playing = types.SimpleNamespace(append=lambda f: self.__dict__.update(ended=f))
         from due_crew import sheets
         self.saved_ask = sheets.ask_item
         sheets.ask_item = lambda title, text, items, then, **k: self.asked.append((title, items, then))
         SF.mw.state = "deckBrowser"
         SF.mw.deckBrowser = types.SimpleNamespace(refresh=lambda: self.redraws.append(1))
-        SF._play.update(uid="", path="", hooked=False)
         SF._last.update(q="", songs={})
         return self
 
@@ -223,7 +222,7 @@ def test_glue():
         res = g.evals[-1]
         check("search: its songs to the page (dcSong.results), only what the rows show",
               res.startswith("window.dcSong&&dcSong.results(") and '"Lantern Hours"' in res and "Second Wind \\u003cb\\u003e" not in res
-              and '"prev"' not in res and '"url"' not in res and '"error": false' in res, res[:300])
+              and '"prev"' not in res and '"url"' not in res and '"error": false' in res and PREV not in res, res[:300])
         check("search: a title with markup goes as data (the page escapes it)", '"Second Wind <b>"' in res)
         n = len(g.asks)
         g.say("duecrew:songsearch:a")
@@ -247,14 +246,22 @@ def test_glue():
         # Listen
         app._state["entries"] = [{"user_id": "me", "you": True},
                                  {"user_id": "dre", "you": False, "name": "Dre", "song": dict(SONG)}]
+        g.say("duecrew:songlisten:dre:youtube")
+        check("the card's row, no app yet: YouTube Music tapped is kept, the song opens there, the board drawn again; nothing asked",
+              g.c.get("music_app") == "youtube" and g.links[-1] == songs.listen_url(SONG, "youtube") and not g.asked and g.redraws)
+        g.say("duecrew:songlisten:dre:winamp")
+        check("…an app that isn't one: Listen as it stands (YouTube Music)", g.c["music_app"] == "youtube"
+              and g.links[-1] == songs.listen_url(SONG, "youtube") and not g.asked)
+        g.c["music_app"] = ""
+        n_links = len(g.links)
         g.say("duecrew:songlisten:dre")
-        check("Listen, the first time: asks which app, every one offered, nothing opened yet",
-              len(g.asked) == 1 and g.asked[0][1] == [n for _k, n in songs.APPS] and not g.links, g.asked)
+        check("Listen with no app (the profile card's), the first time: asks which app, every one offered, nothing opened yet",
+              len(g.asked) == 1 and g.asked[0][1] == [n for _k, n in songs.APPS] and len(g.links) == n_links, g.asked)
         g.asked[0][2](1)
         check("…Spotify picked: kept on this computer, and the song opens there",
               g.c.get("music_app") == "spotify" and g.links[-1] == songs.listen_url(SONG, "spotify"))
         g.say("duecrew:songlisten:dre")
-        check("Listen again: straight there, no question", len(g.asked) == 1 and len(g.links) == 2)
+        check("Listen again: straight there, no question", len(g.asked) == 1 and len(g.links) == n_links + 2)
         g.say("duecrew:songapp:apple")
         g.say("duecrew:songlisten:dre")
         check("▾ Apple Music: the song itself from then on", g.c["music_app"] == "apple" and g.links[-1] == SONG["url"])
@@ -274,31 +281,7 @@ def test_glue():
         n = len(g.links)
         g.say("duecrew:songlisten:stranger")
         check("Listen to someone not in my crew's entries: nothing", len(g.links) == n and len(g.asked) == 1)
-        # the preview
-        g.say("duecrew:songprev:dre")
-        check("▶ 30 s: Apple's preview fetched to a file and played by Anki's player; the page told it's playing",
-              g.played and g.played[-1].endswith(f"duecrew-preview-{SONG['id']}.m4a") and g.evals[-1].endswith('dcSong.playing("dre")'))
-        g.say("duecrew:songprev:dre")
-        check("■ Stop: Anki's player stopped, the page told", g.stopped and g.evals[-1].endswith('dcSong.playing("")'))
-        g.say("duecrew:songprev:dre")
-        g.ended()
-        check("the preview ran out by itself: the page told", g.evals[-1].endswith('dcSong.playing("")') and SF._play["uid"] == "")
-        g.say("duecrew:songprev:dre")  # stop
-        slow = []
-        app._bg = lambda job, done=None: slow.append((job, done))
-        g.say("duecrew:songprev:dre")
-        app._state["entries"].append({"user_id": "mo", "you": False, "name": "Mo", "song": dict(SONG, id=55)})
-        g.say("duecrew:songprev:mo")
-        n_played = len(g.played)
-        for job, done in slow:
-            done(job())
-        app._bg = lambda job, done=None: done(job()) if done else job()
-        check("▶ on one song, then on another before the first loaded: only the second plays",
-              len(g.played) == n_played + 1 and g.played[-1].endswith("duecrew-preview-55.m4a") and SF._play["uid"] == "mo", g.played[-2:])
-        g.say("duecrew:songprev:mo")
-        app._state["entries"][1]["song"] = {k: v for k, v in SONG.items() if k != "prev"}
-        g.say("duecrew:songprev:dre")
-        check("a song without a preview says so", g.tips[-1] == "No preview for this one.")
+        check("no preview: ▶ isn't a command any more", g.say("duecrew:songprev:dre") is False)
         # the floor: on, off, motion
         g.say("duecrew:dancehide")
         check("× on the floor: off on this computer", g.c.get("dance_floor") is False and SF.floor_view([], g.c) is None)
