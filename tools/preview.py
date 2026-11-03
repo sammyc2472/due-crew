@@ -1100,7 +1100,7 @@ _SEARCH = ("dcDance.search(); var q = document.querySelector('#dc-song .sq'); q.
            "document.querySelectorAll('#dc-song .sr button')[1].click(); }, 450);" % _RESULTS)
 sections.append("<h3>3.9.6: the search sheet (a result picked; Use this, Take it off)</h3>" + _dance_frame("search", _dance_view(4), then=_SEARCH))
 sections.append("<h3>3.9.6: the search sheet, dark</h3>" + _dance_frame("search-dark", _dance_view(4), cfg={"theme": "dark"}, dark=True, then=_SEARCH))
-sections.append("<h3>3.9.6: Settings › Board, song of the moment</h3>" + board.settings_html(
+sections.append("<h3>3.9.6: Settings › Board, study soundtrack</h3>" + board.settings_html(
     dict(SET_VIEW, tab="board"), dict(SET_CFG, dance="lively", music_app="spotify")))
 
 page = f"""<!doctype html><html><head><meta charset="utf-8">

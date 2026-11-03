@@ -14,8 +14,8 @@ song, beside Apple's own badge linking to it, credited ("courtesy of"), and
 a preview only ever streamed, never downloaded or kept. Anki's web view
 can't play Apple's audio and its player can't stream a link, so there are
 no previews (Sam's pick, after the click test); every cover sits on a card
-whose foot says "Courtesy of Apple Music" beside BADGE_URL, linked to the
-song's page, at Apple's 30 px digital minimum. Spotify and YouTube Music get
+whose foot credits Apple (CREDIT; the search sheet's, CREDIT_SEARCH) beside
+BADGE_URL, linked to the song's page, at Apple's 30 px digital minimum. Spotify and YouTube Music get
 a search link and nothing of theirs is shown, so they ask nothing of us.
 
 Due Crew never knows what anyone is actually listening to: only the song
@@ -43,7 +43,9 @@ MOTIONS = ("gentle", "lively", "still")
 # Apple's own badge, as its marketing tools serve it (never redrawn or altered)
 BADGE_URL = "https://tools.applemediaservices.com/api/badges/listen-on-apple-music/badge/en-us?size=250x83"
 BADGE_H = 30  # px: Apple's smallest on a screen
-CREDIT = "Courtesy of Apple Music"  # the credit Apple asks for, at the foot of every card with a cover
+# the credit Apple asks for, saying what it gave (Sam): a song's card, and the search sheet
+CREDIT = "Song and cover courtesy of Apple Music"
+CREDIT_SEARCH = "Song search courtesy of Apple Music"
 SEARCH_URL = "https://itunes.apple.com/search"
 
 

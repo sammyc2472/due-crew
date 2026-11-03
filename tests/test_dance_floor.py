@@ -193,7 +193,7 @@ def test_motion_and_fold():
 
 def test_booth_and_dj():
     h = board.dance_html(view(2), {"sev_look": ["partyhat", "glasses"], "sev_closet": {"partyhat": "2026-10-01", "glasses": "2026-10-01"}})
-    dj = h.split('<span class="dj">', 1)[1].split('<svg class="bsv"', 1)[0]
+    dj = h.split('<span class="dj"', 1)[1].split('<svg class="bsv"', 1)[0]
     phones = closet_art.ART["headphones"][0][:60]
     check("my Pip the DJ, headphones on (the closet's, in the party hat's place), the rest of my look on",
           phones in dj and closet_art.ART["partyhat"][0][:60] not in dj and closet_art.ART["glasses"][0][:60] in dj)
@@ -232,10 +232,11 @@ def test_cards():
           and ">Listen in YouTube Music</button>" in board.dance_html(dict(view(1), app="youtube"), {}))
     foot = card("dre").split('<div class="ft">', 1)[1] if '<div class="ft">' in card("dre") else ""
     check("Apple's credit at the foot of every card, the badge beside it, apart from Listen",
-          foot.startswith('<span class="cr">Courtesy of Apple Music</span><span class="bdg">')
-          and card("me").count('<span class="cr">Courtesy of Apple Music</span>') == 1
+          foot.startswith('<span class="cr">Song and cover courtesy of Apple Music</span><span class="bdg">')
+          and card("me").count('<span class="cr">Song and cover courtesy of Apple Music</span>') == 1
           and "border-top: 1px solid var(--dc-line)" in board.DANCE_CSS.split("#dc-dance .ft, #dc-song .ft {", 1)[1].split("}", 1)[0])
-    check("the search: the same credit and badge at its foot", "el('span', 'cr', \"Courtesy of Apple Music\")" in board.DANCE_JS
+    check("the search: its own credit (Song search…) and the badge at its foot",
+          "el('span', 'cr', \"Song search courtesy of Apple Music\")" in board.DANCE_JS
           and "img.height = 30;" in board.DANCE_JS)
     badge = card("dre").split('<span class="bdg">', 1)[1]
     check("Apple's badge with every cover, as Apple serves it (its alt), opening the song (songapple); its words if it doesn't load",
@@ -243,6 +244,13 @@ def test_cards():
           and badge.count(f"pycmd('duecrew:songapple:dre|{KEY}')") == 2 and ">Listen on Apple Music</a>" in badge
           and "this.parentNode.nextElementSibling.hidden=false" in badge and "filter" not in badge)
     mine = card("me")
+    check("called a study soundtrack (Sam), and mine says no more than that",
+          "&#9834; Dre&rsquo;s study soundtrack &middot; since 30 Oct" in card("dre")
+          and '<span>&#9834; Your study soundtrack</span>' in mine and "Decks screens" not in h and "song of the moment" not in h.lower()
+          and "'Your study soundtrack'" in board.DANCE_JS and "Decks screens" not in board.DANCE_JS)
+    clocks = re.findall(r'--sv-b:([\d.]+)s;--sv-d:(-?[\d.]+)s', board.dance_html(view(6), {}))
+    check("each Pip blinks on its own clock, the DJ's too (Sam: they blinked together)",
+          len(clocks) == 7 and len(set(clocks)) == 7, clocks)
     check("my card: Change… (the search), Take it off (songclear), the badge (songapple:me)",
           "data-find" in mine and f"pycmd('duecrew:songclear|{KEY}')" in mine and "songprev" not in mine
           and "songapple:me" in mine and "songlisten" not in mine)
@@ -269,7 +277,7 @@ def test_commands_keyed():
 def test_settings_and_profile():
     b = board._settings_board({})
     check("Settings › Board: the dance floor on (× brings it here), Gentle, and no music app yet (ask)",
-          "Song of the moment" in b and 'aria-checked="true" aria-label="Dance floor" data-f="dancehide"' in b
+          "Study soundtrack" in b and "Song of the moment" not in b and 'aria-checked="true" aria-label="Dance floor" data-f="dancehide"' in b
           and 'aria-pressed="true" data-f="dancemotion:gentle"' in b and 'aria-pressed="true" data-f="songapp:ask"' in b)
     b2 = board._settings_board({"dance_floor": False, "dance": "still", "music_app": "youtube"})
     check("…off, Still, YouTube Music: as saved", 'data-f="danceshow"' in b2 and 'aria-pressed="true" data-f="dancemotion:still"' in b2

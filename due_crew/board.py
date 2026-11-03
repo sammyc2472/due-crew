@@ -4746,7 +4746,7 @@ def _settings_songs(cfg):
                   f'{_st_click("dancemotion:" + k)}>{t}</button>' for k, t in DANCE_MOTIONS)
     apps = "".join(f'<button class="st-pill{" on" if k == app else ""}" aria-pressed="{"true" if k == app else "false"}" '
                    f'{_st_click("songapp:" + k)}>{t}</button>' for k, t in MUSIC_APPS)
-    return ('</div><div class="st-h">Song of the moment</div><div class="st-box">'
+    return ('</div><div class="st-h">Study soundtrack</div><div class="st-box">'
             + _st_row("Dance floor", _st_toggle_cmd("dancehide" if on else "danceshow", on, "Dance floor"),
                       "Your crew&rsquo;s songs, in the Decks screen&rsquo;s corner")
             + _st_row("Dancing", f'<span class="st-seg" role="group" aria-label="Dancing">{seg}</span>',
@@ -4815,8 +4815,8 @@ FIND_WORDS = {
     "set:sev_break:": "breathe stretch rest",
     # 3.9.1
     "set:two_buttons:": "hard easy again good pass fail answer buttons keys review",
-    # 3.9.6: song of the moment
-    "dance": "music song songs dj party floor dancing pip motion animation corner",
+    # 3.9.6: study soundtrack (song of the moment in code)
+    "dance": "music song songs soundtrack dj party floor dancing pip motion animation corner",
     "songapp": "music app listen spotify apple youtube song",
 }
 
@@ -6859,8 +6859,7 @@ def _dance_card(who, song, view, name=""):
     cover). Mine: Change… and Take it off instead of Listen."""
     e = _html.escape
     mine = who == "me"
-    head = ("&#9834; Your song of the moment &middot; on your crew&rsquo;s Decks screens" if mine
-            else f"&#9834; {e(name)}&rsquo;s song of the moment")
+    head = "&#9834; Your study soundtrack" if mine else f"&#9834; {e(name)}&rsquo;s study soundtrack"
     when = _dance_when(song.get("at"))
     if when and not mine:
         head += f" &middot; {when}"
@@ -6912,7 +6911,8 @@ def _dance_dancer(i, p, view, place):
     x = (i - 3) * DANCE_SLOT + DANCE_SLOT // 2 if back else i * DANCE_SLOT
     said = f"{name}’s song: {s['t']} by {s['a']}"
     # the drawing, the name and the bubble spill out of the place (a hat, a long title); the button is laid over it
-    return (f'<span class="{cls}" style="--x:{x};--i:{i};--fa-l:{light};--fa-d:{dark}">'
+    # each Pip blinks on its own clock (Sam: "they're blinking at the same time"; sev.blink, as a room's seats)
+    return (f'<span class="{cls}" style="--x:{x};--i:{i};--fa-l:{light};--fa-d:{dark};{_sev.blink_css(i)}">'
             f'<span class="bub" data-open="{e(p["uid"])}"><span>{mark}{e(s["t"])}</span></span>'
             f'<span class="hp"><span class="pp">{fig}</span><span class="nm">{e(name)}</span></span>'
             f'<button type="button" class="dzb" data-open="{e(p["uid"])}" aria-label="{e(said)}"></button></span>')
@@ -6930,7 +6930,7 @@ def _dance_dj(view, cfg):
     else:
         fig = '<span class="fc">&#9834;</span>'
     ask = "" if me else '<span class="bub on"><span>Put on a song?</span></span>'
-    return f'<span class="dj"><span class="pp">{fig}</span>{ask}</span>'
+    return f'<span class="dj" style="{_sev.blink_css(DANCE_MAX)}"><span class="pp">{fig}</span>{ask}</span>'
 
 
 def _dance_keys(view, cfg):
@@ -7251,9 +7251,9 @@ window.dcDance = window.dcDance || (function () {
         back.id = 'dc-song';
         back.setAttribute('role', 'dialog');
         back.setAttribute('aria-modal', 'true');
-        back.setAttribute('aria-label', 'Your song of the moment');
+        back.setAttribute('aria-label', 'Your study soundtrack');
         back.appendChild(card);
-        head.appendChild(el('b', null, 'Your song of the moment'));
+        head.appendChild(el('b', null, 'Your study soundtrack'));
         x.type = 'button';
         x.setAttribute('aria-label', 'Close');
         head.appendChild(x);
@@ -7272,7 +7272,7 @@ window.dcDance = window.dcDance || (function () {
         ls.setAttribute('aria-label', 'Songs');
         card.appendChild(st);
         card.appendChild(ls);
-        card.appendChild(el('div', 'sn', 'Your crew sees it on their Decks screens. The search goes from this computer to Apple Music.'));
+        card.appendChild(el('div', 'sn', 'Your crew sees it. The search goes from this computer to Apple Music.'));
         if (src) {  // at the foot, Apple's credit and badge beside the covers: the picked song's page (or the first's)
             var bd = badge(src), apple = function () {
                 var s2 = S.sheet, id = s2 && (s2.picked || (s2.rows[0] && s2.rows[0].getAttribute('data-id')));
@@ -7413,7 +7413,7 @@ window.dcDance = window.dcDance || (function () {
     }
 })();
 """.replace("__REST__", str(DANCE_REST * 1000)).replace("__TICK__", str(round(DANCE_TICK * 1000))).replace(
-    "__SAY__", str(DANCE_SAY)).replace("__BADGE_H__", str(_songs.BADGE_H)).replace("__CREDIT__", _json.dumps(_songs.CREDIT)).replace(
+    "__SAY__", str(DANCE_SAY)).replace("__BADGE_H__", str(_songs.BADGE_H)).replace("__CREDIT__", _json.dumps(_songs.CREDIT_SEARCH)).replace(
     "__CSS__", _json.dumps(DANCE_CSS).replace("</", "<\\/"))
 
 

@@ -4419,8 +4419,9 @@ every release that changes how something works.
   open floor would cover the board's column it starts as its chip
   (Sam's "remove from screen, collapse"); a tap opens it over the board.
   A bubble's tap opens the song's card: the cover, title, artist · album
-  · year, Listen, and at its foot, under a line, "Courtesy of Apple Music"
-  beside Apple's "Listen on Apple Music" badge (its artwork as Apple serves
+  · year, Listen, and at its foot, under a line, "Song and cover courtesy
+  of Apple Music" (the search sheet's: "Song search courtesy of Apple
+  Music"; Sam: say what Apple gave) beside Apple's "Listen on Apple Music" badge (its artwork as Apple serves
   it, at its 30 px digital minimum, linked to the song's page; plain words
   when the image doesn't load); the search sheet ends the same way.
   Apple's Search API terms, as a public bug report quotes them (Apple's
@@ -4437,7 +4438,12 @@ every release that changes how something works.
   was never offered" the question, which only Listen on a profile card
   still asks); then just "Listen in Spotify": Apple Music opens the song
   itself, Spotify and YouTube Music a search for its title and artist that
-  lands on it, another app copies the title and artist. Settings › Board ›
+  lands on it, another app copies the title and artist.
+  Its name on screen is "study soundtrack" (Sam: "Dre's study
+  soundtrack", Settings › Board › Study soundtrack; my own card says just
+  that, no "on your crew's Decks screens"); song of the moment in code.
+  Each Pip on the floor, the DJ's too, blinks on its own clock
+  (sev.blink_css, as a room's seats; Sam: they blinked together). Settings › Board ›
   Song of the moment: the floor, Dancing (Gentle · Lively · Still), My
   music app (Ask me the first time, or one). A crewmate's profile card
   says their song with Listen; mine says mine. The bubble is the song they

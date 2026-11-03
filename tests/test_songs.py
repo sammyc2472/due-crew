@@ -105,7 +105,8 @@ def test_pure():
           and songs.MOTIONS[0] == "gentle" and songs.app_name("youtube") == "YouTube Music")
     check("Apple's badge: Apple's own, https, at its 30 px minimum; the credit beside it",
           songs.BADGE_URL.startswith("https://tools.applemediaservices.com/") and songs.BADGE_H == 30
-          and songs.CREDIT == "Courtesy of Apple Music")
+          and songs.CREDIT == "Song and cover courtesy of Apple Music"
+          and songs.CREDIT_SEARCH == "Song search courtesy of Apple Music")
 
 
 def test_worker_twin():
