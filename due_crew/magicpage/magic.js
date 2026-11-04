@@ -161,8 +161,10 @@ var dcMagic = (function () {
     (V.terms || []).forEach(function (t, i) { t.forEach(function (sg) { termOf[sg] = t.length > 1 ? i : null; }); });
     (V.chips || []).forEach(function (c) {
       // "both A and B", A AND B, A with B: the cards in both, a quiet "with" between their chips
-      if (last !== null && c.seg !== last && termOf[c.seg] !== null && termOf[c.seg] !== undefined && termOf[c.seg] === termOf[last])
+      if (last !== null && c.seg !== last && termOf[c.seg] !== null && termOf[c.seg] !== undefined && termOf[c.seg] === termOf[last]) {
+        els.chips.appendChild(h('span', { cls: 'brk', 'aria-hidden': 'true' }));  // the next topic on a line of its own, "with" first
         els.chips.appendChild(h('span', { cls: 'join', text: 'with', title: 'Only the cards in both' }));
+      }
       last = c.seg;
       var key = 'g:' + c.name + ':' + c.seg;
       fresh[key] = 1;
