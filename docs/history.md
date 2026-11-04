@@ -4489,11 +4489,12 @@ every release that changes how something works.
     beside another name (its own "(ITP)" says which), and two letters alone
     ("mi") only when it writes them beside this one, else they're offered
     with "tap the ones you mean";
-  - the deck's resources, its #parts ("b&b heart failure", "boards and
-    beyond renal" by the run's initials with its and, "first aid cardio",
-    "sketchy" for each of a family, "sketchy micro staph"), the topic kept
-    inside them; a resource whose words find nothing in it reads as said
-    ("pathoma chapter 3" is a tag of that name, wherever it is); "chapter",
+  - the deck's resources, its #parts (a made-up deck's: "m&m heart
+    failure", "mice and men renal" by the run's initials with its and,
+    "quick ref cardio", "charts" for each of a family, "charts micro
+    staph"), the topic kept inside them; a resource whose words find
+    nothing in it reads as said ("pathbook chapter 3" is a tag of that
+    name, wherever it is); "chapter",
     "section", "lecture" and the like with a number: the resource's part
     numbered so, the shallowest ("03_Neoplasia", not a "03_" section or a
     "part 3");
@@ -4503,7 +4504,7 @@ every release that changes how something works.
     the time"), each a tap; a number first is how many ("10 new
     platelets", never "type 2 diabetes"); but not, except, without; a deck
     by its name; words no tag has: the cards' text; QIDs (with their
-    bank's name, "uworld 2345 11089"), note ids (a note's before a card's:
+    bank's name, "qbank 2345 11089"), note ids (a note's before a card's:
     both come from the clock), Anki's own search; plan lines (the Text
     tab's, our prompts');
   - what's coming up, a row each, one tap, Undo: a quiz or test (a date on
@@ -4540,6 +4541,57 @@ every release that changes how something works.
   (magic_seen), ? brings it back. A little joy: the star sends sparkles
   off when the box is first picked, chips pop in; none with Reduce motion.
   tests/test_magic.py; tools/control_audit.js on its pages.
+- 3.9.7, Magic search's round 2 (Sam, on the first draft: "the modal
+  introducing for the first time should pop up on the main decks screen",
+  "the magic search box is WAY too big and should change size according
+  to content", "this is replacing QBank QID search", "i'm not really able
+  to find the overarching resource", then "do we built support for AND
+  statements and OR statements on tags"):
+  - the how-to is the Decks screen's, once a person (magic_seen, an
+    account key): `magic_flow.board_howto` and `board.magic_howto_js`, in
+    the sheets' look, over the board the bars dim with (`VEIL_IDS`), shown
+    after the Decks screen draws and only once the board is clear (no
+    window or show over it) with the You box there; Got it, Open Magic
+    search, or a try (duecrew:magichow, the board's key), each seen. Its
+    words are `magic.HOWTO`, the window's ? the same. Its tries are the
+    deck's own where it can say them: the resource one is the #part with
+    the most tags (not a bank's) and its biggest part, the QIDs one three
+    of the biggest bank's questions (`magic.examples`, from the tags
+    table, a fifth of a second once); in the window each try that needs a
+    tag is kept only when it reads as something in that deck;
+  - the window is as tall as what's in it: the page says its height
+    (ResizeObserver, "size"), the window follows from a top edge set high,
+    as a search box is, up to nine tenths of the screen, then the page
+    scrolls; dragged to a size, it keeps it. 660 wide (the how-to's two
+    columns). The empty box: 195 px where it was 680;
+  - a chip's tags under where each is from (`magic.tag_row`/`tag_list`):
+    the resource (the first #part under the root, else the root) bold with
+    a tick of its own (all its tags in or out, some: neither), the path
+    after it, the chip's own name off its end; two of a resource's that
+    would read the same say their whole path, then their root (a deck with
+    a resource in its Step 1 and Step 2 halves);
+  - QBank QIDs is Magic search's (its window, chip, Plans menu item, Find
+    entry, planmissed and `due_flow.has_qids` gone; `planner/qids.py`
+    kept): a paste the way a bank copies it ("Missed: 10234, 10911 · 65%")
+    is QIDs when two or more of its numbers, and a third of them, are the
+    deck's questions (`Tree.qnums`); how many are questions, what isn't
+    one, my plans' dates holding them, the bank when two are close (a
+    pick kept for the paste), the deck with no question IDs said, Their
+    topics with each part's Study, Study now into Due Crew › QBank cards
+    in random order as before. Its default deck rule came too (the plan
+    You › Plans shows, then the deck most plans run on);
+  - and, or, both: "and", "or" and commas put another topic beside one,
+    each one's cards (a lowercase or was read as Anki's own OR before:
+    the words went to Anki's text search); "both A and B" (its list, to an
+    or), AND in capitals (Anki's word) and "with" (when each side names a
+    topic and no tag says the whole, "Diabetes with Complications" staying
+    one) take only the cards in both, a "with" between their chips and in
+    the name; none in both is said. On the big shared deck "both heart
+    failure and pharm" is 170 cards, what Anki's own search of those tags
+    finds. The reading's `terms`: each term's topics in all of them, the
+    terms together (`magic_flow.Search.joined_cards`).
+  The window's how-to title's icon sat where the box's does (the box's
+  absolute place); its own now.
 - 3.9.7, test_plan_web's "the week a set opened in that still runs today"
   counted its set from this week's Monday, so it held only on a Monday or
   a Tuesday: the set and the days after it count from today now.

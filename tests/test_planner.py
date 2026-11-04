@@ -124,9 +124,10 @@ def test_gate():
         m = planner.plans_menu(None)
     finally:
         qt.QMenu = saved
-    check("gate: Tools › Due Crew › Plans holds everything about plans, the three windows among it, for everyone",
+    check("gate: Tools › Due Crew › Plans holds everything about plans, its windows among it, for everyone "
+          "(3.9.7: QBank QIDs… went into Magic search, beside it in Tools › Due Crew)",
           m.title == "Plans" and m.items == ["Your plans…", "New plan…",
-                                             "Follow a plan…", "—", "QBank QIDs…", "Export cards for my AI…"], m.items)
+                                             "Follow a plan…", "—", "Export cards for my AI…"], m.items)
     init = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
     check("gate: Tools › Due Crew puts the Plans submenu in, and the old plan entries at its root are gone",
           "planner.plans_menu(menu)" in init and "Make a plan from a deck…" not in init and "(labs)" not in init)
@@ -311,7 +312,9 @@ def test_nothing_kept():
     from due_crew.planner import flow
     check("kept: no misses kept, no qids.json", not hasattr(flow, "misses_log") and not hasattr(Q, "keep")
           and "qids.json" not in open(flow.__file__, encoding="utf-8").read())
-    check("kept: no threads", not hasattr(Q, "threads") and "In common" not in open(Q.__file__.replace("qids.py", "qid_window.py"), encoding="utf-8").read())
+    from due_crew import magic_flow  # 3.9.7: QBank QIDs is Magic search's
+    check("kept: no threads", not hasattr(Q, "threads") and "In common" not in open(magic_flow.__file__, encoding="utf-8").read()
+          and "qids.json" not in open(magic_flow.__file__, encoding="utf-8").read())
 
 
 def test_unsuspend_and_study():
@@ -512,7 +515,11 @@ def test_flow():
         check("glue: one I write, the deck named like its own", how == "named" and idx.did == 1)
         idx, swap, how = ops.context({"id": "p3"}, {"deck": "Not here", "units": [{"id": "a", "opens": "2026-11-09", "tags": ["Elsewhere::Not::Here"]}]})
         check("glue: none here, none", idx is None and how == "")
-        qo = flow.QidOps()
+        from due_crew import magic_flow as MF
+        from due_crew.planner import actions
+        qo = MF.Ops()  # 3.9.7: QBank QIDs is Magic search's, and its ops with it
+        mf_cfg = MF.cfg
+        MF.cfg = lambda: flow.cfg()  # the plan You › Plans shows, as this test sets it
         choices = P.deck_choices(col)
         check("glue: question IDs start on the deck my plans run on", qo.default_deck(choices) == 1)
         conf = {}
@@ -552,13 +559,15 @@ def test_flow():
             c.db.conn.execute(f"UPDATE cards SET odid = did, did = 5 WHERE odid = 0 AND id IN ({','.join(map(str, cids))})")
             return True
         F._filtered = filtered
-        check("glue: Study now builds Due Crew › QBank cards (in random order), one undo step, and opens it",
-              qo.study({7, 8, 9}) is True and calls == [("build", "Due Crew::QBank cards", [7, 8, 9], F.STUDY_ORDER), "undo",
-                                                        ("select", 5), "overview"]
-              and col.undo_steps[-1][0] == "Due Crew: study 3 QBank cards", (calls, col.undo_steps[-1:]))
+        check("glue: QIDs' Study now builds Due Crew › QBank cards (in random order), one undo step, and opens it",
+              qo.study({7, 8, 9}, actions.DECK, order=F.STUDY_ORDER) is True
+              and calls == [("build", "Due Crew::QBank cards", [7, 8, 9], F.STUDY_ORDER), "undo", ("select", 5), "overview"]
+              and col.undo_steps[-1][0] == "Due Crew: study 3 cards", (calls, col.undo_steps[-1:]))
     finally:
         (F._state_cfg, flow.mw.col, F.followed, F._after_change, F._claim_opened, F.refresh_progress, flow.app.swap,
          flow.cfg, F._filtered, flow.mw.moveToState) = saved
+        if "mf_cfg" in dir():
+            MF.cfg = mf_cfg
 
 
 # ---- a plan from a block's calendar (reading.py, claude.py's stand-in) ----
@@ -986,7 +995,7 @@ def test_rules_of_the_road():
           "attach_alive(self)" in web and "colors(self.cfg)" in web and "set_bridge_command(self._on_cmd" in web
           and "QLabel" not in web and "setStyleSheet" not in web)
     check("road: the windows, each wearing the board's look and saying what it is",
-          sorted(windows) == ["date_dialogs.py", "date_panel.py", "mcp_dialog.py", "new_plan.py", "picker.py", "qid_window.py",
+          sorted(windows) == ["date_dialogs.py", "date_panel.py", "mcp_dialog.py", "new_plan.py", "picker.py",
                               "send.py", "start_window.py", "text_tab.py", "window.py"]
           and all(len(re.findall(r"\(QDialog[,)]", t)) == t.count("attach_alive(self)") == len(re.findall(r"\bheading\(self", t))
                   for t in windows.values()), sorted(windows))
@@ -1010,7 +1019,7 @@ def test_rules_of_the_road():
           not [f for f in pure if re.search(r"^\s*(from aqt|import aqt)", src[f], re.M)])
     calls = set()
     for f in ("flow.py", "window.py", "plan_tab.py", "date_panel.py", "deck_panel.py", "shape.py", "send.py",
-              "mine_tab.py", "new_plan.py", "text_tab.py", "history_tab.py", "settings_tab.py", "day_notes.py", "qid_window.py",
+              "mine_tab.py", "new_plan.py", "text_tab.py", "history_tab.py", "settings_tab.py", "day_notes.py",
               "picker.py", "start_window.py", "mcp_host.py", "mcp_dialog.py"):
         for node in ast.walk(ast.parse(src[f])):
             if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "remote":

@@ -66,10 +66,10 @@ _FILT = {k: (re.compile(rx), label, q) for k, rx, label, q in FILTERS}
 ROW = ("new", "seen", "susp", "learn", "due", "tom", "m1", "m7", "leech", "flag", "add7")
 
 _SEARCHY = re.compile(r"(?:^|[\s(])-?(?:tag|deck|nid|cid|note|card|is|flag|prop|added|rated|introduced|"
-                      r"edited|preset):|(?:^|\s)OR(?:\s|$)", re.I)
+                      r"edited|preset):", re.I)  # Anki's own words; "anemia or platelets" is ours (two topics)
 _LONG = re.compile(r"(?<![0-9])[0-9]{10,13}(?![0-9])")
 _SHORT = re.compile(r"(?<![0-9])[0-9]{3,9}(?![0-9])")
-_IDS_ONLY = re.compile(r"^(?:[\s,;|/#.\-:()]|qids?|question|questions|ids?|nids?|cids?|notes?|cards?|q|and|or)*$", re.I)
+_IDS_ONLY = re.compile(r"^(?:[\s,;|/#.\-:()\u2229]|qids?|question|questions|ids?|nids?|cids?|notes?|cards?|q|and|or)*$", re.I)
 _PLAN_LINE = re.compile(r"^\s*(?:[-*\u2022]\s+)?`?\d{4}-\d{2}-\d{2}\s*\|")
 _KINDS = ("practice exam", "block exam", "shelf exam", "midterm", "final", "quiz", "test", "exam", "shelf")
 _NAME_ONLY = frozenset("practice block shelf pop big class unit module weekly my our a an the".split())
@@ -147,7 +147,7 @@ def pretty(part):
 
 
 def initials(ws):
-    """A run of words' initials, the small ones skipped ("boards and beyond": bb)."""
+    """A run of words' initials, the small ones skipped ("mice and men": mm)."""
     return "".join(x[0] for x in ws if x not in _SMALL and not _ROMAN.match(x))
 
 
@@ -191,7 +191,7 @@ class Tree:
     and Due Crew's own plan tags aren't topics.
 
     What the deck says of itself: its resources (a #part under its root,
-    "#B&B", said "b&b", "boards and beyond" or "sketchy" for every #Sketchy…)
+    "#M&M", said "m&m" or "mice and men", or "charts" for every #Charts…)
     and its short names ("(AKI)" after Acute Kidney Injury: aki is that,
     and only that, wherever else its letters fall)."""
 
@@ -210,7 +210,8 @@ class Tree:
         self.short = {}     # a last part's words, joined -> its short names
         self.by_lead = {}   # a last part's leading number -> those last parts ("chapter 3")
         self.means = {}     # a short name -> the names it's written beside ("aki": {"acute kidney injury"})
-        self.resources = {}  # a resource's letters ("bb", "sketchymicro") -> its parts, lowercased ("#b&b")
+        self.resources = {}  # a resource's letters ("mm", "chartsmicro") -> its parts, lowercased ("#m&m")
+        self.qnums = set()   # the question numbers its tags end in (QBank QIDs: "10234", zeros off the front)
         for low, wr in self.paths.items():
             parts = wr.split(SEP)
             if len(parts) > 1 and parts[-1][:1] in "#^":
@@ -218,6 +219,8 @@ class Tree:
                 if len(key_r) >= 2:
                     self.resources.setdefault(key_r, set()).add(parts[-1].lower())
             last = parts[-1]
+            if last.isdigit() and 3 <= len(last) <= 9:
+                self.qnums.add(last.lstrip("0") or "0")
             if not part_words(last) or last.isdigit() or low in ("leech", "marked") or low.startswith("duecrew"):
                 continue
             self.parts[low] = [part_words(x) for x in parts]
@@ -251,9 +254,9 @@ class Tree:
 
     def resource_named(self, toks):
         """The resource a run of typed words names, from its first: (how many
-        words, {its parts}) or None. Its letters whole ("b&b", "first aid",
-        "sketchy micro"), the run's initials ("boards and beyond"), or one
-        word that begins a family of them ("sketchy")."""
+        words, {its parts}) or None. Its letters whole ("m&m", "quick ref",
+        "charts micro"), the run's initials ("mice and men"), or one
+        word that begins a family of them ("charts")."""
         for n in range(min(4, len(toks)), 0, -1):
             run = toks[:n]
             joined = re.sub(r"[^a-z0-9]", "", "".join(run))
@@ -262,7 +265,7 @@ class Tree:
             if joined in self.resources:
                 return n, set(self.resources[joined])
             if n >= 3 and run[0] not in _SMALL and run[-1] not in _SMALL and any(x in ("and", "&", "of", "n") for x in run[1:-1]):
-                ini = initials(run)  # "boards and beyond" is B&B; "beta blockers" is a topic, not a resource
+                ini = initials(run)  # "mice and men" is M&M; "beta blockers" is a topic, not a resource
                 if len(ini) >= 2 and ini in self.resources:
                     return n, set(self.resources[ini])
             if n == 1 and len(joined) >= 5:
@@ -272,7 +275,7 @@ class Tree:
         return None
 
     def resource_group(self, parts):
-        """A resource said alone: a chip a resource ("sketchy": each of them), every tag that ends at it."""
+        """A resource said alone: a chip a resource ("charts": each of them), every tag that ends at it."""
         out = []
         for part in sorted(parts):
             lows = [low for low in self.paths if low.split(SEP)[-1] == part and SEP in low]
@@ -281,7 +284,7 @@ class Tree:
             cards = set()
             for x in lows:
                 cards |= set(self.cards(x))
-            name = pretty(self.paths[lows[0]].split(SEP)[-1])
+            name = spaced(pretty(self.paths[lows[0]].split(SEP)[-1]))
             out.append({"key": "res:" + part, "name": name, "tags": sorted(self.paths[x] for x in lows), "named": True,
                         "tier": 3, "cards": len(cards)})
         return sorted(out, key=lambda g: -g["cards"])
@@ -581,7 +584,7 @@ def deck_named(low, decks):
 
 def _resources(low, tree):
     """(the words left, {resource parts}): the deck's resources the words
-    say ("b&b", "first aid", "boards and beyond", "sketchy"), taken out."""
+    say ("m&m", "quick ref", "mice and men", "charts"), taken out."""
     found = set()
     if tree is None or not tree.resources:
         return low, found
@@ -607,6 +610,57 @@ def _words(s):
     return [_ROMANS.get(w, w) if i and w != "i" else w for i, w in enumerate(ws)]
 
 
+BOTH = "\u2229"  # a topic's cards that are another's too: "both A and B", A AND B, A with B
+
+
+def _both(low):
+    """"both A, B and C": A ∩ B ∩ C, its commas and ands to the next or, ; or
+    the end ("…, or renal" is beside them; "m&m" is a name, not an and)."""
+    def one(m):
+        return " " + re.sub(r"\band\b|,|(?<![a-z0-9])&(?![a-z0-9])|\+", f" {BOTH} ", m.group(1)) + " "
+    return re.sub(r"\bboth\b\s+(.*?)(?=;|\bor\b|$)", one, low)
+
+
+def _segments(low, tree, within, amp=True):
+    """A topic's words, each its own: (segs, terms). "and", "or", commas
+    (and &, + and / when amp) put another topic beside it, each one's cards;
+    ∩ puts one inside it, the cards in both, as does "with" when each side
+    names a topic and no tag says the whole ("heart failure with pharm"; a
+    tag "Diabetes with complications" stays one). terms: [[seg]], a term's
+    segs the ones it takes the cards in all of."""
+    rx = r"\band\b|,|\bor\b|&|\+|/|;" if amp else r"\band\b|,|\bor\b|\+|/|;"
+    segs, terms = [], []
+    for term in re.split(rx, low):
+        fs = []
+        for f in term.split(BOTH):
+            fs += _with(f, tree, within)
+        if fs:
+            terms.append(list(range(len(segs), len(segs) + len(fs))))
+            segs += fs
+    return segs, terms
+
+
+def _with(f, tree, within):
+    """One part's words, or two when "with" joins two topics: [[words]]."""
+    ws = _words(f)
+    if not ws:
+        return []
+    m = re.search(r"\bwith\b", f)
+    if not m or tree is None:
+        return [ws]
+    a, b = _words(f[:m.start()]), f[m.end():]
+    if not a or not _words(b):
+        return [ws]
+    named = lambda words: any(g["tier"] >= 2 for g in tree.groups(words, within=within or None))  # noqa: E731
+    whole = a + ["with"] + _words(b)  # "Diabetes_with_Complications" has its with
+    if any(g["tier"] == 3 for g in tree.groups(whole, within=within or None)):
+        return [whole]  # a tag says it whole, with and all
+    if any(g["tier"] == 3 for g in tree.groups(ws, within=within or None)) or not named(a):
+        return [ws]  # a tag says it whole, or the first side isn't a topic: as said
+    rest = _with(b, tree, within)
+    return [a] + rest if rest and named(rest[0]) else [ws]
+
+
 def read(text, tree, today, decks=(), plans=()):
     """What a box says. {kind, groups, neg, filters, limit, deck, plan, text,
     qids, ids, search, acts, lines}:
@@ -620,7 +674,7 @@ def read(text, tree, today, decks=(), plans=()):
     name; plan: plan_words' hit; text: words no tag has."""
     out = {"kind": "words", "groups": [], "neg": [], "filters": [], "limit": None, "deck": None, "plan": None,
            "text": "", "qids": [], "ids": [], "search": "", "acts": [], "lines": [], "raw": str(text or ""),
-           "res": [], "bank": None}
+           "res": [], "bank": None, "terms": [], "seg_words": []}
     t = str(text or "").strip()
     if not t:
         out["kind"] = "empty"
@@ -634,11 +688,19 @@ def read(text, tree, today, decks=(), plans=()):
         out["kind"], out["search"] = "search", " ".join(t.split())
         return out
     longs, shorts = _LONG.findall(t), _SHORT.findall(t)
+    # Sam: "AND statements and OR statements on tags": AND in capitals, as Anki writes it, is both (∩);
+    # "and" and "or" in words are another topic, each one's cards
+    t = re.sub(r"(?<![A-Za-z0-9])AND(?![A-Za-z0-9])", " \u2229 ", t)
     low = " " + re.sub(r"[\u2018\u2019\u02bc]", "'", t.lower()) + " "
     low = re.sub(r"\s+", " ", low)
     if longs or shorts:
         rest, said = _resources(_SHORT.sub(" ", _LONG.sub(" ", low)), tree)
-        if _IDS_ONLY.match(rest):  # QIDs (with their bank's name, "uworld 2345 11089"), or note and card ids
+        # round 2 (Sam: "this is replacing QBank QID search"): a block's results pasted the way its bank
+        # copies them ("Block 3 · 12 Oct / Missed: 10234, 10911 · 65%") are QIDs when two or more of the
+        # numbers, and a third of them, are this deck's questions: the words around them aren't a topic
+        nums = {x.lstrip("0") or "0" for x in shorts}
+        hits = len(nums & tree.qnums) if tree is not None and not longs else 0
+        if _IDS_ONLY.match(rest) or (hits >= 2 and 3 * hits >= len(nums)):  # QIDs (with their bank's name, "qbank 2345"), or ids
             out["kind"] = "ids"
             out["ids"] = list(dict.fromkeys(longs))
             out["qids"] = list(dict.fromkeys(x.lstrip("0") or "0" for x in shorts))
@@ -675,13 +737,16 @@ def read(text, tree, today, decks=(), plans=()):
     m = re.search(r"\b(?:but not|except(?: for)?|without|excluding|not)\b(.*)$", low)
     if m:
         neg, low = m.group(1), low[:m.start()]
+    low = _both(low)  # "both heart failure and pharm": the cards in both
     said_low = low
-    low, within = _resources(low, tree)  # "b&b heart failure": heart failure, in that resource
-    segs = [ws for ws in (_words(s) for s in re.split(r"\band\b|,|\bor\b|&|\+|/|;", low)) if ws]
+    low, within = _resources(low, tree)  # "m&m heart failure": heart failure, in that resource
+    segs, terms = _segments(low, tree, within)
     if within and segs and tree is not None and not any(tree.groups(ws, within=within) for ws in segs):
-        low, within = said_low, set()  # "pathoma chapter 3": a tag called that, wherever it is
-        segs = [ws for ws in (_words(s) for s in re.split(r"\band\b|,|\bor\b|\+|/|;", low)) if ws]
+        low, within = said_low, set()  # "pathbook chapter 3": a tag called that, wherever it is
+        segs, terms = _segments(low, tree, within, amp=False)
     out["res"] = sorted(within)
+    out["terms"] = terms  # [[seg]]: each term's topics' cards in all of them; the terms' together
+    out["seg_words"] = [" ".join(ws) for ws in segs]
     if not segs and within and tree is not None:
         gs = tree.resource_group(within)
         out["groups"] += [dict(g, seg=0, on=True) for g in gs]
@@ -715,16 +780,38 @@ def read(text, tree, today, decks=(), plans=()):
     return out
 
 
-def topics_said(groups):
-    """The topics named, one a typed topic: its first ticked chip's name ("Platelets and Anemia")."""
-    seen, names = set(), []
+def topics_said(groups, terms=None):
+    """The topics named, one a typed topic: its first ticked chip's name
+    ("Platelets and Anemia"); two in one term, the cards in both, "with"
+    ("Heart Failure with Pharm")."""
+    first = {}
     for g in groups:
-        if g.get("on") and g.get("seg") not in seen:
-            seen.add(g.get("seg"))
-            names.append(g["name"])
+        if g.get("on") and g.get("seg") not in first:
+            first[g.get("seg")] = g["name"]
+    names = []
+    for term in terms or [[s] for s in first]:
+        said = [first[s] for s in term if s in first]
+        if said:
+            names.append(" with ".join(said))
     if len(names) <= 2:
         return " and ".join(names)
     return ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def ticked_by_seg(r, off_groups=(), off_tags=()):
+    """{seg: [tag]}: each typed topic's ticked tags (a seg with none ticked isn't in it)."""
+    out = {}
+    for i, g in enumerate(r.get("groups") or ()):
+        on = g.get("on") if i not in set(off_groups) else not g.get("on")
+        if on:
+            ts = out.setdefault(g.get("seg"), [])
+            ts += [t for t in g.get("tags") or () if t not in set(off_tags) and t not in ts]
+    return out
+
+
+def joined(r):
+    """Whether any of the reading's topics are taken in both (a term of two or more)."""
+    return any(len(t) > 1 for t in r.get("terms") or ())
 
 
 def filter_label(f):
@@ -817,6 +904,149 @@ def filters_q(filters, off=()):
 def text_q(text):
     """Words no tag has, as Anki's search of the cards' text: each word, its plural off when it's long."""
     return " ".join('"' + esc(stem(w) if len(w) >= 5 else w) + '"' for w in str(text or "").split())
+
+
+# ---- a tag in its chip's list: its resource first ----
+
+def tag_row(path, name="", deep=False):
+    """A tag as its chip's list shows it: {res, path}: where it's from (the
+    first #part under its root, "M&M", else its root, "Heme lectures"; none
+    for a one-part tag) and the parts after that, the last three (deep: all),
+    the chip's own name off the end ("Cardio › Heart Failure" under the chip
+    Heart Failure is "Cardio"). Sam: "the overarching resource is an
+    important thing"."""
+    parts = str(path).split(SEP)
+    at = next((i for i, x in enumerate(parts) if i > 0 and x[:1] in "#^"), 0 if len(parts) > 1 else None)
+    res = spaced(pretty(parts[at])) if at is not None else ""
+    shown = [pretty(x) for x in parts[(at + 1) if at is not None else 0:]]
+    if len(shown) > 1 and name and shown[-1].lower() == str(name).lower():
+        shown = shown[:-1]
+    return {"res": res, "path": " \u203a ".join(shown if deep else shown[-3:])}
+
+
+def tag_list(rows, name=""):
+    """A chip's tags, by where they're from: [{res, n, tags: [row]}], the
+    resource with most cards first, each one's tags by their cards. rows:
+    [{t, res, path, n, on}]. Two of a resource's that would read the same
+    say more: their whole path, then their root ("Step2 › Cardio": a deck
+    with a resource in two versions of itself)."""
+    by = {}
+    for x in rows:
+        by.setdefault(x["res"], []).append(dict(x))
+    for v in by.values():
+        for how in ("deep", "root"):
+            said = {}
+            for x in v:
+                said.setdefault(x["path"].lower(), []).append(x)
+            twins = [x for xs in said.values() if len(xs) > 1 for x in xs]
+            if not twins:
+                break
+            for x in twins:
+                deep = tag_row(x["t"], name, deep=True)["path"]
+                root = pretty(str(x["t"]).split(SEP)[0]) if SEP in str(x["t"]) else ""
+                x["path"] = deep if how == "deep" or not root or not x["res"] else f"{root} \u203a {deep}".rstrip(" \u203a")
+    out = [{"res": k, "n": sum(x["n"] for x in v), "tags": sorted(v, key=lambda x: (-x["n"], x["path"].lower()))}
+           for k, v in by.items()]
+    return sorted(out, key=lambda g: (-g["n"], g["res"].lower()))
+
+
+def spaced(name):
+    """A resource's name as it's said: "QuickRef" is Quick Ref, "ChartsMicro" Charts Micro (M&M stays)."""
+    return re.sub(r"(?<=[a-z])(?=[A-Z])", " ", str(name))
+
+
+# ---- the how-to (Sam: "awesome and comprehensive and clear"): the Decks screen's first-time card and the window's ? ----
+
+HOWTO = {
+    "lede": "Say what you want to study, or what\u2019s coming up, the way you\u2019d say it. It reads your deck\u2019s "
+            "own tags, on this computer; nothing you type leaves it.",
+    "parts": [
+        {"k": "topic", "t": "A topic", "w": "Its name, its initials or a typo: every tag that says it, as one chip; "
+                                            "\u201cand\u201d or \u201cor\u201d adds another. Tap a chip to leave it out; its "
+                                            "tags, under where each is from, to pick which.",
+         "try": ["heart failure", "hf drugs"]},
+        {"k": "res", "t": "A resource", "w": "Its name or its letters, alone or with a topic; a chapter by its number.",
+         "try": []},
+        {"k": "filter", "t": "A filter", "w": "New, seen, due, due tomorrow, missed today or this week, learning, "
+                                              "suspended, leeches, flagged. Or tap them under the box.",
+         "try": ["anemia I missed this week"]},
+        {"k": "limit", "t": "Both, how many, leaving some out", "w": "\u201cboth \u2026 and \u2026\u201d, \u201cwith\u201d "
+                                                                      "or AND: only the cards in both. A number first takes "
+                                                                      "that many, in the deck\u2019s order; \u201cbut not\u201d, "
+                                                                      "\u201cexcept\u201d or \u201cwithout\u201d leaves one out.",
+         "try": ["both heart failure and pharm", "10 new platelets", "platelets but not itp"]},
+        {"k": "ids", "t": "QBank QIDs, IDs, a search", "w": "Paste a block\u2019s question IDs (its bank\u2019s name "
+                                                             "first if you have two): their cards, and the topics they\u2019re "
+                                                             "in. Note or card IDs, or an Anki search, too.",
+         "try": ["10234 10911 11002"], "label": ["a block\u2019s QIDs"]},
+        {"k": "coming", "t": "What\u2019s coming up", "w": "A quiz goes on a plan, its topics on the days before it. "
+                                                            "An exam, or being away, goes in Settings.",
+         "try": ["quiz friday on anemia", "I\u2019m away till monday"]},
+        {"k": "lines", "t": "Plan lines", "w": "Lines from our prompts or the Text tab become a plan\u2019s dates and events.",
+         "code": "2026-11-12 | Anemia | tag:\u2026"},
+        {"k": "plan", "t": "Your plan\u2019s words", "w": "\u201ctomorrow\u2019s set\u201d, \u201cthe heme quiz\u201d: "
+                                                          "the cards your plan has for them.", "try": ["tomorrow\u2019s set"]},
+    ],
+    "then": ["Study now: new and due, or all of them, in a filtered deck. Suspended ones open; leeches stay out.",
+             "Keep as a filtered deck: named by you; Rebuild fills it again any day. Cards never move.",
+             "Add to a filtered deck you have, like a deck of QBank misses.",
+             "Unsuspend, or Browse them.",
+             "Put on days: tap one or several; each is a date on My plan, opened that morning."],
+}
+TRIED = ("topic", "res", "filter", "limit", "ids")  # the parts whose tries need the deck's tags: the window reads them first
+
+
+def howto(kbd, tries=None):
+    """The how-to's words, with this computer's key for Magic search. tries:
+    {part's k: [what to try]}, the deck's own (examples) or what reading
+    them found (the window drops a try that ticks nothing)."""
+    parts = []
+    for x in HOWTO["parts"]:
+        x = dict(x)
+        if tries and x["k"] in tries:
+            x["try"] = list(tries[x["k"]])
+            if x["k"] != "ids":  # a block's QIDs keeps its words; the numbers are the deck's own
+                x.pop("label", None)
+        parts.append(x)
+    return dict(HOWTO, parts=parts,
+                foot=f"In the You box\u2019s head, and {kbd} from any screen. ? in the window brings this back.")
+
+
+def examples(names):
+    """The how-to's tries from the deck's own tags, {res, ids} (either may be
+    missing). res: the #part under a root with the most tags (not a QBank's,
+    whose tags end in a number), said as its name, with its biggest part
+    after it ("quick ref cardiovascular"). ids: three of the questions of
+    the bank with the most, spread over its numbers ("1151 5023 11514")."""
+    seen = {}  # lowercased path to the #part -> [its name, tags, ones ending in a number, {next part: tags}]
+    qs = {}    # a bank's #part, lowercased -> its question numbers
+    for wr in names:
+        parts = str(wr).split(SEP)
+        at = next((i for i, x in enumerate(parts) if i > 0 and x[:1] == "#"), None)
+        if at is None:
+            continue
+        r = seen.setdefault(SEP.join(parts[:at + 1]).lower(), [parts[at], 0, 0, {}])
+        r[1] += 1
+        r[2] += parts[-1].isdigit()
+        if parts[-1].isdigit() and 3 <= len(parts[-1]) <= 9:
+            qs.setdefault(parts[at].lower(), set()).add(int(parts[-1]))
+        if len(parts) > at + 1:
+            r[3][parts[at + 1]] = r[3].get(parts[at + 1], 0) + 1
+    out = {}
+    if qs:
+        nums = sorted(max(qs.values(), key=len))
+        if len(nums) >= 3:
+            out["ids"] = [" ".join(str(nums[len(nums) * k // 4]) for k in (1, 2, 3))]
+    for _k, (part, n, digits, kids) in sorted(seen.items(), key=lambda kv: (-kv[1][1], kv[0])):
+        said = spaced(pretty(part)).lower()
+        if n < 3 or digits * 2 > n or not re.fullmatch(r"[a-z0-9&' ]{2,30}", said):
+            continue
+        for kid, _m in sorted(kids.items(), key=lambda kv: (-kv[1], kv[0].lower())):
+            w = pretty(kid).lower()
+            if re.fullmatch(r"[a-z]{3,}(?: [a-z]{2,}){0,2}", w) and w.split()[0] not in FILLER:
+                out["res"] = [f"{said} {w}"]
+                return out
+    return out
 
 
 # ---- the days a set goes on ----

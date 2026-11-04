@@ -620,8 +620,6 @@ def _you(c, due, plans):
     hidden = board.hidden_tabs(c)
     you = {"tab": due_flow.you_tab(c), "folded": due_flow.folded(c, due), "plans": plans, "insights": None,
            "party_on": "party" not in hidden and gamenight_flow.shown()}  # 3.9.5: You › Pip Party, unless hidden in Settings
-    if not due and mw.col:
-        you["qids"] = due_flow.has_qids()  # 3.9.5: QBank QIDs in the head with Due's lists off too
     if you["folded"]:
         return you
     keys = ((["today", "upcoming", "later"] if due else []) + [k for k, _l in board.YOU_MORE if k not in hidden]
@@ -709,6 +707,17 @@ def _on_did_render(deck_browser):
         QTimer.singleShot(2500, habits_flow.check)  # 3.9.5: once a day, How you study (and the Fifteen at 35)
     sheets.redraw()  # 3.9.1: a question that was open goes back up on the page drawn anew
     rooms.refresh_widgets()
+    if not _closing and not _state.get("wrapped_open"):
+        from aqt.qt import QTimer
+        QTimer.singleShot(900, _magic_howto)  # 3.9.7, round 2: Magic search's how-to, once a person
+
+
+def _magic_howto():
+    try:
+        if not _closing and app.board_up():
+            magic_flow.show_board_howto()
+    except Exception:
+        traceback.print_exc()
 
 
 def _last_studied(q, stats):
@@ -919,6 +928,8 @@ def _on_js(handled, message, context):
         gamenight_flow.on_message(parts)  # 3.9.5's last round: You › Pip Party
     elif cmd == "magic":
         open_magic()  # 3.9.7: Magic search, from the You box's head (and Find a setting)
+    elif cmd == "magichow":
+        magic_flow.howto_said(parts)  # 3.9.7, round 2: its how-to's buttons, on the Decks screen once
     elif cmd in ("songsearch", "songuse", "songclear", "songlisten", "songapp", "songapple",
                  "dancehide", "danceshow", "dancemotion", "dancefold"):
         from . import song_flow

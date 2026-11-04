@@ -46,10 +46,11 @@ var dcMagic = (function () {
       placeholder: 'A topic, a filter, QIDs, a quiz on Friday, plan lines…' });
     box.appendChild(els.q);
     els.box = box;
-    ['rows', 'chips', 'tags', 'filters', 'res', 'lines', 'acts', 'pod', 'said', 'recent'].forEach(function (k) { els[k] = h('div', { cls: k }); });
+    ['rows', 'chips', 'tags', 'filters', 'res', 'lines', 'tops', 'acts', 'where', 'pod', 'said', 'recent'].forEach(function (k) { els[k] = h('div', { cls: k }); });
     els.intro = h('div', { cls: 'intro', role: 'dialog', 'aria-label': 'Magic search' });
-    [head, box, els.rows, els.chips, els.tags, els.filters, els.recent, els.res, els.lines, els.acts, els.pod, els.said, els.intro]
+    [head, box, els.rows, els.chips, els.tags, els.filters, els.recent, els.res, els.lines, els.tops, els.acts, els.where, els.pod, els.said, els.intro]
       .forEach(function (e) { root.appendChild(e); });
+    if (window.ResizeObserver) { var ro = new ResizeObserver(report); ro.observe(root); ro.observe(els.intro); }
     els.q.addEventListener('input', function () {
       fit();
       clearTimeout(typed);
@@ -57,13 +58,37 @@ var dcMagic = (function () {
     });
     els.q.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey && els.q.value.indexOf('\n') < 0) { e.preventDefault(); clearTimeout(typed); send('type', { text: els.q.value }); }
-      if (e.key === 'Escape') send('close');
+      if (e.key === 'Escape' && els.intro.hidden) send('close');
     });
     els.q.addEventListener('focus', sparkle);
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && document.activeElement !== els.q) send('close'); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      if (!els.intro.hidden) { send('intro', { show: false }); setTimeout(function () { els.q.focus(); }, 0); }  // the how-to first, then the window
+      else if (document.activeElement !== els.q) send('close');
+    });
   }
 
   function fit() { els.q.style.height = 'auto'; els.q.style.height = Math.min(160, els.q.scrollHeight) + 'px'; }
+
+  // Sam: "should change size according to content": the window is as tall as what's in it
+  // (the how-to's card when it's up), the glue holding it to the screen (ui/magic_window.py)
+  var told = 0, asked = 0;
+  function tall() {
+    var hh = Math.ceil(root.getBoundingClientRect().height);
+    var card = !els.intro.hidden && els.intro.firstChild;
+    if (card) hh = Math.max(hh, Math.ceil(card.getBoundingClientRect().height) + 28);
+    return hh;
+  }
+  function report() {
+    if (asked) return;
+    asked = requestAnimationFrame(function () {
+      asked = 0;
+      var hh = tall();
+      if (Math.abs(hh - told) < 2) return;
+      told = hh;
+      send('size', { h: hh });
+    });
+  }
 
   // the joy: once a window, the star sends a few sparkles off when the box is picked
   function sparkle() {
@@ -132,8 +157,13 @@ var dcMagic = (function () {
 
   function drawChips() {
     clear(els.chips);
-    var fresh = {};
+    var fresh = {}, termOf = {}, last = null;
+    (V.terms || []).forEach(function (t, i) { t.forEach(function (sg) { termOf[sg] = t.length > 1 ? i : null; }); });
     (V.chips || []).forEach(function (c) {
+      // "both A and B", A AND B, A with B: the cards in both, a quiet "with" between their chips
+      if (last !== null && c.seg !== last && termOf[c.seg] !== null && termOf[c.seg] !== undefined && termOf[c.seg] === termOf[last])
+        els.chips.appendChild(h('span', { cls: 'join', text: 'with', title: 'Only the cards in both' }));
+      last = c.seg;
       var key = 'g:' + c.name + ':' + c.seg;
       fresh[key] = 1;
       var g = h('span', { cls: 'grp' + (c.on ? ' on' : '') + (seen[key] ? '' : ' pop') }, [
@@ -151,11 +181,26 @@ var dcMagic = (function () {
     var open = (V.chips || []).filter(function (c) { return c.open && c.list && c.list.length; })[0];
     els.tags.hidden = !open;
     if (open) {
-      els.tags.appendChild(h('div', { cls: 'th' }, [h('span', { text: open.name + ': ' + plural(open.list.length, 'tag') }), h('span', { text: 'untick one to leave it out' })]));
-      open.list.forEach(function (t) {
-        var cb = h('input', { type: 'checkbox', onchange: function () { send('tag', { t: t.t }); } });
-        cb.checked = !!t.on;
-        els.tags.appendChild(h('label', { title: t.t }, [cb, h('span', { cls: 'p', text: t.name }), h('span', { cls: 'n', text: n(t.n) })]));
+      // a chip's tags under where each is from (Sam: "the overarching resource is an important thing"):
+      // a resource's tick takes all its tags in or out, each tag's tick just that one
+      els.tags.appendChild(h('div', { cls: 'th' }, [h('span', { text: open.name + ': ' + plural(open.tags, 'tag') }), h('span', { text: 'untick what to leave out' })]));
+      open.list.forEach(function (g, gi) {
+        var ts = g.tags.map(function (t) { return t.t; });
+        var ons = g.tags.filter(function (t) { return t.on; }).length;
+        var top = g.res && g.tags.length > 1;
+        if (top) {
+          var all = h('input', { type: 'checkbox', onchange: function () { send('tags', { ts: ts, on: all.checked }); } });
+          all.checked = ons === g.tags.length;
+          all.indeterminate = ons > 0 && ons < g.tags.length;
+          els.tags.appendChild(h('label', { cls: 'rs' + (gi ? ' sep' : '') }, [all, h('span', { cls: 'p', text: g.res }), h('span', { cls: 'n', text: n(g.n) })]));
+        }
+        g.tags.forEach(function (t) {
+          var cb = h('input', { type: 'checkbox', onchange: function () { send('tag', { t: t.t }); } });
+          cb.checked = !!t.on;
+          var words = top ? t.path : (g.res && t.path ? [h('b', { text: g.res }), ' \u00b7 ' + t.path] : [g.res || t.path]);
+          els.tags.appendChild(h('label', { cls: top ? 'in' : (gi ? 'sep' : ''), title: t.t },
+            [cb, h('span', { cls: 'p' }, typeof words === 'string' ? [words] : words), h('span', { cls: 'n', text: n(t.n) })]));
+        });
       });
     }
   }
@@ -177,9 +222,17 @@ var dcMagic = (function () {
   }
 
   function drawRes() {
-    clear(els.res); clear(els.lines); clear(els.acts);
-    var t = V.count;
+    clear(els.res); clear(els.lines); clear(els.acts); clear(els.tops); clear(els.where);
+    var t = V.count, Q = V.qids;
     (V.lines || []).forEach(function (l) { els.lines.appendChild(h('div', { text: l })); });
+    if (Q && Q.ask && (Q.banks || []).length > 1) {
+      // QBank QIDs: two banks have these numbers; which (the one with most, till I pick)
+      var bank = h('select', { cls: 'b', 'aria-label': 'Question bank', onchange: function () { send('bank', { name: bank.value }); } },
+        Q.banks.map(function (b) { return h('option', { value: b, text: b }); }));
+      bank.value = Q.bank || Q.banks[0];
+      els.lines.appendChild(h('div', { cls: 'bank' }, [h('span', { text: 'Question bank' }), bank]));
+    }
+    drawTopics(Q);
     if (!t) return;
     if (!t.n) {
       els.res.appendChild(h('span', { cls: 'mu', text: V.kind === 'empty' && !V.picked ? '' : 'No cards for that here.' }));
@@ -187,7 +240,8 @@ var dcMagic = (function () {
     }
     var bits = [t.new ? n(t.new) + ' new' : '', t.seen ? n(t.seen) + ' seen' : '', t.susp ? n(t.susp) + ' suspended' : '',
       t.due ? n(t.due) + ' due' : '', t.leech ? plural(t.leech, 'leech', 'leeches') : ''].filter(Boolean).join(' · ');
-    els.res.appendChild(h('b', { text: plural(t.n, 'card') }));
+    if (Q && Q.q) bits = plural(t.n, 'card') + (bits ? ' · ' + bits : '');  // QBank QIDs: the questions first, as its window said
+    els.res.appendChild(h('b', { text: Q && Q.q ? plural(Q.q, 'question') : plural(t.n, 'card') }));
     if (bits) els.res.appendChild(h('span', { cls: 'bits', text: bits }));
     els.res.appendChild(btn('link', 'Browse', 'browse', {}));
     var k = V.how === 'all' ? t.all : t.nd;
@@ -211,6 +265,20 @@ var dcMagic = (function () {
     keepRow.appendChild(h('button', { cls: 'b', type: 'button', text: 'Keep', onclick: function () { send('keep', { name: kn.value }); } }));
     kn.addEventListener('keydown', function (e) { if (e.key === 'Enter') send('keep', { name: kn.value }); });
     els.acts.appendChild(keepRow);
+    if (V.where && k) els.where.appendChild(h('span', { text: V.where }));
+  }
+
+  // QBank QIDs' Their topics (3.9.5): the map's parts the questions are in, each a Study of what I missed there
+  function drawTopics(Q) {
+    var rows = (Q && Q.topics) || [];
+    els.tops.hidden = !rows.length;
+    if (!rows.length) return;
+    els.tops.appendChild(h('div', { cls: 'th', text: 'Their topics' }));
+    rows.forEach(function (r) {
+      els.tops.appendChild(h('div', { cls: 'tr' }, [h('span', { cls: 'w' }, [h('b', { text: r.name }), h('span', { cls: 'mu', text: r.line })]),
+        r.missed ? btn('link', 'Study', 'topic', { i: r.i }, { title: 'A filtered deck of the ' + plural(r.missed, 'card') + ' you missed there' }) : null]));
+    });
+    if (Q.more) els.tops.appendChild(h('div', { cls: 'mu', style: 'font-size:12px', text: Q.more }));
   }
 
   function drawDays() {
@@ -258,35 +326,26 @@ var dcMagic = (function () {
 
   function drawIntro() {
     clear(els.intro);
-    els.intro.hidden = !V.intro;
-    if (!V.intro) return;
+    var H = V.intro && V.howto;
+    els.intro.hidden = !H;
+    if (!H) return;
+    // the how-to's words are magic.HOWTO's, the same as the Decks screen's first-time card (board.MAGIC_HOWTO_JS)
     var card = h('div', { cls: 'ic2' });
     var t = h('div', { cls: 't' });
     t.innerHTML = MAG;
     t.appendChild(h('b', { text: 'Magic search' }));
     card.appendChild(t);
-    card.appendChild(h('p', { cls: 'lede', text: 'Say what you want to study, or what’s coming up, the way you’d say it. It reads your deck’s own tags, on this computer; nothing you type leaves it.' }));
+    card.appendChild(h('p', { cls: 'lede', text: H.lede }));
     var how = h('div', { cls: 'how' });
-    function sec(title, text, tries, code) {
-      how.appendChild(h('div', {}, [h('h4', { text: title }), h('p', { text: text }), code ? h('code', { text: code }) : null,
-        tries ? h('div', { cls: 'try' }, tries.map(function (x) { return tryChip(x[0], x[1]); })) : null]));
-    }
-    sec('A topic', 'Its name, its initials or a typo: every tag that says it, as one chip. Tap a chip to leave it out; its tags to pick which.', [['heart failure'], ['hf drugs']]);
-    sec('A filter', 'New, seen, due, due tomorrow, missed today or this week, learning, suspended, leeches, flagged. Or tap them under the box.', [['anemia I missed this week']]);
-    sec('How many', 'A number first takes that many, in the deck’s order.', [['10 new platelets']]);
-    sec('Leave some out', '“but not”, “except” or “without”, then the topic.', [['platelets but not itp']]);
-    sec('QIDs, IDs, a search', 'Paste a block’s question IDs, note or card IDs, or an Anki search.', [['10234 10911 11002', 'a block’s QIDs']]);
-    sec('What’s coming up', 'A quiz goes on a plan, its topics on the days before it. An exam, or being away, goes in Settings.', [['quiz friday on anemia'], ['I’m away till monday']]);
-    sec('Plan lines', 'Lines from our prompts or the Text tab become a plan’s dates and events.', null, '2026-11-12 | Anemia | tag:…');
-    sec('Your plan’s words', '“tomorrow’s set”, “the heme quiz”: the cards your plan has for them.', [['tomorrow’s set']]);
+    (H.parts || []).forEach(function (x) {
+      var tries = (x['try'] || []).map(function (q, i) { return tryChip(q, (x.label || [])[i]); });
+      how.appendChild(h('div', {}, [h('h4', { text: x.t }), h('p', { text: x.w }), x.code ? h('code', { text: x.code }) : null,
+        tries.length ? h('div', { cls: 'try' }, tries) : null]));
+    });
     card.appendChild(how);
-    card.appendChild(h('div', { cls: 'then' }, [h('b', { text: 'Then, with what it finds' }), h('ul', {}, [
-      h('li', { text: 'Study now: new and due, or all of them, in a filtered deck. Suspended ones open; leeches stay out.' }),
-      h('li', { text: 'Keep as a filtered deck: named by you; Rebuild fills it again any day. Cards never move.' }),
-      h('li', { text: 'Add to a filtered deck you have, like a deck of QBank misses.' }),
-      h('li', { text: 'Unsuspend, or Browse them.' }),
-      h('li', { text: 'Put on days: tap one or several; each is a date on My plan, opened that morning.' })])]));
-    card.appendChild(h('div', { cls: 'foot' }, [h('span', { cls: 'mu', style: 'font-size:12px', text: '? brings this back. Ctrl+Shift+F opens Magic search from anywhere.' }),
+    card.appendChild(h('div', { cls: 'then' }, [h('b', { text: 'Then, with what it finds' }),
+      h('ul', {}, (H.then || []).map(function (x) { return h('li', { text: x }); }))]));
+    card.appendChild(h('div', { cls: 'foot' }, [h('span', { cls: 'mu', style: 'font-size:12px', text: H.foot }),
       h('button', { type: 'button', cls: 'b pri', text: 'Got it', onclick: function () { send('intro', { show: false }); setTimeout(function () { els.q.focus(); }, 0); } })]));
     els.intro.appendChild(card);
   }
@@ -300,6 +359,7 @@ var dcMagic = (function () {
     els.deck.value = String(v.did || '');
     els.deck.hidden = (v.decks || []).length < 2;
     drawRows(); drawChips(); drawFilters(); drawRes(); drawDays(); drawSaid(); drawIntro();
+    report();
   }
 
   function start(v, isPreview) {

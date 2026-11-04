@@ -962,13 +962,17 @@ The riskiest of 3.9.1, the parts only a live Anki can show, in order:
 ### 3.9.7: Magic search
 
 - [ ] The You box's head says Magic search (every tab, and folded); Ctrl+Shift+F (⌘⇧F) opens it from the Decks screen, Overview and Review; Tools › Due Crew › Magic search… and Find a setting ("filtered") too. Settings › Board › Due › Magic search off: gone from the head, the key does nothing, the Tools entry hides.
-- [ ] The first time: the how-to card, each part with something to tap that runs it; Got it, then ? brings it back. On another computer it doesn't show again.
+- [ ] The first time on the Decks screen (not in the window): the how-to card over the board, the bars dimmed, each part with something to tap that opens Magic search with it; its resource try is one of your deck's resources, its QIDs try three of your bank's questions. Got it, Open Magic search or a try: it doesn't come back, here or on another computer. In the window, ? brings it back; Esc takes it away before the window.
 - [ ] Picking the box: the star twirls and sparkles, once a window; chips pop in as you type. With Reduce motion, none of it.
 - [ ] In a big shared deck: "heart failure" ticks one chip with its tags listed open (untick one: its cards leave); "hf drugs", "aki", "itp", "copd", "type 2 diabetes", "staph aureus" tick what you'd expect; "mi" ticks only the tag called MI and offers the rest; "graves" doesn't tick Grade.
-- [ ] Resources: "b&b heart failure", "boards and beyond renal", "first aid cardio", "sketchy", "sketchy micro staph", "pathoma chapter 3" (Neoplasia).
+- [ ] Resources: your deck's resource by its name with a topic, by its letters, by its words' initials with their "and"; one word that begins a family of them; a resource and a chapter number.
+- [ ] The window's size: an empty box is a short window; it grows with what it finds, down from where it opened, and scrolls past most of the screen; drag it taller and it stays so.
+- [ ] A topic's tags (open a chip's N tags): under where each is from, the resource in bold with its own tick (untick it: all of its go; tick one back: the resource's tick is half); a resource in both halves of the deck says which half.
+- [ ] "anemia or platelets" and "anemia and platelets": both topics' cards. "both heart failure and pharm", "heart failure AND pharm", "heart failure with pharm": only the cards in both, "with" between the chips, the deck's name "Heart Failure with Pharm"; "diabetes with complications" stays one topic.
 - [ ] The filters row is there with an empty box; a tap on Due today counts the deck's due cards; "anemia I missed this week" turns Missed this week on.
 - [ ] "10 new platelets" takes 10; "platelets but not itp" strikes ITP; "kidney stones" (if no tag says it) finds the cards' text and says so.
 - [ ] A block's QIDs, with or without the bank's name; a note id; an Anki search pasted: each finds its cards.
+- [ ] QBank QIDs is here now: no QBank QIDs chip in the You box's head, no QBank QIDs… in Tools › Due Crew › Plans. Paste a block's results as the bank copies them (a date, "Missed:", a score): "N questions", the numbers that aren't questions, your plan's dates, Their topics (Study on a part you missed some in: its deck); a number in two banks asks which; Study now: Due Crew › QBank cards.
 - [ ] Study now: a Due Crew deck of the new and due ones (All of them: every one but a leech), suspended ones opened, Anki's Study screen on it; Edit › Undo takes it back in one step. Study some: they go home; the deck's still there the next morning until it's empty.
 - [ ] Keep as a filtered deck, named: in your deck list, Rebuild fills it again; it's never tidied away. Undo in the window takes it away.
 - [ ] Add to a filtered deck (one of your own, a QBank misses deck): its own cards stay, these join, Rebuild keeps both.

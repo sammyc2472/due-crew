@@ -136,7 +136,6 @@ def test_glue():
     from aqt.deckbrowser import DeckBrowser
     from due_crew import team_flow as TF, plan_flow as F
     from due_crew.app import _state
-    from due_crew.planner import flow as PF
     if "aqt.reviewer" not in sys.modules:
         sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
     col = _collection()
@@ -195,8 +194,9 @@ def test_glue():
               and Q.topics(idx, found, tiles[:1], got) == [])
         check("qids: the topics' lines, the first % says here", Q.topic_words(rows) == ["4 questions · 55% here", "1 question · 80%",
                                                                                        "1 question · 100%"], Q.topic_words(rows))
-        ops = PF.QidOps()
-        check("qids: the window's map is the deck's (QidOps.deck_map)",
+        from due_crew import magic_flow as MF
+        ops = MF.Ops()  # 3.9.7: Magic search has QBank QIDs' topics since its round 2
+        check("qids: Magic search's map is the deck's (Ops.deck_map)",
               [t["name"] for t in ops.deck_map(30)[0]] == [t["name"] for t in tiles])
         built.clear()
         check("qids: a topic's Study, the same helper as the map's: Due Crew's deck named after it",

@@ -1,7 +1,7 @@
 # Your plans, and the plan windows
 
 Python-native plan work inside Anki: Your plans (the duecrew.com builder,
-in Anki), New plan and QBank QIDs, in their own package,
+in Anki) and New plan, in their own package (QBank QIDs was one too, till 3.9.7's Magic search took it in),
 `due_crew/planner/`. Built in labs (round three's mocks, "Resource tags
 and a Python-native plan window", the design-spec artifact), for everyone
 signed in since 3.9.3, and rebuilt in round five (Sam's picks on the
@@ -18,7 +18,7 @@ card on, from the deck beside the date or a search.
 ## Ways in
 
 - **Tools › Due Crew › Plans**: Your plans…, New plan…, Follow a plan…;
-  QBank QIDs…, Export cards for my AI….
+  Export cards for my AI… (3.9.7: QBank QIDs… went into Magic search, Tools › Due Crew › Magic search…).
 - **You › Plans**: the card's one button, *Your plans…* (on that
   plan; round five, where the card's Open and Plan ▾ and the head row's
   Open plans and New plan ▾ went: a follow's every setting is its
@@ -32,10 +32,9 @@ card on, from the deck beside the date or a search.
   lines, Browse, the ones left, Open now, Study, Move…, Skip it, Put it
   back, why it left cards shut), unfolding; the same click folds them.
   Due's Today and Upcoming open a date's details on its name too.
-- **Insights**: *QBank QIDs…* for a deck with a bank's question tags.
-- **The You box's head** (every tab, and the folded line): *QBank QIDs*,
-  when a tag here ends in a question's number (Anki's tag list, read once a profile and day: `due_flow.has_qids`).
-- **Settings' Find a setting** finds the three windows by their words.
+- **The You box's head** (every tab, and the folded line): *Magic search*,
+  where *QBank QIDs* was till 3.9.7 (its paste is Magic search's).
+- **Settings' Find a setting** finds the windows by their words (Magic search by a bank's too).
 - **Labs** is what stays behind this computer's switch, `"labs": true` in
   the add-on's config (no window sets it): Claude's stand-in, session by
   session (New plan's labs link opens the calendar window), and What
@@ -441,6 +440,13 @@ ticked tag comes with it. Read from the deck index on the main thread.
 
 ## QBank QIDs
 
+3.9.7 (Magic search's round 2, Sam: "this is replacing QBank QID search"):
+its window, chip and menu item went; Magic search reads the paste
+(`magic_flow.Search.qids_view`, on `qids.py`, which stays) and says all of
+what follows, Their topics and the bank's pick among it. A paste with words
+around its numbers is QIDs when two or more of them, and a third, are the
+deck's questions. What follows is how it worked as its own window.
+
 (Missed questions until 3.9.3; Question IDs in labs.) After a practice
 block: paste its QIDs, missed or not (3.9.4, Sam: "Just paste QBank QIDs
 here"), any way the bank copies them. Study now is the window's button in
@@ -683,7 +689,7 @@ and sends in Anki (Your plans › the plan › Review and send).
 | `planner/flow.py` | the glue: the windows' asks (`Ops`, `StartOps`, `NewOps`, `QidOps`), `make_here`, `plan_drafts.json` |
 | `planner/core.py` | Qt-free, round six: the plan window's state and steps (`PlanCore`), both windows' |
 | `planner/web.py`, `webface.py`, `webmodel.py`, `webtabs.py`, `webnew.py`, `webpage.py`, `page/` | round six: the HTML window (its Qt shell, its clicks, its pure views, Insights and Settings, New plan, the page and its scripts) |
-| `planner/window.py`, `plan_tab.py`, `date_panel.py`, `deck_panel.py`, `shape.py`, `send.py`, `insights_tab.py`, `settings_tab.py`, `mine_tab.py`, `new_plan.py`, `text_tab.py`, `history_tab.py`, `day_notes.py`, `date_dialogs.py`, `widgets.py`, `picker.py`, `qid_window.py`, `start_window.py` | the Qt windows and their parts, in the board's look |
+| `planner/window.py`, `plan_tab.py`, `date_panel.py`, `deck_panel.py`, `shape.py`, `send.py`, `insights_tab.py`, `settings_tab.py`, `mine_tab.py`, `new_plan.py`, `text_tab.py`, `history_tab.py`, `day_notes.py`, `date_dialogs.py`, `widgets.py`, `picker.py`, `start_window.py` | the Qt windows and their parts, in the board's look |
 
 Checks: `tests/test_planner.py` (the pure parts, `build.py` against
 builder.js run in node, Fill, the save against the fake Worker's `PUT
@@ -700,7 +706,7 @@ people following (the foot's links), Review and send, Undo after a send, a co-au
 save under waiting changes, no Followers tab and Settings' Posts…, Settings, History, a
 day's notes, Month and a date dragged to another day, Ctrl+Z, the Plan tab's keys, Expand all and Collapse all, Latest first, ↓ and Find, a follower's Plan and Settings, a plan that lost its
 dates and a load that failed, no plans yet, New plan from a calendar,
-no Pip anywhere in them, QBank QIDs, the calendar window in labs),
+no Pip anywhere in them, the calendar window in labs; QBank QIDs is tests/test_magic.py's since 3.9.7),
 and `check_planner` in `tools/real_anki.py` (12,000 question tags, Bring
 back and Anki's undo of it, the picker's timings).
 

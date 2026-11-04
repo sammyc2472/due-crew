@@ -178,26 +178,6 @@ def _every_line(key, today, any_day=False):
     return None, None
 
 
-_QIDS = {"key": None, "has": False}
-
-
-def has_qids():
-    """3.9.3: a tag here ends in a question's number (3 to 9 digits, what
-    QBank QIDs finds: planner.qids), so the box's head offers it. Anki's tag
-    list, not the notes: read once a profile and day."""
-    col = mw.col
-    key = (app.generation, id(col), _today())
-    if _QIDS["key"] != key:
-        pats = " OR ".join(f"tag GLOB '*::{'[0-9]' * k}'" for k in range(3, 10))
-        try:
-            has = bool(col.db.scalar(f"SELECT 1 FROM tags WHERE {pats} LIMIT 1"))
-        except Exception:
-            traceback.print_exc()
-            has = False
-        _QIDS.update(key=key, has=has)
-    return _QIDS["has"]
-
-
 _TREE = {"key": None, "at": 0.0, "until": 0.0, "tree": None}
 
 
@@ -522,7 +502,6 @@ def view(c):
             x = more.get((r.get("pid"), r.get("uid"))) if r.get("kind") == "plan" else None
             if x:  # 3.8.1: what due.view's rows don't carry: "after" its event, Study
                 r["after"], r["study"] = bool(x.get("after")), bool(x.get("study"))
-        v["qids"] = has_qids() if mw.col else False  # 3.9.3: QBank QIDs in the head
         # 3.9.5: today's misses, under a done Reviews row
         rv = next((r for r in v.get("rows") or [] if r.get("kind") == "reviews"), None)
         v["misses"] = _misses(mw.col) if mw.col and rv and rv.get("done") else None

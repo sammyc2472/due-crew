@@ -30,7 +30,7 @@ import traceback
 from aqt import mw
 from aqt.utils import tooltip
 
-from . import app, magic as M, plan_flow
+from . import app, board, magic as M, plan_flow
 from . import plans as P
 from .app import _bg, cfg, client, save_cfg
 from .backend.shapes import TransportError
@@ -82,6 +82,50 @@ def close():
             w.close()
         except RuntimeError:
             pass
+
+
+# ---- the how-to on the Decks screen, once (round 2) ----
+
+_TRIES = {}  # this session's resource try, from the collection's tags: read once, the first time the card's due
+
+
+def board_howto():
+    """The Decks screen's first-time card, its words (magic.howto), or None:
+    Magic search off, or the card was seen (the account's magic_seen: once a
+    person, wherever they are). Its resource try is the collection's own
+    (a fifth of a second on a big shared deck, once)."""
+    if not mw.col or not on() or cfg().get("magic_seen"):
+        return None
+    if "res" not in _TRIES:
+        try:
+            _TRIES["res"] = M.examples(mw.col.tags.all())
+        except Exception:
+            traceback.print_exc()
+            _TRIES["res"] = {}
+    return M.howto(board.MAGIC_KBD, _TRIES["res"])
+
+
+def show_board_howto():
+    """On the Decks screen just drawn: the card, when it's due (it waits on the page for the board to be clear)."""
+    view = board_howto()
+    if view is not None:
+        app.board_eval(board.magic_howto_js(view))
+
+
+def howto_said(parts):
+    """The card's buttons (duecrew:magichow:how:text): Got it, Open Magic search,
+    or a try, the window opened with it. Each is the card seen."""
+    how = parts[2] if len(parts) > 2 else ""
+    try:
+        from urllib.parse import unquote
+        text = unquote(":".join(parts[3:]))[:500] if len(parts) > 3 else ""
+    except Exception:
+        text = ""
+    Ops().saw_intro()
+    if how == "open":
+        open_search()
+    elif how == "try" and text.strip():
+        open_search(text)
 
 
 def from_browser(browser):
@@ -145,14 +189,19 @@ class Ops:
                        if int(r.id) not in normal), key=lambda x: x[1].lower())
 
     def default_deck(self, choices):
-        """The deck my plans run on, else the one I've studied most these 30 days, else the biggest."""
+        """The deck my plans run on (its top deck: a deck's tags are deck-wide):
+        the plan You › Plans shows first, else the one most of my plans run on
+        (QBank QIDs' rule, 3.9.3), else the one I've studied most these 30
+        days, else the biggest."""
         from .planner.flow import StartOps
         have = {d for d, _n in choices}
         state = plan_flow._state_cfg()
-        for st in state.values():
-            top = self.top_of(st.get("deck_id")) if isinstance(st, dict) and st.get("deck_id") else None
-            if top in have:
-                return top
+        top = lambda st: self.top_of(st["deck_id"]) if isinstance(st, dict) and st.get("deck_id") else None  # noqa: E731
+        shown = top(state.get(cfg().get("plan_pick")))
+        ids = [d for d in map(top, state.values()) if d]
+        for did in ([shown] if shown else []) + sorted(set(ids), key=lambda d: (-ids.count(d), ids.index(d))):
+            if did in have:
+                return did
         try:
             most = StartOps().new_defaults().get("deck")
         except Exception:
@@ -379,17 +428,33 @@ class Ops:
     # ---- Anki's steps ----
 
     def unsuspend(self, cids):
-        from .planner.flow import QidOps
-        return QidOps().unsuspend(cids)
+        """Unsuspend: actions.unsuspend (the new ones first in line, one undo
+        step), then what plan_flow does after an open (at my own pace, a date
+        now all open). How many."""
+        from .planner import actions
+        if not mw.col or not cids:
+            return 0
+        shut = P.openable_ids(mw.col, cids)
+        n = actions.unsuspend(mw.col, cids, f"Due Crew: unsuspend {len(shut):,} card{'s' if len(shut) != 1 else ''}")
+        if n:
+            plan_flow._after_change()
+            plan_flow._claim_opened(shut)
+            plan_flow.refresh_progress()
+            app.swap(cfg())
+        return n
 
-    def study(self, cids, name):
-        """Study now: actions.study into Due Crew › name (QBank cards' way), then Anki's Study screen."""
+    def study(self, cids, name, order=None):
+        """Study now: actions.study into Due Crew › name, rescheduled by my
+        answers, each card back to its own deck once done (QBank cards'
+        way: each paste adds to it), then Anki's Study screen. order: Anki's
+        (the deck's own, else QIDs' random)."""
         from .planner import actions
         deck = P.our_deck(name)
         shut = P.openable_ids(mw.col, cids)
         n = len({int(c) for c in cids})
+        how = plan_flow.NEW_ORDER if order is None else int(order)
         opened, had = actions.study(mw.col, cids, f"Due Crew: study {n:,} card{'s' if n != 1 else ''}", deck,
-                                    lambda want: plan_flow._filtered(mw.col, deck, want, order=plan_flow.NEW_ORDER))
+                                    lambda want: plan_flow._filtered(mw.col, deck, want, order=how))
         if opened:
             plan_flow._claim_opened(shut)
             plan_flow.refresh_progress()
@@ -465,6 +530,31 @@ class Ops:
             plan_flow._claim_opened(shut)
         plan_flow._after_change()
         return n
+
+    def plan_dates(self, did, idx, cids):
+        """[(plan name, [date label])]: the dates of the plans I follow on this
+        deck that hold any of these cards (my dates). QBank QIDs' line."""
+        out = []
+        state = plan_flow._state_cfg()
+        for p in plan_flow.followed():
+            st = state.get(p["id"]) or {}
+            if not st.get("deck_id") or self.top_of(st["deck_id"]) != did:
+                continue
+            dates = P.dates_with(idx, p["doc"], cids, plan_flow._swap(st))
+            if dates:
+                out.append((str(p.get("name") or "Plan"), [P.fmt_day(u.get("opens")) for u in dates]))
+        return out
+
+    def deck_map(self, did):
+        """3.9.5, Their topics: the deck's topic map as Insights draws it, its
+        top level, and the cards I missed these 4 weeks: (tiles, missed)."""
+        from . import team_flow
+        return team_flow.deck_map(did)
+
+    def study_topic(self, name, cids):
+        """3.9.5: a topic's Study, the map's deck of what I missed there. True when it took."""
+        from . import team_flow
+        return team_flow.study_deck(name, cids)
 
     def undo_anki(self, label):
         """Edit › Undo, when the last step is still ours."""
@@ -557,7 +647,8 @@ class Search:
         self.picked, self.day_name = [], ""
         self.dest, self.dests = "mine", None
         self.said, self.undo = None, None
-        self.intro = not ops.seen_intro()
+        self.intro = False         # the how-to: the Decks screen shows it once (board_howto), ? here any time
+        self._tries = {}           # a deck's how-to tries, read against its tags: did -> {part: [tries]}
         self.busy = False
         self.mode = ""             # "days": the day picker open
         self._cards, self._q = None, ""
@@ -566,6 +657,7 @@ class Search:
         self.every = ops.all_decks()      # read once a window: a deck said by its name
         self.filtered = ops.filtered_decks()
         self._loads, self._btree = {}, {}
+        self.bank_pick, self._qf, self._maps, self._topics = None, None, {}, []  # QBank QIDs: the bank I picked, the find, decks' maps, Their topics
         self.pick_deck(ops.default_deck(choices) if choices else None)
 
     # -- state --
@@ -636,6 +728,31 @@ class Search:
     def ticked(self):
         return M.ticked_tags(self.r, self.flip, self.tag_off)
 
+    def joined_cards(self, deck_q):
+        """Sam: "AND statements and OR statements on tags": each term's topics'
+        cards in all of them ("both heart failure and pharm"), the terms'
+        together ("…, or renal"). A topic no tag says is its words in the
+        cards' text; one whose chips are all off, none (nothing is in both)."""
+        r, idx = self.r, self.idx
+        by_seg = M.ticked_by_seg(r, self.flip, self.tag_off)
+        has = {g["seg"] for g in r["groups"]}
+        words = r.get("seg_words") or []
+        out = set()
+        for term in r.get("terms") or ():
+            got = None
+            for sg in term:
+                if sg in by_seg:
+                    cs = set()
+                    for t in by_seg[sg]:
+                        cs |= idx.tag_cards(t)
+                elif sg not in has and sg < len(words) and words[sg]:
+                    cs = self.ops.find(f"{deck_q} {M.text_q(words[sg])}") or set()
+                else:
+                    cs = set()
+                got = cs if got is None else got & cs
+            out |= got or set()
+        return out
+
     def reading(self):
         return dict(self.r, filters=self.filters)
 
@@ -672,22 +789,25 @@ class Search:
             base = self.ops.find(f"{deck_q} ({r['search']})") or set()
         else:
             tags = self.ticked()
-            if tags or r.get("plan"):
+            if M.joined(r):
+                base = self.joined_cards(deck_q)  # "both A and B", A AND B, A with B
+            elif tags or r.get("plan"):
                 base = set()
                 for t in tags:
                     base |= idx.tag_cards(t)
-                if r.get("plan"):
-                    hit = r["plan"]
-                    got_p = self.ops.plan_idx(hit["pid"])
-                    if got_p:
-                        _p, st, doc, pidx = got_p
-                        for u in P.units(doc):
-                            if u.get("id") in hit["uids"]:
-                                base |= pidx.match(u, plan_flow._swap(st), doc)
             elif r["text"]:
                 base = self.ops.find(f"{deck_q} {M.text_q(r['text'])}") or set()
             elif not (self.filters or r.get("deck")):
                 base = set()
+            if r.get("plan"):
+                base = set(base or ())
+                hit = r["plan"]
+                got_p = self.ops.plan_idx(hit["pid"])
+                if got_p:
+                    _p, st, doc, pidx = got_p
+                    for u in P.units(doc):
+                        if u.get("id") in hit["uids"]:
+                            base |= pidx.match(u, plan_flow._swap(st), doc)
         for g in r.get("neg") or ():
             for t in g.get("tags") or ():
                 if base is None:
@@ -720,13 +840,43 @@ class Search:
         return self._cards
 
     def qfind(self):
-        """QBank QIDs' own find (planner/qids.py), in the bank the words named ("uworld 2345 …"), else the one with most."""
+        """QBank QIDs' own find (planner/qids.py): in the bank I picked, else
+        the one the words named ("qbank 2345 …"), else the one with most.
+        Once a reading."""
         from .planner import qids as Q
-        bank = None
-        if self.r.get("bank"):
-            want = re.sub(r"[^a-z0-9]", "", self.r["bank"])
-            bank = next((b for b in Q.banks(self.idx) if re.sub(r"[^a-z0-9]", "", b.lower()) == want), None)
-        return Q.find(self.idx, " ".join(self.r["qids"]), bank=bank)
+        key = (self.did, tuple(self.r["qids"]), self.r.get("bank"), self.bank_pick)
+        if self._qf is None or self._qf[0] != key:
+            have = Q.banks(self.idx)
+            bank = self.bank_pick if self.bank_pick in have else None
+            if bank is None and self.r.get("bank"):
+                want = re.sub(r"[^a-z0-9]", "", self.r["bank"])
+                bank = next((b for b in have if re.sub(r"[^a-z0-9]", "", b.lower()) == want), None)
+            self._qf = (key, Q.find(self.idx, " ".join(self.r["qids"]), bank=bank))
+        return self._qf[1]
+
+    def qids_view(self):
+        """What the QBank QIDs window said (3.9.3 to 3.9.6; Magic search has it
+        since 3.9.7, round 2, Sam: "this is replacing QBank QID search"): how
+        many are questions, the bank when two are close (or I picked one), and
+        Their topics (3.9.5): the map's parts they're in, each with a Study of
+        what I missed there. None unless it's QIDs."""
+        from .planner import qids as Q
+        r = self.r
+        if r["kind"] != "ids" or not r["qids"] or self.idx is None or not Q.banks(self.idx):
+            return None
+        f = self.qfind()
+        out = {"q": len(f["found"]), "banks": [b for b, _n in f["banks"]], "bank": f["bank"],
+               "ask": Q.close(f) or self.bank_pick is not None, "topics": [], "more": ""}
+        if f["cids"]:
+            if self.did not in self._maps:
+                self._maps[self.did] = self.ops.deck_map(self.did)
+            tiles, missed = self._maps[self.did]
+            rows = Q.topics(self.idx, f, tiles, missed)
+            self._topics = rows
+            out["topics"] = [{"i": i, "name": x["name"], "line": line, "missed": len(x["missed"])}
+                             for i, (x, line) in enumerate(list(zip(rows, Q.topic_words(rows)))[:Q.TOPICS_SHOWN])]
+            out["more"] = Q.more_topics(rows)
+        return out
 
     def tally(self, cids):
         idx = self.idx
@@ -757,11 +907,13 @@ class Search:
             return f"{len(self.cids_in):,} picked"
         if r.get("plan"):
             return r["plan"]["name"]
-        said = M.topics_said([dict(g, on=(g["on"] if i not in self.flip else not g["on"])) for i, g in enumerate(r["groups"])])
+        said = M.topics_said([dict(g, on=(g["on"] if i not in self.flip else not g["on"])) for i, g in enumerate(r["groups"])],
+                             r.get("terms"))
         if said:
             return said
         if r["kind"] == "ids":
-            return "QBank QIDs" if r["qids"] else "These IDs"
+            from .planner import actions
+            return actions.DECK if r["qids"] else "These IDs"  # QBank QIDs' Study now: each paste adds to its deck
         if r["text"]:
             return r["text"].capitalize()
         if self.filters:
@@ -777,21 +929,24 @@ class Search:
         chips = []
         for i, g in enumerate(r["groups"]):
             on = g["on"] if i not in self.flip else not g["on"]
-            tags = [{"t": x, "name": _tag_name(x), "on": x not in self.tag_off,
-                     "n": len(self.idx.tag_cards(x)) if self.idx else 0} for x in g["tags"]] if i == self.open_g else []
+            tags = M.tag_list([dict(M.tag_row(x, g["name"]), t=x, on=x not in self.tag_off,
+                                    n=len(self.idx.tag_cards(x)) if self.idx else 0)
+                               for x in g["tags"]], g["name"]) if i == self.open_g else []
             chips.append({"i": i, "name": g["name"], "n": g["cards"], "tags": len(g["tags"]), "on": on,
                           "open": i == self.open_g, "list": tags, "seg": g["seg"]})
         have = {f["k"]: f for f in self.filters}
         row = [{"k": k, "label": M.filter_label({"k": k}), "on": k in have} for k in M.ROW]
         row = [{"k": f["k"], "label": M.filter_label(f), "on": True, "n": f.get("n")} for f in self.filters
                if f["k"] not in M.ROW] + row
-        v = {"intro": self.intro, "text": self.text, "decks": [{"did": d, "name": n} for d, n in self.decks],
+        v = {"intro": self.intro, "howto": self.howto() if self.intro else None, "text": self.text, "decks": [{"did": d, "name": n} for d, n in self.decks],
              "did": self.did, "kind": r["kind"], "chips": chips, "neg": [g["name"] for g in r["neg"]],
              "filters": row, "limit": r.get("limit"), "count": t, "q": q, "how": self.how,
              "rows": self.rows(), "said": self.said, "busy": self.busy, "mode": self.mode,
              "recent": self.ops.recent() if r["kind"] == "empty" else [],
              "picked": self.cids_in is not None, "name": self.name(), "signed_in": self.ops.signed_in(),
-             "lines": self.lines(cids, t)}
+             "lines": self.lines(cids, t), "qids": self.qids_view(), "terms": r.get("terms") or [],
+             "where": (f"Study now puts them in {P.our_deck(self.name()).replace('::', ' › ')}; each goes back to its "
+                       f"own deck once you’ve done it.") if cids else ""}
         if self.mode == "days" or self.picked:
             v["days"] = self.days_view(cids)
         v["dests"] = self.dests_view()
@@ -801,16 +956,35 @@ class Search:
             v["plantext"] = self.plantext_view()
         return v
 
+    def howto(self):
+        """The how-to's words, its tries this deck's: the resource one from its
+        own tags, and each try that needs a tag kept only when reading it here
+        ticks something (no "heart failure" to tap in a deck that hasn't it)."""
+        if self.did not in self._tries and self.idx is not None:
+            have = dict(M.examples(self.idx.tag_names.values()))
+            today, kept = self.ops.today(), {}
+            for x in M.HOWTO["parts"]:
+                if x["k"] not in M.TRIED:
+                    continue
+                kept[x["k"]] = [t for t in have.get(x["k"], x.get("try") or []) if _ticks(M.read(t, self.tree, today), x["k"], self.tree)]
+            self._tries[self.did] = kept
+        return M.howto(board.MAGIC_KBD, self._tries.get(self.did))
+
     def lines(self, cids, t):
         r = self.r
         out = []
         if r["kind"] == "ids" and r["qids"] and self.idx is not None:
+            from .planner import qids as Q
             found = self.qfind()
-            miss = found["missing"]
-            if miss and not r["ids"]:
-                shown = ", ".join(miss[:4]) + (" …" if len(miss) > 4 else "")
-                out.append(f"{len(miss):,} number{'s' if len(miss) != 1 else ''} "
-                           f"{'aren’t questions' if len(miss) != 1 else 'isn’t a question'} here: {shown}")
+            if not Q.banks(self.idx):
+                out.append(f"{self.idx.name} has no question IDs in its tags.")
+            elif not found["found"]:
+                if not r["ids"]:
+                    out.append(f"None of these are questions in {self.idx.name}.")
+            else:
+                dates = self.ops.plan_dates(self.did, self.idx, found["cids"])
+                said = Q.words(found, Q.tally(self.idx, found["cids"]), dates)[1:]
+                out += [x for x in said if not r["ids"] or not x[:1].isdigit()]  # with note ids pasted, a short number may be neither
         if r["kind"] == "words" and r["text"] and not self.ticked():
             out.append(f"No tag says “{r['text']}”: these are the cards with those words." if cids
                        else f"No tag or card says “{r['text']}” in {self.idx.name if self.idx else 'this deck'}.")
@@ -819,6 +993,8 @@ class Search:
             segs.setdefault(g["seg"], []).append(g)
         if any(not any(g["on"] for g in gs) for gs in segs.values()) and not self.flip:
             out.append("Those letters could be several: tap the ones you mean.")
+        if M.joined(r) and not cids and r["groups"]:
+            out.append("No card here is in both." if all(len(x) <= 2 for x in r["terms"]) else "No card here is in all of them.")
         return out
 
     def rows(self):
@@ -958,6 +1134,7 @@ class Search:
 
     def c_type(self, text=""):
         self.text = str(text)[:20000]
+        self.bank_pick = None  # a new paste: the bank its numbers say
         self.cids_in = None if self.text.strip() else self.cids_in
         self.said, self.undo = None, None
         self.reread()
@@ -967,6 +1144,7 @@ class Search:
             self.pick_deck(int(did))
         except (TypeError, ValueError):
             return
+        self.bank_pick = None
         self.reread()
 
     def c_chip(self, i=None):
@@ -980,6 +1158,12 @@ class Search:
 
     def c_tag(self, t=""):
         self.tag_off ^= {str(t)}
+        self._cards = None
+
+    def c_tags(self, ts=(), on=True):
+        """A resource's tick in a chip's list: all its tags in, or all out."""
+        ts = {str(x) for x in ts or ()}
+        self.tag_off = (self.tag_off - ts) if on else (self.tag_off | ts)
         self._cards = None
 
     def c_filter(self, k=""):
@@ -1004,7 +1188,22 @@ class Search:
             self.said = {"text": "Nothing here to study now."}
             return
         self.ops.note_recent(self.text)
-        if self.ops.study(cids, self.name()):
+        qids = self.r["kind"] == "ids" and bool(self.r["qids"])
+        if self.ops.study(cids, self.name(), order=plan_flow.STUDY_ORDER if qids else None):  # a block's questions: mixed, as the bank had them
+            self.close_win()
+
+    def c_bank(self, name=""):
+        """QBank QIDs: which bank, when two have these numbers (kept while it's this paste and this deck)."""
+        self.bank_pick = str(name) or None
+        self._cards = None
+
+    def c_topic(self, i=None):
+        """Their topics' Study: the map's deck of what I missed there."""
+        try:
+            row = self._topics[int(i)]
+        except (TypeError, ValueError, IndexError):
+            return
+        if row["missed"] and self.ops.study_topic(row["name"], row["missed"]):
             self.close_win()
 
     def c_keep(self, name=""):
@@ -1044,7 +1243,8 @@ class Search:
         self.idx = None
         self._idx.pop(self.did, None)
         self.pick_deck(self.did)
-        self.said = {"text": f"Unsuspended {n:,} card{'s' if n != 1 else ''}." if n else "None of them were suspended."}
+        self.said = {"text": f"Unsuspended {n:,} card{'s' if n != 1 else ''}, the new ones first in line." if n
+                     else "None of them needed unsuspending."}
         if n:
             self.said["undo"] = "anki"
             self.undo = {"kind": "anki", "label": f"Due Crew: unsuspend {n:,} card{'s' if n != 1 else ''}"}
@@ -1261,11 +1461,12 @@ def tree_of(idx):
     return tree
 
 
-def _tag_name(path):
-    """A tag in its list: its last two parts, readable ("Videos › Heart Failure")."""
-    parts = str(path).split("::")
-    shown = [M.pretty(x) for x in parts[1:]] if len(parts) > 2 else [M.pretty(x) for x in parts]
-    return " › ".join(shown[-3:])
+def _ticks(r, k, tree=None):
+    """A how-to try reads as something here: a topic it ticks (a resource's,
+    for the resource part); for the QIDs part, the deck's questions."""
+    if k == "ids":
+        return r["kind"] == "ids" and bool(set(r["qids"]) & (tree.qnums if tree is not None else set()))
+    return any(g["on"] for g in r["groups"]) and (k != "res" or bool(r.get("res")))
 
 
 def dumps(v):

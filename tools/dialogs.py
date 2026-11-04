@@ -740,7 +740,7 @@ def main(out):
         plans = [a.menu() for a in subs[0].actions() if a.menu()]
         got = [a.text() or "—" for a in plans[0].actions()] if len(plans) == 1 else []
         if got != ["Your plans…", "New plan…", "Follow a plan…", "—",
-                   "QBank QIDs…", "Export cards for my AI…"]:
+                   "Export cards for my AI…"]:  # 3.9.7: QBank QIDs… went into Magic search
             raise RuntimeError(f"tools menu: Plans {got}")
         # 3.8.0: Study what's next carries Ctrl+Shift+S; Show on the Decks screen is a check
         acts = {a.text(): a for a in subs[0].actions()}
@@ -1360,14 +1360,13 @@ def main(out):
         """Labs (due_crew/planner, docs/planner.md): the plan window an author
         sees (a date's sources by resource, system and other, with what each
         holds here; a week; an event; Change ▾), a change saved end to end,
-        the picker (the deck's tree, then a search), and QBank QIDs (a paste
-        found across two banks, Study now, then Unsuspend: one undo step).
-        Names are the author's: plain text."""
+        and the picker (the deck's tree, then a search); QBank QIDs is Magic
+        search's since 3.9.7 (tests/test_magic.py). Names are the author's:
+        plain text."""
         import sqlite3
         from due_crew import plans as P
-        from due_crew.planner import actions as PA, flow as PF, remote as PR
+        from due_crew.planner import flow as PF, remote as PR
         from due_crew.planner.picker import Picker
-        from due_crew.planner.qid_window import QidWindow
         from due_crew.planner.window import PlanWindow
         conn = sqlite3.connect(":memory:")
         fakes.make_collection(conn)
@@ -1956,108 +1955,6 @@ def main(out):
             raise RuntimeError(f"picker: ticked {pick.value()}")
         shoot(pick, os.path.join(out, "planner-picker-find.png"))
 
-        # QBank QIDs on its own copy of the deck: its Unsuspend changes nothing the windows after it read
-        qconn = sqlite3.connect(":memory:")
-        conn.commit()  # a backup waits forever on a source with a write still open
-        conn.backup(qconn)
-        qcol = fakes.FakeCol(qconn, fakes.day_cutoff_for(datetime.date.today()))
-        qcol.decks = fakes.FakeDecks({1: "Big Step 1", 3: "Big Step 1::Cardio", 5: "Due Crew::QBank cards"})
-
-        class QOps(PF.QidOps):
-            def index(self, did):
-                return P.DeckIndex(qcol, did)
-
-            def default_deck(self, choices):
-                return 1
-
-            def plan_dates(self, did, idx, cids):
-                return [("MS2 Block 2", [P.fmt_day(day(0))])]
-
-            def unsuspend(self, cids):
-                return PA.unsuspend(qcol, cids, "Due Crew: unsuspend")
-
-            def study(self, cids):
-                QOps.studied = sorted(cids)
-                return True
-
-            def browse(self, cids):
-                QOps.browsed = sorted(cids)
-
-            # 3.9.5, Their topics: the deck's map as Insights would draw it, a part a system; the questions' cards
-            # are all suspended, so each falls in its part by its tag (qids.topics), as they do in a real deck
-            long_name = ""
-
-            def deck_map(self, did):
-                qidx = P.DeckIndex(qcol, did)
-                play = lambda tag: sorted(c for c in qidx.tag_cards(f"{root}::{tag}") if qidx.cards[c][0] != -1)  # noqa: E731
-                hf, shock, drugs = (play("^Systems::Cardio::Heart_Failure"), play("#Videos::Cardio::Shock"),
-                                    play("#Videos::Pharm::HF_Drugs"))
-                part = lambda name, tag, cids, know, n=None: {  # noqa: E731
-                    "key": tag.lower(), "name": name, "n": n or len(cids), "started": len(cids) if know is not None else 0,
-                    "know": know, "find": {"tags": [f"{root}::{tag}"]}, "_cids": cids}
-                tiles = [part(QOps.long_name or "Cardio · Heart Failure", "^Systems::Cardio::Heart_Failure", hf, 66),
-                         part("Pharm · HF Drugs", "#Videos::Pharm::HF_Drugs", drugs, 81),
-                         part("Cardio · Shock", "^Systems::Cardio::Shock", shock, 84),
-                         part("Renal · AKI", "^Systems::Renal::AKI", [], None, n=12)]
-                return tiles, set(hf[:5]) | set(shock[:2]) | set(drugs)
-
-            def study_topic(self, name, cids):
-                QOps.topic = (name, sorted(cids))
-                return True
-
-        q = QidWindow(None, qcol, [(1, "Big Step 1")], QOps())
-        if q.study_btn.isEnabled() or q.unsuspend_btn.isEnabled() or q.lines.text() or not q.browse_btn.isHidden():
-            raise RuntimeError("qids: nothing pasted, nothing to do")
-        if q.study_btn.property("dc") != "go" or q.text.placeholderText() != "Paste QBank QIDs here":
-            raise RuntimeError("qids: Study now in the accent, and the box asks for QIDs (3.9.4, Sam)")
-        shoot(q, os.path.join(out, "planner-qids-empty.png"))
-        q = QidWindow(None, qcol, [(1, "Big Step 1")], QOps())
-        q.text.setPlainText("Block 3 · 12 Oct 2026\nMissed: 10234, 10911, 11002, 12118 · 65%")
-        q._count()
-        if (q.found["found"] != ["10234", "10911", "11002", "12118"] or not q.bank.isHidden() or not q.study_btn.isEnabled()
-                or q.unsuspend_btn.text() != "Unsuspend 6" or q.lines.text() != "4 questions · 6 cards · 6 suspended"):
-            raise RuntimeError(f"qids: {q.found}, {q.unsuspend_btn.text()!r}, {q.lines.text()!r}")
-        # 3.9.5: Their topics, a question once in each part its cards are in; the map's % there; Study when I missed some
-        said = [lab.text() for lab in q.topics.findChildren(QtWidgets.QLabel) if lab.isVisibleTo(q)]
-        studies = [b for b in q.topics.findChildren(QtWidgets.QPushButton) if b.isVisibleTo(q)]
-        if (q.topics.isHidden() or [(r["name"], r["questions"]) for r in q.topic_rows]
-                != [("Cardio · Heart Failure", 2), ("Cardio · Shock", 1), ("Renal · AKI", 1)]
-                or said != ["Their topics", "Cardio · Heart Failure", "2 questions · 66% here", "Cardio · Shock", "1 question · 84%",
-                            "Renal · AKI", "1 question · new"]
-                or [b.text() for b in studies] != ["Study", "Study"] or "A filtered deck: the 5 you missed" not in studies[0].toolTip()
-                or any(lab.textFormat() != QtCore.Qt.TextFormat.PlainText for lab in q.topics.findChildren(QtWidgets.QLabel))):
-            raise RuntimeError(f"qids: their topics {q.topic_rows}, {said}, {[b.toolTip() for b in studies]} (names in plain text)")
-        shoot(q, os.path.join(out, "planner-qids.png"))
-        q.show()
-        settle(50)  # the paste's own count came in the shot: its rows drawn again
-        [b for b in q.topics.findChildren(QtWidgets.QPushButton) if b.isVisibleTo(q)][1].click()
-        if QOps.topic[0] != "Cardio · Shock" or len(QOps.topic[1]) != 2 or q.isVisible():
-            raise RuntimeError(f"qids: a topic's Study took {QOps.topic}, the window still open: {q.isVisible()}")
-        q = QidWindow(None, qcol, [(1, "Big Step 1")], QOps())
-        q.text.setPlainText("10234 10911 11002 12118")
-        q._count()
-        q.study_btn.click()
-        if QOps.studied != sorted(q.cids()) or len(QOps.studied) != 6:
-            raise RuntimeError(f"qids: Study took {QOps.studied}")
-        QOps.long_name = "Cardiovascular Physiology and Pathology · Heart Failure Treatment"[:60]  # team.NAME_MAX
-        q = QidWindow(None, qcol, [(1, "Big Step 1")], QOps())
-        q.text.setPlainText("10234 10911 11002 12118")
-        q._count()
-        shoot(q, os.path.join(out, "planner-qids-topics-long.png"))
-        QOps.long_name = ""
-        q = QidWindow(None, qcol, [(1, "Big Step 1")], QOps())
-        q.text.setPlainText("10234")
-        q._count()
-        if q.bank.isHidden() or q.bank_label.text() != "Question bank" or q.bank.count() != 2:
-            raise RuntimeError("qids: a number in two banks asks which")
-        shoot(q, os.path.join(out, "planner-qids-bank.png"))
-        q = QidWindow(None, qcol, [(1, "Big Step 1")], QOps())
-        q.text.setPlainText("10234 10911 11002 12118")
-        q._count()
-        q._unsuspend()
-        if not q.said.text().startswith("Unsuspended 6") or len(qcol.undo_steps) != 1 or q.unsuspend_btn.isEnabled():
-            raise RuntimeError(f"qids: Unsuspend said {q.said.text()!r}, {qcol.undo_steps}")
-        shoot(q, os.path.join(out, "planner-qids-done.png"))
         start_window(STORE, PF, PR, P)
 
     for label, build in (("kitchen", kitchen), ("questions", questions), ("tools menu", tools_menu), ("friends", friends), ("decks", decks),

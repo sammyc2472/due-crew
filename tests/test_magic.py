@@ -60,12 +60,12 @@ TAGS = {  # tag: cards (made up: a big shared deck's shapes, its resources, its 
 class Idx:
     """A DeckIndex of the made-up deck: one card a note, the states the window reads."""
 
-    def __init__(self):
+    def __init__(self, tags=None):
         self.did, self.name = 1, "Big Step 1"
         self.by_tag, self.tag_names, self.cards, self.order = {}, {}, {}, {}
         self.due_now, self.leech, self.nid_of, self.state = set(), set(), {}, {}
         cid = 1000
-        for i, (t, n) in enumerate(sorted(TAGS.items())):
+        for i, (t, n) in enumerate(sorted((TAGS if tags is None else tags).items())):
             for k in range(n):
                 cid += 1
                 full = R + t
@@ -177,7 +177,7 @@ def test_resources_the_deck_has():
     check("two words with those initials but no and: a topic", ticked(r) == ["Muscle Myopathies"] and not r["res"], r)
     r = read("charts")
     check("a word that begins a family of resources: a chip each, ticked",
-          sorted(ticked(r)) == ["ChartsMicro", "ChartsPharm"], r["groups"])
+          sorted(ticked(r)) == ["Charts Micro", "Charts Pharm"], r["groups"])
     r = read("charts micro staph")
     check("a resource by its letters whole, then its topic (its parent part covering its children)", ticked(r) == ["Staph"], r["groups"])
     r = read("quick ref cardio")
@@ -215,6 +215,14 @@ def test_ids_searches_and_plan_lines():
     check("QIDs with their bank's name: that bank", r["kind"] == "ids" and r["bank"] == "#qbank", r)
     r = read("Question ID: 20769")
     check("a QID as a bank shows it", r["kind"] == "ids" and r["qids"] == ["20769"], r)
+    r = read("Block 3 · 12 Oct 2026\nMissed: 10234, 10235, 99999 · 65%")
+    check("round 2 (QBank QIDs' paste, any way the bank copies it): a block's results with words around them are its QIDs "
+          "when two or more are this deck's questions (no Missed filter, no topic from the words)",
+          r["kind"] == "ids" and r["qids"] == ["2026", "10234", "10235", "99999"] and not r["filters"] and not r["groups"], r)
+    r = read("Block 3 notes, question 10234")
+    check("…one of them alone, with words: not a paste of QIDs", r["kind"] != "ids" or r["qids"] == ["10234"], r["kind"])
+    r = read("anemia due 2026 and 2027")
+    check("…numbers that aren't its questions: the words as words", r["kind"] == "words" and r["groups"], r["kind"])
     r = read("1583285845282")
     check("a long number: a note or card id", r["kind"] == "ids" and r["ids"] == ["1583285845282"], r)
     r = read('tag:foo OR "deck:bar"')
@@ -369,8 +377,19 @@ class Ops(MF.Ops):
         self.log.append(("uns", len(cids)))
         return n
 
-    def study(self, cids, name):
-        self.log.append(("study", list(cids), name))
+    def study(self, cids, name, order=None):
+        self.log.append(("study", list(cids), name, order))
+        return True
+
+    def plan_dates(self, did, idx, cids):
+        return [("My plan", ["Thu 5 Nov"])] if cids else []
+
+    def deck_map(self, did):
+        self.log.append(("deck_map", did))
+        return getattr(self, "tiles", ([], set()))
+
+    def study_topic(self, name, cids):
+        self.log.append(("study_topic", name, list(cids)))
         return True
 
     def keep(self, name, q, cids, limit, order):
@@ -422,8 +441,12 @@ def window():
 def test_the_window_finds():
     face, ops, _closed = window()
     v = face.view()
-    check("first time: the how-to card; the filters row always there, every filter off",
-          v["intro"] and [f["k"] for f in v["filters"]] == list(M.ROW) and not any(f["on"] for f in v["filters"]), v["filters"])
+    check("round 2 (Sam: the how-to \"should pop up on the main decks screen\"): the window opens on its box, the "
+          "how-to the Decks screen's; the filters row always there, every filter off",
+          not v["intro"] and v["howto"] is None and [f["k"] for f in v["filters"]] == list(M.ROW)
+          and not any(f["on"] for f in v["filters"]), v["filters"])
+    face.on("intro", {"show": True})
+    check("? brings the how-to back, its words magic.HOWTO's", face.view()["intro"] and face.view()["howto"]["lede"] == M.HOWTO["lede"])
     face.on("intro", {"show": False})
     check("Got it: seen, once a person (an account key)", ops.seen and not face.view()["intro"])
     face.on("type", {"text": "heart failure"})
@@ -431,9 +454,18 @@ def test_the_window_finds():
     hf = IDX.tag_cards(R + "#Videos::03_Cardio::05_Heart_Failure") | IDX.tag_cards(R + "#Path::Cardio::Heart_Failure") \
         | IDX.tag_cards(R + "#M&M::Cardio::Heart_Failure")
     check("its cards are its tags' in the deck's index, counted", v["count"]["n"] == len(hf) == 27, v["count"])
-    check("a named topic with several tags shows them, open", v["chips"][0]["open"] and len(v["chips"][0]["list"]) == 3, v["chips"][0])
+    check("a named topic with several tags shows them, open", v["chips"][0]["open"] and v["chips"][0]["tags"] == 3, v["chips"][0])
+    check("round 2 (Sam: \"the overarching resource is an important thing\"): its tags under where each is from, "
+          "the one with most cards first, the chip's own name off each path",
+          [(g["res"], g["n"], [t["path"] for t in g["tags"]]) for g in v["chips"][0]["list"]]
+          == [("Videos", 16, ["Cardio"]), ("Path", 7, ["Cardio"]), ("M&M", 4, ["Cardio"])], v["chips"][0]["list"])
     face.on("tag", {"t": R + "#Path::Cardio::Heart_Failure"})
     check("unticking one of its tags leaves its cards out", face.view()["count"]["n"] == 20)
+    face.on("tags", {"ts": [R + "#Videos::03_Cardio::05_Heart_Failure"], "on": False})
+    check("a resource's tick takes its tags out together…", face.view()["count"]["n"] == 4
+          and not face.view()["chips"][0]["list"][0]["tags"][0]["on"], face.view()["count"])
+    face.on("tags", {"ts": [R + "#Videos::03_Cardio::05_Heart_Failure"], "on": True})
+    check("…and back in together (Path's still out)", face.view()["count"]["n"] == 20)
     face.on("chip", {"i": 1})
     check("ticking an offered chip adds it", face.view()["count"]["n"] == 26)
     face.on("filter", {"k": "new"})
@@ -577,8 +609,10 @@ def test_browse_and_the_page():
     check("Browse's picked cards: in the window, the day picker open", v["picked"] and v["count"]["n"] == 7 and v["mode"] == "days", v["count"])
     js = open(os.path.join(REPO, "due_crew", "magicpage", "magic.js")).read()
     sent = set(re.findall(r"send\('([a-z_]+)'", js)) | set(re.findall(r"btn\([^,]+,\s*[^,]+,\s*'([a-z_]+)'", js))
-    missing = sorted(c for c in sent if not hasattr(MF.Search, "c_" + c))
-    check("every command the page sends has a handler", not missing and len(sent) > 15, missing)
+    win = open(os.path.join(REPO, "due_crew", "ui", "magic_window.py")).read()
+    missing = sorted(c for c in sent if not hasattr(MF.Search, "c_" + c) and not (c == "size" and 'a["cmd"] == "size"' in win))
+    check("every command the page sends has a handler (size, the window's own: its height)",
+          not missing and len(sent) > 15 and "size" in sent, missing)
     check("the page sets words as text, never markup", "innerHTML" not in js.replace("box.innerHTML = MAG", "").replace("t.innerHTML = MAG", ""))
     from due_crew.magic_html import page_html
     html = page_html(face.view(), {"theme": "auto", "accent": "green"}, preview=True)
@@ -677,6 +711,237 @@ def test_ways_in():
         check("…and a card's own script can't", opened == [""], opened)
     finally:
         MF.open_search = saved
+
+
+def test_and_or_and_both():
+    """Sam: "AND statements and OR statements on tags": "and", "or" and
+    commas put another topic beside one (each one's cards); "both … and …",
+    AND in capitals (Anki's word) and "with" take only the cards in both."""
+    for q in ("anemia or platelets", "anemia OR platelets", "anemia and platelets", "anemia, platelets"):
+        r = read(q)
+        check(f"{q!r}: two topics, each one's cards", r["kind"] == "words" and r["terms"] == [[0], [1]]
+              and "Anemia" in ticked(r) and "Platelets" in ticked(r), (r["kind"], r["terms"]))
+    check("an Anki search with its own OR is still Anki's", read("tag:a OR tag:b")["kind"] == "search")
+    for q in ("both heart failure and anemia", "heart failure AND anemia", "heart failure with anemia"):
+        r = read(q)
+        check(f"{q!r}: the cards in both", r["terms"] == [[0, 1]] and ticked(r)[:1] == ["Heart Failure"] and "Anemia" in ticked(r)
+              and M.joined(r), (r["terms"], ticked(r)))
+    r = read("itp AND platelets, or anemia")
+    check("both, then or: ITP's cards that are Platelets', and Anemia's", r["terms"] == [[0, 1], [2]], r["terms"])
+    r = read("both anemia, platelets and itp")
+    check("…both binds its list, to an or", r["terms"] == [[0, 1, 2]], r["terms"])
+    r = read("both anemia and itp, or platelets")
+    check("…an or puts another beside it", r["terms"] == [[0, 1], [2]], r["terms"])
+    r = read("m&m heart failure")
+    check("a resource's & is its name, not an and", r["res"] == ["#m&m"] and r["terms"] == [[0]], r)
+    tree = M.Tree(["#B::#Path::Endo::Diabetes_with_Complications", "#B::#Path::Endo::Diabetes", "#B::#Path::Renal::Complications"])
+    r = M.read("diabetes with complications", tree, TODAY)
+    check("with: a tag that says the whole stays one topic", r["terms"] == [[0]] and ticked(r)[:1] == ["Diabetes with Complications"],
+          (r["terms"], ticked(r)))
+    r = read("anemia with zzqx words")
+    check("…and one side no topic names: as said", r["terms"] == [[0]], r["terms"])
+    check("its name: with between them", M.topics_said([{"seg": 0, "on": True, "name": "Heart Failure"},
+                                                        {"seg": 1, "on": True, "name": "Anemia"}], [[0, 1]]) == "Heart Failure with Anemia")
+    # the window: the cards in both, from a deck whose cards carry two tags
+    both = Idx({"#Path::Cardio::Heart_Failure": 6, "#Path::Pharm::Diuretics": 5, "#Path::Heme::Anemia": 4})
+    hf, di = both.by_tag[(R + "#Path::Cardio::Heart_Failure").lower()], both.by_tag[(R + "#Path::Pharm::Diuretics").lower()]
+    di += hf[:3]  # three heart failure cards are a diuretic's too
+    both.tag_keys = sorted(both.by_tag)
+
+    class BothOps(Ops):
+        def index(self, did):
+            return both
+    face = MF.Search(BothOps())
+    face.push = face.close_win = lambda: None
+    face.on("type", {"text": "both heart failure and diuretics"})
+    v = face.view()
+    check("the window: only the cards in both", sorted(face.cards()[0]) == sorted(hf[:3]) and v["count"]["n"] == 3, v["count"])
+    check("…named with with, the page told which chips go together", face.name() == "Heart Failure with Diuretics"
+          and v["terms"] == [[0, 1]], (face.name(), v["terms"]))
+    face.on("type", {"text": "heart failure or diuretics"})
+    check("or: either's", face.view()["count"]["n"] == 6 + 5, face.view()["count"])
+    face.on("type", {"text": "heart failure AND anemia"})
+    v = face.view()
+    check("none in both: no cards, and said", v["count"]["n"] == 0 and v["lines"] == ["No card here is in both."], v["lines"])
+    face.on("type", {"text": "both heart failure and diuretics"})
+    face.on("chip", {"i": next(i for i, c in enumerate(face.view()["chips"]) if c["seg"] == 1)})
+    check("a side's chip off: nothing is in both", face.view()["count"]["n"] == 0)
+    js = open(os.path.join(REPO, "due_crew", "magicpage", "magic.js")).read()
+    check("the page: a quiet with between the chips taken in both", "text: 'with', title: 'Only the cards in both'" in js)
+
+
+def test_tag_rows_say_their_resource():
+    """Round 2 (Sam, on a topic's tags: "i'm not really able to find the
+    overarching resource which is an important thing")."""
+    row = M.tag_row
+    check("a tag: its resource, the first #part under its root, and the parts after it, the last three",
+          row("#Big::#QuickRef::04_Pathology::03_Neoplasia::16_Paraneoplastic::01_Skin::*Lesser_Sign")
+          == {"res": "Quick Ref", "path": "Paraneoplastic › Skin › Lesser Sign"})
+    check("the chip's own name off the end", row(R + "#M&M::Cardio::Heart_Failure", "Heart Failure") == {"res": "M&M", "path": "Cardio"})
+    check("a resource said alone: its name, nothing after", row(R + "#ChartsMicro", "Charts Micro") == {"res": "Charts Micro", "path": ""})
+    check("no #part: its root is where it's from", row("Heme_lectures::Week_2::Anemia", "Anemia") == {"res": "Heme lectures", "path": "Week 2"})
+    check("a one-part tag: no resource", row("anemia", "Anemia") == {"res": "", "path": "anemia"})
+    rows = [{"t": "a", "res": "Path", "path": "Heme", "n": 3, "on": True}, {"t": "b", "res": "Videos", "path": "Heme", "n": 9, "on": True},
+            {"t": "c", "res": "Path", "path": "Renal", "n": 8, "on": False}]
+    got = M.tag_list(rows)
+    check("by resource, the one with most cards first, each one's tags by their cards",
+          [(g["res"], g["n"], [t["t"] for t in g["tags"]]) for g in got] == [("Path", 11, ["c", "a"]), ("Videos", 9, ["b"])], got)
+    twins = [dict(M.tag_row(t, "Heart Failure"), t=t, n=n, on=True) for t, n in (
+        ("#Big_Step1::#M&M::06_Cardio::06_Heart_Failure", 5), ("#Big_Step2::#M&M::02_Cardio::03_Heart_Failure", 4),
+        ("#Big_Step1::#Path::A::X::B::C::Cardio::Heart_Failure", 3), ("#Big_Step1::#Path::Y::X::B::C::Cardio::Heart_Failure", 2))]
+    got = M.tag_list(twins, "Heart Failure")
+    check("two of a resource's that would read the same say more: the whole path, then the root (a resource in two versions of a deck)",
+          [[t["path"] for t in g["tags"]] for g in got] == [["Big Step1 › Cardio", "Big Step2 › Cardio"],
+                                                             ["A › X › B › C › Cardio", "Y › X › B › C › Cardio"]], got)
+    js = open(os.path.join(REPO, "due_crew", "magicpage", "magic.js")).read()
+    check("the page: a resource with several tags a heading with its own tick (all in, all out, some: neither)",
+          "send('tags', { ts: ts, on: all.checked })" in js and "all.indeterminate = ons > 0 && ons < g.tags.length" in js)
+
+
+def test_the_how_to():
+    """Round 2 (Sam: "the modal introducing for the first time should pop up
+    on the main decks screen"; "awesome and comprehensive and clear")."""
+    from due_crew import board
+    h = M.howto("Ctrl+Shift+F")
+    check("the how-to: every way to say it, then what it does, then where it lives",
+          [x["k"] for x in h["parts"]] == ["topic", "res", "filter", "limit", "ids", "coming", "lines", "plan"]
+          and len(h["then"]) == 5 and "Ctrl+Shift+F" in h["foot"] and "You box" in h["foot"], [x["k"] for x in h["parts"]])
+    words = " ".join([h["lede"], h["foot"]] + h["then"] + [x["t"] + " " + x["w"] for x in h["parts"]]
+                     + [q for x in h["parts"] for q in x.get("try") or []])
+    check("its words name no resource, bank or deck of anyone's: the resource's try is the deck's own",
+          not h["parts"][1]["try"] and not re.search(r"(?i)b&b|boards|first ?aid|sketchy|pathoma|uworld|amboss|anking", words))
+    ex = M.examples(IDX.tag_names.values())
+    check("the deck's own resource try: the #part with most tags (not a bank's numbers), with its biggest part",
+          ex == {"res": ["path endo"]}, ex)
+    r = read(ex["res"][0])
+    check("…and it reads as that resource and topic", r["res"] == ["#path"] and ticked(r) == ["Endo"], (r["res"], r["groups"]))
+    check("a deck whose biggest #part is a bank's: the next; and its QIDs try three of the bank's own, spread over its numbers",
+          M.examples([R + "#Bank::Step::" + str(10000 + i) for i in range(9)]
+                     + [R + "#Notes::Renal::AKI", R + "#Notes::Renal::CKD", R + "#Notes::Heme::ITP"])
+          == {"res": ["notes renal"], "ids": ["10002 10004 10006"]})
+    check("no #parts: no try of the deck's own", M.examples(["Spanish::Unit_12", "Spanish::Verbs"]) == {})
+    h2 = M.howto("Ctrl+Shift+F", {"ids": ["10002 10004 10006"]})
+    check("…a block's QIDs keeps its words, its numbers the deck's", h2["parts"][4]["try"] == ["10002 10004 10006"]
+          and h2["parts"][4]["label"] == ["a block’s QIDs"])
+    face, ops, _closed = window()
+    face.on("intro", {"show": True})
+    tries = {x["k"]: x.get("try") for x in face.view()["howto"]["parts"]}
+    check("the window's ?: each try that needs a tag kept only when it ticks something in this deck",
+          tries["topic"] == ["heart failure", "hf drugs"] and tries["res"] == ["path endo"] and tries["filter"] == ["anemia I missed this week"]
+          and tries["limit"] == ["both heart failure and pharm", "10 new platelets", "platelets but not itp"]
+          and tries["coming"] == M.HOWTO["parts"][5]["try"]
+          and tries["ids"] == ["10234 10911 11002"], tries)  # two questions here, too few to make its own; 10234 is one
+    js = open(os.path.join(REPO, "due_crew", "magicpage", "magic.js")).read()
+    check("the window draws the how-to from its words, not its own", "H.parts" in js and "Its name, its initials" not in js)
+    # the Decks screen's card
+    saved = (MF.mw.col, MF.cfg, MF.on, dict(MF._TRIES))
+    MF.mw.col = types.SimpleNamespace(tags=types.SimpleNamespace(all=lambda: list(IDX.tag_names.values())))
+    conf = {}
+    MF.cfg = lambda: conf
+    MF._TRIES.clear()
+    try:
+        v = MF.board_howto()
+        check("the Decks screen's card: the how-to, the deck's own resource try", v and v["parts"][1]["try"] == ["path endo"], v)
+        conf["magic_seen"] = True
+        check("…once a person: seen, none", MF.board_howto() is None)
+        conf.pop("magic_seen")
+        MF.on = lambda: False
+        check("…and none with Magic search off", MF.board_howto() is None)
+    finally:
+        MF.mw.col, MF.cfg, MF.on = saved[0], saved[1], saved[2]
+        MF._TRIES.clear()
+        MF._TRIES.update(saved[3])
+    js = board.magic_howto_js(dict(M.howto("Ctrl+Shift+F"), lede="a </script> b"))
+    check("its script: the words as JSON, no </ to end it, its buttons keyed as the board's",
+          "</script> b" not in js and "a <\\/script> b" in js and "'duecrew:magichow:' + how + ':' + encodeURIComponent(q || '') + '|' + window.dcBK" in js)
+    check("…over the board the bars dim with (VEIL_IDS), and only once the board is clear and the You box is there",
+          "dc-magic" in board.VEIL_IDS and "document.querySelector('.du-mg')" in js and '"dc-show"' in js and '"dc-sheet"' in js)
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    opened, seen = [], []
+    saved = (MF.open_search, MF.Ops.saw_intro)
+    MF.open_search = lambda text="", cids=None: opened.append(text)
+    MF.Ops.saw_intro = lambda self: seen.append(1)
+    try:
+        dc._on_js(False, "duecrew:magichow:try:heart%20failure%3A%20drugs|" + board.BOARD_KEY, DeckBrowser())
+        dc._on_js(False, "duecrew:magichow:open:|" + board.BOARD_KEY, DeckBrowser())
+        dc._on_js(False, "duecrew:magichow:seen:|" + board.BOARD_KEY, DeckBrowser())
+        check("its buttons through the board: a try opens the window with it, Open with nothing, Got it nothing; each is seen",
+              opened == ["heart failure: drugs", ""] and len(seen) == 3, (opened, seen))
+        dc._on_js(False, "duecrew:magichow:try:x", type("Previewer", (), {})())
+        check("…and a card's own script can't", opened == ["heart failure: drugs", ""] and len(seen) == 3)
+    finally:
+        MF.open_search, MF.Ops.saw_intro = saved
+    init = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
+    check("the glue shows it after the Decks screen draws, not while closing or with Wrapped up",
+          "QTimer.singleShot(900, _magic_howto)" in init and "magic_flow.show_board_howto()" in init)
+
+
+QTAGS = {"#Path::Heme::Anemia": 4, "#Path::Renal::AKI": 3, "#QBank::Step::10234": 2, "#QBank::Step::10235": 1,
+         "#QBank::Step::10236": 1, "#Other::Step::10234": 1, "#Other::Step::10777": 1}
+
+
+def test_qids_in_magic_search():
+    """Round 2 (Sam: "this is replacing QBank QID search"): what its window did, here."""
+    from due_crew.planner import actions
+    idx2 = Idx(QTAGS)
+    q = {n: idx2.tag_cards(R + "#QBank::Step::" + n) for n in ("10234", "10235", "10236")}
+
+    class QOps(Ops):
+        def index(self, did):
+            return idx2
+    ops = QOps()
+    ops.tiles = ([{"name": "Heme", "_cids": sorted(q["10234"] | q["10235"]), "know": 66, "started": 4},
+                  {"name": "Renal", "_cids": sorted(q["10236"]), "know": None, "started": 0}], set(q["10234"]))
+    face = MF.Search(ops)
+    face.push = face.close_win = lambda: None
+    face.on("type", {"text": "10234 10235 10236 99999"})
+    v = face.view()
+    check("QIDs: how many are questions, their cards, the bank with most", v["qids"]["q"] == 3 and v["count"]["n"] == 4
+          and v["qids"]["bank"] == "QBank" and not v["qids"]["ask"], v["qids"])
+    check("QIDs: what isn't a question here, and my plan's dates holding them", v["lines"] == [
+        "1 number isn’t a question here: 99999", "On My plan: Thu 5 Nov"], v["lines"])
+    check("QIDs: Their topics, the map's parts they're in, a Study where I missed some (3.9.5)",
+          [(t["name"], t["line"], t["missed"]) for t in v["qids"]["topics"]] == [("Heme", "2 questions · 66% here", 2), ("Renal", "1 question · new", 0)],
+          v["qids"]["topics"])
+    face.on("topic", {"i": 0})
+    check("Their topics' Study: the map's deck of what I missed there", ops.log[-1] == ("study_topic", "Heme", sorted(q["10234"])), ops.log[-1])
+    check("the map read once a deck", sum(1 for x in ops.log if x[0] == "deck_map") == 1)
+    check("QIDs' Study now: Due Crew › QBank cards, as its window's (each paste adds to it), in random order",
+          face.name() == actions.DECK and "Due Crew › QBank cards" in v["where"])
+    face.on("study", {})
+    st = [x for x in ops.log if x[0] == "study"][-1]
+    check("…its cards, all of them, mixed", st[2] == actions.DECK and st[3] == MF.plan_flow.STUDY_ORDER and len(st[1]) == 4 - len(
+        [c for c in st[1] if c in idx2.leech]), st)
+    face.on("type", {"text": "10234 10235"})
+    v = face.view()
+    check("two banks close (the second has half as many): which, the one with most first, till I pick",
+          v["qids"]["ask"] and v["qids"]["banks"] == ["QBank", "Other"] and v["qids"]["bank"] == "QBank", v["qids"])
+    face.on("bank", {"name": "Other"})
+    v = face.view()
+    check("…a pick takes that bank's cards, and stays asked", v["qids"]["bank"] == "Other" and v["count"]["n"] == 1 and v["qids"]["ask"]
+          and v["lines"][:1] == ["1 number isn’t a question here: 10235"], (v["qids"], v["lines"]))
+    face.on("type", {"text": "10234 10235 "})
+    check("…a new paste: the bank its numbers say", face.bank_pick is None)
+    face.on("type", {"text": "55555 66666"})
+    v = face.view()
+    check("none of them questions here: said", v["lines"] == ["None of these are questions in Big Step 1."], v["lines"])
+    idx3 = Idx({"#Path::Heme::Anemia": 3})
+
+    class NoBank(Ops):
+        def index(self, did):
+            return idx3
+    plain = MF.Search(NoBank())
+    plain.push = plain.close_win = lambda: None
+    plain.on("type", {"text": "55555"})
+    check("a deck with no question tags: said", plain.view()["lines"] == ["Big Step 1 has no question IDs in its tags."]
+          and plain.view()["qids"] is None, plain.view()["lines"])
+    plain.on("intro", {"show": True})
+    tries = {x["k"]: x.get("try") for x in plain.view()["howto"]["parts"]}
+    check("the how-to in a deck without heart failure: no heart failure to tap, no QIDs it hasn't", tries["topic"] == []
+          and tries["ids"] == [] and tries["coming"], tries)
+    check("the old window's gone, its pure find kept", not os.path.exists(os.path.join(REPO, "due_crew", "planner", "qid_window.py"))
+          and os.path.exists(os.path.join(REPO, "due_crew", "planner", "qids.py")))
 
 
 def main():

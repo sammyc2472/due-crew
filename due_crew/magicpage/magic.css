@@ -2,7 +2,7 @@
    and quiet lines. Words are set as text by magic.js. */
 html, body { margin: 0; padding: 0; height: 100%; }
 body { background: var(--dc-bg, #fff); }
-.dcm { box-sizing: border-box; min-height: 100vh; background: var(--dc-bg); color: var(--dc-ink); position: relative;
+.dcm { box-sizing: border-box; background: var(--dc-bg); color: var(--dc-ink); position: relative;
   font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   padding: 14px 18px 16px; text-align: left; display: flex; flex-direction: column; gap: 10px; }
 .dcm *, .dcm *::before, .dcm *::after { box-sizing: border-box; }
@@ -90,6 +90,9 @@ body .dcm select.deck { flex: 0 1 auto; max-width: 46%; border: 0; background-co
 .dcm .tags label { display: flex; gap: 8px; align-items: center; font-size: 12.5px; padding: 3px 0; cursor: pointer; }
 .dcm .tags .p { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dcm .tags .n { color: var(--dc-muted); font-variant-numeric: tabular-nums; }
+.dcm .tags .rs { font-weight: 700; }
+.dcm .tags .in { padding-left: 22px; }
+.dcm .tags .sep { border-top: 1px solid var(--dc-line); margin-top: 3px; padding-top: 6px; }
 
 /* the filters: always there, under the box (Sam) */
 .dcm .filters { display: flex; flex-wrap: wrap; gap: 6px; background: var(--dc-well); border-radius: 14px; padding: 8px; }
@@ -156,6 +159,7 @@ body .dcm select.b { padding-right: 28px !important; color: var(--dc-ink); font-
   padding: 18px 20px 16px; max-width: 640px; width: 100%; display: grid; gap: 12px; }
 .dcm .ic2 .t { display: flex; align-items: center; gap: 10px; }
 .dcm .ic2 .t b { font-size: 19px; }
+.dcm .ic2 .t .mag { position: static; color: var(--dc-ink); }  /* the title's own, beside its name (the box's sits in it) */
 .dcm .ic2 .lede { margin: 0; }
 .dcm .how { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .dcm .how > div { border: 1px solid var(--dc-line); border-radius: 12px; padding: 9px 11px; display: grid; gap: 5px; align-content: start; }
@@ -183,3 +187,14 @@ body .dcm select.b { padding-right: 28px !important; color: var(--dc-ink); font-
 .dcm .pop { animation: dcm-pop .22s cubic-bezier(.3,1.5,.5,1) both; }
 @keyframes dcm-pop { from { transform: scale(.78); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .dcm .spk { display: none; } .dcm .mag.twirl, .dcm .mag.twirl .st, .dcm .pop { animation: none !important; } }
+
+/* QBank QIDs (round 2: Magic search is its way now): the bank when two are close, Their topics, Study now's deck */
+.dcm .lines .bank { display: flex; align-items: center; gap: 8px; }
+.dcm .tops { display: grid; gap: 0; border: 1px solid var(--dc-line); border-radius: 12px; padding: 6px 12px; }
+.dcm .tops .th { font-size: 12px; font-weight: 700; color: var(--dc-muted); padding: 3px 0; }
+.dcm .tops .tr { display: flex; align-items: center; gap: 10px; padding: 5px 0; border-top: 1px solid var(--dc-line); }
+.dcm .tops .tr .w { flex: 1; min-width: 0; display: grid; font-size: 13px; }
+.dcm .tops .tr .mu { font-size: 12px; }
+.dcm .where { font-size: 12px; color: var(--dc-muted); }
+.dcm .where:empty { display: none; }
+.dcm .chips .join { align-self: center; font-size: 12px; font-weight: 700; color: var(--dc-muted); padding: 0 2px; }

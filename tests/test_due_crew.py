@@ -7375,80 +7375,55 @@ def test_plan_windows_ways_in_v393():
           and "Make a plan</a>" in none and "From a deck&hellip;" not in none and "duecrew:planyours|" not in none
           and "duecrew:planyours|" in writes)
     calls = []
-    saved = (pflow.open_plans, pflow.open_new, pflow.open_qids, plan_flow.new_plan_menu)
+    saved = (pflow.open_plans, pflow.open_new, plan_flow.new_plan_menu)
     pflow.open_plans = lambda select=None, tab=None: calls.append(("plans", select))
     pflow.open_new = lambda: calls.append(("start",))
-    pflow.open_qids = lambda did=None: calls.append(("qids", did))
     plan_flow.new_plan_menu = lambda: calls.append(("new",))
     try:
         send = lambda m: dc._on_js(False, as_board("duecrew:" + m), DeckBrowser())
-        for m in ("planyours", "planyours:p1", "planyours:bad id!", "plannew", "planstart", "planmissed:20", "planmissed:x", "planmissed"):
+        for m in ("planyours", "planyours:p1", "planyours:bad id!", "plannew", "planstart", "planmissed:20", "planmissed"):
             send(m)
     finally:
-        pflow.open_plans, pflow.open_new, pflow.open_qids, plan_flow.new_plan_menu = saved
-    check("ways in: each click reaches its window (a plan's id, nothing else, picks the plan; a deck's id the deck; Due's QBank QIDs, none)",
-          calls == [("plans", None), ("plans", "p1"), ("plans", None), ("new",), ("start",), ("qids", 20), ("qids", None),
-                    ("qids", None)], calls)
+        pflow.open_plans, pflow.open_new, plan_flow.new_plan_menu = saved
+    check("ways in: each click reaches its window (a plan's id, nothing else, picks the plan); 3.9.7: QBank QIDs' old "
+          "planmissed opens nothing, Magic search has its paste",
+          calls == [("plans", None), ("plans", "p1"), ("plans", None), ("new",), ("start",)], calls)
     v = {"right": {}, "target": 90}
     from due_crew import due as D
     dv = D.view(TODAY.isoformat(), [], [], {}, reviews={"due": 10, "done": 0})
     check("3.9.5 (Sam: \"this line is extra because QIDs is in the header\"): no QBank QIDs line in Insights",
           "planmissed" not in board._insights_html(20, dict(v, bank=True)) and "practice block" not in board._insights_html(20, v))
-    check("3.9.4 (Sam: \"Not necessarily missed. Just paste QBank QIDs here\"): Due's link asks for QIDs, not misses",
-          'title="Paste QBank QIDs to find their cards"' in board._due_html(dict(dv, qids=True)))
     off = board._due_html(None, more=[("plans", "Plans"), ("insights", "Insights")], more_tab="insights",
-                          more_body="<p>x</p>", qids=True)
-    off_one = board._due_html(None, more=[("plans", "Plans"), ("insights", "Insights")], folded=True, qids=True)
-    check("3.9.5: Due's lists off, QBank QIDs is in the head (and the folded line) instead, only with question IDs",
-          "duecrew:planmissed|" in off[:off.index("</div>")] and "duecrew:planmissed|" in off_one
-          and "planmissed" not in board._due_html(None, more=[("plans", "Plans")], more_tab="plans", more_body="x"), off)
-    head = board._due_html(dict(dv, qids=True))
+                          more_body="<p>x</p>", magic=True)
+    off_one = board._due_html(None, more=[("plans", "Plans"), ("insights", "Insights")], folded=True, magic=True)
+    check("3.9.7, round 2 (Sam: \"this is replacing QBank QID search\"): Due's lists off, Magic search is in the head "
+          "(and the folded line), QBank QIDs' chip gone",
+          "duecrew:magic|" in off[:off.index("</div>")] and "duecrew:magic|" in off_one and "planmissed" not in off + off_one
+          and "QBank QIDs</a>" not in off + off_one, off)
+    head = board._due_html(dict(dv, qids=True), magic=True)
     head = head[:head.index("</div>")]
-    check("ways in: 3.9.3, QBank QIDs in the box's head (Sam's pick 1), only when a deck has question IDs",
-          "duecrew:planmissed|" in head and ">QBank QIDs</a>" in head and "planmissed" not in board._due_html(dv), head)
-    up = board._due_html(dict(dv, qids=True, tab="upcoming"))
-    one = board._due_html(dict(dv, qids=True, folded=True))
-    plans_tab = board._due_html(dict(dv, qids=True), more=[("plans", "Plans")], more_tab="plans", more_body="<p>x</p>")
-    check("ways in: …on every tab and on the folded line, in Study today's place (Sam: \"missing the QID chip on the top right\")",
-          "duecrew:planmissed|" in up[:up.index("</div>")] and "duecrew:planmissed|" in one
-          and one.index("planmissed") < one.index("du-fold") and "duecrew:planmissed|" in plans_tab[:plans_tab.index("</div>")]
-          and "planmissed" not in board._due_html(dict(dv, folded=True)), one)
+    check("ways in: Magic search in the box's head (QBank QIDs' place, Sam's pick 1), its title saying QIDs, no QIDs chip",
+          "duecrew:magic|" in head and ">QBank QIDs</a>" not in head and "QBank QIDs" in head and "planmissed" not in head
+          and "duecrew:magic|" not in board._due_html(dv), head)
+    up = board._due_html(dict(dv, tab="upcoming"), magic=True)
+    one = board._due_html(dict(dv, folded=True), magic=True)
+    plans_tab = board._due_html(dv, more=[("plans", "Plans")], more_tab="plans", more_body="<p>x</p>", magic=True)
+    check("ways in: …on every tab and on the folded line (Sam: \"missing the QID chip on the top right\": Magic search's now)",
+          "duecrew:magic|" in up[:up.index("</div>")] and "duecrew:magic|" in one
+          and one.index("duecrew:magic|") < one.index("du-fold") and "duecrew:magic|" in plans_tab[:plans_tab.index("</div>")], one)
     check("ways in: …on one baseline with the rest (Sam: \"a bit higher than everything else\"): one line height for the head's words, the folded line by baseline",
           "#due-crew .du-one > a, #due-crew .du-one > .du-n { line-height: 16px; }" in open(board.__file__, encoding="utf-8").read()
           and "#due-crew .du-one { display: flex; align-items: baseline;" in open(board.__file__, encoding="utf-8").read())
     from due_crew import due_flow
-    tconn = sqlite3.connect(":memory:")
-    tconn.execute("CREATE TABLE tags (tag TEXT PRIMARY KEY)")
-    tconn.executemany("INSERT INTO tags VALUES (?)", [("Spanish::Unit_12",), ("Spanish::Verbs",)])
-    reads = []
-
-    class TagDB:
-        def scalar(self, sql, *a):
-            reads.append(sql)
-            return tconn.execute(sql, a).fetchone()
-    saved = (due_flow.mw.col, due_flow._today, dict(due_flow._QIDS))
-    try:
-        due_flow.mw.col = types.SimpleNamespace(db=TagDB())
-        due_flow._today = lambda: "2026-10-21"
-        due_flow._QIDS.update(key=None, has=False)
-        no = due_flow.has_qids()
-        tconn.execute("INSERT INTO tags VALUES ('Step1::#Bank::Step::10234')")
-        same_day = due_flow.has_qids()
-        due_flow._today = lambda: "2026-10-22"
-        yes = due_flow.has_qids()
-        check("ways in: a deck here has question IDs when a tag ends in 3 to 9 digits (Unit_12 isn't one); Anki's tag list, once a day",
-              no is False and same_day is False and yes is True and len(reads) == 2, reads)
-    finally:
-        due_flow.mw.col, due_flow._today = saved[0], saved[1]
-        due_flow._QIDS.clear()
-        due_flow._QIDS.update(saved[2])
+    check("3.9.7: no tag read for a QIDs chip any more (has_qids went with it)", not hasattr(due_flow, "has_qids"))
     ix = board.settings_index({"tab": "board", "signed_in": True}, {"accent": "green"})
     wins = {x["l"]: x for x in ix if x.get("p")}
     check("ways in: Find a setting finds the windows by the words people use, after every setting (3.9.7: Magic search)",
-          set(wins) == {"Your plans", "New plan", "QBank QIDs", "Magic search"}
-          and "calendar" in wins["New plan"]["k"] and "missed" in wins["QBank QIDs"]["k"] and "filtered" in wins["Magic search"]["k"]
+          set(wins) == {"Your plans", "New plan", "Magic search"}
+          and "calendar" in wins["New plan"]["k"] and "missed" in wins["Magic search"]["k"] and "qids" in wins["Magic search"]["k"]
+          and "filtered" in wins["Magic search"]["k"]
           and wins["Your plans"]["p"] == "planyours" and wins["Magic search"]["p"] == "magic"
-          and all(x.get("p") for x in ix[-4:]), list(wins))
+          and all(x.get("p") for x in ix[-3:]) and not ix[-4].get("p"), list(wins))
     check("ways in: a window picked in Find a setting is opened, not looked for on a tab",
           "if (h.p) { pycmd('duecrew:' + h.p + '|' + window.dcBK); return; }" in board.FIND_JS)
 
@@ -19684,8 +19659,8 @@ def test_pip_party_can_be_hidden_v395():
     calls = []
     from due_crew import plan_flow, team_flow
     saved = (dc._swap, dc.cfg, dc.save_cfg, GF.shown, GF.tab_view, GF.cfg, GF.save_cfg, GF.app.swap, dc.mw.col, due_flow._today,
-             due_flow.has_qids, plan_flow.morning_opened, team_flow.plan_lines)
-    due_flow.has_qids, plan_flow.morning_opened, team_flow.plan_lines = (lambda: False), (lambda: None), (lambda cards: None)
+             plan_flow.morning_opened, team_flow.plan_lines)
+    plan_flow.morning_opened, team_flow.plan_lines = (lambda: None), (lambda cards: None)
     dc._swap = lambda c, focus=None: None
     dc.cfg = GF.cfg = lambda: conf
     dc.save_cfg = GF.save_cfg = lambda c, **k: None
@@ -19709,7 +19684,7 @@ def test_pip_party_can_be_hidden_v395():
               and calls[-2:] == ["swap", "party"], (conf, calls))
     finally:
         (dc._swap, dc.cfg, dc.save_cfg, GF.shown, GF.tab_view, GF.cfg, GF.save_cfg, GF.app.swap, dc.mw.col, due_flow._today,
-         due_flow.has_qids, plan_flow.morning_opened, team_flow.plan_lines) = saved
+         plan_flow.morning_opened, team_flow.plan_lines) = saved
 
 
 def test_pip_party_keeps_its_socket_v395():
