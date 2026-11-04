@@ -4591,7 +4591,10 @@ every release that changes how something works.
     finds. The reading's `terms`: each term's topics in all of them, the
     terms together (`magic_flow.Search.joined_cards`).
   The window's how-to title's icon sat where the box's does (the box's
-  absolute place); its own now.
+  absolute place); its own now. Its dropdowns in the buttons' look (New
+  and due, Add to a filtered deck…, the bank) had lost their arrow to the
+  buttons' background (Sam, the click test: "not clear that this is a drop
+  down"): drawn again, in the ink.
 - 3.9.7, test_plan_web's "the week a set opened in that still runs today"
   counted its set from this week's Monday, so it held only on a Monday or
   a Tuesday: the set and the days after it count from today now.

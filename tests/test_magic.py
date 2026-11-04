@@ -611,6 +611,10 @@ def test_browse_and_the_page():
     sent = set(re.findall(r"send\('([a-z_]+)'", js)) | set(re.findall(r"btn\([^,]+,\s*[^,]+,\s*'([a-z_]+)'", js))
     win = open(os.path.join(REPO, "due_crew", "ui", "magic_window.py")).read()
     missing = sorted(c for c in sent if not hasattr(MF.Search, "c_" + c) and not (c == "size" and 'a["cmd"] == "size"' in win))
+    css = open(os.path.join(REPO, "due_crew", "magicpage", "magic.css")).read()
+    rule = re.search(r"body \.dcm select\.b \{[^}]*\}", css)
+    check("round 2 (Sam: \"not clear that this is a drop down\"): a dropdown in the buttons' look keeps its arrow "
+          "(.b's background would take it)", rule and "background-image" in rule.group(0) and "!important" in rule.group(0), rule)
     check("every command the page sends has a handler (size, the window's own: its height)",
           not missing and len(sent) > 15 and "size" in sent, missing)
     check("the page sets words as text, never markup", "innerHTML" not in js.replace("box.innerHTML = MAG", "").replace("t.innerHTML = MAG", ""))
