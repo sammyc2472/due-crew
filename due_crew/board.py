@@ -4500,7 +4500,7 @@ def you_html(cfg, due=None, you=None, people=None):
             else _you_insights(you.get("insights")) if tab == "insights"
             else party_html(you.get("party")) if tab == "party" else "")
     return _due_html(due, more, tab if tab in dict(more) else None, body, folded=bool(you.get("folded")),
-                     qids=bool(you.get("qids")))
+                     qids=bool(you.get("qids")), magic=cfg.get("magic_search", True) is not False)
 
 
 # ---- 3.5.0: Settings, in the board ----
@@ -4709,6 +4709,8 @@ def _settings_board(cfg, fsrs=None, reach=None):
             + _settings_songs(cfg)  # 3.9.6: song of the moment, this computer's
             + '</div><div class="st-h">Due</div><div class="st-box">'
             + _st_row("Today, Upcoming, Later", _st_switch("due_show", g("due_show", True), "Today, Upcoming, Later"))
+            + _st_row("Magic search", _st_switch("magic_search", g("magic_search", True), "Magic search"),
+                      f"In the head of this box, and {MAGIC_KBD} from any screen")  # 3.9.7
             + _st_row("Suggestions", _st_switch("due_suggest", g("due_suggest", True), "Suggestions"),
                       "Today's misses, new leeches")
             + _st_row("Recover leeches", _st_switch("due_leeches", g("due_leeches", False), "Recover leeches"),
@@ -4723,6 +4725,7 @@ def _settings_board(cfg, fsrs=None, reach=None):
             + '</div><div class="st-h">Shortcuts</div><div class="st-box">'
             + _st_row("Study what&rsquo;s next", f'<kbd class="st-kbd">{STUDY_KBD}</kbd>', "From any Anki screen")
             + _st_row("Ask the squad about this card", f'<kbd class="st-kbd">{ASK_KBD}</kbd>', "While reviewing")
+            + _st_row("Magic search", f'<kbd class="st-kbd">{MAGIC_KBD}</kbd>', "From any Anki screen")
             + _st_row("Shortcuts on", _st_switch("shortcuts", g("shortcuts", True), "Shortcuts on"),
                       "Off if another add-on uses these keys")
             + '</div>'
@@ -4827,6 +4830,7 @@ FIND_WINDOWS = (
     ("planyours", "Your plans", "plan plans dates weeks schedule write edit author builder follow"),
     ("planstart", "New plan", "new plan calendar syllabus block schedule file pdf word powerpoint slides import make deck"),
     ("planmissed", "QBank QIDs", "qbank qids missed questions question ids bank practice block wrong incorrect unsuspend"),
+    ("magic", "Magic search", "find search cards topic tag filtered deck study now put on a day quiz exam away filter"),  # 3.9.7
 )
 
 
@@ -9289,9 +9293,20 @@ def _due_add(v, default):
 
 # 3.8.0: the two keys as this computer writes them (a Mac: Command for Study, Control for Ask, __init__.py)
 STUDY_KBD, ASK_KBD = ("⌘⇧S", "⌃⇧Q") if _sys.platform == "darwin" else ("Ctrl+Shift+S", "Ctrl+Shift+Q")
+MAGIC_KBD = "⌘⇧F" if _sys.platform == "darwin" else "Ctrl+Shift+F"  # 3.9.7: Magic search, from any screen
+_MAGIC_ICON = ('<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" '
+               'stroke-linecap="round" aria-hidden="true" style="vertical-align:-1px;margin-right:3px"><circle cx="10" cy="11" r="6.2"/>'
+               '<path d="M19.4 20.4l-4.7-4.7"/><path d="M19 1.6l.9 2.3 2.3.9-2.3.9-.9 2.3-.9-2.3-2.3-.9 2.3-.9z" '
+               'fill="var(--dc-hours)" stroke="none"/></svg>')
 
 
-def _due_html(v, more=(), more_tab=None, more_body="", folded=None, qids=False):
+def magic_link():
+    """3.9.7: Magic search in the You box's head, every tab and folded (Sam's way in)."""
+    return (f'<a href="#" class="du-go du-mg" title="Magic search ({MAGIC_KBD}): find cards, put them on a day" '
+            f'onclick="{_pycmd("magic")}">{_MAGIC_ICON}Magic search</a>')
+
+
+def _due_html(v, more=(), more_tab=None, more_body="", folded=None, qids=False, magic=False):
     """The You bubble (3.8.0; Due above the board until then): Due's lists,
     Today, Upcoming and Later, when Due is on (v: due.view, from
     due_flow.view), then `more`, [(key, label)] (Plans, Insights), with
@@ -9301,11 +9316,12 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None, qids=False):
     if not v and not more:
         return ""
     e = _html.escape
+    mg = magic_link() if magic else ""  # 3.9.7
     if not v:
         # Due's lists off: Plans and Insights only, folded or not; 3.9.5: QBank QIDs in its head too (qids: the
         # glue's due_flow.has_qids), where Insights' own line was
-        ql = (f'<a href="#" class="du-go" title="Paste QBank QIDs to find their cards" '
-              f'onclick="{_pycmd("planmissed")}">QBank QIDs</a>' if qids else "")
+        ql = mg + (f'<a href="#" class="du-go" title="Paste QBank QIDs to find their cards" '
+                   f'onclick="{_pycmd("planmissed")}">QBank QIDs</a>' if qids else "")
         if folded:
             names = " &middot; ".join(lb for _k, lb in more)
             return (f'<div class="du du-one"><a href="#" onclick="{_pycmd("duefold")}" title="Show"><b>{names}</b></a>'
@@ -9320,8 +9336,8 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None, qids=False):
     today = e(v["today"])
     # 3.9.3 (Sam's pick 1, in Study today's place): QBank QIDs, after a practice block, when a deck here has
     # question IDs; in the head on every tab and on the folded line ("missing the QID chip on the top right")
-    qids = (f'<a href="#" class="du-go" title="Paste QBank QIDs to find their cards" '
-            f'onclick="{_pycmd("planmissed")}">QBank QIDs</a>' if v.get("qids") else "")
+    qids = mg + (f'<a href="#" class="du-go" title="Paste QBank QIDs to find their cards" '
+                 f'onclick="{_pycmd("planmissed")}">QBank QIDs</a>' if v.get("qids") else "")
     done_n, total_n = int(v["done_n"]), int(v["total_n"])
     count = f"{done_n} of {total_n} done" if total_n else ""
     if v["folded"]:

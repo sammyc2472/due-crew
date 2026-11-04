@@ -4463,3 +4463,83 @@ every release that changes how something works.
   _text, Settings' crew label and share.clean_name take it. Anything
   unassigned outside those planes, and every control or zero-width
   character, is still turned away.
+- 3.9.7, Magic search (Sam: "a magic search function that can parse
+  language about tags … makes custom filtered decks easily … assign it to
+  a future day like for a plan … our gateway into plans for most people";
+  the mock's rounds, then "I trust you to build this first draft"). One box
+  (`magic.py` the rules, `magic_flow.py` the glue, `magic_html.py` and
+  `magicpage/` the page, `ui/magic_window.py` a dialog on Anki's web view
+  whose bridge only its own page reaches, "dcmagic:" + JSON). Rules, not
+  AI: the words are matched to the deck's own tags on this computer and
+  nothing typed is sent. Tried on a big shared deck's export in Anki's own
+  engine (28,653 notes, 44,731 tags): its first view is two seconds once
+  (the tag tree is kept while the deck's tags are), then 3 to 230 ms a
+  search. What it reads:
+  - a topic: every tag whose last part says the words (the same, the
+    plural off, begun at 4+ letters, a letter off at 5+, a run's initials),
+    grouped by that name, a parent covering its children, one chip a topic
+    with its tags open under it (Sam: "many tags for a given topic"); a
+    name's bracket off ("Acute Kidney Injury (AKI) (Clinical Medicine)" is
+    Acute Kidney Injury), a roman number a number ("Type II");
+  - only what you named is ticked (Sam's pick), by tiers: the words name
+    it (overview, basics, SOAP and the like aside), else its name begins
+    with them, else a letter off; a one-word name the word only begins
+    ("thyroid", Thyroiditis) is the second tier, the big ones only;
+    initials name a topic only when the deck doesn't write those letters
+    beside another name (its own "(ITP)" says which), and two letters alone
+    ("mi") only when it writes them beside this one, else they're offered
+    with "tap the ones you mean";
+  - the deck's resources, its #parts ("b&b heart failure", "boards and
+    beyond renal" by the run's initials with its and, "first aid cardio",
+    "sketchy" for each of a family, "sketchy micro staph"), the topic kept
+    inside them; a resource whose words find nothing in it reads as said
+    ("pathoma chapter 3" is a tag of that name, wherever it is); "chapter",
+    "section", "lecture" and the like with a number: the resource's part
+    numbered so, the shallowest ("03_Neoplasia", not a "03_" section or a
+    "part 3");
+  - filters (new, seen, suspended, learning, due today and tomorrow and in
+    N days, missed today, this week or in N days, added, leeches, flagged),
+    on a row under the box that's always there (Sam: "should show more of
+    the time"), each a tap; a number first is how many ("10 new
+    platelets", never "type 2 diabetes"); but not, except, without; a deck
+    by its name; words no tag has: the cards' text; QIDs (with their
+    bank's name, "uworld 2345 11089"), note ids (a note's before a card's:
+    both come from the clock), Anki's own search; plan lines (the Text
+    tab's, our prompts');
+  - what's coming up, a row each, one tap, Undo: a quiz or test (a date on
+    My plan or a plan I write, its topics on the days before it), an exam
+    far off and an away spell (Settings' own setexam and setaway, through
+    app.apply_settings), push my plan back N days, pause it (my follow's
+    days); the social ones wait for a later round (Sam: study ones first).
+  What it does: Study now (New and due, or All of them, Sam's pick), a
+  Due Crew filtered deck as QBank cards' is, suspended ones opened, never
+  a leech, staying till it's studied through (Sam: "why would the filtered
+  deck clear the next morning?": it doesn't; an empty one is tidied);
+  Keep as a filtered deck (Sam: "don't really want to move cards"): named,
+  holding the cards and the filters live, so Rebuild fills it again, never
+  tidied; Add to a filtered deck I have ("a QBANK misses deck"): these
+  cards join its first search, "(its search) OR cid:…", and it's rebuilt,
+  one undo step; Unsuspend (QBank QIDs'); Browse; Put on days (Sam: "click
+  multiple days"): two weeks, each day's reviews due, the light ones
+  green, the cards split over the days picked in the deck's order, a date
+  a day: My plan, made the first time and followed here on this deck
+  (plans.json `magic_plans`), or a plan I write, where with followers the
+  dates wait in Review and send (the plan window's own ops: add_date,
+  add_picks, add_event, text). A topic's cards come from the deck's own
+  index, never a tag in Anki's search: one costs a fifth of a second on
+  that deck (it took 7 s a search before). The requests: my plans when it
+  opens (for where a date goes), and a plan's load and save on Put on days
+  or Add (My plan's first: made, saved, followed).
+  Ways in (Sam's pick): the You box's head (every tab and folded),
+  Ctrl+Shift+F (⌘⇧F) from any screen with Settings › Board › Shortcuts,
+  Browse's right-click "put on a day…" (the picked cards), Tools › Due Crew
+  › Magic search…, Find a setting. Settings › Board › Due › Magic search
+  (an account key, magic_search) takes it all away. The first time, a
+  how-to card (Sam: "awesome and comprehensive and clear"): what it reads,
+  each with something to tap and try, what it does; once a person
+  (magic_seen), ? brings it back. A little joy: the star sends sparkles
+  off when the box is first picked, chips pop in; none with Reduce motion.
+  tests/test_magic.py; tools/control_audit.js on its pages.
+- 3.9.7, test_plan_web's "the week a set opened in that still runs today"
+  counted its set from this week's Monday, so it held only on a Monday or
+  a Tuesday: the set and the days after it count from today now.

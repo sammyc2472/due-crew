@@ -4791,6 +4791,10 @@ def browser_menu(browser, menu):
     why.triggered.connect(lambda: why_flow.explain(browser))
     opn = menu.addAction("Due Crew: open these…")  # 3.8.0: never suspends; leeches stay
     opn.triggered.connect(lambda: open_these(browser))
+    from . import magic_flow
+    if magic_flow.on():  # 3.9.7: the picked cards in Magic search: study them, keep them, put them on days
+        mg = menu.addAction("Due Crew: put on a day…")
+        mg.triggered.connect(lambda: magic_flow.from_browser(browser))
     if not client().signed_in:
         return
     if client().session.get("plans_authored"):  # the plans I write or co-author, from the day's refresh

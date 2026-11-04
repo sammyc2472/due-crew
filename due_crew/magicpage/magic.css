@@ -1,0 +1,185 @@
+/* Magic search (3.9.7), in the board's look: its --dc-* tokens, its pills
+   and quiet lines. Words are set as text by magic.js. */
+html, body { margin: 0; padding: 0; height: 100%; }
+body { background: var(--dc-bg, #fff); }
+.dcm { box-sizing: border-box; min-height: 100vh; background: var(--dc-bg); color: var(--dc-ink); position: relative;
+  font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  padding: 14px 18px 16px; text-align: left; display: flex; flex-direction: column; gap: 10px; }
+.dcm *, .dcm *::before, .dcm *::after { box-sizing: border-box; }
+/* every control is ours, whatever Anki's webview.css or macOS put on top (tools/control_audit.js) */
+body .dcm button, body .dcm select, body .dcm input, body .dcm textarea {
+  appearance: none; -webkit-appearance: none; font: inherit; letter-spacing: inherit; line-height: inherit;
+  text-transform: none; margin: 0; min-height: 0; min-width: 0; box-shadow: none; text-shadow: none;
+  backdrop-filter: none; -webkit-backdrop-filter: none; outline: none; }
+body .dcm button { color: inherit; background: none; border: 0; padding: 0; border-radius: 0; cursor: pointer; }
+body .dcm button:hover, body .dcm button:active { box-shadow: none; transition: none; }
+body .dcm input, body .dcm textarea, body .dcm select { color: var(--dc-ink); }
+body .dcm select { padding-right: 26px !important; background-image: linear-gradient(45deg, transparent 50%, var(--dc-muted) 50%),
+  linear-gradient(135deg, var(--dc-muted) 50%, transparent 50%) !important; background-position: calc(100% - 14px) 52%,
+  calc(100% - 9px) 52% !important; background-size: 5px 5px, 5px 5px !important; background-repeat: no-repeat !important; cursor: pointer; }
+body .dcm input[type=checkbox] { width: 16px; height: 16px; flex: none; display: inline-grid; place-content: center; vertical-align: -3px;
+  border: 1.5px solid var(--dc-faded); background: var(--dc-bg); cursor: pointer; padding: 0; border-radius: 4px; }
+body .dcm input[type=checkbox]:checked { background: var(--dc-accent); border-color: var(--dc-accent); }
+body .dcm input[type=checkbox]:checked::after { content: ""; width: 8px; height: 4px; border-left: 2px solid var(--dc-accent-ink);
+  border-bottom: 2px solid var(--dc-accent-ink); transform: translateY(-1px) rotate(-45deg); }
+body .dcm button:focus-visible, body .dcm [tabindex]:focus-visible, body .dcm input[type=checkbox]:focus-visible,
+body .dcm select:focus-visible { box-shadow: 0 0 0 2px var(--dc-bg), 0 0 0 4px var(--dc-accent) !important; }
+.dcm .mu { color: var(--dc-muted); }
+.dcm .tn { font-variant-numeric: tabular-nums; }
+.dcm [hidden] { display: none !important; }
+
+/* head */
+.dcm .hd { display: flex; align-items: center; gap: 8px; }
+.dcm .hd b { font-size: 17px; letter-spacing: -.01em; }
+.dcm .x { color: var(--dc-muted); width: 28px; height: 28px; border-radius: 50% !important; display: inline-grid; place-items: center;
+  font-size: 15px; font-weight: 700; }
+.dcm .x:hover { color: var(--dc-ink); background: var(--dc-well) !important; }
+
+/* the box */
+.dcm .box { position: relative; display: flex; }
+.dcm .mag { position: absolute; left: 13px; top: 12px; color: var(--dc-muted); transform-origin: 50% 55%; pointer-events: none; }
+.dcm .box:focus-within .mag { color: var(--dc-accent); }
+body .dcm textarea.q { flex: 1 1 auto; width: 100%; border: 1.5px solid var(--dc-line); border-radius: 14px; background: var(--dc-bg);
+  resize: none; padding: 9px 12px 9px 38px; font-size: 15px; line-height: 1.45; max-height: 180px; overflow-y: auto;
+  min-height: 42px; }
+body .dcm textarea.q:focus { border-color: var(--dc-accent); }
+.dcm textarea.q::placeholder { color: var(--dc-faded); }
+.dcm .hd .sp { flex: 1 1 auto; }
+body .dcm select.deck { flex: 0 1 auto; max-width: 46%; border: 0; background-color: var(--dc-well); border-radius: 999px; padding: 3px 12px;
+  font-size: 12.5px; font-weight: 600; color: var(--dc-ink); }
+
+/* what's coming up: a row each */
+.dcm .rows { display: grid; gap: 6px; }
+.dcm .rows:empty { display: none; }
+.dcm .do { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-radius: 12px; padding: 8px 10px 8px 12px;
+  background: var(--dc-you-bg); border: 1px solid color-mix(in srgb, var(--dc-accent) 30%, transparent); }
+.dcm .do .ic { flex: none; width: 20px; text-align: center; }
+.dcm .do .w { flex: 1 1 220px; min-width: 0; }
+.dcm .do .w b { font-weight: 700; }
+.dcm .do .note { color: var(--dc-muted); font-size: 12.5px; margin-left: 4px; }
+.dcm .do.done { background: var(--dc-well); border-color: var(--dc-line); }
+.dcm .do.done .ic::after { content: ""; }
+.dcm .seg { display: inline-flex; background: var(--dc-bg); border-radius: 999px; padding: 2px; flex-wrap: wrap; border: 1px solid var(--dc-line); }
+.dcm .seg button { color: var(--dc-muted); font-weight: 600; padding: 2px 10px; border-radius: 999px !important; font-size: 12.5px; }
+.dcm .seg button.on { background: var(--dc-well) !important; color: var(--dc-ink); }
+.dcm .dest-note { color: var(--dc-muted); font-size: 12px; }
+.dcm .plines { border: 1px solid var(--dc-line); border-radius: 10px; overflow: hidden; }
+.dcm .plines div { display: flex; gap: 12px; padding: 4px 10px; font-size: 13px; border-top: 1px solid var(--dc-line); }
+.dcm .plines div:first-child { border-top: 0; }
+.dcm .plines .d { width: 82px; flex: none; color: var(--dc-muted); }
+.dcm .plines .n { margin-left: auto; color: var(--dc-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dcm .plines .n.none { color: var(--dc-hours); }
+
+/* chips: one a topic, its count opens its tags */
+.dcm .chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.dcm .chips:empty { display: none; }
+.dcm .grp { display: inline-flex; align-items: stretch; border-radius: 999px; border: 1px solid var(--dc-line); overflow: hidden; background: var(--dc-bg); }
+.dcm .grp.on { background: var(--dc-you-bg); border-color: color-mix(in srgb, var(--dc-accent) 50%, transparent); }
+.dcm .grp.neg { background: var(--dc-well); border-style: dashed; }
+.dcm .grp button { font-size: 12.5px; padding: 3px 10px; display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
+.dcm .grp .g1 { font-weight: 600; }
+.dcm .grp.on .g1::before { content: "\2713"; color: var(--dc-accent); font-weight: 800; }
+.dcm .grp.neg .g1 { text-decoration: line-through; text-decoration-color: var(--dc-muted); cursor: default; }
+.dcm .grp .g1 small, .dcm .grp .g2 { color: var(--dc-muted); font-size: 11.5px; font-weight: 500; }
+.dcm .grp .g2 { border-left: 1px solid var(--dc-line) !important; padding: 3px 9px; }
+.dcm .grp .g2::after { content: " \25BE"; }
+.dcm .grp .g2.open::after { content: " \25B4"; }
+.dcm .lim { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; color: var(--dc-muted); padding: 3px 4px; }
+.dcm .tags { border: 1px solid var(--dc-line); border-radius: 12px; padding: 6px 12px; display: grid; gap: 1px; max-height: 220px; overflow-y: auto; }
+.dcm .tags .th { font-size: 12px; font-weight: 700; padding: 3px 0; display: flex; justify-content: space-between; color: var(--dc-muted); }
+.dcm .tags label { display: flex; gap: 8px; align-items: center; font-size: 12.5px; padding: 3px 0; cursor: pointer; }
+.dcm .tags .p { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dcm .tags .n { color: var(--dc-muted); font-variant-numeric: tabular-nums; }
+
+/* the filters: always there, under the box (Sam) */
+.dcm .filters { display: flex; flex-wrap: wrap; gap: 6px; background: var(--dc-well); border-radius: 14px; padding: 8px; }
+.dcm .chip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--dc-line) !important; background: var(--dc-bg) !important;
+  border-radius: 999px !important; padding: 3px 11px !important; font-size: 12.5px; white-space: nowrap; color: var(--dc-ink); }
+.dcm .chip:hover { border-color: var(--dc-accent) !important; }
+.dcm .chip.on { background: var(--dc-accent) !important; border-color: var(--dc-accent) !important; color: var(--dc-accent-ink); font-weight: 600; }
+.dcm .chip.on::before { content: "\2713"; font-weight: 800; }
+.dcm .recent { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.dcm .recent .lab { color: var(--dc-muted); font-size: 12px; margin-right: 2px; }
+
+/* what it found */
+.dcm .res { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; font-size: 13px; }
+.dcm .res:empty { display: none; }
+.dcm .res b { font-size: 14px; }
+.dcm .res .bits { color: var(--dc-muted); }
+.dcm .link { color: var(--dc-accent); font-weight: 600; font-size: 13px; }
+.dcm .link:hover { text-decoration: underline; }
+.dcm .lines { color: var(--dc-muted); font-size: 12.5px; display: grid; gap: 2px; }
+.dcm .lines:empty { display: none; }
+
+/* what to do */
+.dcm .acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.dcm .acts:empty { display: none; }
+.dcm .b { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--dc-line) !important; background: var(--dc-bg) !important;
+  color: var(--dc-accent); font-weight: 650; border-radius: 999px !important; padding: 6px 13px !important; white-space: nowrap;
+  line-height: 1.2; font-size: 13px; }
+.dcm .b:hover { border-color: var(--dc-accent) !important; }
+.dcm .b.pri { background: var(--dc-accent) !important; border-color: var(--dc-accent) !important; color: var(--dc-accent-ink); }
+.dcm .b:disabled { opacity: .45; cursor: default; }
+body .dcm select.b { padding-right: 28px !important; color: var(--dc-ink); font-weight: 600; }
+.dcm .sp { flex: 1 1 auto; }
+.dcm .keep { display: inline-flex; gap: 7px; align-items: center; font-size: 12.5px; color: var(--dc-muted); cursor: pointer; }
+.dcm .kname { border: 1px solid var(--dc-line) !important; border-radius: 999px !important; padding: 4px 12px !important; font-size: 12.5px;
+  background: var(--dc-bg) !important; width: 220px; max-width: 100%; }
+.dcm .kname:focus { border-color: var(--dc-accent) !important; }
+
+/* Put on days: tap as many as you like */
+.dcm .pod { border: 1px solid var(--dc-line); border-radius: 14px; padding: 12px; display: grid; gap: 10px; }
+.dcm .pod .ph { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.dcm .pod .ph b { font-size: 13.5px; }
+.dcm .days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+.dcm .day { position: relative; border: 1px solid var(--dc-line) !important; border-radius: 10px !important; padding: 5px 2px 6px !important;
+  display: grid; justify-items: center; gap: 0; background: var(--dc-bg) !important; min-width: 0; }
+.dcm .day .dw { font-size: 11px; color: var(--dc-muted); font-weight: 600; }
+.dcm .day .dn { font-size: 15px; font-weight: 700; line-height: 1.25; }
+.dcm .day .dl { font-size: 10.5px; color: var(--dc-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dcm .day.light .dl { color: var(--dc-accent); font-weight: 700; }
+.dcm .day:hover { border-color: var(--dc-accent) !important; }
+.dcm .day.on { background: var(--dc-accent) !important; border-color: var(--dc-accent) !important; }
+.dcm .day.on .dw, .dcm .day.on .dn, .dcm .day.on .dl { color: var(--dc-accent-ink); }
+.dcm .day.tdy .dw::after { content: " \b7\20today"; }
+.dcm .podrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12.5px; }
+.dcm .podrow label { color: var(--dc-muted); }
+.dcm .split { color: var(--dc-muted); font-size: 12.5px; }
+
+.dcm .said { font-size: 13px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; min-height: 0; }
+.dcm .said:empty { display: none; }
+
+/* the how-to: what it reads, what it does; ? brings it back */
+.dcm .intro { position: fixed; inset: 0; z-index: 5; background: color-mix(in srgb, var(--dc-bg) 72%, transparent);
+  display: grid; place-items: center; padding: 14px; overflow-y: auto; }
+.dcm .ic2 { background: var(--dc-bg); border-radius: 16px; box-shadow: 0 0 0 1px var(--dc-line), 0 18px 44px rgba(0,0,0,.22);
+  padding: 18px 20px 16px; max-width: 640px; width: 100%; display: grid; gap: 12px; }
+.dcm .ic2 .t { display: flex; align-items: center; gap: 10px; }
+.dcm .ic2 .t b { font-size: 19px; }
+.dcm .ic2 .lede { margin: 0; }
+.dcm .how { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.dcm .how > div { border: 1px solid var(--dc-line); border-radius: 12px; padding: 9px 11px; display: grid; gap: 5px; align-content: start; }
+.dcm .how h4 { margin: 0; font-size: 13px; }
+.dcm .how p { margin: 0; font-size: 12.5px; color: var(--dc-muted); }
+.dcm .how code { font-size: 11.5px; background: var(--dc-well); border-radius: 5px; padding: 1px 5px; overflow-wrap: anywhere; }
+.dcm .how .try { display: flex; flex-wrap: wrap; gap: 5px; }
+.dcm .then { border-radius: 12px; background: var(--dc-you-bg); padding: 10px 12px; display: grid; gap: 4px; font-size: 12.5px; }
+.dcm .then b { font-size: 13px; }
+.dcm .then ul { margin: 0; padding-left: 18px; display: grid; gap: 2px; }
+.dcm .ic2 .foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+@media (max-width: 560px) { .dcm .how { grid-template-columns: minmax(0, 1fr); } .dcm .days { gap: 3px; } }
+
+/* a little joy: sparkles off the star when the box is first picked, chips pop in */
+.dcm .spk { position: absolute; width: var(--sz); height: var(--sz); margin: calc(var(--sz) / -2) 0 0 calc(var(--sz) / -2); pointer-events: none; z-index: 3;
+  background: var(--dc-accent); clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+  animation: dcm-spk .75s cubic-bezier(.2,.7,.3,1) both; }
+.dcm .spk.g { background: var(--dc-hours); }
+@keyframes dcm-spk { 0% { transform: translate(0, 0) scale(.2) rotate(0); opacity: 0; } 18% { opacity: 1; }
+  100% { transform: translate(var(--dx), var(--dy)) scale(1) rotate(90deg); opacity: 0; } }
+.dcm .mag.twirl { animation: dcm-twirl .6s cubic-bezier(.3,1.4,.5,1); }
+.dcm .mag.twirl .st { animation: dcm-twinkle .6s ease-out; transform-box: fill-box; transform-origin: center; }
+@keyframes dcm-twirl { 30% { transform: rotate(-14deg) scale(1.12); } 100% { transform: none; } }
+@keyframes dcm-twinkle { 40% { transform: scale(1.7) rotate(45deg); } 100% { transform: none; } }
+.dcm .pop { animation: dcm-pop .22s cubic-bezier(.3,1.5,.5,1) both; }
+@keyframes dcm-pop { from { transform: scale(.78); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .dcm .spk { display: none; } .dcm .mag.twirl, .dcm .mag.twirl .st, .dcm .pop { animation: none !important; } }

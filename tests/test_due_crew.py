@@ -7444,10 +7444,11 @@ def test_plan_windows_ways_in_v393():
         due_flow._QIDS.update(saved[2])
     ix = board.settings_index({"tab": "board", "signed_in": True}, {"accent": "green"})
     wins = {x["l"]: x for x in ix if x.get("p")}
-    check("ways in: Find a setting finds the three windows by the words people use, after every setting",
-          set(wins) == {"Your plans", "New plan", "QBank QIDs"}
-          and "calendar" in wins["New plan"]["k"] and "missed" in wins["QBank QIDs"]["k"]
-          and wins["Your plans"]["p"] == "planyours" and all(x.get("p") for x in ix[-3:]), list(wins))
+    check("ways in: Find a setting finds the windows by the words people use, after every setting (3.9.7: Magic search)",
+          set(wins) == {"Your plans", "New plan", "QBank QIDs", "Magic search"}
+          and "calendar" in wins["New plan"]["k"] and "missed" in wins["QBank QIDs"]["k"] and "filtered" in wins["Magic search"]["k"]
+          and wins["Your plans"]["p"] == "planyours" and wins["Magic search"]["p"] == "magic"
+          and all(x.get("p") for x in ix[-4:]), list(wins))
     check("ways in: a window picked in Find a setting is opened, not looked for on a tab",
           "if (h.p) { pycmd('duecrew:' + h.p + '|' + window.dcBK); return; }" in board.FIND_JS)
 
@@ -10871,8 +10872,8 @@ def test_plan_words_v381():
         writer = list(acts)
     finally:
         F.client = saved_client
-    check("browse: someone who writes no plan gets why and open these; an author the writing ones too",
-          reader == ["Due Crew: why isn't it showing?", "Due Crew: open these…"]
+    check("browse: someone who writes no plan gets why, open these and put on a day (3.9.7); an author the writing ones too",
+          reader == ["Due Crew: why isn't it showing?", "Due Crew: open these…", "Due Crew: put on a day…"]
           and writer == reader + ["Due Crew: add to a plan…", "Due Crew: tag for a plan…",
                                   "Due Crew: copy as plan selector", "Due Crew: export for my AI…"], (reader, writer))
 
@@ -12854,8 +12855,8 @@ def test_why_not_showing_glue_v380():
         PF.browser_menu(types.SimpleNamespace(), Menu())
     finally:
         PF.client = saved_client
-    check("glue: Browse's right-click asks why and opens the picked cards, signed out too (Anki help, not the account)",
-          acts == ["Due Crew: why isn't it showing?", "Due Crew: open these…"], acts)
+    check("glue: Browse's right-click asks why, opens the picked cards and puts them on a day, signed out too (Anki help, not the account)",
+          acts == ["Due Crew: why isn't it showing?", "Due Crew: open these…", "Due Crew: put on a day…"], acts)
 
 
 def test_card_set_links_one_look_v380():

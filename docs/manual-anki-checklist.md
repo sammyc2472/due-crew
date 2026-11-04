@@ -958,3 +958,21 @@ The riskiest of 3.9.1, the parts only a live Anki can show, in order:
 - [ ] Pip's moves (variety): finish Today on two days running: by the logo Pip does something different each day (a hop, a twirl, a little dance, a big jump), never the same twice in a row, restarting Anki between. In a fifteen of three rounds, the chip's Pip reads differently each round (nods, scratches its head, taps a foot); Settings › On a break › Stretch, each break a different stretch (shakes it out, marches, looks around); Breathe stays Breathe. The question: the clock rings, or Pip points at it, or jumps at it. The session's line, the nudge and a room's seats too (each seat its own small thing). Reduce motion: each shows still.
 - [ ] Signed out (Sign out, Decks screen): Pip waves beside "Your friends' studying next to yours…" (words beside it at a narrow window, not under it), plays once, then rests; an expired sign-in shows no Pip. Settings › Pip off: the card as before.
 - [ ] A crewmate passes a 100-day streak (or a year): the banner has Pip hopping in place of 💯, once, then it rests (not mid-hop, with Reduce motion too); Send 💯 and × as before. Settings › Pip off: the 💯.
+
+### 3.9.7: Magic search
+
+- [ ] The You box's head says Magic search (every tab, and folded); Ctrl+Shift+F (⌘⇧F) opens it from the Decks screen, Overview and Review; Tools › Due Crew › Magic search… and Find a setting ("filtered") too. Settings › Board › Due › Magic search off: gone from the head, the key does nothing, the Tools entry hides.
+- [ ] The first time: the how-to card, each part with something to tap that runs it; Got it, then ? brings it back. On another computer it doesn't show again.
+- [ ] Picking the box: the star twirls and sparkles, once a window; chips pop in as you type. With Reduce motion, none of it.
+- [ ] In a big shared deck: "heart failure" ticks one chip with its tags listed open (untick one: its cards leave); "hf drugs", "aki", "itp", "copd", "type 2 diabetes", "staph aureus" tick what you'd expect; "mi" ticks only the tag called MI and offers the rest; "graves" doesn't tick Grade.
+- [ ] Resources: "b&b heart failure", "boards and beyond renal", "first aid cardio", "sketchy", "sketchy micro staph", "pathoma chapter 3" (Neoplasia).
+- [ ] The filters row is there with an empty box; a tap on Due today counts the deck's due cards; "anemia I missed this week" turns Missed this week on.
+- [ ] "10 new platelets" takes 10; "platelets but not itp" strikes ITP; "kidney stones" (if no tag says it) finds the cards' text and says so.
+- [ ] A block's QIDs, with or without the bank's name; a note id; an Anki search pasted: each finds its cards.
+- [ ] Study now: a Due Crew deck of the new and due ones (All of them: every one but a leech), suspended ones opened, Anki's Study screen on it; Edit › Undo takes it back in one step. Study some: they go home; the deck's still there the next morning until it's empty.
+- [ ] Keep as a filtered deck, named: in your deck list, Rebuild fills it again; it's never tidied away. Undo in the window takes it away.
+- [ ] Add to a filtered deck (one of your own, a QBank misses deck): its own cards stay, these join, Rebuild keeps both.
+- [ ] Put on days: tap three days, the split says it; Put on 3 days: My plan is made the first time (You › Plans shows it), each day's set opens that morning. Undo takes the save back. To a plan you write with followers: it waits in Review and send.
+- [ ] "quiz friday on platelets and anemia": Add the quiz (My plan or yours), then Pick days… opens on the days before it. "my exam is december 12": Settings' exam, Today's countdown; Undo puts it back. "I'm away till monday": your away spell. "push my plan back 2 days", "pause my plan": your follow.
+- [ ] Paste plan lines from a prompt: Add 5 dates and 1 event, each line counted, one whose tag isn't here says so; Add puts them on the plan.
+- [ ] Browse: pick cards, right-click › Due Crew: put on a day…: the window has them, the day picker open.

@@ -357,6 +357,7 @@ swap = None       # swap(cfg): re-render the board in place from cache
 rerender = None   # rerender(): rebuild the deck screen
 refresh = None    # refresh(**kw): refresh_board
 sync = None       # sync(**kw): _on_sync_done (upload + fetch)
+apply_settings = None  # apply_settings({key: value}): a change saved as Settings saves it (3.9.7, Magic search)
 
 
 def feedback_versions(addon_version=None):

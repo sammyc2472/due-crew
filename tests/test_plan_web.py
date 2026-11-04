@@ -49,6 +49,11 @@ def day(n):
     return (MON + datetime.timedelta(days=n)).isoformat()
 
 
+def rel(n):
+    """A day n days from today (day(n) is from this week's Monday)."""
+    return (TODAY + datetime.timedelta(days=n)).isoformat()
+
+
 for uid, name in (("sam", "Sammy"), ("dre", "Dre"), ("maya", "Maya")):
     STORE.add_user(uid, name, code=uid.upper()[:3] + "123")
 
@@ -279,9 +284,10 @@ def test_after_the_last_check_v396():
     every set ends a plan with no end; New plan's preview numbers a set once."""
     us = [{"id": "u1", "name": "Cell injury", "opens": day(-9), "tags": [f"{R}::01_Cell_injury"]},
           {"id": "u2", "name": "Inflammation", "opens": day(-8), "tags": [f"{R}::02_Inflammation"], "for": "e1"},
-          {"id": "u3", "name": "Neoplasia", "opens": day(-1), "due": day(1), "tags": [f"{R}::03_Neoplasia"]},
-          {"id": "u4", "name": "Hemostasis", "opens": day(2), "tags": [f"{R}::04_Hemostasis::Platelets"]}]
-    pid, _code = plan(us, [{"id": "e0", "day": day(-7), "name": "Cell quiz"}, {"id": "e1", "day": day(4), "name": "Heme quiz"}])
+          # running today whatever day of the week the suite runs on (it said so only on a Monday or a Tuesday)
+          {"id": "u3", "name": "Neoplasia", "opens": rel(-1), "due": rel(1), "tags": [f"{R}::03_Neoplasia"]},
+          {"id": "u4", "name": "Hemostasis", "opens": rel(2), "tags": [f"{R}::04_Hemostasis::Platelets"]}]
+    pid, _code = plan(us, [{"id": "e0", "day": day(-7), "name": "Cell quiz"}, {"id": "e1", "day": rel(4), "name": "Heme quiz"}])
     next(u for u in STORE.plans[pid]["doc"]["units"] if u["id"] == "u2")["for"] = "e1"  # (plan() keeps no `for`)
     w = Face(client("sam"), select=pid)
     w.click("pick", key=["event", "e1"])
