@@ -35,10 +35,11 @@ ACCOUNT_KEYS = ("share_reviews", "share_time", "share_retention", "share_streak"
                 "wrapped_seen",  # 3.9.0: the year whose Wrapped line was put away, on every computer
                 "two_buttons",  # 3.9.1: Again and Good alone, a person's way of reviewing
                 "exam_last", "exam_since",  # 3.9.2: my last exam, kept once it's passed; what the next one covers
-                "song")  # 3.9.6: my song of the moment (songs.clean): my mutual friends see it on their board
+                "song",  # 3.9.6: my song of the moment (songs.clean): my mutual friends see it on their board
+                "magic_search", "magic_seen")  # 3.9.7: Magic search on or off; its first-time card seen
 ACCENT_NAMES = ("green", "blue", "purple", "teal", "amber", "rose")
 _BOOLS = ("share_reviews", "share_time", "share_retention", "share_streak",
-          "share_heatmap", "show_up", "paused", "due_show", "due_suggest", "two_buttons")
+          "share_heatmap", "show_up", "paused", "due_show", "due_suggest", "two_buttons", "magic_search", "magic_seen")
 _TEXT = {"exam_date": 10, "away_from": 10, "away_to": 10, "status": 80, "emoji": 16,
          "crew_label": 40, "wrapped_seen": 4, "exam_last": 10, "exam_since": 10}
 MAX_SQUADS = 20

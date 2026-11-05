@@ -4451,3 +4451,203 @@ every release that changes how something works.
   An older add-on saving my settings on another computer drops the song,
   as with every newer account key (it saves the keys it knows).
 
+- 3.9.7, a newer emoji than Anki's Python knows (found in 3.9.6's release
+  run, one check failing on Sam's Mac). Python's isprintable() reads its
+  own Unicode tables, and Anki builds on Python 3.9 have Unicode 13: they
+  take 🫡, 🫠 or 🥹 (Unicode 14) and 🫨 or 🩷 (15) for unassigned, so the
+  Cheer window's emoji drawer offered faces clean_emoji then refused, and a
+  cheer note, a status, a squad's name, the crew's label or a share lost
+  them. shapes.printable is isprintable(), or a code point this Python
+  calls unassigned in the emoji planes (U+1F000-1FAFF), which only a newer
+  Unicode gives out; clean_emoji, clean_note, clean_squad_name, bingo's
+  _text, Settings' crew label and share.clean_name take it. Anything
+  unassigned outside those planes, and every control or zero-width
+  character, is still turned away.
+- 3.9.7, Magic search (Sam: "a magic search function that can parse
+  language about tags … makes custom filtered decks easily … assign it to
+  a future day like for a plan … our gateway into plans for most people";
+  the mock's rounds, then "I trust you to build this first draft"). One box
+  (`magic.py` the rules, `magic_flow.py` the glue, `magic_html.py` and
+  `magicpage/` the page, `ui/magic_window.py` a dialog on Anki's web view
+  whose bridge only its own page reaches, "dcmagic:" + JSON). Rules, not
+  AI: the words are matched to the deck's own tags on this computer and
+  nothing typed is sent. Tried on a big shared deck's export in Anki's own
+  engine (28,653 notes, 44,731 tags): its first view is two seconds once
+  (the tag tree is kept while the deck's tags are), then 3 to 230 ms a
+  search. What it reads:
+  - a topic: every tag whose last part says the words (the same, the
+    plural off, begun at 4+ letters, a letter off at 5+, a run's initials),
+    grouped by that name, a parent covering its children, one chip a topic
+    with its tags open under it (Sam: "many tags for a given topic"); a
+    name's bracket off ("Acute Kidney Injury (AKI) (Clinical Medicine)" is
+    Acute Kidney Injury), a roman number a number ("Type II");
+  - only what you named is ticked (Sam's pick), by tiers: the words name
+    it (overview, basics, SOAP and the like aside), else its name begins
+    with them, else a letter off; a one-word name the word only begins
+    ("thyroid", Thyroiditis) is the second tier, the big ones only;
+    initials name a topic only when the deck doesn't write those letters
+    beside another name (its own "(ITP)" says which), and two letters alone
+    ("mi") only when it writes them beside this one, else they're offered
+    with "tap the ones you mean";
+  - the deck's resources, its #parts (a made-up deck's: "m&m heart
+    failure", "mice and men renal" by the run's initials with its and,
+    "quick ref cardio", "charts" for each of a family, "charts micro
+    staph"), the topic kept inside them; a resource whose words find
+    nothing in it reads as said ("pathbook chapter 3" is a tag of that
+    name, wherever it is); "chapter",
+    "section", "lecture" and the like with a number: the resource's part
+    numbered so, the shallowest ("03_Neoplasia", not a "03_" section or a
+    "part 3");
+  - filters (new, seen, suspended, learning, due today and tomorrow and in
+    N days, missed today, this week or in N days, added, leeches, flagged),
+    on a row under the box that's always there (Sam: "should show more of
+    the time"), each a tap; a number first is how many ("10 new
+    platelets", never "type 2 diabetes"); but not, except, without; a deck
+    by its name; words no tag has: the cards' text; QIDs (with their
+    bank's name, "qbank 2345 11089"), note ids (a note's before a card's:
+    both come from the clock), Anki's own search; plan lines (the Text
+    tab's, our prompts');
+  - what's coming up, a row each, one tap, Undo: a quiz or test (a date on
+    My plan or a plan I write, its topics on the days before it), an exam
+    far off and an away spell (Settings' own setexam and setaway, through
+    app.apply_settings), push my plan back N days, pause it (my follow's
+    days); the social ones wait for a later round (Sam: study ones first).
+  What it does: Study now (New and due, or All of them, Sam's pick), a
+  Due Crew filtered deck as QBank cards' is, suspended ones opened, never
+  a leech, staying till it's studied through (Sam: "why would the filtered
+  deck clear the next morning?": it doesn't; an empty one is tidied);
+  Keep as a filtered deck (Sam: "don't really want to move cards"): named,
+  holding the cards and the filters live, so Rebuild fills it again, never
+  tidied; Add to a filtered deck I have ("a QBANK misses deck"): these
+  cards join its first search, "(its search) OR cid:…", and it's rebuilt,
+  one undo step; Unsuspend (QBank QIDs'); Browse; Put on days (Sam: "click
+  multiple days"): two weeks, each day's reviews due, the light ones
+  green, the cards split over the days picked in the deck's order, a date
+  a day: My plan, made the first time and followed here on this deck
+  (plans.json `magic_plans`), or a plan I write, where with followers the
+  dates wait in Review and send (the plan window's own ops: add_date,
+  add_picks, add_event, text). A topic's cards come from the deck's own
+  index, never a tag in Anki's search: one costs a fifth of a second on
+  that deck (it took 7 s a search before). The requests: my plans when it
+  opens (for where a date goes), and a plan's load and save on Put on days
+  or Add (My plan's first: made, saved, followed).
+  Ways in (Sam's pick): the You box's head (every tab and folded),
+  Ctrl+Shift+F (⌘⇧F) from any screen with Settings › Board › Shortcuts,
+  Browse's right-click "put on a day…" (the picked cards), Tools › Due Crew
+  › Magic search…, Find a setting. Settings › Board › Due › Magic search
+  (an account key, magic_search) takes it all away. The first time, a
+  how-to card (Sam: "awesome and comprehensive and clear"): what it reads,
+  each with something to tap and try, what it does; once a person
+  (magic_seen), ? brings it back. A little joy: the star sends sparkles
+  off when the box is first picked, chips pop in; none with Reduce motion.
+  tests/test_magic.py; tools/control_audit.js on its pages.
+- 3.9.7, Magic search's round 2 (Sam, on the first draft: "the modal
+  introducing for the first time should pop up on the main decks screen",
+  "the magic search box is WAY too big and should change size according
+  to content", "this is replacing QBank QID search", "i'm not really able
+  to find the overarching resource", then "do we built support for AND
+  statements and OR statements on tags"):
+  - the how-to is the Decks screen's, once a person (magic_seen, an
+    account key): `magic_flow.board_howto` and `board.magic_howto_js`, in
+    the sheets' look, over the board the bars dim with (`VEIL_IDS`), shown
+    after the Decks screen draws and only once the board is clear (no
+    window or show over it) with the You box there; Got it, Open Magic
+    search, or a try (duecrew:magichow, the board's key), each seen. Its
+    words are `magic.HOWTO`, the window's ? the same. Its tries are the
+    deck's own where it can say them: the resource one is the #part with
+    the most tags (not a bank's) and its biggest part, the QIDs one three
+    of the biggest bank's questions (`magic.examples`, from the tags
+    table, a fifth of a second once); in the window each try that needs a
+    tag is kept only when it reads as something in that deck;
+  - the window is as tall as what's in it: the page says its height
+    (ResizeObserver, "size"), the window follows from a top edge set high,
+    as a search box is, up to nine tenths of the screen, then the page
+    scrolls; dragged to a size, it keeps it. 660 wide (the how-to's two
+    columns). The empty box: 195 px where it was 680;
+  - a chip's tags under where each is from (`magic.tag_row`/`tag_list`):
+    the resource (the first #part under the root, else the root) bold with
+    a tick of its own (all its tags in or out, some: neither), the path
+    after it, the chip's own name off its end; two of a resource's that
+    would read the same say their whole path, then their root (a deck with
+    a resource in its Step 1 and Step 2 halves);
+  - QBank QIDs is Magic search's (its window, chip, Plans menu item, Find
+    entry, planmissed and `due_flow.has_qids` gone; `planner/qids.py`
+    kept): a paste the way a bank copies it ("Missed: 10234, 10911 · 65%")
+    is QIDs when two or more of its numbers, and a third of them, are the
+    deck's questions (`Tree.qnums`); how many are questions, what isn't
+    one, my plans' dates holding them, the bank when two are close (a
+    pick kept for the paste), the deck with no question IDs said, Their
+    topics with each part's Study, Study now into Due Crew › QBank cards
+    in random order as before. Its default deck rule came too (the plan
+    You › Plans shows, then the deck most plans run on);
+  - and, or, both: "and", "or" and commas put another topic beside one,
+    each one's cards (a lowercase or was read as Anki's own OR before:
+    the words went to Anki's text search); "both A and B" (its list, to an
+    or), AND in capitals (Anki's word) and "with" (when each side names a
+    topic and no tag says the whole, "Diabetes with Complications" staying
+    one) take only the cards in both, a "with" between their chips and in
+    the name; none in both is said. On the big shared deck "both heart
+    failure and pharm" is 170 cards, what Anki's own search of those tags
+    finds. The reading's `terms`: each term's topics in all of them, the
+    terms together (`magic_flow.Search.joined_cards`).
+  The window's how-to title's icon sat where the box's does (the box's
+  absolute place); its own now. Its dropdowns in the buttons' look (New
+  and due, Add to a filtered deck…, the bank) had lost their arrow to the
+  buttons' background (Sam, the click test: "not clear that this is a drop
+  down"): drawn again, in the ink.
+- 3.9.7, Magic search's round 3 (Sam, on the click test: "the bottom of
+  the search with the options is quite complicated… most important thing
+  is giving the user enough information about what has been found so
+  that they can take the appropriate action"; then "seeing the tag tree is
+  really important", "B but with way less exposition", "love the also
+  underneath", "Study now, Schedule ahead, Make a new filtered deck",
+  "the tag tree to go all the way to the last tag", "combine things with
+  similar names so long as the tag goes all the way to the end", "make
+  unsuspend a core button in the bottom pills"; mocked three times, built
+  from the third):
+  - one row a typed topic (`magic_flow.Search.topics_view`): its ticked
+    names as one, its tick (`c_seg`: all of it out or back), its cards
+    ("13 of 798 cards" when a filter, a but not or a number keeps some),
+    "N tags" folding its tree (`c_open`), and Also under it: the near
+    names, a tap takes one in (`c_chip`, eight at most). The chips row and
+    its Where line are gone;
+  - the tree goes to each tag's end (`magic.tag_row`: the resource, then
+    every part after it, the topic's own name kept); tags under two roots
+    say which (`root_name`: "Step 1 › Cardio › Heart Failure", a deck's
+    version and short prefix off); a resource's count is its cards once
+    each (`tag_list` takes the index's tag cards: a parent and its child,
+    or both halves of a deck, had been counted twice, 403 where 314 are);
+  - what it found (`found`): the count, a bar and its key (due now, new
+    and how many of those are suspended, seen and not due yet; leeches
+    left out), and Study now's time at my pace beside my usual day (one
+    read of my last four weeks' answers, `Ops.pace` → `magic.pace_from`:
+    a new card's first-day seconds, a review's, the middle of the days I
+    studied; a guess, unsaid, till there's a log), and any of them sitting
+    in another filtered deck (`Ops.in_filtered`; Study now's own aside);
+  - four tiles (`tiles_view`): Study now (the new and due; every one for a
+    filter, QIDs or a search), Schedule ahead (the day picker, the days it
+    takes at my pace picked from tomorrow when nothing is), Make a new
+    filtered deck (its name to change, then Make), Unsuspend (its count;
+    greyed when none is). The filled one follows what it found: Schedule
+    ahead when Study now's set is more than my usual day, else Study now,
+    Unsuspend when that's all that's left. Under them, quietly: Add to a
+    filtered deck… and Study all N (the seen ones too; New and due's
+    dropdown went);
+  - the filters are a quiet Only line under the box; the how-to's then
+    lines say the four tiles.
+  On the big shared deck: "heart failure" is 537 cards, 21 due, 430 new
+  (373 suspended), 86 not due, about 3 h 40 min, Schedule ahead filled;
+  the window's controls pass the audit in each state, light and dark.
+  Then its words, trimmed (Sam: no "extraneous language that
+  over-explains and doesn't trust the user"): the tree's header ("Heart
+  Failure: 25 tags · untick what to leave out") went, the row above says
+  it; "Those letters could be several: tap the ones you mean" went (Which?
+  says it); the day picker's "Tap as many as you like…" went, its split
+  is just the counts; what's said after a step is what happened ("Your
+  exam: Thu 12 Jun.", "Unsuspended 373 cards.", "Made My plan: …"), not
+  what follows from it; tooltips are a few words; the how-to's topic part
+  and its then lines, a line a tile. The away row keeps "your crew sees
+  it" before Set.
+- 3.9.7, test_plan_web's "the week a set opened in that still runs today"
+  counted its set from this week's Monday, so it held only on a Monday or
+  a Tuesday: the set and the days after it count from today now.

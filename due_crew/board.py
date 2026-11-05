@@ -1564,7 +1564,7 @@ def keep_me_in_view_js(scripts=True):
 # bottom bars to match (app.veil) while one is up. This tells it when: a
 # window comes, or the last one goes (a closing one gives up its id as it
 # starts to fade, motion.js, so the bars fade with it).
-VEIL_IDS = ("dc-cheer", "dc-profile", "dc-sheet", "dc-song")  # 3.9.6: the song search
+VEIL_IDS = ("dc-cheer", "dc-profile", "dc-sheet", "dc-song", "dc-magic")  # 3.9.6: the song search; 3.9.7: Magic search's how-to
 VEIL_WATCH_JS = """
 (function () {
     if (window.dcVeil || typeof MutationObserver === 'undefined') { return; }
@@ -4500,7 +4500,7 @@ def you_html(cfg, due=None, you=None, people=None):
             else _you_insights(you.get("insights")) if tab == "insights"
             else party_html(you.get("party")) if tab == "party" else "")
     return _due_html(due, more, tab if tab in dict(more) else None, body, folded=bool(you.get("folded")),
-                     qids=bool(you.get("qids")))
+                     magic=cfg.get("magic_search", True) is not False)
 
 
 # ---- 3.5.0: Settings, in the board ----
@@ -4709,6 +4709,8 @@ def _settings_board(cfg, fsrs=None, reach=None):
             + _settings_songs(cfg)  # 3.9.6: song of the moment, this computer's
             + '</div><div class="st-h">Due</div><div class="st-box">'
             + _st_row("Today, Upcoming, Later", _st_switch("due_show", g("due_show", True), "Today, Upcoming, Later"))
+            + _st_row("Magic search", _st_switch("magic_search", g("magic_search", True), "Magic search"),
+                      f"In the head of this box, and {MAGIC_KBD} from any screen")  # 3.9.7
             + _st_row("Suggestions", _st_switch("due_suggest", g("due_suggest", True), "Suggestions"),
                       "Today's misses, new leeches")
             + _st_row("Recover leeches", _st_switch("due_leeches", g("due_leeches", False), "Recover leeches"),
@@ -4723,6 +4725,7 @@ def _settings_board(cfg, fsrs=None, reach=None):
             + '</div><div class="st-h">Shortcuts</div><div class="st-box">'
             + _st_row("Study what&rsquo;s next", f'<kbd class="st-kbd">{STUDY_KBD}</kbd>', "From any Anki screen")
             + _st_row("Ask the squad about this card", f'<kbd class="st-kbd">{ASK_KBD}</kbd>', "While reviewing")
+            + _st_row("Magic search", f'<kbd class="st-kbd">{MAGIC_KBD}</kbd>', "From any Anki screen")
             + _st_row("Shortcuts on", _st_switch("shortcuts", g("shortcuts", True), "Shortcuts on"),
                       "Off if another add-on uses these keys")
             + '</div>'
@@ -4826,7 +4829,9 @@ FIND_WORDS = {
 FIND_WINDOWS = (
     ("planyours", "Your plans", "plan plans dates weeks schedule write edit author builder follow"),
     ("planstart", "New plan", "new plan calendar syllabus block schedule file pdf word powerpoint slides import make deck"),
-    ("planmissed", "QBank QIDs", "qbank qids missed questions question ids bank practice block wrong incorrect unsuspend"),
+    # 3.9.7: Magic search, QBank QIDs' way since its round 2 (Sam: "this is replacing QBank QID search")
+    ("magic", "Magic search", "find search cards topic tag resource filtered deck study now put on a day quiz exam away filter "
+                              "qbank qids missed questions question ids bank practice block wrong incorrect unsuspend"),
 )
 
 
@@ -7710,6 +7715,175 @@ def sheet_js(view):
     return SHEET_JS.replace("__VIEW__", _json.dumps(data).replace("</", "<\\/"))
 
 
+# 3.9.7, round 2 (Sam: "the modal introducing for the first time should pop up
+# on the main decks screen"): Magic search's how-to, once a person (the account's
+# magic_seen), over the Decks screen in the sheets' look. Its words are
+# magic.HOWTO's, the window's ? the same; a try opens the window with it.
+# It waits for the board to be clear (no window, no show over it) and for the
+# You box's head, where Magic search lives, to be on the page.
+MAGIC_HOWTO_JS = r"""
+(function () {
+    var V = __VIEW__;
+    if (document.getElementById('dc-magic')) { return; }
+    var BUSY = __BUSY__;
+    function clear() {
+        return document.querySelector('.du-mg') && !BUSY.some(function (id) { return !!document.getElementById(id); });
+    }
+    function later(n) {
+        if (clear()) { draw(); return; }
+        if (n < 30) { setTimeout(function () { later(n + 1); }, 700); }
+    }
+    function draw() {
+    var night = /night/i.test(document.body.className) ||
+        (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    var dcBoard = document.getElementById('due-crew');
+    var dcStyle = dcBoard ? getComputedStyle(dcBoard) : null;
+    function tok(name, light, dark) {
+        var v = dcStyle && dcStyle.getPropertyValue('--dc-' + name).trim();
+        return v || (night ? dark : light);
+    }
+    var bg = tok('bg', '#ffffff', '#1c1c1c'), ink = tok('ink', '#333333', '#dfe1dc'), line = tok('line', '#e2e2da', '#3d403b'),
+        well = tok('well', '#f2f2ec', '#2b2d29'), muted = tok('muted', '#6f736b', '#9a9e94'),
+        accent = tok('accent', '#2e7d32', '#7cc47f'), accentInk = tok('accent-ink', '#ffffff', '#122912'),
+        you = tok('you-bg', '#e9f2e9', '#2c372b'), hours = tok('hours', '#f2b33d', '#f2c25c');
+    var font = (dcStyle && dcStyle.fontFamily) || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function el(tag, cls, text) {
+        var e = document.createElement(tag);
+        if (cls) { e.className = cls; }
+        if (text != null) { e.textContent = text; }
+        return e;
+    }
+    var back = el('div');
+    back.id = 'dc-magic';
+    back.setAttribute('role', 'dialog');
+    back.setAttribute('aria-modal', 'true');
+    back.setAttribute('aria-label', 'Magic search');
+    var css = el('style');
+    css.textContent =
+        '#dc-magic{position:fixed;inset:0;z-index:82;background:rgba(0,0,0,.35);display:flex;align-items:flex-start;justify-content:center;padding:6vh 16px 16px;overflow:auto;}' +
+        '#dc-magic *{box-sizing:border-box;}' +
+        '#dc-magic .cw{width:660px;max-width:100%;border-radius:16px;padding:18px 20px 16px;text-align:left;display:grid;gap:12px;font-family:' + font + ';' +
+          'box-shadow:0 16px 60px rgba(0,0,0,.35);background:' + bg + ';color:' + ink + ';border:1px solid ' + line + ';font-size:13px;line-height:1.45;}' +
+        '#dc-magic button{-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;font-family:inherit;color:inherit;text-shadow:none;min-height:0;min-width:0;' +
+          '-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;font-weight:400;cursor:pointer;}' +
+        '#dc-magic .t{display:flex;align-items:center;gap:10px;}#dc-magic .t b{font-size:19px;}' +
+        '#dc-magic .new{font-size:11px;font-weight:700;border-radius:999px;padding:1px 8px;background:' + you + ';color:' + accent + ';}' +
+        '#dc-magic p{margin:0;}' +
+        '#dc-magic .how{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}' +
+        '#dc-magic .how>div{border:1px solid ' + line + ';border-radius:12px;padding:9px 11px;display:grid;gap:5px;align-content:start;}' +
+        '#dc-magic h4{margin:0;font-size:13px;}#dc-magic .how p{font-size:12.5px;color:' + muted + ';}' +
+        '#dc-magic code{font-size:11.5px;background:' + well + ';border-radius:5px;padding:1px 5px;overflow-wrap:anywhere;}' +
+        '#dc-magic .try{display:flex;flex-wrap:wrap;gap:5px;}' +
+        '#dc-magic .try button{border:1px solid ' + line + ';background:' + well + ';border-radius:999px;padding:3px 10px;font-size:12.5px;}' +
+        '#dc-magic .try button:hover{border-color:' + accent + ';}' +
+        '#dc-magic .then{border-radius:12px;background:' + you + ';padding:10px 12px;display:grid;gap:4px;font-size:12.5px;}' +
+        '#dc-magic .then b{font-size:13px;}#dc-magic ul{margin:0;padding-left:18px;display:grid;gap:2px;}' +
+        '#dc-magic .ft{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}#dc-magic .ft .w{flex:1 1 220px;font-size:12px;color:' + muted + ';}' +
+        '#dc-magic .go{background:' + accent + ';color:' + accentInk + ';border:1px solid transparent;border-radius:8px;padding:6px 16px;font-weight:700;font-size:13px;}' +
+        '#dc-magic .no{background:none;border:1px solid ' + line + ';border-radius:8px;padding:6px 14px;font-size:13px;}' +
+        '#dc-magic button:focus-visible{outline:2px solid ' + accent + ' !important;outline-offset:2px;}' +
+        '@media (max-width:560px){#dc-magic .how{grid-template-columns:minmax(0,1fr);}}';
+    back.appendChild(css);
+    var card = el('div', 'cw');
+    back.appendChild(card);
+    var t = el('div', 't');
+    t.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" aria-hidden="true">' +
+        '<circle cx="10" cy="11" r="6.2"/><path d="M19.4 20.4l-4.7-4.7"/><path d="M19 1.6l.9 2.3 2.3.9-2.3.9-.9 2.3-.9-2.3-2.3-.9 2.3-.9z" fill="' + hours + '" stroke="none"/></svg>';
+    t.appendChild(el('b', null, 'Magic search'));
+    t.appendChild(el('span', 'new', 'New'));
+    card.appendChild(t);
+    card.appendChild(el('p', null, V.lede));
+    var how = el('div', 'how');
+    (V.parts || []).forEach(function (x) {
+        var d = el('div');
+        d.appendChild(el('h4', null, x.t));
+        d.appendChild(el('p', null, x.w));
+        if (x.code) { d.appendChild(el('code', null, x.code)); }
+        var tries = x['try'] || [];
+        if (tries.length) {
+            var tr = el('div', 'try');
+            tries.forEach(function (q, i) {
+                var b = el('button', null, (x.label || [])[i] || q);
+                b.type = 'button';
+                b.title = 'Try it: ' + q;
+                b.addEventListener('click', function () { say('try', q); });
+                tr.appendChild(b);
+            });
+            d.appendChild(tr);
+        }
+        how.appendChild(d);
+    });
+    card.appendChild(how);
+    var then = el('div', 'then');
+    then.appendChild(el('b', null, 'Then, with what it finds'));
+    var ul = el('ul');
+    (V.then || []).forEach(function (x) { ul.appendChild(el('li', null, x)); });
+    then.appendChild(ul);
+    card.appendChild(then);
+    var ft = el('div', 'ft'), go = el('button', 'go', 'Open Magic search'), no = el('button', 'no', 'Got it');
+    go.type = no.type = 'button';
+    ft.appendChild(el('span', 'w', V.foot));
+    ft.appendChild(no);
+    ft.appendChild(go);
+    card.appendChild(ft);
+
+    var said = false, moved = false, was = document.activeElement;
+    function say(how, q) {
+        if (said) { return; }
+        said = true;
+        close();
+        if (typeof pycmd !== 'undefined') { pycmd('duecrew:magichow:' + how + ':' + encodeURIComponent(q || '') + '|' + window.dcBK); }
+    }
+    function close() {
+        document.removeEventListener('keydown', esc, true);
+        back.removeAttribute('id');  // the bars' shade goes with it (VEIL_WATCH_JS)
+        if (was && was.isConnected && was.focus) { try { was.focus(); } catch (x) { /* gone with a redraw */ } }
+        if (moved || still || !back.animate) { back.remove(); return; }
+        back.style.pointerEvents = 'none';
+        back.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-in', fill: 'forwards' }).onfinish = function () { back.remove(); };
+    }
+    go.addEventListener('click', function () { say('open'); });
+    no.addEventListener('click', function () { say('seen'); });
+    var downOnBack = false;
+    back.addEventListener('pointerdown', function (e) { downOnBack = e.target === back; });
+    back.addEventListener('click', function (e) { if (e.target === back && downOnBack) { say('seen'); } });
+    function esc(e) {
+        if (e.key === 'Tab') {
+            var f = Array.prototype.filter.call(card.querySelectorAll('button'), function (x) { return x.offsetParent !== null; });
+            var at = f.indexOf(document.activeElement);
+            if (f.length && (at < 0 || (e.shiftKey && at === 0) || (!e.shiftKey && at === f.length - 1))) {
+                e.preventDefault();
+                (e.shiftKey ? f[f.length - 1] : f[0]).focus();
+            }
+            return;
+        }
+        if (e.key !== 'Escape') { return; }
+        e.stopPropagation();
+        say('seen');
+    }
+    document.addEventListener('keydown', esc, true);
+    document.body.appendChild(back);
+    if (window.dcMotion && !still) { dcMotion.open(back, card); moved = true; }
+    try { go.focus({ preventScroll: true }); } catch (x) { go.focus(); }  // a short window opens on the card's top
+    }
+    later(0);
+})();
+"""
+
+
+def magic_howto_js(view):
+    """MAGIC_HOWTO_JS with its words (magic.howto): JSON, no '</' to end the script."""
+    v = {"lede": str(view.get("lede") or ""), "foot": str(view.get("foot") or ""),
+         "then": [str(x) for x in view.get("then") or []],
+         "parts": [{"t": str(x.get("t") or ""), "w": str(x.get("w") or ""), "code": str(x.get("code") or ""),
+                    "try": [str(q) for q in x.get("try") or []], "label": [str(q) for q in x.get("label") or []]}
+                   for x in view.get("parts") or [] if isinstance(x, dict)]}
+    busy = list(VEIL_IDS) + ["dc-show", "dc-flurry"]  # Wrapped, Settings and the closet take the You box with the board
+    return (MAGIC_HOWTO_JS.replace("__BUSY__", _json.dumps(busy))
+            .replace("__VIEW__", _json.dumps(v).replace("</", "<\\/")))
+
+
 CHEER_PIP = 92  # 3.8.22: a crewmate's Pip popping in with their cheer
 
 
@@ -9289,9 +9463,20 @@ def _due_add(v, default):
 
 # 3.8.0: the two keys as this computer writes them (a Mac: Command for Study, Control for Ask, __init__.py)
 STUDY_KBD, ASK_KBD = ("⌘⇧S", "⌃⇧Q") if _sys.platform == "darwin" else ("Ctrl+Shift+S", "Ctrl+Shift+Q")
+MAGIC_KBD = "⌘⇧F" if _sys.platform == "darwin" else "Ctrl+Shift+F"  # 3.9.7: Magic search, from any screen
+_MAGIC_ICON = ('<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" '
+               'stroke-linecap="round" aria-hidden="true" style="vertical-align:-1px;margin-right:3px"><circle cx="10" cy="11" r="6.2"/>'
+               '<path d="M19.4 20.4l-4.7-4.7"/><path d="M19 1.6l.9 2.3 2.3.9-2.3.9-.9 2.3-.9-2.3-2.3-.9 2.3-.9z" '
+               'fill="var(--dc-hours)" stroke="none"/></svg>')
 
 
-def _due_html(v, more=(), more_tab=None, more_body="", folded=None, qids=False):
+def magic_link():
+    """3.9.7: Magic search in the You box's head, every tab and folded (Sam's way in; QBank QIDs' since round 2)."""
+    return (f'<a href="#" class="du-go du-mg" title="Magic search ({MAGIC_KBD}): a topic, a filter, QBank QIDs; study them or put them on days" '
+            f'onclick="{_pycmd("magic")}">{_MAGIC_ICON}Magic search</a>')
+
+
+def _due_html(v, more=(), more_tab=None, more_body="", folded=None, magic=False):
     """The You bubble (3.8.0; Due above the board until then): Due's lists,
     Today, Upcoming and Later, when Due is on (v: due.view, from
     due_flow.view), then `more`, [(key, label)] (Plans, Insights), with
@@ -9301,11 +9486,11 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None, qids=False):
     if not v and not more:
         return ""
     e = _html.escape
+    mg = magic_link() if magic else ""  # 3.9.7
     if not v:
-        # Due's lists off: Plans and Insights only, folded or not; 3.9.5: QBank QIDs in its head too (qids: the
-        # glue's due_flow.has_qids), where Insights' own line was
-        ql = (f'<a href="#" class="du-go" title="Paste QBank QIDs to find their cards" '
-              f'onclick="{_pycmd("planmissed")}">QBank QIDs</a>' if qids else "")
+        # Due's lists off: Plans and Insights only, folded or not; Magic search in its head too (3.9.5 to 3.9.6:
+        # QBank QIDs, Magic search's since 3.9.7)
+        ql = mg
         if folded:
             names = " &middot; ".join(lb for _k, lb in more)
             return (f'<div class="du du-one"><a href="#" onclick="{_pycmd("duefold")}" title="Show"><b>{names}</b></a>'
@@ -9318,10 +9503,9 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None, qids=False):
                 f'<span class="sp"></span>{ql}<a href="#" class="du-fold" title="Fold to one line" '
                 f'onclick="{_pycmd("duefold")}">Hide &#9652;</a></div>{more_body}</div>')
     today = e(v["today"])
-    # 3.9.3 (Sam's pick 1, in Study today's place): QBank QIDs, after a practice block, when a deck here has
-    # question IDs; in the head on every tab and on the folded line ("missing the QID chip on the top right")
-    qids = (f'<a href="#" class="du-go" title="Paste QBank QIDs to find their cards" '
-            f'onclick="{_pycmd("planmissed")}">QBank QIDs</a>' if v.get("qids") else "")
+    # 3.9.3 (Sam's pick 1, in Study today's place): in the head on every tab and on the folded line ("missing
+    # the QID chip on the top right"); QBank QIDs then, Magic search since 3.9.7 (its paste is QIDs' way)
+    qids = mg
     done_n, total_n = int(v["done_n"]), int(v["total_n"])
     count = f"{done_n} of {total_n} done" if total_n else ""
     if v["folded"]:

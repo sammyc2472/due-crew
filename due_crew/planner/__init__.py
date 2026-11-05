@@ -1,9 +1,9 @@
 """The plan windows (docs/planner.md): Your plans (a plan's weeks and
 dates with the deck beside them, written here by its authors), New plan
-and QBank QIDs, Python-native, for everyone since 3.9.3. Tools ›
-Due Crew › Plans opens them, and the board: You › Plans' head row and
-each plan card's Open, Today's head and Insights' line (QBank QIDs),
-Find a setting.
+Python-native, for everyone since 3.9.3 (QBank QIDs was one too, till
+Magic search took it in 3.9.7). Tools › Due Crew › Plans opens them, and
+the board: You › Plans' head row and each plan card's Open, Find a
+setting.
 
 Labs is what stays behind this computer's "labs" switch (a key no window
 sets; docs/planner.md says how): Claude's stand-in, session by session
@@ -20,7 +20,7 @@ the glue; window.py (Plan · Sharing for authors, Plan · Mine for a
 follower), plan_tab.py, date_panel.py, deck_panel.py, shape.py,
 send.py, settings_tab.py (Sharing), mine_tab.py,
 new_plan.py, text_tab.py, history_tab.py, day_notes.py, date_dialogs.py,
-picker.py, qid_window.py and start_window.py the Qt windows; widgets.py
+picker.py and start_window.py the Qt windows; widgets.py
 their small parts; build.py the builder's rules, text.py its Text.
 """
 
@@ -52,7 +52,7 @@ def plans_menu(parent):
     menu = QMenu("Plans", parent)
     for item in (("Your plans…", flow.open_plans), ("New plan…", flow.open_new),
                  ("Follow a plan…", plan_flow.open_follow), None,
-                 ("QBank QIDs…", flow.open_qids), ("Export cards for my AI…", plan_flow.open_export)):
+                 ("Export cards for my AI…", plan_flow.open_export)):
         if item is None:
             menu.addSeparator()
             continue

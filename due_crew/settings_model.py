@@ -16,7 +16,8 @@ SWITCHES = ("show_leaderboard", "show_stale", "sync_notifications", "compact",
             "shortcuts",  # 3.8.0: Ctrl+Shift+S and Ctrl+Shift+Q
             "fifteen", "sev",  # 3.8.1: ▶ Fifteen? and the nudge; Pip
             "two_buttons",  # 3.9.1: Again and Good alone (not the board's look: Reset board leaves it)
-            "room_sounds")  # 3.9.1: the speaker on a fifteen's chip, and its sounds
+            "room_sounds",  # 3.9.1: the speaker on a fifteen's chip, and its sounds
+            "magic_search")  # 3.9.7: Magic search in the You box's head, and its key
 CHOICES = {"theme": ("auto", "light", "dark"),
            "accent": ("green", "blue", "purple", "teal", "amber", "rose"),
            "room_chip_side": ("left", "right"),
@@ -59,7 +60,8 @@ def change(parts, cfg, today=None):
         return {"hidden_tabs": [k for k in HIDEABLE if k in hidden]}
     if cmd == "setlabel":
         text = " ".join(unquote(":".join(parts[1:])).split())
-        text = "".join(ch for ch in text if ch.isprintable())[:LABEL_MAX]
+        from .backend.shapes import printable
+        text = "".join(ch for ch in text if printable(ch))[:LABEL_MAX]
         return {"crew_label": text or "Crew"}
     if cmd == "setprivacy" and arg in PRIVACY:
         # the numbers keep their switches under the other two, for when

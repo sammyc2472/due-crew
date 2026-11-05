@@ -16,9 +16,9 @@ from .. import app, plan_flow
 from .. import plans as P
 from ..app import _bg, _state, cfg, client, save_cfg
 from ..backend.shapes import TransportError
-from . import actions, enabled, remote
+from . import enabled, remote
 
-_open = {}       # "plans", "start", "qids" -> the window, while it's open
+_open = {}       # "plans", "start" -> the window, while it's open
 _asking = []     # my plans on their way for Your plans (one ask at a time)
 
 
@@ -719,31 +719,6 @@ class NewOps(StartOps):
         open_start()
 
 
-# ---- question IDs ----
-
-def open_qids(did=None):
-    """QBank QIDs (3.9.3, for everyone; Question IDs in labs): this
-    collection only, nothing sent. did: the deck to start on (Insights')."""
-    if not mw.col:
-        return
-    did = _top_deck(mw.col, did) if did else None
-    w = _open.get("qids")
-    if w is not None and getattr(w, "_alive", False):
-        if did:
-            w.pick_deck(did)
-        w.raise_()
-        w.activateWindow()
-        return
-    from .qid_window import QidWindow
-    every = P.deck_choices(mw.col)
-    tops = [(d, n) for d, n in every if "::" not in str(n)]  # question tags are deck-wide: a top deck is enough
-    w = QidWindow(mw, mw.col, tops or every, QidOps(), did=did)
-    _gone_on_close(w)
-    _open["qids"] = w
-    w.show()
-    return w
-
-
 def _top_deck(col, did):
     """A deck's top-level deck (question tags are deck-wide), or None."""
     try:
@@ -753,129 +728,3 @@ def _top_deck(col, did):
         return None
 
 
-class QidOps:
-    def index(self, did):
-        return P.DeckIndex(mw.col, did)
-
-    def new_defaults(self):
-        """New plan's first values, worked out here (the mock's "Filled in
-        for you"): the top deck I've studied most these 30 days, the
-        weekdays I've studied in most of the last six weeks, my exam
-        (Settings). {deck, days, exam}, each None when there's nothing to go
-        on. Two queries, on the click that opens New plan."""
-        import datetime
-        col, out = mw.col, {"deck": None, "days": None, "exam": None}
-        try:
-            since = (int(col.sched.day_cutoff) - 30 * 86400) * 1000
-            per = {}
-            for did, n in col.db.all("SELECT CASE WHEN c.odid THEN c.odid ELSE c.did END, count() FROM revlog r "
-                                     "JOIN cards c ON c.id = r.cid WHERE r.id > ? AND r.ease > 0 GROUP BY 1", since):
-                top = str(col.decks.name(did) or "").split("::")[0]
-                per[top] = per.get(top, 0) + int(n or 0)
-            tops = {name: did for did, name, _n in top_decks(col)}
-            best = max((name for name in per if name in tops), key=lambda x: per[x], default=None)
-            out["deck"] = tops.get(best) if best else None
-        except Exception:  # noqa: BLE001 (no default is fine)
-            pass
-        try:
-            from ..stats.queries import StatsQueries
-            ago = StatsQueries(col).studied_days_ago(42)
-            if len(ago) >= 6:
-                today = datetime.date.fromisoformat(plan_flow._today())
-                weeks = [0] * 7
-                for a in ago:
-                    weeks[(today - datetime.timedelta(days=int(a))).weekday()] += 1
-                days = [1 if n >= 3 else 0 for n in weeks]
-                out["days"] = days if any(days) else None
-        except Exception:  # noqa: BLE001
-            pass
-        exam = str(cfg().get("exam_date") or "")
-        out["exam"] = exam if len(exam) == 10 and exam > plan_flow._today() else None
-        return out
-
-    def default_deck(self, choices):
-        """The deck my plan runs on here (its top deck: question tags are
-        deck-wide, and the window lists top decks): the plan You › Plans
-        shows first, else the one most of my plans run on, else Anki's
-        current deck's top."""
-        state = plan_flow._state_cfg()
-        top = lambda st: _top_deck(mw.col, st["deck_id"]) if isinstance(st, dict) and st.get("deck_id") else None  # noqa: E731
-        shown = top(state.get(cfg().get("plan_pick")))
-        ids = [d for d in map(top, state.values()) if d]
-        have = {d for d, _n in choices}
-        for did in ([shown] if shown else []) + sorted(set(ids), key=ids.count, reverse=True):
-            if did in have:
-                return did
-        try:
-            cur = mw.col.decks.current()["name"].split("::")[0]
-        except Exception:
-            cur = ""
-        return next((d for d, n in choices if n == cur), choices[0][0] if choices else None)
-
-    def plan_dates(self, did, idx, cids):
-        """[(plan name, [date label])]: the dates of the plans I follow on this
-        deck that hold any of these cards (my dates)."""
-        out = []
-        state = plan_flow._state_cfg()
-        for p in plan_flow.followed():
-            st = state.get(p["id"]) or {}
-            if st.get("deck_id") != did:
-                continue
-            dates = P.dates_with(idx, p["doc"], cids, plan_flow._swap(st))
-            if dates:
-                out.append((str(p.get("name") or "Plan"), [P.fmt_day(u.get("opens")) for u in dates]))
-        return out
-
-    def unsuspend(self, cids):
-        """Unsuspend: actions.unsuspend, then what plan_flow does after an
-        open (Edit's undo, at my own pace a date now all open)."""
-        if not mw.col or not cids:
-            return 0
-        shut = P.openable_ids(mw.col, cids)
-        n = actions.unsuspend(mw.col, cids, f"Due Crew: unsuspend {len(shut):,} card{'s' if len(shut) != 1 else ''}")
-        if n:
-            plan_flow._after_change()
-            plan_flow._claim_opened(shut)
-            plan_flow.refresh_progress()
-            app.swap(cfg())
-        return n
-
-    def study(self, cids):
-        """Study now: actions.study into Due Crew › QBank cards (each
-        paste adds to it; a card goes back to its own deck once done), then
-        Anki's Study screen on it. False when none of them can go in."""
-        if not mw.col or not cids:
-            return False
-        name = P.our_deck(actions.DECK)
-        shut = P.openable_ids(mw.col, cids)
-        n = len({int(c) for c in cids})
-        opened, had = actions.study(mw.col, cids, f"Due Crew: study {n:,} QBank card{'s' if n != 1 else ''}", name,
-                                    lambda want: plan_flow._filtered(mw.col, name, want, order=plan_flow.STUDY_ORDER))
-        if opened:
-            plan_flow._claim_opened(shut)
-            plan_flow.refresh_progress()
-        if opened or had:
-            plan_flow._after_change()
-        if not had:
-            tooltip("None of them can be studied now (buried, or in another filtered deck).")
-            return False
-        did = mw.col.decks.id_for_name(name)
-        if did:
-            mw.col.decks.select(did)
-            mw.moveToState("overview")
-        return True
-
-    def browse(self, cids):
-        plan_flow._browse(cids, empty="None of them are in this deck.")
-
-    def deck_map(self, did):
-        """3.9.5, Their topics: the deck's topic map as Insights draws it, its
-        top level, and the cards I missed these 4 weeks: (tiles, missed)."""
-        from .. import team_flow
-        return team_flow.deck_map(did)
-
-    def study_topic(self, name, cids):
-        """3.9.5: a topic's Study, the map's deck of what I missed there
-        (team_flow.study_deck). True when it took."""
-        from .. import team_flow
-        return team_flow.study_deck(name, cids)

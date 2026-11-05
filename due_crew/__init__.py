@@ -46,7 +46,7 @@ from .stats import heatmap as cached_heatmap
 from .stats.decks import gather_shared_decks
 from .stats.queries import StatsQueries
 from .ui import copy_text
-from . import account, ahead_flow, bingo_flow, due_flow, gamenight_flow, plan_flow, rooms, sheets, together, two_buttons
+from . import account, ahead_flow, bingo_flow, due_flow, gamenight_flow, magic_flow, plan_flow, rooms, sheets, together, two_buttons
 from . import cards as crew_cards
 from .wrap import (_arrivals, _deck_deltas, _exam_eve_info, _mute_knocker, _save_wrap, _update_returns,
                    _update_wrap, _wrap_data, _wrap_info)
@@ -620,8 +620,6 @@ def _you(c, due, plans):
     hidden = board.hidden_tabs(c)
     you = {"tab": due_flow.you_tab(c), "folded": due_flow.folded(c, due), "plans": plans, "insights": None,
            "party_on": "party" not in hidden and gamenight_flow.shown()}  # 3.9.5: You › Pip Party, unless hidden in Settings
-    if not due and mw.col:
-        you["qids"] = due_flow.has_qids()  # 3.9.5: QBank QIDs in the head with Due's lists off too
     if you["folded"]:
         return you
     keys = ((["today", "upcoming", "later"] if due else []) + [k for k, _l in board.YOU_MORE if k not in hidden]
@@ -709,6 +707,17 @@ def _on_did_render(deck_browser):
         QTimer.singleShot(2500, habits_flow.check)  # 3.9.5: once a day, How you study (and the Fifteen at 35)
     sheets.redraw()  # 3.9.1: a question that was open goes back up on the page drawn anew
     rooms.refresh_widgets()
+    if not _closing and not _state.get("wrapped_open"):
+        from aqt.qt import QTimer
+        QTimer.singleShot(900, _magic_howto)  # 3.9.7, round 2: Magic search's how-to, once a person
+
+
+def _magic_howto():
+    try:
+        if not _closing and app.board_up():
+            magic_flow.show_board_howto()
+    except Exception:
+        traceback.print_exc()
 
 
 def _last_studied(q, stats):
@@ -917,6 +926,10 @@ def _on_js(handled, message, context):
         due_flow.on_message(cmd, parts)  # Due
     elif cmd == "party":
         gamenight_flow.on_message(parts)  # 3.9.5's last round: You › Pip Party
+    elif cmd == "magic":
+        open_magic()  # 3.9.7: Magic search, from the You box's head (and Find a setting)
+    elif cmd == "magichow":
+        magic_flow.howto_said(parts)  # 3.9.7, round 2: its how-to's buttons, on the Decks screen once
     elif cmd in ("songsearch", "songuse", "songclear", "songlisten", "songapp", "songapple",
                  "dancehide", "danceshow", "dancemotion", "dancefold"):
         from . import song_flow
@@ -1603,7 +1616,7 @@ def _apply_settings(changed, focus=None):
         _swap(c, focus=_flip(focus))
     if chip:
         rooms.refresh_widgets()
-    if "shortcuts" in changed:
+    if "shortcuts" in changed or "magic_search" in changed:
         _apply_keys()
     if leeches:
         due_flow.recover_now()  # 3.8.0: now, and said, not at the next refresh
@@ -1776,6 +1789,7 @@ def _settle_tabs():
 # 3.8.0: clear of Anki's own. On a Mac Qt's "Ctrl" is Command, and ⌘⇧Q is the
 # system's Log Out: Ask the squad is the Control key there (Qt's "Meta"), ⌃⇧Q
 STUDY_KEY, ASK_KEY = "Ctrl+Shift+S", ("Meta+Shift+Q" if sys.platform == "darwin" else "Ctrl+Shift+Q")
+MAGIC_KEY = "Ctrl+Shift+F"  # 3.9.7: Magic search (⌘⇧F on a Mac); Settings › Board › Due takes it away
 
 
 def _tools_menu():
@@ -1788,7 +1802,8 @@ def _tools_menu():
         return  # a second profile open: the submenu is already there
     from . import planner
     menu = QMenu("Due Crew", mw)
-    for item in (("Study what’s next", due_flow.study_today), None,
+    for item in (("Study what’s next", due_flow.study_today),
+                 ("Magic search…", open_magic), None,  # 3.9.7
                  ("Friends…", open_friends),
                  ("Squads…", open_squads),
                  ("Pip Party…", open_game_night),  # 3.9.5: the You bubble on it; shown when it is (gamenight_flow.shown)
@@ -1813,6 +1828,9 @@ def _tools_menu():
             menu.aboutToShow.connect(lambda a=action: a.setChecked(bool(cfg().get("show_leaderboard", True))))
         if fn is due_flow.study_today:
             mw._due_crew_study = action
+        if fn is open_magic:
+            mw._due_crew_magic = action
+            menu.aboutToShow.connect(lambda a=action: a.setVisible(magic_flow.on()))
         if fn is open_game_night:
             menu.aboutToShow.connect(lambda a=action: a.setVisible(gamenight_flow.shown()))
     ask = QShortcut(QKeySequence(ASK_KEY), mw)
@@ -1821,6 +1839,14 @@ def _tools_menu():
     mw.form.menuTools.addMenu(menu)
     mw._due_crew_menu = menu  # kept alive with the window
     _apply_keys()
+
+
+def open_magic(text=""):
+    """3.9.7: Magic search, unless Settings › Board › Due has it off."""
+    if not magic_flow.on():
+        tooltip("Magic search is off: Settings › Board › Due turns it on.")
+        return
+    magic_flow.open_search(text)
 
 
 def open_game_night():
@@ -1844,6 +1870,9 @@ def _apply_keys():
         ask = getattr(mw, "_due_crew_ask", None)
         if ask is not None:
             ask.setEnabled(on)
+        magic = getattr(mw, "_due_crew_magic", None)
+        if magic is not None:  # 3.9.7: its key goes with the rest, and with Magic search off
+            magic.setShortcut(QKeySequence(MAGIC_KEY if on and magic_flow.on() else ""))
     except Exception:
         traceback.print_exc()
 
@@ -1910,6 +1939,10 @@ def _on_profile_close():
         traceback.print_exc()
     try:
         app.ai_app(on=False)  # Your AI app's local server goes with the profile
+    except Exception:
+        traceback.print_exc()
+    try:
+        magic_flow.close()  # 3.9.7: Magic search reads this profile's collection
     except Exception:
         traceback.print_exc()
 
@@ -1981,3 +2014,4 @@ app.on_account_change = account.on_change
 app.rerender = _rerender
 app.refresh = refresh_board
 app.sync = _on_sync_done
+app.apply_settings = _apply_settings  # 3.9.7: Magic search's exam and away, as Settings saves them

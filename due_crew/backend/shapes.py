@@ -8,6 +8,7 @@ import datetime
 import hashlib
 import json
 import re
+import unicodedata
 
 from ..room_model import clean_room, is_fifteen, is_over
 
@@ -55,13 +56,23 @@ def _exam_value(iso, today_label):
 NOTE_MAX = 80
 
 
+def printable(ch):
+    """ch.isprintable(), or an emoji newer than this Python's Unicode: Anki
+    builds on Python 3.9 (Unicode 13) take 🫡 or 🫠 for unassigned, and
+    isprintable() turned them away, so the emoji drawer offered faces that
+    couldn't be sent and a note lost them (3.9.7; the 3.9.6 release run on a
+    Mac). A code point unassigned here in the emoji planes (U+1F000-1FAFF)
+    is one a newer Unicode gave an emoji, so it's kept."""
+    return ch.isprintable() or (0x1F000 <= ord(ch) <= 0x1FAFF and unicodedata.category(ch) == "Cn")
+
+
 def clean_note(text, limit=NOTE_MAX):
     """One printable line, at most `limit` chars; '' for anything else.
     Used for cheer notes and statuses in both directions."""
     if not isinstance(text, str):
         return ""
     one_line = " ".join(text.split())
-    return "".join(ch for ch in one_line if ch.isprintable())[:limit]
+    return "".join(ch for ch in one_line if printable(ch))[:limit]
 
 
 EMOJI_MAX = 16  # UTF-16 units: one emoji, with its modifiers and joiners
@@ -89,7 +100,7 @@ def _first_grapheme(text):
     """The first emoji cluster of `text` (joiners, variation selectors, skin
     tones, flag pairs), or '' when it doesn't start with one."""
     text = str(text or "").strip()
-    if not text or (ord(text[0]) < 0x2190 and ord(text[0]) not in EMOJI_LOW) or not text[0].isprintable():
+    if not text or (ord(text[0]) < 0x2190 and ord(text[0]) not in EMOJI_LOW) or not printable(text[0]):
         return ""
     if text[0].isalnum() and ord(text[0]) not in EMOJI_LOW:
         return ""  # 3.9.2's QoL pass: a letter or digit of any script (あ, 中, ①) isn't an emoji
@@ -499,7 +510,7 @@ def squad_id(code):
 
 def clean_squad_name(name):
     one_line = " ".join(str(name or "").split())
-    return "".join(ch for ch in one_line if ch.isprintable())[:SQUAD_NAME_MAX]
+    return "".join(ch for ch in one_line if printable(ch))[:SQUAD_NAME_MAX]
 
 
 def _clean_member(row):
