@@ -4718,3 +4718,31 @@ every release that changes how something works.
   sounds, the `room_sound`/`room_sound_vol` config keys and the
   `roomsound` command. An old config's keys are left alone and never
   read; a 3.9.7 chip still on screen sends a command nothing takes.
+- 3.9.8, the tidy-ups (Sam: "go for all of the internal tidy-ups"):
+  - the room widgets' runtime (32 KB) and the bottom bar's balance (6 KB)
+    are files, `room_widget.js` and `bar_balance.js`, read once at import;
+    the same text goes, its placeholders filled as before;
+  - the Decks screen's commands are one table, `BOARD_CMDS` in
+    `__init__.py`: each a line (how many values, a check on them, what it
+    does), and five families (plan, due, ins, closet, wrapped) handed to
+    their modules, in place of an 87-branch chain. A name it hasn't, or
+    values that fail, print as unknown, as before;
+  - the fixed scripts as files Anki could cache: looked at and left. Anki
+    serves an add-on's .js with `max_age=0` (aqt's mediasrv), so a file is
+    asked for again at every load; the Decks page's scripts (127 KB) go
+    once a page already and compile in about 2 ms; and the bars' widgets
+    keep their key inside the script's own closure, which a shared file
+    can't hold;
+  - one overlay for the board's seven windows (`board.POP_JS`,
+    `window.dcPop`): the Cheer window, the song search, a sheet, Magic
+    search's how-to, a crewmate's card, a squadmate's and the good-luck
+    card. Each keeps its card and its look (all seven open pixel for pixel
+    as before, light and dark; the control audit the same); the shade, its
+    role and name, Esc, Tab kept inside, a click on the shade, the key back
+    to what opened it, the bars' shade, the fade and the motion layer are
+    the helper's. The three cards gain the Tab trap, the key back, a role
+    and name, and Esc caught first (the good-luck card had no Esc at all).
+    A window's styles name it by its id or its `data-pop` (`pop.css`,
+    `pop_named` for the floor's sheet), so it keeps its look as it goes:
+    the id went first, for the bars' shade, and a closing window showed
+    bare at the page's foot for the length of its fade.

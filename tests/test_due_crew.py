@@ -15736,7 +15736,7 @@ def test_native_emoji_picker_v391():
     check("3.9.2 (Sam: the custom picker didn't take the pick): our own box takes it over the page's, the page gets it; "
           "the window's close or Esc puts the box away",
           "window.dcCheerPicked = function (t) { var e = oneEmoji(String(t || '').trim()); if (e) { unpick(); choose(e); } };" in js
-          and "pycmd('duecrew:emojipickeroff|' + window.dcBK)" in js and "unpick();  // 3.9.2: other's box" in js
+          and "pycmd('duecrew:emojipickeroff|' + window.dcBK)" in js and "closing: unpick  // 3.9.2: other's box" in js
           and "window.dcCheerUnpick = function () { unpick(); other.focus(); };" in js)
     check("3.9.2: what the box hands on: an emoji (a whole one, a skin tone and a job in it), never a letter or a digit",
           NE.first_emoji(" 👩🏽‍⚕️ ") == "👩🏽‍⚕️" and NE.first_emoji("x") == ""
@@ -15875,9 +15875,10 @@ def test_cheer_pill_and_window_v391():
           "</script>" not in js.split("var V = ")[1].split(";\n")[0] and view["name"] == "Dre </script><b>"
           and view["pen"] == board.accent_pair(None)[0] and view["emojis"] == ["🎉", "💪"] and view["pip"] == ""
           and "textContent" in js and "innerHTML = V.pip" in js and "duecrew:cheersend:" in js and "encodeURIComponent" in js)
-    check("the window: the board's tokens, its own font, Draw and Sign, the pad's ceilings, Esc and the backdrop close it",
-          "getPropertyValue('--dc-' + name)" in js and "dcStyle.fontFamily" in js and "'Draw'" in js and "'Sign'" in js
-          and "MAXP = 2000" in js and "SIGN = 24" in js and "'Escape'" in js and "downOnBack" in js)
+    check("the window: the board's tokens, its own font, Draw and Sign, the pad's ceilings, Esc and the backdrop close it "
+          "(3.9.8: through the shared overlay, board.POP_JS)",
+          js.startswith(board.POP_JS) and "window.dcPop.theme()" in js and "var font = T.font;" in js and "'Draw'" in js and "'Sign'" in js
+          and "MAXP = 2000" in js and "SIGN = 24" in js and "shade: close" in js and "esc: function ()" in js)
     from due_crew import emoji_drawer as ED
     from due_crew.backend.shapes import DOODLE_INKS, clean_emoji
     every = [e for _, items in ED.GROUPS for e, _ in items]
@@ -16815,10 +16816,10 @@ def test_sheets_v391():
     check("sheet: a pick's place kept in its list; no items or an unknown kind, no field",
           pick["field"]["at"] == 1 and none["field"] is None and odd["field"] is None)
     check("sheet: the board's tokens and font, the Cheer window's buttons, its answer one keyed command; Esc and the backdrop say no",
-          "getPropertyValue('--dc-' + name)" in board.SHEET_JS and "dcStyle.fontFamily" in board.SHEET_JS
+          js.startswith(board.POP_JS) and "window.dcPop.theme()" in board.SHEET_JS and "var font = T.font;" in board.SHEET_JS
           and "#dc-sheet .go{background:' + accent" in board.SHEET_JS and "#dc-sheet .no{background:none" in board.SHEET_JS
           and "pycmd('duecrew:sheet:' + V.id + ':' + encodeURIComponent(JSON.stringify(p)) + '|' + window.dcBK)" in board.SHEET_JS
-          and "'Escape'" in board.SHEET_JS and "downOnBack" in board.SHEET_JS and "say({ ok: false })" in board.SHEET_JS
+          and "pop.show(card, { esc: function () { say({ ok: false }); } });" in board.SHEET_JS
           and "dc-sheet" in board.VEIL_IDS)
 
     # the glue: on the board, a sheet; its answer, once, with its id
@@ -17904,6 +17905,85 @@ def test_cheer_window_runs_v392():
             check(f"cheer window: other asks for the computer's picker; {steps.split(',')[1].split(':')[0]} puts it away",
                   not r.get("errors") and r.get("open") and [x.split(":")[1] for x in r.get("sent") or []] == ["emojipicker", "emojipickeroff"], r)
 
+
+
+def test_one_overlay_v398():
+    """3.9.8 (the tidy-ups, Sam's yes): the board's seven windows share one
+    overlay (board.POP_JS, window.dcPop): the Cheer window, the song search,
+    a sheet, Magic search's how-to, a crewmate's card, a squadmate's and the
+    good-luck card. Each keeps its own card and look; the shade, its role and
+    name, Esc, Tab kept inside, a click on the shade, the key back to what
+    opened it, the bars' shade and the motion layer are the helper's. The
+    three cards had none of the trap, the key back or a fade; the good-luck
+    card had no Esc. A window's styles name it by its id or its data-pop, so
+    it keeps its look while it goes (the id went first, and a closing window
+    showed bare at the page's foot for its fade)."""
+    import shutil
+    import subprocess
+    from due_crew import magic as M
+    pops = {"cheer": board.cheer_overlay_js({"uid": "dre", "name": "Dre", "emojis": ["🎉"]}),
+            "sheet": board.sheet_js({"id": "x", "title": "t"}),
+            "magic": board.magic_howto_js(M.howto("Ctrl+Shift+F")),
+            "stranger": board.stranger_card_js({"uid": "u2", "name": "Maya"}),
+            "luck": board.luck_card_js("Marisa", [("Dre", "Go")]),
+            "profile": board.profile_overlay_js({"name": "Dre", "uid": "dre", "cells": None})}
+    dance = board.dance_js(scripts=True)
+    check("one overlay: each window's script starts with it (the song search's with the floor's, once a page), and it's set up once a page",
+          all(js.startswith(board.POP_JS) for js in pops.values()) and dance.startswith(board.POP_JS)
+          and board.POP_JS + board.DANCE_JS in board.fridge_js() and board.POP_JS not in board.fridge_js(scripts=False)
+          and not board.dance_js(scripts=False).startswith(board.POP_JS)
+          and "if (window.dcPop) { return; }" in board.POP_JS and "window.dcPop.make(" in board.DANCE_JS)
+    own = {k: js[len(board.POP_JS):] for k, js in pops.items()}
+    check("one overlay: no window keeps its own shade, Esc, Tab trap, key back or fade; each asks dcPop for them",
+          all("window.dcPop.make({ id: '" in js and "pop.show(card" in js and "downOnBack" not in js
+              and "function trap(" not in js and "removeAttribute('id')" not in js and "document.addEventListener('keydown'" not in js
+              and "duration: 160" not in js and "dcMotion.open" not in js and "position:fixed;inset:0" not in js
+              for js in own.values()), [k for k, js in own.items() if "downOnBack" in js or "function trap(" in js])
+    looks = {k: re.search(r"window\.dcPop\.make\(\{ id: '([a-z-]+)', label: .*?, z: (\d+), pad: '([^']+)' \}\)", js)
+             for k, js in list(own.items()) + [("song", board.DANCE_JS)]}
+    check("one overlay: each window's shade where it was: its layer and how far down the card sits (the cards, no side gap, as before)",
+          {k: m.groups() for k, m in looks.items() if m} == {
+              "cheer": ("dc-cheer", "80", "9vh 16px 16px"), "sheet": ("dc-sheet", "82", "12vh 16px 16px"),
+              "magic": ("dc-magic", "82", "6vh 16px 16px"), "song": ("dc-song", "82", "10vh 16px 16px"),
+              "stranger": ("dc-profile", "80", "16vh 0 0"), "luck": ("dc-profile", "80", "14vh 0 0"),
+              "profile": ("dc-profile", "80", "14vh 0 0")}, {k: m and m.groups() for k, m in looks.items()})
+    check("one overlay: a window's styles name it by id or data-pop, so its look outlasts the id (the bars' shade goes with the id)",
+          board.pop_named("#dc-song .sw{} #dc-songs{} #dc-song{}", "dc-song")
+          == ':is(#dc-song,[data-pop="dc-song"]) .sw{} #dc-songs{} :is(#dc-song,[data-pop="dc-song"]){}'
+          and "back.setAttribute('data-pop', o.id);" in board.POP_JS and "back.removeAttribute('id');" in board.POP_JS
+          and "new RegExp('#' + o.id + '(?![\\\\w-])', 'g')" in board.POP_JS
+          and ':is(#dc-song,[data-pop=\\"dc-song\\"]) .sw' in board.DANCE_JS
+          and all("pop.css(" in js for k, js in own.items()))
+    check("one overlay: Esc is caught first and stays in the window; Tab wraps in it; the key goes back to what opened it; "
+          "the motion layer brings it in and takes it out, else a 160 ms fade (none with Reduce motion)",
+          "document.addEventListener('keydown', esc, true);" in board.POP_JS and "e.stopPropagation();" in board.POP_JS
+          and "document.removeEventListener('keydown', esc, true);" in board.POP_JS
+          and "if (was && was.isConnected && was.focus)" in board.POP_JS
+          and "if (moved || still() || !back.animate) { back.remove(); return; }" in board.POP_JS
+          and "duration: 160" in board.POP_JS)
+    node = shutil.which("node")
+    if not node:
+        print("SKIP the windows in node: no node")
+        return
+    here = os.path.dirname(os.path.abspath(__file__))
+    with tempfile.TemporaryDirectory() as tmp:
+        def run(name, steps):
+            js = os.path.join(tmp, name + ".js")
+            with open(js, "w", encoding="utf-8") as f:
+                f.write(pops[name])
+            env = dict(os.environ, POP_ID="dc-profile")
+            out = subprocess.run([node, os.path.join(here, "fake_dom.js"), js, steps], capture_output=True, text=True,
+                                 timeout=30, env=env)
+            return json.loads(out.stdout.strip().splitlines()[-1]) if out.stdout.strip() else {"errors": [out.stderr[-300:]]}
+        got = {(n, st): run(n, st) for n in ("luck", "profile", "stranger") for st in ("", "esc", "backdrop", "button:Close")}
+        check("one overlay, run: each card opens, and Esc (the good-luck card's too, which had none), the shade and Close each close it; "
+              "nothing sent, no errors",
+              all(not r.get("errors") for r in got.values())
+              and all(r.get("open") == (st == "") and not r.get("sent") for (n, st), r in got.items()),
+              {k: v for k, v in got.items() if v.get("errors") or v.get("open") != (k[1] == "") or v.get("sent")})
+        r = run("profile", "button:\U0001F389 Send a cheer")
+        check("one overlay, run: a card's own button closes it and sends its one command",
+              not r.get("errors") and not r.get("open") and r.get("sent") == ["duecrew:cheerpick:dre"], r)
 
 def test_exam_dates_audit_v392():
     """3.9.2's audit: the next exam set on the last one's own day keeps it as

@@ -354,6 +354,10 @@ clean `main` does the migrations, the API, then the site, then
   cleans up (heights by `tall`/`inner`, folds by `room`, never
   offsetHeight); `tools/motion_audit.js` measures each one's last frame
   against the settled page (3.9.0).
+- A window over the board is a `dcPop` (`board.POP_JS`, 3.9.8: the shade,
+  Esc, Tab kept inside, the key back, the bars' shade, the motion layer);
+  its styles name it by its id through `pop.css`, so its look outlasts the
+  id as it closes.
 - A question the board asks goes through `sheets.py` (then-callbacks, only
   a yes reaches them), never a bare QMessageBox/QInputDialog/askUser; the
   Qt ones in `ui` are its fallback off the board. A Qt window wears the

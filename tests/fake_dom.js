@@ -4,7 +4,8 @@
 // Its elements are real EventTargets, so a listener that isn't a function
 // throws as it does in a browser. Usage: node fake_dom.js <window.js> <steps>
 // where steps is a comma list of: quick:<emoji>, button:<label>, esc,
-// backdrop, scroll. Prints {open, sent, errors} as JSON.
+// backdrop, scroll. Prints {open, sent, errors} as JSON. 3.9.8: any of the board's windows
+// (they share board.POP_JS): POP_ID names its id (dc-cheer unless said).
 const fs = require("fs");
 const errors = [];
 process.on("uncaughtException", (e) => errors.push(String(e.message)));
@@ -65,7 +66,8 @@ global.dcBK = "KEY";
 
 try { (0, eval)(fs.readFileSync(process.argv[2], "utf8")); } catch (e) { errors.push(String(e.message)); }
 
-const back = document.getElementById("dc-cheer");
+const ID = process.env.POP_ID || "dc-cheer";
+const back = document.getElementById(ID);
 const all = () => { const out = []; (function walk(n) { out.push(n); n.children.forEach(walk); })(back || document.body); return out; };
 const button = (t) => all().find((n) => n.tagName === "BUTTON" && n.textContent === t);
 const key = (k) => document.dispatchEvent(Object.assign(new Event("keydown"), { key: k }));
@@ -84,5 +86,5 @@ const key = (k) => document.dispatchEvent(Object.assign(new Event("keydown"), { 
     } catch (e) { errors.push(String(e.message)); }
     await new Promise((r) => setImmediate(r));
   }
-  console.log(JSON.stringify({ open: !!document.getElementById("dc-cheer"), sent, errors }));
+  console.log(JSON.stringify({ open: !!document.getElementById(ID), focus: document.activeElement && document.activeElement.id || "", sent, errors }));
 })();

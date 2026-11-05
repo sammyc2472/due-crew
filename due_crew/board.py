@@ -1604,6 +1604,116 @@ VEIL_WATCH_JS = """
 """ % _json.dumps(list(VEIL_IDS))
 
 
+# 3.9.8 (the tidy-ups): one overlay for the board's seven windows (the Cheer
+# window, the song search, a sheet, Magic search's how-to, a crewmate's card, a
+# squadmate's and the good-luck card). Each draws its own card in its own look;
+# this is what's under and around it: the shade, its role and name, Esc, Tab
+# kept inside, a click on the shade, the key back to what opened it, the bars'
+# shade (its id goes as it closes, VEIL_WATCH_JS), the fade, and the motion
+# layer's way in and out. Each window's script starts with it (once a page).
+# A window's styles name it by its id or its data-pop (pop.css), so it keeps
+# its look while it goes: once the id went first, a closing window lost its
+# styles and showed bare at the page's foot for the length of its fade.
+def pop_named(css, pid):
+    """A window's styles, written by its id, as dcPop's css() writes them:
+    by its id or its data-pop, so its look outlasts the id as it closes."""
+    return _re.sub("#" + _re.escape(pid) + r"(?![\w-])", ':is(#%s,[data-pop="%s"])' % (pid, pid), css)
+
+
+POP_JS = r"""
+(function () {
+    if (window.dcPop) { return; }
+    var TABS = 'button, input, a[href], [tabindex="0"]';
+    function still() { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+    function sel(id) { return ':is(#' + id + ',[data-pop="' + id + '"])'; }
+    window.dcPop = {
+        still: still,
+        // the board's look: its tokens follow Settings › Theme and Accent; Anki's night class is only the fallback
+        theme: function () {
+            var night = /night/i.test(document.body.className) ||
+                !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            var dcBoard = document.getElementById('due-crew');
+            var dcStyle = dcBoard ? getComputedStyle(dcBoard) : null;
+            return { night: night, style: dcStyle,
+                     font: (dcStyle && dcStyle.fontFamily) || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                     tok: function (name, light, dark) {
+                         var v = dcStyle && dcStyle.getPropertyValue('--dc-' + name).trim();
+                         return v || (night ? dark : light);
+                     } };
+        },
+        // o: id, label, role (dialog), z, pad (the shade's padding). The window puts its styles (pop.css)
+        // and its card in pop.back, then pop.show(card, {esc, shade, key, closing}): what Esc does (close),
+        // what a click on the shade does (Esc's), a key it takes first (true: taken), what goes as it closes
+        make: function (o) {
+            var old = document.getElementById(o.id);
+            if (old) { old.remove(); }
+            var back = document.createElement('div'), was = document.activeElement, on = {}, moved = false, gone = false, down = false;
+            var s = sel(o.id), base = document.createElement('style');
+            back.id = o.id;
+            back.setAttribute('data-pop', o.id);
+            back.setAttribute('role', o.role || 'dialog');
+            back.setAttribute('aria-modal', 'true');
+            if (o.label) { back.setAttribute('aria-label', o.label); }
+            // Anki's Decks screen gives every control its look (and macOS its own): the window's start from none
+            base.textContent = s + '{position:fixed;inset:0;z-index:' + o.z + ';background:rgba(0,0,0,.35);display:flex;' +
+                'align-items:flex-start;justify-content:center;padding:' + o.pad + ';overflow:auto;}' +
+                s + ' button,' + s + ' input:where(:not([type=checkbox]):not([type=radio]):not([type=range])),' + s + ' textarea' +
+                '{-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;text-shadow:none;min-height:0;min-width:0;' +
+                '-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;}';
+            back.appendChild(base);
+            // 3.9.2's QoL pass: Tab wraps inside the card, never onto the board under it
+            function trap(e) {
+                var f = Array.prototype.filter.call(on.card.querySelectorAll(TABS),
+                    function (x) { return !x.disabled && x.offsetParent !== null; });
+                if (!f.length) { return; }
+                var at = f.indexOf(document.activeElement);
+                if (at < 0 || (e.shiftKey && at === 0) || (!e.shiftKey && at === f.length - 1)) {
+                    e.preventDefault();
+                    (e.shiftKey ? f[f.length - 1] : f[0]).focus();
+                }
+            }
+            function esc(e) {
+                if (on.key && on.key(e)) { return; }
+                if (e.key === 'Tab') { trap(e); return; }
+                if (e.key !== 'Escape') { return; }
+                e.stopPropagation();
+                (on.esc || close)();
+            }
+            function close() {
+                if (gone) { return; }
+                gone = true;
+                document.removeEventListener('keydown', esc, true);
+                if (on.closing) { on.closing(); }
+                back.removeAttribute('id');  // the bars' shade goes with it (VEIL_WATCH_JS); its look stays, by data-pop
+                // what opened it gets the key back (3.9.2's QoL pass)
+                if (was && was.isConnected && was.focus) { try { was.focus(); } catch (x) { /* gone with a redraw */ } }
+                // moved: the motion layer opened it and takes it out its own way, back into what was clicked
+                if (moved || still() || !back.animate) { back.remove(); return; }
+                back.style.pointerEvents = 'none';
+                back.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-in', fill: 'forwards' }).onfinish = function () { back.remove(); };
+            }
+            return {
+                back: back,
+                close: close,
+                // the window's styles, written by its id: they name it by data-pop too, so its look outlasts the id
+                css: function (text) { return String(text).replace(new RegExp('#' + o.id + '(?![\\w-])', 'g'), s); },
+                show: function (card, opts) {
+                    on = opts || {};
+                    on.card = card;
+                    // a press that starts on the shade and ends there closes it (a line drawn off a pad's edge never does)
+                    back.addEventListener('pointerdown', function (e) { down = e.target === back; });
+                    back.addEventListener('click', function (e) { if (e.target === back && down) { (on.shade || on.esc || close)(); } });
+                    document.addEventListener('keydown', esc, true);
+                    document.body.appendChild(back);
+                    if (window.dcMotion && !still()) { try { dcMotion.open(back, card); moved = true; } catch (x) { /* it opens as it is */ } }
+                }
+            };
+        }
+    };
+})();
+"""
+
+
 # what FIND_JS does at every draw once it's on the page
 FIND_AFTER = """
 if (window.dcFind) { window.dcFind.after(); }
@@ -5848,53 +5958,26 @@ def doodle_landing(cheer, entries, cfg):
 CHEER_WINDOW_JS = r"""
 (function () {
     var V = __VIEW__;
-    var old = document.getElementById('dc-cheer');
-    if (old) { old.remove(); }
-    var night = /night/i.test(document.body.className) ||
-        (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    var dcBoard = document.getElementById('due-crew');
-    var dcStyle = dcBoard ? getComputedStyle(dcBoard) : null;
-    function tok(name, light, dark) {
-        var v = dcStyle && dcStyle.getPropertyValue('--dc-' + name).trim();
-        return v || (night ? dark : light);
-    }
+    var T = window.dcPop.theme(), tok = T.tok;
     var bg = tok('bg', '#ffffff', '#1c1c1c'), ink = tok('ink', '#333333', '#dfe1dc'), line = tok('line', '#e2e2da', '#3d403b'),
         well = tok('well', '#f2f2ec', '#2b2d29'), muted = tok('muted', '#6f736b', '#9a9e94'),
         accent = tok('accent', '#2e7d32', '#7cc47f'), accentInk = tok('accent-ink', '#ffffff', '#122912'),
         you = tok('you-bg', '#e9f2e9', '#2c372b');
-    var font = (dcStyle && dcStyle.fontFamily) || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    var font = T.font;
     var W = 300, H = 170, MAXP = 2000, MAXS = 200, SIGN = 24, NOTE = 80, INK = '__INK__';
-    var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    // 3.9.2's QoL pass: Tab wraps inside box (the window over the board), never onto the board under it
-    function trap(e, box) {
-        var f = Array.prototype.filter.call(box.querySelectorAll('button, input, a[href], [tabindex="0"]'),
-            function (x) { return !x.disabled && x.offsetParent !== null; });
-        if (!f.length) { return; }
-        var at = f.indexOf(document.activeElement);
-        if (at < 0 || (e.shiftKey && at === 0) || (!e.shiftKey && at === f.length - 1)) {
-            e.preventDefault();
-            (e.shiftKey ? f[f.length - 1] : f[0]).focus();
-        }
-    }
     function el(tag, cls, text) {
         var e = document.createElement(tag);
         if (cls) { e.className = cls; }
         if (text != null) { e.textContent = text; }
         return e;
     }
-    var back = el('div');
-    back.id = 'dc-cheer';
-    back.setAttribute('role', 'dialog');
-    back.setAttribute('aria-modal', 'true');
-    back.setAttribute('aria-label', 'Cheer ' + V.name);
+    var pop = window.dcPop.make({ id: 'dc-cheer', label: 'Cheer ' + V.name, z: 80, pad: '9vh 16px 16px' }), back = pop.back;
     var css = el('style');
-    css.textContent =
-        '#dc-cheer{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.35);display:flex;align-items:flex-start;justify-content:center;padding:9vh 16px 16px;overflow:auto;}' +
+    css.textContent = pop.css(
         '#dc-cheer *{box-sizing:border-box;}' +
         '#dc-cheer .cw{width:440px;max-width:100%;border-radius:14px;padding:16px 18px 14px;text-align:left;display:grid;gap:12px;font-family:' + font + ';' +
           'box-shadow:0 16px 60px rgba(0,0,0,.35);background:' + bg + ';color:' + ink + ';border:1px solid ' + line + ';font-size:13px;}' +
-        '#dc-cheer button,#dc-cheer input:where(:not([type=checkbox]):not([type=radio]):not([type=range])),#dc-cheer textarea{-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;font-family:inherit;color:inherit;' +
-        'text-shadow:none;min-height:0;min-width:0;-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;font-weight:400;}#dc-cheer button{cursor:pointer;}' +
+        '#dc-cheer button,#dc-cheer input:where(:not([type=checkbox]):not([type=radio]):not([type=range])),#dc-cheer textarea{font-family:inherit;color:inherit;line-height:normal;font-weight:400;}#dc-cheer button{cursor:pointer;}' +
         '#dc-cheer .hd{display:flex;align-items:center;gap:10px;}' +
         '#dc-cheer .hd .pp{width:40px;height:40px;flex:none;display:grid;place-items:center;}' +
         '#dc-cheer .hd .pp svg{width:44px;height:44px;overflow:visible;}' +
@@ -5941,7 +6024,7 @@ CHEER_WINDOW_JS = r"""
         '#dc-cheer .go{background:' + accent + ';color:' + accentInk + ';border:1px solid transparent;border-radius:8px;padding:6px 16px;font-weight:700;font-size:13px;}' +
         '#dc-cheer .no{background:none;border:1px solid ' + line + ';border-radius:8px;padding:6px 14px;font-size:13px;}' +
         '#dc-cheer button:focus-visible{outline:2px solid ' + accent + ' !important;outline-offset:2px;}' +
-        '#dc-cheer .hint{font-size:11px;color:' + muted + ';}';
+        '#dc-cheer .hint{font-size:11px;color:' + muted + ';}');
     back.appendChild(css);
     var card = el('div', 'cw');
     back.appendChild(card);
@@ -6010,7 +6093,7 @@ CHEER_WINDOW_JS = r"""
         window.removeEventListener('resize', away);
         back.removeEventListener('scroll', away, true);
     }
-    // not `moved`: that's the open's motion flag below, and a var of that name overwrote this (3.9.2's QoL pass)
+    // not `moved`: a var of that name once overwrote the open's motion flag (3.9.2's QoL pass)
     function away() { if (pickIn.style.display !== 'none') { unpick(); } }
     pickIn.addEventListener('input', function () {
         var t = oneEmoji(pickIn.value.trim());
@@ -6267,18 +6350,7 @@ CHEER_WINDOW_JS = r"""
             return out;
         }) };
     }
-    var moved = false, was = document.activeElement;  // what opened it gets the key back (3.9.2's QoL pass)
-    function close() {
-        document.removeEventListener('keydown', esc, true);
-        unpick();  // 3.9.2: other's box, if it's up, goes with the window
-        if (was && was.isConnected && was.focus) { try { was.focus(); } catch (x) { /* gone with a redraw */ } }
-        back.removeAttribute('id');  // the bars' shade goes with it (VEIL_WATCH_JS)
-        // moved: motion.js opened it and takes it out its own way (a fade here first had it
-        // snap back for a frame, its fade unfilled, then go again)
-        if (moved || still || !back.animate) { back.remove(); return; }
-        back.style.pointerEvents = 'none';
-        back.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-in', fill: 'forwards' }).onfinish = function () { back.remove(); };
-    }
+    var close = pop.close;
     function send() {
         var p = { to: V.uid, emoji: emoji, note: note.value.replace(/\s+/g, ' ').trim().slice(0, NOTE), doodle: doodle() };
         close();
@@ -6286,20 +6358,15 @@ CHEER_WINDOW_JS = r"""
     }
     go.addEventListener('click', send);
     no.addEventListener('click', close);
-    // a press that starts on the backdrop and ends there closes it (a line drawn off the pad's edge never does)
-    var downOnBack = false;
-    back.addEventListener('pointerdown', function (e) { downOnBack = e.target === back; });
-    back.addEventListener('click', function (e) { if (e.target === back && downOnBack) { close(); } });
-    function esc(e) {
-        if (e.key === 'Tab') { trap(e, card); return; }  // 3.9.2's QoL pass: Tab stays in the window, never on the board under it
-        if (e.key !== 'Escape') { return; }
-        e.stopPropagation();
-        if (pickIn.style.display !== 'none') { unpick(); other.focus(); }
-        else if (drawer.style.display !== 'none') { shut(); other.focus(); } else { close(); }
-    }
-    document.addEventListener('keydown', esc, true);
-    document.body.appendChild(back);
-    if (window.dcMotion && !still) { dcMotion.open(back, card); moved = true; }
+    // Esc puts away what's open in it first (Anki's box, then the drawer); the shade closes it
+    pop.show(card, {
+        esc: function () {
+            if (pickIn.style.display !== 'none') { unpick(); other.focus(); }
+            else if (drawer.style.display !== 'none') { shut(); other.focus(); } else { close(); }
+        },
+        shade: close,
+        closing: unpick  // 3.9.2: other's box, if it's up, goes with the window
+    });
     quick[0][1].focus();
 })();
 """.replace("__INK__", DOODLE_INK)
@@ -6541,8 +6608,9 @@ def fridge_js(scripts=True):
     script itself (dcFridge, loaded once a page) as well as its call, as
     keep_me_in_view_js's. 3.9.6: the dance floor's script (DANCE_JS) comes
     with it, the other thing around the board, and the fridge's call puts the
-    floor in step first (a swap's calls stay the few they were)."""
-    return (FRIDGE_JS + DANCE_JS if scripts else "") + "\nif (window.dcFridge) { window.dcFridge(); }\n"
+    floor in step first (a swap's calls stay the few they were). 3.9.8: the
+    board's one overlay (POP_JS) before it, for the song search."""
+    return (FRIDGE_JS + POP_JS + DANCE_JS if scripts else "") + "\nif (window.dcFridge) { window.dcFridge(); }\n"
 
 
 # 3.9.6, song of the moment (Sam's sign-off on the mock's dance floor, with his
@@ -6716,8 +6784,7 @@ DANCE_CSS = """
 #dc-dance .new { margin-left: auto; flex: none; font-size: 11px; font-weight: 700; color: var(--dc-accent); background: var(--dc-you-bg);
   border-radius: 99px; padding: 1px 7px; }
 /* the search: a sheet over the board, as the board's questions are */
-#dc-song { position: fixed; inset: 0; z-index: 82; background: rgba(0,0,0,.35); display: flex; align-items: flex-start; justify-content: center;
-  padding: 10vh 16px 16px; overflow: auto; font-family: __FONT__; color: var(--dc-ink); text-align: left; }
+#dc-song { font-family: __FONT__; color: var(--dc-ink); text-align: left; }  /* its shade: dcPop (POP_JS) */
 #dc-song .sw { width: 440px; max-width: 100%; border-radius: 14px; padding: 14px 16px; display: grid; gap: 10px; font-size: 13px; line-height: 1.35;
   background: var(--dc-bg); border: 1px solid var(--dc-line); box-shadow: 0 16px 60px rgba(0,0,0,.35); }
 #dc-song .sh { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -7285,11 +7352,8 @@ window.dcDance = window.dcDance || (function () {
         if (!f || S.sheet) { return; }
         close();
         var mine = f.getAttribute('data-me') === '1', src = f.getAttribute('data-badge') || '';
-        var back = el('div'), card = el('div', 'sw'), head = el('div', 'sh'), x = el('button', 'x', '×');
-        back.id = 'dc-song';
-        back.setAttribute('role', 'dialog');
-        back.setAttribute('aria-modal', 'true');
-        back.setAttribute('aria-label', 'Your study soundtrack');
+        var pop = window.dcPop.make({ id: 'dc-song', label: 'Your study soundtrack', z: 82, pad: '10vh 16px 16px' });
+        var back = pop.back, card = el('div', 'sw'), head = el('div', 'sh'), x = el('button', 'x', '×');
         back.appendChild(card);
         head.appendChild(el('b', null, 'Your study soundtrack'));
         x.type = 'button';
@@ -7336,7 +7400,7 @@ window.dcDance = window.dcDance || (function () {
         if (off) { off.type = 'button'; ft.appendChild(off); }
         ft.appendChild(no);
         card.appendChild(ft);
-        var s = { back: back, inp: inp, st: st, ls: ls, go: go, rows: [], picked: '', was: document.activeElement };
+        var s = { pop: pop, inp: inp, st: st, ls: ls, go: go, rows: [], picked: '' };
         S.sheet = s;
         S.q = '';
         inp.addEventListener('input', function () {
@@ -7363,22 +7427,8 @@ window.dcDance = window.dcDance || (function () {
         if (off) { off.addEventListener('click', function () { closeSearch(); send('songclear'); }); }
         no.addEventListener('click', closeSearch);
         x.addEventListener('click', closeSearch);
-        var downOnBack = false;
-        back.addEventListener('pointerdown', function (e) { downOnBack = e.target === back; });
-        back.addEventListener('click', function (e) { if (e.target === back && downOnBack) { closeSearch(); } });
-        s.key = function (e) {
-            if (e.key === 'Escape') { e.stopPropagation(); closeSearch(); return; }
-            if (e.key !== 'Tab') { return; }  // Tab stays in the sheet, never on the board under it
-            var fs = Array.prototype.filter.call(card.querySelectorAll('button, input'), function (b) { return !b.disabled && b.offsetParent !== null; });
-            var at = fs.indexOf(document.activeElement);
-            if (fs.length && (at < 0 || (e.shiftKey && at === 0) || (!e.shiftKey && at === fs.length - 1))) {
-                e.preventDefault();
-                focus(e.shiftKey ? fs[fs.length - 1] : fs[0]);
-            }
-        };
-        document.addEventListener('keydown', s.key, true);
-        document.body.appendChild(back);
-        if (window.dcMotion && !reduce()) { try { dcMotion.open(back, card); } catch (err) { /* it opens as it is */ } }
+        // Esc, or a click on the shade, puts it away; what's being searched goes with it
+        pop.show(card, { esc: closeSearch, closing: function () { S.sheet = null; S.q = ''; clearTimeout(S.qt); } });
         inp.focus();
     }
     function pick(i) {
@@ -7430,15 +7480,7 @@ window.dcDance = window.dcDance || (function () {
             : got.length ? '' : 'Nothing by that name. Try the artist.';
     }
     function closeSearch() {
-        var s = S.sheet;
-        if (!s) { return; }
-        S.sheet = null;
-        S.q = '';
-        clearTimeout(S.qt);
-        document.removeEventListener('keydown', s.key, true);
-        s.back.removeAttribute('id');  // the bars' shade goes with it
-        s.back.remove();  // motion.js takes it out its own way, when it brought it in
-        focus(s.was);
+        if (S.sheet) { S.sheet.pop.close(); }  // dcPop: the shade, the key back, the motion layer's way out
     }
     window.dcSong = { results: results };
     return { sync: sync, show: show, close: close, search: search, wake: wake, fold: fold, results: results };
@@ -7452,14 +7494,14 @@ window.dcDance = window.dcDance || (function () {
 })();
 """.replace("__REST__", str(DANCE_REST * 1000)).replace("__TICK__", str(round(DANCE_TICK * 1000))).replace(
     "__SAY__", str(DANCE_SAY)).replace("__BADGE_H__", str(_songs.BADGE_H)).replace("__CREDIT__", _json.dumps(_songs.CREDIT_SEARCH)).replace(
-    "__CSS__", _json.dumps(DANCE_CSS).replace("</", "<\\/"))
+    "__CSS__", _json.dumps(pop_named(DANCE_CSS, "dc-song")).replace("</", "<\\/"))
 
 
 def dance_js(scripts=True):
     """3.9.6: after the board is drawn (and at every swap): the dance floor put on the page from the board's
     template, or left as it is when nothing it's drawn from changed, or taken off with none. scripts: the
     script itself (dcDance and dcSong, once a page) as well as its call, as fridge_js's."""
-    return (DANCE_JS if scripts else "") + "\nif (window.dcDance) { window.dcDance.sync(); }\n"
+    return (POP_JS + DANCE_JS if scripts else "") + "\nif (window.dcDance) { window.dcDance.sync(); }\n"
 
 
 def cheer_overlay_js(view):
@@ -7482,7 +7524,7 @@ def cheer_overlay_js(view):
             "pip": view.get("pip") or "", "pen": pen, "inks": inks,
             "mine": next((i for i, x in enumerate(inks) if x[0].lower() == pen.lower()), -1),
             "drawer": _emoji_drawer.view(), "native": bool(view.get("native"))}
-    return CHEER_WINDOW_JS.replace("__VIEW__", _json.dumps(data).replace("</", "<\\/"))
+    return POP_JS + CHEER_WINDOW_JS.replace("__VIEW__", _json.dumps(data).replace("</", "<\\/"))
 
 
 # 3.9.1 (Sam: "the modal for status update is still native, make sure all
@@ -7498,16 +7540,7 @@ def cheer_overlay_js(view):
 SHEET_JS = r"""
 (function () {
     var V = __VIEW__;
-    var old = document.getElementById('dc-sheet');
-    if (old) { old.remove(); }
-    var night = /night/i.test(document.body.className) ||
-        (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    var dcBoard = document.getElementById('due-crew');
-    var dcStyle = dcBoard ? getComputedStyle(dcBoard) : null;
-    function tok(name, light, dark) {
-        var v = dcStyle && dcStyle.getPropertyValue('--dc-' + name).trim();
-        return v || (night ? dark : light);
-    }
+    var T = window.dcPop.theme(), tok = T.tok, night = T.night, dcStyle = T.style;
     var bg = tok('bg', '#ffffff', '#1c1c1c'), ink = tok('ink', '#333333', '#dfe1dc'), line = tok('line', '#e2e2da', '#3d403b'),
         well = tok('well', '#f2f2ec', '#2b2d29'), muted = tok('muted', '#6f736b', '#9a9e94'),
         accent = tok('accent', '#2e7d32', '#7cc47f'), accentInk = tok('accent-ink', '#ffffff', '#122912'),
@@ -7516,27 +7549,21 @@ SHEET_JS = r"""
     var m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(bg);
     var dark = m ? (parseInt(m[1], 16) * 299 + parseInt(m[2], 16) * 587 + parseInt(m[3], 16) * 114) / 1000 < 128 : night;
     var bad = dark ? '#ef8383' : '#d32f2f', badInk = dark ? '#2a1212' : '#ffffff';
-    var font = (dcStyle && dcStyle.fontFamily) || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var font = T.font;
     function el(tag, cls, text) {
         var e = document.createElement(tag);
         if (cls) { e.className = cls; }
         if (text != null) { e.textContent = text; }
         return e;
     }
-    var back = el('div');
-    back.id = 'dc-sheet';
-    back.setAttribute('role', V.field ? 'dialog' : 'alertdialog');
-    back.setAttribute('aria-modal', 'true');
-    back.setAttribute('aria-label', V.title);
+    var pop = window.dcPop.make({ id: 'dc-sheet', label: V.title, role: V.field ? 'dialog' : 'alertdialog', z: 82, pad: '12vh 16px 16px' });
+    var back = pop.back;
     var css = el('style');
-    css.textContent =
-        '#dc-sheet{position:fixed;inset:0;z-index:82;background:rgba(0,0,0,.35);display:flex;align-items:flex-start;justify-content:center;padding:12vh 16px 16px;overflow:auto;}' +
+    css.textContent = pop.css(
         '#dc-sheet *{box-sizing:border-box;}' +
         '#dc-sheet .cw{width:420px;max-width:100%;border-radius:14px;padding:16px 18px 14px;text-align:left;display:grid;gap:12px;font-family:' + font + ';' +
           'box-shadow:0 16px 60px rgba(0,0,0,.35);background:' + bg + ';color:' + ink + ';border:1px solid ' + line + ';font-size:13px;}' +
-        '#dc-sheet button,#dc-sheet input:where(:not([type=checkbox]):not([type=radio]):not([type=range])),#dc-sheet textarea{-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;font-family:inherit;color:inherit;' +
-        'text-shadow:none;min-height:0;min-width:0;-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;font-weight:400;}#dc-sheet button{cursor:pointer;}' +
+        '#dc-sheet button,#dc-sheet input:where(:not([type=checkbox]):not([type=radio]):not([type=range])),#dc-sheet textarea{font-family:inherit;color:inherit;line-height:normal;font-weight:400;}#dc-sheet button{cursor:pointer;}' +
         '#dc-sheet .hd{font-size:16px;font-weight:700;}' +
         '#dc-sheet .bd{white-space:pre-line;line-height:1.45;max-height:46vh;overflow-y:auto;overflow-wrap:anywhere;}' +
         '#dc-sheet .tx{width:100%;height:32px;border-radius:8px;border:1px solid ' + line + ';background:' + bg + ';color:' + ink + ';font-size:13px;padding:0 10px;}' +
@@ -7563,7 +7590,7 @@ SHEET_JS = r"""
         '#dc-sheet .go.bad{background:' + bad + ';color:' + badInk + ';}' +
         '#dc-sheet .go:disabled{opacity:.45;cursor:default;}' +
         '#dc-sheet .no{background:none;border:1px solid ' + line + ';border-radius:8px;padding:6px 14px;font-size:13px;}' +
-        '#dc-sheet button:focus-visible{outline:2px solid ' + accent + ' !important;outline-offset:2px;}';
+        '#dc-sheet button:focus-visible{outline:2px solid ' + accent + ' !important;outline-offset:2px;}');
     back.appendChild(css);
     var card = el('div', 'cw');
     back.appendChild(card);
@@ -7682,40 +7709,11 @@ SHEET_JS = r"""
         if (tick) { p.check = tick.checked; }
         say(p);
     }
-    var moved = false, was = document.activeElement;  // what asked gets the key back (3.9.2's QoL pass)
-    function close() {
-        document.removeEventListener('keydown', esc, true);
-        back.removeAttribute('id');  // the bars' shade goes with it (VEIL_WATCH_JS)
-        if (was && was.isConnected && was.focus) { try { was.focus(); } catch (x) { /* gone with a redraw */ } }
-        // moved: motion.js opened it and takes it out its own way, back into what was clicked
-        if (moved || still || !back.animate) { back.remove(); return; }
-        back.style.pointerEvents = 'none';
-        back.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-in', fill: 'forwards' }).onfinish = function () { back.remove(); };
-    }
+    var close = pop.close;
     go.addEventListener('click', yes);
     no.addEventListener('click', function () { say({ ok: false }); });
-    var downOnBack = false;
-    back.addEventListener('pointerdown', function (e) { downOnBack = e.target === back; });
-    back.addEventListener('click', function (e) { if (e.target === back && downOnBack) { say({ ok: false }); } });
-    function esc(e) {
-        if (e.key === 'Tab') { trap(e); return; }  // 3.9.2's QoL pass: Tab stays in the sheet, never on the board under it
-        if (e.key !== 'Escape') { return; }
-        e.stopPropagation();
-        say({ ok: false });
-    }
-    function trap(e) {
-        var f = Array.prototype.filter.call(card.querySelectorAll('button, input, a[href], [tabindex="0"]'),
-            function (x) { return !x.disabled && x.offsetParent !== null; });
-        if (!f.length) { return; }
-        var at = f.indexOf(document.activeElement);
-        if (at < 0 || (e.shiftKey && at === 0) || (!e.shiftKey && at === f.length - 1)) {
-            e.preventDefault();
-            (e.shiftKey ? f[f.length - 1] : f[0]).focus();
-        }
-    }
-    document.addEventListener('keydown', esc, true);
-    document.body.appendChild(back);
-    if (window.dcMotion && !still) { dcMotion.open(back, card); moved = true; }
+    // Esc, or a click on the shade, says no
+    pop.show(card, { esc: function () { say({ ok: false }); } });
     // a line to write starts in its box, its words selected; a step that can't be
     // taken back starts on Cancel, as the Qt question did
     if (input) { input.focus(); input.select(); }
@@ -7743,7 +7741,7 @@ def sheet_js(view):
     data = {"id": str(view.get("id") or ""), "title": str(view.get("title") or ""), "text": str(view.get("text") or ""),
             "yes": str(view.get("yes") or "OK"), "no": str(view.get("no") or "Cancel"), "danger": bool(view.get("danger")),
             "field": f, "check": {"label": str(ck.get("label") or ""), "on": bool(ck.get("on"))} if ck else None}
-    return SHEET_JS.replace("__VIEW__", _json.dumps(data).replace("</", "<\\/"))
+    return POP_JS + SHEET_JS.replace("__VIEW__", _json.dumps(data).replace("</", "<\\/"))
 
 
 # 3.9.7, round 2 (Sam: "the modal introducing for the first time should pop up
@@ -7765,39 +7763,25 @@ MAGIC_HOWTO_JS = r"""
         if (n < 30) { setTimeout(function () { later(n + 1); }, 700); }
     }
     function draw() {
-    var night = /night/i.test(document.body.className) ||
-        (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    var dcBoard = document.getElementById('due-crew');
-    var dcStyle = dcBoard ? getComputedStyle(dcBoard) : null;
-    function tok(name, light, dark) {
-        var v = dcStyle && dcStyle.getPropertyValue('--dc-' + name).trim();
-        return v || (night ? dark : light);
-    }
+    var T = window.dcPop.theme(), tok = T.tok;
     var bg = tok('bg', '#ffffff', '#1c1c1c'), ink = tok('ink', '#333333', '#dfe1dc'), line = tok('line', '#e2e2da', '#3d403b'),
         well = tok('well', '#f2f2ec', '#2b2d29'), muted = tok('muted', '#6f736b', '#9a9e94'),
         accent = tok('accent', '#2e7d32', '#7cc47f'), accentInk = tok('accent-ink', '#ffffff', '#122912'),
         you = tok('you-bg', '#e9f2e9', '#2c372b'), hours = tok('hours', '#f2b33d', '#f2c25c');
-    var font = (dcStyle && dcStyle.fontFamily) || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var font = T.font;
     function el(tag, cls, text) {
         var e = document.createElement(tag);
         if (cls) { e.className = cls; }
         if (text != null) { e.textContent = text; }
         return e;
     }
-    var back = el('div');
-    back.id = 'dc-magic';
-    back.setAttribute('role', 'dialog');
-    back.setAttribute('aria-modal', 'true');
-    back.setAttribute('aria-label', 'Magic search');
+    var pop = window.dcPop.make({ id: 'dc-magic', label: 'Magic search', z: 82, pad: '6vh 16px 16px' }), back = pop.back;
     var css = el('style');
-    css.textContent =
-        '#dc-magic{position:fixed;inset:0;z-index:82;background:rgba(0,0,0,.35);display:flex;align-items:flex-start;justify-content:center;padding:6vh 16px 16px;overflow:auto;}' +
+    css.textContent = pop.css(
         '#dc-magic *{box-sizing:border-box;}' +
         '#dc-magic .cw{width:660px;max-width:100%;border-radius:16px;padding:18px 20px 16px;text-align:left;display:grid;gap:12px;font-family:' + font + ';' +
           'box-shadow:0 16px 60px rgba(0,0,0,.35);background:' + bg + ';color:' + ink + ';border:1px solid ' + line + ';font-size:13px;line-height:1.45;}' +
-        '#dc-magic button{-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;font-family:inherit;color:inherit;text-shadow:none;min-height:0;min-width:0;' +
-          '-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;font-weight:400;cursor:pointer;}' +
+        '#dc-magic button{font-family:inherit;color:inherit;line-height:normal;font-weight:400;cursor:pointer;}' +
         '#dc-magic .t{display:flex;align-items:center;gap:10px;}#dc-magic .t b{font-size:19px;}' +
         '#dc-magic .new{font-size:11px;font-weight:700;border-radius:999px;padding:1px 8px;background:' + you + ';color:' + accent + ';}' +
         '#dc-magic p{margin:0;}' +
@@ -7814,7 +7798,7 @@ MAGIC_HOWTO_JS = r"""
         '#dc-magic .go{background:' + accent + ';color:' + accentInk + ';border:1px solid transparent;border-radius:8px;padding:6px 16px;font-weight:700;font-size:13px;}' +
         '#dc-magic .no{background:none;border:1px solid ' + line + ';border-radius:8px;padding:6px 14px;font-size:13px;}' +
         '#dc-magic button:focus-visible{outline:2px solid ' + accent + ' !important;outline-offset:2px;}' +
-        '@media (max-width:560px){#dc-magic .how{grid-template-columns:minmax(0,1fr);}}';
+        '@media (max-width:560px){#dc-magic .how{grid-template-columns:minmax(0,1fr);}}');
     back.appendChild(css);
     var card = el('div', 'cw');
     back.appendChild(card);
@@ -7859,43 +7843,17 @@ MAGIC_HOWTO_JS = r"""
     ft.appendChild(go);
     card.appendChild(ft);
 
-    var said = false, moved = false, was = document.activeElement;
+    var said = false;
     function say(how, q) {
         if (said) { return; }
         said = true;
-        close();
+        pop.close();
         if (typeof pycmd !== 'undefined') { pycmd('duecrew:magichow:' + how + ':' + encodeURIComponent(q || '') + '|' + window.dcBK); }
-    }
-    function close() {
-        document.removeEventListener('keydown', esc, true);
-        back.removeAttribute('id');  // the bars' shade goes with it (VEIL_WATCH_JS)
-        if (was && was.isConnected && was.focus) { try { was.focus(); } catch (x) { /* gone with a redraw */ } }
-        if (moved || still || !back.animate) { back.remove(); return; }
-        back.style.pointerEvents = 'none';
-        back.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-in', fill: 'forwards' }).onfinish = function () { back.remove(); };
     }
     go.addEventListener('click', function () { say('open'); });
     no.addEventListener('click', function () { say('seen'); });
-    var downOnBack = false;
-    back.addEventListener('pointerdown', function (e) { downOnBack = e.target === back; });
-    back.addEventListener('click', function (e) { if (e.target === back && downOnBack) { say('seen'); } });
-    function esc(e) {
-        if (e.key === 'Tab') {
-            var f = Array.prototype.filter.call(card.querySelectorAll('button'), function (x) { return x.offsetParent !== null; });
-            var at = f.indexOf(document.activeElement);
-            if (f.length && (at < 0 || (e.shiftKey && at === 0) || (!e.shiftKey && at === f.length - 1))) {
-                e.preventDefault();
-                (e.shiftKey ? f[f.length - 1] : f[0]).focus();
-            }
-            return;
-        }
-        if (e.key !== 'Escape') { return; }
-        e.stopPropagation();
-        say('seen');
-    }
-    document.addEventListener('keydown', esc, true);
-    document.body.appendChild(back);
-    if (window.dcMotion && !still) { dcMotion.open(back, card); moved = true; }
+    // Esc, or a click on the shade: seen
+    pop.show(card, { esc: function () { say('seen'); } });
     try { go.focus({ preventScroll: true }); } catch (x) { go.focus(); }  // a short window opens on the card's top
     }
     later(0);
@@ -7911,7 +7869,7 @@ def magic_howto_js(view):
                     "try": [str(q) for q in x.get("try") or []], "label": [str(q) for q in x.get("label") or []]}
                    for x in view.get("parts") or [] if isinstance(x, dict)]}
     busy = list(VEIL_IDS) + ["dc-show", "dc-flurry"]  # Wrapped, Settings and the closet take the You box with the board
-    return (MAGIC_HOWTO_JS.replace("__BUSY__", _json.dumps(busy))
+    return POP_JS + (MAGIC_HOWTO_JS.replace("__BUSY__", _json.dumps(busy))
             .replace("__VIEW__", _json.dumps(v).replace("</", "<\\/")))
 
 
@@ -8332,33 +8290,20 @@ def stranger_card_js(info):
                   ("Block", f"duecrew:squadblock:{uid}"),
                   ("Make founder", f"duecrew:squadfounder:{uid}")]
     extras_json = _json.dumps(extras)
-    return """
+    return POP_JS + """
     (function() {
-        var old = document.getElementById('dc-profile');
-        if (old) { old.remove(); }
-        var night = /night/i.test(document.body.className) ||
-            (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
         // 2.9: colors come from the board, which already follows Settings ->
-        // Theme and Accent; Anki's night class is only the fallback
-        var dcBoard = document.getElementById('due-crew');
-        var dcStyle = dcBoard ? getComputedStyle(dcBoard) : null;
-        function tok(name, light, dark) {
-            var v = dcStyle && dcStyle.getPropertyValue('--dc-' + name).trim();
-            return v || (night ? dark : light);
-        }
+        // Theme and Accent; Anki's night class is only the fallback (dcPop.theme)
+        var T = window.dcPop.theme(), tok = T.tok;
         var dcBg = tok('bg', '#ffffff', '#1c1c1c'), dcInk = tok('ink', '#333333', '#dfe1dc'),
             dcLine = tok('line', '#e2e2da', '#3d403b'), dcWell = tok('well', '#f2f2ec', '#2b2d29'),
             accent = tok('accent', '#2e7d32', '#7cc47f'), accentInk = tok('accent-ink', '#ffffff', '#122912'),
             warn = tok('hours', '#b26a00', '#dda45c');
-        var back = document.createElement('div');
-        back.id = 'dc-profile';
+        var pop = window.dcPop.make({ id: 'dc-profile', label: %s, z: 80, pad: '16vh 0 0' }), back = pop.back;
         var reset = document.createElement('style');  // 3.9.6: Anki's button look (and macOS's own) off the card's; its focus ring back
-        reset.textContent = '#dc-profile button{-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;text-shadow:none;' +
-            'min-height:0;min-width:0;-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;font-weight:400;}' +
-            '#dc-profile button:focus-visible{outline:2px solid ' + accent + ' !important;outline-offset:2px;}';
+        reset.textContent = pop.css('#dc-profile button{line-height:normal;font-weight:400;}' +
+            '#dc-profile button:focus-visible{outline:2px solid ' + accent + ' !important;outline-offset:2px;}');
         back.appendChild(reset);
-        back.style.cssText = 'position:fixed;inset:0;z-index:80;background:rgba(0,0,0,0.35);' +
-            'display:flex;align-items:flex-start;justify-content:center;padding-top:16vh;';
         var card = document.createElement('div');
         card.style.cssText = 'min-width:300px;max-width:380px;border-radius:12px;padding:16px 20px;' +
             'box-shadow:0 16px 60px rgba(0,0,0,0.35);' +
@@ -8379,7 +8324,7 @@ def stranger_card_js(info):
                        dcLine + ';cursor:default;');
         if (actCmd) {
             act.addEventListener('click', function() {
-                back.remove();
+                pop.close();
                 if (typeof pycmd !== 'undefined') { pycmd(actCmd + '|' + window.dcBK); }
             });
         }
@@ -8388,7 +8333,7 @@ def stranger_card_js(info):
         close.style.cssText = 'font-size:12.5px;padding:5px 13px;border-radius:6px;cursor:pointer;' +
             'background:none;color:inherit;border:1px solid ' +
             dcLine + ';';
-        close.addEventListener('click', function() { back.remove(); });
+        close.addEventListener('click', function() { pop.close(); });
         row.appendChild(act);
         var spacer = document.createElement('div');
         spacer.style.flex = '1';
@@ -8413,7 +8358,7 @@ def stranger_card_js(info):
                 extra.style.cssText = 'font-size:11.5px;padding:3px 10px;border-radius:6px;cursor:pointer;' +
                     'background:none;color:inherit;opacity:0.85;border:1px solid ' + dcLine + ';';
                 extra.addEventListener('click', function() {
-                    back.remove();
+                    pop.close();
                     if (typeof pycmd !== 'undefined') { pycmd(pair[1] + '|' + window.dcBK); }
                 });
                 tools.appendChild(extra);
@@ -8421,16 +8366,9 @@ def stranger_card_js(info):
             card.appendChild(tools);
         }
         back.appendChild(card);
-        back.addEventListener('click', function(e) {
-            if (e.target === back) { back.remove(); }
-        });
-        document.addEventListener('keydown', function esc(e) {
-            if (e.key === 'Escape') { back.remove(); document.removeEventListener('keydown', esc); }
-        });
-        document.body.appendChild(back);
-        if (window.dcMotion) { dcMotion.open(back, card); }  // 3.8.0: from the name, back into it
+        pop.show(card);  // Esc or the shade closes it; 3.8.0: out of the name and back into it (dcPop)
     })();
-    """ % (inner, act_cmd, act_label, act_primary, extras_json)
+    """ % (_json.dumps(str(info.get("name") or "?")), inner, act_cmd, act_label, act_primary, extras_json)
 
 
 def luck_card_js(name, lines):
@@ -8439,30 +8377,19 @@ def luck_card_js(name, lines):
     textContent, never markup. Thanks sends a 💚 back to each of them."""
     title = _json.dumps(f"\U0001F340 Good luck today, {str(name or 'you')}")
     items = _json.dumps([[str(n), str(t)] for n, t in (lines or [])][:12])
-    return """
+    return POP_JS + """
     (function() {
-        var old = document.getElementById('dc-profile');
-        if (old) { old.remove(); }
-        var night = /night/i.test(document.body.className) ||
-            (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-        var dcBoard = document.getElementById('due-crew');
-        var dcStyle = dcBoard ? getComputedStyle(dcBoard) : null;
-        function tok(name, light, dark) {
-            var v = dcStyle && dcStyle.getPropertyValue('--dc-' + name).trim();
-            return v || (night ? dark : light);
-        }
+        // 2.9: colors come from the board, which already follows Settings ->
+        // Theme and Accent; Anki's night class is only the fallback (dcPop.theme)
+        var T = window.dcPop.theme(), tok = T.tok;
         var bg = tok('bg', '#ffffff', '#1c1c1c'), ink = tok('ink', '#333333', '#dfe1dc'),
             line = tok('line', '#e2e2da', '#3d403b'), accent = tok('accent', '#2e7d32', '#7cc47f'),
             accentInk = tok('accent-ink', '#ffffff', '#122912');
-        var back = document.createElement('div');
-        back.id = 'dc-profile';
+        var pop = window.dcPop.make({ id: 'dc-profile', label: %s, z: 80, pad: '14vh 0 0' }), back = pop.back;
         var reset = document.createElement('style');  // 3.9.6: Anki's button look (and macOS's own) off the card's; its focus ring back
-        reset.textContent = '#dc-profile button{-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;text-shadow:none;' +
-            'min-height:0;min-width:0;-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;font-weight:400;}' +
-            '#dc-profile button:focus-visible{outline:2px solid ' + accent + ' !important;outline-offset:2px;}';
+        reset.textContent = pop.css('#dc-profile button{line-height:normal;font-weight:400;}' +
+            '#dc-profile button:focus-visible{outline:2px solid ' + accent + ' !important;outline-offset:2px;}');
         back.appendChild(reset);
-        back.style.cssText = 'position:fixed;inset:0;z-index:80;background:rgba(0,0,0,0.35);' +
-            'display:flex;align-items:flex-start;justify-content:center;padding-top:14vh;';
         var card = document.createElement('div');
         card.style.cssText = 'min-width:320px;max-width:420px;border-radius:12px;padding:18px 22px;' +
             'box-shadow:0 16px 60px rgba(0,0,0,0.35);background:' + bg + ';color:' + ink +
@@ -8487,13 +8414,13 @@ def luck_card_js(name, lines):
         close.textContent = 'Close';
         close.style.cssText = 'font-size:12.5px;padding:5px 13px;border-radius:6px;cursor:pointer;' +
             'background:none;color:inherit;border:1px solid ' + line + ';';
-        close.addEventListener('click', function() { back.remove(); });
+        close.addEventListener('click', function() { pop.close(); });
         var thanks = document.createElement('button');
         thanks.textContent = 'Thanks, crew';
         thanks.style.cssText = 'font-size:12.5px;padding:5px 13px;border-radius:6px;cursor:pointer;' +
             'background:' + accent + ';color:' + accentInk + ';border:1px solid transparent;font-weight:600;';
         thanks.addEventListener('click', function() {
-            back.remove();
+            pop.close();
             if (typeof pycmd !== 'undefined') { pycmd('duecrew:luckthanks|' + window.dcBK); }
         });
         var spacer = document.createElement('div');
@@ -8503,11 +8430,9 @@ def luck_card_js(name, lines):
         row.appendChild(thanks);
         card.appendChild(row);
         back.appendChild(card);
-        back.addEventListener('click', function(e) { if (e.target === back) { back.remove(); } });
-        document.body.appendChild(back);
-        if (window.dcMotion) { dcMotion.open(back, card); }  // 3.8.0: from the name, back into it
+        pop.show(card);  // Esc or the shade closes it; 3.8.0: out of the name and back into it (dcPop)
     })();
-    """ % (title, items)
+    """ % (title, title, items)
 
 
 HEAT_LEVELS = ((1, 1), (10, 2), (50, 3), (150, 4))
@@ -8706,33 +8631,20 @@ def profile_overlay_js(profile):
     else:
         act_label, act_primary = _json.dumps("\U0001F389 Send a cheer"), "true"
         act_cmd = _json.dumps(f"duecrew:cheerpick:{profile.get('uid', '')}")
-    return """
+    return POP_JS + """
     (function() {
-        var old = document.getElementById('dc-profile');
-        if (old) { old.remove(); }
-        var night = /night/i.test(document.body.className) ||
-            (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
         // 2.9: colors come from the board, which already follows Settings ->
-        // Theme and Accent; Anki's night class is only the fallback
-        var dcBoard = document.getElementById('due-crew');
-        var dcStyle = dcBoard ? getComputedStyle(dcBoard) : null;
-        function tok(name, light, dark) {
-            var v = dcStyle && dcStyle.getPropertyValue('--dc-' + name).trim();
-            return v || (night ? dark : light);
-        }
+        // Theme and Accent; Anki's night class is only the fallback (dcPop.theme)
+        var T = window.dcPop.theme(), tok = T.tok;
         var dcBg = tok('bg', '#ffffff', '#1c1c1c'), dcInk = tok('ink', '#333333', '#dfe1dc'),
             dcLine = tok('line', '#e2e2da', '#3d403b'), dcWell = tok('well', '#f2f2ec', '#2b2d29'),
             accent = tok('accent', '#2e7d32', '#7cc47f'), accentInk = tok('accent-ink', '#ffffff', '#122912'),
             warn = tok('hours', '#b26a00', '#dda45c');
-        var back = document.createElement('div');
-        back.id = 'dc-profile';
+        var pop = window.dcPop.make({ id: 'dc-profile', label: %s, z: 80, pad: '14vh 0 0' }), back = pop.back;
         var reset = document.createElement('style');  // 3.9.6: Anki's button look (and macOS's own) off the card's; its focus ring back
-        reset.textContent = '#dc-profile button{-webkit-appearance:none;appearance:none;margin:0;box-shadow:none;text-shadow:none;' +
-            'min-height:0;min-width:0;-webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:normal;line-height:normal;font-weight:400;}' +
-            '#dc-profile button:focus-visible{outline:2px solid ' + accent + ' !important;outline-offset:2px;}';
+        reset.textContent = pop.css('#dc-profile button{line-height:normal;font-weight:400;}' +
+            '#dc-profile button:focus-visible{outline:2px solid ' + accent + ' !important;outline-offset:2px;}');
         back.appendChild(reset);
-        back.style.cssText = 'position:fixed;inset:0;z-index:80;background:rgba(0,0,0,0.35);' +
-            'display:flex;align-items:flex-start;justify-content:center;padding-top:14vh;';
         var card = document.createElement('div');
         card.style.cssText = 'min-width:340px;max-width:420px;border-radius:12px;padding:16px 20px;' +
             'box-shadow:0 16px 60px rgba(0,0,0,0.35);' +
@@ -8773,11 +8685,11 @@ def profile_overlay_js(profile):
         }
         var act = btn(%s, %s);
         act.addEventListener('click', function() {
-            back.remove();
+            pop.close();
             if (typeof pycmd !== 'undefined') { pycmd(%s + '|' + window.dcBK); }
         });
         var close = btn('Close', false);
-        close.addEventListener('click', function() { back.remove(); });
+        close.addEventListener('click', function() { pop.close(); });
         row.appendChild(act);
         var spacer = document.createElement('div');
         spacer.style.flex = '1';
@@ -8785,16 +8697,9 @@ def profile_overlay_js(profile):
         row.appendChild(close);
         card.appendChild(row);
         back.appendChild(card);
-        back.addEventListener('click', function(e) {
-            if (e.target === back) { back.remove(); }
-        });
-        document.addEventListener('keydown', function esc(e) {
-            if (e.key === 'Escape') { back.remove(); document.removeEventListener('keydown', esc); }
-        });
-        document.body.appendChild(back);
-        if (window.dcMotion) { dcMotion.open(back, card); }  // 3.8.0: from the name, back into it
+        pop.show(card);  // Esc or the shade closes it; 3.8.0: out of the name and back into it (dcPop)
     })();
-    """ % (inner, act_label, act_primary, act_cmd)
+    """ % (_json.dumps(str(profile.get("name") or "?")), inner, act_label, act_primary, act_cmd)
 
 
 # ---- Due: the day's to-do, above the board ----

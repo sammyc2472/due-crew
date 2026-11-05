@@ -272,7 +272,9 @@ def test_commands_keyed():
     check("the search's rows as text (never markup), a cover only from Apple's image host; only the latest search lands",
           "innerHTML" not in js and "el('b', null, song.t)" in js and "mzstatic\\.com" in js and "ART.test(song.art)" in js
           and "String(o.q || '') !== S.q" in js)
-    check("the search is a sheet over the board: the bars dim with it", "dc-song" in board.VEIL_IDS and "aria-modal" in js)
+    check("the search is a sheet over the board (3.9.8: the board's one overlay, POP_JS): the bars dim with it",
+          "dc-song" in board.VEIL_IDS and "window.dcPop.make({ id: 'dc-song'" in js and "aria-modal" in board.POP_JS
+          and board.dance_js().startswith(board.POP_JS))
     check("the floor's script comes with the fridge's (a page's scripts once), and the fridge's call puts it in step",
           board.DANCE_JS in board.fridge_js() and board.DANCE_JS not in board.fridge_js(scripts=False)
           and "window.dcDance.sync()" in js and board.fridge_js(scripts=False) == "\nif (window.dcFridge) { window.dcFridge(); }\n")
