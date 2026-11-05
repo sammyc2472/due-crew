@@ -4746,3 +4746,17 @@ every release that changes how something works.
     `pop_named` for the floor's sheet), so it keeps its look as it goes:
     the id went first, for the bars' shade, and a closing window showed
     bare at the page's foot for the length of its fade.
+  - `board.py` (9,500 lines) is a package by feature, `due_crew/board/`:
+    `base` (palettes, tabs, words for days, a crew's rows, the page's
+    key), `style` (the stylesheet), `crew`, `squads` (and a plan's squad,
+    bingo), `plancards` and `planweek` (You › Plans), `insights`, `party`,
+    `due`, `settings`, `closet`, `wrapped`, `pip`, `lobby` (a room's),
+    `cheers`, `fridge`, `dance`, `windows` (the overlay, a sheet, the
+    cards), `page` (the stylesheet once a page, Find, the shade, the
+    motion layer's scripts) and `draw` (render, the You bubble). Each part
+    imports what it leans on, in one order, no cycles; the package holds
+    every name of every part, so `board.X` and `from .board import X` read
+    as before, and a name set on the board (a test's stand-in) is set in
+    each part that has it. The preview renders byte for byte as before
+    (but a clock); the suite's source checks read the parts
+    (`fakes.board_source`).

@@ -226,7 +226,7 @@ def test_qid_words():
 def test_commands():
     """Every duecrew: command the map emits has its handler (the suite's
     test_every_board_command_has_a_handler, for this front's)."""
-    src = open(os.path.join(REPO, "due_crew", "board.py")).read()
+    src = fakes.board_source()
     flow = open(os.path.join(REPO, "due_crew", "team_flow.py")).read()
     emitted = set(re.findall(r'_pycmd\(f"(insmap[a-z]*)', src))
     handled = set(re.findall(r'cmd == "([a-z0-9]+)"', flow))

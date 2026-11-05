@@ -733,7 +733,7 @@ def test_board():
           in board._opened_line({"n": 78, "decks": True}))
     check("the morning's line, A: as before", "Cell injury</a> 78</span>" in board._opened_line(
         {"n": 78, "dates": [["p1", "l1", "Cell injury", 78]]}))
-    src = open(os.path.join(REPO, "due_crew", "board.py")).read()
+    src = fakes.board_source()
     flow = open(os.path.join(REPO, "due_crew", "plan_flow.py")).read()
     check("the card's Study is planstudydate, which plan_flow handles", 'cmd == "planstudydate"' in flow and "planstudydate" in src)
 

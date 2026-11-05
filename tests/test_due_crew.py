@@ -7428,8 +7428,8 @@ def test_plan_windows_ways_in_v393():
           "duecrew:magic|" in up[:up.index("</div>")] and "duecrew:magic|" in one
           and one.index("duecrew:magic|") < one.index("du-fold") and "duecrew:magic|" in plans_tab[:plans_tab.index("</div>")], one)
     check("ways in: …on one baseline with the rest (Sam: \"a bit higher than everything else\"): one line height for the head's words, the folded line by baseline",
-          "#due-crew .du-one > a, #due-crew .du-one > .du-n { line-height: 16px; }" in open(board.__file__, encoding="utf-8").read()
-          and "#due-crew .du-one { display: flex; align-items: baseline;" in open(board.__file__, encoding="utf-8").read())
+          "#due-crew .du-one > a, #due-crew .du-one > .du-n { line-height: 16px; }" in fakes.board_source()
+          and "#due-crew .du-one { display: flex; align-items: baseline;" in fakes.board_source())
     from due_crew import due_flow
     check("3.9.7: no tag read for a QIDs chip any more (has_qids went with it)", not hasattr(due_flow, "has_qids"))
     ix = board.settings_index({"tab": "board", "signed_in": True}, {"accent": "green"})
@@ -8489,7 +8489,7 @@ def test_insights_379():
           and '<option value="1">&lt;Yield&gt;</option>' in wy and "by topic, now" not in wy
           and "Split by" not in board._ins_map(10, nest, "fsrs", (), [{"key": "a", "name": "Systems", "on": True}]), wy)
     wy2 = board._ins_map(10, nest, "fsrs", (), [{"key": "a", "name": "Systems", "on": False}, {"key": "b", "name": "A much longer way <x>", "on": True}])
-    src = open(os.path.join(REPO, "due_crew", "board.py"), encoding="utf-8").read()
+    src = fakes.board_source()
     check("map (3.9.5, Sam: \"the carets are justified to the longest thing\"): the pick shows the way picked, its ▾ beside it, "
           "the select laid over them; no ▾ on the board sits after a select",
           '<span class="dc-wp"><b>Systems</b><i aria-hidden="true">&#9662;</i><select' in wy
@@ -9253,7 +9253,7 @@ def test_review_fixes_board_due_v380():
     js = board.swap_js("<div id='due-crew'></div>")
     check("review: a half-typed to-do survives a redraw while it has focus; a sent one is cleared",
           "document.activeElement === din && din.value" in js and "n1.value = keep.v" in js
-          and "inp.value = '';  // sent" in open(board.__file__, encoding="utf-8").read())
+          and "inp.value = '';  // sent" in fakes.board_source())
     # a line's words as served: the same tick keys on both sides
     raw = [{"k": "do", "t": "Practice  questions", "r": "4"}, {"k": "do", "t": "👩‍⚕️ rounds", "r": "1"},
            {"k": "read", "t": "Read ch. 6­", "r": "2"}]
@@ -9677,7 +9677,7 @@ def test_board_motion_v380():
     sel = " ".join(re.findall(r'sel: "([^"]+)"', js)) + " " + " ".join(re.findall(r"closest\(['\"]([^'\"]+)['\"]\)", js))
     site_only = {"pills", "sqsw", "bgmini", "bgt", "brd", "foot", "dc-panel", "st-tabs", "logo-inline"}
     names = sorted({c for c in re.findall(r"\.([a-z][a-z0-9-]*)", sel)} - site_only)
-    drawn = open(os.path.join(REPO, "due_crew", "board.py"), encoding="utf-8").read()
+    drawn = fakes.board_source()
     missing = [c for c in names if not re.search(r'class="[^"]*\b%s\b|class=\\?"[^"]*\b%s\b|\.%s\b' % (c, c, c), drawn)]
     check("motion: every class its rules name is one the board draws (a rename can't switch a motion off)",
           len(names) >= 25 and not missing, (missing, names))
@@ -15369,10 +15369,10 @@ def test_motion_ends_where_it_lands_v390():
     check("audit: the peek's Show grows the bubble into its words, which fade in once there's room; the bar's chip fades its words in",
           "grow.animate([{width: b0.width + 'px', height: b0.height + 'px'}" in fj and "{opacity: 0, offset: 0.4}" in fj
           and "{opacity: getComputedStyle(x).opacity}" in K.chip_js({"text": "x", "accent": "#2e7d32"}))
-    bp = open(os.path.join(REPO, "due_crew", "board.py"), encoding="utf-8").read()
+    bp = fakes.board_source()
     sthit = bp[bp.index("@keyframes sthit"):].split("\n")[0]
     check("audit: Settings' found row glows back to its own ground (from, and no to)", "{ from {" in sthit and "to {" not in sthit, sthit)
-    srcs = {"motion.js": js, "show.js": sj, "board.py": bp,
+    srcs = {"motion.js": js, "show.js": sj, "board/": bp,
             "cards.py": open(os.path.join(REPO, "due_crew", "cards.py"), encoding="utf-8").read(),
             "room_model.py": open(os.path.join(REPO, "due_crew", "room_model.py"), encoding="utf-8").read()}
     for f in sorted(os.listdir(os.path.join(REPO, "site", "public"))):
@@ -16415,7 +16415,7 @@ def test_efficiency_idle_v391():
           forever and all("m-breathe" in x or "m-stretch" in x for x in forever)
           and ".sv:hover, .sv-slot:hover .sv { --sv-on: var(--sv-hover, infinite); }" in _sev.CSS and ".dc-rest { --sv-hover: 1; }" in _sev.CSS
           and _sev.CSS.count("var(--sv-on, ") >= 40, forever)
-    src = open(os.path.join(REPO, "due_crew", "board.py")).read()
+    src = fakes.board_source()
     check("Pip at rest (Sam's pick C): the fridge's Pips are still until pointed at, as crew rows; rows move on while hovered",
           "#dc-fridge .fz:not(:hover) .sv, #dc-fridge .fz:not(:hover) .sv * { animation: none !important; }" in board.FRIDGE_CSS
           and "#dc-fridge .fz:hover .sv { --sv-on: var(--sv-hover, infinite); }" in board.FRIDGE_CSS
@@ -16426,7 +16426,7 @@ def test_efficiency_idle_v391():
           "root.style.setProperty('--sv-on', 'infinite');" in rm._RUNTIME
           and rm._RUNTIME.index("root.style.setProperty('--sv-on', 'infinite');") > rm._RUNTIME.index("var bs = FIF && D.sev"))
     check("the studying-now dot (Sam's pick D): a few pulses, then lit, in Anki and on the site",
-          "dcbreathe 2.4s ease-in-out 7 alternate" in open(os.path.join(REPO, "due_crew", "board.py")).read()
+          "dcbreathe 2.4s ease-in-out 7 alternate" in fakes.board_source()
           and ".chip.live::before { animation: dcbreathe 2.4s ease-in-out 7 alternate; }" in app_css
           and "dcbreathe 2.4s ease-in-out infinite" not in app_css)
     loops = _re.findall(r"[^{}]*\{[^{}]*\binfinite\b[^{}]*\}", board.HW_CSS + board.FRIDGE_CSS if hasattr(board, "FRIDGE_CSS") else board.HW_CSS)
@@ -19314,8 +19314,8 @@ console.log(JSON.stringify({ loneWritten: lone.order.filter((i) => D.blacks[i].w
                        r"|trivial pursuit|apples to apples|quiplash|scattergories|taboo|werewolf|among us|dixit|charades")
     files = [os.path.join(REPO, *f) for f in (("site", "public", "table.js"), ("site", "public", "table.html"), ("site", "public", "table.css"),
                                               ("due_crew", "gamenight.py"), ("due_crew", "gamenight_flow.py"),
-                                              ("due_crew", "board.py"), ("due_crew", "ui", "game_night_tv.py"),
-                                              ("worker", "src", "table.ts"))]
+                                              ("due_crew", "ui", "game_night_tv.py"),
+                                              ("worker", "src", "table.ts"))] + fakes.board_files()
     named = [(os.path.basename(f), m.group(0)) for f in files for m in names.finditer(open(f, encoding="utf-8").read())]
     check("pip party: no other game is named in its games, glue, window or pages (trademarks); each says its kind in our words",
           not named and "kind: \"Fill in the blank\"" in open(files[0], encoding="utf-8").read() and "like:" not in open(files[0], encoding="utf-8").read(), named)
@@ -20077,7 +20077,7 @@ def test_energy_and_security_review_v397():
     from due_crew import app as A, rooms, together, room_model as rm, sev as SV
     from due_crew.app import _state
     from aqt.deckbrowser import DeckBrowser
-    src = open(os.path.join(REPO, "due_crew", "board.py"), encoding="utf-8").read()
+    src = fakes.board_source()
     # -- a resting pointer isn't pointing --
     check("rest: every point-to-play loop reads the page's rest (--sv-hover), none is forever on its own",
           "--sv-on: infinite;" not in src and "--sv-on: infinite;" not in SV.CSS and src.count("--sv-on: var(--sv-hover, infinite);") == 6
