@@ -4651,3 +4651,41 @@ every release that changes how something works.
 - 3.9.7, test_plan_web's "the week a set opened in that still runs today"
   counted its set from this week's Monday, so it held only on a Monday or
   a Tuesday: the set and the days after it count from today now.
+- 3.9.8, the energy review (Sam saw Anki at an Energy Impact of 2,400 in
+  Activity Monitor: "could we be causing this?", then "structurally
+  simplify / make efficient / ensure security / speed", keeping what
+  sparks joy). Four reviews (the pages at rest, the Python glue, security,
+  structure) and measurements in Chromium and in Anki's own engine:
+  - a resting pointer isn't pointing: Pip's "pointing plays it on" (crew
+    rows, squads, the fridge, the dance floor, Pip Party's pictures) was
+    forever while a pointer rested there, measured at 14 to 20% of a core
+    on the floor and 5% on a row. Now each reads `--sv-hover`: forever
+    while the page is awake, one more round at rest (`.dc-rest`). A page
+    rests after `sev.REST_S` (12 s) with no pointer move, key or scroll,
+    or at once when Anki isn't in front (blur, hidden); the next move
+    wakes it and the loops play on (`sev.REST_JS`, once a page, on the
+    Decks screen and in the bars' widgets);
+  - Pip Party: a picked game's picture played forever (its "once" rule
+    lost to the rules after it, as specific or more); it plays once;
+  - the dance floor's half-beat tick (2.5 a second, all day, folded or
+    still) runs only while it dances; resting, one tick a bubble's turn,
+    and no turns while Anki isn't in front; a resting pointer doesn't
+    keep it dancing; the bubbles' fade only where motion is wanted;
+  - the board's stylesheet once a page: a swap had carried all of it
+    (113 KB of a realistic board's 138) and the page parsed it anew on
+    every click. `board.split_css` takes the leading stylesheets off; a
+    page holds them in `#dc-css`, just before the board, sent again only
+    when they change (the glue keeps the key per page, `_SCRIPTS["css"]`);
+    a page that lost them asks (`duecrew:css`, the board's). A swap is
+    30 KB where it was 145; the board is pixel for pixel the same;
+  - Magic search's window goes when it's closed (each close had left it,
+    its page and its deck's index, hidden for the session); a keystroke
+    works each run of words' initials out once (`magic._initials`);
+  - security (no critical or high finding; every board builder fuzzed,
+    nothing got out): the room's cheer once a minute however it's sent
+    (a card's script could learn the widget's key, `rooms.cheer_room`);
+    no redirect followed with the session's token (`api._call`); the
+    cheer show's fragments escaped as their siblings are.
+  Found fine: nothing in the Python runs at rest, no redraw loop, the
+  request budget holds, a card shown costs a third of a millisecond;
+  swaps pile nothing up (100 swaps: the same listeners and timers).

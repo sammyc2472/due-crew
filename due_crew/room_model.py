@@ -1232,7 +1232,8 @@ def widget_js(kind, data=None):
     if data is None:
         return REMOVE_JS.replace("__KIND__", json.dumps(kind))
     # the data goes in last: a name or a tip holding "__KEY__" stays text
-    return (_RUNTIME.replace("__KIND__", json.dumps(kind))
+    # 3.9.7 (the energy review): the bars' Pips rest under a resting pointer too (sev.REST_JS, once a page)
+    return _sev.REST_JS + (_RUNTIME.replace("__KIND__", json.dumps(kind))
             .replace("__SQUARES__", json.dumps(SQUARES))
             .replace("__GUTTER__", str(GUTTER_WIDTH))
             .replace("__SIDE__", chip_side((data or {}).get("side")))

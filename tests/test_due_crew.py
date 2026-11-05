@@ -521,7 +521,7 @@ def test_cheer_notes():
     js = board.flurry_js([fire], "Dre sent cheers", back=("dre", fire),
                          notes=["you're on fire <b>now</b>"])
     check("cheer note: flurry shows the note as text, longer linger",
-          "you're on fire <b>now</b>" in js and "'\u201c' + notes[n]" in js
+          "you're on fire <b>now<\\/b>" in js and "'\u201c' + notes[n]" in js  # 3.9.7: no </ in its script
           and "notes.length ? 2500" in js)
 
 
@@ -8854,7 +8854,7 @@ def test_no_jumps_v380():
     fetching holds it either way; Hide folds at once. _swap draws through it."""
     js = board.swap_js('<div id="due-crew">x</div>')
     init_src = open(os.path.join(REPO, "due_crew", "__init__.py"), encoding="utf-8").read()
-    check("no jumps: _swap redraws through swap_js", "board.swap_js(html_out)" in init_src and "replaceChild" in js)
+    check("no jumps: _swap redraws through swap_js", "board.swap_js(html_out, have)" in init_src and "replaceChild" in js)
     check("no jumps: held while the pointer is on it, released when it leaves, never a folded box",
           "matches(':hover')" in js and "mouseleave" in js and "du-one" in js and "boxSizing = 'border-box'" in js
           and "minHeight = ''" in js and "addEventListener('resize', free)" in js)
@@ -9771,7 +9771,7 @@ def test_board_motion_round_two_glue_v380():
     check("arrive: both draws carry it (3.9.1: after the board's scripts, or their calls)",
           "keep, fridge = _board_js(drawn=True)\n    mw.web.eval(\"window.dcBK=%s;\" % board._json.dumps(board.BOARD_KEY)" in src
           and "                + keep + _arrive_js()" in src
-          and "keep, fridge = _board_js()\n    js = board.swap_js(html_out) + keep + _arrive_js()" in src)
+          and "keep, fridge = _board_js()\n    js = board.swap_js(html_out, have) + keep + _arrive_js()" in src)
     from due_crew import ui as U
     said = []
     saved = (U._clip, getattr(U.mw, "web", None))
@@ -16400,18 +16400,18 @@ def test_efficiency_idle_v391():
     check("idle: the bar's watcher leaves the room's own changes to its tick, as the chip's",
           "room && room.contains(x.target)" in rm.BAR_BALANCE and "n === chip || n === room" in rm.BAR_BALANCE)
     from due_crew import sev as _sev
-    forever = [x for x in _re.findall(r"[^{}\n]*\{[^{}]*\binfinite\b[^{}]*\}", _sev.CSS) if "--sv-on: infinite" not in x]
+    forever = [x for x in _re.findall(r"[^{}\n]*\{[^{}]*\binfinite\b[^{}]*\}", _sev.CSS) if "--sv-on: var(--sv-hover, infinite)" not in x]
     check("Pip at rest (Sam's pick A): every loop of Pip's plays about twelve seconds, then rests; only the break's "
           "breathing and stretch go on (the exercise); pointing at Pip plays it on",
           forever and all("m-breathe" in x or "m-stretch" in x for x in forever)
-          and ".sv:hover, .sv-slot:hover .sv { --sv-on: infinite; }" in _sev.CSS
+          and ".sv:hover, .sv-slot:hover .sv { --sv-on: var(--sv-hover, infinite); }" in _sev.CSS and ".dc-rest { --sv-hover: 1; }" in _sev.CSS
           and _sev.CSS.count("var(--sv-on, ") >= 40, forever)
     src = open(os.path.join(REPO, "due_crew", "board.py")).read()
     check("Pip at rest (Sam's pick C): the fridge's Pips are still until pointed at, as crew rows; rows move on while hovered",
           "#dc-fridge .fz:not(:hover) .sv, #dc-fridge .fz:not(:hover) .sv * { animation: none !important; }" in board.FRIDGE_CSS
-          and "#dc-fridge .fz:hover .sv { --sv-on: infinite; }" in board.FRIDGE_CSS
-          and all(f"#due-crew {k}:hover .dc-rsev .sv {{ --sv-on: infinite; }}" in src for k in ("tr", ".pcrew", ".bg-sq"))
-          and "#due-crew .face:hover .dc-rsev .sv {{ --sv-on: infinite; }}" in src)
+          and "#dc-fridge .fz:hover .sv { --sv-on: var(--sv-hover, infinite); }" in board.FRIDGE_CSS
+          and all(f"#due-crew {k}:hover .dc-rsev .sv {{ --sv-on: var(--sv-hover, infinite); }}" in src for k in ("tr", ".pcrew", ".bg-sq"))
+          and "#due-crew .face:hover .dc-rsev .sv {{ --sv-on: var(--sv-hover, infinite); }}" in src)
     app_css = open(os.path.join(REPO, "site", "public", "app.css")).read()
     check("Pip at rest (the bug hunt): the break screen's Pip goes on all break, whichever of its stretch moves it does",
           "root.style.setProperty('--sv-on', 'infinite');" in rm._RUNTIME
@@ -20108,6 +20108,134 @@ def test_pip_party_tab_shows_first_v396():
             GF.mw.progress = prog
         GF.TAB.clear()
         GF.TAB.update(tab)
+
+
+def test_energy_and_security_review_v397():
+    """3.9.7 (Sam: Anki at an Energy Impact of 2,400: "could we be causing
+    this?", then "structurally simplify / make efficient / ensure security /
+    speed"): a resting pointer isn't pointing; Pip Party's picked picture plays
+    once; the dance floor's tick only while it dances; the board's stylesheet
+    once a page; Magic search's window goes when closed; the room's cheer once
+    a minute; no redirect followed with the session's token."""
+    import shutil
+    import subprocess
+    import due_crew as dc
+    from due_crew import app as A, rooms, together, room_model as rm, sev as SV
+    from due_crew.app import _state
+    from aqt.deckbrowser import DeckBrowser
+    src = open(os.path.join(REPO, "due_crew", "board.py"), encoding="utf-8").read()
+    # -- a resting pointer isn't pointing --
+    check("rest: every point-to-play loop reads the page's rest (--sv-hover), none is forever on its own",
+          "--sv-on: infinite;" not in src and "--sv-on: infinite;" not in SV.CSS and src.count("--sv-on: var(--sv-hover, infinite);") == 6
+          and ".sv:hover, .sv-slot:hover .sv { --sv-on: var(--sv-hover, infinite); }" in SV.CSS and ".dc-rest { --sv-hover: 1; }" in SV.CSS)
+    check("rest: the watcher rides the Decks page's scripts (once a page) and the bars' widgets",
+          SV.REST_JS in board.keep_me_in_view_js(True) and SV.REST_JS not in board.keep_me_in_view_js(False)
+          and rm.widget_js("chip", {"x": 1}).startswith(SV.REST_JS) and "if (window.dcRest ||" in SV.REST_JS)
+    if shutil.which("node"):
+        run = r"""
+        var L = {}, D = {}, T = [], cls = new Set();
+        global.window = { addEventListener: function (e, f) { L[e] = f; } };
+        global.document = { hidden: false, addEventListener: function (e, f) { D[e] = f; },
+          documentElement: { classList: { add: function (c) { cls.add(c); }, remove: function (c) { cls.delete(c); },
+                                           contains: function (c) { return cls.has(c); } } } };
+        global.setTimeout = function (f, ms) { T.push([f, ms]); return T.length; };
+        global.clearTimeout = function () {};
+        eval(process.argv[1]);
+        var out = [cls.has('dc-rest'), T[T.length - 1][1]];
+        T[T.length - 1][0](); out.push(cls.has('dc-rest'));        // REST_S with no move: at rest
+        var now = Date.now; Date.now = function () { return now() + 1000; };
+        L.pointermove(); out.push(cls.has('dc-rest'));             // a move: awake
+        L.blur(); out.push(cls.has('dc-rest'));                    // Anki not in front: at rest at once
+        L.focus(); out.push(cls.has('dc-rest'));
+        console.log(JSON.stringify(out));
+        """
+        r = subprocess.run(["node", "-e", run, SV.REST_JS], capture_output=True, text=True)
+        check("rest, run: awake on load, at rest after REST_S still, awake on a move, at rest on blur, awake on focus",
+              r.stdout.strip() == json.dumps([False, SV.REST_S * 1000, True, False, True, False]).replace(" ", ""), (r.stdout, r.stderr[-300:]))
+    # -- Pip Party: picked, a picture plays once --
+    once = src.index("#due-crew .pp-gm.just .pp-25 i { animation-iteration-count: 1; }")
+    check("Pip Party: a picked game's picture plays once: its rule comes after every rule that plays it, and names each part as they do",
+          all(src.index(x) < once for x in ("animation: pp-think", "animation: pp-bob", "animation: pp-look", "animation: pp-q", "animation: pp-wave"))
+          and all(x in src[once - 400:once + 80] for x in (".pp-gm.just .pp-4 + .pp-p", ".pp-gm.just .pp-3 .pp-p", ".pp-gm.just .pp-odd i")))
+    # -- the dance floor: the half-beat tick only while it dances --
+    dj = board.DANCE_JS
+    check("dance floor: the half-beat tick while it dances, a bubble's turn's while it rests; a resting pointer doesn't keep it dancing; "
+          "no turns while Anki isn't in front",
+          "function pace(ms)" in dj and "pace(TICK * SAY)" in dj and "(S.hover && !resting())" in dj
+          and "!away() && !S.open && !folded(f)" in dj and "setInterval(tick, TICK)" not in dj)
+    # -- the board's stylesheet, once a page --
+    mine = '<div id="due-crew" class="dc-frame"><style>#due-crew { a: 1 }</style>\n<style>#due-crew b { c: 2 }</style><div>board</div></div>'
+    body, css = board.split_css(mine)
+    check("stylesheet: a board's leading stylesheets come off it, in their order",
+          body == '<div id="due-crew" class="dc-frame"><div>board</div></div>' and css == "#due-crew { a: 1 }#due-crew b { c: 2 }"
+          and board.split_css('<div id="due-crew">x</div>') == ('<div id="due-crew">x</div>', ""))
+    key = board.css_key(mine)
+    first, held = board.swap_js(mine), board.swap_js(mine, key)
+    check("stylesheet: a swap sends it to a page without it (into #dc-css, just before the board), and not to one that holds it",
+          json.dumps(css) in first and "CSS = null" in held and json.dumps(css) not in held and json.dumps(body) in held
+          and "el.parentNode.insertBefore(st, el)" in held and "pycmd('duecrew:css|' + window.dcBK)" in held)
+    mw = dc_mw()
+    sent = []
+    saved = (getattr(mw, "web", None), dc._board_html, dc._arrive_js, dc._play_cheers, together.show_luck_card,
+             rooms.refresh_widgets, dict(_state), mw.state, A._decks[0])
+    try:
+        mw.web = types.SimpleNamespace(eval=sent.append)
+        mw.state, A._decks[0] = "deckBrowser", True  # the Decks page is up
+        dc._board_html = lambda c: mine
+        dc._arrive_js = lambda: ""
+        dc._play_cheers = lambda: None
+        together.show_luck_card = lambda: None
+        rooms.refresh_widgets = lambda: None
+        _state.update(entries=[], wrapped_open=False, plans_midday=False, plans_morning=None)
+        A.on_set_content(None, None)
+        dc._on_did_render(None)
+        dc._swap({})
+        dc._swap({})
+        A.on_set_content(None, None)  # another page
+        dc._swap({})
+        dc._on_did_render(None)  # the Decks screen drawn anew
+        dc._swap({})
+        dc._on_js(False, as_board("duecrew:css"), DeckBrowser())  # a page that lost it asks
+        dc._on_js(False, "duecrew:css", type("Previewer", (), {})())  # a card's script can't
+        _drawn, s1, s2, s3, _drawn2, s4, s5 = sent
+    finally:
+        mw.web, dc._board_html, dc._arrive_js, dc._play_cheers, together.show_luck_card, rooms.refresh_widgets = saved[:6]
+        mw.state, A._decks[0] = saved[7], saved[8]
+        _state.clear()
+        _state.update(saved[6])
+    has = lambda js: json.dumps(css) in js  # noqa: E731
+    check("stylesheet, through the glue: the first swap on a page carries it, the next doesn't; another page, or the Decks screen "
+          "drawn anew, gets it again; the page's ask (keyed, the board's) sends it once more",
+          has(s1) and not has(s2) and "CSS = null" in s2 and has(s3) and has(s4) and has(s5) and len(sent) == 7, [has(x) for x in sent])
+    # -- Magic search's window goes when it's closed --
+    mwin = open(os.path.join(REPO, "due_crew", "ui", "magic_window.py"), encoding="utf-8").read()
+    check("Magic search: closed, its window goes (its page and its deck's index with it), as the plan window does",
+          "WA_DeleteOnClose" in mwin and "self.web.cleanup()" in mwin)
+    # -- the room's cheer, once a minute --
+    from due_crew import social
+    cheered, said = [], []
+    saved = (social._send_cheer, social.cheer_allowed, rooms.my_room, rooms.tooltip, dict(rooms._room_cheered), list(_state.get("entries") or []))
+    try:
+        social._send_cheer = lambda uid, name, emoji: cheered.append(uid)
+        social.cheer_allowed = lambda e: e
+        rooms.my_room = lambda: "r1"
+        rooms.tooltip = said.append
+        _state["entries"] = [{"user_id": "me", "you": True, "room": "r1"}, {"user_id": "dre", "name": "Dre", "you": False, "room": "r1"}]
+        saved_members = rm.members
+        rm.members = lambda entries, room: [("dre", "Dre", False), ("me", "Me", True)]
+        rooms._room_cheered["at"] = 0.0
+        rooms.cheer_room()
+        rooms.cheer_room()
+        rm.members = saved_members
+    finally:
+        social._send_cheer, social.cheer_allowed, rooms.my_room, rooms.tooltip = saved[:4]
+        rooms._room_cheered.clear()
+        rooms._room_cheered.update(saved[4])
+        _state["entries"] = saved[5]
+    check("security: the room's cheer once a minute, however it's sent (a card's script could learn the widget's key)",
+          cheered == ["dre"] and said == ["Cheered just now."], (cheered, said))
+    api = open(os.path.join(REPO, "due_crew", "backend", "api.py"), encoding="utf-8").read()
+    check("security: no redirect is followed with the session's token", '"allow_redirects": False' in api)
 
 
 def main():

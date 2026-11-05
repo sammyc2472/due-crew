@@ -977,7 +977,7 @@ def _css(cfg):
     #due-crew .face {{ display: grid; justify-items: center; gap: 1px; font-size: 11px; color: var(--dc-muted); min-width: 44px; }}
     #due-crew .face .e {{ font-size: 20px; line-height: 24px; }}
     #due-crew .face .e .dc-rsev {{ margin: 4px 0 0; }}
-    #due-crew .face:not(:hover) .dc-rsev .sv, #due-crew .face:not(:hover) .dc-rsev .sv * {{ animation: none !important; }} #due-crew .face:hover .dc-rsev .sv {{ --sv-on: infinite; }}
+    #due-crew .face:not(:hover) .dc-rsev .sv, #due-crew .face:not(:hover) .dc-rsev .sv * {{ animation: none !important; }} #due-crew .face:hover .dc-rsev .sv {{ --sv-on: var(--sv-hover, infinite); }}
     #due-crew .ini {{ display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--dc-you-bg); color: var(--dc-accent); font-size: 12px; font-weight: 700; line-height: 1; vertical-align: middle; }}
     #due-crew .ini.sm {{ width: 17px; height: 17px; font-size: 10px; }}
     #due-crew .face.away {{ opacity: .38; }}
@@ -1401,17 +1401,55 @@ def _scroll(html, rows):
     return f'<div class="dc-scroll">{html}</div>' if rows > ROW_CAP else html
 
 
-def swap_js(html_out):
+_LEAD_CSS = _re.compile(r'^(<div id="due-crew"[^>]*>)((?:\s*<style>.*?</style>)+)', _re.S)
+
+
+def split_css(html_out):
+    """3.9.7 (the energy review): (the board without its leading stylesheets,
+    their text). They're most of a draw (113 KB of a realistic board's 138),
+    and the same from one swap to the next."""
+    m = _LEAD_CSS.match(html_out)
+    if not m:
+        return html_out, ""
+    return m.group(1) + html_out[m.end():], "".join(_re.findall(r"<style>(.*?)</style>", m.group(2), _re.S))
+
+
+def css_key(html_out):
+    """The board's stylesheet, as a short key: what a page already holds."""
+    import hashlib
+    css = split_css(html_out)[1]
+    return hashlib.sha1(css.encode("utf-8")).hexdigest()[:16] if css else ""
+
+
+def swap_js(html_out, have_css=None):
     """3.8.0: the board redrawn in place, without the jumps. While the
     pointer is on Due Crew (a tab clicked, a row ticked), neither part (the
     You box, the board) gets shorter: each keeps its height until the
     pointer leaves (or the window resizes), then lets go at once. A part
     still fetching (.dc-wait) keeps
-    its height either way; a box folded by Hide folds at once."""
+    its height either way; a box folded by Hide folds at once.
+    3.9.7 (the energy review): the board's leading stylesheets go once into
+    a page's #dc-css, just before the board, and again only when they
+    change (have_css: the key of what this page holds, the glue's to keep);
+    a swap carries the board alone. A page without them asks (css)."""
+    body, css = split_css(html_out)
+    key = css_key(html_out)
+    send = css if css and key != have_css else None
     return """
     (function() {
         var el = document.getElementById('due-crew');
         if (!el) { return; }
+        var H = %s, CSS = %s, st = document.getElementById('dc-css');
+        if (H) {
+            if (CSS !== null) {
+                if (!st) { st = document.createElement('style'); st.id = 'dc-css'; }
+                if (st.getAttribute('data-h') !== H) { st.textContent = CSS; st.setAttribute('data-h', H); }
+            } else if (!st || st.getAttribute('data-h') !== H) {
+                if (typeof pycmd !== 'undefined') { pycmd('duecrew:css|' + window.dcBK); }  // lost it: the glue sends it again
+                return;
+            }
+            if (st.nextSibling !== el) { el.parentNode.insertBefore(st, el); }
+        }
         var parts = [':scope > .du', '.dc-sheet'], was = {};
         var on = el.matches(':hover');
         parts.forEach(function (s) { var p = el.querySelector(s); if (p) { was[s] = p.getBoundingClientRect().height; } });
@@ -1463,7 +1501,7 @@ def swap_js(html_out):
             window.addEventListener('blur', free);
         }
     })();
-    """ % _json.dumps(html_out)
+    """ % (_json.dumps(key), _json.dumps(send).replace("</", "<\\/") if send is not None else "null", _json.dumps(body))
 
 
 # 3.8.0, pick 28: Find a setting. The box's index (settings_index) is in its
@@ -1556,7 +1594,7 @@ def keep_me_in_view_js(scripts=True):
         var want = me.offsetTop - (box.clientHeight - me.offsetHeight) / 2;
         if (want > 0) { box.scrollTop = want; }
     })();
-    """ + (DUE_JS + MOTION_JS + FIND_JS + VEIL_WATCH_JS + PARTY_JS if scripts else FIND_AFTER) + MOTION_DRAWN
+    """ + (DUE_JS + MOTION_JS + FIND_JS + VEIL_WATCH_JS + PARTY_JS + _sev.REST_JS if scripts else FIND_AFTER) + MOTION_DRAWN
 
 
 # 3.9.1 (Sam: "when cheering, the full background doesn't grey out"): a
@@ -5000,11 +5038,11 @@ CLOSET_CSS = """
        and above it for a hat, so the row is a touch taller than an emoji's */
     #due-crew .dc-rsev { display: inline-block; vertical-align: middle; margin: -3px 8px -6px 2px; line-height: 0; }
     #due-crew a.dc-rsev, #due-crew a.dc-rsevl { text-decoration: none; border: 0; }
-    #due-crew tr:not(:hover) .dc-rsev .sv, #due-crew tr:not(:hover) .dc-rsev .sv * { animation: none !important; } #due-crew tr:hover .dc-rsev .sv { --sv-on: infinite; }
+    #due-crew tr:not(:hover) .dc-rsev .sv, #due-crew tr:not(:hover) .dc-rsev .sv * { animation: none !important; } #due-crew tr:hover .dc-rsev .sv { --sv-on: var(--sv-hover, infinite); }
     /* 3.8.22: a plan card's squad line: who showed up, side by side, still until it's pointed at */
     #due-crew .pcrew .pips { display: inline-flex; gap: 4px; vertical-align: middle; margin: 8px 5px 0 0; }  /* a hat clear of the line above */
     #due-crew .pcrew .pips .dc-rsev { margin: 0; }
-    #due-crew .pcrew:not(:hover) .dc-rsev .sv, #due-crew .pcrew:not(:hover) .dc-rsev .sv * { animation: none !important; } #due-crew .pcrew:hover .dc-rsev .sv { --sv-on: infinite; }
+    #due-crew .pcrew:not(:hover) .dc-rsev .sv, #due-crew .pcrew:not(:hover) .dc-rsev .sv * { animation: none !important; } #due-crew .pcrew:hover .dc-rsev .sv { --sv-on: var(--sv-hover, infinite); }
     @media (max-width: 380px) { #due-crew .dc-rsev { display: none; } }
 """
 
@@ -5558,7 +5596,7 @@ BINGO_PIP_CSS = """
     #due-crew .bg-sq.stamped { padding-bottom: 34px; }
     #due-crew .bg-sq .st.sp { width: auto; height: auto; background: none; box-shadow: none; border-radius: 0; bottom: 4px; }
     #due-crew .bg-sq .st.sp .dc-rsev { display: inline-block; line-height: 0; margin: 0; }
-    #due-crew .bg-sq:not(:hover) .dc-rsev .sv, #due-crew .bg-sq:not(:hover) .dc-rsev .sv * { animation: none !important; } #due-crew .bg-sq:hover .dc-rsev .sv { --sv-on: infinite; }
+    #due-crew .bg-sq:not(:hover) .dc-rsev .sv, #due-crew .bg-sq:not(:hover) .dc-rsev .sv * { animation: none !important; } #due-crew .bg-sq:hover .dc-rsev .sv { --sv-on: var(--sv-hover, infinite); }
 """
 
 
@@ -6333,7 +6371,7 @@ FRIDGE_CSS = """
     #dc-fridge .fz.fgone::before { display: none; }
     #dc-fridge .fgone a { color: var(--fz-acc); font-weight: 700; text-decoration: none; }
     @keyframes dcfgone { 0%%, 85%% { opacity: 1; } 100%% { opacity: 0; visibility: hidden; } }
-    #dc-fridge .fz:hover .sv { --sv-on: infinite; }
+    #dc-fridge .fz:hover .sv { --sv-on: var(--sv-hover, infinite); }
 """ % (FRIDGE_W, FRIDGE_UNDO)
 
 
@@ -6602,8 +6640,9 @@ DANCE_CSS = """
   overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
 /* one bubble at a time (dance_js passes it along), and the one pointed at; it fades, never jumps */
 #dc-dance .bub { position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%); opacity: 0; pointer-events: none;
-  transition: opacity .45s ease; background: var(--dc-bg); color: var(--dc-ink); border: 1px solid var(--dc-line); border-radius: 11px;
+  background: var(--dc-bg); color: var(--dc-ink); border: 1px solid var(--dc-line); border-radius: 11px;
   padding: 3px 9px; box-shadow: var(--df-sh); z-index: 3; }
+@media (prefers-reduced-motion: no-preference) { #dc-dance .bub { transition: opacity .45s ease; } }
 #dc-dance .bub > span { display: block; max-width: 136px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: 11px; font-weight: 600; line-height: 1.35; }
 #dc-dance .bub::after { content: ""; position: absolute; left: 50%; bottom: -5px; width: 8px; height: 8px; margin-left: -4px;
@@ -6757,7 +6796,7 @@ DANCE_CSS = """
   /* a song that's new to me: its dancer hops onto the floor from the booth, once */
   #dc-dance .dz.fresh .hp { animation: df-hop .9s cubic-bezier(.2, .8, .3, 1.2) .4s both; }
   @keyframes df-hop { from { transform: translate(48px, -26px); opacity: 0; } 55% { transform: translate(0, -12px); opacity: 1; } to { transform: none; } }
-  #dc-dance:hover .sv { --sv-on: infinite; }
+  #dc-dance:hover .sv { --sv-on: var(--sv-hover, infinite); }
 }
 """.replace("__W__", str(DANCE_W)).replace("__H__", str(DANCE_H)).replace("__NW__", str(DANCE_NW)).replace(
     "__NH__", str(DANCE_NH)).replace("__NARROW__", str(DANCE_NARROW - 1)).replace("__AREA__", str(DANCE_AREA)).replace(
@@ -7046,7 +7085,7 @@ window.dcDance = window.dcDance || (function () {
         (document.head || document.body).appendChild(css);
     }
     var ART = /^https:\/\/([a-z0-9-]+\.)*mzstatic\.com\/[^\s"'<>\\]*$/i;
-    var S = { open: null, was: null, say: 0, restAt: 0, beat: 0, n: 0, hover: false, timer: null, sheet: null, q: '', qt: null };
+    var S = { open: null, was: null, say: 0, restAt: 0, beat: 0, n: 0, hover: false, timer: null, every: 0, saidAt: 0, sheet: null, q: '', qt: null };
     function floor() { return document.getElementById('dc-dance'); }
     function reduce() { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
     function still(f) { return reduce() || f.classList.contains('dm-still'); }
@@ -7069,12 +7108,16 @@ window.dcDance = window.dcDance || (function () {
         ds[S.say].classList.add('say');
     }
     function beat(f, b) { f.classList.remove('b1', 'b2', 'b3'); if (b > 0) { f.classList.add('b' + b); } }
-    function wake(ms) { S.restAt = Math.max(S.restAt, Date.now() + (ms || REST)); }
+    function wake(ms) { S.restAt = Math.max(S.restAt, Date.now() + (ms || REST)); pace(TICK); }
+    // 3.9.7 (the energy review): the half-beat tick only while it dances; resting, one tick a bubble's turn
+    function pace(ms) { if (S.every === ms && S.timer) { return; } clearInterval(S.timer); S.every = ms; S.timer = setInterval(tick, ms); }
+    function resting() { return !!(window.dcRest && window.dcRest.resting()); }  // no move a while, or Anki not in front (sev.REST_JS)
+    function away() { return document.hidden || (document.hasFocus && !document.hasFocus()); }
     function tick() {
         var f = floor();
         if (!f) { clearInterval(S.timer); S.timer = null; return; }
         S.n++;
-        var on = !folded(f) && !still(f) && (S.hover || Date.now() < S.restAt);
+        var on = !folded(f) && !still(f) && ((S.hover && !resting()) || Date.now() < S.restAt);
         if (on) {
             if (!f.classList.contains('go')) { f.classList.add('go'); each(f, '.dz, .dj', function (d) { d.classList.add('go'); }); }
             if (f.classList.contains('dm-lively') && S.n % 2 === 0) { S.beat = (S.beat + 1) % 4; beat(f, S.beat); }
@@ -7084,7 +7127,9 @@ window.dcDance = window.dcDance || (function () {
             // Gentle's sway goes back to still on its own: each Pip finishes the sway it's in (animationiteration)
             if (!f.classList.contains('dm-gentle') || still(f) || folded(f)) { each(f, '.go', function (d) { d.classList.remove('go'); }); }
         }
-        if (S.n % SAY === 0 && !document.hidden && !S.open && !folded(f)) { say(f, S.say + 1); }
+        var now = Date.now();
+        if (now - S.saidAt >= TICK * SAY - TICK / 2 && !away() && !S.open && !folded(f)) { S.saidAt = now; say(f, S.say + 1); }
+        if (!on && !f.classList.contains('go') && !f.querySelector('.go')) { pace(TICK * SAY); }
     }
     function folded(f) { return f.classList.contains('fold'); }
     function room(on) {  // the room after the board: the floor's, or the chip's while it's folded
@@ -7120,7 +7165,9 @@ window.dcDance = window.dcDance || (function () {
             var d = e.target.closest('.dz, .dj');
             if (d) { d.classList.remove('go'); }
         });
-        if (!S.timer) { S.timer = setInterval(tick, TICK); }
+        S.saidAt = Date.now();
+        f.addEventListener('pointermove', function () { if (S.every !== TICK) { wake(); } });
+        pace(TICK);
         tick();
     }
     // the floor open only where it fits beside the board; where it would cover the board, its chip
@@ -7991,9 +8038,10 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
     the banner, still, on its paper."""
     # 2.10: about one flake in three is the season's
     emoji_list = _json.dumps(list(emojis) * 2 + list(season or []) if season else list(emojis))
-    banner = _json.dumps(banner_text)
-    notes_json = _json.dumps([str(n) for n in (notes or [])][:3])
-    back_cmd = _json.dumps(f"duecrew:cheerback:{back[0]}:{back[1]}" if back else None)
+    # 3.9.7 (the security review): every fragment as its siblings, no </ to end a script it might one day sit in
+    banner = _json.dumps(banner_text).replace("</", "<\\/")
+    notes_json = _json.dumps([str(n) for n in (notes or [])][:3]).replace("</", "<\\/")
+    back_cmd = _json.dumps(f"duecrew:cheerback:{back[0]}:{back[1]}" if back else None).replace("</", "<\\/")
     pips_json = _json.dumps([{"svg": p["svg"], "a": p["a"], "emoji": p.get("emoji") or ""} for p in (pips or [])][:3]).replace("</", "<\\/")
     show_json = _json.dumps(show if show in _shows.SHOWS and pips else None)
     senders_json = _json.dumps([dict(p.get("poses") or {}, name=p.get("name") or "", note=p.get("note") or "", emoji=p.get("emoji") or "\U0001F389", a=p["a"])
@@ -8939,15 +8987,17 @@ DUE_CSS = """
     #due-crew .pp-25 i.g { background: #3a9a40; } #due-crew .pp-25 i.p { background: #7b5cd6; } #due-crew .pp-25 i.x { background: #1f3f73; }
     @media (prefers-reduced-motion: no-preference) {
       /* round three (Sam: "add some animation"): pointed at, a game's picture plays; picked, it plays once */
-      #due-crew .pp-gm:not(.thin):hover .pp-sh, #due-crew .pp-gm.just .pp-sh { animation: pp-pop 1.6s ease-in-out var(--k, 0s) infinite; }
-      #due-crew .pp-gm.just .pp-sh, #due-crew .pp-gm.just .pp-p, #due-crew .pp-gm.just .pp-odd, #due-crew .pp-gm.just .pp-odd i,
-      #due-crew .pp-gm.just .pp-25 i { animation-iteration-count: 1; }
+      #due-crew .pp-gm:not(.thin):hover .pp-sh, #due-crew .pp-gm.just .pp-sh { animation: pp-pop 1.6s ease-in-out var(--k, 0s) var(--sv-hover, infinite); }
       #due-crew .pp-sh.s1 { --k: .18s; } #due-crew .pp-sh.s2 { --k: .36s; } #due-crew .pp-sh.s3 { --k: .54s; } #due-crew .pp-3 .pp-p.p2 { --k: .35s; }
-      #due-crew .pp-gm:not(.thin):hover .pp-4 + .pp-p, #due-crew .pp-gm.just .pp-4 + .pp-p { animation: pp-think 2.4s ease-in-out infinite; }
-      #due-crew .pp-gm:not(.thin):hover .pp-3 .pp-p, #due-crew .pp-gm.just .pp-3 .pp-p { animation: pp-bob 1.1s ease-in-out var(--k, 0s) infinite; }
-      #due-crew .pp-gm:not(.thin):hover .pp-odd, #due-crew .pp-gm.just .pp-odd { animation: pp-look 2.2s ease-in-out infinite; }
-      #due-crew .pp-gm:not(.thin):hover .pp-odd i, #due-crew .pp-gm.just .pp-odd i { animation: pp-q 1.1s ease-in-out infinite; }
-      #due-crew .pp-gm:not(.thin):hover .pp-25 i, #due-crew .pp-gm.just .pp-25 i { animation: pp-wave 1.6s ease-in-out calc(var(--d) * 70ms) infinite; }
+      #due-crew .pp-gm:not(.thin):hover .pp-4 + .pp-p, #due-crew .pp-gm.just .pp-4 + .pp-p { animation: pp-think 2.4s ease-in-out var(--sv-hover, infinite); }
+      #due-crew .pp-gm:not(.thin):hover .pp-3 .pp-p, #due-crew .pp-gm.just .pp-3 .pp-p { animation: pp-bob 1.1s ease-in-out var(--k, 0s) var(--sv-hover, infinite); }
+      #due-crew .pp-gm:not(.thin):hover .pp-odd, #due-crew .pp-gm.just .pp-odd { animation: pp-look 2.2s ease-in-out var(--sv-hover, infinite); }
+      #due-crew .pp-gm:not(.thin):hover .pp-odd i, #due-crew .pp-gm.just .pp-odd i { animation: pp-q 1.1s ease-in-out var(--sv-hover, infinite); }
+      #due-crew .pp-gm:not(.thin):hover .pp-25 i, #due-crew .pp-gm.just .pp-25 i { animation: pp-wave 1.6s ease-in-out calc(var(--d) * 70ms) var(--sv-hover, infinite); }
+      /* 3.9.7 (the energy review): picked, a picture plays once. This comes after the rules above and
+         names each part as they do, or theirs (as specific, or more) kept it playing for good */
+      #due-crew .pp-gm.just .pp-sh, #due-crew .pp-gm.just .pp-4 + .pp-p, #due-crew .pp-gm.just .pp-3 .pp-p, #due-crew .pp-gm.just .pp-odd,
+      #due-crew .pp-gm.just .pp-odd i, #due-crew .pp-gm.just .pp-25 i { animation-iteration-count: 1; }
       #due-crew .pp-gm.just .pp-art { animation: pp-chosen .45s cubic-bezier(.34, 1.56, .64, 1) 1; }
       @keyframes pp-pop { 0%, 55%, 100% { transform: none; } 18% { transform: translateY(-3px) scale(1.18); } }
       @keyframes pp-think { 0%, 100% { transform: none; } 30% { transform: rotate(-7deg); } 65% { transform: rotate(5deg); } }

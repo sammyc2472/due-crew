@@ -174,8 +174,9 @@ def test_motion_and_fold():
           and 'class="dm-still' in board.dance_html(dict(view(), motion="still"), {}))
     css = board.DANCE_CSS
     calm = css.split("@media (prefers-reduced-motion: no-preference)")[0]
-    check("every move is under Reduce motion's no-preference; the bubbles fade, never move",
-          "animation:" not in calm.replace("animation: none", "") and "transition: opacity .45s ease" in calm)
+    check("every move is under Reduce motion's no-preference; the bubbles fade, never move (3.9.7: the fade too)",
+          "animation:" not in calm.replace("animation: none", "") and "transition:" not in calm
+          and "@media (prefers-reduced-motion: no-preference) { #dc-dance .bub { transition: opacity .45s ease; } }" in css)
     check("gentle: a slow sway, from still and back (no pose swaps, no new drawing)",
           "@keyframes df-sway { 0%, 100% { transform: none; }" in css and "2.8s" in css)
     check("the Pips never take a click: the button around them does", re.search(r"#dc-dance \.pp \{[^}]*pointer-events: none", css))
@@ -185,7 +186,7 @@ def test_motion_and_fold():
           and "#dc-dance.fold .df-sc, #dc-dance.fold .df-cards { display: none; }" in css)
     js = board.DANCE_JS
     check("folded: no dancing, no bubbles passed along; the fold at once on the page, then dancefold:1 / 0",
-          "var on = !folded(f) && !still(f)" in js and "!S.open && !folded(f)) { say(" in js
+          "var on = !folded(f) && !still(f)" in js and "!away() && !S.open && !folded(f)) { S.saidAt = now; say(" in js
           and "send('dancefold:' + (on ? 1 : 0));" in js and "f.classList.toggle('fold', on);" in js)
     check("narrow: the booth, one dancer, a count", f"@media (max-width: {board.DANCE_NARROW - 1}px)" in css
           and "#dc-dance .dz:not(.d0), #dc-dance .df-more { display: none; }" in css)

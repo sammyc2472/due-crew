@@ -670,7 +670,7 @@ def _arrive_js():
 # fridge's), and each loads once, so a swap on that page sends only what
 # they do after a draw (it sent 77 KB of them at every click); a page drawn
 # anew gets them all.
-_SCRIPTS = {"page": None}
+_SCRIPTS = {"page": None, "css": None}  # 3.9.7: and the board stylesheet that page holds (board.swap_js)
 
 
 def _board_js(drawn=False):
@@ -679,6 +679,8 @@ def _board_js(drawn=False):
     fridge_js brings the dance floor's (dance_js) with it."""
     whole = drawn or _SCRIPTS["page"] != app.pages[0]
     _SCRIPTS["page"] = app.pages[0]
+    if whole:
+        _SCRIPTS["css"] = None  # 3.9.7: a page drawn anew holds no board stylesheet of its own (#dc-css) yet
     return board.keep_me_in_view_js(scripts=whole), board.fridge_js(scripts=whole)
 
 
@@ -928,6 +930,9 @@ def _on_js(handled, message, context):
         gamenight_flow.on_message(parts)  # 3.9.5's last round: You › Pip Party
     elif cmd == "magic":
         open_magic()  # 3.9.7: Magic search, from the You box's head (and Find a setting)
+    elif cmd == "css":
+        _SCRIPTS["css"] = None  # 3.9.7: the page hasn't the board's stylesheet (board.swap_js): it goes with the next swap
+        _swap(cfg())
     elif cmd == "magichow":
         magic_flow.howto_said(parts)  # 3.9.7, round 2: its how-to's buttons, on the Decks screen once
     elif cmd in ("songsearch", "songuse", "songclear", "songlisten", "songapp", "songapple",
@@ -1136,8 +1141,10 @@ def _swap(c, focus=None):
         _rerender()
         return
     html_out = _board_html(c)
+    have = _SCRIPTS.get("css") if _SCRIPTS["page"] == app.pages[0] else None  # 3.9.7: the stylesheet this page holds
     keep, fridge = _board_js()
-    js = board.swap_js(html_out) + keep + _arrive_js() + fridge  # 3.8.0: no jumps under the pointer
+    js = board.swap_js(html_out, have) + keep + _arrive_js() + fridge  # 3.8.0: no jumps under the pointer
+    _SCRIPTS["css"] = board.css_key(html_out)
     if _state.get("wrapped_open"):
         js += board.wrapped_js()  # 3.9.0: Wrapped's player, on the card just drawn
     if focus:

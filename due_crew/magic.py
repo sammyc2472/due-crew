@@ -21,6 +21,7 @@ How topic words land (the mock's rules, Sam's picks):
   "not" leave one out; words no tag has search the cards' text."""
 
 import datetime
+import functools
 import re
 
 SEP = "::"
@@ -148,6 +149,12 @@ def pretty(part):
 
 def initials(ws):
     """A run of words' initials, the small ones skipped ("mice and men": mm)."""
+    return _initials(tuple(ws))
+
+
+@functools.lru_cache(maxsize=1 << 16)
+def _initials(ws):
+    # 3.9.7 (the energy review): asked for every tag's run of words at every keystroke; worked out once each
     return "".join(x[0] for x in ws if x not in _SMALL and not _ROMAN.match(x))
 
 

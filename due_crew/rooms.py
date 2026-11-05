@@ -157,8 +157,19 @@ def dismiss(key):
     app.swap(cfg())
 
 
+ROOM_CHEER_GAP = 60  # s: 3.9.7 (the security review): the room's cheer at most once a minute
+_room_cheered = {"at": 0.0}
+
+
 def cheer_room():
+    """🎉 to everyone in my room. It comes from the review screen's widget,
+    where a card's own script could learn the widget's key and send it too
+    (room_model.trusted): so once a minute at most, whatever sends it."""
     from .social import _send_cheer, cheer_allowed
+    now = time.time()
+    if now - _room_cheered["at"] < ROOM_CHEER_GAP:
+        tooltip("Cheered just now.")
+        return
     room = my_room()
     if room:
         crew = [(u, n) for u, n, you in room_model.members(_state["entries"], room) if not you]
@@ -168,6 +179,7 @@ def cheer_room():
     if not crew or not emoji:
         tooltip("Nobody else in the room yet.")
         return
+    _room_cheered["at"] = now
     for uid, name in crew:
         _send_cheer(uid, name, emoji)
 

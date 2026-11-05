@@ -201,7 +201,9 @@ class ApiClient:
         headers = {}
         if auth:
             headers["Authorization"] = f"Bearer {self.session.get('token', '')}"
-        kw = {"headers": headers, "timeout": TIMEOUT}
+        # 3.9.7 (the security review): a redirect isn't followed; the API never sends one, and the
+        # session's token goes to the API's own address alone
+        kw = {"headers": headers, "timeout": TIMEOUT, "allow_redirects": False}
         if body is not None:
             kw["json"] = body
         try:
