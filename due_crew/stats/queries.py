@@ -6,6 +6,9 @@ streaks."""
 import datetime
 
 
+_FRESH = {"key": None, "days": 0, "rows": {}}  # new_cards_by_day's widest window lately read
+
+
 class StatsQueries:
     PER_CARD_DAYS = 31  # 3.9.1: new_cards_by_day over more days than this looks each card up once
 
@@ -84,6 +87,21 @@ class StatsQueries:
                 for ago, n, t, c, g in rows or []}
 
     def new_cards_by_day(self, days, skip=0):
+        """3.9.8 (the energy review): a sync asked this three times (today, the
+        week, my log's days), each its own pass over the log. A day's count
+        doesn't depend on the window around it, so the widest window lately
+        read (a week at least) answers the narrower ones while the day and
+        the log's newest answer are the same."""
+        if skip or days > self.PER_CARD_DAYS:
+            return self._new_cards_by_day(days, skip)
+        key = (id(self.col), self._cutoff_s(), self.col.db.scalar("SELECT max(id) FROM revlog"))
+        if _FRESH["key"] != key or _FRESH["days"] < days:
+            want = max(days, 8)
+            _FRESH.update(key=key, days=want, rows=self._new_cards_by_day(want))
+        labels = {self.day_label(i) for i in range(days)}
+        return {k: v for k, v in _FRESH["rows"].items() if k in labels}
+
+    def _new_cards_by_day(self, days, skip=0):
         """{day_label: n} for the last `days` days: cards whose first answer
         ever fell on that day. Each card counts once, on its first day; a
         card seen before is a review, even relearned. A short window has

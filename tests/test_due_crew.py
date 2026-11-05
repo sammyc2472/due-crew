@@ -7616,17 +7616,23 @@ def test_new_cards_first_answer_v391():
     check("new cards: relearned, forgotten and learned again, or only rescheduled, it isn't new again",
           q.new_cards_by_day(120) == {q.day_label(6): 1, q.day_label(1): 1, q.day_label(0): 1}
           and q.day_label(125) not in q.new_cards_by_day(366, 120) and q.day_label(126) not in q.new_cards_by_day(366, 120))
+    from due_crew.stats import queries as SQ
+    SQ._FRESH["key"] = None
     ran = []
     real_all = col.db.all
     col.db.all = lambda sql, *a: ran.append((sql, a)) or real_all(sql, *a)
     q.new_cards_by_day(366, 120)
-    q.new_cards_by_day(8)
+    week = q.new_cards_by_day(8)
+    today, again = q.new_cards_by_day(1), q.new_cards_by_day(8)
     col.db.all = real_all
     plan = " ".join(str(r[-1]) for r in real_all("EXPLAIN QUERY PLAN " + ran[0][0], *ran[0][1]))
     check("new cards: a year looks each card's first answer up once (its select isn't flattened into the count's); "
           "a week, each answer for an earlier one, as in 2.13",
           len(ran) == 2 and plan.count("CORRELATED SCALAR SUBQUERY") == 1 and "LIMIT -1" in ran[0][0]
           and ran[1][0] == NEW_CARDS_213, plan)
+    check("new cards (3.9.8): a sync's today and week again are the week's read, no pass of their own; today is the week's today",
+          len(ran) == 2 and again == week and today == {k: v for k, v in week.items() if k == q.day_label(0)}, (len(ran), today))
+    SQ._FRESH["key"] = None
 
 
 def test_offline_error_names_no_code():
@@ -10907,11 +10913,6 @@ def test_builder_tags_keep_up_v381():
             dre.put_tree = real_put
             F.send_trees()
             check("trees: so the next refresh sends it", puts() == 4 and g.state()["trees_sent"]["step 1"]["day"] == _day(3))
-            col.db.conn.execute("UPDATE notes SET tags = ' Step1::Cardio::Arrhythmia Step1::Cardio::Torsades ' WHERE id = 3")
-            F.note_tree("Step 1", *real_rows(P.DeckIndex(col, 10)))
-            g.today["d"] = _day(4)
-            F.send_trees()
-            check("trees: what Make a plan from a deck sent counts as sent", puts() == 4)
         finally:
             P.tree_rows, dre.put_tree = real_rows, real_put
         maya = new_client(store, "maya", "Maya")
@@ -12429,7 +12430,7 @@ def test_plan_tags_glue_v380():
         mid = src[src.index("def midday"):src.index("def hold_new")]
         check("tags: an update later in the day tags at once (on Decks), before what it opens",
               mid.index('if getattr(mw, "state", "") != "deckBrowser"') < mid.index("apply_tags(plan_list") < mid.index("dry = run("))
-        fol = src[src.index("def on_followed"):src.index("def open_make")]
+        fol = src[src.index("def on_followed"):src.index("def open_site")]
         check("tags: a new follow tags before its first dates open", fol.index("apply_tags([fresh])") < fol.index("res = _open_now([fresh]"))
         check("tags: a plan gone takes its tags off (and waits for Decks to)",
               '_drop_plan_tags(was, "a plan you followed")' in morning and '.get("tags") for pid in gone)' in morning)
@@ -20236,6 +20237,54 @@ def test_energy_and_security_review_v397():
           cheered == ["dre"] and said == ["Cheered just now."], (cheered, said))
     api = open(os.path.join(REPO, "due_crew", "backend", "api.py"), encoding="utf-8").read()
     check("security: no redirect is followed with the session's token", '"allow_redirects": False' in api)
+    # -- the bars: what a page keeps goes again only when that page is drawn anew --
+    class Sig:
+        def __init__(self):
+            self.fns = []
+
+        def connect(self, f):
+            self.fns.append(f)
+
+        def fire(self):
+            for f in self.fns:
+                f()
+
+    class Web:
+        def __init__(self):
+            self.loadStarted, self.sent = Sig(), []
+
+        def eval(self, js):
+            self.sent.append(js)
+
+    top = Web()
+    rooms._draw(top, ["the chip"])
+    rooms._draw(top, ["the chip"])
+    A.on_set_content(None, None)  # another view's page: the reviewer's, the Decks screen's
+    rooms._draw(top, ["the chip"])
+    sent_before_reload = len(top.sent)
+    top.loadStarted.fire()  # the bar's own page anew
+    rooms._draw(top, ["the chip"])
+    plain = types.SimpleNamespace(sent=[])
+    plain.eval = plain.sent.append
+    rooms._draw(plain, ["x"])
+    A.on_set_content(None, None)
+    rooms._draw(plain, ["x"])
+    init = open(os.path.join(REPO, "due_crew", "__init__.py"), encoding="utf-8").read()
+    keep = {k: _state.get(k) for k in ("settings_tab", "closet_open", "wrapped_open")}
+    try:
+        _state.update(settings_tab=False, closet_open=False, wrapped_open=False)
+        off, on = dc._board_off({"show_leaderboard": False}), dc._board_off({})
+        _state["settings_tab"] = True
+        off_in_settings = dc._board_off({"show_leaderboard": False})
+    finally:
+        _state.update(keep)
+    check("board off: a refresh doesn't build Anki's Decks screen again (nothing of ours on it); its cheers play over it; "
+          "Settings, the closet or Wrapped up are ours, so they're drawn",
+          off and not on and not off_in_settings
+          and 'elif _board_off(c) and mw.state == "deckBrowser":\n' in init and init.index("elif _board_off(c)") < init.index("_rerender()         # deck_browser_did_render"))
+    check("bars: a widget goes once a page: another view's new page doesn't send the top bar's again (it sent 71 KB and "
+          "restarted its Pip at every screen change); its own page anew does; a view that can't say counts every page, as before",
+          sent_before_reload == 1 and len(top.sent) == 2 and len(plain.sent) == 2, (sent_before_reload, len(top.sent), len(plain.sent)))
 
 
 def main():

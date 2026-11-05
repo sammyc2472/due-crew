@@ -434,9 +434,21 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
         _swap(cfg())        # page not rebuilt: safe to play cheers directly
         _play_cheers()
         _joy_show()  # 3.9.6: after the cheers that came with it (it waits for their show)
+    elif _board_off(c) and mw.state == "deckBrowser":
+        # 3.9.8 (the energy review): the board's off, so a refresh has nothing of ours to draw:
+        # Anki's Decks screen isn't built again for it (it was, every refresh); its cheers play over it
+        _play_cheers()
+        _joy_show()
     else:
         _rerender()         # deck_browser_did_render plays queued cheers
     rooms.refresh_widgets()  # 2.12: who's in the room, as of this fetch
+
+
+def _board_off(c):
+    """The board turned off in Settings, and none of the screens that show in
+    its place open (Settings, the closet, Wrapped)."""
+    return (not c.get("show_leaderboard", True) and not _state.get("settings_tab")
+            and not _state.get("closet_open") and not _state.get("wrapped_open"))
 
 
 def _closet(do):

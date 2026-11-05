@@ -68,10 +68,6 @@ class _WheelToPage(QObject):
         return False
 
 
-def _nth(n):
-    return f"{n}{'th' if 10 <= n % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')}"
-
-
 def _link(text, fn, bad=False):
     return tool(text, fn, bad=bad)  # an action is a button (the window's one kind); links are only ways to a date
 

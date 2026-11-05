@@ -1199,7 +1199,3 @@ def send_line(changes):
     if changes and all(c["op"].get("by") == "ai" for c in changes) and len(whys) == 1 and "" not in whys:
         return whys.pop()[:WHY_MAX]
     return why_line([x for c in changes for x in c["entries"]])
-
-
-def copy_ops(ops):
-    return [copy.deepcopy(o) for o in ops]

@@ -492,7 +492,6 @@ def main(out):
         join), Resume's catch-up, and Add to a plan from the browser. Names
         come from the author: one carries markup, which must stay text."""
         from due_crew import plans as P
-        from due_crew.ui.plan_dialog import MakePlanDialog
         from due_crew.ui.follow_dialog import CatchUpDialog, FollowDialog, SwapDialog
         from due_crew.ui.add_cards_dialog import AddCardsDialog
         conn = aqt.mw.col.db.conn
@@ -501,36 +500,7 @@ def main(out):
                 5: "Step1_v11::Renal::Physiology", 6: "Step1_v11::Renal::Pharm"}
         for nid, tag in tags.items():
             conn.execute("UPDATE notes SET tags = ? WHERE id = ?", (f" {tag} ", nid))
-        opened = []
 
-        dlg = MakePlanDialog(None, CLIENT, aqt.mw.col, "https://duecrew.com", open_link=opened.append)
-        shoot(dlg, os.path.join(out, "plan-make.png"))
-        dlg = MakePlanDialog(None, CLIENT, aqt.mw.col, "https://duecrew.com", open_link=opened.append)
-        dlg.show()
-        dlg._open()
-        settle()
-        if not opened or "#" not in opened[0] or "/plans/new?deck=Big%20Step%201" not in opened[0]:
-            raise RuntimeError(f"make: opened {opened!r} {dlg.status.text()!r} {STORE.log[-3:]}")
-        if ("sam", "Big Step 1") not in STORE.plan_trees:
-            raise RuntimeError("make: the tree didn't go")
-        # 3.9.3: made in Anki: named, POST /plans, and Your plans opens on it
-        from due_crew.planner import remote as PR
-        made = []
-        dlg = MakePlanDialog(None, CLIENT, aqt.mw.col, "https://duecrew.com", open_link=opened.append,
-                             make=lambda name, deck: PR.create(CLIENT, name, deck), on_made=made.append)
-        if dlg.go.text() != "Make the plan" or dlg.site_btn is None or dlg.name.placeholderText() != "Big Step 1":
-            raise RuntimeError(f"make here: {dlg.go.text()!r}, {dlg.name.placeholderText()!r}")
-        dlg.name.setText("MS2 <b>Block</b> 3")
-        shoot(dlg, os.path.join(out, "plan-make-here.png"))
-        dlg = MakePlanDialog(None, CLIENT, aqt.mw.col, "https://duecrew.com", open_link=opened.append,
-                             make=lambda name, deck: PR.create(CLIENT, name, deck), on_made=made.append)
-        dlg.show()
-        dlg.name.setText("  MS2   Block 3 ")
-        dlg._make()
-        settle()
-        if len(made) != 1 or STORE.plans.get(made[0].get("id"), {}).get("name") != "MS2 Block 3":
-            raise RuntimeError(f"make here: {made!r} {dlg.status.text()!r}")
-        STORE.plans.pop(made[0]["id"])  # the renders after this one count Sam's plans
 
         today = datetime.date.today()
         day = lambda n: (today + datetime.timedelta(days=n)).isoformat()

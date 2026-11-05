@@ -262,7 +262,7 @@ def _draw(web, parts):
     """True when it went (it changed, or the page is new)."""
     if web is None:
         return False
-    key = (app.pages[0], "".join(parts))
+    key = (app.page_of(web), "".join(parts))  # 3.9.8: this view's own page, not every view's
     if _DRAWN.get(id(web)) == key:
         return False
     _eval(web, key[1])

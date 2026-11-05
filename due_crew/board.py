@@ -647,8 +647,6 @@ def _css(cfg):
     #due-crew .chip {{ font-size: 10px; margin-left: 5px; white-space: nowrap; color: var(--dc-muted); }}
     #due-crew .chip.live {{ color: var(--dc-fresh); font-weight: 700; }}
     #due-crew .chip.exam {{ color: var(--dc-hours); font-weight: 700; }}
-    #due-crew .awb {{ font-size: 10px; font-weight: 700; color: var(--dc-hours);
-      margin-left: 5px; white-space: nowrap; }}
     #due-crew .dc-stw {{ position: relative; display: block; max-width: 100%;
       margin: 2px 0 1px; padding-top: 4px; overflow: hidden; line-height: 0; }}
     #due-crew .dc-stw::before {{ content: ""; position: absolute; top: 0; left: 9px;
@@ -987,7 +985,7 @@ def _css(cfg):
     #due-crew .tqa {{ display: flex; gap: 6px; align-items: center; margin: 2px 0 6px; }}
     #due-crew .tqa input {{ flex: 1; min-width: 0; font: inherit; font-size: 12.5px; color: var(--dc-ink); background: var(--dc-bg);
       border: 1px solid var(--dc-line); border-radius: 7px; padding: 5px 8px; }}
-    #due-crew .tqa a, #due-crew .tq a, #due-crew .tjoin a, #due-crew .wk2 a {{
+    #due-crew .tqa a, #due-crew .tq a, #due-crew .tjoin a {{
       color: var(--dc-accent); font-weight: 700; text-decoration: none; font-size: 11.5px; white-space: nowrap; }}
     #due-crew .tq {{ border-top: 1px solid var(--dc-line); padding: 7px 0; margin-top: 0;  /* 3.8.0: rows, not boxes */
       display: grid; gap: 3px; text-align: left; font-size: 12px; overflow-wrap: anywhere; }}
@@ -1102,16 +1100,6 @@ def _css(cfg):
     #due-crew .iline {{ border-top: 1px solid var(--dc-line); padding-top: 10px; color: var(--dc-ink); }}
     @media (max-width: 560px) {{ #due-crew .irow {{ grid-template-columns: minmax(0, 1fr) auto auto; row-gap: 4px; }}
       #due-crew .irow .ib {{ grid-column: 1 / -1; grid-row: 2; }} }}
-    #due-crew .wk2 {{ display: grid; grid-template-columns: minmax(0, 1fr) 64px 76px 150px; gap: 12px; align-items: center;
-      font-size: 12px; padding: 5px 0; border-bottom: 1px solid var(--dc-line); text-align: left; }}
-    #due-crew .wk2:last-child {{ border-bottom: 0; }}
-    #due-crew .wk2 .sub {{ display: block; font-size: 11px; color: var(--dc-muted); }}
-    #due-crew .wk2 .n {{ text-align: right; color: var(--dc-muted); font-variant-numeric: tabular-nums; }}
-    #due-crew .wk2 .tr {{ font-size: 11px; }}
-    #due-crew .wk2 .tr.up {{ color: var(--dc-hours); }}
-    #due-crew .wk2 .tr.dn {{ color: var(--dc-accent); }}
-    #due-crew .wk2 .acts {{ display: flex; gap: 10px; }}
-    #due-crew .wk2.hd {{ font-size: 10.5px; color: var(--dc-muted); font-weight: 700; padding-bottom: 3px; }}
     /* plans, end to end (frame 1): a plan's code or link with Follow, my exam, a plan of my own */
     #due-crew .dc-pways {{ display: grid; gap: 8px; margin: 4px 0 4px; font-size: 12.5px; }}
     #due-crew .dc-pways .pfw {{ display: flex; gap: 8px; align-items: center; }}
@@ -1125,9 +1113,6 @@ def _css(cfg):
     #due-crew .dc-pways .pwl .mu {{ color: var(--dc-muted); }}
     #due-crew .dc-pways .pwl .acts {{ margin-left: auto; display: flex; flex-wrap: wrap; gap: 4px 14px; }}
     @media (max-width: 560px) {{
-      #due-crew .wk2 {{ grid-template-columns: minmax(0, 1fr) auto auto; gap: 3px 10px; }}
-      #due-crew .wk2 .acts {{ grid-column: 1 / -1; }}
-      #due-crew .wk2.hd span:last-child {{ display: none; }}
       /* the seven days stay seven: their numbers and bars, the words and a quiz's name in the day's details */
       #due-crew .pwk .pc {{ padding: 5px 5px 6px; }}
       #due-crew .pwk .pc .dow, #due-crew .pwk .pc .w, #due-crew .pwk .pc .ev {{ display: none; }}
@@ -5422,7 +5407,9 @@ def wrapped_js():
         });
         ph.addEventListener('mouseenter', function() { st.held = true; go(); });
         ph.addEventListener('mouseleave', function() { st.held = false; go(); });
-        document.addEventListener('visibilitychange', go);
+        // 3.9.8 (the energy review): one page listener for whichever card is up (each card had added its own)
+        window.dcWrGo = go;
+        if (!window.dcWrVis) { window.dcWrVis = true; document.addEventListener('visibilitychange', function () { if (window.dcWrGo) { window.dcWrGo(); } }); }
         show(0);
         try { ph.focus({ preventScroll: true }); } catch (e) {}
     })();

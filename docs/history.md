@@ -4689,3 +4689,25 @@ every release that changes how something works.
   Found fine: nothing in the Python runs at rest, no redraw loop, the
   request budget holds, a card shown costs a third of a millisecond;
   swaps pile nothing up (100 swaps: the same listeners and timers).
+- 3.9.8, the energy review's second round (Sam: "any other structural
+  things we can hit?"):
+  - the bars' widgets go again only when their own page is drawn anew
+    (`app.page_of`: a web view's own loads, from its loadStarted). The
+    one count for every web view sent the top bar's whole widget (71 KB)
+    at each screen change and restarted its Pip; a view that can't say
+    counts every page, as before. Pip's sheet on the bar and the card
+    (`cards._SHEET`) the same;
+  - the board turned off: a refresh no longer builds Anki's Decks screen
+    again (`_board_off`; nothing of ours is on it); its cheers play over it;
+  - a sync's new cards by day, asked three times, is one read
+    (`StatsQueries.new_cards_by_day`: the widest window lately read answers
+    the narrower while the day and the log's newest answer stand);
+  - Wrapped: one page listener for whichever card is up (each card had
+    added its own);
+  - gone, nothing called them: the Make a plan dialog and its way in
+    (`ui/plan_dialog.py`, `plan_flow.open_make`/`note_tree`,
+    `planner/flow.make_here`; New plan is the one way since round five),
+    `planner/widgets.Chip`, `room_model.seat_key`, `gamenight.distractors`,
+    `planner/ops.copy_ops`, `settings_tab._nth`, `webface.note_days`, the
+    planner Ops' `new_from_calendar`/`new_from_deck`, and the board's
+    `.wk2` and `.awb` styles.

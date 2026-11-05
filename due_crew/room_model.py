@@ -293,11 +293,6 @@ def vary_seed(room):
         return 0
 
 
-def seat_key(m):
-    """The widgets' markup key for a seat's move (a SEAT_MOVES one)."""
-    return "idle" if m == "idle" or m not in _sev.SEAT_MOVES else f"idle.{m}"
-
-
 def _pair_of(name):
     from .board import accent_pair  # board imports this module
     return accent_pair(name)

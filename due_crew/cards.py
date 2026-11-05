@@ -634,10 +634,11 @@ def _put(web, where, view, cb=None):
             cb(False)
         return
     if view and "sevcss" in view:
-        if _SHEET.get(where) == app.pages[0]:
+        page = app.page_of(web)  # 3.9.8: this view's own page
+        if _SHEET.get(where) == page:
             view = {k: v for k, v in view.items() if k != "sevcss"}
         else:
-            _SHEET[where] = app.pages[0]
+            _SHEET[where] = page
     js = (chip_js if where == "bar" else float_js)(view)
     _UP[where] = view is not None
     if cb is None:

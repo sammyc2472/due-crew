@@ -273,47 +273,6 @@ class Source(QFrame):
         super().mousePressEvent(e)
 
 
-class Chip(QFrame):
-    """One of a date's sources (or a suggestion): its name, its count, and
-    small buttons (✕ takes it off, ✓ / + Add takes a suggestion, ✕ turns it
-    down). kind: None, "sug" (dashed), "maybe" (amber), "fresh" (a change
-    not sent yet). on_click: the chip itself picked (its menu)."""
-
-    def __init__(self, text, n=None, kind=None, tip=None, on_click=None):
-        super().__init__()
-        self.setProperty("dc", "chip")
-        if kind:
-            self.setProperty("kind", kind)
-        self.on_click = on_click
-        row = QHBoxLayout(self)
-        row.setContentsMargins(8, 2, 4 if on_click is None else 6, 2)
-        row.setSpacing(4)
-        self.words = QLabel(str(text))
-        self.words.setTextFormat(Qt.TextFormat.PlainText)
-        row.addWidget(self.words)
-        if n is not None:
-            k = QLabel(f"{n:,}" if isinstance(n, int) else str(n))
-            k.setTextFormat(Qt.TextFormat.PlainText)
-            k.setProperty("dc", "n")
-            row.addWidget(k)
-        self.row = row
-        if tip:
-            self.setToolTip(f"<span>{esc(tip)}</span>")
-        if on_click is not None:
-            self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
-
-    def add(self, w):
-        self.row.addWidget(w)
-        return w
-
-    def mousePressEvent(self, e):  # noqa: N802 (Qt's)
-        if self.on_click is not None and e.button() == Qt.MouseButton.LeftButton:
-            self.on_click(self.mapToGlobal(QPoint(0, self.height())))
-            return
-        super().mousePressEvent(e)
-
-
 DRAG = "application/x-duecrew-plan-item"  # Month: a date or a quiz dragged to another day
 
 

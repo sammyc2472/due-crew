@@ -995,9 +995,6 @@ class WebFace(NewPlan, PlanCore):
                           "text": str(x.get("text") or ""), "remove": bool(x.get("remove"))} for x in rows],
                 "writes": writes, "day": day, "dayw": P.fmt_day(shown or day), "loading": self.notes_of is None}
 
-    def note_days(self):
-        return {x.get("day") for x in self.notes}
-
     def c_note_add(self, day, text):
         from . import remote
         text, pid = " ".join(str(text or "").split())[:280], self.notes_of
