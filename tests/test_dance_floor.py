@@ -426,8 +426,8 @@ def test_every_command_has_its_route():
          + board._profile_song({"uid": "dre", "song": song(1)}))
     emitted = {c for c in set(re.findall(r"duecrew:([a-z]+)", h)) | set(re.findall(r"send\('([a-z]+):?'", board.DANCE_JS))
                if c.startswith(("song", "dance"))}
-    src = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
-    routed = set(re.findall(r'"([a-z]+)"', re.search(r'elif cmd in \(("songsearch"[^)]*)\):', src).group(1)))
+    import due_crew as dc
+    routed = {n for n, (_, _, run) in dc.BOARD_CMDS.items() if run is dc._song}  # 3.9.8: the command table
     flow = open(os.path.join(REPO, "due_crew", "song_flow.py")).read()
     handled = set(re.findall(r'cmd == "([a-z]+)"', flow)) | set(re.findall(r'"([a-z]+)"', " ".join(re.findall(r"cmd in \(([^)]*)\)", flow))))
     want = {"songsearch", "songuse", "songclear", "songlisten", "songapp", "songapple", "dancehide", "danceshow",

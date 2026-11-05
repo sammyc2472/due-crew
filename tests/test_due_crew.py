@@ -3068,15 +3068,31 @@ def test_every_board_command_has_a_handler():
         for rx in (r'_pycmd\(\s*f?["\']([a-z]+)', r'_st_click\(\s*f?["\']([a-z]+)', r'duecrew:([a-z]+)',
                    r'"(?:cmd|actcmd)":\s*f?"([a-z]+)'):
             emitted |= set(re.findall(rx, text))
-    handled = set()
+    import due_crew as dc
+    handled = set(dc.BOARD_CMDS)  # 3.9.8: the Decks screen's, one table
     for name in ("__init__.py", "plan_flow.py", "rooms.py", "cards.py", "due_flow.py", "team_flow.py"):
         text = src[os.path.join(REPO, "due_crew", name)]
         handled |= set(re.findall(r'cmd == "([a-z0-9]+)"', text)) | set(re.findall(r'message == "duecrew:([a-z0-9]+)"', text))
-        for group in re.findall(r'cmd in \(([^)]*)\)', text) + re.findall(r'SETTINGS_CMDS = \(([^)]*)\)', text):
+        for group in re.findall(r'cmd in \(([^)]*)\)', text):
             handled |= set(re.findall(r'"([a-z0-9]+)"', group))
     prefixes = {"plan", "room", "knows"}  # 'duecrew:' + a name built at run time
     missing = sorted(c for c in emitted - handled - prefixes)
     check("commands: every one the add-on emits has a handler", not missing and len(emitted) > 60, missing)
+    families = [f for f, _ in dc._FAMILIES]
+    check("commands (3.9.8, the table): no name in it starts as a family does (a family's module takes those), "
+          "each line a count, a check or none, and what it does",
+          not [n for n in dc.BOARD_CMDS if any(n.startswith(f) for f in families)]
+          and all(isinstance(need, int) and (ok is None or callable(ok)) and callable(run)
+                  for need, ok, run in dc.BOARD_CMDS.values()) and len(dc.BOARD_CMDS) > 80)
+    check("commands (3.9.8, the table): a name it hasn't, or values that don't pass its check or count, is nothing",
+          dc._board_cmd("nosuch", ["duecrew", "nosuch"]) is None
+          and dc._board_cmd("sort", ["duecrew", "sort", "nonsense"]) is None
+          and dc._board_cmd("sort", ["duecrew", "sort"]) is None
+          and dc._board_cmd("sheet", ["duecrew", "sheet", "k"]) is None
+          and dc._board_cmd("fridgemove", ["duecrew", "fridgemove", "a", "x", "1", "2"]) is None
+          and dc._board_cmd("fridgemove", ["duecrew", "fridgemove", "a", "l", "-12", "40"]) is not None
+          and dc._board_cmd("noticex", ["duecrew", "noticex", "7a"]) is None
+          and dc._board_cmd("planopen", ["duecrew", "planopen"]) is not None)
 
 
 def test_take_back_an_ask():

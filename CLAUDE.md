@@ -366,8 +366,9 @@ clean `main` does the migrations, the API, then the site, then
   `ui.tone(...)`, never palette(...). `tools/dialogs.py` fails on a
   clipped button, a squeezed box, two controls on top of each other or a
   window shorter than its words: a new window or state gets a render there.
-- Every `duecrew:` command a page emits needs a handler
-  (`test_every_board_command_has_a_handler`), and a new one gets a test
+- Every `duecrew:` command a page emits needs a handler (a Decks-screen
+  one is a line of `BOARD_CMDS` in `__init__.py`, 3.9.8, or a family's module;
+  `test_every_board_command_has_a_handler`), and a new one gets a test
   that sends it through `_on_js` as the board does (3.5.0's Settings went
   out with its clicks reaching nothing). Anything a click adds has its way
   back on the same screen.

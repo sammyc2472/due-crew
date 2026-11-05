@@ -933,217 +933,255 @@ def _on_js(handled, message, context):
         return handled
     parts = message.split(":")
     cmd = parts[1] if len(parts) > 1 else ""
-    c = cfg()
-    if cmd.startswith("plan"):
-        plan_flow.on_message(cmd, parts)  # 3.1
-    elif cmd.startswith("due"):
-        due_flow.on_message(cmd, parts)  # Due
-    elif cmd == "party":
-        gamenight_flow.on_message(parts)  # 3.9.5's last round: You › Pip Party
-    elif cmd == "magic":
-        open_magic()  # 3.9.7: Magic search, from the You box's head (and Find a setting)
-    elif cmd == "css":
-        _SCRIPTS["css"] = None  # 3.9.7: the page hasn't the board's stylesheet (board.swap_js): it goes with the next swap
-        _swap(cfg())
-    elif cmd == "magichow":
-        magic_flow.howto_said(parts)  # 3.9.7, round 2: its how-to's buttons, on the Decks screen once
-    elif cmd in ("songsearch", "songuse", "songclear", "songlisten", "songapp", "songapple",
-                 "dancehide", "danceshow", "dancemotion", "dancefold"):
-        from . import song_flow
-        song_flow.on_message(cmd, parts)  # 3.9.6: song of the moment, and its dance floor
-    elif cmd.startswith("ins") or cmd == "youins":
-        from . import team_flow
-        team_flow.on_message(cmd, parts)  # 3.8.0: You › Insights, a deck's
-    elif cmd == "sort" and len(parts) > 2 and parts[2] in board.SORT_KEYS:
-        c["sort"] = parts[2]
-        save_cfg(c)
-        _swap(c)
-    elif cmd in ("bingo", "bingoback", "bingocopy"):
-        _bingo_cmd(cmd)
-    elif cmd == "period" and len(parts) > 2 and parts[2] in board.PERIODS:
-        _state["bingo_open"] = False
-        _state["team_bingo_open"] = None
-        c["period"] = parts[2]
-        if parts[2] != "squads":
-            c["crew_view"] = parts[2]  # 3.8.0: Today, Week or Decks: the Crew pill comes back to it
-        save_cfg(c)
-        _swap(c)
-        if parts[2] == "squads":
-            _fetch_squad()
-        elif parts[2] == "decks":
-            _fetch_decks()
-    elif cmd == "refresh":
-        _on_sync_done(full=True, fetch=True)  # push my own numbers too, then fetch the week
-        if c.get("period") == "squads":
-            _fetch_squad(force=True)
-        elif c.get("period") == "decks":
-            _fetch_decks(force=True)
-    elif cmd == "friends":
-        open_friends()
-    elif cmd == "live":
-        together.toggle_live()
-    elif cmd == "luckline" and len(parts) > 2:
-        together.send_luck_line(parts[2])
-    elif cmd == "luckthanks":
-        together.luck_thanks()
-    elif cmd == "tricktip" and len(parts) > 3:
-        together.send_tip(parts[2], parts[3])
-    elif cmd == "milestonecheer" and len(parts) > 2:
-        together.milestone_cheer(parts[2])
-    elif cmd == "milestonex" and len(parts) > 2:
-        together.dismiss_milestone(parts[2])
-    elif cmd == "unask" and len(parts) > 2 and parts[2].isdigit():
-        together.unask(int(parts[2]))  # 3.5.0: Take back, on the Decks tab
-    elif cmd == "copyinvite":
-        _copy_friend_invite()
-    elif cmd == "addcode":
-        if len(parts) > 2 and parts[2]:
-            _add_code(parts[2])  # 3.4 review, C5: from the day-one card
-        else:
-            open_friends(focus_add=True)
-    elif cmd == "crewmenu":
-        _crew_menu(c)  # 3.4 review, H5
-    elif cmd == "privacypage":
-        from aqt.utils import openLink  # 3.7.1, D3: signed out works; no token
-        openLink(plan_flow.site_base() + "/privacy")
-    elif cmd == "sharemenu":
-        _share_menu(c)  # 3.7.1, H3
-    elif cmd == "decks":
-        open_decks()
-    elif cmd == "setup":
-        open_auth()
-    elif cmd == "cheerpick" and len(parts) > 2:
-        _cheer_menu(parts[2])
-    elif (cmd == "fridgemove" and len(parts) > 5 and parts[3] in ("l", "r")
-          and (parts[4][1:] if parts[4][:1] == "-" else parts[4]).isdecimal() and parts[5].isdecimal()):
-        # 3.9.1: where I left it, beside the board (side, px from its edge, px down); no redraw
-        _closet(lambda cf: cf.move_fridge(parts[2], parts[3], int(parts[4][:6]), int(parts[5][:5])))
-    elif cmd == "fridgedown" and len(parts) > 2:
-        _closet(lambda cf: cf.take_down(parts[2]))  # 3.9.1: off the fridge, with an Undo in its place for a few seconds
-        _swap(c)
-    elif cmd == "fridgeback" and len(parts) > 2:
-        _closet(lambda cf: cf.put_back(parts[2]))  # 3.9.1: its Undo
-        _swap(c)
-    elif cmd == "emojipicker":
-        # 3.9.1: the Cheer window's "other": the computer's own picker; when it has none, the window's drawer.
-        # 3.9.2: into our own box over its "pick one" (x:y:w:h), since the page can't take the pick
-        from . import native_emoji
-        at = [int(v) for v in parts[2:6] if v.isdecimal() and len(v) < 6]
-        x, y, w, h = at if len(at) == 4 else (0, 0, 64, 40)
-        if not native_emoji.catch(x, y, w, h, lambda e: app.board_eval(native_emoji.picked_js(e)),
-                                  lambda: app.board_eval("window.dcCheerUnpick && window.dcCheerUnpick();")):
-            app.board_eval("window.dcCheerNoNative && window.dcCheerNoNative();")
-    elif cmd == "emojipickeroff":
-        from .native_emoji import drop
-        drop()  # 3.9.2: the Cheer window closed, or other's box put away there
-    elif cmd == "cheersend" and len(parts) > 2:
-        from .social import send_from_window
-        send_from_window(":".join(parts[2:]))  # 3.9.1: the Cheer window's Send
-    elif cmd == "sheet" and len(parts) > 3:
-        sheets.answer(parts[2], ":".join(parts[3:]))  # 3.9.1: a sheet's answer
-    elif cmd == "veil" and len(parts) > 2:
-        app.veil(parts[2] == "1" and app.board_up())  # 3.9.1: a window over the board; the bars dim with it
-    elif cmd == "rowmenu" and len(parts) > 2:
-        row_menu(parts[2])  # 3.0.1: right-click a crewmate: mute, report
-    elif cmd == "status":
-        _edit_status()
-    elif cmd == "emoji":
-        _edit_emoji()
-    elif cmd == "profile" and len(parts) > 2:
-        _open_profile(parts[2])
-    elif cmd == "evedismiss":
-        w = _wrap_data()
-        w["eve_dismissed"] = _state["labels"][0] if _state["labels"] else ""
-        _save_wrap()
-        _swap(c)
-    elif cmd == "noticex" and len(parts) > 2 and parts[2].isdigit():
-        # 3.2.1: the admin's notice, dismissed for good on this profile
-        w = _wrap_data()
-        w["notices_dismissed"] = (list(w.get("notices_dismissed") or []) + [int(parts[2])])[-50:]
-        _save_wrap()
-        _swap(c)
-    elif cmd == "noticeopen":
-        n = _state.get("notice")
-        if n and n.get("link"):
-            from aqt.utils import openLink
-            openLink(n["link"])
-    elif cmd == "wrapdismiss":
-        w = _wrap_data()
-        w["dismissed"] = w.get("week", "")
-        _save_wrap()
-        _swap(c)
-    elif cmd in ("sharetoday", "shareweek", "sharecrewweek", "sharemonth", "shareyear",
-                 "monthcopy", "yearcopy"):
-        _share(cmd)
-    elif cmd in ("monthdismiss", "yeardismiss"):
-        dismiss_review(cmd[:-7])
-        _swap(c)
-    elif cmd == "wrapcopy":
-        b = _wrap_info() or {}
-        if b.get("reviews"):
-            text = (f"Last week, together: {b['reviews']:,} reviews "
-                    f"· {board._fmt_time(b.get('time_ms') or 0)}")
-            if (b.get("full_days") or 0) >= 3:
-                text += f" · everyone showed up {b['full_days']} of 7 days"
-            if 0 < int(b.get("days_known") or 7) < 7:
-                text += f" · from {int(b['days_known'])} of its 7 days"
-            if b.get("milestone"):
-                text += f" · just passed {b['milestone']} all-time"
-            copy_text(text + " — Due Crew")
-            tooltip("Copied.")
-    elif cmd == "settings":
-        open_settings(tab=parts[2] if len(parts) > 2 else None)
-    elif cmd.startswith("closet"):
-        _closet_cmd(cmd, parts[2:])  # 3.8.2: Pip's closet
-    elif cmd.startswith("wrapped"):
-        _wrapped_cmd(cmd, parts[2:])  # 3.9.0: your Wrapped
-    elif cmd == "heatday" and len(parts) > 2:
-        _browse_day(parts[2])
-    elif cmd in SETTINGS_CMDS:
-        _settings_cmd(cmd, parts[2:])  # 3.5.0: Settings in the board; parts[2:] are its values
-    elif cmd in ("exampick", "scopepick"):
-        _pick_exam_day(cmd)  # 3.9.5: Insights' exam date and its scope, in a Qt calendar
-    elif cmd == "ecard" and len(parts) > 2:
-        _open_squad_card(parts[2])
-    elif cmd == "squad" and len(parts) > 2:
-        _select_squad(parts[2])
-    elif cmd == "squadplan" and len(parts) > 2:
-        from . import team_flow
-        team_flow.open_squad(parts[2])  # 3.8.0: a plan's squad
-    elif cmd == "squadadd":
-        open_squads()
-    elif cmd == "squadinvite":
-        _copy_invite()
-    elif cmd == "squadlock":
-        _toggle_squad_lock()
-    elif cmd == "squadleave":
-        _leave_squad()
-    elif cmd == "squadkick" and len(parts) > 2:
-        _kick_member(parts[2])
-    elif cmd == "squadblock" and len(parts) > 2:
-        _block_member(parts[2])
-    elif cmd == "squadfounder" and len(parts) > 2:
-        _make_founder(parts[2])
-    elif cmd == "squadshare":
-        _share_squad()
-    elif cmd == "squaddrop" and len(parts) > 2:
-        _drop_squad(parts[2])
-    elif cmd == "addback" and len(parts) > 2:
-        _add_back(parts[2])
-    elif cmd == "knockmute" and len(parts) > 2:
-        _dismiss_knock(parts[2])
-    elif cmd == "knock" and len(parts) > 2:
-        _send_knock(parts[2])
-    elif cmd == "cheerback" and len(parts) > 3:
-        uid, emoji = parts[2], parts[3]
-        entry = next((e for e in (_state["entries"] or [])
-                      if e["user_id"] == uid), None)
-        emoji = cheer_allowed(emoji)
-        if entry and emoji:
-            _send_cheer(uid, entry["name"], emoji)
-    else:
+    run = _board_cmd(cmd, parts)
+    if run is None:
         print(f"due crew: unknown command {message!r}")
+    else:
+        run(cfg(), parts)
     return (True, None)
+
+
+def _board_cmd(cmd, parts):
+    """3.9.8 (the tidy-ups): what a Decks-screen command does, or None when
+    it's none of ours or its values don't pass. A family by its first
+    letters goes to its own module, which knows its names; any other is
+    one line of BOARD_CMDS."""
+    for start, run in _FAMILIES:
+        if cmd.startswith(start):
+            return run
+    need, ok, run = BOARD_CMDS.get(cmd, (0, None, None))
+    if run is None or len(parts) < 2 + need or (ok and not ok(parts)):
+        return None
+    return run
+
+
+def _cmd_period(c, parts):
+    _state["bingo_open"] = False
+    _state["team_bingo_open"] = None
+    c["period"] = parts[2]
+    if parts[2] != "squads":
+        c["crew_view"] = parts[2]  # 3.8.0: Today, Week or Decks: the Crew pill comes back to it
+    save_cfg(c)
+    _swap(c)
+    if parts[2] == "squads":
+        _fetch_squad()
+    elif parts[2] == "decks":
+        _fetch_decks()
+
+
+def _cmd_refresh(c, parts):
+    _on_sync_done(full=True, fetch=True)  # push my own numbers too, then fetch the week
+    if c.get("period") == "squads":
+        _fetch_squad(force=True)
+    elif c.get("period") == "decks":
+        _fetch_decks(force=True)
+
+
+def _cmd_css(c, parts):
+    _SCRIPTS["css"] = None  # 3.9.7: the page hasn't the board's stylesheet (board.swap_js): it goes with the next swap
+    _swap(c)
+
+
+def _cmd_sort(c, parts):
+    c["sort"] = parts[2]
+    save_cfg(c)
+    _swap(c)
+
+
+def _cmd_addcode(c, parts):
+    if len(parts) > 2 and parts[2]:
+        _add_code(parts[2])  # 3.4 review, C5: from the day-one card
+    else:
+        open_friends(focus_add=True)
+
+
+def _cmd_privacy(c, parts):
+    from aqt.utils import openLink  # 3.7.1, D3: signed out works; no token
+    openLink(plan_flow.site_base() + "/privacy")
+
+
+def _fridge_spot(parts):
+    # 3.9.1: where I left it, beside the board (side, px from its edge, px down)
+    return (parts[3] in ("l", "r") and (parts[4][1:] if parts[4][:1] == "-" else parts[4]).isdecimal()
+            and parts[5].isdecimal())
+
+
+def _cmd_emoji_picker(c, parts):
+    # 3.9.1: the Cheer window's "other": the computer's own picker; when it has none, the window's drawer.
+    # 3.9.2: into our own box over its "pick one" (x:y:w:h), since the page can't take the pick
+    from . import native_emoji
+    at = [int(v) for v in parts[2:6] if v.isdecimal() and len(v) < 6]
+    x, y, w, h = at if len(at) == 4 else (0, 0, 64, 40)
+    if not native_emoji.catch(x, y, w, h, lambda e: app.board_eval(native_emoji.picked_js(e)),
+                              lambda: app.board_eval("window.dcCheerUnpick && window.dcCheerUnpick();")):
+        app.board_eval("window.dcCheerNoNative && window.dcCheerNoNative();")
+
+
+def _cmd_emoji_picker_off(c, parts):
+    from .native_emoji import drop
+    drop()  # 3.9.2: the Cheer window closed, or other's box put away there
+
+
+def _cmd_cheer_send(c, parts):
+    from .social import send_from_window
+    send_from_window(":".join(parts[2:]))  # 3.9.1: the Cheer window's Send
+
+
+def _wrap_put(c, key, value):
+    w = _wrap_data()
+    w[key] = value(w)
+    _save_wrap()
+    _swap(c)
+
+
+def _cmd_notice_open(c, parts):
+    n = _state.get("notice")
+    if n and n.get("link"):
+        from aqt.utils import openLink
+        openLink(n["link"])
+
+
+def _cmd_wrap_copy(c, parts):
+    b = _wrap_info() or {}
+    if b.get("reviews"):
+        text = (f"Last week, together: {b['reviews']:,} reviews "
+                f"· {board._fmt_time(b.get('time_ms') or 0)}")
+        if (b.get("full_days") or 0) >= 3:
+            text += f" · everyone showed up {b['full_days']} of 7 days"
+        if 0 < int(b.get("days_known") or 7) < 7:
+            text += f" · from {int(b['days_known'])} of its 7 days"
+        if b.get("milestone"):
+            text += f" · just passed {b['milestone']} all-time"
+        copy_text(text + " — Due Crew")
+        tooltip("Copied.")
+
+
+def _cmd_cheer_back(c, parts):
+    uid, emoji = parts[2], parts[3]
+    entry = next((e for e in (_state["entries"] or []) if e["user_id"] == uid), None)
+    emoji = cheer_allowed(emoji)
+    if entry and emoji:
+        _send_cheer(uid, entry["name"], emoji)
+
+
+def _team(cmd, parts):
+    from . import team_flow
+    team_flow.on_message(cmd, parts)  # 3.8.0: You › Insights, a deck's
+
+
+def _song(c, parts):
+    from . import song_flow
+    song_flow.on_message(parts[1], parts)  # 3.9.6: song of the moment, and its dance floor
+
+
+def _settings_family(c, parts):
+    _settings_cmd(parts[1], parts[2:])  # 3.5.0: Settings in the board; parts[2:] are its values
+
+
+def _swapping(do):
+    """A command that changes the board and draws it again."""
+    def run(c, parts):
+        do(c, parts)
+        _swap(c)
+    return run
+
+
+# Settings' own (`_settings_cmd`)
+SETTINGS_CMDS = ("settab", "setclose", "set", "settabs", "setlabel", "setprivacy", "setexam", "setscope",
+                 "setaway", "setreset", "setname", "setemoji", "setstatus", "setsquads",
+                 "setsignout", "setdelete", "setsignin", "setfeedback")
+
+# families: a command by its first letters, its module knowing the rest
+_FAMILIES = (
+    ("plan", lambda c, p: plan_flow.on_message(p[1], p)),  # 3.1
+    ("due", lambda c, p: due_flow.on_message(p[1], p)),  # Due
+    ("ins", lambda c, p: _team(p[1], p)),
+    ("closet", lambda c, p: _closet_cmd(p[1], p[2:])),  # 3.8.2: Pip's closet
+    ("wrapped", lambda c, p: _wrapped_cmd(p[1], p[2:])),  # 3.9.0: your Wrapped
+)
+
+# a command: (how many values after its name, a check on them, what it does with (cfg, parts))
+BOARD_CMDS = {
+    "party": (0, None, lambda c, p: gamenight_flow.on_message(p)),  # 3.9.5's last round: You › Pip Party
+    "magic": (0, None, lambda c, p: open_magic()),  # 3.9.7: Magic search, from the You box's head (and Find a setting)
+    "css": (0, None, _cmd_css),
+    "magichow": (0, None, lambda c, p: magic_flow.howto_said(p)),  # 3.9.7, round 2: its how-to's buttons
+    **{k: (0, None, _song) for k in ("songsearch", "songuse", "songclear", "songlisten", "songapp", "songapple",
+                                     "dancehide", "danceshow", "dancemotion", "dancefold")},
+    "youins": (0, None, lambda c, p: _team(p[1], p)),
+    "sort": (1, lambda p: p[2] in board.SORT_KEYS, _cmd_sort),
+    **{k: (0, None, lambda c, p: _bingo_cmd(p[1])) for k in ("bingo", "bingoback", "bingocopy")},
+    "period": (1, lambda p: p[2] in board.PERIODS, _cmd_period),
+    "refresh": (0, None, _cmd_refresh),
+    "friends": (0, None, lambda c, p: open_friends()),
+    "live": (0, None, lambda c, p: together.toggle_live()),
+    "luckline": (1, None, lambda c, p: together.send_luck_line(p[2])),
+    "luckthanks": (0, None, lambda c, p: together.luck_thanks()),
+    "tricktip": (2, None, lambda c, p: together.send_tip(p[2], p[3])),
+    "milestonecheer": (1, None, lambda c, p: together.milestone_cheer(p[2])),
+    "milestonex": (1, None, lambda c, p: together.dismiss_milestone(p[2])),
+    "unask": (1, lambda p: p[2].isdigit(), lambda c, p: together.unask(int(p[2]))),  # 3.5.0: Take back
+    "copyinvite": (0, None, lambda c, p: _copy_friend_invite()),
+    "addcode": (0, None, _cmd_addcode),
+    "crewmenu": (0, None, lambda c, p: _crew_menu(c)),  # 3.4 review, H5
+    "privacypage": (0, None, _cmd_privacy),
+    "sharemenu": (0, None, lambda c, p: _share_menu(c)),  # 3.7.1, H3
+    "decks": (0, None, lambda c, p: open_decks()),
+    "setup": (0, None, lambda c, p: open_auth()),
+    "cheerpick": (1, None, lambda c, p: _cheer_menu(p[2])),
+    # 3.9.1: the fridge: a Polaroid moved (no redraw), taken down (an Undo in its place for a few seconds), put back
+    "fridgemove": (4, _fridge_spot,
+                   lambda c, p: _closet(lambda cf: cf.move_fridge(p[2], p[3], int(p[4][:6]), int(p[5][:5])))),
+    "fridgedown": (1, None, _swapping(lambda c, p: _closet(lambda cf: cf.take_down(p[2])))),
+    "fridgeback": (1, None, _swapping(lambda c, p: _closet(lambda cf: cf.put_back(p[2])))),
+    "emojipicker": (0, None, _cmd_emoji_picker),
+    "emojipickeroff": (0, None, _cmd_emoji_picker_off),
+    "cheersend": (1, None, _cmd_cheer_send),
+    "sheet": (2, None, lambda c, p: sheets.answer(p[2], ":".join(p[3:]))),  # 3.9.1: a sheet's answer
+    # 3.9.1: a window over the board; the bars dim with it
+    "veil": (1, None, lambda c, p: app.veil(p[2] == "1" and app.board_up())),
+    "rowmenu": (1, None, lambda c, p: row_menu(p[2])),  # 3.0.1: right-click a crewmate: mute, report
+    "status": (0, None, lambda c, p: _edit_status()),
+    "emoji": (0, None, lambda c, p: _edit_emoji()),
+    "profile": (1, None, lambda c, p: _open_profile(p[2])),
+    "evedismiss": (0, None, lambda c, p: _wrap_put(c, "eve_dismissed",
+                                                   lambda w: _state["labels"][0] if _state["labels"] else "")),
+    # 3.2.1: the admin's notice, dismissed for good on this profile
+    "noticex": (1, lambda p: p[2].isdigit(), lambda c, p: _wrap_put(
+        c, "notices_dismissed", lambda w: (list(w.get("notices_dismissed") or []) + [int(p[2])])[-50:])),
+    "noticeopen": (0, None, _cmd_notice_open),
+    "wrapdismiss": (0, None, lambda c, p: _wrap_put(c, "dismissed", lambda w: w.get("week", ""))),
+    **{k: (0, None, lambda c, p: _share(p[1])) for k in ("sharetoday", "shareweek", "sharecrewweek", "sharemonth",
+                                                         "shareyear", "monthcopy", "yearcopy")},
+    **{k: (0, None, _swapping(lambda c, p: dismiss_review(p[1][:-7]))) for k in ("monthdismiss", "yeardismiss")},
+    "wrapcopy": (0, None, _cmd_wrap_copy),
+    "settings": (0, None, lambda c, p: open_settings(tab=p[2] if len(p) > 2 else None)),
+    "heatday": (1, None, lambda c, p: _browse_day(p[2])),
+    **{k: (0, None, _settings_family) for k in SETTINGS_CMDS},
+    # 3.9.5: Insights' exam date and its scope, in a Qt calendar
+    **{k: (0, None, lambda c, p: _pick_exam_day(p[1])) for k in ("exampick", "scopepick")},
+    "ecard": (1, None, lambda c, p: _open_squad_card(p[2])),
+    "squad": (1, None, lambda c, p: _select_squad(p[2])),
+    "squadplan": (1, None, lambda c, p: _team_squad(p[2])),
+    "squadadd": (0, None, lambda c, p: open_squads()),
+    "squadinvite": (0, None, lambda c, p: _copy_invite()),
+    "squadlock": (0, None, lambda c, p: _toggle_squad_lock()),
+    "squadleave": (0, None, lambda c, p: _leave_squad()),
+    "squadkick": (1, None, lambda c, p: _kick_member(p[2])),
+    "squadblock": (1, None, lambda c, p: _block_member(p[2])),
+    "squadfounder": (1, None, lambda c, p: _make_founder(p[2])),
+    "squadshare": (0, None, lambda c, p: _share_squad()),
+    "squaddrop": (1, None, lambda c, p: _drop_squad(p[2])),
+    "addback": (1, None, lambda c, p: _add_back(p[2])),
+    "knockmute": (1, None, lambda c, p: _dismiss_knock(p[2])),
+    "knock": (1, None, lambda c, p: _send_knock(p[2])),
+    "cheerback": (2, None, _cmd_cheer_back),
+}
+
+
+def _team_squad(team_id):
+    from . import team_flow
+    team_flow.open_squad(team_id)  # 3.8.0: a plan's squad
 
 
 def _swap(c, focus=None):
@@ -1341,9 +1379,6 @@ def _on_decks_saved(changed):
     refresh_board(shared_decks=decks)
 
 
-SETTINGS_CMDS = ("settab", "setclose", "set", "settabs", "setlabel", "setprivacy", "setexam", "setscope",
-                 "setaway", "setreset", "setname", "setemoji", "setstatus", "setsquads",
-                 "setsignout", "setdelete", "setsignin", "setfeedback")
 _share_push = {"n": 0}
 
 
