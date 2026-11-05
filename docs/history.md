@@ -4711,3 +4711,10 @@ every release that changes how something works.
     `planner/ops.copy_ops`, `settings_tab._nth`, `webface.note_days`, the
     planner Ops' `new_from_calendar`/`new_from_deck`, and the board's
     `.wk2` and `.awb` styles.
+- 3.9.8, room sounds gone (Sam: "you can actually remove the whole room
+  sounds feature"): the chip's speaker and picker, the top bar's player
+  (`sounds.js`), the three recordings and their credits (`due_crew/sounds/`,
+  about 1.6 MB of the package), `tools/cut_sound.sh`, Settings › Room
+  sounds, the `room_sound`/`room_sound_vol` config keys and the
+  `roomsound` command. An old config's keys are left alone and never
+  read; a 3.9.7 chip still on screen sends a command nothing takes.

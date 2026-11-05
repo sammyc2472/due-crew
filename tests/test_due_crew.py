@@ -16097,16 +16097,7 @@ def test_efficiency_review_screen_v391():
         check("efficiency: night mode on or off, all drawn again (they pick their colours as they're drawn)", len(sent) == 3)
         room["v"] = rm.make_room("me", now - datetime.timedelta(minutes=3))
         _state["entries"][0]["room"] = room["v"]
-        sent.clear()
         R.refresh_widgets()
-        quiet = dict(sent)
-        conf.update(room_sound="rain", room_sound_vol=40)
-        sent.clear()
-        R.refresh_widgets()
-        loud = dict(sent)
-        check("efficiency: in a room, the sounds' code goes only once a sound's picked (it stops one either way)",
-              "window.dcSounds = {" not in quiet["top"] and "window.dcRoomSound" in quiet["top"]
-              and "window.dcSounds = {" in loud["top"] and list(loud) == ["top"])
         sent.clear()
         R.on_question(None)
         check("efficiency: and in a room, the next card sends nothing either", sent == [], [n for n, _ in sent])
@@ -17029,163 +17020,29 @@ def test_qt_look_round_two_v391():
           and "def questions():" in dialogs)
 
 
-def test_room_sounds_v391():
-    """3.9.1, room sounds (Sam's picks): brown noise, rain, fire and waves,
-    made from noise in the top bar's page; a speaker on the chip picks one;
-    each person their own, kept on this computer, never sent; off till
-    picked; it plays while the session runs (breaks too) and stops when it
-    ends. Only the top bar's chip may set it, never a card's page. Since
-    Sam's "the background noises aren't the best": rain, fire and waves are
-    CC0 recordings, seamless loops in due_crew/sounds/; brown noise stays
-    made."""
-    import shutil
-    import subprocess
-    import due_crew as dc
-    from aqt.deckbrowser import DeckBrowser
-    if "aqt.toolbar" not in sys.modules:  # the top bar's page, as Anki's Toolbar.draw names it
-        sys.modules["aqt.toolbar"] = types.SimpleNamespace(TopToolbar=type("TopToolbar", (), {}), Toolbar=type("Toolbar", (), {}))
-    TopBar = sys.modules["aqt.toolbar"].TopToolbar
-    from due_crew import rooms as R, room_model as rm, account
-    t0 = datetime.datetime(2026, 10, 17, 18, 0, tzinfo=datetime.timezone.utc)
-    conf = json.load(open(os.path.join(REPO, "due_crew", "config.json")))
-    check("sounds: off till you pick, on this computer (the add-on's config, never an account key)",
-          conf.get("room_sound") == "off" and conf.get("room_sound_vol") == 60 and rm.sound_pick({}) == ("off", 60)
-          and not {"room_sound", "room_sound_vol"} & set(account.ACCOUNT_KEYS))
-    check("sounds: a pick is one of the four (or off), its volume 0-100; anything else is the default",
-          rm.sound_pick({"room_sound": "rain", "room_sound_vol": 35}) == ("rain", 35)
-          and rm.sound_pick({"room_sound": "cafe", "room_sound_vol": 101}) == ("off", 60)
-          and rm.sound_pick({"room_sound": "fire", "room_sound_vol": True}) == ("fire", 60)
-          and rm.SOUNDS == ("off", "brown", "rain", "fire", "waves"))
-    check("sounds: the chip's command, read strictly",
-          rm.sound_cmd(["duecrew", "roomsound", "waves", "80"]) == ("waves", 80)
-          and rm.sound_cmd(["duecrew", "roomsound", "off", "0"]) == ("off", 0)
-          and all(rm.sound_cmd(p) is None for p in (["duecrew", "roomsound", "cafe", "50"], ["duecrew", "roomsound", "rain", "101"],
-                                                    ["duecrew", "roomsound", "rain", "-1"], ["duecrew", "roomsound", "rain"],
-                                                    ["duecrew", "roomsound", "rain", "5", "x"], ["duecrew", "roomsound", "rain", "5.5"])))
-    fif = rm.make_fifteen("me", t0)
-    room = rm.make_room("me", t0, 4, 25, 5)
-    sf, sr = rm.sound_state(fif, "rain", 50), rm.sound_state(room, "fire", 100)
-    ms = lambda d: int(d.timestamp() * 1000)
-    check("sounds: they play from the session's start to its end, breaks too (a fifteen's: the end of its question)",
-          sf == {"kind": "rain", "vol": 0.5, "from": ms(t0), "until": ms(rm.live_until(fif)), "files": {}}
-          and sr["until"] == ms(rm.room_end(room)) and sr["vol"] == 1.0
-          and rm.sound_state(None, "rain", 50) is None and rm.sound_state(fif, "cafe", 50)["kind"] == "off")
-    stop, on = rm.sound_js(None), rm.sound_js(sf)
-    check("sounds: in no room, the player is only told to stop; in one, the sounds come once a page, then the pick",
-          "dcRoomSound.set(null)" in stop and "dcSounds" not in stop.replace("dcRoomSound", "")
-          and on.count("kinds: KINDS") == 1 and "if (window.dcSounds) { return; }" in on and json.dumps(sf) in on)
-    d = rm.widget_data(fif, [], ("#2e7d32", "#7cc47f"), sound=("rain", 40))
-    chip = rm.widget_js("chip", d)
-    check("sounds: the chip carries the speaker, the pick and the four, labelled; without a pick to carry, no speaker",
-          d["sound"] == {"kind": "rain", "vol": 40} and d["soundKinds"] == list(rm.SOUNDS)
-          and d["soundLabels"]["brown"] == "Brown noise" and "'Room sound'" in chip and "roomsound:" in chip
-          and rm.widget_data(fif, [], ("#2e7d32", "#7cc47f"))["sound"] is None)
-    check("sounds: the speaker says it (Sam's pick, A): Sound while off, the sound's name while one plays; the speaker alone when compact",
-          "on ? D.soundLabels[snd.kind] : 'Sound'" in chip and "if (!D.compact)" in chip and "if (!open) {" in chip)
-    check("sounds: spacing (Sam: \"too close to the edge\"): the outlined speaker nested 3 px inside the chip on every side "
-          "(20 px tall, border included, 7 px into the chip's 10 px end); alone, it sits clear of the end; an empty crewmate slot never doubles a gap",
-          "box-sizing:border-box;height:20px;" in chip and "margin:0 -7px 0 0;" in chip and "'width:20px;margin:0;'" in chip
-          and "if (!fc.childElementCount) { fc.style.display = 'none'; }" in chip
-          and "fc.style.display = on || D.compact || !fc.childElementCount ? 'none' : '';" in chip)
-    from due_crew import settings_model as sm
-    tab = board._settings_board({"room_sounds": False})
-    check("sounds: Settings › Board › Room sounds takes them away (on by default; Reset board puts it back on); Find a setting finds it",
-          sm.change(["set", "room_sounds", "0"], {}) == {"room_sounds": False} and sm.BOARD_DEFAULTS["room_sounds"] is True
-          and rm.sounds_on({}) and rm.sounds_on({"room_sounds": True}) and not rm.sounds_on({"room_sounds": False})
-          and 'aria-label="Room sounds"' in tab and "duecrew:set:room_sounds:1" in tab
-          and "rain" in board.FIND_WORDS["set:room_sounds:"])
-    check("sounds: the picker folds back by itself (Sam: \"should close after a second or two\"): 1.5 s after a pick, "
-          "2 s after the volume, 1 s after the pointer leaves, 4 s if nothing's touched; never mid-drag",
-          "picked = true; later(1500);" in chip and "later(2000)" in chip and "if (open) { later(1000); }" in chip
-          and "if (on) { picked = false; later(4000); }" in chip and "if (vol.matches(':active')) { later(800); return; }" in chip)
-    node = shutil.which("node")
-    if node:
-        src = open(os.path.join(REPO, "due_crew", "sounds.js")).read()
-        prog = ("var window = {};" + src + "var first = window.dcSounds;" + src +
-                "console.log(window.dcSounds.kinds.join(',') + '|' + (window.dcSounds === first) + '|' + typeof window.dcSounds.build);")
-        out = subprocess.run([node], input=prog, capture_output=True, text=True, timeout=60)
-        check("sounds.js: the four, made from noise; loaded twice it's still the one (so it can always stop)",
-              out.stdout.strip() == "brown,rain,fire,waves|true|function", out.stdout + out.stderr)
-        prog = ("var window = {};" + src + "window.dcSounds.files({rain: '/a.ogg', brown: '/b.ogg', fire: 5, cafe: '/c.ogg'});"
-                "console.log(window.dcSounds.recorded().join(','));")
-        out = subprocess.run([node], input=prog, capture_output=True, text=True, timeout=60)
-        check("sounds.js: told where the recordings are, it takes rain, fire and waves as text, never brown noise or anything else",
-              out.stdout.strip() == "rain", out.stdout + out.stderr)
-        fake = open(os.path.join(REPO, "tests", "fake_audio.js")).read()
-        prog = (fake + src + "var S = window.dcSounds; S.play('brown', 0.5); flush();"
-                "S.setVolume(0); flush(); var a = log.join(','); S.setVolume(0.4); flush(); var b = log.join(',');"
-                "S.stop(); flush(); var c = log.join(','); S.play('brown', 0.5); flush();"
-                "console.log([a, b, c, log.join(',')].join('|'));")
-        out = subprocess.run([node], input=prog, capture_output=True, text=True, timeout=60)
-        prog = (fake + src + "var S = window.dcSounds; S.play('brown', 0.5); flush(); S.setVolume(0); flush(); log.length = 0;"
-                "S.play('brown', 0); flush(); S.play('brown', 0); flush(); S.play('brown', 0); flush(); console.log(log.join(','));")
-        quiet = subprocess.run([node], input=prog, capture_output=True, text=True, timeout=60)
-        check("sounds.js (the bug hunt): at no volume, the session's check every 5 s leaves it asleep",
-              quiet.stdout.strip() == "", quiet.stdout + quiet.stderr)
-        check("sounds.js (3.9.1, the efficiency run): at no volume it sleeps, turned up it wakes; stopped, the context closes "
-              "(its samples go with it) and the next play makes a new one",
-              out.stdout.strip() == "new,suspend|new,suspend,resume|new,suspend,resume,close|new,suspend,resume,close,new",
-              out.stdout + out.stderr)
-    else:
-        print("SKIP sounds.js in node: no node")
-    # the clicks: from the top bar (our page) it's kept; from a card's page, never
-    mine = {"room_sound": "off", "room_sound_vol": 60}
-    evals, allowed = [], []
-
-    class Top:
-        def setPlaybackRequiresGesture(self, v):
-            allowed.append(v)
-    saved = (R.cfg, R.save_cfg, R._webs, R._eval, R.my_room)
-    try:
-        R.cfg = lambda: mine
-        R.save_cfg = lambda c, **k: mine.update(c)
-        R._webs = lambda: (Top(), None, None)
-        R._eval = lambda web, js: evals.append(js)
-        R.my_room = lambda: fif
-        dc._on_js(False, "duecrew:roomsound:waves:75|" + rm.CMD_KEY, TopBar())  # the chip's picker, in the top bar
-        kept = dict(mine)
-        played = evals[-1] if evals else ""
-        check("sounds: the top bar's player is told where this install's recordings are, by Anki's /_addons/ (setWebExports)",
-              json.dumps({k: f"/_addons/due_crew/sounds/{k}.ogg" for k in ("rain", "fire", "waves")}) in played
-              and 'setWebExports(__name__, r"sounds/[^/]+\\.ogg")' in open(os.path.join(REPO, "due_crew", "__init__.py")).read()
-              # 3.9.1 (the security review): a file in sounds/ only, never sounds/../ anything
-              and re.fullmatch(r"sounds/[^/]+\.ogg", "sounds/rain.ogg") and not re.fullmatch(r"sounds/[^/]+\.ogg", "sounds/../x/y.ogg"))
-        dc._on_js(False, "duecrew:roomsound:fire:20|" + rm.CMD_KEY, object())  # a card's page, keyed
-        dc._on_js(False, "duecrew:roomsound:fire:20", object())               # and bare
-        dc._on_js(False, "duecrew:roomsound:cafe:20|" + rm.CMD_KEY, TopBar())          # not one of ours
-        check("sounds: the chip's pick is kept for this computer and plays at once; the top bar may play it after a redraw",
-              kept == {"room_sound": "waves", "room_sound_vol": 75} and '"kind": "waves"' in played and allowed == [False, False])
-        check("sounds: a card's page can't set it, keyed or not; nor can a sound that isn't one of the four",
-              mine == {"room_sound": "waves", "room_sound_vol": 75})
-        evals.clear()
-        R._sound(Top(), None)
-        R._sound(None, fif)
-        check("sounds: no room, the player stops; no top bar, nothing", evals == [rm.sound_js(None)])
-        mine["room_sounds"] = False
-        evals.clear()
-        R._sound(Top(), fif)
-        dc._on_js(False, as_board("duecrew:roomsound:rain:50|" + rm.CMD_KEY), DeckBrowser())
-        check("sounds: with Room sounds off, the chip has no speaker, the player is told off, and a pick from the chip is ignored",
-              R._data(fif)["sound"] is None and len(evals) == 1 and '"kind": "off"' in evals[0]
-              and mine["room_sound"] == "waves")
-    finally:
-        R.cfg, R.save_cfg, R._webs, R._eval, R.my_room = saved
-    check("sounds: a recording's address is its kind's, in the add-on's own folder (quoted); brown noise and strangers have none",
-          rm.sound_files("my add-on", ["rain", "brown", "waves", "cafe"])
-          == {"rain": "/_addons/my%20add-on/sounds/rain.ogg", "waves": "/_addons/my%20add-on/sounds/waves.ogg"}
-          and rm.sound_files("x", []) == {} and rm.sound_state(fif, "rain", 50)["files"] == {}
-          and rm.sound_state(fif, "rain", 50, {"rain": "/r.ogg"})["files"] == {"rain": "/r.ogg"}
-          and "window.dcSounds.files(s.files)" in rm.sound_js(rm.sound_state(fif, "rain", 50)))
-    snd = os.path.join(REPO, "due_crew", "sounds")
-    credits = open(os.path.join(snd, "CREDITS.md")).read()
-    heads = {k: open(os.path.join(snd, k + ".ogg"), "rb").read(200) for k in rm.RECORDED}
-    sizes = {k: os.path.getsize(os.path.join(snd, k + ".ogg")) for k in rm.RECORDED}
-    check("sounds: rain, fire and waves ship as Ogg Opus loops, each well under 700 KB, credited (CC0, the maker, the page)",
-          rm.RECORDED == ("rain", "fire", "waves") and all(h.startswith(b"OggS") and b"OpusHead" in h for h in heads.values())
-          and all(40_000 < n < 700_000 for n in sizes.values())
-          and all(f"`{k}.ogg`" in credits for k in rm.RECORDED) and "CC0 1.0" in credits
-          and all(u in credits for u in ("freesound.org/s/525046/", "freesound.org/s/132534/", "freesound.org/s/587164/"))
-          and "due_crew/sounds/*.ogg" in open(os.path.join(REPO, "LICENSE")).read(), sizes)
+def test_room_sounds_gone_v398():
+    """3.9.8 (Sam: "remove the whole room sounds feature"): no speaker on
+    the chip, no player in the top bar, no recordings shipped, no setting,
+    no command; a config that still says room_sound is simply ignored."""
+    from due_crew import room_model as rm, settings_model as sm
+    root = os.path.join(REPO, "due_crew")
+    conf = json.load(open(os.path.join(root, "config.json")))
+    fif = rm.make_fifteen("me", datetime.datetime(2026, 10, 17, 18, 0, tzinfo=datetime.timezone.utc))
+    chip = rm.widget_js("chip", rm.widget_data(fif, [], ("#2e7d32", "#7cc47f")))
+    glue = open(os.path.join(root, "__init__.py")).read() + open(os.path.join(root, "rooms.py")).read()
+    check("room sounds are gone: no files, no keys, no switch, no speaker, no player, no command",
+          not os.path.exists(os.path.join(root, "sounds")) and not os.path.exists(os.path.join(root, "sounds.js"))
+          and not {"room_sound", "room_sound_vol"} & set(conf) and "room_sounds" not in sm.BOARD_DEFAULTS
+          and "room_sounds" not in sm.SWITCHES and "set:room_sounds:" not in board.FIND_WORDS
+          and not any(hasattr(rm, n) for n in ("sound_pick", "sound_state", "sound_js", "sound_cmd", "sounds_on", "SOUNDS"))
+          and "Room sound" not in chip and "roomsound" not in chip and "dcSounds" not in chip
+          and "roomsound" not in glue and "setWebExports" not in glue and "dcRoomSound" not in glue
+          and 'aria-label="Room sounds"' not in board._settings_board({})
+          and "sounds/" not in open(os.path.join(REPO, "LICENSE")).read())
+    from due_crew import rooms as R
+    check("room sounds are gone: an old chip's click is just not ours (not a card page's command, no room handler takes it)",
+          "roomsound" not in rm.CARD_PAGE_CMDS and R.on_message("roomsound", ["duecrew", "roomsound", "rain", "50"]) is False
+          and rm.trusted("duecrew:roomsound:rain:50|" + rm.CMD_KEY, True)[1] is False)
 
 
 def _sim_log(days=200, pace=30, seed=7, batch=False):

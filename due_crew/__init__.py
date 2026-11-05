@@ -1618,8 +1618,7 @@ def _apply_settings(changed, focus=None):
     c = cfg()
     push = any(k in changed and changed[k] != c.get(k) for k in SHARE_KEYS)
     chip = any(k in changed and changed[k] != c.get(k, d) for k, d in
-               (("room_chip_side", "right"), ("fifteen", True), ("sev", True), ("sev_break", "breathe"),
-                ("room_sounds", True)))  # 3.8.1; 3.9.1: the speaker comes and goes
+               (("room_chip_side", "right"), ("fifteen", True), ("sev", True), ("sev_break", "breathe")))  # 3.8.1
     leeches = changed.get("due_leeches") is True and not c.get("due_leeches")
     exam = "exam_date" in changed and str(changed["exam_date"] or "") != str(c.get("exam_date") or "")
     c.update(changed)
@@ -1767,8 +1766,6 @@ def _on_profile_open():
         _menu_done = True
         _tools_menu()
         mw.addonManager.setConfigAction(__name__, open_settings)
-        # 3.9.1: the room sounds' recordings, for the top bar's page (rooms._sound_files)
-        mw.addonManager.setWebExports(__name__, r"sounds/[^/]+\.ogg")
     _reset_runtime()          # profile switch: nothing carries over
     with _lock:
         _fetching = False     # the last profile's refresh can't commit here
