@@ -39,6 +39,7 @@ RECENT = 5           # finds kept for the empty box, on this computer
 DAYS = 14            # the day picker: two weeks from today
 BEFORE_MAX = 5       # a quiz's topics: on at most this many days before it
 MY_PLAN = "My plan"
+ALSO_MAX = 8         # a topic's near names under it
 KEEP_LIMIT = 9999    # a kept deck's limit: what Anki's own box goes to
 
 _win = None
@@ -531,6 +532,26 @@ class Ops:
         plan_flow._after_change()
         return n
 
+    def pace(self):
+        """My pace from my answer log these 4 weeks (one read, when the window
+        first needs it): a new card's first-day seconds, a review's, my
+        usual day's minutes (magic.pace_from)."""
+        col = mw.col
+        cut = int(col.sched.day_cutoff)
+        since = (cut - 28 * 86400) * 1000
+        new_ms, new_cards = col.db.first("SELECT total(time), count(DISTINCT cid) FROM revlog WHERE id > ? AND type = 0", since) or (0, 0)
+        rev_ms, rev_n = col.db.first("SELECT total(time), count() FROM revlog WHERE id > ? AND type = 1", since) or (0, 0)
+        days = [int(ms or 0) / 60000 for _d, ms in col.db.all(
+            "SELECT (id / 1000 - ?) / 86400, total(time) FROM revlog WHERE id > ? GROUP BY 1", cut, since)]
+        return M.pace_from(float(new_ms or 0), int(new_cards or 0), float(rev_ms or 0), int(rev_n or 0), days)
+
+    def in_filtered(self, cids):
+        """[(deck, n)]: these cards sitting in a filtered deck now (another one
+        can't take them), the most first."""
+        ids = ",".join(str(int(c)) for c in cids) or "0"
+        rows = mw.col.db.all(f"SELECT did, count() FROM cards WHERE odid != 0 AND id IN ({ids}) GROUP BY did")
+        return sorted(((self.deck_name(d) or "a filtered deck", int(k)) for d, k in rows), key=lambda x: -x[1])
+
     def plan_dates(self, did, idx, cids):
         """[(plan name, [date label])]: the dates of the plans I follow on this
         deck that hold any of these cards (my dates). QBank QIDs' line."""
@@ -641,7 +662,8 @@ class Search:
         self.idx, self.tree, self.did = None, None, None
         self._idx = {}
         self.r = M.read("", None, ops.today())
-        self.flip, self.tag_off, self.open_g = set(), set(), None
+        self.flip, self.tag_off = set(), set()
+        self.open_segs, self.seg_off = set(), set()  # round 3: a typed topic's tree open; a topic left out whole
         self.filters, self.filters_set = [], False
         self.how = "nd"
         self.picked, self.day_name = [], ""
@@ -658,6 +680,7 @@ class Search:
         self.filtered = ops.filtered_decks()
         self._loads, self._btree = {}, {}
         self.bank_pick, self._qf, self._maps, self._topics = None, None, {}, []  # QBank QIDs: the bank I picked, the find, decks' maps, Their topics
+        self._pace, self._found = None, None  # round 3: my pace (read once a window), what was found (once a reading)
         self.pick_deck(ops.default_deck(choices) if choices else None)
 
     # -- state --
@@ -701,10 +724,11 @@ class Search:
             if top and top != self.did:
                 self.pick_deck(top)
                 self.r = M.read(self.text, self.tree, self.ops.today(), self.every, plans)
-        self.flip, self.tag_off = set(), set()
+        self.flip, self.tag_off, self.seg_off = set(), set(), set()
         self.filters, self.filters_set = [dict(f) for f in self.r["filters"]], False
-        named = [i for i, g in enumerate(self.r["groups"]) if g["on"] and len(g["tags"]) > 1]
-        self.open_g = named[0] if len(named) == 1 else None  # Sam: a named topic with many tags shows them, open
+        # Sam: "seeing the tag tree is really important": the first topic's tree open, the rest a tap away
+        first = next((g["seg"] for g in self.r["groups"] if g["on"]), None)
+        self.open_segs = {first} if first is not None else set()
         self.how = "all" if (self.r["kind"] in ("ids", "search") or self.filters or self.cids_in) else "nd"
         self._cards = None
         if any(a["k"] == "before" for a in self.r["acts"]):
@@ -725,8 +749,17 @@ class Search:
 
     # -- what's found --
 
+    def offs(self):
+        """The chips toggled from the reading's own: my taps (flip), and a topic
+        I left out whole (seg_off) takes its ticked ones out with it."""
+        out = set(self.flip)
+        for i, g in enumerate(self.r["groups"]):
+            if g.get("seg") in self.seg_off and (bool(g["on"]) != (i in self.flip)):
+                out ^= {i}
+        return out
+
     def ticked(self):
-        return M.ticked_tags(self.r, self.flip, self.tag_off)
+        return M.ticked_tags(self.r, self.offs(), self.tag_off)
 
     def joined_cards(self, deck_q):
         """Sam: "AND statements and OR statements on tags": each term's topics'
@@ -734,7 +767,7 @@ class Search:
         together ("…, or renal"). A topic no tag says is its words in the
         cards' text; one whose chips are all off, none (nothing is in both)."""
         r, idx = self.r, self.idx
-        by_seg = M.ticked_by_seg(r, self.flip, self.tag_off)
+        by_seg = M.ticked_by_seg(r, self.offs(), self.tag_off)
         has = {g["seg"] for g in r["groups"]}
         words = r.get("seg_words") or []
         out = set()
@@ -907,7 +940,8 @@ class Search:
             return f"{len(self.cids_in):,} picked"
         if r.get("plan"):
             return r["plan"]["name"]
-        said = M.topics_said([dict(g, on=(g["on"] if i not in self.flip else not g["on"])) for i, g in enumerate(r["groups"])],
+        offs = self.offs()
+        said = M.topics_said([dict(g, on=(g["on"] if i not in offs else not g["on"])) for i, g in enumerate(r["groups"])],
                              r.get("terms"))
         if said:
             return said
@@ -926,27 +960,19 @@ class Search:
         r = self.r
         cids, q = self.cards()
         t = self.tally(cids) if cids or q or r["kind"] not in ("empty", "do", "plantext") else None
-        chips = []
-        for i, g in enumerate(r["groups"]):
-            on = g["on"] if i not in self.flip else not g["on"]
-            tags = M.tag_list([dict(M.tag_row(x, g["name"]), t=x, on=x not in self.tag_off,
-                                    n=len(self.idx.tag_cards(x)) if self.idx else 0)
-                               for x in g["tags"]], g["name"]) if i == self.open_g else []
-            chips.append({"i": i, "name": g["name"], "n": g["cards"], "tags": len(g["tags"]), "on": on,
-                          "open": i == self.open_g, "list": tags, "seg": g["seg"]})
         have = {f["k"]: f for f in self.filters}
         row = [{"k": k, "label": M.filter_label({"k": k}), "on": k in have} for k in M.ROW]
         row = [{"k": f["k"], "label": M.filter_label(f), "on": True, "n": f.get("n")} for f in self.filters
                if f["k"] not in M.ROW] + row
+        f = self.found()
         v = {"intro": self.intro, "howto": self.howto() if self.intro else None, "text": self.text, "decks": [{"did": d, "name": n} for d, n in self.decks],
-             "did": self.did, "kind": r["kind"], "chips": chips, "neg": [g["name"] for g in r["neg"]],
+             "did": self.did, "kind": r["kind"], "topics": self.topics_view(), "neg": [g["name"] for g in r["neg"]],
              "filters": row, "limit": r.get("limit"), "count": t, "q": q, "how": self.how,
              "rows": self.rows(), "said": self.said, "busy": self.busy, "mode": self.mode,
              "recent": self.ops.recent() if r["kind"] == "empty" else [],
              "picked": self.cids_in is not None, "name": self.name(), "signed_in": self.ops.signed_in(),
              "lines": self.lines(cids, t), "qids": self.qids_view(), "terms": r.get("terms") or [],
-             "where": (f"Study now puts them in {P.our_deck(self.name()).replace('::', ' › ')}; each goes back to its "
-                       f"own deck once you’ve done it.") if cids else ""}
+             "found": f, "tiles": self.tiles_view(f)}
         if self.mode == "days" or self.picked:
             v["days"] = self.days_view(cids)
         v["dests"] = self.dests_view()
@@ -955,6 +981,109 @@ class Search:
         if r["kind"] == "plantext":
             v["plantext"] = self.plantext_view()
         return v
+
+    # -- round 3 (Sam: "giving the user enough information about what has been found so that they can take the
+    # appropriate action"): one row a typed topic and its tree, what was found, four tiles --
+
+    def topics_view(self):
+        """One row a typed topic: its ticked names as one (Sam: "combine things
+        with similar names so long as the tag goes all the way to the end"),
+        their cards, the near names as Also under it, and its tree when open:
+        each tag to its last part, under where it's from, a resource's cards
+        once each. [{seg, name, on, can, n, ntags, open, join, also, tree}]."""
+        r, idx = self.r, self.idx
+        if idx is None or not r["groups"]:
+            return []
+        flipped = lambda i, g: bool(g["on"]) != (i in self.flip)  # noqa: E731 (what my taps left ticked, a topic left out aside)
+        term = {sg: ti for ti, t in enumerate(r.get("terms") or []) for sg in t}
+        sizes = {ti: len(t) for ti, t in enumerate(r.get("terms") or [])}
+        words = r.get("seg_words") or []
+        found = set(self.cards()[0])  # what it found: a filter, a but not or a number narrows a topic's cards
+        out, prev = [], None
+        for sg in sorted({g["seg"] for g in r["groups"]}):
+            gs = [(i, g) for i, g in enumerate(r["groups"]) if g["seg"] == sg]
+            named = [(i, g) for i, g in gs if flipped(i, g)]
+            on = named if sg not in self.seg_off else []
+            tags = list(dict.fromkeys(x for _i, g in on for x in g["tags"]))
+            cards = set()
+            for x in tags:
+                if x not in self.tag_off:
+                    cards |= idx.tag_cards(x)
+            joined = sizes.get(term.get(sg), 1) > 1
+            kept = len(cards & found)
+            row = {"seg": sg, "name": (named or gs)[0][1]["name"] if named else (words[sg] if sg < len(words) else gs[0][1]["name"]),
+                   "on": bool(on), "can": bool(named), "n": len(cards), "ntags": len(tags),
+                   "in": kept if on and kept != len(cards) and not joined else None,  # "13 of 798": the ones it found
+                   "open": sg in self.open_segs and bool(tags),
+                   "join": "with" if prev is not None and term.get(sg) == term.get(prev) and joined else "",
+                   "also": [{"i": i, "name": g["name"], "n": g["cards"]} for i, g in gs if not flipped(i, g)][:ALSO_MAX]}
+            if row["open"]:
+                roots = len({str(x).split("::")[0].lower() for x in tags}) > 1
+                row["tree"] = M.tag_list([dict(M.tag_row(x, roots=roots), t=x, on=x not in self.tag_off, n=len(idx.tag_cards(x)))
+                                          for x in tags], idx.tag_cards)
+            out.append(row)
+            prev = sg
+        return out
+
+    def pace(self):
+        if self._pace is None:
+            try:
+                self._pace = self.ops.pace()
+            except Exception:
+                traceback.print_exc()
+                self._pace = dict(M.PACE)
+        return self._pace
+
+    def found(self):
+        """What it found, each card once by what Study now would do with it:
+        due now, new (and how many of those are suspended), seen and not due
+        yet; leeches left out; how long Study now's set is at my pace, beside
+        my usual day; any sitting in another filtered deck. None for nothing."""
+        cids, _q = self.cards()
+        if self._found is not None and self._found[0] is self._cards:
+            return self._found[1]
+        f = None
+        if cids and self.idx is not None:
+            idx = self.idx
+            f = {"n": len(cids), "due": 0, "new": 0, "susp_new": 0, "notdue": 0, "leech": 0, "susp": 0}
+            for c in cids:
+                queue, ctype = idx.cards.get(c, (0, 0))
+                if c in idx.leech:
+                    f["leech"] += 1
+                    continue
+                f["susp"] += queue == -1
+                if c in idx.due_now:
+                    f["due"] += 1
+                elif ctype == 0:
+                    f["new"] += 1
+                    f["susp_new"] += queue == -1
+                else:
+                    f["notdue"] += 1
+            pace = self.pace()
+            f["all"] = self.how == "all"
+            rev = f["due"] + (f["notdue"] if f["all"] else 0)
+            f["study"] = f["new"] + rev
+            sec = M.took(f["new"], rev, pace)
+            f["time"] = M.says_time(sec) if f["study"] else ""
+            f["usual"] = M.says_time(pace["day_min"] * 60).replace("about ", "") if pace["known"] else ""
+            f["big"] = bool(f["study"]) and sec > pace["day_min"] * 60
+            f["days"] = M.days_for(sec, pace) if f["big"] else 0
+            own = P.our_deck(self.name())
+            f["infilt"] = [[name, k] for name, k in self.ops.in_filtered(cids) if name != own]
+        self._found = (self._cards, f)
+        return f
+
+    def tiles_view(self, f):
+        """Study now, Schedule ahead, Make a new filtered deck, Unsuspend (Sam's
+        four), the one that fits filled: Schedule ahead when it's more than my
+        usual day, else Study now (Unsuspend when only that's left to do)."""
+        if not f:
+            return None
+        rec = "days" if f["big"] else ("study" if f["study"] else ("uns" if f["susp"] else ""))
+        every = f["new"] + f["due"] + f["notdue"]
+        return {"study": f["study"], "all": every if not f["all"] and f["notdue"] else 0, "days": f["days"],
+                "keep": self.name(), "uns": f["susp"], "rec": rec,
+                "deck": P.our_deck(self.name()).replace("::", " \u203a ")}
 
     def howto(self):
         """The how-to's words, its tries this deck's: the resource one from its
@@ -1148,13 +1277,21 @@ class Search:
         self.reread()
 
     def c_chip(self, i=None):
+        """An Also: a near name taken in (its topic back in too, if I'd left it out)."""
         i = int(i)
         self.flip ^= {i}
+        if 0 <= i < len(self.r["groups"]):
+            self.seg_off.discard(self.r["groups"][i]["seg"])
         self._cards = None
 
-    def c_open(self, i=None):
-        i = int(i)
-        self.open_g = None if self.open_g == i else i
+    def c_open(self, seg=None):
+        """A topic's tree, open or closed."""
+        self.open_segs ^= {int(seg)}
+
+    def c_seg(self, seg=None):
+        """A typed topic's tick: all of it left out, or back in."""
+        self.seg_off ^= {int(seg)}
+        self._cards = None
 
     def c_tag(self, t=""):
         self.tag_off ^= {str(t)}
@@ -1179,10 +1316,11 @@ class Search:
                 self.filters = [f for f in self.filters if f["k"] != ("seen" if k == "new" else "new")]
         self._cards = None
 
-    def c_how(self, how="nd"):
-        self.how = "all" if how == "all" else "nd"
-
-    def c_study(self):
+    def c_study(self, all=False):
+        """Study now: the new and due (all of them for a filter or QIDs); all=True, every one but a leech."""
+        if all:
+            self.how = "all"
+            self._found = None
         cids = self.study_ids(self.cards()[0])
         if not cids:
             self.said = {"text": "Nothing here to study now."}
@@ -1254,7 +1392,13 @@ class Search:
         self.ops.browse(cids)
 
     def c_days(self, show=True):
+        """Schedule ahead: the day picker, the days it takes at my pace picked
+        from tomorrow when nothing is yet (the days before a quiz are)."""
         self.mode = "days" if show else ""
+        f = self.found() if show and not self.picked else None
+        if f and f["days"]:
+            today = self.ops.today()
+            self.picked = [(today + datetime.timedelta(days=k)).isoformat() for k in range(1, min(f["days"], DAYS - 1) + 1)]
 
     def c_day(self, iso=""):
         if iso in self.picked:

@@ -4595,6 +4595,49 @@ every release that changes how something works.
   and due, Add to a filtered deck…, the bank) had lost their arrow to the
   buttons' background (Sam, the click test: "not clear that this is a drop
   down"): drawn again, in the ink.
+- 3.9.7, Magic search's round 3 (Sam, on the click test: "the bottom of
+  the search with the options is quite complicated… most important thing
+  is giving the user enough information about what has been found so
+  that they can take the appropriate action"; then "seeing the tag tree is
+  really important", "B but with way less exposition", "love the also
+  underneath", "Study now, Schedule ahead, Make a new filtered deck",
+  "the tag tree to go all the way to the last tag", "combine things with
+  similar names so long as the tag goes all the way to the end", "make
+  unsuspend a core button in the bottom pills"; mocked three times, built
+  from the third):
+  - one row a typed topic (`magic_flow.Search.topics_view`): its ticked
+    names as one, its tick (`c_seg`: all of it out or back), its cards
+    ("13 of 798 cards" when a filter, a but not or a number keeps some),
+    "N tags" folding its tree (`c_open`), and Also under it: the near
+    names, a tap takes one in (`c_chip`, eight at most). The chips row and
+    its Where line are gone;
+  - the tree goes to each tag's end (`magic.tag_row`: the resource, then
+    every part after it, the topic's own name kept); tags under two roots
+    say which (`root_name`: "Step 1 › Cardio › Heart Failure", a deck's
+    version and short prefix off); a resource's count is its cards once
+    each (`tag_list` takes the index's tag cards: a parent and its child,
+    or both halves of a deck, had been counted twice, 403 where 314 are);
+  - what it found (`found`): the count, a bar and its key (due now, new
+    and how many of those are suspended, seen and not due yet; leeches
+    left out), and Study now's time at my pace beside my usual day (one
+    read of my last four weeks' answers, `Ops.pace` → `magic.pace_from`:
+    a new card's first-day seconds, a review's, the middle of the days I
+    studied; a guess, unsaid, till there's a log), and any of them sitting
+    in another filtered deck (`Ops.in_filtered`; Study now's own aside);
+  - four tiles (`tiles_view`): Study now (the new and due; every one for a
+    filter, QIDs or a search), Schedule ahead (the day picker, the days it
+    takes at my pace picked from tomorrow when nothing is), Make a new
+    filtered deck (its name to change, then Make), Unsuspend (its count;
+    greyed when none is). The filled one follows what it found: Schedule
+    ahead when Study now's set is more than my usual day, else Study now,
+    Unsuspend when that's all that's left. Under them, quietly: Add to a
+    filtered deck… and Study all N (the seen ones too; New and due's
+    dropdown went);
+  - the filters are a quiet Only line under the box; the how-to's then
+    lines say the four tiles.
+  On the big shared deck: "heart failure" is 537 cards, 21 due, 430 new
+  (373 suspended), 86 not due, about 3 h 40 min, Schedule ahead filled;
+  the window's controls pass the audit in each state, light and dark.
 - 3.9.7, test_plan_web's "the week a set opened in that still runs today"
   counted its set from this week's Monday, so it held only on a Monday or
   a Tuesday: the set and the days after it count from today now.

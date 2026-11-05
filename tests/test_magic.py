@@ -384,6 +384,14 @@ class Ops(MF.Ops):
     def plan_dates(self, did, idx, cids):
         return [("My plan", ["Thu 5 Nov"])] if cids else []
 
+    PACE = {"new_s": 30, "rev_s": 10, "day_min": 20, "known": True}  # a new card's half minute, a review's 10 s, 20 min a day
+
+    def pace(self):
+        return dict(self.PACE)
+
+    def in_filtered(self, cids):
+        return list(getattr(self, "infilt", []))
+
     def deck_map(self, did):
         self.log.append(("deck_map", did))
         return getattr(self, "tiles", ([], set()))
@@ -454,20 +462,33 @@ def test_the_window_finds():
     hf = IDX.tag_cards(R + "#Videos::03_Cardio::05_Heart_Failure") | IDX.tag_cards(R + "#Path::Cardio::Heart_Failure") \
         | IDX.tag_cards(R + "#M&M::Cardio::Heart_Failure")
     check("its cards are its tags' in the deck's index, counted", v["count"]["n"] == len(hf) == 27, v["count"])
-    check("a named topic with several tags shows them, open", v["chips"][0]["open"] and v["chips"][0]["tags"] == 3, v["chips"][0])
-    check("round 2 (Sam: \"the overarching resource is an important thing\"): its tags under where each is from, "
-          "the one with most cards first, the chip's own name off each path",
-          [(g["res"], g["n"], [t["path"] for t in g["tags"]]) for g in v["chips"][0]["list"]]
-          == [("Videos", 16, ["Cardio"]), ("Path", 7, ["Cardio"]), ("M&M", 4, ["Cardio"])], v["chips"][0]["list"])
+    tp = v["topics"][0]
+    check("round 3: one row a typed topic, its tags' cards once each, its tree open", tp["name"] == "Heart Failure"
+          and tp["on"] and tp["n"] == 27 and tp["ntags"] == 3 and tp["open"] and tp["in"] is None, tp)
+    check("round 3 (Sam: \"the tag tree to go all the way to the last tag\"): each tag under where it's from, "
+          "the one with most cards first, its path to its end",
+          [(g["res"], g["n"], [t["path"] for t in g["tags"]]) for g in tp["tree"]]
+          == [("Videos", 16, ["Cardio \u203a Heart Failure"]), ("Path", 7, ["Cardio \u203a Heart Failure"]),
+              ("M&M", 4, ["Cardio \u203a Heart Failure"])], tp["tree"])
+    check("its near names as Also under it, each with its cards", tp["also"] == [{"i": 1, "name": "Heart Failure Drugs", "n": 6}], tp["also"])
+    face.on("open", {"seg": 0})
+    check("its tags' count folds the tree", not face.view()["topics"][0]["open"] and "tree" not in face.view()["topics"][0])
+    face.on("open", {"seg": 0})
     face.on("tag", {"t": R + "#Path::Cardio::Heart_Failure"})
     check("unticking one of its tags leaves its cards out", face.view()["count"]["n"] == 20)
     face.on("tags", {"ts": [R + "#Videos::03_Cardio::05_Heart_Failure"], "on": False})
     check("a resource's tick takes its tags out together…", face.view()["count"]["n"] == 4
-          and not face.view()["chips"][0]["list"][0]["tags"][0]["on"], face.view()["count"])
+          and not face.view()["topics"][0]["tree"][0]["tags"][0]["on"], face.view()["count"])
     face.on("tags", {"ts": [R + "#Videos::03_Cardio::05_Heart_Failure"], "on": True})
     check("…and back in together (Path's still out)", face.view()["count"]["n"] == 20)
     face.on("chip", {"i": 1})
-    check("ticking an offered chip adds it", face.view()["count"]["n"] == 26)
+    tp = face.view()["topics"][0]
+    check("an Also tapped joins the topic's row, and leaves the Also", face.view()["count"]["n"] == 26
+          and tp["ntags"] == 4 and not tp["also"], tp)
+    face.on("seg", {"seg": 0})
+    check("the topic's tick: all of it out", face.view()["count"]["n"] == 0 and not face.view()["topics"][0]["on"])
+    face.on("seg", {"seg": 0})
+    check("…and back", face.view()["count"]["n"] == 26)
     face.on("filter", {"k": "new"})
     v = face.view()
     check("a filter from the row: on, and the cards kept to it", any(f["k"] == "new" and f["on"] for f in v["filters"])
@@ -505,11 +526,10 @@ def test_the_window_does():
     want = [c for c in cids if c not in IDX.leech and (IDX.cards[c][1] == 0 or c in IDX.due_now)]
     check("Study now: new and due, never a leech, its deck named for the topic; the window goes",
           st[1] == want and st[2] == "Anemia" and closed, st)
-    face.on("how", {"how": "all"})
-    face.on("study", {})
+    face.on("study", {"all": True})
     st = [x for x in ops.log if x[0] == "study"][-1]
-    check("All of them: every one but a leech", st[1] == [c for c in cids if c not in IDX.leech])
-    face.on("how", {"how": "nd"})
+    check("Study all N: every one but a leech", st[1] == [c for c in cids if c not in IDX.leech])
+    face.how = "nd"
     face.on("keep", {"name": "Anemia for Friday"})
     k = next(x for x in ops.log if x[0] == "keep")
     check("Keep as a filtered deck: named, its cards and New and due live (Rebuild fills it)",
@@ -526,6 +546,65 @@ def test_the_window_does():
     check("Unsuspend: said", "Unsuspended" in face.view()["said"]["text"], face.view()["said"])
     face.on("browse", {})
     check("Browse", ops.log[-1][0] == "browse")
+
+
+def test_what_it_found_and_the_tiles():
+    """Round 3 (Sam: "giving the user enough information about what has been
+    found so that they can take the appropriate action"; four tiles: "Study
+    now, Schedule ahead, Make a new filtered deck", and "make unsuspend a core
+    button in the bottom pills")."""
+    check("my pace from my log: a new card's seconds, a review's, the middle of my days",
+          M.pace_from(60000 * 10, 20, 8000 * 40, 40, [30, 50, 0, 40, 90]) == {"new_s": 30.0, "rev_s": 8.0, "day_min": 50, "known": True})
+    check("too little to go on: the usual guess, not said as mine",
+          M.pace_from(1000, 2, 1000, 3, [30, 40]) == dict(M.PACE) and not M.PACE["known"])
+    check("a pace's ends held (a card left open over lunch)", M.pace_from(10 ** 9, 10, 10, 20, [])["new_s"] == 240
+          and M.pace_from(10, 10, 10, 20, [])["rev_s"] == 3)
+    check("the time said short", [M.says_time(x) for x in (20, 120, 2700, 3600, 13190)]
+          == ["under a minute", "about 2 min", "about 45 min", "about 1 h", "about 3 h 40 min"])
+    pace = {"new_s": 30, "rev_s": 10, "day_min": 20, "known": True}
+    check("how many of my days it takes, one at least, two weeks at most",
+          (M.days_for(60, pace), M.days_for(1201, pace), M.days_for(10 ** 6, pace)) == (1, 2, 14))
+    face, ops, _closed = window()
+    face.on("intro", {"show": False})
+    face.on("type", {"text": "heart failure"})
+    v = face.view()
+    f, t = v["found"], v["tiles"]
+    check("what it found, each card once: due, new (its suspended said), seen and not due, none a leech here",
+          (f["n"], f["due"], f["new"], f["susp_new"], f["notdue"], f["leech"]) == (27, 2, 17, 9, 8, 0)
+          and f["due"] + f["new"] + f["notdue"] + f["leech"] == f["n"], f)
+    check("Study now's set at my pace, beside my usual day", f["study"] == 19 and f["time"] == "about 9 min" and f["usual"] == "20 min"
+          and not f["big"] and f["days"] == 0, f)
+    check("four tiles: under my day, Study now's filled; Study all the seen ones too; Unsuspend's count; the new deck's name",
+          t == {"study": 19, "all": 27, "days": 0, "keep": "Heart Failure", "uns": 9, "rec": "study", "deck": "Due Crew \u203a Heart Failure"}, t)
+    ops.PACE = dict(Ops.PACE, day_min=5)
+    face = MF.Search(ops)
+    face.push, face.close_win = (lambda: None), (lambda: None)
+    face.on("type", {"text": "heart failure"})
+    v = face.view()
+    check("more than my usual day: Schedule ahead filled, the days it takes said", v["found"]["big"] and v["found"]["days"] == 2
+          and v["tiles"]["rec"] == "days" and v["tiles"]["days"] == 2, v["found"])
+    face.on("days", {"show": True})
+    check("Schedule ahead: the days it takes picked, from tomorrow", face.picked == ["2026-11-05", "2026-11-06"], face.picked)
+    face.on("day", {"iso": "2026-11-09"})
+    face.on("days", {"show": False})
+    face.on("days", {"show": True})
+    check("…not again once I've picked my own", face.picked == ["2026-11-05", "2026-11-06", "2026-11-09"], face.picked)
+    ops.infilt = [("Due Crew::Heart Failure", 3), ("QBank misses", 2)]
+    face.on("type", {"text": "heart failure "})
+    check("some sitting in a filtered deck: said, its own deck aside (Study now rebuilds that one)",
+          face.view()["found"]["infilt"] == [["QBank misses", 2]], face.view()["found"]["infilt"])
+    face.on("type", {"text": "anemia I missed this week"})
+    tp = face.view()["topics"][0]
+    check("a topic narrowed by a filter says how many of its cards are in (\"13 of 798\")", tp["in"] is not None
+          and tp["in"] == face.view()["found"]["n"] < tp["n"], tp)
+    face.on("type", {"text": "seen"})
+    f = face.view()["found"]
+    t = face.view()["tiles"]
+    check("a filter alone: Study now takes every one but a leech, so no Study all; none suspended, Unsuspend has none",
+          f["all"] and f["study"] == f["due"] + f["notdue"] + f["new"] == f["n"] - f["leech"] and t["all"] == 0 and t["uns"] == 0, (f, t))
+    js = open(os.path.join(REPO, "due_crew", "magicpage", "magic.js")).read()
+    check("the page: the four tiles, in Sam's words", all(w in js for w in ("Study now", "Schedule ahead", "Make a new filtered deck", "Unsuspend")))
+    check("the page: Study all N sends study with all", "'Study all ' + n(T.all), 'study', { all: true }" in js)
 
 
 def test_put_on_days():
@@ -768,8 +847,8 @@ def test_and_or_and_both():
     v = face.view()
     check("none in both: no cards, and said", v["count"]["n"] == 0 and v["lines"] == ["No card here is in both."], v["lines"])
     face.on("type", {"text": "both heart failure and diuretics"})
-    face.on("chip", {"i": next(i for i, c in enumerate(face.view()["chips"]) if c["seg"] == 1)})
-    check("a side's chip off: nothing is in both", face.view()["count"]["n"] == 0)
+    face.on("seg", {"seg": 1})
+    check("a side's topic off: nothing is in both", face.view()["count"]["n"] == 0)
     js = open(os.path.join(REPO, "due_crew", "magicpage", "magic.js")).read()
     check("the page: a quiet with between the chips taken in both", "text: 'with', title: 'Only the cards in both'" in js)
 
@@ -778,25 +857,34 @@ def test_tag_rows_say_their_resource():
     """Round 2 (Sam, on a topic's tags: "i'm not really able to find the
     overarching resource which is an important thing")."""
     row = M.tag_row
-    check("a tag: its resource, the first #part under its root, and the parts after it, the last three",
+    A = " \u203a "
+    check("round 3 (Sam: \"all the way to the last tag\"): its resource, the first #part under its root, and every part after it",
           row("#Big::#QuickRef::04_Pathology::03_Neoplasia::16_Paraneoplastic::01_Skin::*Lesser_Sign")
-          == {"res": "Quick Ref", "path": "Paraneoplastic › Skin › Lesser Sign"})
-    check("the chip's own name off the end", row(R + "#M&M::Cardio::Heart_Failure", "Heart Failure") == {"res": "M&M", "path": "Cardio"})
-    check("a resource said alone: its name, nothing after", row(R + "#ChartsMicro", "Charts Micro") == {"res": "Charts Micro", "path": ""})
-    check("no #part: its root is where it's from", row("Heme_lectures::Week_2::Anemia", "Anemia") == {"res": "Heme lectures", "path": "Week 2"})
-    check("a one-part tag: no resource", row("anemia", "Anemia") == {"res": "", "path": "anemia"})
-    rows = [{"t": "a", "res": "Path", "path": "Heme", "n": 3, "on": True}, {"t": "b", "res": "Videos", "path": "Heme", "n": 9, "on": True},
-            {"t": "c", "res": "Path", "path": "Renal", "n": 8, "on": False}]
+          == {"res": "Quick Ref", "path": A.join(["Pathology", "Neoplasia", "Paraneoplastic", "Skin", "Lesser Sign"])})
+    check("the topic's own name kept at the end", row(R + "#M&M::Cardio::Heart_Failure") == {"res": "M&M", "path": "Cardio" + A + "Heart Failure"})
+    check("a resource said alone: its name, nothing after", row(R + "#ChartsMicro") == {"res": "Charts Micro", "path": ""})
+    check("no #part: its root is where it's from", row("Heme_lectures::Week_2::Anemia") == {"res": "Heme lectures", "path": "Week 2" + A + "Anemia"})
+    check("a one-part tag: no resource", row("anemia") == {"res": "", "path": "anemia"})
+    check("tags under two roots: the root says which, said short (its version and a short prefix of capitals off)",
+          row("#Big_Step1_v12::#M&M::06_Cardio::06_Heart_Failure", roots=True)["path"] == A.join(["Big Step 1", "Cardio", "Heart Failure"])
+          and row("XY_Step2_v12::#M&M::02_Cardio", roots=True)["path"] == "Step 2" + A + "Cardio"
+          and row("XY_Step2_v12::#M&M::02_Cardio")["path"] == "Cardio")
+    check("a root's name: no version, no short capitals before it, a number set apart",
+          [M.root_name(x) for x in ("Big_Step1_v12", "XY_Step2_v12", "Heme_lectures", "AB")] == ["Big Step 1", "Step 2", "Heme lectures", "AB"])
+    rows = [{"t": "b", "res": "Path", "path": "Heme", "n": 3, "on": True}, {"t": "c", "res": "Videos", "path": "Heme", "n": 9, "on": True},
+            {"t": "a", "res": "Path", "path": "Renal", "n": 8, "on": False}]
     got = M.tag_list(rows)
-    check("by resource, the one with most cards first, each one's tags by their cards",
-          [(g["res"], g["n"], [t["t"] for t in g["tags"]]) for g in got] == [("Path", 11, ["c", "a"]), ("Videos", 9, ["b"])], got)
-    twins = [dict(M.tag_row(t, "Heart Failure"), t=t, n=n, on=True) for t, n in (
-        ("#Big_Step1::#M&M::06_Cardio::06_Heart_Failure", 5), ("#Big_Step2::#M&M::02_Cardio::03_Heart_Failure", 4),
-        ("#Big_Step1::#Path::A::X::B::C::Cardio::Heart_Failure", 3), ("#Big_Step1::#Path::Y::X::B::C::Cardio::Heart_Failure", 2))]
-    got = M.tag_list(twins, "Heart Failure")
-    check("two of a resource's that would read the same say more: the whole path, then the root (a resource in two versions of a deck)",
-          [[t["path"] for t in g["tags"]] for g in got] == [["Big Step1 › Cardio", "Big Step2 › Cardio"],
-                                                             ["A › X › B › C › Cardio", "Y › X › B › C › Cardio"]], got)
+    check("by resource, the one with most cards first, each one's tags in their own order (a child under its parent)",
+          [(g["res"], g["n"], [t["t"] for t in g["tags"]]) for g in got] == [("Path", 11, ["a", "b"]), ("Videos", 9, ["c"])], got)
+    has = {"a": {1, 2, 3}, "b": {3, 4}, "c": {5}}
+    got = M.tag_list(rows, lambda t: has[t])
+    check("round 3: a resource's cards once each (a note can carry a parent and its child, or both halves of a deck)",
+          [(g["res"], g["n"]) for g in got] == [("Path", 4), ("Videos", 1)], got)
+    twins = [dict(M.tag_row(t), t=t, n=n, on=True) for t, n in (
+        ("#Big_Step1::#M&M::06_Cardio::06_Heart_Failure", 5), ("#Big_Step2::#M&M::02_Cardio::03_Heart_Failure", 4))]
+    got = M.tag_list(twins)
+    check("two of a resource's that would read the same say their tags as written (a resource in two versions of a deck)",
+          [t["path"] for t in got[0]["tags"]] == ["#M&M" + A + "06 Cardio" + A + "06 Heart Failure", "#M&M" + A + "02 Cardio" + A + "03 Heart Failure"], got)
     js = open(os.path.join(REPO, "due_crew", "magicpage", "magic.js")).read()
     check("the page: a resource with several tags a heading with its own tick (all in, all out, some: neither)",
           "send('tags', { ts: ts, on: all.checked })" in js and "all.indeterminate = ons > 0 && ons < g.tags.length" in js)
@@ -912,7 +1000,7 @@ def test_qids_in_magic_search():
     check("Their topics' Study: the map's deck of what I missed there", ops.log[-1] == ("study_topic", "Heme", sorted(q["10234"])), ops.log[-1])
     check("the map read once a deck", sum(1 for x in ops.log if x[0] == "deck_map") == 1)
     check("QIDs' Study now: Due Crew › QBank cards, as its window's (each paste adds to it), in random order",
-          face.name() == actions.DECK and "Due Crew › QBank cards" in v["where"])
+          face.name() == actions.DECK and v["tiles"]["deck"] == "Due Crew › QBank cards", v["tiles"])
     face.on("study", {})
     st = [x for x in ops.log if x[0] == "study"][-1]
     check("…its cards, all of them, mixed", st[2] == actions.DECK and st[3] == MF.plan_flow.STUDY_ORDER and len(st[1]) == 4 - len(

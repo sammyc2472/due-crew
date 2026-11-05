@@ -3,7 +3,7 @@
    bridge. Every word from the view is set as text, never as markup. */
 var dcMagic = (function () {
   'use strict';
-  var V = null, root = null, els = {}, typed = null, sparkled = false, seen = {}, preview = false;
+  var V = null, root = null, els = {}, typed = null, sparkled = false, seen = {}, preview = false, making = false, madeFor = null;
   var REDUCE = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   function send(cmd, args) {
@@ -46,9 +46,10 @@ var dcMagic = (function () {
       placeholder: 'A topic, a filter, QIDs, a quiz on Friday, plan lines…' });
     box.appendChild(els.q);
     els.box = box;
-    ['rows', 'chips', 'tags', 'filters', 'res', 'lines', 'tops', 'acts', 'where', 'pod', 'said', 'recent'].forEach(function (k) { els[k] = h('div', { cls: k }); });
+    ['rows', 'topics', 'filters', 'found', 'lines', 'tops', 'tiles', 'pod', 'said', 'recent'].forEach(function (k) { els[k] = h('div', { cls: k }); });
     els.intro = h('div', { cls: 'intro', role: 'dialog', 'aria-label': 'Magic search' });
-    [head, box, els.rows, els.chips, els.tags, els.filters, els.recent, els.res, els.lines, els.tops, els.acts, els.where, els.pod, els.said, els.intro]
+    // round 3: the box, what it understood (the filters' Only line, each topic and its tree), what it found, what to do
+    [head, box, els.rows, els.filters, els.recent, els.topics, els.lines, els.found, els.tops, els.tiles, els.pod, els.said, els.intro]
       .forEach(function (e) { root.appendChild(e); });
     if (window.ResizeObserver) { var ro = new ResizeObserver(report); ro.observe(root); ro.observe(els.intro); }
     els.q.addEventListener('input', function () {
@@ -155,62 +156,71 @@ var dcMagic = (function () {
     });
   }
 
-  function drawChips() {
-    clear(els.chips);
-    var fresh = {}, termOf = {}, last = null;
-    (V.terms || []).forEach(function (t, i) { t.forEach(function (sg) { termOf[sg] = t.length > 1 ? i : null; }); });
-    (V.chips || []).forEach(function (c) {
-      // "both A and B", A AND B, A with B: the cards in both, a quiet "with" between their chips
-      if (last !== null && c.seg !== last && termOf[c.seg] !== null && termOf[c.seg] !== undefined && termOf[c.seg] === termOf[last]) {
-        els.chips.appendChild(h('span', { cls: 'brk', 'aria-hidden': 'true' }));  // the next topic on a line of its own, "with" first
-        els.chips.appendChild(h('span', { cls: 'join', text: 'with', title: 'Only the cards in both' }));
-      }
-      last = c.seg;
-      var key = 'g:' + c.name + ':' + c.seg;
+  // one row a typed topic (Sam: "combine things with similar names so long as the tag goes all the way to the end"):
+  // its tick, its cards, its tags' count opening its tree; Also under it, the near names a tap takes in
+  function drawTopics() {
+    clear(els.topics);
+    var fresh = {};
+    (V.topics || []).forEach(function (tp) {
+      var key = 't:' + tp.name + ':' + tp.seg;
       fresh[key] = 1;
-      var g = h('span', { cls: 'grp' + (c.on ? ' on' : '') + (seen[key] ? '' : ' pop') }, [
-        h('button', { type: 'button', cls: 'g1', 'aria-pressed': c.on ? 'true' : 'false', title: c.on ? 'Leave it out' : 'Take it in',
-          onclick: function () { send('chip', { i: c.i }); } }, [c.name + ' ', h('small', { text: n(c.n) })])]);
-      if (c.tags > 1) g.appendChild(btn('g2' + (c.open ? ' open' : ''), plural(c.tags, 'tag'), 'open', { i: c.i }, { 'aria-expanded': c.open ? 'true' : 'false' }));
-      els.chips.appendChild(g);
+      var r1 = h('div', { cls: 'tr1' });
+      if (tp.join) r1.appendChild(h('span', { cls: 'join', text: 'with', title: 'Only the cards in both' }));
+      var cb = null;
+      if (tp.can) {
+        cb = h('input', { type: 'checkbox', 'aria-label': (tp.on ? 'Leave out ' : 'Take in ') + tp.name, onchange: function () { send('seg', { seg: tp.seg }); } });
+        cb.checked = !!tp.on;
+      }
+      r1.appendChild(h('label', { cls: 'tl' + (tp.can ? '' : ' mu') }, [cb, h('b', { text: tp.name })]));
+      if (tp.on) r1.appendChild(h('span', { cls: 'tn mu', text: tp['in'] !== null && tp['in'] !== undefined ? n(tp['in']) + ' of ' + plural(tp.n, 'card') : plural(tp.n, 'card') }));
+      r1.appendChild(h('span', { cls: 'sp' }));
+      if (tp.ntags) r1.appendChild(btn('tg', plural(tp.ntags, 'tag') + (tp.open ? ' ▴' : ' ▾'), 'open', { seg: tp.seg }, { 'aria-expanded': tp.open ? 'true' : 'false' }));
+      var row = h('div', { cls: 'topic' + (seen[key] ? '' : ' pop') }, [r1]);
+      if ((tp.also || []).length) {
+        row.appendChild(h('div', { cls: 'also' }, [h('span', { cls: 'mu', text: tp.can ? 'Also' : 'Which?' })].concat(tp.also.map(function (a) {
+          return h('button', { type: 'button', cls: 'ad', title: 'Take it in', onclick: function () { send('chip', { i: a.i }); } }, [a.name + ' ', h('small', { text: n(a.n) })]);
+        }))));
+      }
+      if (tp.open && tp.tree) row.appendChild(drawTree(tp));
+      els.topics.appendChild(row);
     });
-    (V.neg || []).forEach(function (name) {
-      els.chips.appendChild(h('span', { cls: 'grp neg' }, [h('span', { cls: 'g1', style: 'font-size:12.5px;padding:3px 10px', text: 'not ' + name })]));
-    });
-    if (V.limit) els.chips.appendChild(h('span', { cls: 'lim', text: 'taking ' + n(V.limit) }));
+    var bits = [(V.neg || []).length ? 'Leaving out ' + V.neg.join(', ') : '', V.limit ? 'Taking ' + n(V.limit) : ''].filter(Boolean);
+    if (bits.length) els.topics.appendChild(h('div', { cls: 'tx mu', text: bits.join(' · ') }));
     seen = fresh;
-    clear(els.tags);
-    var open = (V.chips || []).filter(function (c) { return c.open && c.list && c.list.length; })[0];
-    els.tags.hidden = !open;
-    if (open) {
-      // a chip's tags under where each is from (Sam: "the overarching resource is an important thing"):
-      // a resource's tick takes all its tags in or out, each tag's tick just that one
-      els.tags.appendChild(h('div', { cls: 'th' }, [h('span', { text: open.name + ': ' + plural(open.tags, 'tag') }), h('span', { text: 'untick what to leave out' })]));
-      open.list.forEach(function (g, gi) {
-        var ts = g.tags.map(function (t) { return t.t; });
-        var ons = g.tags.filter(function (t) { return t.on; }).length;
-        var top = g.res && g.tags.length > 1;
-        if (top) {
-          var all = h('input', { type: 'checkbox', onchange: function () { send('tags', { ts: ts, on: all.checked }); } });
-          all.checked = ons === g.tags.length;
-          all.indeterminate = ons > 0 && ons < g.tags.length;
-          els.tags.appendChild(h('label', { cls: 'rs' + (gi ? ' sep' : '') }, [all, h('span', { cls: 'p', text: g.res }), h('span', { cls: 'n', text: n(g.n) })]));
-        }
-        g.tags.forEach(function (t) {
-          var cb = h('input', { type: 'checkbox', onchange: function () { send('tag', { t: t.t }); } });
-          cb.checked = !!t.on;
-          var words = top ? t.path : (g.res && t.path ? [h('b', { text: g.res }), ' \u00b7 ' + t.path] : [g.res || t.path]);
-          els.tags.appendChild(h('label', { cls: top ? 'in' : (gi ? 'sep' : ''), title: t.t },
-            [cb, h('span', { cls: 'p' }, typeof words === 'string' ? [words] : words), h('span', { cls: 'n', text: n(t.n) })]));
-        });
-      });
-    }
   }
 
+  // a topic's tags under where each is from, each to its last part (Sam: "the tag tree to go all the way to the
+  // last tag"): a resource's tick takes all its tags in or out, each tag's tick just that one
+  function drawTree(tp) {
+    var box = h('div', { cls: 'tags' });
+    box.appendChild(h('div', { cls: 'th' }, [h('span', { text: tp.name + ': ' + plural(tp.ntags, 'tag') }), h('span', { text: 'untick what to leave out' })]));
+    tp.tree.forEach(function (g, gi) {
+      var ts = g.tags.map(function (t) { return t.t; });
+      var ons = g.tags.filter(function (t) { return t.on; }).length;
+      var top = g.res && g.tags.length > 1;
+      if (top) {
+        var all = h('input', { type: 'checkbox', onchange: function () { send('tags', { ts: ts, on: all.checked }); } });
+        all.checked = ons === g.tags.length;
+        all.indeterminate = ons > 0 && ons < g.tags.length;
+        box.appendChild(h('label', { cls: 'rs' + (gi ? ' sep' : '') }, [all, h('span', { cls: 'p', text: g.res }), h('span', { cls: 'n', text: n(g.n) })]));
+      }
+      g.tags.forEach(function (t) {
+        var cb = h('input', { type: 'checkbox', onchange: function () { send('tag', { t: t.t }); } });
+        cb.checked = !!t.on;
+        var words = top ? [t.path] : (g.res && t.path ? [h('b', { text: g.res }), ' · ' + t.path] : [g.res || t.path]);
+        box.appendChild(h('label', { cls: top ? 'in' : (gi ? 'sep' : ''), title: t.t }, [cb, h('span', { cls: 'p' }, words), h('span', { cls: 'n', text: n(t.n) })]));
+      });
+    });
+    return box;
+  }
+
+  // the filters, one quiet line under the box, always there (Sam: "should show more of the time")
   function drawFilters() {
     clear(els.filters);
+    els.filters.className = 'only';
+    els.filters.appendChild(h('span', { cls: 'ol', text: 'Only' }));
     (V.filters || []).forEach(function (f) {
-      els.filters.appendChild(btn('chip' + (f.on ? ' on' : ''), f.label, 'filter', { k: f.k }, { 'aria-pressed': f.on ? 'true' : 'false' }));
+      els.filters.appendChild(btn('ot' + (f.on ? ' on' : ''), f.label, 'filter', { k: f.k }, { 'aria-pressed': f.on ? 'true' : 'false' }));
     });
     clear(els.recent);
     if ((V.recent || []).length) {
@@ -223,9 +233,10 @@ var dcMagic = (function () {
     els.recent.hidden = !(V.recent || []).length;
   }
 
-  function drawRes() {
-    clear(els.res); clear(els.lines); clear(els.acts); clear(els.tops); clear(els.where);
-    var t = V.count, Q = V.qids;
+  // what it found, each card once by what Study now would do with it, how long that is at my pace
+  function drawFound() {
+    clear(els.found); clear(els.lines);
+    var F = V.found, Q = V.qids, t = V.count;
     (V.lines || []).forEach(function (l) { els.lines.appendChild(h('div', { text: l })); });
     if (Q && Q.ask && (Q.banks || []).length > 1) {
       // QBank QIDs: two banks have these numbers; which (the one with most, till I pick)
@@ -234,44 +245,74 @@ var dcMagic = (function () {
       bank.value = Q.bank || Q.banks[0];
       els.lines.appendChild(h('div', { cls: 'bank' }, [h('span', { text: 'Question bank' }), bank]));
     }
-    drawTopics(Q);
-    if (!t) return;
-    if (!t.n) {
-      els.res.appendChild(h('span', { cls: 'mu', text: V.kind === 'empty' && !V.picked ? '' : 'No cards for that here.' }));
+    drawQTopics(Q);
+    if (!F) {
+      els.found.hidden = !(t && !t.n && !(V.kind === 'empty' && !V.picked));
+      if (!els.found.hidden) els.found.appendChild(h('span', { cls: 'mu', text: 'No cards for that here.' }));
       return;
     }
-    var bits = [t.new ? n(t.new) + ' new' : '', t.seen ? n(t.seen) + ' seen' : '', t.susp ? n(t.susp) + ' suspended' : '',
-      t.due ? n(t.due) + ' due' : '', t.leech ? plural(t.leech, 'leech', 'leeches') : ''].filter(Boolean).join(' · ');
-    if (Q && Q.q) bits = plural(t.n, 'card') + (bits ? ' · ' + bits : '');  // QBank QIDs: the questions first, as its window said
-    els.res.appendChild(h('b', { text: Q && Q.q ? plural(Q.q, 'question') : plural(t.n, 'card') }));
-    if (bits) els.res.appendChild(h('span', { cls: 'bits', text: bits }));
-    els.res.appendChild(btn('link', 'Browse', 'browse', {}));
-    var k = V.how === 'all' ? t.all : t.nd;
-    els.acts.appendChild(btn('b pri', 'Study now · ' + n(k), 'study', {}, { disabled: !k || V.busy ? true : null }));
-    var how = h('select', { cls: 'b', 'aria-label': 'Which to study', onchange: function () { send('how', { how: how.value }); } },
-      [h('option', { value: 'nd', text: 'New and due' }), h('option', { value: 'all', text: 'All of them' })]);
-    how.value = V.how;
-    els.acts.appendChild(how);
-    var addto = h('select', { cls: 'b', 'aria-label': 'Add to a filtered deck', onchange: function () {
-      if (addto.value) send('addto', { did: addto.value }); } },
-      [h('option', { value: '', text: 'Add to a filtered deck…' })].concat((V.filtered || []).map(function (d) { return h('option', { value: String(d.did), text: d.name }); })));
-    if ((V.filtered || []).length) els.acts.appendChild(addto);
-    if (t.susp) els.acts.appendChild(btn('b', 'Unsuspend ' + n(t.susp - Math.min(t.susp, t.leech)), 'uns', {}, { disabled: V.busy ? true : null }));
-    els.acts.appendChild(h('span', { cls: 'sp' }));
-    els.acts.appendChild(btn('b', 'Put on days…', 'days', { show: V.mode !== 'days' }, { 'aria-expanded': V.mode === 'days' ? 'true' : 'false' }));
-    // keep it: a filtered deck that stays, named from the chips
-    var keepRow = h('div', { cls: 'acts', style: 'width:100%' });
-    var kn = h('input', { cls: 'kname', type: 'text', maxlength: '80', 'aria-label': 'The deck’s name', value: V.name });
-    keepRow.appendChild(h('span', { cls: 'keep' }, [document.createTextNode('Keep as a filtered deck')]));
-    keepRow.appendChild(kn);
-    keepRow.appendChild(h('button', { cls: 'b', type: 'button', text: 'Keep', onclick: function () { send('keep', { name: kn.value }); } }));
-    kn.addEventListener('keydown', function (e) { if (e.key === 'Enter') send('keep', { name: kn.value }); });
-    els.acts.appendChild(keepRow);
-    if (V.where && k) els.where.appendChild(h('span', { text: V.where }));
+    els.found.hidden = false;
+    els.found.appendChild(h('div', { cls: 'fh' }, [h('b', { text: Q && Q.q ? plural(Q.q, 'question') : plural(F.n, 'card') }),
+      Q && Q.q ? h('span', { cls: 'mu', text: '· ' + plural(F.n, 'card') }) : null, h('span', { cls: 'sp' }), btn('link', 'Browse', 'browse', {})]));
+    var tot = Math.max(1, F.due + F.new + F.notdue);
+    function seg(c, k) { return k ? h('i', { cls: c, style: 'flex-basis:' + Math.max(0.8, 100 * k / tot) + '%' }) : null; }
+    els.found.appendChild(h('div', { cls: 'bar', 'aria-hidden': 'true' }, [seg('d', F.due), seg('nw', F.new), seg('s', F.notdue)]));
+    var key = [];
+    if (F.due) key.push(h('span', {}, [h('i', { cls: 'd' }), h('b', { text: n(F.due) }), ' due now']));
+    if (F.new) key.push(h('span', {}, [h('i', { cls: 'nw' }), h('b', { text: n(F.new) }), ' new', F.susp_new ? h('span', { cls: 'mu', text: ' · ' + n(F.susp_new) + ' suspended' }) : null]));
+    if (F.notdue) key.push(h('span', {}, [h('i', { cls: 's' }), h('b', { text: n(F.notdue) }), ' seen, not due yet']));
+    els.found.appendChild(h('div', { cls: 'key' }, key));
+    if (F.time) {
+      els.found.appendChild(h('div', { cls: 'nt' }, [(F.all ? 'All ' + n(F.study) : 'New and due') + ': ', h('b', { text: F.time }),
+        F.usual ? ' · you usually do ' + F.usual + ' a day' : '']));
+    }
+    var xs = [];
+    if (F.leech) xs.push(plural(F.leech, 'leech', 'leeches') + ' left out');
+    (F.infilt || []).forEach(function (x) { xs.push(n(x[1]) + (x[1] === 1 ? ' is' : ' are') + ' in ' + x[0] + ' now, and stay there'); });
+    xs.forEach(function (x) { els.found.appendChild(h('div', { cls: 'xl', text: x })); });
+  }
+
+  // Sam's four: Study now, Schedule ahead, Make a new filtered deck, Unsuspend; the one that fits filled
+  function drawTiles() {
+    clear(els.tiles);
+    var T = V.tiles;
+    els.tiles.hidden = !T;
+    if (!T) { making = false; return; }
+    if (madeFor !== T.keep) { making = false; madeFor = T.keep; }
+    function tile(k, title, sub, on, extra) {
+      return h('button', Object.assign({ type: 'button', cls: 'tile' + (T.rec === k ? ' rec' : ''), onclick: on }, extra || {}),
+        [h('b', { text: title }), h('span', { cls: 'mu', text: sub })]);
+    }
+    els.tiles.appendChild(h('div', { cls: 'tl4' }, [
+      tile('study', 'Study now', plural(T.study, 'card'), function () { send('study', {}); },
+        { disabled: !T.study || V.busy ? true : null, title: 'In a deck of their own, ' + T.deck + '. Suspended ones open; each goes back to its own deck once done.' }),
+      tile('days', 'Schedule ahead', T.days ? plural(T.days, 'day') : 'pick days', function () { send('days', { show: V.mode !== 'days' }); },
+        { 'aria-expanded': V.mode === 'days' ? 'true' : 'false' }),
+      tile('keep', 'Make a new filtered deck', '“' + T.keep + '”', function () { making = !making; drawTiles(); report(); },
+        { 'aria-expanded': making ? 'true' : 'false' }),
+      tile('uns', 'Unsuspend', T.uns ? plural(T.uns, 'card') : 'none suspended', function () { send('uns', {}); },
+        { disabled: !T.uns || V.busy ? true : null })]));
+    if (making) {
+      var kn = h('input', { cls: 'kname', type: 'text', maxlength: '80', 'aria-label': 'The deck’s name', value: T.keep });
+      var go = function () { making = false; send('keep', { name: kn.value }); };
+      kn.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); if (e.key === 'Escape') { e.stopPropagation(); making = false; drawTiles(); report(); } });
+      els.tiles.appendChild(h('div', { cls: 'mk' }, [h('span', { cls: 'mu', text: 'Name' }), kn,
+        h('button', { type: 'button', cls: 'b pri', text: 'Make', onclick: go })]));
+      setTimeout(function () { kn.focus(); kn.select(); }, 0);
+    }
+    var rest = [];
+    if ((V.filtered || []).length) {
+      var addto = h('select', { cls: 'lk', 'aria-label': 'Add to a filtered deck', onchange: function () { if (addto.value) send('addto', { did: addto.value }); } },
+        [h('option', { value: '', text: 'Add to a filtered deck…' })].concat(V.filtered.map(function (d) { return h('option', { value: String(d.did), text: d.name }); })));
+      rest.push(addto);
+    }
+    if (T.all) rest.push(btn('link', 'Study all ' + n(T.all), 'study', { all: true }, { title: 'The new and due, and the ' + n(T.all - T.study) + ' seen that aren’t due yet' }));
+    if (rest.length) els.tiles.appendChild(h('div', { cls: 'rest' }, rest));
   }
 
   // QBank QIDs' Their topics (3.9.5): the map's parts the questions are in, each a Study of what I missed there
-  function drawTopics(Q) {
+  function drawQTopics(Q) {
+    clear(els.tops);
     var rows = (Q && Q.topics) || [];
     els.tops.hidden = !rows.length;
     if (!rows.length) return;
@@ -289,7 +330,7 @@ var dcMagic = (function () {
     els.pod.hidden = !show;
     els.pod.className = 'pod';
     if (!show) return;
-    els.pod.appendChild(h('div', { cls: 'ph' }, [h('b', { text: 'Put on days' }), h('span', { cls: 'mu', style: 'font-size:12px', text: 'Tap as many as you like. Under each, what’s due that day; green, the light ones.' })]));
+    els.pod.appendChild(h('div', { cls: 'ph' }, [h('b', { text: 'Schedule ahead' }), h('span', { cls: 'mu', style: 'font-size:12px', text: 'Tap as many as you like. Under each, what’s due that day; green, the light ones.' })]));
     var grid = h('div', { cls: 'days', role: 'group', 'aria-label': 'Days' });
     D.list.forEach(function (d) {
       grid.appendChild(h('button', { type: 'button', cls: 'day' + (d.on ? ' on' : '') + (d.today ? ' tdy' : '') + (d.light ? ' light' : ''),
@@ -360,7 +401,7 @@ var dcMagic = (function () {
     (v.decks || []).forEach(function (d) { els.deck.appendChild(h('option', { value: String(d.did), text: d.name })); });
     els.deck.value = String(v.did || '');
     els.deck.hidden = (v.decks || []).length < 2;
-    drawRows(); drawChips(); drawFilters(); drawRes(); drawDays(); drawSaid(); drawIntro();
+    drawRows(); drawFilters(); drawTopics(); drawFound(); drawTiles(); drawDays(); drawSaid(); drawIntro();
     report();
   }
 

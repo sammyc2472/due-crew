@@ -908,46 +908,104 @@ def text_q(text):
 
 # ---- a tag in its chip's list: its resource first ----
 
-def tag_row(path, name="", deep=False):
-    """A tag as its chip's list shows it: {res, path}: where it's from (the
+def root_name(part):
+    """A deck's root as it's said: its version and a short prefix of
+    capitals off, a number set apart ("Big_Step1_v12" is Big Step 1,
+    "XY_Step2_v12" Step 2)."""
+    words = [w for w in pretty(part).split() if not re.fullmatch(r"v\d+", w, re.I)]
+    if len(words) > 1 and re.fullmatch(r"[A-Z]{2,3}", words[0]):
+        words = words[1:]
+    return re.sub(r"(?<=[A-Za-z])(?=\d)", " ", " ".join(words)) or pretty(part)
+
+
+def tag_row(path, roots=False):
+    """A tag as its topic's tree shows it: {res, path}: where it's from (the
     first #part under its root, "M&M", else its root, "Heme lectures"; none
-    for a one-part tag) and the parts after that, the last three (deep: all),
-    the chip's own name off the end ("Cardio › Heart Failure" under the chip
-    Heart Failure is "Cardio"). Sam: "the overarching resource is an
-    important thing"."""
+    for a one-part tag) and every part after that to the last one (Sam: "the
+    tag tree to go all the way to the last tag"). roots: the topic's tags are
+    under more than one root, so the root says which ("Step 1 › Cardio ›
+    Heart Failure")."""
     parts = str(path).split(SEP)
     at = next((i for i, x in enumerate(parts) if i > 0 and x[:1] in "#^"), 0 if len(parts) > 1 else None)
     res = spaced(pretty(parts[at])) if at is not None else ""
     shown = [pretty(x) for x in parts[(at + 1) if at is not None else 0:]]
-    if len(shown) > 1 and name and shown[-1].lower() == str(name).lower():
-        shown = shown[:-1]
-    return {"res": res, "path": " \u203a ".join(shown if deep else shown[-3:])}
+    if roots and at:
+        shown = [root_name(parts[0])] + shown
+    return {"res": res, "path": " \u203a ".join(shown)}
 
 
-def tag_list(rows, name=""):
-    """A chip's tags, by where they're from: [{res, n, tags: [row]}], the
-    resource with most cards first, each one's tags by their cards. rows:
-    [{t, res, path, n, on}]. Two of a resource's that would read the same
-    say more: their whole path, then their root ("Step2 › Cardio": a deck
-    with a resource in two versions of itself)."""
+def tag_list(rows, cards=None):
+    """A topic's tags, by where they're from: [{res, n, tags: [row]}]. rows:
+    [{t, res, path, n, on}]. A resource's n is its cards once each (cards: a
+    tag's cards; a child tag's are its parent's too, and a note can carry a
+    tag in both halves of a deck), else its tags' added. Its tags in their
+    own order, so a child sits right under its parent; the resource with
+    most cards first. Two that would read the same say their tags as written."""
     by = {}
     for x in rows:
         by.setdefault(x["res"], []).append(dict(x))
-    for v in by.values():
-        for how in ("deep", "root"):
-            said = {}
+    out = []
+    for k, v in by.items():
+        said = {}
+        for x in v:
+            said.setdefault(x["path"].lower(), []).append(x)
+        for xs in said.values():
+            if len(xs) > 1:
+                for x in xs:
+                    x["path"] = " \u203a ".join(y.replace("_", " ") for y in str(x["t"]).split(SEP)[1:]) or x["path"]
+        if cards is not None:
+            got = set()
             for x in v:
-                said.setdefault(x["path"].lower(), []).append(x)
-            twins = [x for xs in said.values() if len(xs) > 1 for x in xs]
-            if not twins:
-                break
-            for x in twins:
-                deep = tag_row(x["t"], name, deep=True)["path"]
-                root = pretty(str(x["t"]).split(SEP)[0]) if SEP in str(x["t"]) else ""
-                x["path"] = deep if how == "deep" or not root or not x["res"] else f"{root} \u203a {deep}".rstrip(" \u203a")
-    out = [{"res": k, "n": sum(x["n"] for x in v), "tags": sorted(v, key=lambda x: (-x["n"], x["path"].lower()))}
-           for k, v in by.items()]
+                got |= set(cards(x["t"]))
+            n = len(got)
+        else:
+            n = sum(x["n"] for x in v)
+        out.append({"res": k, "n": n, "tags": sorted(v, key=lambda x: str(x["t"]).lower())})
     return sorted(out, key=lambda g: (-g["n"], g["res"].lower()))
+
+
+# ---- how long, at my pace ----
+
+PACE = {"new_s": 30, "rev_s": 10, "day_min": 60, "known": False}  # before there's a log to read
+
+
+def pace_from(new_ms, new_cards, rev_ms, rev_n, days):
+    """My pace from my answer log these weeks (magic_flow.Ops.pace): a new
+    card's first-day seconds (its learning answers' time over the cards),
+    a review's seconds, and my usual day's minutes (the middle of the days I
+    studied). PACE where there's too little to go on."""
+    out = dict(PACE)
+    if new_cards >= 10:
+        out["new_s"] = max(8, min(240, new_ms / 1000 / new_cards))
+    if rev_n >= 20:
+        out["rev_s"] = max(3, min(90, rev_ms / 1000 / rev_n))
+    mins = sorted(m for m in (days or ()) if m > 0)
+    if len(mins) >= 3:
+        out["day_min"] = max(10, mins[len(mins) // 2])
+        out["known"] = True
+    return out
+
+
+def took(new, rev, pace):
+    """Seconds for `new` new cards and `rev` reviews at this pace."""
+    return new * pace["new_s"] + rev * pace["rev_s"]
+
+
+def says_time(sec):
+    """"about 2 min", "about 45 min", "about 3 h 40 min"."""
+    m = int(round(sec / 60))
+    if m < 1:
+        return "under a minute"
+    if m < 60:
+        return f"about {m} min"
+    m = int(round(m / 5) * 5)
+    h, r = divmod(m, 60)
+    return f"about {h} h" + (f" {r} min" if r else "")
+
+
+def days_for(sec, pace, most=14):
+    """How many of my usual days it takes: 1 at least."""
+    return max(1, min(most, -(-int(sec) // int(pace["day_min"] * 60))))
 
 
 def spaced(name):
@@ -961,9 +1019,9 @@ HOWTO = {
     "lede": "Say what you want to study, or what\u2019s coming up, the way you\u2019d say it. It reads your deck\u2019s "
             "own tags, on this computer; nothing you type leaves it.",
     "parts": [
-        {"k": "topic", "t": "A topic", "w": "Its name, its initials or a typo: every tag that says it, as one chip; "
-                                            "\u201cand\u201d or \u201cor\u201d adds another. Tap a chip to leave it out; its "
-                                            "tags, under where each is from, to pick which.",
+        {"k": "topic", "t": "A topic", "w": "Its name, its initials or a typo: every tag that says it, as one topic; "
+                                            "\u201cand\u201d or \u201cor\u201d adds another. Its tags show to their end "
+                                            "under where each is from: untick what to leave out, tap an Also to add it.",
          "try": ["heart failure", "hf drugs"]},
         {"k": "res", "t": "A resource", "w": "Its name or its letters, alone or with a topic; a chapter by its number.",
          "try": []},
@@ -987,11 +1045,12 @@ HOWTO = {
         {"k": "plan", "t": "Your plan\u2019s words", "w": "\u201ctomorrow\u2019s set\u201d, \u201cthe heme quiz\u201d: "
                                                           "the cards your plan has for them.", "try": ["tomorrow\u2019s set"]},
     ],
-    "then": ["Study now: new and due, or all of them, in a filtered deck. Suspended ones open; leeches stay out.",
-             "Keep as a filtered deck: named by you; Rebuild fills it again any day. Cards never move.",
-             "Add to a filtered deck you have, like a deck of QBank misses.",
-             "Unsuspend, or Browse them.",
-             "Put on days: tap one or several; each is a date on My plan, opened that morning."],
+    "then": ["Study now: the new and due ones (all of them when you asked for a filter or QIDs), in a deck of their "
+             "own. Suspended ones open; leeches stay out.",
+             "Schedule ahead: tap a day or several; each is a date on My plan, opened that morning.",
+             "Make a new filtered deck: named by you; Rebuild fills it again any day. Cards never move.",
+             "Unsuspend them where they are.",
+             "Add to a filtered deck you have, like a deck of QBank misses; or Browse them."],
 }
 TRIED = ("topic", "res", "filter", "limit", "ids")  # the parts whose tries need the deck's tags: the window reads them first
 
