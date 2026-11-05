@@ -511,7 +511,8 @@ def test_the_window_finds():
     face.on("type", {"text": str(IDX.nid_of[c0])})
     check("a note id finds its card", face.cards()[0] == [c0], face.cards()[0])
     face.on("type", {"text": "mi"})
-    check("nothing ticked: a line says to tap", any("tap the ones" in x for x in face.view()["lines"]), face.view()["lines"])
+    tp = face.view()["topics"][0]
+    check("nothing ticked: no line; its names under Which?, to tap", not face.view()["lines"] and not tp["can"] and tp["also"], (face.view()["lines"], tp))
     face.on("type", {"text": "kidney stones"})
     check("words no tag or card has: said, in the deck", face.view()["lines"] and "Big Step 1" in face.view()["lines"][0])
 
@@ -633,7 +634,7 @@ def test_put_on_days():
           and w[2][0]["day"] == "2026-11-06" and w[2][0]["name"] == "Platelets 1 of 2"
           and sum(len(o["cards"]) for o in w[2] if o["op"] == "add_picks") == n, w)
     s = face.view()["said"]
-    check("said, with Undo and the plan", "My plan" in s["text"] and "starts here" in s["text"] and s["undo"] == "save" and s["open"] == "pMine", s)
+    check("said, with Undo and the plan", s["text"].startswith("Made My plan: ") and s["undo"] == "save" and s["open"] == "pMine", s)
     face.on("undo", {})
     check("Undo: the builder's undo of that save", ("undo_save", "pMine", 7) in ops.log)
     ops2 = face.day_ops(face.cards()[0], ["2026-11-05"], "Platelets")

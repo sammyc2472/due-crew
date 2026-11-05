@@ -1019,9 +1019,8 @@ HOWTO = {
     "lede": "Say what you want to study, or what\u2019s coming up, the way you\u2019d say it. It reads your deck\u2019s "
             "own tags, on this computer; nothing you type leaves it.",
     "parts": [
-        {"k": "topic", "t": "A topic", "w": "Its name, its initials or a typo: every tag that says it, as one topic; "
-                                            "\u201cand\u201d or \u201cor\u201d adds another. Its tags show to their end "
-                                            "under where each is from: untick what to leave out, tap an Also to add it.",
+        {"k": "topic", "t": "A topic", "w": "Its name, its initials or a typo: every tag that says it, as one topic. "
+                                            "\u201cand\u201d or \u201cor\u201d adds another.",
          "try": ["heart failure", "hf drugs"]},
         {"k": "res", "t": "A resource", "w": "Its name or its letters, alone or with a topic; a chapter by its number.",
          "try": []},
@@ -1045,12 +1044,11 @@ HOWTO = {
         {"k": "plan", "t": "Your plan\u2019s words", "w": "\u201ctomorrow\u2019s set\u201d, \u201cthe heme quiz\u201d: "
                                                           "the cards your plan has for them.", "try": ["tomorrow\u2019s set"]},
     ],
-    "then": ["Study now: the new and due ones (all of them when you asked for a filter or QIDs), in a deck of their "
-             "own. Suspended ones open; leeches stay out.",
-             "Schedule ahead: tap a day or several; each is a date on My plan, opened that morning.",
-             "Make a new filtered deck: named by you; Rebuild fills it again any day. Cards never move.",
-             "Unsuspend them where they are.",
-             "Add to a filtered deck you have, like a deck of QBank misses; or Browse them."],
+    "then": ["Study now: the new and due ones (all of them for a filter or QIDs), suspended ones too; leeches stay out.",
+             "Schedule ahead: a date on My plan for each day you pick.",
+             "Make a new filtered deck, named by you.",
+             "Unsuspend them.",
+             "Add them to a filtered deck you have, or Browse them."],
 }
 TRIED = ("topic", "res", "filter", "limit", "ids")  # the parts whose tries need the deck's tags: the window reads them first
 

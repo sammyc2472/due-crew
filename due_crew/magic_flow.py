@@ -1115,13 +1115,8 @@ class Search:
                 said = Q.words(found, Q.tally(self.idx, found["cids"]), dates)[1:]
                 out += [x for x in said if not r["ids"] or not x[:1].isdigit()]  # with note ids pasted, a short number may be neither
         if r["kind"] == "words" and r["text"] and not self.ticked():
-            out.append(f"No tag says “{r['text']}”: these are the cards with those words." if cids
+            out.append(f"No tag says “{r['text']}”; these cards do." if cids
                        else f"No tag or card says “{r['text']}” in {self.idx.name if self.idx else 'this deck'}.")
-        segs = {}
-        for g in r["groups"]:
-            segs.setdefault(g["seg"], []).append(g)
-        if any(not any(g["on"] for g in gs) for gs in segs.values()) and not self.flip:
-            out.append("Those letters could be several: tap the ones you mean.")
         if M.joined(r) and not cids and r["groups"]:
             out.append("No card here is in both." if all(len(x) <= 2 for x in r["terms"]) else "No card here is in all of them.")
         return out
@@ -1251,7 +1246,7 @@ class Search:
         except Exception:  # noqa: BLE001 (said in the window, never Anki's error box)
             traceback.print_exc()
             self.busy = False
-            self.said = {"text": "That didn't work. Try again, or close the window and open it again."}
+            self.said = {"text": "That didn't work. Try again."}
         self.push()
 
     def c_ready(self):
@@ -1357,7 +1352,7 @@ class Search:
             return
         self.ops.note_recent(self.text)
         label = f"Due Crew: {name}"
-        self.said = {"text": f"“{name}” is in your decks: Rebuild fills it again any day.", "undo": "anki"}
+        self.said = {"text": f"“{name}” is in your decks.", "undo": "anki"}
         self.undo = {"kind": "anki", "label": label}
 
     def c_addto(self, did=None):
@@ -1381,8 +1376,7 @@ class Search:
         self.idx = None
         self._idx.pop(self.did, None)
         self.pick_deck(self.did)
-        self.said = {"text": f"Unsuspended {n:,} card{'s' if n != 1 else ''}, the new ones first in line." if n
-                     else "None of them needed unsuspending."}
+        self.said = {"text": f"Unsuspended {n:,} card{'s' if n != 1 else ''}." if n else "None were suspended."}
         if n:
             self.said["undo"] = "anki"
             self.undo = {"kind": "anki", "label": f"Due Crew: unsuspend {n:,} card{'s' if n != 1 else ''}"}
@@ -1457,12 +1451,12 @@ class Search:
         elif k == "exam":
             old = self.ops.settings(["setexam", a["day"]])
             if old is not None:
-                self.said = {"text": f"Your exam: {P.fmt_day(a['day'])}. Today counts down to it.", "undo": "settings"}
+                self.said = {"text": f"Your exam: {P.fmt_day(a['day'])}.", "undo": "settings"}
                 self.undo = {"kind": "settings", "old": old, "row": i}
         elif k == "away":
             old = self.ops.settings(["setaway", a["from"], a["to"]])
             if old is not None:
-                self.said = {"text": f"Away {M.words_span(a['from'], a['to'])}. Your crew sees it, and plans wait.",
+                self.said = {"text": f"Away {M.words_span(a['from'], a['to'])}.",
                              "undo": "settings"}
                 self.undo = {"kind": "settings", "old": old, "row": i}
         elif k in ("slide", "pause"):
@@ -1520,7 +1514,7 @@ class Search:
             if how == "failed":
                 self.said = {"text": more or "Couldn't save it."}
             elif how == "waiting":
-                self.said = {"text": f"In {plan_name}'s Review and send: its followers get it when you send.",
+                self.said = {"text": f"Waiting in {plan_name}'s Review and send.",
                              "undo": "draft", "open": got_pid}
                 self.undo = {"kind": "draft", "pid": got_pid, "n": int(more or len(ops)), "row": row}
             else:
@@ -1528,8 +1522,7 @@ class Search:
                     self.dests = [p for p in self.dests or [] if p.get("id") != got_pid] + [
                         {"id": got_pid, "name": MY_PLAN, "role": "owner", "followers": 1, "following": True,
                          "doc": {"deck": self.idx.name if self.idx else ""}}]
-                start = " (it starts here, on this deck)" if more == "made" else ""
-                self.said = {"text": f"On {plan_name}: {what}{start}.", "undo": "save", "open": got_pid}
+                self.said = {"text": f"{'Made' if more == 'made' else 'On'} {plan_name}: {what}.", "undo": "save", "open": got_pid}
                 self.undo = {"kind": "save", "pid": got_pid, "version": version, "row": row}
                 self.picked = [] if row is None else self.picked
                 self.mode = "" if row is None else self.mode

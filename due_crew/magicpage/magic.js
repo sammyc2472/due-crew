@@ -143,7 +143,7 @@ var dcMagic = (function () {
             x.ev ? null : h('span', { cls: 'n' + (x.n ? '' : ' none'), text: x.n ? plural(x.n, 'card') : 'no cards here' })]));
         });
       els.rows.appendChild(list);
-      if (pt.none) els.rows.appendChild(h('div', { cls: 'lines', text: plural(pt.none, 'date') + (pt.none === 1 ? ' has' : ' have') + ' no cards in this deck; it’s added, and fills in when its tag does.' }));
+      if (pt.none) els.rows.appendChild(h('div', { cls: 'lines', text: plural(pt.none, 'date') + ' with no cards here yet' }));
       (pt.errors || []).forEach(function (e) { els.rows.appendChild(h('div', { cls: 'lines', text: e })); });
       return;
     }
@@ -193,7 +193,6 @@ var dcMagic = (function () {
   // last tag"): a resource's tick takes all its tags in or out, each tag's tick just that one
   function drawTree(tp) {
     var box = h('div', { cls: 'tags' });
-    box.appendChild(h('div', { cls: 'th' }, [h('span', { text: tp.name + ': ' + plural(tp.ntags, 'tag') }), h('span', { text: 'untick what to leave out' })]));
     tp.tree.forEach(function (g, gi) {
       var ts = g.tags.map(function (t) { return t.t; });
       var ons = g.tags.filter(function (t) { return t.on; }).length;
@@ -260,7 +259,7 @@ var dcMagic = (function () {
     var key = [];
     if (F.due) key.push(h('span', {}, [h('i', { cls: 'd' }), h('b', { text: n(F.due) }), ' due now']));
     if (F.new) key.push(h('span', {}, [h('i', { cls: 'nw' }), h('b', { text: n(F.new) }), ' new', F.susp_new ? h('span', { cls: 'mu', text: ' · ' + n(F.susp_new) + ' suspended' }) : null]));
-    if (F.notdue) key.push(h('span', {}, [h('i', { cls: 's' }), h('b', { text: n(F.notdue) }), ' seen, not due yet']));
+    if (F.notdue) key.push(h('span', {}, [h('i', { cls: 's' }), h('b', { text: n(F.notdue) }), ' not due yet']));
     els.found.appendChild(h('div', { cls: 'key' }, key));
     if (F.time) {
       els.found.appendChild(h('div', { cls: 'nt' }, [(F.all ? 'All ' + n(F.study) : 'New and due') + ': ', h('b', { text: F.time }),
@@ -268,7 +267,7 @@ var dcMagic = (function () {
     }
     var xs = [];
     if (F.leech) xs.push(plural(F.leech, 'leech', 'leeches') + ' left out');
-    (F.infilt || []).forEach(function (x) { xs.push(n(x[1]) + (x[1] === 1 ? ' is' : ' are') + ' in ' + x[0] + ' now, and stay there'); });
+    (F.infilt || []).forEach(function (x) { xs.push(n(x[1]) + ' already in ' + x[0]); });
     xs.forEach(function (x) { els.found.appendChild(h('div', { cls: 'xl', text: x })); });
   }
 
@@ -285,7 +284,7 @@ var dcMagic = (function () {
     }
     els.tiles.appendChild(h('div', { cls: 'tl4' }, [
       tile('study', 'Study now', plural(T.study, 'card'), function () { send('study', {}); },
-        { disabled: !T.study || V.busy ? true : null, title: 'In a deck of their own, ' + T.deck + '. Suspended ones open; each goes back to its own deck once done.' }),
+        { disabled: !T.study || V.busy ? true : null, title: T.deck }),
       tile('days', 'Schedule ahead', T.days ? plural(T.days, 'day') : 'pick days', function () { send('days', { show: V.mode !== 'days' }); },
         { 'aria-expanded': V.mode === 'days' ? 'true' : 'false' }),
       tile('keep', 'Make a new filtered deck', '“' + T.keep + '”', function () { making = !making; drawTiles(); report(); },
@@ -306,7 +305,7 @@ var dcMagic = (function () {
         [h('option', { value: '', text: 'Add to a filtered deck…' })].concat(V.filtered.map(function (d) { return h('option', { value: String(d.did), text: d.name }); })));
       rest.push(addto);
     }
-    if (T.all) rest.push(btn('link', 'Study all ' + n(T.all), 'study', { all: true }, { title: 'The new and due, and the ' + n(T.all - T.study) + ' seen that aren’t due yet' }));
+    if (T.all) rest.push(btn('link', 'Study all ' + n(T.all), 'study', { all: true }, { title: 'With the ' + n(T.all - T.study) + ' not due yet' }));
     if (rest.length) els.tiles.appendChild(h('div', { cls: 'rest' }, rest));
   }
 
@@ -319,7 +318,7 @@ var dcMagic = (function () {
     els.tops.appendChild(h('div', { cls: 'th', text: 'Their topics' }));
     rows.forEach(function (r) {
       els.tops.appendChild(h('div', { cls: 'tr' }, [h('span', { cls: 'w' }, [h('b', { text: r.name }), h('span', { cls: 'mu', text: r.line })]),
-        r.missed ? btn('link', 'Study', 'topic', { i: r.i }, { title: 'A filtered deck of the ' + plural(r.missed, 'card') + ' you missed there' }) : null]));
+        r.missed ? btn('link', 'Study', 'topic', { i: r.i }, { title: 'The ' + n(r.missed) + ' you missed' }) : null]));
     });
     if (Q.more) els.tops.appendChild(h('div', { cls: 'mu', style: 'font-size:12px', text: Q.more }));
   }
@@ -330,7 +329,7 @@ var dcMagic = (function () {
     els.pod.hidden = !show;
     els.pod.className = 'pod';
     if (!show) return;
-    els.pod.appendChild(h('div', { cls: 'ph' }, [h('b', { text: 'Schedule ahead' }), h('span', { cls: 'mu', style: 'font-size:12px', text: 'Tap as many as you like. Under each, what’s due that day; green, the light ones.' })]));
+    els.pod.appendChild(h('div', { cls: 'ph' }, [h('b', { text: 'Schedule ahead' })]));
     var grid = h('div', { cls: 'days', role: 'group', 'aria-label': 'Days' });
     D.list.forEach(function (d) {
       grid.appendChild(h('button', { type: 'button', cls: 'day' + (d.on ? ' on' : '') + (d.today ? ' tdy' : '') + (d.light ? ' light' : ''),
@@ -345,8 +344,8 @@ var dcMagic = (function () {
     els.pod.appendChild(h('div', { cls: 'podrow' }, [h('label', { text: 'Name' }), name, dests()]));
     var each = D.each || [];
     if (each.length) {
-      els.pod.appendChild(h('div', { cls: 'split', text: each.length === 1 ? plural(each[0].n, 'card') + ' on that day.'
-        : 'Split over ' + each.length + ' days: ' + each.map(function (e) { return n(e.n); }).join(' · ') + ' cards, in the deck’s order.' }));
+      els.pod.appendChild(h('div', { cls: 'split', text: each.length === 1 ? plural(each[0].n, 'card')
+        : each.map(function (e) { return n(e.n); }).join(' · ') + ' cards' }));
     }
     var go = 'Put on ' + (each.length ? plural(each.length, 'day') : 'days');
     els.pod.appendChild(h('div', { cls: 'acts' }, [btn('b', 'Cancel', 'days', { show: false }), h('span', { cls: 'sp' }),

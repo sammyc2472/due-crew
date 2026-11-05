@@ -4638,6 +4638,16 @@ every release that changes how something works.
   On the big shared deck: "heart failure" is 537 cards, 21 due, 430 new
   (373 suspended), 86 not due, about 3 h 40 min, Schedule ahead filled;
   the window's controls pass the audit in each state, light and dark.
+  Then its words, trimmed (Sam: no "extraneous language that
+  over-explains and doesn't trust the user"): the tree's header ("Heart
+  Failure: 25 tags · untick what to leave out") went, the row above says
+  it; "Those letters could be several: tap the ones you mean" went (Which?
+  says it); the day picker's "Tap as many as you like…" went, its split
+  is just the counts; what's said after a step is what happened ("Your
+  exam: Thu 12 Jun.", "Unsuspended 373 cards.", "Made My plan: …"), not
+  what follows from it; tooltips are a few words; the how-to's topic part
+  and its then lines, a line a tile. The away row keeps "your crew sees
+  it" before Set.
 - 3.9.7, test_plan_web's "the week a set opened in that still runs today"
   counted its set from this week's Monday, so it held only on a Monday or
   a Tuesday: the set and the days after it count from today now.
