@@ -1764,7 +1764,7 @@ const PlanFace = (() => {
           words: [`${pl(r.units.length, "set")}${r.events.length ? `, ${pl(r.events.length, "quiz or exam", "quizzes or exams")}` : ""}${r.tags.length ? `, ${pl(r.tags.length, "tag")}` : ""}.`,
             r.missing.length ? `Not in your deck (they'd find nothing): ${r.missing.slice(0, 5).map((k) => B.pathOf(k)).join(", ")}${r.missing.length > 5 ? "…" : ""}` : "",
             r.warns.slice(0, 2).join(" ")].filter(Boolean).join(" "),
-          text: lines.join("\n"), yes: "Add to the plan", cmd: "paste", args: { text: t } });
+          text: lines.join("\n"), yes: "Add to the plan", cmd: "paste", args: { text: t, sure: true } });
         return;
       }
       if (change(() => {

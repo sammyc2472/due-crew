@@ -288,9 +288,12 @@ class WebFace(NewPlan, PlanCore):
                              "warn": str(x.get("who") or "").startswith("Open since"),
                              "ai": bool(j == 0 and c["op"].get("by") == "ai")})
         n, f = len(self.draft), self.followers()
+        # cmd: the page's Send sends the sheet's own cmd (page/plan.js submit); without it Send closed the
+        # sheet and nothing went (Sam, 7 Nov: "stuck at review and send")
         return {"kind": "send", "title": (f"Send {n:,} change{'s' if n != 1 else ''} to {f:,} following" if f
                                           else f"Save {n:,} change{'s' if n != 1 else ''}"),
-                "rows": rows, "why": O.send_line(changes), "max": O.WHY_MAX, "yes": f"Send to {f:,}" if f else "Save"}
+                "rows": rows, "why": O.send_line(changes), "max": O.WHY_MAX, "yes": f"Send to {f:,}" if f else "Save",
+                "cmd": "send"}
 
     def c_take_change(self, i, again=False):
         self.take_change(int(i))

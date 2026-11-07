@@ -4718,6 +4718,19 @@ every release that changes how something works.
   sounds, the `room_sound`/`room_sound_vol` config keys and the
   `roomsound` command. An old config's keys are left alone and never
   read; a 3.9.7 chip still on screen sends a command nothing takes.
+- 3.9.8, plans you couldn't add to or send (Sam, 7 Nov: "aren't letting me
+  add stuff to a plan"; "stuck at review and send"): two sheets whose yes
+  went nowhere. The plan page sends a sheet's own cmd and args when its
+  yes is pressed (page/plan.js submit). Anki's Review and send sheet
+  (`webface._send_view`) carried no cmd, so Send to N closed it and sent
+  nothing; it carries "send" now. On duecrew.com, pasted plan lines' sheet
+  (`planface.js` C.paste) sent its text without `sure`, so Add to the plan
+  drew the same sheet again, every press; it sends `sure: true` now, as
+  `ask()` does. Both tests had called the command directly; they press the
+  sheet's own button now (planface_test.js, test_plan_web.py's `press`), and
+  every sheet the Anki window draws with a yes must carry a cmd (the suite
+  fails on one that doesn't). Found on a local duecrew.com
+  (tools/site_preview.sh) driven in a browser.
 - 3.9.8, the tidy-ups (Sam: "go for all of the internal tidy-ups"):
   - the room widgets' runtime (32 KB) and the bottom bar's balance (6 KB)
     are files, `room_widget.js` and `bar_balance.js`, read once at import;
