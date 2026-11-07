@@ -672,12 +672,6 @@ def _cased(a, like):
     return (a[0].upper() if like[:1].isupper() else a[0].lower()) + a[1:]
 
 
-def distractors(it, pool, rng, k=3):
-    """Three wrong answers for a question (_Pool.wrong), from a pool of items."""
-    pool = [it] + [o for o in pool if o is not it]
-    return _Pool(pool).wrong(0, rng, k)
-
-
 def _card(a, top):
     """An answer good on its own, as a white card, a tile or a prompt: not
     a number or value, not too thin, at most `top` long."""

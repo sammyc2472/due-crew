@@ -116,18 +116,6 @@ def noted_followers(plans):
         _closet(lambda cf: cf.note_followed())
 
 
-def make_here(cl):
-    """3.9.3, Make a plan from a deck made in Anki: (make, made) for its
-    dialog. make, in the background: the plan (POST /plans); made, on the
-    main thread: Your plans opens on it, at Lay it out."""
-    gen = app.generation
-
-    def made(raw):
-        if gen == app.generation and mw.col and raw.get("id"):
-            open_plans(select=raw["id"], tab="layout")
-    return (lambda name, deck: remote.create(cl, name, deck)), made
-
-
 def show_plans(plans, select=None, tab=None, new=None):
     if web_window():
         from .web import PlanWeb
@@ -296,12 +284,6 @@ class Ops:
 
     def study_cards(self, idx, cids, name):
         return study_cards(idx, cids, name)
-
-    def new_from_calendar(self):
-        open_new()
-
-    def new_from_deck(self):
-        open_new()
 
     def new_plan(self):
         """Round five: the one New plan window."""
@@ -726,5 +708,3 @@ def _top_deck(col, did):
         return col.decks.id_for_name(top) if top else None
     except Exception:
         return None
-
-

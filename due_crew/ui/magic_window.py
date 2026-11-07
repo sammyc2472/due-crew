@@ -21,6 +21,10 @@ class MagicWindow(QDialog):
         super().__init__(parent)
         self.face = face
         attach_alive(self)
+        # 3.9.7 (the energy review): closed, it goes, its page and its deck's index with it (each open
+        # had left the last window hidden for the rest of the session), as the plan window does
+        from aqt.qt import Qt
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setWindowTitle("Magic search")
         self.setModal(False)
         # round 2 (Sam: "WAY too big and should change size according to content"): as wide
@@ -43,6 +47,13 @@ class MagicWindow(QDialog):
         face.push = self.push
         face.close_win = self.close
         self.web.stdHtml(page_html(face.view(), cfg()), css=[], js=[], context=self)
+
+    def closeEvent(self, e):  # noqa: N802 (Qt's)
+        try:
+            self.web.cleanup()
+        except Exception:
+            pass
+        super().closeEvent(e)
 
     def push(self):
         if getattr(self, "_alive", False):

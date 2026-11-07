@@ -184,6 +184,24 @@ def on_set_content(_content=None, context=None, *_args):
         veil(False)  # the main view's new page has no window open over it
 
 
+def page_of(web):
+    """3.9.8 (the energy review): a count that moves when this web view's own
+    page is drawn anew (its loadStarted), for what a page keeps once it has
+    it (the bars' widgets, Pip's sheet). The shared count (pages) moved with
+    every web view's page, so a screen change sent the top bar's whole
+    widget again (71 KB) and restarted its Pip. A view that can't say counts
+    with every page, as before."""
+    n = getattr(web, "_dc_loads", None)
+    if n is None:
+        try:
+            n = [0]
+            web.loadStarted.connect(lambda c=n: c.__setitem__(0, c[0] + 1))
+            web._dc_loads = n
+        except Exception:
+            return ("all", pages[0])
+    return ("own", n[0])
+
+
 def _a_bar(context):
     """The top bar's or a bottom bar's page (Anki's TopToolbar, Toolbar,
     DeckBrowserBottomBar, OverviewBottomBar, ReviewerBottomBar)."""

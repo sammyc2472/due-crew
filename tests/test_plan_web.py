@@ -35,6 +35,7 @@ from due_crew.planner.webface import WebFace        # noqa: E402
 from due_crew.planner.webpage import colors, page_html  # noqa: E402
 
 CHECKS = []
+DEAD_SHEETS = []  # sheets drawn with a yes and no cmd: pressed, they'd send nothing
 TODAY = datetime.date.today()
 MON = TODAY - datetime.timedelta(days=TODAY.weekday())
 R = "#Big_Step_1::#Path_Book"
@@ -201,12 +202,25 @@ class Face(WebFace):
 
     def eval_js(self, js):
         self.js.append(js)
+        if js.startswith("dcPlan.sheet("):
+            sh = json.loads(js[len("dcPlan.sheet("):-1])
+            if sh.get("yes") is not None and not sh.get("cmd"):
+                DEAD_SHEETS.append(sh.get("title"))  # its yes would close it and send nothing (page/plan.js submit)
 
     def copy(self, text):
         self.copied = text
 
     def click(self, c, **a):
         self._on_cmd("dcplan:" + json.dumps({"c": c, "a": a}))
+
+    def press(self, sheet, **fields):
+        """A sheet's yes, as the page sends it (page/plan.js submit): its cmd with its args and the
+        fields filled in; a send sheet's, its line to followers alone; no cmd, nothing."""
+        args = dict(sheet.get("args") or {}, **fields)
+        if sheet.get("kind") == "send":
+            args = {"why": fields.get("why", sheet.get("why") or "")}
+        if sheet.get("cmd"):
+            self.click(sheet["cmd"], **args)
 
     def last(self, what="show"):
         for js in reversed(self.js):
@@ -378,7 +392,7 @@ def test_changes_wait_when_someone_follows():
     sh = w.last("sheet")
     check("web: Review and send: each change in words, a line for followers filled in", sh and sh["kind"] == "send" and sh["rows"]
           and sh["why"] and sh["yes"] == "Send to 1", sh)
-    w.click("send", why="Renamed it")
+    w.press(sh, why="Renamed it")  # the sheet's own Send, as the page sends it (Sam, 7 Nov: it sent nothing)
     check("web: Send saves it, with the line as a post", next(u for u in STORE.plans[pid]["doc"]["units"] if u["id"] == "u1")["name"]
           == "Cell injury and death" and not w.draft, STORE.plans[pid]["doc"]["units"])
     w.click("rename", uid="u1", name="Cells")
@@ -903,6 +917,7 @@ def test_the_page_draws_its_own_days_v396():
 def main():
     for n in [n for n in list(globals()) if n.startswith("test_")]:
         globals()[n]()
+    check("web: every sheet with a yes sends a cmd when it's pressed (the page sends nothing without one)", not DEAD_SHEETS, DEAD_SHEETS)
     bad = [c for c in CHECKS if not c[1]]
     print(f"\n{len(CHECKS) - len(bad)}/{len(CHECKS)} checks passed")
     sys.exit(1 if bad else 0)

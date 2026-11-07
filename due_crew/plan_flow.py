@@ -1667,17 +1667,6 @@ def send_trees():
     _bg(job, done)
 
 
-def note_tree(deck, tags, decks):
-    """Make a plan from a deck just sent this deck's tree: noted as sent
-    today, so the next refresh doesn't send it again."""
-    try:
-        pc = _pcfg()
-        pc.setdefault("trees_sent", {})[str(deck).lower()] = {"h": P.tree_hash(deck, tags, decks), "day": _today()}
-        _psave(pc)
-    except Exception:
-        traceback.print_exc()
-
-
 CHECK_CARDS = 60
 CHECK_DAYS = 3  # a checkpoint missed by more than this many mornings isn't built late
 
@@ -4748,17 +4737,6 @@ def on_followed(plan, deck_id, swap, late, hold=False, lesson=None):
         _bg(lambda: cl.set_days(pid, shift=min(365, int(rest))), finish)
     else:
         finish()  # 3.3: the plan's days are the schedule; nothing to ask
-
-
-def open_make():
-    if not _signed_in():
-        return
-    if not mw.col:
-        return
-    from .ui.plan_dialog import MakePlanDialog
-    from .planner import flow as planner_flow
-    make, made = planner_flow.make_here(client())
-    MakePlanDialog(mw, client(), mw.col, site_base(), on_sent=note_tree, make=make, on_made=made).exec()
 
 
 def open_site(path):

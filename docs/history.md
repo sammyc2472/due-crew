@@ -4651,3 +4651,125 @@ every release that changes how something works.
 - 3.9.7, test_plan_web's "the week a set opened in that still runs today"
   counted its set from this week's Monday, so it held only on a Monday or
   a Tuesday: the set and the days after it count from today now.
+- 3.9.8, the energy review (Sam saw Anki at an Energy Impact of 2,400 in
+  Activity Monitor: "could we be causing this?", then "structurally
+  simplify / make efficient / ensure security / speed", keeping what
+  sparks joy). Four reviews (the pages at rest, the Python glue, security,
+  structure) and measurements in Chromium and in Anki's own engine:
+  - a resting pointer isn't pointing: Pip's "pointing plays it on" (crew
+    rows, squads, the fridge, the dance floor, Pip Party's pictures) was
+    forever while a pointer rested there, measured at 14 to 20% of a core
+    on the floor and 5% on a row. Now each reads `--sv-hover`: forever
+    while the page is awake, one more round at rest (`.dc-rest`). A page
+    rests after `sev.REST_S` (12 s) with no pointer move, key or scroll,
+    or at once when Anki isn't in front (blur, hidden); the next move
+    wakes it and the loops play on (`sev.REST_JS`, once a page, on the
+    Decks screen and in the bars' widgets);
+  - Pip Party: a picked game's picture played forever (its "once" rule
+    lost to the rules after it, as specific or more); it plays once;
+  - the dance floor's half-beat tick (2.5 a second, all day, folded or
+    still) runs only while it dances; resting, one tick a bubble's turn,
+    and no turns while Anki isn't in front; a resting pointer doesn't
+    keep it dancing; the bubbles' fade only where motion is wanted;
+  - the board's stylesheet once a page: a swap had carried all of it
+    (113 KB of a realistic board's 138) and the page parsed it anew on
+    every click. `board.split_css` takes the leading stylesheets off; a
+    page holds them in `#dc-css`, just before the board, sent again only
+    when they change (the glue keeps the key per page, `_SCRIPTS["css"]`);
+    a page that lost them asks (`duecrew:css`, the board's). A swap is
+    30 KB where it was 145; the board is pixel for pixel the same;
+  - Magic search's window goes when it's closed (each close had left it,
+    its page and its deck's index, hidden for the session); a keystroke
+    works each run of words' initials out once (`magic._initials`);
+  - security (no critical or high finding; every board builder fuzzed,
+    nothing got out): the room's cheer once a minute however it's sent
+    (a card's script could learn the widget's key, `rooms.cheer_room`);
+    no redirect followed with the session's token (`api._call`); the
+    cheer show's fragments escaped as their siblings are.
+  Found fine: nothing in the Python runs at rest, no redraw loop, the
+  request budget holds, a card shown costs a third of a millisecond;
+  swaps pile nothing up (100 swaps: the same listeners and timers).
+- 3.9.8, the energy review's second round (Sam: "any other structural
+  things we can hit?"):
+  - the bars' widgets go again only when their own page is drawn anew
+    (`app.page_of`: a web view's own loads, from its loadStarted). The
+    one count for every web view sent the top bar's whole widget (71 KB)
+    at each screen change and restarted its Pip; a view that can't say
+    counts every page, as before. Pip's sheet on the bar and the card
+    (`cards._SHEET`) the same;
+  - the board turned off: a refresh no longer builds Anki's Decks screen
+    again (`_board_off`; nothing of ours is on it); its cheers play over it;
+  - a sync's new cards by day, asked three times, is one read
+    (`StatsQueries.new_cards_by_day`: the widest window lately read answers
+    the narrower while the day and the log's newest answer stand);
+  - Wrapped: one page listener for whichever card is up (each card had
+    added its own);
+  - gone, nothing called them: the Make a plan dialog and its way in
+    (`ui/plan_dialog.py`, `plan_flow.open_make`/`note_tree`,
+    `planner/flow.make_here`; New plan is the one way since round five),
+    `planner/widgets.Chip`, `room_model.seat_key`, `gamenight.distractors`,
+    `planner/ops.copy_ops`, `settings_tab._nth`, `webface.note_days`, the
+    planner Ops' `new_from_calendar`/`new_from_deck`, and the board's
+    `.wk2` and `.awb` styles.
+- 3.9.8, room sounds gone (Sam: "you can actually remove the whole room
+  sounds feature"): the chip's speaker and picker, the top bar's player
+  (`sounds.js`), the three recordings and their credits (`due_crew/sounds/`,
+  about 1.6 MB of the package), `tools/cut_sound.sh`, Settings › Room
+  sounds, the `room_sound`/`room_sound_vol` config keys and the
+  `roomsound` command. An old config's keys are left alone and never
+  read; a 3.9.7 chip still on screen sends a command nothing takes.
+- 3.9.8, plans you couldn't add to or send (Sam, 7 Nov: "aren't letting me
+  add stuff to a plan"; "stuck at review and send"): two sheets whose yes
+  went nowhere. The plan page sends a sheet's own cmd and args when its
+  yes is pressed (page/plan.js submit). Anki's Review and send sheet
+  (`webface._send_view`) carried no cmd, so Send to N closed it and sent
+  nothing; it carries "send" now. On duecrew.com, pasted plan lines' sheet
+  (`planface.js` C.paste) sent its text without `sure`, so Add to the plan
+  drew the same sheet again, every press; it sends `sure: true` now, as
+  `ask()` does. Both tests had called the command directly; they press the
+  sheet's own button now (planface_test.js, test_plan_web.py's `press`), and
+  every sheet the Anki window draws with a yes must carry a cmd (the suite
+  fails on one that doesn't). Found on a local duecrew.com
+  (tools/site_preview.sh) driven in a browser.
+- 3.9.8, the tidy-ups (Sam: "go for all of the internal tidy-ups"):
+  - the room widgets' runtime (32 KB) and the bottom bar's balance (6 KB)
+    are files, `room_widget.js` and `bar_balance.js`, read once at import;
+    the same text goes, its placeholders filled as before;
+  - the Decks screen's commands are one table, `BOARD_CMDS` in
+    `__init__.py`: each a line (how many values, a check on them, what it
+    does), and five families (plan, due, ins, closet, wrapped) handed to
+    their modules, in place of an 87-branch chain. A name it hasn't, or
+    values that fail, print as unknown, as before;
+  - the fixed scripts as files Anki could cache: looked at and left. Anki
+    serves an add-on's .js with `max_age=0` (aqt's mediasrv), so a file is
+    asked for again at every load; the Decks page's scripts (127 KB) go
+    once a page already and compile in about 2 ms; and the bars' widgets
+    keep their key inside the script's own closure, which a shared file
+    can't hold;
+  - one overlay for the board's seven windows (`board.POP_JS`,
+    `window.dcPop`): the Cheer window, the song search, a sheet, Magic
+    search's how-to, a crewmate's card, a squadmate's and the good-luck
+    card. Each keeps its card and its look (all seven open pixel for pixel
+    as before, light and dark; the control audit the same); the shade, its
+    role and name, Esc, Tab kept inside, a click on the shade, the key back
+    to what opened it, the bars' shade, the fade and the motion layer are
+    the helper's. The three cards gain the Tab trap, the key back, a role
+    and name, and Esc caught first (the good-luck card had no Esc at all).
+    A window's styles name it by its id or its `data-pop` (`pop.css`,
+    `pop_named` for the floor's sheet), so it keeps its look as it goes:
+    the id went first, for the bars' shade, and a closing window showed
+    bare at the page's foot for the length of its fade.
+  - `board.py` (9,500 lines) is a package by feature, `due_crew/board/`:
+    `base` (palettes, tabs, words for days, a crew's rows, the page's
+    key), `style` (the stylesheet), `crew`, `squads` (and a plan's squad,
+    bingo), `plancards` and `planweek` (You › Plans), `insights`, `party`,
+    `due`, `settings`, `closet`, `wrapped`, `pip`, `lobby` (a room's),
+    `cheers`, `fridge`, `dance`, `windows` (the overlay, a sheet, the
+    cards), `page` (the stylesheet once a page, Find, the shade, the
+    motion layer's scripts) and `draw` (render, the You bubble). Each part
+    imports what it leans on, in one order, no cycles; the package holds
+    every name of every part, so `board.X` and `from .board import X` read
+    as before, and a name set on the board (a test's stand-in) is set in
+    each part that has it. The preview renders byte for byte as before
+    (but a clock); the suite's source checks read the parts
+    (`fakes.board_source`).

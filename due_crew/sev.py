@@ -430,6 +430,28 @@ MOVES = {
     "stack": (("stack", "stack"), ("stack", "wobble"), ("stack", "catch")),
     "peek": (("peek", "peek"), ("peek", "knock"), ("peek", "bounce")),
 }
+# 3.9.7 (the energy review): Pip's "pointing plays it on" (and the dance floor's) meant forever
+# while a pointer rested there, 14 to 20% of a core all day. A page is at rest after REST_S with no
+# pointer move, key or scroll, or at once when Anki isn't in front (blur, hidden); it wakes on the
+# next one. Loaded once a page (window.dcRest), on the Decks screen and in the bars (room_model).
+REST_S = 12
+REST_JS = """(function () {
+  if (window.dcRest || !window.addEventListener || !document.addEventListener) { return; }
+  var html = document.documentElement, R = window.dcRest = { t: 0, at: 0 };
+  function rest() { clearTimeout(R.t); html.classList.add('dc-rest'); }
+  function wake() {
+    var now = Date.now();
+    if (now - R.at < 250 && !html.classList.contains('dc-rest')) { return; }
+    R.at = now; html.classList.remove('dc-rest'); clearTimeout(R.t); R.t = setTimeout(rest, %d);
+  }
+  R.resting = function () { return html.classList.contains('dc-rest'); };
+  ['pointermove', 'pointerdown', 'wheel', 'keydown'].forEach(function (e) { window.addEventListener(e, wake, { passive: true, capture: true }); });
+  window.addEventListener('blur', rest);
+  window.addEventListener('focus', wake);
+  document.addEventListener('visibilitychange', function () { if (document.hidden) { rest(); } else { wake(); } });
+  if (document.hidden) { rest(); } else { wake(); }
+})();""" % (REST_S * 1000)
+
 # a study room's seats, each its own: blinks, reads, nods, reaches, looks around
 SEAT_MOVES = ("idle", "sread", "snod", "sreach", "slook")
 
@@ -504,7 +526,11 @@ svg.sv { overflow: visible; display: block; flex: none; }
    ended kept Anki drawing 60 frames a second, on every screen); pointing at
    Pip plays it on. The break's breathing and stretch go on for the break:
    they're the exercise */
-.sv:hover, .sv-slot:hover .sv { --sv-on: infinite; }
+.sv:hover, .sv-slot:hover .sv { --sv-on: var(--sv-hover, infinite); }
+/* 3.9.7 (the energy review): a pointer left resting on Pip isn't pointing. After REST_S
+   with no move, key or scroll, or once Anki isn't the window in front, the page is at rest
+   (REST_JS: dc-rest) and a pointed-at loop plays its round out and rests; a move plays it on */
+.dc-rest { --sv-hover: 1; }
 @media (prefers-reduced-motion: no-preference) {
   .sv .sv-eyes { animation: sv-blink var(--sv-b, 4.6s) var(--sv-d, 0s) var(--sv-on, 3); }
   @keyframes sv-blink { 0%, 90%, 100% { transform: scaleY(1); } 93% { transform: scaleY(.12); } 96% { transform: scaleY(1); } }

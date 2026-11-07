@@ -174,8 +174,9 @@ def test_motion_and_fold():
           and 'class="dm-still' in board.dance_html(dict(view(), motion="still"), {}))
     css = board.DANCE_CSS
     calm = css.split("@media (prefers-reduced-motion: no-preference)")[0]
-    check("every move is under Reduce motion's no-preference; the bubbles fade, never move",
-          "animation:" not in calm.replace("animation: none", "") and "transition: opacity .45s ease" in calm)
+    check("every move is under Reduce motion's no-preference; the bubbles fade, never move (3.9.7: the fade too)",
+          "animation:" not in calm.replace("animation: none", "") and "transition:" not in calm
+          and "@media (prefers-reduced-motion: no-preference) { #dc-dance .bub { transition: opacity .45s ease; } }" in css)
     check("gentle: a slow sway, from still and back (no pose swaps, no new drawing)",
           "@keyframes df-sway { 0%, 100% { transform: none; }" in css and "2.8s" in css)
     check("the Pips never take a click: the button around them does", re.search(r"#dc-dance \.pp \{[^}]*pointer-events: none", css))
@@ -185,7 +186,7 @@ def test_motion_and_fold():
           and "#dc-dance.fold .df-sc, #dc-dance.fold .df-cards { display: none; }" in css)
     js = board.DANCE_JS
     check("folded: no dancing, no bubbles passed along; the fold at once on the page, then dancefold:1 / 0",
-          "var on = !folded(f) && !still(f)" in js and "!S.open && !folded(f)) { say(" in js
+          "var on = !folded(f) && !still(f)" in js and "!away() && !S.open && !folded(f)) { S.saidAt = now; say(" in js
           and "send('dancefold:' + (on ? 1 : 0));" in js and "f.classList.toggle('fold', on);" in js)
     check("narrow: the booth, one dancer, a count", f"@media (max-width: {board.DANCE_NARROW - 1}px)" in css
           and "#dc-dance .dz:not(.d0), #dc-dance .df-more { display: none; }" in css)
@@ -271,7 +272,9 @@ def test_commands_keyed():
     check("the search's rows as text (never markup), a cover only from Apple's image host; only the latest search lands",
           "innerHTML" not in js and "el('b', null, song.t)" in js and "mzstatic\\.com" in js and "ART.test(song.art)" in js
           and "String(o.q || '') !== S.q" in js)
-    check("the search is a sheet over the board: the bars dim with it", "dc-song" in board.VEIL_IDS and "aria-modal" in js)
+    check("the search is a sheet over the board (3.9.8: the board's one overlay, POP_JS): the bars dim with it",
+          "dc-song" in board.VEIL_IDS and "window.dcPop.make({ id: 'dc-song'" in js and "aria-modal" in board.POP_JS
+          and board.dance_js().startswith(board.POP_JS))
     check("the floor's script comes with the fridge's (a page's scripts once), and the fridge's call puts it in step",
           board.DANCE_JS in board.fridge_js() and board.DANCE_JS not in board.fridge_js(scripts=False)
           and "window.dcDance.sync()" in js and board.fridge_js(scripts=False) == "\nif (window.dcFridge) { window.dcFridge(); }\n")
@@ -425,8 +428,8 @@ def test_every_command_has_its_route():
          + board._profile_song({"uid": "dre", "song": song(1)}))
     emitted = {c for c in set(re.findall(r"duecrew:([a-z]+)", h)) | set(re.findall(r"send\('([a-z]+):?'", board.DANCE_JS))
                if c.startswith(("song", "dance"))}
-    src = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
-    routed = set(re.findall(r'"([a-z]+)"', re.search(r'elif cmd in \(("songsearch"[^)]*)\):', src).group(1)))
+    import due_crew as dc
+    routed = {n for n, (_, _, run) in dc.BOARD_CMDS.items() if run is dc._song}  # 3.9.8: the command table
     flow = open(os.path.join(REPO, "due_crew", "song_flow.py")).read()
     handled = set(re.findall(r'cmd == "([a-z]+)"', flow)) | set(re.findall(r'"([a-z]+)"', " ".join(re.findall(r"cmd in \(([^)]*)\)", flow))))
     want = {"songsearch", "songuse", "songclear", "songlisten", "songapp", "songapple", "dancehide", "danceshow",

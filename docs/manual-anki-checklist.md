@@ -820,22 +820,6 @@ The riskiest of 3.9.1, the parts only a live Anki can show, in order:
 - [ ] A second computer signed in to the same account: it's on there after the account's settings come down. Your phone keeps four buttons.
 - [ ] You › Insights on a deck where you press Hard a lot (15% of 200 answers): the Hard habit line ends "Try two buttons · Not now". Try two buttons: the line says "Two buttons are on … Undo", and Settings shows it on. Undo: off, and the Hard line is back. Reopen Anki with it on: no Hard habit line.
 
-### 3.9.1: room sounds
-
-- [ ] The chip says it: during a fifteen, the chip ends in an outlined "Sound" with a struck speaker; pick Rain: it reads "Rain" in your colour. A compact chip (narrow window) shows the speaker alone.
-- [ ] Settings › Board › Fifteen and Pip › Room sounds, off: the sound fades out and the chip loses its speaker at once; start a fifteen: no speaker, no sound. On again: the speaker's back, with your last pick.
-- [ ] Waves is the Pacific one now: listen for two minutes on loop: no click where it comes round.
-- [ ] The picker closes by itself: pick Rain and leave the pointer still: the chip is back in a second and a half. Drag the volume and hold it: it stays; let go: back in two seconds. Open it and move away: back in a second. Open it and do nothing: back in four.
-- [ ] The recordings: Rain is real rain, Fire a real fireplace (soft pops), Waves a real shore, each a minute or so that loops; listen for two minutes each: no click or jump where it comes round, no voices, birds or hum. Brown noise is the made one, as before. All four sound about as loud at one volume.
-
-- [ ] Start a fifteen: its chip in the top bar ends in a grey speaker (struck through). Click it: the chip becomes Off · Brown noise · Rain · Fire · Waves; Off is filled. Esc, or a click anywhere else, puts the chip back; a click on the chip (not the speaker) still opens its card.
-- [ ] Pick Rain: it fades in over a second or so (headphones for Brown noise and Waves: laptop speakers barely play them); the volume slider appears and changes it as you drag. Pick Fire: Rain fades as Fire comes in. The speaker is in your accent, with waves. Off: it fades out.
-- [ ] Study with a sound on: it plays on through Review (cards changing don't cut it), through a fifteen's break and its question; Stop here: it fades out. Take five, then another: it plays through.
-- [ ] Restart Anki, start a fifteen: your last pick comes back by itself (no click), at its volume. Sync (the top bar redraws): it carries on, or comes back within a moment.
-- [ ] A crew room with someone who picked a different sound (or none): each of you hears your own; theirs never changes yours. The room ends: yours stops.
-- [ ] Preferences › hide the top bar while reviewing: the room shows in the bottom bar or the margin with no speaker, and the sound plays on.
-- [ ] No room and no fifteen: no sound, ever (it never starts on its own outside a session).
-
 ### 3.9.1: doodle cheers (deploy the Worker first: migration 0029)
 
 - [ ] 🎉 a crewmate: the Cheer window opens small: the emoji, "Add Draw · Sign" with neither picked, the note, Send. Send now: a plain cheer. Press Draw: the pad opens; press Draw again: it shuts, and Send sends no drawing (open it again: what you drew is still there). Sign the same.
@@ -982,3 +966,7 @@ The riskiest of 3.9.1, the parts only a live Anki can show, in order:
 - [ ] "quiz friday on platelets and anemia": Add the quiz (My plan or yours), then Pick days… opens on the days before it. "my exam is december 12": Settings' exam, Today's countdown; Undo puts it back. "I'm away till monday": your away spell. "push my plan back 2 days", "pause my plan": your follow.
 - [ ] Paste plan lines from a prompt: Add 5 dates and 1 event, each line counted, one whose tag isn't here says so; Add puts them on the plan.
 - [ ] Browse: pick cards, right-click › Due Crew: put on a day…: the window has them, the day picker open.
+
+### 3.9.8: room sounds gone
+
+- [ ] Start a fifteen: the chip has no speaker; Settings › Board › Fifteen and Pip has no Room sounds; Find a setting: "rain" finds nothing. Coming from 3.9.7 with a sound picked: no sound plays, ever.

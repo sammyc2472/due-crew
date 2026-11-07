@@ -21,7 +21,6 @@ one per yes, one to stop). Pip, if on, keeps me company through it.
 
 import datetime
 import html
-import os
 import time
 import traceback
 
@@ -157,8 +156,19 @@ def dismiss(key):
     app.swap(cfg())
 
 
+ROOM_CHEER_GAP = 60  # s: 3.9.7 (the security review): the room's cheer at most once a minute
+_room_cheered = {"at": 0.0}
+
+
 def cheer_room():
+    """🎉 to everyone in my room. It comes from the review screen's widget,
+    where a card's own script could learn the widget's key and send it too
+    (room_model.trusted): so once a minute at most, whatever sends it."""
     from .social import _send_cheer, cheer_allowed
+    now = time.time()
+    if now - _room_cheered["at"] < ROOM_CHEER_GAP:
+        tooltip("Cheered just now.")
+        return
     room = my_room()
     if room:
         crew = [(u, n) for u, n, you in room_model.members(_state["entries"], room) if not you]
@@ -168,6 +178,7 @@ def cheer_room():
     if not crew or not emoji:
         tooltip("Nobody else in the room yet.")
         return
+    _room_cheered["at"] = now
     for uid, name in crew:
         _send_cheer(uid, name, emoji)
 
@@ -250,7 +261,7 @@ def _draw(web, parts):
     """True when it went (it changed, or the page is new)."""
     if web is None:
         return False
-    key = (app.pages[0], "".join(parts))
+    key = (app.page_of(web), "".join(parts))  # 3.9.8: this view's own page, not every view's
     if _DRAWN.get(id(web)) == key:
         return False
     _eval(web, key[1])
@@ -270,76 +281,7 @@ def _data(room, side=None, **kw):
     return room_model.widget_data(room, _state["entries"], _accent_pair(),
                                   compact=bool(c.get("room_compact")),
                                   side=c.get("room_chip_side") if side is None else side,
-                                  sev=sev_on(), brk_pose=_brk_pose(), look=my_look(),
-                                  sound=room_model.sound_pick(c) if room_model.sounds_on(c) else None, **kw)
-
-
-def _allow_sound(web):
-    """3.9.1: the top bar's page may play sound without a click on it, so a
-    room sound picked earlier comes back by itself after the bar redraws
-    (Anki's webviews, like browsers, wait for a click otherwise)."""
-    try:
-        web.setPlaybackRequiresGesture(False)
-    except Exception:
-        try:
-            from aqt.qt import QWebEngineSettings
-            web.settings().setAttribute(QWebEngineSettings.WebAttribute.PlaybackRequiresUserGesture, False)
-        except Exception:
-            pass
-
-
-def _sound(top, room):
-    """3.9.1: the top bar's player, told my pick and the session (or, in no
-    room, to stop). Nothing is sent: each person picks their own."""
-    if top is not None:
-        _eval(top, _sound_js(top, room))
-
-
-def _sound_js(top, room):
-    if room is None:
-        return room_model.sound_js(None)
-    c = cfg()
-    kind, vol = room_model.sound_pick(c) if room_model.sounds_on(c) else ("off", 0)
-    if kind != "off" and top is not None:
-        _allow_sound(top)
-    return room_model.sound_js(room_model.sound_state(room, kind, vol, _sound_files()))
-
-
-_SOUND_DIR = os.path.join(os.path.dirname(__file__), "sounds")
-
-
-def _sound_files():
-    """Where the top bar's page finds the recordings this install has (none:
-    they're all made). The folder is served by /_addons/ (setWebExports in
-    __init__). Looked for once a run."""
-    if "files" not in _SOUND_FILES:
-        try:
-            have = [k for k in room_model.RECORDED if os.path.isfile(os.path.join(_SOUND_DIR, k + ".ogg"))]
-            _SOUND_FILES["files"] = (room_model.sound_files(mw.addonManager.addonFromModule(__name__), have)
-                                     if have else {})
-        except Exception:
-            return {}
-    return dict(_SOUND_FILES["files"])
-
-
-_SOUND_FILES = {}
-
-
-def set_sound(parts):
-    """roomsound:<kind>:<volume> from the chip's picker: kept for this
-    computer (it already plays in the page). Only the top bar sends it; a
-    card's page can't (room_model.CARD_PAGE_CMDS)."""
-    got = room_model.sound_cmd(parts)
-    if got is None or not room_model.sounds_on(cfg()):
-        return
-    c = cfg()
-    if (c.get("room_sound"), c.get("room_sound_vol")) != got:
-        c["room_sound"], c["room_sound_vol"] = got
-        save_cfg(c)
-    top = _webs()[0]
-    if top is not None and got[0] != "off":
-        _allow_sound(top)
-    _sound(top, my_room())
+                                  sev=sev_on(), brk_pose=_brk_pose(), look=my_look(), **kw)
 
 
 def refresh_widgets():
@@ -349,10 +291,9 @@ def refresh_widgets():
     top, main, bottom = _webs()
     signed = client().signed_in
     room = my_room() if signed else None
-    # 3.9.1: the room sound plays (or stops) in the top bar, whichever little
-    # one shows; each page's widgets go as one piece (_draw), the bottom bar's
-    # with what keeps Anki's answer buttons in its middle
-    t, m, b = [_sound_js(top, room)], [], []
+    # each page's widgets go as one piece (_draw), the bottom bar's with what
+    # keeps Anki's answer buttons in its middle
+    t, m, b = [], [], []
     if room is None:
         off = room_model.widget_js("off")
         t.append(off), m.append(off), b.append(off)
@@ -535,7 +476,6 @@ def on_close():
     """profile_will_close: closing Anki leaves the room. Anki's closing sync
     (or this push) takes it off my week doc; uploads still go while closing.
     3.8.1: a fifteen ends, and its line waits for the next open."""
-    _sound(_webs()[0], None)  # 3.9.1: a room sound stops with the profile
     cl = client()
     room = room_model.clean_room(cl.session.get("room"))
     if cl.signed_in and room_model.is_fifteen(room):
@@ -651,8 +591,6 @@ def on_message(cmd, parts):
     elif cmd == "room15sitx":
         _habits(lambda hf: hf.dismiss_sit())  # its ×: not again this sitting
         refresh_widgets()
-    elif cmd == "roomsound":
-        set_sound(parts)  # 3.9.1: the chip's speaker
     elif cmd == "roomtick":
         # a phase changed (the chip saw it): the Decks screen's lobby follows
         if mw.state == "deckBrowser":

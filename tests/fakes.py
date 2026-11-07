@@ -2685,6 +2685,22 @@ class _FakeCheck:
         return lambda *a, **k: None
 
 
+def board_source():
+    """3.9.8: the board's parts as one text (due_crew/board/, a package by
+    feature; once board.py), for the checks that read its source."""
+    import os as _os
+    here = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "due_crew", "board")
+    names = ["__init__.py"] + sorted(n for n in _os.listdir(here) if n.endswith(".py") and n != "__init__.py")
+    return "".join(open(_os.path.join(here, n), encoding="utf-8").read() for n in names)
+
+
+def board_files():
+    """3.9.8: the board's parts' paths (due_crew/board/*.py)."""
+    import os as _os
+    here = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "due_crew", "board")
+    return [_os.path.join(here, n) for n in sorted(_os.listdir(here)) if n.endswith(".py")]
+
+
 def install_fake_aqt():
     """Minimal aqt/anki surface so due_crew modules import."""
     aqt = types.ModuleType("aqt")

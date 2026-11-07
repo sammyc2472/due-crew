@@ -996,6 +996,11 @@ flurry = board.flurry_js(["\U0001F389"], "Dre sent cheers", back=("dre", "\U0001
 luck_js = board.luck_card_js("Marisa", [("Dre", "You've done the work. Go get it."),
                                         ("Sammy", "Breakfast first. Then crush it."),
                                         ("Adina", "Proud of you either way \U0001F49A")])
+# 3.9.8: the board's seven windows share one overlay (board.POP_JS); the bar opens each
+cheer_js = board.cheer_overlay_js({"uid": "dre", "name": "Dre", "emojis": ["\U0001F389", "\U0001F525", "\U0001F4AA", "\U0001F340"],
+                                   "pip": board.card_sev({"name": "Dre", "accent": "blue", "look": ["partyhat"]}, {})})
+from due_crew import magic as _magic  # noqa: E402
+magic_how_js = board.magic_howto_js(_magic.howto("Ctrl+Shift+F"))
 stranger_js = board.stranger_card_js({"uid": "u2", "name": "Maya R.",
                                       "reviews": 488, "time_ms": 3900000,
                                       "retention": 89.0, "streak": 31, "rank": 3,
@@ -1126,6 +1131,8 @@ page = f"""<!doctype html><html><head><meta charset="utf-8">
   <button onclick="document.body.classList.toggle('nightMode')">theme</button>
   <button onclick="eval(PROFILE_JS)">profile</button>
   <button onclick="eval(FLURRY_JS)">flurry</button>
+  <button onclick="eval(CHEER_JS)">cheer</button>
+  <button onclick="eval(MAGIC_HOW_JS)">magic</button>
   <button onclick="eval(STRANGER_JS)">stranger</button>
   <button onclick="eval(LUCK_JS)">luck</button>
   <button onclick="eval(SHEET_TEXT)">status</button>
@@ -1140,6 +1147,8 @@ page = f"""<!doctype html><html><head><meta charset="utf-8">
   function pycmd(cmd) {{ console.log('pycmd', cmd); return false; }}
   var PROFILE_JS = {json.dumps(profile_js)};
   var FLURRY_JS = {json.dumps(flurry)};
+  var CHEER_JS = {json.dumps(cheer_js)};
+  var MAGIC_HOW_JS = {json.dumps(magic_how_js)};
   var STRANGER_JS = {json.dumps(stranger_js)};
   var LUCK_JS = {json.dumps(luck_js)};
   var SHEET_TEXT = {json.dumps(sheet_text)};

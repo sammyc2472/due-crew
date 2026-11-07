@@ -599,8 +599,15 @@ function drawAll(x, view, sheet, mode) {
   await run(s, "pick", { key: ["date", "u2"] });
   await run(s, "op", { op: { op: "move_source", date: "u2", key: ["search", `"tag:${ROOTTAG}::^Systems::Heme"`], to: "u3" } });
   check("planface: Move to: a search moves to another set", (s.B.doc.units.find((u) => u.id === "u3").search || []).length === 1 && !(s.B.doc.units.find((u) => u.id === "u2").search || []).length);
-  await run(s, "paste", { text: `${s.day(22)} | Pasted | tag:${ROOTTAG}::^Systems::Cardio`, sure: true });
-  check("planface: plan lines pasted go on as the builder's text does", s.B.doc.units.some((u) => u.name === "Pasted"), s.B.doc.units.map((u) => u.name));
+  // as a person does it: Show the changes, then the sheet's Add to the plan, sent with the sheet's own args
+  const pn = s.sheets.length;
+  await run(s, "paste", { text: `${s.day(22)} | Pasted | tag:${ROOTTAG}::^Systems::Cardio` });
+  const pasteSheet = s.sheets[s.sheets.length - 1];
+  check("planface: pasted plan lines show their changes first, nothing on yet", s.sheets.length === pn + 1 && pasteSheet.yes === "Add to the plan"
+    && !s.B.doc.units.some((u) => u.name === "Pasted"), pasteSheet);
+  await run(s, pasteSheet.cmd, pasteSheet.args);
+  check("planface: …the sheet's Add to the plan puts them on (Sam, 7 Nov: it showed the same sheet again, every press)",
+    s.B.doc.units.some((u) => u.name === "Pasted") && s.sheets.length === pn + 1, [s.B.doc.units.map((u) => u.name), s.sheets.length - pn]);
   await run(s, "discard", { sure: true });
   check("planface: Discard: the plan as it was saved", !s.B.doc.units.some((u) => u.name === "Neoplasia") && !s.f.F.changes.length);
 
