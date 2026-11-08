@@ -4800,3 +4800,20 @@ every release that changes how something works.
   week use it. Measured in Anki's own engine on the big test collection:
   the day's first check 0.4 s where it was 0.6 to 1.0. What's left of it is
   the last 120 days of the deck's log and the habits worked out from them.
+- 3.9.9, every control pressed (after the two plan sheets whose yes went
+  nowhere): the suites press each surface's controls as a person does and
+  send what the page sends back through the real handler, where the tests
+  had sent the commands themselves. Anki's plan window (test_plan_web: the
+  page in node on 41 states, every control, menu, calendar day and key;
+  `DEAD_CLICKS`, a cmd with no handler or a menu item with nothing to do),
+  duecrew.com's plan page (planface_test.js: every sheet planface.js can
+  draw, pressed with its boxes filled), the board (every command the suite
+  drew a control for, down its real route at the end of the run:
+  `check_every_board_click_is_taken`), the bars' widgets (room_widget.js in
+  node, each press through `room_model.trusted` and `rooms.on_message`) and
+  Magic search (magic.js in node, each message through `Search.on`). Each
+  fails on the bug it's for (Send's cmd, the paste's `sure`, a family
+  branch wanting one value more, a widget command dropped, a renamed
+  handler). It found one more: on duecrew.com a review day's second sheet
+  said "Empty takes the review day off", but its two days had no Clear,
+  so they couldn't be emptied (`planface.js`, the fields `optional` now).
