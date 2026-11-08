@@ -20578,6 +20578,114 @@ def test_first_answers_quick_read_v399():
           and "min(id) FROM revlog WHERE ease > 0 AND cid IN ({deck})" not in srcs)
 
 
+def test_calm_offline_v399():
+    """3.9.9 (Off the Board, 11, Sam's pick): when Due Crew can't be reached
+    the board says so in a line on top of every tab (the foot's "Couldn't
+    sync" was the only word), with when a refresh last got through and Try
+    now; a cheer sent then waits, marked on its crewmate's row, and goes
+    with the next refresh that gets an answer. Only no answer at all, or the
+    server away, holds a cheer: a refusal, a sign-in gone or a ceiling
+    would only be refused again."""
+    import inspect
+    import time as _time
+    import due_crew as dc
+    from due_crew import app as A, social as S
+    from due_crew.backend.shapes import TransportError
+    from due_crew.board import draw as D
+    from due_crew.app import _state
+    labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    tomorrow = (TODAY + datetime.timedelta(days=1)).isoformat()
+    day = {labels[0]: {"reviews": 40, "studyTimeMs": 600000, "retention": 90.0, "streak": 3}}
+    base = {"days": day, "last_updated": "", "decks": [], "paused": False, "room": None}
+    ents = [dict(base, user_id="me", name="Sammy", you=True), dict(base, user_id="dre", name="Dre", you=False),
+            dict(base, user_id="kai", name="Kai", you=False)]
+    data = {"entries": ents, "labels": labels, "tomorrow": tomorrow, "pending": [], "decks": {}, "my_friends": []}
+    now = _time.mktime((2026, 11, 8, 18, 0, 0, 0, 0, -1))
+    at = _time.mktime((2026, 11, 8, 15, 10, 0, 0, 0, -1))
+    check("offline: when a refresh last got through, as a person says it (today, this week, before)",
+          D._clock(at, now) == "3:10 PM" and D._clock(at - 2 * 86400, now) == "Fri 3:10 PM"
+          and D._clock(at - 9 * 86400, now) == "30 Oct" and D._clock(0, now) == "", D._clock(at, now))
+    line = D.offline_html(at, now)
+    check("offline: the line says it plainly, when, and Try now refreshes (the board's own command)",
+          "Can&rsquo;t reach Due Crew. Your studying still counts and sends when it&rsquo;s back. Last refresh 3:10 PM."
+          in line and "duecrew:refresh|" in line and "Try now" in line and 'role="status"' in line)
+    page = board.render(data, {"period": "today"}, at, offline=True, notice={"id": 1, "text": "Hi"})
+    calm = board.render(data, {"period": "today"}, at)
+    check("offline: on top of the board, above even the admin's notice; nothing when a refresh got through",
+          "dc-wrap off" in page and page.index("dc-wrap off") < page.index("dc-wrap notice")
+          and "dc-wrap off" not in calm and "#due-crew .dc-wrap.off" in page)
+    held = board.render(dict(data, held={"dre"}), {"period": "today"}, at)
+    rows = {u: next(r for r in re.findall(r"<tr class=\"[^\"]*\">.*?</tr>", held, re.S) if n in r)
+            for u, n in (("dre", "Dre"), ("kai", "Kai"))}
+    check("offline: a held cheer's crewmate shows Waiting to send, without the pointer; the others the usual Cheer",
+          "&#127881; Waiting<span class=\"ts\"> to send</span>" in rows["dre"] and 'class="dc-cpill held"' in rows["dre"]
+          and "waiting to send" in rows["dre"] and "a.dc-cpill.held .ts { display: none; }" in held
+          and rows["dre"].startswith('<tr class="') and " ch" in rows["dre"].split('"')[1]
+          and "&#127881; Cheer</a>" in rows["kai"] and "Waiting to send" not in rows["kai"]
+          and "#due-crew tr.ch a.dc-cpill.held" in held)
+
+    # holding: what's held, what isn't, and sending them when a refresh gets through
+    sent, tips, answers = [], [], []
+    cl = types.SimpleNamespace(session={}, user_id="me", _save_session=lambda: None)
+
+    def send_cheer(to, emoji, note=None, luck=False, guid=None, doodle=None):
+        sent.append((to, emoji, note, luck, guid))
+        a = answers.pop(0)
+        if isinstance(a, Exception):
+            raise a
+        return a
+    cl.send_cheer = send_cheer
+    saved = (S.client, S._bg, S.tooltip, A.swap, dict(_state))
+    try:
+        S.client = lambda: cl
+        S._bg = lambda job, done=None: done(job()) if done else job()
+        S.tooltip = lambda t, **k: tips.append(t)
+        A.swap = lambda c: None
+        _state["labels"] = labels
+        answers[:] = [TransportError("no network")]
+        S._send_cheer("dre", "Dre", "\U0001F389", "go")
+        after_net = (S.held_uids(), tips[-1])
+        answers[:] = [TransportError("server busy", 503)]
+        S._send_cheer("kai", "Kai", "\U0001F525")
+        after_5xx = S.held_uids()
+        for err in (TransportError("slow down", 429), TransportError("signed out", 401)):
+            answers[:] = [err]
+            S._send_cheer("max", "Max", "\U0001F389")
+        refused = S.held_uids()
+        answers[:] = [TransportError("no network")]
+        S._send_cheer("dre", "Dre", "\U0001F340", "newer")  # a second to the same crewmate replaces the first
+        one_each = [(h["to"], h["emoji"], h["note"]) for h in S.held_cheers()]
+        sent.clear()
+        answers[:] = [True, TransportError("no network")]  # in the order held: Kai's goes; Dre's gets no answer again
+        n = S.send_held(labels[0])
+        resend = (n, [s[0] for s in sent], S.held_uids())
+        cl.session["cheers_held"]["list"][0]["day"] = (TODAY - datetime.timedelta(days=4)).isoformat()
+        sent.clear()
+        stale = (S.send_held(labels[0]), sent[:], S.held_uids())
+        cl.session["cheers_held"] = {"uid": "someone-else", "list": [{"to": "dre", "emoji": "x", "day": labels[0]}]}
+        other = (S.held_uids(), S.send_held(labels[0]))
+    finally:
+        S.client, S._bg, S.tooltip, A.swap = saved[:4]
+        _state.clear()
+        _state.update(saved[4])
+    check("offline: no answer holds a cheer, and says so with who it's for",
+          after_net[0] == {"dre"} and "sends when Due Crew is back" in after_net[1] and "Dre" in after_net[1], after_net)
+    check("offline: the server away (5xx) holds one too; a ceiling (429) or a sign-in gone (401) doesn't",
+          after_5xx == {"dre", "kai"} and refused == {"dre", "kai"}, (after_5xx, refused))
+    check("offline: one held a crewmate, the newest (the server keeps one a pair as well)",
+          sorted(one_each) == [("dre", "\U0001F340", "newer"), ("kai", "\U0001F525", "")], one_each)
+    check("offline: a refresh that gets through sends each held cheer as it was; one with no answer again waits again",
+          resend[0] == 2 and resend[1] == ["kai", "dre"] and resend[2] == {"dre"}, resend)
+    check("offline: a cheer held more than three days goes unsent; another sign-in's are never sent",
+          stale[0] == 0 and stale[1] == [] and stale[2] == set() and other == (set(), 0), (stale, other))
+    src = inspect.getsource(dc._sync_failed) + inspect.getsource(dc._commit) + inspect.getsource(dc._after_push)
+    check("offline: a refresh with no answer sets the line (not when the sign-in's gone); any answer clears it and "
+          "sends what's held",
+          '_state["offline"] = not client().session_dead' in inspect.getsource(dc._sync_failed)
+          and "offline=False" in inspect.getsource(dc._commit) and src.count("send_held(labels[0])") == 2
+          and 'offline=bool(_state.get("offline"))' in inspect.getsource(dc._board_html))
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

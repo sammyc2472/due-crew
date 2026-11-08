@@ -107,6 +107,9 @@ def _css(cfg):
       display: inline-block; max-width: 56%; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }}
     #due-crew tr.you a.dc-pl {{ max-width: none; }}
     #due-crew a.dc-cpill:hover, #due-crew a.dc-cpill:focus-visible {{ background: var(--dc-accent); color: var(--dc-accent-ink); outline: none; }}
+    /* 3.9.9: a cheer waiting for Due Crew to be reachable shows without the pointer, in the foot's warning colour */
+    #due-crew tr.ch a.dc-cpill.held {{ display: block; width: max-content; max-width: 100%; margin: 2px 0 0; border-color: var(--dc-hours); color: var(--dc-hours); }}
+    @media (max-width: 520px) {{ #due-crew a.dc-cpill.held .ts {{ display: none; }} }}
     #due-crew tr.you td {{ {you_bg} }}
     #due-crew tr.you td.nm {{ font-weight: 700; }}
     #due-crew tr.dim td {{ color: var(--dc-faded); }}
@@ -175,6 +178,7 @@ def _css(cfg):
     #due-crew tr.you .dc-stw::before {{ border-bottom-color: var(--dc-bg); }}
     #due-crew tr.you .dc-st {{ background: var(--dc-bg); font-weight: 400; }}
     #due-crew .dc-wrap.eve {{ border-color: var(--dc-hours); }}
+    #due-crew .dc-wrap.off {{ border-color: var(--dc-hours); text-align: left; }}
     /* 2.12: study rooms */
     #due-crew .dc-room {{ display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center;
       border: 1px solid var(--dc-accent); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; }}

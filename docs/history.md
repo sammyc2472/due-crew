@@ -4817,3 +4817,23 @@ every release that changes how something works.
   handler). It found one more: on duecrew.com a review day's second sheet
   said "Empty takes the review day off", but its two days had no Clear,
   so they couldn't be emptied (`planface.js`, the fields `optional` now).
+- 3.9.9, a calm offline (Off the Board, 11, Sam's pick): when a refresh
+  gets no answer (no network, or the server away) the board says so in a
+  line on top of every tab, above the admin's notice: "Can't reach Due
+  Crew. Your studying still counts and sends when it's back. Last refresh
+  3:10 PM." and Try now (Refresh; `board.offline_html`, `_clock` says the
+  time as a person does). The foot's "Couldn't sync" had been the only
+  word. `_state["offline"]` is set by `_sync_failed` (not when the sign-in
+  is gone: that card asks me back in) and cleared by any answer
+  (`_commit`, `_after_push`). A cheer sent then waits: no answer at all,
+  or a 5xx, holds it (`social.hold_cheer`, the session's `cheers_held`,
+  this sign-in's, one a crewmate, the newest, at most 20); a refusal, a
+  401 or a 429 doesn't, since it would only be refused again. Its
+  crewmate's row says "🎉 Waiting to send" under the name, without the
+  pointer ("Waiting" when the board is narrow), and the next refresh that
+  gets an answer sends each as it was (`send_held`; one with no answer
+  again waits again; one held more than three days is let go). Sending one
+  twice is harmless: the server keeps one cheer a pair. The site has no
+  twin (a page offline isn't open). A status page is Sam's to set up
+  outside our servers (an uptime monitor's public page at
+  status.duecrew.com), so it can say when they're down.

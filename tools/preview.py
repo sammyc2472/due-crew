@@ -135,6 +135,9 @@ KNOCKS = [{"uid": "u3", "name": "Jordan", "squad": "orca"}]
 sections.append("<h3>today, two crewmates on show-up only (as everyone else sees them)</h3>"
                 + board.render(DATA_SHOWUP, {"period": "today"}, now_ts - 60))
 sections.append("<h3>week, same crew</h3>" + board.render(DATA_SHOWUP, {"period": "week"}, now_ts - 60))
+sections.append("<h3>3.9.9: Due Crew can't be reached: the line on top, and a cheer waiting to send</h3>"
+                + board.render(dict(DATA_SHOWUP, held={ENTRIES[1]["user_id"]}), {"period": "today"}, now_ts - 3 * 3600,
+                               offline=True, sync_error=True))
 sections.append("<h3>show-up mode: the one crew view (what a show-up person sees)</h3>"
                 + board.render(DATA_SHOWUP, {"period": "today", "show_up": True}, now_ts - 60,
                                wrap={"reviews": 21430, "time_ms": 148320000, "full_days": 5}))

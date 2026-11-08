@@ -36,7 +36,8 @@ from .backend.shapes import TransportError, _clean_day, clean_emoji, shared_numb
 from .shares import _share, dismiss_review, review_banners
 from .shares import picture as share_picture
 from .social import (_cheer_menu, _edit_emoji, _edit_status, _fresh_cheers, _open_profile,
-                     _play_cheers, _send_cheer, cheer_allowed, drop_muted, muted_uids, row_menu)
+                     _play_cheers, _send_cheer, cheer_allowed, drop_muted, held_uids, muted_uids, row_menu,
+                     send_held)
 from .squads import (_add_back, _block_member, _copy_invite, _dismiss_knock, _drop_squad,
                      _fetch_squad, _kick_member, _leave_squad, _make_founder, _my_squads,
                      _open_squad_card, _select_squad, _send_knock, _share_squad, _squad_view,
@@ -61,7 +62,7 @@ _pushed = None        # 3.9.1: (col.mod, my day, my config) as the last push gat
 def _board_data():
     return {"entries": _state["entries"], "labels": _state["labels"],
             "tomorrow": _state["tomorrow"], "pending": _state["pending"],
-            "my_code": _state["my_code"]}
+            "my_code": _state["my_code"], "held": held_uids()}  # 3.9.9: cheers waiting to send
 
 
 def _wants_fetch(uploading, have_board, age, closing, fetch=None):
@@ -126,6 +127,9 @@ def _after_push(pushed, labels, gone=(), gen=None):
     if gen is not None and not _current(gen):
         return
     _state["sync_error"] = not pushed
+    _state["offline"] = False  # 3.9.9: it got an answer, whatever the answer was
+    if not _closing:
+        send_held(labels[0])  # cheers that waited for Due Crew to be reachable
     cl = client()
     own = cl.my_days(cfg(), labels[0]).get(labels[0])
     if own and _state["entries"]:
@@ -232,6 +236,7 @@ def _sync_failed():
     """Main thread. Either the network is down (footer: Couldn't sync) or the
     server refused my sign-in for good (the card asks me back in)."""
     _state["sync_error"] = True
+    _state["offline"] = not client().session_dead  # 3.9.9: the board says so on top (board.offline_html)
     _morning(_awaiting_phone())  # 3.1: offline, the morning runs from the cached plans
     if client().session_dead:
         _state["board_shown"] = False
@@ -411,7 +416,7 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
         heal_squads(data["squads"], gone)  # 3.6: squads the server has and this config lost
 
     _state.update(entries=data["entries"], labels=labels, tomorrow=tomorrow,
-                  pending=data["pending"], ts=time.time(), sync_error=bool(failed),
+                  pending=data["pending"], ts=time.time(), sync_error=bool(failed), offline=False,
                   my_code=str(data.get("my_code") or _state["my_code"]),
                   my_friends=list(data.get("my_friends") or []))
     # 3.1: plans ride the day's first refresh; the morning follows it
@@ -444,6 +449,8 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
     else:
         _rerender()         # deck_browser_did_render plays queued cheers
     rooms.refresh_widgets()  # 2.12: who's in the room, as of this fetch
+    if not _closing:
+        send_held(labels[0])  # 3.9.9: cheers that waited for Due Crew to be reachable go now
 
 
 def _board_off(c):
@@ -590,7 +597,7 @@ def _board_html(c):
                         exam_eve=_exam_eve_info(),
                         rules_stale=client().rules_stale,
                         squad_view=_squad_view_with_bingo(c), knocks=_visible_knocks(c),
-                        reviews=review_banners(), sync_error=_state["sync_error"],
+                        reviews=review_banners(), sync_error=_state["sync_error"], offline=bool(_state.get("offline")),
                         live=together.is_live(),
                         tricky=together.tricky_view() if c.get("period") == "decks" else None,
                         asks=together.my_asks_view() if c.get("period") == "decks" else None,
