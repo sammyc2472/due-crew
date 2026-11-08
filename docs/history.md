@@ -4788,3 +4788,15 @@ every release that changes how something works.
   is held for the card only while Settings has my exam (with none, it
   plays as a cheer), and a crewmate's later cheer to me takes the place of
   their line on the server (one cheer a pair) if I haven't fetched it yet.
+- 3.9.9, a card's first answer read the quick way (the slow card, Sam: "it's
+  over 5-10 seconds"): Reviews ahead's once-a-day check (1.5 s after the
+  board draws, on the main thread) read every row of my most reviewed
+  deck's log to find each card's first answer (`ease > 0` in the query
+  makes it read each row), 0.4 s of its 0.6 to 1.0 on a 300,000-row log,
+  more on a longer one. `stats.queries.first_answers` reads each card's
+  first row off the cid index alone and looks again only at a card whose
+  first row isn't an answer (a Set Due Date, a Forget): the same answer,
+  0.05 s. Reviews ahead's day part, its track record and Insights by start
+  week use it. Measured in Anki's own engine on the big test collection:
+  the day's first check 0.4 s where it was 0.6 to 1.0. What's left of it is
+  the last 120 days of the deck's log and the habits worked out from them.

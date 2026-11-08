@@ -20319,6 +20319,47 @@ def test_good_luck_card_on_a_refresh_v399():
           ahead[0] == [] and ahead[1] and ahead[1]["exam"] == tomorrow and ahead[1]["shown"] is False, ahead)
 
 
+def test_first_answers_quick_read_v399():
+    """3.9.9 (the slow card, Sam: "it's over 5-10 seconds"): each card's first
+    answer was read with ease > 0 in the query, which visits every row of
+    the deck's log (0.4 s on a 300,000-row log, once a day on the main
+    thread, 1.5 s after the board draws: Reviews ahead's line, its track
+    record, Insights by start week). first_answers reads each card's first
+    row off the index and looks again only at a card whose first row isn't
+    an answer: the same answer, in every case."""
+    import sqlite3
+    from due_crew.stats.queries import first_answers
+    conn = fakes.make_collection(sqlite3.connect(":memory:"))
+    conn.execute("CREATE INDEX ix_revlog_cid ON revlog (cid)")
+    db = fakes.FakeDB(conn)
+    t0 = 1_700_000_000_000
+    for cid, did in ((1, 10), (2, 10), (3, 10), (4, 10), (5, 20), (6, 10)):
+        fakes.add_card(conn, cid, did)
+    fakes.add_review(conn, t0, cid=1)                         # an answer first
+    fakes.add_review(conn, t0 + 9000, cid=1)
+    fakes.add_review(conn, t0 + 100, ease=0, rtype=4, cid=2)  # Set Due Date first, then answers
+    fakes.add_review(conn, t0 + 5000, cid=2)
+    fakes.add_review(conn, t0 + 7000, ease=1, cid=2)
+    fakes.add_review(conn, t0 + 200, ease=0, rtype=4, cid=3)  # only ever rescheduled: never answered
+    fakes.add_review(conn, t0 + 300, cid=5)                   # another deck
+    fakes.add_review(conn, t0 + 400, ease=0, rtype=4, cid=6)  # two manual rows, then an answer
+    fakes.add_review(conn, t0 + 500, ease=0, rtype=4, cid=6)
+    fakes.add_review(conn, t0 + 600, ease=2, cid=6)
+    deck = "SELECT id FROM cards WHERE did IN (10) OR odid IN (10)"
+    old = {int(c): int(t) for c, t in db.all(
+        f"SELECT cid, min(id) FROM revlog WHERE ease > 0 AND cid IN ({deck}) GROUP BY cid")}
+    got = first_answers(db, deck)
+    check("first answers: the quick read gives what the filtered one did (a manual row first, never answered, "
+          "another deck's, a card never seen)", got == old == {1: t0, 2: t0 + 5000, 6: t0 + 600}, (got, old))
+    check("first answers: an empty deck reads as nothing", first_answers(db, "SELECT id FROM cards WHERE did = 99") == {})
+    import inspect
+    from due_crew import ahead_flow, team_flow
+    srcs = inspect.getsource(ahead_flow) + inspect.getsource(team_flow)
+    check("first answers: Reviews ahead, its track record and Insights by start week use it; no filtered read of a "
+          "deck's whole log is left", srcs.count("first_answers(col.db, deck)") == 3
+          and "min(id) FROM revlog WHERE ease > 0 AND cid IN ({deck})" not in srcs)
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

@@ -24,6 +24,7 @@ from aqt.utils import tooltip
 from . import ahead as A
 from . import app
 from .app import _bg, _state, cfg
+from .stats.queries import first_answers
 
 FRESH = 600         # seconds a deck's view keeps (Insights' own)
 TRUST_DAYS = 7      # the track record is worked out again after a week
@@ -74,8 +75,7 @@ def _day_part(col, did, deck, today):
     cutoff = int(col.sched.day_cutoff)
     start = (cutoff - 86400) * 1000
     since = (cutoff - (A.LOOK + 1) * 86400) * 1000
-    first = {int(c): -int((cutoff - 1 - int(t) // 1000) // 86400)
-             for c, t in col.db.all(f"SELECT cid, min(id) FROM revlog WHERE ease > 0 AND cid IN ({deck}) GROUP BY cid")}
+    first = {c: -int((cutoff - 1 - t // 1000) // 86400) for c, t in first_answers(col.db, deck).items()}
     first = {c: d for c, d in first.items() if d < 0}  # started today: today's count, not the log's
     log = [(-int(a), int(c), int(e), int(i), int(li), int(t)) for a, c, e, i, li, t in col.db.all(
         f"SELECT CAST((? - id / 1000) / 86400 AS INTEGER), cid, ease, ivl, lastIvl, type FROM revlog "
@@ -411,8 +411,7 @@ def _start_trust(col, did, deck, today):
     cutoff = int(col.sched.day_cutoff)
     sday = int(col.sched.today)
     back = max(A.BACK) + A.LOOK + 1
-    first = {int(c): -int((cutoff - 1 - int(t) // 1000) // 86400)
-             for c, t in col.db.all(f"SELECT cid, min(id) FROM revlog WHERE ease > 0 AND cid IN ({deck}) GROUP BY cid")}
+    first = {c: -int((cutoff - 1 - t // 1000) // 86400) for c, t in first_answers(col.db, deck).items()}
     log = [(-int(a), int(c), int(e), int(i), int(li), int(t)) for a, c, e, i, li, t in col.db.all(
         f"SELECT CAST((? - id / 1000) / 86400 AS INTEGER), cid, ease, ivl, lastIvl, type FROM revlog "
         f"WHERE id >= ? AND cid IN ({deck})", cutoff - 1, (cutoff - back * 86400) * 1000)]

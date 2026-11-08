@@ -946,8 +946,8 @@ def _map(col, did, deck, cutoff):
     # worked out only when picked (its first answers are one more read of the deck's log)
     start = []
     if pick == T.START_WAY:
-        first = {int(c): (cutoff - 1 - int(t) // 1000) // 86400 for c, t in col.db.all(
-            f"SELECT cid, min(id) FROM revlog WHERE ease > 0 AND cid IN ({deck}) GROUP BY cid")}
+        from .stats.queries import first_answers
+        first = {c: (cutoff - 1 - t // 1000) // 86400 for c, t in first_answers(col.db, deck).items()}
         # named and opened by the map's own topics: its tag way that's on, else its best (3.9.2's audit:
         # plain tags are a way too; subdecks, a plan's tags and this one aren't tags of the deck's own)
         tag_ways = [w for w in ways if w["key"] == T.TAGS_WAY or not str(w["key"]).startswith("~")]
