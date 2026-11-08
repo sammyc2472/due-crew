@@ -90,6 +90,7 @@ add-on.
   (`cd worker && npx vitest run`); `consent.test.ts` there is the consent
   model, restating every check of the old rules test. See
   `tests/README.md`. `docs/manual-anki-checklist.md` is the click-test.
+- `tools/click_test.py` — the robot click-test: real Anki 25.02.7 offscreen on the fake server, every board control pressed, its windows, a plan sent, a deck studied, a minute at rest; red on a press no handler takes, anything raised, a slow first card or CPU at rest (CI's `click test (real Anki)`, part of the gate; `tests/README.md`).
 - `.github/workflows/tests.yml` runs on every push: pyflakes, the suite,
   the offscreen dialog build, and the Worker (typecheck + vitest). Green on
   all of them is the release gate. pyflakes is the only thing that reads most of the glue,
