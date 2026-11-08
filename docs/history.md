@@ -4773,3 +4773,18 @@ every release that changes how something works.
     each part that has it. The preview renders byte for byte as before
     (but a clock); the suite's source checks read the parts
     (`fakes.board_source`).
+- 3.9.9, the good-luck card that waited (Sam, 8 Nov: "make sure the good
+  luck card is working because not sure it did work for my last exam"): a
+  crewmate's line for my exam morning was kept for the card, and the card
+  waited for the Decks screen to be drawn anew. A refresh redraws the board
+  in place (3.9.8, with the board off, not at all), and only a draw showed
+  the card; a line mostly comes with the morning's first refresh, after
+  Anki has drawn the Decks screen, so the card came at the next draw, after
+  a study session, if at all. The refresh that brings it shows it now, both
+  ways a refresh ends on the Decks screen (`_commit`), once, as before.
+  Found and checked in Anki's own engine (signed in to the suite's server:
+  Dre's line sent, the card up with it, Thanks back to Dre, not again);
+  `test_good_luck_card_on_a_refresh_v399` fails on the code before. A line
+  is held for the card only while Settings has my exam (with none, it
+  plays as a cheer), and a crewmate's later cheer to me takes the place of
+  their line on the server (one cheer a pair) if I haven't fetched it yet.

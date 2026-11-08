@@ -434,11 +434,13 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
         _swap(cfg())        # page not rebuilt: safe to play cheers directly
         _play_cheers()
         _joy_show()  # 3.9.6: after the cheers that came with it (it waits for their show)
+        together.show_luck_card()  # 3.9.9: a line that came with this refresh, on my exam morning (only a draw showed it)
     elif _board_off(c) and mw.state == "deckBrowser":
         # 3.9.8 (the energy review): the board's off, so a refresh has nothing of ours to draw:
         # Anki's Decks screen isn't built again for it (it was, every refresh); its cheers play over it
         _play_cheers()
         _joy_show()
+        together.show_luck_card()
     else:
         _rerender()         # deck_browser_did_render plays queued cheers
     rooms.refresh_widgets()  # 2.12: who's in the room, as of this fetch

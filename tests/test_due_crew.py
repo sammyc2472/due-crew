@@ -20240,6 +20240,85 @@ def test_energy_and_security_review_v397():
           sent_before_reload == 1 and len(top.sent) == 2 and len(plain.sent) == 2, (sent_before_reload, len(top.sent), len(plain.sent)))
 
 
+def test_good_luck_card_on_a_refresh_v399():
+    """3.9.9 (Sam: "not sure it did work for my last exam"): a crewmate's line
+    for my exam morning came with a refresh, was kept for the card, and the
+    card waited for the Decks screen to be drawn anew: a refresh redraws the
+    board in place (or, the board off, nothing), and only a draw showed it.
+    Mostly the line comes with the morning's first refresh, after Anki has
+    drawn the Decks screen, so the card showed at the next draw, after a
+    study session, if at all. The refresh that brings it shows it now, in
+    both ways a refresh ends on the Decks screen; once, as before. (Checked
+    in Anki's own engine too: the line sent, the card up, Thanks back.)"""
+    import due_crew as dc
+    from due_crew import app as A, closet_flow as CF, due_flow, rooms, together
+    from due_crew.app import _state
+    wrap = _patched_due_crew()
+    labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    tomorrow = (TODAY + datetime.timedelta(days=1)).isoformat()
+    mw = dc_mw()
+    shown = []
+    cl = types.SimpleNamespace(session={}, signed_in=True, user_id="me", display_name="Sam Caplan",
+                               _save_session=lambda: None)
+
+    def refresh(c, cheers):
+        ents = [{"user_id": u, "name": u.title(), "you": u == "me", "paused": False, "decks": [], "days": {}}
+                for u in ("me", "dre")]
+        dc._commit({"entries": ents, "pending": [], "cheers": cheers, "my_code": "ABC", "my_friends": ["dre"]},
+                   c, labels, tomorrow)
+
+    line = {"from": "dre", "name": "Dre", "emoji": "\U0001F340", "note": "You've got this", "luck": True,
+            "guid": "", "at": f"{TODAY.isoformat()}T07:00:00Z"}
+    saved = (dc.client, together.client, dc._morning, dc._awaiting_phone, due_flow.after_refresh, due_flow._reviews,
+             CF.check, dc.tooltip, dc._rerender, dc._swap, rooms.refresh_widgets, dc.account.saved_elsewhere,
+             dc._play_cheers, dc._joy_show, A.board_eval, getattr(mw, "state", None), dict(_state))
+    try:
+        dc.client = together.client = lambda: cl
+        dc._morning = lambda *a, **k: None
+        dc._awaiting_phone = lambda: False
+        due_flow.after_refresh = lambda: None
+        due_flow._reviews = lambda: {"done": 12, "due": 0}
+        CF.check = lambda today: []
+        dc.tooltip = lambda *a, **k: None
+        dc._rerender = dc._swap = rooms.refresh_widgets = dc._play_cheers = dc._joy_show = lambda *a, **k: None
+        dc.account.saved_elsewhere = lambda at: None
+        A.board_eval = shown.append
+        mw.state = "deckBrowser"
+        out = {}
+        for way, c, on in (("board", {"exam_date": TODAY.isoformat()}, True),
+                           ("off", {"exam_date": TODAY.isoformat(), "show_leaderboard": False}, False)):
+            wrap = _patched_due_crew()  # a profile of its own: nothing kept from the way before
+            cl.session = {}
+            shown.clear()
+            _state.update(board_shown=on, prev_label="", prev_counts={}, prev_streaks={}, days={}, decks={},
+                          entries=None, labels=[], settings_tab=None, closet_open=False, wrapped_open=False)
+            refresh(c, [line])
+            first = list(shown)
+            refresh(c, [line])
+            out[way] = (first, list(shown), wrap._wrap_data().get("luck"))
+        # no exam today: the line is a cheer, no card
+        wrap = _patched_due_crew()
+        cl.session = {}
+        shown.clear()
+        _state.update(board_shown=True, prev_label="", prev_counts={}, prev_streaks={}, days={}, decks={}, entries=None)
+        refresh({"exam_date": tomorrow}, [line])
+        ahead = (list(shown), wrap._wrap_data().get("luck"))
+    finally:
+        (dc.client, together.client, dc._morning, dc._awaiting_phone, due_flow.after_refresh, due_flow._reviews,
+         CF.check, dc.tooltip, dc._rerender, dc._swap, rooms.refresh_widgets, dc.account.saved_elsewhere,
+         dc._play_cheers, dc._joy_show, A.board_eval, mw.state) = saved[:16]
+        _state.clear()
+        _state.update(saved[16])
+    for way in ("board", "off"):
+        first, after, kept = out[way]
+        check(f"good luck ({way}): the refresh that brings a line on my exam morning shows the card, with the line",
+              len(first) == 1 and "Good luck today, Sam" in first[0] and "You've got this" in first[0]
+              and kept and kept["shown"] is True, (way, len(first), kept))
+        check(f"good luck ({way}): once; the next refresh doesn't show it again", after == first, len(after))
+    check("good luck: a line for an exam tomorrow is kept for that morning, no card today",
+          ahead[0] == [] and ahead[1] and ahead[1]["exam"] == tomorrow and ahead[1]["shown"] is False, ahead)
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:
