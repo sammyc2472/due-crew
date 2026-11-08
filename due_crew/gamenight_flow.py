@@ -25,7 +25,6 @@ import os
 import random
 import re
 import time
-import traceback
 import urllib.parse
 
 from aqt import mw
@@ -34,6 +33,7 @@ from aqt.utils import tooltip
 from . import app
 from . import gamenight as G
 from .app import _bg, _profile_files, cfg, client, save_cfg
+from .errs import oops
 
 # None: the tab is everyone's signed in (3.9.5's release); a tuple of uids
 # (the admin's, the Worker's ADMIN_UIDS secret) makes it theirs alone, as while Sam tested it
@@ -140,7 +140,7 @@ def near(got, cids, cap=G.NEAR_MAX, rng=None, slots=False):
             take(col.db.list(f"SELECT c.id FROM cards c JOIN notes n ON n.id = c.nid WHERE {' OR '.join('n.flds LIKE ?' for _ in like)} LIMIT 3000",
                              *like), SLOT_MAX)
     except Exception:
-        traceback.print_exc()
+        oops()
     return rows(picked, cap + SLOT_MAX, rng)
 
 
@@ -232,7 +232,7 @@ def _redraw():
                        "var i=k&&document.getElementById('pp-find');if(i){i.value=k[0];i.focus();try{i.setSelectionRange(k[1],k[2]);}catch(e){}}"
                        "})();" % json.dumps(html))
     except Exception:
-        traceback.print_exc()
+        oops()
 
 
 def _soon(fn, ms=40):
@@ -330,7 +330,7 @@ def _corpus():
     try:
         know = team_flow._know(col, "SELECT id FROM cards WHERE queue != -1", col.sched.day_cutoff)[0]
     except Exception:
-        traceback.print_exc()
+        oops()
         know = {}
     try:
         decks = {int(d.id): str(d.name) for d in col.decks.all_names_and_ids()}
@@ -418,7 +418,7 @@ def _sys_decks():
     try:
         return team_flow.you_decks()
     except Exception:
-        traceback.print_exc()
+        oops()
         return []
 
 
@@ -747,7 +747,7 @@ def tab_view(c):
                 try:
                     level()
                 except Exception:
-                    traceback.print_exc()
+                    oops()
                 TAB["warmed"] = (_warm_key(), time.time())
                 TAB["warming"] = False
                 _redraw()
@@ -859,7 +859,7 @@ def open_tab():
         mw.activateWindow()
         mw.raise_()
     except Exception:
-        traceback.print_exc()
+        oops()
     app.swap(c)
 
 
@@ -876,7 +876,7 @@ def _find_draw():
         app.board_eval("(function(){var m=document.getElementById('pp-map');if(m){m.outerHTML=%s;}})();"
                        % json.dumps(board.party_map_html(view)))
     except Exception:
-        traceback.print_exc()
+        oops()
 
 
 def on_message(parts):
@@ -1064,7 +1064,7 @@ def _tv(payload):
     try:
         w.destroyed.connect(lambda *_: _tv_closed(turn))
     except Exception:
-        traceback.print_exc()
+        oops()
     _redraw()
 
 

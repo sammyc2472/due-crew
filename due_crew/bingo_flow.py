@@ -11,12 +11,12 @@ Nothing here makes a request: the card comes with the day's first refresh
 import datetime
 import json
 import os
-import traceback
 
 from aqt import mw
 
 from . import bingo as B
 from .app import _profile_files, _profile_key, _state, client
+from .errs import oops
 
 FILE = "bingo.json"
 COUNT_KEYS = ("ch", "rm", "lv", "aq", "tp")
@@ -91,7 +91,7 @@ def bump(key, by=1):
         d["counts"][key] = int(d["counts"].get(key) or 0) + by
         _save()
     except Exception:
-        traceback.print_exc()
+        oops()
 
 
 def card():
@@ -173,7 +173,7 @@ def my_play(c):
         try:
             _observe(q, d, today)
         except Exception:
-            traceback.print_exc()
+            oops()
         f = _facts(q, d, today)
         cd = card()
         cd = cd if cd and cd.get("wk") == wk else None
@@ -187,7 +187,7 @@ def my_play(c):
         _save()
         return play
     except Exception:
-        traceback.print_exc()
+        oops()
         return None
 
 

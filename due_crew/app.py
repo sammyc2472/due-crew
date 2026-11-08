@@ -7,12 +7,12 @@ without importing the package root."""
 import json
 import os
 import threading
-import traceback
 
 from aqt import mw
 
 from .backend.api import ApiClient
 from .backend.shapes import TransportError
+from .errs import oops
 
 
 def _read_version():
@@ -79,7 +79,7 @@ def _bg(job, done=None):
             print(f"due crew: {e}")
             result = None
         except Exception:
-            traceback.print_exc()
+            oops()
             result = None
         if done is not None:
             mw.taskman.run_on_main(lambda: done(result))
@@ -345,11 +345,11 @@ def _reset_runtime(keep_sync=False):
         from .planner import flow as planner_flow
         planner_flow.close_all()
     except Exception:
-        traceback.print_exc()
+        oops()
     try:  # Your AI app's local server: started again for this profile and account, or off
         ai_app()
     except Exception:
-        traceback.print_exc()
+        oops()
 
 
 def ai_app(on=True):

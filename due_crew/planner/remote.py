@@ -10,6 +10,7 @@ the author's Anki sends.
 
 import json
 
+from .. import errs as _errs
 from ..backend.shapes import TransportError, clean_plan
 from .edits import _cut
 
@@ -28,7 +29,14 @@ SAVE_WORDS = {
 
 
 def _refused(data):
+    _said_no(data)
     return "refused", SAVE_WORDS.get(str((data or {}).get("error") or ""), "That didn't save. Try again.")
+
+
+def _said_no(data):
+    """3.9.9: a save the server refused, counted for Sam as save:<its error>
+    when the window has words for it (save:other when it hasn't)."""
+    _errs.count(_errs.save_code((data or {}).get("error"), SAVE_CODES))
 
 
 def _call(client, method, path, body=None):
@@ -129,6 +137,7 @@ def post(client, pid, text):
     status, data = _call(client, "POST", f"/plans/{pid}/posts", {"text": str(text)})
     if status == 200 and data.get("id"):
         return "saved", data
+    _said_no(data)
     return "refused", POST_WORDS.get(str((data or {}).get("error") or ""), "That didn't post. Try again.")
 
 
@@ -158,6 +167,7 @@ def add_note(client, pid, day, text):
     status, data = _call(client, "POST", f"/plans/{pid}/notes", {"day": str(day), "text": str(text)})
     if status == 200 and data.get("id"):
         return "saved", data
+    _said_no(data)
     return "refused", NOTE_WORDS.get(str((data or {}).get("error") or ""), "That note didn't post. Try again.")
 
 
@@ -182,9 +192,15 @@ SETTINGS_WORDS = dict(SAVE_WORDS, **{
 })
 
 
+# 3.9.9: the errors a refused save is counted by (errs.save_code): the ones
+# the window has words for
+SAVE_CODES = frozenset(SAVE_WORDS) | frozenset(POST_WORDS) | frozenset(NOTE_WORDS) | frozenset(SETTINGS_WORDS)
+
+
 def _view(status, data):
     if status == 200 and isinstance(data.get("doc"), dict) and data.get("id"):
         return "saved", data
+    _said_no(data)
     return "refused", SETTINGS_WORDS.get(str((data or {}).get("error") or ""), "That didn't work. Try again.")
 
 

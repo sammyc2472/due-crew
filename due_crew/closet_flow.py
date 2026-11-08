@@ -27,12 +27,12 @@ import datetime
 import json
 import os
 import time
-import traceback
 
 from aqt import mw
 
 from . import closet
 from .app import _profile_files, _state, cfg, save_cfg
+from .errs import oops
 
 LOOK_KEY, CLOSET_KEY = "sev_look", "sev_closet"
 _TALLIES = ("fifteens", "fifteen_go", "fifteen_am", "rooms", "big_cheer", "cheered_by", "own_cards",
@@ -335,7 +335,7 @@ def note_card_added(*_args):
     try:
         _bump("own_cards")
     except Exception:
-        traceback.print_exc()
+        oops()
 
 
 def note_bingo(lines, full, week=None):
@@ -544,7 +544,7 @@ def facts(c=None):
         try:
             out.update(revlog_facts(mw.col))
         except Exception:
-            traceback.print_exc()
+            oops()
     try:
         from . import plan_flow
         from .app import client
@@ -553,7 +553,7 @@ def facts(c=None):
                                _state.get("plan_progress") or {}, today, c.get(CLOSET_KEY),
                                finished=out.get("plans_done") or (), followed=out.get("followed") or 0))
     except Exception:
-        traceback.print_exc()
+        oops()
     out["crew"] = max(out.get("crew", 0), len([e for e in _state["entries"] or [] if not e.get("you")]))
     for k in ("cheered", "cheer_days"):
         out[k] = len(out.get(k) or [])
@@ -582,7 +582,7 @@ def check(today):
     try:
         f = facts(c)
     except Exception:
-        traceback.print_exc()
+        oops()
         return []
     got = closet.new(f, have(c), today)
     if not got:
@@ -618,7 +618,7 @@ def standing(c=None):
         f, mine = facts(c), have(c)
         return closet.near(f, mine), closet.progress(f, mine)
     except Exception:
-        traceback.print_exc()
+        oops()
         return [], {}
 
 
@@ -652,7 +652,7 @@ def halloween_view(today, entries, c=None):
         hw["bats"] = round(ago, 2) if ago < BATS_SECONDS else None
         return hw
     except Exception:
-        traceback.print_exc()
+        oops()
         return None
 
 
@@ -675,5 +675,5 @@ def hook():
         from aqt import gui_hooks
         gui_hooks.add_cards_did_add_note.append(note_card_added)
     except Exception:
-        traceback.print_exc()
+        oops()
 

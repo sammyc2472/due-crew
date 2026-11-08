@@ -36,11 +36,14 @@ class AuthError(Exception):
 
 class TransportError(Exception):
     """Request failed (network, 5xx, 429, auth) — the data may still exist.
-    `status` is the HTTP status when there was a response, else None."""
+    `status` is the HTTP status when there was a response, else None.
+    `landed` (3.9.9): no answer came in time, so the request may have reached
+    the server all the same."""
 
-    def __init__(self, message, status=None):
+    def __init__(self, message, status=None, landed=False):
         super().__init__(message)
         self.status = status
+        self.landed = landed
 
 
 def _exam_value(iso, today_label):

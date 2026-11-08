@@ -5,7 +5,6 @@ there because they are a squad flow."""
 import datetime
 import html
 import json
-import traceback
 
 from aqt import mw
 from aqt.utils import tooltip
@@ -17,6 +16,7 @@ from .app import (CHEER_QUICK, HEATMAP_DAYS, _bg, _pending_cheers,
 from .backend.shapes import TransportError, clean_doodle, clean_emoji, clean_note
 from .stats import duet_runs, heatmap
 from .stats.queries import StatsQueries
+from .errs import oops
 
 def _fresh_cheers(cheers, seen, old_ts=""):
     """(fresh, seen') — which cheers to play, and the per-sender marks to
@@ -133,7 +133,7 @@ def _send_cheer(to_uid, to_name, emoji, note="", luck=False, guid=None, then=Non
                 from . import closet_flow
                 closet_flow.note_cheer(to_uid, _state["labels"][0] if _state["labels"] else "", big)
             except Exception:
-                traceback.print_exc()
+                oops()
         if then is not None:
             then(ok is True)
         if ok is True and luck:

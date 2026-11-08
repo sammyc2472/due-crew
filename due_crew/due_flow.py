@@ -15,7 +15,6 @@ leeches did today.
 
 import datetime
 import time
-import traceback
 from urllib.parse import unquote
 
 from aqt import mw
@@ -25,6 +24,7 @@ from . import app
 from . import due as D
 from . import plans as P
 from .app import _state, cfg, save_cfg
+from .errs import oops
 
 AGAIN_MIN = 10  # today's misses before the box suggests going over them
 LEECH_MIN = 3  # new leeches this week before it suggests a look
@@ -225,14 +225,14 @@ def _reviews():
         try:
             got = bars(mw.col, tree, now, ahead, set(_state.get("plan_today") or ()))
         except Exception:
-            traceback.print_exc()  # the count alone, as before 3.9.3
+            oops()  # the count alone, as before 3.9.3
             got = {}
         when = got.pop("_first", 0)
         if got.pop("first", False):
             _flip_at(int(when) - ahead)
         out.update(got)
     except Exception:
-        traceback.print_exc()
+        oops()
     _state["due_reviews"] = (time.time(), out)
     return out
 
@@ -358,7 +358,7 @@ def _flip_at(when):
         from aqt.qt import QTimer
         QTimer.singleShot(int(delay), fire)
     except Exception:
-        traceback.print_exc()
+        oops()
 
 
 def _day_state():
@@ -398,7 +398,7 @@ def suggestions(c, today):
             if lee >= LEECH_MIN and "leeches" not in gone:
                 out.append({"key": "leeches", "text": f"{lee:,} new leeches this week", "go": "See them"})
     except Exception:
-        traceback.print_exc()
+        oops()
     _state["due_suggest"] = (key, out[:2])
     return out[:2]
 
@@ -434,7 +434,7 @@ def _miss_topics(col, cids):
                 top = groups[:MISS_TOPICS]
                 out = (top, len(cids) - sum(len(g) for _n, g in top))
     except Exception:
-        traceback.print_exc()
+        oops()
     _state["due_miss_topics"] = (key, out)
     return out
 
@@ -510,7 +510,7 @@ def view(c):
         v["nudge"] = rooms.nudge(c, v, _day_state()[1].get("dismissed") or ())
         v["nudge_sev"] = rooms.nudge_sev() if v["nudge"] else None
     except Exception:
-        traceback.print_exc()
+        oops()
         return None
     v["toast"] = _toast()
     return v
@@ -677,7 +677,7 @@ def morning(c):
             ask = (len(extra), counts)
         st["recovered"] = recover_leeches(mw.col, cids=eight if reach != "deck" else deck)
     except Exception:
-        traceback.print_exc()
+        oops()
         st["recovered"] = []
     _put_day(pc, st)
     if st["recovered"]:
@@ -714,7 +714,7 @@ def set_reach(wide):
     try:
         got = recover_leeches(mw.col, cids=extra)
     except Exception:
-        traceback.print_exc()
+        oops()
         return
     pc, st = _day_state()
     st["recovered"] = list(st.get("recovered") or []) + got
@@ -751,11 +751,11 @@ def after_refresh():
     try:
         exam_gone(cfg())
     except Exception:
-        traceback.print_exc()  # the morning still runs
+        oops()  # the morning still runs
     try:
         morning(cfg())
     except Exception:
-        traceback.print_exc()
+        oops()
 
 
 def exam_gone(c):
@@ -779,7 +779,7 @@ def exam_gone(c):
         from . import ahead_flow
         ahead_flow.exam_moved()  # a pause to it ends with it
     except Exception:
-        traceback.print_exc()
+        oops()
     return True
 
 
@@ -1103,7 +1103,7 @@ def study_step(first=False):
             plan = _plan_decks()
             step = D.study_next(plan, _due_now(mw.col, set(plan)))
         except Exception:
-            traceback.print_exc()
+            oops()
     if step:
         return _study_deck(step[1], first)
     _state["study_walk"] = None
@@ -1123,7 +1123,7 @@ def _study_deck(did, first, label=None):
         _state["study_walk"]["deck"] = int(did)
         mw.moveToState("review")
     except Exception:
-        traceback.print_exc()
+        oops()
         _state["study_walk"] = None
 
 

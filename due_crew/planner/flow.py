@@ -17,6 +17,7 @@ from .. import plans as P
 from ..app import _bg, _state, cfg, client, save_cfg
 from ..backend.shapes import TransportError
 from . import enabled, remote
+from ..errs import oops
 
 _open = {}       # "plans", "start" -> the window, while it's open
 _asking = []     # my plans on their way for Your plans (one ask at a time)
@@ -103,8 +104,7 @@ def _closet(do):
         from .. import closet_flow
         do(closet_flow)
     except Exception:
-        import traceback
-        traceback.print_exc()
+        oops()
 
 
 def noted_followers(plans):

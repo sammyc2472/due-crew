@@ -2867,7 +2867,7 @@ async function adminPage() {
     people: ["People", h("div", { class: "apage" }, people.el)],
     squads: ["Squads", h("div", { class: "apage" }, squads.el)],
     plans: ["Plans & library", h("div", { class: "apage" }, library)],
-    inbox: ["Inbox", h("div", { class: "apage" }, reportsPanel(nav), feedbackPanel(nav))],
+    inbox: ["Inbox", h("div", { class: "apage" }, fieldPanel(), reportsPanel(nav), feedbackPanel(nav))],  // 3.9.9: In the field, on top
     notices: ["Notices", h("div", { class: "apage" }, notices)],
     bingo: ["Bingo", h("div", { class: "apage" }, bingoPanel())],
     system: ["System", h("div", { class: "apage" }, h("div", { class: "agrid3" }, codes))],
@@ -2916,6 +2916,40 @@ function feedbackPage() {
   const form = h("div", { class: "stack" }, box, h("div", { class: "row" }, send, h("span", { class: "muted small" }, from ? `Sent with the page you were on (${from}).` : "")), status);
   page(phead("Send feedback", "What's working, what isn't, what you'd add. Every one is read, with your name, and we can write back to your email. Nobody else sees it."), form);
   reading();
+}
+
+/** 3.9.9, Know when it breaks: what went wrong in the add-on yesterday, by
+ *  code (never by content, never by person): each code's count, how many
+ *  people sent it and from which versions, most first; and a line for the
+ *  codes new since the day before. A day's counts come with each install's
+ *  first sync after that day ends; kept 30 days. */
+function fieldPanel() {
+  const head = (note) => h("h4", {}, "In the field, yesterday", h("span", { class: "muted" }, note));
+  const box = h("section", { class: "panel" }, head("loading…"));
+  const day = (iso) => { const d = new Date(`${iso}T00:00:00Z`); return `${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`; };
+  async function load() {
+    let r;
+    try { r = await api("GET", "/admin/field"); } catch { box.replaceChildren(head(""), h("p", { class: "status bad" }, "Couldn't load the counts.")); return; }
+    const fresh = !r.rows.length ? null
+      : !r.beforeCodes ? h("p", { class: "muted small" }, `Nothing came in for ${day(r.before)}, so nothing to compare with.`)
+      : r.new.length ? h("p", { class: "small" }, h("b", {}, `New since ${day(r.before)}: `), r.new.join(" · "))
+      : h("p", { class: "muted small" }, `Nothing new since ${day(r.before)}.`);
+    const n = (v) => h("span", { class: "n" }, v.toLocaleString());
+    box.replaceChildren(...[head(`${day(r.day)}${r.rows.length ? ` · ${r.rows.length} code${r.rows.length === 1 ? "" : "s"}` : ""}`),
+      r.rows.length
+        ? h("div", { class: "field" },
+          h("span", { class: "hd" }, "Code"), h("span", { class: "hd n" }, "Times"),
+          h("span", { class: "hd n" }, "People"), h("span", { class: "hd ver" }, "Versions"),
+          r.rows.flatMap((x) => [
+            h("code", { class: r.new.includes(x.code) ? "new" : "" }, x.code), n(x.n), n(x.people),
+            h("span", { class: "muted ver" }, x.versions.join(", "))]))
+        : h("p", { class: "muted small" }, "Nothing went wrong, or nothing has come in yet."),
+      fresh,
+      h("small", { class: "muted" }, "Codes and counts only: no names, no cards. People: how many sent that code. Kept 30 days.")]
+      .filter(Boolean));
+  }
+  load();
+  return box;
 }
 
 /** 3.8.1 (the audit): reports, kept for the admin (they used to go only by

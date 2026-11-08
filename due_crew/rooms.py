@@ -22,13 +22,13 @@ one per yes, one to stop). Pip, if on, keeps me company through it.
 import datetime
 import html
 import time
-import traceback
 
 from aqt import mw
 from aqt.utils import tooltip
 
 from . import app, board, room_model, sev
 from .app import _state, cfg, client, save_cfg
+from .errs import oops
 
 
 def _closet(do):
@@ -37,7 +37,7 @@ def _closet(do):
         from . import closet_flow
         do(closet_flow)
     except Exception:
-        traceback.print_exc()
+        oops()
 
 
 def _accent_pair():
@@ -482,7 +482,7 @@ def on_close():
         try:
             _end_fifteen(room, walked=False, closing=True)
         except Exception:
-            traceback.print_exc()
+            oops()
         return
     if cl.signed_in and cl.session.get("room"):
         cl.session.pop("room", None)
@@ -628,7 +628,7 @@ def my_look():
         from . import closet_flow
         return closet_flow.look(cfg())
     except Exception:
-        traceback.print_exc()
+        oops()
         return []
 
 
@@ -718,7 +718,7 @@ def _habits(do):
         from . import habits_flow
         return do(habits_flow)
     except Exception:
-        traceback.print_exc()
+        oops()
         return None
 
 
@@ -869,7 +869,7 @@ def _usual_start():
                              "GROUP BY (id / 1000 - ?) / 86400", first * 1000, (cutoff - 86400) * 1000, first)
         usual = room_model.usual_start([(int(r[0]) // 1000 - first) % 86400 for r in rows if r and r[0]])
     except Exception:
-        traceback.print_exc()
+        oops()
     _state["fifteen_usual"] = (cutoff, usual)
     return usual
 
@@ -891,7 +891,7 @@ def nudge(c, v, dismissed=()):
         usual = _usual_start()
         return usual is not None and time.time() - (mw.col.sched.day_cutoff - 86400) >= usual
     except Exception:
-        traceback.print_exc()
+        oops()
         return False
 
 
@@ -952,7 +952,7 @@ def board_sev(c, v):
                           exam_eve=str(c.get("exam_date") or "") == (today + datetime.timedelta(days=1)).isoformat(),
                           day_done=bool(v and v.get("done")))
     except Exception:
-        traceback.print_exc()
+        oops()
         return None
     if not pose:
         return None

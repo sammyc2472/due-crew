@@ -15,6 +15,7 @@ from . import view as V
 from . import webmodel as WM
 from .core import PlanCore
 from .webnew import NewPlan
+from ..errs import oops
 
 PREFIX = "dcplan:"
 TABS = {"insights": "insights", "settings": "settings", "sharing": "settings", "mine": "settings"}
@@ -155,8 +156,7 @@ class WebFace(NewPlan, PlanCore):
         try:
             data = self.view(status_only)
         except Exception:
-            import traceback
-            traceback.print_exc()
+            oops()
             data = {"status": "Something went wrong drawing the plan. Close the window and open it again."}
             status_only = True
         self.eval_js(f"dcPlan.{'status' if status_only else 'show'}({json.dumps(data, ensure_ascii=True)})")
@@ -191,8 +191,7 @@ class WebFace(NewPlan, PlanCore):
         try:
             fn(**args)
         except TypeError:
-            import traceback
-            traceback.print_exc()
+            oops()
         except E.Refused as e:
             self.say(str(e))
 

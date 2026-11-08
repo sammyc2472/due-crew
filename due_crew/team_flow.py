@@ -20,7 +20,6 @@ deck's options; the line can be put away for 30 days."""
 import datetime
 import json
 import time
-import traceback
 from urllib.parse import unquote
 
 from aqt import mw
@@ -31,6 +30,7 @@ from . import plans as P
 from . import team as T
 from .app import _bg, _state, cfg, client, save_cfg
 from .backend.shapes import TransportError
+from .errs import oops
 
 FRESH = 60          # seconds a fetched team is shown before the tab asks again
 INSIGHTS_FRESH = 600
@@ -144,7 +144,7 @@ def _known(view):
         guids = [a["guid"] for a in asks]
         return {"down": sorted(i_know(mw.col, guids)), "have": sorted(notes_by_guid(mw.col, guids))}
     except Exception:
-        traceback.print_exc()
+        oops()
         return {"down": [], "have": []}
 
 
@@ -477,7 +477,7 @@ def you_decks():
         try:
             out = _you_decks(mw.col, int(cfg().get("ins_deck") or 0))
         except Exception:
-            traceback.print_exc()
+            oops()
     _state["you_decks"] = {"at": time.time(), "list": out}
     return out
 
@@ -553,7 +553,7 @@ def you_view(c):
         try:
             out["view"].update(leech_flow.line_counts(mw.col, d["did"], _deck_sql(mw.col, d["did"])))
         except Exception:
-            traceback.print_exc()
+            oops()
     if leech_flow.is_open(d["did"]) and mw.col:
         # 3.9.2: the leeches view; "on your exam" when the exam's scope is narrower than the deck
         since = (view.get("aim") or {}).get("since") if (view.get("aim") or {}).get("kind") == "exam" else ""
@@ -563,7 +563,7 @@ def you_view(c):
         from . import habits_flow
         out["habits"] = habits_flow.board_view()  # 3.9.5: How you study, all decks, its line or its view
     except Exception:
-        traceback.print_exc()
+        oops()
     return out
 
 
@@ -596,7 +596,7 @@ def insights(did, pid=None, exam=""):
     try:
         view = _work_out(int(did), pid, exam)
     except Exception:
-        traceback.print_exc()
+        oops()
     _state.setdefault("insights", {})[did] = {"at": time.time(), "view": view, "key": key}
     return view
 
@@ -738,7 +738,7 @@ def _work_out(did, pid=None, exam=""):
         out["_map_missed"] = _missed(col, deck, cutoff) if out["map"] else set()  # 3.9.5: the map's Study
         _map_week(out, did, today)
     except Exception:
-        traceback.print_exc()
+        oops()
 
     # behind on the plan (its Catch up; nothing while a catch-up runs)
     if p:
@@ -754,7 +754,7 @@ def _work_out(did, pid=None, exam=""):
         out["ahead"] = ahead_flow.deck_view(col, did, deck, exam,
                                             plan=ahead_flow.plan_days(units, ld, today) if p else None)
     except Exception:
-        traceback.print_exc()
+        oops()
 
     # Optimize FSRS: my newest cards against my target (put away for 30 days)
     hide = float((pf._pcfg().get("ins_fsrs_hide") or 0))
@@ -764,7 +764,7 @@ def _work_out(did, pid=None, exam=""):
                                     f"AND lastIvl BETWEEN 1 AND 3 AND cid IN ({deck})", since(28)) or (0, 0)
             out["fsrs"] = T.fsrs_gap(int(right or 0), int(n or 0), target)
         except Exception:
-            traceback.print_exc()
+            oops()
 
     # the Hard habit (3.8.0): Hard is a pass; put away for 30 days as Optimize is
     if time.time() - float(pf._pcfg().get("ins_hard_hide") or 0) > T.HIDE_DAYS * 86400:
@@ -773,7 +773,7 @@ def _work_out(did, pid=None, exam=""):
                                    f"AND cid IN ({deck})", since(28)) or (0, 0)
             out["hard"] = T.hard_habit(int(hard or 0), int(n or 0))
         except Exception:
-            traceback.print_exc()
+            oops()
 
     # the deck's leeches Anki suspended (from the plan card, 3.8.0); 3.9.2: the ones a miss from it, and
     # the ones Anki tagged and kept showing (Tag Only)
@@ -1099,7 +1099,7 @@ def deck_map(did):
         tiles = _map(col, did, deck, cutoff)[0]
         return tiles, (_missed(col, deck, cutoff) if tiles else set())
     except Exception:
-        traceback.print_exc()
+        oops()
         return [], set()
 
 
@@ -1162,7 +1162,7 @@ def _slow_before(col, did, k):
             f"SELECT id FROM cards WHERE id IN ({ids}) AND did IN ({tree}) AND queue = 2 AND due - ? >= ?",
             int(col.sched.today), int(k))]
     except Exception:
-        traceback.print_exc()
+        oops()
         return []
 
 
@@ -1231,7 +1231,7 @@ def fsrs(did, open_it=True):
             from aqt.deckoptions import display_options_for_deck_id
             display_options_for_deck_id(int(did))
         except Exception:
-            traceback.print_exc()
+            oops()
 
 
 def pick_deck(did):
@@ -1250,7 +1250,7 @@ def _habits_shut():
         from . import habits_flow
         habits_flow.shut()
     except Exception:
-        traceback.print_exc()
+        oops()
 
 
 def go_insights(did):

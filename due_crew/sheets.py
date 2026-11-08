@@ -15,12 +15,12 @@ it again (redraw, at did_render). Main thread."""
 
 import json
 import secrets
-import traceback
 from urllib.parse import unquote
 
 from aqt import mw
 
 from . import app, board
+from .errs import oops
 
 _open = {}  # id -> {"view": ..., "then": ..., "gen": app.generation}
 
@@ -135,7 +135,7 @@ def answer(sid, raw):
     try:
         go(a)
     except Exception:
-        traceback.print_exc()
+        oops()
 
 
 def redraw():

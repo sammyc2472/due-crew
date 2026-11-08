@@ -270,8 +270,16 @@ class RequestException(Exception):
     pass
 
 
-class ConnectTimeout(RequestException):
+class Timeout(RequestException):
+    """requests.exceptions.Timeout: no answer in time."""
+
+
+class ConnectTimeout(Timeout):
     """requests.exceptions.ConnectTimeout: the request never got out."""
+
+
+class ReadTimeout(Timeout):
+    """requests.exceptions.ReadTimeout: it went, and no answer came in time."""
 
 
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -459,12 +467,16 @@ class FakeWorker:
         self.logs = {}       # uid -> {date: row}
         self.log_cut = {}    # 3.7.1: uid -> the oldest day taken again after Delete my log
         self.notices = []    # 3.2.1: [{id, text, link, below}], newest last (live ones only)
+        # 3.9.9 (field.ts): what went wrong in add-ons, added up: (day, version, code) -> [n, people]; no uid
+        self.field = {}
+        self.takes_errs = True  # False: a Worker from before 3.9.9 (no /board errs, a sync's errs refused whole)
         self.log = []        # (method, path, status)
         self.bodies = []     # (method, path, json body)
         self.writes = 0      # rows written, all tables
         self.wrote = {}      # table -> rows written
         self.min_client = "3.0.0"
         self.down = False    # no network at all
+        self.lose_replies = 0  # 3.9.9: the next N requests land, and their answers never come (a ReadTimeout)
         self.fail_status = None  # every request answers this (a 5xx, say)
         self.lock = threading.RLock()
         self._seq = 0
@@ -516,6 +528,9 @@ class FakeWorker:
         except Bad as e:
             status, body = e.status, {"error": e.code, **e.extra}
         self.log.append((method, route, status))
+        if self.lose_replies:
+            self.lose_replies -= 1
+            raise ReadTimeout("the answer never came")
         return FakeResponse(status, body)
 
     def _me(self, auth):
@@ -614,6 +629,8 @@ class FakeWorker:
             return 200, {"ok": True}
         if m == ("GET", "log"):
             return 200, {"days": dict(self.logs.get(me) or {})}
+        if method == "GET" and parts == ["admin", "field"]:  # 3.9.9
+            return self._admin_field(me, query)
         if m == ("DELETE", "account"):
             self._delete_account(me)
             return 200, {"ok": True}
@@ -808,6 +825,8 @@ class FakeWorker:
                "friends": friends, "cheers": cheers, "knocks": self._knocks_of(me),
                "notice": self._notice_for(u.get("client_version")),
                "settingsAt": (self.settings.get(me) or {}).get("at") or ""}
+        if self.takes_errs:
+            out["errs"] = True  # 3.9.9: a sync may carry error counts
         if self._look_of(me):  # 3.8.2: my own look, as my crew sees it (the site's rows draw it)
             out["me"]["look"] = self._look_of(me)
         if self._song_of(me):  # 3.9.6: my song, as my crew sees it
@@ -922,10 +941,91 @@ class FakeWorker:
         out["play"] = self._clean_play(r.get("play"))
         return out, r.get("name")
 
+    # ---- 3.9.9: a sync's error counts (worker/src/field.ts) ----
+    FIELD_DAYS, FIELD_CODES, FIELD_COUNT, FIELD_KEEP = 7, 50, 9999, 30
+    FIELD_CODE = re.compile(r"[a-z0-9_.:-]{1,80}")
+    FIELD_VERSION = re.compile(r"\d{1,4}(\.\d{1,4}){0,3}")
+
+    def _errs_part(self, v):
+        """field.ts errsPart: every part checked, else bad_errs."""
+        def real(d):
+            try:
+                return DATE_RE.fullmatch(d) and datetime.date.fromisoformat(d)
+            except ValueError:
+                return False
+        if (not isinstance(v, dict) or not set(v) <= {"v", "days"} or not isinstance(v.get("v"), str)
+                or not 1 <= len(v["v"]) <= 20 or not self.FIELD_VERSION.fullmatch(v["v"])
+                or not isinstance(v.get("days"), dict) or len(v["days"]) > self.FIELD_DAYS):
+            raise Bad(400, "bad_errs")
+        for day, codes in v["days"].items():
+            if (not real(day) or not isinstance(codes, dict) or not 1 <= len(codes) <= self.FIELD_CODES
+                    or not all(isinstance(c, str) and self.FIELD_CODE.fullmatch(c) and _is_int(n, 1, self.FIELD_COUNT)
+                               for c, n in codes.items())):
+                raise Bad(400, "bad_errs")
+        return v
+
+    def _anki_today(self, me):
+        """util.ts ankiDay for this person's clock (store.today, when a test sets it)."""
+        if getattr(self, "today", None):
+            return self.today
+        u = self.users[me]
+        shift = (u.get("tz") or 0) * 60 - (u.get("rollover") or 0) * 3600
+        return datetime.datetime.fromtimestamp(time.time() + shift, datetime.timezone.utc).date().isoformat()
+
+    def _field_writes(self, me, e):
+        """field.ts errsWrites: n added and one more person a code a day, the days in my last 7."""
+        today = datetime.date.fromisoformat(self._anki_today(me))
+        lo = (today - datetime.timedelta(days=self.FIELD_DAYS)).isoformat()
+        wrote = False
+        for day, codes in e["days"].items():
+            if not lo <= day <= today.isoformat():
+                continue
+            for code, n in codes.items():
+                row = self.field.setdefault((day, e["v"], code), [0, 0])
+                row[0] += n
+                row[1] += 1
+                self._count("field_errs")
+                wrote = True
+        return wrote
+
+    def keep_field(self, today=None):
+        """Housekeeping's part: what's older than 30 days goes."""
+        today = datetime.date.fromisoformat(today or datetime.datetime.now(datetime.timezone.utc).date().isoformat())
+        lo = (today - datetime.timedelta(days=self.FIELD_KEEP)).isoformat()
+        self.field = {k: v for k, v in self.field.items() if k[0] >= lo}
+
+    def _admin_field(self, me, query):
+        """field.ts field: GET /admin/field[?day=], admins only."""
+        if me not in self.admins:
+            raise Bad(404, "not_found")
+        day = query.get("day") or ""
+        try:
+            real = bool(DATE_RE.fullmatch(day)) and bool(datetime.date.fromisoformat(day))
+        except ValueError:
+            real = False
+        if not real:
+            day = (datetime.datetime.now(datetime.timezone.utc).date() - datetime.timedelta(days=1)).isoformat()
+        before = (datetime.date.fromisoformat(day) - datetime.timedelta(days=1)).isoformat()
+        rows = {}
+        for (d, v, code), (n, people) in self.field.items():
+            if d == day:
+                r = rows.setdefault(code, {"code": code, "n": 0, "people": 0, "versions": set()})
+                r["n"] += n
+                r["people"] += people
+                r["versions"].add(v)
+        key = lambda v: [int(x) for x in v.split(".")]
+        out = sorted(rows.values(), key=lambda r: (-r["n"], r["code"]))[:500]
+        for r in out:
+            r["versions"] = sorted(r["versions"], key=key, reverse=True)
+        had = {code for (d, _v, code) in self.field if d == before}
+        return 200, {"day": day, "before": before, "beforeCodes": len(had), "rows": out,
+                     "new": [r["code"] for r in out if r["code"] not in had]}
+
     def _sync(self, me, body):
         if not set(body) <= {"profile", "week", "decks", "heatmap", "squads", "settings", "plans", "knows", "stuck", "log", "team",
-                             "due"}:
+                             "due"} | ({"errs"} if self.takes_errs else set()):
             raise Bad(400, "bad_sync")
+        errs = self._errs_part(body["errs"]) if "errs" in body else None
         prof = body.get("profile")
         if prof is not None:
             if "name" in prof and (not isinstance(prof["name"], str) or not prof["name"].strip() or len(prof["name"]) > 60):
@@ -1039,6 +1139,8 @@ class FakeWorker:
             if wrote["log"]:
                 self.logs[me] = new
                 self._count("logs")
+        if errs is not None:
+            wrote["errs"] = self._field_writes(me, errs)  # 3.9.9
         gone = []
         if "squads" in body:
             wrote["squads"] = False
@@ -2625,7 +2727,9 @@ def install_fake_requests(store):
     mod = types.ModuleType("requests")
     mod.Session = lambda: FakeSession(store)
     mod.RequestException = RequestException
-    mod.exceptions = types.SimpleNamespace(ConnectTimeout=ConnectTimeout, RequestException=RequestException)
+    mod.Timeout = Timeout
+    mod.exceptions = types.SimpleNamespace(ConnectTimeout=ConnectTimeout, RequestException=RequestException, Timeout=Timeout,
+                                           ReadTimeout=ReadTimeout)
     mod.request = lambda method, url, **kw: FakeSession(store).request(
         method, url, headers=kw.get("headers"), json=kw.get("json"))
     sys.modules["requests"] = mod

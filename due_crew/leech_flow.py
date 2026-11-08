@@ -20,13 +20,13 @@ Main thread."""
 import datetime
 import html
 import re
-import traceback
 
 from aqt import mw
 from aqt.utils import tooltip
 
 from . import app
 from .app import _state, cfg
+from .errs import oops
 
 OUT_MAX = 5000   # cards left out, at most
 SLOW_SECS = 30   # a card's answers this slow on average say so
@@ -280,7 +280,7 @@ def bring_back(did, cids):
             col.tags.bulk_remove(nids, "leech")
         col.sched.unsuspend_cards(cids)
     except Exception:
-        traceback.print_exc()
+        oops()
         tooltip("Couldn't bring them back. Browse › Toggle Suspend.")
         return
     _merge(col, pos)
@@ -305,7 +305,7 @@ def fresh(did, cid):
         col.sched.unsuspend_cards([int(cid)])
         col.sched.schedule_cards_as_new([int(cid)], restore_position=True, reset_counts=True)
     except Exception:
-        traceback.print_exc()
+        oops()
         tooltip("Couldn't reset it. Browse › Cards › Reset.")
         return
     _merge(col, pos)
@@ -425,7 +425,7 @@ def current(col, did, deck, since=None):
             have = view(col, did, deck, since)
             have["out"] = n_out(col, deck)
         except Exception:
-            traceback.print_exc()
+            oops()
             have = _empty()
         have.update(mod=mod, since=since, tips=tips)
         _mine("leech_view")[int(did)] = have

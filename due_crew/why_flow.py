@@ -5,13 +5,13 @@ operation as one undoable step. Main thread; nothing is sent."""
 
 import datetime
 import time
-import traceback
 
 from aqt import mw
 from aqt.utils import tooltip
 
 from . import why as W
 from .stats.queries import StatsQueries
+from .errs import oops
 
 _open = {}  # the sheet, kept while it's open
 
@@ -59,7 +59,7 @@ def context(col):
                 if held:  # 3.9.2's audit: Stop new cards, said as itself; QoL pass: named by the deck it's on
                     out["paused"] = str(col.decks.name(held[0]) or "").split("::")[-1] or True
             except Exception:
-                traceback.print_exc()
+                oops()
             left[did] = out
         return left[did]
 
@@ -121,7 +121,7 @@ def explain(browser):
     try:
         got = read(cids)
     except Exception:
-        traceback.print_exc()
+        oops()
         tooltip("Couldn't read those cards.")
         return
     from .ui.why_dialog import WhyDialog
@@ -139,7 +139,7 @@ def fix(g, dlg, cids):
         try:
             dlg.show_groups(read(cids))
         except Exception:
-            traceback.print_exc()
+            oops()
     if act == "study":
         mw.col.decks.select(int(g["fix"][1]))
         mw.moveToState("overview")

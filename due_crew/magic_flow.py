@@ -25,7 +25,6 @@ What it does with the cards, Due Crew's own steps (Sam's picks):
 import datetime
 import json
 import re
-import traceback
 
 from aqt import mw
 from aqt.utils import tooltip
@@ -34,6 +33,7 @@ from . import app, board, magic as M, plan_flow
 from . import plans as P
 from .app import _bg, cfg, client, save_cfg
 from .backend.shapes import TransportError
+from .errs import oops
 
 RECENT = 5           # finds kept for the empty box, on this computer
 DAYS = 14            # the day picker: two weeks from today
@@ -101,7 +101,7 @@ def board_howto():
         try:
             _TRIES["res"] = M.examples(mw.col.tags.all())
         except Exception:
-            traceback.print_exc()
+            oops()
             _TRIES["res"] = {}
     return M.howto(board.MAGIC_KBD, _TRIES["res"])
 
@@ -134,7 +134,7 @@ def from_browser(browser):
     try:
         cids = browser.selected_cards() if hasattr(browser, "selected_cards") else browser.selectedCards()
     except Exception:
-        traceback.print_exc()
+        oops()
         return
     cids = [int(c) for c in cids or []]
     if not cids:
@@ -307,7 +307,7 @@ class Ops:
             except TransportError:  # offline, or the plan gone: said in the window, never Anki's error box
                 return "failed", made or pid, None, "Couldn't reach Due Crew. Check your connection."
             except Exception:  # noqa: BLE001
-                traceback.print_exc()
+                oops()
                 return "failed", made or pid, None, "That didn't save. Try again."
 
         def back(got):
@@ -494,7 +494,7 @@ class Ops:
             got = col.sched.add_or_update_filtered_deck(deck)
             did = int(getattr(got, "id", 0) or 0) or col.decks.id_for_name(name)
         except Exception:
-            traceback.print_exc()
+            oops()
             did = None
         finally:
             _undo_end(col, pos)
@@ -523,7 +523,7 @@ class Ops:
             col.sched.add_or_update_filtered_deck(deck)
             n = int(col.db.scalar("SELECT count() FROM cards WHERE did = ?", int(did)) or 0)
         except Exception:
-            traceback.print_exc()
+            oops()
             n = None
         finally:
             _undo_end(col, pos)
@@ -584,7 +584,7 @@ class Ops:
                 mw.undo()
                 return True
             except Exception:
-                traceback.print_exc()
+                oops()
         return False
 
     def browse(self, cids, q=None):
@@ -1030,7 +1030,7 @@ class Search:
             try:
                 self._pace = self.ops.pace()
             except Exception:
-                traceback.print_exc()
+                oops()
                 self._pace = dict(M.PACE)
         return self._pace
 
@@ -1216,7 +1216,7 @@ class Search:
         try:
             r = T.from_text(doc, self._btree[self.did], self.text, whole=False, start=self.ops.today().isoformat())
         except Exception:
-            traceback.print_exc()
+            oops()
             return {"dates": [], "events": [], "errors": ["Those lines couldn't be read."]}
         dates = []
         total = set()
@@ -1241,10 +1241,10 @@ class Search:
         try:
             fn(**{k: v for k, v in a.items() if k != "cmd"})
         except TypeError:
-            traceback.print_exc()  # a click with the wrong arguments: nothing
+            oops()  # a click with the wrong arguments: nothing
             return
         except Exception:  # noqa: BLE001 (said in the window, never Anki's error box)
-            traceback.print_exc()
+            oops()
             self.busy = False
             self.said = {"text": "That didn't work. Try again."}
         self.push()

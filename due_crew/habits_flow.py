@@ -22,13 +22,13 @@ the top bar's ▶ Fifteen? says "35 min in · Take five" (rooms.take_five).
 Main thread."""
 
 import time
-import traceback
 
 from aqt import mw
 
 from . import app
 from . import habits as H
 from .app import _state, cfg
+from .errs import oops
 
 STALE = 3600         # seconds: Insights open works it out again after an hour
 LOOK_BACK_MS = 4 * 3600000  # the sitting going on, read from at most this far back
@@ -78,7 +78,7 @@ def check(insights=False):
         rows = mw.col.db.all("SELECT id, cid, ease, ivl, lastIvl, time, type FROM revlog WHERE id >= ? ORDER BY id",
                              (cutoff - H.WEEKS * 7 * 86400) * 1000)
     except Exception:
-        traceback.print_exc()
+        oops()
         return
     gen = app.generation
 
@@ -101,7 +101,7 @@ def check(insights=False):
         try:
             done(job(), draw=False)  # a few weeks of a light log: milliseconds, and the board drawing now has it
         except Exception:
-            traceback.print_exc()
+            oops()
         return
     m["busy"] = True
     app._bg(job, done)
@@ -139,7 +139,7 @@ def slow_now():
             ids = ",".join(str(int(c)) for c in cids[k:k + 500])
             ok |= set(mw.col.db.list(f"SELECT id FROM cards WHERE id IN ({ids}) AND queue >= 0 AND odid = 0"))
     except Exception:
-        traceback.print_exc()
+        oops()
         return []
     out = [c for c in cids if c in ok]
     m["live"] = (mod, out)
@@ -230,7 +230,7 @@ def sit_chip():
         m = _mine()
         return H.sit_due(_sitting(), _now_ms(), m.get("floor") or 0, m.get("sit_x"))
     except Exception:
-        traceback.print_exc()
+        oops()
         return False
 
 

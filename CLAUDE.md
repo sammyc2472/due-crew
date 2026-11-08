@@ -105,7 +105,9 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
 - A refresh is one request (`GET /board`: me, my crew, cheers, knocks; on
   the day's first, `decks=1`, shared decks, plans, squads and the bingo
   card), and a sync is one (`POST /sync`: profile, my week, decks, heatmap,
-  squad rows, plan progress, plan squad days). The server writes only what
+  squad rows, plan progress, plan squad days; 3.9.9: `errs`, what went wrong
+  here by code, a finished day's counts once with the first sync after it,
+  only after `/board` has said `errs: true`). The server writes only what
   changed. `test_request_budget` pins this: a change there is a change in
   what the add-on costs, and must be deliberate. A new feature rides one
   of the two, or is one request on a click.
@@ -160,6 +162,13 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   the leeches view (plans.json: `new_off`, `ahead_trust`, `ahead_line_x`,
   `leech_out`); my exam's scope rides my settings (`exam_last`, `exam_since`).
   3.9.5: How you study; Pip Party's kept picks (`game_night.json`).
+  3.9.9: `errs.json` (beside `wrap.json`) is the exception: what went wrong
+  in this install by code (`errs.py`: `save:`, `py:`, `cmd:`, `req:`; never a
+  message, card text, a name or an id), sent to Sam as counts behind
+  Privacy's "Send Sam what went wrong" (`send_errs`, an account key, on by
+  `errs.SEND_DEFAULT`), kept on the server only added up by day, version and
+  code, no uid (`field_errs`, 30 days). A caught exception is printed with
+  `oops()` (errs.py), never `traceback.print_exc()`: it prints as before and counts.
   Pip's closet is mine (an account key only I read); what my Pip has on
   rides with my accent to mutual friends, as names. A plan's squad (its team on the server) shares only
   that I showed up, my questions and answers, and bingo stamps; never my

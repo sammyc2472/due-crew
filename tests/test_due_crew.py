@@ -3033,7 +3033,8 @@ def test_settings_in_board_v341():
           and "settabs:week" not in bd
           and "duecrew:set:compact:0" in bd and 'aria-label="Teal" aria-pressed="true"' in bd)
     pv = board.settings_html(dict(view, tab="privacy"), {"show_up": True, "exam_date": "2026-10-14",
-                                                           "away_from": "", "away_to": ""})
+                                                           "away_from": "", "away_to": "",
+                                                           "send_errs": False})  # 3.9.9's switch, off: its own test
     check("settings: Privacy, one choice checked; numbers only under My numbers; exam on, away off",
           pv.count('aria-checked="true"') == 2 and "duecrew:setprivacy:numbers" in pv
           and "share_reviews" not in pv and 'value="2026-10-14"' in pv
@@ -18512,7 +18513,9 @@ def test_offline_stays_off_stderr_v392():
             for h in t.handlers:
                 names = {getattr(e, "id", "") for e in (h.type.elts if isinstance(h.type, ast.Tuple) else [h.type])} if h.type else {"Exception"}
                 seen_te = seen_te or "TransportError" in names
-                prints = any(isinstance(c, ast.Call) and getattr(c.func, "attr", "") == "print_exc" for c in ast.walk(h))
+                # 3.9.9: oops() prints it as print_exc() did (and counts it for Sam)
+                prints = any(isinstance(c, ast.Call) and (getattr(c.func, "attr", "") == "print_exc"
+                                                          or getattr(c.func, "id", "") == "oops") for c in ast.walk(h))
                 if asks and prints and "Exception" in names and not seen_te:
                     loud.append(f"{f.name}:{h.lineno}")
     check("every handler that prints a traceback around a request catches TransportError first",
@@ -20684,6 +20687,420 @@ def test_calm_offline_v399():
           '_state["offline"] = not client().session_dead' in inspect.getsource(dc._sync_failed)
           and "offline=False" in inspect.getsource(dc._commit) and src.count("send_held(labels[0])") == 2
           and 'offline=bool(_state.get("offline"))' in inspect.getsource(dc._board_html))
+def test_know_when_it_breaks_v399():
+    """3.9.9, Know when it breaks (Sam's sign-off): each install counts its
+    own failures by code, never by content (errs.py); the first sync after a
+    day ends sends that day's counts once, behind Privacy's switch, and only
+    to a Worker that has said it takes them (errs_flow.py, api.push). The
+    Worker's side is restated in tests/fakes.py and proved in
+    worker/test/field.test.ts."""
+    import contextlib
+    import io
+    import time as _time
+    from urllib.parse import quote
+    import due_crew as dc
+    from due_crew import app as appmod, errs, errs_flow, sheets, team_flow
+    from due_crew.backend.shapes import TransportError
+    from due_crew.planner import remote
+    from aqt.deckbrowser import DeckBrowser
+    CARD = "The external iliac artery <b>becomes</b> the femoral · Sam's /Users/sam/Anki"
+    WORDS = ("iliac", "femoral", "Sam's", "Users", "becomes", "secret", "ZZCODE", "<b>", "artery")
+    was = dict(errs._now)
+    tmp = tempfile.mkdtemp()
+    t = errs.Tally(os.path.join(tmp, "errs.json"))
+    errs.use(t, on=True)
+    errs.after(None)
+    seen = []  # every code counted here, for the last check
+    add = t.add
+    t.add = lambda code, day, n=1: (seen.append(code), add(code, day, n))[1]
+    col_was, state_was = dc.mw.col, dc.mw.state
+    dc.mw.col, dc.mw.state = None, "deckBrowser"  # the day as errs.set_day says it, no collection to read
+
+    real = (datetime.datetime.now() - datetime.timedelta(hours=4)).date()
+    D, Y, Y2 = real.isoformat(), (real - datetime.timedelta(days=1)).isoformat(), (real - datetime.timedelta(days=2)).isoformat()
+    errs.set_day(_time.time() + 3600, D)  # today is D for an hour (mw.col is none here)
+    try:
+        # ---- codes: the alphabet, and built from our own names ----
+        check("errs: a code is [a-z0-9_.:-], 80 at most; anything else is none",
+              errs.clean_code("save:bad_plan") == "save:bad_plan" and errs.clean_code("x" * 80) == "x" * 80
+              and not any(errs.clean_code(c) for c in ("x" * 81, "Save:x", "req:/plans", "a b", "", "py:é", None, 7)))
+        check("errs: req codes name the route as the Worker does, never an id, a code or a query",
+              errs.req_code("/plans/p123secret/notes/77", 400) == "req:plans.:id.notes.:n:400"
+              and errs.req_code("/plans/trees", 500) == "req:plans.trees:500"
+              and errs.req_code("/plans/mine", 404) == "req:plans.mine:404"
+              and errs.req_code("/board?decks=1&wk=2026-W45&got=9&pv=abc", "offline") == "req:board:offline"
+              and errs.req_code("/codes/ZZCODE99/add", 404) == "req:codes.:code.add:404"
+              and errs.req_code("/squads/s1/members/u2", 403) == "req:squads.:id.members.:id:403"
+              and errs.req_code("/nope/zz", 404) == "req:other:404" and errs.req_code("/sync", 999) == "req:sync:other"
+              and errs.req_code("/sync", "timeout") == "req:sync:timeout")
+        # the routes are the Worker's: every one of index.ts is one of ROUTES, and none more
+        ts = open(os.path.join(REPO, "worker", "src", "index.ts"), encoding="utf-8").read()
+        found = set()
+        for raw in re.findall(r'(?:authed|open)\("[A-Z]+", r\([`"]([^`"]+)[`"]\)', ts):
+            def name(m):
+                g = m.group(0)
+                return ":code" if ("{1,12}" in g and "A-Za-z0-9" in g) or "A-Za-z]{4}" in g else ":n" if "d{" in g or "[0-9]{1," in g else ":id"
+            found.add(re.sub(r"\([^)]*\)", name, raw.replace("${ID}", ":id")))
+        check("errs: ROUTES is the Worker's routes (worker/src/index.ts), both ways",
+              len(found) > 100 and found == set(errs.ROUTES), sorted(found ^ set(errs.ROUTES)))
+
+        # an exception the add-on caught and printed: where it was and its type, never its message.
+        # A sheet's answer whose step raises (sheets.answer catches it), sent as the board sends it
+        def boom():
+            raise ValueError(CARD)
+        board_was = appmod._decks[0]
+        appmod._decks[0] = True
+        err = io.StringIO()
+        try:
+            sheets.confirm("Sure?", "x", "Yes", boom)
+            sid = next(iter(sheets._open))
+            with contextlib.redirect_stderr(err):
+                dc._on_js(False, as_board(f"duecrew:sheet:{sid}:" + quote(json.dumps({"ok": True}), safe="")), DeckBrowser())
+        finally:
+            appmod._decks[0] = board_was
+            sheets._open.clear()
+        check("errs: a caught exception prints as before (its words on this computer only) and counts by place and type",
+              "Traceback" in err.getvalue() and "iliac" in err.getvalue() and t.of(D).get("py:sheets:lambda:valueerror") == 1,
+              (t.of(D), err.getvalue()[-200:]))
+        ns = {}
+        exec(compile("def plan_step():\n    raise KeyError('" + CARD.replace("'", "") + "')\n",
+                     os.path.join(errs.ROOT, "planner", "flow.py"), "exec"), ns)
+        try:
+            ns["plan_step"]()
+        except KeyError:
+            kind, _e, tb = sys.exc_info()
+            deep = errs.py_code(kind, tb)
+        try:
+            raise TransportError(CARD)
+        except TransportError:
+            kind, _e, tb = sys.exc_info()
+            outside = errs.py_code(kind, tb)
+        check("errs: the deepest frame in the add-on's folder, a subfolder's file named with it; none in it is other",
+              deep == "py:planner.flow:plan_step:keyerror" and outside == "py:other:other:transporterror", (deep, outside))
+
+        # board commands: a name of the table's with values that don't pass, or one bucket for any other
+        dc._on_js(False, as_board("duecrew:iliacsecret:" + quote(CARD, safe="")), DeckBrowser())
+        dc._on_js(False, as_board("duecrew:femoralsecret"), DeckBrowser())
+        dc._on_js(False, as_board("duecrew:sort:nonsense"), DeckBrowser())
+        Previewer = type("Previewer", (), {})
+        dc._on_js(False, "duecrew:arterysecret:x", Previewer())  # a card's page: refused before the table, not counted
+        check("errs: cmd:<name>:bad for the table's own name, cmd:unknown for any other (it could be a card's), "
+              "and a card page's message is no board command",
+              t.of(D).get("cmd:unknown") == 2 and t.of(D).get("cmd:sort:bad") == 1, t.of(D))
+
+        # requests that failed, through the client against the fake Worker
+        store = world({"sam": "Sammy", "dre": "Dre"})
+        store.today = D
+        cl = new_client(store, "sam", "Sammy")
+        labels = [D, Y]
+        store.fail_status = 503
+        try:
+            cl.plan("psecret123")
+        except TransportError:
+            pass
+        store.fail_status = None
+        for down in (True, "connect"):
+            store.down = down
+            try:
+                cl.fetch_board(labels)
+            except TransportError:
+                pass
+        store.down = False
+        cl.add_friend("ZZCODE99")
+        check("errs: a request that failed, by route and status, offline or timeout; once each, not once a try",
+              t.of(D).get("req:plans.:id:503") == 1 and t.of(D).get("req:board:offline") == 1
+              and t.of(D).get("req:board:timeout") == 1 and t.of(D).get("req:codes.:code.add:404") == 1, t.of(D))
+
+        # a plan save the server refused: its error when the window has words for it, else save:other
+        pid, _c = store.add_plan("sam", "Heme", "Big Step 1", _plan_units())
+        said = remote.save(new_client(store, "dre", "Dre"), pid, 1, {"deck": "Big Step 1", "units": []}, "x")
+        remote._refused({"error": "<b>" + CARD})
+        remote._view(400, {"error": "not_owner"})
+        refused = [c for c in t.of(D) if c.startswith("save:")]
+        check("errs: a refused save is save:<its error>, a word of the window's; any other error is save:other",
+              said[0] == "refused" and "save:other" in refused and "save:not_owner" in refused
+              and all(c[5:] in remote.SAVE_CODES or c == "save:other" for c in refused) and len(refused) == 3, refused)
+
+        # ---- the tally: caps, days, the file ----
+        cap = errs.Tally()
+        for i in range(60):
+            cap.add(f"c{i}", Y)
+        cap.add("c0", Y, 20000)
+        cap.add("Not A Code", Y)
+        day = cap.of(Y)
+        check("errs: 50 codes a day at most (the 50th holds the rest), each count at most 9,999, no code that isn't one",
+              len(day) == 50 and day["errs:more"] == 11 and day["c0"] == 9999 and "c55" not in day, (len(day), day.get("errs:more")))
+        held = errs.Tally()
+        for n in range(11):
+            held.add("a", (real - datetime.timedelta(days=n)).isoformat())
+        ready = held.ready(D)
+        check("errs: today and the 7 days before are held; a sync sends the 7 that are over, older ones go unsent",
+              len(held.days) == 8 and sorted(ready) == [(real - datetime.timedelta(days=n)).isoformat() for n in range(7, 0, -1)]
+              and D not in ready, sorted(held.days))
+        path = os.path.join(tmp, "bad.json")
+        with open(path, "w") as f:
+            json.dump({"v": 1, "days": {Y: {"ok:a": 2, "Bad Code": 1, "z": 0, "y": "3", "w": True}, "nope": {"a": 1}}}, f)
+        with open(os.path.join(tmp, "junk.json"), "w") as f:
+            f.write("{not json")
+        t.save()
+        check("errs: kept in a small file, read back as written; a file not ours, or bad parts of one, read as nothing",
+              errs.Tally(t.path).days == t.days and errs.Tally(path).days == {Y: {"ok:a": 2}}
+              and errs.Tally(os.path.join(tmp, "junk.json")).days == {})
+
+        # ---- the day: Anki's, from any thread ----
+        errs.set_day(1_800_000_000, "2026-11-07")
+        rolled = (errs.today(1_800_000_000 - 1), errs.today(1_800_000_000), errs.today(1_800_000_000 + 2 * 86400 + 5))
+        errs.set_day(_time.time() - 1, Y)  # the rollover just passed, and nobody read the collection since
+        errs.count("rollover:test")
+        errs.set_day(_time.time() + 3600, D)
+        check("errs: a count lands on Anki's day: the cutoff last read, a day on for each day past it",
+              rolled == ("2026-11-07", "2026-11-08", "2026-11-10") and t.of(D).get("rollover:test") == 1
+              and "rollover:test" not in t.of(Y), rolled)
+
+        # ---- sending: once, finished days only, only to a Worker that takes them ----
+        conf = {}
+        V = errs.clean_version(appmod.ADDON_VERSION)
+        glue = (appmod.client, appmod.cfg, sheets.confirm)
+        shown = []
+        appmod.client, appmod.cfg = (lambda: cl), (lambda: conf)
+        sheets.confirm = lambda title, text, yes, then, **k: shown.append((title, text))
+        try:
+            t.clear()
+            t.add("save:bad_plan", Y, 2)
+            t.add("req:plans.:id:400", Y, 2)
+            t.add("py:plan_flow:maybe_morning:keyerror", Y2)
+            t.add("cmd:unknown", D)
+            cl.session.pop("errs_ok", None)
+            gate = errs_flow.for_sync(conf)
+            errs_flow.see_what_went()
+            check("errs: before /board says the Worker takes them, none go, and See what went says why",
+                  gate == {} and "server doesn't take them yet" in shown[-1][1], shown[-1])
+            cl.fetch_board(labels)
+            check("errs: /board's errs: true is kept in the session", cl.session.get("errs_ok") is True)
+            dc._on_js(False, as_board("duecrew:errsee"), DeckBrowser())  # Settings › Privacy's See what went
+            title, text = shown[-1]
+            sending = errs_flow.for_sync(conf)
+            n = len(store.log)
+            ok, _gone = cl.push(labels, conf, stats=types.SimpleNamespace(reviews=3, time_ms=60000, accuracy=90.0, streak=2,
+                                                                         new_cards=0), version="3.9.9", **sending)
+            body = store.bodies[-1][2]
+            listed, at = {}, None
+            for line in text.split("\n"):
+                if re.fullmatch(r"\d{4}-\d{2}-\d{2}", line):
+                    at = line
+                elif " × " in line and at:
+                    code, count = line.rsplit(" × ", 1)
+                    listed.setdefault(at, {})[code] = int(count.replace(",", ""))
+            check("errs: the day's first sync carries the days that are over, in one request; today's wait",
+                  ok and len(store.log) - n == 1 and store.log[-1][:2] == ("POST", "/sync")
+                  and body["errs"]["days"] == {Y: {"save:bad_plan": 2, "req:plans.:id:400": 2},
+                                               Y2: {"py:plan_flow:maybe_morning:keyerror": 1}}
+                  and body["errs"]["v"] == V, body.get("errs"))
+            check("errs: See what went lists exactly what that sync sent",
+                  title == errs.SHEET_TITLE and listed == body["errs"]["days"] and f"Due Crew {body['errs']['v']}" in text,
+                  (listed, text))
+            check("errs: the Worker (the fake) keeps them added up, a person once, no uid",
+                  store.field[(Y, V, "save:bad_plan")] == [2, 1]
+                  and all("sam" not in k for key in store.field for k in key))
+            check("errs: once sent they're gone; today's are still kept", sorted(t.days) == [D], sorted(t.days))
+            cl.push(labels, conf, version="3.9.9", **errs_flow.for_sync(conf))
+            check("errs: the day's next sync carries none", "errs" not in store.bodies[-1][2])
+            errs.set_day(_time.time() + 3600, (real + datetime.timedelta(days=1)).isoformat())
+            store.today = (real + datetime.timedelta(days=1)).isoformat()
+            cl.push(labels, conf, version="3.9.9", **errs_flow.for_sync(conf))
+            check("errs: the next day's first sync carries the day before",
+                  store.bodies[-1][2].get("errs", {}).get("days") == {D: {"cmd:unknown": 1}} and t.days == {})
+            nxt = (real + datetime.timedelta(days=1)).isoformat()
+
+            # a lost reply: it landed, so it never goes again (a person's day counts once); never got out, it goes later
+            t.add("lost:reply", D)
+            sending = errs_flow.for_sync(conf)
+            store.lose_replies, n = 1, len(store.log)
+            ok, _gone = cl.push(labels, conf, version="3.9.9", **sending)
+            check("errs: an answer that never came: the counts are taken as sent, the rest goes once more",
+                  ok and len(store.log) - n == 2 and "errs" not in store.bodies[-1][2] and D not in t.days
+                  and store.field[(D, V, "lost:reply")] == [1, 1], (store.log[-2:], t.days))
+            t.add("never:out", D)
+            store.down = "connect"
+            try:
+                cl.push(labels, conf, version="3.9.9", **errs_flow.for_sync(conf))
+            except TransportError:
+                pass
+            store.down = False
+            errs_flow._flying.clear()  # the next sync is more than a push's while later
+            cl.push(labels, conf, version="3.9.9", **errs_flow.for_sync(conf))
+            check("errs: a sync that never got out keeps them, and the next one sends them",
+                  store.field.get((D, V, "never:out")) == [1, 1] and D not in t.days, t.days)
+            t.add("two:syncs", D)
+            first, second = errs_flow.for_sync(conf), errs_flow.for_sync(conf)
+            check("errs: two syncs at once don't both send a day", bool(first) and second == {})
+            first["errs_sent"]()
+
+            # a Worker put back to one from before: its sync turns errs away; the rest goes, and none till it says so
+            store.takes_errs = False
+            t.add("old:worker", D)
+            sending = errs_flow.for_sync(conf)
+            n = len(store.log)
+            ok, _gone = cl.push(labels, conf, version="3.9.9", **sending)
+            check("errs: an older Worker refuses a sync with errs: sent again without them, the flag off, the counts kept",
+                  ok and len(store.log) - n == 2 and cl.session.get("errs_ok") is False and "errs" not in store.bodies[-1][2]
+                  and t.of(D).get("old:worker") == 1, store.log[-2:])
+            cl.fetch_board(labels)
+            errs_flow._flying.clear()
+            n = len(store.log)
+            ok, _gone = cl.push(labels, conf, version="3.9.9", errs={"days": {D: {"old:worker": 1}}, "v": "3.9.9"})
+            check("errs: without the flag nothing goes, whatever's handed to the push: one request, no errs",
+                  ok and len(store.log) - n == 1 and "errs" not in store.bodies[-1][2] and errs_flow.for_sync(conf) == {})
+            store.takes_errs = True
+            cl.fetch_board(labels)
+            dropped = []
+            n = len(store.log)
+            ok, _gone = cl.push(labels, conf, version="3.9.9", errs={"days": {"nope": {"a": 1}}, "v": "3.9.9"},
+                                errs_sent=lambda: dropped.append(1))
+            check("errs: counts the Worker won't take (bad_errs) go no further; the sync goes without them",
+                  ok and dropped == [1] and len(store.log) - n == 2 and "errs" not in store.bodies[-1][2])
+            t.clear()
+
+            # Privacy's switch: off, nothing is counted, kept or sent
+            t.add("before:off", Y)
+            saved = (dc._swap, dc.cfg, dc.save_cfg)
+            dc._swap, dc.cfg, dc.save_cfg = (lambda c, focus=None: None), (lambda: conf), (lambda c, **k: None)
+            try:
+                dc._on_js(False, as_board("duecrew:set:send_errs:0"), DeckBrowser())
+            finally:
+                dc._swap, dc.cfg, dc.save_cfg = saved
+            errs.count("while:off")
+            cl.push(labels, conf, version="3.9.9", **errs_flow.for_sync(conf))
+            errs_flow.see_what_went()
+            check("errs: Send Sam what went wrong off (its switch, through the board): nothing kept, counted or sent",
+                  conf.get("send_errs") is False and t.days == {} and "errs" not in store.bodies[-1][2]
+                  and "is off" in shown[-1][1], (conf, t.days, shown[-1]))
+            conf["send_errs"] = True
+            errs.switch(True)
+            errs.count("back:on")
+            check("errs: on again, it counts from then", t.days == {nxt: {"back:on": 1}}, t.days)
+            t.clear()
+        finally:
+            appmod.client, appmod.cfg, sheets.confirm = glue
+
+        # the glue: _on_sync_done hands the push what for_sync gives
+        pushes = []
+        names = ("client", "cfg", "_profile_files", "_awaiting_phone", "refresh_board", "_pushed", "_closing", "_last_attempt")
+        saved = {k: getattr(dc, k) for k in names}
+        saved_mods = (dc.mw.col, dc.account.ready, dc.plan_flow.for_sync, dc.plan_flow.maybe_morning, dc.crew_cards.for_sync,
+                      dc.bingo_flow.for_row, team_flow.for_sync, errs_flow.for_sync)
+        dc.mw.col, dc.client, dc.cfg, dc._profile_files = make_user_col([TODAY]), (lambda: cl), (lambda: {}), (lambda: tmp)
+        dc._awaiting_phone = lambda: False
+        dc.account.ready = lambda: True
+        dc.refresh_board = lambda **kw: pushes.append(kw)
+        dc.plan_flow.for_sync = lambda: None
+        dc.plan_flow.maybe_morning = lambda *a, **k: None
+        dc.crew_cards.for_sync = lambda c, light=False: {"stuck": ["g1"]}
+        dc.bingo_flow.for_row = lambda c: None
+        team_flow.for_sync = lambda c: None
+        marker = object()
+        errs_flow.for_sync = lambda c: {"errs": {"days": {Y: {"a": 1}}, "v": "3.9.9"}, "errs_sent": marker}
+        try:
+            dc._on_sync_done(light=True)
+            errs_flow.for_sync = lambda c: {}
+            dc._on_sync_done(light=True)
+        finally:
+            for k, v in saved.items():
+                setattr(dc, k, v)
+            (dc.mw.col, dc.account.ready, dc.plan_flow.for_sync, dc.plan_flow.maybe_morning, dc.crew_cards.for_sync,
+             dc.bingo_flow.for_row, team_flow.for_sync, errs_flow.for_sync) = saved_mods
+        check("errs: a sync's extras carry for_sync's errs beside the rest, and nothing when it has none",
+              len(pushes) == 2 and pushes[0]["extras"]["errs_sent"] is marker and pushes[0]["extras"]["stuck"] == ["g1"]
+              and "errs" not in pushes[1]["extras"], [p.get("extras") for p in pushes])
+
+        # the Privacy row and its default
+        from due_crew import account, settings_model
+        on_html = board.settings_html({"tab": "privacy", "signed_in": True}, {})
+        off_html = board.settings_html({"tab": "privacy", "signed_in": True}, {"send_errs": False})
+        check("errs: Privacy's row: Send Sam what went wrong, its line, See what went, the switch as set (on by default)",
+              "Send Sam what went wrong" in on_html and "Error codes and counts. Never your cards, plans or crew." in on_html
+              and "duecrew:errsee" in on_html and "duecrew:set:send_errs:0" in on_html and "duecrew:set:send_errs:1" in off_html
+              and errs.wanted({}) is errs.SEND_DEFAULT and errs.SEND_DEFAULT is True)
+        check("errs: the switch is the account's (every computer), a Settings switch, never Reset board's",
+              "send_errs" in account.ACCOUNT_KEYS and account.clean({"send_errs": False}) == {"send_errs": False}
+              and settings_model.change(["set", "send_errs", "0"], {}) == {"send_errs": False}
+              and "send_errs" not in settings_model.change(["setreset"], {}))
+        idx = board.settings_index({"signed_in": True}, {})
+        check("errs: Find a setting finds it", any(x["l"] == "Send Sam what went wrong" and "errors" in x["k"] for x in idx)
+              and any(x["l"] == "See what went" for x in idx))
+
+        # nothing a card or a request said is in any code made here, or in what went
+        made = set(seen) | {k[2] for k in store.field}
+        sent = json.dumps([b for m, p, b in store.bodies if p == "/sync" and b and "errs" in b])
+        check("errs: no code carries a message, a card's words, a command a card sent, an id or a friend code",
+              made and all(errs.clean_code(c) for c in made)
+              and not any(w.lower() in (c + sent).lower() for c in made for w in WORDS), sorted(made))
+    finally:
+        errs._now.clear()
+        errs._now.update(was)
+        errs_flow._flying.clear()
+        dc.mw.col, dc.mw.state = col_was, state_was
+
+
+def test_in_the_field_panel_v399():
+    """3.9.9: the admin Inbox's In the field, yesterday (fieldPanel in
+    site/public/app.js), run in node on a small DOM: a code a row with its
+    counts and versions, the line of codes new since the day before, and
+    what the server sends set as text, never as HTML. Needs node."""
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        print("SKIP In the field panel: no node")
+        return
+    js = open(os.path.join(REPO, "site", "public", "app.js"), encoding="utf-8").read()
+    src = (js[js.index("function h(tag, attrs, ...kids) {"):js.index("function page(")]
+           + js[js.index("const MONTHS ="):js.index("\n", js.index("const DAYS ="))] + "\n"
+           + js[js.index("function fieldPanel() {"):js.index("/** 3.8.1 (the audit): reports, kept for the admin")])
+    dom = r"""
+class Node { constructor() { this.kids = []; }
+  append(...k) { for (const x of k) this.kids.push(x instanceof Node ? x : new Text(String(x))); }
+  replaceChildren(...k) { this.kids = []; this.append(...k); }
+  get textContent() { return this.kids.map((c) => c.textContent).join(""); } }
+class Text extends Node { constructor(t) { super(); this.t = t; } get textContent() { return this.t; } }
+class El extends Node { constructor(tag) { super(); this.tag = tag; this.className = ""; this.attrs = {}; }
+  setAttribute(k, v) { this.attrs[k] = v; } addEventListener() {} }
+globalThis.Node = Node;
+globalThis.document = { createElement: (t) => new El(t) };
+const tags = (n) => (n instanceof El ? [n.tag, ...n.kids.flatMap(tags)] : []);
+const text = (n) => n.textContent;
+"""
+    days = {"day": "2026-11-07", "before": "2026-11-06", "beforeCodes": 2,
+            "rows": [{"code": "save:bad_plan", "n": 345, "people": 3, "versions": ["3.9.10", "3.9.9"]},
+                     {"code": "<img src=x onerror=alert(1)>", "n": 1, "people": 1, "versions": ["3.9.9"]}],
+            "new": ["<img src=x onerror=alert(1)>"]}
+    cases = [days, dict(days, beforeCodes=0, new=[r["code"] for r in days["rows"]]),
+             {"day": "2026-11-07", "before": "2026-11-06", "beforeCodes": 0, "rows": [], "new": []},
+             dict(days, new=[])]
+    prog = (dom + src + "\nconst cases = " + json.dumps(cases) + ";\n(async () => { const out = [];"
+            " for (const c of cases) { globalThis.api = async () => c; const box = fieldPanel();"
+            " await new Promise((r) => setTimeout(r, 0)); out.push({ text: text(box), tags: tags(box) }); }"
+            " console.log(JSON.stringify(out)); })();")
+    run = subprocess.run([node, "-e", prog], capture_output=True, text=True, timeout=60)
+    try:
+        got = json.loads(run.stdout)
+    except ValueError:
+        got = None
+    ok = isinstance(got, list) and len(got) == 4
+    full, fresh, empty, same = got if ok else ({}, {}, {}, {})
+    check("in the field: yesterday's codes, a row each, most first, with times, people and versions",
+          ok and "In the field, yesterday" in full["text"] and "Sat 7 Nov · 2 codes" in full["text"]
+          and "save:bad_plan34533.9.10, 3.9.9" in full["text"], (got, run.stderr[-400:]))
+    check("in the field: a line for the codes new since the day before; none to compare with, it says so; none new, it says so",
+          ok and "New since Fri 6 Nov: <img src=x onerror=alert(1)>" in full["text"]
+          and "Nothing came in for Fri 6 Nov, so nothing to compare with." in fresh["text"] and "New since" not in fresh["text"]
+          and "Nothing new since Fri 6 Nov." in same["text"], got)
+    check("in the field: an empty day says so, with no stray null",
+          ok and "Nothing went wrong, or nothing has come in yet." in empty["text"] and "null" not in empty["text"]
+          and "undefined" not in "".join(g["text"] for g in got), got)
+    check("in the field: what the server sends is text, never HTML (no element made from it); the Inbox opens with it",
+          ok and "img" not in sum((g["tags"] for g in got), []) and full["tags"].count("code") == 2
+          and "fieldPanel()" in js[js.index("inbox: ["):js.index("\n", js.index("inbox: ["))], got)
 
 
 def main():

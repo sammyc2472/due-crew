@@ -74,7 +74,6 @@ import html
 import json
 import os
 import re
-import traceback
 
 from aqt import mw
 from aqt.utils import tooltip
@@ -83,6 +82,7 @@ from . import app
 from . import plans as P
 from . import schedule as S
 from .app import _bg, _state, cfg, client, save_cfg
+from .errs import oops
 
 PLAN_KEYS = ("plans", "plans_day", "plans_opened", "plan_offers_dismissed")
 
@@ -653,7 +653,7 @@ def _aside(idx, st, doc):
     try:
         return P.set_aside(idx, doc, _swap(st), st.get("applied"), st.get("held"))
     except Exception:  # noqa: BLE001 (a count, never a crash: nothing set aside)
-        traceback.print_exc()
+        oops()
         return frozenset()
 
 
@@ -1015,7 +1015,7 @@ def _open_now(plan_list, mode=None, everything=False, toast=True):
     try:
         res = run(mw.col, plan_list, state, today, mode=mode, everything=everything)
     except Exception:
-        traceback.print_exc()
+        oops()
         return None
     c["plans"] = state
     if res["n"]:
@@ -1089,7 +1089,7 @@ def apply_tags(plan_list, toast=True):
             applied, res = P.sync_tags(mw.col, _deck_index(idxs, st["deck_id"]), doc, st.get("tags"),
                                        f"Due Crew: {p.get('name') or 'plan'}'s tags", _swap(st))
         except Exception:
-            traceback.print_exc()
+            oops()
             idxs.pop(st["deck_id"], None)
             continue
         if res["added"] or res["removed"]:
@@ -1159,7 +1159,7 @@ def apply_authored_tags(toast=True):
             applied, res = P.sync_tags(mw.col, _deck_index(idxs, did), doc, st.get("tags"),
                                        f"Due Crew: {a.get('name') or 'plan'}'s tags")
         except Exception:
-            traceback.print_exc()
+            oops()
             idxs.pop(did, None)
             continue
         if res["added"] or res["removed"]:
@@ -1193,7 +1193,7 @@ def _drop_plan_tags(st, name):
     try:
         n = P.drop_tags(mw.col, "::".join(parts[:2]), f"Due Crew: {name or 'plan'}'s tags off")
     except Exception:
-        traceback.print_exc()
+        oops()
         return 0
     _tags_changed()
     return n
@@ -1241,7 +1241,7 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True, update=False):
                         if _lesson_drop(mw.col, was):  # Today's lesson, B: and its decks go
                             _after_change()
                     except Exception:
-                        traceback.print_exc()
+                        oops()
             changed = bool(gone)
             for p in plan_list:
                 st = state.get(p["id"])
@@ -1290,7 +1290,7 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True, update=False):
             if ahead_flow.apply_morning():  # 3.9.2: Stop new cards, after a catch-up's own limit
                 _after_change()
         except Exception:
-            traceback.print_exc()
+            oops()
         built = build_checks([p for p in plan_list if not p.get("paused")])  # 3.2
         # 3.8.1, Welcome back: a plan whose dates from 3+ days I studied nothing would open
         # keeps them shut till its question, asked below (Open them, Push my dates back, Not today)
@@ -1317,7 +1317,7 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True, update=False):
             QTimer.singleShot(0, lambda: offer_hold(new_here))
         return line
     except Exception:
-        traceback.print_exc()
+        oops()
         return None
 
 
@@ -1369,7 +1369,7 @@ def midday(plan_list, toast=True):
     try:
         dry = run(mw.col, [p for p in live if p["id"] not in new_here], copy.deepcopy(state), today, dry=True)
     except Exception:
-        traceback.print_exc()
+        oops()
         dry = {"per": {}, "units": {}}
     _state["plan_updates"] = {pid: {"n": int(v[1]), "names": list(v[0]), "units": list(dry["units"].get(pid) or [])}
                               for pid, v in (dry.get("per") or {}).items() if v[1]}
@@ -1592,7 +1592,7 @@ def send_ids():
             if sent.get(a["id"]) != h:
                 jobs.append((a["id"], units, counts, refs, h))
     except Exception:
-        traceback.print_exc()
+        oops()
         return
     if not jobs:
         return
@@ -1645,7 +1645,7 @@ def send_trees():
             else:
                 jobs.append((key, deck, tags, decks, h))
     except Exception:
-        traceback.print_exc()
+        oops()
         return
     if checked or sent != (pc.get("trees_sent") or {}):
         pc["trees_sent"] = dict(sent, **checked)
@@ -1753,7 +1753,7 @@ def study_date(pid, uid):
         try:
             _refill(mw.col, bdid, keep)
         except Exception:
-            traceback.print_exc()
+            oops()
     if ok or back:
         _after_change()
     if ok:
@@ -1796,7 +1796,7 @@ def study_day(pid, day):
         try:
             _refill(mw.col, bdid, keep)
         except Exception:
-            traceback.print_exc()
+            oops()
     if ok or back:
         _after_change()
     if ok:
@@ -1910,7 +1910,7 @@ def _filtered(col, name, cids, order=4, until=None, did=None):
             _note_built(parent)  # made with it (or before, by us), so the tidy may clear it
         return int(made) if made else True
     except Exception:
-        traceback.print_exc()
+        oops()
         return False
 
 
@@ -1984,7 +1984,7 @@ def tidy_decks(col):
             col.decks.remove(gone)
         return len(gone)
     except Exception:
-        traceback.print_exc()
+        oops()
         return 0
 
 
@@ -2081,7 +2081,7 @@ def set_lesson_deck(pid, on):
         else:
             changed = bool(_lesson_drop(mw.col, st))
     except Exception:
-        traceback.print_exc()
+        oops()
     c["plans"] = state
     _psave(c)
     if changed:
@@ -2224,7 +2224,7 @@ def _lesson_sync(col, plan_list, state, today, fold=None):
                         made = _filtered(col, name, cids, order=NEW_ORDER, did=did)
                         made = col.decks.id_for_name(name) if made is True else made
                 except Exception:
-                    traceback.print_exc()
+                    oops()
                     made = None
                 if made:
                     st.setdefault("lesson_decks", {})[uid] = int(made)
@@ -2254,7 +2254,7 @@ def lesson_sync(plan_list, fold=None):
     try:
         got = _lesson_sync(mw.col, plan_list, state, _today(), fold=fold)
     except Exception:
-        traceback.print_exc()
+        oops()
         return {"work": 0, "decks": {}}
     c["plans"] = state
     _psave(c)
@@ -2333,7 +2333,7 @@ def _go_deck(did):
         mw.moveToState("overview")
         return True
     except Exception:
-        traceback.print_exc()
+        oops()
         return False
 
 
@@ -2391,7 +2391,7 @@ def refresh_progress():
     try:
         prog = progress(mw.col, followed(), _state_cfg(), idxs)
     except Exception:
-        traceback.print_exc()
+        oops()
         return {}
     _state["plan_progress"] = prog
     whole = True  # kept for the next ask only when every part was read
@@ -2399,26 +2399,26 @@ def refresh_progress():
         _state["plan_load"] = loads(mw.col, followed(), _state_cfg(), idxs)  # 3.7.81
     except Exception:
         whole = False
-        traceback.print_exc()
+        oops()
     try:
         _state["plan_picks"] = pick_names(mw.col, followed(), _state_cfg(), idxs)  # 3.8.1
         if prog:
             _note_reviews(mw.col, _today())  # 3.8.1: my own load, beside what the plan opens
     except Exception:
         whole = False
-        traceback.print_exc()
+        oops()
     try:
         _state["plan_session"] = sessions(mw.col, followed(), _state_cfg(), _today(), idxs)
         _note_recap(_state["plan_session"])
     except Exception:
         whole = False
-        traceback.print_exc()
+        oops()
     try:
         from . import due_flow
         due_flow.parts(mw.col, idxs, _state["labels"][0] if _state["labels"] else _today())  # Due: each date's resources
     except Exception:
         whole = False
-        traceback.print_exc()
+        oops()
     # a search about my own reviews (is:due, rated:…) is read at every refresh, as before
     if whole and key is not None and not any(idx._fresh for idx in idxs.values()):
         _last.update(key=key, got={k: dict(v) if isinstance(v, dict) else v for k, v in _state.items() if k in _WRITES})
@@ -2492,7 +2492,7 @@ def raise_limit(pid):
         deck.pop("newLimitToday", None)
         col.decks.save(deck)
     except Exception:
-        traceback.print_exc()
+        oops()
         tooltip("Couldn't change it. Deck Options › New cards/day.")
         return
     if pos is not None:
@@ -2624,7 +2624,7 @@ def browse_opened(pid, uid):
     try:
         cids = {c for c in idx.match(u, _swap(st), doc) if idx.cards[c][1] == 0 and idx.cards[c][0] != -1}
     except Exception:
-        traceback.print_exc()
+        oops()
         return
     _browse(cids, empty="None of its new cards are open now.")
 
@@ -2668,13 +2668,13 @@ def board_view(c):
         try:
             joy(card, today)  # 3.9.6: what's happened to it since it was last looked at
         except Exception:
-            traceback.print_exc()
+            oops()
     from . import team_flow
     for card in cards:
         try:
             card["tabs"] = team_flow.card_bits(card["id"])  # the squad line
         except Exception:
-            traceback.print_exc()
+            oops()
     from .squads import _my_squads
     names = {sq["id"]: sq.get("name") or "" for sq in _my_squads(c)}
     offers = offers_view(client().session.get("plan_offers"), names, {p["id"] for p in plan_list},
@@ -2733,7 +2733,7 @@ def joy(card, today, shown=False, now=None):
                 from . import closet_flow
                 closet_flow.note_plan_done(pid)  # 3.9.6: three plans with every set done, the Finisher's ribbon
             except Exception:
-                traceback.print_exc()
+                oops()
     card["joy"] = _joy_pips(view, pid) if view else None
     return card["joy"]
 
@@ -2772,7 +2772,7 @@ def joy_claim(cards, c=None):
         try:
             joy(card, today, shown=True)
         except Exception:
-            traceback.print_exc()
+            oops()
 
 
 def joy_show():
@@ -2899,7 +2899,7 @@ def on_message(cmd, parts):
         try:
             mw.on_sync_button_clicked()  # Anki's own Sync, as its top bar's button
         except Exception:
-            traceback.print_exc()
+            oops()
     elif cmd == "plannow" and arg and len(parts) > 3:
         open_date(arg, parts[3])
     elif cmd == "planbrowse" and arg and len(parts) > 3:
@@ -3138,7 +3138,7 @@ def undo_morning(put_off_too=False):
     try:
         mw.undo()  # an Anki without CollectionOp: undo runs here, now
     except Exception:
-        traceback.print_exc()
+        oops()
         return
     done()
 
@@ -3164,7 +3164,7 @@ def browse_date(pid, uid):
     try:
         cids = P.DeckIndex(mw.col, st["deck_id"]).match(u, _swap(st), pm["doc"])
     except Exception:
-        traceback.print_exc()
+        oops()
         return
     _browse(cids)
 
@@ -3245,7 +3245,7 @@ def browse_left(pid, uids=()):
         if not uids:
             left = {c for c in left if idx.cards[c][0] != -1}  # behind: opened, so waiting in my Anki now
     except Exception:
-        traceback.print_exc()
+        oops()
         return
     _browse(left, empty="Nothing left to see.")
 
@@ -3268,7 +3268,7 @@ def browse_topic(pid, uids, i):
     try:
         cids = P.topic_cards(P.DeckIndex(mw.col, st["deck_id"]), src, _swap(st), pm["doc"])
     except Exception:
-        traceback.print_exc()
+        oops()
         return
     _browse(cids, _tag_search(mw.col, st["deck_id"], src, _swap(st), cids) if cids else None)
 
@@ -3296,7 +3296,7 @@ def study_topic(pid, uids, i):
         idx = P.DeckIndex(mw.col, st["deck_id"])
         cids = P.new_and_due(idx, P.topic_cards(idx, src, _swap(st), pm["doc"]))
     except Exception:
-        traceback.print_exc()
+        oops()
         return
     if not cids:
         browse_topic(pid, uids, i)
@@ -3308,7 +3308,7 @@ def study_topic(pid, uids, i):
         try:
             _refill(mw.col, did, keep)
         except Exception:
-            traceback.print_exc()
+            oops()
     _after_change()
     did = mw.col.decks.id_for_name(name) if ok else None
     if did:
@@ -3381,7 +3381,7 @@ def open_date(pid, uid):
     try:
         res = open_one(mw.col, p, st, uid, _today())
     except Exception:
-        traceback.print_exc()
+        oops()
         return
     c["plans"] = state
     _psave(c)
@@ -3451,7 +3451,7 @@ def open_next(pid, study=False, uid=None):
     try:
         res = open_one(mw.col, p, st, u["id"], today, first=True)
     except Exception:
-        traceback.print_exc()
+        oops()
         return
     st.setdefault("own_opened", {})[u["id"]] = today
     c["plans"] = state
@@ -3513,7 +3513,7 @@ def put_back_own(pid):
         try:
             _lesson_drop(mw.col, st, uids=[u["id"]], fold=label)  # B: Up next again, so its deck goes, in Put back's step
         except Exception:
-            traceback.print_exc()
+            oops()
     for k in ("applied", "src", "own_opened"):
         (st.get(k) or {}).pop(u["id"], None)
     st["hold_yes"] = _hold_yes(p, st)  # settled before Put back adds to `held`, which isn't a yes
@@ -3569,7 +3569,7 @@ def own_undo(pid):
     try:
         mw.undo()
     except Exception:
-        traceback.print_exc()
+        oops()
         return
     done()
 
@@ -3842,7 +3842,7 @@ def _paused(col, did):
         from . import ahead_flow
         got = ahead_flow.paused(col, did)
     except Exception:
-        traceback.print_exc()
+        oops()
         return None
     return got[0] if got else None
 
@@ -3882,7 +3882,7 @@ def apply_catch():
             deck["newLimitToday"] = want
             col.decks.save(deck)
         except Exception:
-            traceback.print_exc()
+            oops()
 
 
 def catch_menu(pid):
@@ -3942,7 +3942,7 @@ def stop_catch(pid):
             deck.pop("newLimitToday", None)
             mw.col.decks.save(deck)
         except Exception:
-            traceback.print_exc()
+            oops()
     _after_change()
     app.swap(cfg())
 
@@ -4055,7 +4055,7 @@ def study(pid):
         mw.col.decks.select(int(st["deck_id"]))
         mw.moveToState("review")
     except Exception:
-        traceback.print_exc()
+        oops()
 
 
 def set_catch(pid, mode):
@@ -4208,7 +4208,7 @@ def _run_on(pid, did):
         try:
             _lesson_drop(mw.col, st)  # Today's lesson, B: the old deck's cards go home; the new deck's get decks
         except Exception:
-            traceback.print_exc()
+            oops()
     if st:
         st.update(deck_id=did, swap=list(swap) if swap else None)
     else:
@@ -4297,7 +4297,7 @@ def _stop(pid, untag):
                 if _lesson_drop(mw.col, state.get(pid)):  # Today's lesson, B: its decks go with it
                     _after_change()
             except Exception:
-                traceback.print_exc()
+                oops()
         if untag:
             _drop_plan_tags(state.get(pid), p.get("name"))
         state.pop(pid, None)
@@ -4386,7 +4386,7 @@ def browse_leeches(pid, uid):
     try:
         cids = {c for c in idx.match(u, _swap(st), doc) if c in idx.leech and idx.cards[c][0] == -1}
     except Exception:
-        traceback.print_exc()
+        oops()
         return
     _browse(cids, empty="No leeches in it now.")
 
@@ -4537,7 +4537,7 @@ def _put_away(plan_list, today):
     try:
         away = _away(mw.col, plan_list, state, today)
     except Exception:
-        traceback.print_exc()
+        oops()
         return {}
     for pid, info in away.items():
         ask_later(state[pid], info["units"], today)
@@ -4567,7 +4567,7 @@ def welcome_back(pids, ask=None):
         try:
             _welcome_one(pid, ask)
         except Exception:
-            traceback.print_exc()
+            oops()
 
 
 def _welcome_one(pid, ask=None):
@@ -4663,7 +4663,7 @@ def on_followed(plan, deck_id, swap, late, hold=False, lesson=None):
         try:
             _lesson_drop(mw.col, st)  # Today's lesson, B: on another deck now, the old one's cards go home
         except Exception:
-            traceback.print_exc()
+            oops()
     if st:
         st.update(deck_id=int(deck_id), swap=list(swap) if swap else None)
     else:
@@ -4681,7 +4681,7 @@ def on_followed(plan, deck_id, swap, late, hold=False, lesson=None):
                     if _lesson_drop(mw.col, st):  # back to A: its decks go
                         _after_change()
                 except Exception:
-                    traceback.print_exc()
+                    oops()
     kind, _, rest = str(late).partition(":")
     if hold and mw.col:
         state[plan["id"]]["hold_yes"] = True  # 3.8.1: my yes, kept (hold_new holds what authors add later)
@@ -4885,7 +4885,7 @@ def open_tag(parent, tag):
     try:
         cids = mw.col.find_cards(P.tag_search(tag) + '"')
     except Exception:
-        traceback.print_exc()
+        oops()
         return
     title, where = _tag_words(tag)
     _open_sheet(parent, cids, title, where)
@@ -4897,7 +4897,7 @@ def open_these(browser):
     try:
         cids = browser.selected_cards() if hasattr(browser, "selected_cards") else browser.selectedCards()
     except Exception:
-        traceback.print_exc()
+        oops()
         return
     if not cids:
         tooltip("Select some cards first.")
@@ -4929,7 +4929,7 @@ def _open_sheet(parent, cids, title, where):
     try:
         plans = _on_plans(cids) if counts["open"] else []
     except Exception:
-        traceback.print_exc()
+        oops()
         plans = []
     from .ui.open_dialog import OpenDialog
     OpenDialog(parent, title, where, counts, plans,
@@ -4950,7 +4950,7 @@ def open_cards_now(cids, name, first=True, study=False):
     try:
         _claim_opened(shut if n else ())
     except Exception:
-        traceback.print_exc()
+        oops()
     if n and not study:  # B: the lessons they're on, in decks of their own, in this undo step (Study makes its own)
         lesson_sync(followed(), fold=label)
     refresh_progress()
@@ -5017,7 +5017,7 @@ def show_on_plan(browser):
         try:
             us = P.dates_with(idx, doc, cids, _swap(st))
         except Exception:
-            traceback.print_exc()
+            oops()
             continue
         if not us:
             continue
@@ -5069,7 +5069,7 @@ def export_selected(browser):
     try:
         nids = browser.selected_notes() if hasattr(browser, "selected_notes") else browser.selectedNotes()
     except Exception:
-        traceback.print_exc()
+        oops()
         return
     if not nids:
         tooltip("Select some notes first.")
@@ -5101,7 +5101,7 @@ def copy_selector(browser):
             picked = browser.selected_cards() if hasattr(browser, "selected_cards") else browser.selectedCards()
             text, n = P.selector(mw.col, cids=picked)
     except Exception:
-        traceback.print_exc()
+        oops()
         return
     if not n:
         tooltip("Select some notes or cards first.")
@@ -5121,7 +5121,7 @@ def tag_for_plan(browser):
     try:
         nids = browser.selected_notes() if hasattr(browser, "selected_notes") else browser.selectedNotes()
     except Exception:
-        traceback.print_exc()
+        oops()
         return
     nids = [int(n) for n in nids or []]
     if not nids:
@@ -5205,7 +5205,7 @@ def note_for_card(browser):
     try:
         cids = browser.selected_cards() if hasattr(browser, "selected_cards") else browser.selectedCards()
     except Exception:
-        traceback.print_exc()
+        oops()
         return
     refs = P.card_refs(mw.col, cids) if len(cids or []) == 1 else []
     if not refs:

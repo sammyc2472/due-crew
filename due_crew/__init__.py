@@ -20,7 +20,6 @@ import re
 import sys
 import threading
 import time
-import traceback
 
 from aqt import gui_hooks, mw
 from aqt.deckbrowser import DeckBrowser
@@ -47,10 +46,11 @@ from .stats import heatmap as cached_heatmap
 from .stats.decks import gather_shared_decks
 from .stats.queries import StatsQueries
 from .ui import copy_text
-from . import account, ahead_flow, bingo_flow, due_flow, gamenight_flow, magic_flow, plan_flow, rooms, sheets, together, two_buttons
+from . import account, ahead_flow, bingo_flow, due_flow, errs, errs_flow, gamenight_flow, magic_flow, plan_flow, rooms, sheets, together, two_buttons
 from . import cards as crew_cards
 from .wrap import (_arrivals, _deck_deltas, _exam_eve_info, _mute_knocker, _save_wrap, _update_returns,
                    _update_wrap, _wrap_data, _wrap_info)
+from .errs import oops
 
 _lock = threading.Lock()
 _fetching = False
@@ -184,7 +184,7 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
     except Exception:
         with _lock:
             _fetching = False
-        traceback.print_exc()
+        oops()
         return
     if not uploading and not fetch:
         with _lock:
@@ -223,7 +223,7 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
             print("due crew: refresh failed (network); keeping the cached board")
             mw.taskman.run_on_main(lambda: _current(gen) and _sync_failed())
         except Exception:
-            traceback.print_exc()  # cache stays untouched on failure
+            oops()  # cache stays untouched on failure
         finally:
             with _lock:
                 if _current(gen):  # else the next profile's refresh owns the flag
@@ -466,7 +466,7 @@ def _closet(do):
         from . import closet_flow
         do(closet_flow)
     except Exception:
-        traceback.print_exc()
+        oops()
 
 
 def _closet_day(cf, today, entries):
@@ -515,7 +515,7 @@ def _on_render(deck_browser, content):
             content.stats += _board_html(c)
             _push_if_stale()
     except Exception:
-        traceback.print_exc()
+        oops()
 
 
 def _bingo_view(c):
@@ -619,7 +619,7 @@ def _dance_view(c):
         from . import song_flow
         return song_flow.floor_view(_state["entries"], c)
     except Exception:
-        traceback.print_exc()
+        oops()
         return None
 
 
@@ -631,7 +631,7 @@ def _dance_seen():
             from . import song_flow
             song_flow.mark_seen(view)
         except Exception:
-            traceback.print_exc()
+            oops()
 
 
 def _you(c, due, plans):
@@ -657,7 +657,7 @@ def _you(c, due, plans):
         elif shown == "party" and mw.col:
             you["party"] = gamenight_flow.tab_view(c)
     except Exception:
-        traceback.print_exc()
+        oops()
     return you
 
 
@@ -681,7 +681,7 @@ def _arrive_js():
     try:
         new = _arrivals(_state.get("entries"), client().user_id)
     except Exception:
-        traceback.print_exc()
+        oops()
         return ""
     return "try{window.dcMotion&&dcMotion.arrive(%s);}catch(e){}" % board._json.dumps(new) if new else ""
 
@@ -740,7 +740,7 @@ def _magic_howto():
         if not _closing and app.board_up():
             magic_flow.show_board_howto()
     except Exception:
-        traceback.print_exc()
+        oops()
 
 
 def _last_studied(q, stats):
@@ -751,7 +751,7 @@ def _last_studied(q, stats):
     try:
         studied = [lb for lb, t in q.daily_totals(7).items() if t and t[0]]
     except Exception:
-        traceback.print_exc()
+        oops()
         return None
     return max(studied) if studied else None
 
@@ -784,26 +784,26 @@ def _on_sync_done(full=False, light=False, fetch=None):
             stats.streak = held_streak(stats.streak, client().sent_days(),
                                        StatsQueries(mw.col).day_label(0))
     except Exception:
-        traceback.print_exc()
+        oops()
     if not light:
         try:
             week = gather_week(mw.col, _profile_files())
         except Exception:
-            traceback.print_exc()
+            oops()
         try:
             # an install that has never had a deck list (and couldn't pull
             # one) doesn't upload an empty one over the account's
             if c.get("shared_decks") or c.get("shared_decks_set"):
                 decks = gather_shared_decks(mw.col, c)
         except Exception:
-            traceback.print_exc()
+            oops()
         try:
             heat = (cached_heatmap(StatsQueries(mw.col), _profile_files(), HEATMAP_DAYS)
                     if c.get("share_heatmap", True) else "off")
             if isinstance(heat, dict) and c.get("show_up"):
                 heat = {lb: 1 for lb, n in heat.items() if n}  # just show up: which days, no counts
         except Exception:
-            traceback.print_exc()
+            oops()
     row = None
     if stats is not None:
         row = {"name": client().display_name or "Me"}
@@ -823,7 +823,7 @@ def _on_sync_done(full=False, light=False, fetch=None):
         try:
             row["week"] = week_days(StatsQueries(mw.col))
         except Exception:
-            traceback.print_exc()
+            oops()
         emoji = clean_emoji(c.get("emoji"))
         if emoji:
             row["emoji"] = emoji
@@ -834,19 +834,25 @@ def _on_sync_done(full=False, light=False, fetch=None):
     try:
         plan_prog = plan_flow.for_sync()
     except Exception:
-        traceback.print_exc()
+        oops()
     extras = None
     try:
         extras = crew_cards.for_sync(c, light=light)  # 3.2: cards I know and I'm stuck on, my log
     except Exception:
-        traceback.print_exc()
+        oops()
     try:
         from . import team_flow
         team = team_flow.for_sync(c)  # 3.7.3: showed up today, and my squares, per plan team
         if team:
             extras = dict(extras or {}, team=team)
     except Exception:
-        traceback.print_exc()
+        oops()
+    try:
+        sending = errs_flow.for_sync(c)  # 3.9.9: the days that are over, what went wrong, by code (Privacy's switch)
+        if sending:
+            extras = dict(extras or {}, **sending)
+    except Exception:
+        oops()
     _pushed = _push_key() if stats is not None else None
     refresh_board(upload_stats=stats, backfill=week, shared_decks=decks,
                   heatmap=heat, squad_row=row, full=full, fetch=fetch, plans=plan_prog, extras=extras)
@@ -926,7 +932,7 @@ def _on_js(handled, message, context):
             parts = message.split(":")
             crew_cards.on_message(parts[1], parts, from_card_page=card_page)
         except Exception:
-            traceback.print_exc()
+            oops()
         return (True, None)
     if message.startswith("duecrew:room"):
         # 2.12: study rooms answer from the top bar and the review screen too
@@ -934,7 +940,7 @@ def _on_js(handled, message, context):
         try:
             done = rooms.on_message(parts[1], parts)
         except Exception:
-            traceback.print_exc()
+            oops()
             done = True
         if done:
             return (True, None)
@@ -945,6 +951,9 @@ def _on_js(handled, message, context):
     run = _board_cmd(cmd, parts)
     if run is None:
         print(f"due crew: unknown command {message!r}")
+        # 3.9.9: for Sam, a name of the table's with values that didn't pass, or cmd:unknown (a
+        # name it hasn't can come from a card's script: never said)
+        errs.count(errs.cmd_code(cmd, BOARD_CMDS))
     else:
         run(cfg(), parts)
     return (True, None)
@@ -1134,6 +1143,7 @@ BOARD_CMDS = {
     "addcode": (0, None, _cmd_addcode),
     "crewmenu": (0, None, lambda c, p: _crew_menu(c)),  # 3.4 review, H5
     "privacypage": (0, None, _cmd_privacy),
+    "errsee": (0, None, lambda c, p: errs_flow.see_what_went()),  # 3.9.9: Privacy's See what went
     "sharemenu": (0, None, lambda c, p: _share_menu(c)),  # 3.7.1, H3
     "decks": (0, None, lambda c, p: open_decks()),
     "setup": (0, None, lambda c, p: open_auth()),
@@ -1221,7 +1231,7 @@ def _joy_show():
     try:
         plan_flow.joy_show()
     except Exception:
-        traceback.print_exc()
+        oops()
 
 
 def open_auth():
@@ -1383,7 +1393,7 @@ def _on_decks_saved(changed):
     try:
         decks = gather_shared_decks(mw.col, c)
     except Exception:
-        traceback.print_exc()
+        oops()
         decks = None
     refresh_board(shared_decks=decks)
 
@@ -1419,7 +1429,7 @@ def open_wrapped(year=None):
     try:
         v = wrapped_flow.view(year)
     except Exception:
-        traceback.print_exc()
+        oops()
         tooltip("Couldn't read your year just now.")
         return
     _state["wrapped_open"] = {"year": v["year"], "view": v}
@@ -1444,7 +1454,7 @@ def _wrapped_banner(c):
     try:
         return wrapped_flow.banner(_state["labels"][0] if _state["labels"] else "", c)
     except Exception:
-        traceback.print_exc()
+        oops()
         return None
 
 
@@ -1680,6 +1690,8 @@ def _apply_settings(changed, focus=None):
         rooms.refresh_widgets()
     if "shortcuts" in changed or "magic_search" in changed:
         _apply_keys()
+    if "send_errs" in changed:
+        errs_flow.switched(changed["send_errs"])  # 3.9.9: off, what's kept goes too
     if leeches:
         due_flow.recover_now()  # 3.8.0: now, and said, not at the next refresh
     if push:
@@ -1817,6 +1829,10 @@ def _on_profile_open():
     _last_attempt = 0.0
     _pushed = None
     client()                  # rebind to this profile's session
+    try:
+        errs_flow.open_profile()  # 3.9.9: this profile's counts for Sam
+    except Exception:
+        oops()
     _closet(lambda cf: cf.hook())  # 3.8.2: cards I add count for Pip's closet
     if client().signed_in:
         account.ensure()      # 2.13: my settings, before anything uploads
@@ -1934,7 +1950,7 @@ def _apply_keys():
         if magic is not None:  # 3.9.7: its key goes with the rest, and with Magic search off
             magic.setShortcut(QKeySequence(MAGIC_KEY if on and magic_flow.on() else ""))
     except Exception:
-        traceback.print_exc()
+        oops()
 
 
 def _toggle_board():
@@ -1996,15 +2012,19 @@ def _on_profile_close():
     try:
         rooms.on_close()  # 2.12: closing Anki leaves the room
     except Exception:
-        traceback.print_exc()
+        oops()
     try:
         app.ai_app(on=False)  # Your AI app's local server goes with the profile
     except Exception:
-        traceback.print_exc()
+        oops()
     try:
         magic_flow.close()  # 3.9.7: Magic search reads this profile's collection
     except Exception:
-        traceback.print_exc()
+        oops()
+    try:
+        errs_flow.close_profile()  # 3.9.9: its counts on disk
+    except Exception:
+        oops()
 
 
 gui_hooks.deck_browser_will_render_content.append(_on_render)

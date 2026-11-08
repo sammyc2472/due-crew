@@ -2,7 +2,6 @@
 my week, the crew's week. Text comes from share.py; this module gathers."""
 
 import datetime
-import traceback
 
 from aqt import mw
 from aqt.utils import tooltip
@@ -14,6 +13,7 @@ from .stats import gather_stats, period_review
 from .stats.queries import StatsQueries
 from .ui import copy_text
 from .wrap import _wrap_data
+from .errs import oops
 
 def _share(kind):
     """Main thread (collection access + clipboard). Builds one of the
@@ -25,7 +25,7 @@ def _share(kind):
     try:
         stats = gather_stats(mw.col, _profile_files())
     except Exception:
-        traceback.print_exc()
+        oops()
         return
     labels = list(_state["labels"]) or [q.day_label(i) for i in range(7)]
     if kind == "sharetoday":
@@ -267,7 +267,7 @@ def picture(kind, year=None):
         days = _log_days(q)
         today = q.day_label(0)
     except Exception:
-        traceback.print_exc()
+        oops()
         return
     c = cfg()
     if kind in ("picturetoday", "pictureweek"):
@@ -276,7 +276,7 @@ def picture(kind, year=None):
             stats = gather_stats(mw.col, _profile_files())
             fresh = q.new_cards_by_day(7)
         except Exception:
-            traceback.print_exc()
+            oops()
             return
         span = [today] if one else list(reversed(board.week_labels(list(_state["labels"]) or [q.day_label(i) for i in range(7)])))
         from .rooms import sev_on  # 3.8.1: Pip hops across it, as Settings › Pip says

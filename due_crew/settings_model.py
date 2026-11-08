@@ -16,7 +16,8 @@ SWITCHES = ("show_leaderboard", "show_stale", "sync_notifications", "compact",
             "shortcuts",  # 3.8.0: Ctrl+Shift+S and Ctrl+Shift+Q
             "fifteen", "sev",  # 3.8.1: ▶ Fifteen? and the nudge; Pip
             "two_buttons",  # 3.9.1: Again and Good alone (not the board's look: Reset board leaves it)
-            "magic_search")  # 3.9.7: Magic search in the You box's head, and its key
+            "magic_search",  # 3.9.7: Magic search in the You box's head, and its key
+            "send_errs")  # 3.9.9: Privacy's Send Sam what went wrong (errs.py; never Reset board's)
 CHOICES = {"theme": ("auto", "light", "dark"),
            "accent": ("green", "blue", "purple", "teal", "amber", "rose"),
            "room_chip_side": ("left", "right"),

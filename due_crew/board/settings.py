@@ -6,6 +6,7 @@ import html as _html
 import json as _json
 import re as _re
 
+from ..errs import wanted as _sends_errs
 from ..logo import board_mark
 from .. import sev as _sev
 
@@ -302,6 +303,12 @@ def _settings_privacy(cfg):
             + '</div><div class="st-h">Dates your crew sees</div><div class="st-box">'
             + _st_row("&#128214; Exam", exam_ctl, "Shown for the two weeks before")
             + _st_row("&#9992;&#65039; Away", away_ctl)
+            # 3.9.9, Know when it breaks: the errors this computer met, by code, with the day's first sync
+            + '</div><div class="st-h">What Sam sees</div><div class="st-box">'
+            + _st_row("Send Sam what went wrong",
+                      f'<a class="st-lk" href="#" {_st_click("errsee")}>See what went</a>'
+                      + _st_switch("send_errs", _sends_errs(cfg), "Send Sam what went wrong"),
+                      "Error codes and counts. Never your cards, plans or crew.")
             + '</div><div class="st-foot"><span>Turning a number off also takes it off this week.</span>'
             # 3.7.1, D3: the page that says what's kept, for how long, and how it goes
             f'<a class="st-lk" href="#" {_st_click("privacypage")}>What Due Crew keeps &rsaquo;</a></div>')
@@ -330,6 +337,9 @@ FIND_WORDS = {
     # 3.9.6: study soundtrack (song of the moment in code)
     "dance": "music song songs soundtrack dj party floor dancing pip motion animation corner",
     "songapp": "music app listen spotify apple youtube song",
+    # 3.9.9: Know when it breaks
+    "set:send_errs:": "errors error bugs bug crash broken report reports diagnostics problems wrong",
+    "errsee": "errors error bugs report diagnostics what goes sent",
 }
 
 
@@ -380,7 +390,8 @@ def settings_index(view, cfg):
             rows = list(_re.finditer(r'<div class="st-row"><span class="st-l"><span>(.*?)</span>(?:<small>(.*?)</small>)?', sec))
             for j, m in enumerate(rows):
                 end = rows[j + 1].start() if j + 1 < len(rows) else len(sec)
-                f = _re.search(r'data-f="([^"]+)"', sec[m.end():end])
+                # a row's switch, when it has one (3.9.9: Send Sam what went wrong's comes after See what went)
+                f = _re.search(r'data-f="(set:[^"]+)"', sec[m.end():end]) or _re.search(r'data-f="([^"]+)"', sec[m.end():end])
                 sub = H.unescape(m.group(2) or "") if tab != "you" else ""  # the You tab's lines name people and squads
                 if f:
                     add(tab, f.group(1), m.group(1), where, sub)
