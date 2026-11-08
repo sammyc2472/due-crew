@@ -98,6 +98,14 @@ POP_JS = r"""
                 back.removeAttribute('id');  // the bars' shade goes with it (VEIL_WATCH_JS); its look stays, by data-pop
                 // what opened it gets the key back (3.9.2's QoL pass)
                 if (was && was.isConnected && was.focus) { try { was.focus(); } catch (x) { /* gone with a redraw */ } }
+                // 3.9.9 (the robot click-test): a crewmate's 🎉 pill shows only while its name cell has the pointer
+                // or the key, so with the window up it's hidden and can't take the key back. Its cell's first
+                // shown control takes it (the pill shows again, :focus-within), then the pill itself
+                if (was && was.isConnected && document.activeElement !== was && was.closest) {
+                    var cell = was.closest('td, li'), near = cell && [].slice.call(cell.querySelectorAll('a[href], button'))
+                        .filter(function (x) { return x !== was && x.offsetParent !== null && x.tabIndex >= 0; })[0];
+                    if (near) { try { near.focus(); was.focus(); } catch (x) { /* gone with a redraw */ } }
+                }
                 // moved: the motion layer opened it and takes it out its own way, back into what was clicked
                 if (moved || still() || !back.animate) { back.remove(); return; }
                 back.style.pointerEvents = 'none';

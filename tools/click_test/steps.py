@@ -347,8 +347,10 @@ class Run:
         self.windows.append(rec)
         self.check(f"windows: Esc closes {label}", gone, how)
         if opener is not None:
+            # 3.9.9: a failure, not a warning, once the Cheer window's key came back (its 🎉 pill hides
+            # while the window's up; board/windows.py's close finds it again)
             self.check(f"windows: the key goes back to what opened {label}", rec["focus_back"],
-                       f"focus on {focus!r}, opened by {opener!r}", warn=True)
+                       f"focus on {focus!r}, opened by {opener!r}")
 
     def open_pop(self, cmd, want, label):
         """Press a board control that opens a window over the board; returns its id."""

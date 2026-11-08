@@ -127,7 +127,7 @@ def summary(d):
     if d["windows"]:
         L.append("Windows over the board:")
         for w in d["windows"]:
-            L.append(f"  {'ok ' if w['esc_closes'] and w['focus_back'] else 'BAD' if not w['esc_closes'] else 'warn'} "
+            L.append(f"  {'ok ' if w['esc_closes'] and w['focus_back'] else 'BAD'} "
                      f"{w['window']:<34} "
                      f"Esc closes: {w['esc_closes']} ({w['how']}); key back: {w['focus_back']}")
         L.append("")

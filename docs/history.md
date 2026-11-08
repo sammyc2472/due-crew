@@ -4861,3 +4861,25 @@ every release that changes how something works.
   default: `errs.SEND_DEFAULT`, one line to flip) and See what went, the
   sheet of what the next sync sends; the privacy page says so. A sync is
   still one request.
+- 3.9.9, a robot click-test (Off the Board, 2, Sam's pick): `tools/click_test.py`
+  runs real Anki 25.02.7 offscreen with the add-on from `due_crew/`, a
+  collection it makes itself and a crew of four on the suite's fake server,
+  and goes through the add-on the way the click-test does: 14 views, the
+  windows over the board (Esc, the key back), every control it can see
+  pressed through a real click (about 200, a short skip list with reasons:
+  links out, the real network, sign-out), New plan › Start empty through
+  Review and send › Send with a follower, a deck's first card (about 0.2 s
+  of 3) and five answers, the bars' Fifteen, and a minute at rest on the
+  Decks screen (0.1 to 0.2% of a core, 5% the line). A press that reaches
+  nothing of the add-on's, anything raised, a slow first card, CPU at rest
+  over the line, or a window that doesn't give the key back fails the run;
+  a report and pictures go up as the `click-test` artifact. A CI job on
+  every push (`click test (real Anki)`), and the tag's deploy waits for it.
+  It fails with 8d18571's Send reverted, with a board command taken out of
+  `BOARD_CMDS`, and with Pip's loops left on forever. It found: the Cheer
+  window opened from a crewmate's 🎉 pill couldn't give the key back (the
+  pill shows only while its cell has the pointer or the key); the overlay's
+  close now finds the cell's first shown control, then the pill
+  (`board.POP_JS`). And one of Anki's own: Study Now pressed before the
+  overview's bottom bar has loaded can leave no Show Answer button; the
+  robot waits for Anki's pages.
