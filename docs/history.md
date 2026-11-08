@@ -4837,3 +4837,27 @@ every release that changes how something works.
   twin (a page offline isn't open). A status page is Sam's to set up
   outside our servers (an uptime monitor's public page at
   status.duecrew.com), so it can say when they're down.
+- 3.9.9, know when it breaks (Off the Board, 1, Sam's pick): both of 3.9.8's
+  plan bugs and the good-luck card were found because Sam hit them. Each
+  install counts its own failures by code, never content (`errs.py`, kept
+  in `user_files/<profile>/errs.json` by Anki day, 50 codes and 9,999 a
+  count at most): `save:<error>` (a refused plan save, its code from
+  planner/remote's word tables, else `save:other`); `py:<module>:<function>:
+  <type>` (every caught exception, the deepest frame in the add-on and the
+  exception's type, never its message: the 188 `traceback.print_exc()`
+  calls are `oops()` now, printing as before); `cmd:<name>:bad` and
+  `cmd:unknown` (a board command the table refused; a card page's never
+  counted, an unknown name never sent); `req:<route>:<status>` (a request
+  that failed, by the route's template from `errs.ROUTES`, checked against
+  the Worker's index both ways; some 4xx are normal traffic). Finished days
+  ride the day's first sync once (`"errs": {"days": …, "v": …}`), only after
+  `/board` has said `"errs": true`, so an older Worker never sees them (if
+  one refuses, the sync goes again without and the flag clears); a lost
+  reply counts them sent, one that never got out keeps them. The Worker
+  keeps totals only, `field_errs(day, version, code, n, people)` with no uid
+  (migration 0030: the starters' 0030 never shipped), 30 days, and the
+  Inbox opens with In the field, yesterday (`GET /admin/field`). Settings ›
+  Privacy › Send Sam what went wrong (account key `send_errs`, on by
+  default: `errs.SEND_DEFAULT`, one line to flip) and See what went, the
+  sheet of what the next sync sends; the privacy page says so. A sync is
+  still one request.
