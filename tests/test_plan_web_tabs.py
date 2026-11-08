@@ -42,6 +42,7 @@ from due_crew.planner.webface import WebFace        # noqa: E402
 from due_crew.planner.webpage import colors, page_html  # noqa: E402
 
 CHECKS = []
+DEAD_SHEETS = []  # a sheet drawn with a yes and nothing for it to send, or a cmd with no handler (test_plan_web.py's, here too)
 TODAY = datetime.date.today()
 MON = TODAY - datetime.timedelta(days=TODAY.weekday())
 R = "#Big_Step_1::#Path_Book"
@@ -252,6 +253,12 @@ class Face(WebFace):
 
     def eval_js(self, js):
         self.js.append(js)
+        if js.startswith("dcPlan.sheet("):
+            sh = json.loads(js[len("dcPlan.sheet("):-1])
+            name = (sh.get("args") or {}).get("name") if sh.get("cmd") == "tabcmd" else None
+            if (sh.get("yes") is not None and not sh.get("cmd")) or (sh.get("cmd") and not hasattr(WebFace, "c_" + str(sh["cmd"]))) \
+                    or (sh.get("cmd") == "tabcmd" and not callable(getattr(WT, "c_" + str(name), None))):
+                DEAD_SHEETS.append(sh.get("title"))  # pressed, its yes would send nothing, or nothing would take it (page/plan.js submit)
 
     def close(self):
         self.closed = True
@@ -947,6 +954,7 @@ def test_the_page_draws_and_every_click_has_its_handler():
 def main():
     for n in [n for n in list(globals()) if n.startswith("test_")]:
         globals()[n]()
+    check("tabs: every sheet with a yes sends a cmd a handler takes when it's pressed", not DEAD_SHEETS, DEAD_SHEETS)
     bad = [c for c in CHECKS if not c[1]]
     print(f"\n{len(CHECKS) - len(bad)}/{len(CHECKS)} checks passed")
     sys.exit(1 if bad else 0)

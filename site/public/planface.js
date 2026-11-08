@@ -1617,7 +1617,9 @@ const PlanFace = (() => {
       if (from === undefined) {
         const was = r ? [unit(r.from), unit(r.to)] : [before[Math.max(0, before.length - 5)], before[before.length - 1]];
         sheet({ title: `Review day · ${fmt(day)}`, words: `It reviews the sets that opened from one day to another, ${fmt(before[0].opens)} at the earliest. Empty takes the review day off.`,
-          fields: [{ name: "from", label: "From the set on", type: "date", value: (was[0] || before[0]).opens }, { name: "to", label: "To the set on", type: "date", value: (was[1] || before[before.length - 1]).opens }],
+          // optional: the page's calendar has Clear on them, as "Empty takes the review day off" says (without it neither could be emptied)
+          fields: [{ name: "from", label: "From the set on", type: "date", optional: true, value: (was[0] || before[0]).opens },
+            { name: "to", label: "To the set on", type: "date", optional: true, value: (was[1] || before[before.length - 1]).opens }],
           yes: r ? "Change it" : "Make it a review day", cmd: "review_day", args: { day } });
         return;
       }

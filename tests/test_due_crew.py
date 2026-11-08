@@ -105,6 +105,26 @@ def showed_days(entry, labels):
 from due_crew.stats import gather_week                        # noqa: E402
 
 CHECKS = []
+BOARD_DREW = {}  # every duecrew: command the board drew a control for (board._pycmd), across the suite: routed at the end
+
+
+def _record_board_commands():
+    """Each command as the page sends it (what _pycmd keeps of it), with the
+    part of the board that drew it; check_every_board_click_is_taken sends
+    them down the board's own route."""
+    import inspect
+    real = board._pycmd
+
+    def seen(cmd):
+        out = real(cmd)
+        at = inspect.currentframe().f_back
+        if os.sep + os.path.join("due_crew", "board") + os.sep in at.f_code.co_filename:  # the board's own, not a test's own call
+            BOARD_DREW.setdefault(out[len("pycmd('"):].split("|")[0], f"{os.path.basename(at.f_code.co_filename)}:{at.f_code.co_name}")
+        return out
+    board._pycmd = seen  # each part of the board that has it (board._Board)
+
+
+_record_board_commands()
 
 
 KK = board.BOARD_KEY  # 3.9.1: what the Decks page's own commands carry
@@ -3093,6 +3113,204 @@ def test_every_board_command_has_a_handler():
           and dc._board_cmd("fridgemove", ["duecrew", "fridgemove", "a", "l", "-12", "40"]) is not None
           and dc._board_cmd("noticex", ["duecrew", "noticex", "7a"]) is None
           and dc._board_cmd("planopen", ["duecrew", "planopen"]) is not None)
+
+
+def _takes(mod, fn, *args):
+    """A family's chain (fn) with its module's own steps stood in for, so
+    nothing runs but the choice: True when it took the command (said True)."""
+    from unittest import mock
+    saved = {k: v for k, v in vars(mod).items() if not k.startswith("__") and v is not fn and callable(v)
+             and not isinstance(v, type) and str(getattr(v, "__module__", "") or "").startswith(("due_crew", "aqt"))}
+    for k in saved:
+        setattr(mod, k, lambda *a, **kw: mock.MagicMock())
+    if "mw" in vars(mod):  # Anki with a collection open (the fake's has none)
+        saved["mw"] = mod.mw
+        mod.mw = mock.MagicMock()
+    try:
+        return fn(*args) is True
+    except Exception:  # noqa: BLE001 (a branch it took, on the stand-ins)
+        return True
+    finally:
+        for k, v in saved.items():
+            setattr(mod, k, v)
+
+
+def check_every_board_click_is_taken():
+    """Run after every test (main): each command the board drew a control
+    for anywhere in the suite (BOARD_DREW, as _pycmd leaves it), sent down
+    the board's own route: _on_js's room and knows families, BOARD_CMDS'
+    count and check, and a family's own chain (plan_flow, team_flow,
+    due_flow, song_flow, leech_flow, habits_flow, the closet's, Wrapped's,
+    Settings' and Pip Party's). A name having a handler isn't enough: a
+    plan family's chain that falls through, or values its check refuses,
+    is a control that does nothing (Sam, 7 Nov, in the plan windows: two
+    yeses that sent nothing, each with a test that never pressed it).
+    A family's own steps are stood in for, so nothing runs but the choice."""
+    import due_crew as dc
+    from due_crew import (closet, gamenight_flow, habits_flow, leech_flow, plan_flow, team_flow, due_flow, song_flow, rooms,
+                          settings_model, cards as crew_cards)
+    takes = _takes
+    party_src = open(gamenight_flow.__file__, encoding="utf-8").read()  # party:<what>: the names its chain reads
+    party = set(re.findall(r'what == "([a-z]+)"', party_src)) | {
+        w for g in re.findall(r'what in \(([^)]*)\)', party_src) for w in re.findall(r'"([a-z]+)"', g)}
+
+    def taken(msg):
+        p = msg.split(":")
+        cmd, arg = p[1], p[2] if len(p) > 2 else ""
+        if cmd.startswith("room"):
+            return takes(rooms, rooms.on_message, cmd, p)
+        if cmd.startswith("knows"):
+            return takes(crew_cards, crew_cards.on_message, cmd, p)
+        if dc._board_cmd(cmd, p) is None:
+            return False
+        if cmd.startswith("planteam"):
+            return takes(team_flow, team_flow.on_message, cmd, p)
+        if cmd.startswith("plan"):
+            return takes(plan_flow, plan_flow.on_message, cmd, p)
+        if cmd.startswith("due"):
+            return takes(due_flow, due_flow.on_message, cmd, p)
+        if cmd.startswith("ins") or cmd == "youins":
+            x = p[3] if len(p) > 3 else ""
+            if not arg.isdigit():
+                return False  # team_flow says True to a deck that isn't a number, and does nothing
+            if cmd == "insleech":
+                return takes(leech_flow, leech_flow.on_message, int(arg), x, p[4] if len(p) > 4 else "")
+            if cmd == "inshabits":
+                return takes(habits_flow, habits_flow.on_message, x)
+            return takes(team_flow, team_flow.on_message, cmd, p)
+        if cmd.startswith(("song", "dance")):
+            return takes(song_flow, song_flow.on_message, cmd, p)
+        if cmd.startswith("closet"):
+            return cmd in ("closet", "closetnew", "closethw", "closetclose", "closetoff") or (cmd == "closetwear" and arg in closet.BY) \
+                or (cmd == "closettab" and arg.isdigit() and int(arg) < len(board.CLOSET_TABS))
+        if cmd.startswith("wrapped"):
+            return cmd in ("wrappedopen", "wrappedyear", "wrappedcard", "wrappedclose") or (arg.isdigit() and len(arg) == 4)
+        if cmd == "settab":
+            return arg in settings_model.TABS
+        if cmd in ("setclose", "setname", "setemoji", "setstatus", "setsquads", "setsignin", "setsignout", "setdelete", "setfeedback"):
+            return True
+        if cmd in dc.SETTINGS_CMDS:
+            return bool(settings_model.change([cmd] + p[2:], {}))
+        if cmd == "party":
+            return arg in party
+        return True  # a line of BOARD_CMDS: its count and check passed
+    drew = dict(BOARD_DREW)  # as the suite left it (a route taken may draw the board again)
+    lost = sorted((m, where) for m, where in drew.items() if not taken(m))
+    check(f"commands: every click the board drew in this suite ({len(drew)} commands) is taken by its route: its family's chain, "
+          "BOARD_CMDS' count and check; none falls through or is refused", len(drew) > 300 and not lost, lost[:8])
+
+
+def test_every_widget_press_is_taken():
+    """The bars' widgets (room_widget.js), run in node and pressed: every
+    one, in each state it has (a crew room before, in a round and in its
+    break; a fifteen in its round, at its question, in its break; ▶
+    Fifteen? and the Fifteen at 35), every onclick and Enter it sets
+    called, and whatever it sends on its own. Each message goes through
+    _on_js's own gate (room_model.trusted) as the page it's on sends it:
+    the margin, the break, the question and the room's card sit on the
+    review screen, where a card's script runs and only CARD_PAGE_CMDS
+    count; then rooms.on_message must take it. A button the gate drops
+    would do nothing (3.8.1: ▶ Fifteen? clicked to nothing the same way)."""
+    import shutil
+    import subprocess
+    from due_crew import room_model as rm, rooms
+    node = shutil.which("node")
+    if not node:
+        print("SKIP the widgets pressed: no node")
+        return
+    now = datetime.datetime.now(datetime.timezone.utc)
+    acc = board.accent_pair("green")
+    ents = [{"user_id": "sam", "name": "Sammy", "you": True, "accent": "blue", "look": []},
+            {"user_id": "dre", "name": "Dre", "you": False, "accent": "teal", "look": []}]
+    before = rm.make_room("sam", now + datetime.timedelta(minutes=20))
+    going = rm.make_room("sam", now - datetime.timedelta(minutes=3))
+    resting = rm.make_room("sam", now - datetime.timedelta(minutes=27), 2, 25, 5)
+    fif = rm.make_fifteen("sam", now - datetime.timedelta(minutes=3))
+    asking = rm.make_fifteen("sam", now - datetime.timedelta(minutes=16))
+    fbreak = dict(rm.make_fifteen("sam", now - datetime.timedelta(minutes=17)), rounds=2)
+    review = ("gutter", "break", "ask", "card")  # on the review screen: a card's own page
+    cases = [(k, room) for k in ("chip", "bottom", "gutter", "card") for room in (before, going, fif)]
+    cases += [("break", resting), ("break", fbreak), ("ask", asking), ("start", None), ("start", "sit")]
+
+    def data(kind, room):
+        if kind == "start":
+            return rm.start_data(acc, "right", True, nap=False, sit=35 if room == "sit" else 0)
+        return rm.widget_data(room, [dict(e, room=room) for e in ents], acc, cards=12, total=40)
+    dom = r"""
+class Sty { constructor() { this.cssText = ''; } setProperty(k, v) { this[k] = v; } }
+class E {
+  constructor(tag) { this.tag = tag; this.kids = []; this.style = new Sty(); this.textContent = ''; this.title = ''; this.attrs = {};
+    this.classList = { add() {}, remove() {}, contains() { return false; }, toggle() {} }; }
+  appendChild(k) { this.kids.push(k); k.parentNode = this; return k; }
+  insertBefore(k) { return this.appendChild(k); }
+  set innerHTML(h) { this.html = h; this.kids = []; const m = /^<([a-z]+)/.exec(h); if (m) { this.kids.push(new E(m[1])); } }
+  get firstChild() { return this.kids[0] || null; }
+  get isConnected() { let p = this; while (p.parentNode) { p = p.parentNode; } return p === body; }
+  setAttribute(k, v) { this.attrs[k] = v; } getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; } removeAttribute(k) { delete this.attrs[k]; }
+  querySelectorAll() { return []; } querySelector() { return null; } addEventListener() {} removeEventListener() {}
+  remove() { if (this.parentNode) { this.parentNode.kids = this.parentNode.kids.filter((x) => x !== this); this.parentNode = null; } }
+  focus() {} blur() {} getBoundingClientRect() { return { left: 0, top: 0, width: 80, height: 26, right: 80, bottom: 26 }; }
+  animate() { return { finished: Promise.resolve(), cancel() {} }; }
+}
+let body;
+const walk = (e, out) => { out.push(e); e.kids.forEach((k) => walk(k, out)); return out; };
+const sent = [];
+function fresh() {
+  body = new E('body'); body.className = '';
+  globalThis.window = globalThis; window.addEventListener = () => {}; window.removeEventListener = () => {}; window.innerWidth = 1200; window.innerHeight = 800;
+  globalThis.document = { body, head: new E('head'), createElement: (t) => new E(t), createRange: () => ({ selectNodeContents() {}, getBoundingClientRect: () => ({ width: 10 }) }),
+    getElementById: (id) => walk(body, []).find((x) => x.id === id) || null, activeElement: null,
+    querySelector: () => null, querySelectorAll: () => [], addEventListener() {}, removeEventListener() {}, documentElement: new E("html") };
+  globalThis.setInterval = () => 0; globalThis.clearInterval = () => {}; globalThis.setTimeout = () => 0; globalThis.clearTimeout = () => {};
+  globalThis.matchMedia = () => ({ matches: false, addEventListener() {} }); globalThis.getComputedStyle = () => ({ getPropertyValue: () => '' });
+  globalThis.localStorage = { getItem: () => null, setItem() {} }; globalThis.requestAnimationFrame = () => 0;
+  globalThis.pycmd = (m) => sent.push(m);
+  for (const k of Object.keys(globalThis)) { if (/^dc/.test(k)) { delete globalThis[k]; } }
+  (0, eval)(PROG);
+}
+const ev = { stopPropagation() {}, preventDefault() {}, key: 'Enter', button: 0 };
+fresh();
+const drew = sent.splice(0);
+const n = walk(body, []).filter((e) => typeof e.onclick === 'function' || typeof e.onkeydown === 'function').length;
+const presses = [];
+for (let i = 0; i < n; i++) {
+  fresh(); sent.length = 0;
+  const el = walk(body, []).filter((e) => typeof e.onclick === 'function' || typeof e.onkeydown === 'function')[i];
+  try { if (typeof el.onclick === 'function') { el.onclick(ev); } else { el.onkeydown(ev); } presses.push([el.textContent || el.title || el.tag, sent.slice()]); }
+  catch (e) { presses.push([el.textContent || el.tag, ['error: ' + e.message]]); }
+}
+console.log(JSON.stringify({ drew, presses, n }));
+"""
+    got = []
+    for kind, room in cases:
+        prog = rm.widget_js(kind, data(kind, room))
+        run = subprocess.run([node, "-e", dom.replace("(0, eval)(PROG);", "(0, eval)(" + json.dumps(prog) + ");")],
+                             capture_output=True, text=True, timeout=60)
+        try:
+            got.append((kind, room, json.loads(run.stdout)))
+        except ValueError:
+            got.append((kind, room, {"error": run.stdout[-300:] + run.stderr[-1500:]}))
+    broke = [(k, o.get("error") or [p for p in o["presses"] if any(m.startswith("error") for m in p[1])]) for k, _r, o in got
+             if o.get("error") or any(m.startswith("error") for p in o["presses"] for m in p[1])]
+    check(f"widgets pressed: each of {len(cases)} drawn in node and every control in it pressed, without an error "
+          f"({sum(o.get('n', 0) for _k, _r, o in got)} controls)", not broke and all(o.get("n") for _k, _r, o in got), broke[:3])
+    dropped, missed, idle = [], [], []
+    for kind, _room, o in got:
+        for label, msgs in o.get("presses", []) + [("as it's drawn", o.get("drew", []))]:
+            if not msgs and label != "as it's drawn":
+                idle.append((kind, label))
+            for m in msgs:
+                body, ok = rm.trusted(m, kind in review)
+                if not ok:
+                    dropped.append((kind, label, m.split("|")[0]))
+                    continue
+                p = body.split(":")
+                if not _takes(rooms, rooms.on_message, p[1], p):
+                    missed.append((kind, label, body))
+    check("widgets pressed: every message a press sends gets through the gate of the page it's on "
+          "(the review screen's widgets send only CARD_PAGE_CMDS, keyed)", not dropped, dropped[:6])
+    check("widgets pressed: rooms.on_message takes every one", not missed, missed[:6])
+    check("widgets pressed: every control sends something", not idle, idle[:6])
 
 
 def test_take_back_an_ask():
@@ -20364,6 +20582,7 @@ def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:
         globals()[n]()
+    check_every_board_click_is_taken()  # last: every control the suite drew on the board, pressed down its route
     bad = [c for c in CHECKS if not c[1]]
     print(f"\n{len(CHECKS) - len(bad)}/{len(CHECKS)} checks passed")
     sys.exit(1 if bad else 0)

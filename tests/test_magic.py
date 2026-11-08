@@ -1037,6 +1037,167 @@ def test_qids_in_magic_search():
           and os.path.exists(os.path.join(REPO, "due_crew", "planner", "qids.py")))
 
 
+MAGIC_PRESS_JS = r"""
+const fs = require("fs"), vm = require("vm");
+const [JS, STATES] = process.argv.slice(1);
+const src = fs.readFileSync(JS, "utf8"), states = JSON.parse(fs.readFileSync(STATES, "utf8"));
+function El(tag) { this.tagName = String(tag).toUpperCase(); this.children = []; this.parent = null; this.attrs = {}; this.style = {}; this.className = "";
+  this._t = ""; this.ls = {}; this.value = ""; this.hidden = false; this.checked = false; this.scrollHeight = 20; }
+Object.defineProperty(El.prototype, "textContent", { get() { return this._t + this.children.map((c) => c.textContent || "").join(""); },
+  set(v) { this._t = String(v); this.children.forEach((c) => { c.parent = null; }); this.children = []; } });
+Object.defineProperty(El.prototype, "innerHTML", { set(v) { this._t = ""; this.children = []; }, get() { return ""; } });
+Object.defineProperty(El.prototype, "firstChild", { get() { return this.children[0] || null; } });
+Object.defineProperty(El.prototype, "parentNode", { get() { return this.parent; } });
+El.prototype.appendChild = function (c) { if (c.parent) { c.remove(); } c.parent = this; this.children.push(c); return c; };
+El.prototype.insertBefore = function (c) { return this.appendChild(c); };
+El.prototype.removeChild = function (c) { c.remove(); return c; };
+El.prototype.remove = function () { if (this.parent) { this.parent.children = this.parent.children.filter((x) => x !== this); this.parent = null; } };
+El.prototype.setAttribute = function (k, v) { this.attrs[k] = String(v); if (k === "disabled") { this.disabled = true; } };
+El.prototype.getAttribute = function (k) { return k in this.attrs ? this.attrs[k] : null; };
+El.prototype.removeAttribute = function (k) { delete this.attrs[k]; };
+El.prototype.addEventListener = function (t, f) { (this.ls[t] = this.ls[t] || []).push(f); };
+El.prototype.classList = null;
+function all(el) { const out = []; (function walk(n) { (n.children || []).forEach((c) => { if (c instanceof El) { out.push(c); walk(c); } }); })(el); return out; }
+El.prototype.querySelectorAll = function (sel) { return all(this).filter((c) => c.tagName === sel.toUpperCase() || (sel[0] === "." && (" " + c.className + " ").indexOf(" " + sel.slice(1) + " ") >= 0)); };
+El.prototype.querySelector = function (sel) { return this.querySelectorAll(sel)[0] || null; };
+El.prototype.getBoundingClientRect = function () { return { left: 0, top: 0, right: 10, bottom: 10, width: 10, height: 10 }; };
+["focus", "blur", "select", "scrollIntoView", "setSelectionRange", "animate"].forEach((k) => { El.prototype[k] = function () { return { finished: Promise.resolve() }; }; });
+function Text(t) { this.textContent = String(t); this.parent = null; }
+Text.prototype.remove = El.prototype.remove;
+const ev = { stopPropagation() {}, preventDefault() {}, key: "Enter", shiftKey: false };
+function fire(el, t) { (el.ls[t] || []).slice().forEach((f) => f.call(el, ev)); if (typeof el["on" + t] === "function") { el["on" + t].call(el, ev); } }
+function page(st) {
+  const root = new El("div"), docLs = {};
+  const ctx = { console, JSON, setTimeout: (f) => { try { f(); } catch (e) { /* a focus */ } return 0; }, clearTimeout() {}, Promise,
+    matchMedia: () => ({ matches: false }), requestAnimationFrame: (f) => 0,
+    document: { createElement: (t) => new El(t), createTextNode: (t) => new Text(t), getElementById: () => root, activeElement: null,
+      addEventListener: (t, f) => { (docLs[t] = docLs[t] || []).push(f); }, body: new El("body") } };
+  ctx.window = ctx;
+  El.prototype.classList = { add() {}, remove() {}, toggle() {}, contains() { return false; } };
+  vm.createContext(ctx); vm.runInContext(src, ctx);
+  ctx.dcMagic.start(st, true);
+  ctx.dcMagicSent = [];
+  return { ctx, root };
+}
+function hidden(el) { for (let x = el; x; x = x.parent) { if (x.hidden) { return true; } } return false; }
+/* what a person can press: what's shown and on; with the how-to up (it covers the window: magic.css .intro), only what's on it */
+function controls(root) {
+  const intro = root.querySelector(".intro"), on = intro && !intro.hidden ? intro : root;
+  return all(on).filter((el) => !el.disabled && !hidden(el) && (on !== root || !intro || !intro.contains(el))
+    && (el.ls.click || el.ls.change || el.ls.input || typeof el.onclick === "function"));
+}
+El.prototype.contains = function (x) { for (; x; x = x.parent) { if (x === this) { return true; } } return false; };
+function shape(root) { return JSON.stringify(all(root).map((e) => [e.tagName, e.className, e.hidden, e._t, e.attrs["aria-expanded"] || ""])); }
+const out = {};
+for (const [key, st] of Object.entries(states)) {
+  const errors = [], presses = [];
+  let n = 0;
+  try { n = controls(page(st).root).length; } catch (e) { errors.push("draw: " + e.message); }
+  for (let i = 0; i < n; i++) {
+    try {
+      const { ctx, root } = page(st), el = controls(root)[i], was = shape(root);
+      if (el.tagName === "SELECT") { const o = el.children.filter((c) => c.tagName === "OPTION" && c.attrs.value !== el.value); el.value = o.length ? o[0].attrs.value : el.value; fire(el, "change"); }
+      else if (el.tagName === "INPUT" && el.attrs.type === "checkbox") { el.checked = !el.checked; fire(el, "change"); }
+      else if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") { el.value = el.value ? el.value + " typed" : "Typed here"; fire(el, "input"); fire(el, "change"); }
+      else { fire(el, "click"); }
+      presses.push([(el.attrs["aria-label"] || el.textContent || el.tagName).slice(0, 50), ctx.dcMagicSent.slice(), shape(root) !== was,
+        el.attrs["aria-pressed"] === "true"]);
+    } catch (e) { errors.push(i + ": " + e.message); }
+  }
+  out[key] = { errors, presses, n };
+}
+process.stdout.write(JSON.stringify(out));
+"""
+
+
+def test_every_control_pressed():
+    """The window's page (magicpage/magic.js) run in node and pressed, as
+    the plan window's is (Sam, 7 Nov: two plan sheets whose yes went
+    nowhere, each with a test that called the command itself): in each
+    state the suite gets it into (the how-to, a topic with its tree, the
+    days, a plan of mine, a quiz, plan lines, IDs, after Study, Browse's
+    cards), every control fired; each message the page sends goes through
+    a fresh window in that state (Search.on). Each has its handler, takes
+    its arguments, and does something."""
+    import json
+    import shutil
+    import subprocess
+    import tempfile
+    import traceback
+    if not shutil.which("node"):
+        print("SKIP the window pressed: no node")
+        return
+    pl = "2026-11-05 | Platelets | tag:" + R + "#Path::Heme::Platelets\n2026-11-10 | event | Heme quiz"
+    recipes = {
+        "the how-to": [("intro", {"show": True})], "a topic": [("intro", {"show": False}), ("type", {"text": "heart failure"})],
+        "a topic, its tree open": [("intro", {"show": False}), ("type", {"text": "heart failure"}), ("open", {"seg": 0})],
+        "filters, how many, but not": [("intro", {"show": False}), ("type", {"text": "10 new platelets but not itp"})],
+        "the days": [("ready", {}), ("type", {"text": "platelets"}), ("days", {"show": True}), ("day", {"iso": "2026-11-06"})],
+        "the days, a plan I write": [("ready", {}), ("type", {"text": "platelets"}), ("days", {"show": True}), ("dest", {"key": "pB"})],
+        "a quiz": [("type", {"text": "quiz friday on platelets and anemia"})], "plan lines": [("type", {"text": pl})],
+        "ids": [("type", {"text": "10234 10235 99999"})], "after Study": [("type", {"text": "anemia"}), ("study", {})],
+        "after Put on days": [("ready", {}), ("type", {"text": "platelets"}), ("days", {"show": True}), ("day", {"iso": "2026-11-06"}), ("put", {})],
+        "recent": [("type", {"text": "anemia"}), ("type", {"text": ""})],
+    }
+
+    def made(steps, picked=None):
+        face, ops, closed = window()
+        ops.recents = ["anemia", "heart failure"]
+        if picked:
+            face.prefill("", picked)
+        for c, a in steps:
+            face.on(c, a)
+        return face, ops, closed
+    makers = {k: (lambda s=s: made(s)) for k, s in recipes.items()}
+    makers["Browse's cards"] = lambda: made([], sorted(IDX.cards)[:7])
+    views = {k: mk()[0].view() for k, mk in makers.items()}
+    with tempfile.TemporaryDirectory() as tmp:
+        sp = os.path.join(tmp, "states.json")
+        with open(sp, "w", encoding="utf-8") as f:
+            json.dump(views, f)
+        got = subprocess.run(["node", "-e", MAGIC_PRESS_JS, os.path.join(REPO, "due_crew", "magicpage", "magic.js"), sp],
+                             capture_output=True, text=True, timeout=180)
+    try:
+        out = json.loads(got.stdout)
+    except ValueError:
+        check("pressed: the page ran in node", False, got.stderr[-1500:])
+        return
+    errs = {k: o["errors"][:2] for k, o in out.items() if o["errors"]}
+    check(f"pressed: the page drew all {len(out)} states and fired every control without an error "
+          f"({sum(o['n'] for o in out.values())} controls)", not errs and all(o["n"] for o in out.values()), errs)
+    printed = []
+    print_exc = traceback.print_exc
+    traceback.print_exc = lambda *a, **k: printed.append(1) or print_exc(*a, **k)
+    nothing, wrong, idle = [], [], []
+    try:
+        for key, o in out.items():
+            seen = set()
+            for label, msgs, changed, on in o["presses"]:
+                msgs = [m for m in msgs if json.loads(m[len("dcmagic:"):])["cmd"] != "size"]  # the window's own (ui/magic_window.py: its height)
+                if tuple(msgs) in seen:
+                    continue
+                seen.add(tuple(msgs))
+                face, ops, closed = makers[key]()
+                before = json.dumps([face.view(), ops.log, closed], sort_keys=True, default=str)
+                for m in msgs:  # a press's messages in turn, on one window (Put on N days: its name, then put)
+                    a = json.loads(m[len("dcmagic:"):])
+                    if not callable(getattr(face, "c_" + a["cmd"], None)):
+                        nothing.append((key, label, m))
+                        continue
+                    printed.clear()
+                    face.on(a["cmd"], a)
+                    if printed:
+                        wrong.append((key, label, m))
+                # nothing, but on the page alone (Make a new filtered deck's name box), or the choice already on, is idle
+                if not changed and not on and json.dumps([face.view(), ops.log, closed], sort_keys=True, default=str) == before:
+                    idle.append((key, label, msgs))
+    finally:
+        traceback.print_exc = print_exc
+    check("pressed: every message the page sends has its handler (or is the window's own size)", not nothing, nothing[:5])
+    check("pressed: no handler took the wrong arguments", not wrong, wrong[:5])
+    check("pressed: every control sends something, and what it sends does something", not idle, idle[:6])
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

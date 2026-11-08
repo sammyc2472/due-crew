@@ -36,6 +36,7 @@ from due_crew.planner.webpage import colors, page_html  # noqa: E402
 
 CHECKS = []
 DEAD_SHEETS = []  # sheets drawn with a yes and no cmd: pressed, they'd send nothing
+DEAD_CLICKS = []  # anything a view or a sheet draws to be clicked whose cmd has no handler, or a menu item with nothing to do
 TODAY = datetime.date.today()
 MON = TODAY - datetime.timedelta(days=TODAY.weekday())
 R = "#Big_Step_1::#Path_Book"
@@ -192,6 +193,46 @@ class Ops:
         return lambda *a, **k: None
 
 
+def dead_clicks(x, where):
+    """What a view or a sheet draws to be clicked that would reach nothing: a
+    cmd (or a sheet's noCmd) with no c_ handler, a tabcmd with no webtabs one,
+    and a menu item (a set's More, a source's menu and their subs: plan.js
+    menu()) with no cmd, no sub and not off, which closes and sends nothing."""
+    from due_crew.planner import webtabs as WT
+    out = []
+
+    def handled(cmd, args):
+        if cmd == "tabcmd":
+            return callable(getattr(WT, "c_" + str((args or {}).get("name")), None))
+        return hasattr(WebFace, "c_" + str(cmd))
+
+    def walk(v, at):
+        if isinstance(v, list):
+            for i, y in enumerate(v):
+                walk(y, f"{at}[{i}]")
+        elif isinstance(v, dict):
+            for k in ("cmd", "noCmd"):
+                if isinstance(v.get(k), str) and not handled(v[k], v.get("args" if k == "cmd" else "noArgs")):
+                    out.append((where, at, v[k]))
+            for k, y in v.items():
+                walk(y, f"{at}.{k}")
+
+    def items(menu, at):
+        for i, it in enumerate(menu or []):
+            if isinstance(it, dict) and not it.get("sep") and not it.get("off"):
+                if it.get("sub"):
+                    items(it["sub"], f"{at}[{i}].sub")
+                elif not it.get("cmd"):
+                    out.append((where, f"{at}[{i}]", it.get("label")))
+    walk(x, "")
+    pn = x.get("panel") if isinstance(x, dict) else None
+    if isinstance(pn, dict):
+        items(pn.get("more"), "panel.more")
+        for i, s in enumerate(pn.get("sources") or []):
+            items((s or {}).get("menu"), f"panel.sources[{i}].menu")
+    return out
+
+
 class Face(WebFace):
     def __init__(self, cl, select=None, tab=None):
         self.js, self.copied = [], None
@@ -206,6 +247,9 @@ class Face(WebFace):
             sh = json.loads(js[len("dcPlan.sheet("):-1])
             if sh.get("yes") is not None and not sh.get("cmd"):
                 DEAD_SHEETS.append(sh.get("title"))  # its yes would close it and send nothing (page/plan.js submit)
+            DEAD_CLICKS.extend(dead_clicks(sh, "sheet " + str(sh.get("title"))))
+        elif js.startswith("dcPlan.show("):
+            DEAD_CLICKS.extend(dead_clicks(json.loads(js[len("dcPlan.show("):-1]), "view"))
 
     def copy(self, text):
         self.copied = text
@@ -914,10 +958,420 @@ def test_the_page_draws_its_own_days_v396():
     check("page: the calendar opens over a sheet's veil", z(".dcp .calp") > z(".dcp .veil"), (z(".dcp .calp"), z(".dcp .veil")))
 
 
+# The page pressed (test_every_control_pressed): each state's view drawn in node, every control fired (its
+# menus and their sub-menus, a day picked in each calendar, the keys), a sheet's own yes with its boxes filled
+# in as a person fills them, and its no; each message kept by what sent it. The page's ui (List, Find, folds)
+# goes back to how it opens before each control, so one control's state never hides the next.
+PRESS_JS = r"""
+const fs = require("fs"), vm = require("vm");
+const [PAGE, STATES] = process.argv.slice(1);
+const src = ["plan.js", "tabs.js", "new.js"].map((f) => fs.readFileSync(PAGE + "/" + f, "utf8")).join("\n");
+const states = JSON.parse(fs.readFileSync(STATES, "utf8"));
+function El(tag) {
+  this.tagName = String(tag).toUpperCase(); this.children = []; this.parent = null; this.attrs = {}; this.style = {};
+  this.className = ""; this._t = ""; this.ls = {}; this.value = ""; const self = this;
+  this.classList = { add(c) { self.className += " " + c; }, remove() {}, toggle() {}, contains(c) { return (" " + self.className + " ").indexOf(" " + c + " ") >= 0; } };
+}
+Object.defineProperty(El.prototype, "textContent", { get() { return this._t + this.children.map((c) => c.textContent || "").join(""); },
+  set(v) { this._t = String(v); this.children.forEach((c) => { c.parent = null; }); this.children = []; } });
+Object.defineProperty(El.prototype, "childNodes", { get() { return this.children; } });
+Object.defineProperty(El.prototype, "parentNode", { get() { return this.parent; } });
+El.prototype.appendChild = function (c) { if (c.parent) { c.remove(); } c.parent = this; this.children.push(c); return c; };
+El.prototype.remove = function () { if (this.parent) { const i = this.parent.children.indexOf(this); if (i >= 0) { this.parent.children.splice(i, 1); } this.parent = null; } };
+El.prototype.setAttribute = function (k, v) { this.attrs[k] = v; if (k === "disabled") { this.disabled = true; } if (k === "checked") { this.checked = true; } };
+El.prototype.getAttribute = function (k) { return k in this.attrs ? this.attrs[k] : null; };
+El.prototype.addEventListener = function (t, f) { (this.ls[t] = this.ls[t] || []).push(f); };
+function matches(el, sel) {  /* the selectors the page asks for: .a.b, #id, [attr], [attr=v], a tag; the last part of a descendant one */
+  const last = sel.trim().split(/\s+/).pop();
+  if (last[0] === ".") { return last.slice(1).split(".").every((c) => (" " + el.className + " ").indexOf(" " + c + " ") >= 0); }
+  if (last[0] === "#") { return el.attrs.id === last.slice(1); }
+  const m = /^\[([\w-]+)(?:=(.*))?\]$/.exec(last);
+  if (m) { return m[1] in el.attrs && (m[2] === undefined || String(el.attrs[m[1]]) === m[2].replace(/^"|"$/g, "")); }
+  return el.tagName === last.toUpperCase();
+}
+function all(el) { const out = []; (function walk(n) { (n.children || []).forEach((c) => { if (c instanceof El) { out.push(c); walk(c); } }); })(el); return out; }
+El.prototype.querySelector = function (sel) { return all(this).find((c) => matches(c, sel)) || null; };
+El.prototype.querySelectorAll = function (sel) { return all(this).filter((c) => matches(c, sel)); };
+El.prototype.click = function () { fire(this, "click"); };
+El.prototype.getBoundingClientRect = function () { return { left: 0, top: 0, right: 10, bottom: 10, width: 10, height: 10 }; };
+["focus", "blur", "select", "scrollIntoView", "setSelectionRange"].forEach((k) => { El.prototype[k] = function () {}; });
+function Text(t) { this.textContent = String(t); this.parent = null; }
+Text.prototype.remove = El.prototype.remove;
+function ev(el, key) { return { target: el, currentTarget: el, stopPropagation() {}, preventDefault() {}, key: key || "Enter" }; }
+function fire(el, t, key) { (el.ls[t] || []).slice().forEach((f) => f.call(el, ev(el, key))); }
+function act(el) {
+  if (el.tagName === "SELECT") {  /* another option than the one shown, as a person picks */
+    const o = el.children.filter((c) => c.tagName === "OPTION"), x = o.find((y) => !y.selected && (y.value || y.attrs.value)) || o[o.length - 1];
+    el.value = x ? (x.value || x.attrs.value || "") : ""; fire(el, "change"); return;
+  }
+  if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") {
+    el.value = (el.attrs.type || "text") === "number" ? "30" : "Typed here"; el.checked = !el.checked;
+    fire(el, "input"); fire(el, "change"); fire(el, "keydown"); return;
+  }
+  if (el.ls.click) { fire(el, "click"); } else if (el.ls.dblclick) { fire(el, "dblclick"); } else { fire(el, "keydown", "Enter"); }
+}
+function label(el) { return (el.attrs["aria-label"] || el.attrs.title || el.textContent || el.tagName).slice(0, 60); }
+const UI = { find: "", look: false, opened: {}, closed: {}, all: null, month: null, week: null, paste: "", deckFind: null, tb: {}, sheet: null };
+const out = {};
+Object.keys(states).forEach((key) => {
+  const st = states[key], errors = [], presses = [];
+  let sent = [];
+  const root = new El("div"), docLs = {};
+  const ctx = { console, setTimeout: (f) => { try { f(); } catch (e) { /* a focus */ } }, clearTimeout() {}, JSON,
+    document: { createElement: (t) => new El(t), createTextNode: (t) => new Text(t), getElementById: (id) => (id === "dcp" ? root : root.querySelector("#" + id)),
+      activeElement: null, addEventListener: (t, f) => { (docLs[t] = docLs[t] || []).push(f); } } };
+  ctx.window = ctx; ctx.innerWidth = 1240; ctx.innerHeight = 820; ctx.pycmd = (m) => sent.push(m);
+  vm.createContext(ctx);
+  vm.runInContext(src, ctx);
+  const P = ctx.dcPlan;
+  function draw() {
+    (docLs.click || []).forEach((f) => f(ev(root)));  /* a menu open from before, closed */
+    P.show(st.view); P.set(Object.assign({}, UI, { mode: st.mode || "list", opened: {}, closed: {}, tb: {} }));
+    if (st.sheet) { P.sheet(st.sheet); }
+  }
+  function controls() {  /* with a sheet up, only what's on it (its veil covers the page); its yes and no are pressed below */
+    const veil = st.sheet ? root.querySelector(".veil") : null, acts = veil && veil.querySelector(".acts");
+    return all(veil || root).filter((el) => (el.ls.click || el.ls.change || el.ls.dblclick || el.ls.input || (box(el) && el.ls.keydown))
+      && !(acts && el.parent === acts) && !hidden(el));
+  }
+  function box(el) { return el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && (el.attrs.type || "text") === "text"); }
+  function shape() { return JSON.stringify(all(root).map((e) => [e.tagName, e.className, e._t, e.style.display || "", e.value || ""])); }
+  function hidden(el) { for (let x = el; x; x = x.parent) { if (x.style.display === "none" || "hidden" in x.attrs) { return true; } } return false; }  /* nobody presses what isn't shown (a Save till something's typed) */
+  function menus() { return root.children.filter((c) => / menu /.test(" " + c.className + " ")); }
+  function items(m) { return (m ? m.children : []).filter((c) => c.ls && c.ls.click && !/ off /.test(" " + c.className + " ")); }  /* an off item is shown off */
+  /* may do nothing: the choice already on (List in List), or a button whose box beside it is empty (pressed typed below) */
+  function quiet(el) {
+    return / on /.test(" " + el.className + " ") || el.attrs["aria-pressed"] === "true"
+      || (el.parent ? el.parent.children : []).some((b) => b !== el && box(b) && !String(b.value || "").trim());
+  }
+  let quietly = null;
+  function press(what, fn) {
+    sent = [];
+    const was = shape();
+    try { fn(); } catch (e) { errors.push(what + ": " + e.stack.split("\n").slice(0, 3).join(" ")); }
+    presses.push({ what, sent: sent.slice(), page: shape() !== was, quiet: !!(quietly && quietly()) });  /* page: it changed something here (a fold, the month, a menu) */
+  }
+  try { P.start(st.view, true); draw(); } catch (e) { errors.push("draw: " + e.stack); }
+  const text = root.textContent;
+  if (st.sheet) {  /* its yes, filled in as a person does: a line in each box, the day after the one shown; then its no */
+    ["yes", "no"].forEach((which) => {
+      draw();
+      const veil = root.querySelector(".veil"), acts = veil && veil.querySelector(".acts"), b = acts && acts.children[which === "yes" ? 1 : 0];
+      if (!b) { presses.push({ what: "sheet " + which, sent: [], none: true }); return; }
+      veil.querySelectorAll("input").concat(veil.querySelectorAll("textarea")).forEach((i) => { if (!i.attrs.type || i.attrs.type === "text") { i.value = "Typed here"; } });
+      veil.querySelectorAll(".date").forEach((d) => { if (/^\d{4}-\d\d-\d\d$/.test(d.value)) { const x = new Date(d.value + "T12:00:00"); x.setDate(x.getDate() + 1); d.value = x.toISOString().slice(0, 10); } });
+      press("sheet " + which + " (" + label(b) + ")", () => { if (b.disabled) { throw new Error("its " + which + " is off"); } fire(b, "click"); });
+    });
+  }
+  draw();
+  const n = controls().length;
+  for (let i = 0; i < n; i++) {
+    draw();
+    const el = controls()[i];
+    if (!el || el.disabled) { continue; }
+    const name = label(el);
+    quietly = () => quiet(el);
+    press(name, () => act(el));
+    quietly = null;
+    if (box(el)) {  /* typed in, then each button beside it (a note's Add, Show the changes, a Save): as a person types first */
+      const beside = (el.parent ? el.parent.children : []).filter((b) => b !== el && b.tagName === "BUTTON");
+      beside.forEach((_b, k) => {
+        draw();
+        const again = controls()[i];
+        if (!again) { return; }
+        again.value = "Typed here"; fire(again, "input");
+        const b = (again.parent ? again.parent.children : []).filter((x) => x !== again && x.tagName === "BUTTON")[k];
+        if (b && !b.disabled && !hidden(b)) { press(name + " typed › " + label(b), () => fire(b, "click")); }
+      });
+    }
+    const opened = menus();
+    if (!opened.length) { continue; }
+    if (/ calp /.test(" " + opened[0].className + " ")) {  /* the page's calendar: a day in it, picked */
+      draw(); act(controls()[i]);
+      const cells = menus()[0] ? menus()[0].querySelectorAll(".cd") : [];
+      if (cells.length) { press(name + " › a day", () => fire(cells[cells.length - 1], "click")); }
+      continue;
+    }
+    items(opened[0]).forEach((_mi, j) => {
+      draw(); act(controls()[i]);
+      const again = items(menus()[0])[j];
+      if (!again) { return; }
+      const mname = name + " › " + label(again);
+      press(mname, () => act(again));
+      items(menus()[1]).forEach((_s, k) => {
+        draw(); act(controls()[i]);
+        const a2 = items(menus()[0])[j];
+        if (!a2) { return; }
+        act(a2);
+        const s2 = items(menus()[1])[k];
+        if (s2) { press(mname + " › " + label(s2), () => act(s2)); }
+      });
+    });
+  }
+  [["ArrowLeft", { altKey: true }], ["z", { ctrlKey: true }], ["Delete"], ["n", { ctrlKey: true }], ["e", { ctrlKey: true }],
+    ["d", { ctrlKey: true }], ["Enter", { ctrlKey: true }], ["ArrowDown"]].forEach(([k, mods]) => {
+    draw();
+    press("key " + k, () => (docLs.keydown || []).forEach((f) => f(Object.assign({ key: k, ctrlKey: false, metaKey: false, altKey: false, preventDefault() {} }, mods || {}))));
+  });
+  out[key] = { presses, errors, text, controls: n };
+});
+process.stdout.write(JSON.stringify(out));
+"""
+
+
+def test_every_control_pressed():
+    """Sam, 7 Nov: Review and send's Send closed its sheet and sent nothing
+    (the sheet had a yes and no cmd); the test had called "send" itself. So
+    the page is pressed here as a person presses it: every state the window
+    draws (an author's plan, a set, a quiz, a review day, the deck beside it,
+    changes waiting, a follower's, New plan's screens, Insights, Settings,
+    and every sheet it asks with), each in node, every control fired; then
+    each message the page sent goes back through a fresh window in that
+    state. Each reaches its handler (none dropped, none under New plan that
+    New plan doesn't take, no wrong arguments), each click does something,
+    and a sheet's yes sends its own cmd, does something, and never draws the
+    same sheet again. Every sheet webface and webnew can draw is pressed."""
+    import shutil
+    import tempfile
+    import traceback
+    import types
+    from due_crew import planner as PL
+    from due_crew.planner import webface as WF, webtabs as WT
+    if not shutil.which("node"):
+        print("SKIP the page pressed: no node")
+        return
+    opened, printed = [], []
+
+    class Dlg:  # the Qt windows a click opens (date_dialogs' and the rest), stood in for: opened, then Cancel
+        def __init__(self, *a, **k):
+            opened.append(type(self).__name__)
+
+        def exec(self):
+            return False
+    stand = {"date_dialogs": ("SplitDialog", "AddCardsDialog", "LinesDialog", "ReviewDialog"), "date_panel": ("MoveFromDialog",),
+             "text_tab": ("TextDialog",), "mcp_dialog": ()}
+    was_mods = {n: sys.modules.get("due_crew.planner." + n) for n in stand}
+    was_attrs = {n: getattr(PL, n, None) for n in stand}
+    for name, classes in stand.items():
+        m = types.ModuleType("due_crew.planner." + name)
+        for c in classes:
+            setattr(m, c, type(c, (Dlg,), {}))
+        m.show = lambda parent=None, ops=None: opened.append("mcp")
+        sys.modules["due_crew.planner." + name] = m
+        setattr(PL, name, m)
+    print_exc = traceback.print_exc
+    traceback.print_exc = lambda *a, **k: printed.append(1) or print_exc(*a, **k)  # a handler's TypeError, as _on_cmd says it
+
+    class PFace(Face):
+        def close(self):  # as web.py's closeEvent: changes waiting ask first
+            if not self.unsent_ask():
+                self._closed = True
+
+    made = [0]
+
+    def fresh(name):
+        made[0] += 1
+        uid = f"press{made[0]}"
+        STORE.add_user(uid, name)  # a person of each state's own: one's follows and plans never reach another's ceilings
+        return uid
+
+    def a_plan(owner, followed=False):
+        """Sets behind, today and ahead, a finish-by day, a quiz, a review day, a plan tag, a note on a card,
+        to-dos; a pace a set's cards can't keep (a heavy week); a code of its own (the fake's repeat every 32 plans)"""
+        made[0] += 1
+        code = "PR" + "".join("ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[(made[0] >> (5 * i)) % 32] for i in range(6))
+        units = [{"id": "u0", "name": "Neoplasia", "opens": rel(-6), "tags": [f"{R}::03_Neoplasia"]},
+                 {"id": "u1", "name": "Cell injury", "opens": rel(0), "tags": [f"{R}::01_Cell_injury"]},
+                 {"id": "u2", "name": "Inflammation", "opens": rel(1), "due": rel(3), "tags": [f"{R}::02_Inflammation"]}]
+        pid, code = STORE.add_plan(owner, "Path Book, high yield", "Big Step 1", units, code=code)
+        doc = STORE.plans[pid]["doc"]
+        doc["events"] = [{"id": "e1", "day": rel(5), "name": "Heme quiz"}]
+        doc["pace"] = {"mode": "daily", "days": [1] * 7, "daily": 3}
+        doc["reviews"] = [{"day": rel(4), "from": "u0", "to": "u2"}]
+        doc["tagroot"], doc["tags"] = "PB", [{"id": "t1", "name": "SLG 5", "notes": []}]
+        doc["remarks"] = [{"id": "r1", "card": ["g1", 0], "text": "on the quiz"}]
+        next(u for u in doc["units"] if u["id"] == "u1")["todo"] = [{"k": "read", "t": "Chapter 3"}]
+        if followed:
+            client(fresh("Fen")).follow_plan(code)
+        return pid
+
+    def noted(w):
+        w.notes, w.notes_of = [{"id": 1, "day": rel(0), "text": "Bring the atlas", "name": "You", "mine": True, "remove": True}], w.pid  # the Worker's ids are numbers
+        w.push()
+
+    def author(*clicks, followed=False):
+        def make():
+            me = fresh("Sam")
+            a_plan(me)  # another of mine, to pick in the head
+            w = PFace(client(me), select=a_plan(me, followed))
+            noted(w)
+            for c, a in clicks:
+                w.click(c, **a)
+            return w
+        return make
+
+    def follower(*clicks):
+        def make():
+            me = fresh("Sam")
+            a_plan(me)
+            pid = a_plan(fresh("Dre"))
+            cl = client(me)
+            cl.follow_plan(STORE.plans[pid]["code"])
+            w = PFace(cl, select=pid)
+            for c, a in clicks:
+                w.click(c, **a)
+            return w
+        return make
+
+    def nobody(*clicks):
+        def make():
+            w = PFace(client(fresh("Zed")))
+            for c, a in clicks:
+                w.click(c, **a)
+            return w
+        return make
+
+    cells = f"tag:{R}::01_Cell_injury"
+    rename, pick1, picke = ("rename", {"uid": "u1", "name": "Cells"}), ("pick", {"key": ["date", "u1"]}), ("pick", {"key": ["event", "e1"]})
+    states = {
+        "author": author(), "author week": author(), "author month": author(),
+        "a set": author(pick1), "a set behind": author(("pick", {"key": ["date", "u0"]})), "a quiz": author(picke),
+        "a review day": author(("pick", {"key": ["review", rel(4)]})),
+        "the deck, adding to a set": author(("deck", {"uid": "u1"})), "the deck, laying out": author(("deck", {}), ("deck_tick", {"key": f"tag:{R}::03_Neoplasia", "on": True})),
+        "the deck, the plan's tags": author(("deck", {"uid": "u1"}), ("deck_view", {"view": "plan"})),
+        "the deck, found": author(("deck", {"uid": "u1"}), ("deck_find", {"text": "inflam"})),
+        "changes waiting": author(rename, followed=True), "insights": author(("tab", {"tab": "insights"})),
+        "settings": author(("tab", {"tab": "settings"})), "settings, changes waiting": author(rename, ("tab", {"tab": "settings"}), followed=True),
+        "a follower": follower(), "a follower week": follower(), "a follower's set": follower(pick1), "a follower's insights": follower(("tab", {"tab": "insights"})),
+        "new plan": nobody(), "new plan, a resource": nobody(("new_step", {"step": "resource"})),
+        "new plan, empty": nobody(("new_step", {"step": "empty"}), ("new_set", {"key": "name", "value": "Heme"})),
+        "new plan, someone's": nobody(("new_step", {"step": "someone"})),
+    }
+    sheets = {  # every sheet webface and webnew draw: the clicks that draw it
+        "discard": author(rename, ("discard", {}), followed=True), "send": author(rename, ("review_send", {}), followed=True),
+        "close with changes waiting": author(rename, ("close", {}), followed=True), "move onto a taken day": author(("move", {"uid": "u2", "to": rel(0)})),
+        "a note for followers": author(pick1, ("remark", {"path": f"{R}::01_Cell_injury"})),
+        "move a source to a day": author(pick1, ("move_source_form", {"i": 0})), "delete a set": author(pick1, ("delete", {})),
+        "take a quiz off": author(picke, ("delete", {})), "a new set": author(("new_date_form", {})),
+        "a new set on a taken day": author(("new_date", {"name": "Again", "day": rel(0)})), "a quiz": author(("new_event_form", {})),
+        "a review day": author(("new_review_form", {})), "a set of its own": author(("lesson_from", {"key": cells, "day": None})),
+        "give everyone a day": author(("breather", {})), "rename a tag": author(("ptag_rename", {"ptag": "t1"})),
+        "delete a tag": author(("ptag_delete", {"ptag": "t1"})), "the prompt": author(("see_prompt", {"which": "plan"})),
+        "make a plan": nobody(("new_step", {"step": "empty"}), ("new_set", {"key": "name", "value": "Heme"}), ("new_make", {"start": False})),
+    }
+    views, pids, drew = {}, {}, {}
+    for key, make in list(states.items()) + [("sheet " + k, v) for k, v in sheets.items()]:
+        w = make()
+        views[key] = {"view": w.view(), "mode": "week" if key.endswith(" week") else "month" if key.endswith(" month") else None}
+        pids[key] = [p["id"] for p in w.plans]
+        if key.startswith("sheet "):
+            drew[key] = w.last("sheet")
+            views[key]["sheet"] = drew[key]
+    makers = dict(states, **{"sheet " + k: v for k, v in sheets.items()})
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = os.path.join(tmp, "states.json")
+            with open(sp, "w", encoding="utf-8") as f:
+                json.dump(views, f)
+            got = subprocess.run(["node", "-e", PRESS_JS, os.path.join(REPO, "due_crew", "planner", "page"), sp],
+                                 capture_output=True, text=True, timeout=300)
+        try:
+            out = json.loads(got.stdout)
+        except ValueError:
+            check("press: the page ran in node", False, got.stderr[-2000:])
+            return
+        errors = {k: o["errors"][:2] for k, o in out.items() if o["errors"]}
+        check(f"press: the page drew all {len(out)} states and fired every control without an error ({sum(len(o['presses']) for o in out.values())} presses)",
+              not errors and all(o["controls"] or k.startswith("sheet ") for k, o in out.items()), errors)
+        dropped, wrong, idle, loops, mute = [], [], [], [], []
+        dead = [(k, p["what"]) for k, o in out.items() for p in o["presses"]
+                if not p["sent"] and not p.get("page") and not p.get("none") and not p.get("quiet") and not p["what"].startswith("key ")]
+        check("press: every control sends something or changes something on the page", not dead, dead[:8])
+        reached = {json.loads(m[len(WF.PREFIX):])["c"] for o in out.values() for p in o["presses"] for m in p["sent"]}
+        expect = {"add_search", "breather", "browse", "calendar", "card_note_off", "close", "copy_search", "copy_source", "deck", "deck_done",
+                  "deck_find", "deck_keep", "deck_open", "deck_tick", "deck_view", "delete", "discard", "event_sets", "keep_only", "lesson_from",
+                  "move", "move_event", "move_from", "move_source_form", "new_cancel", "new_date", "new_date_form", "new_event", "new_event_form",
+                  "new_follow", "new_library", "new_make", "new_plan", "new_review_form", "new_set", "new_step", "note_add", "note_off", "nudge",
+                  "op", "open_now", "paste", "pick", "pick_plan", "prompt", "ptag_delete", "ptag_rename", "remark", "rename", "rename_event",
+                  "review_day", "review_send", "see_prompt", "send", "set_cut", "set_due", "set_for", "spread", "spread_heavy", "study", "tab",
+                  "tabcmd", "take_change", "text", "todo", "todo_off", "undo", "undo_key"}
+        check("press: the walk reaches every one of the window's own clicks (Insights' and Settings' are test_plan_web_tabs')",
+              expect <= reached, sorted(expect - reached))
+
+        def mark(w):
+            o = w.ops
+            return json.dumps([len(w.js), sum(int(p.get("version") or 0) for p in STORE.plans.values()), len(STORE.plans),
+                               len(o.browsed), len(o.opened), len(o.studied), len(o.started), len(o.followed), len(o.pages),
+                               o.drafts, w.copied, getattr(w, "_closed", False), len(opened), getattr(w, "_saved_file", None)],
+                              sort_keys=True, default=str)
+        for key, o in out.items():
+            seen = set()
+            for p in o["presses"]:
+                if key.startswith("sheet ") and p["what"].startswith("sheet yes"):
+                    sh = drew[key]
+                    if not p["sent"] or json.loads(p["sent"][0][len(WF.PREFIX):])["c"] != sh.get("cmd"):
+                        mute.append((key, sh.get("title"), p["sent"]))
+                for m in p["sent"]:
+                    if m in seen and not p["what"].startswith("sheet "):
+                        continue
+                    seen.add(m)
+                    w = makers[key]()
+                    for old, new in zip(pids[key], [x["id"] for x in w.plans]):
+                        m = m.replace(f'"{old}"', f'"{new}"')  # the page's plan ids, this window's
+                    d = json.loads(m[len(WF.PREFIX):])
+                    c, a = d["c"], d["a"]
+                    if not (hasattr(w, "c_" + c) and (w.new is None or c in WF.NEW_CMDS)
+                            and (c != "tabcmd" or callable(getattr(WT, "c_" + str(a.get("name")), None)))):
+                        dropped.append((key, p["what"], m))
+                        continue
+                    before, n_sheets = mark(w), sum(1 for j in w.js if j.startswith("dcPlan.sheet("))
+                    printed.clear()
+                    w._on_cmd(m)
+                    if printed:
+                        wrong.append((key, p["what"], m))
+                    if mark(w) == before and not p["what"].startswith("key "):
+                        idle.append((key, p["what"], m))
+                    after = [json.loads(j[len("dcPlan.sheet("):-1]) for j in w.js if j.startswith("dcPlan.sheet(")]
+                    if p["what"].startswith("sheet yes") and len(after) > n_sheets and after[-1] == drew[key]:
+                        loops.append((key, p["what"], m))
+        check("press: every message the page sent reaches its handler in that state (none dropped, none New plan doesn't take)", not dropped, dropped[:5])
+        check("press: no handler took the wrong arguments", not wrong, wrong[:5])
+        check("press: every click did something (a key may not, where it isn't for that state)", not idle, idle[:8])
+        check("press: every sheet's yes sends the sheet's own cmd (Sam, 7 Nov: Send to N sent nothing)", not mute and len(drew) == len(sheets), mute[:5])
+        check("press: a sheet's yes never draws the same sheet again (duecrew.com's Add to the plan did, every press)", not loops, loops[:5])
+        import ast
+        can = set()  # every sheet the two can draw, by its cmd: an ask(…, cmd), or a dict with a yes and a cmd
+        for f in ("webface.py", "webnew.py"):
+            for node in ast.walk(ast.parse(open(os.path.join(REPO, "due_crew", "planner", f), encoding="utf-8").read())):
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "ask" and len(node.args) > 3 \
+                        and isinstance(node.args[3], ast.Constant):
+                    can.add(node.args[3].value)
+                elif isinstance(node, ast.Dict):
+                    keys = {k.value: v for k, v in zip(node.keys, node.values) if isinstance(k, ast.Constant)}
+                    if "yes" in keys and isinstance(keys.get("cmd"), ast.Constant):
+                        can.add(keys["cmd"].value)
+        pressed = {sh.get("cmd") for sh in drew.values() if sh}
+        check("press: every sheet webface and webnew can draw is pressed above", len(can) >= 15 and can <= pressed, sorted(can - pressed))
+    finally:
+        traceback.print_exc = print_exc
+        for name in stand:
+            if was_mods[name] is None:
+                sys.modules.pop("due_crew.planner." + name, None)
+            else:
+                sys.modules["due_crew.planner." + name] = was_mods[name]
+            if was_attrs[name] is None:
+                if hasattr(PL, name):
+                    delattr(PL, name)
+            else:
+                setattr(PL, name, was_attrs[name])
+
+
 def main():
     for n in [n for n in list(globals()) if n.startswith("test_")]:
         globals()[n]()
     check("web: every sheet with a yes sends a cmd when it's pressed (the page sends nothing without one)", not DEAD_SHEETS, DEAD_SHEETS)
+    check("web: everything a view or a sheet drew to be clicked has its handler; no menu item with nothing to do", not DEAD_CLICKS,
+          sorted(set(map(str, DEAD_CLICKS)))[:8])
     bad = [c for c in CHECKS if not c[1]]
     print(f"\n{len(CHECKS) - len(bad)}/{len(CHECKS)} checks passed")
     sys.exit(1 if bad else 0)
