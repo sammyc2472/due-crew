@@ -9,9 +9,11 @@ the author's Anki sends.
 """
 
 import json
+import math
 
 from .. import errs as _errs
 from ..backend.shapes import TransportError, clean_plan
+from . import build as B
 from .edits import _cut
 
 # a refused save, in words (builder.js SAVE_ERRORS, as the window says them)
@@ -27,10 +29,74 @@ SAVE_WORDS = {
     "nothing_to_undo": "There's nothing to undo.",
 }
 
+# 3.9.9: a save refused at one of the plan's ceilings (build.CEILINGS), with the
+# answer's numbers: plans.ts's `limit`, `have` (what this save makes) and `max`.
+# An answer without them (an older Worker) keeps SAVE_WORDS' line, and so does
+# `ids` (the note ids behind a date's tags, which nobody changes by hand).
+# Ceilings in builder.js says them the same (the suite checks).
+LIMIT_WORDS = {
+    "sets": "A plan holds up to {max} sets. This makes {have}.",
+    "events": "A plan holds up to {max} events. This makes {have}.",
+    "reviews": "A plan holds up to {max} review days. This makes {have}.",
+    "tags": "A plan holds up to {max} tags. This makes {have}.",
+    "cards": "A plan holds up to {max} picked cards and IDs. This makes {have}.",
+    "size": "A plan can be up to {max} MB. This makes {have} MB. Pasted IDs take the most room.",
+    "total": "Your plans can be up to {max} MB together. They're at {have} MB. Delete one, or make this one smaller.",
+}
+# Review and send's line for each ceiling the plan as sent is past 90% of (near)
+NEAR_WORDS = {"sets": "Sets", "events": "Events", "reviews": "Review days", "tags": "Tags",
+              "cards": "Picked cards and IDs", "size": "Size"}
+# the day's saves, refused at a send: its changes stay under the plan (draft.py)
+SLOW_WAITS = f"{B.SAVES_A_DAY:,} saves a day. Your changes wait here and send tomorrow."
 
-def _refused(data):
+
+def mb(n, cap):
+    """Bytes as MB to one decimal, "1.7", "24": past the ceiling rounded up and
+    under it down, so neither reads as the other (Ceilings.mb)."""
+    x = n / 1048576 * 10
+    x = math.ceil(x - 1e-9) if n > cap else math.floor(x + 1e-9)
+    t = f"{x / 10:.1f}"
+    return t[:-2] if t.endswith(".0") else t
+
+
+def limit_words(data):
+    """A refused save's words at a ceiling, the numbers the answer's; None when
+    it names none the window says (Ceilings.said)."""
+    d = data if isinstance(data, dict) else {}
+    lim, have, cap = d.get("limit"), d.get("have"), d.get("max")
+    if lim not in LIMIT_WORDS or not all(isinstance(x, (int, float)) and not isinstance(x, bool) and 0 <= x < 1e15
+                                         for x in (have, cap)):
+        return None
+    if lim in ("size", "total"):
+        return LIMIT_WORDS[lim].format(have=mb(have, cap), max=mb(cap, cap))
+    return LIMIT_WORDS[lim].format(have=f"{int(have):,}", max=f"{int(cap):,}")
+
+
+def near(doc):
+    """Review and send's lines: each ceiling the plan as it would be sent (a save's
+    doc, edits.lean) is past 90% of, "Picked cards and IDs: 47,900 of 50,000.",
+    "Size: 1.4 of 1.5 MB."; none under them all (Ceilings.near)."""
+    got, out = B.ceiling_counts(doc), []
+    for k, label in NEAR_WORDS.items():
+        have, cap = got[k], B.CEILINGS[k]
+        if have * 10 > cap * 9:
+            out.append(f"{label}: {mb(have, cap)} of {mb(cap, cap)} MB." if k == "size" else f"{label}: {have:,} of {cap:,}.")
+    return out
+
+
+def said(data, waits=False):
+    """A refused save in words: a ceiling's with its numbers; the day's saves, at a
+    send whose changes stay waiting (waits), SLOW_WAITS; else SAVE_WORDS'."""
+    d = data if isinstance(data, dict) else {}
+    code = str(d.get("error") or "")
+    if code == "slow_down" and waits:
+        return SLOW_WAITS
+    return limit_words(d) or SAVE_WORDS.get(code, "That didn't save. Try again.")
+
+
+def _refused(data, waits=False):
     _said_no(data)
-    return "refused", SAVE_WORDS.get(str((data or {}).get("error") or ""), "That didn't save. Try again.")
+    return "refused", said(data, waits)
 
 
 def _said_no(data):
@@ -79,12 +145,14 @@ def _canon(doc):
     return json.dumps(d, sort_keys=True)
 
 
-def save(client, pid, version, doc, summary, post=None):
+def save(client, pid, version, doc, summary, post=None, waits=False):
     """("saved", raw) | ("stale", raw now) | ("refused", words). A save whose
     answer was lost on the way and sent again comes back stale, because the
     first one landed: one whose doc is the plan's now is "saved". post
     (round five's send): one line to followers that goes with the save
-    (plans.ts POST_MAX, five a day a plan; past them the save still goes)."""
+    (plans.ts POST_MAX, five a day a plan; past them the save still goes).
+    waits: a send's, whose changes stay under the plan if it's refused (the
+    day's saves say so)."""
     from .edits import lean
     body = {"version": int(version), "doc": lean(doc), "summary": str(summary)[:120]}
     line = " ".join(str(post or "").split())[:200]
@@ -96,7 +164,7 @@ def save(client, pid, version, doc, summary, post=None):
     if status == 409 and data.get("error") == "stale":
         raw, _plan = load(client, pid)
         return ("saved" if _canon(raw.get("doc")) == _canon(doc) else "stale"), raw
-    return _refused(data)
+    return _refused(data, waits)
 
 
 def undo(client, pid, version):

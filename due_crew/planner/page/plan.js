@@ -94,6 +94,8 @@ var dcPlan = (function () {
     ui.sheet = sh;
     var body = h("div.sheet" + (sh.kind === "send" || sh.kind === "read" ? ".wide" : ""), { role: "dialog", "aria-label": sh.title },
       [h("h4", { text: sh.title }), sh.words ? h("p.sub", { text: sh.words }) : null]);
+    /* 3.9.9: a line each in amber, before what's asked (Review and send: a ceiling the plan is near) */
+    (sh.warns || []).forEach(function (t) { body.appendChild(h("p.warn", { text: t })); });
     var fields = {}, go;
     function submit() {
       var args = Object.assign({}, sh.args || {});

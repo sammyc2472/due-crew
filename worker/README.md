@@ -340,6 +340,18 @@ days) and the library's `listed`/`takenOut`; `GET
 keeps them in `admin_days`; accounts come from `created_at`). `GET
 /admin/notices?all=1` is the last 20 with their `state`; taking one down
 keeps its row.
+3.9.9: a save refused at one of a plan's ceilings says which, and the
+numbers, beside the error it always had (an older client keeps its
+words): 400 `bad_plan` with `limit` (`sets` 200, `events` 200, `reviews`
+60, `tags` 100, `cards` 50,000 picked cards and IDs in all with the plan
+tags' notes and cards, `ids` 50,000 of a date's note ids or of its pasted
+ids' cards, `size` the doc as JSON, 1,536 KB), `have` (what this save
+makes, counted as the check counts it, a repeat once) and `max`; 409
+`plans_full` with `limit: "total"`, `have` (what the account's plans hold
+now, in bytes) and `max` (24 MB); 413 `too_big` on `PUT /plans/{id}`
+with `limit: "size"`, `have` (the body's content-length) and `max`
+(1,536 KB). A doc whose shape is wrong is plain `bad_plan`; so are a
+date's own ceilings (searches, sources, IDs of a kind).
 
 ### Squads
 

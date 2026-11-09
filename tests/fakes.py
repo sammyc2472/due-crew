@@ -309,6 +309,11 @@ def _js_len(t):
     return len(t.encode("utf-16-le")) // 2
 
 
+def _over(limit, have, cap):
+    """plans.ts over (3.9.9): a save past a ceiling, bad_plan with which and the numbers."""
+    return Bad(400, "plan", {"limit": limit, "have": have, "max": cap})
+
+
 def _todo_line(x, every=False):
     """plans.ts todoLine: a line to tick by hand {k, t, url?}; `every` adds r,
     its weekdays (Monday "0"), kept sorted."""
@@ -449,6 +454,7 @@ class FakeWorker:
         self.admins = set()  # notices.ts isAdmin: wrangler.toml's ADMINS (and the ADMIN_UIDS secret)
         self.plan_log = []   # plans.ts logSave: (plan, version, uid, summary, at), a save's history line
         self.plan_prev = {}  # plans.ts plan_log.prev: a plan's doc before its latest save, for undo
+        self.plan_saves = {}  # plans.ts limitOrThrow planput: (uid, day) -> saves, PLAN_SAVES_A_DAY a day
         self.otp = {}        # email -> code
         # 3.1: plans (worker/src/plans.ts)
         self.plans = {}      # id -> {code, owner, name, line, audience, squad, doc, version,
@@ -523,6 +529,10 @@ class FakeWorker:
         auth = (headers or {}).get("Authorization", "")
         try:
             self.bodies.append((method, route, json_body))
+            size = len(json.dumps(json_body).encode()) if json_body is not None else 0  # requests' content-length
+            if size > self.BODY_MAX:  # index.ts: before anything else; a plan's save as its size (plans.ts sizeOver)
+                raise Bad(413, "too_big", {"limit": "size", "have": size, "max": self.PLAN_CEILINGS["size"]}
+                          if method == "PUT" and re.fullmatch(r"/plans/(?!trees$)[A-Za-z0-9_-]{1,128}", route) else {})
             status, body = self._route(method, route, dict(p.split("=", 1) for p in query.split("&") if "=" in p),
                                        auth, json_body)
         except Bad as e:
@@ -1533,6 +1543,12 @@ class FakeWorker:
         raise Bad(405, "method")
 
     # -- plans (3.1): worker/src/plans.ts --------------------------------------
+    # plans.ts: a plan save's ceilings, by the name a refusal gives each (3.9.9: over, sizeOver,
+    # roomFor's plans_full); the suite checks them against plans.ts, as remote.py's and builder.js's
+    PLAN_CEILINGS = {"sets": 200, "events": 200, "reviews": 60, "tags": 100, "cards": 50_000, "ids": 50_000,
+                     "size": 1536 * 1024, "total": 24 * 1024 * 1024}
+    PLAN_SAVES_A_DAY = 500  # planput
+    BODY_MAX = 1600 * 1024  # index.ts ANY_BODY_MAX: what the API reads of a body at all
     UNIT_KEYS = {"id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for", "notes", "idr", "pn", "todo", "cut", "pl"}
     UNIT_ID = re.compile(r"[a-z0-9]{1,12}")
     FOLLOWS_MAX = 20
@@ -1666,8 +1682,10 @@ class FakeWorker:
         decks?, search?, n?}, unique by their Anki name, under `tagroot`."""
         tags = v.get("tags")
         if tags is not None:
-            if not isinstance(tags, list) or len(tags) > 100:
+            if not isinstance(tags, list):
                 raise Bad(400, "plan")
+            if len(tags) > self.PLAN_CEILINGS["tags"]:
+                raise _over("tags", len(tags), self.PLAN_CEILINGS["tags"])
             out = []
             for t in tags:
                 if (not isinstance(t, dict) or not set(t) <= {"id", "name", "notes", "cards", "tags", "decks", "search", "n"}
@@ -1712,16 +1730,18 @@ class FakeWorker:
             if not isinstance(root, str) or not 0 < len(root) <= 60 or self._tag_part(root) != root:
                 raise Bad(400, "plan")
             doc["tagroot"] = root
-        if picks > 50000:
-            raise Bad(400, "plan")
+        if picks > self.PLAN_CEILINGS["cards"]:
+            raise _over("cards", picks, self.PLAN_CEILINGS["cards"])
 
     def _plan_doc(self, v):
         if not isinstance(v, dict) or not set(v) <= {"deck", "exam", "end", "phases", "pace", "reviews", "units", "events", "every",
                                                       "tags", "tagroot", "deckUrl", "remarks"}:
             raise Bad(400, "plan")
         units = v.get("units")
-        if not isinstance(v.get("deck"), str) or not v["deck"] or not isinstance(units, list) or len(units) > 200:
+        if not isinstance(v.get("deck"), str) or not v["deck"] or not isinstance(units, list):
             raise Bad(400, "plan")
+        if len(units) > self.PLAN_CEILINGS["sets"]:
+            raise _over("sets", len(units), self.PLAN_CEILINGS["sets"])
         out = []
         for u in units:
             if (not isinstance(u, dict) or not set(u) <= self.UNIT_KEYS or not self.UNIT_ID.fullmatch(str(u.get("id")))
@@ -1816,12 +1836,21 @@ class FakeWorker:
                     raise Bad(400, "plan")
                 nu["n"] = u["n"]
             out.append(nu)
-        if len({u["id"] for u in out}) != len(out) or sum(len(u["cards"]) for u in out) > 5000:
+        if len({u["id"] for u in out}) != len(out):
             raise Bad(400, "plan")
         out.sort(key=lambda u: u["opens"])
         doc = {"deck": v["deck"], "units": out}
         self._plan_tags(v, doc, sum(len(u["cards"]) + len(u.get("notes") or []) + len(u.get("nids") or []) + len(u.get("cids") or [])
                                     for u in out))
+        for k in ("ids", "idr"):  # a date's note ids, its pasted ids' cards: IDS_MAX each, in all
+            n = sum(len(u.get(k) or []) for u in out)
+            if n > self.PLAN_CEILINGS["ids"]:
+                raise _over("ids", n, self.PLAN_CEILINGS["ids"])
+        if v.get("reviews") is not None:  # planDoc checks the review days' count before the events
+            if not isinstance(v["reviews"], list):
+                raise Bad(400, "plan")
+            if len(v["reviews"]) > self.PLAN_CEILINGS["reviews"]:
+                raise _over("reviews", len(v["reviews"]), self.PLAN_CEILINGS["reviews"])
         ids = {t["id"] for t in doc.get("tags") or []}
         for u in out:  # 3.8.1: a cut whose plan tag went is its whole tag again, its search with it
             if not u.get("cut"):
@@ -1837,10 +1866,14 @@ class FakeWorker:
         if v.get("exam"):
             doc["exam"] = v["exam"]
         evs = v.get("events") or []  # F1
+        if not isinstance(evs, list):
+            raise Bad(400, "plan")
+        if len(evs) > self.PLAN_CEILINGS["events"]:
+            raise _over("events", len(evs), self.PLAN_CEILINGS["events"])
         # 3.9.9: an event may be marked the exam (kind: "exam", nothing else); the Worker's own check
-        if len(evs) > 200 or not all(isinstance(e, dict) and set(e) <= {"id", "day", "name", "kind"} and e.get("id")
-                                     and e.get("kind", "exam") == "exam"
-                                     and DATE_RE.fullmatch(str(e.get("day") or "")) and str(e.get("name") or "").strip() for e in evs):
+        if not all(isinstance(e, dict) and set(e) <= {"id", "day", "name", "kind"} and e.get("id")
+                   and e.get("kind", "exam") == "exam"
+                   and DATE_RE.fullmatch(str(e.get("day") or "")) and str(e.get("name") or "").strip() for e in evs):
             raise Bad(400, "plan")
         if evs:
             doc["events"] = sorted((dict(e) for e in evs), key=lambda e: e["day"])
@@ -1889,7 +1922,23 @@ class FakeWorker:
             if ph.get("taper") and not v.get("end"):
                 raise Bad(400, "plan")
             doc["phases"] = {"catchup": int(ph.get("catchup") or 0), "taper": int(ph.get("taper") or 0)}
+        size = _js_len(json.dumps(doc, separators=(",", ":"), ensure_ascii=False))  # JSON.stringify(out).length
+        if size > self.PLAN_CEILINGS["size"]:
+            raise _over("size", size, self.PLAN_CEILINGS["size"])
         return doc
+
+    def _plan_bytes(self, owner):
+        """plans.ts ownerBytes: what an owner's plans keep, their docs and the copies Undo holds (SQLite's LENGTH)."""
+        size = lambda d: len(json.dumps(d, separators=(",", ":"), ensure_ascii=False))
+        return sum(size(p["doc"]) + (size(self.plan_prev[pid]) if self.plan_prev.get(pid) is not None else 0)
+                   for pid, p in self.plans.items() if p["owner"] == owner)
+
+    def _plan_save_counted(self, me):
+        """plans.ts limitOrThrow(planput): a person's saves, PLAN_SAVES_A_DAY a day."""
+        k = (me, datetime.date.today().isoformat())
+        self.plan_saves[k] = self.plan_saves.get(k, 0) + 1
+        if self.plan_saves[k] > self.PLAN_SAVES_A_DAY:
+            raise Bad(429, "slow_down", {"retryAfter": 86400})
 
     def _may_read(self, p, pid, me, code=None):
         """The author, a follower, or whoever may follow it."""
@@ -2434,6 +2483,7 @@ class FakeWorker:
         if len(rest) == 1 and method == "PUT":  # plans.ts put: an author's save, from the version it started at
             if not self._writes(p, me):
                 raise Bad(403, "not_author")
+            self._plan_save_counted(me)
             if not set(body) <= {"version", "name", "line", "audience", "squad", "doc", "summary", "post"}:
                 raise Bad(400, "bad_plan")
             if p["owner"] != me and (("audience" in body and body["audience"] != p["audience"])
@@ -2458,8 +2508,8 @@ class FakeWorker:
                 raise Bad(400, "bad_squad")
             try:
                 doc = self._keep_idr(self._plan_doc(body["doc"]), p["doc"]) if "doc" in body else p["doc"]
-            except Bad as e:  # the Worker's V.bad("plan") is "bad_plan"
-                raise Bad(e.status, e.code if e.code.startswith("bad_") else "bad_" + e.code) from None
+            except Bad as e:  # the Worker's V.bad("plan") is "bad_plan"; a ceiling's numbers with it (3.9.9)
+                raise Bad(e.status, e.code if e.code.startswith("bad_") else "bad_" + e.code, e.extra) from None
             if "post" in body:  # plans.ts put: a post that comes with a save is checked before it
                 raw = body["post"]
                 if not isinstance(raw, str) or not 1 <= len(raw) <= 800 or not _one_line(raw, 200):
@@ -2467,6 +2517,12 @@ class FakeWorker:
             if name == p["name"] and line == p["line"] and doc == p["doc"] and audience == p["audience"] and squad == p["squad"]:
                 out = self._plan_view(pid, me)  # nothing changed: nothing written (but its line, as postWithSave)
                 return 200, dict(out, **self._post_with_save(pid, me, body, None))
+            if doc != p["doc"]:  # plans.ts roomForSave: the new doc, less the copy Undo held (it goes)
+                size = lambda d: len(json.dumps(d, separators=(",", ":"), ensure_ascii=False))
+                held = size(self.plan_prev[pid]) if self.plan_prev.get(pid) is not None else 0
+                have, cap = self._plan_bytes(p["owner"]), self.PLAN_CEILINGS["total"]
+                if size(doc) - held > 0 and have + size(doc) - held > cap:
+                    raise Bad(409, "plans_full", {"limit": "total", "have": have, "max": cap})
             if body["version"] != p["version"]:
                 raise Bad(409, "stale", {"version": p["version"]})
             self.plan_prev[pid] = p["doc"]
@@ -2481,6 +2537,7 @@ class FakeWorker:
         if rest[1:] == ["undo"] and method == "POST":  # plans.ts undo: what the latest save replaced, back
             if not self._writes(p, me):
                 raise Bad(403, "not_author")
+            self._plan_save_counted(me)  # a save, as far as the ceiling goes
             if body.get("version") != p["version"]:
                 raise Bad(409, "stale", {"version": p["version"]})
             prev = self.plan_prev.get(pid)

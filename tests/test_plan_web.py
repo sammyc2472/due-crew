@@ -114,7 +114,7 @@ class Ops:
         done(PR.save(self.cl, pid, version, doc, summary))
 
     def send(self, owner, pid, version, doc, summary, post, done):
-        done(PR.save(self.cl, pid, version, doc, summary, post))
+        done(PR.save(self.cl, pid, version, doc, summary, post, waits=True))  # flow.send's: its changes wait if it's refused
 
     def undo(self, owner, pid, version, done):
         done(PR.undo(self.cl, pid, version))
@@ -785,7 +785,7 @@ class AsyncOps(Ops):
         self.queue.append(("save", lambda: done(PR.save(self.cl, pid, version, doc, summary))))
 
     def send(self, owner, pid, version, doc, summary, post, done):
-        self.queue.append(("send", lambda: done(PR.save(self.cl, pid, version, doc, summary, post))))
+        self.queue.append(("send", lambda: done(PR.save(self.cl, pid, version, doc, summary, post, waits=True))))
 
     def make(self, owner, name, doc, done, pid=None):
         self.queue.append(("make", lambda: Ops.make(self, owner, name, doc, done, pid)))
@@ -1392,6 +1392,136 @@ def test_every_control_pressed():
                     delattr(PL, name)
             else:
                 setattr(PL, name, was_attrs[name])
+
+
+
+def _own_code():
+    """A plan code no other plan in the fake has (its own repeat every 32 plans)."""
+    a, n = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789", len(STORE.plans)
+    return "NQ" + "".join(a[(n >> (5 * i)) % 32] for i in range(6))
+
+
+def _near_plan(me, sets=185, cards=0, tags_each=0):
+    """3.9.9: a plan of `me`'s near its ceilings, someone following it: (pid, the window on it)."""
+    STORE.add_user(me, me.title())
+    left, units = cards, []
+    for i in range(sets):
+        u = {"id": f"s{i}", "name": f"Set {i}", "opens": rel(i - 60), "tags": [f"{R}::01_Cell_injury"] if i == 0 else []}
+        if left > 0:
+            n = min(left, 20000)
+            u["cards"], left = [[f"g{i}x{j}", 0] for j in range(n)], left - n
+        if tags_each:
+            u["tags"] = [f"{R}::{'x' * 150}::{i}_{j}" for j in range(tags_each)]
+        units.append(u)
+    pid, code = STORE.add_plan(me, "Path Book, all of it", "Big Step 1", units, code=_own_code())
+    STORE.add_user(me + "f", "Fen")
+    client(me + "f").follow_plan(code)
+    return pid, Face(client(me), select=pid)
+
+
+def test_review_and_send_says_a_ceiling_near_v399():
+    """3.9.9 (Sam's sign-off): Review and send says each ceiling the plan as it
+    would be sent is past 90% of, a line each in the sheet's amber, before the
+    Worker would refuse it: "Picked cards and IDs: 47,900 of 50,000.", "Size:
+    1.4 of 1.5 MB."; nothing at 90% or under. The page draws them, and the
+    sheet's buttons do what they did (pressed in node: its Send sends)."""
+    import shutil
+    import tempfile
+    from due_crew.planner import build as B
+    from due_crew.planner import edits as E
+    from due_crew.planner import webface as WF
+    pid, w = _near_plan("nearly", sets=185, cards=47_900)
+    w.click("rename", uid="s1", name="Cells")
+    w.click("review_send")
+    sh = w.last("sheet")
+    check("near: Review and send says the ceilings the plan is past 90% of, a line each",
+          sh and sh["kind"] == "send" and sh["warns"] == ["Sets: 185 of 200.", "Picked cards and IDs: 47,900 of 50,000."], sh and sh.get("warns"))
+    check("near: the lines are remote.near's on the doc a send sends (edits.lean), Ceilings.near's twin",
+          sh["warns"] == PR.near(E.lean(w.draft.doc(w.ctx()))), "")
+    _pid2, w2 = _near_plan("roomy", sets=180, cards=45_000)
+    w2.click("rename", uid="s1", name="Cells")
+    w2.click("review_send")
+    check("near: at 90% or under, no line", w2.last("sheet")["warns"] == [], w2.last("sheet").get("warns"))
+    _pid3, w3 = _near_plan("wordy", sets=180, tags_each=45)
+    w3.click("rename", uid="s1", name="Cells")
+    w3.click("review_send")
+    size = B.ceiling_counts(E.lean(w3.draft.doc(w3.ctx())))["size"]
+    check("near: the plan's size as the Worker measures the doc a save sends, in MB rounded down under the ceiling",
+          w3.last("sheet")["warns"] == ["Size: 1.4 of 1.5 MB."] and 1.4 * 1048576 <= size < 1536 * 1024, (w3.last("sheet").get("warns"), size))
+    if not shutil.which("node"):
+        print("SKIP near: the page in node: no node")
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        sp = os.path.join(tmp, "states.json")
+        with open(sp, "w", encoding="utf-8") as f:
+            json.dump({"send near": {"view": w.view(), "sheet": sh}}, f)
+        got = subprocess.run(["node", "-e", PRESS_JS, os.path.join(REPO, "due_crew", "planner", "page"), sp], capture_output=True, text=True, timeout=300)
+    try:
+        out = json.loads(got.stdout)["send near"]
+    except ValueError:
+        check("near: the page ran in node", False, got.stderr[-2000:])
+        return
+    yes = next((p for p in out["presses"] if p["what"].startswith("sheet yes")), None)
+    check("near: the page draws each line in the sheet; its controls and buttons pressed without an error",
+          not out["errors"] and all(t in out["text"] for t in sh["warns"]) and yes and yes["sent"], (out["errors"], yes))
+    v0 = STORE.plans[pid]["version"]
+    w._on_cmd(yes["sent"][0])
+    check("near: the sheet's Send still sends: one save, nothing waiting",
+          json.loads(yes["sent"][0][len(WF.PREFIX):])["c"] == "send" and STORE.plans[pid]["version"] == v0 + 1 and not w.draft, w._status)
+
+
+def test_a_refused_send_keeps_its_changes_v399():
+    """3.9.9: a send refused at a ceiling says which, with the server's
+    numbers; past the day's saves it says the changes wait, and they do:
+    under the plan, kept on this computer (draft.py), till the next send
+    (tomorrow's) takes them. One saved at once (nobody following) is said as
+    before: nothing waits there."""
+    from due_crew.planner.draft import Draft
+    STORE.add_user("busy", "Busy")
+    pid, code = STORE.add_plan("busy", "Path Book", "Big Step 1", [{"id": "u1", "name": "Cell injury", "opens": day(3), "tags": [f"{R}::01_Cell_injury"]}],
+                               code=_own_code())
+    STORE.add_user("busyf", "Fen")
+    client("busyf").follow_plan(code)
+    w = Face(client("busy"), select=pid)
+    w.click("rename", uid="u1", name="Cells")
+    today = datetime.date.today().isoformat()
+    STORE.plan_saves[("busy", today)] = STORE.PLAN_SAVES_A_DAY
+    v0 = STORE.plans[pid]["version"]
+    w.click("review_send")
+    w.press(w.last("sheet"), why="Renamed it")
+    kept = w.ops.drafts.get(str(pid))
+    check("refused: past the day's saves, a send says so, and that its changes wait",
+          w._status == "500 saves a day. Your changes wait here and send tomorrow." == PR.SLOW_WAITS, w._status)
+    again = Draft.from_json(pid, kept) if kept else None
+    check("refused: …and they do: still under the plan, kept on this computer as they were, nothing sent",
+          w.draft and len(w.draft) == 1 and again and len(again) == 1 and STORE.plans[pid]["version"] == v0
+          and w.last()["plan"]["sending"]["n"] == 1, (kept, w.last()["plan"].get("sending")))
+    STORE.plan_saves.pop(("busy", today))  # tomorrow
+    w.click("review_send")
+    w.press(w.last("sheet"), why="Renamed it")
+    check("refused: the next day's send takes them", STORE.plans[pid]["version"] == v0 + 1 and not w.draft
+          and next(u for u in STORE.plans[pid]["doc"]["units"] if u["id"] == "u1")["name"] == "Cells", w._status)
+    # a ceiling: the account's plans full; said with what they hold now, the changes still waiting
+    STORE.plans["pfillbusy0000000"] = {"code": "FILLBUSY", "owner": "busy", "name": "F", "line": "", "audience": "code", "squad": None,
+                                       "version": 1, "doc": {"deck": "F", "units": [], "pad": "x" * (24 * 1048576 - 5_000)}}
+    w.click("op", op={"op": "add_date", "day": day(9), "name": "Big", "tags": [f"{R}::{'z' * 150}::{i}" for i in range(50)]})
+    w.click("rename", uid="u1", name="Cell injury and death")
+    held = STORE._plan_bytes("busy")
+    w.click("review_send")
+    w.press(w.last("sheet"), why="More")
+    check("refused: a ceiling says which, the numbers the server's (the account's plans together, what they hold now)",
+          w._status == PR.LIMIT_WORDS["total"].format(max="24", have=PR.mb(held, 24 * 1048576)) and w._status.startswith(
+              "Your plans can be up to 24 MB together. They're at 23.9 MB.") and w.draft and len(w.draft) == 2, (w._status, held))
+    del STORE.plans["pfillbusy0000000"]
+    # nobody following: a change saves at once, and a refusal says what it said
+    STORE.add_user("solo", "Solo")
+    pid2, _c = STORE.add_plan("solo", "Mine", "Big Step 1", [{"id": "u1", "name": "Cell injury", "opens": day(3), "tags": [f"{R}::01_Cell_injury"]}])
+    w3 = Face(client("solo"), select=pid2)
+    STORE.plan_saves[("solo", today)] = STORE.PLAN_SAVES_A_DAY
+    w3.click("rename", uid="u1", name="Cells")
+    check("refused: saved at once (nobody following), the day's saves say what they said: nothing waits there",
+          w3._status == "That's a lot of saves today. Try again tomorrow." and not w3.draft, w3._status)
+    STORE.plan_saves.pop(("solo", today))
 
 
 def main():

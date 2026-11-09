@@ -85,6 +85,21 @@ export function draw(n: number): string {
 
 const newUnitId = () => draw(8).toLowerCase().replace(/[^a-z0-9]/g, "x");
 
+/** 3.9.9: a save past one of a plan's ceilings says which and the numbers. The
+ *  error stays bad_plan (an older client keeps its words), with `limit`: sets,
+ *  events, reviews, tags, cards (picked cards and IDs in all), ids (a date's note
+ *  ids or its pasted ids' cards, in all) or size (the doc as JSON); `have`, what
+ *  this save makes, counted as the check counts it; `max`, the ceiling. A shape
+ *  that's wrong is plain bad_plan. The windows' words: remote.py LIMIT_WORDS and
+ *  Ceilings in builder.js. */
+function over(limit: string, have: number, max: number): HttpError {
+  return new HttpError(400, "bad_plan", { limit, have, max });
+}
+
+/** 3.9.9: a save's body past what the API reads at all (index.ts, ANY_BODY_MAX)
+ *  is too_big, said as the plan's size: what the body is, in bytes. */
+export const sizeOver = (have: number) => ({ limit: "size", have, max: DOC_MAX });
+
 // ---- shapes ----
 
 function path(v: unknown): string {
@@ -450,7 +465,8 @@ export function planDoc(v: unknown): Obj {
         || (e.by !== undefined && !V.isDate(e.by))) throw V.bad("plan");
     out.exam = { date: e.date, target: e.target, ...(e.by ? { by: e.by } : {}) };
   }
-  if (!Array.isArray(v.units) || v.units.length > UNITS_MAX) throw V.bad("plan");
+  if (!Array.isArray(v.units)) throw V.bad("plan");
+  if (v.units.length > UNITS_MAX) throw over("sets", v.units.length, UNITS_MAX);
   const units = v.units.map(unit);
   if (new Set(units.map((u) => u.id)).size !== units.length) throw V.bad("plan");
   const idLen = (u: Obj) => ((u.nids as unknown[] | undefined)?.length ?? 0) + ((u.cids as unknown[] | undefined)?.length ?? 0)
@@ -458,7 +474,8 @@ export function planDoc(v: unknown): Obj {
   // 3.8.0: the plan's tags, under its own part of the tag (fixed when the first was made)
   let tagNotes = 0;
   if (v.tags !== undefined && v.tags !== null) {
-    if (!Array.isArray(v.tags) || v.tags.length > TAGS_MAX) throw V.bad("plan");
+    if (!Array.isArray(v.tags)) throw V.bad("plan");
+    if (v.tags.length > TAGS_MAX) throw over("tags", v.tags.length, TAGS_MAX);
     const tags = v.tags.map(planTag);
     const parts = new Set(tags.map((t) => tagPart(t.name as string).toLowerCase()));
     if (new Set(tags.map((t) => t.id)).size !== tags.length || parts.size !== tags.length) throw V.bad("plan");
@@ -474,13 +491,17 @@ export function planDoc(v: unknown): Obj {
     if (!V.isStr(v.tagroot, TAG_ROOT_MAX, 1) || tagPart(v.tagroot as string) !== v.tagroot) throw V.bad("plan");
     out.tagroot = v.tagroot;
   }
-  if (units.reduce((n, u) => n + (u.cards as unknown[]).length + idLen(u), 0) + tagNotes > CARDS_MAX) throw V.bad("plan");
-  if (units.reduce((n, u) => n + ((u.ids as unknown[] | undefined)?.length ?? 0), 0) > IDS_MAX) throw V.bad("plan");
-  if (units.reduce((n, u) => n + ((u.idr as unknown[] | undefined)?.length ?? 0), 0) > IDS_MAX) throw V.bad("plan");
+  const picks = units.reduce((n, u) => n + (u.cards as unknown[]).length + idLen(u), 0) + tagNotes;
+  if (picks > CARDS_MAX) throw over("cards", picks, CARDS_MAX);
+  for (const k of ["ids", "idr"]) {
+    const n = units.reduce((a, u) => a + ((u[k] as unknown[] | undefined)?.length ?? 0), 0);
+    if (n > IDS_MAX) throw over("ids", n, IDS_MAX);
+  }
   if (v.reviews !== undefined && v.reviews !== null) {
     // 3.3, C4: a review day: that morning, a filtered deck of the dates from `from` to `to`
     const ids = new Set(units.map((u) => u.id));
-    if (!Array.isArray(v.reviews) || v.reviews.length > REVIEWS_MAX) throw V.bad("plan");
+    if (!Array.isArray(v.reviews)) throw V.bad("plan");
+    if (v.reviews.length > REVIEWS_MAX) throw over("reviews", v.reviews.length, REVIEWS_MAX);
     const rs = v.reviews.map((r) => {
       if (!V.isObj(r) || Object.keys(r).some((k) => !["day", "from", "to"].includes(k)) || !V.isDate(r.day)
           || !ids.has(r.from as string) || !ids.has(r.to as string)) throw V.bad("plan");
@@ -492,7 +513,8 @@ export function planDoc(v: unknown): Obj {
   // event went, in a merge, is dropped rather than refused)
   const evIds = new Set<string>();
   if (v.events !== undefined && v.events !== null) {
-    if (!Array.isArray(v.events) || v.events.length > EVENTS_MAX) throw V.bad("plan");
+    if (!Array.isArray(v.events)) throw V.bad("plan");
+    if (v.events.length > EVENTS_MAX) throw over("events", v.events.length, EVENTS_MAX);
     const evs = v.events.map((e) => {
       // 3.9.9: an event may be marked the exam (kind "exam", nothing else); a follower's board offers it as theirs
       if (!V.isObj(e) || Object.keys(e).some((k) => !["id", "day", "name", "kind"].includes(k)) || !V.isStr(e.id, 12) || !UNIT_ID.test(e.id as string)
@@ -538,7 +560,8 @@ export function planDoc(v: unknown): Obj {
   }
   units.sort((a, b) => String(a.opens).localeCompare(String(b.opens)));
   out.units = units;
-  if (JSON.stringify(out).length > DOC_MAX) throw V.bad("plan");
+  const size = JSON.stringify(out).length;
+  if (size > DOC_MAX) throw over("size", size, DOC_MAX);
   return out;
 }
 
@@ -1112,7 +1135,9 @@ export async function ownerBytes(env: Env, owner: string): Promise<number> {
 
 export async function roomFor(env: Env, owner: string | null, grow: number) {
   if (!owner || grow <= 0) return;
-  if ((await ownerBytes(env, owner)) + grow > PLAN_BYTES_MAX) throw new HttpError(409, "plans_full");
+  // 3.9.9: with what they hold now and the ceiling (`total`), as a save's other ceilings say theirs
+  const have = await ownerBytes(env, owner);
+  if (have + grow > PLAN_BYTES_MAX) throw new HttpError(409, "plans_full", { limit: "total", have, max: PLAN_BYTES_MAX });
 }
 
 export async function logSave(env: Env, plan: string, version: number, uid: string, summary: string, prev: string | null) {

@@ -154,7 +154,7 @@ class Ops:
         done(PR.save(self.cl, pid, version, doc, summary))
 
     def send(self, owner, pid, version, doc, summary, post, done):
-        done(PR.save(self.cl, pid, version, doc, summary, post))
+        done(PR.save(self.cl, pid, version, doc, summary, post, waits=True))  # flow.send's
 
     def undo(self, owner, pid, version, done):
         done(PR.undo(self.cl, pid, version))

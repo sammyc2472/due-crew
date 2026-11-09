@@ -26,11 +26,11 @@ from .. import plans as P
 from . import build as B
 
 SOURCES_MAX = 50   # plans.ts SOURCES_MAX: tags, and subdecks, a date
-UNITS_MAX = 200    # plans.ts UNITS_MAX
+UNITS_MAX = B.CEILINGS["sets"]      # plans.ts UNITS_MAX
 NAME_MAX = 60      # validate.ts NAME_MAX
 PATH_MAX = 200     # plans.ts PATH_MAX
-EVENTS_MAX = 200   # plans.ts EVENTS_MAX
-REVIEWS_MAX = 60   # plans.ts REVIEWS_MAX
+EVENTS_MAX = B.CEILINGS["events"]   # plans.ts EVENTS_MAX
+REVIEWS_MAX = B.CEILINGS["reviews"]  # plans.ts REVIEWS_MAX
 _ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789"  # app.js uid8
 
 

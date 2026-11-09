@@ -205,7 +205,7 @@ class Ops:
         """Round five's Send: the waiting changes as one save, with its line
         to followers. done((outcome, what) or None): remote.save's answer."""
         cl, gen = client(), app.generation
-        _bg(lambda: remote.save(cl, pid, version, doc, summary, post),
+        _bg(lambda: remote.save(cl, pid, version, doc, summary, post, waits=True),
             lambda got: getattr(owner, "_alive", False) and gen == app.generation and done(got))
 
     def gave_day(self):

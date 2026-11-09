@@ -36,6 +36,7 @@ const authed = (method: string, re: RegExp, h: Authed) =>
 
 const ID = "([A-Za-z0-9_-]{1,128})";
 const r = (path: string) => new RegExp(`^${path}$`);
+const PLAN_SAVE = new RegExp(`^/plans/(?!trees$)${ID}$`);  // PUT: an author's save (P.put)
 
 open("GET", r("/version"), async (_q, env) => json({ api: Number(env.API_VERSION), minClient: env.MIN_CLIENT }));
 open("POST", r("/auth/code"), A.requestCode);
@@ -236,7 +237,9 @@ export default {
     // the site reaches the API as duecrew.com/api/* (3.1), through its service binding
     if (path.startsWith("/api/")) path = path.slice(4);
     try {
-      if (Number(req.headers.get("content-length") || 0) > ANY_BODY_MAX) throw new HttpError(413, "too_big");
+      const size = Number(req.headers.get("content-length") || 0);
+      // 3.9.9: a plan's save says it as the plan's size (plans.ts sizeOver), with the bytes it is
+      if (size > ANY_BODY_MAX) throw new HttpError(413, "too_big", req.method === "PUT" && PLAN_SAVE.test(path) ? P.sizeOver(size) : {});
       // A browser names the page that sent a request; the add-on sends no
       // Origin. Nothing that changes anything comes from another site's page
       // (sign-in included: another page can't send codes or spend my tries).

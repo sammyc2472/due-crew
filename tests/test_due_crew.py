@@ -12249,7 +12249,10 @@ def test_builder_review_bugs_v381():
           and 'tagDrop === t.id ? h("div", { class: "ptdrop small"' in builder)
     # 6: the server's ceilings, where they're hit
     want = {k: re.search(rf"const {k} = (\d+);", plans_ts).group(1) for k in ("UNITS_MAX", "EVENTS_MAX", "REVIEWS_MAX", "SOURCES_MAX", "SEARCH_MAX")}
-    check("review: the builder's ceilings are the Worker's", all(f"{k} = {v}" in builder for k, v in want.items()), str(want))
+    named = {"UNITS_MAX": "sets", "EVENTS_MAX": "events", "REVIEWS_MAX": "reviews"}  # 3.9.9: Ceilings.MAX, the site's one table
+    check("review: the builder's ceilings are the Worker's", all(
+        (f"{named[k]}: {v}," in builder and f"{k} = Ceilings.MAX.{named[k]}" in builder) if k in named else f"{k} = {v}" in builder
+        for k, v in want.items()), str(want))
     check("review: a date made past 200, a search past 10 (search box, Overlap, a moved chip), a review day past 60 are refused, said",
           "if (doc.units.length >= UNITS_MAX) { note = FULL; return null; }" in builder
           and "if (!addSearch(u, q)) { why.textContent = note;" in builder and ".slice(0, 10)" not in builder

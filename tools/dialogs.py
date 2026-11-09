@@ -1424,7 +1424,7 @@ def main(out):
                     self.drafts[str(pid)] = json.loads(json.dumps(d.to_json()))
 
             def send(self, owner, pid, version, doc, summary, post, done):
-                done(PR.save(CLIENT, pid, version, doc, summary, post))
+                done(PR.save(CLIENT, pid, version, doc, summary, post, waits=True))  # flow.send's
 
             def now_words(self):
                 return "Tue 2:14 pm"

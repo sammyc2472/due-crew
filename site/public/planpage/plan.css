@@ -203,6 +203,7 @@ body .dcp .b.bad:disabled, body .dcp .b.bad:disabled:hover { color: #c62828; }
 .dcp .sheet.wide { width: min(640px, 100%); }
 .dcp .sheet h4 { margin: 0 0 4px; font-size: 16px; }
 .dcp .sheet .sub { color: var(--dc-muted); margin: 0 0 12px; font-size: 13.5px; }
+.dcp .sheet p.warn { margin: 0 0 4px; font-size: 13.5px; }
 .dcp .sheet .acts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 .dcp .sheet .fld { display: grid; gap: 4px; margin: 0 0 10px; }
 .dcp .sheet .fld label { color: var(--dc-muted); font-size: 12.5px; }

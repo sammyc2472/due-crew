@@ -278,7 +278,8 @@ class WebFace(NewPlan, PlanCore):
 
     def _send_view(self):
         from . import ops as O
-        _doc, changes, _dropped = self.draft.replay(self.ctx())
+        from . import remote as PR
+        doc, changes, _dropped = self.draft.replay(self.ctx())
         rows = []
         for i, c in enumerate(changes):
             for j, x in enumerate(c["entries"]):
@@ -292,7 +293,8 @@ class WebFace(NewPlan, PlanCore):
         return {"kind": "send", "title": (f"Send {n:,} change{'s' if n != 1 else ''} to {f:,} following" if f
                                           else f"Save {n:,} change{'s' if n != 1 else ''}"),
                 "rows": rows, "why": O.send_line(changes), "max": O.WHY_MAX, "yes": f"Send to {f:,}" if f else "Save",
-                "cmd": "send"}
+                # 3.9.9: each ceiling the plan as sent is past 90% of, a line (the page's warns)
+                "warns": PR.near(E.lean(doc)), "cmd": "send"}
 
     def c_take_change(self, i, again=False):
         self.take_change(int(i))

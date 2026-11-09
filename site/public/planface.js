@@ -1269,13 +1269,19 @@ const PlanFace = (() => {
       for (const b of [...new Set(bits)]) { const nxt = (line ? `${line}; ` : "") + b; if (nxt.length + 1 > WHY_MAX) break; line = nxt; }
       return line ? `${line[0].toUpperCase()}${line.slice(1)}.` : "";
     }
+    /** 3.9.9: Review and send's line for each ceiling the plan as sent (the sets that wait left out) is past 90% of (webface._send_view) */
+    function nearLines(ids) {
+      const keep = units().filter((u) => !ids.has(u.id)), on = new Set(keep.map((u) => u.id));
+      const reviews = B.doc.reviews ? { reviews: B.doc.reviews.filter((r) => on.has(r.from) && on.has(r.to)) } : {};
+      return Ceilings.near(B.lean({ ...B.doc, units: keep, ...reviews }));
+    }
     /** Review and send: what goes (a set with no cards waits, out of the rows and the line, and says so) */
     function sendView() {
       const ids = heldIds(), last = F.changes.length - 1, f = others(plan());
       const go = F.changes.map((c, i) => [c, i]).filter(([c]) => !heldOf(c, ids)), n = go.length;
       const rows2 = go.map(([c, i]) => ({ i: i === last && B.undos > 0 ? i : null, verb: c.verb, what: c.what, detail: c.detail || "", who: "", warn: false, ai: false }));
       return { kind: "send", title: f ? `Send ${pl(n, "change")} to ${f.toLocaleString()} following` : `Save ${pl(n, "change")}`, words: heldWords(ids), rows: rows2,
-        why: whyLine(go.map(([c]) => c)), max: WHY_MAX, yes: f ? `Send to ${f.toLocaleString()}` : "Save", cmd: "send" };
+        why: whyLine(go.map(([c]) => c)), max: WHY_MAX, yes: f ? `Send to ${f.toLocaleString()}` : "Save", warns: nearLines(ids), cmd: "send" };
     }
     C.review_send = () => {
       if (!F.changes.length || F.busy) return;

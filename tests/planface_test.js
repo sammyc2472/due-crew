@@ -934,6 +934,93 @@ function drawAll(x, view, sheet, mode) {
     check("planface: a review day's sheet, its day emptied with Clear and pressed: the review day comes off, as its words say",
       clear && m && m.c === "review_day" && m.a.from === "" && !(rv.B.doc.reviews || []).some((r) => r.day === rv.day(9)), [!!clear, m, rv.B.doc.reviews]);
   }
+  // -- 3.9.9: Review and send says a ceiling near; a refused save says which, with the server's numbers --
+  {
+    const sets = (x, n, from, cardsOf = () => 0, server = true) => {  // n sets more, each with something on it (a set with nothing waits)
+      for (let i = 0; i < n; i++) {
+        const u = { id: `z${from + i}`, name: `Set ${from + i}`, opens: x.day(40 + from + i), tags: [`${ROOTTAG}::#Path_Book::03_Neoplasia`], decks: [],
+          cards: Array.from({ length: cardsOf(i) }, (_, j) => [`z${from + i}x${j}`, 0]) };
+        x.B.doc.units.push(u);
+        if (server) x.B.base.units.push(JSON.parse(JSON.stringify(u)));
+      }
+    };
+    const refuse = (x, status, body) => {  // the next saves answered as the Worker refuses them
+      const was = x.ctx.api;
+      x.ctx.api = async (m, u, b) => {
+        if (m === "PUT" && u === `/plans/${x.p.id}`) { x.site.calls.push([m, u, b]); const e = new Error(body.error); e.status = status; e.body = body; throw e; }
+        return was(m, u, b);
+      };
+      return () => { x.ctx.api = was; };
+    };
+    const z = await face(2);
+    sets(z, 182, 0, (i) => (i < 2 ? 20000 : i === 2 ? 7898 : 0));  // 185 sets; 47,900 picked cards with the plan's own two
+    await run(z, "rename", { uid: "u1", name: "Cells" });
+    await run(z, "review_send");
+    const zs = z.sheets[z.sheets.length - 1];
+    check("ceilings: Review and send says each ceiling the plan as sent is past 90% of, a line each, in the add-on's words",
+      zs.kind === "send" && JSON.stringify(zs.warns) === JSON.stringify(["Sets: 185 of 200.", "Picked cards and IDs: 47,900 of 50,000."]), zs.warns);
+    const zd = drawAll(z, z.shown[z.shown.length - 1], zs);
+    check("ceilings: the page draws them in the sheet; every control on it fires without an error", !zd.errors.length && zs.warns.every((t) => zd.text.includes(t)),
+      zd.errors.slice(0, 2));
+    const zn = z.store.log.length;
+    await run(z, "send", { why: "" });
+    check("ceilings: …and its Send sends as before", z.store.log.length === zn + 1 && !z.f.F.changes.length, z.f.F.status);
+    const y = await face(2);
+    sets(y, 177, 0);  // 180: at 90%, no line yet
+    await run(y, "rename", { uid: "u1", name: "Cells" });
+    await run(y, "review_send");
+    check("ceilings: at 90% or under, no line", JSON.stringify(y.sheets[y.sheets.length - 1].warns) === "[]", y.sheets[y.sheets.length - 1].warns);
+
+    // a send refused at a ceiling: the Worker's words, its numbers; the changes still wait
+    const r1 = await face(2);
+    await run(r1, "rename", { uid: "u1", name: "Cells" });
+    let back = refuse(r1, 400, { error: "bad_plan", limit: "sets", have: 214, max: 200 });
+    await run(r1, "send", { why: "" });
+    check("ceilings: a send refused at a ceiling says which, with the server's numbers; the change still waits",
+      r1.f.F.status === "A plan holds up to 200 sets. This makes 214." && r1.f.F.changes.length === 1, [r1.f.F.status, r1.f.F.changes.length]);
+    back();
+    const said = [];
+    for (const [status, body] of [[413, { error: "too_big", limit: "size", have: 1782579, max: 1536 * 1024 }],
+      [409, { error: "plans_full", limit: "total", have: 24746394, max: 24 * 1048576 }], [400, { error: "bad_plan", limit: "cards", have: 51320, max: 50000 }],
+      [400, { error: "bad_plan" }], [413, { error: "too_big" }], [409, { error: "plans_full" }], [400, { error: "bad_plan", limit: "ids", have: 50001, max: 50000 }]]) {
+      back = refuse(r1, status, body);
+      await run(r1, "send", { why: "" });
+      said.push(r1.f.F.status);
+      back();
+    }
+    check("ceilings: the size, the account's plans together and picked cards in Sam's words; an older Worker's answer (or ids) as before",
+      JSON.stringify(said) === JSON.stringify([
+        "A plan can be up to 1.5 MB. This makes 1.7 MB. Pasted IDs take the most room.",
+        "Your plans can be up to 24 MB together. They're at 23.6 MB. Delete one, or make this one smaller.",
+        "A plan holds up to 50,000 picked cards and IDs. This makes 51,320.",
+        "Something in the plan isn't valid. Undo your last change, or reload the page.", "The plan is too big to save. Take some IDs or sets off.",
+        "Your plans hold as much as one account can. Make this one smaller, or delete a plan.",
+        "Something in the plan isn't valid. Undo your last change, or reload the page."]) && r1.f.F.changes.length === 1, said);
+
+    // the day's saves: said; the page keeps what didn't save waiting, and the next send takes it
+    const r2 = await face(0);
+    back = refuse(r2, 429, { error: "slow_down", retryAfter: 86400 });
+    await run(r2, "rename", { uid: "u1", name: "Cells" });
+    const r2v = r2.shown[r2.shown.length - 1];
+    check("ceilings: past the day's saves (nobody following, saved at once): said, and the change waits on the page",
+      r2.f.F.status === "500 saves a day. Your changes wait here and send tomorrow." && r2.f.F.changes.length === 1 && r2v.plan.sending && r2v.plan.sending.n === 1,
+      [r2.f.F.status, r2.f.F.changes.length]);
+    back();
+    const r2n = r2.store.log.length;
+    await run(r2, "review_send");
+    await run(r2, "send", { why: "" });
+    check("ceilings: …and tomorrow's send takes it", r2.store.log.length === r2n + 1 && r2.store.now().doc.units.find((u) => u.id === "u1").name === "Cells"
+      && !r2.f.F.changes.length, [r2.f.F.status, r2.store.log.length - r2n]);
+
+    // the builder's own check before a save says what the Worker would, its own count; nothing goes
+    const r3 = await face(0);
+    sets(r3, 211, 0, () => 0, false);
+    const r3n = r3.site.calls.filter(([m]) => m === "PUT").length;
+    await run(r3, "rename", { uid: "u1", name: "Cells" });
+    check("ceilings: past one before it's sent, said as the Worker's refusal says it (214 sets), and nothing sent",
+      r3.f.F.status === "A plan holds up to 200 sets. This makes 214." && r3.site.calls.filter(([m]) => m === "PUT").length === r3n, r3.f.F.status);
+  }
+
   // every sheet planface.js draws is in that list: a new one gets pressed too
   const pf = read("site/public/planface.js");
   const literals = [];  // each sheet({ … }) as written, by its braces
