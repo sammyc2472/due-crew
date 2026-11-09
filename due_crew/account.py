@@ -38,7 +38,8 @@ ACCOUNT_KEYS = ("share_reviews", "share_time", "share_retention", "share_streak"
                 "exam_last", "exam_since",  # 3.9.2: my last exam, kept once it's passed; what the next one covers
                 "song",  # 3.9.6: my song of the moment (songs.clean): my mutual friends see it on their board
                 "magic_search", "magic_seen",  # 3.9.7: Magic search on or off; its first-time card seen
-                "send_errs")  # 3.9.9: Privacy's Send Sam what went wrong (errs.py)
+                "send_errs",  # 3.9.9: Privacy's Send Sam what went wrong (errs.py)
+                "exam_from", "exam_asked")  # 3.9.9: the plan my exam came from; the plans' exams I was asked about
 ACCENT_NAMES = ("green", "blue", "purple", "teal", "amber", "rose")
 _BOOLS = ("share_reviews", "share_time", "share_retention", "share_streak",
           "share_heatmap", "show_up", "paused", "due_show", "due_suggest", "two_buttons", "magic_search", "magic_seen",
@@ -122,6 +123,12 @@ def clean(s):
     if isinstance(s.get("sev_closet"), dict):
         from .closet import clean_closet
         out["sev_closet"] = clean_closet(s["sev_closet"])
+    if "exam_from" in s or "exam_asked" in s:
+        from .plans import clean_exam_asked, clean_exam_from  # 3.9.9: a plan's exam, asked once
+        if "exam_from" in s:
+            out["exam_from"] = clean_exam_from(s["exam_from"])
+        if "exam_asked" in s:
+            out["exam_asked"] = clean_exam_asked(s["exam_asked"])
     if isinstance(s.get("muted"), list):
         # 3.0.1: the people whose cheers and knocks I don't get, by uid
         out["muted"] = list(dict.fromkeys(

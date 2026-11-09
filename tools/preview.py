@@ -224,6 +224,11 @@ _YOU = lambda tab, **kw: dict({"tab": tab, "plans": PLANS}, **kw)  # noqa: E731
 sections.append("<h3>3.8.0: You › Plans, a plan I follow (round five, Sam's pick A: its day's line, then seven small "
                 "days, each its bar and what's left)</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans")))
+_PX = {"cards": [dict(PLAN_CARD, exam_ask={"pid": "p1", "name": "MS2 Block 1", "day": "2026-10-23", "ename": "Block 1 exam", "was": ""})],
+       "offers": []}
+sections.append("<h3>3.9.9: a plan's exam, asked once on its card (Sam's pick B)</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=_PX, due=_DV, you=_YOU("plans", plans=_PX))
+    .replace("dc-pd-p1-", "dc-pdx-p1-").replace('id="du-', 'id="dux-'))
 # pick A: a day's click opens its assignments under the week, whole (today's here; the quiz day's next)
 for _i, _what in ((2, "today, its date's topics and what's left"), (4, "the quiz day, the date for it and the quiz by name")):
     _PF = {"cards": [dict(PLAN_CARD, focus=PLAN_CARD["week"][_i]["day"])], "offers": []}

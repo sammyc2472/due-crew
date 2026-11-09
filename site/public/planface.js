@@ -737,7 +737,7 @@ const PlanFace = (() => {
       });
       const [, seen, has] = mine(us);
       const counted = a ? (tree() ? ` · ${pl(cards, "card")}` : "") : has ? ` · ${pl(cards, "card")}, ${seen.toLocaleString()} seen` : "";
-      const out = { kind: "event", eid: e.id, name: String(e.name || ""), day: e.day, title: `${fmt(e.day)} · ${e.name || "?"}`, author: a, items, n: us.length,
+      const out = { kind: "event", eid: e.id, name: String(e.name || ""), day: e.day, title: `${fmt(e.day)} · ${e.name || "?"}`, author: a, items, n: us.length, exam: e.kind === "exam",
         said: us.length ? `Tests ${pl(us.length, "set")}${counted}` : a ? "No set leads up to it yet: pick it as a set's Leads up to." : "No set leads up to it yet." };
       return a ? Object.assign(out, eventPicks(e)) : out;
     }
@@ -1601,6 +1601,13 @@ const PlanFace = (() => {
       const e = eventOf(eid), v = norm(name).slice(0, 60);
       if (e && v && v !== e.name) { const was = e.name; change(() => { e.name = v; }, ["Renamed", `${dw(e.day)} · ${v}`, `was ${was || "?"}`], ["event", eid]); }
     };
+    /** webface.c_event_kind (3.9.9): the event panel's This is the exam */
+    C.event_kind = ({ eid, exam }) => {
+      const e = eventOf(eid), on = !!exam;
+      if (e && author() && on !== (e.kind === "exam")) {
+        change(() => { if (on) e.kind = "exam"; else delete e.kind; }, [on ? "Made the exam" : "No longer the exam", `${dw(e.day)} · ${e.name || "?"}`, ""], ["event", eid]);
+      }
+    };
     C.move_event = ({ eid, to }) => {
       const e = eventOf(eid);
       if (e && to && to !== e.day) { const from = e.day; change(() => { e.day = to; B.doc.events.sort((a, b) => a.day.localeCompare(b.day)); }, ["Moved", `${dw(to)} · ${e.name || "?"}`, `from ${dw(from)}`], ["event", eid]); }
@@ -2231,7 +2238,7 @@ const PlanFace = (() => {
         let p = await api("POST", "/plans", { name: norm(st.name), deck: st.decks[st.deck] });
         const end = norm(st.end_name);
         if (end && st.end_day) {
-          const ev = { id: uid8(), day: st.end_day, name: end };
+          const ev = { id: uid8(), day: st.end_day, name: end, kind: "exam" };  // 3.9.9: "the exam it ends with" is the exam (edits.new_plan_doc)
           try { p = await api("PUT", `/plans/${p.id}`, { version: p.version, name: p.name, doc: { ...p.doc, events: [ev], end: st.end_day }, summary: "the exam it ends with" }); }
           catch { /* the plan stands; its exam goes on from Add */ }
         }

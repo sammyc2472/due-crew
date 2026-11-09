@@ -576,7 +576,16 @@ var dcPlan = (function () {
       name.addEventListener("keydown", function (e) { if (e.key === "Enter") { name.blur(); } });
       box.appendChild(h("div.row", {}, [name]));
       box.appendChild(h("div.fl", { style: "margin-top:10px" }, [h("span", { text: "On" }), dateInput(pn.day, function (v) { send("move_event", { eid: pn.eid, to: v }); }, "evday")]));
-    } else { box.appendChild(h("h3", { text: pn.title })); }
+      /* 3.9.9: the exam, which followers are asked (once) to make theirs */
+      var ex = h("input", { type: "checkbox", "aria-label": "This is the exam", "data-keep": "evexam" });
+      ex.checked = !!pn.exam;
+      ex.addEventListener("change", function () { send("event_kind", { eid: pn.eid, exam: this.checked }); });
+      box.appendChild(h("label.line.ep" + (pn.exam ? ".on" : ""), { style: "margin-top:8px" }, [ex, h("span", { text: "This is the exam" })]));
+      if (pn.exam) { box.appendChild(h("div.muted.sm", { text: "Followers are asked once whether it's their exam." })); }
+    } else {
+      box.appendChild(h("h3", { text: pn.title }));
+      if (pn.exam) { box.appendChild(h("div.muted.sm", { text: "The plan's exam" })); }
+    }
     box.appendChild(h("div.muted.sm", { text: pn.said, style: "margin:6px 0" }));
     if (pn.picks) {  /* an author's: each set by its day, ticked when it leads up to it */
       var list = h("div.epicks", { role: "group", "aria-label": "Sets it tests" });

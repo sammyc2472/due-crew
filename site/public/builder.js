@@ -326,7 +326,7 @@ const Prompts = (() => {
       "- Several tags can open the same day: separate them with commas on one line.",
       "- Exact notes: notes:ID ID ID brings every card of those notes (every cloze), the IDs separated by spaces. Exact cards: cards:ID:N ID:N brings card N of each note (1 is the first). These IDs can hold any character but a space; copy each exactly. For a plan others follow, use notes: and cards:; numeric nids: and cids: only work in my own Anki. Use only IDs I give you below; never invent, guess or round one. At most 5,000 on a line; split a longer list over dates.",
       "- An Anki search never uses deck:current, is:due, is:new, is:learn, is:review, is:suspended, is:buried, rated:, prop:, introduced:, added:, edited:, resched:, flag:, nid: or cid: (they find different cards for each person), and stays under 500 characters.",
-      "- Events are named days with no cards (a lecture, a quiz, an exam): YYYY-MM-DD | event | Micro quiz, or YYYY-MM-DD | event | Unit 3 test. A date that preps for one ends with | for Micro quiz, the name exactly as on its event line. A date after its event can name it too: it reads \"after Micro quiz\", review after it.",
+      "- Events are named days with no cards (a lecture, a quiz, an exam): YYYY-MM-DD | event | Micro quiz, or YYYY-MM-DD | event | Unit 3 test. A date that preps for one ends with | for Micro quiz, the name exactly as on its event line. A date after its event can name it too: it reads \"after Micro quiz\", review after it. The exam the plan ends with says exam in place of event: YYYY-MM-DD | exam | Block 1 exam.",
       "- A date can ask for things cards can't measure, ticked by hand (up to 8): | watch: Lecture 14, renal clearance | read: chapter 6 | do: practice block 3. A link may follow the words: | watch: Lecture 14 https://example.com/l14",
       "- A note for followers on a video's or a chapter's tag, or on one card, shows in their Anki when it comes up: note | tag:FULL::TAG::PATH | Skip the last two minutes, or note | card:ID:N | This one's on the quiz. One line in your own words, 280 characters at most, one a tag or a card; never card text.",
       "- A chapter too big for one day: put its deeper tags on different days, or give it a due date and the word even to spread it evenly from its date to its due date (\"| due 2026-10-09 | even\").",
@@ -2215,7 +2215,7 @@ async function builder(id, face = null, got = null) {
     ...(t.search || []).map((x) => `search:${x}`)].filter(Boolean);
   const tagLine = (t) => ["tag", t.name, ...tagSrcs(t), (t.notes || []).length ? Picks.notesText(t.notes) : "",
     (t.cards || []).length ? Picks.cardsText(t.cards) : ""].filter(Boolean).join(" | ");
-  const toText = () => { byOpens(); return [...ptags().map(tagLine), ...[...events().map((x) => `${x.day} | event | ${x.name}`), ...doc.units.map((u) => [u.opens, u.name,
+  const toText = () => { byOpens(); return [...ptags().map(tagLine), ...[...events().map((x) => `${x.day} | ${x.kind === "exam" ? "exam" : "event"} | ${x.name}`), ...doc.units.map((u) => [u.opens, u.name,
     [...(u.tags || []).map((t) => `tag:${t}`), ...(u.cut || []).map((c) => `tag:${c.tag} in ${(ptags().find((x) => x.id === c.in) || {}).name || "?"}`),
       ...(u.decks || []).map((d) => `deck:${d}`)].join(", "),
     ...(u.search || []).filter((q) => !cutOf(u, q)).map((q) => `search:${q}`),
@@ -2311,12 +2311,12 @@ async function builder(id, face = null, got = null) {
         if (cs.length) { const have = new Set((t.cards || []).map(([g, o]) => `${g}:${o}`)); t.cards = [...(t.cards || []), ...cs.filter(([g, o]) => !have.has(`${g}:${o}`))]; }
         return;
       }
-      if (parts.length >= 3 && /^\d{4}-\d{2}-\d{2}$/.test(parts[0]) && /^event$/i.test(parts[1])) {
+      if (parts.length >= 3 && /^\d{4}-\d{2}-\d{2}$/.test(parts[0]) && /^(event|exam)$/i.test(parts[1])) {
         const full = parts.slice(2).join(" ");
         const name = full.slice(0, 60);
         if (full.length > 60) warns.push(`Line ${i + 1}: the event's name is cut to 60 characters.`);
         const old = events().find((x) => x.name.toLowerCase() === name.toLowerCase());
-        evs.push({ id: old?.id || uid8(), day: parts[0], name });
+        evs.push(Object.assign({ id: old?.id || uid8(), day: parts[0], name }, /^exam$/i.test(parts[1]) ? { kind: "exam" } : {}));
         return;
       }
       let forN = null; let keepCards = false; let keepN = 0;

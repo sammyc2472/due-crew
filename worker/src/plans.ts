@@ -494,13 +494,14 @@ export function planDoc(v: unknown): Obj {
   if (v.events !== undefined && v.events !== null) {
     if (!Array.isArray(v.events) || v.events.length > EVENTS_MAX) throw V.bad("plan");
     const evs = v.events.map((e) => {
-      if (!V.isObj(e) || Object.keys(e).some((k) => !["id", "day", "name"].includes(k)) || !V.isStr(e.id, 12) || !UNIT_ID.test(e.id as string)
-          || !V.isDate(e.day)) throw V.bad("plan");
+      // 3.9.9: an event may be marked the exam (kind "exam", nothing else); a follower's board offers it as theirs
+      if (!V.isObj(e) || Object.keys(e).some((k) => !["id", "day", "name", "kind"].includes(k)) || !V.isStr(e.id, 12) || !UNIT_ID.test(e.id as string)
+          || !V.isDate(e.day) || (e.kind !== undefined && e.kind !== "exam")) throw V.bad("plan");
       const name = V.displayName(e.name);
       if (!name) throw V.bad("plan");
       if (evIds.has(e.id as string)) throw V.bad("plan");
       evIds.add(e.id as string);
-      return { id: e.id, day: e.day, name };
+      return { id: e.id, day: e.day, name, ...(e.kind === "exam" ? { kind: "exam" } : {}) };
     });
     if (evs.length) out.events = evs.sort((a, b) => String(a.day).localeCompare(String(b.day)));
   }

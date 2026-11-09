@@ -1899,6 +1899,59 @@ def exam_way(exam, today, ends=()):
     return {"day": e.isoformat(), "days": (e - t).days}
 
 
+EXAM_ASKED_MAX = 40  # 3.9.9: the plans whose exam I've been asked about, kept with my settings
+
+
+def clean_exam_asked(v):
+    """{plan id: the exam day I was asked about}, the newest EXAM_ASKED_MAX."""
+    if not isinstance(v, dict):
+        return {}
+    out = {str(k)[:40]: str(d) for k, d in v.items() if isinstance(k, str) and k and _iso(d)}
+    return dict(list(out.items())[-EXAM_ASKED_MAX:])
+
+
+def clean_exam_from(v):
+    """{pid, day}: the plan my exam came from and the day it was then, or None."""
+    if isinstance(v, dict) and isinstance(v.get("pid"), str) and v["pid"] and _iso(v.get("day")):
+        return {"pid": v["pid"][:40], "day": str(v["day"])}
+    return None
+
+
+def exam_marks(doc, today):
+    """A plan's events marked the exam (kind "exam") after today, soonest first."""
+    return sorted((e for e in (doc or {}).get("events") or [] if isinstance(e, dict) and e.get("kind") == "exam"
+                   and _iso(e.get("day")) and str(e["day"]) > str(today)), key=lambda e: str(e["day"]))
+
+
+def exam_offer(plans, my_exam, today, asked=None, came=None):
+    """3.9.9 (Sam's pick B, "Exams and Limits"): the line a follower's plan
+    card asks, once, about a plan's exam: {pid, name, day, ename, was}, or
+    None. Each plan's soonest exam ahead, soonest first. My own exam ahead
+    wins (nothing is asked) unless it came from that plan and the plan's
+    exam has moved since: then `was` is my day, and it asks again. A plan's
+    exam asked about at its day isn't asked again (Not now, or made mine);
+    moved, it is."""
+    asked, came = clean_exam_asked(asked), clean_exam_from(came)
+    mine = str(my_exam or "") if _iso(my_exam) and str(my_exam) >= str(today) else ""
+    found = []
+    for p in plans or []:
+        marks = exam_marks((p or {}).get("plan_doc") or (p or {}).get("doc"), today)  # the plan's own day, never my shift
+        if marks and p.get("id"):
+            found.append((str(marks[0]["day"]), p, marks[0]))
+    for day, p, e in sorted(found, key=lambda x: x[0]):
+        pid = str(p["id"])
+        if day == mine:
+            return None  # it's my exam already
+        moved = bool(came and came["pid"] == pid and mine and mine == came["day"])
+        if mine and not moved:
+            return None  # my own exam ahead wins
+        if asked.get(pid) == day:
+            continue
+        return {"pid": pid, "name": str(p.get("name") or p.get("title") or "Your plan"), "day": day,
+                "ename": str(e.get("name") or "the exam"), "was": mine if moved else ""}
+    return None
+
+
 def link_code(text):
     """A plan's code from the Plans tab's box: the code as typed ("N4AP
     ULM2"), or its link (duecrew.com/p/N4APULM2: the link's last path part).

@@ -21103,6 +21103,97 @@ const text = (n) => n.textContent;
           and "fieldPanel()" in js[js.index("inbox: ["):js.index("\n", js.index("inbox: ["))], got)
 
 
+def test_plan_exam_asked_once_v399():
+    """3.9.9 (Sam: "when a plan sets an exam date … it should show for the
+    folks following it"; his pick B, "Exams and Limits"): an author marks
+    an event the exam; a follower's plan card asks, once, "Heme–Onc block
+    exam is Fri 12 Dec. Make it your exam?" Make it mine sets my exam to it
+    (the crew's countdown, the good-luck card) and remembers the plan; Not
+    now only remembers it asked. My own exam ahead wins and nothing is
+    asked, but one that came from the plan is asked about again when the
+    plan's exam moves."""
+    from due_crew import plans as P, plan_flow as F, account, app as A
+    from due_crew.app import _state
+    today = TODAY.isoformat()
+    d = lambda n: (TODAY + datetime.timedelta(days=n)).isoformat()  # noqa: E731
+    plan = lambda pid, name, evs: {"id": pid, "name": name, "doc": {"deck": "d", "units": [], "events": evs}}  # noqa: E731
+    heme = plan("p1", "Heme-Onc", [{"id": "q", "day": d(10), "name": "Heme quiz"},
+                                   {"id": "x", "day": d(33), "name": "Heme-Onc block exam", "kind": "exam"}])
+    renal = plan("p2", "Renal", [{"id": "y", "day": d(60), "name": "Renal exam", "kind": "exam"}])
+    old = plan("p3", "Cardio", [{"id": "z", "day": d(-2), "name": "Cardio exam", "kind": "exam"}])
+    o = P.exam_offer([renal, heme, old], "", today)
+    check("exam: the soonest exam ahead across the plans I follow is asked about; a quiz, or one passed, never",
+          o == {"pid": "p1", "name": "Heme-Onc", "day": d(33), "ename": "Heme-Onc block exam", "was": ""}, o)
+    check("exam: once asked about at that day, the next plan's comes up; asked about both, nothing",
+          P.exam_offer([renal, heme], "", today, {"p1": d(33)})["pid"] == "p2"
+          and P.exam_offer([renal, heme], "", today, {"p1": d(33), "p2": d(60)}) is None)
+    check("exam: my own exam ahead wins: nothing is asked; one passed doesn't count",
+          P.exam_offer([heme], d(20), today) is None and P.exam_offer([heme], d(-1), today)["pid"] == "p1")
+    check("exam: it's my exam already: nothing", P.exam_offer([heme], d(33), today) is None)
+    moved = plan("p1", "Heme-Onc", [{"id": "x", "day": d(36), "name": "Heme-Onc block exam", "kind": "exam"}])
+    mv = P.exam_offer([moved], d(33), today, {"p1": d(33)}, {"pid": "p1", "day": d(33)})
+    check("exam: made mine, then moved by its author: asked again, with my day", mv and mv["day"] == d(36) and mv["was"] == d(33), mv)
+    check("exam: …not when I'd set my own day since (it didn't come from the plan any more)",
+          P.exam_offer([moved], d(40), today, {"p1": d(33)}, {"pid": "p1", "day": d(33)}) is None)
+    check("exam: …and asked about at the new day, not again",
+          P.exam_offer([moved], d(33), today, {"p1": d(36)}, {"pid": "p1", "day": d(33)}) is None)
+    check("exam: the two settings keys clean to their shapes and ride the account",
+          P.clean_exam_from({"pid": "p1", "day": d(3), "x": 1}) == {"pid": "p1", "day": d(3)} and P.clean_exam_from({"pid": "", "day": d(3)}) is None
+          and P.clean_exam_asked({"p1": d(3), "p2": "soon", 5: d(1)}) == {"p1": d(3)}
+          and len(P.clean_exam_asked({f"p{i}": d(1) for i in range(90)})) == P.EXAM_ASKED_MAX
+          and {"exam_from", "exam_asked"} <= set(account.ACCOUNT_KEYS)
+          and account.clean({"exam_from": {"pid": "p1", "day": d(3)}, "exam_asked": {"p1": d(3)}})
+          == {"exam_from": {"pid": "p1", "day": d(3)}, "exam_asked": {"p1": d(3)}})
+    card = {"id": "p1", "title": "Heme-Onc", "exam_ask": dict(o, ename="<b>Block</b> exam")}
+    html_ = board._exam_ask(card, "p1")
+    check("exam: the card's line asks it, the exam's name escaped, both ways answered by the board's own commands",
+          "&lt;b&gt;Block&lt;/b&gt; exam is <b>" in html_ and "Make it your exam?" in html_ and "Make it mine" in html_
+          and "Not now" in html_ and "duecrew:planexam:yes:p1|" in html_ and "duecrew:planexam:no:p1|" in html_, html_)
+    mv_html = board._exam_ask({"exam_ask": dict(mv, ename="Heme-Onc block exam")}, "p1")
+    check("exam: moved: Move mine, or keep my day", "moved to <b>" in mv_html and "Move mine" in mv_html and "Keep " in mv_html, mv_html)
+    check("exam: no question, no line", board._exam_ask({"id": "p1"}, "p1") == "")
+
+    # answering it, through the board's command
+    cfgs, tips = [{"exam_date": ""}], []
+    saved = (F.followed, F.cfg, F.save_cfg, F.tooltip, A.swap, dict(_state))
+    try:
+        F.followed = lambda: [heme, renal]
+        F.cfg = lambda: dict(cfgs[-1])
+        F.save_cfg = lambda c: cfgs.append(dict(c))
+        F.tooltip = lambda t, **k: tips.append(t)
+        A.swap = lambda c: None
+        _state["labels"] = [today]
+        F.on_message("planexam", ["duecrew", "planexam", "no", "p1"])
+        after_no = dict(cfgs[-1])
+        F.on_message("planexam", ["duecrew", "planexam", "yes", "p2"])
+        after_yes = dict(cfgs[-1])
+        n = len(cfgs)
+        F.on_message("planexam", ["duecrew", "planexam", "yes", "p2"])
+        again = len(cfgs) == n
+    finally:
+        F.followed, F.cfg, F.save_cfg, F.tooltip, A.swap = saved[:5]
+        _state.clear()
+        _state.update(saved[5])
+    check("exam: Not now remembers it was asked, and sets nothing",
+          after_no.get("exam_asked") == {"p1": d(33)} and not after_no.get("exam_date") and not after_no.get("exam_from"), after_no)
+    check("exam: Make it mine sets my exam to it (Settings' own setexam), remembers the plan, says so; asked again: nothing",
+          after_yes.get("exam_date") == d(60) and after_yes.get("exam_from") == {"pid": "p2", "day": d(60)}
+          and after_yes.get("exam_asked") == {"p1": d(33), "p2": d(60)} and tips and "Your exam:" in tips[-1] and again, after_yes)
+    store = world({"priya": "Priya"})
+    cl = new_client(store, "priya", "Priya")
+    pid = cl._call("POST", "/plans", {"name": "Heme-Onc", "deck": "d"})[1]["id"]
+    ok = cl._call("PUT", f"/plans/{pid}", {"version": 1, "doc": {"deck": "d", "units": [], "events": [
+        {"id": "x", "day": d(33), "name": "Block exam", "kind": "exam"}]}})[0]
+    bad = []
+    for ev in ({"id": "x", "day": d(33), "name": "Block exam", "kind": "quiz"}, {"id": "x", "day": d(33), "name": "E", "big": 1}):
+        try:
+            bad.append(cl._call("PUT", f"/plans/{pid}", {"version": 2, "doc": {"deck": "d", "units": [], "events": [ev]}})[0])
+        except Exception as e:
+            bad.append(getattr(e, "status", "raised"))
+    check("exam: the fake server keeps the mark, and takes no other kind or field (worker/test/exam.test.ts's twin)",
+          ok == 200 and store.plans[pid]["doc"]["events"][0].get("kind") == "exam" and bad == [400, 400], (ok, bad))
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

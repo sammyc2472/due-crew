@@ -463,7 +463,7 @@ def event_panel(w, e):
         said = "No set leads up to it yet: pick it as a set's Leads up to."
     out = {"kind": "event", "eid": e.get("id"), "name": str(e.get("name") or ""), "day": e.get("day"),
            "title": f"{P.fmt_day(e.get('day'))} · {e.get('name') or '?'}", "author": w.author(),
-           "items": items, "said": said, "n": len(prep)}
+           "items": items, "said": said, "n": len(prep), "exam": e.get("kind") == "exam"}  # 3.9.9
     if w.author():
         out.update(event_picks(w.doc, e))
     return out

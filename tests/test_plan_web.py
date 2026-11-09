@@ -383,6 +383,34 @@ def test_after_the_last_check_v396():
     check("web: …once: with an end, another after it changes nothing of the end", STORE.plans[pid]["doc"].get("end") == day(9))
     w.click("new_event", name="Midterm", day=day(0))
     check("web: and one before the last set never does", STORE.plans[pid]["doc"].get("end") == day(9))
+    # 3.9.9 (Sam's pick B): This is the exam, on the event's panel; a follower's board asks once
+    eid = next(e["id"] for e in STORE.plans[pid]["doc"]["events"] if e["name"] == "Path exam")
+    w.click("pick", key=["event", eid])
+    check("web: an event's panel says whether it's the exam (not yet)", w.last()["panel"]["exam"] is False, w.last()["panel"].get("exam"))
+    w.click("event_kind", eid=eid, exam=True)
+    ev = next(e for e in STORE.plans[pid]["doc"]["events"] if e["id"] == eid)
+    check("web: This is the exam marks it on the plan; the panel says so", ev.get("kind") == "exam" and w.last()["panel"]["exam"] is True, ev)
+    other = next(e for e in STORE.plans[pid]["doc"]["events"] if e["name"] == "Midterm")
+    check("web: …and only that one", "kind" not in other, other)
+    w.click("event_kind", eid=eid, exam=False)
+    check("web: unticked, a named day again", "kind" not in next(e for e in STORE.plans[pid]["doc"]["events"] if e["id"] == eid))
+    w.click("event_kind", eid="nope", exam=True)
+    check("web: an event that isn't one: nothing", not any(e.get("kind") for e in STORE.plans[pid]["doc"]["events"]))
+    from due_crew.planner import edits as E, text as T
+    doc = {"deck": "d", "units": [], "events": [{"id": "x1", "day": day(5), "name": "Block exam", "kind": "exam"},
+                                                {"id": "q1", "day": day(2), "name": "Quiz"}]}
+    txt = T.to_text(doc)
+    back = T.from_text(doc, None, txt, whole=True)
+    check("web: the text says exam on an exam's line and event on a plain one, and reads it back so (builder.js's twin)",
+          f"{day(5)} | exam | Block exam" in txt and f"{day(2)} | event | Quiz" in txt
+          and [(e["name"], e.get("kind")) for e in back["events"]] == [("Quiz", None), ("Block exam", "exam")]
+          or [(e["name"], e.get("kind")) for e in sorted(back["events"], key=lambda e: e["day"])] == [("Quiz", None), ("Block exam", "exam")],
+          (txt, back["events"]))
+    made, _u = E.new_plan_doc("d", [{"date": day(3), "kind": "quiz", "title": "Quiz 1"}, {"date": day(4), "kind": "exam", "title": "Midterm"}],
+                              "Block exam", day(20))
+    kinds = {e["name"]: e.get("kind") for e in made["events"]}
+    check("web: New plan: the exam it ends with is the exam, and so is a calendar's exam; a quiz stays a quiz",
+          kinds == {"Quiz 1": None, "Midterm": "exam", "Block exam": "exam"}, kinds)
 
 def test_the_deck_beside_the_plan():
     pid, _code = plan([{"id": "u1", "name": "Cell injury", "opens": day(0), "tags": []}])
@@ -1289,7 +1317,7 @@ def test_every_control_pressed():
         check("press: every control sends something or changes something on the page", not dead, dead[:8])
         reached = {json.loads(m[len(WF.PREFIX):])["c"] for o in out.values() for p in o["presses"] for m in p["sent"]}
         expect = {"add_search", "breather", "browse", "calendar", "card_note_off", "close", "copy_search", "copy_source", "deck", "deck_done",
-                  "deck_find", "deck_keep", "deck_open", "deck_tick", "deck_view", "delete", "discard", "event_sets", "keep_only", "lesson_from",
+                  "deck_find", "deck_keep", "deck_open", "deck_tick", "deck_view", "delete", "discard", "event_kind", "event_sets", "keep_only", "lesson_from",
                   "move", "move_event", "move_from", "move_source_form", "new_cancel", "new_date", "new_date_form", "new_event", "new_event_form",
                   "new_follow", "new_library", "new_make", "new_plan", "new_review_form", "new_set", "new_step", "note_add", "note_off", "nudge",
                   "op", "open_now", "paste", "pick", "pick_plan", "prompt", "ptag_delete", "ptag_rename", "remark", "rename", "rename_event",

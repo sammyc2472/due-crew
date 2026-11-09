@@ -596,6 +596,24 @@ function drawAll(x, view, sheet, mode) {
   check("planface: a quiz or exam after every set ends a plan with no end (webface.ends_here)", qe.B.doc.end === qe.day(30), qe.B.doc.end);
   await run(qe, "new_event", { name: "Midterm", day: qe.day(3) });
   check("planface: …one before the last set never does", qe.B.doc.end === qe.day(30), qe.B.doc.end);
+
+  // -- 3.9.9 (Sam's pick B): an event marked the exam, on the site as in Anki (webface.c_event_kind), and kept through the text --
+  let xp = (await run(qe, "pick", { key: ["event", "q1"] })).panel;
+  check("planface: an event's panel says whether it's the exam (not yet)", xp.exam === false, xp.exam);
+  const saves = qe.store.log.length;
+  xp = (await run(qe, "event_kind", { eid: "q1", exam: true })).panel;
+  check("planface: This is the exam marks it, one save; the panel says so", qe.B.events().find((e) => e.id === "q1").kind === "exam"
+    && xp.exam === true && qe.store.log.length === saves + 1, [xp.exam, qe.store.log.length - saves]);
+  await run(qe, "event_kind", { eid: "q1", exam: true });
+  check("planface: …marked again: nothing to save", qe.store.log.length === saves + 1, qe.store.log.length - saves);
+  const txt = qe.B.toText(), q1 = qe.B.events().find((e) => e.id === "q1");
+  check("planface: the text says exam on its line, event on a plain one (text.py's to_text)",
+    txt.includes(`${q1.day} | exam | ${q1.name}`) && txt.includes(" | event | Midterm"), txt.split("\n").filter((l) => / \| (exam|event) \| /.test(l)));
+  const readBack = qe.B.fromText(txt, true);
+  check("planface: …and read back, the exam is still the exam (fromText)", readBack.events.find((e) => e.name === q1.name).kind === "exam"
+    && !readBack.events.find((e) => e.name === "Midterm").kind, readBack.events);
+  xp = (await run(qe, "event_kind", { eid: "q1", exam: false })).panel;
+  check("planface: unticked, a named day again", !("kind" in qe.B.events().find((e) => e.id === "q1")) && xp.exam === false, qe.B.events().find((e) => e.id === "q1"));
   await run(s, "pick", { key: ["date", "u2"] });
   await run(s, "op", { op: { op: "move_source", date: "u2", key: ["search", `"tag:${ROOTTAG}::^Systems::Heme"`], to: "u3" } });
   check("planface: Move to: a search moves to another set", (s.B.doc.units.find((u) => u.id === "u3").search || []).length === 1 && !(s.B.doc.units.find((u) => u.id === "u2").search || []).length);
@@ -784,7 +802,7 @@ function drawAll(x, view, sheet, mode) {
     [noSaid, noWait, noHold, no.site.calls.filter(([m]) => m === "PUT").length]);
 
   // -- New plan: someone's plan, start empty --
-  const ns = makeSite(makeStore(plans(() => "2030-01-01", 0)).fn);
+  const nstore = makeStore(plans(() => "2030-01-01", 0)), ns = makeSite(nstore.fn);
   const nshown = [];
   const nf = ns.ctx.PlanFace.make(null, { plans: [], go: (u) => ns.went.push(u), out: { show: (x) => nshown.push(x), sheet() {}, status() {} }, newPlan: { decks: ["Big Step 1", "Other deck"], deck: "" } });
   nf.cmd(msg("ready"));
@@ -799,6 +817,9 @@ function drawAll(x, view, sheet, mode) {
   nf.cmd(msg("new_make", { start: false }));
   for (let i = 0; i < 8; i++) await settle();
   check("planface: Make it: POST /plans, its exam, then its page", ns.went.includes("/plans/newplanxxxxxxxxx/edit"), ns.went);
+  const made0 = nstore.log.find((b) => b.summary === "the exam it ends with");
+  check("planface: …its exam marked the exam (3.9.9, edits.new_plan_doc's twin), so followers are asked",
+    made0 && made0.doc.events.length === 1 && made0.doc.events[0].kind === "exam" && made0.doc.events[0].name === "Block 2 exam", made0 && made0.doc.events);
   nf.cmd(msg("new_follow", { code: "ab12 cd34" }));
   check("planface: Someone's plan: its code's page", ns.went.includes("/p/AB12CD34"), ns.went);
   nf.cmd(msg("new_follow", { code: "https://duecrew.com/p/QW12ER34?from=x" }));

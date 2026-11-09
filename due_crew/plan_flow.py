@@ -2669,6 +2669,15 @@ def board_view(c):
             joy(card, today)  # 3.9.6: what's happened to it since it was last looked at
         except Exception:
             oops()
+    try:  # 3.9.9 (Sam's pick B): a plan's exam, asked once on its card
+        ask = P.exam_offer(plan_list, (c or {}).get("exam_date"), today, (c or {}).get("exam_asked"),
+                           (c or {}).get("exam_from"))
+    except Exception:
+        oops()
+        ask = None
+    for card in cards:
+        if ask and str(card.get("id")) == ask["pid"]:
+            card["exam_ask"] = ask
     from . import team_flow
     for card in cards:
         try:
@@ -2885,6 +2894,34 @@ def joy_picture(pid, key, card):
 
 # ---- board commands ----
 
+def exam_answer(pid, mine):
+    """3.9.9 (Sam's pick B): the card's question about a plan's exam,
+    answered. Make it mine sets my exam to it (Settings' own setexam: the
+    one before is kept as my last, as ever) and remembers which plan it came
+    from, so a move asks again; Not now only remembers it was asked. Either
+    way it isn't asked again about that day. Main thread."""
+    c = cfg()
+    today = _state["labels"][0] if _state["labels"] else ""
+    ask = P.exam_offer(followed(), c.get("exam_date"), today, c.get("exam_asked"), c.get("exam_from"))
+    if not ask or ask["pid"] != str(pid):
+        return  # answered already, or the plan moved on
+    c = dict(c)
+    c["exam_asked"] = dict(P.clean_exam_asked(c.get("exam_asked")), **{ask["pid"]: ask["day"]})
+    if mine:
+        from .settings_model import change
+        try:
+            changed = change(["setexam", ask["day"]], c, today=datetime.date.fromisoformat(today) if today else None)
+        except ValueError:
+            changed = None
+        c.update(changed or {})
+        c["exam_from"] = {"pid": ask["pid"], "day": ask["day"]}
+    save_cfg(c)
+    if mine:
+        tooltip(f"Your exam: {P.fmt_day(ask['day'])}.")
+    if app.swap:
+        app.swap(c)
+
+
 def on_message(cmd, parts):
     """duecrew:plan* from the board. True when handled."""
     if cmd.startswith("planteam"):
@@ -2933,6 +2970,8 @@ def on_message(cmd, parts):
     elif cmd == "planbehind" and arg:  # plans, end to end: You › Plans' Behind…, the sheet
         from . import plan_board
         plan_board.behind(arg)
+    elif cmd == "planexam" and arg in ("yes", "no") and len(parts) > 3:  # 3.9.9: a plan's exam, mine or not now
+        exam_answer(parts[3], arg == "yes")
     elif cmd == "planunslide" and arg:  # ...the card's Undo after Slide, the same day
         from . import plan_board
         plan_board.unslide(arg)

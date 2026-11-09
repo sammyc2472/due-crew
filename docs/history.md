@@ -4883,3 +4883,25 @@ every release that changes how something works.
   (`board.POP_JS`). And one of Anki's own: Study Now pressed before the
   overview's bottom bar has loaded can leave no Show Answer button; the
   robot waits for Anki's pages.
+- 3.9.9, a plan's exam, asked once (Sam, 8 Nov: "when a plan sets an exam
+  date … it should show for the folks following it"; his pick B of three:
+  not set for them, not a line alone). An event can be the plan's exam:
+  `kind: "exam"` on it, the only kind there is (`worker/src/plans.ts`
+  takes nothing else; the fake the same; `worker/test/exam.test.ts`). The
+  author ticks This is the exam on the event's panel (op `event_kind`,
+  `edits.mark_exam`; planface's twin), New plan's "the exam it ends with"
+  is one from the start (both sides), and the text says
+  `2026-12-12 | exam | Heme-Onc block exam` (text.py and builder.js, the
+  plan-text page, both prompts). A follower's plan card asks under its
+  path: "Block 1 exam is Fri 23 Oct. Make it your exam?" Make it mine sets
+  my exam (Settings' own `setexam`, so the good-luck card and the exam's
+  scope follow it) and Not now leaves it; either way it isn't asked again
+  for that day (`exam_asked`, pid → day, 40 at most). If the plan's exam
+  moves and mine came from it (`exam_from`), the card asks "moved to … Move
+  your exam too?" with Keep and my day. My own exam ahead, set by hand,
+  wins: nothing is asked. The soonest plan exam ahead across my plans is
+  the one asked (`plans.exam_offer`, `plan_flow.exam_answer`,
+  `planexam:yes|no:<pid>`). Both keys are account keys, so a second
+  computer doesn't ask again. A 3.9.8 add-on keeps the mark when it edits
+  the plan (events are kept whole) and shows it as a plain event; the
+  Worker goes first, since an older one refuses the mark.

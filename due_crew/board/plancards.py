@@ -168,7 +168,7 @@ def _plan_card_html(card, people=None, cfg=None, head=None):
     if card.get("no_deck"):
         out += (f'<div class="dc-line">No deck here has this plan&rsquo;s cards yet. '
                 f'<a href="#" onclick="{_pycmd("plandeck:" + pid)}">Pick a deck</a></div>')
-    out += (_plan_path(card) + _joy_line(card, pid) + _plan_status(card, pid) + _plan_slid(card, pid)
+    out += (_plan_path(card) + _exam_ask(card, pid) + _joy_line(card, pid) + _plan_status(card, pid) + _plan_slid(card, pid)
             + (_plan_behind(card, pid) or _joy_caught(card)) + _week_html(card, pid) + _plan_now(card, pid))
     notes = _plan_notes(card, pid)
     if notes:
@@ -368,6 +368,26 @@ def _joy_caught(card):
     play = f' data-joy="tada"{_joy_ago(c["ago"])}' if c.get("ago") is not None else ""
     return (f'<div class="pst jcu"><span><b>Caught up</b> &middot; {name}, all {int(c.get("n") or 0):,} seen</span>'
             f'<span class="acts"><span class="jta" aria-hidden="true"{play}>&#127881;</span></span></div>')
+
+
+def _exam_ask(card, pid):
+    """3.9.9 (Sam's pick B, "Exams and Limits"): the plan's exam, asked once:
+    Make it mine (my exam, the crew's countdown, the good-luck card) or Not
+    now. Moved since I made it mine: Move mine, or keep my day. The exam's
+    name is the author's: escaped here (plans.exam_offer)."""
+    a = card.get("exam_ask")
+    if not a:
+        return ""
+    e = _html.escape
+    day = e(_ins_dname(a["day"], long=True))
+    yes, no = _pycmd(f"planexam:yes:{pid}"), _pycmd(f"planexam:no:{pid}")
+    if a.get("was"):
+        return (f'<div class="pst pex"><span>{e(a["ename"])} moved to <b>{day}</b>. Move your exam too?</span>'
+                f'<span class="acts"><a href="#" onclick="{yes}">Move mine</a>'
+                f'<a href="#" onclick="{no}">Keep {e(_ins_dname(a["was"], long=True))}</a></span></div>')
+    return (f'<div class="pst pex"><span>{e(a["ename"])} is <b>{day}</b>. Make it your exam?</span>'
+            f'<span class="acts"><a href="#" title="Your exam in Settings: the countdown your crew sees, and the good-luck card" '
+            f'onclick="{yes}">Make it mine</a><a href="#" onclick="{no}">Not now</a></span></div>')
 
 
 def _plan_slid(card, pid):

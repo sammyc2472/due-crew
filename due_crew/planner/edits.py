@@ -265,13 +265,15 @@ def drop_if_empty(doc, uid):
     return doc
 
 
-def add_event(doc, day, name, rng=random):
-    """A named day (a quiz, the exam) the dates prep for. (doc, its id)."""
+def add_event(doc, day, name, rng=random, exam=False):
+    """A named day (a quiz, the exam) the dates prep for. (doc, its id).
+    exam (3.9.9): marked the exam, which a follower's board offers as theirs."""
     doc = copy.deepcopy(doc)
     if len(doc.get("events") or []) >= EVENTS_MAX:
         raise Refused(f"A plan holds up to {EVENTS_MAX} quizzes and exams.")
     eid = new_id(doc, rng)
-    doc.setdefault("events", []).append({"id": eid, "day": _day(day).isoformat(), "name": _name(name)})
+    doc.setdefault("events", []).append(dict({"id": eid, "day": _day(day).isoformat(), "name": _name(name)},
+                                             **({"kind": "exam"} if exam else {})))
     doc["events"].sort(key=lambda e: str(e.get("day") or ""))
     return doc, eid
 
@@ -335,14 +337,14 @@ def new_plan_doc(deck, sessions, end_name, end_day):
     for s in sessions:
         title = " ".join(str(s.get("title") or "").split())[:60] or s.get("kind", "Session").capitalize()
         if s.get("kind") in EVENT_KINDS:
-            doc, _eid = add_event(doc, s["date"], title)
+            doc, _eid = add_event(doc, s["date"], title, exam=s.get("kind") == "exam")
             have.add((s["date"], title.lower()))
             continue
         doc, uid = add_empty_date(doc, s["date"], title)
         uids.append(uid)
     end_name = " ".join(str(end_name or "").split())[:60]
     if end_name and end_day and (end_day, end_name.lower()) not in have:
-        doc, _eid = add_event(doc, end_day, end_name)
+        doc, _eid = add_event(doc, end_day, end_name, exam=True)  # 3.9.9: "the exam it ends with" is the exam
     if end_day:
         doc = set_end(doc, end_day)
     doc = set_pace(doc, "end" if end_day else "daily", [1, 1, 1, 1, 1, 0, 0], 20)
@@ -560,6 +562,19 @@ def _event(doc, eid):
     if e is None:
         raise Refused("That quiz or exam isn't on the plan any more.")
     return e
+
+
+def mark_exam(doc, eid, on=True):
+    """3.9.9 (Sam's pick B): an event marked the exam ({"kind": "exam"}); a
+    follower's board asks them once whether it's their exam. Off, it's a
+    named day again. A plan can have more than one (a block's exams)."""
+    doc = copy.deepcopy(doc)
+    e = _event(doc, eid)
+    if on:
+        e["kind"] = "exam"
+    else:
+        e.pop("kind", None)
+    return doc
 
 
 def rename_event(doc, eid, name):

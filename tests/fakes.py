@@ -1837,7 +1837,9 @@ class FakeWorker:
         if v.get("exam"):
             doc["exam"] = v["exam"]
         evs = v.get("events") or []  # F1
-        if len(evs) > 200 or not all(isinstance(e, dict) and set(e) <= {"id", "day", "name"} and e.get("id")
+        # 3.9.9: an event may be marked the exam (kind: "exam", nothing else); the Worker's own check
+        if len(evs) > 200 or not all(isinstance(e, dict) and set(e) <= {"id", "day", "name", "kind"} and e.get("id")
+                                     and e.get("kind", "exam") == "exam"
                                      and DATE_RE.fullmatch(str(e.get("day") or "")) and str(e.get("name") or "").strip() for e in evs):
             raise Bad(400, "plan")
         if evs:

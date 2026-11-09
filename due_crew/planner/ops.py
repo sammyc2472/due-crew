@@ -447,7 +447,7 @@ class AddEvent(Op):
         return o
 
     def run(self, doc, o, ctx):
-        doc, eid = E.add_event(doc, o["day"], o["name"], _rng(o))
+        doc, eid = E.add_event(doc, o["day"], o["name"], _rng(o), exam=bool(o.get("exam")))
         return doc, {eid}
 
     def words(self, o, before, after, ctx):
@@ -478,6 +478,21 @@ class RenameEvent(_EventOp):
     def words(self, o, before, after, ctx):
         old = next((e.get("name") for e in _events(before) if e["id"] == o["event"]), "")
         return [_entry("Renamed", self._label(after, o["event"]), f"was {old}")]
+
+
+@op("event_kind")
+class EventKind(_EventOp):
+    """3.9.9: an event marked the exam, or not (edits.mark_exam)."""
+    def check(self, doc, o):
+        o = super().check(doc, o)
+        o["exam"] = bool(o.get("exam"))
+        return o
+
+    def run(self, doc, o, ctx):
+        return E.mark_exam(doc, o["event"], o["exam"]), set()
+
+    def words(self, o, before, after, ctx):
+        return [_entry("Made the exam" if o["exam"] else "No longer the exam", self._label(after, o["event"]), "")]
 
 
 @op("move_event")

@@ -742,6 +742,12 @@ class WebFace(NewPlan, PlanCore):
         if e is not None and name and name != e.get("name"):
             self.change({"op": "rename_event", "event": eid, "name": name})
 
+    def c_event_kind(self, eid, exam=False):
+        """3.9.9: the event panel's This is the exam."""
+        e = self.event_of(eid)
+        if e is not None and self.author() and bool(exam) != (e.get("kind") == "exam"):
+            self.change({"op": "event_kind", "event": eid, "exam": bool(exam)}, keep=("event", eid))
+
     def c_move_event(self, eid, to):
         e = self.event_of(eid)
         if e is not None and to and to != e.get("day"):
