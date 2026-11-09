@@ -245,6 +245,11 @@ same commit, each with its test:
   `planner/ics.py` ↔ `Ics` in planface.js (Add to my calendar, the suite
   checks byte for byte); `plans.my_doc` ↔ `myDoc` in planface.js (a
   follower's own days)
+- `planner/build.CEILINGS`/`ceiling_counts` ↔ `Ceilings.MAX`/`counts` in
+  builder.js ↔ the Worker's ceilings in `plans.ts` (a plan's limits and how
+  they're counted, 3.9.9; the suite checks all three); `remote.LIMIT_WORDS`/
+  `NEAR_WORDS` ↔ `Ceilings.WORDS`/`NEAR` (a refused save's words, Review and send's
+  lines past 90%)
 - `gamenight.NEEDS` ↔ `NEEDS` in `site/public/table.js` (what each game
   needs from tonight's pack, 3.9.5; the suite checks)
 - the Worker ↔ `tests/fakes.FakeWorker` (the suite's server)

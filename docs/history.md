@@ -4910,3 +4910,36 @@ every release that changes how something works.
   computer doesn't ask again. A 3.9.8 add-on keeps the mark when it edits
   the plan (events are kept whole) and shows it as a plain event; the
   Worker goes first, since an older one refuses the mark.
+- 3.9.9, plans name the limit a save hit (Sam's pick, "Plans: name the
+  limit"): most refused saves said "The plan didn't take that change."
+  whatever the ceiling. The Worker knew which, and says so now beside the
+  same error and status (older clients keep their line): a count ceiling is
+  400 `bad_plan` with `limit` (sets, events, reviews, tags, cards, ids,
+  size), `have` (what this save makes, counted as the check counts it, a
+  repeated card once) and `max`; `plans_full` adds `limit: "total"` and
+  what the account's plans hold now; a `PUT /plans/{id}` body too big to
+  read is 413 `too_big` with `limit: "size"` and its length (other routes'
+  413 unchanged). A doc whose shape is wrong stays plain `bad_plan`
+  (`worker/README.md`, `worker/test/planlimits.test.ts`). The words are
+  Sam's from the mock, one table a side (`remote.LIMIT_WORDS`,
+  `Ceilings.WORDS` in builder.js): "A plan holds up to 200 sets. This makes
+  214.", "A plan can be up to 1.5 MB. This makes 1.7 MB. Pasted IDs take
+  the most room.", "Your plans can be up to 24 MB together. They're at
+  23.6 MB. Delete one, or make this one smaller." MB to one decimal, rounded
+  up past the ceiling and down under it, so it never reads "1.5 of 1.5".
+  `ids` (a set's note ids, or the cards behind pasted IDs, 50,000 each) has
+  no words yet and keeps the old line. The day's 500 saves: "500 saves a
+  day. Your changes wait here and send tomorrow." where they do wait (a
+  send in Anki, its draft on disk; every save on the site, in the page); a
+  save made at once in Anki (nobody following) drops its change as before,
+  so it keeps its old line. Nothing sends by itself the next day. Review
+  and send, both windows, says it first: a line in the sheet's amber for
+  each ceiling the plan as sent is past 90% of ("Picked cards and IDs:
+  47,900 of 50,000.", "Size: 1.4 of 1.5 MB."), `p.warn` in page/plan.js.
+  The ceilings live once a side (`build.CEILINGS`/`ceiling_counts`,
+  `Ceilings.MAX`/`counts`), checked against plans.ts and run in node
+  against each other; the fake restates them (and lost a 5,000-cards check
+  the Worker never had). Anki's save body is 7 to 12% bigger than the
+  site's (requests' JSON has spaces), so a card-heavy plan meets the body
+  ceiling near 1.4 MB of doc from Anki; compact JSON in `api._call` would
+  fix it and is left for its own change.
