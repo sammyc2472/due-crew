@@ -4882,7 +4882,12 @@ every release that changes how something works.
   close now finds the cell's first shown control, then the pill
   (`board.POP_JS`). And one of Anki's own: Study Now pressed before the
   overview's bottom bar has loaded can leave no Show Answer button; the
-  robot waits for Anki's pages.
+  robot waits for Anki's pages. Now and then on its own (once in four runs here), a
+  crewmate's card closed with the key nowhere: a refresh had redrawn the
+  board while the card was up, so the name that opened it was a new copy
+  and the old one was gone. The overlay's close now finds that copy (the
+  same id, or the same command) and gives it the key (`board.POP_JS`); the
+  robot redraws the board under the card on purpose and fails without it.
 - 3.9.9, a plan's exam, asked once (Sam, 8 Nov: "when a plan sets an exam
   date … it should show for the folks following it"; his pick B of three:
   not set for them, not a line alone). An event can be the plan's exam:

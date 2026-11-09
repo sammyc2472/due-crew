@@ -96,6 +96,13 @@ POP_JS = r"""
                 document.removeEventListener('keydown', esc, true);
                 if (on.closing) { on.closing(); }
                 back.removeAttribute('id');  // the bars' shade goes with it (VEIL_WATCH_JS); its look stays, by data-pop
+                // 3.9.9 (the robot click-test, now and then): a redraw while it was up put a new copy of what
+                // opened it in its place (the same id, or the same command); that copy gets the key back
+                if (was && !was.isConnected && was.getAttribute) {
+                    var wid = was.id, cmd = was.getAttribute('onclick');
+                    was = (wid && document.getElementById(wid)) || (cmd && [].slice.call(document.querySelectorAll(was.tagName))
+                        .filter(function (x) { return x.getAttribute('onclick') === cmd && x.offsetParent !== null; })[0]) || was;
+                }
                 // what opened it gets the key back (3.9.2's QoL pass)
                 if (was && was.isConnected && was.focus) { try { was.focus(); } catch (x) { /* gone with a redraw */ } }
                 // 3.9.9 (the robot click-test): a crewmate's 🎉 pill shows only while its name cell has the pointer

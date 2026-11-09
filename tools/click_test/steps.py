@@ -424,6 +424,19 @@ class Run:
         pop = yield from self.open_pop("profile:max", "dc-profile", "a crewmate's card")
         if pop:
             yield from self.esc_check(pop, "click profile:max", "a crewmate's card")
+        # 3.9.9: the board redrawn under it (a refresh landing while it's up, as it did now and then here):
+        # the name that opened it is a new copy, and that copy gets the key back
+        pop = yield from self.open_pop("profile:max", "dc-profile", "a crewmate's card, redrawn under it")
+        if pop:
+            self.probe.step = "windows: a crewmate's card: the board redrawn under it"
+            yield self.js("[].forEach.call(document.querySelectorAll('#due-crew a'), function (a) {"
+                          " if ((a.getAttribute('onclick') || '').indexOf('duecrew:profile:max|') >= 0)"
+                          " { a.setAttribute('data-robot-old', '1'); } })")
+            self.dc._swap(self.dc.cfg())
+            yield self.r.until(lambda: self.probe.settled(self.mw), 10, "settle")
+            fresh = yield self.js("!document.querySelector('[data-robot-old]') && !!document.querySelector('[data-pop=\"dc-profile\"]')")
+            self.check("windows: a redraw under a crewmate's card puts new rows under it, the card still up", fresh)
+            yield from self.esc_check(pop, "click profile:max", "a crewmate's card, redrawn under it")
         # a sheet: Settings › You › the name's change; Esc, then its yes
         yield from self.press_cmd("settings", view="windows")
         yield from self.wait_board("Settings")
