@@ -4788,6 +4788,16 @@ every release that changes how something works.
   is held for the card only while Settings has my exam (with none, it
   plays as a cheer), and a crewmate's later cheer to me takes the place of
   their line on the server (one cheer a pair) if I haven't fetched it yet.
+- 3.9.9, Pip Party's tab when something changed (Sam: "similar time
+  savings on the tab switching to it"). Its Systems map is Insights' own, so
+  it took Insights' saving with it: on the big collection, back to the tab
+  after ten minutes was 3 s and is 50 ms (`team_flow.insights_ready` reads
+  the stamp too, so no loading screen for a map that's at hand; the picker's
+  40 ms is read in place). Tags and Decks keep their reading of every
+  card's tags by the same stamp (`gamenight_flow._kept`): 0.4 to 0.9 s not
+  read again, 7 ms. The first open of a day is still Insights' first
+  (2 to 3 s there, behind the tab's loading view): what's left is
+  `team.deck_topics` and the log's SQL, not touched here.
 - 3.9.9, Pip Party's door after the review (`worker/src/table.ts`,
   `test/tabledoor.test.ts`; each was reproduced first). Turned away, then
   back under a new tab's id: a crewmate is now known by who they are

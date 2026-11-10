@@ -623,7 +623,12 @@ def insights_ready(did, pid=None, exam=""):
     c = cfg()
     key = f"{pid or ''}|{exam}|{c.get('exam_last') or ''}|{c.get('exam_since') or ''}"
     have = (_state.get("insights") or {}).get(did)
-    return bool(have and have.get("key") == key and time.time() - have["at"] < INSIGHTS_FRESH)
+    if not have or have.get("key") != key:
+        return False
+    if time.time() - have["at"] < INSIGHTS_FRESH:
+        return True
+    stamp = _stamp()  # 3.9.9: past its ten minutes, still at hand while nothing changed
+    return stamp is not None and have.get("stamp") == stamp
 
 
 def decks_ready():

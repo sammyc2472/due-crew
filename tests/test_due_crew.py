@@ -21225,6 +21225,29 @@ def test_insights_only_when_something_changed_v399():
         d = TF.insights(7)
         check("insights: kept past ten minutes while nothing changed; again after an answer, or when the stamp can't be read",
               (a, b, c, d) == ({"n": 1}, {"n": 1}, {"n": 2}, {"n": 3}), (a, b, c, d))
+        # Pip Party's tab asks the same thing before it shows (a loading screen or not), and keeps its own
+        # reading of every card's tags by the same stamp
+        from due_crew import gamenight_flow as GF, app as A
+        db.first = lambda sql: stamp[0]
+        _state["insights"] = {}
+        TF.insights(7)
+        _state["insights"][7]["at"] -= TF.INSIGHTS_FRESH + 1
+        same = TF.insights_ready(7)
+        stamp[0] = (1, 10, 3, 4, 5)
+        moved = TF.insights_ready(7)
+        was = GF.TAB.get("corpus")
+        try:
+            old = time.time() - GF.CORPUS_FOR - 5
+            GF.TAB["corpus"] = (A.generation, old, {"rows": []}, stamp[0])
+            kept_ = GF._kept(GF.TAB["corpus"]) and GF.TAB["corpus"][1] > old
+            GF.TAB["corpus"] = (A.generation, old, {"rows": []}, (0,))
+            changed = GF._kept(GF.TAB["corpus"])
+            other = GF._kept((A.generation - 1, time.time(), {"rows": []}, stamp[0]))
+        finally:
+            GF.TAB["corpus"] = was
+        check("pip party: past ten minutes its map is at hand while nothing changed (no loading screen, no second read of the tags); "
+              "read again after a change, and never another profile's",
+              (same, moved, kept_, changed, other) == (True, False, True, False, False), (same, moved, kept_, changed, other))
     finally:
         TF.cfg, TF._work_out, dc.mw.col, _state["insights"] = saved
     conn = sqlite3.connect(":memory:")

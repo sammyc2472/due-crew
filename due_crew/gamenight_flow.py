@@ -312,7 +312,7 @@ def _corpus():
     than a card's tags all told, so the map and Find walk these); read once
     and kept CORPUS_FOR seconds."""
     got = TAB.get("corpus")
-    if got and got[0] == app.generation and time.time() - got[1] <= CORPUS_FOR:
+    if _kept(got):
         return got[2]
     from . import team_flow
     col = _col()
@@ -337,9 +337,29 @@ def _corpus():
     except Exception:
         decks = {}
     data = {"rows": rows_, "know": know, "decks": decks, "full": full}
-    TAB["corpus"] = (app.generation, time.time(), data)
+    TAB["corpus"] = (app.generation, time.time(), data, _stamp())
     TAB["levels"] = {}
     return data
+
+
+def _stamp():
+    from . import team_flow
+    return team_flow._stamp()
+
+
+def _kept(got):
+    """The tab's reading of every card's tags is still good: this profile's,
+    inside its ten minutes, or (3.9.9) past them with nothing studied or
+    changed since (team_flow._stamp): 0.6 s of a big deck not read again."""
+    if not got or got[0] != app.generation:
+        return False
+    if time.time() - got[1] <= CORPUS_FOR:
+        return True
+    stamp = _stamp()
+    if stamp is None or len(got) < 4 or got[3] != stamp:
+        return False
+    TAB["corpus"] = (got[0], time.time(), got[2], got[3])
+    return True
 
 
 @functools.lru_cache(maxsize=200000)
@@ -804,12 +824,9 @@ def _warm():
     if got and got[0] == _warm_key() and time.time() - got[1] <= CORPUS_FOR:
         return True
     if TAB["by"] in ("tag", "deck"):
-        got = TAB.get("corpus")
-        return bool(got and got[0] == app.generation and time.time() - got[1] <= CORPUS_FOR)
+        return _kept(TAB.get("corpus"))
     from . import team_flow
-    if not team_flow.decks_ready():
-        return False
-    decks = _sys_decks()
+    decks = _sys_decks()  # (Insights' picker: two weeks of the log, 40 ms on a big deck; not worth a loading screen)
     d = next((x for x in decks if x["did"] == TAB["did"]), decks[0] if decks else None)
     return d is None or team_flow.insights_ready(d["did"], d.get("pid"), str(cfg().get("exam_date") or ""))
 
