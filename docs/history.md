@@ -4788,6 +4788,20 @@ every release that changes how something works.
   is held for the card only while Settings has my exam (with none, it
   plays as a cheer), and a crewmate's later cheer to me takes the place of
   their line on the server (one cheer a pair) if I haven't fetched it yet.
+- 3.9.9, the overnight performance review (Sam, 10 Nov). Insights' topic
+  builder (`team.deck_topics`) worked out what each tag is once a card: a
+  deck's cards share a few thousand tags, so it's once a tag now (1.04 s
+  to 0.49 s on the big collection, the same topics: the whole view
+  compared before and after). A steady Insights compute there is about
+  1.6 s, from 3.4 s when the review began. Measured and left: import of
+  the add-on (60 ms, 66 modules; Pip Party, Magic search and Wrapped's
+  board load at start and could wait for a click, worth milliseconds); a
+  board swap (26 KB: its 116 KB of styles go once a page since 3.9.8); the
+  log's date-range reads (a third faster in the log's own order on a whole
+  deck, slower on a small deck over a long range, so left on the card
+  index). What's left of Insights' first open is the log's SQL (0.9 s) and
+  the map (1.1 s) on the main thread: the fix is working it out off the
+  main thread, which is its own change.
 - 3.9.9, what plans were missing (the review's eleven mocks; Sam's answers:
   2, 4, 5, 6, 7 yes; 3 "don't think it works well enough, probably
   remove"; 1 and 8 to 11 no). **6, 7**: Schedule ahead keeps its two-week

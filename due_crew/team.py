@@ -191,35 +191,53 @@ def deck_topics(tags_of, reviewed, min_n=None):
     below the deck works the same). (topics, {level: {cids}}): the topics as
     topic_list gives them, the levels as their tags, for not_sticking."""
     min_n = STUCK_MIN if min_n is None else min_n
-    leaves = {}
+    # 3.9.9 (the performance review): a deck's cards share a few thousand tags between them, so what a
+    # tag is (a topic's or not, its lowered form, the levels above it, the level it counts under) is
+    # worked out once a tag, not once a card: a second off Insights on a big deck, the same topics
+    kept, ups, leaves = {}, {}, {}
     for cid in reviewed:
         # 3.8.0: a question bank's id ("…::Step::104523") is never a topic
         # 3.8.1: never a plan's own tags (DueCrew::…): the plan's way on the map shows those
-        tags = [str(t) for t in (tags_of.get(cid) or ()) if t and str(t).lower() not in ANKI_TAGS
-                and not _bank_id(str(t)) and not _ours(str(t))]
-        low = [t.lower() for t in tags]
+        tags, low = [], []
+        for t in tags_of.get(cid) or ():
+            got = kept.get(t)
+            if got is None:
+                st = str(t) if t else ""
+                got = kept[t] = ((st, st.lower()) if st and st.lower() not in ANKI_TAGS and not _bank_id(st) and not _ours(st)
+                                 else False)
+            if got:
+                tags.append(got[0])
+                low.append(got[1])
         leaves[cid] = [t for t, lt in zip(tags, low) if not any(o.startswith(lt + P._SEP) for o in low)]
     under = {}
     for cid, ls in leaves.items():
         seen = set()
         for t in ls:
-            segs = t.split(P._SEP)
-            for i in range(1, len(segs) + 1):
-                seen.add(P._SEP.join(segs[:i]).lower())
+            up = ups.get(t)
+            if up is None:
+                segs = t.split(P._SEP)
+                up = ups[t] = [P._SEP.join(segs[:i]).lower() for i in range(1, len(segs) + 1)]
+            seen.update(up)
         for k in seen:
             under[k] = under.get(k, 0) + 1
-    groups, first = {}, {}
+    groups, first, at = {}, {}, {}
     for cid in sorted(leaves):
         for t in leaves[cid]:
-            segs = t.split(P._SEP)
-            for i in range(len(segs), 0, -1):
-                if (len(segs) > 1 and i == 1) or (i > 1 and segs[i - 1][:1] in "#^"):
-                    break  # a hierarchy's root, or a resource: too broad to be a topic
-                level = P._SEP.join(segs[:i])
-                if under.get(level.lower(), 0) >= min_n:
-                    level = first.setdefault(level.lower(), level)  # one spelling per level
-                    groups.setdefault(level, set()).add(cid)
-                    break
+            level = at.get(t, 0)
+            if level == 0:
+                level = None
+                segs = t.split(P._SEP)
+                for i in range(len(segs), 0, -1):
+                    if (len(segs) > 1 and i == 1) or (i > 1 and segs[i - 1][:1] in "#^"):
+                        break  # a hierarchy's root, or a resource: too broad to be a topic
+                    lv = P._SEP.join(segs[:i])
+                    if under.get(lv.lower(), 0) >= min_n:
+                        level = lv
+                        break
+                at[t] = level
+            if level is not None:
+                level = first.setdefault(level.lower(), level)  # one spelling per level
+                groups.setdefault(level, set()).add(cid)
     out = {}
     for level in sorted(groups):
         name = P._word(level.split(P._SEP)[-1])[:NAME_MAX]
