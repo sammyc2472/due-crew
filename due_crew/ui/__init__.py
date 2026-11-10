@@ -168,9 +168,9 @@ def tone(key):
     try:
         return tokens()[key]
     except Exception:
-        return {"muted": "#7a7a72", "faded": "#aaaaa2", "line": "#e2e2da", "well": "#f2f2ec", "bg": "#ffffff",
+        return {"muted": "#68685f", "faded": "#aaaaa2", "line": "#e2e2da", "well": "#f2f2ec", "bg": "#ffffff",
                 "ink": "#333333", "ink-2": "#5e5e58", "mark": "#242424", "accent": "#2e7d32",
-                "you-bg": "#e9f2e9", "hours": "#b26a00", "warm": "#f8efe2"}.get(key, "#7a7a72")
+                "you-bg": "#e9f2e9", "hours": "#b26a00", "warm": "#f8efe2"}.get(key, "#68685f")
 
 
 def title(text):

@@ -2871,8 +2871,11 @@ def test_not_yet_today_is_unranked():
     check("not yet: dashes, a note with when we last heard, the status, still cheerable; no zeros", "nothing yet as of" in row and "coffee first" in row
           and ">0<" not in row and "0.0%" not in row and "cheerpick:dre" in row)
     kai = page[:page.index(">Kai<")]
-    check("not yet: Kai keeps silver, and Dre's rank is a dash", kai.rfind("&#129352;") > kai.rfind("<tr")
-          and '<td class="rk">&mdash;</td>' in page[page.rfind("<tr", 0, page.index(">Dre<")):page.index(">Dre<")])
+    check("not yet: Kai is above Dre by the order alone; no medals, no places, no dash (3.9.9, Sam: the design mocks' 2)",
+          '<td class="rk"></td>' in kai[kai.rfind("<tr"):]
+          and '<td class="rk"></td>' in page[page.rfind("<tr", 0, page.index(">Dre<")):page.index(">Dre<")]
+          and not any(m in page for m in ("&#129351;", "&#129352;", "&#129353;")) and re.search(r'class="rk">#\d', page) is None
+          and 'td.rk:empty {' in page and '<table class="dc-s-reviews">' in page)
     week = dict(data, entries=[data["entries"][0], ent("dre", "Dre", {lb: dict(zero) for lb in labels[:3]})])
     wf, wd = board.build_rows(week["entries"], labels, week["tomorrow"], "week", {})
     check("not yet: a week of zeros is unranked on Week", [r["name"] for r in wd] == ["Dre"] and wd[0]["notyet"]
@@ -9271,11 +9274,11 @@ def test_site_audit_v380():
     T0 = TODAY.isoformat()
     lone = board.render({"entries": [{"user_id": "me", "name": "Sam", "you": True, "paused": False, "last_updated": "",
                                       "days": {}}], "labels": [T0], "tomorrow": "", "pending": []}, {"period": "week"}, 0)
-    check("site audit: alone with nothing yet, no medal (the add-on)", "&#129351;" not in lone and "&mdash;" in lone)
+    check("site audit: alone with nothing yet, no medal (the add-on)", "&#129351;" not in lone and "&mdash;" in lone and '<td class="rk"></td>' in lone)
     js = open(os.path.join(REPO, "site", "public", "app.js"), encoding="utf-8").read()
     css = open(os.path.join(REPO, "site", "public", "app.css"), encoding="utf-8").read()
     check("site audit: alone with nothing yet, no medal (the site, its twin)",
-          "if (blank(r)) return tr(r, \"—\")" in js)
+          'tr(r, r.showup ? "✓" : "")' in js and "MEDALS" not in js and "`#${n}`" not in js.split("function table(")[1].split("function ")[0])
     check("site audit: columns hide by name, so a squad's two-column line can't shift them",
           ".brdt .k-time, .brdt .k-retention { display: none; }" in css and "nth-child(4)" not in css
           and 'class: "n k-time"' in js and "k-${k}" in js)
@@ -9552,7 +9555,7 @@ def test_head_row_b_v380():
     today = board.render(data, {"period": "today"}, 0)
     check("head row B: Crew's views in the header's corner, not a line above the table",
           corner + ('<a class="on" href="#" onclick="pycmd(\'duecrew:period:today|' + KK + '\'); return false;">Today</a>') in today
-          and today.index(corner) > today.index("<table>") and "<th></th><th></th>" not in today
+          and today.index(corner) > today.index("<table class=\"dc-s-") and "<th></th><th></th>" not in today
           and today.count('<div class="dc-sw">') == 1)
     week = board.render(data, {"period": "week"}, 0)
     check("head row B: Week too, Week picked", corner in week

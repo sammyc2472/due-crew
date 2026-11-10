@@ -931,7 +931,6 @@ function squadWeek(rows, day) {
 // ---- 3.3: the board, as the add-on draws it (due_crew/board.py) ----
 
 const Board = (() => {
-  const MEDALS = ["🥇", "🥈", "🥉"];
   // 3.4 review, T3: headings as words (the medals keep the emoji)
   const HEADS = [["reviews", "Reviews"], ["time", "Time"], ["retention", "Retention"], ["streak", "Streak"]];
   const SQUAD_HEADS = [...HEADS, ["week", "7 days"]];
@@ -1116,7 +1115,6 @@ const Board = (() => {
     const [fresh, dormant] = rows(people, period, sort, today);
     const head = h("tr", {}, picker ? corner(picker) : [h("th"), h("th")], HEADS.map(([k, l]) => h("th", { class: `k-${k}${k === sort ? " on" : ""}` },
       h("button", { class: "linkish", onclick: () => { store("dc-sort", k); onSort(); } }, l + (k === sort ? " ▾" : "")))));
-    let n = 0;
     const tr = (r, rank) => {
       // T5: how many were new, on the Week tab
       const rv = r.reviews === null ? "—" : h("span", {}, r.reviews.toLocaleString(), period === "week" && r.new > 0 && r.reviews > 0 ? h("small", {}, r.new >= r.reviews ? "all new" : `${Math.min(r.new, r.reviews).toLocaleString()} new`) : null);
@@ -1138,12 +1136,11 @@ const Board = (() => {
       fold.push(h("tr", { class: "qfold" }, h("td", { class: "rk" }), h("td", { class: "nm", colspan: HEADS.length + 1 },
         h("button", { class: "linkish", onclick: () => tbl.classList.toggle("qopen") }, `▸ ${longQ.length} quiet`),
         h("span", { class: "ago faded" }, ` · ${who} ${longQ.length === 1 ? "hasn't" : "haven't"} been here since ${since}`))));
-      for (const r of longQ) { const row = tr(r, "—"); row.classList.add("qh"); fold.push(row); }
+      for (const r of longQ) { const row = tr(r, ""); row.classList.add("qh"); fold.push(row); }
     }
-    // board.py: nothing to rank (me alone, the day I joined) takes no medal
-    const blank = (r) => [r.reviews, r.time, r.retention, r.streak].every((v) => v === null);
-    const body = [...fresh.map((r) => { if (r.showup) return tr(r, "✓"); if (blank(r)) return tr(r, "—"); n++; return tr(r, n <= 3 ? MEDALS[n - 1] : `#${n}`); }),
-      ...dormant.filter((r) => !longQ.includes(r)).map((r) => tr(r, "—")), ...fold];
+    // board/crew.py (3.9.9): no medals, no places: the order says it
+    const body = [...fresh.map((r) => tr(r, r.showup ? "✓" : "")),
+      ...dormant.filter((r) => !longQ.includes(r)).map((r) => tr(r, "")), ...fold];
     tbl.append(h("thead", {}, head), h("tbody", {}, body));
     return h("div", { class: "scrollx" }, tbl);
   }

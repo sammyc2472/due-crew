@@ -15,7 +15,7 @@ from ..stats.decks import sig_match
 
 
 LIGHT = {
-    "bg": "#ffffff", "ink": "#333333", "muted": "#7a7a72", "line": "#e2e2da",
+    "bg": "#ffffff", "ink": "#333333", "muted": "#68685f", "line": "#e2e2da",
     "hours": "#b26a00", "faded": "#aaaaa2", "well": "#f2f2ec",
 }
 DARK = {
@@ -87,7 +87,6 @@ def _head_label(icon, text):
 HEADERS = (("reviews", _head_label("&#128218;", "Reviews")), ("time", _head_label("&#9201;", "Time")),
            ("retention", _head_label("&#127919;", "Retention")),
            ("streak", _head_label("&#128293;", "Streak")))
-MEDALS = ("&#129351;", "&#129352;", "&#129353;")
 
 
 def _token_block(palette):

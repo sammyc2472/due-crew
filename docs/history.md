@@ -4788,6 +4788,31 @@ every release that changes how something works.
   is held for the card only while Settings has my exam (with none, it
   plays as a cheer), and a crewmate's later cheer to me takes the place of
   their line on the server (one cheer a pair) if I haven't fetched it yet.
+- 3.9.9, the look, five of six mocked (Sam, 10 Nov, on the design mocks:
+  "approved for 1, 2, 3, 4"; 5 "we keep both the bento and the ahead"; 6
+  yes). Found by looking at six real screens, light, dark and narrow.
+  1, one action leads: every action was bold accent, so nothing led. The
+  foot's Open a room, Crew, Share, the once-only line's Privacy and Got it,
+  and Today's Catch up…, Not today, See them are ink at 600, underlined
+  when pointed at; the filled button, Magic search, Add and links that are
+  content stay the accent (`style.py`, one block).
+  2, no medals, no places on Crew: the order says it and this isn't a race.
+  `crew._table_html` hands every row an empty rank (a show-up tick is all
+  the column holds; `td.rk:empty` takes no room), `MEDALS` gone; the site's
+  twin the same (`table` in app.js, app.css). Squads keep their plain
+  places: not in the mock, not asked.
+  3, a narrow window keeps its words: under 560 px Crew's headers were four
+  emoji and names were cut for four number columns. The table says what
+  it's sorted by (`dc-s-<key>`) and shows that column with Streak (by
+  Streak: Reviews beside it), headers as words. Other tables as they were.
+  4, small grey you can read: `muted` #7a7a72 was 4.3 to 1 on white and
+  4.0 on Anki's canvas; #68685f is 5.6 and 5.2. Light theme, the board
+  (`base.py`) and the Qt windows' `ui.tone`.
+  5, not built: Insights stays whole, the map and Reviews ahead open.
+  6, today and the day opened: both wore the accent ring; the opened day is
+  now filled with its number underlined, the ring is today's alone.
+  The README's two pictures re-rendered (`tools/readme_images.py`, which
+  now says the once-only counts line was seen: it isn't the listing's).
 - 3.9.9, three from "is there anything else" (Sam, 10 Nov: "Go for
   keyboard insights warmup and extra budget lines").
   The keyboard: the week's seven days were clickable boxes, so Tab skipped

@@ -41,7 +41,8 @@ for e in CREW:
     e.setdefault("last_updated", ago(minutes=4))
 DATA = {"entries": CREW, "labels": L, "tomorrow": P["TOMORROW"], "pending": []}
 
-ME = {"period": "today", "accent": "green", "sev_look": ["headphones"], "sev_closet": {"headphones": L[-1]}}
+ME = {"period": "today", "accent": "green", "sev_look": ["headphones"], "sev_closet": {"headphones": L[-1]},
+      "use_told": True}  # (the once-only line about counts isn't the listing's picture)
 html = board.render(DATA, ME, P["now_ts"] - 30,
                     due=dict(P["_DV"], folded=True), plans=P["PLANS"], you=P["_YOU"]("today", folded=True))
 page = f"""<!doctype html><html><head><meta charset="utf-8"><title>README board</title>

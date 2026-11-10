@@ -87,6 +87,7 @@ def _css(cfg):
       text-overflow: ellipsis; }}
     #due-crew td.n {{ text-align: right; font-variant-numeric: tabular-nums; }}
     #due-crew td.rk {{ width: 30px; color: var(--dc-muted); }}
+    #due-crew td.rk:empty {{ width: 0; padding-left: 0; padding-right: 0; }}  /* 3.9.9: no places on the Crew tab; the column is a show-up tick's alone */
     #due-crew th.lt {{ text-align: left; font-weight: 400; }}
     #due-crew th.lt, #due-crew th.sqh {{ color: var(--dc-muted); font-size: 11px; }}
     #due-crew th.sqh {{ text-align: center; padding: 2px 3px 6px; font-weight: 700; }}
@@ -310,6 +311,17 @@ def _css(cfg):
        gets the room. Until 2.9 every name shrank to three letters. */
     @media (max-width: 560px) {{
       #due-crew th .hl {{ display: none; }} #due-crew th .hi {{ display: inline; }}
+      /* 3.9.9 (the design mocks' 3): Crew's numbers keep their words: the column it's sorted by and
+         Streak (sorted by Streak: Reviews beside it), so a name has the room four columns took */
+      #due-crew table[class*="dc-s-"] th .hl {{ display: inline; }} #due-crew table[class*="dc-s-"] th .hi {{ display: none; }}
+      #due-crew table.dc-s-reviews tr > th:nth-child(3), #due-crew table.dc-s-reviews tr > td.n:nth-child(4),
+      #due-crew table.dc-s-streak tr > th:nth-child(3), #due-crew table.dc-s-streak tr > td.n:nth-child(4),
+      #due-crew table.dc-s-retention tr > th:nth-child(3), #due-crew table.dc-s-retention tr > td.n:nth-child(4),
+      #due-crew table.dc-s-reviews tr > th:nth-child(4), #due-crew table.dc-s-reviews tr > td.n:nth-child(5),
+      #due-crew table.dc-s-streak tr > th:nth-child(4), #due-crew table.dc-s-streak tr > td.n:nth-child(5),
+      #due-crew table.dc-s-time tr > th:nth-child(4), #due-crew table.dc-s-time tr > td.n:nth-child(5),
+      #due-crew table.dc-s-time tr > th:nth-child(2), #due-crew table.dc-s-time tr > td.n:nth-child(3),
+      #due-crew table.dc-s-retention tr > th:nth-child(2), #due-crew table.dc-s-retention tr > td.n:nth-child(3) {{ display: none; }}
       #due-crew td, #due-crew th {{ padding-left: 4px; padding-right: 4px; }}
       #due-crew tr:not(.dim) .la {{ display: none; }}
       #due-crew .dc-head .dc-mark {{ height: 14px; }}
@@ -442,6 +454,15 @@ def _css(cfg):
     #due-crew .pwh a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
     #due-crew .pwh .nav .tb {{ padding: 0 2px; font-size: 12px; font-weight: 700; }}
     #due-crew .pwh .nav .tb.here {{ color: var(--dc-muted); font-weight: 500; }}
+    /* 3.9.9 (the design mocks' 1): one action leads. A box's filled button and the one thing it's for
+       stay the accent; what's beside them is ink at the same weight, underlined when pointed at */
+    #due-crew .dc-foot .fl a:not(.pb):not(.warn), #due-crew .dc-calm a:not(.x),
+    #due-crew .du .du-line .acts a, #due-crew .du .du-sg a:not(.x), #due-crew .du .end a.du-go {{ color: var(--dc-ink); font-weight: 600; }}
+    #due-crew .dc-foot .fl a:not(.pb):not(.warn):hover, #due-crew .dc-calm a:not(.x):hover,
+    #due-crew .du .du-line .acts a:hover, #due-crew .du .du-sg a:not(.x):hover, #due-crew .du .end a.du-go:hover {{ text-decoration: underline; }}
+    /* 3.9.9 (the mocks' 6): today keeps the ring; the day opened is filled, its number underlined */
+    #due-crew .pwk .pc.sel:not(.now) {{ border-color: var(--dc-faded); box-shadow: none; }}
+    #due-crew .pwk .pc.sel:not(.now) .d b {{ text-decoration: underline; text-underline-offset: 3px; }}
     /* 3.9.9: the week across plans, under the plan's card: a row a day, reviews and each plan's new
        cards as one bar, the day's time; a heavy day's line and its one move */
     #due-crew .lw {{ text-align: left; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--dc-line); font-size: 12px; }}

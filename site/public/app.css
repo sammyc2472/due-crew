@@ -124,6 +124,7 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px
 .brdt th.sqh { text-align: center; width: 22px; padding: 4px 2px 8px; } .brdt th.sqh.on { color: var(--accent); }
 .brdt td { padding: 6px 8px; white-space: nowrap; vertical-align: middle; border-top: 1px solid transparent; }
 .brdt td.rk { width: 28px; text-align: center; color: var(--muted); }
+.brdt td.rk:empty { width: 0; padding-left: 0; padding-right: 0; }  /* 3.9.9: no places; a show-up tick's alone */
 .brdt td.nm { width: 100%; max-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .brdt td.nm .who { font-size: 15px; }
 .brdt td.n { text-align: right; font-variant-numeric: tabular-nums; }
