@@ -4,6 +4,7 @@ standard library alone. The fake restates the Worker's consent and shape
 rules; worker/test proves the real thing in workerd with D1.
 """
 
+import os
 import datetime
 import hashlib
 import json
@@ -2866,6 +2867,7 @@ def board_files():
 
 def install_fake_aqt():
     """Minimal aqt/anki surface so due_crew modules import."""
+    os.environ["DUE_CREW_INSIGHTS_WHOLE"] = "1"  # 3.9.9: Insights whole, not a part a turn (team_flow.insights_soon)
     aqt = types.ModuleType("aqt")
     aqt.mw = types.SimpleNamespace(
         pm=types.SimpleNamespace(name="TestProfile"),

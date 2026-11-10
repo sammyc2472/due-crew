@@ -539,7 +539,7 @@ def you_view(c):
     d = next((x for x in decks if x["did"] == did), decks[0])
     p = _plan(d["pid"]) if d.get("pid") else None
     exam = str(c.get("exam_date") or "")
-    view = insights(d["did"], p["id"] if p else None, exam)
+    view = insights_soon(d["did"], p["id"] if p else None, exam)
     at = (_state.get("map_at") or {}).get(d["did"]) or []
     if view.get("map"):
         T.map_level(view["map"], at, view.get("_map_know") or {})  # what's on screen worked out
@@ -577,7 +577,7 @@ def plan_lines(cards):
         did = next((d for d, pid in owner.items() if pid == card.get("id")), None)
         if card.get("paused") or did is None:
             continue  # a second plan on a deck: the deck's Insights are the first's
-        v = insights(did, card["id"], str(cfg().get("exam_date") or ""))
+        v = insights_soon(did, card["id"], str(cfg().get("exam_date") or ""))  # its line joins when it's worked out
         aim = v.get("aim") or {}
         if v.get("hero"):
             card["ins"] = {"n": len(v["hero"]), "did": did, "day": aim.get("day"),
@@ -616,6 +616,60 @@ def _stamp():
             "(SELECT count() FROM cards), (SELECT max(mod) FROM notes)"))
     except Exception:
         return None
+
+
+ASYNC = False  # the glue turns it on with a profile open (real Anki)
+WHOLE = "DUE_CREW_INSIGHTS_WHOLE"  # set in the environment (the suite's and the tools' stand-in for Anki sets it): never in parts
+
+
+def insights_soon(did, pid=None, exam=""):
+    """The board's Insights: the view when it's at hand (insights()' own
+    rule), else worked out a step a turn of the screen while Anki stays
+    live, the board drawn again when it's done. Until then: the last view
+    this deck had, marked `working`, or {"working": True}. One deck at a
+    time; another asked meanwhile waits for the redraw that follows."""
+    import os
+    if not ASYNC or os.environ.get(WHOLE) or insights_ready(did, pid, exam):
+        return insights(did, pid, exam)
+    c = cfg()
+    key = f"{pid or ''}|{exam}|{c.get('exam_last') or ''}|{c.get('exam_since') or ''}"
+    have = (_state.get("insights") or {}).get(did)
+    job = _state.get("ins_job")
+    if job is None or job["gen"] != app.generation:
+        job = _state["ins_job"] = {"did": did, "key": key, "gen": app.generation, "stamp": _stamp(),
+                                   "g": _work_steps(int(did), pid, exam)}
+        _later(lambda: _ins_step(job))
+    return dict(have["view"], working=True) if have and have.get("view") else {"working": True}
+
+
+def _later(fn, ms=0):
+    from aqt.qt import QTimer
+    QTimer.singleShot(ms, fn)
+
+
+def _ins_step(job):
+    if _state.get("ins_job") is not job:
+        return
+    if job["gen"] != app.generation or not mw.col:
+        _state["ins_job"] = None
+        return
+    view, done = {}, False
+    try:
+        next(job["g"])
+    except StopIteration as e:
+        view, done = e.value or {}, True
+    except Exception:
+        oops()
+        done = True
+    if not done:
+        _later(lambda: _ins_step(job), 1)  # a turn of the screen between parts: a click or a key gets in
+        return
+    _state["ins_job"] = None
+    _state.setdefault("insights", {})[job["did"]] = {"at": time.time(), "view": view, "key": job["key"], "stamp": job["stamp"]}
+    try:
+        app.swap(cfg())
+    except Exception:
+        oops()
 
 
 def insights_ready(did, pid=None, exam=""):
@@ -659,6 +713,23 @@ MY_EXAM = "~exam"  # my own exam date, among a plan's events
 
 
 def _work_out(did, pid=None, exam=""):
+    """A deck's Insights, whole, now (the steps run to their end)."""
+    g = _work_steps(did, pid, exam)
+    try:
+        while True:
+            next(g)
+    except StopIteration as e:
+        return e.value or {}
+
+
+def _work_steps(did, pid=None, exam=""):
+    """Insights worked out a part at a time: a generator that pauses between
+    its parts (the header, the exam box, not sticking, the map, Reviews
+    ahead, the habits) and returns the view. 3.9.9 (the performance review:
+    seconds of the log on a big deck held Anki still): the board runs it a
+    step a turn of the screen (insights_soon); anything else runs it whole
+    (_work_out). Main thread throughout: the collection is never read from
+    another."""
     col = mw.col
     if not col or not col.decks.get(did, default=False):
         return {}
@@ -688,6 +759,7 @@ def _work_out(did, pid=None, exam=""):
         f"SELECT cid, CAST((? - id / 1000) / 86400 AS INTEGER), ease FROM revlog "
         f"WHERE id >= ? AND type = 1 AND ease > 0 AND cid IN ({deck}) ORDER BY id", cutoff - 1, since(2 * T.DAYS)), young)
 
+    yield
     # the exam box: started cards Anki won't show me before the aim, under my target by then
     # (FSRS only). The deck's, plan or not: it aims at the next of my own exam date and
     # a plan's events within AIM_DAYS, else a week out. A plan's event counts its prep dates'
@@ -734,6 +806,7 @@ def _work_out(did, pid=None, exam=""):
             mem_of[cid] = (T.recall(ago + k, s_, mem.get("decay")), shown)
         out["hero"] = T.hero(mem_of, target)
 
+    yield
     # not sticking yet: this window's reviews, never right yet, or forgotten after being right
     reviewed, miss_last = set(), {}
     for cid, rid, ease in col.db.all(f"SELECT cid, id, ease FROM revlog WHERE id >= ? AND type IN (1, 2) AND ease > 0 "
@@ -754,6 +827,7 @@ def _work_out(did, pid=None, exam=""):
     else:
         out["rows"] = _deck_rows(col, did, reviewed, stuck, forgot)
 
+    yield
     # 3.8.0, the topic map: what I know now, by topic
     try:
         out["map"], out["map_by"], out["_map_know"], out["map_ways"] = _map(col, did, deck, cutoff)
@@ -769,6 +843,7 @@ def _work_out(did, pid=None, exam=""):
                                            if str(u.get("opens") or "") < today)
         out["pid"] = p["id"]
 
+    yield
     # 3.9.2, Reviews ahead (Your week until now): the next six weeks in cards a day,
     # counted from my own log; a plan's dates in it when I follow one (ahead_flow)
     try:
@@ -778,6 +853,7 @@ def _work_out(did, pid=None, exam=""):
     except Exception:
         oops()
 
+    yield
     # Optimize FSRS: my newest cards against my target (put away for 30 days)
     hide = float((pf._pcfg().get("ins_fsrs_hide") or 0))
     if _fsrs(col) and time.time() - hide > T.HIDE_DAYS * 86400:

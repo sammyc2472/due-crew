@@ -21395,6 +21395,61 @@ def test_calm_board_v399():
           got.get("calm_open") == ["squads"] and "calm" in SM.SWITCHES and SM.change(["set", "calm", "1"], {}) == {"calm": True}, got)
 
 
+def test_insights_a_part_at_a_time_v399():
+    """3.9.9 (the performance review): the board's Insights is worked out a
+    part at a time, Anki live between parts, and drawn again when done; until
+    then the last view (marked working) or a line saying so. Off outside
+    Anki's own run (the suite, the tools), where it's worked out whole."""
+    from due_crew import team_flow as TF, app as A, board
+    from due_crew.app import _state
+    import due_crew as dc
+
+    def steps(did, pid=None, exam=""):
+        seen.append("a")
+        yield
+        seen.append("b")
+        yield
+        return {"n": len(seen)}
+    seen, later, swaps = [], [], []
+    saved = (TF.cfg, TF._work_steps, TF._later, TF.ASYNC, dc.mw.col, _state.get("insights"), _state.get("ins_job"), A.swap, TF._stamp)
+    try:
+        TF.cfg = lambda: {}
+        TF._work_steps = steps
+        TF._later = lambda fn, ms=0: later.append(fn)
+        TF._stamp = lambda: (1,)
+        A.swap = lambda *a, **k: swaps.append(1)
+        dc.mw.col = types.SimpleNamespace()
+        _state["insights"], _state["ins_job"] = {}, None
+        check("soon: off (the suite, the tools): worked out whole, at once", TF._work_out(7) == {"n": 2} and TF.insights_soon(7) == {"n": 4})
+        TF.ASYNC, seen[:] = True, []
+        check("soon: the suite's stand-in for Anki says whole", os.environ.get(TF.WHOLE) == "1" and TF.insights_soon(8) == {"n": 2})
+        os.environ.pop(TF.WHOLE)
+        seen[:] = []
+        _state["insights"] = {}
+        first = TF.insights_soon(7)
+        again = TF.insights_soon(7)
+        check("soon: not at hand: a line saying so, one job however often the board draws, nothing worked out yet",
+              first == {"working": True} == again and len(later) == 1 and seen == [], (first, later, seen))
+        while later:
+            later.pop(0)()
+        check("soon: a part a turn, then the view kept and the board drawn again",
+              seen == ["a", "b"] and swaps == [1] and _state["ins_job"] is None and TF.insights_soon(7) == {"n": 2}, (seen, swaps))
+        _state["insights"][7]["at"] -= TF.INSIGHTS_FRESH + 1
+        TF._stamp = lambda: (2,)
+        stale = TF.insights_soon(7)
+        check("soon: changed since: the last view stays up, marked working, while the next is worked out",
+              stale == {"n": 2, "working": True} and len(later) == 1, stale)
+        A.generation += 1
+        later.pop(0)()
+        check("soon: the profile changed meanwhile: the job lets go, nothing kept or drawn", _state["ins_job"] is None and swaps == [1])
+        A.generation -= 1
+        html = board.insights._you_insights({"decks": [{"did": 7, "name": "Deck"}], "did": 7, "view": {"working": True}})
+        check("soon: the board's line while it works", "Reading your reviews" in html, html[-120:])
+    finally:
+        (TF.cfg, TF._work_steps, TF._later, TF.ASYNC, dc.mw.col, _state["insights"], _state["ins_job"], A.swap, TF._stamp) = saved
+        os.environ[TF.WHOLE] = "1"
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

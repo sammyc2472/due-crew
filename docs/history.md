@@ -4788,6 +4788,22 @@ every release that changes how something works.
   is held for the card only while Settings has my exam (with none, it
   plays as a cheer), and a crewmate's later cheer to me takes the place of
   their line on the server (one cheer a pair) if I haven't fetched it yet.
+- 3.9.9, Insights a part at a time (Sam, 10 Nov: "Yes on all"). On a big
+  collection the day's first Insights held Anki about 2.3 s in one piece.
+  `team_flow.insights_soon` (the board's two callers, `you_view` and
+  `plan_lines`) hands back the view when it's at hand, else starts one job:
+  `_work_steps`, `_work_out` as a generator that stops before the exam box,
+  not sticking, the topic map, Reviews ahead and Optimize FSRS, a turn of
+  the screen between them (`_ins_step` on a 1 ms timer), the board drawn
+  again when it's done. Until then the last view, or "Reading your
+  reviews…". Longest hold now about 0.7 s (Reviews ahead, the map); the
+  view is the same, checked against the one before on the big collection.
+  Still the main thread, so the collection rule holds; a second thread was
+  the other way and would have broken it. On only in Anki
+  (`ASYNC`, set at profile open); the suite and tools work it out whole
+  (`DUE_CREW_INSIGHTS_WHOLE`, set by the stand-in for Anki). Everything
+  else that reads Insights (Reviews ahead's line, Pip Party) still calls
+  `insights()`. `test_insights_a_part_at_a_time_v399`.
 - 3.9.9, the overnight performance review (Sam, 10 Nov). Insights' topic
   builder (`team.deck_topics`) worked out what each tag is once a card: a
   deck's cards share a few thousand tags, so it's once a tag now (1.04 s
