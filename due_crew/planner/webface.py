@@ -216,6 +216,13 @@ class WebFace(NewPlan, PlanCore):
         if tab in ("plan", "insights", "settings"):
             self.tab = tab
             self.push()
+            if tab == "insights":
+                try:
+                    from . import webtabs
+                    webtabs.ask_class(self)  # 3.9.9: an author's, where the squad fell behind
+                except Exception:
+                    from ..errs import oops
+                    oops()
 
     def c_close(self, sure=False):
         """Close: with changes waiting to be sent, asked first (unsent_ask); sure, it closes."""

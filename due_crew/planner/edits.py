@@ -1162,6 +1162,41 @@ def behind(doc, progress, today, total_of=None):
     return sorted(out, key=lambda x: str(x[0].get("due") or x[0]["opens"]), reverse=True)[:2]
 
 
+CLASS_SHOWN = 4  # sets Insights lists as where the class fell behind
+
+
+def class_lines(doc, progress, today):
+    """3.9.9 (the plans review's mock 5; Sam: "yes"): Insights' lines for an
+    author on where the plan's squad fell behind: each set that ended two
+    days ago or more with people still not through it, the worst first,
+    CLASS_SHOWN at most. By the counts' own rule (3 in its squad, 2 besides
+    me): under it, one line saying so; nothing at all with nobody sharing."""
+    if not isinstance(progress, dict):
+        return []
+    sharing = int(progress.get("sharing") or 0)
+    squad = int(progress.get("inSquad", sharing) or 0)
+    if not sharing and not squad:
+        return []
+    if squad < 3 or int(progress.get("others", sharing) or 0) < 2 or not sharing:
+        return [f"{squad:,} {'is' if squad == 1 else 'are'} in its squad: where they fall behind shows from 3."]
+    units, rows = progress.get("units") or {}, []
+    for u in P.units(doc):
+        end = u.get("due") or u.get("opens")
+        if not end or _later(end, 2) > today:
+            continue
+        left = sharing - int((units.get(u["id"]) or {}).get("done") or 0)
+        if left > 0:
+            rows.append((left, str(end), str(u.get("name") or "?")))
+    if not rows:
+        return [f"Its squad is keeping up: all {sharing:,} sharing are through every set that's ended."]
+    rows.sort(key=lambda r: (-r[0], r[1]))
+    out = [f"Where its squad fell behind ({sharing:,} sharing):"]
+    out += [f"{name}: {left:,} of {sharing:,} not through it yet ({P.fmt_day(day)})." for left, day, name in rows[:CLASS_SHOWN]]
+    if len(rows) > CLASS_SHOWN:
+        out.append(f"And {len(rows) - CLASS_SHOWN:,} more set{'s' if len(rows) - CLASS_SHOWN != 1 else ''} with someone behind.")
+    return out
+
+
 # ---- plans end to end: the builder's site-only edits, in Anki ----
 
 def _cut_key(u, key):

@@ -117,7 +117,27 @@ def _insights(w):
     per, cards = INS.held(w.idx, doc, w.swap)
     if not per:
         return {"none": "Nothing to count yet: the plan has no sets."}
-    return {"work": _workload(w, doc), "deck": _deck(w, cards), "has": _contents(w, doc, per, cards)}
+    has = _contents(w, doc, per, cards)
+    cls = _st(w).get("class")  # 3.9.9: where the plan's squad fell behind, an author's (asked once the tab opens)
+    if w.author() and cls and cls[0] == _pid(w):
+        has["lines"] += E.class_lines(doc, cls[1], str(w.ops.today()))
+    return {"work": _workload(w, doc), "deck": _deck(w, cards), "has": has}
+
+
+def ask_class(w):
+    """Insights opened on a plan of mine someone follows: one request for where
+    its squad is (counts, never names), once a plan a window."""
+    st, pid = _st(w), _pid(w)
+    if not w.author() or not pid or w.followers() < 1 or (st.get("class") or (None,))[0] == pid:
+        return
+    st["class"] = (pid, None)
+
+    def got(data):
+        if _pid(w) == pid and isinstance(data, dict):
+            st["class"] = (pid, data)
+            st["ins"] = (None, None)
+            w.push()
+    w.ops.ask(w, lambda cl: remote.progress(cl, pid), got)
 
 
 def _workload(w, doc):

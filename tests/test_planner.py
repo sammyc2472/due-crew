@@ -1019,7 +1019,7 @@ def test_rules_of_the_road():
                 calls.add(node.attr)
     check("road: requests only on a click, through remote (who I am, my plans, one plan, a save, its history and posts)",
           calls <= {"is_admin", "my_plans", "load", "save", "undo", "create", "log", "posts", "post", "unpost", "save_meta",
-                    "set_listed", "copy", "delete", "crew", "add_editor", "remove_editor", "offer", "notes", "add_note",
+                    "set_listed", "copy", "delete", "crew", "progress", "add_editor", "remove_editor", "offer", "notes", "add_note",
                     "remove_note"}
           and "_call" not in src["flow.py"], calls)
     routes = set(re.findall(r'_call\((?:client, )?"(GET|PUT|POST|PATCH|DELETE)", f?"([^"]+)"', src["remote.py"]))
@@ -1028,7 +1028,7 @@ def test_rules_of_the_road():
           routes == {("GET", "/plans/{pid}"), ("PUT", "/plans/{pid}"), ("POST", "/plans/{pid}/undo"),
                      ("POST", "/plans"), ("GET", "/plans/{pid}/log"), ("GET", "/plans/{pid}/posts"), ("POST", "/plans/{pid}/posts"),
                      ("DELETE", "/plans/{pid}/posts/{int(post_id)}"), ("PUT", "/plans/{pid}/listed"),
-                     ("POST", "/plans/{pid}/copy"), ("DELETE", "/plans/{pid}"), ("GET", "/friends"), ("POST", "/plans/{pid}/editors"),
+                     ("POST", "/plans/{pid}/copy"), ("DELETE", "/plans/{pid}"), ("GET", "/friends"), ("GET", "/plans/{pid}/progress"), ("POST", "/plans/{pid}/editors"),
                      ("DELETE", "/plans/{pid}/editors/{uid}"), ("POST", "/plans/{pid}/owner"), ("GET", "/plans/{pid}/notes"),
                      ("POST", "/plans/{pid}/notes"), ("DELETE", "/plans/{pid}/notes/{int(note_id)}")}
           and all(f'api("{m}", `/plans/${{{v}}}{x}' in builder
@@ -1664,8 +1664,11 @@ def test_settings_remote_v393():
     check("settings: Copy for next year: every date 52 weeks on, named for next year",
           copied[0] == "saved" and E.first_day(new["doc"]) == E._later(first, 364) and named[1]["name"] == "MS2 Block 2b (next year)"
           and [u["opens"] for u in new["doc"]["units"]] == [E._later(u["opens"], 364) for u in raw["doc"]["units"]], new["doc"]["units"])
-    check("followers' progress isn't read in Anki (round five, Sam's call: their squad is where followers meet)",
-          not hasattr(R, "progress"))
+    # round five, Sam's call: followers' progress wasn't read in Anki (their squad is where followers meet).
+    # 3.9.9, Sam's yes to the plans review's mock 5: an author's Insights reads the squad's counts by set,
+    # never names, never one follower's, on the route the site's builder has used since 3.7
+    check("followers' progress in Anki is the squad's counts by set for an author's Insights, nothing more",
+          hasattr(R, "progress") and "class_lines" in dir(E))
     check("settings: only its owner takes it down; then it's gone", not R.delete(dre, pid) and R.delete(sam, pid) and pid not in store.plans)
 
 
@@ -2851,6 +2854,51 @@ def test_the_fake_says_which_ceiling_v399():
     check("the fake: past the day's saves, slow_down (a 429); a send's changes wait, said; one at once, as before",
           at_once == ("refused", "That's a lot of saves today. Try again tomorrow.") and sending == ("refused", SAM_WORDS["slow_down"]),
           (at_once, sending))
+
+
+def test_class_lines_v399():
+    """3.9.9: an author's Insights says where the plan's squad fell behind:
+    counts by set, never names, and nothing under the counts' own rule
+    (3 in its squad, 2 besides me)."""
+    doc = {"units": [{"id": "a", "name": "Anemias", "opens": "2026-11-02"}, {"id": "b", "name": "Coagulation", "opens": "2026-11-03"},
+                     {"id": "c", "name": "Platelets", "opens": "2026-11-09"}, {"id": "d", "name": "Later", "opens": "2026-11-20"}]}
+    pr = {"followers": 14, "sharing": 12, "inSquad": 12, "others": 11,
+          "units": {"a": {"opened": 12, "done": 12}, "b": {"opened": 12, "done": 5}, "c": {"opened": 9, "done": 2}, "d": {"opened": 0, "done": 0}}}
+    got = E.class_lines(doc, pr, "2026-11-10")
+    check("class: the sets that ended two days ago or more with people not through, the worst first; one still running isn't late",
+          got[0] == "Where its squad fell behind (12 sharing):" and got[1].startswith("Coagulation: 7 of 12 not through it yet")
+          and len(got) == 2, got)
+    check("class: a day later the next set counts too", len(E.class_lines(doc, pr, "2026-11-11")) == 3
+          and E.class_lines(doc, pr, "2026-11-11")[1].startswith("Platelets: 10 of 12"))
+    done = dict(pr, units={k: {"opened": 12, "done": 12} for k in "abcd"})
+    check("class: everyone through: said in a line", "keeping up" in E.class_lines(doc, done, "2026-11-12")[0])
+    check("class: under three in its squad, or fewer than two besides me: only how many are in it; nobody sharing, nothing",
+          E.class_lines(doc, dict(pr, inSquad=2), "2026-11-10") == ["2 are in its squad: where they fall behind shows from 3."]
+          and len(E.class_lines(doc, dict(pr, others=1), "2026-11-10")) == 1
+          and E.class_lines(doc, {"sharing": 0, "inSquad": 0}, "2026-11-10") == [] and E.class_lines(doc, None, "2026-11-10") == [])
+    many = {"units": [{"id": f"u{i}", "name": f"Set {i}", "opens": "2026-11-01"} for i in range(7)]}
+    prm = dict(pr, units={f"u{i}": {"done": i} for i in range(7)})
+    lines = E.class_lines(many, prm, "2026-11-10")
+    check("class: four at most, then how many more", len(lines) == 1 + E.CLASS_SHOWN + 1 and lines[-1].startswith("And 3 more"), lines)
+    from due_crew.planner import webtabs as WT
+    asked = []
+    w = types.SimpleNamespace(plan={"id": "p1"}, author=lambda: True, followers=lambda: 3, push=lambda *a, **k: asked.append("push"),
+                              ops=types.SimpleNamespace(ask=lambda owner, fn, got: (asked.append("ask"), got(pr))))
+    WT._pid = lambda x: "p1"
+    st = {"ins": ("k", "v")}
+    was = WT._st
+    WT._st = lambda x: st
+    try:
+        WT.ask_class(w)
+        WT.ask_class(w)
+        check("class: asked once a plan a window when Insights opens, then drawn again", asked == ["ask", "push"] and st["class"] == ("p1", pr)
+              and st["ins"] == (None, None), (asked, st))
+        st2 = {}
+        WT._st = lambda x: st2
+        WT.ask_class(types.SimpleNamespace(plan={"id": "p1"}, author=lambda: True, followers=lambda: 0, ops=None))
+        check("class: a plan nobody follows asks nothing", st2 == {})
+    finally:
+        WT._st = was
 
 
 def main():

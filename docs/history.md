@@ -4788,6 +4788,24 @@ every release that changes how something works.
   is held for the card only while Settings has my exam (with none, it
   plays as a cheer), and a crewmate's later cheer to me takes the place of
   their line on the server (one cheer a pair) if I haven't fetched it yet.
+- 3.9.9, what plans were missing (the review's eleven mocks; Sam's answers:
+  2, 4, 5, 6, 7 yes; 3 "don't think it works well enough, probably
+  remove"; 1 and 8 to 11 no). **6, 7**: Schedule ahead keeps its two-week
+  picker (Sam: "don't remove the calendar window... add the fill in
+  option") and under it Go longer: so many days from tomorrow or to my
+  exam's eve, weekdays to skip, a set a day (`Search.fill`, `c_fill`,
+  `c_fillskip`; 90 days out, 60 study days at most); words asking for more
+  than two weeks use it; a card in its learning steps isn't moved and the
+  picker says so. **3**: the class-calendar window goes (`start_window.py`,
+  `picker.py`; `StartOps.make` stays, New plan's). **4** was there already:
+  Settings › Copy for next year (52 weeks on, weekdays kept, renamed).
+  **5**: `edits.class_lines` on an author's Insights (asked once when the
+  tab opens, `webtabs.ask_class`, `remote.progress`): the sets that ended
+  two days ago or more with people in its squad not through them, counts
+  never names, by the counts' own rule. This turns round five's call
+  ("followers' progress isn't read in Anki") for these counts alone; its
+  own commit, so it comes out whole if Sam meant otherwise. The site's
+  builder has shown the same since 3.7.
 - 3.9.9, the plans engine reviewed (Sam, 10 Nov). Three fixes. Schedule
   ahead held the open cards back before the plan's save had landed: a save
   that failed (offline, a limit) left them suspended with no date to open

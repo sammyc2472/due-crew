@@ -300,6 +300,13 @@ def delete(client, pid):
     return status == 200
 
 
+def progress(client, pid):
+    """Where a plan's squad is, for its authors (GET /plans/{id}/progress): {followers, sharing,
+    inSquad, others, units: {unit id: {opened, done}}}; counts, never names. None when it can't be read."""
+    status, data = _call(client, "GET", f"/plans/{pid}/progress")
+    return data if status == 200 and isinstance(data, dict) else None
+
+
 def crew(client):
     """My crew, the people a co-author comes from: [(uid, name)], mutual friends (GET /friends)."""
     status, data = _call(client, "GET", "/friends")
