@@ -195,6 +195,12 @@ _st, offer = sam._call("POST", "/plans", {"name": "Pharm", "deck": "Pharm"})
 sam._call("PUT", f"/plans/{offer['id']}", {"version": offer["version"], "audience": "squad", "squad": sq2["id"]})
 offers = dre.fetch_board(labels, tomorrow, with_decks=True)["plan_offers"]
 check("plans: a squad's plan is offered to its members", [o["id"] for o in offers] == [offer["id"]], str(offers))
+# 3.9.9, Know when it breaks: the client's errs (errs.part's shape) on the Worker's sync, once /board says it takes them
+check("3.9.9: /board says a sync may carry error counts", dre.session.get("errs_ok") is True)
+went = []
+ok5, _ = dre.push(labels, cfg, errs={"days": {labels[1]: {"save:bad_plan": 2, "req:plans.:id:400": 1}}, "v": "3.9.9"},
+                  errs_sent=lambda: went.append(1))
+check("3.9.9: a sync carries them, once", ok5 and went == [1], str((ok5, went)))
 sam.sign_out(); time.sleep(0.5)
 print("ALL OK" if ok_all else "SOMETHING FAILED")
 sys.exit(0 if ok_all else 1)

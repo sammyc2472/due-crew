@@ -16,7 +16,10 @@ from .. import app, plan_flow
 from .. import plans as P
 from ..app import _bg, _state, cfg, client, save_cfg
 from ..backend.shapes import TransportError
-from . import enabled, remote
+from . import enabled as _enabled, remote
+
+enabled = _enabled  # the labs switch: nothing behind it since 3.9.9
+from ..errs import oops
 
 _open = {}       # "plans", "start" -> the window, while it's open
 _asking = []     # my plans on their way for Your plans (one ask at a time)
@@ -51,12 +54,6 @@ def _raise(key):
 
 
 # ---- the plan window ----
-
-def web_window():
-    """The HTML plan window (round six), unless this computer's config says
-    "plan_window": "qt" (the Qt one, kept as it was)."""
-    return str(cfg().get("plan_window") or "") != "qt"
-
 
 def open_plans(select=None, tab=None, new=None):
     """Your plans (3.9.3, for everyone; labs before): signed in, a
@@ -103,8 +100,7 @@ def _closet(do):
         from .. import closet_flow
         do(closet_flow)
     except Exception:
-        import traceback
-        traceback.print_exc()
+        oops()
 
 
 def noted_followers(plans):
@@ -117,12 +113,10 @@ def noted_followers(plans):
 
 
 def show_plans(plans, select=None, tab=None, new=None):
-    if web_window():
-        from .web import PlanWeb
-        w = PlanWeb(mw, mw.col, plans, Ops(), select=select, tab=tab, cfg=cfg(), new=new)
-    else:
-        from .window import PlanWindow
-        w = PlanWindow(mw, mw.col, plans, Ops(), select=select, tab=tab)
+    from .. import errs
+    errs.used("planwin")
+    from .web import PlanWeb  # 3.9.9: the one plan window (the Qt one went; "plan_window": "qt" is read no more)
+    w = PlanWeb(mw, mw.col, plans, Ops(), select=select, tab=tab, cfg=cfg(), new=new)
     _gone_on_close(w)
     _open["plans"] = w
     w.show()
@@ -205,7 +199,7 @@ class Ops:
         """Round five's Send: the waiting changes as one save, with its line
         to followers. done((outcome, what) or None): remote.save's answer."""
         cl, gen = client(), app.generation
-        _bg(lambda: remote.save(cl, pid, version, doc, summary, post),
+        _bg(lambda: remote.save(cl, pid, version, doc, summary, post, waits=True),
             lambda got: getattr(owner, "_alive", False) and gen == app.generation and done(got))
 
     def gave_day(self):
@@ -559,30 +553,7 @@ def open_new(start=None, finish_by=None, exam=None):
     board's exam line passes finish_by (and the exam's name)."""
     if not mw.col or not plan_flow._signed_in():
         return
-    if web_window():
-        open_plans(new={"start": start, "finish_by": finish_by, "exam": exam})
-        return
-    if _raise("new"):
-        return
-    from .new_plan import NewPlanWindow
-    w = NewPlanWindow(mw, top_decks(mw.col), NewOps(), labs=enabled())
-    _gone_on_close(w)
-    _open["new"] = w
-    w.show()
-    return w
-
-
-# ---- a plan from a block's calendar (claude.py's jobs, a stand-in for now) ----
-
-def open_start():
-    """New plan from a calendar (3.9.3, for everyone): signed in (it makes
-    a plan on the server), a collection open. Claude's stand-in and What
-    Claude would get stay behind the labs switch."""
-    if not mw.col or _raise("start"):
-        return
-    if not plan_flow._signed_in():
-        return
-    show_start()
+    open_plans(new={"start": start, "finish_by": finish_by, "exam": exam})
 
 
 def top_decks(col):
@@ -598,17 +569,9 @@ def top_decks(col):
     return sorted(out, key=lambda x: (-x[2], x[1].lower()))
 
 
-def show_start():
-    from .start_window import StartWindow
-    w = StartWindow(mw, top_decks(mw.col), StartOps(), labs=enabled())
-    _gone_on_close(w)
-    _open["start"] = w
-    w.show()
-    return w
-
-
 class StartOps:
-    """What the calendar window asks of the add-on."""
+    """A plan made and saved in one click (New plan's; the calendar window it
+    was written for went in 3.9.9: Sam, "don't think it works well enough")."""
 
     def today(self):
         import datetime
@@ -689,16 +652,6 @@ class StartOps:
         if w is not None and getattr(w, "_alive", False):
             _shut(w)
         open_plans(select=pid)
-
-
-class NewOps(StartOps):
-    """What New plan asks of the add-on: StartOps', a friend's code, the labs window."""
-
-    def follow(self, code):
-        plan_flow.open_follow(code)
-
-    def labs_window(self):
-        open_start()
 
 
 def _top_deck(col, did):

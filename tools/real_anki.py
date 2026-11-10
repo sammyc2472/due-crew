@@ -1438,6 +1438,92 @@ def check_lessons(path):
     return failed
 
 
+def check_spread(path):
+    """3.9.9, Magic search's Schedule ahead on cards that are open already
+    (magic_flow.Ops.spread): a later day's open new cards are held back and
+    its due reviews moved to their day, the interval kept, one undo step;
+    and the plan's date opens the held ones on its morning, each day its own."""
+    import datetime as _dtm
+    import types
+    REPO = os.path.dirname(HERE)
+    sys.path.insert(0, REPO); sys.path.insert(0, REPO + "/tests")
+    from anki.collection import Collection
+    import fakes
+    fakes.install_fake_requests(fakes.FakeWorker())
+    fakes.install_fake_aqt()
+    from due_crew import plans as P
+    from due_crew import plan_flow as F
+    from due_crew import magic_flow as MF
+    failed = []
+
+    def ok(name, cond, extra=""):
+        print(("PASS " if cond else "FAIL ") + "spread: " + name, extra)
+        if not cond:
+            failed.append("spread: " + name)
+    names = ("_pcfg", "_psave", "followed", "client", "_today", "tooltip", "refresh_progress", "_after_change")
+    kept = {k: getattr(F, k) for k in names}
+    kept_mw = (F.mw.col, F.app.swap, getattr(F.mw, "undo", None))
+    col = Collection(path)
+    try:
+        did = col.decks.id_for_name("Step Deck")
+        today = _dtm.date.today()
+        day = lambda n: str(today + _dtm.timedelta(days=n))  # noqa: E731
+        ids = col.db.list("SELECT id FROM cards WHERE did IN (SELECT id FROM decks) AND odid = 0 ORDER BY id LIMIT 400")
+        new, rev = ids[:12], ids[12:18]
+        col.sched.schedule_cards_as_new(new)
+        col.sched.unsuspend_cards(new + rev)
+        for cid in rev:
+            c = col.get_card(cid)
+            c.type, c.queue, c.due, c.ivl = 2, 2, col.sched.today - 1, 20
+            col.update_card(c)
+        q = lambda cs: [col.db.scalar("SELECT queue FROM cards WHERE id = ?", c) for c in cs]  # noqa: E731
+        state_of = lambda cs: {c: col.db.first("SELECT queue, due, ivl FROM cards WHERE id = ?", c) for c in cs}  # noqa: E731
+        plan = {"id": "pM", "name": "My plan", "doc": {"deck": "Step Deck", "units": []}}
+        pstore = {"plans": {"pM": F.new_state(col, plan, did)}, "plans_day": day(0)}
+        F._pcfg, F._psave = (lambda: pstore), (lambda d: None)
+        F.followed = lambda: [F.mine(plan)]
+        F.client = lambda: types.SimpleNamespace(signed_in=True, session={})
+        F.tooltip = lambda *a, **k: None
+        F.refresh_progress = lambda: {}
+        F._after_change = lambda *a, **k: None
+        F.app.swap = lambda *a, **k: None
+        F.mw.col = col
+        F.mw.undo = col.undo
+        ops = MF.Ops()
+        kinds = ops.open_kinds(new + rev)
+        ok("which are open: the new ones not suspended, the reviews due", sorted(set(kinds.values())) == ["new", "rev"] and len(kinds) == 18, len(kinds))
+        before = state_of(new + rev)
+        held, moved, label = ops.spread([(0, new[:2], rev[:2]), (1, new[2:7], rev[2:4]), (2, new[7:], rev[4:])])
+        after = state_of(new + rev)
+        ok("today's share isn't touched", all(after[c] == before[c] for c in new[:2] + rev[:2]))
+        ok("a later day's new cards are held back; its reviews get that day, the interval kept",
+           (held, moved) == (10, 4) and q(new[2:]) == [-1] * 10 and [after[c][1] - col.sched.today for c in rev[2:]] == [1, 1, 2, 2]
+           and all(after[c][2] == before[c][2] for c in rev[2:]), (held, moved))
+        ok("one undo step, named", col.undo_status().undo == label, repr(col.undo_status().undo))
+        col.undo()
+        ok("Edit › Undo puts every card back", state_of(new + rev) == before)
+        ops.spread([(1, new[2:7], rev[2:4]), (2, new[7:], rev[4:])])
+        plan["doc"]["units"] = [
+            {"id": "a", "name": "Set 1 of 2", "opens": day(1), "tags": [], "decks": [], "cards": P.card_refs(col, new[2:7] + rev[2:4])},
+            {"id": "b", "name": "Set 2 of 2", "opens": day(2), "tags": [], "decks": [], "cards": P.card_refs(col, new[7:] + rev[4:])}]
+        seen = []
+        for n in (0, 1, 2):
+            F._today = lambda n=n: day(n)
+            pstore["plans_day"] = day(n - 1)
+            F.maybe_morning(False)
+            seen.append((q(new[2:7]), q(new[7:])))
+        ok("the plan's dates open the held cards, each on its own morning and not before",
+           seen == [([-1] * 5, [-1] * 5), ([0] * 5, [-1] * 5), ([0] * 5, [0] * 5)], seen)
+    finally:
+        for k, v in kept.items():
+            setattr(F, k, v)
+        F.mw.col, F.app.swap = kept_mw[:2]
+        if kept_mw[2] is None:
+            F.mw.__dict__.pop("undo", None)
+        col.close()
+    return failed
+
+
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory() as tmp:
         p = os.path.join(tmp, "big.anki2")
@@ -1456,5 +1542,6 @@ if __name__ == "__main__":
         failed += check_bars(tmp)
         failed += check_opens(p)
         failed += check_lessons(p)
+        failed += check_spread(p)
     print(f"\n{len(failed)} failed" + (": " + "; ".join(failed) if failed else ""))
     sys.exit(1 if failed else 0)

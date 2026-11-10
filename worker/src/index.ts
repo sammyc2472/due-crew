@@ -3,6 +3,7 @@
 
 import * as Ad from "./admin";
 import * as Fb from "./feedback";
+import * as Field from "./field";
 import * as Rp from "./reports";
 import * as A from "./auth";
 import * as B from "./board";
@@ -35,6 +36,7 @@ const authed = (method: string, re: RegExp, h: Authed) =>
 
 const ID = "([A-Za-z0-9_-]{1,128})";
 const r = (path: string) => new RegExp(`^${path}$`);
+const PLAN_SAVE = new RegExp(`^/plans/(?!trees$)${ID}$`);  // PUT: an author's save (P.put)
 
 open("GET", r("/version"), async (_q, env) => json({ api: Number(env.API_VERSION), minClient: env.MIN_CLIENT }));
 open("POST", r("/auth/code"), A.requestCode);
@@ -123,6 +125,8 @@ authed("POST", r("/admin/feedback/([0-9A-Z]{26})/reply"), Fb.reply);
 authed("GET", r("/admin/reports"), Rp.list);
 authed("PATCH", r("/admin/reports/([0-9A-Z]{26})"), Rp.mark);
 authed("DELETE", r("/admin/reports/([0-9A-Z]{26})"), (_q, s, env, p) => Rp.remove(s, env, p));
+// 3.9.9: what went wrong in the add-on, by code, a day of it (field.ts)
+authed("GET", r("/admin/field"), Field.field);
 authed("PUT", r("/admin/bingo/([a-z0-9]{1,12})"), Bingo.adminPut);
 // 3.2.1: the admin's notice on everyone's board
 authed("GET", r("/admin/notices"), N.list);
@@ -200,6 +204,7 @@ export async function housekeeping(env: Env, now = Math.floor(Date.now() / 1000)
     // the admin's audit log is kept a year; an email change lapses after a week
     env.DB.prepare("DELETE FROM admin_actions WHERE at <= ?").bind(now - 365 * 86400),
     env.DB.prepare("DELETE FROM email_changes WHERE at <= ?").bind(now - 7 * 86400),
+    Field.keepStmt(env, now),  // 3.9.9: the add-on's error counts, kept 30 days
   ]);
   // Q1-Q6: quiet accounts trimmed, then deleted, a few a day
   try {
@@ -232,7 +237,9 @@ export default {
     // the site reaches the API as duecrew.com/api/* (3.1), through its service binding
     if (path.startsWith("/api/")) path = path.slice(4);
     try {
-      if (Number(req.headers.get("content-length") || 0) > ANY_BODY_MAX) throw new HttpError(413, "too_big");
+      const size = Number(req.headers.get("content-length") || 0);
+      // 3.9.9: a plan's save says it as the plan's size (plans.ts sizeOver), with the bytes it is
+      if (size > ANY_BODY_MAX) throw new HttpError(413, "too_big", req.method === "PUT" && PLAN_SAVE.test(path) ? P.sizeOver(size) : {});
       // A browser names the page that sent a request; the add-on sends no
       // Origin. Nothing that changes anything comes from another site's page
       // (sign-in included: another page can't send codes or spend my tries).

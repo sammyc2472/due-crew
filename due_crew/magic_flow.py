@@ -25,7 +25,6 @@ What it does with the cards, Due Crew's own steps (Sam's picks):
 import datetime
 import json
 import re
-import traceback
 
 from aqt import mw
 from aqt.utils import tooltip
@@ -34,9 +33,12 @@ from . import app, board, magic as M, plan_flow
 from . import plans as P
 from .app import _bg, cfg, client, save_cfg
 from .backend.shapes import TransportError
+from .errs import oops
 
 RECENT = 5           # finds kept for the empty box, on this computer
 DAYS = 14            # the day picker: two weeks from today
+FILL_SPAN = 90       # the fill-in: how far out it reaches, in days
+FILL_MAX = 60        # and how many study days (a set a day on the plan)
 BEFORE_MAX = 5       # a quiz's topics: on at most this many days before it
 MY_PLAN = "My plan"
 ALSO_MAX = 8         # a topic's near names under it
@@ -48,7 +50,7 @@ _win = None
 # ---- the way in ----
 
 def on():
-    """Settings › Board › Due › Magic search (an account key, on by default)."""
+    """Settings › Study › Magic search (an account key, on by default)."""
     return cfg().get("magic_search", True) is not False
 
 
@@ -101,7 +103,7 @@ def board_howto():
         try:
             _TRIES["res"] = M.examples(mw.col.tags.all())
         except Exception:
-            traceback.print_exc()
+            oops()
             _TRIES["res"] = {}
     return M.howto(board.MAGIC_KBD, _TRIES["res"])
 
@@ -134,7 +136,7 @@ def from_browser(browser):
     try:
         cids = browser.selected_cards() if hasattr(browser, "selected_cards") else browser.selectedCards()
     except Exception:
-        traceback.print_exc()
+        oops()
         return
     cids = [int(c) for c in cids or []]
     if not cids:
@@ -307,7 +309,7 @@ class Ops:
             except TransportError:  # offline, or the plan gone: said in the window, never Anki's error box
                 return "failed", made or pid, None, "Couldn't reach Due Crew. Check your connection."
             except Exception:  # noqa: BLE001
-                traceback.print_exc()
+                oops()
                 return "failed", made or pid, None, "That didn't save. Try again."
 
         def back(got):
@@ -494,7 +496,7 @@ class Ops:
             got = col.sched.add_or_update_filtered_deck(deck)
             did = int(getattr(got, "id", 0) or 0) or col.decks.id_for_name(name)
         except Exception:
-            traceback.print_exc()
+            oops()
             did = None
         finally:
             _undo_end(col, pos)
@@ -523,7 +525,7 @@ class Ops:
             col.sched.add_or_update_filtered_deck(deck)
             n = int(col.db.scalar("SELECT count() FROM cards WHERE did = ?", int(did)) or 0)
         except Exception:
-            traceback.print_exc()
+            oops()
             n = None
         finally:
             _undo_end(col, pos)
@@ -577,6 +579,55 @@ class Ops:
         from . import team_flow
         return team_flow.study_deck(name, cids)
 
+    def open_kinds(self, cids):
+        """3.9.9: which of these a plan's date can't hold till its day, being open
+        already: {cid: "new"} (not started, not suspended) and {cid: "rev"} (a
+        review due today or before); in their own decks (a filtered deck's stay)."""
+        if not mw.col or not cids:
+            return {}
+        today, out = int(mw.col.sched.today), {}
+        ids = ",".join(str(int(c)) for c in cids)
+        for cid, ctype, queue, due in mw.col.db.all(
+                f"SELECT id, type, queue, due FROM cards WHERE id IN ({ids}) AND odid = 0 AND queue IN (0, 1, 2, 3)"):
+            if queue in (1, 3):
+                out[int(cid)] = "learn"  # in its steps: never moved (a move would start them again), only said
+            elif ctype == 0 and queue == 0:
+                out[int(cid)] = "new"
+            elif ctype == 2 and queue == 2 and int(due) <= today:
+                out[int(cid)] = "rev"
+        return out
+
+    def spread(self, shares):
+        """Schedule ahead on cards that are open already (Sam, 10 Nov: unsuspended
+        cards due on one day, put on the next few, stayed where they were: a date
+        only opens what's suspended). shares: [(days from today, [new], [rev])].
+        A later day's new cards are held back (suspended: its date opens them that
+        morning) and its due reviews get that day as their due date (Anki's Set
+        due date: the interval stays). One undo step. (held, moved, its label)."""
+        col = mw.col
+        held = [c for n, new, _rev in shares if n > 0 for c in new]
+        moved = sum(len(rev) for n, _new, rev in shares if n > 0)
+        if not col or not (held or moved):
+            return 0, 0, ""
+        label = f"Due Crew: spread {len(held) + moved:,} card{'s' if len(held) + moved != 1 else ''} over days"
+        pos = _undo_start(col, label)
+        try:
+            if held:
+                col.sched.suspend_cards(held)
+            for n, _new, rev in shares:
+                if n > 0 and rev:
+                    col.sched.set_due_date(rev, str(int(n)))
+        except Exception:
+            oops()
+        _undo_end(col, pos)
+        plan_flow._after_change()
+        app.swap(cfg())
+        return len(held), moved, label
+
+    def exam_day(self):
+        """My exam's day (Settings › You › Exam), or ""."""
+        return str(cfg().get("exam_date") or "")
+
     def undo_anki(self, label):
         """Edit › Undo, when the last step is still ours."""
         if plan_flow._undo_ok(label):
@@ -584,7 +635,7 @@ class Ops:
                 mw.undo()
                 return True
             except Exception:
-                traceback.print_exc()
+                oops()
         return False
 
     def browse(self, cids, q=None):
@@ -673,6 +724,7 @@ class Search:
         self._tries = {}           # a deck's how-to tries, read against its tags: did -> {part: [tries]}
         self.busy = False
         self.mode = ""             # "days": the day picker open
+        self.fill = None           # {from, to, skip}: a stretch longer than the picker, filled in (3.9.9)
         self._cards, self._q = None, ""
         choices = ops.decks()
         self.decks = choices
@@ -724,6 +776,19 @@ class Search:
             if top and top != self.did:
                 self.pick_deck(top)
                 self.r = M.read(self.text, self.tree, self.ops.today(), self.every, plans)
+        # 3.9.9: the words as typed found no tag and no card: read them again by other everyday names, or
+        # for the part of them that is a topic (magic.loose); what wasn't used is said (lines)
+        if self.r["kind"] == "words" and self.r["text"] and not any(g["on"] for g in self.r["groups"]) and self.tree is not None:
+            self.flip, self.tag_off, self.seg_off, self.filters, self._cards = set(), set(), set(), [dict(f) for f in self.r["filters"]], None
+            try:
+                none = not self.cards()[0]
+            except Exception:
+                oops()
+                none = False
+            if none:
+                again = M.read(self.text, self.tree, self.ops.today(), self.every, plans, loose_words=True)
+                if any(g["on"] for g in again["groups"]):
+                    self.r = again
         self.flip, self.tag_off, self.seg_off = set(), set(), set()
         self.filters, self.filters_set = [dict(f) for f in self.r["filters"]], False
         # Sam: "seeing the tag tree is really important": the first topic's tree open, the rest a tap away
@@ -736,7 +801,44 @@ class Search:
             self.picked = self.days_before(ev["day"])
         elif not self.cids_in:
             self.picked = []
+        self.fill = None
         self.day_name = ""
+        self.spread()
+
+    def spread(self):
+        """3.9.9: the days the words asked for ("over the next 5 days", "by
+        Friday", "20 a day", or only "spread …"), picked in Schedule ahead:
+        the picker's two weeks of them, said when the words asked for more."""
+        sp = self.r.get("span")
+        if not sp:
+            if getattr(self, "_spread_on", False):  # the words no longer ask: the picker they opened shuts
+                self._spread_on, self.mode = False, ""
+            return
+        today = self.ops.today()
+        last = (today + datetime.timedelta(days=DAYS - 1)).isoformat()
+        days = [d for d in sp["days"] if today.isoformat() <= d <= last]
+        more = len(days) < len(sp["days"])
+        if more and not sp.get("per"):  # longer than the picker shows: the fill-in's stretch (Sam: "add the fill in option")
+            self.c_fill(to=sp["days"][-1], first=sp["days"][0])
+            self.mode, self._spread_on = "days", True
+            return
+        if sp.get("per"):
+            n = len(self.cards()[0])
+            need = max(1, -(-n // int(sp["per"])))
+            if not days:
+                more = need > DAYS - 1
+                days = [(today + datetime.timedelta(days=k)).isoformat() for k in range(1, min(need, DAYS - 1) + 1)]
+            elif need < len(days):
+                days = days[:need]
+        if not days and not sp["days"]:
+            self.picked = []
+            self.c_days(True)  # "spread cardio": the days it takes at my pace
+        else:
+            self.picked = days
+            self.mode = "days"
+        self._spread_on = True
+        if more and self.picked:
+            self.said = {"text": f"{M.words_span(self.picked[0], self.picked[-1])} picked. Go longer below for more days."}
 
     def days_before(self, day):
         today = self.ops.today()
@@ -830,8 +932,8 @@ class Search:
                     base |= idx.tag_cards(t)
             elif r["text"]:
                 base = self.ops.find(f"{deck_q} {M.text_q(r['text'])}") or set()
-            elif not (self.filters or r.get("deck")):
-                base = set()
+            elif not (self.filters or r.get("deck") or r.get("limit") or r.get("minutes")):
+                base = set()  # (3.9.9: "100 cards", "for 30 minutes" alone: that many of the deck, what's due first)
             if r.get("plan"):
                 base = set(base or ())
                 hit = r["plan"]
@@ -857,6 +959,17 @@ class Search:
         else:
             got = base
         cids = sorted((c for c in got if c in idx.cards), key=lambda c: idx.order.get(c, (True, 0, c)))
+        if (r.get("limit") or r.get("minutes")) and not any(f.get("k") == "leech" for f in self.filters):
+            cids = [c for c in cids if c not in idx.leech]  # 3.9.9: "20 new renal" was 19 when a leech was among them
+        if r.get("minutes") and not r.get("limit") and cids:
+            # 3.9.9: "for 30 minutes": as many as fit at my pace, the due ones first (the order they're in)
+            pace, left, k = self.pace(), r["minutes"] * 60, 0
+            for c in cids:
+                left -= pace["new_s"] if idx.cards[c][1] == 0 else pace["rev_s"]
+                if left < 0 and k:
+                    break
+                k += 1
+            r["limit"] = self.r["fits"] = max(1, k)  # (r is this reading's copy: the budget is worked out again with every filter)
         if r.get("limit"):
             cids = cids[:r["limit"]]
         # what a kept deck holds: the exact cards when it's "10 of them", else the deck's filters live
@@ -1030,7 +1143,7 @@ class Search:
             try:
                 self._pace = self.ops.pace()
             except Exception:
-                traceback.print_exc()
+                oops()
                 self._pace = dict(M.PACE)
         return self._pace
 
@@ -1114,6 +1227,21 @@ class Search:
                 dates = self.ops.plan_dates(self.did, self.idx, found["cids"])
                 said = Q.words(found, Q.tally(self.idx, found["cids"]), dates)[1:]
                 out += [x for x in said if not r["ids"] or not x[:1].isdigit()]  # with note ids pasted, a short number may be neither
+        if r.get("numbered") and r["kind"] == "words":
+            # 3.9.9: "chapter 3", no book said, and more than one part numbered 3: which one this is, and where the rest are
+            for seg in r["numbered"]:
+                gs = [g for g in r["groups"] if g.get("seg") == seg]
+                on = next((g for g in gs if g.get("on")), None)
+                if on and len(gs) > 1 and on.get("tags"):
+                    where = M.tag_row(on["tags"][0]).get("res") or ""
+                    said = (r.get("seg_words") or [""] * (seg + 1))[seg]
+                    out.append(f"Took “{said}” as {on['name']}{' in ' + where if where else ''}. {len(gs) - 1} other part{'' if len(gs) == 2 else 's'} numbered the same: under Also.")
+        if r.get("unused"):
+            out.append(f"Didn’t use “{' '.join(r['unused'])}”.")
+        if r.get("minutes") and r.get("fits") and cids and not r.get("limit"):
+            out.append(f"About {r['minutes']} minute{'' if r['minutes'] == 1 else 's'} at your pace: {len(cids):,} card{'' if len(cids) == 1 else 's'}, what’s due first.")
+        if t and t.get("leech") and t.get("leech") == t.get("n"):
+            out.append("Leeches aren’t studied from here. Browse opens them; Insights › Leeches brings them back.")
         if r["kind"] == "words" and r["text"] and not self.ticked():
             out.append(f"No tag says “{r['text']}”; these cards do." if cids
                        else f"No tag or card says “{r['text']}” in {self.idx.name if self.idx else 'this deck'}.")
@@ -1186,7 +1314,24 @@ class Search:
                          "on": d.isoformat() in self.picked})
         split = M.split(cids, self.picked) if self.picked else []
         each = [{"iso": d, "n": len(c)} for d, c in split]
-        return {"list": days, "each": each, "name": self.day_name or self.name()}
+        sh = self.shares(cids, self.picked) if self.picked else []
+        held = sum(len(new) for n, new, _r in sh if n > 0)
+        moved = sum(len(rev) for n, _n, rev in sh if n > 0)
+        kinds = self.kinds(cids) if self.picked else {}
+        learn = sum(1 for d, part in split if d > today.isoformat() for c in part if kinds.get(c) == "learn")
+        exam = str(self.ops.exam_day() or "")
+        eve = (datetime.date.fromisoformat(exam) - datetime.timedelta(days=1)).isoformat() if exam > (today + datetime.timedelta(days=2)).isoformat() else ""
+        f = self.fill
+        fill = {"on": bool(f), "eve": eve, "eve_label": P.fmt_day(eve) if eve else "",
+                "n": (datetime.date.fromisoformat(f["to"]) - datetime.date.fromisoformat(f["from"])).days + 1 if f else 0,
+                "to_label": P.fmt_day(f["to"]) if f else "", "skip": list(f.get("skip") or []) if f else [],
+                "study": len(each), "per": -(-len(cids) // len(each)) if each else 0, "max": FILL_SPAN}
+        note = " ".join(x for x in (
+            f"{held:,} {'is' if held == 1 else 'are'} new and open now: held back till {'its' if held == 1 else 'their'} day." if held else "",
+            f"{moved:,} review{' is' if moved == 1 else 's are'} due now: {'its due date moves' if moved == 1 else 'their due dates move'} "
+            f"to {'its' if moved == 1 else 'their'} day." if moved else "",
+            f"{learn:,} {'is' if learn == 1 else 'are'} mid-learning and stay{'s' if learn == 1 else ''} with today." if learn else "") if x)
+        return {"list": days, "each": each, "name": self.day_name or self.name(), "note": note, "fill": fill}
 
     def dests_view(self):
         """Where a date or a quiz goes: My plan, and the plans I write on this deck."""
@@ -1216,7 +1361,7 @@ class Search:
         try:
             r = T.from_text(doc, self._btree[self.did], self.text, whole=False, start=self.ops.today().isoformat())
         except Exception:
-            traceback.print_exc()
+            oops()
             return {"dates": [], "events": [], "errors": ["Those lines couldn't be read."]}
         dates = []
         total = set()
@@ -1241,10 +1386,10 @@ class Search:
         try:
             fn(**{k: v for k, v in a.items() if k != "cmd"})
         except TypeError:
-            traceback.print_exc()  # a click with the wrong arguments: nothing
+            oops()  # a click with the wrong arguments: nothing
             return
         except Exception:  # noqa: BLE001 (said in the window, never Anki's error box)
-            traceback.print_exc()
+            oops()
             self.busy = False
             self.said = {"text": "That didn't work. Try again."}
         self.push()
@@ -1394,7 +1539,54 @@ class Search:
             today = self.ops.today()
             self.picked = [(today + datetime.timedelta(days=k)).isoformat() for k in range(1, min(f["days"], DAYS - 1) + 1)]
 
+    # -- the fill-in: a stretch longer than the picker's two weeks (3.9.9) --
+
+    def fill_days(self):
+        f = self.fill or {}
+        try:
+            a, b = datetime.date.fromisoformat(f["from"]), datetime.date.fromisoformat(f["to"])
+        except (KeyError, ValueError):
+            return []
+        skip, out = set(f.get("skip") or []), []
+        while a <= b and len(out) < FILL_MAX:
+            if a.weekday() not in skip:
+                out.append(a.isoformat())
+            a += datetime.timedelta(days=1)
+        return out
+
+    def c_fill(self, n=None, to=None, off=False, first=None):
+        """Go longer: every day from tomorrow (or `first`) for n days, or to a
+        day (my exam's eve), FILL_MAX study days at most; off: back to tapping."""
+        today = self.ops.today()
+        if off:
+            self.fill = None
+            self.picked = [d for d in self.picked if d <= (today + datetime.timedelta(days=DAYS - 1)).isoformat()]
+            return
+        start = first or (today + datetime.timedelta(days=1)).isoformat()
+        try:
+            end = (datetime.date.fromisoformat(str(to)) if to
+                   else datetime.date.fromisoformat(start) + datetime.timedelta(days=max(1, min(FILL_SPAN, int(n))) - 1))
+        except (TypeError, ValueError):
+            return
+        end = min(end, today + datetime.timedelta(days=FILL_SPAN))
+        if end.isoformat() < start:
+            return
+        self.fill = {"from": start, "to": end.isoformat(), "skip": list((self.fill or {}).get("skip") or [])}
+        self.picked = self.fill_days()
+
+    def c_fillskip(self, dow=0):
+        if not self.fill:
+            return
+        d = int(dow)
+        if 0 <= d <= 6:
+            skip = set(self.fill.get("skip") or [])
+            skip ^= {d}
+            if len(skip) < 7:
+                self.fill["skip"] = sorted(skip)
+                self.picked = self.fill_days()
+
     def c_day(self, iso=""):
+        self.fill = None  # a tap is my own choice of days again
         if iso in self.picked:
             self.picked = [d for d in self.picked if d != iso]
         else:
@@ -1415,8 +1607,46 @@ class Search:
             return
         name = self.day_name or self.name()
         ops = self.day_ops(cids, self.picked, name)
-        self.write(ops, f"{name} on {M.words_span(self.picked[0], self.picked[-1])}")
+        what = f"{name} on {M.words_span(self.picked[0], self.picked[-1])}"
+        shares, many = self.shares(cids, self.picked), len(self.picked) > 1
+
+        def landed(how):
+            """Once the dates are on the plan (the review of 10 Nov: held before
+            the save, a save that failed left them suspended with no date to open
+            them): the open cards, which a date alone leaves where they are. Not
+            while the dates wait in Review and send: nothing would open them yet."""
+            if how != "saved":
+                open_n = sum(len(n) + len(r) for d, n, r in shares if d > 0)
+                return (f" {open_n:,} of them {'is' if open_n == 1 else 'are'} open already and stay"
+                        f"{'s' if open_n == 1 else ''} where Anki has {'it' if open_n == 1 else 'them'} till it's sent."
+                        if how == "waiting" and open_n else ""), ""
+            held, moved, label = self.ops.spread(shares)
+            self._kinds = None
+            words = " and ".join(x for x in (
+                f"{held:,} new held back till their day" if held else "",
+                f"{moved:,} review{'s' if moved != 1 else ''} moved to {'their days' if many else 'that day'}" if moved else "") if x)
+            return (f" {words[0].upper()}{words[1:]}." if words else ""), label
+        self.write(ops, what, after=landed)
         self.ops.note_recent(self.text)
+
+    def kinds(self, cids):
+        key = (len(cids), cids[0] if cids else 0, cids[-1] if cids else 0)
+        got = getattr(self, "_kinds", None)
+        if not got or got[0] != key:
+            try:
+                got = self._kinds = (key, self.ops.open_kinds(cids))
+            except Exception:
+                oops()
+                got = self._kinds = (key, {})
+        return got[1]
+
+    def shares(self, cids, days):
+        """[(days from today, its open new cards, its due reviews)] a picked day."""
+        kinds, today, out = self.kinds(cids), self.ops.today(), []
+        for day, part in M.split(cids, days):
+            n = (datetime.date.fromisoformat(day) - today).days
+            out.append((n, [c for c in part if kinds.get(c) == "new"], [c for c in part if kinds.get(c) == "rev"]))
+        return out
 
     def day_ops(self, cids, days, name):
         """A date a day: the ticked tags when it's one day of whole topics,
@@ -1500,7 +1730,7 @@ class Search:
         self.write([{"op": "text", "mode": "add", "text": self.text}],
                    f"{n:,} date{'s' if n != 1 else ''}" + (f" and {len(pt['events']):,} event{'s' if len(pt['events']) != 1 else ''}" if pt["events"] else ""))
 
-    def write(self, ops, what, row=None):
+    def write(self, ops, what, row=None, after=None):
         """The ops onto the plan picked (My plan unless another), said when it lands."""
         key = self.dest if any(d["key"] == self.dest for d in self.dests_view()) else "mine"
         pid = self.my_plan_id() if key == "mine" else key
@@ -1511,19 +1741,20 @@ class Search:
         def done(got):
             how, got_pid, version, more = got
             self.busy = False
+            extra, also = after(how) if after else ("", "")
             if how == "failed":
                 self.said = {"text": more or "Couldn't save it."}
             elif how == "waiting":
-                self.said = {"text": f"Waiting in {plan_name}'s Review and send.",
+                self.said = {"text": f"Waiting in {plan_name}'s Review and send.{extra}",
                              "undo": "draft", "open": got_pid}
-                self.undo = {"kind": "draft", "pid": got_pid, "n": int(more or len(ops)), "row": row}
+                self.undo = {"kind": "draft", "pid": got_pid, "n": int(more or len(ops)), "row": row, "anki": also}
             else:
                 if more == "made":  # My plan, just made: the next Put goes onto it, never a second one
                     self.dests = [p for p in self.dests or [] if p.get("id") != got_pid] + [
                         {"id": got_pid, "name": MY_PLAN, "role": "owner", "followers": 1, "following": True,
                          "doc": {"deck": self.idx.name if self.idx else ""}}]
-                self.said = {"text": f"{'Made' if more == 'made' else 'On'} {plan_name}: {what}.", "undo": "save", "open": got_pid}
-                self.undo = {"kind": "save", "pid": got_pid, "version": version, "row": row}
+                self.said = {"text": f"{'Made' if more == 'made' else 'On'} {plan_name}: {what}.{extra}", "undo": "save", "open": got_pid}
+                self.undo = {"kind": "save", "pid": got_pid, "version": version, "row": row, "anki": also}
                 self.picked = [] if row is None else self.picked
                 self.mode = "" if row is None else self.mode
             self.push()
@@ -1534,6 +1765,9 @@ class Search:
         if not u:
             return
         k = u["kind"]
+        if u.get("anki") and k in ("save", "draft"):  # Schedule ahead's own step in Anki goes back with its dates
+            self.ops.undo_anki(u["anki"])
+            self._kinds = None
         if k == "anki":
             ok = self.ops.undo_anki(u["label"])
             self.said = {"text": "Undone." if ok else "Undo it with Edit › Undo."}

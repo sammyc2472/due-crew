@@ -15,7 +15,7 @@ from ..stats.decks import sig_match
 
 
 LIGHT = {
-    "bg": "#ffffff", "ink": "#333333", "muted": "#7a7a72", "line": "#e2e2da",
+    "bg": "#ffffff", "ink": "#333333", "muted": "#68685f", "line": "#e2e2da",
     "hours": "#b26a00", "faded": "#aaaaa2", "well": "#f2f2ec",
 }
 DARK = {
@@ -34,6 +34,9 @@ ACCENTS = {
     "rose":   {"light": ("#b03052", "#ffffff", "#fbe9ee"), "dark": ("#f08fa8", "#3a1220", "#3f2a31")},
 }
 DEFAULT_ACCENT = "green"
+# 3.9.9: a card's shadow, at rest and under the pointer: the ones Anki's deck list wears (its deckbrowser.css)
+CARD_SHADOW = "0px 2px 1px -1px rgba(20,20,20,.12), 0px 1px 1px 0px rgba(20,20,20,.06), 0px 1px 3px 0px rgba(20,20,20,.04)"
+CARD_SHADOW_HOVER = "0px 3px 1px -2px rgba(20,20,20,.2), 0px 2px 2px 0px rgba(20,20,20,.14), 0px 1px 5px 0px rgba(20,20,20,.12)"
 
 
 def accent_pair(name):
@@ -74,7 +77,9 @@ def _tab_word(k, lb):
 
 
 def hidden_tabs(cfg):
-    return {k for k in (cfg.get("hidden_tabs") or []) if k in dict(HIDEABLE_TABS)}
+    """Hidden in Settings › Board, and (3.9.9) what the calm board keeps folded for now."""
+    from .. import calm
+    return {k for k in (cfg.get("hidden_tabs") or []) if k in dict(HIDEABLE_TABS)} | calm.held(cfg)
 
 
 def _head_label(icon, text):
@@ -85,7 +90,6 @@ def _head_label(icon, text):
 HEADERS = (("reviews", _head_label("&#128218;", "Reviews")), ("time", _head_label("&#9201;", "Time")),
            ("retention", _head_label("&#127919;", "Retention")),
            ("streak", _head_label("&#128293;", "Streak")))
-MEDALS = ("&#129351;", "&#129352;", "&#129353;")
 
 
 def _token_block(palette):

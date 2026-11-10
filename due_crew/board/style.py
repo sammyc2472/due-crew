@@ -2,7 +2,7 @@
 
 A part of the board (due_crew/board/, 3.9.8): see its __init__."""
 
-from .base import ROW_CAP, _theme_css
+from .base import CARD_SHADOW, CARD_SHADOW_HOVER, ROW_CAP, _theme_css
 
 
 def _css(cfg):
@@ -28,6 +28,7 @@ def _css(cfg):
       box-shadow: none; min-height: 0; letter-spacing: normal; line-height: normal; }}
     #due-crew :where(input, select, textarea):focus-visible {{ outline: 2px solid var(--dc-accent); outline-offset: 0; }}
     #due-crew button:focus-visible {{ outline: 2px solid var(--dc-accent) !important; outline-offset: 2px; }}
+    #due-crew [role="button"][tabindex]:focus-visible {{ outline: 2px solid var(--dc-accent) !important; outline-offset: 2px; }}
     /* the board is one rounded card — white by day, near-black by night —
        and inside it there are no rules and no fills: rows separate by
        spacing and the you-row highlight alone */
@@ -38,6 +39,10 @@ def _css(cfg):
     #due-crew.dc-frame.dc-split {{ background: transparent; padding: 0; border-radius: 0; }}
     #due-crew.dc-split > .du {{ background: var(--dc-bg); margin: 0 0 12px; }}
     #due-crew .dc-sheet {{ background: var(--dc-bg); border-radius: 12px; padding: 16px 18px 10px; }}
+    /* 3.9.9 (Sam): each of our cards sits on the page as Anki's deck list does: its shadow at rest, its
+       deeper one under the pointer (Anki's own values, deckbrowser.css's `.fancy table`) */
+    #due-crew.dc-frame:not(.dc-split), #due-crew.dc-split > .du, #due-crew .dc-sheet {{ box-shadow: {CARD_SHADOW}; }}
+    #due-crew.dc-frame:not(.dc-split):hover, #due-crew.dc-split > .du:hover, #due-crew .dc-sheet:hover {{ box-shadow: {CARD_SHADOW_HOVER}; }}
     /* the deck screen is shared with Anki's own styles (26.x paints
        `.fancy table` with a glass fill) and other add-ons' CSS. None of
        them may redecorate this board: no borders, shadows, radii, or fills
@@ -86,6 +91,7 @@ def _css(cfg):
       text-overflow: ellipsis; }}
     #due-crew td.n {{ text-align: right; font-variant-numeric: tabular-nums; }}
     #due-crew td.rk {{ width: 30px; color: var(--dc-muted); }}
+    #due-crew td.rk:empty {{ width: 0; padding-left: 0; padding-right: 0; }}  /* 3.9.9: no places on the Crew tab; the column is a show-up tick's alone */
     #due-crew th.lt {{ text-align: left; font-weight: 400; }}
     #due-crew th.lt, #due-crew th.sqh {{ color: var(--dc-muted); font-size: 11px; }}
     #due-crew th.sqh {{ text-align: center; padding: 2px 3px 6px; font-weight: 700; }}
@@ -107,6 +113,9 @@ def _css(cfg):
       display: inline-block; max-width: 56%; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }}
     #due-crew tr.you a.dc-pl {{ max-width: none; }}
     #due-crew a.dc-cpill:hover, #due-crew a.dc-cpill:focus-visible {{ background: var(--dc-accent); color: var(--dc-accent-ink); outline: none; }}
+    /* 3.9.9: a cheer waiting for Due Crew to be reachable shows without the pointer, in the foot's warning colour */
+    #due-crew tr.ch a.dc-cpill.held {{ display: block; width: max-content; max-width: 100%; margin: 2px 0 0; border-color: var(--dc-hours); color: var(--dc-hours); }}
+    @media (max-width: 520px) {{ #due-crew a.dc-cpill.held .ts {{ display: none; }} }}
     #due-crew tr.you td {{ {you_bg} }}
     #due-crew tr.you td.nm {{ font-weight: 700; }}
     #due-crew tr.dim td {{ color: var(--dc-faded); }}
@@ -121,6 +130,12 @@ def _css(cfg):
                           color: var(--dc-muted); font-weight: 400; }}
     #due-crew .la.fresh {{ color: var(--dc-fresh); }} #due-crew .la.hours {{ color: var(--dc-hours); }}
     #due-crew .la.faded {{ color: var(--dc-faded); }}
+    #due-crew .dc-calm {{ display: flex; gap: 10px; align-items: baseline; text-align: left; font-size: 11.5px; color: var(--dc-muted);
+        padding: 8px 4px 0; margin-top: 6px; border-top: 1px solid var(--dc-line); }}
+    #due-crew .dc-calm b {{ color: var(--dc-ink); font-weight: 600; }}
+    #due-crew .dc-calm .sp {{ flex: 1; }}
+    #due-crew .dc-calm a {{ color: var(--dc-accent); text-decoration: none; font-weight: 600; white-space: nowrap; }}
+    #due-crew .dc-calm a.x {{ color: var(--dc-muted); font-weight: 400; }}
     #due-crew .dc-foot {{ display: flex; gap: 10px; font-size: 10.5px; color: var(--dc-muted); padding: 8px 4px 0; }}
     #due-crew .dc-foot .sp {{ flex: 1; }}
     #due-crew .dc-foot .fl, #due-crew .dc-foot .fr {{ display: inline-flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }}
@@ -175,6 +190,7 @@ def _css(cfg):
     #due-crew tr.you .dc-stw::before {{ border-bottom-color: var(--dc-bg); }}
     #due-crew tr.you .dc-st {{ background: var(--dc-bg); font-weight: 400; }}
     #due-crew .dc-wrap.eve {{ border-color: var(--dc-hours); }}
+    #due-crew .dc-wrap.off {{ border-color: var(--dc-hours); text-align: left; }}
     /* 2.12: study rooms */
     #due-crew .dc-room {{ display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center;
       border: 1px solid var(--dc-accent); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; }}
@@ -299,6 +315,17 @@ def _css(cfg):
        gets the room. Until 2.9 every name shrank to three letters. */
     @media (max-width: 560px) {{
       #due-crew th .hl {{ display: none; }} #due-crew th .hi {{ display: inline; }}
+      /* 3.9.9 (the design mocks' 3): Crew's numbers keep their words: the column it's sorted by and
+         Streak (sorted by Streak: Reviews beside it), so a name has the room four columns took */
+      #due-crew table[class*="dc-s-"] th .hl {{ display: inline; }} #due-crew table[class*="dc-s-"] th .hi {{ display: none; }}
+      #due-crew table.dc-s-reviews tr > th:nth-child(3), #due-crew table.dc-s-reviews tr > td.n:nth-child(4),
+      #due-crew table.dc-s-streak tr > th:nth-child(3), #due-crew table.dc-s-streak tr > td.n:nth-child(4),
+      #due-crew table.dc-s-retention tr > th:nth-child(3), #due-crew table.dc-s-retention tr > td.n:nth-child(4),
+      #due-crew table.dc-s-reviews tr > th:nth-child(4), #due-crew table.dc-s-reviews tr > td.n:nth-child(5),
+      #due-crew table.dc-s-streak tr > th:nth-child(4), #due-crew table.dc-s-streak tr > td.n:nth-child(5),
+      #due-crew table.dc-s-time tr > th:nth-child(4), #due-crew table.dc-s-time tr > td.n:nth-child(5),
+      #due-crew table.dc-s-time tr > th:nth-child(2), #due-crew table.dc-s-time tr > td.n:nth-child(3),
+      #due-crew table.dc-s-retention tr > th:nth-child(2), #due-crew table.dc-s-retention tr > td.n:nth-child(3) {{ display: none; }}
       #due-crew td, #due-crew th {{ padding-left: 4px; padding-right: 4px; }}
       #due-crew tr:not(.dim) .la {{ display: none; }}
       #due-crew .dc-head .dc-mark {{ height: 14px; }}
@@ -431,6 +458,32 @@ def _css(cfg):
     #due-crew .pwh a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
     #due-crew .pwh .nav .tb {{ padding: 0 2px; font-size: 12px; font-weight: 700; }}
     #due-crew .pwh .nav .tb.here {{ color: var(--dc-muted); font-weight: 500; }}
+    /* 3.9.9 (the design mocks' 1): one action leads. A box's filled button and the one thing it's for
+       stay the accent; what's beside them is ink at the same weight, underlined when pointed at */
+    #due-crew .dc-foot .fl a:not(.pb):not(.warn), #due-crew .dc-calm a:not(.x),
+    #due-crew .du .du-line .acts a, #due-crew .du .du-sg a:not(.x), #due-crew .du .end a.du-go {{ color: var(--dc-ink); font-weight: 600; }}
+    #due-crew .dc-foot .fl a:not(.pb):not(.warn):hover, #due-crew .dc-calm a:not(.x):hover,
+    #due-crew .du .du-line .acts a:hover, #due-crew .du .du-sg a:not(.x):hover, #due-crew .du .end a.du-go:hover {{ text-decoration: underline; }}
+    /* 3.9.9 (the mocks' 6): today keeps the ring; the day opened is filled, its number underlined */
+    #due-crew .pwk .pc.sel:not(.now) {{ border-color: var(--dc-faded); box-shadow: none; }}
+    #due-crew .pwk .pc.sel:not(.now) .d b {{ text-decoration: underline; text-underline-offset: 3px; }}
+    /* 3.9.9: the week across plans, under the plan's card: a row a day, reviews and each plan's new
+       cards as one bar, the day's time; a heavy day's line and its one move */
+    #due-crew .lw {{ text-align: left; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--dc-line); font-size: 12px; }}
+    #due-crew .lwk {{ display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--dc-muted); font-size: 11px; margin-bottom: 6px; }}
+    #due-crew .lwk span {{ display: inline-flex; align-items: center; gap: 5px; min-width: 0; }}
+    #due-crew .lwk i {{ width: 9px; height: 9px; border-radius: 2px; flex: none; }}
+    #due-crew .lwd {{ display: grid; grid-template-columns: 52px minmax(0, 1fr) 56px; gap: 8px; align-items: center; padding: 3px 0; }}
+    #due-crew .lwd .d {{ color: var(--dc-muted); white-space: nowrap; }}
+    #due-crew .lwd.now .d {{ color: var(--dc-ink); font-weight: 700; }}
+    #due-crew .lwd .st {{ display: flex; gap: 2px; height: 10px; min-width: 0; }}
+    #due-crew .lwd .st i {{ height: 100%; border-radius: 2px; min-width: 2px; }}
+    #due-crew .lwd .n {{ text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--dc-muted); }}
+    #due-crew .lwd .n.hv {{ color: var(--dc-hours); font-weight: 700; }}
+    #due-crew .lwh {{ display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: space-between; align-items: baseline;
+      margin-top: 8px; padding: 7px 9px; border-radius: 8px; background: var(--dc-well); }}
+    #due-crew .lwh a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
+    #due-crew .lwx {{ color: var(--dc-muted); font-size: 11px; margin-top: 6px; }}
     /* round five, Sam's pick A: the week as seven small days (its bar, what's left, a quiz under its
        day), names in the day's details, which open under the week on a click (motion.js 8) */
     #due-crew .pwk {{ display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }}

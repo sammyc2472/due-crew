@@ -64,7 +64,58 @@ def _you_plans(plans, opened=None, people=None, cfg=None):
     if opened and not opened.get("dates") and (plans or {}).get("opened_dates"):
         opened = dict(opened, dates=plans["opened_dates"])  # 3.8.1: its dates, as Due's Today has them
     return (_opened_line(opened) + _invite_lines((plans or {}).get("invites"))
-            + _offer_banners((plans or {}).get("offers")) + _plans_html(plans, people, cfg))
+            + _offer_banners((plans or {}).get("offers")) + _plans_html(plans, people, cfg)
+            + _load_html((plans or {}).get("load")))
+
+
+_LOAD_INK = ("var(--dc-accent)", "var(--dc-hours)", "var(--dc-fresh)", "var(--dc-ink)")
+
+
+def _load_html(load):
+    """3.9.9, the week across plans (plans.load_week), under the plan's
+    card when two plans have something in the next seven days: a row a day,
+    my reviews and each plan's new cards as one bar at my own pace, the
+    day's time; a heavy day's line, with one press that moves its smallest
+    set to the nearest day with room (my follow only), and Put it back after. Plan and
+    set names are their authors': escaped."""
+    if not load:
+        return ""
+    from .. import plans as P
+    e = _html.escape
+    ink = lambda i: _LOAD_INK[min(i, len(_LOAD_INK) - 1)]
+    key = '<span><i style="background:var(--dc-faded)"></i>Reviews due</span>' + "".join(
+        f'<span><i style="background:{ink(i)}"></i>{e(p["name"])}</span>' for i, p in enumerate(load["plans"]))
+    top = max(1, int(load.get("top") or 1))
+    rows = ""
+    for d in load["days"]:
+        said = f'{d["rev"]:,} reviews' + "".join(
+            f', {n:,} new in {p["name"]}' for n, p in zip(d["parts"], load["plans"]) if n)
+        width = 100 * d["min"] / top
+        inks = ["var(--dc-faded)"] + [ink(i) for i in range(len(d["parts"]))]
+        segs = "".join(f'<i style="width:{width * sh:.1f}%;background:{c}"></i>' for sh, c in zip(d["share"], inks) if sh)
+        rows += (f'<div class="lwd{" now" if d["today"] else ""}" title="{e(said)}"><span class="d">{e(d["dow"])} {int(d["num"])}</span>'
+                 f'<span class="st">{segs}</span>'
+                 f'<span class="n{" hv" if d["heavy"] else ""}">{P.load_time(d["min"]) if d["min"] else "&ndash;"}</span></div>')
+    foot = ""
+    back, hint = load.get("back"), load.get("hint")
+    if back:
+        cmd = _pycmd(f'planmoveback:{back["pid"]}:{back["uid"]}')
+        foot += (f'<div class="lwh"><span>{e(back["name"])} moved to {e(P.fmt_day(back["day"]))}.</span>'
+                 f'<a href="#" onclick="{cmd}">Put it back</a></div>')
+    if hint:
+        day = "Today" if hint["day"] == load["days"][0]["day"] else P.weekday_or_day(hint["day"], load["days"][0]["day"])
+        across = f' across {hint["plans"]} plans' if hint["plans"] > 1 else ""
+        on_top = f' on top of {hint["rev"]:,} reviews' if hint["rev"] else ""
+        mv = hint.get("move")
+        link = ""
+        if mv:
+            cmd = _pycmd(f'planmoveto:{mv["pid"]}:{mv["uid"]}:{int(mv["n"])}')
+            link = (f'<a href="#" title="Changes your days only, never the plan" onclick="{cmd}">'
+                    f'Move {e(mv["name"])} to {e(P.weekday_or_day(mv["to"], load["days"][0]["day"]))}</a>')
+        foot += (f'<div class="lwh"><span><b>{e(day)} is heavy:</b> {hint["new"]:,} new{across}{on_top}.</span>{link}</div>')
+    note = "Times use your own pace per card." if load.get("known") else "Times use a typical pace until there's more of yours to read."
+    return (f'<div class="lw"><div class="pwh"><b>Everything this week</b></div><div class="lwk">{key}</div>{rows}{foot}'
+            f'<div class="lwx">{note}</div></div>')
 
 
 def _invite_lines(invites):
@@ -168,7 +219,7 @@ def _plan_card_html(card, people=None, cfg=None, head=None):
     if card.get("no_deck"):
         out += (f'<div class="dc-line">No deck here has this plan&rsquo;s cards yet. '
                 f'<a href="#" onclick="{_pycmd("plandeck:" + pid)}">Pick a deck</a></div>')
-    out += (_plan_path(card) + _joy_line(card, pid) + _plan_status(card, pid) + _plan_slid(card, pid)
+    out += (_plan_path(card) + _exam_ask(card, pid) + _joy_line(card, pid) + _plan_status(card, pid) + _plan_slid(card, pid)
             + (_plan_behind(card, pid) or _joy_caught(card)) + _week_html(card, pid) + _plan_now(card, pid))
     notes = _plan_notes(card, pid)
     if notes:
@@ -233,7 +284,9 @@ def _plan_path(card):
 
     def jump(day):  # 3.9.6, after the last check: a click opens its day's details in the week below (plan_flow.jump_to)
         day = str(day or "")
-        return f' onclick="{_pycmd(f"planjump:{pid}:{day}")}"' if pid and _re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) else ""
+        # 3.9.9: a button to the keyboard too: one stop for the whole path, the arrows walk it (page.KEYS_JS)
+        return (f' role="button" tabindex="-1" data-rove="1" onclick="{_pycmd(f"planjump:{pid}:{day}")}"'
+                if pid and _re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) else "")
 
     keep = _path_keep(ls, p, card.get("joy"))
     pieces, i = 0, 0
@@ -252,7 +305,7 @@ def _plan_path(card):
                 said = PATH_FOLD[st].format(n=j - i)
                 to = run[-1] if st == "done" else run[0]
                 segs += (f'<i class="run {PATH_WORDS.get(st, "a")}{" rl" if last else ""}" style="flex:{min(j - i, 8)} 1 0" '
-                         f'title="{e(first)} to {e(end)} &middot; {said}"{jump(to.get("opens"))}><span>{said}</span></i>')
+                         f'title="{e(first)} to {e(end)} &middot; {said}" aria-label="{e(first)} to {e(end)}, {said}"{jump(to.get("opens"))}><span>{said}</span></i>')
                 pieces += 1
                 i = j
                 continue
@@ -262,7 +315,7 @@ def _plan_path(card):
             st, _ins_dname(x.get("opens"), long=True))
         cls = PATH_WORDS.get(st, "a") + (" t" if x.get("today") and st == "done" else "")
         play, inner = _joy_seg(card.get("joy"), str(x.get("uid") or ""), st)
-        segs += f'<i class="{cls}" title="{e(str(x.get("name") or "?"))} &middot; {word}"{play}{jump(x.get("opens"))}>{inner}</i>'
+        segs += f'<i class="{cls}" title="{e(str(x.get("name") or "?"))} &middot; {word}" aria-label="{e(str(x.get("name") or "?"))}, {word.replace(" &middot; ", ", ")}"{play}{jump(x.get("opens"))}>{inner}</i>'
         pieces += 1
         i += 1
     end = p.get("end") or {}
@@ -276,7 +329,8 @@ def _plan_path(card):
     gap = "" if pieces <= 30 else " g2" if pieces <= 60 else " g1" if pieces <= 120 else " g0"
     gap += " fold" if keep is not None else ""
     right = (f'{e(str(end.get("name") or "Exam"))} &middot; {when}' if ev else f"Ends {when}" if when else "")
-    return (f'<div class="ppath{gap}" role="img" aria-label="Sets: {said}">{segs}</div>'
+    segs = segs.replace(' tabindex="-1" data-rove', ' tabindex="0" data-rove', 1)  # the path's one stop
+    return (f'<div class="ppath{gap}" role="group" aria-label="Sets: {said}. Arrow keys move along them.">{segs}</div>'
             f'<div class="ppl"><span>{_ins_dname(p.get("first"), long=True)}</span><span>{right}</span></div>')
 
 
@@ -368,6 +422,26 @@ def _joy_caught(card):
     play = f' data-joy="tada"{_joy_ago(c["ago"])}' if c.get("ago") is not None else ""
     return (f'<div class="pst jcu"><span><b>Caught up</b> &middot; {name}, all {int(c.get("n") or 0):,} seen</span>'
             f'<span class="acts"><span class="jta" aria-hidden="true"{play}>&#127881;</span></span></div>')
+
+
+def _exam_ask(card, pid):
+    """3.9.9 (Sam's pick B, "Exams and Limits"): the plan's exam, asked once:
+    Make it mine (my exam, the crew's countdown, the good-luck card) or Not
+    now. Moved since I made it mine: Move mine, or keep my day. The exam's
+    name is the author's: escaped here (plans.exam_offer)."""
+    a = card.get("exam_ask")
+    if not a:
+        return ""
+    e = _html.escape
+    day = e(_ins_dname(a["day"], long=True))
+    yes, no = _pycmd(f"planexam:yes:{pid}"), _pycmd(f"planexam:no:{pid}")
+    if a.get("was"):
+        return (f'<div class="pst pex"><span>{e(a["ename"])} moved to <b>{day}</b>. Move your exam too?</span>'
+                f'<span class="acts"><a href="#" onclick="{yes}">Move mine</a>'
+                f'<a href="#" onclick="{no}">Keep {e(_ins_dname(a["was"], long=True))}</a></span></div>')
+    return (f'<div class="pst pex"><span>{e(a["ename"])} is <b>{day}</b>. Make it your exam?</span>'
+            f'<span class="acts"><a href="#" title="Your exam in Settings: the countdown your crew sees, and the good-luck card" '
+            f'onclick="{yes}">Make it mine</a><a href="#" onclick="{no}">Not now</a></span></div>')
 
 
 def _plan_slid(card, pid):

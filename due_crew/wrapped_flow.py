@@ -11,12 +11,12 @@ Main thread: the collection and the config. No network.
 import datetime
 import html
 import re
-import traceback
 
 from aqt import mw
 
 from . import closet, closet_flow, wrapped
 from .app import _state, cfg
+from .errs import oops
 
 CARD_KEY = "wrapped_card"  # per computer: the card I turned around, on its slide (on unless turned off there)
 
@@ -96,7 +96,7 @@ def turned(col):
     try:
         front = _plain(col.get_card(int(row[0])).question())
     except Exception:
-        traceback.print_exc()
+        oops()
         front = ""
     return count, ({"front": front[:wrapped.FRONT_MAX], "lapses": int(row[1]), "ivl": int(row[2])} if front else None)
 

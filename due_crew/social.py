@@ -5,7 +5,6 @@ there because they are a squad flow."""
 import datetime
 import html
 import json
-import traceback
 
 from aqt import mw
 from aqt.utils import tooltip
@@ -14,9 +13,10 @@ from .songs import clean as songs_clean
 from . import app, board, native_emoji, shows
 from .app import (CHEER_QUICK, HEATMAP_DAYS, _bg, _pending_cheers,
                   _profile_files, _state, cfg, client, save_cfg)
-from .backend.shapes import clean_doodle, clean_emoji, clean_note
+from .backend.shapes import TransportError, clean_doodle, clean_emoji, clean_note
 from .stats import duet_runs, heatmap
 from .stats.queries import StatsQueries
+from .errs import oops
 
 def _fresh_cheers(cheers, seen, old_ts=""):
     """(fresh, seen') — which cheers to play, and the per-sender marks to
@@ -133,13 +133,21 @@ def _send_cheer(to_uid, to_name, emoji, note="", luck=False, guid=None, then=Non
                 from . import closet_flow
                 closet_flow.note_cheer(to_uid, _state["labels"][0] if _state["labels"] else "", big)
             except Exception:
-                traceback.print_exc()
+                oops()
         if then is not None:
             then(ok is True)
         if ok is True and luck:
             tooltip(f"Added to {html.escape(to_name)}'s card.")
         elif ok is True and guid:
             tooltip("Tip sent.")
+        elif ok == "offline":
+            # 3.9.9 (Off the Board, 11): no answer; it waits, marked on their row, for the next refresh that gets through
+            if hold_cheer(to_uid, to_name, emoji, note, luck, guid, doodle):
+                tooltip(f"No connection. Your {html.escape(emoji)} for {html.escape(to_name)} sends when Due Crew is back.")
+                if app.swap:
+                    app.swap(cfg())
+            else:
+                tooltip("Couldn't send. Check your connection.")
         elif ok:
             extra = "" if plain else {"draw": " and a drawing", "sign": " and a sign"}.get((doodle or {}).get("k"), "")
             tooltip(f"Sent {html.escape(emoji)}{extra} to {html.escape(to_name)}.")
@@ -150,7 +158,76 @@ def _send_cheer(to_uid, to_name, emoji, note="", luck=False, guid=None, then=Non
         else:
             tooltip("Couldn't send. Check your connection.")
 
-    _bg(lambda: cl.send_cheer(to_uid, emoji, note or None, luck=luck, guid=guid, doodle=doodle), done)
+    def job():
+        try:
+            return cl.send_cheer(to_uid, emoji, note or None, luck=luck, guid=guid, doodle=doodle)
+        except TransportError as e:
+            # no answer at all, or the server away (5xx): worth holding. A refusal, a sign-in gone or a
+            # ceiling (429) isn't: a held cheer would only be refused again
+            status = getattr(e, "status", None)
+            return "offline" if status is None or int(status) >= 500 else False
+
+    _bg(job, done)
+
+
+HELD_MAX = 20    # 3.9.9: cheers held while Due Crew can't be reached (one a crewmate; the server keeps one a pair too)
+HELD_DAYS = 3    # older than this, a held cheer is let go unsent
+
+
+def held_cheers():
+    """[{to, name, emoji, note, luck, guid, doodle, day}] waiting to send, mine
+    (this sign-in's), newest last. Kept in the session: they go when it goes."""
+    cl = client()
+    got = cl.session.get("cheers_held")
+    if not isinstance(got, dict) or got.get("uid") != cl.user_id:
+        return []
+    return [h for h in got.get("list") or [] if isinstance(h, dict) and h.get("to") and h.get("emoji")]
+
+
+def hold_cheer(to_uid, to_name, emoji, note="", luck=False, guid=None, doodle=None):
+    """Main thread. A cheer that got no answer, kept to send with the next
+    refresh that reaches Due Crew. One a crewmate, the newest (the server
+    keeps one a pair: sending it twice replaces it with itself). True when
+    it's held."""
+    cl = client()
+    if not cl.user_id:
+        return False
+    day = _state["labels"][0] if _state["labels"] else datetime.date.today().isoformat()
+    keep = [h for h in held_cheers() if str(h.get("to")) != str(to_uid)]
+    keep.append({"to": str(to_uid), "name": str(to_name), "emoji": emoji, "note": note or "", "luck": bool(luck),
+                 "guid": guid or "", "doodle": doodle or None, "day": day})
+    cl.session["cheers_held"] = {"uid": cl.user_id, "list": keep[-HELD_MAX:]}
+    cl._save_session()
+    return True
+
+
+def held_uids():
+    """The crewmates a held cheer is waiting for (their rows say so)."""
+    return {str(h["to"]) for h in held_cheers()}
+
+
+def send_held(today=""):
+    """Main thread, after a refresh got through. Each held cheer goes, as it
+    was sent; one that gets no answer again is held again; one older than
+    HELD_DAYS goes unsent."""
+    cl = client()
+    held = held_cheers()
+    if not held:
+        return 0
+    cl.session.pop("cheers_held", None)
+    cl._save_session()
+    try:
+        cut = (datetime.date.fromisoformat(today) - datetime.timedelta(days=HELD_DAYS)).isoformat() if today else ""
+    except ValueError:
+        cut = ""
+    n = 0
+    for h in held:
+        if cut and str(h.get("day") or "") < cut:
+            continue
+        n += 1
+        _send_cheer(h["to"], h.get("name") or "", h["emoji"], h.get("note") or "", luck=bool(h.get("luck")),
+                    guid=h.get("guid") or None, doodle=h.get("doodle"))
+    return n
 
 
 def _edit_status(then=None):

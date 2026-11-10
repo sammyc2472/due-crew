@@ -105,6 +105,26 @@ def showed_days(entry, labels):
 from due_crew.stats import gather_week                        # noqa: E402
 
 CHECKS = []
+BOARD_DREW = {}  # every duecrew: command the board drew a control for (board._pycmd), across the suite: routed at the end
+
+
+def _record_board_commands():
+    """Each command as the page sends it (what _pycmd keeps of it), with the
+    part of the board that drew it; check_every_board_click_is_taken sends
+    them down the board's own route."""
+    import inspect
+    real = board._pycmd
+
+    def seen(cmd):
+        out = real(cmd)
+        at = inspect.currentframe().f_back
+        if os.sep + os.path.join("due_crew", "board") + os.sep in at.f_code.co_filename:  # the board's own, not a test's own call
+            BOARD_DREW.setdefault(out[len("pycmd('"):].split("|")[0], f"{os.path.basename(at.f_code.co_filename)}:{at.f_code.co_name}")
+        return out
+    board._pycmd = seen  # each part of the board that has it (board._Board)
+
+
+_record_board_commands()
 
 
 KK = board.BOARD_KEY  # 3.9.1: what the Decks page's own commands carry
@@ -2851,8 +2871,11 @@ def test_not_yet_today_is_unranked():
     check("not yet: dashes, a note with when we last heard, the status, still cheerable; no zeros", "nothing yet as of" in row and "coffee first" in row
           and ">0<" not in row and "0.0%" not in row and "cheerpick:dre" in row)
     kai = page[:page.index(">Kai<")]
-    check("not yet: Kai keeps silver, and Dre's rank is a dash", kai.rfind("&#129352;") > kai.rfind("<tr")
-          and '<td class="rk">&mdash;</td>' in page[page.rfind("<tr", 0, page.index(">Dre<")):page.index(">Dre<")])
+    check("not yet: Kai is above Dre by the order alone; no medals, no places, no dash (3.9.9, Sam: the design mocks' 2)",
+          '<td class="rk"></td>' in kai[kai.rfind("<tr"):]
+          and '<td class="rk"></td>' in page[page.rfind("<tr", 0, page.index(">Dre<")):page.index(">Dre<")]
+          and not any(m in page for m in ("&#129351;", "&#129352;", "&#129353;")) and re.search(r'class="rk">#\d', page) is None
+          and 'td.rk:empty {' in page and '<table class="dc-s-reviews">' in page)
     week = dict(data, entries=[data["entries"][0], ent("dre", "Dre", {lb: dict(zero) for lb in labels[:3]})])
     wf, wd = board.build_rows(week["entries"], labels, week["tomorrow"], "week", {})
     check("not yet: a week of zeros is unranked on Week", [r["name"] for r in wd] == ["Dre"] and wd[0]["notyet"]
@@ -2863,7 +2886,10 @@ def test_not_yet_today_is_unranked():
             "day": labels[0], "yesterday": labels[1], "people": 2, "reviews": 9}
     sq = board._squads_html(view, {})
     check("not yet: on a squad board the zero is under the ranked, with dashes", sq.index(">Bo<") < sq.index(">Ann<")
-          and ">#1<" in sq and ">#2<" not in sq and "nothing yet today" in sq and "1 studying today" in sq)
+          and re.search(r'class="rk">(#\d|&mdash;)', sq) is None and sq.count('<td class="rk"></td>') == 2  # 3.9.9: no places on Squads either
+          and "nothing yet today" in sq and "1 studying today" in sq
+          and 'h("td", { class: "rk" }, rank)' in open(os.path.join(REPO, "site", "public", "app.js"), encoding="utf-8").read()
+          and "`#${++n}`" not in open(os.path.join(REPO, "site", "public", "app.js"), encoding="utf-8").read())
 
 
 def test_ui_review_board():
@@ -3012,12 +3038,17 @@ def test_settings_in_board_v341():
           and "duecrew:settabs:decks:1" in bd and "duecrew:settabs:plans:0" in bd
           and "settabs:week" not in bd
           and "duecrew:set:compact:0" in bd and 'aria-label="Teal" aria-pressed="true"' in bd)
-    pv = board.settings_html(dict(view, tab="privacy"), {"show_up": True, "exam_date": "2026-10-14",
-                                                           "away_from": "", "away_to": ""})
-    check("settings: Privacy, one choice checked; numbers only under My numbers; exam on, away off",
-          pv.count('aria-checked="true"') == 2 and "duecrew:setprivacy:numbers" in pv
-          and "share_reviews" not in pv and 'value="2026-10-14"' in pv
-          and "duecrew:setexam:off" in pv and "duecrew:setaway:on" in pv, pv[-900:])
+    dated = {"show_up": True, "exam_date": "2026-10-14", "away_from": "", "away_to": "",
+             "send_errs": False}  # 3.9.9's switch, off: its own test
+    pv = board.settings_html(dict(view, tab="privacy"), dated)
+    check("settings: Privacy, one choice checked; numbers only under My numbers",
+          pv.count('aria-checked="true"') == 1 and "duecrew:setprivacy:numbers" in pv
+          and "share_reviews" not in pv, pv[-900:])
+    # 3.9.9 (Settings by what it's about): my dates are on You, no longer under Privacy
+    yo = board.settings_html(dict(view, tab="you", signed_in=True), dated)
+    check("settings: You has my dates, exam on, away off; Privacy has none",
+          '<div class="st-h">Your dates</div>' in yo and 'value="2026-10-14"' in yo and "duecrew:setexam:off" in yo
+          and "duecrew:setaway:on" in yo and "setexam" not in pv and "setaway" not in pv, yo[-900:])
     out = board.settings_html({"tab": "nope", "signed_in": False}, {})
     check("settings: signed out, a way in; an unknown tab is You",
           "setsignin" in out and "follow your account" not in out)
@@ -3093,6 +3124,204 @@ def test_every_board_command_has_a_handler():
           and dc._board_cmd("fridgemove", ["duecrew", "fridgemove", "a", "l", "-12", "40"]) is not None
           and dc._board_cmd("noticex", ["duecrew", "noticex", "7a"]) is None
           and dc._board_cmd("planopen", ["duecrew", "planopen"]) is not None)
+
+
+def _takes(mod, fn, *args):
+    """A family's chain (fn) with its module's own steps stood in for, so
+    nothing runs but the choice: True when it took the command (said True)."""
+    from unittest import mock
+    saved = {k: v for k, v in vars(mod).items() if not k.startswith("__") and v is not fn and callable(v)
+             and not isinstance(v, type) and str(getattr(v, "__module__", "") or "").startswith(("due_crew", "aqt"))}
+    for k in saved:
+        setattr(mod, k, lambda *a, **kw: mock.MagicMock())
+    if "mw" in vars(mod):  # Anki with a collection open (the fake's has none)
+        saved["mw"] = mod.mw
+        mod.mw = mock.MagicMock()
+    try:
+        return fn(*args) is True
+    except Exception:  # noqa: BLE001 (a branch it took, on the stand-ins)
+        return True
+    finally:
+        for k, v in saved.items():
+            setattr(mod, k, v)
+
+
+def check_every_board_click_is_taken():
+    """Run after every test (main): each command the board drew a control
+    for anywhere in the suite (BOARD_DREW, as _pycmd leaves it), sent down
+    the board's own route: _on_js's room and knows families, BOARD_CMDS'
+    count and check, and a family's own chain (plan_flow, team_flow,
+    due_flow, song_flow, leech_flow, habits_flow, the closet's, Wrapped's,
+    Settings' and Pip Party's). A name having a handler isn't enough: a
+    plan family's chain that falls through, or values its check refuses,
+    is a control that does nothing (Sam, 7 Nov, in the plan windows: two
+    yeses that sent nothing, each with a test that never pressed it).
+    A family's own steps are stood in for, so nothing runs but the choice."""
+    import due_crew as dc
+    from due_crew import (closet, gamenight_flow, habits_flow, leech_flow, plan_flow, team_flow, due_flow, song_flow, rooms,
+                          settings_model, cards as crew_cards)
+    takes = _takes
+    party_src = open(gamenight_flow.__file__, encoding="utf-8").read()  # party:<what>: the names its chain reads
+    party = set(re.findall(r'what == "([a-z]+)"', party_src)) | {
+        w for g in re.findall(r'what in \(([^)]*)\)', party_src) for w in re.findall(r'"([a-z]+)"', g)}
+
+    def taken(msg):
+        p = msg.split(":")
+        cmd, arg = p[1], p[2] if len(p) > 2 else ""
+        if cmd.startswith("room"):
+            return takes(rooms, rooms.on_message, cmd, p)
+        if cmd.startswith("knows"):
+            return takes(crew_cards, crew_cards.on_message, cmd, p)
+        if dc._board_cmd(cmd, p) is None:
+            return False
+        if cmd.startswith("planteam"):
+            return takes(team_flow, team_flow.on_message, cmd, p)
+        if cmd.startswith("plan"):
+            return takes(plan_flow, plan_flow.on_message, cmd, p)
+        if cmd.startswith("due"):
+            return takes(due_flow, due_flow.on_message, cmd, p)
+        if cmd.startswith("ins") or cmd == "youins":
+            x = p[3] if len(p) > 3 else ""
+            if not arg.isdigit():
+                return False  # team_flow says True to a deck that isn't a number, and does nothing
+            if cmd == "insleech":
+                return takes(leech_flow, leech_flow.on_message, int(arg), x, p[4] if len(p) > 4 else "")
+            if cmd == "inshabits":
+                return takes(habits_flow, habits_flow.on_message, x)
+            return takes(team_flow, team_flow.on_message, cmd, p)
+        if cmd.startswith(("song", "dance")):
+            return takes(song_flow, song_flow.on_message, cmd, p)
+        if cmd.startswith("closet"):
+            return cmd in ("closet", "closetnew", "closethw", "closetclose", "closetoff") or (cmd == "closetwear" and arg in closet.BY) \
+                or (cmd == "closettab" and arg.isdigit() and int(arg) < len(board.CLOSET_TABS))
+        if cmd.startswith("wrapped"):
+            return cmd in ("wrappedopen", "wrappedyear", "wrappedcard", "wrappedclose") or (arg.isdigit() and len(arg) == 4)
+        if cmd == "settab":
+            return arg in settings_model.TABS
+        if cmd in ("setclose", "setname", "setemoji", "setstatus", "setsquads", "setsignin", "setsignout", "setdelete", "setfeedback"):
+            return True
+        if cmd in dc.SETTINGS_CMDS:
+            return bool(settings_model.change([cmd] + p[2:], {}))
+        if cmd == "party":
+            return arg in party
+        return True  # a line of BOARD_CMDS: its count and check passed
+    drew = dict(BOARD_DREW)  # as the suite left it (a route taken may draw the board again)
+    lost = sorted((m, where) for m, where in drew.items() if not taken(m))
+    check(f"commands: every click the board drew in this suite ({len(drew)} commands) is taken by its route: its family's chain, "
+          "BOARD_CMDS' count and check; none falls through or is refused", len(drew) > 300 and not lost, lost[:8])
+
+
+def test_every_widget_press_is_taken():
+    """The bars' widgets (room_widget.js), run in node and pressed: every
+    one, in each state it has (a crew room before, in a round and in its
+    break; a fifteen in its round, at its question, in its break; ▶
+    Fifteen? and the Fifteen at 35), every onclick and Enter it sets
+    called, and whatever it sends on its own. Each message goes through
+    _on_js's own gate (room_model.trusted) as the page it's on sends it:
+    the margin, the break, the question and the room's card sit on the
+    review screen, where a card's script runs and only CARD_PAGE_CMDS
+    count; then rooms.on_message must take it. A button the gate drops
+    would do nothing (3.8.1: ▶ Fifteen? clicked to nothing the same way)."""
+    import shutil
+    import subprocess
+    from due_crew import room_model as rm, rooms
+    node = shutil.which("node")
+    if not node:
+        print("SKIP the widgets pressed: no node")
+        return
+    now = datetime.datetime.now(datetime.timezone.utc)
+    acc = board.accent_pair("green")
+    ents = [{"user_id": "sam", "name": "Sammy", "you": True, "accent": "blue", "look": []},
+            {"user_id": "dre", "name": "Dre", "you": False, "accent": "teal", "look": []}]
+    before = rm.make_room("sam", now + datetime.timedelta(minutes=20))
+    going = rm.make_room("sam", now - datetime.timedelta(minutes=3))
+    resting = rm.make_room("sam", now - datetime.timedelta(minutes=27), 2, 25, 5)
+    fif = rm.make_fifteen("sam", now - datetime.timedelta(minutes=3))
+    asking = rm.make_fifteen("sam", now - datetime.timedelta(minutes=16))
+    fbreak = dict(rm.make_fifteen("sam", now - datetime.timedelta(minutes=17)), rounds=2)
+    review = ("gutter", "break", "ask", "card")  # on the review screen: a card's own page
+    cases = [(k, room) for k in ("chip", "bottom", "gutter", "card") for room in (before, going, fif)]
+    cases += [("break", resting), ("break", fbreak), ("ask", asking), ("start", None), ("start", "sit")]
+
+    def data(kind, room):
+        if kind == "start":
+            return rm.start_data(acc, "right", True, nap=False, sit=35 if room == "sit" else 0)
+        return rm.widget_data(room, [dict(e, room=room) for e in ents], acc, cards=12, total=40)
+    dom = r"""
+class Sty { constructor() { this.cssText = ''; } setProperty(k, v) { this[k] = v; } }
+class E {
+  constructor(tag) { this.tag = tag; this.kids = []; this.style = new Sty(); this.textContent = ''; this.title = ''; this.attrs = {};
+    this.classList = { add() {}, remove() {}, contains() { return false; }, toggle() {} }; }
+  appendChild(k) { this.kids.push(k); k.parentNode = this; return k; }
+  insertBefore(k) { return this.appendChild(k); }
+  set innerHTML(h) { this.html = h; this.kids = []; const m = /^<([a-z]+)/.exec(h); if (m) { this.kids.push(new E(m[1])); } }
+  get firstChild() { return this.kids[0] || null; }
+  get isConnected() { let p = this; while (p.parentNode) { p = p.parentNode; } return p === body; }
+  setAttribute(k, v) { this.attrs[k] = v; } getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; } removeAttribute(k) { delete this.attrs[k]; }
+  querySelectorAll() { return []; } querySelector() { return null; } addEventListener() {} removeEventListener() {}
+  remove() { if (this.parentNode) { this.parentNode.kids = this.parentNode.kids.filter((x) => x !== this); this.parentNode = null; } }
+  focus() {} blur() {} getBoundingClientRect() { return { left: 0, top: 0, width: 80, height: 26, right: 80, bottom: 26 }; }
+  animate() { return { finished: Promise.resolve(), cancel() {} }; }
+}
+let body;
+const walk = (e, out) => { out.push(e); e.kids.forEach((k) => walk(k, out)); return out; };
+const sent = [];
+function fresh() {
+  body = new E('body'); body.className = '';
+  globalThis.window = globalThis; window.addEventListener = () => {}; window.removeEventListener = () => {}; window.innerWidth = 1200; window.innerHeight = 800;
+  globalThis.document = { body, head: new E('head'), createElement: (t) => new E(t), createRange: () => ({ selectNodeContents() {}, getBoundingClientRect: () => ({ width: 10 }) }),
+    getElementById: (id) => walk(body, []).find((x) => x.id === id) || null, activeElement: null,
+    querySelector: () => null, querySelectorAll: () => [], addEventListener() {}, removeEventListener() {}, documentElement: new E("html") };
+  globalThis.setInterval = () => 0; globalThis.clearInterval = () => {}; globalThis.setTimeout = () => 0; globalThis.clearTimeout = () => {};
+  globalThis.matchMedia = () => ({ matches: false, addEventListener() {} }); globalThis.getComputedStyle = () => ({ getPropertyValue: () => '' });
+  globalThis.localStorage = { getItem: () => null, setItem() {} }; globalThis.requestAnimationFrame = () => 0;
+  globalThis.pycmd = (m) => sent.push(m);
+  for (const k of Object.keys(globalThis)) { if (/^dc/.test(k)) { delete globalThis[k]; } }
+  (0, eval)(PROG);
+}
+const ev = { stopPropagation() {}, preventDefault() {}, key: 'Enter', button: 0 };
+fresh();
+const drew = sent.splice(0);
+const n = walk(body, []).filter((e) => typeof e.onclick === 'function' || typeof e.onkeydown === 'function').length;
+const presses = [];
+for (let i = 0; i < n; i++) {
+  fresh(); sent.length = 0;
+  const el = walk(body, []).filter((e) => typeof e.onclick === 'function' || typeof e.onkeydown === 'function')[i];
+  try { if (typeof el.onclick === 'function') { el.onclick(ev); } else { el.onkeydown(ev); } presses.push([el.textContent || el.title || el.tag, sent.slice()]); }
+  catch (e) { presses.push([el.textContent || el.tag, ['error: ' + e.message]]); }
+}
+console.log(JSON.stringify({ drew, presses, n }));
+"""
+    got = []
+    for kind, room in cases:
+        prog = rm.widget_js(kind, data(kind, room))
+        run = subprocess.run([node, "-e", dom.replace("(0, eval)(PROG);", "(0, eval)(" + json.dumps(prog) + ");")],
+                             capture_output=True, text=True, timeout=60)
+        try:
+            got.append((kind, room, json.loads(run.stdout)))
+        except ValueError:
+            got.append((kind, room, {"error": run.stdout[-300:] + run.stderr[-1500:]}))
+    broke = [(k, o.get("error") or [p for p in o["presses"] if any(m.startswith("error") for m in p[1])]) for k, _r, o in got
+             if o.get("error") or any(m.startswith("error") for p in o["presses"] for m in p[1])]
+    check(f"widgets pressed: each of {len(cases)} drawn in node and every control in it pressed, without an error "
+          f"({sum(o.get('n', 0) for _k, _r, o in got)} controls)", not broke and all(o.get("n") for _k, _r, o in got), broke[:3])
+    dropped, missed, idle = [], [], []
+    for kind, _room, o in got:
+        for label, msgs in o.get("presses", []) + [("as it's drawn", o.get("drew", []))]:
+            if not msgs and label != "as it's drawn":
+                idle.append((kind, label))
+            for m in msgs:
+                body, ok = rm.trusted(m, kind in review)
+                if not ok:
+                    dropped.append((kind, label, m.split("|")[0]))
+                    continue
+                p = body.split(":")
+                if not _takes(rooms, rooms.on_message, p[1], p):
+                    missed.append((kind, label, body))
+    check("widgets pressed: every message a press sends gets through the gate of the page it's on "
+          "(the review screen's widgets send only CARD_PAGE_CMDS, keyed)", not dropped, dropped[:6])
+    check("widgets pressed: rooms.on_message takes every one", not missed, missed[:6])
+    check("widgets pressed: every control sends something", not idle, idle[:6])
 
 
 def test_take_back_an_ask():
@@ -4708,6 +4937,19 @@ def test_your_own_days_376():
             card = F.card_view(next(x for x in F.followed() if x["id"] == pid), F._state_cfg()[pid], {}, _day(0))
             html = board._plan_card_html(dict(card, id=pid))
             check("move: a date from today on has Move…", f"planmove:{pid}:ar" in html, html[:300])
+            # 3.9.9: what's pressed and isn't a link is a button to the keyboard and a screen reader
+            check("keys: a week's day is a button (a Tab stop, says whether it's open, names what it opens)",
+                  re.search(r'<div class="pc[^"]*" onclick="[^"]*" role="button" tabindex="0" aria-expanded="(true|false)" '
+                            r'aria-controls="dc-pd-[^"]+" aria-label="[A-Z][a-z]{2} \d+ [A-Z][a-z]{2}[^"]*: its sets"', html) is not None
+                  and "setAttribute('aria-expanded','true')" in html, html[:400])
+            check("keys: the path is one Tab stop, its sets walked with the arrows, each named",
+                  html.count(' tabindex="0" data-rove="1"') == 1 and html.count('data-rove="1"') >= 2
+                  and 'role="group" aria-label="Sets: ' in html and "Arrow keys move along them." in html
+                  and re.search(r'<i class="[^"]*" title="[^"]*" aria-label="[^"&]*"', html) is not None)
+            from due_crew.board import page as BP
+            check("keys: one handler a page presses them on Enter or Space, and rides with the board's scripts",
+                  "window.dcKeys" in BP.KEYS_JS and "'Enter'" in BP.KEYS_JS and "ArrowRight" in BP.KEYS_JS
+                  and BP.KEYS_JS in BP.keep_me_in_view_js(True) and BP.KEYS_JS not in BP.keep_me_in_view_js(False))
             dc._on_js(False, as_board(f"duecrew:planskip:{pid}:ex"), DeckBrowser())  # a command the board sends, for the handler list
             F.move_date(pid, "cz", 2)
             check("move: kept on my follow; the plan itself unchanged",
@@ -4718,6 +4960,28 @@ def test_your_own_days_376():
             check("move: on its new day, marked moved, with Put it back", "&middot; moved" in html and f"planmoveback:{pid}:cz" in html)
             dc._on_js(False, as_board(f"duecrew:planmoveback:{pid}:cz"), DeckBrowser())
             check("move: Put it back (sent as the board does) takes it off", not store.follows[(pid, "maya")].get("moved"))
+            dc._on_js(False, as_board(f"duecrew:planmoveto:{pid}:cz:2"), DeckBrowser())  # 3.9.9: the load view's Move
+            check("load: its Move (sent as the board does) is my follow's, remembered for Put it back; the plan unchanged",
+                  store.follows[(pid, "maya")].get("moved") == {"cz": 2} and F._state.get("load_moved") == (pid, "cz")
+                  and store.plans[pid]["doc"]["units"][3]["opens"] == _day(7))
+            dc._on_js(False, as_board(f"duecrew:planmoveback:{pid}:cz"), DeckBrowser())
+            check("load: Put it back takes it off", not store.follows[(pid, "maya")].get("moved"))
+            pid2, code2 = store.add_plan("dre", "Pharm", "Pharm", [
+                {"id": "x1", "name": "Pharm 1", "opens": _day(3), "tags": ["Step1::Cardio::Heart_failure"]}])
+            plan2, _ = maya.follow_plan(code2)
+            F.on_followed(plan2, 10, None, "open")
+            maya.fetch_board(labels, with_decks=True)
+            F._last.update(key=None, got=None)
+            F.refresh_progress()
+            lv = F.load_view(F.followed(), F._state_cfg(), _day(0))
+            had_labels, F._state["labels"] = F._state.get("labels"), labels  # the board's today
+            in_board = F.board_view({})
+            F._state["labels"] = had_labels
+            check("load: through the glue: both plans on this deck, each set on my day with what's new to me then",
+                  lv is not None and {x["pid"] for x in lv["plans"]} == {pid, pid2}
+                  and lv["days"][3]["new"] == sum(lv["days"][3]["parts"]) > 1 and len(lv["days"]) == 7
+                  and (in_board.get("load") or {}).get("plans") == lv["plans"]
+                  and "Everything this week" in board.plancards._you_plans(in_board), lv)
             F.move_date(pid, "cz", 2)
             maya.set_days(pid, shift=3)
             asked = []
@@ -6816,10 +7080,11 @@ def test_you_bubble_v380():
         dc._swap, dc.cfg, dc.save_cfg, due_flow.cfg, due_flow.save_cfg, due_flow._swap, due_flow._today = saved
     # Settings: what the board and the bubble show
     st = board._settings_board({"hidden_tabs": ["plans"]})
-    check("settings: Shows, Crew always, then Decks, Squads, Plans and Insights, each a switch",
+    check("settings: Tabs, Crew always, then Decks, Squads, Plans and Insights, each a switch; Today's lists on Study",
           '<button class="st-pill on" disabled aria-pressed="true">Crew</button>' in st
           and "settabs:plans:1" in st and "settabs:decks:0" in st and "settabs:squads:0" in st
-          and "settabs:insights:0" in st and "Today, Upcoming, Later" in st)
+          and "settabs:insights:0" in st and "Today, Upcoming, Later" not in st
+          and "Today, Upcoming, Later" in board._settings_study({}))
     from due_crew import settings_model
     check("settings: the hideable tabs are the board's", set(settings_model.HIDEABLE) == {k for k, _l in board.HIDEABLE_TABS})
     # Crew › Decks: my own deck, to how it's sticking
@@ -7273,8 +7538,8 @@ def test_due_board_and_clicks():
     check("due board: off is nothing", board._due_html(None) == "")
     js = board.keep_me_in_view_js()
     check("due board: the add line's script rides every draw", "window.dcDue" in js and "dueadd" in js)
-    st = board.settings_html({"tab": "board", "signed_in": True}, {})
-    check("due settings: three switches on Board", all(f"duecrew:set:{k}:" in st for k in ("due_show", "due_suggest", "due_leeches")))
+    st = board.settings_html({"tab": "study", "signed_in": True}, {})
+    check("due settings: three switches on Study", all(f"duecrew:set:{k}:" in st for k in ("due_show", "due_suggest", "due_leeches")))
     from due_crew import settings_model as SM
     check("due settings: the switches are whitelisted", SM.change(["set", "due_leeches", "1"], {}) == {"due_leeches": True})
     # clicks, through the add-on's own handler
@@ -7414,19 +7679,20 @@ def test_plan_windows_ways_in_v393():
     off_one = board._due_html(None, more=[("plans", "Plans"), ("insights", "Insights")], folded=True, magic=True)
     check("3.9.7, round 2 (Sam: \"this is replacing QBank QID search\"): Due's lists off, Magic search is in the head "
           "(and the folded line), QBank QIDs' chip gone",
-          "duecrew:magic|" in off[:off.index("</div>")] and "duecrew:magic|" in off_one and "planmissed" not in off + off_one
-          and "QBank QIDs</a>" not in off + off_one, off)
+          # 3.9.9 (Sam's pick G2): it's the field under the deck list now, whatever the You box shows; no link in the box
+          "duecrew:magic" not in off + off_one and "planmissed" not in off + off_one
+          and "QBank QIDs</a>" not in off + off_one and "pasted question IDs" in board.magic_field({}), off)
     head = board._due_html(dict(dv, qids=True), magic=True)
     head = head[:head.index("</div>")]
     check("ways in: Magic search in the box's head (QBank QIDs' place, Sam's pick 1), its title saying QIDs, no QIDs chip",
-          "duecrew:magic|" in head and ">QBank QIDs</a>" not in head and "QBank QIDs" in head and "planmissed" not in head
-          and "duecrew:magic|" not in board._due_html(dv), head)
+          "duecrew:magic" not in head and ">QBank QIDs</a>" not in head and "planmissed" not in head
+          and "pycmd('duecrew:magic'+" in board.magic_field({}), head)
     up = board._due_html(dict(dv, tab="upcoming"), magic=True)
     one = board._due_html(dict(dv, folded=True), magic=True)
     plans_tab = board._due_html(dv, more=[("plans", "Plans")], more_tab="plans", more_body="<p>x</p>", magic=True)
     check("ways in: …on every tab and on the folded line (Sam: \"missing the QID chip on the top right\": Magic search's now)",
-          "duecrew:magic|" in up[:up.index("</div>")] and "duecrew:magic|" in one
-          and one.index("duecrew:magic|") < one.index("du-fold") and "duecrew:magic|" in plans_tab[:plans_tab.index("</div>")], one)
+          # 3.9.9: one field for every tab and the folded line: it's above the box, drawn with the Decks page
+          not any("duecrew:magic" in x for x in (up, one, plans_tab)) and "du-fold" in one, one)
     check("ways in: …on one baseline with the rest (Sam: \"a bit higher than everything else\"): one line height for the head's words, the folded line by baseline",
           "#due-crew .du-one > a, #due-crew .du-one > .du-n { line-height: 16px; }" in fakes.board_source()
           and "#due-crew .du-one { display: flex; align-items: baseline;" in fakes.board_source())
@@ -7524,8 +7790,8 @@ def test_recover_by_deck_count_v393():
     finally:
         F._pf, F.mw.col, F._today, F.mw.state, F.ask_reach, F._left_out, F.tooltip, single = saved
         Q.QTimer.singleShot = staticmethod(single)
-    st_html = board.settings_html({"tab": "board"}, {"due_leeches": True})
-    st_eight = board.settings_html({"tab": "board", "leech_reach": "eight"}, {"due_leeches": True})
+    st_html = board.settings_html({"tab": "study"}, {"due_leeches": True})
+    st_eight = board.settings_html({"tab": "study", "leech_reach": "eight"}, {"due_leeches": True})
     check("recover 3.9.3: Settings says which line it uses",
           "at each deck&#x27;s leech count" in st_html or "at each deck's leech count" in st_html, st_html[-400:])
     check("recover 3.9.3: and after Not these, 8 lapses", "at 8 lapses" in st_eight)
@@ -8932,9 +9198,9 @@ def test_one_settings_keys_study_v380():
         check("one settings: no Qt window left", "settings_dialog" not in init_src
               and not os.path.exists(os.path.join(REPO, "due_crew", "ui", "settings_dialog.py")))
         # the keys: listed, one switch, and it applies at once
-        st = board.settings_html({"tab": "board", "signed_in": True}, conf)
+        st = board.settings_html({"tab": "study", "signed_in": True}, conf)
         keys = ("⌘⇧S", "⌃⇧Q") if sys.platform == "darwin" else ("Ctrl+Shift+S", "Ctrl+Shift+Q")  # 3.9.3: the suite on a Mac too
-        check("keys: Settings › Board lists both, with one switch, in this computer's names", keys == (board.STUDY_KBD, board.ASK_KBD)
+        check("keys: Settings › Study lists both, with one switch, in this computer's names", keys == (board.STUDY_KBD, board.ASK_KBD)
               and all(k in st for k in keys) and "duecrew:set:shortcuts:0" in st, keys)
         check("keys: the switch is a setting, on by default", SM.change(["set", "shortcuts", "0"], {}) == {"shortcuts": False}
               and SM.BOARD_DEFAULTS["shortcuts"] is True and "shortcuts" not in __import__("due_crew.account", fromlist=["x"]).ACCOUNT_KEYS)
@@ -9017,11 +9283,11 @@ def test_site_audit_v380():
     T0 = TODAY.isoformat()
     lone = board.render({"entries": [{"user_id": "me", "name": "Sam", "you": True, "paused": False, "last_updated": "",
                                       "days": {}}], "labels": [T0], "tomorrow": "", "pending": []}, {"period": "week"}, 0)
-    check("site audit: alone with nothing yet, no medal (the add-on)", "&#129351;" not in lone and "&mdash;" in lone)
+    check("site audit: alone with nothing yet, no medal (the add-on)", "&#129351;" not in lone and "&mdash;" in lone and '<td class="rk"></td>' in lone)
     js = open(os.path.join(REPO, "site", "public", "app.js"), encoding="utf-8").read()
     css = open(os.path.join(REPO, "site", "public", "app.css"), encoding="utf-8").read()
     check("site audit: alone with nothing yet, no medal (the site, its twin)",
-          "if (blank(r)) return tr(r, \"—\")" in js)
+          'tr(r, r.showup ? "✓" : "")' in js and "MEDALS" not in js and "`#${n}`" not in js.split("function table(")[1].split("function ")[0])
     check("site audit: columns hide by name, so a squad's two-column line can't shift them",
           ".brdt .k-time, .brdt .k-retention { display: none; }" in css and "nth-child(4)" not in css
           and 'class: "n k-time"' in js and "k-${k}" in js)
@@ -9298,7 +9564,7 @@ def test_head_row_b_v380():
     today = board.render(data, {"period": "today"}, 0)
     check("head row B: Crew's views in the header's corner, not a line above the table",
           corner + ('<a class="on" href="#" onclick="pycmd(\'duecrew:period:today|' + KK + '\'); return false;">Today</a>') in today
-          and today.index(corner) > today.index("<table>") and "<th></th><th></th>" not in today
+          and today.index(corner) > today.index("<table class=\"dc-s-") and "<th></th><th></th>" not in today
           and today.count('<div class="dc-sw">') == 1)
     week = board.render(data, {"period": "week"}, 0)
     check("head row B: Week too, Week picked", corner in week
@@ -9553,9 +9819,11 @@ def test_find_a_setting_v380():
             "squads": ["orca <b>"], "decks": ["Private Deck"], "sync": "now", "tab": "board"}
     ix = board.settings_index(view, {})
     by = {x["l"]: x for x in ix}
-    check("find: rows from all three tabs, each with where it lives",
-          by["Accent"]["t"] == "board" and by["Accent"]["w"] == "Board \u203a How it looks"
-          and by["\u2708\ufe0f Away"]["t"] == "privacy" and by["Sign out"]["t"] == "you" and len(ix) >= 30, sorted(by))
+    check("find: rows from all four tabs, each with where it lives",
+          by["Accent"]["t"] == "board" and by["Accent"]["w"] == "Board \u203a Look"
+          and by["\u2708\ufe0f Away"]["t"] == "you" and by["\u2708\ufe0f Away"]["w"] == "You \u203a Your dates"
+          and by["Two buttons"]["t"] == "study" and by["Two buttons"]["w"] == "Study \u203a Reviewing"
+          and by["Heatmap"]["t"] == "privacy" and by["Sign out"]["t"] == "you" and len(ix) >= 30, sorted(by))
     words = lambda q: [x["l"] for x in ix if all((" " + x["k"]).find(" " + w) >= 0 for w in q.split())]  # noqa: E731
     check("find: by label, by a word it doesn't say (colour, holiday, test, log out), by its section",
           words("accent") == ["Accent"] and words("colour") == ["Accent"] and words("holiday") == ["\u2708\ufe0f Away"]
@@ -12030,7 +12298,10 @@ def test_builder_review_bugs_v381():
           and 'tagDrop === t.id ? h("div", { class: "ptdrop small"' in builder)
     # 6: the server's ceilings, where they're hit
     want = {k: re.search(rf"const {k} = (\d+);", plans_ts).group(1) for k in ("UNITS_MAX", "EVENTS_MAX", "REVIEWS_MAX", "SOURCES_MAX", "SEARCH_MAX")}
-    check("review: the builder's ceilings are the Worker's", all(f"{k} = {v}" in builder for k, v in want.items()), str(want))
+    named = {"UNITS_MAX": "sets", "EVENTS_MAX": "events", "REVIEWS_MAX": "reviews"}  # 3.9.9: Ceilings.MAX, the site's one table
+    check("review: the builder's ceilings are the Worker's", all(
+        (f"{named[k]}: {v}," in builder and f"{k} = Ceilings.MAX.{named[k]}" in builder) if k in named else f"{k} = {v}" in builder
+        for k, v in want.items()), str(want))
     check("review: a date made past 200, a search past 10 (search box, Overlap, a moved chip), a review day past 60 are refused, said",
           "if (doc.units.length >= UNITS_MAX) { note = FULL; return null; }" in builder
           and "if (!addSearch(u, q)) { why.textContent = note;" in builder and ".slice(0, 10)" not in builder
@@ -13597,8 +13868,9 @@ def test_fifteen_board_v381():
           and "animation" not in sev.CSS[:sev.CSS.index("@media")] and ' rest"' in sev.svg("hop", rest=True)
           and " rest" not in sev.svg("nap", rest=True))
     st = board.settings_html({"tab": "board"}, {})
-    check("Settings: Fifteen? in the top bar, Pip, and the break's Breathe or Stretch",
-          "set:fifteen:0" in st and "set:sev:0" in st and "set:sev_break:stretch" in st)
+    sy = board.settings_html({"tab": "study"}, {})
+    check("Settings: Pip on Board; Fifteen? in the top bar and the break's Breathe or Stretch on Study",
+          "set:sev:0" in st and "set:fifteen:0" in sy and "set:sev_break:stretch" in sy and "duecrew:set:fifteen" not in st)
     ix = board.settings_index({"tab": "board"}, {})
     hit = lambda word: {r["f"] for r in ix if word in r["k"].split()}
     check("Find a setting: timer or pomodoro finds Fifteen?, mascot finds Pip, stretch finds the break",
@@ -16013,10 +16285,10 @@ def test_two_buttons_v391():
           and SM.change(["set", "two_buttons", "1"], {}) == {"two_buttons": True}
           and SM.change(["set", "two_buttons", "0"], {}) == {"two_buttons": False}
           and "two_buttons" not in SM.BOARD_DEFAULTS and not TB.on({}))
-    view = {"tab": "board", "signed_in": True}
+    view = {"tab": "study", "signed_in": True}
     page = board.settings_html(dict(view, fsrs=True), {"two_buttons": True})
     page_off = board.settings_html(dict(view, fsrs=False), {})
-    check("Settings › Board › Reviewing: Two buttons, on, with what it does and that phones keep four; FSRS off: its note",
+    check("Settings › Study › Reviewing: Two buttons, on, with what it does and that phones keep four; FSRS off: its note",
           '<div class="st-h">Reviewing</div>' in page and "Two buttons" in page and "duecrew:set:two_buttons:0" in page
           and "2, 3 and 4 count as Good. Phones keep four." in page and "Works best with FSRS on." not in page
           and "duecrew:set:two_buttons:1" in page_off and "Works best with FSRS on." in page_off
@@ -18294,7 +18566,9 @@ def test_offline_stays_off_stderr_v392():
             for h in t.handlers:
                 names = {getattr(e, "id", "") for e in (h.type.elts if isinstance(h.type, ast.Tuple) else [h.type])} if h.type else {"Exception"}
                 seen_te = seen_te or "TransportError" in names
-                prints = any(isinstance(c, ast.Call) and getattr(c.func, "attr", "") == "print_exc" for c in ast.walk(h))
+                # 3.9.9: oops() prints it as print_exc() did (and counts it for Sam)
+                prints = any(isinstance(c, ast.Call) and (getattr(c.func, "attr", "") == "print_exc"
+                                                          or getattr(c.func, "id", "") == "oops") for c in ast.walk(h))
                 if asks and prints and "Exception" in names and not seen_te:
                     loud.append(f"{f.name}:{h.lineno}")
     check("every handler that prints a traceback around a request catches TransportError first",
@@ -20240,10 +20514,1131 @@ def test_energy_and_security_review_v397():
           sent_before_reload == 1 and len(top.sent) == 2 and len(plain.sent) == 2, (sent_before_reload, len(top.sent), len(plain.sent)))
 
 
+def test_good_luck_card_on_a_refresh_v399():
+    """3.9.9 (Sam: "not sure it did work for my last exam"): a crewmate's line
+    for my exam morning came with a refresh, was kept for the card, and the
+    card waited for the Decks screen to be drawn anew: a refresh redraws the
+    board in place (or, the board off, nothing), and only a draw showed it.
+    Mostly the line comes with the morning's first refresh, after Anki has
+    drawn the Decks screen, so the card showed at the next draw, after a
+    study session, if at all. The refresh that brings it shows it now, in
+    both ways a refresh ends on the Decks screen; once, as before. (Checked
+    in Anki's own engine too: the line sent, the card up, Thanks back.)"""
+    import due_crew as dc
+    from due_crew import app as A, closet_flow as CF, due_flow, rooms, together
+    from due_crew.app import _state
+    wrap = _patched_due_crew()
+    labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    tomorrow = (TODAY + datetime.timedelta(days=1)).isoformat()
+    mw = dc_mw()
+    shown = []
+    cl = types.SimpleNamespace(session={}, signed_in=True, user_id="me", display_name="Sam Caplan",
+                               _save_session=lambda: None)
+
+    def refresh(c, cheers):
+        ents = [{"user_id": u, "name": u.title(), "you": u == "me", "paused": False, "decks": [], "days": {}}
+                for u in ("me", "dre")]
+        dc._commit({"entries": ents, "pending": [], "cheers": cheers, "my_code": "ABC", "my_friends": ["dre"]},
+                   c, labels, tomorrow)
+
+    line = {"from": "dre", "name": "Dre", "emoji": "\U0001F340", "note": "You've got this", "luck": True,
+            "guid": "", "at": f"{TODAY.isoformat()}T07:00:00Z"}
+    saved = (dc.client, together.client, dc._morning, dc._awaiting_phone, due_flow.after_refresh, due_flow._reviews,
+             CF.check, dc.tooltip, dc._rerender, dc._swap, rooms.refresh_widgets, dc.account.saved_elsewhere,
+             dc._play_cheers, dc._joy_show, A.board_eval, getattr(mw, "state", None), dict(_state))
+    try:
+        dc.client = together.client = lambda: cl
+        dc._morning = lambda *a, **k: None
+        dc._awaiting_phone = lambda: False
+        due_flow.after_refresh = lambda: None
+        due_flow._reviews = lambda: {"done": 12, "due": 0}
+        CF.check = lambda today: []
+        dc.tooltip = lambda *a, **k: None
+        dc._rerender = dc._swap = rooms.refresh_widgets = dc._play_cheers = dc._joy_show = lambda *a, **k: None
+        dc.account.saved_elsewhere = lambda at: None
+        A.board_eval = shown.append
+        mw.state = "deckBrowser"
+        out = {}
+        for way, c, on in (("board", {"exam_date": TODAY.isoformat()}, True),
+                           ("off", {"exam_date": TODAY.isoformat(), "show_leaderboard": False}, False)):
+            wrap = _patched_due_crew()  # a profile of its own: nothing kept from the way before
+            cl.session = {}
+            shown.clear()
+            _state.update(board_shown=on, prev_label="", prev_counts={}, prev_streaks={}, days={}, decks={},
+                          entries=None, labels=[], settings_tab=None, closet_open=False, wrapped_open=False)
+            refresh(c, [line])
+            first = list(shown)
+            refresh(c, [line])
+            out[way] = (first, list(shown), wrap._wrap_data().get("luck"))
+        # no exam today: the line is a cheer, no card
+        wrap = _patched_due_crew()
+        cl.session = {}
+        shown.clear()
+        _state.update(board_shown=True, prev_label="", prev_counts={}, prev_streaks={}, days={}, decks={}, entries=None)
+        refresh({"exam_date": tomorrow}, [line])
+        ahead = (list(shown), wrap._wrap_data().get("luck"))
+    finally:
+        (dc.client, together.client, dc._morning, dc._awaiting_phone, due_flow.after_refresh, due_flow._reviews,
+         CF.check, dc.tooltip, dc._rerender, dc._swap, rooms.refresh_widgets, dc.account.saved_elsewhere,
+         dc._play_cheers, dc._joy_show, A.board_eval, mw.state) = saved[:16]
+        _state.clear()
+        _state.update(saved[16])
+    for way in ("board", "off"):
+        first, after, kept = out[way]
+        check(f"good luck ({way}): the refresh that brings a line on my exam morning shows the card, with the line",
+              len(first) == 1 and "Good luck today, Sam" in first[0] and "You've got this" in first[0]
+              and kept and kept["shown"] is True, (way, len(first), kept))
+        check(f"good luck ({way}): once; the next refresh doesn't show it again", after == first, len(after))
+    check("good luck: a line for an exam tomorrow is kept for that morning, no card today",
+          ahead[0] == [] and ahead[1] and ahead[1]["exam"] == tomorrow and ahead[1]["shown"] is False, ahead)
+
+
+def test_first_answers_quick_read_v399():
+    """3.9.9 (the slow card, Sam: "it's over 5-10 seconds"): each card's first
+    answer was read with ease > 0 in the query, which visits every row of
+    the deck's log (0.4 s on a 300,000-row log, once a day on the main
+    thread, 1.5 s after the board draws: Reviews ahead's line, its track
+    record, Insights by start week). first_answers reads each card's first
+    row off the index and looks again only at a card whose first row isn't
+    an answer: the same answer, in every case."""
+    import sqlite3
+    from due_crew.stats.queries import first_answers
+    conn = fakes.make_collection(sqlite3.connect(":memory:"))
+    conn.execute("CREATE INDEX ix_revlog_cid ON revlog (cid)")
+    db = fakes.FakeDB(conn)
+    t0 = 1_700_000_000_000
+    for cid, did in ((1, 10), (2, 10), (3, 10), (4, 10), (5, 20), (6, 10)):
+        fakes.add_card(conn, cid, did)
+    fakes.add_review(conn, t0, cid=1)                         # an answer first
+    fakes.add_review(conn, t0 + 9000, cid=1)
+    fakes.add_review(conn, t0 + 100, ease=0, rtype=4, cid=2)  # Set Due Date first, then answers
+    fakes.add_review(conn, t0 + 5000, cid=2)
+    fakes.add_review(conn, t0 + 7000, ease=1, cid=2)
+    fakes.add_review(conn, t0 + 200, ease=0, rtype=4, cid=3)  # only ever rescheduled: never answered
+    fakes.add_review(conn, t0 + 300, cid=5)                   # another deck
+    fakes.add_review(conn, t0 + 400, ease=0, rtype=4, cid=6)  # two manual rows, then an answer
+    fakes.add_review(conn, t0 + 500, ease=0, rtype=4, cid=6)
+    fakes.add_review(conn, t0 + 600, ease=2, cid=6)
+    deck = "SELECT id FROM cards WHERE did IN (10) OR odid IN (10)"
+    old = {int(c): int(t) for c, t in db.all(
+        f"SELECT cid, min(id) FROM revlog WHERE ease > 0 AND cid IN ({deck}) GROUP BY cid")}
+    got = first_answers(db, deck)
+    check("first answers: the quick read gives what the filtered one did (a manual row first, never answered, "
+          "another deck's, a card never seen)", got == old == {1: t0, 2: t0 + 5000, 6: t0 + 600}, (got, old))
+    check("first answers: an empty deck reads as nothing", first_answers(db, "SELECT id FROM cards WHERE did = 99") == {})
+    import inspect
+    from due_crew import ahead_flow, team_flow
+    srcs = inspect.getsource(ahead_flow) + inspect.getsource(team_flow)
+    check("first answers: Reviews ahead, its track record and Insights by start week use it; no filtered read of a "
+          "deck's whole log is left", srcs.count("first_answers(col.db, deck)") == 3
+          and "min(id) FROM revlog WHERE ease > 0 AND cid IN ({deck})" not in srcs)
+
+
+def test_calm_offline_v399():
+    """3.9.9 (Off the Board, 11, Sam's pick): when Due Crew can't be reached
+    the board says so in a line on top of every tab (the foot's "Couldn't
+    sync" was the only word), with when a refresh last got through and Try
+    now; a cheer sent then waits, marked on its crewmate's row, and goes
+    with the next refresh that gets an answer. Only no answer at all, or the
+    server away, holds a cheer: a refusal, a sign-in gone or a ceiling
+    would only be refused again."""
+    import inspect
+    import time as _time
+    import due_crew as dc
+    from due_crew import app as A, social as S
+    from due_crew.backend.shapes import TransportError
+    from due_crew.board import draw as D
+    from due_crew.app import _state
+    labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    tomorrow = (TODAY + datetime.timedelta(days=1)).isoformat()
+    day = {labels[0]: {"reviews": 40, "studyTimeMs": 600000, "retention": 90.0, "streak": 3}}
+    base = {"days": day, "last_updated": "", "decks": [], "paused": False, "room": None}
+    ents = [dict(base, user_id="me", name="Sammy", you=True), dict(base, user_id="dre", name="Dre", you=False),
+            dict(base, user_id="kai", name="Kai", you=False)]
+    data = {"entries": ents, "labels": labels, "tomorrow": tomorrow, "pending": [], "decks": {}, "my_friends": []}
+    now = _time.mktime((2026, 11, 8, 18, 0, 0, 0, 0, -1))
+    at = _time.mktime((2026, 11, 8, 15, 10, 0, 0, 0, -1))
+    check("offline: when a refresh last got through, as a person says it (today, this week, before)",
+          D._clock(at, now) == "3:10 PM" and D._clock(at - 2 * 86400, now) == "Fri 3:10 PM"
+          and D._clock(at - 9 * 86400, now) == "30 Oct" and D._clock(0, now) == "", D._clock(at, now))
+    line = D.offline_html(at, now)
+    check("offline: the line says it plainly, when, and Try now refreshes (the board's own command)",
+          "Can&rsquo;t reach Due Crew. Your studying still counts and sends when it&rsquo;s back. Last refresh 3:10 PM."
+          in line and "duecrew:refresh|" in line and "Try now" in line and 'role="status"' in line)
+    page = board.render(data, {"period": "today"}, at, offline=True, notice={"id": 1, "text": "Hi"})
+    calm = board.render(data, {"period": "today"}, at)
+    check("offline: on top of the board, above even the admin's notice; nothing when a refresh got through",
+          "dc-wrap off" in page and page.index("dc-wrap off") < page.index("dc-wrap notice")
+          and "dc-wrap off" not in calm and "#due-crew .dc-wrap.off" in page)
+    held = board.render(dict(data, held={"dre"}), {"period": "today"}, at)
+    rows = {u: next(r for r in re.findall(r"<tr class=\"[^\"]*\">.*?</tr>", held, re.S) if n in r)
+            for u, n in (("dre", "Dre"), ("kai", "Kai"))}
+    check("offline: a held cheer's crewmate shows Waiting to send, without the pointer; the others the usual Cheer",
+          "&#127881; Waiting<span class=\"ts\"> to send</span>" in rows["dre"] and 'class="dc-cpill held"' in rows["dre"]
+          and "waiting to send" in rows["dre"] and "a.dc-cpill.held .ts { display: none; }" in held
+          and rows["dre"].startswith('<tr class="') and " ch" in rows["dre"].split('"')[1]
+          and "&#127881; Cheer</a>" in rows["kai"] and "Waiting to send" not in rows["kai"]
+          and "#due-crew tr.ch a.dc-cpill.held" in held)
+
+    # holding: what's held, what isn't, and sending them when a refresh gets through
+    sent, tips, answers = [], [], []
+    cl = types.SimpleNamespace(session={}, user_id="me", _save_session=lambda: None)
+
+    def send_cheer(to, emoji, note=None, luck=False, guid=None, doodle=None):
+        sent.append((to, emoji, note, luck, guid))
+        a = answers.pop(0)
+        if isinstance(a, Exception):
+            raise a
+        return a
+    cl.send_cheer = send_cheer
+    saved = (S.client, S._bg, S.tooltip, A.swap, dict(_state))
+    try:
+        S.client = lambda: cl
+        S._bg = lambda job, done=None: done(job()) if done else job()
+        S.tooltip = lambda t, **k: tips.append(t)
+        A.swap = lambda c: None
+        _state["labels"] = labels
+        answers[:] = [TransportError("no network")]
+        S._send_cheer("dre", "Dre", "\U0001F389", "go")
+        after_net = (S.held_uids(), tips[-1])
+        answers[:] = [TransportError("server busy", 503)]
+        S._send_cheer("kai", "Kai", "\U0001F525")
+        after_5xx = S.held_uids()
+        for err in (TransportError("slow down", 429), TransportError("signed out", 401)):
+            answers[:] = [err]
+            S._send_cheer("max", "Max", "\U0001F389")
+        refused = S.held_uids()
+        answers[:] = [TransportError("no network")]
+        S._send_cheer("dre", "Dre", "\U0001F340", "newer")  # a second to the same crewmate replaces the first
+        one_each = [(h["to"], h["emoji"], h["note"]) for h in S.held_cheers()]
+        sent.clear()
+        answers[:] = [True, TransportError("no network")]  # in the order held: Kai's goes; Dre's gets no answer again
+        n = S.send_held(labels[0])
+        resend = (n, [s[0] for s in sent], S.held_uids())
+        cl.session["cheers_held"]["list"][0]["day"] = (TODAY - datetime.timedelta(days=4)).isoformat()
+        sent.clear()
+        stale = (S.send_held(labels[0]), sent[:], S.held_uids())
+        cl.session["cheers_held"] = {"uid": "someone-else", "list": [{"to": "dre", "emoji": "x", "day": labels[0]}]}
+        other = (S.held_uids(), S.send_held(labels[0]))
+    finally:
+        S.client, S._bg, S.tooltip, A.swap = saved[:4]
+        _state.clear()
+        _state.update(saved[4])
+    check("offline: no answer holds a cheer, and says so with who it's for",
+          after_net[0] == {"dre"} and "sends when Due Crew is back" in after_net[1] and "Dre" in after_net[1], after_net)
+    check("offline: the server away (5xx) holds one too; a ceiling (429) or a sign-in gone (401) doesn't",
+          after_5xx == {"dre", "kai"} and refused == {"dre", "kai"}, (after_5xx, refused))
+    check("offline: one held a crewmate, the newest (the server keeps one a pair as well)",
+          sorted(one_each) == [("dre", "\U0001F340", "newer"), ("kai", "\U0001F525", "")], one_each)
+    check("offline: a refresh that gets through sends each held cheer as it was; one with no answer again waits again",
+          resend[0] == 2 and resend[1] == ["kai", "dre"] and resend[2] == {"dre"}, resend)
+    check("offline: a cheer held more than three days goes unsent; another sign-in's are never sent",
+          stale[0] == 0 and stale[1] == [] and stale[2] == set() and other == (set(), 0), (stale, other))
+    src = inspect.getsource(dc._sync_failed) + inspect.getsource(dc._commit) + inspect.getsource(dc._after_push)
+    check("offline: a refresh with no answer sets the line (not when the sign-in's gone); any answer clears it and "
+          "sends what's held",
+          '_state["offline"] = not client().session_dead' in inspect.getsource(dc._sync_failed)
+          and "offline=False" in inspect.getsource(dc._commit) and src.count("send_held(labels[0])") == 2
+          and 'offline=bool(_state.get("offline"))' in inspect.getsource(dc._board_html))
+def test_know_when_it_breaks_v399():
+    """3.9.9, Know when it breaks (Sam's sign-off): each install counts its
+    own failures by code, never by content (errs.py); the first sync after a
+    day ends sends that day's counts once, behind Privacy's switch, and only
+    to a Worker that has said it takes them (errs_flow.py, api.push). The
+    Worker's side is restated in tests/fakes.py and proved in
+    worker/test/field.test.ts."""
+    import contextlib
+    import io
+    import time as _time
+    from urllib.parse import quote
+    import due_crew as dc
+    from due_crew import app as appmod, errs, errs_flow, sheets, team_flow
+    from due_crew.backend.shapes import TransportError
+    from due_crew.planner import remote
+    from aqt.deckbrowser import DeckBrowser
+    CARD = "The external iliac artery <b>becomes</b> the femoral · Sam's /Users/sam/Anki"
+    WORDS = ("iliac", "femoral", "Sam's", "Users", "becomes", "secret", "ZZCODE", "<b>", "artery")
+    was = dict(errs._now)
+    tmp = tempfile.mkdtemp()
+    t = errs.Tally(os.path.join(tmp, "errs.json"))
+    errs.use(t, on=True)
+    errs.after(None)
+    seen = []  # every code counted here, for the last check
+    add = t.add
+    t.add = lambda code, day, n=1: (seen.append(code), add(code, day, n))[1]
+    col_was, state_was = dc.mw.col, dc.mw.state
+    dc.mw.col, dc.mw.state = None, "deckBrowser"  # the day as errs.set_day says it, no collection to read
+
+    real = (datetime.datetime.now() - datetime.timedelta(hours=4)).date()
+    D, Y, Y2 = real.isoformat(), (real - datetime.timedelta(days=1)).isoformat(), (real - datetime.timedelta(days=2)).isoformat()
+    errs.set_day(_time.time() + 3600, D)  # today is D for an hour (mw.col is none here)
+    try:
+        # ---- codes: the alphabet, and built from our own names ----
+        check("errs: a code is [a-z0-9_.:-], 80 at most; anything else is none",
+              errs.clean_code("save:bad_plan") == "save:bad_plan" and errs.clean_code("x" * 80) == "x" * 80
+              and not any(errs.clean_code(c) for c in ("x" * 81, "Save:x", "req:/plans", "a b", "", "py:é", None, 7)))
+        check("errs: req codes name the route as the Worker does, never an id, a code or a query",
+              errs.req_code("/plans/p123secret/notes/77", 400) == "req:plans.:id.notes.:n:400"
+              and errs.req_code("/plans/trees", 500) == "req:plans.trees:500"
+              and errs.req_code("/plans/mine", 404) == "req:plans.mine:404"
+              and errs.req_code("/board?decks=1&wk=2026-W45&got=9&pv=abc", "offline") == "req:board:offline"
+              and errs.req_code("/codes/ZZCODE99/add", 404) == "req:codes.:code.add:404"
+              and errs.req_code("/squads/s1/members/u2", 403) == "req:squads.:id.members.:id:403"
+              and errs.req_code("/nope/zz", 404) == "req:other:404" and errs.req_code("/sync", 999) == "req:sync:other"
+              and errs.req_code("/sync", "timeout") == "req:sync:timeout")
+        # the routes are the Worker's: every one of index.ts is one of ROUTES, and none more
+        ts = open(os.path.join(REPO, "worker", "src", "index.ts"), encoding="utf-8").read()
+        found = set()
+        for raw in re.findall(r'(?:authed|open)\("[A-Z]+", r\([`"]([^`"]+)[`"]\)', ts):
+            def name(m):
+                g = m.group(0)
+                return ":code" if ("{1,12}" in g and "A-Za-z0-9" in g) or "A-Za-z]{4}" in g else ":n" if "d{" in g or "[0-9]{1," in g else ":id"
+            found.add(re.sub(r"\([^)]*\)", name, raw.replace("${ID}", ":id")))
+        check("errs: ROUTES is the Worker's routes (worker/src/index.ts), both ways",
+              len(found) > 100 and found == set(errs.ROUTES), sorted(found ^ set(errs.ROUTES)))
+
+        # an exception the add-on caught and printed: where it was and its type, never its message.
+        # A sheet's answer whose step raises (sheets.answer catches it), sent as the board sends it
+        def boom():
+            raise ValueError(CARD)
+        board_was = appmod._decks[0]
+        appmod._decks[0] = True
+        err = io.StringIO()
+        try:
+            sheets.confirm("Sure?", "x", "Yes", boom)
+            sid = next(iter(sheets._open))
+            with contextlib.redirect_stderr(err):
+                dc._on_js(False, as_board(f"duecrew:sheet:{sid}:" + quote(json.dumps({"ok": True}), safe="")), DeckBrowser())
+        finally:
+            appmod._decks[0] = board_was
+            sheets._open.clear()
+        check("errs: a caught exception prints as before (its words on this computer only) and counts by place and type",
+              "Traceback" in err.getvalue() and "iliac" in err.getvalue() and t.of(D).get("py:sheets:lambda:valueerror") == 1,
+              (t.of(D), err.getvalue()[-200:]))
+        ns = {}
+        exec(compile("def plan_step():\n    raise KeyError('" + CARD.replace("'", "") + "')\n",
+                     os.path.join(errs.ROOT, "planner", "flow.py"), "exec"), ns)
+        try:
+            ns["plan_step"]()
+        except KeyError:
+            kind, _e, tb = sys.exc_info()
+            deep = errs.py_code(kind, tb)
+        try:
+            raise TransportError(CARD)
+        except TransportError:
+            kind, _e, tb = sys.exc_info()
+            outside = errs.py_code(kind, tb)
+        check("errs: the deepest frame in the add-on's folder, a subfolder's file named with it; none in it is other",
+              deep == "py:planner.flow:plan_step:keyerror" and outside == "py:other:other:transporterror", (deep, outside))
+
+        # board commands: a name of the table's with values that don't pass, or one bucket for any other
+        dc._on_js(False, as_board("duecrew:iliacsecret:" + quote(CARD, safe="")), DeckBrowser())
+        dc._on_js(False, as_board("duecrew:femoralsecret"), DeckBrowser())
+        dc._on_js(False, as_board("duecrew:sort:nonsense"), DeckBrowser())
+        Previewer = type("Previewer", (), {})
+        dc._on_js(False, "duecrew:arterysecret:x", Previewer())  # a card's page: refused before the table, not counted
+        check("errs: cmd:<name>:bad for the table's own name, cmd:unknown for any other (it could be a card's), "
+              "and a card page's message is no board command",
+              t.of(D).get("cmd:unknown") == 2 and t.of(D).get("cmd:sort:bad") == 1, t.of(D))
+
+        # requests that failed, through the client against the fake Worker
+        store = world({"sam": "Sammy", "dre": "Dre"})
+        store.today = D
+        cl = new_client(store, "sam", "Sammy")
+        labels = [D, Y]
+        store.fail_status = 503
+        try:
+            cl.plan("psecret123")
+        except TransportError:
+            pass
+        store.fail_status = None
+        for down in (True, "connect"):
+            store.down = down
+            try:
+                cl.fetch_board(labels)
+            except TransportError:
+                pass
+        store.down = False
+        cl.add_friend("ZZCODE99")
+        check("errs: a request that failed, by route and status, offline or timeout; once each, not once a try",
+              t.of(D).get("req:plans.:id:503") == 1 and t.of(D).get("req:board:offline") == 1
+              and t.of(D).get("req:board:timeout") == 1 and t.of(D).get("req:codes.:code.add:404") == 1, t.of(D))
+
+        # a plan save the server refused: its error when the window has words for it, else save:other
+        pid, _c = store.add_plan("sam", "Heme", "Big Step 1", _plan_units())
+        said = remote.save(new_client(store, "dre", "Dre"), pid, 1, {"deck": "Big Step 1", "units": []}, "x")
+        remote._refused({"error": "<b>" + CARD})
+        remote._view(400, {"error": "not_owner"})
+        refused = [c for c in t.of(D) if c.startswith("save:")]
+        check("errs: a refused save is save:<its error>, a word of the window's; any other error is save:other",
+              said[0] == "refused" and "save:other" in refused and "save:not_owner" in refused
+              and all(c[5:] in remote.SAVE_CODES or c == "save:other" for c in refused) and len(refused) == 3, refused)
+
+        # ---- the tally: caps, days, the file ----
+        cap = errs.Tally()
+        for i in range(60):
+            cap.add(f"c{i}", Y)
+        cap.add("c0", Y, 20000)
+        cap.add("Not A Code", Y)
+        day = cap.of(Y)
+        check("errs: 50 codes a day at most (the 50th holds the rest), each count at most 9,999, no code that isn't one",
+              len(day) == 50 and day["errs:more"] == 11 and day["c0"] == 9999 and "c55" not in day, (len(day), day.get("errs:more")))
+        held = errs.Tally()
+        for n in range(11):
+            held.add("a", (real - datetime.timedelta(days=n)).isoformat())
+        ready = held.ready(D)
+        check("errs: today and the 7 days before are held; a sync sends the 7 that are over, older ones go unsent",
+              len(held.days) == 8 and sorted(ready) == [(real - datetime.timedelta(days=n)).isoformat() for n in range(7, 0, -1)]
+              and D not in ready, sorted(held.days))
+        path = os.path.join(tmp, "bad.json")
+        with open(path, "w") as f:
+            json.dump({"v": 1, "days": {Y: {"ok:a": 2, "Bad Code": 1, "z": 0, "y": "3", "w": True}, "nope": {"a": 1}}}, f)
+        with open(os.path.join(tmp, "junk.json"), "w") as f:
+            f.write("{not json")
+        t.save()
+        check("errs: kept in a small file, read back as written; a file not ours, or bad parts of one, read as nothing",
+              errs.Tally(t.path).days == t.days and errs.Tally(path).days == {Y: {"ok:a": 2}}
+              and errs.Tally(os.path.join(tmp, "junk.json")).days == {})
+
+        # ---- the day: Anki's, from any thread ----
+        errs.set_day(1_800_000_000, "2026-11-07")
+        rolled = (errs.today(1_800_000_000 - 1), errs.today(1_800_000_000), errs.today(1_800_000_000 + 2 * 86400 + 5))
+        errs.set_day(_time.time() - 1, Y)  # the rollover just passed, and nobody read the collection since
+        errs.count("rollover:test")
+        errs.set_day(_time.time() + 3600, D)
+        check("errs: a count lands on Anki's day: the cutoff last read, a day on for each day past it",
+              rolled == ("2026-11-07", "2026-11-08", "2026-11-10") and t.of(D).get("rollover:test") == 1
+              and "rollover:test" not in t.of(Y), rolled)
+
+        # ---- sending: once, finished days only, only to a Worker that takes them ----
+        conf = {}
+        V = errs.clean_version(appmod.ADDON_VERSION)
+        glue = (appmod.client, appmod.cfg, sheets.confirm)
+        shown = []
+        appmod.client, appmod.cfg = (lambda: cl), (lambda: conf)
+        sheets.confirm = lambda title, text, yes, then, **k: shown.append((title, text))
+        try:
+            t.clear()
+            t.add("save:bad_plan", Y, 2)
+            t.add("req:plans.:id:400", Y, 2)
+            t.add("py:plan_flow:maybe_morning:keyerror", Y2)
+            t.add("cmd:unknown", D)
+            cl.session.pop("errs_ok", None)
+            gate = errs_flow.for_sync(conf)
+            errs_flow.see_what_went()
+            check("errs: before /board says the Worker takes them, none go, and See what went says why",
+                  gate == {} and "server doesn't take them yet" in shown[-1][1], shown[-1])
+            cl.fetch_board(labels)
+            check("errs: /board's errs: true is kept in the session", cl.session.get("errs_ok") is True)
+            dc._on_js(False, as_board("duecrew:errsee"), DeckBrowser())  # Settings › Privacy's See what went
+            title, text = shown[-1]
+            sending = errs_flow.for_sync(conf)
+            n = len(store.log)
+            ok, _gone = cl.push(labels, conf, stats=types.SimpleNamespace(reviews=3, time_ms=60000, accuracy=90.0, streak=2,
+                                                                         new_cards=0), version="3.9.9", **sending)
+            body = store.bodies[-1][2]
+            listed, at = {}, None
+            for line in text.split("\n"):
+                if re.fullmatch(r"\d{4}-\d{2}-\d{2}", line):
+                    at = line
+                elif " × " in line and at:
+                    code, count = line.rsplit(" × ", 1)
+                    listed.setdefault(at, {})[code] = int(count.replace(",", ""))
+            check("errs: the day's first sync carries the days that are over, in one request; today's wait",
+                  ok and len(store.log) - n == 1 and store.log[-1][:2] == ("POST", "/sync")
+                  and body["errs"]["days"] == {Y: {"save:bad_plan": 2, "req:plans.:id:400": 2},
+                                               Y2: {"py:plan_flow:maybe_morning:keyerror": 1}}
+                  and body["errs"]["v"] == V, body.get("errs"))
+            check("errs: See what went lists exactly what that sync sent",
+                  title == errs.SHEET_TITLE and listed == body["errs"]["days"] and f"Due Crew {body['errs']['v']}" in text,
+                  (listed, text))
+            check("errs: the Worker (the fake) keeps them added up, a person once, no uid",
+                  store.field[(Y, V, "save:bad_plan")] == [2, 1]
+                  and all("sam" not in k for key in store.field for k in key))
+            check("errs: once sent they're gone; today's are still kept", sorted(t.days) == [D], sorted(t.days))
+            cl.push(labels, conf, version="3.9.9", **errs_flow.for_sync(conf))
+            check("errs: the day's next sync carries none", "errs" not in store.bodies[-1][2])
+            errs.set_day(_time.time() + 3600, (real + datetime.timedelta(days=1)).isoformat())
+            store.today = (real + datetime.timedelta(days=1)).isoformat()
+            cl.push(labels, conf, version="3.9.9", **errs_flow.for_sync(conf))
+            check("errs: the next day's first sync carries the day before",
+                  store.bodies[-1][2].get("errs", {}).get("days") == {D: {"cmd:unknown": 1}} and t.days == {})
+            nxt = (real + datetime.timedelta(days=1)).isoformat()
+
+            # a lost reply: it landed, so it never goes again (a person's day counts once); never got out, it goes later
+            t.add("lost:reply", D)
+            sending = errs_flow.for_sync(conf)
+            store.lose_replies, n = 1, len(store.log)
+            ok, _gone = cl.push(labels, conf, version="3.9.9", **sending)
+            check("errs: an answer that never came: the counts are taken as sent, the rest goes once more",
+                  ok and len(store.log) - n == 2 and "errs" not in store.bodies[-1][2] and D not in t.days
+                  and store.field[(D, V, "lost:reply")] == [1, 1], (store.log[-2:], t.days))
+            t.add("never:out", D)
+            store.down = "connect"
+            try:
+                cl.push(labels, conf, version="3.9.9", **errs_flow.for_sync(conf))
+            except TransportError:
+                pass
+            store.down = False
+            errs_flow._flying.clear()  # the next sync is more than a push's while later
+            cl.push(labels, conf, version="3.9.9", **errs_flow.for_sync(conf))
+            check("errs: a sync that never got out keeps them, and the next one sends them",
+                  store.field.get((D, V, "never:out")) == [1, 1] and D not in t.days, t.days)
+            t.add("two:syncs", D)
+            first, second = errs_flow.for_sync(conf), errs_flow.for_sync(conf)
+            check("errs: two syncs at once don't both send a day", bool(first) and second == {})
+            first["errs_sent"]()
+
+            # a Worker put back to one from before: its sync turns errs away; the rest goes, and none till it says so
+            store.takes_errs = False
+            t.add("old:worker", D)
+            sending = errs_flow.for_sync(conf)
+            n = len(store.log)
+            ok, _gone = cl.push(labels, conf, version="3.9.9", **sending)
+            check("errs: an older Worker refuses a sync with errs: sent again without them, the flag off, the counts kept",
+                  ok and len(store.log) - n == 2 and cl.session.get("errs_ok") is False and "errs" not in store.bodies[-1][2]
+                  and t.of(D).get("old:worker") == 1, store.log[-2:])
+            cl.fetch_board(labels)
+            errs_flow._flying.clear()
+            n = len(store.log)
+            ok, _gone = cl.push(labels, conf, version="3.9.9", errs={"days": {D: {"old:worker": 1}}, "v": "3.9.9"})
+            check("errs: without the flag nothing goes, whatever's handed to the push: one request, no errs",
+                  ok and len(store.log) - n == 1 and "errs" not in store.bodies[-1][2] and errs_flow.for_sync(conf) == {})
+            store.takes_errs = True
+            cl.fetch_board(labels)
+            dropped = []
+            n = len(store.log)
+            ok, _gone = cl.push(labels, conf, version="3.9.9", errs={"days": {"nope": {"a": 1}}, "v": "3.9.9"},
+                                errs_sent=lambda: dropped.append(1))
+            check("errs: counts the Worker won't take (bad_errs) go no further; the sync goes without them",
+                  ok and dropped == [1] and len(store.log) - n == 2 and "errs" not in store.bodies[-1][2])
+            t.clear()
+
+            # Privacy's switch: off, nothing is counted, kept or sent
+            t.add("before:off", Y)
+            saved = (dc._swap, dc.cfg, dc.save_cfg)
+            dc._swap, dc.cfg, dc.save_cfg = (lambda c, focus=None: None), (lambda: conf), (lambda c, **k: None)
+            try:
+                dc._on_js(False, as_board("duecrew:set:send_errs:0"), DeckBrowser())
+            finally:
+                dc._swap, dc.cfg, dc.save_cfg = saved
+            errs.count("while:off")
+            cl.push(labels, conf, version="3.9.9", **errs_flow.for_sync(conf))
+            errs_flow.see_what_went()
+            check("errs: Send what went wrong off (its switch, through the board): nothing kept, counted or sent",
+                  conf.get("send_errs") is False and t.days == {} and "errs" not in store.bodies[-1][2]
+                  and "is off" in shown[-1][1], (conf, t.days, shown[-1]))
+            conf["send_errs"] = True
+            errs.switch(True)
+            errs.count("back:on")
+            check("errs: on again, it counts from then", t.days == {nxt: {"back:on": 1}}, t.days)
+            t.clear()
+        finally:
+            appmod.client, appmod.cfg, sheets.confirm = glue
+
+        # the glue: _on_sync_done hands the push what for_sync gives
+        pushes = []
+        names = ("client", "cfg", "_profile_files", "_awaiting_phone", "refresh_board", "_pushed", "_closing", "_last_attempt")
+        saved = {k: getattr(dc, k) for k in names}
+        saved_mods = (dc.mw.col, dc.account.ready, dc.plan_flow.for_sync, dc.plan_flow.maybe_morning, dc.crew_cards.for_sync,
+                      dc.bingo_flow.for_row, team_flow.for_sync, errs_flow.for_sync)
+        dc.mw.col, dc.client, dc.cfg, dc._profile_files = make_user_col([TODAY]), (lambda: cl), (lambda: {}), (lambda: tmp)
+        dc._awaiting_phone = lambda: False
+        dc.account.ready = lambda: True
+        dc.refresh_board = lambda **kw: pushes.append(kw)
+        dc.plan_flow.for_sync = lambda: None
+        dc.plan_flow.maybe_morning = lambda *a, **k: None
+        dc.crew_cards.for_sync = lambda c, light=False: {"stuck": ["g1"]}
+        dc.bingo_flow.for_row = lambda c: None
+        team_flow.for_sync = lambda c: None
+        marker = object()
+        errs_flow.for_sync = lambda c: {"errs": {"days": {Y: {"a": 1}}, "v": "3.9.9"}, "errs_sent": marker}
+        try:
+            dc._on_sync_done(light=True)
+            errs_flow.for_sync = lambda c: {}
+            dc._on_sync_done(light=True)
+        finally:
+            for k, v in saved.items():
+                setattr(dc, k, v)
+            (dc.mw.col, dc.account.ready, dc.plan_flow.for_sync, dc.plan_flow.maybe_morning, dc.crew_cards.for_sync,
+             dc.bingo_flow.for_row, team_flow.for_sync, errs_flow.for_sync) = saved_mods
+        check("errs: a sync's extras carry for_sync's errs beside the rest, and nothing when it has none",
+              len(pushes) == 2 and pushes[0]["extras"]["errs_sent"] is marker and pushes[0]["extras"]["stuck"] == ["g1"]
+              and "errs" not in pushes[1]["extras"], [p.get("extras") for p in pushes])
+
+        # the Privacy row and its default
+        from due_crew import account, settings_model
+        on_html = board.settings_html({"tab": "privacy", "signed_in": True}, {})
+        off_html = board.settings_html({"tab": "privacy", "signed_in": True}, {"send_errs": False})
+        check("errs: Privacy's row: Send what went wrong, its line, See what went, the switch as set (on by default)",
+              "Send what went wrong, and what gets used" in on_html and "Never your cards, plans or crew." in on_html
+              and "duecrew:errsee" in on_html and "duecrew:set:send_errs:0" in on_html and "duecrew:set:send_errs:1" in off_html
+              and errs.wanted({}) is errs.SEND_DEFAULT and errs.SEND_DEFAULT is True)
+        check("errs: the switch is the account's (every computer), a Settings switch, never Reset board's",
+              "send_errs" in account.ACCOUNT_KEYS and account.clean({"send_errs": False}) == {"send_errs": False}
+              and settings_model.change(["set", "send_errs", "0"], {}) == {"send_errs": False}
+              and "send_errs" not in settings_model.change(["setreset"], {}))
+        idx = board.settings_index({"signed_in": True}, {})
+        check("errs: Find a setting finds it", any(x["l"] == "Send what went wrong, and what gets used" and "errors" in x["k"] for x in idx)
+              and any(x["l"] == "See what went" for x in idx))
+
+        # nothing a card or a request said is in any code made here, or in what went
+        made = set(seen) | {k[2] for k in store.field}
+        sent = json.dumps([b for m, p, b in store.bodies if p == "/sync" and b and "errs" in b])
+        check("errs: no code carries a message, a card's words, a command a card sent, an id or a friend code",
+              made and all(errs.clean_code(c) for c in made)
+              and not any(w.lower() in (c + sent).lower() for c in made for w in WORDS), sorted(made))
+    finally:
+        errs._now.clear()
+        errs._now.update(was)
+        errs_flow._flying.clear()
+        dc.mw.col, dc.mw.state = col_was, state_was
+
+
+def test_in_the_field_panel_v399():
+    """3.9.9: the admin Inbox's In the field, yesterday (fieldPanel in
+    site/public/app.js), run in node on a small DOM: a code a row with its
+    counts and versions, the line of codes new since the day before, and
+    what the server sends set as text, never as HTML. Needs node."""
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        print("SKIP In the field panel: no node")
+        return
+    js = open(os.path.join(REPO, "site", "public", "app.js"), encoding="utf-8").read()
+    src = (js[js.index("function h(tag, attrs, ...kids) {"):js.index("function page(")]
+           + js[js.index("const MONTHS ="):js.index("\n", js.index("const DAYS ="))] + "\n"
+           + js[js.index("function fieldPanel() {"):js.index("/** 3.8.1 (the audit): reports, kept for the admin")])
+    dom = r"""
+class Node { constructor() { this.kids = []; }
+  append(...k) { for (const x of k) this.kids.push(x instanceof Node ? x : new Text(String(x))); }
+  replaceChildren(...k) { this.kids = []; this.append(...k); }
+  get textContent() { return this.kids.map((c) => c.textContent).join(""); } }
+class Text extends Node { constructor(t) { super(); this.t = t; } get textContent() { return this.t; } }
+class El extends Node { constructor(tag) { super(); this.tag = tag; this.className = ""; this.attrs = {}; }
+  setAttribute(k, v) { this.attrs[k] = v; } addEventListener() {} }
+globalThis.Node = Node;
+globalThis.document = { createElement: (t) => new El(t) };
+const tags = (n) => (n instanceof El ? [n.tag, ...n.kids.flatMap(tags)] : []);
+const text = (n) => n.textContent;
+"""
+    days = {"day": "2026-11-07", "before": "2026-11-06", "beforeCodes": 2,
+            "rows": [{"code": "save:bad_plan", "n": 345, "people": 3, "versions": ["3.9.10", "3.9.9"]},
+                     {"code": "<img src=x onerror=alert(1)>", "n": 1, "people": 1, "versions": ["3.9.9"]}],
+            "new": ["<img src=x onerror=alert(1)>"]}
+    cases = [days, dict(days, beforeCodes=0, new=[r["code"] for r in days["rows"]]),
+             {"day": "2026-11-07", "before": "2026-11-06", "beforeCodes": 0, "rows": [], "new": []},
+             dict(days, new=[])]
+    prog = (dom + src + "\nconst cases = " + json.dumps(cases) + ";\n(async () => { const out = [];"
+            " for (const c of cases) { globalThis.api = async () => c; const box = fieldPanel();"
+            " await new Promise((r) => setTimeout(r, 0)); out.push({ text: text(box), tags: tags(box) }); }"
+            " console.log(JSON.stringify(out)); })();")
+    run = subprocess.run([node, "-e", prog], capture_output=True, text=True, timeout=60)
+    try:
+        got = json.loads(run.stdout)
+    except ValueError:
+        got = None
+    ok = isinstance(got, list) and len(got) == 4
+    full, fresh, empty, same = got if ok else ({}, {}, {}, {})
+    check("in the field: yesterday's codes, a row each, most first, with times, people and versions",
+          ok and "In the field, yesterday" in full["text"] and "Sat 7 Nov · 2 codes" in full["text"]
+          and "save:bad_plan34533.9.10, 3.9.9" in full["text"], (got, run.stderr[-400:]))
+    check("in the field: a line for the codes new since the day before; none to compare with, it says so; none new, it says so",
+          ok and "New since Fri 6 Nov: <img src=x onerror=alert(1)>" in full["text"]
+          and "Nothing came in for Fri 6 Nov, so nothing to compare with." in fresh["text"] and "New since" not in fresh["text"]
+          and "Nothing new since Fri 6 Nov." in same["text"], got)
+    check("in the field: an empty day says so, with no stray null",
+          ok and "Nothing went wrong, or nothing has come in yet." in empty["text"] and "null" not in empty["text"]
+          and "undefined" not in "".join(g["text"] for g in got), got)
+    check("in the field: what the server sends is text, never HTML (no element made from it); the Inbox opens with it",
+          ok and "img" not in sum((g["tags"] for g in got), []) and full["tags"].count("code") == 2
+          and "fieldPanel()" in js[js.index("inbox: ["):js.index("\n", js.index("inbox: ["))], got)
+
+
+def test_plan_exam_asked_once_v399():
+    """3.9.9 (Sam: "when a plan sets an exam date … it should show for the
+    folks following it"; his pick B, "Exams and Limits"): an author marks
+    an event the exam; a follower's plan card asks, once, "Heme–Onc block
+    exam is Fri 12 Dec. Make it your exam?" Make it mine sets my exam to it
+    (the crew's countdown, the good-luck card) and remembers the plan; Not
+    now only remembers it asked. My own exam ahead wins and nothing is
+    asked, but one that came from the plan is asked about again when the
+    plan's exam moves."""
+    from due_crew import plans as P, plan_flow as F, account, app as A
+    from due_crew.app import _state
+    today = TODAY.isoformat()
+    d = lambda n: (TODAY + datetime.timedelta(days=n)).isoformat()  # noqa: E731
+    plan = lambda pid, name, evs: {"id": pid, "name": name, "doc": {"deck": "d", "units": [], "events": evs}}  # noqa: E731
+    heme = plan("p1", "Heme-Onc", [{"id": "q", "day": d(10), "name": "Heme quiz"},
+                                   {"id": "x", "day": d(33), "name": "Heme-Onc block exam", "kind": "exam"}])
+    renal = plan("p2", "Renal", [{"id": "y", "day": d(60), "name": "Renal exam", "kind": "exam"}])
+    old = plan("p3", "Cardio", [{"id": "z", "day": d(-2), "name": "Cardio exam", "kind": "exam"}])
+    o = P.exam_offer([renal, heme, old], "", today)
+    check("exam: the soonest exam ahead across the plans I follow is asked about; a quiz, or one passed, never",
+          o == {"pid": "p1", "name": "Heme-Onc", "day": d(33), "ename": "Heme-Onc block exam", "was": ""}, o)
+    check("exam: once asked about at that day, the next plan's comes up; asked about both, nothing",
+          P.exam_offer([renal, heme], "", today, {"p1": d(33)})["pid"] == "p2"
+          and P.exam_offer([renal, heme], "", today, {"p1": d(33), "p2": d(60)}) is None)
+    check("exam: my own exam ahead wins: nothing is asked; one passed doesn't count",
+          P.exam_offer([heme], d(20), today) is None and P.exam_offer([heme], d(-1), today)["pid"] == "p1")
+    check("exam: it's my exam already: nothing", P.exam_offer([heme], d(33), today) is None)
+    moved = plan("p1", "Heme-Onc", [{"id": "x", "day": d(36), "name": "Heme-Onc block exam", "kind": "exam"}])
+    mv = P.exam_offer([moved], d(33), today, {"p1": d(33)}, {"pid": "p1", "day": d(33)})
+    check("exam: made mine, then moved by its author: asked again, with my day", mv and mv["day"] == d(36) and mv["was"] == d(33), mv)
+    check("exam: …not when I'd set my own day since (it didn't come from the plan any more)",
+          P.exam_offer([moved], d(40), today, {"p1": d(33)}, {"pid": "p1", "day": d(33)}) is None)
+    check("exam: …and asked about at the new day, not again",
+          P.exam_offer([moved], d(33), today, {"p1": d(36)}, {"pid": "p1", "day": d(33)}) is None)
+    check("exam: the two settings keys clean to their shapes and ride the account",
+          P.clean_exam_from({"pid": "p1", "day": d(3), "x": 1}) == {"pid": "p1", "day": d(3)} and P.clean_exam_from({"pid": "", "day": d(3)}) is None
+          and P.clean_exam_asked({"p1": d(3), "p2": "soon", 5: d(1)}) == {"p1": d(3)}
+          and len(P.clean_exam_asked({f"p{i}": d(1) for i in range(90)})) == P.EXAM_ASKED_MAX
+          and {"exam_from", "exam_asked"} <= set(account.ACCOUNT_KEYS)
+          and account.clean({"exam_from": {"pid": "p1", "day": d(3)}, "exam_asked": {"p1": d(3)}})
+          == {"exam_from": {"pid": "p1", "day": d(3)}, "exam_asked": {"p1": d(3)}})
+    card = {"id": "p1", "title": "Heme-Onc", "exam_ask": dict(o, ename="<b>Block</b> exam")}
+    html_ = board._exam_ask(card, "p1")
+    check("exam: the card's line asks it, the exam's name escaped, both ways answered by the board's own commands",
+          "&lt;b&gt;Block&lt;/b&gt; exam is <b>" in html_ and "Make it your exam?" in html_ and "Make it mine" in html_
+          and "Not now" in html_ and "duecrew:planexam:yes:p1|" in html_ and "duecrew:planexam:no:p1|" in html_, html_)
+    mv_html = board._exam_ask({"exam_ask": dict(mv, ename="Heme-Onc block exam")}, "p1")
+    check("exam: moved: Move mine, or keep my day", "moved to <b>" in mv_html and "Move mine" in mv_html and "Keep " in mv_html, mv_html)
+    check("exam: no question, no line", board._exam_ask({"id": "p1"}, "p1") == "")
+
+    # answering it, through the board's command
+    cfgs, tips = [{"exam_date": ""}], []
+    saved = (F.followed, F.cfg, F.save_cfg, F.tooltip, A.swap, dict(_state))
+    try:
+        F.followed = lambda: [heme, renal]
+        F.cfg = lambda: dict(cfgs[-1])
+        F.save_cfg = lambda c: cfgs.append(dict(c))
+        F.tooltip = lambda t, **k: tips.append(t)
+        A.swap = lambda c: None
+        _state["labels"] = [today]
+        F.on_message("planexam", ["duecrew", "planexam", "no", "p1"])
+        after_no = dict(cfgs[-1])
+        F.on_message("planexam", ["duecrew", "planexam", "yes", "p2"])
+        after_yes = dict(cfgs[-1])
+        n = len(cfgs)
+        F.on_message("planexam", ["duecrew", "planexam", "yes", "p2"])
+        again = len(cfgs) == n
+    finally:
+        F.followed, F.cfg, F.save_cfg, F.tooltip, A.swap = saved[:5]
+        _state.clear()
+        _state.update(saved[5])
+    check("exam: Not now remembers it was asked, and sets nothing",
+          after_no.get("exam_asked") == {"p1": d(33)} and not after_no.get("exam_date") and not after_no.get("exam_from"), after_no)
+    check("exam: Make it mine sets my exam to it (Settings' own setexam), remembers the plan, says so; asked again: nothing",
+          after_yes.get("exam_date") == d(60) and after_yes.get("exam_from") == {"pid": "p2", "day": d(60)}
+          and after_yes.get("exam_asked") == {"p1": d(33), "p2": d(60)} and tips and "Your exam:" in tips[-1] and again, after_yes)
+    store = world({"priya": "Priya"})
+    cl = new_client(store, "priya", "Priya")
+    pid = cl._call("POST", "/plans", {"name": "Heme-Onc", "deck": "d"})[1]["id"]
+    ok = cl._call("PUT", f"/plans/{pid}", {"version": 1, "doc": {"deck": "d", "units": [], "events": [
+        {"id": "x", "day": d(33), "name": "Block exam", "kind": "exam"}]}})[0]
+    bad = []
+    for ev in ({"id": "x", "day": d(33), "name": "Block exam", "kind": "quiz"}, {"id": "x", "day": d(33), "name": "E", "big": 1}):
+        try:
+            bad.append(cl._call("PUT", f"/plans/{pid}", {"version": 2, "doc": {"deck": "d", "units": [], "events": [ev]}})[0])
+        except Exception as e:
+            bad.append(getattr(e, "status", "raised"))
+    check("exam: the fake server keeps the mark, and takes no other kind or field (worker/test/exam.test.ts's twin)",
+          ok == 200 and store.plans[pid]["doc"]["events"][0].get("kind") == "exam" and bad == [400, 400], (ok, bad))
+
+
+def test_insights_only_when_something_changed_v399():
+    """3.9.9's review: Insights took seconds of the log on a big deck, again
+    every ten minutes. Past its ten minutes it is worked out again only when
+    the collection changed (its stamp); and the three slow reads of the log
+    give what the old ones gave."""
+    import sqlite3
+    from due_crew import team_flow as TF
+    from due_crew.app import _state
+    import due_crew as dc
+    stamp, calls = [(1, 2, 3, 4, 5)], []
+    db = types.SimpleNamespace(first=lambda sql: stamp[0])
+    saved = (TF.cfg, TF._work_out, dc.mw.col, _state.get("insights"))
+    try:
+        TF.cfg = lambda: {}
+        TF._work_out = lambda did, pid=None, exam="": calls.append(did) or {"n": len(calls)}
+        dc.mw.col = types.SimpleNamespace(db=db, sched=types.SimpleNamespace(day_cutoff=100))
+        _state["insights"] = {}
+        a = TF.insights(7)
+        _state["insights"][7]["at"] -= TF.INSIGHTS_FRESH + 1
+        b = TF.insights(7)
+        _state["insights"][7]["at"] -= TF.INSIGHTS_FRESH + 1
+        stamp[0] = (1, 9, 3, 4, 5)  # an answer since
+        c = TF.insights(7)
+        db.first = lambda sql: 1 / 0  # a stamp that can't be read: worked out, as before
+        _state["insights"][7]["at"] -= TF.INSIGHTS_FRESH + 1
+        d = TF.insights(7)
+        check("insights: kept past ten minutes while nothing changed; again after an answer, or when the stamp can't be read",
+              (a, b, c, d) == ({"n": 1}, {"n": 1}, {"n": 2}, {"n": 3}), (a, b, c, d))
+        # Pip Party's tab asks the same thing before it shows (a loading screen or not), and keeps its own
+        # reading of every card's tags by the same stamp
+        import time
+        from due_crew import gamenight_flow as GF, app as A
+        db.first = lambda sql: stamp[0]
+        _state["insights"] = {}
+        TF.insights(7)
+        _state["insights"][7]["at"] -= TF.INSIGHTS_FRESH + 1
+        same = TF.insights_ready(7)
+        stamp[0] = (1, 10, 3, 4, 5)
+        moved = TF.insights_ready(7)
+        was = GF.TAB.get("corpus")
+        try:
+            old = time.time() - GF.CORPUS_FOR - 5
+            GF.TAB["corpus"] = (A.generation, old, {"rows": []}, TF._stamp())
+            kept_ = GF._kept(GF.TAB["corpus"]) and GF.TAB["corpus"][1] > old
+            GF.TAB["corpus"] = (A.generation, old, {"rows": []}, (0,))
+            changed = GF._kept(GF.TAB["corpus"])
+            other = GF._kept((A.generation - 1, time.time(), {"rows": []}, TF._stamp()))
+        finally:
+            GF.TAB["corpus"] = was
+        check("pip party: past ten minutes its map is at hand while nothing changed (no loading screen, no second read of the tags); "
+              "read again after a change, and never another profile's",
+              (same, moved, kept_, changed, other) == (True, False, True, False, False), (same, moved, kept_, changed, other))
+    finally:
+        TF.cfg, TF._work_out, dc.mw.col, _state["insights"] = saved
+    conn = sqlite3.connect(":memory:")
+    conn.execute("CREATE TABLE revlog (id INTEGER PRIMARY KEY, cid INTEGER, ease INTEGER, type INTEGER)")
+    conn.execute("CREATE INDEX ix_revlog_cid ON revlog (cid)")
+    conn.execute("CREATE TABLE cards (id INTEGER PRIMARY KEY)")
+    rows = [(10, 1, 3, 0), (60, 1, 1, 1), (70, 1, 3, 1),      # card 1: started before, missed, then right
+            (55, 2, 2, 0), (65, 2, 1, 1),                       # card 2: started since, never right in a review
+            (20, 3, 0, 4), (58, 3, 3, 1), (80, 3, 4, 1),        # card 3: a manual entry before (ease 0), first answer since
+            (30, 4, 3, 1)]                                      # card 4: nothing since
+    conn.executemany("INSERT INTO revlog VALUES (?, ?, ?, ?)", rows)
+    conn.executemany("INSERT INTO cards VALUES (?)", [(i,) for i in range(1, 6)])
+    col = types.SimpleNamespace(db=types.SimpleNamespace(
+        list=lambda q, *a: [r[0] for r in conn.execute(q, a)], all=lambda q, *a: conn.execute(q, a).fetchall()))
+    old = [r[0] for r in conn.execute("SELECT cid FROM revlog WHERE ease > 0 AND cid IN (1,2,3,4,5) GROUP BY cid HAVING min(id) >= ?", (50,))]
+    new = TF._first_since(col, "1,2,3,4,5", 50)
+    check("insights: the cards first answered since a day, read from that day on, are the ones the whole log gave",
+          sorted(new) == sorted(old) == [2, 3], (new, old))
+    old_first = dict(conn.execute("SELECT cid, min(id) FROM revlog WHERE type = 1 AND ease > 1 AND cid IN (1,2,3,4,5) GROUP BY cid"))
+    new_first = {c: r for c, r in conn.execute(
+        "SELECT c.id, (SELECT r.id FROM revlog r WHERE r.cid = c.id AND r.type = 1 AND r.ease > 1 ORDER BY r.id LIMIT 1) "
+        "FROM cards c WHERE c.id IN (1,2,3,4,5)") if r is not None}
+    old_last = dict(conn.execute("SELECT cid, max(id) FROM revlog WHERE type = 1 AND ease > 0 AND cid IN (1,2,3,4,5) GROUP BY cid"))
+    new_last = {c: r for c, r in conn.execute(
+        "SELECT c.id, (SELECT r.id FROM revlog r WHERE r.cid = c.id AND r.type = 1 AND r.ease > 0 ORDER BY r.id DESC LIMIT 1) "
+        "FROM cards c WHERE c.id IN (1,2,3,4,5)") if r is not None}
+    check("insights: a card's first right review and its last review, read from its own log's ends, are the same",
+          new_first == old_first == {1: 70, 3: 58, 4: 30} and new_last == old_last == {1: 70, 2: 65, 3: 80, 4: 30},
+          (new_first, old_first, new_last, old_last))
+
+
+def test_what_gets_used_v399():
+    """3.9.9: which parts were opened today, on the error counts' own path:
+    "use:<part>" once a day however often, "use:any" beside it; nothing
+    before the person has been told, nothing with the switch off, and no
+    name on the switch."""
+    from due_crew import errs, errs_flow
+    saved = dict(errs._now)
+    try:
+        t = errs.Tally()
+        errs.use(t, on=True)
+        errs.use_ok(False)
+        errs.used("insights")
+        untold = dict(t.days)
+        errs.use_ok(True)
+        for _ in range(3):
+            errs.used("insights")
+        errs.used(errs.use_of("planopen"))
+        errs.used(errs.use_of("cheersend"))
+        errs.used("not a part")
+        errs.used(None)
+        day = errs.today()
+        check("used: nothing before being told; then a part once a day however often, use:any once, only parts on the list",
+              untold == {} and t.days[day] == {"use:any": 1, "use:insights": 1, "use:plans": 1, "use:cheers": 1}, (untold, t.days))
+        check("used: a command's part by its first letters, the longest first; none for a command with no part",
+              [errs.use_of(c) for c in ("planteamask", "plan", "duetab", "youins", "insmap", "squadkick", "songuse", "refresh", "css", "")]
+              == ["plansquad", "plans", "due", "insights", "insights", "squads", "songs", None, None, None])
+        check("used: every code passes the server's rule, and a day's parts fit a day's codes",
+              all(errs.clean_code("use:" + p) for p in errs.USE_PARTS) and len(errs.USE_PARTS) < errs.CODES_MAX - 10, errs.USE_PARTS)
+        errs.switch(False)
+        errs.used("magic")
+        check("used: the switch off, nothing counted and what was is gone", t.days == {}, t.days)
+        from due_crew import board
+        import due_crew as dc
+        from aqt.deckbrowser import DeckBrowser
+        c = {"send_errs": True}
+        line = board.draw._use_line(c)
+        words = line + errs.sheet_text({"v": "3.9.9", "days": {"2026-11-09": {"use:any": 1}}})
+        check("used: said once in a line at the board's foot (no window): what's new, Privacy and Got it; nobody named",
+              "Sam" not in words and "counts which of its parts get opened" in line and "usesee" in line and "usetold" in line
+              and "use:any × 1" in words and board.draw._use_line({"send_errs": False}) == ""
+              and board.draw._use_line({"send_errs": True, "use_told": True}) == "", line)
+        was = (dc.cfg, dc.save_cfg, dc._swap, dc.open_settings, errs_flow.app.cfg, errs_flow.app.save_cfg)
+        went = []
+        try:
+            dc.cfg = errs_flow.app.cfg = lambda: c
+            dc.save_cfg = errs_flow.app.save_cfg = lambda x, **k: None
+            dc._swap = lambda *a, **k: went.append("swap")
+            dc.open_settings = lambda tab=None: went.append(tab)
+            errs.switch(True)
+            errs.use_ok(False)
+            dc._on_js(False, as_board("duecrew:usetold"), DeckBrowser())
+            got_it = (c.get("use_told"), errs._now.get("use_ok"), list(went))
+            c.pop("use_told")
+            dc._on_js(False, as_board("duecrew:usesee"), DeckBrowser())
+            check("used: Got it puts the line away and counting starts; Privacy does too, and opens the switch's tab",
+                  got_it == (True, True, ["swap"]) and c.get("use_told") is True and went == ["swap", "privacy"], (got_it, went))
+        finally:
+            dc.cfg, dc.save_cfg, dc._swap, dc.open_settings, errs_flow.app.cfg, errs_flow.app.save_cfg = was
+    finally:
+        errs._now.clear()
+        errs._now.update(saved)
+
+
+def test_calm_board_v399():
+    """3.9.9, the calm board: a new person sees Crew and Today; a part
+    stays folded until it has something to show, then says so in one line;
+    Show all, Settings and any link to a part let it out for good. Off for
+    everyone who had the board before."""
+    from due_crew import calm, board, settings_model as SM
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    if "aqt.reviewer" not in sys.modules:
+        sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
+    old = {"hidden_tabs": ["party"]}
+    check("calm: off unless asked: the board as it was", board.hidden_tabs(old) == {"party"} and board.draw._calm_line(old) == "")
+    c = {"calm": True, "calm_open": [], "calm_news": [], "hidden_tabs": []}
+    check("calm: a new person's board: every part but Crew and Today folded, and the way out said",
+          board.hidden_tabs(c) == set(calm.PARTS) and "Show all" in board.draw._calm_line(c) and "calmall" in board.draw._calm_line(c))
+    check("calm: what's ready: a friend, a squad, a plan, two weeks of reviews; Pip Party never by itself",
+          calm.ready({"friends": 0, "squads": 0, "plans": 0, "days": 13}) == []
+          and calm.ready({"friends": 2, "squads": 1, "plans": 1, "days": 14}) == ["decks", "squads", "plans", "insights"]
+          and calm.ready({"days": None}) == [])
+    changed = calm.release(c, calm.ready({"friends": 1, "days": 20}), news=True)
+    line = board.draw._calm_line(c)
+    check("calm: a part lets itself out once, with its line: its words, Open and its way off",
+          changed and board.hidden_tabs(c) == {"squads", "plans", "party"} and "Decks is ready" in line
+          and "calmopen:decks" in line and "calmx" in line and not calm.release(c, ["decks"], news=True), line)
+    saved = (dc.cfg, dc.save_cfg, dc._swap, dc._cmd_period, dc.due_flow.on_message)
+    went = []
+    try:
+        dc.cfg = lambda: c
+        dc.save_cfg = lambda x, **k: None
+        dc._swap = lambda *a, **k: went.append("swap")
+        dc._cmd_period = lambda cc, p: went.append(("period", p[2]))
+        dc.due_flow.on_message = lambda cmd, p: went.append((cmd, p[2]))
+        send = lambda m: dc._on_js(False, as_board("duecrew:" + m), DeckBrowser())
+        send("calmopen:decks")
+        send("calmx")
+        after_x = list(c["calm_news"])
+        send("calmopen:insights")
+        send("calmopen:nonsense")
+        check("calm: Open goes to the part and its line goes; x puts the next away; a made-up part is no command",
+              went == [("period", "decks"), "swap", ("duetab", "insights")] and after_x == [] and c["calm_news"] == [], (went, c))
+        c["calm_news"] = ["insights"]
+        send("calmall")
+        check("calm: Show all: every tab, the switch off, nothing left to say",
+              c["calm"] is False and board.hidden_tabs(c) == set() and board.draw._calm_line(c) == "" and c["calm_news"] == [], c)
+    finally:
+        dc.cfg, dc.save_cfg, dc._swap, dc._cmd_period, dc.due_flow.on_message = saved
+    c2 = {"calm": True, "calm_open": [], "hidden_tabs": []}
+    got = SM.change(["settabs", "squads", "1"], c2)
+    check("calm: a tab shown by hand in Settings is out for good; the switch is Settings › Board's",
+          got.get("calm_open") == ["squads"] and "calm" in SM.SWITCHES and SM.change(["set", "calm", "1"], {}) == {"calm": True}, got)
+
+
+def test_magic_field_on_the_decks_page_v399():
+    """3.9.9 (Sam's pick G2): the Decks page gets Magic search's field after
+    Anki's deck list and over its "Studied…" line (the start of
+    content.stats), the board after that line; not with Magic search off, not signed out."""
+    import due_crew as dc
+    from due_crew.app import _state
+    store = world({"sam": "Sam"})
+    cl = new_client(store, "sam", "Sam")
+    conf = {"show_leaderboard": True}
+    saved = (dc.cfg, dc.client, dc._board_html, dc._push_if_stale, _state.get("entries"), _state.get("settings_tab"),
+             _state.get("closet_open"), _state.get("wrapped_open"), dc.magic_flow.cfg)
+    try:
+        dc.cfg = dc.magic_flow.cfg = lambda: conf
+        dc.client = lambda: cl
+        dc._board_html = lambda c: "<div id=\"due-crew\">BOARD</div>"
+        dc._push_if_stale = lambda: None
+        _state.update(entries=[], settings_tab=None, closet_open=False, wrapped_open=False)
+        page = types.SimpleNamespace(tree="<table>DECKS</table>", stats="Studied 9 cards")
+        dc._on_render(None, page)
+        # (Sam's screenshot: content.tree is inside Anki's <table>, where a div is lifted to above the list)
+        st = page.stats
+        check("decks page: the field under the deck list (outside Anki's table), over its own line, the board after",
+              page.tree == "<table>DECKS</table>" and st.startswith("<style>#dc-mgf") and 'id="dc-mgf"' in st
+              and st.index('id="dc-mgf"') < st.index("Studied 9 cards") < st.index("BOARD") and st.endswith("BOARD</div>"), st[:120])
+        ph = lambda h: re.search(r'<input type="text"[^>]*placeholder="([^"]*)"', h).group(1)
+        page2 = types.SimpleNamespace(tree="", stats="")
+        dc._on_render(None, page2)
+        check("decks page: one example in the field, another the next time the page is drawn, never cycled",
+              ph(st) in dc.board.MAGIC_EXAMPLES and ph(page2.stats) in dc.board.MAGIC_EXAMPLES and ph(st) != ph(page2.stats)
+              and "setTimeout(type" not in st and "__EX__" not in st, (ph(st), ph(page2.stats)))
+        conf["magic_search"] = False
+        page = types.SimpleNamespace(tree="T", stats="S")
+        dc._on_render(None, page)
+        check("decks page: Magic search off: no field, the board as ever", page.tree == "T" and "BOARD" in page.stats)
+        conf["magic_search"] = True
+        dc.client = lambda: types.SimpleNamespace(signed_in=False, session_dead=False, deleted_quiet=False)
+        page = types.SimpleNamespace(tree="T", stats="S")
+        dc._on_render(None, page)
+        check("decks page: signed out: no field", page.tree == "T")
+    finally:
+        (dc.cfg, dc.client, dc._board_html, dc._push_if_stale) = saved[:4]
+        dc.magic_flow.cfg = saved[8]
+        _state.update(entries=saved[4], settings_tab=saved[5], closet_open=saved[6], wrapped_open=saved[7])
+
+
+def test_load_across_plans_v399():
+    """3.9.9 (plans, what was missing: 2): You › Plans adds up the next
+    seven days across plans, reviews and each plan's new cards at my own
+    pace; a day half again over my usual is heavy, and its smallest set not
+    yet open moves, in one press, to the nearest later day that stays
+    under heavy, before its event. My follow only."""
+    from due_crew import plans as P, board
+    pace = {"new_s": 60, "rev_s": 6, "day_min": 60, "known": True}
+    t = _day(0)
+    sets = [{"pid": "a", "plan": "Heme", "uid": "h1", "name": "Anemias", "day": t, "ask": 20, "moved": 0, "cap": ""},
+            {"pid": "a", "plan": "Heme", "uid": "h2", "name": "Coag", "day": _day(1), "ask": 70, "moved": 0, "cap": ""},
+            {"pid": "b", "plan": "Pharm <b>", "uid": "p6", "name": "Pharm 6", "day": _day(1), "ask": 30, "moved": 1, "cap": _day(4)},
+            {"pid": "b", "plan": "Pharm <b>", "uid": "p7", "name": "Pharm 7", "day": _day(9), "ask": 30, "moved": 0, "cap": ""}]
+    rev = {t: 300, _day(1): 200, _day(2): 500, _day(3): 100, _day(4): 0, _day(20): 900}
+    v = P.load_week(sets, rev, t, pace)
+    d = v["days"]
+    check("load: seven days from today, reviews and each plan's new cards, minutes at my pace",
+          len(d) == 7 and d[0]["today"] and [p["pid"] for p in v["plans"]] == ["a", "b"]
+          and d[0]["parts"] == [20, 0] and d[0]["rev"] == 300 and d[0]["min"] == 50
+          and d[1]["parts"] == [70, 30] and d[1]["min"] == 120 and d[6]["min"] == 0, d[:2])
+    check("load: heavy is half again over my usual day, and only with new cards in it",
+          [x["heavy"] for x in d] == [False, True, False, False, False, False, False] and v["top"] == 120)
+    check("load: a day's shares add up, reviews first", abs(sum(d[1]["share"]) - 1) < 1e-9 and abs(d[1]["share"][0] - 20 / 120) < 1e-9)
+    mv = v["hint"]["move"]
+    check("load: the hint names the day's cards; the move is its smallest set, to the nearest later day with room before its event, "
+          "on top of the days it already runs later",
+          v["hint"]["day"] == _day(1) and v["hint"]["new"] == 100 and v["hint"]["plans"] == 2 and v["hint"]["rev"] == 200
+          and mv == {"pid": "b", "uid": "p6", "name": "Pharm 6", "to": _day(2), "n": 2}, v["hint"])
+    tight = P.load_week([dict(x, cap=_day(2)) if x["uid"] == "p6" else x for x in sets], rev, t, pace)
+    check("load: no day before its event stays under heavy with it: the bigger set moves instead",
+          tight["hint"]["move"]["uid"] == "h2" and tight["hint"]["move"]["to"] == _day(3), tight["hint"])
+    none = P.load_week(sets, {_day(i): 2000 for i in range(7)}, t, pace)
+    check("load: nowhere lighter: the line, no move", none["hint"] and none["hint"]["move"] is None)
+    today_heavy = P.load_week([dict(x, day=t) if x["uid"] in ("h2", "p6") else x for x in sets], rev, t, pace)
+    check("load: today's sets are open already: heavy said, nothing moved", today_heavy["hint"]["day"] == t and today_heavy["hint"]["move"] is None)
+    check("load: before my usual day is known nothing is heavy", P.load_week(sets, rev, t, dict(pace, known=False))["hint"] is None)
+    check("load: one plan in the week: no view (its own week says it)", P.load_week(sets[:2], rev, t, pace) is None
+          and P.load_week([], rev, t, pace) is None)
+    back = P.load_week([dict(x, day=_day(3), moved=3) if x["uid"] == "p6" else x for x in sets], rev, t, pace, back=("b", "p6"))
+    check("load: after a move, the set and where it went, for Put it back",
+          back["back"] == {"pid": "b", "uid": "p6", "name": "Pharm 6", "day": _day(3)} and not back["days"][1]["heavy"], back["back"])
+    check("load: a set put back is no longer named", P.load_week(sets, rev, t, pace, back=("b", "p7"))["back"] is None)
+    check("load: time words", [P.load_time(x) for x in (0, 45, 60, 130)] == ["0 min", "45 min", "1 h 00", "2 h 10"])
+    h = board.plancards._load_html(v)
+    check("load: drawn: the key, a row a day, the heavy day's time marked, the move as a command, names escaped",
+          h.count('class="lwd') == 7 and 'class="n hv">2 h 00' in h and "planmoveto:b:p6:2" in h and "Pharm &lt;b&gt;" in h
+          and "<b>Tomorrow" not in h and "is heavy:</b> 100 new across 2 plans on top of 200 reviews." in h
+          and "Move Pharm 6 to " in h and "your own pace" in h, h[-700:])
+    hb = board.plancards._load_html(back)
+    check("load: drawn after a move: Put it back, on the same screen", "planmoveback:b:p6" in hb and "Pharm 6 moved to " in hb)
+    check("load: nothing to show, nothing drawn; a typical pace says so",
+          board.plancards._load_html(None) == "" and "typical pace" in board.plancards._load_html(P.load_week(sets, rev, t, dict(pace, known=False))))
+
+
+def test_insights_a_part_at_a_time_v399():
+    """3.9.9 (the performance review): the board's Insights is worked out a
+    part at a time, Anki live between parts, and drawn again when done; until
+    then the last view (marked working) or a line saying so. Off outside
+    Anki's own run (the suite, the tools), where it's worked out whole."""
+    from due_crew import team_flow as TF, app as A, board
+    from due_crew.app import _state
+    import due_crew as dc
+
+    def steps(did, pid=None, exam=""):
+        seen.append("a")
+        yield
+        seen.append("b")
+        yield
+        return {"n": len(seen)}
+    seen, later, swaps = [], [], []
+    saved = (TF.cfg, TF._work_steps, TF._later, TF.ASYNC, dc.mw.col, _state.get("insights"), _state.get("ins_job"), A.swap, TF._stamp)
+    try:
+        TF.cfg = lambda: {}
+        TF._work_steps = steps
+        TF._later = lambda fn, ms=0: later.append(fn)
+        TF._stamp = lambda: (1,)
+        A.swap = lambda *a, **k: swaps.append(1)
+        dc.mw.col = types.SimpleNamespace()
+        _state["insights"], _state["ins_job"] = {}, None
+        check("soon: off (the suite, the tools): worked out whole, at once", TF._work_out(7) == {"n": 2} and TF.insights_soon(7) == {"n": 4})
+        TF.ASYNC, seen[:] = True, []
+        check("soon: the suite's stand-in for Anki says whole", os.environ.get(TF.WHOLE) == "1" and TF.insights_soon(8) == {"n": 2})
+        os.environ.pop(TF.WHOLE)
+        seen[:] = []
+        _state["insights"] = {}
+        first = TF.insights_soon(7)
+        again = TF.insights_soon(7)
+        check("soon: not at hand: a line saying so, one job however often the board draws, nothing worked out yet",
+              first == {"working": True} == again and len(later) == 1 and seen == [], (first, later, seen))
+        while later:
+            later.pop(0)()
+        check("soon: a part a turn, then the view kept and the board drawn again",
+              seen == ["a", "b"] and swaps == [1] and _state["ins_job"] is None and TF.insights_soon(7) == {"n": 2}, (seen, swaps))
+        _state["insights"][7]["at"] -= TF.INSIGHTS_FRESH + 1
+        TF._stamp = lambda: (2,)
+        stale = TF.insights_soon(7)
+        check("soon: changed since: the last view stays up, marked working, while the next is worked out",
+              stale == {"n": 2, "working": True} and len(later) == 1, stale)
+        A.generation += 1
+        later.pop(0)()
+        check("soon: the profile changed meanwhile: the job lets go, nothing kept or drawn", _state["ins_job"] is None and swaps == [1])
+        A.generation -= 1
+        html = board.insights._you_insights({"decks": [{"did": 7, "name": "Deck"}], "did": 7, "view": {"working": True}})
+        check("soon: the board's line while it works", "Reading your reviews" in html, html[-120:])
+        # warming ahead: quietly, standing back from a card on screen, no redraw at its end
+        had = (TF.you_decks, board.hidden_tabs, getattr(dc.mw, "state", None))
+        try:
+            TF.you_decks = lambda: [{"did": 9, "name": "Deck", "pid": None}]
+            board.hidden_tabs = lambda c=None: {"insights"}
+            _state["insights"], seen[:], later[:], swaps[:] = {}, [], [], []
+            TF.warm()
+            check("warm: Insights hidden (Settings, or the calm board): nothing worked out", later == [] and _state["ins_job"] is None)
+            board.hidden_tabs = lambda c=None: set()
+            TF.warm()
+            dc.mw.state = "review"
+            later.pop(0)()
+            check("warm: a card on screen: it waits, nothing worked out", seen == [] and len(later) == 1)
+            dc.mw.state = "deckBrowser"
+            while later:
+                later.pop(0)()
+            check("warm: worked out ahead a part a turn, kept, the board not redrawn; the tab then opens on it at once",
+                  seen == ["a", "b"] and swaps == [] and TF.insights_ready(9) and TF.insights_soon(9) == {"n": 2} and later == [])
+            TF.warm()
+            check("warm: at hand already: nothing started", later == [] and _state["ins_job"] is None)
+            _state["insights"], seen[:] = {}, []
+            TF.warm()
+            got = TF.insights_soon(9)
+            while later:
+                later.pop(0)()
+            check("warm: asked for while warming: the same job, and now the board is drawn again at its end",
+                  got == {"working": True} and seen == ["a", "b"] and swaps == [1])
+            os.environ[TF.WHOLE] = "1"
+            _state["insights"] = {}
+            TF.warm()
+            check("warm: off outside Anki's own run", later == [])
+            os.environ.pop(TF.WHOLE)
+        finally:
+            TF.you_decks, board.hidden_tabs = had[0], had[1]
+            dc.mw.state = had[2]
+    finally:
+        (TF.cfg, TF._work_steps, TF._later, TF.ASYNC, dc.mw.col, _state["insights"], _state["ins_job"], A.swap, TF._stamp) = saved
+        os.environ[TF.WHOLE] = "1"
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:
         globals()[n]()
+    check_every_board_click_is_taken()  # last: every control the suite drew on the board, pressed down its route
     bad = [c for c in CHECKS if not c[1]]
     print(f"\n{len(CHECKS) - len(bad)}/{len(CHECKS)} checks passed")
     sys.exit(1 if bad else 0)

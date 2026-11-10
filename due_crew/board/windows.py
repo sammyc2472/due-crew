@@ -96,8 +96,23 @@ POP_JS = r"""
                 document.removeEventListener('keydown', esc, true);
                 if (on.closing) { on.closing(); }
                 back.removeAttribute('id');  // the bars' shade goes with it (VEIL_WATCH_JS); its look stays, by data-pop
+                // 3.9.9 (the robot click-test, now and then): a redraw while it was up put a new copy of what
+                // opened it in its place (the same id, or the same command); that copy gets the key back
+                if (was && !was.isConnected && was.getAttribute) {
+                    var wid = was.id, cmd = was.getAttribute('onclick');
+                    was = (wid && document.getElementById(wid)) || (cmd && [].slice.call(document.querySelectorAll(was.tagName))
+                        .filter(function (x) { return x.getAttribute('onclick') === cmd && x.offsetParent !== null; })[0]) || was;
+                }
                 // what opened it gets the key back (3.9.2's QoL pass)
                 if (was && was.isConnected && was.focus) { try { was.focus(); } catch (x) { /* gone with a redraw */ } }
+                // 3.9.9 (the robot click-test): a crewmate's 🎉 pill shows only while its name cell has the pointer
+                // or the key, so with the window up it's hidden and can't take the key back. Its cell's first
+                // shown control takes it (the pill shows again, :focus-within), then the pill itself
+                if (was && was.isConnected && document.activeElement !== was && was.closest) {
+                    var cell = was.closest('td, li'), near = cell && [].slice.call(cell.querySelectorAll('a[href], button'))
+                        .filter(function (x) { return x !== was && x.offsetParent !== null && x.tabIndex >= 0; })[0];
+                    if (near) { try { near.focus(); was.focus(); } catch (x) { /* gone with a redraw */ } }
+                }
                 // moved: the motion layer opened it and takes it out its own way, back into what was clicked
                 if (moved || still() || !back.animate) { back.remove(); return; }
                 back.style.pointerEvents = 'none';
@@ -347,14 +362,14 @@ def sheet_js(view):
 # magic_seen), over the Decks screen in the sheets' look. Its words are
 # magic.HOWTO's, the window's ? the same; a try opens the window with it.
 # It waits for the board to be clear (no window, no show over it) and for the
-# You box's head, where Magic search lives, to be on the page.
+# field under the deck list, where Magic search lives (3.9.9), to be on the page.
 MAGIC_HOWTO_JS = r"""
 (function () {
     var V = __VIEW__;
     if (document.getElementById('dc-magic')) { return; }
     var BUSY = __BUSY__;
     function clear() {
-        return document.querySelector('.du-mg') && !BUSY.some(function (id) { return !!document.getElementById(id); });
+        return document.getElementById('dc-mgf') && !BUSY.some(function (id) { return !!document.getElementById(id); });
     }
     function later(n) {
         if (clear()) { draw(); return; }

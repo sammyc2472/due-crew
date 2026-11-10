@@ -6,6 +6,7 @@ import { accentOf, type Session } from "./auth";
 import { listKnocks, withoutFlags } from "./social";
 import * as B from "./bingo";
 import * as C from "./cards";
+import * as F from "./field";
 import * as N from "./notices";
 import * as P from "./plans";
 import * as T from "./team";
@@ -198,6 +199,7 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
     friends, cheers, cheersAt, knocks: await listKnocks(env, s.uid),
     notice: await N.forBoard(env, me.client_version ?? null),  // 3.2.1
     settingsAt: me.sat || "",  // 3.7.1: an add-on pulls a save it hasn't seen
+    errs: true,  // 3.9.9: a sync may carry error counts (field.ts); an add-on sends none till it reads this
   };
   if (withDecks) out.decks = await decksFor(env, s.uid);
   // 3.1: the plans I follow, and offers; the site's home (keep=1) reads its plans from /plans/mine.
@@ -267,7 +269,8 @@ export async function getHeatmap(s: Session, env: Env, [uid]: string[]): Promise
 export async function sync(req: Request, s: Session, env: Env): Promise<Response> {
   const body = await readJson(req);
   for (const k of Object.keys(body)) {
-    if (!["profile", "week", "decks", "heatmap", "squads", "settings", "plans", "knows", "stuck", "log", "team", "due"].includes(k)) throw V.bad("sync");
+    if (!["profile", "week", "decks", "heatmap", "squads", "settings", "plans", "knows", "stuck", "log", "team", "due",
+          "errs"].includes(k)) throw V.bad("sync");
   }
   // validate everything before writing anything
   const profile = "profile" in body ? V.profile(body.profile) : null;
@@ -282,6 +285,7 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
   const due = "due" in body ? C.duePart(body.due) : null;                   // 3.9.0
   const log = "log" in body ? C.logPart(body.log) : null;
   const team = "team" in body ? T.teamPart(body.team) : null;               // 3.7.3
+  const errs = "errs" in body ? F.errsPart(body.errs) : null;               // 3.9.9
   let squads: { row: ReturnType<typeof V.memberRow>; ids: string[] } | null = null;
   if ("squads" in body) {
     const sq = body.squads;
@@ -415,6 +419,12 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
         "INSERT INTO logs (uid, json, at) VALUES (?, ?, ?) ON CONFLICT(uid) DO UPDATE SET json = excluded.json, at = excluded.at",
       ).bind(s.uid, next, now));
     }
+  }
+  if (errs) {
+    // 3.9.9: what went wrong, added up by day, version and code; the days in my last 7, by my Anki day
+    const ew = F.errsWrites(env, errs, ankiDay(now, profile?.tz ?? have.tz, profile?.rollover ?? have.rollover));
+    wrote.errs = ew.length > 0;
+    writes.push(...ew);
   }
   if (writes.length) {
     const results = await db.batch(writes);  // one transaction

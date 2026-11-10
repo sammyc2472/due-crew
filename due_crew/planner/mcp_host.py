@@ -15,13 +15,13 @@ import json
 import secrets
 import threading
 import time
-import traceback
 
 from aqt import mw
 
 from .. import app, plan_flow
 from . import build as B
 from . import flow, mcp, remote
+from ..errs import oops
 
 KEY = "mcp"
 MAIN_WAIT = 30      # seconds a tool waits for Anki's main thread
@@ -88,7 +88,7 @@ def stop():
         try:
             srv.stop()
         except Exception:
-            traceback.print_exc()
+            oops()
 
 
 def set_on(on):
@@ -275,7 +275,7 @@ class Host:
                 try:
                     w.draft_changed(pid)
                 except Exception:
-                    traceback.print_exc()
+                    oops()
         mw.taskman.run_on_main(run)
 
 

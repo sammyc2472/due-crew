@@ -20,7 +20,6 @@ deck's options; the line can be put away for 30 days."""
 import datetime
 import json
 import time
-import traceback
 from urllib.parse import unquote
 
 from aqt import mw
@@ -31,6 +30,7 @@ from . import plans as P
 from . import team as T
 from .app import _bg, _state, cfg, client, save_cfg
 from .backend.shapes import TransportError
+from .errs import oops
 
 FRESH = 60          # seconds a fetched team is shown before the tab asks again
 INSIGHTS_FRESH = 600
@@ -144,7 +144,7 @@ def _known(view):
         guids = [a["guid"] for a in asks]
         return {"down": sorted(i_know(mw.col, guids)), "have": sorted(notes_by_guid(mw.col, guids))}
     except Exception:
-        traceback.print_exc()
+        oops()
         return {"down": [], "have": []}
 
 
@@ -477,7 +477,7 @@ def you_decks():
         try:
             out = _you_decks(mw.col, int(cfg().get("ins_deck") or 0))
         except Exception:
-            traceback.print_exc()
+            oops()
     _state["you_decks"] = {"at": time.time(), "list": out}
     return out
 
@@ -528,6 +528,14 @@ def _deck_plans(col):
     return plans
 
 
+def _ins_ask(c, decks):
+    """The deck You › Insights shows (cfg ins_deck, this computer's, or the
+    first), the plan that sharpens it, and my exam date."""
+    did = int(c.get("ins_deck") or 0)
+    d = next((x for x in decks if x["did"] == did), decks[0])
+    return d, (_plan(d["pid"]) if d.get("pid") else None), str(c.get("exam_date") or "")
+
+
 def you_view(c):
     """What You › Insights draws: {decks, did, exam (my date, or ""), view}. The deck
     picked (cfg ins_deck, this computer's) or the first; a plan I follow on
@@ -535,11 +543,8 @@ def you_view(c):
     decks = you_decks()
     if not decks:
         return {"decks": []}
-    did = int(c.get("ins_deck") or 0)
-    d = next((x for x in decks if x["did"] == did), decks[0])
-    p = _plan(d["pid"]) if d.get("pid") else None
-    exam = str(c.get("exam_date") or "")
-    view = insights(d["did"], p["id"] if p else None, exam)
+    d, p, exam = _ins_ask(c, decks)
+    view = insights_soon(d["did"], p["id"] if p else None, exam)
     at = (_state.get("map_at") or {}).get(d["did"]) or []
     if view.get("map"):
         T.map_level(view["map"], at, view.get("_map_know") or {})  # what's on screen worked out
@@ -553,7 +558,7 @@ def you_view(c):
         try:
             out["view"].update(leech_flow.line_counts(mw.col, d["did"], _deck_sql(mw.col, d["did"])))
         except Exception:
-            traceback.print_exc()
+            oops()
     if leech_flow.is_open(d["did"]) and mw.col:
         # 3.9.2: the leeches view; "on your exam" when the exam's scope is narrower than the deck
         since = (view.get("aim") or {}).get("since") if (view.get("aim") or {}).get("kind") == "exam" else ""
@@ -563,7 +568,7 @@ def you_view(c):
         from . import habits_flow
         out["habits"] = habits_flow.board_view()  # 3.9.5: How you study, all decks, its line or its view
     except Exception:
-        traceback.print_exc()
+        oops()
     return out
 
 
@@ -577,7 +582,7 @@ def plan_lines(cards):
         did = next((d for d, pid in owner.items() if pid == card.get("id")), None)
         if card.get("paused") or did is None:
             continue  # a second plan on a deck: the deck's Insights are the first's
-        v = insights(did, card["id"], str(cfg().get("exam_date") or ""))
+        v = insights_soon(did, card["id"], str(cfg().get("exam_date") or ""))  # its line joins when it's worked out
         aim = v.get("aim") or {}
         if v.get("hero"):
             card["ins"] = {"n": len(v["hero"]), "did": did, "day": aim.get("day"),
@@ -592,13 +597,123 @@ def insights(did, pid=None, exam=""):
     have = (_state.get("insights") or {}).get(did)
     if have and have.get("key") == key and time.time() - have["at"] < INSIGHTS_FRESH:
         return have["view"]
+    stamp = _stamp()
+    if have and have.get("key") == key and stamp is not None and have.get("stamp") == stamp:
+        have["at"] = time.time()  # 3.9.9: nothing studied or changed since: the same view, not seconds of the log again
+        return have["view"]
     view = {}
     try:
         view = _work_out(int(did), pid, exam)
     except Exception:
-        traceback.print_exc()
-    _state.setdefault("insights", {})[did] = {"at": time.time(), "view": view, "key": key}
+        oops()
+    _state.setdefault("insights", {})[did] = {"at": time.time(), "view": view, "key": key, "stamp": stamp}
     return view
+
+
+def _stamp():
+    """What Insights is worked out from, as a few numbers: the Anki day, the
+    collection's last change, the log's last answer, the cards' and notes'
+    last edits. None when it can't be read (then Insights is worked out)."""
+    try:
+        col = mw.col
+        return (int(col.sched.day_cutoff),) + tuple(col.db.first(
+            "SELECT (SELECT mod FROM col), (SELECT max(id) FROM revlog), (SELECT max(mod) FROM cards), "
+            "(SELECT count() FROM cards), (SELECT max(mod) FROM notes)"))
+    except Exception:
+        return None
+
+
+ASYNC = False  # the glue turns it on with a profile open (real Anki)
+WHOLE = "DUE_CREW_INSIGHTS_WHOLE"  # set in the environment (the suite's and the tools' stand-in for Anki sets it): never in parts
+
+
+WARM_AFTER = 20000  # ms after a profile opens: the sync and the morning are usually through
+
+
+def warm_soon():
+    """At a profile's open: Insights worked out before it's asked for."""
+    gen = app.generation
+    _later(lambda: gen == app.generation and warm(), WARM_AFTER)
+
+
+def warm():
+    """3.9.9: You › Insights' deck worked out ahead, quietly: a part a turn
+    as insights_soon does, waiting while a card is on screen, and no redraw
+    at its end (the tab opens on a view that's at hand). Nothing when the
+    tab is hidden (Settings, or the calm board hasn't shown it yet), when
+    it's at hand already, or outside Anki's own run."""
+    import os
+    if not ASYNC or os.environ.get(WHOLE) or not mw.col:
+        return
+    try:
+        from . import board
+        c = cfg()
+        if "insights" in board.hidden_tabs(c):
+            return
+        decks = you_decks()
+        if not decks:
+            return
+        d, p, exam = _ins_ask(c, decks)
+        insights_soon(d["did"], p["id"] if p else None, exam, quiet=True)
+    except Exception:
+        oops()
+
+
+def insights_soon(did, pid=None, exam="", quiet=False):
+    """The board's Insights: the view when it's at hand (insights()' own
+    rule), else worked out a step a turn of the screen while Anki stays
+    live, the board drawn again when it's done. Until then: the last view
+    this deck had, marked `working`, or {"working": True}. One deck at a
+    time; another asked meanwhile waits for the redraw that follows."""
+    import os
+    if not ASYNC or os.environ.get(WHOLE) or insights_ready(did, pid, exam):
+        return insights(did, pid, exam)
+    c = cfg()
+    key = f"{pid or ''}|{exam}|{c.get('exam_last') or ''}|{c.get('exam_since') or ''}"
+    have = (_state.get("insights") or {}).get(did)
+    job = _state.get("ins_job")
+    if job is None or job["gen"] != app.generation:
+        job = _state["ins_job"] = {"did": did, "key": key, "gen": app.generation, "stamp": _stamp(),
+                                   "g": _work_steps(int(did), pid, exam), "quiet": bool(quiet)}
+        _later(lambda: _ins_step(job))
+    elif not quiet:
+        job["quiet"] = False  # the board is waiting on it now: no more standing back, and a redraw at its end
+    return dict(have["view"], working=True) if have and have.get("view") else {"working": True}
+
+
+def _later(fn, ms=0):
+    from aqt.qt import QTimer
+    QTimer.singleShot(ms, fn)
+
+
+def _ins_step(job):
+    if _state.get("ins_job") is not job:
+        return
+    if job["gen"] != app.generation or not mw.col:
+        _state["ins_job"] = None
+        return
+    if job.get("quiet") and getattr(mw, "state", "") == "review":
+        _later(lambda: _ins_step(job), 3000)  # warming ahead never costs a card its turn
+        return
+    view, done = {}, False
+    try:
+        next(job["g"])
+    except StopIteration as e:
+        view, done = e.value or {}, True
+    except Exception:
+        oops()
+        done = True
+    if not done:
+        _later(lambda: _ins_step(job), 1)  # a turn of the screen between parts: a click or a key gets in
+        return
+    _state["ins_job"] = None
+    _state.setdefault("insights", {})[job["did"]] = {"at": time.time(), "view": view, "key": job["key"], "stamp": job["stamp"]}
+    if job.get("quiet"):
+        return  # warmed ahead: nothing on screen is waiting for it
+    try:
+        app.swap(cfg())
+    except Exception:
+        oops()
 
 
 def insights_ready(did, pid=None, exam=""):
@@ -606,7 +721,12 @@ def insights_ready(did, pid=None, exam=""):
     c = cfg()
     key = f"{pid or ''}|{exam}|{c.get('exam_last') or ''}|{c.get('exam_since') or ''}"
     have = (_state.get("insights") or {}).get(did)
-    return bool(have and have.get("key") == key and time.time() - have["at"] < INSIGHTS_FRESH)
+    if not have or have.get("key") != key:
+        return False
+    if time.time() - have["at"] < INSIGHTS_FRESH:
+        return True
+    stamp = _stamp()  # 3.9.9: past its ten minutes, still at hand while nothing changed
+    return stamp is not None and have.get("stamp") == stamp
 
 
 def decks_ready():
@@ -637,6 +757,23 @@ MY_EXAM = "~exam"  # my own exam date, among a plan's events
 
 
 def _work_out(did, pid=None, exam=""):
+    """A deck's Insights, whole, now (the steps run to their end)."""
+    g = _work_steps(did, pid, exam)
+    try:
+        while True:
+            next(g)
+    except StopIteration as e:
+        return e.value or {}
+
+
+def _work_steps(did, pid=None, exam=""):
+    """Insights worked out a part at a time: a generator that pauses between
+    its parts (the header, the exam box, not sticking, the map, Reviews
+    ahead, the habits) and returns the view. 3.9.9 (the performance review:
+    seconds of the log on a big deck held Anki still): the board runs it a
+    step a turn of the screen (insights_soon); anything else runs it whole
+    (_work_out). Main thread throughout: the collection is never read from
+    another."""
     col = mw.col
     if not col or not col.decks.get(did, default=False):
         return {}
@@ -661,12 +798,12 @@ def _work_out(did, pid=None, exam=""):
 
     # the header: right on this deck's reviews, first answer of each card each day
     # 3.9.2: split by the cards I started in these two weeks, when the mix shifted (T.right_split)
-    young = col.db.list(f"SELECT cid FROM revlog WHERE ease > 0 AND cid IN ({deck}) GROUP BY cid HAVING min(id) >= ?",
-                        since(T.DAYS))
+    young = _first_since(col, deck, since(T.DAYS))
     out["right"] = T.right_days(col.db.all(
         f"SELECT cid, CAST((? - id / 1000) / 86400 AS INTEGER), ease FROM revlog "
         f"WHERE id >= ? AND type = 1 AND ease > 0 AND cid IN ({deck}) ORDER BY id", cutoff - 1, since(2 * T.DAYS)), young)
 
+    yield
     # the exam box: started cards Anki won't show me before the aim, under my target by then
     # (FSRS only). The deck's, plan or not: it aims at the next of my own exam date and
     # a plan's events within AIM_DAYS, else a week out. A plan's event counts its prep dates'
@@ -692,8 +829,7 @@ def _work_out(did, pid=None, exam=""):
         first_day, why = T.scope(exam, c.get("exam_last"), c.get("exam_since"), today)
         out["aim"].update(since=first_day or "", since_why=why, since_pick=str(c.get("exam_since") or ""), today=str(today))
         if first_day:
-            got = col.db.list(f"SELECT cid FROM revlog WHERE ease > 0 AND cid IN ({deck}) GROUP BY cid HAVING min(id) >= ?",
-                              _since_ms(first_day, cutoff, today))
+            got = _first_since(col, deck, _since_ms(first_day, cutoff, today))
             aimed = _in(got)
             out["aim"]["since_n"] = len(got)
     if _fsrs(col) and aimed and sday:
@@ -714,6 +850,7 @@ def _work_out(did, pid=None, exam=""):
             mem_of[cid] = (T.recall(ago + k, s_, mem.get("decay")), shown)
         out["hero"] = T.hero(mem_of, target)
 
+    yield
     # not sticking yet: this window's reviews, never right yet, or forgotten after being right
     reviewed, miss_last = set(), {}
     for cid, rid, ease in col.db.all(f"SELECT cid, id, ease FROM revlog WHERE id >= ? AND type IN (1, 2) AND ease > 0 "
@@ -721,8 +858,10 @@ def _work_out(did, pid=None, exam=""):
         reviewed.add(cid)
         if ease == 1:
             miss_last[cid] = max(miss_last.get(cid, 0), rid)
-    first_right = dict(col.db.all(f"SELECT cid, min(id) FROM revlog WHERE type = 1 AND ease > 1 AND cid IN ({_in(reviewed)}) "
-                                  f"GROUP BY cid")) if reviewed else {}
+    # 3.9.9: a card's first right review, read from the front of its own log and no further
+    first_right = {c: r for c, r in col.db.all(
+        f"SELECT c.id, (SELECT r.id FROM revlog r WHERE r.cid = c.id AND r.type = 1 AND r.ease > 1 ORDER BY r.id LIMIT 1) "
+        f"FROM cards c WHERE c.id IN ({_in(reviewed)})") if r is not None} if reviewed else {}
     stuck = reviewed - set(first_right)
     forgot = {c for c, m in miss_last.items() if c in first_right and first_right[c] < m}
     if p:
@@ -732,13 +871,14 @@ def _work_out(did, pid=None, exam=""):
     else:
         out["rows"] = _deck_rows(col, did, reviewed, stuck, forgot)
 
+    yield
     # 3.8.0, the topic map: what I know now, by topic
     try:
         out["map"], out["map_by"], out["_map_know"], out["map_ways"] = _map(col, did, deck, cutoff)
         out["_map_missed"] = _missed(col, deck, cutoff) if out["map"] else set()  # 3.9.5: the map's Study
         _map_week(out, did, today)
     except Exception:
-        traceback.print_exc()
+        oops()
 
     # behind on the plan (its Catch up; nothing while a catch-up runs)
     if p:
@@ -747,6 +887,7 @@ def _work_out(did, pid=None, exam=""):
                                            if str(u.get("opens") or "") < today)
         out["pid"] = p["id"]
 
+    yield
     # 3.9.2, Reviews ahead (Your week until now): the next six weeks in cards a day,
     # counted from my own log; a plan's dates in it when I follow one (ahead_flow)
     try:
@@ -754,8 +895,9 @@ def _work_out(did, pid=None, exam=""):
         out["ahead"] = ahead_flow.deck_view(col, did, deck, exam,
                                             plan=ahead_flow.plan_days(units, ld, today) if p else None)
     except Exception:
-        traceback.print_exc()
+        oops()
 
+    yield
     # Optimize FSRS: my newest cards against my target (put away for 30 days)
     hide = float((pf._pcfg().get("ins_fsrs_hide") or 0))
     if _fsrs(col) and time.time() - hide > T.HIDE_DAYS * 86400:
@@ -764,7 +906,7 @@ def _work_out(did, pid=None, exam=""):
                                     f"AND lastIvl BETWEEN 1 AND 3 AND cid IN ({deck})", since(28)) or (0, 0)
             out["fsrs"] = T.fsrs_gap(int(right or 0), int(n or 0), target)
         except Exception:
-            traceback.print_exc()
+            oops()
 
     # the Hard habit (3.8.0): Hard is a pass; put away for 30 days as Optimize is
     if time.time() - float(pf._pcfg().get("ins_hard_hide") or 0) > T.HIDE_DAYS * 86400:
@@ -773,7 +915,7 @@ def _work_out(did, pid=None, exam=""):
                                    f"AND cid IN ({deck})", since(28)) or (0, 0)
             out["hard"] = T.hard_habit(int(hard or 0), int(n or 0))
         except Exception:
-            traceback.print_exc()
+            oops()
 
     # the deck's leeches Anki suspended (from the plan card, 3.8.0); 3.9.2: the ones a miss from it, and
     # the ones Anki tagged and kept showing (Tag Only)
@@ -786,6 +928,15 @@ def _since_ms(day, cutoff, today):
     """A revlog id: the start of that Anki day."""
     back = (datetime.date.fromisoformat(str(today)) - datetime.date.fromisoformat(str(day))).days
     return (int(cutoff) - (back + 1) * 86400) * 1000
+
+
+def _first_since(col, deck, ms):
+    """The deck's cards whose first answer is at or after ms. 3.9.9: read from
+    the answers since then (the log's own order), each card checked for one
+    before; grouping the deck's whole log took most of a second on a big deck."""
+    return col.db.list(
+        f"SELECT DISTINCT r.cid FROM revlog r WHERE r.id >= ? AND r.ease > 0 AND +r.cid IN ({deck}) "
+        f"AND NOT EXISTS (SELECT 1 FROM revlog o WHERE o.cid = r.cid AND o.id < ? AND o.ease > 0)", ms, ms)
 
 
 def _deck_sql(col, did):
@@ -855,8 +1006,10 @@ def _know(col, deck, cutoff):
     rest = [c for c in live if c not in out]
     if rest:
         out.update({c: None for c in rest})
+        # 3.9.9: its last review, read from the end of its own log and no further
         pick = [int(rev) for _cid, rev in col.db.all(
-            f"SELECT cid, max(id) FROM revlog WHERE type = 1 AND ease > 0 AND cid IN ({_in(rest)}) GROUP BY cid")]
+            f"SELECT c.id, (SELECT r.id FROM revlog r WHERE r.cid = c.id AND r.type = 1 AND r.ease > 0 ORDER BY r.id DESC LIMIT 1) "
+            f"FROM cards c WHERE c.id IN ({_in(rest)})") if rev is not None]
         if pick:
             out.update({int(c): 1.0 if int(e) > 1 else 0.0
                         for c, e in col.db.all(f"SELECT cid, ease FROM revlog WHERE id IN ({_in(pick)})")})
@@ -946,8 +1099,8 @@ def _map(col, did, deck, cutoff):
     # worked out only when picked (its first answers are one more read of the deck's log)
     start = []
     if pick == T.START_WAY:
-        first = {int(c): (cutoff - 1 - int(t) // 1000) // 86400 for c, t in col.db.all(
-            f"SELECT cid, min(id) FROM revlog WHERE ease > 0 AND cid IN ({deck}) GROUP BY cid")}
+        from .stats.queries import first_answers
+        first = {c: (cutoff - 1 - t // 1000) // 86400 for c, t in first_answers(col.db, deck).items()}
         # named and opened by the map's own topics: its tag way that's on, else its best (3.9.2's audit:
         # plain tags are a way too; subdecks, a plan's tags and this one aren't tags of the deck's own)
         tag_ways = [w for w in ways if w["key"] == T.TAGS_WAY or not str(w["key"]).startswith("~")]
@@ -1099,7 +1252,7 @@ def deck_map(did):
         tiles = _map(col, did, deck, cutoff)[0]
         return tiles, (_missed(col, deck, cutoff) if tiles else set())
     except Exception:
-        traceback.print_exc()
+        oops()
         return [], set()
 
 
@@ -1162,7 +1315,7 @@ def _slow_before(col, did, k):
             f"SELECT id FROM cards WHERE id IN ({ids}) AND did IN ({tree}) AND queue = 2 AND due - ? >= ?",
             int(col.sched.today), int(k))]
     except Exception:
-        traceback.print_exc()
+        oops()
         return []
 
 
@@ -1231,7 +1384,7 @@ def fsrs(did, open_it=True):
             from aqt.deckoptions import display_options_for_deck_id
             display_options_for_deck_id(int(did))
         except Exception:
-            traceback.print_exc()
+            oops()
 
 
 def pick_deck(did):
@@ -1250,7 +1403,7 @@ def _habits_shut():
         from . import habits_flow
         habits_flow.shut()
     except Exception:
-        traceback.print_exc()
+        oops()
 
 
 def go_insights(did):
@@ -1263,6 +1416,9 @@ def go_insights(did):
     _habits_shut()  # 3.9.5: nor How you study
     if "insights" in (c.get("hidden_tabs") or []):
         c["hidden_tabs"] = [k for k in c["hidden_tabs"] if k != "insights"]
+    from . import calm
+    calm.release(c, ["insights"])
+    calm.seen(c, "insights")
     if mw.col and mw.col.decks.get(did, default=False):
         c["ins_deck"] = did
         if not any(d["did"] == did for d in you_decks()):

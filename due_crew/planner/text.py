@@ -112,7 +112,8 @@ def pick_note(n):
 
 def to_text(doc):
     """toText: the plan's tags, then its dates and events by day, then its notes for followers."""
-    evs = [f"{e.get('day')} | event | {e.get('name')}" for e in _events(doc)]
+    # 3.9.9: the exam's line says so, so it stays the exam through the text (builder.js toText)
+    evs = [f"{e.get('day')} | {'exam' if e.get('kind') == 'exam' else 'event'} | {e.get('name')}" for e in _events(doc)]
     dates = [P._date_line(u, doc) for u in sorted(P.units(doc), key=lambda u: str(u.get("opens") or ""))]
     return "\n".join([tag_line(t) for t in P.plan_tags(doc)] + sorted(evs + dates) + [B.remark_line(r) for r in _remarks(doc)])
 
@@ -277,7 +278,7 @@ def from_text(doc, tree, text, whole=False, start="", plan_name="", new_id=None)
                 have = {(g, o) for g, o in t.get("cards") or []}
                 t["cards"] = list(t.get("cards") or []) + [[g, o] for g, o in cs if (g, o) not in have]
             continue
-        if len(parts) >= 3 and _DAY.fullmatch(parts[0]) and re.fullmatch(r"event", parts[1], re.I):
+        if len(parts) >= 3 and _DAY.fullmatch(parts[0]) and re.fullmatch(r"event|exam", parts[1], re.I):
             full = " ".join(parts[2:])
             if not _real_day(parts[0]):
                 errors.append(f"Line {i + 1}: {parts[0]} isn't a day on the calendar.")
@@ -286,7 +287,8 @@ def from_text(doc, tree, text, whole=False, start="", plan_name="", new_id=None)
             if _u16(full) > 60:
                 warns.append(f"Line {i + 1}: the event's name is cut to 60 characters.")
             old = next((x for x in _events(doc) if str(x.get("name")).lower() == name.lower()), None)
-            evs.append({"id": old["id"] if old else uid8(), "day": parts[0], "name": name})
+            evs.append(dict({"id": old["id"] if old else uid8(), "day": parts[0], "name": name},
+                            **({"kind": "exam"} if parts[1].lower() == "exam" else {})))
             continue
         e = {"i": i, "opens": None, "due": None, "even": False, "name": "", "tags": [], "decks": [], "searches": [],
              "nids": [], "cids": [], "picks": picks or {"notes": [], "cards": [], "bad": []}, "keep_cards": False,

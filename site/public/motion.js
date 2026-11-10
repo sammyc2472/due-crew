@@ -1156,7 +1156,7 @@
       }, 10000);
       return;
     }
-    // 8: the day you pick on a plan's week: the outline glides there, its card slides in; round five
+    // 8: the day you pick on a plan's week: its hairline glides there, its card slides in; round five
     // (Sam: "animate in and out"): the first day picked unfolds its details, the same day again folds them away
     var cell = t.closest(".pwk .pc[onclick]");
     if (cell && M.ok()) {
@@ -1172,11 +1172,17 @@
         if (a) {
           var ring = document.createElement("i");
           ring.setAttribute("aria-hidden", "true");
-          ring.style.cssText = "position:absolute;pointer-events:none;display:block;border:2px solid var(--dc-accent,#2e7d32);border-radius:8px;box-sizing:border-box";
+          // 3.9.9: the opened day is filled, the accent ring is today's alone: what glides is the opened day's own
+          // hairline, and the fill comes up under it as it lands (an accent ring glided there and vanished: Sam)
+          ring.style.cssText = "position:absolute;pointer-events:none;display:block;border:1px solid var(--dc-faded,#aaaaa2);border-radius:8px;box-sizing:border-box";
           var pos = getComputedStyle(wk).position;
           if (pos === "static") wk.style.position = "relative";
           wk.appendChild(ring);
-          cell.style.borderColor = "transparent";
+          var today = cell.classList.contains("now");
+          if (!today) {
+            cell.style.borderColor = "transparent";
+            anim(cell, [{ backgroundColor: "transparent" }, { backgroundColor: getComputedStyle(cell).backgroundColor }], { duration: BASE });
+          }
           done(anim(ring, [{ left: (a.left - w.left) + "px", top: (a.top - w.top) + "px", width: a.width + "px", height: a.height + "px" },
                            { left: (b.left - w.left) + "px", top: (b.top - w.top) + "px", width: b.width + "px", height: b.height + "px" }],
                      { duration: BASE, fill: "forwards" }), function () {

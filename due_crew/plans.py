@@ -936,6 +936,75 @@ def week_view(doc, prog, today, start, skipped=(), ld=None, shut=()):
     return out
 
 
+LOAD_DAYS = 7     # the days the load view shows, today first
+LOAD_HEAVY = 1.5  # a day past my usual day's minutes by half is heavy
+
+
+def load_week(sets, reviews, today, pace, days=LOAD_DAYS, back=None):
+    """3.9.9, the load across plans: today and the six days after, each
+    with my reviews due and every plan's new cards, as minutes at my own
+    pace. sets: [{pid, plan, uid, name, day, ask, moved, cap}] on my own
+    days (ask: new to me on its day; moved: the days later it already runs
+    for me; cap: the day of the event it preps for, or ""). reviews: {iso
+    day: n}. pace: magic.pace_from's. None unless two plans have something
+    in it. {plans: [{pid, name}], days: [{day, dow, num, today, rev, parts:
+    [n a plan], new, min, heavy, share}], top: the longest day's minutes, hint:
+    {day, new, plans, rev, move: {pid, uid, name, to, n} or None} for the
+    heaviest heavy day, back: the set `back` (pid, uid) names while it's
+    still moved}. A day is heavy only once my usual day is known. The move
+    offered is the day's smallest set that isn't open yet, to the nearest
+    later day here, before its event, that stays under heavy with it. Numbers and names; the board escapes."""
+    first = datetime.date.fromisoformat(str(today))
+    span = [(first + datetime.timedelta(days=i)).isoformat() for i in range(int(days))]
+    inside = [x for x in sets if x.get("day") in span and int(x.get("ask") or 0) > 0]
+    order = []
+    for x in inside:
+        if x["pid"] not in [o["pid"] for o in order]:
+            order.append({"pid": x["pid"], "name": str(x.get("plan") or "Plan")})
+    held = next((x for x in sets if back and (x["pid"], x["uid"]) == tuple(back) and int(x.get("moved") or 0)), None)
+    if len(order) < 2 and not held:
+        return None
+    new_s, rev_s = float(pace.get("new_s") or 30), float(pace.get("rev_s") or 10)
+    line = LOAD_HEAVY * float(pace.get("day_min") or 0) if pace.get("known") else None
+    mins = lambda new, rev: (new * new_s + rev * rev_s) / 60
+    out = []
+    for d in span:
+        parts = [sum(int(x["ask"]) for x in inside if x["day"] == d and x["pid"] == o["pid"]) for o in order]
+        rev = int((reviews or {}).get(d) or 0)
+        m = mins(sum(parts), rev)
+        dd = datetime.date.fromisoformat(d)
+        out.append({"day": d, "dow": f"{dd:%a}", "num": dd.day, "today": d == today, "rev": rev, "parts": parts,
+                    "new": sum(parts), "min": round(m), "heavy": bool(line and m > line and sum(parts)),
+                    # each part's share of the day's time: reviews first, then a plan each
+                    "share": [x / m if m else 0 for x in [mins(0, rev)] + [mins(n, 0) for n in parts]]})
+    hint = None
+    heavy = sorted((x for x in out if x["heavy"]), key=lambda x: -x["min"])
+    if heavy:
+        hd = heavy[0]
+        move = None
+        can = sorted((x for x in inside if x["day"] == hd["day"] and x["day"] > today), key=lambda x: int(x["ask"]))
+        by_day = {x["day"]: x for x in out}
+        for x in can:
+            add = mins(int(x["ask"]), 0)
+            cap = str(x.get("cap") or "9999")
+            to = [by_day[d] for d in span if hd["day"] < d < cap and mins(by_day[d]["new"], by_day[d]["rev"]) + add <= line]
+            if to:
+                gap = (datetime.date.fromisoformat(to[0]["day"]) - datetime.date.fromisoformat(hd["day"])).days
+                move = {"pid": x["pid"], "uid": x["uid"], "name": str(x.get("name") or "this set"), "to": to[0]["day"],
+                        "n": int(x.get("moved") or 0) + gap}
+                break
+        hint = {"day": hd["day"], "new": hd["new"], "plans": sum(1 for n in hd["parts"] if n), "rev": hd["rev"], "move": move}
+    return {"plans": order, "days": out, "top": max([x["min"] for x in out] + [1]), "hint": hint,
+            "known": bool(pace.get("known")),
+            "back": {"pid": held["pid"], "uid": held["uid"], "name": str(held.get("name") or "It"), "day": held["day"]} if held else None}
+
+
+def load_time(minutes):
+    """A day's minutes as the load view says them: "45 min", "1 h 10"."""
+    m = max(0, int(round(minutes)))
+    return f"{m} min" if m < 60 else f"{m // 60} h {m % 60:02d}"
+
+
 def waiting_new(doc, prog, today):
     """G5: new cards of dates opened before today that I haven't seen yet."""
     n = 0
@@ -1897,6 +1966,59 @@ def exam_way(exam, today, ends=()):
     if any(str(today) <= str(x) <= str(exam) for x in ends or () if _iso(x)):
         return None
     return {"day": e.isoformat(), "days": (e - t).days}
+
+
+EXAM_ASKED_MAX = 40  # 3.9.9: the plans whose exam I've been asked about, kept with my settings
+
+
+def clean_exam_asked(v):
+    """{plan id: the exam day I was asked about}, the newest EXAM_ASKED_MAX."""
+    if not isinstance(v, dict):
+        return {}
+    out = {str(k)[:40]: str(d) for k, d in v.items() if isinstance(k, str) and k and _iso(d)}
+    return dict(list(out.items())[-EXAM_ASKED_MAX:])
+
+
+def clean_exam_from(v):
+    """{pid, day}: the plan my exam came from and the day it was then, or None."""
+    if isinstance(v, dict) and isinstance(v.get("pid"), str) and v["pid"] and _iso(v.get("day")):
+        return {"pid": v["pid"][:40], "day": str(v["day"])}
+    return None
+
+
+def exam_marks(doc, today):
+    """A plan's events marked the exam (kind "exam") after today, soonest first."""
+    return sorted((e for e in (doc or {}).get("events") or [] if isinstance(e, dict) and e.get("kind") == "exam"
+                   and _iso(e.get("day")) and str(e["day"]) > str(today)), key=lambda e: str(e["day"]))
+
+
+def exam_offer(plans, my_exam, today, asked=None, came=None):
+    """3.9.9 (Sam's pick B, "Exams and Limits"): the line a follower's plan
+    card asks, once, about a plan's exam: {pid, name, day, ename, was}, or
+    None. Each plan's soonest exam ahead, soonest first. My own exam ahead
+    wins (nothing is asked) unless it came from that plan and the plan's
+    exam has moved since: then `was` is my day, and it asks again. A plan's
+    exam asked about at its day isn't asked again (Not now, or made mine);
+    moved, it is."""
+    asked, came = clean_exam_asked(asked), clean_exam_from(came)
+    mine = str(my_exam or "") if _iso(my_exam) and str(my_exam) >= str(today) else ""
+    found = []
+    for p in plans or []:
+        marks = exam_marks((p or {}).get("plan_doc") or (p or {}).get("doc"), today)  # the plan's own day, never my shift
+        if marks and p.get("id"):
+            found.append((str(marks[0]["day"]), p, marks[0]))
+    for day, p, e in sorted(found, key=lambda x: x[0]):
+        pid = str(p["id"])
+        if day == mine:
+            return None  # it's my exam already
+        moved = bool(came and came["pid"] == pid and mine and mine == came["day"])
+        if mine and not moved:
+            return None  # my own exam ahead wins
+        if asked.get(pid) == day:
+            continue
+        return {"pid": pid, "name": str(p.get("name") or p.get("title") or "Your plan"), "day": day,
+                "ename": str(e.get("name") or "the exam"), "was": mine if moved else ""}
+    return None
 
 
 def link_code(text):

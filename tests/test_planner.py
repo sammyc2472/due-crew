@@ -925,10 +925,10 @@ def test_start_flow():
     from due_crew.planner import flow
     store = world({"sam": "Sammy", "dre": "Dre"})
     store.admins.add("sam")
-    sam, dre = new_client(store, "sam"), new_client(store, "dre")
+    sam = new_client(store, "sam")
     col = collection()
-    shown, tips = [], []
-    saved = (flow.enabled, flow.client, flow._bg, flow.show_start, flow.tooltip, flow.mw.col, flow.plan_flow._signed_in,
+    tips = []
+    saved = (flow.enabled, flow.client, flow._bg, flow.tooltip, flow.mw.col, flow.plan_flow._signed_in,
              flow.remote.save, flow.open_plans)
     try:
         flow.mw.col = col
@@ -936,14 +936,8 @@ def test_start_flow():
               flow.top_decks(col) == [(1, "Big Step 1", 15), (3, "Mine", 0)], flow.top_decks(col))
         flow.enabled = lambda: True
         flow._bg = lambda job, done: done(job())
-        flow.show_start = lambda: shown.append(True)
         flow.tooltip = lambda text, **k: tips.append(text)
         flow.plan_flow._signed_in = lambda: True
-        flow.client = lambda: dre
-        n = len(store.log)
-        flow.open_start()
-        check("calendar glue: anyone signed in gets it (3.9.3), nothing asked of the server to open it",
-              shown == [True] and not tips and len(store.log) == n, (shown, tips))
         flow.client = lambda: sam
         ops = flow.StartOps()
         owner = types.SimpleNamespace(_alive=True)
@@ -966,7 +960,7 @@ def test_start_flow():
         made = got[0]
         check("calendar glue: made but its dates lost on the way says so, with the plan it made",
               made[0] == "made" and made[1] in store.plans and "connection" in made[2], got)
-        flow.remote.save = saved[7]
+        flow.remote.save = saved[6]
         got = []
         ops.make(owner, "MS2 Block 3", doc, got.append, pid=made[1])
         check("calendar glue: Make again puts the dates on that plan, never a second one",
@@ -982,7 +976,7 @@ def test_start_flow():
         ops.make(owner, "MS2 Block 4", doc, got.append)
         check("calendar glue: a window closed meanwhile is told nothing", got == [])
     finally:
-        (flow.enabled, flow.client, flow._bg, flow.show_start, flow.tooltip, flow.mw.col, flow.plan_flow._signed_in,
+        (flow.enabled, flow.client, flow._bg, flow.tooltip, flow.mw.col, flow.plan_flow._signed_in,
          flow.remote.save, flow.open_plans) = saved
         flow._open.clear()
 
@@ -995,17 +989,17 @@ def test_rules_of_the_road():
           "attach_alive(self)" in web and "colors(self.cfg)" in web and "set_bridge_command(self._on_cmd" in web
           and "QLabel" not in web and "setStyleSheet" not in web)
     check("road: the windows, each wearing the board's look and saying what it is",
-          sorted(windows) == ["date_dialogs.py", "date_panel.py", "mcp_dialog.py", "new_plan.py", "picker.py",
-                              "send.py", "start_window.py", "text_tab.py", "window.py"]
+          sorted(windows) == ["date_dialogs.py", "mcp_dialog.py", "text_tab.py"]
           and all(len(re.findall(r"\(QDialog[,)]", t)) == t.count("attach_alive(self)") == len(re.findall(r"\bheading\(self", t))
                   for t in windows.values()), sorted(windows))
     tabs = {f: t for f, t in src.items() if "(QWidget)" in t}  # round five: Your plans' tabs and panels
-    check("road: the tabs and panels (Plan with its date and deck panels, Insights, Settings, Mine, the text, History and Posts, "
-          "a date's notes), and no Pip in them",
-          sorted(tabs) == ["date_panel.py", "day_notes.py", "deck_panel.py", "history_tab.py", "insights_tab.py", "mine_tab.py",
-                           "plan_tab.py", "settings_tab.py", "text_tab.py"]
+    check("road: 3.9.9, the Qt plan window's tabs and panels went with it: the text is the one Qt panel left, and no Pip in it",
+          sorted(tabs) == ["text_tab.py"]
+          and not [f for f in ("window.py", "plan_tab.py", "date_panel.py", "deck_panel.py", "shape.py", "send.py", "insights_tab.py",
+                               "settings_tab.py", "mine_tab.py", "new_plan.py", "history_tab.py", "day_notes.py") if f in src]
+          and "plan_window" not in src["flow.py"].replace('"plan_window": "qt" is read no more', "")
           and not [f for f, t in dict(windows, **tabs).items() if re.search(r"\bsev\b|pip_note", t)], sorted(tabs))
-    windows_tabs = dict(windows, **tabs, **{"widgets.py": src["widgets.py"]})
+    windows_tabs = dict(windows, **tabs)
     check("road: no window sets its own type or margins in a style sheet, nor reads Anki's palette",
           not [f for f, t in windows_tabs.items() if "setStyleSheet" in t or "palette(" in t or "font-size" in t])
     labels = {f: t.count("QLabel(") for f, t in windows_tabs.items()}
@@ -1018,15 +1012,14 @@ def test_rules_of_the_road():
     check("road: the pure parts and the requests import no aqt",
           not [f for f in pure if re.search(r"^\s*(from aqt|import aqt)", src[f], re.M)])
     calls = set()
-    for f in ("flow.py", "window.py", "plan_tab.py", "date_panel.py", "deck_panel.py", "shape.py", "send.py",
-              "mine_tab.py", "new_plan.py", "text_tab.py", "history_tab.py", "settings_tab.py", "day_notes.py",
-              "picker.py", "start_window.py", "mcp_host.py", "mcp_dialog.py"):
+    for f in ("flow.py", "text_tab.py", "date_dialogs.py", "mcp_host.py", "mcp_dialog.py",
+              "web.py", "webface.py", "webtabs.py", "webnew.py", "webmodel.py"):
         for node in ast.walk(ast.parse(src[f])):
             if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "remote":
                 calls.add(node.attr)
     check("road: requests only on a click, through remote (who I am, my plans, one plan, a save, its history and posts)",
           calls <= {"is_admin", "my_plans", "load", "save", "undo", "create", "log", "posts", "post", "unpost", "save_meta",
-                    "set_listed", "copy", "delete", "crew", "add_editor", "remove_editor", "offer", "notes", "add_note",
+                    "set_listed", "copy", "delete", "crew", "progress", "add_editor", "remove_editor", "offer", "notes", "add_note",
                     "remove_note"}
           and "_call" not in src["flow.py"], calls)
     routes = set(re.findall(r'_call\((?:client, )?"(GET|PUT|POST|PATCH|DELETE)", f?"([^"]+)"', src["remote.py"]))
@@ -1035,7 +1028,7 @@ def test_rules_of_the_road():
           routes == {("GET", "/plans/{pid}"), ("PUT", "/plans/{pid}"), ("POST", "/plans/{pid}/undo"),
                      ("POST", "/plans"), ("GET", "/plans/{pid}/log"), ("GET", "/plans/{pid}/posts"), ("POST", "/plans/{pid}/posts"),
                      ("DELETE", "/plans/{pid}/posts/{int(post_id)}"), ("PUT", "/plans/{pid}/listed"),
-                     ("POST", "/plans/{pid}/copy"), ("DELETE", "/plans/{pid}"), ("GET", "/friends"), ("POST", "/plans/{pid}/editors"),
+                     ("POST", "/plans/{pid}/copy"), ("DELETE", "/plans/{pid}"), ("GET", "/friends"), ("GET", "/plans/{pid}/progress"), ("POST", "/plans/{pid}/editors"),
                      ("DELETE", "/plans/{pid}/editors/{uid}"), ("POST", "/plans/{pid}/owner"), ("GET", "/plans/{pid}/notes"),
                      ("POST", "/plans/{pid}/notes"), ("DELETE", "/plans/{pid}/notes/{int(note_id)}")}
           and all(f'api("{m}", `/plans/${{{v}}}{x}' in builder
@@ -1046,30 +1039,15 @@ def test_rules_of_the_road():
           and 'api("GET", "/friends")' in builder, routes)
     check("road: Claude isn't connected: the stand-in sends nothing, and nothing reads a card's text for it",
           not re.search(r"^\s*(?:from|import)\s+(?:requests|urllib|http|socket|anthropic)\b", src["claude.py"] + src["reading.py"], re.M)
-          and not re.search(r"\bflds\b|\.note\(|\bnote\[", src["claude.py"] + src["reading.py"] + src["start_window.py"]))
+          and not re.search(r"\bflds\b|\.note\(|\bnote\[", src["claude.py"] + src["reading.py"]))
     ui_files = {f: t for f, t in windows_tabs.items() if f not in ("widgets.py",)}
     hallmarks = [(f, m) for f, t in ui_files.items()
                  for m in re.findall(r'(?:link|tool|plain|QPushButton|menu_button|addAction)\(\s*f?"(\+ [^"]*|[^"]*[◆▾↗][^"]*)"', t)]
     hallmarks = [(f, m) for f, m in hallmarks if not m.startswith("{'▾' if")]  # a week's fold, as a tree's
     check("road: no AI look in the plan windows (Sam, after the site mock): no '+ A …' links, no ◆, no ▾ or ↗ in words, "
           "no tinted banners or accent stripes, no capitals for a change's kind",
-          not hallmarks and not re.search(r'frame\("(?:strip|warm|today|bar|go-bar)"', src["plan_tab.py"] + src["deck_panel.py"]
-                                           + src["settings_tab.py"] + src["shape.py"])
-          and ".upper()" not in src["send.py"], hallmarks)
-    check("road: one way to each thing (Sam, after the site mock): no Study in the plan window (the board studies), no deck tab "
-          "(Add from the deck puts the deck in the date's place), no Followers tab, no −1/+1 day (the date's field, Alt+← →, "
-          "Month's drag), the plan's dates and pace in Settings (no Change… window)",
-          not re.search(r'"Study (them|these|for it)"', src["date_panel.py"]) and "QTabWidget" not in src["plan_tab.py"]
-          and "followers_tab.py" not in src and '"−1 day"' not in src["date_panel.py"] and "ShapeDialog" not in src["shape.py"]
-          and "Shape(win, form)" in src["settings_tab.py"] and '"Settings"' in src["window.py"] and '"Sharing"' not in src["window.py"])
-    order = re.findall(r'self\._add_tab\("(\w+)", "([^"]+)"', src["window.py"])
-    check("road: Plan · Insights · Settings, whoever I am (Sam, before the click-test); Insights asks the server nothing",
-          [x[1] for x in order] == ["Plan", "Insights", "Settings", "Settings"]
-          and not re.search(r"\bremote\b|_call\(", src["insights_tab.py"] + src["insights.py"]), order)
-    keys_ = set(re.findall(r'on\("([^"]+)"', src["plan_tab.py"]))
-    check("road: the Plan tab's keys (each in its button's tip)",
-          {"Ctrl+N", "Ctrl+E", "Ctrl+F", "Ctrl+T", "Ctrl+1", "Ctrl+2", "Ctrl+D", "Ctrl+Z", "Ctrl+Return", "Up", "Down",
-           "Alt+Left", "Alt+Right", "Return", "F2", "Delete"} <= keys_, sorted(keys_))
+          not hallmarks, hallmarks)
+    check("road: Insights asks the server nothing", not re.search(r"\bremote\b|_call\(", src["insights.py"]))
     words = " ".join(src.values()).lower()
     banned = [w for w in ("anking", "uworld", "amboss", "boards and beyond", "sketchy", "pathoma", "first aid", "bootcamp")
               if w in words]
@@ -1686,8 +1664,11 @@ def test_settings_remote_v393():
     check("settings: Copy for next year: every date 52 weeks on, named for next year",
           copied[0] == "saved" and E.first_day(new["doc"]) == E._later(first, 364) and named[1]["name"] == "MS2 Block 2b (next year)"
           and [u["opens"] for u in new["doc"]["units"]] == [E._later(u["opens"], 364) for u in raw["doc"]["units"]], new["doc"]["units"])
-    check("followers' progress isn't read in Anki (round five, Sam's call: their squad is where followers meet)",
-          not hasattr(R, "progress"))
+    # round five, Sam's call: followers' progress wasn't read in Anki (their squad is where followers meet).
+    # 3.9.9, Sam's yes to the plans review's mock 5: an author's Insights reads the squad's counts by set,
+    # never names, never one follower's, on the route the site's builder has used since 3.7
+    check("followers' progress in Anki is the squad's counts by set for an author's Insights, nothing more",
+          hasattr(R, "progress") and "class_lines" in dir(E))
     check("settings: only its owner takes it down; then it's gone", not R.delete(dre, pid) and R.delete(sam, pid) and pid not in store.plans)
 
 
@@ -2652,6 +2633,272 @@ def test_fill_apart_and_the_next_free_day():
     check("next free day: after the last day (an even date's due date), a study day; with no dates, the start",
           B.next_free_day(doc, [1, 1, 1, 1, 1, 0, 0], "2026-11-02") == "2026-11-10"
           and B.next_free_day({"units": []}, [1, 1, 1, 1, 1, 0, 0], "2026-11-07") == "2026-11-09")
+
+
+
+# ---- 3.9.9: a save refused at a ceiling says which, with the numbers; Review and send says it first ----
+
+CEILING_CONSTS = {"sets": "UNITS_MAX", "events": "EVENTS_MAX", "reviews": "REVIEWS_MAX", "tags": "TAGS_MAX",
+                  "cards": "CARDS_MAX", "ids": "IDS_MAX", "size": "DOC_MAX", "total": "PLAN_BYTES_MAX"}
+# what Sam signed off on (the mock), word for word
+SAM_WORDS = {
+    "sets": "A plan holds up to 200 sets. This makes 214.",
+    "events": "A plan holds up to 200 events. This makes 203.",
+    "reviews": "A plan holds up to 60 review days. This makes 61.",
+    "tags": "A plan holds up to 100 tags. This makes 104.",
+    "cards": "A plan holds up to 50,000 picked cards and IDs. This makes 51,320.",
+    "size": "A plan can be up to 1.5 MB. This makes 1.7 MB. Pasted IDs take the most room.",
+    "total": "Your plans can be up to 24 MB together. They're at 23.6 MB. Delete one, or make this one smaller.",
+    "slow_down": "500 saves a day. Your changes wait here and send tomorrow.",
+}
+MB = 1048576
+CEILING_ANSWERS = [  # as the Worker answers (plans.ts over, sizeOver, roomFor), then what an older Worker or a bad one sends
+    {"error": "bad_plan", "limit": "sets", "have": 214, "max": 200},
+    {"error": "bad_plan", "limit": "events", "have": 203, "max": 200},
+    {"error": "bad_plan", "limit": "reviews", "have": 61, "max": 60},
+    {"error": "bad_plan", "limit": "tags", "have": 104, "max": 100},
+    {"error": "bad_plan", "limit": "cards", "have": 51320, "max": 50000},
+    {"error": "too_big", "limit": "size", "have": 1782579, "max": 1536 * 1024},
+    {"error": "plans_full", "limit": "total", "have": 24746394, "max": 24 * MB},
+    {"error": "bad_plan", "limit": "size", "have": 1536 * 1024 + 1, "max": 1536 * 1024},  # a byte past: 1.6, never "1.5 of 1.5"
+    {"error": "plans_full", "limit": "total", "have": 24 * MB - 1, "max": 24 * MB},  # a byte under: 23.9, never "24 of 24"
+    {"error": "bad_plan", "limit": "ids", "have": 50001, "max": 50000},  # nobody's to change by hand: the old line
+    {"error": "bad_plan"}, {"error": "bad_plan", "limit": "sets"}, {"error": "bad_plan", "limit": "sets", "have": "214", "max": 200},
+    {"error": "bad_plan", "limit": "sets", "have": True, "max": 200}, {"error": "bad_plan", "limit": "sets", "have": -1, "max": 200},
+    {"error": "bad_plan", "limit": "toString", "have": 1, "max": 2}, None, [],
+]
+
+
+def _const(src, name):
+    m = re.search(rf"^(?:export )?const {name} = ([\d_ *]+);", src, re.M)
+    if not m:
+        return None
+    n = 1
+    for x in m.group(1).replace("_", "").split("*"):
+        n *= int(x)
+    return n
+
+
+def _ceiling_doc(sets=3, events=0, reviews=0, tags=0, cards=0, name="Set"):
+    """A plan as a save sends it: its sets each with its lists, and as many events, review days, plan tags and picked cards."""
+    units = [{"id": f"u{i}", "name": f"{name} {i}", "opens": f"2026-{10 + i // 300:02d}-{1 + i % 28:02d}", "tags": [], "decks": [], "cards": []}
+             for i in range(sets)]
+    doc = {"deck": "Big Step 1", "units": units}
+    if events:
+        doc["events"] = [{"id": f"e{i}", "day": "2026-12-01", "name": f"Quiz {i}"} for i in range(events)]
+    if reviews:
+        doc["reviews"] = [{"day": "2026-12-02", "from": "u0", "to": "u1"} for _ in range(reviews)]
+    if tags:
+        doc["tagroot"], doc["tags"] = "Step_1", [{"id": f"t{i}", "name": f"SLG {i}", "notes": [f"tn{i}"]} for i in range(tags)]
+    left = cards - tags
+    for i, u in enumerate(units):  # single cards first, a few twice (counted once), then note IDs
+        if left <= 0:
+            break
+        n = min(left, 20000)
+        u["cards"] = [[f"g{i}x{j}", j % 3] for j in range(n)] + [[f"g{i}x0", 0]]
+        left -= n
+    return doc
+
+
+def test_save_ceilings_twins_v399():
+    """3.9.9: the ceilings are kept in one place a side, build.CEILINGS and
+    Ceilings.MAX in builder.js, each the Worker's (plans.ts, read from the file),
+    as the fake's; a refusal's words (remote.LIMIT_WORDS) are Sam's, word for
+    word, and Ceilings.said's; a plan's counts and Review and send's lines are
+    the same on both sides, run in node."""
+    import shutil
+    import subprocess
+    from due_crew.planner import build as B
+    ts = open(os.path.join(REPO, "worker", "src", "plans.ts")).read()
+    util = open(os.path.join(REPO, "worker", "src", "util.ts")).read()
+    worker = {k: _const(ts, v) for k, v in CEILING_CONSTS.items()}
+    check("ceilings: build.CEILINGS is plans.ts's, every one", B.CEILINGS == worker, (B.CEILINGS, worker))
+    check("ceilings: the fake's are plans.ts's too, and what the API reads of a body is util.ts's",
+          fakes.FakeWorker.PLAN_CEILINGS == worker and fakes.FakeWorker.BODY_MAX == _const(util, "ANY_BODY_MAX") == _const(ts, "PLAN_BODY_MAX"),
+          fakes.FakeWorker.PLAN_CEILINGS)
+    saves = set(re.findall(r"planput:\$\{s\.uid\}`, (\d+), 86400", ts))
+    check("ceilings: the day's saves are plans.ts's planput, every save's", saves == {str(B.SAVES_A_DAY)}
+          and fakes.FakeWorker.PLAN_SAVES_A_DAY == B.SAVES_A_DAY, saves)
+    check("ceilings: the Worker names each ceiling as the words do", all(f'over("{k}"' in ts for k in ("sets", "events", "reviews", "tags", "cards", "ids", "size"))
+          and 'limit: "total"' in ts and 'limit: "size", have, max: DOC_MAX' in ts, "")
+    check("ceilings: the one table on each side (edits' and build's ceilings read it)",
+          "UNITS_MAX = B.CEILINGS[\"sets\"]" in open(os.path.join(REPO, "due_crew", "planner", "edits.py")).read()
+          and "UNITS_MAX = CEILINGS[\"sets\"]" in open(os.path.join(REPO, "due_crew", "planner", "build.py")).read(), "")
+    said = [R.limit_words(a) for a in CEILING_ANSWERS]
+    check("ceilings: each refusal in Sam's words, the numbers the answer's", said[:7] == [SAM_WORDS[k] for k in
+          ("sets", "events", "reviews", "tags", "cards", "size", "total")] and R.SLOW_WAITS == SAM_WORDS["slow_down"], said[:7])
+    check("ceilings: MB never reads as its ceiling when it isn't (a byte past is 1.6, a byte under 23.9)",
+          "This makes 1.6 MB." in said[7] and "They're at 23.9 MB." in said[8] and "up to 24 MB" in said[8], said[7:9])
+    check("ceilings: an answer without a limit (an older Worker), with ids, or with numbers that aren't, keeps the old line",
+          said[9:] == [None] * len(said[9:]) and R.said({"error": "bad_plan"}) == R.SAVE_WORDS["bad_plan"]
+          and R.said({"error": "bad_plan", "limit": "ids", "have": 50001, "max": 50000}) == R.SAVE_WORDS["bad_plan"]
+          and R.said({"error": "too_big"}) == R.SAVE_WORDS["too_big"] and R.said({"error": "plans_full"}) == R.SAVE_WORDS["plans_full"], said[9:])
+    check("ceilings: the day's saves say the changes wait only where they do (a send's); at once, as before",
+          R.said({"error": "slow_down"}, waits=True) == SAM_WORDS["slow_down"]
+          and R.said({"error": "slow_down"}) == "That's a lot of saves today. Try again tomorrow."
+          and "remote.save(cl, pid, version, doc, summary, post, waits=True)" in open(os.path.join(REPO, "due_crew", "planner", "flow.py")).read(), "")
+
+    docs = [_ceiling_doc(185, events=190, reviews=55, tags=92, cards=47_900),
+            _ceiling_doc(180, events=180, reviews=54, tags=90, cards=45_000),  # at 90%: no line
+            _ceiling_doc(181, events=181, reviews=55, tags=91, cards=45_001),  # past it: a line each
+            _ceiling_doc(214), _ceiling_doc(3), {"deck": "x"}, {}]
+    big = _ceiling_doc(150, name="Café ☕ 🫀")  # a name in UTF-16 counts as JSON.stringify counts it
+    for u in big["units"]:
+        u["tags"] = [f"Big::{'x' * 180}::{u['id']}_{j}" for j in range(50)]
+    docs.append(big)
+    dup = _ceiling_doc(2)
+    dup["units"][0].update(nids=[1, 1, 2], cids=[3], notes=["a", "a"], cards=[["g", 0], ["g", 0], ["g", 1]])
+    dup["tagroot"], dup["tags"] = "R", [{"id": "t", "name": "T", "notes": ["n", "n"], "cards": [["c", 0], ["c", 0]]}]
+    docs.append(dup)
+    lines = [R.near(d) for d in docs]
+    check("ceilings: Review and send's lines past 90% of each, none at it or under",
+          lines[0] == ["Sets: 185 of 200.", "Events: 190 of 200.", "Review days: 55 of 60.", "Tags: 92 of 100.",
+                       "Picked cards and IDs: 47,900 of 50,000."]
+          and lines[1] == [] and len(lines[2]) == 5 and lines[3] == ["Sets: 214 of 200."] and lines[4] == lines[5] == lines[6] == [], lines)
+    check("ceilings: size in MB, under the ceiling rounded down", lines[7] == ["Size: 1.4 of 1.5 MB."]
+          and 0.9 * 1536 * 1024 < B.ceiling_counts(big)["size"] < 1536 * 1024, (lines[7], B.ceiling_counts(big)["size"]))
+    check("ceilings: one twice counts once, as the Worker keeps it", B.ceiling_counts(dup)["cards"] == 2 + 1 + 2 + 1 + 1 + 1,
+          B.ceiling_counts(dup))
+
+    node = shutil.which("node")
+    if not node:
+        print("SKIP ceilings in node: no node")
+        return
+    mbs = [[n, c] for c in (1536 * 1024, 24 * MB) for n in (0, 1, c - 1, c, c + 1, 1415578, 1782579, 24746393, 24746394, 26 * MB)]
+    prog = _builder_js() + f"""
+const answers = {json.dumps(CEILING_ANSWERS)}, docs = {json.dumps(docs)}, mbs = {json.dumps(mbs)};
+console.log(JSON.stringify({{ MAX: Ceilings.MAX, SAVES: Ceilings.SAVES_A_DAY, WORDS: Ceilings.WORDS, NEAR: Ceilings.NEAR, SLOW: Ceilings.SLOW,
+  said: answers.map(Ceilings.said), counts: docs.map(Ceilings.counts), near: docs.map(Ceilings.near), mb: mbs.map(([n, c]) => Ceilings.mb(n, c)),
+  past: [Ceilings.past(docs[3], ["sets"]), Ceilings.past(docs[0], ["sets", "cards"])] }}));
+"""
+    got = subprocess.run([node, "-"], input=prog, capture_output=True, text=True, timeout=60)  # the docs are past argv's room
+    if got.returncode:
+        check("ceilings: builder.js's Ceilings runs in node", False, got.stderr[-800:])
+        return
+    js = json.loads(got.stdout)
+    check("ceilings: builder.js's table is the add-on's (and so plans.ts's), the day's saves too",
+          js["MAX"] == B.CEILINGS and js["SAVES"] == B.SAVES_A_DAY, js["MAX"])
+    check("ceilings: the site's words are the add-on's, word for word", js["WORDS"] == R.LIMIT_WORDS and js["NEAR"] == R.NEAR_WORDS
+          and js["SLOW"] == R.SLOW_WAITS, (js["WORDS"], js["SLOW"]))
+    check("ceilings: the same answer says the same on both sides (Ceilings.said, remote.limit_words)", js["said"] == said, (js["said"], said))
+    check("ceilings: a plan counts the same on both sides (Ceilings.counts, build.ceiling_counts), size as JSON.stringify's length",
+          js["counts"] == [B.ceiling_counts(d) for d in docs], (js["counts"][-2:], [B.ceiling_counts(d) for d in docs[-2:]]))
+    check("ceilings: Review and send's lines the same (Ceilings.near, remote.near)", js["near"] == lines, (js["near"], lines))
+    check("ceilings: MB the same, to the byte either side of a ceiling", js["mb"] == [R.mb(n, c) for n, c in mbs], (js["mb"], [R.mb(n, c) for n, c in mbs]))
+    check("ceilings: the builder's own check before a save says a refusal's words, with its count",
+          js["past"] == [SAM_WORDS["sets"], None], js["past"])
+
+
+def test_the_fake_says_which_ceiling_v399():
+    """3.9.9: the fake restates the Worker's answers (worker/test/planlimits.test.ts):
+    bad_plan with limit, have and max at each count ceiling and the doc's size;
+    too_big as the size when a save's body is past what the API reads;
+    plans_full with what the account holds; the day's saves; a shape that's
+    wrong plain bad_plan. remote.save says each in its words."""
+    store = world({"dre": "Dre"})
+    cl = new_client(store, "dre")
+    pid, _code = store.add_plan("dre", "Step 1", "Step 1", [])
+
+    def put(doc):
+        status, data = cl._call("PUT", f"/plans/{pid}", {"version": store.plans[pid]["version"], "doc": doc})
+        return status, {k: v for k, v in data.items() if k in ("error", "limit", "have", "max")}
+
+    unit = lambda i, **x: dict({"id": f"u{i}", "name": f"Set {i}", "opens": "2026-10-05", "tags": [], "decks": [], "cards": []}, **x)
+    got = {
+        "sets": put({"deck": "Step 1", "units": [unit(i) for i in range(214)]}),
+        "events": put({"deck": "Step 1", "units": [unit(0)], "events": [{"id": f"e{i}", "day": "2026-10-06", "name": f"Q {i}"} for i in range(203)]}),
+        "reviews": put({"deck": "Step 1", "units": [unit(0), unit(1)], "reviews": [{"day": "2026-10-07", "from": "u0", "to": "u1"}] * 61}),
+        "tags": put({"deck": "Step 1", "units": [unit(0)], "tagroot": "Step_1", "tags": [{"id": f"t{i}", "name": f"SLG {i}", "notes": [f"n{i}"]} for i in range(104)]}),
+        "cards": put({"deck": "Step 1", "units": [unit(0, cards=[[f"g{i}", 0] for i in range(40_000)] + [["g1", 0], ["g2", 0]]),
+                                                    unit(1, nids=list(range(1, 5001))), unit(2, notes=[f"n{i}" for i in range(5000)], cids=[7, 7, 8])],
+                      "tagroot": "Step_1", "tags": [{"id": "t1", "name": "SLG 12", "notes": ["a", "b", "a"], "cards": [["c", 1], ["c", 1], ["c", 2]]}]}),
+        "ids": put({"deck": "Step 1", "units": [unit(0, ids=[f"a{i}" for i in range(30_000)]), unit(1, ids=[f"b{i}" for i in range(20_001)])]}),
+    }
+    want = {"sets": (214, 200), "events": (203, 200), "reviews": (61, 60), "tags": (104, 100), "cards": (50_006, 50_000), "ids": (50_001, 50_000)}
+    check("the fake: each count ceiling bad_plan with which and the numbers, as the Worker's (planlimits.test.ts)",
+          all(got[k] == (400, {"error": "bad_plan", "limit": k, "have": h, "max": m}) for k, (h, m) in want.items()), got)
+    units, doc = [], {"deck": "Step 1", "units": []}
+    while len(json.dumps(doc, separators=(",", ":"))) <= 1536 * 1024 + 20_000:
+        units.append(unit(len(units), tags=[f"Big::{'x' * 180}::{len(units)}_{j}" for j in range(50)]))
+        doc["units"] = units
+    size = len(json.dumps(doc, separators=(",", ":")))
+    check("the fake: the doc's size as the Worker keeps it, past 1,536 KB", put(doc) == (400, {"error": "bad_plan", "limit": "size", "have": size, "max": 1536 * 1024}),
+          (put(doc), size))
+    body = {"version": store.plans[pid]["version"], "doc": {"deck": "Step 1", "units": [unit(0)]}, "summary": "y" * 1_700_000}
+    status, data = cl._call("PUT", f"/plans/{pid}", body)
+    sent = len(json.dumps(body).encode())  # as requests sends it: its content-length
+    check("the fake: a body past what the API reads is too_big, said as the size it is (the bytes sent)",
+          (status, data) == (413, {"error": "too_big", "limit": "size", "have": sent, "max": 1536 * 1024}), (status, data))
+    status, data = cl._call("POST", "/sync", {"profile": {"name": "x" * 1_700_000}})
+    check("the fake: …anything else too big as before", (status, data) == (413, {"error": "too_big"}), (status, data))
+    shapes = [{"deck": "Step 1", "units": "all of them"}, {"deck": "Step 1", "units": [unit(0, due="2026-10-01")]},
+              {"deck": "Step 1", "units": [unit(0), unit(0)]}, {"deck": "Step 1", "units": [unit(0)], "events": "quiz"},
+              {"deck": "Step 1", "units": [unit(0, nids=list(range(1, 5002)))]}]
+    check("the fake: a shape that's wrong is plain bad_plan", all(put(d) == (400, {"error": "bad_plan"}) for d in shapes), [put(d) for d in shapes])
+    # the account's plans together: one of 23.6 MB beside it, kept as the Worker keeps a doc
+    store.plans["pfill"] = {"code": "FILL2345", "owner": "dre", "name": "F", "line": "", "audience": "code", "squad": None, "version": 1,
+                            "doc": {"deck": "F", "units": [], "pad": "x" * 24746394}}
+    held = store._plan_bytes("dre")
+    grows = {"deck": "Step 1", "units": [unit(i, tags=[f"T::{'z' * 180}::{j}" for j in range(50)]) for i in range(60)]}  # 0.6 MB more
+    status, data = put(grows)
+    check("the fake: plans_full with what the account's plans hold now and the ceiling",
+          (status, data) == (409, {"error": "plans_full", "limit": "total", "have": held, "max": 24 * MB}), (status, data, held))
+    outcome, words = R.save(cl, pid, store.plans[pid]["version"], grows, "x")
+    check("the fake: …and the add-on says it in Sam's words", (outcome, words) == ("refused", SAM_WORDS["total"]), (outcome, words))
+    del store.plans["pfill"]
+    outcome, words = R.save(cl, pid, store.plans[pid]["version"], {"deck": "Step 1", "units": [unit(i) for i in range(214)]}, "x")
+    check("the fake: a save past a ceiling, said with the numbers", (outcome, words) == ("refused", SAM_WORDS["sets"]), words)
+    store.plan_saves[("dre", datetime.date.today().isoformat())] = store.PLAN_SAVES_A_DAY
+    at_once = R.save(cl, pid, store.plans[pid]["version"], {"deck": "Step 1", "units": [unit(0)]}, "x")
+    sending = R.save(cl, pid, store.plans[pid]["version"], {"deck": "Step 1", "units": [unit(0)]}, "x", post="Hi", waits=True)
+    check("the fake: past the day's saves, slow_down (a 429); a send's changes wait, said; one at once, as before",
+          at_once == ("refused", "That's a lot of saves today. Try again tomorrow.") and sending == ("refused", SAM_WORDS["slow_down"]),
+          (at_once, sending))
+
+
+def test_class_lines_v399():
+    """3.9.9: an author's Insights says where the plan's squad fell behind:
+    counts by set, never names, and nothing under the counts' own rule
+    (3 in its squad, 2 besides me)."""
+    doc = {"units": [{"id": "a", "name": "Anemias", "opens": "2026-11-02"}, {"id": "b", "name": "Coagulation", "opens": "2026-11-03"},
+                     {"id": "c", "name": "Platelets", "opens": "2026-11-09"}, {"id": "d", "name": "Later", "opens": "2026-11-20"}]}
+    pr = {"followers": 14, "sharing": 12, "inSquad": 12, "others": 11,
+          "units": {"a": {"opened": 12, "done": 12}, "b": {"opened": 12, "done": 5}, "c": {"opened": 9, "done": 2}, "d": {"opened": 0, "done": 0}}}
+    got = E.class_lines(doc, pr, "2026-11-10")
+    check("class: the sets that ended two days ago or more with people not through, the worst first; one still running isn't late",
+          got[0] == "Where its squad fell behind (12 sharing):" and got[1].startswith("Coagulation: 7 of 12 not through it yet")
+          and len(got) == 2, got)
+    check("class: a day later the next set counts too", len(E.class_lines(doc, pr, "2026-11-11")) == 3
+          and E.class_lines(doc, pr, "2026-11-11")[1].startswith("Platelets: 10 of 12"))
+    done = dict(pr, units={k: {"opened": 12, "done": 12} for k in "abcd"})
+    check("class: everyone through: said in a line", "keeping up" in E.class_lines(doc, done, "2026-11-12")[0])
+    check("class: under three in its squad, or fewer than two besides me: only how many are in it; nobody sharing, nothing",
+          E.class_lines(doc, dict(pr, inSquad=2), "2026-11-10") == ["2 are in its squad: where they fall behind shows from 3."]
+          and len(E.class_lines(doc, dict(pr, others=1), "2026-11-10")) == 1
+          and E.class_lines(doc, {"sharing": 0, "inSquad": 0}, "2026-11-10") == [] and E.class_lines(doc, None, "2026-11-10") == [])
+    many = {"units": [{"id": f"u{i}", "name": f"Set {i}", "opens": "2026-11-01"} for i in range(7)]}
+    prm = dict(pr, units={f"u{i}": {"done": i} for i in range(7)})
+    lines = E.class_lines(many, prm, "2026-11-10")
+    check("class: four at most, then how many more", len(lines) == 1 + E.CLASS_SHOWN + 1 and lines[-1].startswith("And 3 more"), lines)
+    from due_crew.planner import webtabs as WT
+    asked = []
+    w = types.SimpleNamespace(plan={"id": "p1"}, author=lambda: True, followers=lambda: 3, push=lambda *a, **k: asked.append("push"),
+                              ops=types.SimpleNamespace(ask=lambda owner, fn, got: (asked.append("ask"), got(pr))))
+    WT._pid = lambda x: "p1"
+    st = {"ins": ("k", "v")}
+    was = WT._st
+    WT._st = lambda x: st
+    try:
+        WT.ask_class(w)
+        WT.ask_class(w)
+        check("class: asked once a plan a window when Insights opens, then drawn again", asked == ["ask", "push"] and st["class"] == ("p1", pr)
+              and st["ins"] == (None, None), (asked, st))
+        st2 = {}
+        WT._st = lambda x: st2
+        WT.ask_class(types.SimpleNamespace(plan={"id": "p1"}, author=lambda: True, followers=lambda: 0, ops=None))
+        check("class: a plan nobody follows asks nothing", st2 == {})
+    finally:
+        WT._st = was
 
 
 def main():

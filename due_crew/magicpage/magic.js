@@ -9,7 +9,17 @@ var dcMagic = (function () {
   function send(cmd, args) {
     var msg = 'dcmagic:' + JSON.stringify(Object.assign({ cmd: cmd }, args || {}));
     if (preview) { (window.dcMagicSent = window.dcMagicSent || []).push(msg); return; }
-    if (window.pycmd) window.pycmd(msg);
+    if (window.pycmd && !waiting.length) { window.pycmd(msg); return; }
+    // 3.9.9 (Sam: opened on a search already typed, the window stayed at its first size): Anki's bridge
+    // comes up a moment after the page, and what was said before it (the page's height) was dropped
+    waiting.push(msg);
+    if (waiting.length === 1) flush();
+  }
+  var waiting = [], waited = 0;
+  function flush() {
+    if (window.pycmd) { var all = waiting; waiting = []; all.forEach(function (m) { window.pycmd(m); }); return; }
+    if (++waited > 400) { waiting = []; return; }
+    setTimeout(flush, 25);
   }
   function h(tag, attrs, kids) {
     var e = document.createElement(tag);
@@ -339,14 +349,34 @@ var dcMagic = (function () {
         h('span', { cls: 'dw', text: d.dow }), h('span', { cls: 'dn', text: String(d.d) }), h('span', { cls: 'dl', text: d.load ? n(d.load) + ' due' : '–' })]));
     });
     els.pod.appendChild(grid);
+    // 3.9.9: a stretch longer than these two weeks, filled in: how many days (or to my exam's eve), the weekdays to skip
+    var F = D.fill || {};
+    if (F.on) {
+      var nIn = h('input', { cls: 'fn', type: 'number', min: '2', max: String(F.max || 90), value: String(F.n), 'aria-label': 'How many days',
+        onchange: function () { send('fill', { n: parseInt(nIn.value, 10) || F.n }); } });
+      var dows = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(function (w, i) {
+        var off = (F.skip || []).indexOf(i) >= 0;
+        return h('button', { type: 'button', cls: 'dw' + (off ? '' : ' on'), 'aria-pressed': off ? 'false' : 'true', text: w,
+          title: off ? 'Skipped' : 'A study day', onclick: function () { send('fillskip', { dow: i }); } });
+      });
+      els.pod.appendChild(h('div', { cls: 'fill' }, [h('span', { text: 'From tomorrow for' }), nIn, h('span', { text: 'days, to ' + F.to_label }),
+        F.eve && F.eve_label !== F.to_label ? btn('link', 'To my exam’s eve', 'fill', { to: F.eve }) : null,
+        h('span', { cls: 'sp' }), btn('link', 'Pick days', 'fill', { off: true })]));
+      els.pod.appendChild(h('div', { cls: 'fill', role: 'group', 'aria-label': 'Study days' }, dows));
+    } else {
+      els.pod.appendChild(h('div', { cls: 'fill' }, [h('span', { cls: 'mu', text: 'More than two weeks?' }),
+        btn('link', 'Go longer', 'fill', { n: 30 }), F.eve ? btn('link', 'To my exam’s eve, ' + F.eve_label, 'fill', { to: F.eve }) : null]));
+    }
     var name = h('input', { cls: 'kname', type: 'text', maxlength: '60', 'aria-label': 'The set’s name', value: D.name,
       onchange: function () { send('dayname', { name: name.value }); } });
     els.pod.appendChild(h('div', { cls: 'podrow' }, [h('label', { text: 'Name' }), name, dests()]));
     var each = D.each || [];
     if (each.length) {
       els.pod.appendChild(h('div', { cls: 'split', text: each.length === 1 ? plural(each[0].n, 'card')
+        : each.length > 8 ? plural(each.length, 'day') + ' · about ' + plural(F.per || each[0].n, 'card') + ' a day'
         : each.map(function (e) { return n(e.n); }).join(' · ') + ' cards' }));
     }
+    if (D.note) els.pod.appendChild(h('div', { cls: 'split', text: D.note }));
     var go = 'Put on ' + (each.length ? plural(each.length, 'day') : 'days');
     els.pod.appendChild(h('div', { cls: 'acts' }, [btn('b', 'Cancel', 'days', { show: false }), h('span', { cls: 'sp' }),
       h('button', { type: 'button', cls: 'b pri', text: go, disabled: !each.length || V.busy || !V.signed_in ? true : null,

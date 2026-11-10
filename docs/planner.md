@@ -63,8 +63,11 @@ card on, from the deck beside the date or a search.
 Sam's pick after "Plans end to end" (the HTML maker over Qt, full
 parity, older add-ons untouched; the calendar import waits): Your plans
 is a page in the board's look, in a window of Anki's. The Qt window
-stays, as it was, for `"plan_window": "qt"` in this computer's config
-(`flow.web_window`); every way in (Tools › Due Crew › Plans, You ›
+went in 3.9.9 (it had stayed behind `"plan_window": "qt"`; what this file
+says of `window.py`, `plan_tab.py`, `date_panel.py`, `deck_panel.py`,
+`shape.py`, `send.py`, the Qt tabs and `new_plan.py` is how the page's
+twins `webmodel.py`, `webtabs.py` and `webnew.py` came to work, kept for
+the why); every way in (Tools › Due Crew › Plans, You ›
 Plans, Make a plan, Plan the way there) goes through `flow.open_plans` /
 `flow.open_new`, which pick the window.
 

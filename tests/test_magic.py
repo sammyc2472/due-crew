@@ -652,6 +652,140 @@ def test_put_on_days():
     check("…taken back", ops.log[-1][0] == "undo_draft" and ops.log[-1][1] == "pB")
 
 
+def test_days_from_the_words_v399():
+    """3.9.9 (Sam: "spread things out across a period of time"): a period in
+    the words was no topic's and the box found nothing ("cardio friday": no
+    such tag). Now the days are read off the words and picked in Schedule
+    ahead. TODAY is Wed 4 Nov 2026."""
+    def days(q):
+        r = M.read(q, TREE, TODAY, [(1, "Big Step 1")], PLANS)
+        sp = r.get("span") or {}
+        return len(r["groups"]) > 0 and not r["text"], sp.get("days") or [], sp.get("per")
+    want = {"platelets over the next 5 days": ("2026-11-05", "2026-11-09", 5),
+            "spread platelets over 2 weeks": ("2026-11-05", "2026-11-18", 14),
+            "spread platelets out evenly across the next three days": ("2026-11-05", "2026-11-07", 3),
+            "platelets from monday to friday": ("2026-11-09", "2026-11-13", 5),
+            "platelets friday to sunday": ("2026-11-06", "2026-11-08", 3),
+            "platelets by friday": ("2026-11-05", "2026-11-06", 2),
+            "platelets before friday": ("2026-11-05", "2026-11-05", 1),
+            "platelets this week": ("2026-11-05", "2026-11-08", 4),
+            "platelets next week": ("2026-11-09", "2026-11-15", 7),
+            "platelets on friday": ("2026-11-06", "2026-11-06", 1),
+            "platelets tomorrow": ("2026-11-05", "2026-11-05", 1),
+            "platelets in 3 days": ("2026-11-07", "2026-11-07", 1),
+            "platelets dec 12": ("2026-12-12", "2026-12-12", 1)}
+    got = {q: days(q) for q in want}
+    bad = {q: g for q, g in got.items() if not g[0] or (g[1][0], g[1][-1], len(g[1])) != want[q]}
+    check("days from the words: over, across, from … to, by, before, this and next week, on a day; the topic still read", not bad, bad)
+    ok, ds, per = days("platelets 20 a day")
+    ok2, ds2, per2 = days("platelets 15 a day by friday")
+    check("so many a day: with or without its days", (ok, ds, per) == (True, [], 20) and ok2 and per2 == 15 and len(ds2) == 2, (ds, per, ds2, per2))
+    same = {q: (M.read(q, TREE, TODAY, [(1, "Big Step 1")], PLANS).get("span"), M.read(q, TREE, TODAY, [(1, "Big Step 1")], PLANS)["limit"])
+            for q in ("platelets", "10 new platelets", "missed in the last 3 days", "due tomorrow", "sun exposure", "type 2 diabetes")}
+    check("no days asked: nothing picked (a filter's days are its own, 'sun' is no Sunday, a count is a count)",
+          all(v[0] is None for v in same.values()) and same["10 new platelets"][1] == 10, same)
+    r = M.read("heme quiz friday", TREE, TODAY, [(1, "Big Step 1")], PLANS)
+    check("a quiz's day is the quiz's: its row, as before", r.get("span") is None and [a["k"] for a in r["acts"]][:1] == ["event"], r["acts"])
+    face, ops, _closed = window()
+    face.on("ready", {})
+    face.on("type", {"text": "platelets over the next 3 days"})
+    v = face.view()
+    check("the window: Schedule ahead open on those days, the cards shared between them",
+          [e["iso"] for e in v["days"]["each"]] == ["2026-11-05", "2026-11-06", "2026-11-07"]
+          and sum(e["n"] for e in v["days"]["each"]) == v["count"]["n"] > 0, v.get("days"))
+    face.on("day", {"iso": "2026-11-06"})
+    check("a tap still takes a day off", [e["iso"] for e in face.view()["days"]["each"]] == ["2026-11-05", "2026-11-07"])
+    face.on("type", {"text": "platelets over the next 4 weeks"})
+    v = face.view()
+    f = v["days"]["fill"]
+    check("more than the picker's two weeks: the fill-in takes the stretch, a set a day, about so many each",
+          len(v["days"]["each"]) == 28 and f["on"] and f["n"] == 28 and f["study"] == 28 and f["per"] >= 1
+          and sum(e["n"] for e in v["days"]["each"]) == v["count"]["n"], (len(v["days"]["each"]), f))
+    face.on("fillskip", {"dow": 6})
+    face.on("fillskip", {"dow": 5})
+    v = face.view()
+    wk = [__import__("datetime").date.fromisoformat(e["iso"]).weekday() for e in v["days"]["each"]]
+    check("the fill-in: weekdays skipped come off, the cards shared over what's left", len(wk) == 20 and not set(wk) & {5, 6}
+          and v["days"]["fill"]["skip"] == [5, 6] and sum(e["n"] for e in v["days"]["each"]) == v["count"]["n"], wk)
+    for d in range(5):
+        face.on("fillskip", {"dow": d})
+    check("…never every weekday", len(face.view()["days"]["each"]) >= 1 and len(face.fill["skip"]) == 6, face.fill)
+    face.on("fill", {"n": 500})
+    check("…at most ninety days out and sixty study days", face.view()["days"]["fill"]["n"] <= MF.FILL_SPAN + 1
+          and len(face.picked) <= MF.FILL_MAX, (face.view()["days"]["fill"]["n"], len(face.picked)))
+    face.on("fill", {"off": True})
+    check("Pick days: back to the picker's two weeks, what was picked in them kept", face.fill is None
+          and 0 < len(face.picked) <= 13, len(face.picked))
+    face.on("fill", {"n": 30})
+    face.on("day", {"iso": face.picked[0]})
+    check("a tap on a day is my own choice again: the fill-in lets go, the other days stay", face.fill is None and len(face.picked) == 29)
+    face.on("type", {"text": "platelets"})
+    check("the words stop asking: the picker they opened shuts", "days" not in face.view())
+    face.on("type", {"text": "spread platelets"})
+    check("only 'spread': Schedule ahead opens (the days it takes, when it's a lot)", face.mode == "days")
+
+
+def test_schedule_ahead_spreads_open_cards_v399():
+    """3.9.9 (Sam: unsuspended cards due on one day, put on the next few,
+    stayed put): a plan's date only opens what's suspended, so cards open
+    already never moved. Schedule ahead now holds a later day's new cards
+    back and moves its due reviews, in one step that goes back with Undo;
+    the picker says so before the press."""
+    face, ops, _closed = window()
+    face.on("ready", {})
+    face.on("type", {"text": "platelets over the next 2 days"})
+    cids = face.cards()[0]
+    kinds = {c: ("new" if i % 3 == 0 else "rev" if i % 3 == 1 else "learn" if i == 2 else "") for i, c in enumerate(cids)}
+    calls = []
+    ops.open_kinds = lambda cs: {c: k for c, k in kinds.items() if k}
+    ops.spread = lambda shares: (calls.append(shares) or (sum(len(n) for d, n, _r in shares if d > 0),
+                                                           sum(len(r) for d, _n, r in shares if d > 0), "Due Crew: spread"))
+    undone = []
+    ops.undo_anki = lambda label: undone.append(label) or True
+    face._kinds = None
+    v = face.view()
+    new_n, rev_n = sum(1 for k in kinds.values() if k == "new"), sum(1 for k in kinds.values() if k == "rev")
+    check("…and that a card in its learning steps stays with today (it isn't moved)",
+          "mid-learning" in face.view()["days"]["note"] or all(k != "learn" for c, k in kinds.items() if c in face.cards()[0][len(face.cards()[0]) // 2:]),
+          face.view()["days"]["note"])
+    check("the picker says what a date alone can't do: the open new ones held back, the due reviews moved",
+          f"{new_n:,} " in v["days"]["note"] and "held back" in v["days"]["note"] and "due date" in v["days"]["note"], v["days"].get("note"))
+    face.on("put", {})
+    sh = calls[-1]
+    check("Put: each day's share of the open cards, by how far off its day is; every open card in one share",
+          [d for d, _n, _r in sh] == [1, 2] and sum(len(n) for _d, n, _r in sh) == new_n and sum(len(r) for _d, _n, r in sh) == rev_n, sh)
+    s = face.view()["said"]
+    check("said with the plan's dates, one Undo for both", "held back" in s["text"] and "moved to their days" in s["text"] and s["undo"] == "save", s)
+    check("held only once the dates are on the plan: the save first, then Anki's step",
+          [x[0] for x in ops.log if x[0] == "write"] and len(calls) == 1)
+    face.on("undo", {})
+    check("Undo: the plan's save and Anki's step", ("undo_save", "pMine", 7) in ops.log and undone == ["Due Crew: spread"], (ops.log[-2:], undone))
+    # a save that fails: nothing was held or moved (they'd be suspended with no date to open them)
+    n_calls = len(calls)
+    real = ops.write_plan
+    ops.write_plan = lambda pid, o, idx, done, name=None, deck=None: done(("failed", pid, None, "Couldn't save it."))
+    face.picked = ["2026-11-05", "2026-11-06"]
+    face.on("put", {})
+    check("a save that fails: the cards aren't touched, and it says the save failed",
+          len(calls) == n_calls and face.view()["said"]["text"] == "Couldn't save it.", face.view()["said"])
+    ops.write_plan = real
+    # onto a plan with followers: the dates wait in Review and send, so nothing is held yet, and it says so
+    face.on("dest", {"key": "pB"})
+    face.picked = ["2026-11-05", "2026-11-06"]
+    face.on("put", {})
+    s2 = face.view()["said"]
+    check("waiting in Review and send: the open cards stay put till it's sent, said", len(calls) == n_calls
+          and "open already" in s2["text"] and "till it's sent" in s2["text"] and s2["undo"] == "draft", s2)
+    face.on("undo", {})
+    face.on("dest", {"key": "mine"})
+    # today's share stays as it is; nothing open, nothing said or done
+    face.on("type", {"text": "platelets"})
+    face.on("days", {"show": True})
+    face.picked = [TODAY.isoformat()]
+    check("a share for today isn't touched", all(d == 0 for d, _n, _r in face.shares(cids, face.picked))
+          and not face.view()["days"]["note"], face.view()["days"])
+
+
 def test_rows_for_whats_coming_up():
     face, ops, _closed = window()
     face.on("type", {"text": "quiz friday on platelets and anemia"})
@@ -767,15 +901,134 @@ def test_my_plan_on_the_server():
         cl.session = {}
 
 
+# ---- 3.9.9: the review of how people really type ----
+
+def test_everyday_phrasings_v399():
+    """Typed the way a person asks, on Anki's engine, the box read some of
+    these as nothing. Each is pinned here: due within a stretch, overdue,
+    unsuspend, a time budget, a bare count, today, and a second, looser
+    reading when the words as typed find no tag and no card."""
+    r = read("heart failure due this week")  # TODAY is a Wednesday: till Sunday is four days
+    check("\"due this week\" is what's due by Sunday, a filter, not a stretch to spread over",
+          r["filters"] == [{"k": "dN", "n": 4}] and r["span"] is None and ticked(r)[:1] == ["Heart Failure"], (r["filters"], r["span"]))
+    check("…\"due by Friday\", \"due before monday\": the days till then",
+          read("anemia due by friday")["filters"] == [{"k": "dN", "n": 2}] and read("anemia due before monday")["filters"] == [{"k": "dN", "n": 5}]
+          and read("anemia due by wednesday")["filters"] == [{"k": "dN", "n": 7}])
+    check("…and \"spread anemia over this week\" is still a stretch", read("spread anemia over this week")["span"] is not None)
+    check("overdue is due", read("overdue")["filters"] == [{"k": "due"}] and read("anemia overdue")["filters"] == [{"k": "due"}]
+          and ticked(read("anemia overdue")) == ["Anemia"])
+    check("\"unsuspend X\" is X's suspended cards", read("unsuspend platelets")["filters"] == [{"k": "susp"}]
+          and ticked(read("unsuspend platelets"))[:1] == ["Platelets"])
+    check("\"what should I study today\" is what's due; \"missed today\" keeps its own meaning",
+          read("what should I study today")["filters"] == [{"k": "due"}] and read("what should I study today")["text"] == ""
+          and read("missed today")["filters"] == [{"k": "m1"}])
+    for words, mins in (("anemia for 30 minutes", 30), ("an hour of anemia", 60), ("20 min anemia", 20), ("half an hour anemia", 30), ("2 hours of anemia", 120)):
+        r = read(words)
+        check(f"a time budget: {words!r}", r["minutes"] == mins and r["limit"] is None and ticked(r) == ["Anemia"], (r["minutes"], r["limit"], ticked(r)))
+    check("…\"type 2 diabetes\" and \"missed in the last 3 days\" aren't one", read("type 2 diabetes")["minutes"] is None
+          and read("missed in the last 3 days")["minutes"] is None and read("anemia over the next 5 days")["minutes"] is None)
+    r = read("100 cards")
+    check("\"100 cards\" is how many, not a question's number; a deck's own question numbers still are",
+          r["kind"] == "words" and r["limit"] == 100 and read("10234 10235")["kind"] == "ids", r["kind"])
+    # a second reading, only when asked for
+    strict, again = read("cardiology"), M.read("cardiology", TREE, TODAY, loose_words=True)
+    check("the words as typed first: \"cardiology\" finds no tag (the window looks in the cards' text)",
+          not strict["groups"] and strict["text"] == "cardiology" and strict["unused"] == [])
+    check("…then by another everyday name: Cardio's tags", any("cardio" in t.lower() for g in again["groups"] for t in g["tags"]) and again["text"] == "", again["groups"][:1])
+    r = M.read("kidney intro", TREE, TODAY, loose_words=True)
+    check("…\"kidney\" where the deck says Renal", any("renal" in t.lower() for g in r["groups"] for t in g["tags"]), [g["name"] for g in r["groups"]])
+    r = M.read("anemia xyzzy plugh", TREE, TODAY, loose_words=True)
+    check("…or the part of the words that is a topic, the rest said", ticked(r) == ["Anemia"] and r["unused"] == ["xyzzy", "plugh"], (ticked(r), r["unused"]))
+    r = M.read("xyzzy plugh", TREE, TODAY, loose_words=True)
+    check("…and nothing invented when none of it is", not r["groups"] and r["text"] == "xyzzy plugh" and r["unused"] == [])
+    check("a deck that says \"heart\" is never second-guessed", ticked(read("heart failure"))[:1] == ["Heart Failure"]
+          and ticked(M.read("heart failure", TREE, TODAY, loose_words=True))[:1] == ["Heart Failure"])
+    tree = M.Tree(["#S::Cardio::Pharmacology", "#S::Renal::Pharmacology", "#S::Cardio::Physiology"])
+    r = M.read("cardio pharm and renal pharm", tree, TODAY)
+    check("two topics that would be called the same take the part above them",
+          M.topics_said(r["groups"], r["terms"]) == "Cardio pharmacology and Renal pharmacology", M.topics_said(r["groups"], r["terms"]))
+    check("…and one typed with the part above it is called by both; typed alone, by its own name",
+          M.topics_said(M.read("cardio pharm", tree, TODAY)["groups"]) == "Cardio pharmacology"
+          and M.topics_said(M.read("physiology", tree, TODAY)["groups"]) == "Physiology"
+          and ticked(read("heart failure"))[:1] == ["Heart Failure"])
+    tree = M.Tree(["#B::#PathBook::03_Neoplasia", "#B::#Other::03_Chapter_3", "#B::#PathBook::05_RBC::part_3", "#B::#Vids::03_Pulm"])
+    r = M.read("chapter 3", tree, TODAY)
+    check("a tag whose own name says \"chapter 3\" is it, before parts only numbered 3; the rest offered; a \"part 3\" isn't one",
+          ticked(r) == ["Chapter 3"] and {"Neoplasia", "Pulm"} <= set(offered(r)) and r["numbered"] == [0], (ticked(r), offered(r)))
+    r = M.read("chapter 3", M.Tree(["#B::#PathBook::03_Neoplasia", "#B::#PathBook::05_RBC::part_3"]), TODAY)
+    check("…with none named so, the part numbered 3 as before", ticked(r) == ["Neoplasia"], ticked(r))
+    # a word a letter off a word thousands of tags end in: every pair of them was tried for initials (22 s on Anki's engine)
+    import time
+    big = M.Tree([f"#L::Article_{i:04d}_Some_Clinical_Topic" for i in range(3000)] + ["#S::Cardio"])
+    t0 = time.perf_counter()
+    big.groups(["toxic"])
+    took = time.perf_counter() - t0
+    check("a word a letter off one that 3,000 tags share is read in well under a second", took < 1.5, f"{took:.2f} s")
+
+
+def test_the_window_reads_them_v399():
+    face, ops, _closed = window()
+    face.on("type", {"text": "cardiology"})
+    v = face.view()
+    check("the window: no tag, no card says it: read again by another name, and found", any(t["on"] for t in v["topics"]) and v["count"]["n"] > 0, v["lines"])
+    face.on("type", {"text": "anemia xyzzy"})
+    v = face.view()
+    check("…the part that's a topic, and a line for the rest", [t["name"] for t in v["topics"] if t["on"]] == ["Anemia"] and "Didn’t use “xyzzy”." in v["lines"], v["lines"])
+    face.on("type", {"text": "anemia for 1 minute"})
+    v = face.view()
+    check("…a time budget is that many cards at my pace, said so; the reading's own limit stays unset",
+          0 < v["count"]["n"] < 12 and any(x.startswith("About 1 minute at your pace") for x in v["lines"]) and face.r["limit"] is None, (v["count"], v["lines"]))
+    face.on("type", {"text": "3 cards"})
+    v = face.view()
+    check("…a bare count is that many of the deck", v["count"]["n"] == 3 and v["kind"] == "words", v["count"])
+    face.on("type", {"text": "2 anemia"})
+    two = list(face.cards()[0])
+    had = face.idx.leech
+    try:
+        face.idx.leech = set(had) | {two[0]}
+        face._cards = None
+        now = list(face.cards()[0])
+        check("…\"2 anemia\" is two I can study: a leech isn't one of them (it was one short)",
+              len(two) == 2 and len(now) == 2 and two[0] not in now, (two, now))
+    finally:
+        face.idx.leech = had
+        face._cards = None
+    js = open(os.path.join(REPO, "due_crew", "motion.js"), encoding="utf-8").read()
+    check("the plan week (3.9.9): what glides to the day picked is the opened day's own hairline with its fill coming up, "
+          "not an accent ring that vanished when it landed; the same on the site",
+          "border:1px solid var(--dc-faded,#aaaaa2)" in js and "border:2px solid var(--dc-accent" not in js
+          and 'anim(cell, [{ backgroundColor: "transparent" }' in js
+          and js == open(os.path.join(REPO, "site", "public", "motion.js"), encoding="utf-8").read())
+    face.on("type", {"text": "chapter 3"})
+    v = face.view()
+    check("…\"chapter 3\", more than one part numbered 3: a line says which was taken and where the others are",
+          any(x.startswith("Took “chapter 3” as ") and "under Also" in x for x in v["lines"]) or len(v["topics"][0]["also"]) == 0, v["lines"])
+    face.on("type", {"text": "quiz friday: spread it out"})
+    check("…and a reading with nothing found draws (it raised once)", isinstance(face.view()["lines"], list))
+
+
 # ---- ways in ----
 
 def test_ways_in():
     from due_crew import board, settings_model, account
-    check("the You box's head: Magic search, with its key", 'duecrew:magic' in board.magic_link() and board.MAGIC_KBD in board.magic_link())
+    # 3.9.9 (Sam's pick G2): a field under Anki's deck list, over its "Studied…" line; the You box's head has no link
+    fld = board.magic_field({"accent": "blue"})
+    check("the field under the decks: the board's input, the window's magnifier and star, its key, what it says to a screen reader",
+          'id="dc-mgf" role="search"' in fld and '<input type="text" aria-label="Magic search: ' in fld and board.MAGIC_KBD in fld
+          and 'class="st"' in fld and 'aria-label="Open Magic search"' in fld and 'maxlength="400"' in fld)
+    check("…it carries the board's tokens itself (it's outside the board), in my accent, both themes",
+          "#dc-mgf { --dc-bg: #ffffff;" in fld and "#1e5fb4" in fld and "night" in fld and "--dc-hours" in fld)
+    check("…Enter sends what's typed, encoded and keyed as the board's commands are",
+          "pycmd('duecrew:magic'+(q?':'+encodeURIComponent(q):'')+'|" + board.BOARD_KEY + "');return false;" in fld
+          and "f.querySelector('button.go').click();" in fld)
+    check("…it moves about twelve seconds, then rests till pointed at; nothing with Reduce motion; no </script> from its words",
+          "12000" in fld and "prefers-reduced-motion" in fld and fld.count("</script>") == 1
+          and sum(('placeholder="%s"' % x) in fld for x in board.MAGIC_EXAMPLES) == 1)
+    check("…its example stays as it is while the page is up (Sam: cycling through them was confusing and distracting)",
+          "setTimeout(type" not in fld and "function next" not in fld and "mouseenter" not in fld)
     due = None
     on = board._due_html(due, (("plans", "Plans"),), "plans", "", magic=True)
-    off = board._due_html(due, (("plans", "Plans"),), "plans", "", magic=False)
-    check("…on unless Settings has it off", "Magic search" in on and "Magic search" not in off)
+    check("the You box's head has no Magic search link any more", "Magic search" not in on and "du-mg" not in on)
     check("Settings › Board › Due: its switch", settings_model.change(["set", "magic_search", "0"], {}) == {"magic_search": False})
     check("an account key, on every computer, with its first-time card's",
           "magic_search" in account.ACCOUNT_KEYS and "magic_seen" in account.ACCOUNT_KEYS and "magic_seen" in account._BOOLS)
@@ -793,6 +1046,12 @@ def test_ways_in():
         check("the board's command opens it", opened == [""], opened)
         dc._on_js(False, "duecrew:magic", type("Previewer", (), {})())
         check("…and a card's own script can't", opened == [""], opened)
+        dc._on_js(False, "duecrew:magic:cardio%20pharm%3A%20due%20%7C%20this%20week|" + board.BOARD_KEY, DeckBrowser())
+        check("the field's Enter opens it on what was typed (a colon and a bar in it too)", opened == ["", "cardio pharm: due | this week"], opened)
+        dc._on_js(False, "duecrew:magic:" + "a" * 900 + "|" + board.BOARD_KEY, DeckBrowser())
+        check("…kept to 400", len(opened[-1]) == 400)
+        dc._on_js(False, "duecrew:magic:tag%3Ax", type("Previewer", (), {})())
+        check("…and never from a card's own script", len(opened) == 3)
     finally:
         MF.open_search = saved
 
@@ -947,8 +1206,8 @@ def test_the_how_to():
     js = board.magic_howto_js(dict(M.howto("Ctrl+Shift+F"), lede="a </script> b"))
     check("its script: the words as JSON, no </ to end it, its buttons keyed as the board's",
           "</script> b" not in js and "a <\\/script> b" in js and "'duecrew:magichow:' + how + ':' + encodeURIComponent(q || '') + '|' + window.dcBK" in js)
-    check("…over the board the bars dim with (VEIL_IDS), and only once the board is clear and the You box is there",
-          "dc-magic" in board.VEIL_IDS and "document.querySelector('.du-mg')" in js and '"dc-show"' in js and '"dc-sheet"' in js)
+    check("…over the board the bars dim with (VEIL_IDS), and only once the board is clear and Magic search's field is there",
+          "dc-magic" in board.VEIL_IDS and "document.getElementById('dc-mgf')" in js and '"dc-show"' in js and '"dc-sheet"' in js)
     import due_crew as dc
     from aqt.deckbrowser import DeckBrowser
     opened, seen = [], []
@@ -1035,6 +1294,167 @@ def test_qids_in_magic_search():
           and tries["ids"] == [] and tries["coming"], tries)
     check("the old window's gone, its pure find kept", not os.path.exists(os.path.join(REPO, "due_crew", "planner", "qid_window.py"))
           and os.path.exists(os.path.join(REPO, "due_crew", "planner", "qids.py")))
+
+
+MAGIC_PRESS_JS = r"""
+const fs = require("fs"), vm = require("vm");
+const [JS, STATES] = process.argv.slice(1);
+const src = fs.readFileSync(JS, "utf8"), states = JSON.parse(fs.readFileSync(STATES, "utf8"));
+function El(tag) { this.tagName = String(tag).toUpperCase(); this.children = []; this.parent = null; this.attrs = {}; this.style = {}; this.className = "";
+  this._t = ""; this.ls = {}; this.value = ""; this.hidden = false; this.checked = false; this.scrollHeight = 20; }
+Object.defineProperty(El.prototype, "textContent", { get() { return this._t + this.children.map((c) => c.textContent || "").join(""); },
+  set(v) { this._t = String(v); this.children.forEach((c) => { c.parent = null; }); this.children = []; } });
+Object.defineProperty(El.prototype, "innerHTML", { set(v) { this._t = ""; this.children = []; }, get() { return ""; } });
+Object.defineProperty(El.prototype, "firstChild", { get() { return this.children[0] || null; } });
+Object.defineProperty(El.prototype, "parentNode", { get() { return this.parent; } });
+El.prototype.appendChild = function (c) { if (c.parent) { c.remove(); } c.parent = this; this.children.push(c); return c; };
+El.prototype.insertBefore = function (c) { return this.appendChild(c); };
+El.prototype.removeChild = function (c) { c.remove(); return c; };
+El.prototype.remove = function () { if (this.parent) { this.parent.children = this.parent.children.filter((x) => x !== this); this.parent = null; } };
+El.prototype.setAttribute = function (k, v) { this.attrs[k] = String(v); if (k === "disabled") { this.disabled = true; } };
+El.prototype.getAttribute = function (k) { return k in this.attrs ? this.attrs[k] : null; };
+El.prototype.removeAttribute = function (k) { delete this.attrs[k]; };
+El.prototype.addEventListener = function (t, f) { (this.ls[t] = this.ls[t] || []).push(f); };
+El.prototype.classList = null;
+function all(el) { const out = []; (function walk(n) { (n.children || []).forEach((c) => { if (c instanceof El) { out.push(c); walk(c); } }); })(el); return out; }
+El.prototype.querySelectorAll = function (sel) { return all(this).filter((c) => c.tagName === sel.toUpperCase() || (sel[0] === "." && (" " + c.className + " ").indexOf(" " + sel.slice(1) + " ") >= 0)); };
+El.prototype.querySelector = function (sel) { return this.querySelectorAll(sel)[0] || null; };
+El.prototype.getBoundingClientRect = function () { return { left: 0, top: 0, right: 10, bottom: 10, width: 10, height: 10 }; };
+["focus", "blur", "select", "scrollIntoView", "setSelectionRange", "animate"].forEach((k) => { El.prototype[k] = function () { return { finished: Promise.resolve() }; }; });
+function Text(t) { this.textContent = String(t); this.parent = null; }
+Text.prototype.remove = El.prototype.remove;
+const ev = { stopPropagation() {}, preventDefault() {}, key: "Enter", shiftKey: false };
+function fire(el, t) { (el.ls[t] || []).slice().forEach((f) => f.call(el, ev)); if (typeof el["on" + t] === "function") { el["on" + t].call(el, ev); } }
+function page(st) {
+  const root = new El("div"), docLs = {};
+  const ctx = { console, JSON, setTimeout: (f) => { try { f(); } catch (e) { /* a focus */ } return 0; }, clearTimeout() {}, Promise,
+    matchMedia: () => ({ matches: false }), requestAnimationFrame: (f) => 0,
+    document: { createElement: (t) => new El(t), createTextNode: (t) => new Text(t), getElementById: () => root, activeElement: null,
+      addEventListener: (t, f) => { (docLs[t] = docLs[t] || []).push(f); }, body: new El("body") } };
+  ctx.window = ctx;
+  El.prototype.classList = { add() {}, remove() {}, toggle() {}, contains() { return false; } };
+  vm.createContext(ctx); vm.runInContext(src, ctx);
+  ctx.dcMagic.start(st, true);
+  ctx.dcMagicSent = [];
+  return { ctx, root };
+}
+function hidden(el) { for (let x = el; x; x = x.parent) { if (x.hidden) { return true; } } return false; }
+/* what a person can press: what's shown and on; with the how-to up (it covers the window: magic.css .intro), only what's on it */
+function controls(root) {
+  const intro = root.querySelector(".intro"), on = intro && !intro.hidden ? intro : root;
+  return all(on).filter((el) => !el.disabled && !hidden(el) && (on !== root || !intro || !intro.contains(el))
+    && (el.ls.click || el.ls.change || el.ls.input || typeof el.onclick === "function"));
+}
+El.prototype.contains = function (x) { for (; x; x = x.parent) { if (x === this) { return true; } } return false; };
+function shape(root) { return JSON.stringify(all(root).map((e) => [e.tagName, e.className, e.hidden, e._t, e.attrs["aria-expanded"] || ""])); }
+const out = {};
+for (const [key, st] of Object.entries(states)) {
+  const errors = [], presses = [];
+  let n = 0;
+  try { n = controls(page(st).root).length; } catch (e) { errors.push("draw: " + e.message); }
+  for (let i = 0; i < n; i++) {
+    try {
+      const { ctx, root } = page(st), el = controls(root)[i], was = shape(root);
+      if (el.tagName === "SELECT") { const o = el.children.filter((c) => c.tagName === "OPTION" && c.attrs.value !== el.value); el.value = o.length ? o[0].attrs.value : el.value; fire(el, "change"); }
+      else if (el.tagName === "INPUT" && el.attrs.type === "checkbox") { el.checked = !el.checked; fire(el, "change"); }
+      else if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") { el.value = el.value ? el.value + " typed" : "Typed here"; fire(el, "input"); fire(el, "change"); }
+      else { fire(el, "click"); }
+      presses.push([(el.attrs["aria-label"] || el.textContent || el.tagName).slice(0, 50), ctx.dcMagicSent.slice(), shape(root) !== was,
+        el.attrs["aria-pressed"] === "true"]);
+    } catch (e) { errors.push(i + ": " + e.message); }
+  }
+  out[key] = { errors, presses, n };
+}
+process.stdout.write(JSON.stringify(out));
+"""
+
+
+def test_every_control_pressed():
+    """The window's page (magicpage/magic.js) run in node and pressed, as
+    the plan window's is (Sam, 7 Nov: two plan sheets whose yes went
+    nowhere, each with a test that called the command itself): in each
+    state the suite gets it into (the how-to, a topic with its tree, the
+    days, a plan of mine, a quiz, plan lines, IDs, after Study, Browse's
+    cards), every control fired; each message the page sends goes through
+    a fresh window in that state (Search.on). Each has its handler, takes
+    its arguments, and does something."""
+    import json
+    import shutil
+    import subprocess
+    import tempfile
+    import traceback
+    if not shutil.which("node"):
+        print("SKIP the window pressed: no node")
+        return
+    pl = "2026-11-05 | Platelets | tag:" + R + "#Path::Heme::Platelets\n2026-11-10 | event | Heme quiz"
+    recipes = {
+        "the how-to": [("intro", {"show": True})], "a topic": [("intro", {"show": False}), ("type", {"text": "heart failure"})],
+        "a topic, its tree open": [("intro", {"show": False}), ("type", {"text": "heart failure"}), ("open", {"seg": 0})],
+        "filters, how many, but not": [("intro", {"show": False}), ("type", {"text": "10 new platelets but not itp"})],
+        "the days": [("ready", {}), ("type", {"text": "platelets"}), ("days", {"show": True}), ("day", {"iso": "2026-11-06"})],
+        "the days, a plan I write": [("ready", {}), ("type", {"text": "platelets"}), ("days", {"show": True}), ("dest", {"key": "pB"})],
+        "a quiz": [("type", {"text": "quiz friday on platelets and anemia"})], "plan lines": [("type", {"text": pl})],
+        "ids": [("type", {"text": "10234 10235 99999"})], "after Study": [("type", {"text": "anemia"}), ("study", {})],
+        "after Put on days": [("ready", {}), ("type", {"text": "platelets"}), ("days", {"show": True}), ("day", {"iso": "2026-11-06"}), ("put", {})],
+        "recent": [("type", {"text": "anemia"}), ("type", {"text": ""})],
+    }
+
+    def made(steps, picked=None):
+        face, ops, closed = window()
+        ops.recents = ["anemia", "heart failure"]
+        if picked:
+            face.prefill("", picked)
+        for c, a in steps:
+            face.on(c, a)
+        return face, ops, closed
+    makers = {k: (lambda s=s: made(s)) for k, s in recipes.items()}
+    makers["Browse's cards"] = lambda: made([], sorted(IDX.cards)[:7])
+    views = {k: mk()[0].view() for k, mk in makers.items()}
+    with tempfile.TemporaryDirectory() as tmp:
+        sp = os.path.join(tmp, "states.json")
+        with open(sp, "w", encoding="utf-8") as f:
+            json.dump(views, f)
+        got = subprocess.run(["node", "-e", MAGIC_PRESS_JS, os.path.join(REPO, "due_crew", "magicpage", "magic.js"), sp],
+                             capture_output=True, text=True, timeout=180)
+    try:
+        out = json.loads(got.stdout)
+    except ValueError:
+        check("pressed: the page ran in node", False, got.stderr[-1500:])
+        return
+    errs = {k: o["errors"][:2] for k, o in out.items() if o["errors"]}
+    check(f"pressed: the page drew all {len(out)} states and fired every control without an error "
+          f"({sum(o['n'] for o in out.values())} controls)", not errs and all(o["n"] for o in out.values()), errs)
+    printed = []
+    print_exc = traceback.print_exc
+    traceback.print_exc = lambda *a, **k: printed.append(1) or print_exc(*a, **k)
+    nothing, wrong, idle = [], [], []
+    try:
+        for key, o in out.items():
+            seen = set()
+            for label, msgs, changed, on in o["presses"]:
+                msgs = [m for m in msgs if json.loads(m[len("dcmagic:"):])["cmd"] != "size"]  # the window's own (ui/magic_window.py: its height)
+                if tuple(msgs) in seen:
+                    continue
+                seen.add(tuple(msgs))
+                face, ops, closed = makers[key]()
+                before = json.dumps([face.view(), ops.log, closed], sort_keys=True, default=str)
+                for m in msgs:  # a press's messages in turn, on one window (Put on N days: its name, then put)
+                    a = json.loads(m[len("dcmagic:"):])
+                    if not callable(getattr(face, "c_" + a["cmd"], None)):
+                        nothing.append((key, label, m))
+                        continue
+                    printed.clear()
+                    face.on(a["cmd"], a)
+                    if printed:
+                        wrong.append((key, label, m))
+                # nothing, but on the page alone (Make a new filtered deck's name box), or the choice already on, is idle
+                if not changed and not on and json.dumps([face.view(), ops.log, closed], sort_keys=True, default=str) == before:
+                    idle.append((key, label, msgs))
+    finally:
+        traceback.print_exc = print_exc
+    check("pressed: every message the page sends has its handler (or is the window's own size)", not nothing, nothing[:5])
+    check("pressed: no handler took the wrong arguments", not wrong, wrong[:5])
+    check("pressed: every control sends something, and what it sends does something", not idle, idle[:6])
 
 
 def main():

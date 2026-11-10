@@ -8,7 +8,7 @@ sends one command per change; the glue saves what comes back.
 import datetime as _dt
 from urllib.parse import unquote
 
-TABS = ("you", "board", "privacy")
+TABS = ("you", "board", "study", "privacy")  # board.SETTINGS_TABS (3.9.9: Study)
 SWITCHES = ("show_leaderboard", "show_stale", "sync_notifications", "compact",
             "highlight_me", "share_reviews", "share_time", "share_retention",
             "share_streak", "share_heatmap",
@@ -16,7 +16,9 @@ SWITCHES = ("show_leaderboard", "show_stale", "sync_notifications", "compact",
             "shortcuts",  # 3.8.0: Ctrl+Shift+S and Ctrl+Shift+Q
             "fifteen", "sev",  # 3.8.1: ▶ Fifteen? and the nudge; Pip
             "two_buttons",  # 3.9.1: Again and Good alone (not the board's look: Reset board leaves it)
-            "magic_search")  # 3.9.7: Magic search in the You box's head, and its key
+            "magic_search",  # 3.9.7: Magic search in the You box's head, and its key
+            "calm",  # 3.9.9: the calm board (calm.py): parts appear when they have something to show
+            "send_errs")  # 3.9.9: Privacy's Send Sam what went wrong (errs.py; never Reset board's)
 CHOICES = {"theme": ("auto", "light", "dark"),
            "accent": ("green", "blue", "purple", "teal", "amber", "rose"),
            "room_chip_side": ("left", "right"),
@@ -24,12 +26,14 @@ CHOICES = {"theme": ("auto", "light", "dark"),
 HIDEABLE = ("decks", "squads", "plans", "insights", "party")  # board.HIDEABLE_TABS: Crew's Decks, Squads; Plans, Insights (3.8.0); Pip Party (3.9.5)
 PRIVACY = ("numbers", "showup", "paused")
 LABEL_MAX = 24
-# what Reset board puts back: the Board tab, never anything on Privacy
+# what Reset Board and Study puts back: this computer's look and layout, the Fifteen, the keys; never
+# anything on Privacy, nor an account's own switches (Today's lists, Magic search, two buttons)
 BOARD_DEFAULTS = {"show_leaderboard": True, "show_stale": True, "sync_notifications": True,
                   "theme": "auto", "accent": "green", "compact": False, "highlight_me": True,
                   "crew_label": "Crew", "room_chip_side": "right", "hidden_tabs": [], "shortcuts": True,
                   "fifteen": True, "sev": True, "sev_break": "breathe",
-                  "dance_floor": True, "dance": "gentle", "dance_folded": False}  # 3.9.6: the dance floor
+                  "dance_floor": True, "dance": "gentle", "dance_folded": False,
+                  "calm": False, "calm_news": []}  # 3.9.6: the dance floor
 
 
 def _day(text):
@@ -56,7 +60,10 @@ def change(parts, cfg, today=None):
         hidden = [k for k in (cfg.get("hidden_tabs") or []) if k in HIDEABLE and k != arg]
         if val == "0":
             hidden.append(arg)
-        return {"hidden_tabs": [k for k in HIDEABLE if k in hidden]}
+        out = {"hidden_tabs": [k for k in HIDEABLE if k in hidden]}
+        if val == "1" and cfg.get("calm"):  # 3.9.9: shown by hand, the calm board lets it out for good
+            out["calm_open"] = [k for k in HIDEABLE if k in set(cfg.get("calm_open") or []) | {arg}]
+        return out
     if cmd == "setlabel":
         text = " ".join(unquote(":".join(parts[1:])).split())
         from .backend.shapes import printable

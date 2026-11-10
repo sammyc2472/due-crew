@@ -24,6 +24,7 @@ import threading
 import requests
 
 from .. import bingo as _bingo
+from .. import errs as _errs
 from ..room_model import clean_room, is_fifteen, is_over
 from ..songs import clean as clean_song
 from .shapes import (
@@ -217,13 +218,18 @@ class ApiClient:
                      or isinstance(e, requests.exceptions.ConnectTimeout))
             if retry and again:
                 return self._call(method, path, body, auth, retry=False)
+            # 3.9.9: counted for Sam by its route (never its ids or codes)
+            _errs.count(_errs.req_code(path, "timeout" if isinstance(e, requests.exceptions.Timeout) else "offline"))
             # from None: requests' own message carries the whole URL (a
             # friend, plan or squad code), and a chained traceback prints it
-            raise TransportError(f"{method} {_said(path)} failed") from None
+            raise TransportError(f"{method} {_said(path)} failed",
+                                 landed=isinstance(e, requests.exceptions.ReadTimeout)) from None
         try:
             data = r.json() if r.content else {}
         except ValueError:
             data = {}
+        if r.status_code >= 300:
+            _errs.count(_errs.req_code(path, r.status_code))  # 3.9.9: a request that failed, by route and status
         if r.status_code == 401 and auth:
             if not self.session.get("auth_dead"):
                 self.session["auth_gone"] = self._ask_gone()  # once, the first time it's refused
@@ -329,6 +335,12 @@ class ApiClient:
                                   else f"/board?got={got}&pv={pv}")
         if status != 200:
             raise TransportError(f"board: {status}", status)
+        # 3.9.9: a Worker that takes a sync's error counts says so; until one does, none go
+        # (an older one turns a sync with a part it doesn't know away whole)
+        takes = data.get("errs") is True
+        if takes != (self.session.get("errs_ok") is True):
+            self.session["errs_ok"] = takes
+            self._save_session()
         span = list(labels) + ([tomorrow] if tomorrow else [])
         today = labels[0] if labels else ""
         me = data.get("me") or {}
@@ -553,7 +565,8 @@ class ApiClient:
 
     def push(self, labels, cfg, stats=None, backfill=None, shared_decks=None, heatmap=None,
              squad_row=None, squads=(), version=None, clock=None, plans=None,
-             known=None, stuck=None, log=None, log_back=None, log_window=None, team=None, due=None, due_day=None):
+             known=None, stuck=None, log=None, log_back=None, log_window=None, team=None, due=None, due_day=None,
+             errs=None, errs_sent=None):
         """One POST /sync with whatever this sync has. Returns (ok, gone):
         gone lists the squads I'm no longer in. heatmap: counts to share,
         "off" to take it down, None to leave it. plans (3.1): {plan id:
@@ -565,7 +578,10 @@ class ApiClient:
         days, sent when they changed. 3.7.3: team, {plan id: {day?, play?}}
         for the plans whose team I'm on, sent when it changed. 3.9.0: due,
         the guids of the cards due today (the day's first sync; who knows
-        them lands in session["cards_due"], kept for due_day).
+        them lands in session["cards_due"], kept for due_day). 3.9.9:
+        errs, the finished days' error counts (errs.part), sent only once
+        /board has said the Worker takes them; errs_sent() once they went,
+        or may have (a person's day counts once: never sent twice).
         Raises TransportError."""
         body = {}
         profile = {"name": self.display_name or "Me"}
@@ -609,10 +625,21 @@ class ApiClient:
         if log_back and log_back[0]:
             # 3.7.1: a year of my history, riding this sync (the server merges it)
             body["log"] = {"days": {**log_back[0], **(log or {})}}
-        status, data = self._call("POST", "/sync", body)
-        if status == 400 and data.get("error") == "bad_sync" and "due" in body:
-            # 3.9.0 against a Worker that doesn't take `due` yet: the rest goes as before
-            body = {k: v for k, v in body.items() if k != "due"}
+        if errs and self.session.get("errs_ok") is True:
+            body["errs"] = errs  # 3.9.9: what went wrong here, by code, for Sam
+        status, data = self._sync_once(body, errs_sent)
+        if status == 400 and data.get("error") == "bad_errs" and "errs" in body:
+            # 3.9.9: counts this Worker won't take go no further (sent again, they'd be refused again)
+            if errs_sent is not None:
+                errs_sent()
+            body = {k: v for k, v in body.items() if k != "errs"}
+            status, data = self._call("POST", "/sync", body)
+        if status == 400 and data.get("error") == "bad_sync" and ("due" in body or "errs" in body):
+            # 3.9.0 against a Worker that doesn't take `due` yet: the rest goes as before.
+            # 3.9.9: nor `errs` (one put back after it said it did): none till /board says so again
+            if "errs" in body:
+                self.session["errs_ok"] = False
+            body = {k: v for k, v in body.items() if k not in ("due", "errs")}
             status, data = self._call("POST", "/sync", body)
         if status == 400 and data.get("error") in ("bad_sync", "bad_week"):
             # 3.2 against a server that doesn't know 3.2's parts yet (a Worker
@@ -625,6 +652,8 @@ class ApiClient:
             print(f"due crew: sync refused ({status}: {data.get('error', '?')})")
             self._save_session()
             return False, []
+        if "errs" in body and errs_sent is not None:
+            errs_sent()
         if "decks" in body:
             self.session["decks_hash"] = _digest(body["decks"])
         if "heatmap" in body:
@@ -667,6 +696,24 @@ class ApiClient:
         self.session["last_ok"] = _now_iso()
         self._save_session()
         return True, [str(s) for s in data.get("gone") or []]
+
+    def _sync_once(self, body, errs_sent=None):
+        """POST /sync. 3.9.9: one carrying error counts whose answer never
+        came isn't sent again as it was (it may have landed, and a person's
+        day counts once): they're taken as gone, and the rest goes once
+        more. One that never got out goes again whole."""
+        if "errs" not in body:
+            return self._call("POST", "/sync", body)
+        for last in (False, True):
+            try:
+                return self._call("POST", "/sync", body, retry=False)
+            except TransportError as e:
+                if e.landed and "errs" in body:
+                    if errs_sent is not None:
+                        errs_sent()
+                    body.pop("errs")
+                if e.status is not None or last:
+                    raise
 
     @staticmethod
     def _without_32(body):

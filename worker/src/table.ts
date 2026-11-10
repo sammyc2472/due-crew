@@ -47,18 +47,20 @@ const TABLES_PER_DAY = 20;          // and a day's ceiling: a table lives four h
 const JOINS_PER_HOUR = 600;         // connections and checks from one network, to one table (its TV's aside): a room of phones on one wifi, each back after a sleep
 const PROBES_PER_HOUR = 60;         // codes tried from one network that aren't a table
 export const DOOR_PER_NET = 3;      // waiting at the door from one network at once
-const REMEMBER = 64;                // who sat down, who was turned away: the newest
+const REMEMBER = 64;                // who was turned away: the newest
+const SEATED = 512;                 // who sat down (3.9.9: 64 let a script's ids push a real seat off the list, and a locked table then kept her own phone out)
 const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";  // no I or O: read off a TV across a room
 const CREW = "x-dc-crew";           // set by connect() alone (it drops a client's own): the crew's name
+const WHO = "x-dc-who";             // and who they are, hashed: a crewmate turned away stays away under any tab's id
 
 type Opened = { key: string; until: number; uid: string };
-type Room = { door: Door; locked: boolean; seated: string[]; away: string[] };
-type Conn = { peer: string; host: boolean; ok: boolean; crew: string | null; net: string; p: Record<string, unknown>; hits: number[] };
+type Room = { door: Door; locked: boolean; seated: string[]; away: string[]; nets?: string[] };
+type Conn = { peer: string; host: boolean; ok: boolean; crew: string | null; who: string; net: string; p: Record<string, unknown>; hits: number[] };
 
 const tableCode = () => Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) => LETTERS[b % LETTERS.length]).join("");
 const KEY_RE = /^[A-Za-z_][A-Za-z0-9_]{0,31}$/;
 const PEER_RE = /^[0-9a-f]{16}$/;
-const keepNewest = (xs: string[], x: string) => (xs.includes(x) ? xs : xs.concat(x).slice(-REMEMBER));
+const keepNewest = (xs: string[], x: string, n = REMEMBER) => (xs.includes(x) ? xs : xs.concat(x).slice(-n));
 
 /** A presence a table passes on: a plain object of up to 24 named fields,
  *  plain JSON at most 8 deep, PRESENCE_MAX as text. */
@@ -83,7 +85,10 @@ export function okPresence(p: unknown): p is Record<string, unknown> {
 const atDoor = (p: Record<string, unknown>) => ({ r: "p", n: typeof p.n === "string" ? p.n.slice(0, 16) : "", ...(typeof p.t === "number" ? { t: p.t } : {}) });
 
 /** One connection as another hears it; the host also hears who's crew and who's waiting. */
-const view = (c: Conn, toHost: boolean) => ({ peer: c.peer, host: c.host, p: c.p, ...(toHost ? { crew: c.crew, ...(c.ok ? {} : { wait: true }) } : {}) });
+const view = (c: Conn, toHost: boolean) => ({ peer: c.peer, host: c.host, p: toHost || c.host ? c.p : quiet(c.p), ...(toHost ? { crew: c.crew, ...(c.ok ? {} : { wait: true }) } : {}) });
+/** A seat as another seat hears it: without its answer (`a`). 3.9.9: a pick
+ *  rode a seat's presence to every phone before the reveal; only the TV reads it. */
+const quiet = (p: Record<string, unknown>) => { if (!("a" in p)) return p; const { a: _a, ...rest } = p; return rest; };
 
 export class Table extends DurableObject<Env> {
   socks = new Map<WebSocket, Conn>();
@@ -138,9 +143,11 @@ export class Table extends DurableObject<Env> {
     // the label everyone sees; only its own page knows the id it comes from
     const peer = (await sha256Hex(`peer:${cid}`)).slice(0, 16);
     const back = room.seated.includes(peer);
+    const who = /^[0-9a-f]{16}$/.test(req.headers.get(WHO) || "") ? req.headers.get(WHO)! : "";
+    const net = netOf(req);
     let shut = 0;
     if (!host) {
-      if (room.away.includes(peer)) shut = SHUT.away;
+      if (room.away.includes(peer) || (who && room.away.includes(`u:${who}`))) shut = SHUT.away;
       else if (room.door === "crew" && crew === null && !back) shut = SHUT.crewOnly;
       else if (room.locked && !back) shut = SHUT.locked;
     }
@@ -151,8 +158,8 @@ export class Table extends DurableObject<Env> {
         else if (host && c.host) { this.socks.delete(ws); this.closeOne(ws, SHUT.anotherHost, "another host"); this.gone(c); }
       }
     }
-    const ok = host || crew !== null || back || room.door === "open";
-    const net = netOf(req);
+    // 3.9.9: turned away, then back with a new tab's id: from that network, an open door asks again
+    const ok = host || crew !== null || back || (room.door === "open" && !(room.nets || []).includes(net));
     if (!shut && !host && this.count(ok) >= (ok ? SEATS : DOOR)) shut = SHUT.full;
     // one network can't fill the door (a script with many ids is still one network)
     if (!shut && !ok && [...this.socks.values()].filter((c) => !c.ok && c.net === net).length >= DOOR_PER_NET) shut = SHUT.full;
@@ -162,12 +169,12 @@ export class Table extends DurableObject<Env> {
       this.closeOne(server, shut, "no");
       return new Response(null, { status: 101, webSocket: client });
     }
-    const me: Conn = { peer, host, ok, crew, net, p: ok ? carried : atDoor(carried), hits: [] };
+    const me: Conn = { peer, host, ok, crew, who, net, p: ok ? carried : atDoor(carried), hits: [] };
     this.socks.set(server, me);
     server.addEventListener("message", (e) => { void this.message(server, e.data); });
     server.addEventListener("close", () => this.drop(server));
     server.addEventListener("error", () => this.drop(server));
-    if (ok && !host && !back) { room.seated = keepNewest(room.seated, peer); await this.keep(); }
+    if (ok && !host && !back) { room.seated = keepNewest(room.seated, peer, SEATED); await this.keep(); }
     if (host) await this.ctx.storage.delete("gone");
     this.greet(server, me, room);
     this.tell(server, me);
@@ -213,6 +220,11 @@ export class Table extends DurableObject<Env> {
       await this.keep();
     } else if (m.t === "away" && peer) {
       room.away = keepNewest(room.away, peer);
+      for (const c of this.socks.values()) {
+        if (c.peer !== peer || c.host) continue;
+        if (c.who) room.away = keepNewest(room.away, `u:${c.who}`);
+        else room.nets = keepNewest(room.nets || [], c.net);
+      }
       room.seated = room.seated.filter((x) => x !== peer);
       await this.keep();
       for (const [w, c] of this.socks) if (c.peer === peer && !c.host) { this.socks.delete(w); this.closeOne(w, SHUT.away, "turned away"); this.gone(c); }
@@ -221,7 +233,7 @@ export class Table extends DurableObject<Env> {
       for (const [w, c] of this.socks) {
         if (c.ok) continue;
         if (room.door === "crew") { this.socks.delete(w); this.closeOne(w, SHUT.crewOnly, "crew only"); this.gone(c); }
-        else if (room.door === "open" && !room.locked && this.count(true) < SEATS) this.seat(w, c, room);
+        else if (room.door === "open" && !room.locked && !(room.nets || []).includes(c.net) && this.count(true) < SEATS) this.seat(w, c, room);
       }
       await this.keep();
     } else if (m.t === "lock" && typeof m.on === "boolean") {
@@ -234,7 +246,7 @@ export class Table extends DurableObject<Env> {
   /** In from the door: hello again, now with the table, and the table hears it. */
   private seat(ws: WebSocket, c: Conn, room: Room) {
     c.ok = true;
-    room.seated = keepNewest(room.seated, c.peer);
+    room.seated = keepNewest(room.seated, c.peer, SEATED);
     this.greet(ws, c, room);
     this.tell(ws, c);
   }
@@ -280,6 +292,9 @@ export class Table extends DurableObject<Env> {
 /** The name on a signed-in visitor's account when they're the host's crew
  *  (mutual friends, or the host on their own phone); null for anyone else. */
 async function crewName(req: Request, env: Env, hostUid: string): Promise<string | null> {
+  return (await crewOf(req, env, hostUid))?.name ?? null;
+}
+async function crewOf(req: Request, env: Env, hostUid: string): Promise<{ name: string; who: string } | null> {
   if (!hostUid || !(req.headers.get("cookie") || "").includes("dc_session=")) return null;
   let uid: string;
   try { uid = (await authenticate(req, env)).uid; } catch { return null; }
@@ -288,7 +303,7 @@ async function crewName(req: Request, env: Env, hostUid: string): Promise<string
     : await env.DB.prepare(
       `SELECT u.name FROM friends a JOIN friends b ON b.owner = a.friend AND b.friend = a.owner
          JOIN users u ON u.uid = a.friend WHERE a.owner = ? AND a.friend = ?`).bind(hostUid, uid).first<{ name: string | null }>();
-  return row ? (row.name || "Crew") : null;
+  return row ? { name: row.name || "Crew", who: (await sha256Hex(`who:${uid}`)).slice(0, 16) } : null;
 }
 
 /** POST /table: open a table; its code for the phones, and the key that
@@ -349,7 +364,8 @@ export async function connect(req: Request, env: Env, [code]: string[]): Promise
   if (!(k && (await stub.isHost(k)))) await limitOrThrow(env, `tablews:${netOf(req)}:${code.toUpperCase()}`, JOINS_PER_HOUR, 3600);
   const headers = new Headers(req.headers);
   headers.delete(CREW);  // only this says who's crew
-  const crew = await crewName(req, env, t.uid);
-  if (crew !== null) headers.set(CREW, encodeURIComponent(crew));
+  headers.delete(WHO);
+  const crew = await crewOf(req, env, t.uid);
+  if (crew !== null) { headers.set(CREW, encodeURIComponent(crew.name)); headers.set(WHO, crew.who); }
   return stub.fetch(new Request(req.url, { method: "GET", headers }));
 }

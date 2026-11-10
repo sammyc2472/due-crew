@@ -16,7 +16,6 @@ and its subdecks while it runs, as a catch-up sets its own; Turn back on
 takes today's off again. Main thread, but for the track record's sums."""
 
 import datetime
-import traceback
 
 from aqt import mw
 from aqt.utils import tooltip
@@ -24,6 +23,8 @@ from aqt.utils import tooltip
 from . import ahead as A
 from . import app
 from .app import _bg, _state, cfg
+from .stats.queries import first_answers
+from .errs import oops
 
 FRESH = 600         # seconds a deck's view keeps (Insights' own)
 TRUST_DAYS = 7      # the track record is worked out again after a week
@@ -74,8 +75,7 @@ def _day_part(col, did, deck, today):
     cutoff = int(col.sched.day_cutoff)
     start = (cutoff - 86400) * 1000
     since = (cutoff - (A.LOOK + 1) * 86400) * 1000
-    first = {int(c): -int((cutoff - 1 - int(t) // 1000) // 86400)
-             for c, t in col.db.all(f"SELECT cid, min(id) FROM revlog WHERE ease > 0 AND cid IN ({deck}) GROUP BY cid")}
+    first = {c: -int((cutoff - 1 - t // 1000) // 86400) for c, t in first_answers(col.db, deck).items()}
     first = {c: d for c, d in first.items() if d < 0}  # started today: today's count, not the log's
     log = [(-int(a), int(c), int(e), int(i), int(li), int(t)) for a, c, e, i, li, t in col.db.all(
         f"SELECT CAST((? - id / 1000) / 86400 AS INTEGER), cid, ease, ivl, lastIvl, type FROM revlog "
@@ -255,7 +255,7 @@ def apply_morning():
             try:
                 changed = _set_zero(col, int(key), True) or changed
             except Exception:
-                traceback.print_exc()
+                oops()
         else:
             idle.append(int(key))
     # 3.9.2's QoL pass: one over or not today (its exam moved or went) takes today's 0 off, the catch-up's back
@@ -264,7 +264,7 @@ def apply_morning():
         try:
             lifted = _set_zero(col, key, False, keep=on) or lifted
         except Exception:
-            traceback.print_exc()
+            oops()
     if lifted:
         _pf().apply_catch()
     if keep != offs:
@@ -281,7 +281,7 @@ def on_state(new_state, *_args):
             if apply_morning():
                 _pf()._after_change()
         except Exception:
-            traceback.print_exc()
+            oops()
 
 
 def paused(col, did):
@@ -325,7 +325,7 @@ def stop_new(did, kind):
             _set_zero(col, int(did), True)
             _pf()._after_change()
         except Exception:
-            traceback.print_exc()
+            oops()
     name = str(col.decks.name(int(did)) or "").split("::")[-1]
     try:
         x = datetime.date.fromisoformat(exam) if has_exam else None
@@ -355,7 +355,7 @@ def start_new(did):
             if _set_zero(col, int(did), False, then=_pf().apply_catch):
                 _pf()._after_change()
         except Exception:
-            traceback.print_exc()
+            oops()
         tooltip(f"New cards back on in {str(col.decks.name(int(did)) or '').split('::')[-1]}.")
     _forget(did)
 
@@ -368,7 +368,7 @@ def exam_moved():
             if apply_morning():
                 _pf()._after_change()
         except Exception:
-            traceback.print_exc()
+            oops()
         _state["insights"] = {}
         _state["ahead_line"] = None
 
@@ -379,7 +379,7 @@ def _forget(did):
     try:
         _pf().refresh_progress()  # 3.9.2's QoL pass: the plan card's line follows (stopped, or Raise)
     except Exception:
-        traceback.print_exc()
+        oops()
     app.swap(cfg())
 
 
@@ -401,7 +401,7 @@ def _trust(col, did, deck, today):
         try:
             _start_trust(col, did, deck, today)
         except Exception:
-            traceback.print_exc()
+            oops()
     if have.get("by"):
         return (float(have.get("err") or 0), [float(x) for x in have["by"]])
     return None
@@ -411,8 +411,7 @@ def _start_trust(col, did, deck, today):
     cutoff = int(col.sched.day_cutoff)
     sday = int(col.sched.today)
     back = max(A.BACK) + A.LOOK + 1
-    first = {int(c): -int((cutoff - 1 - int(t) // 1000) // 86400)
-             for c, t in col.db.all(f"SELECT cid, min(id) FROM revlog WHERE ease > 0 AND cid IN ({deck}) GROUP BY cid")}
+    first = {c: -int((cutoff - 1 - t // 1000) // 86400) for c, t in first_answers(col.db, deck).items()}
     log = [(-int(a), int(c), int(e), int(i), int(li), int(t)) for a, c, e, i, li, t in col.db.all(
         f"SELECT CAST((? - id / 1000) / 86400 AS INTEGER), cid, ease, ivl, lastIvl, type FROM revlog "
         f"WHERE id >= ? AND cid IN ({deck})", cutoff - 1, (cutoff - back * 86400) * 1000)]
@@ -480,7 +479,7 @@ def check():
         else:
             v = deck_view(mw.col, d["did"], team_flow._deck_sql(mw.col, d["did"]), exam)
     except Exception:
-        traceback.print_exc()
+        oops()
         return
     if not v or not v.get("climb"):
         return

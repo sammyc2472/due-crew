@@ -8,7 +8,7 @@ from datetime import datetime
 from ..logo import board_mark
 from .. import sev as _sev
 
-from .base import (CREW_VIEWS, HEADERS, MEDALS, ROW_CAP, _NW_ROOM, _ago, _cell, _even_rows, _fmt_time, _label,
+from .base import (CREW_VIEWS, HEADERS, ROW_CAP, _NW_ROOM, _ago, _cell, _even_rows, _fmt_time, _label,
     _long_quiet, _pycmd, _quiet_fold, _reviews_cell, _showed, build_deck_groups, build_rows, plan_target, sort_key,
     week_labels)
 from .pip import row_sev
@@ -102,9 +102,10 @@ def _who(row, cfg):
     return (fig, _html.escape(str(row["name"]))) if fig else ("", _label(row["name"], row.get("emoji")))
 
 
-def _row_html(row, rank, cfg, period="today"):
+def _row_html(row, rank, cfg, period="today", held=False):
+    """held (3.9.9): a cheer I sent them while Due Crew couldn't be reached, waiting to go."""
     fig, name = _who(row, cfg)
-    cls = ("you" if row["you"] else "") + (" sv" if fig else "")
+    cls = ("you" if row["you"] else "") + (" sv" if fig else "") + (" ch" if held and not row["you"] else "")
     extra = ""
     la = ""
     if row["paused"]:
@@ -164,7 +165,11 @@ def _row_html(row, rank, cfg, period="today"):
     else:
         # 3.9.1: the cheer is a pill after the name (and its chip), where the eye already is
         cheer = (f'<a class="dc-cpill" href="#" title="Send a cheer" aria-label="Cheer {_html.escape(str(row["name"]), quote=True)}" '
-                 f'onclick="{_pycmd("cheerpick:" + str(row["user_id"]))}">&#127881; Cheer</a>')
+                 f'onclick="{_pycmd("cheerpick:" + str(row["user_id"]))}">&#127881; Cheer</a>') if not held else (
+            # 3.9.9 (Off the Board, 11): sent while Due Crew couldn't be reached; it goes with the next refresh that does
+            f'<a class="dc-cpill held" href="#" title="Sends when Due Crew is back" '
+            f'aria-label="Cheer for {_html.escape(str(row["name"]), quote=True)}, waiting to send" '
+            f'onclick="{_pycmd("cheerpick:" + str(row["user_id"]))}">&#127881; Waiting<span class="ts"> to send</span></a>')
         # 3.0.1: right-click for Mute cheers and Report…
         # 3.8.2: their Pip opens the profile too, outside the name's underline
         sev_link = (f'<a class="dc-rsevl" href="#" tabindex="-1" aria-hidden="true" '
@@ -208,6 +213,7 @@ def _table_html(data, cfg, period, pick=""):
     sort = sort_key(cfg)
     fresh, dormant = build_rows(data["entries"], data["labels"],
                                 data.get("tomorrow", ""), period, cfg)
+    held = set(data.get("held") or ())  # 3.9.9: cheers waiting for Due Crew to be reachable
     heads = _corner(pick) if pick else "<th></th><th></th>"
     if sort == "week":
         sort = "reviews"
@@ -221,30 +227,27 @@ def _table_html(data, cfg, period, pick=""):
                                     data.get("tomorrow", ""), "today", cfg)
         return _presence_html(fresh, dormant, data["labels"], data["entries"], pick, cfg) + _solo_html(data)
     body = ""
-    n = 0  # show-up rows are counted, not ranked
     for row in fresh:
         if row.get("showup"):
             rank = "&#10003;"
-        elif all(row.get(k) is None for k in ("reviews", "time_ms", "retention", "streak")):
-            rank = "&mdash;"  # 3.8.0: nothing to rank (me alone, the day I joined), no medal
         else:
-            n += 1
-            rank = MEDALS[n - 1] if n <= 3 else f"#{n}"
-        body += _row_html(row, rank, cfg, period)
+            rank = ""  # 3.9.9 (Sam, the design mocks' 2): no medals, no places: the order says it, and this isn't a race
+        body += _row_html(row, rank, cfg, period, held=row["user_id"] in held)
     # Q3: friends quiet for 90+ days fold into one line under everyone
     long_q = [r for r in dormant if r["quiet"] and not r["you"] and _long_quiet(r["last_updated"])]
     for row in dormant:
         if row not in long_q:
-            body += _row_html(row, "&mdash;", cfg, period)
+            body += _row_html(row, "", cfg, period, held=row["user_id"] in held)
     if long_q:
         body += _quiet_fold(long_q)
         for row in long_q:
-            body += _row_html(row, "&mdash;", cfg, period).replace('<tr class="', '<tr class="qh ', 1)
+            body += _row_html(row, "", cfg, period, held=row["user_id"] in held).replace('<tr class="', '<tr class="qh ', 1)
     body = _even_rows(body)
     solo = _solo_html(data)
     # the name column ellipsizes, so the table can never outgrow the card;
     # past the row cap it scrolls inside it
-    return _scroll(f'<table><tr>{heads}</tr>{body}</table>', body.count('<tr class=')) + solo
+    # 3.9.9: what it's sorted by, for a narrow window's two columns (style.py)
+    return _scroll(f'<table class="dc-s-{sort}"><tr>{heads}</tr>{body}</table>', body.count('<tr class=')) + solo
 
 
 def _scroll(html, rows):

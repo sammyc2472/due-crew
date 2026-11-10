@@ -37,6 +37,35 @@ def notice_html(notice):
             f'<a class="wx" href="#" title="Dismiss" onclick="{_pycmd(f"noticex:{nid}")}">&times;</a></div>')
 
 
+def _clock(ts, now=None):
+    """3.9.9: when a refresh last got through, as a person says it: "3:10 PM"
+    today, "Fri 3:10 PM" this past week, "2 Nov" before that; "" for never."""
+    if not ts:
+        return ""
+    import datetime as _dt
+    t, n = time.localtime(ts), time.localtime(now if now is not None else time.time())
+    hm = f"{(t.tm_hour % 12) or 12}:{t.tm_min:02d} {'AM' if t.tm_hour < 12 else 'PM'}"
+    day = _dt.date(t.tm_year, t.tm_mon, t.tm_mday)
+    back = (_dt.date(n.tm_year, n.tm_mon, n.tm_mday) - day).days
+    if back <= 0:
+        return hm
+    if back < 7:
+        return f"{day.strftime('%a')} {hm}"
+    return f"{day.day} {day.strftime('%b')}"
+
+
+def offline_html(fetched_at, now=None):
+    """3.9.9 (Off the Board, 11, Sam's pick): Due Crew couldn't be reached
+    (no network, or the server away), said plainly on top of every tab where
+    the foot's "Couldn't sync" was the only word. What I study still counts:
+    the next sync reads it from Anki. Try now is Refresh."""
+    when = _clock(fetched_at, now)
+    last = f" Last refresh {when}." if when else ""
+    return (f'<div class="dc-wrap off" role="status"><span>&#9888;&#65039;</span>'
+            f'<span>Can&rsquo;t reach Due Crew. Your studying still counts and sends when it&rsquo;s back.{last}</span>'
+            f'<a class="wc" href="#" onclick="{_pycmd("refresh")}">Try now</a></div>')
+
+
 def _review_banner(kind, info):
     """Personal month or year review, above the board. Local numbers only."""
     r = info["review"]
@@ -120,11 +149,40 @@ def _one_at_a_time(bans):
     return f'<div class="dc-bans">{"".join(out)}</div>'
 
 
+def _use_line(cfg):
+    """3.9.9: what's counted now, said once in a line at the board's foot
+    (errs_flow.NOTE): its way to the switch, and Got it."""
+    from .. import errs_flow
+    if not errs_flow.note_due(cfg):
+        return ""
+    return (f'<div class="dc-calm"><span>{errs_flow.NOTE}</span><span class="sp"></span>'
+            f'<a href="#" onclick="{_pycmd("usesee")}">Privacy</a>'
+            f'<a href="#" onclick="{_pycmd("usetold")}">Got it</a></div>')
+
+
+def _calm_line(cfg):
+    """3.9.9, the calm board (calm.py): the part that just appeared, in one
+    line with its way in and its way off; else, while parts are folded, Show all."""
+    from .. import calm
+    if not calm.on(cfg):
+        return ""
+    h = calm.hint(cfg)
+    if h:
+        part, bold, rest, go = h
+        return (f'<div class="dc-calm"><span><b>{bold}</b> {rest}</span><span class="sp"></span>'
+                f'<a href="#" onclick="{_pycmd(f"calmopen:{part}")}">{go}</a>'
+                f'<a href="#" class="x" title="Put this away" aria-label="Put this away" onclick="{_pycmd("calmx")}">&times;</a></div>')
+    if calm.held(cfg):
+        return (f'<div class="dc-calm"><span>More when you&rsquo;re ready</span><span class="sp"></span>'
+                f'<a href="#" title="Every tab now; Settings &rsaquo; Board has the switch" onclick="{_pycmd("calmall")}">Show all</a></div>')
+    return ""
+
+
 def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
            rules_stale=False, squad_view=None, knocks=None, reviews=None,
            sync_error=False, live=False, tricky=None, milestones=None, room=None, plans=None,
            notice=None, asks=None, due=None, you=None, sticking=None, sev=None, milestone_sev=None, closet=None,
-           halloween=None, wrapped=None, fridge=None, fridge_gone=None, ahead=None, dance=None):
+           halloween=None, wrapped=None, fridge=None, fridge_gone=None, ahead=None, dance=None, offline=False):
     """3.8.0: two parts, apart. On top the You bubble (you_html): due,
     Due's view (due_flow.view, None when Due is off), and you, its Plans and
     Insights ({tab, folded, plans, insights}; None draws Due alone). Under it
@@ -146,7 +204,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     fridge (3.9.1): the doodles my crew sent (fridge.clean's), pinned around the Decks screen (fridge_html);
     fridge_gone: the one just taken down, for its Undo (closet_flow.gone).
     ahead (3.9.2): {did, name, day, n, week} when reviews in my most reviewed deck climb (ahead_line).
-    dance (3.9.6): song of the moment's dance floor (song_flow.floor_view), for the Decks screen's corner (dance_html)."""
+    dance (3.9.6): song of the moment's dance floor (song_flow.floor_view), for the Decks screen's corner (dance_html).
+    offline (3.9.9): the last refresh couldn't reach Due Crew; a line on top of every tab (offline_html)."""
     period = cfg.get("period", "today")
     hidden = hidden_tabs(cfg)
     if period not in PERIODS or period in hidden:
@@ -239,7 +298,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
             bans.append(_review_banner(kind, reviews[kind]))
     if period == "squads":
         bans += _split_wraps(_offer_banners((plans or {}).get("offers")))  # and on You's Plans
-    body = (notice_html(notice) if notice else "") + _one_at_a_time(bans) + lobby + body
+    body = ((offline_html(fetched_at) if offline else "") + (notice_html(notice) if notice else "")
+            + _one_at_a_time(bans) + lobby + body)
 
     # 3.4 review, H5: the day's two social actions as buttons, the rest in
     # one Crew menu, and Refresh and Settings as quiet icons
@@ -271,7 +331,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     failed = ('<span class="warn" title="The last sync didn\'t reach the server. '
               'Your numbers are safe; Refresh tries again.">Couldn&rsquo;t sync</span>'
               ' &middot; ') if sync_error else ""
-    foot = (f'<div class="dc-foot"><span class="fl">{left}</span><span class="sp"></span>'
+    foot = (_calm_line(cfg) + _use_line(cfg) + f'<div class="dc-foot"><span class="fl">{left}</span><span class="sp"></span>'
             f'<span class="fr">{failed}<span class="upd">Updated {ago}</span>'
             f'<a class="ic" href="#" title="Refresh" onclick="{_pycmd("refresh")}">&#8635;</a>'
             f'<a class="ic" href="#" title="Settings" onclick="{_pycmd("settings")}">&#9881;&#xFE0E;</a></span></div>')

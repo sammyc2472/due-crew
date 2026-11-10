@@ -931,7 +931,6 @@ function squadWeek(rows, day) {
 // ---- 3.3: the board, as the add-on draws it (due_crew/board.py) ----
 
 const Board = (() => {
-  const MEDALS = ["🥇", "🥈", "🥉"];
   // 3.4 review, T3: headings as words (the medals keep the emoji)
   const HEADS = [["reviews", "Reviews"], ["time", "Time"], ["retention", "Retention"], ["streak", "Streak"]];
   const SQUAD_HEADS = [...HEADS, ["week", "7 days"]];
@@ -1116,7 +1115,6 @@ const Board = (() => {
     const [fresh, dormant] = rows(people, period, sort, today);
     const head = h("tr", {}, picker ? corner(picker) : [h("th"), h("th")], HEADS.map(([k, l]) => h("th", { class: `k-${k}${k === sort ? " on" : ""}` },
       h("button", { class: "linkish", onclick: () => { store("dc-sort", k); onSort(); } }, l + (k === sort ? " ▾" : "")))));
-    let n = 0;
     const tr = (r, rank) => {
       // T5: how many were new, on the Week tab
       const rv = r.reviews === null ? "—" : h("span", {}, r.reviews.toLocaleString(), period === "week" && r.new > 0 && r.reviews > 0 ? h("small", {}, r.new >= r.reviews ? "all new" : `${Math.min(r.new, r.reviews).toLocaleString()} new`) : null);
@@ -1138,12 +1136,11 @@ const Board = (() => {
       fold.push(h("tr", { class: "qfold" }, h("td", { class: "rk" }), h("td", { class: "nm", colspan: HEADS.length + 1 },
         h("button", { class: "linkish", onclick: () => tbl.classList.toggle("qopen") }, `▸ ${longQ.length} quiet`),
         h("span", { class: "ago faded" }, ` · ${who} ${longQ.length === 1 ? "hasn't" : "haven't"} been here since ${since}`))));
-      for (const r of longQ) { const row = tr(r, "—"); row.classList.add("qh"); fold.push(row); }
+      for (const r of longQ) { const row = tr(r, ""); row.classList.add("qh"); fold.push(row); }
     }
-    // board.py: nothing to rank (me alone, the day I joined) takes no medal
-    const blank = (r) => [r.reviews, r.time, r.retention, r.streak].every((v) => v === null);
-    const body = [...fresh.map((r) => { if (r.showup) return tr(r, "✓"); if (blank(r)) return tr(r, "—"); n++; return tr(r, n <= 3 ? MEDALS[n - 1] : `#${n}`); }),
-      ...dormant.filter((r) => !longQ.includes(r)).map((r) => tr(r, "—")), ...fold];
+    // board/crew.py (3.9.9): no medals, no places: the order says it
+    const body = [...fresh.map((r) => tr(r, r.showup ? "✓" : "")),
+      ...dormant.filter((r) => !longQ.includes(r)).map((r) => tr(r, "")), ...fold];
     tbl.append(h("thead", {}, head), h("tbody", {}, body));
     return h("div", { class: "scrollx" }, tbl);
   }
@@ -1196,7 +1193,7 @@ const Board = (() => {
   }
 
   /** A squad board, as _squads_html: one squad at a time behind a
-   *  switcher, plain ranks, no medals, no cheers; these aren't necessarily
+   *  switcher, no places (3.9.9), no medals, no cheers; these aren't necessarily
    *  people you know. Synced today with nothing studied yet sits under the
    *  ranked, with dashes. */
   let squadsGot = null;  // {at, list, boards: {id: board}}: a sort redraws from these, not the network
@@ -1242,7 +1239,6 @@ const Board = (() => {
     const heads = showUp ? [h("th", {}, "📅 7 days")] : SQUAD_HEADS.map(([k, l]) => h("th", { class: `k-${k}${k === sort ? " on" : ""}` },
       h("button", { class: "linkish", onclick: () => { store("dc-sort", k); onSort(); } }, l + (k === sort ? " ▾" : ""))));
     const numberless = (r) => ["reviews", "studyTimeMs", "accuracy", "streak"].every((k) => r[k] == null);
-    let n = 0;
     const body = [...live, ...waitingToday, ...rest].map((r) => {
       const you = r.uid === me.uid, today = r.day === day, nyet = today && zero(r);
       const notes = [];
@@ -1252,7 +1248,7 @@ const Board = (() => {
       }
       if (!today) notes.push(h("span", { class: "ago faded" }, ` · ${r.day === yday ? "yesterday" : "quiet"}`));
       else if (nyet) notes.push(h("span", { class: "ago faded" }, " · nothing yet today"));
-      const rank = !today ? "" : nyet ? "—" : showUp || numberless(r) ? "✓" : `#${++n}`;
+      const rank = today && !nyet && (showUp || numberless(r)) ? "✓" : "";  // 3.9.9: no places, as on Crew (board/squads.py)
       const wk7 = h("td", { class: "n" }, r.week != null ? `${r.week}/7` : "—");
       const cells = showUp ? [wk7] : nyet ? [h("td", { class: "n" }, "—"), h("td", { class: "n k-time" }, "—"), h("td", { class: "n k-retention" }, "—"), h("td", { class: "n" }, "—"), wk7] : [
         h("td", { class: "n" }, r.reviews == null ? "—" : h("span", {}, r.reviews.toLocaleString(), r.newCards > 0 && r.reviews > 0 ? h("small", {}, r.newCards >= r.reviews ? "all new" : `${r.newCards.toLocaleString()} new`) : null)),
@@ -2867,7 +2863,7 @@ async function adminPage() {
     people: ["People", h("div", { class: "apage" }, people.el)],
     squads: ["Squads", h("div", { class: "apage" }, squads.el)],
     plans: ["Plans & library", h("div", { class: "apage" }, library)],
-    inbox: ["Inbox", h("div", { class: "apage" }, reportsPanel(nav), feedbackPanel(nav))],
+    inbox: ["Inbox", h("div", { class: "apage" }, fieldPanel(), reportsPanel(nav), feedbackPanel(nav))],  // 3.9.9: In the field, on top
     notices: ["Notices", h("div", { class: "apage" }, notices)],
     bingo: ["Bingo", h("div", { class: "apage" }, bingoPanel())],
     system: ["System", h("div", { class: "apage" }, h("div", { class: "agrid3" }, codes))],
@@ -2916,6 +2912,55 @@ function feedbackPage() {
   const form = h("div", { class: "stack" }, box, h("div", { class: "row" }, send, h("span", { class: "muted small" }, from ? `Sent with the page you were on (${from}).` : "")), status);
   page(phead("Send feedback", "What's working, what isn't, what you'd add. Every one is read, with your name, and we can write back to your email. Nobody else sees it."), form);
   reading();
+}
+
+/** 3.9.9, Know when it breaks: what went wrong in the add-on yesterday, by
+ *  code (never by content, never by person): each code's count, how many
+ *  people sent it and from which versions, most first; and a line for the
+ *  codes new since the day before. A day's counts come with each install's
+ *  first sync after that day ends; kept 30 days. */
+function fieldPanel() {
+  const head = (note) => h("h4", {}, "In the field, yesterday", h("span", { class: "muted" }, note));
+  const box = h("section", { class: "panel" }, head("loading…"));
+  const day = (iso) => { const d = new Date(`${iso}T00:00:00Z`); return `${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`; };
+  async function load() {
+    let r;
+    try { r = await api("GET", "/admin/field"); } catch { box.replaceChildren(head(""), h("p", { class: "status bad" }, "Couldn't load the counts.")); return; }
+    const fresh = !r.rows.length ? null
+      : !r.beforeCodes ? h("p", { class: "muted small" }, `Nothing came in for ${day(r.before)}, so nothing to compare with.`)
+      : r.new.length ? h("p", { class: "small" }, h("b", {}, `New since ${day(r.before)}: `), r.new.join(" · "))
+      : h("p", { class: "muted small" }, `Nothing new since ${day(r.before)}.`);
+    const n = (v) => h("span", { class: "n" }, v.toLocaleString());
+    // 3.9.9: what gets used ("use:insights": the people who opened it that day), apart from what went wrong
+    const uses = r.rows.filter((x) => x.code.startsWith("use:") && x.code !== "use:any");
+    const any = (r.rows.find((x) => x.code === "use:any") || {}).people || 0;
+    r.rows = r.rows.filter((x) => !x.code.startsWith("use:"));
+    r.new = r.new.filter((c) => !c.startsWith("use:"));
+    const used = !uses.length ? null : h("div", { class: "used" },
+      h("h4", {}, "Used", h("span", { class: "muted" }, `${day(r.day)} · of ${any.toLocaleString()} ${any === 1 ? "person" : "people"} who sent a day`)),
+      h("div", { class: "field" },
+        h("span", { class: "hd" }, "Part"), h("span", { class: "hd n" }, "People"), h("span", { class: "hd n" }, "Share"), h("span", { class: "hd ver" }, ""),
+        uses.sort((a, b) => b.people - a.people || a.code.localeCompare(b.code)).flatMap((x) => {
+          const pct = any ? Math.min(100, Math.round(100 * x.people / any)) : 0;
+          return [h("code", {}, x.code.slice(4)), n(x.people), h("span", { class: "n" }, any ? `${pct}%` : ""),
+            h("span", { class: "ver usebar" }, h("i", { style: `width:${pct}%` }))];
+        })),
+      h("small", { class: "muted" }, "A part counts once a day a person, whatever they did there. Only people with the switch on, told once, are in it."));
+    box.replaceChildren(...[head(`${day(r.day)}${r.rows.length ? ` · ${r.rows.length} code${r.rows.length === 1 ? "" : "s"}` : ""}`),
+      r.rows.length
+        ? h("div", { class: "field" },
+          h("span", { class: "hd" }, "Code"), h("span", { class: "hd n" }, "Times"),
+          h("span", { class: "hd n" }, "People"), h("span", { class: "hd ver" }, "Versions"),
+          r.rows.flatMap((x) => [
+            h("code", { class: r.new.includes(x.code) ? "new" : "" }, x.code), n(x.n), n(x.people),
+            h("span", { class: "muted ver" }, x.versions.join(", "))]))
+        : h("p", { class: "muted small" }, "Nothing went wrong, or nothing has come in yet."),
+      fresh, used,
+      h("small", { class: "muted" }, "Codes and counts only: no names, no cards. People: how many sent that code. Kept 30 days.")]
+      .filter(Boolean));
+  }
+  load();
+  return box;
 }
 
 /** 3.8.1 (the audit): reports, kept for the admin (they used to go only by

@@ -80,6 +80,9 @@ def _you_insights(ins):
     if hv and hv.get("open"):
         return head + _habits_html(did, hv)
     view = ins.get("view") or {}
+    if view.get("working") and len(view) == 1:
+        # 3.9.9: the day's first look at a big deck is worked out a part at a time, Anki live meanwhile
+        return head + '<div class="tq0" role="status">Reading your reviews&hellip;</div>'
     line = _habits_line(did, hv) if hv and not isinstance(view.get("leech"), dict) else ""
     return head + line + _insights_html(did, view)
 

@@ -8,10 +8,13 @@ where it's from; change one, change both (CLAUDE.md's twins).
 - What a date's name points at in the deck (Suggest.tags).
 - A date's work over its days (Work), and the reviews that brings, a
   typical card's (Reviews).
+- The Worker's ceilings on a save and a plan's counts against them
+  (Ceilings, 3.9.9).
 """
 
 import bisect
 import datetime
+import json
 import math
 import re
 import unicodedata
@@ -679,7 +682,42 @@ def pieces(tree, key, cap, placed):
     return out
 
 
-UNITS_MAX = 200
+# 3.9.9: the Worker's ceilings on a plan's save (worker/src/plans.ts; the suite
+# checks them against it), by the name a refused save gives each (its "limit"):
+# sets UNITS_MAX, events EVENTS_MAX, reviews REVIEWS_MAX, tags TAGS_MAX, cards
+# CARDS_MAX (picked cards and IDs in all, the plan tags' notes and cards with
+# them), ids IDS_MAX (a date's note ids, its pasted ids' cards), size DOC_MAX
+# (the doc as JSON), total PLAN_BYTES_MAX (an account's plans together). The one
+# place they're kept here; Ceilings.MAX in builder.js is the site's.
+CEILINGS = {"sets": 200, "events": 200, "reviews": 60, "tags": 100, "cards": 50_000, "ids": 50_000,
+            "size": 1536 * 1024, "total": 24 * 1024 * 1024}
+SAVES_A_DAY = 500  # plans.ts planput: a person's saves a day, every plan's
+
+
+def ceiling_counts(doc):
+    """{limit: n}: a doc as a save sends it, counted as plans.ts planDoc counts it
+    (Ceilings.counts in builder.js): its sets, events, review days and plan tags;
+    its picked cards and IDs (each set's single cards, note and card IDs and notes,
+    and each plan tag's notes and cards; one twice counts once, as the Worker keeps
+    it); its size, its JSON's length as JSON.stringify counts it."""
+    doc = doc if isinstance(doc, dict) else {}
+    units = [u for u in doc.get("units") or [] if isinstance(u, dict)]
+    tags = [t for t in doc.get("tags") or [] if isinstance(t, dict)]
+
+    def refs(xs):
+        return len({(str(c[0]), c[1]) for c in xs or [] if isinstance(c, (list, tuple)) and len(c) == 2})
+
+    def once(xs):
+        return len(set(x for x in xs or [] if isinstance(x, (str, int))))
+
+    cards = sum(refs(u.get("cards")) + once(u.get("nids")) + once(u.get("cids")) + once(u.get("notes")) for u in units)
+    cards += sum(once(t.get("notes")) + refs(t.get("cards")) for t in tags)
+    text = json.dumps(doc, separators=(",", ":"), ensure_ascii=False)
+    return {"sets": len(units), "events": len(doc.get("events") or []), "reviews": len(doc.get("reviews") or []),
+            "tags": len(tags), "cards": cards, "size": len(text.encode("utf-16-le")) // 2}
+
+
+UNITS_MAX = CEILINGS["sets"]
 SOURCES_MAX = 50
 FULL = f"A plan holds up to {UNITS_MAX} sets."
 

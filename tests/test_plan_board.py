@@ -196,7 +196,9 @@ def test_card():
           '<div class="ppl"><span>Mon 2 Nov</span><span>Exam &middot; Fri 18 Dec</span></div>' in h)
     check("card: each segment says its set on a hover, the names escaped; the path read out in words",
           'title="2 · Inflammation &lt;b&gt; &middot; 31 left"' in path and 'title="3 · Neoplasia &middot; today &middot; 84 to go"' in path
-          and 'role="img" aria-label="Sets: 1 done, 1 behind, 1 today, 2 to come, then Exam on Fri 18 Dec"' in h
+          # 3.9.9: a group of buttons to the keyboard (one Tab stop, the arrows walk it), each set named for a screen reader
+          and 'role="group" aria-label="Sets: 1 done, 1 behind, 1 today, 2 to come, then Exam on Fri 18 Dec. Arrow keys move along them."' in h
+          and 'aria-label="3 · Neoplasia, today, 84 to go"' in path and path.count(' tabindex="0" data-rove="1"') == 1
           and "<b>" not in path, path)
     jumps = re.findall(r"duecrew:planjump:p1:(\d{4}-\d{2}-\d{2})\|", path)
     check("card: each segment's click opens the day it opens in the week below (3.9.6, after the last check)",

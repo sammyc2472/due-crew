@@ -15,6 +15,7 @@ from . import view as V
 from . import webmodel as WM
 from .core import PlanCore
 from .webnew import NewPlan
+from ..errs import oops
 
 PREFIX = "dcplan:"
 TABS = {"insights": "insights", "settings": "settings", "sharing": "settings", "mine": "settings"}
@@ -155,8 +156,7 @@ class WebFace(NewPlan, PlanCore):
         try:
             data = self.view(status_only)
         except Exception:
-            import traceback
-            traceback.print_exc()
+            oops()
             data = {"status": "Something went wrong drawing the plan. Close the window and open it again."}
             status_only = True
         self.eval_js(f"dcPlan.{'status' if status_only else 'show'}({json.dumps(data, ensure_ascii=True)})")
@@ -191,8 +191,7 @@ class WebFace(NewPlan, PlanCore):
         try:
             fn(**args)
         except TypeError:
-            import traceback
-            traceback.print_exc()
+            oops()
         except E.Refused as e:
             self.say(str(e))
 
@@ -217,6 +216,13 @@ class WebFace(NewPlan, PlanCore):
         if tab in ("plan", "insights", "settings"):
             self.tab = tab
             self.push()
+            if tab == "insights":
+                try:
+                    from . import webtabs
+                    webtabs.ask_class(self)  # 3.9.9: an author's, where the squad fell behind
+                except Exception:
+                    from ..errs import oops
+                    oops()
 
     def c_close(self, sure=False):
         """Close: with changes waiting to be sent, asked first (unsent_ask); sure, it closes."""
@@ -279,7 +285,8 @@ class WebFace(NewPlan, PlanCore):
 
     def _send_view(self):
         from . import ops as O
-        _doc, changes, _dropped = self.draft.replay(self.ctx())
+        from . import remote as PR
+        doc, changes, _dropped = self.draft.replay(self.ctx())
         rows = []
         for i, c in enumerate(changes):
             for j, x in enumerate(c["entries"]):
@@ -293,7 +300,8 @@ class WebFace(NewPlan, PlanCore):
         return {"kind": "send", "title": (f"Send {n:,} change{'s' if n != 1 else ''} to {f:,} following" if f
                                           else f"Save {n:,} change{'s' if n != 1 else ''}"),
                 "rows": rows, "why": O.send_line(changes), "max": O.WHY_MAX, "yes": f"Send to {f:,}" if f else "Save",
-                "cmd": "send"}
+                # 3.9.9: each ceiling the plan as sent is past 90% of, a line (the page's warns)
+                "warns": PR.near(E.lean(doc)), "cmd": "send"}
 
     def c_take_change(self, i, again=False):
         self.take_change(int(i))
@@ -581,7 +589,7 @@ class WebFace(NewPlan, PlanCore):
             self.change({"op": "take_review", "day": key}, keep=("gone",))
 
     def c_move_from(self):
-        from .date_panel import MoveFromDialog
+        from .date_dialogs import MoveFromDialog
         u = self.unit(self.picked[1]) if self.picked and self.picked[0] == "date" else None
         if u is None:
             return
@@ -742,6 +750,12 @@ class WebFace(NewPlan, PlanCore):
         name = " ".join(str(name or "").split())[:60]
         if e is not None and name and name != e.get("name"):
             self.change({"op": "rename_event", "event": eid, "name": name})
+
+    def c_event_kind(self, eid, exam=False):
+        """3.9.9: the event panel's This is the exam."""
+        e = self.event_of(eid)
+        if e is not None and self.author() and bool(exam) != (e.get("kind") == "exam"):
+            self.change({"op": "event_kind", "event": eid, "exam": bool(exam)}, keep=("event", eid))
 
     def c_move_event(self, eid, to):
         e = self.event_of(eid)

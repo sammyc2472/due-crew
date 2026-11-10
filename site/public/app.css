@@ -124,6 +124,7 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px
 .brdt th.sqh { text-align: center; width: 22px; padding: 4px 2px 8px; } .brdt th.sqh.on { color: var(--accent); }
 .brdt td { padding: 6px 8px; white-space: nowrap; vertical-align: middle; border-top: 1px solid transparent; }
 .brdt td.rk { width: 28px; text-align: center; color: var(--muted); }
+.brdt td.rk:empty { width: 0; padding-left: 0; padding-right: 0; }  /* 3.9.9: no places; a show-up tick's alone */
 .brdt td.nm { width: 100%; max-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .brdt td.nm .who { font-size: 15px; }
 .brdt td.n { text-align: right; font-variant-numeric: tabular-nums; }
@@ -728,6 +729,19 @@ details summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 .fb .acts { display: flex; gap: 14px; flex-wrap: wrap; }
 .fb textarea { font-family: inherit; }
 .fb [hidden] { display: none; }
+/* 3.9.9: the Inbox's In the field, yesterday: a code a row, its counts and versions */
+.field { display: grid; grid-template-columns: minmax(0, 1fr) max-content max-content minmax(0, max-content); gap: 4px 14px;
+  font-size: 13px; align-items: baseline; }
+.field .hd { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.field code { font: 12px Menlo, Consolas, monospace; overflow-wrap: anywhere; min-width: 0; }
+.field code.new { color: var(--accent); font-weight: 700; }
+.field .n { font-variant-numeric: tabular-nums; text-align: right; }
+.field .ver { overflow-wrap: anywhere; }
+@media (max-width: 520px) {  /* a phone: each code's versions under it, the code its room */
+  .field { grid-template-columns: minmax(0, 1fr) max-content max-content; }
+  .field .ver { grid-column: 1 / -1; margin: -3px 0 3px; font-size: 12px; }
+  .field .hd.ver { display: none; }
+}
 
 /* The admin: a sidebar of pages and one set of gaps
    (16px between boxes, 12px inside them) */

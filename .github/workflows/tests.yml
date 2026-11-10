@@ -65,6 +65,52 @@ jobs:
           name: dialog-shots
           path: dialog-shots
 
+  # The robot click-test (tools/click_test.py): real Anki 25.02.7, offscreen,
+  # signed in to the suite's fake server in its own process. It presses every
+  # control the board shows, opens its windows, makes and sends a plan,
+  # studies a deck and sits a minute at rest; it fails on a press that reaches
+  # no handler, anything raised, a slow first card or CPU at rest. No network
+  # once it runs (pip and apt before it only). Its report and screenshots are
+  # the artifact, red or green.
+  click:
+    name: click test (real Anki)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      # the dialogs job's libraries, and what QtWebEngine's Chromium needs besides
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libxkbcommon-x11-0 \
+            libglib2.0-0 libdbus-1-3 libfontconfig1 libxcb-cursor0 \
+            libnss3 libnspr4 libasound2t64 libxcomposite1 libxdamage1 libxrandr2 \
+            libxtst6 libxkbfile1 libgbm1 libdrm2 libx11-xcb1
+      # Anki's own wheels; aqt asks only for PyQt6>=6.2, so the Qt is pinned to
+      # 6.11 (the dialogs job's: 6.12.0 has no QtPdf), the pair it was proven on
+      - run: pip install "aqt==25.02.7" "anki==25.02.7" "PyQt6==6.11.0" "PyQt6-WebEngine==6.11.0"
+      # 3.9.9: what a person waits on, on a big collection (30,000 notes, a million answers), each
+      # against its budget; over one marked fail is red, as a failing test is (tools/speed_budget.py)
+      - name: speed budget
+        run: python3 tools/speed_budget.py
+      # 3.9.9 (the plans review): the plan engine on Anki's own engine and a big deck (searches, opens,
+      # suspend and undo, filtered decks, Schedule ahead's spread): by hand before a release till now
+      - name: plans on Anki's engine
+        run: python3 tools/real_anki.py
+      - name: click test
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QTWEBENGINE_DISABLE_SANDBOX: "1"
+          QTWEBENGINE_CHROMIUM_FLAGS: "--no-sandbox --disable-gpu"
+        run: python3 tools/click_test.py --out click-test
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: click-test
+          path: click-test
+
   # 3.0: the Worker (worker/) in real workerd with a local D1.
   worker:
     name: worker (vitest, workerd + D1)
@@ -93,14 +139,14 @@ jobs:
           for i in $(seq 1 60); do curl -fs http://127.0.0.1:8787/version && break; sleep 1; done
           cd .. && python3 tools/smoke_worker.py wdev.log
 
-  # 3.0: a v* tag deploys the Worker, after all four jobs are green. The
+  # 3.0: a v* tag deploys the Worker, after every other job is green. The
   # database migrates first; both are no-ops when nothing changed. Until
   # the Cloudflare secrets exist (docs/cloudflare-setup.md) it says so and
   # stands down, so a tag without them stays green.
   deploy:
     name: deploy worker (v* tags)
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [lint, suite, dialogs, worker]
+    needs: [lint, suite, dialogs, click, worker]
     runs-on: ubuntu-24.04
     environment: production
     defaults:

@@ -135,6 +135,9 @@ KNOCKS = [{"uid": "u3", "name": "Jordan", "squad": "orca"}]
 sections.append("<h3>today, two crewmates on show-up only (as everyone else sees them)</h3>"
                 + board.render(DATA_SHOWUP, {"period": "today"}, now_ts - 60))
 sections.append("<h3>week, same crew</h3>" + board.render(DATA_SHOWUP, {"period": "week"}, now_ts - 60))
+sections.append("<h3>3.9.9: Due Crew can't be reached: the line on top, and a cheer waiting to send</h3>"
+                + board.render(dict(DATA_SHOWUP, held={ENTRIES[1]["user_id"]}), {"period": "today"}, now_ts - 3 * 3600,
+                               offline=True, sync_error=True))
 sections.append("<h3>show-up mode: the one crew view (what a show-up person sees)</h3>"
                 + board.render(DATA_SHOWUP, {"period": "today", "show_up": True}, now_ts - 60,
                                wrap={"reviews": 21430, "time_ms": 148320000, "full_days": 5}))
@@ -221,6 +224,11 @@ _YOU = lambda tab, **kw: dict({"tab": tab, "plans": PLANS}, **kw)  # noqa: E731
 sections.append("<h3>3.8.0: You › Plans, a plan I follow (round five, Sam's pick A: its day's line, then seven small "
                 "days, each its bar and what's left)</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans")))
+_PX = {"cards": [dict(PLAN_CARD, exam_ask={"pid": "p1", "name": "MS2 Block 1", "day": "2026-10-23", "ename": "Block 1 exam", "was": ""})],
+       "offers": []}
+sections.append("<h3>3.9.9: a plan's exam, asked once on its card (Sam's pick B)</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=_PX, due=_DV, you=_YOU("plans", plans=_PX))
+    .replace("dc-pd-p1-", "dc-pdx-p1-").replace('id="du-', 'id="dux-'))
 # pick A: a day's click opens its assignments under the week, whole (today's here; the quiz day's next)
 for _i, _what in ((2, "today, its date's topics and what's left"), (4, "the quiz day, the date for it and the quiz by name")):
     _PF = {"cards": [dict(PLAN_CARD, focus=PLAN_CARD["week"][_i]["day"])], "offers": []}
@@ -420,6 +428,27 @@ sections.append("<h3>3.8.1: Study for a quiz, three days out</h3>" + board.rende
         dict(_C3, prep={"name": "Cardio <quiz>", "day": "2026-10-09", "when": "Fri", "left": 2, "today": False},
              quiz={"id": "q", "name": "Cardio <quiz>", "day": "2026-10-09", "when": "Fri", "today": False, "units": ["a", "b"], "open": 412})],
         "offers": []})).replace('id="du-', 'id="duq-'))
+# 3.9.9 (Sam's pick G2): Magic search's field, under Anki's deck list and over its "Studied…" line (a stand-in for both)
+_ANKI_DECKS = ('<table style="width:440px;max-width:92%;margin:0 auto;border-collapse:collapse"><tr><th style="text-align:left">Deck</th><th>New</th>'
+               '<th>Learn</th><th>Due</th></tr><tr><td style="text-align:left">Big Step 1</td><td>42</td><td>5</td><td>110</td></tr></table>')
+sections.append("<h3>3.9.9: Magic search's field under the deck list (Anki's list and line are stand-ins)</h3>" + _ANKI_DECKS
+                + "<br>" + board.magic_field({}) + '<div style="margin:10px 0;font-size:13px">Studied 96 cards in 12 minutes today (7.5s/card)</div>'
+                + board.render(DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("today")).replace('id="du-', 'id="dumg-'))
+# 3.9.9: the week across plans, under the plan's card: a heavy day and its one move; then after the move
+from due_crew import plans as _PL
+_LS = [{"pid": "a", "plan": "Block 2 · Heme", "uid": "h%d" % i, "name": n, "day": "2026-10-%02d" % (5 + i), "ask": k, "moved": 0, "cap": ""}
+       for i, (n, k) in enumerate([("Anemias I", 46), ("Coagulation", 112), ("Platelets", 34), ("Leukemias", 54), ("Lymphomas", 40)])]
+_LS += [{"pid": "b", "plan": "Pharm weekly", "uid": "p6", "name": "Pharm 6", "day": "2026-10-06", "ask": 60, "moved": 0, "cap": ""}]
+_LR = {"2026-10-05": 380, "2026-10-06": 610, "2026-10-07": 360, "2026-10-08": 400, "2026-10-09": 330, "2026-10-10": 280, "2026-10-11": 250}
+_LP = {"new_s": 40, "rev_s": 7, "day_min": 85, "known": True}
+_LW = _PL.load_week(_LS, _LR, "2026-10-05", _LP)
+_LW2 = _PL.load_week([dict(x, day="2026-10-11", moved=5) if x["uid"] == "p6" else x for x in _LS], _LR, "2026-10-05", _LP, back=("b", "p6"))
+sections.append("<h3>3.9.9: the week across plans: a heavy day and its move</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [_C3], "offers": [], "load": _LW})
+    ).replace('id="du-', 'id="dulw-'))
+sections.append("<h3>3.9.9: the week across plans: after the move</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [_C3], "offers": [], "load": _LW2})
+    ).replace('id="du-', 'id="dulw2-'))
 sections.append("<h3>3.8.1: Today: the morning's line by date, Study on a plan's date, a date after its quiz</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV3, you=_YOU("today")).replace('id="du-', 'id="du3-'))
 sections.append("<h3>3.8.1: the morning's line, four or more dates</h3>" + board.render(
@@ -715,7 +744,7 @@ SET_VIEW = {"signed_in": True, "name": "Sammy", "emoji": "\U0001F98A", "status":
             "sync": "sam@school.edu · Synced 2m ago · v3.5.0", "crew": 6, "squads": ["Orca crew", "Block 3"],
             "decks": ["Big Step 1"]}
 SET_CFG = {"accent": "green", "hidden_tabs": ["squads"], "crew_label": "orca", "exam_date": "2026-10-14"}
-for tab in ("you", "board", "privacy"):
+for tab in ("you", "board", "study", "privacy"):
     sections.append(f"<h3>3.5.0: Settings, {tab}</h3>" + board.settings_html(dict(SET_VIEW, tab=tab), SET_CFG))
 sections.append("<h3>3.5.0: decks, asked of you and your asks</h3>" + board.render(
     DATA, {"period": "decks"}, now_ts - 60,
@@ -749,8 +778,8 @@ sections.append("<h3>3.9.1: two buttons, just tried from the Hard habit line (Un
     DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
     you=_YOU("insights", insights={"decks": _DECKS, "did": 20, "exam": "2026-10-14", "plan": None,
                                    "view": dict(_DECK_INS, hard={"pct": 22, "n": 640}, two="tried")})))
-sections.append("<h3>3.9.1: Settings › Board › Reviewing: two buttons, FSRS off (its note)</h3>" + board.settings_html(
-    dict(SET_VIEW, tab="board", fsrs=False), dict(SET_CFG, two_buttons=True)))
+sections.append("<h3>3.9.1: Settings › Study › Reviewing: two buttons, FSRS off (its note)</h3>" + board.settings_html(
+    dict(SET_VIEW, tab="study", fsrs=False), dict(SET_CFG, two_buttons=True)))
 sections.append("<h3>Due: folded</h3>" + board.render(DATA, {"period": "week"}, now_ts - 60, due=dict(_DV, folded=True),
                                                        plans=PLANS, you=_YOU("today", folded=True)))
 sections.append("<h3>Due: done for today, a long tomorrow</h3>" + board.render(

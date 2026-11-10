@@ -26,11 +26,11 @@ from .. import plans as P
 from . import build as B
 
 SOURCES_MAX = 50   # plans.ts SOURCES_MAX: tags, and subdecks, a date
-UNITS_MAX = 200    # plans.ts UNITS_MAX
+UNITS_MAX = B.CEILINGS["sets"]      # plans.ts UNITS_MAX
 NAME_MAX = 60      # validate.ts NAME_MAX
 PATH_MAX = 200     # plans.ts PATH_MAX
-EVENTS_MAX = 200   # plans.ts EVENTS_MAX
-REVIEWS_MAX = 60   # plans.ts REVIEWS_MAX
+EVENTS_MAX = B.CEILINGS["events"]   # plans.ts EVENTS_MAX
+REVIEWS_MAX = B.CEILINGS["reviews"]  # plans.ts REVIEWS_MAX
 _ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789"  # app.js uid8
 
 
@@ -265,13 +265,15 @@ def drop_if_empty(doc, uid):
     return doc
 
 
-def add_event(doc, day, name, rng=random):
-    """A named day (a quiz, the exam) the dates prep for. (doc, its id)."""
+def add_event(doc, day, name, rng=random, exam=False):
+    """A named day (a quiz, the exam) the dates prep for. (doc, its id).
+    exam (3.9.9): marked the exam, which a follower's board offers as theirs."""
     doc = copy.deepcopy(doc)
     if len(doc.get("events") or []) >= EVENTS_MAX:
         raise Refused(f"A plan holds up to {EVENTS_MAX} quizzes and exams.")
     eid = new_id(doc, rng)
-    doc.setdefault("events", []).append({"id": eid, "day": _day(day).isoformat(), "name": _name(name)})
+    doc.setdefault("events", []).append(dict({"id": eid, "day": _day(day).isoformat(), "name": _name(name)},
+                                             **({"kind": "exam"} if exam else {})))
     doc["events"].sort(key=lambda e: str(e.get("day") or ""))
     return doc, eid
 
@@ -335,14 +337,14 @@ def new_plan_doc(deck, sessions, end_name, end_day):
     for s in sessions:
         title = " ".join(str(s.get("title") or "").split())[:60] or s.get("kind", "Session").capitalize()
         if s.get("kind") in EVENT_KINDS:
-            doc, _eid = add_event(doc, s["date"], title)
+            doc, _eid = add_event(doc, s["date"], title, exam=s.get("kind") == "exam")
             have.add((s["date"], title.lower()))
             continue
         doc, uid = add_empty_date(doc, s["date"], title)
         uids.append(uid)
     end_name = " ".join(str(end_name or "").split())[:60]
     if end_name and end_day and (end_day, end_name.lower()) not in have:
-        doc, _eid = add_event(doc, end_day, end_name)
+        doc, _eid = add_event(doc, end_day, end_name, exam=True)  # 3.9.9: "the exam it ends with" is the exam
     if end_day:
         doc = set_end(doc, end_day)
     doc = set_pace(doc, "end" if end_day else "daily", [1, 1, 1, 1, 1, 0, 0], 20)
@@ -560,6 +562,19 @@ def _event(doc, eid):
     if e is None:
         raise Refused("That quiz or exam isn't on the plan any more.")
     return e
+
+
+def mark_exam(doc, eid, on=True):
+    """3.9.9 (Sam's pick B): an event marked the exam ({"kind": "exam"}); a
+    follower's board asks them once whether it's their exam. Off, it's a
+    named day again. A plan can have more than one (a block's exams)."""
+    doc = copy.deepcopy(doc)
+    e = _event(doc, eid)
+    if on:
+        e["kind"] = "exam"
+    else:
+        e.pop("kind", None)
+    return doc
 
 
 def rename_event(doc, eid, name):
@@ -1145,6 +1160,41 @@ def behind(doc, progress, today, total_of=None):
         if _later(end, 2) <= today and done < sharing / 2:
             out.append((u, done, (_day(today) - _day(end)).days))
     return sorted(out, key=lambda x: str(x[0].get("due") or x[0]["opens"]), reverse=True)[:2]
+
+
+CLASS_SHOWN = 4  # sets Insights lists as where the class fell behind
+
+
+def class_lines(doc, progress, today):
+    """3.9.9 (the plans review's mock 5; Sam: "yes"): Insights' lines for an
+    author on where the plan's squad fell behind: each set that ended two
+    days ago or more with people still not through it, the worst first,
+    CLASS_SHOWN at most. By the counts' own rule (3 in its squad, 2 besides
+    me): under it, one line saying so; nothing at all with nobody sharing."""
+    if not isinstance(progress, dict):
+        return []
+    sharing = int(progress.get("sharing") or 0)
+    squad = int(progress.get("inSquad", sharing) or 0)
+    if not sharing and not squad:
+        return []
+    if squad < 3 or int(progress.get("others", sharing) or 0) < 2 or not sharing:
+        return [f"{squad:,} {'is' if squad == 1 else 'are'} in its squad: where they fall behind shows from 3."]
+    units, rows = progress.get("units") or {}, []
+    for u in P.units(doc):
+        end = u.get("due") or u.get("opens")
+        if not end or _later(end, 2) > today:
+            continue
+        left = sharing - int((units.get(u["id"]) or {}).get("done") or 0)
+        if left > 0:
+            rows.append((left, str(end), str(u.get("name") or "?")))
+    if not rows:
+        return [f"Its squad is keeping up: all {sharing:,} sharing are through every set that's ended."]
+    rows.sort(key=lambda r: (-r[0], r[1]))
+    out = [f"Where its squad fell behind ({sharing:,} sharing):"]
+    out += [f"{name}: {left:,} of {sharing:,} not through it yet ({P.fmt_day(day)})." for left, day, name in rows[:CLASS_SHOWN]]
+    if len(rows) > CLASS_SHOWN:
+        out.append(f"And {len(rows) - CLASS_SHOWN:,} more set{'s' if len(rows) - CLASS_SHOWN != 1 else ''} with someone behind.")
+    return out
 
 
 # ---- plans end to end: the builder's site-only edits, in Anki ----

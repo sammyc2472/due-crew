@@ -5,6 +5,14 @@ needs the emulator. None of them run inside Anki. Before a release, do this
 in a real Anki with the add-on installed (quit and reopen Anki after
 installing — add-ons load at launch).
 
+A robot now does part of it on every push: `tools/click_test.py`
+(CI's `click test (real Anki)`; `tests/README.md`) runs real Anki offscreen
+on the fake server and presses every control the board shows. An item that
+ends in *Robot: …* is pressed there on every push, each press reaching its
+handler with nothing raised; the note says which part, and the rest (how it
+looks, light and dark, motion, a second computer or account) is still by
+hand.
+
 ## Appearance (Decks screen)
 - [ ] Light mode: one white rounded card around the board; no outer border, no shadow.
 - [ ] Night mode: the same card in neutral near-black on Anki's gray canvas — no green tint, no lighter rectangle behind the table.
@@ -382,21 +390,21 @@ In Anki (as a follower):
 ### 3.5.0: Settings in the board
 
 - [ ] The board's ⚙ opens Settings where the board was; ‹ Board goes back.
-      A name's card › Privacy… opens it on Privacy.
+      A name's card › Privacy… opens it on Privacy. *Robot: ⚙ and ‹ Board, each reaching its handler.*
 - [ ] Board: each switch, Theme, Accent (the logo and panel recolour at
       once), Tabs (a hidden tab is gone on ‹ Board), Crew name (saved on
-      Enter or leaving the box), Reset board.
+      Enter or leaving the box), Reset board. *Robot: every switch, Theme, Accent, Tabs, Crew name and Reset board pressed, each reaching its handler, nothing raised; the recolour is by eye.*
 - [ ] Privacy: the three choices; the number switches under My numbers;
       a crewmate sees the change a few seconds later. Exam and Away: switch
-      on, pick dates, switch off.
+      on, pick dates, switch off. *Robot: the three choices, each number switch, Exam and Away on and off; what a crewmate sees is by hand.*
 - [ ] You: Name…, Emoji…, Status… update the panel; Friends, Squads and
-      Shared Decks open their dialogs; Sign out lands on the signed-out card.
+      Shared Decks open their dialogs; Sign out lands on the signed-out card. *Robot: Name… (its sheet: Esc closes it, its yes reaches the server), Emoji…, Status…, Friends and Squads open; Sign out isn't pressed.*
 - [ ] Night mode (Anki's and the Theme setting): every control readable,
       the date pickers too.
 - [ ] Tab from control to control with the keyboard; Space toggles; focus
       stays on the control after it redraws.
 - [ ] Turn off "Due Crew on the Decks screen": the board goes, with a
-      tooltip; Tools › Due Crew › Settings opens the dialog to turn it back on.
+      tooltip; Tools › Due Crew › Settings opens the dialog to turn it back on. *Robot: the switch and its tooltip; the way back from Tools is by hand.*
 
 ### 3.6: squad bingo (two accounts in one squad)
 
@@ -518,7 +526,7 @@ In Anki (as a follower):
 ### Not yet today, and the site's board (3.6.7)
 
 - [ ] A crewmate syncs before studying: in Anki and on duecrew.com/home
-      their row has dashes, no rank or medal, "· nothing yet as of …", and sits
+      their row has dashes (nobody has a rank or medal since 3.9.9), "· nothing yet as of …", and sits
       under everyone who studied; their status still shows; 🎉 works.
 - [ ] Week tab: someone with only zero days this week reads "nothing this
       week". A squad board: a 0-review row today sits under the ranked
@@ -551,10 +559,10 @@ In Anki (as a follower):
 - [ ] Due sits above the board on every tab; ▴ folds it to one line (and it stays folded after Anki restarts); the line's Study › opens the plan's deck.
 - [ ] Today: Behind (a plan date from an earlier day not yet seen, an item of yours from yesterday), then Reviews, today's dates with each resource's numbers, your items. Review a date's cards: its box ticks itself at the next refresh.
 - [ ] An author's line (add one in the builder's day panel under To do, with a link): tick it by hand; its link opens in the browser, not in the Decks screen.
-- [ ] Type "Book the room fri": "→ Fri …" shows before Enter; Enter adds it to Friday and says "Added to Fri … · Show"; Show opens Upcoming. "×" on the preview keeps the words as text.
+- [ ] Type "Book the room fri": "→ Fri …" shows before Enter; Enter adds it to Friday and says "Added to Fri … · Show"; Show opens Upcoming. "×" on the preview keeps the words as text. *Robot: Enter adds one for tomorrow and one for Later (Later's tab then shows); the preview and Show are by eye.*
 - [ ] Upcoming: today first, then two weeks; empty days fold into one line; + on a day adds to that day; the exam shows on its day.
 - [ ] Later: an item with no day; Do today moves it; its day button moves it, Pick a day… opens a calendar, Edit… and Delete work.
-- [ ] Settings › Board › Due: turning off Due, Suggestions, and Recover leeches (on: the next refresh brings leeches back as new, the tag off; Edit › Undo puts them back; "Recovered N leeches · See them" opens the browser).
+- [ ] Settings › Study: turning off Due, Suggestions, and Recover leeches (on: the next refresh brings leeches back as new, the tag off; Edit › Undo puts them back; "Recovered N leeches · See them" opens the browser).
 - [ ] With 10+ misses today, "Go over today's N misses" builds a filtered deck and opens it; × hides it for the day.
 - [ ] A second computer, after its morning pull, shows the same own items.
 
@@ -584,19 +592,28 @@ In Anki (as a follower):
 
 ### 3.8.0: Crew, one tab (the four pills became two, below)
 
-- [ ] Under Crew, Today, Week and Decks are picked as a squad is on the Squads tab; Week shows the week's table as before.
+- [ ] Under Crew, Today, Week and Decks are picked as a squad is on the Squads tab; Week shows the week's table as before. *Robot: each picked; a restart is by hand.*
 - [ ] Pick Week, go to Squads, click Crew: it comes back on Week. Pick Decks, the same. Restart Anki: still the one picked.
 - [ ] Settings › Privacy › Just show up: This week and Decks.
 
 ### 3.8.0: You, and your people
 
 - [ ] Open Anki on an install that was on the Plans tab: the board opens on Crew › Today, with the box above it open on Plans. A hidden Week (from 3.7) is gone from Settings and shows in the picker.
-- [ ] The box above the board: Today · Upcoming · Later, a thin rule, then Plans · Insights, as words (the one on screen underlined). The count ("1 of 4 done") shows on Today and Upcoming only. Hide ▴ folds the whole box to one line; Show opens it.
+- [ ] The box above the board: Today · Upcoming · Later, a thin rule, then Plans · Insights, as words (the one on screen underlined). The count ("1 of 4 done") shows on Today and Upcoming only. Hide ▴ folds the whole box to one line; Show opens it. *Robot: each tab and Hide ▴ pressed.*
 - [ ] Today: a plan date's topics sit on its resources' rows (Video Series · Pharmacokinetics 6 / 85), each topic opening its cards in Browse; the list ends with the add line (no Tomorrow line; Upcoming has it). Behind shows on Today, not on Upcoming. Later's tab shows only while Later holds something; add one there ("Call home later") and the toast's Show opens it.
 - [ ] The board under it: Crew · Squads pills, nothing else; the Decks view is in Crew's picker. Light, dark and a narrow window: nothing spills past the board's edge; on a narrow window Hide sits on the right.
 - [ ] Plans (round five, Sam's pick A): the plan's name and Your plans…, its day in a line with Catch up…, then This week ‹ Today › and seven small days, each its bar (amber when behind) and what's left ("16 left", "24 to go", "38 new", ✓, rest), a quiz's name under its day; on a narrow window the days show their numbers alone and a quiz day is underlined. Due's lists on or off, the week is there. No Month ↗, no Done.
 - [ ] Pick 3: follow two plans: the head is their names (one pressed), the shown plan's line and one Your plans… (on it); an amber dot on a plan that's behind. Click the other name: its card, week and lines; restart Anki: still that one. Browse › Show on my plan on the other plan's card: that plan, its day open. Two plans of one name show their whole titles. One plan: no switch.
 - [ ] Pick A: click a day: its assignments open under the week (unfolding), whole: each date's name and bar, its topics by resource (each opens Browse), the authors' notes and lines (a Watch line with a link opens the browser), Browse N cards, N left, Open now, Study, Move…, Skip it, Put it back after a move, Undo skip, "N leeches stay suspended"; a quiz day names the quiz (Study for it is the quiz row under the week). Click the same day: they fold away. Click another: the ring slides to it and the box grows or shrinks to the new day. With Reduce motion, nothing moves. Browse › Show on my plan opens the card's day there; ‹ › to another week shuts it.
+- [ ] 3.9.9, the week's day, gliding: You › Plans, click a day, then another: a thin grey outline slides from the first to the second and the second fills in as it arrives; nothing blue (or your accent) appears and vanishes. Click today: its ring stays put the whole time. In Magic search: "cardio pharm" (a system and a subject under it) is named with both; "chapter 3" says which book's it took when there is more than one.
+- [ ] 3.9.9, Magic search as people type: on your own deck try: a system by its long name ("cardiology", "kidney") where the deck tags it short: it finds the short one. "<topic> due this week": a "Due in N days" filter, no day picker. "<topic> for 30 minutes": a line "About 30 minutes at your pace: N cards". "100 cards": a hundred, due first. "<topic> blahblah": the topic, and "Didn't use “blahblah”". "overdue", "what should I study today": what's due. "unsuspend <topic>": its suspended cards, Unsuspend ready. "leeches": a line saying where they're handled.
+- [ ] 3.9.9, Settings' four tabs: You · Board · Study · Privacy. You has Your dates (Exam, Away: set one, a crewmate sees it as before) and Your people; Board has On the Decks screen, Look, Your crew, Pip, Study soundtrack; Study has Today, Magic search, Reviewing, Fifteen and rooms, Shortcuts; Privacy has only what your crew sees and what Due Crew counts. Every switch still does what it did. Find a setting: "exam" goes to You, "two buttons" and "keys" to Study, "dark" to Board, "heatmap" to Privacy. Reset Board and Study is at the foot of both and puts back the same things as Reset board did.
+- [ ] 3.9.9, the cards' shadow: the Magic search field, the You box and the board each have the soft shadow Anki's deck list has, a little deeper under the pointer; the same in Settings and Pip's closet. Dark theme: nothing glows or looks boxed.
+- [ ] 3.9.9, Magic search from the field: type `cardio` (any topic of yours) in the Decks field, Enter: the window opens already tall enough for the topic, what it found and the four tiles, with no scrolling inside it. The same from ⌘⇧F then typing.
+- [ ] 3.9.9, Magic search's field: on the Decks screen, between the deck list and "Studied N cards…", a white field with a magnifier and a small amber star. For about twelve seconds a glint goes round its edge; then it's still; point at it and it wakes. Its grey words are one example and don't change while you look; leave the Decks screen and come back: another example. Click in it: "A topic, a filter, pasted question IDs…"; type `cardio`, Enter: Magic search opens with cardio searched. Typing d, a, b or s in it types (Anki doesn't jump to Decks, Add, Browse or Stats). Esc empties it. The magnifier alone opens the window empty. The You box's head has no Magic search link. Settings › Study › Magic search off: the field goes. Dark theme: the field is dark. With Reduce motion: no glint. Magic search's window is tall enough for everything it found (no scrolling inside it unless the screen is too short), and grows or shrinks as you type.
+- [ ] 3.9.9, the look (the design mocks' 1, 2, 3, 4, 6): Crew has no medals and no #4, #5, and Squads no #1, #2; the order is the same and your row is still tinted. In the board's foot only I'm studying is green; Open a room, Crew, Share are dark and underline when pointed at; on Today, Catch up…, Not today and See them the same, Magic search and Add still green. Small grey text (captions, counts) is a shade darker in the light theme, in the board and in Due Crew's windows. Drag Anki's window narrow: Crew's headers stay words and it shows the column it's sorted by with Streak; sort by Time and Time shows. You › Plans: click a day that isn't today: it's filled with its number underlined, and today alone has the green ring.
+- [ ] 3.9.9, the keyboard: on You › Plans press Tab till a day of the week has a ring; Enter opens its sets under the week, Space shuts them; Tab to the path (one stop), Right and Left walk its sets, Enter opens that set's day. On You › Pip Party, Tab reaches a pick's chip and Enter leaves it out. Open Anki, wait half a minute on the Decks screen, then You › Insights: it's there at once, no "Reading your reviews…".
+- [ ] 3.9.9, the week across plans: follow two plans on this computer with sets in the next seven days: under the plan's card, Everything this week: a row a day, grey reviews and each plan's colour, the day's time. A day half again over your usual is amber with a line and Move <set> to <day>: press it: the set is on that day in its plan's week ("· moved"), the line says where it went with Put it back; Put it back returns it. One plan, or nothing ahead: no such part. You › Insights on a big collection: "Reading your reviews…" for a moment, Anki answering clicks meanwhile, then the view.
 - [ ] Round five: Today and Upcoming: click a plan date's name: its details open under it (Browse N cards, N left, Open now ahead of its day, Move…, Skip it, Put it back after a move, "N leeches stay suspended"); click again, they shut. Each one does what the old week's did, and the board redraws with it.
 - [ ] Plans: each plan's card with no Today box: its line (week, followers, "opens 2 days early" when set), the week, the next exam's cards at risk ("53 cards Anki won't show you before KSA … · Study 53") with FSRS on, one note, the crew line. Paused: "No new cards while it's paused" with Resume now. A rest day says so.
 - [ ] Behind on a plan: its day's line has Catch up…; my dates later is Your plans… › Settings › My dates (no link in a day's details).
@@ -624,9 +641,9 @@ In Anki (as a follower):
 
 - [ ] Tools › Due Crew › Settings… from the review screen: Anki goes to the Decks screen with Settings open. The add-on's Config button (Tools › Add-ons) does the same and the Add-ons window closes. Signed out, Settings still opens (Sign in… on You).
 - [ ] Turn "Due Crew on the Decks screen" off: the board goes; Tools › Due Crew › Show on the Decks screen (a check) brings it back.
-- [ ] Ctrl+Shift+S from the Decks screen, a deck's overview and Browse's main window: Study today starts. Ctrl+Shift+Q while reviewing a plan's card in its squad asks the squad; elsewhere it says what it's for. Settings › Board › Shortcuts › off: neither key does anything; on again, both do.
+- [ ] Ctrl+Shift+S from the Decks screen, a deck's overview and Browse's main window: Study today starts. Ctrl+Shift+Q while reviewing a plan's card in its squad asks the squad; elsewhere it says what it's for. Settings › Study › Shortcuts › off: neither key does anything; on again, both do.
 - [ ] Study today with a plan and two other decks due: the plan's deck first; when it's done Anki goes straight to the next deck ("Next: …"), then "Done for today" on the Decks screen; with 10+ misses today it builds no deck (no "Due Crew::Today's misses" appears). Press Escape mid-deck: "Study today stopped. This deck stays open.", and when the deck runs out Anki stays on its overview (no "Next: …").
-- [ ] On a Mac: Settings › Board › Shortcuts shows ⌘⇧S and ⌃⇧Q; ⌃⇧Q (the Control key) while reviewing asks the squad, and nothing asks to log out.
+- [ ] On a Mac: Settings › Study › Shortcuts shows ⌘⇧S and ⌃⇧Q; ⌃⇧Q (the Control key) while reviewing asks the squad, and nothing asks to log out.
 - [ ] Squads: a squad with a long name (24 letters, or a plan's) is cut short in the table's corner, its whole name on hover; the table stays inside the card in a narrow window. Switching squads, the names don't jump sideways while it loads.
 - [ ] Type half a to-do, then wait for a refresh (or a learning card coming back): the words and the day stay; press Enter and the box empties.
 - [ ] Insights › What you know: broad subjects (a big shared deck: its systems), the big ones big, shaded by how well you know them; no lecture names, no subject twice. FSRS off: the tooltip says "right on their last review".
@@ -650,7 +667,7 @@ In Anki (as a follower):
 - [ ] Squads: under the table, "Last 7 days: N study days between M of you" (no line when only one of you studied), the same on duecrew.com.
 - [ ] A plan with an "Every week" line (builder, under the pace: Do · Practice questions, F): on a Friday it's in Today with the plan's name and "every Fri"; tick it, it's done for today only; Upcoming shows it once, on the next Friday; its link opens in the browser; it's never Behind; duecrew.com's Due panel shows it on Fridays.
 - [ ] Due Crew's filtered decks (a date's Study, Insights' Study, a checkpoint, today's misses) sit under one Due Crew deck that folds with Anki's +/−. Once they're all studied, the next morning's tidy removes them and the Due Crew deck in one step (Edit › Undo: Delete Deck); an old "Due Crew · …" deck at the top goes the same way once empty. A Today's misses deck left unstudied is emptied back into its decks the next morning, then goes with the rest.
-- [ ] Settings › Board › Due › Recover leeches, switched on with a leech in the collection: "1 leech back as new cards. Edit › Undo puts it back." at once; Edit › Undo does.
+- [ ] Settings › Study › Recover leeches, switched on with a leech in the collection: "1 leech back as new cards. Edit › Undo puts it back." at once; Edit › Undo does.
 - [ ] Plan tags, as the author (3.8.0): in Browse pick a few notes › right-click › Due Crew: tag for a plan…: only plans you made or co-author are listed; type SLG 12, it says where it lands (DueCrew::<plan>::SLG_12) › Tag N notes: the browser's sidebar has the tag at once, and Edit › Undo takes it off here. Pick some of those notes again: Take N off is there. A plan you only follow: "Only a plan's author or co-authors tag for it."
 - [ ] Plan tags on duecrew.com: the builder's What to cover starts with This plan's tags (SLG 12 · 3 notes); + puts it on the picked day; Rename moves it on every date that used it; × asks, then drops it. A day with a plan tag: Overlap › SLG 12 · but not · a tag › Add makes "SLG 12 but not …" on that day. Text › Edit the whole plan starts with `tag | SLG 12 | notes:…` lines. Text › Tag by objective › Copy the tagging prompt carries the plan's tags and says to attach your own export.
 - [ ] Plan tags, as a follower: after the author saves, the next morning (after AnkiWeb's sync, on the Decks screen) or a mid-day update gives your notes DueCrew::<plan>::SLG_12; the plan card says "New tags: SLG 12" once, with Browse them (opens on DueCrew::<plan>::*) and OK. Edit › Undo right after takes them off in one step. Reviewing when the update lands: nothing changes until you're back on Decks. Your own tags never change.
@@ -669,14 +686,14 @@ In Anki (as a follower):
 - [ ] Browse: right-click a tag in the sidebar › Due Crew: open its cards…: the sheet counts what opens, what's open already, the leeches (they stay suspended), and the plans that hold them; Open with First in line ticked puts them first in Anki's new cards; one Edit › Undo suspends them. Pick cards in the table › Due Crew: open these…: the same for just those. Signed out: both are there.
 
 ### 3.9.6: plans end to end (about 30 minutes; a second account helps)
-- [ ] Tools › Due Crew › Plans › Your plans…: an HTML window in the board's look (light and dark, Settings › Theme too), plans picked on top, Undo, Share…, New plan…; Plan · Insights · Settings. `"plan_window": "qt"` in the add-on's config (restart) brings back the Qt window, unchanged.
-- [ ] With no plans: the window opens on New plan. A resource, chapter by chapter: the deck's resources with their chapters; pick one, Only (a tag some of it carries, its count), About N new a day / Finish by… (with the exam) / When I'm ready, study days, Starts, Today's set (In the deck / Its own deck); the preview's sets, new cards and days change as you do. Start it: the plan is made, the window shows it, and it's followed here (You › Plans' card); nobody else sees it.
-- [ ] Start empty: a name, the deck, Ends with (an exam and its day); Make it, start later: the window opens on the deck beside the empty plan; tick a chapter, Lay them out; Before a quiz or exam lays them out before the one picked.
+- [ ] Tools › Due Crew › Plans › Your plans…: an HTML window in the board's look (light and dark, Settings › Theme too), plans picked on top, Undo, Share…, New plan…; Plan · Insights · Settings. `"plan_window": "qt"` in the add-on's config (restart) brings back the Qt window, unchanged. *Robot: it opens from the menu; the look is by eye.*
+- [ ] With no plans: the window opens on New plan. A resource, chapter by chapter: the deck's resources with their chapters; pick one, Only (a tag some of it carries, its count), About N new a day / Finish by… (with the exam) / When I'm ready, study days, Starts, Today's set (In the deck / Its own deck); the preview's sets, new cards and days change as you do. Start it: the plan is made, the window shows it, and it's followed here (You › Plans' card); nobody else sees it. *Robot: it opens on New plan; the resource way in is by hand.*
+- [ ] Start empty: a name, the deck, Ends with (an exam and its day); Make it, start later: the window opens on the deck beside the empty plan; tick a chapter, Lay them out; Before a quiz or exam lays them out before the one picked. *Robot: Start empty, a name, the deck, Start it and its sheet; Make it, start later and the deck beside it are by hand.*
 - [ ] Someone's plan: a code, Follow… opens Follow (its Today's set choice beside How its cards open); The library on duecrew.com opens the site.
 - [ ] A set: rename in its panel, move its day (Week and Month drag too; a taken day asks first), Leads up to, a source's ⋯: Leave out cards also tagged (a tag, its count), Move to (a set nearby, Another day…), Copy its search (paste in Browse: the same cards), Take it off. Undo takes each back.
 - [ ] The deck beside a set (Add from the deck): ticks add to it; a row's ⋯ › A set of its own, next free day / on a day…; Find keeps the tree.
 - [ ] Add › Give everyone a day…: asks, then every set still to come moves a study day; quizzes stay; Undo.
-- [ ] With a follower (the second account follows by code): a change waits under the plan; Review and send lists it with a line for them; Send; their Anki gets it at the next refresh. Following your own plan doesn't make your changes wait.
+- [ ] With a follower (the second account follows by code): a change waits under the plan; Review and send lists it with a line for them; Send; their Anki gets it at the next refresh. Following your own plan doesn't make your changes wait. *Robot: all but the second account's Anki: a crewmate follows by the code, the change waits, Review and send › Send, the fake server has it; following your own plan, a set saves at once.*
 - [ ] Insights (author and follower) and Settings (author: the plan, sharing, co-authors, Posts…, History, the library, Copy it for next year, Your AI app; follower: My dates, Skip a set, Cards open, Today's set, Held back, Pause until…, Stop following…).
 - [ ] Today's set, B (Settings › Today's set › Also its own deck, or chosen at Follow): Decks shows Due Crew › <plan> › 01 <set> with its new cards (no reviews); the plan card says "N to go today, in your decks" with Study (opens that deck); next morning the set's deck is built with the open; Not today takes the open and the decks back in one step. Back to In your deck: the decks go, cards home.
 - [ ] You › Plans: the plan as a path above the week (done, behind, today, ahead, skipped; the last quiz at the end); "set 3 of 19"; when behind, "Behind · …" with Behind…: Slide N days, Fit it in, Skip what's left, Not now.
@@ -688,7 +705,7 @@ In Anki (as a follower):
 - [ ] Edits right after one another (nobody following): rename a set, then at once change its Finish by: both save, one after the other ("Saving…", then "Saved."). New plan… open over a plan: Alt+arrows, Ctrl+Z and Backspace do nothing to the plan behind it. Offline, pick a plan: "The plan didn't load." with Try again; back online, Try again loads it.
 
 ### 3.9.6: after the first click test (about 10 minutes)
-- [ ] Your plans › Add › A set…: a name, Opens (the page's calendar: arrows, Page Up/Down, Enter; Esc closes it alone), Put it on: the set is on the day, Anki stays up. The same for a set's Cards open and Finish by, a quiz's day, Settings' Starts and end day, New plan's days: no Mac date popup anywhere in the window.
+- [ ] Your plans › Add › A set…: a name, Opens (the page's calendar: arrows, Page Up/Down, Enter; Esc closes it alone), Put it on: the set is on the day, Anki stays up. The same for a set's Cards open and Finish by, a quiz's day, Settings' Starts and end day, New plan's days: no Mac date popup anywhere in the window. *Robot: Add › A set…, a name, Put it on (on the day it offers), Anki stays up; the calendar's keys are by hand.*
 - [ ] Hover the window's tabs and buttons: no raised shadow (light, dark).
 - [ ] Add to my calendar…: no save window; Calendar opens asking which calendar to add the plan to; the file is in Downloads.
 - [ ] QBank QIDs (and any Due Crew window's dropdown): the open list has one rounded border, no square round it.
@@ -794,26 +811,26 @@ some history (a few weeks of reviews) and a few leeches.
 
 The riskiest of 3.9.1, the parts only a live Anki can show, in order:
 
-- [ ] Board clicks after a review (the Decks page's key): study a few cards, go back to Decks, then click Week, a crewmate's name (their card), ↻, ⚙ (Settings), a Due tick. Each works. Then Sync, and click them again. Switch profile and back: again. (If any click does nothing, stop: that's a release blocker.)
-- [ ] The whole window dims: open the Cheer window on a crewmate. The top bar and the bottom bar grey with the board; click the grey top bar: the window closes and the bars clear. Open it again and press S (study): the bars clear on the way out, never stuck grey.
-- [ ] A question on the board: own card › Set a status: a sheet in the board's look (not a Qt box); type, Enter: the status shows on your row. Settings › You › Display name: the same. Settings › Sign out: the sheet, Cancel does nothing; Esc and the backdrop the same.
+- [ ] Board clicks after a review (the Decks page's key): study a few cards, go back to Decks, then click Week, a crewmate's name (their card), ↻, ⚙ (Settings), a Due tick. Each works. Then Sync, and click them again. Switch profile and back: again. (If any click does nothing, stop: that's a release blocker.) *Robot: after five cards: Week, a crewmate's name, ↻, ⚙ and ‹ Board, a Due tick; not after a Sync or a profile switch.*
+- [ ] The whole window dims: open the Cheer window on a crewmate. The top bar and the bottom bar grey with the board; click the grey top bar: the window closes and the bars clear. Open it again and press S (study): the bars clear on the way out, never stuck grey. *Robot: the top bar greys with the Cheer window, a click on it closes the window and the bar clears; S on the way out is by hand.*
+- [ ] A question on the board: own card › Set a status: a sheet in the board's look (not a Qt box); type, Enter: the status shows on your row. Settings › You › Display name: the same. Settings › Sign out: the sheet, Cancel does nothing; Esc and the backdrop the same. *Robot: Display name's sheet: Esc closes it; typed, its yes saves on the server. The status, Sign out and the backdrop are by hand.*
 - [ ] A question off the board: while reviewing, Ctrl+Shift+Q (Ask the squad) on a plan's card: a Qt box in the board's colours, readable, OK and Cancel work.
 - [ ] The Qt windows: open Friends, Squads and (a plan's ⋯) Pause: board colours, the main button in your accent, ticks and radio dots visible, nothing cut off (Friends' code whole). Settings › Theme › Dark, open Friends again: dark, all readable.
 - [ ] Round two (on the Mac): Open a Study Room: its title in the window ("Open a Study Room"), the frame says Due Crew; the round length box opens a list in the board's look (no tick column, "15 min" whole), the rounds box has its own up/down arrows; nothing looks washed out. Follow a plan with a code: the plan's dates evenly spaced, Follow and Cancel fully in view. Pause's date box opens a calendar with no red weekends.
 - [ ] Mac or Windows: Cheer window › "other": the system's emoji picker opens and its pick lands.
-- [ ] Leave Anki on the Decks screen a minute: Pips stop moving after about twelve seconds; the fan quiet (no busy CPU).
+- [ ] Leave Anki on the Decks screen a minute: Pips stop moving after about twelve seconds; the fan quiet (no busy CPU). *Robot: a minute with no input after the last pointer move: CPU from 20 s on held under 5% of one core, and the page says it's resting.*
 - [ ] The fridge: × on a drawing: "Taken down · Undo" in its place; Undo: it's back where it was. Take one down and wait: the Undo fades after about eight seconds. Sign out: the fridge is empty; sign in as someone else on the same Anki profile: none of the first person's drawings.
 
 ### 3.9.1: cheers, clearer (the pill, the Cheer window)
 
 - [ ] The crew rows: no 🎉 at the end of any row, and no pill anywhere at rest. Point at a crewmate's name: a green "🎉 Cheer" pill shows after it (and after an exam or "studying now" chip); move off the name and it goes. Pointing at their numbers shows nothing. Tab to a name: it shows. Never on your own row. A very long name ends sooner while the pill shows; the pill is never cut off.
-- [ ] Click the pill (or "🎉 Send a cheer" on their card): the Cheer window opens over the Decks screen in the board's look (your accent, light and dark both right), their Pip and "Cheer Dre" at the top. Pick an emoji, or type/paste any other into "other" (⌃⌘Space on a Mac). Draw on the pad with the mouse, a trackpad or a pen; Black, Thin, Thick, Undo, Clear. Sign: type, and the paper shows it.
-- [ ] Send (or Enter in the note): the window fades, "Sent 🔥 and a drawing to Dre.", and the emoji floats up from their row. Cancel, Esc and a click on the dim backdrop close it without sending; a line drawn off the pad's edge never closes it.
+- [ ] Click the pill (or "🎉 Send a cheer" on their card): the Cheer window opens over the Decks screen in the board's look (your accent, light and dark both right), their Pip and "Cheer Dre" at the top. Pick an emoji, or type/paste any other into "other" (⌃⌘Space on a Mac). Draw on the pad with the mouse, a trackpad or a pen; Black, Thin, Thick, Undo, Clear. Sign: type, and the paper shows it. *Robot: the pointer over a name, then its pill opens the Cheer window; picking, drawing and signing are by hand.*
+- [ ] Send (or Enter in the note): the window fades, "Sent 🔥 and a drawing to Dre.", and the emoji floats up from their row. Cancel, Esc and a click on the dim backdrop close it without sending; a line drawn off the pad's edge never closes it. *Robot: Send reaches the crewmate (the fake server has it); Esc closes it.*
 - [ ] duecrew.com: the same pill after the name, only while pointing at the name; on a phone, tap the name for their card and its "🎉 Send a cheer"; the 🎉 column is gone.
 
 ### 3.9.1: two buttons
 
-- [ ] Settings › Board › Reviewing: Two buttons, off. Its line: "Again and Good. Hard and Easy hide; 2, 3 and 4 count as Good. Phones keep four." With FSRS off (Deck options › FSRS), the line ends "Works best with FSRS on."; with it on, it doesn't. Find a setting: "hard" finds it.
+- [ ] Settings › Study › Reviewing: Two buttons, off. Its line: "Again and Good. Hard and Easy hide; 2, 3 and 4 count as Good. Phones keep four." With FSRS off (Deck options › FSRS), the line ends "Works best with FSRS on."; with it on, it doesn't. Find a setting: "hard" finds it.
 - [ ] Turn it on and review: the bar shows Again and Good only, each with its interval, in Anki's own words (try another interface language). Learning cards that already show two buttons look as before.
 - [ ] Keys: 1 is Again; Space, Enter, 2, 3 and 4 all answer Good (check the card's info: Good, not Hard or Easy). Turn it off: four buttons, and 2 and 4 are Hard and Easy again, at once.
 - [ ] In a study room, on its break: no key answers (2 and 4 included), as before.
@@ -905,7 +922,7 @@ The riskiest of 3.9.1, the parts only a live Anki can show, in order:
 ### 3.8.2: Pip's closet
 
 - [ ] First refresh after updating: the board's line says the closet is open and how many things your days had earned already; See them opens it. Your crew's rows show each person's Pip where their emoji was, in their colour (yours in yours); Settings › Pip off brings the emojis back.
-- [ ] The closet (Settings › Fifteen and Pip › Pip's closet, or Tools › Due Crew › Pip's closet, or click your Pip on your row or your card): your Pip big, in what it has on, and what's on place by place; ‹ Board goes back. The count says N of 64. Yours shows your things by place, each with what earned it; what's on is filled with a ✓ On.
+- [ ] The closet (Settings › Fifteen and Pip › Pip's closet, or Tools › Due Crew › Pip's closet, or click your Pip on your row or your card): your Pip big, in what it has on, and what's on place by place; ‹ Board goes back. The count says N of 64. Yours shows your things by place, each with what earned it; what's on is filled with a ✓ On. *Robot: it opens from the board, its tabs, a few things put on, Take it all off, ‹ Board; what Pip wears is by eye.*
 - [ ] Put on a hat, then another hat: the second replaces the first. Glasses and a hat together: both on. Earmuffs and a scarf (winter) with a scarf on: the scarf comes off.
 - [ ] A costume (the Dinosaur, say) over a look: only the costume shows; a second costume replaces the first; take the costume off (click it again, or its chip): the look you had comes back. Put a hat on while in a costume: the costume comes off.
 - [ ] To earn: everything you haven't got, by how it's earned, greyed, with what it needs (and how far along); clicking does nothing, Pip never wears it. A secret says it's a secret and shows nothing. A place on Yours with nothing yet says what's next.
@@ -923,7 +940,7 @@ The riskiest of 3.9.1, the parts only a live Anki can show, in order:
 ### 3.8.1: the Fifteen and Pip
 
 - [ ] Signed in, in no room: ▶ Fifteen? (with Pip) at the chip's end of the top bar, on the Decks screen, Overview and Review; Settings › Room chip Left moves it; Settings › Fifteen and Pip › Fifteen? off takes it away.
-- [ ] Click it (from the Decks screen, Overview and Review: each must start one): the chip becomes Fifteen · 15 min left (Pip jumps, then heads down) and Study today opens. A crewmate's board shows you studying now, not a room (no Join).
+- [ ] Click it (from the Decks screen, Overview and Review: each must start one): the chip becomes Fifteen · 15 min left (Pip jumps, then heads down) and Study today opens. A crewmate's board shows you studying now, not a room (no Join). *Robot: from the Decks screen's top bar, with its chip's card and Stop; Overview and Review are by hand.*
 - [ ] At 15 minutes, mid-card: nothing until you answer; then "That's fifteen." takes the next card's place, with how many cards; Space and the answer keys do nothing under it.
 - [ ] Take five, then another fifteen: the break (Pip breathing along a square, four counts a side; Settings › On a break › Stretch gives a stretch), Start now starts the next at once; otherwise at five it ends and the card comes back.
 - [ ] Another fifteen now: the card comes back and the chip says Fifteen 2 · 15 min left.
@@ -933,7 +950,7 @@ The riskiest of 3.9.1, the parts only a live Anki can show, in order:
 - [ ] Eight fifteens: the eighth's question offers Stop here only.
 - [ ] Close Anki in a fifteen: next open, no fifteen, and the session's line is there.
 - [ ] Pip by the logo, only for a moment: Today done, back on the Decks screen it pops in, hops (the week's squares fly) and goes after a few seconds, not again that day; a cheer that lands: a gift and a blush, then gone; the night before your exam: a star; the first day back from away: a wave. Any other time the logo's alone. System Settings › Reduce motion: it shows still for those seconds, then goes.
-- [ ] The nudge: with cards due, nothing studied, past your usual start (three days of history needed), the You box's Today says "Not started yet today. Fifteen?" with Pip peeking; Start starts one; × hides it for today; not on an away day.
+- [ ] The nudge: with cards due, nothing studied, past your usual start (three days of history needed), the You box's Today says "Not started yet today. Fifteen?" with Pip peeking; Start starts one; × hides it for today; not on an away day. *Robot: its Start and × pressed.*
 - [ ] Settings › Pip off: no Pip anywhere (the chip, the question and the break show the logo's squares).
 - [ ] A fifteen's card (click the chip): the logo's squares head it, as a room's; Pip sits at the end of the clock's row, heads down; it says "15 min left" (no "then your call"); at the question the chip says done.
 - [ ] Welcome back (follow a plan, study nothing for 3+ days, open Anki): Pip waves, still, at the window's top left, in your accent (night mode too); the words and buttons as before. Settings › Pip off: the window without Pip.
@@ -945,8 +962,8 @@ The riskiest of 3.9.1, the parts only a live Anki can show, in order:
 
 ### 3.9.7: Magic search
 
-- [ ] The You box's head says Magic search (every tab, and folded); Ctrl+Shift+F (⌘⇧F) opens it from the Decks screen, Overview and Review; Tools › Due Crew › Magic search… and Find a setting ("filtered") too. Settings › Board › Due › Magic search off: gone from the head, the key does nothing, the Tools entry hides.
-- [ ] The first time on the Decks screen (not in the window): the how-to card over the board, the bars dimmed, each part with something to tap that opens Magic search with it; its resource try is one of your deck's resources, its QIDs try three of your bank's questions. Got it, Open Magic search or a try: it doesn't come back, here or on another computer. In the window, ? brings it back; Esc takes it away before the window.
+- [ ] The You box's head says Magic search (every tab, and folded); Ctrl+Shift+F (⌘⇧F) opens it from the Decks screen, Overview and Review; Tools › Due Crew › Magic search… and Find a setting ("filtered") too. Settings › Study › Magic search off: gone from the head, the key does nothing, the Tools entry hides. *Robot: the head's Magic search opens the window, a word typed reaches it, it closes; the key and Tools are by hand.*
+- [ ] The first time on the Decks screen (not in the window): the how-to card over the board, the bars dimmed, each part with something to tap that opens Magic search with it; its resource try is one of your deck's resources, its QIDs try three of your bank's questions. Got it, Open Magic search or a try: it doesn't come back, here or on another computer. In the window, ? brings it back; Esc takes it away before the window. *Robot: it comes over the board on the first run, and Esc takes it away.*
 - [ ] Picking the box: the star twirls and sparkles, once a window; its topics pop in as you type. With Reduce motion, none of it.
 - [ ] In a big shared deck: "heart failure" ticks one topic with its tree open (untick a tag: its cards leave); "hf drugs", "aki", "itp", "copd", "type 2 diabetes", "staph aureus" tick what you'd expect; "mi" ticks only the tag called MI and offers the rest; "graves" doesn't tick Grade.
 - [ ] Resources: your deck's resource by its name with a topic, by its letters, by its words' initials with their "and"; one word that begins a family of them; a resource and a chapter number.

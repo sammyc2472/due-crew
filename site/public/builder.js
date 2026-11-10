@@ -326,7 +326,7 @@ const Prompts = (() => {
       "- Several tags can open the same day: separate them with commas on one line.",
       "- Exact notes: notes:ID ID ID brings every card of those notes (every cloze), the IDs separated by spaces. Exact cards: cards:ID:N ID:N brings card N of each note (1 is the first). These IDs can hold any character but a space; copy each exactly. For a plan others follow, use notes: and cards:; numeric nids: and cids: only work in my own Anki. Use only IDs I give you below; never invent, guess or round one. At most 5,000 on a line; split a longer list over dates.",
       "- An Anki search never uses deck:current, is:due, is:new, is:learn, is:review, is:suspended, is:buried, rated:, prop:, introduced:, added:, edited:, resched:, flag:, nid: or cid: (they find different cards for each person), and stays under 500 characters.",
-      "- Events are named days with no cards (a lecture, a quiz, an exam): YYYY-MM-DD | event | Micro quiz, or YYYY-MM-DD | event | Unit 3 test. A date that preps for one ends with | for Micro quiz, the name exactly as on its event line. A date after its event can name it too: it reads \"after Micro quiz\", review after it.",
+      "- Events are named days with no cards (a lecture, a quiz, an exam): YYYY-MM-DD | event | Micro quiz, or YYYY-MM-DD | event | Unit 3 test. A date that preps for one ends with | for Micro quiz, the name exactly as on its event line. A date after its event can name it too: it reads \"after Micro quiz\", review after it. The exam the plan ends with says exam in place of event: YYYY-MM-DD | exam | Block 1 exam.",
       "- A date can ask for things cards can't measure, ticked by hand (up to 8): | watch: Lecture 14, renal clearance | read: chapter 6 | do: practice block 3. A link may follow the words: | watch: Lecture 14 https://example.com/l14",
       "- A note for followers on a video's or a chapter's tag, or on one card, shows in their Anki when it comes up: note | tag:FULL::TAG::PATH | Skip the last two minutes, or note | card:ID:N | This one's on the quiz. One line in your own words, 280 characters at most, one a tag or a card; never card text.",
       "- A chapter too big for one day: put its deeper tags on different days, or give it a due date and the word even to spread it evenly from its date to its due date (\"| due 2026-10-09 | even\").",
@@ -436,6 +436,75 @@ const Prompts = (() => {
     ].flat().filter((x) => x !== null).join("\n");
   }
   return { tagLines, plan, standing, tagList, tags };
+})();
+
+/** 3.9.9: the Worker's ceilings on a plan's save (worker/src/plans.ts; the
+ *  suite checks them against it), by the name a refused save gives each (its
+ *  `limit`): the one place the site keeps them (build.py CEILINGS is the
+ *  add-on's). A plan's counts against them as planDoc counts them
+ *  (build.ceiling_counts), a refusal's words with the answer's numbers, and
+ *  Review and send's line for each it's past 90% of: remote.py's LIMIT_WORDS,
+ *  NEAR_WORDS and SLOW_WAITS, word for word (the suite checks). */
+const Ceilings = (() => {
+  const MAX = { sets: 200, events: 200, reviews: 60, tags: 100, cards: 50000, ids: 50000, size: 1536 * 1024, total: 24 * 1024 * 1024 };
+  const SAVES_A_DAY = 500;  // planput: a person's saves a day, every plan's
+  // `ids` (the note ids behind a date's tags, nobody's to change by hand) has none: the old line says it
+  const WORDS = {
+    sets: "A plan holds up to {max} sets. This makes {have}.",
+    events: "A plan holds up to {max} events. This makes {have}.",
+    reviews: "A plan holds up to {max} review days. This makes {have}.",
+    tags: "A plan holds up to {max} tags. This makes {have}.",
+    cards: "A plan holds up to {max} picked cards and IDs. This makes {have}.",
+    size: "A plan can be up to {max} MB. This makes {have} MB. Pasted IDs take the most room.",
+    total: "Your plans can be up to {max} MB together. They're at {have} MB. Delete one, or make this one smaller.",
+  };
+  const NEAR = { sets: "Sets", events: "Events", reviews: "Review days", tags: "Tags", cards: "Picked cards and IDs", size: "Size" };
+  // the day's saves: the page keeps what didn't save (the face's changes waiting, the builder's unsaved doc)
+  const SLOW = `${SAVES_A_DAY.toLocaleString("en-US")} saves a day. Your changes wait here and send tomorrow.`;
+  const num = (x) => Math.trunc(x).toLocaleString("en-US");
+  const fill = (t, have, max) => t.replace("{max}", max).replace("{have}", have);
+  /** bytes as MB to one decimal, "1.7", "24": past the ceiling rounded up and under it down, so neither reads as the other (remote.mb) */
+  function mb(n, cap) {
+    const x = n / 1048576 * 10;
+    return ((n > cap ? Math.ceil(x - 1e-9) : Math.floor(x + 1e-9)) / 10).toFixed(1).replace(/\.0$/, "");
+  }
+  const ok = (x) => typeof x === "number" && Number.isFinite(x) && x >= 0 && x < 1e15;
+  /** a refused save's words at a ceiling, the numbers the answer's; null when it names none the page says (remote.limit_words) */
+  function said(a) {
+    const lim = a && a.limit, have = a && a.have, max = a && a.max;
+    if (!Object.prototype.hasOwnProperty.call(WORDS, lim) || !ok(have) || !ok(max)) return null;
+    return lim === "size" || lim === "total" ? fill(WORDS[lim], mb(have, max), mb(max, max)) : fill(WORDS[lim], num(have), num(max));
+  }
+  /** {limit: n}: a doc as a save sends it, counted as plans.ts planDoc counts it (build.ceiling_counts): its sets, events, review
+   *  days and plan tags; its picked cards and IDs (each set's single cards, note and card IDs and notes, each plan tag's notes and
+   *  cards; one twice counts once, as the Worker keeps it); its size, its JSON's length */
+  function counts(doc) {
+    const d = doc && typeof doc === "object" ? doc : {};
+    const objs = (xs) => (xs || []).filter((x) => x && typeof x === "object" && !Array.isArray(x));
+    const units = objs(d.units), tags = objs(d.tags);
+    const refs = (xs) => new Set((xs || []).filter((c) => Array.isArray(c) && c.length === 2).map((c) => `${c[0]}\u0000${c[1]}`)).size;
+    const once = (xs) => new Set((xs || []).filter((x) => typeof x === "string" || Number.isInteger(x))).size;
+    const cards = units.reduce((a, u) => a + refs(u.cards) + once(u.nids) + once(u.cids) + once(u.notes), 0)
+      + tags.reduce((a, t) => a + once(t.notes) + refs(t.cards), 0);
+    return { sets: units.length, events: (d.events || []).length, reviews: (d.reviews || []).length, tags: tags.length, cards, size: JSON.stringify(d).length };
+  }
+  /** Review and send's lines: each ceiling the plan as it would be sent is past 90% of, "Picked cards and IDs: 47,900 of 50,000.",
+   *  "Size: 1.4 of 1.5 MB."; none under them all (remote.near) */
+  function near(doc) {
+    const c = counts(doc), out = [];
+    for (const [k, label] of Object.entries(NEAR)) {
+      const have = c[k], max = MAX[k];
+      if (have * 10 > max * 9) out.push(k === "size" ? `${label}: ${mb(have, max)} of ${mb(max, max)} MB.` : `${label}: ${num(have)} of ${num(max)}.`);
+    }
+    return out;
+  }
+  /** the first of these ceilings the doc is past, in a refusal's words with its own count; null */
+  function past(doc, keys) {
+    const c = counts(doc);
+    for (const k of keys) if (c[k] > MAX[k]) return said({ limit: k, have: c[k], max: MAX[k] });
+    return null;
+  }
+  return { MAX, SAVES_A_DAY, WORDS, NEAR, SLOW, mb, said, counts, near, past };
 })();
 
 /** 3.8.0: a plan's squad (its team until then), as the board's Squads tab
@@ -1070,7 +1139,7 @@ async function builder(id, face = null, got = null) {
   };
 
   // the server's ceilings (worker/src/plans.ts), said where they're hit, not at Save
-  const UNITS_MAX = 200, EVENTS_MAX = 200, REVIEWS_MAX = 60, SOURCES_MAX = 50, SEARCH_MAX = 10;
+  const UNITS_MAX = Ceilings.MAX.sets, EVENTS_MAX = Ceilings.MAX.events, REVIEWS_MAX = Ceilings.MAX.reviews, SOURCES_MAX = 50, SEARCH_MAX = 10;
   const FULL = `A plan holds up to ${UNITS_MAX} sets.`;
   const srcFull = (f) => `A set holds up to ${SOURCES_MAX} ${f === "tags" ? "tags" : "subdecks"}.`;
   /** the day's date, made if it has none; null when the plan holds all it can (note says so) */
@@ -2215,7 +2284,7 @@ async function builder(id, face = null, got = null) {
     ...(t.search || []).map((x) => `search:${x}`)].filter(Boolean);
   const tagLine = (t) => ["tag", t.name, ...tagSrcs(t), (t.notes || []).length ? Picks.notesText(t.notes) : "",
     (t.cards || []).length ? Picks.cardsText(t.cards) : ""].filter(Boolean).join(" | ");
-  const toText = () => { byOpens(); return [...ptags().map(tagLine), ...[...events().map((x) => `${x.day} | event | ${x.name}`), ...doc.units.map((u) => [u.opens, u.name,
+  const toText = () => { byOpens(); return [...ptags().map(tagLine), ...[...events().map((x) => `${x.day} | ${x.kind === "exam" ? "exam" : "event"} | ${x.name}`), ...doc.units.map((u) => [u.opens, u.name,
     [...(u.tags || []).map((t) => `tag:${t}`), ...(u.cut || []).map((c) => `tag:${c.tag} in ${(ptags().find((x) => x.id === c.in) || {}).name || "?"}`),
       ...(u.decks || []).map((d) => `deck:${d}`)].join(", "),
     ...(u.search || []).filter((q) => !cutOf(u, q)).map((q) => `search:${q}`),
@@ -2311,12 +2380,12 @@ async function builder(id, face = null, got = null) {
         if (cs.length) { const have = new Set((t.cards || []).map(([g, o]) => `${g}:${o}`)); t.cards = [...(t.cards || []), ...cs.filter(([g, o]) => !have.has(`${g}:${o}`))]; }
         return;
       }
-      if (parts.length >= 3 && /^\d{4}-\d{2}-\d{2}$/.test(parts[0]) && /^event$/i.test(parts[1])) {
+      if (parts.length >= 3 && /^\d{4}-\d{2}-\d{2}$/.test(parts[0]) && /^(event|exam)$/i.test(parts[1])) {
         const full = parts.slice(2).join(" ");
         const name = full.slice(0, 60);
         if (full.length > 60) warns.push(`Line ${i + 1}: the event's name is cut to 60 characters.`);
         const old = events().find((x) => x.name.toLowerCase() === name.toLowerCase());
-        evs.push({ id: old?.id || uid8(), day: parts[0], name });
+        evs.push(Object.assign({ id: old?.id || uid8(), day: parts[0], name }, /^exam$/i.test(parts[1]) ? { kind: "exam" } : {}));
         return;
       }
       let forN = null; let keepCards = false; let keepN = 0;
@@ -3525,9 +3594,11 @@ async function builder(id, face = null, got = null) {
     return out;
   }
 
-  /** The server's ceilings (worker/src/plans.ts planDoc), checked before a save: what's over, by name. */
+  /** The server's ceilings (worker/src/plans.ts planDoc), checked before a save: what's over, by name, in its order
+   *  (the sets, each set, then the plan's tags, picked cards and IDs, review days and events), said as its refusal says it. */
   function overLimit() {
-    if (doc.units.length > UNITS_MAX) return `A plan holds up to ${UNITS_MAX} sets; this one has ${doc.units.length}. Take some off.`;
+    const sets = Ceilings.past(doc, ["sets"]);
+    if (sets) return sets;
     for (const u of doc.units) {
       const at = `${pretty(u.opens)}, ${u.name}`;
       if ((u.search || []).length > SEARCH_MAX) return `${at}: a set holds up to ${SEARCH_MAX} searches and cuts.`;
@@ -3535,12 +3606,7 @@ async function builder(id, face = null, got = null) {
       if (["nids", "cids", "notes"].some((k) => (u[k] || []).length > 5000)) return `${at}: a set takes up to 5,000 IDs of each kind.`;
       if (u.due && u.due < u.opens) return `${at} is due before it opens.`;
     }
-    if (events().length > EVENTS_MAX) return `A plan holds up to ${EVENTS_MAX} events.`;
-    if ((doc.reviews || []).length > REVIEWS_MAX) return `A plan holds up to ${REVIEWS_MAX} review days.`;
-    if (ptags().length > 100) return "A plan holds up to 100 tags.";
-    const picks = doc.units.reduce((a, u) => a + (u.cards || []).length + idsLen(u), 0) + ptags().reduce((a, t) => a + (t.notes || []).length + (t.cards || []).length, 0);
-    if (picks > 50000) return `A plan holds up to 50,000 picked cards and IDs in all; this one has ${picks.toLocaleString()}.`;
-    return null;
+    return Ceilings.past(doc, ["tags", "cards", "reviews", "events"]);
   }
   /** what each refusal of a save means (PUT /plans/{id}), in a few words */
   const SAVE_ERRORS = {
@@ -3555,8 +3621,19 @@ async function builder(id, face = null, got = null) {
     not_author: "You're not one of this plan's authors any more.",
     no_plan: "This plan was deleted.",
     too_big: "The plan is too big to save. Take some IDs or sets off.",
-    slow_down: "That's a lot of saves today. Try again tomorrow.",
+    slow_down: Ceilings.SLOW,  // 3.9.9: what didn't save stays on the page
   };
+  // 3.6.5: `idr` is the server's (from the author's Anki) and kept there; sending it back only costs size
+  // 3.8.1: a date's `pl` (what its picks are, from the author's Anki) goes back as it came, while its picks are as they were
+  /** the doc as a save sends it (the face's Review and send counts it, 3.9.9) */
+  function lean({ every, ...d }, ref = base.units || []) {
+    const was = new Map(ref.map((x) => [x.id, picksSig(x)]));
+    return { ...d, units: (d.units || []).map(({ idr: _idr, pn: _pn, pl, todo, ...u }) => {
+      const t = Todo.clean(todo);  // Due: a line with no words yet isn't sent
+      const v = pl && was.get(u.id) === picksSig(u) ? { ...u, pl } : u;
+      return t.length ? { ...v, todo: t } : v;
+    }), ...(Every.clean(every).length ? { every: Every.clean(every) } : {}) };
+  }
   async function save() {
     saveBtn.disabled = true;
     status.className = "status"; status.textContent = "Saving…";
@@ -3586,21 +3663,11 @@ async function builder(id, face = null, got = null) {
       if (doc.phases && doc.phases.taper && !doc.end) doc.phases.taper = 0;
       if (doc.phases && !doc.phases.taper && !doc.phases.catchup) delete doc.phases;
       const summary = describe(base, doc);
-      // 3.6.5: `idr` is the server's (from the author's Anki) and kept there; sending it back only costs size
-      // 3.8.1: a date's `pl` (what its picks are, from the author's Anki) goes back as it came, while its picks are as they were
-      const lean = ({ every, ...d }, ref = base.units || []) => {
-        const was = new Map(ref.map((x) => [x.id, picksSig(x)]));
-        return { ...d, units: (d.units || []).map(({ idr: _idr, pn: _pn, pl, todo, ...u }) => {
-          const t = Todo.clean(todo);  // Due: a line with no words yet isn't sent
-          const v = pl && was.get(u.id) === picksSig(u) ? { ...u, pl } : u;
-          return t.length ? { ...v, todo: t } : v;
-        }), ...(Every.clean(every).length ? { every: Every.clean(every) } : {}) };
-      };
       const body = { version: plan.version, name: meta.name.trim() || plan.name, line: meta.line, doc: lean(doc), summary };
       if (tell.value.trim()) body.post = tell.value.trim();  // 3.7.3
       if (owner && meta.squad !== (plan.squad || "")) body.squad = meta.squad || null;
       if (owner && meta.audience !== plan.audience) body.audience = meta.audience;
-      const over = overLimit() || (JSON.stringify(body.doc).length > 1536 * 1024 ? SAVE_ERRORS.too_big : null);
+      const over = overLimit() || Ceilings.past(body.doc, ["size"]);
       if (over) { status.className = "status bad"; status.textContent = over; return; }
       let merged = false;
       try {
@@ -3625,9 +3692,10 @@ async function builder(id, face = null, got = null) {
     } catch (err) {
       status.className = "status bad";
       const code = err.body?.error;
-      status.textContent = code === "bad_plan" ? overLimit() || SAVE_ERRORS.bad_plan
+      // 3.9.9: a ceiling the answer names, with its numbers; an older Worker's answer as before
+      status.textContent = Ceilings.said(err.body) || (code === "bad_plan" ? overLimit() || SAVE_ERRORS.bad_plan
         : SAVE_ERRORS[code] || (err.status === 409 ? "It changed again while saving. Save once more."
-          : !err.status ? "That didn't save: check your connection, then try again." : "That didn't save. Try again.");
+          : !err.status ? "That didn't save: check your connection, then try again." : "That didn't save. Try again."));
     } finally { saveBtn.disabled = false; }
   }
 
@@ -3661,7 +3729,7 @@ async function builder(id, face = null, got = null) {
       coverItems, coverTotal, coverLeft, pieces, fill, layOut, fillOrSay, endDaily, finishBy, paceDaily, putWords, leftNames,
       dayMap, workMap, toText, fromText, aiPrompt, tagPrompt, tagLine,
       // a change, Undo, a save
-      mark, undo, settled, reload, fromDoc, save, describe, merge, overLimit,
+      mark, undo, settled, reload, fromDoc, save, describe, merge, overLimit, lean,
       LIMITS: { UNITS_MAX, EVENTS_MAX, REVIEWS_MAX, SOURCES_MAX, SEARCH_MAX, FULL },
     });
   }

@@ -16,13 +16,13 @@ catalog (no account, no key), on typing that's paused; picking a song is
 the account's one save. Nothing about what anyone is listening to is ever
 read: the bubble is the song they chose. Main thread except the HTTP."""
 
-import traceback
 import urllib.parse
 
 from aqt import mw
 
 from . import app, songs
 from .app import cfg, save_cfg
+from .errs import oops
 
 TIMEOUT = 8
 SEEN_KEY = "song_seen"
@@ -270,7 +270,7 @@ def _open(s, key):
         QApplication.clipboard().setText(songs.words(s))
         tooltip(f"Copied: {songs.words(s)}")
     except Exception:
-        traceback.print_exc()
+        oops()
 
 
 def apple(uid):

@@ -6,6 +6,7 @@ import html as _html
 import json as _json
 import re as _re
 
+from ..errs import wanted as _sends_errs
 from ..logo import board_mark
 from .. import sev as _sev
 
@@ -102,7 +103,11 @@ SETTINGS_CSS = """
     @media (prefers-reduced-motion: no-preference) { #due-crew .st-hit { animation: sthit 1.8s ease-out; } }
     @media (prefers-reduced-motion: reduce) { #due-crew .st-hit { outline: 2px solid var(--dc-accent); outline-offset: 1px; } }
 """
-SETTINGS_TABS = (("you", "You"), ("board", "Board"), ("privacy", "Privacy"))
+# 3.9.9 (Sam: "reorganize settings to be intuitive and sensible"): four tabs by what a setting is about.
+# You: who I am, my dates, my people. Board: what's on the Decks screen and how it looks. Study: what
+# works while I study (Today, Magic search, reviewing, the Fifteen, keys). Privacy: what leaves this computer.
+SETTINGS_TABS = (("you", "You"), ("board", "Board"), ("study", "Study"), ("privacy", "Privacy"))
+RESET_WORDS = "Reset Board and Study"
 
 
 def _st_row(label, control, sub=""):
@@ -155,14 +160,16 @@ def _settings_you(view, cfg=None):
             return none
         shown = ", ".join(e(x) for x in xs[:2])
         return shown + (f" and {len(xs) - 2} more" if len(xs) > 2 else "")
-    out += ('<div class="st-box">'
+    if cfg is not None:  # 3.9.9: my dates are about me (they were under Privacy)
+        out += '<div class="st-h">Your dates</div><div class="st-box">' + _date_rows(cfg) + '</div>'
+    out += ('<div class="st-h">Your people</div><div class="st-box">'
             + _st_row("Friends", f'<a class="st-lk" href="#" {_st_click("friends")}>Open</a>',
                       f"{crew} in your crew" if crew else "Your code, and who's in your crew")
             + _st_row("Squads", f'<a class="st-lk" href="#" {_st_click("setsquads")}>Open</a>', names(squads, "None yet"))
             + _st_row("Shared decks", f'<a class="st-lk" href="#" {_st_click("decks")}>Open</a>', names(decks, "None yet"))
             + '</div>')
     # 3.6.5, P6: feedback, here as well as in Tools › Due Crew
-    out += ('<div class="st-box">'
+    out += ('<div class="st-h">Due Crew</div><div class="st-box">'
             + _st_row("Feedback", f'<a class="st-lk" href="#" {_st_click("setfeedback")}>Send&hellip;</a>')
             + '</div>')
     out += (f'<div class="st-foot"><a class="st-lk" href="#" {_st_click("setsignout")}>Sign out</a>'
@@ -181,9 +188,9 @@ def _accent_swatches(cfg):
         for k, v in ACCENTS.items())
 
 
-def _settings_board(cfg, fsrs=None, reach=None):
-    """fsrs (3.9.1): whether FSRS is on in this collection (None: not known),
-    for two buttons' one-line note."""
+def _settings_board(cfg):
+    """What's on the Decks screen and how it looks (3.9.9: Today, Magic search, reviewing,
+    the Fifteen and the keys went to Study)."""
     hidden = hidden_tabs(cfg)
     pills = '<button class="st-pill on" disabled aria-pressed="true">Crew</button>' + "".join(
         f'<button class="st-pill{"" if k in hidden else " on"}" aria-pressed="{"false" if k in hidden else "true"}" '
@@ -193,45 +200,60 @@ def _settings_board(cfg, fsrs=None, reach=None):
     label_in = (f'<input class="st-in" data-f="label" maxlength="24" size="12" value="{label}" aria-label="Crew name in shares" '
                 f'onchange="pycmd(\'duecrew:setlabel:\'+encodeURIComponent(this.value)+\'|\'+window.dcBK);">')
     g = lambda k, d: bool(cfg.get(k, d))  # noqa: E731
-    return ('<div class="st-h">What it shows</div><div class="st-box">'
+    return ('<div class="st-h">On the Decks screen</div><div class="st-box">'
             + _st_row("Due Crew on the Decks screen", _st_switch("show_leaderboard", g("show_leaderboard", True), "Due Crew on the Decks screen"),
                       "Tools › Due Crew › Show on the Decks screen brings it back")
-            + _st_row("Yesterday for friends who haven't synced", _st_switch("show_stale", g("show_stale", True), "Yesterday for friends who haven't synced"))
-            + _st_row("Tell me when my crew studies", _st_switch("sync_notifications", g("sync_notifications", True), "Tell me when my crew studies"))
-            + _st_row("Shows", f'<span class="st-pills">{pills}</span>')
-            + '</div><div class="st-h">How it looks</div><div class="st-box">'
+            + _st_row("Tabs", f'<span class="st-pills">{pills}</span>')
+            + _st_row("Calm board", _st_switch("calm", g("calm", False), "Calm board"),
+                      "A tab appears when it has something to show you")
+            + '</div><div class="st-h">Look</div><div class="st-box">'
             + _st_row("Theme", _st_seg("theme", (("auto", "Match Anki"), ("light", "Light"), ("dark", "Dark")), cfg.get("theme", "auto"), "Theme"))
             + _st_row("Accent", f'<span class="st-sw" role="group" aria-label="Accent">{swatches}</span>')
             + _st_row("Compact rows", _st_switch("compact", g("compact", False), "Compact rows"))
             + _st_row("Highlight my row", _st_switch("highlight_me", g("highlight_me", True), "Highlight my row"))
-            + _st_row("Room chip", _st_seg("room_chip_side", (("left", "Left"), ("right", "Right")), cfg.get("room_chip_side", "right"), "Room chip"),
-                      "Its side of Anki's top bar")
+            + '</div><div class="st-h">Your crew</div><div class="st-box">'
+            + _st_row("Yesterday for friends who haven't synced", _st_switch("show_stale", g("show_stale", True), "Yesterday for friends who haven't synced"))
+            + _st_row("Tell me when my crew studies", _st_switch("sync_notifications", g("sync_notifications", True), "Tell me when my crew studies"))
             + _st_row("Crew name in shares", label_in)
-            + '</div><div class="st-h">Fifteen and Pip</div><div class="st-box">'
-            + _st_row("Fifteen? in the top bar", _st_switch("fifteen", g("fifteen", True), "Fifteen? in the top bar"),
-                      "And the nudge, when you haven't started by your usual time")
+            + '</div><div class="st-h">Pip</div><div class="st-box">'
             + _st_row("Pip", _st_switch("sev", g("sev", True), "Pip"), "The square from the logo, beside it and in your fifteens")
             + _st_row("Pip&rsquo;s closet", f'<a class="st-lk" href="#" {_st_click("closet")}>Open</a>',
                       "What your Pip has on, and what it&rsquo;s earned")
-            + _st_row("On a break", _st_seg("sev_break", (("breathe", "Breathe"), ("stretch", "Stretch")),
-                                            cfg.get("sev_break", "breathe"), "On a break"),
-                      "Breathe with Pip, four counts a side, or stretch")
             + _settings_songs(cfg)  # 3.9.6: song of the moment, this computer's
-            + '</div><div class="st-h">Due</div><div class="st-box">'
+            + '</div>'
+            + f'<div class="st-foot"><span></span>'
+              f'<a class="st-lk" href="#" {_st_click("setreset")}>{RESET_WORDS}</a></div>')
+
+
+def _settings_study(cfg, fsrs=None, reach=None):
+    """3.9.9: what works while I study, a tab of its own (it was spread through Board).
+    fsrs (3.9.1): whether FSRS is on in this collection (None: not known),
+    for two buttons' one-line note; reach: Recover leeches' count."""
+    g = lambda k, d: bool(cfg.get(k, d))  # noqa: E731
+    return ('<div class="st-h">Today</div><div class="st-box">'
             + _st_row("Today, Upcoming, Later", _st_switch("due_show", g("due_show", True), "Today, Upcoming, Later"))
-            + _st_row("Magic search", _st_switch("magic_search", g("magic_search", True), "Magic search"),
-                      f"In the head of this box, and {MAGIC_KBD} from any screen")  # 3.9.7
             + _st_row("Suggestions", _st_switch("due_suggest", g("due_suggest", True), "Suggestions"),
                       "Today's misses, new leeches")
             + _st_row("Recover leeches", _st_switch("due_leeches", g("due_leeches", False), "Recover leeches"),
                       # 3.9.3 (Sam's pick A): by each deck's leech count; 8 lapses after its question's Not these
                       "Each morning, as new cards, at 8 lapses" if reach == "eight"
                       else "Each morning, as new cards, at each deck's leech count")
+            + '</div><div class="st-h">Magic search</div><div class="st-box">'
+            + _st_row("Magic search", _st_switch("magic_search", g("magic_search", True), "Magic search"),
+                      f"The field under your decks, and {MAGIC_KBD} from any screen")  # 3.9.7; 3.9.9: its field
             # 3.9.1, two buttons (Sam's picks): every deck; FSRS off, allowed with a note
             + '</div><div class="st-h">Reviewing</div><div class="st-box">'
             + _st_row("Two buttons", _st_switch("two_buttons", g("two_buttons", False), "Two buttons"),
                       "Again and Good. Hard and Easy hide; 2, 3 and 4 count as Good. Phones keep four."
                       + (" Works best with FSRS on." if fsrs is False else ""))
+            + '</div><div class="st-h">Fifteen and rooms</div><div class="st-box">'
+            + _st_row("Fifteen? in the top bar", _st_switch("fifteen", g("fifteen", True), "Fifteen? in the top bar"),
+                      "And the nudge, when you haven't started by your usual time")
+            + _st_row("On a break", _st_seg("sev_break", (("breathe", "Breathe"), ("stretch", "Stretch")),
+                                            cfg.get("sev_break", "breathe"), "On a break"),
+                      "Breathe with Pip, four counts a side, or stretch")
+            + _st_row("Room chip", _st_seg("room_chip_side", (("left", "Left"), ("right", "Right")), cfg.get("room_chip_side", "right"), "Room chip"),
+                      "Its side of Anki's top bar")
             + '</div><div class="st-h">Shortcuts</div><div class="st-box">'
             + _st_row("Study what&rsquo;s next", f'<kbd class="st-kbd">{STUDY_KBD}</kbd>', "From any Anki screen")
             + _st_row("Ask the squad about this card", f'<kbd class="st-kbd">{ASK_KBD}</kbd>', "While reviewing")
@@ -240,7 +262,7 @@ def _settings_board(cfg, fsrs=None, reach=None):
                       "Off if another add-on uses these keys")
             + '</div>'
             + f'<div class="st-foot"><span></span>'
-              f'<a class="st-lk" href="#" {_st_click("setreset")}>Reset board</a></div>')
+              f'<a class="st-lk" href="#" {_st_click("setreset")}>{RESET_WORDS}</a></div>')
 
 
 # 3.9.6: song of the moment, this computer's: the dance floor and how it dances, and the app Listen opens
@@ -268,6 +290,24 @@ def _settings_songs(cfg):
                       "Where Listen opens your crew&rsquo;s songs, on this computer"))
 
 
+def _date_rows(cfg):
+    """My exam and my days away (Settings › You since 3.9.9): each a date and its switch."""
+    exam = str(cfg.get("exam_date") or "")
+    a, b = str(cfg.get("away_from") or ""), str(cfg.get("away_to") or "")
+    away_on = bool(a and b)
+    esc = _html.escape
+    exam_ctl = (f'<input class="st-in" type="date" data-f="exam" value="{esc(exam)}"{"" if exam else " disabled"} '
+                f'aria-label="Exam date" onchange="if(this.value)pycmd(\'duecrew:setexam:\'+this.value+\'|\'+window.dcBK);">'
+                + _st_toggle_cmd("setexam:" + ("off" if exam else "on"), bool(exam), "Exam"))
+    send = "pycmd('duecrew:setaway:'+document.getElementById('st-af').value+':'+document.getElementById('st-at').value+'|'+window.dcBK);"
+    away_ctl = (f'<input class="st-in" type="date" id="st-af" data-f="af" value="{esc(a)}"{"" if away_on else " disabled"} aria-label="Away from" '
+                f'onchange="{send}"><span style="color:var(--dc-muted)">to</span>'
+                f'<input class="st-in" type="date" id="st-at" data-f="at" value="{esc(b)}"{"" if away_on else " disabled"} aria-label="Away until" '
+                f'onchange="{send}">' + _st_toggle_cmd("setaway:" + ("off" if away_on else "on"), away_on, "Away"))
+    return (_st_row("&#128214; Exam", exam_ctl, "Your crew sees it for the two weeks before")
+            + _st_row("&#9992;&#65039; Away", away_ctl, "Your crew sees you&rsquo;re away"))
+
+
 def _settings_privacy(cfg):
     choice = "paused" if cfg.get("paused") else "showup" if cfg.get("show_up") else "numbers"
 
@@ -282,26 +322,17 @@ def _settings_privacy(cfg):
             f'{_st_click(f"set:{k}:{0 if cfg.get(k, True) else 1}")}>{t}</button>'
             for k, t in (("share_reviews", "Reviews"), ("share_time", "Study time"), ("share_retention", "Retention"),
                          ("share_streak", "Streak"), ("share_heatmap", "Heatmap"))) + '</span></div>'
-    exam = str(cfg.get("exam_date") or "")
-    a, b = str(cfg.get("away_from") or ""), str(cfg.get("away_to") or "")
-    away_on = bool(a and b)
-    esc = _html.escape
-    exam_ctl = (f'<input class="st-in" type="date" data-f="exam" value="{esc(exam)}"{"" if exam else " disabled"} '
-                f'aria-label="Exam date" onchange="if(this.value)pycmd(\'duecrew:setexam:\'+this.value+\'|\'+window.dcBK);">'
-                + _st_toggle_cmd("setexam:" + ("off" if exam else "on"), bool(exam), "Exam"))
-    send = "pycmd('duecrew:setaway:'+document.getElementById('st-af').value+':'+document.getElementById('st-at').value+'|'+window.dcBK);"
-    away_ctl = (f'<input class="st-in" type="date" id="st-af" data-f="af" value="{esc(a)}"{"" if away_on else " disabled"} aria-label="Away from" '
-                f'onchange="{send}"><span style="color:var(--dc-muted)">to</span>'
-                f'<input class="st-in" type="date" id="st-at" data-f="at" value="{esc(b)}"{"" if away_on else " disabled"} aria-label="Away until" '
-                f'onchange="{send}">' + _st_toggle_cmd("setaway:" + ("off" if away_on else "on"), away_on, "Away"))
     return ('<div class="st-h">What your crew and squads see</div><div class="st-box" role="radiogroup">'
             + radio("numbers", "My numbers") + nums
             + radio("showup", "Just that I studied", "Squares, no numbers. You see everyone the same way.")
             + radio("paused", "Nothing for now", "Your crew sees &ldquo;on a break&rdquo;; your streak keeps counting. "
                     "Kept 24 months without activity.")
-            + '</div><div class="st-h">Dates your crew sees</div><div class="st-box">'
-            + _st_row("&#128214; Exam", exam_ctl, "Shown for the two weeks before")
-            + _st_row("&#9992;&#65039; Away", away_ctl)
+            # 3.9.9, Know when it breaks: the errors this computer met, by code, with the day's first sync
+            + '</div><div class="st-h">What Due Crew counts</div><div class="st-box">'
+            + _st_row("Send what went wrong, and what gets used",
+                      f'<a class="st-lk" href="#" {_st_click("errsee")}>See what went</a>'
+                      + _st_switch("send_errs", _sends_errs(cfg), "Send what went wrong, and what gets used"),
+                      "Error codes, and which parts you opened that day, as counts. Never your cards, plans or crew.")
             + '</div><div class="st-foot"><span>Turning a number off also takes it off this week.</span>'
             # 3.7.1, D3: the page that says what's kept, for how long, and how it goes
             f'<a class="st-lk" href="#" {_st_click("privacypage")}>What Due Crew keeps &rsaquo;</a></div>')
@@ -317,7 +348,7 @@ FIND_WORDS = {
     "set:theme:": "dark light night mode", "set:accent:": "colour color green purple blue", "set:compact:": "dense small",
     "set:sync_notifications:": "notify notification alert", "set:show_leaderboard:": "hide off board decks screen",
     "settabs:": "tabs hide squads decks plans insights pip party games", "set:due_suggest:": "hard habit misses again",
-    "set:due_leeches:": "leech suspended", "set:shortcuts:": "keys keyboard", "set:share_time:": "minutes hours privacy private",
+    "set:calm:": "calm simple fewer tabs hide declutter", "set:due_leeches:": "leech suspended", "set:shortcuts:": "keys keyboard", "set:share_time:": "minutes hours privacy private",
     "set:share_reviews:": "cards numbers privacy private", "set:share_heatmap:": "year squares", "exam": "test date countdown",
     "af": "holiday vacation trip break", "setprivacy:paused": "pause break hide", "setprivacy:showup": "show up numbers squares",
     "setsignout": "log out", "setdelete": "remove erase", "setfeedback": "bug idea report", "label": "crew name group",
@@ -330,6 +361,9 @@ FIND_WORDS = {
     # 3.9.6: study soundtrack (song of the moment in code)
     "dance": "music song songs soundtrack dj party floor dancing pip motion animation corner",
     "songapp": "music app listen spotify apple youtube song",
+    # 3.9.9: Know when it breaks
+    "set:send_errs:": "errors error bugs bug crash broken report reports diagnostics problems wrong usage used counts analytics telemetry",
+    "errsee": "errors error bugs report diagnostics what goes sent",
 }
 
 
@@ -351,10 +385,21 @@ def _find_key(f):
     return ":".join(bits[:2]) + ":" if bits[0] in ("set", "settabs") and len(bits) > 2 else f
 
 
+def _settings_tab(tab, view, cfg, pip=True):
+    """A tab's rows. pip=False: the You tab with my emoji, not my Pip's drawing (Find a setting's index)."""
+    if tab == "you":
+        return _settings_you(view, cfg) if pip else _settings_you(view, dict(cfg, sev=False))
+    if tab == "board":
+        return _settings_board(cfg)
+    if tab == "study":
+        return _settings_study(cfg, view.get("fsrs"), view.get("leech_reach"))
+    return _settings_privacy(cfg)
+
+
 def settings_index(view, cfg):
-    """3.8.0, pick 28: every setting a word can find, across Settings' three
+    """3.8.0, pick 28: every setting a word can find, across Settings' four
     tabs: [{t: tab, f: the control's data-f (its start), l: its label,
-    w: where ("Board › How it looks"), k: words to match}]. Read from the
+    w: where ("Board › Look"), k: words to match}]. Read from the
     tabs as they're drawn, so a new row is findable as soon as it's there.
     Labels and headings are the add-on's own words; the people, squads and
     decks the You tab names stay out."""
@@ -370,9 +415,8 @@ def settings_index(view, cfg):
         seen.add(key)
         words = " ".join([label, where, extra] + [w for k, w in FIND_WORDS.items() if f.startswith(k)])
         out.append({"t": tab, "f": _find_key(f), "l": label, "w": where, "k": " ".join(_re.findall(r"[a-z0-9]+", words.lower()))})
-    for tab in ("you", "board", "privacy"):
-        body = (_settings_you(dict(view, name="", status="", emoji="")) if tab == "you"
-                else _settings_board(cfg, view.get("fsrs"), view.get("leech_reach")) if tab == "board" else _settings_privacy(cfg))
+    for tab, _t in SETTINGS_TABS:
+        body = _settings_tab(tab, dict(view, name="", status="", emoji=""), cfg, pip=False)
         sections = _re.split(r'<div class="st-h">', body)
         for i, sec in enumerate(sections):
             head = H.unescape(sec.split("</div>", 1)[0]) if i else ""
@@ -380,7 +424,8 @@ def settings_index(view, cfg):
             rows = list(_re.finditer(r'<div class="st-row"><span class="st-l"><span>(.*?)</span>(?:<small>(.*?)</small>)?', sec))
             for j, m in enumerate(rows):
                 end = rows[j + 1].start() if j + 1 < len(rows) else len(sec)
-                f = _re.search(r'data-f="([^"]+)"', sec[m.end():end])
+                # a row's switch, when it has one (3.9.9: Send Sam what went wrong's comes after See what went)
+                f = _re.search(r'data-f="(set:[^"]+)"', sec[m.end():end]) or _re.search(r'data-f="([^"]+)"', sec[m.end():end])
                 sub = H.unescape(m.group(2) or "") if tab != "you" else ""  # the You tab's lines name people and squads
                 if f:
                     add(tab, f.group(1), m.group(1), where, sub)
@@ -406,8 +451,7 @@ def settings_html(view, cfg):
     tab = view.get("tab") if view.get("tab") in dict(SETTINGS_TABS) else "you"
     pills = "".join(f'<a class="dc-pill{" on" if k == tab else ""}" href="#" {_st_click("settab:" + k)}>{t}</a>'
                     for k, t in SETTINGS_TABS)
-    body = (_settings_you(view, cfg) if tab == "you" else _settings_board(cfg, view.get("fsrs"), view.get("leech_reach")) if tab == "board"
-            else _settings_privacy(cfg))
+    body = _settings_tab(tab, view, cfg)
     foot = "Privacy, dates, status and accent follow your account." if view.get("signed_in") else ""
     pip = ""
     if tab == "you" and cfg.get("sev", True):  # 3.8.22: my Pip in my colour, by day or night as the board

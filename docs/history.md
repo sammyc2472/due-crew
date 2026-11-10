@@ -4773,3 +4773,525 @@ every release that changes how something works.
     each part that has it. The preview renders byte for byte as before
     (but a clock); the suite's source checks read the parts
     (`fakes.board_source`).
+- 3.9.9, the good-luck card that waited (Sam, 8 Nov: "make sure the good
+  luck card is working because not sure it did work for my last exam"): a
+  crewmate's line for my exam morning was kept for the card, and the card
+  waited for the Decks screen to be drawn anew. A refresh redraws the board
+  in place (3.9.8, with the board off, not at all), and only a draw showed
+  the card; a line mostly comes with the morning's first refresh, after
+  Anki has drawn the Decks screen, so the card came at the next draw, after
+  a study session, if at all. The refresh that brings it shows it now, both
+  ways a refresh ends on the Decks screen (`_commit`), once, as before.
+  Found and checked in Anki's own engine (signed in to the suite's server:
+  Dre's line sent, the card up with it, Thanks back to Dre, not again);
+  `test_good_luck_card_on_a_refresh_v399` fails on the code before. A line
+  is held for the card only while Settings has my exam (with none, it
+  plays as a cheer), and a crewmate's later cheer to me takes the place of
+  their line on the server (one cheer a pair) if I haven't fetched it yet.
+- 3.9.9, four small ones after the review (Sam, 10 Nov: "fix those three
+  small things, fix the selection of different days from the plans tab
+  where the blue outline snaps and disappears disconcertingly").
+  The plan week's day: motion.js 8 glided a 2 px accent ring from the day
+  last opened to the one clicked. Since the look's change 6 an opened day
+  has no ring (it's filled; the ring is today's), so the ring arrived and
+  vanished. What glides now is the opened day's own hairline, the fill
+  coming up under it as it lands; today keeps its border through it. Both
+  copies of motion.js. Mine: I changed the look and not its motion.
+  "20 new renal" was 19 with a leech among them: a count or a time budget
+  leaves leeches out before it counts (`Search.cards`), unless Leeches is
+  the filter. "cardio pharm" was called Pharmacology, and its deck too: a
+  topic typed with the part above its chip is called by both
+  (`magic._said_above`, `_up`: Cardio pharmacology; a short name in
+  capitals kept). "chapter 3": a tag whose own name says the kind and the
+  number (Chapter_3) is it, before parts only numbered 3 (it had lost to
+  another book's third part: it matched by its words, got no place in the
+  depth rule and was put out by it); and with more than one part numbered
+  the same the window says which it took, in which resource, and that the
+  rest are under Also.
+- 3.9.9, Magic search read as people type (Sam, 10 Nov: "a thorough
+  review of magic search to make sure it actually functions how a user
+  wants it to"). About ninety asks typed into the window's own logic
+  (`Search`) on Anki's engine, a 35,000-card deck with a year of tags, and
+  its buttons pressed (Study now, Unsuspend, Keep, Undo: all as they say).
+  What it got wrong, each now pinned in test_magic:
+  "cardio due this week" was read as due today, spread over the week (it
+  offered to move today's reviews): it's the cards due by Sunday, and
+  "due by Friday" the days till then (`magic._everyday` writes them as the
+  dN filter; "spread … over this week" is still a stretch). One word no
+  tag has emptied the whole box ("study cardio for 30 minutes", "cardio
+  overdue", "unsuspend renal physiology"): overdue is due, unsuspend is
+  suspended, "for 30 minutes" / "an hour" is a budget the window turns
+  into that many cards at my pace, what's due first, and says so; and
+  when the words as typed find no tag and no card the window reads them
+  once more (`read(..., loose_words=True)`, `magic.loose`): each word by
+  another everyday name (`SAME_AS`: cardiology, kidney, hematology…), or
+  the longest run of them that is a topic, with "Didn't use “…”". Never
+  when the first reading found anything: a deck that says kidney is not
+  second-guessed. "100 cards" was read as question numbers: it's how
+  many (and a count or a budget alone is that many of the deck). "what
+  should I study today" is what's due. Two topics that would both be
+  called Pharmacology take the part above them. Leeches found said
+  nothing about why nothing could be studied: a line now. A reading with
+  nothing in it raised when drawn (my own line; caught the same hour).
+  And one that was there before: a word one letter off a word thousands
+  of tags end in ("toxic", "topic") took 22 s, every pair of the matches
+  tried for initials; only a name the deck writes as a short one is tried
+  now (0.17 s). I had also cut words shorter a letter at a time; that hit
+  the same loop and came out. The field's examples are ones that work.
+  Left: "20 new renal" can be 19 when a leech is among them; "cardio
+  pharm" alone is still named Pharmacology; "chapter 3" picks the part
+  numbered 3 without asking which book.
+- 3.9.9, Settings by what a setting is about (Sam, 10 Nov: "reorganize
+  settings to be intuitive and sensible. I trust you"). Board had grown
+  to ten groups: looks, features, reviewing, keys. Now four tabs
+  (`board.SETTINGS_TABS`, `settings_model.TABS`). You: who I am, Your
+  dates (Exam and Away, which sat under Privacy though they're about
+  me; `_date_rows`), Your people, Feedback, sign out. Board: On the
+  Decks screen (the board's switch, Tabs, Calm board), Look, Your crew
+  (yesterday's rows, the notice, the crew's name in shares), Pip, Study
+  soundtrack. Study (new, `_settings_study`): Today, Magic search,
+  Reviewing, Fifteen and rooms, Shortcuts. Privacy: what my crew sees
+  and what Due Crew counts, nothing else. No setting, key or command
+  changed, only where its row is; Find a setting reads the tabs as
+  drawn, so it follows. Reset is "Reset Board and Study" on both, the
+  same keys as before. Magic search's "is off" tip says Settings ›
+  Study.
+- 3.9.9, our cards wear the deck list's shadow (Sam: "the same hover /
+  drop shadow of the main deck selector"). `base.CARD_SHADOW` and
+  `CARD_SHADOW_HOVER` are Anki's own values for `.fancy table`; on the
+  You bubble, the board's sheet, the unsplit frame (Settings, the
+  closet) and Magic search's field, the deeper one under the pointer.
+- 3.9.9, Magic search's window, opened on a search already typed, was
+  its first size whatever it found (Sam, twice). The page says its
+  height through Anki's bridge, which comes up a moment after the page:
+  `send` dropped what was said before it, and the page then thought the
+  height told. Opened empty, that first height was the window's own, so
+  nobody saw it until the Decks field opened it on a search. `send`
+  keeps what's said till the bridge is up (magic.js `flush`). The robot
+  click-test opens it on a typed search and compares the window with
+  its page; with the old page it read 490 against 190. (My first fix,
+  the heights asked for lately in `ui/magic_window.py`, was for a late
+  resize taken as a drag; real, kept, but not this.)
+- 3.9.9, Magic search is a field under your decks (Sam, 10 Nov, after
+  eight places mocked on the real Decks screen: "could we put it below or
+  above the 'Studied X cards in X minutes' thing?", "I like G but… more
+  in-keeping with Due Crew's style and magical", then of three live
+  styles: "G2 please!"). It was a green link in the You box's head, which
+  didn't look like a search. Now `board.magic_field` (due.py): the
+  board's input with the window's magnifier and amber star, 440 px, after
+  Anki's deck list and over its "Studied…" line (the start of
+  `content.stats` in `_on_render`, the board after Anki's line. Sam's
+  first click-test had it above the list: `content.tree` is inside
+  Anki's `<table>`, and a browser lifts a div out of a table to above
+  it; the preview's stand-in had no table round it). A glint goes round
+  its edge in the accent and the amber about twelve seconds, then rests
+  till it's pointed at (Pip's rule; nothing with Reduce motion). Its
+  placeholder is one of `MAGIC_EXAMPLES`, the next each time the page is
+  drawn (it wrote itself through three at first: "confusing and
+  distracting", Sam). Focused it says what to type; Enter or the
+  magnifier opens the window on it (`duecrew:magic:<encoded>`, 400 at
+  most, keyed as the board's commands are; empty opens it empty). It's
+  outside #due-crew and drawn with the page, never by a swap, so it
+  carries its tokens (both themes, my accent), sheet and script. Only
+  with the board drawn and Magic search on (Settings › Board › Due, whose
+  line says where it is now); the how-to waits for it, not the old link.
+  The link, `magic_link` and its icon are gone; the key, Tools and Browse
+  as before. Time per card as a Crew column was asked the same day and
+  left out (Sam agreed): it reads as a race, and it's already Anki's own
+  line just under the field. `test_magic_field_on_the_decks_page_v399`,
+  test_magic's ways in; tried in a browser (types, rests at 13 s, wakes
+  on a pointer, sends a colon and a bar whole).
+- 3.9.9, the look, five of six mocked (Sam, 10 Nov, on the design mocks:
+  "approved for 1, 2, 3, 4"; 5 "we keep both the bento and the ahead"; 6
+  yes). Found by looking at six real screens, light, dark and narrow.
+  1, one action leads: every action was bold accent, so nothing led. The
+  foot's Open a room, Crew, Share, the once-only line's Privacy and Got it,
+  and Today's Catch up…, Not today, See them are ink at 600, underlined
+  when pointed at; the filled button, Magic search, Add and links that are
+  content stay the accent (`style.py`, one block).
+  2, no medals, no places on Crew: the order says it and this isn't a race.
+  `crew._table_html` hands every row an empty rank (a show-up tick is all
+  the column holds; `td.rk:empty` takes no room), `MEDALS` gone; the site's
+  twin the same (`table` in app.js, app.css). Squads too, a commit later
+  (Sam: "squads should definitely lose those places"): `squads.py` and
+  the site's squad rows, a show-up tick the one thing left in the column.
+  3, a narrow window keeps its words: under 560 px Crew's headers were four
+  emoji and names were cut for four number columns. The table says what
+  it's sorted by (`dc-s-<key>`) and shows that column with Streak (by
+  Streak: Reviews beside it), headers as words. Other tables as they were.
+  4, small grey you can read: `muted` #7a7a72 was 4.3 to 1 on white and
+  4.0 on Anki's canvas; #68685f is 5.6 and 5.2. Light theme, the board
+  (`base.py`) and the Qt windows' `ui.tone`.
+  5, not built: Insights stays whole, the map and Reviews ahead open.
+  6, today and the day opened: both wore the accent ring; the opened day is
+  now filled with its number underlined, the ring is today's alone.
+  The README's two pictures re-rendered (`tools/readme_images.py`, which
+  now says the once-only counts line was seen: it isn't the listing's).
+- 3.9.9, three from "is there anything else" (Sam, 10 Nov: "Go for
+  keyboard insights warmup and extra budget lines").
+  The keyboard: the week's seven days were clickable boxes, so Tab skipped
+  them and everything under a day was the mouse's. What's pressed and isn't
+  a link or a button is now `role="button"` with a tabindex, pressed by
+  Enter or Space through one handler a page (`page.KEYS_JS`): a week's day
+  (`aria-expanded`, `aria-controls`, named "Tue 6 Oct: its sets"), a set on
+  the path (the path is one Tab stop, `data-rove`, the arrows walk it; its
+  box a group, not an image), Pip Party's pick chips and a kept pick's ×.
+  A focus ring for all of them. Looks the same; found by listing every
+  `onclick` on the rendered board a keyboard couldn't reach, and tried in a
+  browser (Enter opens a day, Space shuts it, two rights and Enter jump).
+  Left: Reviews ahead's choices (a radiogroup whose options take focus).
+  Insights ahead: `team_flow.warm`, twenty seconds after a profile opens
+  (`warm_soon`), works You › Insights' deck out with insights_soon's
+  stepper, quietly: it waits while a card is on screen (a look every 3 s)
+  and draws nothing at its end, so the tab opens on a view that's at hand.
+  Not when the tab is hidden (Settings, the calm board). Asked for while it
+  warms, the same job stops standing back and redraws when done.
+  The budget: eight waits nobody timed (`tools/speed_budget.py`), on a plan
+  of thirty sets followed on the big deck: Insights' longest hold (768 ms
+  of 2,000), its picker (37 of 200), a deck read (677 of 2,000), a plan's
+  progress (215 of 800), the morning (352 of 1,200; 1,369 cards opened),
+  the week across plans (0 of 50), my pace (8 of 150), reviews by day (11
+  of 150). The robot click-test times the Decks screen to the board drawn
+  (`board_first_draw_ms`, a warning past 4 s: never measured before).
+- 3.9.9, the week across plans (the plan gaps' mock 2; Sam: "sure", then
+  "Yes on all"). Each plan knew its own week and the week's day lines knew
+  my reviews; nothing added them up. You › Plans now ends with Everything
+  this week, when two plans have something in the next seven days: a row a
+  day, my reviews due and each plan's new cards as one bar, the day's time
+  at my own pace. `plans.load_week` (pure) from sets on my own days
+  (`plan_flow.load_view`: what the last refresh read, `plan_load`'s ask,
+  `plan_reviews`; plans paused, at my own pace or not on this computer's
+  deck left out), `board/plancards._load_html`. Heavy (my call, as drawn):
+  half again over my usual day's minutes (`LOAD_HEAVY`), only once that's
+  known and only a day with new cards. The heaviest heavy day gets a line
+  and one press: its smallest set not yet open, to the nearest later day
+  here, before the event it preps for, that stays under heavy with it
+  (first built to the lightest day; the nearest keeps the plan's order
+  closer). `planmoveto:<pid>:<uid>:<days>` is `move_date`, the follow's
+  `moved`, never the plan; the view then says where it went with Put it
+  back (`load_moved`, this session). No move for today's sets (open
+  already), none when nowhere has room. My pace is Magic search's
+  (`magic_flow.Ops.pace`: 28 days of the log, 12 ms on a million reviews),
+  read once an Anki day with the progress (`_note_pace`), so drawing reads
+  nothing; a typical pace, said so, until there's enough of mine. No
+  request, nothing sent but the move. `test_load_across_plans_v399`, and
+  the move sent as the board sends it in the plan move test.
+- 3.9.9, Insights a part at a time (Sam, 10 Nov: "Yes on all"). On a big
+  collection the day's first Insights held Anki about 2.3 s in one piece.
+  `team_flow.insights_soon` (the board's two callers, `you_view` and
+  `plan_lines`) hands back the view when it's at hand, else starts one job:
+  `_work_steps`, `_work_out` as a generator that stops before the exam box,
+  not sticking, the topic map, Reviews ahead and Optimize FSRS, a turn of
+  the screen between them (`_ins_step` on a 1 ms timer), the board drawn
+  again when it's done. Until then the last view, or "Reading your
+  reviews…". Longest hold now about 0.7 s (Reviews ahead, the map); the
+  view is the same, checked against the one before on the big collection.
+  Still the main thread, so the collection rule holds; a second thread was
+  the other way and would have broken it. On only in Anki
+  (`ASYNC`, set at profile open); the suite and tools work it out whole
+  (`DUE_CREW_INSIGHTS_WHOLE`, set by the stand-in for Anki). Everything
+  else that reads Insights (Reviews ahead's line, Pip Party) still calls
+  `insights()`. `test_insights_a_part_at_a_time_v399`.
+- 3.9.9, the overnight performance review (Sam, 10 Nov). Insights' topic
+  builder (`team.deck_topics`) worked out what each tag is once a card: a
+  deck's cards share a few thousand tags, so it's once a tag now (1.04 s
+  to 0.49 s on the big collection, the same topics: the whole view
+  compared before and after). A steady Insights compute there is about
+  1.6 s, from 3.4 s when the review began. Measured and left: import of
+  the add-on (60 ms, 66 modules; Pip Party, Magic search and Wrapped's
+  board load at start and could wait for a click, worth milliseconds); a
+  board swap (26 KB: its 116 KB of styles go once a page since 3.9.8); the
+  log's date-range reads (a third faster in the log's own order on a whole
+  deck, slower on a small deck over a long range, so left on the card
+  index). What's left of Insights' first open is the log's SQL (0.9 s) and
+  the map (1.1 s) on the main thread: the fix is working it out off the
+  main thread, which is its own change.
+- 3.9.9, what plans were missing (the review's eleven mocks; Sam's answers:
+  2, 4, 5, 6, 7 yes; 3 "don't think it works well enough, probably
+  remove"; 1 and 8 to 11 no). **6, 7**: Schedule ahead keeps its two-week
+  picker (Sam: "don't remove the calendar window... add the fill in
+  option") and under it Go longer: so many days from tomorrow or to my
+  exam's eve, weekdays to skip, a set a day (`Search.fill`, `c_fill`,
+  `c_fillskip`; 90 days out, 60 study days at most); words asking for more
+  than two weeks use it; a card in its learning steps isn't moved and the
+  picker says so. **3**: the class-calendar window goes (`start_window.py`,
+  `picker.py`; `StartOps.make` stays, New plan's). **4** was there already:
+  Settings › Copy for next year (52 weeks on, weekdays kept, renamed).
+  **5**: `edits.class_lines` on an author's Insights (asked once when the
+  tab opens, `webtabs.ask_class`, `remote.progress`): the sets that ended
+  two days ago or more with people in its squad not through them, counts
+  never names, by the counts' own rule. This turns round five's call
+  ("followers' progress isn't read in Anki") for these counts alone; its
+  own commit, so it comes out whole if Sam meant otherwise. The site's
+  builder has shown the same since 3.7.
+- 3.9.9, the plans engine reviewed (Sam, 10 Nov). Three fixes. Schedule
+  ahead held the open cards back before the plan's save had landed: a save
+  that failed (offline, a limit) left them suspended with no date to open
+  them. `Search.c_put` now spreads in `write`'s `after`, once the dates are
+  on the plan; while they wait in Review and send nothing is held, and the
+  line says so. `_psave` let a failed write of plans.json go by unsaid: it
+  counts `file:plans` now. And `tools/real_anki.py` (the engine on Anki's
+  own, 154 checks, 90 s) ran only by hand before a release: CI's click job
+  runs it at every push, with `check_spread` added (held and moved, one
+  undo, and the plan's dates opening the held cards each on its own
+  morning: the part nothing had proved).
+- 3.9.9, the review's four next steps, built from their mocks (Sam, 10 Nov:
+  "build all four, your recommendations on the calls").
+  **What gets used** (`errs.used`, `errs.USE`, `errs_flow.tell_once`): which
+  parts were opened today ride the day's error counts as `use:<part>`, once
+  a day a part however often, with `use:any` so a share has its whole; no
+  account, no route, no migration (the codes pass `field.ts` as they are).
+  Counted from the board's commands (`_on_js`, by a command's first
+  letters), the You tab on screen, the room chip, Magic search and the plan
+  window. One switch for both, and it names nobody (Sam: "don't say Sam"):
+  Privacy › Send what went wrong, and what gets used. Nothing is counted
+  until the person has been told once on the Decks screen (the account's
+  `use_told`). It was a sheet for a day; Sam, on seeing it: "a bit dramatic
+  a pop-up... a little note somewhere". Now a line at the board's foot
+  (`draw._use_line`, `errs_flow.NOTE`): what's new, Privacy (the switch)
+  and Got it (`usesee`, `usetold`); counting starts when either is pressed. Admin › Inbox shows Used apart from what
+  went wrong, each part as a share of the people who sent that day.
+  **The calm board** (`calm.py`, `board.hidden_tabs`, `_calm_check`,
+  `draw._calm_line`): a new account starts with Crew and Today; Decks,
+  Squads, Plans and Insights stay folded until there is a friend, a squad,
+  a plan or two weeks of reviews, then say so in one line (Open, ×). Pip
+  Party opens from Tools alone. Show all, Settings › Board › Calm board, a
+  tab shown by hand and any link to a part let it out for good
+  (`calm_open`). Off for everyone who had the board before. The fridge and
+  the dance floor are as they were (they already wait for a drawing or a
+  song of a crewmate's; the floor's "Put on a song?" still shows).
+  **The speed budget** (`tools/speed_budget.py`, `tools/speed/make_big.py`,
+  CI's click job): each wait against its budget on a 30,000-note,
+  million-answer collection; over one is red; Insights' first open of the
+  day is a known warning (2 to 4 s against 1.5 s).
+  **Plans as the way in**: a plan link's page already had the plan, its
+  three steps and Follow (`codePage`), and its preview picture (`og.ts`);
+  what was missing was the author being told. `PlanCore.share_hint`: a
+  plan of mine with five dated sets and nobody following says, once a
+  window after a save, that Settings › Copy link is the link to send. The
+  public page's "N following" stays as it was (Sam can take it off).
+- 3.9.9, Magic search spreads what's open (Sam, 10 Nov: "cards that were
+  unsuspended and due on one day that I wanted to spread across the next
+  few", and "yes good to go"). Schedule ahead wrote a date a day on My
+  plan, and a date only opens what's suspended: cards open already stayed
+  where Anki had them, and the window said "Made My plan" all the same.
+  Now `Ops.spread` (one undo step, before the plan's save): a later day's
+  new cards that are open are held back (suspended; their date opens them
+  that morning) and its reviews due today or before get that day as their
+  due date (Anki's Set due date, the interval kept). Today's share isn't
+  touched; learning cards and cards in a filtered deck aren't either. The
+  picker says it before the press (`days_view`'s `note`), the line after
+  says how many, and its Undo takes Anki's step back with the plan's save
+  (`undo["anki"]`). Proved on Anki's engine by hand (held, moved, intervals,
+  one undo); `test_schedule_ahead_spreads_open_cards_v399` the flow.
+  With it: a period in the words ("over the next 5 days", "from Monday to
+  Friday", "by Friday", "20 a day", "on Friday") was no topic's and the box
+  found nothing; `magic.spread` reads the days off the words and
+  `Search.spread` picks them (the picker's two weeks of them, said when
+  more was asked). And the page under `.dcm` had no tokens, so its ground
+  was white in dark wherever the window stood taller than its content
+  (`magic_html.colors` sets `body`).
+- 3.9.9, Pip Party's tab when something changed (Sam: "similar time
+  savings on the tab switching to it"). Its Systems map is Insights' own, so
+  it took Insights' saving with it: on the big collection, back to the tab
+  after ten minutes was 3 s and is 50 ms (`team_flow.insights_ready` reads
+  the stamp too, so no loading screen for a map that's at hand; the picker's
+  40 ms is read in place). Tags and Decks keep their reading of every
+  card's tags by the same stamp (`gamenight_flow._kept`): 0.4 to 0.9 s not
+  read again, 7 ms. The first open of a day is still Insights' first
+  (2 to 3 s there, behind the tab's loading view): what's left is
+  `team.deck_topics` and the log's SQL, not touched here.
+- 3.9.9, Pip Party's door after the review (`worker/src/table.ts`,
+  `test/tabledoor.test.ts`; each was reproduced first). Turned away, then
+  back under a new tab's id: a crewmate is now known by who they are
+  (`x-dc-who`, a hash of the uid set by `connect()` alone, kept in `away`
+  as `u:…`) and stays out; anyone else's network is remembered
+  (`room.nets`), and from it an open door asks, as "ask" does, so the host
+  answers again (other phones on that wifi wait to be let in too: the
+  price, and the host's call). A seat's answer (`a` in its presence) went
+  to every seat before the reveal: now to the TV alone (`quiet`; only the
+  host's engine reads it). Who sat down is remembered 512 deep, not 64
+  (`SEATED`): 64 made-up ids pushed a real seat off the list and a locked
+  table then kept her own phone out. Left as it is: at an open door one
+  network can take all twelve seats (a party is one wifi; Lock is the
+  answer). And `field.test.ts`'s UTC+14 case failed from 00:00 to 10:00
+  UTC every day (it isn't tomorrow there yet): the test's day is now the
+  sender's own.
+- 3.9.9, the Qt plan window goes (Sam, 10 Nov, after the review priced it).
+  Since round six the plan window is a page (`planner/web.py`); the Qt one
+  stayed behind `"plan_window": "qt"`, a key no window set. Twelve files
+  and 5,155 lines out of `planner/` (window, plan_tab, date_panel,
+  deck_panel, shape, send, insights_tab, settings_tab, mine_tab, new_plan,
+  history_tab, day_notes), `widgets.py` down to `fit`, and 480 lines of
+  their renders out of `tools/dialogs.py`. Kept, because the HTML window
+  opens them: the plan as text (`text_tab.TextDialog`) and Move from here
+  (`MoveFromDialog`, now in `date_dialogs.py`), both still drawn by
+  `tools/dialogs.py` over the HTML window. The key is read no more: a
+  computer that set it gets the HTML window. One thing lost its only way
+  in: the calendar window (`start_window.py`, Labs) opened from the Qt New
+  plan alone; its code stays till Sam says (New plan's calendar "waits").
+- 3.9.9, Insights when something changed (the review of 9 Nov, timed on a
+  big collection: 30,000 notes, a million answers). `team_flow._work_out`
+  held the main thread 3.4 s, again every ten minutes. Three reads of the
+  log now stop at the first entry they need (`_first_since`: the answers
+  since a day, each card checked for one before; a card's first right
+  review and its last, from the ends of its own log): 2.3 s of SQL to
+  1.4 s, the same view. Past `INSIGHTS_FRESH` it is worked out again only
+  when `_stamp` moved (the Anki day, the collection's mod, the log's last
+  id, the cards' and notes' last mod): 6 ms when nothing has.
+  `test_insights_only_when_something_changed_v399`.
+- 3.9.9, a card's first answer read the quick way (the slow card, Sam: "it's
+  over 5-10 seconds"): Reviews ahead's once-a-day check (1.5 s after the
+  board draws, on the main thread) read every row of my most reviewed
+  deck's log to find each card's first answer (`ease > 0` in the query
+  makes it read each row), 0.4 s of its 0.6 to 1.0 on a 300,000-row log,
+  more on a longer one. `stats.queries.first_answers` reads each card's
+  first row off the cid index alone and looks again only at a card whose
+  first row isn't an answer (a Set Due Date, a Forget): the same answer,
+  0.05 s. Reviews ahead's day part, its track record and Insights by start
+  week use it. Measured in Anki's own engine on the big test collection:
+  the day's first check 0.4 s where it was 0.6 to 1.0. What's left of it is
+  the last 120 days of the deck's log and the habits worked out from them.
+- 3.9.9, every control pressed (after the two plan sheets whose yes went
+  nowhere): the suites press each surface's controls as a person does and
+  send what the page sends back through the real handler, where the tests
+  had sent the commands themselves. Anki's plan window (test_plan_web: the
+  page in node on 41 states, every control, menu, calendar day and key;
+  `DEAD_CLICKS`, a cmd with no handler or a menu item with nothing to do),
+  duecrew.com's plan page (planface_test.js: every sheet planface.js can
+  draw, pressed with its boxes filled), the board (every command the suite
+  drew a control for, down its real route at the end of the run:
+  `check_every_board_click_is_taken`), the bars' widgets (room_widget.js in
+  node, each press through `room_model.trusted` and `rooms.on_message`) and
+  Magic search (magic.js in node, each message through `Search.on`). Each
+  fails on the bug it's for (Send's cmd, the paste's `sure`, a family
+  branch wanting one value more, a widget command dropped, a renamed
+  handler). It found one more: on duecrew.com a review day's second sheet
+  said "Empty takes the review day off", but its two days had no Clear,
+  so they couldn't be emptied (`planface.js`, the fields `optional` now).
+- 3.9.9, a calm offline (Off the Board, 11, Sam's pick): when a refresh
+  gets no answer (no network, or the server away) the board says so in a
+  line on top of every tab, above the admin's notice: "Can't reach Due
+  Crew. Your studying still counts and sends when it's back. Last refresh
+  3:10 PM." and Try now (Refresh; `board.offline_html`, `_clock` says the
+  time as a person does). The foot's "Couldn't sync" had been the only
+  word. `_state["offline"]` is set by `_sync_failed` (not when the sign-in
+  is gone: that card asks me back in) and cleared by any answer
+  (`_commit`, `_after_push`). A cheer sent then waits: no answer at all,
+  or a 5xx, holds it (`social.hold_cheer`, the session's `cheers_held`,
+  this sign-in's, one a crewmate, the newest, at most 20); a refusal, a
+  401 or a 429 doesn't, since it would only be refused again. Its
+  crewmate's row says "🎉 Waiting to send" under the name, without the
+  pointer ("Waiting" when the board is narrow), and the next refresh that
+  gets an answer sends each as it was (`send_held`; one with no answer
+  again waits again; one held more than three days is let go). Sending one
+  twice is harmless: the server keeps one cheer a pair. The site has no
+  twin (a page offline isn't open). A status page is Sam's to set up
+  outside our servers (an uptime monitor's public page at
+  status.duecrew.com), so it can say when they're down.
+- 3.9.9, know when it breaks (Off the Board, 1, Sam's pick): both of 3.9.8's
+  plan bugs and the good-luck card were found because Sam hit them. Each
+  install counts its own failures by code, never content (`errs.py`, kept
+  in `user_files/<profile>/errs.json` by Anki day, 50 codes and 9,999 a
+  count at most): `save:<error>` (a refused plan save, its code from
+  planner/remote's word tables, else `save:other`); `py:<module>:<function>:
+  <type>` (every caught exception, the deepest frame in the add-on and the
+  exception's type, never its message: the 188 `traceback.print_exc()`
+  calls are `oops()` now, printing as before); `cmd:<name>:bad` and
+  `cmd:unknown` (a board command the table refused; a card page's never
+  counted, an unknown name never sent); `req:<route>:<status>` (a request
+  that failed, by the route's template from `errs.ROUTES`, checked against
+  the Worker's index both ways; some 4xx are normal traffic). Finished days
+  ride the day's first sync once (`"errs": {"days": …, "v": …}`), only after
+  `/board` has said `"errs": true`, so an older Worker never sees them (if
+  one refuses, the sync goes again without and the flag clears); a lost
+  reply counts them sent, one that never got out keeps them. The Worker
+  keeps totals only, `field_errs(day, version, code, n, people)` with no uid
+  (migration 0030: the starters' 0030 never shipped), 30 days, and the
+  Inbox opens with In the field, yesterday (`GET /admin/field`). Settings ›
+  Privacy › Send Sam what went wrong (account key `send_errs`, on by
+  default: `errs.SEND_DEFAULT`, one line to flip) and See what went, the
+  sheet of what the next sync sends; the privacy page says so. A sync is
+  still one request.
+- 3.9.9, a robot click-test (Off the Board, 2, Sam's pick): `tools/click_test.py`
+  runs real Anki 25.02.7 offscreen with the add-on from `due_crew/`, a
+  collection it makes itself and a crew of four on the suite's fake server,
+  and goes through the add-on the way the click-test does: 14 views, the
+  windows over the board (Esc, the key back), every control it can see
+  pressed through a real click (about 200, a short skip list with reasons:
+  links out, the real network, sign-out), New plan › Start empty through
+  Review and send › Send with a follower, a deck's first card (about 0.2 s
+  of 3) and five answers, the bars' Fifteen, and a minute at rest on the
+  Decks screen (0.1 to 0.2% of a core, 5% the line). A press that reaches
+  nothing of the add-on's, anything raised, a slow first card, CPU at rest
+  over the line, or a window that doesn't give the key back fails the run;
+  a report and pictures go up as the `click-test` artifact. A CI job on
+  every push (`click test (real Anki)`), and the tag's deploy waits for it.
+  It fails with 8d18571's Send reverted, with a board command taken out of
+  `BOARD_CMDS`, and with Pip's loops left on forever. It found: the Cheer
+  window opened from a crewmate's 🎉 pill couldn't give the key back (the
+  pill shows only while its cell has the pointer or the key); the overlay's
+  close now finds the cell's first shown control, then the pill
+  (`board.POP_JS`). And one of Anki's own: Study Now pressed before the
+  overview's bottom bar has loaded can leave no Show Answer button; the
+  robot waits for Anki's pages. Now and then on its own (once in four runs here), a
+  crewmate's card closed with the key nowhere: a refresh had redrawn the
+  board while the card was up, so the name that opened it was a new copy
+  and the old one was gone. The overlay's close now finds that copy (the
+  same id, or the same command) and gives it the key (`board.POP_JS`); the
+  robot redraws the board under the card on purpose and fails without it.
+- 3.9.9, a plan's exam, asked once (Sam, 8 Nov: "when a plan sets an exam
+  date … it should show for the folks following it"; his pick B of three:
+  not set for them, not a line alone). An event can be the plan's exam:
+  `kind: "exam"` on it, the only kind there is (`worker/src/plans.ts`
+  takes nothing else; the fake the same; `worker/test/exam.test.ts`). The
+  author ticks This is the exam on the event's panel (op `event_kind`,
+  `edits.mark_exam`; planface's twin), New plan's "the exam it ends with"
+  is one from the start (both sides), and the text says
+  `2026-12-12 | exam | Heme-Onc block exam` (text.py and builder.js, the
+  plan-text page, both prompts). A follower's plan card asks under its
+  path: "Block 1 exam is Fri 23 Oct. Make it your exam?" Make it mine sets
+  my exam (Settings' own `setexam`, so the good-luck card and the exam's
+  scope follow it) and Not now leaves it; either way it isn't asked again
+  for that day (`exam_asked`, pid → day, 40 at most). If the plan's exam
+  moves and mine came from it (`exam_from`), the card asks "moved to … Move
+  your exam too?" with Keep and my day. My own exam ahead, set by hand,
+  wins: nothing is asked. The soonest plan exam ahead across my plans is
+  the one asked (`plans.exam_offer`, `plan_flow.exam_answer`,
+  `planexam:yes|no:<pid>`). Both keys are account keys, so a second
+  computer doesn't ask again. A 3.9.8 add-on keeps the mark when it edits
+  the plan (events are kept whole) and shows it as a plain event; the
+  Worker goes first, since an older one refuses the mark.
+- 3.9.9, plans name the limit a save hit (Sam's pick, "Plans: name the
+  limit"): most refused saves said "The plan didn't take that change."
+  whatever the ceiling. The Worker knew which, and says so now beside the
+  same error and status (older clients keep their line): a count ceiling is
+  400 `bad_plan` with `limit` (sets, events, reviews, tags, cards, ids,
+  size), `have` (what this save makes, counted as the check counts it, a
+  repeated card once) and `max`; `plans_full` adds `limit: "total"` and
+  what the account's plans hold now; a `PUT /plans/{id}` body too big to
+  read is 413 `too_big` with `limit: "size"` and its length (other routes'
+  413 unchanged). A doc whose shape is wrong stays plain `bad_plan`
+  (`worker/README.md`, `worker/test/planlimits.test.ts`). The words are
+  Sam's from the mock, one table a side (`remote.LIMIT_WORDS`,
+  `Ceilings.WORDS` in builder.js): "A plan holds up to 200 sets. This makes
+  214.", "A plan can be up to 1.5 MB. This makes 1.7 MB. Pasted IDs take
+  the most room.", "Your plans can be up to 24 MB together. They're at
+  23.6 MB. Delete one, or make this one smaller." MB to one decimal, rounded
+  up past the ceiling and down under it, so it never reads "1.5 of 1.5".
+  `ids` (a set's note ids, or the cards behind pasted IDs, 50,000 each) has
+  no words yet and keeps the old line. The day's 500 saves: "500 saves a
+  day. Your changes wait here and send tomorrow." where they do wait (a
+  send in Anki, its draft on disk; every save on the site, in the page); a
+  save made at once in Anki (nobody following) drops its change as before,
+  so it keeps its old line. Nothing sends by itself the next day. Review
+  and send, both windows, says it first: a line in the sheet's amber for
+  each ceiling the plan as sent is past 90% of ("Picked cards and IDs:
+  47,900 of 50,000.", "Size: 1.4 of 1.5 MB."), `p.warn` in page/plan.js.
+  The ceilings live once a side (`build.CEILINGS`/`ceiling_counts`,
+  `Ceilings.MAX`/`counts`), checked against plans.ts and run in node
+  against each other; the fake restates them (and lost a 5,000-cards check
+  the Worker never had). Anki's save body is 7 to 12% bigger than the
+  site's (requests' JSON has spaces), so a card-heavy plan meets the body
+  ceiling near 1.4 MB of doc from Anki; compact JSON in `api._call` would
+  fix it and is left for its own change.

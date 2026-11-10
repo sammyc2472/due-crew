@@ -190,7 +190,7 @@ async function face(followers, opts = {}) {
   const { ctx } = site;
   const t0 = ctx.today(), mon = ctx.Sched.monday(t0);
   const day = (n) => ctx.addDays(mon, n);
-  const p = opts.follower ? mineToFollow((n) => ctx.addDays(t0, n), opts.following) : plans(day, followers);
+  const p = opts.follower ? mineToFollow((n) => ctx.addDays(t0, n), opts.following) : { ...plans(day, followers), ...(opts.role ? { role: opts.role } : {}) };
   const st2 = makeStore(p);
   site.files = {};
   ctx.api = async (method, url, body) => {
@@ -596,6 +596,24 @@ function drawAll(x, view, sheet, mode) {
   check("planface: a quiz or exam after every set ends a plan with no end (webface.ends_here)", qe.B.doc.end === qe.day(30), qe.B.doc.end);
   await run(qe, "new_event", { name: "Midterm", day: qe.day(3) });
   check("planface: …one before the last set never does", qe.B.doc.end === qe.day(30), qe.B.doc.end);
+
+  // -- 3.9.9 (Sam's pick B): an event marked the exam, on the site as in Anki (webface.c_event_kind), and kept through the text --
+  let xp = (await run(qe, "pick", { key: ["event", "q1"] })).panel;
+  check("planface: an event's panel says whether it's the exam (not yet)", xp.exam === false, xp.exam);
+  const saves = qe.store.log.length;
+  xp = (await run(qe, "event_kind", { eid: "q1", exam: true })).panel;
+  check("planface: This is the exam marks it, one save; the panel says so", qe.B.events().find((e) => e.id === "q1").kind === "exam"
+    && xp.exam === true && qe.store.log.length === saves + 1, [xp.exam, qe.store.log.length - saves]);
+  await run(qe, "event_kind", { eid: "q1", exam: true });
+  check("planface: …marked again: nothing to save", qe.store.log.length === saves + 1, qe.store.log.length - saves);
+  const txt = qe.B.toText(), q1 = qe.B.events().find((e) => e.id === "q1");
+  check("planface: the text says exam on its line, event on a plain one (text.py's to_text)",
+    txt.includes(`${q1.day} | exam | ${q1.name}`) && txt.includes(" | event | Midterm"), txt.split("\n").filter((l) => / \| (exam|event) \| /.test(l)));
+  const readBack = qe.B.fromText(txt, true);
+  check("planface: …and read back, the exam is still the exam (fromText)", readBack.events.find((e) => e.name === q1.name).kind === "exam"
+    && !readBack.events.find((e) => e.name === "Midterm").kind, readBack.events);
+  xp = (await run(qe, "event_kind", { eid: "q1", exam: false })).panel;
+  check("planface: unticked, a named day again", !("kind" in qe.B.events().find((e) => e.id === "q1")) && xp.exam === false, qe.B.events().find((e) => e.id === "q1"));
   await run(s, "pick", { key: ["date", "u2"] });
   await run(s, "op", { op: { op: "move_source", date: "u2", key: ["search", `"tag:${ROOTTAG}::^Systems::Heme"`], to: "u3" } });
   check("planface: Move to: a search moves to another set", (s.B.doc.units.find((u) => u.id === "u3").search || []).length === 1 && !(s.B.doc.units.find((u) => u.id === "u2").search || []).length);
@@ -784,7 +802,7 @@ function drawAll(x, view, sheet, mode) {
     [noSaid, noWait, noHold, no.site.calls.filter(([m]) => m === "PUT").length]);
 
   // -- New plan: someone's plan, start empty --
-  const ns = makeSite(makeStore(plans(() => "2030-01-01", 0)).fn);
+  const nstore = makeStore(plans(() => "2030-01-01", 0)), ns = makeSite(nstore.fn);
   const nshown = [];
   const nf = ns.ctx.PlanFace.make(null, { plans: [], go: (u) => ns.went.push(u), out: { show: (x) => nshown.push(x), sheet() {}, status() {} }, newPlan: { decks: ["Big Step 1", "Other deck"], deck: "" } });
   nf.cmd(msg("ready"));
@@ -799,10 +817,222 @@ function drawAll(x, view, sheet, mode) {
   nf.cmd(msg("new_make", { start: false }));
   for (let i = 0; i < 8; i++) await settle();
   check("planface: Make it: POST /plans, its exam, then its page", ns.went.includes("/plans/newplanxxxxxxxxx/edit"), ns.went);
+  const made0 = nstore.log.find((b) => b.summary === "the exam it ends with");
+  check("planface: …its exam marked the exam (3.9.9, edits.new_plan_doc's twin), so followers are asked",
+    made0 && made0.doc.events.length === 1 && made0.doc.events[0].kind === "exam" && made0.doc.events[0].name === "Block 2 exam", made0 && made0.doc.events);
   nf.cmd(msg("new_follow", { code: "ab12 cd34" }));
   check("planface: Someone's plan: its code's page", ns.went.includes("/p/AB12CD34"), ns.went);
   nf.cmd(msg("new_follow", { code: "https://duecrew.com/p/QW12ER34?from=x" }));
   check("planface: Someone's plan: a pasted link is its code (plans.link_code)", ns.went.includes("/p/QW12ER34"), ns.went);
+
+  // -- every sheet the face draws, pressed as a person presses it (Sam, 7 Nov: Add to the plan drew the same
+  //    sheet again; the test had sent the command itself): drawn on the page, its boxes filled in, its yes
+  //    clicked, the message the page sends back through the face. It reaches a handler, something happens,
+  //    and what comes back isn't the same sheet. Every sheet planface.js can draw is in the list. --
+  const pressSheet = async (x, sh) => {
+    const { ctx, dom } = x.site;
+    const root = new dom.El("div"); root.attrs.id = "dcp"; root.className = "dcp";
+    dom.app.replaceChildren(root);
+    const sent3 = [];
+    ctx.pycmd = (m) => sent3.push(m);
+    ctx.dcPlan.start(JSON.parse(JSON.stringify(x.shown[x.shown.length - 1])), true);
+    ctx.dcPlan.sheet(JSON.parse(JSON.stringify(sh)));
+    const veil = root.querySelector(".veil"), acts = veil && veil.querySelector(".acts"), yes = acts && acts.children[1];
+    if (veil) {  // as a person fills it in: a line in each box, the day after the one shown, a number where there's none
+      for (const i of veil.querySelectorAll("input")) if (!i.attrs.type || i.attrs.type === "text") i.value = "Typed here"; else if (i.attrs.type === "number") i.value = String(Number(i.value || 2) + 1);
+      for (const i of veil.querySelectorAll("textarea")) i.value = `${i.value ? `${i.value}\n` : ""}do: Typed here`;
+      for (const b of veil.querySelectorAll("button.date")) if (/^\d{4}-\d\d-\d\d$/.test(b.value)) b.value = ctx.addDays(b.value, 1);
+    }
+    if (yes && !yes.disabled) dom.fire(yes, "click");
+    ctx.dcPlan.start(null, true);
+    return sent3.map((m) => JSON.parse(m.slice("dcplan:".length)));
+  };
+  const state = (x) => JSON.stringify([x.B ? x.B.doc : null, x.f.F.changes.length, x.store.log.length, x.store.follows.length, x.site.calls.length,
+    x.site.went.length, x.site.copied.length, x.said.length, x.sheets.length, x.f.F.status]);
+  const SHEETS = [  // [who, the clicks that draw it]: who is followers (an author's) or "follower" / "paused"
+    [0, [["pick", { key: ["date", "u3"] }], ["move", { uid: "u3", to: "@u1" }]]],
+    [0, [["pick", { key: ["date", "u1"] }], ["remark", { path: `${ROOTTAG}::#Path_Book::01_Cell_injury` }]]],
+    [0, [["pick", { key: ["date", "u1"] }], ["move_source_form", { i: 0 }]]],
+    [0, [["pick", { key: ["date", "u1"] }], ["delete"]]],
+    [0, [["pick", { key: ["event", "q1"] }], ["delete"]]],
+    [0, [["pick", { key: ["date", "u1"] }], ["move_from"]]],
+    [0, [["pick", { key: ["date", "u1"] }], ["add_search"]]],
+    [0, [["pick", { key: ["date", "u1"] }], ["todo"]]],
+    [0, [["pick", { key: ["date", "u1"] }], ["spread", { key: ["tag", `${ROOTTAG}::#Path_Book::01_Cell_injury`] }]]],
+    [0, [["new_date_form"]]],
+    [0, [["new_date", { name: "Again", day: "@u1" }]]],
+    [0, [["new_event_form"]]],
+    [0, [["new_review_form"]]],
+    [0, [["review_day", { day: "@review" }]]],
+    [0, [["lesson_from", { key: `tag:${ROOTTAG}::^Systems::Heme`, day: null }]]],
+    [0, [["breather"]]],
+    [0, [["ptag_rename", { ptag: "t1" }]]],
+    [0, [["ptag_delete", { ptag: "t1" }]]],
+    [0, [["paste", { text: "@lines" }]]],
+    [0, [["text"]]],
+    [0, [["see_prompt", { which: "plan" }]]],
+    [2, [["rename", { uid: "u1", name: "Cells" }], ["discard"]]],
+    [2, [["rename", { uid: "u1", name: "Cells" }], ["review_send"]]],
+    [0, [["tabcmd", { name: "every" }]]],
+    [0, [["tabcmd", { name: "posts" }]]],
+    [0, [["tabcmd", { name: "history" }]]],
+    [0, [["tabcmd", { name: "coauthor_ask" }]]],
+    [0, [["tabcmd", { name: "delete_plan" }]]],
+    ["coauthor", [["tabcmd", { name: "leave" }]]],
+    ["follower", [["tabcmd", { name: "shift", args: { later: true } }]]],
+    ["follower", [["tabcmd", { name: "pause" }]]],
+    ["paused", [["tabcmd", { name: "pause" }]]],
+    ["follower", [["tabcmd", { name: "reset" }]]],
+    ["follower", [["tabcmd", { name: "stop_following" }]]],
+    ["follower", [["tabcmd", { name: "copy_mine" }]]],
+  ];
+  const pressed = new Set(), dead = [];
+  for (const [who, steps] of SHEETS) {
+    const x = who === "follower" ? await face(0, { follower: true })
+      : who === "paused" ? await face(0, { follower: true, following: { paused: true, since: D(-4), until: D(3) } })
+      : who === "coauthor" ? await face(0, { role: "editor" }) : await face(who);
+    const at = (v) => (v === "@u1" ? x.B.doc.units.find((u) => u.id === "u1").opens : v === "@review" ? (x.B.doc.reviews || [{}])[0].day
+      : v === "@lines" ? `${x.day(22)} | Pasted | tag:${ROOTTAG}::^Systems::Cardio` : v);
+    for (const [c, a] of steps) await run(x, c, a && Object.fromEntries(Object.entries(a).map(([k, v]) => [k, at(v)])));
+    const sh = x.sheets[x.sheets.length - 1], name = `${steps[steps.length - 1][0]}${steps[steps.length - 1][1] && steps[steps.length - 1][1].name ? ` ${steps[steps.length - 1][1].name}` : ""}`;
+    if (!sh || sh.yes === null) { dead.push([name, "no sheet with a yes drawn", sh && sh.title]); continue; }
+    pressed.add(`${sh.cmd}${sh.cmd === "tabcmd" ? ` ${sh.args.name}` : ""}`);
+    const got = await pressSheet(x, sh);
+    if (got.length !== 1 || got[0].c !== sh.cmd) { dead.push([name, "its yes sent", got, "not its own cmd", sh.cmd]); continue; }
+    const m = got[0], handler = m.c === "tabcmd" ? x.f.tabHandlers[m.a.name] : x.f.handlers[m.c];
+    if (!handler) { dead.push([name, "no handler", m]); continue; }
+    const before = state(x), n = x.sheets.length;
+    x.f.cmd(msg(m.c, m.a));
+    for (let i = 0; i < 8; i++) await settle();
+    if (state(x) === before) dead.push([name, "pressed, nothing happened", m]);
+    if (x.sheets.length > n && JSON.stringify(x.sheets[x.sheets.length - 1]) === JSON.stringify(sh)) dead.push([name, "pressed, the same sheet again", m]);
+  }
+  check("planface: every sheet's yes, pressed on the page with its boxes filled in: it sends the sheet's own command, which does something, and never the same sheet again",
+    !dead.length && pressed.size >= 30, dead);
+  // a review day's sheet says "Empty takes the review day off": its day, emptied with the calendar's Clear, then its yes
+  const rv = await face(0);
+  await run(rv, "review_day", { day: rv.day(9) });
+  const rvSh = rv.sheets[rv.sheets.length - 1];
+  {
+    const { ctx, dom } = rv.site;
+    const root = new dom.El("div"); root.attrs.id = "dcp"; root.className = "dcp";
+    dom.app.replaceChildren(root);
+    const rvSent = [];
+    ctx.pycmd = (m) => rvSent.push(m);
+    ctx.dcPlan.start(JSON.parse(JSON.stringify(rv.shown[rv.shown.length - 1])), true);
+    ctx.dcPlan.sheet(JSON.parse(JSON.stringify(rvSh)));
+    const day0 = root.querySelector(".veil").querySelectorAll("button.date")[0];
+    dom.fire(day0, "click");
+    const clear = root.querySelectorAll(".calp button").find((b) => b.textContent === "Clear");
+    if (clear) dom.fire(clear, "click");
+    const yes = root.querySelector(".veil .acts").children[1];
+    dom.fire(yes, "click");
+    ctx.dcPlan.start(null, true);
+    const m = rvSent.map((x) => JSON.parse(x.slice("dcplan:".length)))[0];
+    if (m) rv.f.cmd(msg(m.c, m.a));
+    for (let i = 0; i < 6; i++) await settle();
+    check("planface: a review day's sheet, its day emptied with Clear and pressed: the review day comes off, as its words say",
+      clear && m && m.c === "review_day" && m.a.from === "" && !(rv.B.doc.reviews || []).some((r) => r.day === rv.day(9)), [!!clear, m, rv.B.doc.reviews]);
+  }
+  // -- 3.9.9: Review and send says a ceiling near; a refused save says which, with the server's numbers --
+  {
+    const sets = (x, n, from, cardsOf = () => 0, server = true) => {  // n sets more, each with something on it (a set with nothing waits)
+      for (let i = 0; i < n; i++) {
+        const u = { id: `z${from + i}`, name: `Set ${from + i}`, opens: x.day(40 + from + i), tags: [`${ROOTTAG}::#Path_Book::03_Neoplasia`], decks: [],
+          cards: Array.from({ length: cardsOf(i) }, (_, j) => [`z${from + i}x${j}`, 0]) };
+        x.B.doc.units.push(u);
+        if (server) x.B.base.units.push(JSON.parse(JSON.stringify(u)));
+      }
+    };
+    const refuse = (x, status, body) => {  // the next saves answered as the Worker refuses them
+      const was = x.ctx.api;
+      x.ctx.api = async (m, u, b) => {
+        if (m === "PUT" && u === `/plans/${x.p.id}`) { x.site.calls.push([m, u, b]); const e = new Error(body.error); e.status = status; e.body = body; throw e; }
+        return was(m, u, b);
+      };
+      return () => { x.ctx.api = was; };
+    };
+    const z = await face(2);
+    sets(z, 182, 0, (i) => (i < 2 ? 20000 : i === 2 ? 7898 : 0));  // 185 sets; 47,900 picked cards with the plan's own two
+    await run(z, "rename", { uid: "u1", name: "Cells" });
+    await run(z, "review_send");
+    const zs = z.sheets[z.sheets.length - 1];
+    check("ceilings: Review and send says each ceiling the plan as sent is past 90% of, a line each, in the add-on's words",
+      zs.kind === "send" && JSON.stringify(zs.warns) === JSON.stringify(["Sets: 185 of 200.", "Picked cards and IDs: 47,900 of 50,000."]), zs.warns);
+    const zd = drawAll(z, z.shown[z.shown.length - 1], zs);
+    check("ceilings: the page draws them in the sheet; every control on it fires without an error", !zd.errors.length && zs.warns.every((t) => zd.text.includes(t)),
+      zd.errors.slice(0, 2));
+    const zn = z.store.log.length;
+    await run(z, "send", { why: "" });
+    check("ceilings: …and its Send sends as before", z.store.log.length === zn + 1 && !z.f.F.changes.length, z.f.F.status);
+    const y = await face(2);
+    sets(y, 177, 0);  // 180: at 90%, no line yet
+    await run(y, "rename", { uid: "u1", name: "Cells" });
+    await run(y, "review_send");
+    check("ceilings: at 90% or under, no line", JSON.stringify(y.sheets[y.sheets.length - 1].warns) === "[]", y.sheets[y.sheets.length - 1].warns);
+
+    // a send refused at a ceiling: the Worker's words, its numbers; the changes still wait
+    const r1 = await face(2);
+    await run(r1, "rename", { uid: "u1", name: "Cells" });
+    let back = refuse(r1, 400, { error: "bad_plan", limit: "sets", have: 214, max: 200 });
+    await run(r1, "send", { why: "" });
+    check("ceilings: a send refused at a ceiling says which, with the server's numbers; the change still waits",
+      r1.f.F.status === "A plan holds up to 200 sets. This makes 214." && r1.f.F.changes.length === 1, [r1.f.F.status, r1.f.F.changes.length]);
+    back();
+    const said = [];
+    for (const [status, body] of [[413, { error: "too_big", limit: "size", have: 1782579, max: 1536 * 1024 }],
+      [409, { error: "plans_full", limit: "total", have: 24746394, max: 24 * 1048576 }], [400, { error: "bad_plan", limit: "cards", have: 51320, max: 50000 }],
+      [400, { error: "bad_plan" }], [413, { error: "too_big" }], [409, { error: "plans_full" }], [400, { error: "bad_plan", limit: "ids", have: 50001, max: 50000 }]]) {
+      back = refuse(r1, status, body);
+      await run(r1, "send", { why: "" });
+      said.push(r1.f.F.status);
+      back();
+    }
+    check("ceilings: the size, the account's plans together and picked cards in Sam's words; an older Worker's answer (or ids) as before",
+      JSON.stringify(said) === JSON.stringify([
+        "A plan can be up to 1.5 MB. This makes 1.7 MB. Pasted IDs take the most room.",
+        "Your plans can be up to 24 MB together. They're at 23.6 MB. Delete one, or make this one smaller.",
+        "A plan holds up to 50,000 picked cards and IDs. This makes 51,320.",
+        "Something in the plan isn't valid. Undo your last change, or reload the page.", "The plan is too big to save. Take some IDs or sets off.",
+        "Your plans hold as much as one account can. Make this one smaller, or delete a plan.",
+        "Something in the plan isn't valid. Undo your last change, or reload the page."]) && r1.f.F.changes.length === 1, said);
+
+    // the day's saves: said; the page keeps what didn't save waiting, and the next send takes it
+    const r2 = await face(0);
+    back = refuse(r2, 429, { error: "slow_down", retryAfter: 86400 });
+    await run(r2, "rename", { uid: "u1", name: "Cells" });
+    const r2v = r2.shown[r2.shown.length - 1];
+    check("ceilings: past the day's saves (nobody following, saved at once): said, and the change waits on the page",
+      r2.f.F.status === "500 saves a day. Your changes wait here and send tomorrow." && r2.f.F.changes.length === 1 && r2v.plan.sending && r2v.plan.sending.n === 1,
+      [r2.f.F.status, r2.f.F.changes.length]);
+    back();
+    const r2n = r2.store.log.length;
+    await run(r2, "review_send");
+    await run(r2, "send", { why: "" });
+    check("ceilings: …and tomorrow's send takes it", r2.store.log.length === r2n + 1 && r2.store.now().doc.units.find((u) => u.id === "u1").name === "Cells"
+      && !r2.f.F.changes.length, [r2.f.F.status, r2.store.log.length - r2n]);
+
+    // the builder's own check before a save says what the Worker would, its own count; nothing goes
+    const r3 = await face(0);
+    sets(r3, 211, 0, () => 0, false);
+    const r3n = r3.site.calls.filter(([m]) => m === "PUT").length;
+    await run(r3, "rename", { uid: "u1", name: "Cells" });
+    check("ceilings: past one before it's sent, said as the Worker's refusal says it (214 sets), and nothing sent",
+      r3.f.F.status === "A plan holds up to 200 sets. This makes 214." && r3.site.calls.filter(([m]) => m === "PUT").length === r3n, r3.f.F.status);
+  }
+
+  // every sheet planface.js draws is in that list: a new one gets pressed too
+  const pf = read("site/public/planface.js");
+  const literals = [];  // each sheet({ … }) as written, by its braces
+  for (let i = pf.indexOf("sheet({"); i >= 0; i = pf.indexOf("sheet({", i + 1)) {
+    let depth = 0, j = i + 6;
+    for (; j < pf.length; j++) { if (pf[j] === "{") depth++; else if (pf[j] === "}" && --depth === 0) break; }
+    literals.push(pf.slice(i, j + 1));
+  }
+  const drawnCmds = new Set(literals.map((t) => /cmd: "([a-z_]+)"(?:, args: \{ name: "([a-z_]+)")?/.exec(t)).filter(Boolean).map((mm) => `${mm[1]}${mm[2] ? ` ${mm[2]}` : ""}`)
+    .concat([...pf.matchAll(/\bask\([^\n]*?, "([a-z_]+)"(?:, \{[^}]*\})?(?:, true)?\);/g)].map((mm) => mm[1])));
+  const unpressed = [...drawnCmds].filter((k) => !pressed.has(k));
+  check("planface: every sheet planface.js draws (its cmd) is pressed above", drawnCmds.size >= 25 && !unpressed.length, [unpressed, [...drawnCmds]]);
 
   process.stdout.write(JSON.stringify({ checks }));
   process.exit(checks.every((x) => x[1]) ? 0 : 1);
