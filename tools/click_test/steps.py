@@ -74,6 +74,7 @@ VIEWS = (
     ("Pip Party", ("duetab:party",)),
     ("Settings · You", ("settings",)),
     ("Settings · Board", ("settings", "settab:board")),
+    ("Settings · Study", ("settings", "settab:study")),
     ("Settings · Privacy", ("settings", "settab:privacy")),
     ("Pip's closet", ("closet",)),
 )
@@ -750,6 +751,25 @@ class Run:
         yield self.r.until(lambda: not any(type(w).__name__ == "MagicWindow" and w.isVisible()
                                            for w in QApplication.topLevelWidgets()), 10, "the window to close")
         self.check("Magic search: its window closes", True)
+        # opened on a search already typed (the Decks field's Enter): the page says its height before Anki's
+        # bridge is up; the window must still get it (Sam, 3.9.9: it stayed at its first size)
+        self.probe.step = "Magic search: open on what's typed"
+        from due_crew import magic_flow
+        from due_crew.ui.magic_window import START_H
+        win = magic_flow.open_search("Cardio")
+        fits = None
+        for _ in range(120):
+            need = yield self.js("window.dcMagic ? Math.ceil(document.querySelector('.dcm').getBoundingClientRect().height) : 0", win.web)
+            fits = (need, win.height())
+            if need and abs(win.height() - need) <= 4:
+                break
+            yield self.r.pause(50)
+        self.check("Magic search: opened on a search already typed, its window is as tall as what it found",
+                   bool(fits and fits[0] > START_H + 40) and abs(fits[1] - fits[0]) <= 4, "the page %s, the window %s" % (fits or (None, None)))
+        yield from self.snap("31-magic-search-typed", win.web)
+        win.close()
+        yield self.r.until(lambda: not any(type(w).__name__ == "MagicWindow" and w.isVisible()
+                                           for w in QApplication.topLevelWidgets()), 10, "the window to close")
 
     # ---- the top bar's widget (a script's own buttons: the Fifteen's chip, the room's) ----
     def top_bar(self):

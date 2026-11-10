@@ -8,7 +8,7 @@ sends one command per change; the glue saves what comes back.
 import datetime as _dt
 from urllib.parse import unquote
 
-TABS = ("you", "board", "privacy")
+TABS = ("you", "board", "study", "privacy")  # board.SETTINGS_TABS (3.9.9: Study)
 SWITCHES = ("show_leaderboard", "show_stale", "sync_notifications", "compact",
             "highlight_me", "share_reviews", "share_time", "share_retention",
             "share_streak", "share_heatmap",
@@ -26,7 +26,8 @@ CHOICES = {"theme": ("auto", "light", "dark"),
 HIDEABLE = ("decks", "squads", "plans", "insights", "party")  # board.HIDEABLE_TABS: Crew's Decks, Squads; Plans, Insights (3.8.0); Pip Party (3.9.5)
 PRIVACY = ("numbers", "showup", "paused")
 LABEL_MAX = 24
-# what Reset board puts back: the Board tab, never anything on Privacy
+# what Reset Board and Study puts back: this computer's look and layout, the Fifteen, the keys; never
+# anything on Privacy, nor an account's own switches (Today's lists, Magic search, two buttons)
 BOARD_DEFAULTS = {"show_leaderboard": True, "show_stale": True, "sync_notifications": True,
                   "theme": "auto", "accent": "green", "compact": False, "highlight_me": True,
                   "crew_label": "Crew", "room_chip_side": "right", "hidden_tabs": [], "shortcuts": True,

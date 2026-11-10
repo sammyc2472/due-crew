@@ -3038,13 +3038,17 @@ def test_settings_in_board_v341():
           and "duecrew:settabs:decks:1" in bd and "duecrew:settabs:plans:0" in bd
           and "settabs:week" not in bd
           and "duecrew:set:compact:0" in bd and 'aria-label="Teal" aria-pressed="true"' in bd)
-    pv = board.settings_html(dict(view, tab="privacy"), {"show_up": True, "exam_date": "2026-10-14",
-                                                           "away_from": "", "away_to": "",
-                                                           "send_errs": False})  # 3.9.9's switch, off: its own test
-    check("settings: Privacy, one choice checked; numbers only under My numbers; exam on, away off",
-          pv.count('aria-checked="true"') == 2 and "duecrew:setprivacy:numbers" in pv
-          and "share_reviews" not in pv and 'value="2026-10-14"' in pv
-          and "duecrew:setexam:off" in pv and "duecrew:setaway:on" in pv, pv[-900:])
+    dated = {"show_up": True, "exam_date": "2026-10-14", "away_from": "", "away_to": "",
+             "send_errs": False}  # 3.9.9's switch, off: its own test
+    pv = board.settings_html(dict(view, tab="privacy"), dated)
+    check("settings: Privacy, one choice checked; numbers only under My numbers",
+          pv.count('aria-checked="true"') == 1 and "duecrew:setprivacy:numbers" in pv
+          and "share_reviews" not in pv, pv[-900:])
+    # 3.9.9 (Settings by what it's about): my dates are on You, no longer under Privacy
+    yo = board.settings_html(dict(view, tab="you", signed_in=True), dated)
+    check("settings: You has my dates, exam on, away off; Privacy has none",
+          '<div class="st-h">Your dates</div>' in yo and 'value="2026-10-14"' in yo and "duecrew:setexam:off" in yo
+          and "duecrew:setaway:on" in yo and "setexam" not in pv and "setaway" not in pv, yo[-900:])
     out = board.settings_html({"tab": "nope", "signed_in": False}, {})
     check("settings: signed out, a way in; an unknown tab is You",
           "setsignin" in out and "follow your account" not in out)
@@ -7076,10 +7080,11 @@ def test_you_bubble_v380():
         dc._swap, dc.cfg, dc.save_cfg, due_flow.cfg, due_flow.save_cfg, due_flow._swap, due_flow._today = saved
     # Settings: what the board and the bubble show
     st = board._settings_board({"hidden_tabs": ["plans"]})
-    check("settings: Shows, Crew always, then Decks, Squads, Plans and Insights, each a switch",
+    check("settings: Tabs, Crew always, then Decks, Squads, Plans and Insights, each a switch; Today's lists on Study",
           '<button class="st-pill on" disabled aria-pressed="true">Crew</button>' in st
           and "settabs:plans:1" in st and "settabs:decks:0" in st and "settabs:squads:0" in st
-          and "settabs:insights:0" in st and "Today, Upcoming, Later" in st)
+          and "settabs:insights:0" in st and "Today, Upcoming, Later" not in st
+          and "Today, Upcoming, Later" in board._settings_study({}))
     from due_crew import settings_model
     check("settings: the hideable tabs are the board's", set(settings_model.HIDEABLE) == {k for k, _l in board.HIDEABLE_TABS})
     # Crew › Decks: my own deck, to how it's sticking
@@ -7533,8 +7538,8 @@ def test_due_board_and_clicks():
     check("due board: off is nothing", board._due_html(None) == "")
     js = board.keep_me_in_view_js()
     check("due board: the add line's script rides every draw", "window.dcDue" in js and "dueadd" in js)
-    st = board.settings_html({"tab": "board", "signed_in": True}, {})
-    check("due settings: three switches on Board", all(f"duecrew:set:{k}:" in st for k in ("due_show", "due_suggest", "due_leeches")))
+    st = board.settings_html({"tab": "study", "signed_in": True}, {})
+    check("due settings: three switches on Study", all(f"duecrew:set:{k}:" in st for k in ("due_show", "due_suggest", "due_leeches")))
     from due_crew import settings_model as SM
     check("due settings: the switches are whitelisted", SM.change(["set", "due_leeches", "1"], {}) == {"due_leeches": True})
     # clicks, through the add-on's own handler
@@ -7785,8 +7790,8 @@ def test_recover_by_deck_count_v393():
     finally:
         F._pf, F.mw.col, F._today, F.mw.state, F.ask_reach, F._left_out, F.tooltip, single = saved
         Q.QTimer.singleShot = staticmethod(single)
-    st_html = board.settings_html({"tab": "board"}, {"due_leeches": True})
-    st_eight = board.settings_html({"tab": "board", "leech_reach": "eight"}, {"due_leeches": True})
+    st_html = board.settings_html({"tab": "study"}, {"due_leeches": True})
+    st_eight = board.settings_html({"tab": "study", "leech_reach": "eight"}, {"due_leeches": True})
     check("recover 3.9.3: Settings says which line it uses",
           "at each deck&#x27;s leech count" in st_html or "at each deck's leech count" in st_html, st_html[-400:])
     check("recover 3.9.3: and after Not these, 8 lapses", "at 8 lapses" in st_eight)
@@ -9193,9 +9198,9 @@ def test_one_settings_keys_study_v380():
         check("one settings: no Qt window left", "settings_dialog" not in init_src
               and not os.path.exists(os.path.join(REPO, "due_crew", "ui", "settings_dialog.py")))
         # the keys: listed, one switch, and it applies at once
-        st = board.settings_html({"tab": "board", "signed_in": True}, conf)
+        st = board.settings_html({"tab": "study", "signed_in": True}, conf)
         keys = ("⌘⇧S", "⌃⇧Q") if sys.platform == "darwin" else ("Ctrl+Shift+S", "Ctrl+Shift+Q")  # 3.9.3: the suite on a Mac too
-        check("keys: Settings › Board lists both, with one switch, in this computer's names", keys == (board.STUDY_KBD, board.ASK_KBD)
+        check("keys: Settings › Study lists both, with one switch, in this computer's names", keys == (board.STUDY_KBD, board.ASK_KBD)
               and all(k in st for k in keys) and "duecrew:set:shortcuts:0" in st, keys)
         check("keys: the switch is a setting, on by default", SM.change(["set", "shortcuts", "0"], {}) == {"shortcuts": False}
               and SM.BOARD_DEFAULTS["shortcuts"] is True and "shortcuts" not in __import__("due_crew.account", fromlist=["x"]).ACCOUNT_KEYS)
@@ -9814,9 +9819,11 @@ def test_find_a_setting_v380():
             "squads": ["orca <b>"], "decks": ["Private Deck"], "sync": "now", "tab": "board"}
     ix = board.settings_index(view, {})
     by = {x["l"]: x for x in ix}
-    check("find: rows from all three tabs, each with where it lives",
-          by["Accent"]["t"] == "board" and by["Accent"]["w"] == "Board \u203a How it looks"
-          and by["\u2708\ufe0f Away"]["t"] == "privacy" and by["Sign out"]["t"] == "you" and len(ix) >= 30, sorted(by))
+    check("find: rows from all four tabs, each with where it lives",
+          by["Accent"]["t"] == "board" and by["Accent"]["w"] == "Board \u203a Look"
+          and by["\u2708\ufe0f Away"]["t"] == "you" and by["\u2708\ufe0f Away"]["w"] == "You \u203a Your dates"
+          and by["Two buttons"]["t"] == "study" and by["Two buttons"]["w"] == "Study \u203a Reviewing"
+          and by["Heatmap"]["t"] == "privacy" and by["Sign out"]["t"] == "you" and len(ix) >= 30, sorted(by))
     words = lambda q: [x["l"] for x in ix if all((" " + x["k"]).find(" " + w) >= 0 for w in q.split())]  # noqa: E731
     check("find: by label, by a word it doesn't say (colour, holiday, test, log out), by its section",
           words("accent") == ["Accent"] and words("colour") == ["Accent"] and words("holiday") == ["\u2708\ufe0f Away"]
@@ -13861,8 +13868,9 @@ def test_fifteen_board_v381():
           and "animation" not in sev.CSS[:sev.CSS.index("@media")] and ' rest"' in sev.svg("hop", rest=True)
           and " rest" not in sev.svg("nap", rest=True))
     st = board.settings_html({"tab": "board"}, {})
-    check("Settings: Fifteen? in the top bar, Pip, and the break's Breathe or Stretch",
-          "set:fifteen:0" in st and "set:sev:0" in st and "set:sev_break:stretch" in st)
+    sy = board.settings_html({"tab": "study"}, {})
+    check("Settings: Pip on Board; Fifteen? in the top bar and the break's Breathe or Stretch on Study",
+          "set:sev:0" in st and "set:fifteen:0" in sy and "set:sev_break:stretch" in sy and "duecrew:set:fifteen" not in st)
     ix = board.settings_index({"tab": "board"}, {})
     hit = lambda word: {r["f"] for r in ix if word in r["k"].split()}
     check("Find a setting: timer or pomodoro finds Fifteen?, mascot finds Pip, stretch finds the break",
@@ -16277,10 +16285,10 @@ def test_two_buttons_v391():
           and SM.change(["set", "two_buttons", "1"], {}) == {"two_buttons": True}
           and SM.change(["set", "two_buttons", "0"], {}) == {"two_buttons": False}
           and "two_buttons" not in SM.BOARD_DEFAULTS and not TB.on({}))
-    view = {"tab": "board", "signed_in": True}
+    view = {"tab": "study", "signed_in": True}
     page = board.settings_html(dict(view, fsrs=True), {"two_buttons": True})
     page_off = board.settings_html(dict(view, fsrs=False), {})
-    check("Settings › Board › Reviewing: Two buttons, on, with what it does and that phones keep four; FSRS off: its note",
+    check("Settings › Study › Reviewing: Two buttons, on, with what it does and that phones keep four; FSRS off: its note",
           '<div class="st-h">Reviewing</div>' in page and "Two buttons" in page and "duecrew:set:two_buttons:0" in page
           and "2, 3 and 4 count as Good. Phones keep four." in page and "Works best with FSRS on." not in page
           and "duecrew:set:two_buttons:1" in page_off and "Works best with FSRS on." in page_off

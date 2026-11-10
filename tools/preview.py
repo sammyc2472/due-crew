@@ -744,7 +744,7 @@ SET_VIEW = {"signed_in": True, "name": "Sammy", "emoji": "\U0001F98A", "status":
             "sync": "sam@school.edu · Synced 2m ago · v3.5.0", "crew": 6, "squads": ["Orca crew", "Block 3"],
             "decks": ["Big Step 1"]}
 SET_CFG = {"accent": "green", "hidden_tabs": ["squads"], "crew_label": "orca", "exam_date": "2026-10-14"}
-for tab in ("you", "board", "privacy"):
+for tab in ("you", "board", "study", "privacy"):
     sections.append(f"<h3>3.5.0: Settings, {tab}</h3>" + board.settings_html(dict(SET_VIEW, tab=tab), SET_CFG))
 sections.append("<h3>3.5.0: decks, asked of you and your asks</h3>" + board.render(
     DATA, {"period": "decks"}, now_ts - 60,
@@ -778,8 +778,8 @@ sections.append("<h3>3.9.1: two buttons, just tried from the Hard habit line (Un
     DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
     you=_YOU("insights", insights={"decks": _DECKS, "did": 20, "exam": "2026-10-14", "plan": None,
                                    "view": dict(_DECK_INS, hard={"pct": 22, "n": 640}, two="tried")})))
-sections.append("<h3>3.9.1: Settings › Board › Reviewing: two buttons, FSRS off (its note)</h3>" + board.settings_html(
-    dict(SET_VIEW, tab="board", fsrs=False), dict(SET_CFG, two_buttons=True)))
+sections.append("<h3>3.9.1: Settings › Study › Reviewing: two buttons, FSRS off (its note)</h3>" + board.settings_html(
+    dict(SET_VIEW, tab="study", fsrs=False), dict(SET_CFG, two_buttons=True)))
 sections.append("<h3>Due: folded</h3>" + board.render(DATA, {"period": "week"}, now_ts - 60, due=dict(_DV, folded=True),
                                                        plans=PLANS, you=_YOU("today", folded=True)))
 sections.append("<h3>Due: done for today, a long tomorrow</h3>" + board.render(

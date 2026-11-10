@@ -9,7 +9,17 @@ var dcMagic = (function () {
   function send(cmd, args) {
     var msg = 'dcmagic:' + JSON.stringify(Object.assign({ cmd: cmd }, args || {}));
     if (preview) { (window.dcMagicSent = window.dcMagicSent || []).push(msg); return; }
-    if (window.pycmd) window.pycmd(msg);
+    if (window.pycmd && !waiting.length) { window.pycmd(msg); return; }
+    // 3.9.9 (Sam: opened on a search already typed, the window stayed at its first size): Anki's bridge
+    // comes up a moment after the page, and what was said before it (the page's height) was dropped
+    waiting.push(msg);
+    if (waiting.length === 1) flush();
+  }
+  var waiting = [], waited = 0;
+  function flush() {
+    if (window.pycmd) { var all = waiting; waiting = []; all.forEach(function (m) { window.pycmd(m); }); return; }
+    if (++waited > 400) { waiting = []; return; }
+    setTimeout(flush, 25);
   }
   function h(tag, attrs, kids) {
     var e = document.createElement(tag);

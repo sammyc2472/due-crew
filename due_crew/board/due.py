@@ -732,7 +732,8 @@ _MAGIC_FIELD_CSS = """
     conic-gradient(from var(--dc-ga), var(--dc-line) 0 62%, var(--dc-accent) 74%, var(--dc-hours) 82%, var(--dc-line) 92%) border-box; }
 @property --dc-ga { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 #dc-mgf.live, #dc-mgf:hover, #dc-mgf:focus-within { animation: dc-mgf-glint 4.5s linear infinite; }
-#dc-mgf:focus-within { box-shadow: 0 0 0 2px var(--dc-you-bg); }
+#dc-mgf { box-shadow: __SH__; } #dc-mgf:hover { box-shadow: __SHH__; }
+#dc-mgf:focus-within { box-shadow: 0 0 0 2px var(--dc-you-bg), __SHH__; }
 @keyframes dc-mgf-glint { to { --dc-ga: 360deg; } }
 #dc-mgf button.go { appearance: none; -webkit-appearance: none; all: unset; display: inline-flex; flex: none; cursor: pointer; color: var(--dc-accent);
   margin: 0; padding: 2px; min-width: 0; box-shadow: none; border-radius: 6px; }
@@ -794,7 +795,9 @@ def magic_field(cfg):
     js = _MAGIC_FIELD_JS
     example = MAGIC_EXAMPLES[_magic_drawn[0] % len(MAGIC_EXAMPLES)]
     _magic_drawn[0] += 1
-    return (f'<style>{tokens}{_MAGIC_FIELD_CSS}</style>'
+    from .base import CARD_SHADOW, CARD_SHADOW_HOVER
+    sheet = _MAGIC_FIELD_CSS.replace('__SHH__', CARD_SHADOW_HOVER).replace('__SH__', CARD_SHADOW)
+    return (f'<style>{tokens}{sheet}</style>'
             f'<div id="{MAGIC_FIELD_ID}" role="search">'
             f'<i class="s s1"></i><i class="s s2"></i><i class="s s3"></i>'
             # the board's command as the board sends it, with what's typed when there is any (a colon after its name)

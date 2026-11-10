@@ -2,7 +2,7 @@
 
 A part of the board (due_crew/board/, 3.9.8): see its __init__."""
 
-from .base import ROW_CAP, _theme_css
+from .base import CARD_SHADOW, CARD_SHADOW_HOVER, ROW_CAP, _theme_css
 
 
 def _css(cfg):
@@ -39,6 +39,10 @@ def _css(cfg):
     #due-crew.dc-frame.dc-split {{ background: transparent; padding: 0; border-radius: 0; }}
     #due-crew.dc-split > .du {{ background: var(--dc-bg); margin: 0 0 12px; }}
     #due-crew .dc-sheet {{ background: var(--dc-bg); border-radius: 12px; padding: 16px 18px 10px; }}
+    /* 3.9.9 (Sam): each of our cards sits on the page as Anki's deck list does: its shadow at rest, its
+       deeper one under the pointer (Anki's own values, deckbrowser.css's `.fancy table`) */
+    #due-crew.dc-frame:not(.dc-split), #due-crew.dc-split > .du, #due-crew .dc-sheet {{ box-shadow: {CARD_SHADOW}; }}
+    #due-crew.dc-frame:not(.dc-split):hover, #due-crew.dc-split > .du:hover, #due-crew .dc-sheet:hover {{ box-shadow: {CARD_SHADOW_HOVER}; }}
     /* the deck screen is shared with Anki's own styles (26.x paints
        `.fancy table` with a glass fill) and other add-ons' CSS. None of
        them may redecorate this board: no borders, shadows, radii, or fills

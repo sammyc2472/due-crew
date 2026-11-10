@@ -4841,6 +4841,37 @@ every release that changes how something works.
   Left: "20 new renal" can be 19 when a leech is among them; "cardio
   pharm" alone is still named Pharmacology; "chapter 3" picks the part
   numbered 3 without asking which book.
+- 3.9.9, Settings by what a setting is about (Sam, 10 Nov: "reorganize
+  settings to be intuitive and sensible. I trust you"). Board had grown
+  to ten groups: looks, features, reviewing, keys. Now four tabs
+  (`board.SETTINGS_TABS`, `settings_model.TABS`). You: who I am, Your
+  dates (Exam and Away, which sat under Privacy though they're about
+  me; `_date_rows`), Your people, Feedback, sign out. Board: On the
+  Decks screen (the board's switch, Tabs, Calm board), Look, Your crew
+  (yesterday's rows, the notice, the crew's name in shares), Pip, Study
+  soundtrack. Study (new, `_settings_study`): Today, Magic search,
+  Reviewing, Fifteen and rooms, Shortcuts. Privacy: what my crew sees
+  and what Due Crew counts, nothing else. No setting, key or command
+  changed, only where its row is; Find a setting reads the tabs as
+  drawn, so it follows. Reset is "Reset Board and Study" on both, the
+  same keys as before. Magic search's "is off" tip says Settings ›
+  Study.
+- 3.9.9, our cards wear the deck list's shadow (Sam: "the same hover /
+  drop shadow of the main deck selector"). `base.CARD_SHADOW` and
+  `CARD_SHADOW_HOVER` are Anki's own values for `.fancy table`; on the
+  You bubble, the board's sheet, the unsplit frame (Settings, the
+  closet) and Magic search's field, the deeper one under the pointer.
+- 3.9.9, Magic search's window, opened on a search already typed, was
+  its first size whatever it found (Sam, twice). The page says its
+  height through Anki's bridge, which comes up a moment after the page:
+  `send` dropped what was said before it, and the page then thought the
+  height told. Opened empty, that first height was the window's own, so
+  nobody saw it until the Decks field opened it on a search. `send`
+  keeps what's said till the bridge is up (magic.js `flush`). The robot
+  click-test opens it on a typed search and compares the window with
+  its page; with the old page it read 490 against 190. (My first fix,
+  the heights asked for lately in `ui/magic_window.py`, was for a late
+  resize taken as a drag; real, kept, but not this.)
 - 3.9.9, Magic search is a field under your decks (Sam, 10 Nov, after
   eight places mocked on the real Decks screen: "could we put it below or
   above the 'Studied X cards in X minutes' thing?", "I like G but… more

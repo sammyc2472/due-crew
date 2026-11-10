@@ -1817,7 +1817,7 @@ def open_feedback():
 
 
 def open_settings(tab=None):
-    """tab: "you", "board", or "privacy" (your card's Privacy… opens that
+    """tab: "you", "board", "study" or "privacy" (your card's Privacy… opens that
     one). 3.8.0, one Settings: the board's, on the Decks screen, from
     anywhere (Tools › Due Crew › Settings…, the add-on's Config button);
     signed out or with the board turned off it shows too, since Settings
@@ -1930,7 +1930,7 @@ def _settle_tabs():
 # 3.8.0: clear of Anki's own. On a Mac Qt's "Ctrl" is Command, and ⌘⇧Q is the
 # system's Log Out: Ask the squad is the Control key there (Qt's "Meta"), ⌃⇧Q
 STUDY_KEY, ASK_KEY = "Ctrl+Shift+S", ("Meta+Shift+Q" if sys.platform == "darwin" else "Ctrl+Shift+Q")
-MAGIC_KEY = "Ctrl+Shift+F"  # 3.9.7: Magic search (⌘⇧F on a Mac); Settings › Board › Due takes it away
+MAGIC_KEY = "Ctrl+Shift+F"  # 3.9.7: Magic search (⌘⇧F on a Mac); Settings › Study takes it away
 
 
 def _tools_menu():
@@ -1983,10 +1983,10 @@ def _tools_menu():
 
 
 def open_magic(text=""):
-    """3.9.7: Magic search, unless Settings › Board › Due has it off."""
+    """3.9.7: Magic search, unless Settings › Study has it off."""
     errs.used("magic")
     if not magic_flow.on():
-        tooltip("Magic search is off: Settings › Board › Due turns it on.")
+        tooltip("Magic search is off: Settings › Study turns it on.")
         return
     magic_flow.open_search(text)
 
@@ -2002,7 +2002,7 @@ def _ask_this_card():
 
 
 def _apply_keys():
-    """Settings › Board › Shortcuts: both keys on, or both off (per computer)."""
+    """Settings › Study › Shortcuts: both keys on, or both off (per computer)."""
     on = bool(cfg().get("shortcuts", True))
     try:
         from aqt.qt import QKeySequence

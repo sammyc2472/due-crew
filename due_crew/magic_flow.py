@@ -50,7 +50,7 @@ _win = None
 # ---- the way in ----
 
 def on():
-    """Settings › Board › Due › Magic search (an account key, on by default)."""
+    """Settings › Study › Magic search (an account key, on by default)."""
     return cfg().get("magic_search", True) is not False
 
 
@@ -625,7 +625,7 @@ class Ops:
         return len(held), moved, label
 
     def exam_day(self):
-        """My exam's day (Settings › Privacy › Exam), or ""."""
+        """My exam's day (Settings › You › Exam), or ""."""
         return str(cfg().get("exam_date") or "")
 
     def undo_anki(self, label):

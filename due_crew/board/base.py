@@ -34,6 +34,9 @@ ACCENTS = {
     "rose":   {"light": ("#b03052", "#ffffff", "#fbe9ee"), "dark": ("#f08fa8", "#3a1220", "#3f2a31")},
 }
 DEFAULT_ACCENT = "green"
+# 3.9.9: a card's shadow, at rest and under the pointer: the ones Anki's deck list wears (its deckbrowser.css)
+CARD_SHADOW = "0px 2px 1px -1px rgba(20,20,20,.12), 0px 1px 1px 0px rgba(20,20,20,.06), 0px 1px 3px 0px rgba(20,20,20,.04)"
+CARD_SHADOW_HOVER = "0px 3px 1px -2px rgba(20,20,20,.2), 0px 2px 2px 0px rgba(20,20,20,.14), 0px 1px 5px 0px rgba(20,20,20,.12)"
 
 
 def accent_pair(name):

@@ -264,7 +264,7 @@ same commit, each with its test:
 | The board, your people: Crew (Today · Week · Decks picker) and Squads | `board/` (`crew.py`, `squads.py`, `draw.py`), `__init__.py`, `backend/api.py`, `stats/` | `board.ts`, `social.ts`; `Board` in app.js |
 | The You bubble over it (3.8.0): Today, Upcoming, Later, Plans, Insights | `board.you_html`, `__init__._you`, `due_flow.py` | the rail on /home |
 | Cheers, status, profile card (3.9.0: a landing cheer is a show over the whole Decks screen, a different one each time: `shows.py` the bag, `show.js` the twelve, started by `board.flurry_js`; 3.9.1: a drawing or a sign from the Cheer window's Draw · Sign, held up by the sender's Pip as it lands, its note under it as a caption with who it's from, then pinned around the Decks screen as Polaroids (the fridge: drag one anywhere and it keeps its place beside the board as the window changes, × takes it down, with an Undo in its place for a few seconds; it's the signed-in account's, emptied at sign-out); a cheer is a "🎉 Cheer" pill after a crewmate's name, the 🎉 column is gone) | `social.py` (`_cheer_menu`, `send_from_window`), `wrap.py`, `shows.py`, `show.js`, `board.cheer_overlay_js` (the Cheer window, on the Decks screen in the board's look since 3.9.1; "other" opens the computer's own emoji picker, `native_emoji.py`, or on Linux the drawer, `emoji_drawer.py`), `board.doodle_html`/`doodle_landing`, `fridge.py` and `board.fridge_html`/`fridge_js` | `social.ts`, `validate.doodle` (migration 0029) |
-| Settings (one: the board's, 3.8.0) | `settings_model.py`, `account.py`, `board.settings_html` | `GET/PUT /settings` |
+| Settings (one: the board's, 3.8.0; 3.9.9: four tabs by what a setting is about, You (me, my dates, my people) · Board (the Decks screen, look, crew rows, Pip, soundtrack) · Study (Today, Magic search, reviewing, the Fifteen, keys) · Privacy; a new row goes on the tab its subject names) | `settings_model.py`, `account.py`, `board.settings_html` (`_settings_you`/`_settings_board`/`_settings_study`/`_settings_privacy`) | `GET/PUT /settings` |
 | The board's questions (3.9.1): a sheet over the Decks screen in the Cheer window's look (confirm, one line, one of a few), Qt off the board; the top and bottom bars dim with any window over the board | `sheets.py`, `board.sheet_js`, `board.VEIL_WATCH_JS`, `app.veil` | never sent |
 | Squads, knocks, bingo | `squads.py`, `bingo.py`, `bingo_flow.py` | `squads.ts`, `bingo.ts`, `adminsquads.ts` |
 | Who knows this, asks, tips (3.9.0: the day's first sync asks about the cards due today too, so a first miss shows it; with Pip on, the knower's Pip peeks in from the corner, and a tip's tipper's; a tip's, an ask's or a plan note's words fold till Show, so a one-by-one card isn't given away) | `cards.py`, `together.py` | `cards.ts` |
@@ -293,7 +293,7 @@ same commit, each with its test:
 | The speed budget (3.9.9): each wait against its budget on a big collection, in CI's click job | `tools/speed_budget.py`, `tools/speed/make_big.py` | |
 | Why isn't this card showing? (Browse right-click, 3.8.0) | `why.py`, `why_flow.py`, `ui/why_dialog.py` | never sent |
 | Browse's Due says when a plan opens a suspended card (3.9.5, Sam's pick: "Thu 5 Nov · Heme 2"; not at my own pace, not a leech) | `plans.opens_ahead`/`opens_words`, `plan_flow.opens_map`/`browser_row` (on `browser_did_fetch_row`; never raises) | never sent |
-| Two buttons (3.9.1): Again and Good alone, 2, 3 and 4 count as Good; Settings › Board › Reviewing, and Try two buttons on Insights' Hard habit line | `two_buttons.py` (on `reviewer_will_init_answer_buttons` and `reviewer_will_answer_card`), `board._settings_board`, `team_flow.try_two` | account key `two_buttons` |
+| Two buttons (3.9.1): Again and Good alone, 2, 3 and 4 count as Good; Settings › Study › Reviewing, and Try two buttons on Insights' Hard habit line | `two_buttons.py` (on `reviewer_will_init_answer_buttons` and `reviewer_will_answer_card`), `board._settings_board`, `team_flow.try_two` | account key `two_buttons` |
 | Plan tags: DueCrew::<plan>::SLG_12 on followers' notes (Browse right-click, the builder, Tag by objective; 3.8.0) | `plans.sync_tags`, `plan_flow.apply_tags`, `ui/tag_dialog.py` | `plans.ts` tagNotes; This plan's tags in builder.js |
 | Cuts (a video kept to an SLG) and a tag's single cards; taking a tag off (3.8.1) | `plans.match`/`plan_tag_cards`/`topic_items`, `plan_flow._unit_cids` | `planDoc`/`putIds` in `plans.ts`; `setCut`/`syncCuts` and the Text preview in builder.js |
 | Your own pace (Up next, Open, Put back); Browse › open its cards / open these (3.8.0) | `plans.up_next`, `plan_flow.open_next`, `plan_flow.open_cards_now`, `ui/open_dialog.py` | follow `own` (`plans.ts`); `paceBox` in builder.js |
@@ -356,7 +356,8 @@ clean `main` does the migrations, the API, then the site, then
 - Escape every server-sourced string before webviews, tooltips, or rich-text
   labels.
 - The board lives in Anki's Decks screen, which sits in a `<center>` and
-  styles every button (margin, shadow, rounded corners). The board's older
+  styles every button (margin, shadow, rounded corners). A card of ours
+  wears the deck list's shadow (`base.CARD_SHADOW`, 3.9.9). The board's older
   parts are centred by it on purpose; a new part sets `text-align: left`
   itself, and buttons start from the reset in `_css`. `tools/preview.py`
   renders inside the same `<center>` and button style: look at a new part
