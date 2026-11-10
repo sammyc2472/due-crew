@@ -21,6 +21,7 @@ import sys
 import threading
 import time
 
+from urllib.parse import unquote as _unquote
 from aqt import gui_hooks, mw
 from aqt.deckbrowser import DeckBrowser
 from aqt.qt import QAction, QTimer
@@ -512,6 +513,9 @@ def _on_render(deck_browser, content):
             refresh_board()
         else:
             _state["board_shown"] = True
+            if magic_flow.on():
+                # 3.9.9: under the deck list, over Anki's "Studied…" line
+                content.tree = (getattr(content, "tree", "") or "") + board.magic_field(c)
             content.stats += _board_html(c)
             _push_if_stale()
     except Exception:
@@ -1173,7 +1177,8 @@ BOARD_CMDS = {
     "calmall": (0, None, _calm_cmd), "calmx": (0, None, _calm_cmd),  # 3.9.9: the calm board (calm.py)
     "calmopen": (1, lambda p: p[2] in ("decks", "squads", "plans", "insights"), _calm_cmd),
     "party": (0, None, lambda c, p: gamenight_flow.on_message(p)),  # 3.9.5's last round: You › Pip Party
-    "magic": (0, None, lambda c, p: open_magic()),  # 3.9.7: Magic search, from the You box's head (and Find a setting)
+    # 3.9.7: Magic search (Find a setting); 3.9.9: from its field under the deck list, with what was typed
+    "magic": (0, None, lambda c, p: open_magic(" ".join(_unquote(":".join(p[2:])).split())[:400] if len(p) > 2 else "")),
     "css": (0, None, _cmd_css),
     "magichow": (0, None, lambda c, p: magic_flow.howto_said(p)),  # 3.9.7, round 2: its how-to's buttons
     **{k: (0, None, _song) for k in ("songsearch", "songuse", "songclear", "songlisten", "songapp", "songapple",

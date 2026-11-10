@@ -428,6 +428,12 @@ sections.append("<h3>3.8.1: Study for a quiz, three days out</h3>" + board.rende
         dict(_C3, prep={"name": "Cardio <quiz>", "day": "2026-10-09", "when": "Fri", "left": 2, "today": False},
              quiz={"id": "q", "name": "Cardio <quiz>", "day": "2026-10-09", "when": "Fri", "today": False, "units": ["a", "b"], "open": 412})],
         "offers": []})).replace('id="du-', 'id="duq-'))
+# 3.9.9 (Sam's pick G2): Magic search's field, under Anki's deck list and over its "Studied…" line (a stand-in for both)
+_ANKI_DECKS = ('<table style="width:440px;max-width:92%;margin:0 auto;border-collapse:collapse"><tr><th style="text-align:left">Deck</th><th>New</th>'
+               '<th>Learn</th><th>Due</th></tr><tr><td style="text-align:left">Big Step 1</td><td>42</td><td>5</td><td>110</td></tr></table>')
+sections.append("<h3>3.9.9: Magic search's field under the deck list (Anki's list and line are stand-ins)</h3>" + _ANKI_DECKS
+                + board.magic_field({}) + '<div style="margin:10px 0;font-size:13px">Studied 96 cards in 12 minutes today (7.5s/card)</div>'
+                + board.render(DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("today")).replace('id="du-', 'id="dumg-'))
 # 3.9.9: the week across plans, under the plan's card: a heavy day and its one move; then after the move
 from due_crew import plans as _PL
 _LS = [{"pid": "a", "plan": "Block 2 · Heme", "uid": "h%d" % i, "name": n, "day": "2026-10-%02d" % (5 + i), "ask": k, "moved": 0, "cap": ""}

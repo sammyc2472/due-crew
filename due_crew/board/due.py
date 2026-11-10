@@ -715,16 +715,111 @@ def _due_add(v, default):
 # 3.8.0: the two keys as this computer writes them (a Mac: Command for Study, Control for Ask, __init__.py)
 STUDY_KBD, ASK_KBD = ("⌘⇧S", "⌃⇧Q") if _sys.platform == "darwin" else ("Ctrl+Shift+S", "Ctrl+Shift+Q")
 MAGIC_KBD = "⌘⇧F" if _sys.platform == "darwin" else "Ctrl+Shift+F"  # 3.9.7: Magic search, from any screen
-_MAGIC_ICON = ('<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" '
-               'stroke-linecap="round" aria-hidden="true" style="vertical-align:-1px;margin-right:3px"><circle cx="10" cy="11" r="6.2"/>'
-               '<path d="M19.4 20.4l-4.7-4.7"/><path d="M19 1.6l.9 2.3 2.3.9-2.3.9-.9 2.3-.9-2.3-2.3-.9 2.3-.9z" '
-               'fill="var(--dc-hours)" stroke="none"/></svg>')
+MAGIC_FIELD_ID = "dc-mgf"
+MAGIC_EXAMPLES = ("cardio pharm due this week", "leeches in renal", "40 new from chapter 3", "paste question IDs",
+                  "quiz Friday: spread it out")
+_MAGIC_FIELD_ICON = ('<svg class="mag" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" '
+                     'stroke-linecap="round" aria-hidden="true"><circle cx="10" cy="11" r="6.2"/><path d="M19.4 20.4l-4.7-4.7"/>'
+                     '<path class="st" d="M19 1.6l.9 2.3 2.3.9-2.3.9-.9 2.3-.9-2.3-2.3-.9 2.3-.9z" stroke="none"/></svg>')
+# the field's own sheet: it sits in Anki's part of the Decks page (under the deck list, over "Studied…"),
+# outside #due-crew, so it carries the board's tokens itself
+_MAGIC_FIELD_CSS = """
+#dc-mgf { box-sizing: border-box; position: relative; display: flex; align-items: center; gap: 7px; width: 440px; max-width: 92%;
+  height: 34px; margin: 14px auto 2px; padding: 0 9px 0 10px; border-radius: 10px; border: 1px solid transparent; text-align: left;
+  font: 12.5px/1.2 Inter, -apple-system, "Segoe UI", sans-serif; color: var(--dc-ink);
+  background: linear-gradient(var(--dc-bg), var(--dc-bg)) padding-box,
+    conic-gradient(from var(--dc-ga), var(--dc-line) 0 62%, var(--dc-accent) 74%, var(--dc-hours) 82%, var(--dc-line) 92%) border-box; }
+@property --dc-ga { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+#dc-mgf.live, #dc-mgf:hover, #dc-mgf:focus-within { animation: dc-mgf-glint 4.5s linear infinite; }
+#dc-mgf:focus-within { box-shadow: 0 0 0 2px var(--dc-you-bg); }
+@keyframes dc-mgf-glint { to { --dc-ga: 360deg; } }
+#dc-mgf button.go { appearance: none; -webkit-appearance: none; all: unset; display: inline-flex; flex: none; cursor: pointer; color: var(--dc-accent);
+  margin: 0; padding: 2px; min-width: 0; box-shadow: none; border-radius: 6px; }
+#dc-mgf button.go:focus-visible { outline: 2px solid var(--dc-accent) !important; outline-offset: 1px; }
+#dc-mgf .mag { overflow: visible; display: block; }
+#dc-mgf .mag .st { fill: var(--dc-hours); transform-box: fill-box; transform-origin: center; }
+#dc-mgf.twk .mag .st { animation: dc-mgf-twk .6s ease-out; }
+@keyframes dc-mgf-twk { 40% { transform: scale(1.7) rotate(45deg); } 100% { transform: none; } }
+#dc-mgf input { appearance: none; -webkit-appearance: none; flex: 1; min-width: 0; height: 100%; margin: 0; padding: 0; border: 0; outline: none !important;
+  background: transparent; box-shadow: none; font: inherit; color: var(--dc-ink); }
+#dc-mgf input::placeholder { color: var(--dc-muted); opacity: 1; }
+#dc-mgf kbd { flex: none; font: 10px Menlo, Consolas, monospace; color: var(--dc-muted); border: 1px solid var(--dc-line); border-radius: 4px;
+  padding: 0 4px; background: var(--dc-well); }
+#dc-mgf .s { position: absolute; left: 24px; top: 6px; width: 5px; height: 5px; background: var(--dc-hours); opacity: 0; pointer-events: none;
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); }
+#dc-mgf:hover .s, #dc-mgf.twk .s { animation: dc-mgf-spk .9s ease-out; }
+#dc-mgf .s1 { --dx: -8px; } #dc-mgf .s2 { --dx: 9px; animation-delay: .12s !important; background: var(--dc-accent); }
+#dc-mgf .s3 { --dx: 20px; animation-delay: .22s !important; }
+@keyframes dc-mgf-spk { 0% { transform: translate(0, 0) scale(.2); opacity: 0; } 20% { opacity: 1; }
+  100% { transform: translate(var(--dx, 10px), -22px) scale(1.2) rotate(90deg); opacity: 0; } }
+@media (max-width: 460px) { #dc-mgf kbd { display: none; } }
+@media (prefers-reduced-motion: reduce) { #dc-mgf, #dc-mgf * { animation: none !important; } }
+"""
+# its placeholder writes itself through a few examples, the star twinkling as each lands; then it rests (three
+# examples, about twelve seconds, as the edge's glint does) till it's pointed at. Focused, it says what to type.
+# Enter (or the magnifier) opens Magic search on what's typed. Nothing with Reduce motion.
+_MAGIC_FIELD_JS = r"""
+(function () {
+    var f = document.getElementById('dc-mgf');
+    if (!f || f.dcOn) { return; }
+    f.dcOn = 1;
+    var q = f.querySelector('input'), EX = __EX__, HINT = 'A topic, a filter, pasted question IDs…';
+    var i = 0, n = 0, rounds = 0, timer = 0, typing = false;
+    var still = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function go() { f.querySelector('button.go').click(); }  // (the magnifier's own onclick sends: one place says the command)
+    q.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); go(); }
+        else if (e.key === 'Escape') { q.value = ''; q.blur(); }
+    });
+    function stop() { clearTimeout(timer); typing = false; }
+    function type() {
+        typing = true;
+        q.placeholder = EX[i].slice(0, ++n);
+        if (n < EX[i].length) { timer = setTimeout(type, 55 + Math.random() * 45); return; }
+        typing = false;
+        f.classList.remove('twk'); void f.offsetWidth; f.classList.add('twk');
+        rounds++;
+        if (rounds >= 3) { return; }
+        timer = setTimeout(next, 2600);
+    }
+    function next() { n = 0; i = (i + 1) % EX.length; type(); }
+    q.addEventListener('focus', function () { stop(); q.placeholder = HINT; });
+    q.addEventListener('blur', function () { if (!q.value) { q.placeholder = EX[i]; } });
+    if (still) { q.placeholder = EX[0]; return; }
+    f.addEventListener('mouseenter', function () {
+        if (!typing && rounds >= 3 && document.activeElement !== q) { rounds = 2; next(); }
+    });
+    f.classList.add('live');
+    setTimeout(function () { f.classList.remove('live'); }, 12000);
+    timer = setTimeout(type, 600);
+})();
+"""
 
 
-def magic_link():
-    """3.9.7: Magic search in the You box's head, every tab and folded (Sam's way in; QBank QIDs' since round 2)."""
-    return (f'<a href="#" class="du-go du-mg" title="Magic search ({MAGIC_KBD}): a topic, a filter, QBank QIDs; study them or put them on days" '
-            f'onclick="{_pycmd("magic")}">{_MAGIC_ICON}Magic search</a>')
+def magic_field(cfg):
+    """3.9.9 (Sam's pick G2, from eight places mocked and three styles):
+    Magic search as a field under Anki's deck list, over its "Studied…"
+    line, in the link's place in the You box's head. The board's input with
+    the window's magnifier and star; a glint goes round its edge in the
+    accent and the amber and its placeholder writes itself through a few
+    examples, about twelve seconds, then both rest till it's pointed at.
+    Type and Enter: the window opens on it. It's drawn with the Decks page
+    (never by a swap), so it carries its own sheet, tokens and script."""
+    from .base import BOARD_KEY, DEFAULT_ACCENT, _by_theme, _token_block, palette
+    import json as _json
+    accent = (cfg or {}).get("accent", DEFAULT_ACCENT)
+    tokens = _by_theme(cfg or {}, "#" + MAGIC_FIELD_ID, _token_block(palette("light", accent)), _token_block(palette("dark", accent)))
+    js = _MAGIC_FIELD_JS.replace("__EX__", _json.dumps(list(MAGIC_EXAMPLES)))
+    return (f'<style>{tokens}{_MAGIC_FIELD_CSS}</style>'
+            f'<div id="{MAGIC_FIELD_ID}" role="search">'
+            f'<i class="s s1"></i><i class="s s2"></i><i class="s s3"></i>'
+            # the board's command as the board sends it, with what's typed when there is any (a colon after its name)
+            f'<button type="button" class="go" title="Magic search ({MAGIC_KBD})" aria-label="Open Magic search" '
+            f'onclick="var q=this.parentNode.querySelector(\'input\').value.slice(0,400);'
+            f'pycmd(\'duecrew:magic\'+(q?\':\'+encodeURIComponent(q):\'\')+\'|{BOARD_KEY}\');return false;">{_MAGIC_FIELD_ICON}</button>'
+            f'<input type="text" aria-label="Magic search: a topic, a filter, pasted question IDs" placeholder="{_html.escape(MAGIC_EXAMPLES[0])}" '
+            f'maxlength="400" autocomplete="off" autocapitalize="off" spellcheck="false">'
+            f'<kbd>{MAGIC_KBD}</kbd></div><script>{js}</script>')
 
 
 def _due_html(v, more=(), more_tab=None, more_body="", folded=None, magic=False):
@@ -737,7 +832,7 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None, magic=False)
     if not v and not more:
         return ""
     e = _html.escape
-    mg = magic_link() if magic else ""  # 3.9.7
+    mg = ""  # 3.9.9: Magic search is the field under the deck list now (magic_field); `magic` says only that it's on
     if not v:
         # Due's lists off: Plans and Insights only, folded or not; Magic search in its head too (3.9.5 to 3.9.6:
         # QBank QIDs, Magic search's since 3.9.7)

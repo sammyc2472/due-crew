@@ -362,14 +362,14 @@ def sheet_js(view):
 # magic_seen), over the Decks screen in the sheets' look. Its words are
 # magic.HOWTO's, the window's ? the same; a try opens the window with it.
 # It waits for the board to be clear (no window, no show over it) and for the
-# You box's head, where Magic search lives, to be on the page.
+# field under the deck list, where Magic search lives (3.9.9), to be on the page.
 MAGIC_HOWTO_JS = r"""
 (function () {
     var V = __VIEW__;
     if (document.getElementById('dc-magic')) { return; }
     var BUSY = __BUSY__;
     function clear() {
-        return document.querySelector('.du-mg') && !BUSY.some(function (id) { return !!document.getElementById(id); });
+        return document.getElementById('dc-mgf') && !BUSY.some(function (id) { return !!document.getElementById(id); });
     }
     function later(n) {
         if (clear()) { draw(); return; }

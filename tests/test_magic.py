@@ -905,11 +905,22 @@ def test_my_plan_on_the_server():
 
 def test_ways_in():
     from due_crew import board, settings_model, account
-    check("the You box's head: Magic search, with its key", 'duecrew:magic' in board.magic_link() and board.MAGIC_KBD in board.magic_link())
+    # 3.9.9 (Sam's pick G2): a field under Anki's deck list, over its "Studied…" line; the You box's head has no link
+    fld = board.magic_field({"accent": "blue"})
+    check("the field under the decks: the board's input, the window's magnifier and star, its key, what it says to a screen reader",
+          'id="dc-mgf" role="search"' in fld and '<input type="text" aria-label="Magic search: ' in fld and board.MAGIC_KBD in fld
+          and 'class="st"' in fld and 'aria-label="Open Magic search"' in fld and 'maxlength="400"' in fld)
+    check("…it carries the board's tokens itself (it's outside the board), in my accent, both themes",
+          "#dc-mgf { --dc-bg: #ffffff;" in fld and "#1e5fb4" in fld and "night" in fld and "--dc-hours" in fld)
+    check("…Enter sends what's typed, encoded and keyed as the board's commands are",
+          "pycmd('duecrew:magic'+(q?':'+encodeURIComponent(q):'')+'|" + board.BOARD_KEY + "');return false;" in fld
+          and "function go() { f.querySelector('button.go').click(); }" in fld)
+    check("…it moves about twelve seconds, then rests till pointed at; nothing with Reduce motion; no </script> from its words",
+          "12000" in fld and "rounds >= 3" in fld and "prefers-reduced-motion" in fld and fld.count("</script>") == 1
+          and all(x in fld for x in board.MAGIC_EXAMPLES[:1]))
     due = None
     on = board._due_html(due, (("plans", "Plans"),), "plans", "", magic=True)
-    off = board._due_html(due, (("plans", "Plans"),), "plans", "", magic=False)
-    check("…on unless Settings has it off", "Magic search" in on and "Magic search" not in off)
+    check("the You box's head has no Magic search link any more", "Magic search" not in on and "du-mg" not in on)
     check("Settings › Board › Due: its switch", settings_model.change(["set", "magic_search", "0"], {}) == {"magic_search": False})
     check("an account key, on every computer, with its first-time card's",
           "magic_search" in account.ACCOUNT_KEYS and "magic_seen" in account.ACCOUNT_KEYS and "magic_seen" in account._BOOLS)
@@ -927,6 +938,12 @@ def test_ways_in():
         check("the board's command opens it", opened == [""], opened)
         dc._on_js(False, "duecrew:magic", type("Previewer", (), {})())
         check("…and a card's own script can't", opened == [""], opened)
+        dc._on_js(False, "duecrew:magic:cardio%20pharm%3A%20due%20%7C%20this%20week|" + board.BOARD_KEY, DeckBrowser())
+        check("the field's Enter opens it on what was typed (a colon and a bar in it too)", opened == ["", "cardio pharm: due | this week"], opened)
+        dc._on_js(False, "duecrew:magic:" + "a" * 900 + "|" + board.BOARD_KEY, DeckBrowser())
+        check("…kept to 400", len(opened[-1]) == 400)
+        dc._on_js(False, "duecrew:magic:tag%3Ax", type("Previewer", (), {})())
+        check("…and never from a card's own script", len(opened) == 3)
     finally:
         MF.open_search = saved
 
@@ -1081,8 +1098,8 @@ def test_the_how_to():
     js = board.magic_howto_js(dict(M.howto("Ctrl+Shift+F"), lede="a </script> b"))
     check("its script: the words as JSON, no </ to end it, its buttons keyed as the board's",
           "</script> b" not in js and "a <\\/script> b" in js and "'duecrew:magichow:' + how + ':' + encodeURIComponent(q || '') + '|' + window.dcBK" in js)
-    check("…over the board the bars dim with (VEIL_IDS), and only once the board is clear and the You box is there",
-          "dc-magic" in board.VEIL_IDS and "document.querySelector('.du-mg')" in js and '"dc-show"' in js and '"dc-sheet"' in js)
+    check("…over the board the bars dim with (VEIL_IDS), and only once the board is clear and Magic search's field is there",
+          "dc-magic" in board.VEIL_IDS and "document.getElementById('dc-mgf')" in js and '"dc-show"' in js and '"dc-sheet"' in js)
     import due_crew as dc
     from aqt.deckbrowser import DeckBrowser
     opened, seen = [], []

@@ -4788,6 +4788,31 @@ every release that changes how something works.
   is held for the card only while Settings has my exam (with none, it
   plays as a cheer), and a crewmate's later cheer to me takes the place of
   their line on the server (one cheer a pair) if I haven't fetched it yet.
+- 3.9.9, Magic search is a field under your decks (Sam, 10 Nov, after
+  eight places mocked on the real Decks screen: "could we put it below or
+  above the 'Studied X cards in X minutes' thing?", "I like G but… more
+  in-keeping with Due Crew's style and magical", then of three live
+  styles: "G2 please!"). It was a green link in the You box's head, which
+  didn't look like a search. Now `board.magic_field` (due.py): the
+  board's input with the window's magnifier and amber star, 440 px, after
+  Anki's deck list and over its "Studied…" line (`content.tree` in
+  `_on_render`; the board stays in `content.stats`). A glint goes round
+  its edge in the accent and the amber and its placeholder writes itself
+  through three of `MAGIC_EXAMPLES`, the star twinkling as each lands:
+  about twelve seconds, then both rest till it's pointed at (Pip's rule;
+  nothing with Reduce motion). Focused it says what to type; Enter or the
+  magnifier opens the window on it (`duecrew:magic:<encoded>`, 400 at
+  most, keyed as the board's commands are; empty opens it empty). It's
+  outside #due-crew and drawn with the page, never by a swap, so it
+  carries its tokens (both themes, my accent), sheet and script. Only
+  with the board drawn and Magic search on (Settings › Board › Due, whose
+  line says where it is now); the how-to waits for it, not the old link.
+  The link, `magic_link` and its icon are gone; the key, Tools and Browse
+  as before. Time per card as a Crew column was asked the same day and
+  left out (Sam agreed): it reads as a race, and it's already Anki's own
+  line just under the field. `test_magic_field_on_the_decks_page_v399`,
+  test_magic's ways in; tried in a browser (types, rests at 13 s, wakes
+  on a pointer, sends a colon and a bar whole).
 - 3.9.9, the look, five of six mocked (Sam, 10 Nov, on the design mocks:
   "approved for 1, 2, 3, 4"; 5 "we keep both the bento and the ahead"; 6
   yes). Found by looking at six real screens, light, dark and narrow.

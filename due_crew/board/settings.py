@@ -223,7 +223,7 @@ def _settings_board(cfg, fsrs=None, reach=None):
             + '</div><div class="st-h">Due</div><div class="st-box">'
             + _st_row("Today, Upcoming, Later", _st_switch("due_show", g("due_show", True), "Today, Upcoming, Later"))
             + _st_row("Magic search", _st_switch("magic_search", g("magic_search", True), "Magic search"),
-                      f"In the head of this box, and {MAGIC_KBD} from any screen")  # 3.9.7
+                      f"The field under your decks, and {MAGIC_KBD} from any screen")  # 3.9.7; 3.9.9: its field
             + _st_row("Suggestions", _st_switch("due_suggest", g("due_suggest", True), "Suggestions"),
                       "Today's misses, new leeches")
             + _st_row("Recover leeches", _st_switch("due_leeches", g("due_leeches", False), "Recover leeches"),

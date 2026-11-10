@@ -7674,19 +7674,20 @@ def test_plan_windows_ways_in_v393():
     off_one = board._due_html(None, more=[("plans", "Plans"), ("insights", "Insights")], folded=True, magic=True)
     check("3.9.7, round 2 (Sam: \"this is replacing QBank QID search\"): Due's lists off, Magic search is in the head "
           "(and the folded line), QBank QIDs' chip gone",
-          "duecrew:magic|" in off[:off.index("</div>")] and "duecrew:magic|" in off_one and "planmissed" not in off + off_one
-          and "QBank QIDs</a>" not in off + off_one, off)
+          # 3.9.9 (Sam's pick G2): it's the field under the deck list now, whatever the You box shows; no link in the box
+          "duecrew:magic" not in off + off_one and "planmissed" not in off + off_one
+          and "QBank QIDs</a>" not in off + off_one and "pasted question IDs" in board.magic_field({}), off)
     head = board._due_html(dict(dv, qids=True), magic=True)
     head = head[:head.index("</div>")]
     check("ways in: Magic search in the box's head (QBank QIDs' place, Sam's pick 1), its title saying QIDs, no QIDs chip",
-          "duecrew:magic|" in head and ">QBank QIDs</a>" not in head and "QBank QIDs" in head and "planmissed" not in head
-          and "duecrew:magic|" not in board._due_html(dv), head)
+          "duecrew:magic" not in head and ">QBank QIDs</a>" not in head and "planmissed" not in head
+          and "pycmd('duecrew:magic'+" in board.magic_field({}), head)
     up = board._due_html(dict(dv, tab="upcoming"), magic=True)
     one = board._due_html(dict(dv, folded=True), magic=True)
     plans_tab = board._due_html(dv, more=[("plans", "Plans")], more_tab="plans", more_body="<p>x</p>", magic=True)
     check("ways in: …on every tab and on the folded line (Sam: \"missing the QID chip on the top right\": Magic search's now)",
-          "duecrew:magic|" in up[:up.index("</div>")] and "duecrew:magic|" in one
-          and one.index("duecrew:magic|") < one.index("du-fold") and "duecrew:magic|" in plans_tab[:plans_tab.index("</div>")], one)
+          # 3.9.9: one field for every tab and the folded line: it's above the box, drawn with the Decks page
+          not any("duecrew:magic" in x for x in (up, one, plans_tab)) and "du-fold" in one, one)
     check("ways in: …on one baseline with the rest (Sam: \"a bit higher than everything else\"): one line height for the head's words, the folded line by baseline",
           "#due-crew .du-one > a, #due-crew .du-one > .du-n { line-height: 16px; }" in fakes.board_source()
           and "#due-crew .du-one { display: flex; align-items: baseline;" in fakes.board_source())
@@ -21434,6 +21435,43 @@ def test_calm_board_v399():
     got = SM.change(["settabs", "squads", "1"], c2)
     check("calm: a tab shown by hand in Settings is out for good; the switch is Settings › Board's",
           got.get("calm_open") == ["squads"] and "calm" in SM.SWITCHES and SM.change(["set", "calm", "1"], {}) == {"calm": True}, got)
+
+
+def test_magic_field_on_the_decks_page_v399():
+    """3.9.9 (Sam's pick G2): the Decks page gets Magic search's field after
+    Anki's deck list (content.tree), the board after its "Studied…" line
+    (content.stats); not with Magic search off, not signed out."""
+    import due_crew as dc
+    from due_crew.app import _state
+    store = world({"sam": "Sam"})
+    cl = new_client(store, "sam", "Sam")
+    conf = {"show_leaderboard": True}
+    saved = (dc.cfg, dc.client, dc._board_html, dc._push_if_stale, _state.get("entries"), _state.get("settings_tab"),
+             _state.get("closet_open"), _state.get("wrapped_open"), dc.magic_flow.cfg)
+    try:
+        dc.cfg = dc.magic_flow.cfg = lambda: conf
+        dc.client = lambda: cl
+        dc._board_html = lambda c: "<div id=\"due-crew\">BOARD</div>"
+        dc._push_if_stale = lambda: None
+        _state.update(entries=[], settings_tab=None, closet_open=False, wrapped_open=False)
+        page = types.SimpleNamespace(tree="<table>DECKS</table>", stats="Studied 9 cards")
+        dc._on_render(None, page)
+        check("decks page: the field after the deck list, the board after Anki's own line",
+              page.tree.startswith("<table>DECKS</table><style>#dc-mgf") and 'id="dc-mgf"' in page.tree
+              and page.stats.startswith("Studied 9 cards") and page.stats.endswith("BOARD</div>") and "dc-mgf" not in page.stats, page.tree[:120])
+        conf["magic_search"] = False
+        page = types.SimpleNamespace(tree="T", stats="S")
+        dc._on_render(None, page)
+        check("decks page: Magic search off: no field, the board as ever", page.tree == "T" and "BOARD" in page.stats)
+        conf["magic_search"] = True
+        dc.client = lambda: types.SimpleNamespace(signed_in=False, session_dead=False, deleted_quiet=False)
+        page = types.SimpleNamespace(tree="T", stats="S")
+        dc._on_render(None, page)
+        check("decks page: signed out: no field", page.tree == "T")
+    finally:
+        (dc.cfg, dc.client, dc._board_html, dc._push_if_stale) = saved[:4]
+        dc.magic_flow.cfg = saved[8]
+        _state.update(entries=saved[4], settings_tab=saved[5], closet_open=saved[6], wrapped_open=saved[7])
 
 
 def test_load_across_plans_v399():
