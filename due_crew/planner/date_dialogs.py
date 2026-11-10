@@ -335,3 +335,39 @@ class SplitDialog(QDialog):
 
     def value(self):
         return ("tags",) if self.tags.isChecked() else ("even", int(self.days.value()))
+
+
+class MoveFromDialog(QDialog):
+    """This and every date after: how many days, later or earlier."""
+
+    def __init__(self, parent, name, after):
+        super().__init__(parent)
+        attach_alive(self)
+        self.setWindowTitle(f"Move {name} and every set after it")
+        root = QVBoxLayout(self)
+        heading(self, root)
+        root.addWidget(_plain(f"{after:,} set{'s' if after != 1 else ''} after it move with it, and the review days "
+                             "among them. Quizzes and exams stay on their days.", muted=True))
+        row = QHBoxLayout()
+        self.n = QSpinBox()
+        self.n.setRange(1, 60)
+        self.n.setValue(1)
+        self.n.setSuffix(" day")
+        self.n.valueChanged.connect(lambda v: self.n.setSuffix(" day" if v == 1 else " days"))
+        row.addWidget(self.n)
+        self.way = QComboBox()
+        self.way.addItem("later", 1)
+        self.way.addItem("earlier", -1)
+        row.addWidget(self.way)
+        row.addStretch(1)
+        root.addLayout(row)
+        buttons = QDialogButtonBox()
+        buttons.addButton("Cancel", QDialogButtonBox.ButtonRole.RejectRole).clicked.connect(self.reject)
+        go = QPushButton("Move them")
+        go.setDefault(True)
+        go.clicked.connect(self.accept)
+        buttons.addButton(go, QDialogButtonBox.ButtonRole.AcceptRole)
+        root.addWidget(buttons)
+
+    def days(self):
+        return int(self.n.value()) * int(self.way.currentData())

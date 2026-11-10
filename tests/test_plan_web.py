@@ -1176,7 +1176,7 @@ def test_every_control_pressed():
 
         def exec(self):
             return False
-    stand = {"date_dialogs": ("SplitDialog", "AddCardsDialog", "LinesDialog", "ReviewDialog"), "date_panel": ("MoveFromDialog",),
+    stand = {"date_dialogs": ("SplitDialog", "AddCardsDialog", "LinesDialog", "ReviewDialog", "MoveFromDialog"),
              "text_tab": ("TextDialog",), "mcp_dialog": ()}
     was_mods = {n: sys.modules.get("due_crew.planner." + n) for n in stand}
     was_attrs = {n: getattr(PL, n, None) for n in stand}

@@ -995,17 +995,17 @@ def test_rules_of_the_road():
           "attach_alive(self)" in web and "colors(self.cfg)" in web and "set_bridge_command(self._on_cmd" in web
           and "QLabel" not in web and "setStyleSheet" not in web)
     check("road: the windows, each wearing the board's look and saying what it is",
-          sorted(windows) == ["date_dialogs.py", "date_panel.py", "mcp_dialog.py", "new_plan.py", "picker.py",
-                              "send.py", "start_window.py", "text_tab.py", "window.py"]
+          sorted(windows) == ["date_dialogs.py", "mcp_dialog.py", "picker.py", "start_window.py", "text_tab.py"]
           and all(len(re.findall(r"\(QDialog[,)]", t)) == t.count("attach_alive(self)") == len(re.findall(r"\bheading\(self", t))
                   for t in windows.values()), sorted(windows))
     tabs = {f: t for f, t in src.items() if "(QWidget)" in t}  # round five: Your plans' tabs and panels
-    check("road: the tabs and panels (Plan with its date and deck panels, Insights, Settings, Mine, the text, History and Posts, "
-          "a date's notes), and no Pip in them",
-          sorted(tabs) == ["date_panel.py", "day_notes.py", "deck_panel.py", "history_tab.py", "insights_tab.py", "mine_tab.py",
-                           "plan_tab.py", "settings_tab.py", "text_tab.py"]
+    check("road: 3.9.9, the Qt plan window's tabs and panels went with it: the text is the one Qt panel left, and no Pip in it",
+          sorted(tabs) == ["text_tab.py"]
+          and not [f for f in ("window.py", "plan_tab.py", "date_panel.py", "deck_panel.py", "shape.py", "send.py", "insights_tab.py",
+                               "settings_tab.py", "mine_tab.py", "new_plan.py", "history_tab.py", "day_notes.py") if f in src]
+          and "plan_window" not in src["flow.py"].replace('"plan_window": "qt" is read no more', "")
           and not [f for f, t in dict(windows, **tabs).items() if re.search(r"\bsev\b|pip_note", t)], sorted(tabs))
-    windows_tabs = dict(windows, **tabs, **{"widgets.py": src["widgets.py"]})
+    windows_tabs = dict(windows, **tabs)
     check("road: no window sets its own type or margins in a style sheet, nor reads Anki's palette",
           not [f for f, t in windows_tabs.items() if "setStyleSheet" in t or "palette(" in t or "font-size" in t])
     labels = {f: t.count("QLabel(") for f, t in windows_tabs.items()}
@@ -1018,9 +1018,8 @@ def test_rules_of_the_road():
     check("road: the pure parts and the requests import no aqt",
           not [f for f in pure if re.search(r"^\s*(from aqt|import aqt)", src[f], re.M)])
     calls = set()
-    for f in ("flow.py", "window.py", "plan_tab.py", "date_panel.py", "deck_panel.py", "shape.py", "send.py",
-              "mine_tab.py", "new_plan.py", "text_tab.py", "history_tab.py", "settings_tab.py", "day_notes.py",
-              "picker.py", "start_window.py", "mcp_host.py", "mcp_dialog.py"):
+    for f in ("flow.py", "text_tab.py", "date_dialogs.py", "picker.py", "start_window.py", "mcp_host.py", "mcp_dialog.py",
+              "web.py", "webface.py", "webtabs.py", "webnew.py", "webmodel.py"):
         for node in ast.walk(ast.parse(src[f])):
             if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "remote":
                 calls.add(node.attr)
@@ -1053,23 +1052,8 @@ def test_rules_of_the_road():
     hallmarks = [(f, m) for f, m in hallmarks if not m.startswith("{'▾' if")]  # a week's fold, as a tree's
     check("road: no AI look in the plan windows (Sam, after the site mock): no '+ A …' links, no ◆, no ▾ or ↗ in words, "
           "no tinted banners or accent stripes, no capitals for a change's kind",
-          not hallmarks and not re.search(r'frame\("(?:strip|warm|today|bar|go-bar)"', src["plan_tab.py"] + src["deck_panel.py"]
-                                           + src["settings_tab.py"] + src["shape.py"])
-          and ".upper()" not in src["send.py"], hallmarks)
-    check("road: one way to each thing (Sam, after the site mock): no Study in the plan window (the board studies), no deck tab "
-          "(Add from the deck puts the deck in the date's place), no Followers tab, no −1/+1 day (the date's field, Alt+← →, "
-          "Month's drag), the plan's dates and pace in Settings (no Change… window)",
-          not re.search(r'"Study (them|these|for it)"', src["date_panel.py"]) and "QTabWidget" not in src["plan_tab.py"]
-          and "followers_tab.py" not in src and '"−1 day"' not in src["date_panel.py"] and "ShapeDialog" not in src["shape.py"]
-          and "Shape(win, form)" in src["settings_tab.py"] and '"Settings"' in src["window.py"] and '"Sharing"' not in src["window.py"])
-    order = re.findall(r'self\._add_tab\("(\w+)", "([^"]+)"', src["window.py"])
-    check("road: Plan · Insights · Settings, whoever I am (Sam, before the click-test); Insights asks the server nothing",
-          [x[1] for x in order] == ["Plan", "Insights", "Settings", "Settings"]
-          and not re.search(r"\bremote\b|_call\(", src["insights_tab.py"] + src["insights.py"]), order)
-    keys_ = set(re.findall(r'on\("([^"]+)"', src["plan_tab.py"]))
-    check("road: the Plan tab's keys (each in its button's tip)",
-          {"Ctrl+N", "Ctrl+E", "Ctrl+F", "Ctrl+T", "Ctrl+1", "Ctrl+2", "Ctrl+D", "Ctrl+Z", "Ctrl+Return", "Up", "Down",
-           "Alt+Left", "Alt+Right", "Return", "F2", "Delete"} <= keys_, sorted(keys_))
+          not hallmarks, hallmarks)
+    check("road: Insights asks the server nothing", not re.search(r"\bremote\b|_call\(", src["insights.py"]))
     words = " ".join(src.values()).lower()
     banned = [w for w in ("anking", "uworld", "amboss", "boards and beyond", "sketchy", "pathoma", "first aid", "bootcamp")
               if w in words]

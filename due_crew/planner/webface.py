@@ -582,7 +582,7 @@ class WebFace(NewPlan, PlanCore):
             self.change({"op": "take_review", "day": key}, keep=("gone",))
 
     def c_move_from(self):
-        from .date_panel import MoveFromDialog
+        from .date_dialogs import MoveFromDialog
         u = self.unit(self.picked[1]) if self.picked and self.picked[0] == "date" else None
         if u is None:
             return

@@ -53,12 +53,6 @@ def _raise(key):
 
 # ---- the plan window ----
 
-def web_window():
-    """The HTML plan window (round six), unless this computer's config says
-    "plan_window": "qt" (the Qt one, kept as it was)."""
-    return str(cfg().get("plan_window") or "") != "qt"
-
-
 def open_plans(select=None, tab=None, new=None):
     """Your plans (3.9.3, for everyone; labs before): signed in, a
     collection open. One request on the click: my plans. select: a plan's
@@ -117,12 +111,8 @@ def noted_followers(plans):
 
 
 def show_plans(plans, select=None, tab=None, new=None):
-    if web_window():
-        from .web import PlanWeb
-        w = PlanWeb(mw, mw.col, plans, Ops(), select=select, tab=tab, cfg=cfg(), new=new)
-    else:
-        from .window import PlanWindow
-        w = PlanWindow(mw, mw.col, plans, Ops(), select=select, tab=tab)
+    from .web import PlanWeb  # 3.9.9: the one plan window (the Qt one went; "plan_window": "qt" is read no more)
+    w = PlanWeb(mw, mw.col, plans, Ops(), select=select, tab=tab, cfg=cfg(), new=new)
     _gone_on_close(w)
     _open["plans"] = w
     w.show()
@@ -559,17 +549,7 @@ def open_new(start=None, finish_by=None, exam=None):
     board's exam line passes finish_by (and the exam's name)."""
     if not mw.col or not plan_flow._signed_in():
         return
-    if web_window():
-        open_plans(new={"start": start, "finish_by": finish_by, "exam": exam})
-        return
-    if _raise("new"):
-        return
-    from .new_plan import NewPlanWindow
-    w = NewPlanWindow(mw, top_decks(mw.col), NewOps(), labs=enabled())
-    _gone_on_close(w)
-    _open["new"] = w
-    w.show()
-    return w
+    open_plans(new={"start": start, "finish_by": finish_by, "exam": exam})
 
 
 # ---- a plan from a block's calendar (claude.py's jobs, a stand-in for now) ----
@@ -689,16 +669,6 @@ class StartOps:
         if w is not None and getattr(w, "_alive", False):
             _shut(w)
         open_plans(select=pid)
-
-
-class NewOps(StartOps):
-    """What New plan asks of the add-on: StartOps', a friend's code, the labs window."""
-
-    def follow(self, code):
-        plan_flow.open_follow(code)
-
-    def labs_window(self):
-        open_start()
 
 
 def _top_deck(col, did):
