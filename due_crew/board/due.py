@@ -716,8 +716,9 @@ def _due_add(v, default):
 STUDY_KBD, ASK_KBD = ("⌘⇧S", "⌃⇧Q") if _sys.platform == "darwin" else ("Ctrl+Shift+S", "Ctrl+Shift+Q")
 MAGIC_KBD = "⌘⇧F" if _sys.platform == "darwin" else "Ctrl+Shift+F"  # 3.9.7: Magic search, from any screen
 MAGIC_FIELD_ID = "dc-mgf"
-MAGIC_EXAMPLES = ("cardio pharm due this week", "leeches in renal", "40 new from chapter 3", "paste question IDs",
-                  "quiz Friday: spread it out")
+# (each one is something Magic search reads as written: tried on Anki's engine in 3.9.9's review)
+MAGIC_EXAMPLES = ("cardio pharm due this week", "30 minutes of renal", "20 new from chapter 3", "what I missed this week",
+                  "quiz Friday on heme")
 _MAGIC_FIELD_ICON = ('<svg class="mag" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" '
                      'stroke-linecap="round" aria-hidden="true"><circle cx="10" cy="11" r="6.2"/><path d="M19.4 20.4l-4.7-4.7"/>'
                      '<path class="st" d="M19 1.6l.9 2.3 2.3.9-2.3.9-.9 2.3-.9-2.3-2.3-.9 2.3-.9z" stroke="none"/></svg>')

@@ -4788,6 +4788,39 @@ every release that changes how something works.
   is held for the card only while Settings has my exam (with none, it
   plays as a cheer), and a crewmate's later cheer to me takes the place of
   their line on the server (one cheer a pair) if I haven't fetched it yet.
+- 3.9.9, Magic search read as people type (Sam, 10 Nov: "a thorough
+  review of magic search to make sure it actually functions how a user
+  wants it to"). About ninety asks typed into the window's own logic
+  (`Search`) on Anki's engine, a 35,000-card deck with a year of tags, and
+  its buttons pressed (Study now, Unsuspend, Keep, Undo: all as they say).
+  What it got wrong, each now pinned in test_magic:
+  "cardio due this week" was read as due today, spread over the week (it
+  offered to move today's reviews): it's the cards due by Sunday, and
+  "due by Friday" the days till then (`magic._everyday` writes them as the
+  dN filter; "spread … over this week" is still a stretch). One word no
+  tag has emptied the whole box ("study cardio for 30 minutes", "cardio
+  overdue", "unsuspend renal physiology"): overdue is due, unsuspend is
+  suspended, "for 30 minutes" / "an hour" is a budget the window turns
+  into that many cards at my pace, what's due first, and says so; and
+  when the words as typed find no tag and no card the window reads them
+  once more (`read(..., loose_words=True)`, `magic.loose`): each word by
+  another everyday name (`SAME_AS`: cardiology, kidney, hematology…), or
+  the longest run of them that is a topic, with "Didn't use “…”". Never
+  when the first reading found anything: a deck that says kidney is not
+  second-guessed. "100 cards" was read as question numbers: it's how
+  many (and a count or a budget alone is that many of the deck). "what
+  should I study today" is what's due. Two topics that would both be
+  called Pharmacology take the part above them. Leeches found said
+  nothing about why nothing could be studied: a line now. A reading with
+  nothing in it raised when drawn (my own line; caught the same hour).
+  And one that was there before: a word one letter off a word thousands
+  of tags end in ("toxic", "topic") took 22 s, every pair of the matches
+  tried for initials; only a name the deck writes as a short one is tried
+  now (0.17 s). I had also cut words shorter a letter at a time; that hit
+  the same loop and came out. The field's examples are ones that work.
+  Left: "20 new renal" can be 19 when a leech is among them; "cardio
+  pharm" alone is still named Pharmacology; "chapter 3" picks the part
+  numbered 3 without asking which book.
 - 3.9.9, Magic search is a field under your decks (Sam, 10 Nov, after
   eight places mocked on the real Decks screen: "could we put it below or
   above the 'Studied X cards in X minutes' thing?", "I like G but… more

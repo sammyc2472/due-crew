@@ -776,6 +776,19 @@ class Search:
             if top and top != self.did:
                 self.pick_deck(top)
                 self.r = M.read(self.text, self.tree, self.ops.today(), self.every, plans)
+        # 3.9.9: the words as typed found no tag and no card: read them again by other everyday names, or
+        # for the part of them that is a topic (magic.loose); what wasn't used is said (lines)
+        if self.r["kind"] == "words" and self.r["text"] and not any(g["on"] for g in self.r["groups"]) and self.tree is not None:
+            self.flip, self.tag_off, self.seg_off, self.filters, self._cards = set(), set(), set(), [dict(f) for f in self.r["filters"]], None
+            try:
+                none = not self.cards()[0]
+            except Exception:
+                oops()
+                none = False
+            if none:
+                again = M.read(self.text, self.tree, self.ops.today(), self.every, plans, loose_words=True)
+                if any(g["on"] for g in again["groups"]):
+                    self.r = again
         self.flip, self.tag_off, self.seg_off = set(), set(), set()
         self.filters, self.filters_set = [dict(f) for f in self.r["filters"]], False
         # Sam: "seeing the tag tree is really important": the first topic's tree open, the rest a tap away
@@ -919,8 +932,8 @@ class Search:
                     base |= idx.tag_cards(t)
             elif r["text"]:
                 base = self.ops.find(f"{deck_q} {M.text_q(r['text'])}") or set()
-            elif not (self.filters or r.get("deck")):
-                base = set()
+            elif not (self.filters or r.get("deck") or r.get("limit") or r.get("minutes")):
+                base = set()  # (3.9.9: "100 cards", "for 30 minutes" alone: that many of the deck, what's due first)
             if r.get("plan"):
                 base = set(base or ())
                 hit = r["plan"]
@@ -946,6 +959,15 @@ class Search:
         else:
             got = base
         cids = sorted((c for c in got if c in idx.cards), key=lambda c: idx.order.get(c, (True, 0, c)))
+        if r.get("minutes") and not r.get("limit") and cids:
+            # 3.9.9: "for 30 minutes": as many as fit at my pace, the due ones first (the order they're in)
+            pace, left, k = self.pace(), r["minutes"] * 60, 0
+            for c in cids:
+                left -= pace["new_s"] if idx.cards[c][1] == 0 else pace["rev_s"]
+                if left < 0 and k:
+                    break
+                k += 1
+            r["limit"] = self.r["fits"] = max(1, k)  # (r is this reading's copy: the budget is worked out again with every filter)
         if r.get("limit"):
             cids = cids[:r["limit"]]
         # what a kept deck holds: the exact cards when it's "10 of them", else the deck's filters live
@@ -1203,6 +1225,12 @@ class Search:
                 dates = self.ops.plan_dates(self.did, self.idx, found["cids"])
                 said = Q.words(found, Q.tally(self.idx, found["cids"]), dates)[1:]
                 out += [x for x in said if not r["ids"] or not x[:1].isdigit()]  # with note ids pasted, a short number may be neither
+        if r.get("unused"):
+            out.append(f"Didn’t use “{' '.join(r['unused'])}”.")
+        if r.get("minutes") and r.get("fits") and cids and not r.get("limit"):
+            out.append(f"About {r['minutes']} minute{'' if r['minutes'] == 1 else 's'} at your pace: {len(cids):,} card{'' if len(cids) == 1 else 's'}, what’s due first.")
+        if t and t.get("leech") and t.get("leech") == t.get("n"):
+            out.append("Leeches aren’t studied from here. Browse opens them; Insights › Leeches brings them back.")
         if r["kind"] == "words" and r["text"] and not self.ticked():
             out.append(f"No tag says “{r['text']}”; these cards do." if cids
                        else f"No tag or card says “{r['text']}” in {self.idx.name if self.idx else 'this deck'}.")

@@ -901,6 +901,81 @@ def test_my_plan_on_the_server():
         cl.session = {}
 
 
+# ---- 3.9.9: the review of how people really type ----
+
+def test_everyday_phrasings_v399():
+    """Typed the way a person asks, on Anki's engine, the box read some of
+    these as nothing. Each is pinned here: due within a stretch, overdue,
+    unsuspend, a time budget, a bare count, today, and a second, looser
+    reading when the words as typed find no tag and no card."""
+    r = read("heart failure due this week")  # TODAY is a Wednesday: till Sunday is four days
+    check("\"due this week\" is what's due by Sunday, a filter, not a stretch to spread over",
+          r["filters"] == [{"k": "dN", "n": 4}] and r["span"] is None and ticked(r)[:1] == ["Heart Failure"], (r["filters"], r["span"]))
+    check("…\"due by Friday\", \"due before monday\": the days till then",
+          read("anemia due by friday")["filters"] == [{"k": "dN", "n": 2}] and read("anemia due before monday")["filters"] == [{"k": "dN", "n": 5}]
+          and read("anemia due by wednesday")["filters"] == [{"k": "dN", "n": 7}])
+    check("…and \"spread anemia over this week\" is still a stretch", read("spread anemia over this week")["span"] is not None)
+    check("overdue is due", read("overdue")["filters"] == [{"k": "due"}] and read("anemia overdue")["filters"] == [{"k": "due"}]
+          and ticked(read("anemia overdue")) == ["Anemia"])
+    check("\"unsuspend X\" is X's suspended cards", read("unsuspend platelets")["filters"] == [{"k": "susp"}]
+          and ticked(read("unsuspend platelets"))[:1] == ["Platelets"])
+    check("\"what should I study today\" is what's due; \"missed today\" keeps its own meaning",
+          read("what should I study today")["filters"] == [{"k": "due"}] and read("what should I study today")["text"] == ""
+          and read("missed today")["filters"] == [{"k": "m1"}])
+    for words, mins in (("anemia for 30 minutes", 30), ("an hour of anemia", 60), ("20 min anemia", 20), ("half an hour anemia", 30), ("2 hours of anemia", 120)):
+        r = read(words)
+        check(f"a time budget: {words!r}", r["minutes"] == mins and r["limit"] is None and ticked(r) == ["Anemia"], (r["minutes"], r["limit"], ticked(r)))
+    check("…\"type 2 diabetes\" and \"missed in the last 3 days\" aren't one", read("type 2 diabetes")["minutes"] is None
+          and read("missed in the last 3 days")["minutes"] is None and read("anemia over the next 5 days")["minutes"] is None)
+    r = read("100 cards")
+    check("\"100 cards\" is how many, not a question's number; a deck's own question numbers still are",
+          r["kind"] == "words" and r["limit"] == 100 and read("10234 10235")["kind"] == "ids", r["kind"])
+    # a second reading, only when asked for
+    strict, again = read("cardiology"), M.read("cardiology", TREE, TODAY, loose_words=True)
+    check("the words as typed first: \"cardiology\" finds no tag (the window looks in the cards' text)",
+          not strict["groups"] and strict["text"] == "cardiology" and strict["unused"] == [])
+    check("…then by another everyday name: Cardio's tags", any("cardio" in t.lower() for g in again["groups"] for t in g["tags"]) and again["text"] == "", again["groups"][:1])
+    r = M.read("kidney intro", TREE, TODAY, loose_words=True)
+    check("…\"kidney\" where the deck says Renal", any("renal" in t.lower() for g in r["groups"] for t in g["tags"]), [g["name"] for g in r["groups"]])
+    r = M.read("anemia xyzzy plugh", TREE, TODAY, loose_words=True)
+    check("…or the part of the words that is a topic, the rest said", ticked(r) == ["Anemia"] and r["unused"] == ["xyzzy", "plugh"], (ticked(r), r["unused"]))
+    r = M.read("xyzzy plugh", TREE, TODAY, loose_words=True)
+    check("…and nothing invented when none of it is", not r["groups"] and r["text"] == "xyzzy plugh" and r["unused"] == [])
+    check("a deck that says \"heart\" is never second-guessed", ticked(read("heart failure"))[:1] == ["Heart Failure"]
+          and ticked(M.read("heart failure", TREE, TODAY, loose_words=True))[:1] == ["Heart Failure"])
+    tree = M.Tree(["#S::Cardio::Pharmacology", "#S::Renal::Pharmacology", "#S::Cardio::Physiology"])
+    r = M.read("cardio pharm and renal pharm", tree, TODAY)
+    check("two topics that would be called the same take the part above them",
+          M.topics_said(r["groups"], r["terms"]) == "Cardio pharmacology and Renal pharmacology", M.topics_said(r["groups"], r["terms"]))
+    check("…one alone keeps its name", M.topics_said(M.read("cardio pharm", tree, TODAY)["groups"]) == "Pharmacology")
+    # a word a letter off a word thousands of tags end in: every pair of them was tried for initials (22 s on Anki's engine)
+    import time
+    big = M.Tree([f"#L::Article_{i:04d}_Some_Clinical_Topic" for i in range(3000)] + ["#S::Cardio"])
+    t0 = time.perf_counter()
+    big.groups(["toxic"])
+    took = time.perf_counter() - t0
+    check("a word a letter off one that 3,000 tags share is read in well under a second", took < 1.5, f"{took:.2f} s")
+
+
+def test_the_window_reads_them_v399():
+    face, ops, _closed = window()
+    face.on("type", {"text": "cardiology"})
+    v = face.view()
+    check("the window: no tag, no card says it: read again by another name, and found", any(t["on"] for t in v["topics"]) and v["count"]["n"] > 0, v["lines"])
+    face.on("type", {"text": "anemia xyzzy"})
+    v = face.view()
+    check("…the part that's a topic, and a line for the rest", [t["name"] for t in v["topics"] if t["on"]] == ["Anemia"] and "Didn’t use “xyzzy”." in v["lines"], v["lines"])
+    face.on("type", {"text": "anemia for 1 minute"})
+    v = face.view()
+    check("…a time budget is that many cards at my pace, said so; the reading's own limit stays unset",
+          0 < v["count"]["n"] < 12 and any(x.startswith("About 1 minute at your pace") for x in v["lines"]) and face.r["limit"] is None, (v["count"], v["lines"]))
+    face.on("type", {"text": "3 cards"})
+    v = face.view()
+    check("…a bare count is that many of the deck", v["count"]["n"] == 3 and v["kind"] == "words", v["count"])
+    face.on("type", {"text": "quiz friday: spread it out"})
+    check("…and a reading with nothing found draws (it raised once)", isinstance(face.view()["lines"], list))
+
+
 # ---- ways in ----
 
 def test_ways_in():

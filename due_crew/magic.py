@@ -78,6 +78,63 @@ _NAME_ONLY = frozenset("practice block shelf pop big class unit module weekly my
 
 # ---- words ----
 
+# 3.9.9 (the review of how people really type): everyday words for a subject a deck may tag by another
+# ("cardiology" where the tag is Cardio, "kidney" where it's Renal). Tried only when the words as typed
+# find no tag and no card (read's `loose`), so a deck that does say "kidney" is never second-guessed.
+SAME_AS = tuple(frozenset(x.split()) for x in (
+    "cardio cardiology cardiac cardiovascular heart cvs", "renal kidney kidneys nephrology nephro",
+    "pulm pulmonary pulmonology lung lungs respiratory resp", "heme hematology haematology blood",
+    "neuro neurology brain", "gi gastro gastroenterology gastrointestinal gut", "endo endocrine endocrinology",
+    "repro reproductive reproduction", "msk musculoskeletal", "derm dermatology skin", "psych psychiatry",
+    "immuno immunology immune", "pharm pharmacology", "micro microbiology", "path pathology",
+    "phys physio physiology", "biochem biochemistry", "anat anatomy", "onc oncology cancer"))
+LOOSE_TRIES = 24   # readings a loose pass may try for one topic's words,
+LOOSE_SECS = 0.35  # and how long it may take over them (a reading can cost a third of a second on a big deck's tags)
+
+
+def _others(w):
+    """The other everyday words for w's subject, the shortest first. (Only these: a word cut shorter
+    a letter at a time was tried and taken out: "toxic" is one letter off "topic", and a deck with
+    thousands of tags ending in one word took twenty seconds over it.)"""
+    out = []
+    for group in SAME_AS:
+        if w in group:
+            out += sorted(group - {w}, key=lambda x: (len(x), x))
+    return out
+
+
+def loose(tree, ws, within=None):
+    """A second reading of a topic's words that found nothing: (groups, the words not used). First
+    each word by another name for it; then the longest run of the words that is a topic (by its own
+    words or another name), the rest handed back to be said ("Didn't use…")."""
+    import time
+    tried, until = [0], time.perf_counter() + LOOSE_SECS
+
+    def groups(words):
+        tried[0] += 1
+        if tried[0] > LOOSE_TRIES or time.perf_counter() > until:
+            return []
+        return tree.groups(words, within=within or None)
+
+    def renamed(words):
+        for i, w in enumerate(words):
+            for alt in _others(w):
+                gs = groups(words[:i] + [alt] + words[i + 1:])
+                if gs:
+                    return gs
+        return []
+    gs = renamed(list(ws))
+    if gs:
+        return gs, []
+    for size in range(len(ws) - 1, 0, -1):
+        for at in range(0, len(ws) - size + 1):
+            part = list(ws[at:at + size])
+            gs = groups(part) or renamed(part)
+            if gs:
+                return gs, list(ws[:at]) + list(ws[at + size:])
+    return [], []
+
+
 def stem(w):
     """A word with its plural off: "ies" to "y", a last "s" (not "ss") gone."""
     if w.endswith("ies") and len(w) > 4:
@@ -380,8 +437,10 @@ class Tree:
                 if g["tier"] == 3 and g["num"] and (g["lead"] or 99) > top:
                     g["tier"] = 0
         # a name that's another's initials ("AKI") is that one
+        # (3.9.9: only a name the deck writes as a short one can be another's initials. Every pair was
+        # tried before: a word one letter off a word thousands of tags end in took twenty seconds.)
         keys = list(found)
-        for a in keys:
+        for a in [k for k in keys if k.replace(" ", "") in self.means]:
             for b in keys:
                 if a == b or a not in found or b not in found or " " not in b:
                     continue
@@ -764,9 +823,48 @@ def _with(f, tree, within):
     return [a] + rest if rest and named(rest[0]) else [ws]
 
 
-def read(text, tree, today, decks=(), plans=()):
+_WEEKDAY = r"(mon|tues?|wed(?:nes)?|thu(?:rs?)?|fri|sat(?:ur)?|sun)(?:day)?"
+
+
+def _everyday(low, today):
+    """3.9.9: phrasings people type, said the way the filters read them. (low, minutes or None):
+    "overdue" is due; "unsuspend X" is X's suspended cards; "due this week" and "due by Friday" are
+    due within the days till then (not a stretch to spread over); "for 30 minutes", "an hour": a
+    budget, which the window turns into how many at my pace."""
+    low = re.sub(r"\boverdue\b", " due ", low)
+    low = re.sub(r"\bunsuspend(?:ing)?\b", " suspended ", low)
+    wd = datetime.date.fromisoformat(str(today)).weekday()
+    low = re.sub(r"\bdue (?:(?:some ?time |later )?this week|by (?:the )?end of (?:the |this )?week)\b",
+                 f" due in the next {max(1, 6 - wd)} days ", low)
+
+    def by_day(m):
+        to = _DOWS.index(m.group(1)[:3])
+        return f" due in the next {(to - wd) % 7 or 7} days "
+    low = re.sub(r"\bdue (?:by|before|until|till) (?:this |next )?" + _WEEKDAY + r"\b", by_day, low)
+    minutes = None
+    m = re.search(r"\b(?:for |in |i have |i've got |got )?(?:about |around )?(?:(\d{1,3}) ?(?:minutes?|mins?)|"
+                  r"(half an|an|one|1|two|2|three|3) ?hours?|(\d{1,2}) ?h(?:rs?)?)\b", low)
+    if m:
+        if m.group(1):
+            minutes = int(m.group(1))
+        elif m.group(2):
+            minutes = {"half an": 30, "an": 60, "one": 60, "1": 60, "two": 120, "2": 120, "three": 180, "3": 180}[m.group(2)]
+        else:
+            minutes = int(m.group(3)) * 60
+        if 0 < minutes <= 600:
+            low = low[:m.start()] + " " + low[m.end():]
+        else:
+            minutes = None
+    return low, minutes
+
+
+def read(text, tree, today, decks=(), plans=(), loose_words=False):
     """What a box says. {kind, groups, neg, filters, limit, deck, plan, text,
     qids, ids, search, acts, lines}:
+    loose_words (3.9.9): the window's second reading, when the words as
+    typed found no tag and no card: a topic by another everyday name, or
+    the part of the words that is one (`unused`: the rest). minutes
+    (3.9.9): "for 30 minutes": a budget, the window's to turn into cards.
     kind: "empty"; "plantext" (dates as the Text tab writes them: lines,
     the text itself); "search" (Anki's own words, as pasted); "ids" (QIDs,
     the short numbers; note or card ids, the long); "do" (only what's
@@ -777,7 +875,7 @@ def read(text, tree, today, decks=(), plans=()):
     name; plan: plan_words' hit; text: words no tag has."""
     out = {"kind": "words", "groups": [], "neg": [], "filters": [], "limit": None, "deck": None, "plan": None,
            "text": "", "qids": [], "ids": [], "search": "", "acts": [], "lines": [], "raw": str(text or ""),
-           "res": [], "bank": None, "terms": [], "seg_words": [], "span": None}
+           "res": [], "bank": None, "terms": [], "seg_words": [], "span": None, "unused": [], "minutes": None}
     t = str(text or "").strip()
     if not t:
         out["kind"] = "empty"
@@ -803,12 +901,14 @@ def read(text, tree, today, decks=(), plans=()):
         # numbers, and a third of them, are this deck's questions: the words around them aren't a topic
         nums = {x.lstrip("0") or "0" for x in shorts}
         hits = len(nums & tree.qnums) if tree is not None and not longs else 0
-        if _IDS_ONLY.match(rest) or (hits >= 2 and 3 * hits >= len(nums)):  # QIDs (with their bank's name, "qbank 2345"), or ids
+        how_many = re.fullmatch(r"\s*\d{1,4}\s+cards?\s*", low) and not hits  # "100 cards" is how many, not a question's number
+        if not how_many and (_IDS_ONLY.match(rest) or (hits >= 2 and 3 * hits >= len(nums))):  # QIDs (with their bank's name, "qbank 2345"), or ids
             out["kind"] = "ids"
             out["ids"] = list(dict.fromkeys(longs))
             out["qids"] = list(dict.fromkeys(x.lstrip("0") or "0" for x in shorts))
             out["bank"] = sorted(said)[0] if said else None
             return out
+    low, out["minutes"] = _everyday(low, today)
     hit, low = plan_words(low, today, plans)
     out["plan"] = hit
     acts, low = statements(low, today, quiz_known=bool(hit and hit.get("what") == "quiz"))
@@ -827,6 +927,11 @@ def read(text, tree, today, decks=(), plans=()):
         fs = [f for f in fs if f["k"] != "m7"]
     if have & {"tom", "dN"}:
         fs = [f for f in fs if f["k"] != "due"]
+    if not have & {"due", "tom", "dN", "m1", "mN"} and not acts and not hit:
+        m = re.search(r"(?<!on )(?<!by )(?<!from )(?<!till )(?<!until )\btoday\b", low)
+        if m:  # 3.9.9: "what should I study today": what's due
+            fs.append({"k": "due"})
+            low = low[:m.start()] + " " + low[m.end():]
     out["filters"] = fs
     # 3.9.9: the days asked for ("over the next 5 days", "by Friday", "20 a day"), off the words before
     # a topic is read from them (not beside a quiz or a plan's own set: their days are theirs)
@@ -860,6 +965,10 @@ def read(text, tree, today, decks=(), plans=()):
     text_words = []
     for i, ws in enumerate(segs):
         gs = tree.groups(ws, within=within or None)[:GROUPS_MAX] if tree is not None else []
+        if not gs and loose_words and tree is not None:
+            gs, rest = loose(tree, ws, within)
+            gs = gs[:GROUPS_MAX]
+            out["unused"] += rest if gs else []
         if not gs:
             if not acts and not hit:
                 text_words += ws  # words no tag has: the cards' text (not beside a statement or a plan's set)
@@ -872,6 +981,7 @@ def read(text, tree, today, decks=(), plans=()):
         for g, on in zip(gs, ticks(gs)):
             out["groups"].append(dict(g, seg=0, on=on))
     out["text"] = " ".join(text_words)
+    _tell_apart(out["groups"])
     nws = [ws for ws in (_words(s) for s in re.split(r"\band\b|,|\bor\b|&|\+|/|;|\bnor\b", neg)) if ws]
     for ws in nws:
         gs = tree.groups(ws) if tree is not None else []
@@ -885,6 +995,23 @@ def read(text, tree, today, decks=(), plans=()):
     if acts and not (out["groups"] or out["filters"] or out["plan"] or out["text"] or out["deck"]):
         out["kind"] = "do"
     return out
+
+
+def _tell_apart(groups):
+    """3.9.9: "cardio pharm and renal pharm" was "Pharmacology and Pharmacology". Two typed topics
+    whose first ticked chips share a name take the part above them ("Cardio pharmacology"), when
+    that chip's tags all sit under one part."""
+    first = {}
+    for g in groups:
+        if g.get("on") and g.get("seg") not in first:
+            first[g.get("seg")] = g
+    names = [g["name"] for g in first.values()]
+    for g in first.values():
+        if names.count(g["name"]) < 2:
+            continue
+        ups = {t.split(SEP)[-2] for t in g.get("tags") or () if SEP in t}
+        if len(ups) == 1:
+            g["name"] = f"{pretty(ups.pop())} {g['name'][:1].lower() + g['name'][1:]}"
 
 
 def topics_said(groups, terms=None):
