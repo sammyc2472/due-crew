@@ -987,6 +987,7 @@ def check_392(tmp):
         from anki.scheduler.v3 import CardAnswer
         col.decks.select(did)
         m0 = col.mod
+        __import__("time").sleep(0.005)  # col.mod is in milliseconds: on a fast runner the answer landed in m0's own (CI, 10 Nov)
         qc = col.sched.get_queued_cards()
         if qc.cards:
             card = col.get_card(qc.cards[0].card.id)
