@@ -173,7 +173,7 @@ def _squad_week_line(rows, day):
 
 
 def _squads_html(view, cfg, crew_by=None):
-    """A squad board: everyone here holds the same invite. Plain ranks — no
+    """A squad board: everyone here holds the same invite. No places (3.9.9), no
     medals, no cheers; these aren't necessarily people you know. Add lives
     on the person's card (click a name), not on the row. crew_by (3.8.21): my
     crew by uid, so a crewmate's Pip wears their colour and look."""
@@ -238,7 +238,6 @@ def _squads_html(view, cfg, crew_by=None):
         heads = (_corner(sw) + '<th><span style="color: var(--dc-muted); font-size: 11px; '
                  'font-weight: 700;">&#128197; 7 days</span></th>')
     body = ""
-    n = 0
     folded = False
     for r in live + waiting_today + rest:
         uid = str(r["user_id"])
@@ -274,12 +273,11 @@ def _squads_html(view, cfg, crew_by=None):
         elif zero(r):
             cls += " dim"
             note += ' <span class="la faded">&middot; nothing yet today</span>'
-            rank = "&mdash;"
+            rank = ""
         elif show_up or numberless(r):
             rank = "&#10003;"  # showed up: counted, not ranked
         else:
-            n += 1
-            rank = f"#{n}"
+            rank = ""  # 3.9.9 (Sam: "squads should definitely lose those places"): the order says it, as on Crew
         if show_up:
             body += (f'<tr class="{cls.strip()}"><td class="rk">{rank}</td>'
                      f'<td class="nm">{link}{note}</td>'

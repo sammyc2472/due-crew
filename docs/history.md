@@ -4799,8 +4799,9 @@ every release that changes how something works.
   2, no medals, no places on Crew: the order says it and this isn't a race.
   `crew._table_html` hands every row an empty rank (a show-up tick is all
   the column holds; `td.rk:empty` takes no room), `MEDALS` gone; the site's
-  twin the same (`table` in app.js, app.css). Squads keep their plain
-  places: not in the mock, not asked.
+  twin the same (`table` in app.js, app.css). Squads too, a commit later
+  (Sam: "squads should definitely lose those places"): `squads.py` and
+  the site's squad rows, a show-up tick the one thing left in the column.
   3, a narrow window keeps its words: under 560 px Crew's headers were four
   emoji and names were cut for four number columns. The table says what
   it's sorted by (`dc-s-<key>`) and shows that column with Streak (by

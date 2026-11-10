@@ -1193,7 +1193,7 @@ const Board = (() => {
   }
 
   /** A squad board, as _squads_html: one squad at a time behind a
-   *  switcher, plain ranks, no medals, no cheers; these aren't necessarily
+   *  switcher, no places (3.9.9), no medals, no cheers; these aren't necessarily
    *  people you know. Synced today with nothing studied yet sits under the
    *  ranked, with dashes. */
   let squadsGot = null;  // {at, list, boards: {id: board}}: a sort redraws from these, not the network
@@ -1239,7 +1239,6 @@ const Board = (() => {
     const heads = showUp ? [h("th", {}, "📅 7 days")] : SQUAD_HEADS.map(([k, l]) => h("th", { class: `k-${k}${k === sort ? " on" : ""}` },
       h("button", { class: "linkish", onclick: () => { store("dc-sort", k); onSort(); } }, l + (k === sort ? " ▾" : ""))));
     const numberless = (r) => ["reviews", "studyTimeMs", "accuracy", "streak"].every((k) => r[k] == null);
-    let n = 0;
     const body = [...live, ...waitingToday, ...rest].map((r) => {
       const you = r.uid === me.uid, today = r.day === day, nyet = today && zero(r);
       const notes = [];
@@ -1249,7 +1248,7 @@ const Board = (() => {
       }
       if (!today) notes.push(h("span", { class: "ago faded" }, ` · ${r.day === yday ? "yesterday" : "quiet"}`));
       else if (nyet) notes.push(h("span", { class: "ago faded" }, " · nothing yet today"));
-      const rank = !today ? "" : nyet ? "—" : showUp || numberless(r) ? "✓" : `#${++n}`;
+      const rank = today && !nyet && (showUp || numberless(r)) ? "✓" : "";  // 3.9.9: no places, as on Crew (board/squads.py)
       const wk7 = h("td", { class: "n" }, r.week != null ? `${r.week}/7` : "—");
       const cells = showUp ? [wk7] : nyet ? [h("td", { class: "n" }, "—"), h("td", { class: "n k-time" }, "—"), h("td", { class: "n k-retention" }, "—"), h("td", { class: "n" }, "—"), wk7] : [
         h("td", { class: "n" }, r.reviews == null ? "—" : h("span", {}, r.reviews.toLocaleString(), r.newCards > 0 && r.reviews > 0 ? h("small", {}, r.newCards >= r.reviews ? "all new" : `${r.newCards.toLocaleString()} new`) : null)),

@@ -2886,7 +2886,10 @@ def test_not_yet_today_is_unranked():
             "day": labels[0], "yesterday": labels[1], "people": 2, "reviews": 9}
     sq = board._squads_html(view, {})
     check("not yet: on a squad board the zero is under the ranked, with dashes", sq.index(">Bo<") < sq.index(">Ann<")
-          and ">#1<" in sq and ">#2<" not in sq and "nothing yet today" in sq and "1 studying today" in sq)
+          and re.search(r'class="rk">(#\d|&mdash;)', sq) is None and sq.count('<td class="rk"></td>') == 2  # 3.9.9: no places on Squads either
+          and "nothing yet today" in sq and "1 studying today" in sq
+          and 'h("td", { class: "rk" }, rank)' in open(os.path.join(REPO, "site", "public", "app.js"), encoding="utf-8").read()
+          and "`#${++n}`" not in open(os.path.join(REPO, "site", "public", "app.js"), encoding="utf-8").read())
 
 
 def test_ui_review_board():
