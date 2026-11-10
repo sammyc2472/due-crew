@@ -4788,6 +4788,38 @@ every release that changes how something works.
   is held for the card only while Settings has my exam (with none, it
   plays as a cheer), and a crewmate's later cheer to me takes the place of
   their line on the server (one cheer a pair) if I haven't fetched it yet.
+- 3.9.9, the review's four next steps, built from their mocks (Sam, 10 Nov:
+  "build all four, your recommendations on the calls").
+  **What gets used** (`errs.used`, `errs.USE`, `errs_flow.tell_once`): which
+  parts were opened today ride the day's error counts as `use:<part>`, once
+  a day a part however often, with `use:any` so a share has its whole; no
+  account, no route, no migration (the codes pass `field.ts` as they are).
+  Counted from the board's commands (`_on_js`, by a command's first
+  letters), the You tab on screen, the room chip, Magic search and the plan
+  window. One switch for both, and it names nobody (Sam: "don't say Sam"):
+  Privacy › Send what went wrong, and what gets used. Nothing is counted
+  until the person has been told once on the Decks screen (the account's
+  `use_told`; OK, or Turn it off). Admin › Inbox shows Used apart from what
+  went wrong, each part as a share of the people who sent that day.
+  **The calm board** (`calm.py`, `board.hidden_tabs`, `_calm_check`,
+  `draw._calm_line`): a new account starts with Crew and Today; Decks,
+  Squads, Plans and Insights stay folded until there is a friend, a squad,
+  a plan or two weeks of reviews, then say so in one line (Open, ×). Pip
+  Party opens from Tools alone. Show all, Settings › Board › Calm board, a
+  tab shown by hand and any link to a part let it out for good
+  (`calm_open`). Off for everyone who had the board before. The fridge and
+  the dance floor are as they were (they already wait for a drawing or a
+  song of a crewmate's; the floor's "Put on a song?" still shows).
+  **The speed budget** (`tools/speed_budget.py`, `tools/speed/make_big.py`,
+  CI's click job): each wait against its budget on a 30,000-note,
+  million-answer collection; over one is red; Insights' first open of the
+  day is a known warning (2 to 4 s against 1.5 s).
+  **Plans as the way in**: a plan link's page already had the plan, its
+  three steps and Follow (`codePage`), and its preview picture (`og.ts`);
+  what was missing was the author being told. `PlanCore.share_hint`: a
+  plan of mine with five dated sets and nobody following says, once a
+  window after a save, that Settings › Copy link is the link to send. The
+  public page's "N following" stays as it was (Sam can take it off).
 - 3.9.9, Magic search spreads what's open (Sam, 10 Nov: "cards that were
   unsuspended and due on one day that I wanted to spread across the next
   few", and "yes good to go"). Schedule ahead wrote a date a day on My

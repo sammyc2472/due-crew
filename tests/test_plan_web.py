@@ -1524,6 +1524,28 @@ def test_a_refused_send_keeps_its_changes_v399():
     STORE.plan_saves.pop(("solo", today))
 
 
+def test_share_hint_v399():
+    """3.9.9, plans as the way in: my plan with dates on it and nobody
+    following says where its link is, once a window; never a plan someone
+    follows, one for a squad alone, a co-author's, or one just begun."""
+    from due_crew.planner import core as C
+
+    class W(C.PlanCore):
+        def __init__(self, plan, raw, units):
+            self.plan, self.raw, self.doc = plan, raw, {"units": [{"id": f"u{i}"} for i in range(units)]}
+    mine = {"id": "p1", "role": "owner", "followers": 1, "following": True}
+    w = W(mine, {"code": "HEME2BLK", "audience": "code"}, 6)
+    first, again = w.share_hint("p1"), w.share_hint("p1")
+    check("share: a plan of mine with dates and nobody else following: where its link is, once",
+          "Copy link" in first and "your class" in first and again == "", (first, again))
+    quiet = [W(dict(mine, followers=4), {"code": "X"}, 6).share_hint("p1"),
+             W(dict(mine, role="editor"), {"code": "X"}, 6).share_hint("p1"),
+             W(mine, {"code": "X", "audience": "squad"}, 6).share_hint("p1"),
+             W(mine, {"code": "X"}, C.SHARE_FROM - 1).share_hint("p1"),
+             W(mine, {}, 6).share_hint("p1")]
+    check("share: not when someone follows, for a co-author, a squad's plan, a plan just begun, or one with no code", quiet == [""] * 5, quiet)
+
+
 def main():
     for n in [n for n in list(globals()) if n.startswith("test_")]:
         globals()[n]()

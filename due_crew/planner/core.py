@@ -27,6 +27,9 @@ def whose(p):
     return f"{who}’s · following" if who else "following"
 
 
+SHARE_FROM = 5  # dated sets before a plan says where its link is (a plan being started isn't one to share yet)
+
+
 def others(p):
     """Who follows a plan besides me: an author studying their own plan
     (New plan's Start it) isn't someone its changes wait for."""
@@ -113,6 +116,18 @@ class PlanCore:
 
     def followers(self):
         return others(self.plan)
+
+    def share_hint(self, pid):
+        """3.9.9 (plans as the way in): a plan of mine with dates on it that
+        nobody follows yet says where its link is, once a window: the class
+        comes by that link (duecrew.com/p/CODE: its page has the three steps)."""
+        said = self.__dict__.setdefault("_share_said", set())
+        p, raw = self.plan or {}, self.raw or {}  # (the code and who can follow come with the plan as loaded)
+        if (pid in said or p.get("role") != "owner" or self.followers() > 0 or not raw.get("code")
+                or raw.get("audience") == "squad" or len((self.doc or {}).get("units") or []) < SHARE_FROM):
+            return ""
+        said.add(pid)
+        return " Nobody follows it yet: Settings \u203a Copy link is the link to send your class."
 
     def waiting(self):
         """Changes wait to be sent: someone follows it, or some wait already (an AI app's)."""
@@ -392,7 +407,7 @@ class PlanCore:
         if outcome == "saved":
             self.undoable = (pid, plan.get("version"))
             self.undo_shown()
-            self.say("Saved.")
+            self.say("Saved." + self.share_hint(pid))
         else:
             self.say("Someone saved this plan again since: it's up to date now. Make the change again.")
 
