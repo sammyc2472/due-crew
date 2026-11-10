@@ -91,6 +91,10 @@ jobs:
       # Anki's own wheels; aqt asks only for PyQt6>=6.2, so the Qt is pinned to
       # 6.11 (the dialogs job's: 6.12.0 has no QtPdf), the pair it was proven on
       - run: pip install "aqt==25.02.7" "anki==25.02.7" "PyQt6==6.11.0" "PyQt6-WebEngine==6.11.0"
+      # 3.9.9: what a person waits on, on a big collection (30,000 notes, a million answers), each
+      # against its budget; over one marked fail is red, as a failing test is (tools/speed_budget.py)
+      - name: speed budget
+        run: python3 tools/speed_budget.py
       - name: click test
         env:
           QT_QPA_PLATFORM: offscreen

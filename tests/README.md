@@ -131,3 +131,15 @@ states the harness puts it in: when one grows a new state, seed it here.
 | `suite` | `python3 tests/test_due_crew.py` on a clean Python 3.12. |
 | `dialogs` | Every Qt dialog builds under PyQt6 offscreen; the PNGs are attached as an artifact so you can look at them. |
 | `click` | The robot click-test above, in real Anki 25.02.7 (PyQt6 6.11); its report and screenshots are the `click-test` artifact, red or green. |
+
+## The speed budget (3.9.9)
+
+`python3 tools/speed_budget.py` (needs `pip install "anki==25.02.7"`) makes a
+big collection on Anki's own engine (`tools/speed/make_big.py`: 30,000 notes,
+a million answers, 500 decks) and times what a person waits on against a
+budget each: a sync's gathering, Insights first and again, Pip Party's tab,
+Schedule ahead's read. Over a budget marked `fail` is exit 1; one marked
+`warn` is said and passes (Insights' first open of the day, 2 to 4 s against
+1.5 s: red once it's met). CI runs it in the click test's job, before the
+robot; the first card after Study and CPU at rest stay the robot's.
+`--keep DIR` keeps the collection between runs.
