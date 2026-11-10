@@ -343,7 +343,7 @@ def today(now=None):
 # ---- 3.9.9: what gets used ----
 # Which parts of Due Crew were opened today, as codes on the same path ("use:insights"): once a day a
 # part however often it's opened, with "use:any" beside them so a share has its whole. Never what was
-# done there. Counted only once the person has been told (the account's use_told; errs_flow.tell_once).
+# done there. Counted only once the person has been told (the account's use_told; errs_flow.told).
 
 USE = (  # a board command's first letters -> its part (the longest first)
     ("planteam", "plansquad"), ("plan", "plans"), ("due", "due"), ("ins", "insights"), ("youins", "insights"),

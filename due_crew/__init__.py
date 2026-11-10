@@ -783,8 +783,8 @@ def _on_did_render(deck_browser):
 def _magic_howto():
     try:
         if not _closing and app.board_up():
-            if not errs_flow.tell_once():  # 3.9.9: what's counted now, once a person (never two cards at once)
-                magic_flow.show_board_howto()
+            errs_flow.use_ready()
+            magic_flow.show_board_howto()
     except Exception:
         oops()
 
@@ -1168,6 +1168,8 @@ _FAMILIES = (
 
 # a command: (how many values after its name, a check on them, what it does with (cfg, parts))
 BOARD_CMDS = {
+    "usetold": (0, None, lambda c, p: (errs_flow.told(), _swap(cfg()))),  # 3.9.9: the foot's note on what's counted, Got it
+    "usesee": (0, None, lambda c, p: (errs_flow.told(), open_settings("privacy"))),  # and its way to the switch
     "calmall": (0, None, _calm_cmd), "calmx": (0, None, _calm_cmd),  # 3.9.9: the calm board (calm.py)
     "calmopen": (1, lambda p: p[2] in ("decks", "squads", "plans", "insights"), _calm_cmd),
     "party": (0, None, lambda c, p: gamenight_flow.on_message(p)),  # 3.9.5's last round: You › Pip Party

@@ -21311,9 +21311,33 @@ def test_what_gets_used_v399():
         errs.switch(False)
         errs.used("magic")
         check("used: the switch off, nothing counted and what was is gone", t.days == {}, t.days)
-        words = errs_flow.TELL_TITLE + errs_flow.TELL_TEXT + errs.sheet_text({"v": "3.9.9", "days": {"2026-11-09": {"use:any": 1}}})
-        check("used: told in plain words, the switch named, nobody named", "Sam" not in words and "what gets used" in words
-              and "Never your cards" in words and "use:any × 1" in words, words[-120:])
+        from due_crew import board
+        import due_crew as dc
+        from aqt.deckbrowser import DeckBrowser
+        c = {"send_errs": True}
+        line = board.draw._use_line(c)
+        words = line + errs.sheet_text({"v": "3.9.9", "days": {"2026-11-09": {"use:any": 1}}})
+        check("used: said once in a line at the board's foot (no window): what's new, Privacy and Got it; nobody named",
+              "Sam" not in words and "counts which of its parts get opened" in line and "usesee" in line and "usetold" in line
+              and "use:any × 1" in words and board.draw._use_line({"send_errs": False}) == ""
+              and board.draw._use_line({"send_errs": True, "use_told": True}) == "", line)
+        was = (dc.cfg, dc.save_cfg, dc._swap, dc.open_settings, errs_flow.app.cfg, errs_flow.app.save_cfg)
+        went = []
+        try:
+            dc.cfg = errs_flow.app.cfg = lambda: c
+            dc.save_cfg = errs_flow.app.save_cfg = lambda x, **k: None
+            dc._swap = lambda *a, **k: went.append("swap")
+            dc.open_settings = lambda tab=None: went.append(tab)
+            errs.switch(True)
+            errs.use_ok(False)
+            dc._on_js(False, as_board("duecrew:usetold"), DeckBrowser())
+            got_it = (c.get("use_told"), errs._now.get("use_ok"), list(went))
+            c.pop("use_told")
+            dc._on_js(False, as_board("duecrew:usesee"), DeckBrowser())
+            check("used: Got it puts the line away and counting starts; Privacy does too, and opens the switch's tab",
+                  got_it == (True, True, ["swap"]) and c.get("use_told") is True and went == ["swap", "privacy"], (got_it, went))
+        finally:
+            dc.cfg, dc.save_cfg, dc._swap, dc.open_settings, errs_flow.app.cfg, errs_flow.app.save_cfg = was
     finally:
         errs._now.clear()
         errs._now.update(saved)

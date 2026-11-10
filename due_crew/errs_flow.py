@@ -128,12 +128,12 @@ def see_what_went():
 
 
 # ---- 3.9.9: what gets used, said once ----
+# A line at the board's foot (board.draw._use_line; Sam, of the sheet it was first: "a bit dramatic a
+# pop-up... a little note somewhere"), there until Got it or its Privacy link is pressed. Nothing is
+# counted before that.
 
 TOLD = "use_told"
-TELL_TITLE = "Due Crew now counts what gets used"
-TELL_TEXT = ("With a day's error counts, Due Crew now sends which of its parts you opened that day (Insights, Plans, "
-             "Magic search and so on), as counts with no account on them. Never your cards, your numbers or your crew. "
-             "It's the same switch: Settings \u203a Privacy \u203a Send what went wrong, and what gets used.")
+NOTE = "New: Due Crew counts which of its parts get opened, as totals with no account on them."
 
 
 def use_ready(c=None):
@@ -142,33 +142,20 @@ def use_ready(c=None):
     errs.use_ok(on(c) and bool(c.get(TOLD)))
 
 
-def tell_once():
-    """On the Decks screen, once a person: what's counted now, and where its
-    switch is. OK, Cancel or Esc: they've been told (nothing is counted
-    before), and the switch stays as they had it; Magic search's how-to, if
-    it's still to come, follows at once rather than at some later visit."""
-    c = app.cfg()
-    if c.get(TOLD) or not on(c) or not app.client().signed_in:
-        use_ready(c)
-        return False
-    from . import sheets
+def note_due(c):
+    """The board's line is still to be put away."""
+    return bool(on(c) and not c.get(TOLD))
 
-    def told():
-        c2 = app.cfg()
-        c2[TOLD] = True
-        app.save_cfg(c2)
+
+def told():
+    """Got it, or the line's way to Privacy: said, so uses count from here."""
+    c = app.cfg()
+    if not c.get(TOLD):
+        c[TOLD] = True
+        app.save_cfg(c)
         try:
             from . import account
-            account.push(c2)
+            account.push(c)
         except Exception:
             pass
-        errs.switch(on(c2))
-        use_ready(c2)
-        try:
-            from . import magic_flow
-            from aqt.qt import QTimer
-            QTimer.singleShot(500, lambda: app.board_up() and magic_flow.show_board_howto())  # once this sheet has gone
-        except Exception:
-            errs.oops()
-    sheets.confirm(TELL_TITLE, TELL_TEXT, "OK", told, no=told)
-    return True
+    use_ready(c)

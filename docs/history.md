@@ -4799,10 +4799,10 @@ every release that changes how something works.
   window. One switch for both, and it names nobody (Sam: "don't say Sam"):
   Privacy › Send what went wrong, and what gets used. Nothing is counted
   until the person has been told once on the Decks screen (the account's
-  `use_told`: a sheet that says what's counted and where its switch is; OK,
-  Cancel or Esc all mean told, and the switch stays as it was; Magic
-  search's how-to, if still to come, follows it at once, and the robot's
-  boot step puts both away). Admin › Inbox shows Used apart from what
+  `use_told`). It was a sheet for a day; Sam, on seeing it: "a bit dramatic
+  a pop-up... a little note somewhere". Now a line at the board's foot
+  (`draw._use_line`, `errs_flow.NOTE`): what's new, Privacy (the switch)
+  and Got it (`usesee`, `usetold`); counting starts when either is pressed. Admin › Inbox shows Used apart from what
   went wrong, each part as a share of the people who sent that day.
   **The calm board** (`calm.py`, `board.hidden_tabs`, `_calm_check`,
   `draw._calm_line`): a new account starts with Crew and Today; Decks,

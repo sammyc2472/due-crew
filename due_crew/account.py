@@ -39,7 +39,7 @@ ACCOUNT_KEYS = ("share_reviews", "share_time", "share_retention", "share_streak"
                 "song",  # 3.9.6: my song of the moment (songs.clean): my mutual friends see it on their board
                 "magic_search", "magic_seen",  # 3.9.7: Magic search on or off; its first-time card seen
                 "send_errs",  # 3.9.9: Privacy's Send what went wrong, and what gets used (errs.py)
-                "use_told",  # 3.9.9: told once what's counted (errs_flow.tell_once)
+                "use_told",  # 3.9.9: told once what's counted (errs_flow.told)
                 "exam_from", "exam_asked")  # 3.9.9: the plan my exam came from; the plans' exams I was asked about
 ACCENT_NAMES = ("green", "blue", "purple", "teal", "amber", "rose")
 _BOOLS = ("share_reviews", "share_time", "share_retention", "share_streak",
