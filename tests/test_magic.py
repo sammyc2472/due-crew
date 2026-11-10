@@ -947,7 +947,16 @@ def test_everyday_phrasings_v399():
     r = M.read("cardio pharm and renal pharm", tree, TODAY)
     check("two topics that would be called the same take the part above them",
           M.topics_said(r["groups"], r["terms"]) == "Cardio pharmacology and Renal pharmacology", M.topics_said(r["groups"], r["terms"]))
-    check("…one alone keeps its name", M.topics_said(M.read("cardio pharm", tree, TODAY)["groups"]) == "Pharmacology")
+    check("…and one typed with the part above it is called by both; typed alone, by its own name",
+          M.topics_said(M.read("cardio pharm", tree, TODAY)["groups"]) == "Cardio pharmacology"
+          and M.topics_said(M.read("physiology", tree, TODAY)["groups"]) == "Physiology"
+          and ticked(read("heart failure"))[:1] == ["Heart Failure"])
+    tree = M.Tree(["#B::#PathBook::03_Neoplasia", "#B::#Other::03_Chapter_3", "#B::#PathBook::05_RBC::part_3", "#B::#Vids::03_Pulm"])
+    r = M.read("chapter 3", tree, TODAY)
+    check("a tag whose own name says \"chapter 3\" is it, before parts only numbered 3; the rest offered; a \"part 3\" isn't one",
+          ticked(r) == ["Chapter 3"] and {"Neoplasia", "Pulm"} <= set(offered(r)) and r["numbered"] == [0], (ticked(r), offered(r)))
+    r = M.read("chapter 3", M.Tree(["#B::#PathBook::03_Neoplasia", "#B::#PathBook::05_RBC::part_3"]), TODAY)
+    check("…with none named so, the part numbered 3 as before", ticked(r) == ["Neoplasia"], ticked(r))
     # a word a letter off a word thousands of tags end in: every pair of them was tried for initials (22 s on Anki's engine)
     import time
     big = M.Tree([f"#L::Article_{i:04d}_Some_Clinical_Topic" for i in range(3000)] + ["#S::Cardio"])
@@ -972,6 +981,28 @@ def test_the_window_reads_them_v399():
     face.on("type", {"text": "3 cards"})
     v = face.view()
     check("…a bare count is that many of the deck", v["count"]["n"] == 3 and v["kind"] == "words", v["count"])
+    face.on("type", {"text": "2 anemia"})
+    two = list(face.cards()[0])
+    had = face.idx.leech
+    try:
+        face.idx.leech = set(had) | {two[0]}
+        face._cards = None
+        now = list(face.cards()[0])
+        check("…\"2 anemia\" is two I can study: a leech isn't one of them (it was one short)",
+              len(two) == 2 and len(now) == 2 and two[0] not in now, (two, now))
+    finally:
+        face.idx.leech = had
+        face._cards = None
+    js = open(os.path.join(REPO, "due_crew", "motion.js"), encoding="utf-8").read()
+    check("the plan week (3.9.9): what glides to the day picked is the opened day's own hairline with its fill coming up, "
+          "not an accent ring that vanished when it landed; the same on the site",
+          "border:1px solid var(--dc-faded,#aaaaa2)" in js and "border:2px solid var(--dc-accent" not in js
+          and 'anim(cell, [{ backgroundColor: "transparent" }' in js
+          and js == open(os.path.join(REPO, "site", "public", "motion.js"), encoding="utf-8").read())
+    face.on("type", {"text": "chapter 3"})
+    v = face.view()
+    check("…\"chapter 3\", more than one part numbered 3: a line says which was taken and where the others are",
+          any(x.startswith("Took “chapter 3” as ") and "under Also" in x for x in v["lines"]) or len(v["topics"][0]["also"]) == 0, v["lines"])
     face.on("type", {"text": "quiz friday: spread it out"})
     check("…and a reading with nothing found draws (it raised once)", isinstance(face.view()["lines"], list))
 

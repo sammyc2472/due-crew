@@ -412,6 +412,9 @@ class Tree:
                 if lead is not None:
                     g["lead"] = min(g["lead"] or 99, lead)
                 g["num"] = g["num"] or any(w.isdigit() for w in words)
+                # (3.9.9) its own name says the kind and the number typed ("chapter 3" on Chapter_3; not "part_3" for "chapter 3")
+                g["lit"] = g.get("lit") or (lead is None and any(w.isdigit() for w in words)
+                                            and all(w in last_ws for w in words if w in FILLER or w.isdigit()))
                 need = {i for i, x in enumerate(last_ws) if x not in GENERIC} or set(range(len(last_ws)))
                 tier = 0
                 if need <= said:
@@ -430,8 +433,14 @@ class Tree:
                     tier = 2  # its name begins with the words, all of them: about them
                 g["tier"] = max(g["tier"], tier)
         # "chapter 3": the shallowest part numbered 3 (a chapter, not its third section, nor a "Part 3")
+        # 3.9.9: a tag whose own name says it ("Chapter 3") is it, before any part that's only numbered 3
+        named = [g for g in found.values() if g["tier"] == 3 and g["num"] and g["lead"] is None and g.get("lit")]
+        if named:
+            for g in found.values():
+                if g["tier"] == 3 and g["num"] and not (g["lead"] is None and g.get("lit")):
+                    g["tier"] = 0
         tops = [g["lead"] for g in found.values() if g["lead"] is not None and g["tier"] == 3]
-        if tops:
+        if tops and not named:
             top = min(tops)
             for g in found.values():
                 if g["tier"] == 3 and g["num"] and (g["lead"] or 99) > top:
@@ -875,7 +884,7 @@ def read(text, tree, today, decks=(), plans=(), loose_words=False):
     name; plan: plan_words' hit; text: words no tag has."""
     out = {"kind": "words", "groups": [], "neg": [], "filters": [], "limit": None, "deck": None, "plan": None,
            "text": "", "qids": [], "ids": [], "search": "", "acts": [], "lines": [], "raw": str(text or ""),
-           "res": [], "bank": None, "terms": [], "seg_words": [], "span": None, "unused": [], "minutes": None}
+           "res": [], "bank": None, "terms": [], "seg_words": [], "span": None, "unused": [], "minutes": None, "numbered": []}
     t = str(text or "").strip()
     if not t:
         out["kind"] = "empty"
@@ -981,7 +990,10 @@ def read(text, tree, today, decks=(), plans=(), loose_words=False):
         for g, on in zip(gs, ticks(gs)):
             out["groups"].append(dict(g, seg=0, on=on))
     out["text"] = " ".join(text_words)
+    _said_above(out["groups"], out["seg_words"])
     _tell_apart(out["groups"])
+    # 3.9.9: "chapter 3" with no book said: which part numbered 3 was taken is said (the window's line)
+    out["numbered"] = [i for i, ws in enumerate(segs) if any(w in FILLER for w in ws) and any(w.isdigit() for w in ws)]
     nws = [ws for ws in (_words(s) for s in re.split(r"\band\b|,|\bor\b|&|\+|/|;|\bnor\b", neg)) if ws]
     for ws in nws:
         gs = tree.groups(ws) if tree is not None else []
@@ -997,6 +1009,44 @@ def read(text, tree, today, decks=(), plans=(), loose_words=False):
     return out
 
 
+def _named_with(name, parent):
+    """"Cardio pharmacology": a part's name after the part above it (a short name in capitals kept as it is)."""
+    return f"{pretty(parent)} {name[:1].lower() + name[1:] if name[1:2].islower() else name}"
+
+
+def _up(g):
+    """The one part every tag of a chip sits under, by its words ("03_Cardio" and "Cardio" are one), or None."""
+    ups = {}
+    for t in g.get("tags") or ():
+        ps = t.split(SEP)
+        if len(ps) < 2:
+            return None
+        ups.setdefault(" ".join(part_words(ps[-2])), ps[-2])
+    return next(iter(ups.values())) if len(ups) == 1 else None
+
+
+def _said_above(groups, seg_words):
+    """3.9.9: "cardio pharm" was called Pharmacology, and its deck with it. A typed topic whose words
+    name the part above its chip too ("cardio") is called by both: Cardio pharmacology."""
+    seen = set()
+    for g in groups:
+        seg = g.get("seg")
+        if not g.get("on") or seg in seen or seg is None or seg >= len(seg_words):
+            continue
+        seen.add(seg)
+        up = _up(g)
+        if not up:
+            continue
+        own = {stem(w) for w in part_words(g["name"])}
+        for w in seg_words[seg].split():
+            sw = stem(w)
+            if len(sw) < 3 or any(o.startswith(sw) or sw.startswith(o) for o in own):
+                continue  # the word is the chip's own
+            if any(pw.startswith(sw) or (len(pw) >= 3 and sw.startswith(pw)) for pw in (stem(x) for x in part_words(up))):
+                g["name"] = _named_with(g["name"], up)
+                break
+
+
 def _tell_apart(groups):
     """3.9.9: "cardio pharm and renal pharm" was "Pharmacology and Pharmacology". Two typed topics
     whose first ticked chips share a name take the part above them ("Cardio pharmacology"), when
@@ -1009,9 +1059,9 @@ def _tell_apart(groups):
     for g in first.values():
         if names.count(g["name"]) < 2:
             continue
-        ups = {t.split(SEP)[-2] for t in g.get("tags") or () if SEP in t}
-        if len(ups) == 1:
-            g["name"] = f"{pretty(ups.pop())} {g['name'][:1].lower() + g['name'][1:]}"
+        up = _up(g)
+        if up and not g["name"].lower().startswith(pretty(up).lower() + " "):
+            g["name"] = _named_with(g["name"], up)
 
 
 def topics_said(groups, terms=None):

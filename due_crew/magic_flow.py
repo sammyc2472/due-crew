@@ -959,6 +959,8 @@ class Search:
         else:
             got = base
         cids = sorted((c for c in got if c in idx.cards), key=lambda c: idx.order.get(c, (True, 0, c)))
+        if (r.get("limit") or r.get("minutes")) and not any(f.get("k") == "leech" for f in self.filters):
+            cids = [c for c in cids if c not in idx.leech]  # 3.9.9: "20 new renal" was 19 when a leech was among them
         if r.get("minutes") and not r.get("limit") and cids:
             # 3.9.9: "for 30 minutes": as many as fit at my pace, the due ones first (the order they're in)
             pace, left, k = self.pace(), r["minutes"] * 60, 0
@@ -1225,6 +1227,15 @@ class Search:
                 dates = self.ops.plan_dates(self.did, self.idx, found["cids"])
                 said = Q.words(found, Q.tally(self.idx, found["cids"]), dates)[1:]
                 out += [x for x in said if not r["ids"] or not x[:1].isdigit()]  # with note ids pasted, a short number may be neither
+        if r.get("numbered") and r["kind"] == "words":
+            # 3.9.9: "chapter 3", no book said, and more than one part numbered 3: which one this is, and where the rest are
+            for seg in r["numbered"]:
+                gs = [g for g in r["groups"] if g.get("seg") == seg]
+                on = next((g for g in gs if g.get("on")), None)
+                if on and len(gs) > 1 and on.get("tags"):
+                    where = M.tag_row(on["tags"][0]).get("res") or ""
+                    said = (r.get("seg_words") or [""] * (seg + 1))[seg]
+                    out.append(f"Took “{said}” as {on['name']}{' in ' + where if where else ''}. {len(gs) - 1} other part{'' if len(gs) == 2 else 's'} numbered the same: under Also.")
         if r.get("unused"):
             out.append(f"Didn’t use “{' '.join(r['unused'])}”.")
         if r.get("minutes") and r.get("fits") and cids and not r.get("limit"):

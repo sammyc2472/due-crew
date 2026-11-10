@@ -4788,6 +4788,26 @@ every release that changes how something works.
   is held for the card only while Settings has my exam (with none, it
   plays as a cheer), and a crewmate's later cheer to me takes the place of
   their line on the server (one cheer a pair) if I haven't fetched it yet.
+- 3.9.9, four small ones after the review (Sam, 10 Nov: "fix those three
+  small things, fix the selection of different days from the plans tab
+  where the blue outline snaps and disappears disconcertingly").
+  The plan week's day: motion.js 8 glided a 2 px accent ring from the day
+  last opened to the one clicked. Since the look's change 6 an opened day
+  has no ring (it's filled; the ring is today's), so the ring arrived and
+  vanished. What glides now is the opened day's own hairline, the fill
+  coming up under it as it lands; today keeps its border through it. Both
+  copies of motion.js. Mine: I changed the look and not its motion.
+  "20 new renal" was 19 with a leech among them: a count or a time budget
+  leaves leeches out before it counts (`Search.cards`), unless Leeches is
+  the filter. "cardio pharm" was called Pharmacology, and its deck too: a
+  topic typed with the part above its chip is called by both
+  (`magic._said_above`, `_up`: Cardio pharmacology; a short name in
+  capitals kept). "chapter 3": a tag whose own name says the kind and the
+  number (Chapter_3) is it, before parts only numbered 3 (it had lost to
+  another book's third part: it matched by its words, got no place in the
+  depth rule and was put out by it); and with more than one part numbered
+  the same the window says which it took, in which resource, and that the
+  rest are under Also.
 - 3.9.9, Magic search read as people type (Sam, 10 Nov: "a thorough
   review of magic search to make sure it actually functions how a user
   wants it to"). About ninety asks typed into the window's own logic
