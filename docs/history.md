@@ -4788,6 +4788,16 @@ every release that changes how something works.
   is held for the card only while Settings has my exam (with none, it
   plays as a cheer), and a crewmate's later cheer to me takes the place of
   their line on the server (one cheer a pair) if I haven't fetched it yet.
+- 3.9.9, Insights when something changed (the review of 9 Nov, timed on a
+  big collection: 30,000 notes, a million answers). `team_flow._work_out`
+  held the main thread 3.4 s, again every ten minutes. Three reads of the
+  log now stop at the first entry they need (`_first_since`: the answers
+  since a day, each card checked for one before; a card's first right
+  review and its last, from the ends of its own log): 2.3 s of SQL to
+  1.4 s, the same view. Past `INSIGHTS_FRESH` it is worked out again only
+  when `_stamp` moved (the Anki day, the collection's mod, the log's last
+  id, the cards' and notes' last mod): 6 ms when nothing has.
+  `test_insights_only_when_something_changed_v399`.
 - 3.9.9, a card's first answer read the quick way (the slow card, Sam: "it's
   over 5-10 seconds"): Reviews ahead's once-a-day check (1.5 s after the
   board draws, on the main thread) read every row of my most reviewed
