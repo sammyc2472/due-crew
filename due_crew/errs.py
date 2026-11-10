@@ -236,6 +236,10 @@ class Tally:
             self.dirty = True
         return True
 
+    def has(self, code, day):
+        with self.lock:
+            return code in (self.days.get(day) or {})
+
     def merge(self, other):
         """What `other` counted, added in (the counts from before a profile opened)."""
         with other.lock:
@@ -336,6 +340,50 @@ def today(now=None):
     return (datetime.datetime.fromtimestamp(now) - datetime.timedelta(hours=4)).date().isoformat()
 
 
+# ---- 3.9.9: what gets used ----
+# Which parts of Due Crew were opened today, as codes on the same path ("use:insights"): once a day a
+# part however often it's opened, with "use:any" beside them so a share has its whole. Never what was
+# done there. Counted only once the person has been told (the account's use_told; errs_flow.tell_once).
+
+USE = (  # a board command's first letters -> its part (the longest first)
+    ("planteam", "plansquad"), ("plan", "plans"), ("due", "due"), ("ins", "insights"), ("youins", "insights"),
+    ("closet", "closet"), ("wrapped", "wrapped"), ("party", "party"), ("magic", "magic"), ("song", "songs"),
+    ("dance", "songs"), ("bingo", "bingo"), ("cheer", "cheers"), ("fridge", "fridge"), ("squad", "squads"),
+    ("knock", "squads"), ("room", "rooms"), ("knows", "knows"), ("settings", "settings"), ("friends", "friends"),
+    ("profile", "profile"), ("sharemenu", "share"), ("decks", "crewdecks"),
+)
+USE_PARTS = tuple(sorted({p for _s, p in USE} | {"any", "planwin", "fifteen", "aiapp", "twobuttons"}))
+
+
+def use_of(cmd):
+    """The part a board command belongs to, or None."""
+    cmd = str(cmd or "")
+    for start, part in sorted(USE, key=lambda x: -len(x[0])):
+        if cmd.startswith(start):
+            return part
+    return None
+
+
+def use_ok(on):
+    """The person has been told what's counted (the glue says so)."""
+    _now["use_ok"] = bool(on)
+
+
+def used(part):
+    """`part` was opened today: its code once, and use:any once. Never raises."""
+    try:
+        if not part or part not in USE_PARTS or not _now["on"] or not _now.get("use_ok"):
+            return
+        day, t, hit = today(), _now["tally"], False
+        for code in ("use:any", "use:" + part):
+            if not t.has(code, day):
+                hit = t.add(code, day) or hit
+        if hit and _now["after"] is not None:
+            _now["after"]()
+    except Exception:
+        pass
+
+
 def count(code):
     """One more of `code` today, from any thread. Never raises: a count
     never stops what it counts."""
@@ -384,7 +432,7 @@ def sheet_text(sending, why=""):
         return why
     if not sending:
         return "Nothing yet. A day's counts go with the first sync after it ends."
-    lines = [f"Due Crew {sending['v']}, to Sam:"]
+    lines = [f"Due Crew {sending['v']} sends:"]
     for day in sorted(sending["days"], reverse=True):
         lines.append("")
         lines.append(day)

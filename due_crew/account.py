@@ -38,12 +38,13 @@ ACCOUNT_KEYS = ("share_reviews", "share_time", "share_retention", "share_streak"
                 "exam_last", "exam_since",  # 3.9.2: my last exam, kept once it's passed; what the next one covers
                 "song",  # 3.9.6: my song of the moment (songs.clean): my mutual friends see it on their board
                 "magic_search", "magic_seen",  # 3.9.7: Magic search on or off; its first-time card seen
-                "send_errs",  # 3.9.9: Privacy's Send Sam what went wrong (errs.py)
+                "send_errs",  # 3.9.9: Privacy's Send what went wrong, and what gets used (errs.py)
+                "use_told",  # 3.9.9: told once what's counted (errs_flow.tell_once)
                 "exam_from", "exam_asked")  # 3.9.9: the plan my exam came from; the plans' exams I was asked about
 ACCENT_NAMES = ("green", "blue", "purple", "teal", "amber", "rose")
 _BOOLS = ("share_reviews", "share_time", "share_retention", "share_streak",
           "share_heatmap", "show_up", "paused", "due_show", "due_suggest", "two_buttons", "magic_search", "magic_seen",
-          "send_errs")
+          "send_errs", "use_told")
 _TEXT = {"exam_date": 10, "away_from": 10, "away_to": 10, "status": 80, "emoji": 16,
          "crew_label": 40, "wrapped_seen": 4, "exam_last": 10, "exam_since": 10}
 MAX_SQUADS = 20

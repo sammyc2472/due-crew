@@ -304,11 +304,11 @@ def _settings_privacy(cfg):
             + _st_row("&#128214; Exam", exam_ctl, "Shown for the two weeks before")
             + _st_row("&#9992;&#65039; Away", away_ctl)
             # 3.9.9, Know when it breaks: the errors this computer met, by code, with the day's first sync
-            + '</div><div class="st-h">What Sam sees</div><div class="st-box">'
-            + _st_row("Send Sam what went wrong",
+            + '</div><div class="st-h">What Due Crew counts</div><div class="st-box">'
+            + _st_row("Send what went wrong, and what gets used",
                       f'<a class="st-lk" href="#" {_st_click("errsee")}>See what went</a>'
-                      + _st_switch("send_errs", _sends_errs(cfg), "Send Sam what went wrong"),
-                      "Error codes and counts. Never your cards, plans or crew.")
+                      + _st_switch("send_errs", _sends_errs(cfg), "Send what went wrong, and what gets used"),
+                      "Error codes, and which parts you opened that day, as counts. Never your cards, plans or crew.")
             + '</div><div class="st-foot"><span>Turning a number off also takes it off this week.</span>'
             # 3.7.1, D3: the page that says what's kept, for how long, and how it goes
             f'<a class="st-lk" href="#" {_st_click("privacypage")}>What Due Crew keeps &rsaquo;</a></div>')
@@ -338,7 +338,7 @@ FIND_WORDS = {
     "dance": "music song songs soundtrack dj party floor dancing pip motion animation corner",
     "songapp": "music app listen spotify apple youtube song",
     # 3.9.9: Know when it breaks
-    "set:send_errs:": "errors error bugs bug crash broken report reports diagnostics problems wrong",
+    "set:send_errs:": "errors error bugs bug crash broken report reports diagnostics problems wrong usage used counts analytics telemetry",
     "errsee": "errors error bugs report diagnostics what goes sent",
 }
 

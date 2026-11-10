@@ -32,6 +32,7 @@ def open_profile():
         t.merge(before)
     _flying.clear()
     errs.use(t, on=yes)
+    use_ready()
     errs.after(_soon)
     t.save()
 
@@ -83,7 +84,7 @@ def _today():
 def _sending(c):
     """(errs part or None, why none goes): what the next sync would carry."""
     if not on(c):
-        return None, "Nothing goes: Send Sam what went wrong is off."
+        return None, "Nothing goes: Send what went wrong, and what gets used is off."
     cl = app.client()
     if not cl.signed_in:
         return None, "Nothing goes while you're signed out."
@@ -124,3 +125,44 @@ def see_what_went():
     errs.switch(on(c))
     part, why = _sending(c)
     sheets.confirm(errs.SHEET_TITLE, errs.sheet_text(part, why), "OK", lambda: None)
+
+
+# ---- 3.9.9: what gets used, said once ----
+
+TOLD = "use_told"
+TELL_TITLE = "Due Crew now counts what gets used"
+TELL_TEXT = ("With a day's error counts, Due Crew now sends which of its parts you opened that day (Insights, Plans, "
+             "Magic search and so on), as counts with no account on them. Never your cards, your numbers or your crew. "
+             "It's the same switch: Settings \u203a Privacy \u203a Send what went wrong, and what gets used.")
+
+
+def use_ready(c=None):
+    """Tell errs whether uses count: the switch on and the person told."""
+    c = app.cfg() if c is None else c
+    errs.use_ok(on(c) and bool(c.get(TOLD)))
+
+
+def tell_once():
+    """On the Decks screen, once a person: what's counted now, with OK and
+    Turn it off. Either way they've been told; nothing is counted before."""
+    c = app.cfg()
+    if c.get(TOLD) or not on(c) or not app.client().signed_in:
+        use_ready(c)
+        return False
+    from . import sheets
+
+    def told(off=False):
+        c2 = app.cfg()
+        c2[TOLD] = True
+        if off:
+            c2["send_errs"] = False
+        app.save_cfg(c2)
+        try:
+            from . import account
+            account.push(c2)
+        except Exception:
+            pass
+        errs.switch(on(c2))
+        use_ready(c2)
+    sheets.confirm(TELL_TITLE, TELL_TEXT, "OK", told, no=lambda: told(True), no_label="Turn it off")
+    return True

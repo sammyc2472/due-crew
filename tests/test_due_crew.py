@@ -20975,7 +20975,7 @@ def test_know_when_it_breaks_v399():
             errs.count("while:off")
             cl.push(labels, conf, version="3.9.9", **errs_flow.for_sync(conf))
             errs_flow.see_what_went()
-            check("errs: Send Sam what went wrong off (its switch, through the board): nothing kept, counted or sent",
+            check("errs: Send what went wrong off (its switch, through the board): nothing kept, counted or sent",
                   conf.get("send_errs") is False and t.days == {} and "errs" not in store.bodies[-1][2]
                   and "is off" in shown[-1][1], (conf, t.days, shown[-1]))
             conf["send_errs"] = True
@@ -21020,8 +21020,8 @@ def test_know_when_it_breaks_v399():
         from due_crew import account, settings_model
         on_html = board.settings_html({"tab": "privacy", "signed_in": True}, {})
         off_html = board.settings_html({"tab": "privacy", "signed_in": True}, {"send_errs": False})
-        check("errs: Privacy's row: Send Sam what went wrong, its line, See what went, the switch as set (on by default)",
-              "Send Sam what went wrong" in on_html and "Error codes and counts. Never your cards, plans or crew." in on_html
+        check("errs: Privacy's row: Send what went wrong, its line, See what went, the switch as set (on by default)",
+              "Send what went wrong, and what gets used" in on_html and "Never your cards, plans or crew." in on_html
               and "duecrew:errsee" in on_html and "duecrew:set:send_errs:0" in on_html and "duecrew:set:send_errs:1" in off_html
               and errs.wanted({}) is errs.SEND_DEFAULT and errs.SEND_DEFAULT is True)
         check("errs: the switch is the account's (every computer), a Settings switch, never Reset board's",
@@ -21029,7 +21029,7 @@ def test_know_when_it_breaks_v399():
               and settings_model.change(["set", "send_errs", "0"], {}) == {"send_errs": False}
               and "send_errs" not in settings_model.change(["setreset"], {}))
         idx = board.settings_index({"signed_in": True}, {})
-        check("errs: Find a setting finds it", any(x["l"] == "Send Sam what went wrong" and "errors" in x["k"] for x in idx)
+        check("errs: Find a setting finds it", any(x["l"] == "Send what went wrong, and what gets used" and "errors" in x["k"] for x in idx)
               and any(x["l"] == "See what went" for x in idx))
 
         # nothing a card or a request said is in any code made here, or in what went
@@ -21278,6 +21278,45 @@ def test_insights_only_when_something_changed_v399():
     check("insights: a card's first right review and its last review, read from its own log's ends, are the same",
           new_first == old_first == {1: 70, 3: 58, 4: 30} and new_last == old_last == {1: 70, 2: 65, 3: 80, 4: 30},
           (new_first, old_first, new_last, old_last))
+
+
+def test_what_gets_used_v399():
+    """3.9.9: which parts were opened today, on the error counts' own path:
+    "use:<part>" once a day however often, "use:any" beside it; nothing
+    before the person has been told, nothing with the switch off, and no
+    name on the switch."""
+    from due_crew import errs, errs_flow
+    saved = dict(errs._now)
+    try:
+        t = errs.Tally()
+        errs.use(t, on=True)
+        errs.use_ok(False)
+        errs.used("insights")
+        untold = dict(t.days)
+        errs.use_ok(True)
+        for _ in range(3):
+            errs.used("insights")
+        errs.used(errs.use_of("planopen"))
+        errs.used(errs.use_of("cheersend"))
+        errs.used("not a part")
+        errs.used(None)
+        day = errs.today()
+        check("used: nothing before being told; then a part once a day however often, use:any once, only parts on the list",
+              untold == {} and t.days[day] == {"use:any": 1, "use:insights": 1, "use:plans": 1, "use:cheers": 1}, (untold, t.days))
+        check("used: a command's part by its first letters, the longest first; none for a command with no part",
+              [errs.use_of(c) for c in ("planteamask", "plan", "duetab", "youins", "insmap", "squadkick", "songuse", "refresh", "css", "")]
+              == ["plansquad", "plans", "due", "insights", "insights", "squads", "songs", None, None, None])
+        check("used: every code passes the server's rule, and a day's parts fit a day's codes",
+              all(errs.clean_code("use:" + p) for p in errs.USE_PARTS) and len(errs.USE_PARTS) < errs.CODES_MAX - 10, errs.USE_PARTS)
+        errs.switch(False)
+        errs.used("magic")
+        check("used: the switch off, nothing counted and what was is gone", t.days == {}, t.days)
+        words = errs_flow.TELL_TITLE + errs_flow.TELL_TEXT + errs.sheet_text({"v": "3.9.9", "days": {"2026-11-09": {"use:any": 1}}})
+        check("used: told in plain words, the switch named, nobody named", "Sam" not in words and "what gets used" in words
+              and "Never your cards" in words and "use:any × 1" in words, words[-120:])
+    finally:
+        errs._now.clear()
+        errs._now.update(saved)
 
 
 def main():

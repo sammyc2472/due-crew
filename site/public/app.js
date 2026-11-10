@@ -2935,6 +2935,21 @@ function fieldPanel() {
       : r.new.length ? h("p", { class: "small" }, h("b", {}, `New since ${day(r.before)}: `), r.new.join(" · "))
       : h("p", { class: "muted small" }, `Nothing new since ${day(r.before)}.`);
     const n = (v) => h("span", { class: "n" }, v.toLocaleString());
+    // 3.9.9: what gets used ("use:insights": the people who opened it that day), apart from what went wrong
+    const uses = r.rows.filter((x) => x.code.startsWith("use:") && x.code !== "use:any");
+    const any = (r.rows.find((x) => x.code === "use:any") || {}).people || 0;
+    r.rows = r.rows.filter((x) => !x.code.startsWith("use:"));
+    r.new = r.new.filter((c) => !c.startsWith("use:"));
+    const used = !uses.length ? null : h("div", { class: "used" },
+      h("h4", {}, "Used", h("span", { class: "muted" }, `${day(r.day)} · of ${any.toLocaleString()} ${any === 1 ? "person" : "people"} who sent a day`)),
+      h("div", { class: "field" },
+        h("span", { class: "hd" }, "Part"), h("span", { class: "hd n" }, "People"), h("span", { class: "hd n" }, "Share"), h("span", { class: "hd ver" }, ""),
+        uses.sort((a, b) => b.people - a.people || a.code.localeCompare(b.code)).flatMap((x) => {
+          const pct = any ? Math.min(100, Math.round(100 * x.people / any)) : 0;
+          return [h("code", {}, x.code.slice(4)), n(x.people), h("span", { class: "n" }, any ? `${pct}%` : ""),
+            h("span", { class: "ver usebar" }, h("i", { style: `width:${pct}%` }))];
+        })),
+      h("small", { class: "muted" }, "A part counts once a day a person, whatever they did there. Only people with the switch on, told once, are in it."));
     box.replaceChildren(...[head(`${day(r.day)}${r.rows.length ? ` · ${r.rows.length} code${r.rows.length === 1 ? "" : "s"}` : ""}`),
       r.rows.length
         ? h("div", { class: "field" },
@@ -2944,7 +2959,7 @@ function fieldPanel() {
             h("code", { class: r.new.includes(x.code) ? "new" : "" }, x.code), n(x.n), n(x.people),
             h("span", { class: "muted ver" }, x.versions.join(", "))]))
         : h("p", { class: "muted small" }, "Nothing went wrong, or nothing has come in yet."),
-      fresh,
+      fresh, used,
       h("small", { class: "muted" }, "Codes and counts only: no names, no cards. People: how many sent that code. Kept 30 days.")]
       .filter(Boolean));
   }

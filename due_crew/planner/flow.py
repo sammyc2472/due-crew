@@ -111,6 +111,8 @@ def noted_followers(plans):
 
 
 def show_plans(plans, select=None, tab=None, new=None):
+    from .. import errs
+    errs.used("planwin")
     from .web import PlanWeb  # 3.9.9: the one plan window (the Qt one went; "plan_window": "qt" is read no more)
     w = PlanWeb(mw, mw.col, plans, Ops(), select=select, tab=tab, cfg=cfg(), new=new)
     _gone_on_close(w)

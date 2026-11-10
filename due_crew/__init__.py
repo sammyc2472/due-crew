@@ -646,6 +646,8 @@ def _you(c, due, plans):
     keys = ((["today", "upcoming", "later"] if due else []) + [k for k, _l in board.YOU_MORE if k not in hidden]
             + ([board.PARTY_TAB[0]] if you["party_on"] else []))
     shown = you["tab"] if you["tab"] in keys else (keys[0] if keys else None)
+    if shown:
+        errs.used(shown if shown in ("plans", "insights", "party") else "due")  # 3.9.9: the tab on screen, once a day
     try:
         if shown == "plans":
             team_flow.plan_lines(plans.get("cards"))  # the next exam's cards at risk, a line a plan
@@ -738,7 +740,8 @@ def _on_did_render(deck_browser):
 def _magic_howto():
     try:
         if not _closing and app.board_up():
-            magic_flow.show_board_howto()
+            if not errs_flow.tell_once():  # 3.9.9: what's counted now, once a person (never two cards at once)
+                magic_flow.show_board_howto()
     except Exception:
         oops()
 
@@ -938,6 +941,7 @@ def _on_js(handled, message, context):
         # 2.12: study rooms answer from the top bar and the review screen too
         parts = message.split(":")
         try:
+            errs.used("fifteen" if "fifteen" in parts[1] else "rooms")
             done = rooms.on_message(parts[1], parts)
         except Exception:
             oops()
@@ -956,6 +960,7 @@ def _on_js(handled, message, context):
         errs.count(errs.cmd_code(cmd, BOARD_CMDS))
     else:
         run(cfg(), parts)
+        errs.used(errs.use_of(cmd))  # 3.9.9: which part was opened today (once a day; Privacy's switch)
     return (True, None)
 
 
@@ -1919,6 +1924,7 @@ def _tools_menu():
 
 def open_magic(text=""):
     """3.9.7: Magic search, unless Settings › Board › Due has it off."""
+    errs.used("magic")
     if not magic_flow.on():
         tooltip("Magic search is off: Settings › Board › Due turns it on.")
         return
