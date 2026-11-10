@@ -21197,6 +21197,65 @@ def test_plan_exam_asked_once_v399():
           ok == 200 and store.plans[pid]["doc"]["events"][0].get("kind") == "exam" and bad == [400, 400], (ok, bad))
 
 
+def test_insights_only_when_something_changed_v399():
+    """3.9.9's review: Insights took seconds of the log on a big deck, again
+    every ten minutes. Past its ten minutes it is worked out again only when
+    the collection changed (its stamp); and the three slow reads of the log
+    give what the old ones gave."""
+    import sqlite3
+    from due_crew import team_flow as TF
+    from due_crew.app import _state
+    import due_crew as dc
+    stamp, calls = [(1, 2, 3, 4, 5)], []
+    db = types.SimpleNamespace(first=lambda sql: stamp[0])
+    saved = (TF.cfg, TF._work_out, dc.mw.col, _state.get("insights"))
+    try:
+        TF.cfg = lambda: {}
+        TF._work_out = lambda did, pid=None, exam="": calls.append(did) or {"n": len(calls)}
+        dc.mw.col = types.SimpleNamespace(db=db, sched=types.SimpleNamespace(day_cutoff=100))
+        _state["insights"] = {}
+        a = TF.insights(7)
+        _state["insights"][7]["at"] -= TF.INSIGHTS_FRESH + 1
+        b = TF.insights(7)
+        _state["insights"][7]["at"] -= TF.INSIGHTS_FRESH + 1
+        stamp[0] = (1, 9, 3, 4, 5)  # an answer since
+        c = TF.insights(7)
+        db.first = lambda sql: 1 / 0  # a stamp that can't be read: worked out, as before
+        _state["insights"][7]["at"] -= TF.INSIGHTS_FRESH + 1
+        d = TF.insights(7)
+        check("insights: kept past ten minutes while nothing changed; again after an answer, or when the stamp can't be read",
+              (a, b, c, d) == ({"n": 1}, {"n": 1}, {"n": 2}, {"n": 3}), (a, b, c, d))
+    finally:
+        TF.cfg, TF._work_out, dc.mw.col, _state["insights"] = saved
+    conn = sqlite3.connect(":memory:")
+    conn.execute("CREATE TABLE revlog (id INTEGER PRIMARY KEY, cid INTEGER, ease INTEGER, type INTEGER)")
+    conn.execute("CREATE INDEX ix_revlog_cid ON revlog (cid)")
+    conn.execute("CREATE TABLE cards (id INTEGER PRIMARY KEY)")
+    rows = [(10, 1, 3, 0), (60, 1, 1, 1), (70, 1, 3, 1),      # card 1: started before, missed, then right
+            (55, 2, 2, 0), (65, 2, 1, 1),                       # card 2: started since, never right in a review
+            (20, 3, 0, 4), (58, 3, 3, 1), (80, 3, 4, 1),        # card 3: a manual entry before (ease 0), first answer since
+            (30, 4, 3, 1)]                                      # card 4: nothing since
+    conn.executemany("INSERT INTO revlog VALUES (?, ?, ?, ?)", rows)
+    conn.executemany("INSERT INTO cards VALUES (?)", [(i,) for i in range(1, 6)])
+    col = types.SimpleNamespace(db=types.SimpleNamespace(
+        list=lambda q, *a: [r[0] for r in conn.execute(q, a)], all=lambda q, *a: conn.execute(q, a).fetchall()))
+    old = [r[0] for r in conn.execute("SELECT cid FROM revlog WHERE ease > 0 AND cid IN (1,2,3,4,5) GROUP BY cid HAVING min(id) >= ?", (50,))]
+    new = TF._first_since(col, "1,2,3,4,5", 50)
+    check("insights: the cards first answered since a day, read from that day on, are the ones the whole log gave",
+          sorted(new) == sorted(old) == [2, 3], (new, old))
+    old_first = dict(conn.execute("SELECT cid, min(id) FROM revlog WHERE type = 1 AND ease > 1 AND cid IN (1,2,3,4,5) GROUP BY cid"))
+    new_first = {c: r for c, r in conn.execute(
+        "SELECT c.id, (SELECT r.id FROM revlog r WHERE r.cid = c.id AND r.type = 1 AND r.ease > 1 ORDER BY r.id LIMIT 1) "
+        "FROM cards c WHERE c.id IN (1,2,3,4,5)") if r is not None}
+    old_last = dict(conn.execute("SELECT cid, max(id) FROM revlog WHERE type = 1 AND ease > 0 AND cid IN (1,2,3,4,5) GROUP BY cid"))
+    new_last = {c: r for c, r in conn.execute(
+        "SELECT c.id, (SELECT r.id FROM revlog r WHERE r.cid = c.id AND r.type = 1 AND r.ease > 0 ORDER BY r.id DESC LIMIT 1) "
+        "FROM cards c WHERE c.id IN (1,2,3,4,5)") if r is not None}
+    check("insights: a card's first right review and its last review, read from its own log's ends, are the same",
+          new_first == old_first == {1: 70, 3: 58, 4: 30} and new_last == old_last == {1: 70, 2: 65, 3: 80, 4: 30},
+          (new_first, old_first, new_last, old_last))
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

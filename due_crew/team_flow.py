@@ -592,13 +592,30 @@ def insights(did, pid=None, exam=""):
     have = (_state.get("insights") or {}).get(did)
     if have and have.get("key") == key and time.time() - have["at"] < INSIGHTS_FRESH:
         return have["view"]
+    stamp = _stamp()
+    if have and have.get("key") == key and stamp is not None and have.get("stamp") == stamp:
+        have["at"] = time.time()  # 3.9.9: nothing studied or changed since: the same view, not seconds of the log again
+        return have["view"]
     view = {}
     try:
         view = _work_out(int(did), pid, exam)
     except Exception:
         oops()
-    _state.setdefault("insights", {})[did] = {"at": time.time(), "view": view, "key": key}
+    _state.setdefault("insights", {})[did] = {"at": time.time(), "view": view, "key": key, "stamp": stamp}
     return view
+
+
+def _stamp():
+    """What Insights is worked out from, as a few numbers: the Anki day, the
+    collection's last change, the log's last answer, the cards' and notes'
+    last edits. None when it can't be read (then Insights is worked out)."""
+    try:
+        col = mw.col
+        return (int(col.sched.day_cutoff),) + tuple(col.db.first(
+            "SELECT (SELECT mod FROM col), (SELECT max(id) FROM revlog), (SELECT max(mod) FROM cards), "
+            "(SELECT count() FROM cards), (SELECT max(mod) FROM notes)"))
+    except Exception:
+        return None
 
 
 def insights_ready(did, pid=None, exam=""):
@@ -661,8 +678,7 @@ def _work_out(did, pid=None, exam=""):
 
     # the header: right on this deck's reviews, first answer of each card each day
     # 3.9.2: split by the cards I started in these two weeks, when the mix shifted (T.right_split)
-    young = col.db.list(f"SELECT cid FROM revlog WHERE ease > 0 AND cid IN ({deck}) GROUP BY cid HAVING min(id) >= ?",
-                        since(T.DAYS))
+    young = _first_since(col, deck, since(T.DAYS))
     out["right"] = T.right_days(col.db.all(
         f"SELECT cid, CAST((? - id / 1000) / 86400 AS INTEGER), ease FROM revlog "
         f"WHERE id >= ? AND type = 1 AND ease > 0 AND cid IN ({deck}) ORDER BY id", cutoff - 1, since(2 * T.DAYS)), young)
@@ -692,8 +708,7 @@ def _work_out(did, pid=None, exam=""):
         first_day, why = T.scope(exam, c.get("exam_last"), c.get("exam_since"), today)
         out["aim"].update(since=first_day or "", since_why=why, since_pick=str(c.get("exam_since") or ""), today=str(today))
         if first_day:
-            got = col.db.list(f"SELECT cid FROM revlog WHERE ease > 0 AND cid IN ({deck}) GROUP BY cid HAVING min(id) >= ?",
-                              _since_ms(first_day, cutoff, today))
+            got = _first_since(col, deck, _since_ms(first_day, cutoff, today))
             aimed = _in(got)
             out["aim"]["since_n"] = len(got)
     if _fsrs(col) and aimed and sday:
@@ -721,8 +736,10 @@ def _work_out(did, pid=None, exam=""):
         reviewed.add(cid)
         if ease == 1:
             miss_last[cid] = max(miss_last.get(cid, 0), rid)
-    first_right = dict(col.db.all(f"SELECT cid, min(id) FROM revlog WHERE type = 1 AND ease > 1 AND cid IN ({_in(reviewed)}) "
-                                  f"GROUP BY cid")) if reviewed else {}
+    # 3.9.9: a card's first right review, read from the front of its own log and no further
+    first_right = {c: r for c, r in col.db.all(
+        f"SELECT c.id, (SELECT r.id FROM revlog r WHERE r.cid = c.id AND r.type = 1 AND r.ease > 1 ORDER BY r.id LIMIT 1) "
+        f"FROM cards c WHERE c.id IN ({_in(reviewed)})") if r is not None} if reviewed else {}
     stuck = reviewed - set(first_right)
     forgot = {c for c, m in miss_last.items() if c in first_right and first_right[c] < m}
     if p:
@@ -786,6 +803,15 @@ def _since_ms(day, cutoff, today):
     """A revlog id: the start of that Anki day."""
     back = (datetime.date.fromisoformat(str(today)) - datetime.date.fromisoformat(str(day))).days
     return (int(cutoff) - (back + 1) * 86400) * 1000
+
+
+def _first_since(col, deck, ms):
+    """The deck's cards whose first answer is at or after ms. 3.9.9: read from
+    the answers since then (the log's own order), each card checked for one
+    before; grouping the deck's whole log took most of a second on a big deck."""
+    return col.db.list(
+        f"SELECT DISTINCT r.cid FROM revlog r WHERE r.id >= ? AND r.ease > 0 AND +r.cid IN ({deck}) "
+        f"AND NOT EXISTS (SELECT 1 FROM revlog o WHERE o.cid = r.cid AND o.id < ? AND o.ease > 0)", ms, ms)
 
 
 def _deck_sql(col, did):
@@ -855,8 +881,10 @@ def _know(col, deck, cutoff):
     rest = [c for c in live if c not in out]
     if rest:
         out.update({c: None for c in rest})
+        # 3.9.9: its last review, read from the end of its own log and no further
         pick = [int(rev) for _cid, rev in col.db.all(
-            f"SELECT cid, max(id) FROM revlog WHERE type = 1 AND ease > 0 AND cid IN ({_in(rest)}) GROUP BY cid")]
+            f"SELECT c.id, (SELECT r.id FROM revlog r WHERE r.cid = c.id AND r.type = 1 AND r.ease > 0 ORDER BY r.id DESC LIMIT 1) "
+            f"FROM cards c WHERE c.id IN ({_in(rest)})") if rev is not None]
         if pick:
             out.update({int(c): 1.0 if int(e) > 1 else 0.0
                         for c, e in col.db.all(f"SELECT cid, ease FROM revlog WHERE id IN ({_in(pick)})")})
