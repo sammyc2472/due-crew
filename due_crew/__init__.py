@@ -634,10 +634,53 @@ def _dance_seen():
             oops()
 
 
+def _calm_check(c, plans):
+    """3.9.9, the calm board: the parts that now have something to show are
+    let out, with the board's line. From what's at hand; never raises."""
+    from . import calm
+    if not calm.on(c) or not calm.held(c):
+        return
+    try:
+        entries = [e for e in (_state.get("entries") or []) if not e.get("me")]
+        days = _state.get("calm_days")
+        if (days is None or days[0] != errs.today()) and mw.col:
+            first = mw.col.db.scalar("SELECT min(id) FROM revlog WHERE ease > 0")
+            days = _state["calm_days"] = (errs.today(), None if not first else int((time.time() - int(first) / 1000) // 86400))
+        facts = {"friends": len(entries), "squads": len(c.get("squads") or []),
+                 "plans": len(plans or []) if isinstance(plans, (list, tuple)) else int(bool(plans)),
+                 "days": days[1] if days else None}
+        if calm.release(c, calm.ready(facts), news=True):
+            save_cfg(c)
+    except Exception:
+        oops()
+
+
+def _calm_cmd(c, parts):
+    """The calm board's line and Show all."""
+    from . import calm
+    cmd, arg = parts[1], parts[2] if len(parts) > 2 else ""
+    if cmd == "calmall":
+        calm.show_all(c)
+        save_cfg(c)
+        _swap(c)
+    elif cmd == "calmx":
+        if calm.seen(c):
+            save_cfg(c)
+        _swap(c)
+    elif cmd == "calmopen":
+        calm.seen(c, arg)
+        save_cfg(c)
+        if arg in ("squads", "decks"):
+            _cmd_period(c, ["duecrew", "period", arg])
+        else:
+            due_flow.on_message("duetab", ["duecrew", "duetab", arg])
+
+
 def _you(c, due, plans):
     """3.8.0, the You bubble over the board: its tab, folded or not, and the
     Plans or Insights it draws. Only the one on screen is worked out."""
     from . import team_flow
+    _calm_check(c, plans)
     hidden = board.hidden_tabs(c)
     you = {"tab": due_flow.you_tab(c), "folded": due_flow.folded(c, due), "plans": plans, "insights": None,
            "party_on": "party" not in hidden and gamenight_flow.shown()}  # 3.9.5: You › Pip Party, unless hidden in Settings
@@ -1125,6 +1168,8 @@ _FAMILIES = (
 
 # a command: (how many values after its name, a check on them, what it does with (cfg, parts))
 BOARD_CMDS = {
+    "calmall": (0, None, _calm_cmd), "calmx": (0, None, _calm_cmd),  # 3.9.9: the calm board (calm.py)
+    "calmopen": (1, lambda p: p[2] in ("decks", "squads", "plans", "insights"), _calm_cmd),
     "party": (0, None, lambda c, p: gamenight_flow.on_message(p)),  # 3.9.5's last round: You › Pip Party
     "magic": (0, None, lambda c, p: open_magic()),  # 3.9.7: Magic search, from the You box's head (and Find a setting)
     "css": (0, None, _cmd_css),
@@ -1252,6 +1297,9 @@ def open_auth():
         with _lock:
             _fetching = False  # the last session's refresh can't commit now
         if dlg.joined:
+            c = cfg()
+            c["calm"], c["calm_open"], c["calm_news"] = True, [], []  # 3.9.9: a new person's board starts calm (calm.py)
+            save_cfg(c)
             _welcome()
         else:
             tooltip(f"Welcome back, {html.escape(name)}.")

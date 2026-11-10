@@ -1296,6 +1296,9 @@ def go_insights(did):
     _habits_shut()  # 3.9.5: nor How you study
     if "insights" in (c.get("hidden_tabs") or []):
         c["hidden_tabs"] = [k for k in c["hidden_tabs"] if k != "insights"]
+    from . import calm
+    calm.release(c, ["insights"])
+    calm.seen(c, "insights")
     if mw.col and mw.col.decks.get(did, default=False):
         c["ins_deck"] = did
         if not any(d["did"] == did for d in you_decks()):

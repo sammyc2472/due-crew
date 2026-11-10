@@ -1010,6 +1010,9 @@ def on_message(cmd, parts):
     if cmd == "duetab" and arg in YOU_TABS:
         if arg in (c.get("hidden_tabs") or []):
             c["hidden_tabs"] = [k for k in c["hidden_tabs"] if k != arg]  # a link to it shows it again
+        from . import calm
+        calm.release(c, [arg])  # 3.9.9: and the calm board lets it out
+        calm.seen(c, arg)
         c["due_tab"] = arg
         c["due_fold"] = {"day": _today(), "folded": False}
         save_cfg(c)

@@ -867,6 +867,8 @@ def open_tab():
     c["due_tab"] = "party"
     if "party" in (c.get("hidden_tabs") or []):
         c["hidden_tabs"] = [k for k in c["hidden_tabs"] if k != "party"]  # hidden in Settings: asked for, it shows again
+    from . import calm
+    calm.release(c, ["party"])  # 3.9.9: the calm board's one way to Pip Party
     from . import team_flow
     c["due_fold"] = {"day": team_flow._today(), "folded": False}
     save_cfg(c)

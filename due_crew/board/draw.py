@@ -149,6 +149,24 @@ def _one_at_a_time(bans):
     return f'<div class="dc-bans">{"".join(out)}</div>'
 
 
+def _calm_line(cfg):
+    """3.9.9, the calm board (calm.py): the part that just appeared, in one
+    line with its way in and its way off; else, while parts are folded, Show all."""
+    from .. import calm
+    if not calm.on(cfg):
+        return ""
+    h = calm.hint(cfg)
+    if h:
+        part, bold, rest, go = h
+        return (f'<div class="dc-calm"><span><b>{bold}</b> {rest}</span><span class="sp"></span>'
+                f'<a href="#" onclick="{_pycmd(f"calmopen:{part}")}">{go}</a>'
+                f'<a href="#" class="x" title="Put this away" aria-label="Put this away" onclick="{_pycmd("calmx")}">&times;</a></div>')
+    if calm.held(cfg):
+        return (f'<div class="dc-calm"><span>More when you&rsquo;re ready</span><span class="sp"></span>'
+                f'<a href="#" title="Every tab now; Settings &rsaquo; Board has the switch" onclick="{_pycmd("calmall")}">Show all</a></div>')
+    return ""
+
+
 def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
            rules_stale=False, squad_view=None, knocks=None, reviews=None,
            sync_error=False, live=False, tricky=None, milestones=None, room=None, plans=None,
@@ -302,7 +320,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     failed = ('<span class="warn" title="The last sync didn\'t reach the server. '
               'Your numbers are safe; Refresh tries again.">Couldn&rsquo;t sync</span>'
               ' &middot; ') if sync_error else ""
-    foot = (f'<div class="dc-foot"><span class="fl">{left}</span><span class="sp"></span>'
+    foot = (_calm_line(cfg) + f'<div class="dc-foot"><span class="fl">{left}</span><span class="sp"></span>'
             f'<span class="fr">{failed}<span class="upd">Updated {ago}</span>'
             f'<a class="ic" href="#" title="Refresh" onclick="{_pycmd("refresh")}">&#8635;</a>'
             f'<a class="ic" href="#" title="Settings" onclick="{_pycmd("settings")}">&#9881;&#xFE0E;</a></span></div>')

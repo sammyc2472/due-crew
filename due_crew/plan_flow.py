@@ -2567,6 +2567,9 @@ def show_plans(c, swap=True):
     hidden = [k for k in (c.get("hidden_tabs") or []) if k != "plans"]
     if hidden != list(c.get("hidden_tabs") or []):
         c["hidden_tabs"] = hidden
+    from . import calm
+    calm.release(c, ["plans"])
+    calm.seen(c, "plans")
     save_cfg(c)
     if swap:
         app.swap(c)

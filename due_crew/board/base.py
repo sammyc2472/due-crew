@@ -74,7 +74,9 @@ def _tab_word(k, lb):
 
 
 def hidden_tabs(cfg):
-    return {k for k in (cfg.get("hidden_tabs") or []) if k in dict(HIDEABLE_TABS)}
+    """Hidden in Settings › Board, and (3.9.9) what the calm board keeps folded for now."""
+    from .. import calm
+    return {k for k in (cfg.get("hidden_tabs") or []) if k in dict(HIDEABLE_TABS)} | calm.held(cfg)
 
 
 def _head_label(icon, text):

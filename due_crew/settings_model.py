@@ -17,6 +17,7 @@ SWITCHES = ("show_leaderboard", "show_stale", "sync_notifications", "compact",
             "fifteen", "sev",  # 3.8.1: ▶ Fifteen? and the nudge; Pip
             "two_buttons",  # 3.9.1: Again and Good alone (not the board's look: Reset board leaves it)
             "magic_search",  # 3.9.7: Magic search in the You box's head, and its key
+            "calm",  # 3.9.9: the calm board (calm.py): parts appear when they have something to show
             "send_errs")  # 3.9.9: Privacy's Send Sam what went wrong (errs.py; never Reset board's)
 CHOICES = {"theme": ("auto", "light", "dark"),
            "accent": ("green", "blue", "purple", "teal", "amber", "rose"),
@@ -30,7 +31,8 @@ BOARD_DEFAULTS = {"show_leaderboard": True, "show_stale": True, "sync_notificati
                   "theme": "auto", "accent": "green", "compact": False, "highlight_me": True,
                   "crew_label": "Crew", "room_chip_side": "right", "hidden_tabs": [], "shortcuts": True,
                   "fifteen": True, "sev": True, "sev_break": "breathe",
-                  "dance_floor": True, "dance": "gentle", "dance_folded": False}  # 3.9.6: the dance floor
+                  "dance_floor": True, "dance": "gentle", "dance_folded": False,
+                  "calm": False, "calm_news": []}  # 3.9.6: the dance floor
 
 
 def _day(text):
@@ -57,7 +59,10 @@ def change(parts, cfg, today=None):
         hidden = [k for k in (cfg.get("hidden_tabs") or []) if k in HIDEABLE and k != arg]
         if val == "0":
             hidden.append(arg)
-        return {"hidden_tabs": [k for k in HIDEABLE if k in hidden]}
+        out = {"hidden_tabs": [k for k in HIDEABLE if k in hidden]}
+        if val == "1" and cfg.get("calm"):  # 3.9.9: shown by hand, the calm board lets it out for good
+            out["calm_open"] = [k for k in HIDEABLE if k in set(cfg.get("calm_open") or []) | {arg}]
+        return out
     if cmd == "setlabel":
         text = " ".join(unquote(":".join(parts[1:])).split())
         from .backend.shapes import printable

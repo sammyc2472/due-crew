@@ -21319,6 +21319,58 @@ def test_what_gets_used_v399():
         errs._now.update(saved)
 
 
+def test_calm_board_v399():
+    """3.9.9, the calm board: a new person sees Crew and Today; a part
+    stays folded until it has something to show, then says so in one line;
+    Show all, Settings and any link to a part let it out for good. Off for
+    everyone who had the board before."""
+    from due_crew import calm, board, settings_model as SM
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    if "aqt.reviewer" not in sys.modules:
+        sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
+    old = {"hidden_tabs": ["party"]}
+    check("calm: off unless asked: the board as it was", board.hidden_tabs(old) == {"party"} and board.draw._calm_line(old) == "")
+    c = {"calm": True, "calm_open": [], "calm_news": [], "hidden_tabs": []}
+    check("calm: a new person's board: every part but Crew and Today folded, and the way out said",
+          board.hidden_tabs(c) == set(calm.PARTS) and "Show all" in board.draw._calm_line(c) and "calmall" in board.draw._calm_line(c))
+    check("calm: what's ready: a friend, a squad, a plan, two weeks of reviews; Pip Party never by itself",
+          calm.ready({"friends": 0, "squads": 0, "plans": 0, "days": 13}) == []
+          and calm.ready({"friends": 2, "squads": 1, "plans": 1, "days": 14}) == ["decks", "squads", "plans", "insights"]
+          and calm.ready({"days": None}) == [])
+    changed = calm.release(c, calm.ready({"friends": 1, "days": 20}), news=True)
+    line = board.draw._calm_line(c)
+    check("calm: a part lets itself out once, with its line: its words, Open and its way off",
+          changed and board.hidden_tabs(c) == {"squads", "plans", "party"} and "Decks is ready" in line
+          and "calmopen:decks" in line and "calmx" in line and not calm.release(c, ["decks"], news=True), line)
+    saved = (dc.cfg, dc.save_cfg, dc._swap, dc._cmd_period, dc.due_flow.on_message)
+    went = []
+    try:
+        dc.cfg = lambda: c
+        dc.save_cfg = lambda x, **k: None
+        dc._swap = lambda *a, **k: went.append("swap")
+        dc._cmd_period = lambda cc, p: went.append(("period", p[2]))
+        dc.due_flow.on_message = lambda cmd, p: went.append((cmd, p[2]))
+        send = lambda m: dc._on_js(False, as_board("duecrew:" + m), DeckBrowser())
+        send("calmopen:decks")
+        send("calmx")
+        after_x = list(c["calm_news"])
+        send("calmopen:insights")
+        send("calmopen:nonsense")
+        check("calm: Open goes to the part and its line goes; x puts the next away; a made-up part is no command",
+              went == [("period", "decks"), "swap", ("duetab", "insights")] and after_x == [] and c["calm_news"] == [], (went, c))
+        c["calm_news"] = ["insights"]
+        send("calmall")
+        check("calm: Show all: every tab, the switch off, nothing left to say",
+              c["calm"] is False and board.hidden_tabs(c) == set() and board.draw._calm_line(c) == "" and c["calm_news"] == [], c)
+    finally:
+        dc.cfg, dc.save_cfg, dc._swap, dc._cmd_period, dc.due_flow.on_message = saved
+    c2 = {"calm": True, "calm_open": [], "hidden_tabs": []}
+    got = SM.change(["settabs", "squads", "1"], c2)
+    check("calm: a tab shown by hand in Settings is out for good; the switch is Settings › Board's",
+          got.get("calm_open") == ["squads"] and "calm" in SM.SWITCHES and SM.change(["set", "calm", "1"], {}) == {"calm": True}, got)
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

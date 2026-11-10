@@ -124,6 +124,12 @@ def _css(cfg):
                           color: var(--dc-muted); font-weight: 400; }}
     #due-crew .la.fresh {{ color: var(--dc-fresh); }} #due-crew .la.hours {{ color: var(--dc-hours); }}
     #due-crew .la.faded {{ color: var(--dc-faded); }}
+    #due-crew .dc-calm {{ display: flex; gap: 10px; align-items: baseline; text-align: left; font-size: 11.5px; color: var(--dc-muted);
+        padding: 8px 4px 0; margin-top: 6px; border-top: 1px solid var(--dc-line); }}
+    #due-crew .dc-calm b {{ color: var(--dc-ink); font-weight: 600; }}
+    #due-crew .dc-calm .sp {{ flex: 1; }}
+    #due-crew .dc-calm a {{ color: var(--dc-accent); text-decoration: none; font-weight: 600; white-space: nowrap; }}
+    #due-crew .dc-calm a.x {{ color: var(--dc-muted); font-weight: 400; }}
     #due-crew .dc-foot {{ display: flex; gap: 10px; font-size: 10.5px; color: var(--dc-muted); padding: 8px 4px 0; }}
     #due-crew .dc-foot .sp {{ flex: 1; }}
     #due-crew .dc-foot .fl, #due-crew .dc-foot .fr {{ display: inline-flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }}
