@@ -5,9 +5,9 @@ Magic search took it in 3.9.7). Tools › Due Crew › Plans opens them, and
 the board: You › Plans' head row and each plan card's Open, Find a
 setting.
 
-Labs is what stays behind this computer's "labs" switch (a key no window
-sets; docs/planner.md says how): Claude's stand-in, session by session
-(start_window.py), and What Claude would get (claude.py: nothing is sent).
+Labs was what stayed behind this computer's "labs" switch: the calendar
+window, session by session. It went in 3.9.9 (start_window.py, picker.py;
+Sam: "don't think it works well enough"); the key opens nothing now.
 
 Round five: every change is an op (ops.py, pure), waiting under the plan
 till it's sent when anyone follows it (draft.py, pure); view.py works out
@@ -18,7 +18,7 @@ edits.py and reading.py are pure; actions.py is the one collection step
 it adds; remote.py its requests (routes the builder uses already); flow.py
 the glue; web.py the plan window (a page: webface.py, webmodel.py,
 webtabs.py, webnew.py, page/; the Qt one went in 3.9.9); text_tab.py,
-date_dialogs.py, picker.py and start_window.py the Qt windows left;
+and date_dialogs.py the Qt windows left;
 widgets.py a window's first size; build.py the builder's rules, text.py
 its Text.
 """

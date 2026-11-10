@@ -16,7 +16,7 @@ from .. import app, plan_flow
 from .. import plans as P
 from ..app import _bg, _state, cfg, client, save_cfg
 from ..backend.shapes import TransportError
-from . import enabled, remote
+from . import enabled, remote  # noqa: F401 (enabled: the labs switch, nothing behind it since 3.9.9)
 from ..errs import oops
 
 _open = {}       # "plans", "start" -> the window, while it's open
@@ -554,19 +554,6 @@ def open_new(start=None, finish_by=None, exam=None):
     open_plans(new={"start": start, "finish_by": finish_by, "exam": exam})
 
 
-# ---- a plan from a block's calendar (claude.py's jobs, a stand-in for now) ----
-
-def open_start():
-    """New plan from a calendar (3.9.3, for everyone): signed in (it makes
-    a plan on the server), a collection open. Claude's stand-in and What
-    Claude would get stay behind the labs switch."""
-    if not mw.col or _raise("start"):
-        return
-    if not plan_flow._signed_in():
-        return
-    show_start()
-
-
 def top_decks(col):
     """[(deck id, name, cards)]: the top-level normal decks, biggest first
     (a new plan starts on the biggest)."""
@@ -580,17 +567,9 @@ def top_decks(col):
     return sorted(out, key=lambda x: (-x[2], x[1].lower()))
 
 
-def show_start():
-    from .start_window import StartWindow
-    w = StartWindow(mw, top_decks(mw.col), StartOps(), labs=enabled())
-    _gone_on_close(w)
-    _open["start"] = w
-    w.show()
-    return w
-
-
 class StartOps:
-    """What the calendar window asks of the add-on."""
+    """A plan made and saved in one click (New plan's; the calendar window it
+    was written for went in 3.9.9: Sam, "don't think it works well enough")."""
 
     def today(self):
         import datetime

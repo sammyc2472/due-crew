@@ -925,10 +925,10 @@ def test_start_flow():
     from due_crew.planner import flow
     store = world({"sam": "Sammy", "dre": "Dre"})
     store.admins.add("sam")
-    sam, dre = new_client(store, "sam"), new_client(store, "dre")
+    sam = new_client(store, "sam")
     col = collection()
-    shown, tips = [], []
-    saved = (flow.enabled, flow.client, flow._bg, flow.show_start, flow.tooltip, flow.mw.col, flow.plan_flow._signed_in,
+    tips = []
+    saved = (flow.enabled, flow.client, flow._bg, flow.tooltip, flow.mw.col, flow.plan_flow._signed_in,
              flow.remote.save, flow.open_plans)
     try:
         flow.mw.col = col
@@ -936,14 +936,8 @@ def test_start_flow():
               flow.top_decks(col) == [(1, "Big Step 1", 15), (3, "Mine", 0)], flow.top_decks(col))
         flow.enabled = lambda: True
         flow._bg = lambda job, done: done(job())
-        flow.show_start = lambda: shown.append(True)
         flow.tooltip = lambda text, **k: tips.append(text)
         flow.plan_flow._signed_in = lambda: True
-        flow.client = lambda: dre
-        n = len(store.log)
-        flow.open_start()
-        check("calendar glue: anyone signed in gets it (3.9.3), nothing asked of the server to open it",
-              shown == [True] and not tips and len(store.log) == n, (shown, tips))
         flow.client = lambda: sam
         ops = flow.StartOps()
         owner = types.SimpleNamespace(_alive=True)
@@ -982,7 +976,7 @@ def test_start_flow():
         ops.make(owner, "MS2 Block 4", doc, got.append)
         check("calendar glue: a window closed meanwhile is told nothing", got == [])
     finally:
-        (flow.enabled, flow.client, flow._bg, flow.show_start, flow.tooltip, flow.mw.col, flow.plan_flow._signed_in,
+        (flow.enabled, flow.client, flow._bg, flow.tooltip, flow.mw.col, flow.plan_flow._signed_in,
          flow.remote.save, flow.open_plans) = saved
         flow._open.clear()
 
@@ -995,7 +989,7 @@ def test_rules_of_the_road():
           "attach_alive(self)" in web and "colors(self.cfg)" in web and "set_bridge_command(self._on_cmd" in web
           and "QLabel" not in web and "setStyleSheet" not in web)
     check("road: the windows, each wearing the board's look and saying what it is",
-          sorted(windows) == ["date_dialogs.py", "mcp_dialog.py", "picker.py", "start_window.py", "text_tab.py"]
+          sorted(windows) == ["date_dialogs.py", "mcp_dialog.py", "text_tab.py"]
           and all(len(re.findall(r"\(QDialog[,)]", t)) == t.count("attach_alive(self)") == len(re.findall(r"\bheading\(self", t))
                   for t in windows.values()), sorted(windows))
     tabs = {f: t for f, t in src.items() if "(QWidget)" in t}  # round five: Your plans' tabs and panels
@@ -1018,7 +1012,7 @@ def test_rules_of_the_road():
     check("road: the pure parts and the requests import no aqt",
           not [f for f in pure if re.search(r"^\s*(from aqt|import aqt)", src[f], re.M)])
     calls = set()
-    for f in ("flow.py", "text_tab.py", "date_dialogs.py", "picker.py", "start_window.py", "mcp_host.py", "mcp_dialog.py",
+    for f in ("flow.py", "text_tab.py", "date_dialogs.py", "mcp_host.py", "mcp_dialog.py",
               "web.py", "webface.py", "webtabs.py", "webnew.py", "webmodel.py"):
         for node in ast.walk(ast.parse(src[f])):
             if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "remote":
@@ -1045,7 +1039,7 @@ def test_rules_of_the_road():
           and 'api("GET", "/friends")' in builder, routes)
     check("road: Claude isn't connected: the stand-in sends nothing, and nothing reads a card's text for it",
           not re.search(r"^\s*(?:from|import)\s+(?:requests|urllib|http|socket|anthropic)\b", src["claude.py"] + src["reading.py"], re.M)
-          and not re.search(r"\bflds\b|\.note\(|\bnote\[", src["claude.py"] + src["reading.py"] + src["start_window.py"]))
+          and not re.search(r"\bflds\b|\.note\(|\bnote\[", src["claude.py"] + src["reading.py"]))
     ui_files = {f: t for f, t in windows_tabs.items() if f not in ("widgets.py",)}
     hallmarks = [(f, m) for f, t in ui_files.items()
                  for m in re.findall(r'(?:link|tool|plain|QPushButton|menu_button|addAction)\(\s*f?"(\+ [^"]*|[^"]*[◆▾↗][^"]*)"', t)]
