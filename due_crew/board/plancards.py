@@ -64,7 +64,58 @@ def _you_plans(plans, opened=None, people=None, cfg=None):
     if opened and not opened.get("dates") and (plans or {}).get("opened_dates"):
         opened = dict(opened, dates=plans["opened_dates"])  # 3.8.1: its dates, as Due's Today has them
     return (_opened_line(opened) + _invite_lines((plans or {}).get("invites"))
-            + _offer_banners((plans or {}).get("offers")) + _plans_html(plans, people, cfg))
+            + _offer_banners((plans or {}).get("offers")) + _plans_html(plans, people, cfg)
+            + _load_html((plans or {}).get("load")))
+
+
+_LOAD_INK = ("var(--dc-accent)", "var(--dc-hours)", "var(--dc-fresh)", "var(--dc-ink)")
+
+
+def _load_html(load):
+    """3.9.9, the week across plans (plans.load_week), under the plan's
+    card when two plans have something in the next seven days: a row a day,
+    my reviews and each plan's new cards as one bar at my own pace, the
+    day's time; a heavy day's line, with one press that moves its smallest
+    set to the nearest day with room (my follow only), and Put it back after. Plan and
+    set names are their authors': escaped."""
+    if not load:
+        return ""
+    from .. import plans as P
+    e = _html.escape
+    ink = lambda i: _LOAD_INK[min(i, len(_LOAD_INK) - 1)]
+    key = '<span><i style="background:var(--dc-faded)"></i>Reviews due</span>' + "".join(
+        f'<span><i style="background:{ink(i)}"></i>{e(p["name"])}</span>' for i, p in enumerate(load["plans"]))
+    top = max(1, int(load.get("top") or 1))
+    rows = ""
+    for d in load["days"]:
+        said = f'{d["rev"]:,} reviews' + "".join(
+            f', {n:,} new in {p["name"]}' for n, p in zip(d["parts"], load["plans"]) if n)
+        width = 100 * d["min"] / top
+        inks = ["var(--dc-faded)"] + [ink(i) for i in range(len(d["parts"]))]
+        segs = "".join(f'<i style="width:{width * sh:.1f}%;background:{c}"></i>' for sh, c in zip(d["share"], inks) if sh)
+        rows += (f'<div class="lwd{" now" if d["today"] else ""}" title="{e(said)}"><span class="d">{e(d["dow"])} {int(d["num"])}</span>'
+                 f'<span class="st">{segs}</span>'
+                 f'<span class="n{" hv" if d["heavy"] else ""}">{P.load_time(d["min"]) if d["min"] else "&ndash;"}</span></div>')
+    foot = ""
+    back, hint = load.get("back"), load.get("hint")
+    if back:
+        cmd = _pycmd(f'planmoveback:{back["pid"]}:{back["uid"]}')
+        foot += (f'<div class="lwh"><span>{e(back["name"])} moved to {e(P.fmt_day(back["day"]))}.</span>'
+                 f'<a href="#" onclick="{cmd}">Put it back</a></div>')
+    if hint:
+        day = "Today" if hint["day"] == load["days"][0]["day"] else P.weekday_or_day(hint["day"], load["days"][0]["day"])
+        across = f' across {hint["plans"]} plans' if hint["plans"] > 1 else ""
+        on_top = f' on top of {hint["rev"]:,} reviews' if hint["rev"] else ""
+        mv = hint.get("move")
+        link = ""
+        if mv:
+            cmd = _pycmd(f'planmoveto:{mv["pid"]}:{mv["uid"]}:{int(mv["n"])}')
+            link = (f'<a href="#" title="Changes your days only, never the plan" onclick="{cmd}">'
+                    f'Move {e(mv["name"])} to {e(P.weekday_or_day(mv["to"], load["days"][0]["day"]))}</a>')
+        foot += (f'<div class="lwh"><span><b>{e(day)} is heavy:</b> {hint["new"]:,} new{across}{on_top}.</span>{link}</div>')
+    note = "Times use your own pace per card." if load.get("known") else "Times use a typical pace until there's more of yours to read."
+    return (f'<div class="lw"><div class="pwh"><b>Everything this week</b></div><div class="lwk">{key}</div>{rows}{foot}'
+            f'<div class="lwx">{note}</div></div>')
 
 
 def _invite_lines(invites):

@@ -4937,6 +4937,28 @@ def test_your_own_days_376():
             check("move: on its new day, marked moved, with Put it back", "&middot; moved" in html and f"planmoveback:{pid}:cz" in html)
             dc._on_js(False, as_board(f"duecrew:planmoveback:{pid}:cz"), DeckBrowser())
             check("move: Put it back (sent as the board does) takes it off", not store.follows[(pid, "maya")].get("moved"))
+            dc._on_js(False, as_board(f"duecrew:planmoveto:{pid}:cz:2"), DeckBrowser())  # 3.9.9: the load view's Move
+            check("load: its Move (sent as the board does) is my follow's, remembered for Put it back; the plan unchanged",
+                  store.follows[(pid, "maya")].get("moved") == {"cz": 2} and F._state.get("load_moved") == (pid, "cz")
+                  and store.plans[pid]["doc"]["units"][3]["opens"] == _day(7))
+            dc._on_js(False, as_board(f"duecrew:planmoveback:{pid}:cz"), DeckBrowser())
+            check("load: Put it back takes it off", not store.follows[(pid, "maya")].get("moved"))
+            pid2, code2 = store.add_plan("dre", "Pharm", "Pharm", [
+                {"id": "x1", "name": "Pharm 1", "opens": _day(3), "tags": ["Step1::Cardio::Heart_failure"]}])
+            plan2, _ = maya.follow_plan(code2)
+            F.on_followed(plan2, 10, None, "open")
+            maya.fetch_board(labels, with_decks=True)
+            F._last.update(key=None, got=None)
+            F.refresh_progress()
+            lv = F.load_view(F.followed(), F._state_cfg(), _day(0))
+            had_labels, F._state["labels"] = F._state.get("labels"), labels  # the board's today
+            in_board = F.board_view({})
+            F._state["labels"] = had_labels
+            check("load: through the glue: both plans on this deck, each set on my day with what's new to me then",
+                  lv is not None and {x["pid"] for x in lv["plans"]} == {pid, pid2}
+                  and lv["days"][3]["new"] == sum(lv["days"][3]["parts"]) > 1 and len(lv["days"]) == 7
+                  and (in_board.get("load") or {}).get("plans") == lv["plans"]
+                  and "Everything this week" in board.plancards._you_plans(in_board), lv)
             F.move_date(pid, "cz", 2)
             maya.set_days(pid, shift=3)
             asked = []
@@ -21393,6 +21415,60 @@ def test_calm_board_v399():
     got = SM.change(["settabs", "squads", "1"], c2)
     check("calm: a tab shown by hand in Settings is out for good; the switch is Settings › Board's",
           got.get("calm_open") == ["squads"] and "calm" in SM.SWITCHES and SM.change(["set", "calm", "1"], {}) == {"calm": True}, got)
+
+
+def test_load_across_plans_v399():
+    """3.9.9 (plans, what was missing: 2): You › Plans adds up the next
+    seven days across plans, reviews and each plan's new cards at my own
+    pace; a day half again over my usual is heavy, and its smallest set not
+    yet open moves, in one press, to the nearest later day that stays
+    under heavy, before its event. My follow only."""
+    from due_crew import plans as P, board
+    pace = {"new_s": 60, "rev_s": 6, "day_min": 60, "known": True}
+    t = _day(0)
+    sets = [{"pid": "a", "plan": "Heme", "uid": "h1", "name": "Anemias", "day": t, "ask": 20, "moved": 0, "cap": ""},
+            {"pid": "a", "plan": "Heme", "uid": "h2", "name": "Coag", "day": _day(1), "ask": 70, "moved": 0, "cap": ""},
+            {"pid": "b", "plan": "Pharm <b>", "uid": "p6", "name": "Pharm 6", "day": _day(1), "ask": 30, "moved": 1, "cap": _day(4)},
+            {"pid": "b", "plan": "Pharm <b>", "uid": "p7", "name": "Pharm 7", "day": _day(9), "ask": 30, "moved": 0, "cap": ""}]
+    rev = {t: 300, _day(1): 200, _day(2): 500, _day(3): 100, _day(4): 0, _day(20): 900}
+    v = P.load_week(sets, rev, t, pace)
+    d = v["days"]
+    check("load: seven days from today, reviews and each plan's new cards, minutes at my pace",
+          len(d) == 7 and d[0]["today"] and [p["pid"] for p in v["plans"]] == ["a", "b"]
+          and d[0]["parts"] == [20, 0] and d[0]["rev"] == 300 and d[0]["min"] == 50
+          and d[1]["parts"] == [70, 30] and d[1]["min"] == 120 and d[6]["min"] == 0, d[:2])
+    check("load: heavy is half again over my usual day, and only with new cards in it",
+          [x["heavy"] for x in d] == [False, True, False, False, False, False, False] and v["top"] == 120)
+    check("load: a day's shares add up, reviews first", abs(sum(d[1]["share"]) - 1) < 1e-9 and abs(d[1]["share"][0] - 20 / 120) < 1e-9)
+    mv = v["hint"]["move"]
+    check("load: the hint names the day's cards; the move is its smallest set, to the nearest later day with room before its event, "
+          "on top of the days it already runs later",
+          v["hint"]["day"] == _day(1) and v["hint"]["new"] == 100 and v["hint"]["plans"] == 2 and v["hint"]["rev"] == 200
+          and mv == {"pid": "b", "uid": "p6", "name": "Pharm 6", "to": _day(2), "n": 2}, v["hint"])
+    tight = P.load_week([dict(x, cap=_day(2)) if x["uid"] == "p6" else x for x in sets], rev, t, pace)
+    check("load: no day before its event stays under heavy with it: the bigger set moves instead",
+          tight["hint"]["move"]["uid"] == "h2" and tight["hint"]["move"]["to"] == _day(3), tight["hint"])
+    none = P.load_week(sets, {_day(i): 2000 for i in range(7)}, t, pace)
+    check("load: nowhere lighter: the line, no move", none["hint"] and none["hint"]["move"] is None)
+    today_heavy = P.load_week([dict(x, day=t) if x["uid"] in ("h2", "p6") else x for x in sets], rev, t, pace)
+    check("load: today's sets are open already: heavy said, nothing moved", today_heavy["hint"]["day"] == t and today_heavy["hint"]["move"] is None)
+    check("load: before my usual day is known nothing is heavy", P.load_week(sets, rev, t, dict(pace, known=False))["hint"] is None)
+    check("load: one plan in the week: no view (its own week says it)", P.load_week(sets[:2], rev, t, pace) is None
+          and P.load_week([], rev, t, pace) is None)
+    back = P.load_week([dict(x, day=_day(3), moved=3) if x["uid"] == "p6" else x for x in sets], rev, t, pace, back=("b", "p6"))
+    check("load: after a move, the set and where it went, for Put it back",
+          back["back"] == {"pid": "b", "uid": "p6", "name": "Pharm 6", "day": _day(3)} and not back["days"][1]["heavy"], back["back"])
+    check("load: a set put back is no longer named", P.load_week(sets, rev, t, pace, back=("b", "p7"))["back"] is None)
+    check("load: time words", [P.load_time(x) for x in (0, 45, 60, 130)] == ["0 min", "45 min", "1 h 00", "2 h 10"])
+    h = board.plancards._load_html(v)
+    check("load: drawn: the key, a row a day, the heavy day's time marked, the move as a command, names escaped",
+          h.count('class="lwd') == 7 and 'class="n hv">2 h 00' in h and "planmoveto:b:p6:2" in h and "Pharm &lt;b&gt;" in h
+          and "<b>Tomorrow" not in h and "is heavy:</b> 100 new across 2 plans on top of 200 reviews." in h
+          and "Move Pharm 6 to " in h and "your own pace" in h, h[-700:])
+    hb = board.plancards._load_html(back)
+    check("load: drawn after a move: Put it back, on the same screen", "planmoveback:b:p6" in hb and "Pharm 6 moved to " in hb)
+    check("load: nothing to show, nothing drawn; a typical pace says so",
+          board.plancards._load_html(None) == "" and "typical pace" in board.plancards._load_html(P.load_week(sets, rev, t, dict(pace, known=False))))
 
 
 def test_insights_a_part_at_a_time_v399():

@@ -441,6 +441,23 @@ def _css(cfg):
     #due-crew .pwh a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
     #due-crew .pwh .nav .tb {{ padding: 0 2px; font-size: 12px; font-weight: 700; }}
     #due-crew .pwh .nav .tb.here {{ color: var(--dc-muted); font-weight: 500; }}
+    /* 3.9.9: the week across plans, under the plan's card: a row a day, reviews and each plan's new
+       cards as one bar, the day's time; a heavy day's line and its one move */
+    #due-crew .lw {{ text-align: left; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--dc-line); font-size: 12px; }}
+    #due-crew .lwk {{ display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--dc-muted); font-size: 11px; margin-bottom: 6px; }}
+    #due-crew .lwk span {{ display: inline-flex; align-items: center; gap: 5px; min-width: 0; }}
+    #due-crew .lwk i {{ width: 9px; height: 9px; border-radius: 2px; flex: none; }}
+    #due-crew .lwd {{ display: grid; grid-template-columns: 52px minmax(0, 1fr) 56px; gap: 8px; align-items: center; padding: 3px 0; }}
+    #due-crew .lwd .d {{ color: var(--dc-muted); white-space: nowrap; }}
+    #due-crew .lwd.now .d {{ color: var(--dc-ink); font-weight: 700; }}
+    #due-crew .lwd .st {{ display: flex; gap: 2px; height: 10px; min-width: 0; }}
+    #due-crew .lwd .st i {{ height: 100%; border-radius: 2px; min-width: 2px; }}
+    #due-crew .lwd .n {{ text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--dc-muted); }}
+    #due-crew .lwd .n.hv {{ color: var(--dc-hours); font-weight: 700; }}
+    #due-crew .lwh {{ display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: space-between; align-items: baseline;
+      margin-top: 8px; padding: 7px 9px; border-radius: 8px; background: var(--dc-well); }}
+    #due-crew .lwh a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
+    #due-crew .lwx {{ color: var(--dc-muted); font-size: 11px; margin-top: 6px; }}
     /* round five, Sam's pick A: the week as seven small days (its bar, what's left, a quiz under its
        day), names in the day's details, which open under the week on a click (motion.js 8) */
     #due-crew .pwk {{ display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }}

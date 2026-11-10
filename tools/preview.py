@@ -428,6 +428,21 @@ sections.append("<h3>3.8.1: Study for a quiz, three days out</h3>" + board.rende
         dict(_C3, prep={"name": "Cardio <quiz>", "day": "2026-10-09", "when": "Fri", "left": 2, "today": False},
              quiz={"id": "q", "name": "Cardio <quiz>", "day": "2026-10-09", "when": "Fri", "today": False, "units": ["a", "b"], "open": 412})],
         "offers": []})).replace('id="du-', 'id="duq-'))
+# 3.9.9: the week across plans, under the plan's card: a heavy day and its one move; then after the move
+from due_crew import plans as _PL
+_LS = [{"pid": "a", "plan": "Block 2 · Heme", "uid": "h%d" % i, "name": n, "day": "2026-10-%02d" % (5 + i), "ask": k, "moved": 0, "cap": ""}
+       for i, (n, k) in enumerate([("Anemias I", 46), ("Coagulation", 112), ("Platelets", 34), ("Leukemias", 54), ("Lymphomas", 40)])]
+_LS += [{"pid": "b", "plan": "Pharm weekly", "uid": "p6", "name": "Pharm 6", "day": "2026-10-06", "ask": 60, "moved": 0, "cap": ""}]
+_LR = {"2026-10-05": 380, "2026-10-06": 610, "2026-10-07": 360, "2026-10-08": 400, "2026-10-09": 330, "2026-10-10": 280, "2026-10-11": 250}
+_LP = {"new_s": 40, "rev_s": 7, "day_min": 85, "known": True}
+_LW = _PL.load_week(_LS, _LR, "2026-10-05", _LP)
+_LW2 = _PL.load_week([dict(x, day="2026-10-11", moved=5) if x["uid"] == "p6" else x for x in _LS], _LR, "2026-10-05", _LP, back=("b", "p6"))
+sections.append("<h3>3.9.9: the week across plans: a heavy day and its move</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [_C3], "offers": [], "load": _LW})
+    ).replace('id="du-', 'id="dulw-'))
+sections.append("<h3>3.9.9: the week across plans: after the move</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [_C3], "offers": [], "load": _LW2})
+    ).replace('id="du-', 'id="dulw2-'))
 sections.append("<h3>3.8.1: Today: the morning's line by date, Study on a plan's date, a date after its quiz</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV3, you=_YOU("today")).replace('id="du-', 'id="du3-'))
 sections.append("<h3>3.8.1: the morning's line, four or more dates</h3>" + board.render(

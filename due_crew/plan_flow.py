@@ -2408,6 +2408,7 @@ def refresh_progress():
         _state["plan_picks"] = pick_names(mw.col, followed(), _state_cfg(), idxs)  # 3.8.1
         if prog:
             _note_reviews(mw.col, _today())  # 3.8.1: my own load, beside what the plan opens
+            _note_pace(mw.col, _today())  # 3.9.9: my pace, for the load across plans
     except Exception:
         whole = False
         oops()
@@ -2701,7 +2702,12 @@ def board_view(c):
     ends = [P.last_day(p["doc"]) for p in plan_list] + [P.last_day(a.get("doc")) for a in authored]
     # 3.8.1: an invite to co-write a plan, or to keep one, from the day's first board; and
     # the morning's dates, for its line here when Due is off (__init__ hands over morning_opened())
-    return {"cards": cards, "offers": offers, "invites": list(client().session.get("plan_invites") or []),
+    try:
+        load = load_view(plan_list, state, today)  # 3.9.9: the week across plans
+    except Exception:
+        oops()
+        load = None
+    return {"cards": cards, "offers": offers, "load": load, "invites": list(client().session.get("plan_invites") or []),
             "opened_dates": opened_dates(), "exam": P.exam_way(str((c or {}).get("exam_date") or ""), today, ends),
             "writes": bool(authored)}
 
@@ -2960,6 +2966,8 @@ def on_message(cmd, parts):
         move_menu(arg, parts[3])
     elif cmd == "planmoveback" and arg and len(parts) > 3:
         move_date(arg, parts[3], 0)
+    elif cmd == "planmoveto" and arg and len(parts) > 4 and parts[4].isdigit():  # 3.9.9: the load view's Move
+        load_move(arg, parts[3], int(parts[4]))
     elif cmd == "planreset" and arg:
         reset_days(arg)
     elif cmd == "planskip" and arg and len(parts) > 3:
@@ -4373,6 +4381,61 @@ def reviews_by_day(col, today, days=REVIEWS_AHEAD):
         day = S.iso(base + datetime.timedelta(days=max(0, int(k))))
         out[day] = out.get(day, 0) + int(n)
     return out
+
+
+def _note_pace(col, today):
+    """refresh_progress: my pace (a new card's seconds, a review's, my usual
+    day's minutes) for the load view, read once an Anki day
+    (`_state["plan_pace"]`: (day, pace)). 28 days of the answer log."""
+    hit = _state.get("plan_pace")
+    if hit and hit[0] == today:
+        return
+    from . import magic, magic_flow
+    try:
+        pace = magic_flow.Ops().pace()
+    except Exception:
+        oops()
+        pace = dict(magic.PACE)
+    _state["plan_pace"] = (today, pace)
+
+
+def load_view(plan_list, state, today):
+    """3.9.9, You › Plans' load across plans (plans.load_week), from what
+    the last refresh read: no collection reads. Plans on this computer's
+    deck that run on their days (not paused, not at my own pace)."""
+    from . import magic
+    hit = _state.get("plan_pace")
+    pace = hit[1] if hit and hit[0] == today else dict(magic.PACE)
+    prog, lds, sets = _state.get("plan_progress") or {}, _state.get("plan_load") or {}, []
+    end = P._later(today, P.LOAD_DAYS - 1)
+    back = _state.get("load_moved")
+    for p in plan_list:
+        st = state.get(p["id"])
+        if not st or p.get("paused") or P.own_pace(p) or not (mw.col and _deck_ok(mw.col, st.get("deck_id"))):
+            continue
+        doc, ld, pg = mine(p)["doc"], lds.get(p["id"]) or {}, prog.get(p["id"]) or {}
+        moved = p.get("moved") or {}
+        for u in P.units(doc):
+            day = str(u.get("opens") or "")
+            if not (today <= day <= end or (back and (p["id"], u["id"]) == tuple(back))):
+                continue
+            if u["id"] in ld:
+                ask = P.load_ask(ld[u["id"]], day, today)
+            else:
+                _o, s, t = pg.get(u["id"], [0, 0, 0])
+                ask = max(0, (int(t) or P.unit_total(u)) - int(s))
+            ev = P.event_of(doc, u)
+            sets.append({"pid": p["id"], "plan": str(p.get("name") or P.plan_title(p)), "uid": u["id"],
+                         "name": str(u.get("name") or "?"), "day": day, "ask": ask,
+                         "moved": int(moved.get(u["id"]) or 0), "cap": str((ev or {}).get("day") or "")})
+    return P.load_week(sets, _day_due(today), today, pace, back=back)
+
+
+def load_move(pid, uid, days):
+    """The load view's Move: this set `days` later for me (my follow, never
+    the plan), and remembered so the view offers Put it back."""
+    _state["load_moved"] = (pid, uid)
+    move_date(pid, uid, days)
 
 
 def _note_reviews(col, today):

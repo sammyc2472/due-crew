@@ -4788,6 +4788,29 @@ every release that changes how something works.
   is held for the card only while Settings has my exam (with none, it
   plays as a cheer), and a crewmate's later cheer to me takes the place of
   their line on the server (one cheer a pair) if I haven't fetched it yet.
+- 3.9.9, the week across plans (the plan gaps' mock 2; Sam: "sure", then
+  "Yes on all"). Each plan knew its own week and the week's day lines knew
+  my reviews; nothing added them up. You › Plans now ends with Everything
+  this week, when two plans have something in the next seven days: a row a
+  day, my reviews due and each plan's new cards as one bar, the day's time
+  at my own pace. `plans.load_week` (pure) from sets on my own days
+  (`plan_flow.load_view`: what the last refresh read, `plan_load`'s ask,
+  `plan_reviews`; plans paused, at my own pace or not on this computer's
+  deck left out), `board/plancards._load_html`. Heavy (my call, as drawn):
+  half again over my usual day's minutes (`LOAD_HEAVY`), only once that's
+  known and only a day with new cards. The heaviest heavy day gets a line
+  and one press: its smallest set not yet open, to the nearest later day
+  here, before the event it preps for, that stays under heavy with it
+  (first built to the lightest day; the nearest keeps the plan's order
+  closer). `planmoveto:<pid>:<uid>:<days>` is `move_date`, the follow's
+  `moved`, never the plan; the view then says where it went with Put it
+  back (`load_moved`, this session). No move for today's sets (open
+  already), none when nowhere has room. My pace is Magic search's
+  (`magic_flow.Ops.pace`: 28 days of the log, 12 ms on a million reviews),
+  read once an Anki day with the progress (`_note_pace`), so drawing reads
+  nothing; a typical pace, said so, until there's enough of mine. No
+  request, nothing sent but the move. `test_load_across_plans_v399`, and
+  the move sent as the board sends it in the plan move test.
 - 3.9.9, Insights a part at a time (Sam, 10 Nov: "Yes on all"). On a big
   collection the day's first Insights held Anki about 2.3 s in one piece.
   `team_flow.insights_soon` (the board's two callers, `you_view` and
