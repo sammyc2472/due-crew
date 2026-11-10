@@ -697,8 +697,28 @@ def test_days_from_the_words_v399():
     check("a tap still takes a day off", [e["iso"] for e in face.view()["days"]["each"]] == ["2026-11-05", "2026-11-07"])
     face.on("type", {"text": "platelets over the next 4 weeks"})
     v = face.view()
-    check("more than the picker's two weeks: its 13 days picked, and said",
-          len(v["days"]["each"]) == 13 and "two weeks" in (v.get("said") or {}).get("text", ""), (len(v["days"]["each"]), v.get("said")))
+    f = v["days"]["fill"]
+    check("more than the picker's two weeks: the fill-in takes the stretch, a set a day, about so many each",
+          len(v["days"]["each"]) == 28 and f["on"] and f["n"] == 28 and f["study"] == 28 and f["per"] >= 1
+          and sum(e["n"] for e in v["days"]["each"]) == v["count"]["n"], (len(v["days"]["each"]), f))
+    face.on("fillskip", {"dow": 6})
+    face.on("fillskip", {"dow": 5})
+    v = face.view()
+    wk = [__import__("datetime").date.fromisoformat(e["iso"]).weekday() for e in v["days"]["each"]]
+    check("the fill-in: weekdays skipped come off, the cards shared over what's left", len(wk) == 20 and not set(wk) & {5, 6}
+          and v["days"]["fill"]["skip"] == [5, 6] and sum(e["n"] for e in v["days"]["each"]) == v["count"]["n"], wk)
+    for d in range(5):
+        face.on("fillskip", {"dow": d})
+    check("…never every weekday", len(face.view()["days"]["each"]) >= 1 and len(face.fill["skip"]) == 6, face.fill)
+    face.on("fill", {"n": 500})
+    check("…at most ninety days out and sixty study days", face.view()["days"]["fill"]["n"] <= MF.FILL_SPAN + 1
+          and len(face.picked) <= MF.FILL_MAX, (face.view()["days"]["fill"]["n"], len(face.picked)))
+    face.on("fill", {"off": True})
+    check("Pick days: back to the picker's two weeks, what was picked in them kept", face.fill is None
+          and 0 < len(face.picked) <= 13, len(face.picked))
+    face.on("fill", {"n": 30})
+    face.on("day", {"iso": face.picked[0]})
+    check("a tap on a day is my own choice again: the fill-in lets go, the other days stay", face.fill is None and len(face.picked) == 29)
     face.on("type", {"text": "platelets"})
     check("the words stop asking: the picker they opened shuts", "days" not in face.view())
     face.on("type", {"text": "spread platelets"})
@@ -715,7 +735,7 @@ def test_schedule_ahead_spreads_open_cards_v399():
     face.on("ready", {})
     face.on("type", {"text": "platelets over the next 2 days"})
     cids = face.cards()[0]
-    kinds = {c: ("new" if i % 3 == 0 else "rev" if i % 3 == 1 else "") for i, c in enumerate(cids)}
+    kinds = {c: ("new" if i % 3 == 0 else "rev" if i % 3 == 1 else "learn" if i == 2 else "") for i, c in enumerate(cids)}
     calls = []
     ops.open_kinds = lambda cs: {c: k for c, k in kinds.items() if k}
     ops.spread = lambda shares: (calls.append(shares) or (sum(len(n) for d, n, _r in shares if d > 0),
@@ -725,6 +745,9 @@ def test_schedule_ahead_spreads_open_cards_v399():
     face._kinds = None
     v = face.view()
     new_n, rev_n = sum(1 for k in kinds.values() if k == "new"), sum(1 for k in kinds.values() if k == "rev")
+    check("…and that a card in its learning steps stays with today (it isn't moved)",
+          "mid-learning" in face.view()["days"]["note"] or all(k != "learn" for c, k in kinds.items() if c in face.cards()[0][len(face.cards()[0]) // 2:]),
+          face.view()["days"]["note"])
     check("the picker says what a date alone can't do: the open new ones held back, the due reviews moved",
           f"{new_n:,} " in v["days"]["note"] and "held back" in v["days"]["note"] and "due date" in v["days"]["note"], v["days"].get("note"))
     face.on("put", {})

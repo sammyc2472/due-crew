@@ -16,7 +16,9 @@ from .. import app, plan_flow
 from .. import plans as P
 from ..app import _bg, _state, cfg, client, save_cfg
 from ..backend.shapes import TransportError
-from . import enabled, remote  # noqa: F401 (enabled: the labs switch, nothing behind it since 3.9.9)
+from . import enabled as _enabled, remote
+
+enabled = _enabled  # the labs switch: nothing behind it since 3.9.9
 from ..errs import oops
 
 _open = {}       # "plans", "start" -> the window, while it's open

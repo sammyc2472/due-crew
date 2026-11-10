@@ -37,6 +37,8 @@ from .errs import oops
 
 RECENT = 5           # finds kept for the empty box, on this computer
 DAYS = 14            # the day picker: two weeks from today
+FILL_SPAN = 90       # the fill-in: how far out it reaches, in days
+FILL_MAX = 60        # and how many study days (a set a day on the plan)
 BEFORE_MAX = 5       # a quiz's topics: on at most this many days before it
 MY_PLAN = "My plan"
 ALSO_MAX = 8         # a topic's near names under it
@@ -586,8 +588,10 @@ class Ops:
         today, out = int(mw.col.sched.today), {}
         ids = ",".join(str(int(c)) for c in cids)
         for cid, ctype, queue, due in mw.col.db.all(
-                f"SELECT id, type, queue, due FROM cards WHERE id IN ({ids}) AND odid = 0 AND queue IN (0, 2)"):
-            if ctype == 0 and queue == 0:
+                f"SELECT id, type, queue, due FROM cards WHERE id IN ({ids}) AND odid = 0 AND queue IN (0, 1, 2, 3)"):
+            if queue in (1, 3):
+                out[int(cid)] = "learn"  # in its steps: never moved (a move would start them again), only said
+            elif ctype == 0 and queue == 0:
                 out[int(cid)] = "new"
             elif ctype == 2 and queue == 2 and int(due) <= today:
                 out[int(cid)] = "rev"
@@ -619,6 +623,10 @@ class Ops:
         plan_flow._after_change()
         app.swap(cfg())
         return len(held), moved, label
+
+    def exam_day(self):
+        """My exam's day (Settings › Privacy › Exam), or ""."""
+        return str(cfg().get("exam_date") or "")
 
     def undo_anki(self, label):
         """Edit › Undo, when the last step is still ours."""
@@ -716,6 +724,7 @@ class Search:
         self._tries = {}           # a deck's how-to tries, read against its tags: did -> {part: [tries]}
         self.busy = False
         self.mode = ""             # "days": the day picker open
+        self.fill = None           # {from, to, skip}: a stretch longer than the picker, filled in (3.9.9)
         self._cards, self._q = None, ""
         choices = ops.decks()
         self.decks = choices
@@ -779,6 +788,7 @@ class Search:
             self.picked = self.days_before(ev["day"])
         elif not self.cids_in:
             self.picked = []
+        self.fill = None
         self.day_name = ""
         self.spread()
 
@@ -795,6 +805,10 @@ class Search:
         last = (today + datetime.timedelta(days=DAYS - 1)).isoformat()
         days = [d for d in sp["days"] if today.isoformat() <= d <= last]
         more = len(days) < len(sp["days"])
+        if more and not sp.get("per"):  # longer than the picker shows: the fill-in's stretch (Sam: "add the fill in option")
+            self.c_fill(to=sp["days"][-1], first=sp["days"][0])
+            self.mode, self._spread_on = "days", True
+            return
         if sp.get("per"):
             n = len(self.cards()[0])
             need = max(1, -(-n // int(sp["per"])))
@@ -811,8 +825,7 @@ class Search:
             self.mode = "days"
         self._spread_on = True
         if more and self.picked:
-            self.said = {"text": f"Schedule ahead holds two weeks: {M.words_span(self.picked[0], self.picked[-1])} picked. "
-                                 "Past that, add dates in Your plans."}
+            self.said = {"text": f"{M.words_span(self.picked[0], self.picked[-1])} picked. Go longer below for more days."}
 
     def days_before(self, day):
         today = self.ops.today()
@@ -1265,11 +1278,21 @@ class Search:
         sh = self.shares(cids, self.picked) if self.picked else []
         held = sum(len(new) for n, new, _r in sh if n > 0)
         moved = sum(len(rev) for n, _n, rev in sh if n > 0)
+        kinds = self.kinds(cids) if self.picked else {}
+        learn = sum(1 for d, part in split if d > today.isoformat() for c in part if kinds.get(c) == "learn")
+        exam = str(self.ops.exam_day() or "")
+        eve = (datetime.date.fromisoformat(exam) - datetime.timedelta(days=1)).isoformat() if exam > (today + datetime.timedelta(days=2)).isoformat() else ""
+        f = self.fill
+        fill = {"on": bool(f), "eve": eve, "eve_label": P.fmt_day(eve) if eve else "",
+                "n": (datetime.date.fromisoformat(f["to"]) - datetime.date.fromisoformat(f["from"])).days + 1 if f else 0,
+                "to_label": P.fmt_day(f["to"]) if f else "", "skip": list(f.get("skip") or []) if f else [],
+                "study": len(each), "per": -(-len(cids) // len(each)) if each else 0, "max": FILL_SPAN}
         note = " ".join(x for x in (
             f"{held:,} {'is' if held == 1 else 'are'} new and open now: held back till {'its' if held == 1 else 'their'} day." if held else "",
             f"{moved:,} review{' is' if moved == 1 else 's are'} due now: {'its due date moves' if moved == 1 else 'their due dates move'} "
-            f"to {'its' if moved == 1 else 'their'} day." if moved else "") if x)
-        return {"list": days, "each": each, "name": self.day_name or self.name(), "note": note}
+            f"to {'its' if moved == 1 else 'their'} day." if moved else "",
+            f"{learn:,} {'is' if learn == 1 else 'are'} mid-learning and stay{'s' if learn == 1 else ''} with today." if learn else "") if x)
+        return {"list": days, "each": each, "name": self.day_name or self.name(), "note": note, "fill": fill}
 
     def dests_view(self):
         """Where a date or a quiz goes: My plan, and the plans I write on this deck."""
@@ -1477,7 +1500,54 @@ class Search:
             today = self.ops.today()
             self.picked = [(today + datetime.timedelta(days=k)).isoformat() for k in range(1, min(f["days"], DAYS - 1) + 1)]
 
+    # -- the fill-in: a stretch longer than the picker's two weeks (3.9.9) --
+
+    def fill_days(self):
+        f = self.fill or {}
+        try:
+            a, b = datetime.date.fromisoformat(f["from"]), datetime.date.fromisoformat(f["to"])
+        except (KeyError, ValueError):
+            return []
+        skip, out = set(f.get("skip") or []), []
+        while a <= b and len(out) < FILL_MAX:
+            if a.weekday() not in skip:
+                out.append(a.isoformat())
+            a += datetime.timedelta(days=1)
+        return out
+
+    def c_fill(self, n=None, to=None, off=False, first=None):
+        """Go longer: every day from tomorrow (or `first`) for n days, or to a
+        day (my exam's eve), FILL_MAX study days at most; off: back to tapping."""
+        today = self.ops.today()
+        if off:
+            self.fill = None
+            self.picked = [d for d in self.picked if d <= (today + datetime.timedelta(days=DAYS - 1)).isoformat()]
+            return
+        start = first or (today + datetime.timedelta(days=1)).isoformat()
+        try:
+            end = (datetime.date.fromisoformat(str(to)) if to
+                   else datetime.date.fromisoformat(start) + datetime.timedelta(days=max(1, min(FILL_SPAN, int(n))) - 1))
+        except (TypeError, ValueError):
+            return
+        end = min(end, today + datetime.timedelta(days=FILL_SPAN))
+        if end.isoformat() < start:
+            return
+        self.fill = {"from": start, "to": end.isoformat(), "skip": list((self.fill or {}).get("skip") or [])}
+        self.picked = self.fill_days()
+
+    def c_fillskip(self, dow=0):
+        if not self.fill:
+            return
+        d = int(dow)
+        if 0 <= d <= 6:
+            skip = set(self.fill.get("skip") or [])
+            skip ^= {d}
+            if len(skip) < 7:
+                self.fill["skip"] = sorted(skip)
+                self.picked = self.fill_days()
+
     def c_day(self, iso=""):
+        self.fill = None  # a tap is my own choice of days again
         if iso in self.picked:
             self.picked = [d for d in self.picked if d != iso]
         else:

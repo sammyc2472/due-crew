@@ -123,6 +123,14 @@ body .dcm select.b { padding-right: 30px !important; color: var(--dc-ink); font-
 .dcm .day.tdy .dw::after { content: " \b7\20today"; }
 .dcm .podrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12.5px; }
 .dcm .podrow label { color: var(--dc-muted); }
+.dcm .fill { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; font-size: 12.5px; }
+.dcm .fill .sp { flex: 1; }
+.dcm .fill .mu { color: var(--dc-muted); }
+body .dcm .fill input.fn { width: 58px; border: 1.5px solid var(--dc-line); border-radius: 8px; padding: 3px 6px; background: var(--dc-bg);
+  font: inherit; text-align: right; }
+body .dcm .fill input.fn:focus { border-color: var(--dc-accent); outline: none; }
+body .dcm .fill button.dw { padding: 3px 9px; border-radius: 999px; background: var(--dc-well); color: var(--dc-muted); font-size: 12px; }
+body .dcm .fill button.dw.on { background: var(--dc-you-bg); color: var(--dc-ink); }
 .dcm .split { color: var(--dc-muted); font-size: 12.5px; }
 
 .dcm .said { font-size: 13px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; min-height: 0; }
