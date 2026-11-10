@@ -733,8 +733,28 @@ def test_schedule_ahead_spreads_open_cards_v399():
           [d for d, _n, _r in sh] == [1, 2] and sum(len(n) for _d, n, _r in sh) == new_n and sum(len(r) for _d, _n, r in sh) == rev_n, sh)
     s = face.view()["said"]
     check("said with the plan's dates, one Undo for both", "held back" in s["text"] and "moved to their days" in s["text"] and s["undo"] == "save", s)
+    check("held only once the dates are on the plan: the save first, then Anki's step",
+          [x[0] for x in ops.log if x[0] == "write"] and len(calls) == 1)
     face.on("undo", {})
     check("Undo: the plan's save and Anki's step", ("undo_save", "pMine", 7) in ops.log and undone == ["Due Crew: spread"], (ops.log[-2:], undone))
+    # a save that fails: nothing was held or moved (they'd be suspended with no date to open them)
+    n_calls = len(calls)
+    real = ops.write_plan
+    ops.write_plan = lambda pid, o, idx, done, name=None, deck=None: done(("failed", pid, None, "Couldn't save it."))
+    face.picked = ["2026-11-05", "2026-11-06"]
+    face.on("put", {})
+    check("a save that fails: the cards aren't touched, and it says the save failed",
+          len(calls) == n_calls and face.view()["said"]["text"] == "Couldn't save it.", face.view()["said"])
+    ops.write_plan = real
+    # onto a plan with followers: the dates wait in Review and send, so nothing is held yet, and it says so
+    face.on("dest", {"key": "pB"})
+    face.picked = ["2026-11-05", "2026-11-06"]
+    face.on("put", {})
+    s2 = face.view()["said"]
+    check("waiting in Review and send: the open cards stay put till it's sent, said", len(calls) == n_calls
+          and "open already" in s2["text"] and "till it's sent" in s2["text"] and s2["undo"] == "draft", s2)
+    face.on("undo", {})
+    face.on("dest", {"key": "mine"})
     # today's share stays as it is; nothing open, nothing said or done
     face.on("type", {"text": "platelets"})
     face.on("days", {"show": True})

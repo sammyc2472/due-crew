@@ -95,6 +95,10 @@ jobs:
       # against its budget; over one marked fail is red, as a failing test is (tools/speed_budget.py)
       - name: speed budget
         run: python3 tools/speed_budget.py
+      # 3.9.9 (the plans review): the plan engine on Anki's own engine and a big deck (searches, opens,
+      # suspend and undo, filtered decks, Schedule ahead's spread): by hand before a release till now
+      - name: plans on Anki's engine
+        run: python3 tools/real_anki.py
       - name: click test
         env:
           QT_QPA_PLATFORM: offscreen

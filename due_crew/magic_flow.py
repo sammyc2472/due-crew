@@ -1499,13 +1499,25 @@ class Search:
         name = self.day_name or self.name()
         ops = self.day_ops(cids, self.picked, name)
         what = f"{name} on {M.words_span(self.picked[0], self.picked[-1])}"
-        held, moved, label = self.ops.spread(self.shares(cids, self.picked))
-        if held or moved:  # the open ones, which a date alone leaves where they are
-            what += ". " + " and ".join(x for x in (
-                f"{held:,} new held back till their day" if held else "",
-                f"{moved:,} review{'s' if moved != 1 else ''} moved to {'their days' if len(self.picked) > 1 else 'that day'}" if moved else "") if x)
+        shares, many = self.shares(cids, self.picked), len(self.picked) > 1
+
+        def landed(how):
+            """Once the dates are on the plan (the review of 10 Nov: held before
+            the save, a save that failed left them suspended with no date to open
+            them): the open cards, which a date alone leaves where they are. Not
+            while the dates wait in Review and send: nothing would open them yet."""
+            if how != "saved":
+                open_n = sum(len(n) + len(r) for d, n, r in shares if d > 0)
+                return (f" {open_n:,} of them {'is' if open_n == 1 else 'are'} open already and stay"
+                        f"{'s' if open_n == 1 else ''} where Anki has {'it' if open_n == 1 else 'them'} till it's sent."
+                        if how == "waiting" and open_n else ""), ""
+            held, moved, label = self.ops.spread(shares)
             self._kinds = None
-        self.write(ops, what, also=label)
+            words = " and ".join(x for x in (
+                f"{held:,} new held back till their day" if held else "",
+                f"{moved:,} review{'s' if moved != 1 else ''} moved to {'their days' if many else 'that day'}" if moved else "") if x)
+            return (f" {words[0].upper()}{words[1:]}." if words else ""), label
+        self.write(ops, what, after=landed)
         self.ops.note_recent(self.text)
 
     def kinds(self, cids):
@@ -1609,7 +1621,7 @@ class Search:
         self.write([{"op": "text", "mode": "add", "text": self.text}],
                    f"{n:,} date{'s' if n != 1 else ''}" + (f" and {len(pt['events']):,} event{'s' if len(pt['events']) != 1 else ''}" if pt["events"] else ""))
 
-    def write(self, ops, what, row=None, also=""):
+    def write(self, ops, what, row=None, after=None):
         """The ops onto the plan picked (My plan unless another), said when it lands."""
         key = self.dest if any(d["key"] == self.dest for d in self.dests_view()) else "mine"
         pid = self.my_plan_id() if key == "mine" else key
@@ -1620,10 +1632,11 @@ class Search:
         def done(got):
             how, got_pid, version, more = got
             self.busy = False
+            extra, also = after(how) if after else ("", "")
             if how == "failed":
                 self.said = {"text": more or "Couldn't save it."}
             elif how == "waiting":
-                self.said = {"text": f"Waiting in {plan_name}'s Review and send.",
+                self.said = {"text": f"Waiting in {plan_name}'s Review and send.{extra}",
                              "undo": "draft", "open": got_pid}
                 self.undo = {"kind": "draft", "pid": got_pid, "n": int(more or len(ops)), "row": row, "anki": also}
             else:
@@ -1631,7 +1644,7 @@ class Search:
                     self.dests = [p for p in self.dests or [] if p.get("id") != got_pid] + [
                         {"id": got_pid, "name": MY_PLAN, "role": "owner", "followers": 1, "following": True,
                          "doc": {"deck": self.idx.name if self.idx else ""}}]
-                self.said = {"text": f"{'Made' if more == 'made' else 'On'} {plan_name}: {what}.", "undo": "save", "open": got_pid}
+                self.said = {"text": f"{'Made' if more == 'made' else 'On'} {plan_name}: {what}.{extra}", "undo": "save", "open": got_pid}
                 self.undo = {"kind": "save", "pid": got_pid, "version": version, "row": row, "anki": also}
                 self.picked = [] if row is None else self.picked
                 self.mode = "" if row is None else self.mode

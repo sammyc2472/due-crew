@@ -4788,6 +4788,17 @@ every release that changes how something works.
   is held for the card only while Settings has my exam (with none, it
   plays as a cheer), and a crewmate's later cheer to me takes the place of
   their line on the server (one cheer a pair) if I haven't fetched it yet.
+- 3.9.9, the plans engine reviewed (Sam, 10 Nov). Three fixes. Schedule
+  ahead held the open cards back before the plan's save had landed: a save
+  that failed (offline, a limit) left them suspended with no date to open
+  them. `Search.c_put` now spreads in `write`'s `after`, once the dates are
+  on the plan; while they wait in Review and send nothing is held, and the
+  line says so. `_psave` let a failed write of plans.json go by unsaid: it
+  counts `file:plans` now. And `tools/real_anki.py` (the engine on Anki's
+  own, 154 checks, 90 s) ran only by hand before a release: CI's click job
+  runs it at every push, with `check_spread` added (held and moved, one
+  undo, and the plan's dates opening the held cards each on its own
+  morning: the part nothing had proved).
 - 3.9.9, the review's four next steps, built from their mocks (Sam, 10 Nov:
   "build all four, your recommendations on the calls").
   **What gets used** (`errs.used`, `errs.USE`, `errs_flow.tell_once`): which

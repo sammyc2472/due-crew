@@ -164,6 +164,10 @@ def _psave(data):
             json.dump(data, f)
         os.replace(tmp, path)
     except OSError:
+        # 3.9.9 (the plans review): this went by unsaid, and a plan's state that isn't kept is a morning
+        # that opens again; counted for the field's sheet (a code, never the path)
+        from . import errs
+        errs.count("file:plans")
         try:
             os.remove(tmp)
         except OSError:
