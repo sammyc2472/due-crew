@@ -293,6 +293,19 @@ class Run:
         yield from self.wait_board()
         # Magic search's how-to comes over the Decks screen once a person, a moment after it's drawn
         mf = __import__("due_crew.magic_flow", fromlist=["board_howto"])
+        # 3.9.9: before it, once a person, what's counted now (errs_flow.tell_once): a sheet, put away with Esc
+        ef = __import__("due_crew.errs_flow", fromlist=["TOLD"])
+        told, t = "", time.perf_counter()
+        while not dc.cfg().get(ef.TOLD) and ef.on(dc.cfg()) and time.perf_counter() - t < 15:
+            told = yield self.js(pagejs.call("pop"))
+            if told:
+                break
+            yield self.r.pause(50)
+        if told:
+            self.check("boot: what's counted is said over the board once, in a sheet", told == "dc-sheet", repr(told))
+            yield from self.snap("00-told")
+            yield from self.esc_check(told, None, "what's counted (shown by itself)")
+            self.check("boot: put away, it's been said and the switch is as it was", bool(dc.cfg().get(ef.TOLD)) and ef.on(dc.cfg()))
         pop, t = "", time.perf_counter()
         while mf.board_howto() is not None and time.perf_counter() - t < 15:
             pop = yield self.js(pagejs.call("pop"))

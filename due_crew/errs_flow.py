@@ -143,19 +143,19 @@ def use_ready(c=None):
 
 
 def tell_once():
-    """On the Decks screen, once a person: what's counted now, with OK and
-    Turn it off. Either way they've been told; nothing is counted before."""
+    """On the Decks screen, once a person: what's counted now, and where its
+    switch is. OK, Cancel or Esc: they've been told (nothing is counted
+    before), and the switch stays as they had it; Magic search's how-to, if
+    it's still to come, follows at once rather than at some later visit."""
     c = app.cfg()
     if c.get(TOLD) or not on(c) or not app.client().signed_in:
         use_ready(c)
         return False
     from . import sheets
 
-    def told(off=False):
+    def told():
         c2 = app.cfg()
         c2[TOLD] = True
-        if off:
-            c2["send_errs"] = False
         app.save_cfg(c2)
         try:
             from . import account
@@ -164,5 +164,11 @@ def tell_once():
             pass
         errs.switch(on(c2))
         use_ready(c2)
-    sheets.confirm(TELL_TITLE, TELL_TEXT, "OK", told, no=lambda: told(True), no_label="Turn it off")
+        try:
+            from . import magic_flow
+            from aqt.qt import QTimer
+            QTimer.singleShot(500, lambda: app.board_up() and magic_flow.show_board_howto())  # once this sheet has gone
+        except Exception:
+            errs.oops()
+    sheets.confirm(TELL_TITLE, TELL_TEXT, "OK", told, no=told)
     return True
