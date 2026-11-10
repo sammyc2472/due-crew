@@ -150,7 +150,9 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   plan's choice here: in its deck (A, the default) or also each open
   set a filtered deck of its own (B: new and learning due now, never a
   review), built in the open's undo step. A plan never suspends on
-  its own (Hold back is the one suspend, and only when asked), a date that
+  its own (Hold back is the one suspend, and only when asked; 3.9.9:
+  Magic search's Schedule ahead, asked the same way, holds a later day's
+  open new cards back and moves its due reviews, `magic_flow.Ops.spread`), a date that
   opened never closes again, and a leech never opens. Plan state is per
   profile (`user_files/<profile>/plans.json`), never the shared config:
   deck ids belong to one collection. `plans.py` is pure, `plan_flow.py`

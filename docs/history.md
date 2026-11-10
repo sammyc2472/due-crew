@@ -4788,6 +4788,27 @@ every release that changes how something works.
   is held for the card only while Settings has my exam (with none, it
   plays as a cheer), and a crewmate's later cheer to me takes the place of
   their line on the server (one cheer a pair) if I haven't fetched it yet.
+- 3.9.9, Magic search spreads what's open (Sam, 10 Nov: "cards that were
+  unsuspended and due on one day that I wanted to spread across the next
+  few", and "yes good to go"). Schedule ahead wrote a date a day on My
+  plan, and a date only opens what's suspended: cards open already stayed
+  where Anki had them, and the window said "Made My plan" all the same.
+  Now `Ops.spread` (one undo step, before the plan's save): a later day's
+  new cards that are open are held back (suspended; their date opens them
+  that morning) and its reviews due today or before get that day as their
+  due date (Anki's Set due date, the interval kept). Today's share isn't
+  touched; learning cards and cards in a filtered deck aren't either. The
+  picker says it before the press (`days_view`'s `note`), the line after
+  says how many, and its Undo takes Anki's step back with the plan's save
+  (`undo["anki"]`). Proved on Anki's engine by hand (held, moved, intervals,
+  one undo); `test_schedule_ahead_spreads_open_cards_v399` the flow.
+  With it: a period in the words ("over the next 5 days", "from Monday to
+  Friday", "by Friday", "20 a day", "on Friday") was no topic's and the box
+  found nothing; `magic.spread` reads the days off the words and
+  `Search.spread` picks them (the picker's two weeks of them, said when
+  more was asked). And the page under `.dcm` had no tokens, so its ground
+  was white in dark wherever the window stood taller than its content
+  (`magic_html.colors` sets `body`).
 - 3.9.9, Pip Party's tab when something changed (Sam: "similar time
   savings on the tab switching to it"). Its Systems map is Insights' own, so
   it took Insights' saving with it: on the big collection, back to the tab

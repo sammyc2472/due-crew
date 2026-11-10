@@ -705,6 +705,44 @@ def test_days_from_the_words_v399():
     check("only 'spread': Schedule ahead opens (the days it takes, when it's a lot)", face.mode == "days")
 
 
+def test_schedule_ahead_spreads_open_cards_v399():
+    """3.9.9 (Sam: unsuspended cards due on one day, put on the next few,
+    stayed put): a plan's date only opens what's suspended, so cards open
+    already never moved. Schedule ahead now holds a later day's new cards
+    back and moves its due reviews, in one step that goes back with Undo;
+    the picker says so before the press."""
+    face, ops, _closed = window()
+    face.on("ready", {})
+    face.on("type", {"text": "platelets over the next 2 days"})
+    cids = face.cards()[0]
+    kinds = {c: ("new" if i % 3 == 0 else "rev" if i % 3 == 1 else "") for i, c in enumerate(cids)}
+    calls = []
+    ops.open_kinds = lambda cs: {c: k for c, k in kinds.items() if k}
+    ops.spread = lambda shares: (calls.append(shares) or (sum(len(n) for d, n, _r in shares if d > 0),
+                                                           sum(len(r) for d, _n, r in shares if d > 0), "Due Crew: spread"))
+    undone = []
+    ops.undo_anki = lambda label: undone.append(label) or True
+    face._kinds = None
+    v = face.view()
+    new_n, rev_n = sum(1 for k in kinds.values() if k == "new"), sum(1 for k in kinds.values() if k == "rev")
+    check("the picker says what a date alone can't do: the open new ones held back, the due reviews moved",
+          f"{new_n:,} " in v["days"]["note"] and "held back" in v["days"]["note"] and "due date" in v["days"]["note"], v["days"].get("note"))
+    face.on("put", {})
+    sh = calls[-1]
+    check("Put: each day's share of the open cards, by how far off its day is; every open card in one share",
+          [d for d, _n, _r in sh] == [1, 2] and sum(len(n) for _d, n, _r in sh) == new_n and sum(len(r) for _d, _n, r in sh) == rev_n, sh)
+    s = face.view()["said"]
+    check("said with the plan's dates, one Undo for both", "held back" in s["text"] and "moved to their days" in s["text"] and s["undo"] == "save", s)
+    face.on("undo", {})
+    check("Undo: the plan's save and Anki's step", ("undo_save", "pMine", 7) in ops.log and undone == ["Due Crew: spread"], (ops.log[-2:], undone))
+    # today's share stays as it is; nothing open, nothing said or done
+    face.on("type", {"text": "platelets"})
+    face.on("days", {"show": True})
+    face.picked = [TODAY.isoformat()]
+    check("a share for today isn't touched", all(d == 0 for d, _n, _r in face.shares(cids, face.picked))
+          and not face.view()["days"]["note"], face.view()["days"])
+
+
 def test_rows_for_whats_coming_up():
     face, ops, _closed = window()
     face.on("type", {"text": "quiz friday on platelets and anemia"})

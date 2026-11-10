@@ -347,6 +347,7 @@ var dcMagic = (function () {
       els.pod.appendChild(h('div', { cls: 'split', text: each.length === 1 ? plural(each[0].n, 'card')
         : each.map(function (e) { return n(e.n); }).join(' · ') + ' cards' }));
     }
+    if (D.note) els.pod.appendChild(h('div', { cls: 'split', text: D.note }));
     var go = 'Put on ' + (each.length ? plural(each.length, 'day') : 'days');
     els.pod.appendChild(h('div', { cls: 'acts' }, [btn('b', 'Cancel', 'days', { show: false }), h('span', { cls: 'sp' }),
       h('button', { type: 'button', cls: 'b pri', text: go, disabled: !each.length || V.busy || !V.signed_in ? true : null,

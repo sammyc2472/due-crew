@@ -577,6 +577,49 @@ class Ops:
         from . import team_flow
         return team_flow.study_deck(name, cids)
 
+    def open_kinds(self, cids):
+        """3.9.9: which of these a plan's date can't hold till its day, being open
+        already: {cid: "new"} (not started, not suspended) and {cid: "rev"} (a
+        review due today or before); in their own decks (a filtered deck's stay)."""
+        if not mw.col or not cids:
+            return {}
+        today, out = int(mw.col.sched.today), {}
+        ids = ",".join(str(int(c)) for c in cids)
+        for cid, ctype, queue, due in mw.col.db.all(
+                f"SELECT id, type, queue, due FROM cards WHERE id IN ({ids}) AND odid = 0 AND queue IN (0, 2)"):
+            if ctype == 0 and queue == 0:
+                out[int(cid)] = "new"
+            elif ctype == 2 and queue == 2 and int(due) <= today:
+                out[int(cid)] = "rev"
+        return out
+
+    def spread(self, shares):
+        """Schedule ahead on cards that are open already (Sam, 10 Nov: unsuspended
+        cards due on one day, put on the next few, stayed where they were: a date
+        only opens what's suspended). shares: [(days from today, [new], [rev])].
+        A later day's new cards are held back (suspended: its date opens them that
+        morning) and its due reviews get that day as their due date (Anki's Set
+        due date: the interval stays). One undo step. (held, moved, its label)."""
+        col = mw.col
+        held = [c for n, new, _rev in shares if n > 0 for c in new]
+        moved = sum(len(rev) for n, _new, rev in shares if n > 0)
+        if not col or not (held or moved):
+            return 0, 0, ""
+        label = f"Due Crew: spread {len(held) + moved:,} card{'s' if len(held) + moved != 1 else ''} over days"
+        pos = _undo_start(col, label)
+        try:
+            if held:
+                col.sched.suspend_cards(held)
+            for n, _new, rev in shares:
+                if n > 0 and rev:
+                    col.sched.set_due_date(rev, str(int(n)))
+        except Exception:
+            oops()
+        _undo_end(col, pos)
+        plan_flow._after_change()
+        app.swap(cfg())
+        return len(held), moved, label
+
     def undo_anki(self, label):
         """Edit › Undo, when the last step is still ours."""
         if plan_flow._undo_ok(label):
@@ -1219,7 +1262,14 @@ class Search:
                          "on": d.isoformat() in self.picked})
         split = M.split(cids, self.picked) if self.picked else []
         each = [{"iso": d, "n": len(c)} for d, c in split]
-        return {"list": days, "each": each, "name": self.day_name or self.name()}
+        sh = self.shares(cids, self.picked) if self.picked else []
+        held = sum(len(new) for n, new, _r in sh if n > 0)
+        moved = sum(len(rev) for n, _n, rev in sh if n > 0)
+        note = " ".join(x for x in (
+            f"{held:,} {'is' if held == 1 else 'are'} new and open now: held back till {'its' if held == 1 else 'their'} day." if held else "",
+            f"{moved:,} review{' is' if moved == 1 else 's are'} due now: {'its due date moves' if moved == 1 else 'their due dates move'} "
+            f"to {'its' if moved == 1 else 'their'} day." if moved else "") if x)
+        return {"list": days, "each": each, "name": self.day_name or self.name(), "note": note}
 
     def dests_view(self):
         """Where a date or a quiz goes: My plan, and the plans I write on this deck."""
@@ -1448,8 +1498,34 @@ class Search:
             return
         name = self.day_name or self.name()
         ops = self.day_ops(cids, self.picked, name)
-        self.write(ops, f"{name} on {M.words_span(self.picked[0], self.picked[-1])}")
+        what = f"{name} on {M.words_span(self.picked[0], self.picked[-1])}"
+        held, moved, label = self.ops.spread(self.shares(cids, self.picked))
+        if held or moved:  # the open ones, which a date alone leaves where they are
+            what += ". " + " and ".join(x for x in (
+                f"{held:,} new held back till their day" if held else "",
+                f"{moved:,} review{'s' if moved != 1 else ''} moved to {'their days' if len(self.picked) > 1 else 'that day'}" if moved else "") if x)
+            self._kinds = None
+        self.write(ops, what, also=label)
         self.ops.note_recent(self.text)
+
+    def kinds(self, cids):
+        key = (len(cids), cids[0] if cids else 0, cids[-1] if cids else 0)
+        got = getattr(self, "_kinds", None)
+        if not got or got[0] != key:
+            try:
+                got = self._kinds = (key, self.ops.open_kinds(cids))
+            except Exception:
+                oops()
+                got = self._kinds = (key, {})
+        return got[1]
+
+    def shares(self, cids, days):
+        """[(days from today, its open new cards, its due reviews)] a picked day."""
+        kinds, today, out = self.kinds(cids), self.ops.today(), []
+        for day, part in M.split(cids, days):
+            n = (datetime.date.fromisoformat(day) - today).days
+            out.append((n, [c for c in part if kinds.get(c) == "new"], [c for c in part if kinds.get(c) == "rev"]))
+        return out
 
     def day_ops(self, cids, days, name):
         """A date a day: the ticked tags when it's one day of whole topics,
@@ -1533,7 +1609,7 @@ class Search:
         self.write([{"op": "text", "mode": "add", "text": self.text}],
                    f"{n:,} date{'s' if n != 1 else ''}" + (f" and {len(pt['events']):,} event{'s' if len(pt['events']) != 1 else ''}" if pt["events"] else ""))
 
-    def write(self, ops, what, row=None):
+    def write(self, ops, what, row=None, also=""):
         """The ops onto the plan picked (My plan unless another), said when it lands."""
         key = self.dest if any(d["key"] == self.dest for d in self.dests_view()) else "mine"
         pid = self.my_plan_id() if key == "mine" else key
@@ -1549,14 +1625,14 @@ class Search:
             elif how == "waiting":
                 self.said = {"text": f"Waiting in {plan_name}'s Review and send.",
                              "undo": "draft", "open": got_pid}
-                self.undo = {"kind": "draft", "pid": got_pid, "n": int(more or len(ops)), "row": row}
+                self.undo = {"kind": "draft", "pid": got_pid, "n": int(more or len(ops)), "row": row, "anki": also}
             else:
                 if more == "made":  # My plan, just made: the next Put goes onto it, never a second one
                     self.dests = [p for p in self.dests or [] if p.get("id") != got_pid] + [
                         {"id": got_pid, "name": MY_PLAN, "role": "owner", "followers": 1, "following": True,
                          "doc": {"deck": self.idx.name if self.idx else ""}}]
                 self.said = {"text": f"{'Made' if more == 'made' else 'On'} {plan_name}: {what}.", "undo": "save", "open": got_pid}
-                self.undo = {"kind": "save", "pid": got_pid, "version": version, "row": row}
+                self.undo = {"kind": "save", "pid": got_pid, "version": version, "row": row, "anki": also}
                 self.picked = [] if row is None else self.picked
                 self.mode = "" if row is None else self.mode
             self.push()
@@ -1567,6 +1643,9 @@ class Search:
         if not u:
             return
         k = u["kind"]
+        if u.get("anki") and k in ("save", "draft"):  # Schedule ahead's own step in Anki goes back with its dates
+            self.ops.undo_anki(u["anki"])
+            self._kinds = None
         if k == "anki":
             ok = self.ops.undo_anki(u["label"])
             self.said = {"text": "Undone." if ok else "Undo it with Edit › Undo."}
