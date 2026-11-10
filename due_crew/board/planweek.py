@@ -66,9 +66,13 @@ def _week_html(card, pid):
                + (" ev1" if d["events"] else "") + (" sel" if i == sel else ""))
         # a click picks the day and shows its details (motion.js moves them in); again shuts them
         click = (f' onclick="var w=this.parentNode,o=this.classList.contains(\'sel\'),x=document.getElementById(\'{did}\');'
-                 f'w.querySelectorAll(\'.pc\').forEach(function(c){{c.classList.remove(\'sel\');}});'
+                 f'w.querySelectorAll(\'.pc\').forEach(function(c){{c.classList.remove(\'sel\');'
+                 f'if(c.hasAttribute(\'aria-expanded\'))c.setAttribute(\'aria-expanded\',\'false\');}});'
                  f'w.parentNode.querySelectorAll(\'.pday\').forEach(function(y){{y.hidden=true;}});'
-                 f'if(!o){{this.classList.add(\'sel\');if(x)x.hidden=false;}}return false;"') if has else ""
+                 f'if(!o){{this.classList.add(\'sel\');this.setAttribute(\'aria-expanded\',\'true\');if(x)x.hidden=false;}}return false;"'
+                 # 3.9.9: a day is a button to the keyboard and a screen reader too (page.KEYS_JS presses it on Enter or Space)
+                 f' role="button" tabindex="0" aria-expanded="{"true" if i == sel else "false"}" aria-controls="{did}"'
+                 f' aria-label="{e(d["dow"])} {int(d["num"])} {_mon(d["day"])}{", today" if d["today"] else ""}: its sets"') if has else ""
         num = f'<span class="d"><span class="dow">{e(d["dow"])} </span><b>{int(d["num"])}</b></span>'
         cells += f'<div class="{cls}"{click}>{num}{bar}<span class="n">{n}</span>{evs}</div>'
         if has:

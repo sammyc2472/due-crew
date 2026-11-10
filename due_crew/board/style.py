@@ -28,6 +28,7 @@ def _css(cfg):
       box-shadow: none; min-height: 0; letter-spacing: normal; line-height: normal; }}
     #due-crew :where(input, select, textarea):focus-visible {{ outline: 2px solid var(--dc-accent); outline-offset: 0; }}
     #due-crew button:focus-visible {{ outline: 2px solid var(--dc-accent) !important; outline-offset: 2px; }}
+    #due-crew [role="button"][tabindex]:focus-visible {{ outline: 2px solid var(--dc-accent) !important; outline-offset: 2px; }}
     /* the board is one rounded card — white by day, near-black by night —
        and inside it there are no rules and no fills: rows separate by
        spacing and the you-row highlight alone */

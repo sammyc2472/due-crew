@@ -208,7 +208,7 @@ def keep_me_in_view_js(scripts=True):
         var want = me.offsetTop - (box.clientHeight - me.offsetHeight) / 2;
         if (want > 0) { box.scrollTop = want; }
     })();
-    """ + (DUE_JS + MOTION_JS + FIND_JS + VEIL_WATCH_JS + PARTY_JS + _sev.REST_JS if scripts else FIND_AFTER) + MOTION_DRAWN
+    """ + (DUE_JS + MOTION_JS + FIND_JS + VEIL_WATCH_JS + KEYS_JS + PARTY_JS + _sev.REST_JS if scripts else FIND_AFTER) + MOTION_DRAWN
 
 
 # 3.9.1 (Sam: "when cheering, the full background doesn't grey out"): a
@@ -217,6 +217,33 @@ def keep_me_in_view_js(scripts=True):
 # window comes, or the last one goes (a closing one gives up its id as it
 # starts to fade, motion.js, so the bars fade with it).
 VEIL_IDS = ("dc-cheer", "dc-profile", "dc-sheet", "dc-song", "dc-magic")  # 3.9.6: the song search; 3.9.7: Magic search's how-to
+# 3.9.9: what isn't a link or a button but is pressed (a week's day, a set on the path, a pick's chip)
+# is one to the keyboard: role="button" with a tabindex, pressed by Enter or Space; a row marked
+# data-rove is one Tab stop, walked with the arrows. Once a page.
+KEYS_JS = """
+(function () {
+    if (window.dcKeys) { return; }
+    window.dcKeys = 1;
+    document.addEventListener('keydown', function (e) {
+        var t = e.target;
+        if (!t || !t.matches || !t.matches('#due-crew [role="button"][tabindex]')) { return; }
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            t.click();
+            return;
+        }
+        if (!t.hasAttribute('data-rove') || (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft')) { return; }
+        var all = Array.prototype.slice.call(t.parentNode.querySelectorAll('[data-rove]'));
+        var to = all[all.indexOf(t) + (e.key === 'ArrowRight' ? 1 : -1)];
+        if (!to) { return; }
+        e.preventDefault();
+        t.setAttribute('tabindex', '-1');
+        to.setAttribute('tabindex', '0');
+        to.focus();
+    });
+})();
+"""
+
 VEIL_WATCH_JS = """
 (function () {
     if (window.dcVeil || typeof MutationObserver === 'undefined') { return; }

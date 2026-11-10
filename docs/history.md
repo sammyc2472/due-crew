@@ -4788,6 +4788,32 @@ every release that changes how something works.
   is held for the card only while Settings has my exam (with none, it
   plays as a cheer), and a crewmate's later cheer to me takes the place of
   their line on the server (one cheer a pair) if I haven't fetched it yet.
+- 3.9.9, three from "is there anything else" (Sam, 10 Nov: "Go for
+  keyboard insights warmup and extra budget lines").
+  The keyboard: the week's seven days were clickable boxes, so Tab skipped
+  them and everything under a day was the mouse's. What's pressed and isn't
+  a link or a button is now `role="button"` with a tabindex, pressed by
+  Enter or Space through one handler a page (`page.KEYS_JS`): a week's day
+  (`aria-expanded`, `aria-controls`, named "Tue 6 Oct: its sets"), a set on
+  the path (the path is one Tab stop, `data-rove`, the arrows walk it; its
+  box a group, not an image), Pip Party's pick chips and a kept pick's ×.
+  A focus ring for all of them. Looks the same; found by listing every
+  `onclick` on the rendered board a keyboard couldn't reach, and tried in a
+  browser (Enter opens a day, Space shuts it, two rights and Enter jump).
+  Left: Reviews ahead's choices (a radiogroup whose options take focus).
+  Insights ahead: `team_flow.warm`, twenty seconds after a profile opens
+  (`warm_soon`), works You › Insights' deck out with insights_soon's
+  stepper, quietly: it waits while a card is on screen (a look every 3 s)
+  and draws nothing at its end, so the tab opens on a view that's at hand.
+  Not when the tab is hidden (Settings, the calm board). Asked for while it
+  warms, the same job stops standing back and redraws when done.
+  The budget: eight waits nobody timed (`tools/speed_budget.py`), on a plan
+  of thirty sets followed on the big deck: Insights' longest hold (768 ms
+  of 2,000), its picker (37 of 200), a deck read (677 of 2,000), a plan's
+  progress (215 of 800), the morning (352 of 1,200; 1,369 cards opened),
+  the week across plans (0 of 50), my pace (8 of 150), reviews by day (11
+  of 150). The robot click-test times the Decks screen to the board drawn
+  (`board_first_draw_ms`, a warning past 4 s: never measured before).
 - 3.9.9, the week across plans (the plan gaps' mock 2; Sam: "sure", then
   "Yes on all"). Each plan knew its own week and the week's day lines knew
   my reviews; nothing added them up. You › Plans now ends with Everything

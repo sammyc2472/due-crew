@@ -139,7 +139,7 @@ def party_html(v):
                   f'<span class="pp-first">First up</span><span class="pp-art" aria-hidden="true">{_party_art(gid)}</span>'
                   f'<b>{e(g["label"])}</b><span class="pp-k">{e(_GAME_KIND.get(gid, ""))}</span><span class="pp-n">{count}</span></a>')
     kept = "".join(f'<a class="pp-kb" href="#" onclick="{_pycmd(f"party:kept:{i}")}">{e(k)}'
-                   f'<i class="x" role="button" aria-label="Forget {e(k)}" onclick="event.stopPropagation();{_pycmd(f"party:forget:{i}")}">&times;</i></a>'
+                   f'<i class="x" role="button" tabindex="0" aria-label="Forget {e(k)}" onclick="event.stopPropagation();{_pycmd(f"party:forget:{i}")}">&times;</i></a>'
                    for i, k in enumerate(v.get("kept") or []))
     kept = f'<div class="pp-kept"><span>Kept:</span>{kept}</div>' if kept else ""
     by = v.get("by") or "sys"
@@ -163,7 +163,7 @@ def party_html(v):
     chips = ""
     for j, p in enumerate(v.get("picks") or []):
         deck = f' &middot; {e(p["deck"])}' if p.get("kind") == "sys" and p.get("deck") else ""
-        flip = "" if p.get("kind") == "search" else f' onclick="{_pycmd(f"party:out:{j}")}"'
+        flip = "" if p.get("kind") == "search" else f' tabindex="0" onclick="{_pycmd(f"party:out:{j}")}"'
         chips += (f'<span class="pp-pk{" out" if p.get("out") else ""}" role="button"{flip} '
                   f'title="{"Put it back in" if p.get("out") else "Leave these out"}">{"Not " if p.get("out") else ""}{e(p["name"])}{deck}'
                   f'<a class="x" href="#" aria-label="Drop {e(p["name"])}" onclick="event.stopPropagation();{_pycmd(f"party:drop:{j}")}">&times;</a></span>')

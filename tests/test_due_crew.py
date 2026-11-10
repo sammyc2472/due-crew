@@ -4927,6 +4927,19 @@ def test_your_own_days_376():
             card = F.card_view(next(x for x in F.followed() if x["id"] == pid), F._state_cfg()[pid], {}, _day(0))
             html = board._plan_card_html(dict(card, id=pid))
             check("move: a date from today on has Move…", f"planmove:{pid}:ar" in html, html[:300])
+            # 3.9.9: what's pressed and isn't a link is a button to the keyboard and a screen reader
+            check("keys: a week's day is a button (a Tab stop, says whether it's open, names what it opens)",
+                  re.search(r'<div class="pc[^"]*" onclick="[^"]*" role="button" tabindex="0" aria-expanded="(true|false)" '
+                            r'aria-controls="dc-pd-[^"]+" aria-label="[A-Z][a-z]{2} \d+ [A-Z][a-z]{2}[^"]*: its sets"', html) is not None
+                  and "setAttribute('aria-expanded','true')" in html, html[:400])
+            check("keys: the path is one Tab stop, its sets walked with the arrows, each named",
+                  html.count(' tabindex="0" data-rove="1"') == 1 and html.count('data-rove="1"') >= 2
+                  and 'role="group" aria-label="Sets: ' in html and "Arrow keys move along them." in html
+                  and re.search(r'<i class="[^"]*" title="[^"]*" aria-label="[^"&]*"', html) is not None)
+            from due_crew.board import page as BP
+            check("keys: one handler a page presses them on Enter or Space, and rides with the board's scripts",
+                  "window.dcKeys" in BP.KEYS_JS and "'Enter'" in BP.KEYS_JS and "ArrowRight" in BP.KEYS_JS
+                  and BP.KEYS_JS in BP.keep_me_in_view_js(True) and BP.KEYS_JS not in BP.keep_me_in_view_js(False))
             dc._on_js(False, as_board(f"duecrew:planskip:{pid}:ex"), DeckBrowser())  # a command the board sends, for the handler list
             F.move_date(pid, "cz", 2)
             check("move: kept on my follow; the plan itself unchanged",
@@ -21521,6 +21534,41 @@ def test_insights_a_part_at_a_time_v399():
         A.generation -= 1
         html = board.insights._you_insights({"decks": [{"did": 7, "name": "Deck"}], "did": 7, "view": {"working": True}})
         check("soon: the board's line while it works", "Reading your reviews" in html, html[-120:])
+        # warming ahead: quietly, standing back from a card on screen, no redraw at its end
+        had = (TF.you_decks, board.hidden_tabs, getattr(dc.mw, "state", None))
+        try:
+            TF.you_decks = lambda: [{"did": 9, "name": "Deck", "pid": None}]
+            board.hidden_tabs = lambda c=None: {"insights"}
+            _state["insights"], seen[:], later[:], swaps[:] = {}, [], [], []
+            TF.warm()
+            check("warm: Insights hidden (Settings, or the calm board): nothing worked out", later == [] and _state["ins_job"] is None)
+            board.hidden_tabs = lambda c=None: set()
+            TF.warm()
+            dc.mw.state = "review"
+            later.pop(0)()
+            check("warm: a card on screen: it waits, nothing worked out", seen == [] and len(later) == 1)
+            dc.mw.state = "deckBrowser"
+            while later:
+                later.pop(0)()
+            check("warm: worked out ahead a part a turn, kept, the board not redrawn; the tab then opens on it at once",
+                  seen == ["a", "b"] and swaps == [] and TF.insights_ready(9) and TF.insights_soon(9) == {"n": 2} and later == [])
+            TF.warm()
+            check("warm: at hand already: nothing started", later == [] and _state["ins_job"] is None)
+            _state["insights"], seen[:] = {}, []
+            TF.warm()
+            got = TF.insights_soon(9)
+            while later:
+                later.pop(0)()
+            check("warm: asked for while warming: the same job, and now the board is drawn again at its end",
+                  got == {"working": True} and seen == ["a", "b"] and swaps == [1])
+            os.environ[TF.WHOLE] = "1"
+            _state["insights"] = {}
+            TF.warm()
+            check("warm: off outside Anki's own run", later == [])
+            os.environ.pop(TF.WHOLE)
+        finally:
+            TF.you_decks, board.hidden_tabs = had[0], had[1]
+            dc.mw.state = had[2]
     finally:
         (TF.cfg, TF._work_steps, TF._later, TF.ASYNC, dc.mw.col, _state["insights"], _state["ins_job"], A.swap, TF._stamp) = saved
         os.environ[TF.WHOLE] = "1"

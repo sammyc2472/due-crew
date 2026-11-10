@@ -528,6 +528,14 @@ def _deck_plans(col):
     return plans
 
 
+def _ins_ask(c, decks):
+    """The deck You › Insights shows (cfg ins_deck, this computer's, or the
+    first), the plan that sharpens it, and my exam date."""
+    did = int(c.get("ins_deck") or 0)
+    d = next((x for x in decks if x["did"] == did), decks[0])
+    return d, (_plan(d["pid"]) if d.get("pid") else None), str(c.get("exam_date") or "")
+
+
 def you_view(c):
     """What You › Insights draws: {decks, did, exam (my date, or ""), view}. The deck
     picked (cfg ins_deck, this computer's) or the first; a plan I follow on
@@ -535,10 +543,7 @@ def you_view(c):
     decks = you_decks()
     if not decks:
         return {"decks": []}
-    did = int(c.get("ins_deck") or 0)
-    d = next((x for x in decks if x["did"] == did), decks[0])
-    p = _plan(d["pid"]) if d.get("pid") else None
-    exam = str(c.get("exam_date") or "")
+    d, p, exam = _ins_ask(c, decks)
     view = insights_soon(d["did"], p["id"] if p else None, exam)
     at = (_state.get("map_at") or {}).get(d["did"]) or []
     if view.get("map"):
@@ -622,7 +627,39 @@ ASYNC = False  # the glue turns it on with a profile open (real Anki)
 WHOLE = "DUE_CREW_INSIGHTS_WHOLE"  # set in the environment (the suite's and the tools' stand-in for Anki sets it): never in parts
 
 
-def insights_soon(did, pid=None, exam=""):
+WARM_AFTER = 20000  # ms after a profile opens: the sync and the morning are usually through
+
+
+def warm_soon():
+    """At a profile's open: Insights worked out before it's asked for."""
+    gen = app.generation
+    _later(lambda: gen == app.generation and warm(), WARM_AFTER)
+
+
+def warm():
+    """3.9.9: You › Insights' deck worked out ahead, quietly: a part a turn
+    as insights_soon does, waiting while a card is on screen, and no redraw
+    at its end (the tab opens on a view that's at hand). Nothing when the
+    tab is hidden (Settings, or the calm board hasn't shown it yet), when
+    it's at hand already, or outside Anki's own run."""
+    import os
+    if not ASYNC or os.environ.get(WHOLE) or not mw.col:
+        return
+    try:
+        from . import board
+        c = cfg()
+        if "insights" in board.hidden_tabs(c):
+            return
+        decks = you_decks()
+        if not decks:
+            return
+        d, p, exam = _ins_ask(c, decks)
+        insights_soon(d["did"], p["id"] if p else None, exam, quiet=True)
+    except Exception:
+        oops()
+
+
+def insights_soon(did, pid=None, exam="", quiet=False):
     """The board's Insights: the view when it's at hand (insights()' own
     rule), else worked out a step a turn of the screen while Anki stays
     live, the board drawn again when it's done. Until then: the last view
@@ -637,8 +674,10 @@ def insights_soon(did, pid=None, exam=""):
     job = _state.get("ins_job")
     if job is None or job["gen"] != app.generation:
         job = _state["ins_job"] = {"did": did, "key": key, "gen": app.generation, "stamp": _stamp(),
-                                   "g": _work_steps(int(did), pid, exam)}
+                                   "g": _work_steps(int(did), pid, exam), "quiet": bool(quiet)}
         _later(lambda: _ins_step(job))
+    elif not quiet:
+        job["quiet"] = False  # the board is waiting on it now: no more standing back, and a redraw at its end
     return dict(have["view"], working=True) if have and have.get("view") else {"working": True}
 
 
@@ -653,6 +692,9 @@ def _ins_step(job):
     if job["gen"] != app.generation or not mw.col:
         _state["ins_job"] = None
         return
+    if job.get("quiet") and getattr(mw, "state", "") == "review":
+        _later(lambda: _ins_step(job), 3000)  # warming ahead never costs a card its turn
+        return
     view, done = {}, False
     try:
         next(job["g"])
@@ -666,6 +708,8 @@ def _ins_step(job):
         return
     _state["ins_job"] = None
     _state.setdefault("insights", {})[job["did"]] = {"at": time.time(), "view": view, "key": job["key"], "stamp": job["stamp"]}
+    if job.get("quiet"):
+        return  # warmed ahead: nothing on screen is waiting for it
     try:
         app.swap(cfg())
     except Exception:

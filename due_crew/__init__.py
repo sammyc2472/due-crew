@@ -1888,6 +1888,7 @@ def _on_profile_open():
         errs_flow.open_profile()  # 3.9.9: this profile's counts for Sam
         from . import team_flow as _tf
         _tf.ASYNC = True  # 3.9.9: the board's Insights is worked out a part at a time (insights_soon)
+        _tf.warm_soon()  # and ahead of its first ask, once the morning is through
     except Exception:
         oops()
     _closet(lambda cf: cf.hook())  # 3.8.2: cards I add count for Pip's closet

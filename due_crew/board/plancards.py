@@ -284,7 +284,9 @@ def _plan_path(card):
 
     def jump(day):  # 3.9.6, after the last check: a click opens its day's details in the week below (plan_flow.jump_to)
         day = str(day or "")
-        return f' onclick="{_pycmd(f"planjump:{pid}:{day}")}"' if pid and _re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) else ""
+        # 3.9.9: a button to the keyboard too: one stop for the whole path, the arrows walk it (page.KEYS_JS)
+        return (f' role="button" tabindex="-1" data-rove="1" onclick="{_pycmd(f"planjump:{pid}:{day}")}"'
+                if pid and _re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) else "")
 
     keep = _path_keep(ls, p, card.get("joy"))
     pieces, i = 0, 0
@@ -303,7 +305,7 @@ def _plan_path(card):
                 said = PATH_FOLD[st].format(n=j - i)
                 to = run[-1] if st == "done" else run[0]
                 segs += (f'<i class="run {PATH_WORDS.get(st, "a")}{" rl" if last else ""}" style="flex:{min(j - i, 8)} 1 0" '
-                         f'title="{e(first)} to {e(end)} &middot; {said}"{jump(to.get("opens"))}><span>{said}</span></i>')
+                         f'title="{e(first)} to {e(end)} &middot; {said}" aria-label="{e(first)} to {e(end)}, {said}"{jump(to.get("opens"))}><span>{said}</span></i>')
                 pieces += 1
                 i = j
                 continue
@@ -313,7 +315,7 @@ def _plan_path(card):
             st, _ins_dname(x.get("opens"), long=True))
         cls = PATH_WORDS.get(st, "a") + (" t" if x.get("today") and st == "done" else "")
         play, inner = _joy_seg(card.get("joy"), str(x.get("uid") or ""), st)
-        segs += f'<i class="{cls}" title="{e(str(x.get("name") or "?"))} &middot; {word}"{play}{jump(x.get("opens"))}>{inner}</i>'
+        segs += f'<i class="{cls}" title="{e(str(x.get("name") or "?"))} &middot; {word}" aria-label="{e(str(x.get("name") or "?"))}, {word.replace(" &middot; ", ", ")}"{play}{jump(x.get("opens"))}>{inner}</i>'
         pieces += 1
         i += 1
     end = p.get("end") or {}
@@ -327,7 +329,8 @@ def _plan_path(card):
     gap = "" if pieces <= 30 else " g2" if pieces <= 60 else " g1" if pieces <= 120 else " g0"
     gap += " fold" if keep is not None else ""
     right = (f'{e(str(end.get("name") or "Exam"))} &middot; {when}' if ev else f"Ends {when}" if when else "")
-    return (f'<div class="ppath{gap}" role="img" aria-label="Sets: {said}">{segs}</div>'
+    segs = segs.replace(' tabindex="-1" data-rove', ' tabindex="0" data-rove', 1)  # the path's one stop
+    return (f'<div class="ppath{gap}" role="group" aria-label="Sets: {said}. Arrow keys move along them.">{segs}</div>'
             f'<div class="ppl"><span>{_ins_dname(p.get("first"), long=True)}</span><span>{right}</span></div>')
 
 

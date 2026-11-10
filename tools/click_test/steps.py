@@ -27,6 +27,7 @@ from .probe import clean
 from .robot import BLOCKED, Robot, Timeout
 
 FIRST_CARD_MAX_S = 3.0
+BOARD_MAX_S = 4.0  # the Decks screen to the board with its crew, on the fake server (a warning: not measured before 3.9.9)
 # CPU at rest, % of one core, from REST_FROM_S after the last input: the page rests at 12 s (sev.REST_JS) and
 # its loops play their round out by about 20. Measured on the code of 8 Nov 2026 (3.9.8, a 4-core container):
 # 0.1-0.2% from 20 s on (about 30% awake, about 10% from 15 to 20 s); a page that never rests stays near 30%.
@@ -287,10 +288,15 @@ class Run:
         yield self.r.until(lambda: getattr(mw, "col", None) is not None and mw.state == "deckBrowser", 60,
                            "the Decks screen")
         dc = self.dc
+        t_decks = time.perf_counter()  # 3.9.9: the Decks screen is up; from here to the board with its crew on it
         yield self.r.until(lambda: dc._state.get("entries") is not None, 30, "the board's first refresh")
         from aqt.qt import QApplication
         self.baseline = {id(w) for w in QApplication.topLevelWidgets() if w.isVisible()}
         yield from self.wait_board()
+        first = time.perf_counter() - t_decks
+        self.timings["board_first_draw_ms"] = round(first * 1000)
+        self.check(f"boot: the board is drawn within {BOARD_MAX_S:g} s of the Decks screen", first <= BOARD_MAX_S,
+                   f"{first:.1f} s", warn=True)
         # Magic search's how-to comes over the Decks screen once a person, a moment after it's drawn
         mf = __import__("due_crew.magic_flow", fromlist=["board_howto"])
         pop, t = "", time.perf_counter()
