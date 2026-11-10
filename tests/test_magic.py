@@ -1020,10 +1020,12 @@ def test_ways_in():
           "#dc-mgf { --dc-bg: #ffffff;" in fld and "#1e5fb4" in fld and "night" in fld and "--dc-hours" in fld)
     check("…Enter sends what's typed, encoded and keyed as the board's commands are",
           "pycmd('duecrew:magic'+(q?':'+encodeURIComponent(q):'')+'|" + board.BOARD_KEY + "');return false;" in fld
-          and "function go() { f.querySelector('button.go').click(); }" in fld)
+          and "f.querySelector('button.go').click();" in fld)
     check("…it moves about twelve seconds, then rests till pointed at; nothing with Reduce motion; no </script> from its words",
-          "12000" in fld and "rounds >= 3" in fld and "prefers-reduced-motion" in fld and fld.count("</script>") == 1
-          and all(x in fld for x in board.MAGIC_EXAMPLES[:1]))
+          "12000" in fld and "prefers-reduced-motion" in fld and fld.count("</script>") == 1
+          and sum(('placeholder="%s"' % x) in fld for x in board.MAGIC_EXAMPLES) == 1)
+    check("…its example stays as it is while the page is up (Sam: cycling through them was confusing and distracting)",
+          "setTimeout(type" not in fld and "function next" not in fld and "mouseenter" not in fld)
     due = None
     on = board._due_html(due, (("plans", "Plans"),), "plans", "", magic=True)
     check("the You box's head has no Magic search link any more", "Magic search" not in on and "du-mg" not in on)

@@ -4848,12 +4848,16 @@ every release that changes how something works.
   styles: "G2 please!"). It was a green link in the You box's head, which
   didn't look like a search. Now `board.magic_field` (due.py): the
   board's input with the window's magnifier and amber star, 440 px, after
-  Anki's deck list and over its "Studied…" line (`content.tree` in
-  `_on_render`; the board stays in `content.stats`). A glint goes round
-  its edge in the accent and the amber and its placeholder writes itself
-  through three of `MAGIC_EXAMPLES`, the star twinkling as each lands:
-  about twelve seconds, then both rest till it's pointed at (Pip's rule;
-  nothing with Reduce motion). Focused it says what to type; Enter or the
+  Anki's deck list and over its "Studied…" line (the start of
+  `content.stats` in `_on_render`, the board after Anki's line. Sam's
+  first click-test had it above the list: `content.tree` is inside
+  Anki's `<table>`, and a browser lifts a div out of a table to above
+  it; the preview's stand-in had no table round it). A glint goes round
+  its edge in the accent and the amber about twelve seconds, then rests
+  till it's pointed at (Pip's rule; nothing with Reduce motion). Its
+  placeholder is one of `MAGIC_EXAMPLES`, the next each time the page is
+  drawn (it wrote itself through three at first: "confusing and
+  distracting", Sam). Focused it says what to type; Enter or the
   magnifier opens the window on it (`duecrew:magic:<encoded>`, 400 at
   most, keyed as the board's commands are; empty opens it empty). It's
   outside #due-crew and drawn with the page, never by a swap, so it

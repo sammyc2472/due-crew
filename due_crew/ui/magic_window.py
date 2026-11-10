@@ -14,6 +14,7 @@ from . import attach_alive
 
 PREFIX = "dcmagic:"
 WIDTH, START_H, MIN_H = 660, 190, 140  # a box and its filters; it grows with what it finds
+ASK_SECS = 3.0  # how long a height asked for stays ours when the window manager reports it late
 
 
 class MagicWindow(QDialog):
@@ -37,7 +38,10 @@ class MagicWindow(QDialog):
             fit(self, WIDTH, START_H)
         except Exception:
             self.resize(WIDTH, START_H)
-        self._asked = self.height()  # the height last asked for: a resize to it is ours, even when the window manager says so late
+        # the heights asked for lately: a resize to one of them is ours, even when the window manager says so
+        # late (3.9.9, Sam's Mac: two asks in a row, as when it opens on a search already typed, and the first
+        # one's late word looked like a drag; the window then kept its first size whatever it found)
+        self._asks = [(0.0, self.height())]
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         from aqt.webview import AnkiWebView
@@ -114,7 +118,8 @@ class MagicWindow(QDialog):
         want = max(MIN_H, min(int(h), most))
         if want == self.height():
             return
-        self._fitting, self._asked = True, want
+        self._fitting = True
+        self._ask(want)
         try:
             self.resize(self.width(), want)
             if room is not None:
@@ -124,10 +129,21 @@ class MagicWindow(QDialog):
         finally:
             self._fitting = False
 
+    def _ask(self, h):
+        import time
+        now = time.monotonic()
+        self._asks = [(t, a) for t, a in self._asks[-7:] if now - t < ASK_SECS] + [(now, h)]
+
+    def _ours(self, h):
+        """Is a resize to h one this window asked for (the last, or any in the last few seconds)?"""
+        import time
+        now = time.monotonic()
+        return any(abs(h - a) <= 6 for t, a in self._asks[:-1] if now - t < ASK_SECS) or abs(h - self._asks[-1][1]) <= 6
+
     def resizeEvent(self, e):
         super().resizeEvent(e)
         h = e.size().height()
-        if self._fitting or abs(h - self._asked) <= 6 or not self.isVisible() or self._top is None:
+        if self._fitting or self._ours(h) or not self.isVisible() or self._top is None:
             return
         if e.oldSize().isValid() and e.oldSize().height() != h:
             self._mine = True  # dragged to a size: it keeps it

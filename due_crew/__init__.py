@@ -515,7 +515,9 @@ def _on_render(deck_browser, content):
             _state["board_shown"] = True
             if magic_flow.on():
                 # 3.9.9: under the deck list, over Anki's "Studied…" line
-                content.tree = (getattr(content, "tree", "") or "") + board.magic_field(c)
+                # (3.9.9, Sam's screenshot: Anki puts content.tree inside its <table>, and a browser lifts a
+                # div out of a table to above it; the start of content.stats is under the list, over "Studied…")
+                content.stats = board.magic_field(c) + (content.stats or "")
             content.stats += _board_html(c)
             _push_if_stale()
     except Exception:

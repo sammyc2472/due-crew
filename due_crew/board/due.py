@@ -726,7 +726,7 @@ _MAGIC_FIELD_ICON = ('<svg class="mag" width="17" height="17" viewBox="0 0 24 24
 # outside #due-crew, so it carries the board's tokens itself
 _MAGIC_FIELD_CSS = """
 #dc-mgf { box-sizing: border-box; position: relative; display: flex; align-items: center; gap: 7px; width: 440px; max-width: 92%;
-  height: 34px; margin: 14px auto 2px; padding: 0 9px 0 10px; border-radius: 10px; border: 1px solid transparent; text-align: left;
+  height: 34px; margin: 0 auto 14px; padding: 0 9px 0 10px; border-radius: 10px; border: 1px solid transparent; text-align: left;
   font: 12.5px/1.2 Inter, -apple-system, "Segoe UI", sans-serif; color: var(--dc-ink);
   background: linear-gradient(var(--dc-bg), var(--dc-bg)) padding-box,
     conic-gradient(from var(--dc-ga), var(--dc-line) 0 62%, var(--dc-accent) 74%, var(--dc-hours) 82%, var(--dc-line) 92%) border-box; }
@@ -739,7 +739,7 @@ _MAGIC_FIELD_CSS = """
 #dc-mgf button.go:focus-visible { outline: 2px solid var(--dc-accent) !important; outline-offset: 1px; }
 #dc-mgf .mag { overflow: visible; display: block; }
 #dc-mgf .mag .st { fill: var(--dc-hours); transform-box: fill-box; transform-origin: center; }
-#dc-mgf.twk .mag .st { animation: dc-mgf-twk .6s ease-out; }
+#dc-mgf:hover .mag .st { animation: dc-mgf-twk .6s ease-out; }
 @keyframes dc-mgf-twk { 40% { transform: scale(1.7) rotate(45deg); } 100% { transform: none; } }
 #dc-mgf input { appearance: none; -webkit-appearance: none; flex: 1; min-width: 0; height: 100%; margin: 0; padding: 0; border: 0; outline: none !important;
   background: transparent; box-shadow: none; font: inherit; color: var(--dc-ink); }
@@ -748,7 +748,7 @@ _MAGIC_FIELD_CSS = """
   padding: 0 4px; background: var(--dc-well); }
 #dc-mgf .s { position: absolute; left: 24px; top: 6px; width: 5px; height: 5px; background: var(--dc-hours); opacity: 0; pointer-events: none;
   clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); }
-#dc-mgf:hover .s, #dc-mgf.twk .s { animation: dc-mgf-spk .9s ease-out; }
+#dc-mgf:hover .s { animation: dc-mgf-spk .9s ease-out; }
 #dc-mgf .s1 { --dx: -8px; } #dc-mgf .s2 { --dx: 9px; animation-delay: .12s !important; background: var(--dc-accent); }
 #dc-mgf .s3 { --dx: 20px; animation-delay: .22s !important; }
 @keyframes dc-mgf-spk { 0% { transform: translate(0, 0) scale(.2); opacity: 0; } 20% { opacity: 1; }
@@ -756,45 +756,27 @@ _MAGIC_FIELD_CSS = """
 @media (max-width: 460px) { #dc-mgf kbd { display: none; } }
 @media (prefers-reduced-motion: reduce) { #dc-mgf, #dc-mgf * { animation: none !important; } }
 """
-# its placeholder writes itself through a few examples, the star twinkling as each lands; then it rests (three
-# examples, about twelve seconds, as the edge's glint does) till it's pointed at. Focused, it says what to type.
-# Enter (or the magnifier) opens Magic search on what's typed. Nothing with Reduce motion.
+# its placeholder is one example, the next each time the Decks page is drawn (Sam, 3.9.9: writing itself through
+# several was "confusing and distracting"); focused, it says what to type. Enter (or the magnifier) opens Magic
+# search on what's typed. The edge's glint is about twelve seconds, then at rest till it's pointed at.
 _MAGIC_FIELD_JS = r"""
 (function () {
     var f = document.getElementById('dc-mgf');
     if (!f || f.dcOn) { return; }
     f.dcOn = 1;
-    var q = f.querySelector('input'), EX = __EX__, HINT = 'A topic, a filter, pasted question IDs…';
-    var i = 0, n = 0, rounds = 0, timer = 0, typing = false;
-    var still = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
-    function go() { f.querySelector('button.go').click(); }  // (the magnifier's own onclick sends: one place says the command)
+    var q = f.querySelector('input'), EX = q.placeholder, HINT = 'A topic, a filter, pasted question IDs…';
     q.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') { e.preventDefault(); go(); }
+        if (e.key === 'Enter') { e.preventDefault(); f.querySelector('button.go').click(); }  // (the magnifier's own onclick sends)
         else if (e.key === 'Escape') { q.value = ''; q.blur(); }
     });
-    function stop() { clearTimeout(timer); typing = false; }
-    function type() {
-        typing = true;
-        q.placeholder = EX[i].slice(0, ++n);
-        if (n < EX[i].length) { timer = setTimeout(type, 55 + Math.random() * 45); return; }
-        typing = false;
-        f.classList.remove('twk'); void f.offsetWidth; f.classList.add('twk');
-        rounds++;
-        if (rounds >= 3) { return; }
-        timer = setTimeout(next, 2600);
-    }
-    function next() { n = 0; i = (i + 1) % EX.length; type(); }
-    q.addEventListener('focus', function () { stop(); q.placeholder = HINT; });
-    q.addEventListener('blur', function () { if (!q.value) { q.placeholder = EX[i]; } });
-    if (still) { q.placeholder = EX[0]; return; }
-    f.addEventListener('mouseenter', function () {
-        if (!typing && rounds >= 3 && document.activeElement !== q) { rounds = 2; next(); }
-    });
+    q.addEventListener('focus', function () { q.placeholder = HINT; });
+    q.addEventListener('blur', function () { q.placeholder = EX; });
+    if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) { return; }
     f.classList.add('live');
     setTimeout(function () { f.classList.remove('live'); }, 12000);
-    timer = setTimeout(type, 600);
 })();
 """
+_magic_drawn = [0]
 
 
 def magic_field(cfg):
@@ -802,15 +784,16 @@ def magic_field(cfg):
     Magic search as a field under Anki's deck list, over its "Studied…"
     line, in the link's place in the You box's head. The board's input with
     the window's magnifier and star; a glint goes round its edge in the
-    accent and the amber and its placeholder writes itself through a few
-    examples, about twelve seconds, then both rest till it's pointed at.
+    accent and the amber, about twelve seconds, then rests till it's pointed
+    at; its placeholder is one example, the next each time the page is drawn.
     Type and Enter: the window opens on it. It's drawn with the Decks page
     (never by a swap), so it carries its own sheet, tokens and script."""
     from .base import BOARD_KEY, DEFAULT_ACCENT, _by_theme, _token_block, palette
-    import json as _json
     accent = (cfg or {}).get("accent", DEFAULT_ACCENT)
     tokens = _by_theme(cfg or {}, "#" + MAGIC_FIELD_ID, _token_block(palette("light", accent)), _token_block(palette("dark", accent)))
-    js = _MAGIC_FIELD_JS.replace("__EX__", _json.dumps(list(MAGIC_EXAMPLES)))
+    js = _MAGIC_FIELD_JS
+    example = MAGIC_EXAMPLES[_magic_drawn[0] % len(MAGIC_EXAMPLES)]
+    _magic_drawn[0] += 1
     return (f'<style>{tokens}{_MAGIC_FIELD_CSS}</style>'
             f'<div id="{MAGIC_FIELD_ID}" role="search">'
             f'<i class="s s1"></i><i class="s s2"></i><i class="s s3"></i>'
@@ -818,7 +801,7 @@ def magic_field(cfg):
             f'<button type="button" class="go" title="Magic search ({MAGIC_KBD})" aria-label="Open Magic search" '
             f'onclick="var q=this.parentNode.querySelector(\'input\').value.slice(0,400);'
             f'pycmd(\'duecrew:magic\'+(q?\':\'+encodeURIComponent(q):\'\')+\'|{BOARD_KEY}\');return false;">{_MAGIC_FIELD_ICON}</button>'
-            f'<input type="text" aria-label="Magic search: a topic, a filter, pasted question IDs" placeholder="{_html.escape(MAGIC_EXAMPLES[0])}" '
+            f'<input type="text" aria-label="Magic search: a topic, a filter, pasted question IDs" placeholder="{_html.escape(example)}" '
             f'maxlength="400" autocomplete="off" autocapitalize="off" spellcheck="false">'
             f'<kbd>{MAGIC_KBD}</kbd></div><script>{js}</script>')
 

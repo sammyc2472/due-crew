@@ -21439,8 +21439,8 @@ def test_calm_board_v399():
 
 def test_magic_field_on_the_decks_page_v399():
     """3.9.9 (Sam's pick G2): the Decks page gets Magic search's field after
-    Anki's deck list (content.tree), the board after its "Studied…" line
-    (content.stats); not with Magic search off, not signed out."""
+    Anki's deck list and over its "Studied…" line (the start of
+    content.stats), the board after that line; not with Magic search off, not signed out."""
     import due_crew as dc
     from due_crew.app import _state
     store = world({"sam": "Sam"})
@@ -21456,9 +21456,17 @@ def test_magic_field_on_the_decks_page_v399():
         _state.update(entries=[], settings_tab=None, closet_open=False, wrapped_open=False)
         page = types.SimpleNamespace(tree="<table>DECKS</table>", stats="Studied 9 cards")
         dc._on_render(None, page)
-        check("decks page: the field after the deck list, the board after Anki's own line",
-              page.tree.startswith("<table>DECKS</table><style>#dc-mgf") and 'id="dc-mgf"' in page.tree
-              and page.stats.startswith("Studied 9 cards") and page.stats.endswith("BOARD</div>") and "dc-mgf" not in page.stats, page.tree[:120])
+        # (Sam's screenshot: content.tree is inside Anki's <table>, where a div is lifted to above the list)
+        st = page.stats
+        check("decks page: the field under the deck list (outside Anki's table), over its own line, the board after",
+              page.tree == "<table>DECKS</table>" and st.startswith("<style>#dc-mgf") and 'id="dc-mgf"' in st
+              and st.index('id="dc-mgf"') < st.index("Studied 9 cards") < st.index("BOARD") and st.endswith("BOARD</div>"), st[:120])
+        ph = lambda h: re.search(r'<input type="text"[^>]*placeholder="([^"]*)"', h).group(1)
+        page2 = types.SimpleNamespace(tree="", stats="")
+        dc._on_render(None, page2)
+        check("decks page: one example in the field, another the next time the page is drawn, never cycled",
+              ph(st) in dc.board.MAGIC_EXAMPLES and ph(page2.stats) in dc.board.MAGIC_EXAMPLES and ph(st) != ph(page2.stats)
+              and "setTimeout(type" not in st and "__EX__" not in st, (ph(st), ph(page2.stats)))
         conf["magic_search"] = False
         page = types.SimpleNamespace(tree="T", stats="S")
         dc._on_render(None, page)

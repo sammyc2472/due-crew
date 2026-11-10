@@ -721,7 +721,30 @@ class Run:
             self.check("Magic search: what's typed reaches it", True)
         except Timeout:
             self.check("Magic search: what's typed reaches it", False, repr(win.face.text))
+        # the window is as tall as what's in it (Sam, 3.9.9: it had stayed at its first size)
+        fits = None
+        for _ in range(60):
+            need = yield self.js("Math.ceil(document.querySelector('.dcm').getBoundingClientRect().height)", win.web)
+            fits = (need, win.height())
+            if need and abs(win.height() - need) <= 4:
+                break
+            yield self.r.pause(50)
+        self.check("Magic search: its window is as tall as what it found", bool(fits and fits[0]) and abs(fits[1] - fits[0]) <= 4,
+                   "the page %s, the window %s" % (fits or (None, None)))
+        # two asks in a row and the first one's word coming late (a Mac's window manager): still not a drag;
+        # a height nobody asked for is one, and the window keeps it
+        from aqt.qt import QResizeEvent, QSize
+        w0, h0 = win.width(), win.height()
+        win.fit_to(h0 + 40)
+        win.fit_to(h0 + 90)
+        win.resizeEvent(QResizeEvent(QSize(w0, h0 + 40), QSize(w0, h0)))
+        late = win._mine
+        win.fit_to(h0)
+        self.check("Magic search: a late word about a size it asked for isn't taken for a drag", late is False and win.height() == h0,
+                   (late, win.height(), h0))
         yield from self.snap("30-magic-search", win.web)
+        win.resizeEvent(QResizeEvent(QSize(w0, h0 + 333), QSize(w0, h0)))
+        self.check("Magic search: dragged to a size, it keeps it", win._mine is True)
         self.probe.step = "Magic search: close"
         win.close()
         yield self.r.until(lambda: not any(type(w).__name__ == "MagicWindow" and w.isVisible()
