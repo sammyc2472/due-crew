@@ -21227,6 +21227,7 @@ def test_insights_only_when_something_changed_v399():
               (a, b, c, d) == ({"n": 1}, {"n": 1}, {"n": 2}, {"n": 3}), (a, b, c, d))
         # Pip Party's tab asks the same thing before it shows (a loading screen or not), and keeps its own
         # reading of every card's tags by the same stamp
+        import time
         from due_crew import gamenight_flow as GF, app as A
         db.first = lambda sql: stamp[0]
         _state["insights"] = {}
@@ -21238,11 +21239,11 @@ def test_insights_only_when_something_changed_v399():
         was = GF.TAB.get("corpus")
         try:
             old = time.time() - GF.CORPUS_FOR - 5
-            GF.TAB["corpus"] = (A.generation, old, {"rows": []}, stamp[0])
+            GF.TAB["corpus"] = (A.generation, old, {"rows": []}, TF._stamp())
             kept_ = GF._kept(GF.TAB["corpus"]) and GF.TAB["corpus"][1] > old
             GF.TAB["corpus"] = (A.generation, old, {"rows": []}, (0,))
             changed = GF._kept(GF.TAB["corpus"])
-            other = GF._kept((A.generation - 1, time.time(), {"rows": []}, stamp[0]))
+            other = GF._kept((A.generation - 1, time.time(), {"rows": []}, TF._stamp()))
         finally:
             GF.TAB["corpus"] = was
         check("pip party: past ten minutes its map is at hand while nothing changed (no loading screen, no second read of the tags); "
