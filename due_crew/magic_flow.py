@@ -737,6 +737,39 @@ class Search:
         elif not self.cids_in:
             self.picked = []
         self.day_name = ""
+        self.spread()
+
+    def spread(self):
+        """3.9.9: the days the words asked for ("over the next 5 days", "by
+        Friday", "20 a day", or only "spread …"), picked in Schedule ahead:
+        the picker's two weeks of them, said when the words asked for more."""
+        sp = self.r.get("span")
+        if not sp:
+            if getattr(self, "_spread_on", False):  # the words no longer ask: the picker they opened shuts
+                self._spread_on, self.mode = False, ""
+            return
+        today = self.ops.today()
+        last = (today + datetime.timedelta(days=DAYS - 1)).isoformat()
+        days = [d for d in sp["days"] if today.isoformat() <= d <= last]
+        more = len(days) < len(sp["days"])
+        if sp.get("per"):
+            n = len(self.cards()[0])
+            need = max(1, -(-n // int(sp["per"])))
+            if not days:
+                more = need > DAYS - 1
+                days = [(today + datetime.timedelta(days=k)).isoformat() for k in range(1, min(need, DAYS - 1) + 1)]
+            elif need < len(days):
+                days = days[:need]
+        if not days and not sp["days"]:
+            self.picked = []
+            self.c_days(True)  # "spread cardio": the days it takes at my pace
+        else:
+            self.picked = days
+            self.mode = "days"
+        self._spread_on = True
+        if more and self.picked:
+            self.said = {"text": f"Schedule ahead holds two weeks: {M.words_span(self.picked[0], self.picked[-1])} picked. "
+                                 "Past that, add dates in Your plans."}
 
     def days_before(self, day):
         today = self.ops.today()

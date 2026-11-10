@@ -652,6 +652,59 @@ def test_put_on_days():
     check("…taken back", ops.log[-1][0] == "undo_draft" and ops.log[-1][1] == "pB")
 
 
+def test_days_from_the_words_v399():
+    """3.9.9 (Sam: "spread things out across a period of time"): a period in
+    the words was no topic's and the box found nothing ("cardio friday": no
+    such tag). Now the days are read off the words and picked in Schedule
+    ahead. TODAY is Wed 4 Nov 2026."""
+    def days(q):
+        r = M.read(q, TREE, TODAY, [(1, "Big Step 1")], PLANS)
+        sp = r.get("span") or {}
+        return len(r["groups"]) > 0 and not r["text"], sp.get("days") or [], sp.get("per")
+    want = {"platelets over the next 5 days": ("2026-11-05", "2026-11-09", 5),
+            "spread platelets over 2 weeks": ("2026-11-05", "2026-11-18", 14),
+            "spread platelets out evenly across the next three days": ("2026-11-05", "2026-11-07", 3),
+            "platelets from monday to friday": ("2026-11-09", "2026-11-13", 5),
+            "platelets friday to sunday": ("2026-11-06", "2026-11-08", 3),
+            "platelets by friday": ("2026-11-05", "2026-11-06", 2),
+            "platelets before friday": ("2026-11-05", "2026-11-05", 1),
+            "platelets this week": ("2026-11-05", "2026-11-08", 4),
+            "platelets next week": ("2026-11-09", "2026-11-15", 7),
+            "platelets on friday": ("2026-11-06", "2026-11-06", 1),
+            "platelets tomorrow": ("2026-11-05", "2026-11-05", 1),
+            "platelets in 3 days": ("2026-11-07", "2026-11-07", 1),
+            "platelets dec 12": ("2026-12-12", "2026-12-12", 1)}
+    got = {q: days(q) for q in want}
+    bad = {q: g for q, g in got.items() if not g[0] or (g[1][0], g[1][-1], len(g[1])) != want[q]}
+    check("days from the words: over, across, from … to, by, before, this and next week, on a day; the topic still read", not bad, bad)
+    ok, ds, per = days("platelets 20 a day")
+    ok2, ds2, per2 = days("platelets 15 a day by friday")
+    check("so many a day: with or without its days", (ok, ds, per) == (True, [], 20) and ok2 and per2 == 15 and len(ds2) == 2, (ds, per, ds2, per2))
+    same = {q: (M.read(q, TREE, TODAY, [(1, "Big Step 1")], PLANS).get("span"), M.read(q, TREE, TODAY, [(1, "Big Step 1")], PLANS)["limit"])
+            for q in ("platelets", "10 new platelets", "missed in the last 3 days", "due tomorrow", "sun exposure", "type 2 diabetes")}
+    check("no days asked: nothing picked (a filter's days are its own, 'sun' is no Sunday, a count is a count)",
+          all(v[0] is None for v in same.values()) and same["10 new platelets"][1] == 10, same)
+    r = M.read("heme quiz friday", TREE, TODAY, [(1, "Big Step 1")], PLANS)
+    check("a quiz's day is the quiz's: its row, as before", r.get("span") is None and [a["k"] for a in r["acts"]][:1] == ["event"], r["acts"])
+    face, ops, _closed = window()
+    face.on("ready", {})
+    face.on("type", {"text": "platelets over the next 3 days"})
+    v = face.view()
+    check("the window: Schedule ahead open on those days, the cards shared between them",
+          [e["iso"] for e in v["days"]["each"]] == ["2026-11-05", "2026-11-06", "2026-11-07"]
+          and sum(e["n"] for e in v["days"]["each"]) == v["count"]["n"] > 0, v.get("days"))
+    face.on("day", {"iso": "2026-11-06"})
+    check("a tap still takes a day off", [e["iso"] for e in face.view()["days"]["each"]] == ["2026-11-05", "2026-11-07"])
+    face.on("type", {"text": "platelets over the next 4 weeks"})
+    v = face.view()
+    check("more than the picker's two weeks: its 13 days picked, and said",
+          len(v["days"]["each"]) == 13 and "two weeks" in (v.get("said") or {}).get("text", ""), (len(v["days"]["each"]), v.get("said")))
+    face.on("type", {"text": "platelets"})
+    check("the words stop asking: the picker they opened shuts", "days" not in face.view())
+    face.on("type", {"text": "spread platelets"})
+    check("only 'spread': Schedule ahead opens (the days it takes, when it's a lot)", face.mode == "days")
+
+
 def test_rows_for_whats_coming_up():
     face, ops, _closed = window()
     face.on("type", {"text": "quiz friday on platelets and anemia"})

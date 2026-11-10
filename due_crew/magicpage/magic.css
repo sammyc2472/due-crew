@@ -1,7 +1,7 @@
 /* Magic search (3.9.7), in the board's look: its --dc-* tokens, its pills
    and quiet lines. Words are set as text by magic.js. */
 html, body { margin: 0; padding: 0; height: 100%; }
-body { background: var(--dc-bg, #fff); }
+/* the page's own ground is set with the tokens (magic_html.colors): they live on .dcm, below body */
 .dcm { box-sizing: border-box; background: var(--dc-bg); color: var(--dc-ink); position: relative;
   font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   padding: 14px 18px 16px; text-align: left; display: flex; flex-direction: column; gap: 10px; }

@@ -454,6 +454,102 @@ def find_day(low, today):
     return None
 
 
+_NUMS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
+         "nine": 9, "ten": 10, "couple of": 2, "few": 3}
+_NUM = r"(\d{1,3}|an?|one|two|three|four|five|six|seven|eight|nine|ten|couple of|few)"
+_DAY = (r"(?:today|tomorrow|(?:next )?(?:mon|tues?|wed(?:nes)?|thu(?:rs?)?|fri|sat(?:ur)?|sun)(?:day)?"
+        r"|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.? \d{1,2}(?:st|nd|rd|th)?"
+        r"|\d{1,2}(?:st|nd|rd|th)? (?:of )?(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*|\d{1,2}/\d{1,2})")
+_FULL_DAY = (r"(?:tomorrow|(?:next )?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)"
+             r"|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.? \d{1,2}(?:st|nd|rd|th)?"
+             r"|\d{1,2}(?:st|nd|rd|th)? (?:of )?(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*)")
+SPAN_MAX = 60
+_VERB = r"^\s*(?:please )?(?:spread|schedule|space out|split up|divide up)\b"  # the asking, only where a box starts
+
+
+def _run(a, b):
+    """Each day from a to b, as ISO days (SPAN_MAX at most)."""
+    n = (b - a).days
+    return [_add(a, i).isoformat() for i in range(0, min(max(n, 0), SPAN_MAX - 1) + 1)]
+
+
+def spread(low, today):
+    """3.9.9 (Sam: "spread things out across a period of time and it didn't
+    work"): the days the words ask for, and the words without them.
+    ({days: [iso], per: cards a day or None, said}, low). Over, across or
+    for (the next) 5 days, 2 weeks, a week; this week, next week; from
+    Monday to Friday; by or before Friday; on Friday, tomorrow, Dec 12;
+    20 a day. Days start tomorrow unless a day is named. Before this the
+    words stayed in the box's topic ("cardio friday": no such tag) and it
+    found nothing."""
+    out = {"days": [], "per": None, "said": ""}
+
+    def took(m, days=None, per=None):
+        if days is not None:
+            out["days"] = days
+        if per is not None:
+            out["per"] = per
+        out["said"] = (out["said"] + " " + m.group(0).strip()).strip()
+        return low[:m.start()] + " " + low[m.end():]
+
+    m = re.search(r"\b(\d{1,3}) (?:cards? |new |new cards? )?(?:a|per|each|every) day\b", low)
+    if m and 0 < int(m.group(1)):
+        low = took(m, per=int(m.group(1)))
+    m = re.search(rf"\b(?:from |between )?({_DAY}) (?:to|until|till|through|thru|and|-|\u2013) ({_DAY})\b", low)
+    a = find_day(m.group(1), today) if m else None
+    b = find_day(m.group(2), today) if m else None
+    if m and a and b and (re.match(r"\s*(?:from|between)\b", m.group(0)) or " and " not in m.group(0)):
+        first, last = a[0], b[0]
+        if last < first:
+            last = _add(last, 7) if (first - last).days < 7 else first
+        low = took(m, _run(first, last))
+    if not out["days"]:
+        m = re.search(rf"\b(?:over|across|for|during|within|throughout|in) (?:the )?(?:next |coming |following )?{_NUM} (days?|weeks?|months?)\b", low)
+        if m and not (m.group(0).startswith("in ") and "next" not in m.group(0) and "coming" not in m.group(0)):
+            n = int(m.group(1)) if m.group(1).isdigit() else _NUMS[m.group(1)]
+            n *= {"d": 1, "w": 7, "m": 30}[m.group(2)[0]]
+            if n > 0:
+                low = took(m, _run(_add(today, 1), _add(today, n)))
+    if not out["days"]:
+        m = re.search(r"\b(?:(?:over|across|during|throughout|for|in) )?(?:the )?(this|next|coming|following) (week|fortnight|month)\b", low)
+        if m:
+            w, unit = m.group(1), m.group(2)
+            if unit == "week" and w == "this":
+                days = _run(_add(today, 1), _add(today, max(1, 6 - today.weekday())))
+            elif unit == "week" and w == "next" and not re.match(r"\s*(?:over|across|during|throughout|for|in)\b", m.group(0)):
+                mon = _add(today, 7 - today.weekday())
+                days = _run(mon, _add(mon, 6))
+            else:
+                days = _run(_add(today, 1), _add(today, {"week": 7, "fortnight": 14, "month": 30}[unit]))
+            low = took(m, days)
+    if not out["days"]:
+        m = re.search(rf"\b(by|before|until|till|up to) ({_DAY})\b", low)
+        d = find_day(m.group(2), today) if m else None
+        if m and d:
+            last = _add(d[0], -1) if m.group(1) == "before" else d[0]
+            first = _add(today, 1)
+            low = took(m, _run(first, last) if last >= first else [max(last, today).isoformat()])
+    if not out["days"]:
+        m = re.search(rf"\bon ({_DAY})\b", low) or re.search(rf"\b({_FULL_DAY})\b", low)
+        d = find_day(m.group(1), today) if m else None
+        if m and d and d[0] > today:
+            low = took(m, _run(d[0], _add(d[0], 1) if d[2] else d[0]))
+    if not out["days"]:
+        m = re.search(r"\bin (\d{1,3}) (days?|weeks?)\b", low)  # "in 3 days": that day
+        if m and int(m.group(1)) > 0:
+            d = _add(today, int(m.group(1)) * (7 if m.group(2)[0] == "w" else 1))
+            low = took(m, [d.isoformat()])
+    verb = re.search(_VERB, low)
+    if out["days"] or out["per"] or verb:
+        # "spread heart failure out evenly": the asking, not a topic's words ("spread cardio": the days it takes)
+        low = re.sub(r"\bevenly\b", " ", low)
+        if verb:
+            low = re.sub(r"\b(?:(?:them|it|these|those) )?out\b", " ", re.sub(_VERB, " ", low))
+        low = re.sub(r"\b(?:starting|start|beginning) (?=\s|$)", " ", low)
+        return out, re.sub(r"\s+", " ", low)
+    return None, low
+
+
 def _dated(today, mon, day, said):
     for year in (today.year, today.year + 1):
         try:
@@ -681,7 +777,7 @@ def read(text, tree, today, decks=(), plans=()):
     name; plan: plan_words' hit; text: words no tag has."""
     out = {"kind": "words", "groups": [], "neg": [], "filters": [], "limit": None, "deck": None, "plan": None,
            "text": "", "qids": [], "ids": [], "search": "", "acts": [], "lines": [], "raw": str(text or ""),
-           "res": [], "bank": None, "terms": [], "seg_words": []}
+           "res": [], "bank": None, "terms": [], "seg_words": [], "span": None}
     t = str(text or "").strip()
     if not t:
         out["kind"] = "empty"
@@ -732,6 +828,10 @@ def read(text, tree, today, decks=(), plans=()):
     if have & {"tom", "dN"}:
         fs = [f for f in fs if f["k"] != "due"]
     out["filters"] = fs
+    # 3.9.9: the days asked for ("over the next 5 days", "by Friday", "20 a day"), off the words before
+    # a topic is read from them (not beside a quiz or a plan's own set: their days are theirs)
+    if not acts and not hit:
+        out["span"], low = spread(low, today)
     m = re.search(r"(?<![\w:/])(\d{1,4})\s+(?!days?\b|weeks?\b|months?\b|hours?\b|minutes?\b)(?=[a-z])", low)
     if m and not _words(low[:m.start()]):  # "10 new platelets", "give me 10": how many; "type 2 diabetes" isn't
         n = int(m.group(1))
