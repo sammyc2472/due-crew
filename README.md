@@ -5,7 +5,7 @@
 
 Your friends' studying next to yours, on Anki's Decks screen.
 
-<img alt="The Due Crew board on the Decks screen, your day folded above it" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/board.png?v=9" width="600">
+<img alt="The Due Crew board on the Decks screen, your day folded above it" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/board.png?v=10" width="600">
 
 Studying for a big exam is more fun with friends! Due Crew puts your crew on
 Anki's Decks screen: who's studied today, who's studying now, how far
@@ -24,7 +24,7 @@ their board.
 
 **Study rooms.** 25-minute rounds with your crew, the timer in Anki's top
 bar, breaks together. Each of you sits in the room as your own Pip, in
-your own colour. Rain, a fire, waves or brown noise if you like.
+your own colour.
 
 <img alt="A study room in Anki's top bar" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/room.png?v=2" width="420">
 
@@ -58,8 +58,9 @@ Above the board is yours.
   each week.
 - **Upcoming** is the next two weeks, and **Later** whatever has no day
   yet.
-- **QBank QIDs**: after a practice block, paste its QIDs. Unsuspend
-  their cards, or study them now.
+- **Magic search**, the field under your decks: type a topic, "due this
+  week", "30 minutes of renal", or paste a practice block's question
+  IDs. Study what it finds now, put it on a day, or unsuspend it.
 - **Fifteen?** One click in Anki's top bar starts fifteen minutes of
   study, your plans' decks first. At the end: take five, go again, or stop there. Your crew
   sees you're studying. Not started by your usual time? Today nudges you.
@@ -87,7 +88,7 @@ New plan…) or on a calendar at duecrew.com: pick chapters from a deck, set
 a pace, mark the exam, and share the code. Everyone following gets that
 day's cards each morning. Behind? **Catch up** or **Push my dates back**.
 
-<img alt="You › Plans: a plan's week, today's assignments open" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/plans.png?v=7" width="600">
+<img alt="You › Plans: a plan's week, today's assignments open" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/plans.png?v=8" width="600">
 
 - **Your week.** You › Plans shows the plan's seven days; click one for
   its assignments. Following two plans? Switch between them by name.
