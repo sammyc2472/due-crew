@@ -195,7 +195,8 @@ describe("game night: a table", () => {
     tell(jo, { t: "lock", on: true });
     await new Promise((r) => setTimeout(r, 30));
     expect(tv.closed).toBeNull();
-    const lee = (await seat(code, cid("lee"))).s!;  // still unlocked, still open
+    // 3.9.9: from the network someone was turned away on, an open door asks (tabledoor.test.ts); another walks in
+    const lee = (await seat(code, cid("lee"), { ip: "198.51.100.44" })).s!;  // still unlocked, still open
     expect((await hello(lee)).wait).toBeUndefined();
     await leave(tv, d, jo, lee);
   });

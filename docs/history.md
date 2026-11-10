@@ -4788,6 +4788,22 @@ every release that changes how something works.
   is held for the card only while Settings has my exam (with none, it
   plays as a cheer), and a crewmate's later cheer to me takes the place of
   their line on the server (one cheer a pair) if I haven't fetched it yet.
+- 3.9.9, Pip Party's door after the review (`worker/src/table.ts`,
+  `test/tabledoor.test.ts`; each was reproduced first). Turned away, then
+  back under a new tab's id: a crewmate is now known by who they are
+  (`x-dc-who`, a hash of the uid set by `connect()` alone, kept in `away`
+  as `u:…`) and stays out; anyone else's network is remembered
+  (`room.nets`), and from it an open door asks, as "ask" does, so the host
+  answers again (other phones on that wifi wait to be let in too: the
+  price, and the host's call). A seat's answer (`a` in its presence) went
+  to every seat before the reveal: now to the TV alone (`quiet`; only the
+  host's engine reads it). Who sat down is remembered 512 deep, not 64
+  (`SEATED`): 64 made-up ids pushed a real seat off the list and a locked
+  table then kept her own phone out. Left as it is: at an open door one
+  network can take all twelve seats (a party is one wifi; Lock is the
+  answer). And `field.test.ts`'s UTC+14 case failed from 00:00 to 10:00
+  UTC every day (it isn't tomorrow there yet): the test's day is now the
+  sender's own.
 - 3.9.9, the Qt plan window goes (Sam, 10 Nov, after the review priced it).
   Since round six the plan window is a page (`planner/web.py`); the Qt one
   stayed behind `"plan_window": "qt"`, a key no window set. Twelve files

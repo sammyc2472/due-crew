@@ -89,7 +89,10 @@ describe("POST /sync's errs", () => {
     expect((await rows()).map((x: any) => x.code).sort()).toEqual(["today", "week"]);
     expect(await db().prepare("SELECT COUNT(*) AS n FROM weeks").first<number>("n")).toBe(1);
     // a day by the sender's own clock: at UTC+14 it's already tomorrow there
-    await dre.call("POST", "/sync", { profile: { tz: 14 * 60, rollover: 0 }, errs: errs({ [dayShift(t, 1)]: { east: 1 } }) });
+    // (the sender's own today, worked out here: before 10:00 UTC it isn't tomorrow there yet, and the
+    // test as first written failed for those ten hours of every day)
+    const east = new Date(Date.now() + 14 * 3600 * 1000).toISOString().slice(0, 10);
+    await dre.call("POST", "/sync", { profile: { tz: 14 * 60, rollover: 0 }, errs: errs({ [east]: { east: 1 } }) });
     expect((await rows()).map((x: any) => x.code)).toContain("east");
   });
 
