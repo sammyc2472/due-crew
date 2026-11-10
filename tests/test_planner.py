@@ -960,7 +960,7 @@ def test_start_flow():
         made = got[0]
         check("calendar glue: made but its dates lost on the way says so, with the plan it made",
               made[0] == "made" and made[1] in store.plans and "connection" in made[2], got)
-        flow.remote.save = saved[7]
+        flow.remote.save = saved[6]
         got = []
         ops.make(owner, "MS2 Block 3", doc, got.append, pid=made[1])
         check("calendar glue: Make again puts the dates on that plan, never a second one",
