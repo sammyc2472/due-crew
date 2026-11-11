@@ -932,7 +932,7 @@ class Search:
                     base |= idx.tag_cards(t)
             elif r["text"]:
                 base = self.ops.find(f"{deck_q} {M.text_q(r['text'])}") or set()
-            elif not (self.filters or r.get("deck") or r.get("limit") or r.get("minutes")):
+            elif not (self.filters or r.get("deck") or r.get("limit") or r.get("minutes") or r.get("quoted")):
                 base = set()  # (3.9.9: "100 cards", "for 30 minutes" alone: that many of the deck, what's due first)
             if r.get("plan"):
                 base = set(base or ())
@@ -943,6 +943,10 @@ class Search:
                     for u in P.units(doc):
                         if u.get("id") in hit["uids"]:
                             base |= pidx.match(u, plan_flow._swap(st), doc)
+        if r.get("quoted") and r["kind"] == "words" and self.cids_in is None:
+            # 3.9.9, quotes mean text: the cards that say it; with a topic, a plan's set or a filter, those of them that do
+            said = self.ops.find(f"{deck_q} {M.quoted_q(r['quoted'])}") or set()
+            base = said if base is None else base & said
         for g in r.get("neg") or ():
             for t in g.get("tags") or ():
                 if base is None:
@@ -1063,6 +1067,8 @@ class Search:
             return actions.DECK if r["qids"] else "These IDs"  # QBank QIDs' Study now: each paste adds to its deck
         if r["text"]:
             return r["text"].capitalize()
+        if r.get("quoted"):
+            return r["quoted"][0].capitalize()
         if self.filters:
             return " · ".join(M.filter_label(f) for f in self.filters)
         return "Cards"
@@ -1245,6 +1251,11 @@ class Search:
         if r["kind"] == "words" and r["text"] and not self.ticked():
             out.append(f"No tag says “{r['text']}”; these cards do." if cids
                        else f"No tag or card says “{r['text']}” in {self.idx.name if self.idx else 'this deck'}.")
+        if r["kind"] == "words" and r.get("quoted"):
+            says = " and ".join(f"\u201c{q}\u201d" for q in r["quoted"])
+            where = "of these " if (self.ticked() or r.get("plan")) else ""
+            out.append(f"The cards {where}that say {says}." if cids
+                       else f"No card {where}says {says} in {self.idx.name if self.idx else 'this deck'}.")
         if M.joined(r) and not cids and r["groups"]:
             out.append("No card here is in both." if all(len(x) <= 2 for x in r["terms"]) else "No card here is in all of them.")
         return out

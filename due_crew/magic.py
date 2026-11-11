@@ -68,6 +68,9 @@ ROW = ("new", "seen", "susp", "learn", "due", "tom", "m1", "m7", "leech", "flag"
 
 _SEARCHY = re.compile(r"(?:^|[\s(])-?(?:tag|deck|nid|cid|note|card|is|flag|prop|added|rated|introduced|"
                       r"edited|preset):", re.I)  # Anki's own words; "anemia or platelets" is ours (two topics)
+# 3.9.9 (Sam: "build quotes mean text"): words in quotes are the cards' own words, a tag by that name or not
+_QUOTED = re.compile(r'"([^"\n]{1,80})"|\u201c([^\u201d\n]{1,80})\u201d')
+QUOTED_MAX = 4
 _LONG = re.compile(r"(?<![0-9])[0-9]{10,13}(?![0-9])")
 _SHORT = re.compile(r"(?<![0-9])[0-9]{3,9}(?![0-9])")
 _IDS_ONLY = re.compile(r"^(?:[\s,;|/#.\-:()\u2229]|qids?|question|questions|ids?|nids?|cids?|notes?|cards?|q|and|or)*$", re.I)
@@ -884,7 +887,8 @@ def read(text, tree, today, decks=(), plans=(), loose_words=False):
     name; plan: plan_words' hit; text: words no tag has."""
     out = {"kind": "words", "groups": [], "neg": [], "filters": [], "limit": None, "deck": None, "plan": None,
            "text": "", "qids": [], "ids": [], "search": "", "acts": [], "lines": [], "raw": str(text or ""),
-           "res": [], "bank": None, "terms": [], "seg_words": [], "span": None, "unused": [], "minutes": None, "numbered": []}
+           "res": [], "bank": None, "terms": [], "seg_words": [], "span": None, "unused": [], "minutes": None, "numbered": [],
+           "quoted": []}
     t = str(text or "").strip()
     if not t:
         out["kind"] = "empty"
@@ -897,6 +901,14 @@ def read(text, tree, today, decks=(), plans=(), loose_words=False):
     if _SEARCHY.search(t):
         out["kind"], out["search"] = "search", " ".join(t.split())
         return out
+    # quotes mean text: each phrase is looked for in the cards' words (with a topic beside it, in that topic's
+    # cards), and is no part of what the tags, the numbers or the days are read from
+    for m in _QUOTED.finditer(t):
+        said = " ".join((m.group(1) or m.group(2) or "").split())
+        if said and said.lower() not in [q.lower() for q in out["quoted"]] and len(out["quoted"]) < QUOTED_MAX:
+            out["quoted"].append(said)
+    if out["quoted"]:
+        t = _QUOTED.sub(" ", t)
     longs, shorts = _LONG.findall(t), _SHORT.findall(t)
     # Sam: "AND statements and OR statements on tags": AND in capitals, as Anki writes it, is both (∩);
     # "and" and "or" in words are another topic, each one's cards
@@ -947,6 +959,8 @@ def read(text, tree, today, decks=(), plans=(), loose_words=False):
     if not acts and not hit:
         out["span"], low = spread(low, today)
     m = re.search(r"(?<![\w:/])(\d{1,4})\s+(?!days?\b|weeks?\b|months?\b|hours?\b|minutes?\b)(?=[a-z])", low)
+    if not m and out["quoted"]:  # '10 "left shift"': ten of the cards that say it (the number stands alone once the quotes are off)
+        m = re.fullmatch(r"\s*(\d{1,4})\s*", low)
     if m and not _words(low[:m.start()]):  # "10 new platelets", "give me 10": how many; "type 2 diabetes" isn't
         n = int(m.group(1))
         if 0 < n <= LIMIT_MAX:
@@ -1004,7 +1018,7 @@ def read(text, tree, today, decks=(), plans=(), loose_words=False):
     if ev and any(g["on"] for g in out["groups"]):
         acts.append({"k": "before", "day": ev["day"]})  # its topics on the days before it
     out["acts"] = acts
-    if acts and not (out["groups"] or out["filters"] or out["plan"] or out["text"] or out["deck"]):
+    if acts and not (out["groups"] or out["filters"] or out["plan"] or out["text"] or out["deck"] or out["quoted"]):
         out["kind"] = "do"
     return out
 
@@ -1153,6 +1167,9 @@ def search(r, deck_name="", tags=(), cids=(), off=()):
     elif finds:
         parts.append(finds[0])
     has_find = bool(finds)
+    if r.get("quoted"):
+        parts.append(quoted_q(r["quoted"]))  # and what the cards themselves say
+        has_find = True
     fs = [f for f in r.get("filters") or () if f.get("k") not in set(off)]
     if not has_find and not fs and not r.get("deck"):
         return ""
@@ -1183,6 +1200,12 @@ def ticked_tags(r, off_groups=(), off_tags=()):
 def filters_q(filters, off=()):
     """The filters as Anki's search terms, one string ("" for none)."""
     return " ".join(q for q in (filter_q(f) for f in filters or () if f.get("k") not in set(off)) if q)
+
+
+def quoted_q(phrases):
+    """Words in quotes, as Anki's search of the cards' text: each phrase whole (a colon in one is a colon,
+    not a field's name), every one of them in the card."""
+    return " ".join('"' + re.sub(r"(:)", r"\\\1", esc(p)) + '"' for p in phrases or ())
 
 
 def text_q(text):
@@ -1304,7 +1327,8 @@ HOWTO = {
             "own tags, on this computer; nothing you type leaves it.",
     "parts": [
         {"k": "topic", "t": "A topic", "w": "Its name, its initials or a typo: every tag that says it, as one topic. "
-                                            "\u201cand\u201d or \u201cor\u201d adds another.",
+                                            "\u201cand\u201d or \u201cor\u201d adds another. "
+                                            "In quotes: the cards\u2019 own words.",
          "try": ["heart failure", "hf drugs"]},
         {"k": "res", "t": "A resource", "w": "Its name or its letters, alone or with a topic; a chapter by its number.",
          "try": []},

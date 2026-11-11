@@ -966,6 +966,44 @@ def test_everyday_phrasings_v399():
     check("a word a letter off one that 3,000 tags share is read in well under a second", took < 1.5, f"{took:.2f} s")
 
 
+def test_quotes_mean_text_v399():
+    """3.9.9 (Sam: "build quotes mean text"): words in quotes are looked for
+    in the cards themselves, a tag by that name or not; beside a topic, a
+    filter or a count they narrow it."""
+    r = M.read('"anemia"', TREE, TODAY)
+    check("quotes: the phrase is text, no topic is read from it, though a tag says it",
+          r["quoted"] == ["anemia"] and not r["groups"] and not r["text"] and r["kind"] == "words", (r["quoted"], [g["name"] for g in r["groups"]]))
+    r = M.read('platelets \u201cLeft  Shift\u201d due', TREE, TODAY)
+    check("quotes: curly ones too, beside a topic and a filter, its spaces one",
+          r["quoted"] == ["Left Shift"] and any(g["on"] for g in r["groups"]) and [f["k"] for f in r["filters"]] == ["due"], r["quoted"])
+    r = M.read('"10234 10911 11002"', TREE, TODAY)
+    check("quotes: numbers in them aren't QIDs", r["kind"] == "words" and r["quoted"] == ["10234 10911 11002"] and not r["qids"])
+    r = M.read('10 "anemia"', TREE, TODAY)
+    check("quotes: a number before them is how many", r["limit"] == 10 and not r["groups"], (r["limit"], r["groups"]))
+    check("quotes: Anki's search for it: the phrase whole, a colon a colon, a quote and a wildcard escaped",
+          M.quoted_q(['a:b', 'x_y "z']) == '"a\\:b" "x\\_y \\"z"' and M.search(M.read('"left shift"', TREE, TODAY), "Deck") == '"deck:Deck" "left shift"',
+          M.quoted_q(['a:b', 'x_y "z']))
+    check("quotes: an Anki search pasted with quotes in it stays Anki's", M.read('tag:x "left shift"', TREE, TODAY)["kind"] == "search")
+    face, ops, _closed = window()
+    face.on("type", {"text": "anemia"})
+    topic = face.view()
+    face.on("type", {"text": '"anemia"'})
+    v = face.view()
+    said = set(face.cards()[0])
+    check("quotes in the window: the cards that say it, no topic row, a line saying so",
+          v["count"]["n"] > 0 and not v["topics"] and "The cards that say \u201canemia\u201d." in v["lines"]
+          and all("anemia" in IDX.state[c]["text"] for c in said) and topic["topics"], v["lines"])
+    face.on("type", {"text": 'heme "anemia"'})
+    v = face.view()
+    both = set(face.cards()[0])
+    check("…beside a topic: that topic's cards that say it", any(t["on"] for t in v["topics"]) and both and both <= said
+          and any(x.startswith("The cards of these that say") for x in v["lines"]), (len(both), v["lines"]))
+    face.on("type", {"text": '"zzqqx"'})
+    v = face.view()
+    check("…nothing says it: a line, and it draws", v["count"]["n"] == 0 and any(x.startswith("No card says \u201czzqqx\u201d") for x in v["lines"]), v["lines"])
+    check("the how-to says it", "In quotes: the cards\u2019 own words." in M.HOWTO["parts"][0]["w"])
+
+
 def test_the_window_reads_them_v399():
     face, ops, _closed = window()
     face.on("type", {"text": "cardiology"})

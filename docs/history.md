@@ -4773,6 +4773,21 @@ every release that changes how something works.
     each part that has it. The preview renders byte for byte as before
     (but a clock); the suite's source checks read the parts
     (`fakes.board_source`).
+- 3.9.10, quotes mean text (Sam, 11 Nov: "should magic search include
+  card text?", then "build quotes mean text"). Magic search read the
+  cards' own words only when no tag said what was typed, so a word a tag
+  has ("warfarin") could never be looked for in the cards, nor a phrase.
+  Now words in quotes, straight or curly, are text (`magic._QUOTED`,
+  `read`'s `quoted`, four at most): each phrase whole in the card, by
+  Anki's own search on this computer (`quoted_q`: a colon is a colon,
+  not a field). Alone, the cards that say it; beside a topic, a plan's
+  set, a filter or a count, those of them that do (`Search.cards`), with
+  a line saying so ("The cards of these that say …", or that none does).
+  The quotes come off before the tags, numbers and days are read, so
+  numbers in them aren't QIDs and a number before them is how many. A
+  pasted Anki search keeps its quotes as Anki's. The how-to's first card
+  says it. Not built: "Also in card text: N" under a matched topic.
+  Nothing new leaves the computer.
 - 3.9.9, the good-luck card that waited (Sam, 8 Nov: "make sure the good
   luck card is working because not sure it did work for my last exam"): a
   crewmate's line for my exam morning was kept for the card, and the card
