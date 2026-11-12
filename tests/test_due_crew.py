@@ -15897,8 +15897,20 @@ def test_fridge_dark_v392():
           f'stroke="{board.DOODLE_INK}"' in dark and f'path[stroke="{board.DOODLE_INK}"] {{ stroke: var(--fz-2b2d29, {board.DOODLE_INK}); }}' in dark
           and "--fz-2b2d29: #e6e8e3;" in dark and f'stroke="{pl}"' in dark and f"--fz-{pl[1:]}: {pd};" in dark
           and f'stroke="{rl}"' in dark and f"--fz-{rl[1:]}: {rd};" in dark
-          and f"--fa:{pl};--fd:{pd};" in dark and "--fz-acc: var(--fd)" in dark and "--sv-a: var(--fz-acc)" in board.FRIDGE_CSS)
+          and f"--fa:{pl};--fd:{pd};" in dark and "--fz-acc: var(--fd)" in dark and "--sv-a: var(--fz-pip)" in board.FRIDGE_CSS
+          and "--fz-pip: var(--pd, var(--fd))" in dark and "--fz-pip: var(--pa, var(--fa))" in light)
     check("a theme change draws it again (it's kept as last drawn)", dark != light != auto)
+    # 3.9.10 (Sam: "everyone's polaroids are now showing their pip as green even if they use a different color"):
+    # the Pip wears the colour its person has now; the tape and the drawing keep the one it came in
+    bl, bd = board.accent_pair("blue")
+    gl, gd = board.accent_pair("green")
+    moved = board.fridge_html([item], {"dre": dict(people["dre"], accent="blue")}, {"sev": True, "theme": "light"})
+    bare = board.fridge_html([dict(item, a="")], {"dre": dict(people["dre"], accent="blue")}, {"sev": True, "theme": "light"})
+    gone = board.fridge_html([dict(item, a="")], {}, {"sev": True, "theme": "light"})
+    check("a polaroid's Pip wears its person's colour as it is now; the tape keeps the one it came in",
+          f"--fa:{pl};--fd:{pd};--pa:{bl};--pd:{bd};" in moved and moved != light)
+    check("…one that came with no colour takes theirs, tape and Pip; nobody to ask: the default",
+          f"--fa:{bl};--fd:{bd};--pa:{bl};--pd:{bd};" in bare and f"--fa:{gl};--fd:{gd};--pa:{gl};--pd:{gd};" in gone)
 
 
 def test_fridge_account_and_undo_v391():

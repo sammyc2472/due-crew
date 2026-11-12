@@ -4773,6 +4773,17 @@ every release that changes how something works.
     each part that has it. The preview renders byte for byte as before
     (but a clock); the suite's source checks read the parts
     (`fakes.board_source`).
+- 3.9.10, a polaroid's Pip in its person's colour (Sam, 12 Nov:
+  "everyone's polaroids are now showing their pip as green even if they
+  use a different color"). A polaroid kept the colour its sender had
+  when it came (`a`), and its Pip took that too, while the Pip's look was
+  already theirs as it is now; one that came with no colour was the
+  default green for good. Now the Pip wears the colour its person has
+  now (`--pa`/`--pd` from the crew row, `--fz-pip`), the tape and the
+  drawing keep the one they came in, and a polaroid with no colour takes
+  theirs (`board/fridge.py`). Why some came with none I couldn't find by
+  reading or reproduce: the path from `/board` to `keep_doodles` gives
+  the accent in the suite and in the preview. Worth watching.
 - 3.9.10, quotes mean text (Sam, 11 Nov: "should magic search include
   card text?", then "build quotes mean text"). Magic search read the
   cards' own words only when no tag said what was typed, so a word a tag
