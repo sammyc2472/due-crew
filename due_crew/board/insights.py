@@ -439,8 +439,7 @@ def _ins_ahead(did, a, deck_name=""):
             act = (f'<span>No new cards in {name} '
                    + (f"from {_ins_dname(_day_after(days[7], start), long=True)} " if start > 0 else "")
                    + (f"till your exam, {exd}" if to_exam else "till you turn them back on")
-                   + f'.{held(w)}</span><a class="bt" href="#" onclick="{_pycmd(f"insaheadon:{did}")}">'
-                   + ("Keep them on" if start > 0 else "Turn new cards back on") + '</a>')
+                   + f'.{held(w)}</span>')  # (3.9.10: its way back is Settings › Study's, and a plan card's)
         else:
             act = ""
         if act:
@@ -480,29 +479,19 @@ def _ins_leech_row(did, c):
         tip_ = f' title="{title}"' if title else ""
         return f'<a class="{cls}" href="#"{tip_} onclick="{_pycmd(f"insleech:{did}:{a}:{cid}")}">{label}</a>'
     tip, knows = c.get("tip") or [], c.get("knows") or []
-    back = act("back", "Bring back", "sl-bt", "Due again, schedule kept")
+    # 3.9.10 (Sam: Insights is "a data only zone", nothing here adjusts a card): a crewmate's tip or
+    # who has it down stay (they change no card); Bring back, Learn it fresh, Leave it out and Edit went
     if tip:
         main = act("tip", f'{e(tip[0]["name"])}&rsquo;s tip', "sl-bt tip")
     elif knows:
         main = act("ask", f"Ask {e(knows[0])}", "sl-bt tip",
                    f'{e(", ".join(knows))} {"has" if len(knows) == 1 else "have"} it down')
-    elif c.get("susp"):
-        main = back
     else:
         main = ""
-    more = [act("fresh", "Learn it fresh", "q", "A new card again (Anki&rsquo;s Reset)"), act("edit", "Edit", "q")]
-    if c.get("susp"):
-        more.append(act("out", "Leave it out", "q", "Stays suspended, out of this list"))
-        if main != back:
-            more.insert(0, act("back", "Bring back", "q", "Due again, schedule kept"))
-    elif c.get("kept"):
-        more.append(act("out", "Leave it out", "q", "Stays in your reviews, out of this list"))
-    toggle = "var m=this.nextElementSibling;m.hidden=!m.hidden;this.setAttribute('aria-expanded',!m.hidden);return false;"
     fr = e(str(c.get("front") or ""))
     return (f'<div class="sl-row"><span class="sl-q"><b title="{fr}">{fr or "&nbsp;"}</b>'
             f'<span>{" &middot; ".join(bits)}</span></span>'
-            f'<span class="sl-act">{main}<span class="sl-more"><a class="q" href="#" aria-expanded="false" aria-label="More" '
-            f'title="More" onclick="{toggle}">&middot;&middot;&middot;</a><span class="sl-more" hidden>{" ".join(more)}</span></span></span></div>')
+            f'<span class="sl-act">{main}</span></div>')
 
 
 LEECH_SHOW = 12  # cards a group lists; the rest are in Browse
@@ -531,11 +520,7 @@ def _ins_leeches(did, L, deck_name=""):
         f"<b>{nk:,}</b> still in your reviews" if nk else "",
         f"<b>{nn:,}</b> one miss away" if nn else "",
         f"{on_exam:,} on your exam" if on_exam else "") if x)
-    heads = ""
-    if ng:
-        heads += (f'<a class="sl-bt" href="#" title="Due again, schedule kept" '
-                  f'onclick="{_pycmd(f"insleech:{did}:back:all")}">{"Bring it back" if ng == 1 else f"Bring all {ng:,} back"}</a>')
-    heads += f'<a href="#" onclick="{_pycmd(f"insleech:{did}:browse:0")}">Browse</a>'
+    heads = f'<a href="#" onclick="{_pycmd(f"insleech:{did}:browse:0")}">Browse</a>'
     out = f'{trail}<div class="sl-sum"><span>{summ}</span><span class="sl-hd">{heads}</span></div>'
     for rows, n, head, sub in ((gone, ng, "Anki stopped showing these", f"{ng:,}"),
                                (near, nn, "One miss away", f"{nn:,}, still in your reviews"),
@@ -544,8 +529,7 @@ def _ins_leeches(did, L, deck_name=""):
             out += (f'<div class="isec"><div class="ik">{head}<span>&nbsp;&middot; {sub}</span></div>'
                     + "".join(_ins_leech_row(did, c) for c in rows[:LEECH_SHOW])
                     + (f'<div class="sl-plus">{n - LEECH_SHOW:,} more in Browse</div>' if n > LEECH_SHOW else "") + "</div>")
-    out += ('<div class="tmt">' + ("Bring back: due again, schedule kept. " if ng else "")
-            + "Learn it fresh: a new card again. Edit &rsaquo; Undo takes " + ("either" if ng else "it") + " back.</div>") + put
+    out += put
     return f'<div class="dc-ins">{out}</div>'
 
 
@@ -624,8 +608,7 @@ def _insights_html(did, v):
         risk = ": nothing at risk" if aim.get("checked") else ""
         out += f'<div class="iline">Your exam, {_ins_dname(aim.get("day"), long=True)}{risk} &middot; {_ins_scope(aim)}</div>'
     if int(v.get("behind") or 0) and v.get("pid"):
-        out += (f'<div class="iline">{int(v["behind"]):,} new cards behind &middot; '
-                f'<a href="#" onclick="{_pycmd("plancatch:" + str(v["pid"]))}">Catch up&hellip;</a></div>')
+        out += f'<div class="iline">{int(v["behind"]):,} new cards behind</div>'  # (3.9.10: said; You › Plans has what to do)
     rows = v.get("rows") or []
     dated = bool((v.get("aim") or {}).get("name"))  # 3.9.5 (Sam's FSRS rule): a Study only before a date
     if rows:
@@ -651,21 +634,14 @@ def _insights_html(did, v):
     if f:
         out += (f'<div class="iline" title="Reviews of cards 1&ndash;3 days since their last review, 4 weeks: '
                 f'{int(f["right"])}% right of {int(f["n"]):,}">Newest cards {int(f["right"])}% right, '
-                f'Anki aims for {int(f["target"])}% &middot; '
-                f'<a href="#" onclick="{_pycmd(f"insfsrs:{did}")}">Optimize FSRS</a> '
-                f'<a class="q" href="#" onclick="{_pycmd(f"insfsrsno:{did}")}">Not now</a></div>')
+                f'Anki aims for {int(f["target"])}%</div>')
     h = v.get("hard")
     two = v.get("two")
-    if two == "tried":
-        # 3.9.1: just turned on from here: said, with its way back
-        out += (f'<div class="iline">Two buttons are on: Again and Good. 2, 3 and 4 count as Good. '
-                f'<a class="q" href="#" onclick="{_pycmd(f"instwono:{did}")}">Undo</a></div>')
-    elif h and two != "on":
-        # 3.8.0: the Hard habit, said once a month at most; 3.9.1: with two buttons on there's no Hard to press
+    if h and two != "on":
+        # 3.8.0: the Hard habit; with two buttons on there's no Hard to press. 3.9.10: said, nothing to press here
+        # (Try two buttons is Settings › Study's)
         out += (f'<div class="iline" title="{int(h["n"]):,} reviews in 4 weeks">You press Hard on {int(h["pct"])}% of reviews. '
-                f'Anki counts Hard as remembered. '
-                f'<a href="#" onclick="{_pycmd(f"instwo:{did}")}">Try two buttons</a> '
-                f'<a class="q" href="#" onclick="{_pycmd(f"inshardno:{did}")}">Not now</a></div>')
+                f'Anki counts Hard as remembered.</div>')
     lee, near, kept = int(v.get("leeches") or 0), int(v.get("near") or 0), int(v.get("kept") or 0)
     lout = int(v.get("leech_out") or 0)
     if not (lee or near or kept) and lout:

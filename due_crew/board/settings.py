@@ -225,12 +225,17 @@ def _settings_board(cfg):
               f'<a class="st-lk" href="#" {_st_click("setreset")}>{RESET_WORDS}</a></div>')
 
 
-def _settings_study(cfg, fsrs=None, reach=None):
+def _settings_study(cfg, fsrs=None, reach=None, stops=()):
     """3.9.9: what works while I study, a tab of its own (it was spread through Board).
     fsrs (3.9.1): whether FSRS is on in this collection (None: not known),
     for two buttons' one-line note; reach: Recover leeches' count."""
     g = lambda k, d: bool(cfg.get(k, d))  # noqa: E731
-    return ('<div class="st-h">Today</div><div class="st-box">'
+    # 3.9.10: new cards stopped from Reviews ahead (it could, till Insights became data only): the way back, while one runs
+    stopped = "".join(
+        _st_row(f"New cards stopped in {_html.escape(str(name))}",
+                f'<a class="st-lk" href="#" onclick="{_pycmd("insaheadon:" + str(int(did)))}">Turn back on</a>')
+        for did, name in stops)
+    return ('<div class="st-h">Today</div><div class="st-box">' + stopped
             + _st_row("Today, Upcoming, Later", _st_switch("due_show", g("due_show", True), "Today, Upcoming, Later"))
             + _st_row("Suggestions", _st_switch("due_suggest", g("due_suggest", True), "Suggestions"),
                       "Today's misses, new leeches")
@@ -400,7 +405,7 @@ def _settings_tab(tab, view, cfg, pip=True):
     if tab == "board":
         return _settings_board(cfg)
     if tab == "study":
-        return _settings_study(cfg, view.get("fsrs"), view.get("leech_reach"))
+        return _settings_study(cfg, view.get("fsrs"), view.get("leech_reach"), view.get("new_stops") or ())
     return _settings_privacy(cfg)
 
 

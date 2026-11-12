@@ -332,11 +332,6 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
              f'<a href="#" title="What your crew sent you and what you did, by month" onclick="{_pycmd("scrapbook")}">Scrapbook</a>'
              f'<a href="#" title="Your day, week or year, as text or a picture" '
              f'onclick="{_pycmd("sharemenu")}">Share my stats</a>')
-    # 3.9.10, one grid: what a tab adds is the foot's fourth word there (it crowded Squads' top, and sat under Decks' bars)
-    if period == "squads":
-        left += f'<a href="#" title="With a squad&rsquo;s code, or start one" onclick="{_pycmd("squadadd")}">Create / join a squad</a>'
-    elif period == "decks":
-        left += f'<a href="#" title="Pick the decks your crew sees" onclick="{_pycmd("decks")}">Share a deck</a>'
     n_pending = len(data.get("pending", []))
     if n_pending:
         left += (f'<a class="warn" href="#" title="You added them; you\'re crew when they add you back" '

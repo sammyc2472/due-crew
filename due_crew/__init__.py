@@ -1669,7 +1669,23 @@ def _settings_view():
             "squads": [s.get("name") for s in (c.get("squads") or []) if isinstance(s, dict) and s.get("name")],
             "decks": decks,
             "fsrs": _fsrs_on(),  # 3.9.1: two buttons' note, with FSRS off
-            "leech_reach": _leech_reach()}  # 3.9.3: Recover leeches' line, by this profile's answer
+            "leech_reach": _leech_reach(),  # 3.9.3: Recover leeches' line, by this profile's answer
+            "new_stops": _new_stops()}  # 3.9.10: new cards stopped (Reviews ahead's, till then): Settings › Study turns them back on
+
+
+def _new_stops():
+    """[(deck id, its name)] for each deck whose new cards are stopped (plans.json's new_off)."""
+    try:
+        from . import ahead_flow
+        out = []
+        for key in ahead_flow._off():
+            name = str(mw.col.decks.name(int(key)) or "").split("::")[-1] if mw.col else ""
+            if name:
+                out.append((int(key), name))
+        return out
+    except Exception:
+        oops()
+        return []
 
 
 def _leech_reach():

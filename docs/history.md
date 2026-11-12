@@ -4858,11 +4858,11 @@ every release that changes how something works.
   squad's 7 days is "· 6/7 days" in its name's line and its header is
   Crew's four (`SQUAD_HEADERS` went; an older sort by it reads as
   Reviews); the squads' names are the corner's one line, and "+ join or
-  create" is the foot's "Create / join a squad" on that tab (`draw.py`);
+  create" left that line (see the last look, below);
   a deck's row has its person's Pip and name on the left at a crew row's
   height (`crew._bar`, `.dr`, `.dn`), "unlocked" says "unsuspended"
   (the site's key too), "How it's sticking ›" and "Matching decks pair
-  up on their own" went, and Share a deck is the foot's on that tab. A
+  up on their own" went. A
   status note stays under its name (Sam's pick). Measured in the
   preview: the same column edges on Today, Week and a squad. Not done:
   the site's board keeps its own layout.
@@ -4874,6 +4874,28 @@ every release that changes how something works.
   what it does and Turn new cards back on, so nobody is stuck with one;
   `ahead_flow.stop_new` and `insaheadoff` stay for it, with no way to
   start one from the board now.
+- 3.9.10, Insights is data only (Sam, 12 Nov: "we shouldn't be adjusting
+  cards from insights... consider it a data only zone. The study now for
+  areas of weakness don't change card visibility / plan"). Gone from it:
+  a leech's Bring back, Learn it fresh, Leave it out and Edit, Bring all
+  back and the line saying what they do (`_ins_leech_row`,
+  `_ins_leeches`; a crewmate's tip, Ask who has it down and Browse stay:
+  they change no card); Catch up… beside "N new cards behind"; Optimize
+  FSRS and Not now; Try two buttons and its Undo (the Hard habit is
+  said; two buttons is Settings › Study's); and a running stop's Turn
+  new cards back on, which is now a row of Settings › Study while one
+  runs ("New cards stopped in <deck> · Turn back on", `_new_stops`) and
+  stays on a plan card's line. Study on a weak part stays: it builds a
+  deck and changes no card's state or plan. The handlers behind the
+  removed links stay in `team_flow` (nothing on the board sends them).
+- 3.9.10, the last look (Sam): pointing at a name grew its row 2 px
+  (the Cheer pill, and the name's box becoming inline-block): measured
+  in the preview, now nothing moves on Today or Week (`style.py`, the
+  pill's and the name's margins). "+ Create / join a squad" and "+ Share
+  a deck" are small pills on their own tabs, under the squad and under
+  the bars (`squads._squad_add`, `crew._decks_body`, `.dc-add`), not in
+  the foot every tab has (Sam: "specific to those pages and not global
+  functions, otherwise i worry they'd be missed").
 - 3.9.10, the fixing run (Sam, 12 Nov). Magic search's field asks one
   thing, "What do you want to study?" (`due.MAGIC_PROMPT`; the sample
   searches are gone), and its key is ⌘F / Ctrl+F (the ⇧ sat low in the

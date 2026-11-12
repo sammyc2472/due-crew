@@ -431,4 +431,6 @@ def _decks_body(data, deltas=None, sticking=None, pick="", asks="", cfg=None):
     html = _scroll(_even_bars(html), sum(len(g["rows"]) for g in groups))
     if groups and not up:
         html += f'<div class="dc-line" style="padding-top: 2px;">{_DKEY}</div>'
-    return top + asks + html  # (3.9.10: Share a deck is the foot's on this tab, draw.py)
+    # 3.9.10: sharing another deck starts here, under the ones I share (never in the foot: it's this tab's alone)
+    html += f'<div class="dc-add"><a href="#" title="Pick the decks your crew sees" onclick="{_pycmd("decks")}">+ Share a deck</a></div>'
+    return top + asks + html

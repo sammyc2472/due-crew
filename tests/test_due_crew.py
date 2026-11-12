@@ -787,13 +787,14 @@ def test_squad_view_html():
           and by_streak.index("Maya") < by_streak.index("Sammy")
           and '<span class="hi">&#128293;</span><span class="hl">Streak</span> &#9662;' in by_streak, by_streak)
     check("squad view: switcher marks the current squad and escapes names",
-          'class="on"' in html and "MS2 &lt;x&gt;" in html and "squadadd" not in html)  # (3.9.10: the foot's Create / join a squad)
+          'class="on"' in html and "MS2 &lt;x&gt;" in html and "squadadd" not in html.split("</div>")[0])  # (3.9.10: under the squad, _squad_add)
     none = board._squads_html({"state": "none", "squads": [], "current": ""}, {})
     sq_page = board.render({"entries": [], "labels": ["2026-09-01"], "tomorrow": "", "pending": []}, {"period": "squads"}, 0,
                            squad_view={"state": "none", "squads": [], "current": ""})
-    check("squad view: no squads yet; Create / join a squad is the foot's on this tab alone (3.9.10)",
-          "No squads yet" in none and "<table>" not in none
-          and ("duecrew:squadadd|" + board.BOARD_KEY + "'); return false;\">Create / join a squad</a>") in sq_page.split('class="dc-foot"')[1]
+    check("squad view: no squads yet; + Create / join a squad is on this tab alone, under the squad, never in the foot (3.9.10)",
+          "No squads yet" in none and "<table>" not in none and '<div class="dc-add">' in none
+          and ("duecrew:squadadd|" + board.BOARD_KEY + "'); return false;\">+ Create / join a squad</a>") in sq_page.split('class="dc-foot"')[0]
+          and "squadadd" not in sq_page.split('class="dc-foot"')[1]
           and "Create / join a squad" not in board.render({"entries": [], "labels": ["2026-09-01"], "tomorrow": "", "pending": []},
                                                           {"period": "today"}, 0))
     gone = board._squads_html({"state": "gone", "squads": [{"id": "abc", "name": "orca"}],
@@ -7366,8 +7367,8 @@ def test_crew_menu_pictures():
     check("no Crew menu: Friends has the code and Copy Invite; Crew › Decks starts sharing a deck",
           not hasattr(board, "crew_menu_items") and "def _crew_menu" not in text and '"crewmenu"' not in text
           and 'QPushButton("Copy Invite")' in fd
-          and ("duecrew:decks|" + board.BOARD_KEY + "'); return false;\">Share a deck</a>") in board.render({"entries": [], "labels": ["2026-09-01"], "tomorrow": "", "pending": []}, {"period": "decks"}, 0).split('class="dc-foot"')[1]
-          and "Matching decks pair up" not in dk and "Share a deck" not in dk, dk[-300:])
+          and ('<div class="dc-add"><a href="#" title="Pick the decks your crew sees" onclick="pycmd(\'duecrew:decks|' + board.BOARD_KEY + "'); return false;\">+ Share a deck</a>") in dk
+          and "Matching decks pair up" not in dk, dk[-300:])
     import due_crew as dc
     import aqt.utils as au
     from aqt.deckbrowser import DeckBrowser
@@ -8758,14 +8759,13 @@ def test_insights_379():
     check("insights: the board escapes the plan's words", "<img" not in html and "&lt;img" in html)
     check("insights: header, hero with Study, behind with Catch up (3.8.0: a deck's id in each command)",
           "<b>86%</b>" in html and "87% the 2 weeks before" in html and "3 cards</a> Anki won&rsquo;t show you before Fri" in html
-          and "duecrew:insstudy:10:h" in html and "12 new cards behind" in html and "duecrew:plancatch:p1" in html, html[:900])
+          and "duecrew:insstudy:10:h" in html and "12 new cards behind" in html and "plancatch" not in html, html[:900])  # (3.9.10: data only)
     check("insights: not sticking yet, one Study a row",
           "Not sticking yet" in html and "<b>10</b> of 27" in html and "duecrew:insstudy:10:0" in html and "Re-watch" not in html)
     check("insights: 3.9.2, Reviews ahead in Your week's place, the exam marked on its day",
           "Reviews ahead" in html and "Your week" not in html and ">Exam<" in html and ">today<" in html, html)
     check("insights: Optimize FSRS and Not now",
-          "Newest cards 85% right, Anki aims for 90%" in html and "duecrew:insfsrs:10" in html
-          and "duecrew:insfsrsno:10" in html)
+          "Newest cards 85% right, Anki aims for 90%" in html and "insfsrs" not in html)  # (3.9.10: said, nothing to press)
     check("insights: 3.8.0, the deck's leeches, from the plan card, with See them",
           "<b>2</b> leeches Anki stopped showing you" in html and "duecrew:insleeches:10" in html)
     check("insights: no plan, no behind line", "behind" not in board._insights_html(10, dict(view, pid=None)))
@@ -8779,7 +8779,7 @@ def test_insights_379():
           "duecrew:insbrowse:10:h" in html and "duecrew:insbrowse:10:0" in html, html)
     hh = board._insights_html(10, {"hard": {"pct": 22, "n": 640}})
     check("insights: the Hard habit said, with Not now", "You press Hard on 22% of reviews. Anki counts Hard as remembered." in hh
-          and "duecrew:inshardno:10" in hh and "640 reviews in 4 weeks" in hh, hh)
+          and "inshardno" not in hh and "instwo" not in hh and "640 reviews in 4 weeks" in hh, hh)
     from due_crew import team as T
     check("insights: the Hard habit needs 15% of 200 answers or more",
           T.hard_habit(30, 200) == {"pct": 15, "n": 200} and T.hard_habit(29, 200) is None and T.hard_habit(100, 199) is None)
@@ -16510,8 +16510,8 @@ def test_two_buttons_v391():
     hh = board._insights_html(10, {"hard": {"pct": 22, "n": 640}, "two": ""})
     tried = board._insights_html(10, {"hard": {"pct": 22, "n": 640}, "two": "tried"})
     check("the Hard habit line offers Try two buttons beside Not now; tried: it's on, with Undo; on: there's no Hard to press",
-          "duecrew:instwo:10" in hh and "Try two buttons" in hh and "duecrew:inshardno:10" in hh
-          and "Two buttons are on" in tried and "duecrew:instwono:10" in tried and "You press Hard" not in tried
+          "instwo" not in hh and "Try two buttons" not in hh and "You press Hard" in hh
+          and "instwono" not in tried
           and "You press Hard" not in board._insights_html(10, {"hard": {"pct": 22, "n": 640}, "two": "on"}))
     # the clicks, as the board sends them
     import due_crew as dc
@@ -17718,7 +17718,10 @@ def test_reviews_ahead_392():
     paused = board._ins_ahead(10, _ahead_sample(exam_in=10, off=(0, 10)), "Spanish")
     check("board: paused: its way on, Turn new cards back on in Do it's place",
           'class="ahw" data-k="now"' in paused and paused.count('class="ahw"') == 1 and "new cards wait till" in paused
-          and "duecrew:insaheadon:10" in paused
+          and "insaheadon" not in paused
+          and "duecrew:insaheadon:10" in board.settings_html({"tab": "study", "signed_in": True, "new_stops": [(10, "Sp<i>")]}, {})
+          and "New cards stopped in Sp&lt;i&gt;" in board.settings_html({"tab": "study", "signed_in": True, "new_stops": [(10, "Sp<i>")]}, {})
+          and "New cards stopped" not in board.settings_html({"tab": "study", "signed_in": True}, {})
           and "duecrew:insaheadoff:10:now" not in paused and "No new cards in Spanish till your exam" in paused, paused[-2500:])
     generic = board._ins_ahead(10, dict(_ahead_sample(), own=False, trust=None), "Spanish")
     check("board: no exam: stop for good; a typical curve said; no track record yet",
@@ -18030,15 +18033,14 @@ def test_leeches_392():
         html = board._insights_html(10, {"leech": v, "deck_name": "<i>Spanish"})
         check("board: the trail back, the counts, Bring all back and Browse; the deck's name escaped",
               "duecrew:insleech:10:shut:0" in html and "<b>3</b> Anki stopped showing you" in html and "<b>2</b> one miss away" in html
-              and "Bring all 3 back" in html and "duecrew:insleech:10:back:all" in html and "duecrew:insleech:10:browse:0" in html
+              and "Bring all" not in html and "insleech:10:back" not in html and "duecrew:insleech:10:browse:0" in html
               and "&lt;i&gt;Spanish" in html and "<i>Spanish" not in html, html[:1500])
         check("board: one button a card: the tip, else Ask who has it down, else Bring back; a near card's is a tip or nothing",
               "duecrew:insleech:10:tip:102" in html and "Dre&rsquo;s tip" in html and "Ask Maya" in html
-              and "duecrew:insleech:10:back:101" in html and "slow: 44 s a try" in html and "back in 3 days" in html, html)
+              and "slow: 44 s a try" in html and "back in 3 days" in html, html)
         check("board: behind ⋯: Learn it fresh, Edit, Leave it out (and Bring back where the button's a tip)",
-              "duecrew:insleech:10:fresh:101" in html and "duecrew:insleech:10:edit:104" in html
-              and "duecrew:insleech:10:out:101" in html and "duecrew:insleech:10:out:104" not in html
-              and "duecrew:insleech:10:back:102" in html and "hidden>" in html, html)
+              not any(f"insleech:10:{a}:" in html for a in ("fresh", "edit", "out", "back")) and "hidden>" not in html
+              and "Learn it fresh" not in html, html)  # 3.9.10: Insights is data only: nothing here adjusts a card
         evil = board._ins_leeches(10, {"gone": [dict(g[101], front="<img src=x onerror=1>", topic="<b>")], "near": [], "n_gone": 1, "n_near": 0})
         check("board: a card's own words escaped", "<img" not in evil and "&lt;img" in evil and "<b>&lt;b&gt;" not in evil, evil)
         dc._on_js(False, as_board("duecrew:insleech:10:tip:102"), DeckBrowser())
@@ -18234,9 +18236,7 @@ def test_leeches_tag_only_v392():
         check("board: the summary, its own group, due today and back tomorrow, Leave it out but no Bring back",
               "<b>4</b> still in your reviews" in html and "Leeches still in your reviews" in html
               and "due today" in html and "back tomorrow" in html
-              and "duecrew:insleech:10:out:301" in html and "Stays in your reviews, out of this list" in html
-              and "duecrew:insleech:10:fresh:301" in html and "duecrew:insleech:10:back:301" not in html
-              and "Bring it back" in html, html)
+              and "insleech:10:out" not in html and "insleech:10:fresh" not in html and "Bring it back" not in html, html)
         line = board._insights_html(10, {"leeches": 0, "near": 0, "kept": 4})
         check("board: Insights' line: N leeches still in your reviews · See them (Sam's words)",
               "<b>4</b> leeches still in your reviews &middot; <a" in line and "duecrew:insleeches:10" in line, line)
@@ -18301,7 +18301,7 @@ def test_qol_pass_v392():
     import re as _re
     nots = _re.findall(r"about <b>(\d+)</b> a day, not (\d+)", h)
     check("a stop no longer among the choices: its own kind's name, never Paused; never a number against itself",
-          "Paused" not in h and "Turn new cards back on" in h or "Keep them on" in h and all(x != y for x, y in nots), (nots, h[-1500:]))
+          "Paused" not in h and "No new cards in Spanish" in h and all(x != y for x, y in nots), (nots, h[-1500:]))
     # an exam today: no "To your exam" over today alone; a stop to it ends tonight, not in six weeks
     v = A.view(A.existing([(0, 1)] * 40, *A.habits([])), A.GENERIC, [20.0] * 7, 0, 500, 300, [100] * 7, exam_in=0,
                off=A.stop_of({"kind": "now", "exam": True, "at": "2026-09-01"}, 0, "2026-09-01"), off_kind="now")
@@ -18313,11 +18313,11 @@ def test_qol_pass_v392():
     one = {"cid": 1, "front": "x", "topic": "", "lapses": 1, "susp": False, "due": 2, "tip": [], "knows": []}
     lv = board._ins_leeches(10, {"near": [one], "n_near": 1, "gone": [], "kept": []})
     check("leeches: missed 1 time; no Bring back explained where there's none",
-          "missed 1 time " in lv + " " and "missed 1 times" not in lv and "Bring back:" not in lv and "Undo takes it back" in lv, lv)
+          "missed 1 time " in lv + " " and "missed 1 times" not in lv and "Bring back" not in lv and "Undo takes" not in lv, lv)
     g = dict(one, susp=True, lapses=8, day="2024-08-03")
     lg = board._ins_leeches(10, {"gone": [g], "n_gone": 1, "near": [], "kept": []})
     check("leeches: one to bring back says it; a leech from a year ago or more says its year",
-          "Bring it back" in lg and "Bring all 1" not in lg and "since 3 Aug 2024" in lg and "Bring back: due again" in lg, lg)
+          "Bring" not in lg and "since 3 Aug 2024" in lg, lg)
     line = board._insights_html(10, {"leeches": 0, "near": 1, "kept": 0})
     check("Insights' line: a near leech alone says of what", "<b>1</b> card one miss from a leech" in line, line)
     line = board._insights_html(10, {"leeches": 2, "near": 3})
@@ -18335,8 +18335,7 @@ def test_qol_pass_v392():
     # a stop to the week before an exam 60 days out: named from its own day; before it starts they're not off yet
     far = board._ins_ahead(10, _ahead_sample(exam_in=60, off=(53, 60), pause={"kind": "week", "exam": True, "from": 53}), "Spanish")
     check("a stop far ahead: from its own day (past the chart), and Keep them on, not Turn back on",
-          "No new cards in Spanish from Sat 24 Oct till your exam, Sat 31 Oct" in far and "Keep them on" in far
-          and "Turn new cards back on" not in far, far[-900:])
+          "No new cards in Spanish from Sat 24 Oct till your exam, Sat 31 Oct" in far and "insaheadon" not in far, far[-900:])
     # Why: the stop on a parent deck is named as that deck
     from due_crew import why as W
     ctx = {"today": 500, "now": 1_000_000, "ahead": 1200, "deck": lambda d: {1: "Cardio"}.get(d, "?"),

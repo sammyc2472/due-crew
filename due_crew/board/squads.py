@@ -121,6 +121,12 @@ SQUAD_FIELDS = {"reviews": "reviews", "time": "time_ms",
 # Week view is the calendar week, and the two must not share a word.
 
 
+def _squad_add():
+    """3.9.10: the way into another squad, on the Squads tab alone, under the one shown."""
+    return (f'<div class="dc-add"><a href="#" title="With a squad&rsquo;s code, or start one" '
+            f'onclick="{_pycmd("squadadd")}">+ Create / join a squad</a></div>')
+
+
 def _switcher(view):
     parts = []
     for sq in view.get("squads") or []:
@@ -135,7 +141,7 @@ def _switcher(view):
         badge = f"<i>{n}</i>" if n and not on else ""
         nm = _html.escape(str(sq["name"]))
         parts.append(f'<a{cls} href="#" title="{nm}" onclick="{_pycmd("squadplan:" + str(sq["pid"]))}">{nm}{badge}</a>')
-    # (3.9.10: "+ join or create" is the foot's "Create / join a squad" on this tab, draw.py)
+    # (3.9.10: "+ join or create" is _squad_add, under the squad: it crowded this line)
     return '<div class="dc-sw">' + "".join(parts) + "</div>"
 
 
@@ -178,10 +184,10 @@ def _squads_html(view, cfg, crew_by=None):
     state = view.get("state")
     sw = _switcher(view)
     if view.get("kind") == "plan":
-        return sw + _plan_squad_html(str(view.get("pid") or ""), view, crew_by, cfg)
+        return sw + _plan_squad_html(str(view.get("pid") or ""), view, crew_by, cfg) + _squad_add()
     name = _html.escape(str(view.get("name") or "?"))
     if state == "none":
-        return sw + '<div class="dc-line">No squads yet.</div>'  # the way in is right above it
+        return sw + '<div class="dc-line">No squads yet.</div>' + _squad_add()
     if state == "loading":
         return sw + '<div class="dc-line dc-wait">Fetching&hellip;</div>'
     if state == "error":
@@ -304,7 +310,7 @@ def _squads_html(view, cfg, crew_by=None):
                     f'{"Open" if view.get("open") is False else "Lock"}</a>')
     acts.append(f'<a href="#" onclick="{_pycmd("squadleave")}">Leave</a>')
     foot = ('<div class="dc-line">'
-            + " &middot; ".join(acts) + "</div>")
+            + " &middot; ".join(acts) + "</div>") + _squad_add()
     bingo = (f"<style>{BINGO_CSS}</style>" + bingo_card_html(view["bingo"])) if view.get("bingo") else ""  # 3.6
     if not body:
         return (sw + bingo + '<div class="dc-line">No one&rsquo;s '

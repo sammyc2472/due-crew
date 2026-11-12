@@ -109,12 +109,13 @@ def _css(cfg):
        column at the end; it shows only while the pointer's on the name (or a key's on it), never always
        (Sam: "only show up when scrolling on a name, not persistent all the time") */
     #due-crew a.dc-cpill {{ display: none; margin-left: 6px; padding: 0 8px; border: 1px solid var(--dc-accent); border-radius: 99px;
-      color: var(--dc-accent); font-size: 10.5px; font-weight: 700; line-height: 16px; text-decoration: none; white-space: nowrap;
-      vertical-align: 1px; }}
+      color: var(--dc-accent); font-size: 10.5px; font-weight: 700; line-height: 14px; text-decoration: none; white-space: nowrap;
+      vertical-align: 1px; margin-top: -3px; margin-bottom: -3px; }}
     #due-crew td.nm:hover a.dc-cpill, #due-crew td.nm:focus-within a.dc-cpill {{ display: inline-block; }}
     /* a long name gives way so its pill is never cut off: it ends a little sooner while the pill shows */
     #due-crew td.nm:hover a.dc-pl, #due-crew td.nm:focus-within a.dc-pl {{
-      display: inline-block; max-width: 56%; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }}
+      display: inline-block; max-width: 56%; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom;
+      margin-top: -2px; margin-bottom: -2px; position: relative; top: -1px; }}  /* 3.9.10: pointing at a name moves nothing (it grew the row 2px) */
     #due-crew tr.you a.dc-pl {{ max-width: none; }}
     #due-crew a.dc-cpill:hover, #due-crew a.dc-cpill:focus-visible {{ background: var(--dc-accent); color: var(--dc-accent-ink); outline: none; }}
     /* 3.9.9: a cheer waiting for Due Crew to be reachable shows without the pointer, in the foot's warning colour */
@@ -276,6 +277,12 @@ def _css(cfg):
     #due-crew .dn {{ width: 150px; flex-shrink: 0; display: flex; align-items: center; min-width: 0; white-space: nowrap; }}
     #due-crew .dn b {{ font-weight: 400; overflow: hidden; text-overflow: ellipsis; min-width: 0; }}
     #due-crew .dgh {{ text-align: left; padding: 0 8px; }}
+    /* 3.9.10: what a tab alone can add (a squad, a shared deck), on that tab under what it adds to, not in the foot
+       every tab has (Sam: "specific to those pages and not global functions, otherwise i worry they'd be missed") */
+    #due-crew .dc-add {{ text-align: left; padding: 6px 8px 0; }}
+    #due-crew .dc-add a {{ display: inline-block; color: var(--dc-accent); font-size: 10.5px; font-weight: 700; line-height: 16px;
+      text-decoration: none; border: 1px solid var(--dc-accent); border-radius: 99px; padding: 0 8px; }}
+    #due-crew .dc-add a:hover, #due-crew .dc-add a:focus-visible {{ background: var(--dc-accent); color: var(--dc-accent-ink); outline: none; }}
     @media (max-width: 520px) {{ #due-crew .dn {{ width: 96px; }} }}
     #due-crew .dtrack {{ position: relative; flex: 1; min-width: 70px; height: 12px; background: var(--dc-well);
       border: 1px solid var(--dc-line); border-radius: 2px; overflow: hidden; }}
