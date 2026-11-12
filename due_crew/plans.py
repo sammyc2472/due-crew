@@ -1903,6 +1903,48 @@ def behind_of(p, today):
             "days": max(1, (t - (_iso(since) or t)).days)}
 
 
+# 3.9.10, catching up (Sam, 12 Nov: "once someone is behind a certain amount, we automatically pause… the options
+# should be study or ignore", and "I don't want the dates moved"): from LINE_AT days behind (or one a week old),
+# a new day waits in line instead of opening, and each day owed is a row: Study or Ignore. The plan's dates stay.
+LINE_AT, LINE_OLD = 3, 7
+
+
+def line_starts(p, today):
+    """A path far enough behind for the line: LINE_AT lessons behind, or one whose day was LINE_OLD days ago."""
+    late = [x for x in (p or {}).get("lessons") or [] if x["state"] == "behind"]
+    t = _iso(today)
+    if not late or t is None:
+        return False
+    oldest = _iso(min(x["day"] for x in late))
+    return len(late) >= LINE_AT or (oldest is not None and (t - oldest).days >= LINE_OLD)
+
+
+def line_waits(doc, applied, today):
+    """The dates of my doc (my days, my skips left out) that came and never opened here: waiting in line."""
+    return [u["id"] for u in units(doc) if str(u.get("opens") or "9999") <= today and u["id"] not in (applied or {})]
+
+
+def line_view(p, waits, today):
+    """The line, for the card: {rows, next, days, left}. rows, oldest day
+    first: each lesson behind ({uid, name, day, left, total, opened: True})
+    and each that came before today and waits ({..., opened: False}; its
+    cards are all left). next: the ones whose day is today, waiting
+    ([{uid, name, total}]). The line is over when rows is empty."""
+    waits = set(waits or ())
+    rows, nxt = [], []
+    for x in (p or {}).get("lessons") or []:
+        if x["state"] == "behind":
+            rows.append({"uid": x["uid"], "name": x["name"], "day": x["day"], "left": x["left"], "total": x["total"], "opened": True})
+        elif x["uid"] in waits and x["state"] != "done":
+            left = max(0, int(x["total"]) - int(x["seen"]))
+            if x["opens"] < today:
+                rows.append({"uid": x["uid"], "name": x["name"], "day": x["opens"], "left": left, "total": x["total"], "opened": False})
+            else:
+                nxt.append({"uid": x["uid"], "name": x["name"], "total": x["total"]})
+    rows.sort(key=lambda r: r["day"])
+    return {"rows": rows, "next": nxt, "days": len(rows), "left": sum(r["left"] for r in rows)}
+
+
 FIT_DAYS = (2, 14, 3)  # Behind's Fit it in…: over the days I pick, 2 to 14, three to start (Sam's pick)
 
 

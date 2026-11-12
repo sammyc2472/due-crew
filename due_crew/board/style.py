@@ -391,6 +391,21 @@ def _css(cfg):
       margin-left: 6px; vertical-align: 2px; }}
     #due-crew .dc-pc .pst {{ font-size: 12px; padding: 6px 0 0; border-top: 1px solid var(--dc-line); margin-top: 6px;
       display: flex; gap: 6px 10px; flex-wrap: wrap; align-items: baseline; }}
+    /* 3.9.10, catching up: each day owed a row, Study or Ignore */
+    #due-crew .dc-pc .pln {{ font-size: 12px; border-top: 1px solid var(--dc-line); margin-top: 6px; padding-top: 6px; text-align: left; }}
+    #due-crew .dc-pc .plh {{ display: flex; gap: 4px 12px; align-items: baseline; flex-wrap: wrap; padding-bottom: 4px; }}
+    #due-crew .dc-pc .plh .acts {{ margin-left: auto; }}
+    #due-crew .dc-pc .plh a, #due-crew .dc-pc .plr a.ig {{ color: var(--dc-muted); font-weight: 600; text-decoration: none; }}
+    #due-crew .dc-pc .plr {{ display: flex; gap: 4px 10px; align-items: baseline; padding: 5px 0; border-top: 1px solid var(--dc-line); }}
+    #due-crew .dc-pc .plr .d {{ flex: none; width: 52px; color: var(--dc-muted); }}
+    #due-crew .dc-pc .plr b {{ flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+    #due-crew .dc-pc .plr .n {{ color: var(--dc-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }}
+    #due-crew .dc-pc .plr a {{ white-space: nowrap; }}
+    #due-crew .dc-pc .plr a.go {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; border: 1px solid var(--dc-accent);
+      border-radius: 99px; padding: 0 9px; }}
+    #due-crew .dc-pc .plr a.go.on {{ background: var(--dc-accent); color: var(--dc-accent-ink); }}
+    #due-crew .dc-pc .plr.wait b {{ font-weight: 400; color: var(--dc-muted); }}
+    #due-crew .dc-pc .plh a:hover, #due-crew .dc-pc .plr a.ig:hover {{ color: var(--dc-ink); }}
     #due-crew .dc-pc .pst .late {{ color: var(--dc-hours); font-weight: 700; }}
     #due-crew .dc-pc .pst .acts {{ margin-left: auto; display: flex; gap: 12px; }}
     #due-crew .dc-pc .pst a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; white-space: nowrap; }}

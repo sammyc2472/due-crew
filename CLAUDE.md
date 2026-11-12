@@ -146,7 +146,11 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   (`plan_flow.mine` → `plans.my_doc`), and never changes the plan. The
   morning opens what's due once per Anki day, after the AnkiWeb sync, in
   one undo step; at my own pace it opens only what an author adds to dates
-  I opened (and, "next", the next once I've seen most of the last). Today's set (3.9.6) is a
+  I opened (and, "next", the next once I've seen most of the last). 3.9.10,
+  catching up: three sets behind (or one a week old) and a plan on its
+  dates waits in line (plans.json's `line`): a morning opens no new date,
+  the card lists each day owed with Study and Ignore, and the plan's dates
+  never move (`plans.line_view`, `plan_flow.line_sync`/`line_study`/`line_off`). Today's set (3.9.6) is a
   plan's choice here: in its deck (A, the default) or also each open
   set a filtered deck of its own (B: new and learning due now, never a
   review), built in the open's undo step. A plan never suspends on

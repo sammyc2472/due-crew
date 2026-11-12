@@ -332,6 +332,20 @@ sections.append("<h3>plans, end to end: a plan behind (Behind &middot; its set, 
                 "up top opens its sheet)</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [_BEHIND], "offers": []}))
     .replace("dc-pd-pe-", "dc-pd-pe2-").replace('id="du-', 'id="due2-'))
+# 3.9.10, catching up: the line in Behind's place, the week under it
+_LPROG = {"e0": [40, 40, 40], "e1": [53, 22, 53], "e2": [84, 0, 84], "e3": [0, 0, 66], "e4": [0, 0, 31]}
+_LPATH = PL.path(_EDOC, _LPROG, "2026-11-09", applied=_EAPPLIED)
+_LINE = PL.line_view(_LPATH, PL.line_waits(_EDOC, _EAPPLIED, "2026-11-09"), "2026-11-09")
+for _r in _LINE["rows"]:
+    _dd = datetime.date.fromisoformat(_r["day"])
+    _r["when"] = f"{_dd:%a} {_dd.day}"
+_LCARD = dict(PLAN_CARD, id="pl", title="Path Book, high yield · Dre's plan", name="Path Book, high yield",
+              sub=f"set {_LPATH['at']} of {_LPATH['of']} · 6 following", tabs={"summary": None}, ins=None, waiting=0,
+              week=PL.week_view(_EDOC, _LPROG, "2026-11-09", PL.week_start("2026-11-09")), path=_LPATH, behind=None, line=_LINE,
+              status={"togo": 0, "behind": 0, "since": ""})
+sections.append("<h3>3.9.10: catching up (three days owed: Study or Ignore on each, today's set waiting, the week under it)</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [_LCARD], "offers": []}))
+    .replace("dc-pd-pe-", "dc-pd-pl-").replace('id="du-', 'id="due-line-'))
 # 3.9.6, the plan joys (Sam's picks, the "Joy on the plan card" mock): each moment as the board draws it,
 # mid-moment (motion.js plays it from --ago; still with Reduce motion) and the rest of its day
 from due_crew import sev as _SV  # noqa: E402

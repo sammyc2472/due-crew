@@ -4819,6 +4819,28 @@ every release that changes how something works.
   stay as the year page's numbers, and `wrappedx` as the line's ×.
   Different from the mock: kept through sign-out, and a streak is not a
   kind of its own (what Pip earned for it is).
+- 3.9.10, catching up (Sam, 12 Nov, on a follower's card who was behind:
+  "This is confusing for folks who are behind about what actually is
+  required of them", then "once someone is behind a certain amount, we
+  automatically pause", "I don't want the dates moved", "the options
+  should be study or ignore", "trust the user to understand our UI").
+  From three sets behind, or one a week old (`plans.LINE_AT`,
+  `LINE_OLD`, `line_starts`), a plan on its dates waits in line
+  (plans.json's `line`, set by `plan_flow.line_sync` when my numbers are
+  read): a morning opens no date that never opened here (`run`), and the
+  card has the line in Behind's place (`plans.line_view`,
+  `plancards._plan_line`): each day owed a row, oldest first, with Study
+  (`planlinestudy`: a day that waited opens first, then its deck as any
+  date's Study, new cards only) and Ignore (the follow's skip, as it
+  was; the week's Undo skip brings it back); today's set under them,
+  waiting; the week below as ever. Nothing owed, the line ends and what
+  waited for today opens. Don't wait (`planlineoff`, plans.json's
+  `line_off`) turns it off for that plan on this computer. The plan's
+  dates and my shift are never touched; never at my own pace, paused, on
+  3.2's schedule or an even date; nothing new is sent. An earlier mock
+  (a line saying where you stand, a Catch up… sheet) was set aside for
+  this; one that built every day's deck up front, too (Sam: on Study).
+  Not done: at my own pace the card is as it was.
 - 3.9.10, the fixing run (Sam, 12 Nov). Magic search's field asks one
   thing, "What do you want to study?" (`due.MAGIC_PROMPT`; the sample
   searches are gone), and its key is ⌘F / Ctrl+F (the ⇧ sat low in the
