@@ -4846,6 +4846,34 @@ every release that changes how something works.
   under it, and the lines measuring me against the author's dates are
   gone (where the plan is, my pace, the finish). The You tab says Party
   (`base.PARTY_TAB`; the feature is still Pip Party everywhere else).
+- 3.9.10, one grid (Sam, 12 Nov, with five screenshots: "The different
+  friend tables all look very different fundamentally. Let's get them
+  looking the same… the squads page looks quite crowded at the top").
+  Each table sized its columns from what was in them, Week and Squads
+  could carry a first column for a tick, Squads had a fifth column and a
+  second line in its corner, Decks centred its names. Now: Crew's and a
+  squad's four number columns are one width (`style.py`, the
+  `dc-s-<sort>` tables, a squad's too); there is no first column (a
+  show-up tick is in the name's line, `crew._row_html`, `squads.py`); a
+  squad's 7 days is "· 6/7 days" in its name's line and its header is
+  Crew's four (`SQUAD_HEADERS` went; an older sort by it reads as
+  Reviews); the squads' names are the corner's one line, and "+ join or
+  create" is the foot's "Create / join a squad" on that tab (`draw.py`);
+  a deck's row has its person's Pip and name on the left at a crew row's
+  height (`crew._bar`, `.dr`, `.dn`), "unlocked" says "unsuspended"
+  (the site's key too), "How it's sticking ›" and "Matching decks pair
+  up on their own" went, and Share a deck is the foot's on that tab. A
+  status note stays under its name (Sam's pick). Measured in the
+  preview: the same column edges on Today, Week and a squad. Not done:
+  the site's board keeps its own layout.
+- 3.9.10, Reviews ahead is its graph (Sam: "This bottom of insights
+  looks really sloppy… just keep the graph and eliminate the call to
+  action"). The ways to pick from, their paragraphs, Do it and the
+  "Counted from…" line went (`insights._ins_ahead`); the one chart is the
+  way in effect. A stop of new cards already running keeps its chart,
+  what it does and Turn new cards back on, so nobody is stuck with one;
+  `ahead_flow.stop_new` and `insaheadoff` stay for it, with no way to
+  start one from the board now.
 - 3.9.10, the fixing run (Sam, 12 Nov). Magic search's field asks one
   thing, "What do you want to study?" (`due.MAGIC_PROMPT`; the sample
   searches are gone), and its key is ⌘F / Ctrl+F (the ⇧ sat low in the

@@ -787,10 +787,15 @@ def test_squad_view_html():
           and by_streak.index("Maya") < by_streak.index("Sammy")
           and '<span class="hi">&#128293;</span><span class="hl">Streak</span> &#9662;' in by_streak, by_streak)
     check("squad view: switcher marks the current squad and escapes names",
-          'class="on"' in html and "MS2 &lt;x&gt;" in html and "squadadd" in html)
+          'class="on"' in html and "MS2 &lt;x&gt;" in html and "squadadd" not in html)  # (3.9.10: the foot's Create / join a squad)
     none = board._squads_html({"state": "none", "squads": [], "current": ""}, {})
-    check("squad view: no squads yet offers join or create",
-          "squadadd" in none and "<table>" not in none)
+    sq_page = board.render({"entries": [], "labels": ["2026-09-01"], "tomorrow": "", "pending": []}, {"period": "squads"}, 0,
+                           squad_view={"state": "none", "squads": [], "current": ""})
+    check("squad view: no squads yet; Create / join a squad is the foot's on this tab alone (3.9.10)",
+          "No squads yet" in none and "<table>" not in none
+          and ("duecrew:squadadd|" + board.BOARD_KEY + "'); return false;\">Create / join a squad</a>") in sq_page.split('class="dc-foot"')[1]
+          and "Create / join a squad" not in board.render({"entries": [], "labels": ["2026-09-01"], "tomorrow": "", "pending": []},
+                                                          {"period": "today"}, 0))
     gone = board._squads_html({"state": "gone", "squads": [{"id": "abc", "name": "orca"}],
                                "current": "abc", "name": "orca"}, {})
     check("squad view: removed -> Remove link", "squaddrop:abc" in gone)
@@ -946,8 +951,8 @@ def test_v25_edges_emoji_week():
     check("squad board: a Pip in front of each name (3.8.21; the emoji with Pip off), a rolling 7-days column, sortable by it",
           "🐢" not in html and "🦊" not in html and html.count('class="dc-rsev"') == 3
           and "🐢 igk" in plain and "🦊 Sammy" in plain and "dc-rsev" not in plain
-          and "7/7" in html and "6/7" in html
-          and '<span class="hl">7 days</span> &#9662;' in html
+          and "&middot; 7/7 days</span>" in html and "&middot; 6/7 days</span>" in html
+          and "7 days</span> &#9662;" not in html and html.count("<th>") == 4 and '<table class="dc-s-reviews">' in html
           and html.index("igk") < html.index("Sammy") < html.index("Priya"))
     page = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []},
                         {"period": "squads"}, 0, squad_view=view)
@@ -1209,8 +1214,8 @@ def test_decks():
     check("bar: a fully seen deck has no hatch left to draw",
           'class="fo" style="left:100%;width:0%;"' in done)
     check("bar: hover has the exact numbers; the name is escaped",
-          "4 seen · 2 mature · 5 unlocked · 6 total · +12 this week · 75.0% retention, last 7 days" in bar
-          and "Ameya &lt;a&gt;" in bar)
+          "4 seen · 2 mature · 5 unsuspended · 6 total · +12 this week · 75.0% retention, last 7 days" in bar
+          and "<b>Ameya &lt;a&gt;</b>" in bar)
     check("bar: today and week chips, and retention beside the count",
           "+4 today &middot; +12 wk" in bar and "4 / 6 &middot; 75%" in bar)
     stale = board._bar("Ameya", False, clean(payload)[0], today_labels=(other,))
@@ -1239,7 +1244,7 @@ def test_decks():
     legend = board._decks_html({"labels": [today], "entries": [
         {"user_id": "me", "name": "Sam", "you": True, "decks": clean(payload)}]})
     check("decks legend: a key drawn with the bars' own fills, which holds in both themes (3.7.1, I6)",
-          '<i class="fm"></i>mature<i class="fs"></i>seen<i class="fo"></i>unlocked' in legend
+          '<i class="fm"></i>mature<i class="fs"></i>seen<i class="fo"></i>unsuspended' in legend
           and "light =" not in legend and "dark =" not in legend and "hover" not in legend)
 
 
@@ -2583,8 +2588,8 @@ def test_show_up():
                person("theo", "Theo", paused=True)]
     base = {"entries": entries, "labels": labels, "tomorrow": "", "pending": []}
     today = board.render(base, {"period": "today"}, 0)
-    check("show-up rows, Today: a check instead of a rank, after the ranked rows",
-          '<td class="rk">&#10003;</td><td class="nm">' in today and today.index("Kai") > today.index("Dre")
+    check("show-up rows, Today: a check in the name's line (3.9.10: no first column), after the ranked rows",
+          '<td class="rk">&#10003;' not in today and '<span class="la faded">&#10003;' in today and today.index("Kai") > today.index("Dre")
           and '<td class="rk">#3</td>' not in today)
     week = board.render(base, {"period": "week"}, 0)
     check("show-up rows, Week: a check and the days this week, no rank (Nia studied Monday: she counts too)",
@@ -7195,7 +7200,7 @@ def test_you_bubble_v380():
     # Crew › Decks: my own deck, to how it's sticking
     me = dict(data["entries"][0], decks=[{"name": "Step <1>", "sig": "s", "total": 10, "seen": 5, "mature": 2, "open": 6}])
     dk = board.render(dict(data, entries=[me]), {"period": "decks"}, 0, sticking={"Step <1>": 10})
-    check("decks: my deck's way to Insights", "duecrew:youins:10" in dk and "How it&rsquo;s sticking &rsaquo;" in dk
+    check("decks: no How it's sticking beside a deck's name (3.9.10: Insights has it)", "youins" not in dk and "sticking" not in dk
           and "Step &lt;1&gt;" in dk)
     check("decks: none for a deck Insights doesn't have", "youins" not in board.render(dict(data, entries=[me]), {"period": "decks"}, 0))
     _state["labels"] = []
@@ -7361,8 +7366,8 @@ def test_crew_menu_pictures():
     check("no Crew menu: Friends has the code and Copy Invite; Crew › Decks starts sharing a deck",
           not hasattr(board, "crew_menu_items") and "def _crew_menu" not in text and '"crewmenu"' not in text
           and 'QPushButton("Copy Invite")' in fd
-          and ("duecrew:decks|" + board.BOARD_KEY + "'); return false;\">Share a deck&hellip;</a>") in dk
-          and "Matching decks pair up on their own" in dk, dk[-300:])
+          and ("duecrew:decks|" + board.BOARD_KEY + "'); return false;\">Share a deck</a>") in board.render({"entries": [], "labels": ["2026-09-01"], "tomorrow": "", "pending": []}, {"period": "decks"}, 0).split('class="dc-foot"')[1]
+          and "Matching decks pair up" not in dk and "Share a deck" not in dk, dk[-300:])
     import due_crew as dc
     import aqt.utils as au
     from aqt.deckbrowser import DeckBrowser
@@ -17682,16 +17687,15 @@ def test_reviews_ahead_392():
     # ---- the board ----
     s0 = _ahead_sample(exam_in=10)
     html = board._ins_ahead(10, s0, "<b>Spanish")
-    check("board: Reviews ahead, one chart a way, the one in effect shown; pills switch on the page",
-          html.count('class="ahw"') == 3 and html.count(" hidden>") >= 2 and 'data-k="pace">' in html
-          and 'role="radiogroup"' in html and "Your pace &middot; 140 new a week" in html
-          and "Stop new a week before the exam" in html, html[:1500])
+    check("board: Reviews ahead is its line and its chart (3.9.10: no ways to pick, no Do it, nothing under it)",
+          html.count('class="ahw"') == 1 and " hidden>" not in html and 'data-k="pace">' in html
+          and 'role="radiogroup"' not in html and "Your pace &middot;" not in html and "Stop new" not in html
+          and "insaheadoff" not in html and "Counted from" not in html and "xact" not in html, html[:1500])
     check("board: data first: the cards I've started first, what new ones add at my pace, this week, the time; the exam week against my pace",
           "Next 2 weeks: <b>" in html and "a day from cards you&rsquo;ve started, <b>+" in html and "new at your pace" in html
-          and " a day &middot; this week 100</div>" in html and "new at your pace, about " in html
-          and "Exam week: about <b>" in html and ", not " in html, html)
+          and " a day &middot; this week 100</div>" in html and "new at your pace, about " in html, html)
     check("board: a stop says what it holds back and when they start again (a real deck: the cost was unsaid)",
-          "220 new cards wait till Sat 12 " in html and "plan&rsquo;s sets" not in html, html)
+          "new cards wait till" not in html, html)  # (3.9.10: only a running stop says it: `paused`, below)
     hv = A.view(A.existing([(1, 10)] * 20, *A.habits([])), A.GENERIC, [20.0] * 7, 0, 900, 100, [50] * 7, exam_in=10,
                 plan={2: 50, 20: 30}, pool=100)
     hw = {w["key"]: w for w in hv["ways"]}
@@ -17700,26 +17704,25 @@ def test_reviews_ahead_392():
           and "held" not in hw["pace"], {k: (w.get("held"), w.get("plan_held")) for k, w in hw.items()})
     hh = board._ins_ahead(10, dict(_ahead_sample(exam_in=10), ways=hv["ways"]), "Step")
     check("board: a plan's share of what waits (the day with its month)",
-          "150 new cards wait till Sat 12 " in hh and ", 50 of them in your plan&rsquo;s sets." in hh, hh)
+          "insaheadoff" not in hh and "plan&rsquo;s sets" not in hh, hh)  # (3.9.10: no stop is offered to say it of)
     check("ahead: new cards named the climb's cause only when they're it (200 in two weeks, twice the two before)",
           A.cause(2480, 262) == 2480 and A.cause(150, 0) == 0 and A.cause(500, 300) == 0 and A.cause(None, None) == 0)
     ln = board.ahead_line({"did": 1, "name": "Step", "day": "2026-10-19", "n": 1030, "week": 780, "cause": 2480})
     check("board: the line says the cause", "this week 780 &middot; you started 2,480 cards in 2 weeks</span>" in ln
           and "you started" not in board.ahead_line({"did": 1, "name": "Step", "day": "2026-10-19", "n": 1030, "week": 780}), ln)
     check("board: Do it for each stop, said once; deck options untouched (its tip); the deck's name escaped",
-          "duecrew:insaheadoff:10:week" in html and "duecrew:insaheadoff:10:now" in html
-          and "no new cards in &lt;b&gt;Spanish till your exam" in html and "<b>Spanish" not in html
-          and "deck options stay as they are" in html, html)
-    check("board: the track record, and each bar's band from it", "on your own past, within 9% a week" in html and "&ndash;" in html)
+          "duecrew:insaheadoff" not in html and ">Do it<" not in html and "<b>Spanish" not in html, html)
+    check("board: the track record, and each bar's band from it", "within 9% a week" not in html and "&ndash;" in html)
     check("board: the exam on its day; the last 7 days, today, then by week", ">Exam<" in html and ">today<" in html
           and ">by week<" in html and "Week of " in html, html)
     paused = board._ins_ahead(10, _ahead_sample(exam_in=10, off=(0, 10)), "Spanish")
     check("board: paused: its way on, Turn new cards back on in Do it's place",
-          'class="xc on" data-k="now"' in paused and "duecrew:insaheadon:10" in paused
+          'class="ahw" data-k="now"' in paused and paused.count('class="ahw"') == 1 and "new cards wait till" in paused
+          and "duecrew:insaheadon:10" in paused
           and "duecrew:insaheadoff:10:now" not in paused and "No new cards in Spanish till your exam" in paused, paused[-2500:])
     generic = board._ins_ahead(10, dict(_ahead_sample(), own=False, trust=None), "Spanish")
     check("board: no exam: stop for good; a typical curve said; no track record yet",
-          "till you turn them back on" in generic and "typical curve" in generic and "within" not in generic, generic[-1500:])
+          "insaheadoff" not in generic and "typical curve" not in generic and "within" not in generic, generic[-1500:])
     rh = board.render({"entries": [], "labels": ["2026-09-01"], "tomorrow": "", "pending": []}, {}, 0, ahead={"did": 10, "name": "<i>Spanish", "day": "2026-09-08", "n": 330, "week": 250})
     check("board: the line when reviews climb, the deck escaped, to Insights, put away for a week",
           "Reviews in <b>&lt;i&gt;Spanish</b> climb to about <b>330</b> a day by Tue 8 Sep &middot; this week 250" in rh
@@ -17891,10 +17894,10 @@ def test_ahead_audit_v392():
     later = board._ins_ahead(10, sample(exam_in=10, off=(0, 10), pause={"kind": "now", "exam": False, "from": 0}), "Spanish")
     week = board._ins_ahead(10, sample(exam_in=10, off=(3, 10), pause={"kind": "week", "exam": True, "from": 3}), "Spanish")
     check("board: an exam today: Stop new now, till I turn them back on (never 'to the exam')",
-          "to the exam" not in exam_today and "till you turn them back on" in exam_today, exam_today[-1800:])
+          "to the exam" not in exam_today and "insaheadoff" not in exam_today, exam_today[-1800:])
     check("board: an exam passed: the same", "to the exam" not in passed and "till your exam" not in passed, passed[-1800:])
     check("board: paused to an exam six weeks off: its date named, one pill for it",
-          "till your exam, Sat 31 Oct" in far and far.count('data-k="now" role="radio"') == 1 and 'data-k="off"' not in far, far[-1800:])
+          "till your exam, Sat 31 Oct" in far and far.count('class="ahw"') == 1 and 'role="radio"' not in far, far[-1800:])
     check("board: a pause made with no exam, an exam added since: still till I turn them back on",
           "No new cards in Spanish till you turn them back on" in later, later[-1500:])
     check("board: the week before the exam, before it starts: from its first day",
@@ -17903,8 +17906,9 @@ def test_ahead_audit_v392():
                  [100] * 7, exam_in=20)
     check("a finished deck (no new cards left): no stop offered, it changes nothing", [w["key"] for w in fin["ways"]] == ["pace"],
           [w["key"] for w in fin["ways"]])
-    check("words: one card, one new card", "1 new card waits" in board._ins_ahead(10, dict(sample(exam_in=10), ways=[
-        dict(w, held=1) if w["key"] == "now" else w for w in sample(exam_in=10)["ways"]]), "Spanish"))
+    one = sample(exam_in=10, off=(0, 10), pause={"kind": "now", "exam": True, "from": 0})
+    check("words: one card, one new card", "1 new card waits" in board._ins_ahead(10, dict(one, ways=[
+        dict(w, held=1) if w["key"] == one["on"] else w for w in one["ways"]]), "Spanish"))
 
 
 def test_builder_audit_v392():
@@ -18297,7 +18301,7 @@ def test_qol_pass_v392():
     import re as _re
     nots = _re.findall(r"about <b>(\d+)</b> a day, not (\d+)", h)
     check("a stop no longer among the choices: its own kind's name, never Paused; never a number against itself",
-          "Paused" not in h and "Stop new a week before the exam" in h and all(x != y for x, y in nots), (nots, h[-1500:]))
+          "Paused" not in h and "Turn new cards back on" in h or "Keep them on" in h and all(x != y for x, y in nots), (nots, h[-1500:]))
     # an exam today: no "To your exam" over today alone; a stop to it ends tonight, not in six weeks
     v = A.view(A.existing([(0, 1)] * 40, *A.habits([])), A.GENERIC, [20.0] * 7, 0, 500, 300, [100] * 7, exam_in=0,
                off=A.stop_of({"kind": "now", "exam": True, "at": "2026-09-01"}, 0, "2026-09-01"), off_kind="now")

@@ -90,6 +90,10 @@ def _css(cfg):
     #due-crew td.nm {{ width: 100%; max-width: 0; overflow: hidden !important;
       text-overflow: ellipsis; }}
     #due-crew td.n {{ text-align: right; font-variant-numeric: tabular-nums; }}
+    /* 3.9.10, one grid (Sam: "The different friend tables all look very different fundamentally"): Crew's and a
+       squad's four number columns are one width whatever is in them, so they sit in the same place on every tab */
+    #due-crew table[class*="dc-s-"] tr > th:nth-child(n+2), #due-crew table[class*="dc-s-"] td.n {{ width: 62px; min-width: 62px;
+      box-sizing: content-box; }}
     #due-crew td.rk {{ width: 30px; color: var(--dc-muted); }}
     #due-crew td.rk:empty {{ width: 0; padding-left: 0; padding-right: 0; }}  /* 3.9.9: no places on the Crew tab; the column is a show-up tick's alone */
     #due-crew th.lt {{ text-align: left; font-weight: 400; }}
@@ -221,7 +225,6 @@ def _css(cfg):
     #due-crew .dc-foot .warn {{ color: var(--dc-hours); }}
     #due-crew .dg {{ margin-bottom: 12px; }}
     #due-crew .dgh {{ font-size: 12.5px; font-weight: 700; margin: 2px 0 5px; }}
-    #due-crew .dgh .dsk {{ font-size: 11px; color: var(--dc-accent); text-decoration: none; margin-left: 8px; }}
     #due-crew .ihead {{ display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; margin: 0 0 8px; }}
     #due-crew .ihead .dc-sw {{ padding: 0; }}
     #due-crew .ictx {{ text-align: left; font-size: 11.5px; color: var(--dc-muted); }}
@@ -266,9 +269,14 @@ def _css(cfg):
     #due-crew .ideck + .ictx {{ margin-left: auto; }}
     #due-crew .iexam input {{ font: inherit; color: var(--dc-ink); background: var(--dc-bg); border: 1px solid var(--dc-line);
       border-radius: 6px; padding: 1px 4px; margin: 0; color-scheme: light dark; }}
-    #due-crew .dr {{ display: flex; align-items: center; gap: 10px; padding: 3px 0; font-size: 12px; }}
-    #due-crew .dr.me .dn {{ font-weight: 700; }}
-    #due-crew .dn {{ width: 90px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; }}
+    /* 3.9.10, one grid: a deck's row as a crew row: Pip and name on the left in the name's place, the same height */
+    #due-crew .dr {{ display: flex; align-items: center; gap: 10px; padding: 0 8px; min-height: 34px; font-size: 13px; text-align: left; }}
+    #due-crew .dr.me {{ background: var(--dc-you-bg); }}
+    #due-crew .dr.me .dn b {{ font-weight: 700; }}
+    #due-crew .dn {{ width: 150px; flex-shrink: 0; display: flex; align-items: center; min-width: 0; white-space: nowrap; }}
+    #due-crew .dn b {{ font-weight: 400; overflow: hidden; text-overflow: ellipsis; min-width: 0; }}
+    #due-crew .dgh {{ text-align: left; padding: 0 8px; }}
+    @media (max-width: 520px) {{ #due-crew .dn {{ width: 96px; }} }}
     #due-crew .dtrack {{ position: relative; flex: 1; min-width: 70px; height: 12px; background: var(--dc-well);
       border: 1px solid var(--dc-line); border-radius: 2px; overflow: hidden; }}
     #due-crew .dtrack i {{ position: absolute; left: 0; top: 0; bottom: 0; display: block; }}
@@ -285,7 +293,6 @@ def _css(cfg):
     #due-crew .dc-count .dc-delta {{ margin-left: 0; }}
     #due-crew .dc-line {{ font-size: 11.5px; color: var(--dc-muted); padding: 6px 0; }}
     #due-crew .dc-line a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
-    #due-crew .dc-line.dshare {{ display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; text-align: left; padding: 8px 8px 2px; }}
     #due-crew .dc-live {{ display: inline-block; width: 7px; height: 7px; border-radius: 50%;
       background: var(--dc-accent); box-shadow: 0 0 0 2px var(--dc-you-bg); margin: 0 3px 0 6px;
       vertical-align: 1px; }}

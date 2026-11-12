@@ -263,10 +263,6 @@ def _habits_html(did, h):
     return f'<style>{HABITS_CSS}</style><div class="dc-hv">{head}<div class="ht">{tiles}</div>{more}</div>'
 
 
-AHEAD_PILL = {"pace": "Your pace", "week": "Stop new a week before the exam", "unlocked": "",
-              "now": "Stop new now", "off": "Paused"}
-
-
 def _ins_ahead_svg(did, a, w, uid):
     """3.9.2: one chart, cards a day as Anki counts them: the last 7 days
     as studied, today (done, and what's still due), the next 13 by day
@@ -372,11 +368,11 @@ def _ahead_weeks(xs):
 
 
 def _ins_ahead(did, a, deck_name=""):
-    """3.9.2 (Sam's picks: Your week becomes Reviews ahead): the chart, the
-    ways the next six weeks could go (each its own chart and line, picked
-    on the page), and for a stop, Do it: no new cards in this deck, set
-    each morning as Anki's today-only limit (deck options untouched), with
-    Turn back on in its place once it runs. a: ahead_flow.deck_view."""
+    """3.9.2 (Sam's picks: Your week becomes Reviews ahead): the chart of
+    the next six weeks and its line. 3.9.10: nothing under it (the ways to
+    pick from and Do it went); a stop of new cards that's already running
+    keeps its chart, what it does, and Turn new cards back on.
+    a: ahead_flow.deck_view."""
     e = _html.escape
     ways = [w for w in a.get("ways") or [] if isinstance(w, dict)]
     if not ways:
@@ -394,14 +390,10 @@ def _ins_ahead(did, a, deck_name=""):
         lo, hi, when = max(0, ex - 6), ex + 1, "Exam week"
     else:
         lo, hi, when = 7, 14, "In 2 weeks"
-    # 3.9.2's audit: "to the exam" only for an exam ahead (today's, or one passed, isn't), named at any distance;
-    # a pause I made says what it does from its own kind and exam, not from whether there's an exam now
-    ahead_ex = ex is not None and ex >= 1
     exd = _ins_dname(_day_after(days[7], ex), long=True) if ex is not None and ex >= 0 else ""
     if exd and ex == 0:
         exd = "today"
     pz = a.get("pause") if isinstance(a.get("pause"), dict) else None
-    rate, unlocked = int(round(a.get("rate") or 0)), int(a.get("unlocked") or 0)
 
     def mean(xs):
         return sum(xs) / len(xs) if xs else 0
@@ -417,9 +409,13 @@ def _ins_ahead(did, a, deck_name=""):
                 f"till {_ins_dname(days[7 + int(s[1]) + 1], long=True)}"
                 + (f", {_ins_r(ph)} of them in your plan&rsquo;s sets" if ph >= 1 else "") + ".")
 
-    blocks, pills, acts = "", "", ""
+    # 3.9.10 (Sam: "just keep the graph and eliminate the call to action"): the one chart, the way it is now.
+    # The ways to pick from and Do it went; a stop that's running keeps its line and its way back
+    blocks, acts = "", ""
     for w in ways:
         k = w["key"]
+        if k != on:
+            continue
         if k == "pace":
             # 3.9.2 (a real deck: 44% of the week ahead was new cards at its pace, a guess, in one number):
             # the cards I've started first, what new ones add at my pace after it
@@ -428,22 +424,13 @@ def _ins_ahead(did, a, deck_name=""):
             line = (f"Next 2 weeks: <b>{_ins_r(st)}</b> a day from cards you&rsquo;ve started"
                     + (f", <b>+{_ins_r(nw)}</b> new at your pace" if nw >= 0.5 else "")
                     + f"{mins} &middot; this week {_ins_r(week)}")
-            label = f"Your pace &middot; {rate:,} new a week"
         else:
             a_, b_ = _ins_r(mean(w['cards'][lo:hi])), _ins_r(mean(pace['cards'][lo:hi]))
             line = (f"{when}: about <b>{a_}</b> a day" + (f", not {b_}" if a_ != b_ else "")
                     + (f" &middot; exam day about {_ins_r(w['cards'][ex])}" if k != "unlocked" and ex is not None and 1 <= ex < 42 else ""))
-            # 3.9.2's QoL pass: a pause no longer among the choices (its exam moved) keeps its own kind's name
-            kk = str((pz or {}).get("kind") or "now") if k == "off" else k
-            label = (f"Only the {unlocked:,} unlocked" if kk == "unlocked"
-                     else "Stop new now" + (", to the exam" if (bool(pz.get("exam")) if pz and k == on else ahead_ex) else "")
-                     if kk == "now"
-                     else AHEAD_PILL.get(kk) or kk)
         hid = "" if k == on else " hidden"
         blocks += (f'<div class="ahw" data-k="{k}"{hid}><div class="xline">{line}</div>'
                    f'<div class="iwk">{_ins_ahead_svg(did, a, w, uid)}</div></div>')
-        pills += (f'<span class="xc{" on" if k == on else ""}" data-k="{k}" role="radio" tabindex="0" '
-                  f'aria-checked="{"true" if k == on else "false"}">{label}</span>')
         # what pressing it does, said once, beside its button
         if k == on and k != "pace":
             to_exam = bool(pz and (pz.get("exam") or pz.get("kind") == "week") and exd)
@@ -454,41 +441,16 @@ def _ins_ahead(did, a, deck_name=""):
                    + (f"till your exam, {exd}" if to_exam else "till you turn them back on")
                    + f'.{held(w)}</span><a class="bt" href="#" onclick="{_pycmd(f"insaheadon:{did}")}">'
                    + ("Keep them on" if start > 0 else "Turn new cards back on") + '</a>')
-        elif k == "pace" and on != "pace":
-            later = int((pz or {}).get("from") or 0) > 0  # the stop hasn't begun: they're on today
-            act = (f'<span>{"New cards stay on, at your pace." if later else "From today, new cards at your pace."}</span>'
-                   f'<a class="bt" href="#" onclick="{_pycmd(f"insaheadon:{did}")}">{"Keep them on" if later else "Turn new cards back on"}</a>')
-        elif k == "pace":
-            act = ""
-        elif k == "unlocked":
-            act = "<span>If you unlock no more: what that leaves.</span>"
-        elif k in ("week", "now") and on == "pace":
-            first = "today" if k == "now" else _ins_dname(days[7 + w["stop"][0]], long=True)
-            till = f"till your exam, {exd}" if ahead_ex else "till you turn them back on"
-            act = (f'<span>From {first}, no new cards in {name} {till}.{held(w)}</span>'
-                   f'<a class="bt" href="#" title="Anki&rsquo;s today-only limit, each morning. Your deck options stay as they are." '
-                   f'onclick="{_pycmd(f"insaheadoff:{did}:{k}")}">Do it</a>')
         else:
             act = ""
         if act:
             acts += f'<div class="xact" data-k="{k}"{hid}>{act}</div>'
-    tr = a.get("trust")
-    said = ("Counted from your last 120 days"
-            + (f" &middot; on your own past, within {max(1, int(round(100 * tr[0])))}% a week" if tr else "")
-            + ("" if a.get("own") else " &middot; new cards by a typical curve till yours has 6 weeks"))
-    pick = ("var r=this.closest('.dc-ahead'),k=(event.target.closest('.xc')||{}).dataset;"
-            "if(!k||!k.k)return;k=k.k;r.querySelectorAll('[data-k]').forEach(function(x){"
-            "var m=x.dataset.k===k;if(x.classList.contains('xc')){x.classList.toggle('on',m);x.setAttribute('aria-checked',m);}else x.hidden=!m;});")
-    keys = ("if(event.key==='Enter'||event.key===' '){event.preventDefault();event.target.click();}")
     defs = (f'<svg class="ahdefs" width="0" height="0" aria-hidden="true"><defs><pattern id="ah{uid}" width="6" height="6" '
             f'patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" class="h1"/>'
             f'<rect width="3" height="6" class="h2"/></pattern></defs></svg>')
     return (f'<div class="isec dc-ahead">{defs}<div class="ik">Reviews ahead<span>&nbsp;&middot; cards a day</span>'
             f'<span class="ikey"><i class="sw ps"></i>done <i class="sw pm"></i>started <i class="sw hx"></i>new cards</span></div>'
-            f'{blocks}'
-            + (f'<div class="xwhat" role="radiogroup" aria-label="New cards" onclick="{pick}" onkeydown="{keys}">{pills}</div>'
-               if len(ways) > 1 else "")
-            + f'{acts}<div class="tmt">{said}.</div></div>')
+            f'{blocks}{acts}</div>')
 
 
 def _ins_leech_row(did, c):
