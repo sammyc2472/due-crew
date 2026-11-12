@@ -1444,6 +1444,106 @@ def test_request_paths_and_errors():
           and A._said("/invites/ABCDEFGHJK/redeem") == "/invites/…/redeem" and A._said("/squads/s1") == "/squads/s1")
 
 
+def test_studying_dot_by_itself_v3910():
+    """3.9.10 (Sam: "get rid of I'm studying and just have it automatically
+    pushed when someone has synced reviews within the last hour"): my dot
+    for an hour after my last review, set as a sync is made ready and riding
+    my week as the button's hour did; Privacy's switch, never for someone
+    paused or just showing up; said once at the board's foot; the squad's
+    square counts studying while a crewmate is."""
+    import due_crew as dc
+    from due_crew import together as T, account, settings_model as SM, bingo_flow
+    from due_crew.app import _state
+    from aqt.deckbrowser import DeckBrowser
+    if "aqt.reviewer" not in sys.modules:
+        sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
+    store = world({"sam": "Sam", "dre": "Dre"})
+    cl = new_client(store, "sam", "Sam")
+    now = datetime.datetime(2026, 11, 12, 15, 0, tzinfo=datetime.timezone.utc)
+    ms = lambda mins: int((now - datetime.timedelta(minutes=mins)).timestamp() * 1000)  # noqa: E731
+    iso = lambda mins: (now + datetime.timedelta(minutes=mins)).strftime("%Y-%m-%dT%H:%M:%SZ")  # noqa: E731
+    bumps = []
+    saved = (T.client, bingo_flow.bump, _state.get("entries"), dc.cfg, dc.save_cfg, T.cfg, T.save_cfg, dc._swap, dc.open_settings)
+    conf = {}
+    try:
+        T.client = lambda: cl
+        bingo_flow.bump = lambda k, by=1: bumps.append(k)
+        _state["entries"] = []
+        cl.session.pop("live_until", None)
+        check("the dot: a review 20 minutes ago: live for the 40 left of its hour",
+              T.auto_live({}, ms(20), "2026-11-12", now) is True and cl.session["live_until"] == iso(40))
+        check("…a newer review moves it on; the same one again changes nothing",
+              T.auto_live({}, ms(5), "2026-11-12", now) is True and cl.session["live_until"] == iso(55)
+              and T.auto_live({}, ms(5), "2026-11-12", now) is False)
+        check("…a review over an hour ago, or none: no dot, and the hour it set goes",
+              T.auto_live({}, ms(61), "2026-11-12", now) is True and "live_until" not in cl.session
+              and T.auto_live({}, 0, "2026-11-12", now) is False)
+        for off in ({"show_studying": False}, {"paused": True}, {"show_up": True}):
+            cl.session.pop("live_until", None)
+            cl.session.pop("live_auto", None)
+            T.auto_live({}, ms(5), "", now)
+            T.auto_live(off, ms(5), "", now)
+            check(f"…{sorted(off)[0]}: no dot, the one it had set taken down", "live_until" not in cl.session and not T.live_on(off))
+        cl.session["live_until"] = room = iso(90)  # a room's or a fifteen's hour
+        T.auto_live({}, ms(5), "", now)
+        T.auto_live({"show_studying": False}, ms(5), "", now)
+        check("…a room's or a fifteen's longer hour is never shortened, nor taken down by the switch", cl.session.get("live_until") == room)
+        cl.session.pop("live_until", None)
+        cl.session.pop("live_lv", None)
+        real_now = datetime.datetime.now(datetime.timezone.utc)
+        soon = (real_now + datetime.timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        fresh = int((real_now - datetime.timedelta(minutes=2)).timestamp() * 1000)
+        T.auto_live({}, fresh, "2026-11-12")
+        _state["entries"] = [{"user_id": "dre", "you": False, "live_until": soon}]
+        T.auto_live({}, fresh, "2026-11-12")
+        T.auto_live({}, fresh, "2026-11-12")
+        check("the squad's square (lv): the first time in a day I'm studying while a crewmate is, once",
+              bumps == ["lv"] and cl.session.get("live_lv") == "2026-11-12", bumps)
+        check("the switch is an account key, a bool, on unless turned off; telling is one too; a sharing change, so it syncs",
+              {"show_studying", "live_told"} <= set(account.ACCOUNT_KEYS)
+              and account.clean({"show_studying": False, "live_told": True}) == {"show_studying": False, "live_told": True}
+              and SM.change(["set", "show_studying", "0"], {}) == {"show_studying": False}
+              and "show_studying" in dc.SHARE_KEYS and "show_studying" not in SM.BOARD_DEFAULTS)
+        pv = board._settings_privacy({})
+        check("Privacy: Show when I'm studying, on, with what it does; paused: it says it's off",
+              "duecrew:set:show_studying:0" in pv and "an hour after your last review" in pv
+              and "Off while you&rsquo;re paused" in board._settings_privacy({"paused": True}))
+        ix = board.settings_index({"signed_in": True}, {})
+        check("Find a setting: dot, live or presence finds it, on Privacy",
+              all(any(w in r["k"].split() and r["f"] == "set:show_studying:" and r["t"] == "privacy" for r in ix) for w in ("dot", "live", "presence")))
+        data = {"entries": [], "labels": [TODAY.isoformat()], "tomorrow": "", "pending": []}
+        told = {"use_told": True}
+        line = board.render(data, dict(told), 0)
+        check("the board says it once: a line at the foot with Privacy and Got it; not beside the line on what's counted, "
+              "not once put away, not for someone paused",
+              T.LIVE_NOTE in line and "duecrew:livesee|" in line and "duecrew:livetold|" in line
+              and T.LIVE_NOTE not in board.render(data, {}, 0)
+              and T.LIVE_NOTE not in board.render(data, dict(told, live_told=True), 0)
+              and T.LIVE_NOTE not in board.render(data, dict(told, paused=True), 0))
+        swaps, opened = [], []
+        dc.cfg = T.cfg = lambda: conf
+        dc.save_cfg = T.save_cfg = lambda c: conf.update(c)
+        dc._swap = lambda c, focus=None: swaps.append(1)
+        dc.open_settings = lambda tab=None: opened.append(tab)
+        conf.update(use_told=True)
+        dc._on_js(False, as_board("duecrew:livetold"), DeckBrowser())
+        check("Got it: put away, the board drawn again", conf.get("live_told") is True and swaps == [1])
+        conf.pop("live_told")
+        dc._on_js(False, as_board("duecrew:livesee"), DeckBrowser())
+        check("Privacy: put away, and Settings opens on Privacy", conf.get("live_told") is True and opened == ["privacy"])
+        src = open(os.path.join(REPO, "due_crew", "__init__.py"), encoding="utf-8").read()
+        check("it's set as a sync is made ready (no request of its own), from my last review; the button's command is gone",
+              "together.auto_live(c, q.last_review_ms(), labels[0])" in src and '"live": (' not in src
+              and not hasattr(T, "toggle_live"))
+        mig = open(os.path.join(REPO, "worker", "migrations", "0031_bingo_together.sql"), encoding="utf-8").read()
+        check("the square's words on the server say what it counts now, its key the same, only where the admin hasn't rewritten it",
+              '"name":"Studying together"' in mig and '"params":{"key":"lv"}' in mig and "WHERE id = 'buddy' AND updated_at = 0" in mig)
+        check("the privacy page says the dot shows by itself and where its switch is",
+              "by itself, for an hour after your last review" in open(os.path.join(REPO, "site", "public", "privacy.html"), encoding="utf-8").read())
+    finally:
+        (T.client, bingo_flow.bump, _state["entries"], dc.cfg, dc.save_cfg, T.cfg, T.save_cfg, dc._swap, dc.open_settings) = saved
+
+
 def test_request_budget():
     """3.0: a refresh is ONE request, whatever the crew's size, and a sync
     is one. The numbers below are the budget: a change here is a change in
@@ -3042,7 +3142,7 @@ def test_settings_in_board_v341():
              "send_errs": False}  # 3.9.9's switch, off: its own test
     pv = board.settings_html(dict(view, tab="privacy"), dated)
     check("settings: Privacy, one choice checked; numbers only under My numbers",
-          pv.count('aria-checked="true"') == 1 and "duecrew:setprivacy:numbers" in pv
+          pv.count('role="radio" aria-checked="true"') == 1 and "duecrew:setprivacy:numbers" in pv
           and "share_reviews" not in pv, pv[-900:])
     # 3.9.9 (Settings by what it's about): my dates are on You, no longer under Privacy
     yo = board.settings_html(dict(view, tab="you", signed_in=True), dated)

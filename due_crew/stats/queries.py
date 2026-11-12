@@ -52,6 +52,11 @@ class StatsQueries:
         cutoff = datetime.date.fromtimestamp(self._cutoff_s())
         return (cutoff - datetime.timedelta(days=days_ago + 1)).isoformat()
 
+    def last_review_ms(self):
+        """When my last review was, in ms (0: none): the newest row's id, read from the log's end.
+        3.9.10: the studying dot shows by itself for an hour after it."""
+        return int(self.col.db.scalar("SELECT id FROM revlog WHERE ease > 0 ORDER BY id DESC LIMIT 1") or 0)
+
     def reviews_for_day(self, days_ago=0):
         start, end = self.day_bounds_ms(days_ago)
         return self.col.db.scalar(

@@ -12,7 +12,7 @@ from aqt import mw
 from aqt.utils import tooltip
 
 from . import app, board
-from .app import _state, cfg, client
+from .app import _state, cfg, client, save_cfg
 from .backend.shapes import LIVE_MINUTES, TRICKY_MAX, clean_note, clean_tricky
 from .wrap import _save_wrap, _wrap_data
 
@@ -217,26 +217,70 @@ def is_live():
     return board.live_now(client().session.get("live_until"))
 
 
-def toggle_live():
-    """The footer's "I'm studying": a dot by my name for LIVE_MINUTES, or
-    off again. It rides my week doc; friends see it on their next refresh."""
+LIVE_KEY = "show_studying"  # Privacy's Show when I'm studying (an account key, on unless turned off)
+LIVE_TOLD = "live_told"     # the board's line about it, put away
+LIVE_NOTE = "New: your crew sees a dot by your name while you\u2019re studying."
+
+
+def live_on(c):
+    """Whether my dot shows by itself: the switch on, and my numbers shared
+    (never for someone paused or in just-show-up mode)."""
+    return c.get(LIVE_KEY, True) is not False and not c.get("paused") and not c.get("show_up")
+
+
+def live_note_due(c):
+    """The board's line about the dot is still to be put away."""
+    return bool(live_on(c) and not c.get(LIVE_TOLD))
+
+
+def live_told():
+    c = cfg()
+    if not c.get(LIVE_TOLD):
+        c[LIVE_TOLD] = True
+        save_cfg(c)
+        try:
+            from . import account
+            account.push(c)
+        except Exception:
+            pass
+
+
+def auto_live(c, last_ms, day="", now=None):
+    """3.9.10 (Sam: "get rid of I'm studying and just have it automatically
+    pushed when someone has synced reviews within the last hour"): my dot for
+    LIVE_MINUTES after my last review, set as a sync is made ready, so it
+    rides my week as the button's hour did. It never shortens a room's or a
+    fifteen's hour; switched off (or paused, or just showing up) the hour
+    this set goes, and only that one. The first time in a day I'm studying
+    while a crewmate is counts for the squad's square (lv). Main thread.
+    True when the session changed."""
     cl = client()
-    if is_live():
-        cl.session.pop("live_until", None)
-        msg = "Stopped."
-    else:
-        until = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=LIVE_MINUTES)
-        cl.session["live_until"] = until.strftime("%Y-%m-%dT%H:%M:%SZ")
-        from .bingo_flow import bump
-        bump("lv")  # 3.6
-        msg = "Your crew sees you're studying, for the next hour."
-    cl._save_session()
-    for e in _state["entries"] or []:
-        if e["you"]:
-            e["live_until"] = str(cl.session.get("live_until") or "")
-    app.swap(cfg())
-    app.sync(light=True, fetch=False)
-    tooltip(msg)
+    s = cl.session
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    want = ""
+    if live_on(c) and last_ms:
+        until = datetime.datetime.fromtimestamp(int(last_ms) / 1000, datetime.timezone.utc) + datetime.timedelta(minutes=LIVE_MINUTES)
+        if until > now:
+            want = until.strftime("%Y-%m-%dT%H:%M:%SZ")
+    cur, mine, changed = str(s.get("live_until") or ""), str(s.get("live_auto") or ""), False
+    if want:
+        if want > cur:
+            s["live_until"] = s["live_auto"] = want
+            changed = True
+        if day and s.get("live_lv") != day and any(
+                not e.get("you") and board.live_now(e.get("live_until")) for e in _state["entries"] or []):
+            s["live_lv"] = day
+            changed = True
+            from .bingo_flow import bump
+            bump("lv")  # 3.6's square, by what it means now: studied while a crewmate was studying
+    elif mine:
+        if cur == mine:
+            s.pop("live_until", None)
+        s.pop("live_auto", None)
+        changed = True
+    if changed:
+        cl._save_session()
+    return changed
 
 
 # ---- cards that are getting me ----

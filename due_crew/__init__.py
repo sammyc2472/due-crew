@@ -182,6 +182,8 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
                              time.time() - _state["ts"], _closing, fetch)
         clock = _clock()
         gen = app.generation
+        if upload_stats is not None:
+            together.auto_live(c, q.last_review_ms(), labels[0])  # 3.9.10: the studying dot, by itself
     except Exception:
         with _lock:
             _fetching = False
@@ -1191,7 +1193,8 @@ BOARD_CMDS = {
     "period": (1, lambda p: p[2] in board.PERIODS, _cmd_period),
     "refresh": (0, None, _cmd_refresh),
     "friends": (0, None, lambda c, p: open_friends()),
-    "live": (0, None, lambda c, p: together.toggle_live()),
+    "livetold": (0, None, lambda c, p: (together.live_told(), _swap(cfg()))),  # 3.9.10: the foot's note on the dot, Got it
+    "livesee": (0, None, lambda c, p: (together.live_told(), open_settings("privacy"))),  # and its way to the switch
     "luckline": (1, None, lambda c, p: together.send_luck_line(p[2])),
     "luckthanks": (0, None, lambda c, p: together.luck_thanks()),
     "tricktip": (2, None, lambda c, p: together.send_tip(p[2], p[3])),
@@ -1852,7 +1855,7 @@ def _close_addons_dialog():
 
 
 SHARE_KEYS = ("show_up", "share_reviews", "share_time", "share_retention", "share_streak",
-              "share_heatmap", "paused", "exam_date",
+              "share_heatmap", "paused", "exam_date", "show_studying",
               "away_from", "away_to")
 
 

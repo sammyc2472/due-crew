@@ -327,6 +327,13 @@ def _settings_privacy(cfg):
             + radio("showup", "Just that I studied", "Squares, no numbers. You see everyone the same way.")
             + radio("paused", "Nothing for now", "Your crew sees &ldquo;on a break&rdquo;; your streak keeps counting. "
                     "Kept 24 months without activity.")
+            # 3.9.10: the studying dot shows by itself; this is its switch (not for someone paused or just showing up)
+            + '</div><div class="st-h">While you study</div><div class="st-box">'
+            + _st_row("Show when I&rsquo;m studying", _st_switch("show_studying", cfg.get("show_studying", True) is not False,
+                                                                "Show when I'm studying"),
+                      "A dot by your name for an hour after your last review. Not shown while you&rsquo;re paused or just showing up."
+                      if not (cfg.get("paused") or cfg.get("show_up")) else
+                      "Off while you&rsquo;re paused or just showing up.")
             # 3.9.9, Know when it breaks: the errors this computer met, by code, with the day's first sync
             + '</div><div class="st-h">What Due Crew counts</div><div class="st-box">'
             + _st_row("Send what went wrong, and what gets used",
@@ -362,6 +369,7 @@ FIND_WORDS = {
     "dance": "music song songs soundtrack dj party floor dancing pip motion animation corner",
     "songapp": "music app listen spotify apple youtube song",
     # 3.9.9: Know when it breaks
+    "set:show_studying:": "studying now dot live online presence active green im i'm hour",
     "set:send_errs:": "errors error bugs bug crash broken report reports diagnostics problems wrong usage used counts analytics telemetry",
     "errsee": "errors error bugs report diagnostics what goes sent",
 }

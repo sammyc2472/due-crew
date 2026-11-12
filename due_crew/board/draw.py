@@ -153,6 +153,18 @@ def _use_line(cfg):
             f'<a href="#" onclick="{_pycmd("usetold")}">Got it</a></div>')
 
 
+def _live_line(cfg):
+    """3.9.10: the studying dot shows by itself now, said once in a line at
+    the board's foot (after the line on what's counted, never beside it):
+    its way to the switch, and Got it."""
+    from .. import errs_flow, together
+    if errs_flow.note_due(cfg) or not together.live_note_due(cfg):
+        return ""
+    return (f'<div class="dc-calm"><span>{together.LIVE_NOTE}</span><span class="sp"></span>'
+            f'<a href="#" onclick="{_pycmd("livesee")}">Privacy</a>'
+            f'<a href="#" onclick="{_pycmd("livetold")}">Got it</a></div>')
+
+
 def _calm_line(cfg):
     """3.9.9, the calm board (calm.py): the part that just appeared, in one
     line with its way in and its way off; else, while parts are folded, Show all."""
@@ -315,7 +327,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     failed = ('<span class="warn" title="The last sync didn\'t reach the server. '
               'Your numbers are safe; Refresh tries again.">Couldn&rsquo;t sync</span>'
               ' &middot; ') if sync_error else ""
-    foot = (_calm_line(cfg) + _use_line(cfg) + f'<div class="dc-foot"><span class="fl">{left}</span><span class="sp"></span>'
+    foot = (_calm_line(cfg) + _use_line(cfg) + _live_line(cfg) + f'<div class="dc-foot"><span class="fl">{left}</span><span class="sp"></span>'
             f'<span class="fr">{failed}<span class="upd">Updated {ago}</span>'
             f'<a class="ic" href="#" title="Refresh" onclick="{_pycmd("refresh")}">&#8635;</a>'
             f'<a class="ic" href="#" title="Settings" onclick="{_pycmd("settings")}">&#9881;&#xFE0E;</a></span></div>')
