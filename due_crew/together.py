@@ -109,6 +109,8 @@ def show_luck_card():
     app.board_eval(board.luck_card_js(name, [(x["name"], x["note"]) for x in store["lines"]]))
     store["shown"] = True
     _save_wrap()
+    from . import scrap_flow
+    scrap_flow.luck_shown(store["lines"], _today())  # 3.9.10: shown, each line is kept (never raises)
 
 
 def luck_thanks():
@@ -140,6 +142,9 @@ def mark_helped(guid, from_uid, on):
         if isinstance(t, dict) and t.get("from") == from_uid and bool(t.get("helped")) != on:
             t["helped"] = on
             changed = True
+            if on:
+                from . import scrap_flow
+                scrap_flow.tip_helped(guid, t)  # 3.9.10: a tip that helped is kept (its words, never the card)
     if changed:
         _save_wrap()
 

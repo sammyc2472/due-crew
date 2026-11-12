@@ -21,7 +21,7 @@ from .dance import dance_html
 from .fridge import fridge_html
 from .squads import _squads_html
 from .closet import CLOSET_CSS, closet_line
-from .wrapped import wrapped_line
+from .scrapbook import scrapbook_line
 from .lobby import room_html
 
 
@@ -269,7 +269,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     if ahead and ahead.get("did"):
         bans.append(ahead_line(ahead))
     if wrapped and wrapped.get("year"):
-        bans.append(wrapped_line(wrapped["year"], wrapped.get("so_far"), wrapped.get("look") or [], cfg.get("sev", True)))
+        bans.append(scrapbook_line(wrapped["year"], wrapped.get("so_far"), wrapped.get("look") or [], cfg.get("sev", True)))
     if closet and closet.get("keys") and cfg.get("sev", True):
         line = closet_line(closet["keys"], my_look(cfg), bool(closet.get("first")))
         if line:
@@ -316,6 +316,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
                  'some sharing is paused until it catches up.">'
                  '&#9888; server catching up</span>')
     left += (f'<a href="#" title="Your crew, your code, Copy invite" onclick="{_pycmd("friends")}">Friends</a>'
+             f'<a href="#" title="What your crew sent you and what you did, by month" onclick="{_pycmd("scrapbook")}">Scrapbook</a>'
              f'<a href="#" title="Your day, week or year, as text or a picture" '
              f'onclick="{_pycmd("sharemenu")}">Share my stats</a>')
     n_pending = len(data.get("pending", []))

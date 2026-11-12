@@ -3295,7 +3295,9 @@ def check_every_board_click_is_taken():
             return cmd in ("closet", "closetnew", "closethw", "closetclose", "closetoff") or (cmd == "closetwear" and arg in closet.BY) \
                 or (cmd == "closettab" and arg.isdigit() and int(arg) < len(board.CLOSET_TABS))
         if cmd.startswith("wrapped"):
-            return cmd in ("wrappedopen", "wrappedyear", "wrappedcard", "wrappedclose") or (arg.isdigit() and len(arg) == 4)
+            return cmd == "wrappedx" and arg.isdigit() and len(arg) == 4
+        if cmd.startswith("scrap"):
+            return cmd in ("scrapbook", "scrapclose", "scrapempty", "scrappin", "scrapdel") or (arg.isdigit() and len(arg) == 4)
         if cmd == "settab":
             return arg in settings_model.TABS
         if cmd in ("setclose", "setname", "setemoji", "setstatus", "setsquads", "setsignin", "setsignout", "setdelete", "setfeedback"):
@@ -7117,8 +7119,8 @@ def test_you_bubble_v380():
     foot = bh.split('class="dc-foot"')[1]
     # 3.9.10 (Sam: "I've been meaning to redo the bottom"): three words, each saying what it opens
     words = re.findall(r'<a [^>]*onclick="pycmd\(\'duecrew:([a-z]+)\|[^>]*>([^<]+)</a>', foot.split('class="sp"')[0])
-    check("the foot: Friends opens the Friends window, Share my stats the share menu; no pill, no room, no Crew menu; who's waiting stays",
-          words[:2] == [("friends", "Friends"), ("sharemenu", "Share my stats")] and 'class="pb' not in foot
+    check("the foot: Friends opens the Friends window, Scrapbook the scrapbook, Share my stats the share menu; no pill, no room, no Crew menu; who's waiting stays",
+          words[:3] == [("friends", "Friends"), ("scrapbook", "Scrapbook"), ("sharemenu", "Share my stats")] and 'class="pb' not in foot
           and "Open a room" not in foot and ">Crew</a>" not in foot and 'class="warn"' in foot and "1 waiting" in foot, words)
     css = board.render(data, {"period": "today"}, 0, due=dv2, plans=plans, you={"tab": "today", "plans": plans})
     check("simpler: the box is a card like the board's, no border of its own; one underline for every word tab",
@@ -15512,98 +15514,37 @@ def _wr_year(seed, keep, until=datetime.date(2026, 11, 30), start=datetime.date(
 
 
 def test_wrapped_story_v390():
-    """3.9.0, your Wrapped (Sam's pick, round three): a year's story from my
-    own reviews, only the slides that year can fill, every line kind (no
-    missed days, no "fewer", no comparing: wrapped.SAD, read in every slide
-    of every year here), the card I turned around shown here only, and the
-    board's line from 1 December to 15 January."""
+    """3.9.0's Wrapped, since 3.9.10 the scrapbook's year page: the year's
+    facts from my own reviews, and the board's line from 1 December to 15
+    January, now the scrapbook's (the slide story is gone)."""
     from due_crew import wrapped as W
     full = W.facts(2026, "2026-12-01", _wr_year(9, lambda d, r: r.random() < (.97 if d.month == 3 else .85)),
                    {22: 5000, 23: 3000, 9: 1000}, "2023-02-01")
-    fall = W.facts(2026, "2026-12-01", _wr_year(4, lambda d, r: d >= datetime.date(2026, 9, 2) and r.random() < .82),
-                   {7: 4000, 8: 2000, 20: 500}, "2026-09-02")
-    back = W.facts(2026, "2026-12-01", _wr_year(5, lambda d, r: not (datetime.date(2026, 2, 9) <= d <= datetime.date(2026, 4, 13)) and r.random() < .9),
-                   {14: 100, 15: 100}, "2025-01-01")
-    one = W.facts(2026, "2026-03-03", {"2026-03-02": (12, 12, 60000)}, {}, "2026-03-02")
     none = W.facts(2026, "2026-03-03", {}, {}, None)
-    names = {k: t["name"] for k, t in __import__("due_crew.closet", fromlist=["BY"]).BY.items()}
-    counts = {"fifteens": 38, "hours": {"20": 20}, "cheers_sent": 12, "cheered_by": 41, "rooms": 6, "worn": {"headphones": 40}}
-    sl_full = W.slides(full, counts, {"sprout": "2026-10-14", "headphones": "2026-10-14"}, ["Headphones"], 4,
-                       {"front": "Which nerve <b>x</b>?", "lapses": 9, "ivl": 41}, 12, 4, names)
-    sl_fall = W.slides(fall, {}, {"sprout": "2026-09-02"}, ["Sprout"], 0, None, 0, 4, names)
-    sl_back = W.slides(back, {}, {}, [], 2, None, 0, 4, names)
-    kinds = lambda sl: [x["kind"] for x in sl]
-    check("a full year: every slide it can fill, in the story's order",
-          kinds(sl_full) == ["cover", "days", "run", "back", "time", "cards", "turned", "fifteens", "things", "crew", "picture"]
-          or kinds(sl_full) == ["cover", "days", "run", "time", "cards", "turned", "fifteens", "things", "crew", "picture"], kinds(sl_full))
-    check("met Anki this year: says so; an early bird; no crew, no Fifteens, no comebacks: those slides aren't made",
-          sl_fall[0]["line"] == "You and Anki met on 2 September." and "time" in kinds(sl_fall)
-          and next(x for x in sl_fall if x["kind"] == "time")["big"] == "Early bird"
-          and not {"crew", "fifteens", "back", "turned"} & set(kinds(sl_fall)), kinds(sl_fall))
-    bk = next(x for x in sl_back if x["kind"] == "back")
-    check("a comeback after weeks away is its own big slide: the day, how long, and the days that followed (more than half)",
-          bk["big"].endswith("April") and bk["line"].startswith("after nine weeks away. Then you showed up on") and "next" in bk["line"], bk)
-    check("one day: a short story (cover, days, cards, picture); no reviews: nothing",
-          kinds(W.slides(one)) == ["cover", "days", "cards", "picture"] and W.slides(none) == [])
-    every = sl_full + sl_fall + sl_back + W.slides(one)
-    said = [W.words(x).lower() for x in every]
-    bad = [(w, t) for t in said for w in W.SAD if re.search(rf"\b{w}", t)]
-    check("kind, always: no slide says missed, only, fewer, down, worst, lost, behind, less ...", not bad, bad[:5])
-    check("the card I turned around: its front on its slide, marked as staying here; never on the picture",
-          next(x for x in sl_full if x["kind"] == "turned")["tag"].startswith("Stays on this computer")
-          and "nerve" not in W.words(sl_full[-1]).lower())
-    check("since October, for what Due Crew only began counting then", next(x for x in sl_full if x["kind"] == "fifteens")["tag"] == "Since October"
-          and next(x for x in sl_full if x["kind"] == "crew")["tag"] == "Since October")
-    things = next(x for x in sl_full if x["kind"] == "things")
-    check("Pip's things: what came this year, worn most (a week or more of it)",
-          things["big"] == "2 things" and "headphones, 40 days" in things["small"], things)
-    check("the picture: days, longest run, and reviews (new cards when the year was mostly new)",
-          sl_full[-1]["grid"][2][1] == "reviews" and sl_fall[-1]["grid"][2][1] in ("reviews", "new cards")
-          and sl_full[-1]["kicker"] == "My 2026 so far in Anki" and sl_full[-1]["small"] == "See you in 2027.")
-    check("the board's line: 1 December to 15 January, for the year just ending; else none; the year it's about",
+    check("the year's facts: days, reviews, the longest run, each day's count; none for no reviews",
+          full["days"] > 200 and full["reviews"] > full["days"] and full["run"][0] >= 3 and len(full["per_day"]) == full["days"]
+          and not none["days"], (full["days"], full["run"]))
+    check("the board's line: 1 December to 15 January, for the year just ending; else none",
           W.banner_year("2026-12-01") == 2026 and W.banner_year("2027-01-15") == 2026 and W.banner_year("2027-01-16") is None
-          and W.banner_year("2026-11-30") is None and W.default_year("2027-01-10") == 2026 and W.default_year("2026-12-02") == 2026)
-    cells = W.heat(full)
-    check("the year's squares: Monday-first weeks, levels against the year's own days, the days still to come empty",
-          len(cells) % 7 == 0 and 53 <= len(cells) // 7 <= 54 and {c[1] for c in cells if c and c != ""} <= {0, 1, 2, 3, 4}
-          and any(c == "" for c in cells) and cells[0] is None)
-    check("every kind of slide is in the table that says when it's made", {x["kind"] for x in every} <= {k for k, _w in W.SLIDES}
-          and set(W.BG) == {k for k, _w in W.SLIDES})
-    # drawn, in the board's place
-    view = {"year": 2026, "years": [2026, 2025], "slides": sl_full, "heat": cells, "look": ["headphones"], "card": True, "card_on": True}
-    h = board.wrapped_html(view, {"accent": "green"})
-    check("drawn: a slide each, Pip in my look, the year's squares, another year, All on one page, the card's switch, the way back",
-          h.count('<section class="wr-s') == len(sl_full) and "duecrew:wrappedyear:2025" in h and "All on one page" in h
-          and "duecrew:wrappedcard" in h and "duecrew:wrappedclose" in h and "duecrew:wrappedpic:2026" in h
-          and 'class="wh"' in h and '<svg class="sv' in h, h[:300])
-    check("the card's front is text, escaped", "Which nerve &lt;b&gt;x&lt;/b&gt;?" in h and "<b>x</b>" not in h)
-    off = board.wrapped_html(view, {"sev": False})
-    check("Pip off: the story without Pip (no Pip's things slide)", "<svg class=\"sv" not in off and off.count('<section class="wr-s') == len(sl_full) - 1)
-    js = board.wrapped_js()
-    check("the player: arrows and the sides move it, it moves on by itself, never with Reduce motion, once a card",
-          "ArrowRight" in js and "prefers-reduced-motion: reduce" in js and "bars[st.i].animate" in js and "requestAnimationFrame" not in js and "st.run.pause()" in js
-          and "data-on" in js)
-    import shutil
-    import subprocess
-    if shutil.which("node"):
-        r = subprocess.run(["node", "--check", "-"], input=js, capture_output=True, text=True)
-        check("the player is valid JS", r.returncode == 0, r.stderr[:300])
-    line = board.wrapped_line(2026, True, ["dino"])
-    check("the line: Your 2026 so far, Open, and its x for the year", "Your 2026 so far" in line and "duecrew:wrappedopen:2026" in line
-          and "duecrew:wrappedx:2026" in line and "&#127873;" in board.wrapped_line(2026, False, [], pip=False))
+          and W.banner_year("2026-11-30") is None)
+    check("the slide story is gone (3.9.10): no slides, no card read for it",
+          not hasattr(W, "slides") and not hasattr(board, "wrapped_html") and not hasattr(board, "wrapped_js")
+          and not hasattr(__import__("due_crew.wrapped_flow", fromlist=["x"]), "turned"))
+    line = board.scrapbook_line(2026, True, ["dino"])
+    check("the line: Your 2026 so far is in your scrapbook, Open, and its x for the year", "Your 2026 so far" in line
+          and "scrapbook" in line and "duecrew:scrapbook:2026" in line
+          and "duecrew:wrappedx:2026" in line and "&#127873;" in board.scrapbook_line(2026, False, [], pip=False))
     from due_crew import account
     check("the line's x is the account's (wrapped_seen), so it holds on every computer",
           "wrapped_seen" in account.ACCOUNT_KEYS and account.clean({"wrapped_seen": "2026xx"}) == {"wrapped_seen": "2026"})
 
 
 def test_wrapped_flow_v390():
-    """3.9.0: Wrapped's glue reads the year in one grouped query (an hour a
-    row), new cards met as first answers, the first review ever, the years
-    there are, and the card I turned around as plain text; the commands
-    reach it as the board sends them."""
+    """3.9.0: the year is read in one grouped query (an hour a row), new
+    cards met as first answers, the first review ever, the years there are
+    (3.9.10: for the scrapbook's year page; its commands have their own
+    test, test_scrapbook_v3910)."""
     from due_crew import wrapped_flow as F
-    import due_crew as dc
-    from aqt.deckbrowser import DeckBrowser
     conn = sqlite3.connect(":memory:")
     fakes.make_collection(conn)
     at = lambda d, h: int(datetime.datetime.combine(d, datetime.time(h)).timestamp() * 1000)
@@ -15618,38 +15559,6 @@ def test_wrapped_flow_v390():
           days.get("2026-03-02", (0,))[0] == 5 and days["2026-03-02"][1] == 1 and "2026-03-03" not in days
           and "2025-12-31" not in days and hours.get(22) == 3 and hours.get(1) == 1, (days, hours))
     check("the first review ever, and the years there are", F.first_day(col) == "2025-12-31" and F.years(col) == [2026, 2025])
-    col.get_card = lambda cid: types.SimpleNamespace(question=lambda: '<style>.x{}</style><div>Which <b>nerve</b>?</div>[sound:a.mp3]&amp; why')
-    n, card = F.turned(col)
-    check("the card I turned around: as plain text (no markup, no media)", n == 1 and card == {"front": "Which nerve ? & why", "lapses": 9, "ivl": 41}, card)
-    # the board's commands
-    saved = (dc.open_wrapped, dc._swap, dc.cfg, dc.save_cfg, dc._board_on_screen, dict(dc._state))
-    opened, conf, swaps = [], {"accent": "green"}, []
-    import due_crew.shares as SH
-    pics = []
-    saved_pic = SH.picture
-    dc.open_wrapped = lambda year=None: opened.append(year)
-    dc._swap = lambda c, focus=None: swaps.append(1)
-    dc.cfg = lambda: conf
-    dc.save_cfg = lambda c, **k: conf.update(c)
-    dc._board_on_screen = lambda: True
-    SH.picture = lambda kind, year=None: pics.append((kind, year))
-    try:
-        send = lambda m: dc._on_js(False, as_board("duecrew:" + m), DeckBrowser())
-        send("wrappedopen:2026")
-        send("wrappedyear:2025")
-        send("wrappedpic:2026")
-        send("wrappedx:2026")
-        dc._state["wrapped_open"] = {"year": 2026}
-        send("wrappedcard")
-        send("wrappedclose")
-        check("the board's clicks reach it: open, another year, the picture on that year, the line's x for the year, the card off, back",
-              opened == [2026, 2025, 2026] and pics == [("pictureyear", 2026)] and conf.get("wrapped_seen") == "2026"
-              and conf.get(F.CARD_KEY) is False and dc._state.get("wrapped_open") is None and swaps, (opened, pics, conf))
-    finally:
-        dc.open_wrapped, dc._swap, dc.cfg, dc.save_cfg, dc._board_on_screen = saved[:5]
-        dc._state.clear()
-        dc._state.update(saved[5])
-        SH.picture = saved_pic
     check("the board's line: in its fortnight-and-a-month, until its x for that year",
           F.banner("2026-12-03", {"sev": False})["year"] == 2026 and F.banner("2026-12-03", {"wrapped_seen": "2026"}) is None
           and F.banner("2027-01-10", {"sev": False}) == {"year": 2026, "so_far": False, "look": []} and F.banner("2026-10-03", {}) is None)
@@ -15661,6 +15570,158 @@ def test_wrapped_flow_v390():
           any(o[0] == "sev" for o in ops) and not any(o[0] == "sev" for o in S.draw("year", "story", dict(d, sev=False), {}, "light", lambda s, px, w: 1)[2])
           and "if (d.sev) { const img = await sevImg(pal.g); if (img) c.drawImage(img, W - P - YEAR_SEV, 446 - YEAR_SEV * SEV_FEET, YEAR_SEV, YEAR_SEV); }" in js
           and "YEAR_SEV = 220" in js and S.YEAR_SEV == 220)
+
+
+def test_scrapbook_v3910():
+    """3.9.10, the scrapbook (Sam: "a combo wrapped and home for polaroids /
+    notes, etc. that are ephemeral at the moment or deleted permanently
+    when taken away from the screen"): a polaroid taken down, pushed out or
+    signed out with goes there; good-luck lines once shown, a tip that
+    helped, a cheer with words, what I did; by month under the year's page;
+    Pin up, Delete, Empty; this computer's, per account, never sent."""
+    import due_crew as dc
+    from due_crew import scrapbook as S, scrap_flow as SF, closet_flow as cf, fridge as FR
+    from aqt.deckbrowser import DeckBrowser
+    _patched_due_crew()
+    SF._BOOK.update(profile=None, data=None, disk=None)
+    draw = {"k": "draw", "s": [[0, 10, 10, 50, 50]]}
+    # pure
+    pz = {"k": "pz", "from": "dre", "name": "Dre", "at": "2026-11-03T10:00:00Z", "a": "blue", "n": "go <b>", "d": draw}
+    its = S.add(S.add([], pz), pz)
+    check("a keepsake is kept once, cleaned; one of no kind, no day or no words isn't",
+          len(its) == 1 and its[0]["d"]["k"] == "draw" and S.clean_one({"k": "x", "at": "2026-11-03"}) is None
+          and S.clean_one({"k": "luck", "at": "nope", "n": "hi"}) is None and S.clean_one({"k": "luck", "at": "2026-11-03", "n": ""}) is None
+          and S.clean_one({"k": "mine", "at": "2026-11-03", "head": ""}) is None, its)
+    more = S.add(its, {"k": "mine", "w": "plan", "head": "Finished Heme", "at": "2026-10-20"})
+    more = S.add(more, {"k": "cheer", "from": "nia", "name": "Nia", "at": "2025-12-30T01:00:00Z", "n": "nice", "e": "🎉"})
+    check("by year and month, newest first; this year always has a page",
+          S.years(more, 2027) == [2027, 2026, 2025] and [m for m, _x in S.months(more, 2026)] == [11, 10]
+          and S.counts(more, 2026) == {"pz": 1, "luck": 0, "tip": 0, "cheer": 0, "mine": 1})
+    check("a month's line: what I did leads, else the days I showed up; its numbers only when there are some",
+          S.month_line([{"head": "Finished Heme"}, {"head": "x"}], 9) == ("", "Finished Heme", ", and 1 more.")
+          and S.month_line([], 1) == ("", "1 day", " you showed up.") and S.month_line([], 0) == ("", "", "")
+          and S.month_sub(12, 3400, 1) == "12 study days · 3,400 reviews · cheered 1 time" and S.month_sub(0, 0, 0) == "")
+    check("the year's line and numbers: kind, and only what there is",
+          S.year_line(2026, 0, 0, True)[0] == "2026 so far: nothing studied yet."
+          and S.year_line(2026, 200, 41000, False) == ("200 days you showed up, and ", "41,000 reviews", ".")
+          and S.year_stats(31, 1, {"pz": 2}, 0, 0) == [("31", "days, your longest run"), ("1", "plan finished"), ("2", "drawings and signs")])
+    check("a polaroid goes to the fridge's shape and back", S.to_fridge(S.from_fridge({"from": "dre", "name": "Dre", "at": "x", "a": "blue", "n": "n", "d": draw}))
+          == {"from": "dre", "name": "Dre", "at": "x", "a": "blue", "n": "n", "d": draw})
+
+    # the fridge feeds it
+    ents = [{"user_id": "dre", "accent": "blue", "you": False}]
+    cheers = [{"from": "dre", "name": "Dre", "at": f"2026-10-{d:02d}T10:00:00Z", "note": f"day {d}", "doodle": draw} for d in range(1, FR.KEEP + 3)]
+    cf.keep_doodles(cheers, ents, "sam")
+    pushed = [x["n"] for x in SF.items("sam")]
+    check("a newer drawing pushing the oldest off the fridge sends it to the scrapbook (it was gone for good)",
+          len(cf.fridge("sam")) == FR.KEEP and pushed == ["day 1", "day 2"], pushed)
+    first = cf.fridge("sam")[0]
+    cf.take_down(FR.key(first))
+    down = [x["n"] for x in SF.items("sam")]
+    cf.put_back(FR.key(first))
+    check("× takes a drawing down into the scrapbook; Undo brings it back out", down == ["day 1", "day 2", first["n"]]
+          and [x["n"] for x in SF.items("sam")] == ["day 1", "day 2"] and "In your scrapbook &middot;" in open(os.path.join(REPO, "due_crew", "board", "fridge.py")).read())
+    kept = SF.find(S.key(SF.items("sam")[0]), "sam")
+    up = cf.pin_up(S.to_fridge(kept), "sam")
+    check("Pin up: back on the fridge, the oldest there making room in the scrapbook",
+          up and any(x["n"] == "day 1" for x in cf.fridge("sam")) and len(cf.fridge("sam")) == FR.KEEP
+          and first["n"] in [x["n"] for x in SF.items("sam")], [x["n"] for x in SF.items("sam")])
+    saved = (dc._reset_runtime, dc._rerender)
+    dc._reset_runtime, dc._rerender = (lambda **k: None), (lambda: None)
+    try:
+        dc._on_signed_out()
+    finally:
+        dc._reset_runtime, dc._rerender = saved
+    n_out = len(SF.items("sam"))
+    check("signing out: the fridge empties into that account's scrapbook, which stays, and another account sees none of it",
+          cf.fridge("sam") == [] and n_out == FR.KEEP + 2 and SF.items("nia") == [], n_out)
+
+    # what else is kept
+    SF.cheers_in([{"from": "nia", "name": "Nia", "at": "2026-11-02T09:00:00Z", "note": "you got this", "emoji": "💪"},
+                  {"from": "nia", "name": "Nia", "at": "2026-11-02T09:01:00Z", "note": "", "emoji": "🎉"},
+                  {"from": "dre", "name": "Dre", "at": "2026-11-02T09:02:00Z", "note": "look", "doodle": draw}], "sam")
+    SF.luck_shown([{"from": "nia", "name": "Nia", "note": "Breathe."}], "2026-11-05", "sam")
+    SF.moment("plan", "Finished Heme", "Every set of it done.", "cheer", "2026-11-06", "sam")
+    SF.moment("plan", "Finished Heme", "Every set of it done.", "cheer", "2026-11-06", "sam")
+    nov = [x for x in SF.items("sam") if x["at"][:7] == "2026-11"]
+    check("a cheer is counted in its month and kept only with words (a drawing is the fridge's); a good-luck line once shown; a moment once",
+          sorted(x["k"] for x in nov) == ["cheer", "luck", "mine"] and SF._read("sam")["cheers"] == {"2026-11": 3}, nov)
+    disk = json.load(open(SF._path()))
+    check("its file is scrapbook.json beside wrap.json, by account; nothing of it is an account key or rides a request",
+          set(disk["by"]) == {"sam"} and "scrap" not in open(os.path.join(REPO, "due_crew", "backend", "api.py")).read()
+          and "scrap" not in open(os.path.join(REPO, "due_crew", "account.py")).read())
+
+    # drawn
+    view = {"year": 2026, "years": [2026, 2025], "so_far": True, "yline": S.year_line(2026, 200, 41000, True),
+            "ystats": S.year_stats(31, 1, S.counts(SF.items("sam"), 2026), 3, 0), "n": len(SF.items("sam")), "any": True, "sev": True,
+            "months": [{"m": m, "name": S.MONTHS[m - 1], "line": S.month_line([x for x in xs if x["k"] == "mine"], 9), "sub": S.month_sub(9, 900, 3),
+                        "items": [dict(x, key=S.key(x)) for x in xs]} for m, xs in S.months(SF.items("sam") + [dict(pz)], 2026)]}
+    h = board.scrapbook_html(view, {"accent": "green"}, {"dre": {"user_id": "dre", "accent": "purple", "look": []}}, [])
+    check("drawn in the board's place: the year's page and Share my year, each year, a month a block, the way back, Empty, where it's kept",
+          'class="sb-y"' in h and "duecrew:scrapshare:2026" in h and "duecrew:scrapyear:2025" in h and h.count('class="sb-m"') == 2
+          and "duecrew:scrapclose" in h and "duecrew:scrapempty" in h and "Kept on this computer. Never sent." in h, h[:200])
+    check("a polaroid has Pin up and Delete, anything else Delete alone; every word a sender wrote is escaped",
+          h.count(">Pin up<") == h.count('class="sb-k sb-pz"') > 0 and h.count(">Delete<") == view["n"] + 1
+          and "go &lt;b&gt;" in h and "go <b>" not in h)
+    check("a sender's Pip and colour are theirs as they are now (purple, not the blue it came in)",
+          f'style="--al:{board.accent_pair("purple")[0]};' in h and 'class="sv m-idle"' in h
+          and 'class="sv ' not in board.scrapbook_html(dict(view, sev=False), {"sev": False}, {}, []).split('class="sb-m"')[1])
+    empty = board.scrapbook_html({"year": 2026, "years": [2026], "so_far": True, "yline": S.year_line(2026, 0, 0, True), "months": [], "n": 0}, {})
+    check("nothing kept yet: says what comes here; no Empty link", "Nothing kept yet this year" in empty and "scrapempty" not in empty)
+
+    # the board's commands
+    keep = (dc.open_scrapbook, dc._swap, dc.cfg, dc.save_cfg, dc._board_on_screen, dc._scrap_load, dict(dc._state), dc.client)
+    import due_crew.shares as SH
+    import due_crew.sheets as sheets
+    saved_pic, saved_confirm = SH.picture, sheets.confirm
+    opened, conf, swaps, pics, asked = [], {"accent": "green"}, [], [], []
+    dc.open_scrapbook = lambda year=None: opened.append(year)
+    dc._swap = lambda c, focus=None: swaps.append(1)
+    dc.cfg = lambda: conf
+    dc.save_cfg = lambda c, **k: conf.update(c)
+    dc._board_on_screen = lambda: True
+    dc._scrap_load = lambda year=None: True
+    dc.client = lambda: types.SimpleNamespace(user_id="sam")
+    SF.client = dc.client
+    SH.picture = lambda kind, year=None: pics.append((kind, year))
+    sheets.confirm = lambda title, text, yes, then, danger=False, **k: (asked.append((title, danger)), then())
+    try:
+        send = lambda m: dc._on_js(False, as_board("duecrew:" + m), DeckBrowser())
+        send("scrapbook")
+        send("scrapbook:2026")
+        send("scrapyear:2025")
+        send("scrapshare:2026")
+        send("wrappedx:2026")
+        dc._state["wrapped_open"] = {"year": 2026}
+        a_pz = next(x for x in SF.items("sam") if x["k"] == "pz")
+        a_luck = next(x for x in SF.items("sam") if x["k"] == "luck")
+        before = len(SF.items("sam"))
+        send("scrappin:" + S.key(a_pz))
+        pinned = (len(SF.items("sam")), [x["n"] for x in cf.fridge("sam")])
+        send("scrappin:" + S.key(a_luck))
+        send("scrapdel:" + S.key(a_luck))
+        after_del = len(SF.items("sam"))
+        send("scrapdel:nonsense")
+        send("scrapempty")
+        send("scrapclose")
+        check("the board's clicks reach it: open, a year, another, Share my year, the line's x for the year, back",
+              opened == [None, 2026, 2025] and pics == [("pictureyear", 2026)] and conf.get("wrapped_seen") == "2026"
+              and dc._state.get("wrapped_open") is None and swaps, (opened, pics, conf))
+        check("Pin up puts a polaroid back on the Decks screen and out of the scrapbook (never a note); "
+              "Delete and Empty ask first, in red, and only then go",
+              pinned == (before - 1, [a_pz["n"]]) and after_del == before - 2 and SF.items("sam") == []
+              and asked == [("Delete this?", True), ("Empty the scrapbook?", True)] and len(cf.fridge("sam")) == 1, (pinned, after_del, asked))
+    finally:
+        dc.open_scrapbook, dc._swap, dc.cfg, dc.save_cfg, dc._board_on_screen, dc._scrap_load = keep[:6]
+        dc._state.clear()
+        dc._state.update(keep[6])
+        dc.client = keep[7]
+        SF.client = keep[7]
+        SH.picture, sheets.confirm = saved_pic, saved_confirm
+        SF._BOOK.update(profile=None, data=None, disk=None)
+    src = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
+    check("its ways in: the foot's Scrapbook, Tools › Due Crew › Scrapbook… (Your year… is gone), the December line",
+          '("Scrapbook…", lambda: open_scrapbook())' in src and "Your year…" not in src)
 
 
 def test_banner_actions_sit_together_v390():
@@ -16038,7 +16099,7 @@ def test_fridge_account_and_undo_v391():
     """3.9.1, before release: the fridge is this Anki profile's file, and
     more than one account can sign in on a profile, so it keeps whose
     drawings it holds, shows them to that account alone and empties at
-    sign-out. And × leaves "Taken down · Undo" in the drawing's place for a
+    sign-out. And × leaves "In your scrapbook · Undo" in the drawing's place for a
     few seconds; Undo puts it back where it was."""
     import due_crew as dc
     from due_crew import closet_flow as cf, fridge as FR
@@ -16090,7 +16151,7 @@ def test_fridge_account_and_undo_v391():
         dc._swap = saved
     pill = re.search(r'<div class="fz fgone"[^>]*>.*?</div>', html)
     order = re.findall(r'data-k="([0-9a-f]+)"', html)
-    check("undo: × takes it down and leaves Taken down · Undo where it was (its spot, its sender's colour), for the seconds it has",
+    check("undo: × takes it down and leaves In your scrapbook · Undo where it was (its spot, its sender's colour), for the seconds it has",
           g and g["k"] == k and pill and f"duecrew:fridgeback:{k}" in pill.group(0) and 'data-s="r" data-x="40" data-y="300"' in pill.group(0)
           and f"--fa:{board.accent_pair('blue')[0]}" in pill.group(0) and 'role="status"' in pill.group(0)
           and re.search(r"--fg:-\d+\.\ds", pill.group(0)) and order == [FR.key(x) for x in reversed(back)]
@@ -16802,10 +16863,6 @@ def test_efficiency_idle_v391():
     import re as _re
     check("idle: the bats' wings flap for the flight and stop (no loop of ours that runs forever on Halloween's line)",
           "infinite" not in board.HW_CSS and "calc(var(--d) - var(--ago, 0s)) 20 alternate" in board.HW_CSS)
-    js = board.wrapped_js()
-    check("idle: Wrapped's bars fill by one animation a slide, paused when held or hidden, none on the last; no frame loop",
-          "requestAnimationFrame" not in js and "visibilitychange" in js and "st.run.pause()" in js
-          and "st.i < sl.length - 1 && bars[st.i].animate" in js)
     rt = rm._RUNTIME
     check("idle: a room's widgets tick as often as they show (the break's mm:ss and the question each second, "
           "else at the minute's turn or the phase's end, ten seconds at most), and balance the bar only when their words change",

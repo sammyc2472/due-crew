@@ -72,9 +72,9 @@ Above the board is yours.
   of what you know, by topic or by the week you started it. It's worked
   out in your Anki and never sent; copy the map as a picture or as text
   if you want to share it.
-- **Your year.** From 1 December, your year in Anki as a short story,
-  made on your computer from your own reviews. Tools → Due Crew → Your
-  year… has any year Anki remembers.
+- **Scrapbook.** What your crew sent you and what you did, by month:
+  drawings you take down, good-luck cards, tips that helped, plans you
+  finished, under each year's page. Kept on your computer, never sent.
 
 **Pip**, the square from the logo, keeps you company: heads down in a
 fifteen, breathing with you on a break, a hop when the day's done, a wave

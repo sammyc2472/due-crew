@@ -2754,6 +2754,8 @@ def joy(card, today, shown=False, now=None):
             try:
                 from . import closet_flow
                 closet_flow.note_plan_done(pid)  # 3.9.6: three plans with every set done, the Finisher's ribbon
+                from . import scrap_flow
+                scrap_flow.moment("plan", f"Finished {str(card.get('name') or 'a plan')}", "Every set of it done.", "cheer", today)  # 3.9.10
             except Exception:
                 oops()
     card["joy"] = _joy_pips(view, pid) if view else None

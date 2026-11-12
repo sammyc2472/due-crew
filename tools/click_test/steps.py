@@ -77,6 +77,7 @@ VIEWS = (
     ("Settings · Study", ("settings", "settab:study")),
     ("Settings · Privacy", ("settings", "settab:privacy")),
     ("Pip's closet", ("closet",)),
+    ("Scrapbook", ("scrapbook",)),
 )
 
 NAV = {cmd for _name, path in VIEWS for cmd in path}  # pressed on the way to each view, not in the sweep

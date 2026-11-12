@@ -4773,6 +4773,52 @@ every release that changes how something works.
     each part that has it. The preview renders byte for byte as before
     (but a clock); the suite's source checks read the parts
     (`fakes.board_source`).
+- 3.9.10, the board's foot (Sam, 12 Nov: "I've been meaning to redo the
+  bottom anyway… crew isn't clear so let's call it friends… share also
+  isn't clear"). Three words, each saying what it opens: Friends (the
+  Friends window: the list, my code, Copy invite), Scrapbook, Share my
+  stats (the share menu). The Crew menu is gone (`crew_menu_items`,
+  `crewmenu`); a shared deck starts on Crew › Decks ("Share a deck…",
+  `crew._decks_body`); Open a room is the ▾ beside ▶ Fifteen? in the top
+  bar (`rooms.start_menu`, `room15menu`). The site's foot says the same
+  (`app.js`).
+- 3.9.10, the studying dot by itself (Sam: "get rid of I'm studying and
+  just have it automatically pushed when someone has synced reviews
+  within the last hour"). The I'm studying pill is gone; a sync whose
+  newest review is under an hour old sets `liveUntil` an hour past it
+  (`together.auto_live`, from `stats.queries.last_review_ms`; it rides
+  my week as before, nothing new on the wire, never shortened). On by
+  default with a switch (Privacy › While you study, account key
+  `show_studying`) and a one-time line on the board saying so
+  (`live_told`, Got it / Privacy). Bingo's "studied while a crewmate was
+  live" square counts by itself the same way (once a day), its words now
+  "Studied while a crewmate was studying" (migration 0031; key `lv`
+  unchanged).
+- 3.9.10, the scrapbook (Sam: "a combo wrapped and home for polaroids /
+  notes, etc. that are ephemeral at the moment or deleted permanently
+  when taken away from the screen… let's have it replace wrapped").
+  In the board's place (Wrapped's slot, `_state["wrapped_open"]`), from
+  the foot, Tools › Due Crew › Scrapbook… and the December line: the
+  year's page (its line, its numbers, Share my year: the year picture
+  card), then each month, newest first, with its line and its keepsakes.
+  Five kinds (`scrapbook.py`, pure): a polaroid off the fridge (×, pushed
+  out by a thirteenth, or the account signing out; Undo takes it back
+  out), a good-luck line once its card has shown, a tip I marked This
+  helped (its words and the deck part, never the card), a cheer that
+  came with words (one without is counted by month), and what I did (a
+  plan finished, a bingo line, something Pip earned). Pin up puts a
+  polaroid back on the Decks screen; Delete and Empty ask first
+  (`sheets.confirm`, red). Each sender's Pip and colour are theirs as
+  they are now. Kept in `scrapbook.json` beside `wrap.json`, by account
+  (`scrap_flow.py`), 3,000 at most, never sent, and not emptied at
+  sign-out (the fridge is; its drawings go here first). Its hooks never
+  stand in a refresh's way (`_scrap`, `closet_flow._scrap`).
+  Wrapped's slide story went with it (`board/wrapped.py`,
+  `wrapped.slides`, the card I turned around and its read of a card's
+  front, `wrapped_card`): `wrapped.facts` and `wrapped_flow.year_rows`
+  stay as the year page's numbers, and `wrappedx` as the line's ×.
+  Different from the mock: kept through sign-out, and a streak is not a
+  kind of its own (what Pip earned for it is).
 - 3.9.10, a polaroid's Pip in its person's colour (Sam, 12 Nov:
   "everyone's polaroids are now showing their pip as green even if they
   use a different color"). A polaroid kept the colour its sender had

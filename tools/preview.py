@@ -969,24 +969,31 @@ sections.append("<h3>3.8.22: Halloween week: the line, the bats' flight once a d
 sections.append("<h3>3.8.22: Halloween week, its last day: all five, no bats (they flew this morning), not everyone dressed</h3>"
                 + board.render(dict(DATA, entries=DRESSED), dict(_MINE, period="today"), now_ts - 60,
                                halloween=dict(_cl.halloween("2026-10-31", ["2026-10-%d" % d for d in range(24, 32)], {}), spooky=0, bats=None)))
-# 3.9.0: your Wrapped, in the board's place (its player runs once the page is up), and its line on the board
-from due_crew import wrapped as _wr  # noqa: E402
-import random as _rnd  # noqa: E402
-_r = _rnd.Random(3)
-_days, _d = {}, datetime.date(2026, 1, 1)
-while _d <= datetime.date(2026, 11, 30):
-    if not (datetime.date(2026, 2, 9) <= _d <= datetime.date(2026, 4, 13)) and _r.random() < .88:
-        _days[_d.isoformat()] = (_r.randint(80, 400), _r.randint(0, 30), _r.randint(600000, 4000000))
-    _d += datetime.timedelta(days=1)
-_WF = _wr.facts(2026, "2026-12-01", _days, {22: 5000, 23: 3000, 9: 1000, 14: 2000}, "2024-05-01")
-_NAMES = {k: t["name"] for k, t in _cl.BY.items()}
-_WV = {"year": 2026, "years": [2026, 2025, 2024], "heat": _wr.heat(_WF), "look": _MINE["sev_look"], "card": True, "card_on": True,
-       "slides": _wr.slides(_WF, {"fifteens": 38, "hours": {"20": 20}, "cheers_sent": 12, "cheered_by": 41, "rooms": 6,
-                                  "worn": {"headphones": 40}}, _MINE["sev_closet"], ["Headphones", "Round glasses", "Star pin", "Coffee mug"], 4,
-                              {"front": "Which nerve passes through the cubital tunnel?", "lapses": 9, "ivl": 41}, 12, 4, _NAMES)}
-sections.append("<h3>3.9.0: your Wrapped, in the board's place: the year's story, Pip in your look (it plays once the page is up)</h3>"
-                + board.wrapped_html(_WV, dict(_MINE, accent="green")))
-sections.append("<h3>3.9.0: 1 December to 15 January: the line on the board</h3>" + board.render(
+# 3.9.10: the scrapbook, in the board's place (Wrapped's, 3.9.0), and its line on the board
+from due_crew import scrapbook as _sb  # noqa: E402
+_DRAW = {"k": "draw", "s": [[0, 40, 120, 90, 40, 150, 120, 210, 40, 260, 120], [2, 60, 140, 240, 140]]}
+_SIGN = {"k": "sign", "t": "YOU GOT THIS"}
+_KEPT = _sb.clean([
+    {"k": "pz", "from": "maya", "name": "Maya", "at": "2026-11-09T10:00:00Z", "a": "purple", "n": "for renal week", "d": _DRAW},
+    {"k": "pz", "from": "theo", "name": "Theo", "at": "2026-11-04T10:00:00Z", "a": "teal", "n": "", "d": _SIGN},
+    {"k": "luck", "from": "maya", "name": "Maya", "at": "2026-11-06", "n": "Breathe. You know more than you think."},
+    {"k": "tip", "from": "theo", "name": "Theo", "at": "2026-11-02", "n": "Think of the loop as a countercurrent, not a pipe.", "part": "Renal"},
+    {"k": "cheer", "from": "priya", "name": "Priya", "at": "2026-11-08T08:00:00Z", "n": "200 days!! unreal", "e": "🔥"},
+    {"k": "mine", "w": "plan", "head": "Finished Heme block", "sub": "Every set of it done.", "at": "2026-11-07"},
+    {"k": "mine", "w": "pip", "head": "Pip earned the Headphones", "pose": "hop", "at": "2026-10-14"},
+    {"k": "pz", "from": "priya", "name": "Priya", "at": "2026-10-20T10:00:00Z", "a": "amber", "n": "see you at the library", "d": _DRAW},
+])
+_SBV = {"year": 2026, "years": [2026, 2025], "so_far": True, "yline": _sb.year_line(2026, 212, 48210, True),
+        "ystats": _sb.year_stats(41, 1, _sb.counts(_KEPT, 2026), 37, 1), "n": len(_KEPT), "any": True, "sev": True,
+        "months": [{"m": _m, "name": _sb.MONTHS[_m - 1], "line": _sb.month_line([x for x in _xs if x["k"] == "mine"], 24),
+                    "sub": _sb.month_sub(24, 5120, 9), "items": [dict(x, key=_sb.key(x)) for x in _xs]}
+                   for _m, _xs in _sb.months(_KEPT, 2026)]}
+_SBP = {e["user_id"]: e for e in DRESSED if not e.get("you")}
+sections.append("<h3>3.9.10: the scrapbook, in the board's place: the year's page, then months of keepsakes (point at one: Pin up, Delete)</h3>"
+                + board.scrapbook_html(_SBV, dict(_MINE, accent="green"), _SBP, _MINE["sev_look"]))
+sections.append("<h3>3.9.10: the scrapbook, nothing kept yet</h3>" + board.scrapbook_html(
+    {"year": 2026, "years": [2026], "so_far": True, "yline": _sb.year_line(2026, 0, 0, True), "months": [], "n": 0}, dict(_MINE, accent="green")))
+sections.append("<h3>3.9.10: 1 December to 15 January: the scrapbook's line on the board</h3>" + board.render(
     dict(DATA, entries=DRESSED), dict(_MINE, period="today"), now_ts - 60, wrapped={"year": 2026, "so_far": True, "look": _MINE["sev_look"]}))
 # Each board styles `#due-crew`; on one page the last <style> would win for
 # all of them, so every accent gets its own document via srcdoc.

@@ -17,7 +17,7 @@ from .dance import DANCE_JS
 # periphery of the decks window, like dragged around the anki window?")
 FRIDGE_W = 124  # px: a doodle on the window, on its paper
 FRIDGE_PIP = 30  # px: the Pip by a sender's name on the fridge (a crew row's size; its body is 18)
-FRIDGE_UNDO = 8  # s: "Taken down · Undo" in a doodle's place (closet_flow.UNDO_SECS)
+FRIDGE_UNDO = 8  # s: "In your scrapbook · Undo" in a doodle's place (closet_flow.UNDO_SECS)
 
 
 def _tape(colour):
@@ -97,7 +97,7 @@ def fridge_html(items, people, cfg, gone=None):
     places the rest in the gutters beside the board, and lets me drag. ""
     when there's none. Kept as last drawn while what it's drawn from (the
     items, each person's look, Pip on or off) stays the same. gone
-    (closet_flow.gone): the one just taken down; in its place "Taken down ·
+    (closet_flow.gone): the one just taken down; in its place "In your scrapbook ·
     Undo" (duecrew:fridgeback:<key>) for the seconds it has left."""
     crew = people or {}
     looks = [[u, 1, e.get("look"), e.get("accent")] if isinstance(e, dict) else [u, 0, e] for u, e in crew.items() if e]
@@ -144,7 +144,7 @@ def _fridge_notes(items, people, cfg, gone=None):
         left = max(0.0, min(float(FRIDGE_UNDO), float(gone.get("ago") or 0)))
         notes.insert(max(0, min(len(notes), len(items) - int(gone.get("i") or 0))),
                      f'<div class="fz fgone" data-k="{_html.escape(k)}"{at} role="status" '
-                     f'style="--fa:{accent_pair(g.get("a"))[0]};--fd:{accent_pair(g.get("a"))[1]};--fg:-{left:.1f}s">Taken down &middot; '
+                     f'style="--fa:{accent_pair(g.get("a"))[0]};--fd:{accent_pair(g.get("a"))[1]};--fg:-{left:.1f}s">In your scrapbook &middot; '
                      f'<a href="#" onclick="{_pycmd("fridgeback:" + k)}">Undo</a></div>')
     return (f'<style>{FRIDGE_CSS}{_fridge_theme(cfg)}</style>'
             f'<div id="dc-fridge" role="group" aria-label="Your fridge">{"".join(notes)}</div>')

@@ -896,13 +896,15 @@ The riskiest of 3.9.1, the parts only a live Anki can show, in order:
 - [ ] On a card with a tip, press Show in the corner: the bubble grows to fit the words, which fade in; the chip beside Edit fades its words in too.
 - [ ] Reduce motion (system setting): nothing slides, grows or turns; the banner only fades.
 
-### 3.9.0: your Wrapped
+### 3.9.10: the foot, the dot, the scrapbook (Wrapped's place)
 
-- [ ] Tools › Due Crew › Your year…: the board's place shows Your 2026 on a phone-shaped card; it moves on every few seconds and waits while the pointer is on it; the right side or → goes on, the left or ← goes back. Each slide's Pip plays as it comes, in your look. ‹ Board goes back.
-- [ ] The slides your year can fill, and no others: a year without Fifteens has no Fifteens slide; the comeback slide only if you were away a week or more; Night owl or Early bird only with 30 days or more. None of it says missed, fewer or behind.
-- [ ] The card you turned around shows a real card's front as text; "Leave out the card you turned around" takes it off (and the link says Show it again). Make the picture opens Share's picture on that year, Pip hopping on it; Copy and Save work.
-- [ ] Another year (2025, …) from the list beside it; All on one page lists every slide as text. Reduce motion: it never moves on by itself; the Pips are still.
-- [ ] Set the date to 1 December (or wait): the board's line "Your 2026 so far is ready"; Open plays it; × puts it away, and it stays away on your other computer after a sync. 16 January: no line.
+- [ ] The board's foot: Friends (the Friends window), Scrapbook, Share my stats (the share menu). No I'm studying pill, no Crew menu. Crew › Decks ends with "Share a deck…". The top bar's ▶ Fifteen? has a ▾: Start a Fifteen, Open a room.
+- [ ] Study a few cards, sync: your row has the studying dot without pressing anything, for about an hour after your last review; the board says so once (Got it, or Privacy). Privacy › While you study off: no dot after the next sync.
+- [ ] Scrapbook: the board's place shows the year's page (days, reviews, the small numbers, Share my year opens the year picture) and each month under it. ‹ Board goes back. Another year from the pills.
+- [ ] × on a drawing beside the board: "In your scrapbook · Undo"; left alone, it is in this month's page; Undo, it isn't. Pin up on it there: back beside the board, gone from the page. Delete asks, in red; Empty the scrapbook… asks, and what's pinned stays.
+- [ ] A thirteenth drawing arriving sends the oldest to the scrapbook. Sign out: the fridge is empty; sign in again: its drawings are in the scrapbook. Another account on the same profile sees none of them.
+- [ ] A good-luck card shown on exam morning, a tip marked This helped, a cheer with words, a finished plan, a bingo line, something Pip earns: each is in its month. A sender's Pip and colour are as their row has them now. Pip off in Settings: no Pips on the page.
+- [ ] Set the date to 1 December: the board's line "Your 2026 so far is in your scrapbook"; Open opens that year; × puts it away on every computer. 16 January: no line.
 
 ### 3.8.22: Pips on a plan card's squad line
 
