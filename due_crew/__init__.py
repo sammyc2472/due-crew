@@ -1200,7 +1200,6 @@ BOARD_CMDS = {
     "unask": (1, lambda p: p[2].isdigit(), lambda c, p: together.unask(int(p[2]))),  # 3.5.0: Take back
     "copyinvite": (0, None, lambda c, p: _copy_friend_invite()),
     "addcode": (0, None, _cmd_addcode),
-    "crewmenu": (0, None, lambda c, p: _crew_menu(c)),  # 3.4 review, H5
     "privacypage": (0, None, _cmd_privacy),
     "errsee": (0, None, lambda c, p: errs_flow.see_what_went()),  # 3.9.9: Privacy's See what went
     "sharemenu": (0, None, lambda c, p: _share_menu(c)),  # 3.7.1, H3
@@ -1380,17 +1379,6 @@ def _redeem(invite):
         refresh_board(full=True)
 
     _bg(lambda: cl.redeem_invite(invite), done)
-
-
-def _crew_menu(c):
-    """The footer's Crew ▾ (3.4 review, H5): people."""
-    from aqt.qt import QCursor, QMenu
-    run = {"friends": lambda: open_friends(), "decks": lambda: open_decks(),
-           "copyinvite": lambda: _copy_friend_invite()}
-    menu = QMenu(mw)
-    for label, key in board.crew_menu_items():
-        menu.addAction(label).triggered.connect(lambda _=False, k=key: run[k]())
-    menu.exec(QCursor.pos())
 
 
 def _share_menu(c):

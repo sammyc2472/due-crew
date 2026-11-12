@@ -89,13 +89,6 @@ def _review_banner(kind, info):
             f'onclick="{_pycmd(cmd_x)}">&times;</a></div>')
 
 
-def crew_menu_items():
-    """The footer's Crew menu (3.4 review, H5; 3.7.1, H3): people only, the
-    same on every tab. What you post went to Share."""
-    return [("Friends…", "friends"), ("Copy invite", "copyinvite"),
-            ("Shared decks…", "decks")]
-
-
 def share_menu_items(show_up, squad_ok=False):
     """The footer's Share menu (3.7.1, H3), as [(label, command)], a label of
     None being a heading: as text first, then as a picture, the same on
@@ -301,27 +294,18 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     body = ((offline_html(fetched_at) if offline else "") + (notice_html(notice) if notice else "")
             + _one_at_a_time(bans) + lobby + body)
 
-    # 3.4 review, H5: the day's two social actions as buttons, the rest in
-    # one Crew menu, and Refresh and Settings as quiet icons
+    # 3.9.10 (Sam: "I've been meaning to redo the bottom"): three words, each saying what it opens.
+    # Friends is the Friends window (its list, my code, Copy invite: the Crew menu went, Shared decks to
+    # Crew › Decks); Share my stats is Share's menu by what leaves. I'm studying went (the dot shows by
+    # itself) and Open a room is the top bar's (▶ Fifteen?'s arrow). Refresh and Settings stay quiet icons
     left = ""
     if rules_stale:
         left += ('<span class="warn" title="The server is behind this version; '
                  'some sharing is paused until it catches up.">'
                  '&#9888; server catching up</span>')
-    if period in ("today", "week") and not cfg.get("paused"):
-        # 2.10: a dot by your name for an hour, so friends can join you
-        left += (f'<a class="pb on" href="#" title="Stop showing that you\'re studying" '
-                 f'onclick="{_pycmd("live")}">Stop studying</a>' if live else
-                 f'<a class="pb on" href="#" title="A dot by your name for the next hour" '
-                 f'onclick="{_pycmd("live")}">I&rsquo;m studying</a>')
-        if not (room or {}).get("mine"):
-            # 2.12: a study room for the crew
-            left += (f'<a href="#" title="Rounds and breaks with your crew" '
-                     f'onclick="{_pycmd("roomopen")}">Open a room</a>')  # 3.8.0: one pill in the footer
-    left += (f'<a href="#" title="Friends" '
-             f'onclick="{_pycmd("crewmenu")}">Crew</a>'  # 3.8.0 (Sam): no caret
-             f'<a href="#" title="As text or a picture" '
-             f'onclick="{_pycmd("sharemenu")}">Share</a>')
+    left += (f'<a href="#" title="Your crew, your code, Copy invite" onclick="{_pycmd("friends")}">Friends</a>'
+             f'<a href="#" title="Your day, week or year, as text or a picture" '
+             f'onclick="{_pycmd("sharemenu")}">Share my stats</a>')
     n_pending = len(data.get("pending", []))
     if n_pending:
         left += (f'<a class="warn" href="#" title="You added them; you\'re crew when they add you back" '

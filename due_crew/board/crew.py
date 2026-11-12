@@ -437,4 +437,7 @@ def _decks_body(data, deltas=None, sticking=None, pick="", asks=""):
     html = _scroll(_even_bars(html), sum(len(g["rows"]) for g in groups))
     if groups and not up:
         html += f'<div class="dc-line" style="padding-top: 2px;">{_DKEY}</div>'
+    # 3.9.10: sharing another deck starts here, beside the ones I share (it was in the foot's Crew menu)
+    html += (f'<div class="dc-line dshare"><a href="#" onclick="{_pycmd("decks")}">Share a deck&hellip;</a>'
+             '<span>Matching decks pair up on their own</span></div>')
     return top + asks + html

@@ -468,7 +468,7 @@ def test_shares_v21():
     foot_week = board.render({"entries": [], "labels": labels[::-1], "tomorrow": "",
                               "pending": []}, {"period": "week"}, 0)
     check("share: the footer's Share menu offers the crew week (3.7.1, H3)",
-          "crewmenu" in foot_week and "sharemenu" in foot_week
+          "crewmenu" not in foot_week and "sharemenu" in foot_week
           and ("Our week", "sharecrewweek") in board.share_menu_items(False))
 
 
@@ -2252,8 +2252,8 @@ def test_together_v210():
     check("live: the row shows a dot and 'studying now'", "dc-live" in html and "studying now" in html)
     page = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []}, {}, 0, live=False)
     stop = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []}, {}, 0, live=True)
-    check("live: the footer offers I'm studying, then Stop studying",
-          "I&rsquo;m studying" in page and "Stop studying" in stop and "duecrew:live" in page)
+    check("3.9.10: the footer has no I'm studying (the dot shows by itself), whether I'm studying or not",
+          "I&rsquo;m studying" not in page and "Stop studying" not in stop and "duecrew:live" not in page + stop)
 
     # L2: flags I share show on the Decks tab; tips go to the card
     col = make_user_col([TODAY])
@@ -7015,8 +7015,11 @@ def test_you_bubble_v380():
     check("refined: the box's tabs are words, Hide a word", 'class="du-tabs du-more"' in bh and "border: 1px solid var(--dc-line);\n"
           "      border-radius: 99px; padding: 2px 10px" not in bh and ">Hide &#9652;</a>" in bh)
     foot = bh.split('class="dc-foot"')[1]
-    check("refined: one pill in the footer, I'm studying; Open a room and who's waiting are words",
-          foot.count('class="pb') == 1 and ">Open a room</a>" in foot and 'class="warn"' in foot and "1 waiting" in foot)
+    # 3.9.10 (Sam: "I've been meaning to redo the bottom"): three words, each saying what it opens
+    words = re.findall(r'<a [^>]*onclick="pycmd\(\'duecrew:([a-z]+)\|[^>]*>([^<]+)</a>', foot.split('class="sp"')[0])
+    check("the foot: Friends opens the Friends window, Share my stats the share menu; no pill, no room, no Crew menu; who's waiting stays",
+          words[:2] == [("friends", "Friends"), ("sharemenu", "Share my stats")] and 'class="pb' not in foot
+          and "Open a room" not in foot and ">Crew</a>" not in foot and 'class="warn"' in foot and "1 waiting" in foot, words)
     css = board.render(data, {"period": "today"}, 0, due=dv2, plans=plans, you={"tab": "today", "plans": plans})
     check("simpler: the box is a card like the board's, no border of its own; one underline for every word tab",
           "#due-crew .du { text-align: left; border-radius: 12px; padding: 12px 18px;" in css
@@ -7236,9 +7239,8 @@ def test_crew_menu_pictures():
     then as a picture), and a handler for every key either can offer."""
     text = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
     for fn, nxt, keys in (
-            ("def _crew_menu", "def _share_menu", {k for _l, k in board.crew_menu_items()}),
             ("def _share_menu", "def open_friends",
-             {k for show_up in (False, True) for _l, k in board.share_menu_items(show_up, True) if _l})):
+             {k for show_up in (False, True) for _l, k in board.share_menu_items(show_up, True) if _l}),):
         run = text[text.index(fn):text.index(nxt)]
         handled = set(re.findall(r'"([a-z]+)": lambda', run))
         check(f"{fn[4:]}: every key handled", keys <= handled, sorted(keys - handled))
@@ -7248,8 +7250,17 @@ def test_crew_menu_pictures():
                                         "My day…", "My week…", "My year…", "All time…"]
           and "head.setEnabled(False)" in text
           and 'share_picture("picturealltime")' in text and 'share_picture("pictureyear")' in text)
-    check("crew menu: people only",
-          [k for _l, k in board.crew_menu_items()] == ["friends", "copyinvite", "decks"])
+    # 3.9.10: the Crew menu went: Friends opens the Friends window (its list, the code, Copy Invite), and
+    # sharing a deck starts on Crew › Decks
+    fd = open(os.path.join(REPO, "due_crew", "ui", "friends_dialog.py"), encoding="utf-8").read()
+    dk = board._decks_body({"entries": [{"user_id": "me", "name": "Me", "you": True, "decks": [{"name": "D", "cards": 10, "seen": 5, "mature": 2}]},
+                                        {"user_id": "a", "name": "A", "you": False, "decks": [{"name": "D", "cards": 10, "seen": 4, "mature": 1}]}],
+                            "labels": []})
+    check("no Crew menu: Friends has the code and Copy Invite; Crew › Decks starts sharing a deck",
+          not hasattr(board, "crew_menu_items") and "def _crew_menu" not in text and '"crewmenu"' not in text
+          and 'QPushButton("Copy Invite")' in fd
+          and ("duecrew:decks|" + board.BOARD_KEY + "'); return false;\">Share a deck&hellip;</a>") in dk
+          and "Matching decks pair up on their own" in dk, dk[-300:])
     import due_crew as dc
     import aqt.utils as au
     from aqt.deckbrowser import DeckBrowser
@@ -9619,9 +9630,19 @@ def test_head_row_b_v380():
     for st in ("none", "loading", "error"):
         check(f"head row B: {st}, the names on top",
               board._squads_html({"state": st, "squads": [{"id": "x", "name": "x"}]}, {}).startswith('<div class="dc-sw">'))
-    check("footer: Crew and Share without carets (Sam)",
-          ("duecrew:crewmenu|" + KK + "'); return false;\">Crew</a>") in today and ("duecrew:sharemenu|" + KK + "'); return false;\">Share</a>") in today
-          and "Crew &#9662;" not in today and "Share &#9662;" not in today)
+    site_js = open(os.path.join(REPO, "site", "public", "app.js"), encoding="utf-8").read()
+    rw = open(os.path.join(REPO, "due_crew", "room_widget.js"), encoding="utf-8").read()
+    from due_crew import rooms as _rooms
+    check("the site's foot says the same two words (the scrapbook is Anki's alone); sharing a deck points at Crew › Decks",
+          'menu("Friends", crewItems), menu("Share my stats", shareItems)' in site_js and 'menu("Crew"' not in site_js
+          and "Settings › Shared decks" not in site_js and "Crew › Decks › Share a deck" in site_js)
+    check("Open a room is the top bar's: ▶ Fifteen?'s arrow sends its own keyed command, which offers the two ways",
+          "send('room15menu')" in rw and "e.stopPropagation()" in rw
+          and [k for _l, k in _rooms.START_WAYS] == ["fifteen", "room"] and 'cmd == "room15menu"' in open(_rooms.__file__, encoding="utf-8").read())
+    check("footer: Friends and Share my stats, without carets (Sam)",
+          ("duecrew:friends|" + KK + "'); return false;\">Friends</a>") in today
+          and ("duecrew:sharemenu|" + KK + "'); return false;\">Share my stats</a>") in today
+          and "&#9662;" not in today.split('class="dc-foot"')[1])
     js = open(os.path.join(REPO, "site", "public", "app.js"), encoding="utf-8").read()
     css = open(os.path.join(REPO, "site", "public", "app.css"), encoding="utf-8").read()
     check("head row B, the site's twin: the corner, the line under, Decks' line, the squads' corner, no carets",

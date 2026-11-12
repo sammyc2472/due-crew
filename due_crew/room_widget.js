@@ -363,6 +363,12 @@
     root.appendChild(word);
     if (D.compact) { word.style.display = 'none'; }
     root.onclick = function () { send('room15'); };
+    // 3.9.10 (Open a room left the board's foot): the arrow opens the two ways, on my own or a room with my crew
+    var more = el('span', 'color:' + c.mut + ';font-size:10px;border-left:1px solid ' + c.line + ';padding:2px 0 2px 7px;margin-left:2px;', '▾');
+    more.title = 'On my own, or a room with my crew';
+    more.setAttribute('role', 'button'); more.setAttribute('aria-label', 'On my own, or a room with my crew');
+    more.onclick = function (e) { e.stopPropagation(); send('room15menu'); };
+    root.appendChild(more);
     root.id = 'dc-room-start';
     document.body.appendChild(root);
     return;

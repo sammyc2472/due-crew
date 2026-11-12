@@ -282,6 +282,7 @@ def _css(cfg):
     #due-crew .dc-count .dc-delta {{ margin-left: 0; }}
     #due-crew .dc-line {{ font-size: 11.5px; color: var(--dc-muted); padding: 6px 0; }}
     #due-crew .dc-line a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
+    #due-crew .dc-line.dshare {{ display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; text-align: left; padding: 8px 8px 2px; }}
     #due-crew .dc-live {{ display: inline-block; width: 7px; height: 7px; border-radius: 50%;
       background: var(--dc-accent); box-shadow: 0 0 0 2px var(--dc-you-bg); margin: 0 3px 0 6px;
       vertical-align: 1px; }}
