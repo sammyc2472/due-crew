@@ -256,8 +256,18 @@ def keep_doodles(cheers, entries, uid=None):
     if uid:
         w["fridge_uid"] = uid
     accents = {e.get("user_id"): e.get("accent") for e in entries or [] if not e.get("you")}
-    w["fridge"] = fr.add(w.get("fridge"), cheers, accents)
+    # 3.9.10: twelve fit around the board; the one a newer one pushes out goes to the scrapbook
+    # (one cheer at a time, so a busy refresh's own drawings push each other there too)
+    now, out = fr.clean(w.get("fridge")), []
+    for ch in cheers or []:
+        nxt = fr.add(now, [ch], accents)
+        kept = {fr.key(x) for x in nxt}
+        out += [x for x in now if fr.key(x) not in kept]
+        now = nxt
+    w["fridge"] = now
     _save()
+    for x in out:
+        _scrap(lambda sf, x=x: sf.polaroid(x, uid))
 
 
 def clear_fridge():
@@ -266,6 +276,10 @@ def clear_fridge():
     w = _wrap_data()
     _GONE.clear()
     if "fridge" in w or "fridge_uid" in w:
+        from . import fridge as fr
+        owner = w.get("fridge_uid")
+        for x in fr.clean(w.get("fridge")) if owner else []:
+            _scrap(lambda sf, x=x: sf.polaroid(x, owner))  # 3.9.10: off the screen with the account, kept in its scrapbook
         w.pop("fridge", None)
         w.pop("fridge_uid", None)
         _save()
@@ -273,7 +287,41 @@ def clear_fridge():
 
 # the one just taken down, for its Undo: this session only, the last one
 _GONE = {}
-UNDO_SECS = 8  # how long "Taken down · Undo" stays where it was
+UNDO_SECS = 8  # how long "In your scrapbook · Undo" stays where it was
+
+
+def _scrap(fn):
+    """The scrapbook's part of a fridge step: never in its way."""
+    try:
+        from . import scrap_flow
+        fn(scrap_flow)
+    except Exception:
+        oops()
+
+
+def pin_up(item, uid=None):
+    """3.9.10, the scrapbook's Pin up: a kept polaroid back on the fridge (the newest there; the
+    oldest makes room, into the scrapbook). True when it went up."""
+    from . import fridge as fr
+    from .wrap import _wrap_data
+    w = _wrap_data()
+    if not _ours(w, uid):
+        w["fridge"] = []
+    if uid:
+        w["fridge_uid"] = uid
+    before = fr.clean(w.get("fridge"))
+    if any(fr.key(x) == fr.key(item) for x in before):
+        return False
+    after = fr.clean(before + [dict(item)])
+    if not any(fr.key(x) == fr.key(item) for x in after):
+        return False
+    w["fridge"] = after
+    _save()
+    kept = {fr.key(x) for x in after}
+    for x in before:
+        if fr.key(x) not in kept:
+            _scrap(lambda sf, x=x: sf.polaroid(x, uid))
+    return True
 
 
 def take_down(k):
@@ -290,6 +338,7 @@ def take_down(k):
     _GONE.update(k=k, item=before[at], i=at, t=time.time())
     w["fridge"] = fr.take_down(before, k)
     _save()
+    _scrap(lambda sf: sf.polaroid(before[at], w.get("fridge_uid")))  # 3.9.10: taken down, it's in the scrapbook (it was gone for good)
     return True
 
 
@@ -312,8 +361,11 @@ def put_back(k):
     if not any(fr.key(x) == k for x in items):
         items.insert(min(_GONE["i"], len(items)), _GONE["item"])
     w["fridge"] = fr.clean(items)
+    back = _GONE.get("item")
     _GONE.clear()
     _save()
+    if back:
+        _scrap(lambda sf: sf.polaroid_back(back, w.get("fridge_uid")))  # on the fridge again: out of the scrapbook
     return True
 
 
@@ -593,6 +645,11 @@ def check(today):
     save_cfg(c)
     # the day the closet comes, what you'd earned already arrives all at once: one line for it
     _state["closet_new"] = {"keys": list(got), "first": first, "day": today}
+    if not first:  # 3.9.10: what Pip earns is kept in the scrapbook (not the day the closet came, all at once)
+        for k in got:
+            name = closet.BY[k]["name"] if k in closet.BY else ""
+            if name:
+                _scrap(lambda sf, name=name: sf.moment("pip", f"Pip earned the {name}", "", "hop", today))
     return list(got)
 
 

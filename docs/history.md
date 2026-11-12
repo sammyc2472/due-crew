@@ -4773,6 +4773,166 @@ every release that changes how something works.
     each part that has it. The preview renders byte for byte as before
     (but a clock); the suite's source checks read the parts
     (`fakes.board_source`).
+- 3.9.10, the board's foot (Sam, 12 Nov: "I've been meaning to redo the
+  bottom anyway… crew isn't clear so let's call it friends… share also
+  isn't clear"). Three words, each saying what it opens: Friends (the
+  Friends window: the list, my code, Copy invite), Scrapbook, Share my
+  stats (the share menu). The Crew menu is gone (`crew_menu_items`,
+  `crewmenu`); a shared deck starts on Crew › Decks ("Share a deck…",
+  `crew._decks_body`); Open a room is the ▾ beside ▶ Fifteen? in the top
+  bar (`rooms.start_menu`, `room15menu`). The site's foot says the same
+  (`app.js`).
+- 3.9.10, the studying dot by itself (Sam: "get rid of I'm studying and
+  just have it automatically pushed when someone has synced reviews
+  within the last hour"). The I'm studying pill is gone; a sync whose
+  newest review is under an hour old sets `liveUntil` an hour past it
+  (`together.auto_live`, from `stats.queries.last_review_ms`; it rides
+  my week as before, nothing new on the wire, never shortened). On by
+  default with a switch (Privacy › While you study, account key
+  `show_studying`) and a one-time line on the board saying so
+  (`live_told`, Got it / Privacy). Bingo's "studied while a crewmate was
+  live" square counts by itself the same way (once a day), its words now
+  "Studied while a crewmate was studying" (migration 0031; key `lv`
+  unchanged).
+- 3.9.10, the scrapbook (Sam: "a combo wrapped and home for polaroids /
+  notes, etc. that are ephemeral at the moment or deleted permanently
+  when taken away from the screen… let's have it replace wrapped").
+  In the board's place (Wrapped's slot, `_state["wrapped_open"]`), from
+  the foot, Tools › Due Crew › Scrapbook… and the December line: the
+  year's page (its line, its numbers, Share my year: the year picture
+  card), then each month, newest first, with its line and its keepsakes.
+  Five kinds (`scrapbook.py`, pure): a polaroid off the fridge (×, pushed
+  out by a thirteenth, or the account signing out; Undo takes it back
+  out), a good-luck line once its card has shown, a tip I marked This
+  helped (its words and the deck part, never the card), a cheer that
+  came with words (one without is counted by month), and what I did (a
+  plan finished, a bingo line, something Pip earned). Pin up puts a
+  polaroid back on the Decks screen; Delete and Empty ask first
+  (`sheets.confirm`, red). Each sender's Pip and colour are theirs as
+  they are now. Kept in `scrapbook.json` beside `wrap.json`, by account
+  (`scrap_flow.py`), 3,000 at most, never sent, and not emptied at
+  sign-out (the fridge is; its drawings go here first). Its hooks never
+  stand in a refresh's way (`_scrap`, `closet_flow._scrap`).
+  Wrapped's slide story went with it (`board/wrapped.py`,
+  `wrapped.slides`, the card I turned around and its read of a card's
+  front, `wrapped_card`): `wrapped.facts` and `wrapped_flow.year_rows`
+  stay as the year page's numbers, and `wrappedx` as the line's ×.
+  Different from the mock: kept through sign-out, and a streak is not a
+  kind of its own (what Pip earned for it is).
+- 3.9.10, catching up (Sam, 12 Nov, on a follower's card who was behind:
+  "This is confusing for folks who are behind about what actually is
+  required of them", then "once someone is behind a certain amount, we
+  automatically pause", "I don't want the dates moved", "the options
+  should be study or ignore", "trust the user to understand our UI").
+  From three sets behind, or one a week old (`plans.LINE_AT`,
+  `LINE_OLD`, `line_starts`), a plan on its dates waits in line
+  (plans.json's `line`, set by `plan_flow.line_sync` when my numbers are
+  read): a morning opens no date that never opened here (`run`), and the
+  card has the line in Behind's place (`plans.line_view`,
+  `plancards._plan_line`): each day owed a row, oldest first, with Study
+  (`planlinestudy`: a day that waited opens first, then its deck as any
+  date's Study, new cards only) and Ignore (the follow's skip, as it
+  was; the week's Undo skip brings it back); today's set under them,
+  waiting; the week below as ever. Nothing owed, the line ends and what
+  waited for today opens. Don't wait (`planlineoff`, plans.json's
+  `line_off`) turns it off for that plan on this computer. The plan's
+  dates and my shift are never touched; never at my own pace, paused, on
+  3.2's schedule or an even date; nothing new is sent. An earlier mock
+  (a line saying where you stand, a Catch up… sheet) was set aside for
+  this; one that built every day's deck up front, too (Sam: on Study).
+  At my own pace (Sam, the next message: "match") the card has the same
+  list for what I opened and haven't finished ("Open · 2 sets, 115 new",
+  Study and Ignore; `own_view`'s `open`, `plancards._own_html`), Up next
+  under it, and the lines measuring me against the author's dates are
+  gone (where the plan is, my pace, the finish). The You tab says Party
+  (`base.PARTY_TAB`; the feature is still Pip Party everywhere else).
+- 3.9.10, one grid (Sam, 12 Nov, with five screenshots: "The different
+  friend tables all look very different fundamentally. Let's get them
+  looking the same… the squads page looks quite crowded at the top").
+  Each table sized its columns from what was in them, Week and Squads
+  could carry a first column for a tick, Squads had a fifth column and a
+  second line in its corner, Decks centred its names. Now: Crew's and a
+  squad's four number columns are one width (`style.py`, the
+  `dc-s-<sort>` tables, a squad's too); there is no first column (a
+  show-up tick is in the name's line, `crew._row_html`, `squads.py`); a
+  squad's 7 days is "· 6/7 days" in its name's line and its header is
+  Crew's four (`SQUAD_HEADERS` went; an older sort by it reads as
+  Reviews); the squads' names are the corner's one line, and "+ join or
+  create" left that line (see the last look, below);
+  a deck's row has its person's Pip and name on the left at a crew row's
+  height (`crew._bar`, `.dr`, `.dn`), "unlocked" says "unsuspended"
+  (the site's key too), "How it's sticking ›" and "Matching decks pair
+  up on their own" went. A
+  status note stays under its name (Sam's pick). Measured in the
+  preview: the same column edges on Today, Week and a squad. Not done:
+  the site's board keeps its own layout.
+- 3.9.10, Reviews ahead is its graph (Sam: "This bottom of insights
+  looks really sloppy… just keep the graph and eliminate the call to
+  action"). The ways to pick from, their paragraphs, Do it and the
+  "Counted from…" line went (`insights._ins_ahead`); the one chart is the
+  way in effect. A stop of new cards already running keeps its chart,
+  what it does and Turn new cards back on, so nobody is stuck with one;
+  `ahead_flow.stop_new` and `insaheadoff` stay for it, with no way to
+  start one from the board now.
+- 3.9.10, Insights is data only (Sam, 12 Nov: "we shouldn't be adjusting
+  cards from insights... consider it a data only zone. The study now for
+  areas of weakness don't change card visibility / plan"). Gone from it:
+  a leech's Bring back, Learn it fresh, Leave it out and Edit, Bring all
+  back and the line saying what they do (`_ins_leech_row`,
+  `_ins_leeches`; a crewmate's tip, Ask who has it down and Browse stay:
+  they change no card); Catch up… beside "N new cards behind"; Optimize
+  FSRS and Not now; Try two buttons and its Undo (the Hard habit is
+  said; two buttons is Settings › Study's); and a running stop's Turn
+  new cards back on, which is now a row of Settings › Study while one
+  runs ("New cards stopped in <deck> · Turn back on", `_new_stops`) and
+  stays on a plan card's line. Study on a weak part stays: it builds a
+  deck and changes no card's state or plan. The handlers behind the
+  removed links stay in `team_flow` (nothing on the board sends them).
+- 3.9.10, the last look (Sam): pointing at a name grew its row 2 px
+  (the Cheer pill, and the name's box becoming inline-block): measured
+  in the preview, now nothing moves on Today or Week (`style.py`, the
+  pill's and the name's margins). "+ Create / join a squad" and "+ Share
+  a deck" are small pills on their own tabs, under the squad and under
+  the bars (`squads._squad_add`, `crew._decks_body`, `.dc-add`), not in
+  the foot every tab has (Sam: "specific to those pages and not global
+  functions, otherwise i worry they'd be missed").
+- 3.9.10, the fixing run (Sam, 12 Nov). Magic search's field asks one
+  thing, "What do you want to study?" (`due.MAGIC_PROMPT`; the sample
+  searches are gone), and its key is ⌘F / Ctrl+F (the ⇧ sat low in the
+  field; Anki's main window has no Find of its own; `MAGIC_KEY`). Pip
+  Party is out of Beta (`base.BETA_TABS` is empty). Crew's Today · Week ·
+  Decks hold still: each word keeps the room its bold takes (`data-t`,
+  `.dc-sw a[data-t]::after`), so picking one never moves the others. The
+  foot's refresh and gear are drawn (`draw._IC_REFRESH`, `_IC_GEAR`), one
+  size and stroke, where a font's glyphs sat unevenly. A crew row's Pip
+  is still when the row is pointed at: only the Cheer pill shows
+  (`closet.py`'s row rule).
+- 3.9.10, a polaroid's Pip in its person's colour (Sam, 12 Nov:
+  "everyone's polaroids are now showing their pip as green even if they
+  use a different color"). A polaroid kept the colour its sender had
+  when it came (`a`), and its Pip took that too, while the Pip's look was
+  already theirs as it is now; one that came with no colour was the
+  default green for good. Now the Pip wears the colour its person has
+  now (`--pa`/`--pd` from the crew row, `--fz-pip`), the tape and the
+  drawing keep the one they came in, and a polaroid with no colour takes
+  theirs (`board/fridge.py`). Why some came with none I couldn't find by
+  reading or reproduce: the path from `/board` to `keep_doodles` gives
+  the accent in the suite and in the preview. Worth watching.
+- 3.9.10, quotes mean text (Sam, 11 Nov: "should magic search include
+  card text?", then "build quotes mean text"). Magic search read the
+  cards' own words only when no tag said what was typed, so a word a tag
+  has ("warfarin") could never be looked for in the cards, nor a phrase.
+  Now words in quotes, straight or curly, are text (`magic._QUOTED`,
+  `read`'s `quoted`, four at most): each phrase whole in the card, by
+  Anki's own search on this computer (`quoted_q`: a colon is a colon,
+  not a field). Alone, the cards that say it; beside a topic, a plan's
+  set, a filter or a count, those of them that do (`Search.cards`), with
+  a line saying so ("The cards of these that say …", or that none does).
+  The quotes come off before the tags, numbers and days are read, so
+  numbers in them aren't QIDs and a number before them is how many. A
+  pasted Anki search keeps its quotes as Anki's. The how-to's first card
+  says it. Not built: "Also in card text: N" under a matched topic.
+  Nothing new leaves the computer.
 - 3.9.9, the good-luck card that waited (Sam, 8 Nov: "make sure the good
   luck card is working because not sure it did work for my last exam"): a
   crewmate's line for my exam morning was kept for the card, and the card

@@ -22,10 +22,10 @@ when the board was one file.
 import types as _types
 
 from . import (base, style, pip, crew, planweek, insights, plancards, party, due, page, windows, cheers,  # noqa: F401
-               dance, fridge, squads, settings, closet, wrapped, lobby, draw)
+               dance, fridge, squads, settings, closet, scrapbook, lobby, draw)
 
 PARTS = (base, style, pip, crew, planweek, insights, plancards, party, due, page, windows, cheers,
-         dance, fridge, squads, settings, closet, wrapped, lobby, draw)
+         dance, fridge, squads, settings, closet, scrapbook, lobby, draw)
 _NAMES = {}
 for _part in PARTS:
     for _name, _value in vars(_part).items():

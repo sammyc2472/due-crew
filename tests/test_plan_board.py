@@ -714,6 +714,141 @@ def test_follow_and_new_commands():
             delattr(planner, "web")
 
 
+def test_catching_up_v3910():
+    """3.9.10, catching up (Sam, 12 Nov: "once someone is behind a certain
+    amount, we automatically pause… the options should be study or ignore",
+    "I don't want the dates moved", "trust the user to understand our UI"):
+    three days behind, or one a week old, and a new day waits in line
+    instead of opening; each day owed is a row with Study and Ignore; the
+    list clear, the plan opens its days again. The plan's dates never move."""
+    path = P.path(DOC, PROG, day(0), applied=APPLIED)
+    check("line: one lesson a day behind doesn't start it; three behind does; so does one a week old",
+          not P.line_starts(path, day(0)) and P.line_starts(path, day(6))
+          and P.line_starts({"lessons": [dict(x, state="behind") for x in path["lessons"][:3]]}, day(0))
+          and (P.LINE_AT, P.LINE_OLD) == (3, 7))
+    later = P.path(DOC, PROG, day(2), applied=APPLIED)
+    v = P.line_view(later, P.line_waits(DOC, APPLIED, day(2)), day(2))
+    check("line: its rows, oldest first: what's behind (opened, what's left), then a day that came and waited (all of it); today's waits under them",
+          [(r["uid"], r["opened"], r["left"]) for r in v["rows"]] == [("l2", True, 31), ("l3", True, 84), ("l4", False, 0)]
+          and v["next"] == [] and P.line_waits(DOC, APPLIED, day(1)) == ["l4"]
+          and P.line_view(P.path(DOC, PROG, day(1), applied=APPLIED), ["l4"], day(1))["next"] == [{"uid": "l4", "name": "4 · Heme", "total": 0}], v)
+    # the card
+    ln = {"rows": [{"uid": "l2", "name": "2 · Inflammation <b>", "day": day(-1), "when": "Wed 4", "left": 31, "total": 53, "opened": True},
+                   {"uid": "l4", "name": "4 · Heme", "day": day(1), "when": "Fri 6", "left": 20, "total": 20, "opened": False}],
+          "next": [{"uid": "l5", "name": "5 · Renal", "total": 12}], "days": 2, "left": 51}
+    h = board._plan_card_html(_card(line=ln, behind=None))
+    part = h.split('<div class="pln">')[1].split('<div class="pwk')[0] if '<div class="pln">' in h else ""
+    check("card: Catching up in Behind's place: a row a day with Study and Ignore, today's waiting, Don't wait; the week under it; names escaped",
+          "<b>Catching up</b> &middot; 2 days, 51 new" in part and part.count(">Study</a>") == 2 == part.count(">Ignore</a>")
+          and "duecrew:planlinestudy:p1:l2" in part and "duecrew:planskip:p1:l4" in part and "duecrew:planlineoff:p1" in part
+          and "31 left" in part and "20 new" in part and "12 new &middot; waiting" in part and "Inflammation &lt;b&gt;" in part
+          and "Behind&hellip;" not in h and h.index('class="pln"') < h.index('class="pwk'), part[:400])
+    check("card: no words explaining it (Sam: trust the user)", "carries on" not in h and "instead of" not in h and "land in" not in h)
+
+    # the engine
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    for cid, tag in ((1, "A"), (2, "B"), (3, "C"), (4, "D"), (5, "E"), (6, "G")):
+        fakes.add_card(conn, cid, did=10, ctype=0, queue=-1, tags=f"Step1::{tag}")
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    col.decks = fakes.FakeDecks({10: "Step 1"})
+    units = [{"id": k.lower(), "name": k, "opens": day(d), "tags": [f"Step1::{k}"]}
+             for k, d in (("A", -3), ("B", -2), ("C", -1), ("D", 0), ("E", 1), ("G", 2))]
+    store, cl = _world()
+    pid, code = store.add_plan("dre", "Path Book", "Step 1", units)
+    with Glue(cl, col) as g:
+        g.follow(code)
+        F = g.F
+        c = F._pcfg()
+        state = F._state_cfg(c)
+        changed, ended = F.line_sync(F.followed(), state, F._state["plan_progress"], day(0))
+        check("engine: three days behind (A, B, C opened, none seen): the line starts, kept in plans.json's state",
+              not ended and state[pid].get("line") == {"since": day(0)}, (changed, state[pid].get("line")))
+        res = F.run(col, F.followed(), state, day(1))
+        check("engine: the next morning opens nothing: E waits (never applied), its card still shut",
+              res["n"] == 0 and "e" not in state[pid]["applied"]
+              and col.db.scalar("SELECT queue FROM cards WHERE id = 5") == -1, (res["n"], sorted(state[pid]["applied"])))
+        c["plans"] = state
+        F._psave(c)
+        g.progress()
+        F._today = lambda: day(2)
+        card = F.card_view(F.followed()[0], state[pid], F._state["plan_progress"][pid], day(2))
+        check("engine: the card's line two days on: A to D behind, E waited (not opened), today's G next; no Behind line; the dates as the plan has them",
+              [(r["uid"], r["opened"]) for r in card["line"]["rows"]] == [("a", True), ("b", True), ("c", True), ("d", True), ("e", False)]
+              and [x["uid"] for x in card["line"]["next"]] == ["g"] and card["behind"] is None
+              and card["line"]["rows"][0]["when"] == f"{TODAY - datetime.timedelta(days=3):%a} {(TODAY - datetime.timedelta(days=3)).day}"
+              and not F.followed()[0].get("shift"), card["line"])
+        studied = []
+        saved = F.study_date, F.refresh_progress
+        F.study_date = lambda p, u: studied.append((p, u))
+        F.refresh_progress = lambda: None
+        try:
+            from aqt.deckbrowser import DeckBrowser
+            import due_crew as dc
+            dc._on_js(False, as_board(f"duecrew:planlinestudy:{pid}:e"), DeckBrowser())
+        finally:
+            F.study_date, F.refresh_progress = saved
+        state = F._state_cfg()
+        check("engine: Study on a day that waited opens it first, then its deck (the board's click reaches it)",
+              studied == [(pid, "e")] and "e" in state[pid]["applied"] and col.db.scalar("SELECT queue FROM cards WHERE id = 5") == 0, studied)
+        col.db.conn.execute("UPDATE cards SET queue = 2, type = 2 WHERE id IN (1, 2, 3, 4, 5)")  # all of them seen
+        g.progress()
+        changed, ended = F.line_sync(F.followed(), state, F._state["plan_progress"], day(2))
+        res = F.run(col, F.followed(), state, day(2))
+        check("engine: nothing owed, the line ends and today's set opens as dated",
+              changed and [p["id"] for p in ended] == [pid] and "line" not in state[pid] and res["n"] == 1 and "g" in state[pid]["applied"], res["n"])
+        # Don't wait
+        state[pid]["line"] = {"since": day(2)}
+        c = F._pcfg()
+        c["plans"] = state
+        F._psave(c)
+        opened = []
+        saved = F._open_now
+        F._open_now = lambda pl, **k: opened.append([p["id"] for p in pl])
+        try:
+            F.on_message("planlineoff", ["duecrew", "planlineoff", pid])
+        finally:
+            F._open_now = saved
+        st = F._state_cfg()[pid]
+        check("engine: Don't wait turns it off for this plan here, opens what waited, and it doesn't start again",
+              "line" not in st and st.get("line_off") is True and opened == [[pid]]
+              and F.line_sync(F.followed(), {pid: dict(st, applied={k: "s" for k in "abc"})}, {pid: {k: [1, 0, 1] for k in "abc"}}, day(2)) == (False, []))
+        raw = next(p for p in cl.session["plans"] if p["id"] == pid)
+        st2 = {"deck_id": 10, "applied": {k: "s" for k in "abc"}}
+        check("engine: never at my own pace or while paused (nothing opens by itself there)",
+              not F._line_can(F.mine(dict(raw, own="ready")), st2) and not F._line_can(F.mine(dict(raw, paused=True)), st2)
+              and F._line_can(F.mine(raw), st2))
+    src = open(os.path.join(REPO, "due_crew", "plan_flow.py")).read()
+    check("engine: the line is read with my numbers at each refresh, and nothing of it is sent (plans.json alone)",
+          "_line_refresh(prog)" in src and "line" not in open(os.path.join(REPO, "due_crew", "backend", "api.py")).read().split("def set_days")[1].split("def ")[0])
+
+
+def test_own_pace_matches_v3910():
+    """3.9.10 (Sam: the own-pace card should "match"): what I opened and
+    haven't finished is the same list, Study or Ignore on each; Up next
+    stays; nothing measures me against the plan's dates any more."""
+    ow = {"mode": "ready", "open": [{"uid": "l2", "name": "2 · Inflammation <b>", "left": 31}, {"uid": "l3", "name": "3 · Neoplasia", "left": 84}],
+          "next": {"uid": "l4", "name": "4 · Heme", "n": 20}, "then": [], "more": 0, "then_items": [], "last": None, "back": None,
+          "at": "The plan's dates are at Heme today.", "pace": "You opened 2 sets in the last two weeks.", "finish": "At this pace…"}
+    h = board._own_html(ow, "p1")
+    check("own pace: Open · 2 sets, 115 new; a row each with Study and Ignore; Up next under it; names escaped",
+          "<b>Open</b> &middot; 2 sets, 115 new" in h and h.count(">Study</a>") == 2 == h.count(">Ignore</a>")
+          and "duecrew:planstudydate:p1:l2" in h and "duecrew:planskip:p1:l3" in h and "Up next" in h
+          and h.index('class="pln"') < h.index("Up next") and "Inflammation &lt;b&gt;" in h, h[:300])
+    check("own pace: no line about the plan's dates, my pace or the finish, even handed them",
+          "plan's dates" not in h and "plan&#x27;s dates" not in h and "last two weeks" not in h and "At this pace" not in h)
+    check("own pace: nothing open, no list", 'class="pln"' not in board._own_html(dict(ow, open=[]), "p1"))
+    store, cl = _world()
+    pid, code = store.add_plan("dre", "Path Book", "Step 1", UNITS)
+    with Glue(cl, _col()) as g:
+        g.follow(code)
+        F = g.F
+        raw = next(p for p in cl.session["plans"] if p["id"] == pid)
+        own = F.card_view(dict(raw, own="ready"), F._state_cfg()[pid], F._state["plan_progress"][pid], day(0))["own"]
+        check("own pace: the view lists what's open with cards left (lesson 2's three, lesson 3's one), and has no at, pace or finish",
+              [(r["uid"], r["left"]) for r in own["open"]] == [("l2", 3), ("l3", 1)] and not {"at", "pace", "finish"} & set(own), own)
+
+
 def test_commands_have_handlers():
     """Every duecrew: command this tab puts on the board has its handler in plan_flow."""
     html = (board._plan_card_html(_card()) + board._plans_empty_html({"cards": [], "exam": {"day": day(43), "days": 43}, "writes": True}))

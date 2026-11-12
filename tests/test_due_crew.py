@@ -468,7 +468,7 @@ def test_shares_v21():
     foot_week = board.render({"entries": [], "labels": labels[::-1], "tomorrow": "",
                               "pending": []}, {"period": "week"}, 0)
     check("share: the footer's Share menu offers the crew week (3.7.1, H3)",
-          "crewmenu" in foot_week and "sharemenu" in foot_week
+          "crewmenu" not in foot_week and "sharemenu" in foot_week
           and ("Our week", "sharecrewweek") in board.share_menu_items(False))
 
 
@@ -787,10 +787,16 @@ def test_squad_view_html():
           and by_streak.index("Maya") < by_streak.index("Sammy")
           and '<span class="hi">&#128293;</span><span class="hl">Streak</span> &#9662;' in by_streak, by_streak)
     check("squad view: switcher marks the current squad and escapes names",
-          'class="on"' in html and "MS2 &lt;x&gt;" in html and "squadadd" in html)
+          'class="on"' in html and "MS2 &lt;x&gt;" in html and "squadadd" not in html.split("</div>")[0])  # (3.9.10: under the squad, _squad_add)
     none = board._squads_html({"state": "none", "squads": [], "current": ""}, {})
-    check("squad view: no squads yet offers join or create",
-          "squadadd" in none and "<table>" not in none)
+    sq_page = board.render({"entries": [], "labels": ["2026-09-01"], "tomorrow": "", "pending": []}, {"period": "squads"}, 0,
+                           squad_view={"state": "none", "squads": [], "current": ""})
+    check("squad view: no squads yet; + Create / join a squad is on this tab alone, under the squad, never in the foot (3.9.10)",
+          "No squads yet" in none and "<table>" not in none and '<div class="dc-add">' in none
+          and ("duecrew:squadadd|" + board.BOARD_KEY + "'); return false;\">+ Create / join a squad</a>") in sq_page.split('class="dc-foot"')[0]
+          and "squadadd" not in sq_page.split('class="dc-foot"')[1]
+          and "Create / join a squad" not in board.render({"entries": [], "labels": ["2026-09-01"], "tomorrow": "", "pending": []},
+                                                          {"period": "today"}, 0))
     gone = board._squads_html({"state": "gone", "squads": [{"id": "abc", "name": "orca"}],
                                "current": "abc", "name": "orca"}, {})
     check("squad view: removed -> Remove link", "squaddrop:abc" in gone)
@@ -946,8 +952,8 @@ def test_v25_edges_emoji_week():
     check("squad board: a Pip in front of each name (3.8.21; the emoji with Pip off), a rolling 7-days column, sortable by it",
           "🐢" not in html and "🦊" not in html and html.count('class="dc-rsev"') == 3
           and "🐢 igk" in plain and "🦊 Sammy" in plain and "dc-rsev" not in plain
-          and "7/7" in html and "6/7" in html
-          and '<span class="hl">7 days</span> &#9662;' in html
+          and "&middot; 7/7 days</span>" in html and "&middot; 6/7 days</span>" in html
+          and "7 days</span> &#9662;" not in html and html.count("<th>") == 4 and '<table class="dc-s-reviews">' in html
           and html.index("igk") < html.index("Sammy") < html.index("Priya"))
     page = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []},
                         {"period": "squads"}, 0, squad_view=view)
@@ -1209,8 +1215,8 @@ def test_decks():
     check("bar: a fully seen deck has no hatch left to draw",
           'class="fo" style="left:100%;width:0%;"' in done)
     check("bar: hover has the exact numbers; the name is escaped",
-          "4 seen · 2 mature · 5 unlocked · 6 total · +12 this week · 75.0% retention, last 7 days" in bar
-          and "Ameya &lt;a&gt;" in bar)
+          "4 seen · 2 mature · 5 unsuspended · 6 total · +12 this week · 75.0% retention, last 7 days" in bar
+          and "<b>Ameya &lt;a&gt;</b>" in bar)
     check("bar: today and week chips, and retention beside the count",
           "+4 today &middot; +12 wk" in bar and "4 / 6 &middot; 75%" in bar)
     stale = board._bar("Ameya", False, clean(payload)[0], today_labels=(other,))
@@ -1239,7 +1245,7 @@ def test_decks():
     legend = board._decks_html({"labels": [today], "entries": [
         {"user_id": "me", "name": "Sam", "you": True, "decks": clean(payload)}]})
     check("decks legend: a key drawn with the bars' own fills, which holds in both themes (3.7.1, I6)",
-          '<i class="fm"></i>mature<i class="fs"></i>seen<i class="fo"></i>unlocked' in legend
+          '<i class="fm"></i>mature<i class="fs"></i>seen<i class="fo"></i>unsuspended' in legend
           and "light =" not in legend and "dark =" not in legend and "hover" not in legend)
 
 
@@ -1442,6 +1448,106 @@ def test_request_paths_and_errors():
         check(f"paths: {bad!r} refused before it goes", ok)
     check("errors: codes in paths are left out", A._said("/codes/ABC123/add?x=1") == "/codes/…/add"
           and A._said("/invites/ABCDEFGHJK/redeem") == "/invites/…/redeem" and A._said("/squads/s1") == "/squads/s1")
+
+
+def test_studying_dot_by_itself_v3910():
+    """3.9.10 (Sam: "get rid of I'm studying and just have it automatically
+    pushed when someone has synced reviews within the last hour"): my dot
+    for an hour after my last review, set as a sync is made ready and riding
+    my week as the button's hour did; Privacy's switch, never for someone
+    paused or just showing up; said once at the board's foot; the squad's
+    square counts studying while a crewmate is."""
+    import due_crew as dc
+    from due_crew import together as T, account, settings_model as SM, bingo_flow
+    from due_crew.app import _state
+    from aqt.deckbrowser import DeckBrowser
+    if "aqt.reviewer" not in sys.modules:
+        sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
+    store = world({"sam": "Sam", "dre": "Dre"})
+    cl = new_client(store, "sam", "Sam")
+    now = datetime.datetime(2026, 11, 12, 15, 0, tzinfo=datetime.timezone.utc)
+    ms = lambda mins: int((now - datetime.timedelta(minutes=mins)).timestamp() * 1000)  # noqa: E731
+    iso = lambda mins: (now + datetime.timedelta(minutes=mins)).strftime("%Y-%m-%dT%H:%M:%SZ")  # noqa: E731
+    bumps = []
+    saved = (T.client, bingo_flow.bump, _state.get("entries"), dc.cfg, dc.save_cfg, T.cfg, T.save_cfg, dc._swap, dc.open_settings)
+    conf = {}
+    try:
+        T.client = lambda: cl
+        bingo_flow.bump = lambda k, by=1: bumps.append(k)
+        _state["entries"] = []
+        cl.session.pop("live_until", None)
+        check("the dot: a review 20 minutes ago: live for the 40 left of its hour",
+              T.auto_live({}, ms(20), "2026-11-12", now) is True and cl.session["live_until"] == iso(40))
+        check("…a newer review moves it on; the same one again changes nothing",
+              T.auto_live({}, ms(5), "2026-11-12", now) is True and cl.session["live_until"] == iso(55)
+              and T.auto_live({}, ms(5), "2026-11-12", now) is False)
+        check("…a review over an hour ago, or none: no dot, and the hour it set goes",
+              T.auto_live({}, ms(61), "2026-11-12", now) is True and "live_until" not in cl.session
+              and T.auto_live({}, 0, "2026-11-12", now) is False)
+        for off in ({"show_studying": False}, {"paused": True}, {"show_up": True}):
+            cl.session.pop("live_until", None)
+            cl.session.pop("live_auto", None)
+            T.auto_live({}, ms(5), "", now)
+            T.auto_live(off, ms(5), "", now)
+            check(f"…{sorted(off)[0]}: no dot, the one it had set taken down", "live_until" not in cl.session and not T.live_on(off))
+        cl.session["live_until"] = room = iso(90)  # a room's or a fifteen's hour
+        T.auto_live({}, ms(5), "", now)
+        T.auto_live({"show_studying": False}, ms(5), "", now)
+        check("…a room's or a fifteen's longer hour is never shortened, nor taken down by the switch", cl.session.get("live_until") == room)
+        cl.session.pop("live_until", None)
+        cl.session.pop("live_lv", None)
+        real_now = datetime.datetime.now(datetime.timezone.utc)
+        soon = (real_now + datetime.timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        fresh = int((real_now - datetime.timedelta(minutes=2)).timestamp() * 1000)
+        T.auto_live({}, fresh, "2026-11-12")
+        _state["entries"] = [{"user_id": "dre", "you": False, "live_until": soon}]
+        T.auto_live({}, fresh, "2026-11-12")
+        T.auto_live({}, fresh, "2026-11-12")
+        check("the squad's square (lv): the first time in a day I'm studying while a crewmate is, once",
+              bumps == ["lv"] and cl.session.get("live_lv") == "2026-11-12", bumps)
+        check("the switch is an account key, a bool, on unless turned off; telling is one too; a sharing change, so it syncs",
+              {"show_studying", "live_told"} <= set(account.ACCOUNT_KEYS)
+              and account.clean({"show_studying": False, "live_told": True}) == {"show_studying": False, "live_told": True}
+              and SM.change(["set", "show_studying", "0"], {}) == {"show_studying": False}
+              and "show_studying" in dc.SHARE_KEYS and "show_studying" not in SM.BOARD_DEFAULTS)
+        pv = board._settings_privacy({})
+        check("Privacy: Show when I'm studying, on, with what it does; paused: it says it's off",
+              "duecrew:set:show_studying:0" in pv and "an hour after your last review" in pv
+              and "Off while you&rsquo;re paused" in board._settings_privacy({"paused": True}))
+        ix = board.settings_index({"signed_in": True}, {})
+        check("Find a setting: dot, live or presence finds it, on Privacy",
+              all(any(w in r["k"].split() and r["f"] == "set:show_studying:" and r["t"] == "privacy" for r in ix) for w in ("dot", "live", "presence")))
+        data = {"entries": [], "labels": [TODAY.isoformat()], "tomorrow": "", "pending": []}
+        told = {"use_told": True}
+        line = board.render(data, dict(told), 0)
+        check("the board says it once: a line at the foot with Privacy and Got it; not beside the line on what's counted, "
+              "not once put away, not for someone paused",
+              T.LIVE_NOTE in line and "duecrew:livesee|" in line and "duecrew:livetold|" in line
+              and T.LIVE_NOTE not in board.render(data, {}, 0)
+              and T.LIVE_NOTE not in board.render(data, dict(told, live_told=True), 0)
+              and T.LIVE_NOTE not in board.render(data, dict(told, paused=True), 0))
+        swaps, opened = [], []
+        dc.cfg = T.cfg = lambda: conf
+        dc.save_cfg = T.save_cfg = lambda c: conf.update(c)
+        dc._swap = lambda c, focus=None: swaps.append(1)
+        dc.open_settings = lambda tab=None: opened.append(tab)
+        conf.update(use_told=True)
+        dc._on_js(False, as_board("duecrew:livetold"), DeckBrowser())
+        check("Got it: put away, the board drawn again", conf.get("live_told") is True and swaps == [1])
+        conf.pop("live_told")
+        dc._on_js(False, as_board("duecrew:livesee"), DeckBrowser())
+        check("Privacy: put away, and Settings opens on Privacy", conf.get("live_told") is True and opened == ["privacy"])
+        src = open(os.path.join(REPO, "due_crew", "__init__.py"), encoding="utf-8").read()
+        check("it's set as a sync is made ready (no request of its own), from my last review; the button's command is gone",
+              "together.auto_live(c, q.last_review_ms(), labels[0])" in src and '"live": (' not in src
+              and not hasattr(T, "toggle_live"))
+        mig = open(os.path.join(REPO, "worker", "migrations", "0031_bingo_together.sql"), encoding="utf-8").read()
+        check("the square's words on the server say what it counts now, its key the same, only where the admin hasn't rewritten it",
+              '"name":"Studying together"' in mig and '"params":{"key":"lv"}' in mig and "WHERE id = 'buddy' AND updated_at = 0" in mig)
+        check("the privacy page says the dot shows by itself and where its switch is",
+              "by itself, for an hour after your last review" in open(os.path.join(REPO, "site", "public", "privacy.html"), encoding="utf-8").read())
+    finally:
+        (T.client, bingo_flow.bump, _state["entries"], dc.cfg, dc.save_cfg, T.cfg, T.save_cfg, dc._swap, dc.open_settings) = saved
 
 
 def test_request_budget():
@@ -2252,8 +2358,8 @@ def test_together_v210():
     check("live: the row shows a dot and 'studying now'", "dc-live" in html and "studying now" in html)
     page = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []}, {}, 0, live=False)
     stop = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []}, {}, 0, live=True)
-    check("live: the footer offers I'm studying, then Stop studying",
-          "I&rsquo;m studying" in page and "Stop studying" in stop and "duecrew:live" in page)
+    check("3.9.10: the footer has no I'm studying (the dot shows by itself), whether I'm studying or not",
+          "I&rsquo;m studying" not in page and "Stop studying" not in stop and "duecrew:live" not in page + stop)
 
     # L2: flags I share show on the Decks tab; tips go to the card
     col = make_user_col([TODAY])
@@ -2483,8 +2589,8 @@ def test_show_up():
                person("theo", "Theo", paused=True)]
     base = {"entries": entries, "labels": labels, "tomorrow": "", "pending": []}
     today = board.render(base, {"period": "today"}, 0)
-    check("show-up rows, Today: a check instead of a rank, after the ranked rows",
-          '<td class="rk">&#10003;</td><td class="nm">' in today and today.index("Kai") > today.index("Dre")
+    check("show-up rows, Today: a check in the name's line (3.9.10: no first column), after the ranked rows",
+          '<td class="rk">&#10003;' not in today and '<span class="la faded">&#10003;' in today and today.index("Kai") > today.index("Dre")
           and '<td class="rk">#3</td>' not in today)
     week = board.render(base, {"period": "week"}, 0)
     check("show-up rows, Week: a check and the days this week, no rank (Nia studied Monday: she counts too)",
@@ -3042,7 +3148,7 @@ def test_settings_in_board_v341():
              "send_errs": False}  # 3.9.9's switch, off: its own test
     pv = board.settings_html(dict(view, tab="privacy"), dated)
     check("settings: Privacy, one choice checked; numbers only under My numbers",
-          pv.count('aria-checked="true"') == 1 and "duecrew:setprivacy:numbers" in pv
+          pv.count('role="radio" aria-checked="true"') == 1 and "duecrew:setprivacy:numbers" in pv
           and "share_reviews" not in pv, pv[-900:])
     # 3.9.9 (Settings by what it's about): my dates are on You, no longer under Privacy
     yo = board.settings_html(dict(view, tab="you", signed_in=True), dated)
@@ -3195,7 +3301,9 @@ def check_every_board_click_is_taken():
             return cmd in ("closet", "closetnew", "closethw", "closetclose", "closetoff") or (cmd == "closetwear" and arg in closet.BY) \
                 or (cmd == "closettab" and arg.isdigit() and int(arg) < len(board.CLOSET_TABS))
         if cmd.startswith("wrapped"):
-            return cmd in ("wrappedopen", "wrappedyear", "wrappedcard", "wrappedclose") or (arg.isdigit() and len(arg) == 4)
+            return cmd == "wrappedx" and arg.isdigit() and len(arg) == 4
+        if cmd.startswith("scrap"):
+            return cmd in ("scrapbook", "scrapclose", "scrapempty", "scrappin", "scrapdel") or (arg.isdigit() and len(arg) == 4)
         if cmd == "settab":
             return arg in settings_model.TABS
         if cmd in ("setclose", "setname", "setemoji", "setstatus", "setsquads", "setsignin", "setsignout", "setdelete", "setfeedback"):
@@ -6894,7 +7002,7 @@ def test_crew_picker_v380():
           [x[1] for x in pills(today)] == ["Crew", "Squads"]
           and 'dc-pill on" href="#" onclick="pycmd(\'duecrew:period:today' in today
           and 'dc-pill on" href="#" onclick="pycmd(\'duecrew:period:week' in week, pills(today))
-    pick = lambda h: _re.search(r'<div class="dc-sw">(.*?)</div>', h).group(1)
+    pick = lambda h: _re.sub(r' data-t="[^"]*"', "", _re.search(r'<div class="dc-sw">(.*?)</div>', h).group(1))  # (3.9.10: each word's bold room)
     check("crew: the picker, Today picked, then Week picked",
           ('<a class="on" href="#" onclick="pycmd(\'duecrew:period:today|' + KK + '\'); return false;">Today</a>') in pick(today)
           and ('<a href="#" onclick="pycmd(\'duecrew:period:week|' + KK + '\'); return false;">Week</a>') in pick(today)
@@ -7015,8 +7123,11 @@ def test_you_bubble_v380():
     check("refined: the box's tabs are words, Hide a word", 'class="du-tabs du-more"' in bh and "border: 1px solid var(--dc-line);\n"
           "      border-radius: 99px; padding: 2px 10px" not in bh and ">Hide &#9652;</a>" in bh)
     foot = bh.split('class="dc-foot"')[1]
-    check("refined: one pill in the footer, I'm studying; Open a room and who's waiting are words",
-          foot.count('class="pb') == 1 and ">Open a room</a>" in foot and 'class="warn"' in foot and "1 waiting" in foot)
+    # 3.9.10 (Sam: "I've been meaning to redo the bottom"): three words, each saying what it opens
+    words = re.findall(r'<a [^>]*onclick="pycmd\(\'duecrew:([a-z]+)\|[^>]*>([^<]+)</a>', foot.split('class="sp"')[0])
+    check("the foot: Friends opens the Friends window, Scrapbook the scrapbook, Share my stats the share menu; no pill, no room, no Crew menu; who's waiting stays",
+          words[:3] == [("friends", "Friends"), ("scrapbook", "Scrapbook"), ("sharemenu", "Share my stats")] and 'class="pb' not in foot
+          and "Open a room" not in foot and ">Crew</a>" not in foot and 'class="warn"' in foot and "1 waiting" in foot, words)
     css = board.render(data, {"period": "today"}, 0, due=dv2, plans=plans, you={"tab": "today", "plans": plans})
     check("simpler: the box is a card like the board's, no border of its own; one underline for every word tab",
           "#due-crew .du { text-align: left; border-radius: 12px; padding: 12px 18px;" in css
@@ -7090,7 +7201,7 @@ def test_you_bubble_v380():
     # Crew › Decks: my own deck, to how it's sticking
     me = dict(data["entries"][0], decks=[{"name": "Step <1>", "sig": "s", "total": 10, "seen": 5, "mature": 2, "open": 6}])
     dk = board.render(dict(data, entries=[me]), {"period": "decks"}, 0, sticking={"Step <1>": 10})
-    check("decks: my deck's way to Insights", "duecrew:youins:10" in dk and "How it&rsquo;s sticking &rsaquo;" in dk
+    check("decks: no How it's sticking beside a deck's name (3.9.10: Insights has it)", "youins" not in dk and "sticking" not in dk
           and "Step &lt;1&gt;" in dk)
     check("decks: none for a deck Insights doesn't have", "youins" not in board.render(dict(data, entries=[me]), {"period": "decks"}, 0))
     _state["labels"] = []
@@ -7236,9 +7347,8 @@ def test_crew_menu_pictures():
     then as a picture), and a handler for every key either can offer."""
     text = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
     for fn, nxt, keys in (
-            ("def _crew_menu", "def _share_menu", {k for _l, k in board.crew_menu_items()}),
             ("def _share_menu", "def open_friends",
-             {k for show_up in (False, True) for _l, k in board.share_menu_items(show_up, True) if _l})):
+             {k for show_up in (False, True) for _l, k in board.share_menu_items(show_up, True) if _l}),):
         run = text[text.index(fn):text.index(nxt)]
         handled = set(re.findall(r'"([a-z]+)": lambda', run))
         check(f"{fn[4:]}: every key handled", keys <= handled, sorted(keys - handled))
@@ -7248,8 +7358,17 @@ def test_crew_menu_pictures():
                                         "My day…", "My week…", "My year…", "All time…"]
           and "head.setEnabled(False)" in text
           and 'share_picture("picturealltime")' in text and 'share_picture("pictureyear")' in text)
-    check("crew menu: people only",
-          [k for _l, k in board.crew_menu_items()] == ["friends", "copyinvite", "decks"])
+    # 3.9.10: the Crew menu went: Friends opens the Friends window (its list, the code, Copy Invite), and
+    # sharing a deck starts on Crew › Decks
+    fd = open(os.path.join(REPO, "due_crew", "ui", "friends_dialog.py"), encoding="utf-8").read()
+    dk = board._decks_body({"entries": [{"user_id": "me", "name": "Me", "you": True, "decks": [{"name": "D", "cards": 10, "seen": 5, "mature": 2}]},
+                                        {"user_id": "a", "name": "A", "you": False, "decks": [{"name": "D", "cards": 10, "seen": 4, "mature": 1}]}],
+                            "labels": []})
+    check("no Crew menu: Friends has the code and Copy Invite; Crew › Decks starts sharing a deck",
+          not hasattr(board, "crew_menu_items") and "def _crew_menu" not in text and '"crewmenu"' not in text
+          and 'QPushButton("Copy Invite")' in fd
+          and ('<div class="dc-add"><a href="#" title="Pick the decks your crew sees" onclick="pycmd(\'duecrew:decks|' + board.BOARD_KEY + "'); return false;\">+ Share a deck</a>") in dk
+          and "Matching decks pair up" not in dk, dk[-300:])
     import due_crew as dc
     import aqt.utils as au
     from aqt.deckbrowser import DeckBrowser
@@ -8640,14 +8759,13 @@ def test_insights_379():
     check("insights: the board escapes the plan's words", "<img" not in html and "&lt;img" in html)
     check("insights: header, hero with Study, behind with Catch up (3.8.0: a deck's id in each command)",
           "<b>86%</b>" in html and "87% the 2 weeks before" in html and "3 cards</a> Anki won&rsquo;t show you before Fri" in html
-          and "duecrew:insstudy:10:h" in html and "12 new cards behind" in html and "duecrew:plancatch:p1" in html, html[:900])
+          and "duecrew:insstudy:10:h" in html and "12 new cards behind" in html and "plancatch" not in html, html[:900])  # (3.9.10: data only)
     check("insights: not sticking yet, one Study a row",
           "Not sticking yet" in html and "<b>10</b> of 27" in html and "duecrew:insstudy:10:0" in html and "Re-watch" not in html)
     check("insights: 3.9.2, Reviews ahead in Your week's place, the exam marked on its day",
           "Reviews ahead" in html and "Your week" not in html and ">Exam<" in html and ">today<" in html, html)
     check("insights: Optimize FSRS and Not now",
-          "Newest cards 85% right, Anki aims for 90%" in html and "duecrew:insfsrs:10" in html
-          and "duecrew:insfsrsno:10" in html)
+          "Newest cards 85% right, Anki aims for 90%" in html and "insfsrs" not in html)  # (3.9.10: said, nothing to press)
     check("insights: 3.8.0, the deck's leeches, from the plan card, with See them",
           "<b>2</b> leeches Anki stopped showing you" in html and "duecrew:insleeches:10" in html)
     check("insights: no plan, no behind line", "behind" not in board._insights_html(10, dict(view, pid=None)))
@@ -8661,7 +8779,7 @@ def test_insights_379():
           "duecrew:insbrowse:10:h" in html and "duecrew:insbrowse:10:0" in html, html)
     hh = board._insights_html(10, {"hard": {"pct": 22, "n": 640}})
     check("insights: the Hard habit said, with Not now", "You press Hard on 22% of reviews. Anki counts Hard as remembered." in hh
-          and "duecrew:inshardno:10" in hh and "640 reviews in 4 weeks" in hh, hh)
+          and "inshardno" not in hh and "instwo" not in hh and "640 reviews in 4 weeks" in hh, hh)
     from due_crew import team as T
     check("insights: the Hard habit needs 15% of 200 answers or more",
           T.hard_habit(30, 200) == {"pct": 15, "n": 200} and T.hard_habit(29, 200) is None and T.hard_habit(100, 199) is None)
@@ -9563,12 +9681,12 @@ def test_head_row_b_v380():
     corner = '<th class="lt dc-corner" colspan="2"><div class="dc-sw">'
     today = board.render(data, {"period": "today"}, 0)
     check("head row B: Crew's views in the header's corner, not a line above the table",
-          corner + ('<a class="on" href="#" onclick="pycmd(\'duecrew:period:today|' + KK + '\'); return false;">Today</a>') in today
+          corner + ('<a class="on" data-t="Today" href="#" onclick="pycmd(\'duecrew:period:today|' + KK + '\'); return false;">Today</a>') in today
           and today.index(corner) > today.index("<table class=\"dc-s-") and "<th></th><th></th>" not in today
           and today.count('<div class="dc-sw">') == 1)
     week = board.render(data, {"period": "week"}, 0)
     check("head row B: Week too, Week picked", corner in week
-          and ('<a class="on" href="#" onclick="pycmd(\'duecrew:period:week|' + KK + '\'); return false;">Week</a>') in week)
+          and ('<a class="on" data-t="Week" href="#" onclick="pycmd(\'duecrew:period:week|' + KK + '\'); return false;">Week</a>') in week)
     mode = board.render(data, {"period": "today", "show_up": True}, 0)
     check("head row B: show-up mode's corner is the picker; who showed up today goes under the table",
           corner in mode and '<div class="dc-line dc-sum">2 showed up today</div>' in mode
@@ -9619,9 +9737,19 @@ def test_head_row_b_v380():
     for st in ("none", "loading", "error"):
         check(f"head row B: {st}, the names on top",
               board._squads_html({"state": st, "squads": [{"id": "x", "name": "x"}]}, {}).startswith('<div class="dc-sw">'))
-    check("footer: Crew and Share without carets (Sam)",
-          ("duecrew:crewmenu|" + KK + "'); return false;\">Crew</a>") in today and ("duecrew:sharemenu|" + KK + "'); return false;\">Share</a>") in today
-          and "Crew &#9662;" not in today and "Share &#9662;" not in today)
+    site_js = open(os.path.join(REPO, "site", "public", "app.js"), encoding="utf-8").read()
+    rw = open(os.path.join(REPO, "due_crew", "room_widget.js"), encoding="utf-8").read()
+    from due_crew import rooms as _rooms
+    check("the site's foot says the same two words (the scrapbook is Anki's alone); sharing a deck points at Crew › Decks",
+          'menu("Friends", crewItems), menu("Share my stats", shareItems)' in site_js and 'menu("Crew"' not in site_js
+          and "Settings › Shared decks" not in site_js and "Crew › Decks › Share a deck" in site_js)
+    check("Open a room is the top bar's: ▶ Fifteen?'s arrow sends its own keyed command, which offers the two ways",
+          "send('room15menu')" in rw and "e.stopPropagation()" in rw
+          and [k for _l, k in _rooms.START_WAYS] == ["fifteen", "room"] and 'cmd == "room15menu"' in open(_rooms.__file__, encoding="utf-8").read())
+    check("footer: Friends and Share my stats, without carets (Sam)",
+          ("duecrew:friends|" + KK + "'); return false;\">Friends</a>") in today
+          and ("duecrew:sharemenu|" + KK + "'); return false;\">Share my stats</a>") in today
+          and "&#9662;" not in today.split('class="dc-foot"')[1])
     js = open(os.path.join(REPO, "site", "public", "app.js"), encoding="utf-8").read()
     css = open(os.path.join(REPO, "site", "public", "app.css"), encoding="utf-8").read()
     check("head row B, the site's twin: the corner, the line under, Decks' line, the squads' corner, no carets",
@@ -10790,7 +10918,7 @@ def test_own_pace_first_seen_v381():
               [u["id"] for u in P.up_next(p["doc"], st["applied"])] == ["hf", "ar", "cz"])
         v = F.card_view(p, st, F.progress(col, [p], F._state_cfg())[pid], _day(0))
         check("first seen: not in my pace; Up next starts at the first date",
-              v["own"]["pace"] is None and v["own"]["next"]["uid"] == "hf", str(v["own"]))
+              "pace" not in v["own"] and v["own"]["next"]["uid"] == "hf", str(v["own"]))
         asked = []
         F.offer_hold([pid], ask=lambda name, n: asked.append(n) or False)
         check("first seen: the hold-back question counts the dates I haven't opened, not one opened elsewhere",
@@ -12865,8 +12993,7 @@ def test_own_pace_v380():
         v = F.card_view(p, st, prog, _day(0))
         check("own: the card says at your pace, Up next with what opens, and no Behind",
               v["sub"].startswith("at your pace") and v["own"]["next"]["name"] == "Heart failure" and v["own"]["next"]["n"] == 3  # not open yet, its leech too
-              and v["lines"] == [] and v["own"]["at"] == "The plan's dates are at Arrhythmia today."
-              and v["own"]["pace"] is None and v["own"]["finish"] is None, str(v["own"]))
+              and v["lines"] == [] and not {"at", "pace", "finish"} & set(v["own"]) and "open" in v["own"], str(v["own"]))  # 3.9.10: no line against the plan's dates
         F.open_next(pid)
         st = F._state_cfg()[pid]
         dues = dict(col.db.all("SELECT id, due FROM cards"))
@@ -15391,98 +15518,37 @@ def _wr_year(seed, keep, until=datetime.date(2026, 11, 30), start=datetime.date(
 
 
 def test_wrapped_story_v390():
-    """3.9.0, your Wrapped (Sam's pick, round three): a year's story from my
-    own reviews, only the slides that year can fill, every line kind (no
-    missed days, no "fewer", no comparing: wrapped.SAD, read in every slide
-    of every year here), the card I turned around shown here only, and the
-    board's line from 1 December to 15 January."""
+    """3.9.0's Wrapped, since 3.9.10 the scrapbook's year page: the year's
+    facts from my own reviews, and the board's line from 1 December to 15
+    January, now the scrapbook's (the slide story is gone)."""
     from due_crew import wrapped as W
     full = W.facts(2026, "2026-12-01", _wr_year(9, lambda d, r: r.random() < (.97 if d.month == 3 else .85)),
                    {22: 5000, 23: 3000, 9: 1000}, "2023-02-01")
-    fall = W.facts(2026, "2026-12-01", _wr_year(4, lambda d, r: d >= datetime.date(2026, 9, 2) and r.random() < .82),
-                   {7: 4000, 8: 2000, 20: 500}, "2026-09-02")
-    back = W.facts(2026, "2026-12-01", _wr_year(5, lambda d, r: not (datetime.date(2026, 2, 9) <= d <= datetime.date(2026, 4, 13)) and r.random() < .9),
-                   {14: 100, 15: 100}, "2025-01-01")
-    one = W.facts(2026, "2026-03-03", {"2026-03-02": (12, 12, 60000)}, {}, "2026-03-02")
     none = W.facts(2026, "2026-03-03", {}, {}, None)
-    names = {k: t["name"] for k, t in __import__("due_crew.closet", fromlist=["BY"]).BY.items()}
-    counts = {"fifteens": 38, "hours": {"20": 20}, "cheers_sent": 12, "cheered_by": 41, "rooms": 6, "worn": {"headphones": 40}}
-    sl_full = W.slides(full, counts, {"sprout": "2026-10-14", "headphones": "2026-10-14"}, ["Headphones"], 4,
-                       {"front": "Which nerve <b>x</b>?", "lapses": 9, "ivl": 41}, 12, 4, names)
-    sl_fall = W.slides(fall, {}, {"sprout": "2026-09-02"}, ["Sprout"], 0, None, 0, 4, names)
-    sl_back = W.slides(back, {}, {}, [], 2, None, 0, 4, names)
-    kinds = lambda sl: [x["kind"] for x in sl]
-    check("a full year: every slide it can fill, in the story's order",
-          kinds(sl_full) == ["cover", "days", "run", "back", "time", "cards", "turned", "fifteens", "things", "crew", "picture"]
-          or kinds(sl_full) == ["cover", "days", "run", "time", "cards", "turned", "fifteens", "things", "crew", "picture"], kinds(sl_full))
-    check("met Anki this year: says so; an early bird; no crew, no Fifteens, no comebacks: those slides aren't made",
-          sl_fall[0]["line"] == "You and Anki met on 2 September." and "time" in kinds(sl_fall)
-          and next(x for x in sl_fall if x["kind"] == "time")["big"] == "Early bird"
-          and not {"crew", "fifteens", "back", "turned"} & set(kinds(sl_fall)), kinds(sl_fall))
-    bk = next(x for x in sl_back if x["kind"] == "back")
-    check("a comeback after weeks away is its own big slide: the day, how long, and the days that followed (more than half)",
-          bk["big"].endswith("April") and bk["line"].startswith("after nine weeks away. Then you showed up on") and "next" in bk["line"], bk)
-    check("one day: a short story (cover, days, cards, picture); no reviews: nothing",
-          kinds(W.slides(one)) == ["cover", "days", "cards", "picture"] and W.slides(none) == [])
-    every = sl_full + sl_fall + sl_back + W.slides(one)
-    said = [W.words(x).lower() for x in every]
-    bad = [(w, t) for t in said for w in W.SAD if re.search(rf"\b{w}", t)]
-    check("kind, always: no slide says missed, only, fewer, down, worst, lost, behind, less ...", not bad, bad[:5])
-    check("the card I turned around: its front on its slide, marked as staying here; never on the picture",
-          next(x for x in sl_full if x["kind"] == "turned")["tag"].startswith("Stays on this computer")
-          and "nerve" not in W.words(sl_full[-1]).lower())
-    check("since October, for what Due Crew only began counting then", next(x for x in sl_full if x["kind"] == "fifteens")["tag"] == "Since October"
-          and next(x for x in sl_full if x["kind"] == "crew")["tag"] == "Since October")
-    things = next(x for x in sl_full if x["kind"] == "things")
-    check("Pip's things: what came this year, worn most (a week or more of it)",
-          things["big"] == "2 things" and "headphones, 40 days" in things["small"], things)
-    check("the picture: days, longest run, and reviews (new cards when the year was mostly new)",
-          sl_full[-1]["grid"][2][1] == "reviews" and sl_fall[-1]["grid"][2][1] in ("reviews", "new cards")
-          and sl_full[-1]["kicker"] == "My 2026 so far in Anki" and sl_full[-1]["small"] == "See you in 2027.")
-    check("the board's line: 1 December to 15 January, for the year just ending; else none; the year it's about",
+    check("the year's facts: days, reviews, the longest run, each day's count; none for no reviews",
+          full["days"] > 200 and full["reviews"] > full["days"] and full["run"][0] >= 3 and len(full["per_day"]) == full["days"]
+          and not none["days"], (full["days"], full["run"]))
+    check("the board's line: 1 December to 15 January, for the year just ending; else none",
           W.banner_year("2026-12-01") == 2026 and W.banner_year("2027-01-15") == 2026 and W.banner_year("2027-01-16") is None
-          and W.banner_year("2026-11-30") is None and W.default_year("2027-01-10") == 2026 and W.default_year("2026-12-02") == 2026)
-    cells = W.heat(full)
-    check("the year's squares: Monday-first weeks, levels against the year's own days, the days still to come empty",
-          len(cells) % 7 == 0 and 53 <= len(cells) // 7 <= 54 and {c[1] for c in cells if c and c != ""} <= {0, 1, 2, 3, 4}
-          and any(c == "" for c in cells) and cells[0] is None)
-    check("every kind of slide is in the table that says when it's made", {x["kind"] for x in every} <= {k for k, _w in W.SLIDES}
-          and set(W.BG) == {k for k, _w in W.SLIDES})
-    # drawn, in the board's place
-    view = {"year": 2026, "years": [2026, 2025], "slides": sl_full, "heat": cells, "look": ["headphones"], "card": True, "card_on": True}
-    h = board.wrapped_html(view, {"accent": "green"})
-    check("drawn: a slide each, Pip in my look, the year's squares, another year, All on one page, the card's switch, the way back",
-          h.count('<section class="wr-s') == len(sl_full) and "duecrew:wrappedyear:2025" in h and "All on one page" in h
-          and "duecrew:wrappedcard" in h and "duecrew:wrappedclose" in h and "duecrew:wrappedpic:2026" in h
-          and 'class="wh"' in h and '<svg class="sv' in h, h[:300])
-    check("the card's front is text, escaped", "Which nerve &lt;b&gt;x&lt;/b&gt;?" in h and "<b>x</b>" not in h)
-    off = board.wrapped_html(view, {"sev": False})
-    check("Pip off: the story without Pip (no Pip's things slide)", "<svg class=\"sv" not in off and off.count('<section class="wr-s') == len(sl_full) - 1)
-    js = board.wrapped_js()
-    check("the player: arrows and the sides move it, it moves on by itself, never with Reduce motion, once a card",
-          "ArrowRight" in js and "prefers-reduced-motion: reduce" in js and "bars[st.i].animate" in js and "requestAnimationFrame" not in js and "st.run.pause()" in js
-          and "data-on" in js)
-    import shutil
-    import subprocess
-    if shutil.which("node"):
-        r = subprocess.run(["node", "--check", "-"], input=js, capture_output=True, text=True)
-        check("the player is valid JS", r.returncode == 0, r.stderr[:300])
-    line = board.wrapped_line(2026, True, ["dino"])
-    check("the line: Your 2026 so far, Open, and its x for the year", "Your 2026 so far" in line and "duecrew:wrappedopen:2026" in line
-          and "duecrew:wrappedx:2026" in line and "&#127873;" in board.wrapped_line(2026, False, [], pip=False))
+          and W.banner_year("2026-11-30") is None)
+    check("the slide story is gone (3.9.10): no slides, no card read for it",
+          not hasattr(W, "slides") and not hasattr(board, "wrapped_html") and not hasattr(board, "wrapped_js")
+          and not hasattr(__import__("due_crew.wrapped_flow", fromlist=["x"]), "turned"))
+    line = board.scrapbook_line(2026, True, ["dino"])
+    check("the line: Your 2026 so far is in your scrapbook, Open, and its x for the year", "Your 2026 so far" in line
+          and "scrapbook" in line and "duecrew:scrapbook:2026" in line
+          and "duecrew:wrappedx:2026" in line and "&#127873;" in board.scrapbook_line(2026, False, [], pip=False))
     from due_crew import account
     check("the line's x is the account's (wrapped_seen), so it holds on every computer",
           "wrapped_seen" in account.ACCOUNT_KEYS and account.clean({"wrapped_seen": "2026xx"}) == {"wrapped_seen": "2026"})
 
 
 def test_wrapped_flow_v390():
-    """3.9.0: Wrapped's glue reads the year in one grouped query (an hour a
-    row), new cards met as first answers, the first review ever, the years
-    there are, and the card I turned around as plain text; the commands
-    reach it as the board sends them."""
+    """3.9.0: the year is read in one grouped query (an hour a row), new
+    cards met as first answers, the first review ever, the years there are
+    (3.9.10: for the scrapbook's year page; its commands have their own
+    test, test_scrapbook_v3910)."""
     from due_crew import wrapped_flow as F
-    import due_crew as dc
-    from aqt.deckbrowser import DeckBrowser
     conn = sqlite3.connect(":memory:")
     fakes.make_collection(conn)
     at = lambda d, h: int(datetime.datetime.combine(d, datetime.time(h)).timestamp() * 1000)
@@ -15497,38 +15563,6 @@ def test_wrapped_flow_v390():
           days.get("2026-03-02", (0,))[0] == 5 and days["2026-03-02"][1] == 1 and "2026-03-03" not in days
           and "2025-12-31" not in days and hours.get(22) == 3 and hours.get(1) == 1, (days, hours))
     check("the first review ever, and the years there are", F.first_day(col) == "2025-12-31" and F.years(col) == [2026, 2025])
-    col.get_card = lambda cid: types.SimpleNamespace(question=lambda: '<style>.x{}</style><div>Which <b>nerve</b>?</div>[sound:a.mp3]&amp; why')
-    n, card = F.turned(col)
-    check("the card I turned around: as plain text (no markup, no media)", n == 1 and card == {"front": "Which nerve ? & why", "lapses": 9, "ivl": 41}, card)
-    # the board's commands
-    saved = (dc.open_wrapped, dc._swap, dc.cfg, dc.save_cfg, dc._board_on_screen, dict(dc._state))
-    opened, conf, swaps = [], {"accent": "green"}, []
-    import due_crew.shares as SH
-    pics = []
-    saved_pic = SH.picture
-    dc.open_wrapped = lambda year=None: opened.append(year)
-    dc._swap = lambda c, focus=None: swaps.append(1)
-    dc.cfg = lambda: conf
-    dc.save_cfg = lambda c, **k: conf.update(c)
-    dc._board_on_screen = lambda: True
-    SH.picture = lambda kind, year=None: pics.append((kind, year))
-    try:
-        send = lambda m: dc._on_js(False, as_board("duecrew:" + m), DeckBrowser())
-        send("wrappedopen:2026")
-        send("wrappedyear:2025")
-        send("wrappedpic:2026")
-        send("wrappedx:2026")
-        dc._state["wrapped_open"] = {"year": 2026}
-        send("wrappedcard")
-        send("wrappedclose")
-        check("the board's clicks reach it: open, another year, the picture on that year, the line's x for the year, the card off, back",
-              opened == [2026, 2025, 2026] and pics == [("pictureyear", 2026)] and conf.get("wrapped_seen") == "2026"
-              and conf.get(F.CARD_KEY) is False and dc._state.get("wrapped_open") is None and swaps, (opened, pics, conf))
-    finally:
-        dc.open_wrapped, dc._swap, dc.cfg, dc.save_cfg, dc._board_on_screen = saved[:5]
-        dc._state.clear()
-        dc._state.update(saved[5])
-        SH.picture = saved_pic
     check("the board's line: in its fortnight-and-a-month, until its x for that year",
           F.banner("2026-12-03", {"sev": False})["year"] == 2026 and F.banner("2026-12-03", {"wrapped_seen": "2026"}) is None
           and F.banner("2027-01-10", {"sev": False}) == {"year": 2026, "so_far": False, "look": []} and F.banner("2026-10-03", {}) is None)
@@ -15540,6 +15574,170 @@ def test_wrapped_flow_v390():
           any(o[0] == "sev" for o in ops) and not any(o[0] == "sev" for o in S.draw("year", "story", dict(d, sev=False), {}, "light", lambda s, px, w: 1)[2])
           and "if (d.sev) { const img = await sevImg(pal.g); if (img) c.drawImage(img, W - P - YEAR_SEV, 446 - YEAR_SEV * SEV_FEET, YEAR_SEV, YEAR_SEV); }" in js
           and "YEAR_SEV = 220" in js and S.YEAR_SEV == 220)
+
+
+def test_crew_tabs_hold_still_v3910():
+    """3.9.10 (Sam: "make sure the spacing on today / week are the same"):
+    the picked view's word is bold, and bold is wider, so Week sat in a
+    different place on Today than on Week. Each word keeps its bold room."""
+    from due_crew.board import crew, style
+    sw = crew._crew_picker("week")
+    css = style._css({})
+    check("crew's views: each word carries its own name for the room its bold takes, and the picked one adds no height",
+          sw.count('data-t="') == 3 and 'data-t="Week"' in sw and "a[data-t]::after { content: attr(data-t);" in css
+          and "a[data-t] { display: inline-block; padding-bottom: 2px; }" in css, sw[:200])
+
+
+def test_scrapbook_v3910():
+    """3.9.10, the scrapbook (Sam: "a combo wrapped and home for polaroids /
+    notes, etc. that are ephemeral at the moment or deleted permanently
+    when taken away from the screen"): a polaroid taken down, pushed out or
+    signed out with goes there; good-luck lines once shown, a tip that
+    helped, a cheer with words, what I did; by month under the year's page;
+    Pin up, Delete, Empty; this computer's, per account, never sent."""
+    import due_crew as dc
+    from due_crew import scrapbook as S, scrap_flow as SF, closet_flow as cf, fridge as FR
+    from aqt.deckbrowser import DeckBrowser
+    _patched_due_crew()
+    SF._BOOK.update(profile=None, data=None, disk=None)
+    draw = {"k": "draw", "s": [[0, 10, 10, 50, 50]]}
+    # pure
+    pz = {"k": "pz", "from": "dre", "name": "Dre", "at": "2026-11-03T10:00:00Z", "a": "blue", "n": "go <b>", "d": draw}
+    its = S.add(S.add([], pz), pz)
+    check("a keepsake is kept once, cleaned; one of no kind, no day or no words isn't",
+          len(its) == 1 and its[0]["d"]["k"] == "draw" and S.clean_one({"k": "x", "at": "2026-11-03"}) is None
+          and S.clean_one({"k": "luck", "at": "nope", "n": "hi"}) is None and S.clean_one({"k": "luck", "at": "2026-11-03", "n": ""}) is None
+          and S.clean_one({"k": "mine", "at": "2026-11-03", "head": ""}) is None, its)
+    more = S.add(its, {"k": "mine", "w": "plan", "head": "Finished Heme", "at": "2026-10-20"})
+    more = S.add(more, {"k": "cheer", "from": "nia", "name": "Nia", "at": "2025-12-30T01:00:00Z", "n": "nice", "e": "🎉"})
+    check("by year and month, newest first; this year always has a page",
+          S.years(more, 2027) == [2027, 2026, 2025] and [m for m, _x in S.months(more, 2026)] == [11, 10]
+          and S.counts(more, 2026) == {"pz": 1, "luck": 0, "tip": 0, "cheer": 0, "mine": 1})
+    check("a month's line: what I did leads, else the days I showed up; its numbers only when there are some",
+          S.month_line([{"head": "Finished Heme"}, {"head": "x"}], 9) == ("", "Finished Heme", ", and 1 more.")
+          and S.month_line([], 1) == ("", "1 day", " you showed up.") and S.month_line([], 0) == ("", "", "")
+          and S.month_sub(12, 3400, 1) == "12 study days · 3,400 reviews · cheered 1 time" and S.month_sub(0, 0, 0) == "")
+    check("the year's line and numbers: kind, and only what there is",
+          S.year_line(2026, 0, 0, True)[0] == "2026 so far: nothing studied yet."
+          and S.year_line(2026, 200, 41000, False) == ("200 days you showed up, and ", "41,000 reviews", ".")
+          and S.year_stats(31, 1, {"pz": 2}, 0, 0) == [("31", "days, your longest run"), ("1", "plan finished"), ("2", "drawings and signs")])
+    check("a polaroid goes to the fridge's shape and back", S.to_fridge(S.from_fridge({"from": "dre", "name": "Dre", "at": "x", "a": "blue", "n": "n", "d": draw}))
+          == {"from": "dre", "name": "Dre", "at": "x", "a": "blue", "n": "n", "d": draw})
+
+    # the fridge feeds it
+    ents = [{"user_id": "dre", "accent": "blue", "you": False}]
+    cheers = [{"from": "dre", "name": "Dre", "at": f"2026-10-{d:02d}T10:00:00Z", "note": f"day {d}", "doodle": draw} for d in range(1, FR.KEEP + 3)]
+    cf.keep_doodles(cheers, ents, "sam")
+    pushed = [x["n"] for x in SF.items("sam")]
+    check("a newer drawing pushing the oldest off the fridge sends it to the scrapbook (it was gone for good)",
+          len(cf.fridge("sam")) == FR.KEEP and pushed == ["day 1", "day 2"], pushed)
+    first = cf.fridge("sam")[0]
+    cf.take_down(FR.key(first))
+    down = [x["n"] for x in SF.items("sam")]
+    cf.put_back(FR.key(first))
+    check("× takes a drawing down into the scrapbook; Undo brings it back out", down == ["day 1", "day 2", first["n"]]
+          and [x["n"] for x in SF.items("sam")] == ["day 1", "day 2"] and "In your scrapbook &middot;" in open(os.path.join(REPO, "due_crew", "board", "fridge.py")).read())
+    kept = SF.find(S.key(SF.items("sam")[0]), "sam")
+    up = cf.pin_up(S.to_fridge(kept), "sam")
+    check("Pin up: back on the fridge, the oldest there making room in the scrapbook",
+          up and any(x["n"] == "day 1" for x in cf.fridge("sam")) and len(cf.fridge("sam")) == FR.KEEP
+          and first["n"] in [x["n"] for x in SF.items("sam")], [x["n"] for x in SF.items("sam")])
+    saved = (dc._reset_runtime, dc._rerender)
+    dc._reset_runtime, dc._rerender = (lambda **k: None), (lambda: None)
+    try:
+        dc._on_signed_out()
+    finally:
+        dc._reset_runtime, dc._rerender = saved
+    n_out = len(SF.items("sam"))
+    check("signing out: the fridge empties into that account's scrapbook, which stays, and another account sees none of it",
+          cf.fridge("sam") == [] and n_out == FR.KEEP + 2 and SF.items("nia") == [], n_out)
+
+    # what else is kept
+    SF.cheers_in([{"from": "nia", "name": "Nia", "at": "2026-11-02T09:00:00Z", "note": "you got this", "emoji": "💪"},
+                  {"from": "nia", "name": "Nia", "at": "2026-11-02T09:01:00Z", "note": "", "emoji": "🎉"},
+                  {"from": "dre", "name": "Dre", "at": "2026-11-02T09:02:00Z", "note": "look", "doodle": draw}], "sam")
+    SF.luck_shown([{"from": "nia", "name": "Nia", "note": "Breathe."}], "2026-11-05", "sam")
+    SF.moment("plan", "Finished Heme", "Every set of it done.", "cheer", "2026-11-06", "sam")
+    SF.moment("plan", "Finished Heme", "Every set of it done.", "cheer", "2026-11-06", "sam")
+    nov = [x for x in SF.items("sam") if x["at"][:7] == "2026-11"]
+    check("a cheer is counted in its month and kept only with words (a drawing is the fridge's); a good-luck line once shown; a moment once",
+          sorted(x["k"] for x in nov) == ["cheer", "luck", "mine"] and SF._read("sam")["cheers"] == {"2026-11": 3}, nov)
+    disk = json.load(open(SF._path()))
+    check("its file is scrapbook.json beside wrap.json, by account; nothing of it is an account key or rides a request",
+          set(disk["by"]) == {"sam"} and "scrap" not in open(os.path.join(REPO, "due_crew", "backend", "api.py")).read()
+          and "scrap" not in open(os.path.join(REPO, "due_crew", "account.py")).read())
+
+    # drawn
+    view = {"year": 2026, "years": [2026, 2025], "so_far": True, "yline": S.year_line(2026, 200, 41000, True),
+            "ystats": S.year_stats(31, 1, S.counts(SF.items("sam"), 2026), 3, 0), "n": len(SF.items("sam")), "any": True, "sev": True,
+            "months": [{"m": m, "name": S.MONTHS[m - 1], "line": S.month_line([x for x in xs if x["k"] == "mine"], 9), "sub": S.month_sub(9, 900, 3),
+                        "items": [dict(x, key=S.key(x)) for x in xs]} for m, xs in S.months(SF.items("sam") + [dict(pz)], 2026)]}
+    h = board.scrapbook_html(view, {"accent": "green"}, {"dre": {"user_id": "dre", "accent": "purple", "look": []}}, [])
+    check("drawn in the board's place: the year's page and Share my year, each year, a month a block, the way back, Empty, where it's kept",
+          'class="sb-y"' in h and "duecrew:scrapshare:2026" in h and "duecrew:scrapyear:2025" in h and h.count('class="sb-m"') == 2
+          and "duecrew:scrapclose" in h and "duecrew:scrapempty" in h and "Kept on this computer. Never sent." in h, h[:200])
+    check("a polaroid has Pin up and Delete, anything else Delete alone; every word a sender wrote is escaped",
+          h.count(">Pin up<") == h.count('class="sb-k sb-pz"') > 0 and h.count(">Delete<") == view["n"] + 1
+          and "go &lt;b&gt;" in h and "go <b>" not in h)
+    check("a sender's Pip and colour are theirs as they are now (purple, not the blue it came in)",
+          f'style="--al:{board.accent_pair("purple")[0]};' in h and 'class="sv m-idle"' in h
+          and 'class="sv ' not in board.scrapbook_html(dict(view, sev=False), {"sev": False}, {}, []).split('class="sb-m"')[1])
+    empty = board.scrapbook_html({"year": 2026, "years": [2026], "so_far": True, "yline": S.year_line(2026, 0, 0, True), "months": [], "n": 0}, {})
+    check("nothing kept yet: says what comes here; no Empty link", "Nothing kept yet this year" in empty and "scrapempty" not in empty)
+
+    # the board's commands
+    keep = (dc.open_scrapbook, dc._swap, dc.cfg, dc.save_cfg, dc._board_on_screen, dc._scrap_load, dict(dc._state), dc.client)
+    import due_crew.shares as SH
+    import due_crew.sheets as sheets
+    saved_pic, saved_confirm = SH.picture, sheets.confirm
+    opened, conf, swaps, pics, asked = [], {"accent": "green"}, [], [], []
+    dc.open_scrapbook = lambda year=None: opened.append(year)
+    dc._swap = lambda c, focus=None: swaps.append(1)
+    dc.cfg = lambda: conf
+    dc.save_cfg = lambda c, **k: conf.update(c)
+    dc._board_on_screen = lambda: True
+    dc._scrap_load = lambda year=None: True
+    dc.client = lambda: types.SimpleNamespace(user_id="sam")
+    SF.client = dc.client
+    SH.picture = lambda kind, year=None: pics.append((kind, year))
+    sheets.confirm = lambda title, text, yes, then, danger=False, **k: (asked.append((title, danger)), then())
+    try:
+        send = lambda m: dc._on_js(False, as_board("duecrew:" + m), DeckBrowser())
+        send("scrapbook")
+        send("scrapbook:2026")
+        send("scrapyear:2025")
+        send("scrapshare:2026")
+        send("wrappedx:2026")
+        dc._state["wrapped_open"] = {"year": 2026}
+        a_pz = next(x for x in SF.items("sam") if x["k"] == "pz")
+        a_luck = next(x for x in SF.items("sam") if x["k"] == "luck")
+        before = len(SF.items("sam"))
+        send("scrappin:" + S.key(a_pz))
+        pinned = (len(SF.items("sam")), [x["n"] for x in cf.fridge("sam")])
+        send("scrappin:" + S.key(a_luck))
+        send("scrapdel:" + S.key(a_luck))
+        after_del = len(SF.items("sam"))
+        send("scrapdel:nonsense")
+        send("scrapempty")
+        send("scrapclose")
+        check("the board's clicks reach it: open, a year, another, Share my year, the line's x for the year, back",
+              opened == [None, 2026, 2025] and pics == [("pictureyear", 2026)] and conf.get("wrapped_seen") == "2026"
+              and dc._state.get("wrapped_open") is None and swaps, (opened, pics, conf))
+        check("Pin up puts a polaroid back on the Decks screen and out of the scrapbook (never a note); "
+              "Delete and Empty ask first, in red, and only then go",
+              pinned == (before - 1, [a_pz["n"]]) and after_del == before - 2 and SF.items("sam") == []
+              and asked == [("Delete this?", True), ("Empty the scrapbook?", True)] and len(cf.fridge("sam")) == 1, (pinned, after_del, asked))
+    finally:
+        dc.open_scrapbook, dc._swap, dc.cfg, dc.save_cfg, dc._board_on_screen, dc._scrap_load = keep[:6]
+        dc._state.clear()
+        dc._state.update(keep[6])
+        dc.client = keep[7]
+        SF.client = keep[7]
+        SH.picture, sheets.confirm = saved_pic, saved_confirm
+        SF._BOOK.update(profile=None, data=None, disk=None)
+    src = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
+    check("its ways in: the foot's Scrapbook, Tools › Due Crew › Scrapbook… (Your year… is gone), the December line",
+          '("Scrapbook…", lambda: open_scrapbook())' in src and "Your year…" not in src)
 
 
 def test_banner_actions_sit_together_v390():
@@ -15897,15 +16095,27 @@ def test_fridge_dark_v392():
           f'stroke="{board.DOODLE_INK}"' in dark and f'path[stroke="{board.DOODLE_INK}"] {{ stroke: var(--fz-2b2d29, {board.DOODLE_INK}); }}' in dark
           and "--fz-2b2d29: #e6e8e3;" in dark and f'stroke="{pl}"' in dark and f"--fz-{pl[1:]}: {pd};" in dark
           and f'stroke="{rl}"' in dark and f"--fz-{rl[1:]}: {rd};" in dark
-          and f"--fa:{pl};--fd:{pd};" in dark and "--fz-acc: var(--fd)" in dark and "--sv-a: var(--fz-acc)" in board.FRIDGE_CSS)
+          and f"--fa:{pl};--fd:{pd};" in dark and "--fz-acc: var(--fd)" in dark and "--sv-a: var(--fz-pip)" in board.FRIDGE_CSS
+          and "--fz-pip: var(--pd, var(--fd))" in dark and "--fz-pip: var(--pa, var(--fa))" in light)
     check("a theme change draws it again (it's kept as last drawn)", dark != light != auto)
+    # 3.9.10 (Sam: "everyone's polaroids are now showing their pip as green even if they use a different color"):
+    # the Pip wears the colour its person has now; the tape and the drawing keep the one it came in
+    bl, bd = board.accent_pair("blue")
+    gl, gd = board.accent_pair("green")
+    moved = board.fridge_html([item], {"dre": dict(people["dre"], accent="blue")}, {"sev": True, "theme": "light"})
+    bare = board.fridge_html([dict(item, a="")], {"dre": dict(people["dre"], accent="blue")}, {"sev": True, "theme": "light"})
+    gone = board.fridge_html([dict(item, a="")], {}, {"sev": True, "theme": "light"})
+    check("a polaroid's Pip wears its person's colour as it is now; the tape keeps the one it came in",
+          f"--fa:{pl};--fd:{pd};--pa:{bl};--pd:{bd};" in moved and moved != light)
+    check("…one that came with no colour takes theirs, tape and Pip; nobody to ask: the default",
+          f"--fa:{bl};--fd:{bd};--pa:{bl};--pd:{bd};" in bare and f"--fa:{gl};--fd:{gd};--pa:{gl};--pd:{gd};" in gone)
 
 
 def test_fridge_account_and_undo_v391():
     """3.9.1, before release: the fridge is this Anki profile's file, and
     more than one account can sign in on a profile, so it keeps whose
     drawings it holds, shows them to that account alone and empties at
-    sign-out. And × leaves "Taken down · Undo" in the drawing's place for a
+    sign-out. And × leaves "In your scrapbook · Undo" in the drawing's place for a
     few seconds; Undo puts it back where it was."""
     import due_crew as dc
     from due_crew import closet_flow as cf, fridge as FR
@@ -15957,7 +16167,7 @@ def test_fridge_account_and_undo_v391():
         dc._swap = saved
     pill = re.search(r'<div class="fz fgone"[^>]*>.*?</div>', html)
     order = re.findall(r'data-k="([0-9a-f]+)"', html)
-    check("undo: × takes it down and leaves Taken down · Undo where it was (its spot, its sender's colour), for the seconds it has",
+    check("undo: × takes it down and leaves In your scrapbook · Undo where it was (its spot, its sender's colour), for the seconds it has",
           g and g["k"] == k and pill and f"duecrew:fridgeback:{k}" in pill.group(0) and 'data-s="r" data-x="40" data-y="300"' in pill.group(0)
           and f"--fa:{board.accent_pair('blue')[0]}" in pill.group(0) and 'role="status"' in pill.group(0)
           and re.search(r"--fg:-\d+\.\ds", pill.group(0)) and order == [FR.key(x) for x in reversed(back)]
@@ -16300,8 +16510,8 @@ def test_two_buttons_v391():
     hh = board._insights_html(10, {"hard": {"pct": 22, "n": 640}, "two": ""})
     tried = board._insights_html(10, {"hard": {"pct": 22, "n": 640}, "two": "tried"})
     check("the Hard habit line offers Try two buttons beside Not now; tried: it's on, with Undo; on: there's no Hard to press",
-          "duecrew:instwo:10" in hh and "Try two buttons" in hh and "duecrew:inshardno:10" in hh
-          and "Two buttons are on" in tried and "duecrew:instwono:10" in tried and "You press Hard" not in tried
+          "instwo" not in hh and "Try two buttons" not in hh and "You press Hard" in hh
+          and "instwono" not in tried
           and "You press Hard" not in board._insights_html(10, {"hard": {"pct": 22, "n": 640}, "two": "on"}))
     # the clicks, as the board sends them
     import due_crew as dc
@@ -16669,10 +16879,6 @@ def test_efficiency_idle_v391():
     import re as _re
     check("idle: the bats' wings flap for the flight and stop (no loop of ours that runs forever on Halloween's line)",
           "infinite" not in board.HW_CSS and "calc(var(--d) - var(--ago, 0s)) 20 alternate" in board.HW_CSS)
-    js = board.wrapped_js()
-    check("idle: Wrapped's bars fill by one animation a slide, paused when held or hidden, none on the last; no frame loop",
-          "requestAnimationFrame" not in js and "visibilitychange" in js and "st.run.pause()" in js
-          and "st.i < sl.length - 1 && bars[st.i].animate" in js)
     rt = rm._RUNTIME
     check("idle: a room's widgets tick as often as they show (the break's mm:ss and the question each second, "
           "else at the minute's turn or the phase's end, ten seconds at most), and balance the bar only when their words change",
@@ -16688,10 +16894,11 @@ def test_efficiency_idle_v391():
           and ".sv:hover, .sv-slot:hover .sv { --sv-on: var(--sv-hover, infinite); }" in _sev.CSS and ".dc-rest { --sv-hover: 1; }" in _sev.CSS
           and _sev.CSS.count("var(--sv-on, ") >= 40, forever)
     src = fakes.board_source()
-    check("Pip at rest (Sam's pick C): the fridge's Pips are still until pointed at, as crew rows; rows move on while hovered",
+    check("Pip at rest (Sam's pick C): the fridge's Pips are still until pointed at; a plan card's and a bingo square's move while hovered; a crew row's never (3.9.10, Sam: only the Cheer pill shows)",
           "#dc-fridge .fz:not(:hover) .sv, #dc-fridge .fz:not(:hover) .sv * { animation: none !important; }" in board.FRIDGE_CSS
           and "#dc-fridge .fz:hover .sv { --sv-on: var(--sv-hover, infinite); }" in board.FRIDGE_CSS
-          and all(f"#due-crew {k}:hover .dc-rsev .sv {{ --sv-on: var(--sv-hover, infinite); }}" in src for k in ("tr", ".pcrew", ".bg-sq"))
+          and all(f"#due-crew {k}:hover .dc-rsev .sv {{ --sv-on: var(--sv-hover, infinite); }}" in src for k in (".pcrew", ".bg-sq"))
+          and "#due-crew tr .dc-rsev .sv, #due-crew tr .dc-rsev .sv * { animation: none !important; }" in src and "tr:hover .dc-rsev" not in src
           and "#due-crew .face:hover .dc-rsev .sv {{ --sv-on: var(--sv-hover, infinite); }}" in src)
     app_css = open(os.path.join(REPO, "site", "public", "app.css")).read()
     check("Pip at rest (the bug hunt): the break screen's Pip goes on all break, whichever of its stretch moves it does",
@@ -17480,16 +17687,15 @@ def test_reviews_ahead_392():
     # ---- the board ----
     s0 = _ahead_sample(exam_in=10)
     html = board._ins_ahead(10, s0, "<b>Spanish")
-    check("board: Reviews ahead, one chart a way, the one in effect shown; pills switch on the page",
-          html.count('class="ahw"') == 3 and html.count(" hidden>") >= 2 and 'data-k="pace">' in html
-          and 'role="radiogroup"' in html and "Your pace &middot; 140 new a week" in html
-          and "Stop new a week before the exam" in html, html[:1500])
+    check("board: Reviews ahead is its line and its chart (3.9.10: no ways to pick, no Do it, nothing under it)",
+          html.count('class="ahw"') == 1 and " hidden>" not in html and 'data-k="pace">' in html
+          and 'role="radiogroup"' not in html and "Your pace &middot;" not in html and "Stop new" not in html
+          and "insaheadoff" not in html and "Counted from" not in html and "xact" not in html, html[:1500])
     check("board: data first: the cards I've started first, what new ones add at my pace, this week, the time; the exam week against my pace",
           "Next 2 weeks: <b>" in html and "a day from cards you&rsquo;ve started, <b>+" in html and "new at your pace" in html
-          and " a day &middot; this week 100</div>" in html and "new at your pace, about " in html
-          and "Exam week: about <b>" in html and ", not " in html, html)
+          and " a day &middot; this week 100</div>" in html and "new at your pace, about " in html, html)
     check("board: a stop says what it holds back and when they start again (a real deck: the cost was unsaid)",
-          "220 new cards wait till Sat 12 " in html and "plan&rsquo;s sets" not in html, html)
+          "new cards wait till" not in html, html)  # (3.9.10: only a running stop says it: `paused`, below)
     hv = A.view(A.existing([(1, 10)] * 20, *A.habits([])), A.GENERIC, [20.0] * 7, 0, 900, 100, [50] * 7, exam_in=10,
                 plan={2: 50, 20: 30}, pool=100)
     hw = {w["key"]: w for w in hv["ways"]}
@@ -17498,26 +17704,28 @@ def test_reviews_ahead_392():
           and "held" not in hw["pace"], {k: (w.get("held"), w.get("plan_held")) for k, w in hw.items()})
     hh = board._ins_ahead(10, dict(_ahead_sample(exam_in=10), ways=hv["ways"]), "Step")
     check("board: a plan's share of what waits (the day with its month)",
-          "150 new cards wait till Sat 12 " in hh and ", 50 of them in your plan&rsquo;s sets." in hh, hh)
+          "insaheadoff" not in hh and "plan&rsquo;s sets" not in hh, hh)  # (3.9.10: no stop is offered to say it of)
     check("ahead: new cards named the climb's cause only when they're it (200 in two weeks, twice the two before)",
           A.cause(2480, 262) == 2480 and A.cause(150, 0) == 0 and A.cause(500, 300) == 0 and A.cause(None, None) == 0)
     ln = board.ahead_line({"did": 1, "name": "Step", "day": "2026-10-19", "n": 1030, "week": 780, "cause": 2480})
     check("board: the line says the cause", "this week 780 &middot; you started 2,480 cards in 2 weeks</span>" in ln
           and "you started" not in board.ahead_line({"did": 1, "name": "Step", "day": "2026-10-19", "n": 1030, "week": 780}), ln)
     check("board: Do it for each stop, said once; deck options untouched (its tip); the deck's name escaped",
-          "duecrew:insaheadoff:10:week" in html and "duecrew:insaheadoff:10:now" in html
-          and "no new cards in &lt;b&gt;Spanish till your exam" in html and "<b>Spanish" not in html
-          and "deck options stay as they are" in html, html)
-    check("board: the track record, and each bar's band from it", "on your own past, within 9% a week" in html and "&ndash;" in html)
+          "duecrew:insaheadoff" not in html and ">Do it<" not in html and "<b>Spanish" not in html, html)
+    check("board: the track record, and each bar's band from it", "within 9% a week" not in html and "&ndash;" in html)
     check("board: the exam on its day; the last 7 days, today, then by week", ">Exam<" in html and ">today<" in html
           and ">by week<" in html and "Week of " in html, html)
     paused = board._ins_ahead(10, _ahead_sample(exam_in=10, off=(0, 10)), "Spanish")
     check("board: paused: its way on, Turn new cards back on in Do it's place",
-          'class="xc on" data-k="now"' in paused and "duecrew:insaheadon:10" in paused
+          'class="ahw" data-k="now"' in paused and paused.count('class="ahw"') == 1 and "new cards wait till" in paused
+          and "insaheadon" not in paused
+          and "duecrew:insaheadon:10" in board.settings_html({"tab": "study", "signed_in": True, "new_stops": [(10, "Sp<i>")]}, {})
+          and "New cards stopped in Sp&lt;i&gt;" in board.settings_html({"tab": "study", "signed_in": True, "new_stops": [(10, "Sp<i>")]}, {})
+          and "New cards stopped" not in board.settings_html({"tab": "study", "signed_in": True}, {})
           and "duecrew:insaheadoff:10:now" not in paused and "No new cards in Spanish till your exam" in paused, paused[-2500:])
     generic = board._ins_ahead(10, dict(_ahead_sample(), own=False, trust=None), "Spanish")
     check("board: no exam: stop for good; a typical curve said; no track record yet",
-          "till you turn them back on" in generic and "typical curve" in generic and "within" not in generic, generic[-1500:])
+          "insaheadoff" not in generic and "typical curve" not in generic and "within" not in generic, generic[-1500:])
     rh = board.render({"entries": [], "labels": ["2026-09-01"], "tomorrow": "", "pending": []}, {}, 0, ahead={"did": 10, "name": "<i>Spanish", "day": "2026-09-08", "n": 330, "week": 250})
     check("board: the line when reviews climb, the deck escaped, to Insights, put away for a week",
           "Reviews in <b>&lt;i&gt;Spanish</b> climb to about <b>330</b> a day by Tue 8 Sep &middot; this week 250" in rh
@@ -17689,10 +17897,10 @@ def test_ahead_audit_v392():
     later = board._ins_ahead(10, sample(exam_in=10, off=(0, 10), pause={"kind": "now", "exam": False, "from": 0}), "Spanish")
     week = board._ins_ahead(10, sample(exam_in=10, off=(3, 10), pause={"kind": "week", "exam": True, "from": 3}), "Spanish")
     check("board: an exam today: Stop new now, till I turn them back on (never 'to the exam')",
-          "to the exam" not in exam_today and "till you turn them back on" in exam_today, exam_today[-1800:])
+          "to the exam" not in exam_today and "insaheadoff" not in exam_today, exam_today[-1800:])
     check("board: an exam passed: the same", "to the exam" not in passed and "till your exam" not in passed, passed[-1800:])
     check("board: paused to an exam six weeks off: its date named, one pill for it",
-          "till your exam, Sat 31 Oct" in far and far.count('data-k="now" role="radio"') == 1 and 'data-k="off"' not in far, far[-1800:])
+          "till your exam, Sat 31 Oct" in far and far.count('class="ahw"') == 1 and 'role="radio"' not in far, far[-1800:])
     check("board: a pause made with no exam, an exam added since: still till I turn them back on",
           "No new cards in Spanish till you turn them back on" in later, later[-1500:])
     check("board: the week before the exam, before it starts: from its first day",
@@ -17701,8 +17909,9 @@ def test_ahead_audit_v392():
                  [100] * 7, exam_in=20)
     check("a finished deck (no new cards left): no stop offered, it changes nothing", [w["key"] for w in fin["ways"]] == ["pace"],
           [w["key"] for w in fin["ways"]])
-    check("words: one card, one new card", "1 new card waits" in board._ins_ahead(10, dict(sample(exam_in=10), ways=[
-        dict(w, held=1) if w["key"] == "now" else w for w in sample(exam_in=10)["ways"]]), "Spanish"))
+    one = sample(exam_in=10, off=(0, 10), pause={"kind": "now", "exam": True, "from": 0})
+    check("words: one card, one new card", "1 new card waits" in board._ins_ahead(10, dict(one, ways=[
+        dict(w, held=1) if w["key"] == one["on"] else w for w in one["ways"]]), "Spanish"))
 
 
 def test_builder_audit_v392():
@@ -17824,15 +18033,14 @@ def test_leeches_392():
         html = board._insights_html(10, {"leech": v, "deck_name": "<i>Spanish"})
         check("board: the trail back, the counts, Bring all back and Browse; the deck's name escaped",
               "duecrew:insleech:10:shut:0" in html and "<b>3</b> Anki stopped showing you" in html and "<b>2</b> one miss away" in html
-              and "Bring all 3 back" in html and "duecrew:insleech:10:back:all" in html and "duecrew:insleech:10:browse:0" in html
+              and "Bring all" not in html and "insleech:10:back" not in html and "duecrew:insleech:10:browse:0" in html
               and "&lt;i&gt;Spanish" in html and "<i>Spanish" not in html, html[:1500])
         check("board: one button a card: the tip, else Ask who has it down, else Bring back; a near card's is a tip or nothing",
               "duecrew:insleech:10:tip:102" in html and "Dre&rsquo;s tip" in html and "Ask Maya" in html
-              and "duecrew:insleech:10:back:101" in html and "slow: 44 s a try" in html and "back in 3 days" in html, html)
+              and "slow: 44 s a try" in html and "back in 3 days" in html, html)
         check("board: behind ⋯: Learn it fresh, Edit, Leave it out (and Bring back where the button's a tip)",
-              "duecrew:insleech:10:fresh:101" in html and "duecrew:insleech:10:edit:104" in html
-              and "duecrew:insleech:10:out:101" in html and "duecrew:insleech:10:out:104" not in html
-              and "duecrew:insleech:10:back:102" in html and "hidden>" in html, html)
+              not any(f"insleech:10:{a}:" in html for a in ("fresh", "edit", "out", "back")) and "hidden>" not in html
+              and "Learn it fresh" not in html, html)  # 3.9.10: Insights is data only: nothing here adjusts a card
         evil = board._ins_leeches(10, {"gone": [dict(g[101], front="<img src=x onerror=1>", topic="<b>")], "near": [], "n_gone": 1, "n_near": 0})
         check("board: a card's own words escaped", "<img" not in evil and "&lt;img" in evil and "<b>&lt;b&gt;" not in evil, evil)
         dc._on_js(False, as_board("duecrew:insleech:10:tip:102"), DeckBrowser())
@@ -18028,9 +18236,7 @@ def test_leeches_tag_only_v392():
         check("board: the summary, its own group, due today and back tomorrow, Leave it out but no Bring back",
               "<b>4</b> still in your reviews" in html and "Leeches still in your reviews" in html
               and "due today" in html and "back tomorrow" in html
-              and "duecrew:insleech:10:out:301" in html and "Stays in your reviews, out of this list" in html
-              and "duecrew:insleech:10:fresh:301" in html and "duecrew:insleech:10:back:301" not in html
-              and "Bring it back" in html, html)
+              and "insleech:10:out" not in html and "insleech:10:fresh" not in html and "Bring it back" not in html, html)
         line = board._insights_html(10, {"leeches": 0, "near": 0, "kept": 4})
         check("board: Insights' line: N leeches still in your reviews · See them (Sam's words)",
               "<b>4</b> leeches still in your reviews &middot; <a" in line and "duecrew:insleeches:10" in line, line)
@@ -18095,7 +18301,7 @@ def test_qol_pass_v392():
     import re as _re
     nots = _re.findall(r"about <b>(\d+)</b> a day, not (\d+)", h)
     check("a stop no longer among the choices: its own kind's name, never Paused; never a number against itself",
-          "Paused" not in h and "Stop new a week before the exam" in h and all(x != y for x, y in nots), (nots, h[-1500:]))
+          "Paused" not in h and "No new cards in Spanish" in h and all(x != y for x, y in nots), (nots, h[-1500:]))
     # an exam today: no "To your exam" over today alone; a stop to it ends tonight, not in six weeks
     v = A.view(A.existing([(0, 1)] * 40, *A.habits([])), A.GENERIC, [20.0] * 7, 0, 500, 300, [100] * 7, exam_in=0,
                off=A.stop_of({"kind": "now", "exam": True, "at": "2026-09-01"}, 0, "2026-09-01"), off_kind="now")
@@ -18107,11 +18313,11 @@ def test_qol_pass_v392():
     one = {"cid": 1, "front": "x", "topic": "", "lapses": 1, "susp": False, "due": 2, "tip": [], "knows": []}
     lv = board._ins_leeches(10, {"near": [one], "n_near": 1, "gone": [], "kept": []})
     check("leeches: missed 1 time; no Bring back explained where there's none",
-          "missed 1 time " in lv + " " and "missed 1 times" not in lv and "Bring back:" not in lv and "Undo takes it back" in lv, lv)
+          "missed 1 time " in lv + " " and "missed 1 times" not in lv and "Bring back" not in lv and "Undo takes" not in lv, lv)
     g = dict(one, susp=True, lapses=8, day="2024-08-03")
     lg = board._ins_leeches(10, {"gone": [g], "n_gone": 1, "near": [], "kept": []})
     check("leeches: one to bring back says it; a leech from a year ago or more says its year",
-          "Bring it back" in lg and "Bring all 1" not in lg and "since 3 Aug 2024" in lg and "Bring back: due again" in lg, lg)
+          "Bring" not in lg and "since 3 Aug 2024" in lg, lg)
     line = board._insights_html(10, {"leeches": 0, "near": 1, "kept": 0})
     check("Insights' line: a near leech alone says of what", "<b>1</b> card one miss from a leech" in line, line)
     line = board._insights_html(10, {"leeches": 2, "near": 3})
@@ -18129,8 +18335,7 @@ def test_qol_pass_v392():
     # a stop to the week before an exam 60 days out: named from its own day; before it starts they're not off yet
     far = board._ins_ahead(10, _ahead_sample(exam_in=60, off=(53, 60), pause={"kind": "week", "exam": True, "from": 53}), "Spanish")
     check("a stop far ahead: from its own day (past the chart), and Keep them on, not Turn back on",
-          "No new cards in Spanish from Sat 24 Oct till your exam, Sat 31 Oct" in far and "Keep them on" in far
-          and "Turn new cards back on" not in far, far[-900:])
+          "No new cards in Spanish from Sat 24 Oct till your exam, Sat 31 Oct" in far and "insaheadon" not in far, far[-900:])
     # Why: the stop on a parent deck is named as that deck
     from due_crew import why as W
     ctx = {"today": 500, "now": 1_000_000, "ahead": 1200, "deck": lambda d: {1: "Cardio"}.get(d, "?"),
@@ -19811,14 +20016,14 @@ def test_pip_party_only_from_its_tab_v395():
     you = {"plans": None, "insights": ins, "party_on": True}
     today, insights = board.you_html({}, v, dict(you, tab="today")), board.you_html({}, v, dict(you, tab="insights"))
     check("pip party: Today and Insights say nothing of it, the tab open to me or not; its tab is there",
-          "Pip Party" in today and not re.search(r"(?i)party:|>Party<|Party &rsaquo;|missparty|planparty|insmapparty", today + insights)
+          ">Party</a>" in today and "Pip Party" not in today and not re.search(r"(?i)party:|Party &rsaquo;|missparty|planparty|insmapparty", today + insights)
           and "Path 2" in today and "insmapshare" in insights, today[-600:])
     folded = board.you_html({}, None, dict(you, tab="insights", folded=True))
     alone = board.you_html({}, None, dict(you, tab="party"))
-    check("pip party: its tab says Beta beside its name (Sam's), with Due's lists or alone; no other tab does; "
+    check("pip party: out of Beta (3.9.10, Sam's): no tab says Beta, with Due's lists or alone; "
           "the folded line keeps the names",
-          all(h.count('Pip Party<span class="du-beta">Beta</span>') == 1 == h.count("du-beta") for h in (today, insights, alone))
-          and "Pip Party" in folded and "du-beta" not in folded and "#due-crew .du-tabs .du-beta" in board.DUE_CSS,
+          all(">Party</a>" in h and 'class="du-beta"' not in h for h in (today, insights, alone))
+          and "&middot; Party" in folded and "du-beta" not in folded and board.BETA_TABS == () and board.PARTY_TAB == ("party", "Party"),
           (today.count("du-beta"), alone.count("du-beta"), folded[-300:]))
     acts = []
 
@@ -19862,7 +20067,7 @@ def test_pip_party_for_everyone_v395():
           and "const FEW = Infinity;" in src["site/public/table.js"])
     check("pip party for everyone: a day's ceiling on tables beside the hour's",
           "TABLES_PER_DAY = 20" in src["worker/src/table.ts"] and "`tableday:${uid}`, TABLES_PER_DAY, 86400" in src["worker/src/table.ts"])
-    check("pip party for everyone: still Beta on its tab", "party" in board.BETA_TABS)
+    check("pip party for everyone: and out of Beta since 3.9.10", "party" not in board.BETA_TABS)
 
 
 def test_pip_party_can_be_hidden_v395():
@@ -19881,7 +20086,7 @@ def test_pip_party_can_be_hidden_v395():
     shown_bd = board.settings_html({"tab": "board", "signed_in": True}, {"hidden_tabs": []})
     hidden_bd = board.settings_html({"tab": "board", "signed_in": True}, {"hidden_tabs": ["party"]})
     check("pip party hidden: its pill beside Decks, Squads, Plans and Insights, on or off as set",
-          "duecrew:settabs:party:0" in shown_bd and ">Pip Party</button>" in shown_bd and "duecrew:settabs:party:1" in hidden_bd,
+          "duecrew:settabs:party:0" in shown_bd and ">Party</button>" in shown_bd and "duecrew:settabs:party:1" in hidden_bd,
           re.findall(r"settabs:\w+:\d", hidden_bd))
     conf = {"hidden_tabs": [], "due_tab": "party"}
     calls = []
@@ -20354,7 +20559,7 @@ def test_energy_and_security_review_v397():
     src = fakes.board_source()
     # -- a resting pointer isn't pointing --
     check("rest: every point-to-play loop reads the page's rest (--sv-hover), none is forever on its own",
-          "--sv-on: infinite;" not in src and "--sv-on: infinite;" not in SV.CSS and src.count("--sv-on: var(--sv-hover, infinite);") == 6
+          "--sv-on: infinite;" not in src and "--sv-on: infinite;" not in SV.CSS and src.count("--sv-on: var(--sv-hover, infinite);") == 5
           and ".sv:hover, .sv-slot:hover .sv { --sv-on: var(--sv-hover, infinite); }" in SV.CSS and ".dc-rest { --sv-hover: 1; }" in SV.CSS)
     check("rest: the watcher rides the Decks page's scripts (once a page) and the bars' widgets",
           SV.REST_JS in board.keep_me_in_view_js(True) and SV.REST_JS not in board.keep_me_in_view_js(False)
@@ -21472,8 +21677,8 @@ def test_magic_field_on_the_decks_page_v399():
         ph = lambda h: re.search(r'<input type="text"[^>]*placeholder="([^"]*)"', h).group(1)
         page2 = types.SimpleNamespace(tree="", stats="")
         dc._on_render(None, page2)
-        check("decks page: one example in the field, another the next time the page is drawn, never cycled",
-              ph(st) in dc.board.MAGIC_EXAMPLES and ph(page2.stats) in dc.board.MAGIC_EXAMPLES and ph(st) != ph(page2.stats)
+        check("decks page: one question in the field, the same every time (3.9.10: no sample searches), never cycled",
+              ph(st) == dc.board.MAGIC_PROMPT == ph(page2.stats) == "What do you want to study?" and not hasattr(dc.board, "MAGIC_EXAMPLES")
               and "setTimeout(type" not in st and "__EX__" not in st, (ph(st), ph(page2.stats)))
         conf["magic_search"] = False
         page = types.SimpleNamespace(tree="T", stats="S")

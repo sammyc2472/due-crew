@@ -476,6 +476,9 @@ def run(col, plan_list, state, today, mode=None, everything=False, dry=False):
             later = st.get("later") or {}
             if not everything:
                 items = [(u, how) for u, how in items if str(later.get(u["id"]) or "") <= today]
+            if st.get("line") and not everything and pmode != "skip" and _line_can(p, st):
+                # 3.9.10, catching up: a day that never opened here waits in line (what an author adds to an open one still comes)
+                items = [(u, how) for u, how in items if not (how == "open" and u["id"] not in applied)]
             for u, _how in items:
                 later.pop(u["id"], None)
         if not items:
@@ -505,6 +508,99 @@ def run(col, plan_list, state, today, mode=None, everything=False, dry=False):
     was = {pid: {uid: v for uid, v in b.items() if uid in (opened_units.get(pid) or ())} for pid, b in before.items()}
     return {"n": n, "names": names, "label": label, "per": per, "units": opened_units, "spread": spread,
             "was": {pid: b for pid, b in was.items() if b}, "dates": dates}
+
+
+def _line_can(p, st):
+    """3.9.10: a plan that can wait in line: on its dates (not my own pace, not 3.2's schedule or even slices), running, not turned off."""
+    return bool(st) and not (P.own_pace(p) or p.get("paused") or p.get("sched") or S.has_even(p["doc"]) or st.get("line_off"))
+
+
+def _line_path(p, st, prog, today):
+    return P.path(_plan_doc(p), prog or {}, today, applied=st.get("applied") or {}, shift=int(p.get("shift") or 0),
+                  skipped=p.get("skipped") or (), moved=p.get("moved"), sched=False)
+
+
+def line_sync(plan_list, state, prog, today):
+    """3.9.10: which plans wait in line, from my numbers: one starts when
+    it's far enough behind (P.line_starts) and ends when nothing's owed.
+    Mutates `state`; (changed, [the plans whose line just ended])."""
+    changed, ended = False, []
+    for p in plan_list:
+        st = state.get(p["id"])
+        if not st:
+            continue
+        if not _line_can(p, st):
+            changed = st.pop("line", None) is not None or changed
+            continue
+        path = _line_path(p, st, (prog or {}).get(p["id"]), today)
+        if st.get("line"):
+            if not P.line_view(path, P.line_waits(p["doc"], st.get("applied"), today), today)["rows"]:
+                st.pop("line", None)
+                changed = True
+                ended.append(p)
+        elif P.line_starts(path, today):
+            st["line"] = {"since": today}
+            changed = True
+    return changed, ended
+
+
+def _line_refresh(prog):
+    """After my numbers are read: the lines kept in plans.json; a line that
+    just ended opens what waited for today (on the Decks screen, its own undo step)."""
+    try:
+        c = _pcfg()
+        state = _state_cfg(c)
+        changed, ended = line_sync(followed(), state, prog, _today())
+        if not changed:
+            return
+        c["plans"] = state
+        _psave(c)
+        if ended and getattr(mw, "state", "") == "deckBrowser":
+            from aqt.qt import QTimer
+            ids = [p["id"] for p in ended]
+            QTimer.singleShot(0, lambda: _open_now([x for x in followed() if x["id"] in ids]))
+    except Exception:
+        oops()
+
+
+def line_study(pid, uid):
+    """Study on a row of the line: a date that waited opens first (its own
+    undo step), then its deck as Study on any date (study_date)."""
+    p = next((x for x in followed() if x["id"] == pid), None)
+    c = _pcfg()
+    state = _state_cfg(c)
+    st = state.get(pid)
+    if p is None or not st or not mw.col:
+        return
+    if uid not in (st.get("applied") or {}):
+        try:
+            res = open_one(mw.col, p, st, uid, _today())
+        except Exception:
+            oops()
+            return
+        c["plans"] = state
+        _psave(c)
+        if res["n"]:
+            _after_change()
+    study_date(pid, uid)
+    refresh_progress()
+    if getattr(mw, "state", "") == "deckBrowser":
+        app.swap(cfg())
+
+
+def line_off(pid):
+    """Don't wait: this plan opens its days as they come again, here (plans.json's line_off), and what waited opens now."""
+    c = _pcfg()
+    state = _state_cfg(c)
+    st = state.get(pid)
+    if not st:
+        return
+    st.pop("line", None)
+    st["line_off"] = True
+    c["plans"] = state
+    _psave(c)
+    _open_now([x for x in followed() if x["id"] == pid])
+    app.swap(cfg())
 
 
 def open_one(col, plan, st, uid, today, first=False, whole=False):
@@ -914,7 +1010,13 @@ def card_view(plan, st, prog, today, session=None, week_offset=0):
     # round five: the card's line about the plan's day (Due's Today and Upcoming have each date):
     # what today's dates have left; plans, end to end: what's behind is the path's (a lesson whose
     # last day passed with cards left, opened here), its own line with Behind…
-    status = behind = None
+    status = behind = line = None
+    if st and st.get("line") and not no_deck and _line_can(plan, st):  # 3.9.10: catching up: the line, in Behind's place
+        line = P.line_view(path, P.line_waits(doc, st.get("applied"), today), today)
+        line = line if line["rows"] else None
+        for r in (line or {}).get("rows") or []:
+            d = S.d(r["day"])
+            r["when"] = f"{d:%a} {d.day}"
     if not (no_deck or plan.get("paused") or own):
         left = lambda u: max(0, int(_t3(prog, u)[2]) - int(_t3(prog, u)[1]))
         behind = P.behind_of(path, today)
@@ -943,7 +1045,8 @@ def card_view(plan, st, prog, today, session=None, week_offset=0):
             # 3.8.1: put off by Welcome back's Not today: tomorrow morning asks again
             "put_off_ask": bool(put_off) and str(((st or {}).get("away") or {}).get("day") or "") == today,
             "week": week, "week_offset": int(week_offset), "status": status,
-            "path": path if status is not None else None, "behind": behind,  # plans, end to end
+            "path": path if status is not None else None, "behind": None if line else behind,  # plans, end to end
+            "line": line,
             "lesson_deck": None if no_deck or plan.get("paused") else lesson_view(plan, st, today),  # Today's lesson, B
             # Slide on Behind…, today: the card's Undo (plan_board.unslide)
             "slid": int(((st or {}).get("slid") or {}).get("days") or 0) if ((st or {}).get("slid") or {}).get("day") == today else 0,
@@ -2398,6 +2501,7 @@ def refresh_progress():
         oops()
         return {}
     _state["plan_progress"] = prog
+    _line_refresh(prog)  # 3.9.10: who waits in line, from these numbers
     whole = True  # kept for the next ask only when every part was read
     try:
         _state["plan_load"] = loads(mw.col, followed(), _state_cfg(), idxs)  # 3.7.81
@@ -2754,6 +2858,8 @@ def joy(card, today, shown=False, now=None):
             try:
                 from . import closet_flow
                 closet_flow.note_plan_done(pid)  # 3.9.6: three plans with every set done, the Finisher's ribbon
+                from . import scrap_flow
+                scrap_flow.moment("plan", f"Finished {str(card.get('name') or 'a plan')}", "Every set of it done.", "cheer", today)  # 3.9.10
             except Exception:
                 oops()
     card["joy"] = _joy_pips(view, pid) if view else None
@@ -2982,6 +3088,10 @@ def on_message(cmd, parts):
             catch_menu(arg)
     elif cmd == "planstudyday" and arg and len(parts) > 3:  # 3.9.6: a day's Study in You › Plans' week
         study_day(arg, parts[3])
+    elif cmd == "planlinestudy" and arg and len(parts) > 3:  # 3.9.10: catching up: a row's Study
+        line_study(arg, parts[3])
+    elif cmd == "planlineoff" and arg:
+        line_off(arg)
     elif cmd == "planbehind" and arg:  # plans, end to end: You › Plans' Behind…, the sheet
         from . import plan_board
         plan_board.behind(arg)
@@ -3659,7 +3769,7 @@ def set_own(pid, own):
 def own_view(plan, st, prog, today):
     """card_view's part at my own pace: Up next, then, where the plan's dates
     are, my pace (and the exam), the last step with its Undo, Put back."""
-    doc, real = plan["doc"], _plan_doc(plan)
+    doc = plan["doc"]
     st = st or {}
     applied, days, prog = st.get("applied") or {}, st.get("own_opened") or {}, prog or {}
     left = P.up_next(doc, applied, prog)
@@ -3667,7 +3777,6 @@ def own_view(plan, st, prog, today):
     def to_open(u):
         o, _s, t = (prog.get(u["id"]) or [0, 0, 0])[:3]
         return max(0, int(t) - int(o))
-    recent = P.recent_opens(days, today)
     last = None
     ol = (_pcfg().get("own_last") or {}) if mw else {}
     if ol.get("pid") == plan["id"] and ol.get("day") == today and mw and mw.col and _undo_ok(ol.get("label")):
@@ -3681,14 +3790,19 @@ def own_view(plan, st, prog, today):
         o, s2, _t = (prog.get(lu["id"]) or [0, 0, 0])[:3]
         if int(o) > int(s2):
             back = {"name": str(lu.get("name") or "?"), "n": int(o) - int(s2)}
-    return {"mode": plan.get("own"),
+    # 3.9.10 (Sam: the own-pace card "to match"): what I opened and haven't finished, a row each, Study or Ignore;
+    # the lines measuring me against the author's dates (where the plan is, my pace, the finish) are gone
+    opened = []
+    for u in P.units(doc):
+        o, s3, _t = (int(x or 0) for x in (list(prog.get(u["id"]) or []) + [0, 0, 0])[:3])
+        if o > s3 and P.opened_here(applied, u, prog):
+            opened.append({"uid": u["id"], "name": str(u.get("name") or "?"), "left": o - s3})
+    return {"mode": plan.get("own"), "open": opened,
             "next": {"uid": left[0]["id"], "name": str(left[0].get("name") or "?"), "n": to_open(left[0])} if left else None,
             "then": [f"{u.get('name') or '?'} · {to_open(u):,}" for u in left[1:4]], "more": max(0, len(left) - 4),
             # 3.8.1: each a link, Open on that date (open_next(pid, uid))
             "then_items": [{"uid": u["id"], "name": str(u.get("name") or "?"), "n": to_open(u)} for u in left[1:4]],
-            "at": P.plan_at(real, today),
-            "pace": f"You opened {recent} set{'s' if recent != 1 else ''} in the last two weeks." if recent else None,
-            "finish": P.finish_check(real, len(left), recent, today), "last": last, "back": back}
+            "last": last, "back": back}
 
 
 def set_skip(pid, uid, on):

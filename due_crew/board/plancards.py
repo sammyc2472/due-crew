@@ -220,7 +220,7 @@ def _plan_card_html(card, people=None, cfg=None, head=None):
         out += (f'<div class="dc-line">No deck here has this plan&rsquo;s cards yet. '
                 f'<a href="#" onclick="{_pycmd("plandeck:" + pid)}">Pick a deck</a></div>')
     out += (_plan_path(card) + _exam_ask(card, pid) + _joy_line(card, pid) + _plan_status(card, pid) + _plan_slid(card, pid)
-            + (_plan_behind(card, pid) or _joy_caught(card)) + _week_html(card, pid) + _plan_now(card, pid))
+            + (_plan_line(card, pid) or _plan_behind(card, pid) or _joy_caught(card)) + _week_html(card, pid) + _plan_now(card, pid))
     notes = _plan_notes(card, pid)
     if notes:
         out += notes[0]
@@ -471,6 +471,34 @@ def _plan_behind(card, pid):
             f'onclick="{_pycmd("planbehind:" + pid)}">Behind&hellip;</a></span></div>')
 
 
+def _plan_line(card, pid):
+    """3.9.10, catching up (Sam's: "the options should be study or
+    ignore"), in Behind's place: each day owed a row, oldest first, with
+    Study (its deck; a day that waited opens first) and Ignore (the
+    follow's skip; the week has Undo skip); today's set, waiting, under
+    them. The week stays below. Names are the author's: escaped here."""
+    ln = card.get("line") or {}
+    rows = ln.get("rows") or []
+    if not rows:
+        return ""
+    e = _html.escape
+    n, left = len(rows), int(ln.get("left") or 0)
+    out = (f'<div class="pln"><div class="plh"><span><b>Catching up</b> &middot; {n} day{"s" if n != 1 else ""}, {left:,} new</span>'
+           f'<span class="acts"><a href="#" title="Open each day as it comes again" onclick="{_pycmd("planlineoff:" + pid)}">Don&rsquo;t wait</a></span></div>')
+    for i, r in enumerate(rows):
+        uid = str(r.get("uid") or "")
+        seen = int(r.get("total") or 0) - int(r.get("left") or 0)
+        count = f'{int(r.get("left") or 0):,} left' if r.get("opened") and seen > 0 else f'{int(r.get("left") or 0):,} new'
+        out += (f'<div class="plr"><span class="d">{e(str(r.get("when") or ""))}</span><b>{e(str(r.get("name") or "?"))}</b>'
+                f'<span class="n">{count}</span>'
+                f'<a class="go{" on" if i == 0 else ""}" href="#" title="A deck of its new cards" onclick="{_pycmd(f"planlinestudy:{pid}:{uid}")}">Study</a>'
+                f'<a class="ig" href="#" title="Leave it out. The week has Undo skip." onclick="{_pycmd(f"planskip:{pid}:{uid}")}">Ignore</a></div>')
+    for r in ln.get("next") or []:
+        out += (f'<div class="plr wait"><span class="d">Today</span><b>{e(str(r.get("name") or "?"))}</b>'
+                f'<span class="n">{int(r.get("total") or 0):,} new &middot; waiting</span></div>')
+    return out + "</div>"
+
+
 def _plan_now(card, pid):
     """3.8.0: what the plan's Today box said that Today, the tab beside it,
     doesn't: that it's paused, a day with no new cards, and the next
@@ -521,11 +549,23 @@ def _quiz_line(card, pid):
 
 def _own_html(ow, pid):
     """3.8.0, at my own pace: Up next with Open and Open and study, what
-    follows, the last step's Undo (or Put back), and quiet lines: where the
-    plan's dates are, my pace, the exam. No Behind. Names are the author's:
+    follows, the last step's Undo (or Put back). No Behind; 3.9.10: what's
+    open and not finished as rows (Study, Ignore), and no line measuring me
+    against the plan's dates. Names are the author's:
     escaped here."""
     e = _html.escape
-    out = '<div class="pnx">'
+    out = ""
+    rows = ow.get("open") or []
+    if rows:  # 3.9.10: what I opened and haven't finished, as the line on a dated plan: Study or Ignore
+        left = sum(int(r.get("left") or 0) for r in rows)
+        out += (f'<div class="pln"><div class="plh"><span><b>Open</b> &middot; {len(rows)} set{"s" if len(rows) != 1 else ""}, {left:,} new</span></div>')
+        for i, r in enumerate(rows):
+            uid = str(r.get("uid") or "")
+            out += (f'<div class="plr"><b>{e(str(r.get("name") or "?"))}</b><span class="n">{int(r.get("left") or 0):,} new</span>'
+                    f'<a class="go{" on" if i == 0 else ""}" href="#" title="A deck of its new cards" onclick="{_pycmd(f"planstudydate:{pid}:{uid}")}">Study</a>'
+                    f'<a class="ig" href="#" title="Leave it out. The week has Undo skip." onclick="{_pycmd(f"planskip:{pid}:{uid}")}">Ignore</a></div>')
+        out += "</div>"
+    out += '<div class="pnx">'
     nx = ow.get("next")
     if nx:
         n = int(nx.get("n") or 0)
@@ -555,11 +595,6 @@ def _own_html(ow, pid):
         b = ow["back"]
         out += (f'<div class="pq"><a href="#" onclick="{_pycmd("planpaceback:" + pid)}">Put back {e(str(b.get("name") or "?"))}</a>'
                 f' &middot; {int(b.get("n") or 0):,} not seen yet</div>')
-    said = " ".join(e(str(ow[k])) for k in ("at", "pace") if ow.get(k))
-    if said:
-        out += f'<div class="pq">{said}</div>'
-    if ow.get("finish"):
-        out += f'<div class="pq">{e(str(ow["finish"]))}</div>'
     return out + "</div>"
 
 

@@ -1,24 +1,15 @@
-"""3.9.0: your Wrapped, the glue (wrapped.py is the story; board.wrapped_html
-draws it in the board's place). One grouped query over the year's reviews
-(an hour a row, so a busy year is a few thousand rows), the counts this
-computer keeps for the year (closet_flow.year_counts), the closet, and the
-card I turned around, its front read here and never sent or put on the
-picture. Nothing in it is sent.
+"""The year read from my own reviews (3.9.0, your Wrapped; since 3.9.10 the
+scrapbook's year page, scrap_flow.view): one grouped query over the year
+(an hour a row, so a busy year is a few thousand rows), and the board's
+December line. Nothing in it is sent.
 
 Main thread: the collection and the config. No network.
 """
 
 import datetime
-import html
-import re
 
-from aqt import mw
-
-from . import closet, closet_flow, wrapped
-from .app import _state, cfg
-from .errs import oops
-
-CARD_KEY = "wrapped_card"  # per computer: the card I turned around, on its slide (on unless turned off there)
+from . import closet_flow, wrapped
+from .app import cfg
 
 
 def _today_end(col):
@@ -74,55 +65,6 @@ def years(col):
     a = datetime.date.fromtimestamp(int(lo) / 1000).year
     b = max(datetime.date.fromtimestamp(int(hi) / 1000).year, a)
     return list(range(b, a - 1, -1))[:12]
-
-
-def _plain(text):
-    """A card's side as one plain line: no markup, no media, no styling."""
-    text = re.sub(r"(?is)<(style|script)\b.*?</\1>", " ", text or "")
-    text = re.sub(r"\[sound:[^\]]*\]", " ", text)
-    text = re.sub(r"(?i)<br\s*/?>|</(div|p|li)>", " ", text)
-    text = re.sub(r"<[^>]+>", " ", text)
-    return re.sub(r"\s+", " ", html.unescape(text)).strip()
-
-
-def turned(col):
-    """(how many leeches are turned around, the one turned furthest: {front,
-    lapses, ivl} or None). Its front is read from my own collection, here."""
-    where = f"lapses >= {wrapped.TURNED_LAPSES} AND type = 2 AND ivl >= {wrapped.TURNED_IVL} AND queue >= 0"
-    count = int(col.db.scalar(f"SELECT COUNT() FROM cards WHERE {where}") or 0)
-    if not count:
-        return 0, None
-    row = col.db.first(f"SELECT id, lapses, ivl FROM cards WHERE {where} ORDER BY lapses DESC, ivl DESC LIMIT 1")
-    try:
-        front = _plain(col.get_card(int(row[0])).question())
-    except Exception:
-        oops()
-        front = ""
-    return count, ({"front": front[:wrapped.FRONT_MAX], "lapses": int(row[1]), "ivl": int(row[2])} if front else None)
-
-
-def view(year=None):
-    """Wrapped's view for the board (board.wrapped_html): {year, years,
-    slides, heat, look}. Main thread."""
-    col = mw.col
-    c = cfg()
-    today, _end, _cut = _today_end(col)
-    year = int(year or wrapped.default_year(today))
-    days, hours = year_rows(col, year)
-    f = wrapped.facts(year, today, days, hours, first_day(col))
-    n_turned, card = turned(col) if f["days"] else (0, None)
-    look = closet_flow.look(c)
-    names = {k: t["name"] for k, t in closet.BY.items()}
-    try:
-        rollover = int(col.get_config("rollover", 4) or 0)
-    except Exception:
-        rollover = 4
-    crew = len([e for e in _state.get("entries") or [] if not e.get("you")])
-    slides = wrapped.slides(f, closet_flow.year_counts(year), closet_flow.have(c) if c.get("sev", True) else {},
-                            [names[k] for k in closet.shown(look)], crew,
-                            card if c.get(CARD_KEY, True) else None, n_turned, rollover, names)
-    return {"year": year, "years": years(col), "slides": slides, "heat": wrapped.heat(f), "look": look,
-            "card": bool(card), "card_on": bool(c.get(CARD_KEY, True))}
 
 
 def banner(today, c=None):

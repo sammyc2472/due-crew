@@ -691,7 +691,7 @@ def main(out):
             raise RuntimeError(f"tools menu: {len(subs)} Due Crew submenus")
         items = [a.text() or "—" for a in subs[0].actions()]
         want = ["Study what’s next", "Magic search…", "—", "Friends…", "Squads…", "Pip Party…", "Plans", "—", "Settings…",
-                "Pip’s closet…", "Your year…", "Show on the Decks screen", "Send feedback…"]  # 3.9.7: Magic search
+                "Pip’s closet…", "Scrapbook…", "Show on the Decks screen", "Send feedback…"]  # 3.9.7: Magic search
         if items != want:
             raise RuntimeError(f"tools menu: {items}")
         # 3.9.5: Pip Party… shows for anyone signed in (since its release), as the menu opens
@@ -716,8 +716,8 @@ def main(out):
         acts = {a.text(): a for a in subs[0].actions()}
         if acts["Study what’s next"].shortcut().toString() != "Ctrl+Shift+S":
             raise RuntimeError("tools menu: Study what's next has no Ctrl+Shift+S")
-        if acts["Magic search…"].shortcut().toString() != "Ctrl+Shift+F":  # 3.9.7, ⌘⇧F on a Mac
-            raise RuntimeError("tools menu: Magic search has no Ctrl+Shift+F")
+        if acts["Magic search…"].shortcut().toString() != "Ctrl+F":  # 3.9.7; 3.9.10: ⌘F on a Mac
+            raise RuntimeError("tools menu: Magic search has no Ctrl+F")
         if not acts["Show on the Decks screen"].isCheckable():
             raise RuntimeError("tools menu: Show on the Decks screen isn't a check")
 

@@ -225,12 +225,17 @@ def _settings_board(cfg):
               f'<a class="st-lk" href="#" {_st_click("setreset")}>{RESET_WORDS}</a></div>')
 
 
-def _settings_study(cfg, fsrs=None, reach=None):
+def _settings_study(cfg, fsrs=None, reach=None, stops=()):
     """3.9.9: what works while I study, a tab of its own (it was spread through Board).
     fsrs (3.9.1): whether FSRS is on in this collection (None: not known),
     for two buttons' one-line note; reach: Recover leeches' count."""
     g = lambda k, d: bool(cfg.get(k, d))  # noqa: E731
-    return ('<div class="st-h">Today</div><div class="st-box">'
+    # 3.9.10: new cards stopped from Reviews ahead (it could, till Insights became data only): the way back, while one runs
+    stopped = "".join(
+        _st_row(f"New cards stopped in {_html.escape(str(name))}",
+                f'<a class="st-lk" href="#" onclick="{_pycmd("insaheadon:" + str(int(did)))}">Turn back on</a>')
+        for did, name in stops)
+    return ('<div class="st-h">Today</div><div class="st-box">' + stopped
             + _st_row("Today, Upcoming, Later", _st_switch("due_show", g("due_show", True), "Today, Upcoming, Later"))
             + _st_row("Suggestions", _st_switch("due_suggest", g("due_suggest", True), "Suggestions"),
                       "Today's misses, new leeches")
@@ -327,6 +332,13 @@ def _settings_privacy(cfg):
             + radio("showup", "Just that I studied", "Squares, no numbers. You see everyone the same way.")
             + radio("paused", "Nothing for now", "Your crew sees &ldquo;on a break&rdquo;; your streak keeps counting. "
                     "Kept 24 months without activity.")
+            # 3.9.10: the studying dot shows by itself; this is its switch (not for someone paused or just showing up)
+            + '</div><div class="st-h">While you study</div><div class="st-box">'
+            + _st_row("Show when I&rsquo;m studying", _st_switch("show_studying", cfg.get("show_studying", True) is not False,
+                                                                "Show when I'm studying"),
+                      "A dot by your name for an hour after your last review. Not shown while you&rsquo;re paused or just showing up."
+                      if not (cfg.get("paused") or cfg.get("show_up")) else
+                      "Off while you&rsquo;re paused or just showing up.")
             # 3.9.9, Know when it breaks: the errors this computer met, by code, with the day's first sync
             + '</div><div class="st-h">What Due Crew counts</div><div class="st-box">'
             + _st_row("Send what went wrong, and what gets used",
@@ -362,6 +374,7 @@ FIND_WORDS = {
     "dance": "music song songs soundtrack dj party floor dancing pip motion animation corner",
     "songapp": "music app listen spotify apple youtube song",
     # 3.9.9: Know when it breaks
+    "set:show_studying:": "studying now dot live online presence active green im i'm hour",
     "set:send_errs:": "errors error bugs bug crash broken report reports diagnostics problems wrong usage used counts analytics telemetry",
     "errsee": "errors error bugs report diagnostics what goes sent",
 }
@@ -392,7 +405,7 @@ def _settings_tab(tab, view, cfg, pip=True):
     if tab == "board":
         return _settings_board(cfg)
     if tab == "study":
-        return _settings_study(cfg, view.get("fsrs"), view.get("leech_reach"))
+        return _settings_study(cfg, view.get("fsrs"), view.get("leech_reach"), view.get("new_stops") or ())
     return _settings_privacy(cfg)
 
 

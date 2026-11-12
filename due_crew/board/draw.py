@@ -21,7 +21,20 @@ from .dance import dance_html
 from .fridge import fridge_html
 from .squads import _squads_html
 from .closet import CLOSET_CSS, closet_line
-from .wrapped import wrapped_line
+from .scrapbook import scrapbook_line
+
+# 3.9.10 (Sam: "find a new settings gear because this one doesn't really fit and feels strangely spaced"): the
+# foot's two icons drawn, one size and one stroke (a font's ⚙ and ↻ came in whatever size and place the font had)
+_IC = ('<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+       'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">%s</svg>')
+_IC_REFRESH = _IC % '<path d="M21 4v6h-6"/><path d="M20.5 15a9 9 0 1 1-2.1-9.4L21 10"/>'
+_IC_GEAR = _IC % ('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06'
+                  'a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33'
+                  'l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09'
+                  'A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9'
+                  'a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06'
+                  'a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09'
+                  'a1.65 1.65 0 0 0-1.51 1z"/>')
 from .lobby import room_html
 
 
@@ -89,13 +102,6 @@ def _review_banner(kind, info):
             f'onclick="{_pycmd(cmd_x)}">&times;</a></div>')
 
 
-def crew_menu_items():
-    """The footer's Crew menu (3.4 review, H5; 3.7.1, H3): people only, the
-    same on every tab. What you post went to Share."""
-    return [("Friends…", "friends"), ("Copy invite", "copyinvite"),
-            ("Shared decks…", "decks")]
-
-
 def share_menu_items(show_up, squad_ok=False):
     """The footer's Share menu (3.7.1, H3), as [(label, command)], a label of
     None being a heading: as text first, then as a picture, the same on
@@ -160,6 +166,18 @@ def _use_line(cfg):
             f'<a href="#" onclick="{_pycmd("usetold")}">Got it</a></div>')
 
 
+def _live_line(cfg):
+    """3.9.10: the studying dot shows by itself now, said once in a line at
+    the board's foot (after the line on what's counted, never beside it):
+    its way to the switch, and Got it."""
+    from .. import errs_flow, together
+    if errs_flow.note_due(cfg) or not together.live_note_due(cfg):
+        return ""
+    return (f'<div class="dc-calm"><span>{together.LIVE_NOTE}</span><span class="sp"></span>'
+            f'<a href="#" onclick="{_pycmd("livesee")}">Privacy</a>'
+            f'<a href="#" onclick="{_pycmd("livetold")}">Got it</a></div>')
+
+
 def _calm_line(cfg):
     """3.9.9, the calm board (calm.py): the part that just appeared, in one
     line with its way in and its way off; else, while parts are folded, Show all."""
@@ -212,7 +230,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
         period = "today"  # a saved Plans (before 3.8.0) or a hidden view: Crew's Today
     show_up = bool(cfg.get("show_up"))
     pick = "" if period == "squads" else _crew_picker(period, show_up, hidden)
-    body = (_decks_html(data, deltas, tricky, None, asks, sticking, pick) if period == "decks"
+    body = (_decks_html(data, deltas, tricky, None, asks, sticking, pick, cfg) if period == "decks"
             else _squads_html(squad_view or {"state": "none"}, cfg,
                               {e.get("user_id"): e for e in data.get("entries") or [] if not e.get("you")})
             if period == "squads"
@@ -264,7 +282,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     if ahead and ahead.get("did"):
         bans.append(ahead_line(ahead))
     if wrapped and wrapped.get("year"):
-        bans.append(wrapped_line(wrapped["year"], wrapped.get("so_far"), wrapped.get("look") or [], cfg.get("sev", True)))
+        bans.append(scrapbook_line(wrapped["year"], wrapped.get("so_far"), wrapped.get("look") or [], cfg.get("sev", True)))
     if closet and closet.get("keys") and cfg.get("sev", True):
         line = closet_line(closet["keys"], my_look(cfg), bool(closet.get("first")))
         if line:
@@ -301,27 +319,19 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     body = ((offline_html(fetched_at) if offline else "") + (notice_html(notice) if notice else "")
             + _one_at_a_time(bans) + lobby + body)
 
-    # 3.4 review, H5: the day's two social actions as buttons, the rest in
-    # one Crew menu, and Refresh and Settings as quiet icons
+    # 3.9.10 (Sam: "I've been meaning to redo the bottom"): three words, each saying what it opens.
+    # Friends is the Friends window (its list, my code, Copy invite: the Crew menu went, Shared decks to
+    # Crew › Decks); Share my stats is Share's menu by what leaves. I'm studying went (the dot shows by
+    # itself) and Open a room is the top bar's (▶ Fifteen?'s arrow). Refresh and Settings stay quiet icons
     left = ""
     if rules_stale:
         left += ('<span class="warn" title="The server is behind this version; '
                  'some sharing is paused until it catches up.">'
                  '&#9888; server catching up</span>')
-    if period in ("today", "week") and not cfg.get("paused"):
-        # 2.10: a dot by your name for an hour, so friends can join you
-        left += (f'<a class="pb on" href="#" title="Stop showing that you\'re studying" '
-                 f'onclick="{_pycmd("live")}">Stop studying</a>' if live else
-                 f'<a class="pb on" href="#" title="A dot by your name for the next hour" '
-                 f'onclick="{_pycmd("live")}">I&rsquo;m studying</a>')
-        if not (room or {}).get("mine"):
-            # 2.12: a study room for the crew
-            left += (f'<a href="#" title="Rounds and breaks with your crew" '
-                     f'onclick="{_pycmd("roomopen")}">Open a room</a>')  # 3.8.0: one pill in the footer
-    left += (f'<a href="#" title="Friends" '
-             f'onclick="{_pycmd("crewmenu")}">Crew</a>'  # 3.8.0 (Sam): no caret
-             f'<a href="#" title="As text or a picture" '
-             f'onclick="{_pycmd("sharemenu")}">Share</a>')
+    left += (f'<a href="#" title="Your crew, your code, Copy invite" onclick="{_pycmd("friends")}">Friends</a>'
+             f'<a href="#" title="What your crew sent you and what you did, by month" onclick="{_pycmd("scrapbook")}">Scrapbook</a>'
+             f'<a href="#" title="Your day, week or year, as text or a picture" '
+             f'onclick="{_pycmd("sharemenu")}">Share my stats</a>')
     n_pending = len(data.get("pending", []))
     if n_pending:
         left += (f'<a class="warn" href="#" title="You added them; you\'re crew when they add you back" '
@@ -331,10 +341,10 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     failed = ('<span class="warn" title="The last sync didn\'t reach the server. '
               'Your numbers are safe; Refresh tries again.">Couldn&rsquo;t sync</span>'
               ' &middot; ') if sync_error else ""
-    foot = (_calm_line(cfg) + _use_line(cfg) + f'<div class="dc-foot"><span class="fl">{left}</span><span class="sp"></span>'
+    foot = (_calm_line(cfg) + _use_line(cfg) + _live_line(cfg) + f'<div class="dc-foot"><span class="fl">{left}</span><span class="sp"></span>'
             f'<span class="fr">{failed}<span class="upd">Updated {ago}</span>'
-            f'<a class="ic" href="#" title="Refresh" onclick="{_pycmd("refresh")}">&#8635;</a>'
-            f'<a class="ic" href="#" title="Settings" onclick="{_pycmd("settings")}">&#9881;&#xFE0E;</a></span></div>')
+            f'<a class="ic" href="#" title="Refresh" aria-label="Refresh" onclick="{_pycmd("refresh")}">{_IC_REFRESH}</a>'
+            f'<a class="ic" href="#" title="Settings" aria-label="Settings" onclick="{_pycmd("settings")}">{_IC_GEAR}</a></span></div>')
 
     # 3.8.1: Pip's moments; a crew room's Pips each wear their person's accent, by day or by night as the board
     seat = _by_theme(cfg, "#due-crew .dc-room .seat", "--sv-a: var(--sa-l);", "--sv-a: var(--sa-d);")

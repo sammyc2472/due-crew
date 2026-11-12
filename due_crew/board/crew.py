@@ -59,7 +59,7 @@ def _crew_picker(period, show_up=False, hidden=frozenset()):
     period = _crew_on(period, show_up)
     on = ' class="on"'
     return ('<div class="dc-sw">' + "".join(
-        f'<a{on if period == k else ""} href="#" onclick="{_pycmd("period:" + k)}">{t}</a>'
+        f'<a{on if period == k else ""} data-t="{t}" href="#" onclick="{_pycmd("period:" + k)}">{t}</a>'
         for k, t in views) + "</div>")
 
 
@@ -133,9 +133,9 @@ def _row_html(row, rank, cfg, period="today", held=False):
         if row["stale"]:
             cls += " dim"
             extra = ' <span class="la faded">&middot; yesterday</span>'
-        elif row.get("showup") and row.get("days_wk"):
-            n = row["days_wk"]
-            extra = f' <span class="la faded">&middot; {n} day{"s" if n != 1 else ""} this week</span>'
+        elif row.get("showup"):  # 3.9.10, one grid: the tick is in the name's line (it had a column of its own)
+            n = int(row.get("days_wk") or 0)
+            extra = ' <span class="la faded">&#10003;' + (f' {n} day{"s" if n != 1 else ""} this week' if n else "") + '</span>'
         # T5: how many were new shows on the Week tab, where it's the story
         cells = (f'<td class="n">{_reviews_cell(row["reviews"], row.get("new") if period == "week" else None)}</td>'
                  f'<td class="n">{_cell(row["time_ms"], _fmt_time)}</td>'
@@ -228,10 +228,7 @@ def _table_html(data, cfg, period, pick=""):
         return _presence_html(fresh, dormant, data["labels"], data["entries"], pick, cfg) + _solo_html(data)
     body = ""
     for row in fresh:
-        if row.get("showup"):
-            rank = "&#10003;"
-        else:
-            rank = ""  # 3.9.9 (Sam, the design mocks' 2): no medals, no places: the order says it, and this isn't a race
+        rank = ""  # 3.9.10, one grid: no first column at all. 3.9.9 (Sam, the design mocks' 2): no medals, no places: the order says it, and this isn't a race
         body += _row_html(row, rank, cfg, period, held=row["user_id"] in held)
     # Q3: friends quiet for 90+ days fold into one line under everyone
     long_q = [r for r in dormant if r["quiet"] and not r["you"] and _long_quiet(r["last_updated"])]
@@ -269,7 +266,7 @@ def _even_bars(html):
     return html.replace(_DD_ROOM, "")
 
 
-def _bar(name, is_me, d, delta=None, today_labels=()):
+def _bar(name, is_me, d, delta=None, today_labels=(), pip=None):
     """One person's progress through one shared deck. Three fills on one
     track: mature (solid), seen (faded), then unlocked-but-unseen (hatched) —
     so a deck worked through by unsuspending it a topic at a time shows how
@@ -300,14 +297,14 @@ def _bar(name, is_me, d, delta=None, today_labels=()):
     chip_html = (f'<span class="dc-delta">{" &middot; ".join(chips)}</span>' if chips else _DD_ROOM)
     tip = [f'{seen:,} seen', f'{mature:,} mature']
     if opened is not None:
-        tip.append(f'{int(opened):,} unlocked')
+        tip.append(f'{int(opened):,} unsuspended')
     tip.append(f'{int(d.get("total") or 0):,} total')
     if delta:
         tip.append(f'+{delta:,} this week')
     if ret is not None:
         tip.append(f'{float(ret):.1f}% retention, last 7 days')
     return (f'<div class="dr{" me" if is_me else ""}" title="{_html.escape(" · ".join(tip))}">'
-            f'<span class="dn">{_html.escape(str(name))}</span>'
+            f'<span class="dn">{pip or ""}<b>{_html.escape(str(name))}</b></span>'
             f'<div class="dtrack">{open_html}<i class="fs" style="width:{pct(seen)}%;"></i>'
             f'<i class="fm" style="width:{pct(mature)}%;"></i></div>'
             f'<span class="dc-count"><span>{counts}</span>{chip_html}</span></div>')
@@ -400,15 +397,15 @@ def _tricky_html(tricky, mine=None):
     return out
 
 
-def _decks_html(data, deltas=None, tricky=None, plans=None, mine=None, sticking=None, pick=""):
-    return _decks_body(data, deltas, sticking, pick, _tricky_html(tricky, mine))
+def _decks_html(data, deltas=None, tricky=None, plans=None, mine=None, sticking=None, pick="", cfg=None):
+    return _decks_body(data, deltas, sticking, pick, _tricky_html(tricky, mine), cfg)
 
 
 # 3.7.1, I6: a key drawn like the bars, no words about hovering
-_DKEY = '<span class="dkey"><i class="fm"></i>mature<i class="fs"></i>seen<i class="fo"></i>unlocked</span>'
+_DKEY = '<span class="dkey"><i class="fm"></i>mature<i class="fs"></i>seen<i class="fo"></i>unsuspended</span>'
 
 
-def _decks_body(data, deltas=None, sticking=None, pick="", asks=""):
+def _decks_body(data, deltas=None, sticking=None, pick="", asks="", cfg=None):
     """Crew › Decks: pick (Crew's views) on a line of its own, the key at its
     right when the bars come next (3.8.0, head row B); asks, the cards asked
     about, between them and the bars, with the key under the bars."""
@@ -417,6 +414,8 @@ def _decks_body(data, deltas=None, sticking=None, pick="", asks=""):
     # a friend ahead of my timezone writes my "tomorrow" as their today
     today_labels = tuple(lb for lb in (labels[0] if labels else "", data.get("tomorrow")) if lb)
     groups, extras = build_deck_groups(data["entries"])
+    # 3.9.10, one grid: each row's Pip and name on the left, where a crew row's are
+    pips = {e.get("user_id"): row_sev(e, cfg) for e in data["entries"]} if cfg is not None else {}
     up = bool(pick) and not asks and bool(groups)
     top = f'<div class="dc-pline">{pick}{_DKEY if up else ""}</div>' if pick else ""
     if not groups:  # a friend's alone isn't drawn (extras, since 2.7): the way in
@@ -424,17 +423,14 @@ def _decks_body(data, deltas=None, sticking=None, pick="", asks=""):
                 f'<a href="#" onclick="{_pycmd("decks")}">Pick decks to share</a></div>')
     html = ""
     for g in groups:
-        label = _html.escape(str(g["label"]))
-        did = (sticking or {}).get(str(g["label"]))
-        if did:
-            # 3.8.0: my own deck, to how it's sticking (You › Insights)
-            label += (f'<a class="dsk" href="#" title="How it&rsquo;s sticking, in Insights" '
-                      f'onclick="{_pycmd("youins:" + str(int(did)))}">How it&rsquo;s sticking &rsaquo;</a>')
+        label = _html.escape(str(g["label"]))  # (3.9.10: no "How it's sticking" beside it; Insights has it)
         rows = "".join(
-            _bar(n, me, d, deltas.get((uid, d.get("name", ""))), today_labels)
+            _bar(n, me, d, deltas.get((uid, d.get("name", ""))), today_labels, pips.get(uid))
             for n, me, d, uid in g["rows"])
         html += f'<div class="dg"><div class="dgh">{label}</div>{rows}</div>'
     html = _scroll(_even_bars(html), sum(len(g["rows"]) for g in groups))
     if groups and not up:
         html += f'<div class="dc-line" style="padding-top: 2px;">{_DKEY}</div>'
+    # 3.9.10: sharing another deck starts here, under the ones I share (never in the foot: it's this tab's alone)
+    html += f'<div class="dc-add"><a href="#" title="Pick the decks your crew sees" onclick="{_pycmd("decks")}">+ Share a deck</a></div>'
     return top + asks + html

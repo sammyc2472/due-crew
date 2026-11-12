@@ -714,11 +714,11 @@ def _due_add(v, default):
 
 # 3.8.0: the two keys as this computer writes them (a Mac: Command for Study, Control for Ask, __init__.py)
 STUDY_KBD, ASK_KBD = ("⌘⇧S", "⌃⇧Q") if _sys.platform == "darwin" else ("Ctrl+Shift+S", "Ctrl+Shift+Q")
-MAGIC_KBD = "⌘⇧F" if _sys.platform == "darwin" else "Ctrl+Shift+F"  # 3.9.7: Magic search, from any screen
+# 3.9.7: Magic search, from any screen; 3.9.10: ⌘F (Sam: the ⇧ sat low in the field; Anki's main window has no Find)
+MAGIC_KBD = "⌘F" if _sys.platform == "darwin" else "Ctrl+F"
 MAGIC_FIELD_ID = "dc-mgf"
-# (each one is something Magic search reads as written: tried on Anki's engine in 3.9.9's review)
-MAGIC_EXAMPLES = ("cardio pharm due this week", "30 minutes of renal", "20 new from chapter 3", "what I missed this week",
-                  "quiz Friday on heme")
+# 3.9.10 (Sam: "get rid of the sample queries… one helpful thing it can prompt a searcher with"): one question
+MAGIC_PROMPT = "What do you want to study?"
 _MAGIC_FIELD_ICON = ('<svg class="mag" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" '
                      'stroke-linecap="round" aria-hidden="true"><circle cx="10" cy="11" r="6.2"/><path d="M19.4 20.4l-4.7-4.7"/>'
                      '<path class="st" d="M19 1.6l.9 2.3 2.3.9-2.3.9-.9 2.3-.9-2.3-2.3-.9 2.3-.9z" stroke="none"/></svg>')
@@ -757,8 +757,8 @@ _MAGIC_FIELD_CSS = """
 @media (max-width: 460px) { #dc-mgf kbd { display: none; } }
 @media (prefers-reduced-motion: reduce) { #dc-mgf, #dc-mgf * { animation: none !important; } }
 """
-# its placeholder is one example, the next each time the Decks page is drawn (Sam, 3.9.9: writing itself through
-# several was "confusing and distracting"); focused, it says what to type. Enter (or the magnifier) opens Magic
+# its placeholder is one question (3.9.10; samples till then: writing themselves, then one a draw); focused, it
+# says what to type. Enter (or the magnifier) opens Magic
 # search on what's typed. The edge's glint is about twelve seconds, then at rest till it's pointed at.
 _MAGIC_FIELD_JS = r"""
 (function () {
@@ -777,8 +777,6 @@ _MAGIC_FIELD_JS = r"""
     setTimeout(function () { f.classList.remove('live'); }, 12000);
 })();
 """
-_magic_drawn = [0]
-
 
 def magic_field(cfg):
     """3.9.9 (Sam's pick G2, from eight places mocked and three styles):
@@ -786,15 +784,13 @@ def magic_field(cfg):
     line, in the link's place in the You box's head. The board's input with
     the window's magnifier and star; a glint goes round its edge in the
     accent and the amber, about twelve seconds, then rests till it's pointed
-    at; its placeholder is one example, the next each time the page is drawn.
+    at; its placeholder asks one thing (MAGIC_PROMPT).
     Type and Enter: the window opens on it. It's drawn with the Decks page
     (never by a swap), so it carries its own sheet, tokens and script."""
     from .base import BOARD_KEY, DEFAULT_ACCENT, _by_theme, _token_block, palette
     accent = (cfg or {}).get("accent", DEFAULT_ACCENT)
     tokens = _by_theme(cfg or {}, "#" + MAGIC_FIELD_ID, _token_block(palette("light", accent)), _token_block(palette("dark", accent)))
     js = _MAGIC_FIELD_JS
-    example = MAGIC_EXAMPLES[_magic_drawn[0] % len(MAGIC_EXAMPLES)]
-    _magic_drawn[0] += 1
     from .base import CARD_SHADOW, CARD_SHADOW_HOVER
     sheet = _MAGIC_FIELD_CSS.replace('__SHH__', CARD_SHADOW_HOVER).replace('__SH__', CARD_SHADOW)
     return (f'<style>{tokens}{sheet}</style>'
@@ -804,7 +800,7 @@ def magic_field(cfg):
             f'<button type="button" class="go" title="Magic search ({MAGIC_KBD})" aria-label="Open Magic search" '
             f'onclick="var q=this.parentNode.querySelector(\'input\').value.slice(0,400);'
             f'pycmd(\'duecrew:magic\'+(q?\':\'+encodeURIComponent(q):\'\')+\'|{BOARD_KEY}\');return false;">{_MAGIC_FIELD_ICON}</button>'
-            f'<input type="text" aria-label="Magic search: a topic, a filter, pasted question IDs" placeholder="{_html.escape(example)}" '
+            f'<input type="text" aria-label="Magic search: a topic, a filter, pasted question IDs" placeholder="{_html.escape(MAGIC_PROMPT)}" '
             f'maxlength="400" autocomplete="off" autocapitalize="off" spellcheck="false">'
             f'<kbd>{MAGIC_KBD}</kbd></div><script>{js}</script>')
 

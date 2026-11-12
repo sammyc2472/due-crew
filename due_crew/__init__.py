@@ -182,6 +182,8 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
                              time.time() - _state["ts"], _closing, fetch)
         clock = _clock()
         gen = app.generation
+        if upload_stats is not None:
+            together.auto_live(c, q.last_review_ms(), labels[0])  # 3.9.10: the studying dot, by itself
     except Exception:
         with _lock:
             _fetching = False
@@ -404,6 +406,7 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
         # 3.9.1: a drawing or a sign goes on the fridge, in its sender's colour from this refresh's crew
         # (the bug hunt: _state's is None at launch, and stale for someone just become mutual)
         _closet(lambda cf: cf.keep_doodles(fresh, data["entries"], client().user_id))
+        _scrap(lambda sf: sf.cheers_in(fresh))  # 3.9.10: counted by month; one with words is kept
 
     if knocks is not None:
         _state["knocks"] = [tuple(k) for k in knocks]
@@ -497,8 +500,8 @@ def _on_render(deck_browser, content):
             content.stats += board.closet_html(_closet_view(), c)
             return
         if _state.get("wrapped_open") and mw.col:
-            _state["board_shown"] = True  # 3.9.0: your Wrapped, as the closet
-            content.stats += board.wrapped_html(_wrapped_view(), c)
+            _state["board_shown"] = True  # 3.9.10: the scrapbook (Wrapped's place, 3.9.0), as the closet
+            content.stats += _scrap_html(c)
             return
         if not c.get("show_leaderboard", True):
             _state["board_shown"] = False
@@ -551,6 +554,7 @@ def _squad_view_with_bingo(c):
                                              f'{(bv.get("card") or {}).get("wk")}:{bv.get("squad_id")}'))
             if bingo_flow.new_lines(bv):
                 tooltip("BINGO! Your squad just made a line.", period=4000)
+                _scrap(lambda sf: sf.moment("bingo", "Your squad made a bingo line", "", "cheer", (_state.get("labels") or [None])[0]))
     return sv
 
 
@@ -581,7 +585,7 @@ def _board_html(c):
     if _state.get("closet_open"):
         return board.closet_html(_closet_view(), c)  # 3.8.2: Pip's closet in its place
     if _state.get("wrapped_open"):
-        return board.wrapped_html(_wrapped_view(), c)  # 3.9.0: your Wrapped in its place
+        return _scrap_html(c)  # 3.9.10: the scrapbook in its place (Wrapped's, 3.9.0)
     if _state.get("team_bingo_open"):
         from . import team_flow  # 3.7.3: a plan team's card in its place
         pid = _state["team_bingo_open"]
@@ -759,8 +763,7 @@ def _board_js(drawn=False):
 def _on_did_render(deck_browser):
     keep, fridge = _board_js(drawn=True)
     mw.web.eval("window.dcBK=%s;" % board._json.dumps(board.BOARD_KEY)  # 3.9.1: as the page's own script set it
-                + keep + _arrive_js() + (board.wrapped_js() if _state.get("wrapped_open") else "")
-                + fridge)  # 3.9.1: the doodles placed around the board, and draggable (3.9.6: and the dance floor)
+                + keep + _arrive_js() + fridge)  # 3.9.1: the doodles placed around the board, and draggable (3.9.6: and the dance floor)
     _dance_seen()
     _play_cheers()
     _joy_show()
@@ -1169,7 +1172,8 @@ _FAMILIES = (
     ("due", lambda c, p: due_flow.on_message(p[1], p)),  # Due
     ("ins", lambda c, p: _team(p[1], p)),
     ("closet", lambda c, p: _closet_cmd(p[1], p[2:])),  # 3.8.2: Pip's closet
-    ("wrapped", lambda c, p: _wrapped_cmd(p[1], p[2:])),  # 3.9.0: your Wrapped
+    ("wrapped", lambda c, p: _scrap_cmd(p[1], p[2:])),  # 3.9.0's line: its x (wrappedx)
+    ("scrap", lambda c, p: _scrap_cmd(p[1], p[2:])),  # 3.9.10: the scrapbook
 )
 
 # a command: (how many values after its name, a check on them, what it does with (cfg, parts))
@@ -1191,7 +1195,8 @@ BOARD_CMDS = {
     "period": (1, lambda p: p[2] in board.PERIODS, _cmd_period),
     "refresh": (0, None, _cmd_refresh),
     "friends": (0, None, lambda c, p: open_friends()),
-    "live": (0, None, lambda c, p: together.toggle_live()),
+    "livetold": (0, None, lambda c, p: (together.live_told(), _swap(cfg()))),  # 3.9.10: the foot's note on the dot, Got it
+    "livesee": (0, None, lambda c, p: (together.live_told(), open_settings("privacy"))),  # and its way to the switch
     "luckline": (1, None, lambda c, p: together.send_luck_line(p[2])),
     "luckthanks": (0, None, lambda c, p: together.luck_thanks()),
     "tricktip": (2, None, lambda c, p: together.send_tip(p[2], p[3])),
@@ -1200,7 +1205,6 @@ BOARD_CMDS = {
     "unask": (1, lambda p: p[2].isdigit(), lambda c, p: together.unask(int(p[2]))),  # 3.5.0: Take back
     "copyinvite": (0, None, lambda c, p: _copy_friend_invite()),
     "addcode": (0, None, _cmd_addcode),
-    "crewmenu": (0, None, lambda c, p: _crew_menu(c)),  # 3.4 review, H5
     "privacypage": (0, None, _cmd_privacy),
     "errsee": (0, None, lambda c, p: errs_flow.see_what_went()),  # 3.9.9: Privacy's See what went
     "sharemenu": (0, None, lambda c, p: _share_menu(c)),  # 3.7.1, H3
@@ -1273,8 +1277,6 @@ def _swap(c, focus=None):
     keep, fridge = _board_js()
     js = board.swap_js(html_out, have) + keep + _arrive_js() + fridge  # 3.8.0: no jumps under the pointer
     _SCRIPTS["css"] = board.css_key(html_out)
-    if _state.get("wrapped_open"):
-        js += board.wrapped_js()  # 3.9.0: Wrapped's player, on the card just drawn
     if focus:
         js += ("(function(){var f=document.querySelector('#due-crew [data-f=\"%s\"]');"
                "if(f){f.focus({preventScroll:true});}})();" % re.sub(r"[^A-Za-z0-9:_-]", "", focus))
@@ -1382,17 +1384,6 @@ def _redeem(invite):
     _bg(lambda: cl.redeem_invite(invite), done)
 
 
-def _crew_menu(c):
-    """The footer's Crew ▾ (3.4 review, H5): people."""
-    from aqt.qt import QCursor, QMenu
-    run = {"friends": lambda: open_friends(), "decks": lambda: open_decks(),
-           "copyinvite": lambda: _copy_friend_invite()}
-    menu = QMenu(mw)
-    for label, key in board.crew_menu_items():
-        menu.addAction(label).triggered.connect(lambda _=False, k=key: run[k]())
-    menu.exec(QCursor.pos())
-
-
 def _share_menu(c):
     """The footer's Share ▾ (3.7.1, H3): as text, then as a picture."""
     from aqt.qt import QCursor, QMenu
@@ -1481,20 +1472,26 @@ def open_closet(tab=None):
         _rerender()
 
 
-def open_wrapped(year=None):
-    """3.9.0: your Wrapped, in place of the board (as the closet is), from
-    the board's December line or Tools › Due Crew › Your year…: the year's
-    story, made here from your own reviews (wrapped_flow)."""
-    if not mw.col:
-        return
-    from . import wrapped_flow
+def _scrap(do):
+    """A step of the scrapbook's (scrap_flow), never in a refresh's way."""
     try:
-        v = wrapped_flow.view(year)
+        from . import scrap_flow
+        return do(scrap_flow)
     except Exception:
         oops()
-        tooltip("Couldn't read your year just now.")
+        return None
+
+
+def open_scrapbook(year=None):
+    """3.9.10: the scrapbook, in place of the board (as the closet is), from
+    the foot's Scrapbook, the board's December line or Tools › Due Crew ›
+    Scrapbook…: what my crew sent me and what I did, by month, under the
+    year's page (Wrapped's, 3.9.0), read here from this computer alone."""
+    if not mw.col:
         return
-    _state["wrapped_open"] = {"year": v["year"], "view": v}
+    if not _scrap_load(year):
+        tooltip("Couldn't open your scrapbook just now.")
+        return
     _state["settings_tab"] = None
     _state["closet_open"] = None
     _close_addons_dialog()
@@ -1506,9 +1503,24 @@ def open_wrapped(year=None):
         _rerender()
 
 
-def _wrapped_view():
+def _scrap_load(year=None):
+    """The scrapbook's view, read again (opening it, another year, after a keepsake goes). True when it was."""
+    from . import scrap_flow
+    try:
+        v = scrap_flow.view(year)
+    except Exception:
+        oops()
+        return False
+    _state["wrapped_open"] = {"year": v["year"], "view": v}  # Wrapped's slot (3.9.0): one screen in the board's place
+    return True
+
+
+def _scrap_html(c):
     st = _state.get("wrapped_open") or {}
-    return st.get("view") or {"year": st.get("year"), "slides": []}
+    view = st.get("view") or {"year": st.get("year"), "months": []}
+    people = {e.get("user_id"): e for e in _state.get("entries") or [] if e.get("user_id") and not e.get("you")}
+    from . import closet_flow
+    return board.scrapbook_html(view, c, people, closet_flow.look(c))
 
 
 def _wrapped_banner(c):
@@ -1520,29 +1532,53 @@ def _wrapped_banner(c):
         return None
 
 
-def _wrapped_cmd(cmd, parts):
-    """3.9.0: Wrapped's clicks: open it (the line's Open), another year, the
-    picture, the card I turned around on or off, back to the board, and the
-    line's x (for the year, on every computer)."""
+def _scrap_cmd(cmd, parts):
+    """3.9.10: the scrapbook's clicks: open it (the foot's word, the
+    December line's Open), another year, the year picture card, a polaroid
+    back on the Decks screen, a keepsake or all of them gone (asked first),
+    back to the board, and the line's x (for the year, on every computer)."""
+    from . import scrap_flow, sheets
     arg = parts[0] if parts else ""
     year = int(arg) if arg.isdigit() and len(arg) == 4 else None
-    if cmd in ("wrappedopen", "wrappedyear"):
-        open_wrapped(year)
+    st = _state.get("wrapped_open") or {}
+
+    def again():
+        if _state.get("wrapped_open"):
+            _scrap_load(st.get("year"))
+        if _board_on_screen() or mw.state == "deckBrowser":
+            _swap(cfg())
+
+    if cmd in ("scrapbook", "scrapyear"):
+        open_scrapbook(year)
         return
-    if cmd == "wrappedpic" and year:
+    if cmd == "scrapshare" and year:
         from .shares import picture
         picture("pictureyear", year=year)  # the year card, made here, with Pip on it
         return
-    if cmd == "wrappedcard":
-        from .wrapped_flow import CARD_KEY
-        c = dict(cfg())
-        c[CARD_KEY] = not c.get(CARD_KEY, True)
-        save_cfg(c)
-        st = _state.get("wrapped_open")
-        if st:
-            open_wrapped(st.get("year"))
+    if cmd == "scrappin" and st:
+        item = scrap_flow.find(arg)
+        if not item or item.get("k") != "pz":
+            return
+        from . import closet_flow, scrapbook
+        if closet_flow.pin_up(scrapbook.to_fridge(item), client().user_id):
+            scrap_flow.forget(arg)
+            tooltip("Pinned up on your Decks screen.")
+        else:
+            tooltip("It’s on your Decks screen already.")
+            scrap_flow.forget(arg)
+        again()
         return
-    if cmd == "wrappedclose":
+    if cmd == "scrapdel" and st:
+        if scrap_flow.find(arg):
+            sheets.confirm("Delete this?", "It goes for good.", "Delete",
+                           lambda: (scrap_flow.forget(arg), again()), danger=True)
+        return
+    if cmd == "scrapempty" and st:
+        sheets.confirm("Empty the scrapbook?", "Every keepsake in it goes for good, from every year. "
+                       "What’s pinned on your Decks screen stays.", "Empty it",
+                       lambda: (scrap_flow.empty(), again()), danger=True)
+        return
+    if cmd == "scrapclose":
         _state["wrapped_open"] = None
     elif cmd == "wrappedx" and year:
         c = dict(cfg())
@@ -1633,7 +1669,23 @@ def _settings_view():
             "squads": [s.get("name") for s in (c.get("squads") or []) if isinstance(s, dict) and s.get("name")],
             "decks": decks,
             "fsrs": _fsrs_on(),  # 3.9.1: two buttons' note, with FSRS off
-            "leech_reach": _leech_reach()}  # 3.9.3: Recover leeches' line, by this profile's answer
+            "leech_reach": _leech_reach(),  # 3.9.3: Recover leeches' line, by this profile's answer
+            "new_stops": _new_stops()}  # 3.9.10: new cards stopped (Reviews ahead's, till then): Settings › Study turns them back on
+
+
+def _new_stops():
+    """[(deck id, its name)] for each deck whose new cards are stopped (plans.json's new_off)."""
+    try:
+        from . import ahead_flow
+        out = []
+        for key in ahead_flow._off():
+            name = str(mw.col.decks.name(int(key)) or "").split("::")[-1] if mw.col else ""
+            if name:
+                out.append((int(key), name))
+        return out
+    except Exception:
+        oops()
+        return []
 
 
 def _leech_reach():
@@ -1864,7 +1916,7 @@ def _close_addons_dialog():
 
 
 SHARE_KEYS = ("show_up", "share_reviews", "share_time", "share_retention", "share_streak",
-              "share_heatmap", "paused", "exam_date",
+              "share_heatmap", "paused", "exam_date", "show_studying",
               "away_from", "away_to")
 
 
@@ -1930,7 +1982,7 @@ def _settle_tabs():
 # 3.8.0: clear of Anki's own. On a Mac Qt's "Ctrl" is Command, and ⌘⇧Q is the
 # system's Log Out: Ask the squad is the Control key there (Qt's "Meta"), ⌃⇧Q
 STUDY_KEY, ASK_KEY = "Ctrl+Shift+S", ("Meta+Shift+Q" if sys.platform == "darwin" else "Ctrl+Shift+Q")
-MAGIC_KEY = "Ctrl+Shift+F"  # 3.9.7: Magic search (⌘⇧F on a Mac); Settings › Study takes it away
+MAGIC_KEY = "Ctrl+F"  # 3.9.7: Magic search; 3.9.10: ⌘F on a Mac (was ⌘⇧F); Settings › Study takes it away
 
 
 def _tools_menu():
@@ -1951,7 +2003,7 @@ def _tools_menu():
                  "plans", None,  # 3.9.3: Plans ▸, the plan windows among its entries
                  ("Settings…", open_settings),
                  ("Pip’s closet…", lambda: open_closet()),
-                 ("Your year…", lambda: open_wrapped()),
+                 ("Scrapbook…", lambda: open_scrapbook()),
                  ("Show on the Decks screen", _toggle_board),
                  ("Send feedback…", open_feedback)):
         if item is None:

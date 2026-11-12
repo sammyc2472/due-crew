@@ -10,7 +10,7 @@ from datetime import datetime
 from ..logo import board_mark
 from .. import sev as _sev
 
-from .base import (HEADERS, QUIET_FOLD_DAYS, _NW_ROOM, _by_theme, _cell, _even_rows, _fmt_time, _head_label,
+from .base import (HEADERS, QUIET_FOLD_DAYS, _NW_ROOM, _by_theme, _cell, _even_rows, _fmt_time,
     _label, _pycmd, _quiet_fold, _reviews_cell, _week_span, face, sort_key)
 from .style import _css
 from .pip import BINGO_PIP_CSS, squad_pip, stamp_pip
@@ -119,7 +119,12 @@ SQUAD_FIELDS = {"reviews": "reviews", "time": "time_ms",
 # squads stay Today-only, so this column is a rolling count ("studied 5 of
 # the last 7 days"), one int per member. Labelled for what it is: the crew's
 # Week view is the calendar week, and the two must not share a word.
-SQUAD_HEADERS = HEADERS + (("week", _head_label("&#128197;", "7 days")),)
+
+
+def _squad_add():
+    """3.9.10: the way into another squad, on the Squads tab alone, under the one shown."""
+    return (f'<div class="dc-add"><a href="#" title="With a squad&rsquo;s code, or start one" '
+            f'onclick="{_pycmd("squadadd")}">+ Create / join a squad</a></div>')
 
 
 def _switcher(view):
@@ -136,8 +141,7 @@ def _switcher(view):
         badge = f"<i>{n}</i>" if n and not on else ""
         nm = _html.escape(str(sq["name"]))
         parts.append(f'<a{cls} href="#" title="{nm}" onclick="{_pycmd("squadplan:" + str(sq["pid"]))}">{nm}{badge}</a>')
-    parts.append(f'<a class="add" href="#" onclick="{_pycmd("squadadd")}">'
-                 f'+ join or create</a>')
+    # (3.9.10: "+ join or create" is _squad_add, under the squad: it crowded this line)
     return '<div class="dc-sw">' + "".join(parts) + "</div>"
 
 
@@ -180,10 +184,10 @@ def _squads_html(view, cfg, crew_by=None):
     state = view.get("state")
     sw = _switcher(view)
     if view.get("kind") == "plan":
-        return sw + _plan_squad_html(str(view.get("pid") or ""), view, crew_by, cfg)
+        return sw + _plan_squad_html(str(view.get("pid") or ""), view, crew_by, cfg) + _squad_add()
     name = _html.escape(str(view.get("name") or "?"))
     if state == "none":
-        return sw + '<div class="dc-line">No squads yet.</div>'  # the way in is right above it
+        return sw + '<div class="dc-line">No squads yet.</div>' + _squad_add()
     if state == "loading":
         return sw + '<div class="dc-line dc-wait">Fetching&hellip;</div>'
     if state == "error":
@@ -196,6 +200,7 @@ def _squads_html(view, cfg, crew_by=None):
     rows = view.get("rows") or []
     day, yesterday = view.get("day", ""), view.get("yesterday", "")
     sort = sort_key(cfg)  # the crew table's sort, same headers, same links
+    hsort = "reviews" if sort == "week" else sort  # (3.9.10: no 7 days head; an older pick of it reads as Reviews, as on Crew)
     field = SQUAD_FIELDS[sort]
     # synced today with nothing studied yet: no numbers to rank, so these
     # sit under the ranked rows with dashes (as on Today)
@@ -224,9 +229,9 @@ def _squads_html(view, cfg, crew_by=None):
     # 3.8.0, head row B: the squads' names in the table's corner, the
     # headline under it (rebuilt below when show-up mode is on)
     heads = _corner(sw)
-    for key, label in SQUAD_HEADERS:
-        on = "on" if key == sort else ""
-        arrow = " &#9662;" if key == sort else ""
+    for key, label in HEADERS:  # 3.9.10, one grid: Crew's four columns; 7 days is in each name's line
+        on = "on" if key == hsort else ""
+        arrow = " &#9662;" if key == hsort else ""
         heads += (f'<th><a class="{on}" href="#" '
                   f'onclick="{_pycmd("sort:" + key)}">{label}{arrow}</a></th>')
     show_up = bool(cfg.get("show_up"))
@@ -247,7 +252,7 @@ def _squads_html(view, cfg, crew_by=None):
         if id(r) in long_ids:
             if not folded:
                 body += _quiet_fold([{"name": x["name"], "last_updated": x.get("day")} for x in long_q]).replace(
-                    f'colspan="{len(HEADERS) + 1}"', f'colspan="{2 + (1 if show_up else len(SQUAD_HEADERS))}"', 1)
+                    f'colspan="{len(HEADERS) + 1}"', f'colspan="{2 + (1 if show_up else len(HEADERS))}"', 1)
                 folded = True
             cls = "qh"
         if r.get("you"):
@@ -263,6 +268,8 @@ def _squads_html(view, cfg, crew_by=None):
                 note = ' <span class="la faded">&middot; waiting</span>'
             link = (f'<a class="dc-pl" href="#" title="Open card" '
                     f'onclick="{_pycmd("ecard:" + uid)}">{pname}</a>')
+        if not show_up and isinstance(r.get("week"), int) and not isinstance(r.get("week"), bool):
+            note = f' <span class="la faded">&middot; {max(0, min(7, r["week"]))}/7 days</span>' + note
         if pip:  # beside the name, outside its underline, as on Crew; room above for a hat (tr.sv)
             link, cls = pip + link, cls + " sv"
         if r.get("day") != day:
@@ -275,7 +282,8 @@ def _squads_html(view, cfg, crew_by=None):
             note += ' <span class="la faded">&middot; nothing yet today</span>'
             rank = ""
         elif show_up or numberless(r):
-            rank = "&#10003;"  # showed up: counted, not ranked
+            rank = ""
+            note += ' <span class="la faded">&#10003;</span>'  # showed up: counted, not ranked (3.9.10: in the name's line)
         else:
             rank = ""  # 3.9.9 (Sam: "squads should definitely lose those places"): the order says it, as on Crew
         if show_up:
@@ -286,16 +294,14 @@ def _squads_html(view, cfg, crew_by=None):
         if r.get("day") == day and zero(r):
             body += (f'<tr class="{cls.strip()}"><td class="rk">{rank}</td>'
                      f'<td class="nm">{link}{note}</td>'
-                     f'<td class="n">{_NW_ROOM}&mdash;{_NW_ROOM}</td>' + '<td class="n">&mdash;</td>' * 3 +
-                     f'<td class="n">{_cell(r.get("week"), lambda v: f"{v}/7")}</td></tr>')
+                     f'<td class="n">{_NW_ROOM}&mdash;{_NW_ROOM}</td>' + '<td class="n">&mdash;</td>' * 3 + '</tr>')
             continue
         body += (f'<tr class="{cls.strip()}"><td class="rk">{rank}</td>'
                  f'<td class="nm">{link}{note}</td>'
                  f'<td class="n">{_reviews_cell(r.get("reviews"), r.get("new_cards"))}</td>'
                  f'<td class="n">{_cell(r.get("time_ms"), _fmt_time)}</td>'
                  f'<td class="n">{_cell(r.get("retention"), lambda v: f"{v:.1f}%")}</td>'
-                 f'<td class="n">{_cell(r.get("streak"))}</td>'
-                 f'<td class="n">{_cell(r.get("week"), lambda v: f"{v}/7")}</td></tr>')
+                 f'<td class="n">{_cell(r.get("streak"))}</td></tr>')
     body = _even_rows(body)
     # the squad's own line; Share today sits in the footer, as on Today
     acts = [f'<a href="#" onclick="{_pycmd("squadinvite")}">Copy invite</a>']
@@ -304,13 +310,14 @@ def _squads_html(view, cfg, crew_by=None):
                     f'{"Open" if view.get("open") is False else "Lock"}</a>')
     acts.append(f'<a href="#" onclick="{_pycmd("squadleave")}">Leave</a>')
     foot = ('<div class="dc-line">'
-            + " &middot; ".join(acts) + "</div>")
+            + " &middot; ".join(acts) + "</div>") + _squad_add()
     bingo = (f"<style>{BINGO_CSS}</style>" + bingo_card_html(view["bingo"])) if view.get("bingo") else ""  # 3.6
     if not body:
         return (sw + bingo + '<div class="dc-line">No one&rsquo;s '
                 'synced yet.</div>' + foot)
     # the bingo card under the table, the names it's for being in its corner
-    return (_scroll(f"<table><tr>{heads}</tr>{body}</table>", body.count('<tr class='))
+    return (_scroll(f'<table class="dc-s-{hsort}"><tr>{heads}</tr>{body}</table>' if not show_up
+                    else f"<table><tr>{heads}</tr>{body}</table>", body.count('<tr class='))
             + f'<div class="dc-line dc-sum">{headline}</div>' + _squad_week_line(rows, day) + bingo + foot)
 
 

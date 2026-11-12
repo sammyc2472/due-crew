@@ -212,7 +212,7 @@ class Probe:
             "app", "plan_flow", "due_flow", "team_flow", "song_flow", "gamenight_flow", "rooms",
             "room_model", "settings_model", "cards")}
         shallow = [dc._on_js, dc._board_cmd, dc._team, dc._song, dc._settings_family, dc._settings_cmd,
-                   dc._closet_cmd, dc._wrapped_cmd, mods["plan_flow"].on_message, mods["due_flow"].on_message,
+                   dc._closet_cmd, dc._scrap_cmd, mods["plan_flow"].on_message, mods["due_flow"].on_message,
                    mods["team_flow"].on_message, mods["song_flow"].on_message, mods["gamenight_flow"].on_message,
                    mods["rooms"].on_message, mods["cards"].on_message]
         shallow += [run for _start, run in dc._FAMILIES]

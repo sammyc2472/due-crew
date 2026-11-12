@@ -551,6 +551,21 @@ def on_theme(*_args):
         refresh_widgets()
 
 
+START_WAYS = (("Fifteen minutes, on my own", "fifteen"), ("A room with my crew", "room"))
+
+
+def start_menu():
+    """3.9.10: ▶ Fifteen?'s arrow in the top bar: the two ways to start. A
+    room with my crew is what Open a room was in the board's foot (Sam: "Open
+    a room should live elsewhere": the top bar, where its timer lives)."""
+    from aqt.qt import QCursor, QMenu
+    run = {"fifteen": start_fifteen, "room": open_room}
+    menu = QMenu(mw)
+    for label, key in START_WAYS:
+        menu.addAction(label).triggered.connect(lambda _=False, k=key: run[k]())
+    menu.exec(QCursor.pos())
+
+
 def on_message(cmd, parts):
     """duecrew:room* from any of Anki's webviews. True when handled."""
     arg = parts[2] if len(parts) > 2 else ""
@@ -582,6 +597,8 @@ def on_message(cmd, parts):
         break_ended()
     elif cmd == "room15":
         start_fifteen()  # 3.8.1: ▶ Fifteen? and the nudge's Start
+    elif cmd == "room15menu":
+        start_menu()  # 3.9.10: ▶ Fifteen?'s arrow
     elif cmd in ("room15five", "room15now", "room15stop"):
         fifteen_answer(cmd[6:])
     elif cmd == "room15x":

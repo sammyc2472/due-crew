@@ -1172,15 +1172,15 @@ const Board = (() => {
    *  their own with the key at its right (3.8.0, head row B). */
   function decks(me, crew, decksBy, today, picker = null) {
     const mine = decksBy[me.uid] || [];
-    const key = () => h("span", { class: "dkey" }, h("i", { class: "fm" }), "mature", h("i", { class: "fs" }), "seen", h("i", { class: "fo" }), "unlocked");
+    const key = () => h("span", { class: "dkey" }, h("i", { class: "fm" }), "mature", h("i", { class: "fs" }), "seen", h("i", { class: "fo" }), "unsuspended");
     const top = picker ? h("div", { class: "pline" }, picker, mine.length ? key() : null) : null;
-    if (!mine.length) return h("div", {}, top, h("p", { class: "muted small" }, "No shared decks yet. In Anki: Settings › Shared decks. Matching decks pair up on their own."));
+    if (!mine.length) return h("div", {}, top, h("p", { class: "muted small" }, "No shared decks yet. In Anki: Crew › Decks › Share a deck. Matching decks pair up on their own."));
     const match = (a, b) => { const x = new Set(a.sig || []); return (b.sig || []).some((g) => x.has(g)); };
     const days = [today, addDays(today, 1)];
     const bar = (name, d, isMe) => {
       const total = Math.max(d.total || 0, 1); const pct = (v) => Math.min(100, Math.round((100 * (v || 0)) / total));
       const counts = `${(d.seen || 0).toLocaleString()} / ${(d.total || 0).toLocaleString()}${d.ret != null ? ` · ${Math.round(d.ret)}%` : ""}`;
-      const tip = [`${(d.seen || 0).toLocaleString()} seen`, `${(d.mature || 0).toLocaleString()} mature`, d.open != null ? `${Number(d.open).toLocaleString()} unlocked` : null,
+      const tip = [`${(d.seen || 0).toLocaleString()} seen`, `${(d.mature || 0).toLocaleString()} mature`, d.open != null ? `${Number(d.open).toLocaleString()} unsuspended` : null,
         `${(d.total || 0).toLocaleString()} total`, d.ret != null ? `${Number(d.ret).toFixed(1)}% retention, last 7 days` : null].filter(Boolean).join(" · ");
       return h("div", { class: `dr${isMe ? " me" : ""}`, title: tip },
         h("span", { class: "dn" }, name), h("span", { class: "dtrack" }, d.open != null ? h("i", { class: "fo", style: `left:${pct(d.seen)}%;width:${Math.max(0, pct(d.open) - pct(d.seen))}%` }) : null,
@@ -1424,8 +1424,9 @@ async function home() {
       return line;
     }));
   }
-  // board.py's footer: Crew (people) and Share (as text, then as a
-  // picture: 3.7.1, H3), who I'm waiting on; Refresh as a quiet icon
+  // board.py's footer (3.9.10): Friends (adding one, Copy invite; sharing a deck starts in Anki's
+  // Crew › Decks) and Share my stats (as text, then as a picture: 3.7.1, H3), who I'm waiting on;
+  // Refresh as a quiet icon. The scrapbook is Anki's alone: it's kept on that computer
   const footLeft = h("span", { class: "fl" });
   const toCode = () => { const i = document.getElementById("anycode"); if (i) { i.focus(); i.scrollIntoView({ block: "center" }); } };
   function menu(label, items) {
@@ -1441,13 +1442,12 @@ async function home() {
     return btn;
   }
   function drawFoot() {
-    const crewItems = [["Friends…", toCode]];
+    const crewItems = [["Add a friend…", toCode]];
     // its "Copied." goes where Share's does, not over the menu's name
     if (b.me.code) crewItems.push(["Copy invite", () => copyInvite(b.me.code, { set textContent(v) {
       if (v === "Copy invite") return;
       updated.textContent = v; setTimeout(() => { updated.textContent = "Updated just now"; }, 2400);
     } })]);
-    crewItems.push(["Shared decks…", (btn) => { btn.textContent = "In Anki: Settings › Shared decks"; setTimeout(() => { btn.textContent = "Crew"; }, 2400); }]);
     const shareItems = [["As text"]];
     if (!showUp) shareItems.push(["My day", () => share(Board.shareText(people, t))]);
     shareItems.push(["Our week", () => share(Board.shareWeek(people, t))], ["As a picture"]);
@@ -1455,7 +1455,7 @@ async function home() {
     shareItems.push(["My week…", () => weekCard()],
       ["My year…", () => openYearCard(logR.days || {}, t.slice(0, 4), logR.cheers || {})],
       ["All time…", () => openYearCard(logR.days || {}, "all", logR.cheers || {})]);
-    footLeft.replaceChildren(...[menu("Crew", crewItems), menu("Share", shareItems), waiting.length ? h("button", { class: "pillw", title: `Waiting for ${waiting.map((f) => f.name).join(", ")} to add you back`,
+    footLeft.replaceChildren(...[menu("Friends", crewItems), menu("Share my stats", shareItems), waiting.length ? h("button", { class: "pillw", title: `Waiting for ${waiting.map((f) => f.name).join(", ")} to add you back`,
       onclick: () => { const i = document.getElementById("anycode"); if (i) i.scrollIntoView({ block: "center" }); } }, `${waiting.length} waiting`) : null].filter(Boolean));
   }
   const share = async (text) => {

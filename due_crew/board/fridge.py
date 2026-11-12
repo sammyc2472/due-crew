@@ -17,7 +17,7 @@ from .dance import DANCE_JS
 # periphery of the decks window, like dragged around the anki window?")
 FRIDGE_W = 124  # px: a doodle on the window, on its paper
 FRIDGE_PIP = 30  # px: the Pip by a sender's name on the fridge (a crew row's size; its body is 18)
-FRIDGE_UNDO = 8  # s: "Taken down · Undo" in a doodle's place (closet_flow.UNDO_SECS)
+FRIDGE_UNDO = 8  # s: "In your scrapbook · Undo" in a doodle's place (closet_flow.UNDO_SECS)
 
 
 def _tape(colour):
@@ -51,7 +51,7 @@ FRIDGE_CSS = """
     #dc-fridge .fw b { color: var(--fz-ink); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
     /* 3.9.2 (Sam: "pips get cutoff on the polaroids"): Pip's head, hat and what it holds reach past its slot,
        so the line never clips (only the name does) and gives the head room under the photo */
-    #dc-fridge .fw .sv-slot { --sv-a: var(--fz-acc); flex: none; margin: 9px 2px 0 4px; }
+    #dc-fridge .fw .sv-slot { --sv-a: var(--fz-pip); flex: none; margin: 9px 2px 0 4px; }
     #dc-fridge .fx { position: absolute; top: 0; right: 3px; display: block; opacity: 0; color: var(--fz-muted); text-decoration: none; font-size: 15px; line-height: 1; }
     /* 3.9.2's QoL pass: hidden by opacity, not display, so Tab reaches it (and shows it) */
     #dc-fridge .fz:hover .fx, #dc-fridge .fz:focus-within .fx, #dc-fridge .fx:focus { opacity: 1; }
@@ -72,11 +72,11 @@ FRIDGE_CSS = """
 # frame and the photo go dark, and a doodle's ink with them: black reads
 # light, each colour its own night shade (the board's), and Pip and Undo
 # take the sender's night accent (--fd beside --fa on each)
-FRIDGE_LIGHT = ("--fz-bg: #fff; --fz-photo: #f4f3ee; --fz-ink: #2b2d29; --fz-muted: #6b665a; --fz-acc: var(--fa); "
+FRIDGE_LIGHT = ("--fz-bg: #fff; --fz-photo: #f4f3ee; --fz-ink: #2b2d29; --fz-muted: #6b665a; --fz-acc: var(--fa); --fz-pip: var(--pa, var(--fa)); "
                 "--fz-sh: 0 3px 10px rgba(0,0,0,.16), 0 0 0 1px rgba(0,0,0,.05);")
 FRIDGE_INKS = ((DOODLE_INK, "#e6e8e3"),) + tuple(
     (v["light"][0], v["dark"][0]) for _k, v in sorted(ACCENTS.items()))
-FRIDGE_DARK = ("--fz-bg: #33352f; --fz-photo: #23241f; --fz-ink: #e6e8e3; --fz-muted: #a3a79c; --fz-acc: var(--fd); "
+FRIDGE_DARK = ("--fz-bg: #33352f; --fz-photo: #23241f; --fz-ink: #e6e8e3; --fz-muted: #a3a79c; --fz-acc: var(--fd); --fz-pip: var(--pd, var(--fd)); "
                "--fz-sh: 0 4px 14px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.07); "
                + " ".join(f"--fz-{a[1:]}: {b};" for a, b in FRIDGE_INKS))
 FRIDGE_INK_CSS = "".join(f'#dc-fridge .fp path[stroke="{a}"] {{ stroke: var(--fz-{a[1:]}, {a}); }}' for a, _b in FRIDGE_INKS)
@@ -97,10 +97,10 @@ def fridge_html(items, people, cfg, gone=None):
     places the rest in the gutters beside the board, and lets me drag. ""
     when there's none. Kept as last drawn while what it's drawn from (the
     items, each person's look, Pip on or off) stays the same. gone
-    (closet_flow.gone): the one just taken down; in its place "Taken down ·
+    (closet_flow.gone): the one just taken down; in its place "In your scrapbook ·
     Undo" (duecrew:fridgeback:<key>) for the seconds it has left."""
     crew = people or {}
-    looks = [[u, 1, e.get("look")] if isinstance(e, dict) else [u, 0, e] for u, e in crew.items() if e]
+    looks = [[u, 1, e.get("look"), e.get("accent")] if isinstance(e, dict) else [u, 0, e] for u, e in crew.items() if e]
     if gone:
         return _fridge_notes(_fridge.clean(items), crew, cfg, gone)  # a few seconds: drawn each time
     key = _fridge.fingerprint([items, looks, bool(cfg.get("sev", True)), str(cfg.get("theme", "auto"))])
@@ -128,8 +128,13 @@ def _fridge_notes(items, people, cfg, gone=None):
         note = f'<div class="fq">&ldquo;{_html.escape(x["n"])}&rdquo;</div>' if x.get("n") else ""
         at = f' data-s="{x["p"][0]}" data-x="{x["p"][1]}" data-y="{x["p"][2]}"' if x.get("p") else ""
         art = _doodle_art(x["d"], x["a"], x["name"] + "’s drawing")  # fridge.clean checked it
-        fa, tape = accent_pair(x["a"])
-        notes.append(f'<div class="fz" data-k="{k}"{at} style="--fa:{fa};--fd:{tape};--ft:{_tape(tape)}" title="Drag it anywhere">'
+        # 3.9.10 (Sam: "everyone's polaroids are now showing their pip as green even if they use a different
+        # color"): the Pip is theirs as it is now, so it wears the colour they have now, as it wears what they
+        # have on now; the drawing keeps the ink it was made in. One that came with no colour takes theirs
+        now = e.get("accent") if isinstance(e, dict) and e.get("accent") in ACCENTS else ""
+        fa, tape = accent_pair(x["a"] or now)
+        pa, pd = accent_pair(now or x["a"])
+        notes.append(f'<div class="fz" data-k="{k}"{at} style="--fa:{fa};--fd:{tape};--pa:{pa};--pd:{pd};--ft:{_tape(tape)}" title="Drag it anywhere">'
                      f'<div class="fp">{art}</div>{note}<div class="fw">{pip}<b>{name}</b>{f" · {when}" if when else ""}</div>'
                      f'<a class="fx" href="#" title="Take it down" aria-label="Take {name}’s down" '
                      f'onclick="{_pycmd("fridgedown:" + k)}">&times;</a></div>')
@@ -139,7 +144,7 @@ def _fridge_notes(items, people, cfg, gone=None):
         left = max(0.0, min(float(FRIDGE_UNDO), float(gone.get("ago") or 0)))
         notes.insert(max(0, min(len(notes), len(items) - int(gone.get("i") or 0))),
                      f'<div class="fz fgone" data-k="{_html.escape(k)}"{at} role="status" '
-                     f'style="--fa:{accent_pair(g.get("a"))[0]};--fd:{accent_pair(g.get("a"))[1]};--fg:-{left:.1f}s">Taken down &middot; '
+                     f'style="--fa:{accent_pair(g.get("a"))[0]};--fd:{accent_pair(g.get("a"))[1]};--fg:-{left:.1f}s">In your scrapbook &middot; '
                      f'<a href="#" onclick="{_pycmd("fridgeback:" + k)}">Undo</a></div>')
     return (f'<style>{FRIDGE_CSS}{_fridge_theme(cfg)}</style>'
             f'<div id="dc-fridge" role="group" aria-label="Your fridge">{"".join(notes)}</div>')
