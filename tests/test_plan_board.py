@@ -823,6 +823,32 @@ def test_catching_up_v3910():
           "_line_refresh(prog)" in src and "line" not in open(os.path.join(REPO, "due_crew", "backend", "api.py")).read().split("def set_days")[1].split("def ")[0])
 
 
+def test_own_pace_matches_v3910():
+    """3.9.10 (Sam: the own-pace card should "match"): what I opened and
+    haven't finished is the same list, Study or Ignore on each; Up next
+    stays; nothing measures me against the plan's dates any more."""
+    ow = {"mode": "ready", "open": [{"uid": "l2", "name": "2 · Inflammation <b>", "left": 31}, {"uid": "l3", "name": "3 · Neoplasia", "left": 84}],
+          "next": {"uid": "l4", "name": "4 · Heme", "n": 20}, "then": [], "more": 0, "then_items": [], "last": None, "back": None,
+          "at": "The plan's dates are at Heme today.", "pace": "You opened 2 sets in the last two weeks.", "finish": "At this pace…"}
+    h = board._own_html(ow, "p1")
+    check("own pace: Open · 2 sets, 115 new; a row each with Study and Ignore; Up next under it; names escaped",
+          "<b>Open</b> &middot; 2 sets, 115 new" in h and h.count(">Study</a>") == 2 == h.count(">Ignore</a>")
+          and "duecrew:planstudydate:p1:l2" in h and "duecrew:planskip:p1:l3" in h and "Up next" in h
+          and h.index('class="pln"') < h.index("Up next") and "Inflammation &lt;b&gt;" in h, h[:300])
+    check("own pace: no line about the plan's dates, my pace or the finish, even handed them",
+          "plan's dates" not in h and "plan&#x27;s dates" not in h and "last two weeks" not in h and "At this pace" not in h)
+    check("own pace: nothing open, no list", 'class="pln"' not in board._own_html(dict(ow, open=[]), "p1"))
+    store, cl = _world()
+    pid, code = store.add_plan("dre", "Path Book", "Step 1", UNITS)
+    with Glue(cl, _col()) as g:
+        g.follow(code)
+        F = g.F
+        raw = next(p for p in cl.session["plans"] if p["id"] == pid)
+        own = F.card_view(dict(raw, own="ready"), F._state_cfg()[pid], F._state["plan_progress"][pid], day(0))["own"]
+        check("own pace: the view lists what's open with cards left (lesson 2's three, lesson 3's one), and has no at, pace or finish",
+              [(r["uid"], r["left"]) for r in own["open"]] == [("l2", 3), ("l3", 1)] and not {"at", "pace", "finish"} & set(own), own)
+
+
 def test_commands_have_handlers():
     """Every duecrew: command this tab puts on the board has its handler in plan_flow."""
     html = (board._plan_card_html(_card()) + board._plans_empty_html({"cards": [], "exam": {"day": day(43), "days": 43}, "writes": True}))

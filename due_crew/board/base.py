@@ -64,10 +64,10 @@ PERIODS = ("today", "week", "decks", "squads")
 # 3.5.0: tabs a person can hide in Settings (per computer); Today always shows
 # 3.8.0: Today and Week are always there; the rest can be hidden in Settings
 HIDEABLE_TABS = (("decks", "Decks"), ("squads", "Squads"), ("plans", "Plans"), ("insights", "Insights"),
-                 ("party", "Pip Party"))  # 3.9.5 (Sam: "make pip party something someone can unshow")
+                 ("party", "Party"))  # 3.9.10: the tab says Party (Sam: "Let's go for party"); the feature is still Pip Party. 3.9.5 (Sam: "make pip party something someone can unshow")
 CREW_VIEWS = (("today", "Today"), ("week", "Week"), ("decks", "Decks"))
 YOU_MORE = (("plans", "Plans"), ("insights", "Insights"))
-PARTY_TAB = ("party", "Pip Party")  # 3.9.5's last round: after Insights, for those it's open to (gamenight_flow.shown)
+PARTY_TAB = ("party", "Party")  # 3.9.5's last round: after Insights, for those it's open to (gamenight_flow.shown)
 BETA_TABS = ()  # a tab named here says Beta (Pip Party did, 3.9.5 to 3.9.10: Sam, "we can take pip party out of beta")
 
 

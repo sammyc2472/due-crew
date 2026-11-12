@@ -10913,7 +10913,7 @@ def test_own_pace_first_seen_v381():
               [u["id"] for u in P.up_next(p["doc"], st["applied"])] == ["hf", "ar", "cz"])
         v = F.card_view(p, st, F.progress(col, [p], F._state_cfg())[pid], _day(0))
         check("first seen: not in my pace; Up next starts at the first date",
-              v["own"]["pace"] is None and v["own"]["next"]["uid"] == "hf", str(v["own"]))
+              "pace" not in v["own"] and v["own"]["next"]["uid"] == "hf", str(v["own"]))
         asked = []
         F.offer_hold([pid], ask=lambda name, n: asked.append(n) or False)
         check("first seen: the hold-back question counts the dates I haven't opened, not one opened elsewhere",
@@ -12988,8 +12988,7 @@ def test_own_pace_v380():
         v = F.card_view(p, st, prog, _day(0))
         check("own: the card says at your pace, Up next with what opens, and no Behind",
               v["sub"].startswith("at your pace") and v["own"]["next"]["name"] == "Heart failure" and v["own"]["next"]["n"] == 3  # not open yet, its leech too
-              and v["lines"] == [] and v["own"]["at"] == "The plan's dates are at Arrhythmia today."
-              and v["own"]["pace"] is None and v["own"]["finish"] is None, str(v["own"]))
+              and v["lines"] == [] and not {"at", "pace", "finish"} & set(v["own"]) and "open" in v["own"], str(v["own"]))  # 3.9.10: no line against the plan's dates
         F.open_next(pid)
         st = F._state_cfg()[pid]
         dues = dict(col.db.all("SELECT id, due FROM cards"))
@@ -20014,14 +20013,14 @@ def test_pip_party_only_from_its_tab_v395():
     you = {"plans": None, "insights": ins, "party_on": True}
     today, insights = board.you_html({}, v, dict(you, tab="today")), board.you_html({}, v, dict(you, tab="insights"))
     check("pip party: Today and Insights say nothing of it, the tab open to me or not; its tab is there",
-          "Pip Party" in today and not re.search(r"(?i)party:|>Party<|Party &rsaquo;|missparty|planparty|insmapparty", today + insights)
+          ">Party</a>" in today and "Pip Party" not in today and not re.search(r"(?i)party:|Party &rsaquo;|missparty|planparty|insmapparty", today + insights)
           and "Path 2" in today and "insmapshare" in insights, today[-600:])
     folded = board.you_html({}, None, dict(you, tab="insights", folded=True))
     alone = board.you_html({}, None, dict(you, tab="party"))
     check("pip party: out of Beta (3.9.10, Sam's): no tab says Beta, with Due's lists or alone; "
           "the folded line keeps the names",
-          all("Pip Party" in h and 'class="du-beta"' not in h for h in (today, insights, alone))
-          and "Pip Party" in folded and "du-beta" not in folded and board.BETA_TABS == (),
+          all(">Party</a>" in h and 'class="du-beta"' not in h for h in (today, insights, alone))
+          and "&middot; Party" in folded and "du-beta" not in folded and board.BETA_TABS == () and board.PARTY_TAB == ("party", "Party"),
           (today.count("du-beta"), alone.count("du-beta"), folded[-300:]))
     acts = []
 
@@ -20084,7 +20083,7 @@ def test_pip_party_can_be_hidden_v395():
     shown_bd = board.settings_html({"tab": "board", "signed_in": True}, {"hidden_tabs": []})
     hidden_bd = board.settings_html({"tab": "board", "signed_in": True}, {"hidden_tabs": ["party"]})
     check("pip party hidden: its pill beside Decks, Squads, Plans and Insights, on or off as set",
-          "duecrew:settabs:party:0" in shown_bd and ">Pip Party</button>" in shown_bd and "duecrew:settabs:party:1" in hidden_bd,
+          "duecrew:settabs:party:0" in shown_bd and ">Party</button>" in shown_bd and "duecrew:settabs:party:1" in hidden_bd,
           re.findall(r"settabs:\w+:\d", hidden_bd))
     conf = {"hidden_tabs": [], "due_tab": "party"}
     calls = []

@@ -4840,7 +4840,12 @@ every release that changes how something works.
   3.2's schedule or an even date; nothing new is sent. An earlier mock
   (a line saying where you stand, a Catch up… sheet) was set aside for
   this; one that built every day's deck up front, too (Sam: on Study).
-  Not done: at my own pace the card is as it was.
+  At my own pace (Sam, the next message: "match") the card has the same
+  list for what I opened and haven't finished ("Open · 2 sets, 115 new",
+  Study and Ignore; `own_view`'s `open`, `plancards._own_html`), Up next
+  under it, and the lines measuring me against the author's dates are
+  gone (where the plan is, my pace, the finish). The You tab says Party
+  (`base.PARTY_TAB`; the feature is still Pip Party everywhere else).
 - 3.9.10, the fixing run (Sam, 12 Nov). Magic search's field asks one
   thing, "What do you want to study?" (`due.MAGIC_PROMPT`; the sample
   searches are gone), and its key is ⌘F / Ctrl+F (the ⇧ sat low in the

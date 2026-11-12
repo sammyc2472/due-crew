@@ -3769,7 +3769,7 @@ def set_own(pid, own):
 def own_view(plan, st, prog, today):
     """card_view's part at my own pace: Up next, then, where the plan's dates
     are, my pace (and the exam), the last step with its Undo, Put back."""
-    doc, real = plan["doc"], _plan_doc(plan)
+    doc = plan["doc"]
     st = st or {}
     applied, days, prog = st.get("applied") or {}, st.get("own_opened") or {}, prog or {}
     left = P.up_next(doc, applied, prog)
@@ -3777,7 +3777,6 @@ def own_view(plan, st, prog, today):
     def to_open(u):
         o, _s, t = (prog.get(u["id"]) or [0, 0, 0])[:3]
         return max(0, int(t) - int(o))
-    recent = P.recent_opens(days, today)
     last = None
     ol = (_pcfg().get("own_last") or {}) if mw else {}
     if ol.get("pid") == plan["id"] and ol.get("day") == today and mw and mw.col and _undo_ok(ol.get("label")):
@@ -3791,14 +3790,19 @@ def own_view(plan, st, prog, today):
         o, s2, _t = (prog.get(lu["id"]) or [0, 0, 0])[:3]
         if int(o) > int(s2):
             back = {"name": str(lu.get("name") or "?"), "n": int(o) - int(s2)}
-    return {"mode": plan.get("own"),
+    # 3.9.10 (Sam: the own-pace card "to match"): what I opened and haven't finished, a row each, Study or Ignore;
+    # the lines measuring me against the author's dates (where the plan is, my pace, the finish) are gone
+    opened = []
+    for u in P.units(doc):
+        o, s3, _t = (int(x or 0) for x in (list(prog.get(u["id"]) or []) + [0, 0, 0])[:3])
+        if o > s3 and P.opened_here(applied, u, prog):
+            opened.append({"uid": u["id"], "name": str(u.get("name") or "?"), "left": o - s3})
+    return {"mode": plan.get("own"), "open": opened,
             "next": {"uid": left[0]["id"], "name": str(left[0].get("name") or "?"), "n": to_open(left[0])} if left else None,
             "then": [f"{u.get('name') or '?'} · {to_open(u):,}" for u in left[1:4]], "more": max(0, len(left) - 4),
             # 3.8.1: each a link, Open on that date (open_next(pid, uid))
             "then_items": [{"uid": u["id"], "name": str(u.get("name") or "?"), "n": to_open(u)} for u in left[1:4]],
-            "at": P.plan_at(real, today),
-            "pace": f"You opened {recent} set{'s' if recent != 1 else ''} in the last two weeks." if recent else None,
-            "finish": P.finish_check(real, len(left), recent, today), "last": last, "back": back}
+            "last": last, "back": back}
 
 
 def set_skip(pid, uid, on):
