@@ -68,7 +68,7 @@ HIDEABLE_TABS = (("decks", "Decks"), ("squads", "Squads"), ("plans", "Plans"), (
 CREW_VIEWS = (("today", "Today"), ("week", "Week"), ("decks", "Decks"))
 YOU_MORE = (("plans", "Plans"), ("insights", "Insights"))
 PARTY_TAB = ("party", "Pip Party")  # 3.9.5's last round: after Insights, for those it's open to (gamenight_flow.shown)
-BETA_TABS = ("party",)  # Sam's (3.9.5): Pip Party says Beta on its tab, the one way in, while it's new
+BETA_TABS = ()  # a tab named here says Beta (Pip Party did, 3.9.5 to 3.9.10: Sam, "we can take pip party out of beta")
 
 
 def _tab_word(k, lb):

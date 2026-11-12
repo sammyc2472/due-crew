@@ -142,7 +142,10 @@ def _css(cfg):
     #due-crew .dc-foot a.pb {{ border: 1px solid var(--dc-accent); border-radius: 99px; padding: 1px 9px; }}
     #due-crew .dc-foot a.pb.on {{ background: var(--dc-accent); color: var(--dc-bg); }}
     #due-crew .dc-foot a.warn {{ color: var(--dc-hours); }}
-    #due-crew .dc-foot a.ic {{ color: var(--dc-muted); font-weight: 400; font-size: 13px; }}
+    #due-crew .dc-foot a.ic {{ color: var(--dc-muted); font-weight: 400; font-size: 13px; display: inline-flex; align-items: center;
+      vertical-align: middle; padding: 2px; }}
+    #due-crew .dc-foot a.ic svg {{ display: block; }}
+    #due-crew .dc-foot a.ic:hover {{ color: var(--dc-ink); }}
     #due-crew .dc-wrap[hidden] {{ display: none; }}
     #due-crew .dc-wrap a.wn {{ color: var(--dc-muted); text-decoration: none; font-size: 11px; white-space: nowrap; margin-left: 8px; }}
     #due-crew .dc-empty {{ border: 1px dashed var(--dc-accent); border-radius: 10px; padding: 12px 14px; margin: 8px 0 2px;
@@ -338,6 +341,11 @@ def _css(cfg):
     #due-crew .dc-sw a.on {{ color: var(--dc-ink); font-weight: 700; box-shadow: inset 0 -2px var(--dc-accent);
       padding-bottom: 2px; }}
     #due-crew .dc-sw a.add {{ color: var(--dc-accent); font-weight: 700; }}
+    /* 3.9.10 (Sam: "make sure the spacing on today / week are the same"): a word keeps the room its bold takes,
+       so picking one never moves the others */
+    #due-crew .dc-sw a[data-t] {{ display: inline-block; padding-bottom: 2px; }}
+    #due-crew .dc-sw a[data-t]::after {{ content: attr(data-t); display: block; height: 0; overflow: hidden; visibility: hidden;
+      font-weight: 700; }}
     #due-crew .dc-sw a i {{ font-style: normal; font-size: 10px; font-weight: 700; color: var(--dc-accent-ink);
       background: var(--dc-accent); border-radius: 99px; padding: 0 5px; margin-left: 4px; }}
     /* 3.8.0, head row B (Sam's pick): Crew's views, and a squad's names, in

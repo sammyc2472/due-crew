@@ -4819,6 +4819,17 @@ every release that changes how something works.
   stay as the year page's numbers, and `wrappedx` as the line's ×.
   Different from the mock: kept through sign-out, and a streak is not a
   kind of its own (what Pip earned for it is).
+- 3.9.10, the fixing run (Sam, 12 Nov). Magic search's field asks one
+  thing, "What do you want to study?" (`due.MAGIC_PROMPT`; the sample
+  searches are gone), and its key is ⌘F / Ctrl+F (the ⇧ sat low in the
+  field; Anki's main window has no Find of its own; `MAGIC_KEY`). Pip
+  Party is out of Beta (`base.BETA_TABS` is empty). Crew's Today · Week ·
+  Decks hold still: each word keeps the room its bold takes (`data-t`,
+  `.dc-sw a[data-t]::after`), so picking one never moves the others. The
+  foot's refresh and gear are drawn (`draw._IC_REFRESH`, `_IC_GEAR`), one
+  size and stroke, where a font's glyphs sat unevenly. A crew row's Pip
+  is still when the row is pointed at: only the Cheer pill shows
+  (`closet.py`'s row rule).
 - 3.9.10, a polaroid's Pip in its person's colour (Sam, 12 Nov:
   "everyone's polaroids are now showing their pip as green even if they
   use a different color"). A polaroid kept the colour its sender had

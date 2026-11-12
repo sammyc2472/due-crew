@@ -1966,7 +1966,7 @@ def _settle_tabs():
 # 3.8.0: clear of Anki's own. On a Mac Qt's "Ctrl" is Command, and ⌘⇧Q is the
 # system's Log Out: Ask the squad is the Control key there (Qt's "Meta"), ⌃⇧Q
 STUDY_KEY, ASK_KEY = "Ctrl+Shift+S", ("Meta+Shift+Q" if sys.platform == "darwin" else "Ctrl+Shift+Q")
-MAGIC_KEY = "Ctrl+Shift+F"  # 3.9.7: Magic search (⌘⇧F on a Mac); Settings › Study takes it away
+MAGIC_KEY = "Ctrl+F"  # 3.9.7: Magic search; 3.9.10: ⌘F on a Mac (was ⌘⇧F); Settings › Study takes it away
 
 
 def _tools_menu():

@@ -6996,7 +6996,7 @@ def test_crew_picker_v380():
           [x[1] for x in pills(today)] == ["Crew", "Squads"]
           and 'dc-pill on" href="#" onclick="pycmd(\'duecrew:period:today' in today
           and 'dc-pill on" href="#" onclick="pycmd(\'duecrew:period:week' in week, pills(today))
-    pick = lambda h: _re.search(r'<div class="dc-sw">(.*?)</div>', h).group(1)
+    pick = lambda h: _re.sub(r' data-t="[^"]*"', "", _re.search(r'<div class="dc-sw">(.*?)</div>', h).group(1))  # (3.9.10: each word's bold room)
     check("crew: the picker, Today picked, then Week picked",
           ('<a class="on" href="#" onclick="pycmd(\'duecrew:period:today|' + KK + '\'); return false;">Today</a>') in pick(today)
           and ('<a href="#" onclick="pycmd(\'duecrew:period:week|' + KK + '\'); return false;">Week</a>') in pick(today)
@@ -9676,12 +9676,12 @@ def test_head_row_b_v380():
     corner = '<th class="lt dc-corner" colspan="2"><div class="dc-sw">'
     today = board.render(data, {"period": "today"}, 0)
     check("head row B: Crew's views in the header's corner, not a line above the table",
-          corner + ('<a class="on" href="#" onclick="pycmd(\'duecrew:period:today|' + KK + '\'); return false;">Today</a>') in today
+          corner + ('<a class="on" data-t="Today" href="#" onclick="pycmd(\'duecrew:period:today|' + KK + '\'); return false;">Today</a>') in today
           and today.index(corner) > today.index("<table class=\"dc-s-") and "<th></th><th></th>" not in today
           and today.count('<div class="dc-sw">') == 1)
     week = board.render(data, {"period": "week"}, 0)
     check("head row B: Week too, Week picked", corner in week
-          and ('<a class="on" href="#" onclick="pycmd(\'duecrew:period:week|' + KK + '\'); return false;">Week</a>') in week)
+          and ('<a class="on" data-t="Week" href="#" onclick="pycmd(\'duecrew:period:week|' + KK + '\'); return false;">Week</a>') in week)
     mode = board.render(data, {"period": "today", "show_up": True}, 0)
     check("head row B: show-up mode's corner is the picker; who showed up today goes under the table",
           corner in mode and '<div class="dc-line dc-sum">2 showed up today</div>' in mode
@@ -15572,6 +15572,18 @@ def test_wrapped_flow_v390():
           and "YEAR_SEV = 220" in js and S.YEAR_SEV == 220)
 
 
+def test_crew_tabs_hold_still_v3910():
+    """3.9.10 (Sam: "make sure the spacing on today / week are the same"):
+    the picked view's word is bold, and bold is wider, so Week sat in a
+    different place on Today than on Week. Each word keeps its bold room."""
+    from due_crew.board import crew, style
+    sw = crew._crew_picker("week")
+    css = style._css({})
+    check("crew's views: each word carries its own name for the room its bold takes, and the picked one adds no height",
+          sw.count('data-t="') == 3 and 'data-t="Week"' in sw and "a[data-t]::after { content: attr(data-t);" in css
+          and "a[data-t] { display: inline-block; padding-bottom: 2px; }" in css, sw[:200])
+
+
 def test_scrapbook_v3910():
     """3.9.10, the scrapbook (Sam: "a combo wrapped and home for polaroids /
     notes, etc. that are ephemeral at the moment or deleted permanently
@@ -16878,10 +16890,11 @@ def test_efficiency_idle_v391():
           and ".sv:hover, .sv-slot:hover .sv { --sv-on: var(--sv-hover, infinite); }" in _sev.CSS and ".dc-rest { --sv-hover: 1; }" in _sev.CSS
           and _sev.CSS.count("var(--sv-on, ") >= 40, forever)
     src = fakes.board_source()
-    check("Pip at rest (Sam's pick C): the fridge's Pips are still until pointed at, as crew rows; rows move on while hovered",
+    check("Pip at rest (Sam's pick C): the fridge's Pips are still until pointed at; a plan card's and a bingo square's move while hovered; a crew row's never (3.9.10, Sam: only the Cheer pill shows)",
           "#dc-fridge .fz:not(:hover) .sv, #dc-fridge .fz:not(:hover) .sv * { animation: none !important; }" in board.FRIDGE_CSS
           and "#dc-fridge .fz:hover .sv { --sv-on: var(--sv-hover, infinite); }" in board.FRIDGE_CSS
-          and all(f"#due-crew {k}:hover .dc-rsev .sv {{ --sv-on: var(--sv-hover, infinite); }}" in src for k in ("tr", ".pcrew", ".bg-sq"))
+          and all(f"#due-crew {k}:hover .dc-rsev .sv {{ --sv-on: var(--sv-hover, infinite); }}" in src for k in (".pcrew", ".bg-sq"))
+          and "#due-crew tr .dc-rsev .sv, #due-crew tr .dc-rsev .sv * { animation: none !important; }" in src and "tr:hover .dc-rsev" not in src
           and "#due-crew .face:hover .dc-rsev .sv {{ --sv-on: var(--sv-hover, infinite); }}" in src)
     app_css = open(os.path.join(REPO, "site", "public", "app.css")).read()
     check("Pip at rest (the bug hunt): the break screen's Pip goes on all break, whichever of its stretch moves it does",
@@ -20005,10 +20018,10 @@ def test_pip_party_only_from_its_tab_v395():
           and "Path 2" in today and "insmapshare" in insights, today[-600:])
     folded = board.you_html({}, None, dict(you, tab="insights", folded=True))
     alone = board.you_html({}, None, dict(you, tab="party"))
-    check("pip party: its tab says Beta beside its name (Sam's), with Due's lists or alone; no other tab does; "
+    check("pip party: out of Beta (3.9.10, Sam's): no tab says Beta, with Due's lists or alone; "
           "the folded line keeps the names",
-          all(h.count('Pip Party<span class="du-beta">Beta</span>') == 1 == h.count("du-beta") for h in (today, insights, alone))
-          and "Pip Party" in folded and "du-beta" not in folded and "#due-crew .du-tabs .du-beta" in board.DUE_CSS,
+          all("Pip Party" in h and 'class="du-beta"' not in h for h in (today, insights, alone))
+          and "Pip Party" in folded and "du-beta" not in folded and board.BETA_TABS == (),
           (today.count("du-beta"), alone.count("du-beta"), folded[-300:]))
     acts = []
 
@@ -20052,7 +20065,7 @@ def test_pip_party_for_everyone_v395():
           and "const FEW = Infinity;" in src["site/public/table.js"])
     check("pip party for everyone: a day's ceiling on tables beside the hour's",
           "TABLES_PER_DAY = 20" in src["worker/src/table.ts"] and "`tableday:${uid}`, TABLES_PER_DAY, 86400" in src["worker/src/table.ts"])
-    check("pip party for everyone: still Beta on its tab", "party" in board.BETA_TABS)
+    check("pip party for everyone: and out of Beta since 3.9.10", "party" not in board.BETA_TABS)
 
 
 def test_pip_party_can_be_hidden_v395():
@@ -20544,7 +20557,7 @@ def test_energy_and_security_review_v397():
     src = fakes.board_source()
     # -- a resting pointer isn't pointing --
     check("rest: every point-to-play loop reads the page's rest (--sv-hover), none is forever on its own",
-          "--sv-on: infinite;" not in src and "--sv-on: infinite;" not in SV.CSS and src.count("--sv-on: var(--sv-hover, infinite);") == 6
+          "--sv-on: infinite;" not in src and "--sv-on: infinite;" not in SV.CSS and src.count("--sv-on: var(--sv-hover, infinite);") == 5
           and ".sv:hover, .sv-slot:hover .sv { --sv-on: var(--sv-hover, infinite); }" in SV.CSS and ".dc-rest { --sv-hover: 1; }" in SV.CSS)
     check("rest: the watcher rides the Decks page's scripts (once a page) and the bars' widgets",
           SV.REST_JS in board.keep_me_in_view_js(True) and SV.REST_JS not in board.keep_me_in_view_js(False)
@@ -21662,8 +21675,8 @@ def test_magic_field_on_the_decks_page_v399():
         ph = lambda h: re.search(r'<input type="text"[^>]*placeholder="([^"]*)"', h).group(1)
         page2 = types.SimpleNamespace(tree="", stats="")
         dc._on_render(None, page2)
-        check("decks page: one example in the field, another the next time the page is drawn, never cycled",
-              ph(st) in dc.board.MAGIC_EXAMPLES and ph(page2.stats) in dc.board.MAGIC_EXAMPLES and ph(st) != ph(page2.stats)
+        check("decks page: one question in the field, the same every time (3.9.10: no sample searches), never cycled",
+              ph(st) == dc.board.MAGIC_PROMPT == ph(page2.stats) == "What do you want to study?" and not hasattr(dc.board, "MAGIC_EXAMPLES")
               and "setTimeout(type" not in st and "__EX__" not in st, (ph(st), ph(page2.stats)))
         conf["magic_search"] = False
         page = types.SimpleNamespace(tree="T", stats="S")

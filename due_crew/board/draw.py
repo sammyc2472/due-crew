@@ -22,6 +22,19 @@ from .fridge import fridge_html
 from .squads import _squads_html
 from .closet import CLOSET_CSS, closet_line
 from .scrapbook import scrapbook_line
+
+# 3.9.10 (Sam: "find a new settings gear because this one doesn't really fit and feels strangely spaced"): the
+# foot's two icons drawn, one size and one stroke (a font's ⚙ and ↻ came in whatever size and place the font had)
+_IC = ('<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+       'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">%s</svg>')
+_IC_REFRESH = _IC % '<path d="M21 4v6h-6"/><path d="M20.5 15a9 9 0 1 1-2.1-9.4L21 10"/>'
+_IC_GEAR = _IC % ('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06'
+                  'a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33'
+                  'l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09'
+                  'A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9'
+                  'a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06'
+                  'a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09'
+                  'a1.65 1.65 0 0 0-1.51 1z"/>')
 from .lobby import room_html
 
 
@@ -330,8 +343,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
               ' &middot; ') if sync_error else ""
     foot = (_calm_line(cfg) + _use_line(cfg) + _live_line(cfg) + f'<div class="dc-foot"><span class="fl">{left}</span><span class="sp"></span>'
             f'<span class="fr">{failed}<span class="upd">Updated {ago}</span>'
-            f'<a class="ic" href="#" title="Refresh" onclick="{_pycmd("refresh")}">&#8635;</a>'
-            f'<a class="ic" href="#" title="Settings" onclick="{_pycmd("settings")}">&#9881;&#xFE0E;</a></span></div>')
+            f'<a class="ic" href="#" title="Refresh" aria-label="Refresh" onclick="{_pycmd("refresh")}">{_IC_REFRESH}</a>'
+            f'<a class="ic" href="#" title="Settings" aria-label="Settings" onclick="{_pycmd("settings")}">{_IC_GEAR}</a></span></div>')
 
     # 3.8.1: Pip's moments; a crew room's Pips each wear their person's accent, by day or by night as the board
     seat = _by_theme(cfg, "#due-crew .dc-room .seat", "--sv-a: var(--sa-l);", "--sv-a: var(--sa-d);")

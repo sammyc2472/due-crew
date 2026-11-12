@@ -59,7 +59,7 @@ def _crew_picker(period, show_up=False, hidden=frozenset()):
     period = _crew_on(period, show_up)
     on = ' class="on"'
     return ('<div class="dc-sw">' + "".join(
-        f'<a{on if period == k else ""} href="#" onclick="{_pycmd("period:" + k)}">{t}</a>'
+        f'<a{on if period == k else ""} data-t="{t}" href="#" onclick="{_pycmd("period:" + k)}">{t}</a>'
         for k, t in views) + "</div>")
 
 

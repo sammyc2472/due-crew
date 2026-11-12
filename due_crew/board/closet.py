@@ -98,7 +98,9 @@ CLOSET_CSS = """
        and above it for a hat, so the row is a touch taller than an emoji's */
     #due-crew .dc-rsev { display: inline-block; vertical-align: middle; margin: -3px 8px -6px 2px; line-height: 0; }
     #due-crew a.dc-rsev, #due-crew a.dc-rsevl { text-decoration: none; border: 0; }
-    #due-crew tr:not(:hover) .dc-rsev .sv, #due-crew tr:not(:hover) .dc-rsev .sv * { animation: none !important; } #due-crew tr:hover .dc-rsev .sv { --sv-on: var(--sv-hover, infinite); }
+    /* 3.9.10 (Sam: "the way the person who you're on kinda hovers / gets bigger is disruptive… just the cheer
+       button appears"): a crew row's Pip is still, pointed at or not; the Cheer pill is what a row shows */
+    #due-crew tr .dc-rsev .sv, #due-crew tr .dc-rsev .sv * { animation: none !important; }
     /* 3.8.22: a plan card's squad line: who showed up, side by side, still until it's pointed at */
     #due-crew .pcrew .pips { display: inline-flex; gap: 4px; vertical-align: middle; margin: 8px 5px 0 0; }  /* a hat clear of the line above */
     #due-crew .pcrew .pips .dc-rsev { margin: 0; }

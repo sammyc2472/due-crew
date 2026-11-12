@@ -1061,7 +1061,7 @@ def test_ways_in():
           and "f.querySelector('button.go').click();" in fld)
     check("…it moves about twelve seconds, then rests till pointed at; nothing with Reduce motion; no </script> from its words",
           "12000" in fld and "prefers-reduced-motion" in fld and fld.count("</script>") == 1
-          and sum(('placeholder="%s"' % x) in fld for x in board.MAGIC_EXAMPLES) == 1)
+          and ('placeholder="%s"' % board.MAGIC_PROMPT) in fld)
     check("…its example stays as it is while the page is up (Sam: cycling through them was confusing and distracting)",
           "setTimeout(type" not in fld and "function next" not in fld and "mouseenter" not in fld)
     due = None
