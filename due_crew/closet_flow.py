@@ -30,7 +30,7 @@ import time
 
 from aqt import mw
 
-from . import closet
+from . import closet, store
 from .app import _profile_files, _state, cfg, save_cfg
 from .errs import oops
 
@@ -514,13 +514,7 @@ def _history(col, cut):
     else:
         return h
     _RF["hist"] = h
-    tmp = path + ".tmp"
-    try:
-        with open(tmp, "w") as f:
-            json.dump(dict(h, **{k: sorted(h[k]) for k in ("days", "morn", "eve")}), f)
-        os.replace(tmp, path)
-    except OSError:
-        pass
+    store.write_json(path, dict(h, **{k: sorted(h[k]) for k in ("days", "morn", "eve")}))
     return h
 
 

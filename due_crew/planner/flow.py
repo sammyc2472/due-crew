@@ -12,7 +12,7 @@ import os
 from aqt import mw
 from aqt.utils import tooltip
 
-from .. import app, plan_flow
+from .. import app, plan_flow, store
 from .. import plans as P
 from ..app import _bg, _state, cfg, client, save_cfg
 from ..backend.shapes import TransportError
@@ -516,14 +516,7 @@ def _drafts():
 
 
 def _save_drafts(data):
-    path = _drafts_path()
-    tmp = path + ".tmp"
-    try:
-        with open(tmp, "w") as f:
-            json.dump(data, f)
-        os.replace(tmp, path)
-    except OSError:
-        pass  # a full disk: the changes stay in the window till it closes
+    store.write_json(_drafts_path(), data)  # a full disk: the changes stay in the window till it closes
 
 
 def study_cards(idx, cids, name):

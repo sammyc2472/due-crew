@@ -1381,12 +1381,13 @@ def test_wrap_file_is_durable():
                 self.f.write(text[:len(text) // 2])
                 raise OSError("disk full")
 
-        wrap.open = lambda p, mode="r", *a, **k: DiesHalfway(open(p, mode, *a, **k)) if "w" in mode else open(p, mode, *a, **k)
+        from due_crew import store  # 3.9.12: every file is written by store.py
+        store.open = lambda p, mode="r", *a, **k: DiesHalfway(open(p, mode, *a, **k)) if "w" in mode else open(p, mode, *a, **k)
         try:
             wrap._wrap["data"] = {"life": {"reviews": 0}}
             wrap._save_wrap()
         finally:
-            del wrap.open
+            del store.open
         with open(path) as f:
             after = json.load(f)
         check("wrap.json: a write that dies halfway leaves the last good file in place",
@@ -15772,6 +15773,44 @@ def test_hooks_v3911():
     os.path.exists(H._path()) and os.remove(H._path())
 
 
+def test_one_way_to_keep_a_file_v3912():
+    """3.9.12, the foundations round: every file Due Crew keeps is written by
+    store.py (whole to a .tmp, then swapped in; a failed write takes its
+    .tmp with it and says so), where ten modules each wrote their own."""
+    from due_crew import store
+    d = tempfile.mkdtemp()
+    p = os.path.join(d, "x.json")
+    check("store: written whole and read back; a file that isn't a JSON object, or isn't there, reads as the default",
+          store.write_json(p, {"a": 1}) and store.read_json(p) == ({"a": 1}, '{"a": 1}') and not os.path.exists(p + ".tmp")
+          and store.write_text(p, "[1, 2]") and store.read_json(p, {}) == ({}, None) and store.read_json(os.path.join(d, "none.json")) == (None, None))
+    check("store: a write that can't be made says so, leaves no .tmp and leaves the file as it was",
+          store.write_json(p, {"a": 2}) and not store.write_json(os.path.join(d, "no", "such", "dir.json"), {"a": 3})
+          and store.read_json(p)[0] == {"a": 2} and os.listdir(d) == ["x.json"])
+    q = os.path.join(d, "mine.json")
+    check("store: private is mine alone (a session token's file)", store.write_json(q, {"t": "x"}, private=True)
+          and (os.name == "nt" or (os.stat(q).st_mode & 0o777) == 0o600))
+    cache = {}
+    data = store.load(cache, p)
+    data["b"] = 1
+    writes = []
+    real = store.write_text
+    store.write_text = lambda path, text, private=False: (writes.append(path), real(path, text, private))[1]
+    try:
+        first, again = store.save(cache), store.save(cache)
+        other = store.load(cache, q, ok=lambda d: "by" in d, empty=lambda: {"by": {}})
+    finally:
+        store.write_text = real
+    check("store: kept in memory till the path changes; saved only when it says something the file doesn't; a wrong shape is the empty one",
+          first and again and writes == [p] and store.read_json(p)[0] == {"a": 2, "b": 1} and other == {"by": {}} and cache["path"] == q)
+    src = {}
+    for root, _dirs, files in os.walk(os.path.join(REPO, "due_crew")):
+        for f in files:
+            if f.endswith(".py"):
+                src[os.path.relpath(os.path.join(root, f), REPO)] = open(os.path.join(root, f), encoding="utf-8").read()
+    own = sorted(k for k, v in src.items() if '+ ".tmp"' in v and not k.endswith("store.py"))
+    check("store: nothing else writes a .tmp of its own", own == [], own)
+
+
 def test_scrapbook_v3910():
     """3.9.10, the scrapbook (Sam: "a combo wrapped and home for polaroids /
     notes, etc. that are ephemeral at the moment or deleted permanently
@@ -15783,7 +15822,7 @@ def test_scrapbook_v3910():
     from due_crew import scrapbook as S, scrap_flow as SF, closet_flow as cf, fridge as FR
     from aqt.deckbrowser import DeckBrowser
     _patched_due_crew()
-    SF._BOOK.update(profile=None, data=None, disk=None)
+    SF._BOOK.update(path=None, data=None, disk=None)
     draw = {"k": "draw", "s": [[0, 10, 10, 50, 50]]}
     # pure
     pz = {"k": "pz", "from": "dre", "name": "Dre", "at": "2026-11-03T10:00:00Z", "a": "blue", "n": "go <b>", "d": draw}
@@ -15918,7 +15957,7 @@ def test_scrapbook_v3910():
         dc.client = keep[7]
         SF.client = keep[7]
         SH.picture, sheets.confirm = saved_pic, saved_confirm
-        SF._BOOK.update(profile=None, data=None, disk=None)
+        SF._BOOK.update(path=None, data=None, disk=None)
     src = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
     check("its ways in: the foot's Scrapbook, Tools › Due Crew › Scrapbook… (Your year… is gone), the December line",
           '("Scrapbook…", lambda: open_scrapbook())' in src and "Your year…" not in src)
@@ -17247,8 +17286,9 @@ def test_efficiency_decks_v391():
     saved = (wrap.os, dc.client, together.client, dc._morning, dc._awaiting_phone, due_flow.after_refresh, due_flow._reviews,
              CF.check, dc.tooltip, dc._rerender, dc._swap, rooms.refresh_widgets, dc.account.saved_elsewhere, dict(_state))
     try:
-        wrap.os = types.SimpleNamespace(path=os.path, remove=os.remove,
-                                        replace=lambda a, b: (writes.append(b), os.replace(a, b)))
+        from due_crew import store  # 3.9.12: every file is written by store.py
+        store.os = types.SimpleNamespace(path=os.path, remove=os.remove, open=os.open, fdopen=os.fdopen, chmod=os.chmod,
+                                         replace=lambda a, b: (writes.append(b), os.replace(a, b)))
         dc.client = together.client = lambda: cl
         dc._morning = lambda *a, **k: None
         dc._awaiting_phone = lambda: False
@@ -17276,6 +17316,7 @@ def test_efficiency_decks_v391():
     finally:
         (wrap.os, dc.client, together.client, dc._morning, dc._awaiting_phone, due_flow.after_refresh, due_flow._reviews,
          CF.check, dc.tooltip, dc._rerender, dc._swap, rooms.refresh_widgets, dc.account.saved_elsewhere) = saved[:13]
+        store.os = os
         _state.clear()
         _state.update(saved[13])
         wrap._wrap["profile"] = None

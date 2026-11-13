@@ -157,21 +157,12 @@ def _set_aside(path):
 def _psave(data):
     """Written whole, then swapped in (as wrap.json)."""
     _store.update(profile=app._profile_key(), data=data)
-    path = os.path.join(_files(), "plans.json")
-    tmp = path + ".tmp"
-    try:
-        with open(tmp, "w") as f:
-            json.dump(data, f)
-        os.replace(tmp, path)
-    except OSError:
+    from . import store
+    if not store.write_json(os.path.join(_files(), "plans.json"), data):
         # 3.9.9 (the plans review): this went by unsaid, and a plan's state that isn't kept is a morning
         # that opens again; counted for the field's sheet (a code, never the path)
         from . import errs
         errs.count("file:plans")
-        try:
-            os.remove(tmp)
-        except OSError:
-            pass
 
 
 def _migrate():

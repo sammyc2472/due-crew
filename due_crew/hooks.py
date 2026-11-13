@@ -25,9 +25,9 @@ hid (`hide`). Pure but for the file: the rules and the views here, the
 chip's place, its clicks and the requests in cards.py.
 """
 
-import json
 import os
 
+from . import store
 from .backend.shapes import clean_note
 
 KEEP = 3000            # hooks kept (the oldest go first)
@@ -47,18 +47,7 @@ def _path():
 
 
 def _data():
-    path = _path()
-    if _STORE["path"] != path or _STORE["data"] is None:
-        _STORE.update(path=path, disk=None)
-        try:
-            with open(path, encoding="utf-8") as f:
-                text = f.read()
-            got = json.loads(text)
-            _STORE["data"] = got if isinstance(got, dict) else {}
-            _STORE["disk"] = text
-        except Exception:
-            _STORE["data"] = {}
-    d = _STORE["data"]
+    d = store.load(_STORE, _path())
     for k in ("by", "asked", "out", "hide"):
         if not isinstance(d.get(k), dict):
             d[k] = {}
@@ -66,20 +55,7 @@ def _data():
 
 
 def _save():
-    text = json.dumps(_STORE["data"])
-    if _STORE.get("disk") == text:
-        return
-    tmp = _path() + ".tmp"
-    try:
-        with open(tmp, "w", encoding="utf-8") as f:
-            f.write(text)
-        os.replace(tmp, _path())
-        _STORE["disk"] = text
-    except OSError:
-        try:
-            os.remove(tmp)
-        except OSError:
-            pass
+    store.save(_STORE)
 
 
 def _one(guid):

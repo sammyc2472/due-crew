@@ -125,13 +125,9 @@ class ApiClient:
         with self._session_lock:
             try:
                 os.makedirs(os.path.dirname(self.session_file), exist_ok=True)
-                tmp = self.session_file + ".tmp"
-                # holds the session token: mine alone from the first byte
-                fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-                with os.fdopen(fd, "w") as f:
-                    json.dump(dict(self.session), f)
-                os.chmod(tmp, 0o600)  # an older .tmp kept its own mode
-                os.replace(tmp, self.session_file)
+                # holds the session token: mine alone from the first byte (store.write_json, private)
+                from .. import store
+                store.write_json(self.session_file, dict(self.session), private=True)
             except OSError:
                 pass
 
@@ -748,13 +744,8 @@ class ApiClient:
             return "", None
 
     def _save_known(self, guids):
-        tmp = self._known_file() + ".tmp"
-        try:
-            with open(tmp, "w") as f:
-                json.dump({"uid": self.user_id, "guids": sorted(guids)}, f)
-            os.replace(tmp, self._known_file())
-        except OSError:
-            pass
+        from .. import store
+        store.write_json(self._known_file(), {"uid": self.user_id, "guids": sorted(guids)})
 
     def _knows_part(self, known):
         """(the sync's `knows` part or None, what the server will have after it).

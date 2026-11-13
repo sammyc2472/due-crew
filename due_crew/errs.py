@@ -284,12 +284,8 @@ class Tally:
         with self.lock:
             text = json.dumps({"v": 1, "days": self.days}, sort_keys=True)
             self.dirty = False
-        tmp = self.path + ".tmp"
-        try:
-            with open(tmp, "w", encoding="utf-8") as f:
-                f.write(text)
-            os.replace(tmp, self.path)
-        except OSError:
+        from . import store
+        if not store.write_text(self.path, text):
             self.dirty = True
 
 
