@@ -5558,3 +5558,42 @@ every release that changes how something works.
   rooms, the share cards and the map card, the plan windows, Your AI
   app: already in step. Pip Party keeps its name on the TV and phones;
   the tab says Party (3.9.10).
+- 3.9.12, the foundations (Sam, 13 Nov: "are there any foundational setup
+  things that we need to be doing as well. like standardizing structures
+  of UI and data", then "go for all of the above"). Eight were named;
+  nothing a person sees changes. What each got this round:
+  1, one way to keep a file: `store.py` (whole to a .tmp, swapped in, a
+  failed write takes its .tmp with it and says so; `load`/`save` for one
+  kept in memory, written only when it differs). hooks, the scrapbook,
+  wrap.json, bingo, the closet's days, plan drafts, plans.json, the error
+  counts, the session (0600) and the known cards all go through it; no
+  module writes a .tmp of its own (`test_one_way_to_keep_a_file_v3912`).
+  2, one set of colours: the add-on's pages already all read
+  `board.palette`; the site restates the shared ones by hand (its paper
+  and ink are its own), so they're checked against it, light and dark
+  (`test_the_site_wears_the_boards_tokens_v3912`). Not done: one control
+  reset for every page (ten files still carry their own).
+  3, fewer twins: the site's shared constants (what each party game
+  needs, a plan's limits, a day's saves) are written from the add-on's
+  by `tools/gen_twins.py`, and the suite checks it changes nothing. The
+  rules (functions) are still twins, each with its test.
+  4 and 5, the big files and the tests: the suite runs by area
+  (`python3 tests/test_due_crew.py hook magic`), `-q` says only what
+  failed, `--list` names its 329 tests. Not done: splitting
+  `plan_flow.py`, `__init__.py`, the test file or the site's scripts
+  (37 checks read those files by name, so each split moves its checks
+  with it: one file a sitting), and moving checks off exact markup.
+  6, named shapes: `views.py`, the review chip first (its keys and
+  types, its kinds, its peek); checked as it crosses to the page, a slip
+  counted as `view:chip` and drawn anyway; the chip's script reads only
+  keys in the shape.
+  7, the words: `test_copy_rules_v3912` (sentence case for buttons,
+  headings and menu items; a hook wherever a person reads it; nothing
+  says rank, rival, compete or leaderboard), which found one more
+  "tips" on its first run; the glossary of names and their older names
+  in code is in CLAUDE.md.
+  8, the server's contract: the suite's server is asked every route in
+  `worker/src/index.ts` (127); it answers all but the site's own two,
+  which are named (`test_the_fake_has_every_route_v3912`). Not done:
+  one schema that writes the validators for the Worker, the client and
+  the fake.
