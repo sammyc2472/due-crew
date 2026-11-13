@@ -15773,6 +15773,42 @@ def test_hooks_v3911():
     os.path.exists(H._path()) and os.remove(H._path())
 
 
+def test_the_site_wears_the_boards_tokens_v3912():
+    """3.9.12, the foundations round: the colours a person sees in Anki and
+    on duecrew.com are one set. The add-on's pages all read board.palette;
+    the site's stylesheets restate it by hand (its paper and ink are its
+    own), so the tokens they share are checked against it here: the
+    accent, its ink, your row's fill, the line, the well and the amber, in
+    light and in dark."""
+    from due_crew import board
+    light, dark = board.palette("light", "green"), board.palette("dark", "green")
+    want = {"accent": "accent", "accent-ink": "accent-ink", "you": "you-bg", "line": "line", "well": "well", "warn": "hours"}
+
+    def tokens(text):
+        """[{name: value}] for each block of custom properties, in order (the light block, then the dark)."""
+        out = []
+        for block in re.findall(r"\{[^{}]*--[a-z-]+:\s*#[^{}]*\}", text):
+            out.append(dict(re.findall(r"--([a-z0-9-]+):\s*(#[0-9a-fA-F]{3,8})", block)))
+        return out
+
+    wrong = []
+    for name, names in (("app.css", want), ("index.html", {k: v for k, v in want.items() if k in ("accent", "accent-ink", "line", "well")}),
+                        ("table.css", {"acc": "accent", "line": "line", "w-well": "well", "w-acc-ink": "accent-ink", "w-you": "you-bg", "w-acc": "accent"})):
+        blocks = tokens(open(os.path.join(REPO, "site", "public", name), encoding="utf-8").read())
+        firsts = [b for b in blocks if any(k in b for k in names)][:2]
+        if len(firsts) < 2:
+            wrong.append((name, "no light and dark block"))
+            continue
+        for b, pal, theme in ((firsts[0], light, "light"), (firsts[1], dark, "dark")):
+            for site_name, board_name in names.items():
+                if site_name in b and b[site_name].lower() != pal[board_name].lower():
+                    wrong.append((name, theme, site_name, b[site_name], pal[board_name]))
+    check("tokens: the site's accent, its ink, your row, the line, the well and the amber are the board's, light and dark", wrong == [], wrong)
+    pages = {"magic_html.py": "board.palette(", os.path.join("planner", "webpage.py"): "palette(", os.path.join("ui", "__init__.py"): "palette("}
+    check("tokens: every page the add-on draws reads the board's palette (Magic search, the plan window, the Qt windows)",
+          all(want_ in open(os.path.join(REPO, "due_crew", f), encoding="utf-8").read() for f, want_ in pages.items()))
+
+
 def test_one_way_to_keep_a_file_v3912():
     """3.9.12, the foundations round: every file Due Crew keeps is written by
     store.py (whole to a .tmp, then swapped in; a failed write takes its
