@@ -1121,3 +1121,37 @@ def test_deck_counts_without_buried_siblings_v3912():
     finally:
         dc.cfg, dc.mw.col = saved
 
+
+def test_the_hook_button_reaches_its_window_v3912():
+    """3.9.12 (SC: "the add a hook for last time button isn't working"): the chip's hookadd, sent as the
+    review screen's bottom bar and the card above it send it, opens the hook's window; from a card's own
+    script (a preview, no key) it does nothing."""
+    import due_crew as dc
+    from due_crew import cards as CC, hooks as H, room_model as rm
+    Bar = type("ReviewerBottomBar", (), {})
+    had = sys.modules.get("aqt.reviewer")
+    sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}), ReviewerBottomBar=Bar)
+    got, saved = [], CC.hook_edit
+    CC.hook_edit = lambda: got.append("edit")
+    try:
+        view, _asked = H.view(None, False, True, False, False)
+        check("the chip that offers a hook sends hookadd", view["cmd"] == "hookadd" and view["kind"] == "hookadd")
+        dc._on_js(False, "duecrew:" + view["cmd"], Bar())
+        check("Add a hook, from the review screen's bottom bar: the hook's window", got == ["edit"])
+        dc._on_js(False, f"duecrew:hookadd|{rm.CMD_KEY}", type("Reviewer2", (), {})())
+        check("…and from the card above the bar (keyed)", got == ["edit", "edit"])
+        dc._on_js(False, "duecrew:hookadd", type("Previewer", (), {})())
+        check("a card's own script, no key: nothing", got == ["edit", "edit"])
+        mine, _ = H.view({"text": "loops"}, True, False, False, False)
+        check("my hook's Edit is the same command", mine["cmd"] == "hookadd" and mine["act"] == "Edit")
+        src = srcs.glue_src()
+        check("every command the chip can send is one the glue passes to cards.on_message",
+              all(c.startswith("knows") or c == "hookadd" for c in ("knowsask", "knowstip", "knowsbar", "knowshelped", "hookadd"))
+              and '== ["hookadd"]' in src)
+    finally:
+        CC.hook_edit = saved
+        if had is None:
+            sys.modules.pop("aqt.reviewer", None)
+        else:
+            sys.modules["aqt.reviewer"] = had
+

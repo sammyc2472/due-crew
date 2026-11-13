@@ -74,8 +74,10 @@ def _on_js(handled, message, context):
         # 3.9.1: a tap on the top or bottom bar's shade (app.veil) is Esc on the board
         app.board_eval("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));")
         return (True, None)
-    if message.startswith("duecrew:knows"):
-        # 3.2: the chip in the reviewer's bottom bar, or its card above it
+    if message.startswith("duecrew:knows") or message.split(":")[1:2] == ["hookadd"]:
+        # 3.2: the chip in the reviewer's bottom bar, or its card above it. 3.9.12 (SC: "the add a hook
+        # for last time button isn't working"): hookadd is the chip's too, and wasn't named here, so
+        # Add a hook and a hook's Edit reached nothing since 3.9.11
         try:
             parts = message.split(":")
             crew_cards.on_message(parts[1], parts, from_card_page=card_page)
