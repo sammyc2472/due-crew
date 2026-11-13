@@ -15773,6 +15773,53 @@ def test_hooks_v3911():
     os.path.exists(H._path()) and os.remove(H._path())
 
 
+def test_copy_rules_v3912():
+    """3.9.12, the foundations round: the words' rules, checked instead of
+    remembered. Buttons, headings and menu items are sentence case; what a
+    crewmate leaves on a card is a hook wherever it's read; nothing a
+    person reads says rank, rival, compete or leaderboard."""
+    files = {}
+    for root, _dirs, names in os.walk(os.path.join(REPO, "due_crew")):
+        for f in names:
+            if f.endswith(".py"):
+                files[os.path.relpath(os.path.join(root, f), os.path.join(REPO, "due_crew"))] = open(os.path.join(root, f), encoding="utf-8").read()
+    # names that are names: the product, its parts, a person's own things
+    names_ok = ("Due Crew", "Pip Party", "Your plans", "Magic search", "Big Step", "Your AI", "My plan", "Anki", "Apple Music", "Study Session", "Step 1", "Step 2")
+    title = []
+    for f, text in files.items():
+        for m in re.finditer(r'(?:QPushButton|addButton|setWindowTitle|addAction|heading|QCheckBox|QRadioButton)\(\s*f?"([^"]{3,60})"', text):
+            words = m.group(1)
+            bare = words
+            for n in names_ok:
+                bare = bare.replace(n, "")
+            if re.search(r"[a-z] [A-Z][a-z]", bare) and ": " not in bare and " \u00b7 " not in bare and " · " not in bare:
+                title.append((f, words))
+    check("copy: buttons, headings and menu items are sentence case (a name keeps its capitals)", title == [], title[:8])
+    shown = [("board", "crew.py"), ("board", "insights.py"), ("board", "scrapbook.py"), ("together.py",), ("leech_flow.py",), ("scrapbook.py",),
+             ("cards.py",), ("ui", "hook_dialog.py")]
+    tips = []
+    for parts in shown:
+        text = files[os.path.join(*parts)]
+        text = re.sub(r'''"""[\s\S]*?"""''', '""', text)       # a docstring or a comment may still say tip: the code does
+        text = re.sub(r"(?m)(^\s*#.*$|\s{2}# .*$|^\s*//.*$)", "", text)
+        for m in re.finditer(r"""(?:"|>|')([^"'<>\n]*?(?:\ba tip\b|s tip\b|\btips that\b|\bSend a tip\b|\bTips from\b|>Tip<)[^"'<>\n]*)""", text):
+            src = text.split("\n")[text[:m.start()].count("\n")]
+            before = src[:src.find(m.group(1))] if m.group(1) in src else src
+            if not ("#" in before or "//" in before or src.strip().startswith(("#", "//", "*"))):  # a comment may still say tip: the code does
+                tips.append((os.path.join(*parts), m.group(1)[:60]))
+    check("copy: what a crewmate leaves on a card is a hook wherever a person reads it", tips == [], tips[:6])
+    banned = []
+    pages = dict(files)
+    for f in ("index.html", "classes.html", "privacy.html", "app.js", "table.js"):
+        pages[os.path.join("site", f)] = open(os.path.join(REPO, "site", "public", f), encoding="utf-8").read()
+    for f, text in pages.items():
+        for m in re.finditer(r"""["'>][^"'<>\n]*\b(compete|competition|rivals?|leaderboard|ranking)\b[^"'<>\n]*""", text, re.I):
+            line = text.split("\n")[text[:m.start()].count("\n")].strip()
+            if not (line.startswith("#") or line.startswith("//") or line.startswith("*") or '"""' in line or "  # " in line):
+                banned.append((f, m.group(0)[:70]))
+    check("copy: friendship, never competition: nothing a person reads says rank, rival, compete or leaderboard", banned == [], banned[:6])
+
+
 def test_the_site_wears_the_boards_tokens_v3912():
     """3.9.12, the foundations round: the colours a person sees in Anki and
     on duecrew.com are one set. The add-on's pages all read board.palette;

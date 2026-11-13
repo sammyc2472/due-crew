@@ -981,7 +981,7 @@ def helped(guid, from_uid, on=True):
         from .together import mark_helped
         mark_helped(guid, from_uid, on)
         if on:
-            tooltip("Thanks. The tips that help most show first.")
+            tooltip("Thanks. The hooks that help most show first.")
         card = _card()
         if card is not None and card.note().guid == guid and getattr(mw.reviewer, "state", "") == "answer":
             on_answer(card, opened=True)

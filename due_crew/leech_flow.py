@@ -1,6 +1,6 @@
 """3.9.2, Leeches (Sam's picks, S1-A, S2-A): the cards Anki stopped showing
 me (a leech, suspended) and the ones one miss from it, in a deck, as a view
-in Insights' place. One button a card, sorted by danger: a crewmate's tip
+in Insights' place. One button a card, sorted by danger: a crewmate's hook
 when someone has it down (else Ask them), else Bring back; Learn it fresh,
 Edit and Leave it out sit behind its ⋯. Bring all back and Browse at the top.
 

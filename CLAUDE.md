@@ -345,6 +345,18 @@ clean `main` does the migrations, the API, then the site, then
 
 - Simplicity is the product rule. Friendship framing, never competition —
   "crew", no "compete/rivals". Copy is terse, no AI-speak.
+- Words (3.9.12; `test_copy_rules_v3912` checks them): buttons, headings and
+  menu items are sentence case; nothing a person reads says rank, rival,
+  compete or leaderboard. One name a thing, and the code's older name for it:
+  a **hook** is `tip` in code, routes and tables (`tips`, `/tips/helped`);
+  **Pip** is `sev`; **Pip Party** is `gamenight` (its tab says Party); the
+  **scrapbook** took Wrapped's place (`wrapped*` is the year's numbers);
+  **unsuspended**, never unlocked; a plan's **set** on the site is a date in
+  the add-on's code.
+- A file Due Crew keeps is written by `store.py` (3.9.12: whole to a .tmp,
+  swapped in; `load`/`save` for one kept in memory), never by a module's own
+  open-and-replace. The colours are `board.palette`: every add-on page reads
+  it, and the site's shared tokens are checked against it.
 - Requests, not reads, are the budget now: a refresh is one request and a
   sync is one. Don't add polling, per-friend requests, or unbounded
   queries. D1 writes cost more than reads: the server compares before it
