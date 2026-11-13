@@ -64,7 +64,7 @@ def keep(luck, tips, my_exam, today):
             got = [t for t in store.get(ch["guid"], []) if t.get("from") != ch["from"]]
             got.append({"from": ch["from"], "name": ch["name"], "note": ch["note"], "day": today})
             store[ch["guid"]] = got[-3:]
-            toasts.append(f"{TIP_EMOJI} {html.escape(ch['name'])} sent a tip on a card you flagged. "
+            toasts.append(f"{TIP_EMOJI} {html.escape(ch['name'])} left a hook on a card you flagged. "
                           "It shows when the card comes up.")
         horizon = (datetime.date.fromisoformat(today) - datetime.timedelta(days=TIP_DAYS)).isoformat()
         w["tips"] = {g: [t for t in ts if str(t.get("day", "")) >= horizon]
@@ -187,7 +187,7 @@ def send_tip(uid, index):
             _send_cheer(uid, entry["name"], TIP_EMOJI, tip, guid=flag["guid"],
                         then=lambda ok: ok and hide_tipped(uid, flag["guid"]))
     # plain text: the card's words are this computer's own, the ask a crewmate's
-    sheets.ask_text("Send a tip", f"On “{text or 'this card'}”.{q}\n\nOne line; {first} sees it when the card comes up.",
+    sheets.ask_text("Send a hook", f"On “{text or 'this card'}”.{q}\n\nOne line; {first} sees it when the card comes up.",
                     go, yes="Send")
 
 
@@ -313,7 +313,7 @@ def flag_card(card):
         flags.append({"guid": note.guid, "text": _plain(note.fields[0] if note.fields else ""),
                       "deck": clean_note(deck, 40), "at": _today()})
         flags = flags[-TRICKY_MAX:]
-        msg = "Flagged for your crew. Anyone with this card can send you a tip."
+        msg = "Flagged for your crew. Anyone with this card can send you a hook."
     cl.session["tricky"] = flags
     cl._save_session()
     app.sync(light=True, fetch=False)

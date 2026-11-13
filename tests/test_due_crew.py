@@ -2382,7 +2382,7 @@ def test_together_v210():
                                    {"text": "Digoxin", "state": "answered", "who": ["Priya <b>"]}])
     check("your asks (K3): where each stands, escaped, no Asked of you when nobody asked",
           "Your asks" in mine and "Asked of you" not in mine and "Dre knows this" in mine and "waiting" in mine
-          and "Priya &lt;b&gt; answered" in mine and "1 tip" in mine and "<i>" not in mine)
+          and "Priya &lt;b&gt; answered" in mine and "1 hook" in mine and "<i>" not in mine)
     check("flags: a cloze shows as [...], never its answer",
           together._plain("<b>S3</b>&nbsp;is heard in {{c1::Kentucky::rhythm}}") == "S3 is heard in [\u2026]")
 
@@ -6093,7 +6093,7 @@ def test_who_knows_v32():
           both["more"] == 1 and both["actcmd"] == "knowshelped:dre" and both["act"] == "\u2713 Helped", str(both))
     check("chip: nobody I can name, nothing", K.chip_view({"knows": ["zed"], "tips": []}, [], names) is None)
     asked = K.chip_view(None, [], names, asks=[("dre", 1)])
-    check("chip: a crewmate's ask on a card I have, with Tip", asked["cmd"] == "knowsreply:dre:1" and asked["act"] == "Tip")
+    check("chip: a crewmate's ask on a card I have, with Tip", asked["cmd"] == "knowsreply:dre:1" and asked["act"] == "Hook")
     asked_q = K.chip_view(None, [], names, asks=[("dre", 1, "why axillary?")])
     check("chip: a crewmate's ask shows their line, and a short form for a narrow bar",
           asked_q["text"] == "\U0001F419 Dre: \u201cwhy axillary?\u201d" and asked_q["short"] == "\U0001F419 Dre asked"
@@ -17557,7 +17557,7 @@ def test_sheets_v391():
                                        ("__init__.py", 'sheets.confirm("Sign out?"'), ("__init__.py", 'sheets.confirm("Delete account?"'),
                                        ("due_flow.py", 'sheets.ask_text("Edit to-do"'), ("team_flow.py", 'sheets.confirm("Join this plan'),
                                        ("team_flow.py", 'sheets.ask_text("Reply"'), ("team_flow.py", 'sheets.ask_text("Ask the squad"'),
-                                       ("together.py", 'sheets.ask_text("Good-luck card"'), ("together.py", 'sheets.ask_text("Send a tip"'),
+                                       ("together.py", 'sheets.ask_text("Good-luck card"'), ("together.py", 'sheets.ask_text("Send a hook"'),
                                        ("plan_flow.py", "sheets.confirm(title, text, yes"), ("plan_flow.py", 'sheets.confirm("Reset to default?"'),
                                        ("plan_flow.py", 'sheets.ask_item("Change deck"'), ("plan_flow.py", "sheets.confirm_check(title, text, \"Stop\""),
                                        ("squads.py", 'sheets.confirm("Block?"'), ("squads.py", 'sheets.confirm("Remove?"')))
@@ -18220,7 +18220,7 @@ def test_leeches_392():
               and "Bring all" not in html and "insleech:10:back" not in html and "duecrew:insleech:10:browse:0" in html
               and "&lt;i&gt;Spanish" in html and "<i>Spanish" not in html, html[:1500])
         check("board: one button a card: the tip, else Ask who has it down, else Bring back; a near card's is a tip or nothing",
-              "duecrew:insleech:10:tip:102" in html and "Dre&rsquo;s tip" in html and "Ask Maya" in html
+              "duecrew:insleech:10:tip:102" in html and "Dre&rsquo;s hook" in html and "Ask Maya" in html
               and "slow: 44 s a try" in html and "back in 3 days" in html, html)
         check("board: behind ⋯: Learn it fresh, Edit, Leave it out (and Bring back where the button's a tip)",
               not any(f"insleech:10:{a}:" in html for a in ("fresh", "edit", "out", "back")) and "hidden>" not in html
@@ -18231,7 +18231,7 @@ def test_leeches_392():
         q = lambda cid: conn.execute("SELECT queue, lapses, type FROM cards WHERE id = ?", (cid,)).fetchone()  # noqa: E731
         tags = lambda nid: conn.execute("SELECT tags FROM notes WHERE id = ?", (nid,)).fetchone()[0]  # noqa: E731
         check("glue: the tip in a sheet, Bring it back from there: unsuspended, schedule kept, the leech tag off, one undo step",
-              sheets_asked[-1] == ("Dre's tip", "Dre: fiesta takes ser: it's an event", "Bring it back") and q(102) == (2, 8, 2)
+              sheets_asked[-1] == ("Dre's hook", "Dre: fiesta takes ser: it's an event", "Bring it back") and q(102) == (2, 8, 2)
               and "leech" not in tags(102) and col.undo_steps[-1] == ("Due Crew: bring back", [102]) and said[-1] == "Back in your reviews.",
               (sheets_asked, q(102), col.undo_steps[-1:]))
         dc._on_js(False, as_board("duecrew:insleech:10:ask:103"), DeckBrowser())

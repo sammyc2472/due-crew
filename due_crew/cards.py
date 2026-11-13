@@ -329,7 +329,7 @@ def chip_view(info, local_tips, names, asks=(), mine=False, pips=None, hidden=No
         who = who_of(asks[0][0])
         q = str(asks[0][2]) if len(asks[0]) > 2 and asks[0][2] else ""
         view = {"kind": "asked", "text": f"{who}: \u201c{q}\u201d" if q else f"{who} asked about this",
-                "short": f"{who} asked", "ask": False, "cmd": f"knowsreply:{asks[0][0]}:{int(asks[0][1])}", "act": "Tip"}
+                "short": f"{who} asked", "ask": False, "cmd": f"knowsreply:{asks[0][0]}:{int(asks[0][1])}", "act": "Hook"}
         if q:
             view["title"] = q
             view["fold"] = f"{who} asked about this card"  # the line can give the answer away
@@ -1020,7 +1020,7 @@ def on_message(cmd, parts=(), from_card_page=False):
             # the review screen runs the card's script too: a thanks is sent only on a yes
             from .ui import confirm  # in the board's colours (3.9.1); the review screen has no board for a sheet
             tip = _tip_from(parts[2])
-            if tip is None or (not tip["helped"] and not confirm(mw, "This helped", f"Tell {tip['name'].split(' ')[0]} this tip helped?", "Tell them")):
+            if tip is None or (not tip["helped"] and not confirm(mw, "This helped", f"Tell {tip['name'].split(' ')[0]} this hook helped?", "Tell them")):
                 return True
         helped_toggle(parts[2])
     elif cmd == "knowsreply" and len(parts) > 3:

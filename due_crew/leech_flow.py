@@ -366,7 +366,7 @@ def show_tip(did, cid):
         return
     from . import sheets
     words = "\n\n".join(f"{t['name']}: {t['text']}" for t in c["tip"])
-    head = f"{c['tip'][0]['name']}'s tip" if len(c["tip"]) == 1 else "Tips from your crew"
+    head = f"{c['tip'][0]['name']}'s hook" if len(c["tip"]) == 1 else "Hooks from your crew"
     if c["susp"]:
         sheets.confirm(head, words, "Bring it back", lambda: bring_back(did, [c["cid"]]))
     else:

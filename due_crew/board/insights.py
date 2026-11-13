@@ -482,7 +482,7 @@ def _ins_leech_row(did, c):
     # 3.9.10 (Sam: Insights is "a data only zone", nothing here adjusts a card): a crewmate's tip or
     # who has it down stay (they change no card); Bring back, Learn it fresh, Leave it out and Edit went
     if tip:
-        main = act("tip", f'{e(tip[0]["name"])}&rsquo;s tip', "sl-bt tip")
+        main = act("tip", f'{e(tip[0]["name"])}&rsquo;s hook', "sl-bt tip")
     elif knows:
         main = act("ask", f"Ask {e(knows[0])}", "sl-bt tip",
                    f'{e(", ".join(knows))} {"has" if len(knows) == 1 else "have"} it down')

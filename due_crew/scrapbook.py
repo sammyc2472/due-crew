@@ -167,7 +167,7 @@ def year_stats(run, plans, c, cheers, earned):
                          (plans, "plan finished", "plans finished"),
                          (c.get("pz", 0), "drawing or sign", "drawings and signs"),
                          (c.get("luck", 0), "good-luck card", "good-luck cards"),
-                         (c.get("tip", 0), "tip that helped", "tips that helped"),
+                         (c.get("tip", 0), "hook that helped", "hooks that helped"),
                          (cheers, "cheer", "cheers"),
                          (earned, "thing Pip earned", "things Pip earned")):
         if n:
