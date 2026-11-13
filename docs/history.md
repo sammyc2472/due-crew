@@ -4914,6 +4914,29 @@ every release that changes how something works.
   refresh is one request, a hook's save is one on a click.
   Sam's three open questions took my defaults: the name is "hook",
   shared by default, Ask stays.
+- 3.9.11, more magic in Magic search (Sam, 13 Nov, on the mock "Magic
+  Search Sparkle", eight ideas: "build 1, 4, 5, 7"). 1, it answers while
+  you type: the answer sits in the box ("27 cards · about 9 min", `.live`:
+  one line of words only, never over them, not in a narrow window), and
+  when a new answer lands its count rolls up, the bar grows and the star
+  twinkles, more for a find of a hundred or more (`landed` in magic.js;
+  the same answer drawn again is still). 4, did you mean: words no tag
+  and no card has offer the tag's word they nearly are, with its cards
+  ("Platelets? 14 cards"; `magic.mean`/`lev2`: two letters off, or one
+  with the first letter wrong, since one off after a right first letter
+  was read as the tag already; a quarter of a second at most; a tap puts
+  that one word right and leaves the rest of the box). 5, nothing found
+  is a way on: what's waiting today in this deck, each a chip with the
+  words that find it (missed today, due today, leeches: the ones with
+  any; `magic.WAITING`, `Search.none_view`, worked out once a text), and
+  the recents. The mock's "search the cards' own words" isn't there: words
+  no tag has are looked for in the cards already. 7, Schedule ahead: a
+  picked day wears its share ("+5") and its count is what it would be;
+  the share drops in when it's new or changes, and Put sends a sparkle
+  off each day. All from the deck, on this computer; no request; nothing
+  moves with Reduce motion. Not built: 2 (opens knowing your day), 3
+  (recents that say what they found), 6 (Study now deals the cards), 8
+  (Pip in the wizard hat).
 - 3.9.11, Magic search's Recent (Sam's screenshot: a pasted list of card
   ids ran off the window). A recent is something to type again: pasted
   ids and anything over 60 characters aren't kept (they were, cut at 200

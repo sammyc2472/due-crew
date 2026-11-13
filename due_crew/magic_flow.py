@@ -717,6 +717,7 @@ class Search:
     the window hands it the page's clicks (on) and draws its view."""
 
     def __init__(self, ops):
+        self._none = None  # (deck, text) -> what nothing found offers (none_view)
         self.ops = ops
         self.push = lambda: None   # the window: draw the view again
         self.close_win = lambda: None
@@ -1103,6 +1104,10 @@ class Search:
              "picked": self.cids_in is not None, "name": self.name(), "signed_in": self.ops.signed_in(),
              "lines": self.lines(cids, t), "qids": self.qids_view(), "terms": r.get("terms") or [],
              "found": f, "tiles": self.tiles_view(f)}
+        none = self.none_view(cids)
+        if none:
+            v["none"] = none
+            v["recent"] = self.ops.recent()
         if self.mode == "days" or self.picked:
             v["days"] = self.days_view(cids)
         v["dests"] = self.dests_view()
@@ -1228,6 +1233,44 @@ class Search:
                 kept[x["k"]] = [t for t in have.get(x["k"], x.get("try") or []) if _ticks(M.read(t, self.tree, today), x["k"], self.tree)]
             self._tries[self.did] = kept
         return M.howto(board.MAGIC_KBD, self._tries.get(self.did))
+
+    def none_view(self, cids):
+        """3.9.11 (Sam's picks 4 and 5 on the mock "Magic Search Sparkle"):
+        words that found no tag and no card aren't a dead end. mean: the
+        tags' words they nearly are, each the box's text with that word put
+        right, what it's called and its cards ("Platelets?", 14); waiting:
+        what's waiting today in this deck (missed today, due, leeches: the
+        ones with any), each the words that find it. Worked out once a text.
+        None when something was found or it wasn't words."""
+        r = self.r
+        if cids or self.idx is None or r["kind"] != "words" or not r["text"] or self.ticked() or self.cids_in is not None:
+            return None
+        key = (self.did, self.text)
+        if self._none and self._none[0] == key:
+            return self._none[1]
+        out = {"mean": [], "waiting": []}
+        try:
+            for typed, word in M.mean(self.tree, r["text"].split()):
+                text = re.sub(r"(?<![A-Za-z0-9])" + re.escape(typed) + r"(?![A-Za-z0-9])", word, self.text, count=1, flags=re.I)
+                again = M.read(text, self.tree, self.ops.today(), self.every, self.plans_for_words())
+                on = [g for g in again["groups"] if g["on"]]
+                if on and text != self.text:
+                    out["mean"].append({"text": text, "name": on[0]["name"], "n": sum(g["cards"] for g in on)})
+            idx = self.idx
+            deck_q = M.deck_q(idx.name)
+            for k, words in M.WAITING:
+                if k == "due":
+                    n = sum(1 for c in idx.due_now if c in idx.cards and c not in idx.leech)
+                elif k == "leech":
+                    n = sum(1 for c in idx.leech if c in idx.cards)
+                else:
+                    n = len([c for c in (self.ops.find(f"{deck_q} {M.filters_q([{'k': k}])}") or ()) if c in idx.cards])
+                if n:
+                    out["waiting"].append({"text": words, "label": M.filter_label({"k": k}), "n": n})
+        except Exception:
+            oops()
+        self._none = (key, out)
+        return out
 
     def lines(self, cids, t):
         r = self.r

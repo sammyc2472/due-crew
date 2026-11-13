@@ -161,6 +161,62 @@ def lev1(a, b):
     return a[i + 1:] == b[i:] if len(a) > len(b) else a[i:] == b[i + 1:]
 
 
+MEAN_MIN = 4       # did you mean: a word this long or longer,
+MEAN_MAX = 2       # at most this many offered,
+MEAN_SECS = 0.25   # and this long looking
+
+
+def lev2(a, b):
+    """How many letters apart (added, gone, changed), counted up to 2; 3 for any more."""
+    if a == b:
+        return 0
+    if abs(len(a) - len(b)) > 2:
+        return 3
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        if min(cur) > 2:
+            return 3
+        prev = cur
+    return min(prev[-1], 3)
+
+
+def mean(tree, words):
+    """3.9.11, did you mean: for words no tag and no card has, the tags'
+    own words they nearly are: [(typed, the tag's word)], the nearest
+    first, MEAN_MAX at most. Two letters off, or one with the first letter
+    wrong (one off after a right first letter is read as the tag already,
+    Tree.groups' tier 1). Only words of MEAN_MIN letters or more: a short
+    one is near too many."""
+    import time
+    if tree is None:
+        return []
+    vocab = getattr(tree, "_vocab", None)
+    if vocab is None:
+        vocab = tree._vocab = sorted({w for key in tree.by_last for w in key.split() if len(w) >= MEAN_MIN and not w.isdigit()})
+    out, t0 = [], time.time()
+    for w in dict.fromkeys(str(x).lower() for x in words or ()):
+        if len(w) < MEAN_MIN or w in STOP or w.isdigit():
+            continue
+        best = None
+        for c in vocab:
+            if abs(len(c) - len(w)) > 2 or not (c[0] == w[0] or c[1] == w[1] or c[-2:] == w[-2:]):
+                continue
+            d = lev2(w, c)
+            if d and d <= 2 and (best is None or (d, c) < best):
+                best = (d, c)
+        if best:
+            out.append((best[0], w, best[1]))
+        if time.time() - t0 > MEAN_SECS:
+            break
+    return [(w, c) for _d, w, c in sorted(out)[:MEAN_MAX]]
+
+
+WAITING = (("m1", "missed today"), ("due", "due today"), ("leech", "leeches"))  # nothing found: what's waiting, and the words that find it
+
+
 FILLER = frozenset("chapter chapters ch section sections sec lecture lectures lec part unit video videos module "
                    "lesson lessons page pages".split())  # "chapter 3": a word a tag may leave out
 _SMALL = frozenset("and of the in to for with a an on vs or at by from".split())  # not in a name's initials

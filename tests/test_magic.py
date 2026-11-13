@@ -981,6 +981,70 @@ def test_recents_are_short_v3911():
           and "els.q.value = t; fit(); send('type', { text: t });" in js and "b.textContent" not in js)
 
 
+def test_more_magic_v3911():
+    """3.9.11 (Sam, on the mock "Magic Search Sparkle": "build 1, 4, 5, 7"):
+    the answer lands in the box as it's typed; a word no tag or card has
+    offers the tag it nearly was; nothing found says what's waiting today;
+    Schedule ahead's picked days wear their share. Each moves once, and not
+    at all with Reduce motion."""
+    check("letters apart, counted to two", (M.lev2("platelets", "plateletts"), M.lev2("pletelats", "platelets"), M.lev2("kitten", "sitting"),
+                                            M.lev2("renal", "renal"), M.lev2("abc", "abcdef")) == (1, 2, 3, 0, 3))
+    face, ops, _closed = window()
+    face.on("ready", {})
+    face.on("type", {"text": "pletelats"})
+    v = face.view()
+    check("4, did you mean: two letters off finds no tag and no card; the tag it nearly was is offered with its cards, the text put right",
+          v["found"] is None and v["none"]["mean"] == [{"text": "platelets", "name": "Platelets", "n": 14}]
+          and v["lines"] == ["No tag or card says \u201cpletelats\u201d in Big Step 1."], (v.get("none"), v["lines"]))
+    face.on("type", {"text": "hart failure"})
+    check("did you mean: a short word too, the rest of the box kept", face.view()["none"]["mean"] == [{"text": "heart failure", "name": "Heart Failure", "n": 27}],
+          face.view().get("none"))
+    face.on("type", {"text": "20 new pletelats"})
+    check("did you mean: only the word is put right (the number and the filter stay as typed)",
+          [m["text"] for m in face.view()["none"]["mean"]] == ["20 new platelets"], face.view().get("none"))
+    face.on("type", {"text": "plateletts"})
+    check("one letter off is read as the tag already: nothing to offer", face.view().get("none") is None and face.view()["count"]["n"] == 14)
+    finds = len(ops.log)
+    face.on("type", {"text": "zebra"})
+    v = face.view()
+    check("5, nothing found is a way on: nothing near it, so what's waiting today in this deck, each with the words that find it; recents too",
+          v["none"]["mean"] == [] and [(w["text"], w["label"]) for w in v["none"]["waiting"]]
+          == [("missed today", "Missed today"), ("due today", "Due today"), ("leeches", "Leeches")]
+          and all(w["n"] > 0 for w in v["none"]["waiting"]) and "recent" in v, v.get("none"))
+    again = face.view()
+    check("worked out once a text (a redraw doesn't look again), and nothing done to the deck", again["none"] is v["none"] or again["none"] == v["none"]
+          and face._none[0][1] == "zebra" and len(ops.log) == finds)
+    face.on("type", {"text": v["none"]["waiting"][0]["text"]})
+    check("its chip types the words, and they find those cards", face.view()["count"]["n"] == v["none"]["waiting"][0]["n"] and face.view().get("none") is None,
+          face.view()["count"])
+    for text in ("heart failure", "", "missed today", "cid:1"):
+        face.on("type", {"text": text})
+        check(f"no offer when it isn't words that found nothing: {text!r}", face.view().get("none") is None)
+    js = open(os.path.join(REPO, "due_crew", "magicpage", "magic.js")).read()
+    css = open(os.path.join(REPO, "due_crew", "magicpage", "magic.css")).read()
+    check("1, it answers while you type: the count in the box and in what it found rolls up, the bar grows and the star twinkles "
+          "(more for a big find), only when a new answer lands",
+          "var key = (V.q || '') + '|' + F.n, lands = key !== landed;" in js and "roll(lb, F.n, n);" in js
+          and "burst(els.box.querySelector('.mag'), F.n >= 100 ? 14 : 7)" in js and "'bar' + (lands && !REDUCE ? ' grow' : '')" in js
+          and ".dcm .live {" in css and "pointer-events: none" in css.split(".dcm .live {")[1].split("}")[0])
+    check("the answer in the box gives way to the words: one line only, and never over them",
+          "var one = els.q.value.indexOf('\\n') < 0 && els.q.scrollHeight <= 52;" in js and "the words wrapped under it: the words win" in js)
+    check("7, Schedule ahead: a picked day wears its share and its count is what it would be; the share drops in when it's new or changes",
+          "(D.each || []).forEach(function (e) { share[e.iso] = e.n; });" in js and "dropped[d.iso] !== add && !REDUCE ? ' drop' : ''" in js
+          and "text: tot ? n(tot) + ' due' : '\u2013'" in js and ".dcm .day .plus.drop" in css)
+    check("nothing moves with Reduce motion, and every word from the view is set as text",
+          ".dcm .found .bar.grow, .dcm .dym.wob, .dcm .day .plus.drop { animation: none !important; }" in css
+          and "if (REDUCE || !to) { el.textContent = say(to); return; }" in js and "if (REDUCE || !el || !el.isConnected) return;" in js
+          and js.count("innerHTML") == 2)
+    face.on("type", {"text": "platelets"})
+    face.on("days", {"show": True})
+    face.on("day", {"iso": "2026-11-06"})
+    face.on("day", {"iso": "2026-11-07"})
+    d = face.view()["days"]
+    check("each picked day's share is the view's (the page only draws it)", [e["iso"] for e in d["each"]] == ["2026-11-06", "2026-11-07"]
+          and sum(e["n"] for e in d["each"]) == face.view()["count"]["n"], d["each"])
+
+
 def test_quotes_mean_text_v399():
     """3.9.9 (Sam: "build quotes mean text"): words in quotes are looked for
     in the cards themselves, a tag by that name or not; beside a topic, a

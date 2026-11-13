@@ -171,6 +171,25 @@ body .dcm .fill button.dw.on { background: var(--dc-you-bg); color: var(--dc-ink
 @keyframes dcm-twinkle { 40% { transform: scale(1.7) rotate(45deg); } 100% { transform: none; } }
 .dcm .pop { animation: dcm-pop .22s cubic-bezier(.3,1.5,.5,1) both; }
 @keyframes dcm-pop { from { transform: scale(.78); opacity: 0; } }
+/* 3.9.11: the answer in the box, did you mean, a picked day's share; each moves once, when it's new */
+.dcm .live { position: absolute; right: 12px; top: 11px; font-size: 12.5px; line-height: 20px; color: var(--dc-muted); pointer-events: none; white-space: nowrap; }
+.dcm .live b { color: var(--dc-accent); }
+.dcm .found .bar.grow { animation: dcm-grow .55s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes dcm-grow { from { clip-path: inset(0 100% 0 0 round 99px); } to { clip-path: inset(0 0 0 0 round 99px); } }
+.dcm .found.none { border-style: dashed; }
+.dcm .dym { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 13.5px; }
+.dcm .dym .m1 { display: inline-flex; align-items: baseline; gap: 6px; }
+body .dcm button.mean { color: var(--dc-accent); font-weight: 700; border-bottom: 1.5px dotted var(--dc-accent); border-radius: 0; }
+body .dcm button.mean:hover { border-bottom-style: solid; }
+.dcm .dym.wob { animation: dcm-wob .4s ease; }
+@keyframes dcm-wob { 25% { transform: translateX(-4px); } 60% { transform: translateX(3px); } }
+.dcm .found .chip small { color: var(--dc-muted); }
+.dcm .day .plus { position: absolute; top: -8px; right: -4px; background: var(--dc-hours); color: #201400; font-size: 10.5px; font-weight: 700;
+  border-radius: 99px; padding: 0 5px; line-height: 16px; font-variant-numeric: tabular-nums; pointer-events: none; }
+.dcm .day .plus.drop { animation: dcm-drop .45s cubic-bezier(.3,1.6,.5,1) both; }
+@keyframes dcm-drop { from { transform: translateY(-12px) scale(.5); opacity: 0; } }
+.dcm .days { padding-top: 4px; }
+@media (prefers-reduced-motion: reduce) { .dcm .found .bar.grow, .dcm .dym.wob, .dcm .day .plus.drop { animation: none !important; } }
 @media (prefers-reduced-motion: reduce) { .dcm .spk { display: none; } .dcm .mag.twirl, .dcm .mag.twirl .st, .dcm .pop { animation: none !important; } }
 
 /* QBank QIDs (round 2: Magic search is its way now): the bank when two are close, Their topics, Study now's deck */
