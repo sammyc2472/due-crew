@@ -21,7 +21,15 @@ const only = process.argv[2] ? path.resolve(process.argv[2]) : img;   // another
   p = await page(760, 900);
   await p.goto('file://' + path.join(here, 'preview.html'));
   await p.waitForTimeout(700);
-  await p.addStyleTag({ content: '.bar { display: none !important; }' });
+  // the once-only lines on the board (what gets counted, the studying dot) aren't the listing's picture
+  await p.addStyleTag({ content: '.bar, .dc-calm { display: none !important; }' });
+  // the preview's names carry markup on purpose (it checks escaping); the listing's picture reads plainly
+  await p.evaluate(() => {
+    const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let n = w.nextNode(); n; n = w.nextNode()) {
+      if (/ <(weekend|lectures|3)>/.test(n.nodeValue)) n.nodeValue = n.nodeValue.replace(/ <(weekend|lectures|3)>/g, '');
+    }
+  });
   const section = (start) => p.evaluateHandle((s) => {
     const h = [...document.querySelectorAll('h3')].find((x) => x.textContent.startsWith(s));
     return h ? h.nextElementSibling : null;
@@ -47,6 +55,7 @@ const only = process.argv[2] ? path.resolve(process.argv[2]) : img;   // another
   if (doc) {
     p = await page(1500, 640);
     await p.setContent(doc);
+    await p.addStyleTag({ content: '.dc-calm { display: none !important; }' });
     await p.waitForTimeout(900);
     await p.screenshot({ path: path.join(only, 'dance.png'), clip: { x: 1080, y: 400, width: 420, height: 240 } });
     console.log('dance.png');
