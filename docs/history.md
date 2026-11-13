@@ -5665,4 +5665,19 @@ every release that changes how something works.
   language. simpler still"). Short sentences, everyday words, a bullet a
   thing; Your day is four bullets; Privacy says the same things as a
   list. Same order, same ten pictures.
+- 3.9.12, the README with its voice back, and the pictures in colour (SC,
+  13 Nov: "now it reads as without personality. you should assume people
+  understand when they see the image... we just need them to see
+  something cool and hten download. also, the images should have
+  different user choice colors... redo the bingo without BUSm and make
+  sure it's the pips not emojis"). A heading, a line or two, the picture:
+  Get it, Magic search, Study plans, Insights, Cheers, Study rooms, Study
+  soundtrack, Squad bingo, Pip, Pip Party, And more; about 560 words
+  with Privacy. The pictures wear different accents: the board green,
+  Magic search blue, plans amber, Insights teal, bingo purple, Party
+  rose (`readme_shots.py` renders Magic search and bingo in theirs and
+  writes each accent's tokens, which `readme_shots.js` sets on the
+  preview's board for a crop; `readme_images.py` renders plans amber).
+  bingo.png is new: the preview's card and squad ("Orca crew"), each
+  stamp its person's Pip (`bingo_html(..., people=)`), no school's name.
 

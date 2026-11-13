@@ -59,7 +59,8 @@ print("wrote", out)
 card = P["PLAN_CARD"]
 today = next((d["day"] for d in card.get("week") or [] if d.get("today")), (card.get("week") or [{}])[0].get("day"))
 plans = dict(P["PLANS"], cards=[dict(card, focus=today)])
-html = board.render(DATA, ME, P["now_ts"] - 30, due=P["_DV"], plans=plans, you=P["_YOU"]("plans", plans=plans))
+html = board.render(DATA, dict(ME, accent="amber"), P["now_ts"] - 30, due=P["_DV"], plans=plans,
+                    you=P["_YOU"]("plans", plans=plans))  # a colour a picture: people pick their own
 page = page.replace(page[page.index('<div id="shot">'):page.index("</center>")], f'<div id="shot">{html}</div>')
 out = os.path.join(HERE, "readme_plans.html")
 with open(out, "w", encoding="utf-8") as f:

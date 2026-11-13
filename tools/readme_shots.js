@@ -18,6 +18,14 @@ const only = process.argv[2] ? path.resolve(process.argv[2]) : img;   // another
   await (await p.$('#shot')).screenshot({ path: path.join(only, 'magic.png') });
   await p.close();
 
+  p = await page(760, 1000);
+  await p.goto('file://' + path.join(here, 'readme_bingo.html'));
+  await p.waitForTimeout(700);
+  await (await p.$('#shot')).screenshot({ path: path.join(only, 'bingo.png') });
+  console.log('bingo.png');
+  await p.close();
+  const tokens = JSON.parse(require('fs').readFileSync(path.join(here, 'readme_tokens.json'), 'utf8'));
+
   p = await page(760, 900);
   await p.goto('file://' + path.join(here, 'preview.html'));
   await p.waitForTimeout(700);
@@ -34,15 +42,18 @@ const only = process.argv[2] ? path.resolve(process.argv[2]) : img;   // another
     const h = [...document.querySelectorAll('h3')].find((x) => x.textContent.startsWith(s));
     return h ? h.nextElementSibling : null;
   }, start);
-  for (const [start, sel, png] of [
-    ['3.8.0: You › Insights, the map opened on Cardio', '.du', 'insights.png'],
-    ['3.9.5: You › Pip Party, three picked', '.du', 'party.png'],
-    ["3.8.2: Pip's closet, in the board", null, 'closet.png'],
+  for (const [start, sel, png, accent] of [
+    ['3.8.0: You › Insights, the map opened on Cardio', '.du', 'insights.png', 'teal'],
+    ['3.9.5: You › Pip Party, three picked', '.du', 'party.png', 'rose'],
+    ["3.8.2: Pip's closet, in the board", null, 'closet.png', null],
   ]) {
     const box = (await section(start)).asElement();
     if (!box) { console.log('no section:', start); process.exitCode = 1; continue; }
     const el = sel ? await box.$(sel) : box;
+    // a colour a picture (people pick their own): that accent's tokens on the board while it's taken
+    const tint = accent ? await p.addStyleTag({ content: '#due-crew, #due-crew .du { ' + tokens[accent] + ' }' }) : null;
     await (el || box).screenshot({ path: path.join(only, png) });
+    if (tint) await tint.evaluate((n) => n.parentNode.removeChild(n));
     console.log(png);
   }
   // the dance floor: its frame opened wide (it folds where it would cover the board), the corner cut out
