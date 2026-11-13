@@ -898,16 +898,31 @@ def test_long_quiet_friends_fold():
                         ent("w", "Wren", ago(8)), ent("p", "Priya", ago(120)), ent("t", "Theo<", ago(200))],
             "labels": labels, "tomorrow": "", "pending": []}
     page = board.render(data, {"period": "today"}, 0)
-    fold = page[page.index('class="qfold"'):]
-    fold = fold[:fold.index("</tr>")]
-    check("quiet fold: two long-quiet friends fold into one line, names escaped; a week-quiet one stays a row",
-          "2 quiet" in fold and "Priya and Theo&lt; haven't been here since" in fold
-          and page.count('<tr class="qh ') == 2 and page.index(">Wren<") < page.index('class="qfold"')
-          and "qopen" in fold and "pycmd" not in fold, fold)
-    one = dict(data, entries=data["entries"][:3])
-    check("quiet fold: one person reads 'hasn't'", "Priya hasn't been here" in board.render(one, {"period": "today"}, 0))
-    near = dict(data, entries=data["entries"][:2])
-    check("quiet fold: none when no one's been away 90 days", 'class="qfold"' not in board.render(near, {"period": "today"}, 0))
+    # 3.9.12 (SC: "put the bench without the zzz or clear separation"): on the crew's board a friend who's been
+    # away longer than yesterday has no row and no fold: their Pip is on the bench, asleep, with how long
+    bench = page[page.index('class="dc-bench"'):]
+    bench = bench[:bench.index("</div>")]
+    check("the bench: everyone away longer than yesterday, names escaped, how long under each, a click their profile",
+          bench.count('class="bn"') == 3 and ">Wren<" in bench and ">a week<" in bench and "Theo&lt;" in bench and "<Theo<" not in bench
+          and ">since " in bench and f"duecrew:profile:w|{board.BOARD_KEY}" in bench and "m-nap" in bench, bench[:600])
+    rows = page[:page.index('class="dc-bench"')]
+    check("the bench: none of them has a row, and the fold is gone from the crew's board",
+          'class="qfold"' not in page and ">Wren<" not in rows.split("</style>")[-1] and "data-uid" not in bench)
+    check("the bench: no z's (the nap's are hidden there), and no line over it",
+          "#due-crew .dc-bench .sv-z {" in page.replace("{{", "{") and "border-top" not in page[page.index("#due-crew .dc-bench {"):].split("}")[0])
+    off = board.render(data, {"period": "today", "sev": False}, 0)
+    check("the bench with Pip off: an initial in each seat", off.count('class="bi"') == 3 and "m-nap" not in off[off.index('class="dc-bench"'):])
+    alone = dict(data, entries=data["entries"][:1])
+    check("the bench: nobody away, no bench", 'class="dc-bench"' not in board.render(alone, {"period": "today"}, 0))
+    paused = dict(data, entries=[data["entries"][0], dict(ent("b", "Bea", ago(0)), paused=True)])
+    pb = board.render(paused, {"period": "today"}, 0)
+    check("the bench: someone on a break sits there too, saying so", ">on a break<" in pb[pb.index('class="dc-bench"'):])
+    from due_crew.board import base as _base
+    now = datetime.now(timezone.utc)
+    words = [_base.away_words((now - timedelta(days=d)).isoformat(), now) for d in (1, 3, 8, 20, 40)]
+    check("how long: a day, days, a week, weeks, a month, then since its month; unknown says nothing",
+          words == ["a day", "3 days", "a week", "2 weeks", "a month"] and _base.away_words(ago(200)).startswith("since ")
+          and _base.away_words("") == "" and _base.away_words("nonsense") == "")
     view = {"state": "ok", "squads": [{"id": "s", "name": "S"}], "current": "s", "name": "S", "open": True,
             "rows": [{"user_id": "a", "name": "Ann", "day": labels[0], "reviews": 9, "time_ms": 60000, "week": 3},
                      {"user_id": "b", "name": "Bo", "day": labels[3], "reviews": 4, "week": 1},

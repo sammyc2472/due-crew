@@ -2138,7 +2138,7 @@ def test_cheer_pill_and_window_v391():
     app_css = open(os.path.join(REPO, "site", "public", "app.css")).read()
     check("the site's twin: the pill after the name, only while the pointer's on the name; no 🎉 column, never on every row",
           '"linkish cpill"' in app_js and 'class: "chc"' not in app_js and "dc-pill-from" not in app_js and "cpills" not in app_js
-          and "HEADS.length + 1" in app_js and ".brdt td.nm:hover .cpill, .brdt td.nm:focus-within .cpill" in app_css
+          and ".brdt td.nm:hover .cpill, .brdt td.nm:focus-within .cpill" in app_css
           and "tr:hover .cpill" not in app_css and "hover: none" not in app_css and ".chc" not in app_css)
     import shutil
     import subprocess

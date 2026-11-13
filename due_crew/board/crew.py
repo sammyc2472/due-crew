@@ -8,8 +8,9 @@ from datetime import datetime
 from ..logo import board_mark
 from .. import sev as _sev
 
-from .base import (CREW_VIEWS, HEADERS, ROW_CAP, _NW_ROOM, _ago, _cell, _even_rows, _fmt_time, _label,
-    _long_quiet, _pycmd, _quiet_fold, _reviews_cell, _showed, build_deck_groups, build_rows, plan_target, sort_key,
+from .base import (BENCH_MAX, CREW_VIEWS, HEADERS, ROW_CAP, _NW_ROOM, _ago, _cell, _even_rows, _fmt_time, _label,
+                   accent_pair, away_words, initial,
+    _pycmd, _reviews_cell, _showed, build_deck_groups, build_rows, plan_target, sort_key,
     week_labels)
 from .pip import row_sev
 
@@ -230,21 +231,52 @@ def _table_html(data, cfg, period, pick=""):
     for row in fresh:
         rank = ""  # 3.9.10, one grid: no first column at all. 3.9.9 (Sam, the design mocks' 2): no medals, no places: the order says it, and this isn't a race
         body += _row_html(row, rank, cfg, period, held=row["user_id"] in held)
-    # Q3: friends quiet for 90+ days fold into one line under everyone
-    long_q = [r for r in dormant if r["quiet"] and not r["you"] and _long_quiet(r["last_updated"])]
+    # 3.9.12 (SC: "keep yesterday at the bottom but not distinguished by a header ... and put the bench
+    # without the zzz or clear separation"): a friend who's been away longer than yesterday, or is on a
+    # break, has no row: their Pip sits on the bench under the board (_bench_html). Q3's fold of the
+    # long quiet went with it: the bench says how long for each.
+    bench = [r for r in dormant if (r["quiet"] or r["paused"]) and not r["you"]]
     for row in dormant:
-        if row not in long_q:
+        if row not in bench:
             body += _row_html(row, "", cfg, period, held=row["user_id"] in held)
-    if long_q:
-        body += _quiet_fold(long_q)
-        for row in long_q:
-            body += _row_html(row, "", cfg, period, held=row["user_id"] in held).replace('<tr class="', '<tr class="qh ', 1)
     body = _even_rows(body)
     solo = _solo_html(data)
     # the name column ellipsizes, so the table can never outgrow the card;
     # past the row cap it scrolls inside it
     # 3.9.9: what it's sorted by, for a narrow window's two columns (style.py)
-    return _scroll(f'<table class="dc-s-{sort}"><tr>{heads}</tr>{body}</table>', body.count('<tr class=')) + solo
+    return (_scroll(f'<table class="dc-s-{sort}"><tr>{heads}</tr>{body}</table>', body.count('<tr class='))
+            + _bench_html(bench, cfg) + solo)
+
+
+def _bench_html(rows, cfg):
+    """3.9.12, the bench: who hasn't been here since before yesterday, or is on a break, as their Pips
+    asleep in a line under the board (their colour and look, no z's, no line between it and the rows),
+    each with a name and how long; a click is their profile, where a cheer is. With Pip off: an initial
+    in its place. Names are the server's: escaped."""
+    if not rows:
+        return ""
+    e = _html.escape
+    seats = ""
+    for row in rows[:BENCH_MAX]:
+        name = str(row.get("name") or "?")
+        how = "on a break" if row["paused"] else away_words(row.get("last_updated"))
+        light, dark = accent_pair(row.get("accent"))
+        if cfg.get("sev", True):
+            fig = (f'<span class="dc-rsev" style="--rs-l:{light};--rs-d:{dark}">'
+                   + _sev.slot(_sev.svg("nap", rest=True, look=row.get("look"), label=e(f"{name}’s Pip, away", quote=True)), BENCH_PIP)
+                   + '</span>')
+        else:
+            fig = f'<span class="bi" style="--rs-l:{light};--rs-d:{dark}">{e(initial(name))}</span>'
+        seats += (f'<a class="bn" href="#" title="{e(name, quote=True)}{" · " + how if how else ""}" '
+                  f'onclick="{_pycmd("profile:" + str(row["user_id"]))}">{fig}'
+                  f'<span class="bm">{e(name)}</span><span class="bw">{how}</span></a>')
+    more = len(rows) - BENCH_MAX
+    if more > 0:
+        seats += f'<span class="bn more">+{more} more</span>'
+    return f'<div class="dc-bench" aria-label="Not here lately">{seats}</div>'
+
+
+BENCH_PIP = 30
 
 
 def _scroll(html, rows):

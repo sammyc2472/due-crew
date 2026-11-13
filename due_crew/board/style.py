@@ -125,6 +125,18 @@ def _css(cfg):
     /* Q3: long-quiet friends, folded into one line until it's clicked */
     #due-crew tr.qh {{ display: none; }}
     #due-crew table.qopen tr.qh {{ display: table-row; }}
+    /* 3.9.12, the bench: who's been away longer than yesterday, as Pips asleep under the rows (no line over it) */
+    #due-crew .dc-bench {{ display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px 14px; padding: 10px 10px 4px; text-align: left; }}
+    #due-crew .dc-bench .bn {{ display: inline-flex; flex-direction: column; align-items: center; gap: 1px; min-width: 44px; max-width: 76px;
+      text-decoration: none; color: var(--dc-muted); font-size: 11px; line-height: 1.25; opacity: .62; transition: opacity .15s; }}
+    #due-crew .dc-bench a.bn:hover, #due-crew .dc-bench a.bn:focus-visible {{ opacity: 1; }}
+    #due-crew .dc-bench .dc-rsev {{ display: block; line-height: 0; margin: 8px 0 7px; --sv-a: var(--rs-l); }}
+    #due-crew .dc-bench .sv-z {{ display: none; }}  /* asleep, quietly (SC: "without the zzz") */
+    #due-crew .dc-bench .bm {{ max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dc-ink); }}
+    #due-crew .dc-bench .bw {{ white-space: nowrap; }}
+    #due-crew .dc-bench .bi {{ display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; font-weight: 700; font-size: 12px;
+      color: #fff; background: var(--rs-l); }}
+    #due-crew .dc-bench .more {{ align-self: center; opacity: 1; }}
     #due-crew tr.qfold td {{ text-align: left; }}
     #due-crew tr.qfold a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
     #due-crew .la {{ font-size: 10px; margin-left: 5px; }}

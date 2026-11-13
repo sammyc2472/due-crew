@@ -1071,6 +1071,19 @@ const Board = (() => {
     return Sev.row(p.look, accentPair(you ? p.accent || worn : p.accent), you ? "Your Pip" : `${x.name || "?"}’s Pip`);
   }
 
+  /** board/base.py away_words: how long since someone was last here, in a word or two. */
+  function awayWords(last) {
+    const t = Date.parse(last || "");
+    if (!t) return "";
+    const days = Math.floor(Math.max(0, Date.now() - t) / 86400000);
+    if (days < 2) return "a day";
+    if (days < 7) return `${days} days`;
+    if (days < 14) return "a week";
+    if (days < 28) return `${Math.floor(days / 7)} weeks`;
+    if (days < 60) return "a month";
+    return `since ${MONTHS[new Date(t).getMonth()]}`;
+  }
+
   function nameCell(r, period) {
     const p = r.p;
     const cell = h("td", { class: "nm" }, who(p));
@@ -1125,24 +1138,20 @@ const Board = (() => {
         h("td", { class: "n k-retention" }, dash || r.retention === null ? "—" : `${r.retention.toFixed(1)}%`),
         h("td", { class: "n" }, dash || r.streak === null ? "—" : String(r.streak)));
     };
-    // Q3: friends with no sync in 90+ days fold into one line, as board.py's _quiet_fold
-    const longQ = dormant.filter((r) => r.quiet && !r.you && r.last && Date.now() - Date.parse(r.last) > 90 * 86400000);
+    // board/crew.py's _bench_html (3.9.12): a friend away longer than yesterday, or on a break, has no row: they
+    // sit on the bench under the board, a name and how long. (Q3's fold of the long quiet went with it.)
+    const bench = dormant.filter((r) => (r.quiet || r.paused) && !r.you);
     const tbl = h("table", { class: "brdt" });
-    const fold = [];
-    if (longQ.length) {
-      const names = longQ.map((r) => r.p.name);
-      const who = names.length === 1 ? names[0] : names.length <= 3 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : `${names.slice(0, 2).join(", ")} and ${names.length - 2} more`;
-      const since = MONTHS[new Date(Math.max(...longQ.map((r) => Date.parse(r.last)))).getMonth()];
-      fold.push(h("tr", { class: "qfold" }, h("td", { class: "rk" }), h("td", { class: "nm", colspan: HEADS.length + 1 },
-        h("button", { class: "linkish", onclick: () => tbl.classList.toggle("qopen") }, `▸ ${longQ.length} quiet`),
-        h("span", { class: "ago faded" }, ` · ${who} ${longQ.length === 1 ? "hasn't" : "haven't"} been here since ${since}`))));
-      for (const r of longQ) { const row = tr(r, ""); row.classList.add("qh"); fold.push(row); }
-    }
     // board/crew.py (3.9.9): no medals, no places: the order says it
-    const body = [...fresh.map((r) => tr(r, r.showup ? "✓" : "")),
-      ...dormant.filter((r) => !longQ.includes(r)).map((r) => tr(r, "")), ...fold];
+    const body = [...fresh.map((r) => tr(r, r.showup ? "✓" : "")), ...dormant.filter((r) => !bench.includes(r)).map((r) => tr(r, ""))];
     tbl.append(h("thead", {}, head), h("tbody", {}, body));
-    return h("div", { class: "scrollx" }, tbl);
+    const seats = bench.slice(0, 12).map((r) => {
+      const how = r.paused ? "on a break" : awayWords(r.last);
+      const pip = typeof Sev === "object" ? Sev.row(r.p.look, accentPair(r.p.accent), `${r.p.name || "?"}’s Pip, away`) : h("span", { class: "bi" }, (r.p.name || "?").trim().charAt(0).toUpperCase());
+      return h("span", { class: "bn", title: `${r.p.name}${how ? ` · ${how}` : ""}` }, pip, h("span", { class: "bm" }, r.p.name), h("span", { class: "bw" }, how));
+    });
+    if (bench.length > 12) seats.push(h("span", { class: "bn more" }, `+${bench.length - 12} more`));
+    return h("div", {}, h("div", { class: "scrollx" }, tbl), bench.length ? h("div", { class: "bench", "aria-label": "Not here lately" }, seats) : null);
   }
 
   /** show-up mode, as _presence_html: a square a day, Monday to today,
