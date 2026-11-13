@@ -12485,7 +12485,7 @@ def test_builder_review_wording_v381():
     check("words: Make it a review day says followers get a Due Crew deck of what they've seen, that morning",
           "That morning, followers get a Due Crew deck of what they've seen from these sets" in builder)
     check("words: the empty tree names the plan's deck, and Anki's deck needs that name",
-          "and pick ${doc.deck}: the deck in Anki needs that name." in builder)
+          "the deck there needs the name ${doc.deck}." in builder and "Make a plan from a deck" not in builder)  # 3.9.12: that menu item went in 3.9.3
     check("words: at my own pace, the next once I've seen most of the last",
           "when I'm ready, the next once I've seen most of the last" in builder and "the next once I've seen the last\"" not in builder)
     check("words: Progress shows per-date counts only from 3 in the squad (3.9.5: an author on the team among them) "

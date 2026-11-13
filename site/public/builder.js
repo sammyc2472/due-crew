@@ -1521,7 +1521,7 @@ async function builder(id, face = null, got = null) {
         rec(root, 0);
       }
       if (!out.length) out.push(h("p", { class: "muted small" }, count.size ? "Nothing matches."
-        : `No tags yet. In Anki: Tools › Due Crew › Make a plan from a deck, and pick ${doc.deck}: the deck in Anki needs that name.`));
+        : `No tags yet. They come from Anki, with its next refresh: the deck there needs the name ${doc.deck}.`));
       list.replaceChildren(...out);
     }
     q.addEventListener("input", fillList);
