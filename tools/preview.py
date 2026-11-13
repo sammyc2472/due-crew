@@ -1144,6 +1144,10 @@ sections.append("<h3>3.9.6: the song card, dark, no music app yet (the apps on t
                 + _dance_frame("card-dark", _dance_view(4, app=""), cfg={"theme": "dark"}, dark=True,
                                then="dcDance.show('marisa');"))
 sections.append("<h3>3.9.6: my song's card</h3>" + _dance_frame("mine", _dance_view(4), then="dcDance.show('me');"))
+sections.append("<h3>3.9.6: Still this one? (my song's last day, 3.9.12)</h3>" + _dance_frame("ask", _dance_view(4, ask=True)))
+sections.append("<h3>3.9.6: Still this one?, dark</h3>" + _dance_frame("ask-dark", _dance_view(4, ask=True), cfg={"theme": "dark"}, dark=True))
+sections.append("<h3>3.9.6: the floor turned off: its line with Undo (3.9.12)</h3>"
+                + _dance_frame("off", _dance_view(4), then=board.dance_off_js()))
 _RESULTS = json.dumps({"q": "lantern", "error": False, "songs": [
     {"id": 1701, "t": "Lantern Hours", "a": "Mira Vale", "al": "Lantern Hours", "y": 2025},
     {"id": 1702, "t": "Lanterns on the Water", "a": "June Atlas", "al": "Small Weathers", "y": 2023},

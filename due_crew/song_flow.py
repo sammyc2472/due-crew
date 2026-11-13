@@ -26,6 +26,7 @@ from .errs import oops
 
 TIMEOUT = 8
 SEEN_KEY = "song_seen"
+ASKED_KEY = "song_asked"  # this computer: the pick "Still this one?" was answered for (its sig)
 
 _last = {"q": "", "songs": {}}  # the last search: what Use this picks from
 
@@ -54,13 +55,18 @@ def _entries():
     return app._state.get("entries") or []
 
 
+def _live(song):
+    """The song while it's on the floor (songs.alive: three days from its pick), else None."""
+    return song if songs.alive(song, _today()) else None
+
+
 def song_of(uid):
-    """My song ("me"), or a mutual crewmate's from this refresh."""
+    """My song ("me"), or a mutual crewmate's from this refresh; None once it has left the floor."""
     if uid == "me":
-        return mine()
+        return _live(mine())
     for e in _entries():
         if not e.get("you") and str(e.get("user_id") or "") == str(uid):
-            return songs.clean(e.get("song"))
+            return _live(songs.clean(e.get("song")))
     return None
 
 
@@ -77,13 +83,16 @@ def floor_view(entries, c):
         if e.get("you"):
             continue
         uid = str(e.get("user_id") or "")
-        s = songs.clean(e.get("song"))
+        s = _live(songs.clean(e.get("song")))  # 3.9.12: a song leaves three days after it was picked
         sigs[uid] = _sig(s)
         if s:
             crew.append({"uid": uid, "name": str(e.get("name") or "?"), "accent": e.get("accent") or "",
                          "look": list(e.get("look") or []), "song": s,
                          "fresh": seen is not None and uid in seen and seen[uid] != sigs[uid]})
-    return {"me": mine(c), "crew": songs.newest_first(crew), "motion": motion(c), "app": app_key(c),
+    me = _live(mine(c))
+    # 3.9.12: on my song's last day the booth asks "Still this one?", till I answer (Keep, Change or its ×)
+    ask = bool(me) and songs.last_day(me, _today()) and c.get(ASKED_KEY) != _sig(me)
+    return {"me": me, "crew": songs.newest_first(crew), "motion": motion(c), "app": app_key(c), "ask": ask,
             "pip": bool(c.get("sev", True)), "folded": bool(c.get("dance_folded")), "_seen": sigs}
 
 
@@ -118,8 +127,14 @@ def on_message(cmd, parts):
         set_app("")  # Settings' "Ask me the first time": the next Listen asks again
     elif cmd == "songapple" and arg:
         apple(arg)
+    elif cmd == "songkeep":
+        keep()
+    elif cmd == "songaskoff":
+        ask_off()
     elif cmd in ("dancehide", "danceshow"):
         _set("dance_floor", cmd == "danceshow")
+        if cmd == "dancehide":
+            _undo_line()
     elif cmd == "dancefold" and arg in ("0", "1"):
         _set("dance_folded", arg == "1", redraw=False)  # the page folds it itself; kept for the next draw
     elif cmd == "dancemotion" and arg in songs.MOTIONS:
@@ -209,6 +224,35 @@ def use(track_id):
     c["song"] = dict(songs.clean(s), at=_today())
     save_cfg(c)  # an account key: the account's save goes with it
     _redraw()
+
+
+def keep():
+    """Still this one: my song stays three more days (its day is today again; one save)."""
+    c = cfg()
+    s = mine(c)
+    if not s:
+        return
+    c["song"] = dict(s, at=_today())
+    c.pop(ASKED_KEY, None)
+    save_cfg(c)
+    _redraw()
+
+
+def ask_off():
+    """The ask's ×: not asked again about this pick; it leaves when its days are up."""
+    c = cfg()
+    s = mine(c)
+    if s and c.get(ASKED_KEY) != _sig(s):
+        c[ASKED_KEY] = _sig(s)
+        save_cfg(c)
+    _redraw()
+
+
+def _undo_line():
+    """The dance floor was turned off (from the song list's foot): a line in its corner for a few
+    seconds with Undo, as a drawing taken off the fridge has. Settings › Board brings it back after."""
+    from . import board
+    app.board_eval(board.dance_off_js())
 
 
 def clear():

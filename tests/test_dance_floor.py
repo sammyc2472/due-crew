@@ -314,7 +314,9 @@ def test_render_and_glue():
     from due_crew.app import _state
     box = {"cfg": {"sev": True, "song_seen": {"dre": "1"}}}
     saved = (SF.cfg, SF.save_cfg, _state.get("entries"), _state.get("dance_view"))
+    today = SF._today
     try:
+        SF._today = lambda: "2026-10-31"  # 3.9.12: a song is on the floor three days from its pick
         SF.cfg = lambda: box["cfg"]
         SF.save_cfg = lambda c: box.update(cfg=c)
         _state["entries"] = [{"user_id": "me", "you": True, "name": "Me"},
@@ -331,6 +333,7 @@ def test_render_and_glue():
         box["cfg"]["dance_floor"] = False
         check("the floor off: no view", dc._dance_view(box["cfg"]) is None)
     finally:
+        SF._today = today
         SF.cfg, SF.save_cfg = saved[:2]
         _state["entries"] = saved[2]
         if saved[3] is None:
@@ -375,7 +378,7 @@ def test_commands_through_on_js():
         SF._today = lambda: "2026-11-02"
         A._bg = lambda job, done=None: done(job()) if done else job()
         A.board_eval = lambda js: did.append(("eval", js))
-        A._state["entries"] = [{"user_id": "dre", "name": "Dre", "song": song(1, t="Second Wind")}]
+        A._state["entries"] = [{"user_id": "dre", "name": "Dre", "song": song(1, t="Second Wind", at="2026-11-01")}]
         typed = "AC/DC: back | in black"
         send("songsearch:" + quote(typed, safe=""))
         got = [d for d in did if isinstance(d, tuple)]
@@ -405,6 +408,23 @@ def test_commands_through_on_js():
         did.clear()
         send("dancefold:1")
         check("the fold doesn't draw the board again (the page folded itself)", "redraw" not in did, did)
+        # 3.9.12: "Still this one?" on my song's last day (Keep, its ×), and turning the floor off leaves an Undo
+        box["cfg"]["song"] = dict(box["cfg"]["song"], at="2026-10-31")
+        check("my song's last day: the view asks", SF.floor_view([], box["cfg"])["ask"] is True)
+        send("songaskoff")
+        check("songaskoff: not asked again about this pick, the song as it was",
+              box["cfg"]["song_asked"] == SF._sig(box["cfg"]["song"]) and SF.floor_view([], box["cfg"])["ask"] is False
+              and box["cfg"]["song"]["at"] == "2026-10-31")
+        send("songkeep")
+        check("songkeep: three more days from today", box["cfg"]["song"]["at"] == "2026-11-02" and "song_asked" not in box["cfg"])
+        n = len(did)
+        send("dancehide")
+        off = [d for d in did[n:] if isinstance(d, tuple) and d[0] == "eval"]
+        check("dancehide: the floor off, and a line with Undo (danceshow) on the Decks screen",
+              box["cfg"].get("dance_floor") is False and off and "Dance floor off" in off[-1][1]
+              and f"duecrew:danceshow|{KEY}" in off[-1][1], did[n:])
+        send("danceshow")
+        check("its Undo: the floor back", box["cfg"].get("dance_floor") is True)
         send("songclear")
         check("songclear: my song off", "song" not in box["cfg"])
         before = dict(box["cfg"])
@@ -422,9 +442,34 @@ def test_commands_through_on_js():
         A._state["entries"] = saved_app[2]
 
 
+def test_one_button_and_the_ask_v3912():
+    """3.9.12 (Sam: the × "closes it permanently which i don't think people realize"): the floor's one button is
+    the fold; turning it off is a line at the foot of the song list and of my card; "Still this one?" at the booth."""
+    h = board.dance_html(view(4), {})
+    body = h.split("</style>")[-1]
+    check("no × on the floor: the fold alone", "df-x" not in h and "Hide the dance floor" not in h and 'class="df-fd"' in h)
+    off = f"pycmd('duecrew:dancehide|{KEY}')"
+    cut = lambda who: h.split(f'data-card="{who}"', 1)[1].split('<div class="df-pop"', 1)[0]  # noqa: E731
+    check("Turn off the dance floor: the song list's foot and my card's, nowhere else",
+          off in cut("*") and "Turn off the dance floor" in cut("*") and off in cut("me") and off not in cut("dre")
+          and h.count(off) == 2, h.count(off))
+    check("no ask unless the view says", 'class="df-ask"' not in body)
+    a = board.dance_html(view(4, ask=True), {})
+    ask = a.split('class="df-ask"', 1)[1].split("</div>", 1)[0]
+    check("Still this one?: my song's name, Keep (songkeep), Change (the search), × (songaskoff)",
+          "Still this one?" in ask and "Study Hall" in ask and f"pycmd('duecrew:songkeep|{KEY}')" in ask
+          and 'data-open="search"' in ask and f"pycmd('duecrew:songaskoff|{KEY}')" in ask)
+    check("none without a song of mine", 'class="df-ask"' not in board.dance_html(view(4, me=False, ask=True), {}))
+    check("the ask is part of the scene: the floor is drawn again when it comes or goes",
+          board._dance_keys(view(4), {}) != board._dance_keys(view(4, ask=True), {}))
+    js = board.dance_off_js()
+    check("the line once it's off: Dance floor off, Undo (danceshow), gone in a few seconds",
+          "Dance floor off" in js and f"duecrew:danceshow|{KEY}" in js and "setTimeout" in js)
+
+
 def test_every_command_has_its_route():
     """The commands on the floor, its cards, the search, Settings and the profile, each routed in _on_js to song_flow."""
-    h = (board.dance_html(view(9), {}) + board._settings_board({}) + board._settings_board({"dance_floor": False})
+    h = (board.dance_html(view(9, ask=True), {}) + board._settings_board({}) + board._settings_board({"dance_floor": False})
          + board._profile_song({"uid": "dre", "song": song(1)}))
     emitted = {c for c in set(re.findall(r"duecrew:([a-z]+)", h)) | set(re.findall(r"send\('([a-z]+):?'", board.DANCE_JS))
                if c.startswith(("song", "dance"))}
@@ -432,7 +477,7 @@ def test_every_command_has_its_route():
     routed = {n for n, (_, _, run) in dc.BOARD_CMDS.items() if run is dc._song}  # 3.9.8: the command table
     flow = open(os.path.join(REPO, "due_crew", "song_flow.py")).read()
     handled = set(re.findall(r'cmd == "([a-z]+)"', flow)) | set(re.findall(r'"([a-z]+)"', " ".join(re.findall(r"cmd in \(([^)]*)\)", flow))))
-    want = {"songsearch", "songuse", "songclear", "songlisten", "songapp", "songapple", "dancehide", "danceshow",
+    want = {"songsearch", "songuse", "songclear", "songkeep", "songaskoff", "songlisten", "songapp", "songapple", "dancehide", "danceshow",
             "dancemotion", "dancefold"}
     check("every song and dance command on the page is routed to song_flow, which handles it",
           want <= emitted and emitted <= routed and routed <= handled,

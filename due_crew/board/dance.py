@@ -61,6 +61,11 @@ def _dance_tokens(cfg, sel):
                      _token_block(dk) + more(dk, "rgba(255,255,255,.07)", "0 3px 10px rgba(0,0,0,.5)"))
 
 
+DANCE_OFF_CSS = ("#dc-off { position: fixed; right: 12px; bottom: 10px; z-index: 6; background: var(--canvas-elevated, #fff); color: var(--fg, #333); "
+                 "border: 1px solid var(--border, #e2e2da); border-radius: 999px; padding: 5px 12px; font: 12.5px/1.3 -apple-system, BlinkMacSystemFont, sans-serif; "
+                 "box-shadow: 0 3px 8px rgba(0,0,0,.14); } #dc-off a { color: #2e7d32; font-weight: 700; text-decoration: none; margin-left: 8px; } "
+                 ".night-mode #dc-off a, .nightMode #dc-off a { color: #7cc47f; }")
+
 DANCE_CSS = """
 #dc-dance { position: fixed; right: 12px; bottom: 6px; width: __W__px; height: __H__px; z-index: 6; pointer-events: none;
   font-family: __FONT__; font-size: 13px; line-height: 1.3; color: var(--dc-ink); text-align: left;
@@ -124,15 +129,27 @@ __BUTTONS__
 #dc-dance .woof { transform-box: fill-box; transform-origin: 50% 50%; }
 #dc-dance .spin { transform-box: view-box; transform-origin: 0 0; opacity: 0; }
 #dc-dance.dm-lively.go .spin { opacity: 1; }
-#dc-dance .df-x { position: absolute; right: 0; top: 42px; pointer-events: auto; width: 22px; height: 22px; border-radius: 50%;
-  display: grid; place-items: center; color: var(--dc-muted); background: var(--dc-bg); border: 1px solid var(--dc-line);
-  font-size: 15px; line-height: 1; text-decoration: none; opacity: 0; transition: opacity .2s; }
-#dc-dance .df-fd { position: absolute; right: 28px; top: 42px; pointer-events: auto; width: 22px; height: 22px; border-radius: 50%;
+/* 3.9.12 (Sam: the × "closes it permanently which i don't think people realize"): the fold is the floor's one button */
+#dc-dance .df-fd { position: absolute; right: 0; top: 42px; pointer-events: auto; width: 22px; height: 22px; border-radius: 50%;
   display: grid; place-items: center; color: var(--dc-muted); background: var(--dc-bg); border: 1px solid var(--dc-line);
   opacity: 0; transition: opacity .2s; }
 #dc-dance .df-fd svg { width: 12px; height: 12px; display: block; }
-#dc-dance:hover .df-x, #dc-dance:focus-within .df-x, #dc-dance .df-x:focus,
 #dc-dance:hover .df-fd, #dc-dance:focus-within .df-fd { opacity: 1; }
+/* the song list's foot (and my card's): the one deliberate way to turn the floor off */
+#dc-dance .df-off { border-top: 1px solid var(--dc-line); margin-top: 8px; padding-top: 7px; font-size: 12px; text-align: left; }
+#dc-dance .df-off a { color: var(--dc-muted); text-decoration: underline; text-underline-offset: 2px; }
+#dc-dance .df-off a:hover { color: var(--dc-ink); }
+/* "Still this one?": over the booth on my song's last day */
+#dc-dance .df-ask { position: absolute; right: 28px; bottom: 142px; pointer-events: auto; background: var(--dc-bg); color: var(--dc-ink);
+  border: 1px solid var(--dc-line); border-radius: 12px; padding: 7px 26px 8px 11px; box-shadow: var(--df-sh); font-size: 12.5px;
+  line-height: 1.35; white-space: nowrap; text-align: left; }
+#dc-dance .df-ask b { display: block; font-weight: 700; }
+#dc-dance .df-ask small { display: block; color: var(--dc-muted); font-size: 12px; max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
+#dc-dance .df-ask a, #dc-dance .df-ask button.lk { color: var(--dc-accent); font-weight: 700; text-decoration: none; font-size: 12.5px; padding: 0;
+  background: none; border: 0; cursor: pointer; }
+#dc-dance .df-ask i { color: var(--dc-faded); font-style: normal; margin: 0 4px; }
+#dc-dance .df-ask .ax { position: absolute; right: 6px; top: 4px; color: var(--dc-muted); font-weight: 400; font-size: 14px; line-height: 1; }
+#dc-dance.fold .df-ask { display: none; }
 /* folded: a chip in the corner, a record and how many songs (a star when one's new); a tap opens it again */
 #dc-dance .df-chip { display: none; position: absolute; right: 0; bottom: 0; pointer-events: auto; align-items: center; gap: 6px;
   padding: 4px 11px 4px 5px; border-radius: 99px; border: 1px solid var(--dc-line); background: var(--dc-bg); color: var(--dc-ink);
@@ -372,7 +389,23 @@ def _dance_card(who, song, view, name=""):
             f'<div class="ph"><span>{head}</span><button type="button" class="x" data-close aria-label="Close">&times;</button></div>'
             f'<div class="sg">{_dance_cover(song)}<div class="tx"><b>{e(song["t"])}</b><span class="mt">{_dance_line(song)}</span>'
             f'{f"<span class=acts>{acts}</span>" if acts else ""}</div></div>{row}'
-            f'<div class="ft"><span class="cr">{e(_songs.CREDIT)}</span>{_dance_badge(who)}</div></div>')
+            f'<div class="ft"><span class="cr">{e(_songs.CREDIT)}</span>{_dance_badge(who)}</div>'
+            f'{_dance_off() if mine else ""}</div>')
+
+
+def _dance_off():
+    """3.9.12: "Turn off the dance floor", at the foot of the song list and of my own card."""
+    return (f'<div class="df-off"><a href="#" title="Settings &rsaquo; Board brings it back" '
+            f'onclick="{_pycmd("dancehide")}">Turn off the dance floor</a></div>')
+
+
+def dance_off_js():
+    """The line that stands in the floor's corner for a few seconds once it's turned off: Undo brings it back."""
+    line = (f'Dance floor off<a href="#" onclick="{_pycmd("danceshow")}">Undo</a>')
+    return ("(function(){var o=document.getElementById('dc-off');if(o){o.remove();}"
+            "o=document.createElement('div');o.id='dc-off';o.setAttribute('role','status');o.innerHTML=" + _json.dumps(line) + ";"
+            "var s=document.createElement('style');s.textContent=" + _json.dumps(DANCE_OFF_CSS) + ";o.appendChild(s);"
+            "document.body.appendChild(o);setTimeout(function(){if(o.parentNode){o.remove();}},6000);})();")
 
 
 def _dance_list(crew):
@@ -386,7 +419,7 @@ def _dance_list(crew):
     return (f'<div class="df-pop" data-card="*" role="dialog" aria-label="Your crew&rsquo;s songs" hidden>'
             f'<div class="ph"><span>&#9834; Your crew&rsquo;s songs &middot; {len(crew)}</span>'
             f'<button type="button" class="x" data-close aria-label="Close">&times;</button></div>'
-            f'<ul class="df-ls">{rows}</ul></div>')
+            f'<ul class="df-ls">{rows}</ul>{_dance_off()}</div>')
 
 
 def _dance_dancer(i, p, view, place):
@@ -436,7 +469,7 @@ def _dance_keys(view, cfg):
     isn't in either: it plays when the floor is first drawn with it."""
     import hashlib
     crew = [[p.get("uid"), p.get("name"), p.get("accent"), p.get("look"), p.get("song")] for p in view.get("crew") or []]
-    scene = _json.dumps([crew, view.get("me"), bool(view.get("pip", True)), view.get("motion"), my_look(cfg),
+    scene = _json.dumps([crew, view.get("me"), bool(view.get("ask")), bool(view.get("pip", True)), view.get("motion"), my_look(cfg),
                          cfg.get("theme", "auto"), cfg.get("accent", DEFAULT_ACCENT)], sort_keys=True, default=str)
     k = hashlib.sha1(scene.encode()).hexdigest()[:12]
     c = hashlib.sha1(_json.dumps([k, view.get("app")]).encode()).hexdigest()[:12]
@@ -451,7 +484,7 @@ def dance_html(view, cfg):
     rest toward the middle (the checkered floor under just them), then "+N" (the whole list) in the last
     one's place; on a narrow window, the booth, one dancer and a count. No lights (Sam: distracting).
     Folded (Sam's "collapse": the view's folded, the page's own fold at once, dancefold), a chip in the
-    corner: a record, how many songs, a star when one's new; × hides it (dancehide). Every word in it is theirs or Apple's: escaped here, and
+    corner: a record, how many songs, a star when one's new; turning it off is a line at the foot of the song list and of my card (dancehide, 3.9.12). Every word in it is theirs or Apple's: escaped here, and
     only cleaned songs (songs.clean) are drawn. Each click a keyed command, or a card's, the list's, the
     fold's or the search's opening (dance_js)."""
     if not view:
@@ -484,6 +517,13 @@ def dance_html(view, cfg):
     booth = (f'<button type="button" class="df-bo" data-open="{"me" if me else "search"}" aria-label="{e(said)}">'
              f'{_dance_dj(view, cfg)}{dance_booth_svg(me)}'
              f'<span class="tag{"" if me else " no"}">{"&#9834; " + e(me["t"]) if me else "No song yet"}</span></button>')
+    # 3.9.12: on my song's last day (songs.last_day), till answered: Keep (three more days), Change (the search), ×
+    ask = ""
+    if me and view.get("ask"):
+        ask = (f'<div class="df-ask" role="group" aria-label="Still this one?"><b>Still this one?</b><small>{e(me["t"])}</small>'
+               f'<a href="#" onclick="{_pycmd("songkeep")}">Keep</a><i>&middot;</i>'
+               f'<button type="button" class="lk" data-open="search">Change</button>'
+               f'<a class="ax" href="#" title="Not now" aria-label="Not now" onclick="{_pycmd("songaskoff")}">&times;</a></div>')
     cards = ("".join(_dance_card(p["uid"], p["song"], view, p["name"]) for p in crew)
              + (_dance_card("me", me, view) if me else "") + (_dance_list(crew) if crew else ""))
     # each crewmate in their colour, by day or by night as the board (one selector a call: _by_theme prefixes it)
@@ -505,9 +545,7 @@ def dance_html(view, cfg):
              f'<div class="df-sc"><div class="df-fl" style="--fl:{fl}px"></div><div class="df-dn">{dancers}</div>{booth}'
              f'<button type="button" class="df-fd" data-fold="1" title="Fold it into the corner" aria-label="Fold the dance floor">'
              f'<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 L6 8 L9.5 4.5" fill="none" stroke="currentColor" '
-             f'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>'
-             f'<a class="df-x" href="#" title="Hide the dance floor (Settings &rsaquo; Board brings it back)" '
-             f'aria-label="Hide the dance floor" onclick="{_pycmd("dancehide")}">&times;</a></div>'
+             f'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>{ask}</div>'
              f'<div class="df-cards">{cards}</div>{chip}</div>')
     room = (f'<style>#due-crew #dc-dance-room {{ height: 0; }} @media (max-width: {DANCE_BOARD}px) {{ #due-crew #dc-dance-room '
             f'{{ height: {DANCE_H + 8}px; }} #due-crew #dc-dance-room.fold {{ height: 40px; }} }} '

@@ -5617,3 +5617,24 @@ every release that changes how something works.
   as an error window. `_refill` takes that one refusal quietly now (the
   deck stays empty, for the morning's tidy); any other error is raised as
   before. `test_refill_with_nothing_to_take_back_v3912`.
+- 3.9.12, the study soundtrack's floor (Sam, 13 Nov, on the mock: "all
+  except 5, 6, 7"; "the x closes it permanentl which i don't think people
+  realize"; "disappear after 3 days"). Four things. One button on the
+  floor: the fold; its × is gone (`board/dance.py`). Turning the floor off
+  is deliberate: "Turn off the dance floor" at the foot of the song list
+  and of my own card (`_dance_off`), then "Dance floor off · Undo" in the
+  corner for six seconds (`dance_off_js`, `song_flow._undo_line`);
+  Settings › Board's switch as before. A song leaves after three days:
+  on the floor the day it's picked and the two after (`songs.LIFE_DAYS`,
+  `age`/`alive`), worked out by each reader's Anki (`song_flow._live` in
+  `floor_view` and `song_of`, so the profile card agrees); the server
+  keeps what it's sent, nothing changed there. A song that doesn't say
+  when it was picked has left. "Still this one?" over the booth on my
+  song's last day (`songs.last_day`, the view's `ask`): Keep makes its
+  day today (`songkeep`, one save), Change opens the search, × stops the
+  asking for this pick (`songaskoff`, this computer's `song_asked`).
+  Mine stays in my settings after it leaves, so Change… starts from it.
+  Not built, Sam's no: a count on the folded chip, Make it mine, a
+  Settings row for my song. Tests: `test_floor_view` (the days, the ask,
+  Keep), `test_one_button_and_the_ask_v3912`, the commands through
+  `_on_js`.

@@ -1191,7 +1191,7 @@ BOARD_CMDS = {
     "magic": (0, None, lambda c, p: open_magic(" ".join(_unquote(":".join(p[2:])).split())[:400] if len(p) > 2 else "")),
     "css": (0, None, _cmd_css),
     "magichow": (0, None, lambda c, p: magic_flow.howto_said(p)),  # 3.9.7, round 2: its how-to's buttons
-    **{k: (0, None, _song) for k in ("songsearch", "songuse", "songclear", "songlisten", "songapp", "songapple",
+    **{k: (0, None, _song) for k in ("songsearch", "songuse", "songclear", "songkeep", "songaskoff", "songlisten", "songapp", "songapple",
                                      "dancehide", "danceshow", "dancemotion", "dancefold")},
     "youins": (0, None, lambda c, p: _team(p[1], p)),
     "sort": (1, lambda p: p[2] in board.SORT_KEYS, _cmd_sort),
