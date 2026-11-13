@@ -6,6 +6,7 @@ import datetime as _dt
 import html as _html
 import json as _json
 
+from .. import views as _views
 from .. import closet as _closet
 from .. import sev as _sev
 from .. import songs as _songs
@@ -487,6 +488,7 @@ def dance_html(view, cfg):
     corner: a record, how many songs, a star when one's new; turning it off is a line at the foot of the song list and of my card (dancehide, 3.9.12). Every word in it is theirs or Apple's: escaped here, and
     only cleaned songs (songs.clean) are drawn. Each click a keyed command, or a card's, the list's, the
     fold's or the search's opening (dance_js)."""
+    _views.seen("dance", view)  # 3.9.12: its shape, checked as it's drawn
     if not view:
         return ""
     me = _songs.clean(view.get("me"))

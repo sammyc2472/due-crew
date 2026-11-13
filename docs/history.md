@@ -5682,4 +5682,51 @@ every release that changes how something works.
   stamp its person's Pip (`bingo_html(..., people=)`), no school's name.
 - 3.9.12, the README: from Magic search to Pip Party a part is its
   heading and its picture, no line under it (SC, 13 Nov).
+- 3.9.12, the foundations, Stages B, C and more of D and A (SC, 13 Nov:
+  "build 5, 6, 7, 8"). No behaviour changed; nothing a person sees did.
+  **B, the two big files.** `plan_flow.py` (5,477 lines) is `plan_flow/`,
+  twelve parts (state, cards, morning, lessons, joys, commands, days,
+  pace, schedule, follower, following, browser); the glue that was
+  `due_crew/__init__.py` (2,219 lines) is `glue/`, nine parts (refresh,
+  render, sync, commands, windows, settings, profile, table, joined), and
+  `__init__.py` keeps its docstring, its imports and the namespace. Both
+  are one namespace as before (board/'s way, 3.9.8): `plan_flow.X`,
+  `from .plan_flow import X`, `due_crew._on_js` and a test's stand-in set
+  on either read as they did. Written by a script, not retyped: each
+  statement where it was, imports written again per part, a later part's
+  names set by the package as that part loads (an import at a part's foot
+  would load a later part before the ones between: the first try did, and
+  failed to load). Two things the script couldn't do blind: the glue's
+  five flags that functions set (`_fetching`, `_menu_done`,
+  `_last_attempt`, `_closing`, `_pushed`) live in one holder
+  (`glue.refresh._run`), read and set through the package as before; and
+  the commands' table (`BOARD_CMDS`) moved after the parts it names. A
+  part is never named after a module beside it (a part called hooks hid
+  `hooks.py`: it's `joined`). An error's code names the part now
+  (`py:plan_flow.morning:...`), so the field's sheet reads finer.
+  **C, the suite.** `tests/test_due_crew.py` (22,312 lines) runs
+  `tests/suite/`, eight parts in the order the tests were written (base,
+  board, plans, v380, v381, v382, v392, v399): the same 332 tests, the
+  same order, `-q`, `--list` and by-area as before. By era, not by
+  feature: a regrouping would change the order they run in, which they
+  lean on. `tests/srcs.py` reads a module that became a package as the
+  one text it was, for the checks that read source.
+  **D, three more shapes** (`views.py`): a plan's card, Insights and the
+  dance floor (its dancers and songs too), written from every one the
+  suites and the preview draw plus every key their drawing reads, checked
+  where each is drawn (`views.seen`): a slip is `view:plan`,
+  `view:insights` or `view:dance`, drawn anyway. The suite's last check:
+  nothing it drew slipped (`views.SLIPS`). One level deep; what's inside
+  a day or a tile is next.
+  **A's other half, the site.** `board.SITE_RESET` is the site's one
+  control reset; app.css and table.css had it, the landing page and For
+  classes (three controls and one) had none and carry it now; the suite
+  checks every page with a control does.
+  Seen on the way: the robot click test fails with a bottom-bar script
+  error ("offsetHeight" of null, starting a room) when the suites run
+  beside it; alone it passes, as before the split. A race under load in
+  the room's bar script, not looked into here.
+  Left: `__init__`'s and plan_flow's parts are still big where the
+  feature is (morning 1,083 lines); the suite by feature; shapes a level
+  down; the site's sheets down to one file.
 

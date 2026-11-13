@@ -41,6 +41,9 @@ def main():
         f()
     if not args:
         suite.check_every_board_click_is_taken()  # last: every control the suite drew on the board, pressed down its route
+    if not args:  # 3.9.12, Stage D: every plan card, Insights view and dance floor the suite drew fits its shape
+        from due_crew import views
+        suite.check("shapes: nothing the suite drew slipped its shape (views.SLIPS)", views.SLIPS == [], views.SLIPS[:5])
     bad = [c for c in CHECKS if not c[1]]
     print(f"\n{len(CHECKS) - len(bad)}/{len(CHECKS)} checks passed" + (f" ({len(picked)} of {len(every)} tests)" if args else ""))
     sys.exit(1 if bad else 0)

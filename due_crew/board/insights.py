@@ -6,6 +6,7 @@ import datetime as _dt
 import html as _html
 import re as _re
 
+from .. import views as _views
 from .base import _ahead_r, _day_after, _ins_dname, _ins_r, _pycmd, _short_day
 
 
@@ -560,6 +561,7 @@ def _insights_html(did, v):
     then, what's not sticking yet, my week in time, Optimize FSRS when my
     newest cards fall short, and the deck's suspended leeches. 3.8.0: a
     deck's, plan or not (did, its id, in each command)."""
+    _views.seen("insights", v)  # 3.9.12: its shape, checked as it's drawn
     e = _html.escape
     v = v if isinstance(v, dict) else {}
     if isinstance(v.get("leech"), dict):

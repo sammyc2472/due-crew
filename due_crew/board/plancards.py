@@ -5,6 +5,7 @@ A part of the board (due_crew/board/, 3.9.8): see its __init__."""
 import html as _html
 import re as _re
 
+from .. import views as _views
 from .base import _ins_dname, _pycmd
 from .pip import PCREW_PIP, squad_pip
 from .planweek import _crew_line, _plan_notes, _week_html
@@ -208,6 +209,7 @@ def _plan_card_html(card, people=None, cfg=None, head=None):
     above the week (_plan_path), and what's behind its own line with
     Behind… (_plan_behind), where Catch up… was. Plan, date and event names
     are the author's: escaped here."""
+    _views.seen("plan", card)  # 3.9.12: its shape, checked as it's drawn (a slip is counted, and drawn anyway)
     e = _html.escape
     pid = str(card.get("id", ""))
     out = '<div class="dc-pc">' + (head or (

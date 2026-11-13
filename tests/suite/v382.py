@@ -1198,6 +1198,34 @@ def test_view_shapes_v3912():
     read = set(re.findall(r"\bD\.([a-zA-Z_]+)", js))
     check("shapes: the chip's script reads only keys in its shape, and the glue counts a slip without dropping the view",
           read <= set(V.CHIP) and read >= {"kind", "text", "fold", "cmd", "act"} and 'errs.count("view:chip")' in js, sorted(read - set(V.CHIP)))
+    # Stage D's first three: a plan's card, Insights, the dance floor, checked where each is drawn
+    from due_crew import views as V
+    had = list(V.SLIPS)
+    try:
+        del V.SLIPS[:]
+        song = {"t": "Lantern Hours", "a": "Mira Vale", "al": "Lantern Hours", "y": 2025, "id": 1, "url": "https://music.apple.com/x", "at": "2026-11-02"}
+        floor = {"me": song, "crew": [{"uid": "dre", "name": "Dre", "accent": None, "look": [], "song": song, "fresh": False}],
+                 "motion": "gentle", "app": "", "ask": False, "pip": True, "folded": False, "_seen": {}}
+        check("shapes: a dance floor as song_flow makes it fits; a None is always allowed",
+              V.dance_wrong(floor) == [] and V.seen("dance", floor) and V.seen("dance", None) and V.SLIPS == [])
+        check("shapes: a key the page doesn't know, a wrong type, in a dancer or a song: each said",
+              V.dance_wrong(dict(floor, lights=True)) == ["lights: not in the shape"]
+              and V.dance_wrong(dict(floor, folded="yes")) == ["folded: str"]
+              and V.dance_wrong(dict(floor, crew=[{"uid": 7}])) == ["crew.uid: int"]
+              and V.dance_wrong(dict(floor, me=dict(song, preview="x"))) == ["me.preview: not in the shape"])
+        check("shapes: a slip is counted and kept for whoever looks, and the floor is drawn anyway",
+              V.seen("dance", dict(floor, lights=True)) is False and V.SLIPS == [("dance", ["lights: not in the shape"])]
+              and "dc-dance" in board.dance_html(dict(floor, lights=True), {}))
+        check("shapes: a plan's card and Insights have theirs; a made-up surface is no one's problem",
+              V.plan_wrong({"id": "p1", "name": "Block 1", "week": [], "paused": False}) == []
+              and V.plan_wrong({"id": "p1", "weeks": []}) == ["weeks: not in the shape"]
+              and V.insights_wrong({"did": 1, "map": [], "right": {}}) == [] and V.insights_wrong({"did": "1"}) == ["did: str"]
+              and V.seen("nothing", {"a": 1}) is True)
+        src = fakes.board_source()
+        check("shapes: each is checked where it's drawn", all(x in src for x in ('_views.seen("plan", card)', '_views.seen("insights", v)',
+                                                                                 '_views.seen("dance", view)')))
+    finally:
+        V.SLIPS[:] = had
 
 
 def test_the_sites_constants_are_made_v3912():

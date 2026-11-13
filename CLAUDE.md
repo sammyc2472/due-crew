@@ -6,8 +6,11 @@ add-on.
 
 ## Layout
 
-- `due_crew/` — the add-on. `__init__.py` (hooks/glue, main-thread rules in
-  its docstring), `board/` (pure HTML rendering; since 3.9.8 a package by
+- `due_crew/` — the add-on. `__init__.py` (the main-thread rules in its docstring; since 3.9.12 the
+  glue itself is `glue/`, a package by part: `refresh`, `render`, `sync`, `commands`, `windows`,
+  `settings`, `profile`, `table` (`BOARD_CMDS`), `joined` (Anki's hooks); one namespace, so
+  `due_crew._on_js` reads as before; the five flags it sets as it runs are `glue.refresh._run`),
+  `plan_flow/` (the plans' glue, twelve parts the same way: `plan_flow.X` as before), `board/` (pure HTML rendering; since 3.9.8 a package by
   feature: `base`, `style`, `crew`, `squads`, `plancards`, `planweek`,
   `insights`, `party`, `due`, `settings`, `closet`, `scrapbook`, `pip`,
   `lobby`, `cheers`, `fridge`, `dance`, `windows`, `page`, `draw` (render);
@@ -87,7 +90,9 @@ add-on.
   (a Swift helper built on the Mac, or the `fm` command) or plain rules, ticked
   and opened; Copy as plan text is its one bridge to the builder. Its own
   tests, `poc/tests/`, and `poc/README.md`; CI doesn't run them.
-- `tests/` — `python3 tests/test_due_crew.py` (client behavior against
+- `tests/` — `python3 tests/test_due_crew.py` (it runs `tests/suite/`, eight parts in the order the
+  tests were written, one namespace, 3.9.12; `tests/srcs.py` reads a module that became a package as one
+  text; client behavior against
   `fakes.FakeWorker`, a Python restatement of the Worker; standard library
   only). `worker/test/` is the Worker itself in real workerd with D1
   (`cd worker && npx vitest run`); `consent.test.ts` there is the consent
@@ -161,7 +166,7 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   open new cards back and moves its due reviews, `magic_flow.Ops.spread`), a date that
   opened never closes again, and a leech never opens. Plan state is per
   profile (`user_files/<profile>/plans.json`), never the shared config:
-  deck ids belong to one collection. `plans.py` is pure, `plan_flow.py`
+  deck ids belong to one collection. `plans.py` is pure, `plan_flow/`
   the glue.
 - Mine alone, never sent: Insights, my progress on each bingo square,
   checkpoint scores, `wrap.json` (3.8.2: and the closet's tallies in it;
@@ -356,12 +361,18 @@ clean `main` does the migrations, the API, then the site, then
   **scrapbook** took Wrapped's place (`wrapped*` is the year's numbers);
   **unsuspended**, never unlocked; a plan's **set** on the site is a date in
   the add-on's code.
-- What a page is told to draw has a named shape in `views.py` (3.9.12; the
-  review chip is the first), checked as it crosses to the page: a slip counts
-  as `view:<name>` and is drawn anyway. A new surface's view gets its shape there.
+- What a page is told to draw has a named shape in `views.py` (3.9.12: the
+  review chip, a plan's card, Insights, the dance floor), checked where it's drawn
+  (`views.seen`): a slip counts as `view:<name>` and is drawn anyway; the suite's last
+  check is that nothing it drew slipped. A new surface's view gets its shape there.
+- A big module is a package by part, one namespace (board/, plan_flow/, glue/, tests/suite/):
+  a new function goes in the part its subject names; a part reads an earlier part's names by
+  import and a later part's through `_LATER` (the package sets them); a part is never named
+  after a module beside it; a flag a function sets lives in a holder, not a module-level name.
 - A button on the board starts from `board.button_reset(selector, extra)` (3.9.12, one
   core for every part; a part adds only its own and never restates it); a page of its
-  own carries `base.page_reset(scope)`'s text (Magic search, the plan window).
+  own carries `base.page_reset(scope)`'s text (Magic search, the plan window); the site's
+  pages carry `board.SITE_RESET`.
 - A file Due Crew keeps is written by `store.py` (3.9.12: whole to a .tmp,
   swapped in; `load`/`save` for one kept in memory), never by a module's own
   open-and-replace. The colours are `board.palette`: every add-on page reads
