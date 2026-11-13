@@ -146,6 +146,16 @@ def sent(guid, words):
     _save()
 
 
+def refused(guid, words):
+    """The server won't take it (no room, or its shape): stop sending it; the hook stays, as mine alone."""
+    d, g = _data(), str(guid)
+    if d["out"].get(g) == words:
+        d["out"].pop(g, None)
+        if words and isinstance(d["by"].get(g), dict):
+            d["by"][g]["s"] = False
+    _save()
+
+
 def hide(guid, uid):
     """A crewmate's hook on a card, hidden here for good."""
     h = _data()["hide"]

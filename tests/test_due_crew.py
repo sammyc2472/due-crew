@@ -15742,6 +15742,11 @@ def test_hooks_v3911():
         waited = H.waiting() == [("g21", "later")] and ("g21", "sam") not in store.tips
         sam.put_hook = real
         K.flush_hooks()
+        H.put("g22", "no room", "2026-11-15")
+        sam.put_hook = lambda g, w: None
+        K.flush_hooks()
+        refused = H.waiting() == [] and H.get("g22") == "no room" and not H.shared("g22")
+        sam.put_hook = real
     finally:
         K._card, HD.HookDialog, K.on_answer, K.mw.col, K.log_today, K.tooltip = keep[:6]
         K.mw.reviewer, K.client, K._bg, K.names_by_uid = keep[6:]
@@ -15759,6 +15764,7 @@ def test_hooks_v3911():
           board["thanks"] == [("g20", "dre")] and twice == [] and "Your hook on a card helped Dre." in said and down and H.get("g20") == ""
           , (board["thanks"], twice, said))
     check("a send that didn't get out waits and goes with the next flush", waited and H.waiting() == [] and store.tips[("g21", "sam")]["text"] == "later")
+    check("one the server refuses for good (no room) isn't sent again at every refresh: it stays, mine alone", refused)
     init = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
     check("a refresh's commit says the thanks and sends what waits (no request of its own when nothing does)",
           '_crew_cards.hook_thanks(data.get("thanks"))' in init and "_crew_cards.flush_hooks()" in init)

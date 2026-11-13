@@ -775,7 +775,8 @@ class ApiClient:
         """3.9.11: my own hook on a card, read by mutual friends stuck on it; no
         text takes it down. One request, on a click (a PUT: twice is once)."""
         status, _ = self._call("PUT", "/hooks", {"guid": str(guid), "text": str(text or "")})
-        return status == 200
+        # True: there; None: refused for good (its shape, or no room), not worth sending again; False: try later
+        return True if status == 200 else (None if status in (400, 409) else False)
 
     def tip_helped(self, guid, from_uid, helped=True):
         """3.2: "This helped" on a crewmate's tip. One request, on a click."""

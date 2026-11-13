@@ -825,13 +825,16 @@ def flush_hooks():
     gen = app.generation
 
     def send():
-        return [(g, w) for g, w in todo if cl.put_hook(g, w)]
+        return [(g, w, cl.put_hook(g, w)) for g, w in todo]
 
     def done(ok):
         if gen != app.generation:
             return
-        for g, w in ok or []:
-            hooks.sent(g, w)
+        for g, w, got in ok or []:
+            if got is True:
+                hooks.sent(g, w)
+            elif got is None:
+                hooks.refused(g, w)  # the server won't have it: it stays mine here, and isn't sent at every refresh
 
     _bg(send, done)
 
