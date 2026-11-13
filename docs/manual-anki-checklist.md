@@ -736,7 +736,7 @@ In Anki (as a follower):
 - [ ] Nothing on screen or in a menu says "hook".
 - [ ] Crew › Today with a friend who last synced three days ago: no row for them; under the rows their Pip, eyes closed, their name and "3 days". No z's, no line above it. Click it: their profile. A friend who paused sits there too.
 - [ ] A friend who synced yesterday but not today: their row as before, at the bottom, with "· yesterday".
-- [ ] Settings: no Compact rows, Highlight my row, Crew name in shares, Room chip or Shortcuts on. Study › Today has one row, Today's extras, with two switches. On the dance floor, the song list's foot has "Dancing: Gentle · Lively · Still".
+- [ ] Settings: no Compact rows, Highlight my row, Crew name in shares or Shortcuts on (Room chip is still there). Study › Today has one row, Today's extras, with two switches. On the dance floor, the song list's foot has "Dancing: Gentle · Lively · Still".
 
 ### 3.9.12: deck counts, and a quiet board (about 5 minutes)
 - [ ] A deck with "bury new siblings" and "bury review siblings" on, with notes that have two cards due. Settings › Study › Reviewing › Deck counts leave out buried siblings: off, the deck list is Anki's. On: New and Due drop to about half; point at one: "Anki counts 12. 6 are siblings it will bury as you go." Open the deck: Anki's own count at the top matches ours.

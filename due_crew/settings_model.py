@@ -21,6 +21,7 @@ SWITCHES = ("show_leaderboard", "show_stale", "sync_notifications", "share_revie
             "send_errs")  # 3.9.9: Privacy's Send Sam what went wrong (errs.py; never Reset board's)
 CHOICES = {"theme": ("auto", "light", "dark"),
            "accent": ("green", "blue", "purple", "teal", "amber", "rose"),
+           "room_chip_side": ("left", "right"),
            "sev_break": ("breathe", "stretch")}  # 3.8.1: a fifteen's break
 HIDEABLE = ("decks", "squads", "plans", "insights", "party")  # board.HIDEABLE_TABS: Crew's Decks, Squads; Plans, Insights (3.8.0); Pip Party (3.9.5)
 PRIVACY = ("numbers", "showup", "paused")
@@ -37,9 +38,9 @@ BOARD_DEFAULTS = {"show_leaderboard": True, "show_stale": True, "sync_notificati
 
 
 # 3.9.12 (SC agreed): switches that left Settings. Each is put back to what it was by default, once,
-# so nobody is left in a look they can no longer change: compact rows, my row's highlight, the room
-# chip's side, the keys' switch. (The crew's name in shares lost its row too; a name someone set is kept.)
-RETIRED = {"compact": False, "highlight_me": True, "room_chip_side": "right", "shortcuts": True}
+# so nobody is left in a look they can no longer change: compact rows, my row's highlight, the keys'
+# switch. (The room chip's side was one for an hour: it's where a thing is, not a look, and its row is back.) (The crew's name in shares lost its row too; a name someone set is kept.)
+RETIRED = {"compact": False, "highlight_me": True, "shortcuts": True}
 
 
 def retire(cfg):
