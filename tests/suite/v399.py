@@ -1175,3 +1175,36 @@ def test_settings_pruned_v3912():
           and "Room chip" in pages and SM.change(["set", "room_chip_side", "left"], {}) == {"room_chip_side": "left"})
     check("at a profile's open", "settings_model.retire(cfg())" in srcs.glue_src())
 
+
+
+def test_what_offers_a_tip_v3912():
+    """3.9.12 (SC: "lets loosen", "i like 1-4. 4 only when it's been asked about"): the way to add a tip comes up on a
+    card I pressed Again or Hard on today or yesterday, one that took well over my usual, a leech or nearly one; a
+    crewmate's ask has its own Tip button."""
+    import sqlite3 as _sql
+    import types
+    from due_crew import cards as K, hooks
+    check("slow: twice my usual and never under eight seconds; not known, no",
+          hooks.slow(20000, 9000) and not hooks.slow(17000, 9000) and not hooks.slow(7000, 2000) and hooks.slow(8000, 2000)
+          and not hooks.slow(60000, None) and not hooks.slow(None, 5000) and not hooks.slow("x", 5))
+    check("nearly a leech: the tag, or within two lapses of the deck's threshold; leeches off or no lapse, no",
+          hooks.near_leech(0, 8, True) and hooks.near_leech(6, 8) and hooks.near_leech(9, 8) and not hooks.near_leech(5, 8)
+          and not hooks.near_leech(3, 0) and not hooks.near_leech(0, 2) and not hooks.near_leech("x", 8))
+    conn = _sql.connect(":memory:")
+    conn.execute("CREATE TABLE revlog (id INTEGER, cid INTEGER, ease INTEGER, time INTEGER)")
+    conn.executemany("INSERT INTO revlog VALUES (?, 1, 3, ?)", [(i, 4000 + (i % 2) * 2000) for i in range(1, 11)])
+    db = types.SimpleNamespace(scalar=lambda q, *a: (conn.execute(q, a).fetchone() or [None])[0])
+    conf = {"lapse": {"leechFails": 8}}
+    col = types.SimpleNamespace(db=db, decks=types.SimpleNamespace(config_dict_for_deck_id=lambda did: conf if did == 7 else {}))
+    K._USUAL.clear()
+    check("my usual: the average of my last answers, asked once a day", K._usual(col, "d1") == 5000 and
+          (conn.execute("DELETE FROM revlog") and K._usual(col, "d1") == 5000) and K._usual(col, "d2") is None)
+    K._USUAL.clear()
+    card = types.SimpleNamespace(did=1, odid=7, time_taken=lambda: 12345, note=lambda: types.SimpleNamespace(has_tag=lambda t: t == "leech"))
+    check("how long it's been up, and the deck's leech rule (a filtered deck's card: its home deck's); an Anki that says neither, nothing",
+          K._taken(card) == 12345 and K._leech(col, card) == (8, True)
+          and K._taken(types.SimpleNamespace()) == 0 and K._leech(types.SimpleNamespace(), types.SimpleNamespace()) == (0, False))
+    src = open(os.path.join(REPO, "due_crew", "cards.py"), encoding="utf-8").read()
+    check("the offer: Again or Hard since yesterday, or slow, or nearly a leech; and an ask still has its Tip",
+          "ease IN (1, 2) LIMIT 1" in src and "hooks.slow(_taken(card), _usual(col, day)) or hooks.near_leech(card.lapses, *_leech(col, card))" in src
+          and '"kind": "asked"' in src and '"act": "Tip"' in src)

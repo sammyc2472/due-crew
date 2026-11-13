@@ -777,6 +777,43 @@ def on_answer(card, opened=False):
     _show(view)
 
 
+_USUAL = {}  # {"day": the Anki day, "ms": my usual answer}: asked of the revlog once a day
+
+
+def _usual(col, day):
+    """The average of my last 200 answers, in ms (None: not known)."""
+    if _USUAL.get("day") != day:
+        try:
+            ms = col.db.scalar("SELECT avg(time) FROM (SELECT time FROM revlog WHERE time > 0 ORDER BY id DESC LIMIT 200)")
+        except Exception:
+            ms = None
+        _USUAL.update(day=day, ms=ms)
+    return _USUAL.get("ms")
+
+
+def _taken(card):
+    """How long the card up now has been up, in ms (0: this Anki doesn't say)."""
+    took = getattr(card, "time_taken", None)
+    try:
+        return int(took()) if callable(took) else 0
+    except Exception:
+        return 0
+
+
+def _leech(col, card):
+    """(the deck's leech threshold, whether the note wears Anki's leech tag); (0, False) when it can't be read."""
+    try:
+        conf = col.decks.config_dict_for_deck_id(getattr(card, "odid", 0) or card.did)
+        fails = int((conf.get("lapse") or {}).get("leechFails") or 0)
+    except Exception:
+        fails = 0
+    try:
+        tagged = bool(card.note().has_tag("leech"))
+    except Exception:
+        tagged = False
+    return fails, tagged
+
+
 def _with_hook(view, card, guid):
     """3.9.11, hooks (hooks.py): my own hook when I'm stuck on the card,
     folded till Show, in the place of nothing, of who knows it or of a
@@ -799,10 +836,12 @@ def _with_hook(view, card, guid):
         stuck = stuck and not has_turned
         has_turned = has_turned and not hook
         day = log_today(col)
-        # 3.9.12 (SC: "lets loosen"): any card I pressed Again on today or yesterday, learning ones too (it was two
-        # lapses as a review card first, which a card still being learned never has)
-        offer = (not hook and bool(col.db.scalar(
-            "SELECT 1 FROM revlog WHERE cid = ? AND id >= ? AND ease = 1 LIMIT 1", int(card.id), (int(col.sched.day_cutoff) - 86400) * 1000)))
+        # 3.9.12 (SC: "lets loosen", then "i like 1-4"): any card I pressed Again or Hard on today or yesterday,
+        # learning ones too (it was two lapses as a review card first, which a card still being learned never
+        # has); one that took well over my usual; a leech, or nearly one
+        offer = not hook and (bool(col.db.scalar(
+            "SELECT 1 FROM revlog WHERE cid = ? AND id >= ? AND ease IN (1, 2) LIMIT 1", int(card.id), (int(col.sched.day_cutoff) - 86400) * 1000))
+            or hooks.slow(_taken(card), _usual(col, day)) or hooks.near_leech(card.lapses, *_leech(col, card)))
         got, asked = hooks.view(hook, stuck, offer, has_turned, has_turned and hooks.may_ask(guid, day))
         if asked:
             hooks.note_asked(guid, day)
