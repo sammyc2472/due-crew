@@ -5651,3 +5651,14 @@ every release that changes how something works.
   (`tools/readme_shots.py`, then `node tools/readme_shots.js`, after
   `tools/preview.py`). They show on GitHub and AnkiWeb once this is on
   `main` (the links are raw URLs there).
+- 3.9.12, the README, simpler (SC, 13 Nov: "make it a bit simpler. call
+  me SC not sammy caplan. I want things organized in order of utility.
+  magic search higher, plans higher, the same images maybe less text").
+  About 1,250 words from 2,100. The order is by use: what it is, Get
+  started (install is its first step), Magic search, Study plans, Your
+  day with Insights, Your crew, Squads and bingo, Pip, Pip Party, Also
+  (Browse's right-clicks, the scrapbook, Share), then Privacy on as
+  before. "What's in it" went (the sections are short enough to be the
+  list). The same ten pictures. The README says SC where it said Sam or
+  Sammy Caplan; the LICENSE files' copyright lines are as they were.
+
