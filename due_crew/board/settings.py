@@ -10,7 +10,7 @@ from ..errs import wanted as _sends_errs
 from ..logo import board_mark
 from .. import sev as _sev
 
-from .base import ACCENTS, DEFAULT_ACCENT, HIDEABLE_TABS, KEEP_LINE, _by_theme, _pycmd, accent_pair, hidden_tabs
+from .base import ACCENTS, DEFAULT_ACCENT, HIDEABLE_TABS, KEEP_LINE, _by_theme, _pycmd, accent_pair, hidden_tabs, button_reset
 from .style import _css
 from .pip import SETTINGS_PIP, my_look
 from .due import ASK_KBD, MAGIC_KBD, STUDY_KBD
@@ -22,8 +22,7 @@ SETTINGS_CSS = """
     #due-crew.dc-set, #due-crew.dc-set .st-row, #due-crew.dc-set .st-l { text-align: left; }
     /* Anki styles every button on the Decks screen (a margin, a shadow,
        rounded corners); the panel's own controls start from nothing */
-    #due-crew.dc-set button { -webkit-appearance: none; appearance: none; margin: 0; box-shadow: none;
-      min-width: 0; min-height: 0; text-shadow: none; background-image: none; vertical-align: middle; }
+    __BUTTONS__
     #due-crew .st-radio { box-sizing: border-box; border-radius: 0; }
     #due-crew .st-box { overflow: hidden; }
     #due-crew .st-bar { display: flex; align-items: baseline; gap: 10px; margin: 2px 0 10px; }
@@ -102,7 +101,7 @@ SETTINGS_CSS = """
     @keyframes sthit { from { background-color: color-mix(in srgb, var(--dc-accent) 26%, transparent); } }  /* to its own ground, whatever that is */
     @media (prefers-reduced-motion: no-preference) { #due-crew .st-hit { animation: sthit 1.8s ease-out; } }
     @media (prefers-reduced-motion: reduce) { #due-crew .st-hit { outline: 2px solid var(--dc-accent); outline-offset: 1px; } }
-"""
+""".replace("__BUTTONS__", button_reset("#due-crew.dc-set button", "vertical-align: middle;"))
 # 3.9.9 (Sam: "reorganize settings to be intuitive and sensible"): four tabs by what a setting is about.
 # You: who I am, my dates, my people. Board: what's on the Decks screen and how it looks. Study: what
 # works while I study (Today, Magic search, reviewing, the Fifteen, keys). Privacy: what leaves this computer.

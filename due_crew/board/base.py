@@ -54,6 +54,32 @@ def palette(theme, accent=DEFAULT_ACCENT):
     # the logo's wordmark, a touch darker (lighter at night) than ink
     base["mark"] = "#e6e8e3" if theme == "dark" else "#242424"
     return base
+# 3.9.12, one control reset (the foundations round, Stage A). Anki's Decks screen gives every button a
+# margin, a shadow and rounded corners, and macOS draws any control whose appearance isn't none in its
+# own look: every button of ours starts from this, whichever part of the board it's on. A part adds
+# only what's its own (`extra`); it never restates these.
+BUTTON_CORE = ("-webkit-appearance: none; appearance: none; margin: 0; box-shadow: none; min-width: 0; min-height: 0; "
+               "text-shadow: none; background-image: none; -webkit-backdrop-filter: none; backdrop-filter: none; letter-spacing: normal;")
+
+
+def button_reset(selector, extra=""):
+    """The reset for the buttons `selector` names, as one CSS rule; extra: a part's own declarations after it."""
+    return f"{selector} {{ {BUTTON_CORE}{' ' + extra if extra else ''} }}"
+
+
+# The same for a page of its own (Magic search's .dcm, the plan window's .dcp): its files carry this text
+# for their scope, and the suite checks they still do (the plan page is shared with duecrew.com byte for byte).
+PAGE_RESET = """body {scope} button, body {scope} select, body {scope} input, body {scope} textarea {{
+  appearance: none; -webkit-appearance: none; font: inherit; letter-spacing: inherit; line-height: inherit;
+  text-transform: none; margin: 0; min-height: 0; min-width: 0; box-shadow: none; text-shadow: none;
+  backdrop-filter: none; -webkit-backdrop-filter: none; outline: none; }}
+body {scope} button {{ color: inherit; background: none; border: 0; padding: 0; border-radius: 0; cursor: pointer; }}"""
+
+
+def page_reset(scope):
+    return PAGE_RESET.format(scope=scope)
+
+
 NIGHT_SELECTORS = ("body.nightMode", "body.night_mode", "body.night-mode",
                    ":root.night-mode")
 

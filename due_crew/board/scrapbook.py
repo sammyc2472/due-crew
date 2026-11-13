@@ -9,7 +9,7 @@ import html as _html
 from ..logo import board_mark
 from .. import sev as _sev
 
-from .base import ACCENTS, CARD_SHADOW, _by_theme, _pycmd, _short_day, accent_pair
+from .base import ACCENTS, CARD_SHADOW, _by_theme, _pycmd, _short_day, accent_pair, button_reset
 from .cheers import DOODLE_INK, _doodle_art
 from .style import _css
 
@@ -19,8 +19,7 @@ _WEIGHT = {"pz": 6, "luck": 5, "tip": 5, "mine": 3, "cheer": 1}
 
 SCRAP_CSS = """
     #due-crew.dc-sb, #due-crew.dc-sb .sb-m, #due-crew.dc-sb .sb-y { text-align: left; }
-    #due-crew.dc-sb button { -webkit-appearance: none; appearance: none; margin: 0; box-shadow: none; min-width: 0; min-height: 0;
-      text-shadow: none; background-image: none; vertical-align: middle; font: inherit; cursor: pointer; }
+    __BUTTONS__
     #due-crew .sb-bar { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 2px 0 8px; }
     #due-crew .sb-bar b { font-size: 15px; }
     #due-crew .sb-bar .sp { flex: 1; }
@@ -99,7 +98,7 @@ SCRAP_CSS = """
       border-top: 1px solid var(--dc-line); color: var(--dc-muted); font-size: 11.5px; }
     #due-crew .sb-foot a { color: var(--dc-accent); font-weight: 700; text-decoration: none; }
     #due-crew.dc-sb button:focus-visible, #due-crew.dc-sb a:focus-visible { outline: 2px solid var(--dc-accent) !important; outline-offset: 2px; }
-"""
+""".replace("__BUTTONS__", button_reset("#due-crew.dc-sb button", "vertical-align: middle; font: inherit; cursor: pointer;"))
 SCRAP_LIGHT = ("--sb-bg: #fff; --sb-photo: #f4f3ee; --sb-ink: #2b2d29; --sb-muted: #6b665a; --sb-paper: #fbf8f1; --sb-note: #fdf3d3; "
                "--sb-note-ink: #4a3d12; --sb-sh: " + CARD_SHADOW + ", 0 0 0 1px rgba(0,0,0,.05);")
 SCRAP_DARK = ("--sb-bg: #33352f; --sb-photo: #23241f; --sb-ink: #e6e8e3; --sb-muted: #a3a79c; --sb-paper: #2e2c26; --sb-note: #45391a; "

@@ -10,7 +10,7 @@ from .. import closet as _closet
 from .. import sev as _sev
 from .. import songs as _songs
 
-from .base import BOARD_FONT, DEFAULT_ACCENT, _by_theme, _pycmd, _token_block, accent_pair, initial, palette
+from .base import BOARD_FONT, DEFAULT_ACCENT, _by_theme, _pycmd, _token_block, accent_pair, initial, palette, button_reset
 from .pip import my_look
 from .windows import POP_JS, pop_named
 
@@ -68,9 +68,7 @@ DANCE_CSS = """
 #dc-dance *, #dc-song * { box-sizing: border-box; }
 #dc-dance [hidden], #dc-song [hidden] { display: none !important; }
 /* Anki's Decks screen gives every button its look (and macOS its own): ours start from none */
-#dc-dance button, #dc-song button, #dc-song input { -webkit-appearance: none; appearance: none; margin: 0; box-shadow: none;
-  min-width: 0; min-height: 0; text-shadow: none; background-image: none; -webkit-backdrop-filter: none; backdrop-filter: none;
-  letter-spacing: normal; font: inherit; color: inherit; border-radius: 0; }
+__BUTTONS__
 #dc-dance button { background: none; border: 0; padding: 0; cursor: pointer; text-align: inherit; }
 #dc-dance button:focus-visible, #dc-dance a:focus-visible, #dc-song button:focus-visible, #dc-song a:focus-visible {
   outline: 2px solid var(--dc-accent) !important; outline-offset: 2px; }
@@ -251,7 +249,7 @@ DANCE_CSS = """
   @keyframes df-hop { from { transform: translate(48px, -26px); opacity: 0; } 55% { transform: translate(0, -12px); opacity: 1; } to { transform: none; } }
   #dc-dance:hover .sv { --sv-on: var(--sv-hover, infinite); }
 }
-""".replace("__W__", str(DANCE_W)).replace("__H__", str(DANCE_H)).replace("__NW__", str(DANCE_NW)).replace(
+""".replace("__BUTTONS__", button_reset("#dc-dance button, #dc-song button, #dc-song input", "font: inherit; color: inherit; border-radius: 0;")).replace("__W__", str(DANCE_W)).replace("__H__", str(DANCE_H)).replace("__NW__", str(DANCE_NW)).replace(
     "__NH__", str(DANCE_NH)).replace("__NARROW__", str(DANCE_NARROW - 1)).replace("__AREA__", str(DANCE_AREA)).replace(
     "__BOOTH__", "150").replace("__FONT__", BOARD_FONT)
 

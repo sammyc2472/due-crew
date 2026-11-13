@@ -2,7 +2,7 @@
 
 A part of the board (due_crew/board/, 3.9.8): see its __init__."""
 
-from .base import CARD_SHADOW, CARD_SHADOW_HOVER, ROW_CAP, _theme_css
+from .base import CARD_SHADOW, CARD_SHADOW_HOVER, ROW_CAP, _theme_css, button_reset
 
 
 def _css(cfg):
@@ -17,9 +17,7 @@ def _css(cfg):
        have always been centred by it; a new part says text-align: left
        itself) and gives every button a margin, a shadow and rounded
        corners, which the board's buttons start without */
-    #due-crew button {{ -webkit-appearance: none; appearance: none; margin: 0; box-shadow: none;
-      min-width: 0; min-height: 0; text-shadow: none; background-image: none;
-      -webkit-backdrop-filter: none; backdrop-filter: none; letter-spacing: normal; color: inherit; font-weight: normal; }}
+    {button_reset("#due-crew button", "color: inherit; font-weight: normal;")}
     /* 3.9.6: its boxes and pickers are the board's to draw: macOS draws any control whose
        appearance isn't none in its own look (Liquid Glass) over the board's. Anki's
        `button {{ outline: none !important }}` takes every focus ring: the board's come back */

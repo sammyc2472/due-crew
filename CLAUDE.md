@@ -357,6 +357,9 @@ clean `main` does the migrations, the API, then the site, then
 - What a page is told to draw has a named shape in `views.py` (3.9.12; the
   review chip is the first), checked as it crosses to the page: a slip counts
   as `view:<name>` and is drawn anyway. A new surface's view gets its shape there.
+- A button on the board starts from `board.button_reset(selector, extra)` (3.9.12, one
+  core for every part; a part adds only its own and never restates it); a page of its
+  own carries `base.page_reset(scope)`'s text (Magic search, the plan window).
 - A file Due Crew keeps is written by `store.py` (3.9.12: whole to a .tmp,
   swapped in; `load`/`save` for one kept in memory), never by a module's own
   open-and-replace. The colours are `board.palette`: every add-on page reads

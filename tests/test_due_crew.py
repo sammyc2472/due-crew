@@ -15778,6 +15778,35 @@ def test_hooks_v3911():
     os.path.exists(H._path()) and os.remove(H._path())
 
 
+def test_one_control_reset_v3912():
+    """3.9.12, the foundations round, Stage A: every button of ours starts
+    from one reset (board.button_reset), whichever part of the board it's
+    on; a part adds only its own. A page of its own (Magic search, the
+    plan window and its copy on duecrew.com) carries the same text for its
+    scope. Five places restated it before, each a little differently."""
+    from due_crew import board
+    from due_crew.board import base, scrapbook as sb, settings as st, dance as dn
+    core = base.BUTTON_CORE
+    css = board._css({"accent": "green", "theme": "auto"}) if hasattr(board, "_css") else ""
+    check("reset: the board's buttons, the scrapbook's, Settings' and the dance floor's all start from the one core, each with only its own after it",
+          base.button_reset("#x", "color: red;") == "#x { " + core + " color: red; }"
+          and ("#due-crew button { " + core + " color: inherit; font-weight: normal; }") in css
+          and ("#due-crew.dc-sb button { " + core + " vertical-align: middle; font: inherit; cursor: pointer; }") in sb.SCRAP_CSS
+          and ("#due-crew.dc-set button { " + core + " vertical-align: middle; }") in st.SETTINGS_CSS
+          and ("#dc-dance button, #dc-song button, #dc-song input { " + core + " font: inherit; color: inherit; border-radius: 0; }") in dn.DANCE_CSS
+          and "__BUTTONS__" not in sb.SCRAP_CSS + st.SETTINGS_CSS + dn.DANCE_CSS)
+    src = {}
+    for f in os.listdir(os.path.join(REPO, "due_crew", "board")):
+        if f.endswith(".py") and f != "base.py":
+            src[f] = open(os.path.join(REPO, "due_crew", "board", f), encoding="utf-8").read()
+    own = sorted(f for f, text in src.items() if re.search(r"button[^{}\n]*\{[^{}]*appearance: none; margin: 0; box-shadow: none", text))
+    check("reset: no part of the board restates it", own == [], own)
+    pages = {os.path.join("due_crew", "magicpage", "magic.css"): ".dcm", os.path.join("due_crew", "planner", "page", "plan.css"): ".dcp",
+             os.path.join("site", "public", "planpage", "plan.css"): ".dcp"}
+    off = [f for f, scope in pages.items() if base.page_reset(scope) not in open(os.path.join(REPO, f), encoding="utf-8").read()]
+    check("reset: a page of its own carries the same text for its scope (Magic search, the plan window, its copy on the site)", off == [], off)
+
+
 def test_view_shapes_v3912():
     """3.9.12, the foundations round: what a page is told to draw has a
     named shape (views.py), checked where it crosses from Python to the

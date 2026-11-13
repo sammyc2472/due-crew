@@ -5597,3 +5597,13 @@ every release that changes how something works.
   which are named (`test_the_fake_has_every_route_v3912`). Not done:
   one schema that writes the validators for the Worker, the client and
   the fake.
+- 3.9.12, the foundations, Stage A: one control reset. The board, the
+  scrapbook, Settings and the dance floor each restated the buttons'
+  reset, each a little differently; they all come from
+  `board.button_reset(selector, extra)` now (`base.BUTTON_CORE`), a part
+  adding only its own. Magic search's page and the plan window's (and
+  its copy on duecrew.com) carry `base.page_reset(scope)`'s text, which
+  the suite checks. Measured, not eyeballed: the computed look of all
+  325 controls on the board's preview was the same before and after.
+  Left: the site's own two stylesheets (app.css, table.css) and the
+  Magic field under the deck list keep their resets.
