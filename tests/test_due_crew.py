@@ -15773,6 +15773,19 @@ def test_hooks_v3911():
     os.path.exists(H._path()) and os.remove(H._path())
 
 
+def test_the_sites_constants_are_made_v3912():
+    """3.9.12, the foundations round: constants the site restated by hand
+    (what each party game needs, a plan's limits, a day's saves) are
+    written from the add-on's by tools/gen_twins.py; running it again
+    changes nothing."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("gen_twins", os.path.join(REPO, "tools", "gen_twins.py"))
+    gen = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gen)
+    check("the site's constants are their Python's (tools/gen_twins.py changes nothing)", gen.stale() == [], gen.stale())
+    check("each made line says where it's from", all("made by tools/gen_twins.py from" in want for _f, _n, want in gen.lines()) and len(gen.lines()) == 3)
+
+
 def test_the_fake_has_every_route_v3912():
     """3.9.12, the foundations round: the suite's server is the Worker
     restated, so a route the Worker gains has to be restated too, or the

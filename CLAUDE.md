@@ -260,8 +260,9 @@ same commit, each with its test:
   they're counted, 3.9.9; the suite checks all three); `remote.LIMIT_WORDS`/
   `NEAR_WORDS` ↔ `Ceilings.WORDS`/`NEAR` (a refused save's words, Review and send's
   lines past 90%)
-- `gamenight.NEEDS` ↔ `NEEDS` in `site/public/table.js` (what each game
-  needs from tonight's pack, 3.9.5; the suite checks)
+- `gamenight.NEEDS` → `NEEDS` in `site/public/table.js`, and `planner/build.CEILINGS`/`SAVES_A_DAY`
+  → `MAX`/`SAVES_A_DAY` in builder.js: written, not restated (3.9.12, `tools/gen_twins.py`; run it
+  after changing the Python, the suite checks it changes nothing). A new shared constant goes there
 - the Worker ↔ `tests/fakes.FakeWorker` (the suite's server)
 
 ## Where things live
