@@ -5560,9 +5560,9 @@ def test_asks_and_tips_v390():
     knows = K.chip_view({"knows": ["dre"], "tips": []}, [], names, pips=pips)
     note = K.remark_view([{"name": "Block 1", "doc": {"remarks": [{"card": ["guid000001", 0], "text": "the second cloze"}]}}], "guid000001", 0)
     check("fold: a tip says who left it, with the Pip peeking in; Pip off, the same bubble with the bulb; the words wait",
-          tip["fold"] == "Dre left a tip" and tip["peek"] == {"uids": ["dre"], "head": "Dre: think loops", "act": "This helped"}
+          tip["fold"] == "Dre left a hook" and tip["peek"] == {"uids": ["dre"], "head": "Dre: think loops", "act": "This helped"}
           and tip["pip"] == pips["dre"] and tip["text"] == "\U0001F4A1 Dre: think loops"
-          and tip_off["fold"] == "\U0001F4A1 Dre left a tip" and tip_off["peek"]["uids"] == [] and "pip" not in tip_off, (tip, tip_off))
+          and tip_off["fold"] == "\U0001F4A1 Dre left a hook" and tip_off["peek"]["uids"] == [] and "pip" not in tip_off, (tip, tip_off))
     check("fold: an ask's line and a plan's note fold too; an ask with no line, and who knows it, don't (nothing to give away)",
           asked["fold"] == "Dre asked about this card" and asked["text"] == "Dre: \u201cwhy axillary?\u201d"
           and "fold" not in bare and "fold" not in knows and note["fold"] == "\U0001F4CC A note from Block 1", (asked, note))
@@ -6102,7 +6102,7 @@ def test_who_knows_v32():
           K.chip_view({"knows": ["dre"]}, [], names, mine=True)["act"] == "Asked" and v["act"] == "Ask"
           and v["short"] == "\U0001F419 Dre +1")
     check("chip: a tip's short form names whose tip it is",
-          K.chip_view(cardsin["guid000003"], [], names)["short"] == "\U0001F4A1 Dre's tip")
+          K.chip_view(cardsin["guid000003"], [], names)["short"] == "\U0001F4A1 Dre's hook")
     js = K.chip_js({"text": "</span><script>x</script>", "cmd": "knowsask", "act": "Ask", "accent": "#0a0"})
     check("chip: text goes in as text (3.8.22: the one markup is a Pip's own drawing)", "textContent" in js and js.count("innerHTML") == 1 and "p.innerHTML = D.pip.svg" in js)
     acked(sam, sam.fetch_board(labels))  # Dre's tip is read, and the next refresh
@@ -6302,7 +6302,7 @@ def test_knows_peek_v390():
           and one["text"] == "Dre knows this" and one["act"] == "Ask", (one.get("peek"), two.get("peek")))
     tip = K.chip_view({"knows": ["dre"], "tips": [{"from": "dre", "text": "think loops"}]}, [], names, pips=pips)
     check("peek: a tip peeks in with its tipper's Pip (Sam's note on \"Asks and tips\"); an ask keeps its card",
-          tip["peek"] == {"uids": ["dre"], "head": "Dre: think loops", "act": "This helped"} and tip["fold"] == "Dre left a tip"
+          tip["peek"] == {"uids": ["dre"], "head": "Dre: think loops", "act": "This helped"} and tip["fold"] == "Dre left a hook"
           and "peek" not in K.chip_view(None, [], names, asks=[("dre", 1, "why?")], pips=pips), tip.get("peek"))
     shown, saved = [], (K._bottom, K._review_web, K._show, K.client, dict(_state))
     store = world({"sam": "Sam"})
@@ -15589,29 +15589,51 @@ def test_crew_tabs_hold_still_v3910():
 
 
 def test_hooks_v3911():
-    """3.9.11, hooks, step one (Sam: "I like the way you've put tips together
-    but I really liked also the current implementation of these folks know
-    this coming up on the right. Give it a build"): my own line on a card I
-    keep missing, shown when I'm stuck on it; offered quietly beside Edit on
-    a second miss, and once when a card I kept missing has stuck. Who knows
-    it keeps its bubble. Kept on this computer, never sent."""
-    from due_crew import hooks as H, cards as K, room_model as rm
+    """3.9.11, hooks (Sam: "build that whole implementation you've
+    proposed"): my own line on a card I keep missing, folded till Show when
+    I'm stuck on it (Sam: "especially for one by ones we don't want to spoil
+    the correct answer"); offered quietly beside Edit on a second miss, and
+    once when a card I kept missing has stuck. Shared (a tick on each), it's
+    my tip on the card on the server: mutual friends stuck on it read it,
+    nobody asking; "This helped" reaches me once. Who knows it keeps its
+    bubble on a card I've no hook on; a crewmate's hook can be hidden."""
+    from due_crew import hooks as H, cards as K, room_model as rm, scrapbook as S
     _patched_due_crew()
     H._STORE.update(path=None, data=None, disk=None)
     check("a hook is one line a card, cleaned as a note is; no words takes it off",
           H.put("g1", "  LOOP = thick <b>ascending</b> loop\n of Henle ", "2026-11-13") == H.get("g1") and "\n" not in H.get("g1")
           and "<b>" in H.get("g1") and H.count() == 1 and H.put("g1", "   ", "2026-11-13") == "" and H.get("g1") == "" and H.count() == 0)
+    H._STORE.update(path=None, data=None, disk=None)
+    os.path.exists(H._path()) and os.remove(H._path())
     H.put("g1", "think loops", "2026-11-13")
     disk = json.load(open(H._path()))
-    check("kept in hooks.json beside wrap.json; nothing of it in the client or the account's keys",
-          disk["by"]["g1"]["t"] == "think loops" and "hook" not in open(os.path.join(REPO, "due_crew", "backend", "api.py")).read()
-          and "hook" not in open(os.path.join(REPO, "due_crew", "account.py")).read())
+    check("kept in hooks.json beside wrap.json; shared by default, and waiting to be sent; none of it an account key",
+          disk["by"]["g1"] == {"t": "think loops", "at": "2026-11-13", "s": True, "up": False} and H.waiting() == [("g1", "think loops")]
+          and H.shared("g1") and "hook" not in open(os.path.join(REPO, "due_crew", "account.py")).read())
+    H.sent("g1", "think loops")
+    check("sent: nothing waits, and the hook knows it's up", H.waiting() == [] and json.load(open(H._path()))["by"]["g1"]["up"] is True)
+    H.put("g1", "think loops", "2026-11-13", share=False)
+    check("made private: it comes down from the server; the next one starts unticked (what I chose last)",
+          H.waiting() == [("g1", "")] and not H.shared("g1") and not H.shared("never"))
+    H.sent("g1", "")
+    H.put("g2", "mine alone", "2026-11-13", share=False)
+    check("a private hook is never sent, and taking one off that never went up sends nothing",
+          H.waiting() == [] and H.put("g2", "", "2026-11-13") == "" and H.waiting() == [])
+    H.put("g1", "think loops", "2026-11-13", share=True)
+    H.put("g1", "think LOOPS", "2026-11-13", share=True)
+    H.sent("g1", "think loops")  # an older send lands after a change: the newer words still wait
+    check("a send that lands after a change leaves the newer words waiting; taken off after going up, it comes down",
+          H.waiting() == [("g1", "think LOOPS")] and (H.sent("g1", "think LOOPS"), H.put("g1", "", "2026-11-13")) and H.waiting() == [("g1", "")])
+    H.sent("g1", "")
+    H.put("g1", "think loops", "2026-11-13")
+    H.sent("g1", "think loops")
     check("a card has stuck: three lapses or more and its last three answers right, no fewer",
           H.turned(3, [3, 2, 4]) and not H.turned(2, [3, 3, 3]) and not H.turned(5, [3, 1, 3]) and not H.turned(5, [3, 3])
           and (H.TURNED_LAPSES, H.TURNED_RIGHT, H.ASKS_A_DAY) == (3, 3, 2))
     v, asked = H.view("think loops", True, False, False, False)
-    check("stuck on a card with my hook: it says it, Edit beside it; a card I have down says nothing",
-          v["text"] == "Your hook: think loops" and v["cmd"] == "hookadd" and v["act"] == "Edit" and not asked
+    check("stuck on a card with my hook: folded till Show (a one-by-one's answer isn't given away), Edit beside it; a card I have down says nothing",
+          v["text"] == "Your hook: think loops" and v["fold"] == "You left a hook" and "think" not in v["fold"]
+          and v["cmd"] == "hookadd" and v["act"] == "Edit" and not asked
           and H.view("think loops", False, False, True, True) == (None, False))
     add, _a = H.view("", True, True, False, False)
     ask, was = H.view("", False, False, True, True)
@@ -15624,11 +15646,21 @@ def test_hooks_v3911():
           and not H.may_ask("c", "2026-11-13") and H.may_ask("c", "2026-11-14"))
     knows = {"kind": "knows", "text": "Dre knows this", "cmd": "knowsask", "act": "Ask",
              "peek": {"uids": ["dre"], "head": "I know this one", "act": "Ask Dre"}}
-    both = H.beside(knows, "think loops")
-    check("who knows it keeps its bubble and its Ask; my hook is said after it; a tip or an ask is left as it is",
-          both["peek"]["head"] == "I know this one · Your hook: think loops" and both["peek"]["uids"] == ["dre"] and both["cmd"] == "knowsask"
-          and H.beside(knows, "") is knows and H.beside({"kind": "tip", "text": "x"}, "think loops") == {"kind": "tip", "text": "x"}
-          and H.beside(None, "think loops") is None)
+    check("my hook takes the place of nothing, of who knows it, of a plan's note; an ask or a crewmate's hook stays",
+          H.over(None) and H.over(knows) and H.over({"kind": "remark"}) and not H.over({"kind": "tip"}) and not H.over({"kind": "ask"}))
+    check("hiding a crewmate's hook: theirs on that card alone, for good",
+          not H.hidden("g3", "dre") and (H.hide("g3", "dre"), H.hidden("g3", "dre"))[1] and not H.hidden("g3", "mo") and not H.hidden("g4", "dre"))
+    names = {"dre": ("Dre Ng", ""), "mo": ("Mo", "")}
+    info = {"knows": [], "tips": [{"from": "dre", "text": "theirs", "helped": False}, {"from": "mo", "text": "mo's", "helped": False}]}
+    check("a hidden hook is off the chip and its list; the next one takes its place; all hidden, who knows it is what's left",
+          [t["from"] for t in K.tip_list(info, [], names, hidden=lambda u: u == "dre")] == ["mo"]
+          and K.chip_view(info, [], names, hidden=lambda u: u == "dre")["actcmd"] == "knowshelped:mo"
+          and K.chip_view(info, [{"from": "dre", "name": "Dre", "note": "kept here"}], names, hidden=lambda u: True) is None
+          and "Hide this hook" in open(os.path.join(REPO, "due_crew", "cards.py")).read())
+    lines = H.thanks_lines([("g1", "dre"), ("g1", "mo"), ("g1", "dre"), ("g5", "zed")], {"dre": "Dre", "mo": "Mo"},
+                           lambda g: "Renal" if g == "g1" else "")
+    check("thanks: a line a card, named by its deck part (never its words), the rest counted; someone I can't name is a crewmate",
+          lines == ["Your hook on a Renal card helped Dre and 1 more.", "Your hook on a card helped a crewmate."] and "hook" in S.WHATS, lines)
 
     # on the card: the chip, and the click
     conn = sqlite3.connect(":memory:")
@@ -15647,34 +15679,91 @@ def test_hooks_v3911():
         turned = K._with_hook(None, mk(7, "g7", 4), "g7")
         again = K._with_hook(None, mk(7, "g7", 4), "g7")
         quiet = K._with_hook(None, mk(9, "g9", 0), "g9")
-        beside = K._with_hook(dict(knows), mk(8, "g1", 2), "g1")
+        over_knows = K._with_hook(dict(knows), mk(8, "g1", 2), "g1")
+        knows_stays = K._with_hook(dict(knows), mk(8, "g8", 2), "g8")
+        tip_stays = K._with_hook({"kind": "tip", "text": "x"}, mk(8, "g1", 2), "g1")
     finally:
         K.mw.col, K.log_today = saved
     check("on the card: my hook when I'm stuck; the offer on a second miss today; what made it click once, then nothing; a fresh card, nothing",
-          stuck_view["kind"] == "hook" and offer["kind"] == "hookadd" and turned["kind"] == "hookask" and again is None and quiet is None
-          and beside["peek"]["head"].endswith("Your hook: think loops"), (stuck_view, offer, turned, again, quiet))
+          stuck_view["kind"] == "hook" and stuck_view["fold"] and offer["kind"] == "hookadd" and turned["kind"] == "hookask"
+          and again is None and quiet is None, (stuck_view, offer, turned, again, quiet))
+    check("who knows it comes up as ever on a card I've no hook on (an offer never takes its place); my hook goes in its place; a crewmate's hook stays",
+          knows_stays["kind"] == "knows" and knows_stays["peek"]["head"] == "I know this one" and over_knows["kind"] == "hook"
+          and tip_stays == {"kind": "tip", "text": "x"}, (knows_stays, over_knows))
     src = open(os.path.join(REPO, "due_crew", "cards.py")).read()
     check("its click is one of the card page's keyed commands (it opens a window, nothing more); the quiet offer stays in the bar; "
           "the More menu has it on any card",
           "hookadd" in rm.CARD_PAGE_CMDS and 'if view and page is not None and not view.get("bar"):' in src
           and 'elif cmd == "hookadd":\n        hook_edit()' in src
           and "Due Crew: add a hook…" in open(os.path.join(REPO, "due_crew", "together.py")).read())
-    asked_for, shown = [], []
-    import due_crew.ui as U
-    keep = (K._card, U.ask_text, K.on_answer, K.mw.col, K.log_today, K.tooltip, getattr(K.mw, "reviewer", None))
+
+    # the window's answer is kept, and a shared one goes to the server; a crewmate stuck on the card reads it; helped comes back once
+    labels = [_day(-i) for i in range(8)]
+    store = world({"sam": "Sam", "dre": "Dre", "zed": "Zed"}, {"sam": ["dre"], "dre": ["sam"], "zed": []})
+    sam, dre, zed = new_client(store, "sam", "Sam"), new_client(store, "dre", "Dre"), new_client(store, "zed", "Zed")
+    HD = types.ModuleType('due_crew.ui.hook_dialog')  # the suite has no Qt: the window itself is tools/dialogs.py's
+    HD.HookDialog = None
+    had_hd = sys.modules.get('due_crew.ui.hook_dialog')
+    sys.modules['due_crew.ui.hook_dialog'] = HD
+    opened, shown, said, answers = [], [], [], [("renal: think loops", True), ("renal: think loops", False), ("", False)]
+
+    class FakeDialog:
+        def __init__(self, parent, words="", shared=True, signed_in=True):
+            opened.append((words, shared, signed_in))
+            self.result_words, self.result_shared = answers[len(opened) - 1]
+
+        def exec(self):
+            return 1
+    keep = (K._card, HD.HookDialog, K.on_answer, K.mw.col, K.log_today, K.tooltip, getattr(K.mw, "reviewer", None), K.client, K._bg, K.names_by_uid)
     card = mk(8, "g20", 2)
-    K._card, K.on_answer, K.mw.col, K.log_today, K.tooltip = (lambda: card), (lambda c, opened=False: shown.append(opened)), col, (lambda c: "2026-11-15"), (lambda *a, **k: None)
+    K._card, K.on_answer, K.mw.col, K.log_today = (lambda: card), (lambda c, opened=False: shown.append(opened)), col, (lambda c: "2026-11-15")
+    K.tooltip = lambda text, **k: said.append(text)
     K.mw.reviewer = types.SimpleNamespace(state="answer")
-    U.ask_text = lambda parent, title, label, text="": (asked_for.append((title, text)), ("renal: think loops", True))[1]
+    HD.HookDialog, K.client, K._bg = FakeDialog, (lambda: sam), (lambda job, done=None: done(job()) if done else job())
+    K.names_by_uid = lambda: {"dre": ("Dre Ng", "")}
     try:
         handled = K.on_message("hookadd", ["duecrew", "hookadd"], from_card_page=True)
-        K.on_message("hookadd", ["duecrew", "hookadd"], from_card_page=True)
+        up = store.tips.get(("g20", "sam"))
+        dre.push(labels, {}, stuck=["g20"])
+        zed.push(labels, {}, stuck=["g20"])
+        read = json.loads(json.dumps((dre.session.get("cards") or {}).get("g20"))), (zed.session.get("cards") or {}).get("g20")
+        dre.tip_helped("g20", "sam")
+        board = sam.fetch_board(labels)
+        K.hook_thanks(board["thanks"])
+        twice = sam.fetch_board(labels)["thanks"]
+        K.on_message("hookadd", ["duecrew", "hookadd"], from_card_page=True)   # now private: it comes down
+        down = ("g20", "sam") not in store.tips and H.get("g20") == "renal: think loops"
+        K.on_message("hookadd", ["duecrew", "hookadd"], from_card_page=True)   # taken off
+        # a send that doesn't get out waits, and goes with a later refresh's flush
+        H.put("g21", "later", "2026-11-15")
+        real = sam.put_hook
+        sam.put_hook = lambda g, w: False
+        K.flush_hooks()
+        waited = H.waiting() == [("g21", "later")] and ("g21", "sam") not in store.tips
+        sam.put_hook = real
+        K.flush_hooks()
     finally:
-        K._card, U.ask_text, K.on_answer, K.mw.col, K.log_today, K.tooltip = keep[:6]
-        K.mw.reviewer = keep[6]
-        H._STORE.update(path=None, data=None, disk=None)
-    check("the click: asks for its one line (the hook it has, the second time), keeps it, and draws the chip again opened",
-          handled is True and asked_for == [("Add a hook", ""), ("Your hook", "renal: think loops")] and shown == [True, True], (asked_for, shown))
+        K._card, HD.HookDialog, K.on_answer, K.mw.col, K.log_today, K.tooltip = keep[:6]
+        K.mw.reviewer, K.client, K._bg, K.names_by_uid = keep[6:]
+        if had_hd is None:
+            sys.modules.pop('due_crew.ui.hook_dialog', None)
+        else:
+            sys.modules['due_crew.ui.hook_dialog'] = had_hd
+    check("the click: the window (the hook and tick it has, each time), kept, the chip drawn again opened",
+          handled is True and opened == [("", True, True), ("renal: think loops", True, True), ("renal: think loops", False, True)]
+          and shown == [True, True, True] and said[0] == "Hook saved, for you and your crew." and said[-1] == "Hook removed.", (opened, shown, said))
+    check("shared: it's my tip on the card on the server; a mutual friend stuck on it reads it, a stranger doesn't",
+          up and up["text"] == "renal: think loops" and read[0] == {"knows": [], "tips": [{"from": "sam", "text": "renal: think loops", "helped": False}]}
+          and read[1] is None, (up, read))
+    check("This helped reaches me with a refresh, once: said, and a keepsake; made private it comes down, and stays mine here",
+          board["thanks"] == [("g20", "dre")] and twice == [] and "Your hook on a card helped Dre." in said and down and H.get("g20") == ""
+          , (board["thanks"], twice, said))
+    check("a send that didn't get out waits and goes with the next flush", waited and H.waiting() == [] and store.tips[("g21", "sam")]["text"] == "later")
+    init = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
+    check("a refresh's commit says the thanks and sends what waits (no request of its own when nothing does)",
+          '_crew_cards.hook_thanks(data.get("thanks"))' in init and "_crew_cards.flush_hooks()" in init)
+    H._STORE.update(path=None, data=None, disk=None)
+    os.path.exists(H._path()) and os.remove(H._path())
 
 
 def test_scrapbook_v3910():

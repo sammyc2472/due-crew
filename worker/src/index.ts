@@ -87,6 +87,7 @@ authed("POST", r("/reports"), S.report);
 
 // 3.2: tips, my log, the admin's counts
 authed("POST", r("/tips/helped"), C.helped);
+authed("PUT", r("/hooks"), C.putHook);  // 3.9.11: my own hook on a card, read by mutual friends stuck on it
 authed("GET", r("/log"), (q, s, env) => C.getLog(q, s, env));
 // 3.7.1, D2: Account › Your data
 authed("DELETE", r("/log"), (_q, s, env) => C.deleteLog(s, env));

@@ -201,6 +201,10 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
     settingsAt: me.sat || "",  // 3.7.1: an add-on pulls a save it hasn't seen
     errs: true,  // 3.9.9: a sync may carry error counts (field.ts); an add-on sends none till it reads this
   };
+  if (!keep) {  // 3.9.11: an add-on's refresh says who a hook of mine helped, once (the site's home has no place for it)
+    const thanks = await C.thanksFor(env, s.uid);
+    if (thanks.length) out.thanks = thanks;
+  }
   if (withDecks) out.decks = await decksFor(env, s.uid);
   // 3.1: the plans I follow, and offers; the site's home (keep=1) reads its plans from /plans/mine.
   // 3.7.3: every add-on refresh carries a stamp of them (pv=, what it last saw);

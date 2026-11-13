@@ -453,6 +453,9 @@ class ApiClient:
                 "pending": [str(f.get("name") or "?") for f in data.get("friends") or [] if not f.get("mutual")],
                 "cheers": cheers,
                 "cheers_at": int(data.get("cheersAt") or 0) if isinstance(data.get("cheersAt"), (int, float)) else 0,
+                # 3.9.11: who a hook of mine helped, each once: [(guid, uid)]
+                "thanks": [(str(t["guid"])[:64], str(t["by"])[:128]) for t in data.get("thanks") or []
+                           if isinstance(t, dict) and isinstance(t.get("guid"), str) and isinstance(t.get("by"), str)][:50],
                 "my_friends": friends,
                 "my_code": str(me.get("code") or ""),
                 "knocks": self._knocks(data.get("knocks")),
@@ -767,6 +770,12 @@ class ApiClient:
         if not add and not gone:
             return None, sent
         return {"add": add, "del": gone}, (sent | set(add)) - set(gone)
+
+    def put_hook(self, guid, text):
+        """3.9.11: my own hook on a card, read by mutual friends stuck on it; no
+        text takes it down. One request, on a click (a PUT: twice is once)."""
+        status, _ = self._call("PUT", "/hooks", {"guid": str(guid), "text": str(text or "")})
+        return status == 200
 
     def tip_helped(self, guid, from_uid, helped=True):
         """3.2: "This helped" on a crewmate's tip. One request, on a click."""

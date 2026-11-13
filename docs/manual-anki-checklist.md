@@ -898,8 +898,10 @@ The riskiest of 3.9.1, the parts only a live Anki can show, in order:
 
 ### 3.9.11: hooks, Magic search's Recent
 
-- [ ] Hooks: on a card you've lapsed on twice, press Again, and when it comes back show the answer: "Add a hook for next time" beside Edit (nothing over the card). Click it, type a line, save. Miss it again: the corner card says "Your hook: …" with Edit. Edit and clear it: gone. More › "Due Crew: add a hook…" works on any card.
-- [ ] A card a crewmate has down still shows "… knows this" coming up on the right with Ask; with your hook on it, the same bubble ends "· Your hook: …". A crewmate's tip or ask shows as before.
+- [ ] Hooks: on a card you've lapsed on twice, press Again, and when it comes back show the answer: "Add a hook for next time" beside Edit (nothing over the card). Click it: a window with one line, "Share with my crew" ticked, Save. Miss it again: the corner card says "You left a hook" and Show; only then the words, with Edit. Edit › Take it off: gone. More › "Due Crew: add a hook…" works on any card.
+- [ ] Shared: a crewmate (mutual) who misses that card sees "<you> left a hook" coming up on the right after their next sync, Show, then This helped. Your next refresh says "Your hook on a … card helped <them>." once, and the scrapbook keeps the line. Untick Share and save: after their next sync it's gone for them, still yours.
+- [ ] On a crewmate's hook, the chip's list (click it) has "Hide this hook": it never shows on that card again.
+- [ ] A card a crewmate has down, with no hook of yours on it, still shows "… knows this" coming up on the right with Ask.
 - [ ] A card you lapsed three times and have since got right three times running: once, "This one stuck. What made it click?"; never again on that card, twice a day at most.
 - [ ] Magic search: paste a long list of card ids, Study or Browse them, reopen: no Recent for it. A long Recent from before is gone; a short one ("pv loop") is there and types itself on a click.
 

@@ -113,7 +113,7 @@ ROUTES = (
     "/board", "/sync", "/decks", "/heatmap/:id", "/settings",
     "/users/:id", "/friends", "/friends/:id", "/codes", "/codes/:code", "/codes/:code/add",
     "/invites/:code", "/invites", "/invites/:code/redeem", "/cheers/:id", "/knocks", "/knocks/:id", "/reports",
-    "/tips/helped", "/log", "/account/data", "/account/todos",
+    "/tips/helped", "/hooks", "/log", "/account/data", "/account/todos",
     "/admin/stats", "/admin/trends", "/admin/people", "/admin/people/:id", "/admin/people/:id/signout",
     "/admin/people/:id/code", "/admin/people/:id/limits", "/admin/people/:id/email", "/admin/people/:id/note",
     "/admin/people/:id/crew", "/admin/people/:id/crew/:id", "/admin/actions", "/admin/squads/:id",

@@ -273,14 +273,16 @@ def peek_pip(uid):
         return None
     return sev.slot(sev.svg("peek", look=e.get("look"), label=html.escape(f'{e.get("name") or "?"}’s Pip', quote=True)), PEEK_PIP)
 
-def tip_list(info, local_tips, names):
+def tip_list(info, local_tips, names, hidden=None):
     """The tips on one card, each person once: [{from, name, text, helped}].
     The server's first (on a card I'm stuck on, from crewmates I can name),
-    then the ones kept here as they arrived (2.10 tuples or 3.5.0 dicts)."""
+    then the ones kept here as they arrived (2.10 tuples or 3.5.0 dicts).
+    hidden (3.9.11): uid -> whether I hid their hook on this card."""
     out, seen = [], set()
+    hidden = hidden or (lambda u: False)
     for t in (info or {}).get("tips") or []:
         u = t.get("from")
-        if u in names and u not in seen:
+        if u in names and u not in seen and not hidden(u):
             seen.add(u)
             out.append({"from": u, "name": names[u][0], "text": str(t.get("text") or ""),
                         "helped": bool(t.get("helped"))})
@@ -288,7 +290,7 @@ def tip_list(info, local_tips, names):
         if isinstance(t, (tuple, list)):
             t = {"name": t[0], "note": t[1]}
         u = t.get("from") or ""
-        if u and u in seen:
+        if u and (u in seen or hidden(u)):
             continue
         seen.add(u)
         out.append({"from": u, "name": str(t.get("name") or "?"), "text": str(t.get("note") or ""),
@@ -296,7 +298,7 @@ def tip_list(info, local_tips, names):
     return out
 
 
-def chip_view(info, local_tips, names, asks=(), mine=False, pips=None):
+def chip_view(info, local_tips, names, asks=(), mine=False, pips=None, hidden=None):
     """What the chip says for one card, or None. info: the session's entry
     for the card; local_tips: the tips kept here for it (together.local_tips);
     asks: [(uid, index[, line])] crewmates asking about this card (on their
@@ -333,11 +335,12 @@ def chip_view(info, local_tips, names, asks=(), mine=False, pips=None):
             view["fold"] = f"{who} asked about this card"  # the line can give the answer away
         return with_pip(view, asks[0][0])
     knows = [u for u in (info or {}).get("knows") or [] if u in names]
-    tips = tip_list(info, local_tips, names)
+    tips = tip_list(info, local_tips, names, hidden)
     if tips:
         first = tips[0]
         who = first["name"].split(" ")[0]
-        view = {"kind": "tip", "text": f"\U0001F4A1 {who}: {first['text']}", "short": f"\U0001F4A1 {who}'s tip",
+        # 3.9.11: on the card a tip is a hook (the same line, now left without being asked)
+        view = {"kind": "tip", "text": f"\U0001F4A1 {who}: {first['text']}", "short": f"\U0001F4A1 {who}'s hook",
                 "title": first["text"], "cmd": "knowstip"}
         if len(tips) > 1:
             view["more"] = len(tips) - 1
@@ -347,7 +350,7 @@ def chip_view(info, local_tips, names, asks=(), mine=False, pips=None):
         # 3.9.0 (Sam's note on "Asks and tips"): the tipper's Pip peeks in with it, as who knows it
         # does (the same bubble without it, Pip off); its words folded till Show
         own = first["from"] in pips
-        view["fold"] = f"{who} left a tip" if own else f"\U0001F4A1 {who} left a tip"
+        view["fold"] = f"{who} left a hook" if own else f"\U0001F4A1 {who} left a hook"
         view["peek"] = {"uids": [first["from"]] if own else [], "head": f"{who}: {first['text']}" if own else view["text"],
                         "act": view.get("act")}
         return with_pip(view, first["from"]) if own else view
@@ -727,7 +730,8 @@ def on_answer(card, opened=False):
             info = sess["cards_due"][guid]  # 3.9.0: missed today for the first time, known since the morning
         names, tips = names_by_uid(), local_tips(guid)
         pips = pips_by_uid(only=chip_people(info, tips, names, asks))
-        view = chip_view(info, tips, names, asks, mine, pips)
+        from . import hooks as _hooks
+        view = chip_view(info, tips, names, asks, mine, pips, hidden=lambda u: _hooks.hidden(guid, u))
         if view is None or view.get("kind") == "knows":
             view = remark_view(client().session.get("plans"), guid, card.ord) or view  # 3.8.1
         view = _with_hook(view, card, guid)  # 3.9.11: my own hook, or the way to add one
@@ -749,18 +753,19 @@ def on_answer(card, opened=False):
 
 
 def _with_hook(view, card, guid):
-    """3.9.11, hooks (hooks.py): with nothing from my crew on the card, my
-    own hook when I'm stuck on it, or the way to add one (and, once a card,
-    "What made it click?" when one I kept missing has stuck). Who knows it
-    keeps its bubble, my hook said after it. Never in the chip's way."""
+    """3.9.11, hooks (hooks.py): my own hook when I'm stuck on the card,
+    folded till Show, in the place of nothing, of who knows it or of a
+    plan's note (an ask or a crewmate's hook keeps the chip); with none, the
+    quiet way to add one, or once a card "What made it click?" when one I
+    kept missing has stuck. Never in the chip's way."""
     try:
         from . import hooks
-        hook = hooks.get(guid)
-        if view is not None:
-            return hooks.beside(view, hook)
+        if not hooks.over(view):
+            return view
         col = mw.col
         if col is None:
             return view
+        hook = hooks.get(guid)
         stuck = stuck_now(col, card, col.sched.day_cutoff)
         # a card that has stuck (its last answers right) still has its lapses, so it's "stuck" by the list's rule:
         # looked at apart, to ask what made it click, and so a hook isn't read to me on a card I have down again
@@ -774,6 +779,8 @@ def _with_hook(view, card, guid):
         got, asked = hooks.view(hook, stuck, offer, has_turned, has_turned and hooks.may_ask(guid, day))
         if asked:
             hooks.note_asked(guid, day)
+        if got is None or (view is not None and got.get("kind") != "hook"):
+            return view  # who knows it (or a plan's note) gives way to my hook alone, never to an offer
         return got
     except Exception:
         from .errs import oops
@@ -783,23 +790,85 @@ def _with_hook(view, card, guid):
 
 def hook_edit(card=None):
     """Add or change my hook on the card up now (the chip, or the reviewer's
-    More menu): one line; none takes it off. Kept on this computer."""
+    More menu): one line, and whether my crew reads it; Take it off removes
+    it. Kept here; shared, it goes to the server (flush_hooks)."""
     card = card or _card()
     if card is None:
         return
     from . import hooks
-    from .ui import ask_text
+    from .ui.hook_dialog import HookDialog
     guid = card.note().guid
     have = hooks.get(guid)
-    line, ok = ask_text(mw, "Your hook" if have else "Add a hook",
-                        "What makes this card stick? One line, shown when you miss it. Kept on this computer."
-                        + (" Clear it to take it off." if have else ""), have)
-    if not ok:
+    dlg = HookDialog(mw, have, hooks.shared(guid), signed_in=client().signed_in)
+    dlg.exec()
+    if dlg.result_words is None:
         return
-    now = hooks.put(guid, line, log_today(mw.col))
-    tooltip("Hook saved." if now else ("Hook removed." if have else "Nothing saved."))
+    now = hooks.put(guid, dlg.result_words, log_today(mw.col), share=dlg.result_shared and client().signed_in)
+    tooltip(("Hook saved, for you and your crew." if hooks.shared(guid) else "Hook saved.") if now
+            else ("Hook removed." if have else "Nothing saved."))
+    flush_hooks()
     if _card() is card and getattr(mw.reviewer, "state", "") == "answer":
         on_answer(card, opened=True)
+
+
+def flush_hooks():
+    """What my hooks still owe the server goes now (a hook just saved, or
+    one a refresh finds waiting because an earlier send didn't get out): a
+    PUT each, a few at most, in the background. Twice is once."""
+    from . import hooks
+    cl = client()
+    if not cl.signed_in:
+        return
+    todo = hooks.waiting()
+    if not todo:
+        return
+    gen = app.generation
+
+    def send():
+        return [(g, w) for g, w in todo if cl.put_hook(g, w)]
+
+    def done(ok):
+        if gen != app.generation:
+            return
+        for g, w in ok or []:
+            hooks.sent(g, w)
+
+    _bg(send, done)
+
+
+def hide_hook(guid, uid):
+    """A crewmate's hook on the card up now, hidden here for good; the chip is drawn again without it."""
+    from . import hooks
+    hooks.hide(guid, uid)
+    card = _card()
+    if card is not None and card.note().guid == guid:
+        on_answer(card)
+
+
+def hook_thanks(thanks):
+    """A refresh says who hooks of mine helped (each once): said in a
+    tooltip, and kept in the scrapbook. The card is named by the deck part
+    it's in here, never by its words. Main thread."""
+    if not thanks:
+        return
+    try:
+        from . import hooks, scrap_flow
+        names = {u: n[0].split(" ")[0] for u, n in names_by_uid().items()}
+
+        def part(guid):
+            if not mw.col:
+                return ""
+            did = mw.col.db.scalar("SELECT c.did FROM cards c JOIN notes n ON n.id = c.nid WHERE n.guid = ? LIMIT 1", str(guid))
+            return str(mw.col.decks.name(did) or "").split("::")[-1] if did else ""
+        lines = hooks.thanks_lines(thanks, names, part)
+        for line in lines:
+            scrap_flow.moment("hook", line, "", "cheer")
+        if lines:
+            import html
+            tooltip("<br>".join(html.escape(x) for x in lines[:3]), period=6000)
+    except Exception:
+        from .errs import oops
+        oops()
 
 
 def on_question(card):
@@ -869,7 +938,9 @@ def flag(card, q):
 
 def _tips_here(guid):
     from .together import local_tips
-    return tip_list((client().session.get("cards") or {}).get(guid), local_tips(guid), names_by_uid())
+    from . import hooks
+    return tip_list((client().session.get("cards") or {}).get(guid), local_tips(guid), names_by_uid(),
+                    hidden=lambda u: hooks.hidden(guid, u))
 
 
 def show_tips():
@@ -886,6 +957,8 @@ def show_tips():
         if t["from"]:
             act = menu.addAction("    \u2713 This helped" if t["helped"] else "    This helped")
             act.triggered.connect(lambda _c=False, t=t: helped(guid, t["from"], not t["helped"]))
+            hide = menu.addAction("    Hide this hook")  # 3.9.11: it never shows here again
+            hide.triggered.connect(lambda _c=False, t=t: hide_hook(guid, t["from"]))
     if not menu.actions():
         return
     menu.exec(QCursor.pos())

@@ -4874,26 +4874,46 @@ every release that changes how something works.
   what it does and Turn new cards back on, so nobody is stuck with one;
   `ahead_flow.stop_new` and `insaheadoff` stay for it, with no way to
   start one from the board now.
-- 3.9.11, hooks, step one (Sam, 13 Nov, on the mock "Tips Become
-  Hooks": "I like the way you've put tips together but I really liked
-  also the current implementation of these folks know this coming up on
-  the right. Give it a build for me to test out"). A hook is my own line
-  on a card I keep missing (`hooks.py`; `hooks.json` beside wrap.json,
-  by note guid, never the card's text, never sent). On the answer side:
-  stuck on a card with my hook and nothing from my crew, the chip says
-  it ("Your hook: …", Edit); a card missed twice or more and again today
-  offers one, quietly beside Edit and never over the card ("Add a hook
-  for next time", the view's `bar`); once a card and twice a day at
+- 3.9.11, hooks (Sam, 13 Nov, on the mock "Tips Become Hooks": first "I
+  really liked also the current implementation of these folks know this
+  coming up on the right", then "build that whole implementation you've
+  proposed", and "especially for one by ones we don't want to spoil the
+  correct answer"). A hook is my own line on a card I keep missing
+  (`hooks.py`; `hooks.json` beside wrap.json, by note guid, never the
+  card's text). On the answer side: stuck on a card with my hook, the
+  chip says "You left a hook" and waits for Show (the chip's `fold`, as
+  a crewmate's does), in the place of nothing, of who knows it or of a
+  plan's note (`hooks.over`); a card missed twice or more and again
+  today offers one, quietly beside Edit and never over the card ("Add a
+  hook for next time", the view's `bar`); once a card and twice a day at
   most, a card I kept missing whose last three answers were right asks
   "This one stuck. What made it click?" (`hooks.turned`, `may_ask`).
-  Who knows it keeps its bubble and its Ask, my hook said after it
-  (`hooks.beside`); an ask or a crewmate's tip is left as it is. The
-  reviewer's More menu has "add a hook…" on any card. One click
-  (`hookadd`, a card-page command: it opens a window for its line).
-  Not built: sharing a hook with my crew, "helped" back to its author
-  and the scrapbook line (step two: a table, a migration, Sam's answers
-  on shared by default and whether Ask stays). The name is "hook" till
-  Sam says otherwise.
+  Who knows it comes up on the right as ever on a card I've no hook on,
+  with its Ask. The reviewer's More menu has "add a hook…" on any card.
+  The window (`ui/hook_dialog.py`: one line, "Share with my crew", Take
+  it off; `hookadd`, a card-page command that only opens it).
+  Shared (the default; each hook keeps its own tick, a new one starts
+  as the last was): the hook is my tip on that card on the server, by
+  one new route, `PUT /hooks {guid, text}` (`cards.ts putHook`; no text
+  takes it down with what was marked helped; the tips' ceiling). No new
+  table: tips were already kept a card a person and handed to mutual
+  friends stuck on the card with their sync (`forStuck`), so a crewmate
+  reads my hook the next time they miss it, nobody asking. On their
+  card it's "Dre left a hook" (the word tip is gone from the chip), with
+  This helped, and Hide this hook in its list (`hooks.hide`, kept here).
+  This helped reaches me once: `tip_helped.told` (migration 0032; what
+  was marked before it is counted as told), read by `thanksFor` on the
+  add-on's `/board` (not the site's `keep=1`), one read a refresh and a
+  write only when there's something to say; here a tooltip and a
+  scrapbook line ("Your hook on a Renal card helped Dre and 1 more.":
+  the deck part from my own copy, never the card's words; scrapbook
+  `WHATS` gains "hook"). What a hook still owes the server waits in
+  `hooks.json`'s `out` and goes with the save, or with a later
+  refresh when a send didn't get out (`cards.flush_hooks`, five at a
+  time; a PUT, so twice is once). The request budget is as it was: a
+  refresh is one request, a hook's save is one on a click.
+  Sam's three open questions took my defaults: the name is "hook",
+  shared by default, Ask stays.
 - 3.9.11, Magic search's Recent (Sam's screenshot: a pasted list of card
   ids ran off the window). A recent is something to type again: pasted
   ids and anything over 60 characters aren't kept (they were, cut at 200

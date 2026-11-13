@@ -471,6 +471,7 @@ class FakeWorker:
         self.knows = set()   # (uid, guid)
         self.tips = {}       # (guid, uid) -> {text, at}
         self.helped = set()  # (guid, tip_uid, by_uid)
+        self.told = set()    # 3.9.11: the helped ones their hook's author has been told of (tip_helped.told)
         self.logs = {}       # uid -> {date: row}
         self.log_cut = {}    # 3.7.1: uid -> the oldest day taken again after Delete my log
         self.notices = []    # 3.2.1: [{id, text, link, below}], newest last (live ones only)
@@ -615,6 +616,22 @@ class FakeWorker:
             return self._team_route(method, me, parts[1], parts[2:], query, body or {})
         if parts[:1] == ["plans"]:
             return self._plans(method, me, parts[1:], query, body or {})
+        if m == ("PUT", "hooks") and len(parts) == 1:  # 3.9.11 (cards.ts putHook): my own hook on a card
+            b = body or {}
+            g, text = b.get("guid"), b.get("text")
+            if not set(b) <= {"guid", "text"} or not isinstance(g, str) or not g or len(g) > 64 \
+                    or not isinstance(text, str) or len(text) > 80:
+                raise Bad(400, "bad_hook")
+            text = " ".join(text.split())[:80]
+            if not text:
+                self.tips.pop((g, me), None)
+                self.helped = {k for k in self.helped if not (k[0] == g and k[1] == me)}
+                self.told = {k for k in self.told if not (k[0] == g and k[1] == me)}
+                return 200, {"ok": True, "kept": False}
+            if (g, me) not in self.tips and sum(1 for k in self.tips if k[1] == me) >= 5000:
+                raise Bad(409, "hooks_full")
+            self.tips[(g, me)] = {"text": text, "at": len(self.tips) + 1}
+            return 200, {"ok": True, "kept": True}
         if m == ("POST", "tips") and parts[1:] == ["helped"]:
             b = body or {}
             if not set(b) <= {"guid", "from", "helped"}:
@@ -624,6 +641,7 @@ class FakeWorker:
                 raise Bad(404, "no_tip")
             if b.get("helped") is False:
                 self.helped.discard((g, frm, me))
+                self.told.discard((g, frm, me))
             else:
                 self.helped.add((g, frm, me))
             return 200, {"ok": True}
@@ -838,6 +856,11 @@ class FakeWorker:
                "settingsAt": (self.settings.get(me) or {}).get("at") or ""}
         if self.takes_errs:
             out["errs"] = True  # 3.9.9: a sync may carry error counts
+        if not keep:  # 3.9.11 (cards.ts thanksFor): who a hook of mine helped, each once
+            new = sorted(k for k in self.helped if k[1] == me and k not in self.told)[:50]
+            if new:
+                self.told.update(new)
+                out["thanks"] = [{"guid": g, "by": by} for g, _me, by in new]
         if self._look_of(me):  # 3.8.2: my own look, as my crew sees it (the site's rows draw it)
             out["me"]["look"] = self._look_of(me)
         if self._song_of(me):  # 3.9.6: my song, as my crew sees it

@@ -21,7 +21,7 @@ KINDS = ("pz", "luck", "tip", "cheer", "mine")
 KEEP = 3000          # keepsakes kept in all (a polaroid is a few hundred bytes; the oldest go first)
 HEAD_MAX, SUB_MAX, PART_MAX = 80, 160, 60
 POSES = ("cheer", "hop", "hello")
-WHATS = ("plan", "bingo", "pip")  # what a moment of mine was (the year page counts plans and what Pip earned)
+WHATS = ("plan", "bingo", "pip", "hook")  # what a moment of mine was (the year page counts plans and what Pip earned)
 MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August", "September",
           "October", "November", "December")
 

@@ -407,6 +407,10 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
         # (the bug hunt: _state's is None at launch, and stale for someone just become mutual)
         _closet(lambda cf: cf.keep_doodles(fresh, data["entries"], client().user_id))
         _scrap(lambda sf: sf.cheers_in(fresh))  # 3.9.10: counted by month; one with words is kept
+    # 3.9.11, hooks: who mine helped (said once), and any of mine still owed to the server
+    from . import cards as _crew_cards
+    _crew_cards.hook_thanks(data.get("thanks"))
+    _crew_cards.flush_hooks()
 
     if knocks is not None:
         _state["knocks"] = [tuple(k) for k in knocks]
