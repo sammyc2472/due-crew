@@ -354,6 +354,9 @@ clean `main` does the migrations, the API, then the site, then
   **scrapbook** took Wrapped's place (`wrapped*` is the year's numbers);
   **unsuspended**, never unlocked; a plan's **set** on the site is a date in
   the add-on's code.
+- What a page is told to draw has a named shape in `views.py` (3.9.12; the
+  review chip is the first), checked as it crosses to the page: a slip counts
+  as `view:<name>` and is drawn anyway. A new surface's view gets its shape there.
 - A file Due Crew keeps is written by `store.py` (3.9.12: whole to a .tmp,
   swapped in; `load`/`save` for one kept in memory), never by a module's own
   open-and-replace. The colours are `board.palette`: every add-on page reads

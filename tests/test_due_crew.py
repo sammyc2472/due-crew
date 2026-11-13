@@ -15778,6 +15778,34 @@ def test_hooks_v3911():
     os.path.exists(H._path()) and os.remove(H._path())
 
 
+def test_view_shapes_v3912():
+    """3.9.12, the foundations round: what a page is told to draw has a
+    named shape (views.py), checked where it crosses from Python to the
+    page. The review chip is the first: every view its makers build fits,
+    a slip is counted (`view:chip`) and drawn anyway."""
+    from due_crew import views as V, cards as K, hooks as H
+    names = {"dre": ("Dre Ng", ""), "mo": ("Mo", "")}
+    made = [K.chip_view({"knows": ["dre", "mo"], "tips": []}, [], names),
+            K.chip_view({"knows": ["dre"], "tips": [{"from": "dre", "text": "loops", "helped": False}]}, [], names),
+            K.chip_view({"knows": ["dre"]}, [], names, mine=True),
+            K.chip_view(None, [], names, asks=[("dre", 1, "why axillary?")]),
+            K.chip_view(None, [], names, asks=[("dre", 1)]),
+            H.view("think loops", True, False, False, False)[0], H.view("", True, True, False, False)[0], H.view("", False, False, True, True)[0],
+            None]
+    bad = [(v.get("kind"), V.chip_wrong(v)) for v in made if V.chip_wrong(v)]
+    check("shapes: every view the chip's makers build fits the chip's shape (who knows it, a hook, an ask, my hook, its offers)",
+          bad == [] and all(v is None or v["kind"] in V.CHIP_KINDS for v in made), bad)
+    check("shapes: a key the page doesn't know, a wrong type, an unknown kind and a peek's slip are each said",
+          V.chip_wrong({"kind": "knows", "text": "x", "txet": "y"}) == ["txet: not in the shape"]
+          and V.chip_wrong({"kind": "knows", "more": "2"}) == ["more: str"] and V.chip_wrong({"kind": "knows", "more": True}) == ["more: bool"]
+          and V.chip_wrong({"kind": "nope"}) == ["kind: 'nope'"] and V.chip_wrong({"kind": "tip", "peek": {"uids": "dre"}}) == ["peek.uids: str"]
+          and V.chip_wrong(None) == [] and V.chip_wrong("x") == ["not a dict"])
+    js = open(os.path.join(REPO, "due_crew", "cards.py"), encoding="utf-8").read()
+    read = set(re.findall(r"\bD\.([a-zA-Z_]+)", js))
+    check("shapes: the chip's script reads only keys in its shape, and the glue counts a slip without dropping the view",
+          read <= set(V.CHIP) and read >= {"kind", "text", "fold", "cmd", "act"} and 'errs.count("view:chip")' in js, sorted(read - set(V.CHIP)))
+
+
 def test_the_sites_constants_are_made_v3912():
     """3.9.12, the foundations round: constants the site restated by hand
     (what each party game needs, a plan's limits, a day's saves) are

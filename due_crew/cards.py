@@ -636,6 +636,11 @@ def _put(web, where, view, cb=None):
         if cb is not None:
             cb(False)
         return
+    if view:  # 3.9.12: the chip's shape, checked as it crosses to the page; a slip is counted and drawn anyway
+        from . import views
+        if views.chip_wrong(view):
+            from . import errs
+            errs.count("view:chip")
     if view and "sevcss" in view:
         page = app.page_of(web)  # 3.9.8: this view's own page
         if _SHEET.get(where) == page:
