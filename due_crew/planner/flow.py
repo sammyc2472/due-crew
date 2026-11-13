@@ -84,7 +84,7 @@ def open_plans(select=None, tab=None, new=None):
         if gen != app.generation or not mw.col:
             return
         if plans is None:
-            tooltip("Due Crew couldn't be reached. Try again in a minute.")
+            tooltip("Couldn't reach Due Crew. Check your connection.")
             return
         noted_followers(plans)
         w = _open.get("plans")

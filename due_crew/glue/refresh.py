@@ -114,7 +114,7 @@ def _morning_now(waiting):
     _state["plans_morning"] = None
     _morning(bool(waiting.get("awaiting")) and _awaiting_phone(), fresh=bool(waiting.get("fresh")))
     if _state["board_shown"] and mw.state == "deckBrowser":
-        _swap(cfg())
+        _swap(cfg(), quiet=True)
 
 
 def _after_push(pushed, labels, gone=(), gen=None):
@@ -139,7 +139,7 @@ def _after_push(pushed, labels, gone=(), gen=None):
         _drop_squad(sid, swap=False)
         tooltip(f"You're no longer in {html.escape(name or 'a squad')}.")
     if _state["board_shown"] and mw.state == "deckBrowser":
-        _swap(cfg())
+        _swap(cfg(), quiet=True)
 
 
 def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
@@ -238,7 +238,7 @@ def _sync_failed():
         _state["board_shown"] = False
         _rerender()
     elif _state["board_shown"] and mw.state == "deckBrowser":
-        _swap(cfg())
+        _swap(cfg(), quiet=True)
 
 
 def _is_stale(now, fetched_at, last_attempt, limit=STALE_SECS):
@@ -436,7 +436,7 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
     if toasts:
         tooltip("<br>".join(toasts), period=5000)
     if _state["board_shown"] and mw.state == "deckBrowser":
-        _swap(cfg())        # page not rebuilt: safe to play cheers directly
+        _swap(cfg(), quiet=True)        # page not rebuilt: safe to play cheers directly
         _play_cheers()
         _joy_show()  # 3.9.6: after the cheers that came with it (it waits for their show)
         together.show_luck_card()  # 3.9.9: a line that came with this refresh, on my exam morning (only a draw showed it)

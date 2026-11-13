@@ -259,13 +259,27 @@ def _team_squad(team_id):
     team_flow.open_squad(team_id)  # 3.8.0: a plan's squad
 
 
-def _swap(c, focus=None):
+def _swap(c, focus=None, quiet=False):
     """Re-render the board in place from cache. No network, no page reload.
-    focus: the data-f of the control to give focus back to (Settings)."""
+    focus: the data-f of the control to give focus back to (Settings).
+    quiet (3.9.12): a draw nobody asked for (a refresh came back, a push finished): when the board would be
+    the very same as the one on this page, the page is left alone (nothing flickers, a fold or a menu the
+    person has open stays), and only what arrives is played. A click's own draw is never skipped: it may
+    be what closes something the page opened itself."""
     if _state["entries"] is None:
         _rerender()
         return
     html_out = _board_html(c)
+    drawn = (app.pages[0], hash(html_out))
+    if quiet and not focus and _SCRIPTS.get("html") == drawn:
+        js = _arrive_js()
+        if js:
+            app.board_eval(js)
+        _dance_seen()
+        if not _pending_cheers:
+            _joy_show()
+        return
+    _SCRIPTS["html"] = drawn
     have = _SCRIPTS.get("css") if _SCRIPTS["page"] == app.pages[0] else None  # 3.9.7: the stylesheet this page holds
     keep, fridge = _board_js()
     js = board.swap_js(html_out, have) + keep + _arrive_js() + fridge  # 3.8.0: no jumps under the pointer

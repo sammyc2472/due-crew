@@ -1312,6 +1312,15 @@ def test_copy_rules_v3912():
             if not (line.startswith("#") or line.startswith("//") or line.startswith("*") or '"""' in line or "  # " in line):
                 banned.append((f, m.group(0)[:70]))
     check("copy: friendship, never competition: nothing a person reads says rank, rival, compete or leaderboard", banned == [], banned[:6])
+    # one way to say there was no answer: "Couldn't reach Due Crew." (never "the server", never "couldn't be reached")
+    import glob as _glob
+    odd = []
+    for path in _glob.glob(os.path.join(REPO, "due_crew", "**", "*.py"), recursive=True):
+        text = open(path, encoding="utf-8").read()
+        for words in ("ouldn't reach the server", "Can't reach the server", "couldn't be reached. Try", "didn\\'t reach the server"):
+            if words in text:
+                odd.append((os.path.relpath(path, REPO), words))
+    check("words: no answer from Due Crew is said one way", odd == [], odd)
 
 
 def test_the_site_wears_the_boards_tokens_v3912():

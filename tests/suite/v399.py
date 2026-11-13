@@ -1,6 +1,7 @@
 """The suite: 3.9.9 on: calm offline, what gets used, Magic search's field."""
 
 from due_crew import board
+import srcs
 import datetime
 import json
 import os
@@ -1011,3 +1012,112 @@ def test_insights_a_part_at_a_time_v399():
     finally:
         (TF.cfg, TF._work_steps, TF._later, TF.ASYNC, dc.mw.col, _state["insights"], _state["ins_job"], A.swap, TF._stamp) = saved
         os.environ[TF.WHOLE] = "1"
+
+
+def test_a_quiet_draw_of_the_same_board_is_skipped_v3912():
+    """3.9.12: a refresh that comes back with nothing new doesn't draw the board again (the page is left
+    as it is); one with something new does; a click's own draw is never skipped."""
+    import due_crew as dc
+    from due_crew import app as A
+    from due_crew.app import _state
+    evals = []
+    names = ("_board_html", "_board_js", "_arrive_js", "_dance_seen", "_joy_show")
+    saved = {n: getattr(dc, n) for n in names}
+    was = (A.board_eval, _state["entries"], dict(dc._SCRIPTS), list(A.pages))
+    box = {"html": "<div id=\"due-crew\">one</div>", "arrive": ""}
+    try:
+        dc._board_html = lambda c: box["html"]
+        dc._board_js = lambda drawn=False: ("", "")
+        dc._arrive_js = lambda: box["arrive"]
+        dc._dance_seen = lambda: None
+        dc._joy_show = lambda: None
+        A.board_eval = evals.append
+        A.pages[:] = [7]
+        _state["entries"] = []
+        dc._SCRIPTS.update(page=7, css=None, html=None)
+        dc._swap({}, quiet=True)
+        check("quiet: the first draw on a page is drawn", len(evals) == 1 and "one" in evals[0])
+        dc._swap({}, quiet=True)
+        check("quiet: the same board again: the page is left alone", len(evals) == 1)
+        box["arrive"] = "arrive();"
+        dc._swap({}, quiet=True)
+        check("quiet: the same board with a cheer arriving: only the cheer is played", evals[1:] == ["arrive();"])
+        box["arrive"] = ""
+        dc._swap({})
+        check("a click's own draw of the same board is drawn all the same", len(evals) == 3 and "one" in evals[2])
+        box["html"] = "<div id=\"due-crew\">two</div>"
+        dc._swap({}, quiet=True)
+        check("quiet: something new: drawn", len(evals) == 4 and "two" in evals[3])
+        A.pages[:] = [8]
+        dc._swap({}, quiet=True)
+        check("quiet: a new page (the Decks screen came back): drawn, whatever the last page held", len(evals) == 5)
+        src = srcs.glue_src()
+        check("the draws nobody asked for are the quiet ones (a refresh, a push, a squad gone)", src.count("_swap(cfg(), quiet=True)") == 4)
+    finally:
+        for n, f in saved.items():
+            setattr(dc, n, f)
+        A.board_eval, _state["entries"] = was[0], was[1]
+        dc._SCRIPTS.clear()
+        dc._SCRIPTS.update(was[2])
+        A.pages[:] = was[3]
+
+
+def test_deck_counts_without_buried_siblings_v3912():
+    """3.9.12 (SC's pick A): Anki's deck list as what there is to do: the smaller of Anki's count and the notes
+    due where a deck buries siblings, a deck and the decks under it; behind a switch, off by default."""
+    import due_crew as dc
+    from due_crew import deck_counts as DC, settings_model as SM
+    names = {1: "T", 2: "T::Kid", 3: "Plain", 4: "Tx"}
+    bury = {1: (True, True), 2: (True, True), 3: (False, False), 4: (True, False)}
+    rows = [(1, 8, 4, 8, 4), (2, 6, 3, 6, 3), (3, 4, 2, 4, 2), (4, 4, 2, 4, 2)]
+    got = DC.to_do(rows, bury, names)
+    check("to do: a note once where its deck buries, a deck with the decks under it; a deck that doesn't bury as Anki has it; "
+          "each kind by its own switch; a name that only starts the same isn't under it",
+          got == {1: (7, 7), 2: (3, 3), 3: (4, 4), 4: (2, 4)}, got)
+
+    def row(did, new, learn, due):
+        span = lambda n, k: f'<span class="{k if n else "zero-count"}">{n}</span>'  # noqa: E731
+        return (f"<tr class='deck current' id='{did}' onclick='if(event.shiftKey) return pycmd(\"select:{did}\")'><td class=decktd>x</td>"
+                f"<td align=end>{span(new, 'new-count')}</td><td align=end>{span(learn, 'learn-count')}</td>"
+                f"<td align=end>{span(due, 'review-count')}</td><td align=center class=opts>o</td></tr>")
+    tree = row(1, 14, 3, 14) + row(2, 6, 0, 6) + row(3, 4, 0, 4) + row(9, 5, 0, 5)
+    out = DC.rewrite(tree, got)
+    check("the list: T says 7 and 7 (Anki's 14 on a hover), its learning count as it was",
+          '<span class="new-count" title="Anki counts 14. 7 are siblings it will bury as you go.">7</span>' in out
+          and '<span class="review-count" title="Anki counts 14. 7 are siblings it will bury as you go.">7</span>' in out
+          and '<span class="learn-count">3</span>' in out)
+    check("the list: a deck that doesn't bury, and one it wasn't told about, are exactly as Anki wrote them",
+          row(3, 4, 0, 4) in out and row(9, 5, 0, 5) in out)
+    check("the list: Anki's count under a daily limit stands (the smaller of the two)", DC.rewrite(row(1, 5, 0, 5), got) == row(1, 5, 0, 5))
+    check("the list: one sibling, said as one; none left to do reads as Anki's zero",
+          "1 is a sibling it will bury" in DC.rewrite(row(2, 4, 0, 0), got)
+          and '<span class="zero-count" title="Anki counts 2. 2 are siblings' in DC.rewrite(row(2, 0, 0, 2), {2: (0, 0)}))
+    check("the list: a page that isn't shaped as expected is left alone", DC.rewrite("<table>no rows</table>", got) == "<table>no rows</table>"
+          and DC.rewrite(None, got) is None)
+    check("the switch: Settings › Study, off by default, this computer's", SM.change(["set", "deck_counts", "1"], {}) == {"deck_counts": True}
+          and SM.BOARD_DEFAULTS["deck_counts"] is False and "Deck counts leave out buried siblings" in board._settings_study({})
+          and "deck_counts" not in __import__("due_crew.account", fromlist=["x"]).ACCOUNT_KEYS)
+    # the glue: nothing read with the switch off; on, one query and the page's rows rewritten
+    asked = []
+    col = types.SimpleNamespace(
+        decks=types.SimpleNamespace(all_names_and_ids=lambda: [types.SimpleNamespace(id=k, name=v) for k, v in names.items()],
+                                    config_dict_for_deck_id=lambda did: {"new": {"bury": bury[did][0]}, "rev": {"bury": bury[did][1]}}),
+        db=types.SimpleNamespace(all=lambda q, *a: asked.append((q, a)) or rows), sched=types.SimpleNamespace(today=100))
+    saved = (dc.cfg, dc.mw.col)
+    box = {"cfg": {}}
+    try:
+        dc.cfg = lambda: box["cfg"]
+        dc.mw.col = col
+        content = types.SimpleNamespace(tree=tree, stats="")
+        dc._deck_counts(content)
+        check("off: Anki's list as it was, nothing read", content.tree == tree and asked == [])
+        box["cfg"] = {"deck_counts": True}
+        dc._deck_counts(content)
+        check("on: one query (today's day), the list rewritten", len(asked) == 1 and asked[0][1] == (100,) and content.tree == out)
+        col.db.all = lambda q, *a: 1 / 0
+        content = types.SimpleNamespace(tree=tree, stats="")
+        dc._deck_counts(content)
+        check("on, and the read fails: Anki's list as it was", content.tree == tree)
+    finally:
+        dc.cfg, dc.mw.col = saved
+

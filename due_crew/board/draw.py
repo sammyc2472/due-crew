@@ -338,7 +338,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
                  f'onclick="{_pycmd("friends")}">{n_pending} waiting</a>')
 
     ago, _tone = _ago_secs(max(0.0, time.time() - fetched_at)) if fetched_at else ("just now", "")
-    failed = ('<span class="warn" title="The last sync didn\'t reach the server. '
+    failed = ('<span class="warn" title="The last sync didn\'t reach Due Crew. '
               'Your numbers are safe; Refresh tries again.">Couldn&rsquo;t sync</span>'
               ' &middot; ') if sync_error else ""
     foot = (_calm_line(cfg) + _use_line(cfg) + _live_line(cfg) + f'<div class="dc-foot"><span class="fl">{left}</span><span class="sp"></span>'

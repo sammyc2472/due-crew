@@ -66,7 +66,30 @@ def _rerender():
         mw.deckBrowser.refresh()
 
 
+def _deck_counts(content):
+    """3.9.12 (deck_counts.py): the deck list's New and Due as what there is to do, behind its switch. One
+    query a draw, on the main thread (the Decks screen's own draw); whatever goes wrong, Anki's list is as it was."""
+    try:
+        from .. import deck_counts
+        if not cfg().get(deck_counts.SWITCH) or mw.col is None or not getattr(content, "tree", ""):
+            return
+        col = mw.col
+        names = {int(d.id): d.name for d in col.decks.all_names_and_ids()}
+        bury = {}
+        for did in names:
+            try:
+                conf = col.decks.config_dict_for_deck_id(did)
+                bury[did] = (bool((conf.get("new") or {}).get("bury")), bool((conf.get("rev") or {}).get("bury")))
+            except Exception:
+                bury[did] = (False, False)  # a filtered deck has no options of its own: as Anki counts it
+        rows = col.db.all(deck_counts.QUERY, col.sched.today)
+        content.tree = deck_counts.rewrite(content.tree, deck_counts.to_do(rows, bury, names))
+    except Exception:
+        oops()
+
+
 def _on_render(deck_browser, content):
+    _deck_counts(content)  # 3.9.12: Anki's own list without the siblings it will bury (Settings › Study; off by default)
     app.on_decks_render()
     content.stats += board.key_js()  # 3.9.1: the page's own scripts add the board's key to what they send
     try:
@@ -327,7 +350,7 @@ def _arrive_js():
 # fridge's), and each loads once, so a swap on that page sends only what
 # they do after a draw (it sent 77 KB of them at every click); a page drawn
 # anew gets them all.
-_SCRIPTS = {"page": None, "css": None}  # 3.9.7: and the board stylesheet that page holds (board.swap_js)
+_SCRIPTS = {"page": None, "css": None, "html": None}  # 3.9.7: and the board stylesheet that page holds (board.swap_js)
 
 
 def _board_js(drawn=False):

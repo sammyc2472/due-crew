@@ -250,6 +250,9 @@ def _settings_study(cfg, fsrs=None, reach=None, stops=()):
             + _st_row("Two buttons", _st_switch("two_buttons", g("two_buttons", False), "Two buttons"),
                       "Again and Good. Hard and Easy hide; 2, 3 and 4 count as Good. Phones keep four."
                       + (" Works best with FSRS on." if fsrs is False else ""))
+            # 3.9.12 (SC's pick A): Anki's deck list as what there is to do, where Anki buries siblings
+            + _st_row("Deck counts leave out buried siblings", _st_switch("deck_counts", g("deck_counts", False), "Deck counts leave out buried siblings"),
+                      "Anki&rsquo;s deck list counts every card of a note, then buries the siblings as you study. On, it shows what you&rsquo;ll do.")
             + '</div><div class="st-h">Fifteen and rooms</div><div class="st-box">'
             + _st_row("Fifteen? in the top bar", _st_switch("fifteen", g("fifteen", True), "Fifteen? in the top bar"),
                       "And the nudge, when you haven't started by your usual time")

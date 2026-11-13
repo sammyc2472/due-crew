@@ -16,6 +16,7 @@ SWITCHES = ("show_leaderboard", "show_stale", "sync_notifications", "compact",
             "shortcuts",  # 3.8.0: Ctrl+Shift+S and Ctrl+Shift+Q
             "fifteen", "sev",  # 3.8.1: ▶ Fifteen? and the nudge; Pip
             "two_buttons",  # 3.9.1: Again and Good alone (not the board's look: Reset board leaves it)
+            "deck_counts",  # 3.9.12: Anki's deck list without the siblings it will bury (this computer's)
             "magic_search",  # 3.9.7: Magic search in the You box's head, and its key
             "calm",  # 3.9.9: the calm board (calm.py): parts appear when they have something to show
             "show_studying",  # 3.9.10: Privacy's Show when I'm studying (never Reset board's)
@@ -34,7 +35,8 @@ BOARD_DEFAULTS = {"show_leaderboard": True, "show_stale": True, "sync_notificati
                   "crew_label": "Crew", "room_chip_side": "right", "hidden_tabs": [], "shortcuts": True,
                   "fifteen": True, "sev": True, "sev_break": "breathe",
                   "dance_floor": True, "dance": "gentle", "dance_folded": False,
-                  "calm": False, "calm_news": []}  # 3.9.6: the dance floor
+                  "calm": False, "calm_news": [],
+                  "deck_counts": False}  # 3.9.6: the dance floor
 
 
 def _day(text):

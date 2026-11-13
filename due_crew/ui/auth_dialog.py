@@ -20,7 +20,7 @@ ERRORS = {
     "locked": "Too many tries. Wait an hour, then send a new code.",
     "slow_down": "Too many codes. Wait a bit, then try again.",
     "mail_failed": "The email didn't go out. Your address is fine: try again in a minute.",
-    "NETWORK": "Can't reach the server. Check your connection.",
+    "NETWORK": "Couldn't reach Due Crew. Check your connection.",
 }
 
 

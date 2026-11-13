@@ -11,6 +11,13 @@ BAD = ("no handler", "dead", "lost", "raised", "stuck")
 OUR_VIEWS = ("main webview", "top toolbar", "bottom toolbar")
 
 
+# 3.9.12: Anki asks a bar for its height ("document.documentElement.offsetHeight", aqt/toolbar.py's
+# adjustHeightToFit) and, on a slow machine, can ask while the bar's page is still being replaced: the
+# document isn't there yet. It's Anki's own script on Anki's own timing (seen only with the suites
+# running beside the robot); no script of Due Crew's reads a null's offsetHeight.
+ANKIS_OWN = "Cannot read properties of null (reading 'offsetHeight')"
+
+
 def ours(view):
     """A web view the add-on draws in: Anki's main view and its bars, and its own windows ("due crew …")."""
     return view in OUR_VIEWS or str(view).startswith("due crew")
@@ -34,6 +41,8 @@ def failures(run, probe, result):
         if e["text"][-1500:] not in pressed:
             out.append((f"raised during {e['step']}", e["text"][-1500:]))
     for e in probe.js_errors:
+        if ANKIS_OWN in e.get("text", ""):
+            continue  # Anki's, not a page of ours: see ANKIS_OWN
         if ours(e.get("view", "")):
             out.append((f"a page's script failed ({e.get('view')}) during {e['step']}",
                         f"{e['src']}:{e['line']} {e['text']}"))
