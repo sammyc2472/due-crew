@@ -59,6 +59,15 @@ def _on_profile_open():
     _run.last_attempt = 0.0
     _run.pushed = None
     client()                  # rebind to this profile's session
+    try:  # 3.9.12: switches that left Settings go back to their defaults, once
+        from .. import settings_model
+        back = settings_model.retire(cfg())
+        if back:
+            c = cfg()
+            c.update(back)
+            save_cfg(c)
+    except Exception:
+        oops()
     try:
         errs_flow.open_profile()  # 3.9.9: this profile's counts for Sam
         from .. import team_flow as _tf

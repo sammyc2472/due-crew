@@ -2974,11 +2974,11 @@ def test_settings_in_board_v341():
     day = datetime.date(2026, 9, 28)
     cfg = {"hidden_tabs": ["squads"], "exam_date": "", "away_from": "", "away_to": ""}
     check("settings: a switch, a choice, only values it takes",
-          change(["set", "compact", "1"], cfg) == {"compact": True}
+          change(["set", "calm", "1"], cfg) == {"calm": True}
           and change(["set", "accent", "rose"], cfg) == {"accent": "rose"}
           and change(["set", "accent", "red"], cfg) is None
           and change(["set", "api_base", "1"], cfg) is None
-          and change(["set", "compact", "yes"], cfg) is None)
+          and change(["set", "calm", "yes"], cfg) is None)
     check("settings: tabs hide and show; Today isn't one of them",
           change(["settabs", "plans", "0"], cfg) == {"hidden_tabs": ["squads", "plans"]}
           and change(["settabs", "squads", "1"], cfg) == {"hidden_tabs": []}
@@ -3014,12 +3014,12 @@ def test_settings_in_board_v341():
           and "coffee &quot;&amp;&quot; cards" in you and "3 in your crew" in you and "<i>ORCA" not in you
           and "duecrew:setclose" in you and "Delete account" in you, you[-600:])
     bd = board.settings_html(dict(view, tab="board"), {"crew_label": 'a"><script>', "accent": "teal",
-                                                         "hidden_tabs": ["decks"], "compact": True})
-    check("settings: Board, its switches and tabs as set, the crew name escaped",
-          'value="a&quot;&gt;&lt;script&gt;"' in bd and "<script>" not in bd
+                                                         "hidden_tabs": ["decks"], "calm": False})
+    check("settings: Board, its switches and tabs as set; the crew's name has no row since 3.9.12",
+          "<script>" not in bd and "Crew name in shares" not in bd
           and "duecrew:settabs:decks:1" in bd and "duecrew:settabs:plans:0" in bd
           and "settabs:week" not in bd
-          and "duecrew:set:compact:0" in bd and 'aria-label="Teal" aria-pressed="true"' in bd)
+          and "duecrew:set:calm:1" in bd and 'aria-label="Teal" aria-pressed="true"' in bd)
     dated = {"show_up": True, "exam_date": "2026-10-14", "away_from": "", "away_to": "",
              "send_errs": False}  # 3.9.9's switch, off: its own test
     pv = board.settings_html(dict(view, tab="privacy"), dated)
@@ -3044,7 +3044,7 @@ def test_settings_messages_reach_the_panel():
     from aqt.deckbrowser import DeckBrowser
     if "aqt.reviewer" not in sys.modules:
         sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
-    conf = {"compact": False, "hidden_tabs": [], "accent": "green"}
+    conf = {"calm": False, "hidden_tabs": [], "accent": "green"}
     saved = (dc._swap, dc.cfg, dc.save_cfg)
     swaps = []
     dc._swap = lambda c, focus=None: swaps.append(focus)
@@ -3054,12 +3054,12 @@ def test_settings_messages_reach_the_panel():
         send = lambda m: dc._on_js(False, as_board("duecrew:" + m), DeckBrowser())
         send("settab:board")
         tab = dc._state.get("settings_tab")
-        send("set:compact:1")
+        send("set:calm:1")
         send("set:accent:rose")
         send("settabs:plans:0")
         send("setclose")
         check("settings: the board's clicks reach it (a tab, a switch, a choice, a tab hidden, back)",
-              tab == "board" and conf["compact"] is True and conf["accent"] == "rose"
+              tab == "board" and conf["calm"] is True and conf["accent"] == "rose"
               and conf["hidden_tabs"] == ["plans"] and dc._state.get("settings_tab") is None and len(swaps) == 5,
               (tab, conf, swaps))
     finally:

@@ -1155,3 +1155,22 @@ def test_the_hook_button_reaches_its_window_v3912():
         else:
             sys.modules["aqt.reviewer"] = had
 
+
+def test_settings_pruned_v3912():
+    """3.9.12 (SC: "agreed on all the settings adjustments"): Compact rows, Highlight my row, Crew name in shares,
+    Room chip and Shortcuts on leave Settings; Dancing moves to the floor; Suggestions and Recover leeches share a row."""
+    from due_crew import settings_model as SM
+    pages = board._settings_board({}) + board._settings_study({}) + board._settings_you({"signed_in": True}, {})
+    gone = [w for w in ("Compact rows", "Highlight my row", "Crew name in shares", "Room chip", "Shortcuts on", ">Dancing<") if w in pages]
+    check("gone from Settings", gone == [], gone)
+    study = board._settings_study({})
+    check("Today's extras: one row, each still its own switch", "Today&rsquo;s extras" in study and "set:due_suggest:" in study
+          and "set:due_leeches:" in study and study.count("st-two") == 1)
+    old = {"compact": True, "highlight_me": False, "crew_label": "Night owls", "room_chip_side": "left", "shortcuts": False, "accent": "rose"}
+    back = SM.retire(old)
+    check("a switch that left goes back to its default once, so nobody is left in a look they can't change; the rest is untouched",
+          back == {"compact": False, "highlight_me": True, "room_chip_side": "right", "shortcuts": True}
+          and SM.retire(dict(old, **back)) == {} and SM.retire({}) == {})
+    check("their commands are no longer settings", SM.change(["set", "compact", "1"], {}) is None and SM.change(["set", "room_chip_side", "left"], {}) is None)
+    check("at a profile's open", "settings_model.retire(cfg())" in srcs.glue_src())
+

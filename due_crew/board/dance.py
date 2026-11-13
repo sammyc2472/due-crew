@@ -138,6 +138,9 @@ __BUTTONS__
 #dc-dance:hover .df-fd, #dc-dance:focus-within .df-fd { opacity: 1; }
 /* the song list's foot (and my card's): the one deliberate way to turn the floor off */
 #dc-dance .df-off { border-top: 1px solid var(--dc-line); margin-top: 8px; padding-top: 7px; font-size: 12px; text-align: left; }
+#dc-dance .df-off { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; }
+#dc-dance .df-off .df-mo { color: var(--dc-muted); }
+#dc-dance .df-off .df-mo b { color: var(--dc-ink); }
 #dc-dance .df-off a { color: var(--dc-muted); text-decoration: underline; text-underline-offset: 2px; }
 #dc-dance .df-off a:hover { color: var(--dc-ink); }
 /* "Still this one?": over the booth on my song's last day */
@@ -391,12 +394,18 @@ def _dance_card(who, song, view, name=""):
             f'<div class="sg">{_dance_cover(song)}<div class="tx"><b>{e(song["t"])}</b><span class="mt">{_dance_line(song)}</span>'
             f'{f"<span class=acts>{acts}</span>" if acts else ""}</div></div>{row}'
             f'<div class="ft"><span class="cr">{e(_songs.CREDIT)}</span>{_dance_badge(who)}</div>'
-            f'{_dance_off() if mine else ""}</div>')
+            f'{_dance_off(view) if mine else ""}</div>')
 
 
-def _dance_off():
-    """3.9.12: "Turn off the dance floor", at the foot of the song list and of my own card."""
-    return (f'<div class="df-off"><a href="#" title="Settings &rsaquo; Board brings it back" '
+def _dance_off(view=None):
+    """3.9.12: the foot of the song list and of my own card: how the Pips dance (Gentle · Lively · Still: it was
+    a row in Settings; SC agreed it belongs on the floor), and "Turn off the dance floor"."""
+    now = (view or {}).get("motion") or "gentle"
+    ways = " &middot; ".join(
+        f'<b>{t}</b>' if k == now else f'<a href="#" onclick="{_pycmd("dancemotion:" + k)}">{t}</a>'
+        for k, t in (("gentle", "Gentle"), ("lively", "Lively"), ("still", "Still")))
+    return (f'<div class="df-off"><span class="df-mo">Dancing: {ways}</span>'
+            f'<a href="#" title="Settings &rsaquo; Board brings it back" '
             f'onclick="{_pycmd("dancehide")}">Turn off the dance floor</a></div>')
 
 
@@ -409,7 +418,7 @@ def dance_off_js():
             "document.body.appendChild(o);setTimeout(function(){if(o.parentNode){o.remove();}},6000);})();")
 
 
-def _dance_list(crew):
+def _dance_list(crew, view=None):
     """Everyone's songs (the "+N" and the folded floor's count open it): newest first, each opening its card."""
     e = _html.escape
     rows = "".join(
@@ -420,7 +429,7 @@ def _dance_list(crew):
     return (f'<div class="df-pop" data-card="*" role="dialog" aria-label="Your crew&rsquo;s songs" hidden>'
             f'<div class="ph"><span>&#9834; Your crew&rsquo;s songs &middot; {len(crew)}</span>'
             f'<button type="button" class="x" data-close aria-label="Close">&times;</button></div>'
-            f'<ul class="df-ls">{rows}</ul>{_dance_off()}</div>')
+            f'<ul class="df-ls">{rows}</ul>{_dance_off(view)}</div>')
 
 
 def _dance_dancer(i, p, view, place):
@@ -527,7 +536,7 @@ def dance_html(view, cfg):
                f'<button type="button" class="lk" data-open="search">Change</button>'
                f'<a class="ax" href="#" title="Not now" aria-label="Not now" onclick="{_pycmd("songaskoff")}">&times;</a></div>')
     cards = ("".join(_dance_card(p["uid"], p["song"], view, p["name"]) for p in crew)
-             + (_dance_card("me", me, view) if me else "") + (_dance_list(crew) if crew else ""))
+             + (_dance_card("me", me, view) if me else "") + (_dance_list(crew, view) if crew else ""))
     # each crewmate in their colour, by day or by night as the board (one selector a call: _by_theme prefixes it)
     tones = "\n".join(_by_theme(cfg, sel, "--sv-a: var(--fa-l);", "--sv-a: var(--fa-d);")
                        for sel in ("#dc-dance .dz", "#dc-dance .df-ls button"))

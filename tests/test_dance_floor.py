@@ -286,13 +286,17 @@ def test_settings_and_profile():
     b = board._settings_board({})
     check("Settings › Board: the dance floor on (× brings it here), Gentle, and no music app yet (ask)",
           "Study soundtrack" in b and "Song of the moment" not in b and 'aria-checked="true" aria-label="Dance floor" data-f="dancehide"' in b
-          and 'aria-pressed="true" data-f="dancemotion:gentle"' in b and 'aria-pressed="true" data-f="songapp:ask"' in b)
+          and "dancemotion" not in b and 'aria-pressed="true" data-f="songapp:ask"' in b)
     b2 = board._settings_board({"dance_floor": False, "dance": "still", "music_app": "youtube"})
-    check("…off, Still, YouTube Music: as saved", 'data-f="danceshow"' in b2 and 'aria-pressed="true" data-f="dancemotion:still"' in b2
-          and 'aria-pressed="true" data-f="songapp:youtube"' in b2)
+    check("…off, YouTube Music: as saved", 'data-f="danceshow"' in b2 and 'aria-pressed="true" data-f="songapp:youtube"' in b2)
+    # 3.9.12 (SC agreed): how they dance is chosen on the floor (the song list's foot, my card's), not in Settings
+    f = board.dance_html(view(4, motion="lively"), {})
+    check("Dancing: Gentle · Lively · Still on the floor's own cards, the one in use plain, the others its commands",
+          "Dancing: " in f and "<b>Lively</b>" in f and f"pycmd('duecrew:dancemotion:gentle|{KEY}')" in f
+          and f"pycmd('duecrew:dancemotion:still|{KEY}')" in f and f"dancemotion:lively|{KEY}" not in f)
     ix = board.settings_index({"signed_in": True, "tab": "board"}, {})
     found = {x["l"] for x in ix if "music" in x["k"]}
-    check("Find a setting finds them by music words", {"Dance floor", "Dancing", "My music app"} <= found, found)
+    check("Find a setting finds them by music words", {"Dance floor", "My music app"} <= found, found)
     p = board._profile_song({"uid": "dre", "song": song(2, t="Second <Wind>", a="North & bound")})
     check("their card: ♪ title · artist, Listen (songlisten, keyed), escaped",
           "&#9834; <b>Second &lt;Wind&gt;</b> &middot; North &amp; bound" in p and f"pycmd('duecrew:songlisten:dre|{KEY}')" in p)

@@ -2815,15 +2815,9 @@ def test_one_settings_keys_study_v380():
         # the keys: listed, one switch, and it applies at once
         st = board.settings_html({"tab": "study", "signed_in": True}, conf)
         keys = ("⌘⇧S", "⌃⇧Q") if sys.platform == "darwin" else ("Ctrl+Shift+S", "Ctrl+Shift+Q")  # 3.9.3: the suite on a Mac too
-        check("keys: Settings › Study lists both, with one switch, in this computer's names", keys == (board.STUDY_KBD, board.ASK_KBD)
-              and all(k in st for k in keys) and "duecrew:set:shortcuts:0" in st, keys)
-        check("keys: the switch is a setting, on by default", SM.change(["set", "shortcuts", "0"], {}) == {"shortcuts": False}
-              and SM.BOARD_DEFAULTS["shortcuts"] is True and "shortcuts" not in __import__("due_crew.account", fromlist=["x"]).ACCOUNT_KEYS)
-        applied = []
-        dc._apply_keys = lambda: applied.append(1)
-        _state["settings_tab"] = "board"
-        dc._on_js(False, as_board("duecrew:set:shortcuts:0"), DeckBrowser())
-        check("keys: turning them off applies at once", conf.get("shortcuts") is False and applied == [1], (conf, applied))
+        check("keys: Settings › Study lists both in this computer's names; 3.9.12 (SC agreed): no switch, the keys are on",
+              keys == (board.STUDY_KBD, board.ASK_KBD) and all(k in st for k in keys) and "set:shortcuts" not in st
+              and SM.change(["set", "shortcuts", "0"], {}) is None and SM.BOARD_DEFAULTS["shortcuts"] is True, keys)
         said = []
         TF.tooltip = lambda m, **k: said.append(m)
         mw.state = "deckBrowser"
@@ -3455,7 +3449,7 @@ def test_find_a_setting_v380():
           and "\U0001f4d6 Exam" in words("test") and words("log out") == ["Sign out"] and "Study time" in words("study time"),
           (words("colour"), words("holiday"), words("test")))
     check("find: a switch is found whichever way it's set (its command without the state)",
-          by["Study time"]["f"] == "set:share_time:" and by["Compact rows"]["f"] == "set:compact:")
+          by["Study time"]["f"] == "set:share_time:" and by["Calm board"]["f"] == "set:calm:")
     text = repr(ix)
     check("find: the person's name, status, squads and decks stay out of it",
           not any(x in text for x in ("Sammy", "secret", "orca", "Private Deck")), text[:300])
