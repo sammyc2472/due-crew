@@ -5661,4 +5661,8 @@ every release that changes how something works.
   before. "What's in it" went (the sections are short enough to be the
   list). The same ten pictures. The README says SC where it said Sam or
   Sammy Caplan; the LICENSE files' copyright lines are as they were.
+- 3.9.12, the README, plainer still (SC, 13 Nov: "less AI-speaky words /
+  language. simpler still"). Short sentences, everyday words, a bullet a
+  thing; Your day is four bullets; Privacy says the same things as a
+  list. Same order, same ten pictures.
 
