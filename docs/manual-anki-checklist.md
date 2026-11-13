@@ -731,6 +731,13 @@ In Anki (as a follower):
 - [ ] A plan of more than 16 sets: You › Plans' path folds the runs done ("22 done") and far ahead ("26 to come") into one piece each, its count under it; sets behind, today's, the two before and the next four stay their own; a click on a fold opens its day. A plan of 16 or fewer: a segment a set. Light and dark.
 - [ ] You › Plans' week, click today: its details have one Study at the top right (no Study on each set, none on the card's line); it opens "Due Crew::<plan> · Today" on Anki's Study screen with today's new cards and the plan's reviews due today, nothing due tomorrow; the tooltip says how many of each. Click a past day behind: its Study builds "Due Crew::<plan> · <day>" with that day's cards not seen yet and its reviews due today. Today's set (B): its own deck loses those cards and keeps the rest. A day ahead: no Study. Tomorrow morning both decks are empty and gone.
 
+### 3.9.12: tips, the bench, Settings (about 8 minutes)
+- [ ] Miss a card you've lapsed on twice: your own Pip peeks in from the bottom left with "Add a tip for next time". Add a tip opens the window; Save; miss it again: "You left a tip", Show, Edit opens the window with your words.
+- [ ] Nothing on screen or in a menu says "hook".
+- [ ] Crew › Today with a friend who last synced three days ago: no row for them; under the rows their Pip, eyes closed, their name and "3 days". No z's, no line above it. Click it: their profile. A friend who paused sits there too.
+- [ ] A friend who synced yesterday but not today: their row as before, at the bottom, with "· yesterday".
+- [ ] Settings: no Compact rows, Highlight my row, Crew name in shares, Room chip or Shortcuts on. Study › Today has one row, Today's extras, with two switches. On the dance floor, the song list's foot has "Dancing: Gentle · Lively · Still".
+
 ### 3.9.12: deck counts, and a quiet board (about 5 minutes)
 - [ ] A deck with "bury new siblings" and "bury review siblings" on, with notes that have two cards due. Settings › Study › Reviewing › Deck counts leave out buried siblings: off, the deck list is Anki's. On: New and Due drop to about half; point at one: "Anki counts 12. 6 are siblings it will bury as you go." Open the deck: Anki's own count at the top matches ours.
 - [ ] A deck with burying off: its numbers don't change. Turn the switch off: Anki's numbers are back.
