@@ -146,6 +146,32 @@ def hidden(guid, uid):
     return f"{guid}|{uid}" in _data()["hide"]
 
 
+# 3.9.12 (SC: "i like 1-4"): what else offers the way to add a tip, besides Again today or yesterday (Hard counts
+# as Again does): an answer that took well over my usual, and a leech or a card close to being one. (A crewmate's
+# ask has had its own Tip button since 3.9.0: cards.chip_view's "asked".)
+SLOW_TIMES = 2         # this many times my usual answer...
+SLOW_MIN_MS = 8000     # ...and never under this: a quick deck's double is still quick
+LEECH_NEAR = 2         # within this many lapses of the deck's leech threshold
+
+
+def slow(taken_ms, usual_ms):
+    """Whether this answer took well over my usual (the average of my last answers; 0 or None: not known)."""
+    try:
+        taken, usual = float(taken_ms or 0), float(usual_ms or 0)
+    except (TypeError, ValueError):
+        return False
+    return usual > 0 and taken >= max(SLOW_MIN_MS, SLOW_TIMES * usual)
+
+
+def near_leech(lapses, fails, tagged=False):
+    """A leech (Anki's tag), or within LEECH_NEAR lapses of the deck's threshold (fails; 0: leeches off)."""
+    try:
+        lapses, fails = int(lapses or 0), int(fails or 0)
+    except (TypeError, ValueError):
+        return bool(tagged)
+    return bool(tagged) or (fails > 0 and lapses >= 1 and lapses >= fails - LEECH_NEAR)
+
+
 def turned(lapses, last_eases):
     """A card I kept missing that has stuck: TURNED_LAPSES lapses or more,
     and its last TURNED_RIGHT answers (newest first) all right."""
@@ -173,7 +199,7 @@ def view(hook, stuck, offer, has_turned, can_ask):
     asked: whether this was the "what made it click" line). stuck: I'm
     stuck on it (my hook shows, folded till Show: Sam, "especially for one
     by ones we don't want to spoil the correct answer"); offer: I've missed
-    it twice or more and again today (the quiet way to add one, beside Edit
+    it today or yesterday, or pressed Hard, took long over it, or it's a leech or nearly (3.9.12; the quiet way to add one, beside Edit
     in the bar, never over the card). Raw words: the chip draws them as text."""
     if hook:
         if not stuck:

@@ -175,15 +175,18 @@ def _ago(ts_str):
 
 
 def away_words(ts_str, now=None):
-    """3.9.12, the bench: how long since someone was last here, in a word or two: "2 days", "a week",
+    """3.9.12, the bench: how long since someone was last here, in a word or two: "5h", "a day", "2 days", "a week",
     "3 weeks", "a month", "since Aug" (this computer's month). "" when it isn't known."""
     if not ts_str:
         return ""
     try:
         dt = datetime.fromisoformat(str(ts_str).replace("Z", "+00:00"))
-        days = int(max(0.0, ((now or datetime.now(timezone.utc)) - dt).total_seconds()) // 86400)
+        hours = int(max(0.0, ((now or datetime.now(timezone.utc)) - dt).total_seconds()) // 3600)
+        days = hours // 24
     except Exception:
         return ""
+    if days < 1:  # in today, nothing studied (and nothing yesterday): hours
+        return f"{max(1, hours)}h"
     if days < 2:
         return "a day"
     if days < 7:
@@ -427,23 +430,26 @@ def build_rows(entries, labels, tomorrow, period, cfg):
             # "tomorrow" label — that's their live today
             today = days.get(tomorrow) or days.get(today_lb)
             yesterday = days.get(yest_lb)
-            if today and not _showed(today):
-                # synced, but nothing studied yet (or away): no numbers to
-                # rank, so dashes and no rank, under everyone who studied;
-                # their status still shows, and a cheer still lands
+            # (the show-up board has no number columns: there everyone in today keeps a row of squares)
+            here = row["live"] or row["room"] or cfg.get("show_up")
+            if today and not _showed(today) and (e["you"] or here):
+                # me, or someone studying right now, with nothing counted yet: dashes, under everyone
+                # who studied; their status still shows, and a cheer still lands
                 row.update(_day_flags(today, today_lb))
                 row["notyet"] = not row["away"]
                 notyet.append(row)
-            elif today:
+            elif today and _showed(today):
                 row.update(_day_metrics(today))
                 row.update(_day_flags(today, today_lb))
-                row["showup"] = _showed(today) and all(
-                    row[k] is None for k in ("reviews", "time_ms", "retention", "streak"))
-                row["studied_today"] = _showed(today)
+                row["showup"] = all(row[k] is None for k in ("reviews", "time_ms", "retention", "streak"))
+                row["studied_today"] = True
                 fresh.append(row)
-            elif yesterday and cfg.get("show_stale", True) and not e["you"]:
+            elif _showed(yesterday) and cfg.get("show_stale", True) and not e["you"]:
+                # 3.9.12 (SC: "if they were here yesterday AND they did some reviews that result in stats
+                # then they can be in the columns, otherwise, to the bottom they go"): yesterday's numbers
+                # hold a row, in today with nothing yet or not; a day of nothing doesn't
                 row.update(_day_metrics(yesterday))
-                row.update(_day_flags(yesterday, today_lb))
+                row.update(_day_flags(today or yesterday, today_lb))
                 row["stale"] = True
                 stale.append(row)
             elif e["you"]:

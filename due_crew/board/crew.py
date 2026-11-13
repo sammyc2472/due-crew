@@ -244,8 +244,11 @@ def _table_html(data, cfg, period, pick=""):
     # the name column ellipsizes, so the table can never outgrow the card;
     # past the row cap it scrolls inside it
     # 3.9.9: what it's sorted by, for a narrow window's two columns (style.py)
-    return (_scroll(f'<table class="dc-s-{sort}"><tr>{heads}</tr>{body}</table>', body.count('<tr class='))
-            + _bench_html(bench, cfg) + solo)
+    # the bench is the scroll's last thing, never held under it (SC: "they should be at the bottom of the
+    # scroll"); it counts as two rows towards the cap
+    seats = _bench_html(bench, cfg)
+    return _scroll(f'<table class="dc-s-{sort}"><tr>{heads}</tr>{body}</table>{seats}',
+                   body.count('<tr class=') + (2 if seats else 0)) + solo
 
 
 def _bench_html(rows, cfg):

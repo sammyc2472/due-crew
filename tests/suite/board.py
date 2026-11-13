@@ -2841,9 +2841,25 @@ def test_not_yet_today_is_unranked():
                 "exam_date": "", "days": days, "decks": []}
     zero = {"studied": False, "reviews": 0, "studyTimeMs": 0, "accuracy": 0.0, "streak": 0, "status": "coffee first"}
     data = {"entries": [ent("sam", "Sammy", {labels[0]: {"studied": True, "reviews": 50, "studyTimeMs": 600000}}, you=True),
-                        ent("dre", "Dre", {labels[0]: dict(zero)}),
+                        dict(ent("dre", "Dre", {labels[0]: dict(zero)}), live_until="2099-01-01T00:00:00Z"),  # 3.9.12: studying now
                         ent("kai", "Kai", {labels[0]: {"studied": True, "reviews": 10, "studyTimeMs": 60000}})],
             "labels": labels, "tomorrow": "2026-09-28", "pending": []}
+    # 3.9.12 (SC: "if they were here yesterday AND they did some reviews that result in stats then they can be in
+    # the columns, otherwise, to the bottom they go"): in today with nothing counted holds a row only for me or
+    # someone studying right now; yesterday's numbers hold one; nothing either day is the bench
+    idle = [data["entries"][0], ent("dre", "Dre", {labels[0]: dict(zero)}),
+            ent("nia", "Nia", {labels[0]: dict(zero), labels[1]: {"studied": True, "reviews": 30, "studyTimeMs": 60000}}),
+            ent("bo", "Bo", {labels[1]: dict(zero)})]
+    f2, d2 = board.build_rows(idle, labels, data["tomorrow"], "today", {})
+    check("a row needs numbers: yesterday's reviews keep one (dim, as yesterday's), a day of nothing is the bench",
+          [(r["name"], r["stale"], r["quiet"], r["reviews"]) for r in d2] == [("Nia", True, False, 30), ("Dre", False, True, None), ("Bo", False, True, None)], d2)
+    bpage = board.render(dict(data, entries=idle), {"period": "today"}, 0)
+    seat = bpage[bpage.index('class="dc-bench"'):]
+    check("a row needs numbers: the bench has them, and whoever was in today reads in hours",
+          ">Dre<" in seat and ">Bo<" in seat and ">Nia<" not in seat and board.away_words("2026-09-27T10:00:00Z", datetime.datetime(2026, 9, 27, 15, 30, tzinfo=datetime.timezone.utc)) == "5h"
+          and "if (days < 1) return `${Math.max(1, hours)}h`;" in open(os.path.join(REPO, "site", "public", "app.js"), encoding="utf-8").read())
+    check("a row needs numbers: the bench is the scroll's last thing, never under it",
+          "</table>{seats}'" in open(os.path.join(REPO, "due_crew", "board", "crew.py"), encoding="utf-8").read())
     fresh, dormant = board.build_rows(data["entries"], labels, data["tomorrow"], "today", {})
     check("not yet: the studied are ranked, the zero isn't", [r["name"] for r in fresh] == ["Sammy", "Kai"]
           and [r["name"] for r in dormant] == ["Dre"] and dormant[0]["notyet"])

@@ -1019,9 +1019,10 @@ const Board = (() => {
       } else {
         // a friend whose day rolled over ahead of mine writes my "tomorrow"
         const t = dayOf(w, tomorrow) || dayOf(w, today), y = dayOf(w, yest);
-        if (t && !showed(t)) { flags(t); r.notyet = !r.away; notyet.push(r); }  // synced, nothing studied yet
-        else if (t) { Object.assign(r, metrics(t)); flags(t); r.showup = [r.reviews, r.time, r.retention, r.streak].every((v) => v === null); fresh.push(r); }
-        else if (y && !r.you) { Object.assign(r, metrics(y)); flags(y); r.stale = true; stale.push(r); }
+        if (t && !showed(t) && (r.you || r.live || r.room)) { flags(t); r.notyet = !r.away; notyet.push(r); }  // me, or studying now: nothing counted yet
+        else if (t && showed(t)) { Object.assign(r, metrics(t)); flags(t); r.showup = [r.reviews, r.time, r.retention, r.streak].every((v) => v === null); fresh.push(r); }
+        // yesterday's numbers hold a row (SC, 3.9.12); a day of nothing doesn't: the bench
+        else if (y && showed(y) && !r.you) { Object.assign(r, metrics(y)); flags(t || y); r.stale = true; stale.push(r); }
         else if (r.you) fresh.push(r);
         else { r.quiet = true; quiet.push(r); }
       }
@@ -1075,7 +1076,8 @@ const Board = (() => {
   function awayWords(last) {
     const t = Date.parse(last || "");
     if (!t) return "";
-    const days = Math.floor(Math.max(0, Date.now() - t) / 86400000);
+    const hours = Math.floor(Math.max(0, Date.now() - t) / 3600000), days = Math.floor(hours / 24);
+    if (days < 1) return `${Math.max(1, hours)}h`;
     if (days < 2) return "a day";
     if (days < 7) return `${days} days`;
     if (days < 14) return "a week";
