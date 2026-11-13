@@ -46,7 +46,7 @@ class WelcomeDialog(QDialog):
             f"letter-spacing: 2px; padding: 5px 10px; color: {accent()};"
             f"background: {tone('bg')}; border: 1px solid {tone('line')}; border-radius: 6px;")
         grid.addWidget(self.code_label, 0, 1)
-        self.copy_btn = QPushButton("Copy Invite")
+        self.copy_btn = QPushButton("Copy invite")
         self.copy_btn.setEnabled(False)
         self.copy_btn.clicked.connect(self._copy)
         grid.addWidget(self.copy_btn, 0, 2)
@@ -63,7 +63,7 @@ class WelcomeDialog(QDialog):
         grid.addWidget(self.add_btn, 1, 2)
 
         grid.addWidget(QLabel("A class or study group?"), 2, 0)
-        squads = QPushButton("Join a Squad…")
+        squads = QPushButton("Join a squad…")
         squads.clicked.connect(lambda: self.open_squads())
         grid.addWidget(squads, 2, 1, 1, 2, Qt.AlignmentFlag.AlignRight)
         root.addLayout(grid)

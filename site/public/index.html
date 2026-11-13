@@ -54,8 +54,8 @@
   .small { font-size: 13px; }
   .crop table { width: 100%; border-collapse: collapse; font-size: 15px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
   .crop td { padding: 9px 8px; white-space: nowrap; }
-  .crop td:nth-child(n+3) { text-align: right; font-variant-numeric: tabular-nums; }
-  .crop td:nth-child(2) { width: 100%; }
+  .crop td:nth-child(n+2) { text-align: right; font-variant-numeric: tabular-nums; }
+  .crop td:first-child { width: 100%; padding-left: 14px; }
   .crop tr.you td { background: var(--well); }
   .crop .live { color: var(--accent); font-size: 12px; font-weight: 700; }
   @media (max-width: 700px) {
@@ -94,20 +94,23 @@
   </div>
 
   <figure class="wide">
-    <picture><source srcset="/board-dark.png" media="(prefers-color-scheme: dark)"><img src="/board.png" alt="The Due Crew board on Anki's Decks screen" width="1280" height="768"></picture>
+    <picture><source srcset="/board-dark.png" media="(prefers-color-scheme: dark)"><img src="/board.png" alt="The Due Crew board on Anki&#39;s Decks screen" width="1280" height="818"></picture>
   </figure>
   <figure class="phone crop" aria-label="The Due Crew board, three rows">
     <table>
-      <tr><td>&#129351;</td><td>Jordan</td><td>840</td><td>2h 16m</td></tr>
-      <tr class="you"><td>#2</td><td><b>You</b></td><td>512</td><td>1h 12m</td></tr>
-      <tr><td>#3</td><td>Dre <span class="live">studying now</span></td><td>118</td><td>22m</td></tr>
+      <tr><td>Jordan</td><td>840</td><td>2h 16m</td></tr>
+      <tr class="you"><td><b>You</b></td><td>512</td><td>1h 12m</td></tr>
+      <tr><td>Dre <span class="live">studying now</span></td><td>118</td><td>22m</td></tr>
     </table>
   </figure>
 
   <div class="feat">
-    <div><b>Cheers</b>Send one and it rains down their screen.</div>
+    <div><b>Cheers</b>Send one and a little show lands on their screen.</div>
     <div><b>Study rooms</b>Rounds and breaks, together.</div>
     <div><b>Plans</b>A class&rsquo;s cards open on their day. <a href="/classes">For classes</a></div>
+    <div><b>Magic search</b>One box finds the cards for whatever&rsquo;s coming up.</div>
+    <div><b>Hooks</b>The line that made a card click, shared with your crew.</div>
+    <div><b>Pip Party</b>Party games on your own cards, phones in hand.</div>
   </div>
 
   <p class="muted">Free and open source &middot; on <a href="https://ankiweb.net/shared/info/2035408484">AnkiWeb</a> &middot; needs Anki 2.1.55 or newer.</p>

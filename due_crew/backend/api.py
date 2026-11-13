@@ -125,13 +125,9 @@ class ApiClient:
         with self._session_lock:
             try:
                 os.makedirs(os.path.dirname(self.session_file), exist_ok=True)
-                tmp = self.session_file + ".tmp"
-                # holds the session token: mine alone from the first byte
-                fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-                with os.fdopen(fd, "w") as f:
-                    json.dump(dict(self.session), f)
-                os.chmod(tmp, 0o600)  # an older .tmp kept its own mode
-                os.replace(tmp, self.session_file)
+                # holds the session token: mine alone from the first byte (store.write_json, private)
+                from .. import store
+                store.write_json(self.session_file, dict(self.session), private=True)
             except OSError:
                 pass
 
@@ -453,6 +449,9 @@ class ApiClient:
                 "pending": [str(f.get("name") or "?") for f in data.get("friends") or [] if not f.get("mutual")],
                 "cheers": cheers,
                 "cheers_at": int(data.get("cheersAt") or 0) if isinstance(data.get("cheersAt"), (int, float)) else 0,
+                # 3.9.11: who a hook of mine helped, each once: [(guid, uid)]
+                "thanks": [(str(t["guid"])[:64], str(t["by"])[:128]) for t in data.get("thanks") or []
+                           if isinstance(t, dict) and isinstance(t.get("guid"), str) and isinstance(t.get("by"), str)][:50],
                 "my_friends": friends,
                 "my_code": str(me.get("code") or ""),
                 "knocks": self._knocks(data.get("knocks")),
@@ -745,13 +744,8 @@ class ApiClient:
             return "", None
 
     def _save_known(self, guids):
-        tmp = self._known_file() + ".tmp"
-        try:
-            with open(tmp, "w") as f:
-                json.dump({"uid": self.user_id, "guids": sorted(guids)}, f)
-            os.replace(tmp, self._known_file())
-        except OSError:
-            pass
+        from .. import store
+        store.write_json(self._known_file(), {"uid": self.user_id, "guids": sorted(guids)})
 
     def _knows_part(self, known):
         """(the sync's `knows` part or None, what the server will have after it).
@@ -767,6 +761,13 @@ class ApiClient:
         if not add and not gone:
             return None, sent
         return {"add": add, "del": gone}, (sent | set(add)) - set(gone)
+
+    def put_hook(self, guid, text):
+        """3.9.11: my own hook on a card, read by mutual friends stuck on it; no
+        text takes it down. One request, on a click (a PUT: twice is once)."""
+        status, _ = self._call("PUT", "/hooks", {"guid": str(guid), "text": str(text or "")})
+        # True: there; None: refused for good (its shape, or no room), not worth sending again; False: try later
+        return True if status == 200 else (None if status in (400, 409) else False)
 
     def tip_helped(self, guid, from_uid, helped=True):
         """3.2: "This helped" on a crewmate's tip. One request, on a click."""

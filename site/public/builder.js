@@ -446,8 +446,8 @@ const Prompts = (() => {
  *  Review and send's line for each it's past 90% of: remote.py's LIMIT_WORDS,
  *  NEAR_WORDS and SLOW_WAITS, word for word (the suite checks). */
 const Ceilings = (() => {
-  const MAX = { sets: 200, events: 200, reviews: 60, tags: 100, cards: 50000, ids: 50000, size: 1536 * 1024, total: 24 * 1024 * 1024 };
-  const SAVES_A_DAY = 500;  // planput: a person's saves a day, every plan's
+  const MAX = { sets: 200, events: 200, reviews: 60, tags: 100, cards: 50000, ids: 50000, size: 1572864, total: 25165824 };  // made by tools/gen_twins.py from planner/build.CEILINGS
+  const SAVES_A_DAY = 500;  // made by tools/gen_twins.py from planner/build.SAVES_A_DAY (planput: a person's saves a day, every plan's)
   // `ids` (the note ids behind a date's tags, nobody's to change by hand) has none: the old line says it
   const WORDS = {
     sets: "A plan holds up to {max} sets. This makes {have}.",
@@ -1521,7 +1521,7 @@ async function builder(id, face = null, got = null) {
         rec(root, 0);
       }
       if (!out.length) out.push(h("p", { class: "muted small" }, count.size ? "Nothing matches."
-        : `No tags yet. In Anki: Tools › Due Crew › Make a plan from a deck, and pick ${doc.deck}: the deck in Anki needs that name.`));
+        : `No tags yet. They come from Anki, with its next refresh: the deck there needs the name ${doc.deck}.`));
       list.replaceChildren(...out);
     }
     q.addEventListener("input", fillList);

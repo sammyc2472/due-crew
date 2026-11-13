@@ -8,17 +8,16 @@ and shows the signed-in one's; signing out leaves it (a keepsake isn't
 lost by signing out, as a polaroid on the fridge was). Main thread."""
 
 import datetime
-import json
 import os
 
 from aqt import mw
 
 from . import scrapbook as S
-from . import wrap
+from . import store, wrap
 from .app import _state, cfg, client
 from .errs import oops
 
-_BOOK = {"profile": None, "data": None, "disk": None}
+_BOOK = {"path": None, "data": None, "disk": None}
 
 
 def _path():
@@ -26,36 +25,12 @@ def _path():
 
 
 def _data():
-    key = _path()
-    if _BOOK["profile"] != key or _BOOK["data"] is None:
-        _BOOK.update(profile=key, disk=None)
-        try:
-            with open(_path(), encoding="utf-8") as f:
-                text = f.read()
-            got = json.loads(text)
-            _BOOK["data"] = got if isinstance(got, dict) and isinstance(got.get("by"), dict) else {"by": {}}
-            _BOOK["disk"] = text
-        except Exception:
-            _BOOK["data"] = {"by": {}}
-    return _BOOK["data"]
+    return store.load(_BOOK, _path(), ok=lambda d: isinstance(d.get("by"), dict), empty=lambda: {"by": {}})
 
 
 def _save():
-    """Written whole, then swapped in, and only when it says something the file doesn't (as wrap.json is)."""
-    text = json.dumps(_BOOK["data"])
-    if _BOOK.get("disk") == text:
-        return
-    tmp = _path() + ".tmp"
-    try:
-        with open(tmp, "w", encoding="utf-8") as f:
-            f.write(text)
-        os.replace(tmp, _path())
-        _BOOK["disk"] = text
-    except OSError:
-        try:
-            os.remove(tmp)
-        except OSError:
-            pass
+    """Written whole, then swapped in, and only when it says something the file doesn't (store.py)."""
+    store.save(_BOOK)
 
 
 def _uid(uid=None):

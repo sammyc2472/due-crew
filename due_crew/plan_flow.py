@@ -157,21 +157,12 @@ def _set_aside(path):
 def _psave(data):
     """Written whole, then swapped in (as wrap.json)."""
     _store.update(profile=app._profile_key(), data=data)
-    path = os.path.join(_files(), "plans.json")
-    tmp = path + ".tmp"
-    try:
-        with open(tmp, "w") as f:
-            json.dump(data, f)
-        os.replace(tmp, path)
-    except OSError:
+    from . import store
+    if not store.write_json(os.path.join(_files(), "plans.json"), data):
         # 3.9.9 (the plans review): this went by unsaid, and a plan's state that isn't kept is a morning
         # that opens again; counted for the field's sheet (a code, never the path)
         from . import errs
         errs.count("file:plans")
-        try:
-            os.remove(tmp)
-        except OSError:
-            pass
 
 
 def _migrate():
@@ -3500,15 +3491,24 @@ def _free(col, cids, name):
 
 def _refill(col, did, cids):
     """A Due Crew deck _free emptied, with these cards again (its order and
-    rescheduling as they were); one with none left stays empty, for the
-    morning's tidy."""
+    rescheduling as they were); one with none left, or whose cards Anki
+    won't take back (suspended since, or in another deck), stays empty, for
+    the morning's tidy."""
     if not cids:
         return
     deck = col.sched.get_or_create_filtered_deck(deck_id=did)
     term = deck.config.search_terms[0]
     term.search = "cid:" + ",".join(str(int(c)) for c in cids)
     term.limit = len(cids)
-    col.sched.add_or_update_filtered_deck(deck)
+    try:
+        col.sched.add_or_update_filtered_deck(deck)
+    except Exception as e:
+        # 3.9.12 (Sam's report, a day's Study): the cards it would get back are suspended now, or another
+        # add-on's deck took them, and Anki refuses a filtered deck that finds none ("No cards matched the
+        # provided search"). That isn't an error of ours: the deck stays empty, for the morning's tidy.
+        # Anything else is still said.
+        if type(e).__name__ != "FilteredDeckError":
+            raise
 
 
 def _tag_search(col, deck_id, src, swap, cids):

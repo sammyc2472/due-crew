@@ -130,7 +130,7 @@ class AuthDialog(QDialog):
     def _show(self, page):
         self.pages.setCurrentIndex(page)
         self.error.setText("")
-        self.go.setText(("Send Code", "Sign In", "Done")[page])
+        self.go.setText(("Send code", "Sign in", "Done")[page])
         (self.email, self.code, self.name)[page].setFocus()
 
     # ---- actions ----
@@ -167,7 +167,7 @@ class AuthDialog(QDialog):
 
         def done(_result, err):
             if err:
-                self._fail(err, "Send Code")
+                self._fail(err, "Send code")
                 return
             self._busy(False)
             self.sent_to.setText(f"We sent a code to {email}. It works for 10 minutes.")
@@ -192,7 +192,7 @@ class AuthDialog(QDialog):
 
         def done(result, err):
             if err or not result:
-                self._fail(err, "Sign In")
+                self._fail(err, "Sign in")
                 return
             self._busy(False)
             self._uid = result["uid"]

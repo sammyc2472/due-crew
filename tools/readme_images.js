@@ -15,5 +15,12 @@ const { chromium } = require("playwright");
     await (await page.$(sel)).screenshot({ path: path.join(__dirname, "..", "docs", "images", png) });
     console.log("wrote docs/images/" + png);
   }
+  // 3.9.12: the landing page's two (duecrew.com's board.png and board-dark.png)
+  for (const [file, png] of [["readme_site.html", "board.png"], ["readme_site_dark.html", "board-dark.png"]]) {
+    await page.goto("file://" + path.join(__dirname, file));
+    await page.waitForTimeout(400);
+    await (await page.$("#shot")).screenshot({ path: path.join(__dirname, "..", "site", "public", png) });
+    console.log("wrote site/public/" + png);
+  }
   await browser.close();
 })();

@@ -407,6 +407,10 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
         # (the bug hunt: _state's is None at launch, and stale for someone just become mutual)
         _closet(lambda cf: cf.keep_doodles(fresh, data["entries"], client().user_id))
         _scrap(lambda sf: sf.cheers_in(fresh))  # 3.9.10: counted by month; one with words is kept
+    # 3.9.11, hooks: who mine helped (said once), and any of mine still owed to the server
+    from . import cards as _crew_cards
+    _crew_cards.hook_thanks(data.get("thanks"))
+    _crew_cards.flush_hooks()
 
     if knocks is not None:
         _state["knocks"] = [tuple(k) for k in knocks]
@@ -1187,7 +1191,7 @@ BOARD_CMDS = {
     "magic": (0, None, lambda c, p: open_magic(" ".join(_unquote(":".join(p[2:])).split())[:400] if len(p) > 2 else "")),
     "css": (0, None, _cmd_css),
     "magichow": (0, None, lambda c, p: magic_flow.howto_said(p)),  # 3.9.7, round 2: its how-to's buttons
-    **{k: (0, None, _song) for k in ("songsearch", "songuse", "songclear", "songlisten", "songapp", "songapple",
+    **{k: (0, None, _song) for k in ("songsearch", "songuse", "songclear", "songkeep", "songaskoff", "songlisten", "songapp", "songapple",
                                      "dancehide", "danceshow", "dancemotion", "dancefold")},
     "youins": (0, None, lambda c, p: _team(p[1], p)),
     "sort": (1, lambda p: p[2] in board.SORT_KEYS, _cmd_sort),
@@ -1738,7 +1742,7 @@ def _settings_cmd(cmd, parts):
             _state["settings_tab"] = None
             client().sign_out()
             _on_signed_out()
-        sheets.confirm("Sign out?", "Sign out on this device? Your account and stats stay.", "Sign Out", out)
+        sheets.confirm("Sign out?", "Sign out on this device? Your account and stats stay.", "Sign out", out)
     elif cmd == "setdelete":
         _delete_account()
     elif cmd == "setfeedback":

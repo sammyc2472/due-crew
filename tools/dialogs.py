@@ -399,7 +399,7 @@ def main(out):
         cal.setCurrentPage(2026, 10)
         root.addWidget(cal)
         bb = W.QDialogButtonBox(W.QDialogButtonBox.StandardButton.Ok | W.QDialogButtonBox.StandardButton.Cancel)
-        bb.button(W.QDialogButtonBox.StandardButton.Ok).setText("Open Room")
+        bb.button(W.QDialogButtonBox.StandardButton.Ok).setText("Open room")
         extra = bb.addButton("Not today", W.QDialogButtonBox.ButtonRole.ActionRole)
         extra.setEnabled(False)
         root.addWidget(bb)
@@ -988,6 +988,34 @@ def main(out):
             raise RuntimeError("tag: the plan didn't get it")
         dlg.close()
 
+    def hook():
+        # 3.9.11: my hook on the card up now: one line, Share with my crew, Take it off once there's one
+        from due_crew.ui.hook_dialog import HookDialog
+        dlg = HookDialog(None)
+        settle()
+        if dlg.save_btn.isEnabled() or not dlg.remove_btn.isHidden() or not dlg.share.isChecked():
+            raise RuntimeError("hook: a new one starts empty, shared, nothing to take off")
+        shoot(dlg, os.path.join(out, "hook-new.png"))
+        dlg = HookDialog(None, "LOOP = thick ascending loop <b>", shared=False)
+        dlg.show()
+        settle()
+        if dlg.text.text() != "LOOP = thick ascending loop <b>" or dlg.share.isChecked() or dlg.remove_btn.isHidden():
+            raise RuntimeError("hook: the one there, its tick, Take it off")
+        shoot(dlg, os.path.join(out, "hook-mine.png"))
+        dlg.share.setChecked(True)
+        dlg.save_btn.click()
+        if (dlg.result_words, dlg.result_shared) != ("LOOP = thick ascending loop <b>", True):
+            raise RuntimeError(f"hook: saved {dlg.result_words!r} {dlg.result_shared!r}")
+        dlg = HookDialog(None, "mine", signed_in=False)
+        dlg.show()
+        settle()
+        if dlg.share.isEnabled() or dlg.share.isChecked():
+            raise RuntimeError("hook: signed out, nothing to share with")
+        shoot(dlg, os.path.join(out, "hook-signed-out.png"))
+        dlg.remove_btn.click()
+        if dlg.result_words != "":
+            raise RuntimeError("hook: Take it off")
+
     def remark():
         # 3.8.1: Browse › note for the plan's followers: only plans I write; the note on this
         # card there is filled in and edited (it stays one note) or taken off; names stay text
@@ -1259,7 +1287,7 @@ def main(out):
                          ("welcome", welcome), ("logo", logo), ("room", room), ("emoji", emoji),
                          ("report", report), ("plans", plans), ("schedule", schedule), ("map card", map_card),
                          ("share card", share_card), ("why", why), ("plan tags", plan_tags), ("open cards", open_cards),
-                         ("remark", remark), ("held back", held), ("welcome back", away), ("planner", planner),
+                         ("remark", remark), ("hook", hook), ("held back", held), ("welcome back", away), ("planner", planner),
                          ("ai app", ai_app)):
         if os.environ.get("DC_ONLY") and label not in os.environ["DC_ONLY"].split(","):
             continue  # DC_ONLY=planner,plans: just those (while working on them)

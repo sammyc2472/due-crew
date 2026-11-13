@@ -184,6 +184,40 @@ describe("tips stay on the card", () => {
     expect(off.body.cards.g1.tips.find((t: any) => t.from === "mo").helped).toBe(false);
   });
 
+  it("3.9.11, a hook: my own line on a card, read by mutual friends stuck on it without anyone asking; helped reaches me once", async () => {
+    const { sam, dre, stranger } = await crew();
+    expect((await dre.call("PUT", "/hooks", { guid: "g9", text: "  LOOP = thick\nascending loop " })).body).toEqual({ ok: true, kept: true });
+    expect(await db().prepare("SELECT text FROM tips WHERE guid = 'g9' AND uid = 'dre'").first<string>("text")).toBe("LOOP = thick ascending loop");
+    // sam (mutual) is stuck on it and reads it; a stranger stuck on it doesn't; dre never gets his own back
+    expect((await sam.call("POST", "/sync", { stuck: ["g9"] })).body.cards.g9.tips).toMatchObject([{ from: "dre", text: "LOOP = thick ascending loop", helped: false }]);
+    expect((await stranger.call("POST", "/sync", { stuck: ["g9"] })).body.cards).toEqual({});
+    expect((await dre.call("POST", "/sync", { stuck: ["g9"] })).body.cards).toEqual({});
+    // nobody's told of anything yet
+    expect((await dre.call("GET", "/board")).body.thanks).toBeUndefined();
+    expect(await sam.status("POST", "/tips/helped", { guid: "g9", from: "dre" })).toBe(200);
+    expect(await stranger.status("POST", "/tips/helped", { guid: "g9", from: "dre" })).toBe(404);
+    // the site's home (keep=1) isn't told; the add-on's refresh is, once
+    expect((await dre.call("GET", "/board?keep=1")).body.thanks).toBeUndefined();
+    expect((await dre.call("GET", "/board")).body.thanks).toEqual([{ guid: "g9", by: "sam" }]);
+    expect((await dre.call("GET", "/board")).body.thanks).toBeUndefined();
+    expect((await sam.call("GET", "/board")).body.thanks).toBeUndefined();  // it's the author's alone
+    // a change keeps what was helped; no words takes the hook down, and its helped with it
+    await dre.call("PUT", "/hooks", { guid: "g9", text: "thick ascending LOOP" });
+    expect((await sam.call("POST", "/sync", { stuck: ["g9"] })).body.cards.g9.tips[0]).toMatchObject({ text: "thick ascending LOOP", helped: true });
+    expect((await dre.call("PUT", "/hooks", { guid: "g9", text: "  " })).body).toEqual({ ok: true, kept: false });
+    expect((await sam.call("POST", "/sync", { stuck: ["g9"] })).body.cards).toEqual({});
+    expect(await db().prepare("SELECT COUNT(*) AS n FROM tip_helped WHERE guid = 'g9'").first<number>("n")).toBe(0);
+    // shapes: a guid and one line, nothing else; signed in
+    expect(await dre.status("PUT", "/hooks", { guid: "g9", text: "x".repeat(81) })).toBe(400);
+    expect(await dre.status("PUT", "/hooks", { guid: "", text: "x" })).toBe(400);
+    expect(await dre.status("PUT", "/hooks", { guid: "g9", text: "x", front: "the card" })).toBe(400);
+    // the ceiling a tip has: a new one has no room past it, an old one still changes
+    await db().prepare(`WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 5000)
+      INSERT INTO tips (guid, uid, text, at) SELECT 'h' || x, 'dre', 'old', 0 FROM c`).run();
+    expect(await dre.status("PUT", "/hooks", { guid: "fresh", text: "one more" })).toBe(409);
+    expect(await dre.status("PUT", "/hooks", { guid: "h1", text: "better" })).toBe(200);
+  });
+
   it("a cheer without words, or without a card, isn't a tip; helped needs a mutual friend's tip", async () => {
     const { sam, dre, stranger } = await crew();
     await dre.call("POST", "/cheers/sam", { emoji: "🔥" });

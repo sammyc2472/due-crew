@@ -166,6 +166,33 @@ def words(song):
     return " · ".join(x for x in (song.get("t"), song.get("a")) if x)
 
 
+LIFE_DAYS = 3  # 3.9.12 (Sam: "disappear after 3 days"): a song is on the floor the day it's picked and the two after
+
+
+def age(song, today):
+    """Days since the song was picked (0 the day itself), or None when it doesn't say or the day isn't one."""
+    import datetime
+    at = (song or {}).get("at")
+    if not isinstance(at, str) or not _DAY.match(at) or not _DAY.match(str(today or "")):
+        return None
+    try:
+        return (datetime.date.fromisoformat(str(today)) - datetime.date.fromisoformat(at)).days
+    except ValueError:
+        return None
+
+
+def alive(song, today):
+    """Whether a song is still on the floor: picked within LIFE_DAYS (a day ahead of mine, another's
+    rollover, counts as today). One that doesn't say when it was picked has left."""
+    n = age(song, today)
+    return bool(song) and n is not None and n < LIFE_DAYS
+
+
+def last_day(song, today):
+    """Its last day on the floor: the booth asks "Still this one?"."""
+    return age(song, today) == LIFE_DAYS - 1
+
+
 def newest_first(people):
     """Crewmates with a song, the one picked most lately first, then by name."""
     by_name = sorted(people, key=lambda p: str(p.get("name") or "").lower())

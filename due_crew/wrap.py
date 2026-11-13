@@ -85,17 +85,9 @@ def _save_wrap():
     text = json.dumps(_wrap["data"])
     if _wrap.get("disk") == (path, text):
         return
-    tmp = path + ".tmp"
-    try:
-        with open(tmp, "w") as f:
-            f.write(text)
-        os.replace(tmp, path)
+    from . import store
+    if store.write_text(path, text):
         _wrap["disk"] = (path, text)
-    except OSError:
-        try:
-            os.remove(tmp)
-        except OSError:
-            pass
 
 
 def _week_key(label):

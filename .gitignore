@@ -28,3 +28,8 @@ tools/readme_board.html
 tools/readme_plans.html
 # tools/click_test.py's default output (report, screenshots)
 click-test/
+tools/readme_site.html
+tools/readme_site_dark.html
+tools/readme_magic.html
+tools/readme_bingo.html
+tools/readme_tokens.json

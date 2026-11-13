@@ -126,7 +126,7 @@ class EmojiDialog(QDialog):
     def __init__(self, parent, current=""):
         super().__init__(parent)
         styled(self)  # 3.9.1: the board's look
-        self.setWindowTitle("Your Emoji")
+        self.setWindowTitle("Your emoji")
         self.setMinimumWidth(380)
         self._removed = False
         lay = QVBoxLayout(self)

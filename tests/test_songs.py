@@ -303,12 +303,13 @@ def test_glue():
 def test_floor_view():
     c = {}
     ents = [{"user_id": "me", "you": True, "name": "Me"},
-            {"user_id": "dre", "you": False, "name": "Dre", "accent": "blue", "look": ["cap"], "song": dict(SONG, at="2026-10-01")},
+            {"user_id": "dre", "you": False, "name": "Dre", "accent": "blue", "look": ["cap"], "song": dict(SONG, at="2026-10-31")},
             {"user_id": "mo", "you": False, "name": "Mo", "song": dict(SONG, id=9, at="2026-11-01")},
             {"user_id": "jo", "you": False, "name": "Jo"}]
-    saved = (SF.cfg, SF.save_cfg)
+    saved = (SF.cfg, SF.save_cfg, SF._today)
     SF.cfg = lambda: c
     SF.save_cfg = lambda x: None
+    SF._today = lambda: "2026-11-02"
     try:
         v = SF.floor_view(ents, c)
         check("the floor: crewmates with a song, newest first, in their colour and look; the default motion gentle; no app yet",
@@ -316,7 +317,7 @@ def test_floor_view():
               and v["motion"] == "gentle" and v["app"] == "" and v["me"] is None and v["pip"] is True, v)
         check("the first look is history: nobody hops", not any(p["fresh"] for p in v["crew"]))
         SF.mark_seen(v)
-        check("…and it's kept: each crewmate's song as seen", c.get(SF.SEEN_KEY) == {"dre": f"{SONG['id']}@2026-10-01", "mo": "9@2026-11-01", "jo": ""})
+        check("…and it's kept: each crewmate's song as seen", c.get(SF.SEEN_KEY) == {"dre": f"{SONG['id']}@2026-10-31", "mo": "9@2026-11-01", "jo": ""})
         ents[1]["song"] = dict(SONG, id=12, at="2026-11-02")
         ents[3]["song"] = dict(SONG, id=13, at="2026-11-02")
         v = SF.floor_view(ents, c)
@@ -332,10 +333,34 @@ def test_floor_view():
         v = SF.floor_view(ents, c)
         check("my song on the decks; Pip off says so", v["me"] == SONG and v["pip"] is False)
         check("no board (signed out): no floor", SF.floor_view(None, c) is None)
+        # 3.9.12 (Sam: "disappear after 3 days"): a song is on the floor the day it's picked and the two after
+        check("a song's days: 0 the day it's picked; alive through day 2, gone on day 3; no day, a bad day: gone",
+              songs.age(SONG, "2026-11-02") == 0 and songs.alive(SONG, "2026-11-04") and not songs.alive(SONG, "2026-11-05")
+              and not songs.alive(dict(SONG, at=""), "2026-11-02") and not songs.alive({k: v for k, v in SONG.items() if k != "at"}, "2026-11-02")
+              and not songs.alive(dict(SONG, at="2026-13-40"), "2026-11-02") and not songs.alive(None, "2026-11-02")
+              and songs.alive(dict(SONG, at="2026-11-03"), "2026-11-02") and songs.LIFE_DAYS == 3)
+        check("its last day is day 2 alone", songs.last_day(SONG, "2026-11-04") and not songs.last_day(SONG, "2026-11-03")
+              and not songs.last_day(SONG, "2026-11-05"))
+        SF._today = lambda: "2026-11-04"
+        v = SF.floor_view(ents, c)
+        check("two days on: Mo's (1 Nov) has left the floor, the ones from the 2nd dance on",
+              sorted(p["uid"] for p in v["crew"]) == ["dre", "jo", "new"], [p["uid"] for p in v["crew"]])
+        check("my song's last day: the booth asks", v["me"] == SONG and v["ask"] is True)
+        c[SF.ASKED_KEY] = SF._sig(SONG)
+        check("…till answered for this pick", SF.floor_view(ents, c)["ask"] is False)
+        SF.keep()
+        check("Keep: its day is today again, three more days, nothing to ask",
+              c["song"]["at"] == "2026-11-04" and SF.ASKED_KEY not in c and SF.floor_view(ents, c)["ask"] is False
+              and SF.floor_view(ents, c)["me"]["id"] == SONG["id"])
+        SF._today = lambda: "2026-11-07"
+        v = SF.floor_view(ents, c)
+        check("three days after: mine has left too (kept in my settings till I pick again), nobody's dancing, no ask",
+              v["me"] is None and v["crew"] == [] and v["ask"] is False and c["song"]["id"] == SONG["id"]
+              and SF.song_of("me") is None)
         c["dance_floor"] = False
         check("off: no floor", SF.floor_view(ents, c) is None)
     finally:
-        SF.cfg, SF.save_cfg = saved
+        SF.cfg, SF.save_cfg, SF._today = saved
 
 
 if __name__ == "__main__":

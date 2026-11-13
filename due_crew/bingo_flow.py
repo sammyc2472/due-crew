@@ -14,7 +14,7 @@ import os
 
 from aqt import mw
 
-from . import bingo as B
+from . import bingo as B, store
 from .app import _profile_files, _profile_key, _state, client
 from .errs import oops
 
@@ -41,17 +41,7 @@ def _data():
 
 
 def _save():
-    path = _path()
-    tmp = path + ".tmp"
-    try:
-        with open(tmp, "w") as f:
-            json.dump(_mem["data"], f)
-        os.replace(tmp, path)
-    except OSError:
-        try:
-            os.remove(tmp)
-        except OSError:
-            pass
+    store.write_json(_path(), _mem["data"])
 
 
 def _week(wk):

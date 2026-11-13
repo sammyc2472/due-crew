@@ -868,7 +868,7 @@ const Links = {
 const FEW = Infinity;
 const need = (g) => Math.min(g.min, FEW);
 // what each game needs from tonight's pack (gamenight.NEEDS, the twin: the suite checks)
-const NEEDS = { trivia: ["qs", 10], rounds: ["blacks", 1], links: ["words", 25], imposter: ["twins", 1], draw: ["prompts", 1], between: ["prompts", 1] };
+const NEEDS = { trivia: ["qs", 10], rounds: ["blacks", 1], links: ["words", 25], imposter: ["twins", 1], draw: ["prompts", 1], between: ["prompts", 1] };  // made by tools/gen_twins.py from gamenight.NEEDS
 const ready = (g) => !!D && (D[NEEDS[g.id][0]] || []).length >= NEEDS[g.id][1];
 
 const GAMES = { imposter: Imposter, rounds: Rounds, trivia: Trivia, draw: DrawIt, between: Between, links: Links };
@@ -1356,7 +1356,7 @@ function home() {
   app.className = "home";
   app.replaceChildren(
     h("header", { class: "hero" }, h("h1", {}, "Pip Party"),
-      h("p", { class: "lede" }, "Party games on your own cards. The TV is Anki: You › Pip Party on the Decks screen. Everyone else plays on their phone."),
+      h("p", { class: "lede" }, "Party games on your own cards. The TV is Anki: You › Party on the Decks screen. Everyone else plays on their phone."),
       h("div", { class: "modes" }, h("button", { type: "button", class: "mode go", onclick: () => joinView("") }, h("b", {}, "Join from your phone"), h("span", {}, "The four letters on the TV.")))),
     h("section", { class: "games" }, h("div", { class: "lbl" }, `${["No", "One", "Two", "Three", "Four", "Five", "Six"][ORDER.length]} games`), h("div", { class: "tiles static" }, ORDER.map((id) => { const g = GAMES[id]; return h("div", { class: "tile" }, h("span", { class: "kind" }, g.kind), h("b", {}, g.name), h("span", { class: "ln" }, g.line), h("span", { class: "lr" }, g.learn), h("span", { class: "np" }, `${g.min}–${g.max} players`)); }))));
 }

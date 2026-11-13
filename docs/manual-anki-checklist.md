@@ -101,8 +101,8 @@ hand.
 
 ## 2.9: onboarding, a lighter week, consistency (rules-v9)
 - [ ] Rules-v9 pasted in the console BEFORE the release; the footer shows no "server catching up" on 2.9.
-- [ ] A fresh profile (no email used yet): the Decks screen says "Nothing is shared until you join. Join · Sign in"; Join opens the dialog on Join, Sign in on Sign In.
-- [ ] Join: the welcome screen shows your code at once, Copy Invite copies, and nothing is uploaded until it closes (console: no daily_stats doc yet). Tick "Just show up", Done: the first upload has no numbers.
+- [ ] A fresh profile (no email used yet): the Decks screen says "Nothing is shared until you join. Join · Sign in"; Join opens the dialog on Join, Sign in on Sign in.
+- [ ] Join: the welcome screen shows your code at once, Copy invite copies, and nothing is uploaded until it closes (console: no daily_stats doc yet). Tick "Just show up", Done: the first upload has no numbers.
 - [ ] Welcome → paste a friend's whole invite into "Have a code?" → Add: "Added X. They'll see it on their board."
 - [ ] On that friend's account: within an hour, or at once on Refresh, the board says "👋 <name> added your code · Add back"; Add back makes you crew on both boards.
 - [ ] Friends dialog: paste an invite in the old wording ("My friend code: ABC123"): it adds. The list says "⏳ … — waiting", the section is "Added you".
@@ -138,14 +138,14 @@ hand.
 - [ ] A cheer in October has 🎃/🍂 in its flurry.
 - [ ] With rules-v9 still published: a tip or a line goes as a plain cheer with its words, and the tooltip says the server needs an update.
 - [ ] The board's top left is the one-line logo, not the words "Due Crew", in your accent; Settings → Accent changes it on Save; night mode turns the wordmark pale. A narrow window puts the Today/Week/Decks/Squads pills under it. The signed-out and loading cards show it too.
-- [ ] The logo tops Sign In / Join and the welcome screen, sharp on a Retina or high-DPI screen. Settings → Accent → rose, reopen Sign In: the studied days are rose. Anki in night mode: the wordmark is pale and the squares take the dark shade.
+- [ ] The logo tops Sign in / Join and the welcome screen, sharp on a Retina or high-DPI screen. Settings → Accent → rose, reopen Sign in: the studied days are rose. Anki in night mode: the wordmark is pale and the squares take the dark shade.
 
-## 2.11: the logo on the board, New Code
+## 2.11: the logo on the board, New code
 
 - [ ] The board's top left is the logo (see the 2.10 logo lines above).
-- [ ] Friends → New Code → confirm: a different code shows; Copy Invite copies it; the solo board's Copy invite copies the new one too, without waiting for tomorrow.
+- [ ] Friends → New code → confirm: a different code shows; Copy invite copies it; the solo board's Copy invite copies the new one too, without waiting for tomorrow.
 - [ ] A friend adds the OLD code: "That code doesn't match anyone." They add the new one: it works, and you get the Add back banner.
-- [ ] Your crew is unchanged after New Code, on your board and on theirs.
+- [ ] Your crew is unchanged after New code, on your board and on theirs.
 
 ## 2.11.1: streaks from the phone
 
@@ -155,7 +155,7 @@ hand.
 
 ## 2.12: study rooms
 
-- [ ] Footer → Open a room → 4 × 25, 5-min breaks, Now → Open Room. The board shows the room (ring, rounds, Study, Leave); the top bar shows the chip with the seven squares, the ring, "Round 1 of 4", and your initial.
+- [ ] Footer → Open a room → 4 × 25, 5-min breaks, Now → Open room. The board shows the room (ring, rounds, Study, Leave); the top bar shows the chip with the seven squares, the ring, "Round 1 of 4", and your initial.
 - [ ] A crewmate on 2.12 refreshes: an invite with Join. They join; after your next refresh both of you show "in <host>'s room" and both initials sit in the chip.
 - [ ] Review: the chip stays in the top bar; the card is untouched. Click it: the room card (rounds, who's in, Tuck it away, Leave). Tuck it away leaves only the ring.
 - [ ] Preferences → hide the top bar while reviewing: the room moves beside Edit in the bottom bar. Hide the bottom bar too, window wide: a card in the left margin, gone on a card with a full-width image.
@@ -195,7 +195,7 @@ before trying the real thing.
 - [ ] A brand-new address: a new account, asked for a name; the welcome screen follows; Friends shows a code.
 - [ ] A refresh is one request: `npx wrangler tail --env dev` shows one GET /board per refresh, one POST /sync per sync.
 - [ ] Flag a card: a crewmate with the same note sees it on the Decks tab with the card's text (from their own copy); the server never has the text (`wrangler d1 execute due-crew-dev --remote --command "SELECT doc FROM weeks"`).
-- [ ] Settings → Sign Out, then sign in on another computer: both work; Delete Account from one signs the other out at its next request.
+- [ ] Settings → Sign out, then sign in on another computer: both work; Delete Account from one signs the other out at its next request.
 - [ ] Paused, show-up, away dates, exam date, statuses, cheers with notes, good-luck lines, tips, rooms: each still reaches a crewmate on 3.0.
 
 ## 3.0.1: a tip clears the flag, mute and report, the room chip's side
@@ -731,6 +731,12 @@ In Anki (as a follower):
 - [ ] A plan of more than 16 sets: You › Plans' path folds the runs done ("22 done") and far ahead ("26 to come") into one piece each, its count under it; sets behind, today's, the two before and the next four stay their own; a click on a fold opens its day. A plan of 16 or fewer: a segment a set. Light and dark.
 - [ ] You › Plans' week, click today: its details have one Study at the top right (no Study on each set, none on the card's line); it opens "Due Crew::<plan> · Today" on Anki's Study screen with today's new cards and the plan's reviews due today, nothing due tomorrow; the tooltip says how many of each. Click a past day behind: its Study builds "Due Crew::<plan> · <day>" with that day's cards not seen yet and its reviews due today. Today's set (B): its own deck loses those cards and keeps the rest. A day ahead: no Study. Tomorrow morning both decks are empty and gone.
 
+### 3.9.12: the soundtrack's floor (about 5 minutes)
+- [ ] Point at the floor: one round button, ⌄ (fold). No ×.
+- [ ] Tap "+N" or the folded chip: the song list ends with "Turn off the dance floor". Click it: the floor goes, "Dance floor off · Undo" in the corner for a few seconds; Undo brings it back. Left alone, Settings › Board › Dance floor brings it back. My own song's card has the same line.
+- [ ] A crewmate's song picked four days ago (or set the computer's date three days on): they're not on the floor, not in the list, and their profile card has no song line.
+- [ ] My song, two days after I picked it: "Still this one?" over the booth with its name. Keep: the bubble goes and it stays three more days. Change: the search. ×: the bubble goes and isn't back for this pick; the next day my booth says "Put on a song?".
+
 ### 3.9.6: study soundtrack and the dance floor (about 15 minutes; a crewmate on another computer helps)
 - [ ] Decks screen, a wide window: the floor in the bottom-right corner, my Pip at the booth, no lights over it. With no song, its bubble says "Put on a song?"; a tap opens the search.
 - [ ] Search: type two letters and stop: real songs from Apple with covers. Under them a line, then "Song search courtesy of Apple Music" and Apple's "Listen on Apple Music" badge (the picture, not just its words); clicking it opens the picked song's page. Pick one, Use this: it's on the decks.
@@ -739,7 +745,7 @@ In Anki (as a follower):
 - [ ] The Pips on the floor (and the DJ) blink each in their own time, never all at once.
 - [ ] Settings › Board › Study soundtrack › My music app: Ask me the first time. Their card's row now says "Listen in" Apple Music · Spotify · YouTube Music · Other. Tap Spotify: Spotify (app or browser) opens a search with the song first, and the card now says "Listen in Spotify" (it stays open). Other: copies "Title · Artist". A profile card's Listen with no app picked asks which app.
 - [ ] Gentle: a slow sway, nothing jumps. Lively: steps on the beat. Still: nothing moves. Reduce motion (system): still. They rest after about twelve seconds; pointing wakes them.
-- [ ] ⌄ folds it to the chip (record, ♪ N, ★ when there's a new song); a tap opens it; Anki restarted, it's as I left it. × takes it off; Settings brings it back. Reset board: on, Gentle, open.
+- [ ] ⌄ folds it to the chip (record, ♪ N, ★ when there's a new song); a tap opens it; Anki restarted, it's as I left it. (3.9.12: no × any more; see above) Settings brings it back. Reset board: on, Gentle, open.
 - [ ] Narrow the window until the floor would cover the crew list: it becomes its chip by itself; widen: it opens again. Tap the chip on a narrow window: it opens over the board and stays until folded.
 - [ ] A crewmate's profile card: "♪ title · artist" with Listen. Mine: my song with Change.
 - [ ] Offline: the search says it couldn't reach the catalog; nothing in Anki's error window.
@@ -895,6 +901,26 @@ The riskiest of 3.9.1, the parts only a live Anki can show, in order:
 - [ ] A crewmate's cheer: the banner fades in; click it to send one back and it fades out. During a show, click anywhere or press Esc: the show fades away (a quarter second), not gone in one frame.
 - [ ] On a card with a tip, press Show in the corner: the bubble grows to fit the words, which fade in; the chip beside Edit fades its words in too.
 - [ ] Reduce motion (system setting): nothing slides, grows or turns; the banner only fades.
+
+### 3.9.12: current and consistent
+
+- [ ] Squads: under the table, one line: "+ Create / join a squad" at the left, Copy invite · Lock · Leave at the right.
+- [ ] Crew › Decks, Asked of you: the button says Hook; an answered ask says "1 hook". Insights › Leeches: "Dre's hook" opens its words with OK only.
+- [ ] Sign-in, Welcome, Friends, Squads, Open a study room: buttons and headings in sentence case; Friends lists "Name · waiting".
+- [ ] duecrew.com: no medal or #2 on a phone; six features; the board picture matches Anki in light and dark. /classes and a new plan's empty page say Tools › Due Crew › Plans › New plan…
+
+### 3.9.11: hooks, Magic search's Recent
+
+- [ ] Magic search, typing a topic: the box says "N cards · about M min" on its right; as each new answer lands the count rolls up, the bar grows and the star twinkles (more for 100 cards or more). A long line of words, or a narrow window: no answer in the box, nothing covered.
+- [ ] Type a topic two letters off: "No tag or card says …", then "Did you mean <Topic>? N cards"; a tap puts that word right and finds it. Type nonsense: "Waiting today" with Missed today, Due today, Leeches (the ones with any); each chip finds them.
+- [ ] Schedule ahead: each day you pick gets a "+N" that drops in, and its due count goes up by it; unpick and both go. Put on days: a sparkle off each. With Reduce motion on, none of it moves.
+
+- [ ] Hooks: on a card you've lapsed on twice, press Again, and when it comes back show the answer: "Add a hook for next time" beside Edit (nothing over the card). Click it: a window with one line, "Share with my crew" ticked, Save. Miss it again: the corner card says "You left a hook" and Show; only then the words, with Edit. Edit › Take it off: gone. More › "Due Crew: add a hook…" works on any card.
+- [ ] Shared: a crewmate (mutual) who misses that card sees "<you> left a hook" coming up on the right after their next sync, Show, then This helped. Your next refresh says "Your hook on a … card helped <them>." once, and the scrapbook keeps the line. Untick Share and save: after their next sync it's gone for them, still yours.
+- [ ] On a crewmate's hook, the chip's list (click it) has "Hide this hook": it never shows on that card again.
+- [ ] A card a crewmate has down, with no hook of yours on it, still shows "… knows this" coming up on the right with Ask.
+- [ ] A card you lapsed three times and have since got right three times running: once, "This one stuck. What made it click?"; never again on that card, twice a day at most.
+- [ ] Magic search: paste a long list of card ids, Study or Browse them, reopen: no Recent for it. A long Recent from before is gone; a short one ("pv loop") is there and types itself on a click.
 
 ### 3.9.10: the foot, the dot, the scrapbook (Wrapped's place)
 

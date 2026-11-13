@@ -445,6 +445,8 @@ CARD_PAGE_CMDS = ("roomcard", "roomcardoff", "roomtuck", "roomskip", "roombreake
                   # menu (Tip asks for its line), moving the chip to the bar, and This
                   # helped, which asks first
                   "knowsask", "knowstip", "knowsbar", "knowshelped", "knowsreply",
+                  # 3.9.11: my own hook on the card up now (a window for its one line)
+                  "hookadd",
                   # 3.9.1: a tap on the bars' shade (app.veil) is Esc on the board; the
                   # Decks screen's bottom bar is Anki's, not ours, so it comes keyed
                   "veiltap")

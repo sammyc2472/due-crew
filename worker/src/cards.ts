@@ -113,6 +113,42 @@ export function tipWrite(env: Env, from: string, guid: string, text: string): D1
   ).bind(guid, from, text, nowSec(), TIPS_MAX);
 }
 
+/** PUT /hooks {guid, text}: 3.9.11, my own hook on a card (the line that
+ *  made it click), kept as my tip on it: every mutual friend stuck on the
+ *  card reads it with their sync, nobody has to ask first. No text takes
+ *  it down, and what was marked helped on it. One request, on a click. */
+export async function putHook(req: Request, s: Session, env: Env): Promise<Response> {
+  const body = await readJson(req);
+  for (const k of Object.keys(body)) if (!["guid", "text"].includes(k)) throw V.bad("hook");
+  if (!V.isStr(body.guid, V.GUID_MAX, 1) || !V.isStr(body.text, V.NOTE_MAX)) throw V.bad("hook");
+  const text = V.oneLine(body.text as string, V.NOTE_MAX);
+  if (!text) {
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM tips WHERE guid = ? AND uid = ?").bind(body.guid, s.uid),
+      env.DB.prepare("DELETE FROM tip_helped WHERE guid = ? AND tip_uid = ?").bind(body.guid, s.uid),
+    ]);
+    return json({ ok: true, kept: false });
+  }
+  const res = await tipWrite(env, s.uid, body.guid as string, text).run();
+  if (!res.meta.changes) throw new HttpError(409, "hooks_full");  // TIPS_MAX of them: a new one has no room
+  return json({ ok: true, kept: true });
+}
+
+export const THANKS_MAX = 50;
+
+/** 3.9.11: who said "This helped" on a hook of mine since I was last told:
+ *  [{guid, by}], each once (told is set as they're read; nothing is
+ *  written on a refresh with none). Only a mutual friend could mark one. */
+export async function thanksFor(env: Env, uid: string): Promise<{ guid: string; by: string }[]> {
+  const got = await env.DB.prepare(
+    "SELECT guid, by_uid FROM tip_helped WHERE tip_uid = ? AND told = 0 ORDER BY guid, by_uid LIMIT ?").bind(uid, THANKS_MAX).all();
+  const rows = got.results as { guid: string; by_uid: string }[];
+  if (!rows.length) return [];
+  await env.DB.batch(rows.map((r) => env.DB.prepare(
+    "UPDATE tip_helped SET told = 1 WHERE guid = ? AND tip_uid = ? AND by_uid = ?").bind(r.guid, uid, r.by_uid)));
+  return rows.map((r) => ({ guid: r.guid, by: r.by_uid }));
+}
+
 /** POST /tips/helped {guid, from, helped?}: "This helped" on a mutual
  *  friend's tip. Only orders tips; nobody sees a count. */
 export async function helped(req: Request, s: Session, env: Env): Promise<Response> {

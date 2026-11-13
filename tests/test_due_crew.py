@@ -137,8 +137,13 @@ def as_board(message):
     return message if "|" in message else message + "|" + _b.BOARD_KEY
 
 
+QUIET = [False]  # -q: only what failed is said
+
+
 def check(name, cond, detail=""):
     CHECKS.append((name, bool(cond), detail))
+    if cond and QUIET[0]:
+        return
     print(("PASS " if cond else "FAIL ") + name + (f"  [{detail}]" if detail and not cond else ""))
 
 
@@ -1381,12 +1386,13 @@ def test_wrap_file_is_durable():
                 self.f.write(text[:len(text) // 2])
                 raise OSError("disk full")
 
-        wrap.open = lambda p, mode="r", *a, **k: DiesHalfway(open(p, mode, *a, **k)) if "w" in mode else open(p, mode, *a, **k)
+        from due_crew import store  # 3.9.12: every file is written by store.py
+        store.open = lambda p, mode="r", *a, **k: DiesHalfway(open(p, mode, *a, **k)) if "w" in mode else open(p, mode, *a, **k)
         try:
             wrap._wrap["data"] = {"life": {"reviews": 0}}
             wrap._save_wrap()
         finally:
-            del wrap.open
+            del store.open
         with open(path) as f:
             after = json.load(f)
         check("wrap.json: a write that dies halfway leaves the last good file in place",
@@ -1729,7 +1735,7 @@ def test_code_knocks_v29():
 
 
 def test_new_code():
-    """2.10: New Code swaps my friend code; the old one stops working, the
+    """2.10: New code swaps my friend code; the old one stops working, the
     crew stays."""
     store = world({"sam": "Sammy", "priya": "Priya"}, {"sam": ["priya"], "priya": ["sam"]})
     store.codes["SAM123"] = "sam"
@@ -2382,7 +2388,7 @@ def test_together_v210():
                                    {"text": "Digoxin", "state": "answered", "who": ["Priya <b>"]}])
     check("your asks (K3): where each stands, escaped, no Asked of you when nobody asked",
           "Your asks" in mine and "Asked of you" not in mine and "Dre knows this" in mine and "waiting" in mine
-          and "Priya &lt;b&gt; answered" in mine and "1 tip" in mine and "<i>" not in mine)
+          and "Priya &lt;b&gt; answered" in mine and "1 hook" in mine and "<i>" not in mine)
     check("flags: a cloze shows as [...], never its answer",
           together._plain("<b>S3</b>&nbsp;is heard in {{c1::Kentucky::rhythm}}") == "S3 is heard in [\u2026]")
 
@@ -5560,9 +5566,9 @@ def test_asks_and_tips_v390():
     knows = K.chip_view({"knows": ["dre"], "tips": []}, [], names, pips=pips)
     note = K.remark_view([{"name": "Block 1", "doc": {"remarks": [{"card": ["guid000001", 0], "text": "the second cloze"}]}}], "guid000001", 0)
     check("fold: a tip says who left it, with the Pip peeking in; Pip off, the same bubble with the bulb; the words wait",
-          tip["fold"] == "Dre left a tip" and tip["peek"] == {"uids": ["dre"], "head": "Dre: think loops", "act": "This helped"}
+          tip["fold"] == "Dre left a hook" and tip["peek"] == {"uids": ["dre"], "head": "Dre: think loops", "act": "This helped"}
           and tip["pip"] == pips["dre"] and tip["text"] == "\U0001F4A1 Dre: think loops"
-          and tip_off["fold"] == "\U0001F4A1 Dre left a tip" and tip_off["peek"]["uids"] == [] and "pip" not in tip_off, (tip, tip_off))
+          and tip_off["fold"] == "\U0001F4A1 Dre left a hook" and tip_off["peek"]["uids"] == [] and "pip" not in tip_off, (tip, tip_off))
     check("fold: an ask's line and a plan's note fold too; an ask with no line, and who knows it, don't (nothing to give away)",
           asked["fold"] == "Dre asked about this card" and asked["text"] == "Dre: \u201cwhy axillary?\u201d"
           and "fold" not in bare and "fold" not in knows and note["fold"] == "\U0001F4CC A note from Block 1", (asked, note))
@@ -6093,7 +6099,7 @@ def test_who_knows_v32():
           both["more"] == 1 and both["actcmd"] == "knowshelped:dre" and both["act"] == "\u2713 Helped", str(both))
     check("chip: nobody I can name, nothing", K.chip_view({"knows": ["zed"], "tips": []}, [], names) is None)
     asked = K.chip_view(None, [], names, asks=[("dre", 1)])
-    check("chip: a crewmate's ask on a card I have, with Tip", asked["cmd"] == "knowsreply:dre:1" and asked["act"] == "Tip")
+    check("chip: a crewmate's ask on a card I have, with Tip", asked["cmd"] == "knowsreply:dre:1" and asked["act"] == "Hook")
     asked_q = K.chip_view(None, [], names, asks=[("dre", 1, "why axillary?")])
     check("chip: a crewmate's ask shows their line, and a short form for a narrow bar",
           asked_q["text"] == "\U0001F419 Dre: \u201cwhy axillary?\u201d" and asked_q["short"] == "\U0001F419 Dre asked"
@@ -6102,7 +6108,7 @@ def test_who_knows_v32():
           K.chip_view({"knows": ["dre"]}, [], names, mine=True)["act"] == "Asked" and v["act"] == "Ask"
           and v["short"] == "\U0001F419 Dre +1")
     check("chip: a tip's short form names whose tip it is",
-          K.chip_view(cardsin["guid000003"], [], names)["short"] == "\U0001F4A1 Dre's tip")
+          K.chip_view(cardsin["guid000003"], [], names)["short"] == "\U0001F4A1 Dre's hook")
     js = K.chip_js({"text": "</span><script>x</script>", "cmd": "knowsask", "act": "Ask", "accent": "#0a0"})
     check("chip: text goes in as text (3.8.22: the one markup is a Pip's own drawing)", "textContent" in js and js.count("innerHTML") == 1 and "p.innerHTML = D.pip.svg" in js)
     acked(sam, sam.fetch_board(labels))  # Dre's tip is read, and the next refresh
@@ -6302,7 +6308,7 @@ def test_knows_peek_v390():
           and one["text"] == "Dre knows this" and one["act"] == "Ask", (one.get("peek"), two.get("peek")))
     tip = K.chip_view({"knows": ["dre"], "tips": [{"from": "dre", "text": "think loops"}]}, [], names, pips=pips)
     check("peek: a tip peeks in with its tipper's Pip (Sam's note on \"Asks and tips\"); an ask keeps its card",
-          tip["peek"] == {"uids": ["dre"], "head": "Dre: think loops", "act": "This helped"} and tip["fold"] == "Dre left a tip"
+          tip["peek"] == {"uids": ["dre"], "head": "Dre: think loops", "act": "This helped"} and tip["fold"] == "Dre left a hook"
           and "peek" not in K.chip_view(None, [], names, asks=[("dre", 1, "why?")], pips=pips), tip.get("peek"))
     shown, saved = [], (K._bottom, K._review_web, K._show, K.client, dict(_state))
     store = world({"sam": "Sam"})
@@ -7358,15 +7364,15 @@ def test_crew_menu_pictures():
                                         "My day…", "My week…", "My year…", "All time…"]
           and "head.setEnabled(False)" in text
           and 'share_picture("picturealltime")' in text and 'share_picture("pictureyear")' in text)
-    # 3.9.10: the Crew menu went: Friends opens the Friends window (its list, the code, Copy Invite), and
+    # 3.9.10: the Crew menu went: Friends opens the Friends window (its list, the code, Copy invite), and
     # sharing a deck starts on Crew › Decks
     fd = open(os.path.join(REPO, "due_crew", "ui", "friends_dialog.py"), encoding="utf-8").read()
     dk = board._decks_body({"entries": [{"user_id": "me", "name": "Me", "you": True, "decks": [{"name": "D", "cards": 10, "seen": 5, "mature": 2}]},
                                         {"user_id": "a", "name": "A", "you": False, "decks": [{"name": "D", "cards": 10, "seen": 4, "mature": 1}]}],
                             "labels": []})
-    check("no Crew menu: Friends has the code and Copy Invite; Crew › Decks starts sharing a deck",
+    check("no Crew menu: Friends has the code and Copy invite; Crew › Decks starts sharing a deck",
           not hasattr(board, "crew_menu_items") and "def _crew_menu" not in text and '"crewmenu"' not in text
-          and 'QPushButton("Copy Invite")' in fd
+          and 'QPushButton("Copy invite")' in fd
           and ('<div class="dc-add"><a href="#" title="Pick the decks your crew sees" onclick="pycmd(\'duecrew:decks|' + board.BOARD_KEY + "'); return false;\">+ Share a deck</a>") in dk
           and "Matching decks pair up" not in dk, dk[-300:])
     import due_crew as dc
@@ -12485,7 +12491,7 @@ def test_builder_review_wording_v381():
     check("words: Make it a review day says followers get a Due Crew deck of what they've seen, that morning",
           "That morning, followers get a Due Crew deck of what they've seen from these sets" in builder)
     check("words: the empty tree names the plan's deck, and Anki's deck needs that name",
-          "and pick ${doc.deck}: the deck in Anki needs that name." in builder)
+          "the deck there needs the name ${doc.deck}." in builder and "Make a plan from a deck" not in builder)  # 3.9.12: that menu item went in 3.9.3
     check("words: at my own pace, the next once I've seen most of the last",
           "when I'm ready, the next once I've seen most of the last" in builder and "the next once I've seen the last\"" not in builder)
     check("words: Progress shows per-date counts only from 3 in the squad (3.9.5: an author on the team among them) "
@@ -15588,6 +15594,439 @@ def test_crew_tabs_hold_still_v3910():
           and "a[data-t] { display: inline-block; padding-bottom: 2px; }" in css, sw[:200])
 
 
+def test_hooks_v3911():
+    """3.9.11, hooks (Sam: "build that whole implementation you've
+    proposed"): my own line on a card I keep missing, folded till Show when
+    I'm stuck on it (Sam: "especially for one by ones we don't want to spoil
+    the correct answer"); offered quietly beside Edit on a second miss, and
+    once when a card I kept missing has stuck. Shared (a tick on each), it's
+    my tip on the card on the server: mutual friends stuck on it read it,
+    nobody asking; "This helped" reaches me once. Who knows it keeps its
+    bubble on a card I've no hook on; a crewmate's hook can be hidden."""
+    from due_crew import hooks as H, cards as K, room_model as rm, scrapbook as S
+    _patched_due_crew()
+    H._STORE.update(path=None, data=None, disk=None)
+    check("a hook is one line a card, cleaned as a note is; no words takes it off",
+          H.put("g1", "  LOOP = thick <b>ascending</b> loop\n of Henle ", "2026-11-13") == H.get("g1") and "\n" not in H.get("g1")
+          and "<b>" in H.get("g1") and H.count() == 1 and H.put("g1", "   ", "2026-11-13") == "" and H.get("g1") == "" and H.count() == 0)
+    H._STORE.update(path=None, data=None, disk=None)
+    os.path.exists(H._path()) and os.remove(H._path())
+    H.put("g1", "think loops", "2026-11-13")
+    disk = json.load(open(H._path()))
+    check("kept in hooks.json beside wrap.json; shared by default, and waiting to be sent; none of it an account key",
+          disk["by"]["g1"] == {"t": "think loops", "at": "2026-11-13", "s": True, "up": False} and H.waiting() == [("g1", "think loops")]
+          and H.shared("g1") and "hook" not in open(os.path.join(REPO, "due_crew", "account.py")).read())
+    H.sent("g1", "think loops")
+    check("sent: nothing waits, and the hook knows it's up", H.waiting() == [] and json.load(open(H._path()))["by"]["g1"]["up"] is True)
+    H.put("g1", "think loops", "2026-11-13", share=False)
+    check("made private: it comes down from the server; the next one starts unticked (what I chose last)",
+          H.waiting() == [("g1", "")] and not H.shared("g1") and not H.shared("never"))
+    H.sent("g1", "")
+    H.put("g2", "mine alone", "2026-11-13", share=False)
+    check("a private hook is never sent, and taking one off that never went up sends nothing",
+          H.waiting() == [] and H.put("g2", "", "2026-11-13") == "" and H.waiting() == [])
+    H.put("g1", "think loops", "2026-11-13", share=True)
+    H.put("g1", "think LOOPS", "2026-11-13", share=True)
+    H.sent("g1", "think loops")  # an older send lands after a change: the newer words still wait
+    check("a send that lands after a change leaves the newer words waiting; taken off after going up, it comes down",
+          H.waiting() == [("g1", "think LOOPS")] and (H.sent("g1", "think LOOPS"), H.put("g1", "", "2026-11-13")) and H.waiting() == [("g1", "")])
+    H.sent("g1", "")
+    H.put("g1", "think loops", "2026-11-13")
+    H.sent("g1", "think loops")
+    check("a card has stuck: three lapses or more and its last three answers right, no fewer",
+          H.turned(3, [3, 2, 4]) and not H.turned(2, [3, 3, 3]) and not H.turned(5, [3, 1, 3]) and not H.turned(5, [3, 3])
+          and (H.TURNED_LAPSES, H.TURNED_RIGHT, H.ASKS_A_DAY) == (3, 3, 2))
+    v, asked = H.view("think loops", True, False, False, False)
+    check("stuck on a card with my hook: folded till Show (a one-by-one's answer isn't given away), Edit beside it; a card I have down says nothing",
+          v["text"] == "Your hook: think loops" and v["fold"] == "You left a hook" and "think" not in v["fold"]
+          and v["cmd"] == "hookadd" and v["act"] == "Edit" and not asked
+          and H.view("think loops", False, False, True, True) == (None, False))
+    add, _a = H.view("", True, True, False, False)
+    ask, was = H.view("", False, False, True, True)
+    check("no hook: a second miss offers one beside Edit (never over the card); a card that stuck asks what made it click, once",
+          add["text"] == "Add a hook for next time" and add["bar"] is True and "act" not in add
+          and ask["text"] == "This one stuck. What made it click?" and was and "bar" not in ask
+          and H.view("", True, False, False, False) == (None, False) and H.view("", False, False, True, False) == (None, False))
+    check("what made it click: never twice on a card, twice a day at most",
+          H.may_ask("a", "2026-11-13") and (H.note_asked("a", "2026-11-13"), H.note_asked("b", "2026-11-13")) and not H.may_ask("a", "2026-11-14")
+          and not H.may_ask("c", "2026-11-13") and H.may_ask("c", "2026-11-14"))
+    knows = {"kind": "knows", "text": "Dre knows this", "cmd": "knowsask", "act": "Ask",
+             "peek": {"uids": ["dre"], "head": "I know this one", "act": "Ask Dre"}}
+    check("my hook takes the place of nothing, of who knows it, of a plan's note; an ask or a crewmate's hook stays",
+          H.over(None) and H.over(knows) and H.over({"kind": "remark"}) and not H.over({"kind": "tip"}) and not H.over({"kind": "ask"}))
+    check("hiding a crewmate's hook: theirs on that card alone, for good",
+          not H.hidden("g3", "dre") and (H.hide("g3", "dre"), H.hidden("g3", "dre"))[1] and not H.hidden("g3", "mo") and not H.hidden("g4", "dre"))
+    names = {"dre": ("Dre Ng", ""), "mo": ("Mo", "")}
+    info = {"knows": [], "tips": [{"from": "dre", "text": "theirs", "helped": False}, {"from": "mo", "text": "mo's", "helped": False}]}
+    check("a hidden hook is off the chip and its list; the next one takes its place; all hidden, who knows it is what's left",
+          [t["from"] for t in K.tip_list(info, [], names, hidden=lambda u: u == "dre")] == ["mo"]
+          and K.chip_view(info, [], names, hidden=lambda u: u == "dre")["actcmd"] == "knowshelped:mo"
+          and K.chip_view(info, [{"from": "dre", "name": "Dre", "note": "kept here"}], names, hidden=lambda u: True) is None
+          and "Hide this hook" in open(os.path.join(REPO, "due_crew", "cards.py")).read())
+    lines = H.thanks_lines([("g1", "dre"), ("g1", "mo"), ("g1", "dre"), ("g5", "zed")], {"dre": "Dre", "mo": "Mo"},
+                           lambda g: "Renal" if g == "g1" else "")
+    check("thanks: a line a card, named by its deck part (never its words), the rest counted; someone I can't name is a crewmate",
+          lines == ["Your hook on a Renal card helped Dre and 1 more.", "Your hook on a card helped a crewmate."] and "hook" in S.WHATS, lines)
+
+    # on the card: the chip, and the click
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    now_ms = (col.sched.day_cutoff - 3600) * 1000
+    for i, ease in enumerate((3, 3, 3)):
+        fakes.add_review(conn, now_ms - 86400000 * (i + 2), ease=ease, cid=7)
+    fakes.add_review(conn, now_ms, ease=1, cid=8)
+    mk = lambda cid, guid, lapses: types.SimpleNamespace(id=cid, lapses=lapses, ord=0, note=lambda: types.SimpleNamespace(guid=guid))  # noqa: E731
+    saved = (K.mw.col, K.log_today)
+    K.mw.col, K.log_today = col, (lambda c: "2026-11-15")
+    try:
+        stuck_view = K._with_hook(None, mk(8, "g1", 2), "g1")
+        offer = K._with_hook(None, mk(8, "g8", 2), "g8")
+        turned = K._with_hook(None, mk(7, "g7", 4), "g7")
+        again = K._with_hook(None, mk(7, "g7", 4), "g7")
+        quiet = K._with_hook(None, mk(9, "g9", 0), "g9")
+        over_knows = K._with_hook(dict(knows), mk(8, "g1", 2), "g1")
+        knows_stays = K._with_hook(dict(knows), mk(8, "g8", 2), "g8")
+        tip_stays = K._with_hook({"kind": "tip", "text": "x"}, mk(8, "g1", 2), "g1")
+    finally:
+        K.mw.col, K.log_today = saved
+    check("on the card: my hook when I'm stuck; the offer on a second miss today; what made it click once, then nothing; a fresh card, nothing",
+          stuck_view["kind"] == "hook" and stuck_view["fold"] and offer["kind"] == "hookadd" and turned["kind"] == "hookask"
+          and again is None and quiet is None, (stuck_view, offer, turned, again, quiet))
+    check("who knows it comes up as ever on a card I've no hook on (an offer never takes its place); my hook goes in its place; a crewmate's hook stays",
+          knows_stays["kind"] == "knows" and knows_stays["peek"]["head"] == "I know this one" and over_knows["kind"] == "hook"
+          and tip_stays == {"kind": "tip", "text": "x"}, (knows_stays, over_knows))
+    src = open(os.path.join(REPO, "due_crew", "cards.py")).read()
+    check("its click is one of the card page's keyed commands (it opens a window, nothing more); the quiet offer stays in the bar; "
+          "the More menu has it on any card",
+          "hookadd" in rm.CARD_PAGE_CMDS and 'if view and page is not None and not view.get("bar"):' in src
+          and 'elif cmd == "hookadd":\n        hook_edit()' in src
+          and "Due Crew: add a hook…" in open(os.path.join(REPO, "due_crew", "together.py")).read())
+
+    # the window's answer is kept, and a shared one goes to the server; a crewmate stuck on the card reads it; helped comes back once
+    labels = [_day(-i) for i in range(8)]
+    store = world({"sam": "Sam", "dre": "Dre", "zed": "Zed"}, {"sam": ["dre"], "dre": ["sam"], "zed": []})
+    sam, dre, zed = new_client(store, "sam", "Sam"), new_client(store, "dre", "Dre"), new_client(store, "zed", "Zed")
+    HD = types.ModuleType('due_crew.ui.hook_dialog')  # the suite has no Qt: the window itself is tools/dialogs.py's
+    HD.HookDialog = None
+    had_hd = sys.modules.get('due_crew.ui.hook_dialog')
+    sys.modules['due_crew.ui.hook_dialog'] = HD
+    opened, shown, said, answers = [], [], [], [("renal: think loops", True), ("renal: think loops", False), ("", False)]
+
+    class FakeDialog:
+        def __init__(self, parent, words="", shared=True, signed_in=True):
+            opened.append((words, shared, signed_in))
+            self.result_words, self.result_shared = answers[len(opened) - 1]
+
+        def exec(self):
+            return 1
+    keep = (K._card, HD.HookDialog, K.on_answer, K.mw.col, K.log_today, K.tooltip, getattr(K.mw, "reviewer", None), K.client, K._bg, K.names_by_uid)
+    card = mk(8, "g20", 2)
+    K._card, K.on_answer, K.mw.col, K.log_today = (lambda: card), (lambda c, opened=False: shown.append(opened)), col, (lambda c: "2026-11-15")
+    K.tooltip = lambda text, **k: said.append(text)
+    K.mw.reviewer = types.SimpleNamespace(state="answer")
+    HD.HookDialog, K.client, K._bg = FakeDialog, (lambda: sam), (lambda job, done=None: done(job()) if done else job())
+    K.names_by_uid = lambda: {"dre": ("Dre Ng", "")}
+    try:
+        handled = K.on_message("hookadd", ["duecrew", "hookadd"], from_card_page=True)
+        up = store.tips.get(("g20", "sam"))
+        dre.push(labels, {}, stuck=["g20"])
+        zed.push(labels, {}, stuck=["g20"])
+        read = json.loads(json.dumps((dre.session.get("cards") or {}).get("g20"))), (zed.session.get("cards") or {}).get("g20")
+        dre.tip_helped("g20", "sam")
+        board = sam.fetch_board(labels)
+        K.hook_thanks(board["thanks"])
+        twice = sam.fetch_board(labels)["thanks"]
+        K.on_message("hookadd", ["duecrew", "hookadd"], from_card_page=True)   # now private: it comes down
+        down = ("g20", "sam") not in store.tips and H.get("g20") == "renal: think loops"
+        K.on_message("hookadd", ["duecrew", "hookadd"], from_card_page=True)   # taken off
+        # a send that doesn't get out waits, and goes with a later refresh's flush
+        H.put("g21", "later", "2026-11-15")
+        real = sam.put_hook
+        sam.put_hook = lambda g, w: False
+        K.flush_hooks()
+        waited = H.waiting() == [("g21", "later")] and ("g21", "sam") not in store.tips
+        sam.put_hook = real
+        K.flush_hooks()
+        H.put("g22", "no room", "2026-11-15")
+        sam.put_hook = lambda g, w: None
+        K.flush_hooks()
+        refused = H.waiting() == [] and H.get("g22") == "no room" and not H.shared("g22")
+        sam.put_hook = real
+    finally:
+        K._card, HD.HookDialog, K.on_answer, K.mw.col, K.log_today, K.tooltip = keep[:6]
+        K.mw.reviewer, K.client, K._bg, K.names_by_uid = keep[6:]
+        if had_hd is None:
+            sys.modules.pop('due_crew.ui.hook_dialog', None)
+        else:
+            sys.modules['due_crew.ui.hook_dialog'] = had_hd
+    check("the click: the window (the hook and tick it has, each time), kept, the chip drawn again opened",
+          handled is True and opened == [("", True, True), ("renal: think loops", True, True), ("renal: think loops", False, True)]
+          and shown == [True, True, True] and said[0] == "Hook saved, for you and your crew." and said[-1] == "Hook removed.", (opened, shown, said))
+    check("shared: it's my tip on the card on the server; a mutual friend stuck on it reads it, a stranger doesn't",
+          up and up["text"] == "renal: think loops" and read[0] == {"knows": [], "tips": [{"from": "sam", "text": "renal: think loops", "helped": False}]}
+          and read[1] is None, (up, read))
+    check("This helped reaches me with a refresh, once: said, and a keepsake; made private it comes down, and stays mine here",
+          board["thanks"] == [("g20", "dre")] and twice == [] and "Your hook on a card helped Dre." in said and down and H.get("g20") == ""
+          , (board["thanks"], twice, said))
+    check("a send that didn't get out waits and goes with the next flush", waited and H.waiting() == [] and store.tips[("g21", "sam")]["text"] == "later")
+    check("one the server refuses for good (no room) isn't sent again at every refresh: it stays, mine alone", refused)
+    init = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
+    check("a refresh's commit says the thanks and sends what waits (no request of its own when nothing does)",
+          '_crew_cards.hook_thanks(data.get("thanks"))' in init and "_crew_cards.flush_hooks()" in init)
+    H._STORE.update(path=None, data=None, disk=None)
+    os.path.exists(H._path()) and os.remove(H._path())
+
+
+def test_refill_with_nothing_to_take_back_v3912():
+    """3.9.12 (Sam's report from a day's Study: "FilteredDeckError: No cards
+    matched the provided search"): a Due Crew deck that lent its cards gets
+    the rest back afterwards; when those are suspended now, or another
+    add-on's deck holds them, Anki refuses a filtered deck that finds none.
+    That isn't ours to report: the deck stays empty. Any other error is."""
+    from due_crew import plan_flow as PF
+
+    class FilteredDeckError(Exception):
+        pass
+    term = types.SimpleNamespace(search="", limit=0)
+    deck = types.SimpleNamespace(config=types.SimpleNamespace(search_terms=[term]))
+    calls = []
+
+    def col(err):
+        def update(d):
+            calls.append((term.search, term.limit))
+            if err is not None:
+                raise err
+        return types.SimpleNamespace(sched=types.SimpleNamespace(get_or_create_filtered_deck=lambda deck_id: deck, add_or_update_filtered_deck=update))
+    PF._refill(col(None), 5, [11, 12])
+    quiet = PF._refill(col(FilteredDeckError("No cards matched the provided search.")), 5, [11, 12])
+    loud = None
+    try:
+        PF._refill(col(RuntimeError("something else")), 5, [11])
+    except RuntimeError as e:
+        loud = str(e)
+    PF._refill(col(RuntimeError("never asked")), 5, [])
+    check("refill: its cards back by id; none that Anki will take leaves it empty and says nothing; another error is still raised; no cards, no ask",
+          calls == [("cid:11,12", 2), ("cid:11,12", 2), ("cid:11", 1)] and quiet is None and loud == "something else", (calls, loud))
+
+
+def test_one_control_reset_v3912():
+    """3.9.12, the foundations round, Stage A: every button of ours starts
+    from one reset (board.button_reset), whichever part of the board it's
+    on; a part adds only its own. A page of its own (Magic search, the
+    plan window and its copy on duecrew.com) carries the same text for its
+    scope. Five places restated it before, each a little differently."""
+    from due_crew import board
+    from due_crew.board import base, scrapbook as sb, settings as st, dance as dn
+    core = base.BUTTON_CORE
+    css = board._css({"accent": "green", "theme": "auto"}) if hasattr(board, "_css") else ""
+    check("reset: the board's buttons, the scrapbook's, Settings' and the dance floor's all start from the one core, each with only its own after it",
+          base.button_reset("#x", "color: red;") == "#x { " + core + " color: red; }"
+          and ("#due-crew button { " + core + " color: inherit; font-weight: normal; }") in css
+          and ("#due-crew.dc-sb button { " + core + " vertical-align: middle; font: inherit; cursor: pointer; }") in sb.SCRAP_CSS
+          and ("#due-crew.dc-set button { " + core + " vertical-align: middle; }") in st.SETTINGS_CSS
+          and ("#dc-dance button, #dc-song button, #dc-song input { " + core + " font: inherit; color: inherit; border-radius: 0; }") in dn.DANCE_CSS
+          and "__BUTTONS__" not in sb.SCRAP_CSS + st.SETTINGS_CSS + dn.DANCE_CSS)
+    src = {}
+    for f in os.listdir(os.path.join(REPO, "due_crew", "board")):
+        if f.endswith(".py") and f != "base.py":
+            src[f] = open(os.path.join(REPO, "due_crew", "board", f), encoding="utf-8").read()
+    own = sorted(f for f, text in src.items() if re.search(r"button[^{}\n]*\{[^{}]*appearance: none; margin: 0; box-shadow: none", text))
+    check("reset: no part of the board restates it", own == [], own)
+    pages = {os.path.join("due_crew", "magicpage", "magic.css"): ".dcm", os.path.join("due_crew", "planner", "page", "plan.css"): ".dcp",
+             os.path.join("site", "public", "planpage", "plan.css"): ".dcp"}
+    off = [f for f, scope in pages.items() if base.page_reset(scope) not in open(os.path.join(REPO, f), encoding="utf-8").read()]
+    check("reset: a page of its own carries the same text for its scope (Magic search, the plan window, its copy on the site)", off == [], off)
+
+
+def test_view_shapes_v3912():
+    """3.9.12, the foundations round: what a page is told to draw has a
+    named shape (views.py), checked where it crosses from Python to the
+    page. The review chip is the first: every view its makers build fits,
+    a slip is counted (`view:chip`) and drawn anyway."""
+    from due_crew import views as V, cards as K, hooks as H
+    names = {"dre": ("Dre Ng", ""), "mo": ("Mo", "")}
+    made = [K.chip_view({"knows": ["dre", "mo"], "tips": []}, [], names),
+            K.chip_view({"knows": ["dre"], "tips": [{"from": "dre", "text": "loops", "helped": False}]}, [], names),
+            K.chip_view({"knows": ["dre"]}, [], names, mine=True),
+            K.chip_view(None, [], names, asks=[("dre", 1, "why axillary?")]),
+            K.chip_view(None, [], names, asks=[("dre", 1)]),
+            H.view("think loops", True, False, False, False)[0], H.view("", True, True, False, False)[0], H.view("", False, False, True, True)[0],
+            None]
+    bad = [(v.get("kind"), V.chip_wrong(v)) for v in made if V.chip_wrong(v)]
+    check("shapes: every view the chip's makers build fits the chip's shape (who knows it, a hook, an ask, my hook, its offers)",
+          bad == [] and all(v is None or v["kind"] in V.CHIP_KINDS for v in made), bad)
+    check("shapes: a key the page doesn't know, a wrong type, an unknown kind and a peek's slip are each said",
+          V.chip_wrong({"kind": "knows", "text": "x", "txet": "y"}) == ["txet: not in the shape"]
+          and V.chip_wrong({"kind": "knows", "more": "2"}) == ["more: str"] and V.chip_wrong({"kind": "knows", "more": True}) == ["more: bool"]
+          and V.chip_wrong({"kind": "nope"}) == ["kind: 'nope'"] and V.chip_wrong({"kind": "tip", "peek": {"uids": "dre"}}) == ["peek.uids: str"]
+          and V.chip_wrong(None) == [] and V.chip_wrong("x") == ["not a dict"])
+    js = open(os.path.join(REPO, "due_crew", "cards.py"), encoding="utf-8").read()
+    read = set(re.findall(r"\bD\.([a-zA-Z_]+)", js))
+    check("shapes: the chip's script reads only keys in its shape, and the glue counts a slip without dropping the view",
+          read <= set(V.CHIP) and read >= {"kind", "text", "fold", "cmd", "act"} and 'errs.count("view:chip")' in js, sorted(read - set(V.CHIP)))
+
+
+def test_the_sites_constants_are_made_v3912():
+    """3.9.12, the foundations round: constants the site restated by hand
+    (what each party game needs, a plan's limits, a day's saves) are
+    written from the add-on's by tools/gen_twins.py; running it again
+    changes nothing."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("gen_twins", os.path.join(REPO, "tools", "gen_twins.py"))
+    gen = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gen)
+    check("the site's constants are their Python's (tools/gen_twins.py changes nothing)", gen.stale() == [], gen.stale())
+    check("each made line says where it's from", all("made by tools/gen_twins.py from" in want for _f, _n, want in gen.lines()) and len(gen.lines()) == 3)
+
+
+def test_the_fake_has_every_route_v3912():
+    """3.9.12, the foundations round: the suite's server is the Worker
+    restated, so a route the Worker gains has to be restated too, or the
+    client's use of it is tested against nothing. Every route in
+    worker/src/index.ts is asked of the fake; the ones it doesn't know
+    are named here, and are only the site's."""
+    ts = open(os.path.join(REPO, "worker", "src", "index.ts"), encoding="utf-8").read()
+    store = world({"sam": "Sam"}, {})
+    token = store.session_for("sam")
+
+    def fill(g):
+        t = g.group(0)
+        return ("ABCD" if "A-Za-z]{4}" in t else "ABC123" if "A-Za-z0-9" in t else "7" if ("[0-9]{1," in t or "d{" in t)
+                else "01ARZ3NDEKTSV4RRFFQ69G5FAV" if "{26}" in t else "x1")
+    routes = re.findall(r'\b(?:authed|open)\("(GET|POST|PUT|PATCH|DELETE)", r\([`"]([^`"]+)[`"]\)', ts)
+    unknown = []
+    for m, raw in routes:
+        path = re.sub(r"\([^)]*\)", fill, raw.replace("${ID}", "x1"))
+        r = store.handle(m, "https://api.test" + path, {"Authorization": "Bearer " + token}, {} if m != "GET" else None)
+        if r.status_code == 404 and (r.json() or {}).get("error") == "not_found":
+            unknown.append((m, raw))
+    SITE_ONLY = [("POST", "/auth/link/redeem"), ("POST", "/links/email")]  # the site's sign-in link and the landing page's "email it"
+    check("the fake answers every route the Worker has but the site's own two; a new route is restated there or named here",
+          len(routes) > 100 and sorted(unknown) == sorted(SITE_ONLY), (len(routes), unknown))
+
+
+def test_copy_rules_v3912():
+    """3.9.12, the foundations round: the words' rules, checked instead of
+    remembered. Buttons, headings and menu items are sentence case; what a
+    crewmate leaves on a card is a hook wherever it's read; nothing a
+    person reads says rank, rival, compete or leaderboard."""
+    files = {}
+    for root, _dirs, names in os.walk(os.path.join(REPO, "due_crew")):
+        for f in names:
+            if f.endswith(".py"):
+                files[os.path.relpath(os.path.join(root, f), os.path.join(REPO, "due_crew"))] = open(os.path.join(root, f), encoding="utf-8").read()
+    # names that are names: the product, its parts, a person's own things
+    names_ok = ("Due Crew", "Pip Party", "Your plans", "Magic search", "Big Step", "Your AI", "My plan", "Anki", "Apple Music", "Study Session", "Step 1", "Step 2")
+    title = []
+    for f, text in files.items():
+        for m in re.finditer(r'(?:QPushButton|addButton|setWindowTitle|addAction|heading|QCheckBox|QRadioButton)\(\s*f?"([^"]{3,60})"', text):
+            words = m.group(1)
+            bare = words
+            for n in names_ok:
+                bare = bare.replace(n, "")
+            if re.search(r"[a-z] [A-Z][a-z]", bare) and ": " not in bare and " \u00b7 " not in bare and " · " not in bare:
+                title.append((f, words))
+    check("copy: buttons, headings and menu items are sentence case (a name keeps its capitals)", title == [], title[:8])
+    shown = [("board", "crew.py"), ("board", "insights.py"), ("board", "scrapbook.py"), ("together.py",), ("leech_flow.py",), ("scrapbook.py",),
+             ("cards.py",), ("ui", "hook_dialog.py")]
+    tips = []
+    for parts in shown:
+        text = files[os.path.join(*parts)]
+        text = re.sub(r'''"""[\s\S]*?"""''', '""', text)       # a docstring or a comment may still say tip: the code does
+        text = re.sub(r"(?m)(^\s*#.*$|\s{2}# .*$|^\s*//.*$)", "", text)
+        for m in re.finditer(r"""(?:"|>|')([^"'<>\n]*?(?:\ba tip\b|s tip\b|\btips that\b|\bSend a tip\b|\bTips from\b|>Tip<)[^"'<>\n]*)""", text):
+            src = text.split("\n")[text[:m.start()].count("\n")]
+            before = src[:src.find(m.group(1))] if m.group(1) in src else src
+            if not ("#" in before or "//" in before or src.strip().startswith(("#", "//", "*"))):  # a comment may still say tip: the code does
+                tips.append((os.path.join(*parts), m.group(1)[:60]))
+    check("copy: what a crewmate leaves on a card is a hook wherever a person reads it", tips == [], tips[:6])
+    banned = []
+    pages = dict(files)
+    for f in ("index.html", "classes.html", "privacy.html", "app.js", "table.js"):
+        pages[os.path.join("site", f)] = open(os.path.join(REPO, "site", "public", f), encoding="utf-8").read()
+    for f, text in pages.items():
+        for m in re.finditer(r"""["'>][^"'<>\n]*\b(compete|competition|rivals?|leaderboard|ranking)\b[^"'<>\n]*""", text, re.I):
+            line = text.split("\n")[text[:m.start()].count("\n")].strip()
+            if not (line.startswith("#") or line.startswith("//") or line.startswith("*") or '"""' in line or "  # " in line):
+                banned.append((f, m.group(0)[:70]))
+    check("copy: friendship, never competition: nothing a person reads says rank, rival, compete or leaderboard", banned == [], banned[:6])
+
+
+def test_the_site_wears_the_boards_tokens_v3912():
+    """3.9.12, the foundations round: the colours a person sees in Anki and
+    on duecrew.com are one set. The add-on's pages all read board.palette;
+    the site's stylesheets restate it by hand (its paper and ink are its
+    own), so the tokens they share are checked against it here: the
+    accent, its ink, your row's fill, the line, the well and the amber, in
+    light and in dark."""
+    from due_crew import board
+    light, dark = board.palette("light", "green"), board.palette("dark", "green")
+    want = {"accent": "accent", "accent-ink": "accent-ink", "you": "you-bg", "line": "line", "well": "well", "warn": "hours"}
+
+    def tokens(text):
+        """[{name: value}] for each block of custom properties, in order (the light block, then the dark)."""
+        out = []
+        for block in re.findall(r"\{[^{}]*--[a-z-]+:\s*#[^{}]*\}", text):
+            out.append(dict(re.findall(r"--([a-z0-9-]+):\s*(#[0-9a-fA-F]{3,8})", block)))
+        return out
+
+    wrong = []
+    for name, names in (("app.css", want), ("index.html", {k: v for k, v in want.items() if k in ("accent", "accent-ink", "line", "well")}),
+                        ("table.css", {"acc": "accent", "line": "line", "w-well": "well", "w-acc-ink": "accent-ink", "w-you": "you-bg", "w-acc": "accent"})):
+        blocks = tokens(open(os.path.join(REPO, "site", "public", name), encoding="utf-8").read())
+        firsts = [b for b in blocks if any(k in b for k in names)][:2]
+        if len(firsts) < 2:
+            wrong.append((name, "no light and dark block"))
+            continue
+        for b, pal, theme in ((firsts[0], light, "light"), (firsts[1], dark, "dark")):
+            for site_name, board_name in names.items():
+                if site_name in b and b[site_name].lower() != pal[board_name].lower():
+                    wrong.append((name, theme, site_name, b[site_name], pal[board_name]))
+    check("tokens: the site's accent, its ink, your row, the line, the well and the amber are the board's, light and dark", wrong == [], wrong)
+    pages = {"magic_html.py": "board.palette(", os.path.join("planner", "webpage.py"): "palette(", os.path.join("ui", "__init__.py"): "palette("}
+    check("tokens: every page the add-on draws reads the board's palette (Magic search, the plan window, the Qt windows)",
+          all(want_ in open(os.path.join(REPO, "due_crew", f), encoding="utf-8").read() for f, want_ in pages.items()))
+
+
+def test_one_way_to_keep_a_file_v3912():
+    """3.9.12, the foundations round: every file Due Crew keeps is written by
+    store.py (whole to a .tmp, then swapped in; a failed write takes its
+    .tmp with it and says so), where ten modules each wrote their own."""
+    from due_crew import store
+    d = tempfile.mkdtemp()
+    p = os.path.join(d, "x.json")
+    check("store: written whole and read back; a file that isn't a JSON object, or isn't there, reads as the default",
+          store.write_json(p, {"a": 1}) and store.read_json(p) == ({"a": 1}, '{"a": 1}') and not os.path.exists(p + ".tmp")
+          and store.write_text(p, "[1, 2]") and store.read_json(p, {}) == ({}, None) and store.read_json(os.path.join(d, "none.json")) == (None, None))
+    check("store: a write that can't be made says so, leaves no .tmp and leaves the file as it was",
+          store.write_json(p, {"a": 2}) and not store.write_json(os.path.join(d, "no", "such", "dir.json"), {"a": 3})
+          and store.read_json(p)[0] == {"a": 2} and os.listdir(d) == ["x.json"])
+    q = os.path.join(d, "mine.json")
+    check("store: private is mine alone (a session token's file)", store.write_json(q, {"t": "x"}, private=True)
+          and (os.name == "nt" or (os.stat(q).st_mode & 0o777) == 0o600))
+    cache = {}
+    data = store.load(cache, p)
+    data["b"] = 1
+    writes = []
+    real = store.write_text
+    store.write_text = lambda path, text, private=False: (writes.append(path), real(path, text, private))[1]
+    try:
+        first, again = store.save(cache), store.save(cache)
+        other = store.load(cache, q, ok=lambda d: "by" in d, empty=lambda: {"by": {}})
+    finally:
+        store.write_text = real
+    check("store: kept in memory till the path changes; saved only when it says something the file doesn't; a wrong shape is the empty one",
+          first and again and writes == [p] and store.read_json(p)[0] == {"a": 2, "b": 1} and other == {"by": {}} and cache["path"] == q)
+    src = {}
+    for root, _dirs, files in os.walk(os.path.join(REPO, "due_crew")):
+        for f in files:
+            if f.endswith(".py"):
+                src[os.path.relpath(os.path.join(root, f), REPO)] = open(os.path.join(root, f), encoding="utf-8").read()
+    own = sorted(k for k, v in src.items() if '+ ".tmp"' in v and not k.endswith("store.py"))
+    check("store: nothing else writes a .tmp of its own", own == [], own)
+
+
 def test_scrapbook_v3910():
     """3.9.10, the scrapbook (Sam: "a combo wrapped and home for polaroids /
     notes, etc. that are ephemeral at the moment or deleted permanently
@@ -15599,7 +16038,7 @@ def test_scrapbook_v3910():
     from due_crew import scrapbook as S, scrap_flow as SF, closet_flow as cf, fridge as FR
     from aqt.deckbrowser import DeckBrowser
     _patched_due_crew()
-    SF._BOOK.update(profile=None, data=None, disk=None)
+    SF._BOOK.update(path=None, data=None, disk=None)
     draw = {"k": "draw", "s": [[0, 10, 10, 50, 50]]}
     # pure
     pz = {"k": "pz", "from": "dre", "name": "Dre", "at": "2026-11-03T10:00:00Z", "a": "blue", "n": "go <b>", "d": draw}
@@ -15734,7 +16173,7 @@ def test_scrapbook_v3910():
         dc.client = keep[7]
         SF.client = keep[7]
         SH.picture, sheets.confirm = saved_pic, saved_confirm
-        SF._BOOK.update(profile=None, data=None, disk=None)
+        SF._BOOK.update(path=None, data=None, disk=None)
     src = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
     check("its ways in: the foot's Scrapbook, Tools › Due Crew › Scrapbook… (Your year… is gone), the December line",
           '("Scrapbook…", lambda: open_scrapbook())' in src and "Your year…" not in src)
@@ -17063,8 +17502,9 @@ def test_efficiency_decks_v391():
     saved = (wrap.os, dc.client, together.client, dc._morning, dc._awaiting_phone, due_flow.after_refresh, due_flow._reviews,
              CF.check, dc.tooltip, dc._rerender, dc._swap, rooms.refresh_widgets, dc.account.saved_elsewhere, dict(_state))
     try:
-        wrap.os = types.SimpleNamespace(path=os.path, remove=os.remove,
-                                        replace=lambda a, b: (writes.append(b), os.replace(a, b)))
+        from due_crew import store  # 3.9.12: every file is written by store.py
+        store.os = types.SimpleNamespace(path=os.path, remove=os.remove, open=os.open, fdopen=os.fdopen, chmod=os.chmod,
+                                         replace=lambda a, b: (writes.append(b), os.replace(a, b)))
         dc.client = together.client = lambda: cl
         dc._morning = lambda *a, **k: None
         dc._awaiting_phone = lambda: False
@@ -17092,6 +17532,7 @@ def test_efficiency_decks_v391():
     finally:
         (wrap.os, dc.client, together.client, dc._morning, dc._awaiting_phone, due_flow.after_refresh, due_flow._reviews,
          CF.check, dc.tooltip, dc._rerender, dc._swap, rooms.refresh_widgets, dc.account.saved_elsewhere) = saved[:13]
+        store.os = os
         _state.clear()
         _state.update(saved[13])
         wrap._wrap["profile"] = None
@@ -17309,7 +17750,7 @@ def test_sheets_v391():
         m.web = types.SimpleNamespace(eval=sent.append)
         m.state = "deckBrowser"
         A.on_decks_render()
-        sheets.confirm("Sign out?", "Sure?", "Sign Out", lambda: got.append("yes"), no=lambda: nos.append("no"))
+        sheets.confirm("Sign out?", "Sure?", "Sign out", lambda: got.append("yes"), no=lambda: nos.append("no"))
         sid = re.search(r'"id": "([0-9a-f]+)"', sent[-1]).group(1)
         answer = lambda i, p, key=board.BOARD_KEY: dc._on_js(False, f"duecrew:sheet:{i}:{quote(json.dumps(p))}|{key}", DeckBrowser())
         answer("0" * 16, {"ok": True})
@@ -17318,7 +17759,7 @@ def test_sheets_v391():
         answer(sid, {"ok": True})
         answer(sid, {"ok": True})
         check("sheets: on the board a sheet, not Qt; only its own id with the page's key answers it, and once",
-              len(sent) == 1 and "dc-sheet" in sent[0] and '"yes": "Sign Out"' in sent[0] and wrong == [] and got == ["yes"], (wrong, got))
+              len(sent) == 1 and "dc-sheet" in sent[0] and '"yes": "Sign out"' in sent[0] and wrong == [] and got == ["yes"], (wrong, got))
         sheets.confirm("Leave?", "", "Leave", lambda: got.append("left"), no=lambda: nos.append("no"))
         sid = re.search(r'"id": "([0-9a-f]+)"', sent[-1]).group(1)
         answer(sid, {"ok": False})
@@ -17341,7 +17782,7 @@ def test_sheets_v391():
         answer(sid, {"ok": True, "text": "123456789"})
         check("sheets: one at a time (a new one drops the one before); a pick out of the list does nothing; a line keeps to its ceiling",
               got == ["yes", 1, "12345"], got)
-        sheets.confirm("Sign out?", "Sure?", "Sign Out", lambda: got.append("late"))
+        sheets.confirm("Sign out?", "Sure?", "Sign out", lambda: got.append("late"))
         sid = re.search(r'"id": "([0-9a-f]+)"', sent[-1]).group(1)
         n = len(sent)
         sheets.redraw()
@@ -17357,11 +17798,11 @@ def test_sheets_v391():
         real = ui.confirm
         ui.confirm = lambda parent, title, text, yes: seen.append((title, text, yes)) or True
         try:
-            sheets.confirm("Sign out?", "Sure?", "Sign Out", lambda: got.append("qt"))
+            sheets.confirm("Sign out?", "Sure?", "Sign out", lambda: got.append("qt"))
         finally:
             ui.confirm = real
         check("sheets: off the board, Qt's question, the same words; a yes reaches then",
-              len(sent) == n and seen == [("Sign out?", "Sure?", "Sign Out")] and got[-1] == "qt", (seen, got))
+              len(sent) == n and seen == [("Sign out?", "Sure?", "Sign out")] and got[-1] == "qt", (seen, got))
     finally:
         m.state, m.web, A._decks[0], A.generation, dc._state["entries"] = saved
         sheets._open.clear()
@@ -17373,7 +17814,7 @@ def test_sheets_v391():
                                        ("__init__.py", 'sheets.confirm("Sign out?"'), ("__init__.py", 'sheets.confirm("Delete account?"'),
                                        ("due_flow.py", 'sheets.ask_text("Edit to-do"'), ("team_flow.py", 'sheets.confirm("Join this plan'),
                                        ("team_flow.py", 'sheets.ask_text("Reply"'), ("team_flow.py", 'sheets.ask_text("Ask the squad"'),
-                                       ("together.py", 'sheets.ask_text("Good-luck card"'), ("together.py", 'sheets.ask_text("Send a tip"'),
+                                       ("together.py", 'sheets.ask_text("Good-luck card"'), ("together.py", 'sheets.ask_text("Send a hook"'),
                                        ("plan_flow.py", "sheets.confirm(title, text, yes"), ("plan_flow.py", 'sheets.confirm("Reset to default?"'),
                                        ("plan_flow.py", 'sheets.ask_item("Change deck"'), ("plan_flow.py", "sheets.confirm_check(title, text, \"Stop\""),
                                        ("squads.py", 'sheets.confirm("Block?"'), ("squads.py", 'sheets.confirm("Remove?"')))
@@ -18036,7 +18477,7 @@ def test_leeches_392():
               and "Bring all" not in html and "insleech:10:back" not in html and "duecrew:insleech:10:browse:0" in html
               and "&lt;i&gt;Spanish" in html and "<i>Spanish" not in html, html[:1500])
         check("board: one button a card: the tip, else Ask who has it down, else Bring back; a near card's is a tip or nothing",
-              "duecrew:insleech:10:tip:102" in html and "Dre&rsquo;s tip" in html and "Ask Maya" in html
+              "duecrew:insleech:10:tip:102" in html and "Dre&rsquo;s hook" in html and "Ask Maya" in html
               and "slow: 44 s a try" in html and "back in 3 days" in html, html)
         check("board: behind ⋯: Learn it fresh, Edit, Leave it out (and Bring back where the button's a tip)",
               not any(f"insleech:10:{a}:" in html for a in ("fresh", "edit", "out", "back")) and "hidden>" not in html
@@ -18046,8 +18487,12 @@ def test_leeches_392():
         dc._on_js(False, as_board("duecrew:insleech:10:tip:102"), DeckBrowser())
         q = lambda cid: conn.execute("SELECT queue, lapses, type FROM cards WHERE id = ?", (cid,)).fetchone()  # noqa: E731
         tags = lambda nid: conn.execute("SELECT tags FROM notes WHERE id = ?", (nid,)).fetchone()[0]  # noqa: E731
-        check("glue: the tip in a sheet, Bring it back from there: unsuspended, schedule kept, the leech tag off, one undo step",
-              sheets_asked[-1] == ("Dre's tip", "Dre: fiesta takes ser: it's an event", "Bring it back") and q(102) == (2, 8, 2)
+        was = q(102)
+        check("glue: the hook in a sheet, its words alone (3.9.12: Insights is data only, nothing to bring back from here); the card as it was",
+              sheets_asked[-1] == ("Dre's hook", "Dre: fiesta takes ser: it's an event", "OK") and q(102) == was and was[0] == -1, (sheets_asked[-1], was))
+        LF.bring_back(10, [102])
+        check("glue: bring back: unsuspended, schedule kept, the leech tag off, one undo step",
+              q(102) == (2, 8, 2)
               and "leech" not in tags(102) and col.undo_steps[-1] == ("Due Crew: bring back", [102]) and said[-1] == "Back in your reviews.",
               (sheets_asked, q(102), col.undo_steps[-1:]))
         dc._on_js(False, as_board("duecrew:insleech:10:ask:103"), DeckBrowser())
@@ -21840,12 +22285,25 @@ def test_insights_a_part_at_a_time_v399():
 
 
 def main():
+    """python3 tests/test_due_crew.py                 everything (what CI runs)
+    python3 tests/test_due_crew.py hook magic      only the tests with one of these words in their name
+    python3 tests/test_due_crew.py -q              only what failed is said
+    python3 tests/test_due_crew.py --list          the tests' names
+    3.9.12: one file of 22,000 lines runs by area, so a change is checked in a second or two before
+    the whole suite is. A run by area leaves out the last check (every board click), which needs them all."""
+    args = [a for a in sys.argv[1:] if not a.startswith("-")]
+    QUIET[0] = "-q" in sys.argv[1:]
     names = [n for n in list(globals()) if n.startswith("test_")]
-    for n in names:
+    if "--list" in sys.argv[1:]:
+        print("\n".join(names))
+        return
+    picked = [n for n in names if not args or any(a.lower() in n.lower() for a in args)]
+    for n in picked:
         globals()[n]()
-    check_every_board_click_is_taken()  # last: every control the suite drew on the board, pressed down its route
+    if not args:
+        check_every_board_click_is_taken()  # last: every control the suite drew on the board, pressed down its route
     bad = [c for c in CHECKS if not c[1]]
-    print(f"\n{len(CHECKS) - len(bad)}/{len(CHECKS)} checks passed")
+    print(f"\n{len(CHECKS) - len(bad)}/{len(CHECKS)} checks passed" + (f" ({len(picked)} of {len(names)} tests)" if args else ""))
     sys.exit(1 if bad else 0)
 
 

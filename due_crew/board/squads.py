@@ -121,10 +121,13 @@ SQUAD_FIELDS = {"reviews": "reviews", "time": "time_ms",
 # Week view is the calendar week, and the two must not share a word.
 
 
-def _squad_add():
-    """3.9.10: the way into another squad, on the Squads tab alone, under the one shown."""
+def _squad_add(acts=""):
+    """3.9.10: the way into another squad, on the Squads tab alone, under the one shown.
+    3.9.12: the shown squad's own actions (Copy invite, Lock, Leave) sit on the same line,
+    at its right: one row under the table where there were two."""
     return (f'<div class="dc-add"><a href="#" title="With a squad&rsquo;s code, or start one" '
-            f'onclick="{_pycmd("squadadd")}">+ Create / join a squad</a></div>')
+            f'onclick="{_pycmd("squadadd")}">+ Create / join a squad</a>'
+            + (f'<span class="acts">{acts}</span>' if acts else "") + '</div>')
 
 
 def _switcher(view):
@@ -309,8 +312,7 @@ def _squads_html(view, cfg, crew_by=None):
         acts.append(f'<a href="#" onclick="{_pycmd("squadlock")}">'
                     f'{"Open" if view.get("open") is False else "Lock"}</a>')
     acts.append(f'<a href="#" onclick="{_pycmd("squadleave")}">Leave</a>')
-    foot = ('<div class="dc-line">'
-            + " &middot; ".join(acts) + "</div>") + _squad_add()
+    foot = _squad_add(" &middot; ".join(acts))
     bingo = (f"<style>{BINGO_CSS}</style>" + bingo_card_html(view["bingo"])) if view.get("bingo") else ""  # 3.6
     if not body:
         return (sw + bingo + '<div class="dc-line">No one&rsquo;s '

@@ -355,7 +355,7 @@ async function plansList() {
     h("b", {}, p.name), h("small", { class: "fol" }, `${p.followers} following`),
     h("small", {}, [writes(p) ? (p.role === "editor" ? `with ${p.ownerName}` : null) : `${p.ownerName}'s plan`,
       p.doc.deck !== p.name ? p.doc.deck : null, planDays(p.doc), span(p)].filter(Boolean).join(" · ")));
-  const how = h("p", { class: "muted small", hidden: true }, "Pick the deck in Anki: Tools › Due Crew › Make a plan from a deck. It opens here.");
+  const how = h("p", { class: "muted small", hidden: true }, "Start it in Anki: Tools › Due Crew › Plans › New plan… It shows up here.");
   page(
     phead("Plans", "A deck's cards in sets, on days; your Anki opens each set on its day.",
       h("button", { onclick: () => { how.hidden = !how.hidden; } }, "New plan")), how,
@@ -486,7 +486,7 @@ async function newPlan() {
     return;
   }
   const deck = new URLSearchParams(location.search).get("deck") || "";
-  if (!deck) { page(h("h1", {}, "A new plan"), h("p", { class: "muted" }, "Start from Anki: Tools › Due Crew › Make a plan from a deck.")); return; }
+  if (!deck) { page(h("h1", {}, "A new plan"), h("p", { class: "muted" }, "Start it in Anki: Tools › Due Crew › Plans › New plan…")); return; }
   // named for the deck's own last part ("Step 1::Cardio" makes "Cardio"), as long as a name can be
   const name = (deck.split("::").pop().trim() || deck.trim()).slice(0, 60).trim() || "My plan";
   const status = h("p", { class: "status", role: "status" });

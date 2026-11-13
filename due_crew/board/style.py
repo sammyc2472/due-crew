@@ -2,7 +2,7 @@
 
 A part of the board (due_crew/board/, 3.9.8): see its __init__."""
 
-from .base import CARD_SHADOW, CARD_SHADOW_HOVER, ROW_CAP, _theme_css
+from .base import CARD_SHADOW, CARD_SHADOW_HOVER, ROW_CAP, _theme_css, button_reset
 
 
 def _css(cfg):
@@ -17,9 +17,7 @@ def _css(cfg):
        have always been centred by it; a new part says text-align: left
        itself) and gives every button a margin, a shadow and rounded
        corners, which the board's buttons start without */
-    #due-crew button {{ -webkit-appearance: none; appearance: none; margin: 0; box-shadow: none;
-      min-width: 0; min-height: 0; text-shadow: none; background-image: none;
-      -webkit-backdrop-filter: none; backdrop-filter: none; letter-spacing: normal; color: inherit; font-weight: normal; }}
+    {button_reset("#due-crew button", "color: inherit; font-weight: normal;")}
     /* 3.9.6: its boxes and pickers are the board's to draw: macOS draws any control whose
        appearance isn't none in its own look (Liquid Glass) over the board's. Anki's
        `button {{ outline: none !important }}` takes every focus ring: the board's come back */
@@ -279,7 +277,10 @@ def _css(cfg):
     #due-crew .dgh {{ text-align: left; padding: 0 8px; }}
     /* 3.9.10: what a tab alone can add (a squad, a shared deck), on that tab under what it adds to, not in the foot
        every tab has (Sam: "specific to those pages and not global functions, otherwise i worry they'd be missed") */
-    #due-crew .dc-add {{ text-align: left; padding: 6px 8px 0; }}
+    #due-crew .dc-add {{ text-align: left; padding: 6px 8px 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }}
+    #due-crew .dc-add .acts {{ margin-left: auto; font-size: 12px; color: var(--dc-faded); }}
+    #due-crew .dc-add .acts a {{ display: inline; border: 0; padding: 0; font-size: 12px; line-height: inherit; border-radius: 0; }}
+    #due-crew .dc-add .acts a:hover, #due-crew .dc-add .acts a:focus-visible {{ background: none; color: var(--dc-accent); text-decoration: underline; }}
     #due-crew .dc-add a {{ display: inline-block; color: var(--dc-accent); font-size: 10.5px; font-weight: 700; line-height: 16px;
       text-decoration: none; border: 1px solid var(--dc-accent); border-radius: 99px; padding: 0 8px; }}
     #due-crew .dc-add a:hover, #due-crew .dc-add a:focus-visible {{ background: var(--dc-accent); color: var(--dc-accent-ink); outline: none; }}

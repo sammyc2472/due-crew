@@ -4,6 +4,7 @@
 var dcMagic = (function () {
   'use strict';
   var V = null, root = null, els = {}, typed = null, sparkled = false, seen = {}, preview = false, making = false, madeFor = null;
+  var landed = null, meant = null, dropped = {};  // 3.9.11: the answer that last landed, the "did you mean" last shown, each day's share
   var REDUCE = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   function send(cmd, args) {
@@ -55,6 +56,9 @@ var dcMagic = (function () {
     els.q = h('textarea', { cls: 'q', rows: '1', spellcheck: 'false', 'aria-label': 'What to find',
       placeholder: 'A topic, a filter, QIDs, a quiz on Friday, plan lines…' });
     box.appendChild(els.q);
+    els.live = h('span', { cls: 'live', 'aria-hidden': 'true' });  // 3.9.11: the answer in the box as it's typed (what it found says it in full)
+    els.live.hidden = true;
+    box.appendChild(els.live);
     els.box = box;
     ['rows', 'topics', 'filters', 'found', 'lines', 'tops', 'tiles', 'pod', 'said', 'recent'].forEach(function (k) { els[k] = h('div', { cls: k }); });
     els.intro = h('div', { cls: 'intro', role: 'dialog', 'aria-label': 'Magic search' });
@@ -79,7 +83,58 @@ var dcMagic = (function () {
     });
   }
 
-  function fit() { els.q.style.height = 'auto'; els.q.style.height = Math.min(160, els.q.scrollHeight) + 'px'; }
+  function fit() { els.q.style.height = 'auto'; els.q.style.height = Math.min(160, els.q.scrollHeight) + 'px'; liveFit(); }
+
+  // the answer in the box: only beside one line of words, and only where there's room for both
+  function liveFit() {
+    if (!els.live) return;
+    var F = V && V.found;
+    els.q.style.paddingRight = '';
+    var one = els.q.value.indexOf('\n') < 0 && els.q.scrollHeight <= 52;
+    els.live.hidden = !(F && one && root.clientWidth >= 430);
+    if (els.live.hidden) return;
+    var w = els.live.offsetWidth + 18;
+    els.q.style.paddingRight = w + 'px';
+    if (els.q.scrollHeight > 52) { els.q.style.paddingRight = ''; els.live.hidden = true; }  // the words wrapped under it: the words win
+  }
+
+  // a number counting up to itself (once, when an answer lands)
+  function roll(el, to, say) {
+    if (REDUCE || !to) { el.textContent = say(to); return; }
+    var t0 = null, dur = Math.min(600, 240 + to * 2);
+    el.textContent = say(0);
+    function step(t) {
+      if (t0 === null) t0 = t;
+      var k = Math.min(1, (t - t0) / dur);
+      el.textContent = say(Math.round(to * (1 - Math.pow(1 - k, 3))));
+      if (k < 1 && el.isConnected) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  // sparkles off anything in the window, drawn on the window so a redraw doesn't take them
+  function burst(el, k) {
+    if (REDUCE || !el || !el.isConnected) return;
+    var a = el.getBoundingClientRect(), b = root.getBoundingClientRect();
+    var x = a.left - b.left + a.width / 2, y = a.top - b.top + a.height / 2;
+    for (var i = 0; i < k; i++) {
+      var ang = (-150 + i * (300 / k)) * Math.PI / 180, d = 20 + (i % 3) * 9 + (k > 9 ? 8 : 0);
+      var s = h('span', { cls: 'spk' + (i % 3 === 1 ? ' g' : '') });
+      s.style.left = x + 'px'; s.style.top = y + 'px';
+      s.style.setProperty('--sz', (5 + (i % 3) * 2) + 'px');
+      s.style.setProperty('--dx', Math.round(Math.cos(ang) * d) + 'px');
+      s.style.setProperty('--dy', Math.round(Math.sin(ang) * d) + 'px');
+      s.style.animationDelay = (i * 16) + 'ms';
+      root.appendChild(s);
+      setTimeout(function (x) { return function () { if (x.parentNode) x.parentNode.removeChild(x); }; }(s), 1200);
+    }
+  }
+  function twirl() {
+    var mag = els.box.querySelector('.mag');
+    if (!mag || REDUCE) return;
+    mag.classList.remove('twirl'); void mag.getBoundingClientRect(); mag.classList.add('twirl');
+  }
+  function setText(t) { els.q.value = t; fit(); send('type', { text: t }); setTimeout(function () { els.q.focus(); }, 0); }
 
   // Sam: "should change size according to content": the window is as tall as what's in it
   // (the how-to's card when it's up), the glue holding it to the screen (ui/magic_window.py)
@@ -234,9 +289,9 @@ var dcMagic = (function () {
     clear(els.recent);
     if ((V.recent || []).length) {
       els.recent.appendChild(h('span', { cls: 'lab', text: 'Recent' }));
-      V.recent.forEach(function (t) { els.recent.appendChild(btn('chip', t, 'type', { text: t }, { onclick: null })); });
-      Array.prototype.forEach.call(els.recent.querySelectorAll('button'), function (b) {
-        b.onclick = function () { els.q.value = b.textContent; fit(); send('type', { text: b.textContent }); };
+      V.recent.forEach(function (t) {
+        // its words are its own (never what's on the button: that's cut to fit, magic.css)
+        els.recent.appendChild(btn('chip', t, 'type', { text: t }, { title: t, onclick: function () { els.q.value = t; fit(); send('type', { text: t }); } }));
       });
     }
     els.recent.hidden = !(V.recent || []).length;
@@ -255,17 +310,57 @@ var dcMagic = (function () {
       els.lines.appendChild(h('div', { cls: 'bank' }, [h('span', { text: 'Question bank' }), bank]));
     }
     drawQTopics(Q);
+    els.found.className = 'found';
+    clear(els.live);
     if (!F) {
+      landed = '';
+      liveFit();
+      var N = V.none, means = (N && N.mean) || [], waits = (N && N.waiting) || [];
+      if (means.length || waits.length) {
+        // 3.9.11: nothing found is a way on: the tag it nearly was, and what's waiting today (the line above says what wasn't found)
+        els.found.hidden = false;
+        els.found.className = 'found none';
+        var fresh = meant !== V.text;
+        meant = V.text;
+        if (means.length) {
+          els.found.appendChild(h('div', { cls: 'dym' + (fresh && !REDUCE ? ' wob' : '') }, [h('span', { cls: 'mu', text: 'Did you mean' })].concat(means.map(function (m) {
+            return h('span', { cls: 'm1' }, [h('button', { type: 'button', cls: 'mean', text: m.name + '?', onclick: function () { twirl(); setText(m.text); } }),
+              h('span', { cls: 'mu tn', text: plural(m.n, 'card') })]);
+          }))));
+        }
+        if (waits.length) {
+          els.found.appendChild(h('div', { cls: 'recent' }, [h('span', { cls: 'lab', text: means.length ? 'Or' : 'Waiting today' })].concat(waits.map(function (w) {
+            return h('button', { type: 'button', cls: 'chip', onclick: function () { setText(w.text); } }, [w.label + ' ', h('small', { cls: 'tn', text: n(w.n) })]);
+          }))));
+        }
+        return;
+      }
+      meant = null;
       els.found.hidden = !(t && !t.n && !(V.kind === 'empty' && !V.picked));
       if (!els.found.hidden) els.found.appendChild(h('span', { cls: 'mu', text: 'No cards for that here.' }));
       return;
     }
+    meant = null;
     els.found.hidden = false;
-    els.found.appendChild(h('div', { cls: 'fh' }, [h('b', { text: Q && Q.q ? plural(Q.q, 'question') : plural(F.n, 'card') }),
+    // 3.9.11, it answers while you type: when a new answer lands its count rolls up (here and in the box), the bar
+    // grows and the star twinkles, more for a big find; the same answer drawn again is still
+    var key = (V.q || '') + '|' + F.n, lands = key !== landed;
+    landed = key;
+    var cnt = h('b', { text: Q && Q.q ? plural(Q.q, 'question') : plural(F.n, 'card') });
+    var lb = h('b', { cls: 'tn', text: n(F.n) });
+    els.live.appendChild(lb);
+    els.live.appendChild(document.createTextNode(' ' + (F.n === 1 ? 'card' : 'cards') + (F.time ? ' · ' + F.time : '')));
+    liveFit();
+    if (lands && !REDUCE) {
+      if (!(Q && Q.q)) roll(cnt, F.n, function (k) { return plural(k, 'card'); });
+      roll(lb, F.n, n);
+      setTimeout(function () { if (landed === key) { twirl(); burst(els.box.querySelector('.mag'), F.n >= 100 ? 14 : 7); } }, 320);
+    }
+    els.found.appendChild(h('div', { cls: 'fh' }, [cnt,
       Q && Q.q ? h('span', { cls: 'mu', text: '· ' + plural(F.n, 'card') }) : null, h('span', { cls: 'sp' }), btn('link', 'Browse', 'browse', {})]));
     var tot = Math.max(1, F.due + F.new + F.notdue);
     function seg(c, k) { return k ? h('i', { cls: c, style: 'flex-basis:' + Math.max(0.8, 100 * k / tot) + '%' }) : null; }
-    els.found.appendChild(h('div', { cls: 'bar', 'aria-hidden': 'true' }, [seg('d', F.due), seg('nw', F.new), seg('s', F.notdue)]));
+    els.found.appendChild(h('div', { cls: 'bar' + (lands && !REDUCE ? ' grow' : ''), 'aria-hidden': 'true' }, [seg('d', F.due), seg('nw', F.new), seg('s', F.notdue)]));
     var key = [];
     if (F.due) key.push(h('span', {}, [h('i', { cls: 'd' }), h('b', { text: n(F.due) }), ' due now']));
     if (F.new) key.push(h('span', {}, [h('i', { cls: 'nw' }), h('b', { text: n(F.new) }), ' new', F.susp_new ? h('span', { cls: 'mu', text: ' · ' + n(F.susp_new) + ' suspended' }) : null]));
@@ -338,16 +433,23 @@ var dcMagic = (function () {
     var D = V.days, show = V.mode === 'days' && D && V.count && V.count.n;
     els.pod.hidden = !show;
     els.pod.className = 'pod';
-    if (!show) return;
+    if (!show) { dropped = {}; return; }
     els.pod.appendChild(h('div', { cls: 'ph' }, [h('b', { text: 'Schedule ahead' })]));
     var grid = h('div', { cls: 'days', role: 'group', 'aria-label': 'Days' });
+    // 3.9.11: each picked day wears its share ("+5", dropping in when it's new or changes), and its count is what it would be
+    var share = {}, now = {};
+    (D.each || []).forEach(function (e) { share[e.iso] = e.n; });
     D.list.forEach(function (d) {
+      var add = share[d.iso] || 0, tot = (d.load || 0) + add;
+      if (add) now[d.iso] = add;
       grid.appendChild(h('button', { type: 'button', cls: 'day' + (d.on ? ' on' : '') + (d.today ? ' tdy' : '') + (d.light ? ' light' : ''),
         'aria-pressed': d.on ? 'true' : 'false', title: d.light ? 'A light day' : null,
-        'aria-label': d.dow + ' ' + d.d + ' ' + d.mon + (d.load ? ', ' + d.load + ' due' : '') + (d.light ? ', a light day' : ''),
+        'aria-label': d.dow + ' ' + d.d + ' ' + d.mon + (d.load ? ', ' + d.load + ' due' : '') + (add ? ', ' + add + ' more from this' : '') + (d.light ? ', a light day' : ''),
         onclick: function () { send('day', { iso: d.iso }); } }, [
-        h('span', { cls: 'dw', text: d.dow }), h('span', { cls: 'dn', text: String(d.d) }), h('span', { cls: 'dl', text: d.load ? n(d.load) + ' due' : '–' })]));
+        h('span', { cls: 'dw', text: d.dow }), h('span', { cls: 'dn', text: String(d.d) }), h('span', { cls: 'dl', text: tot ? n(tot) + ' due' : '–' }),
+        add ? h('span', { cls: 'plus' + (dropped[d.iso] !== add && !REDUCE ? ' drop' : ''), text: '+' + n(add) }) : null]));
     });
+    dropped = now;
     els.pod.appendChild(grid);
     // 3.9.9: a stretch longer than these two weeks, filled in: how many days (or to my exam's eve), the weekdays to skip
     var F = D.fill || {};
@@ -380,7 +482,9 @@ var dcMagic = (function () {
     var go = 'Put on ' + (each.length ? plural(each.length, 'day') : 'days');
     els.pod.appendChild(h('div', { cls: 'acts' }, [btn('b', 'Cancel', 'days', { show: false }), h('span', { cls: 'sp' }),
       h('button', { type: 'button', cls: 'b pri', text: go, disabled: !each.length || V.busy || !V.signed_in ? true : null,
-        onclick: function () { send('dayname', { name: name.value }); send('put', {}); } })]));
+        onclick: function () {
+          [].slice.call(grid.querySelectorAll('.day.on')).slice(0, 7).forEach(function (d, i) { setTimeout(function () { burst(d, 5); }, i * 70); });
+          send('dayname', { name: name.value }); send('put', {}); } })]));
     if (!V.signed_in) els.pod.appendChild(h('div', { cls: 'split', text: 'Sign in to put cards on a plan.' }));
   }
 

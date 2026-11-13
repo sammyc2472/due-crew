@@ -4874,6 +4874,75 @@ every release that changes how something works.
   what it does and Turn new cards back on, so nobody is stuck with one;
   `ahead_flow.stop_new` and `insaheadoff` stay for it, with no way to
   start one from the board now.
+- 3.9.11, hooks (Sam, 13 Nov, on the mock "Tips Become Hooks": first "I
+  really liked also the current implementation of these folks know this
+  coming up on the right", then "build that whole implementation you've
+  proposed", and "especially for one by ones we don't want to spoil the
+  correct answer"). A hook is my own line on a card I keep missing
+  (`hooks.py`; `hooks.json` beside wrap.json, by note guid, never the
+  card's text). On the answer side: stuck on a card with my hook, the
+  chip says "You left a hook" and waits for Show (the chip's `fold`, as
+  a crewmate's does), in the place of nothing, of who knows it or of a
+  plan's note (`hooks.over`); a card missed twice or more and again
+  today offers one, quietly beside Edit and never over the card ("Add a
+  hook for next time", the view's `bar`); once a card and twice a day at
+  most, a card I kept missing whose last three answers were right asks
+  "This one stuck. What made it click?" (`hooks.turned`, `may_ask`).
+  Who knows it comes up on the right as ever on a card I've no hook on,
+  with its Ask. The reviewer's More menu has "add a hook…" on any card.
+  The window (`ui/hook_dialog.py`: one line, "Share with my crew", Take
+  it off; `hookadd`, a card-page command that only opens it).
+  Shared (the default; each hook keeps its own tick, a new one starts
+  as the last was): the hook is my tip on that card on the server, by
+  one new route, `PUT /hooks {guid, text}` (`cards.ts putHook`; no text
+  takes it down with what was marked helped; the tips' ceiling). No new
+  table: tips were already kept a card a person and handed to mutual
+  friends stuck on the card with their sync (`forStuck`), so a crewmate
+  reads my hook the next time they miss it, nobody asking. On their
+  card it's "Dre left a hook" (the word tip is gone from the chip), with
+  This helped, and Hide this hook in its list (`hooks.hide`, kept here).
+  This helped reaches me once: `tip_helped.told` (migration 0032; what
+  was marked before it is counted as told), read by `thanksFor` on the
+  add-on's `/board` (not the site's `keep=1`), one read a refresh and a
+  write only when there's something to say; here a tooltip and a
+  scrapbook line ("Your hook on a Renal card helped Dre and 1 more.":
+  the deck part from my own copy, never the card's words; scrapbook
+  `WHATS` gains "hook"). What a hook still owes the server waits in
+  `hooks.json`'s `out` and goes with the save, or with a later
+  refresh when a send didn't get out (`cards.flush_hooks`, five at a
+  time; a PUT, so twice is once). The request budget is as it was: a
+  refresh is one request, a hook's save is one on a click.
+  Sam's three open questions took my defaults: the name is "hook",
+  shared by default, Ask stays.
+- 3.9.11, more magic in Magic search (Sam, 13 Nov, on the mock "Magic
+  Search Sparkle", eight ideas: "build 1, 4, 5, 7"). 1, it answers while
+  you type: the answer sits in the box ("27 cards · about 9 min", `.live`:
+  one line of words only, never over them, not in a narrow window), and
+  when a new answer lands its count rolls up, the bar grows and the star
+  twinkles, more for a find of a hundred or more (`landed` in magic.js;
+  the same answer drawn again is still). 4, did you mean: words no tag
+  and no card has offer the tag's word they nearly are, with its cards
+  ("Platelets? 14 cards"; `magic.mean`/`lev2`: two letters off, or one
+  with the first letter wrong, since one off after a right first letter
+  was read as the tag already; a quarter of a second at most; a tap puts
+  that one word right and leaves the rest of the box). 5, nothing found
+  is a way on: what's waiting today in this deck, each a chip with the
+  words that find it (missed today, due today, leeches: the ones with
+  any; `magic.WAITING`, `Search.none_view`, worked out once a text), and
+  the recents. The mock's "search the cards' own words" isn't there: words
+  no tag has are looked for in the cards already. 7, Schedule ahead: a
+  picked day wears its share ("+5") and its count is what it would be;
+  the share drops in when it's new or changes, and Put sends a sparkle
+  off each day. All from the deck, on this computer; no request; nothing
+  moves with Reduce motion. Not built: 2 (opens knowing your day), 3
+  (recents that say what they found), 6 (Study now deals the cards), 8
+  (Pip in the wizard hat).
+- 3.9.11, Magic search's Recent (Sam's screenshot: a pasted list of card
+  ids ran off the window). A recent is something to type again: pasted
+  ids and anything over 60 characters aren't kept (they were, cut at 200
+  characters, mid-id) nor shown if an older build kept them
+  (`magic_flow._recent_ok`); a chip is cut to the window with an
+  ellipsis and types its own words, not what's left on the button.
 - 3.9.10, Insights is data only (Sam, 12 Nov: "we shouldn't be adjusting
   cards from insights... consider it a data only zone. The study now for
   areas of weakness don't change card visibility / plan"). Gone from it:
@@ -5455,3 +5524,162 @@ every release that changes how something works.
   site's (requests' JSON has spaces), so a card-heavy plan meets the body
   ceiling near 1.4 MB of doc from Anki; compact JSON in `api._call` would
   fix it and is left for its own change.
+- 3.9.12, current and consistent (Sam, 13 Nov: "make a plan to hit all
+  the things to get them current and consistent", then "Go for all of
+  it... I trust you"; no mocks this round, his call). An audit of every
+  window and board part against the week's decisions (one grid, no hover
+  growth, terse copy, page actions as small pills, questions in sheets,
+  words folded till Show, Insights data only, one name a thing), then
+  what it found:
+  One word: what a crewmate leaves on a card is a hook wherever it's
+  read (the asks list's Hook and "1 hook", Send a hook, "left a hook on
+  a card you flagged", a leech's "Dre's hook", the scrapbook's "A hook
+  that helped", the privacy page). The routes, tables and code keep tip.
+  Insights is data only, the last corner: a leech's hook sheet shows its
+  words and OK; Bring it back went from it.
+  Qt windows: they already wore the board's look; their buttons and
+  headings are sentence case now, as the board's are (Send code, Sign
+  in, Copy invite, New code, Add back, Look up, Open room, Join a
+  squad…, Shared decks, Your emoji, Open a study room); the Friends
+  list says "Name · waiting", no tick or hourglass.
+  Squads: the shown squad's own actions (Copy invite, Lock, Leave) sit
+  on the "+ Create / join a squad" line, at its right: one row under the
+  table where there were two (`squads._squad_add(acts)`). The asks list
+  lost its emoji marks.
+  Outside: the landing page's small board had a medal and #2, #3 (no
+  ranking anywhere: gone), its features say Magic search, Hooks and Pip
+  Party, a cheer is "a little show"; its pictures and the README's are
+  rendered from the board as it is (`tools/readme_images.py` and `.js`
+  write the site's `board.png` and `board-dark.png` too now). The README
+  says hooks, Insights as it is (it only shows), catching up, Pip Party.
+  The site named a menu item that went in 3.9.3 ("Make a plan from a
+  deck") in four places: Tools › Due Crew › Plans › New plan… now.
+  Looked at and left: bingo, the closet, How you study, the Fifteen,
+  rooms, the share cards and the map card, the plan windows, Your AI
+  app: already in step. Pip Party keeps its name on the TV and phones;
+  the tab says Party (3.9.10).
+- 3.9.12, the foundations (Sam, 13 Nov: "are there any foundational setup
+  things that we need to be doing as well. like standardizing structures
+  of UI and data", then "go for all of the above"). Eight were named;
+  nothing a person sees changes. What each got this round:
+  1, one way to keep a file: `store.py` (whole to a .tmp, swapped in, a
+  failed write takes its .tmp with it and says so; `load`/`save` for one
+  kept in memory, written only when it differs). hooks, the scrapbook,
+  wrap.json, bingo, the closet's days, plan drafts, plans.json, the error
+  counts, the session (0600) and the known cards all go through it; no
+  module writes a .tmp of its own (`test_one_way_to_keep_a_file_v3912`).
+  2, one set of colours: the add-on's pages already all read
+  `board.palette`; the site restates the shared ones by hand (its paper
+  and ink are its own), so they're checked against it, light and dark
+  (`test_the_site_wears_the_boards_tokens_v3912`). Not done: one control
+  reset for every page (ten files still carry their own).
+  3, fewer twins: the site's shared constants (what each party game
+  needs, a plan's limits, a day's saves) are written from the add-on's
+  by `tools/gen_twins.py`, and the suite checks it changes nothing. The
+  rules (functions) are still twins, each with its test.
+  4 and 5, the big files and the tests: the suite runs by area
+  (`python3 tests/test_due_crew.py hook magic`), `-q` says only what
+  failed, `--list` names its 329 tests. Not done: splitting
+  `plan_flow.py`, `__init__.py`, the test file or the site's scripts
+  (37 checks read those files by name, so each split moves its checks
+  with it: one file a sitting), and moving checks off exact markup.
+  6, named shapes: `views.py`, the review chip first (its keys and
+  types, its kinds, its peek); checked as it crosses to the page, a slip
+  counted as `view:chip` and drawn anyway; the chip's script reads only
+  keys in the shape.
+  7, the words: `test_copy_rules_v3912` (sentence case for buttons,
+  headings and menu items; a hook wherever a person reads it; nothing
+  says rank, rival, compete or leaderboard), which found one more
+  "tips" on its first run; the glossary of names and their older names
+  in code is in CLAUDE.md.
+  8, the server's contract: the suite's server is asked every route in
+  `worker/src/index.ts` (127); it answers all but the site's own two,
+  which are named (`test_the_fake_has_every_route_v3912`). Not done:
+  one schema that writes the validators for the Worker, the client and
+  the fake.
+- 3.9.12, the foundations, Stage A: one control reset. The board, the
+  scrapbook, Settings and the dance floor each restated the buttons'
+  reset, each a little differently; they all come from
+  `board.button_reset(selector, extra)` now (`base.BUTTON_CORE`), a part
+  adding only its own. Magic search's page and the plan window's (and
+  its copy on duecrew.com) carry `base.page_reset(scope)`'s text, which
+  the suite checks. Measured, not eyeballed: the computed look of all
+  325 controls on the board's preview was the same before and after.
+  Left: the site's own two stylesheets (app.css, table.css) and the
+  Magic field under the deck list keep their resets.
+- 3.9.12, a day's Study and a deck with nothing to take back (Sam's
+  report, 13 Nov, Anki 26.09.3: "FilteredDeckError: No cards matched the
+  provided search" from `plan_flow._refill`). A day's Study borrows cards
+  from other Due Crew decks and gives those decks back the rest; when the
+  rest are suspended by then, or another add-on's deck holds them, Anki
+  refuses a filtered deck that finds none. The call was already inside a
+  try, but its traceback was printed, and Anki shows a printed traceback
+  as an error window. `_refill` takes that one refusal quietly now (the
+  deck stays empty, for the morning's tidy); any other error is raised as
+  before. `test_refill_with_nothing_to_take_back_v3912`.
+- 3.9.12, the study soundtrack's floor (Sam, 13 Nov, on the mock: "all
+  except 5, 6, 7"; "the x closes it permanentl which i don't think people
+  realize"; "disappear after 3 days"). Four things. One button on the
+  floor: the fold; its × is gone (`board/dance.py`). Turning the floor off
+  is deliberate: "Turn off the dance floor" at the foot of the song list
+  and of my own card (`_dance_off`), then "Dance floor off · Undo" in the
+  corner for six seconds (`dance_off_js`, `song_flow._undo_line`);
+  Settings › Board's switch as before. A song leaves after three days:
+  on the floor the day it's picked and the two after (`songs.LIFE_DAYS`,
+  `age`/`alive`), worked out by each reader's Anki (`song_flow._live` in
+  `floor_view` and `song_of`, so the profile card agrees); the server
+  keeps what it's sent, nothing changed there. A song that doesn't say
+  when it was picked has left. "Still this one?" over the booth on my
+  song's last day (`songs.last_day`, the view's `ask`): Keep makes its
+  day today (`songkeep`, one save), Change opens the search, × stops the
+  asking for this pick (`songaskoff`, this computer's `song_asked`).
+  Mine stays in my settings after it leaves, so Change… starts from it.
+  Not built, Sam's no: a count on the folded chip, Make it mine, a
+  Settings row for my song. Tests: `test_floor_view` (the days, the ask,
+  Keep), `test_one_button_and_the_ask_v3912`, the commands through
+  `_on_js`.
+- 3.9.12, the README anew (Sam, 13 Nov: "rebuild the readme anew. more
+  human sounding. clear about functionalities and good screenshots").
+  Rewritten from the tagline to Share (Install on is as it was): what
+  Due Crew is in two short paragraphs, "What's in it" as six lines, then
+  a section each, said plainly; plans split into "If you follow one" and
+  "If you write one"; the study soundtrack and Pip's closet, which it
+  never mentioned, have their own words. No anchor links (AnkiWeb's copy
+  has no anchors). Five new pictures, renders of the add-on's own pages
+  like the rest: `magic.png` (Magic search's window on the suite's sample
+  deck), `insights.png`, `closet.png`, `party.png`, `dance.png`
+  (`tools/readme_shots.py`, then `node tools/readme_shots.js`, after
+  `tools/preview.py`). They show on GitHub and AnkiWeb once this is on
+  `main` (the links are raw URLs there).
+- 3.9.12, the README, simpler (SC, 13 Nov: "make it a bit simpler. call
+  me SC not sammy caplan. I want things organized in order of utility.
+  magic search higher, plans higher, the same images maybe less text").
+  About 1,250 words from 2,100. The order is by use: what it is, Get
+  started (install is its first step), Magic search, Study plans, Your
+  day with Insights, Your crew, Squads and bingo, Pip, Pip Party, Also
+  (Browse's right-clicks, the scrapbook, Share), then Privacy on as
+  before. "What's in it" went (the sections are short enough to be the
+  list). The same ten pictures. The README says SC where it said Sam or
+  Sammy Caplan; the LICENSE files' copyright lines are as they were.
+- 3.9.12, the README, plainer still (SC, 13 Nov: "less AI-speaky words /
+  language. simpler still"). Short sentences, everyday words, a bullet a
+  thing; Your day is four bullets; Privacy says the same things as a
+  list. Same order, same ten pictures.
+- 3.9.12, the README with its voice back, and the pictures in colour (SC,
+  13 Nov: "now it reads as without personality. you should assume people
+  understand when they see the image... we just need them to see
+  something cool and hten download. also, the images should have
+  different user choice colors... redo the bingo without BUSm and make
+  sure it's the pips not emojis"). A heading, a line or two, the picture:
+  Get it, Magic search, Study plans, Insights, Cheers, Study rooms, Study
+  soundtrack, Squad bingo, Pip, Pip Party, And more; about 800 words
+  with Privacy. The pictures wear different accents: the board green,
+  Magic search blue, plans amber, Insights teal, bingo purple, Party
+  rose (`readme_shots.py` renders Magic search and bingo in theirs and
+  writes each accent's tokens, which `readme_shots.js` sets on the
+  preview's board for a crop; `readme_images.py` renders plans amber).
+  bingo.png is new: the preview's card and squad ("Orca crew"), each
+  stamp its person's Pip (`bingo_html(..., people=)`), no school's name.
+- 3.9.12, the README: from Magic search to Pip Party a part is its
+  heading and its picture, no line under it (SC, 13 Nov).
+

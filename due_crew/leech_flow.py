@@ -1,6 +1,6 @@
 """3.9.2, Leeches (Sam's picks, S1-A, S2-A): the cards Anki stopped showing
 me (a leech, suspended) and the ones one miss from it, in a deck, as a view
-in Insights' place. One button a card, sorted by danger: a crewmate's tip
+in Insights' place. One button a card, sorted by danger: a crewmate's hook
 when someone has it down (else Ask them), else Bring back; Learn it fresh,
 Edit and Leave it out sit behind its ⋯. Bring all back and Browse at the top.
 
@@ -359,18 +359,15 @@ def _listed(v):
 
 
 def show_tip(did, cid):
-    """A crewmate's tip on it, in a sheet: Bring back from there when it's
-    suspended."""
+    """A crewmate's hook on it, in a sheet. Words only (3.9.12: Insights is
+    data only, so Bring it back isn't offered from here either)."""
     c = _card_of(did, cid)
     if not c or not c.get("tip"):
         return
     from . import sheets
     words = "\n\n".join(f"{t['name']}: {t['text']}" for t in c["tip"])
-    head = f"{c['tip'][0]['name']}'s tip" if len(c["tip"]) == 1 else "Tips from your crew"
-    if c["susp"]:
-        sheets.confirm(head, words, "Bring it back", lambda: bring_back(did, [c["cid"]]))
-    else:
-        sheets.confirm(head, words, "OK", lambda: None)
+    head = f"{c['tip'][0]['name']}'s hook" if len(c["tip"]) == 1 else "Hooks from your crew"
+    sheets.confirm(head, words, "OK", lambda: None)
 
 
 def ask(did, cid):

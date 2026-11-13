@@ -17,7 +17,7 @@ class RoomDialog(QDialog):
         super().__init__(parent)
         self.result_room = None  # (start UTC, rounds, round min, break min)
         attach_alive(self)
-        self.setWindowTitle("Open a Study Room")
+        self.setWindowTitle("Open a study room")
         self.setMinimumWidth(420)
         root = QVBoxLayout(self)
         heading(self, root)
@@ -73,7 +73,7 @@ class RoomDialog(QDialog):
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok
                                    | QDialogButtonBox.StandardButton.Cancel)
-        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Open Room")
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Open room")
         buttons.accepted.connect(self._open)
         buttons.rejected.connect(self.reject)
         root.addWidget(buttons)

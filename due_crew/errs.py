@@ -113,7 +113,7 @@ ROUTES = (
     "/board", "/sync", "/decks", "/heatmap/:id", "/settings",
     "/users/:id", "/friends", "/friends/:id", "/codes", "/codes/:code", "/codes/:code/add",
     "/invites/:code", "/invites", "/invites/:code/redeem", "/cheers/:id", "/knocks", "/knocks/:id", "/reports",
-    "/tips/helped", "/log", "/account/data", "/account/todos",
+    "/tips/helped", "/hooks", "/log", "/account/data", "/account/todos",
     "/admin/stats", "/admin/trends", "/admin/people", "/admin/people/:id", "/admin/people/:id/signout",
     "/admin/people/:id/code", "/admin/people/:id/limits", "/admin/people/:id/email", "/admin/people/:id/note",
     "/admin/people/:id/crew", "/admin/people/:id/crew/:id", "/admin/actions", "/admin/squads/:id",
@@ -284,12 +284,8 @@ class Tally:
         with self.lock:
             text = json.dumps({"v": 1, "days": self.days}, sort_keys=True)
             self.dirty = False
-        tmp = self.path + ".tmp"
-        try:
-            with open(tmp, "w", encoding="utf-8") as f:
-                f.write(text)
-            os.replace(tmp, self.path)
-        except OSError:
+        from . import store
+        if not store.write_text(self.path, text):
             self.dirty = True
 
 

@@ -51,11 +51,11 @@ class SquadDialog(QDialog):
         self.code_edit.setPlaceholderText("Its code, or paste the invite")
         self.code_edit.textChanged.connect(self._code_changed)
         self.code_edit.returnPressed.connect(self._look_up)
-        self.look_btn = QPushButton("Look Up")
+        self.look_btn = QPushButton("Look up")
         self.look_btn.clicked.connect(self._look_up)
         grid.addWidget(self.code_edit, 1, 0)
         grid.addWidget(self.look_btn, 1, 1)
-        # what the code is, with Join under Look Up (the buttons' column, so
+        # what the code is, with Join under Look up (the buttons' column, so
         # it's never squeezed by a long name); nothing at all until then
         self.peek_label = QLabel("")
         self.peek_label.setWordWrap(True)
