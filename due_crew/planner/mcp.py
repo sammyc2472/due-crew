@@ -260,7 +260,7 @@ class Server:
         except (ToolError, Unavailable, E.Refused) as e:
             return {"content": [{"type": "text", "text": str(e)}], "isError": True}
         except Exception as e:  # noqa: BLE001
-            words = ("Due Crew couldn't be reached. Try again in a minute." if type(e).__name__ == "TransportError"
+            words = ("Couldn't reach Due Crew. Check your connection." if type(e).__name__ == "TransportError"
                      else "That didn't work in Anki. Try again.")
             if type(e).__name__ != "TransportError":
                 print(f"due crew: the AI app's {name}: {type(e).__name__}")

@@ -104,7 +104,7 @@ class WelcomeDialog(QDialog):
 
         def done(result, err):
             if err or not result:
-                self.status.setText("Couldn't reach the server. The Friends dialog has all of this.")
+                self.status.setText("Couldn't reach Due Crew. The Friends dialog has all of this.")
                 return
             self.code, self.friends, self.loaded = result
             self.code_label.setText(self.code or "?")

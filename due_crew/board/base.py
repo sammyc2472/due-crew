@@ -76,6 +76,13 @@ PAGE_RESET = """body {scope} button, body {scope} select, body {scope} input, bo
 body {scope} button {{ color: inherit; background: none; border: 0; padding: 0; border-radius: 0; cursor: pointer; }}"""
 
 
+# duecrew.com's own pages (3.9.12, Stage A's other half): every stylesheet with a control carries this text,
+# so none is drawn by the system (Safari draws one whose appearance isn't none, Liquid Glass and all).
+# The suite checks each page that has a control has it; tools/control_audit.js --site looks at the result.
+SITE_RESET = """button, select, textarea, input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]) {
+  -webkit-appearance: none; appearance: none; }"""
+
+
 def page_reset(scope):
     return PAGE_RESET.format(scope=scope)
 
@@ -165,6 +172,32 @@ def _ago(ts_str):
     except Exception:
         return "", "faded"
     return _ago_secs(secs)
+
+
+def away_words(ts_str, now=None):
+    """3.9.12, the bench: how long since someone was last here, in a word or two: "2 days", "a week",
+    "3 weeks", "a month", "since Aug" (this computer's month). "" when it isn't known."""
+    if not ts_str:
+        return ""
+    try:
+        dt = datetime.fromisoformat(str(ts_str).replace("Z", "+00:00"))
+        days = int(max(0.0, ((now or datetime.now(timezone.utc)) - dt).total_seconds()) // 86400)
+    except Exception:
+        return ""
+    if days < 2:
+        return "a day"
+    if days < 7:
+        return f"{days} days"
+    if days < 14:
+        return "a week"
+    if days < 28:
+        return f"{days // 7} weeks"
+    if days < 60:
+        return "a month"
+    return "since " + dt.astimezone().strftime("%b")
+
+
+BENCH_MAX = 12  # Pips on the bench; past it, "+N more"
 
 
 QUIET_FOLD_DAYS = 90  # "The next round", Q3: the server's fold, the same number

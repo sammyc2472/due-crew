@@ -56,7 +56,7 @@ password.
 
 ## And more
 
-- **Hooks.** Write down what made a card click. It shows up the next
+- **Tips.** Write down what made a card click. It shows up the next
   time you miss it, and for a friend who misses it too.
 - **Good-luck cards** the night before a friend's exam.
 - **Today.** What's due, your plan and your to-dos in one list.

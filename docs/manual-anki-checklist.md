@@ -731,6 +731,18 @@ In Anki (as a follower):
 - [ ] A plan of more than 16 sets: You › Plans' path folds the runs done ("22 done") and far ahead ("26 to come") into one piece each, its count under it; sets behind, today's, the two before and the next four stay their own; a click on a fold opens its day. A plan of 16 or fewer: a segment a set. Light and dark.
 - [ ] You › Plans' week, click today: its details have one Study at the top right (no Study on each set, none on the card's line); it opens "Due Crew::<plan> · Today" on Anki's Study screen with today's new cards and the plan's reviews due today, nothing due tomorrow; the tooltip says how many of each. Click a past day behind: its Study builds "Due Crew::<plan> · <day>" with that day's cards not seen yet and its reviews due today. Today's set (B): its own deck loses those cards and keeps the rest. A day ahead: no Study. Tomorrow morning both decks are empty and gone.
 
+### 3.9.12: tips, the bench, Settings (about 8 minutes)
+- [ ] Miss a card you've lapsed on twice: your own Pip peeks in from the bottom left with "Add a tip for next time". Add a tip opens the window; Save; miss it again: "You left a tip", Show, Edit opens the window with your words.
+- [ ] Nothing on screen or in a menu says "hook".
+- [ ] Crew › Today with a friend who last synced three days ago: no row for them; under the rows their Pip, eyes closed, their name and "3 days". No z's, no line above it. Click it: their profile. A friend who paused sits there too.
+- [ ] A friend who synced yesterday but not today: their row as before, at the bottom, with "· yesterday".
+- [ ] Settings: no Compact rows, Highlight my row, Crew name in shares, Room chip or Shortcuts on. Study › Today has one row, Today's extras, with two switches. On the dance floor, the song list's foot has "Dancing: Gentle · Lively · Still".
+
+### 3.9.12: deck counts, and a quiet board (about 5 minutes)
+- [ ] A deck with "bury new siblings" and "bury review siblings" on, with notes that have two cards due. Settings › Study › Reviewing › Deck counts leave out buried siblings: off, the deck list is Anki's. On: New and Due drop to about half; point at one: "Anki counts 12. 6 are siblings it will bury as you go." Open the deck: Anki's own count at the top matches ours.
+- [ ] A deck with burying off: its numbers don't change. Turn the switch off: Anki's numbers are back.
+- [ ] Leave the Decks screen open with a menu or a fold open on the board for a few minutes: when a refresh comes back with nothing new, it stays open and nothing flickers.
+
 ### 3.9.12: the soundtrack's floor (about 5 minutes)
 - [ ] Point at the floor: one round button, ⌄ (fold). No ×.
 - [ ] Tap "+N" or the folded chip: the song list ends with "Turn off the dance floor". Click it: the floor goes, "Dance floor off · Undo" in the corner for a few seconds; Undo brings it back. Left alone, Settings › Board › Dance floor brings it back. My own song's card has the same line.
@@ -905,20 +917,20 @@ The riskiest of 3.9.1, the parts only a live Anki can show, in order:
 ### 3.9.12: current and consistent
 
 - [ ] Squads: under the table, one line: "+ Create / join a squad" at the left, Copy invite · Lock · Leave at the right.
-- [ ] Crew › Decks, Asked of you: the button says Hook; an answered ask says "1 hook". Insights › Leeches: "Dre's hook" opens its words with OK only.
+- [ ] Crew › Decks, Asked of you: the button says Tip; an answered ask says "1 hook". Insights › Leeches: "Dre's hook" opens its words with OK only.
 - [ ] Sign-in, Welcome, Friends, Squads, Open a study room: buttons and headings in sentence case; Friends lists "Name · waiting".
 - [ ] duecrew.com: no medal or #2 on a phone; six features; the board picture matches Anki in light and dark. /classes and a new plan's empty page say Tools › Due Crew › Plans › New plan…
 
-### 3.9.11: hooks, Magic search's Recent
+### 3.9.11: tips (called hooks then), Magic search's Recent
 
 - [ ] Magic search, typing a topic: the box says "N cards · about M min" on its right; as each new answer lands the count rolls up, the bar grows and the star twinkles (more for 100 cards or more). A long line of words, or a narrow window: no answer in the box, nothing covered.
 - [ ] Type a topic two letters off: "No tag or card says …", then "Did you mean <Topic>? N cards"; a tap puts that word right and finds it. Type nonsense: "Waiting today" with Missed today, Due today, Leeches (the ones with any); each chip finds them.
 - [ ] Schedule ahead: each day you pick gets a "+N" that drops in, and its due count goes up by it; unpick and both go. Put on days: a sparkle off each. With Reduce motion on, none of it moves.
 
-- [ ] Hooks: on a card you've lapsed on twice, press Again, and when it comes back show the answer: "Add a hook for next time" beside Edit (nothing over the card). Click it: a window with one line, "Share with my crew" ticked, Save. Miss it again: the corner card says "You left a hook" and Show; only then the words, with Edit. Edit › Take it off: gone. More › "Due Crew: add a hook…" works on any card.
-- [ ] Shared: a crewmate (mutual) who misses that card sees "<you> left a hook" coming up on the right after their next sync, Show, then This helped. Your next refresh says "Your hook on a … card helped <them>." once, and the scrapbook keeps the line. Untick Share and save: after their next sync it's gone for them, still yours.
-- [ ] On a crewmate's hook, the chip's list (click it) has "Hide this hook": it never shows on that card again.
-- [ ] A card a crewmate has down, with no hook of yours on it, still shows "… knows this" coming up on the right with Ask.
+- [ ] Tips: on a card you've lapsed on twice, press Again, and when it comes back show the answer: "Add a tip for next time" beside Edit (nothing over the card). Click it: a window with one line, "Share with my crew" ticked, Save. Miss it again: the corner card says "You left a tip" and Show; only then the words, with Edit. Edit › Take it off: gone. More › "Due Crew: add a tip…" works on any card.
+- [ ] Shared: a crewmate (mutual) who misses that card sees "<you> left a tip" coming up on the right after their next sync, Show, then This helped. Your next refresh says "Your tip on a … card helped <them>." once, and the scrapbook keeps the line. Untick Share and save: after their next sync it's gone for them, still yours.
+- [ ] On a crewmate's tip, the chip's list (click it) has "Hide this tip": it never shows on that card again.
+- [ ] A card a crewmate has down, with no tip of yours on it, still shows "… knows this" coming up on the right with Ask.
 - [ ] A card you lapsed three times and have since got right three times running: once, "This one stuck. What made it click?"; never again on that card, twice a day at most.
 - [ ] Magic search: paste a long list of card ids, Study or Browse them, reopen: no Recent for it. A long Recent from before is gone; a short one ("pv loop") is there and types itself on a click.
 

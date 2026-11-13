@@ -6,6 +6,7 @@ import datetime as _dt
 import html as _html
 import re as _re
 
+from .. import views as _views
 from .base import _ahead_r, _day_after, _ins_dname, _ins_r, _pycmd, _short_day
 
 
@@ -482,7 +483,7 @@ def _ins_leech_row(did, c):
     # 3.9.10 (Sam: Insights is "a data only zone", nothing here adjusts a card): a crewmate's tip or
     # who has it down stay (they change no card); Bring back, Learn it fresh, Leave it out and Edit went
     if tip:
-        main = act("tip", f'{e(tip[0]["name"])}&rsquo;s hook', "sl-bt tip")
+        main = act("tip", f'{e(tip[0]["name"])}&rsquo;s tip', "sl-bt tip")
     elif knows:
         main = act("ask", f"Ask {e(knows[0])}", "sl-bt tip",
                    f'{e(", ".join(knows))} {"has" if len(knows) == 1 else "have"} it down')
@@ -560,6 +561,7 @@ def _insights_html(did, v):
     then, what's not sticking yet, my week in time, Optimize FSRS when my
     newest cards fall short, and the deck's suspended leeches. 3.8.0: a
     deck's, plan or not (did, its id, in each command)."""
+    _views.seen("insights", v)  # 3.9.12: its shape, checked as it's drawn
     e = _html.escape
     v = v if isinstance(v, dict) else {}
     if isinstance(v.get("leech"), dict):

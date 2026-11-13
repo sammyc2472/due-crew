@@ -2,7 +2,7 @@
 
 Kept for the reasoning behind each step. The current description of how
 plans work (the doc, a follow, plans.json, the morning, limits) is
-[`docs/plans.md`](plans.md); later changes are in `docs/history.md`.
+[`docs/plans.md`](plans.md); later changes are in `docs/history/`.
 
 Signed-off mock: the "Due Crew Plans" artifact (Dre builds, Maya follows).
 This file is how it's built. What users see is in the mock; ask the maintainer before

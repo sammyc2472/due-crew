@@ -9,7 +9,8 @@ from . import attach_alive, heading, note
 from ..backend.shapes import NOTE_MAX
 
 SHARE_WORDS = "Share with my crew"
-SHARE_NOTE = "Crewmates see it when they miss this card. Never the card itself."
+# 3.9.12 (SC: "Never the card itself." doesn't make sense): who reads it, and that only the tip goes
+SHARE_NOTE = "Friends who have this card see your tip when they miss it. Only the tip is sent."
 
 
 class HookDialog(QDialog):
@@ -21,7 +22,7 @@ class HookDialog(QDialog):
         super().__init__(parent)
         attach_alive(self)
         self.result_words, self.result_shared = None, bool(shared)
-        self.setWindowTitle("Your hook" if words else "Add a hook")
+        self.setWindowTitle("Your tip" if words else "Add a tip")
         self.setMinimumWidth(460)
         root = QVBoxLayout(self)
         heading(self, root)
@@ -34,7 +35,7 @@ class HookDialog(QDialog):
         self.share.setEnabled(bool(signed_in))
         root.addWidget(self.share)
         from aqt.qt import QLabel
-        why = QLabel(SHARE_NOTE if signed_in else "Kept on this computer. Sign in to share hooks with your crew.")
+        why = QLabel(SHARE_NOTE if signed_in else "Kept on this computer. Sign in to share tips with your crew.")
         why.setWordWrap(True)
         root.addWidget(note(why))
         self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)

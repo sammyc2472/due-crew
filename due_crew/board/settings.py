@@ -45,6 +45,8 @@ SETTINGS_CSS = """
     #due-crew .st-tg.on { background: var(--dc-accent); }
     #due-crew .st-tg.on::after { left: 15px; }
     #due-crew .st-seg { display: inline-flex; }
+    #due-crew .st-two { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 14px; }
+    #due-crew .st-two label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--dc-muted); }
     #due-crew .st-seg button, #due-crew .st-pill { font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer;
       border: 1px solid var(--dc-line); background: transparent; color: var(--dc-muted); padding: 2px 10px; }
     #due-crew .st-seg button { border-radius: 0; }
@@ -195,9 +197,6 @@ def _settings_board(cfg):
         f'<button class="st-pill{"" if k in hidden else " on"}" aria-pressed="{"false" if k in hidden else "true"}" '
         f'{_st_click(f"settabs:{k}:{1 if k in hidden else 0}")}>{t}</button>' for k, t in HIDEABLE_TABS)
     swatches = _accent_swatches(cfg)
-    label = _html.escape(str(cfg.get("crew_label") or "Crew"))
-    label_in = (f'<input class="st-in" data-f="label" maxlength="24" size="12" value="{label}" aria-label="Crew name in shares" '
-                f'onchange="pycmd(\'duecrew:setlabel:\'+encodeURIComponent(this.value)+\'|\'+window.dcBK);">')
     g = lambda k, d: bool(cfg.get(k, d))  # noqa: E731
     return ('<div class="st-h">On the Decks screen</div><div class="st-box">'
             + _st_row("Due Crew on the Decks screen", _st_switch("show_leaderboard", g("show_leaderboard", True), "Due Crew on the Decks screen"),
@@ -208,12 +207,9 @@ def _settings_board(cfg):
             + '</div><div class="st-h">Look</div><div class="st-box">'
             + _st_row("Theme", _st_seg("theme", (("auto", "Match Anki"), ("light", "Light"), ("dark", "Dark")), cfg.get("theme", "auto"), "Theme"))
             + _st_row("Accent", f'<span class="st-sw" role="group" aria-label="Accent">{swatches}</span>')
-            + _st_row("Compact rows", _st_switch("compact", g("compact", False), "Compact rows"))
-            + _st_row("Highlight my row", _st_switch("highlight_me", g("highlight_me", True), "Highlight my row"))
             + '</div><div class="st-h">Your crew</div><div class="st-box">'
             + _st_row("Yesterday for friends who haven't synced", _st_switch("show_stale", g("show_stale", True), "Yesterday for friends who haven't synced"))
             + _st_row("Tell me when my crew studies", _st_switch("sync_notifications", g("sync_notifications", True), "Tell me when my crew studies"))
-            + _st_row("Crew name in shares", label_in)
             + '</div><div class="st-h">Pip</div><div class="st-box">'
             + _st_row("Pip", _st_switch("sev", g("sev", True), "Pip"), "The square from the logo, beside it and in your fifteens")
             + _st_row("Pip&rsquo;s closet", f'<a class="st-lk" href="#" {_st_click("closet")}>Open</a>',
@@ -236,12 +232,14 @@ def _settings_study(cfg, fsrs=None, reach=None, stops=()):
         for did, name in stops)
     return ('<div class="st-h">Today</div><div class="st-box">' + stopped
             + _st_row("Today, Upcoming, Later", _st_switch("due_show", g("due_show", True), "Today, Upcoming, Later"))
-            + _st_row("Suggestions", _st_switch("due_suggest", g("due_suggest", True), "Suggestions"),
-                      "Today's misses, new leeches")
-            + _st_row("Recover leeches", _st_switch("due_leeches", g("due_leeches", False), "Recover leeches"),
-                      # 3.9.3 (Sam's pick A): by each deck's leech count; 8 lapses after its question's Not these
-                      "Each morning, as new cards, at 8 lapses" if reach == "eight"
-                      else "Each morning, as new cards, at each deck's leech count")
+            # 3.9.12 (SC agreed): Suggestions and Recover leeches are one row, each still its own switch
+            + _st_row("Today&rsquo;s extras",
+                      '<span class="st-two"><label>Suggestions ' + _st_switch("due_suggest", g("due_suggest", True), "Suggestions")
+                      + '</label><label>Recover leeches ' + _st_switch("due_leeches", g("due_leeches", False), "Recover leeches") + '</label></span>',
+                      "Suggestions: today&rsquo;s misses, new leeches. Recover leeches: "
+                      + (                      # 3.9.3 (Sam's pick A): by each deck's leech count; 8 lapses after its question's Not these
+                      "each morning, as new cards, at 8 lapses" if reach == "eight"
+                      else "each morning, as new cards, at each deck's leech count"))
             + '</div><div class="st-h">Magic search</div><div class="st-box">'
             + _st_row("Magic search", _st_switch("magic_search", g("magic_search", True), "Magic search"),
                       f"The field under your decks, and {MAGIC_KBD} from any screen")  # 3.9.7; 3.9.9: its field
@@ -250,20 +248,19 @@ def _settings_study(cfg, fsrs=None, reach=None, stops=()):
             + _st_row("Two buttons", _st_switch("two_buttons", g("two_buttons", False), "Two buttons"),
                       "Again and Good. Hard and Easy hide; 2, 3 and 4 count as Good. Phones keep four."
                       + (" Works best with FSRS on." if fsrs is False else ""))
+            # 3.9.12 (SC's pick A): Anki's deck list as what there is to do, where Anki buries siblings
+            + _st_row("Deck counts leave out buried siblings", _st_switch("deck_counts", g("deck_counts", False), "Deck counts leave out buried siblings"),
+                      "Anki&rsquo;s deck list counts every card of a note, then buries the siblings as you study. On, it shows what you&rsquo;ll do.")
             + '</div><div class="st-h">Fifteen and rooms</div><div class="st-box">'
             + _st_row("Fifteen? in the top bar", _st_switch("fifteen", g("fifteen", True), "Fifteen? in the top bar"),
                       "And the nudge, when you haven't started by your usual time")
             + _st_row("On a break", _st_seg("sev_break", (("breathe", "Breathe"), ("stretch", "Stretch")),
                                             cfg.get("sev_break", "breathe"), "On a break"),
                       "Breathe with Pip, four counts a side, or stretch")
-            + _st_row("Room chip", _st_seg("room_chip_side", (("left", "Left"), ("right", "Right")), cfg.get("room_chip_side", "right"), "Room chip"),
-                      "Its side of Anki's top bar")
             + '</div><div class="st-h">Shortcuts</div><div class="st-box">'
             + _st_row("Study what&rsquo;s next", f'<kbd class="st-kbd">{STUDY_KBD}</kbd>', "From any Anki screen")
             + _st_row("Ask the squad about this card", f'<kbd class="st-kbd">{ASK_KBD}</kbd>', "While reviewing")
             + _st_row("Magic search", f'<kbd class="st-kbd">{MAGIC_KBD}</kbd>', "From any Anki screen")
-            + _st_row("Shortcuts on", _st_switch("shortcuts", g("shortcuts", True), "Shortcuts on"),
-                      "Off if another add-on uses these keys")
             + '</div>'
             + f'<div class="st-foot"><span></span>'
               f'<a class="st-lk" href="#" {_st_click("setreset")}>{RESET_WORDS}</a></div>')
@@ -279,17 +276,12 @@ def _settings_songs(cfg):
     """Settings › Board's song rows: the dance floor on or off (its × hides it; this brings it back), its
     motion, and my music app (Listen; a card's ▾ changes it too). Each one of song_flow's commands."""
     on = cfg.get("dance_floor", True) is not False
-    motion = cfg.get("dance") if cfg.get("dance") in dict(DANCE_MOTIONS) else "gentle"
     app = cfg.get("music_app") if cfg.get("music_app") in dict(MUSIC_APPS) else "ask"
-    seg = "".join(f'<button class="{"on" if k == motion else ""}" aria-pressed="{"true" if k == motion else "false"}" '
-                  f'{_st_click("dancemotion:" + k)}>{t}</button>' for k, t in DANCE_MOTIONS)
     apps = "".join(f'<button class="st-pill{" on" if k == app else ""}" aria-pressed="{"true" if k == app else "false"}" '
                    f'{_st_click("songapp:" + k)}>{t}</button>' for k, t in MUSIC_APPS)
     return ('</div><div class="st-h">Study soundtrack</div><div class="st-box">'
             + _st_row("Dance floor", _st_toggle_cmd("dancehide" if on else "danceshow", on, "Dance floor"),
                       "Your crew&rsquo;s songs, in the Decks screen&rsquo;s corner")
-            + _st_row("Dancing", f'<span class="st-seg" role="group" aria-label="Dancing">{seg}</span>',
-                      "Lively moves on the beat. Reduce motion keeps them still")
             + _st_row("My music app", f'<span class="st-pills" role="group" aria-label="My music app">{apps}</span>',
                       "Where Listen opens your crew&rsquo;s songs, on this computer"))
 
@@ -356,10 +348,10 @@ def _st_toggle_cmd(cmd, on, label):
 
 # 3.8.0, pick 28 (Find a setting): words people use for a setting that its own label doesn't say
 FIND_WORDS = {
-    "set:theme:": "dark light night mode", "set:accent:": "colour color green purple blue", "set:compact:": "dense small",
+    "set:theme:": "dark light night mode", "set:accent:": "colour color green purple blue", 
     "set:sync_notifications:": "notify notification alert", "set:show_leaderboard:": "hide off board decks screen",
     "settabs:": "tabs hide squads decks plans insights pip party games", "set:due_suggest:": "hard habit misses again",
-    "set:calm:": "calm simple fewer tabs hide declutter", "set:due_leeches:": "leech suspended", "set:shortcuts:": "keys keyboard", "set:share_time:": "minutes hours privacy private",
+    "set:calm:": "calm simple fewer tabs hide declutter", "set:due_leeches:": "leech suspended", "set:share_time:": "minutes hours privacy private",
     "set:share_reviews:": "cards numbers privacy private", "set:share_heatmap:": "year squares", "exam": "test date countdown",
     "af": "holiday vacation trip break", "setprivacy:paused": "pause break hide", "setprivacy:showup": "show up numbers squares",
     "setsignout": "log out", "setdelete": "remove erase", "setfeedback": "bug idea report", "label": "crew name group",

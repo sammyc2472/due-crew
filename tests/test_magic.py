@@ -10,6 +10,7 @@ only: python3 tests/test_magic.py."""
 
 import datetime
 import os
+import srcs  # noqa: E402
 import re
 import sys
 import types
@@ -1341,7 +1342,7 @@ def test_the_how_to():
         check("…and a card's own script can't", opened == ["heart failure: drugs", ""] and len(seen) == 3)
     finally:
         MF.open_search, MF.Ops.saw_intro = saved
-    init = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
+    init = srcs.glue_src()
     check("the glue shows it after the Decks screen draws, not while closing or with Wrapped up",
           "QTimer.singleShot(900, _magic_howto)" in init and "magic_flow.show_board_howto()" in init)
 

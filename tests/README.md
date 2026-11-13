@@ -130,7 +130,7 @@ states the harness puts it in: when one grows a new state, seed it here.
 | `lint` | pyflakes over the add-on, tests, and tools. The suite never imports most of the glue, so this is what catches a NameError there. |
 | `suite` | `python3 tests/test_due_crew.py` on a clean Python 3.12. |
 
-By area (3.9.12): `python3 tests/test_due_crew.py hook magic` runs only the tests with one of those words in their name, `-q` says only what failed, `--list` names them. CI runs it whole.
+The tests themselves are `tests/suite/` (3.9.12): eight parts in the order they were written (`base`, `board`, `plans`, `v380`, `v381`, `v382`, `v392`, `v399`), one namespace; a new test goes at the end of the newest part. By area (3.9.12): `python3 tests/test_due_crew.py hook magic` runs only the tests with one of those words in their name, `-q` says only what failed, `--list` names them. CI runs it whole.
 | `dialogs` | Every Qt dialog builds under PyQt6 offscreen; the PNGs are attached as an artifact so you can look at them. |
 | `click` | The robot click-test above, in real Anki 25.02.7 (PyQt6 6.11); its report and screenshots are the `click-test` artifact, red or green. |
 

@@ -272,7 +272,7 @@ class FriendsDialog(QDialog):
         def done(result, err):
             self.new_btn.setEnabled(self.loaded)
             if err or result is None:
-                tooltip("Couldn't reach the server. Your code is unchanged.")
+                tooltip("Couldn't reach Due Crew. Your code is unchanged.")
                 return
             code, problem = result
             if code:

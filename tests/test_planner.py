@@ -9,6 +9,7 @@ import datetime
 import glob
 import json
 import os
+import srcs  # noqa: E402
 import random
 import re
 import sqlite3
@@ -128,7 +129,7 @@ def test_gate():
           "(3.9.7: QBank QIDs… went into Magic search, beside it in Tools › Due Crew)",
           m.title == "Plans" and m.items == ["Your plans…", "New plan…",
                                              "Follow a plan…", "—", "Export cards for my AI…"], m.items)
-    init = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
+    init = srcs.glue_src()
     check("gate: Tools › Due Crew puts the Plans submenu in, and the old plan entries at its root are gone",
           "planner.plans_menu(menu)" in init and "Make a plan from a deck…" not in init and "(labs)" not in init)
     cfgj = open(os.path.join(REPO, "due_crew", "config.json")).read()
@@ -1991,7 +1992,7 @@ def test_ai_jobs():
           planned == PR.for_plan(doc, tree, "MS2 Block 2", "2026-10-21").replace(
               "(edit this part):\n\n", "(edit this part):\nMy syllabus: week 1 is shock.\n", 1) and "My syllabus" in planned)
     src = {f: open(os.path.join(REPO, "due_crew", "planner", f)).read() for f in ("ai.py", "mcp.py", "mcp_shim.py")}
-    check("ai: the AI hooks and the AI app's server import no aqt, and the hooks send nothing",
+    check("ai: the AI tips and the AI app's server import no aqt, and the tips send nothing",
           not [f for f, t in src.items() if re.search(r"^\s*(from aqt|import aqt)", t, re.M)]
           and not re.search(r"^\s*(?:from|import)\s+(?:requests|urllib|http|socket|anthropic)\b", src["ai.py"], re.M))
 
