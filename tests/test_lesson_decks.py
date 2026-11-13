@@ -15,6 +15,7 @@ Run: python3 tests/test_lesson_decks.py
 import copy
 import datetime
 import os
+import srcs  # noqa: E402
 import re
 import sqlite3
 import sys
@@ -649,7 +650,7 @@ def test_study_a_day_v396():
         check("a past day's details: its Study", f"planstudyday:p1:{day(-2)}" in past, past)
     if day(3) in days:
         check("a day ahead: none (nothing of it open)", "planstudyday" not in details(day(3)), details(day(3)))
-    src = open(os.path.join(REPO, "due_crew", "plan_flow.py")).read()
+    src = srcs.flow_src()
     check("planstudyday is plan_flow's", 'cmd == "planstudyday"' in src)
 
 
@@ -734,7 +735,7 @@ def test_board():
     check("the morning's line, A: as before", "Cell injury</a> 78</span>" in board._opened_line(
         {"n": 78, "dates": [["p1", "l1", "Cell injury", 78]]}))
     src = fakes.board_source()
-    flow = open(os.path.join(REPO, "due_crew", "plan_flow.py")).read()
+    flow = srcs.flow_src()
     check("the card's Study is planstudydate, which plan_flow handles", 'cmd == "planstudydate"' in flow and "planstudydate" in src)
 
 

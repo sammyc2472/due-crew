@@ -9,6 +9,7 @@ import datetime
 import glob
 import json
 import os
+import srcs  # noqa: E402
 import random
 import re
 import sqlite3
@@ -128,7 +129,7 @@ def test_gate():
           "(3.9.7: QBank QIDs… went into Magic search, beside it in Tools › Due Crew)",
           m.title == "Plans" and m.items == ["Your plans…", "New plan…",
                                              "Follow a plan…", "—", "Export cards for my AI…"], m.items)
-    init = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
+    init = srcs.glue_src()
     check("gate: Tools › Due Crew puts the Plans submenu in, and the old plan entries at its root are gone",
           "planner.plans_menu(menu)" in init and "Make a plan from a deck…" not in init and "(labs)" not in init)
     cfgj = open(os.path.join(REPO, "due_crew", "config.json")).read()

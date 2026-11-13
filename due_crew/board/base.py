@@ -76,6 +76,13 @@ PAGE_RESET = """body {scope} button, body {scope} select, body {scope} input, bo
 body {scope} button {{ color: inherit; background: none; border: 0; padding: 0; border-radius: 0; cursor: pointer; }}"""
 
 
+# duecrew.com's own pages (3.9.12, Stage A's other half): every stylesheet with a control carries this text,
+# so none is drawn by the system (Safari draws one whose appearance isn't none, Liquid Glass and all).
+# The suite checks each page that has a control has it; tools/control_audit.js --site looks at the result.
+SITE_RESET = """button, select, textarea, input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]) {
+  -webkit-appearance: none; appearance: none; }"""
+
+
 def page_reset(scope):
     return PAGE_RESET.format(scope=scope)
 

@@ -15,6 +15,7 @@ Run: python3 tests/test_plan_joy.py
 
 import json
 import os
+import srcs  # noqa: E402
 import html
 import re
 import shutil
@@ -292,7 +293,7 @@ def test_board():
     check("board: still (Reduce motion), a Pip stands where it lands, then goes in its time; the joys' places are left-aligned board parts",
           "#due-crew .ppath i[data-joy] { position: relative; }" in css and "dcjoygo 0s linear calc(5s - var(--ago, 0s)) forwards" in css
           and "@keyframes dcjoygo { to { visibility: hidden; } }" in css)
-    src = open(os.path.join(REPO, "due_crew", "plan_flow.py"), encoding="utf-8").read()
+    src = srcs.flow_src()
     handled = set(re.findall(r'cmd == "([a-z0-9]+)"', src))
     cmds = set(re.findall(r"duecrew:([a-z0-9]+)", fin + h + hc + board.finish_js({"pid": "p1", "name": "x", "sets": 2})))
     check("board: every joy command has its handler", {"planjoyshare", "planjoyx"} <= cmds and {"planjoyshare", "planjoyx"} <= handled, cmds)
@@ -477,7 +478,7 @@ def test_finish_show():
     check("show: seven seconds, the banner three more (shows.py), the board's tokens read off the page, Reduce motion asked",
           (shows.FINISH_SECONDS, shows.BANNER_SECONDS) == (7, 3) and "getPropertyValue('--dc-' + name)" in js
           and "prefers-reduced-motion: reduce" in js)
-    init = open(os.path.join(REPO, "due_crew", "__init__.py"), encoding="utf-8").read()
+    init = srcs.glue_src()
     did = init[init.index("def _on_did_render"):init.index("def _last_studied")]
     check("show: at a board draw, after any cheers landing with it: their show plays first, the finish waits for it to end",
           "document.getElementById('dc-show') && n < 40" in js and did.index("_play_cheers()") < did.index("_joy_show()")

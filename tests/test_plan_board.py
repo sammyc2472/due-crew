@@ -14,6 +14,7 @@ Run: python3 tests/test_plan_board.py
 import datetime
 import json
 import os
+import srcs  # noqa: E402
 import re
 import shutil
 import sqlite3
@@ -818,7 +819,7 @@ def test_catching_up_v3910():
         check("engine: never at my own pace or while paused (nothing opens by itself there)",
               not F._line_can(F.mine(dict(raw, own="ready")), st2) and not F._line_can(F.mine(dict(raw, paused=True)), st2)
               and F._line_can(F.mine(raw), st2))
-    src = open(os.path.join(REPO, "due_crew", "plan_flow.py")).read()
+    src = srcs.flow_src()
     check("engine: the line is read with my numbers at each refresh, and nothing of it is sent (plans.json alone)",
           "_line_refresh(prog)" in src and "line" not in open(os.path.join(REPO, "due_crew", "backend", "api.py")).read().split("def set_days")[1].split("def ")[0])
 
@@ -853,7 +854,7 @@ def test_commands_have_handlers():
     """Every duecrew: command this tab puts on the board has its handler in plan_flow."""
     html = (board._plan_card_html(_card()) + board._plans_empty_html({"cards": [], "exam": {"day": day(43), "days": 43}, "writes": True}))
     cmds = set(re.findall(r"duecrew:([a-z0-9]+)", html))
-    src = "".join(open(os.path.join(REPO, "due_crew", f)).read() for f in ("plan_flow.py", "__init__.py", "team_flow.py"))
+    src = "".join(srcs.due_src(f) for f in ("plan_flow.py", "__init__.py", "team_flow.py"))
     handled = set(re.findall(r'cmd == "([a-z0-9]+)"', src))
     new = {"planbehind", "planfollowcode", "planopennew"}
     check("commands: the new ones are on the tab, and every command on it has a handler",

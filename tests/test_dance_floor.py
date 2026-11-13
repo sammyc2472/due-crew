@@ -15,6 +15,7 @@ Run: python3 tests/test_dance_floor.py
 
 import json
 import os
+import srcs  # noqa: E402
 import re
 import shutil
 import subprocess
@@ -307,7 +308,7 @@ def test_render_and_glue():
     with_floor = board.render(data, {"period": "today"}, 0, dance=view(2))
     check("render: the floor's template in the board, after the fridge; none without a view",
           'id="dc-dance-src"' in with_floor and 'id="dc-dance-src"' not in board.render(data, {"period": "today"}, 0))
-    src = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
+    src = srcs.glue_src()
     check("the glue draws it with the board (song_flow.floor_view) and says it's seen once on the page (mark_seen)",
           'dance=_state["dance_view"]' in src and src.count("    _dance_seen()\n") == 2 and "song_flow.mark_seen(view)" in src)
     import due_crew as dc
