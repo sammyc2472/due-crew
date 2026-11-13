@@ -251,7 +251,7 @@ def _table_html(data, cfg, period, pick=""):
 def _bench_html(rows, cfg):
     """3.9.12, the bench: who hasn't been here since before yesterday, or is on a break, as their Pips
     asleep in a line under the board (their colour and look, no z's, no line between it and the rows),
-    each with a name and how long; a click is their profile, where a cheer is. With Pip off: an initial
+    each with a name and how long since they were last here (on a break or not: the same); a click is their profile, where a cheer is. With Pip off: an initial
     in its place. Names are the server's: escaped."""
     if not rows:
         return ""
@@ -259,7 +259,7 @@ def _bench_html(rows, cfg):
     seats = ""
     for row in rows[:BENCH_MAX]:
         name = str(row.get("name") or "?")
-        how = "on a break" if row["paused"] else away_words(row.get("last_updated"))
+        how = away_words(row.get("last_updated"))  # a break reads as anyone's time away (SC: "just how long since we saw them")
         light, dark = accent_pair(row.get("accent"))
         if cfg.get("sev", True):
             fig = (f'<span class="dc-rsev" style="--rs-l:{light};--rs-d:{dark}">'

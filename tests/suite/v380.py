@@ -914,9 +914,11 @@ def test_long_quiet_friends_fold():
     check("the bench with Pip off: an initial in each seat", off.count('class="bi"') == 3 and "m-nap" not in off[off.index('class="dc-bench"'):])
     alone = dict(data, entries=data["entries"][:1])
     check("the bench: nobody away, no bench", 'class="dc-bench"' not in board.render(alone, {"period": "today"}, 0))
-    paused = dict(data, entries=[data["entries"][0], dict(ent("b", "Bea", ago(0)), paused=True)])
+    paused = dict(data, entries=[data["entries"][0], dict(ent("b", "Bea", ago(16)), paused=True)])
     pb = board.render(paused, {"period": "today"}, 0)
-    check("the bench: someone on a break sits there too, saying so", ">on a break<" in pb[pb.index('class="dc-bench"'):])
+    pb = pb[pb.index('class="dc-bench"'):]
+    check("the bench: someone on a break sits there too, with how long since they were here, as anyone (SC: no \"on a break\")",
+          ">Bea<" in pb and ">2 weeks<" in pb and "on a break" not in pb.split("</div>")[0])
     from due_crew.board import base as _base
     now = datetime.now(timezone.utc)
     words = [_base.away_words((now - timedelta(days=d)).isoformat(), now) for d in (1, 3, 8, 20, 40)]

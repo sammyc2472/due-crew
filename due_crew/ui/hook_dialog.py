@@ -9,7 +9,8 @@ from . import attach_alive, heading, note
 from ..backend.shapes import NOTE_MAX
 
 SHARE_WORDS = "Share with my crew"
-SHARE_NOTE = "Crewmates see it when they miss this card. Never the card itself."
+# 3.9.12 (SC: "Never the card itself." doesn't make sense): who reads it, and that only the tip goes
+SHARE_NOTE = "Friends who have this card see your tip when they miss it. Only the tip is sent."
 
 
 class HookDialog(QDialog):

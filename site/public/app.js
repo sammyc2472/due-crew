@@ -1146,7 +1146,7 @@ const Board = (() => {
     const body = [...fresh.map((r) => tr(r, r.showup ? "✓" : "")), ...dormant.filter((r) => !bench.includes(r)).map((r) => tr(r, ""))];
     tbl.append(h("thead", {}, head), h("tbody", {}, body));
     const seats = bench.slice(0, 12).map((r) => {
-      const how = r.paused ? "on a break" : awayWords(r.last);
+      const how = awayWords(r.last);  // on a break or not: how long since they were here
       const pip = typeof Sev === "object" ? Sev.row(r.p.look, accentPair(r.p.accent), `${r.p.name || "?"}’s Pip, away`) : h("span", { class: "bi" }, (r.p.name || "?").trim().charAt(0).toUpperCase());
       return h("span", { class: "bn", title: `${r.p.name}${how ? ` · ${how}` : ""}` }, pip, h("span", { class: "bm" }, r.p.name), h("span", { class: "bw" }, how));
     });
