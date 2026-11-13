@@ -5607,3 +5607,13 @@ every release that changes how something works.
   325 controls on the board's preview was the same before and after.
   Left: the site's own two stylesheets (app.css, table.css) and the
   Magic field under the deck list keep their resets.
+- 3.9.12, a day's Study and a deck with nothing to take back (Sam's
+  report, 13 Nov, Anki 26.09.3: "FilteredDeckError: No cards matched the
+  provided search" from `plan_flow._refill`). A day's Study borrows cards
+  from other Due Crew decks and gives those decks back the rest; when the
+  rest are suspended by then, or another add-on's deck holds them, Anki
+  refuses a filtered deck that finds none. The call was already inside a
+  try, but its traceback was printed, and Anki shows a printed traceback
+  as an error window. `_refill` takes that one refusal quietly now (the
+  deck stays empty, for the morning's tidy); any other error is raised as
+  before. `test_refill_with_nothing_to_take_back_v3912`.

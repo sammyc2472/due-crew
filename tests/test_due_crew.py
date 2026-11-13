@@ -15778,6 +15778,38 @@ def test_hooks_v3911():
     os.path.exists(H._path()) and os.remove(H._path())
 
 
+def test_refill_with_nothing_to_take_back_v3912():
+    """3.9.12 (Sam's report from a day's Study: "FilteredDeckError: No cards
+    matched the provided search"): a Due Crew deck that lent its cards gets
+    the rest back afterwards; when those are suspended now, or another
+    add-on's deck holds them, Anki refuses a filtered deck that finds none.
+    That isn't ours to report: the deck stays empty. Any other error is."""
+    from due_crew import plan_flow as PF
+
+    class FilteredDeckError(Exception):
+        pass
+    term = types.SimpleNamespace(search="", limit=0)
+    deck = types.SimpleNamespace(config=types.SimpleNamespace(search_terms=[term]))
+    calls = []
+
+    def col(err):
+        def update(d):
+            calls.append((term.search, term.limit))
+            if err is not None:
+                raise err
+        return types.SimpleNamespace(sched=types.SimpleNamespace(get_or_create_filtered_deck=lambda deck_id: deck, add_or_update_filtered_deck=update))
+    PF._refill(col(None), 5, [11, 12])
+    quiet = PF._refill(col(FilteredDeckError("No cards matched the provided search.")), 5, [11, 12])
+    loud = None
+    try:
+        PF._refill(col(RuntimeError("something else")), 5, [11])
+    except RuntimeError as e:
+        loud = str(e)
+    PF._refill(col(RuntimeError("never asked")), 5, [])
+    check("refill: its cards back by id; none that Anki will take leaves it empty and says nothing; another error is still raised; no cards, no ask",
+          calls == [("cid:11,12", 2), ("cid:11,12", 2), ("cid:11", 1)] and quiet is None and loud == "something else", (calls, loud))
+
+
 def test_one_control_reset_v3912():
     """3.9.12, the foundations round, Stage A: every button of ours starts
     from one reset (board.button_reset), whichever part of the board it's
