@@ -2577,9 +2577,11 @@ def test_knows_due_v390():
         K.on_answer(card)
         sam.session["due_day"] = _day(0)
         check("the chip: not before I miss it; the first miss today shows who knows it, with no request; "
-              "a card nobody I can name knows, nothing; yesterday's answer, nothing",
+              "a card nobody I can name knows, nothing; yesterday's answer, only the way to add a tip",
               shown[0] is None and shown[1] and shown[1]["kind"] == "knows" and shown[1]["text"].endswith("Dre knows this")
-              and shown[2] is None and shown[3] is None and len(store.log) == n, shown)
+              and shown[2] is None and len(store.log) == n
+              # 3.9.12 (SC: "lets loosen"): with nothing else to say, a card missed today offers a tip, lapses or none
+              and shown[3]["kind"] == "hookadd" and card.lapses == 0, shown)
         lapsed = types.SimpleNamespace(note=lambda: types.SimpleNamespace(guid="guid000001"), ord=0, id=99, lapses=2)
         check("stuck now: lapsed twice, or missed today", K.stuck_now(col, lapsed, col.sched.day_cutoff)
               and K.stuck_now(col, card, col.sched.day_cutoff)

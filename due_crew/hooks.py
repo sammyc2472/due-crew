@@ -173,7 +173,7 @@ def view(hook, stuck, offer, has_turned, can_ask):
     asked: whether this was the "what made it click" line). stuck: I'm
     stuck on it (my hook shows, folded till Show: Sam, "especially for one
     by ones we don't want to spoil the correct answer"); offer: I've missed
-    it twice or more and again today (the quiet way to add one, beside Edit
+    it today or yesterday (3.9.12; the quiet way to add one, beside Edit
     in the bar, never over the card). Raw words: the chip draws them as text."""
     if hook:
         if not stuck:

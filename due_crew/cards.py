@@ -799,7 +799,9 @@ def _with_hook(view, card, guid):
         stuck = stuck and not has_turned
         has_turned = has_turned and not hook
         day = log_today(col)
-        offer = (not hook and int(card.lapses or 0) >= STUCK_LAPSES and bool(col.db.scalar(
+        # 3.9.12 (SC: "lets loosen"): any card I pressed Again on today or yesterday, learning ones too (it was two
+        # lapses as a review card first, which a card still being learned never has)
+        offer = (not hook and bool(col.db.scalar(
             "SELECT 1 FROM revlog WHERE cid = ? AND id >= ? AND ease = 1 LIMIT 1", int(card.id), (int(col.sched.day_cutoff) - 86400) * 1000)))
         got, asked = hooks.view(hook, stuck, offer, has_turned, has_turned and hooks.may_ask(guid, day))
         if asked:
