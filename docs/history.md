@@ -5638,3 +5638,16 @@ every release that changes how something works.
   Settings row for my song. Tests: `test_floor_view` (the days, the ask,
   Keep), `test_one_button_and_the_ask_v3912`, the commands through
   `_on_js`.
+- 3.9.12, the README anew (Sam, 13 Nov: "rebuild the readme anew. more
+  human sounding. clear about functionalities and good screenshots").
+  Rewritten from the tagline to Share (Install on is as it was): what
+  Due Crew is in two short paragraphs, "What's in it" as six lines, then
+  a section each, said plainly; plans split into "If you follow one" and
+  "If you write one"; the study soundtrack and Pip's closet, which it
+  never mentioned, have their own words. No anchor links (AnkiWeb's copy
+  has no anchors). Five new pictures, renders of the add-on's own pages
+  like the rest: `magic.png` (Magic search's window on the suite's sample
+  deck), `insights.png`, `closet.png`, `party.png`, `dance.png`
+  (`tools/readme_shots.py`, then `node tools/readme_shots.js`, after
+  `tools/preview.py`). They show on GitHub and AnkiWeb once this is on
+  `main` (the links are raw URLs there).

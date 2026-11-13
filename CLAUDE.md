@@ -45,7 +45,9 @@ add-on.
   raw.githubusercontent.com URLs on `main`, so the same text works on
   AnkiWeb. They're renders of the add-on's own board, overlays and room
   widget (sample crew), not mockups; re-render them when those change
-  (board.png: `tools/readme_images.py`, then `node tools/readme_images.js`).
+  (board.png: `tools/readme_images.py`, then `node tools/readme_images.js`;
+  magic, insights, closet, party, dance: `tools/preview.py`, `tools/readme_shots.py`,
+  then `node tools/readme_shots.js`).
 - `docs/logo/` — the logo ("Seven days"), final artwork: never redraw or
   re-typeset it. Green on GitHub; inside the add-on, `due_crew/logo.py`
   colours the studied days with the user's accent: the board's title is
