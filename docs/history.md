@@ -5680,4 +5680,6 @@ every release that changes how something works.
   preview's board for a crop; `readme_images.py` renders plans amber).
   bingo.png is new: the preview's card and squad ("Orca crew"), each
   stamp its person's Pip (`bingo_html(..., people=)`), no school's name.
+- 3.9.12, the README: from Magic search to Pip Party a part is its
+  heading and its picture, no line under it (SC, 13 Nov).
 

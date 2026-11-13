@@ -20,58 +20,37 @@ password.
 
 ## Magic search
 
-Type "30 minutes of renal". Get 30 minutes of renal.
-
 <img alt="Magic search: heart failure, 27 cards, Study now" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/magic.png?v=2" width="600">
 
 ## Study plans
-
-One person makes the calendar. Everyone wakes up to that day's cards.
-Fall behind and it waits for you.
 
 <img alt="You › Plans: a plan's week, today's assignments open" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/plans.png?v=10" width="600">
 
 ## Insights
 
-What you know, what you don't, and how bad next week is going to be.
-
 <img alt="You › Insights: what you know by topic, and your reviews for the weeks ahead" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/insights.png?v=2" width="600">
 
 ## Cheers
-
-Your friend hit 700 reviews. Throw confetti at their screen.
 
 <img alt="A cheer landing" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/flurry.png" width="600">
 
 ## Study rooms
 
-25 minutes on, five off, together. The timer lives in Anki's top bar.
-
 <img alt="A study room in Anki's top bar" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/room.png?v=2" width="420">
 
 ## Study soundtrack
-
-Put on the song you're studying to. Your crew dances to theirs.
 
 <img alt="The dance floor: your Pip at the booth, your crew's Pips with their songs" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/dance.png?v=1" width="420">
 
 ## Squad bingo
 
-A new card for your class every Monday. Most squares take a few of
-you, so somebody has to text the group chat.
-
 <img alt="A squad's bingo card with a line" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/bingo.png?v=3" width="600">
 
 ## Pip
 
-The little square from the logo. Study, and it earns hats.
-
 <img alt="Pip's closet: hats, glasses and costumes earned by showing up" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/closet.png?v=1" width="600">
 
 ## Pip Party
-
-Trivia night, but the questions are your own cards. Phones in hand,
-Anki on the TV. (Beta.)
 
 <img alt="You › Party: three games, and a map of your deck to pick the night's topics from" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/party.png?v=2" width="600">
 
