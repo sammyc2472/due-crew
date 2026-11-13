@@ -42,7 +42,7 @@ for e in CREW:
 DATA = {"entries": CREW, "labels": L, "tomorrow": P["TOMORROW"], "pending": []}
 
 ME = {"period": "today", "accent": "green", "sev_look": ["headphones"], "sev_closet": {"headphones": L[-1]},
-      "use_told": True}  # (the once-only line about counts isn't the listing's picture)
+      "use_told": True, "live_told": True}  # (the once-only lines aren't the listing's picture)
 html = board.render(DATA, ME, P["now_ts"] - 30,
                     due=dict(P["_DV"], folded=True), plans=P["PLANS"], you=P["_YOU"]("today", folded=True))
 page = f"""<!doctype html><html><head><meta charset="utf-8"><title>README board</title>
@@ -65,3 +65,16 @@ out = os.path.join(HERE, "readme_plans.html")
 with open(out, "w", encoding="utf-8") as f:
     f.write(page)
 print("wrote", out)
+
+# 3.9.12: the landing page's pictures (site/public/board.png and board-dark.png), the same board in each theme
+for name, theme, ground in (("readme_site.html", "light", "#fbfbf8"), ("readme_site_dark.html", "dark", "#1c1c1c")):
+    html = board.render(DATA, dict(ME, theme=theme), P["now_ts"] - 30,
+                        due=dict(P["_DV"], folded=True), plans=P["PLANS"], you=P["_YOU"]("today", folded=True))
+    page = f"""<!doctype html><html><head><meta charset="utf-8"><title>Landing board</title>
+<style>body {{ margin: 0; padding: 16px; background: {ground}; font-family: -apple-system, sans-serif; }}
+#shot {{ width: 640px; }}</style></head>
+<body><center><div id="shot">{html}</div></center></body></html>"""
+    out = os.path.join(HERE, name)
+    with open(out, "w", encoding="utf-8") as f:
+        f.write(page)
+    print("wrote", out)

@@ -5,7 +5,7 @@
 
 Your friends' studying next to yours, on Anki's Decks screen.
 
-<img alt="The Due Crew board on the Decks screen, your day folded above it" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/board.png?v=10" width="600">
+<img alt="The Due Crew board on the Decks screen, your day folded above it" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/board.png?v=11" width="600">
 
 Studying for a big exam is more fun with friends! Due Crew puts your crew on
 Anki's Decks screen: who's studied today, who's studying now, how far
@@ -28,8 +28,9 @@ your own colour.
 
 <img alt="A study room in Anki's top bar" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/room.png?v=2" width="420">
 
-- **Stuck on a card?** Ask your crew. Anyone who has it down can send a
-  tip, which shows next time the card comes up.
+- **Hooks.** Leave the line that made a card click. It comes up, folded
+  till you ask, the next time you miss that card, and for any friend who
+  misses it too. Nobody's left one? Ask your crew.
 - **Good-luck cards.** Leave a line the night before a friend's exam.
 - **Profiles.** Half a year of a friend's studying, and your days in a
   row together.
@@ -65,15 +66,13 @@ Above the board is yours.
   study, your plans' decks first. At the end: take five, go again, or stop there. Your crew
   sees you're studying. Not started by your usual time? Today nudges you.
 - **Insights**, for any deck: your reviews for the next six weeks,
-  counted from your own reviews, and what stopping new cards before your
-  exam would do (one click to stop, one to start again); the cards Anki
-  won't show you before your exam; the leeches Anki stopped showing you,
-  one button each to bring them back; what isn't sticking yet; and a map
-  of what you know, by topic or by the week you started it. It's worked
+  counted from your own reviews; the leeches Anki stopped showing you;
+  how you study; and a map of what you know, by topic or by the week you
+  started it. It only shows: nothing there changes a card. It's worked
   out in your Anki and never sent; copy the map as a picture or as text
   if you want to share it.
 - **Scrapbook.** What your crew sent you and what you did, by month:
-  drawings you take down, good-luck cards, tips that helped, plans you
+  drawings you take down, good-luck cards, hooks that helped, plans you
   finished, under each year's page. Kept on your computer, never sent.
 
 **Pip**, the square from the logo, keeps you company: heads down in a
@@ -86,9 +85,10 @@ turns it off.
 Plan a class's or a crew's studying, in Anki (Tools → Due Crew → Plans →
 New plan…) or on a calendar at duecrew.com: pick chapters from a deck, set
 a pace, mark the exam, and share the code. Everyone following gets that
-day's cards each morning. Behind? **Catch up** or **Push my dates back**.
+day's cards each morning. Fall three days behind and the plan waits for
+you: each day you owe has **Study** and **Ignore**, and its dates don't move.
 
-<img alt="You › Plans: a plan's week, today's assignments open" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/plans.png?v=8" width="600">
+<img alt="You › Plans: a plan's week, today's assignments open" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/plans.png?v=9" width="600">
 
 - **Your week.** You › Plans shows the plan's seven days; click one for
   its assignments. Following two plans? Switch between them by name.
@@ -119,6 +119,12 @@ day's cards each morning. Behind? **Catch up** or **Push my dates back**.
 - Plans can have co-authors (each says yes first), notes for followers
   on a video or a card, go in your calendar app, and be shared in the
   library.
+
+## Party
+
+Party games on your own cards: Trivia, Imposter and Links. Pick what
+they're about in You › Party and press Host. The TV is a window of
+Anki's; phones join at duecrew.com with its code.
 
 ## In Anki's browser
 
