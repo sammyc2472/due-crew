@@ -310,7 +310,7 @@ def test_render_and_glue():
           'id="dc-dance-src"' in with_floor and 'id="dc-dance-src"' not in board.render(data, {"period": "today"}, 0))
     src = srcs.glue_src()
     check("the glue draws it with the board (song_flow.floor_view) and says it's seen once on the page (mark_seen)",
-          'dance=_state["dance_view"]' in src and src.count("    _dance_seen()\n") == 2 and "song_flow.mark_seen(view)" in src)
+          'dance=_state["dance_view"]' in src and src.count("    _dance_seen()\n") == 3 and "song_flow.mark_seen(view)" in src)
     import due_crew as dc
     from due_crew.app import _state
     box = {"cfg": {"sev": True, "song_seen": {"dre": "1"}}}
