@@ -5672,7 +5672,7 @@ every release that changes how something works.
   different user choice colors... redo the bingo without BUSm and make
   sure it's the pips not emojis"). A heading, a line or two, the picture:
   Get it, Magic search, Study plans, Insights, Cheers, Study rooms, Study
-  soundtrack, Squad bingo, Pip, Pip Party, And more; about 560 words
+  soundtrack, Squad bingo, Pip, Pip Party, And more; about 800 words
   with Privacy. The pictures wear different accents: the board green,
   Magic search blue, plans amber, Insights teal, bingo purple, Party
   rose (`readme_shots.py` renders Magic search and bingo in theirs and
