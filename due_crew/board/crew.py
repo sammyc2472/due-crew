@@ -250,20 +250,22 @@ def _table_html(data, cfg, period, pick=""):
 
 def _bench_html(rows, cfg):
     """3.9.12, the bench: who hasn't been here since before yesterday, or is on a break, as their Pips
-    asleep in a line under the board (their colour and look, no z's, no line between it and the rows),
+    in a line under the board, a mix by seat (BENCH_POSES: resting, awake, off with a case, asleep; the awake
+    ones blink each on its own clock, sev.blink; the others breathe or step) (their colour and look, no z's, no line between it and the rows),
     each with a name and how long since they were last here (on a break or not: the same); a click is their profile, where a cheer is. With Pip off: an initial
     in its place. Names are the server's: escaped."""
     if not rows:
         return ""
     e = _html.escape
     seats = ""
-    for row in rows[:BENCH_MAX]:
+    for i, row in enumerate(rows[:BENCH_MAX]):
         name = str(row.get("name") or "?")
+        pose, moment = BENCH_POSES[i % len(BENCH_POSES)]
         how = away_words(row.get("last_updated"))  # a break reads as anyone's time away (SC: "just how long since we saw them")
         light, dark = accent_pair(row.get("accent"))
         if cfg.get("sev", True):
-            fig = (f'<span class="dc-rsev" style="--rs-l:{light};--rs-d:{dark}">'
-                   + _sev.slot(_sev.svg("nap", rest=True, look=row.get("look"), label=e(f"{name}’s Pip, away", quote=True)), BENCH_PIP)
+            fig = (f'<span class="dc-rsev" style="--rs-l:{light};--rs-d:{dark};{_sev.blink_css(i)}">'
+                   + _sev.slot(_sev.svg(pose, moment, rest=True, look=row.get("look"), label=e(f"{name}’s Pip, away", quote=True)), BENCH_PIP)
                    + '</span>')
         else:
             fig = f'<span class="bi" style="--rs-l:{light};--rs-d:{dark}">{e(initial(name))}</span>'
@@ -277,6 +279,9 @@ def _bench_html(rows, cfg):
 
 
 BENCH_PIP = 30
+# a seat's Pip, in turn (SC: "a mix"): eyes closed and smiling, awake, off with a suitcase, asleep. (pose, moment):
+# the resting one breathes as the sleeper does (its own moment is the breathing box, which never stops)
+BENCH_POSES = (("rest", "nap"), ("idle", None), ("away", None), ("nap", None))
 
 
 def _scroll(html, rows):

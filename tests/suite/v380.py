@@ -905,6 +905,9 @@ def test_long_quiet_friends_fold():
     check("the bench: everyone away longer than yesterday, names escaped, how long under each, a click their profile",
           bench.count('class="bn"') == 3 and ">Wren<" in bench and ">a week<" in bench and "Theo&lt;" in bench and "<Theo<" not in bench
           and ">since " in bench and f"duecrew:profile:w|{board.BOARD_KEY}" in bench and "m-nap" in bench, bench[:600])
+    check("the bench: a mix by seat (resting, awake, off with a case), each Pip on its own blink clock (SC)",
+          bench.count("m-nap") == 1 and "m-idle" in bench and "m-away" in bench and "m-breathe" not in bench
+          and len(set(re.findall(r"--sv-b:[\d.]+s;--sv-d:-?[\d.]+s", bench))) == 3, bench[:600])
     rows = page[:page.index('class="dc-bench"')]
     check("the bench: none of them has a row, and the fold is gone from the crew's board",
           'class="qfold"' not in page and ">Wren<" not in rows.split("</style>")[-1] and "data-uid" not in bench)

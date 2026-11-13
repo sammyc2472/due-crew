@@ -2393,7 +2393,7 @@ def test_energy_and_security_review_v397():
     src = fakes.board_source()
     # -- a resting pointer isn't pointing --
     check("rest: every point-to-play loop reads the page's rest (--sv-hover), none is forever on its own",
-          "--sv-on: infinite;" not in src and "--sv-on: infinite;" not in SV.CSS and src.count("--sv-on: var(--sv-hover, infinite);") == 5
+          "--sv-on: infinite;" not in src and "--sv-on: infinite;" not in SV.CSS and src.count("--sv-on: var(--sv-hover, infinite);") == 6
           and ".sv:hover, .sv-slot:hover .sv { --sv-on: var(--sv-hover, infinite); }" in SV.CSS and ".dc-rest { --sv-hover: 1; }" in SV.CSS)
     check("rest: the watcher rides the Decks page's scripts (once a page) and the bars' widgets",
           SV.REST_JS in board.keep_me_in_view_js(True) and SV.REST_JS not in board.keep_me_in_view_js(False)

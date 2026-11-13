@@ -132,6 +132,8 @@ def _css(cfg):
     #due-crew .dc-bench a.bn:hover, #due-crew .dc-bench a.bn:focus-visible {{ opacity: 1; }}
     #due-crew .dc-bench .dc-rsev {{ display: block; line-height: 0; margin: 8px 0 7px; --sv-a: var(--rs-l); }}
     #due-crew .dc-bench .sv-z {{ display: none; }}  /* asleep, quietly (SC: "without the zzz") */
+    #due-crew .dc-bench a.bn:hover .sv, #due-crew .dc-bench a.bn:focus-visible .sv {{ --sv-on: var(--sv-hover, infinite); }}
+    #due-crew .dc-bench .bn:nth-child(3n+2) .sv-body {{ animation-delay: -1.1s; }} #due-crew .dc-bench .bn:nth-child(3n) .sv-body {{ animation-delay: -2.3s; }}  /* no two breathe together */
     #due-crew .dc-bench .bm {{ max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dc-ink); }}
     #due-crew .dc-bench .bw {{ white-space: nowrap; }}
     #due-crew .dc-bench .bi {{ display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; font-weight: 700; font-size: 12px;
