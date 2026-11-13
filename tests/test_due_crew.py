@@ -15773,6 +15773,32 @@ def test_hooks_v3911():
     os.path.exists(H._path()) and os.remove(H._path())
 
 
+def test_the_fake_has_every_route_v3912():
+    """3.9.12, the foundations round: the suite's server is the Worker
+    restated, so a route the Worker gains has to be restated too, or the
+    client's use of it is tested against nothing. Every route in
+    worker/src/index.ts is asked of the fake; the ones it doesn't know
+    are named here, and are only the site's."""
+    ts = open(os.path.join(REPO, "worker", "src", "index.ts"), encoding="utf-8").read()
+    store = world({"sam": "Sam"}, {})
+    token = store.session_for("sam")
+
+    def fill(g):
+        t = g.group(0)
+        return ("ABCD" if "A-Za-z]{4}" in t else "ABC123" if "A-Za-z0-9" in t else "7" if ("[0-9]{1," in t or "d{" in t)
+                else "01ARZ3NDEKTSV4RRFFQ69G5FAV" if "{26}" in t else "x1")
+    routes = re.findall(r'\b(?:authed|open)\("(GET|POST|PUT|PATCH|DELETE)", r\([`"]([^`"]+)[`"]\)', ts)
+    unknown = []
+    for m, raw in routes:
+        path = re.sub(r"\([^)]*\)", fill, raw.replace("${ID}", "x1"))
+        r = store.handle(m, "https://api.test" + path, {"Authorization": "Bearer " + token}, {} if m != "GET" else None)
+        if r.status_code == 404 and (r.json() or {}).get("error") == "not_found":
+            unknown.append((m, raw))
+    SITE_ONLY = [("POST", "/auth/link/redeem"), ("POST", "/links/email")]  # the site's sign-in link and the landing page's "email it"
+    check("the fake answers every route the Worker has but the site's own two; a new route is restated there or named here",
+          len(routes) > 100 and sorted(unknown) == sorted(SITE_ONLY), (len(routes), unknown))
+
+
 def test_copy_rules_v3912():
     """3.9.12, the foundations round: the words' rules, checked instead of
     remembered. Buttons, headings and menu items are sentence case; what a
