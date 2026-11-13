@@ -8,17 +8,18 @@ from datetime import datetime
 from ..logo import board_mark
 from .. import sev as _sev
 
-from .base import (BENCH_MAX, CREW_VIEWS, HEADERS, ROW_CAP, _NW_ROOM, _ago, _cell, _even_rows, _fmt_time, _label,
+from .base import (BENCH_MAX, CREW_VIEWS, headers, ROW_CAP, _NW_ROOM, _ago, _cell, _even_rows, _fmt_time, _label,
                    accent_pair, away_words, initial,
     _pycmd, _reviews_cell, _showed, build_deck_groups, build_rows, plan_target, sort_key,
     week_labels)
 from .pip import row_sev
+from ..words import later as _later, t as _t, tn as _tn
 
 
 def crew_views(show_up=False, hidden=frozenset()):
     """3.8.0: Crew's views, picked under the pills: Today, Week, Decks; in
     show-up mode This week (one view for both) and Decks. Decks can hide."""
-    first = (("today", "This week"),) if show_up else CREW_VIEWS[:2]
+    first = (("today", _later("This week")),) if show_up else CREW_VIEWS[:2]
     return first + (CREW_VIEWS[2:] if "decks" not in hidden else ())
 
 
@@ -34,14 +35,14 @@ def _head(period, show_up=False, hidden=frozenset(), crew="today", sev=None):
     views = dict(crew_views(show_up, hidden))
     crew = _crew_on(crew, show_up)
     crew = crew if crew in views else "today"
-    keys = (("crew", "Crew"), ("squads", "Squads"))
+    keys = (("crew", _later("Crew")), ("squads", _later("Squads")))
     on = "squads" if period == "squads" else "crew"
     keys = tuple((k, label) for k, label in keys if k not in hidden)
     pills = ""
     for key, label in keys:
         cls = "dc-pill on" if on == key else "dc-pill"
         pills += (f'<a class="{cls}" href="#" '
-                  f'onclick="{_pycmd("period:" + (crew if key == "crew" else key))}">{label}</a>')
+                  f'onclick="{_pycmd("period:" + (crew if key == "crew" else key))}">{_t(label)}</a>')
     # 3.8.1: Pip beside the logo, never on it (the logo itself never changes),
     # and only for a moment: it pops in, plays it, and goes (Sam)
     beside = (f'<a class="dc-sev once" href="#" title="Pip&rsquo;s closet" onclick="{_pycmd("closet")}" '
@@ -60,8 +61,8 @@ def _crew_picker(period, show_up=False, hidden=frozenset()):
     period = _crew_on(period, show_up)
     on = ' class="on"'
     return ('<div class="dc-sw">' + "".join(
-        f'<a{on if period == k else ""} data-t="{t}" href="#" onclick="{_pycmd("period:" + k)}">{t}</a>'
-        for k, t in views) + "</div>")
+        f'<a{on if period == k else ""} data-t="{_t(word)}" href="#" onclick="{_pycmd("period:" + k)}">{_t(word)}</a>'
+        for k, word in views) + "</div>")
 
 
 def _corner(inner):
@@ -79,20 +80,20 @@ def _chip(row):
         return ""
     if row.get("room"):
         # the room's title is a friend's name: escaped
-        return f' <span class="dc-live"></span><span class="chip live">in {_html.escape(str(row["room"]))}</span>'
+        return f' <span class="dc-live"></span><span class="chip live">{_html.escape(_t("in {room}", room=str(row["room"])))}</span>'
     if row.get("live"):
-        return ' <span class="dc-live"></span><span class="chip live">studying now</span>'
+        return f' <span class="dc-live"></span><span class="chip live">{_t("studying now")}</span>'
     if row.get("exam"):
         return f' <span class="chip exam">{_html.escape(str(row["exam"]))}</span>'
     if row.get("back"):
-        return ' <span class="chip">back today</span>'
+        return f' <span class="chip">{_t("back today")}</span>'
     if row.get("away"):
         away = str(row["away"])
-        return f' <span class="chip">{_html.escape(away if away == "away" else "away · " + away)}</span>'
+        return f' <span class="chip">{_html.escape(_t("away") if away == "away" else _t("away · {when}", when=away))}</span>'
     r = row.get("recap")
     if r:
         return (f' <span class="chip" title="{_html.escape(str(r.get("name") or ""))}">'
-                f'week {int(r.get("n") or 0)} done</span>')
+                f'{_t("week {n} done", n=int(r.get("n") or 0))}</span>')
     return ""
 
 
@@ -111,16 +112,17 @@ def _row_html(row, rank, cfg, period="today", held=False):
     la = ""
     if row["paused"]:
         cls += " dim"
-        extra = ' <span class="dc-note">&middot; on a break</span>'
+        extra = f' <span class="dc-note">&middot; {_t("on a break")}</span>'
         cells = f'<td class="n">{_NW_ROOM}&mdash;{_NW_ROOM}</td>' + '<td class="n">&mdash;</td>' * 3
     elif row.get("notyet"):
         cls += " dim"
         # a phone's reviews reach us only once their computer's Anki syncs,
         # so say when we last heard, not that they haven't studied
-        txt, _tone = _ago(row["last_updated"])
-        when = f" as of {txt}" if txt and txt != "just now" else ""
-        extra = (' <span class="la faded">&middot; nothing '
-                 f'{"this week" if period == "week" else "yet"}{when}</span>')
+        txt, tone = _ago(row["last_updated"])
+        nothing = _t("nothing this week") if period == "week" else _t("nothing yet")
+        if txt and not (tone == "fresh" and txt == _t("just now")):
+            nothing = _t("nothing this week as of {when}", when=txt) if period == "week" else _t("nothing yet as of {when}", when=txt)
+        extra = f' <span class="la faded">&middot; {nothing}</span>'
         cells = f'<td class="n">{_NW_ROOM}&mdash;{_NW_ROOM}</td>' + '<td class="n">&mdash;</td>' * 3
     elif row["quiet"]:
         cls += " dim"
@@ -133,10 +135,10 @@ def _row_html(row, rank, cfg, period="today", held=False):
     else:
         if row["stale"]:
             cls += " dim"
-            extra = ' <span class="la faded">&middot; yesterday</span>'
+            extra = f' <span class="la faded">&middot; {_t("yesterday")}</span>'
         elif row.get("showup"):  # 3.9.10, one grid: the tick is in the name's line (it had a column of its own)
             n = int(row.get("days_wk") or 0)
-            extra = ' <span class="la faded">&#10003;' + (f' {n} day{"s" if n != 1 else ""} this week' if n else "") + '</span>'
+            extra = ' <span class="la faded">&#10003;' + (" " + _tn("{n} day this week", "{n} days this week", n) if n else "") + '</span>'
         # T5: how many were new shows on the Week tab, where it's the story
         cells = (f'<td class="n">{_reviews_cell(row["reviews"], row.get("new") if period == "week" else None)}</td>'
                  f'<td class="n">{_cell(row["time_ms"], _fmt_time)}</td>'
@@ -165,8 +167,8 @@ def _row_html(row, rank, cfg, period="today", held=False):
                 f'onclick="{_pycmd("profile:" + str(row["user_id"]))}">{name}</a>')
     else:
         # 3.9.1: the cheer is a pill after the name (and its chip), where the eye already is
-        cheer = (f'<a class="dc-cpill" href="#" title="Send a cheer" aria-label="Cheer {_html.escape(str(row["name"]), quote=True)}" '
-                 f'onclick="{_pycmd("cheerpick:" + str(row["user_id"]))}">&#127881; Cheer</a>') if not held else (
+        cheer = (f'<a class="dc-cpill" href="#" title="{_t("Send a cheer")}" aria-label="{_html.escape(_t("Cheer {name}", name=str(row["name"])), quote=True)}" '
+                 f'onclick="{_pycmd("cheerpick:" + str(row["user_id"]))}">&#127881; {_t("Cheer")}</a>') if not held else (
             # 3.9.9 (Off the Board, 11): sent while Due Crew couldn't be reached; it goes with the next refresh that does
             f'<a class="dc-cpill held" href="#" title="Sends when Due Crew is back" '
             f'aria-label="Cheer for {_html.escape(str(row["name"]), quote=True)}, waiting to send" '
@@ -195,18 +197,19 @@ def _solo_html(data):
            "pycmd('duecrew:addcode:'+v+'|'+window.dcBK);return false;")
     pending = [str(x) for x in data.get("pending") or []]
     if not pending:
-        wait = "Send a friend your invite. Once you’ve added each other, they’re here."
+        wait = _t("Send a friend your invite. Once you’ve added each other, they’re here.")
     elif len(pending) <= 2:
-        wait = f"Waiting for {' and '.join(_html.escape(x) for x in pending)} to add you back."
+        wait = _html.escape(_tn("Waiting for {who} to add you back.", "Waiting for {who} and {other} to add you back.", len(pending),
+                                who=pending[0], other=pending[-1]))
     else:
-        wait = f"Waiting for {len(pending)} people to add you back."
-    return (f'<div class="dc-empty"><b>Bring your crew</b>'
+        wait = _t("Waiting for {n} people to add you back.", n=len(pending))
+    return (f'<div class="dc-empty"><b>{_t("Bring your crew")}</b>'
             f'<span style="color: var(--dc-muted);">{wait}</span>'
             f'<div class="row">{f"<span class=dc-code>{_html.escape(spaced)}</span>" if code else ""}'
-            f'<a class="bt on" href="#" onclick="{_pycmd("copyinvite")}">Copy invite</a></div>'
-            f'<div class="row"><input id="dc-addcode" placeholder="A code, or paste an invite" '
+            f'<a class="bt on" href="#" onclick="{_pycmd("copyinvite")}">{_t("Copy invite")}</a></div>'
+            f'<div class="row"><input id="dc-addcode" placeholder="{_t("A code, or paste an invite")}" '
             f'onkeydown="if(event.key===\'Enter\'){{{add}}}">'
-            f'<a class="bt" href="#" onclick="{add}">Add</a></div></div>')
+            f'<a class="bt" href="#" onclick="{add}">{_t("Add")}</a></div></div>')
 
 
 def _table_html(data, cfg, period, pick=""):
@@ -218,7 +221,7 @@ def _table_html(data, cfg, period, pick=""):
     heads = _corner(pick) if pick else "<th></th><th></th>"
     if sort == "week":
         sort = "reviews"
-    for key, label in HEADERS:
+    for key, label in headers():
         on = "on" if key == sort else ""
         arrow = " &#9662;" if key == sort else ""
         heads += (f'<th><a class="{on}" href="#" '
@@ -268,7 +271,7 @@ def _bench_html(rows, cfg):
         light, dark = accent_pair(row.get("accent"))
         if cfg.get("sev", True):
             fig = (f'<span class="dc-rsev" style="--rs-l:{light};--rs-d:{dark};{_sev.blink_css(i)}">'
-                   + _sev.slot(_sev.svg(pose, moment, rest=True, look=row.get("look"), label=e(f"{name}’s Pip, away", quote=True)), BENCH_PIP)
+                   + _sev.slot(_sev.svg(pose, moment, rest=True, look=row.get("look"), label=e(_t("{name}’s Pip, away", name=name), quote=True)), BENCH_PIP)
                    + '</span>')
         else:
             fig = f'<span class="bi" style="--rs-l:{light};--rs-d:{dark}">{e(initial(name))}</span>'
@@ -277,8 +280,8 @@ def _bench_html(rows, cfg):
                   f'<span class="bm">{e(name)}</span><span class="bw">{how}</span></a>')
     more = len(rows) - BENCH_MAX
     if more > 0:
-        seats += f'<span class="bn more">+{more} more</span>'
-    return f'<div class="dc-bench" aria-label="Not here lately">{seats}</div>'
+        seats += f'<span class="bn more">{_t("+{n} more", n=more)}</span>'
+    return f'<div class="dc-bench" aria-label="{_t("Not here lately")}">{seats}</div>'
 
 
 BENCH_PIP = 30

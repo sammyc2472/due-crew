@@ -994,8 +994,8 @@ def test_sync_reliability_v251():
           and "Join your crew" not in card)
     base = {"entries": [], "labels": [TODAY.isoformat()], "tomorrow": "", "pending": []}
     check("board: the footer admits a failed sync, and only then",
-          "Couldn&rsquo;t sync" in board.render(base, {}, 0, sync_error=True)
-          and "Couldn&rsquo;t sync" not in board.render(base, {}, 0))
+          "Couldn’t sync" in board.render(base, {}, 0, sync_error=True)
+          and "Couldn’t sync" not in board.render(base, {}, 0))
 
 
 def test_remove_sticks():

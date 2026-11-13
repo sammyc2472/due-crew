@@ -168,6 +168,18 @@ def _pick_exam_day(cmd):
         _apply_settings(changed)
 
 
+def speak(c=None):
+    """3.10.0 (words.py): the language from here on: Settings' pick, or Anki's own. At a profile's open and when
+    the setting changes."""
+    from .. import words
+    try:
+        import anki.lang
+        anki_lang = getattr(anki.lang, "current_lang", "") or ""
+    except Exception:
+        anki_lang = ""
+    return words.use(words.pick((c if c is not None else cfg()).get("lang"), anki_lang))
+
+
 def _apply_settings(changed, focus=None):
     """Save what one change changed; the board redraws at once, and a
     sharing change goes out a moment later (one sync for a run of clicks)."""
@@ -179,6 +191,8 @@ def _apply_settings(changed, focus=None):
     exam = "exam_date" in changed and str(changed["exam_date"] or "") != str(c.get("exam_date") or "")
     c.update(changed)
     save_cfg(c)
+    if "lang" in changed:
+        speak(c)  # 3.10.0: the redraw below is in the language just picked
     if exam:
         ahead_flow.exam_moved()  # 3.9.2's QoL pass: a pause to it follows now, not tomorrow
     if changed.get("show_leaderboard") is False:

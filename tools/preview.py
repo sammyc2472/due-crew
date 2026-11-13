@@ -19,6 +19,8 @@ fakes.install_fake_requests(fakes.FakeWorker())
 fakes.install_fake_aqt()
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from due_crew import board  # noqa: E402
+from due_crew import words as _words  # noqa: E402
+_words.use(os.environ.get("DC_LANG", "en"))  # 3.10.0: DC_LANG=es python3 tools/preview.py draws it in Spanish
 
 TODAY = datetime.date(2026, 9, 1)
 L = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
