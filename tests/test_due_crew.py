@@ -1729,7 +1729,7 @@ def test_code_knocks_v29():
 
 
 def test_new_code():
-    """2.10: New Code swaps my friend code; the old one stops working, the
+    """2.10: New code swaps my friend code; the old one stops working, the
     crew stays."""
     store = world({"sam": "Sammy", "priya": "Priya"}, {"sam": ["priya"], "priya": ["sam"]})
     store.codes["SAM123"] = "sam"
@@ -7358,15 +7358,15 @@ def test_crew_menu_pictures():
                                         "My day…", "My week…", "My year…", "All time…"]
           and "head.setEnabled(False)" in text
           and 'share_picture("picturealltime")' in text and 'share_picture("pictureyear")' in text)
-    # 3.9.10: the Crew menu went: Friends opens the Friends window (its list, the code, Copy Invite), and
+    # 3.9.10: the Crew menu went: Friends opens the Friends window (its list, the code, Copy invite), and
     # sharing a deck starts on Crew › Decks
     fd = open(os.path.join(REPO, "due_crew", "ui", "friends_dialog.py"), encoding="utf-8").read()
     dk = board._decks_body({"entries": [{"user_id": "me", "name": "Me", "you": True, "decks": [{"name": "D", "cards": 10, "seen": 5, "mature": 2}]},
                                         {"user_id": "a", "name": "A", "you": False, "decks": [{"name": "D", "cards": 10, "seen": 4, "mature": 1}]}],
                             "labels": []})
-    check("no Crew menu: Friends has the code and Copy Invite; Crew › Decks starts sharing a deck",
+    check("no Crew menu: Friends has the code and Copy invite; Crew › Decks starts sharing a deck",
           not hasattr(board, "crew_menu_items") and "def _crew_menu" not in text and '"crewmenu"' not in text
-          and 'QPushButton("Copy Invite")' in fd
+          and 'QPushButton("Copy invite")' in fd
           and ('<div class="dc-add"><a href="#" title="Pick the decks your crew sees" onclick="pycmd(\'duecrew:decks|' + board.BOARD_KEY + "'); return false;\">+ Share a deck</a>") in dk
           and "Matching decks pair up" not in dk, dk[-300:])
     import due_crew as dc
@@ -17493,7 +17493,7 @@ def test_sheets_v391():
         m.web = types.SimpleNamespace(eval=sent.append)
         m.state = "deckBrowser"
         A.on_decks_render()
-        sheets.confirm("Sign out?", "Sure?", "Sign Out", lambda: got.append("yes"), no=lambda: nos.append("no"))
+        sheets.confirm("Sign out?", "Sure?", "Sign out", lambda: got.append("yes"), no=lambda: nos.append("no"))
         sid = re.search(r'"id": "([0-9a-f]+)"', sent[-1]).group(1)
         answer = lambda i, p, key=board.BOARD_KEY: dc._on_js(False, f"duecrew:sheet:{i}:{quote(json.dumps(p))}|{key}", DeckBrowser())
         answer("0" * 16, {"ok": True})
@@ -17502,7 +17502,7 @@ def test_sheets_v391():
         answer(sid, {"ok": True})
         answer(sid, {"ok": True})
         check("sheets: on the board a sheet, not Qt; only its own id with the page's key answers it, and once",
-              len(sent) == 1 and "dc-sheet" in sent[0] and '"yes": "Sign Out"' in sent[0] and wrong == [] and got == ["yes"], (wrong, got))
+              len(sent) == 1 and "dc-sheet" in sent[0] and '"yes": "Sign out"' in sent[0] and wrong == [] and got == ["yes"], (wrong, got))
         sheets.confirm("Leave?", "", "Leave", lambda: got.append("left"), no=lambda: nos.append("no"))
         sid = re.search(r'"id": "([0-9a-f]+)"', sent[-1]).group(1)
         answer(sid, {"ok": False})
@@ -17525,7 +17525,7 @@ def test_sheets_v391():
         answer(sid, {"ok": True, "text": "123456789"})
         check("sheets: one at a time (a new one drops the one before); a pick out of the list does nothing; a line keeps to its ceiling",
               got == ["yes", 1, "12345"], got)
-        sheets.confirm("Sign out?", "Sure?", "Sign Out", lambda: got.append("late"))
+        sheets.confirm("Sign out?", "Sure?", "Sign out", lambda: got.append("late"))
         sid = re.search(r'"id": "([0-9a-f]+)"', sent[-1]).group(1)
         n = len(sent)
         sheets.redraw()
@@ -17541,11 +17541,11 @@ def test_sheets_v391():
         real = ui.confirm
         ui.confirm = lambda parent, title, text, yes: seen.append((title, text, yes)) or True
         try:
-            sheets.confirm("Sign out?", "Sure?", "Sign Out", lambda: got.append("qt"))
+            sheets.confirm("Sign out?", "Sure?", "Sign out", lambda: got.append("qt"))
         finally:
             ui.confirm = real
         check("sheets: off the board, Qt's question, the same words; a yes reaches then",
-              len(sent) == n and seen == [("Sign out?", "Sure?", "Sign Out")] and got[-1] == "qt", (seen, got))
+              len(sent) == n and seen == [("Sign out?", "Sure?", "Sign out")] and got[-1] == "qt", (seen, got))
     finally:
         m.state, m.web, A._decks[0], A.generation, dc._state["entries"] = saved
         sheets._open.clear()

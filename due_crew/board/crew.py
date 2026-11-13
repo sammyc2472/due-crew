@@ -372,8 +372,8 @@ def _tricky_html(tricky, mine=None):
         cmd = f'tricktip:{t.get("uid", "")}:{int(t.get("index", 0))}'
         q = _html.escape(str(t.get("q") or ""))
         where = f'&ldquo;{text}&rdquo;{" &middot; " + deck if deck else ""}' + (" &middot; you have this down" if t.get("known") else "")
-        say = (f'&#129504; <b>{who}</b>: &ldquo;{q}&rdquo;' if q
-               else f'&#129513; <b>{who}</b> finds this one tricky') + f'<small>{where}</small>'
+        say = (f'<b>{who}</b>: &ldquo;{q}&rdquo;' if q
+               else f'<b>{who}</b> finds this one tricky') + f'<small>{where}</small>'
         out += (f'<div class="dc-flag"><span>{say}</span>'
                 f'<a href="#" title="One line; it shows when the card comes up for them" '
                 f'onclick="{_pycmd(cmd)}">Hook</a></div>')

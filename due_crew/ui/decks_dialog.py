@@ -34,7 +34,7 @@ class DecksDialog(QDialog):
         QTimer.singleShot(0, self._match)
 
     def _build(self):
-        self.setWindowTitle("Shared Decks")
+        self.setWindowTitle("Shared decks")
         self.setMinimumWidth(480)
         self.setMinimumHeight(400)
         root = QVBoxLayout(self)

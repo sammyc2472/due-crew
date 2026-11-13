@@ -130,7 +130,7 @@ class FollowDialog(QDialog):
         self.code_edit.setPlaceholderText("Code, or paste the link")
         self.code_edit.returnPressed.connect(self._look_up)
         self.code_edit.textChanged.connect(lambda *_: self._clear())
-        self.look_btn = QPushButton("Look Up")
+        self.look_btn = QPushButton("Look up")
         self.look_btn.clicked.connect(self._look_up)
         row.addWidget(self.code_edit)
         row.addWidget(self.look_btn)

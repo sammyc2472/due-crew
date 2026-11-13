@@ -62,12 +62,12 @@ class FriendsDialog(QDialog):
         copy = QPushButton("Copy")
         copy.clicked.connect(self._copy)
         code_row.addWidget(copy)
-        invite = QPushButton("Copy Invite")
+        invite = QPushButton("Copy invite")
         invite.setToolTip("Everything a friend needs, in one paste")
         invite.clicked.connect(self._copy_invite)
         code_row.addWidget(invite)
         # 2.10: a code also knocks now, so one posted too widely needs a way out
-        self.new_btn = QPushButton("New Code")
+        self.new_btn = QPushButton("New code")
         self.new_btn.setToolTip("Retire this code and get a fresh one. Your crew stays.")
         self.new_btn.clicked.connect(self._new_code)
         code_row.addWidget(self.new_btn)
@@ -180,7 +180,7 @@ class FriendsDialog(QDialog):
             label.setText(f"{kname} added you")
             row.addWidget(label)
             row.addStretch()
-            add = QPushButton("Add Back")
+            add = QPushButton("Add back")
             add.clicked.connect(
                 lambda _=False, u=kuid, n=kname: self._add_back(u, n))
             row.addWidget(add)
@@ -230,9 +230,9 @@ class FriendsDialog(QDialog):
             return
         for _, name, mutual in self.friends:
             if mutual:
-                self.list.addItem(f"✓ {name}")
+                self.list.addItem(name)
             else:
-                self.list.addItem(f"⏳ {name} — waiting")
+                self.list.addItem(f"{name} · waiting")
 
     # ---- actions ----
 
@@ -262,9 +262,9 @@ class FriendsDialog(QDialog):
     def _new_code(self):
         if not self.loaded or not self.code:
             return
-        if not confirm(self, "New Code",
+        if not confirm(self, "New code",
                        "Get a new code? This one stops working, and so does any invite "
-                       "with it in. Your crew stays as it is.", "New Code"):
+                       "with it in. Your crew stays as it is.", "New code"):
             return
         old = self.code
         self.new_btn.setEnabled(False)

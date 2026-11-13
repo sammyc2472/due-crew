@@ -279,7 +279,10 @@ def _css(cfg):
     #due-crew .dgh {{ text-align: left; padding: 0 8px; }}
     /* 3.9.10: what a tab alone can add (a squad, a shared deck), on that tab under what it adds to, not in the foot
        every tab has (Sam: "specific to those pages and not global functions, otherwise i worry they'd be missed") */
-    #due-crew .dc-add {{ text-align: left; padding: 6px 8px 0; }}
+    #due-crew .dc-add {{ text-align: left; padding: 6px 8px 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }}
+    #due-crew .dc-add .acts {{ margin-left: auto; font-size: 12px; color: var(--dc-faded); }}
+    #due-crew .dc-add .acts a {{ display: inline; border: 0; padding: 0; font-size: 12px; line-height: inherit; border-radius: 0; }}
+    #due-crew .dc-add .acts a:hover, #due-crew .dc-add .acts a:focus-visible {{ background: none; color: var(--dc-accent); text-decoration: underline; }}
     #due-crew .dc-add a {{ display: inline-block; color: var(--dc-accent); font-size: 10.5px; font-weight: 700; line-height: 16px;
       text-decoration: none; border: 1px solid var(--dc-accent); border-radius: 99px; padding: 0 8px; }}
     #due-crew .dc-add a:hover, #due-crew .dc-add a:focus-visible {{ background: var(--dc-accent); color: var(--dc-accent-ink); outline: none; }}

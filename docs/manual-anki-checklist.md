@@ -101,8 +101,8 @@ hand.
 
 ## 2.9: onboarding, a lighter week, consistency (rules-v9)
 - [ ] Rules-v9 pasted in the console BEFORE the release; the footer shows no "server catching up" on 2.9.
-- [ ] A fresh profile (no email used yet): the Decks screen says "Nothing is shared until you join. Join · Sign in"; Join opens the dialog on Join, Sign in on Sign In.
-- [ ] Join: the welcome screen shows your code at once, Copy Invite copies, and nothing is uploaded until it closes (console: no daily_stats doc yet). Tick "Just show up", Done: the first upload has no numbers.
+- [ ] A fresh profile (no email used yet): the Decks screen says "Nothing is shared until you join. Join · Sign in"; Join opens the dialog on Join, Sign in on Sign in.
+- [ ] Join: the welcome screen shows your code at once, Copy invite copies, and nothing is uploaded until it closes (console: no daily_stats doc yet). Tick "Just show up", Done: the first upload has no numbers.
 - [ ] Welcome → paste a friend's whole invite into "Have a code?" → Add: "Added X. They'll see it on their board."
 - [ ] On that friend's account: within an hour, or at once on Refresh, the board says "👋 <name> added your code · Add back"; Add back makes you crew on both boards.
 - [ ] Friends dialog: paste an invite in the old wording ("My friend code: ABC123"): it adds. The list says "⏳ … — waiting", the section is "Added you".
@@ -138,14 +138,14 @@ hand.
 - [ ] A cheer in October has 🎃/🍂 in its flurry.
 - [ ] With rules-v9 still published: a tip or a line goes as a plain cheer with its words, and the tooltip says the server needs an update.
 - [ ] The board's top left is the one-line logo, not the words "Due Crew", in your accent; Settings → Accent changes it on Save; night mode turns the wordmark pale. A narrow window puts the Today/Week/Decks/Squads pills under it. The signed-out and loading cards show it too.
-- [ ] The logo tops Sign In / Join and the welcome screen, sharp on a Retina or high-DPI screen. Settings → Accent → rose, reopen Sign In: the studied days are rose. Anki in night mode: the wordmark is pale and the squares take the dark shade.
+- [ ] The logo tops Sign in / Join and the welcome screen, sharp on a Retina or high-DPI screen. Settings → Accent → rose, reopen Sign in: the studied days are rose. Anki in night mode: the wordmark is pale and the squares take the dark shade.
 
-## 2.11: the logo on the board, New Code
+## 2.11: the logo on the board, New code
 
 - [ ] The board's top left is the logo (see the 2.10 logo lines above).
-- [ ] Friends → New Code → confirm: a different code shows; Copy Invite copies it; the solo board's Copy invite copies the new one too, without waiting for tomorrow.
+- [ ] Friends → New code → confirm: a different code shows; Copy invite copies it; the solo board's Copy invite copies the new one too, without waiting for tomorrow.
 - [ ] A friend adds the OLD code: "That code doesn't match anyone." They add the new one: it works, and you get the Add back banner.
-- [ ] Your crew is unchanged after New Code, on your board and on theirs.
+- [ ] Your crew is unchanged after New code, on your board and on theirs.
 
 ## 2.11.1: streaks from the phone
 
@@ -155,7 +155,7 @@ hand.
 
 ## 2.12: study rooms
 
-- [ ] Footer → Open a room → 4 × 25, 5-min breaks, Now → Open Room. The board shows the room (ring, rounds, Study, Leave); the top bar shows the chip with the seven squares, the ring, "Round 1 of 4", and your initial.
+- [ ] Footer → Open a room → 4 × 25, 5-min breaks, Now → Open room. The board shows the room (ring, rounds, Study, Leave); the top bar shows the chip with the seven squares, the ring, "Round 1 of 4", and your initial.
 - [ ] A crewmate on 2.12 refreshes: an invite with Join. They join; after your next refresh both of you show "in <host>'s room" and both initials sit in the chip.
 - [ ] Review: the chip stays in the top bar; the card is untouched. Click it: the room card (rounds, who's in, Tuck it away, Leave). Tuck it away leaves only the ring.
 - [ ] Preferences → hide the top bar while reviewing: the room moves beside Edit in the bottom bar. Hide the bottom bar too, window wide: a card in the left margin, gone on a card with a full-width image.
@@ -195,7 +195,7 @@ before trying the real thing.
 - [ ] A brand-new address: a new account, asked for a name; the welcome screen follows; Friends shows a code.
 - [ ] A refresh is one request: `npx wrangler tail --env dev` shows one GET /board per refresh, one POST /sync per sync.
 - [ ] Flag a card: a crewmate with the same note sees it on the Decks tab with the card's text (from their own copy); the server never has the text (`wrangler d1 execute due-crew-dev --remote --command "SELECT doc FROM weeks"`).
-- [ ] Settings → Sign Out, then sign in on another computer: both work; Delete Account from one signs the other out at its next request.
+- [ ] Settings → Sign out, then sign in on another computer: both work; Delete Account from one signs the other out at its next request.
 - [ ] Paused, show-up, away dates, exam date, statuses, cheers with notes, good-luck lines, tips, rooms: each still reaches a crewmate on 3.0.
 
 ## 3.0.1: a tip clears the flag, mute and report, the room chip's side

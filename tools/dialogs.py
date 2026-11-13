@@ -399,7 +399,7 @@ def main(out):
         cal.setCurrentPage(2026, 10)
         root.addWidget(cal)
         bb = W.QDialogButtonBox(W.QDialogButtonBox.StandardButton.Ok | W.QDialogButtonBox.StandardButton.Cancel)
-        bb.button(W.QDialogButtonBox.StandardButton.Ok).setText("Open Room")
+        bb.button(W.QDialogButtonBox.StandardButton.Ok).setText("Open room")
         extra = bb.addButton("Not today", W.QDialogButtonBox.ButtonRole.ActionRole)
         extra.setEnabled(False)
         root.addWidget(bb)

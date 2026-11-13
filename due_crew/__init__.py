@@ -1742,7 +1742,7 @@ def _settings_cmd(cmd, parts):
             _state["settings_tab"] = None
             client().sign_out()
             _on_signed_out()
-        sheets.confirm("Sign out?", "Sign out on this device? Your account and stats stay.", "Sign Out", out)
+        sheets.confirm("Sign out?", "Sign out on this device? Your account and stats stay.", "Sign out", out)
     elif cmd == "setdelete":
         _delete_account()
     elif cmd == "setfeedback":
