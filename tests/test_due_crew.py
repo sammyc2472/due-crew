@@ -137,8 +137,13 @@ def as_board(message):
     return message if "|" in message else message + "|" + _b.BOARD_KEY
 
 
+QUIET = [False]  # -q: only what failed is said
+
+
 def check(name, cond, detail=""):
     CHECKS.append((name, bool(cond), detail))
+    if cond and QUIET[0]:
+        return
     print(("PASS " if cond else "FAIL ") + name + (f"  [{detail}]" if detail and not cond else ""))
 
 
@@ -22191,12 +22196,25 @@ def test_insights_a_part_at_a_time_v399():
 
 
 def main():
+    """python3 tests/test_due_crew.py                 everything (what CI runs)
+    python3 tests/test_due_crew.py hook magic      only the tests with one of these words in their name
+    python3 tests/test_due_crew.py -q              only what failed is said
+    python3 tests/test_due_crew.py --list          the tests' names
+    3.9.12: one file of 22,000 lines runs by area, so a change is checked in a second or two before
+    the whole suite is. A run by area leaves out the last check (every board click), which needs them all."""
+    args = [a for a in sys.argv[1:] if not a.startswith("-")]
+    QUIET[0] = "-q" in sys.argv[1:]
     names = [n for n in list(globals()) if n.startswith("test_")]
-    for n in names:
+    if "--list" in sys.argv[1:]:
+        print("\n".join(names))
+        return
+    picked = [n for n in names if not args or any(a.lower() in n.lower() for a in args)]
+    for n in picked:
         globals()[n]()
-    check_every_board_click_is_taken()  # last: every control the suite drew on the board, pressed down its route
+    if not args:
+        check_every_board_click_is_taken()  # last: every control the suite drew on the board, pressed down its route
     bad = [c for c in CHECKS if not c[1]]
-    print(f"\n{len(CHECKS) - len(bad)}/{len(CHECKS)} checks passed")
+    print(f"\n{len(CHECKS) - len(bad)}/{len(CHECKS)} checks passed" + (f" ({len(picked)} of {len(names)} tests)" if args else ""))
     sys.exit(1 if bad else 0)
 
 
